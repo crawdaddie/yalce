@@ -15,17 +15,19 @@ static double seconds_offset = 0.0;
 static double pitch = 440.0;
 static double pitches[6] = {261.626, 311.127, 349.228,
                             391.995, 466.164, 523.251};
+void sleep_millisecs(long msec) {
+  struct timespec ts;
+  ts.tv_sec = msec / 1000;
+  ts.tv_nsec = (msec % 1000) * 1000000;
+  nanosleep(&ts, &ts);
+}
 void *modulate_pitch(void *arg) {
   for (;;) {
     int rand_int = rand() % 6;
     double p = pitches[rand_int];
     pitch = p * (rand() % 2 ? 1.0 : 0.25);
-
-    struct timespec ts;
     long msec = 250 * ((long)(rand() % 4) + 1);
-    ts.tv_sec = msec / 1000;
-    ts.tv_nsec = (msec % 1000) * 1000000;
-    nanosleep(&ts, &ts);
+    sleep_millisecs(msec);
   }
 }
 
@@ -113,6 +115,17 @@ void perform_lp(double *out, int frame_count, double seconds_per_frame) {
 }
 
 static void (*write_sample)(char *ptr, double sample);
+void write_buffer_to_output(double *buffer, int frame_count,
+                            const struct SoundIoChannelLayout *layout,
+                            struct SoundIoChannelArea *areas) {
+  for (int frame = 0; frame < frame_count; frame += 1) {
+    double sample = 0.25 * buffer[frame];
+    for (int channel = 0; channel < layout->channel_count; channel += 1) {
+      write_sample(areas[channel].ptr, sample);
+      areas[channel].ptr += areas[channel].step;
+    }
+  }
+}
 static void write_callback(struct SoundIoOutStream *outstream,
                            int frame_count_min, int frame_count_max) {
   double float_sample_rate = outstream->sample_rate;
@@ -130,6 +143,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
     }
     if (!frame_count)
       break;
+
     const struct SoundIoChannelLayout *layout = &outstream->layout;
     double buffer[frame_count];
     double *out = &buffer[0];
@@ -137,13 +151,8 @@ static void write_callback(struct SoundIoOutStream *outstream,
     perform_sq_detune(out, frame_count, seconds_per_frame);
     perform_tanh(out, frame_count, seconds_per_frame);
 
-    for (int frame = 0; frame < frame_count; frame += 1) {
-      double sample = 0.25 * buffer[frame];
-      for (int channel = 0; channel < layout->channel_count; channel += 1) {
-        write_sample(areas[channel].ptr, sample);
-        areas[channel].ptr += areas[channel].step;
-      }
-    }
+    write_buffer_to_output(out, frame_count, layout, areas);
+
     seconds_offset =
         fmod(seconds_offset + seconds_per_frame * frame_count, 1.0);
     if ((err = soundio_outstream_end_write(outstream))) {

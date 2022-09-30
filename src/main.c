@@ -146,10 +146,6 @@ int main(int argc, char **argv) {
     return 1;
   };
 
-  for (;;) {
-    soundio_flush_events(soundio);
-  };
-
   pthread_exit(NULL);
 
   soundio_outstream_destroy(outstream);
