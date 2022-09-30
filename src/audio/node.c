@@ -67,3 +67,22 @@ void write_node_frame(struct Node *node, double *out, int frame_count,
     out[frame] = 0.1 * sample;
   }
 }
+
+/* typedef struct _sin { */
+/*   double freq; */
+/* } t_sin; */
+/*  */
+/* void sin_perform(t_sin *x, double **ins, long numins, double **outs, */
+/*                  long numouts, long sampleframes) { */
+/*   double *in = ins[0]; */
+/*   double *out = outs[0]; */
+/*  */
+/*   int n = sampleframes; */
+/*  */
+/*   while (n--) { */
+/*     double value = *in++; */
+/*     *out++ = value * 0.5; */
+/*   } */
+/* } */
+/*  */
+/* void add_to_graph() {} */
