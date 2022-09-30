@@ -85,4 +85,4 @@ void write_node_frame(struct Node *node, double *out, int frame_count,
 /*   } */
 /* } */
 /*  */
-/* void add_to_graph() {} */
+/* void add_to_graph(struct Node *node) {} */

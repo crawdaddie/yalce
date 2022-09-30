@@ -1,5 +1,4 @@
 #include "audio/audio.c"
-#include "audio/node.h"
 #include "cli.c"
 #include <soundio/soundio.h>
 #include <stdio.h>
@@ -7,62 +6,7 @@
 
 #include <pthread.h>
 
-#define PROJECT_NAME "asimp"
-
-void input_to_note(char input, struct Node *data) {
-  switch (input) {
-  case 'z':
-    data->args[0] = 261.626;
-    break;
-  case 's':
-    data->args[0] = 277.183;
-    break;
-  case 'x':
-    data->args[0] = 293.665;
-    break;
-  case 'd':
-    data->args[0] = 311.127;
-    break;
-  case 'c':
-    data->args[0] = 329.628;
-    break;
-  case 'v':
-    data->args[0] = 349.228;
-    break;
-  case 'g':
-    data->args[0] = 369.994;
-    break;
-  case 'b':
-    data->args[0] = 391.995;
-    break;
-  case 'h':
-    data->args[0] = 415.305;
-    break;
-  case 'n':
-    data->args[0] = 440.0;
-    break;
-  case 'j':
-    data->args[0] = 466.164;
-    break;
-  case 'm':
-    data->args[0] = 493.883;
-    break;
-  case ',':
-    data->args[0] = 523.251;
-    break;
-  default:
-    data->args[0] = 440.0;
-  }
-}
-
-void *input_thread(void *arg) {
-  struct Node *data = (struct Node *)arg;
-  char input;
-  while (1) {
-    scanf("%c", &input);
-    input_to_note(input, data);
-  }
-}
+#define PROJECT_NAME "simple-synth"
 
 int get_output_device_index(char *device_id, struct SoundIo *soundio,
                             bool raw) {
@@ -85,13 +29,46 @@ int get_output_device_index(char *device_id, struct SoundIo *soundio,
   return selected_device_index;
 }
 
+static void (*write_sample)(char *ptr, double sample);
+int set_output_format(struct SoundIoOutStream *outstream,
+                      struct SoundIoDevice *device) {
+  if (soundio_device_supports_format(device, SoundIoFormatFloat32NE)) {
+    outstream->format = SoundIoFormatFloat32NE;
+    write_sample = write_sample_float32ne;
+    printf("outstream-format: float32ne\n");
+  } else if (soundio_device_supports_format(device, SoundIoFormatFloat64NE)) {
+    outstream->format = SoundIoFormatFloat64NE;
+    write_sample = write_sample_float64ne;
+
+    printf("outstream-format: float64ne\n");
+  } else if (soundio_device_supports_format(device, SoundIoFormatS32NE)) {
+    outstream->format = SoundIoFormatS32NE;
+    write_sample = write_sample_s32ne;
+
+    printf("outstream-format: s32ne\n");
+  } else if (soundio_device_supports_format(device, SoundIoFormatS16NE)) {
+    outstream->format = SoundIoFormatS16NE;
+    write_sample = write_sample_s16ne;
+    printf("outstream-format: s16ne\n");
+  } else {
+    fprintf(stderr, "No suitable device format available.\n");
+    return 1;
+  };
+  return 0;
+}
+
+static void underflow_callback(struct SoundIoOutStream *outstream) {
+  static int count = 0;
+  fprintf(stderr, "underflow %d\n", count++);
+}
+
 int main(int argc, char **argv) {
   enum SoundIoBackend *backend = NULL;
   char *device_id = NULL;
   bool raw = false;
   char *stream_name = NULL;
 
-  asimp_setup(argc, argv, stream_name, device_id, backend);
+  ss_setup(argc, argv, stream_name, device_id, backend);
 
   struct SoundIo *soundio = soundio_create();
   if (!soundio) {
@@ -141,25 +118,14 @@ int main(int argc, char **argv) {
   double latency = 0.0;
   int sample_rate = 0;
 
-  /* double sin_args[2]; */
-  /* sin_args[0] = 440.0; */
-  /* sin_args[1] = 1.01; */
-  /* double *sin_argsptr = &sin_args[0]; */
-
-  /* struct Node sin = get_sin_node_detune(sin_argsptr); */
-  struct Node sin = get_sin_node(440.0);
-  struct Node tanh = get_tanh_node(1.01);
-  sin.next = &tanh;
-
-  pthread_t thread;
-  pthread_create(&thread, NULL, input_thread, (void *)&sin);
-
-  outstream->userdata = &sin;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;
   outstream->software_latency = latency;
   outstream->sample_rate = sample_rate;
+
+  pthread_t thread;
+  pthread_create(&thread, NULL, modulate_pitch, NULL);
 
   if ((err = set_output_format(outstream, device))) {
     return 1;

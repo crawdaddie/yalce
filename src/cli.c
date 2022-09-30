@@ -1,6 +1,6 @@
 #include "cli.h"
 
-static int asimp_usage(char *exe) {
+static int ss_usage(char *exe) {
   fprintf(stderr,
           "Usage: %s [options]\n"
           "Options:\n"
@@ -14,9 +14,8 @@ static int asimp_usage(char *exe) {
   return 1;
 }
 
-int asimp_setup(int argc, char **argv, char *stream_name, char *device_id,
-                enum SoundIoBackend *backend) {
-  enableRawMode();
+int ss_setup(int argc, char **argv, char *stream_name, char *device_id,
+             enum SoundIoBackend *backend) {
   char *exe = argv[0];
   double latency = 0.0;
   int sample_rate = 0;
@@ -29,7 +28,7 @@ int asimp_setup(int argc, char **argv, char *stream_name, char *device_id,
       } else {
         i += 1;
         if (i >= argc) {
-          return asimp_usage(exe);
+          return ss_usage(exe);
         } else if (strcmp(arg, "--backend") == 0) {
           if (strcmp(argv[i], "dummy") == 0) {
             *backend = SoundIoBackendDummy;
@@ -59,23 +58,11 @@ int asimp_setup(int argc, char **argv, char *stream_name, char *device_id,
         } else if (strcmp(arg, "--sample-rate") == 0) {
           sample_rate = atoi(argv[i]);
         } else {
-          return asimp_usage(exe);
+          return ss_usage(exe);
         }
       };
     } else {
-      return asimp_usage(exe);
+      return ss_usage(exe);
     }
   }
-}
-
-struct termios orig_termios;
-void disableRawMode() { tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios); }
-void enableRawMode() {
-  tcgetattr(STDIN_FILENO, &orig_termios);
-  atexit(disableRawMode);
-
-  struct termios raw = orig_termios;
-  raw.c_lflag &= ~(ECHO | ICANON);
-
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
