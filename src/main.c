@@ -117,7 +117,15 @@ int main(int argc, char **argv) {
 
   double latency = 0.0;
   int sample_rate = 0;
-  Node graph = get_graph();
+  Node graph = {
+    .perform = perform_sq_detune
+  };
+  Node tanh_node = {
+    .perform = perform_tanh,
+  };
+
+  graph.next = &tanh_node;
+
 
 
   outstream->userdata = &graph;

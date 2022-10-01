@@ -50,7 +50,7 @@ void perform_sq_detune(double *out, int frame_count, double seconds_per_frame) {
 
 void perform_tanh(double *out, int frame_count, double seconds_per_frame) {
   for (int i = 0; i < frame_count; i++) {
-    double sample = tanh(out[i] * 10.0);
+    double sample = tanh(out[i] * 10.0) + ((double)(rand() /(double)RAND_MAX ));
     out[i] = sample;
   };
 }
@@ -67,16 +67,17 @@ Node get_graph() {
   };
   Node sq_node = {
     .perform = perform_sq_detune,
-    .next = &tanh_node
   };
+  sq_node.next = &tanh_node;
   return sq_node;
 }
 
 void perform_graph(Node *graph, double *out, int frame_count, double seconds_per_frame) {
-  graph->perform(out, frame_count, seconds_per_frame);
-  if (graph->next) {
-    perform_graph(graph->next, out, frame_count, seconds_per_frame);
-  };
+  Node *node = graph;
+  node->perform(out, frame_count, seconds_per_frame);
+  if (node->next) {
+    perform_graph(node->next, out, frame_count, seconds_per_frame);
+  }
 }
 
 static void (*write_sample)(char *ptr, double sample);
