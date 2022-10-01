@@ -31,60 +31,6 @@ void *modulate_pitch(void *arg) {
   }
 }
 
-void perform_sin(double *out, int frame_count, double seconds_per_frame) {
-  double radians_per_second = pitch * 2.0 * PI;
-  for (int i = 0; i < frame_count; i++) {
-    double sample =
-        sin((seconds_offset + i * seconds_per_frame) * radians_per_second);
-    out[i] = sample;
-  };
-}
-
-void perform_sin_detune(double *out, int frame_count,
-                        double seconds_per_frame) {
-  double radians_per_second = pitch * 2.0 * PI;
-  for (int i = 0; i < frame_count; i++) {
-    double sample =
-        sin((seconds_offset + i * seconds_per_frame) * radians_per_second);
-    sample += sin((seconds_offset + i * seconds_per_frame) *
-                  radians_per_second * 1.01);
-    out[i] = sample * 0.5;
-  };
-}
-
-void perform_sq(double *out, int frame_count, double seconds_per_frame) {
-  double radians_per_second = pitch * 2.0 * PI;
-  for (int i = 0; i < frame_count; i++) {
-    double sample =
-        fmod((seconds_offset + i * seconds_per_frame) * radians_per_second,
-             2 * PI) > PI;
-    out[i] = (2 * sample - 1);
-  };
-}
-
-void perform_saw(double *out, int frame_count, double seconds_per_frame) {
-  double radians_per_second = pitch * 2.0 * PI;
-  for (int i = 0; i < frame_count; i++) {
-    double sample = fmod(
-        (seconds_offset + i * seconds_per_frame) * radians_per_second, 2 * PI);
-    out[i] = 2 * sample - 1;
-  };
-}
-
-void perform_saw_detune(double *out, int frame_count,
-                        double seconds_per_frame) {
-  double radians_per_second = pitch * 2.0 * PI;
-  for (int i = 0; i < frame_count; i++) {
-    double sample = fmod(
-        (seconds_offset + i * seconds_per_frame) * radians_per_second, 2 * PI);
-    sample += fmod((seconds_offset + i * seconds_per_frame) *
-                       radians_per_second * 1.001,
-                   2 * PI);
-
-    out[i] = 2 * sample - 1;
-  };
-}
-
 void perform_sq_detune(double *out, int frame_count, double seconds_per_frame) {
   double radians_per_second = pitch * 2.0 * PI;
   for (int i = 0; i < frame_count; i++) {
@@ -101,13 +47,6 @@ void perform_sq_detune(double *out, int frame_count, double seconds_per_frame) {
 }
 
 void perform_tanh(double *out, int frame_count, double seconds_per_frame) {
-  for (int i = 0; i < frame_count; i++) {
-    double sample = tanh(out[i] * 10.0);
-    out[i] = sample;
-  };
-}
-
-void perform_lp(double *out, int frame_count, double seconds_per_frame) {
   for (int i = 0; i < frame_count; i++) {
     double sample = tanh(out[i] * 10.0);
     out[i] = sample;
