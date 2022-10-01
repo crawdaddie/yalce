@@ -117,7 +117,10 @@ int main(int argc, char **argv) {
 
   double latency = 0.0;
   int sample_rate = 0;
+  Node graph = get_graph();
 
+
+  outstream->userdata = &graph;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;

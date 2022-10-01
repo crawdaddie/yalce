@@ -6,10 +6,6 @@
 #include <time.h>
 #include <unistd.h>
 
-typedef struct Node {
-  struct Node *next;
-} Node;
-
 static const double PI = 3.14159265358979323846264338328;
 static double seconds_offset = 0.0;
 static double pitch = 440.0;
@@ -30,6 +26,12 @@ void *modulate_pitch(void *arg) {
     sleep_millisecs(msec);
   }
 }
+
+typedef struct Node {
+  struct Node *next;
+  void (*perform)(double *out, int frame_count, double seconds_per_frame);
+} Node;
+
 
 void perform_sq_detune(double *out, int frame_count, double seconds_per_frame) {
   double radians_per_second = pitch * 2.0 * PI;
@@ -53,6 +55,30 @@ void perform_tanh(double *out, int frame_count, double seconds_per_frame) {
   };
 }
 
+void perform(double *out, int frame_count, double seconds_per_frame) {
+  perform_sq_detune(out, frame_count, seconds_per_frame);
+  perform_tanh(out, frame_count, seconds_per_frame);
+
+}
+
+Node get_graph() {
+  Node tanh_node = {
+    .perform = perform_tanh
+  };
+  Node sq_node = {
+    .perform = perform_sq_detune,
+    .next = &tanh_node
+  };
+  return sq_node;
+}
+
+void perform_graph(Node *graph, double *out, int frame_count, double seconds_per_frame) {
+  graph->perform(out, frame_count, seconds_per_frame);
+  if (graph->next) {
+    perform_graph(graph->next, out, frame_count, seconds_per_frame);
+  };
+}
+
 static void (*write_sample)(char *ptr, double sample);
 void write_buffer_to_output(double *buffer, int frame_count,
                             const struct SoundIoChannelLayout *layout,
@@ -70,6 +96,10 @@ static void write_callback(struct SoundIoOutStream *outstream,
   double float_sample_rate = outstream->sample_rate;
   double seconds_per_frame = 1.0 / float_sample_rate;
   struct SoundIoChannelArea *areas;
+  Node *graph = (Node *)outstream->userdata;
+  
+
+
   int err;
   int frames_left = frame_count_max;
   for (;;) {
@@ -87,8 +117,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
     double buffer[frame_count];
     double *out = &buffer[0];
 
-    perform_sq_detune(out, frame_count, seconds_per_frame);
-    perform_tanh(out, frame_count, seconds_per_frame);
+    perform_graph(graph, out, frame_count, seconds_per_frame);
 
     write_buffer_to_output(out, frame_count, layout, areas);
 
