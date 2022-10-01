@@ -117,18 +117,9 @@ int main(int argc, char **argv) {
 
   double latency = 0.0;
   int sample_rate = 0;
-  Node graph = {
-    .perform = perform_sq_detune
-  };
-  Node tanh_node = {
-    .perform = perform_tanh,
-  };
 
-  graph.next = &tanh_node;
+  add_graph_to_stream(outstream);
 
-
-
-  outstream->userdata = &graph;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;

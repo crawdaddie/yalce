@@ -30,8 +30,17 @@ void *modulate_pitch(void *arg) {
 typedef struct Node {
   struct Node *next;
   void (*perform)(double *out, int frame_count, double seconds_per_frame);
+  char *name;
 } Node;
 
+void debug_node(Node *node, char *location) {
+  printf("%s\n", location);
+  printf("node name: %s\n", node->name);
+  printf("node &: %#08x\n", node);
+  printf("node perform: %#08x\n", node->perform);
+  printf("node next: %#08x\n", node->next);
+  printf("-------\n");
+}
 
 void perform_sq_detune(double *out, int frame_count, double seconds_per_frame) {
   double radians_per_second = pitch * 2.0 * PI;
@@ -50,30 +59,33 @@ void perform_sq_detune(double *out, int frame_count, double seconds_per_frame) {
 
 void perform_tanh(double *out, int frame_count, double seconds_per_frame) {
   for (int i = 0; i < frame_count; i++) {
-    double sample = tanh(out[i] * 10.0) + ((double)(rand() /(double)RAND_MAX ));
+    double sample = tanh(out[i] * 10.0);
     out[i] = sample;
   };
 }
 
-void perform(double *out, int frame_count, double seconds_per_frame) {
-  perform_sq_detune(out, frame_count, seconds_per_frame);
-  perform_tanh(out, frame_count, seconds_per_frame);
+Node *get_graph() {
+  Node *tanh_node = malloc(sizeof(Node));
+  tanh_node->name = "tanh";
+  tanh_node->perform = perform_tanh;
+  tanh_node->next = NULL;
 
-}
+  Node *sq_node = malloc(sizeof(Node));
 
-Node get_graph() {
-  Node tanh_node = {
-    .perform = perform_tanh
-  };
-  Node sq_node = {
-    .perform = perform_sq_detune,
-  };
-  sq_node.next = &tanh_node;
+  sq_node->name = "square";
+  sq_node->perform = perform_sq_detune;
+  sq_node->next = tanh_node;
   return sq_node;
 }
+void add_graph_to_stream(struct SoundIoOutStream *outstream) {
+  Node *graph = get_graph();
+  outstream->userdata = graph;
+}
 
-void perform_graph(Node *graph, double *out, int frame_count, double seconds_per_frame) {
+void perform_graph(Node *graph, double *out, int frame_count,
+                   double seconds_per_frame) {
   Node *node = graph;
+
   node->perform(out, frame_count, seconds_per_frame);
   if (node->next) {
     perform_graph(node->next, out, frame_count, seconds_per_frame);
@@ -98,8 +110,6 @@ static void write_callback(struct SoundIoOutStream *outstream,
   double seconds_per_frame = 1.0 / float_sample_rate;
   struct SoundIoChannelArea *areas;
   Node *graph = (Node *)outstream->userdata;
-  
-
 
   int err;
   int frames_left = frame_count_max;
