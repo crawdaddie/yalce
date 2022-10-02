@@ -2,6 +2,7 @@
 #include "node_biquad.c"
 #include "node_delay.c"
 #include "node_dist.c"
+#include "node_env.c"
 #include "node_sin.c"
 #include "node_square.c"
 
@@ -23,22 +24,29 @@ void sleep_millisecs(long msec) {
   ts.tv_nsec = (msec % 1000) * 1000000;
   nanosleep(&ts, &ts);
 }
+static double seconds_offset = 0.0;
 void *modulate_pitch(void *arg) {
   Node *graph = (Node *)arg;
-  Node *filter = graph;
-
-  while (filter->name != "biquad_lp") {
-    filter = filter->next;
-  };
 
   for (;;) {
+    Node *env = graph;
+
+    while (env->name != "env") {
+      env = env->next;
+    };
+    Node *prev = graph;
+    while (prev->name != "biquad_lp") {
+      prev = prev->next;
+    };
     int rand_int = rand() % 7;
     double p = pitches[rand_int];
     int rand_octave = rand() % 4;
     p = p * 0.5 * octaves[rand_octave];
     set_freq(graph, p);
-    set_filter_params(filter, p * 5.0, 0.1 + (double)(0.5 * rand() / RAND_MAX),
-                      1.0, 48000);
+    reset_env(env, prev, seconds_offset * 1000);
+    /* set_filter_params(prev, p * 3.0, 0.1 + (double)(0.5 * rand() / RAND_MAX),
+     */
+    /*                   1.0, 48000); */
 
     long msec = 250 * ((long)(rand() % 4) + 1);
     sleep_millisecs(msec);
@@ -49,11 +57,15 @@ Node *get_graph(struct SoundIoOutStream *outstream) {
   int sample_rate = outstream->sample_rate;
   Node *head = get_sq_detune_node(220.0);
   Node *tanh = get_tanh_node(20.0);
-  Node *biquad = get_biquad_lpf(1000.0, 0.2, 2.0, sample_rate);
+  Node *biquad = get_biquad_lpf(2000.0, 0.5, 2.0, sample_rate);
+  Node *env = get_env_node(100.0, 10.0, 500.0, 0.0);
   Node *delay = get_delay_node(250, 1000, 0.4, sample_rate);
+
   head->next = tanh;
   tanh->next = biquad;
-  biquad->next = delay;
+  biquad->next = env;
+  env->next = delay;
+  /* biquad->next = delay; */
 
   return head;
 }
@@ -61,6 +73,9 @@ Node *get_graph(struct SoundIoOutStream *outstream) {
 void perform_graph(Node *graph, double *out, int frame_count,
                    double seconds_per_frame, double seconds_offset) {
   Node *node = graph;
+  if (node == NULL) {
+    return;
+  };
 
   node->perform(node, out, frame_count, seconds_per_frame, seconds_offset);
   if (node->next) {
@@ -68,7 +83,6 @@ void perform_graph(Node *graph, double *out, int frame_count,
                   seconds_offset);
   }
 }
-static double seconds_offset = 0.0;
 static void (*write_sample)(char *ptr, double sample);
 void write_buffer_to_output(double *buffer, int frame_count,
                             const struct SoundIoChannelLayout *layout,
