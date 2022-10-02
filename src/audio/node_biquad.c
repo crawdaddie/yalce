@@ -10,13 +10,13 @@ typedef struct {
 } biquad_data;
 
 typedef enum {
-  LPF,   /* low pass filter */
-  HPF,   /* High pass filter */
-  BPF,   /* band pass filter */
-  NOTCH, /* Notch Filter */
-  PEQ,   /* Peaking band EQ filter */
-  LSH,   /* Low shelf filter */
-  HSH    /* High shelf filter */
+  BIQUAD_LPF,   /* low pass filter */
+  BIQUAD_HPF,   /* High pass filter */
+  BIQUAD_BPF,   /* band pass filter */
+  BIQUAD_NOTCH, /* Notch Filter */
+  BIQUAD_PEQ,   /* Peaking band EQ filter */
+  BIQUAD_LSH,   /* Low shelf filter */
+  BIQUAD_HSH    /* High shelf filter */
 } biquad_type;
 
 void perform_biquad(Node *node, double *out, int frame_count,
@@ -58,7 +58,7 @@ Node *get_biquad_node(biquad_type type, double gain, double freq,
   beta = sqrt(A + A);
 
   switch (type) {
-  case LPF:
+  case BIQUAD_LPF:
     b0 = (1 - cs) / 2;
     b1 = 1 - cs;
     b2 = (1 - cs) / 2;
@@ -66,7 +66,7 @@ Node *get_biquad_node(biquad_type type, double gain, double freq,
     a1 = -2 * cs;
     a2 = 1 - alpha;
     break;
-  case HPF:
+  case BIQUAD_HPF:
     b0 = (1 + cs) / 2;
     b1 = -(1 + cs);
     b2 = (1 + cs) / 2;
@@ -74,7 +74,7 @@ Node *get_biquad_node(biquad_type type, double gain, double freq,
     a1 = -2 * cs;
     a2 = 1 - alpha;
     break;
-  case BPF:
+  case BIQUAD_BPF:
     b0 = alpha;
     b1 = 0;
     b2 = -alpha;
@@ -82,7 +82,7 @@ Node *get_biquad_node(biquad_type type, double gain, double freq,
     a1 = -2 * cs;
     a2 = 1 - alpha;
     break;
-  case NOTCH:
+  case BIQUAD_NOTCH:
     b0 = 1;
     b1 = -2 * cs;
     b2 = 1;
@@ -90,7 +90,7 @@ Node *get_biquad_node(biquad_type type, double gain, double freq,
     a1 = -2 * cs;
     a2 = 1 - alpha;
     break;
-  case PEQ:
+  case BIQUAD_PEQ:
     b0 = 1 + (alpha * A);
     b1 = -2 * cs;
     b2 = 1 - (alpha * A);
@@ -98,7 +98,7 @@ Node *get_biquad_node(biquad_type type, double gain, double freq,
     a1 = -2 * cs;
     a2 = 1 - (alpha / A);
     break;
-  case LSH:
+  case BIQUAD_LSH:
     b0 = A * ((A + 1) - (A - 1) * cs + beta * sn);
     b1 = 2 * A * ((A - 1) - (A + 1) * cs);
     b2 = A * ((A + 1) - (A - 1) * cs - beta * sn);
@@ -106,7 +106,7 @@ Node *get_biquad_node(biquad_type type, double gain, double freq,
     a1 = -2 * ((A - 1) + (A + 1) * cs);
     a2 = (A + 1) + (A - 1) * cs - beta * sn;
     break;
-  case HSH:
+  case BIQUAD_HSH:
     b0 = A * ((A + 1) + (A - 1) * cs + beta * sn);
     b1 = -2 * A * ((A - 1) + (A + 1) * cs);
     b2 = A * ((A + 1) + (A - 1) * cs - beta * sn);

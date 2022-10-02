@@ -40,7 +40,7 @@ void *modulate_pitch(void *arg) {
 Node *get_graph(struct SoundIoOutStream *outstream) {
   Node *head = get_sq_detune_node(220.0);
   Node *tanh = get_tanh_node(20.0);
-  Node *biquad = get_biquad_node(LPF, 1.0, 1000.0, 48000, 0.2);
+  Node *biquad = get_biquad_node(BIQUAD_LPF, 1.0, 1000.0, 48000, 0.2);
   Node *delay = get_delay_node(250, 1000, 0.2, outstream);
   head->next = tanh;
   tanh->next = biquad;
