@@ -118,7 +118,10 @@ int main(int argc, char **argv) {
   double latency = 0.0;
   int sample_rate = 0;
 
-  add_graph_to_stream(outstream);
+  sq_data data = {.freq = 220.0, ._prev_freq = 220.0};
+  tanh_data tanh_data = {.gain = 9.0};
+  lp_data lp_data = {.cutoff = 1000.0, .resonance = 0.5};
+  add_graph_to_stream(outstream, &data, &tanh_data, &lp_data);
 
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
@@ -127,7 +130,7 @@ int main(int argc, char **argv) {
   outstream->sample_rate = sample_rate;
 
   pthread_t thread;
-  pthread_create(&thread, NULL, modulate_pitch, NULL);
+  pthread_create(&thread, NULL, modulate_pitch, (void *)&data);
 
   if ((err = set_output_format(outstream, device))) {
     return 1;

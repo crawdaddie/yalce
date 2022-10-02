@@ -1,3 +1,4 @@
+#include "node.h"
 #include "util.c"
 #include <math.h>
 #include <soundio/soundio.h>
@@ -7,10 +8,9 @@
 #include <unistd.h>
 
 static const double PI = 3.14159265358979323846264338328;
-static double seconds_offset = 0.0;
-static double pitch = 440.0;
 static double pitches[6] = {261.626, 311.127, 349.228,
                             391.995, 466.164, 523.251};
+
 void sleep_millisecs(long msec) {
   struct timespec ts;
   ts.tv_sec = msec / 1000;
@@ -18,80 +18,44 @@ void sleep_millisecs(long msec) {
   nanosleep(&ts, &ts);
 }
 void *modulate_pitch(void *arg) {
+  sq_data *data = (sq_data *)arg;
   for (;;) {
     int rand_int = rand() % 6;
     double p = pitches[rand_int];
-    pitch = p * (rand() % 2 ? 1.0 : 0.25);
+    p = p * (rand() % 2 ? 1.0 : 0.25);
+    data->freq = p;
+    debug_sq(data);
+
     long msec = 250 * ((long)(rand() % 4) + 1);
     sleep_millisecs(msec);
   }
 }
 
-typedef struct Node {
-  struct Node *next;
-  void (*perform)(double *out, int frame_count, double seconds_per_frame);
-  char *name;
-} Node;
-
-void debug_node(Node *node, char *location) {
-  printf("%s\n", location);
-  printf("node name: %s\n", node->name);
-  printf("node &: %#08x\n", node);
-  printf("node perform: %#08x\n", node->perform);
-  printf("node next: %#08x\n", node->next);
-  printf("-------\n");
+Node *get_graph(sq_data *sq_data, tanh_data *tanh_data, lp_data *lp_data) {
+  Node *head = get_sq_detune_node(sq_data);
+  Node *tanh = get_tanh_node(tanh_data);
+  /* Node *lp = get_lp_node(); */
+  head->next = tanh;
+  /* tanh->next = lp; */
+  return head;
 }
-
-void perform_sq_detune(double *out, int frame_count, double seconds_per_frame) {
-  double radians_per_second = pitch * 2.0 * PI;
-  for (int i = 0; i < frame_count; i++) {
-    double sample =
-        fmod((seconds_offset + i * seconds_per_frame) * radians_per_second,
-             2 * PI) > PI;
-
-    sample += fmod((seconds_offset + i * seconds_per_frame) *
-                       radians_per_second * 1.02,
-                   2 * PI) > PI;
-
-    out[i] = (2 * sample - 1) * 0.5;
-  };
-}
-
-void perform_tanh(double *out, int frame_count, double seconds_per_frame) {
-  for (int i = 0; i < frame_count; i++) {
-    double sample = tanh(out[i] * 10.0);
-    out[i] = sample;
-  };
-}
-
-Node *get_graph() {
-  Node *tanh_node = malloc(sizeof(Node));
-  tanh_node->name = "tanh";
-  tanh_node->perform = perform_tanh;
-  tanh_node->next = NULL;
-
-  Node *sq_node = malloc(sizeof(Node));
-
-  sq_node->name = "square";
-  sq_node->perform = perform_sq_detune;
-  sq_node->next = tanh_node;
-  return sq_node;
-}
-void add_graph_to_stream(struct SoundIoOutStream *outstream) {
-  Node *graph = get_graph();
+void add_graph_to_stream(struct SoundIoOutStream *outstream, sq_data *data,
+                         tanh_data *tanh_data, lp_data *lp_data) {
+  Node *graph = get_graph(data, tanh_data, lp_data);
   outstream->userdata = graph;
 }
 
 void perform_graph(Node *graph, double *out, int frame_count,
-                   double seconds_per_frame) {
+                   double seconds_per_frame, double seconds_offset) {
   Node *node = graph;
 
-  node->perform(out, frame_count, seconds_per_frame);
+  node->perform(node, out, frame_count, seconds_per_frame, seconds_offset);
   if (node->next) {
-    perform_graph(node->next, out, frame_count, seconds_per_frame);
+    perform_graph(node->next, out, frame_count, seconds_per_frame,
+                  seconds_offset);
   }
 }
-
+static double seconds_offset = 0.0;
 static void (*write_sample)(char *ptr, double sample);
 void write_buffer_to_output(double *buffer, int frame_count,
                             const struct SoundIoChannelLayout *layout,
@@ -128,12 +92,11 @@ static void write_callback(struct SoundIoOutStream *outstream,
     double buffer[frame_count];
     double *out = &buffer[0];
 
-    perform_graph(graph, out, frame_count, seconds_per_frame);
+    perform_graph(graph, out, frame_count, seconds_per_frame, seconds_offset);
 
     write_buffer_to_output(out, frame_count, layout, areas);
 
-    seconds_offset =
-        fmod(seconds_offset + seconds_per_frame * frame_count, 1.0);
+    seconds_offset = seconds_offset + seconds_per_frame * frame_count;
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
         return;
