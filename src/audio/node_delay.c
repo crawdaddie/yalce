@@ -54,11 +54,9 @@ Node *get_delay_node(int delay_time_ms, int max_delay_time_ms, double feedback,
                      struct SoundIoOutStream *outstream) {
 
   int bufsize = (int)(48000 * max_delay_time_ms / 1000);
-
   int read_ptr = (int)(48000 * delay_time_ms / 1000);
 
   double *buffer = malloc(sizeof(double) * bufsize);
-  printf("buffer &: %#08x\n", buffer);
   delay_data *data = malloc(sizeof(delay_data) + sizeof(double) * bufsize);
   data->delay_time_ms = delay_time_ms;
   data->feedback = feedback;

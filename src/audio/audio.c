@@ -1,6 +1,8 @@
 #include "node.h"
+#include "node_biquad.c"
 #include "node_delay.c"
 #include "node_dist.c"
+#include "node_sin.c"
 #include "node_square.c"
 
 #include "util.c"
@@ -11,9 +13,10 @@
 #include <time.h>
 #include <unistd.h>
 
-static double pitches[6] = {261.626, 311.127, 349.228,
-                            391.995, 466.164, 523.251};
+static double pitches[7] = {261.626,         311.127, 349.228, 391.995,
+                            415.30469757995, 466.164, 523.251};
 
+static double octaves[4] = {0.25, 0.5, 1, 2.0};
 void sleep_millisecs(long msec) {
   struct timespec ts;
   ts.tv_sec = msec / 1000;
@@ -21,32 +24,29 @@ void sleep_millisecs(long msec) {
   nanosleep(&ts, &ts);
 }
 void *modulate_pitch(void *arg) {
-  sq_data *data = (sq_data *)arg;
+  Node *graph = (Node *)arg;
   for (;;) {
-    int rand_int = rand() % 6;
+    int rand_int = rand() % 7;
     double p = pitches[rand_int];
-    p = p * (rand() % 2 ? 1.0 : 0.25);
-    data->freq = p;
-    debug_sq(data);
+    int rand_octave = rand() % 4;
+    p = p * 0.5 * octaves[rand_octave];
+    set_freq(graph, p);
 
-    long msec = 250 * ((long)(rand() % 4) + 1);
+    long msec = 500 * ((long)(rand() % 4) + 1);
     sleep_millisecs(msec);
   }
 }
 
-Node *get_graph(sq_data *sq_data, tanh_data *tanh_data, lp_data *lp_data,
-                struct SoundIoOutStream *outstream) {
-  Node *head = get_sq_detune_node(sq_data);
-  Node *tanh = get_tanh_node(tanh_data);
+Node *get_graph(struct SoundIoOutStream *outstream) {
+  Node *head = get_sq_detune_node(220.0);
+  Node *tanh = get_tanh_node(20.0);
+  Node *biquad = get_biquad_node(LPF, 1.0, 1000.0, 48000, 0.2);
   Node *delay = get_delay_node(250, 1000, 0.2, outstream);
   head->next = tanh;
-  tanh->next = delay;
+  tanh->next = biquad;
+  biquad->next = delay;
+
   return head;
-}
-void add_graph_to_stream(struct SoundIoOutStream *outstream, sq_data *data,
-                         tanh_data *tanh_data, lp_data *lp_data) {
-  Node *graph = get_graph(data, tanh_data, lp_data, outstream);
-  outstream->userdata = graph;
 }
 
 void perform_graph(Node *graph, double *out, int frame_count,
@@ -95,6 +95,8 @@ static void write_callback(struct SoundIoOutStream *outstream,
     const struct SoundIoChannelLayout *layout = &outstream->layout;
     double buffer[frame_count];
     double *out = &buffer[0];
+
+    sq_data *data = (sq_data *)graph->data;
 
     perform_graph(graph, out, frame_count, seconds_per_frame, seconds_offset);
 
