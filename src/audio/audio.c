@@ -38,7 +38,7 @@ Node *get_graph(sq_data *sq_data, tanh_data *tanh_data, lp_data *lp_data,
                 struct SoundIoOutStream *outstream) {
   Node *head = get_sq_detune_node(sq_data);
   Node *tanh = get_tanh_node(tanh_data);
-  Node *delay = get_delay_node(250, 1000, outstream);
+  Node *delay = get_delay_node(250, 1000, 0.2, outstream);
   head->next = tanh;
   tanh->next = delay;
   return head;

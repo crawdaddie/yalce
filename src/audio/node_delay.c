@@ -10,6 +10,7 @@
 /* } */
 typedef struct delay_data {
   int delay_time_ms;
+  double feedback;
   int bufsize;
   int read_ptr;
   int write_ptr;
@@ -32,7 +33,6 @@ void perform_delay(Node *node, double *out, int frame_count,
   double *buffer = data->buffer;
   for (int i = 0; i < frame_count; i++) {
     input = out[i];
-    buffer[data->write_ptr] = input;
     output = data->buffer[data->read_ptr] * 0.5 + input;
 
     data->write_ptr++;
@@ -45,11 +45,12 @@ void perform_delay(Node *node, double *out, int frame_count,
       data->read_ptr -= data->bufsize;
     };
 
+    buffer[data->write_ptr] = output;
     out[i] = output;
   }
 }
 
-Node *get_delay_node(int delay_time_ms, int max_delay_time_ms,
+Node *get_delay_node(int delay_time_ms, int max_delay_time_ms, double feedback,
                      struct SoundIoOutStream *outstream) {
 
   int bufsize = (int)(48000 * max_delay_time_ms / 1000);
@@ -60,6 +61,7 @@ Node *get_delay_node(int delay_time_ms, int max_delay_time_ms,
   printf("buffer &: %#08x\n", buffer);
   delay_data *data = malloc(sizeof(delay_data) + sizeof(double) * bufsize);
   data->delay_time_ms = delay_time_ms;
+  data->feedback = feedback;
   data->bufsize = bufsize;
   data->buffer = buffer;
   data->read_ptr = read_ptr;
