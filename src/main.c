@@ -118,17 +118,11 @@ int main(int argc, char **argv) {
   double latency = 0.0;
   int sample_rate = 0;
 
-  Node *graph = get_graph(outstream);
-
-  outstream->userdata = graph;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;
   outstream->software_latency = latency;
   outstream->sample_rate = sample_rate;
-
-  pthread_t thread;
-  pthread_create(&thread, NULL, modulate_pitch, (void *)graph);
 
   if ((err = set_output_format(outstream, device))) {
     return 1;
@@ -148,6 +142,11 @@ int main(int argc, char **argv) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   };
+
+  Node *graph = get_graph(outstream);
+  outstream->userdata = graph;
+  pthread_t thread;
+  pthread_create(&thread, NULL, modulate_pitch, (void *)graph);
 
   pthread_exit(NULL);
 

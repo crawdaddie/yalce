@@ -51,10 +51,10 @@ void perform_delay(Node *node, double *out, int frame_count,
 }
 
 Node *get_delay_node(int delay_time_ms, int max_delay_time_ms, double feedback,
-                     struct SoundIoOutStream *outstream) {
+                     int sample_rate) {
 
-  int bufsize = (int)(48000 * max_delay_time_ms / 1000);
-  int read_ptr = (int)(48000 * delay_time_ms / 1000);
+  int bufsize = (int)(sample_rate * max_delay_time_ms / 1000);
+  int read_ptr = (int)(sample_rate * delay_time_ms / 1000);
 
   double *buffer = malloc(sizeof(double) * bufsize);
   delay_data *data = malloc(sizeof(delay_data) + sizeof(double) * bufsize);
