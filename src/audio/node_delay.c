@@ -1,13 +1,6 @@
 #include "node.h"
 #include <soundio/soundio.h>
-/* Node *alloc_delay_node(NodeData *data, t_perform perform, char *name, ) { */
-/*   Node *node = malloc(sizeof(Node) + sizeof(data)); */
-/*   node->name = name ? (name) : ""; */
-/*   node->perform = perform; */
-/*   node->next = NULL; */
-/*   node->data = data; */
-/*   return node; */
-/* } */
+
 typedef struct delay_data {
   int delay_time_ms;
   double feedback;
@@ -25,6 +18,7 @@ void debug_delay_data(delay_data *data) {
   printf("buffer &: %#08x\n", data->buffer);
   printf("-------\n");
 }
+
 void perform_delay(Node *node, double *out, int frame_count,
                    double seconds_per_frame, double seconds_offset) {
   delay_data *data = (delay_data *)node->data;
@@ -49,6 +43,11 @@ void perform_delay(Node *node, double *out, int frame_count,
     out[i] = output;
   }
 }
+void free_delay_node(Node *node) {
+  delay_data *data = (delay_data *)node->data;
+  free(data->buffer);
+  free_node(node);
+}
 
 Node *get_delay_node(int delay_time_ms, int max_delay_time_ms, double feedback,
                      int sample_rate) {
@@ -64,12 +63,6 @@ Node *get_delay_node(int delay_time_ms, int max_delay_time_ms, double feedback,
   data->buffer = buffer;
   data->read_ptr = read_ptr;
   data->write_ptr = 0;
-  debug_delay_data(data);
-
-  Node *node = malloc(sizeof(Node) + sizeof(data));
-  node->name = "delay";
-  node->perform = perform_delay;
-  node->next = NULL;
-  node->data = (NodeData *)data;
-  return node;
+  return alloc_node((NodeData *)data, (t_perform)perform_delay, "delay",
+                    (t_free_node)free_delay_node);
 }

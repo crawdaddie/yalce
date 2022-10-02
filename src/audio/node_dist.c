@@ -13,5 +13,5 @@ void perform_tanh(Node *node, double *out, int frame_count,
 Node *get_tanh_node(double gain) {
   tanh_data *data = malloc(sizeof(tanh_data));
   data->gain = gain;
-  return alloc_node((NodeData *)data, (t_perform)perform_tanh, "tanh");
+  return alloc_node((NodeData *)data, (t_perform)perform_tanh, "tanh", NULL);
 }

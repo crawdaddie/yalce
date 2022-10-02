@@ -28,17 +28,6 @@ void perform_sq_detune(Node *node, double *out, int frame_count,
   };
 }
 
-void slide_parameter(Node *node) {
-  sq_data *data = (sq_data *)node->data;
-  static double freq;
-  double target_freq = data->freq;
-  if (target_freq != freq) {
-    double dir = (target_freq - freq) > 0 ? 1.0 : -1.0;
-    freq = freq + dir * 0.001;
-    data->freq = freq;
-  };
-}
-
 void modulate_freq(sq_data *data, int frame_count, double seconds_per_frame,
                    double seconds_offset) {
   double mod_freq = 1.0;
@@ -82,10 +71,7 @@ Node *get_sq_detune_node(double freq) {
   sq_data *data = malloc(sizeof(sq_data));
   data->freq = freq;
   data->target_freq = freq;
-  Node *node = malloc(sizeof(Node) + sizeof(data));
-  node->name = "square";
-  node->perform = perform_sq_detune_slide;
-  node->next = NULL;
-  node->data = (NodeData *)data;
+  Node *node = alloc_node((NodeData *)data, (t_perform)perform_sq_detune,
+                          "square", NULL);
   return node;
 }
