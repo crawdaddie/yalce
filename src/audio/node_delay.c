@@ -16,6 +16,14 @@ typedef struct delay_data {
   double *buffer;
 } delay_data;
 
+void debug_delay_data(delay_data *data) {
+
+  printf("bufsize: %d\n", data->bufsize);
+  printf("write_ptr: %d\n", data->write_ptr);
+  printf("read_ptr: %d\n", data->read_ptr);
+  printf("buffer &: %#08x\n", data->buffer);
+  printf("-------\n");
+}
 void perform_delay(Node *node, double *out, int frame_count,
                    double seconds_per_frame, double seconds_offset) {
   delay_data *data = (delay_data *)node->data;
@@ -24,10 +32,12 @@ void perform_delay(Node *node, double *out, int frame_count,
   double *buffer = data->buffer;
   for (int i = 0; i < frame_count; i++) {
     input = out[i];
-    /* buffer[data->write_ptr] = input; */
-    /* output = data->buffer[data->read_ptr] + input; */
+    buffer[data->write_ptr] = input;
+    output = data->buffer[data->read_ptr] * 0.5 + input;
+
     data->write_ptr++;
     data->read_ptr++;
+
     if (data->write_ptr > data->bufsize) {
       data->write_ptr -= data->bufsize;
     };
@@ -35,24 +45,26 @@ void perform_delay(Node *node, double *out, int frame_count,
       data->read_ptr -= data->bufsize;
     };
 
-    out[i] = input;
+    out[i] = output;
   }
 }
 
 Node *get_delay_node(int delay_time_ms, int max_delay_time_ms,
                      struct SoundIoOutStream *outstream) {
 
-  int bufsize = (int)(outstream->sample_rate * max_delay_time_ms / 1000);
+  int bufsize = (int)(48000 * max_delay_time_ms / 1000);
+
+  int read_ptr = (int)(48000 * delay_time_ms / 1000);
+
   double *buffer = malloc(sizeof(double) * bufsize);
-
-  int read_ptr = (int)outstream->sample_rate * delay_time_ms / 1000;
-
-  delay_data *data = malloc(sizeof(delay_data));
+  printf("buffer &: %#08x\n", buffer);
+  delay_data *data = malloc(sizeof(delay_data) + sizeof(double) * bufsize);
   data->delay_time_ms = delay_time_ms;
-  data->buffer = buffer;
   data->bufsize = bufsize;
-  data->read_ptr = 0;
+  data->buffer = buffer;
+  data->read_ptr = read_ptr;
   data->write_ptr = 0;
+  debug_delay_data(data);
 
   Node *node = malloc(sizeof(Node) + sizeof(data));
   node->name = "delay";
