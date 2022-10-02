@@ -1,9 +1,6 @@
 #include "node.h"
 #include <stdlib.h>
 
-static const double PI = 3.14159265358979323846264338328;
-static double pitch = 220.0;
-
 Node *alloc_node(NodeData *data, t_perform perform, char *name) {
   Node *node = malloc(sizeof(Node) + sizeof(data));
   node->name = name ? (name) : "";
@@ -21,45 +18,6 @@ void debug_node(Node *node, char *text) {
   printf("node perform: %#08x\n", node->perform);
   printf("node next: %#08x\n", node->next);
   printf("-------\n");
-}
-
-void perform_sq_detune(Node *node, double *out, int frame_count,
-                       double seconds_per_frame, double seconds_offset) {
-  sq_data *data = (sq_data *)node->data;
-  double freq = data->freq;
-
-  double radians_per_second = freq * 2.0 * PI;
-  for (int i = 0; i < frame_count; i++) {
-    double sample =
-        fmod((seconds_offset + i * seconds_per_frame) * radians_per_second,
-             2 * PI) > PI;
-
-    sample += fmod((seconds_offset + i * seconds_per_frame) *
-                       radians_per_second * 1.02,
-                   2 * PI) > PI;
-
-    out[i] = (2 * sample - 1) * 0.5;
-  };
-}
-
-void debug_sq(sq_data *data) {
-  printf("freq: %f\n", data->freq);
-  printf("-------\n");
-}
-
-Node *get_sq_detune_node(sq_data *data) {
-  return alloc_node((NodeData *)data, (t_perform)perform_sq_detune, "square");
-}
-
-void perform_tanh(Node *node, double *out, int frame_count,
-                  double seconds_per_frame, double seconds_offset) {
-  for (int i = 0; i < frame_count; i++) {
-    double sample = tanh(out[i] * 10.0);
-    out[i] = sample;
-  };
-}
-Node *get_tanh_node(tanh_data *data) {
-  return alloc_node((NodeData *)data, (t_perform)perform_tanh, "tanh");
 }
 
 void perform_lp(Node *node, double *out, int frame_count,

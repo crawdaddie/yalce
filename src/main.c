@@ -119,9 +119,8 @@ int main(int argc, char **argv) {
   int sample_rate = 0;
 
   sq_data data = {.freq = 220.0, ._prev_freq = 220.0};
-  tanh_data tanh_data = {.gain = 9.0};
   lp_data lp_data = {.cutoff = 1000.0, .resonance = 0.5};
-  add_graph_to_stream(outstream, &data, &tanh_data, &lp_data);
+  add_graph_to_stream(outstream, &data, NULL, &lp_data);
 
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;

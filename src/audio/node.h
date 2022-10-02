@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static const double PI = 3.14159265358979323846264338328;
 typedef struct NodeData {
 } NodeData;
 
@@ -18,25 +19,8 @@ typedef struct Node {
   char *name;
   NodeData *data;
 } Node;
-#endif
-
 void debug_node(Node *node, char *text);
 Node *alloc_node(NodeData *data, t_perform perform, char *name);
-
-typedef struct sq_data {
-  double freq;
-  double _prev_freq;
-
-} sq_data;
-void debug_sq(sq_data *data);
-Node *get_sq_detune_node();
-void perform_sq_detune(Node *node, double *out, int frame_count,
-                       double seconds_per_frame, double seconds_offset);
-
-typedef struct tanh_data {
-  double gain;
-} tanh_data;
-Node *get_tanh_node();
 
 typedef struct lp_data {
   double cutoff;
@@ -53,3 +37,4 @@ typedef struct lp_data {
   double amf;
 } lp_data;
 Node *get_lp_node();
+#endif

@@ -1,4 +1,8 @@
 #include "node.h"
+#include "node_delay.c"
+#include "node_dist.c"
+#include "node_square.c"
+
 #include "util.c"
 #include <math.h>
 #include <soundio/soundio.h>
@@ -7,7 +11,6 @@
 #include <time.h>
 #include <unistd.h>
 
-static const double PI = 3.14159265358979323846264338328;
 static double pitches[6] = {261.626, 311.127, 349.228,
                             391.995, 466.164, 523.251};
 
@@ -31,17 +34,18 @@ void *modulate_pitch(void *arg) {
   }
 }
 
-Node *get_graph(sq_data *sq_data, tanh_data *tanh_data, lp_data *lp_data) {
+Node *get_graph(sq_data *sq_data, tanh_data *tanh_data, lp_data *lp_data,
+                struct SoundIoOutStream *outstream) {
   Node *head = get_sq_detune_node(sq_data);
   Node *tanh = get_tanh_node(tanh_data);
-  /* Node *lp = get_lp_node(); */
+  Node *delay = get_delay_node(250, 1000, outstream);
   head->next = tanh;
-  /* tanh->next = lp; */
+  tanh->next = delay;
   return head;
 }
 void add_graph_to_stream(struct SoundIoOutStream *outstream, sq_data *data,
                          tanh_data *tanh_data, lp_data *lp_data) {
-  Node *graph = get_graph(data, tanh_data, lp_data);
+  Node *graph = get_graph(data, tanh_data, lp_data, outstream);
   outstream->userdata = graph;
 }
 
