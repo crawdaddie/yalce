@@ -22,8 +22,12 @@ Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
   node->in = in;
   node->out = get_buffer();
   node->free_node = custom_free_node == NULL ? free_node : custom_free_node;
+  node->should_free = 0;
   return node;
 }
+
+void perform_null(Node *node, int frame_count, double seconds_per_frame,
+                  double seconds_offset) {}
 
 void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
                       double seconds_offset) {
