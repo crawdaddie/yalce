@@ -22,8 +22,12 @@ Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
   node->in = in;
   node->out = get_buffer();
   node->free_node = custom_free_node == NULL ? free_node : custom_free_node;
+  node->should_free = 0;
   return node;
 }
+
+void perform_null(Node *node, int frame_count, double seconds_per_frame,
+                  double seconds_offset){};
 
 void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
                       double seconds_offset) {
@@ -49,7 +53,7 @@ void perform_node_add(Node *node, int frame_count, double seconds_per_frame,
   double *out = node->out;
   double *add = node->add;
   for (int i = 0; i < frame_count; i++) {
-    out[i] = in[i] + add[i];
+    out[i] = ((in) ? in[i] : 0.0) + ((add) ? add[i] : 0.0);
   }
 }
 
@@ -67,6 +71,16 @@ Node *node_add_to_tail(Node *node, Node *prev) {
   return node;
 };
 
+Node *node_add_after(Node *new_node, Node *head) {
+  new_node->next = head->next;
+  head->next = new_node;
+}
+
+Node *node_add_before(Node *new_node, Node *head) {
+  new_node->next = head->next;
+  head->next = new_node;
+}
+
 void debug_node(Node *node, char *text) {
   if (text)
     printf("%s\n", text);
@@ -78,6 +92,7 @@ void debug_node(Node *node, char *text) {
   printf("node next: %#08x\n", node->next);
   printf("node mul: %#08x\n", node->mul);
   printf("node size: %d\n", sizeof(*node));
+  printf("node should free: %d\n", node->should_free);
   /* printf("node add: %#08x\n", node->add); */
   printf("-------\n");
 }

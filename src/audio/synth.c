@@ -1,14 +1,11 @@
-#include "node.h"
+#include "synth.h"
 #include "node_biquad.c"
 #include "node_delay.c"
 #include "node_dist.c"
 #include "node_env.c"
+#include "node_out.c"
 #include "node_sin.c"
 #include "node_square.c"
-
-typedef struct synth_data {
-  Node *graph;
-} synth_data;
 
 Node *perform_graph(Node *graph, int frame_count, double seconds_per_frame,
                     double seconds_offset) {
@@ -25,7 +22,7 @@ Node *perform_graph(Node *graph, int frame_count, double seconds_per_frame,
                          seconds_offset);
   };
 
-  return node;
+  return node; // return head
 }
 
 void perform_synth_graph(Node *synth, int frame_count, double seconds_per_frame,
@@ -36,17 +33,20 @@ void perform_synth_graph(Node *synth, int frame_count, double seconds_per_frame,
   perform_graph(node, frame_count, seconds_per_frame, seconds_offset);
 }
 
-Node *get_synth(struct SoundIoOutStream *outstream) {
-  int sample_rate = outstream->sample_rate;
+void on_free(Node *synth) { synth->should_free = 1; }
 
-  Node *head = get_sq_detune_node(220.0);
+Node *get_synth(double freq, double *bus) {
+
+  Node *head = get_sq_detune_node(freq);
   Node *tail = head;
   tail = node_add_to_tail(get_tanh_node(tail->out, 20.0), tail);
 
   tail = node_add_to_tail(
-      get_biquad_lpf(tail->out, 1000.0, 0.5, 2.0, sample_rate), tail);
+      get_biquad_lpf(tail->out, 1000.0, 0.5, 2.0, synth_sample_rate), tail);
+  Node *env = get_env_node(100, 25.0, 500.0, 0.0);
 
-  tail = node_mul(get_env_node(100, 25.0, 500.0, 0.0), tail);
+  tail = node_mul(env, tail);
+  tail = node_add_to_tail(node_out(tail->out, bus), tail);
 
   synth_data *data = malloc(sizeof(synth_data) + sizeof(head));
   data->graph = head;
@@ -54,6 +54,15 @@ Node *get_synth(struct SoundIoOutStream *outstream) {
   Node *out_node = alloc_node((NodeData *)data, NULL,
                               (t_perform)perform_synth_graph, "synth", NULL);
   out_node->out = tail->out;
-
+  set_on_free(env, out_node, on_free);
   return out_node;
 }
+
+/* Node *node_play_synth(Node *head, double freq, double *bus) { */
+/*   Node *next = head->next; */
+/*   Node *synth = get_synth(freq, bus); */
+/*   head->next = synth; */
+/*   synth->next = next; */
+/*   next->in = synth->out; */
+/*   return head; */
+/* } */
