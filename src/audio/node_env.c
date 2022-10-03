@@ -12,15 +12,14 @@ void perform_env(Node *node, int frame_count, double seconds_per_frame,
                  double seconds_offset) {
   env_data *data = (env_data *)node->data;
   double level = 0.0;
-  double env_offset = data->offset;
+  double *out = node->out;
   double attack = data->attack;
   double sustain = data->sustain;
   double release = data->release;
-  double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
+    double env_offset = data->offset;
     double time_ms = (seconds_offset + i * seconds_per_frame) * 1000;
-    double input = out[i];
     if (time_ms <= env_offset + attack) {
       level = (time_ms - env_offset) / attack;
     } else if ((time_ms > env_offset + attack) &&
@@ -32,7 +31,7 @@ void perform_env(Node *node, int frame_count, double seconds_per_frame,
     } else {
       level = 0.0;
     };
-    out[i] = input * level;
+    out[i] = level;
   }
 }
 

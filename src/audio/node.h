@@ -26,6 +26,7 @@ typedef struct Node {
   void (*free_node)(struct Node *node);
   double *out;
   double *in;
+
   double *mul;
   double *add;
 } Node;
@@ -41,6 +42,7 @@ void perform_node_add(Node *node, int frame_count, double seconds_per_frame,
                       double seconds_offset);
 
 Node *node_add(Node *node_a, Node *node_b);
+Node *node_add_to_tail(Node *node, Node *tail);
 void free_data(NodeData *data);
 void free_node(Node *node);
 #endif

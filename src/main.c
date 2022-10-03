@@ -150,7 +150,6 @@ int main(int argc, char **argv) {
   pthread_create(&thread, NULL, modulate_pitch, (void *)graph);
 
   pthread_exit(NULL);
-
   soundio_outstream_destroy(outstream);
   soundio_device_unref(device);
   soundio_destroy(soundio);

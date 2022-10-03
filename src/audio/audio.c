@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
+static double seconds_offset = 0.0;
 static double pitches[7] = {261.626,         311.127, 349.228, 391.995,
                             415.30469757995, 466.164, 523.251};
 
@@ -24,14 +25,13 @@ void sleep_millisecs(long msec) {
   ts.tv_nsec = (msec % 1000) * 1000000;
   nanosleep(&ts, &ts);
 }
-static double seconds_offset = 0.0;
 void *modulate_pitch(void *arg) {
   Node *graph = (Node *)arg;
-  Node *env = graph;
 
-  /* while (env->name != "env") { */
-  /*   env = env->next; */
-  /* }; */
+  Node *env = graph;
+  while (env->name != "env") {
+    env = env->next;
+  };
 
   for (;;) {
     int rand_int = rand() % 7;
@@ -39,36 +39,32 @@ void *modulate_pitch(void *arg) {
     int rand_octave = rand() % 4;
     p = p * 0.5 * octaves[rand_octave];
     set_freq(graph, p);
-    /* if (env) { */
-    /*   reset_env(env, seconds_offset * 1000); */
-    /* } */
+    if (env) {
+      reset_env(env, seconds_offset * 1000);
+    }
 
     long msec = 250 * ((long)(rand() % 4) + 1);
     sleep_millisecs(msec);
   }
 }
 
-Node *add_node(Node *node, Node *prev) {
-  prev->next = node;
-  return node;
-};
-
 Node *get_graph(struct SoundIoOutStream *outstream) {
   int sample_rate = outstream->sample_rate;
 
   Node *head = get_sq_detune_node(220.0);
   Node *tail = head;
-  tail = add_node(get_tanh_node(tail->out, 20.0), tail);
+  tail = node_add_to_tail(get_tanh_node(tail->out, 20.0), tail);
 
-  tail =
-      add_node(get_biquad_lpf(tail->out, 2000.0, 0.5, 2.0, sample_rate), tail);
+  tail = node_add_to_tail(
+      get_biquad_lpf(tail->out, 1000.0, 0.5, 2.0, sample_rate), tail);
 
-  /* Node *filtered = tail; */
-  /* tail = add_node(get_env_node(100.0, 250.0, 500.0, 0.0), tail); */
-  /* Node *env = tail; */
-  /* tail = add_node(node_mul(filtered, env), tail); */
+  tail = node_mul(get_env_node(100, 25.0, 500.0, 0.0), tail);
 
-  tail = add_node(get_delay_node(tail->out, 750, 1000, 0.8, sample_rate), tail);
+  tail = node_add_to_tail(
+      get_delay_node(tail->out, 750, 1000, 0.8, sample_rate), tail);
+
+  tail = node_add_to_tail(
+      get_delay_node(tail->out, 250, 1000, 0.3, sample_rate), tail);
 
   return head;
 }
@@ -114,6 +110,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
   for (;;) {
     int frame_count = frames_left;
     node_frame_size = frame_count;
+    /* printf("frame count: %d\n", node_frame_size); */
     if ((err =
              soundio_outstream_begin_write(outstream, &areas, &frame_count))) {
       fprintf(stderr, "unrecoverable stream error: %s\n",
@@ -124,6 +121,11 @@ static void write_callback(struct SoundIoOutStream *outstream,
       break;
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
+    /**
+    double buffer[frame_count];
+    double *out = &buffer;
+    write_buffer_to_output(out, frame_count, layout, areas);
+    **/
 
     Node *outnode =
         perform_graph(graph, frame_count, seconds_per_frame, seconds_offset);
