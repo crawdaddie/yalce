@@ -145,6 +145,7 @@ int main(int argc, char **argv) {
 
   Node *graph = get_graph(outstream);
   outstream->userdata = graph;
+
   pthread_t thread;
   pthread_create(&thread, NULL, modulate_pitch, (void *)graph);
 

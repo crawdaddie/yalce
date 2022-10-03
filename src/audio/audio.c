@@ -59,13 +59,18 @@ Node *get_graph(struct SoundIoOutStream *outstream) {
 
   Node *head = get_sq_detune_node(220.0);
   Node *tanh = get_tanh_node(20.0, head->out);
-  Node *biquad = get_biquad_lpf(1000.0, 0.5, 2.0, sample_rate, tanh->out);
-  /* Node *env = get_env_node(50.0, 1.0, 250.0, 0.0); */
-  Node *delay = get_delay_node(750, 1000, 0.8, sample_rate, tanh->out);
-
   head->next = tanh;
+
+  Node *biquad = get_biquad_lpf(1000.0, 0.5, 2.0, sample_rate, tanh->out);
   tanh->next = biquad;
-  tanh->next = delay;
+
+  Node *delay = get_delay_node(750, 1000, 0.8, sample_rate, biquad->out);
+  biquad->next = delay;
+
+  /* debug_node(biquad, "get_graph"); */
+
+  /* debug_node(delay, "get_graph"); */
+
   /* biquad->next = env; */
   /* env->next = delay; */
 
@@ -75,15 +80,18 @@ Node *get_graph(struct SoundIoOutStream *outstream) {
 Node *perform_graph(Node *graph, int frame_count, double seconds_per_frame,
                     double seconds_offset) {
   Node *node = graph;
+
   if (node == NULL) {
     return NULL;
   };
 
   node->perform(node, frame_count, seconds_per_frame, seconds_offset);
+
   if (node->next) {
     return perform_graph(node->next, frame_count, seconds_per_frame,
                          seconds_offset);
-  }
+  };
+
   return node;
 }
 static void (*write_sample)(char *ptr, double sample);
@@ -124,10 +132,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
     Node *outnode =
         perform_graph(graph, frame_count, seconds_per_frame, seconds_offset);
 
-    double *out = outnode->out;
-    if (out) {
-      write_buffer_to_output(out, frame_count, layout, areas);
-    };
+    write_buffer_to_output(outnode->out, frame_count, layout, areas);
 
     seconds_offset = seconds_offset + seconds_per_frame * frame_count;
     if ((err = soundio_outstream_end_write(outstream))) {

@@ -28,6 +28,8 @@ void debug_node(Node *node, char *text) {
     printf("%s\n", text);
   printf("node name: %s\n", node->name);
   printf("node &: %#08x\n", node);
+  printf("node out &: %#08x\n", node->out);
+  printf("node in &: %#08x\n", node->in);
   printf("node perform: %#08x\n", node->perform);
   printf("node next: %#08x\n", node->next);
   printf("-------\n");

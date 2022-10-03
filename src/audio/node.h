@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 static const double PI = 3.14159265358979323846264338328;
-static int node_frame_size = 512;
+static int node_frame_size = 2048;
 
 typedef struct NodeData {
 } NodeData;
