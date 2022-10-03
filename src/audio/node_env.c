@@ -42,7 +42,8 @@ Node *get_env_node(double attack, double sustain, double release,
   data->sustain = sustain;
   data->release = release;
   data->offset = offset;
-  return alloc_node((NodeData *)data, (t_perform)perform_env, "env", NULL);
+  return alloc_node((NodeData *)data, NULL, (t_perform)perform_env, "env",
+                    NULL);
 }
 
 void reset_env(Node *node, Node *prev, double offset) {

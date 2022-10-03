@@ -41,8 +41,9 @@ void perform_biquad_static(Node *node, double *out, int frame_count,
     out[i] = result;
   };
 }
-Node *get_biquad_static_node(biquad_type type, double gain, double freq,
-                             int sample_rate, double bandwidth) {
+
+Node *get_biquad_static(biquad_type type, double freq, double bandwidth,
+                        double gain, int sample_rate, double *in) {
 
   biquad_data *b = malloc(sizeof(biquad_data));
 
@@ -129,8 +130,8 @@ Node *get_biquad_static_node(biquad_type type, double gain, double freq,
   /* zero initial samples */
   b->x1 = b->x2 = 0;
   b->y1 = b->y2 = 0;
-  return alloc_node((NodeData *)b, (t_perform)perform_biquad_static, "biquad",
-                    NULL);
+  return alloc_node((NodeData *)b, in, (t_perform)perform_biquad_static,
+                    "biquad", NULL);
 }
 
 typedef struct {
@@ -219,11 +220,13 @@ void set_biquad_params(biquad_data *b, biquad_type type, double freq,
   b->a4 = a2 / a0;
 }
 
-void perform_biquad_lp(Node *node, double *out, int frame_count,
-                       double seconds_per_frame, double seconds_offset) {
+void perform_biquad_lp(Node *node, int frame_count, double seconds_per_frame,
+                       double seconds_offset) {
+  double *out = node->out;
+  double *in = node->in;
   biquad_lp_data *b = (biquad_lp_data *)node->data;
   for (int i = 0; i < frame_count; i++) {
-    double sample = out[i];
+    double sample = in[i];
 
     double result;
 
@@ -249,7 +252,7 @@ void set_filter_params(Node *node, double freq, double bandwidth, double gain,
 }
 
 Node *get_biquad_lpf(double freq, double bandwidth, double gain,
-                     int sample_rate) {
+                     int sample_rate, double *in) {
 
   biquad_lp_data *b = malloc(sizeof(biquad_lp_data));
   set_biquad_params(b, BIQUAD_LPF, freq, bandwidth, gain, sample_rate);
@@ -257,6 +260,7 @@ Node *get_biquad_lpf(double freq, double bandwidth, double gain,
   /* zero initial samples */
   b->x1 = b->x2 = 0;
   b->y1 = b->y2 = 0;
-  return alloc_node((NodeData *)b, (t_perform)perform_biquad_lp, "biquad_lp",
-                    NULL);
+
+  return alloc_node((NodeData *)b, in, (t_perform)perform_biquad_lp,
+                    "biquad_lp", NULL);
 }

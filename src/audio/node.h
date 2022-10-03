@@ -6,23 +6,28 @@
 #include <stdlib.h>
 
 static const double PI = 3.14159265358979323846264338328;
+static int node_frame_size = 512;
+
 typedef struct NodeData {
 } NodeData;
 
-typedef void (*t_perform)(struct Node *node, double *out, int frame_count,
+typedef void (*t_perform)(struct Node *node, int frame_count,
                           double seconds_per_frame, double seconds_offset);
 typedef void (*t_free_node)(struct Node *node);
 
 typedef struct Node {
   struct Node *next;
-  void (*perform)(struct Node *node, double *out, int frame_count,
-                  double seconds_per_frame, double seconds_offset);
+  void (*perform)(struct Node *node, int frame_count, double seconds_per_frame,
+                  double seconds_offset);
   char *name;
   NodeData *data;
   void (*free_node)(struct Node *node);
+  double *out;
+  double *in;
 } Node;
 void debug_node(Node *node, char *text);
-Node *alloc_node(NodeData *data, t_perform perform, char *name,
+double *get_buffer();
+Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
                  t_free_node free_node);
 
 void free_data(NodeData *data);

@@ -9,8 +9,9 @@ void debug_sq(sq_data *data) {
   printf("-------\n");
 }
 
-void perform_sq_detune(Node *node, double *out, int frame_count,
-                       double seconds_per_frame, double seconds_offset) {
+void perform_sq_detune(Node *node, int frame_count, double seconds_per_frame,
+                       double seconds_offset) {
+  double *out = node->out;
   sq_data *data = (sq_data *)node->data;
 
   for (int i = 0; i < frame_count; i++) {
@@ -71,7 +72,8 @@ Node *get_sq_detune_node(double freq) {
   sq_data *data = malloc(sizeof(sq_data));
   data->freq = freq;
   data->target_freq = freq;
-  Node *node = alloc_node((NodeData *)data, (t_perform)perform_sq_detune,
+  double *out = get_buffer();
+  Node *node = alloc_node((NodeData *)data, NULL, (t_perform)perform_sq_detune,
                           "square", NULL);
   return node;
 }
