@@ -54,6 +54,7 @@ void perform_delay(Node *node, int frame_count, double seconds_per_frame,
 
     buffer[data->write_ptr] = output;
     out[i] = output;
+    /* node_mul_add(node, i); */
   }
 }
 void free_delay_node(Node *node) {
@@ -62,8 +63,8 @@ void free_delay_node(Node *node) {
   free_node(node);
 }
 
-Node *get_delay_node(int delay_time_ms, int max_delay_time_ms, double feedback,
-                     int sample_rate, double *in) {
+Node *get_delay_node(double *in, int delay_time_ms, int max_delay_time_ms,
+                     double feedback, int sample_rate) {
 
   int bufsize = (int)(sample_rate * max_delay_time_ms / 1000);
   int read_ptr = (int)(sample_rate * delay_time_ms / 1000) * -1;

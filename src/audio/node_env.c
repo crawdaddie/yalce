@@ -8,14 +8,15 @@ typedef struct {
 
 void ramp_value_tick(double *val, double target, double speed) {}
 
-void perform_env(Node *node, double *out, int frame_count,
-                 double seconds_per_frame, double seconds_offset) {
+void perform_env(Node *node, int frame_count, double seconds_per_frame,
+                 double seconds_offset) {
   env_data *data = (env_data *)node->data;
   double level = 0.0;
   double env_offset = data->offset;
   double attack = data->attack;
   double sustain = data->sustain;
   double release = data->release;
+  double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
     double time_ms = (seconds_offset + i * seconds_per_frame) * 1000;
@@ -46,15 +47,7 @@ Node *get_env_node(double attack, double sustain, double release,
                     NULL);
 }
 
-void reset_env(Node *node, Node *prev, double offset) {
-  Node *node_next = node->next;
+void reset_env(Node *node, double offset) {
   env_data *data = (env_data *)node->data;
-  double attack = data->attack;
-  double sustain = data->sustain;
-  double release = data->release;
-
-  free_node(node);
-  Node *env = get_env_node(attack, sustain, release, offset);
-  prev->next = env;
-  env->next = node_next;
+  data->offset = offset;
 }

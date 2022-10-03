@@ -25,7 +25,7 @@ void perform_sq_detune(Node *node, int frame_count, double seconds_per_frame,
                    2 * PI) > PI;
 
     out[i] = (2 * sample - 1) * 0.5;
-  };
+  }
 }
 
 void modulate_freq(sq_data *data, int frame_count, double seconds_per_frame,

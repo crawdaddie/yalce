@@ -242,6 +242,8 @@ void perform_biquad_lp(Node *node, int frame_count, double seconds_per_frame,
     b->y2 = b->y1;
     b->y1 = result;
     out[i] = result;
+
+    /* node_mul_add(node, i); */
   };
 }
 
@@ -251,8 +253,8 @@ void set_filter_params(Node *node, double freq, double bandwidth, double gain,
   set_biquad_params(data, BIQUAD_LPF, freq, bandwidth, gain, sample_rate);
 }
 
-Node *get_biquad_lpf(double freq, double bandwidth, double gain,
-                     int sample_rate, double *in) {
+Node *get_biquad_lpf(double *in, double freq, double bandwidth, double gain,
+                     int sample_rate) {
 
   biquad_lp_data *b = malloc(sizeof(biquad_lp_data));
   set_biquad_params(b, BIQUAD_LPF, freq, bandwidth, gain, sample_rate);

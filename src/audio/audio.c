@@ -27,52 +27,48 @@ void sleep_millisecs(long msec) {
 static double seconds_offset = 0.0;
 void *modulate_pitch(void *arg) {
   Node *graph = (Node *)arg;
+  Node *env = graph;
+
+  /* while (env->name != "env") { */
+  /*   env = env->next; */
+  /* }; */
 
   for (;;) {
-    Node *env = graph;
-
-    /* while (env->name != "env") { */
-    /*   env = env->next; */
-    /* }; */
-    /* Node *prev = graph; */
-    /* while (prev->name != "biquad_lp") { */
-    /*   prev = prev->next; */
-    /* }; */
     int rand_int = rand() % 7;
     double p = pitches[rand_int];
     int rand_octave = rand() % 4;
     p = p * 0.5 * octaves[rand_octave];
     set_freq(graph, p);
-    /* reset_env(env, prev, seconds_offset * 1000); */
-    /*
-        set_filter_params(prev, p * 3.0, 0.1 + (double)(0.5 * rand() /
-       RAND_MAX), 1.0, 48000);
-          */
+    /* if (env) { */
+    /*   reset_env(env, seconds_offset * 1000); */
+    /* } */
 
     long msec = 250 * ((long)(rand() % 4) + 1);
     sleep_millisecs(msec);
   }
 }
 
+Node *add_node(Node *node, Node *prev) {
+  prev->next = node;
+  return node;
+};
+
 Node *get_graph(struct SoundIoOutStream *outstream) {
   int sample_rate = outstream->sample_rate;
 
   Node *head = get_sq_detune_node(220.0);
-  Node *tanh = get_tanh_node(20.0, head->out);
-  head->next = tanh;
+  Node *tail = head;
+  tail = add_node(get_tanh_node(tail->out, 20.0), tail);
 
-  Node *biquad = get_biquad_lpf(1000.0, 0.5, 2.0, sample_rate, tanh->out);
-  tanh->next = biquad;
+  tail =
+      add_node(get_biquad_lpf(tail->out, 2000.0, 0.5, 2.0, sample_rate), tail);
 
-  Node *delay = get_delay_node(750, 1000, 0.8, sample_rate, biquad->out);
-  biquad->next = delay;
+  /* Node *filtered = tail; */
+  /* tail = add_node(get_env_node(100.0, 250.0, 500.0, 0.0), tail); */
+  /* Node *env = tail; */
+  /* tail = add_node(node_mul(filtered, env), tail); */
 
-  /* debug_node(biquad, "get_graph"); */
-
-  /* debug_node(delay, "get_graph"); */
-
-  /* biquad->next = env; */
-  /* env->next = delay; */
+  tail = add_node(get_delay_node(tail->out, 750, 1000, 0.8, sample_rate), tail);
 
   return head;
 }

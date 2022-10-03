@@ -19,17 +19,28 @@ typedef struct Node {
   struct Node *next;
   void (*perform)(struct Node *node, int frame_count, double seconds_per_frame,
                   double seconds_offset);
+  void (*perform_mul_add)(struct Node *node, int frame_count,
+                          double seconds_per_frame, double seconds_offset);
   char *name;
   NodeData *data;
   void (*free_node)(struct Node *node);
   double *out;
   double *in;
+  double *mul;
+  double *add;
 } Node;
 void debug_node(Node *node, char *text);
 double *get_buffer();
 Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
                  t_free_node free_node);
 
+void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
+                      double seconds_offset);
+Node *node_mul(Node *node_a, Node *node_b);
+void perform_node_add(Node *node, int frame_count, double seconds_per_frame,
+                      double seconds_offset);
+
+Node *node_add(Node *node_a, Node *node_b);
 void free_data(NodeData *data);
 void free_node(Node *node);
 #endif
