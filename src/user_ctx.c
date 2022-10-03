@@ -1,5 +1,4 @@
 #include "user_ctx.h"
-#include "audio/synth.h"
 
 Node *get_graph(struct SoundIoOutStream *outstream, double *bus) {
   int sample_rate = synth_sample_rate;
@@ -15,11 +14,11 @@ void ctx_play_synth(UserCtx *ctx) {}
 double *get_bus(UserCtx *ctx, int bus_num) { return ctx->buses[bus_num]; }
 
 UserCtx *get_user_ctx(struct SoundIoOutStream *outstream) {
-  UserCtx *ctx = malloc(sizeof(UserCtx));
-  double **buses;
+  double **buses[16];
   for (int i = 0; i < 16; i++) {
     buses[i] = get_buffer();
   }
+  UserCtx *ctx = malloc(sizeof(UserCtx) + sizeof(buses));
   ctx->ctx_play_synth = ctx_play_synth;
   ctx->get_bus = get_bus;
 

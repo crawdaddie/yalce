@@ -1,7 +1,7 @@
 #ifndef _USER_CTX
 #define _USER_CTX
 #include "audio/node.h"
-#include "audio/synth.h"
+#include "audio/synth.c"
 #include <soundio/soundio.h>
 
 typedef struct UserCtx {

@@ -1,6 +1,13 @@
 #ifndef _SYNTH
 #define _SYNTH
 #include "node.h"
+#include "node_biquad.c"
+#include "node_delay.c"
+#include "node_dist.c"
+#include "node_env.c"
+#include "node_out.c"
+#include "node_sin.c"
+#include "node_square.c"
 
 typedef struct synth_data {
   Node *graph;

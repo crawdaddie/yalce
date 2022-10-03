@@ -1,3 +1,4 @@
+#include "audio/synth.h"
 #include "audio/util.c"
 #include "cli.c"
 #include "user_ctx.h"
@@ -94,10 +95,11 @@ static void write_callback(struct SoundIoOutStream *outstream,
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
-    Node *outnode = perform_graph(ctx->graph, frame_count, seconds_per_frame,
-                                  seconds_offset);
+    /* Node *outnode = perform_graph(ctx->graph, frame_count, seconds_per_frame,
+     */
+    /*                               seconds_offset); */
 
-    write_buffer_to_output(outnode->out, frame_count, layout, areas);
+    write_buffer_to_output(ctx->get_bus(ctx, 0), frame_count, layout, areas);
 
     seconds_offset = seconds_offset + seconds_per_frame * frame_count;
     if ((err = soundio_outstream_end_write(outstream))) {

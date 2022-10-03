@@ -1,11 +1,4 @@
 #include "synth.h"
-#include "node_biquad.c"
-#include "node_delay.c"
-#include "node_dist.c"
-#include "node_env.c"
-#include "node_out.c"
-#include "node_sin.c"
-#include "node_square.c"
 
 Node *perform_graph(Node *graph, int frame_count, double seconds_per_frame,
                     double seconds_offset) {
