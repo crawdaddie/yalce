@@ -77,6 +77,7 @@ void debug_node(Node *node, char *text) {
   printf("node perform: %#08x\n", node->perform);
   printf("node next: %#08x\n", node->next);
   printf("node mul: %#08x\n", node->mul);
+  printf("node size: %d\n", sizeof(*node));
   /* printf("node add: %#08x\n", node->add); */
   printf("-------\n");
 }
