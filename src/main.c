@@ -14,10 +14,6 @@
 #define PROJECT_NAME "simple-synth"
 
 static double seconds_offset = 0.0;
-static double pitches[7] = {261.626,         311.127, 349.228, 391.995,
-                            415.30469757995, 466.164, 523.251};
-
-static double octaves[4] = {0.25, 0.5, 1, 2.0};
 int sleep_millisecs(long msec) {
   int ret;
   struct timespec ts;
@@ -52,6 +48,10 @@ void *cleanup_nodes_job(void *arg) {
     sleep_millisecs(25);
   }
 }
+static double pitches[7] = {261.626,         311.127, 349.228, 391.995,
+                            415.30469757995, 466.164, 523.251};
+
+static double octaves[5] = {0.125, 0.25, 0.5, 1, 2.0};
 void *modulate_pitch(void *arg) {
 
   for (;;) {
@@ -60,7 +60,7 @@ void *modulate_pitch(void *arg) {
     int p_index = rand() % 7;
     int o_index = rand() % 4;
     double p = pitches[p_index] * octaves[o_index];
-    long msec = 500 * octaves[rand() % 4];
+    long msec = 1000 * octaves[rand() % 5];
     Node *synth = ctx_play_synth(ctx, p, msec);
 
     /* long msec = 250 * ((long)(rand() % 4) + 1); */
