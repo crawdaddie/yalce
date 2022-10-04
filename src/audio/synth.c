@@ -43,10 +43,11 @@ Node *get_synth(double freq, double *bus) {
 
   Node *head = get_sq_detune_node(freq);
   Node *tail = head;
-  tail = node_add_to_tail(get_tanh_node(tail->out, 20.0), tail);
-
-  tail = node_add_to_tail(get_biquad_lpf(tail->out, 1000.0, 0.5, 2.0, 48000),
-                          tail);
+  /* tail = node_add_to_tail(get_tanh_node(tail->out, 20.0), tail); */
+  /*  */
+  /* tail = node_add_to_tail(get_biquad_lpf(tail->out, 1000.0, 0.5, 2.0, 48000),
+   */
+  /*                         tail); */
   Node *env = get_env_node(100, 25.0, 500.0, 0.0);
 
   tail = node_mul(env, tail);
@@ -55,9 +56,8 @@ Node *get_synth(double freq, double *bus) {
   synth_data *data = malloc(sizeof(synth_data) + sizeof(head));
   data->graph = head;
 
-  Node *out_node = alloc_node((NodeData *)data, NULL,
+  Node *out_node = alloc_node((NodeData *)data, NULL, NULL,
                               (t_perform)perform_synth_graph, "synth", NULL);
-  out_node->out = tail->out;
-  set_on_free(env, out_node, on_free);
+  env_set_on_free(env, out_node, on_free);
   return out_node;
 }

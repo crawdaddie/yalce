@@ -50,11 +50,11 @@ Node *get_env_node(double attack, double sustain, double release,
   data->offset = offset;
   data->ctx = NULL;
   data->on_free = NULL;
-  return alloc_node((NodeData *)data, NULL, (t_perform)perform_env, "env",
+  return alloc_node((NodeData *)data, NULL, NULL, (t_perform)perform_env, "env",
                     NULL);
 }
 
-void set_on_free(Node *env_node, Node *ctx, void (*on_free)(Node *ctx)) {
+void env_set_on_free(Node *env_node, Node *ctx, void (*on_free)(Node *ctx)) {
   ((env_data *)env_node->data)->ctx = ctx;
   ((env_data *)env_node->data)->on_free = on_free;
 }

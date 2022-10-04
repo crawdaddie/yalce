@@ -10,8 +10,8 @@ void free_node(Node *node) {
 }
 double *get_buffer() { return malloc(sizeof(double) * node_frame_size); }
 
-Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
-                 t_free_node custom_free_node) {
+Node *alloc_node(NodeData *data, double *in, double *out, t_perform perform,
+                 char *name, t_free_node custom_free_node) {
   Node *node = malloc(sizeof(Node) + sizeof(data));
   node->name = name ? (name) : "";
   node->perform = perform;
@@ -20,7 +20,7 @@ Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
   node->add = NULL;
   node->data = data;
   node->in = in;
-  node->out = get_buffer();
+  node->out = out ? out : get_buffer();
   node->free_node = custom_free_node == NULL ? free_node : custom_free_node;
   node->should_free = 0;
   return node;
@@ -40,7 +40,8 @@ void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
 }
 
 Node *node_mul(Node *node_a, Node *node_b) {
-  Node *node = alloc_node(NULL, NULL, (t_perform)perform_node_mul, "mul", NULL);
+  Node *node =
+      alloc_node(NULL, NULL, NULL, (t_perform)perform_node_mul, "mul", NULL);
   node->in = node_a->out;
   node->mul = node_b->out;
   node_b->next = node_a;
@@ -58,7 +59,8 @@ void perform_node_add(Node *node, int frame_count, double seconds_per_frame,
 }
 
 Node *node_add(Node *node_a, Node *node_b) {
-  Node *node = alloc_node(NULL, NULL, (t_perform)perform_node_add, "add", NULL);
+  Node *node =
+      alloc_node(NULL, NULL, NULL, (t_perform)perform_node_add, "add", NULL);
   node->in = node_a->out;
   node->add = node_b->out;
   node_b->next = node_a;
@@ -75,13 +77,13 @@ void debug_node(Node *node, char *text) {
   if (text)
     printf("%s\n", text);
   printf("node name: %s\n", node->name);
-  printf("node &: %#08x\n", node);
-  printf("node out &: %#08x\n", node->out);
-  printf("node in &: %#08x\n", node->in);
-  printf("node perform: %#08x\n", node->perform);
-  printf("node next: %#08x\n", node->next);
-  printf("node mul: %#08x\n", node->mul);
-  printf("node size: %d\n", sizeof(*node));
+  printf("\tnode &: %#08x\n", node);
+  printf("\tnode out &: %#08x\n", node->out);
+  printf("\tnode in &: %#08x\n", node->in);
+  printf("\tnode perform: %#08x\n", node->perform);
+  printf("\tnode next: %#08x\n", node->next);
+  /* printf("node mul: %#08x\n", node->mul); */
+  printf("\tnode size: %d\n", sizeof(*node));
+  printf("\tnode finished: %d\n", node->should_free);
   /* printf("node add: %#08x\n", node->add); */
-  printf("-------\n");
 }

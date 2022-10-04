@@ -35,9 +35,12 @@ void cleanup_graph(Node *node, Node *prev) {
 }
 void *cleanup_nodes_job(void *arg) {
   UserCtx *ctx = (UserCtx *)arg;
+  Node *graph = ctx->graph;
   for (;;) {
-    Node *head = (Node *)arg;
-    /* cleanup_graph(head, NULL); */
+    /* cleanup_graph(graph, NULL); */
+
+    printf("----------ts %f\n", seconds_offset);
+    debug_graph(graph);
     sleep_millisecs(250);
   }
 }
@@ -58,25 +61,13 @@ void *modulate_pitch(void *arg) {
     sleep_millisecs(msec);
   }
 }
-
-/* Node *get_graph(struct SoundIoOutStream *outstream) { */
-/*   int sample_rate = outstream->sample_rate; */
-/*   Node *head = get_synth(outstream); */
-/*   Node *tail = head; */
-/*   debug_node(tail, NULL); */
-/*  */
-/*   tail = node_add_to_tail( */
-/*       get_delay_node(tail->out, 750, 1000, 0.3, sample_rate), tail); */
-/*  */
-/*   return head; */
-/* } */
-/*  */
 static void (*write_sample)(char *ptr, double sample);
 void write_buffer_to_output(double *buffer, int frame_count,
                             const struct SoundIoChannelLayout *layout,
                             struct SoundIoChannelArea *areas) {
   if (!buffer) {
     fprintf(stderr, "no buffer found to write to output");
+    return;
   };
   for (int frame = 0; frame < frame_count; frame += 1) {
     double sample = 0.25 * buffer[frame];
@@ -109,6 +100,8 @@ static void write_callback(struct SoundIoOutStream *outstream,
       break;
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
+    Node *node = perform_graph(ctx->graph, frame_count, seconds_per_frame,
+                               seconds_offset);
 
     write_buffer_to_output(ctx->buses[0], frame_count, layout, areas);
 
