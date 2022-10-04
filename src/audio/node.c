@@ -74,7 +74,7 @@ Node *node_add(Node *node_a, Node *node_b) {
 
 Node *node_add_to_tail(Node *node, Node *prev) {
   prev->next = node;
-  return node;
+  return node; // returns tail
 };
 
 void debug_node(Node *node, char *text) {

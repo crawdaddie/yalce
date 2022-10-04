@@ -42,14 +42,15 @@ int win(UserCtx *ctx) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
     for (int i = 0; i < 2048; i++) {
       int j = (read + i) % 2048;
-      int x1 = (int)j * 640 / 2048;
+      int x1 = (int)j * 1000 / 2048;
       double y1val = 120 * ctx->buses[0][j];
       int y1 = (int)(240 + y1val);
 
-      int x2 = (int)(j + 1) * 640 / 2048;
+      int x2 = (int)(j + 1) * 1000 / 2048;
       double y2val = 120 * ctx->buses[0][(j + 1) % 2048];
       int y2 = (int)(240 + y2val);
       SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+      /* printf("sample: %f\n", ctx->buses[0][j]); */
     }
     SDL_RenderPresent(renderer);
     sleep_mils(1000 / 48000);

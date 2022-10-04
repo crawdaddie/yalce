@@ -10,5 +10,6 @@ typedef struct UserCtx {
   Node *graph;
   /* void (*ctx_play_synth)(struct UserCtx *ctx); */
   /* double *(*get_bus)(struct UserCtx *ctx, int bus_num); */
+  double seconds_offset;
 } UserCtx;
 #endif

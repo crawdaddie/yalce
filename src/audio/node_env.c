@@ -3,7 +3,7 @@ typedef struct {
   double attack;
   double sustain;
   double release;
-  double offset;
+  double time_s;
   Node *ctx;
   void (*on_free)(Node *ctx)
 } env_data;
@@ -20,34 +20,34 @@ void perform_env(Node *node, int frame_count, double seconds_per_frame,
   double release = data->release;
 
   for (int i = 0; i < frame_count; i++) {
-    double env_offset = data->offset;
-    double time_ms = (seconds_offset + i * seconds_per_frame) * 1000;
-    if (time_ms <= env_offset + attack) {
-      level = (time_ms - env_offset) / attack;
-    } else if ((time_ms > env_offset + attack) &&
-               (time_ms <= env_offset + attack + sustain)) {
-      level = 1.0;
-    } else if ((time_ms > env_offset + attack + sustain) &&
-               (time_ms <= env_offset + attack + sustain + release)) {
-      level = (attack + sustain + release - (time_ms - env_offset)) / release;
-    } else {
+    double time_ms = data->time_s * 1000;
+    if (time_ms <= 0.0) {
       level = 0.0;
-      if ((time_ms > env_offset + attack + sustain + release)) {
+    } else if (time_ms <= attack) {
+      level = time_ms / attack;
+    } else if ((time_ms > attack) && (time_ms <= attack + sustain)) {
+      level = 1.0;
+    } else if ((time_ms > attack + sustain) &&
+               (time_ms <= attack + sustain + release)) {
+      level = (attack + sustain + release - time_ms) / release;
+    } else {
+      if ((time_ms > attack + sustain + release)) {
         if (data->on_free)
           data->on_free(data->ctx);
-      }
+      };
+      level = 0.0;
     };
     out[i] = level;
+    data->time_s = data->time_s + seconds_per_frame;
   }
 }
 
-Node *get_env_node(double attack, double sustain, double release,
-                   double offset) {
+Node *get_env_node(double attack, double sustain, double release) {
   env_data *data = malloc(sizeof(env_data) + sizeof(Node));
   data->attack = attack;
   data->sustain = sustain;
   data->release = release;
-  data->offset = offset;
+  data->time_s = 0.0;
   data->ctx = NULL;
   data->on_free = NULL;
   return alloc_node((NodeData *)data, NULL, (t_perform)perform_env, "env",
@@ -59,7 +59,7 @@ void env_set_on_free(Node *env_node, Node *ctx, void (*on_free)(Node *ctx)) {
   ((env_data *)env_node->data)->on_free = on_free;
 }
 
-void reset_env(Node *node, double offset) {
+void reset_env(Node *node) {
   env_data *data = (env_data *)node->data;
-  data->offset = offset;
+  data->time_s = 0.0;
 }

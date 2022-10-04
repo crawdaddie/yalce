@@ -17,14 +17,22 @@ void perform_sq_detune(Node *node, int frame_count, double seconds_per_frame,
     double freq = data->freq;
     double radians_per_second = freq * 2.0 * PI;
     double sample =
-        fmod((seconds_offset + i * seconds_per_frame) * radians_per_second,
-             2 * PI) > PI;
+        2.0 *
+            (fmod((seconds_offset + i * seconds_per_frame) * radians_per_second,
+                  2 * PI) > PI) -
+        1;
 
-    sample += fmod((seconds_offset + i * seconds_per_frame) *
-                       radians_per_second * 1.02,
-                   2 * PI) > PI;
+    sample += 2.0 * (fmod((seconds_offset + i * seconds_per_frame) *
+                              radians_per_second * 1.02,
+                          2 * PI) > PI) -
+              1;
 
-    out[i] = (2 * sample - 1) * 0.5;
+    /* sample += fmod((seconds_offset + i * seconds_per_frame) * */
+    /*                    radians_per_second * 1.02, */
+    /*                2 * PI) > PI; */
+
+    /* out[i] = (2 * sample - 1) * 0.5; */
+    out[i] = sample * 0.5;
   }
 }
 

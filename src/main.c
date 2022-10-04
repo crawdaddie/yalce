@@ -3,9 +3,11 @@
 #include "cli.c"
 #include "oscilloscope.c"
 #include "user_ctx.c"
+#include <errno.h>
 #include <soundio/soundio.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include <pthread.h>
 
@@ -16,52 +18,53 @@ static double pitches[7] = {261.626,         311.127, 349.228, 391.995,
                             415.30469757995, 466.164, 523.251};
 
 static double octaves[4] = {0.25, 0.5, 1, 2.0};
-void sleep_millisecs(long msec) {
+int sleep_millisecs(long msec) {
+  int ret;
   struct timespec ts;
+  if (msec < 0) {
+    errno = EINVAL;
+    return -1;
+  }
   ts.tv_sec = msec / 1000;
   ts.tv_nsec = (msec % 1000) * 1000000;
-  nanosleep(&ts, &ts);
+  do {
+    ret = nanosleep(&ts, &ts);
+  } while (ret && errno == EINTR);
 }
+
 void cleanup_graph(Node *node, Node *prev) {
-  if (node->should_free) {
-    prev->next = node->next;
-    node->free_node(node);
-    return cleanup_graph(prev->next, NULL);
+  if (node == NULL) {
+    return;
+  };
+  if (node->should_free == 1) {
+    Node *next = remove_from_graph(node, prev);
+    return cleanup_graph(next, prev);
   };
   Node *next = node->next;
-  if (next) {
-    cleanup_graph(next, node);
-  }
+  cleanup_graph(next, node);
 }
 void *cleanup_nodes_job(void *arg) {
   UserCtx *ctx = (UserCtx *)arg;
   Node *graph = ctx->graph;
   for (;;) {
-    /* cleanup_graph(graph, NULL); */
-    printf("----------ts %f\n", seconds_offset);
-    /* debug_graph(graph); */
-    sleep_millisecs(250);
+    debug_synths(graph);
+    cleanup_graph(graph, NULL);
+    sleep_millisecs(25);
   }
 }
 void *modulate_pitch(void *arg) {
-  int p_index = 0;
 
   for (;;) {
     struct SoundIoOutStream *outstream = (struct SoundIoOutStream *)arg;
     UserCtx *ctx = (UserCtx *)outstream->userdata;
-    int rand_int = rand() % 7;
-    double p = pitches[p_index];
-    /* int rand_octave = rand() % 4; */
-    /* p = p * 0.5 * octaves[rand_octave]; */
+    int p_index = rand() % 7;
+    int o_index = rand() % 4;
+    double p = pitches[p_index] * octaves[o_index];
+    long msec = 500 * octaves[rand() % 4];
+    Node *synth = ctx_play_synth(ctx, p, msec);
 
-    ctx_play_synth(ctx, p);
-    /* graph = play_synth(graph, p); */
-    /* debug_node(graph, "playing"); */
-    /* debug_node(graph->next, "before"); */
-
-    long msec = 500 * ((long)(rand() % 4) + 1);
+    /* long msec = 250 * ((long)(rand() % 4) + 1); */
     sleep_millisecs(msec);
-    p_index = (p_index + 1) % 7;
   }
 }
 static void (*write_sample)(char *ptr, double sample);
@@ -69,7 +72,7 @@ void write_buffer_to_output(double *buffer, int frame_count,
                             const struct SoundIoChannelLayout *layout,
                             struct SoundIoChannelArea *areas) {
   if (!buffer) {
-    fprintf(stderr, "no buffer found to write to output");
+    fprintf(stderr, "no buffer found to write to output\n");
     return;
   };
   for (int frame = 0; frame < frame_count; frame += 1) {
@@ -103,14 +106,18 @@ static void write_callback(struct SoundIoOutStream *outstream,
       break;
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
-    zero_bus(get_bus(ctx, 0), frame_count, seconds_per_frame, seconds_offset);
+    zero_bus(get_bus(ctx, 0), frame_count, seconds_per_frame,
+             ctx->seconds_offset);
+    // reset bus to zero before computing this block and writing to it
 
-    Node *node = perform_graph(ctx->graph, frame_count, seconds_per_frame,
-                               seconds_offset);
+    Node *node =
+        perform_graph(ctx->graph, frame_count, seconds_per_frame,
+                      ctx->seconds_offset); // compute a block of samples and
+                                            // write it to a bus
 
-    write_buffer_to_output(get_bus(ctx, 0), frame_count, layout, areas);
+    write_buffer_to_output(ctx->buses[0], frame_count, layout, areas);
 
-    seconds_offset = seconds_offset + seconds_per_frame * frame_count;
+    ctx->seconds_offset += seconds_per_frame * frame_count;
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
         return;
