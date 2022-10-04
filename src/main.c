@@ -1,6 +1,7 @@
 #include "audio/node.h"
 #include "audio/util.c"
 #include "cli.c"
+#include "oscilloscope.c"
 #include "user_ctx.c"
 #include <soundio/soundio.h>
 #include <stdio.h>
@@ -24,7 +25,6 @@ void sleep_millisecs(long msec) {
 void cleanup_graph(Node *node, Node *prev) {
   if (node->should_free) {
     prev->next = node->next;
-    debug_node(node, "cleaning up:");
     node->free_node(node);
     return cleanup_graph(prev->next, NULL);
   };
@@ -38,27 +38,30 @@ void *cleanup_nodes_job(void *arg) {
   Node *graph = ctx->graph;
   for (;;) {
     /* cleanup_graph(graph, NULL); */
-
     printf("----------ts %f\n", seconds_offset);
-    debug_graph(graph);
+    /* debug_graph(graph); */
     sleep_millisecs(250);
   }
 }
 void *modulate_pitch(void *arg) {
-  UserCtx *ctx = (UserCtx *)arg;
+  int p_index = 0;
 
-  /* Node *graph = (Node *)ctx->graph; */
   for (;;) {
+    struct SoundIoOutStream *outstream = (struct SoundIoOutStream *)arg;
+    UserCtx *ctx = (UserCtx *)outstream->userdata;
     int rand_int = rand() % 7;
-    double p = pitches[rand_int];
-    int rand_octave = rand() % 4;
-    p = p * 0.5 * octaves[rand_octave];
+    double p = pitches[p_index];
+    /* int rand_octave = rand() % 4; */
+    /* p = p * 0.5 * octaves[rand_octave]; */
+
+    ctx_play_synth(ctx, p);
     /* graph = play_synth(graph, p); */
     /* debug_node(graph, "playing"); */
     /* debug_node(graph->next, "before"); */
 
     long msec = 500 * ((long)(rand() % 4) + 1);
     sleep_millisecs(msec);
+    p_index = (p_index + 1) % 7;
   }
 }
 static void (*write_sample)(char *ptr, double sample);
@@ -100,10 +103,12 @@ static void write_callback(struct SoundIoOutStream *outstream,
       break;
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
+    zero_bus(get_bus(ctx, 0), frame_count, seconds_per_frame, seconds_offset);
+
     Node *node = perform_graph(ctx->graph, frame_count, seconds_per_frame,
                                seconds_offset);
 
-    write_buffer_to_output(ctx->buses[0], frame_count, layout, areas);
+    write_buffer_to_output(get_bus(ctx, 0), frame_count, layout, areas);
 
     seconds_offset = seconds_offset + seconds_per_frame * frame_count;
     if ((err = soundio_outstream_end_write(outstream))) {
@@ -258,10 +263,13 @@ int main(int argc, char **argv) {
   outstream->userdata = ctx;
 
   pthread_t thread;
-  pthread_create(&thread, NULL, modulate_pitch, (void *)ctx);
+  pthread_create(&thread, NULL, modulate_pitch, (void *)outstream);
 
   pthread_t cleanup_thread;
   pthread_create(&thread, NULL, cleanup_nodes_job, (void *)ctx);
+
+  pthread_t win_thread;
+  pthread_create(&win_thread, NULL, (void *)win, (void *)ctx);
 
   pthread_exit(NULL);
   soundio_outstream_destroy(outstream);

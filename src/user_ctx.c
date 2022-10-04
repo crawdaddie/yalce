@@ -1,24 +1,13 @@
-#include "audio/node.h"
-#include "audio/synth.c"
-#define BUS_NUM 8
-#define BUS_SIZE 512
-
-typedef struct UserCtx {
-  double **buses;
-  Node *graph;
-  /* void (*ctx_play_synth)(struct UserCtx *ctx); */
-  /* double *(*get_bus)(struct UserCtx *ctx, int bus_num); */
-} UserCtx;
-
+#include "user_ctx.h"
 Node *get_graph(double *bus) {
   int sample_rate = 48000;
-  Node *head =
-      alloc_node(NULL, NULL, NULL, (t_perform)perform_null, "head", NULL);
+  Node *head = alloc_node(NULL, NULL, (t_perform)perform_null, "head", NULL);
   Node *tail = head;
   tail = node_add_to_tail(get_synth(220.0, bus), tail);
 
-  tail = node_add_to_tail(get_delay_node(bus, bus, 750, 1000, 0.3, sample_rate),
-                          tail);
+  /* tail = */
+  /*     node_add_to_tail(get_delay_node(bus, 750, 1000, 0.3, sample_rate),
+   * tail); */
 
   return head;
 }
@@ -33,8 +22,20 @@ void debug_graph(Node *graph) {
   printf("----------\n");
 }
 
-void ctx_play_synth(UserCtx *ctx) {}
 double *get_bus(UserCtx *ctx, int bus_num) { return ctx->buses[bus_num]; }
+void zero_bus(double *bus, int frame_count, double seconds_per_frame,
+              double seconds_offset) {
+  for (int i = 0; i < frame_count; i++) {
+    bus[i] = 0;
+  }
+}
+void ctx_play_synth(UserCtx *ctx, double freq) {
+  Node *head = ctx->graph;
+  debug_node(head, NULL);
+  Node *next = head->next;
+  Node *synth = node_add_to_tail(get_synth(freq, get_bus(ctx, 0)), head);
+  synth->next = next;
+};
 
 UserCtx *get_user_ctx() {
   double **buses;

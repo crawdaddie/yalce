@@ -130,7 +130,7 @@ Node *get_biquad_static(biquad_type type, double freq, double bandwidth,
   /* zero initial samples */
   b->x1 = b->x2 = 0;
   b->y1 = b->y2 = 0;
-  return alloc_node((NodeData *)b, in, NULL, (t_perform)perform_biquad_static,
+  return alloc_node((NodeData *)b, in, (t_perform)perform_biquad_static,
                     "biquad", NULL);
 }
 
@@ -263,6 +263,6 @@ Node *get_biquad_lpf(double *in, double freq, double bandwidth, double gain,
   b->x1 = b->x2 = 0;
   b->y1 = b->y2 = 0;
 
-  return alloc_node((NodeData *)b, in, NULL, (t_perform)perform_biquad_lp,
+  return alloc_node((NodeData *)b, in, (t_perform)perform_biquad_lp,
                     "biquad_lp", NULL);
 }

@@ -63,8 +63,8 @@ void free_delay_node(Node *node) {
   free_node(node);
 }
 
-Node *get_delay_node(double *in, double *out, int delay_time_ms,
-                     int max_delay_time_ms, double feedback, int sample_rate) {
+Node *get_delay_node(double *in, int delay_time_ms, int max_delay_time_ms,
+                     double feedback, int sample_rate) {
 
   int bufsize = (int)(sample_rate * max_delay_time_ms / 1000);
   int read_ptr = (int)(sample_rate * delay_time_ms / 1000) * -1;
@@ -85,7 +85,7 @@ Node *get_delay_node(double *in, double *out, int delay_time_ms,
   node->data = (NodeData *)data;
   node->free_node = free_delay_node;
   node->in = in;
-  node->out = out ? out : get_buffer();
+  node->out = get_buffer();
   node->should_free = 0;
   return node;
 }

@@ -36,7 +36,7 @@ void set_freq(Node *node, double freq) {
 Node *get_sq_detune_node(double freq) {
   sq_data *data = malloc(sizeof(sq_data));
   data->freq = freq;
-  Node *node = alloc_node((NodeData *)data, NULL, NULL,
-                          (t_perform)perform_sq_detune, "square", NULL);
+  Node *node = alloc_node((NodeData *)data, NULL, (t_perform)perform_sq_detune,
+                          "square", NULL);
   return node;
 }

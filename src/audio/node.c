@@ -8,10 +8,10 @@ void free_node(Node *node) {
   free(node->out);
   free(node);
 }
-double *get_buffer() { return malloc(sizeof(double) * node_frame_size); }
+double *get_buffer() { return calloc(2048, sizeof(double)); }
 
-Node *alloc_node(NodeData *data, double *in, double *out, t_perform perform,
-                 char *name, t_free_node custom_free_node) {
+Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
+                 t_free_node custom_free_node) {
   Node *node = malloc(sizeof(Node) + sizeof(data));
   node->name = name ? (name) : "";
   node->perform = perform;
@@ -20,14 +20,20 @@ Node *alloc_node(NodeData *data, double *in, double *out, t_perform perform,
   node->add = NULL;
   node->data = data;
   node->in = in;
-  node->out = out ? out : get_buffer();
-  node->free_node = custom_free_node == NULL ? free_node : custom_free_node;
+  node->out = get_buffer();
+  node->free_node = (custom_free_node) ? free_node : custom_free_node;
   node->should_free = 0;
   return node;
 }
 
 void perform_null(Node *node, int frame_count, double seconds_per_frame,
-                  double seconds_offset) {}
+                  double seconds_offset) {
+  double *out = node->out;
+
+  for (int i = 0; i < frame_count; i++) {
+    out[i] = 0.0;
+  }
+}
 
 void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
                       double seconds_offset) {
@@ -40,8 +46,7 @@ void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
 }
 
 Node *node_mul(Node *node_a, Node *node_b) {
-  Node *node =
-      alloc_node(NULL, NULL, NULL, (t_perform)perform_node_mul, "mul", NULL);
+  Node *node = alloc_node(NULL, NULL, (t_perform)perform_node_mul, "mul", NULL);
   node->in = node_a->out;
   node->mul = node_b->out;
   node_b->next = node_a;
@@ -59,8 +64,7 @@ void perform_node_add(Node *node, int frame_count, double seconds_per_frame,
 }
 
 Node *node_add(Node *node_a, Node *node_b) {
-  Node *node =
-      alloc_node(NULL, NULL, NULL, (t_perform)perform_node_add, "add", NULL);
+  Node *node = alloc_node(NULL, NULL, (t_perform)perform_node_add, "add", NULL);
   node->in = node_a->out;
   node->add = node_b->out;
   node_b->next = node_a;

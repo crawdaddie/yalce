@@ -6,8 +6,8 @@
 #include <stdlib.h>
 
 static const double PI = 3.14159265358979323846264338328;
-/* static int node_frame_size = 2048; */
-static int node_frame_size = 512;
+static int node_frame_size = 2048;
+/* static int node_frame_size = 512; */
 
 typedef struct NodeData {
 } NodeData;
@@ -34,8 +34,8 @@ typedef struct Node {
 } Node;
 void debug_node(Node *node, char *text);
 double *get_buffer();
-Node *alloc_node(NodeData *data, double *in, double *out, t_perform perform,
-                 char *name, t_free_node free_node);
+Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
+                 t_free_node free_node);
 
 void perform_null(Node *node, int frame_count, double seconds_per_frame,
                   double seconds_offset);
