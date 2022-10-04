@@ -46,7 +46,7 @@ int win(UserCtx *ctx) {
       double y1val = 120 * ctx->buses[0][j];
       int y1 = (int)(240 + y1val);
 
-      int x2 = (int)((j + 1) % 2048) * 640 / 2048;
+      int x2 = (int)(j + 1) * 640 / 2048;
       double y2val = 120 * ctx->buses[0][(j + 1) % 2048];
       int y2 = (int)(240 + y2val);
       SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
