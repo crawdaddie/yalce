@@ -1,38 +1,5 @@
 #include "user_ctx.h"
 
-Node *get_square_synth_node(double freq, double *bus, long sustain) {
-
-  Node *head = get_sq_detune_node(freq);
-  Node *tail = head;
-  tail = node_add_to_tail(get_tanh_node(tail->out, 20.0), tail);
-  tail =
-      node_add_to_tail(get_biquad_lpf(tail->out, 2500, 0.2, 2.0, 48000), tail);
-  Node *env = get_env_node(10, 25.0, (double)sustain);
-
-  tail = node_mul(env, tail);
-
-  synth_data *data = malloc(sizeof(synth_data) + sizeof(bus));
-  data->graph = head;
-  data->bus = bus;
-
-  Node *out_node =
-      alloc_node((NodeData *)data, NULL, (t_perform)perform_synth_graph,
-                 "synth", (t_free_node)free_synth);
-  env_set_on_free(env, out_node, on_env_free);
-  return out_node;
-}
-Node *get_graph(double *bus) {
-  int sample_rate = 48000;
-  Node *head = alloc_node(NULL, NULL, (t_perform)perform_null, "head", NULL);
-  Node *tail = head;
-
-  tail =
-      node_add_to_tail(get_delay_node(bus, 750, 1000, 0.3, sample_rate), tail);
-  tail->out = bus;
-
-  return head;
-}
-
 void debug_graph(Node *graph) {
   debug_node(graph, NULL);
 
@@ -61,32 +28,77 @@ void zero_bus(double *bus, int frame_count, double seconds_per_frame,
     bus[i] = 0;
   }
 }
-Node *ctx_play_synth(UserCtx *ctx, double freq, long sustain) {
-  Node *head = ctx->graph;
-  Node *next = head->next;
-  Node *synth = node_add_to_tail(
-      get_square_synth_node(freq, ctx->buses[0], sustain), head);
-  synth->next = next;
-  return synth;
-};
+Node *get_tail(Node *node) {
+  if (node->next == NULL) {
+    return node;
+  }
+  return get_tail(node->next);
+}
 
-UserCtx *get_user_ctx() {
+UserCtx *get_user_ctx(double latency) {
   double **buses;
   buses = calloc(BUS_NUM, sizeof(double *));
   for (int i = 0; i < BUS_NUM; i++) {
     buses[i] = calloc(BUS_SIZE, sizeof(double));
   };
 
-  Node *graph = get_graph(buses[0]);
-  UserCtx *ctx = malloc(sizeof(UserCtx) + sizeof(buses) + sizeof(graph));
+  UserCtx *ctx = malloc(sizeof(UserCtx) + sizeof(buses));
   ctx->buses = buses;
-  ctx->graph = graph;
   ctx->seconds_offset = 0.0;
+  ctx->latency = latency;
+  ctx->graphs = NULL;
 
   return ctx;
 }
 
-void debug_ctx(UserCtx *ctx) {
-  printf("user_ctx\n");
-  printf("user_ctx buses: %#08x\n", ctx->buses);
+Node *add_graph_to_ctx(UserCtx *ctx) {
+  Node *new_graph =
+      alloc_node(NULL, NULL, (t_perform)perform_null, "head", NULL);
+  if (!ctx->graphs) {
+    ctx->graphs = malloc(sizeof(List) + sizeof(new_graph));
+    ((List *)ctx->graphs)->value = new_graph;
+    return new_graph;
+  };
+  List *list_el = malloc(sizeof(List) + sizeof(new_graph));
+  list_el->value = new_graph;
+  List *tail = ctx->graphs;
+  while (tail->next) {
+    tail = tail->next;
+  };
+  tail->next = list_el;
+
+  return new_graph;
+}
+
+void iterate_list(List *list, void (*cb)(void *list_el)) {
+  cb(list->value);
+  if (list->next) {
+    return iterate_list(list->next, cb);
+  }
+}
+
+void perform_ctx_group(Node *group, int frame_count, double seconds_per_frame,
+                       double seconds_offset) {
+
+  perform_graph(group, frame_count, seconds_per_frame,
+                seconds_offset); // compute a block of samples and
+                                 // write it to a bus
+}
+
+void iterate_groups_perform(List *list, int frame_count,
+                            double seconds_per_frame, double seconds_offset) {
+  perform_graph(list->value, frame_count, seconds_per_frame, seconds_offset);
+  if (list->next) {
+    return iterate_groups_perform(list->next, frame_count, seconds_per_frame,
+                                  seconds_offset);
+  }
+}
+
+struct player_ctx *get_player_ctx_ref(UserCtx *ctx) {
+
+  Node *group = add_graph_to_ctx(ctx);
+  struct player_ctx *player_ctx = malloc(sizeof(struct player_ctx));
+  player_ctx->ctx = ctx;
+  player_ctx->group = group;
+  return player_ctx;
 }

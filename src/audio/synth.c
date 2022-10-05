@@ -1,5 +1,6 @@
 #include "node.h"
 #include "node_biquad.c"
+#include "node_bufplayer.c"
 #include "node_delay.c"
 #include "node_dist.c"
 #include "node_env.c"

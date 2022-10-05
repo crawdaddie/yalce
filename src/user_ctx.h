@@ -5,11 +5,24 @@
 #define BUS_NUM 8
 #define BUS_SIZE 2048
 
+typedef struct List {
+  Node *value;
+  struct List *next;
+} List;
+
 typedef struct UserCtx {
   double **buses;
-  Node *graph;
-  /* void (*ctx_play_synth)(struct UserCtx *ctx); */
-  /* double *(*get_bus)(struct UserCtx *ctx, int bus_num); */
   double seconds_offset;
+  double latency;
+  List *graphs;
 } UserCtx;
+
+UserCtx *get_user_ctx(double latency);
+Node *add_graph_to_ctx(UserCtx *ctx);
+
+struct player_ctx {
+  UserCtx *ctx;
+  Node *group;
+};
+struct player_ctx *get_player_ctx_ref(UserCtx *ctx);
 #endif

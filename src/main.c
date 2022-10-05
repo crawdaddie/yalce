@@ -1,9 +1,10 @@
 #include "audio/node.h"
 #include "audio/util.c"
 #include "cli.c"
+#include "music.c"
 #include "oscilloscope.c"
 #include "user_ctx.c"
-#include <errno.h>
+#include "util.c"
 #include <soundio/soundio.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,21 +13,6 @@
 #include <pthread.h>
 
 #define PROJECT_NAME "simple-synth"
-
-static double seconds_offset = 0.0;
-int sleep_millisecs(long msec) {
-  int ret;
-  struct timespec ts;
-  if (msec < 0) {
-    errno = EINVAL;
-    return -1;
-  }
-  ts.tv_sec = msec / 1000;
-  ts.tv_nsec = (msec % 1000) * 1000000;
-  do {
-    ret = nanosleep(&ts, &ts);
-  } while (ret && errno == EINTR);
-}
 
 void cleanup_graph(Node *node, Node *prev) {
   if (node == NULL) {
@@ -41,30 +27,15 @@ void cleanup_graph(Node *node, Node *prev) {
 }
 void *cleanup_nodes_job(void *arg) {
   UserCtx *ctx = (UserCtx *)arg;
-  Node *graph = ctx->graph;
+
   for (;;) {
-    debug_synths(graph);
-    cleanup_graph(graph, NULL);
+    List *graphs = ctx->graphs;
+    cleanup_graph(graphs->value, NULL);
+    while (graphs->next) {
+      graphs = graphs->next;
+      cleanup_graph(graphs->value, NULL);
+    };
     sleep_millisecs(25);
-  }
-}
-static double pitches[7] = {261.626,         311.127, 349.228, 391.995,
-                            415.30469757995, 466.164, 523.251};
-
-static double octaves[5] = {0.125, 0.25, 0.5, 1, 2.0};
-void *modulate_pitch(void *arg) {
-
-  for (;;) {
-    struct SoundIoOutStream *outstream = (struct SoundIoOutStream *)arg;
-    UserCtx *ctx = (UserCtx *)outstream->userdata;
-    int p_index = rand() % 7;
-    int o_index = rand() % 4;
-    double p = pitches[p_index] * octaves[o_index];
-    long msec = 1000 * octaves[rand() % 5];
-    Node *synth = ctx_play_synth(ctx, p, msec);
-
-    /* long msec = 250 * ((long)(rand() % 4) + 1); */
-    sleep_millisecs(msec);
   }
 }
 static void (*write_sample)(char *ptr, double sample);
@@ -83,6 +54,7 @@ void write_buffer_to_output(double *buffer, int frame_count,
     }
   }
 }
+
 static void write_callback(struct SoundIoOutStream *outstream,
                            int frame_count_min, int frame_count_max) {
   double float_sample_rate = outstream->sample_rate;
@@ -95,7 +67,6 @@ static void write_callback(struct SoundIoOutStream *outstream,
   int frames_left = frame_count_max;
   for (;;) {
     int frame_count = frames_left;
-    node_frame_size = frame_count;
     if ((err =
              soundio_outstream_begin_write(outstream, &areas, &frame_count))) {
       fprintf(stderr, "unrecoverable stream error: %s\n",
@@ -110,10 +81,10 @@ static void write_callback(struct SoundIoOutStream *outstream,
              ctx->seconds_offset);
     // reset bus to zero before computing this block and writing to it
 
-    Node *node =
-        perform_graph(ctx->graph, frame_count, seconds_per_frame,
-                      ctx->seconds_offset); // compute a block of samples and
-                                            // write it to a bus
+    iterate_groups_perform(
+        ctx->graphs, frame_count, seconds_per_frame,
+        ctx->seconds_offset); // compute block for each audio graph in ctx and
+                              // write to out buses
 
     write_buffer_to_output(ctx->buses[0], frame_count, layout, areas);
 
@@ -261,19 +232,18 @@ int main(int argc, char **argv) {
     fprintf(stderr, "unable to set channel layout: %s\n",
             soundio_strerror(outstream->layout_error));
 
+  UserCtx *ctx = get_user_ctx(outstream->software_latency);
+  outstream->userdata = ctx;
+  attach_synth_thread(ctx);
+  attach_kick_thread(ctx);
+
   if ((err = soundio_outstream_start(outstream))) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   };
 
-  UserCtx *ctx = get_user_ctx();
-  outstream->userdata = ctx;
-
-  pthread_t thread;
-  pthread_create(&thread, NULL, modulate_pitch, (void *)outstream);
-
   pthread_t cleanup_thread;
-  pthread_create(&thread, NULL, cleanup_nodes_job, (void *)ctx);
+  pthread_create(&cleanup_thread, NULL, cleanup_nodes_job, (void *)ctx);
 
   pthread_t win_thread;
   pthread_create(&win_thread, NULL, (void *)win, (void *)ctx);

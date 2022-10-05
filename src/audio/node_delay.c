@@ -1,13 +1,5 @@
 #include "node.h"
 #include <soundio/soundio.h>
-/* Node *alloc_delay_node(NodeData *data, t_perform perform, char *name, ) { */
-/*   Node *node = malloc(sizeof(Node) + sizeof(data)); */
-/*   node->name = name ? (name) : ""; */
-/*   node->perform = perform; */
-/*   node->next = NULL; */
-/*   node->data = data; */
-/*   return node; */
-/* } */
 typedef struct delay_data {
   int delay_time_ms;
   double feedback;

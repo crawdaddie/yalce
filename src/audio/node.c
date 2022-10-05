@@ -23,6 +23,7 @@ Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
   node->out = get_buffer();
   node->free_node = (custom_free_node) ? free_node : custom_free_node;
   node->should_free = 0;
+  node->schedule = 0.0;
   return node;
 }
 

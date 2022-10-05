@@ -9,7 +9,8 @@ exe = executable('simple-synth', 'src/main.c', 'src/audio/node.c',
   dependencies : [
     cc.find_library('soundio'),
     cc.find_library('m'),
-    cc.find_library('SDL2')
+    cc.find_library('SDL2'),
+    cc.find_library('libsndfile')
     ]
   )
 

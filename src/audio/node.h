@@ -6,8 +6,6 @@
 #include <stdlib.h>
 
 static const double PI = 3.14159265358979323846264338328;
-static int node_frame_size = 2048;
-/* static int node_frame_size = 512; */
 
 typedef struct NodeData {
 } NodeData;
@@ -20,8 +18,7 @@ typedef struct Node {
   struct Node *next;
   void (*perform)(struct Node *node, int frame_count, double seconds_per_frame,
                   double seconds_offset);
-  void (*perform_mul_add)(struct Node *node, int frame_count,
-                          double seconds_per_frame, double seconds_offset);
+
   char *name;
   NodeData *data;
   void (*free_node)(struct Node *node);
@@ -31,6 +28,7 @@ typedef struct Node {
   double *mul;
   double *add;
   int should_free;
+  double schedule;
 } Node;
 void debug_node(Node *node, char *text);
 double *get_buffer();
