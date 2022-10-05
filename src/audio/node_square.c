@@ -14,8 +14,9 @@ void perform_sq_detune(Node *node, int frame_count, double seconds_per_frame,
   double *out = node->out;
   sq_data *data = (sq_data *)node->data;
 
-  double phase = data->phase;
   for (int i = 0; i < frame_count; i++) {
+    schedule();
+    double phase = data->phase;
     double freq = data->freq;
     double radians_per_second = freq * 2.0 * PI;
     double sample = 2.0 * (fmod(phase * radians_per_second, 2 * PI) > PI) - 1;
@@ -23,9 +24,8 @@ void perform_sq_detune(Node *node, int frame_count, double seconds_per_frame,
     sample += 2.0 * (fmod(phase * radians_per_second * 1.02, 2 * PI) > PI) - 1;
 
     out[i] = sample * 0.5;
-    phase += seconds_per_frame;
+    data->phase += seconds_per_frame;
   }
-  data->phase = phase;
 }
 
 void set_freq(Node *node, double freq) {

@@ -35,6 +35,8 @@ void perform_delay(Node *node, int frame_count, double seconds_per_frame,
   double output;
   double *buffer = data->buffer;
   for (int i = 0; i < frame_count; i++) {
+    schedule();
+
     data->write_ptr = sanitize_delay_pointer(data->write_ptr, data->bufsize);
     data->read_ptr = sanitize_delay_pointer(data->read_ptr, data->bufsize);
 

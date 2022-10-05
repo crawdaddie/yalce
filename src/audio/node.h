@@ -11,7 +11,8 @@ typedef struct NodeData {
 } NodeData;
 
 typedef void (*t_perform)(struct Node *node, int frame_count,
-                          double seconds_per_frame, double seconds_offset);
+                          double seconds_per_frame, double seconds_offset,
+                          double *schedule);
 typedef void (*t_free_node)(struct Node *node);
 
 typedef struct Node {
@@ -47,4 +48,12 @@ Node *node_add(Node *node_a, Node *node_b);
 Node *node_add_to_tail(Node *node, Node *tail);
 void free_data(NodeData *data);
 void free_node(Node *node);
+
+int delay_til_schedule_time(double schedule, int frame, double seconds_offset,
+                            double seconds_per_frame);
+
+#define schedule()                                                             \
+  if (delay_til_schedule_time(node->schedule, i, seconds_offset,               \
+                              seconds_per_frame))                              \
+    break;
 #endif

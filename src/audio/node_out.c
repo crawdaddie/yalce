@@ -9,6 +9,7 @@ void perform_out(Node *node, int frame_count, double seconds_per_frame,
 
   double *in = node->in;
   for (int i = 0; i < frame_count; i++) {
+    schedule();
     data->out_bus[i] = data->out_bus[i] + in[i];
     /* printf("out bus %f %f\n", data->out_bus[i], in[i]); */
   };

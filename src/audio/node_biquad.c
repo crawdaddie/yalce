@@ -226,6 +226,7 @@ void perform_biquad_lp(Node *node, int frame_count, double seconds_per_frame,
   double *in = node->in;
   biquad_lp_data *b = (biquad_lp_data *)node->data;
   for (int i = 0; i < frame_count; i++) {
+    schedule();
     double sample = in[i];
 
     double result;

@@ -20,6 +20,7 @@ void perform_env(Node *node, int frame_count, double seconds_per_frame,
   double release = data->release;
 
   for (int i = 0; i < frame_count; i++) {
+    schedule();
     double time_ms = data->time_s * 1000;
     if (time_ms <= 0.0) {
       level = 0.0;

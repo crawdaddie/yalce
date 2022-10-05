@@ -27,11 +27,24 @@ Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
   return node;
 }
 
+int delay_til_schedule_time(double schedule, int frame, double seconds_offset,
+                            double seconds_per_frame) {
+  if (schedule == 0.0) {
+    return 0;
+  };
+  double cur_time = seconds_offset + frame * seconds_per_frame;
+  if (schedule < cur_time) {
+    return 1;
+  }
+  return 0;
+}
+
 void perform_null(Node *node, int frame_count, double seconds_per_frame,
                   double seconds_offset) {
   double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
+    schedule();
     out[i] = 0.0;
   }
 }
@@ -42,6 +55,7 @@ void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
   double *out = node->out;
   double *mul = node->mul;
   for (int i = 0; i < frame_count; i++) {
+    schedule();
     out[i] = in[i] * mul[i];
   }
 }
@@ -60,6 +74,7 @@ void perform_node_add(Node *node, int frame_count, double seconds_per_frame,
   double *out = node->out;
   double *add = node->add;
   for (int i = 0; i < frame_count; i++) {
+    schedule();
     out[i] = in[i] + add[i];
   }
 }

@@ -12,6 +12,8 @@ void perform_bufplayer(Node *node, int frame_count, double seconds_per_frame,
   double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
+    schedule();
+
     int read_ptr = data->read_ptr;
     out[i] = read_ptr < data->frames ? data->buffer[read_ptr] : 0.0;
     if (data->loop > 0) {
@@ -62,6 +64,8 @@ void perform_bufplayer_interp(Node *node, int frame_count,
   double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
+    schedule();
+
     int read_ptr = data->read_ptr;
 
     out[i] = get_sample_interp(read_ptr, data->buffer, data->frames);

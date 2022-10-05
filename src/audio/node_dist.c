@@ -8,6 +8,7 @@ void perform_tanh(Node *node, int frame_count, double seconds_per_frame,
   double *in = node->in;
   tanh_data *data = (tanh_data *)node->data;
   for (int i = 0; i < frame_count; i++) {
+    schedule();
     double sample = tanh(in[i] * data->gain);
     out[i] = sample;
   };
