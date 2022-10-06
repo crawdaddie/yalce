@@ -53,6 +53,7 @@ void perform_synth_graph(Node *synth, int frame_count, double seconds_per_frame,
 void on_env_free(Node *synth) { synth->should_free = 1; }
 void free_synth(Node *synth) {
   printf("free synth %s", synth->name);
+  free_node(((synth_data *)synth->data)->graph);
   free_node(synth);
 }
 

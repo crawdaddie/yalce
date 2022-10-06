@@ -5,7 +5,6 @@ void free_data(NodeData *data) { free(data); }
 void free_node(Node *node) {
   NodeData *data = node->data;
   free_data(data);
-  free(node->out);
   free(node);
 }
 double *get_buffer() { return calloc(2048, sizeof(double)); }

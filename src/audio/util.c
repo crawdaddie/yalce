@@ -1,3 +1,5 @@
+#ifndef _AUDIO_UTIL
+#define _AUDIO_UTIL
 #include <math.h>
 #include <soundio/soundio.h>
 #include <stdint.h>
@@ -26,3 +28,19 @@ static void write_sample_float64ne(char *ptr, double sample) {
   double *buf = (double *)ptr;
   *buf = sample;
 }
+
+double get_sample_interp(double read_ptr, double *buf, int max_frames) {
+  double r = read_ptr;
+  if (r >= max_frames) {
+    return 0.0;
+  }
+  if (r <= 0) {
+    r = max_frames + r;
+  }
+  int frame = ((int)r);
+  double fraction = r - frame;
+  double result = buf[frame] * fraction;
+  result += buf[frame + 1] * (1.0 - fraction);
+  return result;
+}
+#endif

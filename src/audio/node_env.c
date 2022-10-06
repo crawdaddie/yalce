@@ -55,7 +55,8 @@ Node *get_env_node(double attack, double sustain, double release) {
                     NULL);
 }
 
-void env_set_on_free(Node *env_node, Node *ctx, void (*on_free)(Node *ctx)) {
+void set_on_free_handler(Node *env_node, Node *ctx,
+                         void (*on_free)(Node *ctx)) {
   ((env_data *)env_node->data)->ctx = ctx;
   ((env_data *)env_node->data)->on_free = on_free;
 }

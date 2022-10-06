@@ -20,7 +20,9 @@ void cleanup_graph(Node *node, Node *prev) {
     return;
   };
   if (node->should_free == 1) {
+    debug_node(node, "cleaning up node");
     Node *next = remove_from_graph(node, prev);
+
     return cleanup_graph(next, prev);
   };
   Node *next = node->next;
@@ -236,7 +238,7 @@ int main(int argc, char **argv) {
   UserCtx *ctx = get_user_ctx(outstream->software_latency);
   outstream->userdata = ctx;
   attach_synth_thread(ctx);
-  attach_kick_thread(ctx);
+  /* attach_kick_thread(ctx); */
 
   if ((err = soundio_outstream_start(outstream))) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
@@ -246,8 +248,13 @@ int main(int argc, char **argv) {
   pthread_t cleanup_thread;
   pthread_create(&cleanup_thread, NULL, cleanup_nodes_job, (void *)ctx);
 
-  pthread_t win_thread;
-  pthread_create(&win_thread, NULL, (void *)win, (void *)ctx);
+  for (int i = 1; i < argc; i += 1) {
+    char *arg = argv[i];
+    if (strcmp(arg, "--oscilloscope") == 0) {
+      pthread_t win_thread;
+      pthread_create(&win_thread, NULL, (void *)win, (void *)ctx);
+    }
+  }
 
   pthread_exit(NULL);
   soundio_outstream_destroy(outstream);

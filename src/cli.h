@@ -18,9 +18,9 @@
 void enableRawMode();
 void disableRawMode();
 
-static int asimp_usage(char *exe);
+static int ss_usage(char *exe);
 
-int asimp_setup(int argc, char **argv, char *stream_name, char *device_id,
-                enum SoundIoBackend *backend);
+int ss_setup(int argc, char **argv, char *stream_name, char *device_id,
+             enum SoundIoBackend *backend);
 
 #endif

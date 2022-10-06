@@ -1,4 +1,5 @@
 #include "node.h"
+#include "util.c"
 typedef struct bufplayer_data {
   double *buffer;
   int frames;
@@ -42,21 +43,6 @@ typedef struct bufplayer_interp_data {
   double rate;
   int loop;
 } bufplayer_interp_data;
-
-double get_sample_interp(double read_ptr, double *buf, int max_frames) {
-  double r = read_ptr;
-  if (r >= max_frames) {
-    return 0.0;
-  }
-  if (r <= 0) {
-    r = max_frames + r;
-  }
-  int frame = ((int)r);
-  double fraction = r - frame;
-  double result = buf[frame] * fraction;
-  result += buf[frame + 1] * (1.0 - fraction);
-  return result;
-}
 
 void perform_bufplayer_interp(Node *node, int frame_count,
                               double seconds_per_frame, double seconds_offset) {

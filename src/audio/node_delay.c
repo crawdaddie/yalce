@@ -1,10 +1,11 @@
 #include "node.h"
+#include "util.c"
 #include <soundio/soundio.h>
 typedef struct delay_data {
   int delay_time_ms;
   double feedback;
   int bufsize;
-  int read_ptr;
+  double read_ptr;
   int write_ptr;
   double *buffer;
 } delay_data;
@@ -41,7 +42,9 @@ void perform_delay(Node *node, int frame_count, double seconds_per_frame,
     data->read_ptr = sanitize_delay_pointer(data->read_ptr, data->bufsize);
 
     input = in[i];
-    output = data->buffer[data->read_ptr] * 0.5 + input;
+    output =
+        get_sample_interp(data->read_ptr, data->buffer, data->bufsize) * 0.5 +
+        input;
 
     data->write_ptr++;
     data->read_ptr++;
@@ -61,7 +64,7 @@ Node *get_delay_node(double *in, int delay_time_ms, int max_delay_time_ms,
                      double feedback, int sample_rate) {
 
   int bufsize = (int)(sample_rate * max_delay_time_ms / 1000);
-  int read_ptr = (int)(sample_rate * delay_time_ms / 1000) * -1;
+  int read_ptr = (double)(sample_rate * delay_time_ms / 1000) * -1;
 
   double *buffer = malloc(sizeof(double) * bufsize);
   delay_data *data = malloc(sizeof(delay_data) + sizeof(double) * bufsize);

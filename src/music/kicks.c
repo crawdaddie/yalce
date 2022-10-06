@@ -3,6 +3,7 @@
 #include "../util.c"
 #include <pthread.h>
 #include <sndfile.h>
+#include <sys/time.h>
 
 struct buf_info {
   double *data;
@@ -40,7 +41,7 @@ Node *get_kick_sample_node(double *buf, int frames, double *bus, double rate,
   Node *out_node =
       alloc_node((NodeData *)data, NULL, (t_perform)perform_synth_graph, "kick",
                  (t_free_node)free_synth);
-  env_set_on_free(env, out_node, on_env_free);
+  set_on_free_handler(env, out_node, on_env_free);
   return out_node;
 }
 
@@ -63,7 +64,9 @@ void *kicks(void *arg) {
   UserCtx *ctx = player_ctx->ctx;
   Node *group = player_ctx->group;
   free(player_ctx);
+
   struct buf_info *b_info = read_sndfile("kick.wav");
+
   long msec = 500;
   double last_tick = ctx->seconds_offset;
   for (;;) {

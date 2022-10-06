@@ -44,7 +44,6 @@ int ss_setup(int argc, char **argv, char *stream_name, char *device_id,
 
           } else if (strcmp(argv[i], "wasapi") == 0) {
             *backend = SoundIoBackendWasapi;
-            return 0;
           } else {
             fprintf(stderr, "Invalid backend: %s\n", argv[i]);
             return 1;
@@ -65,4 +64,5 @@ int ss_setup(int argc, char **argv, char *stream_name, char *device_id,
       return ss_usage(exe);
     }
   }
+  return 0;
 }
