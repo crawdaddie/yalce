@@ -18,7 +18,7 @@ typedef void (*t_free_node)(struct Node *node);
 typedef struct Node {
   struct Node *next;
   void (*perform)(struct Node *node, int frame_count, double seconds_per_frame,
-                  double seconds_offset);
+                  double seconds_offset, double schedule);
 
   char *name;
   NodeData *data;
@@ -37,12 +37,12 @@ Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
                  t_free_node free_node);
 
 void perform_null(Node *node, int frame_count, double seconds_per_frame,
-                  double seconds_offset);
+                  double seconds_offset, double schedule);
 void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
-                      double seconds_offset);
+                      double seconds_offset, double schedule);
 Node *node_mul(Node *node_a, Node *node_b);
 void perform_node_add(Node *node, int frame_count, double seconds_per_frame,
-                      double seconds_offset);
+                      double seconds_offset, double schedule);
 
 Node *node_add(Node *node_a, Node *node_b);
 Node *node_add_to_tail(Node *node, Node *tail);
@@ -52,8 +52,9 @@ void free_node(Node *node);
 int delay_til_schedule_time(double schedule, int frame, double seconds_offset,
                             double seconds_per_frame);
 
-#define schedule()                                                             \
-  if (delay_til_schedule_time(node->schedule, i, seconds_offset,               \
-                              seconds_per_frame))                              \
-    break;
+#define sched()                                                                \
+  if (delay_til_schedule_time(schedule, i, seconds_offset,                     \
+                              seconds_per_frame) == 1) {                       \
+    break;                                                                     \
+  }
 #endif

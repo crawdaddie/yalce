@@ -4,12 +4,12 @@ typedef struct out_data {
 } out_data;
 
 void perform_out(Node *node, int frame_count, double seconds_per_frame,
-                 double seconds_offset) {
+                 double seconds_offset, double schedule) {
   out_data *data = (out_data *)node->data;
 
   double *in = node->in;
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     data->out_bus[i] = data->out_bus[i] + in[i];
     /* printf("out bus %f %f\n", data->out_bus[i], in[i]); */
   };

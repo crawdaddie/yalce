@@ -20,7 +20,8 @@ typedef enum {
 } biquad_type;
 
 void perform_biquad_static(Node *node, double *out, int frame_count,
-                           double seconds_per_frame, double seconds_offset) {
+                           double seconds_per_frame, double seconds_offset,
+                           double schedule) {
   biquad_data *b = (biquad_data *)node->data;
   for (int i = 0; i < frame_count; i++) {
     double sample = out[i];
@@ -221,12 +222,12 @@ void set_biquad_params(biquad_data *b, biquad_type type, double freq,
 }
 
 void perform_biquad_lp(Node *node, int frame_count, double seconds_per_frame,
-                       double seconds_offset) {
+                       double seconds_offset, double schedule) {
   double *out = node->out;
   double *in = node->in;
   biquad_lp_data *b = (biquad_lp_data *)node->data;
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     double sample = in[i];
 
     double result;
@@ -251,7 +252,8 @@ void perform_biquad_lp(Node *node, int frame_count, double seconds_per_frame,
 void set_filter_params(Node *node, double freq, double bandwidth, double gain,
                        int sample_rate) {
   biquad_lp_data *data = (biquad_lp_data *)node->data;
-  set_biquad_params(data, BIQUAD_LPF, freq, bandwidth, gain, sample_rate);
+  set_biquad_params((NodeData *)data, BIQUAD_LPF, freq, bandwidth, gain,
+                    sample_rate);
 }
 
 Node *get_biquad_lpf(double *in, double freq, double bandwidth, double gain,

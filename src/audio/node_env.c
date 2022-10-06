@@ -11,7 +11,7 @@ typedef struct {
 void ramp_value_tick(double *val, double target, double speed) {}
 
 void perform_env(Node *node, int frame_count, double seconds_per_frame,
-                 double seconds_offset) {
+                 double seconds_offset, double schedule) {
   env_data *data = (env_data *)node->data;
   double level = 0.0;
   double *out = node->out;
@@ -20,7 +20,7 @@ void perform_env(Node *node, int frame_count, double seconds_per_frame,
   double release = data->release;
 
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     double time_ms = data->time_s * 1000;
     if (time_ms <= 0.0) {
       level = 0.0;

@@ -3,12 +3,12 @@ typedef struct tanh_data {
   double gain;
 } tanh_data;
 void perform_tanh(Node *node, int frame_count, double seconds_per_frame,
-                  double seconds_offset) {
+                  double seconds_offset, double schedule) {
   double *out = node->out;
   double *in = node->in;
   tanh_data *data = (tanh_data *)node->data;
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     double sample = tanh(in[i] * data->gain);
     out[i] = sample;
   };

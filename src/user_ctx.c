@@ -80,25 +80,28 @@ void iterate_list(List *list, void (*cb)(void *list_el)) {
 void perform_ctx_group(Node *group, int frame_count, double seconds_per_frame,
                        double seconds_offset) {
 
-  perform_graph(group, frame_count, seconds_per_frame,
-                seconds_offset); // compute a block of samples and
-                                 // write it to a bus
+  perform_graph(group, frame_count, seconds_per_frame, seconds_offset,
+                0.0); // compute a block of samples and
+                      // write it to a bus
 }
 
 void iterate_groups_perform(List *list, int frame_count,
                             double seconds_per_frame, double seconds_offset) {
-  perform_graph(list->value, frame_count, seconds_per_frame, seconds_offset);
+  perform_graph(list->value, frame_count, seconds_per_frame, seconds_offset,
+                0.0);
   if (list->next) {
     return iterate_groups_perform(list->next, frame_count, seconds_per_frame,
                                   seconds_offset);
   }
 }
 
-struct player_ctx *get_player_ctx_ref(UserCtx *ctx) {
+struct player_ctx *get_player_ctx_ref(UserCtx *ctx,
+                                      struct timespec initial_time) {
 
   Node *group = add_graph_to_ctx(ctx);
   struct player_ctx *player_ctx = malloc(sizeof(struct player_ctx));
   player_ctx->ctx = ctx;
   player_ctx->group = group;
+  player_ctx->initial_time = initial_time;
   return player_ctx;
 }

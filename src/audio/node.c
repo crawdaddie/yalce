@@ -32,29 +32,29 @@ int delay_til_schedule_time(double schedule, int frame, double seconds_offset,
     return 0;
   };
   double cur_time = seconds_offset + frame * seconds_per_frame;
-  if (schedule < cur_time) {
+  if (schedule > cur_time) {
     return 1;
-  }
+  };
   return 0;
 }
 
 void perform_null(Node *node, int frame_count, double seconds_per_frame,
-                  double seconds_offset) {
+                  double seconds_offset, double schedule) {
   double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     out[i] = 0.0;
   }
 }
 
 void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
-                      double seconds_offset) {
+                      double seconds_offset, double schedule) {
   double *in = node->in;
   double *out = node->out;
   double *mul = node->mul;
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     out[i] = in[i] * mul[i];
   }
 }
@@ -68,12 +68,12 @@ Node *node_mul(Node *node_a, Node *node_b) {
   return node;
 }
 void perform_node_add(Node *node, int frame_count, double seconds_per_frame,
-                      double seconds_offset) {
+                      double seconds_offset, double schedule) {
   double *in = node->in;
   double *out = node->out;
   double *add = node->add;
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     out[i] = in[i] + add[i];
   }
 }
@@ -96,6 +96,7 @@ void debug_node(Node *node, char *text) {
   if (text)
     printf("%s\n", text);
   printf("node name: %s\n", node->name);
+  printf("\tnode schedule %f\n", node->schedule);
   printf("\tnode &: %#08x\n", node);
   printf("\tnode out &: %#08x\n", node->out);
   printf("\tnode in &: %#08x\n", node->in);

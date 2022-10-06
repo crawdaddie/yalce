@@ -14,19 +14,20 @@ typedef struct synth_data {
 } synth_data;
 
 Node *perform_graph(Node *synth_graph, int frame_count,
-                    double seconds_per_frame, double seconds_offset) {
+                    double seconds_per_frame, double seconds_offset,
+                    double schedule) {
 
   if (synth_graph == NULL) {
     return NULL;
   };
 
   synth_graph->perform(synth_graph, frame_count, seconds_per_frame,
-                       seconds_offset);
+                       seconds_offset, schedule);
 
   if (synth_graph->next) {
-    synth_graph->next->schedule = synth_graph->schedule;
-    return perform_graph(synth_graph->next, frame_count, seconds_per_frame,
-                         seconds_offset);
+    Node *next = synth_graph->next;
+    return perform_graph(next, frame_count, seconds_per_frame, seconds_offset,
+                         schedule);
   };
 
   return synth_graph; // return tail
@@ -35,17 +36,15 @@ Node *perform_graph(Node *synth_graph, int frame_count,
 void perform_synth_graph(Node *synth, int frame_count, double seconds_per_frame,
                          double seconds_offset) {
 
+  double schedule = synth->schedule;
   synth_data *s_data = (synth_data *)synth->data;
   Node *node = s_data->graph;
 
-  double schedule = synth->schedule;
-  node->schedule = schedule;
-
-  Node *tail =
-      perform_graph(node, frame_count, seconds_per_frame, seconds_offset);
+  Node *tail = perform_graph(node, frame_count, seconds_per_frame,
+                             seconds_offset, schedule);
 
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     s_data->bus[i] += tail->out[i];
   }
 }

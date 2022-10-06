@@ -2,6 +2,8 @@
 #define _USER_CTX
 #include "audio/node.h"
 #include "audio/synth.c"
+#include <time.h>
+
 #define BUS_NUM 8
 #define BUS_SIZE 2048
 
@@ -23,6 +25,8 @@ Node *add_graph_to_ctx(UserCtx *ctx);
 struct player_ctx {
   UserCtx *ctx;
   Node *group;
+  struct timespec initial_time;
 };
-struct player_ctx *get_player_ctx_ref(UserCtx *ctx);
+struct player_ctx *get_player_ctx_ref(UserCtx *ctx,
+                                      struct timespec initial_time);
 #endif

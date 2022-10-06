@@ -10,12 +10,12 @@ void debug_sq(sq_data *data) {
 }
 
 void perform_sq_detune(Node *node, int frame_count, double seconds_per_frame,
-                       double seconds_offset) {
+                       double seconds_offset, double schedule) {
   double *out = node->out;
   sq_data *data = (sq_data *)node->data;
 
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
     double phase = data->phase;
     double freq = data->freq;
     double radians_per_second = freq * 2.0 * PI;

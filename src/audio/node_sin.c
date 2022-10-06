@@ -5,12 +5,12 @@ typedef struct sin_data {
 } sin_data;
 
 void perform_sin_detune(Node *node, int frame_count, double seconds_per_frame,
-                        double seconds_offset) {
+                        double seconds_offset, double schedule) {
   sin_data *data = (sin_data *)node->data;
   double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
 
     double phase = data->phase;
     double freq = data->freq;

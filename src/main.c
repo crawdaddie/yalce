@@ -5,7 +5,6 @@
 #include "music/synth.c"
 #include "oscilloscope.c"
 #include "user_ctx.c"
-#include "util.c"
 #include <soundio/soundio.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +19,6 @@ void cleanup_graph(Node *node, Node *prev) {
     return;
   };
   if (node->should_free == 1) {
-    debug_node(node, "cleaning up node");
     Node *next = remove_from_graph(node, prev);
 
     return cleanup_graph(next, prev);
@@ -38,7 +36,7 @@ void *cleanup_nodes_job(void *arg) {
       graphs = graphs->next;
       cleanup_graph(graphs->value, NULL);
     };
-    sleep_millisecs(25);
+    msleep(25);
   }
 }
 static void (*write_sample)(char *ptr, double sample);
@@ -92,6 +90,9 @@ static void write_callback(struct SoundIoOutStream *outstream,
     write_buffer_to_output(ctx->buses[0], frame_count, layout, areas);
 
     ctx->seconds_offset += seconds_per_frame * frame_count;
+
+    /* ctx->seconds_offset = */
+    /*     fmod(ctx->seconds_offset + seconds_per_frame * frame_count, 1.0); */
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
         return;
@@ -237,8 +238,9 @@ int main(int argc, char **argv) {
 
   UserCtx *ctx = get_user_ctx(outstream->software_latency);
   outstream->userdata = ctx;
-  attach_synth_thread(ctx);
-  /* attach_kick_thread(ctx); */
+  struct timespec initial_time = get_time();
+  attach_synth_thread(ctx, initial_time);
+  attach_kick_thread(ctx, initial_time);
 
   if ((err = soundio_outstream_start(outstream))) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));

@@ -8,12 +8,12 @@ typedef struct bufplayer_data {
 } bufplayer_data;
 
 void perform_bufplayer(Node *node, int frame_count, double seconds_per_frame,
-                       double seconds_offset) {
+                       double seconds_offset, double schedule) {
   bufplayer_data *data = (bufplayer_data *)node->data;
   double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
 
     int read_ptr = data->read_ptr;
     out[i] = read_ptr < data->frames ? data->buffer[read_ptr] : 0.0;
@@ -45,12 +45,13 @@ typedef struct bufplayer_interp_data {
 } bufplayer_interp_data;
 
 void perform_bufplayer_interp(Node *node, int frame_count,
-                              double seconds_per_frame, double seconds_offset) {
+                              double seconds_per_frame, double seconds_offset,
+                              double schedule) {
   bufplayer_interp_data *data = (bufplayer_interp_data *)node->data;
   double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
-    schedule();
+    sched();
 
     int read_ptr = data->read_ptr;
 
