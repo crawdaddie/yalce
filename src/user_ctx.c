@@ -48,12 +48,17 @@ UserCtx *get_user_ctx(double latency) {
   ctx->latency = latency;
   ctx->graphs = NULL;
 
+  /* NodeVec graphs_vec; */
+  /* vec_init(&graphs_vec); */
+  /*  */
+  /* ctx->graphs_vec = &graphs_vec; */
+
   return ctx;
 }
 
 Node *add_graph_to_ctx(UserCtx *ctx) {
-  Node *new_graph =
-      alloc_node(NULL, NULL, (t_perform)perform_null, "head", NULL);
+  Node *new_graph = alloc_node(NULL, NULL, NULL, "head", NULL);
+
   if (!ctx->graphs) {
     ctx->graphs = malloc(sizeof(List) + sizeof(new_graph));
     ((List *)ctx->graphs)->value = new_graph;

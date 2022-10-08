@@ -1,6 +1,6 @@
 #include "node.h"
 typedef struct sin_data {
-  double freq;
+  CtrlVal *freq;
   double phase;
 } sin_data;
 
@@ -13,7 +13,7 @@ void perform_sin_detune(Node *node, int frame_count, double seconds_per_frame,
     sched();
 
     double phase = data->phase;
-    double freq = data->freq;
+    double freq = get_ctrl_val(data->freq, i);
     double radians_per_second = freq * 2.0 * PI;
     double sample = sin(phase * radians_per_second);
 
@@ -27,7 +27,11 @@ void perform_sin_detune(Node *node, int frame_count, double seconds_per_frame,
 
 Node *get_sin_detune_node(double freq) {
   sin_data *data = malloc(sizeof(sin_data));
-  data->freq = freq;
+  CtrlVal freq_ctrl = {
+    .val = &freq,
+    .size = 1,
+  };
+  data->freq = &freq_ctrl;
   data->phase = 0.0;
   Node *node = alloc_node((NodeData *)data, NULL, (t_perform)perform_sin_detune,
                           "sin", NULL);

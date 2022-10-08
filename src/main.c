@@ -36,7 +36,7 @@ void *cleanup_nodes_job(void *arg) {
       graphs = graphs->next;
       cleanup_graph(graphs->value, NULL);
     };
-    msleep(25);
+    msleep(43);
   }
 }
 static void (*write_sample)(char *ptr, double sample);

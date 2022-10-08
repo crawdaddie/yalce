@@ -10,6 +10,16 @@ static const double PI = 3.14159265358979323846264338328;
 typedef struct NodeData {
 } NodeData;
 
+typedef struct CtrlVal {
+  double *val;
+  int size;
+} CtrlVal;
+
+void set_ctrl_val(CtrlVal *ctrl, int i, double val);
+double get_ctrl_val(CtrlVal *ctrl, double i);
+
+double get_sample_interp(double read_ptr, double *buf, int max_frames);
+
 typedef void (*t_perform)(struct Node *node, int frame_count,
                           double seconds_per_frame, double seconds_offset,
                           double *schedule);
@@ -56,5 +66,12 @@ int delay_til_schedule_time(double schedule, int frame, double seconds_offset,
   if (delay_til_schedule_time(schedule, i, seconds_offset,                     \
                               seconds_per_frame) == 1) {                       \
     break;                                                                     \
-  }
+  };
+
+#define ptr(name, member)                                                      \
+  double *name;                                                                \
+  if (member == NULL) {                                                        \
+    return;                                                                    \
+  } else                                                                       \
+    name = member;
 #endif

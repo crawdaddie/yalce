@@ -2,6 +2,7 @@
 #define _USER_CTX
 #include "audio/node.h"
 #include "audio/synth.c"
+#include "vec.h"
 #include <time.h>
 
 #define BUS_NUM 8

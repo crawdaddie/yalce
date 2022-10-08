@@ -19,13 +19,15 @@ typedef enum {
   BIQUAD_HSH    /* High shelf filter */
 } biquad_type;
 
-void perform_biquad_static(Node *node, double *out, int frame_count,
+void perform_biquad_static(Node *node, int frame_count,
                            double seconds_per_frame, double seconds_offset,
                            double schedule) {
   biquad_data *b = (biquad_data *)node->data;
+  double *out = node->out;
   for (int i = 0; i < frame_count; i++) {
-    double sample = out[i];
+    sched();
 
+    double sample = out[i];
     double result;
 
     /* compute result */

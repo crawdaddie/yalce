@@ -1,19 +1,29 @@
 #include "node.h"
 #include <stdlib.h>
+#include "util.c"
 
 void free_data(NodeData *data) { free(data); }
 void free_node(Node *node) {
   NodeData *data = node->data;
   free_data(data);
+  free(node->out);
   free(node);
 }
 double *get_buffer() { return calloc(2048, sizeof(double)); }
+void perform_null(Node *node, int frame_count, double seconds_per_frame,
+                  double seconds_offset, double schedule) {
+  double *out = node->out;
+  for (int i = 0; i < frame_count; i++) {
+    sched();
+    out[i] = 0.0;
+  };
+}
 
 Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
                  t_free_node custom_free_node) {
   Node *node = malloc(sizeof(Node) + sizeof(data));
   node->name = name ? (name) : "";
-  node->perform = perform;
+  node->perform = perform ? (t_perform)perform : (t_perform)perform_null;
   node->next = NULL;
   node->mul = NULL;
   node->add = NULL;
@@ -25,6 +35,48 @@ Node *alloc_node(NodeData *data, double *in, t_perform perform, char *name,
   node->schedule = 0.0;
   return node;
 }
+
+double get_sample_interp(double read_ptr, double *buf, int max_frames) {
+  double r = read_ptr;
+  if (r >= max_frames) {
+    return 0.0;
+  }
+  if (r <= 0) {
+    r = max_frames + r;
+  }
+  int frame = ((int)r);
+  double fraction = r - frame;
+  double result = buf[frame] * fraction;
+  result += buf[frame + 1] * (1.0 - fraction);
+  return result;
+}
+
+void set_ctrl_val(CtrlVal *ctrl, int i, double val) {
+  if (ctrl->size == 1) {
+    ctrl->val = &val;
+  }
+  ctrl->val[i] = val;
+};
+
+void map_ctrl_to_buf(CtrlVal *ctrl, double *buf, int size) {
+  ctrl->val = buf;
+  ctrl->size = size;
+}
+
+double get_ctrl_val(CtrlVal *ctrl, double i) {
+  if (ctrl->size == 1) {
+    return *ctrl->val;
+  };
+  return get_sample_interp(i, ctrl->val, ctrl->size);
+}
+
+int set_pointer_val(double *ptr, int i, double val) {
+  if (ptr == NULL) {
+    return 1;
+  }
+  return 0;
+}
+
 
 int delay_til_schedule_time(double schedule, int frame, double seconds_offset,
                             double seconds_per_frame) {
@@ -38,22 +90,15 @@ int delay_til_schedule_time(double schedule, int frame, double seconds_offset,
   return 0;
 }
 
-void perform_null(Node *node, int frame_count, double seconds_per_frame,
-                  double seconds_offset, double schedule) {
-  double *out = node->out;
-
-  for (int i = 0; i < frame_count; i++) {
-    sched();
-    out[i] = 0.0;
-  }
-}
-
 void perform_node_mul(Node *node, int frame_count, double seconds_per_frame,
                       double seconds_offset, double schedule) {
   double *in = node->in;
   double *out = node->out;
   double *mul = node->mul;
   for (int i = 0; i < frame_count; i++) {
+    if (mul == NULL) {
+      return;
+    }
     sched();
     out[i] = in[i] * mul[i];
   }

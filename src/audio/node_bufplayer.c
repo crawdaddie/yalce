@@ -10,13 +10,13 @@ typedef struct bufplayer_data {
 void perform_bufplayer(Node *node, int frame_count, double seconds_per_frame,
                        double seconds_offset, double schedule) {
   bufplayer_data *data = (bufplayer_data *)node->data;
-  double *out = node->out;
 
   for (int i = 0; i < frame_count; i++) {
     sched();
-
+    ptr(out, node->out);
+    ptr(buffer, data->buffer);
     int read_ptr = data->read_ptr;
-    out[i] = read_ptr < data->frames ? data->buffer[read_ptr] : 0.0;
+    out[i] = read_ptr < data->frames ? buffer[read_ptr] : 0.0;
     if (data->loop > 0) {
       data->read_ptr = (read_ptr + 1) % data->loop;
     } else {

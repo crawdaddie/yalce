@@ -6,6 +6,7 @@ typedef struct out_data {
 void perform_out(Node *node, int frame_count, double seconds_per_frame,
                  double seconds_offset, double schedule) {
   out_data *data = (out_data *)node->data;
+  double *out = node->out;
 
   double *in = node->in;
   for (int i = 0; i < frame_count; i++) {
