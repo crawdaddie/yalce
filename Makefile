@@ -1,3 +1,12 @@
-#test: test.c term.c
-main: asimp.c audio/audio.c audio/util.c
-	gcc -o main asimp.c audio/audio.c audio/util.c -lsoundio -lm -lpthread -I.
+src = src/main.c src/user_ctx.c src/audio/graph.c
+
+obj = $(src:.c=.o)
+
+LDFLAGS = -ljack -lm -lm
+
+main: $(obj)
+	gcc -o $@ $^ $(LDFLAGS)
+
+.PHONY: clean
+clean:
+	rm -f $(obj) main

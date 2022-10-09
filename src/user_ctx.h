@@ -1,33 +1,18 @@
 #ifndef _USER_CTX
 #define _USER_CTX
-#include "audio/node.h"
-#include "audio/synth.c"
-#include "vec.h"
 #include <time.h>
+#include <stdlib.h>
+#include <jack/jack.h>
+#include "audio/graph.h"
 
 #define BUS_NUM 8
 #define BUS_SIZE 2048
 
-typedef struct List {
-  Node *value;
-  struct List *next;
-} List;
-
 typedef struct UserCtx {
-  double **buses;
-  double seconds_offset;
-  double latency;
-  List *graphs;
+  jack_port_t *input_port;
+  jack_port_t **output_ports;
+  Graph *graph;
 } UserCtx;
 
-UserCtx *get_user_ctx(double latency);
-Node *add_graph_to_ctx(UserCtx *ctx);
-
-struct player_ctx {
-  UserCtx *ctx;
-  Node *group;
-  struct timespec initial_time;
-};
-struct player_ctx *get_player_ctx_ref(UserCtx *ctx,
-                                      struct timespec initial_time);
+UserCtx *get_user_ctx();
 #endif
