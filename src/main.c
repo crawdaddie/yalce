@@ -82,7 +82,8 @@ int main(int narg, char **args)
 	  output_ports[i] = jack_port_register (client, port_name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
   };
 
-  UserCtx *ctx = get_user_ctx(input_port, output_ports);
+  queue_t msg_queue = { 0, 0, 100, malloc(sizeof(void*) * 100) };
+  UserCtx *ctx = get_user_ctx(input_port, output_ports, &msg_queue);
 	jack_set_process_callback (client, callback, ctx);
 
 	if (jack_activate (client))
@@ -98,6 +99,10 @@ int main(int narg, char **args)
     printf("frame time %d\n", frame_time);
 
 		sleep(1);
+    char *msg1 = "msg1";
+    char *msg2 = "msg2";
+    enqueue(ctx->msg_queue, msg1);
+    enqueue(ctx->msg_queue, msg2);
 	};
 	jack_client_close(client);
 	exit (0);

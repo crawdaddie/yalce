@@ -1,4 +1,4 @@
-src = src/main.c src/user_ctx.c src/audio/graph.c
+src = src/main.c src/user_ctx.c src/audio/graph.c src/queue.c
 
 obj = $(src:.c=.o)
 

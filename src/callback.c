@@ -25,6 +25,16 @@ void calc_note_frqs(sample_t srate)
 /*   } */
 /* } */
 
+void debug_queue(UserCtx *ctx) {
+  queue_t *q = ctx->msg_queue;
+  char *item = dequeue(q);
+  while (item) {
+    printf("msg: %s\n", item);
+    item = dequeue(q);
+  };
+  printf("queue empty %u %u\n", q->head, q->tail);
+}
+
 int callback(nframes_t nframes, void *arg) {
 	int i;
 
@@ -76,6 +86,8 @@ int callback(nframes_t nframes, void *arg) {
 		out[0][i] = sample;
 		out[1][i] = sample;
 	}
+  debug_queue(ctx);
+  /* process_queue(ctx->msg_queue, ctx->graph); */
   graph_perform(ctx->graph);
 	return 0;      
 }
