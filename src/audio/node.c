@@ -1,6 +1,6 @@
 #include "node.h"
-#include <stdlib.h>
 #include "util.c"
+#include <stdlib.h>
 
 void free_data(NodeData *data) { free(data); }
 void free_node(Node *node) {
@@ -76,7 +76,6 @@ int set_pointer_val(double *ptr, int i, double val) {
   }
   return 0;
 }
-
 
 int delay_til_schedule_time(double schedule, int frame, double seconds_offset,
                             double seconds_per_frame) {

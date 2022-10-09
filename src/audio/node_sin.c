@@ -28,8 +28,8 @@ void perform_sin_detune(Node *node, int frame_count, double seconds_per_frame,
 Node *get_sin_detune_node(double freq) {
   sin_data *data = malloc(sizeof(sin_data));
   CtrlVal freq_ctrl = {
-    .val = &freq,
-    .size = 1,
+      .val = &freq,
+      .size = 1,
   };
   data->freq = &freq_ctrl;
   data->phase = 0.0;

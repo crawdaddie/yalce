@@ -1,0 +1,7 @@
+%build/compile_commands.json
+%c -std=c11
+-I/opt/homebrew/include
+-I/usr/local/include
+-L/opt/homebrew/lib
+-L/usr/homebrew/lib
+

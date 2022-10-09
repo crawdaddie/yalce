@@ -5,10 +5,10 @@ typedef struct queue_t {
   size_t head;
   size_t tail;
   size_t size;
-  void** data;
+  void **data;
 } queue_t;
 
-void* dequeue(queue_t *queue);
+void *dequeue(queue_t *queue);
 
-int enqueue(queue_t *queue, void* handle);
+int enqueue(queue_t *queue, void *handle);
 #endif
