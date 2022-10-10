@@ -24,17 +24,9 @@ void calc_note_frqs(sample_t srate) {
 /*   } */
 /* } */
 
-int callback(nframes_t nframes, void *arg) {
-  int i;
+void process_midi(nframes_t nframes, UserCtx *ctx, sample_t **out, int i) {
 
-  UserCtx *ctx = (UserCtx *)arg;
   void *port_buf = jack_port_get_buffer(ctx->input_port, nframes);
-
-  sample_t *out[NUM_CHANNELS];
-
-  for (int ch = 0; ch < NUM_CHANNELS; ch++) {
-    out[ch] = (sample_t *)jack_port_get_buffer(ctx->output_ports[ch], nframes);
-  };
 
   jack_midi_event_t in_event;
   nframes_t event_index = 0;
@@ -72,6 +64,20 @@ int callback(nframes_t nframes, void *arg) {
     out[0][i] = sample;
     out[1][i] = sample;
   }
+}
+int callback(nframes_t nframes, void *arg) {
+  int i;
+
+  UserCtx *ctx = (UserCtx *)arg;
+  void *port_buf = jack_port_get_buffer(ctx->input_port, nframes);
+
+  sample_t *out[NUM_CHANNELS];
+
+  for (int ch = 0; ch < NUM_CHANNELS; ch++) {
+    out[ch] = (sample_t *)jack_port_get_buffer(ctx->output_ports[ch], nframes);
+  };
+  process_midi(nframes, ctx, out, i);
+
   process_queue(ctx->msg_queue, ctx->graph);
   Graph *tail = graph_perform(ctx->graph, nframes);
   for (i = 0; i < nframes; i++) {

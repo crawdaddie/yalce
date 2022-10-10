@@ -90,21 +90,22 @@ int main(int narg, char **args) {
   queue_msg_t make_kick_node = {
       .msg = "kick node", .time = frame_time, .func = make_kick};
   enqueue(ctx->msg_queue, &make_kick_node);
+
   for (;;) {
     printf("frame time %d\n", frame_time);
 
     sleep(1);
 
     frame_time = jack_frames_since_cycle_start(client);
-    /* Graph *node_ref = ctx->graph->next; */
-    /* debug_node(node_ref, NULL); */
-    /*  */
-    /* queue_msg_t msg1 = {.msg = "msg1", */
-    /*                     .time = frame_time, */
-    /*                     .func = trigger_kick, */
-    /*                     .ref = node_ref}; */
-    /* enqueue(ctx->msg_queue, &msg1); */
+    Graph *kick_node = ctx->graph->next;
+
+    queue_msg_t trigger_kick = {.msg = "kick node",
+                                .time = frame_time,
+                                .func = (Action)set_kick_trigger,
+                                .ref = kick_node};
+    enqueue(ctx->msg_queue, &trigger_kick);
   };
+
   jack_client_close(client);
   exit(0);
 }
