@@ -25,13 +25,11 @@ void handle_msg(void *msg, Graph *graph) {
   m->func(graph, m->time, m->ref);
 }
 
-void action_1(Graph *graph, int time) { printf("action 1\n"); }
-void action_2(Graph *graph, int time) { printf("action 2\n"); }
-
 Graph *process_queue(queue_t *queue, Graph *graph) {
   char *item = dequeue(queue);
   while (item) {
     handle_msg(item, graph);
+    free(item);
     item = dequeue(queue);
   }
   return graph;

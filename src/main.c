@@ -9,6 +9,7 @@
 #include "config.h"
 #include "kicks.c"
 #include "user_ctx.h"
+#include "scheduling.c"
 #include <jack/jack.h>
 #include <jack/midiport.h>
 
@@ -86,24 +87,17 @@ int main(int narg, char **args) {
   connect_ports(client);
 
   /* run until interrupted */
-  jack_nframes_t frame_time = jack_frames_since_cycle_start(client);
-  queue_msg_t make_kick_node = {
-      .msg = "kick node", .time = frame_time, .func = make_kick};
-  enqueue(ctx->msg_queue, &make_kick_node);
-
+  Graph *kick_node;
+  add_kick_node(client, ctx);
+  double r[5] = {1.5, 1.5, 0.5, 0.5};
+  int i = 0; 
   for (;;) {
-    printf("frame time %d\n", frame_time);
+    msleep(r[i] * 500);
+    kick_node = ctx->graph->next;
 
-    sleep(1);
+    trigger_kick_node(client, ctx, kick_node);
+    i = (i + 1) % 4;
 
-    frame_time = jack_frames_since_cycle_start(client);
-    Graph *kick_node = ctx->graph->next;
-
-    queue_msg_t trigger_kick = {.msg = "kick node",
-                                .time = frame_time,
-                                .func = (Action)set_kick_trigger,
-                                .ref = kick_node};
-    enqueue(ctx->msg_queue, &trigger_kick);
   };
 
   jack_client_close(client);
