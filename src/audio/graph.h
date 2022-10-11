@@ -27,6 +27,9 @@ Graph *graph_perform(Graph *graph, nframes_t nframes);
 Graph *add_before(Graph *graph_node, Graph *new_node);
 Graph *add_after(Graph *graph_node, Graph *new_node);
 
+void perform_null();
+Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform);
+
 Graph *remove_from_graph(Graph *node);
 
 void debug_graph(Graph *graph);

@@ -5,7 +5,8 @@ Graph *graph_perform(Graph *graph, nframes_t nframes) {
     return NULL;
   };
 
-  graph->perform(graph, nframes);
+  if (graph->perform)
+    graph->perform(graph, nframes);
 
   if (graph->_graph) {
     graph->perform(graph->_graph, nframes);
@@ -74,4 +75,17 @@ Graph *add_after(Graph *graph_node, Graph *new_node) {
   new_node->prev = graph_node;
   graph_node->next = new_node;
   return new_node;
+}
+void perform_null() {}
+Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform) {
+  sample_t *out_buf = out ? out : calloc(BUF_SIZE, sizeof(sample_t));
+  Graph *node = malloc(sizeof(Graph) + sizeof(out) + sizeof(data));
+  node->data = (NodeData *)data;
+  node->perform = perform ? perform : (t_perform)perform_null;
+  node->prev = NULL;
+  node->next = NULL;
+  node->should_free = 0;
+  node->schedule = 0;
+  node->out = out ? out : calloc(BUF_SIZE, sizeof(sample_t));
+  return node;
 }

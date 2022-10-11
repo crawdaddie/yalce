@@ -1,5 +1,4 @@
 #include "user_ctx.h"
-void perform_null(){};
 Graph *null_graph() {
   Graph *graph = malloc(sizeof(Graph));
   graph->perform = perform_null;
@@ -15,6 +14,7 @@ UserCtx *get_user_ctx(jack_port_t *input_port, jack_port_t **output_ports,
   ctx->input_port = input_port;
   ctx->output_ports = output_ports;
   ctx->graph = null_graph();
+  /* ctx->graph = NULL; */
   ctx->msg_queue = msg_queue;
   return ctx;
 }

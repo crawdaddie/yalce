@@ -18,4 +18,3 @@ int enqueue(queue_t *queue, void *handle) {
   queue->head = (queue->head + 1) % queue->size;
   return 0;
 }
-
