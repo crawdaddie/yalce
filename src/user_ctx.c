@@ -36,13 +36,15 @@ void handle_msg(void *msg, Graph *graph) {
   printf("msg: %s time %d\n", m->msg, m->time);
   m->func(graph, m->time, m->args);
 }
-
+void free_msg(queue_msg_t *msg) {
+  free(msg->args);
+  free(msg);
+}
 Graph *process_queue(queue_t *queue, Graph *graph) {
   queue_msg_t *item = dequeue(queue);
   while (item) {
     handle_msg(item, graph);
-    free(item->args);
-    free(item);
+    free_msg(item);
     item = dequeue(queue);
   }
   return graph;

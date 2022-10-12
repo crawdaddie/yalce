@@ -36,7 +36,6 @@ typedef struct queue_msg_t {
   int num_args;
   void **args;
 } queue_msg_t;
+void free_msg(queue_msg_t *msg);
 
-void action_1();
-void action_2();
 #endif

@@ -44,7 +44,7 @@ sample_t pitch_env(sample_t i, sample_t decay) {
 }
 sample_t scale_val(sample_t env_val, // 0-1
                    sample_t min, sample_t max) {
-  return max + env_val * (max - min);
+  return min + env_val * (max - min);
 }
 
 t_perform perform_kick(Graph *graph, nframes_t nframes) {
@@ -60,7 +60,6 @@ t_perform perform_kick(Graph *graph, nframes_t nframes) {
     sample_t env_val =
         scale_val(pitch_env(data->ramp, 0.02), data->freq, 4000.0);
     sample_t sample = sin(env_val * 2.0 * PI);
-    sample += sin(env_val * 1.01 * 2.0 * PI);
     sample += scale_val((sample_t)rand() / RAND_MAX, -1, 1) *
               sin(data->ramp * 30 * 2.0 * PI) * 0.04;
     sample += tanh(sample * 5.0);
@@ -78,8 +77,7 @@ void set_kick_freq(Graph *kick_node, int time, Graph *kick_node_ref) {
 void add_kick_node_msg_handler(Graph *graph, int time, void **args) {
   kick_data *data = alloc_kick_data();
   sample_t *outbus = args[0];
-  Graph *kick_node = alloc_graph((NodeData *)data, NULL, perform_kick);
-  kick_node->out = outbus;
+  Graph *kick_node = alloc_graph((NodeData *)data, outbus, perform_kick);
   add_after(graph, kick_node);
 }
 
