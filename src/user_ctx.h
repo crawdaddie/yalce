@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define BUS_NUM 8
 #define BUS_SIZE 2048
 
 typedef struct UserCtx {
@@ -14,6 +13,9 @@ typedef struct UserCtx {
   jack_port_t **output_ports;
   Graph *graph;
   queue_t *msg_queue;
+
+
+  sample_t **buses;
 } UserCtx;
 
 UserCtx *get_user_ctx();
@@ -31,6 +33,8 @@ typedef struct queue_msg_t {
   int time;
   Action func;
   void *ref;
+  int num_args;
+  void **args;
 } queue_msg_t;
 
 void action_1();

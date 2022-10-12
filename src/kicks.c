@@ -69,41 +69,52 @@ t_perform perform_kick(Graph *graph, nframes_t nframes) {
   }
 }
 
-void set_kick_trigger(Graph *kick_node, int time, Graph *kick_node_ref) {
-  kick_data *data = (kick_data *)kick_node_ref->data;
-  kick_node->schedule = time;
-  data->t_ramp = time;
-}
 
 void set_kick_freq(Graph *kick_node, int time, Graph *kick_node_ref) {
   kick_data *data = (kick_data *)kick_node_ref->data;
   data->t_ramp = time;
 }
 
-void make_kick(Graph *graph, int time, void *ref) {
+void add_kick_node_msg_handler(Graph *graph, int time, void **args) {
   kick_data *data = alloc_kick_data();
+  sample_t *outbus = args[0];
   Graph *kick_node = alloc_graph((NodeData *)data, NULL, perform_kick);
+  kick_node->out = outbus;
   add_after(graph, kick_node);
 }
 
-void add_kick_node(jack_client_t *client, UserCtx *ctx) {
+void add_kick_node_msg(jack_client_t *client, UserCtx *ctx) {
   jack_nframes_t frame_time = jack_frames_since_cycle_start(client);
   queue_msg_t *msg = malloc(sizeof(queue_msg_t));
   msg->msg = "kick node";
   msg->time = frame_time;
-  msg->func = make_kick;
+  msg->func = (Action)add_kick_node_msg_handler;
   msg->ref = NULL;
+
+
+  msg->num_args = 1;
+  msg->args = malloc(msg->num_args * sizeof(void *));
+  msg->args[0] = ctx->buses[0];
   enqueue(ctx->msg_queue, msg);
 }
 
-void trigger_kick_node(jack_client_t *client, UserCtx *ctx, Graph *node) {
+void trigger_kick_node_msg_handler(Graph *kick_node, int time, void **args) {
+  Graph *kick_node_ref = args[0];
+  kick_data *data = (kick_data *)kick_node_ref->data;
+  kick_node->schedule = time;
+  data->t_ramp = time;
+}
+void trigger_kick_node_msg(jack_client_t *client, UserCtx *ctx, Graph *node) {
 
   jack_nframes_t frame_time = jack_frames_since_cycle_start(client);
 
   queue_msg_t *msg = malloc(sizeof(queue_msg_t));
   msg->msg = "kick node trig";
   msg->time = frame_time;
-  msg->func = (Action)set_kick_trigger;
-  msg->ref = node;
+  msg->func = (Action)trigger_kick_node_msg_handler;
+
+  msg->num_args = 1;
+  msg->args = malloc(msg->num_args * sizeof(void *));
+  msg->args[0] = node;
   enqueue(ctx->msg_queue, msg);
 }

@@ -88,14 +88,14 @@ int main(int narg, char **args) {
 
   /* run until interrupted */
   Graph *kick_node;
-  add_kick_node(client, ctx);
+  add_kick_node_msg(client, ctx);
   double r[5] = {1.5, 1.5, 0.5, 0.5};
   int i = 0; 
   for (;;) {
     msleep(r[i] * 500);
     kick_node = ctx->graph->next;
 
-    trigger_kick_node(client, ctx, kick_node);
+    trigger_kick_node_msg(client, ctx, kick_node);
     i = (i + 1) % 4;
 
   };
