@@ -103,7 +103,7 @@ int main(int narg, char **args) {
     nframes_t frame_time = jack_frames_since_cycle_start(client);
     trigger_kick_node_msg(ctx, kick_node, frame_time);
     set_freq_msg(ctx, kick_node, frame_time, 440.0);
-    i = rand() % 4;
+    i = (i + 1) % 4;
 
   };
 
