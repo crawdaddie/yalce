@@ -1,6 +1,6 @@
-#include "audio/graph.h"
-#include "config.h"
-#include "user_ctx.h"
+#include "../audio/graph.h"
+#include "../config.h"
+#include "../user_ctx.h"
 #include <stdlib.h>
 
 typedef void (*t_trigger)(void *data, nframes_t i);
@@ -52,9 +52,9 @@ t_perform perform_kick(Graph *graph, nframes_t nframes) {
 
   for (int i = 0; i < nframes; i++) {
     if (i < graph->schedule) {
-      graph->schedule = -1;
       break;
     };
+    graph->schedule = -1;
     process_triggers(data, i);
 
     sample_t env_val =
@@ -81,12 +81,11 @@ void add_kick_node_msg_handler(Graph *graph, int time, void **args) {
   add_after(graph, kick_node);
 }
 
-void add_kick_node_msg(jack_client_t *client, UserCtx *ctx) {
-  jack_nframes_t frame_time = jack_frames_since_cycle_start(client);
+void add_kick_node_msg(UserCtx *ctx, nframes_t frame_time) {
   queue_msg_t *msg = malloc(sizeof(queue_msg_t));
   msg->msg = "kick node";
   msg->time = frame_time;
-  msg->func = (Action)add_kick_node_msg_handler;
+  msg->func = (MsgAction)add_kick_node_msg_handler;
   msg->ref = NULL;
 
 
@@ -102,14 +101,12 @@ void trigger_kick_node_msg_handler(Graph *kick_node, int time, void **args) {
   kick_node->schedule = time;
   data->t_ramp = time;
 }
-void trigger_kick_node_msg(jack_client_t *client, UserCtx *ctx, Graph *node) {
-
-  jack_nframes_t frame_time = jack_frames_since_cycle_start(client);
+void trigger_kick_node_msg(UserCtx *ctx, Graph *node, nframes_t frame_time) {
 
   queue_msg_t *msg = malloc(sizeof(queue_msg_t));
   msg->msg = "kick node trig";
   msg->time = frame_time;
-  msg->func = (Action)trigger_kick_node_msg_handler;
+  msg->func = (MsgAction)trigger_kick_node_msg_handler;
 
   msg->num_args = 1;
   msg->args = malloc(msg->num_args * sizeof(void *));

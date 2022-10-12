@@ -26,12 +26,12 @@ enum msg_type {
   ADD_AFTER,
 };
 
-typedef void (*Action)(Graph *graph, int time, void *ref);
+typedef void (*MsgAction)(Graph *graph, int time, void *ref);
 
 typedef struct queue_msg_t {
   char *msg;
   int time;
-  Action func;
+  MsgAction func;
   void *ref;
   int num_args;
   void **args;

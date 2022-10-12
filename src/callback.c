@@ -81,8 +81,8 @@ int callback(nframes_t nframes, void *arg) {
   process_queue(ctx->msg_queue, ctx->graph);
   Graph *tail = graph_perform(ctx->graph, nframes);
   for (i = 0; i < nframes; i++) {
-    out[0][i] = ctx->buses[0][i];
-    out[1][i] = ctx->buses[0][i];
+    out[0][i] = ctx->buses[0][i] + ctx->buses[1][i];
+    out[1][i] = ctx->buses[0][i] + ctx->buses[1][i];
   }
 
   return 0;

@@ -7,7 +7,8 @@
 
 #include "callback.c"
 #include "config.h"
-#include "kicks.c"
+#include "synths/kicks.c"
+#include "synths/squares.c"
 #include "user_ctx.h"
 #include "scheduling.c"
 #include <jack/jack.h>
@@ -88,15 +89,21 @@ int main(int narg, char **args) {
 
   /* run until interrupted */
   Graph *kick_node;
-  add_kick_node_msg(client, ctx);
+  Graph *square_node;
+  nframes_t frame_time = jack_frames_since_cycle_start(client);
+  add_kick_node_msg(ctx, frame_time);
+  add_square_node_msg(ctx, frame_time);
   double r[5] = {1.5, 1.5, 0.5, 0.5};
   int i = 0; 
   for (;;) {
     msleep(r[i] * 500);
-    kick_node = ctx->graph->next;
+    square_node = ctx->graph->next;
+    kick_node = ctx->graph->next->next;
 
-    trigger_kick_node_msg(client, ctx, kick_node);
-    i = (i + 1) % 4;
+    nframes_t frame_time = jack_frames_since_cycle_start(client);
+    trigger_kick_node_msg(ctx, kick_node, frame_time);
+    set_freq_msg(ctx, kick_node, frame_time, 440.0);
+    i = rand() % 4;
 
   };
 
