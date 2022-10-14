@@ -4,13 +4,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
 #include "callback.c"
 #include "config.h"
 #include "synths/kicks.c"
 #include "synths/squares.c"
 #include "user_ctx.h"
-#include "scheduling.c"
+#include "scheduling.h"
+#include "oscilloscope.h"
 #include <jack/jack.h>
 #include <jack/midiport.h>
 
@@ -52,7 +52,7 @@ int srate(nframes_t nframes, void *arg) {
   return 0;
 }
 
-int main(int narg, char **args) {
+int main(int argc, char **argv) {
   jack_client_t *client;
 
   if ((client = jack_client_open("simple-synth", JackNullOption, NULL)) == 0) {
@@ -86,27 +86,36 @@ int main(int narg, char **args) {
     return 1;
   }
   connect_ports(client);
+  for (int i = 1; i < argc; i += 1) {
+    char *arg = argv[i];
+    if (strcmp(arg, "--oscilloscope") == 0) {
+      pthread_t win_thread;
+      pthread_create(&win_thread, NULL, (void *)oscilloscope_view, (void *)ctx);
+    }
+  }
+  printf("sizeof sample_t %d sample_t* %d\n", sizeof(sample_t), sizeof(sample_t *));
 
   /* run until interrupted */
   Graph *kick_node;
   Graph *square_node;
   nframes_t frame_time = jack_frames_since_cycle_start(client);
   add_kick_node_msg(ctx, frame_time);
-  add_square_node_msg(ctx, frame_time);
+  /* add_square_node_msg(ctx, frame_time); */
   double r[5] = {1.5, 1.5, 0.5, 0.5};
   int i = 0; 
   for (;;) {
     msleep(r[i] * 500);
-    square_node = ctx->graph->next;
-    kick_node = ctx->graph->next->next;
-
-    nframes_t frame_time = jack_frames_since_cycle_start(client);
-    trigger_kick_node_msg(ctx, kick_node, frame_time);
-    set_freq_msg(ctx, kick_node, frame_time, 440.0);
-    i = (i + 1) % 4;
+    /* square_node = ctx->graph->next; */
+    /* kick_node = ctx->graph->next->next; */
+    /*  */
+    /* nframes_t frame_time = jack_frames_since_cycle_start(client); */
+    /* trigger_kick_node_msg(ctx, kick_node, frame_time); */
+    /* set_freq_msg(ctx, kick_node, frame_time, 440.0); */
+    /* i = (i + 1) % 4; */
 
   };
 
+  pthread_exit(NULL);
   jack_client_close(client);
   exit(0);
 }

@@ -1,16 +1,6 @@
-#include "user_ctx.h"
-#include <SDL2/SDL.h>
-#include <soundio/soundio.h>
-#include <time.h>
+#include "oscilloscope.h"
 
-void sleep_mils(long msec) {
-  struct timespec ts;
-  ts.tv_sec = msec / 1000;
-  ts.tv_nsec = (msec % 1000) * 1000000;
-  nanosleep(&ts, &ts);
-}
-
-int win(UserCtx *ctx) {
+int oscilloscope_view(UserCtx *ctx) {
   SDL_Window *window;
   SDL_Renderer *renderer;
   SDL_Surface *surface;
@@ -20,7 +10,7 @@ int win(UserCtx *ctx) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s",
                  SDL_GetError());
     return 3;
-  }
+ }
 
   if (SDL_CreateWindowAndRenderer(320, 240, SDL_WINDOW_RESIZABLE, &window,
                                   &renderer)) {
@@ -42,19 +32,24 @@ int win(UserCtx *ctx) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
     for (int i = 0; i < 2048; i++) {
       int j = (read + i) % 2048;
+      double y1val = 0;
+      double y2val = 0;
+      for (int i = 0; i < INITIAL_BUSNUM; i++) {
+        y1val += ctx->buses[i][j];
+        y1val += ctx->buses[i][(j + 1) % BUF_SIZE];
+      };
       int x1 = (int)j * 1000 / 2048;
-      double y1val = 120 * ctx->buses[0][j];
+      y1val = 120 * y1val;
       int y1 = (int)(240 + y1val);
 
-      int x2 = (int)(j + 1) * 1000 / 2048;
-      double y2val = 120 * ctx->buses[0][(j + 1) % 2048];
+      int x2 = (int)(j + 1) * 1000 / BUF_SIZE;
+      y2val = 120 * y2val;
       int y2 = (int)(240 + y2val);
       SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
-      /* printf("sample: %f\n", ctx->buses[0][j]); */
     }
     SDL_RenderPresent(renderer);
-    sleep_mils(1000 / 48000);
-    read = (read + 1) % 2048;
+    msleepd(1000 / 48000);
+    read = (read + 1) % BUF_SIZE;
   }
 
   SDL_DestroyRenderer(renderer);

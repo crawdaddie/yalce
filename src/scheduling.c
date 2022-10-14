@@ -1,12 +1,4 @@
-#ifndef _SCHEDULING
-#define _SCHEDULING
-#include <errno.h>
-#include <math.h>
-#include <stdio.h>
-#include <time.h>
-#include <unistd.h>
-
-enum { NS_PER_SECOND = 1000000000 };
+#include "scheduling.h"
 
 void sub_timespec(struct timespec t1, struct timespec t2, struct timespec *td) {
   td->tv_nsec = t2.tv_nsec - t1.tv_nsec;
@@ -47,4 +39,23 @@ int msleep(long msec) {
   return res;
 }
 
-#endif
+int msleepd(double msec) {
+  struct timespec ts;
+  int res;
+
+  if (msec < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  ts.tv_sec = msec / 1000;
+  ts.tv_nsec = fmod(msec, 1000) * 1000000;
+
+  do {
+    res = nanosleep(&ts, NULL);
+  } while (res && errno == EINTR);
+
+  return res;
+}
+
+

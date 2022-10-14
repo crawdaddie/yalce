@@ -3,7 +3,7 @@ simple C synth for learning purposes
 highly unsafe  
 
 ## dependencies
-- [libsoundio](http://libsound.io/)
+- [jack](https://jackaudio.org/api/)
 - [SDL2](https://www.libsdl.org/)
 
 # build

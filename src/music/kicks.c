@@ -1,5 +1,5 @@
 #include "../audio/node.h"
-#include "../scheduling.c"
+#include "../scheduling.h"
 #include "../user_ctx.h"
 #include <pthread.h>
 #include <sndfile.h>
