@@ -42,7 +42,7 @@ t_perform perform_square(Graph *graph, nframes_t nframes) {
 void add_square_node_msg_handler(Graph *graph, int time, void **args) {
   square_data *data = alloc_square_data();
   sample_t *outbus = args[0];
-  Graph *square_node = alloc_graph((NodeData *)data, outbus, perform_square);
+  Graph *square_node = alloc_graph((NodeData *)data, outbus, (t_perform)perform_square, 1);
   add_after(graph, square_node);
 }
 

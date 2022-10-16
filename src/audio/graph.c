@@ -77,9 +77,15 @@ Graph *add_after(Graph *graph_node, Graph *new_node) {
   return new_node;
 }
 void perform_null() {}
-Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform) {
+
+void add_ins(int num_ins, Graph *node) {
+  node->num_ins = num_ins;
+  node->size_ins = calloc(num_ins, sizeof(int));
+  node->ins = calloc(num_ins, sizeof(sample_t *));
+};
+Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform, int num_ins) {
   sample_t *out_buf = out ? out : calloc(BUF_SIZE, sizeof(sample_t));
-  Graph *node = malloc(sizeof(Graph) + sizeof(out) + sizeof(data));
+  Graph *node = calloc(1, sizeof(Graph));
   node->data = (NodeData *)data;
   node->perform = perform ? perform : (t_perform)perform_null;
   node->prev = NULL;
@@ -87,5 +93,7 @@ Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform) {
   node->should_free = 0;
   node->schedule = 0;
   node->out = out ? out : calloc(BUF_SIZE, sizeof(sample_t));
+
+  add_ins(num_ins, node); 
   return node;
 }

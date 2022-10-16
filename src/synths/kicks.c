@@ -77,11 +77,11 @@ void set_kick_freq(Graph *kick_node, int time, Graph *kick_node_ref) {
 void add_kick_node_msg_handler(Graph *graph, int time, void **args) {
   kick_data *data = alloc_kick_data();
   sample_t *outbus = args[0];
-  Graph *kick_node = alloc_graph((NodeData *)data, outbus, perform_kick);
+  Graph *kick_node = alloc_graph((NodeData *)data, outbus, (t_perform)perform_kick, 1);
   add_after(graph, kick_node);
 }
 
-void add_kick_node_msg(UserCtx *ctx, nframes_t frame_time) {
+void add_kick_node_msg(UserCtx *ctx, nframes_t frame_time, sample_t freq) {
   queue_msg_t *msg = malloc(sizeof(queue_msg_t));
   msg->msg = "kick node";
   msg->time = frame_time;

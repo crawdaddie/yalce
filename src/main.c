@@ -99,19 +99,19 @@ int main(int argc, char **argv) {
   Graph *kick_node;
   Graph *square_node;
   nframes_t frame_time = jack_frames_since_cycle_start(client);
-  add_kick_node_msg(ctx, frame_time);
+  add_kick_node_msg(ctx, frame_time, 60.0);
   /* add_square_node_msg(ctx, frame_time); */
   double r[5] = {1.5, 1.5, 0.5, 0.5};
   int i = 0; 
   for (;;) {
     msleep(r[i] * 500);
-    /* square_node = ctx->graph->next; */
-    /* kick_node = ctx->graph->next->next; */
-    /*  */
-    /* nframes_t frame_time = jack_frames_since_cycle_start(client); */
-    /* trigger_kick_node_msg(ctx, kick_node, frame_time); */
-    /* set_freq_msg(ctx, kick_node, frame_time, 440.0); */
-    /* i = (i + 1) % 4; */
+    square_node = ctx->graph->next;
+    kick_node = ctx->graph->next->next;
+    
+    nframes_t frame_time = jack_frames_since_cycle_start(client);
+    trigger_kick_node_msg(ctx, kick_node, frame_time);
+    /* set_freq_msg(ctx, square_node, frame_time, 440.0); */
+    i = (i + 1) % 4;
 
   };
 

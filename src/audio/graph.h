@@ -20,6 +20,10 @@ struct Graph {
   int schedule;
   int should_free;
   t_perform perform;
+
+  sample_t **ins;
+  int *size_ins;
+  int num_ins;
 };
 typedef struct Graph Graph;
 
@@ -28,11 +32,14 @@ Graph *add_before(Graph *graph_node, Graph *new_node);
 Graph *add_after(Graph *graph_node, Graph *new_node);
 
 void perform_null();
-Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform);
+Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform, int num_ins);
 
 Graph *remove_from_graph(Graph *node);
 
 void debug_graph(Graph *graph);
 void debug_node(Graph *node, char *text);
+
+void setup_ins(int num_ins, Graph *node);
+
 
 #endif
