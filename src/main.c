@@ -1,18 +1,18 @@
+#include "callback.c"
+#include "config.h"
+#include "oscilloscope.h"
+#include "scheduling.h"
+#include "synths/kicks.c"
+#include "synths/squares.c"
+#include "user_ctx.h"
 #include <errno.h>
+#include <jack/jack.h>
+#include <jack/midiport.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "callback.c"
-#include "config.h"
-#include "synths/kicks.c"
-#include "synths/squares.c"
-#include "user_ctx.h"
-#include "scheduling.h"
-#include "oscilloscope.h"
-#include <jack/jack.h>
-#include <jack/midiport.h>
 
 jack_client_t *client;
 jack_port_t *input_port;
@@ -93,7 +93,8 @@ int main(int argc, char **argv) {
       pthread_create(&win_thread, NULL, (void *)oscilloscope_view, (void *)ctx);
     }
   }
-  printf("sizeof sample_t %d sample_t* %d\n", sizeof(sample_t), sizeof(sample_t *));
+  printf("sizeof sample_t %d sample_t* %d\n", sizeof(sample_t),
+         sizeof(sample_t *));
 
   /* run until interrupted */
   Graph *kick_node;
@@ -102,17 +103,16 @@ int main(int argc, char **argv) {
   add_kick_node_msg(ctx, frame_time, 60.0);
   /* add_square_node_msg(ctx, frame_time); */
   double r[5] = {1.5, 1.5, 0.5, 0.5};
-  int i = 0; 
+  int i = 0;
   for (;;) {
     msleep(r[i] * 500);
-    square_node = ctx->graph->next;
-    kick_node = ctx->graph->next->next;
-    
+    /* square_node = ctx->graph->next; */
+    kick_node = ctx->graph->next;
+
     nframes_t frame_time = jack_frames_since_cycle_start(client);
     trigger_kick_node_msg(ctx, kick_node, frame_time);
     /* set_freq_msg(ctx, square_node, frame_time, 440.0); */
     i = (i + 1) % 4;
-
   };
 
   pthread_exit(NULL);

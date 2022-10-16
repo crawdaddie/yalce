@@ -10,7 +10,7 @@ int oscilloscope_view(UserCtx *ctx) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s",
                  SDL_GetError());
     return 3;
- }
+  }
 
   if (SDL_CreateWindowAndRenderer(320, 240, SDL_WINDOW_RESIZABLE, &window,
                                   &renderer)) {
@@ -30,15 +30,15 @@ int oscilloscope_view(UserCtx *ctx) {
     SDL_RenderClear(renderer);
     SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
-    for (int i = 0; i < 2048; i++) {
-      int j = (read + i) % 2048;
+    for (int i = 0; i < BUF_SIZE; i++) {
+      int j = (read + i) % BUF_SIZE;
       double y1val = 0;
       double y2val = 0;
       for (int i = 0; i < INITIAL_BUSNUM; i++) {
         y1val += ctx->buses[i][j];
         y1val += ctx->buses[i][(j + 1) % BUF_SIZE];
       };
-      int x1 = (int)j * 1000 / 2048;
+      int x1 = (int)j * 1000 / BUF_SIZE;
       y1val = 120 * y1val;
       int y1 = (int)(240 + y1val);
 

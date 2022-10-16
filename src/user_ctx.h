@@ -14,11 +14,11 @@ typedef struct UserCtx {
   Graph *graph;
   queue_t *msg_queue;
 
-
   sample_t **buses;
 } UserCtx;
 
-UserCtx *get_user_ctx();
+UserCtx *get_user_ctx(jack_port_t *input_port, jack_port_t **output_ports,
+                      queue_t *msg_queue);
 Graph *process_queue(queue_t *queue, Graph *graph);
 
 enum msg_type {

@@ -68,7 +68,6 @@ t_perform perform_kick(Graph *graph, nframes_t nframes) {
   }
 }
 
-
 void set_kick_freq(Graph *kick_node, int time, Graph *kick_node_ref) {
   kick_data *data = (kick_data *)kick_node_ref->data;
   data->t_ramp = time;
@@ -77,7 +76,8 @@ void set_kick_freq(Graph *kick_node, int time, Graph *kick_node_ref) {
 void add_kick_node_msg_handler(Graph *graph, int time, void **args) {
   kick_data *data = alloc_kick_data();
   sample_t *outbus = args[0];
-  Graph *kick_node = alloc_graph((NodeData *)data, outbus, (t_perform)perform_kick, 1);
+  Graph *kick_node =
+      alloc_graph((NodeData *)data, outbus, (t_perform)perform_kick, 1);
   add_after(graph, kick_node);
 }
 
@@ -87,7 +87,6 @@ void add_kick_node_msg(UserCtx *ctx, nframes_t frame_time, sample_t freq) {
   msg->time = frame_time;
   msg->func = (MsgAction)add_kick_node_msg_handler;
   msg->ref = NULL;
-
 
   msg->num_args = 1;
   msg->args = malloc(msg->num_args * sizeof(void *));
@@ -111,5 +110,23 @@ void trigger_kick_node_msg(UserCtx *ctx, Graph *node, nframes_t frame_time) {
   msg->num_args = 1;
   msg->args = malloc(msg->num_args * sizeof(void *));
   msg->args[0] = node;
+  enqueue(ctx->msg_queue, msg);
+}
+
+void node_set_msg_handler(Graph *node, int time, void **args) {}
+
+void node_set_msg(UserCtx *ctx, Graph *node, nframes_t frame_time) {
+  queue_msg_t *msg = malloc(sizeof(queue_msg_t));
+  msg->msg = "kick node trig";
+  msg->time = frame_time;
+  msg->func = (MsgAction)node_set_msg_handler;
+  int num_args = 1 + 2;
+
+  msg->num_args = num_args;
+  msg->args = malloc(num_args * sizeof(void *));
+  msg->args[0] = node;
+  msg->args[1] = "freq";
+  sample_t freq = 220.0;
+  /* msg->args[2] = freq; */
   enqueue(ctx->msg_queue, msg);
 }

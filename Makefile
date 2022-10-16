@@ -2,9 +2,9 @@ src = src/main.c src/user_ctx.c src/audio/graph.c src/queue.c src/oscilloscope.c
 
 obj = $(src:.c=.o)
 
-LDFLAGS = -ljack -lm -lSDL2
+LDFLAGS = -ljack -lm -lSDL2 -lsndfile
 
-main: $(obj)
+synth: $(obj)
 	gcc -o $@ $^ $(LDFLAGS)
 
 .PHONY: clean

@@ -26,7 +26,6 @@ UserCtx *get_user_ctx(jack_port_t *input_port, jack_port_t **output_ports,
   /* ctx->graph = NULL; */
   ctx->msg_queue = msg_queue;
 
-
   ctx->buses = alloc_buses(INITIAL_BUSNUM);
   return ctx;
 }
