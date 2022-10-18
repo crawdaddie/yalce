@@ -2,8 +2,9 @@
 #include "config.h"
 #include "oscilloscope.h"
 #include "scheduling.h"
-#include "synths/kicks.c"
-#include "synths/squares.c"
+/* #include "synths/kicks.c" */
+/* #include "synths/squares.c" */
+#include "synths/grains.c"
 #include "user_ctx.h"
 #include <errno.h>
 #include <jack/jack.h>
@@ -13,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "buf_read.c"
 
 jack_client_t *client;
 jack_port_t *input_port;
@@ -79,6 +81,10 @@ int main(int argc, char **argv) {
 
   queue_t msg_queue = {0, 0, 100, malloc(sizeof(void *) * 100)};
   UserCtx *ctx = get_user_ctx(input_port, output_ports, &msg_queue);
+
+  struct buf_info *amen_buf = read_sndfile("fat_amen_mono_48000.wav");
+  ctx->buffers[0] = amen_buf;
+
   jack_set_process_callback(client, callback, ctx);
 
   if (jack_activate(client)) {
@@ -93,24 +99,23 @@ int main(int argc, char **argv) {
       pthread_create(&win_thread, NULL, (void *)oscilloscope_view, (void *)ctx);
     }
   }
-  printf("sizeof sample_t %d sample_t* %d\n", sizeof(sample_t),
-         sizeof(sample_t *));
 
   /* run until interrupted */
   Graph *kick_node;
   Graph *square_node;
   nframes_t frame_time = jack_frames_since_cycle_start(client);
-  add_kick_node_msg(ctx, frame_time, 60.0);
+  /* add_kick_node_msg(ctx, frame_time, 60.0); */
   /* add_square_node_msg(ctx, frame_time); */
+  add_grains_node_msg(ctx, frame_time);
   double r[5] = {1.5, 1.5, 0.5, 0.5};
   int i = 0;
   for (;;) {
     msleep(r[i] * 500);
     /* square_node = ctx->graph->next; */
-    kick_node = ctx->graph->next;
+    /* kick_node = ctx->graph->next; */
 
-    nframes_t frame_time = jack_frames_since_cycle_start(client);
-    trigger_kick_node_msg(ctx, kick_node, frame_time);
+    /* nframes_t frame_time = jack_frames_since_cycle_start(client); */
+    /* trigger_kick_node_msg(ctx, kick_node, frame_time); */
     /* set_freq_msg(ctx, square_node, frame_time, 440.0); */
     i = (i + 1) % 4;
   };

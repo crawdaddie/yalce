@@ -15,6 +15,8 @@ typedef struct UserCtx {
   queue_t *msg_queue;
 
   sample_t **buses;
+
+  struct buf_info **buffers;
 } UserCtx;
 
 UserCtx *get_user_ctx(jack_port_t *input_port, jack_port_t **output_ports,
@@ -37,5 +39,6 @@ typedef struct queue_msg_t {
   void **args;
 } queue_msg_t;
 void free_msg(queue_msg_t *msg);
+queue_msg_t *msg_init(char *msg_string, nframes_t time, void *func, int num_args);
 
 #endif

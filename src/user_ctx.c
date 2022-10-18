@@ -30,6 +30,17 @@ UserCtx *get_user_ctx(jack_port_t *input_port, jack_port_t **output_ports,
   return ctx;
 }
 
+queue_msg_t *msg_init(char *msg_string, nframes_t time, void *func, int num_args) {
+  queue_msg_t *msg = malloc(sizeof(queue_msg_t));
+  msg->msg = "kick node trig";
+  msg->time = time;
+  msg->func = (MsgAction)func;
+
+  msg->num_args = num_args;
+  msg->args = malloc(num_args * sizeof(void *));
+  return msg;
+}
+
 void handle_msg(void *msg, Graph *graph) {
   queue_msg_t *m = (queue_msg_t *)msg;
   printf("msg: %s time %d\n", m->msg, m->time);
