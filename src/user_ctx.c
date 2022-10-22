@@ -32,7 +32,7 @@ UserCtx *get_user_ctx(jack_port_t *input_port, jack_port_t **output_ports,
 
 queue_msg_t *msg_init(char *msg_string, nframes_t time, void *func, int num_args) {
   queue_msg_t *msg = malloc(sizeof(queue_msg_t));
-  msg->msg = "kick node trig";
+  msg->msg = msg_string;
   msg->time = time;
   msg->func = (MsgAction)func;
 

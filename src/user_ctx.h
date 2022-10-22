@@ -2,6 +2,7 @@
 #define _USER_CTX
 #include "audio/graph.h"
 #include "queue.h"
+#include "buf_read.h"
 #include <jack/jack.h>
 #include <stdlib.h>
 #include <time.h>

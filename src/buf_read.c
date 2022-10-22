@@ -1,10 +1,5 @@
-#include <sndfile.h>
-#include <stdlib.h>
+#include "buf_read.h"
 
-struct buf_info {
-  double *data;
-  int frames;
-};
 struct buf_info *read_sndfile(char *filename) {
   SNDFILE *file;
   int fs;

@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "buf_read.c"
+#include "buf_read.h"
 
 jack_client_t *client;
 jack_port_t *input_port;
@@ -50,7 +50,6 @@ void connect_ports(jack_client_t *client) {
 
 int srate(nframes_t nframes, void *arg) {
   printf("the sample rate is now %" PRIu32 "/sec\n", nframes);
-  calc_note_frqs((sample_t)nframes);
   return 0;
 }
 
@@ -62,7 +61,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  calc_note_frqs(jack_get_sample_rate(client));
 
   jack_set_sample_rate_callback(client, srate, 0);
 
@@ -71,18 +69,22 @@ int main(int argc, char **argv) {
   input_port = jack_port_register(client, "midi_in", JACK_DEFAULT_MIDI_TYPE,
                                   JackPortIsInput, 0);
 
-  for (int i = 0; i < NUM_CHANNELS; i++) {
-    int index = i + 1;
-    char *port_name = (char *)malloc(10 * sizeof(char));
-    sprintf(port_name, "audio_out_%d", i);
-    output_ports[i] = jack_port_register(
-        client, port_name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
-  }
+//  for (int i = 0; i < NUM_CHANNELS; i++) {
+//    int index = i + 1;
+//    char *port_name = (char *)malloc(10 * sizeof(char));
+//    sprintf(port_name, "audio_out_%d", i);
+//    output_ports[i] = jack_port_register(
+//        client, port_name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+//  }
+
+  output_ports[0] = jack_port_register(client, "playback_FL", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+  output_ports[1] = jack_port_register(client, "playback_FR", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
 
   queue_t msg_queue = {0, 0, 100, malloc(sizeof(void *) * 100)};
   UserCtx *ctx = get_user_ctx(input_port, output_ports, &msg_queue);
 
   struct buf_info *amen_buf = read_sndfile("fat_amen_mono_48000.wav");
+  ctx->buffers = realloc(ctx->buffers, sizeof(amen_buf));
   ctx->buffers[0] = amen_buf;
 
   jack_set_process_callback(client, callback, ctx);
@@ -106,7 +108,7 @@ int main(int argc, char **argv) {
   nframes_t frame_time = jack_frames_since_cycle_start(client);
   /* add_kick_node_msg(ctx, frame_time, 60.0); */
   /* add_square_node_msg(ctx, frame_time); */
-  add_grains_node_msg(ctx, frame_time);
+  add_grains_node_msg(ctx, frame_time, 0);
   double r[5] = {1.5, 1.5, 0.5, 0.5};
   int i = 0;
   for (;;) {
