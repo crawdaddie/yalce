@@ -25,7 +25,6 @@ void calc_note_frqs(sample_t srate) {
 /* } */
 
 void process_midi(nframes_t nframes, UserCtx *ctx, sample_t **out, int i) {
-  printf("nframes %d\n", nframes);
 
   void *port_buf = jack_port_get_buffer(ctx->input_port, nframes);
 

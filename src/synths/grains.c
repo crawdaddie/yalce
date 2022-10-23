@@ -80,10 +80,10 @@ Graph *init_grains_node(struct buf_info *buf, sample_t *out) {
   return node;
 }
 void add_grains_node_msg_handler(Graph *graph, int time, void **args) {
-  struct buf_info *buf = args[1];
-  Graph *node = init_grains_node(buf, args[0]);
-  node->schedule = time;
-  add_after(graph, node);
+  /* struct buf_info *buf = args[1]; */
+  /* Graph *node = init_grains_node(buf, args[0]); */
+  /* node->schedule = time; */
+  /* add_after(graph, node); */
 }
 void add_grains_node_msg(UserCtx *ctx, nframes_t frame_time, int bufnum) {
   queue_msg_t *msg = msg_init("grains", frame_time, add_grains_node_msg_handler, 2);

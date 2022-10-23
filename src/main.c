@@ -62,30 +62,27 @@ int main(int argc, char **argv) {
   }
 
 
-  jack_set_sample_rate_callback(client, srate, 0);
+  /* jack_set_sample_rate_callback(client, srate, 0); */
 
   jack_on_shutdown(client, jack_shutdown, 0);
 
   input_port = jack_port_register(client, "midi_in", JACK_DEFAULT_MIDI_TYPE,
                                   JackPortIsInput, 0);
 
-//  for (int i = 0; i < NUM_CHANNELS; i++) {
-//    int index = i + 1;
-//    char *port_name = (char *)malloc(10 * sizeof(char));
-//    sprintf(port_name, "audio_out_%d", i);
-//    output_ports[i] = jack_port_register(
-//        client, port_name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
-//  }
-
-  output_ports[0] = jack_port_register(client, "playback_FL", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
-  output_ports[1] = jack_port_register(client, "playback_FR", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    int index = i + 1;
+    char *port_name = (char *)malloc(10 * sizeof(char));
+    sprintf(port_name, "audio_out_%d", i);
+    output_ports[i] = jack_port_register(
+        client, port_name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+  }
 
   queue_t msg_queue = {0, 0, 100, malloc(sizeof(void *) * 100)};
   UserCtx *ctx = get_user_ctx(input_port, output_ports, &msg_queue);
 
-  struct buf_info *amen_buf = read_sndfile("fat_amen_mono_48000.wav");
-  ctx->buffers = realloc(ctx->buffers, sizeof(amen_buf));
-  ctx->buffers[0] = amen_buf;
+  /* struct buf_info *amen_buf = read_sndfile("fat_amen_mono_48000.wav"); */
+  /* ctx->buffers = realloc(ctx->buffers, sizeof(amen_buf)); */
+  /* ctx->buffers[0] = amen_buf; */
 
   jack_set_process_callback(client, callback, ctx);
 
