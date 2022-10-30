@@ -81,8 +81,11 @@ int main(int argc, char **argv) {
   UserCtx *ctx = get_user_ctx(input_port, output_ports, &msg_queue);
 
   /* struct buf_info *amen_buf = read_sndfile("fat_amen_mono_48000.wav"); */
-  /* ctx->buffers = realloc(ctx->buffers, sizeof(amen_buf)); */
-  /* ctx->buffers[0] = amen_buf; */
+  /* struct buf_info *amen_buf = read_sndfile("kick.wav"); */
+  struct buf_info *amen_buf = read_sndfile("Gritch Kick 1.wav");
+  printf("buf info %d\n", amen_buf->frames);
+  ctx->buffers = realloc(ctx->buffers, sizeof(ctx->buffers) + sizeof(amen_buf));
+  ctx->buffers[0] = amen_buf;
 
   jack_set_process_callback(client, callback, ctx);
 
