@@ -5,16 +5,16 @@
 #include <math.h>
 #include <stdio.h>
 
-sample_t ramp = 0.0;
-sample_t note_on;
+t_sample ramp = 0.0;
+t_sample note_on;
 unsigned char note = 0;
-sample_t note_frqs[128];
+t_sample note_frqs[128];
 
-void calc_note_frqs(sample_t srate) {
+void calc_note_frqs(t_sample srate) {
   int i;
   for (i = 0; i < 128; i++) {
     note_frqs[i] =
-        (2.0 * 440.0 / 32.0) * pow(2, (((sample_t)i - 9.0) / 12.0)) / srate;
+        (2.0 * 440.0 / 32.0) * pow(2, (((t_sample)i - 9.0) / 12.0)) / srate;
   }
 }
 
@@ -24,7 +24,7 @@ void calc_note_frqs(sample_t srate) {
 /*   } */
 /* } */
 
-void process_midi(nframes_t nframes, UserCtx *ctx, sample_t **out, int i) {
+void process_midi(nframes_t nframes, UserCtx *ctx, t_sample **out, int i) {
 
   void *port_buf = jack_port_get_buffer(ctx->input_port, nframes);
 
@@ -60,7 +60,7 @@ void process_midi(nframes_t nframes, UserCtx *ctx, sample_t **out, int i) {
     }
     ramp += note_frqs[note];
     ramp = (ramp > 1.0) ? ramp - 2.0 : ramp;
-    sample_t sample = note_on * sin(2 * PI * ramp);
+    t_sample sample = note_on * sin(2 * PI * ramp);
     out[0][i] = sample;
     out[1][i] = sample;
   }
@@ -71,10 +71,10 @@ int callback(nframes_t nframes, void *arg) {
   UserCtx *ctx = (UserCtx *)arg;
   void *port_buf = jack_port_get_buffer(ctx->input_port, nframes);
 
-  sample_t *out[NUM_CHANNELS];
+  t_sample *out[NUM_CHANNELS];
 
   for (int ch = 0; ch < NUM_CHANNELS; ch++) {
-    out[ch] = (sample_t *)jack_port_get_buffer(ctx->output_ports[ch], nframes);
+    out[ch] = (t_sample *)jack_port_get_buffer(ctx->output_ports[ch], nframes);
   };
   process_midi(nframes, ctx, out, i);
 

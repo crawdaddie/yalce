@@ -5,8 +5,8 @@
 
 typedef void (*t_trigger)(void *data, nframes_t i);
 typedef struct kick_data {
-  sample_t ramp;
-  sample_t freq;
+  t_sample ramp;
+  t_sample freq;
   int t_ramp; // set this to a sample offset within a block to retrigger
               // the node - reset back to -1 immediately after to avoid
               // triggering every block
@@ -39,11 +39,11 @@ void process_triggers(kick_data *data, nframes_t i) {
 /*   } */
 /* } */
 
-sample_t pitch_env(sample_t i, sample_t decay) {
+t_sample pitch_env(t_sample i, t_sample decay) {
   return 1.0 / (1.0 + decay * i);
 }
-sample_t scale_val(sample_t env_val, // 0-1
-                   sample_t min, sample_t max) {
+t_sample scale_val(t_sample env_val, // 0-1
+                   t_sample min, t_sample max) {
   return min + env_val * (max - min);
 }
 
@@ -57,14 +57,14 @@ t_perform perform_kick(Graph *graph, nframes_t nframes) {
     graph->schedule = -1;
     process_triggers(data, i);
 
-    sample_t env_val =
+    t_sample env_val =
         scale_val(pitch_env(data->ramp, 0.02), data->freq, 4000.0);
-    sample_t sample = sin(env_val * 2.0 * PI);
-    sample += scale_val((sample_t)rand() / RAND_MAX, -1, 1) *
+    t_sample sample = sin(env_val * 2.0 * PI);
+    sample += scale_val((t_sample)rand() / RAND_MAX, -1, 1) *
               sin(data->ramp * 30 * 2.0 * PI) * 0.04;
     sample += tanh(sample * 5.0);
     graph->out[i] = sample * 0.125;
-    data->ramp += (sample_t)1.0 / 48000;
+    data->ramp += (t_sample)1.0 / 48000;
   }
 }
 
@@ -75,13 +75,13 @@ void set_kick_freq(Graph *kick_node, int time, Graph *kick_node_ref) {
 
 void add_kick_node_msg_handler(Graph *graph, int time, void **args) {
   kick_data *data = alloc_kick_data();
-  sample_t *outbus = args[0];
+  t_sample *outbus = args[0];
   Graph *kick_node =
       alloc_graph((NodeData *)data, outbus, (t_perform)perform_kick, 1);
   add_after(graph, kick_node);
 }
 
-void add_kick_node_msg(UserCtx *ctx, nframes_t frame_time, sample_t freq) {
+void add_kick_node_msg(UserCtx *ctx, nframes_t frame_time, t_sample freq) {
   queue_msg_t *msg = malloc(sizeof(queue_msg_t));
   msg->msg = "kick node";
   msg->time = frame_time;
@@ -126,7 +126,7 @@ void node_set_msg(UserCtx *ctx, Graph *node, nframes_t frame_time) {
   msg->args = malloc(num_args * sizeof(void *));
   msg->args[0] = node;
   msg->args[1] = "freq";
-  sample_t freq = 220.0;
+  t_sample freq = 220.0;
   /* msg->args[2] = freq; */
   enqueue(ctx->msg_queue, msg);
 }

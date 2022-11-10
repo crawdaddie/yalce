@@ -15,7 +15,7 @@ typedef struct UserCtx {
   Graph *graph;
   queue_t *msg_queue;
 
-  sample_t **buses;
+  t_sample **buses;
 
   struct buf_info **buffers;
 } UserCtx;

@@ -1,6 +1,6 @@
 #include "graph.h"
 
-Graph *graph_perform(Graph *graph, nframes_t nframes) {
+Graph *graph_perform(Graph *graph, t_nframes nframes) {
   if (!graph) {
     return NULL;
   };
@@ -83,12 +83,12 @@ void perform_null() {}
 void add_ins(int num_ins, Graph *node) {
   node->num_ins = num_ins;
   node->size_ins = calloc(num_ins, sizeof(int));
-  node->ins = calloc(num_ins, sizeof(sample_t *));
+  node->ins = calloc(num_ins, sizeof(t_sample *));
 }
 
-Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform,
+Graph *alloc_graph(NodeData *data, t_sample *out, t_perform perform,
                    int num_ins) {
-  sample_t *out_buf = out ? out : calloc(BUF_SIZE, sizeof(sample_t));
+  t_sample *out_buf = out ? out : calloc(BUF_SIZE, sizeof(sample_t));
   Graph *node = calloc(1, sizeof(Graph));
   node->data = (NodeData *)data;
   node->perform = perform ? perform : (t_perform)perform_null;
@@ -96,7 +96,7 @@ Graph *alloc_graph(NodeData *data, sample_t *out, t_perform perform,
   node->next = NULL;
   node->should_free = 0;
   node->schedule = 0;
-  node->out = out ? out : calloc(BUF_SIZE, sizeof(sample_t));
+  node->out = out ? out : calloc(BUF_SIZE, sizeof(t_sample));
 
   add_ins(num_ins, node);
   return node;

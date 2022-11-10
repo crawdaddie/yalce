@@ -6,7 +6,7 @@
 #define BUF_SIZE 1024
 #define INITIAL_BUSNUM 8
 static const double PI = 3.14159265358979323846264338328;
-typedef jack_default_audio_sample_t sample_t;
-typedef jack_nframes_t nframes_t;
+typedef jack_default_audio_sample_t t_sample;
+typedef jack_nframes_t t_nframes;
 
 #endif

@@ -19,8 +19,6 @@
 jack_client_t *client;
 jack_port_t *input_port;
 jack_port_t *output_ports[NUM_CHANNELS];
-typedef jack_default_audio_sample_t sample_t;
-typedef jack_nframes_t nframes_t;
 
 jack_port_t *output_ports[NUM_CHANNELS];
 
@@ -48,7 +46,7 @@ void connect_ports(jack_client_t *client) {
   free(serverports_names);
 }
 
-int srate(nframes_t nframes, void *arg) {
+int srate(t_nframes nframes, void *arg) {
   printf("the sample rate is now %" PRIu32 "/sec\n", nframes);
   return 0;
 }
@@ -105,7 +103,7 @@ int main(int argc, char **argv) {
   /* run until interrupted */
   Graph *kick_node;
   Graph *square_node;
-  nframes_t frame_time = jack_frames_since_cycle_start(client);
+  t_nframes frame_time = jack_frames_since_cycle_start(client);
   /* add_kick_node_msg(ctx, frame_time, 60.0); */
   /* add_square_node_msg(ctx, frame_time); */
   add_grains_node_msg(ctx, frame_time, 0);
