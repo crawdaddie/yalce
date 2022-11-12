@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
 
   /* struct buf_info *amen_buf = read_sndfile("fat_amen_mono_48000.wav"); */
   /* struct buf_info *amen_buf = read_sndfile("kick.wav"); */
-  struct buf_info *amen_buf = read_sndfile("Gritch Kick 1.wav");
+  struct buf_info *amen_buf = read_sndfile("assets/Gritch Kick 1.wav");
   printf("buf info %d\n", amen_buf->frames);
   ctx->buffers = realloc(ctx->buffers, sizeof(ctx->buffers) + sizeof(amen_buf));
   ctx->buffers[0] = amen_buf;
