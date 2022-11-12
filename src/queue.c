@@ -1,6 +1,6 @@
 #include "queue.h"
 
-void *dequeue(queue_t *queue) {
+void *dequeue(t_queue *queue) {
   if (queue->tail == queue->head) {
     return NULL;
   }
@@ -10,7 +10,7 @@ void *dequeue(queue_t *queue) {
   return handle;
 }
 
-int enqueue(queue_t *queue, void *handle) {
+int enqueue(t_queue *queue, void *handle) {
   if (((queue->head + 1) % queue->size) == queue->tail) {
     return 1;
   }

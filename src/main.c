@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         client, port_name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
   }
 
-  queue_t msg_queue = {0, 0, 100, malloc(sizeof(void *) * 100)};
+  t_queue msg_queue = {0, 0, 100, malloc(sizeof(void *) * 100)};
   UserCtx *ctx = get_user_ctx(input_port, output_ports, &msg_queue);
 
   /* struct buf_info *amen_buf = read_sndfile("fat_amen_mono_48000.wav"); */

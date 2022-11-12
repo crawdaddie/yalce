@@ -24,13 +24,13 @@ void calc_note_frqs(t_sample srate) {
 /*   } */
 /* } */
 
-void process_midi(nframes_t nframes, UserCtx *ctx, t_sample **out, int i) {
+void process_midi(t_nframes nframes, UserCtx *ctx, t_sample **out, int i) {
 
   void *port_buf = jack_port_get_buffer(ctx->input_port, nframes);
 
   jack_midi_event_t in_event;
-  nframes_t event_index = 0;
-  nframes_t event_count = jack_midi_get_event_count(port_buf);
+  t_nframes event_index = 0;
+  t_nframes event_count = jack_midi_get_event_count(port_buf);
 
   if (event_count > 1) {
     printf(" midisine: have %d events\n", event_count);
@@ -65,7 +65,7 @@ void process_midi(nframes_t nframes, UserCtx *ctx, t_sample **out, int i) {
     out[1][i] = sample;
   }
 }
-int callback(nframes_t nframes, void *arg) {
+int callback(t_nframes nframes, void *arg) {
   int i;
 
   UserCtx *ctx = (UserCtx *)arg;

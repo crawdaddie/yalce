@@ -88,7 +88,7 @@ void add_ins(int num_ins, Graph *node) {
 
 Graph *alloc_graph(NodeData *data, t_sample *out, t_perform perform,
                    int num_ins) {
-  t_sample *out_buf = out ? out : calloc(BUF_SIZE, sizeof(sample_t));
+  t_sample *out_buf = out ? out : calloc(BUF_SIZE, sizeof(t_sample));
   Graph *node = calloc(1, sizeof(Graph));
   node->data = (NodeData *)data;
   node->perform = perform ? perform : (t_perform)perform_null;

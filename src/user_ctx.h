@@ -13,7 +13,7 @@ typedef struct UserCtx {
   jack_port_t *input_port;
   jack_port_t **output_ports;
   Graph *graph;
-  queue_t *msg_queue;
+  t_queue *msg_queue;
 
   t_sample **buses;
 
@@ -21,8 +21,8 @@ typedef struct UserCtx {
 } UserCtx;
 
 UserCtx *get_user_ctx(jack_port_t *input_port, jack_port_t **output_ports,
-                      queue_t *msg_queue);
-Graph *process_queue(queue_t *queue, Graph *graph);
+                      t_queue *msg_queue);
+Graph *process_queue(t_queue *queue, Graph *graph);
 
 enum msg_type {
   ADD_BEFORE = 1,
@@ -31,15 +31,15 @@ enum msg_type {
 
 typedef void (*MsgAction)(Graph *graph, int time, void *ref);
 
-typedef struct queue_msg_t {
+typedef struct t_queue_msg {
   char *msg;
   int time;
   MsgAction func;
   void *ref;
   int num_args;
   void **args;
-} queue_msg_t;
-void free_msg(queue_msg_t *msg);
-queue_msg_t *msg_init(char *msg_string, nframes_t time, void *func, int num_args);
+} t_queue_msg;
+void free_msg(t_queue_msg *msg);
+t_queue_msg *msg_init(char *msg_string, t_nframes time, void *func, int num_args);
 
 #endif

@@ -6,9 +6,9 @@ typedef struct queue_t {
   size_t tail;
   size_t size;
   void **data;
-} queue_t;
+} t_queue;
 
-void *dequeue(queue_t *queue);
+void *dequeue(t_queue *queue);
 
-int enqueue(queue_t *queue, void *handle);
+int enqueue(t_queue *queue, void *handle);
 #endif
