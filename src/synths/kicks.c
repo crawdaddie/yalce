@@ -3,7 +3,7 @@
 #include "../user_ctx.h"
 #include <stdlib.h>
 
-typedef void (*t_trigger)(void *data, nframes_t i);
+typedef void (*t_trigger)(void *data, t_nframes i);
 typedef struct kick_data {
   t_sample ramp;
   t_sample freq;
@@ -20,13 +20,13 @@ kick_data *alloc_kick_data() {
   return data;
 }
 
-void process_triggers(kick_data *data, nframes_t i) {
+void process_triggers(kick_data *data, t_nframes i) {
   if (data->t_ramp != -1 && i == data->t_ramp) {
     data->ramp = 0.0;
     data->t_ramp = -1;
   }
 }
-/* int process_schedule(Graph *node, nframes_t i) { */
+/* int process_schedule(Graph *node, t_nframes i) { */
 /*   if (node->schedule == -1) { */
 /*     return 0; */
 /*   } */
@@ -47,7 +47,7 @@ t_sample scale_val(t_sample env_val, // 0-1
   return min + env_val * (max - min);
 }
 
-t_perform perform_kick(Graph *graph, nframes_t nframes) {
+t_perform perform_kick(Graph *graph, t_nframes nframes) {
   kick_data *data = (kick_data *)graph->data;
 
   for (int i = 0; i < nframes; i++) {
@@ -81,8 +81,8 @@ void add_kick_node_msg_handler(Graph *graph, int time, void **args) {
   add_after(graph, kick_node);
 }
 
-void add_kick_node_msg(UserCtx *ctx, nframes_t frame_time, t_sample freq) {
-  queue_msg_t *msg = malloc(sizeof(queue_msg_t));
+void add_kick_node_msg(UserCtx *ctx, t_nframes frame_time, t_sample freq) {
+  t_queue_msg *msg = malloc(sizeof(t_queue_msg));
   msg->msg = "kick node";
   msg->time = frame_time;
   msg->func = (MsgAction)add_kick_node_msg_handler;
@@ -100,9 +100,9 @@ void trigger_kick_node_msg_handler(Graph *kick_node, int time, void **args) {
   kick_node->schedule = time;
   data->t_ramp = time;
 }
-void trigger_kick_node_msg(UserCtx *ctx, Graph *node, nframes_t frame_time) {
+void trigger_kick_node_msg(UserCtx *ctx, Graph *node, t_nframes frame_time) {
 
-  queue_msg_t *msg = malloc(sizeof(queue_msg_t));
+  t_queue_msg *msg = malloc(sizeof(t_queue_msg));
   msg->msg = "kick node trig";
   msg->time = frame_time;
   msg->func = (MsgAction)trigger_kick_node_msg_handler;
@@ -115,8 +115,8 @@ void trigger_kick_node_msg(UserCtx *ctx, Graph *node, nframes_t frame_time) {
 
 void node_set_msg_handler(Graph *node, int time, void **args) {}
 
-void node_set_msg(UserCtx *ctx, Graph *node, nframes_t frame_time) {
-  queue_msg_t *msg = malloc(sizeof(queue_msg_t));
+void node_set_msg(UserCtx *ctx, Graph *node, t_nframes frame_time) {
+  t_queue_msg *msg = malloc(sizeof(t_queue_msg));
   msg->msg = "kick node trig";
   msg->time = frame_time;
   msg->func = (MsgAction)node_set_msg_handler;

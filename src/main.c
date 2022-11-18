@@ -1,9 +1,7 @@
-#include "callback.c"
+#include "audio/callback.c"
 #include "config.h"
 #include "oscilloscope.h"
 #include "scheduling.h"
-/* #include "synths/kicks.c" */
-/* #include "synths/squares.c" */
 #include "synths/grains.c"
 #include "user_ctx.h"
 #include <errno.h>
@@ -80,7 +78,7 @@ int main(int argc, char **argv) {
 
   /* struct buf_info *amen_buf = read_sndfile("fat_amen_mono_48000.wav"); */
   /* struct buf_info *amen_buf = read_sndfile("kick.wav"); */
-  struct buf_info *amen_buf = read_sndfile("assets/Gritch Kick 1.wav");
+  struct buf_info *amen_buf = read_sndfile("assets/fat_amen_mono_48000.wav");
   printf("buf info %d\n", amen_buf->frames);
   ctx->buffers = realloc(ctx->buffers, sizeof(ctx->buffers) + sizeof(amen_buf));
   ctx->buffers[0] = amen_buf;
@@ -92,6 +90,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   connect_ports(client);
+
   for (int i = 1; i < argc; i += 1) {
     char *arg = argv[i];
     if (strcmp(arg, "--oscilloscope") == 0) {
@@ -100,23 +99,16 @@ int main(int argc, char **argv) {
     }
   }
 
-  /* run until interrupted */
   Graph *kick_node;
   Graph *square_node;
   t_nframes frame_time = jack_frames_since_cycle_start(client);
-  /* add_kick_node_msg(ctx, frame_time, 60.0); */
-  /* add_square_node_msg(ctx, frame_time); */
   add_grains_node_msg(ctx, frame_time, 0);
   double r[5] = {1.5, 1.5, 0.5, 0.5};
+
+  /* run until interrupted */
   int i = 0;
   for (;;) {
     msleep(r[i] * 500);
-    /* square_node = ctx->graph->next; */
-    /* kick_node = ctx->graph->next; */
-
-    /* nframes_t frame_time = jack_frames_since_cycle_start(client); */
-    /* trigger_kick_node_msg(ctx, kick_node, frame_time); */
-    /* set_freq_msg(ctx, square_node, frame_time, 440.0); */
     i = (i + 1) % 4;
   };
 

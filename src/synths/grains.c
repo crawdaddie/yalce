@@ -1,58 +1,74 @@
 #include "../audio/graph.h"
 #include "../config.h"
 #include "../user_ctx.h"
+#include "../audio/windows.c"
 #include <stdlib.h>
 
-typedef struct grains_data {
-  int buf_frames;
-  t_sample *buf_data;
-  int max_grains;
+typedef struct grain {
+  t_sample  position;
+  t_sample      rate;
+  t_sample    offset;
+  int            dur;
+  int        playing;
+} grain;
 
-  t_sample ramp;
-  t_sample *voice_read_ptrs;
-  t_sample *voice_rates;
+
+typedef struct grains_data {
+  int     buf_frames;
+  t_sample *buf_data;
+  int     max_grains;
+  int  voice_counter;
+  grain      *grains;
+
+
   t_sample grain_freq;
   t_sample grain_dur;
   t_sample grain_pos;
   
   t_sample trigger_ramp;
   int trigger;
-  int voice_counter;
-
 } grains_data;
 
 grains_data *alloc_grains_data(int buf_frames, t_sample *buf_data, int max_grains) {
   grains_data *data = malloc(sizeof(grains_data));
   data->buf_frames = buf_frames;
   data->buf_data = buf_data;
+
   data->max_grains = max_grains;
-  data->voice_counter = 0;
-  data->voice_read_ptrs = calloc(max_grains, sizeof(t_sample));
-  data->voice_rates = calloc(max_grains, sizeof(t_sample));
-
-  data->voice_rates[0] = 1.0;
-
-  for (int v = 1; v < max_grains; v++) {
-    data->voice_rates[v] = 0.0;
-  };
-  data->grain_freq = 10.0;
+  data->grain_freq = 40;
   data->grain_dur = 0.01;
   data->grain_pos = 0.0;
-  data->ramp = 0;
+
   data->trigger_ramp = 0;
   data->trigger = 0;
+
+  data->voice_counter = 0;
+
+  data->grains = malloc(sizeof(grain) * max_grains);
+  for (int i = 0; i < max_grains; ++i) {
+    grain g = data->grains[i];
+    g.position = 0.0;
+    g.offset = 0.0;
+    g.rate = 1.0;
+    g.playing = 0;
+    g.dur = 200;
+  };
+
   return data;
 }
 
-t_sample grain_sample(t_sample read_ptr, t_sample *buf, int max_frames) {
 
+t_sample buf_sample(t_sample read_ptr, t_sample *buf, int max_frames) {
   t_sample r = read_ptr;
+
   if (r >= max_frames) {
-    return 0.0;
+    r = r - max_frames;
   }
+
   if (r <= 0) {
     r = max_frames + r;
   }
+
   int frame = ((int)r);
   t_sample fraction = r - frame;
   t_sample result = buf[frame] * fraction;
@@ -60,12 +76,45 @@ t_sample grain_sample(t_sample read_ptr, t_sample *buf, int max_frames) {
   return result;
 }
 
+t_sample grain_env(grain *g) {
+  if (g->position >= g->dur) {
+    g->playing = 0;
+    return 0.0;
+  };
+
+  return hann((int)g->position, g->dur);
+}
+
+t_sample get_grain_sample(grain *grain, t_sample *buf, int max_frames) {
+  t_sample read_ptr = grain->offset + grain->position * grain->rate;
+  t_sample s = buf_sample(read_ptr, buf, max_frames);
+  return s;
+}
+
+t_sample read_grain(grain *grain, t_sample *buf, int max_frames) {
+  if (!grain->playing) {
+    return 0.0;
+  }
+
+  t_sample s = grain_env(grain) * get_grain_sample(grain, buf, max_frames);
+  grain->position += 1;
+  return s;
+}
+
+
+void reset_grain(grain *grain, t_sample offset) {
+  grain->playing = 1;
+  grain->position = 0;
+  grain->offset = offset;
+}
+
+
+
 t_sample impulse(grains_data *data, int sample_rate) {
   t_sample grain_trig_period = 48000 / (data->grain_freq);
   int trigger = 0;
   if (data->trigger_ramp >= grain_trig_period) {
     data->trigger_ramp -= grain_trig_period;
-    data->voice_counter = (data->voice_counter + 1) % data->max_grains;
     trigger = 1;
   } else {
     trigger = 0;
@@ -81,23 +130,27 @@ t_perform perform_grains(Graph *graph, t_nframes nframes) {
   t_sample output_sample = 0.0;
 
   for (int i = 0; i < nframes; i++) {
+
     impulse(data, 48000);
+    
     if (data->trigger) {
-      data->voice_read_ptrs[data->voice_counter] = data->grain_pos * data->buf_frames;
-      /* data->voice_rates[data->voice_counter] = 1 + rand() % 3;  */
-    };
+      reset_grain(
+          &(data->grains[data->voice_counter]),
+          data->grain_pos * data->buf_frames
+        );
+      data->voice_counter = (data->voice_counter + 1) % data->max_grains;
+    }
+
     t_sample sample = 0.0;
 
+    for (int v = 0; v < data->max_grains; ++v) {
+      sample += read_grain(
+          &(data->grains[v]),
+          data->buf_data,
+          data->buf_frames
+        );
+    }
 
-
-    for (int v = 0; v < data->max_grains; v++) {
-      data->voice_read_ptrs[v] = data->voice_read_ptrs[v] + data->voice_rates[v];
-      sample += grain_sample(data->voice_read_ptrs[v], data->buf_data, data->buf_frames);
-    };
-
-
-    data->ramp += (t_sample)1.0 / 48000;
-    /* graph->out[i] = (t_sample) data->trigger; */
     data->grain_pos = fmod(data->grain_pos + ((t_sample) 0.1 / 48000), 1.0);
     graph->out[i] = sample;
   }

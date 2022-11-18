@@ -1,5 +1,5 @@
-#include "config.h"
-#include "user_ctx.h"
+#include "../config.h"
+#include "../user_ctx.h"
 #include <jack/jack.h>
 #include <jack/midiport.h>
 #include <math.h>
