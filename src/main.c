@@ -4,6 +4,7 @@
 #include "scheduling.h"
 /* #include "synths/kicks.c" */
 /* #include "synths/squares.c" */
+#include "buf_read.h"
 #include "synths/grains.c"
 #include "user_ctx.h"
 #include <errno.h>
@@ -14,7 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "buf_read.h"
 
 jack_client_t *client;
 jack_port_t *input_port;
@@ -60,7 +60,6 @@ int main(int argc, char **argv) {
     fprintf(stderr, "jack server not running?\n");
     return 1;
   }
-
 
   /* jack_set_sample_rate_callback(client, srate, 0); */
 
