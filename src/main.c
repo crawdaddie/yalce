@@ -1,11 +1,19 @@
-#include <soundio/soundio.h>
-
-#include "./ctx.c"
+#include "audio/signal.c"
+#include "callback.c"
+#include "ctx.c"
 #include <math.h>
+#include <soundio/soundio.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "./prog.c"
+#include "audio/sq.c"
+#include "graph/graph.c"
+#include "scheduling.h"
+#include <stdlib.h>
+// #include "oscilloscope.h"
 
 static int usage(char *exe) {
   fprintf(stderr,
@@ -16,90 +24,10 @@ static int usage(char *exe) {
           "  [--raw]\n"
           "  [--name stream_name]\n"
           "  [--latency seconds]\n"
-          "  [--sample-rate hz]\n",
+          "  [--sample-rate hz]\n"
+          "  [--oscilloscope]\n",
           exe);
   return 1;
-}
-
-static void write_sample_s16ne(char *ptr, double sample) {
-  int16_t *buf = (int16_t *)ptr;
-  double range = (double)INT16_MAX - (double)INT16_MIN;
-  double val = sample * range / 2.0;
-  *buf = val;
-}
-
-static void write_sample_s32ne(char *ptr, double sample) {
-  int32_t *buf = (int32_t *)ptr;
-  double range = (double)INT32_MAX - (double)INT32_MIN;
-  double val = sample * range / 2.0;
-  *buf = val;
-}
-
-static void write_sample_float32ne(char *ptr, double sample) {
-  float *buf = (float *)ptr;
-  *buf = sample;
-}
-
-static void write_sample_float64ne(char *ptr, double sample) {
-  double *buf = (double *)ptr;
-  *buf = sample;
-}
-
-static void (*write_sample)(char *ptr, double sample);
-
-static volatile bool want_pause = false;
-
-static void write_callback(struct SoundIoOutStream *outstream,
-                           int frame_count_min, int frame_count_max) {
-  double float_sample_rate = outstream->sample_rate;
-  double seconds_per_frame = 1.0 / float_sample_rate;
-
-  struct SoundIoChannelArea *areas;
-  int err;
-
-  int frames_left = frame_count_max;
-
-  for (;;) {
-    int frame_count = frames_left;
-    if ((err =
-             soundio_outstream_begin_write(outstream, &areas, &frame_count))) {
-      fprintf(stderr, "unrecoverable stream error: %s\n",
-              soundio_strerror(err));
-      exit(1);
-    }
-
-    if (!frame_count)
-      break;
-
-    const struct SoundIoChannelLayout *layout = &outstream->layout;
-    user_ctx_callback(frame_count, seconds_per_frame);
-
-    for (int frame = 0; frame < frame_count; frame += 1) {
-      for (int channel = 0; channel < layout->channel_count; channel += 1) {
-        write_sample(areas[channel].ptr, read_channel_out(channel, frame));
-        areas[channel].ptr += areas[channel].step;
-      }
-    }
-
-    if ((err = soundio_outstream_end_write(outstream))) {
-      if (err == SoundIoErrorUnderflow)
-        return;
-      fprintf(stderr, "unrecoverable stream error: %s\n",
-              soundio_strerror(err));
-      exit(1);
-    }
-
-    frames_left -= frame_count;
-    if (frames_left <= 0)
-      break;
-  }
-
-  soundio_outstream_pause(outstream, want_pause);
-}
-
-static void underflow_callback(struct SoundIoOutStream *outstream) {
-  static int count = 0;
-  fprintf(stderr, "underflow %d\n", count++);
 }
 
 int main(int argc, char **argv) {
@@ -107,6 +35,7 @@ int main(int argc, char **argv) {
   enum SoundIoBackend backend = SoundIoBackendNone;
   char *device_id = NULL;
   bool raw = false;
+  bool oscilloscope = false;
   char *stream_name = NULL;
   double latency = 0.0;
   int sample_rate = 0;
@@ -144,6 +73,8 @@ int main(int argc, char **argv) {
           latency = atof(argv[i]);
         } else if (strcmp(arg, "--sample-rate") == 0) {
           sample_rate = atoi(argv[i]);
+        } else if (strcmp(arg, "--oscilloscope") == 0) {
+          oscilloscope = true;
         } else {
           return usage(exe);
         }
@@ -262,30 +193,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
-
-  for (;;) {
-    soundio_flush_events(soundio);
-    int c = getc(stdin);
-    if (c == 'p') {
-      fprintf(stderr, "pausing result: %s\n",
-              soundio_strerror(soundio_outstream_pause(outstream, true)));
-    } else if (c == 'P') {
-      want_pause = true;
-    } else if (c == 'u') {
-      want_pause = false;
-      fprintf(stderr, "unpausing result: %s\n",
-              soundio_strerror(soundio_outstream_pause(outstream, false)));
-    } else if (c == 'c') {
-      fprintf(stderr, "clear buffer result: %s\n",
-              soundio_strerror(soundio_outstream_clear_buffer(outstream)));
-    } else if (c == 'q') {
-      break;
-    } else if (c == '\r' || c == '\n') {
-      // ignore
-    } else {
-      fprintf(stderr, "Unrecognized command: %c\n", c);
-    }
-  }
+  soundio_flush_events(soundio);
+  play();
 
   soundio_outstream_destroy(outstream);
   soundio_device_unref(device);

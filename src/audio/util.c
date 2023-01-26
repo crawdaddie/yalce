@@ -3,6 +3,7 @@
 #include <math.h>
 #include <soundio/soundio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 static void write_sample_s16ne(char *ptr, double sample) {
