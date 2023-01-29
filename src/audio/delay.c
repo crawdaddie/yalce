@@ -56,7 +56,8 @@ static void increment_delay_pointers(delay_data *data) {
   data->read_ptr++;
 }
 
-void perform_delay(Graph *node, int frame_count, double seconds_per_frame) {
+static void perform_delay(Graph *node, int frame_count,
+                          double seconds_per_frame) {
   delay_data *data = node->data;
   Signal input = node->in[0];
   Signal delay_time_ms = node->in[1];
@@ -77,7 +78,6 @@ void perform_delay(Graph *node, int frame_count, double seconds_per_frame) {
         unwrap(input, 2 * frame + 1);
 
     buffer[2 * data->write_ptr] = output_0;
-
     buffer[2 * data->write_ptr + 1] = output_1;
 
     out[2 * frame] = output_0;
@@ -90,7 +90,7 @@ void perform_delay(Graph *node, int frame_count, double seconds_per_frame) {
 Graph *delay_create(double *input) {
 
   int max_delay_time_ms = 1000;
-  int delay_time_ms = 250;
+  int delay_time_ms = 750;
 
   int sample_rate = 48000;
   int bufsize = (int)(sample_rate * max_delay_time_ms / 1000);
@@ -120,7 +120,7 @@ Graph *delay_create(double *input) {
   node->in[1].size = 1;
 
   node->in[2].data = calloc(sizeof(double), 1);
-  *node->in[2].data = 0.8;
+  *node->in[2].data = 0.5;
   node->in[2].size = 1;
 
   return node;

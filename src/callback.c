@@ -1,6 +1,7 @@
 #include <soundio/soundio.h>
 
 #include "ctx.c"
+#include "sched.c"
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -60,9 +61,12 @@ static void write_callback(struct SoundIoOutStream *outstream,
       break;
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
+    sched_incr_time(seconds_per_frame * frame_count);
+
     user_ctx_callback(frame_count, seconds_per_frame);
 
     for (int frame = 0; frame < frame_count; frame += 1) {
+
       for (int channel = 0; channel < layout->channel_count; channel += 1) {
         write_sample(areas[channel].ptr,
                      sum_channel_output_destructive(channel, frame));

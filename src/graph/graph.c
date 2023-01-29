@@ -12,7 +12,7 @@ typedef struct Graph {
   void (*perform)(struct Graph *node, int nframes, double seconds_per_frame);
 
   void *data;
-  int schedule;
+  double schedule; // secs
 
   /* double **out; */
   int chan_offset;
@@ -72,6 +72,7 @@ void remove_graph(Graph *node) {
   Graph *next = node->next;
   prev->next = next;
   next->prev = prev;
+  free(node->data);
   free(node);
 }
 

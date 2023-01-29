@@ -4,29 +4,46 @@
 #include "audio/sq.c"
 #include "ctx.c"
 #include "graph/graph.c"
+#include "sched.c"
 #include "scheduling.h"
 #include <stdlib.h>
 
 static Graph *synth(Graph *tail, double *out) {
   tail = add_after(tail, sq_create(NULL));
-  /* Graph *sq2 = add_after(tail, sq_create(channel_out(0))); */
-  tail = add_after(tail, add_out(tail->out, out));
-  return tail;
-}
-static Graph *delay(Graph *tail, double *out) {
-  tail = add_after(tail, delay_create(out));
+  tail = add_after(tail, delay_create(tail->out));
   tail = add_after(tail, replace_out(tail->out, out));
+  /* tail = add_after(tail, add_out(tail->out, out)); */
   return tail;
 }
 
-void play() {
-  Group g = group(ctx_graph_head(), channel_out(0), synth);
-  printf("%#08x %#08x\n", g.head, g.tail);
+static Group create_synth_group(double *out, double frame_offset) {
+  Graph *head = sq_create(NULL);
+  Graph *tail = add_after(head, delay_create(head->out));
+  tail = add_after(tail, add_out(tail->out, out));
+  return (Group){.head = head, .tail = tail};
+}
 
-  /* Graph *h = ctx_set_head(sq_create(channel_out(0))); */
+void DISPATCH_ADD_SQ_SYNTH_MSG() {}
 
-  Group h = group(g.tail, channel_out(0), synth);
-  Group d = group(h.tail, channel_out(0), delay);
+static Graph *delay(Graph *tail, double *out) { return tail; }
+void DISPATCH_ADD_DELAY_SYNTH_MSG() {}
+
+double frame_offset_secs() {
+  double clock_start = sched_clock_start();
+  double callback_time = sched_get_time();
+  double clock_time = timespec_to_secs(get_time()) - clock_start;
+  double frame_offset_secs = clock_time - callback_time;
+  printf("callback time %f clock time %f frame offset %f\n", callback_time,
+         clock_time, frame_offset_secs);
+  return frame_offset_secs;
+}
+
+void play(void *vargp) {
+
+  Group g = create_synth_group(channel_out(0), frame_offset_secs());
+
+  /* Group h = group(g.tail, channel_out(0), synth); */
+  /* Group d = group(h.tail, channel_out(0), delay); */
 
   double sequence[7] = {1.0,
                         1.122462048309373,
@@ -42,14 +59,19 @@ void play() {
   int time_seq[7] = {1, 2, 3, 1, 1, 4, 1};
 
   for (int i = 0;; i = (i + 1) % 7) {
-    set_signal(g.head->in[0], sequence[arc4random_uniform(7)] * 220 *
+    frame_offset_secs();
+
+    set_signal(g.head->in[0], sequence[arc4random_uniform(7)] * 110 *
                                   octave[arc4random_uniform(3)]);
 
     /* ((sq_data *)g.head->data)->pan = pan[i % 3]; */
 
-    msleep(250);
-    set_signal(h.head->in[0], sequence[arc4random_uniform(7)] * 0.5 * 220);
+    /* ((sq_data *)h.head->data)->pan = pan[(2 - i) % 3]; */
 
-    msleep(250);
+    msleep(500);
+    /* set_signal(h.head->in[0], sequence[arc4random_uniform(7)] * 0.5 * 220);
+     */
+
+    /* msleep(250); */
   }
 }

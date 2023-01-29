@@ -58,7 +58,6 @@ Graph *sq_create(double *out) {
   node->data = data;
 
   if (out == NULL) {
-    printf("out == null\n");
     node->out = calloc(sizeof(double), 2 * BUF_SIZE);
     node->num_outs = 2;
   } else {

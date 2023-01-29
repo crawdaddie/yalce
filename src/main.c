@@ -11,8 +11,9 @@
 #include "./prog.c"
 #include "audio/sq.c"
 #include "graph/graph.c"
-#include "scheduling.h"
 #include <stdlib.h>
+
+#include <pthread.h>
 // #include "oscilloscope.h"
 
 static int usage(char *exe) {
@@ -193,8 +194,17 @@ int main(int argc, char **argv) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
-  soundio_flush_events(soundio);
-  play();
+  printf("b4 init sched\n");
+  init_sched();
+  msleep(100);
+
+  printf("--------------\n");
+
+  pthread_t tid;
+  pthread_create(&tid, NULL, play, (void *)&tid);
+  for (;;) {
+    soundio_flush_events(soundio);
+  }
 
   soundio_outstream_destroy(outstream);
   soundio_device_unref(device);

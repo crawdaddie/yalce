@@ -1,5 +1,5 @@
 %build/compile_commands.json
-%c -std=c11
+%c -std=c17
 -I/opt/homebrew/include
 -I/usr/local/include
 -L/opt/homebrew/lib
