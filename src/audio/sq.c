@@ -38,6 +38,7 @@ void perform_square(Graph *node, int nframes, double seconds_per_frame) {
     };
     node->schedule = -1;
     double freq = unwrap(node->in[0], frame);
+    /* printf("freq: %f\n", freq); */
 
     out[frame * node->num_outs] = pan * sq_sample(data->ramp, freq) * 0.1;
     out[frame * node->num_outs + 1] =

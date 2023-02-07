@@ -1,0 +1,3 @@
+[submodule "libs/minunit"]
+	path = libs/minunit
+	url = git@github.com:siu/minunit.git

@@ -4,9 +4,21 @@
 #include "audio/sq.c"
 #include "ctx.c"
 #include "graph/graph.c"
+#include "parse.c"
 #include "sched.c"
 #include "scheduling.h"
 #include <stdlib.h>
+
+double frame_offset_secs() {
+  double clock_start = sched_clock_start();
+  double callback_time = sched_get_time();
+  double clock_time = timespec_to_secs(get_time()) - clock_start;
+  double frame_offset_secs = clock_time - callback_time;
+  /* printf("callback time %f clock time %f frame offset %f\n", callback_time,
+   */
+  /*        clock_time, frame_offset_secs); */
+  return frame_offset_secs;
+}
 
 static Graph *synth(Graph *tail, double *out) {
   tail = add_after(tail, sq_create(NULL));
@@ -17,32 +29,28 @@ static Graph *synth(Graph *tail, double *out) {
 }
 
 static Group create_synth_group(double *out, double frame_offset) {
-  Graph *head = sq_create(NULL);
-  Graph *tail = add_after(head, delay_create(head->out));
-  tail = add_after(tail, add_out(tail->out, out));
-  return (Group){.head = head, .tail = tail};
+  Graph *sq = sq_create(NULL);
+  Graph *del = delay_create(NULL);
+  pipe_graph(sq, del);
+  Graph *bus_out = replace_out(NULL, out);
+  pipe_graph(del, bus_out);
+  return (Group){.head = sq, .tail = bus_out};
 }
 
-void DISPATCH_ADD_SQ_SYNTH_MSG() {}
+Group DISPATCH_ADD_SQ_SYNTH_MSG(Graph *node) {
+  Group g = create_synth_group(channel_out(0), frame_offset_secs());
+  node->_graph = g.head;
+  return g;
+}
 
 static Graph *delay(Graph *tail, double *out) { return tail; }
 void DISPATCH_ADD_DELAY_SYNTH_MSG() {}
 
-double frame_offset_secs() {
-  double clock_start = sched_clock_start();
-  double callback_time = sched_get_time();
-  double clock_time = timespec_to_secs(get_time()) - clock_start;
-  double frame_offset_secs = clock_time - callback_time;
-  printf("callback time %f clock time %f frame offset %f\n", callback_time,
-         clock_time, frame_offset_secs);
-  return frame_offset_secs;
-}
-
 void play(void *vargp) {
 
-  Group g = create_synth_group(channel_out(0), frame_offset_secs());
+  Group g = DISPATCH_ADD_SQ_SYNTH_MSG(ctx_graph_head());
 
-  /* Group h = group(g.tail, channel_out(0), synth); */
+  /* Group g = group(ctx_graph_head(), channel_out(0), synth); */
   /* Group d = group(h.tail, channel_out(0), delay); */
 
   double sequence[7] = {1.0,

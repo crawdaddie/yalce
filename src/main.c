@@ -13,6 +13,7 @@
 #include "graph/graph.c"
 #include <stdlib.h>
 
+#include "parse.c"
 #include <pthread.h>
 // #include "oscilloscope.h"
 
@@ -194,16 +195,20 @@ int main(int argc, char **argv) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
-  printf("b4 init sched\n");
   init_sched();
   msleep(100);
 
   printf("--------------\n");
 
   pthread_t tid;
-  pthread_create(&tid, NULL, play, (void *)&tid);
+  pthread_create(&tid, NULL, (void *)play, (void *)&tid);
+
+  char input[2048];
+  soundio_flush_events(soundio);
   for (;;) {
-    soundio_flush_events(soundio);
+    gets(input);
+    printf("input: %s\n", input);
+    parse_synth(input, NULL);
   }
 
   soundio_outstream_destroy(outstream);

@@ -109,6 +109,7 @@ int graph_schedule(Graph *graph, int frame) {
 }
 
 Graph *perform_graph(Graph *graph, int nframes, double seconds_per_frame) {
+
   if (!graph) {
     return NULL;
   };
@@ -118,8 +119,7 @@ Graph *perform_graph(Graph *graph, int nframes, double seconds_per_frame) {
   }
 
   if (graph->_graph) {
-    graph->_graph->perform(graph->_graph, nframes,
-                           seconds_per_frame); // recurse subgraph
+    perform_graph(graph->_graph, nframes, seconds_per_frame);
   };
 
   Graph *next = graph->next;
@@ -157,6 +157,11 @@ Group group(Graph *after, double *out,
   }
   Graph *tail = synths(after, out);
   return (Group){.head = after->next, .tail = tail};
+}
+
+void pipe_graph(Graph *from, Graph *to) {
+  add_after(from, to);
+  to->in[0].data = from->out;
 }
 
 /* void write_to_graph_out(Graph *graph, double *sample, int frame) { */
