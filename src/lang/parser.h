@@ -50,6 +50,7 @@ extern int yydebug;
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include "lang.h"
 
 double symbols[52];
 int yylex();
@@ -66,7 +67,7 @@ typedef struct sym_list {
 
 } sym_list;
 
-#line 70 "src/lang/parser.h"
+#line 71 "src/lang/parser.h"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -90,13 +91,13 @@ typedef struct sym_list {
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 24 "src/lang/parser.y"
+#line 25 "src/lang/parser.y"
 
     double num;
     char id;
     sym_list list;
 
-#line 100 "src/lang/parser.h"
+#line 101 "src/lang/parser.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

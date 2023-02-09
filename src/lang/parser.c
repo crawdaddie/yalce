@@ -498,8 +498,8 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    44,    44,    45,    46,    47,    48,    49,    50,    53,
-      56,    57,    58,    59,    60,    63,    64
+       0,    45,    45,    46,    47,    48,    49,    50,    51,    54,
+      57,    58,    59,    60,    61,    64,    65
 };
 #endif
 
@@ -1076,91 +1076,91 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* line: assignment ';'  */
-#line 44 "src/lang/parser.y"
+#line 45 "src/lang/parser.y"
                                   {;}
 #line 1082 "src/lang/parser.c"
     break;
 
   case 3: /* line: exit_command ';'  */
-#line 45 "src/lang/parser.y"
+#line 46 "src/lang/parser.y"
                                   {exit(EXIT_SUCCESS);}
 #line 1088 "src/lang/parser.c"
     break;
 
   case 4: /* line: print exp ';'  */
-#line 46 "src/lang/parser.y"
+#line 47 "src/lang/parser.y"
                                   {printf("> %lf\n", (yyvsp[-1].num));}
 #line 1094 "src/lang/parser.c"
     break;
 
   case 5: /* line: line assignment ';'  */
-#line 47 "src/lang/parser.y"
+#line 48 "src/lang/parser.y"
                                   {;}
 #line 1100 "src/lang/parser.c"
     break;
 
   case 6: /* line: line print exp ';'  */
-#line 48 "src/lang/parser.y"
+#line 49 "src/lang/parser.y"
                                   {printf("> %lf\n", (yyvsp[-1].num));}
 #line 1106 "src/lang/parser.c"
     break;
 
   case 7: /* line: line exit_command ';'  */
-#line 49 "src/lang/parser.y"
+#line 50 "src/lang/parser.y"
                                   {exit(EXIT_SUCCESS);}
 #line 1112 "src/lang/parser.c"
     break;
 
   case 8: /* line: loop exp ';'  */
-#line 50 "src/lang/parser.y"
+#line 51 "src/lang/parser.y"
                                   {printf("loop %s, %lf\n", (yyval.num), (yyvsp[-1].num));}
 #line 1118 "src/lang/parser.c"
     break;
 
   case 9: /* assignment: identifier '=' exp  */
-#line 53 "src/lang/parser.y"
+#line 54 "src/lang/parser.y"
                                  { set_symbol_val((yyvsp[-2].id),(yyvsp[0].num)); }
 #line 1124 "src/lang/parser.c"
     break;
 
   case 10: /* exp: term  */
-#line 56 "src/lang/parser.y"
+#line 57 "src/lang/parser.y"
                                  {(yyval.num) = (yyvsp[0].num);}
 #line 1130 "src/lang/parser.c"
     break;
 
   case 11: /* exp: exp '+' term  */
-#line 57 "src/lang/parser.y"
+#line 58 "src/lang/parser.y"
                                  {(yyval.num) = (yyvsp[-2].num) + (yyvsp[0].num);}
 #line 1136 "src/lang/parser.c"
     break;
 
   case 12: /* exp: exp '-' term  */
-#line 58 "src/lang/parser.y"
+#line 59 "src/lang/parser.y"
                                  {(yyval.num) = (yyvsp[-2].num) - (yyvsp[0].num);}
 #line 1142 "src/lang/parser.c"
     break;
 
   case 13: /* exp: exp '*' term  */
-#line 59 "src/lang/parser.y"
+#line 60 "src/lang/parser.y"
                                  {(yyval.num) = (yyvsp[-2].num) * (yyvsp[0].num);}
 #line 1148 "src/lang/parser.c"
     break;
 
   case 14: /* exp: exp '/' term  */
-#line 60 "src/lang/parser.y"
+#line 61 "src/lang/parser.y"
                                  {(yyval.num) = (yyvsp[-2].num) / (yyvsp[0].num);}
 #line 1154 "src/lang/parser.c"
     break;
 
   case 15: /* term: number  */
-#line 63 "src/lang/parser.y"
+#line 64 "src/lang/parser.y"
                                  {printf("val %lf\n", (yyvsp[0].num));(yyval.num) = (yyvsp[0].num);}
 #line 1160 "src/lang/parser.c"
     break;
 
   case 16: /* term: identifier  */
-#line 64 "src/lang/parser.y"
+#line 65 "src/lang/parser.y"
                                  {(yyval.num) = symbol_val((yyvsp[0].id));}
 #line 1166 "src/lang/parser.c"
     break;
@@ -1359,7 +1359,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 67 "src/lang/parser.y"
+#line 68 "src/lang/parser.y"
 
 
 double symbol_val(char symbol) {

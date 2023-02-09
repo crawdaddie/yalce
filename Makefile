@@ -3,6 +3,7 @@ src = src/main.c
 src += src/scheduling.c 
 src += src/lang/lexer.c
 src += src/lang/parser.c
+src += src/lang/lang.c
 
 obj = $(src:.c=.o)
 
@@ -29,4 +30,4 @@ run:
 
 .PHONY: test_lang
 test_lang:
-	make clean && make lang && gcc src/lang_test.c src/lang/lexer.c src/lang/parser.c -o lang && ./lang
+	make clean && make lang && gcc src/lang_test.c src/lang/lexer.c src/lang/parser.c src/lang/lang.c -o lang && ./lang

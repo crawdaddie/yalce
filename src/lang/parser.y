@@ -61,35 +61,35 @@ exp     : term                   {$$ = $1;}
         | exp '/' term           {$$ = $1 / $3;}
         ;
 
-term    : number                 {printf("val %lf\n", $1);$$ = $1;}
+term    : number                 {$$ = $1;}
         | identifier             {$$ = symbol_val($1);} 
         ;
 
 %%
 
 double symbol_val(char symbol) {
-    int bucket = symbol_idx(symbol);
-    return symbols[bucket];
+  int bucket = symbol_idx(symbol);
+  return symbols[bucket];
 }
 
 void set_symbol_val(char symbol, double val) {
-    int bucket = symbol_idx(symbol);
-    symbols[bucket] = val;
+  int bucket = symbol_idx(symbol);
+  symbols[bucket] = val;
 }
 
 int symbol_idx(char token) {
-    int idx = -1;
-    if(islower(token)) {
-        idx = token - 'a' + 26;
-    }
-    else if(isupper(token)) {
-        idx = token - 'A';
-    }
-    return idx;
+  int idx = -1;
+  if(islower(token)) {
+      idx = token - 'a' + 26;
+  }
+  else if(isupper(token)) {
+      idx = token - 'A';
+  }
+  return idx;
 } 
 
 void yyerror(char *s) {
-    fprintf(stderr, "%s\n", s);
+  fprintf(stderr, "%s\n", s);
 }
 
 void set_input_string(const char* in);
