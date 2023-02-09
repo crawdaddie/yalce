@@ -61,7 +61,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
       break;
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
-    sched_incr_time(seconds_per_frame * frame_count);
+    /* sched_incr_time(seconds_per_frame * frame_count); */
 
     user_ctx_callback(frame_count, seconds_per_frame);
 

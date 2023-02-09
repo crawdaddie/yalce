@@ -13,10 +13,8 @@
 #include "graph/graph.c"
 #include <stdlib.h>
 
-#include "parse.c"
+#include "lang/parser.h"
 #include <pthread.h>
-// #include "oscilloscope.h"
-
 static int usage(char *exe) {
   fprintf(stderr,
           "Usage: %s [options]\n"
@@ -181,11 +179,6 @@ int main(int argc, char **argv) {
   }
 
   fprintf(stderr, "Software latency: %f\n", outstream->software_latency);
-  fprintf(stderr, "'p\\n' - pause\n"
-                  "'u\\n' - unpause\n"
-                  "'P\\n' - pause from within callback\n"
-                  "'c\\n' - clear buffer\n"
-                  "'q\\n' - quit\n");
 
   if (outstream->layout_error)
     fprintf(stderr, "unable to set channel layout: %s\n",
@@ -195,20 +188,15 @@ int main(int argc, char **argv) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
-  init_sched();
-  msleep(100);
 
   printf("--------------\n");
 
-  pthread_t tid;
-  pthread_create(&tid, NULL, (void *)play, (void *)&tid);
-
   char input[2048];
-  soundio_flush_events(soundio);
   for (;;) {
-    gets(input);
+    soundio_flush_events(soundio);
+    fgets(input, 2048, stdin);
     printf("input: %s\n", input);
-    parse_synth(input, NULL);
+    parse_string(input);
   }
 
   soundio_outstream_destroy(outstream);

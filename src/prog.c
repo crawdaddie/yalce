@@ -4,7 +4,7 @@
 #include "audio/sq.c"
 #include "ctx.c"
 #include "graph/graph.c"
-#include "parse.c"
+/* #include "parse.c" */
 #include "sched.c"
 #include "scheduling.h"
 #include <stdlib.h>
