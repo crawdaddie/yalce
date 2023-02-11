@@ -1,0 +1,9 @@
+() -> +-
+"hello world"
+"another string"
+1.2312 1, 2 3 4 -1.2 -2
+"hello", a
+a bcd
++ - *
+fn print
+# comment string
