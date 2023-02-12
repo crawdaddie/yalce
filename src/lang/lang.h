@@ -39,12 +39,12 @@ enum token_type {
   FN,
   PRINT
 };
-#define NUM_KEYWORDS 2
 typedef struct keyword {
   enum token_type kw;
   char *match;
 } keyword;
 
+#define NUM_KEYWORDS 2
 static keyword keywords[NUM_KEYWORDS] = {{FN, "fn"}, {PRINT, "print"}};
 typedef union literal {
   char *vstr;
@@ -59,13 +59,21 @@ typedef struct token {
   literal literal;
 } token;
 
-typedef struct ctx {
+typedef struct stack_frame {
+  void *scope;
+} stack_frame;
 
-} ctx;
+typedef struct ex_stack {
 
-ctx *create_ctx();
+} ex_stack;
 
-void process_token(ctx *ctx, token token);
+typedef struct execution_ctx {
+  ex_stack stack;
+} execution_ctx;
+
+execution_ctx *create_execution_ctx();
+
+void process_token(execution_ctx *execution_ctx, token token);
 
 int parse_string(char *input);
 void report_error(int line, int ptr, char *msg, char *input_line);
@@ -80,8 +88,8 @@ void free_tokens(token *head);
 int seek_char(char *input, char c);
 int parse_num(char *input, token *tok);
 
-int lexer(char *input, ctx *ctx); // returns tail
+int lexer(char *input, execution_ctx *execution_ctx); // returns tail
 
-void append_token(token token, ctx *ctx);
+void append_token(token token, execution_ctx *execution_ctx);
 void print_token(token tok);
 #endif

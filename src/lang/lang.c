@@ -1,8 +1,10 @@
 #include "lang.h"
 #define DEBUG 1
 
-ctx *create_ctx() { return calloc(sizeof(ctx), 1); }
-void process_token(ctx *ctx, token token) {}
+execution_ctx *create_execution_ctx() {
+  return calloc(sizeof(execution_ctx), 1);
+}
+void process_token(execution_ctx *execution_ctx, token token) {}
 
 void report_error(int line, int ptr, char *msg, char *input_line) {
   printf("Error: %s\n", msg);
@@ -93,11 +95,11 @@ token create_identifier(char *str) {
   return token;
 }
 
-void append_token(token token, ctx *ctx) {
+void append_token(token token, execution_ctx *execution_ctx) {
   if (DEBUG) {
     print_token(token);
   }
-  process_token(ctx, token);
+  process_token(execution_ctx, token);
 }
 int seek_char(char *input, char c) {
   int seek = 0;
@@ -158,8 +160,8 @@ int parse_num(char *input, token *tok) {
   return seek;
 }
 
-int lexer(char *input, ctx *ctx) {
-  append_token(create_token(START, NULL), ctx);
+int lexer(char *input, execution_ctx *execution_ctx) {
+  append_token(create_token(START, NULL), execution_ctx);
   int ptr = 0;
   int line = 0;
   int len = strlen(input);
@@ -172,25 +174,25 @@ int lexer(char *input, ctx *ctx) {
     char c = *(cur_input);
     switch (c) {
     case '(':
-      append_token(create_token(LP, NULL), ctx);
+      append_token(create_token(LP, NULL), execution_ctx);
       ptr++;
       break;
     case ')':
-      append_token(create_token(RP, NULL), ctx);
+      append_token(create_token(RP, NULL), execution_ctx);
       ptr++;
 
       break;
     case ',':
-      append_token(create_token(COMMA, NULL), ctx);
+      append_token(create_token(COMMA, NULL), execution_ctx);
       ptr++;
       break;
     case '.':
-      append_token(create_token(DOT, NULL), ctx);
+      append_token(create_token(DOT, NULL), execution_ctx);
       ptr++;
       break;
     case '-': {
       if (*(cur_input + 1) == '>') {
-        append_token(create_token(PIPE, NULL), ctx);
+        append_token(create_token(PIPE, NULL), execution_ctx);
         ptr += 2;
         break;
       }
@@ -200,28 +202,28 @@ int lexer(char *input, ctx *ctx) {
         if ((offset = parse_num(cur_input, &token)) == 0) {
           report_error(line, ptr, "error parsing number", input);
         } else {
-          append_token(token, ctx);
+          append_token(token, execution_ctx);
           ptr += offset;
         }
         break;
       }
-      append_token(create_token(MINUS, NULL), ctx);
+      append_token(create_token(MINUS, NULL), execution_ctx);
 
       ptr++;
       break;
     }
     case '+':
-      append_token(create_token(PLUS, NULL), ctx);
+      append_token(create_token(PLUS, NULL), execution_ctx);
 
       ptr++;
       break;
     case '/':
-      append_token(create_token(SLASH, NULL), ctx);
+      append_token(create_token(SLASH, NULL), execution_ctx);
 
       ptr++;
       break;
     case '*':
-      append_token(create_token(STAR, NULL), ctx);
+      append_token(create_token(STAR, NULL), execution_ctx);
 
       ptr++;
       break;
@@ -235,7 +237,7 @@ int lexer(char *input, ctx *ctx) {
       char *str = malloc(substr_len * sizeof(char));
       strncpy(str, cur_input + 1, substr_len - 1);
       literal lit = {.vstr = str};
-      append_token(create_token(STRING, &lit), ctx);
+      append_token(create_token(STRING, &lit), execution_ctx);
       ptr += offset + 1;
       break;
     }
@@ -250,7 +252,7 @@ int lexer(char *input, ctx *ctx) {
       ptr++;
       break;
     case '\n':
-      append_token(create_token(NL, NULL), ctx);
+      append_token(create_token(NL, NULL), execution_ctx);
       line++;
       ptr++;
       break;
@@ -268,14 +270,14 @@ int lexer(char *input, ctx *ctx) {
           report_error(line, ptr, "error parsing number", input);
           return 0;
         }
-        append_token(token, ctx);
+        append_token(token, execution_ctx);
         ptr += offset;
         break;
       }
       if ((offset = seek_identifier(cur_input)) != 0) {
         char *str = malloc((offset + 1) * sizeof(char));
         strncpy(str, cur_input, offset);
-        append_token(create_identifier(str), ctx);
+        append_token(create_identifier(str), execution_ctx);
         ptr += offset;
         break;
       } else {

@@ -6,4 +6,6 @@
 a bcd
 + - *
 fn print
+
+1
 # comment string

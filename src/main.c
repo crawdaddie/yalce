@@ -13,7 +13,8 @@
 #include "graph/graph.c"
 #include <stdlib.h>
 
-#include "lang/parser.h"
+#include "lang/lang.h"
+
 #include <pthread.h>
 static int usage(char *exe) {
   fprintf(stderr,

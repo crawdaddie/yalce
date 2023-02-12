@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 int main(int argc, char **argv) {
-  ctx *ctx = create_ctx();
+  execution_ctx *ctx = create_execution_ctx();
   if (argc > 1) {
     char const *const filename = argv[1];
     FILE *file = fopen(filename, "r");
