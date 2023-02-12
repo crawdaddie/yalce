@@ -9,8 +9,6 @@ LDFLAGS = -lsoundio -lm -lSDL2 -lsndfile -lcheck
 COMPILER_OPTIONS = -Werror -Wall -Wextra
 
 synth: $(obj)
-	rm src/lang/*.c
-	rm src/lang/*.h
 	gcc -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
 
 .PHONY: clean
@@ -19,7 +17,7 @@ clean:
 
 .PHONY: run
 run:
-	make clean && make lang && make synth && ./synth
+	make clean && make synth && ./synth
 
 .PHONY: test_lang
 test_lang:

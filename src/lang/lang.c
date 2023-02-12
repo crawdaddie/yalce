@@ -47,6 +47,7 @@ void print_token(token tok) {
     printf("\n");
     break;
   case PIPE:
+    printf("[->]");
     break;
   case IDENTIFIER:
     printf("[%s]", tok.literal.vident);
