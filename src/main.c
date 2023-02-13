@@ -149,13 +149,12 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  init_user_ctx();
-
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;
   outstream->software_latency = latency;
   outstream->sample_rate = sample_rate;
+  init_user_ctx();
 
   if (soundio_device_supports_format(device, SoundIoFormatFloat32NE)) {
     outstream->format = SoundIoFormatFloat32NE;
@@ -196,8 +195,7 @@ int main(int argc, char **argv) {
   for (;;) {
     soundio_flush_events(soundio);
     fgets(input, 2048, stdin);
-    printf("input: %s\n", input);
-    parse_string(input);
+    parse_line(input, 0);
   }
 
   soundio_outstream_destroy(outstream);

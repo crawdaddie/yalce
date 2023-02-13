@@ -3,7 +3,6 @@
 #include <stdlib.h>
 
 int main(int argc, char **argv) {
-  execution_ctx *ctx = create_execution_ctx();
   if (argc > 1) {
     char const *const filename = argv[1];
     FILE *file = fopen(filename, "r");
@@ -13,7 +12,7 @@ int main(int argc, char **argv) {
     int read;
 
     while ((read = getline(&line, &line_len, file)) != -1) {
-      lexer(line, ctx);
+      parse_line(line, i);
       i++;
     }
 
@@ -23,7 +22,6 @@ int main(int argc, char **argv) {
   char input[2048];
   for (;;) {
     fgets(input, 2048, stdin);
-    printf("input: %s\n", input);
-    lexer(input, ctx);
+    parse_line(input, 0);
   }
 }
