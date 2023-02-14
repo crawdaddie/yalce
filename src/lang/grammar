@@ -1,0 +1,13 @@
+<expression>  ::= <expression> PLUS <term>
+              | <expression> MINUS <term>
+              | <term>
+
+<term>        ::= <term> STAR <factor>
+              | <term> SLASH <factor>
+              | <factor>
+
+<factor>      ::= NUMBER
+              | INTEGER
+              | IDENTIFIER
+              | LP <expression> RP
+              
