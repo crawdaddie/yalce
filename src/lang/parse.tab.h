@@ -78,7 +78,7 @@ int parse_line(const char* in, int line);
     IDENTIFIER = 260,              /* IDENTIFIER  */
     STRING = 261,                  /* STRING  */
     PIPE = 262,                    /* PIPE  */
-    DOUBLE_QUOTE = 263             /* DOUBLE_QUOTE  */
+    EQUALS = 263                   /* EQUALS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -92,7 +92,7 @@ int parse_line(const char* in, int line);
 #define IDENTIFIER 260
 #define STRING 261
 #define PIPE 262
-#define DOUBLE_QUOTE 263
+#define EQUALS 263
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -103,7 +103,7 @@ union YYSTYPE
   double number;
   int integer;
   char *string;
-  Object obj;
+  Value value;
 
 #line 109 "src/lang/parse.tab.h"
 

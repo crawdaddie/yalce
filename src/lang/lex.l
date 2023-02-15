@@ -1,9 +1,9 @@
 %{
 #include "parse.tab.h"
 #include <stdlib.h>
+#include "value.h"
 void yyerror(char *);
 %}
-%x EXPECT_STRING
 %%
 
 [a-zA-Z_][a-zA-Z_0-9]* {
@@ -12,28 +12,29 @@ void yyerror(char *);
                         }
 
 [-]?[1-9][0-9]*         {
-                          sscanf(yytext, "%d", &yylval.integer);
+                          int num;
+                          sscanf(yytext, "%d", &num);
+                          yylval.value = INTEGER_VAL(num);
                           return INTEGER;
                         }
 
 [-]?([0-9]*[.])?[0-9]+  {
-                          sscanf(yytext, "%lf", &yylval.number);
+                          double num;
+                          sscanf(yytext, "%lf", &num);
+                          yylval.value = NUMBER_VAL(num);
                           return NUMBER;
                         }
 
 ->                      { return PIPE; }
 
 [-+()=/*%^,\n]          { return *yytext; }
+
+==                      { return EQUALS; } 
           
 
 [ \t\r]   ;             /* skip whitespace */
+\"([^\\\"]|\\.)*\" { yylval.string = strdup(yytext); return STRING;}
 
-\"	{BEGIN(EXPECT_STRING); return DOUBLE_QUOTE;}
-<EXPECT_STRING>([^\\\"]|\\.)*  {
-	yylval.string = strdup(yytext);
-	return STRING;
-}
-<EXPECT_STRING>\" {BEGIN(INITIAL); return DOUBLE_QUOTE;}
 
 .                       yyerror("Unknown character");
 

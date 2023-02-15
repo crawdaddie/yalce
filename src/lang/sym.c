@@ -40,7 +40,7 @@ static void adjust_capacity(int capacity) {
   Entry *data = calloc(sizeof(Entry), capacity);
   for (int i = 0; i < capacity; i++) {
     data[i].key = NULL;
-    data[i].value = 0;
+    data[i].value = NIL_VAL;
   }
   for (int i = 0; i < capacity; i++) {
     Entry *entry = &sym.data[i];
@@ -58,7 +58,7 @@ static void adjust_capacity(int capacity) {
   sym.capacity = capacity;
 }
 
-int table_set(char *key, double value) {
+int table_set(char *key, Value value) {
   if (sym.count + 1 > sym.capacity * TABLE_MAX_LOAD) {
     int capacity = 2 * sym.capacity;
     printf("adjusting capacity %d -> %d\n", sym.capacity, capacity);
@@ -74,7 +74,7 @@ int table_set(char *key, double value) {
   entry->value = value;
   return is_new;
 }
-double table_get(char *key) {
+Value table_get(char *key) {
   uint32_t hash = hash_string(key, strlen(key));
   Entry *entry = find_entry(sym.data, sym.capacity, hash);
   return entry->value;

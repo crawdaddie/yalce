@@ -19,23 +19,23 @@ int parse_line(const char* in, int line);
   double number;
   int integer;
   char *string;
-  Object obj;
   Value value;
 }
 
-%token<number> NUMBER
-%token<integer> INTEGER
+%token<value> NUMBER
+%token<value> INTEGER
 %token<string> IDENTIFIER
 %token<string> STRING
 %token PIPE
-%token DOUBLE_QUOTE
+%token EQUALS
+
 
 %left '+' '-'
 %left '*' '/'
-%type <number> nexpr
-%type <integer> iexpr
-%type <string> sexpr
-%type <number>statement
+%type <value> expr
+%type <value> sexpr
+%type <value> nexpr
+%type <value> statement
 %%
 
 program:
@@ -45,49 +45,35 @@ program:
         ;
 
 statement:
-        nexpr                  
-        | IDENTIFIER '=' nexpr  { table_set($1, $3);}
-        | IDENTIFIER '=' iexpr  { table_set($1, (double)$3);}
-        | iexpr                  
-        | sexpr                 
-        | IDENTIFIER            { printf("%s> %lf\n", $1, table_get($1));} 
+        expr                  
+        | IDENTIFIER '=' expr  { table_set($1, $3);}
+        | IDENTIFIER           { print_value(table_get($1));} 
         ;
 
-nexpr:
-        IDENTIFIER           { $$ = table_get($1);}
-        | nexpr '+' nexpr    { $$ = $1 + $3; }
-        | nexpr '-' nexpr    { $$ = $1 - $3; }
-        | nexpr '*' nexpr    { $$ = $1 * $3; }
-        | nexpr '/' nexpr    { $$ = divf($1, $3); }
-        | '(' nexpr ')'      { $$ = $2; }
-        | nexpr '+' iexpr    { $$ = $1 + (double)$3; }
-        | nexpr '-' iexpr    { $$ = $1 - (double)$3; }
-        | nexpr '*' iexpr    { $$ = $1 * (double)$3; }
-        | nexpr '/' iexpr    { $$ = divf($1, (double)$3); }
-        | iexpr '+' nexpr    { $$ = (double)$1 + $3; }
-        | iexpr '-' nexpr    { $$ = (double)$1 - $3; }
-        | iexpr '*' nexpr    { $$ = (double)$1 * $3; }
-        | iexpr '/' nexpr    { $$ = divf((double) $1, $3); }
+expr:
+        IDENTIFIER         { $$ = table_get($1);}
+        | '(' expr ')'     { $$ = $2; }
+        | nexpr
+        | sexpr
+        | expr EQUALS expr { printf("equality\n");}
+        | IDENTIFIER '(' expr ')' { printf("call function %s\n", $1);}
+        ;
+
+nexpr: 
+        | expr '+' expr    { $$ = nadd($1, $3); }
+        | expr '-' expr    { $$ = nsub($1, $3); }
+        | expr '*' expr    { $$ = nmul($1, $3); }
+        | expr '/' expr    { $$ = ndiv($1, $3); }
+        | INTEGER
         | NUMBER
         ;
 
 sexpr:
-        DOUBLE_QUOTE STRING DOUBLE_QUOTE {$$ = $2;}
-        | sexpr '+' sexpr {$$ = strconcat($1, $3);}
+        STRING {$$ = make_string($1);}
+        /* | sexpr '+' sexpr {$$ = strconcat($1, $3);} */
     
 
 
-
-iexpr:
-        IDENTIFIER            
-        | iexpr '+' iexpr     { $$ = $1 + $3; }
-        | iexpr '-' iexpr     { $$ = $1 - $3; }
-        | iexpr '*' iexpr     { $$ = $1 * $3; }
-        | iexpr '%' iexpr     { $$ = $1 % $3; }
-        | iexpr '/' iexpr     { $$ = divi($1, $3); }
-        | '(' iexpr ')'       { $$ = $2; }
-        | INTEGER
-        ;
 %%
 
 
