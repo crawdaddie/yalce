@@ -24,15 +24,25 @@ run:
 
 
 src_lang = src/lang/lang_test.c
-src_lang += src/lang/lexer.c
-src_lang += src/lang/lang.c
+# src_lang += src/lang/lexer.c
+# src_lang += src/lang/lang.c
+src_lang += src/lang/parse.c
+src_lang += src/lang/lex.c
 src_lang += src/lang/dbg.c
+src_lang += src/lang/sym.c
+src_lang += src/lang/value.c
+src_lang += src/lang/obj.c
+src_lang += src/lang/util.c
 obj_lang = $(src_lang:.c=.o)
 lang: $(obj_lang)
 	gcc -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
 
+
 .PHONY: test_lang
 test_lang:
 	make clean
+	rm -f src/lang/parse.c src/lang/parse.h src/lang/lex.c src/lang/lex.h;
+	flex -o src/lang/lex.c src/lang/lex.l
+	bison -dy -b src/lang/parse src/lang/parse.y
 	make lang
-	./lang lang_test.txt
+	./lang src/lang/lang_test.txt

@@ -1,8 +1,10 @@
-#include "lang.h"
+#include "parse.tab.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 int main(int argc, char **argv) {
+
+  init_table();
   if (argc > 1) {
     char const *const filename = argv[1];
     FILE *file = fopen(filename, "r");
