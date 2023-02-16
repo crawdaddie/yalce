@@ -6,7 +6,7 @@ void init_chunk(Chunk *chunk) {
   chunk->count = 0;
   chunk->capacity = 0;
   chunk->code = NULL;
-  init_value_array(&chunk->constants)
+  init_value_array(&chunk->constants);
 }
 
 void write_chunk(Chunk *chunk, uint8_t byte) {

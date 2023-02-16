@@ -11,9 +11,9 @@
 #include "./prog.c"
 #include "audio/sq.c"
 #include "graph/graph.c"
+#include "lang/parse.tab.h"
 #include <stdlib.h>
 
-#include "lang/lang.h"
 
 #include <pthread.h>
 static int usage(char *exe) {

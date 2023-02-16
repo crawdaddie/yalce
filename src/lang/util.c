@@ -69,14 +69,14 @@ Value ndiv(Value a, Value b) {
 void print_value(Value val) {
   switch (val.type) {
   case VAL_NUMBER:
-    printf_color("[%lf]", 96, val.as.number);
+    printf_color("%lf", 96, val.as.number);
     break;
   case VAL_INTEGER:
-    printf_color("[%d]", 96, val.as.integer);
+    printf_color("%d", 96, val.as.integer);
     break;
 
   case VAL_OBJ:
-    printf_color("[%x] - %s", 96, val.as.object, val.as.object->value);
+    printf_color("%s", 96, val.as.object, val.as.object->value);
     break;
   default:
     break;

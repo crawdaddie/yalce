@@ -5,8 +5,9 @@
 void yyerror(char *);
 %}
 %%
+"print"                 { return PRINT; }
 
-[a-zA-Z_][a-zA-Z_0-9]* {
+[a-zA-Z_][a-zA-Z_0-9]*  {
                           yylval.string = strdup(yytext);
                           return IDENTIFIER;
                         }
@@ -25,23 +26,31 @@ void yyerror(char *);
                           return NUMBER;
                         }
 
-->                      { return PIPE; }
+"->"                    { return PIPE; }
 
-[-+()=/*%^,:{}\n]          { return *yytext; }
+[-+()=/*%^,:{}\n]       { return *yytext; }
 
-==                      { return EQUALS; } 
+"=="                    { return EQUALS; } 
 
-fn                      { return FN; }
+"fn"                    { return FN; }
           
-
 [ \t\r]   ;             /* skip whitespace */
-\"([^\\\"]|\\.)*\" { yylval.string = strdup(yytext); return STRING;}
+
+"//".*\n                
+
+"/*"[^*/]*"*/"          
+
+\"([^\\\"]|\\.)*\"      {
+                          yylval.string = strdup(yytext);
+                          return STRING;
+                        }
 
 
 .                       yyerror("Unknown character");
 
 
 %%
+
 void set_input_string(const char *input) {
   yy_scan_string(input);
 }

@@ -26,7 +26,7 @@ int parse_line(const char* in, int line);
 %token<value> INTEGER
 %token<string> IDENTIFIER
 %token<string> STRING
-%token PIPE EQUALS FN LET
+%token PIPE EQUALS FN LET PRINT
 
 
 %left '+' '-'
@@ -47,8 +47,9 @@ program:
 statement:
         expr                  
         | IDENTIFIER '=' expr { table_set($1, $3);}
-        | IDENTIFIER          { print_value(table_get($1));} 
+        | IDENTIFIER          { $$ = table_get($1);} 
         | '\n'
+        | PRINT expr {print_value($2); }
         ;
 
 

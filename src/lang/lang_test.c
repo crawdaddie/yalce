@@ -39,13 +39,33 @@ void parse_lines(char const *const filename) {
 
   fclose(file);
 }
+
 int main(int argc, char **argv) {
-  char const *const filename = argv[1];
+
+  int repl = 0;
+  int last_index = 1;
+  for (int i = 0; i < argc; i++) {
+    char *arg = argv[i];
+    if (strcmp(arg, "--repl") == 0) {
+      repl = 1;
+      continue;
+    }
+    if (i == argc - 1) {
+      last_index = i;
+      continue;
+    }
+  }
+  char *filename = argv[last_index];
 
   Chunk chunk;
   init_chunk(&chunk);
+  int constant = add_constant(&chunk, NUMBER_VAL(1.2));
+
+  write_chunk(&chunk, OP_CONSTANT);
+  write_chunk(&chunk, constant);
   write_chunk(&chunk, OP_RETURN);
-  disassemble_chunk(&chunk, "test chunk");
+
+  /* disassemble_chunk(&chunk, "test chunk"); */
   free_chunk(&chunk);
 
   init_table();
@@ -53,9 +73,11 @@ int main(int argc, char **argv) {
     parse_file(filename);
   }
 
-  char input[2048];
-  for (;;) {
-    fgets(input, 2048, stdin);
-    parse_line(input, 0);
+  if (repl) {
+    char input[2048];
+    for (;;) {
+      fgets(input, 2048, stdin);
+      parse_line(input, 0);
+    }
   }
 }

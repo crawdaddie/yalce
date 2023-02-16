@@ -1,6 +1,5 @@
 #ifndef _SIGNAL_H
 #define _SIGNAL_H
-#include "check.h"
 #include "stdlib.h"
 
 typedef struct Signal {

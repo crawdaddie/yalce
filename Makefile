@@ -7,7 +7,7 @@ src += src/lang/dbg.c
 
 obj = $(src:.c=.o)
 
-LDFLAGS = -lsoundio -lm -lSDL2 -lsndfile -lcheck
+LDFLAGS = -lsoundio -lm -lSDL2 -lsndfile
 COMPILER_OPTIONS = -Werror -Wall -Wextra
 
 synth: $(obj)
@@ -37,4 +37,11 @@ test_lang:
 	flex -o src/lang/lex.c src/lang/lex.l
 	bison -dy -b src/lang/parse src/lang/parse.y
 	make lang
-	./lang src/lang/lang_test.txt
+
+TEST_DIR = src/lang/test
+.PHONY: test_suite
+test_suite: $(TEST_DIR)/*
+	for file in $^ ; do \
+		./test_file.sh $${file} ; \
+  done
+	
