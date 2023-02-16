@@ -81,4 +81,5 @@ void print_value(Value val) {
   default:
     break;
   }
+  printf("\n");
 }

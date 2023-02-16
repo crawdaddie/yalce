@@ -27,9 +27,11 @@ void yyerror(char *);
 
 ->                      { return PIPE; }
 
-[-+()=/*%^,\n]          { return *yytext; }
+[-+()=/*%^,:{}\n]          { return *yytext; }
 
 ==                      { return EQUALS; } 
+
+fn                      { return FN; }
           
 
 [ \t\r]   ;             /* skip whitespace */

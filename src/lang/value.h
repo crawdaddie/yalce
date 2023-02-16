@@ -16,34 +16,39 @@ typedef struct {
   } as;
 } Value;
 
+typedef struct {
+  int capacity;
+  int count;
+  Value *values;
+} ValueArray;
+
+void init_value_array(ValueArray *array);
+void write_value_array(ValueArray *array, Value value);
+void free_value_array(ValueArray *array);
+
 #define BOOL_VAL(value) ((Value){VAL_BOOL, {.boolean = value}})
+#define AS_BOOL(value) ((value).as.boolean)
+#define IS_BOOL(value) ((value).type == VAL_BOOL)
+
 #define NIL_VAL ((Value){VAL_NIL, {.integer = 0}})
+#define AS_NIL(value) ((value).as.integer)
+#define IS_NIL(value) ((value).type == VAL_NIL)
+
 #define NUMBER_VAL(value) ((Value){VAL_NUMBER, {.number = value}})
 #define INTEGER_VAL(value) ((Value){VAL_INTEGER, {.integer = value}})
-
-#define AS_BOOL(value) ((value).as.boolean)
 #define AS_NUMBER(value)                                                       \
   ((value).type == VAL_NUMBER                                                  \
        ? (value).as.number                                                     \
        : ((value).type == VAL_INTEGER ? (value).as.integer : VAL_NIL))
 #define AS_INTEGER(value) ((value).as.integer)
-#define AS_NIL(value) ((value).as.integer)
-
-#define IS_OBJ(value) ((value).type == VAL_OBJ)
-
-#define AS_OBJ(value) ((value).as.object)
-
-#define OBJ_VAL(object) ((Value){VAL_OBJ, {.object = (Object *)object}})
-#define OBJ_TYPE(value) (AS_OBJ(value)->type)
-
-#define IS_BOOL(value) ((value).type == VAL_BOOL)
+#define IS_NUMERIC(value)                                                      \
+  ((value).type == VAL_INTEGER || (value).type == VAL_NUMBER)
 #define IS_NUMBER(value) ((value).type == VAL_NUMBER)
 #define IS_INTEGER(value) ((value).type == VAL_INTEGER)
 
-#define IS_NUMERIC(value)                                                      \
-  ((value).type == VAL_INTEGER || (value).type == VAL_NUMBER)
-
-#define IS_NIL(value) ((value).type == VAL_NIL)
+#define OBJ_VAL(object) ((Value){VAL_OBJ, {.object = (Object *)object}})
+#define AS_OBJ(value) ((value).as.object)
+#define OBJ_TYPE(value) (AS_OBJ(value)->type)
 #define IS_OBJ(value) ((value).type == VAL_OBJ)
 
 Value make_string(char *string);

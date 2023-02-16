@@ -26,8 +26,7 @@ int parse_line(const char* in, int line);
 %token<value> INTEGER
 %token<string> IDENTIFIER
 %token<string> STRING
-%token PIPE
-%token EQUALS
+%token PIPE EQUALS FN LET
 
 
 %left '+' '-'
@@ -36,19 +35,22 @@ int parse_line(const char* in, int line);
 %type <value> sexpr
 %type <value> nexpr
 %type <value> statement
+%type <value> lexpr
 %%
 
 program:
-        program statement '\n' 
+        program statement 
         | '\n'
         | /* NULL */
         ;
 
 statement:
         expr                  
-        | IDENTIFIER '=' expr  { table_set($1, $3);}
-        | IDENTIFIER           { print_value(table_get($1));} 
+        | IDENTIFIER '=' expr { table_set($1, $3);}
+        | IDENTIFIER          { print_value(table_get($1));} 
+        | '\n'
         ;
+
 
 expr:
         IDENTIFIER         { $$ = table_get($1);}
@@ -56,8 +58,14 @@ expr:
         | nexpr
         | sexpr
         | expr EQUALS expr { printf("equality\n");}
-        | IDENTIFIER '(' expr ')' { printf("call function %s\n", $1);}
+        | IDENTIFIER '(' lexpr ')' { printf("call function %s\n", $1);}
+        | lexpr
         ;
+
+lexpr:
+     expr ',' { printf("list? n"); $$ = $1; }
+     | lexpr expr { printf("list expr > 1 el "); print_value($1); print_value($2);}
+     ;
 
 nexpr: 
         | expr '+' expr    { $$ = nadd($1, $3); }
