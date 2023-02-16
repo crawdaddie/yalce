@@ -1,10 +1,11 @@
 %code requires {
 #include <stdio.h>
-#include <stdlib.h>
-#include "sym.h"
+#include <stdlib.h> #include "sym.h"
 #include "value.h"
 #include "obj.h"
 #include "util.h"
+#include "list.h"
+#include "sym.h"
 int yylex(void);
 
 void set_input_string(const char* in);
@@ -49,30 +50,30 @@ statement:
         | IDENTIFIER '=' expr { table_set($1, $3);}
         | IDENTIFIER          { $$ = table_get($1);} 
         | '\n'
-        | PRINT expr {print_value($2); }
+        | PRINT expr        {print_value($2); }
         ;
 
 
 expr:
-        IDENTIFIER         { $$ = table_get($1);}
-        | '(' expr ')'     { $$ = $2; }
+        IDENTIFIER          { $$ = table_get($1);}
+        | '(' expr ')'      { $$ = $2; }
         | nexpr
         | sexpr
-        | expr EQUALS expr { printf("equality\n");}
+        | expr EQUALS expr  { printf("equality\n");}
         | IDENTIFIER '(' lexpr ')' { printf("call function %s\n", $1);}
         | lexpr
         ;
 
-lexpr:
-     expr ',' { printf("list? n"); $$ = $1; }
-     | lexpr expr { printf("list expr > 1 el "); print_value($1); print_value($2);}
-     ;
+
+lexpr: /*blank*/            { $$ = make_list(); /*empty list*/}
+        | expr              { $$ = make_list(); list_push(&$$, $1); }
+        | lexpr ',' expr    { list_push(&$1, $3); }
 
 nexpr: 
-        | expr '+' expr    { $$ = nadd($1, $3); }
-        | expr '-' expr    { $$ = nsub($1, $3); }
-        | expr '*' expr    { $$ = nmul($1, $3); }
-        | expr '/' expr    { $$ = ndiv($1, $3); }
+        | expr '+' expr     { $$ = nadd($1, $3); }
+        | expr '-' expr     { $$ = nsub($1, $3); }
+        | expr '*' expr     { $$ = nmul($1, $3); }
+        | expr '/' expr     { $$ = ndiv($1, $3); }
         | INTEGER
         | NUMBER
         ;

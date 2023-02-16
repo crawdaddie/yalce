@@ -48,11 +48,12 @@ extern int yydebug;
 #line 1 "src/lang/parse.y"
 
 #include <stdio.h>
-#include <stdlib.h>
-#include "sym.h"
+#include <stdlib.h> #include "sym.h"
 #include "value.h"
 #include "obj.h"
 #include "util.h"
+#include "list.h"
+#include "sym.h"
 int yylex(void);
 
 void set_input_string(const char* in);
@@ -62,7 +63,7 @@ void end_lexical_scan(void);
 int parse_line(const char* in, int line);
 
 
-#line 66 "src/lang/parse.tab.h"
+#line 67 "src/lang/parse.tab.h"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -104,14 +105,14 @@ int parse_line(const char* in, int line);
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 18 "src/lang/parse.y"
+#line 19 "src/lang/parse.y"
 
   double number;
   int integer;
   char *string;
   Value value;
 
-#line 115 "src/lang/parse.tab.h"
+#line 116 "src/lang/parse.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

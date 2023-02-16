@@ -15,5 +15,4 @@ Value ndiv(Value a, Value b);
 Value nmul(Value a, Value b);
 void print_value(Value any);
 
-Value make_list(Value start);
 #endif
