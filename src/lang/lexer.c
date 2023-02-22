@@ -308,6 +308,15 @@ static int _MINUS_MATCHER(const char *input, token *tail) {
   }
   return 0;
 }
+
+static int _MODULO_MATCHER(const char *input, token *tail) {
+  if (*input == '%') {
+    *tail = create_symbol_token(TOKEN_MODULO);
+    return 1;
+  }
+  return 0;
+}
+
 static int _BANG_MATCHER(const char *input, token *tail) {
   if (*input == '!') {
     *tail = create_symbol_token(TOKEN_BANG);
@@ -411,12 +420,13 @@ static int _MATCH_IDENTIFIER(const char *input, token *tail) {
   return 0;
 }
 
-#define NUM_MATCHERS 15
+#define NUM_MATCHERS 17
 static token_matcher matchers[NUM_MATCHERS] = {
-    _LP_MATCHER,     _RP_MATCHER,     _COMMA_MATCHER,   _DOT_MATCHER,
-    _EQL_MATCHER,    _ASSIGN_MATCHER, _PIPE_MATCHER,    _MINUS_MATCHER,
-    _PLUS_MATCHER,   _SLASH_MATCHER,  _STAR_MATCHER,    _NL_MATCHER,
-    _STRING_MATCHER, _NUMBER_MATCHER, _MATCH_IDENTIFIER};
+    _LP_MATCHER,      _RP_MATCHER,     _COMMA_MATCHER,  _DOT_MATCHER,
+    _EQL_MATCHER,     _ASSIGN_MATCHER, _PIPE_MATCHER,   _MINUS_MATCHER,
+    _BANG_MATCHER,    _MODULO_MATCHER, _PLUS_MATCHER,   _SLASH_MATCHER,
+    _STAR_MATCHER,    _NL_MATCHER,     _STRING_MATCHER, _NUMBER_MATCHER,
+    _MATCH_IDENTIFIER};
 
 static token error_token(char *msg) {
   return create_literal_token(TOKEN_ERROR, (literal){.vstr = msg});

@@ -194,6 +194,10 @@ static void binary() {
     emit_byte(OP_EQUAL);
     break;
 
+  case TOKEN_MODULO:
+    emit_byte(OP_MODULO);
+    break;
+
   default:
     return;
   }
@@ -207,6 +211,7 @@ ParseRule rules[] = {
     /* [TOKEN_DOT] = {NULL, dot, PREC_CALL}, */
     [TOKEN_MINUS] = {unary, binary, PREC_TERM},
     [TOKEN_PLUS] = {NULL, binary, PREC_TERM},
+    [TOKEN_MODULO] = {NULL, binary, PREC_TERM},
     /* [TOKEN_SEMICOLON] = {NULL, NULL, PREC_NONE}, */
     [TOKEN_SLASH] = {NULL, binary, PREC_FACTOR},
     [TOKEN_STAR] = {NULL, binary, PREC_FACTOR},
@@ -263,13 +268,21 @@ static void parse_precedence(Precedence precedence) {
 
 static void expression() { parse_precedence(PREC_ASSIGNMENT); }
 
+static void expr_statement() {
+  while (parser.current.type != TOKEN_EOF) {
+    expression();
+    consume(TOKEN_NL, "Expect \\n after statement");
+  }
+}
+
 bool compile(const char *source, Chunk *chunk) {
   init_scanner(source);
   compiling_chunk = chunk;
   token token;
 
   advance();
-  expression();
+  /* expression(); */
+  expr_statement();
   emit_byte(OP_RETURN);
   return !parser.had_error;
 }

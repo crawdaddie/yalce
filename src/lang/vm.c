@@ -69,6 +69,7 @@ static InterpretResult run() {
     case OP_NOT:
       push(BOOL_VAL(is_falsy(pop())));
       break;
+
     case OP_NEGATE:
       if (!IS_NUMERIC(peek(0))) {
         /* runtimeError("Operand must be a number."); */
