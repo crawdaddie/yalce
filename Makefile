@@ -39,6 +39,7 @@ test_lang:
 	make lang
 
 TEST_DIR = src/lang/test
+
 .PHONY: test_suite
 test_suite: $(TEST_DIR)/*
 	for file in $^ ; do \

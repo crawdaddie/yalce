@@ -2,7 +2,6 @@
 #include "parse.tab.h"
 #include <stdlib.h>
 #include "value.h"
-void yyerror(char *);
 %}
 %%
 "print"                 { return PRINT; }
@@ -41,12 +40,14 @@ void yyerror(char *);
 "/*"[^*/]*"*/"          
 
 \"([^\\\"]|\\.)*\"      {
-                          yylval.string = strdup(yytext);
+                          int size = strlen(yytext);
+                          yylval.string = strndup(yytext + 1, size - 2);
                           return STRING;
                         }
 
 
-.                       yyerror("Unknown character");
+
+.                       { yyerror("Unknown character"); };
 
 
 %%

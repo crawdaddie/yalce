@@ -4,9 +4,11 @@
 void printf_color(char *fmt, int ansi, ...) {
   va_list args;
   va_start(args, ansi);
-  if (COLOR) printf("\033[%dm", ansi);
+  if (COLOR)
+    printf("\033[%dm", ansi);
   vprintf(fmt, args);
-  if (COLOR) printf("\033[%dm", 37);
+  if (COLOR)
+    printf("\033[%dm", 37);
   va_end(args);
 }
 void disassemble_chunk(Chunk *chunk, const char *name) {
@@ -37,6 +39,21 @@ int disassemble_instruction(Chunk *chunk, int offset) {
     return simple_instruction("OP_RETURN", offset);
   case OP_CONSTANT:
     return constant_instruction("OP_CONSTANT", chunk, offset);
+  case OP_ADD:
+    return simple_instruction("OP_ADD", offset);
+  case OP_SUBTRACT:
+    return simple_instruction("OP_SUBTRACT", offset);
+  case OP_MULTIPLY:
+    return simple_instruction("OP_MULTIPLY", offset);
+  case OP_DIVIDE:
+    return simple_instruction("OP_DIVIDE", offset);
+  case OP_NIL:
+    return simple_instruction("OP_NIL", offset);
+  case OP_TRUE:
+    return simple_instruction("OP_TRUE", offset);
+  case OP_FALSE:
+    return simple_instruction("OP_FALSE", offset);
+
   default:
     printf("Unknown opcode %d\n", instruction);
     return offset + 1;

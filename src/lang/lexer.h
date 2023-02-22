@@ -1,59 +1,63 @@
-#ifndef _LEXER_H
-#define _LEXER_H
-#include <ctype.h>
-#include <regex.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#ifndef _LANG_LEXER_H
+#define _LANG_LEXER_H
 
 enum token_type {
   // dummy token
-  START,
+  TOKEN_START,
   // parens
-  LP,
-  RP,
+  TOKEN_LP,
+  TOKEN_RP,
 
-  COMMA,
+  TOKEN_COMMA,
 
   // OPERATORS
-  DOT,
-  MINUS,
-  PLUS,
+  TOKEN_DOT,
+  TOKEN_MINUS,
+  TOKEN_PLUS,
+  TOKEN_BANG,
+  TOKEN_MODULO,
   /* SEMICOLON, */
-  SLASH,
-  STAR,
-  ASSIGNMENT,
-  EQUALITY,
+  TOKEN_SLASH,
+  TOKEN_STAR,
+  TOKEN_ASSIGNMENT,
+  TOKEN_EQUALITY,
 
   // statement terminator
-  NL,
+  TOKEN_NL,
 
   // special operators
-  PIPE,
+  TOKEN_PIPE,
 
-  IDENTIFIER,
+  TOKEN_IDENTIFIER,
 
   // LITERALS
-  STRING,
-  NUMBER,
-  INTEGER,
-  TRUE,
-  FALSE,
+  TOKEN_STRING,
+  TOKEN_NUMBER,
+  TOKEN_INTEGER,
 
   // keywords
-  FN,
-  PRINT,
-  _END_TOKEN,
+  TOKEN_FN,
+  TOKEN_PRINT,
+  TOKEN_TRUE,
+  TOKEN_FALSE,
+  TOKEN_NIL,
+
+  TOKEN_COMMENT,
+  TOKEN_WS,
+  TOKEN_ERROR,
+  TOKEN_EOF,
 };
+
 typedef struct keyword {
   enum token_type kw;
   char *match;
 } keyword;
 
-#define NUM_KEYWORDS 4
-static keyword keywords[NUM_KEYWORDS] = {
-    {FN, "fn"}, {PRINT, "print"}, {TRUE, "true"}, {FALSE, "false"}};
+static keyword keywords[TOKEN_NIL - TOKEN_FN + 1] = {{TOKEN_FN, "fn"},
+                                                     {TOKEN_PRINT, "print"},
+                                                     {TOKEN_TRUE, "true"},
+                                                     {TOKEN_FALSE, "false"},
+                                                     {TOKEN_NIL, "nil"}};
 
 typedef union literal {
   char *vstr;
@@ -65,20 +69,18 @@ typedef union literal {
 
 typedef struct token {
   enum token_type type;
-  literal literal;
+  literal as;
 } token;
 
-int parse_string(char *input);
-void report_error(int line, int ptr, char *msg, char *input_line);
+void init_scanner(const char *source);
+token scan_token();
+void print_token(token token);
 
-token get_start_token();
-token create_token(enum token_type type, literal *lex_unit);
-
-int seek_char(char *input, char c);
-int parse_num(char *input, token *tok);
-int compare_ahead(char *input, int num, char c);
-
-int lexer(char *input, int line,
-          void (*process_token)(token token)); // returns tail
+typedef struct {
+  int line;
+  int col_offset;
+} line_info;
+const char *get_scanner_current();
+line_info get_line_info();
 
 #endif

@@ -13,6 +13,9 @@ Value nadd(Value a, Value b);
 Value nsub(Value a, Value b);
 Value ndiv(Value a, Value b);
 Value nmul(Value a, Value b);
+Value nmod(Value a, Value b);
+
+Value nnegate(Value a);
 void print_value(Value any);
 
 #endif

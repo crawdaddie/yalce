@@ -1,10 +1,12 @@
 %code requires {
 #include <stdio.h>
-#include <stdlib.h> #include "sym.h"
+#include <stdlib.h>
+#include "sym.h"
 #include "value.h"
 #include "obj.h"
 #include "util.h"
 #include "list.h"
+#include "string.h"
 #include "sym.h"
 int yylex(void);
 
@@ -36,12 +38,12 @@ int parse_line(const char* in, int line);
 %type <value> sexpr
 %type <value> nexpr
 %type <value> statement
-%type <value> lexpr
+%type <value> param_list
+%type <value> tuple
 %%
 
 program:
         program statement 
-        | '\n'
         | /* NULL */
         ;
 
@@ -50,7 +52,7 @@ statement:
         | IDENTIFIER '=' expr { table_set($1, $3);}
         | IDENTIFIER          { $$ = table_get($1);} 
         | '\n'
-        | PRINT expr        {print_value($2); }
+        | PRINT expr        { print_value($2); printf("\n"); }
         ;
 
 
@@ -60,17 +62,19 @@ expr:
         | nexpr
         | sexpr
         | expr EQUALS expr  { printf("equality\n");}
-        | IDENTIFIER '(' lexpr ')' { printf("call function %s\n", $1);}
-        | lexpr
+        | IDENTIFIER '(' param_list ')'  {
+                                      printf("call function %s with ", $1);
+                                      print_value($3);
+                                    }
         ;
 
 
-lexpr: /*blank*/            { $$ = make_list(); /*empty list*/}
-        | expr              { $$ = make_list(); list_push(&$$, $1); }
-        | lexpr ',' expr    { list_push(&$1, $3); }
+param_list: /*blank*/            { $$ = make_list(); /*empty list*/}
+        | expr              { $$ = make_list(); list_push($$, $1); }
+        | param_list ',' expr    { list_push($1, $3);}
 
 nexpr: 
-        | expr '+' expr     { $$ = nadd($1, $3); }
+        expr '+' expr       { $$ = nadd($1, $3); }
         | expr '-' expr     { $$ = nsub($1, $3); }
         | expr '*' expr     { $$ = nmul($1, $3); }
         | expr '/' expr     { $$ = ndiv($1, $3); }

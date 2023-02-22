@@ -6,6 +6,13 @@
 #include <stdlib.h>
 
 typedef enum { VAL_BOOL, VAL_NIL, VAL_NUMBER, VAL_INTEGER, VAL_OBJ } ValueType;
+
+typedef enum { OBJ_STRING, OBJ_LIST } ObjectType;
+
+typedef struct {
+  ObjectType type;
+} Object;
+
 typedef struct {
   ValueType type;
   union {
@@ -49,8 +56,10 @@ void free_value_array(ValueArray *array);
 #define OBJ_VAL(object) ((Value){VAL_OBJ, {.object = (Object *)object}})
 #define AS_OBJ(value) ((value).as.object)
 #define OBJ_TYPE(value) (AS_OBJ(value)->type)
+
 #define IS_OBJ(value) ((value).type == VAL_OBJ)
 
-Value make_string(char *string);
-
+#define IS_STRING(value) is_obj_type(value, OBJ_STRING)
+#define IS_LIST(value) is_obj_type(value, OBJ_LIST)
+bool values_equal(Value a, Value b);
 #endif

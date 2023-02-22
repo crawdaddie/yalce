@@ -3,7 +3,23 @@
 #include "common.h"
 #include "value.h"
 
-typedef enum { OP_RETURN, OP_CONSTANT, } OpCode;
+typedef enum {
+  OP_RETURN,
+  OP_CONSTANT,
+  OP_NIL,
+  OP_TRUE,
+  OP_FALSE,
+  OP_ADD,
+  OP_SUBTRACT,
+  OP_MULTIPLY,
+  OP_DIVIDE,
+  OP_MODULO,
+  OP_EQUAL,
+  OP_CALL,
+  OP_NEGATE,
+  OP_NOT
+} OpCode;
+
 typedef struct {
   int count;
   int capacity;

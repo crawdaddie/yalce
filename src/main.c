@@ -14,7 +14,6 @@
 #include "lang/parse.tab.h"
 #include <stdlib.h>
 
-
 #include <pthread.h>
 static int usage(char *exe) {
   fprintf(stderr,

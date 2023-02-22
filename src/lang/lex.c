@@ -476,9 +476,8 @@ char *yytext;
 #include "parse.tab.h"
 #include <stdlib.h>
 #include "value.h"
-void yyerror(char *);
+#line 479 "src/lang/lex.c"
 #line 480 "src/lang/lex.c"
-#line 481 "src/lang/lex.c"
 
 #define INITIAL 0
 
@@ -695,9 +694,9 @@ YY_DECL
 		}
 
 	{
-#line 7 "src/lang/lex.l"
+#line 6 "src/lang/lex.l"
 
-#line 700 "src/lang/lex.c"
+#line 699 "src/lang/lex.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -756,12 +755,12 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 8 "src/lang/lex.l"
+#line 7 "src/lang/lex.l"
 { return PRINT; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 10 "src/lang/lex.l"
+#line 9 "src/lang/lex.l"
 {
                           yylval.string = strdup(yytext);
                           return IDENTIFIER;
@@ -769,7 +768,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 15 "src/lang/lex.l"
+#line 14 "src/lang/lex.l"
 {
                           int num;
                           sscanf(yytext, "%d", &num);
@@ -779,7 +778,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 22 "src/lang/lex.l"
+#line 21 "src/lang/lex.l"
 {
                           double num;
                           sscanf(yytext, "%lf", &num);
@@ -789,59 +788,60 @@ YY_RULE_SETUP
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 29 "src/lang/lex.l"
+#line 28 "src/lang/lex.l"
 { return PIPE; }
 	YY_BREAK
 case 6:
 /* rule 6 can match eol */
 YY_RULE_SETUP
-#line 31 "src/lang/lex.l"
+#line 30 "src/lang/lex.l"
 { return *yytext; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 33 "src/lang/lex.l"
+#line 32 "src/lang/lex.l"
 { return EQUALS; } 
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 35 "src/lang/lex.l"
+#line 34 "src/lang/lex.l"
 { return FN; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 37 "src/lang/lex.l"
+#line 36 "src/lang/lex.l"
 ;             /* skip whitespace */
 	YY_BREAK
 case 10:
 /* rule 10 can match eol */
 YY_RULE_SETUP
-#line 39 "src/lang/lex.l"
+#line 38 "src/lang/lex.l"
 
 	YY_BREAK
 case 11:
 /* rule 11 can match eol */
 YY_RULE_SETUP
-#line 41 "src/lang/lex.l"
+#line 40 "src/lang/lex.l"
 
 	YY_BREAK
 case 12:
 /* rule 12 can match eol */
 YY_RULE_SETUP
-#line 43 "src/lang/lex.l"
+#line 42 "src/lang/lex.l"
 {
-                          yylval.string = strdup(yytext);
+                          int size = strlen(yytext);
+                          yylval.string = strndup(yytext + 1, size - 2);
                           return STRING;
                         }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 49 "src/lang/lex.l"
-yyerror("Unknown character");
+#line 50 "src/lang/lex.l"
+{ yyerror("Unknown character"); };
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 52 "src/lang/lex.l"
+#line 53 "src/lang/lex.l"
 ECHO;
 	YY_BREAK
 #line 847 "src/lang/lex.c"
@@ -1849,7 +1849,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 52 "src/lang/lex.l"
+#line 53 "src/lang/lex.l"
 
 
 void set_input_string(const char *input) {
