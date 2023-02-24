@@ -1,2 +1,5 @@
-5 % 3
-1 + 2 
+5 % 3.0
+"here's a string"
+# comment
+
+1 + 2.0

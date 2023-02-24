@@ -176,7 +176,6 @@ static void binary() {
   enum token_type op_type = parser.previous.type;
   ParseRule *rule = get_rule(op_type);
   parse_precedence((Precedence)(rule->precedence + 1));
-
   switch (op_type) {
   case TOKEN_PLUS:
     emit_byte(OP_ADD);
@@ -193,14 +192,17 @@ static void binary() {
   case TOKEN_EQUALITY:
     emit_byte(OP_EQUAL);
     break;
-
   case TOKEN_MODULO:
     emit_byte(OP_MODULO);
     break;
-
   default:
     return;
   }
+}
+static void string() {
+  Object *str = (Object *)make_string(parser.previous.as.vstr);
+  Value val = {VAL_OBJ, {.object = str}};
+  emit_bytes(OP_CONSTANT, make_constant((val)));
 }
 ParseRule rules[] = {
     [TOKEN_LP] = {grouping, call, PREC_CALL},
@@ -215,7 +217,7 @@ ParseRule rules[] = {
     /* [TOKEN_SEMICOLON] = {NULL, NULL, PREC_NONE}, */
     [TOKEN_SLASH] = {NULL, binary, PREC_FACTOR},
     [TOKEN_STAR] = {NULL, binary, PREC_FACTOR},
-    /* [TOKEN_BANG] = {unary, NULL, PREC_NONE}, */
+    [TOKEN_BANG] = {unary, NULL, PREC_NONE},
     /* [TOKEN_BANG_EQUAL] = {NULL, binary, PREC_EQUALITY}, */
     /* [TOKEN_ASSIGNMENT] = {NULL, NULL, PREC_NONE}, */
     /* [TOKEN_EQUAL_EQUAL] = {NULL, binary, PREC_EQUALITY}, */
@@ -224,12 +226,14 @@ ParseRule rules[] = {
     /* [TOKEN_LESS] = {NULL, binary, PREC_COMPARISON}, */
     /* [TOKEN_LESS_EQUAL] = {NULL, binary, PREC_COMPARISON}, */
     /* [TOKEN_IDENTIFIER] = {variable, NULL, PREC_NONE}, */
-    /* [TOKEN_STRING] = {string, NULL, PREC_NONE}, */
+    [TOKEN_STRING] = {string, NULL, PREC_NONE},
     [TOKEN_NUMBER] = {number, NULL, PREC_NONE},
     [TOKEN_INTEGER] = {number, NULL, PREC_NONE},
     /* [TOKEN_AND] = {NULL, and_, PREC_AND}, */
     /* [TOKEN_CLASS] = {NULL, NULL, PREC_NONE}, */
     /* [TOKEN_ELSE] = {NULL, NULL, PREC_NONE}, */
+
+    [TOKEN_TRUE] = {parse_literal, NULL, PREC_NONE},
     [TOKEN_FALSE] = {parse_literal, NULL, PREC_NONE},
     /* [TOKEN_FOR] = {NULL, NULL, PREC_NONE}, */
     /* [TOKEN_FUN] = {NULL, NULL, PREC_NONE}, */
@@ -250,6 +254,7 @@ ParseRule rules[] = {
 static ParseRule *get_rule(enum token_type type) { return &(rules[type]); }
 
 static void parse_precedence(Precedence precedence) {
+
   advance();
 
   ParseFn prefix_rule = get_rule(parser.previous.type)->prefix;
@@ -270,19 +275,96 @@ static void expression() { parse_precedence(PREC_ASSIGNMENT); }
 
 static void expr_statement() {
   while (parser.current.type != TOKEN_EOF) {
+    if (parser.current.type == TOKEN_NL) {
+      advance();
+      continue; // skip blanklines
+    }
     expression();
     consume(TOKEN_NL, "Expect \\n after statement");
+    emit_byte(OP_POP); // discard result of expr statement
   }
 }
 
+static void print_statement() {
+  expression();
+  consume(TOKEN_NL, "Expect \\n after statement");
+  emit_byte(OP_PRINT);
+}
+static void synchronize() {
+  parser.panic_mode = false;
+  while (parser.current.type != TOKEN_EOF) {
+    if (parser.previous.type == TOKEN_NL)
+      return;
+    switch (parser.current.type) {
+    /* case TOKEN_CLASS: */
+    /* case TOKEN_FUN: */
+    /* case TOKEN_VAR: */
+    /* case TOKEN_FOR: */
+    /* case TOKEN_IF: */
+    /* case TOKEN_WHILE: */
+    case TOKEN_PRINT:
+      /* case TOKEN_RETURN: */
+      return;
+
+    default:; // Do nothing.
+    }
+
+    advance();
+  }
+}
+static void statement() {
+  if (match(TOKEN_PRINT)) {
+    print_statement();
+  } else {
+    expr_statement();
+  }
+}
+static uint8_t identifier_constant(token name) {
+  Object *str = (Object *)make_string(name.as.vstr);
+
+  Value val = {VAL_OBJ, {.object = str}};
+  return make_constant(val);
+}
+static uint8_t parse_var(const char *error_msg) {
+  consume(TOKEN_IDENTIFIER, error_msg);
+  return identifier_constant(parser.previous);
+}
+
+static void define_var(uint8_t global) { emit_bytes(OP_DEFINE_GLOBAL, global); }
+
+static void var_declaration() {
+  uint8_t global = parse_var("Expect variable name");
+  if (match(TOKEN_ASSIGNMENT)) {
+    expression();
+  } else {
+    emit_byte(OP_NIL);
+  }
+  consume(TOKEN_NL, "Expect \\n after variable declaration");
+  define_var(global);
+}
+static void declaration() {
+  if (match(TOKEN_LET)) {
+    var_declaration();
+  } else {
+    statement();
+  }
+  if (parser.panic_mode)
+    synchronize();
+}
+
 bool compile(const char *source, Chunk *chunk) {
+
   init_scanner(source);
+  parser.had_error = false;
+  parser.panic_mode = false;
   compiling_chunk = chunk;
   token token;
 
   advance();
   /* expression(); */
-  expr_statement();
+  while (!match(TOKEN_EOF)) {
+    declaration();
+  }
   emit_byte(OP_RETURN);
   return !parser.had_error;
 }

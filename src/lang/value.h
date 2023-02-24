@@ -1,5 +1,6 @@
 #ifndef _VALUE_H
 #define _VALUE_H
+#include "common.h"
 #include "obj.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -7,19 +8,13 @@
 
 typedef enum { VAL_BOOL, VAL_NIL, VAL_NUMBER, VAL_INTEGER, VAL_OBJ } ValueType;
 
-typedef enum { OBJ_STRING, OBJ_LIST } ObjectType;
-
-typedef struct {
-  ObjectType type;
-} Object;
-
 typedef struct {
   ValueType type;
   union {
     bool boolean;
     double number;
     int integer;
-    Object *object;
+    struct Object *object;
   } as;
 } Value;
 
@@ -54,7 +49,7 @@ void free_value_array(ValueArray *array);
 #define IS_INTEGER(value) ((value).type == VAL_INTEGER)
 
 #define OBJ_VAL(object) ((Value){VAL_OBJ, {.object = (Object *)object}})
-#define AS_OBJ(value) ((value).as.object)
+#define AS_OBJ(value) ((Object *)(value).as.object)
 #define OBJ_TYPE(value) (AS_OBJ(value)->type)
 
 #define IS_OBJ(value) ((value).type == VAL_OBJ)
@@ -62,4 +57,7 @@ void free_value_array(ValueArray *array);
 #define IS_STRING(value) is_obj_type(value, OBJ_STRING)
 #define IS_LIST(value) is_obj_type(value, OBJ_LIST)
 bool values_equal(Value a, Value b);
+
+Value make_string_val(char *chars);
+
 #endif

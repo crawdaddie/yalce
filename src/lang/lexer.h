@@ -40,6 +40,7 @@ enum token_type {
   TOKEN_PRINT,
   TOKEN_TRUE,
   TOKEN_FALSE,
+  TOKEN_LET,
   TOKEN_NIL,
 
   TOKEN_COMMENT,
@@ -53,11 +54,9 @@ typedef struct keyword {
   char *match;
 } keyword;
 
-static keyword keywords[TOKEN_NIL - TOKEN_FN + 1] = {{TOKEN_FN, "fn"},
-                                                     {TOKEN_PRINT, "print"},
-                                                     {TOKEN_TRUE, "true"},
-                                                     {TOKEN_FALSE, "false"},
-                                                     {TOKEN_NIL, "nil"}};
+static keyword keywords[TOKEN_NIL - TOKEN_FN + 1] = {
+    {TOKEN_FN, "fn"},       {TOKEN_PRINT, "print"}, {TOKEN_TRUE, "true"},
+    {TOKEN_FALSE, "false"}, {TOKEN_LET, "let"},     {TOKEN_NIL, "nil"}};
 
 typedef union literal {
   char *vstr;

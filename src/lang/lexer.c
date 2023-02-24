@@ -51,6 +51,20 @@ void print_token(token token) {
     printf("[+]\n");
     break;
   }
+
+  case TOKEN_BANG: {
+
+    printf("%d:%d ", l.line, l.col_offset);
+    printf("[!]\n");
+    break;
+  }
+
+  case TOKEN_MODULO: {
+
+    printf("%d:%d ", l.line, l.col_offset);
+    printf("[%%]\n");
+    break;
+  }
   case TOKEN_SLASH: {
 
     printf("%d:%d ", l.line, l.col_offset);
@@ -351,7 +365,7 @@ static int _STAR_MATCHER(const char *input, token *tail) {
 static int _COMMENT_MATCHER(const char *input) {
   if (*input == '#') {
     int len = seek_char(input, '\n');
-    return len - 1;
+    return len;
   }
   return 0;
 }
@@ -451,11 +465,8 @@ token scan_token() {
       scanner.col_offset += result;
       return tail;
     }
-    if (result < 0) {
-      return error_token("lexer error");
-    };
   }
-
+  scanner.current++;
   return error_token("unexpected character");
 }
 const char *get_scanner_current() { return scanner.current; }

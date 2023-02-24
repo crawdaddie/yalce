@@ -6,7 +6,6 @@
 #include "obj.h"
 #include "util.h"
 #include "list.h"
-#include "string.h"
 #include "sym.h"
 int yylex(void);
 
@@ -83,7 +82,7 @@ nexpr:
         ;
 
 sexpr:
-        STRING {$$ = make_string($1);}
+        STRING {/*$$ = make_string($1); */}
         /* | sexpr '+' sexpr {$$ = strconcat($1, $3);} */
     
 

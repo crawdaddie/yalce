@@ -1,10 +1,11 @@
 #include "sym.h"
-static symbol_table sym = {};
+#include "memory.h"
+#include "util.h"
 #define TABLE_MAX_LOAD 0.75
 #define INITIAL_TABLE_SIZE 64
 
 // hash util functions
-static unsigned int hash_string(const char *string, int length) {
+uint32_t hash_string(const char *string, int length) {
   unsigned int hash = 2166136261u;
 
   for (int i = 0; i < length; i++) {
@@ -15,67 +16,72 @@ static unsigned int hash_string(const char *string, int length) {
   return hash;
 }
 
-void init_table() {
-  sym.count = 0;
-  sym.capacity = 64;
-  sym.data = calloc(sizeof(Entry), INITIAL_TABLE_SIZE);
-}
-static int grow_table() { return 1; }
-
-void free_table() {
-  free(sym.data);
-  init_table();
-}
-static Entry *find_entry(Entry *data, int capacity, uint32_t hash) {
-  uint32_t index = hash % capacity;
+static Entry *find_entry(Entry *data, int capacity, ObjString *key) {
+  uint32_t index = key->hash % capacity;
   for (;;) {
     Entry *entry = &data[index];
-    if (entry->hash == hash || entry->key == NULL) {
+    if (entry->key == key || entry->key == NULL) {
       return entry;
     }
     index = (index + 1) % capacity;
   }
 };
-static void adjust_capacity(int capacity) {
-  Entry *data = calloc(sizeof(Entry), capacity);
+static void adjust_capacity(Table *table, int capacity) {
+  Entry *entries = ALLOCATE(Entry, capacity);
   for (int i = 0; i < capacity; i++) {
-    data[i].key = NULL;
-    data[i].value = NIL_VAL;
+    entries[i].key = NULL;
+    entries[i].value = NIL_VAL;
   }
-  for (int i = 0; i < capacity; i++) {
-    Entry *entry = &sym.data[i];
-    if (entry->key == NULL) {
-      continue;
-    }
 
-    Entry *dest = find_entry(data, capacity, entry->hash);
+  table->count = 0;
+  for (int i = 0; i < table->capacity; i++) {
+    Entry *entry = &table->data[i];
+    if (entry->key == NULL)
+      continue;
+
+    Entry *dest = find_entry(entries, capacity, entry->key);
     dest->key = entry->key;
-    dest->hash = entry->hash;
     dest->value = entry->value;
+    table->count++;
   }
-  free(sym.data);
-  sym.data = data;
-  sym.capacity = capacity;
+
+  FREE_ARRAY(Entry, table->data, table->capacity);
+  table->data = entries;
+  table->capacity = capacity;
 }
 
-int table_set(char *key, Value value) {
-  if (sym.count + 1 > sym.capacity * TABLE_MAX_LOAD) {
-    int capacity = 2 * sym.capacity;
-    printf("adjusting capacity %d -> %d\n", sym.capacity, capacity);
-    adjust_capacity(capacity);
+void init_table(Table *table) {
+  table->count = 0;
+  table->capacity = 0;
+  table->data = NULL;
+}
+
+void free_table(Table *sym) {
+  FREE_ARRAY(Entry, sym->data, sym->capacity);
+  init_table(sym);
+}
+
+int table_set(Table *table, ObjString *key, Value value) {
+  if (table->count + 1 > table->capacity * TABLE_MAX_LOAD) {
+    int capacity = GROW_CAPACITY(table->capacity);
+    adjust_capacity(table, capacity);
   }
-  uint32_t hash = hash_string(key, strlen(key));
-  Entry *entry = find_entry(sym.data, sym.capacity, hash);
+  Entry *entry = find_entry(table->data, table->capacity, key);
   int is_new = entry->key == NULL;
   if (is_new)
-    sym.count++;
+    table->count++;
   entry->key = key;
-  entry->hash = hash;
   entry->value = value;
   return is_new;
 }
-Value table_get(char *key) {
-  uint32_t hash = hash_string(key, strlen(key));
-  Entry *entry = find_entry(sym.data, sym.capacity, hash);
-  return entry->value;
+
+bool table_get(Table *sym, ObjString *key, Value *val) {
+  if (sym->count == 0)
+    return false;
+  Entry *entry = find_entry(sym->data, sym->capacity, key);
+  if (entry->key == NULL) {
+    return false;
+  }
+  *val = entry->value;
+  return true;
 }

@@ -7,20 +7,21 @@
 
 #define MAX_TOKEN_LENGTH 64
 typedef struct Entry {
-  char *key;
-  uint32_t hash;
+  ObjString *key;
   Value value;
 } Entry;
 
-typedef struct symbol_table {
+typedef struct Table {
   int count;
   int capacity;
   Entry *data;
-} symbol_table;
+} Table;
 
-void init_table();
-void free_table();
+void init_table(Table *sym);
+void free_table(Table *sym);
 
-int table_set(char *name, Value value);
-Value table_get(char *name);
+int table_set(Table *sym, ObjString *key, Value value);
+bool table_get(Table *sym, ObjString *key, Value *value);
+
+uint32_t hash_string(const char *string, int length);
 #endif

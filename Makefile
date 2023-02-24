@@ -34,8 +34,8 @@ lang: $(obj_lang)
 test_lang:
 	make clean
 	rm -f src/lang/parse.c src/lang/parse.h src/lang/lex.c src/lang/lex.h;
-	flex -o src/lang/lex.c src/lang/lex.l
-	bison -dy -b src/lang/parse src/lang/parse.y
+	# flex -o src/lang/lex.c src/lang/lex.l
+	# bison -dy -b src/lang/parse src/lang/parse.y
 	make lang
 
 TEST_DIR = src/lang/test

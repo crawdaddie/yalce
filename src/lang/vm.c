@@ -1,20 +1,31 @@
 #include "vm.h"
 #include "common.h"
 #include "compiler.h"
+#include "sym.h"
 #include "util.h"
+
 VM vm;
 
 static void reset_stack() { vm.stack_top = vm.stack; }
-void init_vm() { reset_stack(); }
-void free_vm(){};
+
+void init_vm() {
+  reset_stack();
+  vm.objects = NULL;
+  init_table(&vm.globals);
+  printf("init vm globals %d\n", vm.globals.capacity);
+}
+
+void free_vm() { free_table(&vm.globals); };
 
 static bool is_falsy(Value value) {
   return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 static Value peek(int distance) { return vm.stack_top[-1 - distance]; }
+
 static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+#define READ_STRING() AS_STRING(READ_CONSTANT())
   for (;;) {
 #ifdef DEBUG_TRACE_EXECUTION
     printf("          ");
@@ -35,8 +46,6 @@ static InterpretResult run() {
       break;
     }
     case OP_RETURN: {
-      print_value(pop());
-      printf("\n");
       return INTERPRET_OK;
     }
     case OP_ADD: {
@@ -111,10 +120,30 @@ static InterpretResult run() {
       printf("arg count %d\n", arg_count);
       break;
     }
+
+    case OP_PRINT: {
+      print_value(pop());
+      printf("\n");
+      break;
+    }
+
+    case OP_POP: {
+      pop();
+      break;
+    }
+
+    case OP_DEFINE_GLOBAL: {
+
+      ObjString *name = READ_STRING();
+      Value val = peek(0);
+      table_set(&vm.globals, name, val);
+      pop();
+    }
     }
   }
 #undef READ_BYTE
 #undef READ_CONSTANT
+#undef READ_STRING
 }
 
 InterpretResult interpret(const char *source) {
@@ -125,6 +154,7 @@ InterpretResult interpret(const char *source) {
   }
   vm.chunk = &chunk;
   vm.ip = vm.chunk->code;
+
   InterpretResult result = run();
   free_chunk(&chunk);
   return result;
@@ -137,5 +167,8 @@ void push(Value value) {
 
 Value pop() {
   vm.stack_top--;
-  return *vm.stack_top;
+  Value v = *vm.stack_top;
+  /* printf("popping.. "); */
+  /* print_value(v); */
+  return v;
 }

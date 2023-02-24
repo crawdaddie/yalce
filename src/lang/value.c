@@ -1,5 +1,6 @@
 #include "value.h"
 #include "memory.h"
+#include "obj.h"
 #include "string.h"
 
 void init_value_array(ValueArray *array) {
@@ -26,6 +27,7 @@ void free_value_array(ValueArray *array) {
 static inline bool is_obj_type(Value value, ObjectType type) {
   return IS_OBJ(value) && AS_OBJ(value)->type == type;
 }
+
 bool values_equal(Value a, Value b) {
   if (a.type != b.type) {
     return false;
@@ -33,13 +35,18 @@ bool values_equal(Value a, Value b) {
   switch (a.type) {
   case VAL_BOOL:
     return AS_BOOL(a) == AS_BOOL(b);
-
   case VAL_NIL:
     return true;
   case VAL_NUMBER:
     return AS_NUMBER(a) == AS_NUMBER(b);
-
   case VAL_INTEGER:
     return AS_INTEGER(a) == AS_INTEGER(b);
+  case VAL_OBJ:
+    return AS_OBJ(a) == AS_OBJ(b);
   }
+}
+
+Value make_string_val(char *chars) {
+  ObjString *string = make_string(chars);
+  return (Value){VAL_OBJ, {.object = (Object *)string}};
 }
