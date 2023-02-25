@@ -1,3 +1,6 @@
 let a = 1 + 2
-
-
+print a + 2
+let b = a + 2
+print b
+b = 1
+print b

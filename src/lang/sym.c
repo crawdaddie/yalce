@@ -76,12 +76,35 @@ int table_set(Table *table, ObjString *key, Value value) {
 }
 
 bool table_get(Table *sym, ObjString *key, Value *val) {
-  if (sym->count == 0)
+  if (sym->count == 0) {
     return false;
+  }
   Entry *entry = find_entry(sym->data, sym->capacity, key);
   if (entry->key == NULL) {
     return false;
   }
   *val = entry->value;
   return true;
+}
+
+ObjString *table_find_string(Table *table, char *chars, int length,
+                             uint32_t hash) {
+  if (table->count == 0) {
+    return NULL;
+  }
+
+  uint32_t index = hash % table->capacity;
+  for (;;) {
+    Entry *entry = &table->data[index];
+    if (entry->key == NULL) {
+      // stop if we find empty non-tombstone
+      if (IS_NIL(entry->value))
+        return NULL;
+    } else if (entry->key->length == length && entry->key->hash == hash &&
+               memcmp(entry->key->chars, chars, length) == 0) {
+      // found the entry
+      return entry->key;
+    }
+    index = (index + 1) % table->capacity;
+  }
 }

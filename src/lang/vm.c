@@ -12,10 +12,13 @@ void init_vm() {
   reset_stack();
   vm.objects = NULL;
   init_table(&vm.globals);
-  printf("init vm globals %d\n", vm.globals.capacity);
+  init_table(&vm.strings);
 }
 
-void free_vm() { free_table(&vm.globals); };
+void free_vm() {
+  free_table(&vm.globals);
+  free_table(&vm.strings);
+};
 
 static bool is_falsy(Value value) {
   return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
@@ -28,6 +31,9 @@ static InterpretResult run() {
 #define READ_STRING() AS_STRING(READ_CONSTANT())
   for (;;) {
 #ifdef DEBUG_TRACE_EXECUTION
+    disassemble_instruction(vm.chunk, (int)(vm.ip - vm.chunk->code));
+    // print out stack
+    printf("stack: \n");
     printf("          ");
     for (Value *slot = vm.stack; slot < vm.stack_top; slot++) {
       printf("[ ");
@@ -35,7 +41,20 @@ static InterpretResult run() {
       printf(" ]");
     }
     printf("\n");
-    disassemble_instruction(vm.chunk, (int)(vm.ip - vm.chunk->code));
+
+#ifdef DEBUG_VM_CONSTANTS
+    printf("constants: \n");
+    printf("          ");
+    for (Value *const_val = vm.chunk->constants.values;
+         const_val < vm.chunk->constants.values + vm.chunk->constants.count;
+         const_val++) {
+      printf("[ ");
+      print_value(*const_val);
+      printf(" ]");
+    }
+    printf("\n");
+
+#endif
 #endif
     uint8_t instruction;
     switch (instruction = READ_BYTE()) {
@@ -81,7 +100,7 @@ static InterpretResult run() {
 
     case OP_NEGATE:
       if (!IS_NUMERIC(peek(0))) {
-        /* runtimeError("Operand must be a number."); */
+        /* runtime_error("Operand must be a number."); */
         return INTERPRET_RUNTIME_ERROR;
       }
       push(nnegate(pop()));
@@ -135,9 +154,30 @@ static InterpretResult run() {
     case OP_DEFINE_GLOBAL: {
 
       ObjString *name = READ_STRING();
-      Value val = peek(0);
+      Value val = *(vm.stack_top - 1);
       table_set(&vm.globals, name, val);
       pop();
+      break;
+    }
+    case OP_GET_GLOBAL: {
+      ObjString *name = READ_STRING();
+      Value value;
+      if (!table_get(&vm.globals, name, &value)) {
+        /* runtime_error("Undefined variable '%s'.", name->chars); */
+        printf("Undefined variable '%s'\n", name->chars);
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      push(value);
+      break;
+    }
+    case OP_SET_GLOBAL: {
+      ObjString *name = READ_STRING();
+      if (table_set(&vm.globals, name, peek(0))) {
+        printf("is new value\n");
+        /* table_delete(&vm.globals, name); */
+        /* return INTERPRET_RUNTIME_ERROR; */
+      }
+      break;
     }
     }
   }
@@ -168,7 +208,5 @@ void push(Value value) {
 Value pop() {
   vm.stack_top--;
   Value v = *vm.stack_top;
-  /* printf("popping.. "); */
-  /* print_value(v); */
   return v;
 }

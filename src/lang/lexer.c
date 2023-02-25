@@ -27,6 +27,19 @@ void print_token(token token) {
     printf("[)]\n");
     break;
   }
+
+  case TOKEN_LEFT_BRACE: {
+
+    printf("%d:%d ", l.line, l.col_offset);
+    printf("[{]\n");
+    break;
+  }
+  case TOKEN_RIGHT_BRACE: {
+
+    printf("%d:%d ", l.line, l.col_offset);
+    printf("[}]\n");
+    break;
+  }
   case TOKEN_COMMA: {
 
     printf("%d:%d ", l.line, l.col_offset);
@@ -276,6 +289,27 @@ static int _RP_MATCHER(const char *input, token *tail) {
   }
   return 0;
 }
+static int _BRACKET_MATCHER(const char *input, token *tail) {
+  switch (*input) {
+
+  case '(':
+    *tail = create_symbol_token(TOKEN_LP);
+    return 1;
+
+  case ')':
+    *tail = create_symbol_token(TOKEN_RP);
+    return 1;
+  case '{':
+    *tail = create_symbol_token(TOKEN_LEFT_BRACE);
+    return 1;
+
+  case '}':
+    *tail = create_symbol_token(TOKEN_RIGHT_BRACE);
+    return 1;
+  default:
+    return 0;
+  }
+}
 
 static int _COMMA_MATCHER(const char *input, token *tail) {
   if (*input == ',') {
@@ -434,13 +468,12 @@ static int _MATCH_IDENTIFIER(const char *input, token *tail) {
   return 0;
 }
 
-#define NUM_MATCHERS 17
+#define NUM_MATCHERS 16
 static token_matcher matchers[NUM_MATCHERS] = {
-    _LP_MATCHER,      _RP_MATCHER,     _COMMA_MATCHER,  _DOT_MATCHER,
-    _EQL_MATCHER,     _ASSIGN_MATCHER, _PIPE_MATCHER,   _MINUS_MATCHER,
-    _BANG_MATCHER,    _MODULO_MATCHER, _PLUS_MATCHER,   _SLASH_MATCHER,
-    _STAR_MATCHER,    _NL_MATCHER,     _STRING_MATCHER, _NUMBER_MATCHER,
-    _MATCH_IDENTIFIER};
+    _BRACKET_MATCHER, _COMMA_MATCHER,  _DOT_MATCHER,    _EQL_MATCHER,
+    _ASSIGN_MATCHER,  _PIPE_MATCHER,   _MINUS_MATCHER,  _BANG_MATCHER,
+    _MODULO_MATCHER,  _PLUS_MATCHER,   _SLASH_MATCHER,  _STAR_MATCHER,
+    _NL_MATCHER,      _STRING_MATCHER, _NUMBER_MATCHER, _MATCH_IDENTIFIER};
 
 static token error_token(char *msg) {
   return create_literal_token(TOKEN_ERROR, (literal){.vstr = msg});

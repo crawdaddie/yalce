@@ -17,5 +17,6 @@ Value nmod(Value a, Value b);
 
 Value nnegate(Value a);
 void print_value(Value any);
+void print_object(Object *any);
 
 #endif

@@ -85,7 +85,7 @@ Value nnegate(Value a) {
   }
   return NUMBER_VAL(-AS_NUMBER(a));
 }
-static void print_object(Object *object) {
+void print_object(Object *object) {
   switch (object->type) {
   case OBJ_STRING: {
     ObjString *str = (ObjString *)object;

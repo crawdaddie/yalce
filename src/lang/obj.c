@@ -22,10 +22,19 @@ static Object *allocate_object(size_t size, ObjectType type) {
   return object;
 }
 static ObjString *_make_string(char *chars) {
+  int len = strlen(chars);
+  uint32_t hash = hash_string(chars, len);
+  ObjString *interned = table_find_string(&vm.strings, chars, len, hash);
+  if (interned != NULL) {
+    FREE_ARRAY(char, chars, len + 1);
+    return interned;
+  }
+
   ObjString *string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
-  string->length = strlen(chars);
-  string->hash = hash_string(chars, string->length);
+  string->length = len;
+  string->hash = hash;
   string->chars = chars;
+  table_set(&vm.strings, string, NIL_VAL);
   return string;
 }
 

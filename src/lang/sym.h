@@ -24,4 +24,7 @@ int table_set(Table *sym, ObjString *key, Value value);
 bool table_get(Table *sym, ObjString *key, Value *value);
 
 uint32_t hash_string(const char *string, int length);
+
+ObjString *table_find_string(Table *table, char *chars, int length,
+                             uint32_t hash);
 #endif

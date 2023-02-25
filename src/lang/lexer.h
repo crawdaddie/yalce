@@ -2,47 +2,33 @@
 #define _LANG_LEXER_H
 
 enum token_type {
-  // dummy token
-  TOKEN_START,
-  // parens
-  TOKEN_LP,
+  TOKEN_START, // dummy token
+  TOKEN_LP,    // parens
   TOKEN_RP,
-
+  TOKEN_LEFT_BRACE,
+  TOKEN_RIGHT_BRACE,
   TOKEN_COMMA,
-
-  // OPERATORS
-  TOKEN_DOT,
+  TOKEN_DOT, // OPERATORS
   TOKEN_MINUS,
   TOKEN_PLUS,
   TOKEN_BANG,
   TOKEN_MODULO,
-  /* SEMICOLON, */
   TOKEN_SLASH,
   TOKEN_STAR,
   TOKEN_ASSIGNMENT,
   TOKEN_EQUALITY,
-
-  // statement terminator
-  TOKEN_NL,
-
-  // special operators
-  TOKEN_PIPE,
-
+  TOKEN_NL,   // statement terminator
+  TOKEN_PIPE, // special operator
   TOKEN_IDENTIFIER,
-
-  // LITERALS
-  TOKEN_STRING,
+  TOKEN_STRING, // literal
   TOKEN_NUMBER,
   TOKEN_INTEGER,
-
-  // keywords
-  TOKEN_FN,
+  TOKEN_FN, // keywords
   TOKEN_PRINT,
   TOKEN_TRUE,
   TOKEN_FALSE,
   TOKEN_LET,
   TOKEN_NIL,
-
   TOKEN_COMMENT,
   TOKEN_WS,
   TOKEN_ERROR,
