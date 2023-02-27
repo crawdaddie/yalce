@@ -1,7 +1,6 @@
 #include "compiler.h"
 #include "dbg.h"
-#include "lexer.h"
-#include "util.h"
+#include "lexer.h" #include "util.h"
 typedef struct {
   token current;
   token previous;
@@ -53,8 +52,9 @@ static void init_compiler(Compiler *compiler) {
 
 static Chunk *current_chunk() { return compiling_chunk; }
 static void error_at(token *token, const char *message) {
-  if (parser.panic_mode)
-    return;
+  if (parser.panic_mode) {
+    /* return; */
+  }
   parser.panic_mode = true;
   // TODO: add line info
   fprintf(stderr, "Error");
@@ -97,8 +97,9 @@ static void consume(enum token_type type, const char *message) {
 }
 static bool check(enum token_type type) { return parser.current.type == type; }
 static bool match(enum token_type type) {
-  if (!check(type))
+  if (!check(type)) {
     return false;
+  }
   advance();
   return true;
 }
@@ -234,7 +235,7 @@ ParseRule rules[] = {
     [TOKEN_MINUS] = {unary, binary, PREC_TERM},
     [TOKEN_PLUS] = {NULL, binary, PREC_TERM},
     [TOKEN_MODULO] = {NULL, binary, PREC_TERM},
-    /* [TOKEN_SEMICOLON] = {NULL, NULL, PREC_NONE}, */
+    [TOKEN_NL] = {NULL, NULL, PREC_NONE},
     [TOKEN_SLASH] = {NULL, binary, PREC_FACTOR},
     [TOKEN_STAR] = {NULL, binary, PREC_FACTOR},
     [TOKEN_BANG] = {unary, NULL, PREC_NONE},
@@ -274,13 +275,16 @@ ParseRule rules[] = {
 static ParseRule *get_rule(enum token_type type) { return &(rules[type]); }
 
 static void parse_precedence(Precedence precedence) {
-
+  while (check(TOKEN_NL)) {
+    advance();
+  }
   advance();
 
   ParseFn prefix_rule = get_rule(parser.previous.type)->prefix;
   if (prefix_rule == NULL) {
-    printf("prev %d\n", parser.previous.type);
-    error("Expected expression");
+    error("Expected expression ");
+    printf("  ");
+    print_token(parser.previous);
     return;
   }
   bool can_assign =
@@ -301,11 +305,10 @@ static void parse_precedence(Precedence precedence) {
 static void expression() { parse_precedence(PREC_ASSIGNMENT); }
 
 static void expr_statement() {
+
+  printf("start expr statement ");
+  print_token(parser.current);
   while (parser.current.type != TOKEN_EOF) {
-    if (parser.current.type == TOKEN_NL) {
-      advance();
-      continue; // skip blanklines
-    }
     expression();
     consume(TOKEN_NL, "Expect \\n after statement");
     emit_byte(OP_POP); // discard result of expr statement
@@ -313,6 +316,8 @@ static void expr_statement() {
 }
 
 static void print_statement() {
+  printf("start print statement ");
+  print_token(parser.current);
   expression();
   consume(TOKEN_NL, "Expect \\n after statement");
   emit_byte(OP_PRINT);
@@ -340,6 +345,10 @@ static void synchronize() {
   }
 }
 static void block() {
+
+  printf("start block statement ");
+  print_token(parser.current);
+
   while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
     declaration();
   }
@@ -349,13 +358,16 @@ static void statement() {
   if (match(TOKEN_PRINT)) {
     print_statement();
   } else if (match(TOKEN_LEFT_BRACE)) {
-    printf("start block\n");
     /* begin_scope(); */
     block();
     /* end_scope(); */
   } else {
     expr_statement();
   }
+
+  printf("end statement ");
+  print_token(parser.current);
+  /* consume(TOKEN_NL, "expected \\n after statement"); */
 }
 static uint8_t identifier_constant(token name) {
   Object *str = (Object *)make_string(name.as.vstr);

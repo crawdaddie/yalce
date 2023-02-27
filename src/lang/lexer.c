@@ -12,6 +12,7 @@ void print_token(token token) {
   switch (token.type) {
 
   case TOKEN_START: {
+    printf("[start]\n");
     break;
   }
 
@@ -163,6 +164,12 @@ void print_token(token token) {
   case TOKEN_EOF: {
     printf("%d:%d ", l.line, l.col_offset);
     printf("[\\0]\n");
+    break;
+  }
+
+  case TOKEN_LET: {
+    printf("%d:%d ", l.line, l.col_offset);
+    printf("[let]\n");
     break;
   }
   }
