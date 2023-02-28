@@ -1,6 +1,5 @@
 #ifndef _LANG_OBJ_H
 #define _LANG_OBJ_H
-#include "chunk.h"
 #include "common.h"
 
 typedef enum { OBJ_STRING, OBJ_LIST, OBJ_FUNCTION } ObjectType;
@@ -16,10 +15,11 @@ typedef struct {
   uint32_t hash;
 } ObjString;
 
+struct Chunk {};
 typedef struct {
   Object object;
   int arity;
-  /* Chunk chunk; */
+  struct Chunk chunk;
   ObjString *name;
 } ObjFunction;
 

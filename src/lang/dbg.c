@@ -119,6 +119,15 @@ int disassemble_instruction(Chunk *chunk, int offset) {
     return simple_instruction("OP_MULTIPLY", offset);
   case OP_DIVIDE:
     return simple_instruction("OP_DIVIDE", offset);
+  case OP_LT:
+    return simple_instruction("OP_LT", offset);
+  case OP_GT:
+    return simple_instruction("OP_GT", offset);
+
+  case OP_LTE:
+    return simple_instruction("OP_LTE", offset);
+  case OP_GTE:
+    return simple_instruction("OP_GTE", offset);
   case OP_NIL:
     return simple_instruction("OP_NIL", offset);
   case OP_TRUE:

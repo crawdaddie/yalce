@@ -1,4 +1,5 @@
 #include "obj.h"
+#include "chunk.h"
 #include "memory.h"
 #include "sym.h"
 #include "vm.h"
@@ -15,7 +16,7 @@ static Object *allocate_object(size_t size, ObjectType type) {
   /* object->next = vm.objects; */
   vm.objects = object;
 
-#ifdef DEBUG_LOG_GC
+#ifdef DEBUG_LOG_G
   printf("%p allocate %zu for %d\n", (void *)object, size, type);
 #endif
 

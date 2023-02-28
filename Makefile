@@ -27,7 +27,7 @@ src_lang = $(wildcard src/lang/*.c)
 
 obj_lang = $(src_lang:.c=.o)
 lang: $(obj_lang)
-	gcc -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS) -DDEBUG_TRACE_EXECUTION
+	gcc -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
 
 
 .PHONY: test_lang

@@ -2,6 +2,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "dbg.h"
+#include <math.h>
 
 VM vm;
 
@@ -305,6 +306,7 @@ static InterpretResult run() {
         /* table_delete(&vm.globals, name); */
         /* return INTERPRET_RUNTIME_ERROR; */
       }
+      pop();
       break;
     }
     case OP_GET_LOCAL: {
@@ -315,7 +317,6 @@ static InterpretResult run() {
     case OP_SET_LOCAL: {
       uint8_t slot = READ_BYTE();
       vm.stack[slot] = peek(0);
-      break;
       break;
     }
     case OP_JUMP_IF_FALSE: {

@@ -4,7 +4,7 @@
 #include "obj.h"
 #include "sym.h"
 #include "value.h"
-#define STACK_MAX 256
+#define STACK_MAX 8
 
 typedef struct {
   Chunk *chunk;
