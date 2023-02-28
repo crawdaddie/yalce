@@ -42,3 +42,11 @@ ObjString *make_string(char *chars) {
   ObjString *string = _make_string(chars);
   return string;
 }
+
+ObjFunction *make_function() {
+  ObjFunction *function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
+  function->arity = 0;
+  function->name = NULL;
+  /* init_chunk(&function->chunk); */
+  return function;
+}

@@ -1,6 +1,6 @@
 #ifndef _LANG_LIST_H
 #define _LANG_LIST_H
-#include "value.h"
+#include "obj.h"
 
 typedef struct {
   Object object;

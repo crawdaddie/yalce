@@ -7,7 +7,9 @@ enum token_type {
   TOKEN_RP,
   TOKEN_LEFT_BRACE,
   TOKEN_RIGHT_BRACE,
+
   TOKEN_COMMA,
+
   TOKEN_DOT, // OPERATORS
   TOKEN_MINUS,
   TOKEN_PLUS,
@@ -17,19 +19,31 @@ enum token_type {
   TOKEN_STAR,
   TOKEN_ASSIGNMENT,
   TOKEN_EQUALITY,
+  TOKEN_LT,
+  TOKEN_GT,
+  TOKEN_LTE,
+  TOKEN_GTE,
+
   TOKEN_NL,   // statement terminator
   TOKEN_PIPE, // special operator
+  //
   TOKEN_IDENTIFIER,
+
   TOKEN_STRING, // literal
   TOKEN_NUMBER,
   TOKEN_INTEGER,
+
   TOKEN_FN, // keywords
   TOKEN_PRINT,
   TOKEN_TRUE,
   TOKEN_FALSE,
   TOKEN_LET,
-  TOKEN_NIL,
+  TOKEN_IF,
+  TOKEN_ELSE,
+  TOKEN_WHILE,
+  TOKEN_NIL, // end keywords
   TOKEN_COMMENT,
+
   TOKEN_WS,
   TOKEN_ERROR,
   TOKEN_EOF,
@@ -42,7 +56,8 @@ typedef struct keyword {
 
 static keyword keywords[TOKEN_NIL - TOKEN_FN + 1] = {
     {TOKEN_FN, "fn"},       {TOKEN_PRINT, "print"}, {TOKEN_TRUE, "true"},
-    {TOKEN_FALSE, "false"}, {TOKEN_LET, "let"},     {TOKEN_NIL, "nil"}};
+    {TOKEN_FALSE, "false"}, {TOKEN_LET, "let"},     {TOKEN_IF, "if"},
+    {TOKEN_ELSE, "else"},   {TOKEN_WHILE, "while"}, {TOKEN_NIL, "nil"}};
 
 typedef union literal {
   char *vstr;

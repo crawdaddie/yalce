@@ -14,6 +14,10 @@ typedef enum {
   OP_MULTIPLY,
   OP_DIVIDE,
   OP_MODULO,
+  OP_LT,
+  OP_GT,
+  OP_LTE,
+  OP_GTE,
   OP_EQUAL,
   OP_CALL,
   OP_NEGATE,
@@ -23,6 +27,11 @@ typedef enum {
   OP_DEFINE_GLOBAL,
   OP_SET_GLOBAL,
   OP_GET_GLOBAL,
+  OP_SET_LOCAL,
+  OP_GET_LOCAL,
+  OP_JUMP_IF_FALSE,
+  OP_JUMP,
+  OP_LOOP,
 } OpCode;
 
 typedef struct {
@@ -31,6 +40,7 @@ typedef struct {
   uint8_t *code;
   ValueArray constants;
 } Chunk;
+
 void init_chunk(Chunk *chunk);
 void write_chunk(Chunk *chunk, uint8_t byte);
 void free_chunk(Chunk *chunk);

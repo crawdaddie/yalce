@@ -27,7 +27,7 @@ src_lang = $(wildcard src/lang/*.c)
 
 obj_lang = $(src_lang:.c=.o)
 lang: $(obj_lang)
-	gcc -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
+	gcc -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS) -DDEBUG_TRACE_EXECUTION
 
 
 .PHONY: test_lang
@@ -42,6 +42,7 @@ TEST_DIR = src/lang/test
 
 .PHONY: test_suite
 test_suite: $(TEST_DIR)/*
+	make test_lang
 	for file in $^ ; do \
 		./test_file.sh $${file} ; \
   done

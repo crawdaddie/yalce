@@ -1,9 +1,8 @@
 #ifndef _DBG_H
 #define _DBG_H
+#include "chunk.h"
 #include <stdarg.h>
 #include <stdio.h>
-
-#include "chunk.h"
 
 void disassemble_chunk(Chunk *chunk, const char *name);
 int disassemble_instruction(Chunk *chunk, int offset);

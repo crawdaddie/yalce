@@ -14,7 +14,7 @@ typedef struct {
     bool boolean;
     double number;
     int integer;
-    struct Object *object;
+    Object *object;
   } as;
 } Value;
 
@@ -48,14 +48,15 @@ void free_value_array(ValueArray *array);
 #define IS_NUMBER(value) ((value).type == VAL_NUMBER)
 #define IS_INTEGER(value) ((value).type == VAL_INTEGER)
 
-#define OBJ_VAL(object) ((Value){VAL_OBJ, {.object = (Object *)object}})
-#define AS_OBJ(value) ((Object *)(value).as.object)
+#define OBJ_VAL(object) ((Value){VAL_OBJ, {.object = (struct Object *)object}})
+#define AS_OBJ(value) ((struct Object *)(value).as.object)
 #define OBJ_TYPE(value) (AS_OBJ(value)->type)
 
 #define IS_OBJ(value) ((value).type == VAL_OBJ)
 
 #define IS_STRING(value) is_obj_type(value, OBJ_STRING)
 #define IS_LIST(value) is_obj_type(value, OBJ_LIST)
+#define IS_FUNCTION(value) is_obj_type(value, OBJ_FUNCTION)
 bool values_equal(Value a, Value b);
 
 Value make_string_val(char *chars);

@@ -1,8 +1,7 @@
 #include "vm.h"
 #include "common.h"
 #include "compiler.h"
-#include "sym.h"
-#include "util.h"
+#include "dbg.h"
 
 VM vm;
 
@@ -25,10 +24,112 @@ static bool is_falsy(Value value) {
 }
 static Value peek(int distance) { return vm.stack_top[-1 - distance]; }
 
+Value nadd(Value a, Value b) {
+  if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
+    /* yyerror("invalid operands for +"); */
+    return NIL_VAL;
+  }
+  if (IS_INTEGER(a) && IS_INTEGER(b)) {
+    return INTEGER_VAL(AS_INTEGER(a) + AS_INTEGER(b));
+  }
+  return NUMBER_VAL(AS_NUMBER(a) + AS_NUMBER(b));
+}
+
+Value nsub(Value a, Value b) {
+  if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
+    /* yyerror("invalid operands for -"); */
+    return NIL_VAL;
+  }
+  if (IS_INTEGER(a) && IS_INTEGER(b)) {
+    return INTEGER_VAL(AS_INTEGER(a) - AS_INTEGER(b));
+  }
+  return NUMBER_VAL(AS_NUMBER(a) - AS_NUMBER(b));
+}
+
+Value nmul(Value a, Value b) {
+  if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
+    /* yyerror("invalid operands for *"); */
+    return NIL_VAL;
+  }
+  if (IS_INTEGER(a) && IS_INTEGER(b)) {
+    return INTEGER_VAL(AS_INTEGER(a) * AS_INTEGER(b));
+  }
+  return NUMBER_VAL(AS_NUMBER(a) * AS_NUMBER(b));
+}
+
+Value ndiv(Value a, Value b) {
+  if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
+    /* yyerror("invalid operands for /"); */
+    return NIL_VAL;
+  }
+  if (IS_INTEGER(a) && IS_INTEGER(b)) {
+    return INTEGER_VAL(AS_INTEGER(a) / AS_INTEGER(b));
+  }
+  return NUMBER_VAL(AS_NUMBER(a) / AS_NUMBER(b));
+}
+
+Value nmod(Value a, Value b) {
+  if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
+    /* yyerror("invalid operands for %"); */
+    return NIL_VAL;
+  }
+  if (IS_INTEGER(a) && IS_INTEGER(b)) {
+    return INTEGER_VAL(AS_INTEGER(a) % AS_INTEGER(b));
+  }
+  return NUMBER_VAL(fmod(AS_NUMBER(a), AS_NUMBER(b)));
+}
+
+Value ncompare(Value a, Value b, int lt, int inclusive) {
+  if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
+    /* yyerror("invalid operands for %"); */
+    return NIL_VAL;
+  }
+  if (IS_INTEGER(a) && IS_INTEGER(b)) {
+    if (lt && inclusive) {
+      return BOOL_VAL(AS_INTEGER(a) <= AS_INTEGER(b));
+    }
+
+    if (lt && !inclusive) {
+      return BOOL_VAL(AS_INTEGER(a) < AS_INTEGER(b));
+    }
+
+    if (!lt && inclusive) {
+      return BOOL_VAL(AS_INTEGER(a) >= AS_INTEGER(b));
+    }
+
+    if (!lt && !inclusive) {
+      return BOOL_VAL(AS_INTEGER(a) > AS_INTEGER(b));
+    }
+  }
+
+  if (lt && inclusive) {
+    return BOOL_VAL(AS_NUMBER(a) <= AS_NUMBER(b));
+  }
+
+  if (lt && !inclusive) {
+    return BOOL_VAL(AS_NUMBER(a) < AS_NUMBER(b));
+  }
+
+  if (!lt && !inclusive) {
+    return BOOL_VAL(AS_NUMBER(a) > AS_NUMBER(b));
+  }
+
+  if (!lt && inclusive) {
+    return BOOL_VAL(AS_NUMBER(a) >= AS_NUMBER(b));
+  }
+}
+Value nnegate(Value a) {
+  if (IS_INTEGER(a)) {
+    return INTEGER_VAL(-AS_INTEGER(a));
+  }
+  return NUMBER_VAL(-AS_NUMBER(a));
+}
+
 static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 #define READ_STRING() AS_STRING(READ_CONSTANT())
+#define READ_SHORT() (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
   for (;;) {
 #ifdef DEBUG_TRACE_EXECUTION
     disassemble_instruction(vm.chunk, (int)(vm.ip - vm.chunk->code));
@@ -113,6 +214,34 @@ static InterpretResult run() {
       break;
     }
 
+    case OP_LT: {
+      Value b = pop();
+      Value a = pop();
+      push(ncompare(a, b, 1, 0));
+      break;
+    }
+
+    case OP_GT: {
+      Value b = pop();
+      Value a = pop();
+      push(ncompare(a, b, 0, 0));
+      break;
+    }
+
+    case OP_LTE: {
+      Value b = pop();
+      Value a = pop();
+      push(ncompare(a, b, 1, 1));
+      break;
+    }
+
+    case OP_GTE: {
+      Value b = pop();
+      Value a = pop();
+      push(ncompare(a, b, 0, 1));
+      break;
+    }
+
     case OP_NIL: {
       push(NIL_VAL);
       break;
@@ -173,10 +302,36 @@ static InterpretResult run() {
     case OP_SET_GLOBAL: {
       ObjString *name = READ_STRING();
       if (table_set(&vm.globals, name, peek(0))) {
-        printf("is new value\n");
         /* table_delete(&vm.globals, name); */
         /* return INTERPRET_RUNTIME_ERROR; */
       }
+      break;
+    }
+    case OP_GET_LOCAL: {
+      uint8_t slot = READ_BYTE();
+      push(vm.stack[slot]);
+      break;
+    }
+    case OP_SET_LOCAL: {
+      uint8_t slot = READ_BYTE();
+      vm.stack[slot] = peek(0);
+      break;
+      break;
+    }
+    case OP_JUMP_IF_FALSE: {
+      uint16_t offset = READ_SHORT();
+      if (is_falsy(peek(0)))
+        vm.ip += offset;
+      break;
+    }
+    case OP_JUMP: {
+      uint16_t offset = READ_SHORT();
+      vm.ip += offset;
+      break;
+    }
+    case OP_LOOP: {
+      uint16_t offset = READ_SHORT();
+      vm.ip -= offset;
       break;
     }
     }
@@ -184,6 +339,7 @@ static InterpretResult run() {
 #undef READ_BYTE
 #undef READ_CONSTANT
 #undef READ_STRING
+#undef READ_SHORT
 }
 
 InterpretResult interpret(const char *source) {
@@ -192,6 +348,7 @@ InterpretResult interpret(const char *source) {
   if (!compile(source, &chunk)) {
     return INTERPRET_COMPILE_ERROR;
   }
+
   vm.chunk = &chunk;
   vm.ip = vm.chunk->code;
 

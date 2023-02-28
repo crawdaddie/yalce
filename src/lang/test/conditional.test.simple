@@ -1,0 +1,13 @@
+if (true) {
+print "print if true" # expect: print if true
+} else {
+print "print if not true"
+
+}
+
+if (false) {
+print "print if true"
+} else {
+print "print if not true" # expect: print if not true
+
+}

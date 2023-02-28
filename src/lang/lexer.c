@@ -12,164 +12,148 @@ void print_token(token token) {
   switch (token.type) {
 
   case TOKEN_START: {
-    printf("[start]\n");
+    printf("[start]");
     break;
   }
 
   case TOKEN_LP: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[(]\n");
+    printf("[(]");
     break;
   }
   case TOKEN_RP: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[)]\n");
+    printf("[)]");
     break;
   }
 
   case TOKEN_LEFT_BRACE: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[{]\n");
+    printf("[{]");
     break;
   }
   case TOKEN_RIGHT_BRACE: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[}]\n");
+    printf("[}]");
     break;
   }
   case TOKEN_COMMA: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[,]\n");
+    printf("[,]");
     break;
   }
   case TOKEN_DOT: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[.]\n");
+    printf("[.]");
     break;
   }
   case TOKEN_MINUS: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[-]\n");
+    printf("[-]");
     break;
   }
   case TOKEN_PLUS: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[+]\n");
+    printf("[+]");
     break;
   }
 
   case TOKEN_BANG: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[!]\n");
+    printf("[!]");
     break;
   }
 
   case TOKEN_MODULO: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[%%]\n");
+    printf("[%%]");
     break;
   }
   case TOKEN_SLASH: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[/]\n");
+    printf("[/]");
     break;
   }
   case TOKEN_STAR: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[*]\n");
+    printf("[*]");
     break;
   }
   case TOKEN_ASSIGNMENT: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[=]\n");
+    printf("[=]");
 
     break;
   }
   case TOKEN_EQUALITY: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[==]\n");
+    printf("[==]");
     break;
   }
   case TOKEN_NL: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[\\n]\n");
+    printf("[\\n]");
     break;
   }
   case TOKEN_PIPE: {
 
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[->]\n");
+    printf("[->]");
     break;
   }
   case TOKEN_IDENTIFIER: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[%s]\n", token.as.vident);
+
+    printf("[%s]", token.as.vident);
     break;
   }
   case TOKEN_STRING: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[%s]\n", token.as.vstr);
+
+    printf("[%s]", token.as.vstr);
     break;
   }
   case TOKEN_NUMBER: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[%lf]\n", token.as.vfloat);
+
+    printf("[%lf]", token.as.vfloat);
     break;
   }
   case TOKEN_INTEGER: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[%d]\n", token.as.vint);
+
+    printf("[%d]", token.as.vint);
     break;
   }
   case TOKEN_TRUE: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[true]\n");
+
+    printf("[true]");
     break;
   }
   case TOKEN_FALSE: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[false]\n");
+
+    printf("[false]");
     break;
   }
   case TOKEN_FN: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[fn]\n");
+
+    printf("[fn]");
     break;
   }
   case TOKEN_PRINT: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[print]\n");
+
+    printf("[print]");
     break;
   }
   case TOKEN_ERROR: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[err]\n");
+
+    printf("[err]");
     break;
   }
   case TOKEN_EOF: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[\\0]\n");
+
+    printf("[\\0]");
     break;
   }
 
   case TOKEN_LET: {
-    printf("%d:%d ", l.line, l.col_offset);
-    printf("[let]\n");
+
+    printf("[let]");
     break;
   }
   }
@@ -349,6 +333,30 @@ static int _ASSIGN_MATCHER(const char *input, token *tail) {
   return 0;
 }
 
+static int _LESS_THAN_MATCHER(const char *input, token *tail) {
+  if (*input == '<') {
+    if (*(input + 1) == '=') {
+      *tail = create_symbol_token(TOKEN_LTE);
+      return 2;
+    }
+    *tail = create_symbol_token(TOKEN_LT);
+    return 1;
+  }
+  return 0;
+}
+
+static int _GREATER_THAN_MATCHER(const char *input, token *tail) {
+  if (*input == '>') {
+    if (*(input + 1) == '=') {
+      *tail = create_symbol_token(TOKEN_GTE);
+      return 2;
+    }
+    *tail = create_symbol_token(TOKEN_GT);
+    return 1;
+  }
+  return 0;
+}
+
 static int _PIPE_MATCHER(const char *input, token *tail) {
   if (strncmp(input, "->", 2) == 0) {
     *tail = create_symbol_token(TOKEN_PIPE);
@@ -475,12 +483,13 @@ static int _MATCH_IDENTIFIER(const char *input, token *tail) {
   return 0;
 }
 
-#define NUM_MATCHERS 16
+#define NUM_MATCHERS 18
 static token_matcher matchers[NUM_MATCHERS] = {
-    _BRACKET_MATCHER, _COMMA_MATCHER,  _DOT_MATCHER,    _EQL_MATCHER,
-    _ASSIGN_MATCHER,  _PIPE_MATCHER,   _MINUS_MATCHER,  _BANG_MATCHER,
-    _MODULO_MATCHER,  _PLUS_MATCHER,   _SLASH_MATCHER,  _STAR_MATCHER,
-    _NL_MATCHER,      _STRING_MATCHER, _NUMBER_MATCHER, _MATCH_IDENTIFIER};
+    _BRACKET_MATCHER,   _COMMA_MATCHER,        _DOT_MATCHER,    _EQL_MATCHER,
+    _LESS_THAN_MATCHER, _GREATER_THAN_MATCHER, _ASSIGN_MATCHER, _PIPE_MATCHER,
+    _MINUS_MATCHER,     _BANG_MATCHER,         _MODULO_MATCHER, _PLUS_MATCHER,
+    _SLASH_MATCHER,     _STAR_MATCHER,         _NL_MATCHER,     _STRING_MATCHER,
+    _NUMBER_MATCHER,    _MATCH_IDENTIFIER};
 
 static token error_token(char *msg) {
   return create_literal_token(TOKEN_ERROR, (literal){.vstr = msg});
@@ -492,7 +501,7 @@ token scan_token() {
     return create_symbol_token(TOKEN_EOF);
   }
   int whitespace = _WS_MATCHER(scanner.current);
-  int comment = _COMMENT_MATCHER(scanner.current);
+  int comment = _COMMENT_MATCHER(scanner.current + whitespace);
   scanner.current += whitespace + comment;
   scanner.col_offset += whitespace + comment;
   token tail = {};
