@@ -1,5 +1,6 @@
 # simple-synth
-simple C synth for learning purposes  
+simple C synthesis environment for learning purposes  
+including small scripting language for controlling audio backend
 highly unsafe  
 
 ## dependencies
