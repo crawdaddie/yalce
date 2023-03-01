@@ -1,0 +1,5 @@
+let a = 1
+let b = "hello"
+fn func() {
+  print "this is a func"
+}

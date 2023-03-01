@@ -15,6 +15,8 @@
 
 #include <getopt.h>
 
+#include "lang/vm.h"
+#include "lang_runner.h"
 #include <pthread.h>
 static int usage(char *exe) {
   fprintf(stderr,
@@ -142,6 +144,8 @@ int main(int argc, char **argv) {
                     &oscilloscope, &stream_name, &latency, &filename)) {
     usage(exe);
   }
+  init_vm();
+
   struct SoundIo *soundio = soundio_create();
   if (!soundio) {
     fprintf(stderr, "out of memory\n");
@@ -206,12 +210,12 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  init_user_ctx();
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;
   outstream->software_latency = latency;
   outstream->sample_rate = sample_rate;
-  init_user_ctx();
 
   if (soundio_device_supports_format(device, SoundIoFormatFloat32NE)) {
     outstream->format = SoundIoFormatFloat32NE;
@@ -247,12 +251,17 @@ int main(int argc, char **argv) {
   }
 
   printf("--------------\n");
+  if (filename) {
+    printf("loading file %s\n", filename);
+    run_file(filename);
+  }
 
   char input[2048];
   for (;;) {
+    printf("> ");
     soundio_flush_events(soundio);
     fgets(input, 2048, stdin);
-    printf("input: %s", input);
+    interpret(input);
   }
 
   soundio_outstream_destroy(outstream);

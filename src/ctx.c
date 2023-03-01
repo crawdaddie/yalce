@@ -11,7 +11,7 @@ typedef struct UserCtx {
   Graph *head;
 } UserCtx;
 
-static UserCtx ctx = {.main_vol = 0.25};
+UserCtx ctx = {.main_vol = 0.25};
 
 double **alloc_buses(int num_buses) {
   double **buses;

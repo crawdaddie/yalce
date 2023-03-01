@@ -23,6 +23,7 @@ lang: $(obj_lang_test)
 src = src/main.c 
 src += src/scheduling.c 
 src += $(src_lang)
+src += src/lang_runner.c
 obj = $(src:.c=.o)
 
 LDFLAGS = -lsoundio -lm -lSDL2 -lsndfile
