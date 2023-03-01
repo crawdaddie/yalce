@@ -1,7 +1,10 @@
 #include "compiler.h"
 #include "dbg.h"
 #include "lexer.h"
+#include "obj_function.h"
 #include "util.h"
+#include <string.h>
+
 typedef struct {
   token current;
   token previous;
@@ -44,9 +47,9 @@ typedef enum {
 typedef struct {
   ObjFunction *function;
   FunctionType type;
-  Local locals[UINT8_COUNT];
   int local_count;
   int scope_depth;
+  Local locals[UINT8_COUNT];
 } Compiler;
 
 Parser parser;
@@ -55,18 +58,29 @@ Chunk *compiling_chunk;
 
 static void init_compiler(Compiler *compiler, FunctionType type) {
   compiler->type = type;
-  compiler->local_count = 0;
+  compiler->local_count = 1; // TODO: increment this
   compiler->scope_depth = 0;
   compiler->function = make_function();
   current = compiler;
-  /* Local *local = &current->locals[current->local_count++]; */
+  // INIT LOCALS
+  for (int i = 0; i < UINT8_COUNT; i++) {
+    if (i == 0) {
+
+      current->locals[i] =
+          (Local){.name = {TOKEN_STRING, {.vstr = ""}}, .depth = 0};
+      continue;
+    }
+    current->locals[i] = (Local){};
+  }
+  /* current->local_count = current->local_count + 1; */
+
   /* local->depth = 0; */
   /* local->name = (token){TOKEN_STRING, {.vstr = ""}}; */
 }
 
 static Chunk *current_chunk() {
-  /* return &current->function->chunk; */
-  return compiling_chunk;
+  return &current->function->chunk;
+  /* return compiling_chunk; */
 }
 static void error_at(token *token, const char *message) {
   if (parser.panic_mode) {
@@ -578,9 +592,9 @@ static void program() {
   statement();
 }
 
-void end_compiler() {
+ObjFunction *end_compiler() {
   emit_byte(OP_RETURN);
-  /*   ObjFunction *function = current->function; */
+  ObjFunction *function = current->function;
   /* #ifdef DEBUG_PRINT_CODE */
   /*   if (!parser.hadError) { */
   /*     disassemble_chunk(current_chunk(), function->name != NULL */
@@ -588,10 +602,10 @@ void end_compiler() {
   /*                                            : "<script>"); */
   /*   } */
   /* #endif */
-  /*   return function; */
+  return function;
 }
 
-bool compile(const char *source, Chunk *chunk) {
+ObjFunction *compile(const char *source, Chunk *chunk) {
 
   init_scanner(source);
   Compiler compiler;
@@ -607,8 +621,8 @@ bool compile(const char *source, Chunk *chunk) {
   while (!match(TOKEN_EOF)) {
     program();
   }
-  end_compiler();
-  /* ObjFunction *function = end_compiler(); */
-  /* return parser.had_error ? NULL : function; */
-  return !parser.had_error;
+  /* end_compiler(); */
+  ObjFunction *function = end_compiler();
+  return parser.had_error ? NULL : function;
+  /* return !parser.had_error; */
 }

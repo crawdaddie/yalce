@@ -2,13 +2,20 @@
 #define _LANG_VM_H
 #include "chunk.h"
 #include "obj.h"
+#include "obj_function.h"
 #include "sym.h"
 #include "value.h"
-#define STACK_MAX 256
+#define FRAMES_MAX 64
+#define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
+typedef struct {
+  ObjFunction *function;
+  uint8_t *ip;
+  Value *slots; // pointer to VM's stack
+} CallFrame;
 
 typedef struct {
-  Chunk *chunk;
-  uint8_t *ip;
+  CallFrame frames[FRAMES_MAX];
+  int frame_count;
   Value stack[STACK_MAX];
   Value *stack_top;
   Object *objects;

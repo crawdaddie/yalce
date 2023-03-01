@@ -6,7 +6,10 @@
 
 VM vm;
 
-static void reset_stack() { vm.stack_top = vm.stack; }
+static void reset_stack() {
+  vm.stack_top = vm.stack;
+  vm.frame_count = 0;
+}
 
 void init_vm() {
   reset_stack();
@@ -20,6 +23,16 @@ void free_vm() {
   free_table(&vm.strings);
 };
 
+static void runtime_error(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  fputs("\n", stderr);
+  CallFrame *frame = &vm.frames[vm.frame_count - 1];
+  size_t instruction = frame->ip - frame->function->chunk.code - 1;
+  /* int line = frame->function->chunk.lines[instruction]; */
+}
 static bool is_falsy(Value value) {
   return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
@@ -27,7 +40,6 @@ static Value peek(int distance) { return vm.stack_top[-1 - distance]; }
 
 Value nadd(Value a, Value b) {
   if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
-    /* yyerror("invalid operands for +"); */
     return NIL_VAL;
   }
   if (IS_INTEGER(a) && IS_INTEGER(b)) {
@@ -38,7 +50,6 @@ Value nadd(Value a, Value b) {
 
 Value nsub(Value a, Value b) {
   if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
-    /* yyerror("invalid operands for -"); */
     return NIL_VAL;
   }
   if (IS_INTEGER(a) && IS_INTEGER(b)) {
@@ -49,7 +60,6 @@ Value nsub(Value a, Value b) {
 
 Value nmul(Value a, Value b) {
   if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
-    /* yyerror("invalid operands for *"); */
     return NIL_VAL;
   }
   if (IS_INTEGER(a) && IS_INTEGER(b)) {
@@ -60,7 +70,6 @@ Value nmul(Value a, Value b) {
 
 Value ndiv(Value a, Value b) {
   if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
-    /* yyerror("invalid operands for /"); */
     return NIL_VAL;
   }
   if (IS_INTEGER(a) && IS_INTEGER(b)) {
@@ -71,7 +80,6 @@ Value ndiv(Value a, Value b) {
 
 Value nmod(Value a, Value b) {
   if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
-    /* yyerror("invalid operands for %"); */
     return NIL_VAL;
   }
   if (IS_INTEGER(a) && IS_INTEGER(b)) {
@@ -82,7 +90,6 @@ Value nmod(Value a, Value b) {
 
 Value ncompare(Value a, Value b, int lt, int inclusive) {
   if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
-    /* yyerror("invalid operands for %"); */
     return NIL_VAL;
   }
   if (IS_INTEGER(a) && IS_INTEGER(b)) {
@@ -125,15 +132,22 @@ Value nnegate(Value a) {
   }
   return NUMBER_VAL(-AS_NUMBER(a));
 }
-
+static void jump_ip(CallFrame *frame, int offset) { frame->ip += offset; }
 static InterpretResult run() {
-#define READ_BYTE() (*vm.ip++)
-#define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+
+  CallFrame *frame = &vm.frames[vm.frame_count - 1];
+
+#define READ_BYTE() (*frame->ip++)
+#define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
 #define READ_STRING() AS_STRING(READ_CONSTANT())
-#define READ_SHORT() (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
+#define READ_SHORT()                                                           \
+  (frame->ip += 2, (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
+
   for (;;) {
+
 #ifdef DEBUG_TRACE_EXECUTION
-    disassemble_instruction(vm.chunk, (int)(vm.ip - vm.chunk->code));
+    disassemble_instruction(&frame->function->chunk,
+                            (int)(frame->ip - frame->function->chunk.code));
     // print out stack
     printf("stack: \n");
     printf("          ");
@@ -158,6 +172,7 @@ static InterpretResult run() {
 
 #endif
 #endif
+
     uint8_t instruction;
     switch (instruction = READ_BYTE()) {
 
@@ -202,7 +217,7 @@ static InterpretResult run() {
 
     case OP_NEGATE:
       if (!IS_NUMERIC(peek(0))) {
-        /* runtime_error("Operand must be a number."); */
+        runtime_error("Operand must be a number.");
         return INTERPRET_RUNTIME_ERROR;
       }
       push(nnegate(pop()));
@@ -293,7 +308,7 @@ static InterpretResult run() {
       ObjString *name = READ_STRING();
       Value value;
       if (!table_get(&vm.globals, name, &value)) {
-        /* runtime_error("Undefined variable '%s'.", name->chars); */
+        runtime_error("Undefined variable '%s'.", name->chars);
         printf("Undefined variable '%s'\n", name->chars);
         return INTERPRET_RUNTIME_ERROR;
       }
@@ -304,36 +319,36 @@ static InterpretResult run() {
       ObjString *name = READ_STRING();
       if (table_set(&vm.globals, name, peek(0))) {
         /* table_delete(&vm.globals, name); */
-        /* return INTERPRET_RUNTIME_ERROR; */
+        return INTERPRET_RUNTIME_ERROR;
       }
       pop();
       break;
     }
     case OP_GET_LOCAL: {
       uint8_t slot = READ_BYTE();
-      push(vm.stack[slot]);
+      push(frame->slots[slot]);
       break;
     }
     case OP_SET_LOCAL: {
       uint8_t slot = READ_BYTE();
-      vm.stack[slot] = peek(0);
+      frame->slots[slot] = peek(0);
       pop();
       break;
     }
     case OP_JUMP_IF_FALSE: {
       uint16_t offset = READ_SHORT();
       if (is_falsy(peek(0)))
-        vm.ip += offset;
+        jump_ip(frame, offset);
       break;
     }
     case OP_JUMP: {
       uint16_t offset = READ_SHORT();
-      vm.ip += offset;
+      jump_ip(frame, offset);
       break;
     }
     case OP_LOOP: {
       uint16_t offset = READ_SHORT();
-      vm.ip -= offset;
+      jump_ip(frame, -offset);
       break;
     }
     }
@@ -347,16 +362,21 @@ static InterpretResult run() {
 InterpretResult interpret(const char *source) {
   Chunk chunk;
   init_chunk(&chunk);
-  if (!compile(source, &chunk)) {
+  ObjFunction *compiled = compile(source, &chunk);
+  if (!compiled) {
     return INTERPRET_COMPILE_ERROR;
   }
+  push(((Value){VAL_OBJ, {.object = (Object *)compiled}}));
+  CallFrame *frame = &vm.frames[vm.frame_count++];
+  frame->function = compiled;
+  frame->ip = compiled->chunk.code;
+  frame->slots = vm.stack;
 
-  vm.chunk = &chunk;
-  vm.ip = vm.chunk->code;
+  return run();
 
-  InterpretResult result = run();
-  free_chunk(&chunk);
-  return result;
+  /* InterpretResult result = run(); */
+  /* free_chunk(&chunk); */
+  /* return result; */
 }
 
 void push(Value value) {

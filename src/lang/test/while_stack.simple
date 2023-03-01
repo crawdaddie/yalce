@@ -1,6 +1,6 @@
 {
   let a = 0
-  while (a < 1000) {
+  while (a < 10) {
     print a
     a = a + 1
   }

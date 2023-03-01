@@ -1,5 +1,7 @@
 #ifndef _LANG_COMPILER_H
 #define _LANG_COMPILER_H
+#include "obj_function.h"
 #include "vm.h"
-bool compile(const char *source, Chunk *chunk);
+
+ObjFunction *compile(const char *source, Chunk *chunk);
 #endif
