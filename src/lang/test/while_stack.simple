@@ -1,7 +1,14 @@
+fn pr(v) {
+  print v
+}
+
+print pr(1)
+
 {
   let a = 0
   while (a < 10) {
-    print a
+    
+    pr(a)
     a = a + 1
   }
 }

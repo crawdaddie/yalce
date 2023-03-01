@@ -6,6 +6,6 @@ ObjFunction *make_function() {
       (ObjFunction *)allocate_object(sizeof(ObjFunction), OBJ_FUNCTION);
   function->arity = 0;
   function->name = NULL;
-  /* init_chunk(&function->chunk); */
+  init_chunk(&function->chunk);
   return function;
 }

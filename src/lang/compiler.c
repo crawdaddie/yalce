@@ -45,6 +45,7 @@ typedef enum {
 } FunctionType;
 
 typedef struct {
+  struct Compiler *enclosing;
   ObjFunction *function;
   FunctionType type;
   int local_count;
@@ -57,26 +58,19 @@ Compiler *current = NULL;
 Chunk *compiling_chunk;
 
 static void init_compiler(Compiler *compiler, FunctionType type) {
+  compiler->enclosing = (struct Compiler *)current;
   compiler->type = type;
-  compiler->local_count = 1; // TODO: increment this
+  compiler->local_count = 0;
   compiler->scope_depth = 0;
   compiler->function = make_function();
   current = compiler;
-  // INIT LOCALS
-  for (int i = 0; i < UINT8_COUNT; i++) {
-    if (i == 0) {
 
-      current->locals[i] =
-          (Local){.name = {TOKEN_STRING, {.vstr = ""}}, .depth = 0};
-      continue;
-    }
-    current->locals[i] = (Local){};
-  }
-  /* current->local_count = current->local_count + 1; */
-
-  /* local->depth = 0; */
-  /* local->name = (token){TOKEN_STRING, {.vstr = ""}}; */
+  Local *local = &current->locals[current->local_count++];
+  local->depth = 0;
+  local->name = (token){TOKEN_STRING, {.vstr = ""}};
 }
+
+ObjFunction *end_compiler();
 
 static Chunk *current_chunk() {
   return &current->function->chunk;
@@ -139,6 +133,7 @@ static void emit_bytes(uint8_t byte1, uint8_t byte2) {
   emit_byte(byte1);
   emit_byte(byte2);
 }
+static void emit_return();
 static uint8_t make_constant(Value value) {
   int constant = add_constant(current_chunk(), value);
   if (constant > UINT8_MAX) {
@@ -330,7 +325,6 @@ static void parse_precedence(Precedence precedence) {
   ParseFn prefix_rule = get_rule(parser.previous.type)->prefix;
   if (prefix_rule == NULL) {
     error("Expected expression ");
-    printf("  ");
     print_token(parser.previous);
     return;
   }
@@ -450,6 +444,8 @@ static uint8_t parse_var(const char *error_msg) {
   return identifier_constant(parser.previous);
 }
 static void mark_initialized() {
+  if (current->scope_depth == 0)
+    return;
   current->locals[current->local_count - 1].depth = current->scope_depth;
 }
 static void define_var(uint8_t global) {
@@ -566,6 +562,49 @@ static void while_statement() {
   patch_jump(exitJump);
   emit_byte(OP_POP);
 }
+static void compile_function(FunctionType type) {
+  Compiler compiler;
+  init_compiler(&compiler, type);
+  begin_scope();
+  consume(TOKEN_LP, "Expect '(' after function name");
+  if (!check(TOKEN_RP)) {
+    do {
+      current->function->arity++;
+      if (current->function->arity > 255) {
+        error_at_current("Can't have more than 255 parameters");
+      }
+      uint8_t constant = parse_var("Expect parameter name.");
+      define_var(constant);
+
+    } while (match(TOKEN_COMMA));
+  }
+  consume(TOKEN_RP, "Expect ')' after function name");
+  consume(TOKEN_LEFT_BRACE, "Expect '{' before function body");
+
+  block();
+
+  ObjFunction *function = end_compiler();
+  emit_bytes(OP_CONSTANT,
+             make_constant((Value){VAL_OBJ, {.object = (Object *)function}}));
+}
+static void function_declaration() {
+  uint8_t global = parse_var("Expect function name");
+  mark_initialized();
+  compile_function(TYPE_FUNCTION);
+  define_var(global);
+}
+static void return_statement() {
+  if (current->type == TYPE_SCRIPT) {
+    error("Can't return from top-level code");
+  }
+  if (match(TOKEN_NL)) {
+    emit_return();
+  } else {
+    expression();
+    consume(TOKEN_NL, "Expect \\n after return value");
+    emit_byte(OP_RETURN);
+  }
+}
 static void statement() {
   if (match(TOKEN_PRINT)) {
     print_statement();
@@ -573,12 +612,16 @@ static void statement() {
     if_statement();
   } else if (match(TOKEN_WHILE)) {
     while_statement();
+  } else if (match(TOKEN_RETURN)) {
+    return_statement();
   } else if (match(TOKEN_LEFT_BRACE)) {
     begin_scope();
     block();
     end_scope();
   } else if (match(TOKEN_LET)) {
     var_declaration();
+  } else if (match(TOKEN_FN)) {
+    function_declaration();
   } else {
     expression();
   }
@@ -591,10 +634,15 @@ static void program() {
   }
   statement();
 }
-
-ObjFunction *end_compiler() {
+static void emit_return() {
+  emit_byte(OP_NIL);
   emit_byte(OP_RETURN);
+}
+ObjFunction *end_compiler() {
+  /* emit_byte(OP_RETURN); */
+  emit_return();
   ObjFunction *function = current->function;
+
   /* #ifdef DEBUG_PRINT_CODE */
   /*   if (!parser.hadError) { */
   /*     disassemble_chunk(current_chunk(), function->name != NULL */
@@ -602,6 +650,7 @@ ObjFunction *end_compiler() {
   /*                                            : "<script>"); */
   /*   } */
   /* #endif */
+  current = (Compiler *)current->enclosing;
   return function;
 }
 

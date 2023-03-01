@@ -2,7 +2,6 @@
 #define _LANG_OBJ_FUNCTION_H
 #include "chunk.h"
 #include "obj.h"
-
 typedef struct {
   Object object;
   int arity;
@@ -10,5 +9,7 @@ typedef struct {
   ObjString *name;
 } ObjFunction;
 ObjFunction *make_function();
+
+#define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
 
 #endif

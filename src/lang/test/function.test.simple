@@ -1,0 +1,37 @@
+fn func() {
+  print 1 + 2
+}
+
+func() # expect: 3
+
+fn void() {
+  1 + 2
+}
+
+print void() # expect: nil
+
+fn nv_func(v) {
+  return v + 1
+}
+
+print nv_func(1) # expect: 2
+
+let a = nv_func
+
+print a(1) # expect: 2
+
+fn early_return(v) {
+  if (v > 2) {
+    return 1
+  }
+  print "after early return"
+  return 0
+}
+
+
+print early_return(3)
+# expect: 1
+
+print early_return(2)
+# expect: after early return
+# expect: 0

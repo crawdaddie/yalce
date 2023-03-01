@@ -37,6 +37,35 @@ static bool is_falsy(Value value) {
   return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 static Value peek(int distance) { return vm.stack_top[-1 - distance]; }
+static bool call(ObjFunction *function, int arg_count) {
+  if (arg_count != function->arity) {
+    runtime_error("Expected %d arguments but got %d", function->arity,
+                  arg_count);
+    return false;
+  }
+
+  if (vm.frame_count == FRAMES_MAX) {
+    runtime_error("Stack overflow");
+    return false;
+  }
+  CallFrame *frame = &vm.frames[vm.frame_count++];
+  frame->function = function;
+  frame->ip = function->chunk.code;
+  frame->slots = vm.stack_top - arg_count - 1;
+  return true;
+}
+static bool call_value(Value callee, int arg_count) {
+  if (IS_OBJ(callee)) {
+    switch (OBJ_TYPE(callee)) {
+    case OBJ_FUNCTION:
+      return call(AS_FUNCTION(callee), arg_count);
+    default:
+      break;
+    }
+  }
+  runtime_error("Can only call functions");
+  return false;
+}
 
 Value nadd(Value a, Value b) {
   if (!(IS_NUMERIC(a) && IS_NUMERIC(b))) {
@@ -182,7 +211,16 @@ static InterpretResult run() {
       break;
     }
     case OP_RETURN: {
-      return INTERPRET_OK;
+      Value result = pop();
+      vm.frame_count--;
+      if (vm.frame_count == 0) {
+        pop();
+        return INTERPRET_OK;
+      }
+      vm.stack_top = frame->slots;
+      push(result);
+      frame = &vm.frames[vm.frame_count - 1];
+      break;
     }
     case OP_ADD: {
       Value b = pop();
@@ -281,7 +319,10 @@ static InterpretResult run() {
     }
     case OP_CALL: {
       int arg_count = READ_BYTE();
-      printf("arg count %d\n", arg_count);
+      if (!call_value(peek(arg_count), arg_count)) {
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      frame = &vm.frames[vm.frame_count - 1];
       break;
     }
 
