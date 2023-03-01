@@ -41,7 +41,7 @@ test_lang:
 TEST_DIR = src/lang/test
 
 .PHONY: test_suite
-test_suite: $(TEST_DIR)/*
+test_suite: $(wildcard $(TEST_DIR)/*.test.simple)
 	make test_lang
 	for file in $^ ; do \
 		./test_file.sh $${file} ; \

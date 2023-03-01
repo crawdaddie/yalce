@@ -8,7 +8,7 @@
 #define ALLOCATE_OBJ(type, object_type)                                        \
   (type *)allocate_object(sizeof(type), object_type)
 
-static Object *allocate_object(size_t size, ObjectType type) {
+Object *allocate_object(size_t size, ObjectType type) {
   Object *object = (Object *)reallocate(NULL, 0, size);
   object->type = type;
   /* object->isMarked = false; */
@@ -42,12 +42,4 @@ static ObjString *_make_string(char *chars) {
 ObjString *make_string(char *chars) {
   ObjString *string = _make_string(chars);
   return string;
-}
-
-ObjFunction *make_function() {
-  ObjFunction *function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
-  function->arity = 0;
-  function->name = NULL;
-  /* init_chunk(&function->chunk); */
-  return function;
 }

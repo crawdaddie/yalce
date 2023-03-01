@@ -42,8 +42,8 @@ typedef enum {
 } FunctionType;
 
 typedef struct {
-  /* ObjFunction *function; */
-  /* FunctionType type; */
+  ObjFunction *function;
+  FunctionType type;
   Local locals[UINT8_COUNT];
   int local_count;
   int scope_depth;
@@ -54,10 +54,10 @@ Compiler *current = NULL;
 Chunk *compiling_chunk;
 
 static void init_compiler(Compiler *compiler, FunctionType type) {
-  /* compiler->type = type; */
+  compiler->type = type;
   compiler->local_count = 0;
   compiler->scope_depth = 0;
-  /* compiler->function = make_function(); */
+  compiler->function = make_function();
   current = compiler;
   /* Local *local = &current->locals[current->local_count++]; */
   /* local->depth = 0; */

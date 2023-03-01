@@ -2,6 +2,7 @@
 #include "chunk.h"
 #include "list.h"
 #include "obj.h"
+#include "obj_function.h"
 #include "util.h"
 
 #define COLOR 0

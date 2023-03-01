@@ -34,7 +34,7 @@ typedef enum {
   OP_LOOP,
 } OpCode;
 
-typedef struct {
+typedef struct Chunk {
   int count;
   int capacity;
   uint8_t *code;
