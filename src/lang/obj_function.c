@@ -9,3 +9,10 @@ ObjFunction *make_function() {
   init_chunk(&function->chunk);
   return function;
 }
+
+ObjNative *make_native(NativeFn function) {
+  ObjNative *native =
+      (ObjNative *)allocate_object(sizeof(ObjNative), OBJ_NATIVE);
+  native->function = function;
+  return native;
+}

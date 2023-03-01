@@ -11,7 +11,6 @@
 #include "./prog.c"
 #include "audio/sq.c"
 #include "graph/graph.c"
-#include "lang/parse.tab.h"
 #include <stdlib.h>
 
 #include <pthread.h>
@@ -194,7 +193,7 @@ int main(int argc, char **argv) {
   for (;;) {
     soundio_flush_events(soundio);
     fgets(input, 2048, stdin);
-    parse_line(input, 0);
+    printf("input: %s", input);
   }
 
   soundio_outstream_destroy(outstream);

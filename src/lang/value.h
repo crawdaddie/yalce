@@ -57,6 +57,7 @@ void free_value_array(ValueArray *array);
 #define IS_STRING(value) is_obj_type(value, OBJ_STRING)
 #define IS_LIST(value) is_obj_type(value, OBJ_LIST)
 #define IS_FUNCTION(value) is_obj_type(value, OBJ_FUNCTION)
+#define IS_NATIVE(value) is_obj_type(value, OBJ_NATIVE)
 bool values_equal(Value a, Value b);
 
 Value make_string_val(char *chars);

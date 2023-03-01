@@ -1,6 +1,5 @@
 #include "dbg.h"
 #include "chunk.h"
-#include "list.h"
 #include "obj.h"
 #include "obj_function.h"
 #include "util.h"
@@ -37,14 +36,14 @@ void print_object(Object *object) {
     print_function((ObjFunction *)object);
     break;
   }
-  case OBJ_LIST: {
-    ObjList *l = (ObjList *)object;
-    for (int i = 0; i < l->length; i++) {
-      print_value(l->values[i]);
-      printf(", ");
-    }
-    break;
-  }
+  /* case OBJ_LIST: { */
+  /*   ObjList *l = (ObjList *)object; */
+  /*   for (int i = 0; i < l->length; i++) { */
+  /*     print_value(l->values[i]); */
+  /*     printf(", "); */
+  /*   } */
+  /*   break; */
+  /* } */
   default:
     break;
   }

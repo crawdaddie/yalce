@@ -2,7 +2,7 @@
 #define _LANG_OBJ_H
 #include "common.h"
 
-typedef enum { OBJ_STRING, OBJ_LIST, OBJ_FUNCTION } ObjectType;
+typedef enum { OBJ_STRING, OBJ_LIST, OBJ_FUNCTION, OBJ_NATIVE } ObjectType;
 
 typedef struct {
   ObjectType type;

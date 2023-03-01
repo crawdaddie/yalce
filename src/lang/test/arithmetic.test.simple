@@ -1,7 +1,7 @@
-b = 1 + 2 * 3 + 1 
+let b = 1 + 2 * 3 + 1 
 print b # expect: 8
 
-c = 3 * 4.0
+let c = 3 * 4.0
 print c # expect: 12.000000
 
 

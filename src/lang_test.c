@@ -1,6 +1,6 @@
-#include "chunk.h"
-#include "dbg.h"
-#include "vm.h"
+#include "lang/chunk.h"
+#include "lang/dbg.h"
+#include "lang/vm.h"
 #include <stdio.h>
 #include <stdlib.h>
 

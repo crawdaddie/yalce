@@ -3,9 +3,21 @@
 #include "compiler.h"
 #include "dbg.h"
 #include <math.h>
+#include <time.h>
 
 VM vm;
 
+static Value clock_native(int arg_count, Value *args) {
+  return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
+
+static void define_native(const char *name, NativeFn function) {
+  push(make_string_val((char *)name));
+  push((Value){VAL_OBJ, {.object = (Object *)make_native(function)}});
+  table_set(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
+  pop();
+  pop();
+}
 static void reset_stack() {
   vm.stack_top = vm.stack;
   vm.frame_count = 0;
@@ -16,6 +28,7 @@ void init_vm() {
   vm.objects = NULL;
   init_table(&vm.globals);
   init_table(&vm.strings);
+  define_native("clock", clock_native);
 }
 
 void free_vm() {
@@ -33,6 +46,7 @@ static void runtime_error(const char *format, ...) {
   size_t instruction = frame->ip - frame->function->chunk.code - 1;
   /* int line = frame->function->chunk.lines[instruction]; */
 }
+
 static bool is_falsy(Value value) {
   return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
@@ -59,6 +73,14 @@ static bool call_value(Value callee, int arg_count) {
     switch (OBJ_TYPE(callee)) {
     case OBJ_FUNCTION:
       return call(AS_FUNCTION(callee), arg_count);
+
+    case OBJ_NATIVE: {
+      NativeFn native = AS_NATIVE(callee);
+      Value result = native(arg_count, vm.stack_top - arg_count);
+      vm.stack_top -= arg_count + 1;
+      push(result);
+      return true;
+    }
     default:
       break;
     }
@@ -163,7 +185,6 @@ Value nnegate(Value a) {
 }
 static void jump_ip(CallFrame *frame, int offset) { frame->ip += offset; }
 static InterpretResult run() {
-
   CallFrame *frame = &vm.frames[vm.frame_count - 1];
 
 #define READ_BYTE() (*frame->ip++)
