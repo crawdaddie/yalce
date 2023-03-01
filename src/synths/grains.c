@@ -1,5 +1,5 @@
 #include "../audio/graph.h"
-#include "../config.h"
+#include "../common.h"
 #include "../user_ctx.h"
 #include <stdlib.h>
 
@@ -14,14 +14,15 @@ typedef struct grains_data {
   sample_t grain_freq;
   sample_t grain_dur;
   sample_t grain_pos;
-  
+
   sample_t trigger_ramp;
   int trigger;
   int voice_counter;
 
 } grains_data;
 
-grains_data *alloc_grains_data(int buf_frames, sample_t *buf_data, int max_grains) {
+grains_data *alloc_grains_data(int buf_frames, sample_t *buf_data,
+                               int max_grains) {
   grains_data *data = malloc(sizeof(grains_data));
   data->buf_frames = buf_frames;
   data->buf_data = buf_data;
@@ -75,7 +76,6 @@ sample_t impulse(grains_data *data, int sample_rate) {
   return trigger;
 }
 
-
 t_perform perform_grains(Graph *graph, nframes_t nframes) {
   grains_data *data = (grains_data *)graph->data;
   sample_t output_sample = 0.0;
@@ -83,29 +83,30 @@ t_perform perform_grains(Graph *graph, nframes_t nframes) {
   for (int i = 0; i < nframes; i++) {
     impulse(data, 48000);
     if (data->trigger) {
-      data->voice_read_ptrs[data->voice_counter] = data->grain_pos * data->buf_frames;
+      data->voice_read_ptrs[data->voice_counter] =
+          data->grain_pos * data->buf_frames;
       /* data->voice_rates[data->voice_counter] = 1 + rand() % 3;  */
     };
     sample_t sample = 0.0;
 
-
-
     for (int v = 0; v < data->max_grains; v++) {
-      data->voice_read_ptrs[v] = data->voice_read_ptrs[v] + data->voice_rates[v];
-      sample += grain_sample(data->voice_read_ptrs[v], data->buf_data, data->buf_frames);
+      data->voice_read_ptrs[v] =
+          data->voice_read_ptrs[v] + data->voice_rates[v];
+      sample += grain_sample(data->voice_read_ptrs[v], data->buf_data,
+                             data->buf_frames);
     };
-
 
     data->ramp += (sample_t)1.0 / 48000;
     /* graph->out[i] = (sample_t) data->trigger; */
-    data->grain_pos = fmod(data->grain_pos + ((sample_t) 0.1 / 48000), 1.0);
+    data->grain_pos = fmod(data->grain_pos + ((sample_t)0.1 / 48000), 1.0);
     graph->out[i] = sample;
   }
 }
 
 Graph *init_grains_node(struct buf_info *buf, sample_t *out) {
   grains_data *data = alloc_grains_data(buf->frames, (sample_t *)buf->data, 10);
-  Graph *node = alloc_graph((NodeData *)data, out, (t_perform)perform_grains, 1); 
+  Graph *node =
+      alloc_graph((NodeData *)data, out, (t_perform)perform_grains, 1);
   return node;
 }
 void add_grains_node_msg_handler(Graph *graph, int time, void **args) {
@@ -115,9 +116,9 @@ void add_grains_node_msg_handler(Graph *graph, int time, void **args) {
   add_after(graph, node);
 }
 void add_grains_node_msg(UserCtx *ctx, nframes_t frame_time, int bufnum) {
-  queue_msg_t *msg = msg_init("grains", frame_time, add_grains_node_msg_handler, 2);
+  queue_msg_t *msg =
+      msg_init("grains", frame_time, add_grains_node_msg_handler, 2);
   msg->args[0] = ctx->buses[0];
   msg->args[1] = ctx->buffers[bufnum];
   enqueue(ctx->msg_queue, msg);
 }
-

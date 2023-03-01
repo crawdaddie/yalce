@@ -1,6 +1,6 @@
 #ifndef _DELAY_H
 #define _DELAY_H
-#include "../config.h"
+#include "../common.h"
 #include "../graph/graph.c"
 
 typedef struct delay_data {

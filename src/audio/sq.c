@@ -1,6 +1,6 @@
 #ifndef _SQ_H
 #define _SQ_H
-#include "../config.h"
+#include "../common.h"
 #include "../ctx.c"
 #include "../graph/graph.c"
 #include "./signal.c"

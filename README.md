@@ -3,11 +3,15 @@ simple C synth for learning purposes
 highly unsafe  
 
 ## dependencies
-- [jack](https://jackaudio.org/api/)
+- [libsoundio](http://libsound.io/)
 - [SDL2](https://www.libsdl.org/)
 
 # build
 ```
-meson setup build
-meson compile -C build
+make synth
+```
+
+# test lang
+```
+make lang_test_suite
 ```

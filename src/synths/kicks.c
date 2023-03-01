@@ -1,5 +1,5 @@
 #include "../audio/graph.h"
-#include "../config.h"
+#include "../common.h"
 #include "../user_ctx.h"
 #include <stdlib.h>
 

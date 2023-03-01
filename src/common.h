@@ -1,5 +1,5 @@
-#ifndef _CONFIG
-#define _CONFIG
+#ifndef _COMMON_H
+#define _COMMON_H
 #define PROJECT_NAME "simple-synth"
 #define BUF_SIZE 512
 #define NUM_BUSES 64

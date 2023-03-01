@@ -1,6 +1,6 @@
 #ifndef _CTX_H
 #define _CTX_H
-#include "./config.h"
+#include "./common.h"
 #include "graph/graph.c"
 #include <math.h>
 #include <stdio.h>

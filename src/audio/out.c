@@ -1,6 +1,6 @@
 #ifndef _OUT_H
 #define _OUT_H
-#include "../config.h"
+#include "../common.h"
 #include "../graph/graph.c"
 
 void perform_add_out(Graph *node, int nframes, double seconds_per_frame) {

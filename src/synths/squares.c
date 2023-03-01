@@ -1,5 +1,5 @@
 #include "../audio/graph.h"
-#include "../config.h"
+#include "../common.h"
 #include "../user_ctx.h"
 #include <stdlib.h>
 
@@ -15,7 +15,7 @@ square_data *alloc_square_data() {
 }
 
 sample_t scale_val_2(sample_t env_val, // 0-1
-                   sample_t min, sample_t max) {
+                     sample_t min, sample_t max) {
   return min + env_val * (max - min);
 }
 
@@ -38,11 +38,11 @@ t_perform perform_square(Graph *graph, nframes_t nframes) {
   }
 }
 
-
 void add_square_node_msg_handler(Graph *graph, int time, void **args) {
   square_data *data = alloc_square_data();
   sample_t *outbus = args[0];
-  Graph *square_node = alloc_graph((NodeData *)data, outbus, (t_perform)perform_square, 1);
+  Graph *square_node =
+      alloc_graph((NodeData *)data, outbus, (t_perform)perform_square, 1);
   add_after(graph, square_node);
 }
 
@@ -53,7 +53,6 @@ void add_square_node_msg(UserCtx *ctx, nframes_t frame_time) {
   msg->func = (MsgAction)add_square_node_msg_handler;
   msg->ref = NULL;
 
-
   msg->num_args = 1;
   msg->args = malloc(msg->num_args * sizeof(void *));
   msg->args[0] = ctx->buses[1];
@@ -62,13 +61,13 @@ void add_square_node_msg(UserCtx *ctx, nframes_t frame_time) {
 void set_freq_msg_handler(Graph *graph, int time, void **args) {
   printf("set freq %f\n", args[0]);
 }
-void set_freq_msg(UserCtx *ctx, Graph *node, nframes_t frame_time, sample_t freq) {
+void set_freq_msg(UserCtx *ctx, Graph *node, nframes_t frame_time,
+                  sample_t freq) {
   queue_msg_t *msg = malloc(sizeof(queue_msg_t));
   msg->msg = "square node set freq";
   msg->time = frame_time;
   msg->func = (MsgAction)set_freq_msg_handler;
   msg->ref = NULL;
-
 
   msg->num_args = 1;
   msg->args = malloc(msg->num_args * sizeof(void *));

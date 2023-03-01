@@ -1,7 +1,7 @@
 #ifndef _CHANNEL_H
 #define _CHANNEL_H
 
-#include "./config.h"
+#include "common.h"
 
 static double out[NUM_BUSES][OUTPUT_CHANNELS * BUF_SIZE] = {0};
 static double main_vol = 0.25;

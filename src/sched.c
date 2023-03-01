@@ -1,6 +1,6 @@
 #ifndef _SCHED_H
 #define _SCHED_H
-#include "config.h"
+#include "common.h"
 #include "scheduling.h"
 
 static int current_frame = 0;
