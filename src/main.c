@@ -13,6 +13,8 @@
 #include "graph/graph.c"
 #include <stdlib.h>
 
+#include <getopt.h>
+
 #include <pthread.h>
 static int usage(char *exe) {
   fprintf(stderr,
@@ -29,6 +31,103 @@ static int usage(char *exe) {
   return 1;
 }
 
+static int process_opts(int argc, char **argv, char **device_id,
+                        int *sample_rate, enum SoundIoBackend *backend,
+                        bool *raw, bool *oscilloscope, char **stream_name,
+                        double *latency, char **filename) {
+  int c;
+
+  while (1) {
+    static struct option long_options[] = {
+        {"backend", required_argument, 0, 'b'},
+        {"device", required_argument, 0, 'd'},
+        {"sample-rate", required_argument, 0, 's'},
+        {"latency", required_argument, 0, 'l'},
+        {"name", required_argument, 0, 'n'},
+        {"oscilloscope", no_argument, 0, 'o'},
+        {"r", no_argument, 0, 'r'},
+        {0, 0, 0, 0}};
+    /* getopt_long stores the option index here. */
+    int option_index = 0;
+
+    c = getopt_long(argc, argv, "b:d:s:l:n:o:r:", long_options, &option_index);
+
+    /* Detect the end of the options. */
+    if (c == -1)
+      break;
+
+    switch (c) {
+    case 0:
+      /* If this option set a flag, do nothing else now. */
+      if (long_options[option_index].flag != 0)
+        break;
+      printf("option %s", long_options[option_index].name);
+      if (optarg)
+        printf(" with arg %s", optarg);
+      printf("\n");
+      break;
+
+    case 'b': {
+
+      if (strcmp(optarg, "dummy") == 0) {
+        *backend = SoundIoBackendDummy;
+      } else if (strcmp(optarg, "alsa") == 0) {
+        *backend = SoundIoBackendAlsa;
+      } else if (strcmp(optarg, "pulseaudio") == 0) {
+        *backend = SoundIoBackendPulseAudio;
+      } else if (strcmp(optarg, "jack") == 0) {
+        *backend = SoundIoBackendJack;
+      } else if (strcmp(optarg, "coreaudio") == 0) {
+        *backend = SoundIoBackendCoreAudio;
+      } else if (strcmp(optarg, "wasapi") == 0) {
+        *backend = SoundIoBackendWasapi;
+      } else {
+        fprintf(stderr, "Invalid backend: %s\n", optarg);
+        return 0;
+      }
+      break;
+    }
+
+    case 'd':
+      *device_id = optarg;
+      break;
+
+    case 's':
+      *sample_rate = atoi(optarg);
+      break;
+
+    case 'l':
+      *latency = atof(optarg);
+      break;
+
+    case 'n':
+      *stream_name = optarg;
+      break;
+
+    case 'o':
+      *oscilloscope = true;
+      break;
+
+    case 'r':
+      *raw = true;
+      break;
+
+    case '?':
+      /* getopt_long already printed an error message. */
+      break;
+
+    default:
+      return 0;
+    }
+  }
+
+  /* Print any remaining command line arguments (not options). */
+  if (optind < argc) {
+    *filename = argv[argc - 1];
+  }
+  return 1;
+}
+
 int main(int argc, char **argv) {
   char *exe = argv[0];
   enum SoundIoBackend backend = SoundIoBackendNone;
@@ -38,51 +137,11 @@ int main(int argc, char **argv) {
   char *stream_name = NULL;
   double latency = 0.0;
   int sample_rate = 0;
-  for (int i = 1; i < argc; i += 1) {
-    char *arg = argv[i];
-    if (arg[0] == '-' && arg[1] == '-') {
-      if (strcmp(arg, "--raw") == 0) {
-        raw = true;
-      } else {
-        i += 1;
-        if (i >= argc) {
-          return usage(exe);
-        } else if (strcmp(arg, "--backend") == 0) {
-          if (strcmp(argv[i], "dummy") == 0) {
-            backend = SoundIoBackendDummy;
-          } else if (strcmp(argv[i], "alsa") == 0) {
-            backend = SoundIoBackendAlsa;
-          } else if (strcmp(argv[i], "pulseaudio") == 0) {
-            backend = SoundIoBackendPulseAudio;
-          } else if (strcmp(argv[i], "jack") == 0) {
-            backend = SoundIoBackendJack;
-          } else if (strcmp(argv[i], "coreaudio") == 0) {
-            backend = SoundIoBackendCoreAudio;
-          } else if (strcmp(argv[i], "wasapi") == 0) {
-            backend = SoundIoBackendWasapi;
-          } else {
-            fprintf(stderr, "Invalid backend: %s\n", argv[i]);
-            return 1;
-          }
-        } else if (strcmp(arg, "--device") == 0) {
-          device_id = argv[i];
-        } else if (strcmp(arg, "--name") == 0) {
-          stream_name = argv[i];
-        } else if (strcmp(arg, "--latency") == 0) {
-          latency = atof(argv[i]);
-        } else if (strcmp(arg, "--sample-rate") == 0) {
-          sample_rate = atoi(argv[i]);
-        } else if (strcmp(arg, "--oscilloscope") == 0) {
-          oscilloscope = true;
-        } else {
-          return usage(exe);
-        }
-      }
-    } else {
-      return usage(exe);
-    }
+  char *filename = NULL;
+  if (!process_opts(argc, argv, &device_id, &sample_rate, &backend, &raw,
+                    &oscilloscope, &stream_name, &latency, &filename)) {
+    usage(exe);
   }
-
   struct SoundIo *soundio = soundio_create();
   if (!soundio) {
     fprintf(stderr, "out of memory\n");

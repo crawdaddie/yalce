@@ -13,6 +13,7 @@ lang: $(obj_lang)
 	gcc -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
 
 src_lang_test = $(src_lang)
+src_lang_test += src/lang_runner.c
 src_lang_test += src/lang_test.c
 obj_lang_test = $(src_lang_test:.c=.o)
 
