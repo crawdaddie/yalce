@@ -4,12 +4,12 @@ void debug_node(Graph *node, char *text) {
   if (text) {
     printf("%s\n", text);
   }
-  printf("\tnode &: %#08x\n", node);
+  printf("\tnode &: %p\n", node);
   /* printf("\tnode name: %s\n", node->name); */
-  printf("\tnode perform: %#08x\n", node->perform);
-  printf("\tnode next: %#08x\n", node->next);
-  printf("\tnode prev: %#08x\n", node->next);
-  printf("\tnode size: %d\n", sizeof(*node));
+  printf("\tnode perform: %p\n", node->perform);
+  printf("\tnode next: %p\n", node->next);
+  printf("\tnode prev: %p\n", node->next);
+  printf("\tnode size: %lu\n", sizeof(*node));
   /* printf("\tnode out: %#08x\n", node->out); */
   /* printf("\tnode schedule: %d\n", node->schedule); */
   /* printf("node add: %#08x\n", node->add); */

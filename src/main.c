@@ -1,23 +1,17 @@
 #include "audio/signal.h"
 #include "callback.c"
 #include "ctx.h"
+#include "graph/graph.h"
+#include "lang/lang_runner.h"
+#include "lang/vm.h"
+#include <getopt.h>
 #include <math.h>
+#include <pthread.h>
 #include <soundio/soundio.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* #include "./prog.c" */
-#include "graph/graph.h"
-#include <stdlib.h>
-
-#include <getopt.h>
-
-#include "bindings.h"
-#include "lang/vm.h"
-#include "lang_runner.h"
-#include <pthread.h>
 static int usage(char *exe) {
   fprintf(stderr,
           "Usage: %s [options]\n"

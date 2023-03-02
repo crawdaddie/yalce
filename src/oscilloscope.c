@@ -1,4 +1,5 @@
 #include "oscilloscope.h"
+#include "common.h"
 
 int oscilloscope_view(UserCtx *ctx) {
   SDL_Window *window;
@@ -35,8 +36,8 @@ int oscilloscope_view(UserCtx *ctx) {
       double y1val = 0;
       double y2val = 0;
       for (int i = 0; i < INITIAL_BUSNUM; i++) {
-        y1val += ctx->buses[i][j];
-        y1val += ctx->buses[i][(j + 1) % BUF_SIZE];
+        /* y1val += ctx->buses[i][j]; */
+        /* y1val += ctx->buses[i][(j + 1) % BUF_SIZE]; */
       };
       int x1 = (int)j * 1000 / BUF_SIZE;
       y1val = 120 * y1val;
