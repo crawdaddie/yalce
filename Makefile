@@ -6,10 +6,7 @@ src += src/scheduling.c
 src += src/oscilloscope.c
 src += $(wildcard src/graph/*.c)
 src += $(wildcard src/lang/*.c)
-src += src/audio/sq.c
-src += src/audio/out.c
-src += src/audio/signal.c
-# src += $(wildcard src/audio/*.c)
+src += $(wildcard src/audio/*.c)
 
 obj = $(src:.c=.o)
 
