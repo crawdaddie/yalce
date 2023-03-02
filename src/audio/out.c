@@ -1,7 +1,4 @@
-#ifndef _OUT_H
-#define _OUT_H
-#include "../common.h"
-#include "../graph/graph.h"
+#include "out.h"
 
 void perform_add_out(Graph *node, int nframes, double seconds_per_frame) {
   double *out = node->out;
@@ -46,4 +43,3 @@ Graph *replace_out(double *node_out, double *channel_out) {
   node->num_outs = 2;
   return node;
 }
-#endif

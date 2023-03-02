@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "./prog.c"
+/* #include "./prog.c" */
 #include "graph/graph.h"
 #include <stdlib.h>
 

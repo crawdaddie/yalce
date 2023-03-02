@@ -11,6 +11,10 @@ highly unsafe
 ```
 make synth
 ```
+# make a square wave
+```
+./synth examples/synth.simple
+```
 
 # test lang
 ```

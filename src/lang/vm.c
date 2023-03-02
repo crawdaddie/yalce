@@ -1,8 +1,10 @@
 #include "vm.h"
 #include "../bindings.h"
+#include "../graph/graph.h"
 #include "common.h"
 #include "compiler.h"
 #include "dbg.h"
+#include "obj_graph.h"
 #include <math.h>
 #include <time.h>
 
@@ -184,12 +186,10 @@ Value ncompare(Value a, Value b, int lt, int inclusive) {
 }
 
 Value pipe_values(Value a, Value b) {
-
-  print_value(a);
-  printf(" -> ");
-  print_value(b);
-
-  return b;
+  Graph *graph_a = ((ObjGraph *)a.as.object)->graph;
+  Graph *graph_b = ((ObjGraph *)b.as.object)->graph;
+  pipe_graph(graph_a, graph_b);
+  return a;
 }
 
 Value nnegate(Value a) {
@@ -430,8 +430,6 @@ static InterpretResult run() {
     }
 
     case OP_PIPE: {
-      printf("op_pipe: ");
-
       Value b = pop();
       Value a = pop();
       push(pipe_values(a, b));

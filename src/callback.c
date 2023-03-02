@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "./channel.c"
+#include "./channel.h"
 
 static void write_sample_s16ne(char *ptr, double sample) {
   int16_t *buf = (int16_t *)ptr;

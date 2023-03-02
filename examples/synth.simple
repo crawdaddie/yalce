@@ -1,3 +1,5 @@
 fn s() {
   return sq() -> out(0)
 }
+
+s()

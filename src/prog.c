@@ -1,7 +1,7 @@
 #include "audio/delay.c"
 #include "audio/out.c"
 #include "audio/sq.c"
-#include "channel.c"
+#include "channel.h"
 #include "ctx.h"
 #include "graph/graph.h"
 /* #include "parse.c" */

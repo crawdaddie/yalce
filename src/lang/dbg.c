@@ -1,7 +1,9 @@
 #include "dbg.h"
+#include "../graph/graph.h"
 #include "chunk.h"
 #include "obj.h"
 #include "obj_function.h"
+#include "obj_graph.h"
 #include "util.h"
 
 #define COLOR 0
@@ -39,7 +41,7 @@ void print_object(Object *object) {
 
   case OBJ_GRAPH: {
     /* print_function((ObjFunction *)object); */
-    printf("graph object");
+    debug_graph((Graph *)((ObjGraph *)object)->graph);
     break;
   }
   /* case OBJ_LIST: { */

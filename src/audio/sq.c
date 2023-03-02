@@ -1,6 +1,4 @@
 #include "sq.h"
-#include "../common.h"
-#include "../graph/graph.h"
 #include <math.h>
 
 static double scale_val_2(double env_val, // 0-1

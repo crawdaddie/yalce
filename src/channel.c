@@ -1,8 +1,4 @@
-#ifndef _CHANNEL_H
-#define _CHANNEL_H
-
-#include "common.h"
-
+#include "channel.h"
 static double out[NUM_BUSES][OUTPUT_CHANNELS * BUF_SIZE] = {0};
 static double main_vol = 0.25;
 
@@ -57,5 +53,3 @@ double zero_channel_outputs() {
 
   return output * main_vol;
 }
-
-#endif

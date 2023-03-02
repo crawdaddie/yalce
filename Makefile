@@ -27,7 +27,10 @@ src += src/lang_runner.c
 src += src/bindings.c
 src += src/graph/graph.c
 src += src/audio/signal.c
+src += src/audio/sq.c
 src += src/ctx.c
+src += src/channel.c
+src += src/audio/out.c
 obj = $(src:.c=.o)
 
 LDFLAGS = -lsoundio -lm -lSDL2 -lsndfile
