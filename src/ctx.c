@@ -1,18 +1,8 @@
-#ifndef _CTX_H
-#define _CTX_H
+#include "ctx.h"
 #include "./common.h"
-#include "graph/graph.c"
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include "graph/graph.h"
 
-typedef struct UserCtx {
-  double main_vol;
-  Graph *head;
-} UserCtx;
-
-UserCtx ctx = {.main_vol = 0.25};
-
+static UserCtx ctx = {.main_vol = 0.25};
 double **alloc_buses(int num_buses) {
   double **buses;
   buses = calloc(num_buses, sizeof(double *));
@@ -39,6 +29,3 @@ Graph *ctx_add_after(Graph *node) {
   ctx.head = node;
   return ctx.head;
 }
-void graph_set(Graph *graph, char *key, void *val) {}
-
-#endif

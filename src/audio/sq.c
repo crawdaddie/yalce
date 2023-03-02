@@ -1,26 +1,18 @@
-#ifndef _SQ_H
-#define _SQ_H
+#include "sq.h"
 #include "../common.h"
-#include "../ctx.c"
-#include "../graph/graph.c"
-#include "./signal.c"
+#include "../graph/graph.h"
 #include <math.h>
 
-typedef struct sq_data {
-  double ramp;
-  double pan;
-} sq_data;
-
-double scale_val_2(double env_val, // 0-1
-                   double min, double max) {
+static double scale_val_2(double env_val, // 0-1
+                          double min, double max) {
   return min + env_val * (max - min);
 }
 
-double sq_sample(double ramp, double freq) {
+static double sq_sample(double ramp, double freq) {
   return scale_val_2((fmod(ramp * freq * 2.0 * PI, 2 * PI) > PI), -1, 1);
 }
 
-void perform_square(Graph *node, int nframes, double seconds_per_frame) {
+static void perform_square(Graph *node, int nframes, double seconds_per_frame) {
   sq_data *data = node->data;
   double pan = data->pan;
 
@@ -68,4 +60,3 @@ Graph *sq_create(double *out) {
 
   return node;
 }
-#endif

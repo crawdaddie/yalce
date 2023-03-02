@@ -1,5 +1,3 @@
-#ifndef _SIGNAL_H
-#define _SIGNAL_H
 #include "stdlib.h"
 
 typedef struct Signal {
@@ -42,5 +40,3 @@ void set_signal_ramp(Signal signal, double value, int time) {
 double unwrap(Signal sig, int frame) {
   return *(sig.data + (frame % sig.size));
 }
-
-#endif

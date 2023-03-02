@@ -37,4 +37,6 @@ void push(Value value);
 Value pop();
 extern VM vm;
 
+void define_native(const char *name, NativeFn function);
+
 #endif

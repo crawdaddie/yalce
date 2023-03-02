@@ -19,6 +19,7 @@ typedef enum {
   PREC_AND,        // and
   PREC_EQUALITY,   // == !=
   PREC_COMPARISON, // < > <= >=
+  PREC_PIPE,       // ->
   PREC_TERM,       // + -
   PREC_FACTOR,     // * /
   PREC_UNARY,      // ! -
@@ -254,6 +255,10 @@ static void parse_binary(bool can_assign) {
   case TOKEN_GTE:
     emit_byte(OP_GTE);
     break;
+
+  case TOKEN_PIPE:
+    emit_byte(OP_PIPE);
+    break;
   default:
     return;
   }
@@ -278,6 +283,7 @@ ParseRule rules[] = {
     [TOKEN_SLASH] = {NULL, parse_binary, PREC_FACTOR},
     [TOKEN_STAR] = {NULL, parse_binary, PREC_FACTOR},
     [TOKEN_BANG] = {unary, NULL, PREC_NONE},
+    [TOKEN_PIPE] = {NULL, parse_binary, PREC_PIPE},
     /* [TOKEN_BANG_EQUAL] = {NULL, binary, PREC_EQUALITY}, */
     /* [TOKEN_ASSIGNMENT] = {NULL, NULL, PREC_NONE}, */
     /* [TOKEN_EQUAL_EQUAL] = {NULL, binary, PREC_EQUALITY}, */

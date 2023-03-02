@@ -1,4 +1,5 @@
 #include "vm.h"
+#include "../bindings.h"
 #include "common.h"
 #include "compiler.h"
 #include "dbg.h"
@@ -7,17 +8,21 @@
 
 VM vm;
 
-static Value clock_native(int arg_count, Value *args) {
-  return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
-}
-
-static void define_native(const char *name, NativeFn function) {
+void define_native(const char *name, NativeFn function) {
   push(make_string_val((char *)name));
   push((Value){VAL_OBJ, {.object = (Object *)make_native(function)}});
   table_set(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
   pop();
   pop();
 }
+
+void make_bindings() {
+  for (int i = 0; i < NUM_BINDINGS; i++) {
+    Binding binding = bindings[i];
+    define_native(binding.name, binding.function);
+  }
+}
+
 static void reset_stack() {
   vm.stack_top = vm.stack;
   vm.frame_count = 0;
@@ -28,7 +33,7 @@ void init_vm() {
   vm.objects = NULL;
   init_table(&vm.globals);
   init_table(&vm.strings);
-  define_native("clock", clock_native);
+  make_bindings();
 }
 
 void free_vm() {
@@ -177,6 +182,16 @@ Value ncompare(Value a, Value b, int lt, int inclusive) {
     return BOOL_VAL(AS_NUMBER(a) >= AS_NUMBER(b));
   }
 }
+
+Value pipe_values(Value a, Value b) {
+
+  print_value(a);
+  printf(" -> ");
+  print_value(b);
+
+  return b;
+}
+
 Value nnegate(Value a) {
   if (IS_INTEGER(a)) {
     return INTEGER_VAL(-AS_INTEGER(a));
@@ -411,6 +426,15 @@ static InterpretResult run() {
     case OP_LOOP: {
       uint16_t offset = READ_SHORT();
       jump_ip(frame, -offset);
+      break;
+    }
+
+    case OP_PIPE: {
+      printf("op_pipe: ");
+
+      Value b = pop();
+      Value a = pop();
+      push(pipe_values(a, b));
       break;
     }
     }

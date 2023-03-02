@@ -1,7 +1,7 @@
 #ifndef _DELAY_H
 #define _DELAY_H
 #include "../common.h"
-#include "../graph/graph.c"
+#include "../graph/graph.h"
 
 typedef struct delay_data {
   int bufsize;

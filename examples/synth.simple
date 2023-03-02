@@ -1,5 +1,3 @@
-let a = 1
-let b = "hello"
-fn func() {
-  print "this is a func"
+fn s() {
+  return sq() -> out(0)
 }

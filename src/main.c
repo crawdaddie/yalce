@@ -1,6 +1,6 @@
-#include "audio/signal.c"
+#include "audio/signal.h"
 #include "callback.c"
-#include "ctx.c"
+#include "ctx.h"
 #include <math.h>
 #include <soundio/soundio.h>
 #include <stdint.h>
@@ -9,12 +9,12 @@
 #include <string.h>
 
 #include "./prog.c"
-#include "audio/sq.c"
-#include "graph/graph.c"
+#include "graph/graph.h"
 #include <stdlib.h>
 
 #include <getopt.h>
 
+#include "bindings.h"
 #include "lang/vm.h"
 #include "lang_runner.h"
 #include <pthread.h>

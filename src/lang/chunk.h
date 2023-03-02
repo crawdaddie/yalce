@@ -18,6 +18,7 @@ typedef enum {
   OP_GT,
   OP_LTE,
   OP_GTE,
+  OP_PIPE,
   OP_EQUAL,
   OP_CALL,
   OP_NEGATE,

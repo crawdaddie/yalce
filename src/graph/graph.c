@@ -1,29 +1,4 @@
-#ifndef _GRAPH_H
-#define _GRAPH_H
-#include "../audio/signal.c"
-#include <stdio.h>
-#include <stdlib.h>
-
-typedef struct Graph {
-  struct Graph *next;
-  struct Graph *prev;
-  struct Graph *_graph;
-
-  void (*perform)(struct Graph *node, int nframes, double seconds_per_frame);
-
-  void *data;
-  double schedule; // secs
-
-  /* double **out; */
-  int chan_offset;
-
-  double *out;
-  int num_outs;
-
-  Signal *in;
-  int num_ins;
-
-} Graph;
+#include "graph.h"
 
 void debug_node(Graph *node, char *text) {
   if (text) {
@@ -143,12 +118,6 @@ void iterate_graphs(Graph *head, void (*cb)(Graph *graph)) {
   cb(head);
   return iterate_graphs(head->next, cb);
 }
-typedef struct Group {
-  Graph *head;
-  Graph *tail;
-  Signal *in;
-  int num_ins;
-} Group;
 
 Group group(Graph *after, double *out,
             Graph *(*synths)(Graph *tail, double *out)) {
@@ -170,5 +139,3 @@ void pipe_graph(Graph *from, Graph *to) {
 /*     *(out + frame) = *sample; */
 /*   } */
 /* } */
-
-#endif

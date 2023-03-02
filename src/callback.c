@@ -1,6 +1,6 @@
 #include <soundio/soundio.h>
 
-#include "ctx.c"
+#include "ctx.h"
 #include "sched.c"
 #include <math.h>
 #include <stdint.h>

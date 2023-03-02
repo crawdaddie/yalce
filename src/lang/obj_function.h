@@ -8,6 +8,7 @@ typedef struct {
   Chunk chunk;
   ObjString *name;
 } ObjFunction;
+
 ObjFunction *make_function();
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
 #define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value))->function)

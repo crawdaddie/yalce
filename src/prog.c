@@ -1,9 +1,9 @@
-#include "./channel.c"
 #include "audio/delay.c"
 #include "audio/out.c"
 #include "audio/sq.c"
-#include "ctx.c"
-#include "graph/graph.c"
+#include "channel.c"
+#include "ctx.h"
+#include "graph/graph.h"
 /* #include "parse.c" */
 #include "sched.c"
 #include "scheduling.h"

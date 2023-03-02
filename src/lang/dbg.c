@@ -36,6 +36,12 @@ void print_object(Object *object) {
     print_function((ObjFunction *)object);
     break;
   }
+
+  case OBJ_GRAPH: {
+    /* print_function((ObjFunction *)object); */
+    printf("graph object");
+    break;
+  }
   /* case OBJ_LIST: { */
   /*   ObjList *l = (ObjList *)object; */
   /*   for (int i = 0; i < l->length; i++) { */
