@@ -1,19 +1,9 @@
 let a = 1
 {
-print a # expect: 1
-
-{
-
-let b = 2
-print b # expect: 2
-{
-let c = "some string"
-print c # expect: some string
-}
-
-}
-print b # expect: Undefined variable 'b'
-print c
-
-
+  print(a) # expect: 1
+  {
+    let b = 2
+    print(b) # expect: 2
+  }
+  print(b) # expect: undefined variable 'b'.
 }

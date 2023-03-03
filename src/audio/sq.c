@@ -38,7 +38,7 @@ static void perform_square(Graph *node, int nframes, double seconds_per_frame) {
   }
 }
 
-Graph *sq_create(double *out) {
+Graph *sq_create(double *out, Signal *freq) {
 
   Graph *node = calloc(sizeof(Graph), 1);
   node->perform = perform_square;
@@ -54,7 +54,7 @@ Graph *sq_create(double *out) {
   } else {
     node->out = out;
   }
-  node->in = new_signal_heap(440, 1);
+  node->in = freq ? freq : new_signal_heap(440, 1);
 
   return node;
 }

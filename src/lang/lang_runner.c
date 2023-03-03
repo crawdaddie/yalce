@@ -36,3 +36,32 @@ void run_file(const char *path) {
   if (result == INTERPRET_RUNTIME_ERROR)
     exit(70);
 }
+
+void repl_input(char *input, int bufsize, const char *prompt) {
+  char prev;
+  char c;
+  int position = 0;
+
+  printf("%s", prompt);
+  while (1) {
+    prev = c;
+    c = getchar();
+
+    if (c == '\\') {
+      input[position] = '\n';
+      position++;
+      continue;
+    }
+    if (c == EOF || c == '\n') {
+      if (prev == '\\') {
+        return repl_input(input + position, bufsize, "  ");
+      }
+
+      input[position] = '\0';
+      return;
+    }
+
+    input[position] = c;
+    position++;
+  }
+}

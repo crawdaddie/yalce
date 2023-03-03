@@ -6,7 +6,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef enum { VAL_BOOL, VAL_NIL, VAL_NUMBER, VAL_INTEGER, VAL_OBJ } ValueType;
+typedef enum {
+  VAL_BOOL,
+  VAL_NIL,
+  VAL_VOID,
+  VAL_NUMBER,
+  VAL_INTEGER,
+  VAL_OBJ
+} ValueType;
 
 typedef struct {
   ValueType type;
@@ -58,6 +65,8 @@ void free_value_array(ValueArray *array);
 #define IS_LIST(value) is_obj_type(value, OBJ_LIST)
 #define IS_FUNCTION(value) is_obj_type(value, OBJ_FUNCTION)
 #define IS_NATIVE(value) is_obj_type(value, OBJ_NATIVE)
+#define IS_VOID(value) ((value).type == VAL_VOID)
+#define VOID_VAL ((Value){VAL_VOID})
 bool values_equal(Value a, Value b);
 
 Value make_string_val(char *chars);

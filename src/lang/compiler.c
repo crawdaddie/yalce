@@ -309,7 +309,7 @@ ParseRule rules[] = {
     /* [TOKEN_IF] = {NULL, NULL, PREC_NONE}, */
     [TOKEN_NIL] = {parse_literal, NULL, PREC_NONE},
     /* [TOKEN_OR] = {NULL, or_, PREC_OR}, */
-    [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
+    /* [TOKEN_PRINT] = {NULL, NULL, PREC_NONE}, */
     /* [TOKEN_RETURN] = {NULL, NULL, PREC_NONE}, */
     /* [TOKEN_SUPER] = {super_, NULL, PREC_NONE}, */
     /* [TOKEN_THIS] = {this_, NULL, PREC_NONE}, */
@@ -362,13 +362,13 @@ static void synchronize() {
     if (parser.previous.type == TOKEN_NL)
       return;
     switch (parser.current.type) {
-    /* case TOKEN_CLASS: */
-    /* case TOKEN_FUN: */
-    /* case TOKEN_VAR: */
-    /* case TOKEN_FOR: */
-    /* case TOKEN_IF: */
-    /* case TOKEN_WHILE: */
-    case TOKEN_PRINT:
+      /* case TOKEN_CLASS: */
+      /* case TOKEN_FUN: */
+      /* case TOKEN_VAR: */
+      /* case TOKEN_FOR: */
+      /* case TOKEN_IF: */
+      /* case TOKEN_WHILE: */
+      /* case TOKEN_PRINT: */
       /* case TOKEN_RETURN: */
       return;
 
@@ -463,6 +463,7 @@ static void define_var(uint8_t global) {
 }
 
 static void var_declaration() {
+
   uint8_t global = parse_var("Expect variable name");
 
   if (match(TOKEN_ASSIGNMENT)) {
@@ -568,7 +569,7 @@ static void while_statement() {
   patch_jump(exitJump);
   emit_byte(OP_POP);
 }
-static void compile_function(FunctionType type) {
+static void *compile_function(FunctionType type) {
   Compiler compiler;
   init_compiler(&compiler, type);
   begin_scope();
@@ -612,9 +613,7 @@ static void return_statement() {
   }
 }
 static void statement() {
-  if (match(TOKEN_PRINT)) {
-    print_statement();
-  } else if (match(TOKEN_IF)) {
+  if (match(TOKEN_IF)) {
     if_statement();
   } else if (match(TOKEN_WHILE)) {
     while_statement();

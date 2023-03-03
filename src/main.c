@@ -341,9 +341,9 @@ int main(int argc, char **argv) {
 
   char input[2048];
   for (;;) {
-    printf("> ");
-    soundio_flush_events(soundio);
-    fgets(input, 2048, stdin);
+    repl_input(input, 2048, "> ");
+    /* soundio_flush_events(soundio); */
+    /* fgets(input, 2048, stdin); */
     interpret(input);
   }
 

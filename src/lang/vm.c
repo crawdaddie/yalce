@@ -85,7 +85,9 @@ static bool call_value(Value callee, int arg_count) {
       NativeFn native = AS_NATIVE(callee);
       Value result = native(arg_count, vm.stack_top - arg_count);
       vm.stack_top -= arg_count + 1;
-      push(result);
+      if (!IS_VOID(result)) {
+        push(result);
+      }
       return true;
     }
     default:
@@ -362,11 +364,11 @@ static InterpretResult run() {
       break;
     }
 
-    case OP_PRINT: {
-      print_value(pop());
-      printf("\n");
-      break;
-    }
+      /* case OP_PRINT: { */
+      /*   print_value(pop()); */
+      /*   printf("\n"); */
+      /*   break; */
+      /* } */
 
     case OP_POP: {
       pop();
@@ -386,7 +388,6 @@ static InterpretResult run() {
       Value value;
       if (!table_get(&vm.globals, name, &value)) {
         runtime_error("Undefined variable '%s'.", name->chars);
-        printf("Undefined variable '%s'\n", name->chars);
         return INTERPRET_RUNTIME_ERROR;
       }
       push(value);

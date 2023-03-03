@@ -6,4 +6,5 @@
 #include <stdio.h>
 #include <stdlib.h>
 void run_file(const char *path);
+void repl_input(char *input, int bufsize, const char *prompt);
 #endif

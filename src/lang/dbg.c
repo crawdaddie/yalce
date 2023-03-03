@@ -30,7 +30,7 @@ void print_object(Object *object) {
   switch (object->type) {
   case OBJ_STRING: {
     ObjString *str = (ObjString *)object;
-    printf_color("%s", 96, str->chars);
+    printf("%s", str->chars);
     break;
   }
 

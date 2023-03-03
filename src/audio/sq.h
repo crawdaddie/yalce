@@ -8,5 +8,5 @@ typedef struct sq_data {
   double pan;
 } sq_data;
 
-Graph *sq_create(double *out);
+Graph *sq_create(double *out, Signal *freq);
 #endif

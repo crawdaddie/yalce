@@ -1,8 +1,8 @@
 fn pr(v) {
-  print v
+  print(v)
 }
 
-print pr(1)
+print(pr(1))
 
 {
   let a = 0

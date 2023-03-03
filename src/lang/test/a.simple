@@ -1,5 +1,5 @@
-print 5 % 3.0 # expect: 2.000000
-print "here's a string" # expect: here's a string
+print(5 % 3.0) # expect: 2.000000
+print("here's a string") # expect: here's a string
 # comment
 
-print 1 + 2.0 # expect: 3.000000
+print(1 + 2.0) # expect: 3.000000

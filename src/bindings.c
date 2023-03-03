@@ -3,6 +3,7 @@
 #include "audio/sq.h"
 #include "channel.h"
 #include "ctx.h"
+#include "lang/dbg.h"
 #include "lang/obj.h"
 #include "lang/obj_graph.h"
 
@@ -14,7 +15,7 @@ Value clock_native(int arg_count, Value *args) {
 
 Value square_generator_native(int arg_count, Value *args) {
   ObjGraph *sq = (ObjGraph *)allocate_object(sizeof(ObjGraph), OBJ_GRAPH);
-  sq->graph = sq_create(NULL);
+  sq->graph = sq_create(NULL, NULL);
   ctx_graph_head()->_graph = sq->graph;
   return (Value){VAL_OBJ, {.object = (Object *)sq}};
 }
@@ -25,3 +26,11 @@ Value out_native(int arg_count, Value *args) {
       NULL, arg_count == 0 ? channel_out(0) : channel_out(AS_INTEGER(args[0])));
   return (Value){VAL_OBJ, {.object = (Object *)out}};
 }
+
+Value print_native(int arg_count, Value *args) {
+  for (int i = 0; i < arg_count; i++) {
+    print_value(args[i]);
+    printf("\n");
+  }
+  return VOID_VAL;
+};

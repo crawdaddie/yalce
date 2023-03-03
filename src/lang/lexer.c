@@ -135,11 +135,11 @@ void print_token(token token) {
     printf("[fn]");
     break;
   }
-  case TOKEN_PRINT: {
-
-    printf("[print]");
-    break;
-  }
+  /* case TOKEN_PRINT: { */
+  /*  */
+  /*   printf("[print]"); */
+  /*   break; */
+  /* } */
   case TOKEN_ERROR: {
 
     printf("[err]");

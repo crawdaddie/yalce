@@ -1,5 +1,7 @@
 fn s() {
-  return sq() -> out(0)
+  let a = sq(220) -> out(0)
+  return a
 }
 
-s()
+
+print s()
