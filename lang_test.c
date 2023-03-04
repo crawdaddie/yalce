@@ -26,7 +26,7 @@ void read_chars(char *input, int bufsize) {
 }
 
 int main(int argc, char **argv) {
-  setbuf(stdout, NULL);
+  setbuf(stdout, NULL); // turn off line buffering for stdout
   int repl = 0;
   repl = argc == 1;
 
