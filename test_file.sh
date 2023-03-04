@@ -3,7 +3,7 @@
 file=$1
 expects=$(grep -oE 'expect: .+$' $file | cut -c 9-)
 echo "$expects" > expected
-echo "$(./lang $file)" > actual
+./lang $file > actual 2>&1
 result=$(diff actual expected)
 if [ -z "$result" ];
 then printf "\e[0;32m\xE2\x9C\x94\e[0m $file\n"
