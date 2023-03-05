@@ -5,5 +5,5 @@ let a = 1
     let b = 2
     print(b) # expect: 2
   }
-  print(b) # expect: Undefined variable 'b'.
+  print(b) # b goes out of scope expect: Undefined variable 'b'.
 }
