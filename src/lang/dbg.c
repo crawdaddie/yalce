@@ -39,6 +39,11 @@ void print_object(Object *object) {
     break;
   }
 
+  case OBJ_CLOSURE: {
+    print_function(((ObjClosure *)object)->function);
+    break;
+  }
+
   case OBJ_GRAPH: {
     /* print_function((ObjFunction *)object); */
     debug_graph((Graph *)((ObjGraph *)object)->graph);

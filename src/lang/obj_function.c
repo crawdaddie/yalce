@@ -16,3 +16,10 @@ ObjNative *make_native(NativeFn function) {
   native->function = function;
   return native;
 }
+
+ObjClosure *make_closure(ObjFunction *function) {
+  ObjClosure *closure =
+      (ObjClosure *)allocate_object(sizeof(ObjClosure), OBJ_CLOSURE);
+  closure->function = function;
+  return closure;
+}

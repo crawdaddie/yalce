@@ -19,6 +19,13 @@ typedef struct {
   Object object;
   NativeFn function;
 } ObjNative;
-
 ObjNative *make_native(NativeFn function);
+
+typedef struct {
+  Object object;
+  ObjFunction *function;
+} ObjClosure;
+
+ObjClosure *make_closure(ObjFunction *function);
+
 #endif

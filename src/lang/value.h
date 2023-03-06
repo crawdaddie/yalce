@@ -67,6 +67,9 @@ void free_value_array(ValueArray *array);
 #define IS_NATIVE(value) is_obj_type(value, OBJ_NATIVE)
 #define IS_VOID(value) ((value).type == VAL_VOID)
 #define VOID_VAL ((Value){VAL_VOID})
+
+#define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
+
 bool values_equal(Value a, Value b);
 
 Value make_string_val(char *chars);

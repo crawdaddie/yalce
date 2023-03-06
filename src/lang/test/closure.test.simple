@@ -1,8 +1,7 @@
 fn makeClosure(value) {
-  fn closure() {
+  return fn() {
     print(value)
   }
-  return closure
 }
 let doughnut = makeClosure("doughnut")
 let bagel = makeClosure("bagel")

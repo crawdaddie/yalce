@@ -7,6 +7,7 @@ typedef enum {
   OBJ_LIST,
   OBJ_FUNCTION,
   OBJ_NATIVE,
+  OBJ_CLOSURE,
   OBJ_GRAPH
 } ObjectType;
 

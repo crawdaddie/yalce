@@ -615,13 +615,6 @@ static void function_declaration() {
   define_var(global);
 }
 
-static void anonymous_function_declaration() {
-  uint8_t global = parse_var("Expect function name");
-  mark_initialized();
-  compile_function(TYPE_FUNCTION);
-  define_var(global);
-}
-
 static void return_statement() {
   if (current->type == TYPE_SCRIPT) {
     error("Can't return from top-level code");
