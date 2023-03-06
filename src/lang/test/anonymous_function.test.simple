@@ -12,3 +12,13 @@ let func_args = fn(a, b, c) {
 }
 
 print(func_args(1, 2, 3)) # expect: 6
+
+let return_func = fn() {
+  return fn(text) {
+    print(text)
+  }
+}
+
+let f = return_func()
+f("something") # expect: something
+

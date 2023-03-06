@@ -153,6 +153,8 @@ static ParseRule *get_rule(enum token_type type);
 static void parse_precedence(Precedence precedence);
 static void *compile_function(FunctionType type);
 
+static void mark_initialized();
+
 static void number(bool can_assign) {
   Value value = parser.previous.type == TOKEN_INTEGER
                     ? INTEGER_VAL(parser.previous.as.vint)
@@ -269,6 +271,10 @@ static void string(bool can_assign) {
   Value val = {VAL_OBJ, {.object = str}};
   emit_bytes(OP_CONSTANT, make_constant((val)));
 }
+static void parse_anonymous_function(bool can_assign) {
+  mark_initialized();
+  compile_function(TYPE_FUNCTION);
+}
 
 ParseRule rules[] = {
     [TOKEN_LP] = {grouping, call, PREC_CALL},
@@ -306,7 +312,7 @@ ParseRule rules[] = {
     [TOKEN_TRUE] = {parse_literal, NULL, PREC_NONE},
     [TOKEN_FALSE] = {parse_literal, NULL, PREC_NONE},
     /* [TOKEN_FOR] = {NULL, NULL, PREC_NONE}, */
-    /* [TOKEN_FUN] = {NULL, NULL, PREC_NONE}, */
+    [TOKEN_FN] = {parse_anonymous_function, NULL, PREC_NONE},
     /* [TOKEN_IF] = {NULL, NULL, PREC_NONE}, */
     [TOKEN_NIL] = {parse_literal, NULL, PREC_NONE},
     /* [TOKEN_OR] = {NULL, or_, PREC_OR}, */
@@ -468,13 +474,14 @@ static void var_declaration() {
   uint8_t global = parse_var("Expect variable name");
 
   if (match(TOKEN_ASSIGNMENT)) {
-    if (check(TOKEN_FN)) {
-      match(TOKEN_FN);
-      mark_initialized();
-      compile_function(TYPE_FUNCTION);
-    } else {
-      expression();
-    }
+    /* if (check(TOKEN_FN)) { */
+    /*   match(TOKEN_FN); */
+    /*   mark_initialized(); */
+    /*   compile_function(TYPE_FUNCTION); */
+    /* } else { */
+    /*   expression(); */
+    /* } */
+    expression();
   } else {
     emit_byte(OP_NIL);
   }
