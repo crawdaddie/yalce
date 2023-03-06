@@ -1,0 +1,14 @@
+# anonymous functions
+
+let func = fn() {
+  print("anonymous func")
+}
+
+
+func() # expect: anonymous func
+
+let func_args = fn(a, b, c) {
+  return a + b + c
+}
+
+print(func_args(1, 2, 3)) # expect: 6

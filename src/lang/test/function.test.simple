@@ -35,3 +35,26 @@ print(early_return(3))
 print(early_return(2))
 # expect: after early return
 # expect: 0
+
+fn local_vars() {
+  let v = 1
+  print(1)
+}
+
+
+local_vars() # creates local variables correctly expect: 1
+fn local_vars2(v) {
+  let v_ = v + 1
+  return v_
+}
+
+print(local_vars2(3)) # expect: 4
+
+let g = 1
+fn mutate(v) {
+  v = v + 1
+}
+
+mutate(g)
+print(g) # variables passed by value expect: 1
+

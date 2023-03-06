@@ -12,4 +12,4 @@ printf "\e[0;31m\xE2\x9C\x98\e[0m  $file\n"
 fi
 echo "$result"
 
-# rm actual expected
+rm actual expected

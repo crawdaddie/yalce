@@ -151,6 +151,7 @@ static void program();
 static void variable(bool can_assign);
 static ParseRule *get_rule(enum token_type type);
 static void parse_precedence(Precedence precedence);
+static void *compile_function(FunctionType type);
 
 static void number(bool can_assign) {
   Value value = parser.previous.type == TOKEN_INTEGER
@@ -467,7 +468,13 @@ static void var_declaration() {
   uint8_t global = parse_var("Expect variable name");
 
   if (match(TOKEN_ASSIGNMENT)) {
-    expression();
+    if (check(TOKEN_FN)) {
+      match(TOKEN_FN);
+      mark_initialized();
+      compile_function(TYPE_FUNCTION);
+    } else {
+      expression();
+    }
   } else {
     emit_byte(OP_NIL);
   }
@@ -600,6 +607,14 @@ static void function_declaration() {
   compile_function(TYPE_FUNCTION);
   define_var(global);
 }
+
+static void anonymous_function_declaration() {
+  uint8_t global = parse_var("Expect function name");
+  mark_initialized();
+  compile_function(TYPE_FUNCTION);
+  define_var(global);
+}
+
 static void return_statement() {
   if (current->type == TYPE_SCRIPT) {
     error("Can't return from top-level code");
