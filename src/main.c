@@ -44,7 +44,6 @@ void write_sample_float64ne(char *ptr, double sample) {
 static void (*write_sample)(char *ptr, double sample);
 
 static volatile bool want_pause = false;
-
 void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
                     int frame_count_max) {
   double float_sample_rate = outstream->sample_rate;
@@ -69,19 +68,25 @@ void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
       break;
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
-    /* sched_incr_time(seconds_per_frame * frame_count); */
 
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
-    double main_vol = ctx->main_vol;
 
-    for (int frame = 0; frame < frame_count; frame += 1) {
-      for (int channel = 0; channel < layout->channel_count; channel += 1) {
-        write_sample(areas[channel].ptr,
-                     main_vol * user_ctx_get_sample(ctx, channel, frame));
+    for (int out_chan = 0; out_chan < OUTPUT_CHANNELS; out_chan++) {
+      Channel chan = ctx->out_chans[out_chan];
 
-        areas[channel].ptr += areas[channel].step;
+      if (!chan.mute) {
+        for (int frame = 0; frame < frame_count; frame += 1) {
+          for (int layout_chan = 0; layout_chan < layout->channel_count;
+               layout_chan += 1) {
+            write_sample(areas[layout_chan].ptr,
+                         ctx->main_vol * chan.data[frame + layout_chan]);
+
+            areas[layout_chan].ptr += areas[layout_chan].step;
+          }
+        }
       }
     }
+    ctx->sched_time += seconds_per_frame * frame_count;
 
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
@@ -229,7 +234,6 @@ int main(int argc, char **argv) {
                     &oscilloscope, &stream_name, &latency, &filename)) {
     usage(exe);
   }
-  init_vm();
 
   struct SoundIo *soundio = soundio_create();
   if (!soundio) {
@@ -295,8 +299,13 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  UserCtx ctx = {.main_vol = 0.25};
-  init_user_ctx(&ctx);
+  /* UserCtx ctx = {.main_vol = 0.25}; */
+  /* init_user_ctx(&ctx); */
+  /* outstream->userdata = &ctx; */
+  init_ctx();
+  init_vm();
+
+  /* outstream->userdata = user_callback; */
   outstream->userdata = &ctx;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
@@ -336,6 +345,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
+  printf("ctx main vol: %f\n", ctx.main_vol);
 
   printf("--------------\n");
   if (filename) {

@@ -2,7 +2,8 @@
 #include "./common.h"
 #include "graph/graph.h"
 
-static UserCtx ctx = {.main_vol = 0.25};
+UserCtx ctx;
+
 double **alloc_buses(int num_buses) {
   double **buses;
   buses = calloc(num_buses, sizeof(double *));
@@ -12,12 +13,15 @@ double **alloc_buses(int num_buses) {
   return buses;
 }
 
-void init_user_ctx(UserCtx *ctx) {
-  /* ctx->head = new_graph(); */
-  ctx->head = NULL;
+void init_ctx() {
+  ctx.main_vol = 0.25;
+  ctx.head = NULL;
+  ctx.sched_time = 0;
 }
 
-void user_ctx_callback(UserCtx *ctx, int nframes, double seconds_per_frame) {
+UserCtxCb user_ctx_callback(UserCtx *ctx, int nframes,
+                            double seconds_per_frame) {
+  /* printf("t: %f\n", ctx->sched_time); */
   perform_graph(ctx->head, nframes, seconds_per_frame);
 }
 
