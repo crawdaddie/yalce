@@ -49,6 +49,10 @@ void print_object(Object *object) {
     debug_graph((Graph *)((ObjGraph *)object)->graph);
     break;
   }
+  case OBJ_UPVALUE: {
+    printf("upvalue");
+    break;
+  }
   /* case OBJ_LIST: { */
   /*   ObjList *l = (ObjList *)object; */
   /*   for (int i = 0; i < l->length; i++) { */
@@ -176,6 +180,29 @@ int disassemble_instruction(Chunk *chunk, int offset) {
 
   case OP_CALL:
     return byte_instruction("OP_CALL", chunk, offset);
+
+  case OP_CLOSURE: {
+    offset++;
+    uint8_t constant = chunk->code[offset++];
+    printf("%-16s %4d ", "OP_CLOSURE", constant);
+    print_value(chunk->constants.values[constant]);
+    printf("\n");
+    ObjFunction *function = AS_FUNCTION(chunk->constants.values[constant]);
+    for (int j = 0; j < function->upvalue_count; j++) {
+      int isLocal = chunk->code[offset++];
+      int index = chunk->code[offset++];
+      printf("%04d      |                     %s %d\n", offset - 2,
+             isLocal ? "local" : "upvalue", index);
+    }
+    return offset;
+  }
+  case OP_GET_UPVALUE:
+    return byte_instruction("OP_GET_UPVALUE", chunk, offset);
+  case OP_SET_UPVALUE:
+    return byte_instruction("OP_SET_UPVALUE", chunk, offset);
+  case OP_CLOSE_UPVALUE:
+    return simple_instruction("OP_CLOSE_UPVALUE", offset);
+
   default:
     printf("Unknown opcode %d\n", instruction);
     return offset + 1;

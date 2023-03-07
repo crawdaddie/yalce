@@ -30,9 +30,13 @@ typedef enum {
   OP_GET_GLOBAL,
   OP_SET_LOCAL,
   OP_GET_LOCAL,
+  OP_GET_UPVALUE,
+  OP_SET_UPVALUE,
+  OP_CLOSE_UPVALUE,
   OP_JUMP_IF_FALSE,
   OP_JUMP,
   OP_LOOP,
+  OP_CLOSURE,
 } OpCode;
 
 typedef struct Chunk {

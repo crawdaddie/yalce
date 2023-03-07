@@ -450,9 +450,9 @@ static int _STRING_MATCHER(const char *input, token *tail) {
 
   if (*input == '"') {
     int offset = seek_char(input, '"');
-    char *str = malloc((offset + 1) * sizeof(char));
-    strncpy(str, input + 1, offset - 1);
-    str[offset] = '\0';
+    char *str = malloc((offset) * sizeof(char));
+    strlcpy(str, input + 1, offset);
+    str[offset - 1] = '\0';
     literal lit = {.vstr = str};
     *tail = create_literal_token(TOKEN_STRING, lit);
     return offset + 1;
@@ -476,7 +476,7 @@ static int _MATCH_IDENTIFIER(const char *input, token *tail) {
   int offset = 0;
   if ((offset = seek_identifier(input)) != 0) {
     char *str = malloc((offset + 1) * sizeof(char));
-    strncpy(str, input, offset);
+    strlcpy(str, input, offset + 1);
     *tail = create_identifier(str);
     return offset;
   }
