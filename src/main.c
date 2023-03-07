@@ -346,8 +346,7 @@ int main(int argc, char **argv) {
   char input[2048];
   for (;;) {
     repl_input(input, 2048, "> ");
-    /* soundio_flush_events(soundio); */
-    /* fgets(input, 2048, stdin); */
+    soundio_flush_events(soundio);
     interpret(input);
   }
 

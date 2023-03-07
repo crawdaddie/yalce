@@ -60,6 +60,9 @@ void repl_input(char *input, int bufsize, const char *prompt) {
       input[position] = '\0';
       return;
     }
+    if (position == 2048) {
+      // TODO: increase size of input buffer
+    }
 
     input[position] = c;
     position++;
