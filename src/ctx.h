@@ -9,9 +9,10 @@ typedef struct UserCtx {
 
 double **alloc_buses(int num_buses);
 
-void init_user_ctx();
+void init_user_ctx(UserCtx *ctx);
 
-void user_ctx_callback(int nframes, double seconds_per_frame);
+void user_ctx_callback(UserCtx *ctx, int nframes, double seconds_per_frame);
+double user_ctx_get_sample(UserCtx *ctx, int channel, int frame);
 
 Graph *ctx_graph_head();
 

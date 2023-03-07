@@ -107,7 +107,8 @@ static void error_at(token *token, const char *message) {
 }
 static void error(const char *message) { error_at(&parser.previous, message); }
 static void error_at_current(const char *message) {
-  error_at(&parser.current, message);
+  error_at(&parser.current, "");
+  printf("'%.20s...'\n", get_scanner_current());
 }
 static void advance() {
   parser.previous = parser.current;

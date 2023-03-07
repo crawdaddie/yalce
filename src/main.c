@@ -51,6 +51,7 @@ void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
   double seconds_per_frame = 1.0 / float_sample_rate;
 
   struct SoundIoChannelArea *areas;
+  UserCtx *ctx = outstream->userdata;
   int err;
 
   int frames_left = frame_count_max;
@@ -70,13 +71,14 @@ void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
     const struct SoundIoChannelLayout *layout = &outstream->layout;
     /* sched_incr_time(seconds_per_frame * frame_count); */
 
-    user_ctx_callback(frame_count, seconds_per_frame);
+    user_ctx_callback(ctx, frame_count, seconds_per_frame);
+    double main_vol = ctx->main_vol;
 
     for (int frame = 0; frame < frame_count; frame += 1) {
-
       for (int channel = 0; channel < layout->channel_count; channel += 1) {
         write_sample(areas[channel].ptr,
-                     sum_channel_output_destructive(channel, frame));
+                     main_vol * user_ctx_get_sample(ctx, channel, frame));
+
         areas[channel].ptr += areas[channel].step;
       }
     }
@@ -293,7 +295,9 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  init_user_ctx();
+  UserCtx ctx = {.main_vol = 0.25};
+  init_user_ctx(&ctx);
+  outstream->userdata = &ctx;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;

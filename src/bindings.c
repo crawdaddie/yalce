@@ -15,7 +15,8 @@ Value clock_native(int arg_count, Value *args) {
 
 Value square_generator_native(int arg_count, Value *args) {
   ObjGraph *sq = (ObjGraph *)allocate_object(sizeof(ObjGraph), OBJ_GRAPH);
-  sq->graph = sq_create(NULL, NULL);
+  Signal freq = new_signal(arg_count == 0 ? 220 : AS_NUMBER(args[0]), 1);
+  sq->graph = sq_create(NULL, &freq);
   ctx_graph_head()->_graph = sq->graph;
   return (Value){VAL_OBJ, {.object = (Object *)sq}};
 }
