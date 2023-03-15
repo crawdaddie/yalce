@@ -11,15 +11,6 @@ typedef struct {
   BoundFunction function;
 } Binding;
 
-Value clock_native(int arg_count, Value *args);
-Value square_generator_native(int arg_count, Value *args);
-Value out_native(int arg_count, Value *args);
-Value print_native(int arg_count, Value *arg);
-
-#define NUM_BINDINGS 4
-static Binding bindings[NUM_BINDINGS] = {{"print", print_native},
-                                         {"clock", clock_native},
-                                         {"sq", square_generator_native},
-                                         {"out", out_native}};
+void bindings_setup();
 
 #endif

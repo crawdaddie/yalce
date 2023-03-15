@@ -1,5 +1,5 @@
 #include "chunk.h"
-#include "memory.h"
+#include "lang_memory.h"
 #include <stdlib.h>
 
 void init_chunk(Chunk *chunk) {

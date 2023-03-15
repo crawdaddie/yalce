@@ -297,6 +297,14 @@ static int _BRACKET_MATCHER(const char *input, token *tail) {
   case '}':
     *tail = create_symbol_token(TOKEN_RIGHT_BRACE);
     return 1;
+
+  case '[':
+    *tail = create_symbol_token(TOKEN_LEFT_SB);
+    return 1;
+
+  case ']':
+    *tail = create_symbol_token(TOKEN_RIGHT_SB);
+    return 1;
   default:
     return 0;
   }

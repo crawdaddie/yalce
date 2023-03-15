@@ -1,9 +1,8 @@
 #include "dbg.h"
-#include "../graph/graph.h"
 #include "chunk.h"
 #include "obj.h"
 #include "obj_function.h"
-#include "obj_graph.h"
+#include "obj_node.h"
 #include "util.h"
 
 #define COLOR 0
@@ -44,9 +43,10 @@ void print_object(Object *object) {
     break;
   }
 
-  case OBJ_GRAPH: {
+  case OBJ_NODE: {
     /* print_function((ObjFunction *)object); */
-    debug_graph((Graph *)((ObjGraph *)object)->graph);
+    /* debug_graph((Graph *)((ObjGraph *)object)->graph); */
+    printf("<node %s>", ((ObjNode *)object)->node->name);
     break;
   }
   case OBJ_UPVALUE: {

@@ -1,5 +1,5 @@
 #include "value.h"
-#include "memory.h"
+#include "lang_memory.h"
 #include "obj.h"
 #include "string.h"
 

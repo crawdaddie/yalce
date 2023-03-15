@@ -1,6 +1,6 @@
 #include "obj.h"
 #include "chunk.h"
-#include "memory.h"
+#include "lang_memory.h"
 #include "sym.h"
 #include "vm.h"
 #include <string.h>

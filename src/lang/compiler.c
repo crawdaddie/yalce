@@ -107,8 +107,8 @@ static void error_at(token *token, const char *message) {
 }
 static void error(const char *message) { error_at(&parser.previous, message); }
 static void error_at_current(const char *message) {
-  error_at(&parser.current, "");
-  printf("'%.20s...'\n", get_scanner_current());
+  error_at(&parser.current, message);
+  /* printf("'%.20s...'\n", get_scanner_current()); */
 }
 static void advance() {
   parser.previous = parser.current;
@@ -284,12 +284,15 @@ static void parse_anonymous_function(bool can_assign) {
   mark_initialized();
   compile_function(TYPE_FUNCTION);
 }
+static void array_start(bool can_assign) {}
+static void array_index(bool can_assign) {}
 
 ParseRule rules[] = {
     [TOKEN_LP] = {grouping, call, PREC_CALL},
     [TOKEN_RP] = {NULL, NULL, PREC_NONE},
     /* [TOKEN_LEFT_BRACE] = {NULL, NULL, PREC_NONE}, */
     /* [TOKEN_RIGHT_BRACE] = {NULL, NULL, PREC_NONE}, */
+    [TOKEN_LEFT_SB] = {array_start, array_index, PREC_CALL},
     [TOKEN_COMMA] = {NULL, NULL, PREC_NONE},
     /* [TOKEN_DOT] = {NULL, dot, PREC_CALL}, */
     [TOKEN_MINUS] = {unary, parse_binary, PREC_TERM},
@@ -484,23 +487,18 @@ static void define_var(uint8_t global) {
 }
 
 static void var_declaration() {
+  printf("var declaration\n");
+  print_token(parser.previous);
 
-  uint8_t global = parse_var("Expect variable name");
+  /* uint8_t global = parse_var("Expect variable name"); */
 
   if (match(TOKEN_ASSIGNMENT)) {
-    /* if (check(TOKEN_FN)) { */
-    /*   match(TOKEN_FN); */
-    /*   mark_initialized(); */
-    /*   compile_function(TYPE_FUNCTION); */
-    /* } else { */
-    /*   expression(); */
-    /* } */
     expression();
   } else {
     emit_byte(OP_NIL);
   }
-  consume(TOKEN_NL, "Expect \\n after variable declaration");
-  define_var(global);
+  /* consume(TOKEN_NL, "Expect \\n after variable declaration"); */
+  /* define_var(global); */
 }
 static int resolve_local(Compiler *compiler, token *name) {
   for (int i = compiler->local_count - 1; i >= 0; i--) {
@@ -572,6 +570,7 @@ static void named_variable(token name, bool can_assign) {
   }
 }
 static void variable(bool can_assign) {
+  printf("variable\n");
   named_variable(parser.previous, can_assign);
 }
 static int emit_jump(uint8_t instruction) {
@@ -633,6 +632,12 @@ static void while_statement() {
   patch_jump(exitJump);
   emit_byte(OP_POP);
 }
+
+static void for_loop_statement() {
+  int loop_start = current_chunk()->count;
+  printf("for loop start\n");
+}
+
 static void *compile_function(FunctionType type) {
   Compiler compiler;
   init_compiler(&compiler, type);
@@ -684,7 +689,11 @@ static void return_statement() {
 static void statement() {
   if (match(TOKEN_IF)) {
     if_statement();
-  } else if (match(TOKEN_WHILE)) {
+  }
+  /* else if (match(TOKEN_FOR)) { */
+  /*     for_loop_statement(); */
+  /*   } */
+  else if (match(TOKEN_WHILE)) {
     while_statement();
   } else if (match(TOKEN_RETURN)) {
     return_statement();
@@ -693,10 +702,14 @@ static void statement() {
     block();
     end_scope();
   } else if (match(TOKEN_LET)) {
+    printf("token let\n");
+    print_token(parser.previous);
+    print_token(parser.current);
     var_declaration();
   } else if (match(TOKEN_FN)) {
     function_declaration();
   } else {
+    printf("expr:??\n");
     expression();
   }
 }

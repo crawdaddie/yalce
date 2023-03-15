@@ -1,7 +1,7 @@
 #include "oscilloscope.h"
 #include "common.h"
 
-int oscilloscope_view(UserCtx *ctx) {
+int oscilloscope_view(Ctx *ctx) {
   SDL_Window *window;
   SDL_Renderer *renderer;
   SDL_Surface *surface;

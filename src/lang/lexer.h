@@ -7,6 +7,8 @@ enum token_type {
   TOKEN_RP,
   TOKEN_LEFT_BRACE,
   TOKEN_RIGHT_BRACE,
+  TOKEN_LEFT_SB,
+  TOKEN_RIGHT_SB,
 
   TOKEN_COMMA,
 
@@ -42,6 +44,8 @@ enum token_type {
   TOKEN_IF,
   TOKEN_ELSE,
   TOKEN_WHILE,
+  TOKEN_FOR,
+  TOKEN_IN,
   TOKEN_NIL, // end keywords
   TOKEN_COMMENT,
 
@@ -65,6 +69,8 @@ static keyword keywords[TOKEN_NIL - TOKEN_FN + 1] = {
     {TOKEN_IF, "if"},
     {TOKEN_ELSE, "else"},
     {TOKEN_WHILE, "while"},
+    {TOKEN_FOR, "for"},
+    {TOKEN_IN, "in"},
     {TOKEN_NIL, "nil"}};
 
 typedef union literal {

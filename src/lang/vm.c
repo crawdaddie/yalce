@@ -1,10 +1,9 @@
 #include "vm.h"
-#include "../bindings.h"
-#include "../graph/graph.h"
+/* #include "../graph/graph.h" */
 #include "common.h"
 #include "compiler.h"
 #include "dbg.h"
-#include "obj_graph.h"
+#include "obj_node.h"
 #include <math.h>
 #include <time.h>
 
@@ -18,13 +17,6 @@ void define_native(const char *name, NativeFn function) {
   pop();
 }
 
-void make_bindings() {
-  for (int i = 0; i < NUM_BINDINGS; i++) {
-    Binding binding = bindings[i];
-    define_native(binding.name, binding.function);
-  }
-}
-
 static void reset_stack() {
   vm.stack_top = vm.stack;
   vm.frame_count = 0;
@@ -36,7 +28,6 @@ void init_vm() {
   vm.objects = NULL;
   init_table(&vm.globals);
   init_table(&vm.strings);
-  make_bindings();
 }
 
 void free_vm() {
@@ -226,9 +217,11 @@ Value ncompare(Value a, Value b, int lt, int inclusive) {
 }
 
 Value pipe_values(Value a, Value b) {
-  Graph *graph_a = ((ObjGraph *)a.as.object)->graph;
-  Graph *graph_b = ((ObjGraph *)b.as.object)->graph;
+  /*
+  Node *graph_a = ((ObjNode *)a.as.object)->graph;
+  Node *graph_b = ((ObjNode *)b.as.object)->graph;
   pipe_graph(graph_a, graph_b);
+  */
   return a;
 }
 

@@ -57,7 +57,8 @@ void repl_input(char *input, int bufsize, const char *prompt) {
         return repl_input(input + position, bufsize, "  ");
       }
 
-      input[position] = '\0';
+      input[position] = '\n';
+      input[++position] = '\0';
       return;
     }
     if (position == 2048) {

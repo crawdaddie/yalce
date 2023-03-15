@@ -1,3 +1,4 @@
+#include "src/bindings.h"
 #include "src/lang/lang_runner.h"
 #define INPUT_BUFSIZE 2048
 void read_chars(char *input, int bufsize) {
@@ -31,6 +32,7 @@ int main(int argc, char **argv) {
   repl = argc == 1;
 
   init_vm();
+  bindings_setup();
 
   if (argc == 2) {
     char *filename = argv[1];

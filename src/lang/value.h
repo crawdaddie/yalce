@@ -68,6 +68,9 @@ void free_value_array(ValueArray *array);
 #define IS_VOID(value) ((value).type == VAL_VOID)
 #define VOID_VAL ((Value){VAL_VOID})
 
+#define IS_NODE(value) is_obj_type(value, OBJ_NODE)
+#define AS_NODE(value) ((ObjNode *)AS_OBJ(value))->node;
+
 #define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
 
 bool values_equal(Value a, Value b);

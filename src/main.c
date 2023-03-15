@@ -7,11 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "graph/graph.h"
 #include <stdlib.h>
 
 #include "bindings.h"
 #include "channel.h"
+#include "dbg.h"
 #include "lang/lang_runner.h"
 #include "lang/vm.h"
 #include <getopt.h>
@@ -50,7 +50,7 @@ void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
   double seconds_per_frame = 1.0 / float_sample_rate;
 
   struct SoundIoChannelArea *areas;
-  UserCtx *ctx = outstream->userdata;
+  Ctx *ctx = outstream->userdata;
   int err;
 
   int frames_left = frame_count_max;
@@ -86,7 +86,7 @@ void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
         }
       }
     }
-    ctx->sched_time += seconds_per_frame * frame_count;
+    ctx->sys_time += seconds_per_frame * frame_count;
 
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
@@ -139,6 +139,7 @@ static int process_opts(int argc, char **argv, char **device_id,
         {"oscilloscope", no_argument, 0, 'o'},
         {"r", no_argument, 0, 'r'},
         {0, 0, 0, 0}};
+
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
@@ -250,6 +251,7 @@ int main(int argc, char **argv) {
             soundio_strerror(err));
     return 1;
   }
+  printf(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
 
   fprintf(stderr, "Backend: %s\n",
           soundio_backend_name(soundio->current_backend));
@@ -299,15 +301,13 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  /* UserCtx ctx = {.main_vol = 0.25}; */
-  /* init_user_ctx(&ctx); */
-  /* outstream->userdata = &ctx; */
   init_ctx();
   init_vm();
+  bindings_setup();
 
-  /* outstream->userdata = user_callback; */
   outstream->userdata = &ctx;
   outstream->write_callback = write_callback;
+
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;
   outstream->software_latency = latency;
@@ -345,7 +345,6 @@ int main(int argc, char **argv) {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
-  printf("ctx main vol: %f\n", ctx.main_vol);
 
   printf("--------------\n");
   if (filename) {
@@ -355,9 +354,19 @@ int main(int argc, char **argv) {
 
   char input[2048];
   for (;;) {
-    repl_input(input, 2048, "> ");
     soundio_flush_events(soundio);
+
+    printf(ANSI_COLOR_RED);
+    repl_input(input, 2048, "> ");
+    printf(ANSI_COLOR_RESET);
+
     interpret(input);
+
+    printf(ANSI_COLOR_BLUE);
+    printf("< ");
+    print_value(*vm.stack_top);
+    printf(ANSI_COLOR_RESET);
+    printf("\n");
   }
 
   soundio_outstream_destroy(outstream);

@@ -1,5 +1,5 @@
 #include "obj_function.h"
-#include "memory.h"
+#include "lang_memory.h"
 #include "obj.h"
 
 ObjFunction *make_function() {
