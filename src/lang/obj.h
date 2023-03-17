@@ -9,7 +9,8 @@ typedef enum {
   OBJ_NATIVE,
   OBJ_CLOSURE,
   OBJ_UPVALUE,
-  OBJ_NODE
+  OBJ_NODE,
+  OBJ_ARRAY
 } ObjectType;
 
 typedef struct {

@@ -3,5 +3,5 @@
 #include "obj_function.h"
 #include "vm.h"
 
-ObjFunction *compile(const char *source, Chunk *chunk);
+ObjFunction *compile(char *source, Chunk *chunk);
 #endif

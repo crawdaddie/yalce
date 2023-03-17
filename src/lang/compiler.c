@@ -284,8 +284,27 @@ static void parse_anonymous_function(bool can_assign) {
   mark_initialized();
   compile_function(TYPE_FUNCTION);
 }
-static void array_start(bool can_assign) {}
-static void array_index(bool can_assign) {}
+static void array_start(bool can_assign) {
+
+  uint8_t arg_count = 0;
+  if (!check(TOKEN_RIGHT_SB)) {
+    do {
+      expression();
+      if (arg_count == 255) {
+
+        error("Can't have more than 255 elements.");
+      }
+      arg_count++;
+    } while (match(TOKEN_COMMA));
+  }
+  consume(TOKEN_RIGHT_SB, "Expect ']' after array elements.");
+  emit_bytes(OP_ALLOC_ARRAY_LITERAL, arg_count);
+}
+static void array_index(bool can_assign) {
+  expression();
+  emit_byte(OP_ARRAY_INDEX);
+  consume(TOKEN_RIGHT_SB, "Expect ']' after array index expression");
+}
 
 ParseRule rules[] = {
     [TOKEN_LP] = {grouping, call, PREC_CALL},
@@ -478,6 +497,7 @@ static void mark_initialized() {
     return;
   current->locals[current->local_count - 1].depth = current->scope_depth;
 }
+
 static void define_var(uint8_t global) {
   if (current->scope_depth > 0) {
     mark_initialized();
@@ -487,18 +507,16 @@ static void define_var(uint8_t global) {
 }
 
 static void var_declaration() {
-  printf("var declaration\n");
-  print_token(parser.previous);
 
-  /* uint8_t global = parse_var("Expect variable name"); */
+  uint8_t global = parse_var("Expect variable name");
 
   if (match(TOKEN_ASSIGNMENT)) {
     expression();
   } else {
     emit_byte(OP_NIL);
   }
-  /* consume(TOKEN_NL, "Expect \\n after variable declaration"); */
-  /* define_var(global); */
+  consume(TOKEN_NL, "Expect \\n after variable declaration");
+  define_var(global);
 }
 static int resolve_local(Compiler *compiler, token *name) {
   for (int i = compiler->local_count - 1; i >= 0; i--) {
@@ -570,7 +588,6 @@ static void named_variable(token name, bool can_assign) {
   }
 }
 static void variable(bool can_assign) {
-  printf("variable\n");
   named_variable(parser.previous, can_assign);
 }
 static int emit_jump(uint8_t instruction) {
@@ -633,10 +650,7 @@ static void while_statement() {
   emit_byte(OP_POP);
 }
 
-static void for_loop_statement() {
-  int loop_start = current_chunk()->count;
-  printf("for loop start\n");
-}
+static void for_loop_statement() { int loop_start = current_chunk()->count; }
 
 static void *compile_function(FunctionType type) {
   Compiler compiler;
@@ -702,20 +716,17 @@ static void statement() {
     block();
     end_scope();
   } else if (match(TOKEN_LET)) {
-    printf("token let\n");
-    print_token(parser.previous);
-    print_token(parser.current);
     var_declaration();
   } else if (match(TOKEN_FN)) {
     function_declaration();
   } else {
-    printf("expr:??\n");
     expression();
   }
 }
 
 static void program() {
   if (check(TOKEN_NL)) {
+
     advance();
     return;
   }
@@ -741,7 +752,7 @@ ObjFunction *end_compiler() {
   return function;
 }
 
-ObjFunction *compile(const char *source, Chunk *chunk) {
+ObjFunction *compile(char *source, Chunk *chunk) {
 
   init_scanner(source);
   Compiler compiler;

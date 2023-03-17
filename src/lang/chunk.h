@@ -37,6 +37,8 @@ typedef enum {
   OP_JUMP,
   OP_LOOP,
   OP_CLOSURE,
+  OP_ALLOC_ARRAY_LITERAL,
+  OP_ARRAY_INDEX,
 } OpCode;
 
 typedef struct Chunk {

@@ -1,4 +1,5 @@
 #include "sym.h"
+#include "dbg.h"
 #include "lang_memory.h"
 #include "util.h"
 #define TABLE_MAX_LOAD 0.75

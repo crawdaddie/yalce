@@ -3,6 +3,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "dbg.h"
+#include "obj_array.h"
 #include "obj_node.h"
 #include <math.h>
 #include <time.h>
@@ -422,7 +423,9 @@ static InterpretResult run() {
     }
     case OP_SET_GLOBAL: {
       ObjString *name = READ_STRING();
+
       if (table_set(&vm.globals, name, peek(0))) {
+        printf("error: is new?");
         /* table_delete(&vm.globals, name); */
         return INTERPRET_RUNTIME_ERROR;
       }
@@ -492,6 +495,36 @@ static InterpretResult run() {
     case OP_CLOSE_UPVALUE: {
       close_upvalues(vm.stack_top - 1);
       pop();
+      break;
+    }
+    case OP_ALLOC_ARRAY_LITERAL: {
+
+      uint32_t arg_count = READ_BYTE();
+      ObjArray *array = make_array(arg_count);
+
+      Value *elements = vm.stack_top - arg_count;
+      for (int idx = arg_count - 1; idx >= 0; idx--) {
+        Value element = pop();
+        array->values[idx] = element;
+      }
+      push((Value){VAL_OBJ, {.object = (Object *)array}});
+      break;
+    }
+
+    case OP_ARRAY_INDEX: {
+
+      Value index_val = pop();
+      int8_t index = AS_INTEGER(index_val);
+      ObjArray *array = (ObjArray *)AS_OBJ(pop());
+      if (index >= array->size) {
+        char *msg;
+        asprintf(&msg, "Index %d too large for array of size %d", index,
+                 array->size);
+        runtime_error(msg);
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      push(array->values[index]);
+
       break;
     }
     }

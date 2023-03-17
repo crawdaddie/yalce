@@ -1,6 +1,7 @@
 #include "dbg.h"
 #include "chunk.h"
 #include "obj.h"
+#include "obj_array.h"
 #include "obj_function.h"
 #include "obj_node.h"
 #include "util.h"
@@ -61,6 +62,18 @@ void print_object(Object *object) {
   /*   } */
   /*   break; */
   /* } */
+  case OBJ_ARRAY: {
+    printf("<array ");
+    ObjArray *array = (ObjArray *)object;
+    for (int i = 0; i < array->size; i++) {
+      print_value(array->values[i]);
+      if (i != array->size - 1) {
+        printf(", ");
+      }
+    }
+    printf(">");
+    break;
+  }
   default:
     break;
   }
@@ -202,6 +215,11 @@ int disassemble_instruction(Chunk *chunk, int offset) {
     return byte_instruction("OP_SET_UPVALUE", chunk, offset);
   case OP_CLOSE_UPVALUE:
     return simple_instruction("OP_CLOSE_UPVALUE", offset);
+
+  case OP_ALLOC_ARRAY_LITERAL:
+    return simple_instruction("OP_ALLOC_ARRAY_LITERAL", offset);
+  case OP_ARRAY_INDEX:
+    return simple_instruction("OP_ARRAY_INDEX", offset);
 
   default:
     printf("Unknown opcode %d\n", instruction);

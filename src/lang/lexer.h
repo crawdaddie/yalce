@@ -86,7 +86,7 @@ typedef struct token {
   literal as;
 } token;
 
-void init_scanner(const char *source);
+void init_scanner(char *source);
 token scan_token();
 void print_token(token token);
 

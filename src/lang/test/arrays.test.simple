@@ -1,6 +1,7 @@
+
 let arr = [1,2,3,4]
 
-print(arr) # expect: [1, 2, 3, 4]
+print(arr) # expect: <array 1, 2, 3, 4>
 
 
 let i = 0
@@ -9,7 +10,9 @@ while(i < 4) {
   i = i + 1
 }
 # expect: 1
-# expect: 2 
+# expect: 2
 # expect: 3
 # expect: 4
+
+
 

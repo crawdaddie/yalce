@@ -43,8 +43,7 @@ int main(int argc, char **argv) {
     char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
     for (;;) {
 
-      printf("> ");
-      read_chars(input, INPUT_BUFSIZE);
+      repl_input(input, INPUT_BUFSIZE, "> ");
       /* fgets(input, 2048, stdin); */
       /* parse_line(input, 0); */
       interpret(input);

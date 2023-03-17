@@ -7,7 +7,7 @@ static char *read_file(const char *path) {
     exit(74);
   }
 
-  fseek(file, 0L, SEEK_END);
+  fseek(file, 0, SEEK_END);
   size_t file_size = ftell(file);
   rewind(file);
 
@@ -29,7 +29,9 @@ static char *read_file(const char *path) {
 
 void run_file(const char *path) {
   char *source = read_file(path);
+
   InterpretResult result = interpret(source);
+
   free(source);
   if (result == INTERPRET_COMPILE_ERROR)
     exit(65);

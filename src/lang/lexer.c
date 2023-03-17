@@ -37,6 +37,18 @@ void print_token(token token) {
     printf("[}]");
     break;
   }
+
+  case TOKEN_LEFT_SB: {
+
+    printf("[[]");
+    break;
+  }
+
+  case TOKEN_RIGHT_SB: {
+
+    printf("[]]");
+    break;
+  }
   case TOKEN_COMMA: {
 
     printf("[,]");
@@ -167,7 +179,7 @@ typedef struct {
 } Scanner;
 
 Scanner scanner;
-void init_scanner(const char *source) {
+void init_scanner(char *source) {
   scanner.start = source;
   scanner.current = source;
   scanner.line = 0;
