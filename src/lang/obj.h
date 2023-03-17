@@ -10,7 +10,8 @@ typedef enum {
   OBJ_CLOSURE,
   OBJ_UPVALUE,
   OBJ_NODE,
-  OBJ_ARRAY
+  OBJ_ARRAY,
+  OBJ_BUFFER,
 } ObjectType;
 
 typedef struct {

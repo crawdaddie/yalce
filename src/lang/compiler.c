@@ -12,6 +12,7 @@ typedef struct {
   bool panic_mode;
 } Parser;
 
+/* PREC_ARRAY_ASSIGNMENT, // array[0] = 0 */
 typedef enum {
   PREC_NONE,
   PREC_ASSIGNMENT, // =
@@ -302,9 +303,16 @@ static void array_start(bool can_assign) {
 }
 static void array_index(bool can_assign) {
   expression();
-  emit_byte(OP_ARRAY_INDEX);
   consume(TOKEN_RIGHT_SB, "Expect ']' after array index expression");
+  emit_byte(OP_ARRAY_INDEX);
+  /* if (check(TOKEN_ASSIGNMENT)) { */
+  /*   advance(); */
+  /*   expression(); */
+  /*   emit_byte(OP_ARRAY_INDEX_ASSIGNMENT); */
+  /* } else { */
+  /* } */
 }
+static void array_index_assignment(bool can_assign) {}
 
 ParseRule rules[] = {
     [TOKEN_LP] = {grouping, call, PREC_CALL},
@@ -375,13 +383,16 @@ static void parse_precedence(Precedence precedence) {
   bool can_assign =
       precedence <=
       PREC_ASSIGNMENT; // guard against expressions like a * b = c + d
+
   prefix_rule(can_assign);
+
   while (precedence <= get_rule(parser.current.type)->precedence) {
     advance();
 
     ParseFn infix_rule = get_rule(parser.previous.type)->infix;
     infix_rule(can_assign);
   }
+
   if (can_assign && match(TOKEN_ASSIGNMENT)) {
     error("Invalid assignment target");
   }

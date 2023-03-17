@@ -39,5 +39,6 @@ Value pop();
 extern VM vm;
 
 void define_native(const char *name, NativeFn function);
+void print_stack();
 
 #endif

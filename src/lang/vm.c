@@ -233,6 +233,18 @@ Value nnegate(Value a) {
   return NUMBER_VAL(-AS_NUMBER(a));
 }
 static void jump_ip(CallFrame *frame, int offset) { frame->ip += offset; }
+void print_stack() {
+
+  // print out stack
+  printf("stack: \n");
+  printf("          ");
+  for (Value *slot = vm.stack; slot < vm.stack_top; slot++) {
+    printf("[ ");
+    print_value(*slot);
+    printf(" ]");
+  }
+  printf("\n");
+}
 static InterpretResult run() {
   CallFrame *frame = &vm.frames[vm.frame_count - 1];
 
@@ -250,14 +262,7 @@ static InterpretResult run() {
         &frame->closure->function->chunk,
         (int)(frame->ip - frame->closure->function->chunk.code));
     // print out stack
-    printf("stack: \n");
-    printf("          ");
-    for (Value *slot = vm.stack; slot < vm.stack_top; slot++) {
-      printf("[ ");
-      print_value(*slot);
-      printf(" ]");
-    }
-    printf("\n");
+    print_stack();
 
 #ifdef DEBUG_VM_CONSTANTS
     printf("constants: \n");
@@ -515,16 +520,36 @@ static InterpretResult run() {
 
       Value index_val = pop();
       int8_t index = AS_INTEGER(index_val);
-      ObjArray *array = (ObjArray *)AS_OBJ(pop());
-      if (index >= array->size) {
+      Value array_val = pop();
+      Object *array = (Object *)AS_OBJ(array_val);
+      Value *values = ARRAY_VALUES(array_val);
+      int size = ((ObjArray *)array)->size;
+
+      if (index >= size) {
         char *msg;
         asprintf(&msg, "Index %d too large for array of size %d", index,
-                 array->size);
+                 ((ObjArray *)array)->size);
         runtime_error(msg);
         return INTERPRET_RUNTIME_ERROR;
       }
-      push(array->values[index]);
+      if (array->type == OBJ_ARRAY) {
+        push(values[index]);
+      } else {
+      }
+      break;
+    }
 
+    case OP_ARRAY_INDEX_ASSIGNMENT: {
+
+      Value val_to_set = pop();
+      Value index_val = pop();
+      int8_t index = AS_INTEGER(index_val);
+      Value array_val = pop();
+      printf("array index assignment: index %d <- ", index);
+      print_value(val_to_set);
+      Value array = pop();
+      printf("array: ");
+      print_value(array);
       break;
     }
     }
@@ -547,6 +572,8 @@ InterpretResult interpret(const char *source) {
   pop();
   push((Value){VAL_OBJ, {.object = (Object *)closure}});
   call(closure, 0);
+  /* print_stack(); */
+  /* reset_stack(); */
 
   return run();
 }

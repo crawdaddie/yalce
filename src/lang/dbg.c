@@ -74,6 +74,15 @@ void print_object(Object *object) {
     printf(">");
     break;
   }
+
+  case OBJ_BUFFER: {
+    ObjBuffer *buffer = (ObjBuffer *)object;
+    printf("<buffer ");
+    printf(buffer->data_size == sizeof(int) ? "<int>" : "<double>");
+    printf("[%d]", buffer->size);
+    printf(">");
+    break;
+  }
   default:
     break;
   }
