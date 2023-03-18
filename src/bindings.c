@@ -68,13 +68,14 @@ static Value dump_stack(int arg_count, Value *args) {
 }
 
 static Value array_set_native(int arg_count, Value *args) {
-  ObjArray *array = AS_OBJ(args[0]);
-  int index = AS_INTEGER(args[1]);
-  Value val = args[2];
-  if (((Object *)array)->type == OBJ_BUFFER) {
-    return VOID_VAL;
+  ObjArray *array = (ObjArray *)AS_OBJ(args[0]);
+  Value val;
+  int offset = AS_INTEGER(args[1]);
+
+  for (int i = 0; i < arg_count - 2; i++) {
+    array_set(AS_OBJ(args[0]), offset + i, args[i + 2]);
   }
-  array->values[index] = val;
+
   return VOID_VAL;
 }
 void bindings_setup() {

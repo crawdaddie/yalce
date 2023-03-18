@@ -430,7 +430,6 @@ static InterpretResult run() {
       ObjString *name = READ_STRING();
 
       if (table_set(&vm.globals, name, peek(0))) {
-        printf("error: is new?");
         /* table_delete(&vm.globals, name); */
         return INTERPRET_RUNTIME_ERROR;
       }
@@ -521,6 +520,11 @@ static InterpretResult run() {
       Value index_val = pop();
       int8_t index = AS_INTEGER(index_val);
       Value array_val = pop();
+      if (IS_BUF(array_val)) {
+        
+        break;
+      }
+
       Object *array = (Object *)AS_OBJ(array_val);
       Value *values = ARRAY_VALUES(array_val);
       int size = ((ObjArray *)array)->size;
@@ -532,10 +536,7 @@ static InterpretResult run() {
         runtime_error(msg);
         return INTERPRET_RUNTIME_ERROR;
       }
-      if (array->type == OBJ_ARRAY) {
-        push(values[index]);
-      } else {
-      }
+      push(values[index]);
       break;
     }
 
