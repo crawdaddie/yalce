@@ -1,8 +1,11 @@
 #include "sq.h"
 #include "../memory.h"
 #include "math.h"
+#include "signal.h"
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+
 // static double scale_val_2(double env_val, // 0-1
 //                           double min, double max) {
 //   return min + env_val * (max - min);
@@ -68,16 +71,22 @@
 static double sq_sample(double phase, double freq) {
   return scale_val_2(fmod(phase * freq * 2.0 * PI, 2 * PI) > PI, -1, 1);
 }
-node_perform sq_perform(Node *node, int nframes, double spf) {
+
+static node_perform sq_perform(Node *node, int nframes, double spf) {
   sq_data *data = node->object;
   for (int f = 0; f < nframes; f++) {
     double sample = sq_sample(data->ramp, 440.0);
+
     printf("sq samp: %f\n", sample);
+
     data->ramp += spf;
   }
-};
+}
 
 Node *make_sq_node() {
-  Node *sq = alloc_node(sizeof(sq_data), "square");
+  Node *sq = alloc_node(sizeof(Node), "square");
+  sq->perform = sq_perform;
+  sq_data *data = calloc(sizeof(sq_data), 1);
+  sq->object = data;
   return sq;
 }

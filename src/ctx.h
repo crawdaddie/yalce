@@ -26,4 +26,5 @@ double user_ctx_get_sample(Ctx *ctx, int channel, int frame);
 
 extern Ctx ctx;
 
+Node *ctx_graph_head();
 #endif

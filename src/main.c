@@ -9,13 +9,13 @@
 
 #include <stdlib.h>
 
-#include "bindings.h"
+#include "audio/sq.h"
 #include "channel.h"
 #include "dbg.h"
-#include "lang/lang_runner.h"
-#include "lang/vm.h"
 #include <getopt.h>
 #include <pthread.h>
+
+static void prog() { Node *sq = make_sq_node(); }
 
 void write_sample_s16ne(char *ptr, double sample) {
   int16_t *buf = (int16_t *)ptr;
@@ -303,8 +303,6 @@ int main(int argc, char **argv) {
   }
 
   init_ctx();
-  init_vm();
-  bindings_setup();
 
   outstream->userdata = &ctx;
   outstream->write_callback = write_callback;
@@ -355,26 +353,10 @@ int main(int argc, char **argv) {
   }
 
   printf("--------------\n");
-  if (filename) {
-    printf("loading file %s\n", filename);
-    run_file(filename);
-  }
+  prog();
 
-  char input[2048];
   for (;;) {
     soundio_flush_events(soundio);
-
-    printf(ANSI_COLOR_RED);
-    repl_input(input, 2048, "> ");
-    printf(ANSI_COLOR_RESET);
-
-    interpret(input);
-
-    printf(ANSI_COLOR_BLUE);
-    printf("< ");
-    print_value(*vm.stack_top);
-    printf(ANSI_COLOR_RESET);
-    printf("\n");
   }
 
   soundio_outstream_destroy(outstream);

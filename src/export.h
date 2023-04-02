@@ -9,4 +9,5 @@
 #include <string.h>
 
 int setup_audio();
+int stop_audio();
 #endif

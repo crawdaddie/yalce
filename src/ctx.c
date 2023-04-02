@@ -14,7 +14,7 @@ UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
   perform_graph(ctx->head, nframes, seconds_per_frame);
 }
 
-// Graph *ctx_graph_head() { return ctx.head; }
+Node *ctx_graph_head() { return ctx.head; }
 //
 // Graph *ctx_set_head(Graph *node) {
 //   ctx.head = node;

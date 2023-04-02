@@ -1,20 +1,20 @@
 #include "export.h"
+#include "audio/sq.h"
+#include "ctx.h"
+#include <math.h>
 
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
 static struct SoundIoOutStream *outstream = NULL;
 
-void _write_sample_float32ne(char *ptr, double sample) {
+static void _write_sample_float32ne(char *ptr, double sample) {
   float *buf = (float *)ptr;
   *buf = sample;
 }
-
 static void (*write_sample)(char *ptr, double sample);
-
 static volatile bool want_pause = false;
-
-void _write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
-                     int frame_count_max) {
+static void _write_callback(struct SoundIoOutStream *outstream,
+                            int frame_count_min, int frame_count_max) {
   double float_sample_rate = outstream->sample_rate;
   double seconds_per_frame = 1.0 / float_sample_rate;
 
@@ -78,7 +78,6 @@ static void underflow_callback(struct SoundIoOutStream *outstream) {
   fprintf(stderr, "underflow %d\n", count++);
 }
 int setup_audio() {
-
   enum SoundIoBackend backend = SoundIoBackendNone;
   char *device_id = NULL;
   bool raw = false;
@@ -179,5 +178,14 @@ int setup_audio() {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
+  return 0;
+}
+
+int stop_audio() {
+  free(ctx.head);
+  ctx.head = NULL;
+  /* soundio_outstream_destroy(outstream); */
+  /* soundio_device_unref(device); */
+  /* soundio_destroy(soundio); */
   return 0;
 }
