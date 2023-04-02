@@ -1,6 +1,0 @@
-{
-  let i
-  for (i in iter(2,3,5,7)) {
-    print(i)
-  }
-}

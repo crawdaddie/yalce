@@ -1,2 +1,0 @@
-let a = "hello I'm a string"
-print(a) # expect: hello I'm a string

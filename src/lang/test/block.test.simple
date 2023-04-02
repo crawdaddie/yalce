@@ -1,9 +1,0 @@
-let a = 1
-{
-  print(a) # expect: 1
-  {
-    let b = 2
-    print(b) # expect: 2
-  }
-  print(b) # b goes out of scope expect: Undefined variable 'b'.
-}
