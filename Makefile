@@ -7,6 +7,7 @@ src += src/memory.c
 src += src/node.c
 src += src/audio/sq.c
 src += src/audio/math.c
+src += src/export.c
 
 # src += $(wildcard src/graph/*.c)
 src += $(wildcard src/lang/*.c)
@@ -15,11 +16,29 @@ src += src/bindings.c
 
 obj = $(src:.c=.o)
 
+CC = gcc
+
 LDFLAGS = -lsoundio -lm -lSDL2 -lsndfile
 COMPILER_OPTIONS = -Werror -Wall -Wextra
 
 synth: $(obj)
-	clang -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
+	$(CC) -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
+
+
+EXPORT_COMPILER_OPTIONS = -Werror -Wall -Wextra -fPIC
+
+libsimpleaudio.so: $(obj)
+	$(CC) -shared -o $@ $^ $(LDFLAGS) $(EXPORT_COMPILER_OPTIONS)
+
+.PHONY: ocamlbindings
+ocamlbindings:
+	make libsimpleaudio.so
+	ocamlc -i simpleaudio_stubs.ml > simpleaudio_stubs.mli
+	ocamlc -c simpleaudio_stubs.ml
+	ocamlc -c simpleaudio_stubs.mli
+	ocamlc -I ./ -c simpleaudio_stubs.c -cclib -L. -I src -cclib -lsimpleaudio -o simpleaudio_stubs.o
+	ocamlmklib -o simpleaudio_stubs -L. -lsimpleaudio -L. simpleaudio_stubs.o
+	ocamlc -a -custom -o simpleaudio_stubs.cma simpleaudio_stubs.cmo -dllib dllsimpleaudio_stubs.so
 
 .PHONY: clean
 clean:
@@ -34,7 +53,7 @@ src_lang += lang_test.c
 obj_lang = $(src_lang:.c=.o)
 
 lang: $(obj_lang)
-	clang -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
+	$(CC) -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
 
 .PHONY: test_lang
 test_lang:
@@ -49,5 +68,6 @@ lang_test_suite: $(wildcard $(TEST_DIR)/*.test.simple)
 	for file in $^ ; do \
 		./test_file.sh $${file} ; \
   done
+
 	
 

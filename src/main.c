@@ -44,6 +44,7 @@ void write_sample_float64ne(char *ptr, double sample) {
 static void (*write_sample)(char *ptr, double sample);
 
 static volatile bool want_pause = false;
+
 void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
                     int frame_count_max) {
   double float_sample_rate = outstream->sample_rate;
@@ -314,15 +315,22 @@ int main(int argc, char **argv) {
   outstream->sample_rate = sample_rate;
 
   if (soundio_device_supports_format(device, SoundIoFormatFloat32NE)) {
+    /* printf("32\n"); */
     outstream->format = SoundIoFormatFloat32NE;
     write_sample = write_sample_float32ne;
   } else if (soundio_device_supports_format(device, SoundIoFormatFloat64NE)) {
+
+    /* printf("64\n"); */
     outstream->format = SoundIoFormatFloat64NE;
     write_sample = write_sample_float64ne;
   } else if (soundio_device_supports_format(device, SoundIoFormatS32NE)) {
+
+    /* printf("S32NE\n"); */
     outstream->format = SoundIoFormatS32NE;
     write_sample = write_sample_s32ne;
   } else if (soundio_device_supports_format(device, SoundIoFormatS16NE)) {
+
+    /* printf("S16NE\n"); */
     outstream->format = SoundIoFormatS16NE;
     write_sample = write_sample_s16ne;
   } else {

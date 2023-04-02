@@ -375,6 +375,7 @@ static void parse_precedence(Precedence precedence) {
   advance();
 
   ParseFn prefix_rule = get_rule(parser.previous.type)->prefix;
+
   if (prefix_rule == NULL) {
     error("Expected expression ");
     print_token(parser.previous);
@@ -392,9 +393,8 @@ static void parse_precedence(Precedence precedence) {
     ParseFn infix_rule = get_rule(parser.previous.type)->infix;
     infix_rule(can_assign);
   }
-
   if (can_assign && match(TOKEN_ASSIGNMENT)) {
-    error("Invalid assignment target");
+    error("Invalid assignment target: ");
   }
 };
 

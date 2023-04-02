@@ -34,6 +34,7 @@ ObjArray *make_array(uint32_t size);
 ObjBuffer *make_buffer(uint32_t size, size_t data_size);
 
 void array_set(Object *array, int index, Value value);
+Value array_get(Object *array, int index);
 
 #define ARRAY_VALUES(value) ((ObjArray *)AS_OBJ(value))->values;
 #define IS_BUF(value) AS_OBJ(value)->type == OBJ_BUFFER

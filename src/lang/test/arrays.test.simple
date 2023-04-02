@@ -15,4 +15,7 @@ while(i < 4) {
 # expect: 4
 
 
+set(arr, 0, 0)
+print(arr) # expect: <array 0, 2, 3, 4>
+
 

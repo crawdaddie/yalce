@@ -521,7 +521,7 @@ static InterpretResult run() {
       int8_t index = AS_INTEGER(index_val);
       Value array_val = pop();
       if (IS_BUF(array_val)) {
-        
+
         break;
       }
 
@@ -541,16 +541,11 @@ static InterpretResult run() {
     }
 
     case OP_ARRAY_INDEX_ASSIGNMENT: {
-
       Value val_to_set = pop();
       Value index_val = pop();
       int8_t index = AS_INTEGER(index_val);
       Value array_val = pop();
-      printf("array index assignment: index %d <- ", index);
-      print_value(val_to_set);
       Value array = pop();
-      printf("array: ");
-      print_value(array);
       break;
     }
     }
