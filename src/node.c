@@ -33,3 +33,12 @@ Node *alloc_node(size_t obj_size, const char *name) {
   node->name = name;
   return node;
 };
+
+Node *make_node(size_t obj_size, node_perform perform, const char *name) {
+  void *obj = allocate(obj_size);
+  Node *node = allocate(sizeof(Node));
+  node->perform = perform;
+  node->object = obj;
+  node->name = name;
+  return node;
+};

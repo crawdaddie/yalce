@@ -1,5 +1,6 @@
 #include "sq.h"
 #include "../memory.h"
+#include "../node.h"
 #include "math.h"
 #include "signal.h"
 #include <math.h>
@@ -83,10 +84,13 @@ static node_perform sq_perform(Node *node, int nframes, double spf) {
   }
 }
 
+static void init_sq(Node *node) {
+  node->perform = sq_perform;
+  ((sq_data *)node->object)->freq = 220;
+}
+
 Node *make_sq_node() {
-  Node *sq = alloc_node(sizeof(Node), "square");
-  sq->perform = sq_perform;
-  sq_data *data = calloc(sizeof(sq_data), 1);
-  sq->object = data;
+  Node *sq = ALLOC_NODE(sq_data, "square");
+  init_sq(sq);
   return sq;
 }

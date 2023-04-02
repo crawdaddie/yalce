@@ -9,3 +9,11 @@ CAMLprim value start_audio() {
 
   return Val_int(audio_status);
 }
+
+CAMLprim value kill_audio() {
+  int audio_status = stop_audio();
+
+  printf("%s\n", audio_status == 0 ? "audio killed" : "kill audio failed");
+
+  return Val_int(audio_status);
+}

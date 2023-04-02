@@ -10,9 +10,9 @@ src += src/audio/math.c
 src += src/export.c
 
 # src += $(wildcard src/graph/*.c)
-src += $(wildcard src/lang/*.c)
+# src += $(wildcard src/lang/*.c)
 # src += $(wildcard src/audio/*.c)
-src += src/bindings.c
+# src += src/bindings.c
 
 obj = $(src:.c=.o)
 
@@ -39,6 +39,10 @@ ocamlbindings:
 	ocamlc -I ./ -c simpleaudio_stubs.c -cclib -L. -I src -cclib -lsimpleaudio -o simpleaudio_stubs.o
 	ocamlmklib -o simpleaudio_stubs -L. -lsimpleaudio -L. simpleaudio_stubs.o
 	ocamlc -a -custom -o simpleaudio_stubs.cma simpleaudio_stubs.cmo -dllib dllsimpleaudio_stubs.so
+
+.PHONY: utop_test
+utop_test:
+	utop simpleaudio_stubs.cma -init utop_init.ml
 
 .PHONY: clean
 clean:
