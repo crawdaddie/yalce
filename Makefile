@@ -6,8 +6,12 @@ src += src/oscilloscope.c
 src += src/memory.c
 src += src/node.c
 src += src/audio/sq.c
+src += src/audio/sin.c
 src += src/audio/math.c
-src += src/export.c
+src += src/start_audio.c
+# src += src/callback.c
+src += src/audio/signal.c
+src += src/audio/out.c
 
 # src += $(wildcard src/graph/*.c)
 # src += $(wildcard src/lang/*.c)
@@ -34,8 +38,8 @@ libsimpleaudio.so: $(obj)
 ocamlbindings:
 	make libsimpleaudio.so
 	ocamlc -i simpleaudio_stubs.ml > simpleaudio_stubs.mli
-	ocamlc -c simpleaudio_stubs.ml
 	ocamlc -c simpleaudio_stubs.mli
+	ocamlc -c simpleaudio_stubs.ml
 	ocamlc -I ./ -c simpleaudio_stubs.c -cclib -L. -I src -cclib -lsimpleaudio -o simpleaudio_stubs.o
 	ocamlmklib -o simpleaudio_stubs -L. -lsimpleaudio -L. simpleaudio_stubs.o
 	ocamlc -a -custom -o simpleaudio_stubs.cma simpleaudio_stubs.cmo -dllib dllsimpleaudio_stubs.so

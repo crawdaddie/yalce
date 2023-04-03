@@ -7,9 +7,9 @@ typedef struct Signal {
   int num_chans;
 } Signal;
 
-Signal new_signal(double def, int size);
+Signal new_signal(int size);
 
-Signal *new_signal_heap(double def, int size);
+Signal *new_signal_heap(int size);
 
 void set_signal(Signal signal, double value);
 

@@ -27,4 +27,6 @@ double user_ctx_get_sample(Ctx *ctx, int channel, int frame);
 extern Ctx ctx;
 
 Node *ctx_graph_head();
+
+double channel_read_destructive(int out_chan, int stereo_channel, int frame);
 #endif

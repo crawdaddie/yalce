@@ -15,7 +15,6 @@
 #include <getopt.h>
 #include <pthread.h>
 
-static void prog() { Node *sq = make_sq_node(); }
 
 void write_sample_s16ne(char *ptr, double sample) {
   int16_t *buf = (int16_t *)ptr;
@@ -353,7 +352,6 @@ int main(int argc, char **argv) {
   }
 
   printf("--------------\n");
-  prog();
 
   for (;;) {
     soundio_flush_events(soundio);

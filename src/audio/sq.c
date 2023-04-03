@@ -74,23 +74,23 @@ static double sq_sample(double phase, double freq) {
 }
 
 static node_perform sq_perform(Node *node, int nframes, double spf) {
-  sq_data *data = node->object;
+  sq_data *data = NODE_DATA(sq_data, node);
+  double freq = data->freq;
   for (int f = 0; f < nframes; f++) {
-    double sample = sq_sample(data->ramp, 440.0);
+    double sample = sq_sample(data->ramp, freq);
 
-    printf("sq samp: %f\n", sample);
 
     data->ramp += spf;
+    data->out->data[f] = sample;
   }
 }
 
-static void init_sq(Node *node) {
-  node->perform = sq_perform;
-  ((sq_data *)node->object)->freq = 220;
-}
 
-Node *make_sq_node() {
+Node *sq_node() {
   Node *sq = ALLOC_NODE(sq_data, "square");
-  init_sq(sq);
+  sq->perform = sq_perform;
+  sq_data *data = sq->object;
+  data->freq = 220;
+  data->out = new_signal_heap(BUF_SIZE);
   return sq;
 }

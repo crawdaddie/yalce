@@ -2,13 +2,17 @@
 #define _OUT_H
 #include "../common.h"
 #include "../node.h"
+#include "signal.h"
 
-void perform_add_out(Node *node, int nframes, double seconds_per_frame);
+typedef struct {
+  Signal *in;
+  Signal *out;
+} out_data;
 
-Node *add_out(double *node_out, double *channel_out);
 
-void perform_replace_out(Node *node, int nframes, double seconds_per_frame);
 
-Node *replace_out(double *node_out, double *channel_out);
+
+Node *replace_out(Signal *in, double *channel_out);
+Node *add_out(Signal *in, double *channel_out);
 
 #endif

@@ -29,3 +29,10 @@ Node *ctx_graph_head() { return ctx.head; }
 double user_ctx_get_sample(Ctx *ctx, int channel, int frame) { return 0; };
 
 double *get_sys_time() { return &ctx.sys_time; }
+
+double channel_read_destructive(int out_chan, int layout_channel, int frame) {
+  int data_idx = (LAYOUT_CHANNELS * frame) + layout_channel;
+  double output = ctx.out_chans[out_chan].data[frame + layout_channel];
+  ctx.out_chans[out_chan].data[frame + layout_channel] = 0.0;
+  return output;
+}

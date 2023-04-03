@@ -2,12 +2,14 @@
 #define _SQ_H
 #include "../common.h"
 #include "../node.h"
+#include "signal.h"
 
-typedef struct sq_data {
+typedef struct {
   double ramp;
   double freq;
+  Signal *out;
 } sq_data;
 /* node_perform sq_perform(Node *node, int nframes, double spf); */
-Node *make_sq_node();
+Node *sq_node();
 
 #endif

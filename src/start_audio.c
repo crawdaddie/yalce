@@ -1,7 +1,21 @@
-#include "export.h"
+#include "start_audio.h"
 #include "audio/sq.h"
+#include "audio/sin.h"
+#include "audio/out.h"
 #include "ctx.h"
 #include <math.h>
+
+
+static void add_squares() {
+  Node *sq = sin_node(200);
+  Node *out = replace_out(
+      NODE_DATA(sq_data, sq)->out,
+      ctx.out_chans[0].data
+    );
+
+  ctx.head = sq;
+  sq->next = out;
+}
 
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
@@ -48,9 +62,12 @@ static void _write_callback(struct SoundIoOutStream *outstream,
           for (int layout_chan = 0; layout_chan < layout->channel_count;
                layout_chan += 1) {
             write_sample(areas[layout_chan].ptr,
-                         ctx->main_vol * chan.data[frame + layout_chan]);
+                         ctx->main_vol * chan.data[frame + layout_chan]
+                         /* ctx->main_vol * channel_read_destructive(out_chan, layout_chan, frame) */
+                         );
 
-            areas[layout_chan].ptr += areas[layout_chan].step;
+
+           areas[layout_chan].ptr += areas[layout_chan].step;
           }
         }
       }
@@ -153,6 +170,7 @@ int setup_audio() {
   }
 
   init_ctx();
+  /* add_squares(); */
 
   outstream->userdata = &ctx;
   outstream->write_callback = _write_callback;
