@@ -1,32 +1,18 @@
 #include "start_audio.h"
-#include "audio/sq.h"
-#include "audio/sin.h"
 #include "audio/out.h"
+#include "audio/sin.h"
+#include "audio/sq.h"
 #include "ctx.h"
+#include "write_sample.h"
 #include <math.h>
-
-
-static void add_squares() {
-  Node *sq = sin_node(200);
-  Node *out = replace_out(
-      NODE_DATA(sq_data, sq)->out,
-      ctx.out_chans[0].data
-    );
-
-  ctx.head = sq;
-  sq->next = out;
-}
 
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
 static struct SoundIoOutStream *outstream = NULL;
 
-static void _write_sample_float32ne(char *ptr, double sample) {
-  float *buf = (float *)ptr;
-  *buf = sample;
-}
 static void (*write_sample)(char *ptr, double sample);
 static volatile bool want_pause = false;
+
 static void _write_callback(struct SoundIoOutStream *outstream,
                             int frame_count_min, int frame_count_max) {
   double float_sample_rate = outstream->sample_rate;
@@ -53,25 +39,29 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
+    if (ctx->head == NULL) {
+      break;
+    }
 
+    double pitch = 440.0;
+    double radians_per_second = pitch * 2.0 * PI;
     for (int out_chan = 0; out_chan < OUTPUT_CHANNELS; out_chan++) {
-      Channel chan = ctx->out_chans[out_chan];
+      for (int frame = 0; frame < frame_count; frame += 1) {
+        for (int channel = 0; channel < layout->channel_count; channel += 1) {
+          Signal OutChannel = ctx->out_chans[out_chan];
 
-      if (!chan.mute) {
-        for (int frame = 0; frame < frame_count; frame += 1) {
-          for (int layout_chan = 0; layout_chan < layout->channel_count;
-               layout_chan += 1) {
-            write_sample(areas[layout_chan].ptr,
-                         ctx->main_vol * chan.data[frame + layout_chan]
-                         /* ctx->main_vol * channel_read_destructive(out_chan, layout_chan, frame) */
-                         );
+          double sample =
+              OutChannel.data[(OutChannel.layout * frame) + channel];
 
+          write_sample(areas[channel].ptr, ctx->main_vol * sample);
 
-           areas[layout_chan].ptr += areas[layout_chan].step;
-          }
+          OutChannel.data[(OutChannel.layout * frame) + channel] =
+              0.0; // zero channel buffer after reading from it
+          areas[channel].ptr += areas[channel].step;
         }
       }
     }
+
     ctx->sys_time += seconds_per_frame * frame_count;
 
     if ((err = soundio_outstream_end_write(outstream))) {
@@ -170,7 +160,6 @@ int setup_audio() {
   }
 
   init_ctx();
-  /* add_squares(); */
 
   outstream->userdata = &ctx;
   outstream->write_callback = _write_callback;
@@ -179,7 +168,26 @@ int setup_audio() {
   outstream->name = stream_name;
   outstream->software_latency = latency;
   outstream->sample_rate = sample_rate;
-  write_sample = _write_sample_float32ne;
+
+  if (soundio_device_supports_format(device, SoundIoFormatFloat32NE)) {
+    outstream->format = SoundIoFormatFloat32NE;
+    write_sample = write_sample_float32ne;
+  } else if (soundio_device_supports_format(device, SoundIoFormatFloat64NE)) {
+
+    outstream->format = SoundIoFormatFloat64NE;
+    write_sample = write_sample_float64ne;
+  } else if (soundio_device_supports_format(device, SoundIoFormatS32NE)) {
+
+    outstream->format = SoundIoFormatS32NE;
+    write_sample = write_sample_s32ne;
+  } else if (soundio_device_supports_format(device, SoundIoFormatS16NE)) {
+
+    outstream->format = SoundIoFormatS16NE;
+    write_sample = write_sample_s16ne;
+  } else {
+    fprintf(stderr, "No suitable device format available.\n");
+    return 1;
+  }
 
   if ((err = soundio_outstream_open(outstream))) {
     fprintf(stderr, "unable to open device: %s", soundio_strerror(err));

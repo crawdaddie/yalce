@@ -9,6 +9,7 @@ src += src/audio/sq.c
 src += src/audio/sin.c
 src += src/audio/math.c
 src += src/start_audio.c
+src += src/write_sample.c
 # src += src/callback.c
 src += src/audio/signal.c
 src += src/audio/out.c

@@ -1,15 +1,22 @@
 #ifndef _SIGNAL_H
 #define _SIGNAL_H
 
+typedef enum {
+  SIGNAL_AUDIO,
+  SIGNAL_CTL,
+} signal_type;
+
 typedef struct Signal {
   double *data;
   int size;
-  int num_chans;
+  int layout;
+  signal_type type;
 } Signal;
 
 Signal new_signal(int size);
 
-Signal *new_signal_heap(int size);
+Signal *new_signal_heap(int size, int layout);
+Signal *new_signal_heap_default(int size, int layout, double def);
 
 void set_signal(Signal signal, double value);
 

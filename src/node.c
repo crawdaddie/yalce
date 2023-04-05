@@ -29,7 +29,7 @@ node_perform perform_graph(struct Node *head, int nframes,
 Node *alloc_node(size_t obj_size, const char *name) {
   void *obj = allocate(obj_size);
   Node *node = allocate(sizeof(Node));
-  node->object = obj;
+  node->data = obj;
   node->name = name;
   return node;
 };
@@ -38,7 +38,7 @@ Node *make_node(size_t obj_size, node_perform perform, const char *name) {
   void *obj = allocate(obj_size);
   Node *node = allocate(sizeof(Node));
   node->perform = perform;
-  node->object = obj;
+  node->data = obj;
   node->name = name;
   return node;
 };

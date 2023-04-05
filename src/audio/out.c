@@ -1,54 +1,54 @@
 #include "out.h"
+#include "../ctx.h"
 #include <stdlib.h>
 
+static node_perform perform_replace_out(Node *node, int nframes,
+                                        double seconds_per_frame) {
+  out_data *data = NODE_DATA(out_data, node);
+  Signal *out = data->out_channel;
+  Signal *input = data->in;
 
-static node_perform perform_replace_out(Node *node, int nframes, double seconds_per_frame) {
-  Signal *out = NODE_DATA(out_data, node)->out;
-  Signal *input = NODE_DATA(out_data, node)->in;
-
-  for (int frame = 0; frame < nframes; frame++) {
-    double value = input->data[frame];
-
-    out->data[frame * LAYOUT_CHANNELS] = value;
-    out->data[frame * LAYOUT_CHANNELS + 1] = value;
+  for (int layout = 0; layout < out->layout; layout++) {
+    for (int frame = 0; frame < nframes; frame++) {
+      double value = input->data[frame];
+      out->data[out->layout * frame + layout] = value;
+    }
   }
 }
 
-Node *replace_out(Signal *in, double *channel_out) {
+Node *replace_out(Signal *in, Signal *out_channel) {
   Node *out = ALLOC_NODE(out_data, "replace_out");
   out->perform = perform_replace_out;
-  out_data *data = out->object;
+  out_data *data = out->data;
 
   data->in = in;
-  data->out = malloc(sizeof(Signal));
-  data->out->data = channel_out;
-
-  data->out->size = LAYOUT_CHANNELS * BUF_SIZE;
+  data->out_channel = out_channel;
 
   return out;
 }
 
-static node_perform perform_add_out(Node *node, int nframes, double seconds_per_frame) {
-  Signal *out = NODE_DATA(out_data, node)->out;
-  Signal *input = NODE_DATA(out_data, node)->in;
+static node_perform perform_add_out(Node *node, int nframes,
+                                    double seconds_per_frame) {
 
-  for (int frame = 0; frame < nframes; frame++) {
-    double value = input->data[frame];
+  out_data *data = NODE_DATA(out_data, node);
+  Signal *out = data->out_channel;
+  Signal *input = data->in;
 
-    out->data[frame * LAYOUT_CHANNELS] += value;
-    out->data[frame * LAYOUT_CHANNELS + 1] += value;
+  for (int layout = 0; layout < out->layout; layout++) {
+    for (int frame = 0; frame < nframes; frame++) {
+      double value = input->data[frame];
+      out->data[out->layout * frame + layout] += value;
+    }
   }
 }
 
-Node *add_out(Signal *in, double *channel_out) {
+Node *add_out(Signal *in, Signal *out_channel) {
   Node *out = ALLOC_NODE(out_data, "replace_out");
   out->perform = perform_add_out;
-  out_data *data = out->object;
+  out_data *data = out->data;
 
   data->in = in;
-  data->out = malloc(sizeof(Signal));
-  data->out->data = channel_out;
-  data->out->size = LAYOUT_CHANNELS * BUF_SIZE;
+  data->out_channel = out_channel;
 
   return out;
 }

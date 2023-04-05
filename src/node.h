@@ -6,7 +6,7 @@ typedef struct Node (*node_perform)(struct Node *node, int nframes, double spf);
 
 typedef struct Node {
   node_perform (*perform)(struct Node *node, int nframes, double spf);
-  void *object;
+  void *data;
   const char *name;
   struct Node *next;
 } Node;
@@ -18,7 +18,6 @@ Node *alloc_node(size_t obj_size, const char *name);
 Node *make_node(size_t obj_size, node_perform perform, const char *name);
 
 #define ALLOC_NODE(type, name) alloc_node(sizeof(type), name)
-#define NODE_DATA(type, node) ((type *)node->object)
-
+#define NODE_DATA(type, node) ((type *)node->data)
 #define MAKE_NODE(type, perform, name) make_node(sizeof(type), perform, name)
 #endif

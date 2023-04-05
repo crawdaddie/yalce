@@ -11,5 +11,4 @@ typedef struct {
 
 Node *sin_node(double freq);
 
-
 #endif

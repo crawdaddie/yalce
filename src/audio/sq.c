@@ -79,18 +79,38 @@ static node_perform sq_perform(Node *node, int nframes, double spf) {
   for (int f = 0; f < nframes; f++) {
     double sample = sq_sample(data->ramp, freq);
 
-
     data->ramp += spf;
     data->out->data[f] = sample;
   }
 }
 
-
-Node *sq_node() {
+Node *sq_node(double freq) {
   Node *sq = ALLOC_NODE(sq_data, "square");
   sq->perform = sq_perform;
-  sq_data *data = sq->object;
-  data->freq = 220;
-  data->out = new_signal_heap(BUF_SIZE);
+  sq_data *data = sq->data;
+  data->freq = new_signal_heap_default(1, 1, freq);
+  data->out = new_signal_heap(BUF_SIZE, 1);
+  return sq;
+}
+
+static node_perform sq_detune_perform(Node *node, int nframes, double spf) {
+  sq_data *data = NODE_DATA(sq_data, node);
+  Signal *freq = data->freq;
+
+  for (int f = 0; f < nframes; f++) {
+    double sample = sq_sample(data->ramp, unwrap(*freq, f)) +
+                    sq_sample(data->ramp, unwrap(*freq, f) * 1.01);
+
+    data->ramp += spf;
+    data->out->data[f] = 0.5 * sample;
+  }
+}
+
+Node *sq_detune_node(double freq) {
+  Node *sq = ALLOC_NODE(sq_data, "square");
+  sq->perform = sq_detune_perform;
+  sq_data *data = sq->data;
+  data->freq = new_signal_heap_default(1, 1, freq);
+  data->out = new_signal_heap(BUF_SIZE, 1);
   return sq;
 }

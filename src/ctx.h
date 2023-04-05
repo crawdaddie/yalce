@@ -1,18 +1,19 @@
 #ifndef _CTX_H
 #define _CTX_H
+#include "audio/signal.h"
 #include "common.h"
 #include "node.h"
 
 typedef struct {
   bool mute;
-  double data[BUF_SIZE * LAYOUT_CHANNELS];
+  double data[BUF_SIZE];
 } Channel;
 
 typedef struct {
   double main_vol;
   double sys_time; /* global time in secs */
   Node *head;
-  Channel out_chans[OUTPUT_CHANNELS];
+  Signal out_chans[OUTPUT_CHANNELS];
 } Ctx;
 
 double **alloc_buses(int num_buses);
@@ -29,4 +30,6 @@ extern Ctx ctx;
 Node *ctx_graph_head();
 
 double channel_read_destructive(int out_chan, int stereo_channel, int frame);
+
+int channel_data_idx(int frame, int layout_channel);
 #endif

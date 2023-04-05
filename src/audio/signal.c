@@ -1,10 +1,8 @@
+#include "signal.h"
+#include "../common.h"
 #include "stdlib.h"
 
-typedef struct Signal {
-  double *data;
-  int size;
-  int num_chans;
-} Signal;
+static double signal_buffer_pool[128][BUF_SIZE] = {0.0};
 
 Signal new_signal(int size) {
   double *data = malloc(sizeof(double) * size);
@@ -14,15 +12,16 @@ Signal new_signal(int size) {
   return (Signal){.data = data, .size = size};
 }
 
-Signal *new_signal_heap(int size) {
+Signal *new_signal_heap(int size, int layout) {
   double *data = calloc(sizeof(double), size);
   Signal *sig = malloc(sizeof(Signal));
   sig->data = data;
   sig->size = size;
+  sig->layout = layout;
   return sig;
 }
 
-Signal *new_signal_heap_default(double def, int size) {
+Signal *new_signal_heap_default(int size, int layout, double def) {
   double *data = malloc(sizeof(double) * size);
   for (int i = 0; i < size; i++) {
     data[i] = def;
@@ -32,7 +31,6 @@ Signal *new_signal_heap_default(double def, int size) {
   sig->size = size;
   return sig;
 }
-
 
 void set_signal(Signal signal, double value) {
   for (int i = 0; i < signal.size; i++) {

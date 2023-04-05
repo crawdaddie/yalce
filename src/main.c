@@ -1,5 +1,6 @@
 #include "audio/signal.h"
 #include "ctx.h"
+#include "write_sample.h"
 #include <math.h>
 #include <soundio/soundio.h>
 #include <stdint.h>
@@ -14,31 +15,6 @@
 #include "dbg.h"
 #include <getopt.h>
 #include <pthread.h>
-
-
-void write_sample_s16ne(char *ptr, double sample) {
-  int16_t *buf = (int16_t *)ptr;
-  double range = (double)INT16_MAX - (double)INT16_MIN;
-  double val = sample * range / 2.0;
-  *buf = val;
-}
-
-void write_sample_s32ne(char *ptr, double sample) {
-  int32_t *buf = (int32_t *)ptr;
-  double range = (double)INT32_MAX - (double)INT32_MIN;
-  double val = sample * range / 2.0;
-  *buf = val;
-}
-
-void write_sample_float32ne(char *ptr, double sample) {
-  float *buf = (float *)ptr;
-  *buf = sample;
-}
-
-void write_sample_float64ne(char *ptr, double sample) {
-  double *buf = (double *)ptr;
-  *buf = sample;
-}
 
 static void (*write_sample)(char *ptr, double sample);
 
@@ -71,21 +47,21 @@ void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
 
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
 
-    for (int out_chan = 0; out_chan < OUTPUT_CHANNELS; out_chan++) {
-      Channel chan = ctx->out_chans[out_chan];
-
-      if (!chan.mute) {
-        for (int frame = 0; frame < frame_count; frame += 1) {
-          for (int layout_chan = 0; layout_chan < layout->channel_count;
-               layout_chan += 1) {
-            write_sample(areas[layout_chan].ptr,
-                         ctx->main_vol * chan.data[frame + layout_chan]);
-
-            areas[layout_chan].ptr += areas[layout_chan].step;
-          }
-        }
-      }
-    }
+    /* for (int out_chan = 0; out_chan < OUTPUT_CHANNELS; out_chan++) { */
+    /*   Channel chan = ctx->out_chans[out_chan]; */
+    /*  */
+    /*   if (!chan.mute) { */
+    /*     for (int frame = 0; frame < frame_count; frame += 1) { */
+    /*       for (int layout_chan = 0; layout_chan < layout->channel_count; */
+    /*            layout_chan += 1) { */
+    /*         write_sample(areas[layout_chan].ptr, */
+    /*                      ctx->main_vol * chan.data[frame + layout_chan]); */
+    /*  */
+    /*         areas[layout_chan].ptr += areas[layout_chan].step; */
+    /*       } */
+    /*     } */
+    /*   } */
+    /* } */
     ctx->sys_time += seconds_per_frame * frame_count;
 
     if ((err = soundio_outstream_end_write(outstream))) {
