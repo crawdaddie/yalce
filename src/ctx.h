@@ -14,6 +14,7 @@ typedef struct {
   double sys_time; /* global time in secs */
   Node *head;
   Signal out_chans[OUTPUT_CHANNELS];
+  double *channel_vols;
 } Ctx;
 
 double **alloc_buses(int num_buses);

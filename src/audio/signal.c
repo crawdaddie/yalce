@@ -45,5 +45,8 @@ void set_signal_ramp(Signal signal, double value, int time) {
 }
 
 double unwrap(Signal sig, int frame) {
+  if (sig.size == 1) {
+    return *(sig.data);
+  }
   return *(sig.data + (frame % sig.size));
 }

@@ -42,3 +42,10 @@ Node *make_node(size_t obj_size, node_perform perform, const char *name) {
   node->name = name;
   return node;
 };
+
+Node *node_add_after(Node *before, Node *after) {
+  Node *next = before->next;
+  before->next = after;
+  after->next = next;
+  return after;
+}

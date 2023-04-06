@@ -1,24 +1,27 @@
 #include "ctx.h"
+#include "audio/osc.h"
 #include "common.h"
 #include <pthread.h>
 
-static double channel_pool[OUTPUT_CHANNELS][BUF_SIZE * LAYOUT_CHANNELS] = {0.0};
+static double output_channel_pool[OUTPUT_CHANNELS][BUF_SIZE * LAYOUT_CHANNELS];
+static double channel_vols[OUTPUT_CHANNELS] = {[0 ... OUTPUT_CHANNELS - 1] =
+                                                   1.0};
 
-Ctx ctx = {
-    .main_vol = 0.25,
-    .head = NULL,
-    .sys_time = 0,
-};
+Ctx ctx;
 
 void init_ctx() {
   ctx.main_vol = 0.25;
-  ctx.head = NULL;
   ctx.sys_time = 0;
+
   for (int i = 0; i < OUTPUT_CHANNELS; i++) {
-    ctx.out_chans[i].data = channel_pool[i];
+    ctx.out_chans[i].data = output_channel_pool[i];
     ctx.out_chans[i].size = BUF_SIZE;
     ctx.out_chans[i].layout = LAYOUT_CHANNELS;
   }
+  ctx.channel_vols = channel_vols;
+
+  ctx.head = NULL;
+  osc_setup();
 }
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {

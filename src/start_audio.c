@@ -1,8 +1,8 @@
 #include "start_audio.h"
+#include "audio/osc.h"
 #include "audio/out.h"
-#include "audio/sin.h"
-#include "audio/sq.h"
 #include "ctx.h"
+#include "oscilloscope.h"
 #include "write_sample.h"
 #include <math.h>
 
@@ -38,22 +38,26 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
-    user_ctx_callback(ctx, frame_count, seconds_per_frame);
     if (ctx->head == NULL) {
       break;
     }
 
-    double pitch = 440.0;
-    double radians_per_second = pitch * 2.0 * PI;
+    user_ctx_callback(ctx, frame_count, seconds_per_frame);
+
     for (int out_chan = 0; out_chan < OUTPUT_CHANNELS; out_chan++) {
-      for (int frame = 0; frame < frame_count; frame += 1) {
-        for (int channel = 0; channel < layout->channel_count; channel += 1) {
+      for (int channel = 0; channel < layout->channel_count; channel += 1) {
+        for (int frame = 0; frame < frame_count; frame += 1) {
+
+          set_osc_scope_buf(frame, 0.0);
+
           Signal OutChannel = ctx->out_chans[out_chan];
 
           double sample =
-              OutChannel.data[(OutChannel.layout * frame) + channel];
+              OutChannel.data[(OutChannel.layout * frame) + channel] *
+              ctx->channel_vols[out_chan];
 
           write_sample(areas[channel].ptr, ctx->main_vol * sample);
+          add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
 
           OutChannel.data[(OutChannel.layout * frame) + channel] =
               0.0; // zero channel buffer after reading from it
@@ -204,6 +208,8 @@ int setup_audio() {
     fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
+  /* oscilloscope(); */
+
   return 0;
 }
 

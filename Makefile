@@ -5,14 +5,15 @@ src += src/scheduling.c
 src += src/oscilloscope.c
 src += src/memory.c
 src += src/node.c
-src += src/audio/sq.c
-src += src/audio/sin.c
+src += src/audio/osc.c
 src += src/audio/math.c
 src += src/start_audio.c
 src += src/write_sample.c
 # src += src/callback.c
 src += src/audio/signal.c
+src += src/oscilloscope.c
 src += src/audio/out.c
+src += lib/tigr.c
 
 # src += $(wildcard src/graph/*.c)
 # src += $(wildcard src/lang/*.c)
@@ -21,19 +22,21 @@ src += src/audio/out.c
 
 obj = $(src:.c=.o)
 
-CC = gcc
+CC = clang 
 
 LDFLAGS = -lsoundio -lm -lSDL2 -lsndfile
+
+FRAMEWORKS =-framework opengl -framework cocoa
 COMPILER_OPTIONS = -Werror -Wall -Wextra
 
 synth: $(obj)
-	$(CC) -o $@ $^ $(LDFLAGS) $(COMPILER_OPTIONS)
+	$(CC) -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(COMPILER_OPTIONS)
 
 
 EXPORT_COMPILER_OPTIONS = -Werror -Wall -Wextra -fPIC
 
 libsimpleaudio.so: $(obj)
-	$(CC) -shared -o $@ $^ $(LDFLAGS) $(EXPORT_COMPILER_OPTIONS)
+	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(EXPORT_COMPILER_OPTIONS)
 
 .PHONY: ocamlbindings
 ocamlbindings:
