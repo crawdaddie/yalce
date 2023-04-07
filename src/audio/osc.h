@@ -4,54 +4,76 @@
 #include "../node.h"
 #include "signal.h"
 
+#define INS(node_data) ((signals *)node_data)->ins
+#define IN(node, enum_name) (INS(node->data)[enum_name])
+#define OUTS(node_data) ((signals *)node_data)->outs
+#define NUM_INS(node_data) ((signals *)node_data)->num_ins
+#define NUM_OUTS(node_data) ((signals *)node_data)->num_outs
+
 typedef struct {
-  Signal *freq;
-  Signal *out;
+  Signal *ins;
+  Signal *outs;
+  int num_ins;
+  int num_outs;
+} signals;
+
+// EXPORT SIGNAL ENUM
+typedef enum {
+  SIN_SIG_FREQ,
+} sin_sig_map;
+
+typedef struct {
+  signals signals;
   double phase;
 } sin_data;
 
-typedef struct {
-  double phase;
-  double freq;
-  double pm_freq;
-  double pm_index;
-  Signal *out;
-} pmsin_data;
-
 Node *sin_node(double freq);
 
-Node *pmsin_node(double freq, double pm_index, double pm_freq);
+// EXPORT SIGNAL ENUM
+typedef enum {
+  SQ_SIG_FREQ,
+} sq_sig_map;
 
 typedef struct {
-  Signal *freq;
-  Signal *out;
-  double ramp;
+  signals signals;
+  double phase;
 } sq_data;
-/* node_perform sq_perform(Node *node, int nframes, double spf); */
-Node *sq_node(double freq);
 
+Node *sq_node(double freq);
 Node *sq_detune_node(double freq);
 
+// EXPORT SIGNAL ENUM
+typedef enum {
+  IMPULSE_SIG_FREQ,
+} impulse_sig_map;
+
 typedef struct {
-  Signal *freq;
-  Signal *out;
+  signals signals;
   double counter;
 } impulse_data;
 
 Node *impulse_node(double freq);
 
+// EXPORT SIGNAL ENUM
+typedef enum {
+  POLY_SAW_SIG_FREQ,
+} poly_saw_sig_map;
+
 typedef struct {
-  Signal *freq;
-  Signal *out;
+  signals signals;
   double phase;
 } poly_saw_data;
 
 Node *poly_saw_node(double freq);
 
+// EXPORT SIGNAL ENUM
+typedef enum {
+  PULSE_SIG_FREQ,
+  PULSE_SIG_PW,
+} pulse_sig_map;
+
 typedef struct {
-  Signal *freq;
-  Signal *out;
-  Signal *pw;
+  signals signals;
   double phase;
 } pulse_data;
 

@@ -1,6 +1,8 @@
 #include "ctx.h"
+#include "audio/blip.h"
 #include "audio/osc.h"
 #include "common.h"
+
 #include <pthread.h>
 
 static double output_channel_pool[OUTPUT_CHANNELS][BUF_SIZE * LAYOUT_CHANNELS];
@@ -14,14 +16,16 @@ void init_ctx() {
   ctx.sys_time = 0;
 
   for (int i = 0; i < OUTPUT_CHANNELS; i++) {
-    ctx.out_chans[i].data = output_channel_pool[i];
-    ctx.out_chans[i].size = BUF_SIZE;
-    ctx.out_chans[i].layout = LAYOUT_CHANNELS;
+    /* ctx.out_chans[i].data = output_channel_pool[i]; */
+    /* ctx.out_chans[i].size = BUF_SIZE; */
+    /* ctx.out_chans[i].layout = LAYOUT_CHANNELS; */
+    ctx.out_chans[i].vol = 1.0;
   }
-  ctx.channel_vols = channel_vols;
+  /* ctx.channel_vols = channel_vols; */
 
   ctx.head = NULL;
   osc_setup();
+  blip_setup();
 }
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {

@@ -1,5 +1,6 @@
 #ifndef _NODE_H
 #define _NODE_H
+#include <stdbool.h>
 #include <stdio.h>
 
 typedef struct Node (*node_perform)(struct Node *node, int nframes, double spf);
@@ -7,8 +8,12 @@ typedef struct Node (*node_perform)(struct Node *node, int nframes, double spf);
 typedef struct Node {
   node_perform (*perform)(struct Node *node, int nframes, double spf);
   void *data;
+  bool killed;
   const char *name;
   struct Node *next;
+  struct Node *prev;
+  struct Node *parent;
+  struct Node *_sub;
 } Node;
 
 node_perform perform_graph(struct Node *head, int nframes, double spf);

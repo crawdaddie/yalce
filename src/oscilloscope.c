@@ -55,8 +55,15 @@ static void draw_waveform_on_window(Tigr *screen) {
   // Unlock the buffer
   /* pthread_mutex_unlock(&buffer_mutex); */
 }
+static Tigr *screen = NULL;
 
 // Define the main function
+static void draw() {
+  while (!tigrClosed(screen)) {
+    draw_waveform_on_window(screen);
+    tigrUpdate(screen);
+  }
+}
 int oscilloscope() {
   // Initialize the mutex
   /* pthread_mutex_init(&buffer_mutex, NULL); */
@@ -67,14 +74,17 @@ int oscilloscope() {
    */
 
   // Create the tigr window
-  Tigr *screen =
-      tigrWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Oscilloscope", TIGR_FIXED);
+  screen = tigrWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Oscilloscope", TIGR_FIXED);
 
-  // Draw the waveform on the tigr window
   while (!tigrClosed(screen)) {
     draw_waveform_on_window(screen);
     tigrUpdate(screen);
   }
+
+  // Draw the waveform on the tigr window
+  /* pthread_t draw_thread; */
+  /* pthread_create(&draw_thread, NULL, draw, NULL); */
+  /* pthread_detach(draw_thread); */
 
   // Clean up
   /* pthread_mutex_destroy(&buffer_mutex); */

@@ -6,6 +6,7 @@ src += src/oscilloscope.c
 src += src/memory.c
 src += src/node.c
 src += src/audio/osc.c
+src += src/audio/blip.c
 src += src/audio/math.c
 src += src/start_audio.c
 src += src/write_sample.c

@@ -6,15 +6,17 @@
 
 typedef struct {
   bool mute;
-  double data[BUF_SIZE];
+  Node *head;
+  double vol;
+  /* double data[BUF_SIZE]; */
 } Channel;
 
 typedef struct {
   double main_vol;
   double sys_time; /* global time in secs */
   Node *head;
-  Signal out_chans[OUTPUT_CHANNELS];
-  double *channel_vols;
+  /* Signal out_chans[OUTPUT_CHANNELS]; */
+  Channel out_chans[OUTPUT_CHANNELS];
 } Ctx;
 
 double **alloc_buses(int num_buses);

@@ -1,3 +1,4 @@
+#include "src/audio/blip.h"
 #include "src/audio/osc.h"
 #include "src/audio/out.h"
 #include "src/ctx.h"
@@ -18,7 +19,6 @@ CAMLprim value caml_start_audio() {
 
   printf("%s\n", audio_status == 0 ? "audio started" : "audio failed");
 
-  /* return Val_int(audio_status); */
   return Val_unit;
 }
 
@@ -48,24 +48,11 @@ CAMLprim value caml_chain_nodes() {
 CAMLprim value caml_play_sin(value freq) {
 
   Node *osc = sin_node(Double_val(freq));
-  Node *out =
-      replace_out(NODE_DATA(poly_saw_data, osc)->out, &ctx.out_chans[0]);
+  /* Node *out = add_out(OUTS(NODE_DATA(poly_saw_data, osc)),
+   * &ctx.out_chans[0]); */
 
-  ctx.head = osc;
-  osc->next = out;
-
-  return Val_node(osc);
-}
-
-CAMLprim value caml_play_pmsin(value freq, value pm_index, value pm_freq) {
-
-  Node *osc =
-      pmsin_node(Double_val(freq), Double_val(pm_index), Double_val(pm_freq));
-  Node *out =
-      replace_out(NODE_DATA(poly_saw_data, osc)->out, &ctx.out_chans[0]);
-
-  ctx.head = osc;
-  osc->next = out;
+  ctx.out_chans[0].head = osc;
+  /* osc->next = out; */
 
   return Val_node(osc);
 }
@@ -73,7 +60,7 @@ CAMLprim value caml_play_pmsin(value freq, value pm_index, value pm_freq) {
 CAMLprim value caml_play_sq(value freq) {
 
   Node *osc = sq_node(Double_val(freq));
-  Node *out = add_out(NODE_DATA(sq_data, osc)->out, &ctx.out_chans[0]);
+  Node *out = add_out(OUTS(NODE_DATA(sq_data, osc)), &ctx.out_chans[0]);
 
   ctx.head = osc;
   osc->next = out;
@@ -84,7 +71,7 @@ CAMLprim value caml_play_sq(value freq) {
 CAMLprim value caml_play_sq_detune(value freq) {
 
   Node *osc = sq_detune_node(Double_val(freq));
-  Node *out = add_out(NODE_DATA(sq_data, osc)->out, &ctx.out_chans[0]);
+  Node *out = add_out(OUTS(NODE_DATA(sq_data, osc)), &ctx.out_chans[0]);
 
   ctx.head = osc;
   osc->next = out;
@@ -95,7 +82,7 @@ CAMLprim value caml_play_sq_detune(value freq) {
 CAMLprim value caml_play_impulse(value freq) {
 
   Node *osc = impulse_node(Double_val(freq));
-  Node *out = replace_out(NODE_DATA(impulse_data, osc)->out, &ctx.out_chans[0]);
+  Node *out = add_out(OUTS(NODE_DATA(impulse_data, osc)), &ctx.out_chans[0]);
 
   ctx.head = osc;
   osc->next = out;
@@ -106,8 +93,7 @@ CAMLprim value caml_play_impulse(value freq) {
 CAMLprim value caml_play_poly_saw(value freq) {
 
   Node *osc = poly_saw_node(Double_val(freq));
-  Node *out =
-      replace_out(NODE_DATA(poly_saw_data, osc)->out, &ctx.out_chans[0]);
+  Node *out = add_out(OUTS(NODE_DATA(poly_saw_data, osc)), &ctx.out_chans[0]);
 
   ctx.head = osc;
   osc->next = out;
@@ -118,7 +104,7 @@ CAMLprim value caml_play_poly_saw(value freq) {
 CAMLprim value caml_play_hoover(value freq) {
 
   Node *osc = hoover_node(Double_val(freq), 2, 1.001);
-  Node *out = replace_out(NODE_DATA(hoover_data, osc)->out, &ctx.out_chans[0]);
+  Node *out = add_out(NODE_DATA(hoover_data, osc)->out, &ctx.out_chans[0]);
 
   ctx.head = osc;
   osc->next = out;
@@ -129,7 +115,18 @@ CAMLprim value caml_play_hoover(value freq) {
 CAMLprim value caml_play_pulse(value freq, value pw) {
 
   Node *osc = pulse_node(Double_val(freq), Double_val(pw));
-  Node *out = replace_out(NODE_DATA(pulse_data, osc)->out, &ctx.out_chans[0]);
+  Node *out = add_out(OUTS(NODE_DATA(pulse_data, osc)), &ctx.out_chans[0]);
+
+  ctx.head = osc;
+  osc->next = out;
+
+  return Val_node(osc);
+}
+
+CAMLprim value caml_play_blip(value freq, value dur_s) {
+
+  Node *osc = sq_blip_node(Double_val(freq), Double_val(dur_s));
+  Node *out = add_out(OUTS(NODE_DATA(blip_data, osc)), &ctx.out_chans[0]);
 
   ctx.head = osc;
   osc->next = out;
@@ -140,16 +137,28 @@ CAMLprim value caml_oscilloscope() {
   /* pthread_t oscil_thread; */
   /* pthread_create(&oscil_thread, NULL, oscilloscope, NULL); */
   /* pthread_detach(oscil_thread); */
-  /* oscilloscope(); */
+  oscilloscope();
   return Val_unit;
 }
 
-CAMLprim value set_freq(value ml_ptr, value d) {
+CAMLprim value caml_set_freq(value ml_ptr, value d) {
   Node *node;
   node = Node_val(ml_ptr);
-  Signal *freq = NODE_DATA(sin_data, node)->freq;
-  set_signal(*freq, Double_val(d));
-  printf("set freq to %f\n", unwrap(*freq, 0));
+  Signal freq = IN(node, SIN_SIG_FREQ);
+  set_signal(freq, Double_val(d));
+  return Val_unit;
+}
+
+CAMLprim value caml_set_sig(value ml_ptr, value sig, value d) {
+  Node *node = Node_val(ml_ptr);
+  int sig_idx = Int_val(sig);
+
+  if (sig_idx >= ((signals *)node->data)->num_outs) {
+    printf("node has no input %d\n", sig_idx);
+    return Val_unit;
+  }
+  Signal signal = IN(node, sig_idx);
+  set_signal(signal, Double_val(d));
   return Val_unit;
 }
 

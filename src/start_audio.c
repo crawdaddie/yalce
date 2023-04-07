@@ -23,6 +23,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
   int err;
 
   int frames_left = frame_count_max;
+  double Outputs[2][BUF_SIZE];
 
   for (;;) {
     int frame_count = frames_left;
@@ -38,31 +39,38 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
-    if (ctx->head == NULL) {
-      break;
+    for (int chan = 0; chan < OUTPUT_CHANNELS; chan++) {
+      Channel channel = ctx->out_chans[chan];
+      Node *graph = channel.head;
+      Node *tail = (Node *)perform_graph(graph, frame_count, seconds_per_frame);
+      if (!tail) {
+        continue;
+      }
+      signals *sigs = tail->data;
+      Signal out = *sigs->outs; // take first out
+      if (out.size <= 1) {
+        continue;
+      }
+      double sample[2];
+      int offset = 0;
+      for (int frame = 0; frame < frame_count; frame += 1) {
+        if (out.layout == 2) {
+          Outputs[0][frame] += channel.vol * out.data[frame];
+          Outputs[1][frame] += channel.vol * out.data[BUF_SIZE + frame];
+        } else {
+          double mono = channel.vol * out.data[frame];
+          Outputs[0][frame] += mono;
+          Outputs[1][frame] += mono;
+        }
+      }
     }
 
-    user_ctx_callback(ctx, frame_count, seconds_per_frame);
-
-    for (int out_chan = 0; out_chan < OUTPUT_CHANNELS; out_chan++) {
-      for (int channel = 0; channel < layout->channel_count; channel += 1) {
-        for (int frame = 0; frame < frame_count; frame += 1) {
-
-          set_osc_scope_buf(frame, 0.0);
-
-          Signal OutChannel = ctx->out_chans[out_chan];
-
-          double sample =
-              OutChannel.data[(OutChannel.layout * frame) + channel] *
-              ctx->channel_vols[out_chan];
-
-          write_sample(areas[channel].ptr, ctx->main_vol * sample);
-          add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
-
-          OutChannel.data[(OutChannel.layout * frame) + channel] =
-              0.0; // zero channel buffer after reading from it
-          areas[channel].ptr += areas[channel].step;
-        }
+    for (int frame = 0; frame < frame_count; frame += 1) {
+      for (int channel = 0; channel < LAYOUT_CHANNELS; channel += 1) {
+        double sample = Outputs[channel][frame];
+        write_sample(areas[channel].ptr, sample);
+        Outputs[channel][frame] = 0;
+        areas[channel].ptr += areas[channel].step;
       }
     }
 
@@ -174,6 +182,7 @@ int setup_audio() {
   outstream->sample_rate = sample_rate;
 
   if (soundio_device_supports_format(device, SoundIoFormatFloat32NE)) {
+    printf("float32ne\n");
     outstream->format = SoundIoFormatFloat32NE;
     write_sample = write_sample_float32ne;
   } else if (soundio_device_supports_format(device, SoundIoFormatFloat64NE)) {
