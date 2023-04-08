@@ -10,7 +10,6 @@
 
 #include <stdlib.h>
 
-#include "audio/sq.h"
 #include "channel.h"
 #include "dbg.h"
 #include <getopt.h>

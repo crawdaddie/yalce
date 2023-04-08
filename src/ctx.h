@@ -15,8 +15,9 @@ typedef struct {
   double main_vol;
   double sys_time; /* global time in secs */
   Node *head;
-  /* Signal out_chans[OUTPUT_CHANNELS]; */
-  Channel out_chans[OUTPUT_CHANNELS];
+  Signal out_chans[OUTPUT_CHANNELS];
+  double *channel_vols;
+  /* Channel out_chans[OUTPUT_CHANNELS]; */
 } Ctx;
 
 double **alloc_buses(int num_buses);
@@ -31,6 +32,12 @@ double user_ctx_get_sample(Ctx *ctx, int channel, int frame);
 extern Ctx ctx;
 
 Node *ctx_graph_head();
+
+Node *ctx_graph_tail();
+
+void ctx_add_after_tail(Node *node);
+
+void ctx_remove_node(Node *node);
 
 double channel_read_destructive(int out_chan, int stereo_channel, int frame);
 

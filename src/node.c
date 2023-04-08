@@ -1,8 +1,17 @@
 #include "node.h"
+#include "ctx.h"
 #include "memory.h"
 #include <string.h>
 
 node_perform perform_graph(Node *head, int nframes, double seconds_per_frame) {
+  if (head->killed) {
+    Node *next = head->next;
+    /* ctx_remove_node(head); */
+    if (next) {
+      return perform_graph(next, nframes, seconds_per_frame);
+    }
+  }
+
   if (!head) {
     return NULL;
   };

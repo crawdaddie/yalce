@@ -2,6 +2,7 @@
 #include "audio/osc.h"
 #include "audio/out.h"
 #include "ctx.h"
+#include "log.h"
 #include "oscilloscope.h"
 #include "write_sample.h"
 #include <math.h>
@@ -23,14 +24,12 @@ static void _write_callback(struct SoundIoOutStream *outstream,
   int err;
 
   int frames_left = frame_count_max;
-  double Outputs[2][BUF_SIZE];
 
   for (;;) {
     int frame_count = frames_left;
     if ((err =
              soundio_outstream_begin_write(outstream, &areas, &frame_count))) {
-      fprintf(stderr, "unrecoverable stream error: %s\n",
-              soundio_strerror(err));
+      write_log("unrecoverable stream error: %s\n", soundio_strerror(err));
       exit(1);
     }
 
@@ -39,38 +38,52 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
-    for (int chan = 0; chan < OUTPUT_CHANNELS; chan++) {
-      Channel channel = ctx->out_chans[chan];
-      Node *graph = channel.head;
-      Node *tail = (Node *)perform_graph(graph, frame_count, seconds_per_frame);
-      if (!tail) {
-        continue;
-      }
-      signals *sigs = tail->data;
-      Signal out = *sigs->outs; // take first out
-      if (out.size <= 1) {
-        continue;
-      }
-      double sample[2];
-      int offset = 0;
-      for (int frame = 0; frame < frame_count; frame += 1) {
-        if (out.layout == 2) {
-          Outputs[0][frame] += channel.vol * out.data[frame];
-          Outputs[1][frame] += channel.vol * out.data[BUF_SIZE + frame];
-        } else {
-          double mono = channel.vol * out.data[frame];
-          Outputs[0][frame] += mono;
-          Outputs[1][frame] += mono;
-        }
-      }
+    if (ctx->head == NULL) {
+      break;
     }
 
-    for (int frame = 0; frame < frame_count; frame += 1) {
-      for (int channel = 0; channel < LAYOUT_CHANNELS; channel += 1) {
-        double sample = Outputs[channel][frame];
-        write_sample(areas[channel].ptr, sample);
-        Outputs[channel][frame] = 0;
-        areas[channel].ptr += areas[channel].step;
+    /* for (int chan = 0; chan < OUTPUT_CHANNELS; chan++) { */
+    /*   Channel channel = ctx->out_chans[chan]; */
+    /*   Node *graph = channel.head; */
+    /*   Node *tail = (Node *)perform_graph(graph, frame_count,
+     * seconds_per_frame); */
+    /*   if (!tail) { */
+    /*     continue; */
+    /*   } */
+    /*   signals *sigs = tail->data; */
+    /*   Signal out = *sigs->outs; // take first out */
+    /*   if (out.size <= 1) { */
+    /*     continue; */
+    /*   } */
+    /*   for (int frame = 0; frame < frame_count; frame += 1) { */
+    /*     for (int layout = 0; layout < out.layout; layout++) { */
+    /*       int idx = layout * BUF_SIZE + frame; */
+    /*       double sample = channel.vol * out.data[idx]; */
+    /*     } */
+    /*   } */
+    /* } */
+
+    user_ctx_callback(ctx, frame_count, seconds_per_frame);
+
+    for (int out_chan = 0; out_chan < OUTPUT_CHANNELS; out_chan++) {
+      for (int channel = 0; channel < layout->channel_count; channel += 1) {
+        for (int frame = 0; frame < frame_count; frame += 1) {
+
+          set_osc_scope_buf(frame, 0.0);
+
+          Signal OutChannel = ctx->out_chans[out_chan];
+
+          double sample =
+              OutChannel.data[(OutChannel.layout * frame) + channel] *
+              ctx->channel_vols[out_chan];
+
+          write_sample(areas[channel].ptr, ctx->main_vol * sample);
+          add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
+
+          OutChannel.data[(OutChannel.layout * frame) + channel] =
+              0.0; // zero channel buffer after reading from it
+          areas[channel].ptr += areas[channel].step;
+        }
       }
     }
 
@@ -79,8 +92,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
         return;
-      fprintf(stderr, "unrecoverable stream error: %s\n",
-              soundio_strerror(err));
+      write_log("unrecoverable stream error: %s\n", soundio_strerror(err));
       exit(1);
     }
 
@@ -94,9 +106,10 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
 static void underflow_callback(struct SoundIoOutStream *outstream) {
   static int count = 0;
-  fprintf(stderr, "underflow %d\n", count++);
+  write_log("underflow %d\n", count++);
 }
 int setup_audio() {
+  logging_setup();
   enum SoundIoBackend backend = SoundIoBackendNone;
   char *device_id = NULL;
   bool raw = false;
@@ -104,11 +117,12 @@ int setup_audio() {
   double latency = 0.0;
   int sample_rate = 0;
   char *filename = NULL;
+  write_log("------------------\n");
 
   soundio = soundio_create();
 
   if (!soundio) {
-    fprintf(stderr, "out of memory\n");
+    write_log("out of memory\n");
     return 1;
   }
 
@@ -117,14 +131,12 @@ int setup_audio() {
                 : soundio_connect_backend(soundio, backend);
 
   if (err) {
-    fprintf(stderr, "Unable to connect to backend: %s\n",
-            soundio_strerror(err));
+    write_log("Unable to connect to backend: %s\n", soundio_strerror(err));
     return 1;
   }
-  printf(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
+  write_log(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
 
-  fprintf(stderr, "Backend: %s\n",
-          soundio_backend_name(soundio->current_backend));
+  write_log("Backend: %s\n", soundio_backend_name(soundio->current_backend));
 
   soundio_flush_events(soundio);
 
@@ -146,28 +158,28 @@ int setup_audio() {
   }
 
   if (selected_device_index < 0) {
-    fprintf(stderr, "Output device not found\n");
+    write_log("Output device not found\n");
     return 1;
   }
 
   struct SoundIoDevice *device =
       soundio_get_output_device(soundio, selected_device_index);
   if (!device) {
-    fprintf(stderr, "out of memory\n");
+    write_log("out of memory\n");
     return 1;
   }
 
-  fprintf(stderr, "Output device: %s\n", device->name);
+  write_log("Output device: %s\n", device->name);
 
   if (device->probe_error) {
-    fprintf(stderr, "Cannot probe device: %s\n",
-            soundio_strerror(device->probe_error));
+    write_log("Cannot probe device: %s\n",
+              soundio_strerror(device->probe_error));
     return 1;
   }
 
   struct SoundIoOutStream *outstream = soundio_outstream_create(device);
   if (!outstream) {
-    fprintf(stderr, "out of memory\n");
+    write_log("out of memory\n");
     return 1;
   }
 
@@ -182,7 +194,6 @@ int setup_audio() {
   outstream->sample_rate = sample_rate;
 
   if (soundio_device_supports_format(device, SoundIoFormatFloat32NE)) {
-    printf("float32ne\n");
     outstream->format = SoundIoFormatFloat32NE;
     write_sample = write_sample_float32ne;
   } else if (soundio_device_supports_format(device, SoundIoFormatFloat64NE)) {
@@ -198,27 +209,30 @@ int setup_audio() {
     outstream->format = SoundIoFormatS16NE;
     write_sample = write_sample_s16ne;
   } else {
-    fprintf(stderr, "No suitable device format available.\n");
+    write_log("No suitable device format available.\n");
     return 1;
   }
 
   if ((err = soundio_outstream_open(outstream))) {
-    fprintf(stderr, "unable to open device: %s", soundio_strerror(err));
+    write_log("unable to open device: %s", soundio_strerror(err));
     return 1;
   }
 
-  fprintf(stderr, "Software latency: %f\n", outstream->software_latency);
+  write_log("Software latency: %f\n", outstream->software_latency);
+  fflush(log_stream);
 
   if (outstream->layout_error)
-    fprintf(stderr, "unable to set channel layout: %s\n",
-            soundio_strerror(outstream->layout_error));
+    write_log("unable to set channel layout: %s\n",
+              soundio_strerror(outstream->layout_error));
 
   if ((err = soundio_outstream_start(outstream))) {
-    fprintf(stderr, "unable to start device: %s\n", soundio_strerror(err));
+    write_log("unable to start device: %s\n", soundio_strerror(err));
     return 1;
   }
   /* oscilloscope(); */
 
+  write_log("------------------\n");
+  fflush(log_stream);
   return 0;
 }
 
@@ -228,5 +242,6 @@ int stop_audio() {
   /* soundio_outstream_destroy(outstream); */
   /* soundio_device_unref(device); */
   /* soundio_destroy(soundio); */
+  logging_teardown();
   return 0;
 }

@@ -9,10 +9,11 @@ static node_perform sq_blip_perform(Node *node, int nframes, double spf) {
   blip_data *data = NODE_DATA(blip_data, node);
   Signal freq = IN(node, 0);
   Signal *out = OUTS(data);
+  bool should_kill;
 
   for (int f = 0; f < nframes; f++) {
     if (data->dur_s <= 0.0) {
-      node->killed = true;
+      should_kill = true;
       out->data[f] = 0.0;
     }
     double sample = sq_sample(data->phase, unwrap(freq, f));
@@ -20,6 +21,9 @@ static node_perform sq_blip_perform(Node *node, int nframes, double spf) {
     data->phase += spf;
     data->dur_s -= spf;
     out->data[f] = sample;
+  }
+  if (should_kill) {
+    node->killed = true;
   }
 }
 

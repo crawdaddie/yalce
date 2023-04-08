@@ -44,7 +44,7 @@ void set_signal_ramp(Signal signal, double value, int time) {
   }
 }
 
-void write(Signal *signal, int frame, double value) {
+void signal_write(Signal *signal, int frame, double value) {
   signal->data[frame] = value;
 }
 

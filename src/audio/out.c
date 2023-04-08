@@ -43,7 +43,7 @@ static node_perform perform_add_out(Node *node, int nframes,
 }
 
 Node *add_out(Signal *in, Signal *out_channel) {
-  Node *out = ALLOC_NODE(out_data, "replace_out");
+  Node *out = ALLOC_NODE(out_data, "add_out");
   out->perform = perform_add_out;
   out_data *data = out->data;
 

@@ -24,7 +24,7 @@ void set_signal_ramp(Signal signal, double value, int time);
 
 double unwrap(Signal sig, int frame);
 
-void write(Signal *signal, int frame, double value);
+void signal_write(Signal *signal, int frame, double value);
 
 void init_signal(Signal *signal, int size, double def);
 
