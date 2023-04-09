@@ -60,11 +60,16 @@ external set_sig : node_ptr -> int -> float -> unit = "caml_set_sig"
 val node_set : node -> StringMap.key -> float -> unit
 external set_freq : node_ptr -> float -> unit = "caml_set_freq"
 external play_sq : float -> node_ptr = "caml_play_sq"
+val sq : float -> node
 external play_sq_detune : float -> node_ptr = "caml_play_sq_detune"
-external play_imp : float -> node_ptr = "caml_play_impulse"
+val sq_detune : float -> node
+external play_impulse : float -> node_ptr = "caml_play_impulse"
+val impulse : float -> node
 external play_saw : float -> node_ptr = "caml_play_poly_saw"
+val saw : float -> node
 external play_hoover : float -> node_ptr = "caml_play_hoover"
 external play_pulse : float -> float -> node_ptr = "caml_play_pulse"
-external pulse : float -> float -> node_ptr = "caml_play_blip"
+val pulse : float -> float -> node
+external play_blip : float -> float -> node_ptr = "caml_play_blip"
 external stop : node_ptr -> unit = "caml_kill_node"
 external dump_nodes : unit -> unit = "caml_dump_nodes"

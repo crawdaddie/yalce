@@ -2,7 +2,7 @@
 
 function kitty_window_exists() {
   title=$1
-  exists=$(kitty @ ls | jq '.[].tabs[].windows[] | select(.title == "SIMPLE_AUDIO_POST_WINDOW")' || false)
+  exists=$(kitty @ ls | jq -e '.[].tabs[].windows[] | select(.title == "SIMPLE_AUDIO_POST_WINDOW")' || false)
   if [ "$exists" = false ]; then
     return 1 
   else

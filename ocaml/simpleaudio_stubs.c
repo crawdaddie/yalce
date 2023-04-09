@@ -1,11 +1,11 @@
-#include "src/audio/blip.h"
-#include "src/audio/osc.h"
-#include "src/audio/out.h"
-#include "src/ctx.h"
-#include "src/log.h"
-#include "src/node.h"
-#include "src/oscilloscope.h"
-#include "src/start_audio.h"
+#include "../src/audio/blip.h"
+#include "../src/audio/osc.h"
+#include "../src/audio/out.h"
+#include "../src/ctx.h"
+#include "../src/log.h"
+#include "../src/node.h"
+#include "../src/oscilloscope.h"
+#include "../src/start_audio.h"
 #include <caml/alloc.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
@@ -43,109 +43,131 @@ CAMLprim value caml_sq() {
   printf("sq node\n");
   return Val_unit;
 }
+static void chain_nodes(Node *container, Node *filter) {
+  Node *last = container->_sub_tail;
+  NUM_INS(container->data) += NUM_INS(filter->data);
+}
 
-CAMLprim value caml_chain_nodes() {
-  printf("chain nodes\n");
+CAMLprim value caml_chain_nodes(value send_ptr, value recv_ptr) {
+  Node *container = Node_val(send_ptr);
+  Node *filter = Node_val(recv_ptr);
+  chain_nodes(container, filter);
+
   return Val_unit;
 }
 typedef struct {
-
+  signals signals;
 } container_node_data;
 
-static Node *wrap_chain(Node *head) {
+static Node *wrap_chain(Node *head, Node *tail) {
   Node *container = ALLOC_NODE(container_node_data, "Container");
   container->_sub = head;
+  container->_sub_tail = tail; // point to the last node in the chain
+                               // that's not an add_out or replace_out -
+                               // could be the same node as head
   return container;
 }
 
 CAMLprim value caml_play_sin(value freq) {
-
-  Node *osc = sin_node(Double_val(freq));
-  Node *out = add_out(OUTS(NODE_DATA(poly_saw_data, osc)), &ctx.out_chans[0]);
+  Signal *sigs = ALLOC_SIGS(SIN_SIG_OUT);
+  Node *osc = sin_node(Double_val(freq), sigs);
+  Node *out = add_out(osc, &ctx.out_chans[0]);
   osc->next = out;
 
-  Node *container = wrap_chain(osc);
+  Node *container = wrap_chain(osc, osc);
+  INS(container->data) = sigs;
+  NUM_INS(container->data) += SIN_SIG_OUT;
   ctx_add_after_tail(container);
-  /* fflush(log_stream); */
 
   return Val_node(container);
 }
 
 CAMLprim value caml_play_sq(value freq) {
 
-  Node *osc = sq_node(Double_val(freq));
-  Node *out = add_out(OUTS(NODE_DATA(sq_data, osc)), &ctx.out_chans[0]);
+  Signal *sigs = ALLOC_SIGS(SQ_SIG_OUT);
+
+  Node *osc = sq_node(Double_val(freq), sigs);
+  Node *out = add_out(osc, &ctx.out_chans[0]);
 
   osc->next = out;
-  ctx_add_after_tail(osc);
 
-  return Val_node(osc);
+  Node *container = wrap_chain(osc, out);
+  INS(container->data) = sigs;
+  NUM_INS(container->data) += SQ_SIG_OUT;
+  ctx_add_after_tail(container);
+
+  return Val_node(container);
 }
 
 CAMLprim value caml_play_sq_detune(value freq) {
-
-  Node *osc = sq_detune_node(Double_val(freq));
-  Node *out = add_out(OUTS(NODE_DATA(sq_data, osc)), &ctx.out_chans[0]);
+  Signal *sigs = ALLOC_SIGS(SQ_SIG_OUT);
+  Node *osc = sq_detune_node(Double_val(freq), sigs);
+  Node *out = add_out(osc, &ctx.out_chans[0]);
 
   osc->next = out;
 
-  ctx_add_after_tail(osc);
+  Node *container = wrap_chain(osc, osc);
+  INS(container->data) = sigs;
+  NUM_INS(container->data) += SQ_SIG_OUT;
+  ctx_add_after_tail(container);
 
-  return Val_node(osc);
+  return Val_node(container);
 }
 
 CAMLprim value caml_play_impulse(value freq) {
 
-  Node *osc = impulse_node(Double_val(freq));
-  Node *out = add_out(OUTS(NODE_DATA(impulse_data, osc)), &ctx.out_chans[0]);
+  Signal *sigs = ALLOC_SIGS(IMPULSE_SIG_OUT);
+
+  Node *osc = impulse_node(Double_val(freq), sigs);
+  Node *out = add_out(osc, &ctx.out_chans[0]);
 
   osc->next = out;
 
-  ctx_add_after_tail(osc);
+  Node *container = wrap_chain(osc, osc);
+  INS(container->data) = sigs;
+  NUM_INS(container->data) += IMPULSE_SIG_OUT;
+  ctx_add_after_tail(container);
 
-  return Val_node(osc);
+  return Val_node(container);
 }
 
 CAMLprim value caml_play_poly_saw(value freq) {
 
-  Node *osc = poly_saw_node(Double_val(freq));
-  Node *out = add_out(OUTS(NODE_DATA(poly_saw_data, osc)), &ctx.out_chans[0]);
+  Signal *sigs = ALLOC_SIGS(POLY_SAW_SIG_OUT);
+
+  Node *osc = poly_saw_node(Double_val(freq), sigs);
+  Node *out = add_out(osc, &ctx.out_chans[0]);
 
   osc->next = out;
 
-  ctx_add_after_tail(osc);
+  Node *container = wrap_chain(osc, osc);
+  INS(container->data) = sigs;
+  NUM_INS(container->data) += POLY_SAW_SIG_OUT;
+  ctx_add_after_tail(container);
 
-  return Val_node(osc);
-}
-
-CAMLprim value caml_play_hoover(value freq) {
-
-  Node *osc = hoover_node(Double_val(freq), 2, 1.001);
-  Node *out = add_out(NODE_DATA(hoover_data, osc)->out, &ctx.out_chans[0]);
-
-  osc->next = out;
-
-  ctx_add_after_tail(osc);
-
-  return Val_node(osc);
+  return Val_node(container);
 }
 
 CAMLprim value caml_play_pulse(value freq, value pw) {
 
-  Node *osc = pulse_node(Double_val(freq), Double_val(pw));
-  Node *out = add_out(OUTS(NODE_DATA(pulse_data, osc)), &ctx.out_chans[0]);
+  Signal *sigs = ALLOC_SIGS(PULSE_SIG_OUT);
+  Node *osc = pulse_node(Double_val(freq), Double_val(pw), sigs);
+  Node *out = add_out(osc, &ctx.out_chans[0]);
 
   osc->next = out;
 
-  ctx_add_after_tail(osc);
+  Node *container = wrap_chain(osc, osc);
+  INS(container->data) = sigs;
+  NUM_INS(container->data) += PULSE_SIG_OUT;
+  ctx_add_after_tail(container);
 
-  return Val_node(osc);
+  return Val_node(container);
 }
 
 CAMLprim value caml_play_blip(value freq, value dur_s) {
 
   Node *osc = sq_blip_node(Double_val(freq), Double_val(dur_s));
-  Node *out = add_out(OUTS(NODE_DATA(blip_data, osc)), &ctx.out_chans[0]);
+  Node *out = add_out(osc, &ctx.out_chans[0]);
 
   osc->next = out;
 
@@ -173,7 +195,7 @@ CAMLprim value caml_set_sig(value ml_ptr, value sig, value d) {
   Node *node = Node_val(ml_ptr);
   int sig_idx = Int_val(sig);
 
-  if (sig_idx >= ((signals *)node->data)->num_outs) {
+  if (sig_idx >= ((signals *)node->data)->num_ins) {
     printf("node has no input %d\n", sig_idx);
     return Val_unit;
   }

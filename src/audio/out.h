@@ -11,6 +11,6 @@ typedef struct {
 } out_data;
 
 Node *replace_out(Signal *in, Signal *channel_out);
-Node *add_out(Signal *in, Signal *channel_out);
+Node *add_out(Node *in, Signal *channel_out);
 
 #endif

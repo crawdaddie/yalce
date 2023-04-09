@@ -42,13 +42,72 @@ let node_set node param_name value =
 
 external set_freq: node_ptr -> float -> unit = "caml_set_freq"
 external play_sq: float -> node_ptr = "caml_play_sq"
+
+let sq x =
+  let node_ptr = play_sq x in
+  let param_map = StringMap.add "freq" 0 (StringMap.empty
+    |> StringMap.add "pw" 1
+    |> StringMap.add "amp" 2
+  ) in
+  {
+    param_map = param_map;
+    node_ptr = node_ptr; 
+  }
+
 external play_sq_detune: float -> node_ptr = "caml_play_sq_detune"
-external play_imp: float -> node_ptr = "caml_play_impulse"
+
+let sq_detune x =
+  let node_ptr = play_sq_detune x in
+  let param_map = StringMap.add "freq" 0 (StringMap.empty
+    |> StringMap.add "pw" 1
+    |> StringMap.add "amp" 2
+  ) in
+  {
+    param_map = param_map;
+    node_ptr = node_ptr; 
+  }
+
+external play_impulse: float -> node_ptr = "caml_play_impulse"
+
+let impulse x =
+  let node_ptr = play_impulse x in
+  let param_map = StringMap.add "freq" 0 (StringMap.empty
+    |> StringMap.add "pw" 1
+    |> StringMap.add "amp" 2
+  ) in
+  {
+    param_map = param_map;
+    node_ptr = node_ptr; 
+  }
+
 external play_saw: float -> node_ptr = "caml_play_poly_saw"
+
+let saw x =
+  let node_ptr = play_saw x in
+  let param_map = StringMap.add "freq" 0 (StringMap.empty
+    |> StringMap.add "pw" 1
+    |> StringMap.add "amp" 2
+  ) in
+  {
+    param_map = param_map;
+    node_ptr = node_ptr; 
+  }
+
 external play_hoover: float -> node_ptr = "caml_play_hoover"
 external play_pulse: float -> float -> node_ptr = "caml_play_pulse"
 
-external pulse: float -> float -> node_ptr = "caml_play_blip"
+let pulse f pw =
+  let node_ptr = play_pulse f pw in
+  let param_map = StringMap.add "freq" 0 (StringMap.empty
+    |> StringMap.add "pw" 1
+    |> StringMap.add "amp" 2
+  ) in
+  {
+    param_map = param_map;
+    node_ptr = node_ptr; 
+  }
+
+external play_blip: float -> float -> node_ptr = "caml_play_blip"
 
 
 external stop: node_ptr -> unit = "caml_kill_node"

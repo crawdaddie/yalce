@@ -14,6 +14,9 @@ typedef struct Node {
   struct Node *prev;
   /* struct Node *parent; */
   struct Node *_sub;
+  struct Node *
+      _sub_tail; // optional pointer to a node before the add_out or replace_out
+                 // node found at the end of a Container Node's signal chain
 } Node;
 
 node_perform perform_graph(struct Node *head, int nframes, double spf);

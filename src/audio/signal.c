@@ -56,6 +56,15 @@ void init_signal(Signal *signal, int size, double def) {
   signal->size = size;
 }
 
+void init_out_signal(Signal *signal, int size, int layout) {
+  signal->data = malloc(sizeof(double) * size * layout);
+  for (int i = 0; i < size; i++) {
+    signal->data[i] = 0.0;
+  }
+  signal->size = size;
+  signal->layout = layout;
+}
+
 double unwrap(Signal sig, int frame) {
   if (sig.size == 1) {
     return *(sig.data);
