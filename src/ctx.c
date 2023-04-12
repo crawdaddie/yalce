@@ -1,5 +1,4 @@
 #include "ctx.h"
-#include "audio/blip.h"
 #include "audio/osc.h"
 #include "common.h"
 #include "log.h"
@@ -14,20 +13,23 @@ static double channel_vols[OUTPUT_CHANNELS] = {[0 ... OUTPUT_CHANNELS - 1] =
 Ctx ctx;
 static Node *tail = NULL;
 void init_ctx() {
-  ctx.main_vol = 0.25;
+  ctx.main_vol = 0.125;
   ctx.sys_time = 0;
 
-  for (int i = 0; i < OUTPUT_CHANNELS; i++) {
-    ctx.out_chans[i].data = output_channel_pool[i];
-    ctx.out_chans[i].size = BUF_SIZE;
-    ctx.out_chans[i].layout = LAYOUT_CHANNELS;
-  }
-  ctx.channel_vols = channel_vols;
+  /* for (int i = 0; i < OUTPUT_CHANNELS; i++) { */
+  /*   ctx.out_chans[i].data = output_channel_pool[i]; */
+  /*   ctx.out_chans[i].size = BUF_SIZE; */
+  /*   ctx.out_chans[i].layout = LAYOUT_CHANNELS; */
+  /* } */
+
+  /* ctx.channel_vols = channel_vols; */
+  ctx.DAC.data = *output_channel_pool;
+  ctx.DAC.size = BUF_SIZE;
+  ctx.DAC.layout = LAYOUT_CHANNELS;
 
   ctx.head = NULL;
   tail = ctx.head;
   osc_setup();
-  blip_setup();
 }
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
@@ -74,8 +76,10 @@ void ctx_add_after_tail(Node *node) {
     ctx.head = node;
 
     while (node->next) {
+
       node = node->next;
     }
+
     tail = node;
     return;
   }
@@ -103,3 +107,32 @@ double *get_sys_time() { return &ctx.sys_time; }
 int channel_data_idx(int frame, int layout_channel) {
   return (BUF_SIZE * layout_channel) + frame;
 }
+
+void ctx_add_node_out_to_output(Signal *out_ptr, int nframes,
+                                double seconds_per_frame) {
+  Signal output = ctx.DAC;
+  Signal out = *out_ptr;
+
+  int write_idx = 0;
+  int read_idx = 0;
+  if (out.layout == 1) {
+    for (int f = 0; f < nframes; f++) {
+      write_idx = SAMPLE_IDX(output, f, 0);
+      read_idx = SAMPLE_IDX(out, f, 0);
+      double samp = out.data[read_idx];
+      output.data[write_idx] += samp;
+      output.data[write_idx + 1] += samp;
+    }
+    return;
+  }
+
+  if (out.layout == 2) {
+    for (int f = 0; f < nframes; f++) {
+      write_idx = SAMPLE_IDX(output, f, 0);
+      read_idx = SAMPLE_IDX(out, f, 0);
+      output.data[write_idx] += out.data[read_idx];
+      output.data[++write_idx] += out.data[read_idx];
+    } // TODO: create code for multichannel configurations
+    return;
+  }
+};

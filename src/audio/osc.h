@@ -11,7 +11,6 @@ typedef enum {
 } sin_sig_map;
 
 typedef struct {
-  signals signals;
   double phase;
 } sin_data;
 
@@ -24,7 +23,6 @@ typedef enum {
 } sq_sig_map;
 
 typedef struct {
-  signals signals;
   double phase;
 } sq_data;
 
@@ -38,7 +36,6 @@ typedef enum {
 } impulse_sig_map;
 
 typedef struct {
-  signals signals;
   double counter;
 } impulse_data;
 
@@ -51,7 +48,6 @@ typedef enum {
 } poly_saw_sig_map;
 
 typedef struct {
-  signals signals;
   double phase;
 } poly_saw_data;
 
@@ -65,21 +61,10 @@ typedef enum {
 } pulse_sig_map;
 
 typedef struct {
-  signals signals;
   double phase;
 } pulse_data;
 
 Node *pulse_node(double freq, double pw, Signal *ins);
-
-typedef struct {
-  Signal *freq;
-  Signal *out;
-  double *phase;
-  int num_oscs;
-  double dt_amt;
-} hoover_data;
-
-Node *hoover_node(double freq, int num_oscs, double detune_spread);
 
 void osc_setup();
 #endif

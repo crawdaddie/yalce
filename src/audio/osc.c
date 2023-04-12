@@ -21,14 +21,15 @@ static void maketable_sin(void) {
 static node_perform sin_perform(Node *node, int nframes, double spf) {
   sin_data *data = NODE_DATA(sin_data, node);
 
-  Signal *out = OUTS(data);
+  Signal out = OUTS(node);
   double d_index;
   int index = 0;
 
   double frac, a, b, sample;
-  double freq = unwrap(IN(node, SIN_SIG_FREQ), 0);
+  double freq;
 
   for (int f = 0; f < nframes; f++) {
+    freq = unwrap(IN(node, SIN_SIG_FREQ), f);
     d_index = data->phase * SIN_TABSIZE;
     index = (int)d_index;
     frac = d_index - index;
@@ -39,42 +40,42 @@ static node_perform sin_perform(Node *node, int nframes, double spf) {
     sample = (1.0 - frac) * a + (frac * b);
 
     data->phase = fmod(freq * spf + data->phase, 1.0);
-    out->data[f] = sample;
+    node_write_out(node, f, sample);
   }
 }
 
 Node *sin_node(double freq, Signal *ins) {
-  Node *sin = ALLOC_NODE(sin_data, "Sin");
-  sin->perform = sin_perform;
-  sin_data *data = sin->data;
+  Node *osc = ALLOC_NODE(sin_data, "Sin");
+  osc->perform = sin_perform;
+  sin_data *data = osc->data;
 
-  INS(data) = ins == NULL ? ALLOC_SIGS(SIN_SIG_OUT) : ins;
-  NUM_INS(data) = 1;
-  init_signal(INS(data), 1, freq);
+  INS(osc) = ins == NULL ? ALLOC_SIGS(SIN_SIG_OUT) : ins;
+  NUM_INS(osc) = 1;
+  init_signal(INS(osc), 1, freq);
 
-  OUTS(data) = INS(data) + SIN_SIG_OUT;
-  init_out_signal(OUTS(data), BUF_SIZE, 1);
-  NUM_OUTS(data) = 1;
+  init_out_signal(&OUTS(osc), BUF_SIZE, 1);
 
   data->phase = 0.0;
-  return sin;
+  return osc;
 }
 
 // ----------------------------- IMPULSE OSCILLATORS
 static node_perform impulse_perform(Node *node, int nframes, double spf) {
+
   impulse_data *data = NODE_DATA(impulse_data, node);
   Signal freq_sig = IN(node, IMPULSE_SIG_FREQ);
   double freq = unwrap(freq_sig, 0);
-  Signal *out = OUTS(data);
 
   double threshold = 1 / (spf * freq);
 
   for (int f = 0; f < nframes; f++) {
     if (data->counter >= threshold) {
-      out->data[f] = 1.0;
+
+      node_write_out(node, f, 1.0);
       data->counter = 0.0;
     } else {
-      out->data[f] = 0.0;
+
+      node_write_out(node, f, 0.0);
     }
     data->counter++;
   }
@@ -85,13 +86,12 @@ Node *impulse_node(double freq, Signal *ins) {
 
   impulse_data *data = osc->data;
 
-  INS(data) = ins == NULL ? ALLOC_SIGS(IMPULSE_SIG_OUT) : ins;
-  NUM_INS(data) = IMPULSE_SIG_OUT;
-  init_signal(INS(data), 1, freq);
+  INS(osc) = ins == NULL ? ALLOC_SIGS(IMPULSE_SIG_OUT) : ins;
+  NUM_INS(osc) = IMPULSE_SIG_OUT;
 
-  OUTS(data) = INS(data) + IMPULSE_SIG_OUT;
-  init_out_signal(OUTS(data), BUF_SIZE, 1);
-  NUM_OUTS(data) = 1;
+  init_signal(INS(osc), 1, freq);
+
+  init_out_signal(&OUTS(osc), BUF_SIZE, 1);
 
   return osc;
 }
@@ -154,7 +154,6 @@ static node_perform poly_saw_perform(Node *node, int nframes, double spf) {
 
   double naive_saw;
   Signal freq_sig = IN(node, POLY_SAW_SIG_FREQ);
-  Signal *out = OUTS(data);
   double freq = unwrap(freq_sig, 0);
 
   double dt = freq / (1 / spf);
@@ -162,7 +161,7 @@ static node_perform poly_saw_perform(Node *node, int nframes, double spf) {
 
     naive_saw = data->phase;
 
-    out->data[f] = (2. * naive_saw) - 1 - poly_blep(data->phase, dt);
+    node_write_out(node, f, (2. * naive_saw) - 1 - poly_blep(data->phase, dt));
     data->phase = fmod(freq * spf + data->phase, 1.0);
   }
 }
@@ -173,13 +172,11 @@ Node *poly_saw_node(double freq, Signal *ins) {
   osc->perform = poly_saw_perform;
   pulse_data *data = NODE_DATA(pulse_data, osc);
 
-  INS(data) = ins == NULL ? ALLOC_SIGS(POLY_SAW_SIG_OUT) : ins;
-  NUM_INS(data) = POLY_SAW_SIG_OUT;
-  init_signal(INS(data), 1, freq);
+  INS(osc) = ins == NULL ? ALLOC_SIGS(POLY_SAW_SIG_OUT) : ins;
+  NUM_INS(osc) = POLY_SAW_SIG_OUT;
+  init_signal(INS(osc), 1, freq);
 
-  OUTS(data) = INS(data) + POLY_SAW_SIG_OUT;
-  init_out_signal(OUTS(data), BUF_SIZE, 1);
-  NUM_OUTS(data) = 1;
+  init_out_signal(&OUTS(osc), BUF_SIZE, 1);
   return osc;
 }
 
@@ -192,12 +189,11 @@ static node_perform sq_perform(Node *node, int nframes, double spf) {
 
   sq_data *data = NODE_DATA(sq_data, node);
   Signal freq = IN(node, SQ_SIG_FREQ);
-  Signal *out = OUTS(data);
 
   for (int f = 0; f < nframes; f++) {
     double sample = sq_sample(data->phase, unwrap(freq, f));
     data->phase += spf;
-    out->data[f] = sample;
+    node_write_out(node, f, sample);
   }
 }
 
@@ -213,13 +209,11 @@ Node *sq_node(double freq, Signal *ins) {
   osc->perform = sq_perform;
   sq_data *data = NODE_DATA(sq_data, osc);
 
-  INS(data) = ins == NULL ? ALLOC_SIGS(SQ_SIG_OUT) : ins;
-  NUM_INS(data) = 1;
-  init_signal(INS(data), 1, freq);
+  INS(osc) = ins == NULL ? ALLOC_SIGS(SQ_SIG_OUT) : ins;
+  NUM_INS(osc) = 1;
+  init_signal(INS(osc), 1, freq);
 
-  OUTS(data) = INS(data) + SQ_SIG_OUT;
-  init_out_signal(OUTS(data), BUF_SIZE, 1);
-  NUM_OUTS(data) = 1;
+  init_out_signal(&OUTS(osc), BUF_SIZE, 1);
 
   return osc;
 }
@@ -227,14 +221,14 @@ Node *sq_node(double freq, Signal *ins) {
 static node_perform sq_detune_perform(Node *node, int nframes, double spf) {
   sq_data *data = NODE_DATA(sq_data, node);
   Signal freq = IN(node, SQ_SIG_FREQ);
-  Signal *out = OUTS(data);
 
   for (int f = 0; f < nframes; f++) {
     double sample = sq_sample(data->phase, unwrap(freq, f)) +
                     sq_sample(data->phase, unwrap(freq, f) * 1.01);
 
     data->phase += spf;
-    out->data[f] = 0.5 * sample;
+
+    node_write_out(node, f, 0.5 * sample);
   }
 }
 
@@ -244,33 +238,31 @@ Node *sq_detune_node(double freq, Signal *ins) {
   osc->perform = sq_detune_perform;
   sq_data *data = NODE_DATA(sq_data, osc);
 
-  INS(data) = ins == NULL ? ALLOC_SIGS(SQ_SIG_OUT) : ins;
-  NUM_INS(data) = SQ_SIG_OUT;
-  init_signal(INS(data), 1, freq);
-  /* init_signal(INS(data) + 1, 1, pw); */
+  INS(osc) = ins == NULL ? ALLOC_SIGS(SQ_SIG_OUT) : ins;
+  NUM_INS(osc) = SQ_SIG_OUT;
+  init_signal(INS(osc), 1, freq);
 
-  OUTS(data) = INS(data) + SQ_SIG_OUT;
-  init_out_signal(OUTS(data), BUF_SIZE, 1);
-  NUM_OUTS(data) = 1;
+  init_out_signal(&OUTS(osc), BUF_SIZE, 1);
 
   return osc;
 }
 static node_perform pulse_perform(Node *node, int nframes, double spf) {
   pulse_data *data = NODE_DATA(pulse_data, node);
-  Signal *out = OUTS(data);
 
   double naive_saw;
-  double freq = unwrap(IN(node, PULSE_SIG_FREQ), 0);
-  double pw = unwrap(IN(node, PULSE_SIG_PW), 0);
+  double freq;
+  double pw;
 
   double dt = freq / (1 / spf);
-  double samp;
+  double sample;
   double phase2;
   double saw2;
   for (int f = 0; f < nframes; f++) {
+    freq = unwrap(IN(node, PULSE_SIG_FREQ), f);
+    pw = unwrap(IN(node, PULSE_SIG_PW), f);
 
     naive_saw = data->phase;
-    samp = (2. * naive_saw) - 1 - poly_blep(data->phase, dt);
+    sample = (2. * naive_saw) - 1 - poly_blep(data->phase, dt);
 
     phase2 = data->phase + pw;
     if (phase2 >= 1.0) {
@@ -278,9 +270,9 @@ static node_perform pulse_perform(Node *node, int nframes, double spf) {
     }
 
     saw2 = (2. * phase2) - 1 - poly_blep(phase2, dt);
-    samp += saw2 * -1.0 + 2 * pw - 1.0;
+    sample += saw2 * -1.0 + 2 * pw - 1.0;
 
-    out->data[f] = samp;
+    node_write_out(node, f, sample);
     data->phase = fmod(freq * spf + data->phase, 1.0);
   }
 }
@@ -290,15 +282,13 @@ Node *pulse_node(double freq, double pw, Signal *ins) {
   osc->perform = pulse_perform;
   pulse_data *data = NODE_DATA(pulse_data, osc);
 
-  INS(data) = ins == NULL ? ALLOC_SIGS(PULSE_SIG_OUT) : ins;
+  INS(osc) = ins == NULL ? ALLOC_SIGS(PULSE_SIG_OUT) : ins;
 
-  init_signal(INS(data) + PULSE_SIG_FREQ, 1, freq);
-  init_signal(INS(data) + PULSE_SIG_PW, 1, pw);
-  NUM_INS(data) = PULSE_SIG_OUT;
+  init_signal(INS(osc) + PULSE_SIG_FREQ, 1, freq);
+  init_signal(INS(osc) + PULSE_SIG_PW, 1, pw);
+  NUM_INS(osc) = PULSE_SIG_OUT;
 
-  OUTS(data) = INS(data) + PULSE_SIG_OUT;
-  init_out_signal(OUTS(data), BUF_SIZE, 1);
-  NUM_OUTS(data) = 1;
+  init_out_signal(&OUTS(osc), BUF_SIZE, 1);
   return osc;
 }
 

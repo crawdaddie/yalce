@@ -17,7 +17,7 @@ void write_log(const char *format, ...) {
 
 int logging_setup() {
   // Open a file for writing
-  log_file = fopen("mylog.txt", "w");
+  log_file = fopen("log.txt", "w");
   if (log_file == NULL) {
     perror("Error opening log file");
     exit(EXIT_FAILURE);

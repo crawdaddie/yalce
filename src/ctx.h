@@ -16,6 +16,7 @@ typedef struct {
   double sys_time; /* global time in secs */
   Node *head;
   Signal out_chans[OUTPUT_CHANNELS];
+  Signal DAC;
   double *channel_vols;
   /* Channel out_chans[OUTPUT_CHANNELS]; */
 } Ctx;
@@ -42,4 +43,7 @@ void ctx_remove_node(Node *node);
 double channel_read_destructive(int out_chan, int stereo_channel, int frame);
 
 int channel_data_idx(int frame, int layout_channel);
+
+void ctx_add_node_out_to_output(Signal *out, int nframes,
+                                double seconds_per_frame);
 #endif

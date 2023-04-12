@@ -42,48 +42,23 @@ static void _write_callback(struct SoundIoOutStream *outstream,
       break;
     }
 
-    /* for (int chan = 0; chan < OUTPUT_CHANNELS; chan++) { */
-    /*   Channel channel = ctx->out_chans[chan]; */
-    /*   Node *graph = channel.head; */
-    /*   Node *tail = (Node *)perform_graph(graph, frame_count,
-     * seconds_per_frame); */
-    /*   if (!tail) { */
-    /*     continue; */
-    /*   } */
-    /*   signals *sigs = tail->data; */
-    /*   Signal out = *sigs->outs; // take first out */
-    /*   if (out.size <= 1) { */
-    /*     continue; */
-    /*   } */
-    /*   for (int frame = 0; frame < frame_count; frame += 1) { */
-    /*     for (int layout = 0; layout < out.layout; layout++) { */
-    /*       int idx = layout * BUF_SIZE + frame; */
-    /*       double sample = channel.vol * out.data[idx]; */
-    /*     } */
-    /*   } */
-    /* } */
-
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
 
-    for (int out_chan = 0; out_chan < OUTPUT_CHANNELS; out_chan++) {
-      for (int channel = 0; channel < layout->channel_count; channel += 1) {
-        for (int frame = 0; frame < frame_count; frame += 1) {
+    int sample_idx;
+    double sample;
+    Signal DAC = ctx->DAC;
 
-          set_osc_scope_buf(frame, 0.0);
+    for (int channel = 0; channel < layout->channel_count; channel += 1) {
+      for (int frame = 0; frame < frame_count; frame += 1) {
 
-          Signal OutChannel = ctx->out_chans[out_chan];
+        sample_idx = SAMPLE_IDX(DAC, frame, channel);
+        sample = DAC.data[sample_idx];
 
-          double sample =
-              OutChannel.data[(OutChannel.layout * frame) + channel] *
-              ctx->channel_vols[out_chan];
+        write_sample(areas[channel].ptr, ctx->main_vol * sample);
+        add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
 
-          write_sample(areas[channel].ptr, ctx->main_vol * sample);
-          add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
-
-          OutChannel.data[(OutChannel.layout * frame) + channel] =
-              0.0; // zero channel buffer after reading from it
-          areas[channel].ptr += areas[channel].step;
-        }
+        DAC.data[sample_idx] = 0.0; // zero channel buffer after reading from it
+        areas[channel].ptr += areas[channel].step;
       }
     }
 

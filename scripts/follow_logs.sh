@@ -1,2 +1,2 @@
 #!/bin/zsh
-tail -f mylog.txt
+tail -f log.txt

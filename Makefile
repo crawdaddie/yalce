@@ -7,7 +7,8 @@ src += src/memory.c
 src += src/node.c
 src += src/log.c
 src += src/audio/osc.c
-src += src/audio/blip.c
+src += src/audio/delay.c
+# src += src/audio/blip.c
 src += src/audio/math.c
 src += src/start_audio.c
 src += src/write_sample.c
@@ -65,7 +66,7 @@ ocamlbindings:
 utop_test:
 	echo "" > mylog.txt
 	./scripts/post_window.sh
-	utop -I ./ocaml -require unix ocaml/simpleaudio_stubs.cma -init examples/utop_init.ml
+	utop -I ./ocaml -require unix -require core -require lwt ocaml/simpleaudio_stubs.cma -init examples/utop_init.ml
 
 .PHONY: clean
 clean:
