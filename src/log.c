@@ -7,7 +7,6 @@ FILE *log_stream;
 void write_log(const char *format, ...) {
   va_list args;
   va_start(args, format);
-
   /* fprintf(log_stream, "[%5.f] ", (double)clock() / (double)CLOCKS_PER_SEC);
    */
   vfprintf(log_stream, format, args);
