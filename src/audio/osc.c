@@ -3,7 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-#define SIN_TABSIZE (1 << 10)
+#define SIN_TABSIZE (1 << 11)
 
 // ----------------------------- SINE WAVE OSCILLATORS
 static double sin_table[SIN_TABSIZE];
@@ -50,7 +50,7 @@ Node *sin_node(double freq, Signal *ins) {
   sin_data *data = osc->data;
 
   INS(osc) = ins == NULL ? ALLOC_SIGS(SIN_SIG_OUT) : ins;
-  NUM_INS(osc) = 1;
+  NUM_INS(osc) = SIN_SIG_OUT;
   init_signal(INS(osc), 1, freq);
 
   init_out_signal(&OUTS(osc), BUF_SIZE, 1);
@@ -281,14 +281,8 @@ Node *pulse_node(double freq, double pw, Signal *ins) {
   Node *osc = ALLOC_NODE(pulse_data, "Pulse");
   osc->perform = pulse_perform;
   pulse_data *data = NODE_DATA(pulse_data, osc);
-
-  INS(osc) = ins == NULL ? ALLOC_SIGS(PULSE_SIG_OUT) : ins;
-
-  init_signal(INS(osc) + PULSE_SIG_FREQ, 1, freq);
-  init_signal(INS(osc) + PULSE_SIG_PW, 1, pw);
-  NUM_INS(osc) = PULSE_SIG_OUT;
-
-  init_out_signal(&OUTS(osc), BUF_SIZE, 1);
+  double init_values[PULSE_SIG_OUT] = {freq, pw};
+  node_build_ins(osc, PULSE_SIG_OUT, init_values);
   return osc;
 }
 

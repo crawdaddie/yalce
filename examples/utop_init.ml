@@ -1,7 +1,5 @@
-open Simpleaudio_stubs;;
-open Unix;;
+open Nodes;;
+Stubs.start_audio () ;;
 
-
-start_audio () ;;
 
 

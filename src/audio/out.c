@@ -49,7 +49,7 @@ Node *add_out(Node *in, Signal *out_channel) {
 
   out_data *data = out->data;
 
-  data->in = OUTS(in);
+  data->in = &OUTS(in);
   data->out_channel = out_channel;
   out->prev = in;
 

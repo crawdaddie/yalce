@@ -1,5 +1,6 @@
 #ifndef _SIGNAL_H
 #define _SIGNAL_H
+#include <stdlib.h>
 
 typedef struct Signal {
   // size of the data array will be size * layout

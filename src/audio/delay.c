@@ -1,5 +1,6 @@
 #include "delay.h"
 #include "../common.h"
+#include "../log.h"
 #include <stdlib.h>
 
 static double get_sample_interp(double read_ptr, double *buf, int max_frames) {
@@ -76,7 +77,7 @@ Node *simple_delay_node(double delay_time_s, double delay_fb,
   NUM_INS(delay) = 1;
 
   init_out_signal(&delay->out, BUF_SIZE, 1);
-  printf("build delay node %p\n", delay);
+  write_log("build delay node %p\n", delay);
 
   return delay;
 }

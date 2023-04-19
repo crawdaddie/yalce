@@ -13,6 +13,7 @@ void write_log(const char *format, ...) {
   vfprintf(log_stream, format, args);
 
   va_end(args);
+  fflush(log_stream);
 }
 
 int logging_setup() {

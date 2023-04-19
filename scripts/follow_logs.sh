@@ -1,2 +1,2 @@
 #!/bin/zsh
-tail -f log.txt
+echo "" > log.txt && tail -f log.txt

@@ -60,7 +60,7 @@ Node *alloc_node(size_t obj_size, const char *name) {
 Node *make_node(size_t obj_size, node_perform perform, const char *name) {
   void *obj = allocate(obj_size);
   Node *node = allocate(sizeof(Node));
-  node->perform = perform;
+  node->perform = (node_perform *)perform;
   node->data = obj;
   node->name = name;
   return node;
@@ -94,38 +94,41 @@ static node_perform perform_container(Node *node, int nframes,
   }
 }
 
+static void update_container(Node *container, Node *head) {
+
+  Node *chain_node = head;
+  chain_node->parent = container;
+
+  int num_ins = container->num_ins + chain_node->num_ins;
+  while (chain_node->next) {
+    num_ins += chain_node->num_ins;
+    chain_node = chain_node->next;
+    chain_node->parent = container;
+  }
+
+  container->out = chain_node->out;
+
+  Signal *inputs = realloc(container->ins, sizeof(Signal) * num_ins);
+  container->ins = inputs;
+  container->num_ins = num_ins;
+
+  for (chain_node = container->_sub; chain_node != NULL;
+       chain_node = chain_node->next) {
+    for (int i = 0; i < chain_node->num_ins; i++) {
+      (inputs + i)->data = (chain_node->ins + i)->data;
+      (inputs + i)->size = (chain_node->ins + i)->size;
+      (inputs + i)->layout = (chain_node->ins + i)->layout;
+    }
+    inputs += chain_node->num_ins;
+  }
+}
+
 Node *container_node(Node *sub) {
   Node *node = ALLOC_NODE(container_node_data, "Container");
   ((container_node_data *)node->data)->write_to_output = true;
   node->perform = perform_container;
   node->_sub = sub;
-  Node *chain_node = sub;
-  int num_ins = chain_node->num_ins;
-  while (chain_node->next) {
-    num_ins += chain_node->num_ins;
-    chain_node = chain_node->next;
-  }
-  /* Signal *inputs = malloc(sizeof(Signal) * num_ins); */
-  node->out = chain_node->out;
-
-  /* for (chain_node = node->_sub; chain_node != NULL; */
-  /*      chain_node = chain_node->next) { */
-  /* } */
-  /*
-    node->num_ins = num_ins;
-    node->ins = inputs;
-
-    for (chain_node = node->_sub; chain_node != NULL;
-         chain_node = chain_node->next) {
-      chain_node->ins = inputs;
-      for (int i = 0; i < chain_node->num_ins; i++) {
-        (inputs + i)->data = (chain_node->ins + i)->data;
-        (inputs + i)->size = (chain_node->ins + i)->size;
-        (inputs + i)->layout = (chain_node->ins + i)->layout;
-      }
-      inputs += chain_node->num_ins;
-    }
-    */
+  update_container(node, sub);
 
   return node;
 }
@@ -136,4 +139,122 @@ Node *node_write_out(Node *node, int frame, double sample) {
   double add = unwrap(node->add, frame);
   node->out.data[frame] = add + sample * mul;
   return node;
+}
+
+static node_perform lag_node_perform(Node *node, int nframes, double spf) {
+  lag_node_data *data = node->data;
+
+  double start = data->start;
+  double target = data->target;
+  double lagtime = data->lagtime;
+
+  double step = (target - start) / (lagtime * spf);
+
+  double sample = start;
+  for (int f = 0; f < nframes; f++) {
+    if (sample != target) {
+      sample += step;
+    }
+    /* printf("lag samp %f\n", sample); */
+    node_write_out(node, f, sample);
+  }
+}
+
+static Node *lag_node(Signal *sig, double target_value, double lagtime) {
+  Node *node = ALLOC_NODE(lag_node_data, "Lag");
+  if (sig->size != BUF_SIZE) {
+    double init_value = sig->data[0];
+    sig->data = realloc(sig->data, BUF_SIZE);
+    for (int i = 0; i < BUF_SIZE; i++) {
+      sig->data[i] = init_value;
+    }
+    sig->size = BUF_SIZE;
+  }
+
+  node->ins = sig;
+  node->out = *sig;
+  node->perform = lag_node_perform;
+
+  lag_node_data *data = node->data;
+  data->target = target_value;
+  data->lagtime = lagtime;
+  data->start = sig->data[sig->size - 1];
+
+  return node;
+}
+
+Node *node_set_sig_double(Node *node, int sig_idx, double value) {
+
+  if (sig_idx >= node->num_ins) {
+    printf("node has no input %d\n", sig_idx);
+    return node;
+  }
+  Signal signal = IN(node, sig_idx);
+  set_signal(signal, value);
+  return node;
+};
+
+Node *node_set_sig_double_lag(Node *node, int sig_idx, double value,
+                              double lagtime) {
+
+  if (sig_idx >= node->num_ins) {
+    printf("node has no input %d\n", sig_idx);
+    return node;
+  }
+
+  Node *lag = lag_node(node->ins + sig_idx, value, lagtime);
+  Node *prev = node->prev;
+  if (prev) {
+    prev->next = lag;
+    lag->prev = prev;
+  } else {
+    node->parent->_sub = lag;
+  }
+  lag->next = node;
+  node->prev = lag;
+  return node;
+};
+
+Node *node_set_sig_node(Node *node, int sig_idx, Node *src) {
+
+  if (sig_idx >= node->num_ins) {
+    printf("node has no input %d\n", sig_idx);
+    return node;
+  }
+
+  Signal input = IN(node, sig_idx);
+
+  input.data = src->out.data;
+  input.size = src->out.size;
+
+  return node;
+}
+Node *node_set_add_node(Node *node, Node *src) {
+  node->add.data = src->out.data;
+  node->add.size = src->out.size;
+  return node;
+}
+
+Node *node_set_add_double(Node *node, double val) {
+  set_signal(node->add, val);
+  return node;
+}
+
+Node *node_set_mul_node(Node *node, Node *src) {
+  node->mul.data = src->out.data;
+  node->mul.size = src->out.size;
+  return node;
+}
+
+Node *node_set_mul_double(Node *node, double val) {
+  set_signal(node->mul, val);
+  return node;
+}
+
+void node_build_ins(Node *node, int num_ins, double *init_values) {
+  INS(node) = ALLOC_SIGS(num_ins);
+  for (int i = 0; i < num_ins; i++) {
+    init_signal(INS(node) + i, BUF_SIZE, *(init_values + i));
+  }
+  init_out_signal(&OUTS(node), BUF_SIZE, 1);
 }

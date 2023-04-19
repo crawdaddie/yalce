@@ -46,4 +46,5 @@ int channel_data_idx(int frame, int layout_channel);
 
 void ctx_add_node_out_to_output(Signal *out, int nframes,
                                 double seconds_per_frame);
+void dump_graph();
 #endif

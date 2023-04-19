@@ -1,12 +1,15 @@
 #include "../src/audio/delay.h"
+#include "../src/audio/filter.h"
 #include "../src/audio/osc.h"
 #include "../src/audio/out.h"
 #include "../src/ctx.h"
+#include "../src/dbg.h"
 #include "../src/log.h"
 #include "../src/node.h"
 #include "../src/oscilloscope.h"
 #include "../src/start_audio.h"
 #include <caml/alloc.h>
+#include <caml/bigarray.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
 #include <stdio.h>
@@ -89,9 +92,22 @@ CAMLprim value caml_pulse(value freq, value pw) {
   return Val_node(osc);
 }
 
-CAMLprim value caml_simple_delay(value time, value fb) {
-  Node *osc = simple_delay_node(Double_val(time), Double_val(fb), 1.0, NULL);
-  return Val_node(osc);
+CAMLprim value caml_simple_delay(value time, value fb, value ml_ptr) {
+
+  Node *node = Node_val(ml_ptr);
+  Node *delay =
+      simple_delay_node(Double_val(time), Double_val(fb), 1.0, &node->out);
+  node->next = delay;
+  delay->prev = node;
+  return Val_node(delay);
+}
+
+CAMLprim value caml_biquad_lpf(value freq, value bw, value ml_ptr) {
+  Node *node = Node_val(ml_ptr);
+  Node *biquad = biquad_lpf_node(Double_val(freq), Double_val(bw), &node->out);
+  node->next = biquad;
+  biquad->prev = node;
+  return Val_node(biquad);
 }
 
 CAMLprim value caml_oscilloscope() {
@@ -191,29 +207,8 @@ CAMLprim value free_ptr(value ml_ptr) {
   return Val_unit;
 }
 
-#define INDENT(indent) write_log("%.*s", indent, "  ")
-static void dump_nodes(Node *head, int indent) {
-  if (!head) {
-    return;
-  }
-  INDENT(indent);
-  write_log("%s num inputs: %d", head->name, ((signals *)head->data)->num_ins);
-
-  if (head->_sub) {
-    write_log("\n");
-    dump_nodes(head->_sub, indent + 1);
-  }
-  if (head->next) {
-    write_log("\n");
-    dump_nodes(head->next, indent);
-  }
-  write_log("\n");
-  return;
-}
-
 CAMLprim value caml_dump_nodes() {
   dump_nodes(ctx.head, 0);
-  fflush(log_stream);
   return Val_unit;
 }
 
@@ -240,7 +235,7 @@ CAMLprim value caml_set_add_node(value ml_ptr, value sig) {
   node->add.data = src->out.data;
   node->add.size = src->out.size;
 
-  return Val_unit
+  return Val_unit;
 }
 
 CAMLprim value caml_set_mul_node(value ml_ptr, value sig) {
@@ -261,8 +256,21 @@ CAMLprim value caml_play_node(value node_ptr) {
   return Val_node(container);
 }
 
-CAMLprim value caml_set_list_float(value ml_ptr, value l) {
+CAMLprim value caml_set_list_float(value ml_ptr, value ml_num, value ml_values,
+                                   value ml_indices) {
+  int num_params = Int_val(ml_num);
   Node *node = Node_val(ml_ptr);
+
+  double *values = (double *)Caml_ba_data_val(ml_values);
+
+  printf("got vals\n");
+  int *indices = (int *)Caml_ba_data_val(ml_indices);
+
+  printf("got indices\n");
+  for (int i = 0; i < num_params; i++) {
+    printf("idx: %d val: %f\n", indices[i], values[i]);
+  }
+
   /* int sig_idx = Int_val(sig); */
   /*  */
   /* if (sig_idx >= node->num_ins) { */
@@ -271,5 +279,6 @@ CAMLprim value caml_set_list_float(value ml_ptr, value l) {
   /* } */
   /* Signal signal = IN(node, sig_idx); */
   /* set_signal(signal, Double_val(d)); */
-  return Val_unit;
+
+  return Val_node(node);
 }

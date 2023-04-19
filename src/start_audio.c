@@ -194,7 +194,6 @@ int setup_audio() {
   }
 
   write_log("Software latency: %f\n", outstream->software_latency);
-  fflush(log_stream);
 
   if (outstream->layout_error)
     write_log("unable to set channel layout: %s\n",
@@ -207,7 +206,6 @@ int setup_audio() {
   /* oscilloscope(); */
 
   write_log("------------------\n");
-  fflush(log_stream);
   return 0;
 }
 

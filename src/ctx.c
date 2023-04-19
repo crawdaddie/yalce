@@ -4,6 +4,7 @@
 #include "log.h"
 #include <stdlib.h>
 
+#include "dbg.h"
 #include <pthread.h>
 
 static double output_channel_pool[OUTPUT_CHANNELS][BUF_SIZE * LAYOUT_CHANNELS];
@@ -135,4 +136,6 @@ void ctx_add_node_out_to_output(Signal *out_ptr, int nframes,
     } // TODO: create code for multichannel configurations
     return;
   }
-};
+}
+
+void dump_graph() { dump_nodes(ctx.head, 0); }

@@ -22,7 +22,7 @@ typedef struct Node {
 
   struct Node *next;
   struct Node *prev;
-  /* struct Node *parent; */
+  struct Node *parent;
   struct Node *_sub;
   struct Node *
       _sub_tail; // optional pointer to a node before the add_out or replace_out
@@ -55,4 +55,21 @@ Node *container_node(Node *sub);
 
 Node *chain_nodes(Node *container, Node *filter, int dest_sig_idx);
 Node *node_write_out(Node *node, int frame, double sample);
+Node *node_set_sig_double(Node *node, int sig_idx, double value);
+Node *node_set_sig_node(Node *node, int sig_idx, Node *value);
+
+Node *node_set_add_node(Node *node, Node *src);
+Node *node_set_add_double(Node *node, double val);
+Node *node_set_mul_node(Node *node, Node *src);
+Node *node_set_mul_double(Node *node, double val);
+
+Node *node_set_sig_double_lag(Node *node, int sig_idx, double value,
+                              double lagtime);
+typedef struct {
+  double target;
+  double start;
+  double lagtime;
+} lag_node_data;
+
+void node_build_ins(Node *node, int num_ins, double *init_values);
 #endif

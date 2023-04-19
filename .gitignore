@@ -26,6 +26,9 @@
 *.so
 *.so.*
 *.dylib
+*.cmo
+*.cmi
+*.cma
 
 # Executables
 *.exe
