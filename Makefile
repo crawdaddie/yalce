@@ -40,9 +40,9 @@ ocamlobj = $(wildcard ocaml/*.cmo)
 
 .PHONY: ocaml_make
 ocaml_make:
-	ocamlc -I ocaml/ -i ocaml/$(name).ml > ocaml/$(name).mli
-	ocamlc -I ocaml/ -c ocaml/$(name).mli -o ocaml/$(name).cmi
-	ocamlc -I ocaml/ -c ocaml/$(name).ml -cmi-file ocaml/$(name).cmi
+	ocamlfind ocamlc -I ocaml/ -package lwt.unix -i ocaml/$(name).ml > ocaml/$(name).mli
+	ocamlfind ocamlc -I ocaml/ -package lwt.unix -c ocaml/$(name).mli -o ocaml/$(name).cmi
+	ocamlfind ocamlc -I ocaml/ -package lwt.unix -c ocaml/$(name).ml -cmi-file ocaml/$(name).cmi
 
 .PHONY: ocamlbindings
 ocamlbindings:
@@ -56,10 +56,7 @@ ocamlbindings:
 	make name=osc ocaml_make
 	make name=fx ocaml_make
 	make name=synths ocaml_make
-
-	ocamlfind ocamlc -package lwt.unix -i ocaml/seqq.ml > ocaml/seqq.mli
-	ocamlfind ocamlc -package lwt.unix -c ocaml/seqq.mli -o ocaml/seqq.cmi
-	ocamlfind ocamlc -package lwt.unix -c -cmi-file ocaml/seqq.cmi ocaml/seqq.ml
+	make name=seqq ocaml_make
 
 	ocamlc -a -custom -o ocaml/stubs.cma -dllib ocaml/dllstubs.so
 
@@ -71,7 +68,12 @@ utop_test:
 		-require unix \
 		-require core \
 		-require lwt.unix \
-		ocaml/stubs.cma ocaml/nodes.cmo ocaml/osc.cmo ocaml/fx.cmo ocaml/synths.cmo ocaml/seqq.cmo \
+		ocaml/stubs.cma \
+		ocaml/nodes.cmo \
+		ocaml/osc.cmo \
+		ocaml/fx.cmo \
+		ocaml/synths.cmo \
+		ocaml/seqq.cmo \
 		-init examples/utop_init.ml
 
 .PHONY: py
