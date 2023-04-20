@@ -1,6 +1,0 @@
-------------------
-[35mSimple Synth[0m
-Backend: CoreAudio
-Output device: PHL 345E2
-Software latency: 0.010667
-------------------

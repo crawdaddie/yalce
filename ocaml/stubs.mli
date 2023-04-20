@@ -1,4 +1,5 @@
 type node_ptr
+type signal
 external start_audio : unit -> unit = "caml_start_audio"
 external oscilloscope : unit -> unit = "caml_oscilloscope"
 external kill_audio : unit -> unit = "caml_kill_audio"
@@ -29,3 +30,6 @@ external osc_pulse : float -> float -> node_ptr = "caml_pulse"
 external fx_delay : float -> float -> node_ptr -> node_ptr
   = "caml_simple_delay"
 external lpf : float -> float -> node_ptr -> node_ptr = "caml_biquad_lpf"
+external load_sndfile : string -> signal = "caml_load_soundfile"
+external dump_sndfile : signal -> unit = "dump_soundfile_data"
+external bufplayer : float -> signal -> node_ptr = "caml_bufplayer"

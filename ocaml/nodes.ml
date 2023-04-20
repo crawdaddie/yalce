@@ -8,6 +8,7 @@ type node = { param_map: param_map; node_ptr: node_ptr }
 type node_param = 
   | Float of float
   | Node of node
+  | Signal of signal
 
 let make_param_map keys =
   let rec aux counter acc = function
@@ -52,11 +53,21 @@ let set_node node param_name n =
     set_sig_node node.node_ptr param_idx n.node_ptr);
   node
 
+let set_signal node param_name n = 
+  (match param_name with
+  | "mul" -> caml_set_mul_node node.node_ptr n.node_ptr
+  | "add" -> caml_set_add_node node.node_ptr n.node_ptr
+  | _ -> 
+    let param_idx = node_param_idx node param_name in 
+    set_sig_node node.node_ptr param_idx n.node_ptr);
+  node
 
 let set param_name value node = 
   match value with
   | Float f -> set_float node param_name f
   | Node n -> set_node node param_name n
+  | _ -> node
+  (* | Signal s -> set_signal node param_name s *)
 
 let make_node node_ptr param_map =
   {param_map = param_map; node_ptr = node_ptr;}
@@ -70,6 +81,10 @@ let chain_nodes a b ?(p=0) =
 ;;
 
 
+let chain_nodeptrs_idx a ?(p=0) b =
+  caml_chain_nodes a b p |> ignore;
+  a 
+;;
 let chain_nodes_idx a ?(p=0) b =
   caml_chain_nodes a.node_ptr b.node_ptr p |> ignore;
   b
@@ -89,7 +104,8 @@ let chain a b p =
 
 (* Define the chaining operator => *)
 let (=>) a b = chain_nodes a b ~p:0
-let (=>.) a p = (chain_nodes_idx a ~p:(p))
+(* let (=>.) a p = (chain_nodes_idx a ~p:(p)) *)
+let (=>.) a p = (chain_nodeptrs_idx a ~p:(p))
 
 (* external extern_set_list_float: node_ptr -> unit = "caml_set_list_float" *)
 

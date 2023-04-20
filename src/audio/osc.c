@@ -44,18 +44,14 @@ static node_perform sin_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *sin_node(double freq, Signal *ins) {
-  Node *osc = ALLOC_NODE(sin_data, "Sin");
+Node *sin_node(double freq) {
+  Node *osc = ALLOC_NODE(sin_data, "Sin", 1);
   osc->perform = sin_perform;
-  sin_data *data = osc->data;
 
-  INS(osc) = ins == NULL ? ALLOC_SIGS(SIN_SIG_OUT) : ins;
-  NUM_INS(osc) = SIN_SIG_OUT;
   init_signal(INS(osc), 1, freq);
-
   init_out_signal(&OUTS(osc), BUF_SIZE, 1);
 
-  data->phase = 0.0;
+  NODE_DATA(sin_data, osc)->phase = 0.0;
   return osc;
 }
 
@@ -80,55 +76,17 @@ static node_perform impulse_perform(Node *node, int nframes, double spf) {
     data->counter++;
   }
 }
-Node *impulse_node(double freq, Signal *ins) {
-  Node *osc = ALLOC_NODE(impulse_data, "Impulse");
+Node *impulse_node(double freq) {
+  Node *osc = ALLOC_NODE(impulse_data, "Impulse", 1);
   osc->perform = impulse_perform;
 
   impulse_data *data = osc->data;
 
-  INS(osc) = ins == NULL ? ALLOC_SIGS(IMPULSE_SIG_OUT) : ins;
-  NUM_INS(osc) = IMPULSE_SIG_OUT;
-
   init_signal(INS(osc), 1, freq);
-
   init_out_signal(&OUTS(osc), BUF_SIZE, 1);
 
   return osc;
 }
-// ------------------------------ POLY BLEP SAW
-//
-
-/* static double poly_blep(double *t, double dt) { */
-/*   // 0 <= t < 1 */
-/*   if (*t < dt) { */
-/*     *t /= dt; */
-/*     // 2 * (t - t^2/2 - 0.5) */
-/*     return *t + *t - *t * *t - 1.; */
-/*   } */
-/*  */
-/*   // -1 < t < 0 */
-/*   else if (*t > 1. - dt) { */
-/*     *t = (*t - 1.) / dt; */
-/*     // 2 * (t^2/2 + t + 0.5) */
-/*     return *t * *t + *t + *t + 1.; */
-/*   } */
-/*  */
-/*   // 0 otherwise */
-/*   else { */
-/*     return 0.; */
-/*   } */
-/* } */
-/*  */
-/* static double poly_saw(double *t, double dt) { */
-/*   // Correct phase, so it would be in line with sin(2.*M_PI * t) */
-/*   *t += 0.5; */
-/*   if (*t >= 1.) */
-/*     *t -= 1.; */
-/*  */
-/*   double naive_saw = 2. * *t - 1.; */
-/* return naive_saw - poly_blep(t, dt); */
-/*   return naive_saw; */
-/* } */
 double poly_blep(double t, double dt) {
   // 0 <= t < 1
   if (t < dt) {
@@ -166,16 +124,13 @@ static node_perform poly_saw_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *poly_saw_node(double freq, Signal *ins) {
+Node *poly_saw_node(double freq) {
 
-  Node *osc = ALLOC_NODE(poly_saw_data, "poly_saw");
+  Node *osc = ALLOC_NODE(poly_saw_data, "poly_saw", 1);
   osc->perform = poly_saw_perform;
   pulse_data *data = NODE_DATA(pulse_data, osc);
 
-  INS(osc) = ins == NULL ? ALLOC_SIGS(POLY_SAW_SIG_OUT) : ins;
-  NUM_INS(osc) = POLY_SAW_SIG_OUT;
   init_signal(INS(osc), 1, freq);
-
   init_out_signal(&OUTS(osc), BUF_SIZE, 1);
   return osc;
 }
@@ -203,16 +158,12 @@ static void maketable_blsq() {
   // fill sq_table with values for a band-limited square wave
 }
 
-Node *sq_node(double freq, Signal *ins) {
+Node *sq_node(double freq) {
 
-  Node *osc = ALLOC_NODE(sq_data, "sq");
+  Node *osc = ALLOC_NODE(sq_data, "sq", 1);
   osc->perform = sq_perform;
   sq_data *data = NODE_DATA(sq_data, osc);
-
-  INS(osc) = ins == NULL ? ALLOC_SIGS(SQ_SIG_OUT) : ins;
-  NUM_INS(osc) = 1;
   init_signal(INS(osc), 1, freq);
-
   init_out_signal(&OUTS(osc), BUF_SIZE, 1);
 
   return osc;
@@ -232,16 +183,13 @@ static node_perform sq_detune_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *sq_detune_node(double freq, Signal *ins) {
+Node *sq_detune_node(double freq) {
 
-  Node *osc = ALLOC_NODE(sq_data, "sq_detune");
+  Node *osc = ALLOC_NODE(sq_data, "sq_detune", 1);
   osc->perform = sq_detune_perform;
   sq_data *data = NODE_DATA(sq_data, osc);
 
-  INS(osc) = ins == NULL ? ALLOC_SIGS(SQ_SIG_OUT) : ins;
-  NUM_INS(osc) = SQ_SIG_OUT;
   init_signal(INS(osc), 1, freq);
-
   init_out_signal(&OUTS(osc), BUF_SIZE, 1);
 
   return osc;
@@ -277,12 +225,12 @@ static node_perform pulse_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *pulse_node(double freq, double pw, Signal *ins) {
-  Node *osc = ALLOC_NODE(pulse_data, "Pulse");
+Node *pulse_node(double freq, double pw) {
+  Node *osc = ALLOC_NODE(pulse_data, "Pulse", 1);
   osc->perform = pulse_perform;
   pulse_data *data = NODE_DATA(pulse_data, osc);
-  double init_values[PULSE_SIG_OUT] = {freq, pw};
-  node_build_ins(osc, PULSE_SIG_OUT, init_values);
+  init_signal(INS(osc) + PULSE_SIG_FREQ, 1, freq);
+  init_signal(INS(osc) + PULSE_SIG_PW, 1, pw);
   return osc;
 }
 

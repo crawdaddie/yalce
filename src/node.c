@@ -38,7 +38,7 @@ node_perform perform_graph(Node *head, int nframes, double seconds_per_frame) {
   return head;
 }
 
-Node *alloc_node(size_t obj_size, const char *name) {
+Node *alloc_node(size_t obj_size, const char *name, size_t num_ins) {
   void *obj = allocate(obj_size);
   Node *node = allocate(sizeof(Node));
   /* Node *node = NodePool.free_node; */
@@ -54,6 +54,10 @@ Node *alloc_node(size_t obj_size, const char *name) {
   node->data = obj;
   node->name = name;
   node->killed = false;
+
+  node->ins = ALLOC_SIGS(num_ins);
+  node->num_ins = num_ins;
+
   return node;
 };
 
@@ -76,6 +80,8 @@ Node *node_add_after(Node *before, Node *after) {
 Node *chain_nodes(Node *source, Node *dest, int dest_sig_idx) {
   node_add_after(source, dest);
   dest->ins[dest_sig_idx].data = source->out.data;
+  dest->ins[dest_sig_idx].size = source->out.size;
+  dest->ins[dest_sig_idx].layout = source->out.layout;
 }
 
 static node_perform perform_container(Node *node, int nframes,
@@ -101,8 +107,9 @@ static void update_container(Node *container, Node *head) {
 
   int num_ins = container->num_ins + chain_node->num_ins;
   while (chain_node->next) {
-    num_ins += chain_node->num_ins;
     chain_node = chain_node->next;
+
+    num_ins += chain_node->num_ins;
     chain_node->parent = container;
   }
 
@@ -124,7 +131,7 @@ static void update_container(Node *container, Node *head) {
 }
 
 Node *container_node(Node *sub) {
-  Node *node = ALLOC_NODE(container_node_data, "Container");
+  Node *node = ALLOC_NODE(container_node_data, "Container", 0);
   ((container_node_data *)node->data)->write_to_output = true;
   node->perform = perform_container;
   node->_sub = sub;
@@ -161,7 +168,7 @@ static node_perform lag_node_perform(Node *node, int nframes, double spf) {
 }
 
 static Node *lag_node(Signal *sig, double target_value, double lagtime) {
-  Node *node = ALLOC_NODE(lag_node_data, "Lag");
+  Node *node = ALLOC_NODE(lag_node_data, "Lag", 1);
   if (sig->size != BUF_SIZE) {
     double init_value = sig->data[0];
     sig->data = realloc(sig->data, BUF_SIZE);

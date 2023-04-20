@@ -1,3 +1,4 @@
+#include "../src/audio/bufplayer.h"
 #include "../src/audio/delay.h"
 #include "../src/audio/filter.h"
 #include "../src/audio/osc.h"
@@ -7,6 +8,7 @@
 #include "../src/log.h"
 #include "../src/node.h"
 #include "../src/oscilloscope.h"
+#include "../src/soundfile.h"
 #include "../src/start_audio.h"
 #include <caml/alloc.h>
 #include <caml/bigarray.h>
@@ -18,6 +20,9 @@
 
 static value Val_node(Node *p) { return caml_copy_nativeint((intnat)p); }
 static Node *Node_val(value v) { return (Node *)Nativeint_val(v); }
+static value Val_signal(Signal *p) { return caml_copy_nativeint((intnat)p); }
+static Signal *Signal_val(value v) { return (Signal *)Nativeint_val(v); }
+
 CAMLprim value caml_start_audio() {
   int audio_status = setup_audio();
   return Val_unit;
@@ -36,7 +41,7 @@ CAMLprim value caml_chain_nodes(value source_ptr, value dest_ptr, value idx) {
 }
 
 static Node *wrap_chain(Node *head, Node *tail) {
-  Node *container = ALLOC_NODE(container_node_data, "Container");
+  Node *container = ALLOC_NODE(container_node_data, "Container", 0);
   container->_sub = head;
   container->_sub_tail = tail; // point to the last node in the chain
                                // that's not an add_out or replace_out -
@@ -45,21 +50,21 @@ static Node *wrap_chain(Node *head, Node *tail) {
 }
 
 CAMLprim value caml_sin(value freq) {
-  Node *osc = sin_node(Double_val(freq), NULL);
+  Node *osc = sin_node(Double_val(freq));
   /* Node *container = container_node(osc); */
   /* ctx_add_after_tail(container); */
   return Val_node(osc);
 }
 
 CAMLprim value caml_sq(value freq) {
-  Node *osc = sq_node(Double_val(freq), NULL);
+  Node *osc = sq_node(Double_val(freq));
   /* Node *container = container_node(osc); */
   /* ctx_add_after_tail(container); */
   return Val_node(osc);
 }
 
 CAMLprim value caml_sq_detune(value freq) {
-  Node *osc = sq_detune_node(Double_val(freq), NULL);
+  Node *osc = sq_detune_node(Double_val(freq));
   /* Node *container = container_node(osc); */
   /* ctx_add_after_tail(container); */
   return Val_node(osc);
@@ -67,7 +72,7 @@ CAMLprim value caml_sq_detune(value freq) {
 
 CAMLprim value caml_impulse(value freq) {
 
-  Node *osc = impulse_node(Double_val(freq), NULL);
+  Node *osc = impulse_node(Double_val(freq));
   /* Node *container = container_node(osc); */
   /* ctx_add_after_tail(container); */
   return Val_node(osc);
@@ -75,7 +80,7 @@ CAMLprim value caml_impulse(value freq) {
 
 CAMLprim value caml_poly_saw(value freq) {
 
-  Node *osc = poly_saw_node(Double_val(freq), NULL);
+  Node *osc = poly_saw_node(Double_val(freq));
 
   /* Node *container = container_node(osc); */
   /* ctx_add_after_tail(container); */
@@ -85,7 +90,7 @@ CAMLprim value caml_poly_saw(value freq) {
 
 CAMLprim value caml_pulse(value freq, value pw) {
 
-  Node *osc = pulse_node(Double_val(freq), Double_val(pw), NULL);
+  Node *osc = pulse_node(Double_val(freq), Double_val(pw));
   /* Node *container = container_node(osc); */
   /* ctx_add_after_tail(container); */
 
@@ -109,10 +114,15 @@ CAMLprim value caml_biquad_lpf(value freq, value bw, value ml_ptr) {
   biquad->prev = node;
   return Val_node(biquad);
 }
+CAMLprim value caml_bufplayer(value ml_rate, value ml_signal_ptr) {
+  Signal *buf = Signal_val(ml_signal_ptr);
+  Node *osc = bufplayer_node(buf, 48000, Double_val(ml_rate), 0.0, 1);
+  return Val_node(osc);
+}
 
 CAMLprim value caml_oscilloscope() {
   /* pthread_t oscil_thread; */
-  /* pthread_create(&oscil_thread, NULL, oscilloscope, NULL); */
+  /* pthread_create(&oscil_thread, oscilloscope); */
   /* pthread_detach(oscil_thread); */
   oscilloscope();
   return Val_unit;
@@ -281,4 +291,19 @@ CAMLprim value caml_set_list_float(value ml_ptr, value ml_num, value ml_values,
   /* set_signal(signal, Double_val(d)); */
 
   return Val_node(node);
+}
+
+CAMLprim value caml_load_soundfile(value ml_filename) {
+  const char *filename = String_val(ml_filename);
+  Signal *res = malloc(sizeof(Signal));
+  int read = read_file(filename, res);
+  return Val_signal(res);
+}
+
+CAMLprim value dump_soundfile_data(value ml_read_result_ptr) {
+  Signal *res = Signal_val(ml_read_result_ptr);
+  for (int i = 0; i < res->size; i++) {
+    printf("%f\n", *(res->data + i));
+  }
+  return Val_unit;
 }

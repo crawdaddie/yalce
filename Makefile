@@ -12,6 +12,7 @@ src += src/write_sample.c
 src += src/oscilloscope.c
 src += lib/tigr.c
 src += $(wildcard src/audio/*.c)
+src += src/soundfile.c
 
 # src += $(wildcard src/graph/*.c)
 # src += $(wildcard src/lang/*.c)
@@ -56,6 +57,10 @@ ocamlbindings:
 	make name=fx ocaml_make
 	make name=synths ocaml_make
 
+	ocamlfind ocamlc -package lwt.unix -i ocaml/seqq.ml > ocaml/seqq.mli
+	ocamlfind ocamlc -package lwt.unix -c ocaml/seqq.mli -o ocaml/seqq.cmi
+	ocamlfind ocamlc -package lwt.unix -c -cmi-file ocaml/seqq.cmi ocaml/seqq.ml
+
 	ocamlc -a -custom -o ocaml/stubs.cma -dllib ocaml/dllstubs.so
 
 .PHONY: utop_test
@@ -65,9 +70,8 @@ utop_test:
 	utop -I ./ocaml \
 		-require unix \
 		-require core \
-		-require lwt \
-		-require async \
-		ocaml/stubs.cma ocaml/nodes.cmo ocaml/osc.cmo ocaml/fx.cmo ocaml/synths.cmo \
+		-require lwt.unix \
+		ocaml/stubs.cma ocaml/nodes.cmo ocaml/osc.cmo ocaml/fx.cmo ocaml/synths.cmo ocaml/seqq.cmo \
 		-init examples/utop_init.ml
 
 .PHONY: py

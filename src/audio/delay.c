@@ -1,22 +1,8 @@
 #include "delay.h"
 #include "../common.h"
 #include "../log.h"
+#include "math.h"
 #include <stdlib.h>
-
-static double get_sample_interp(double read_ptr, double *buf, int max_frames) {
-  double r = read_ptr;
-  if (r >= max_frames) {
-    return 0.0;
-  }
-  if (r <= 0) {
-    r = max_frames + r;
-  }
-  int frame = ((int)r);
-  double fraction = r - frame;
-  double result = buf[frame] * fraction;
-  result += buf[frame + 1] * (1.0 - fraction);
-  return result;
-}
 
 static double sanitize_delay_pointer(double ptr, int bufsize) {
   if (ptr >= bufsize) {
@@ -58,7 +44,7 @@ static node_perform delay_perform(Node *node, int nframes, double spf) {
 Node *simple_delay_node(double delay_time_s, double delay_fb,
                         double max_delay_time_s, Signal *ins) {
 
-  Node *delay = ALLOC_NODE(delay_data, "Delay");
+  Node *delay = ALLOC_NODE(delay_data, "Delay", 1);
   delay->perform = delay_perform;
   delay_data *data = delay->data;
 

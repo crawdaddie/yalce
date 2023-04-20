@@ -38,11 +38,11 @@ typedef struct Node {
 
 node_perform perform_graph(struct Node *head, int nframes, double spf);
 
-Node *alloc_node(size_t obj_size, const char *name);
+Node *alloc_node(size_t obj_size, const char *name, size_t num_ins);
 
 Node *make_node(size_t obj_size, node_perform perform, const char *name);
 
-#define ALLOC_NODE(type, name) alloc_node(sizeof(type), name)
+#define ALLOC_NODE(type, name, ins) alloc_node(sizeof(type), name, ins)
 #define NODE_DATA(type, node) ((type *)node->data)
 #define MAKE_NODE(type, perform, name) make_node(sizeof(type), perform, name)
 

@@ -14,7 +14,7 @@ typedef struct {
   double phase;
 } sin_data;
 
-Node *sin_node(double freq, Signal *ins);
+Node *sin_node(double freq);
 
 // EXPORT SIGNAL ENUM
 typedef enum {
@@ -26,8 +26,8 @@ typedef struct {
   double phase;
 } sq_data;
 
-Node *sq_node(double freq, Signal *ins);
-Node *sq_detune_node(double freq, Signal *ins);
+Node *sq_node(double freq);
+Node *sq_detune_node(double freq);
 
 // EXPORT SIGNAL ENUM
 typedef enum {
@@ -39,7 +39,7 @@ typedef struct {
   double counter;
 } impulse_data;
 
-Node *impulse_node(double freq, Signal *ins);
+Node *impulse_node(double freq);
 
 // EXPORT SIGNAL ENUM
 typedef enum {
@@ -51,7 +51,7 @@ typedef struct {
   double phase;
 } poly_saw_data;
 
-Node *poly_saw_node(double freq, Signal *ins);
+Node *poly_saw_node(double freq);
 
 // EXPORT SIGNAL ENUM
 typedef enum {
@@ -64,7 +64,7 @@ typedef struct {
   double phase;
 } pulse_data;
 
-Node *pulse_node(double freq, double pw, Signal *ins);
+Node *pulse_node(double freq, double pw);
 
 void osc_setup();
 #endif
