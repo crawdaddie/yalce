@@ -2,6 +2,7 @@
 #include "audio/osc.h"
 #include "common.h"
 #include "log.h"
+#include "midi.h"
 #include <stdlib.h>
 
 #include "dbg.h"
@@ -31,6 +32,7 @@ void init_ctx() {
   ctx.head = NULL;
   tail = ctx.head;
   osc_setup();
+  midi_setup();
 }
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {

@@ -13,6 +13,7 @@ src += src/oscilloscope.c
 src += lib/tigr.c
 src += $(wildcard src/audio/*.c)
 src += src/soundfile.c
+src += src/midi.c
 
 # src += $(wildcard src/graph/*.c)
 # src += $(wildcard src/lang/*.c)
@@ -24,7 +25,7 @@ CC = clang
 
 LDFLAGS = -lsoundio -lm -lsndfile
 
-FRAMEWORKS =-framework opengl -framework cocoa
+FRAMEWORKS =-framework opengl -framework cocoa -framework CoreMIDI -framework CoreFoundation
 COMPILER_OPTIONS = -Werror -Wall -Wextra
 
 synth: $(obj)
