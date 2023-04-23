@@ -1,15 +1,6 @@
-#ifndef _MSG_QUEUE_H
-#define _MSG_QUEUE_H
+#include "msg_queue.h"
 #include <stdlib.h>
 #define MSG_QUEUE_MAX 64
-
-typedef struct MsgQueue {
-  void **items;
-  int bottom;
-  int top;
-  int max;
-
-} MsgQueue;
 
 MsgQueue *new_queue() {
 
@@ -49,5 +40,3 @@ void *q_pop_left(MsgQueue *q) {
   q->bottom = (q->bottom + 1) % q->max;
   return popped_left;
 };
-
-#endif

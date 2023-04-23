@@ -1,4 +1,4 @@
-# simple-synth
+#  yalce_synth
 simple C synthesis environment for learning purposes  
 including bindings for ocaml for creating synth nodes 
 highly unsafe  

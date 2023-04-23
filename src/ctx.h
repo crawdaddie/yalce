@@ -2,6 +2,7 @@
 #define _CTX_H
 #include "audio/signal.h"
 #include "common.h"
+#include "msg_queue.h"
 #include "node.h"
 
 typedef struct {
@@ -18,6 +19,7 @@ typedef struct {
   Signal out_chans[OUTPUT_CHANNELS];
   Signal DAC;
   double *channel_vols;
+  MsgQueue queue;
   /* Channel out_chans[OUTPUT_CHANNELS]; */
 } Ctx;
 

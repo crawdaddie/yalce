@@ -7,6 +7,8 @@
 #include "write_sample.h"
 #include <math.h>
 
+#include <CoreMIDI/CoreMIDI.h>
+
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
 static struct SoundIoOutStream *outstream = NULL;
@@ -40,6 +42,10 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     if (ctx->head == NULL) {
       break;
+    }
+
+    for (void *queue_msg = q_pop_left(&ctx->queue); !q_is_empty(&ctx->queue);
+         queue_msg = q_pop_left(&ctx->queue)) {
     }
 
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
@@ -200,7 +206,9 @@ int setup_audio() {
               soundio_strerror(outstream->layout_error));
 
   if ((err = soundio_outstream_start(outstream))) {
+
     write_log("unable to start device: %s\n", soundio_strerror(err));
+
     return 1;
   }
   /* oscilloscope(); */
