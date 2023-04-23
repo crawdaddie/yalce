@@ -44,10 +44,6 @@ static void _write_callback(struct SoundIoOutStream *outstream,
       break;
     }
 
-    for (void *queue_msg = q_pop_left(&ctx->queue); !q_is_empty(&ctx->queue);
-         queue_msg = q_pop_left(&ctx->queue)) {
-    }
-
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
 
     int sample_idx;

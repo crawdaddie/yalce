@@ -40,9 +40,9 @@ ocamlobj = $(wildcard ocaml/*.cmo)
 
 .PHONY: ocaml_make
 ocaml_make:
-	ocamlfind ocamlc -I ocaml/ -package lwt.unix -i ocaml/$(name).ml > ocaml/$(name).mli
-	ocamlfind ocamlc -I ocaml/ -package lwt.unix -c ocaml/$(name).mli -o ocaml/$(name).cmi
-	ocamlfind ocamlc -I ocaml/ -package lwt.unix -c ocaml/$(name).ml -cmi-file ocaml/$(name).cmi
+	ocamlfind ocamlc -I ocaml/ -package lwt.unix -package portmidi -thread -i ocaml/$(name).ml > ocaml/$(name).mli
+	ocamlfind ocamlc -I ocaml/ -package lwt.unix -package portmidi -thread -c ocaml/$(name).mli -o ocaml/$(name).cmi
+	ocamlfind ocamlc -I ocaml/ -package lwt.unix -package portmidi -thread -c ocaml/$(name).ml
 
 .PHONY: ocamlbindings
 ocamlbindings:
@@ -64,10 +64,12 @@ ocamlbindings:
 .PHONY: utop_test
 utop_test:
 	./scripts/post_window.sh
+	echo $(ocamlobj)
 	utop -I ./ocaml \
 		-require unix \
 		-require core \
 		-require lwt.unix \
+		-require portmidi \
 		ocaml/stubs.cma \
 		ocaml/nodes.cmo \
 		ocaml/osc.cmo \

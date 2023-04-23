@@ -25,8 +25,8 @@ static void handle_cc(MIDIPacket *packet) {
   /*  */
   /* printf("registered handler %p\n", ccnum_handler.fn_ptr); */
   /* if (ccnum_handler.fn_ptr) { */
-  Handler[0].wrapper(channel, cc_num, *(packet->data + 2),
-                     Handler[0].registered_name);
+  // Handler[0].wrapper(channel, cc_num, *(packet->data + 2),
+  //                    Handler[0].registered_name);
   /* } */
 }
 

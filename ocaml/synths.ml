@@ -18,6 +18,11 @@ let amen filename rate =
   let cont = play_node node_ptr in
   { param_map = make_param_map ["buf"; "rate"; "trig"; "start_pos"]; node_ptr = cont}
 
+let amen_ts filename rate ps trig_freq = 
+  let node_ptr = load_sndfile filename |> bufplayer_timestretch rate ps trig_freq in
+  let cont = play_node node_ptr in
+  { param_map = make_param_map ["buf"; "pitchshift"; "trig_freq"; "speed";]; node_ptr = cont}
+
 let get_bufplayer filename = 
   let buf = load_sndfile "assets/fat_amen_mono_48000.wav" in
   fun rate -> bufplayer rate buf;;
@@ -27,7 +32,13 @@ let amenretrig () =
   let bp = (get_bufplayer "assets/fat_amen_mono_48000.wav") 1.0 in
   let chain = (imp =>.2) bp in
   let container = play_node chain in
-  { param_map = make_param_map ["trig_freq"; "buf"; "rate"; "trig"; "start_pos"]; node_ptr = container}
+  { param_map = make_param_map [
+      "buf";
+      "pitch_shift";
+      "trig_freq";
+      "rate";
+    ];
+    node_ptr = container}
 
 
 let trig_amen sp rate nod = 

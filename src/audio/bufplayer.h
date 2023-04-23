@@ -3,7 +3,7 @@
 #include "../node.h"
 
 typedef enum {
-  BUFPLAYER_SIG_BUF,
+  BUFPLAYER_BUF,
   BUFPLAYER_RATE,
   BUFPLAYER_TRIG,
   BUFPLAYER_STARTPOS,
@@ -30,21 +30,22 @@ Node *bufplayer_node(Signal *buf, size_t buf_sample_rate, double rate,
                      double start_pos, int loop);
 
 typedef enum {
-  TIMESTRETCH_SIG_BUF,
-  TIMESTRETCH_RATE,
+  TIMESTRETCH_BUF,
   TIMESTRETCH_PITCHSHIFT,
-  TIMESTRETCH_TRIG,
-  TIMESTRETCH_STARTPOS,
+  TIMESTRETCH_TRIG_FREQ,
+  TIMESTRETCH_SPEED,
   TIMESTRETCH_NUM_INS
 } timestretch_sig_map;
 
 typedef struct {
   double read_ptr;
+  double trig_ramp;
+  double start_pos;
   size_t buf_sample_rate;
   int loop;
 } timestretch_data;
 
 Node *bufplayer_timestretch_node(Signal *buf, size_t buf_sample_rate,
                                  double rate, double pitchshift,
-                                 double start_pos, int loop);
+                                 double trig_freq, double start_pos, int loop);
 #endif

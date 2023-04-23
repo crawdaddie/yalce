@@ -28,3 +28,13 @@ external lpf: float -> float -> node_ptr -> node_ptr = "caml_biquad_lpf"
 external load_sndfile: string -> signal = "caml_load_soundfile"
 external dump_sndfile: signal -> unit = "dump_soundfile_data"
 external bufplayer: float -> signal -> node_ptr = "caml_bufplayer"
+
+external bufplayer_timestretch: float -> float ->float-> signal -> node_ptr = "caml_bufplayer_timestretch"
+
+external register_midi_handler_name : int -> int -> string -> unit = "caml_register_midi_handler"
+
+external write_log : string -> unit = "caml_write_log"
+(* let register_midi_handler chan ccnum handler = *)
+(*   let handler_ptr = caml_callback3_native (Nativeint.of_int64 (Nativeint.size / 8)) (Obj.repr ocaml_handler) 2 in *)
+(*  *)
+(*   caml_register_midi_handler chan ccnum handler_ptr *)

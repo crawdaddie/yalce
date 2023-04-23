@@ -6,12 +6,14 @@
 #include "../src/ctx.h"
 #include "../src/dbg.h"
 #include "../src/log.h"
+#include "../src/midi.h"
 #include "../src/node.h"
 #include "../src/oscilloscope.h"
 #include "../src/soundfile.h"
 #include "../src/start_audio.h"
 #include <caml/alloc.h>
 #include <caml/bigarray.h>
+#include <caml/callback.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
 #include <stdio.h>
@@ -117,6 +119,17 @@ CAMLprim value caml_biquad_lpf(value freq, value bw, value ml_ptr) {
 CAMLprim value caml_bufplayer(value ml_rate, value ml_signal_ptr) {
   Signal *buf = Signal_val(ml_signal_ptr);
   Node *osc = bufplayer_node(buf, 48000, Double_val(ml_rate), 0.0, 1);
+  return Val_node(osc);
+}
+
+CAMLprim value caml_bufplayer_timestretch(value ml_rate,
+                                          value ml_pitchshift_rate,
+                                          value ml_trig_freq,
+                                          value ml_signal_ptr) {
+  Signal *buf = Signal_val(ml_signal_ptr);
+  Node *osc = bufplayer_timestretch_node(buf, 48000, Double_val(ml_rate),
+                                         Double_val(ml_pitchshift_rate),
+                                         Double_val(ml_trig_freq), 0.0, 1);
   return Val_node(osc);
 }
 
@@ -305,5 +318,49 @@ CAMLprim value dump_soundfile_data(value ml_read_result_ptr) {
   for (int i = 0; i < res->size; i++) {
     printf("%f\n", *(res->data + i));
   }
+  return Val_unit;
+}
+
+CAMLprim value caml_apply(value vf, value vx) {
+  caml_callback(vf, vx);
+  return Val_unit;
+}
+
+void caml_wrapper(uint8_t chan, uint8_t cc, uint8_t val,
+                  const char *registered_name) {
+  write_log("caml wrapper %s %d %d %d\n", registered_name, chan, cc, val);
+  /* value args[3] = {0, 0, 0}; */
+  value closure = *caml_named_value("midi_func");
+  write_log("found closure %d\n", closure);
+
+  caml_callback(closure, Val_int(val));
+
+  /* caml_callbackN((value)fn_ptr, 3, args); */
+}
+
+CAMLprim value caml_register_midi_handler(value ml_chan, value ml_ccnum,
+                                          value ml_name) {
+  int chan = Int_val(ml_chan);
+  int ccnum = Int_val(ml_ccnum);
+  int cchandler_offset = ccnum == -1 ? 0 : 1 + ccnum;
+  const char *name = caml_stat_strdup(String_val(ml_name));
+  printf("%s - registered name\n", name);
+
+  /* HandlerWrapper wrapper = Handler; */
+
+  /* chan * 129 + cchandler_offset]; */
+  Handler[0].wrapper = &caml_wrapper;
+  Handler[0].registered_name = name;
+
+  /* printf("registered handler %p\n", wrapper.fn_ptr); */
+
+  /* register_midi_handler(chan, ccnum, handler); */
+
+  return Val_unit;
+}
+
+CAMLprim value caml_write_log(value ml_string) {
+  const char *str = caml_stat_strdup(String_val(ml_string));
+  write_log(str);
   return Val_unit;
 }
