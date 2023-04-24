@@ -14,30 +14,9 @@ type t = {
   handlers : (int -> int -> int -> unit ) list ref;
 }
 
+let log_midi_error fmt err =
+  Printf.sprintf fmt (Option.value ~default:"Unknown error" (get_error_text err)) |> Stubs.write_log 
 
-let handle_msg message add =
-  let status = message_status message in
-  let data1 = message_data1 message in
-  let data2 = message_data2 message in
-  match (Int32.to_int status land 0xF0) with
-    | 0xB0 ->
-      Printf.sprintf "CC message: channel=%d control=%d value=%d\n"
-        (Int32.to_int status land 0x0F) (Int32.to_int data1) (Int32.to_int data2) |> Stubs.write_log
-    | _ -> ();
-
-  add status data1 data2
-
-
-
-let input_cb input_stream = 
-  match poll_input input_stream with
-    | Error error -> Printf.sprintf "Error polling input stream: %s\n" (Option.value ~default:"Unknown error" (get_error_text error)) |> Stubs.write_log
-    | Ok false -> ()
-    | Ok true ->
-      match read_input ~length:1 input_stream with
-      | Error error -> Printf.sprintf "Error reading input stream: %s\n" (Option.value ~default:"Unknown error" (get_error_text error)) |> Stubs.write_log
-      | Ok [event] -> handle_msg event.message (fun a b c -> ())
-      | Ok _ -> ()
 
 let create () =
   let mutex = Mutex.create () in
@@ -47,9 +26,8 @@ let create () =
   let buffer_size = Int32.of_int default_sysex_buffer_size in
 
   let t = match open_input ~device_id:device_id ~buffer_size:buffer_size with
-    (* | Error error -> Printf.sprintf "Error opening input stream" |> Stubs.write_log *)
     | Ok input_stream ->
-      let add message  =
+      let handle_msg message  =
         let c = Int32.to_int (message_status message) land 0x0F in
         let cc = Int32.to_int (message_data1 message) in
         let v = Int32.to_int (message_data2 message) in
@@ -58,18 +36,18 @@ let create () =
         List.iter (fun f -> f c cc v) !handlers;
         Mutex.unlock mutex
       in
-      let input_loop i_s = 
+      let input_loop stream = 
         while true do
-          match poll_input input_stream with
-            | Error error -> Printf.sprintf "Error polling input stream: %s\n" (Option.value ~default:"Unknown error" (get_error_text error)) |> Stubs.write_log
+          match poll_input stream with
+            | Error error -> log_midi_error "Error polling input stream: %s\n" error
             | Ok false -> ()
             | Ok true ->
               match read_input ~length:1 input_stream with
-              | Error error -> Printf.sprintf "Error reading input stream: %s\n" (Option.value ~default:"Unknown error" (get_error_text error)) |> Stubs.write_log
-              | Ok [event] -> add event.message
+              | Error error -> log_midi_error "Error reading input stream: %s\n" error
+              | Ok [event] -> handle_msg event.message
               | Ok _ -> ()
         done;
-        close_input i_s;
+        close_input stream;
       in
       Lwt_preemptive.detach input_loop input_stream
   in

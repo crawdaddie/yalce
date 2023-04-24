@@ -77,7 +77,10 @@ static node_perform bufplayer_timestretch_perform(Node *node, int nframes,
   Signal speed = IN(node, TIMESTRETCH_SPEED);
 
   timestretch_data *data = node->data;
-  double retrig_after_samps = 1 / (spf * unwrap(trig_freq, 0));
+  double trig_freq_val = unwrap(trig_freq, 0);
+
+  double retrig_after_samps =
+      trig_freq_val == 0.0 ? bufsize : 1 / (spf * unwrap(trig_freq, 0));
   double pitchshift_rate;
 
   for (int f = 0; f < nframes; f++) {

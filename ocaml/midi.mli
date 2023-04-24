@@ -9,7 +9,8 @@ type t = {
   mutex : Mutex.t;
   handlers : (int -> int -> int -> unit) list ref;
 }
-val handle_msg : int32 -> (int32 -> int32 -> int32 -> unit) -> unit
-val input_cb : Portmidi.Input_stream.t -> unit
+val log_midi_error :
+  (string -> string, unit, string) format ->
+  Portmidi.Portmidi_error.t -> unit
 val create : unit -> t
 val register : t -> (int -> int -> int -> unit) -> unit
