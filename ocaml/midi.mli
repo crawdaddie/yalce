@@ -8,9 +8,11 @@ type event =
 type t = {
   mutex : Mutex.t;
   handlers : (int -> int -> int -> unit) list ref;
+  dbg : bool ref;
 }
 val log_midi_error :
   (string -> string, unit, string) format ->
   Portmidi.Portmidi_error.t -> unit
-val create : unit -> t
+val log_midi_msg : int32 -> int -> unit
+val create : int -> t
 val register : t -> (int -> int -> int -> unit) -> unit
