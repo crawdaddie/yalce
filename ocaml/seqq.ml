@@ -22,12 +22,15 @@
 (*  *)
 
 let rec sequence_events times f =
+  f ();
   match times () with
   | Seq.Nil -> Lwt.return_unit
-  | Seq.Cons (time, rest_times) -> Lwt.bind (Lwt_unix.sleep time) (fun () ->
+  | Seq.Cons (time, rest_times) ->
+      Lwt.bind (Lwt_unix.sleep time) (
+        fun () ->
           f ();
           sequence_events rest_times f
-        );;
+        )
 
 let run times f =
-  Lwt_main.run (sequence_events times f);;
+  Lwt_preemptive.detach (sequence_events times) f
