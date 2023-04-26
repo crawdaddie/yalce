@@ -9,8 +9,10 @@
 #include "../src/midi.h"
 #include "../src/node.h"
 #include "../src/oscilloscope.h"
+#include "../src/scheduling.h"
 #include "../src/soundfile.h"
 #include "../src/start_audio.h"
+#include "caml/misc.h"
 #include <caml/alloc.h>
 #include <caml/bigarray.h>
 #include <caml/callback.h>
@@ -362,5 +364,15 @@ CAMLprim value caml_register_midi_handler(value ml_chan, value ml_ccnum,
 CAMLprim value caml_write_log(value ml_string) {
   const char *str = caml_stat_strdup(String_val(ml_string));
   write_log(str);
+  return Val_unit;
+}
+
+msg_handler mock_msg_handler(void *ctx, Msg msg, int block_offset) {}
+
+CAMLprim value caml_push_to_q(value ml_string) {
+  const char *str = caml_stat_strdup(String_val(ml_string));
+  double current = get_time();
+
+  push_message(&ctx.queue, current, (msg_handler)mock_msg_handler, NULL, 0);
   return Val_unit;
 }

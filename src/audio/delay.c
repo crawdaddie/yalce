@@ -45,7 +45,7 @@ Node *simple_delay_node(double delay_time_s, double delay_fb,
                         double max_delay_time_s, Signal *ins) {
 
   Node *delay = ALLOC_NODE(delay_data, "Delay", 1);
-  delay->perform = delay_perform;
+  delay->perform = (node_perform)delay_perform;
   delay_data *data = delay->data;
 
   int bufsize = (int)(48000 * max_delay_time_s);

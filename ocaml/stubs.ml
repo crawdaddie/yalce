@@ -34,6 +34,7 @@ external bufplayer_timestretch: float -> float ->float-> signal -> node_ptr = "c
 external register_midi_handler_name : int -> int -> string -> unit = "caml_register_midi_handler"
 
 external write_log : string -> unit = "caml_write_log"
+external push_msg : string -> unit = "caml_push_to_q"
 (* let register_midi_handler chan ccnum handler = *)
 (*   let handler_ptr = caml_callback3_native (Nativeint.of_int64 (Nativeint.size / 8)) (Obj.repr ocaml_handler) 2 in *)
 (*  *)

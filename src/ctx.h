@@ -14,7 +14,13 @@ typedef struct {
 
 typedef struct {
   double main_vol;
-  double sys_time; /* global time in secs */
+
+  /* global time in secs */
+  double sys_time;
+
+  /* global time in secs at which current block begins*/
+  double block_time;
+
   Node *head;
   Signal out_chans[OUTPUT_CHANNELS];
   Signal DAC;
@@ -49,4 +55,7 @@ int channel_data_idx(int frame, int layout_channel);
 void ctx_add_node_out_to_output(Signal *out, int nframes,
                                 double seconds_per_frame);
 void dump_graph();
+void handle_queue(Ctx *ctx, double sr);
+
+int get_msg_block_offset(Msg msg, Ctx ctx, double sample_rate);
 #endif

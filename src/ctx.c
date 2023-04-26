@@ -16,7 +16,7 @@ Ctx ctx;
 static Node *tail = NULL;
 void init_ctx() {
   ctx.main_vol = 0.125;
-  ctx.sys_time = 0;
+  ctx.sys_time = 0.0;
 
   /* for (int i = 0; i < OUTPUT_CHANNELS; i++) { */
   /*   ctx.out_chans[i].data = output_channel_pool[i]; */
@@ -32,10 +32,14 @@ void init_ctx() {
   ctx.head = NULL;
   tail = ctx.head;
   osc_setup();
+  init_queue(&ctx.queue);
   // midi_setup();
 }
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
+  if (ctx->head == NULL) {
+    return NULL;
+  }
   perform_graph(ctx->head, nframes, seconds_per_frame);
 }
 
@@ -93,15 +97,6 @@ void ctx_add_after_tail(Node *node) {
   }
   tail = node;
 }
-// Graph *ctx_set_head(Graph *node) {
-//   ctx.head = node;
-//   return ctx.head;
-// }
-//
-// Graph *ctx_add_after(Graph *node) {
-//   ctx.head = node;
-//   return ctx.head;
-// }
 
 double user_ctx_get_sample(Ctx *ctx, int channel, int frame) { return 0; };
 
@@ -139,5 +134,23 @@ void ctx_add_node_out_to_output(Signal *out_ptr, int nframes,
     return;
   }
 }
+/**
+ * get number of frames into the block at
+ * which to schedule the audible change the message represents
+ **/
+int get_msg_block_offset(Msg msg, Ctx ctx, double sample_rate) {
+  return (int)(msg.timestamp - ctx.block_time) * sample_rate;
+}
 
 void dump_graph() { dump_nodes(ctx.head, 0); }
+void handle_queue(Ctx *ctx, double sample_rate) {
+
+  for (int i = 0; i < ctx->queue.top; i++) {
+    Msg msg = ctx->queue.items[i];
+    if (msg.handler != NULL) {
+      int block_offset = get_msg_block_offset(msg, *ctx, sample_rate);
+      msg.handler(ctx, msg, block_offset);
+    }
+  }
+  ctx->queue.top = 0;
+}

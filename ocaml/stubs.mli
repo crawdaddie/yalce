@@ -39,3 +39,4 @@ external bufplayer_timestretch :
 external register_midi_handler_name : int -> int -> string -> unit
   = "caml_register_midi_handler"
 external write_log : string -> unit = "caml_write_log"
+external push_msg : string -> unit = "caml_push_to_q"

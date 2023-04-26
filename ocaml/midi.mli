@@ -1,18 +1,14 @@
-type event =
-    [ `Controller of int * float
-    | `Nop
-    | `Note_off of int
-    | `Note_on of int * float
-    | `Pitch_bend of int * float
-    | `Program_change of int * int ]
 type t = {
   mutex : Mutex.t;
-  handlers : (int -> int -> int -> unit) list ref;
+  handlers : (int32 -> int32 -> int32 -> unit) list ref;
   dbg : bool ref;
+  name : string;
 }
 val log_midi_error :
   (string -> string, unit, string) format ->
   Portmidi.Portmidi_error.t -> unit
-val log_midi_msg : int32 -> int -> unit
+val log_midi_msg : int32 -> string -> unit
+val get_device_name : int -> string
 val create : int -> t
-val register : t -> (int -> int -> int -> unit) -> unit
+val register : t -> (int32 -> int32 -> int32 -> unit) -> unit
+val connect_all_sources : unit -> t list

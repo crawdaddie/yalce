@@ -46,7 +46,7 @@ static node_perform sin_perform(Node *node, int nframes, double spf) {
 
 Node *sin_node(double freq) {
   Node *osc = ALLOC_NODE(sin_data, "Sin", 1);
-  osc->perform = sin_perform;
+  osc->perform = (node_perform)sin_perform;
 
   init_signal(INS(osc), 1, freq);
   init_out_signal(&OUTS(osc), BUF_SIZE, 1);
@@ -78,7 +78,7 @@ static node_perform impulse_perform(Node *node, int nframes, double spf) {
 }
 Node *impulse_node(double freq) {
   Node *osc = ALLOC_NODE(impulse_data, "Impulse", 1);
-  osc->perform = impulse_perform;
+  osc->perform = (node_perform)impulse_perform;
 
   impulse_data *data = osc->data;
 
@@ -127,7 +127,7 @@ static node_perform poly_saw_perform(Node *node, int nframes, double spf) {
 Node *poly_saw_node(double freq) {
 
   Node *osc = ALLOC_NODE(poly_saw_data, "poly_saw", 1);
-  osc->perform = poly_saw_perform;
+  osc->perform = (node_perform)poly_saw_perform;
   pulse_data *data = NODE_DATA(pulse_data, osc);
 
   init_signal(INS(osc), 1, freq);
@@ -161,7 +161,7 @@ static void maketable_blsq() {
 Node *sq_node(double freq) {
 
   Node *osc = ALLOC_NODE(sq_data, "sq", 1);
-  osc->perform = sq_perform;
+  osc->perform = (node_perform)sq_perform;
   sq_data *data = NODE_DATA(sq_data, osc);
   init_signal(INS(osc), 1, freq);
   init_out_signal(&OUTS(osc), BUF_SIZE, 1);
@@ -186,7 +186,7 @@ static node_perform sq_detune_perform(Node *node, int nframes, double spf) {
 Node *sq_detune_node(double freq) {
 
   Node *osc = ALLOC_NODE(sq_data, "sq_detune", 1);
-  osc->perform = sq_detune_perform;
+  osc->perform = (node_perform)sq_detune_perform;
   sq_data *data = NODE_DATA(sq_data, osc);
 
   init_signal(INS(osc), 1, freq);
@@ -227,7 +227,7 @@ static node_perform pulse_perform(Node *node, int nframes, double spf) {
 
 Node *pulse_node(double freq, double pw) {
   Node *osc = ALLOC_NODE(pulse_data, "Pulse", 1);
-  osc->perform = pulse_perform;
+  osc->perform = (node_perform)pulse_perform;
   pulse_data *data = NODE_DATA(pulse_data, osc);
   init_signal(INS(osc) + PULSE_SIG_FREQ, 1, freq);
   init_signal(INS(osc) + PULSE_SIG_PW, 1, pw);

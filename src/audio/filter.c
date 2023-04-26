@@ -127,7 +127,7 @@ Node *biquad_node(const biquad_filter_type type,
   Node *node = ALLOC_NODE(biquad_data, "Biquad", 1);
   biquad_data *data = node->data;
   set_filter_coefficients(data, type, dbGain, freq, bandwidth);
-  node->perform = biquad_perform;
+  node->perform = (node_perform)biquad_perform;
 
   INS(node) = ins == NULL ? ALLOC_SIGS(BIQUAD_SIG_OUT) : ins;
 
@@ -146,7 +146,7 @@ Node *biquad_lpf_node(                        /* gain of filter */
   Node *node = ALLOC_NODE(biquad_data, "BiquadLPF", 1);
   biquad_data *data = node->data;
   set_filter_coefficients(data, BIQUAD_LPF, 0.0, freq, bandwidth);
-  node->perform = biquad_perform;
+  node->perform = (node_perform)biquad_perform;
 
   INS(node) = ins == NULL ? ALLOC_SIGS(BIQUAD_SIG_OUT) : ins;
 

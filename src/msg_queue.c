@@ -2,18 +2,15 @@
 #include <stdlib.h>
 #define MSG_QUEUE_MAX 64
 
-MsgQueue *new_queue() {
-
-  MsgQueue *q = (MsgQueue *)calloc(sizeof(MsgQueue), 1);
-  q->items = (void **)calloc(sizeof(void *), MSG_QUEUE_MAX);
-  q->bottom = 0;
-  q->top = 1;
-  q->max = MSG_QUEUE_MAX;
-  return q;
-};
+void init_queue(MsgQueue *queue) {
+  queue->items = (void **)calloc(sizeof(void *), MSG_QUEUE_MAX);
+  queue->bottom = 0;
+  queue->top = 0;
+  queue->max = MSG_QUEUE_MAX;
+}
 
 int q_is_full(MsgQueue *q) {
-  if (q->top == q->bottom - 1) {
+  if (q->top == q->max) {
     return 1;
   }
   return 0;
@@ -25,18 +22,25 @@ int q_is_empty(MsgQueue *q) {
   }
   return 0;
 };
-void q_push(MsgQueue *q, void *newitem) {
-  if (q_is_full(q)) {
+
+void push_message(MsgQueue *queue, double timestamp, msg_handler handler,
+                  void *data, int size) {
+
+  if (q_is_full(queue)) {
     // extend queue
-    q->items = realloc(q->items, q->max + MSG_QUEUE_MAX);
-    return;
+    queue->items = realloc(queue->items, queue->max + MSG_QUEUE_MAX);
   }
-  q->items[q->top] = newitem;
-  q->top = (q->top + 1) % q->max;
+  Msg *msg = queue->items + queue->top;
+  msg->timestamp = timestamp;
+  msg->handler = handler;
+  msg->data = data;
+  msg->size = size;
+
+  queue->top++;
 };
 
-void *q_pop_left(MsgQueue *q) {
-  void *popped_left = q->items[q->bottom];
+Msg q_pop_left(MsgQueue *q) {
+  Msg popped_left = q->items[q->bottom];
   q->bottom = (q->bottom + 1) % q->max;
   return popped_left;
 };

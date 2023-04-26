@@ -1,18 +1,10 @@
 open Portmidi
 
-type event =
-  [ `Note_on of int * float
-  | `Note_off of int
-  | `Controller of int * float
-  | `Pitch_bend of int * float
-  | `Program_change of int * int
-  | `Nop (** Do not do anything. This is useful to extend repeated patterns. *)
-  ]
-
 type t = {
   mutex: Mutex.t;
-  handlers : (int -> int -> int -> unit ) list ref;
+  handlers : (int32 -> int32 -> int32 -> unit ) list ref;
   dbg: bool ref;
+  name: string;
 }
 
 let log_midi_error fmt err =
@@ -22,9 +14,18 @@ let log_midi_msg msg src_device =
   let status = message_status msg in
   let num = message_data1 msg in
   let value = message_data2 msg in
-  match (Int32.to_int status land 0xF0) with
-    | 0xB0 -> Printf.sprintf "(src %d) midi cc: %d %d %d\n" src_device (Int32.to_int status land 0x0F) (Int32.to_int num) (Int32.to_int value) |> Stubs.write_log
-    | 0x90 -> Printf.sprintf "(src %d) midi note: %d %d %d\n" src_device (Int32.to_int status land 0x0F) (Int32.to_int num) (Int32.to_int value) |> Stubs.write_log
+  match (Int32.logand status 0xF0l) with
+    | 0xB0l -> Printf.sprintf "[%s] cc: %ld %ld %ld\n" src_device (Int32.logand status 0x0Fl) num value |> Stubs.write_log
+    | 0x90l -> Printf.sprintf "[%s] note: %ld %ld %ld\n" src_device (Int32.logand status 0x0Fl) num value |> Stubs.write_log
+
+let get_device_name device_id =
+  match get_device_info device_id with
+    | Some device_info -> (match device_info.name with
+      | None -> Printf.sprintf "%d" device_id 
+      | Some name -> name
+    )
+    | None -> Printf.sprintf "%d" device_id
+
 
 
 let create device_id =
@@ -33,15 +34,18 @@ let create device_id =
   initialize () ;
   let buffer_size = Int32.of_int default_sysex_buffer_size in
   let dbg = ref false in
+
+  let name = get_device_name device_id in 
+
   let t = match open_input ~device_id:device_id ~buffer_size:buffer_size with
     | Ok input_stream ->
-      Printf.sprintf "opened midi stream from device %d\n" device_id |> Stubs.write_log;
+        Printf.sprintf "opened midi stream from device [%s]\n" name |> Stubs.write_log;
       let handle_msg message  =
-        let c = Int32.to_int (message_status message) land 0x0F in
-        let cc = Int32.to_int (message_data1 message) in
-        let v = Int32.to_int (message_data2 message) in
+        let c = Int32.logand (message_status message) 0x0Fl in
+        let cc = message_data1 message in
+        let v = message_data2 message in
 
-        if !dbg then log_midi_msg message device_id;
+        if !dbg then log_midi_msg message name;
 
         Mutex.lock mutex;
         List.iter (fun f -> f c cc v) !handlers;
@@ -68,8 +72,14 @@ let create device_id =
     mutex;
     handlers;
     dbg;
+    name;
   }
 
 let register midi h =
   midi.handlers := h :: !(midi.handlers)
 
+
+let connect_all_sources () = 
+  initialize () ;
+  let num_devices = count_devices () in
+  List.init num_devices (fun x -> x) |> List.map (fun id -> create id)

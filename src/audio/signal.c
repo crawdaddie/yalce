@@ -33,6 +33,7 @@ Signal *new_signal_heap_default(int size, int layout, double def) {
 }
 
 void set_signal(Signal signal, double value) {
+
   for (int i = 0; i < signal.size; i++) {
     signal.data[i] = value;
   }
@@ -48,7 +49,8 @@ void signal_write(Signal *signal, int frame, double value) {
   signal->data[frame] = value;
 }
 
-void init_signal(Signal *signal, int size, double def) {
+void init_signal(Signal *signal, int _size, double def) {
+  int size = BUF_SIZE;
   signal->data = malloc(sizeof(double) * size);
   for (int i = 0; i < size; i++) {
     signal->data[i] = def;
@@ -56,7 +58,8 @@ void init_signal(Signal *signal, int size, double def) {
   signal->size = size;
 }
 
-void init_out_signal(Signal *signal, int size, int layout) {
+void init_out_signal(Signal *signal, int _size, int layout) {
+  int size = BUF_SIZE;
   signal->data = malloc(sizeof(double) * size * layout);
   for (int i = 0; i < size; i++) {
     signal->data[i] = 0.0;

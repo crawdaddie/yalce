@@ -84,13 +84,13 @@ Node *chain_nodes(Node *source, Node *dest, int dest_sig_idx) {
   dest->ins[dest_sig_idx].layout = source->out.layout;
 }
 
-static node_perform perform_container(Node *node, int nframes,
+// perform graph until you return tail of container's sub nodes - final node
+// in the chain means use the output and additively write to an output
+// channel
+static node_perform container_perform(Node *node, int nframes,
                                       double seconds_per_frame) {
   if (node->_sub) {
     Node *tail = (Node *)perform_graph(node->_sub, nframes, seconds_per_frame);
-    // perform graph until you return tail of container's sub nodes - final node
-    // in the chain means use the output and additively write to an output
-    // channel
     Signal out = OUTS(tail);
 
     if (((container_node_data *)node->data)->write_to_output == true &&
@@ -133,7 +133,7 @@ static void update_container(Node *container, Node *head) {
 Node *container_node(Node *sub) {
   Node *node = ALLOC_NODE(container_node_data, "Container", 0);
   ((container_node_data *)node->data)->write_to_output = true;
-  node->perform = perform_container;
+  node->perform = (node_perform)container_perform;
   node->_sub = sub;
   update_container(node, sub);
 
@@ -180,7 +180,7 @@ static Node *lag_node(Signal *sig, double target_value, double lagtime) {
 
   node->ins = sig;
   node->out = *sig;
-  node->perform = lag_node_perform;
+  node->perform = (node_perform)lag_node_perform;
 
   lag_node_data *data = node->data;
   data->target = target_value;

@@ -4,10 +4,9 @@
 #include "ctx.h"
 #include "log.h"
 #include "oscilloscope.h"
+#include "scheduling.h"
 #include "write_sample.h"
 #include <math.h>
-
-#include <CoreMIDI/CoreMIDI.h>
 
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
@@ -40,11 +39,17 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
-    if (ctx->head == NULL) {
-      break;
+    for (int i = 0; i < ctx->queue.top; i++) {
+      Msg msg = ctx->queue.items[i];
+      if (msg.handler != NULL) {
+        int block_offset = get_msg_block_offset(msg, *ctx, float_sample_rate);
+        msg.handler(ctx, msg, block_offset);
+      }
     }
 
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
+
+    ctx->queue.top = 0;
 
     int sample_idx;
     double sample;
@@ -64,7 +69,8 @@ static void _write_callback(struct SoundIoOutStream *outstream,
       }
     }
 
-    ctx->sys_time += seconds_per_frame * frame_count;
+    ctx->sys_time = ctx->sys_time + (seconds_per_frame * frame_count);
+    ctx->block_time = get_time();
 
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
@@ -161,6 +167,7 @@ int setup_audio() {
   }
 
   init_ctx();
+  init_scheduling();
 
   outstream->userdata = &ctx;
   outstream->write_callback = _write_callback;

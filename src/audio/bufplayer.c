@@ -46,7 +46,7 @@ Node *bufplayer_node(Signal *buf, size_t buf_sample_rate, double rate,
                      double start_pos, int loop) {
 
   Node *osc = ALLOC_NODE(bufplayer_data, "Bufplayer", BUFPLAYER_NUM_INS);
-  osc->perform = bufplayer_perform;
+  osc->perform = (node_perform)bufplayer_perform;
 
   INS(osc) = ALLOC_SIGS(BUFPLAYER_NUM_INS);
   Signal *buffer = INS(osc);
@@ -104,7 +104,7 @@ Node *bufplayer_timestretch_node(Signal *buf, size_t buf_sample_rate,
   Node *osc = ALLOC_NODE(timestretch_data, "Bufplayer Timestretch",
                          TIMESTRETCH_NUM_INS);
 
-  osc->perform = bufplayer_timestretch_perform;
+  osc->perform = (node_perform)bufplayer_timestretch_perform;
 
   INS(osc) = ALLOC_SIGS(TIMESTRETCH_NUM_INS);
   Signal *buffer = INS(osc);

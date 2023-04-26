@@ -14,7 +14,7 @@ typedef struct Node {
   Signal mul;
   Signal out;
 
-  node_perform (*perform)(struct Node *node, int nframes, double spf);
+  node_perform perform;
   void *data;
   const char *name;
 
