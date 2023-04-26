@@ -54,6 +54,7 @@ Node *alloc_node(size_t obj_size, const char *name, size_t num_ins) {
   node->data = obj;
   node->name = name;
   node->killed = false;
+  node->_block_offset = 0;
 
   node->ins = ALLOC_SIGS(num_ins);
   node->num_ins = num_ins;
@@ -90,6 +91,11 @@ Node *chain_nodes(Node *source, Node *dest, int dest_sig_idx) {
 static node_perform container_perform(Node *node, int nframes,
                                       double seconds_per_frame) {
   if (node->_sub) {
+    int block_offset = node->_block_offset;
+    if (block_offset > 0) {
+      node->_sub->_block_offset = block_offset;
+    }
+
     Node *tail = (Node *)perform_graph(node->_sub, nframes, seconds_per_frame);
     Signal out = OUTS(tail);
 
@@ -264,4 +270,10 @@ void node_build_ins(Node *node, int num_ins, double *init_values) {
     init_signal(INS(node) + i, BUF_SIZE, *(init_values + i));
   }
   init_out_signal(&OUTS(node), BUF_SIZE, 1);
+}
+
+int get_block_offset(Node *node) {
+  int offset = node->_block_offset;
+  node->_block_offset = 0;
+  return offset;
 }

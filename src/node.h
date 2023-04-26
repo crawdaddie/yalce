@@ -18,6 +18,11 @@ typedef struct Node {
   void *data;
   const char *name;
 
+  // 'ephemeral value' for offsetting the calculation of a node's frames into
+  // a block - should be accessed by `int get_block_offset(Node *node)` that
+  // resets it to 0 after reading
+  int _block_offset;
+
   bool killed;
 
   struct Node *next;
@@ -28,6 +33,8 @@ typedef struct Node {
       _sub_tail; // optional pointer to a node before the add_out or replace_out
                  // node found at the end of a Container Node's signal chain
 } Node;
+
+int get_block_offset(Node *node);
 
 #define INS(node) (node)->ins
 #define IN(node, enum_name) (INS(node)[enum_name])

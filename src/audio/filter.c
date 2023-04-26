@@ -112,7 +112,7 @@ static double biquad_sample(const double sample, biquad_data *const b) {
 static node_perform biquad_perform(Node *node, int nframes, double spf) {
   biquad_data *data = NODE_DATA(biquad_data, node);
   double sample;
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
     sample = unwrap(IN(node, 0), f);
     node_write_out(node, f, biquad_sample(sample, data));
   }

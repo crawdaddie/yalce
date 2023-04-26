@@ -23,7 +23,7 @@ static node_perform delay_perform(Node *node, int nframes, double spf) {
   double output;
   double *buffer = data->buffer;
 
-  for (int i = 0; i < nframes; i++) {
+  for (int i = get_block_offset(node); i < nframes; i++) {
 
     data->write_ptr = sanitize_delay_pointer(data->write_ptr, data->bufsize);
     data->read_ptr = sanitize_delay_pointer(data->read_ptr, data->bufsize);

@@ -28,7 +28,7 @@ static node_perform sin_perform(Node *node, int nframes, double spf) {
   double frac, a, b, sample;
   double freq;
 
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
     freq = unwrap(IN(node, SIN_SIG_FREQ), f);
     d_index = data->phase * SIN_TABSIZE;
     index = (int)d_index;
@@ -64,7 +64,7 @@ static node_perform impulse_perform(Node *node, int nframes, double spf) {
 
   double threshold = 1 / (spf * freq);
 
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
     if (data->counter >= threshold) {
 
       node_write_out(node, f, 1.0);
@@ -115,7 +115,7 @@ static node_perform poly_saw_perform(Node *node, int nframes, double spf) {
   double freq = unwrap(freq_sig, 0);
 
   double dt = freq / (1 / spf);
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
 
     naive_saw = data->phase;
 
@@ -145,7 +145,7 @@ static node_perform sq_perform(Node *node, int nframes, double spf) {
   sq_data *data = NODE_DATA(sq_data, node);
   Signal freq = IN(node, SQ_SIG_FREQ);
 
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
     double sample = sq_sample(data->phase, unwrap(freq, f));
     data->phase += spf;
     node_write_out(node, f, sample);
@@ -173,7 +173,7 @@ static node_perform sq_detune_perform(Node *node, int nframes, double spf) {
   sq_data *data = NODE_DATA(sq_data, node);
   Signal freq = IN(node, SQ_SIG_FREQ);
 
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
     double sample = sq_sample(data->phase, unwrap(freq, f)) +
                     sq_sample(data->phase, unwrap(freq, f) * 1.01);
 
@@ -205,7 +205,7 @@ static node_perform pulse_perform(Node *node, int nframes, double spf) {
   double sample;
   double phase2;
   double saw2;
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
     freq = unwrap(IN(node, PULSE_SIG_FREQ), f);
     pw = unwrap(IN(node, PULSE_SIG_PW), f);
 

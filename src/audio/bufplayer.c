@@ -22,7 +22,7 @@ static node_perform bufplayer_perform(Node *node, int nframes, double spf) {
   Signal trig = IN(node, BUFPLAYER_TRIG);
   Signal start_pos = IN(node, BUFPLAYER_STARTPOS);
 
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
 
     if (handle_trig(trig, f)) {
       data->read_ptr = *start_pos.data * bufsize;
@@ -83,7 +83,7 @@ static node_perform bufplayer_timestretch_perform(Node *node, int nframes,
       trig_freq_val == 0.0 ? bufsize : 1 / (spf * unwrap(trig_freq, 0));
   double pitchshift_rate;
 
-  for (int f = 0; f < nframes; f++) {
+  for (int f = get_block_offset(node); f < nframes; f++) {
     if (data->trig_ramp == 0.0) {
       data->read_ptr = data->start_pos;
     }

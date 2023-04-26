@@ -274,6 +274,9 @@ CAMLprim value caml_set_mul_node(value ml_ptr, value sig) {
 
 CAMLprim value caml_play_node(value node_ptr) {
   Node *node = Node_val(node_ptr);
+  double timestamp = get_time();
+  int block_offset = (int)(timestamp - ctx.block_time) * 48000;
+  node->_block_offset = block_offset;
 
   Node *container = container_node(node);
   ctx_add_after_tail(container);

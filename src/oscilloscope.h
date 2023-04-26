@@ -1,4 +1,4 @@
-#include "../lib/tigr.h"
+#include "../lib/tigr/tigr.h"
 #include "common.h"
 #include <math.h>
 #include <pthread.h>

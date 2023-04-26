@@ -18,7 +18,7 @@ static node_perform perform_replace_out(Node *node, int nframes,
 
 Node *replace_out(Signal *in, Signal *out_channel) {
   Node *out = ALLOC_NODE(out_data, "replace_out", 1);
-  out->perform = perform_replace_out;
+  out->perform = (node_perform)perform_replace_out;
   out_data *data = out->data;
 
   data->in = in;
@@ -45,7 +45,7 @@ static node_perform perform_add_out(Node *node, int nframes,
 Node *add_out(Node *in, Signal *out_channel) {
   Node *out = ALLOC_NODE(out_data, "add_out", 1);
 
-  out->perform = perform_add_out;
+  out->perform = (node_perform)perform_add_out;
 
   out_data *data = out->data;
 
