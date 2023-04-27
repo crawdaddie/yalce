@@ -8,22 +8,7 @@ void init_queue(MsgQueue *queue) {
   queue->bottom = 0;
   queue->top = 0;
   queue->max = MSG_QUEUE_MAX;
-  queue->used = false;
 }
-
-int q_is_full(MsgQueue *q) {
-  if (q->top == q->max) {
-    return 1;
-  }
-  return 0;
-};
-
-int q_is_empty(MsgQueue *q) {
-  if (q->top == q->bottom) {
-    return 1;
-  }
-  return 0;
-};
 
 void push_message(MsgQueue *queue, double timestamp, msg_handler handler,
                   void *data, int size) {
@@ -39,14 +24,12 @@ void push_message(MsgQueue *queue, double timestamp, msg_handler handler,
   msg->handler = handler;
   msg->data = data;
   msg->size = size;
-  queue->used = true;
 
   queue->top = (queue->top + 1) % queue->max;
 };
 
 size_t queue_size(MsgQueue queue) {
   if (queue.bottom > queue.top) {
-    write_log("invert calc\n");
     return queue.max - queue.bottom + queue.top;
   }
   return queue.top - queue.bottom;

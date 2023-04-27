@@ -40,7 +40,6 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
     size_t len_msgs = queue_size(ctx->queue);
-    // write_log("len msgs %d\n", len_msgs);
 
     for (int i = 0; i < len_msgs; i++) {
       Msg msg = queue_pop_left(&ctx->queue);
@@ -72,7 +71,6 @@ static void _write_callback(struct SoundIoOutStream *outstream,
       }
     }
 
-    ctx->sys_time = ctx->sys_time + (seconds_per_frame * frame_count);
     ctx->block_time = get_time();
 
     if ((err = soundio_outstream_end_write(outstream))) {

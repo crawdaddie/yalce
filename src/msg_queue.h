@@ -18,8 +18,6 @@ typedef struct MsgQueue {
   int bottom;
   int top;
   int max;
-  bool used;
-
 } MsgQueue;
 
 void init_queue(MsgQueue *queue);

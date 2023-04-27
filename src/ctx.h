@@ -15,9 +15,6 @@ typedef struct {
 typedef struct {
   double main_vol;
 
-  /* global time in secs */
-  double sys_time;
-
   /* global time in secs at which current block begins*/
   double block_time;
 

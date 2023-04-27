@@ -15,7 +15,6 @@ Ctx ctx;
 static Node *tail = NULL;
 void init_ctx() {
   ctx.main_vol = 0.125;
-  ctx.sys_time = 0.0;
 
   /* for (int i = 0; i < OUTPUT_CHANNELS; i++) { */
   /*   ctx.out_chans[i].data = output_channel_pool[i]; */
@@ -98,8 +97,6 @@ void ctx_add_after_tail(Node *node) {
 }
 
 double user_ctx_get_sample(Ctx *ctx, int channel, int frame) { return 0; };
-
-double *get_sys_time() { return &ctx.sys_time; }
 
 int channel_data_idx(int frame, int layout_channel) {
   return (BUF_SIZE * layout_channel) + frame;

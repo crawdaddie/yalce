@@ -61,7 +61,6 @@ void write_callback(struct SoundIoOutStream *outstream, int frame_count_min,
     /*     } */
     /*   } */
     /* } */
-    ctx->sys_time += seconds_per_frame * frame_count;
 
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
