@@ -2,7 +2,6 @@
 #include "audio/osc.h"
 #include "common.h"
 #include "log.h"
-// #include "midi.h"
 #include <stdlib.h>
 
 #include "dbg.h"
@@ -139,7 +138,7 @@ void ctx_add_node_out_to_output(Signal *out_ptr, int nframes,
  * which to schedule the audible change the message represents
  **/
 int get_msg_block_offset(Msg msg, Ctx ctx, double sample_rate) {
-  return (int)(msg.timestamp - ctx.block_time) * sample_rate;
+  return (int)((msg.timestamp - ctx.block_time) * sample_rate);
 }
 
 void dump_graph() { dump_nodes(ctx.head, 0); }

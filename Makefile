@@ -13,7 +13,6 @@ src += src/oscilloscope.c
 src += lib/tigr/tigr.c
 src += $(wildcard src/audio/*.c)
 src += src/soundfile.c
-src += src/midi.c
 src += src/msg_queue.c
 
 # src += $(wildcard src/graph/*.c)
@@ -26,7 +25,7 @@ CC = clang
 
 
 LDFLAGS = -lsoundio -lm -lsndfile
-FRAMEWORKS =-framework opengl -framework cocoa -framework CoreMIDI -framework CoreFoundation
+FRAMEWORKS =-framework opengl -framework cocoa 
 COMPILER_OPTIONS = -Werror -Wall -Wextra
 
 synth: $(obj)
@@ -90,4 +89,23 @@ clean:
 .PHONY: run
 run:
 	make clean && make synth && ./synth
+
+
+test_src = $(filter-out src/main.c, $(wildcard src/*.c))
+test_src += $(wildcard src/audio/*.c)
+
+%: tests/%.c
+	@$(CC) $(LDFLAGS) $(FRAMEWORKS) \
+		-DUNITY_SUPPORT_64 \
+		-DUNITY_OUTPUT_COLOR \
+		lib/Unity/src/unity.c \
+		lib/tigr/tigr.c \
+		-L. -I src -lyalce_synth \
+		$^ -o $@
+
+.PHONY: test
+test:
+	make libyalce_synth.so
+	make node.test && ./node.test
+	make msg_queue.test && ./msg_queue.test
 

@@ -69,7 +69,6 @@ Node *node_set_add_node(Node *node, Node *src);
 Node *node_set_add_double(Node *node, double val);
 Node *node_set_mul_node(Node *node, Node *src);
 Node *node_set_mul_double(Node *node, double val);
-
 Node *node_set_sig_double_lag(Node *node, int sig_idx, double value,
                               double lagtime);
 typedef struct {

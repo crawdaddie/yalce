@@ -6,7 +6,6 @@
 #include "../src/ctx.h"
 #include "../src/dbg.h"
 #include "../src/log.h"
-#include "../src/midi.h"
 #include "../src/node.h"
 #include "../src/oscilloscope.h"
 #include "../src/scheduling.h"
@@ -343,34 +342,15 @@ void caml_wrapper(uint8_t chan, uint8_t cc, uint8_t val,
   /* caml_callbackN((value)fn_ptr, 3, args); */
 }
 
-CAMLprim value caml_register_midi_handler(value ml_chan, value ml_ccnum,
-                                          value ml_name) {
-  int chan = Int_val(ml_chan);
-  int ccnum = Int_val(ml_ccnum);
-  int cchandler_offset = ccnum == -1 ? 0 : 1 + ccnum;
-  const char *name = caml_stat_strdup(String_val(ml_name));
-  printf("%s - registered name\n", name);
-
-  /* HandlerWrapper wrapper = Handler; */
-
-  /* chan * 129 + cchandler_offset]; */
-  Handler[0].wrapper = &caml_wrapper;
-  Handler[0].registered_name = name;
-
-  /* printf("registered handler %p\n", wrapper.fn_ptr); */
-
-  /* register_midi_handler(chan, ccnum, handler); */
-
-  return Val_unit;
-}
-
 CAMLprim value caml_write_log(value ml_string) {
   const char *str = caml_stat_strdup(String_val(ml_string));
   write_log(str);
   return Val_unit;
 }
 
-msg_handler mock_msg_handler(void *ctx, Msg msg, int block_offset) {}
+msg_handler mock_msg_handler(void *ctx, Msg msg, int block_offset) {
+  write_log("msg received %d\n", block_offset);
+}
 
 CAMLprim value caml_push_to_q(value ml_string) {
   const char *str = caml_stat_strdup(String_val(ml_string));

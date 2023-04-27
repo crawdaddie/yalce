@@ -39,17 +39,20 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
-    for (int i = 0; i < ctx->queue.top; i++) {
-      Msg msg = ctx->queue.items[i];
+    size_t len_msgs = queue_size(ctx->queue);
+    // write_log("len msgs %d\n", len_msgs);
+
+    for (int i = 0; i < len_msgs; i++) {
+      Msg msg = queue_pop_left(&ctx->queue);
+
       if (msg.handler != NULL) {
         int block_offset = get_msg_block_offset(msg, *ctx, float_sample_rate);
+
         msg.handler(ctx, msg, block_offset);
       }
     }
 
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
-
-    ctx->queue.top = 0;
 
     int sample_idx;
     double sample;
