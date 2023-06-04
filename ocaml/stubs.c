@@ -11,11 +11,11 @@
 #include "../src/scheduling.h"
 #include "../src/soundfile.h"
 #include "../src/start_audio.h"
-#include "caml/misc.h"
 #include <caml/alloc.h>
 #include <caml/bigarray.h>
 #include <caml/callback.h>
 #include <caml/memory.h>
+#include <caml/misc.h>
 #include <caml/mlvalues.h>
 #include <stdio.h>
 
@@ -27,6 +27,8 @@ static value Val_signal(Signal *p) { return caml_copy_nativeint((intnat)p); }
 static Signal *Signal_val(value v) { return (Signal *)Nativeint_val(v); }
 
 CAMLprim value caml_start_audio() {
+  write_audio = write_fd_log;
+  logging_setup();
   int audio_status = setup_audio();
   return Val_unit;
 }

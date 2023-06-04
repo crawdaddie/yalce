@@ -1,0 +1,6 @@
+------------------
+[35mSimple Synth[0m
+Backend: CoreAudio
+Output device: MacBook Pro Speakers
+Software latency: 0.010667
+------------------

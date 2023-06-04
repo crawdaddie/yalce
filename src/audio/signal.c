@@ -78,3 +78,7 @@ double unwrap(Signal sig, int frame) {
 int sample_idx(Signal sig, int frame, int channel) {
   return sig.layout * frame + channel;
 };
+
+int SAMPLE_IDX(Signal sig, int frame, int channel) {
+  return sig.layout * frame + channel;
+}

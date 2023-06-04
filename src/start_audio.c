@@ -2,21 +2,22 @@
 #include "audio/osc.h"
 #include "audio/out.h"
 #include "ctx.h"
+#include "lang/dsl.h"
 #include "log.h"
 #include "oscilloscope.h"
 #include "scheduling.h"
 #include "write_sample.h"
 #include <math.h>
-
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
 static struct SoundIoOutStream *outstream = NULL;
 
 static void (*write_sample)(char *ptr, double sample);
+
 static volatile bool want_pause = false;
 
-static void _write_callback(struct SoundIoOutStream *outstream,
-                            int frame_count_min, int frame_count_max) {
+static void write_callback(struct SoundIoOutStream *outstream,
+                           int frame_count_min, int frame_count_max) {
   double float_sample_rate = outstream->sample_rate;
   double seconds_per_frame = 1.0 / float_sample_rate;
 
@@ -64,7 +65,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
         sample = DAC.data[sample_idx];
 
         write_sample(areas[channel].ptr, ctx->main_vol * sample);
-        add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
+        // add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
 
         DAC.data[sample_idx] = 0.0; // zero channel buffer after reading from it
         areas[channel].ptr += areas[channel].step;
@@ -92,8 +93,8 @@ static void underflow_callback(struct SoundIoOutStream *outstream) {
   static int count = 0;
   write_log("underflow %d\n", count++);
 }
+
 int setup_audio() {
-  logging_setup();
   enum SoundIoBackend backend = SoundIoBackendNone;
   char *device_id = NULL;
   bool raw = false;
@@ -118,7 +119,7 @@ int setup_audio() {
     write_log("Unable to connect to backend: %s\n", soundio_strerror(err));
     return 1;
   }
-  write_log(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
+  write_log(ANSI_COLOR_MAGENTA "Yalce Synth" ANSI_COLOR_RESET "\n");
 
   write_log("Backend: %s\n", soundio_backend_name(soundio->current_backend));
 
@@ -171,7 +172,7 @@ int setup_audio() {
   init_scheduling();
 
   outstream->userdata = &ctx;
-  outstream->write_callback = _write_callback;
+  outstream->write_callback = write_callback;
 
   outstream->underflow_callback = underflow_callback;
   outstream->name = stream_name;
@@ -229,4 +230,22 @@ int stop_audio() {
   /* soundio_destroy(soundio); */
   logging_teardown();
   return 0;
+}
+
+void destroy_audio() {
+  soundio_outstream_destroy(outstream);
+  soundio_device_unref(device);
+  soundio_destroy(soundio);
+}
+
+void event_loop() {
+
+  char input[2048];
+
+  for (;;) {
+    // repl_input(input, 2048, "\x1b[32m~ \x1b[0m");
+    // printf("input: %s", input);
+    process_input(input, 0);
+    soundio_flush_events(soundio);
+  }
 }

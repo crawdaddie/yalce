@@ -16,13 +16,6 @@ static Node *tail = NULL;
 void init_ctx() {
   ctx.main_vol = 0.125;
 
-  /* for (int i = 0; i < OUTPUT_CHANNELS; i++) { */
-  /*   ctx.out_chans[i].data = output_channel_pool[i]; */
-  /*   ctx.out_chans[i].size = BUF_SIZE; */
-  /*   ctx.out_chans[i].layout = LAYOUT_CHANNELS; */
-  /* } */
-
-  /* ctx.channel_vols = channel_vols; */
   ctx.DAC.data = *output_channel_pool;
   ctx.DAC.size = BUF_SIZE;
   ctx.DAC.layout = LAYOUT_CHANNELS;
@@ -150,3 +143,5 @@ void handle_queue(Ctx *ctx, double sample_rate) {
   }
   ctx->queue.top = 0;
 }
+
+Ctx *get_user_ctx() { return &ctx; }

@@ -4,15 +4,20 @@
 
 FILE *log_file;
 FILE *log_stream;
-void write_log(const char *format, ...) {
+
+void write_fd_log(const char *format, ...) {
   va_list args;
   va_start(args, format);
-  /* fprintf(log_stream, "[%5.f] ", (double)clock() / (double)CLOCKS_PER_SEC);
-   */
   vfprintf(log_stream, format, args);
-
   va_end(args);
   fflush(log_stream);
+}
+
+void write_stdout_log(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  vprintf(format, args);
+  va_end(args);
 }
 
 int logging_setup() {
@@ -31,15 +36,6 @@ int logging_setup() {
     exit(EXIT_FAILURE);
   }
 
-  /* // Print to the new output stream */
-  /* fprintf(log_stream, "This is a message for the log\n"); */
-  /*  */
-  /* // Flush the output stream */
-  /* fflush(log_stream); */
-  /*  */
-  /* // Close the log file */
-  /* fclose(log_file); */
-
   return 0;
 }
 int logging_teardown() {
@@ -51,3 +47,5 @@ int logging_teardown() {
   fclose(log_stream);
   return 0;
 }
+
+void (*write_log)(const char *fmt, ...);

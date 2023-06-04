@@ -11,5 +11,7 @@
 
 int setup_audio();
 int stop_audio();
+void destroy_audio();
 
+void event_loop();
 #endif

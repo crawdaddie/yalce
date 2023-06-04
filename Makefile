@@ -14,6 +14,7 @@ src += lib/tigr/tigr.c
 src += $(wildcard src/audio/*.c)
 src += src/soundfile.c
 src += src/msg_queue.c
+src += src/lang/dsl.c
 
 # src += $(wildcard src/graph/*.c)
 # src += $(wildcard src/lang/*.c)
@@ -24,7 +25,7 @@ obj = $(src:.c=.o)
 CC = clang 
 
 
-LDFLAGS = -lsoundio -lm -lsndfile
+LDFLAGS = -lsoundio -lm -lsndfile -ldl
 FRAMEWORKS =-framework opengl -framework cocoa 
 COMPILER_OPTIONS = -Werror -Wall -Wextra
 

@@ -21,7 +21,8 @@ typedef struct {
 
 #define ALLOC_SIGS(out_enum) calloc(sizeof(Signal), out_enum)
 
-#define SAMPLE_IDX(sig, frame, channel) (sig.layout * frame + channel)
+int SAMPLE_IDX(struct Signal sig, int frame, int channel);
+
 Signal new_signal(int size);
 
 Signal *new_signal_heap(int size, int layout);
