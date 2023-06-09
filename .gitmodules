@@ -4,3 +4,6 @@
 [submodule "lib/tigr"]
 	path = lib/tigr
 	url = git@github.com:erkkah/tigr.git
+[submodule "lib/fe"]
+	path = lib/fe
+	url = https://github.com/rxi/fe

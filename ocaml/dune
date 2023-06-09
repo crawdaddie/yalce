@@ -1,5 +1,0 @@
-(library
-  (name yalce_bindings)
-  (libraries portmidi lwt.unix)
-  ; (flags (-linkpkg))
-  )
