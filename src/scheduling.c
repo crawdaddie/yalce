@@ -75,3 +75,5 @@ int msleepd(double msec) {
 }
 
 void init_scheduling() { clock_gettime(CLOCK_REALTIME, &start_time); }
+
+// int thread_func() { pthread_create(); }

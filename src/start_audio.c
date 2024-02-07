@@ -3,6 +3,7 @@
 #include "audio/out.h"
 #include "ctx.h"
 #include "log.h"
+#include "midi.h"
 #include "oscilloscope.h"
 #include "scheduling.h"
 #include "write_sample.h"
@@ -120,7 +121,8 @@ int setup_audio() {
   }
   write_log(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
 
-  write_log("Backend: %s\n", soundio_backend_name(soundio->current_backend));
+  write_log("Backend:           %s\n",
+            soundio_backend_name(soundio->current_backend));
 
   soundio_flush_events(soundio);
 
@@ -153,7 +155,7 @@ int setup_audio() {
     return 1;
   }
 
-  write_log("Output device: %s\n", device->name);
+  write_log("Output device:     %s\n", device->name);
 
   if (device->probe_error) {
     write_log("Cannot probe device: %s\n",
@@ -203,8 +205,6 @@ int setup_audio() {
     return 1;
   }
 
-  write_log("Software latency: %f\n", outstream->software_latency);
-
   if (outstream->layout_error)
     write_log("unable to set channel layout: %s\n",
               soundio_strerror(outstream->layout_error));
@@ -215,6 +215,8 @@ int setup_audio() {
 
     return 1;
   }
+  write_log("Software latency:  %f\n", outstream->software_latency);
+  write_log("Sample rate:       %d\n", outstream->sample_rate);
   /* oscilloscope(); */
 
   write_log("------------------\n");

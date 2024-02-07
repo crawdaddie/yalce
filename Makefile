@@ -14,6 +14,8 @@ src += lib/tigr/tigr.c
 src += $(wildcard src/audio/*.c)
 src += src/soundfile.c
 src += src/msg_queue.c
+src += src/lang/ffi.c
+src += src/midi.c
 
 # src += $(wildcard src/graph/*.c)
 # src += $(wildcard src/lang/*.c)
@@ -25,13 +27,13 @@ CC = clang
 
 
 LDFLAGS = -lsoundio -lm -lsndfile
-FRAMEWORKS =-framework opengl -framework cocoa 
-COMPILER_OPTIONS = -Werror -Wall -Wextra
+FRAMEWORKS =-framework opengl -framework cocoa -framework CoreMIDI -framework CoreFoundation 
+COMPILER_OPTIONS = -Werror -Wall -Wextra -g
 
 synth: $(obj)
 	$(CC) -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(COMPILER_OPTIONS)
 
-EXPORT_COMPILER_OPTIONS = -Werror -Wall -Wextra -fPIC 
+EXPORT_COMPILER_OPTIONS = -Werror -Wall -Wextra -fPIC
 libyalce_synth.so: $(obj)
 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(EXPORT_COMPILER_OPTIONS)
 

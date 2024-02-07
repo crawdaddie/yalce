@@ -135,7 +135,11 @@ static void update_container(Node *container, Node *head) {
     inputs += chain_node->num_ins;
   }
 }
-
+/*
+ * Node -> (ContainerNode
+ *              Sub: Node
+ *         )
+ * */
 Node *container_node(Node *sub) {
   Node *node = ALLOC_NODE(container_node_data, "Container", 0);
   ((container_node_data *)node->data)->write_to_output = true;
