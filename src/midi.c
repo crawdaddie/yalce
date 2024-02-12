@@ -13,12 +13,13 @@ static void handle_cc(MIDIPacket *packet) {
   uint8_t cc = *(packet->data + 1) & 0xFF;
   uint8_t val = *(packet->data + 2);
 
-  write_log("%d\n", (*(Handler[0].handler))(ch, cc, val));
+  printf("MIDI cc: %d %d %d\n", ch, cc, val);
 }
 
 static void MIDIInputCallback(const MIDIPacketList *pktlist,
                               void *readProcRefCon, void *srcConnRefCon) {
   MIDIPacket *packet = (MIDIPacket *)pktlist->packet;
+
   for (int i = 0; i < pktlist->numPackets; i++) {
     switch (*packet->data & 0xF0) {
     case CC: {
@@ -45,12 +46,10 @@ void midi_setup() {
 
   // get the list of MIDI sources
   ItemCount sourceCount = MIDIGetNumberOfSources();
-  write_log("Found %lu MIDI source%s\n", sourceCount,
-            sourceCount > 1 ? "s" : "");
+  printf("num sources %lu\n", sourceCount);
   for (int i = 0; i < sourceCount; i++) {
     MIDIEndpointRef source = MIDIGetSource(i);
     MIDIPortConnectSource(inputPort, source, NULL);
-    write_log("Connected to MIDI source\n");
   }
 }
 

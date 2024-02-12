@@ -1,6 +1,6 @@
 #ifndef _BUFPLAYER_H
 #define _BUFPLAYER_H
-#include "../node.h"
+#include "node.h"
 
 typedef enum {
   BUFPLAYER_BUF,

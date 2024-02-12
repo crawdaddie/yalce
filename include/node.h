@@ -1,6 +1,6 @@
 #ifndef _NODE_H
 #define _NODE_H
-#include "audio/signal.h"
+#include "signal.h"
 #include <stdbool.h>
 #include <stdio.h>
 

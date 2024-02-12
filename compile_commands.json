@@ -1,0 +1,32 @@
+[
+  {
+    "arguments": [
+      "/opt/homebrew/opt/llvm@16/bin/clang",
+      "-Iinclude",
+      "-c",
+      "-I",
+      "/opt/homebrew/include",
+      "-o",
+      "src/audio/delay.o",
+      "src/audio/delay.c"
+    ],
+    "directory": "/Users/adam/projects/yalce",
+    "file": "/Users/adam/projects/yalce/src/audio/delay.c",
+    "output": "/Users/adam/projects/yalce/src/audio/delay.o"
+  },
+  {
+    "arguments": [
+      "/opt/homebrew/opt/llvm@16/bin/clang",
+      "-Iinclude",
+      "-c",
+      "-I",
+      "/opt/homebrew/include",
+      "-o",
+      "src/audio/math.o",
+      "src/audio/math.c"
+    ],
+    "directory": "/Users/adam/projects/yalce",
+    "file": "/Users/adam/projects/yalce/src/audio/math.c",
+    "output": "/Users/adam/projects/yalce/src/audio/math.o"
+  }
+]

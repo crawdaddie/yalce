@@ -1,6 +1,6 @@
 #ifndef _DELAY_H
 #define _DELAY_H
-#include "../node.h"
+#include "node.h"
 #include "signal.h"
 
 // EXPORT SIGNAL ENUM

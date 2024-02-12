@@ -1,5 +1,6 @@
 #ifndef _LOG_H
 #define _LOG_H
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

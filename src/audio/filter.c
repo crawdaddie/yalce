@@ -1,5 +1,5 @@
 #include "filter.h"
-#include "../common.h"
+#include "common.h"
 #include "signal.h"
 #include <math.h>
 static int SR = 48000;

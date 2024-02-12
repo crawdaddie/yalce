@@ -1,7 +1,7 @@
 #include "ctx.h"
-#include "audio/osc.h"
 #include "common.h"
 #include "log.h"
+#include "osc.h"
 #include <stdlib.h>
 
 #include "dbg.h"

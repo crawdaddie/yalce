@@ -1,5 +1,5 @@
 #include "signal.h"
-#include "../common.h"
+#include "common.h"
 #include "stdlib.h"
 
 static double signal_buffer_pool[128][BUF_SIZE] = {0.0};

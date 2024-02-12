@@ -1,7 +1,7 @@
 #include "delay.h"
-#include "../common.h"
-#include "../log.h"
-#include "math.h"
+#include "audio_math.h"
+#include "common.h"
+#include "log.h"
 #include <stdlib.h>
 
 static double sanitize_delay_pointer(double ptr, int bufsize) {

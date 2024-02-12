@@ -1,8 +1,8 @@
 #ifndef _OUT_H
 #define _OUT_H
-#include "../common.h"
-#include "../ctx.h"
-#include "../node.h"
+#include "common.h"
+#include "ctx.h"
+#include "node.h"
 #include "signal.h"
 
 typedef struct {

@@ -1,7 +1,7 @@
 #include "node.h"
-#include "audio/signal.h"
 #include "ctx.h"
 #include "memory.h"
+#include "signal.h"
 #include <stdlib.h>
 #include <string.h>
 

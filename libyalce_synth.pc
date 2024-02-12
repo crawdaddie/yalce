@@ -1,0 +1,10 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libyalce_synth
+Description: Description of your library
+Version: 1.0.0
+Libs: -L${libdir} -lyalce_synth
+Cflags: -I${includedir}

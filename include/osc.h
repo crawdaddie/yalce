@@ -1,7 +1,7 @@
 #ifndef _OSC_H
 #define _OSC_H
-#include "../common.h"
-#include "../node.h"
+#include "common.h"
+#include "node.h"
 #include "signal.h"
 
 // EXPORT SIGNAL ENUM

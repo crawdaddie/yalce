@@ -1,9 +1,9 @@
 #ifndef _CTX_H
 #define _CTX_H
-#include "audio/signal.h"
 #include "common.h"
 #include "msg_queue.h"
 #include "node.h"
+#include "signal.h"
 
 typedef struct {
   bool mute;

@@ -1,6 +1,7 @@
 #include "bufplayer.h"
-#include "../common.h"
-#include "math.h"
+#include "audio_math.h"
+#include "common.h"
+#include <math.h>
 
 static bool handle_trig(Signal trig, int frame) {
   if (unwrap(trig, frame) > 0.0) {

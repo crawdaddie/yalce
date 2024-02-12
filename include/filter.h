@@ -1,6 +1,6 @@
 #ifndef _FILTER_H
 #define _FILTER_H
-#include "../node.h"
+#include "node.h"
 #include "signal.h"
 
 #ifndef M_LN2

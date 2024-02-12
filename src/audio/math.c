@@ -1,4 +1,4 @@
-#include "math.h"
+#include "audio_math.h"
 
 double get_sample_interp(double read_ptr, double *buf, int max_frames) {
   double r = read_ptr;

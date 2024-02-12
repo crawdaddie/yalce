@@ -1,10 +1,10 @@
 #include "start_audio.h"
-#include "audio/osc.h"
-#include "audio/out.h"
 #include "ctx.h"
 #include "log.h"
 #include "midi.h"
-#include "oscilloscope.h"
+#include "osc.h"
+#include "out.h"
+// #include "oscilloscope.h"
 #include "scheduling.h"
 #include "write_sample.h"
 #include <math.h>
@@ -65,7 +65,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
         sample = DAC.data[sample_idx];
 
         write_sample(areas[channel].ptr, ctx->main_vol * sample);
-        add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
+        // add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
 
         DAC.data[sample_idx] = 0.0; // zero channel buffer after reading from it
         areas[channel].ptr += areas[channel].step;
@@ -94,6 +94,7 @@ static void underflow_callback(struct SoundIoOutStream *outstream) {
   write_log("underflow %d\n", count++);
 }
 int setup_audio() {
+  printf("SETUP SYNTH\n");
   logging_setup();
   enum SoundIoBackend backend = SoundIoBackendNone;
   char *device_id = NULL;
@@ -119,7 +120,8 @@ int setup_audio() {
     write_log("Unable to connect to backend: %s\n", soundio_strerror(err));
     return 1;
   }
-  write_log(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
+  write_log(ANSI_COLOR_MAGENTA "HELLO Simple Synth______" ANSI_COLOR_RESET
+                               "\n");
 
   write_log("Backend:           %s\n",
             soundio_backend_name(soundio->current_backend));
