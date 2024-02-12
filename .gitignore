@@ -54,3 +54,7 @@ Mkfile.old
 dkms.conf
 *.ccls-cache
 *.idea
+.DS_Store
+.cache
+log.txt
+
