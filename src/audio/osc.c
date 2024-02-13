@@ -1,7 +1,7 @@
 #include "osc.h"
-#include "math.h"
+#include "audio_math.h"
 #include <math.h>
-#include <stdlib.h>
+#include <stdio.h>
 
 #define SIN_TABSIZE (1 << 11)
 
@@ -159,6 +159,7 @@ static void maketable_blsq() {
 }
 
 Node *sq_node(double freq) {
+  printf("init sq node %f\n", freq);
 
   Node *osc = ALLOC_NODE(sq_data, "sq", 1);
   osc->perform = (node_perform)sq_perform;

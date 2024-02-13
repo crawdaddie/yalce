@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include "dbg.h"
+#include "scheduling.h"
 #include <pthread.h>
 
 static double output_channel_pool[OUTPUT_CHANNELS][BUF_SIZE * LAYOUT_CHANNELS];
@@ -33,6 +34,8 @@ void init_ctx() {
   init_queue(&ctx.queue);
   // midi_setup();
 }
+
+Ctx *get_audio_ctx() { return &ctx; }
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
   if (ctx->head == NULL) {
@@ -149,4 +152,13 @@ void handle_queue(Ctx *ctx, double sample_rate) {
     }
   }
   ctx->queue.top = 0;
+}
+
+Node *play_node(Node *node) {
+  double timestamp = get_time();
+  int block_offset = (int)(timestamp - ctx.block_time) * 48000;
+  node->_block_offset = block_offset;
+  Node *container = container_node(node);
+  ctx_add_after_tail(container);
+  return container;
 }

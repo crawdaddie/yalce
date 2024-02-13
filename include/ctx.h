@@ -55,4 +55,8 @@ void dump_graph();
 void handle_queue(Ctx *ctx, double sr);
 
 int get_msg_block_offset(Msg msg, Ctx ctx, double sample_rate);
+
+Ctx *get_audio_ctx();
+
+Node *play_node(Node *node);
 #endif

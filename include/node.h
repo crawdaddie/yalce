@@ -58,6 +58,7 @@ Node *node_add_after(Node *before, Node *after);
 typedef struct {
   bool write_to_output;
 } container_node_data;
+
 Node *container_node(Node *sub);
 
 Node *chain_nodes(Node *container, Node *filter, int dest_sig_idx);
