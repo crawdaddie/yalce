@@ -2,8 +2,7 @@
 %c -std=c17
 -I/opt/homebrew/include
 -I/usr/local/include
--I/Users/adam/.opam/default/lib/ocaml
+-Iinclude
 -L/opt/homebrew/lib
--L/usr/homebrew/lib
 -L/Users/adam/.opam/default/lib/ocaml
 

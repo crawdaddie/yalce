@@ -1,82 +1,85 @@
 #ifndef _NODE_H
 #define _NODE_H
-#include "signal.h"
 #include <stdbool.h>
-#include <stdio.h>
 
 typedef struct Node (*node_perform)(struct Node *node, int nframes, double spf);
+typedef struct Signal {
+  // size of the data array will be size * layout
+  // data is interleaved, so sample for frame x, channel 0 will be at index
+  // layout * x + 0
+  // sample for frame x, channel 1 will be at index layout * x + 1
+  double *data;
+  int size;   // number of frames
+  int layout; // how they are laid out
+} Signal;
 
 typedef struct Node {
-  Signal *ins;
-  int num_ins;
-
-  Signal add;
-  Signal mul;
-  Signal out;
+  enum {
+    INTERMEDIATE = 0,
+    OUTPUT,
+  } type;
 
   node_perform perform;
-  void *data;
-  const char *name;
-
-  // 'ephemeral value' for offsetting the calculation of a node's frames into
-  // a block - should be accessed by `int get_block_offset(Node *node)` that
-  // resets it to 0 after reading
-  int _block_offset;
-
-  bool killed;
-
+  Signal ins;
+  Signal out;
   struct Node *next;
-  struct Node *prev;
-  struct Node *parent;
-  struct Node *_sub;
-  struct Node *
-      _sub_tail; // optional pointer to a node before the add_out or replace_out
-                 // node found at the end of a Container Node's signal chain
+  bool killed;
+  void *data;
 } Node;
 
-int get_block_offset(Node *node);
+static inline double *get_sig_ptr(Signal sig, int frame, int chan) {
+  // return sig.data + frame + (chan * sig.size); // non-interleaved
+  return sig.data + (frame * sig.layout) + chan; // interleaved samples
+}
 
-#define INS(node) (node)->ins
-#define IN(node, enum_name) (INS(node)[enum_name])
-#define OUTS(node) node->out
-/* + node->num_ins */
+double random_double();
 
-#define NUM_INS(node) (node)->num_ins
+double random_double_range(double min, double max);
 
-node_perform perform_graph(struct Node *head, int nframes, double spf);
+node_perform noise_perform(Node *node, int nframes, double spf);
 
-Node *alloc_node(size_t obj_size, const char *name, size_t num_ins);
 
-Node *make_node(size_t obj_size, node_perform perform, const char *name);
-
-#define ALLOC_NODE(type, name, ins) alloc_node(sizeof(type), name, ins)
-#define NODE_DATA(type, node) ((type *)node->data)
-#define MAKE_NODE(type, perform, name) make_node(sizeof(type), perform, name)
-
-Node *node_add_after(Node *before, Node *after);
+#define SIN_TABSIZE (1 << 11)
+void maketable_sin(void);
 
 typedef struct {
-  bool write_to_output;
-} container_node_data;
+  double phase;
+} sin_data;
 
-Node *container_node(Node *sub);
+node_perform sine_perform(Node *node, int nframes, double spf);
+static inline double scale_val_2(double env_val, // 0-1
+                                 double min, double max) {
+  return min + env_val * (max - min);
+}
+double sq_sample(double phase, double freq);
 
-Node *chain_nodes(Node *container, Node *filter, int dest_sig_idx);
-Node *node_write_out(Node *node, int frame, double sample);
-Node *node_set_sig_double(Node *node, int sig_idx, double value);
-Node *node_set_sig_node(Node *node, int sig_idx, Node *value);
-
-Node *node_set_add_node(Node *node, Node *src);
-Node *node_set_add_double(Node *node, double val);
-Node *node_set_mul_node(Node *node, Node *src);
-Node *node_set_mul_double(Node *node, double val);
-Node *node_set_sig_double_lag(Node *node, int sig_idx, double value,
-                              double lagtime);
 typedef struct {
+  double phase;
+} sq_data;
+
+node_perform sq_perform(Node *node, int nframes, double spf);
+
+
+typedef struct {
+  double phase;
   double target;
-  double start;
-  double lagtime;
-} lag_node_data;
+  double min;
+  double max;
+} lf_noise_data;
 
-void node_build_ins(Node *node, int num_ins, double *init_values);
+node_perform lf_noise_perform(Node *node, int nframes, double spf);
+
+typedef struct {
+  double phase;
+  double target;
+  double current;
+} lf_noise_interp_data;
+node_perform lf_noise_interp_perform(Node *node, int nframes,
+                                            double spf);
+
+void init_sig_ptrs();
+
+Signal get_sig(int layout);
+Node *node_new(void *data, node_perform *perform, Signal ins,
+                      Signal out);
 #endif

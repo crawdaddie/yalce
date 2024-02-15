@@ -1,7 +1,13 @@
 #include "start_audio.h"
 #include "ctx.h"
 #include "log.h"
+#include "midi.h"
+#include "osc.h"
+#include "out.h"
+// #include "oscilloscope.h"
+#include "scheduling.h"
 #include "write_sample.h"
+#include <math.h>
 
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
@@ -34,7 +40,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
-    // size_t len_msgs = queue_size(ctx->queue);
+    size_t len_msgs = queue_size(ctx->queue);
 
     // for (int i = 0; i < len_msgs; i++) {
     //   Msg msg = queue_pop_left(&ctx->queue);
@@ -51,14 +57,12 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     int sample_idx;
     double sample;
-    Signal DAC = ctx->dac_buffer;
+    Signal DAC = ctx->DAC;
 
     for (int channel = 0; channel < layout->channel_count; channel += 1) {
       for (int frame = 0; frame < frame_count; frame += 1) {
 
-
-        
-        sample_idx = DAC.layout * frame + channel;
+        sample_idx = SAMPLE_IDX(DAC, frame, channel);
         sample = DAC.data[sample_idx];
 
         write_sample(areas[channel].ptr, ctx->main_vol * sample);
@@ -70,7 +74,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
       }
     }
 
-    // ctx->block_time = get_time();
+    ctx->block_time = get_time();
 
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
@@ -91,11 +95,9 @@ static void underflow_callback(struct SoundIoOutStream *outstream) {
   static int count = 0;
   write_log("underflow %d\n", count++);
 }
-int start_audio() {
+int setup_audio() {
   enum SoundIoBackend backend = SoundIoBackendNone;
   char *device_id = NULL;
-  // char *device_id = "BuiltInSpeakerDevice";
-
   bool raw = false;
   char *stream_name = NULL;
   double latency = 0.0;
@@ -118,7 +120,9 @@ int start_audio() {
     write_log("Unable to connect to backend: %s\n", soundio_strerror(err));
     return 1;
   }
-  write_log(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
+  write_log(ANSI_COLOR_MAGENTA "HELLO Simple Synth______" ANSI_COLOR_RESET
+                               "\n");
+
   write_log("Backend:           %s\n",
             soundio_backend_name(soundio->current_backend));
 
@@ -154,7 +158,6 @@ int start_audio() {
   }
 
   write_log("Output device:     %s\n", device->name);
-  // write_log("Output device ID:  %s\n", device->id);
 
   if (device->probe_error) {
     write_log("Cannot probe device: %s\n",
@@ -169,6 +172,7 @@ int start_audio() {
   }
 
   init_ctx();
+  // init_scheduling();
 
   outstream->userdata = &ctx;
   outstream->write_callback = _write_callback;
@@ -221,12 +225,11 @@ int start_audio() {
 }
 
 int stop_audio() {
-  // free(ctx.head);
-  // ctx.head = NULL;
+  free(ctx.head);
+  ctx.head = NULL;
   soundio_outstream_destroy(outstream);
   soundio_device_unref(device);
   soundio_destroy(soundio);
-
   // logging_teardown();
   return 0;
 }

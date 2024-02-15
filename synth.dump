@@ -1,0 +1,2540 @@
+
+synth:	file format mach-o arm64
+
+Disassembly of section __TEXT,__text:
+
+00000001000016c4 <_channel_out>:
+1000016c4: ff 43 00 d1 	sub	sp, sp, #16
+1000016c8: e0 0f 00 b9 	str	w0, [sp, #12]
+1000016cc: e9 0f 80 b9 	ldrsw	x9, [sp, #12]
+1000016d0: 28 00 00 f0 	adrp	x8, 0x100008000 <_channel_write+0x8>
+1000016d4: 08 21 00 91 	add	x8, x8, #8
+1000016d8: 00 31 09 8b 	add	x0, x8, x9, lsl #12
+1000016dc: ff 43 00 91 	add	sp, sp, #16
+1000016e0: c0 03 5f d6 	ret
+
+00000001000016e4 <_channel_write>:
+1000016e4: ff 83 00 d1 	sub	sp, sp, #32
+1000016e8: e0 1f 00 b9 	str	w0, [sp, #28]
+1000016ec: e1 1b 00 b9 	str	w1, [sp, #24]
+1000016f0: e2 17 00 b9 	str	w2, [sp, #20]
+1000016f4: e0 07 00 fd 	str	d0, [sp, #8]
+1000016f8: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000016fc: ea 1f 80 b9 	ldrsw	x10, [sp, #28]
+100001700: 29 00 00 f0 	adrp	x9, 0x100008000 <_channel_write+0x38>
+100001704: 29 21 00 91 	add	x9, x9, #8
+100001708: 29 31 0a 8b 	add	x9, x9, x10, lsl #12
+10000170c: eb 17 40 b9 	ldr	w11, [sp, #20]
+100001710: ea 1b 40 b9 	ldr	w10, [sp, #24]
+100001714: 4a 01 0b 0b 	add	w10, w10, w11
+100001718: 28 d9 2a f8 	str	x8, [x9, w10, sxtw #3]
+10000171c: ff 83 00 91 	add	sp, sp, #32
+100001720: c0 03 5f d6 	ret
+
+0000000100001724 <_channel_read>:
+100001724: ff 43 00 d1 	sub	sp, sp, #16
+100001728: e0 0f 00 b9 	str	w0, [sp, #12]
+10000172c: e1 0b 00 b9 	str	w1, [sp, #8]
+100001730: e2 07 00 b9 	str	w2, [sp, #4]
+100001734: e9 0f 80 b9 	ldrsw	x9, [sp, #12]
+100001738: 28 00 00 f0 	adrp	x8, 0x100008000 <_channel_read+0x30>
+10000173c: 08 21 00 91 	add	x8, x8, #8
+100001740: 08 31 09 8b 	add	x8, x8, x9, lsl #12
+100001744: ea 07 40 b9 	ldr	w10, [sp, #4]
+100001748: e9 0b 40 b9 	ldr	w9, [sp, #8]
+10000174c: 29 01 0a 0b 	add	w9, w9, w10
+100001750: 00 d9 69 fc 	ldr	d0, [x8, w9, sxtw #3]
+100001754: ff 43 00 91 	add	sp, sp, #16
+100001758: c0 03 5f d6 	ret
+
+000000010000175c <_sum_channel_output>:
+10000175c: ff c3 00 d1 	sub	sp, sp, #48
+100001760: fd 7b 02 a9 	stp	x29, x30, [sp, #32]
+100001764: fd 83 00 91 	add	x29, sp, #32
+100001768: a0 c3 1f b8 	stur	w0, [x29, #-4]
+10000176c: a1 83 1f b8 	stur	w1, [x29, #-8]
+100001770: 00 e4 00 2f 	movi	d0, #0000000000000000
+100001774: e0 0b 00 fd 	str	d0, [sp, #16]
+100001778: ff 0f 00 b9 	str	wzr, [sp, #12]
+10000177c: 01 00 00 14 	b	0x100001780 <_sum_channel_output+0x24>
+100001780: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100001784: 08 09 00 71 	subs	w8, w8, #2
+100001788: e8 b7 9f 1a 	cset	w8, ge
+10000178c: e8 01 00 37 	tbnz	w8, #0, 0x1000017c8 <_sum_channel_output+0x6c>
+100001790: 01 00 00 14 	b	0x100001794 <_sum_channel_output+0x38>
+100001794: e0 0f 40 b9 	ldr	w0, [sp, #12]
+100001798: a1 c3 5f b8 	ldur	w1, [x29, #-4]
+10000179c: a2 83 5f b8 	ldur	w2, [x29, #-8]
+1000017a0: e1 ff ff 97 	bl	0x100001724 <_channel_read>
+1000017a4: 01 40 60 1e 	fmov	d1, d0
+1000017a8: e0 0b 40 fd 	ldr	d0, [sp, #16]
+1000017ac: 00 28 61 1e 	fadd	d0, d0, d1
+1000017b0: e0 0b 00 fd 	str	d0, [sp, #16]
+1000017b4: 01 00 00 14 	b	0x1000017b8 <_sum_channel_output+0x5c>
+1000017b8: e8 0f 40 b9 	ldr	w8, [sp, #12]
+1000017bc: 08 05 00 11 	add	w8, w8, #1
+1000017c0: e8 0f 00 b9 	str	w8, [sp, #12]
+1000017c4: ef ff ff 17 	b	0x100001780 <_sum_channel_output+0x24>
+1000017c8: e0 0b 40 fd 	ldr	d0, [sp, #16]
+1000017cc: 28 00 00 f0 	adrp	x8, 0x100008000 <_sum_channel_output_destructive+0x4>
+1000017d0: 01 01 40 fd 	ldr	d1, [x8]
+1000017d4: 00 08 61 1e 	fmul	d0, d0, d1
+1000017d8: fd 7b 42 a9 	ldp	x29, x30, [sp, #32]
+1000017dc: ff c3 00 91 	add	sp, sp, #48
+1000017e0: c0 03 5f d6 	ret
+
+00000001000017e4 <_sum_channel_output_destructive>:
+1000017e4: ff c3 00 d1 	sub	sp, sp, #48
+1000017e8: fd 7b 02 a9 	stp	x29, x30, [sp, #32]
+1000017ec: fd 83 00 91 	add	x29, sp, #32
+1000017f0: a0 c3 1f b8 	stur	w0, [x29, #-4]
+1000017f4: a1 83 1f b8 	stur	w1, [x29, #-8]
+1000017f8: 00 e4 00 2f 	movi	d0, #0000000000000000
+1000017fc: e0 0b 00 fd 	str	d0, [sp, #16]
+100001800: ff 0f 00 b9 	str	wzr, [sp, #12]
+100001804: 01 00 00 14 	b	0x100001808 <_sum_channel_output_destructive+0x24>
+100001808: e8 0f 40 b9 	ldr	w8, [sp, #12]
+10000180c: 08 09 00 71 	subs	w8, w8, #2
+100001810: e8 b7 9f 1a 	cset	w8, ge
+100001814: 88 02 00 37 	tbnz	w8, #0, 0x100001864 <_sum_channel_output_destructive+0x80>
+100001818: 01 00 00 14 	b	0x10000181c <_sum_channel_output_destructive+0x38>
+10000181c: e0 0f 40 b9 	ldr	w0, [sp, #12]
+100001820: a1 c3 5f b8 	ldur	w1, [x29, #-4]
+100001824: a2 83 5f b8 	ldur	w2, [x29, #-8]
+100001828: bf ff ff 97 	bl	0x100001724 <_channel_read>
+10000182c: 01 40 60 1e 	fmov	d1, d0
+100001830: e0 0b 40 fd 	ldr	d0, [sp, #16]
+100001834: 00 28 61 1e 	fadd	d0, d0, d1
+100001838: e0 0b 00 fd 	str	d0, [sp, #16]
+10000183c: e0 0f 40 b9 	ldr	w0, [sp, #12]
+100001840: a1 c3 5f b8 	ldur	w1, [x29, #-4]
+100001844: a2 83 5f b8 	ldur	w2, [x29, #-8]
+100001848: 00 e4 00 2f 	movi	d0, #0000000000000000
+10000184c: a6 ff ff 97 	bl	0x1000016e4 <_channel_write>
+100001850: 01 00 00 14 	b	0x100001854 <_sum_channel_output_destructive+0x70>
+100001854: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100001858: 08 05 00 11 	add	w8, w8, #1
+10000185c: e8 0f 00 b9 	str	w8, [sp, #12]
+100001860: ea ff ff 17 	b	0x100001808 <_sum_channel_output_destructive+0x24>
+100001864: e0 0b 40 fd 	ldr	d0, [sp, #16]
+100001868: 28 00 00 f0 	adrp	x8, 0x100008000 <_zero_channels_after_write+0x4>
+10000186c: 01 01 40 fd 	ldr	d1, [x8]
+100001870: 00 08 61 1e 	fmul	d0, d0, d1
+100001874: fd 7b 42 a9 	ldp	x29, x30, [sp, #32]
+100001878: ff c3 00 91 	add	sp, sp, #48
+10000187c: c0 03 5f d6 	ret
+
+0000000100001880 <_zero_channels_after_write>:
+100001880: ff 43 00 d1 	sub	sp, sp, #16
+100001884: e0 0f 00 b9 	str	w0, [sp, #12]
+100001888: e1 0b 00 b9 	str	w1, [sp, #8]
+10000188c: ff 07 00 b9 	str	wzr, [sp, #4]
+100001890: 01 00 00 14 	b	0x100001894 <_zero_channels_after_write+0x14>
+100001894: e8 07 40 b9 	ldr	w8, [sp, #4]
+100001898: 08 09 00 71 	subs	w8, w8, #2
+10000189c: e8 b7 9f 1a 	cset	w8, ge
+1000018a0: 08 02 00 37 	tbnz	w8, #0, 0x1000018e0 <_zero_channels_after_write+0x60>
+1000018a4: 01 00 00 14 	b	0x1000018a8 <_zero_channels_after_write+0x28>
+1000018a8: e9 07 80 b9 	ldrsw	x9, [sp, #4]
+1000018ac: 28 00 00 f0 	adrp	x8, 0x100008000 <_zero_channels_after_write+0x48>
+1000018b0: 08 21 00 91 	add	x8, x8, #8
+1000018b4: 08 31 09 8b 	add	x8, x8, x9, lsl #12
+1000018b8: ea 0b 40 b9 	ldr	w10, [sp, #8]
+1000018bc: e9 0f 40 b9 	ldr	w9, [sp, #12]
+1000018c0: 29 01 0a 0b 	add	w9, w9, w10
+1000018c4: 00 e4 00 2f 	movi	d0, #0000000000000000
+1000018c8: 00 d9 29 fc 	str	d0, [x8, w9, sxtw #3]
+1000018cc: 01 00 00 14 	b	0x1000018d0 <_zero_channels_after_write+0x50>
+1000018d0: e8 07 40 b9 	ldr	w8, [sp, #4]
+1000018d4: 08 05 00 11 	add	w8, w8, #1
+1000018d8: e8 07 00 b9 	str	w8, [sp, #4]
+1000018dc: ee ff ff 17 	b	0x100001894 <_zero_channels_after_write+0x14>
+1000018e0: ff 43 00 91 	add	sp, sp, #16
+1000018e4: c0 03 5f d6 	ret
+
+00000001000018e8 <_zero_channel_outputs>:
+1000018e8: ff 83 00 d1 	sub	sp, sp, #32
+1000018ec: 00 e4 00 2f 	movi	d0, #0000000000000000
+1000018f0: e0 0f 00 fd 	str	d0, [sp, #24]
+1000018f4: ff 17 00 b9 	str	wzr, [sp, #20]
+1000018f8: 01 00 00 14 	b	0x1000018fc <_zero_channel_outputs+0x14>
+1000018fc: e8 17 40 b9 	ldr	w8, [sp, #20]
+100001900: 08 09 00 71 	subs	w8, w8, #2
+100001904: e8 b7 9f 1a 	cset	w8, ge
+100001908: 08 05 00 37 	tbnz	w8, #0, 0x1000019a8 <_zero_channel_outputs+0xc0>
+10000190c: 01 00 00 14 	b	0x100001910 <_zero_channel_outputs+0x28>
+100001910: ff 13 00 b9 	str	wzr, [sp, #16]
+100001914: 01 00 00 14 	b	0x100001918 <_zero_channel_outputs+0x30>
+100001918: e8 13 40 b9 	ldr	w8, [sp, #16]
+10000191c: 08 01 08 71 	subs	w8, w8, #512
+100001920: e8 b7 9f 1a 	cset	w8, ge
+100001924: 88 03 00 37 	tbnz	w8, #0, 0x100001994 <_zero_channel_outputs+0xac>
+100001928: 01 00 00 14 	b	0x10000192c <_zero_channel_outputs+0x44>
+10000192c: ff 0f 00 b9 	str	wzr, [sp, #12]
+100001930: 01 00 00 14 	b	0x100001934 <_zero_channel_outputs+0x4c>
+100001934: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100001938: 08 05 00 71 	subs	w8, w8, #1
+10000193c: e8 b7 9f 1a 	cset	w8, ge
+100001940: 08 02 00 37 	tbnz	w8, #0, 0x100001980 <_zero_channel_outputs+0x98>
+100001944: 01 00 00 14 	b	0x100001948 <_zero_channel_outputs+0x60>
+100001948: e9 17 80 b9 	ldrsw	x9, [sp, #20]
+10000194c: 28 00 00 f0 	adrp	x8, 0x100008000 <_zero_channel_outputs+0x80>
+100001950: 08 21 00 91 	add	x8, x8, #8
+100001954: 08 31 09 8b 	add	x8, x8, x9, lsl #12
+100001958: ea 13 40 b9 	ldr	w10, [sp, #16]
+10000195c: e9 0f 40 b9 	ldr	w9, [sp, #12]
+100001960: 29 01 0a 0b 	add	w9, w9, w10
+100001964: 00 e4 00 2f 	movi	d0, #0000000000000000
+100001968: 00 d9 29 fc 	str	d0, [x8, w9, sxtw #3]
+10000196c: 01 00 00 14 	b	0x100001970 <_zero_channel_outputs+0x88>
+100001970: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100001974: 08 05 00 11 	add	w8, w8, #1
+100001978: e8 0f 00 b9 	str	w8, [sp, #12]
+10000197c: ee ff ff 17 	b	0x100001934 <_zero_channel_outputs+0x4c>
+100001980: 01 00 00 14 	b	0x100001984 <_zero_channel_outputs+0x9c>
+100001984: e8 13 40 b9 	ldr	w8, [sp, #16]
+100001988: 08 05 00 11 	add	w8, w8, #1
+10000198c: e8 13 00 b9 	str	w8, [sp, #16]
+100001990: e2 ff ff 17 	b	0x100001918 <_zero_channel_outputs+0x30>
+100001994: 01 00 00 14 	b	0x100001998 <_zero_channel_outputs+0xb0>
+100001998: e8 17 40 b9 	ldr	w8, [sp, #20]
+10000199c: 08 05 00 11 	add	w8, w8, #1
+1000019a0: e8 17 00 b9 	str	w8, [sp, #20]
+1000019a4: d6 ff ff 17 	b	0x1000018fc <_zero_channel_outputs+0x14>
+1000019a8: e0 0f 40 fd 	ldr	d0, [sp, #24]
+1000019ac: 28 00 00 f0 	adrp	x8, 0x100008000 <_get_clock+0x8>
+1000019b0: 01 01 40 fd 	ldr	d1, [x8]
+1000019b4: 00 08 61 1e 	fmul	d0, d0, d1
+1000019b8: ff 83 00 91 	add	sp, sp, #32
+1000019bc: c0 03 5f d6 	ret
+
+00000001000019c0 <_get_clock>:
+1000019c0: ff 03 01 d1 	sub	sp, sp, #64
+1000019c4: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+1000019c8: fd c3 00 91 	add	x29, sp, #48
+1000019cc: e8 07 00 f9 	str	x8, [sp, #8]
+1000019d0: ff 0b 00 f9 	str	xzr, [sp, #16]
+1000019d4: ff 0f 00 f9 	str	xzr, [sp, #24]
+1000019d8: 08 19 80 d2 	mov	x8, #200
+1000019dc: e8 13 00 f9 	str	x8, [sp, #32]
+1000019e0: 00 c8 80 d2 	mov	x0, #1600
+1000019e4: 41 08 00 94 	bl	0x100003ae8 <_vprintf+0x100003ae8>
+1000019e8: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000019ec: e0 17 00 f9 	str	x0, [sp, #40]
+1000019f0: e0 07 c0 3d 	ldr	q0, [sp, #16]
+1000019f4: 00 01 80 3d 	str	q0, [x8]
+1000019f8: e0 0b c0 3d 	ldr	q0, [sp, #32]
+1000019fc: 00 05 80 3d 	str	q0, [x8, #16]
+100001a00: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+100001a04: ff 03 01 91 	add	sp, sp, #64
+100001a08: c0 03 5f d6 	ret
+
+0000000100001a0c <_play_on_clock>:
+100001a0c: ff 43 00 d1 	sub	sp, sp, #16
+100001a10: e0 07 00 f9 	str	x0, [sp, #8]
+100001a14: e1 03 00 f9 	str	x1, [sp]
+100001a18: ff 43 00 91 	add	sp, sp, #16
+100001a1c: c0 03 5f d6 	ret
+
+0000000100001a20 <_init_ctx>:
+100001a20: 49 02 00 f0 	adrp	x9, 0x10004c000 <_perform_graph+0x70>
+100001a24: 48 02 00 f0 	adrp	x8, 0x10004c000 <_perform_graph+0x74>
+100001a28: 08 21 01 91 	add	x8, x8, #72
+100001a2c: 00 10 68 1e 	fmov	d0, #0.12500000
+100001a30: 20 25 00 fd 	str	d0, [x9, #72]
+100001a34: 29 02 00 f0 	adrp	x9, 0x100048000 <_perform_graph+0x74>
+100001a38: 29 21 00 91 	add	x9, x9, #8
+100001a3c: 09 0d 00 f9 	str	x9, [x8, #24]
+100001a40: 09 40 80 52 	mov	w9, #512
+100001a44: 09 21 00 b9 	str	w9, [x8, #32]
+100001a48: 49 00 80 52 	mov	w9, #2
+100001a4c: 09 25 00 b9 	str	w9, [x8, #36]
+100001a50: 1f 09 00 f9 	str	xzr, [x8, #16]
+100001a54: 08 09 40 f9 	ldr	x8, [x8, #16]
+100001a58: 49 02 00 b0 	adrp	x9, 0x10004a000 <_perform_graph+0xa0>
+100001a5c: 28 05 00 f9 	str	x8, [x9, #8]
+100001a60: c0 03 5f d6 	ret
+
+0000000100001a64 <_get_audio_ctx>:
+100001a64: 40 02 00 f0 	adrp	x0, 0x10004c000 <_perform_graph+0xb4>
+100001a68: 00 20 01 91 	add	x0, x0, #72
+100001a6c: c0 03 5f d6 	ret
+
+0000000100001a70 <_user_ctx_callback>:
+100001a70: ff c3 00 d1 	sub	sp, sp, #48
+100001a74: fd 7b 02 a9 	stp	x29, x30, [sp, #32]
+100001a78: fd 83 00 91 	add	x29, sp, #32
+100001a7c: e0 0b 00 f9 	str	x0, [sp, #16]
+100001a80: e1 0f 00 b9 	str	w1, [sp, #12]
+100001a84: e0 03 00 fd 	str	d0, [sp]
+100001a88: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100001a8c: 08 09 40 f9 	ldr	x8, [x8, #16]
+100001a90: 08 01 00 f1 	subs	x8, x8, #0
+100001a94: e8 07 9f 1a 	cset	w8, ne
+100001a98: 88 00 00 37 	tbnz	w8, #0, 0x100001aa8 <_user_ctx_callback+0x38>
+100001a9c: 01 00 00 14 	b	0x100001aa0 <_user_ctx_callback+0x30>
+100001aa0: bf 83 1f f8 	stur	xzr, [x29, #-8]
+100001aa4: 0a 00 00 14 	b	0x100001acc <_user_ctx_callback+0x5c>
+100001aa8: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100001aac: 00 09 40 f9 	ldr	x0, [x8, #16]
+100001ab0: e1 0f 40 b9 	ldr	w1, [sp, #12]
+100001ab4: e0 03 40 fd 	ldr	d0, [sp]
+100001ab8: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100001abc: 02 61 00 91 	add	x2, x8, #24
+100001ac0: 03 00 80 52 	mov	w3, #0
+100001ac4: 06 00 00 94 	bl	0x100001adc <_perform_graph>
+100001ac8: 01 00 00 14 	b	0x100001acc <_user_ctx_callback+0x5c>
+100001acc: a0 83 5f f8 	ldur	x0, [x29, #-8]
+100001ad0: fd 7b 42 a9 	ldp	x29, x30, [sp, #32]
+100001ad4: ff c3 00 91 	add	sp, sp, #48
+100001ad8: c0 03 5f d6 	ret
+
+0000000100001adc <_perform_graph>:
+100001adc: ff c3 02 d1 	sub	sp, sp, #176
+100001ae0: fd 7b 0a a9 	stp	x29, x30, [sp, #160]
+100001ae4: fd 83 02 91 	add	x29, sp, #160
+100001ae8: a0 03 1f f8 	stur	x0, [x29, #-16]
+100001aec: a1 c3 1e b8 	stur	w1, [x29, #-20]
+100001af0: a0 03 1e fc 	stur	d0, [x29, #-32]
+100001af4: a2 83 1d f8 	stur	x2, [x29, #-40]
+100001af8: a3 43 1d b8 	stur	w3, [x29, #-44]
+100001afc: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001b00: 08 a1 40 39 	ldrb	w8, [x8, #40]
+100001b04: 68 02 00 36 	tbz	w8, #0, 0x100001b50 <_perform_graph+0x74>
+100001b08: 01 00 00 14 	b	0x100001b0c <_perform_graph+0x30>
+100001b0c: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001b10: 08 11 40 f9 	ldr	x8, [x8, #32]
+100001b14: a8 83 1c f8 	stur	x8, [x29, #-56]
+100001b18: a8 83 5c f8 	ldur	x8, [x29, #-56]
+100001b1c: 08 01 00 f1 	subs	x8, x8, #0
+100001b20: e8 17 9f 1a 	cset	w8, eq
+100001b24: 48 01 00 37 	tbnz	w8, #0, 0x100001b4c <_perform_graph+0x70>
+100001b28: 01 00 00 14 	b	0x100001b2c <_perform_graph+0x50>
+100001b2c: a0 83 5c f8 	ldur	x0, [x29, #-56]
+100001b30: a1 c3 5e b8 	ldur	w1, [x29, #-20]
+100001b34: a0 03 5e fc 	ldur	d0, [x29, #-32]
+100001b38: a2 83 5d f8 	ldur	x2, [x29, #-40]
+100001b3c: a3 43 5d b8 	ldur	w3, [x29, #-44]
+100001b40: e7 ff ff 97 	bl	0x100001adc <_perform_graph>
+100001b44: a0 83 1f f8 	stur	x0, [x29, #-8]
+100001b48: 72 00 00 14 	b	0x100001d10 <_perform_graph+0x234>
+100001b4c: 01 00 00 14 	b	0x100001b50 <_perform_graph+0x74>
+100001b50: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001b54: 08 01 00 f1 	subs	x8, x8, #0
+100001b58: e8 07 9f 1a 	cset	w8, ne
+100001b5c: 88 00 00 37 	tbnz	w8, #0, 0x100001b6c <_perform_graph+0x90>
+100001b60: 01 00 00 14 	b	0x100001b64 <_perform_graph+0x88>
+100001b64: bf 83 1f f8 	stur	xzr, [x29, #-8]
+100001b68: 6a 00 00 14 	b	0x100001d10 <_perform_graph+0x234>
+100001b6c: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001b70: 08 05 40 f9 	ldr	x8, [x8, #8]
+100001b74: 08 01 00 f1 	subs	x8, x8, #0
+100001b78: e8 17 9f 1a 	cset	w8, eq
+100001b7c: c8 01 00 37 	tbnz	w8, #0, 0x100001bb4 <_perform_graph+0xd8>
+100001b80: 01 00 00 14 	b	0x100001b84 <_perform_graph+0xa8>
+100001b84: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001b88: 08 a1 40 39 	ldrb	w8, [x8, #40]
+100001b8c: 48 01 00 37 	tbnz	w8, #0, 0x100001bb4 <_perform_graph+0xd8>
+100001b90: 01 00 00 14 	b	0x100001b94 <_perform_graph+0xb8>
+100001b94: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001b98: 09 05 40 f9 	ldr	x9, [x8, #8]
+100001b9c: a0 03 5f f8 	ldur	x0, [x29, #-16]
+100001ba0: a1 c3 5e b8 	ldur	w1, [x29, #-20]
+100001ba4: a0 03 5e fc 	ldur	d0, [x29, #-32]
+100001ba8: e8 e3 00 91 	add	x8, sp, #56
+100001bac: 20 01 3f d6 	blr	x9
+100001bb0: 01 00 00 14 	b	0x100001bb4 <_perform_graph+0xd8>
+100001bb4: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001bb8: 08 01 40 b9 	ldr	w8, [x8]
+100001bbc: 08 01 00 71 	subs	w8, w8, #0
+100001bc0: e8 07 9f 1a 	cset	w8, ne
+100001bc4: 08 08 00 37 	tbnz	w8, #0, 0x100001cc4 <_perform_graph+0x1e8>
+100001bc8: 01 00 00 14 	b	0x100001bcc <_perform_graph+0xf0>
+100001bcc: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001bd0: 00 05 c0 3d 	ldr	q0, [x8, #16]
+100001bd4: e0 0b 80 3d 	str	q0, [sp, #32]
+100001bd8: ff 1f 00 b9 	str	wzr, [sp, #28]
+100001bdc: 01 00 00 14 	b	0x100001be0 <_perform_graph+0x104>
+100001be0: e8 1f 40 b9 	ldr	w8, [sp, #28]
+100001be4: a9 c3 5e b8 	ldur	w9, [x29, #-20]
+100001be8: 08 01 09 6b 	subs	w8, w8, w9
+100001bec: e8 b7 9f 1a 	cset	w8, ge
+100001bf0: 28 06 00 37 	tbnz	w8, #0, 0x100001cb4 <_perform_graph+0x1d8>
+100001bf4: 01 00 00 14 	b	0x100001bf8 <_perform_graph+0x11c>
+100001bf8: ff 1b 00 b9 	str	wzr, [sp, #24]
+100001bfc: 01 00 00 14 	b	0x100001c00 <_perform_graph+0x124>
+100001c00: e8 1b 40 b9 	ldr	w8, [sp, #24]
+100001c04: 08 09 00 71 	subs	w8, w8, #2
+100001c08: e8 b7 9f 1a 	cset	w8, ge
+100001c0c: a8 04 00 37 	tbnz	w8, #0, 0x100001ca0 <_perform_graph+0x1c4>
+100001c10: 01 00 00 14 	b	0x100001c14 <_perform_graph+0x138>
+100001c14: e2 1f 40 b9 	ldr	w2, [sp, #28]
+100001c18: e3 1b 40 b9 	ldr	w3, [sp, #24]
+100001c1c: e0 13 40 f9 	ldr	x0, [sp, #32]
+100001c20: e1 17 40 f9 	ldr	x1, [sp, #40]
+100001c24: 3f 00 00 94 	bl	0x100001d20 <_get_sig_ptr>
+100001c28: e0 0b 00 f9 	str	x0, [sp, #16]
+100001c2c: a8 83 5d f8 	ldur	x8, [x29, #-40]
+100001c30: e2 1f 40 b9 	ldr	w2, [sp, #28]
+100001c34: e3 1b 40 b9 	ldr	w3, [sp, #24]
+100001c38: 00 01 40 f9 	ldr	x0, [x8]
+100001c3c: 01 05 40 f9 	ldr	x1, [x8, #8]
+100001c40: 38 00 00 94 	bl	0x100001d20 <_get_sig_ptr>
+100001c44: e0 07 00 f9 	str	x0, [sp, #8]
+100001c48: a8 43 5d b8 	ldur	w8, [x29, #-44]
+100001c4c: 08 01 00 71 	subs	w8, w8, #0
+100001c50: e8 07 9f 1a 	cset	w8, ne
+100001c54: e8 00 00 37 	tbnz	w8, #0, 0x100001c70 <_perform_graph+0x194>
+100001c58: 01 00 00 14 	b	0x100001c5c <_perform_graph+0x180>
+100001c5c: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100001c60: 08 01 40 f9 	ldr	x8, [x8]
+100001c64: e9 07 40 f9 	ldr	x9, [sp, #8]
+100001c68: 28 01 00 f9 	str	x8, [x9]
+100001c6c: 08 00 00 14 	b	0x100001c8c <_perform_graph+0x1b0>
+100001c70: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100001c74: 01 01 40 fd 	ldr	d1, [x8]
+100001c78: e8 07 40 f9 	ldr	x8, [sp, #8]
+100001c7c: 00 01 40 fd 	ldr	d0, [x8]
+100001c80: 00 28 61 1e 	fadd	d0, d0, d1
+100001c84: 00 01 00 fd 	str	d0, [x8]
+100001c88: 01 00 00 14 	b	0x100001c8c <_perform_graph+0x1b0>
+100001c8c: 01 00 00 14 	b	0x100001c90 <_perform_graph+0x1b4>
+100001c90: e8 1b 40 b9 	ldr	w8, [sp, #24]
+100001c94: 08 05 00 11 	add	w8, w8, #1
+100001c98: e8 1b 00 b9 	str	w8, [sp, #24]
+100001c9c: d9 ff ff 17 	b	0x100001c00 <_perform_graph+0x124>
+100001ca0: 01 00 00 14 	b	0x100001ca4 <_perform_graph+0x1c8>
+100001ca4: e8 1f 40 b9 	ldr	w8, [sp, #28]
+100001ca8: 08 05 00 11 	add	w8, w8, #1
+100001cac: e8 1f 00 b9 	str	w8, [sp, #28]
+100001cb0: cc ff ff 17 	b	0x100001be0 <_perform_graph+0x104>
+100001cb4: a8 43 5d b8 	ldur	w8, [x29, #-44]
+100001cb8: 08 05 00 11 	add	w8, w8, #1
+100001cbc: a8 43 1d b8 	stur	w8, [x29, #-44]
+100001cc0: 01 00 00 14 	b	0x100001cc4 <_perform_graph+0x1e8>
+100001cc4: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001cc8: 08 11 40 f9 	ldr	x8, [x8, #32]
+100001ccc: e8 03 00 f9 	str	x8, [sp]
+100001cd0: e8 03 40 f9 	ldr	x8, [sp]
+100001cd4: 08 01 00 f1 	subs	x8, x8, #0
+100001cd8: e8 17 9f 1a 	cset	w8, eq
+100001cdc: 48 01 00 37 	tbnz	w8, #0, 0x100001d04 <_perform_graph+0x228>
+100001ce0: 01 00 00 14 	b	0x100001ce4 <_perform_graph+0x208>
+100001ce4: e0 03 40 f9 	ldr	x0, [sp]
+100001ce8: a1 c3 5e b8 	ldur	w1, [x29, #-20]
+100001cec: a0 03 5e fc 	ldur	d0, [x29, #-32]
+100001cf0: a2 83 5d f8 	ldur	x2, [x29, #-40]
+100001cf4: a3 43 5d b8 	ldur	w3, [x29, #-44]
+100001cf8: 79 ff ff 97 	bl	0x100001adc <_perform_graph>
+100001cfc: a0 83 1f f8 	stur	x0, [x29, #-8]
+100001d00: 04 00 00 14 	b	0x100001d10 <_perform_graph+0x234>
+100001d04: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100001d08: a8 83 1f f8 	stur	x8, [x29, #-8]
+100001d0c: 01 00 00 14 	b	0x100001d10 <_perform_graph+0x234>
+100001d10: a0 83 5f f8 	ldur	x0, [x29, #-8]
+100001d14: fd 7b 4a a9 	ldp	x29, x30, [sp, #160]
+100001d18: ff c3 02 91 	add	sp, sp, #176
+100001d1c: c0 03 5f d6 	ret
+
+0000000100001d20 <_get_sig_ptr>:
+100001d20: ff 83 00 d1 	sub	sp, sp, #32
+100001d24: e0 0b 00 f9 	str	x0, [sp, #16]
+100001d28: e1 0f 00 f9 	str	x1, [sp, #24]
+100001d2c: e2 0f 00 b9 	str	w2, [sp, #12]
+100001d30: e3 0b 00 b9 	str	w3, [sp, #8]
+100001d34: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100001d38: e9 0f 80 b9 	ldrsw	x9, [sp, #12]
+100001d3c: 08 0d 09 8b 	add	x8, x8, x9, lsl #3
+100001d40: e9 0b 40 b9 	ldr	w9, [sp, #8]
+100001d44: ea 1b 40 b9 	ldr	w10, [sp, #24]
+100001d48: 29 7d 0a 1b 	mul	w9, w9, w10
+100001d4c: 00 cd 29 8b 	add	x0, x8, w9, sxtw #3
+100001d50: ff 83 00 91 	add	sp, sp, #32
+100001d54: c0 03 5f d6 	ret
+
+0000000100001d58 <_dump_nodes>:
+100001d58: ff c3 00 d1 	sub	sp, sp, #48
+100001d5c: fd 7b 02 a9 	stp	x29, x30, [sp, #32]
+100001d60: fd 83 00 91 	add	x29, sp, #32
+100001d64: a0 83 1f f8 	stur	x0, [x29, #-8]
+100001d68: a1 43 1f b8 	stur	w1, [x29, #-12]
+100001d6c: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100001d70: 08 01 00 f1 	subs	x8, x8, #0
+100001d74: e8 07 9f 1a 	cset	w8, ne
+100001d78: 68 00 00 37 	tbnz	w8, #0, 0x100001d84 <_dump_nodes+0x2c>
+100001d7c: 01 00 00 14 	b	0x100001d80 <_dump_nodes+0x28>
+100001d80: 37 00 00 14 	b	0x100001e5c <_dump_nodes+0x104>
+100001d84: a9 43 5f b8 	ldur	w9, [x29, #-12]
+100001d88: e8 03 09 aa 	mov	x8, x9
+100001d8c: e9 03 00 91 	mov	x9, sp
+100001d90: 28 01 00 f9 	str	x8, [x9]
+100001d94: 08 00 00 d0 	adrp	x8, 0x100003000 <_dump_nodes+0x44>
+100001d98: 08 e5 31 91 	add	x8, x8, #3193
+100001d9c: 28 05 00 f9 	str	x8, [x9, #8]
+100001da0: 00 00 00 d0 	adrp	x0, 0x100003000 <_dump_nodes+0x50>
+100001da4: 00 d0 31 91 	add	x0, x0, #3188
+100001da8: 30 00 00 94 	bl	0x100001e68 <_write_log>
+100001dac: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100001db0: 0a 29 40 f9 	ldr	x10, [x8, #80]
+100001db4: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100001db8: 09 09 40 b9 	ldr	w9, [x8, #8]
+100001dbc: e8 03 09 aa 	mov	x8, x9
+100001dc0: e9 03 00 91 	mov	x9, sp
+100001dc4: 2a 01 00 f9 	str	x10, [x9]
+100001dc8: 28 05 00 f9 	str	x8, [x9, #8]
+100001dcc: 00 00 00 d0 	adrp	x0, 0x100003000 <_dump_nodes+0x7c>
+100001dd0: 00 f0 31 91 	add	x0, x0, #3196
+100001dd4: 51 07 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+100001dd8: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100001ddc: 08 3d 40 f9 	ldr	x8, [x8, #120]
+100001de0: 08 01 00 f1 	subs	x8, x8, #0
+100001de4: e8 17 9f 1a 	cset	w8, eq
+100001de8: 68 01 00 37 	tbnz	w8, #0, 0x100001e14 <_dump_nodes+0xbc>
+100001dec: 01 00 00 14 	b	0x100001df0 <_dump_nodes+0x98>
+100001df0: 00 00 00 d0 	adrp	x0, 0x100003000 <_dump_nodes+0xa0>
+100001df4: 00 38 32 91 	add	x0, x0, #3214
+100001df8: 48 07 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+100001dfc: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100001e00: 00 3d 40 f9 	ldr	x0, [x8, #120]
+100001e04: a8 43 5f b8 	ldur	w8, [x29, #-12]
+100001e08: 01 05 00 11 	add	w1, w8, #1
+100001e0c: d3 ff ff 97 	bl	0x100001d58 <_dump_nodes>
+100001e10: 01 00 00 14 	b	0x100001e14 <_dump_nodes+0xbc>
+100001e14: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100001e18: 08 31 40 f9 	ldr	x8, [x8, #96]
+100001e1c: 08 01 00 f1 	subs	x8, x8, #0
+100001e20: e8 17 9f 1a 	cset	w8, eq
+100001e24: 48 01 00 37 	tbnz	w8, #0, 0x100001e4c <_dump_nodes+0xf4>
+100001e28: 01 00 00 14 	b	0x100001e2c <_dump_nodes+0xd4>
+100001e2c: 00 00 00 d0 	adrp	x0, 0x100003000 <_dump_nodes+0xdc>
+100001e30: 00 38 32 91 	add	x0, x0, #3214
+100001e34: 39 07 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+100001e38: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100001e3c: 00 31 40 f9 	ldr	x0, [x8, #96]
+100001e40: a1 43 5f b8 	ldur	w1, [x29, #-12]
+100001e44: c5 ff ff 97 	bl	0x100001d58 <_dump_nodes>
+100001e48: 01 00 00 14 	b	0x100001e4c <_dump_nodes+0xf4>
+100001e4c: 00 00 00 d0 	adrp	x0, 0x100003000 <_dump_nodes+0xfc>
+100001e50: 00 38 32 91 	add	x0, x0, #3214
+100001e54: 31 07 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+100001e58: 01 00 00 14 	b	0x100001e5c <_dump_nodes+0x104>
+100001e5c: fd 7b 42 a9 	ldp	x29, x30, [sp, #32]
+100001e60: ff c3 00 91 	add	sp, sp, #48
+100001e64: c0 03 5f d6 	ret
+
+0000000100001e68 <_write_log>:
+100001e68: ff 83 00 d1 	sub	sp, sp, #32
+100001e6c: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100001e70: fd 43 00 91 	add	x29, sp, #16
+100001e74: e0 07 00 f9 	str	x0, [sp, #8]
+100001e78: e9 03 00 91 	mov	x9, sp
+100001e7c: a8 43 00 91 	add	x8, x29, #16
+100001e80: 28 01 00 f9 	str	x8, [x9]
+100001e84: e0 07 40 f9 	ldr	x0, [sp, #8]
+100001e88: e1 03 40 f9 	ldr	x1, [sp]
+100001e8c: 77 07 00 94 	bl	0x100003c68 <_vprintf+0x100003c68>
+100001e90: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+100001e94: ff 83 00 91 	add	sp, sp, #32
+100001e98: c0 03 5f d6 	ret
+
+0000000100001e9c <_logging_setup>:
+100001e9c: ff 83 00 d1 	sub	sp, sp, #32
+100001ea0: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100001ea4: fd 43 00 91 	add	x29, sp, #16
+100001ea8: 00 00 00 d0 	adrp	x0, 0x100003000 <_logging_setup+0x14>
+100001eac: 00 40 32 91 	add	x0, x0, #3216
+100001eb0: 01 00 00 d0 	adrp	x1, 0x100003000 <_logging_setup+0x1c>
+100001eb4: 21 60 32 91 	add	x1, x1, #3224
+100001eb8: 06 07 00 94 	bl	0x100003ad0 <_vprintf+0x100003ad0>
+100001ebc: 48 02 00 f0 	adrp	x8, 0x10004c000 <_main>
+100001ec0: 00 39 00 f9 	str	x0, [x8, #112]
+100001ec4: 08 39 40 f9 	ldr	x8, [x8, #112]
+100001ec8: 08 01 00 f1 	subs	x8, x8, #0
+100001ecc: e8 07 9f 1a 	cset	w8, ne
+100001ed0: e8 00 00 37 	tbnz	w8, #0, 0x100001eec <_logging_setup+0x50>
+100001ed4: 01 00 00 14 	b	0x100001ed8 <_logging_setup+0x3c>
+100001ed8: 00 00 00 d0 	adrp	x0, 0x100003000 <_logging_setup+0x44>
+100001edc: 00 68 32 91 	add	x0, x0, #3226
+100001ee0: 0b 07 00 94 	bl	0x100003b0c <_vprintf+0x100003b0c>
+100001ee4: 20 00 80 52 	mov	w0, #1
+100001ee8: e8 06 00 94 	bl	0x100003a88 <_vprintf+0x100003a88>
+100001eec: 48 02 00 f0 	adrp	x8, 0x10004c000 <_main+0x30>
+100001ef0: 00 39 40 f9 	ldr	x0, [x8, #112]
+100001ef4: f1 06 00 94 	bl	0x100003ab8 <_vprintf+0x100003ab8>
+100001ef8: a0 c3 1f b8 	stur	w0, [x29, #-4]
+100001efc: a0 c3 5f b8 	ldur	w0, [x29, #-4]
+100001f00: 01 00 00 d0 	adrp	x1, 0x100003000 <_logging_setup+0x6c>
+100001f04: 21 60 32 91 	add	x1, x1, #3224
+100001f08: e6 06 00 94 	bl	0x100003aa0 <_vprintf+0x100003aa0>
+100001f0c: 48 02 00 f0 	adrp	x8, 0x10004c000 <_main+0x50>
+100001f10: 00 3d 00 f9 	str	x0, [x8, #120]
+100001f14: 08 3d 40 f9 	ldr	x8, [x8, #120]
+100001f18: 08 01 00 f1 	subs	x8, x8, #0
+100001f1c: e8 07 9f 1a 	cset	w8, ne
+100001f20: e8 00 00 37 	tbnz	w8, #0, 0x100001f3c <_logging_setup+0xa0>
+100001f24: 01 00 00 14 	b	0x100001f28 <_logging_setup+0x8c>
+100001f28: 00 00 00 d0 	adrp	x0, 0x100003000 <_logging_setup+0x94>
+100001f2c: 00 c4 32 91 	add	x0, x0, #3249
+100001f30: f7 06 00 94 	bl	0x100003b0c <_vprintf+0x100003b0c>
+100001f34: 20 00 80 52 	mov	w0, #1
+100001f38: d4 06 00 94 	bl	0x100003a88 <_vprintf+0x100003a88>
+100001f3c: 00 00 80 52 	mov	w0, #0
+100001f40: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+100001f44: ff 83 00 91 	add	sp, sp, #32
+100001f48: c0 03 5f d6 	ret
+
+0000000100001f4c <_logging_teardown>:
+100001f4c: ff 83 00 d1 	sub	sp, sp, #32
+100001f50: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100001f54: fd 43 00 91 	add	x29, sp, #16
+100001f58: 48 02 00 f0 	adrp	x8, 0x10004c000 <_noise_perform+0x3c>
+100001f5c: e8 07 00 f9 	str	x8, [sp, #8]
+100001f60: 00 3d 40 f9 	ldr	x0, [x8, #120]
+100001f64: d2 06 00 94 	bl	0x100003aac <_vprintf+0x100003aac>
+100001f68: 48 02 00 f0 	adrp	x8, 0x10004c000 <_noise_perform+0x4c>
+100001f6c: 00 39 40 f9 	ldr	x0, [x8, #112]
+100001f70: c9 06 00 94 	bl	0x100003a94 <_vprintf+0x100003a94>
+100001f74: e8 07 40 f9 	ldr	x8, [sp, #8]
+100001f78: 00 3d 40 f9 	ldr	x0, [x8, #120]
+100001f7c: c6 06 00 94 	bl	0x100003a94 <_vprintf+0x100003a94>
+100001f80: 00 00 80 52 	mov	w0, #0
+100001f84: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+100001f88: ff 83 00 91 	add	sp, sp, #32
+100001f8c: c0 03 5f d6 	ret
+
+0000000100001f90 <_random_double>:
+100001f90: ff 83 00 d1 	sub	sp, sp, #32
+100001f94: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100001f98: fd 43 00 91 	add	x29, sp, #16
+100001f9c: e5 06 00 94 	bl	0x100003b30 <_vprintf+0x100003b30>
+100001fa0: a0 c3 1f b8 	stur	w0, [x29, #-4]
+100001fa4: a1 c3 5f bc 	ldur	s1, [x29, #-4]
+100001fa8: 20 40 20 1e 	fmov	s0, s1
+100001fac: 00 a4 20 0f 	sshll.2d	v0, v0, #0
+100001fb0: 00 d8 61 5e 	scvtf	d0, d0
+100001fb4: 08 00 00 d0 	adrp	x8, 0x100003000 <_random_double+0x2c>
+100001fb8: 01 8d 47 fd 	ldr	d1, [x8, #3864]
+100001fbc: 00 18 61 1e 	fdiv	d0, d0, d1
+100001fc0: e0 03 00 fd 	str	d0, [sp]
+100001fc4: e0 03 40 fd 	ldr	d0, [sp]
+100001fc8: 02 10 7e 1e 	fmov	d2, #-1.00000000
+100001fcc: 01 10 60 1e 	fmov	d1, #2.00000000
+100001fd0: 00 08 41 1f 	fmadd	d0, d0, d1, d2
+100001fd4: e0 03 00 fd 	str	d0, [sp]
+100001fd8: e0 03 40 fd 	ldr	d0, [sp]
+100001fdc: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+100001fe0: ff 83 00 91 	add	sp, sp, #32
+100001fe4: c0 03 5f d6 	ret
+
+0000000100001fe8 <_main>:
+100001fe8: ff 83 01 d1 	sub	sp, sp, #96
+100001fec: fd 7b 05 a9 	stp	x29, x30, [sp, #80]
+100001ff0: fd 43 01 91 	add	x29, sp, #80
+100001ff4: a0 c3 1f b8 	stur	w0, [x29, #-4]
+100001ff8: a1 03 1f f8 	stur	x1, [x29, #-16]
+100001ffc: f7 02 00 94 	bl	0x100002bd8 <_setup_audio>
+100002000: e0 43 00 91 	add	x0, sp, #16
+100002004: e0 03 00 f9 	str	x0, [sp]
+100002008: 01 00 00 d0 	adrp	x1, 0x100004000 <_main+0x28>
+10000200c: 21 20 06 91 	add	x1, x1, #392
+100002010: 02 06 80 d2 	mov	x2, #48
+100002014: b8 06 00 94 	bl	0x100003af4 <_vprintf+0x100003af4>
+100002018: 93 fe ff 97 	bl	0x100001a64 <_get_audio_ctx>
+10000201c: e8 03 40 f9 	ldr	x8, [sp]
+100002020: e0 07 00 f9 	str	x0, [sp, #8]
+100002024: e9 07 40 f9 	ldr	x9, [sp, #8]
+100002028: 28 09 00 f9 	str	x8, [x9, #16]
+10000202c: 60 00 80 52 	mov	w0, #3
+100002030: cf 06 00 94 	bl	0x100003b6c <_vprintf+0x100003b6c>
+100002034: 0b 05 00 94 	bl	0x100003460 <_stop_audio>
+100002038: 00 00 80 52 	mov	w0, #0
+10000203c: fd 7b 45 a9 	ldp	x29, x30, [sp, #80]
+100002040: ff 83 01 91 	add	sp, sp, #96
+100002044: c0 03 5f d6 	ret
+
+0000000100002048 <_noise_perform>:
+100002048: ff 43 01 d1 	sub	sp, sp, #80
+10000204c: fd 7b 04 a9 	stp	x29, x30, [sp, #64]
+100002050: fd 03 01 91 	add	x29, sp, #64
+100002054: a0 03 1f f8 	stur	x0, [x29, #-16]
+100002058: a1 c3 1e b8 	stur	w1, [x29, #-20]
+10000205c: e0 13 00 fd 	str	d0, [sp, #32]
+100002060: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100002064: 00 05 c0 3d 	ldr	q0, [x8, #16]
+100002068: e0 07 80 3d 	str	q0, [sp, #16]
+10000206c: ff 0f 00 b9 	str	wzr, [sp, #12]
+100002070: 01 00 00 14 	b	0x100002074 <_noise_perform+0x2c>
+100002074: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100002078: a9 c3 5e b8 	ldur	w9, [x29, #-20]
+10000207c: 08 01 09 6b 	subs	w8, w8, w9
+100002080: e8 b7 9f 1a 	cset	w8, ge
+100002084: 28 02 00 37 	tbnz	w8, #0, 0x1000020c8 <_noise_perform+0x80>
+100002088: 01 00 00 14 	b	0x10000208c <_noise_perform+0x44>
+10000208c: c1 ff ff 97 	bl	0x100001f90 <_random_double>
+100002090: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100002094: e9 0f 80 b9 	ldrsw	x9, [sp, #12]
+100002098: 00 79 29 fc 	str	d0, [x8, x9, lsl #3]
+10000209c: bd ff ff 97 	bl	0x100001f90 <_random_double>
+1000020a0: e8 0b 40 f9 	ldr	x8, [sp, #16]
+1000020a4: e9 0f 40 b9 	ldr	w9, [sp, #12]
+1000020a8: ea 1b 40 b9 	ldr	w10, [sp, #24]
+1000020ac: 29 01 0a 0b 	add	w9, w9, w10
+1000020b0: 00 d9 29 fc 	str	d0, [x8, w9, sxtw #3]
+1000020b4: 01 00 00 14 	b	0x1000020b8 <_noise_perform+0x70>
+1000020b8: e8 0f 40 b9 	ldr	w8, [sp, #12]
+1000020bc: 08 05 00 11 	add	w8, w8, #1
+1000020c0: e8 0f 00 b9 	str	w8, [sp, #12]
+1000020c4: ec ff ff 17 	b	0x100002074 <_noise_perform+0x2c>
+1000020c8: a0 83 5f f8 	ldur	x0, [x29, #-8]
+1000020cc: fd 7b 44 a9 	ldp	x29, x30, [sp, #64]
+1000020d0: ff 43 01 91 	add	sp, sp, #80
+1000020d4: c0 03 5f d6 	ret
+
+00000001000020d8 <_allocate>:
+1000020d8: ff 83 00 d1 	sub	sp, sp, #32
+1000020dc: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+1000020e0: fd 43 00 91 	add	x29, sp, #16
+1000020e4: e0 07 00 f9 	str	x0, [sp, #8]
+1000020e8: e0 07 40 f9 	ldr	x0, [sp, #8]
+1000020ec: 21 00 80 d2 	mov	x1, #1
+1000020f0: 60 06 00 94 	bl	0x100003a70 <_vprintf+0x100003a70>
+1000020f4: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+1000020f8: ff 83 00 91 	add	sp, sp, #32
+1000020fc: c0 03 5f d6 	ret
+
+0000000100002100 <_release>:
+100002100: ff 83 00 d1 	sub	sp, sp, #32
+100002104: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100002108: fd 43 00 91 	add	x29, sp, #16
+10000210c: e0 07 00 f9 	str	x0, [sp, #8]
+100002110: e0 07 40 f9 	ldr	x0, [sp, #8]
+100002114: 72 06 00 94 	bl	0x100003adc <_vprintf+0x100003adc>
+100002118: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+10000211c: ff 83 00 91 	add	sp, sp, #32
+100002120: c0 03 5f d6 	ret
+
+0000000100002124 <_midi_setup>:
+100002124: ff 03 01 d1 	sub	sp, sp, #64
+100002128: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+10000212c: fd c3 00 91 	add	x29, sp, #48
+100002130: 00 00 00 d0 	adrp	x0, 0x100004000 <_midi_setup+0x14>
+100002134: 00 e0 06 91 	add	x0, x0, #440
+100002138: 02 00 80 d2 	mov	x2, #0
+10000213c: e2 0b 00 f9 	str	x2, [sp, #16]
+100002140: e1 03 02 aa 	mov	x1, x2
+100002144: a3 13 00 d1 	sub	x3, x29, #4
+100002148: 38 06 00 94 	bl	0x100003a28 <_vprintf+0x100003a28>
+10000214c: e3 0b 40 f9 	ldr	x3, [sp, #16]
+100002150: a0 c3 5f b8 	ldur	w0, [x29, #-4]
+100002154: 01 00 00 d0 	adrp	x1, 0x100004000 <_midi_setup+0x38>
+100002158: 21 60 07 91 	add	x1, x1, #472
+10000215c: 02 00 00 90 	adrp	x2, 0x100002000 <_midi_setup+0x38>
+100002160: 42 a0 07 91 	add	x2, x2, #488
+100002164: a4 23 00 d1 	sub	x4, x29, #8
+100002168: 39 06 00 94 	bl	0x100003a4c <_vprintf+0x100003a4c>
+10000216c: 32 06 00 94 	bl	0x100003a34 <_vprintf+0x100003a34>
+100002170: a0 03 1f f8 	stur	x0, [x29, #-16]
+100002174: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100002178: e9 03 00 91 	mov	x9, sp
+10000217c: 28 01 00 f9 	str	x8, [x9]
+100002180: 00 00 00 b0 	adrp	x0, 0x100003000 <_midi_setup+0x60>
+100002184: 00 88 33 91 	add	x0, x0, #3298
+100002188: 64 06 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+10000218c: bf c3 1e b8 	stur	wzr, [x29, #-20]
+100002190: 01 00 00 14 	b	0x100002194 <_midi_setup+0x70>
+100002194: a8 c3 9e b8 	ldursw	x8, [x29, #-20]
+100002198: a9 03 5f f8 	ldur	x9, [x29, #-16]
+10000219c: 08 01 09 eb 	subs	x8, x8, x9
+1000021a0: e8 37 9f 1a 	cset	w8, hs
+1000021a4: c8 01 00 37 	tbnz	w8, #0, 0x1000021dc <_midi_setup+0xb8>
+1000021a8: 01 00 00 14 	b	0x1000021ac <_midi_setup+0x88>
+1000021ac: a0 c3 9e b8 	ldursw	x0, [x29, #-20]
+1000021b0: 24 06 00 94 	bl	0x100003a40 <_vprintf+0x100003a40>
+1000021b4: e0 1b 00 b9 	str	w0, [sp, #24]
+1000021b8: a0 83 5f b8 	ldur	w0, [x29, #-8]
+1000021bc: e1 1b 40 b9 	ldr	w1, [sp, #24]
+1000021c0: 02 00 80 d2 	mov	x2, #0
+1000021c4: 25 06 00 94 	bl	0x100003a58 <_vprintf+0x100003a58>
+1000021c8: 01 00 00 14 	b	0x1000021cc <_midi_setup+0xa8>
+1000021cc: a8 c3 5e b8 	ldur	w8, [x29, #-20]
+1000021d0: 08 05 00 11 	add	w8, w8, #1
+1000021d4: a8 c3 1e b8 	stur	w8, [x29, #-20]
+1000021d8: ef ff ff 17 	b	0x100002194 <_midi_setup+0x70>
+1000021dc: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+1000021e0: ff 03 01 91 	add	sp, sp, #64
+1000021e4: c0 03 5f d6 	ret
+
+00000001000021e8 <_MIDIInputCallback>:
+1000021e8: ff 03 01 d1 	sub	sp, sp, #64
+1000021ec: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+1000021f0: fd c3 00 91 	add	x29, sp, #48
+1000021f4: a0 03 1f f8 	stur	x0, [x29, #-16]
+1000021f8: e1 0f 00 f9 	str	x1, [sp, #24]
+1000021fc: e2 0b 00 f9 	str	x2, [sp, #16]
+100002200: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100002204: 08 11 00 91 	add	x8, x8, #4
+100002208: e8 07 00 f9 	str	x8, [sp, #8]
+10000220c: ff 07 00 b9 	str	wzr, [sp, #4]
+100002210: 01 00 00 14 	b	0x100002214 <_MIDIInputCallback+0x2c>
+100002214: e8 07 40 b9 	ldr	w8, [sp, #4]
+100002218: a9 03 5f f8 	ldur	x9, [x29, #-16]
+10000221c: 29 01 40 b9 	ldr	w9, [x9]
+100002220: 08 01 09 6b 	subs	w8, w8, w9
+100002224: e8 37 9f 1a 	cset	w8, hs
+100002228: 88 03 00 37 	tbnz	w8, #0, 0x100002298 <_MIDIInputCallback+0xb0>
+10000222c: 01 00 00 14 	b	0x100002230 <_MIDIInputCallback+0x48>
+100002230: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002234: 08 29 40 39 	ldrb	w8, [x8, #10]
+100002238: 08 0d 1c 12 	and	w8, w8, #0xf0
+10000223c: 08 c1 02 71 	subs	w8, w8, #176
+100002240: e8 07 9f 1a 	cset	w8, ne
+100002244: a8 00 00 37 	tbnz	w8, #0, 0x100002258 <_MIDIInputCallback+0x70>
+100002248: 01 00 00 14 	b	0x10000224c <_MIDIInputCallback+0x64>
+10000224c: e0 07 40 f9 	ldr	x0, [sp, #8]
+100002250: 30 00 00 94 	bl	0x100002310 <_handle_cc>
+100002254: 02 00 00 14 	b	0x10000225c <_MIDIInputCallback+0x74>
+100002258: 01 00 00 14 	b	0x10000225c <_MIDIInputCallback+0x74>
+10000225c: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002260: a8 83 1f f8 	stur	x8, [x29, #-8]
+100002264: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100002268: 08 29 00 91 	add	x8, x8, #10
+10000226c: a9 83 5f f8 	ldur	x9, [x29, #-8]
+100002270: 29 11 40 79 	ldrh	w9, [x9, #8]
+100002274: 08 01 09 8b 	add	x8, x8, x9
+100002278: 08 0d 00 91 	add	x8, x8, #3
+10000227c: 08 f5 7e 92 	and	x8, x8, #0xfffffffffffffffc
+100002280: e8 07 00 f9 	str	x8, [sp, #8]
+100002284: 01 00 00 14 	b	0x100002288 <_MIDIInputCallback+0xa0>
+100002288: e8 07 40 b9 	ldr	w8, [sp, #4]
+10000228c: 08 05 00 11 	add	w8, w8, #1
+100002290: e8 07 00 b9 	str	w8, [sp, #4]
+100002294: e0 ff ff 17 	b	0x100002214 <_MIDIInputCallback+0x2c>
+100002298: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+10000229c: ff 03 01 91 	add	sp, sp, #64
+1000022a0: c0 03 5f d6 	ret
+
+00000001000022a4 <_register_midi_handler>:
+1000022a4: ff 03 01 d1 	sub	sp, sp, #64
+1000022a8: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+1000022ac: fd c3 00 91 	add	x29, sp, #48
+1000022b0: a0 f3 1f 38 	sturb	w0, [x29, #-1]
+1000022b4: a1 83 1f b8 	stur	w1, [x29, #-8]
+1000022b8: a2 03 1f f8 	stur	x2, [x29, #-16]
+1000022bc: 00 00 00 b0 	adrp	x0, 0x100003000 <_register_midi_handler+0x1c>
+1000022c0: 00 cc 33 91 	add	x0, x0, #3315
+1000022c4: 15 06 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+1000022c8: aa 03 5f f8 	ldur	x10, [x29, #-16]
+1000022cc: ab f3 5f 38 	ldurb	w11, [x29, #-1]
+1000022d0: a9 83 5f b8 	ldur	w9, [x29, #-8]
+1000022d4: e8 03 09 aa 	mov	x8, x9
+1000022d8: e9 03 00 91 	mov	x9, sp
+1000022dc: 2a 01 00 f9 	str	x10, [x9]
+1000022e0: ea 03 0b aa 	mov	x10, x11
+1000022e4: 2a 05 00 f9 	str	x10, [x9, #8]
+1000022e8: 28 09 00 f9 	str	x8, [x9, #16]
+1000022ec: 00 00 00 b0 	adrp	x0, 0x100003000 <_register_midi_handler+0x4c>
+1000022f0: 00 f4 33 91 	add	x0, x0, #3325
+1000022f4: 09 06 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+1000022f8: a8 03 5f f8 	ldur	x8, [x29, #-16]
+1000022fc: 49 02 00 d0 	adrp	x9, 0x10004c000 <_push_message+0x50>
+100002300: 28 41 00 f9 	str	x8, [x9, #128]
+100002304: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+100002308: ff 03 01 91 	add	sp, sp, #64
+10000230c: c0 03 5f d6 	ret
+
+0000000100002310 <_handle_cc>:
+100002310: ff 03 01 d1 	sub	sp, sp, #64
+100002314: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+100002318: fd c3 00 91 	add	x29, sp, #48
+10000231c: a0 83 1f f8 	stur	x0, [x29, #-8]
+100002320: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100002324: 08 29 40 39 	ldrb	w8, [x8, #10]
+100002328: 08 0d 00 12 	and	w8, w8, #0xf
+10000232c: a8 73 1f 38 	sturb	w8, [x29, #-9]
+100002330: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100002334: 08 2d 40 39 	ldrb	w8, [x8, #11]
+100002338: a8 63 1f 38 	sturb	w8, [x29, #-10]
+10000233c: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100002340: 08 31 40 39 	ldrb	w8, [x8, #12]
+100002344: a8 53 1f 38 	sturb	w8, [x29, #-11]
+100002348: ac 73 5f 38 	ldurb	w12, [x29, #-9]
+10000234c: ab 63 5f 38 	ldurb	w11, [x29, #-10]
+100002350: aa 53 5f 38 	ldurb	w10, [x29, #-11]
+100002354: e9 03 00 91 	mov	x9, sp
+100002358: e8 03 0c aa 	mov	x8, x12
+10000235c: 28 01 00 f9 	str	x8, [x9]
+100002360: e8 03 0b aa 	mov	x8, x11
+100002364: 28 05 00 f9 	str	x8, [x9, #8]
+100002368: e8 03 0a aa 	mov	x8, x10
+10000236c: 28 09 00 f9 	str	x8, [x9, #16]
+100002370: 00 00 00 b0 	adrp	x0, 0x100003000 <_handle_cc+0x64>
+100002374: 00 3c 34 91 	add	x0, x0, #3343
+100002378: e8 05 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+10000237c: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+100002380: ff 03 01 91 	add	sp, sp, #64
+100002384: c0 03 5f d6 	ret
+
+0000000100002388 <_init_queue>:
+100002388: ff 83 00 d1 	sub	sp, sp, #32
+10000238c: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100002390: fd 43 00 91 	add	x29, sp, #16
+100002394: e0 07 00 f9 	str	x0, [sp, #8]
+100002398: 00 01 80 d2 	mov	x0, #8
+10000239c: 01 08 80 d2 	mov	x1, #64
+1000023a0: b4 05 00 94 	bl	0x100003a70 <_vprintf+0x100003a70>
+1000023a4: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000023a8: 00 01 00 f9 	str	x0, [x8]
+1000023ac: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000023b0: 1f 09 00 b9 	str	wzr, [x8, #8]
+1000023b4: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000023b8: 1f 0d 00 b9 	str	wzr, [x8, #12]
+1000023bc: e9 07 40 f9 	ldr	x9, [sp, #8]
+1000023c0: 08 08 80 52 	mov	w8, #64
+1000023c4: 28 11 00 b9 	str	w8, [x9, #16]
+1000023c8: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+1000023cc: ff 83 00 91 	add	sp, sp, #32
+1000023d0: c0 03 5f d6 	ret
+
+00000001000023d4 <_push_message>:
+1000023d4: ff 03 01 d1 	sub	sp, sp, #64
+1000023d8: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+1000023dc: fd c3 00 91 	add	x29, sp, #48
+1000023e0: a0 83 1f f8 	stur	x0, [x29, #-8]
+1000023e4: a0 03 1f fc 	stur	d0, [x29, #-16]
+1000023e8: e1 0f 00 f9 	str	x1, [sp, #24]
+1000023ec: e2 0b 00 f9 	str	x2, [sp, #16]
+1000023f0: e3 0f 00 b9 	str	w3, [sp, #12]
+1000023f4: a8 83 5f f8 	ldur	x8, [x29, #-8]
+1000023f8: 08 0d 40 b9 	ldr	w8, [x8, #12]
+1000023fc: 08 05 00 11 	add	w8, w8, #1
+100002400: a9 83 5f f8 	ldur	x9, [x29, #-8]
+100002404: 2a 11 40 b9 	ldr	w10, [x9, #16]
+100002408: 09 0d ca 1a 	sdiv	w9, w8, w10
+10000240c: 29 7d 0a 1b 	mul	w9, w9, w10
+100002410: 08 01 09 6b 	subs	w8, w8, w9
+100002414: a9 83 5f f8 	ldur	x9, [x29, #-8]
+100002418: 29 09 40 b9 	ldr	w9, [x9, #8]
+10000241c: 08 01 09 6b 	subs	w8, w8, w9
+100002420: e8 07 9f 1a 	cset	w8, ne
+100002424: c8 00 00 37 	tbnz	w8, #0, 0x10000243c <_push_message+0x68>
+100002428: 01 00 00 14 	b	0x10000242c <_push_message+0x58>
+10000242c: 00 00 00 b0 	adrp	x0, 0x100003000 <_push_message+0x5c>
+100002430: 00 88 34 91 	add	x0, x0, #3362
+100002434: 8d fe ff 97 	bl	0x100001e68 <_write_log>
+100002438: 1e 00 00 14 	b	0x1000024b0 <_push_message+0xdc>
+10000243c: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100002440: 08 01 40 f9 	ldr	x8, [x8]
+100002444: a9 83 5f f8 	ldur	x9, [x29, #-8]
+100002448: 29 0d 80 b9 	ldrsw	x9, [x9, #12]
+10000244c: 08 15 09 8b 	add	x8, x8, x9, lsl #5
+100002450: e8 03 00 f9 	str	x8, [sp]
+100002454: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100002458: e9 03 40 f9 	ldr	x9, [sp]
+10000245c: 28 01 00 f9 	str	x8, [x9]
+100002460: e8 0f 40 f9 	ldr	x8, [sp, #24]
+100002464: e9 03 40 f9 	ldr	x9, [sp]
+100002468: 28 05 00 f9 	str	x8, [x9, #8]
+10000246c: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100002470: e9 03 40 f9 	ldr	x9, [sp]
+100002474: 28 09 00 f9 	str	x8, [x9, #16]
+100002478: e8 0f 40 b9 	ldr	w8, [sp, #12]
+10000247c: e9 03 40 f9 	ldr	x9, [sp]
+100002480: 28 19 00 b9 	str	w8, [x9, #24]
+100002484: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100002488: 08 0d 40 b9 	ldr	w8, [x8, #12]
+10000248c: 08 05 00 11 	add	w8, w8, #1
+100002490: a9 83 5f f8 	ldur	x9, [x29, #-8]
+100002494: 2a 11 40 b9 	ldr	w10, [x9, #16]
+100002498: 09 0d ca 1a 	sdiv	w9, w8, w10
+10000249c: 29 7d 0a 1b 	mul	w9, w9, w10
+1000024a0: 08 01 09 6b 	subs	w8, w8, w9
+1000024a4: a9 83 5f f8 	ldur	x9, [x29, #-8]
+1000024a8: 28 0d 00 b9 	str	w8, [x9, #12]
+1000024ac: 01 00 00 14 	b	0x1000024b0 <_push_message+0xdc>
+1000024b0: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+1000024b4: ff 03 01 91 	add	sp, sp, #64
+1000024b8: c0 03 5f d6 	ret
+
+00000001000024bc <_queue_size>:
+1000024bc: ff 43 00 d1 	sub	sp, sp, #16
+1000024c0: e0 03 00 f9 	str	x0, [sp]
+1000024c4: 08 08 40 b9 	ldr	w8, [x0, #8]
+1000024c8: 09 0c 40 b9 	ldr	w9, [x0, #12]
+1000024cc: 08 01 09 6b 	subs	w8, w8, w9
+1000024d0: e8 c7 9f 1a 	cset	w8, le
+1000024d4: 88 01 00 37 	tbnz	w8, #0, 0x100002504 <_queue_size+0x48>
+1000024d8: 01 00 00 14 	b	0x1000024dc <_queue_size+0x20>
+1000024dc: e9 03 40 f9 	ldr	x9, [sp]
+1000024e0: 28 11 40 b9 	ldr	w8, [x9, #16]
+1000024e4: 2a 09 40 b9 	ldr	w10, [x9, #8]
+1000024e8: 08 01 0a 6b 	subs	w8, w8, w10
+1000024ec: 29 0d 40 b9 	ldr	w9, [x9, #12]
+1000024f0: 09 01 09 0b 	add	w9, w8, w9
+1000024f4: e8 03 09 aa 	mov	x8, x9
+1000024f8: 08 7d 40 93 	sxtw	x8, w8
+1000024fc: e8 07 00 f9 	str	x8, [sp, #8]
+100002500: 09 00 00 14 	b	0x100002524 <_queue_size+0x68>
+100002504: e9 03 40 f9 	ldr	x9, [sp]
+100002508: 28 0d 40 b9 	ldr	w8, [x9, #12]
+10000250c: 29 09 40 b9 	ldr	w9, [x9, #8]
+100002510: 09 01 09 6b 	subs	w9, w8, w9
+100002514: e8 03 09 aa 	mov	x8, x9
+100002518: 08 7d 40 93 	sxtw	x8, w8
+10000251c: e8 07 00 f9 	str	x8, [sp, #8]
+100002520: 01 00 00 14 	b	0x100002524 <_queue_size+0x68>
+100002524: e0 07 40 f9 	ldr	x0, [sp, #8]
+100002528: ff 43 00 91 	add	sp, sp, #16
+10000252c: c0 03 5f d6 	ret
+
+0000000100002530 <_queue_pop_left>:
+100002530: ff 43 00 d1 	sub	sp, sp, #16
+100002534: e0 07 00 f9 	str	x0, [sp, #8]
+100002538: e9 07 40 f9 	ldr	x9, [sp, #8]
+10000253c: 29 01 40 f9 	ldr	x9, [x9]
+100002540: ea 07 40 f9 	ldr	x10, [sp, #8]
+100002544: 4a 09 80 b9 	ldrsw	x10, [x10, #8]
+100002548: 29 15 0a 8b 	add	x9, x9, x10, lsl #5
+10000254c: 20 01 c0 3d 	ldr	q0, [x9]
+100002550: 00 01 80 3d 	str	q0, [x8]
+100002554: 20 05 c0 3d 	ldr	q0, [x9, #16]
+100002558: 00 05 80 3d 	str	q0, [x8, #16]
+10000255c: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002560: 08 09 40 b9 	ldr	w8, [x8, #8]
+100002564: 08 05 00 11 	add	w8, w8, #1
+100002568: e9 07 40 f9 	ldr	x9, [sp, #8]
+10000256c: 2a 11 40 b9 	ldr	w10, [x9, #16]
+100002570: 09 0d ca 1a 	sdiv	w9, w8, w10
+100002574: 29 7d 0a 1b 	mul	w9, w9, w10
+100002578: 08 01 09 6b 	subs	w8, w8, w9
+10000257c: e9 07 40 f9 	ldr	x9, [sp, #8]
+100002580: 28 09 00 b9 	str	w8, [x9, #8]
+100002584: ff 43 00 91 	add	sp, sp, #16
+100002588: c0 03 5f d6 	ret
+
+000000010000258c <_dequeue>:
+10000258c: ff 83 00 d1 	sub	sp, sp, #32
+100002590: e0 0b 00 f9 	str	x0, [sp, #16]
+100002594: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100002598: 08 05 40 f9 	ldr	x8, [x8, #8]
+10000259c: e9 0b 40 f9 	ldr	x9, [sp, #16]
+1000025a0: 29 01 40 f9 	ldr	x9, [x9]
+1000025a4: 08 01 09 eb 	subs	x8, x8, x9
+1000025a8: e8 07 9f 1a 	cset	w8, ne
+1000025ac: 88 00 00 37 	tbnz	w8, #0, 0x1000025bc <_dequeue+0x30>
+1000025b0: 01 00 00 14 	b	0x1000025b4 <_dequeue+0x28>
+1000025b4: ff 0f 00 f9 	str	xzr, [sp, #24]
+1000025b8: 1a 00 00 14 	b	0x100002620 <_dequeue+0x94>
+1000025bc: e8 0b 40 f9 	ldr	x8, [sp, #16]
+1000025c0: 08 0d 40 f9 	ldr	x8, [x8, #24]
+1000025c4: e9 0b 40 f9 	ldr	x9, [sp, #16]
+1000025c8: 29 05 40 f9 	ldr	x9, [x9, #8]
+1000025cc: 08 79 69 f8 	ldr	x8, [x8, x9, lsl #3]
+1000025d0: e8 07 00 f9 	str	x8, [sp, #8]
+1000025d4: e8 0b 40 f9 	ldr	x8, [sp, #16]
+1000025d8: 09 0d 40 f9 	ldr	x9, [x8, #24]
+1000025dc: e8 0b 40 f9 	ldr	x8, [sp, #16]
+1000025e0: 0a 05 40 f9 	ldr	x10, [x8, #8]
+1000025e4: 08 00 80 d2 	mov	x8, #0
+1000025e8: 28 79 2a f8 	str	x8, [x9, x10, lsl #3]
+1000025ec: e8 0b 40 f9 	ldr	x8, [sp, #16]
+1000025f0: 08 05 40 f9 	ldr	x8, [x8, #8]
+1000025f4: 08 05 00 91 	add	x8, x8, #1
+1000025f8: e9 0b 40 f9 	ldr	x9, [sp, #16]
+1000025fc: 2a 09 40 f9 	ldr	x10, [x9, #16]
+100002600: 09 09 ca 9a 	udiv	x9, x8, x10
+100002604: 29 7d 0a 9b 	mul	x9, x9, x10
+100002608: 08 01 09 eb 	subs	x8, x8, x9
+10000260c: e9 0b 40 f9 	ldr	x9, [sp, #16]
+100002610: 28 05 00 f9 	str	x8, [x9, #8]
+100002614: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002618: e8 0f 00 f9 	str	x8, [sp, #24]
+10000261c: 01 00 00 14 	b	0x100002620 <_dequeue+0x94>
+100002620: e0 0f 40 f9 	ldr	x0, [sp, #24]
+100002624: ff 83 00 91 	add	sp, sp, #32
+100002628: c0 03 5f d6 	ret
+
+000000010000262c <_enqueue>:
+10000262c: ff 83 00 d1 	sub	sp, sp, #32
+100002630: e0 0b 00 f9 	str	x0, [sp, #16]
+100002634: e1 07 00 f9 	str	x1, [sp, #8]
+100002638: e8 0b 40 f9 	ldr	x8, [sp, #16]
+10000263c: 08 01 40 f9 	ldr	x8, [x8]
+100002640: 08 05 00 91 	add	x8, x8, #1
+100002644: e9 0b 40 f9 	ldr	x9, [sp, #16]
+100002648: 2a 09 40 f9 	ldr	x10, [x9, #16]
+10000264c: 09 09 ca 9a 	udiv	x9, x8, x10
+100002650: 29 7d 0a 9b 	mul	x9, x9, x10
+100002654: 08 01 09 eb 	subs	x8, x8, x9
+100002658: e9 0b 40 f9 	ldr	x9, [sp, #16]
+10000265c: 29 05 40 f9 	ldr	x9, [x9, #8]
+100002660: 08 01 09 eb 	subs	x8, x8, x9
+100002664: e8 07 9f 1a 	cset	w8, ne
+100002668: a8 00 00 37 	tbnz	w8, #0, 0x10000267c <_enqueue+0x50>
+10000266c: 01 00 00 14 	b	0x100002670 <_enqueue+0x44>
+100002670: 28 00 80 52 	mov	w8, #1
+100002674: e8 1f 00 b9 	str	w8, [sp, #28]
+100002678: 13 00 00 14 	b	0x1000026c4 <_enqueue+0x98>
+10000267c: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002680: e9 0b 40 f9 	ldr	x9, [sp, #16]
+100002684: 29 0d 40 f9 	ldr	x9, [x9, #24]
+100002688: ea 0b 40 f9 	ldr	x10, [sp, #16]
+10000268c: 4a 01 40 f9 	ldr	x10, [x10]
+100002690: 28 79 2a f8 	str	x8, [x9, x10, lsl #3]
+100002694: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100002698: 08 01 40 f9 	ldr	x8, [x8]
+10000269c: 08 05 00 91 	add	x8, x8, #1
+1000026a0: e9 0b 40 f9 	ldr	x9, [sp, #16]
+1000026a4: 2a 09 40 f9 	ldr	x10, [x9, #16]
+1000026a8: 09 09 ca 9a 	udiv	x9, x8, x10
+1000026ac: 29 7d 0a 9b 	mul	x9, x9, x10
+1000026b0: 08 01 09 eb 	subs	x8, x8, x9
+1000026b4: e9 0b 40 f9 	ldr	x9, [sp, #16]
+1000026b8: 28 01 00 f9 	str	x8, [x9]
+1000026bc: ff 1f 00 b9 	str	wzr, [sp, #28]
+1000026c0: 01 00 00 14 	b	0x1000026c4 <_enqueue+0x98>
+1000026c4: e0 1f 40 b9 	ldr	w0, [sp, #28]
+1000026c8: ff 83 00 91 	add	sp, sp, #32
+1000026cc: c0 03 5f d6 	ret
+
+00000001000026d0 <_sub_timespec>:
+1000026d0: ff c3 00 d1 	sub	sp, sp, #48
+1000026d4: e0 13 00 f9 	str	x0, [sp, #32]
+1000026d8: e1 17 00 f9 	str	x1, [sp, #40]
+1000026dc: e2 0b 00 f9 	str	x2, [sp, #16]
+1000026e0: e3 0f 00 f9 	str	x3, [sp, #24]
+1000026e4: e4 07 00 f9 	str	x4, [sp, #8]
+1000026e8: e8 0f 40 f9 	ldr	x8, [sp, #24]
+1000026ec: e9 17 40 f9 	ldr	x9, [sp, #40]
+1000026f0: 08 01 09 eb 	subs	x8, x8, x9
+1000026f4: e9 07 40 f9 	ldr	x9, [sp, #8]
+1000026f8: 28 05 00 f9 	str	x8, [x9, #8]
+1000026fc: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100002700: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002704: 08 01 09 eb 	subs	x8, x8, x9
+100002708: e9 07 40 f9 	ldr	x9, [sp, #8]
+10000270c: 28 01 00 f9 	str	x8, [x9]
+100002710: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002714: 08 01 40 f9 	ldr	x8, [x8]
+100002718: 08 01 00 f1 	subs	x8, x8, #0
+10000271c: e8 c7 9f 1a 	cset	w8, le
+100002720: 68 02 00 37 	tbnz	w8, #0, 0x10000276c <_sub_timespec+0x9c>
+100002724: 01 00 00 14 	b	0x100002728 <_sub_timespec+0x58>
+100002728: e8 07 40 f9 	ldr	x8, [sp, #8]
+10000272c: 08 05 40 f9 	ldr	x8, [x8, #8]
+100002730: 08 01 00 f1 	subs	x8, x8, #0
+100002734: e8 b7 9f 1a 	cset	w8, ge
+100002738: a8 01 00 37 	tbnz	w8, #0, 0x10000276c <_sub_timespec+0x9c>
+10000273c: 01 00 00 14 	b	0x100002740 <_sub_timespec+0x70>
+100002740: e9 07 40 f9 	ldr	x9, [sp, #8]
+100002744: 28 05 40 f9 	ldr	x8, [x9, #8]
+100002748: 0a 40 99 d2 	mov	x10, #51712
+10000274c: 4a 73 a7 f2 	movk	x10, #15258, lsl #16
+100002750: 08 01 0a 8b 	add	x8, x8, x10
+100002754: 28 05 00 f9 	str	x8, [x9, #8]
+100002758: e9 07 40 f9 	ldr	x9, [sp, #8]
+10000275c: 28 01 40 f9 	ldr	x8, [x9]
+100002760: 08 05 00 f1 	subs	x8, x8, #1
+100002764: 28 01 00 f9 	str	x8, [x9]
+100002768: 19 00 00 14 	b	0x1000027cc <_sub_timespec+0xfc>
+10000276c: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002770: 08 01 40 f9 	ldr	x8, [x8]
+100002774: 08 01 00 f1 	subs	x8, x8, #0
+100002778: e8 b7 9f 1a 	cset	w8, ge
+10000277c: 68 02 00 37 	tbnz	w8, #0, 0x1000027c8 <_sub_timespec+0xf8>
+100002780: 01 00 00 14 	b	0x100002784 <_sub_timespec+0xb4>
+100002784: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002788: 08 05 40 f9 	ldr	x8, [x8, #8]
+10000278c: 08 01 00 f1 	subs	x8, x8, #0
+100002790: e8 c7 9f 1a 	cset	w8, le
+100002794: a8 01 00 37 	tbnz	w8, #0, 0x1000027c8 <_sub_timespec+0xf8>
+100002798: 01 00 00 14 	b	0x10000279c <_sub_timespec+0xcc>
+10000279c: e9 07 40 f9 	ldr	x9, [sp, #8]
+1000027a0: 28 05 40 f9 	ldr	x8, [x9, #8]
+1000027a4: 0a 40 99 d2 	mov	x10, #51712
+1000027a8: 4a 73 a7 f2 	movk	x10, #15258, lsl #16
+1000027ac: 08 01 0a eb 	subs	x8, x8, x10
+1000027b0: 28 05 00 f9 	str	x8, [x9, #8]
+1000027b4: e9 07 40 f9 	ldr	x9, [sp, #8]
+1000027b8: 28 01 40 f9 	ldr	x8, [x9]
+1000027bc: 08 05 00 91 	add	x8, x8, #1
+1000027c0: 28 01 00 f9 	str	x8, [x9]
+1000027c4: 01 00 00 14 	b	0x1000027c8 <_sub_timespec+0xf8>
+1000027c8: 01 00 00 14 	b	0x1000027cc <_sub_timespec+0xfc>
+1000027cc: ff c3 00 91 	add	sp, sp, #48
+1000027d0: c0 03 5f d6 	ret
+
+00000001000027d4 <_timespec_diff>:
+1000027d4: ff c3 00 d1 	sub	sp, sp, #48
+1000027d8: e0 13 00 f9 	str	x0, [sp, #32]
+1000027dc: e1 17 00 f9 	str	x1, [sp, #40]
+1000027e0: e2 0b 00 f9 	str	x2, [sp, #16]
+1000027e4: e3 0f 00 f9 	str	x3, [sp, #24]
+1000027e8: e8 13 40 f9 	ldr	x8, [sp, #32]
+1000027ec: e9 0b 40 f9 	ldr	x9, [sp, #16]
+1000027f0: 08 01 09 eb 	subs	x8, x8, x9
+1000027f4: e8 07 00 f9 	str	x8, [sp, #8]
+1000027f8: e8 17 40 f9 	ldr	x8, [sp, #40]
+1000027fc: e9 0f 40 f9 	ldr	x9, [sp, #24]
+100002800: 08 01 09 eb 	subs	x8, x8, x9
+100002804: e8 03 00 f9 	str	x8, [sp]
+100002808: e8 03 40 f9 	ldr	x8, [sp]
+10000280c: 08 01 00 f1 	subs	x8, x8, #0
+100002810: e8 b7 9f 1a 	cset	w8, ge
+100002814: 68 01 00 37 	tbnz	w8, #0, 0x100002840 <_timespec_diff+0x6c>
+100002818: 01 00 00 14 	b	0x10000281c <_timespec_diff+0x48>
+10000281c: e8 07 40 f9 	ldr	x8, [sp, #8]
+100002820: 08 05 00 f1 	subs	x8, x8, #1
+100002824: e8 07 00 f9 	str	x8, [sp, #8]
+100002828: e8 03 40 f9 	ldr	x8, [sp]
+10000282c: 09 40 99 d2 	mov	x9, #51712
+100002830: 49 73 a7 f2 	movk	x9, #15258, lsl #16
+100002834: 08 01 09 8b 	add	x8, x8, x9
+100002838: e8 03 00 f9 	str	x8, [sp]
+10000283c: 01 00 00 14 	b	0x100002840 <_timespec_diff+0x6c>
+100002840: e0 07 40 fd 	ldr	d0, [sp, #8]
+100002844: 00 d8 61 5e 	scvtf	d0, d0
+100002848: e1 03 40 fd 	ldr	d1, [sp]
+10000284c: 21 d8 61 5e 	scvtf	d1, d1
+100002850: 08 00 00 b0 	adrp	x8, 0x100003000 <_timespec_diff+0x80>
+100002854: 02 91 47 fd 	ldr	d2, [x8, #3872]
+100002858: 21 18 62 1e 	fdiv	d1, d1, d2
+10000285c: 00 28 61 1e 	fadd	d0, d0, d1
+100002860: ff c3 00 91 	add	sp, sp, #48
+100002864: c0 03 5f d6 	ret
+
+0000000100002868 <_get_time>:
+100002868: ff 83 00 d1 	sub	sp, sp, #32
+10000286c: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100002870: fd 43 00 91 	add	x29, sp, #16
+100002874: 00 00 80 52 	mov	w0, #0
+100002878: e1 03 00 91 	mov	x1, sp
+10000287c: 80 04 00 94 	bl	0x100003a7c <_vprintf+0x100003a7c>
+100002880: e0 03 40 f9 	ldr	x0, [sp]
+100002884: e1 07 40 f9 	ldr	x1, [sp, #8]
+100002888: 49 02 00 d0 	adrp	x9, 0x10004c000 <_msleepd+0x8>
+10000288c: 48 02 00 d0 	adrp	x8, 0x10004c000 <_msleepd+0xc>
+100002890: 08 41 00 91 	add	x8, x8, #16
+100002894: 22 09 40 f9 	ldr	x2, [x9, #16]
+100002898: 03 05 40 f9 	ldr	x3, [x8, #8]
+10000289c: ce ff ff 97 	bl	0x1000027d4 <_timespec_diff>
+1000028a0: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+1000028a4: ff 83 00 91 	add	sp, sp, #32
+1000028a8: c0 03 5f d6 	ret
+
+00000001000028ac <_timespec_to_secs>:
+1000028ac: ff 43 00 d1 	sub	sp, sp, #16
+1000028b0: e0 03 00 f9 	str	x0, [sp]
+1000028b4: e1 07 00 f9 	str	x1, [sp, #8]
+1000028b8: e0 03 40 fd 	ldr	d0, [sp]
+1000028bc: 00 d8 61 5e 	scvtf	d0, d0
+1000028c0: ff 43 00 91 	add	sp, sp, #16
+1000028c4: c0 03 5f d6 	ret
+
+00000001000028c8 <_msleep>:
+1000028c8: ff 03 01 d1 	sub	sp, sp, #64
+1000028cc: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+1000028d0: fd c3 00 91 	add	x29, sp, #48
+1000028d4: a0 03 1f f8 	stur	x0, [x29, #-16]
+1000028d8: a8 03 5f f8 	ldur	x8, [x29, #-16]
+1000028dc: 08 01 00 f1 	subs	x8, x8, #0
+1000028e0: e8 b7 9f 1a 	cset	w8, ge
+1000028e4: 08 01 00 37 	tbnz	w8, #0, 0x100002904 <_msleep+0x3c>
+1000028e8: 01 00 00 14 	b	0x1000028ec <_msleep+0x24>
+1000028ec: 5e 04 00 94 	bl	0x100003a64 <_vprintf+0x100003a64>
+1000028f0: c8 02 80 52 	mov	w8, #22
+1000028f4: 08 00 00 b9 	str	w8, [x0]
+1000028f8: 08 00 80 12 	mov	w8, #-1
+1000028fc: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002900: 26 00 00 14 	b	0x100002998 <_msleep+0xd0>
+100002904: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100002908: 0a 7d 80 d2 	mov	x10, #1000
+10000290c: 08 0d ca 9a 	sdiv	x8, x8, x10
+100002910: e8 0b 00 f9 	str	x8, [sp, #16]
+100002914: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100002918: 09 0d ca 9a 	sdiv	x9, x8, x10
+10000291c: 29 7d 0a 9b 	mul	x9, x9, x10
+100002920: 08 01 09 eb 	subs	x8, x8, x9
+100002924: 09 48 88 d2 	mov	x9, #16960
+100002928: e9 01 a0 f2 	movk	x9, #15, lsl #16
+10000292c: 08 7d 09 9b 	mul	x8, x8, x9
+100002930: e8 0f 00 f9 	str	x8, [sp, #24]
+100002934: 01 00 00 14 	b	0x100002938 <_msleep+0x70>
+100002938: e0 43 00 91 	add	x0, sp, #16
+10000293c: 01 00 80 d2 	mov	x1, #0
+100002940: 70 04 00 94 	bl	0x100003b00 <_vprintf+0x100003b00>
+100002944: e0 0f 00 b9 	str	w0, [sp, #12]
+100002948: 01 00 00 14 	b	0x10000294c <_msleep+0x84>
+10000294c: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100002950: 08 01 00 71 	subs	w8, w8, #0
+100002954: e8 17 9f 1a 	cset	w8, eq
+100002958: 09 00 80 52 	mov	w9, #0
+10000295c: e9 0b 00 b9 	str	w9, [sp, #8]
+100002960: 08 01 00 37 	tbnz	w8, #0, 0x100002980 <_msleep+0xb8>
+100002964: 01 00 00 14 	b	0x100002968 <_msleep+0xa0>
+100002968: 3f 04 00 94 	bl	0x100003a64 <_vprintf+0x100003a64>
+10000296c: 08 00 40 b9 	ldr	w8, [x0]
+100002970: 08 11 00 71 	subs	w8, w8, #4
+100002974: e8 17 9f 1a 	cset	w8, eq
+100002978: e8 0b 00 b9 	str	w8, [sp, #8]
+10000297c: 01 00 00 14 	b	0x100002980 <_msleep+0xb8>
+100002980: e8 0b 40 b9 	ldr	w8, [sp, #8]
+100002984: a8 fd 07 37 	tbnz	w8, #0, 0x100002938 <_msleep+0x70>
+100002988: 01 00 00 14 	b	0x10000298c <_msleep+0xc4>
+10000298c: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100002990: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002994: 01 00 00 14 	b	0x100002998 <_msleep+0xd0>
+100002998: a0 c3 5f b8 	ldur	w0, [x29, #-4]
+10000299c: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+1000029a0: ff 03 01 91 	add	sp, sp, #64
+1000029a4: c0 03 5f d6 	ret
+
+00000001000029a8 <_msleepd>:
+1000029a8: ff 03 01 d1 	sub	sp, sp, #64
+1000029ac: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+1000029b0: fd c3 00 91 	add	x29, sp, #48
+1000029b4: a0 03 1f fc 	stur	d0, [x29, #-16]
+1000029b8: a0 03 5f fc 	ldur	d0, [x29, #-16]
+1000029bc: 08 20 60 1e 	fcmp	d0, #0.0
+1000029c0: e8 47 9f 1a 	cset	w8, pl
+1000029c4: 08 01 00 37 	tbnz	w8, #0, 0x1000029e4 <_msleepd+0x3c>
+1000029c8: 01 00 00 14 	b	0x1000029cc <_msleepd+0x24>
+1000029cc: 26 04 00 94 	bl	0x100003a64 <_vprintf+0x100003a64>
+1000029d0: c8 02 80 52 	mov	w8, #22
+1000029d4: 08 00 00 b9 	str	w8, [x0]
+1000029d8: 08 00 80 12 	mov	w8, #-1
+1000029dc: a8 c3 1f b8 	stur	w8, [x29, #-4]
+1000029e0: 27 00 00 14 	b	0x100002a7c <_msleepd+0xd4>
+1000029e4: a0 03 5f fc 	ldur	d0, [x29, #-16]
+1000029e8: 08 00 00 b0 	adrp	x8, 0x100003000 <_msleepd+0x44>
+1000029ec: 01 99 47 fd 	ldr	d1, [x8, #3888]
+1000029f0: 00 18 61 1e 	fdiv	d0, d0, d1
+1000029f4: 08 00 78 9e 	fcvtzs	x8, d0
+1000029f8: e8 0b 00 f9 	str	x8, [sp, #16]
+1000029fc: a0 03 5f fc 	ldur	d0, [x29, #-16]
+100002a00: 31 04 00 94 	bl	0x100003ac4 <_vprintf+0x100003ac4>
+100002a04: 08 00 00 b0 	adrp	x8, 0x100003000 <_msleepd+0x60>
+100002a08: 01 95 47 fd 	ldr	d1, [x8, #3880]
+100002a0c: 00 08 61 1e 	fmul	d0, d0, d1
+100002a10: 08 00 78 9e 	fcvtzs	x8, d0
+100002a14: e8 0f 00 f9 	str	x8, [sp, #24]
+100002a18: 01 00 00 14 	b	0x100002a1c <_msleepd+0x74>
+100002a1c: e0 43 00 91 	add	x0, sp, #16
+100002a20: 01 00 80 d2 	mov	x1, #0
+100002a24: 37 04 00 94 	bl	0x100003b00 <_vprintf+0x100003b00>
+100002a28: e0 0f 00 b9 	str	w0, [sp, #12]
+100002a2c: 01 00 00 14 	b	0x100002a30 <_msleepd+0x88>
+100002a30: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100002a34: 08 01 00 71 	subs	w8, w8, #0
+100002a38: e8 17 9f 1a 	cset	w8, eq
+100002a3c: 09 00 80 52 	mov	w9, #0
+100002a40: e9 0b 00 b9 	str	w9, [sp, #8]
+100002a44: 08 01 00 37 	tbnz	w8, #0, 0x100002a64 <_msleepd+0xbc>
+100002a48: 01 00 00 14 	b	0x100002a4c <_msleepd+0xa4>
+100002a4c: 06 04 00 94 	bl	0x100003a64 <_vprintf+0x100003a64>
+100002a50: 08 00 40 b9 	ldr	w8, [x0]
+100002a54: 08 11 00 71 	subs	w8, w8, #4
+100002a58: e8 17 9f 1a 	cset	w8, eq
+100002a5c: e8 0b 00 b9 	str	w8, [sp, #8]
+100002a60: 01 00 00 14 	b	0x100002a64 <_msleepd+0xbc>
+100002a64: e8 0b 40 b9 	ldr	w8, [sp, #8]
+100002a68: a8 fd 07 37 	tbnz	w8, #0, 0x100002a1c <_msleepd+0x74>
+100002a6c: 01 00 00 14 	b	0x100002a70 <_msleepd+0xc8>
+100002a70: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100002a74: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002a78: 01 00 00 14 	b	0x100002a7c <_msleepd+0xd4>
+100002a7c: a0 c3 5f b8 	ldur	w0, [x29, #-4]
+100002a80: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+100002a84: ff 03 01 91 	add	sp, sp, #64
+100002a88: c0 03 5f d6 	ret
+
+0000000100002a8c <_init_scheduling>:
+100002a8c: fd 7b bf a9 	stp	x29, x30, [sp, #-16]!
+100002a90: fd 03 00 91 	mov	x29, sp
+100002a94: 00 00 80 52 	mov	w0, #0
+100002a98: 41 02 00 d0 	adrp	x1, 0x10004c000 <_read_file+0x114>
+100002a9c: 21 40 00 91 	add	x1, x1, #16
+100002aa0: f7 03 00 94 	bl	0x100003a7c <_vprintf+0x100003a7c>
+100002aa4: fd 7b c1 a8 	ldp	x29, x30, [sp], #16
+100002aa8: c0 03 5f d6 	ret
+
+0000000100002aac <_read_file>:
+100002aac: ff c3 01 d1 	sub	sp, sp, #112
+100002ab0: fd 7b 06 a9 	stp	x29, x30, [sp, #96]
+100002ab4: fd 83 01 91 	add	x29, sp, #96
+100002ab8: a0 03 1f f8 	stur	x0, [x29, #-16]
+100002abc: a1 83 1e f8 	stur	x1, [x29, #-24]
+100002ac0: 00 e4 00 6f 	movi.2d	v0, #0000000000000000
+100002ac4: e2 83 00 91 	add	x2, sp, #32
+100002ac8: e0 0b 80 3d 	str	q0, [sp, #32]
+100002acc: e0 0f 80 3d 	str	q0, [sp, #48]
+100002ad0: a0 03 5f f8 	ldur	x0, [x29, #-16]
+100002ad4: 01 02 80 52 	mov	w1, #16
+100002ad8: 1c 04 00 94 	bl	0x100003b48 <_vprintf+0x100003b48>
+100002adc: e8 03 00 aa 	mov	x8, x0
+100002ae0: a8 03 1e f8 	stur	x8, [x29, #-32]
+100002ae4: 08 00 00 f1 	subs	x8, x0, #0
+100002ae8: e8 07 9f 1a 	cset	w8, ne
+100002aec: c8 01 00 37 	tbnz	w8, #0, 0x100002b24 <_read_file+0x78>
+100002af0: 01 00 00 14 	b	0x100002af4 <_read_file+0x48>
+100002af4: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100002af8: e9 03 00 91 	mov	x9, sp
+100002afc: 28 01 00 f9 	str	x8, [x9]
+100002b00: 00 00 00 b0 	adrp	x0, 0x100003000 <_read_file+0x58>
+100002b04: 00 d4 34 91 	add	x0, x0, #3381
+100002b08: 04 04 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+100002b0c: 00 00 80 d2 	mov	x0, #0
+100002b10: 14 04 00 94 	bl	0x100003b60 <_vprintf+0x100003b60>
+100002b14: 04 04 00 94 	bl	0x100003b24 <_vprintf+0x100003b24>
+100002b18: 28 00 80 52 	mov	w8, #1
+100002b1c: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002b20: 2a 00 00 14 	b	0x100002bc8 <_read_file+0x11c>
+100002b24: e8 2f 40 b9 	ldr	w8, [sp, #44]
+100002b28: 08 19 00 71 	subs	w8, w8, #6
+100002b2c: e8 c7 9f 1a 	cset	w8, le
+100002b30: a8 01 00 37 	tbnz	w8, #0, 0x100002b64 <_read_file+0xb8>
+100002b34: 01 00 00 14 	b	0x100002b38 <_read_file+0x8c>
+100002b38: e9 03 00 91 	mov	x9, sp
+100002b3c: c8 00 80 d2 	mov	x8, #6
+100002b40: 28 01 00 f9 	str	x8, [x9]
+100002b44: 00 00 00 b0 	adrp	x0, 0x100003000 <_read_file+0x9c>
+100002b48: 00 58 35 91 	add	x0, x0, #3414
+100002b4c: f3 03 00 94 	bl	0x100003b18 <_vprintf+0x100003b18>
+100002b50: a0 03 5e f8 	ldur	x0, [x29, #-32]
+100002b54: fa 03 00 94 	bl	0x100003b3c <_vprintf+0x100003b3c>
+100002b58: 28 00 80 52 	mov	w8, #1
+100002b5c: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002b60: 1a 00 00 14 	b	0x100002bc8 <_read_file+0x11c>
+100002b64: e8 2f 80 b9 	ldrsw	x8, [sp, #44]
+100002b68: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002b6c: 08 7d 09 9b 	mul	x8, x8, x9
+100002b70: e8 0b 00 f9 	str	x8, [sp, #16]
+100002b74: e9 0b 40 f9 	ldr	x9, [sp, #16]
+100002b78: 08 01 80 d2 	mov	x8, #8
+100002b7c: 00 7d 09 9b 	mul	x0, x8, x9
+100002b80: da 03 00 94 	bl	0x100003ae8 <_vprintf+0x100003ae8>
+100002b84: a8 83 5e f8 	ldur	x8, [x29, #-24]
+100002b88: 00 01 00 f9 	str	x0, [x8]
+100002b8c: e8 13 40 f9 	ldr	x8, [sp, #32]
+100002b90: a9 83 5e f8 	ldur	x9, [x29, #-24]
+100002b94: 28 09 00 b9 	str	w8, [x9, #8]
+100002b98: e8 2f 40 b9 	ldr	w8, [sp, #44]
+100002b9c: a9 83 5e f8 	ldur	x9, [x29, #-24]
+100002ba0: 28 0d 00 b9 	str	w8, [x9, #12]
+100002ba4: a0 03 5e f8 	ldur	x0, [x29, #-32]
+100002ba8: a8 83 5e f8 	ldur	x8, [x29, #-24]
+100002bac: 01 01 40 f9 	ldr	x1, [x8]
+100002bb0: e2 0b 40 f9 	ldr	x2, [sp, #16]
+100002bb4: e8 03 00 94 	bl	0x100003b54 <_vprintf+0x100003b54>
+100002bb8: a0 03 5e f8 	ldur	x0, [x29, #-32]
+100002bbc: e0 03 00 94 	bl	0x100003b3c <_vprintf+0x100003b3c>
+100002bc0: bf c3 1f b8 	stur	wzr, [x29, #-4]
+100002bc4: 01 00 00 14 	b	0x100002bc8 <_read_file+0x11c>
+100002bc8: a0 c3 5f b8 	ldur	w0, [x29, #-4]
+100002bcc: fd 7b 46 a9 	ldp	x29, x30, [sp, #96]
+100002bd0: ff c3 01 91 	add	sp, sp, #112
+100002bd4: c0 03 5f d6 	ret
+
+0000000100002bd8 <_setup_audio>:
+100002bd8: ff 43 02 d1 	sub	sp, sp, #144
+100002bdc: fd 7b 08 a9 	stp	x29, x30, [sp, #128]
+100002be0: fd 03 02 91 	add	x29, sp, #128
+100002be4: bf 83 1f b8 	stur	wzr, [x29, #-8]
+100002be8: bf 03 1f f8 	stur	xzr, [x29, #-16]
+100002bec: bf f3 1e 38 	sturb	wzr, [x29, #-17]
+100002bf0: bf 03 1e f8 	stur	xzr, [x29, #-32]
+100002bf4: 00 e4 00 2f 	movi	d0, #0000000000000000
+100002bf8: a0 83 1d fc 	stur	d0, [x29, #-40]
+100002bfc: bf 43 1d b8 	stur	wzr, [x29, #-44]
+100002c00: bf 83 1c f8 	stur	xzr, [x29, #-56]
+100002c04: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0x30>
+100002c08: 00 04 36 91 	add	x0, x0, #3457
+100002c0c: 97 fc ff 97 	bl	0x100001e68 <_write_log>
+100002c10: e3 03 00 94 	bl	0x100003b9c <_vprintf+0x100003b9c>
+100002c14: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x164>
+100002c18: 00 11 00 f9 	str	x0, [x8, #32]
+100002c1c: 08 11 40 f9 	ldr	x8, [x8, #32]
+100002c20: 08 01 00 f1 	subs	x8, x8, #0
+100002c24: e8 07 9f 1a 	cset	w8, ne
+100002c28: 08 01 00 37 	tbnz	w8, #0, 0x100002c48 <_setup_audio+0x70>
+100002c2c: 01 00 00 14 	b	0x100002c30 <_setup_audio+0x58>
+100002c30: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0x5c>
+100002c34: 00 54 36 91 	add	x0, x0, #3477
+100002c38: 8c fc ff 97 	bl	0x100001e68 <_write_log>
+100002c3c: 28 00 80 52 	mov	w8, #1
+100002c40: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002c44: 50 01 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100002c48: a8 83 5f b8 	ldur	w8, [x29, #-8]
+100002c4c: 08 01 00 71 	subs	w8, w8, #0
+100002c50: e8 07 9f 1a 	cset	w8, ne
+100002c54: e8 00 00 37 	tbnz	w8, #0, 0x100002c70 <_setup_audio+0x98>
+100002c58: 01 00 00 14 	b	0x100002c5c <_setup_audio+0x84>
+100002c5c: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x1ac>
+100002c60: 00 11 40 f9 	ldr	x0, [x8, #32]
+100002c64: c8 03 00 94 	bl	0x100003b84 <_vprintf+0x100003b84>
+100002c68: e0 1f 00 b9 	str	w0, [sp, #28]
+100002c6c: 07 00 00 14 	b	0x100002c88 <_setup_audio+0xb0>
+100002c70: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x1c0>
+100002c74: 00 11 40 f9 	ldr	x0, [x8, #32]
+100002c78: a1 83 5f b8 	ldur	w1, [x29, #-8]
+100002c7c: c5 03 00 94 	bl	0x100003b90 <_vprintf+0x100003b90>
+100002c80: e0 1f 00 b9 	str	w0, [sp, #28]
+100002c84: 01 00 00 14 	b	0x100002c88 <_setup_audio+0xb0>
+100002c88: e8 1f 40 b9 	ldr	w8, [sp, #28]
+100002c8c: a8 43 1c b8 	stur	w8, [x29, #-60]
+100002c90: a8 43 5c b8 	ldur	w8, [x29, #-60]
+100002c94: 08 01 00 71 	subs	w8, w8, #0
+100002c98: e8 17 9f 1a 	cset	w8, eq
+100002c9c: 88 01 00 37 	tbnz	w8, #0, 0x100002ccc <_setup_audio+0xf4>
+100002ca0: 01 00 00 14 	b	0x100002ca4 <_setup_audio+0xcc>
+100002ca4: a0 43 5c b8 	ldur	w0, [x29, #-60]
+100002ca8: ea 03 00 94 	bl	0x100003c50 <_vprintf+0x100003c50>
+100002cac: e8 03 00 91 	mov	x8, sp
+100002cb0: 00 01 00 f9 	str	x0, [x8]
+100002cb4: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0xe0>
+100002cb8: 00 90 36 91 	add	x0, x0, #3492
+100002cbc: 6b fc ff 97 	bl	0x100001e68 <_write_log>
+100002cc0: 28 00 80 52 	mov	w8, #1
+100002cc4: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002cc8: 2f 01 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100002ccc: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0xf8>
+100002cd0: 00 18 37 91 	add	x0, x0, #3526
+100002cd4: 65 fc ff 97 	bl	0x100001e68 <_write_log>
+100002cd8: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x228>
+100002cdc: e8 0b 00 f9 	str	x8, [sp, #16]
+100002ce0: 08 11 40 f9 	ldr	x8, [x8, #32]
+100002ce4: 00 21 40 b9 	ldr	w0, [x8, #32]
+100002ce8: a4 03 00 94 	bl	0x100003b78 <_vprintf+0x100003b78>
+100002cec: e8 03 00 91 	mov	x8, sp
+100002cf0: 00 01 00 f9 	str	x0, [x8]
+100002cf4: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0x120>
+100002cf8: 00 74 37 91 	add	x0, x0, #3549
+100002cfc: 5b fc ff 97 	bl	0x100001e68 <_write_log>
+100002d00: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100002d04: 00 11 40 f9 	ldr	x0, [x8, #32]
+100002d08: b4 03 00 94 	bl	0x100003bd8 <_vprintf+0x100003bd8>
+100002d0c: 08 00 80 12 	mov	w8, #-1
+100002d10: e8 43 00 b9 	str	w8, [sp, #64]
+100002d14: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100002d18: 08 01 00 f1 	subs	x8, x8, #0
+100002d1c: e8 17 9f 1a 	cset	w8, eq
+100002d20: 68 07 00 37 	tbnz	w8, #0, 0x100002e0c <_setup_audio+0x234>
+100002d24: 01 00 00 14 	b	0x100002d28 <_setup_audio+0x150>
+100002d28: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x278>
+100002d2c: 00 11 40 f9 	ldr	x0, [x8, #32]
+100002d30: b0 03 00 94 	bl	0x100003bf0 <_vprintf+0x100003bf0>
+100002d34: e0 3f 00 b9 	str	w0, [sp, #60]
+100002d38: ff 3b 00 b9 	str	wzr, [sp, #56]
+100002d3c: 01 00 00 14 	b	0x100002d40 <_setup_audio+0x168>
+100002d40: e8 3b 40 b9 	ldr	w8, [sp, #56]
+100002d44: e9 3f 40 b9 	ldr	w9, [sp, #60]
+100002d48: 08 01 09 6b 	subs	w8, w8, w9
+100002d4c: e8 b7 9f 1a 	cset	w8, ge
+100002d50: c8 05 00 37 	tbnz	w8, #0, 0x100002e08 <_setup_audio+0x230>
+100002d54: 01 00 00 14 	b	0x100002d58 <_setup_audio+0x180>
+100002d58: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x2a8>
+100002d5c: 00 11 40 f9 	ldr	x0, [x8, #32]
+100002d60: e1 3b 40 b9 	ldr	w1, [sp, #56]
+100002d64: a0 03 00 94 	bl	0x100003be4 <_vprintf+0x100003be4>
+100002d68: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x2b8>
+100002d6c: 00 15 00 f9 	str	x0, [x8, #40]
+100002d70: 08 15 40 f9 	ldr	x8, [x8, #40]
+100002d74: 00 05 40 f9 	ldr	x0, [x8, #8]
+100002d78: a1 03 5f f8 	ldur	x1, [x29, #-16]
+100002d7c: b8 03 00 94 	bl	0x100003c5c <_vprintf+0x100003c5c>
+100002d80: 08 00 00 71 	subs	w8, w0, #0
+100002d84: e8 07 9f 1a 	cset	w8, ne
+100002d88: 09 00 80 52 	mov	w9, #0
+100002d8c: e9 0f 00 b9 	str	w9, [sp, #12]
+100002d90: 88 01 00 37 	tbnz	w8, #0, 0x100002dc0 <_setup_audio+0x1e8>
+100002d94: 01 00 00 14 	b	0x100002d98 <_setup_audio+0x1c0>
+100002d98: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x2e8>
+100002d9c: 08 15 40 f9 	ldr	x8, [x8, #40]
+100002da0: 08 61 43 39 	ldrb	w8, [x8, #216]
+100002da4: 08 01 00 12 	and	w8, w8, #0x1
+100002da8: a9 f3 5e 38 	ldurb	w9, [x29, #-17]
+100002dac: 29 01 00 12 	and	w9, w9, #0x1
+100002db0: 08 01 09 6b 	subs	w8, w8, w9
+100002db4: e8 17 9f 1a 	cset	w8, eq
+100002db8: e8 0f 00 b9 	str	w8, [sp, #12]
+100002dbc: 01 00 00 14 	b	0x100002dc0 <_setup_audio+0x1e8>
+100002dc0: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100002dc4: 29 00 80 52 	mov	w9, #1
+100002dc8: 08 01 09 0a 	and	w8, w8, w9
+100002dcc: e8 df 00 39 	strb	w8, [sp, #55]
+100002dd0: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x320>
+100002dd4: 00 15 40 f9 	ldr	x0, [x8, #40]
+100002dd8: 7d 03 00 94 	bl	0x100003bcc <_vprintf+0x100003bcc>
+100002ddc: e8 df 40 39 	ldrb	w8, [sp, #55]
+100002de0: a8 00 00 36 	tbz	w8, #0, 0x100002df4 <_setup_audio+0x21c>
+100002de4: 01 00 00 14 	b	0x100002de8 <_setup_audio+0x210>
+100002de8: e8 3b 40 b9 	ldr	w8, [sp, #56]
+100002dec: e8 43 00 b9 	str	w8, [sp, #64]
+100002df0: 06 00 00 14 	b	0x100002e08 <_setup_audio+0x230>
+100002df4: 01 00 00 14 	b	0x100002df8 <_setup_audio+0x220>
+100002df8: e8 3b 40 b9 	ldr	w8, [sp, #56]
+100002dfc: 08 05 00 11 	add	w8, w8, #1
+100002e00: e8 3b 00 b9 	str	w8, [sp, #56]
+100002e04: cf ff ff 17 	b	0x100002d40 <_setup_audio+0x168>
+100002e08: 06 00 00 14 	b	0x100002e20 <_setup_audio+0x248>
+100002e0c: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x35c>
+100002e10: 00 11 40 f9 	ldr	x0, [x8, #32]
+100002e14: 65 03 00 94 	bl	0x100003ba8 <_vprintf+0x100003ba8>
+100002e18: e0 43 00 b9 	str	w0, [sp, #64]
+100002e1c: 01 00 00 14 	b	0x100002e20 <_setup_audio+0x248>
+100002e20: e8 43 40 b9 	ldr	w8, [sp, #64]
+100002e24: 08 01 00 71 	subs	w8, w8, #0
+100002e28: e8 b7 9f 1a 	cset	w8, ge
+100002e2c: 08 01 00 37 	tbnz	w8, #0, 0x100002e4c <_setup_audio+0x274>
+100002e30: 01 00 00 14 	b	0x100002e34 <_setup_audio+0x25c>
+100002e34: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0x260>
+100002e38: 00 d0 37 91 	add	x0, x0, #3572
+100002e3c: 0b fc ff 97 	bl	0x100001e68 <_write_log>
+100002e40: 28 00 80 52 	mov	w8, #1
+100002e44: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002e48: cf 00 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100002e4c: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x39c>
+100002e50: 00 11 40 f9 	ldr	x0, [x8, #32]
+100002e54: e1 43 40 b9 	ldr	w1, [sp, #64]
+100002e58: 63 03 00 94 	bl	0x100003be4 <_vprintf+0x100003be4>
+100002e5c: e0 17 00 f9 	str	x0, [sp, #40]
+100002e60: e8 17 40 f9 	ldr	x8, [sp, #40]
+100002e64: 08 01 00 f1 	subs	x8, x8, #0
+100002e68: e8 07 9f 1a 	cset	w8, ne
+100002e6c: 08 01 00 37 	tbnz	w8, #0, 0x100002e8c <_setup_audio+0x2b4>
+100002e70: 01 00 00 14 	b	0x100002e74 <_setup_audio+0x29c>
+100002e74: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0x2a0>
+100002e78: 00 54 36 91 	add	x0, x0, #3477
+100002e7c: fb fb ff 97 	bl	0x100001e68 <_write_log>
+100002e80: 28 00 80 52 	mov	w8, #1
+100002e84: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002e88: bf 00 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100002e8c: e8 17 40 f9 	ldr	x8, [sp, #40]
+100002e90: 08 09 40 f9 	ldr	x8, [x8, #16]
+100002e94: e9 03 00 91 	mov	x9, sp
+100002e98: 28 01 00 f9 	str	x8, [x9]
+100002e9c: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0x2c8>
+100002ea0: 00 34 38 91 	add	x0, x0, #3597
+100002ea4: f1 fb ff 97 	bl	0x100001e68 <_write_log>
+100002ea8: e8 17 40 f9 	ldr	x8, [sp, #40]
+100002eac: 08 e1 40 b9 	ldr	w8, [x8, #224]
+100002eb0: 08 01 00 71 	subs	w8, w8, #0
+100002eb4: e8 17 9f 1a 	cset	w8, eq
+100002eb8: a8 01 00 37 	tbnz	w8, #0, 0x100002eec <_setup_audio+0x314>
+100002ebc: 01 00 00 14 	b	0x100002ec0 <_setup_audio+0x2e8>
+100002ec0: e8 17 40 f9 	ldr	x8, [sp, #40]
+100002ec4: 00 e1 40 b9 	ldr	w0, [x8, #224]
+100002ec8: 62 03 00 94 	bl	0x100003c50 <_vprintf+0x100003c50>
+100002ecc: e8 03 00 91 	mov	x8, sp
+100002ed0: 00 01 00 f9 	str	x0, [x8]
+100002ed4: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0x300>
+100002ed8: 00 90 38 91 	add	x0, x0, #3620
+100002edc: e3 fb ff 97 	bl	0x100001e68 <_write_log>
+100002ee0: 28 00 80 52 	mov	w8, #1
+100002ee4: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002ee8: a7 00 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100002eec: e0 17 40 f9 	ldr	x0, [sp, #40]
+100002ef0: 46 03 00 94 	bl	0x100003c08 <_vprintf+0x100003c08>
+100002ef4: e0 13 00 f9 	str	x0, [sp, #32]
+100002ef8: e8 13 40 f9 	ldr	x8, [sp, #32]
+100002efc: 08 01 00 f1 	subs	x8, x8, #0
+100002f00: e8 07 9f 1a 	cset	w8, ne
+100002f04: 08 01 00 37 	tbnz	w8, #0, 0x100002f24 <_setup_audio+0x34c>
+100002f08: 01 00 00 14 	b	0x100002f0c <_setup_audio+0x334>
+100002f0c: 00 00 00 b0 	adrp	x0, 0x100003000 <_setup_audio+0x338>
+100002f10: 00 54 36 91 	add	x0, x0, #3477
+100002f14: d5 fb ff 97 	bl	0x100001e68 <_write_log>
+100002f18: 28 00 80 52 	mov	w8, #1
+100002f1c: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100002f20: 99 00 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100002f24: bf fa ff 97 	bl	0x100001a20 <_init_ctx>
+100002f28: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002f2c: 48 02 00 d0 	adrp	x8, 0x10004c000 <_setup_audio+0x47c>
+100002f30: 08 21 01 91 	add	x8, x8, #72
+100002f34: 28 49 00 f9 	str	x8, [x9, #144]
+100002f38: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002f3c: 08 00 00 b0 	adrp	x8, 0x100003000 <_setup_audio+0x368>
+100002f40: 08 51 06 91 	add	x8, x8, #404
+100002f44: 28 4d 00 f9 	str	x8, [x9, #152]
+100002f48: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002f4c: 08 00 00 b0 	adrp	x8, 0x100003000 <_setup_audio+0x378>
+100002f50: 08 61 10 91 	add	x8, x8, #1048
+100002f54: 28 51 00 f9 	str	x8, [x9, #160]
+100002f58: a8 03 5e f8 	ldur	x8, [x29, #-32]
+100002f5c: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002f60: 28 59 00 f9 	str	x8, [x9, #176]
+100002f64: a8 83 5d f8 	ldur	x8, [x29, #-40]
+100002f68: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002f6c: 28 41 00 f9 	str	x8, [x9, #128]
+100002f70: a8 43 5d b8 	ldur	w8, [x29, #-44]
+100002f74: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002f78: 28 0d 00 b9 	str	w8, [x9, #12]
+100002f7c: e0 17 40 f9 	ldr	x0, [sp, #40]
+100002f80: e1 01 80 52 	mov	w1, #15
+100002f84: 0f 03 00 94 	bl	0x100003bc0 <_vprintf+0x100003bc0>
+100002f88: 40 01 00 36 	tbz	w0, #0, 0x100002fb0 <_setup_audio+0x3d8>
+100002f8c: 01 00 00 14 	b	0x100002f90 <_setup_audio+0x3b8>
+100002f90: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002f94: e8 01 80 52 	mov	w8, #15
+100002f98: 28 09 00 b9 	str	w8, [x9, #8]
+100002f9c: 08 00 00 b0 	adrp	x8, 0x100003000 <_setup_audio+0x3c8>
+100002fa0: 08 e1 14 91 	add	x8, x8, #1336
+100002fa4: 49 02 00 d0 	adrp	x9, 0x10004c000 <_setup_audio+0x4f4>
+100002fa8: 28 19 00 f9 	str	x8, [x9, #48]
+100002fac: 31 00 00 14 	b	0x100003070 <_setup_audio+0x498>
+100002fb0: e0 17 40 f9 	ldr	x0, [sp, #40]
+100002fb4: 21 02 80 52 	mov	w1, #17
+100002fb8: 02 03 00 94 	bl	0x100003bc0 <_vprintf+0x100003bc0>
+100002fbc: 40 01 00 36 	tbz	w0, #0, 0x100002fe4 <_setup_audio+0x40c>
+100002fc0: 01 00 00 14 	b	0x100002fc4 <_setup_audio+0x3ec>
+100002fc4: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002fc8: 28 02 80 52 	mov	w8, #17
+100002fcc: 28 09 00 b9 	str	w8, [x9, #8]
+100002fd0: 08 00 00 b0 	adrp	x8, 0x100003000 <_setup_audio+0x3fc>
+100002fd4: 08 a1 16 91 	add	x8, x8, #1448
+100002fd8: 49 02 00 d0 	adrp	x9, 0x10004c000 <_setup_audio+0x528>
+100002fdc: 28 19 00 f9 	str	x8, [x9, #48]
+100002fe0: 23 00 00 14 	b	0x10000306c <_setup_audio+0x494>
+100002fe4: e0 17 40 f9 	ldr	x0, [sp, #40]
+100002fe8: 61 01 80 52 	mov	w1, #11
+100002fec: f5 02 00 94 	bl	0x100003bc0 <_vprintf+0x100003bc0>
+100002ff0: 40 01 00 36 	tbz	w0, #0, 0x100003018 <_setup_audio+0x440>
+100002ff4: 01 00 00 14 	b	0x100002ff8 <_setup_audio+0x420>
+100002ff8: e9 13 40 f9 	ldr	x9, [sp, #32]
+100002ffc: 68 01 80 52 	mov	w8, #11
+100003000: 28 09 00 b9 	str	w8, [x9, #8]
+100003004: 08 00 00 90 	adrp	x8, 0x100003000 <_setup_audio+0x42c>
+100003008: 08 a1 13 91 	add	x8, x8, #1256
+10000300c: 49 02 00 b0 	adrp	x9, 0x10004c000 <_setup_audio+0x558>
+100003010: 28 19 00 f9 	str	x8, [x9, #48]
+100003014: 15 00 00 14 	b	0x100003068 <_setup_audio+0x490>
+100003018: e0 17 40 f9 	ldr	x0, [sp, #40]
+10000301c: 61 00 80 52 	mov	w1, #3
+100003020: e8 02 00 94 	bl	0x100003bc0 <_vprintf+0x100003bc0>
+100003024: 40 01 00 36 	tbz	w0, #0, 0x10000304c <_setup_audio+0x474>
+100003028: 01 00 00 14 	b	0x10000302c <_setup_audio+0x454>
+10000302c: e9 13 40 f9 	ldr	x9, [sp, #32]
+100003030: 68 00 80 52 	mov	w8, #3
+100003034: 28 09 00 b9 	str	w8, [x9, #8]
+100003038: 49 02 00 b0 	adrp	x9, 0x10004c000 <_setup_audio+0x584>
+10000303c: 08 00 00 90 	adrp	x8, 0x100003000 <_setup_audio+0x464>
+100003040: 08 61 12 91 	add	x8, x8, #1176
+100003044: 28 19 00 f9 	str	x8, [x9, #48]
+100003048: 07 00 00 14 	b	0x100003064 <_setup_audio+0x48c>
+10000304c: 00 00 00 90 	adrp	x0, 0x100003000 <_setup_audio+0x474>
+100003050: 00 f4 38 91 	add	x0, x0, #3645
+100003054: 85 fb ff 97 	bl	0x100001e68 <_write_log>
+100003058: 28 00 80 52 	mov	w8, #1
+10000305c: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100003060: 49 00 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100003064: 01 00 00 14 	b	0x100003068 <_setup_audio+0x490>
+100003068: 01 00 00 14 	b	0x10000306c <_setup_audio+0x494>
+10000306c: 01 00 00 14 	b	0x100003070 <_setup_audio+0x498>
+100003070: e0 13 40 f9 	ldr	x0, [sp, #32]
+100003074: ee 02 00 94 	bl	0x100003c2c <_vprintf+0x100003c2c>
+100003078: a0 43 1c b8 	stur	w0, [x29, #-60]
+10000307c: 08 00 00 71 	subs	w8, w0, #0
+100003080: e8 17 9f 1a 	cset	w8, eq
+100003084: 88 01 00 37 	tbnz	w8, #0, 0x1000030b4 <_setup_audio+0x4dc>
+100003088: 01 00 00 14 	b	0x10000308c <_setup_audio+0x4b4>
+10000308c: a0 43 5c b8 	ldur	w0, [x29, #-60]
+100003090: f0 02 00 94 	bl	0x100003c50 <_vprintf+0x100003c50>
+100003094: e8 03 00 91 	mov	x8, sp
+100003098: 00 01 00 f9 	str	x0, [x8]
+10000309c: 00 00 00 90 	adrp	x0, 0x100003000 <_setup_audio+0x4c4>
+1000030a0: 00 8c 39 91 	add	x0, x0, #3683
+1000030a4: 71 fb ff 97 	bl	0x100001e68 <_write_log>
+1000030a8: 28 00 80 52 	mov	w8, #1
+1000030ac: a8 c3 1f b8 	stur	w8, [x29, #-4]
+1000030b0: 35 00 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+1000030b4: e8 13 40 f9 	ldr	x8, [sp, #32]
+1000030b8: 08 c5 40 b9 	ldr	w8, [x8, #196]
+1000030bc: 08 01 00 71 	subs	w8, w8, #0
+1000030c0: e8 17 9f 1a 	cset	w8, eq
+1000030c4: 68 01 00 37 	tbnz	w8, #0, 0x1000030f0 <_setup_audio+0x518>
+1000030c8: 01 00 00 14 	b	0x1000030cc <_setup_audio+0x4f4>
+1000030cc: e8 13 40 f9 	ldr	x8, [sp, #32]
+1000030d0: 00 c5 40 b9 	ldr	w0, [x8, #196]
+1000030d4: df 02 00 94 	bl	0x100003c50 <_vprintf+0x100003c50>
+1000030d8: e8 03 00 91 	mov	x8, sp
+1000030dc: 00 01 00 f9 	str	x0, [x8]
+1000030e0: 00 00 00 90 	adrp	x0, 0x100003000 <_setup_audio+0x508>
+1000030e4: 00 f4 39 91 	add	x0, x0, #3709
+1000030e8: 60 fb ff 97 	bl	0x100001e68 <_write_log>
+1000030ec: 01 00 00 14 	b	0x1000030f0 <_setup_audio+0x518>
+1000030f0: e0 13 40 f9 	ldr	x0, [sp, #32]
+1000030f4: d4 02 00 94 	bl	0x100003c44 <_vprintf+0x100003c44>
+1000030f8: a0 43 1c b8 	stur	w0, [x29, #-60]
+1000030fc: 08 00 00 71 	subs	w8, w0, #0
+100003100: e8 17 9f 1a 	cset	w8, eq
+100003104: 88 01 00 37 	tbnz	w8, #0, 0x100003134 <_setup_audio+0x55c>
+100003108: 01 00 00 14 	b	0x10000310c <_setup_audio+0x534>
+10000310c: a0 43 5c b8 	ldur	w0, [x29, #-60]
+100003110: d0 02 00 94 	bl	0x100003c50 <_vprintf+0x100003c50>
+100003114: e8 03 00 91 	mov	x8, sp
+100003118: 00 01 00 f9 	str	x0, [x8]
+10000311c: 00 00 00 90 	adrp	x0, 0x100003000 <_setup_audio+0x544>
+100003120: 00 7c 3a 91 	add	x0, x0, #3743
+100003124: 51 fb ff 97 	bl	0x100001e68 <_write_log>
+100003128: 28 00 80 52 	mov	w8, #1
+10000312c: a8 c3 1f b8 	stur	w8, [x29, #-4]
+100003130: 15 00 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100003134: e8 13 40 f9 	ldr	x8, [sp, #32]
+100003138: 08 41 40 f9 	ldr	x8, [x8, #128]
+10000313c: e9 03 00 91 	mov	x9, sp
+100003140: 28 01 00 f9 	str	x8, [x9]
+100003144: 00 00 00 90 	adrp	x0, 0x100003000 <_setup_audio+0x56c>
+100003148: 00 ec 3a 91 	add	x0, x0, #3771
+10000314c: 47 fb ff 97 	bl	0x100001e68 <_write_log>
+100003150: e8 13 40 f9 	ldr	x8, [sp, #32]
+100003154: 09 0d 40 b9 	ldr	w9, [x8, #12]
+100003158: e8 03 09 aa 	mov	x8, x9
+10000315c: e9 03 00 91 	mov	x9, sp
+100003160: 28 01 00 f9 	str	x8, [x9]
+100003164: 00 00 00 90 	adrp	x0, 0x100003000 <_setup_audio+0x58c>
+100003168: 00 48 3b 91 	add	x0, x0, #3794
+10000316c: 3f fb ff 97 	bl	0x100001e68 <_write_log>
+100003170: 00 00 00 90 	adrp	x0, 0x100003000 <_setup_audio+0x598>
+100003174: 00 04 36 91 	add	x0, x0, #3457
+100003178: 3c fb ff 97 	bl	0x100001e68 <_write_log>
+10000317c: bf c3 1f b8 	stur	wzr, [x29, #-4]
+100003180: 01 00 00 14 	b	0x100003184 <_setup_audio+0x5ac>
+100003184: a0 c3 5f b8 	ldur	w0, [x29, #-4]
+100003188: fd 7b 48 a9 	ldp	x29, x30, [sp, #128]
+10000318c: ff 43 02 91 	add	sp, sp, #144
+100003190: c0 03 5f d6 	ret
+
+0000000100003194 <__write_callback>:
+100003194: ff 43 02 d1 	sub	sp, sp, #144
+100003198: fd 7b 08 a9 	stp	x29, x30, [sp, #128]
+10000319c: fd 03 02 91 	add	x29, sp, #128
+1000031a0: a0 83 1f f8 	stur	x0, [x29, #-8]
+1000031a4: a1 43 1f b8 	stur	w1, [x29, #-12]
+1000031a8: a2 03 1f b8 	stur	w2, [x29, #-16]
+1000031ac: a8 83 5f f8 	ldur	x8, [x29, #-8]
+1000031b0: 01 0d 40 bd 	ldr	s1, [x8, #12]
+1000031b4: 20 40 20 1e 	fmov	s0, s1
+1000031b8: 00 a4 20 0f 	sshll.2d	v0, v0, #0
+1000031bc: 00 d8 61 5e 	scvtf	d0, d0
+1000031c0: a0 83 1e fc 	stur	d0, [x29, #-24]
+1000031c4: a1 83 5e fc 	ldur	d1, [x29, #-24]
+1000031c8: 00 10 6e 1e 	fmov	d0, #1.00000000
+1000031cc: 00 18 61 1e 	fdiv	d0, d0, d1
+1000031d0: a0 03 1e fc 	stur	d0, [x29, #-32]
+1000031d4: a8 83 5f f8 	ldur	x8, [x29, #-8]
+1000031d8: 08 49 40 f9 	ldr	x8, [x8, #144]
+1000031dc: a8 03 1d f8 	stur	x8, [x29, #-48]
+1000031e0: a8 03 5f b8 	ldur	w8, [x29, #-16]
+1000031e4: a8 83 1c b8 	stur	w8, [x29, #-56]
+1000031e8: 01 00 00 14 	b	0x1000031ec <__write_callback+0x58>
+1000031ec: a8 83 5c b8 	ldur	w8, [x29, #-56]
+1000031f0: a2 f3 00 d1 	sub	x2, x29, #60
+1000031f4: a8 43 1c b8 	stur	w8, [x29, #-60]
+1000031f8: a0 83 5f f8 	ldur	x0, [x29, #-8]
+1000031fc: a1 a3 00 d1 	sub	x1, x29, #40
+100003200: 7f 02 00 94 	bl	0x100003bfc <_vprintf+0x100003bfc>
+100003204: a0 c3 1c b8 	stur	w0, [x29, #-52]
+100003208: 08 00 00 71 	subs	w8, w0, #0
+10000320c: e8 17 9f 1a 	cset	w8, eq
+100003210: 68 01 00 37 	tbnz	w8, #0, 0x10000323c <__write_callback+0xa8>
+100003214: 01 00 00 14 	b	0x100003218 <__write_callback+0x84>
+100003218: a0 c3 5c b8 	ldur	w0, [x29, #-52]
+10000321c: 8d 02 00 94 	bl	0x100003c50 <_vprintf+0x100003c50>
+100003220: e8 03 00 91 	mov	x8, sp
+100003224: 00 01 00 f9 	str	x0, [x8]
+100003228: 00 00 00 90 	adrp	x0, 0x100003000 <__write_callback+0x94>
+10000322c: 00 a4 3b 91 	add	x0, x0, #3817
+100003230: 0e fb ff 97 	bl	0x100001e68 <_write_log>
+100003234: 20 00 80 52 	mov	w0, #1
+100003238: 14 02 00 94 	bl	0x100003a88 <_vprintf+0x100003a88>
+10000323c: a8 43 5c b8 	ldur	w8, [x29, #-60]
+100003240: 08 01 00 71 	subs	w8, w8, #0
+100003244: e8 07 9f 1a 	cset	w8, ne
+100003248: 68 00 00 37 	tbnz	w8, #0, 0x100003254 <__write_callback+0xc0>
+10000324c: 01 00 00 14 	b	0x100003250 <__write_callback+0xbc>
+100003250: 69 00 00 14 	b	0x1000033f4 <__write_callback+0x260>
+100003254: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100003258: 08 41 00 91 	add	x8, x8, #16
+10000325c: e8 1f 00 f9 	str	x8, [sp, #56]
+100003260: a0 03 5d f8 	ldur	x0, [x29, #-48]
+100003264: a1 43 5c b8 	ldur	w1, [x29, #-60]
+100003268: a0 03 5e fc 	ldur	d0, [x29, #-32]
+10000326c: 01 fa ff 97 	bl	0x100001a70 <_user_ctx_callback>
+100003270: a8 03 5d f8 	ldur	x8, [x29, #-48]
+100003274: 00 81 c1 3c 	ldur	q0, [x8, #24]
+100003278: e0 07 80 3d 	str	q0, [sp, #16]
+10000327c: ff 0f 00 b9 	str	wzr, [sp, #12]
+100003280: 01 00 00 14 	b	0x100003284 <__write_callback+0xf0>
+100003284: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100003288: e9 1f 40 f9 	ldr	x9, [sp, #56]
+10000328c: 29 09 40 b9 	ldr	w9, [x9, #8]
+100003290: 08 01 09 6b 	subs	w8, w8, w9
+100003294: e8 b7 9f 1a 	cset	w8, ge
+100003298: 68 06 00 37 	tbnz	w8, #0, 0x100003364 <__write_callback+0x1d0>
+10000329c: 01 00 00 14 	b	0x1000032a0 <__write_callback+0x10c>
+1000032a0: ff 0b 00 b9 	str	wzr, [sp, #8]
+1000032a4: 01 00 00 14 	b	0x1000032a8 <__write_callback+0x114>
+1000032a8: e8 0b 40 b9 	ldr	w8, [sp, #8]
+1000032ac: a9 43 5c b8 	ldur	w9, [x29, #-60]
+1000032b0: 08 01 09 6b 	subs	w8, w8, w9
+1000032b4: e8 b7 9f 1a 	cset	w8, ge
+1000032b8: c8 04 00 37 	tbnz	w8, #0, 0x100003350 <__write_callback+0x1bc>
+1000032bc: 01 00 00 14 	b	0x1000032c0 <__write_callback+0x12c>
+1000032c0: e8 1f 40 b9 	ldr	w8, [sp, #28]
+1000032c4: e9 0b 40 b9 	ldr	w9, [sp, #8]
+1000032c8: 08 7d 09 1b 	mul	w8, w8, w9
+1000032cc: e9 0f 40 b9 	ldr	w9, [sp, #12]
+1000032d0: 08 01 09 0b 	add	w8, w8, w9
+1000032d4: e8 37 00 b9 	str	w8, [sp, #52]
+1000032d8: e8 0b 40 f9 	ldr	x8, [sp, #16]
+1000032dc: e9 37 80 b9 	ldrsw	x9, [sp, #52]
+1000032e0: 08 79 69 f8 	ldr	x8, [x8, x9, lsl #3]
+1000032e4: e8 17 00 f9 	str	x8, [sp, #40]
+1000032e8: 48 02 00 b0 	adrp	x8, 0x10004c000 <__write_callback+0x278>
+1000032ec: 08 19 40 f9 	ldr	x8, [x8, #48]
+1000032f0: a9 83 5d f8 	ldur	x9, [x29, #-40]
+1000032f4: ea 0f 80 b9 	ldrsw	x10, [sp, #12]
+1000032f8: 4a ed 7c d3 	lsl	x10, x10, #4
+1000032fc: 20 69 6a f8 	ldr	x0, [x9, x10]
+100003300: a9 03 5d f8 	ldur	x9, [x29, #-48]
+100003304: 20 01 40 fd 	ldr	d0, [x9]
+100003308: e1 17 40 fd 	ldr	d1, [sp, #40]
+10000330c: 00 08 61 1e 	fmul	d0, d0, d1
+100003310: 00 01 3f d6 	blr	x8
+100003314: a8 83 5d f8 	ldur	x8, [x29, #-40]
+100003318: e9 0f 80 b9 	ldrsw	x9, [sp, #12]
+10000331c: 08 11 09 8b 	add	x8, x8, x9, lsl #4
+100003320: 0a 09 80 b9 	ldrsw	x10, [x8, #8]
+100003324: a8 83 5d f8 	ldur	x8, [x29, #-40]
+100003328: e9 0f 80 b9 	ldrsw	x9, [sp, #12]
+10000332c: 09 11 09 8b 	add	x9, x8, x9, lsl #4
+100003330: 28 01 40 f9 	ldr	x8, [x9]
+100003334: 08 01 0a 8b 	add	x8, x8, x10
+100003338: 28 01 00 f9 	str	x8, [x9]
+10000333c: 01 00 00 14 	b	0x100003340 <__write_callback+0x1ac>
+100003340: e8 0b 40 b9 	ldr	w8, [sp, #8]
+100003344: 08 05 00 11 	add	w8, w8, #1
+100003348: e8 0b 00 b9 	str	w8, [sp, #8]
+10000334c: d7 ff ff 17 	b	0x1000032a8 <__write_callback+0x114>
+100003350: 01 00 00 14 	b	0x100003354 <__write_callback+0x1c0>
+100003354: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100003358: 08 05 00 11 	add	w8, w8, #1
+10000335c: e8 0f 00 b9 	str	w8, [sp, #12]
+100003360: c9 ff ff 17 	b	0x100003284 <__write_callback+0xf0>
+100003364: 41 fd ff 97 	bl	0x100002868 <_get_time>
+100003368: a8 03 5d f8 	ldur	x8, [x29, #-48]
+10000336c: 00 05 00 fd 	str	d0, [x8, #8]
+100003370: a0 83 5f f8 	ldur	x0, [x29, #-8]
+100003374: 2b 02 00 94 	bl	0x100003c20 <_vprintf+0x100003c20>
+100003378: a0 c3 1c b8 	stur	w0, [x29, #-52]
+10000337c: 08 00 00 71 	subs	w8, w0, #0
+100003380: e8 17 9f 1a 	cset	w8, eq
+100003384: 28 02 00 37 	tbnz	w8, #0, 0x1000033c8 <__write_callback+0x234>
+100003388: 01 00 00 14 	b	0x10000338c <__write_callback+0x1f8>
+10000338c: a8 c3 5c b8 	ldur	w8, [x29, #-52]
+100003390: 08 39 00 71 	subs	w8, w8, #14
+100003394: e8 07 9f 1a 	cset	w8, ne
+100003398: 68 00 00 37 	tbnz	w8, #0, 0x1000033a4 <__write_callback+0x210>
+10000339c: 01 00 00 14 	b	0x1000033a0 <__write_callback+0x20c>
+1000033a0: 1b 00 00 14 	b	0x10000340c <__write_callback+0x278>
+1000033a4: a0 c3 5c b8 	ldur	w0, [x29, #-52]
+1000033a8: 2a 02 00 94 	bl	0x100003c50 <_vprintf+0x100003c50>
+1000033ac: e8 03 00 91 	mov	x8, sp
+1000033b0: 00 01 00 f9 	str	x0, [x8]
+1000033b4: 00 00 00 90 	adrp	x0, 0x100003000 <__write_callback+0x220>
+1000033b8: 00 a4 3b 91 	add	x0, x0, #3817
+1000033bc: ab fa ff 97 	bl	0x100001e68 <_write_log>
+1000033c0: 20 00 80 52 	mov	w0, #1
+1000033c4: b1 01 00 94 	bl	0x100003a88 <_vprintf+0x100003a88>
+1000033c8: a9 43 5c b8 	ldur	w9, [x29, #-60]
+1000033cc: a8 83 5c b8 	ldur	w8, [x29, #-56]
+1000033d0: 08 01 09 6b 	subs	w8, w8, w9
+1000033d4: a8 83 1c b8 	stur	w8, [x29, #-56]
+1000033d8: a8 83 5c b8 	ldur	w8, [x29, #-56]
+1000033dc: 08 01 00 71 	subs	w8, w8, #0
+1000033e0: e8 d7 9f 1a 	cset	w8, gt
+1000033e4: 68 00 00 37 	tbnz	w8, #0, 0x1000033f0 <__write_callback+0x25c>
+1000033e8: 01 00 00 14 	b	0x1000033ec <__write_callback+0x258>
+1000033ec: 02 00 00 14 	b	0x1000033f4 <__write_callback+0x260>
+1000033f0: 7f ff ff 17 	b	0x1000031ec <__write_callback+0x58>
+1000033f4: a0 83 5f f8 	ldur	x0, [x29, #-8]
+1000033f8: 48 02 00 b0 	adrp	x8, 0x10004c000 <_write_sample_s32ne+0x34>
+1000033fc: 08 01 41 39 	ldrb	w8, [x8, #64]
+100003400: 01 01 00 12 	and	w1, w8, #0x1
+100003404: 0d 02 00 94 	bl	0x100003c38 <_vprintf+0x100003c38>
+100003408: 01 00 00 14 	b	0x10000340c <__write_callback+0x278>
+10000340c: fd 7b 48 a9 	ldp	x29, x30, [sp, #128]
+100003410: ff 43 02 91 	add	sp, sp, #144
+100003414: c0 03 5f d6 	ret
+
+0000000100003418 <_underflow_callback>:
+100003418: ff 83 00 d1 	sub	sp, sp, #32
+10000341c: fd 7b 01 a9 	stp	x29, x30, [sp, #16]
+100003420: fd 43 00 91 	add	x29, sp, #16
+100003424: e0 07 00 f9 	str	x0, [sp, #8]
+100003428: 4a 02 00 b0 	adrp	x10, 0x10004c000 <_write_sample_float32ne+0x14>
+10000342c: 49 45 40 b9 	ldr	w9, [x10, #68]
+100003430: e8 03 09 aa 	mov	x8, x9
+100003434: e9 03 08 aa 	mov	x9, x8
+100003438: 29 05 00 11 	add	w9, w9, #1
+10000343c: 49 45 00 b9 	str	w9, [x10, #68]
+100003440: e9 03 00 91 	mov	x9, sp
+100003444: 28 01 00 f9 	str	x8, [x9]
+100003448: 00 00 00 90 	adrp	x0, 0x100003000 <_underflow_callback+0x30>
+10000344c: 00 24 3c 91 	add	x0, x0, #3849
+100003450: 86 fa ff 97 	bl	0x100001e68 <_write_log>
+100003454: fd 7b 41 a9 	ldp	x29, x30, [sp, #16]
+100003458: ff 83 00 91 	add	sp, sp, #32
+10000345c: c0 03 5f d6 	ret
+
+0000000100003460 <_stop_audio>:
+100003460: fd 7b bf a9 	stp	x29, x30, [sp, #-16]!
+100003464: fd 03 00 91 	mov	x29, sp
+100003468: 48 02 00 b0 	adrp	x8, 0x10004c000 <_add_sample_float32ne_w_offset+0x28>
+10000346c: 00 1d 40 f9 	ldr	x0, [x8, #56]
+100003470: e9 01 00 94 	bl	0x100003c14 <_vprintf+0x100003c14>
+100003474: 48 02 00 b0 	adrp	x8, 0x10004c000 <_add_sample_float32ne_w_offset+0x34>
+100003478: 00 15 40 f9 	ldr	x0, [x8, #40]
+10000347c: d4 01 00 94 	bl	0x100003bcc <_vprintf+0x100003bcc>
+100003480: 48 02 00 b0 	adrp	x8, 0x10004c000 <_add_sample_float32ne_w_offset+0x40>
+100003484: 00 11 40 f9 	ldr	x0, [x8, #32]
+100003488: cb 01 00 94 	bl	0x100003bb4 <_vprintf+0x100003bb4>
+10000348c: 00 00 80 52 	mov	w0, #0
+100003490: fd 7b c1 a8 	ldp	x29, x30, [sp], #16
+100003494: c0 03 5f d6 	ret
+
+0000000100003498 <_write_sample_s16ne>:
+100003498: ff c3 00 d1 	sub	sp, sp, #48
+10000349c: e0 17 00 f9 	str	x0, [sp, #40]
+1000034a0: e0 13 00 fd 	str	d0, [sp, #32]
+1000034a4: e8 17 40 f9 	ldr	x8, [sp, #40]
+1000034a8: e8 0f 00 f9 	str	x8, [sp, #24]
+1000034ac: 08 00 00 90 	adrp	x8, 0x100003000 <_write_sample_s16ne+0x14>
+1000034b0: 00 9d 47 fd 	ldr	d0, [x8, #3896]
+1000034b4: e0 0b 00 fd 	str	d0, [sp, #16]
+1000034b8: e0 13 40 fd 	ldr	d0, [sp, #32]
+1000034bc: e1 0b 40 fd 	ldr	d1, [sp, #16]
+1000034c0: 00 08 61 1e 	fmul	d0, d0, d1
+1000034c4: 01 10 60 1e 	fmov	d1, #2.00000000
+1000034c8: 00 18 61 1e 	fdiv	d0, d0, d1
+1000034cc: e0 07 00 fd 	str	d0, [sp, #8]
+1000034d0: e0 07 40 fd 	ldr	d0, [sp, #8]
+1000034d4: 08 00 78 1e 	fcvtzs	w8, d0
+1000034d8: e9 0f 40 f9 	ldr	x9, [sp, #24]
+1000034dc: 28 01 00 79 	strh	w8, [x9]
+1000034e0: ff c3 00 91 	add	sp, sp, #48
+1000034e4: c0 03 5f d6 	ret
+
+00000001000034e8 <_write_sample_s32ne>:
+1000034e8: ff c3 00 d1 	sub	sp, sp, #48
+1000034ec: e0 17 00 f9 	str	x0, [sp, #40]
+1000034f0: e0 13 00 fd 	str	d0, [sp, #32]
+1000034f4: e8 17 40 f9 	ldr	x8, [sp, #40]
+1000034f8: e8 0f 00 f9 	str	x8, [sp, #24]
+1000034fc: 08 00 00 90 	adrp	x8, 0x100003000 <_write_sample_s32ne+0x14>
+100003500: 00 a1 47 fd 	ldr	d0, [x8, #3904]
+100003504: e0 0b 00 fd 	str	d0, [sp, #16]
+100003508: e0 13 40 fd 	ldr	d0, [sp, #32]
+10000350c: e1 0b 40 fd 	ldr	d1, [sp, #16]
+100003510: 00 08 61 1e 	fmul	d0, d0, d1
+100003514: 01 10 60 1e 	fmov	d1, #2.00000000
+100003518: 00 18 61 1e 	fdiv	d0, d0, d1
+10000351c: e0 07 00 fd 	str	d0, [sp, #8]
+100003520: e0 07 40 fd 	ldr	d0, [sp, #8]
+100003524: 08 00 78 1e 	fcvtzs	w8, d0
+100003528: e9 0f 40 f9 	ldr	x9, [sp, #24]
+10000352c: 28 01 00 b9 	str	w8, [x9]
+100003530: ff c3 00 91 	add	sp, sp, #48
+100003534: c0 03 5f d6 	ret
+
+0000000100003538 <_write_sample_float32ne>:
+100003538: ff 83 00 d1 	sub	sp, sp, #32
+10000353c: e0 0f 00 f9 	str	x0, [sp, #24]
+100003540: e0 0b 00 fd 	str	d0, [sp, #16]
+100003544: e8 0f 40 f9 	ldr	x8, [sp, #24]
+100003548: e8 07 00 f9 	str	x8, [sp, #8]
+10000354c: e0 0b 40 fd 	ldr	d0, [sp, #16]
+100003550: 00 40 62 1e 	fcvt	s0, d0
+100003554: e8 07 40 f9 	ldr	x8, [sp, #8]
+100003558: 00 01 00 bd 	str	s0, [x8]
+10000355c: ff 83 00 91 	add	sp, sp, #32
+100003560: c0 03 5f d6 	ret
+
+0000000100003564 <_add_sample_float32ne_w_offset>:
+100003564: ff 83 00 d1 	sub	sp, sp, #32
+100003568: e0 0f 00 f9 	str	x0, [sp, #24]
+10000356c: e1 17 00 b9 	str	w1, [sp, #20]
+100003570: e0 07 00 fd 	str	d0, [sp, #8]
+100003574: e8 0f 40 f9 	ldr	x8, [sp, #24]
+100003578: e9 17 80 b9 	ldrsw	x9, [sp, #20]
+10000357c: 08 01 09 8b 	add	x8, x8, x9
+100003580: e8 03 00 f9 	str	x8, [sp]
+100003584: e1 07 40 fd 	ldr	d1, [sp, #8]
+100003588: e8 03 40 f9 	ldr	x8, [sp]
+10000358c: 00 01 40 bd 	ldr	s0, [x8]
+100003590: 00 c0 22 1e 	fcvt	d0, s0
+100003594: 00 28 61 1e 	fadd	d0, d0, d1
+100003598: 00 40 62 1e 	fcvt	s0, d0
+10000359c: 00 01 00 bd 	str	s0, [x8]
+1000035a0: ff 83 00 91 	add	sp, sp, #32
+1000035a4: c0 03 5f d6 	ret
+
+00000001000035a8 <_write_sample_float64ne>:
+1000035a8: ff 83 00 d1 	sub	sp, sp, #32
+1000035ac: e0 0f 00 f9 	str	x0, [sp, #24]
+1000035b0: e0 0b 00 fd 	str	d0, [sp, #16]
+1000035b4: e8 0f 40 f9 	ldr	x8, [sp, #24]
+1000035b8: e8 07 00 f9 	str	x8, [sp, #8]
+1000035bc: e8 0b 40 f9 	ldr	x8, [sp, #16]
+1000035c0: e9 07 40 f9 	ldr	x9, [sp, #8]
+1000035c4: 28 01 00 f9 	str	x8, [x9]
+1000035c8: ff 83 00 91 	add	sp, sp, #32
+1000035cc: c0 03 5f d6 	ret
+
+00000001000035d0 <_new_signal>:
+1000035d0: ff 03 01 d1 	sub	sp, sp, #64
+1000035d4: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+1000035d8: fd c3 00 91 	add	x29, sp, #48
+1000035dc: a0 c3 1e b8 	stur	w0, [x29, #-20]
+1000035e0: a9 c3 9e b8 	ldursw	x9, [x29, #-20]
+1000035e4: 08 01 80 d2 	mov	x8, #8
+1000035e8: 00 7d 09 9b 	mul	x0, x8, x9
+1000035ec: 3f 01 00 94 	bl	0x100003ae8 <_vprintf+0x100003ae8>
+1000035f0: e0 0b 00 f9 	str	x0, [sp, #16]
+1000035f4: ff 0f 00 b9 	str	wzr, [sp, #12]
+1000035f8: 01 00 00 14 	b	0x1000035fc <_new_signal+0x2c>
+1000035fc: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100003600: a9 c3 5e b8 	ldur	w9, [x29, #-20]
+100003604: 08 01 09 6b 	subs	w8, w8, w9
+100003608: e8 b7 9f 1a 	cset	w8, ge
+10000360c: 68 01 00 37 	tbnz	w8, #0, 0x100003638 <_new_signal+0x68>
+100003610: 01 00 00 14 	b	0x100003614 <_new_signal+0x44>
+100003614: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100003618: e9 0f 80 b9 	ldrsw	x9, [sp, #12]
+10000361c: 00 e4 00 2f 	movi	d0, #0000000000000000
+100003620: 00 79 29 fc 	str	d0, [x8, x9, lsl #3]
+100003624: 01 00 00 14 	b	0x100003628 <_new_signal+0x58>
+100003628: e8 0f 40 b9 	ldr	w8, [sp, #12]
+10000362c: 08 05 00 11 	add	w8, w8, #1
+100003630: e8 0f 00 b9 	str	w8, [sp, #12]
+100003634: f2 ff ff 17 	b	0x1000035fc <_new_signal+0x2c>
+100003638: e8 0b 40 f9 	ldr	x8, [sp, #16]
+10000363c: a8 03 1f f8 	stur	x8, [x29, #-16]
+100003640: a8 c3 5e b8 	ldur	w8, [x29, #-20]
+100003644: a8 83 1f b8 	stur	w8, [x29, #-8]
+100003648: bf c3 1f b8 	stur	wzr, [x29, #-4]
+10000364c: a0 03 5f f8 	ldur	x0, [x29, #-16]
+100003650: a1 83 5f f8 	ldur	x1, [x29, #-8]
+100003654: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+100003658: ff 03 01 91 	add	sp, sp, #64
+10000365c: c0 03 5f d6 	ret
+
+0000000100003660 <_new_signal_heap>:
+100003660: ff c3 00 d1 	sub	sp, sp, #48
+100003664: fd 7b 02 a9 	stp	x29, x30, [sp, #32]
+100003668: fd 83 00 91 	add	x29, sp, #32
+10000366c: a0 c3 1f b8 	stur	w0, [x29, #-4]
+100003670: a1 83 1f b8 	stur	w1, [x29, #-8]
+100003674: a1 c3 9f b8 	ldursw	x1, [x29, #-4]
+100003678: 00 01 80 d2 	mov	x0, #8
+10000367c: fd 00 00 94 	bl	0x100003a70 <_vprintf+0x100003a70>
+100003680: e0 0b 00 f9 	str	x0, [sp, #16]
+100003684: 00 02 80 d2 	mov	x0, #16
+100003688: 18 01 00 94 	bl	0x100003ae8 <_vprintf+0x100003ae8>
+10000368c: e0 07 00 f9 	str	x0, [sp, #8]
+100003690: e8 0b 40 f9 	ldr	x8, [sp, #16]
+100003694: e9 07 40 f9 	ldr	x9, [sp, #8]
+100003698: 28 01 00 f9 	str	x8, [x9]
+10000369c: a8 c3 5f b8 	ldur	w8, [x29, #-4]
+1000036a0: e9 07 40 f9 	ldr	x9, [sp, #8]
+1000036a4: 28 09 00 b9 	str	w8, [x9, #8]
+1000036a8: a8 83 5f b8 	ldur	w8, [x29, #-8]
+1000036ac: e9 07 40 f9 	ldr	x9, [sp, #8]
+1000036b0: 28 0d 00 b9 	str	w8, [x9, #12]
+1000036b4: e0 07 40 f9 	ldr	x0, [sp, #8]
+1000036b8: fd 7b 42 a9 	ldp	x29, x30, [sp, #32]
+1000036bc: ff c3 00 91 	add	sp, sp, #48
+1000036c0: c0 03 5f d6 	ret
+
+00000001000036c4 <_new_signal_heap_default>:
+1000036c4: ff 03 01 d1 	sub	sp, sp, #64
+1000036c8: fd 7b 03 a9 	stp	x29, x30, [sp, #48]
+1000036cc: fd c3 00 91 	add	x29, sp, #48
+1000036d0: a0 c3 1f b8 	stur	w0, [x29, #-4]
+1000036d4: a1 83 1f b8 	stur	w1, [x29, #-8]
+1000036d8: a0 03 1f fc 	stur	d0, [x29, #-16]
+1000036dc: a9 c3 9f b8 	ldursw	x9, [x29, #-4]
+1000036e0: 08 01 80 d2 	mov	x8, #8
+1000036e4: 00 7d 09 9b 	mul	x0, x8, x9
+1000036e8: 00 01 00 94 	bl	0x100003ae8 <_vprintf+0x100003ae8>
+1000036ec: e0 0f 00 f9 	str	x0, [sp, #24]
+1000036f0: ff 17 00 b9 	str	wzr, [sp, #20]
+1000036f4: 01 00 00 14 	b	0x1000036f8 <_new_signal_heap_default+0x34>
+1000036f8: e8 17 40 b9 	ldr	w8, [sp, #20]
+1000036fc: a9 c3 5f b8 	ldur	w9, [x29, #-4]
+100003700: 08 01 09 6b 	subs	w8, w8, w9
+100003704: e8 b7 9f 1a 	cset	w8, ge
+100003708: 68 01 00 37 	tbnz	w8, #0, 0x100003734 <_new_signal_heap_default+0x70>
+10000370c: 01 00 00 14 	b	0x100003710 <_new_signal_heap_default+0x4c>
+100003710: a8 03 5f f8 	ldur	x8, [x29, #-16]
+100003714: e9 0f 40 f9 	ldr	x9, [sp, #24]
+100003718: ea 17 80 b9 	ldrsw	x10, [sp, #20]
+10000371c: 28 79 2a f8 	str	x8, [x9, x10, lsl #3]
+100003720: 01 00 00 14 	b	0x100003724 <_new_signal_heap_default+0x60>
+100003724: e8 17 40 b9 	ldr	w8, [sp, #20]
+100003728: 08 05 00 11 	add	w8, w8, #1
+10000372c: e8 17 00 b9 	str	w8, [sp, #20]
+100003730: f2 ff ff 17 	b	0x1000036f8 <_new_signal_heap_default+0x34>
+100003734: 00 02 80 d2 	mov	x0, #16
+100003738: ec 00 00 94 	bl	0x100003ae8 <_vprintf+0x100003ae8>
+10000373c: e0 07 00 f9 	str	x0, [sp, #8]
+100003740: e8 0f 40 f9 	ldr	x8, [sp, #24]
+100003744: e9 07 40 f9 	ldr	x9, [sp, #8]
+100003748: 28 01 00 f9 	str	x8, [x9]
+10000374c: a8 c3 5f b8 	ldur	w8, [x29, #-4]
+100003750: e9 07 40 f9 	ldr	x9, [sp, #8]
+100003754: 28 09 00 b9 	str	w8, [x9, #8]
+100003758: e0 07 40 f9 	ldr	x0, [sp, #8]
+10000375c: fd 7b 43 a9 	ldp	x29, x30, [sp, #48]
+100003760: ff 03 01 91 	add	sp, sp, #64
+100003764: c0 03 5f d6 	ret
+
+0000000100003768 <_set_signal>:
+100003768: ff 83 00 d1 	sub	sp, sp, #32
+10000376c: e0 0b 00 f9 	str	x0, [sp, #16]
+100003770: e1 0f 00 f9 	str	x1, [sp, #24]
+100003774: e0 07 00 fd 	str	d0, [sp, #8]
+100003778: ff 07 00 b9 	str	wzr, [sp, #4]
+10000377c: 01 00 00 14 	b	0x100003780 <_set_signal+0x18>
+100003780: e8 07 40 b9 	ldr	w8, [sp, #4]
+100003784: e9 1b 40 b9 	ldr	w9, [sp, #24]
+100003788: 08 01 09 6b 	subs	w8, w8, w9
+10000378c: e8 b7 9f 1a 	cset	w8, ge
+100003790: 68 01 00 37 	tbnz	w8, #0, 0x1000037bc <_set_signal+0x54>
+100003794: 01 00 00 14 	b	0x100003798 <_set_signal+0x30>
+100003798: e8 07 40 f9 	ldr	x8, [sp, #8]
+10000379c: e9 0b 40 f9 	ldr	x9, [sp, #16]
+1000037a0: ea 07 80 b9 	ldrsw	x10, [sp, #4]
+1000037a4: 28 79 2a f8 	str	x8, [x9, x10, lsl #3]
+1000037a8: 01 00 00 14 	b	0x1000037ac <_set_signal+0x44>
+1000037ac: e8 07 40 b9 	ldr	w8, [sp, #4]
+1000037b0: 08 05 00 11 	add	w8, w8, #1
+1000037b4: e8 07 00 b9 	str	w8, [sp, #4]
+1000037b8: f2 ff ff 17 	b	0x100003780 <_set_signal+0x18>
+1000037bc: ff 83 00 91 	add	sp, sp, #32
+1000037c0: c0 03 5f d6 	ret
+
+00000001000037c4 <_set_signal_ramp>:
+1000037c4: ff 83 00 d1 	sub	sp, sp, #32
+1000037c8: e0 0b 00 f9 	str	x0, [sp, #16]
+1000037cc: e1 0f 00 f9 	str	x1, [sp, #24]
+1000037d0: e0 07 00 fd 	str	d0, [sp, #8]
+1000037d4: e2 07 00 b9 	str	w2, [sp, #4]
+1000037d8: ff 03 00 b9 	str	wzr, [sp]
+1000037dc: 01 00 00 14 	b	0x1000037e0 <_set_signal_ramp+0x1c>
+1000037e0: e8 03 40 b9 	ldr	w8, [sp]
+1000037e4: e9 1b 40 b9 	ldr	w9, [sp, #24]
+1000037e8: 08 01 09 6b 	subs	w8, w8, w9
+1000037ec: e8 b7 9f 1a 	cset	w8, ge
+1000037f0: 68 01 00 37 	tbnz	w8, #0, 0x10000381c <_set_signal_ramp+0x58>
+1000037f4: 01 00 00 14 	b	0x1000037f8 <_set_signal_ramp+0x34>
+1000037f8: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000037fc: e9 0b 40 f9 	ldr	x9, [sp, #16]
+100003800: ea 03 80 b9 	ldrsw	x10, [sp]
+100003804: 28 79 2a f8 	str	x8, [x9, x10, lsl #3]
+100003808: 01 00 00 14 	b	0x10000380c <_set_signal_ramp+0x48>
+10000380c: e8 03 40 b9 	ldr	w8, [sp]
+100003810: 08 05 00 11 	add	w8, w8, #1
+100003814: e8 03 00 b9 	str	w8, [sp]
+100003818: f2 ff ff 17 	b	0x1000037e0 <_set_signal_ramp+0x1c>
+10000381c: ff 83 00 91 	add	sp, sp, #32
+100003820: c0 03 5f d6 	ret
+
+0000000100003824 <_signal_write>:
+100003824: ff 83 00 d1 	sub	sp, sp, #32
+100003828: e0 0f 00 f9 	str	x0, [sp, #24]
+10000382c: e1 17 00 b9 	str	w1, [sp, #20]
+100003830: e0 07 00 fd 	str	d0, [sp, #8]
+100003834: e8 07 40 f9 	ldr	x8, [sp, #8]
+100003838: e9 0f 40 f9 	ldr	x9, [sp, #24]
+10000383c: 29 01 40 f9 	ldr	x9, [x9]
+100003840: ea 17 80 b9 	ldrsw	x10, [sp, #20]
+100003844: 28 79 2a f8 	str	x8, [x9, x10, lsl #3]
+100003848: ff 83 00 91 	add	sp, sp, #32
+10000384c: c0 03 5f d6 	ret
+
+0000000100003850 <_init_signal>:
+100003850: ff c3 00 d1 	sub	sp, sp, #48
+100003854: fd 7b 02 a9 	stp	x29, x30, [sp, #32]
+100003858: fd 83 00 91 	add	x29, sp, #32
+10000385c: a0 83 1f f8 	stur	x0, [x29, #-8]
+100003860: a1 43 1f b8 	stur	w1, [x29, #-12]
+100003864: e0 07 00 fd 	str	d0, [sp, #8]
+100003868: 08 40 80 52 	mov	w8, #512
+10000386c: e8 07 00 b9 	str	w8, [sp, #4]
+100003870: e9 07 80 b9 	ldrsw	x9, [sp, #4]
+100003874: 08 01 80 d2 	mov	x8, #8
+100003878: 00 7d 09 9b 	mul	x0, x8, x9
+10000387c: 9b 00 00 94 	bl	0x100003ae8 <_vprintf+0x100003ae8>
+100003880: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100003884: 00 01 00 f9 	str	x0, [x8]
+100003888: ff 03 00 b9 	str	wzr, [sp]
+10000388c: 01 00 00 14 	b	0x100003890 <_init_signal+0x40>
+100003890: e8 03 40 b9 	ldr	w8, [sp]
+100003894: e9 07 40 b9 	ldr	w9, [sp, #4]
+100003898: 08 01 09 6b 	subs	w8, w8, w9
+10000389c: e8 b7 9f 1a 	cset	w8, ge
+1000038a0: 88 01 00 37 	tbnz	w8, #0, 0x1000038d0 <_init_signal+0x80>
+1000038a4: 01 00 00 14 	b	0x1000038a8 <_init_signal+0x58>
+1000038a8: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000038ac: a9 83 5f f8 	ldur	x9, [x29, #-8]
+1000038b0: 29 01 40 f9 	ldr	x9, [x9]
+1000038b4: ea 03 80 b9 	ldrsw	x10, [sp]
+1000038b8: 28 79 2a f8 	str	x8, [x9, x10, lsl #3]
+1000038bc: 01 00 00 14 	b	0x1000038c0 <_init_signal+0x70>
+1000038c0: e8 03 40 b9 	ldr	w8, [sp]
+1000038c4: 08 05 00 11 	add	w8, w8, #1
+1000038c8: e8 03 00 b9 	str	w8, [sp]
+1000038cc: f1 ff ff 17 	b	0x100003890 <_init_signal+0x40>
+1000038d0: e8 07 40 b9 	ldr	w8, [sp, #4]
+1000038d4: a9 83 5f f8 	ldur	x9, [x29, #-8]
+1000038d8: 28 09 00 b9 	str	w8, [x9, #8]
+1000038dc: fd 7b 42 a9 	ldp	x29, x30, [sp, #32]
+1000038e0: ff c3 00 91 	add	sp, sp, #48
+1000038e4: c0 03 5f d6 	ret
+
+00000001000038e8 <_init_out_signal>:
+1000038e8: ff c3 00 d1 	sub	sp, sp, #48
+1000038ec: fd 7b 02 a9 	stp	x29, x30, [sp, #32]
+1000038f0: fd 83 00 91 	add	x29, sp, #32
+1000038f4: a0 83 1f f8 	stur	x0, [x29, #-8]
+1000038f8: a1 43 1f b8 	stur	w1, [x29, #-12]
+1000038fc: e2 13 00 b9 	str	w2, [sp, #16]
+100003900: 08 40 80 52 	mov	w8, #512
+100003904: e8 0f 00 b9 	str	w8, [sp, #12]
+100003908: e9 0f 80 b9 	ldrsw	x9, [sp, #12]
+10000390c: 08 01 80 d2 	mov	x8, #8
+100003910: 08 7d 09 9b 	mul	x8, x8, x9
+100003914: e9 13 80 b9 	ldrsw	x9, [sp, #16]
+100003918: 00 7d 09 9b 	mul	x0, x8, x9
+10000391c: 73 00 00 94 	bl	0x100003ae8 <_vprintf+0x100003ae8>
+100003920: a8 83 5f f8 	ldur	x8, [x29, #-8]
+100003924: 00 01 00 f9 	str	x0, [x8]
+100003928: ff 0b 00 b9 	str	wzr, [sp, #8]
+10000392c: 01 00 00 14 	b	0x100003930 <_init_out_signal+0x48>
+100003930: e8 0b 40 b9 	ldr	w8, [sp, #8]
+100003934: e9 0f 40 b9 	ldr	w9, [sp, #12]
+100003938: 08 01 09 6b 	subs	w8, w8, w9
+10000393c: e8 b7 9f 1a 	cset	w8, ge
+100003940: 88 01 00 37 	tbnz	w8, #0, 0x100003970 <_init_out_signal+0x88>
+100003944: 01 00 00 14 	b	0x100003948 <_init_out_signal+0x60>
+100003948: a8 83 5f f8 	ldur	x8, [x29, #-8]
+10000394c: 08 01 40 f9 	ldr	x8, [x8]
+100003950: e9 0b 80 b9 	ldrsw	x9, [sp, #8]
+100003954: 00 e4 00 2f 	movi	d0, #0000000000000000
+100003958: 00 79 29 fc 	str	d0, [x8, x9, lsl #3]
+10000395c: 01 00 00 14 	b	0x100003960 <_init_out_signal+0x78>
+100003960: e8 0b 40 b9 	ldr	w8, [sp, #8]
+100003964: 08 05 00 11 	add	w8, w8, #1
+100003968: e8 0b 00 b9 	str	w8, [sp, #8]
+10000396c: f1 ff ff 17 	b	0x100003930 <_init_out_signal+0x48>
+100003970: e8 0f 40 b9 	ldr	w8, [sp, #12]
+100003974: a9 83 5f f8 	ldur	x9, [x29, #-8]
+100003978: 28 09 00 b9 	str	w8, [x9, #8]
+10000397c: e8 13 40 b9 	ldr	w8, [sp, #16]
+100003980: a9 83 5f f8 	ldur	x9, [x29, #-8]
+100003984: 28 0d 00 b9 	str	w8, [x9, #12]
+100003988: fd 7b 42 a9 	ldp	x29, x30, [sp, #32]
+10000398c: ff c3 00 91 	add	sp, sp, #48
+100003990: c0 03 5f d6 	ret
+
+0000000100003994 <_unwrap>:
+100003994: ff 83 00 d1 	sub	sp, sp, #32
+100003998: e0 07 00 f9 	str	x0, [sp, #8]
+10000399c: e1 0b 00 f9 	str	x1, [sp, #16]
+1000039a0: e2 07 00 b9 	str	w2, [sp, #4]
+1000039a4: e8 13 40 b9 	ldr	w8, [sp, #16]
+1000039a8: 08 05 00 71 	subs	w8, w8, #1
+1000039ac: e8 07 9f 1a 	cset	w8, ne
+1000039b0: c8 00 00 37 	tbnz	w8, #0, 0x1000039c8 <_unwrap+0x34>
+1000039b4: 01 00 00 14 	b	0x1000039b8 <_unwrap+0x24>
+1000039b8: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000039bc: 08 01 40 f9 	ldr	x8, [x8]
+1000039c0: e8 0f 00 f9 	str	x8, [sp, #24]
+1000039c4: 0a 00 00 14 	b	0x1000039ec <_unwrap+0x58>
+1000039c8: e8 07 40 f9 	ldr	x8, [sp, #8]
+1000039cc: e9 07 40 b9 	ldr	w9, [sp, #4]
+1000039d0: eb 13 40 b9 	ldr	w11, [sp, #16]
+1000039d4: 2a 0d cb 1a 	sdiv	w10, w9, w11
+1000039d8: 4a 7d 0b 1b 	mul	w10, w10, w11
+1000039dc: 29 01 0a 6b 	subs	w9, w9, w10
+1000039e0: 08 d9 69 f8 	ldr	x8, [x8, w9, sxtw #3]
+1000039e4: e8 0f 00 f9 	str	x8, [sp, #24]
+1000039e8: 01 00 00 14 	b	0x1000039ec <_unwrap+0x58>
+1000039ec: e0 0f 40 fd 	ldr	d0, [sp, #24]
+1000039f0: ff 83 00 91 	add	sp, sp, #32
+1000039f4: c0 03 5f d6 	ret
+
+00000001000039f8 <_sample_idx>:
+1000039f8: ff 83 00 d1 	sub	sp, sp, #32
+1000039fc: e0 0b 00 f9 	str	x0, [sp, #16]
+100003a00: e1 0f 00 f9 	str	x1, [sp, #24]
+100003a04: e2 0f 00 b9 	str	w2, [sp, #12]
+100003a08: e3 0b 00 b9 	str	w3, [sp, #8]
+100003a0c: e8 1f 40 b9 	ldr	w8, [sp, #28]
+100003a10: e9 0f 40 b9 	ldr	w9, [sp, #12]
+100003a14: 08 7d 09 1b 	mul	w8, w8, w9
+100003a18: e9 0b 40 b9 	ldr	w9, [sp, #8]
+100003a1c: 00 01 09 0b 	add	w0, w8, w9
+100003a20: ff 83 00 91 	add	sp, sp, #32
+100003a24: c0 03 5f d6 	ret
+
+Disassembly of section __TEXT,__stubs:
+
+0000000100003a28 <__stubs>:
+100003a28: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x4>
+100003a2c: 10 02 40 f9 	ldr	x16, [x16]
+100003a30: 00 02 1f d6 	br	x16
+100003a34: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x10>
+100003a38: 10 06 40 f9 	ldr	x16, [x16, #8]
+100003a3c: 00 02 1f d6 	br	x16
+100003a40: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1c>
+100003a44: 10 0a 40 f9 	ldr	x16, [x16, #16]
+100003a48: 00 02 1f d6 	br	x16
+100003a4c: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x28>
+100003a50: 10 0e 40 f9 	ldr	x16, [x16, #24]
+100003a54: 00 02 1f d6 	br	x16
+100003a58: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x34>
+100003a5c: 10 12 40 f9 	ldr	x16, [x16, #32]
+100003a60: 00 02 1f d6 	br	x16
+100003a64: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x40>
+100003a68: 10 16 40 f9 	ldr	x16, [x16, #40]
+100003a6c: 00 02 1f d6 	br	x16
+100003a70: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x4c>
+100003a74: 10 1a 40 f9 	ldr	x16, [x16, #48]
+100003a78: 00 02 1f d6 	br	x16
+100003a7c: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x58>
+100003a80: 10 1e 40 f9 	ldr	x16, [x16, #56]
+100003a84: 00 02 1f d6 	br	x16
+100003a88: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x64>
+100003a8c: 10 22 40 f9 	ldr	x16, [x16, #64]
+100003a90: 00 02 1f d6 	br	x16
+100003a94: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x70>
+100003a98: 10 26 40 f9 	ldr	x16, [x16, #72]
+100003a9c: 00 02 1f d6 	br	x16
+100003aa0: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x7c>
+100003aa4: 10 2a 40 f9 	ldr	x16, [x16, #80]
+100003aa8: 00 02 1f d6 	br	x16
+100003aac: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x88>
+100003ab0: 10 2e 40 f9 	ldr	x16, [x16, #88]
+100003ab4: 00 02 1f d6 	br	x16
+100003ab8: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x94>
+100003abc: 10 32 40 f9 	ldr	x16, [x16, #96]
+100003ac0: 00 02 1f d6 	br	x16
+100003ac4: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0xa0>
+100003ac8: 10 36 40 f9 	ldr	x16, [x16, #104]
+100003acc: 00 02 1f d6 	br	x16
+100003ad0: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0xac>
+100003ad4: 10 3a 40 f9 	ldr	x16, [x16, #112]
+100003ad8: 00 02 1f d6 	br	x16
+100003adc: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0xb8>
+100003ae0: 10 3e 40 f9 	ldr	x16, [x16, #120]
+100003ae4: 00 02 1f d6 	br	x16
+100003ae8: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0xc4>
+100003aec: 10 42 40 f9 	ldr	x16, [x16, #128]
+100003af0: 00 02 1f d6 	br	x16
+100003af4: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0xd0>
+100003af8: 10 46 40 f9 	ldr	x16, [x16, #136]
+100003afc: 00 02 1f d6 	br	x16
+100003b00: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0xdc>
+100003b04: 10 4a 40 f9 	ldr	x16, [x16, #144]
+100003b08: 00 02 1f d6 	br	x16
+100003b0c: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0xe8>
+100003b10: 10 4e 40 f9 	ldr	x16, [x16, #152]
+100003b14: 00 02 1f d6 	br	x16
+100003b18: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0xf4>
+100003b1c: 10 52 40 f9 	ldr	x16, [x16, #160]
+100003b20: 00 02 1f d6 	br	x16
+100003b24: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x100>
+100003b28: 10 56 40 f9 	ldr	x16, [x16, #168]
+100003b2c: 00 02 1f d6 	br	x16
+100003b30: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x10c>
+100003b34: 10 5a 40 f9 	ldr	x16, [x16, #176]
+100003b38: 00 02 1f d6 	br	x16
+100003b3c: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x118>
+100003b40: 10 5e 40 f9 	ldr	x16, [x16, #184]
+100003b44: 00 02 1f d6 	br	x16
+100003b48: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x124>
+100003b4c: 10 62 40 f9 	ldr	x16, [x16, #192]
+100003b50: 00 02 1f d6 	br	x16
+100003b54: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x130>
+100003b58: 10 66 40 f9 	ldr	x16, [x16, #200]
+100003b5c: 00 02 1f d6 	br	x16
+100003b60: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x13c>
+100003b64: 10 6a 40 f9 	ldr	x16, [x16, #208]
+100003b68: 00 02 1f d6 	br	x16
+100003b6c: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x148>
+100003b70: 10 6e 40 f9 	ldr	x16, [x16, #216]
+100003b74: 00 02 1f d6 	br	x16
+100003b78: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x154>
+100003b7c: 10 72 40 f9 	ldr	x16, [x16, #224]
+100003b80: 00 02 1f d6 	br	x16
+100003b84: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x160>
+100003b88: 10 76 40 f9 	ldr	x16, [x16, #232]
+100003b8c: 00 02 1f d6 	br	x16
+100003b90: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x16c>
+100003b94: 10 7a 40 f9 	ldr	x16, [x16, #240]
+100003b98: 00 02 1f d6 	br	x16
+100003b9c: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x178>
+100003ba0: 10 7e 40 f9 	ldr	x16, [x16, #248]
+100003ba4: 00 02 1f d6 	br	x16
+100003ba8: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x184>
+100003bac: 10 82 40 f9 	ldr	x16, [x16, #256]
+100003bb0: 00 02 1f d6 	br	x16
+100003bb4: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x190>
+100003bb8: 10 86 40 f9 	ldr	x16, [x16, #264]
+100003bbc: 00 02 1f d6 	br	x16
+100003bc0: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x19c>
+100003bc4: 10 8a 40 f9 	ldr	x16, [x16, #272]
+100003bc8: 00 02 1f d6 	br	x16
+100003bcc: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1a8>
+100003bd0: 10 8e 40 f9 	ldr	x16, [x16, #280]
+100003bd4: 00 02 1f d6 	br	x16
+100003bd8: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1b4>
+100003bdc: 10 92 40 f9 	ldr	x16, [x16, #288]
+100003be0: 00 02 1f d6 	br	x16
+100003be4: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1c0>
+100003be8: 10 96 40 f9 	ldr	x16, [x16, #296]
+100003bec: 00 02 1f d6 	br	x16
+100003bf0: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1cc>
+100003bf4: 10 9a 40 f9 	ldr	x16, [x16, #304]
+100003bf8: 00 02 1f d6 	br	x16
+100003bfc: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1d8>
+100003c00: 10 9e 40 f9 	ldr	x16, [x16, #312]
+100003c04: 00 02 1f d6 	br	x16
+100003c08: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1e4>
+100003c0c: 10 a2 40 f9 	ldr	x16, [x16, #320]
+100003c10: 00 02 1f d6 	br	x16
+100003c14: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1f0>
+100003c18: 10 a6 40 f9 	ldr	x16, [x16, #328]
+100003c1c: 00 02 1f d6 	br	x16
+100003c20: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x1fc>
+100003c24: 10 aa 40 f9 	ldr	x16, [x16, #336]
+100003c28: 00 02 1f d6 	br	x16
+100003c2c: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x208>
+100003c30: 10 ae 40 f9 	ldr	x16, [x16, #344]
+100003c34: 00 02 1f d6 	br	x16
+100003c38: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x214>
+100003c3c: 10 b2 40 f9 	ldr	x16, [x16, #352]
+100003c40: 00 02 1f d6 	br	x16
+100003c44: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x220>
+100003c48: 10 b6 40 f9 	ldr	x16, [x16, #360]
+100003c4c: 00 02 1f d6 	br	x16
+100003c50: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x22c>
+100003c54: 10 ba 40 f9 	ldr	x16, [x16, #368]
+100003c58: 00 02 1f d6 	br	x16
+100003c5c: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x238>
+100003c60: 10 be 40 f9 	ldr	x16, [x16, #376]
+100003c64: 00 02 1f d6 	br	x16
+100003c68: 10 00 00 b0 	adrp	x16, 0x100004000 <__stubs+0x244>
+100003c6c: 10 c2 40 f9 	ldr	x16, [x16, #384]
+100003c70: 00 02 1f d6 	br	x16

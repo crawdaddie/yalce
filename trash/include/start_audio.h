@@ -9,7 +9,7 @@
 #include <string.h>
 #include <time.h>
 
-int start_audio();
+int setup_audio();
 int stop_audio();
 
 #endif
