@@ -19,12 +19,18 @@ typedef struct Node {
     OUTPUT,
   } type;
 
-  node_perform perform;
-  Signal ins;
-  Signal out;
-  struct Node *next;
   bool killed;
+
+  node_perform perform;
   void *data;
+  Signal *ins;
+  int num_ins;
+
+  Signal *out;
+
+  struct Node *next;
+  struct Node *head;
+  struct Node *tail;
 } Node;
 
 static inline double *get_sig_ptr(Signal sig, int frame, int chan) {
@@ -37,7 +43,6 @@ double random_double();
 double random_double_range(double min, double max);
 
 node_perform noise_perform(Node *node, int nframes, double spf);
-
 
 #define SIN_TABSIZE (1 << 11)
 void maketable_sin(void);
@@ -59,12 +64,12 @@ typedef struct {
 
 node_perform sq_perform(Node *node, int nframes, double spf);
 
-
 typedef struct {
   double phase;
   double target;
   double min;
   double max;
+  double freq;
 } lf_noise_data;
 
 node_perform lf_noise_perform(Node *node, int nframes, double spf);
@@ -74,12 +79,10 @@ typedef struct {
   double target;
   double current;
 } lf_noise_interp_data;
-node_perform lf_noise_interp_perform(Node *node, int nframes,
-                                            double spf);
+node_perform lf_noise_interp_perform(Node *node, int nframes, double spf);
 
 void init_sig_ptrs();
 
-Signal get_sig(int layout);
-Node *node_new(void *data, node_perform *perform, Signal ins,
-                      Signal out);
+Signal *get_sig(int layout);
+Node *node_new(void *data, node_perform *perform, Signal *ins, Signal *out);
 #endif

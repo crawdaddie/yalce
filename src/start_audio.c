@@ -56,16 +56,10 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     for (int channel = 0; channel < layout->channel_count; channel += 1) {
       for (int frame = 0; frame < frame_count; frame += 1) {
 
-
-        
         sample_idx = DAC.layout * frame + channel;
         sample = DAC.data[sample_idx];
 
         write_sample(areas[channel].ptr, ctx->main_vol * sample);
-        // add_osc_scope_buf(frame, sample / OUTPUT_CHANNELS);
-
-        // DAC.data[sample_idx] = 0.0; // zero channel buffer after reading from
-        // it
         areas[channel].ptr += areas[channel].step;
       }
     }

@@ -23,5 +23,5 @@ Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
 
 Ctx *get_audio_ctx();
 Node *ctx_get_tail();
-Node *ctx_add();
+Node *ctx_add(Node *node);
 #endif

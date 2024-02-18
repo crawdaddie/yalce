@@ -1,7 +1,8 @@
-#include "ctx.h" #include < stdlib.h>
+#include "ctx.h"
 #include "common.h"
 #include "node.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 static double output_channel_pool[OUTPUT_CHANNELS][BUF_SIZE * LAYOUT_CHANNELS];
 
@@ -15,13 +16,13 @@ void init_ctx() {
   ctx.dac_buffer.size = BUF_SIZE;
   ctx.dac_buffer.layout = LAYOUT_CHANNELS;
 
-
   ctx.head = NULL;
   tail = ctx.head;
 }
 
 Ctx *get_audio_ctx() { return &ctx; }
 Node *ctx_get_tail() { return tail; }
+
 Node *ctx_add(Node *node) {
   Ctx *ctx = get_audio_ctx();
   // Node *tail = ctx_get_tail();
@@ -32,9 +33,8 @@ Node *ctx_add(Node *node) {
     ctx->head = node;
     tail = node;
   }
-
+  return node;
 }
-
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
   if (ctx->head == NULL) {
@@ -45,8 +45,62 @@ UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
 }
 
 static inline int min(int a, int b) { return (a <= b) ? a : b; }
+
+void write_to_output_buf(Signal *out,
+                        int nframes,
+                        double seconds_per_frame,
+                        Signal *dac_buffer,
+                        int output_num
+                        ) {
+
+  // write output to dac_buffer
+  double *output = out->data;
+  int out_layout = out->layout;
+  if (out_layout >= 2) {
+
+    double *dest = dac_buffer->data;
+    for (int f = 0; f < nframes; f++) {
+      for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
+        if (output_num == 0) {
+          *dest = *output;
+        } else {
+          *dest += *output;
+        }
+        if (ch <= out_layout) {
+          output++;
+        }
+        dest++;
+      }
+    }
+  } else {
+    // double *samps = output->data;
+    double *dest = dac_buffer->data;
+    for (int f = 0; f < nframes; f++) {
+      // printf("write to output from %p\n", output);
+      double samp_val = *output;
+
+      // printf("write output %f\n", samp_val);
+      // TODO: why is this zero????
+      for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
+        if (output_num == 0) {
+          *dest = samp_val;
+        } else {
+          *dest += samp_val;
+        }
+        dest++;
+      }
+      output++;
+    }
+  }
+}
+
 Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
                     Signal *dac_buffer, int output_num) {
+  // printf("perform graph %p\n", head);
+  if (!head) {
+    return NULL;
+  };
+
   if (head->killed) {
     Node *next = head->next;
     if (next) {
@@ -54,51 +108,19 @@ Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
                            output_num);
     }
   }
+  Signal *out = NULL;
+  if (head->head) {
+    Node *tail = perform_graph(head->head, nframes, seconds_per_frame,
+                               dac_buffer, output_num);
+    out = tail->out;
+  }
 
-  if (!head) {
-    return NULL;
-  };
-
-  if (head->perform && !(head->killed)) {
+  if (head->perform) {
     head->perform(head, nframes, seconds_per_frame);
   }
-  if (head->type == OUTPUT) {
-    // write output to dac_buffer
-    Signal output = head->out;
-    int out_layout = output.layout;
-    if (out_layout >= 2) {
-      double *samps = output.data;
-      double samp_val = *samps;
-      double *dest = dac_buffer->data;
-      for (int f = 0; f < nframes; f++) {
-        for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
-          if (output_num == 0) {
-            *dest = *samps;
-          } else {
-            *dest += *samps;
-          }
-          if (ch <= out_layout) {
-            samps++;
-          }
-          dest++;
-        }
-      }
-    } else {
-      double *samps = output.data;
-      double *dest = dac_buffer->data;
-      for (int f = 0; f < nframes; f++) {
-        double samp_val = *samps;
-        for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
-          if (output_num == 0) {
-            *dest = samp_val;
-          } else {
-            *dest += samp_val;
-          }
-          dest++;
-        }
-        samps++;
-      }
-    }
+
+  if (head->type == OUTPUT && out) {
+    write_to_output_buf(out, nframes, seconds_per_frame, dac_buffer, output_num);
     output_num++;
   }
 

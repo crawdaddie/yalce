@@ -11,7 +11,7 @@ OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
 LDFLAGS = -lsoundio -lm -lsndfile
 FRAMEWORKS =-framework opengl -framework CoreMIDI -framework cocoa
-COMPILER_OPTIONS = -Werror -Wall -Wextra -Iinclude -g -O0
+COMPILER_OPTIONS = -Werror -Wall -Wextra -Iinclude -g
 
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -26,7 +26,7 @@ all: $(TARGET)
 clean:
 	$(RM) -r $(BUILDDIR)
 
-synth: $(OBJS)
+build/synth: $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(COMPILER_OPTIONS)
 
 EXPORT_COMPILER_OPTIONS = -Werror -Wall -Wextra -Iinclude -fPIC

@@ -1,5 +1,6 @@
 #include "write_sample.h"
 #include <stdint.h>
+#include <stdio.h>
 
 void write_sample_s16ne(char *ptr, double sample) {
   int16_t *buf = (int16_t *)ptr;
