@@ -7,6 +7,7 @@ typedef struct {
   double block_time;
   Node *head;
   Signal dac_buffer;
+  int SR;
 } Ctx;
 
 double **alloc_buses(int num_buses);

@@ -57,7 +57,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
       for (int frame = 0; frame < frame_count; frame += 1) {
 
         sample_idx = DAC.layout * frame + channel;
-        sample = DAC.data[sample_idx];
+        sample = DAC.buf[sample_idx];
 
         write_sample(areas[channel].ptr, ctx->main_vol * sample);
         areas[channel].ptr += areas[channel].step;
@@ -209,6 +209,7 @@ int start_audio() {
   }
   write_log("Software latency:  %f\n", outstream->software_latency);
   write_log("Sample rate:       %d\n", outstream->sample_rate);
+  ctx.SR = outstream->sample_rate;
 
   write_log("------------------\n");
   return 0;

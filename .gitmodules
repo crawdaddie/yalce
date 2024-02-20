@@ -1,6 +1,3 @@
-[submodule "lib/Unity"]
-	path = lib/Unity
-	url = https://github.com/ThrowTheSwitch/Unity.git
-[submodule "lib/tigr"]
-	path = lib/tigr
-	url = git@github.com:erkkah/tigr.git
+[submodule "raylib"]
+	path = raylib
+	url = git@github.com:raysan5/raylib.git

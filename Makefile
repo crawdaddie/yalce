@@ -9,8 +9,10 @@ SRCS := $(wildcard $(SRCDIR)/*.c)
 
 OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
-LDFLAGS = -lsoundio -lm -lsndfile
+LDFLAGS = -lsoundio -lm -lsndfile -lraylib
 FRAMEWORKS =-framework opengl -framework CoreMIDI -framework cocoa
+# RAYLIB_INCLUDE=/opt/homebrew/include
+# RAYLIB_LIB=/opt/homebrew/lib/
 COMPILER_OPTIONS = -Werror -Wall -Wextra -Iinclude -g
 
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR)
@@ -29,7 +31,9 @@ clean:
 build/synth: $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(COMPILER_OPTIONS)
 
-EXPORT_COMPILER_OPTIONS = -Werror -Wall -Wextra -Iinclude -fPIC
+
+EXPORT_COMPILER_OPTIONS = $(COMPILER_OPTIONS) -fPIC
+
 $(SHARED_LIB_TARGET): $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 	$(CC) -shared -o $@  $^ $(LDFLAGS) $(FRAMEWORKS) $(EXPORT_COMPILER_OPTIONS)
 
