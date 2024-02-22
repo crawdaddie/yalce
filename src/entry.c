@@ -1,7 +1,8 @@
 #include "entry.h"
 #include "common.h"
 #include "node.h"
-#include "raylib.h"
+#include "window.h"
+#include <math.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +27,16 @@ double random_double() {
   // Scale and shift the double to be between -1 and 1
   rand_double = rand_double * 2 - 1;
   return rand_double;
+}
+
+int rand_int(int range) {
+  // Generate a random integer between 0 and RAND_MAX
+  int rand_int = rand();
+  // Scale the integer to a double between 0 and 1
+  double rand_double = (double)rand_int / RAND_MAX;
+  // Scale and shift the double to be between -1 and 1
+  rand_double = rand_double * range;
+  return (int)rand_double;
 }
 
 double random_double_range(double min, double max) {
@@ -202,18 +213,59 @@ Node *tanh_node(double gain, Node *node) {
 
 // ------------------------------------------- FILTERS
 //
+//
+// Process loop (lowpass):
+// out = a0*in - b1*tmp;
+// tmp = out;
+//
+// Coefficient calculation:
+// x = exp(-2.0*pi*freq/samplerate);
+// a0 = 1.0-x;
+// b1 = -x;
+typedef struct {
+  double a0;
+  double b1;
+  double mem;
+} op_lp_state;
+
+static inline void op_lp_perform_tick(op_lp_state *state, double *in,
+                                      double *out) {
+  *out = state->a0 * *in - state->b1 * state->mem;
+  state->mem = *out;
+}
+node_perform op_lp_perform(Node *node, int nframes, double spf) {
+
+  double *in = node->ins->buf;
+  double *out = node->out->buf;
+  op_lp_state *state = node->state;
+  while (nframes--) {
+    op_lp_perform_tick(state, in, out);
+    in++;
+    out++;
+  }
+}
+
+void set_op_lp_params(op_lp_state *state, double freq) {
+  int SR = ctx_sample_rate();
+  double x = exp(-2 * PI * freq / SR);
+  state->a0 = 1.0 - x;
+  state->b1 = -x;
+  state->mem = 0.0;
+}
+
+Node *op_lp_node(double freq, Node *input) {
+  op_lp_state *state = malloc(sizeof(op_lp_state));
+  set_op_lp_params(state, freq);
+  return node_new(state, op_lp_perform, input->out, get_sig(1));
+}
+
 typedef struct {
   double *buf;
+  int buf_size;
   int read_pos;
   int write_pos;
-  int buf_size;
   double fb;
 } comb_state;
-
-static inline void comb_perform_tick(comb_state *state, double *in,
-                                     double *out) {
-  // *out =
-}
 
 node_perform comb_perform(Node *node, int nframes, double spf) {
   double *in = node->ins->buf;
@@ -238,29 +290,224 @@ node_perform comb_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *comb_node(double delay_time, double max_delay_time, double fb,
-                Node *input) {
+void set_comb_params(comb_state *state, double delay_time,
+                     double max_delay_time, double fb) {
   Ctx *ctx = get_audio_ctx();
   int SR = ctx->SR;
-  comb_state *state = malloc(sizeof(comb_state));
+
+  if (delay_time >= max_delay_time) {
+    printf("Error: cannot set delay time %f longer than the max delay time %f",
+           delay_time, max_delay_time);
+    return;
+  }
+
   int buf_size = (int)max_delay_time * SR;
-
-  state->read_pos = buf_size - (int)(delay_time * SR);
-  state->write_pos = 0;
   state->buf_size = buf_size;
-  state->fb = fb;
-
   double *buf = malloc(sizeof(double) * (int)max_delay_time * SR);
   double *b = buf;
-
   while (buf_size--) {
     *b = 0.0;
     b++;
   }
 
   state->buf = buf;
+  state->write_pos = 0;
+
+  int read_pos = state->buf_size - (int)(delay_time * SR);
+  state->read_pos = read_pos;
+  state->fb = fb;
+}
+
+Node *comb_node(double delay_time, double max_delay_time, double fb,
+                Node *input) {
+  comb_state *state = malloc(sizeof(comb_state));
+  set_comb_params(state, delay_time, max_delay_time, fb);
   Node *s = node_new(state, comb_perform, input->out, get_sig(1));
   return s;
+}
+// ------------------------------------------- ALLPASS DELAY
+typedef struct {
+  double *buf;
+  int buf_size;
+  int read_pos;
+  int write_pos;
+} allpass_state;
+
+node_perform allpass_perform(Node *node, int nframes, double spf) {
+  double *in = node->ins->buf;
+  double *out = node->out->buf;
+  allpass_state *state = node->state;
+
+  double *write_ptr = state->buf + state->write_pos;
+  double *read_ptr = state->buf + state->read_pos;
+
+  while (nframes--) {
+    write_ptr = state->buf + state->write_pos;
+    read_ptr = state->buf + state->read_pos;
+    *write_ptr = *in;
+    *out = *in + *read_ptr;
+
+    state->read_pos = (state->read_pos + 1) % state->buf_size;
+    state->write_pos = (state->write_pos + 1) % state->buf_size;
+    in++;
+    out++;
+  }
+}
+void set_allpass_params(allpass_state *state, double delay_time) {
+  Ctx *ctx = get_audio_ctx();
+  int SR = ctx->SR;
+
+  int buf_size = 1 + (int)delay_time * SR;
+  state->buf_size = buf_size;
+  double *buf = malloc(sizeof(double) * buf_size);
+  double *b = buf;
+  while (buf_size--) {
+    *b = 0.0;
+    b++;
+  }
+
+  state->buf = buf;
+  state->write_pos = 0;
+
+  int read_pos = state->buf_size - (int)(delay_time * SR);
+  state->read_pos = read_pos;
+}
+
+Node *allpass_node(double delay_time, double max_delay_time, Node *input) {
+  allpass_state *state = malloc(sizeof(allpass_state));
+  set_allpass_params(state, delay_time);
+  return node_new(state, allpass_perform, input->out, get_sig(1));
+}
+// ------------------------------------------- FREEVERB
+//
+// double comb_delay_lengths[] = {1617, 1557, 1491, 1422, 1356, 1277, 1188,
+// 1116};
+// the original values are optimised for 44100 sample rate
+//
+static double comb_delay_lengths[] = {1760.00, 1694.69, 1622.86,
+                                      1547.76, 1475.92, 1389.93,
+                                      1293.06, 1214.69}; // in milliseconds??
+static double ap_delay_lengths[] = {
+    244.8,
+    605.17,
+    480.0,
+    371.15,
+};
+
+static int stereo_spread = 31;
+
+typedef struct {
+  comb_state parallel_combs[16];
+  op_lp_state comb_lps[16];
+  allpass_state series_ap[8]
+} freeverb_state;
+
+static inline void parallel_comblp_perform(comb_state *state,
+                                           op_lp_state *lp_state, double *in,
+                                           double *out, int comb_num) {
+
+  double *write_ptr = state->buf + state->write_pos;
+  double *read_ptr = state->buf + state->read_pos;
+  double del_val = *in + *read_ptr;
+
+  if (comb_num == 0) {
+    *out = del_val;
+  } else {
+    *out += del_val;
+  }
+
+  *write_ptr = state->fb * (*out);
+
+  state->read_pos = (state->read_pos + 1) % state->buf_size;
+  state->write_pos = (state->write_pos + 1) % state->buf_size;
+}
+
+static inline void allpass_perform_tick(allpass_state *state, double in,
+                                        double *out) {
+  int size = state->buf_size;
+
+  double *write_ptr = state->buf + state->write_pos;
+  double *read_ptr = state->buf + state->read_pos;
+
+  *write_ptr = in;
+  *out = in + *read_ptr;
+
+  state->write_pos = (state->write_pos + 1 % size);
+  state->read_pos = (state->read_pos + 1 % size);
+}
+
+node_perform freeverb_perform(Node *node, int nframes, double spf) {
+  double *in = node->ins->buf;
+  double *out = node->out->buf;
+  freeverb_state *state = node->state;
+  while (nframes--) {
+    // double parallel_comb_out = 0;
+    int comb = 0;
+
+    double parallel_val = 0.0;
+
+    while (++comb < 8) {
+      comb_state *comb_state = state->parallel_combs + comb;
+      op_lp_state *lp_state = state->comb_lps + comb;
+      parallel_comblp_perform(comb_state, lp_state, in, &parallel_val, comb);
+    }
+    *out = parallel_val / 8.0;
+
+    parallel_val = 0.0;
+    while (++comb < 16) {
+      comb_state *comb_state = state->parallel_combs + comb;
+      op_lp_state *lp_state = state->comb_lps + comb;
+      parallel_comblp_perform(comb_state, lp_state, in, &parallel_val, comb);
+    }
+    *(out + 1) = parallel_val / 8.0;
+
+    for (int i = 0; i < 4; i++) {
+      allpass_state *ap = state->series_ap + i;
+      allpass_perform_tick(ap, *out, out);
+    }
+    out++;
+
+    for (int i = 0; i < 4; i++) {
+      allpass_state *ap = state->series_ap + i + 4;
+      allpass_perform_tick(ap, *out, out);
+    }
+    out++;
+
+    in++;
+  }
+}
+
+Node *freeverb_node(Node *input) {
+
+  freeverb_state *state = malloc(sizeof(freeverb_state));
+  int SR = ctx_sample_rate();
+  for (int i = 0; i < 8; i++) {
+    double len = comb_delay_lengths[i];
+    set_comb_params(state->parallel_combs + i, len / 1000.0, (len + 1) / 1000.0,
+                    0.25 /*comb gain*/
+    );
+    set_op_lp_params(state->comb_lps + i, 100.0);
+  }
+
+  for (int i = 0; i < 8; i++) {
+    double len = comb_delay_lengths[i] + stereo_spread;
+    set_comb_params(state->parallel_combs + i + 8, len / 1000.0,
+                    (len + 1) / 1000.0, 0.25 /*comb gain*/
+    );
+    set_op_lp_params(state->comb_lps + i + 8, 100.0);
+  }
+
+  for (int i = 0; i < 4; i++) {
+    double len = ap_delay_lengths[i];
+    set_allpass_params(state->series_ap + i, len / 1000.0);
+  }
+
+  for (int i = 0; i < 4; i++) {
+    double len = ap_delay_lengths[i] + stereo_spread;
+    set_allpass_params(state->series_ap + i + 4, len / 1000.0);
+  }
+
+  return node_new(state, freeverb_perform, input->out, get_sig(2));
 }
 
 // ------------------------------------------- NOISE UGENS
@@ -288,12 +535,9 @@ node_perform lf_noise_interp_perform(Node *node, int nframes, double spf) {
 
   while (nframes--) {
 
-    // printf("noise: %f %d thresh: %d\n", data->target, (int)data->phase,
-    // trigger_per_ms);
     if ((int)(1000 * state->phase) >= trigger_per_ms) {
       state->phase = 0;
       state->target = random_double_range(60, 120);
-      // printf("noise: %f\n", data->target);
     }
 
     state->phase += spf;
@@ -302,6 +546,48 @@ node_perform lf_noise_interp_perform(Node *node, int nframes, double spf) {
         state->current + 0.000001 * (state->target - state->current);
     out++;
   }
+}
+
+typedef struct {
+  double freq;
+  double phase;
+  double target;
+  double *choices;
+  int size;
+} rand_choice_state;
+
+node_perform rand_choice_perform(Node *node, int nframes, double spf) {
+  rand_choice_state *state = node->state;
+
+  double noise_freq = state->freq;
+  int trigger_per_ms = (int)(1000 / noise_freq);
+  double *out = node->out->buf;
+  // Signal in = node->ins;
+
+  while (nframes--) {
+
+    if ((int)(1000 * state->phase) >= trigger_per_ms) {
+      state->phase = 0;
+      int r = rand_int(state->size);
+      state->target = state->choices[r];
+    }
+
+    state->phase += spf;
+    *out = state->target;
+
+    out++;
+    // in.data++;
+  }
+}
+Node *rand_choice_node(double freq, int size, double *choices) {
+  rand_choice_state *state = malloc(sizeof(rand_choice_state));
+  state->phase = 0.0;
+  state->target = choices[rand_int(size)];
+  state->choices = choices;
+  state->size = size;
+  state->freq = freq;
+
+  return node_new(state, rand_choice_perform, &(Signal){}, get_sig(1));
 }
 
 // ------------------------------ SIGNAL / BUFFER ALLOC
@@ -352,58 +638,27 @@ Node *add_to_chain(Node *chain, Node *node) {
   return node;
 }
 
-void *win(void) {
-  int screen_width = 400;
-  int screen_height = 400;
-  InitWindow(screen_width, screen_height,
-             "raylib [core] example - basic window");
-  Vector2 position[LAYOUT_CHANNELS] = {0, 0};
-  // double prev_pos_y[LAYOUT_CHANNELS] = {0};
-
-  Vector2 prev_pos[LAYOUT_CHANNELS] = {0, 0};
-  SetTargetFPS(30); // Set our game to run at 30 frames-per-second
-  //
-  Ctx *ctx = get_audio_ctx();
-
-  double *data = ctx->dac_buffer.buf;
-
-  while (!WindowShouldClose()) {
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-
-    // Draw the current buffer state proportionate to the screen
-    prev_pos[0].x = 0.;
-    prev_pos[1].x = 0.;
-
-    for (int i = 0; i < screen_width; i++) {
-      position[0].x = (float)i;
-      position[1].x = (float)i;
-      for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
-        position[ch].y = (2 * ch + 1) * screen_height / (LAYOUT_CHANNELS * 2) +
-                         10 * data[ch + i * BUF_SIZE / screen_width];
-        DrawLine(prev_pos[ch].x, prev_pos[ch].y, position[ch].x, position[ch].y,
-                 RED);
-        prev_pos[ch] = (Vector2){(float)(i), position[ch].y};
-      }
-    }
-    EndDrawing();
-  }
-  CloseWindow();
-}
-
+static double choices[8] = {220.0,
+                            246.94165062806206,
+                            261.6255653005986,
+                            293.6647679174076,
+                            329.6275569128699,
+                            349.2282314330039,
+                            391.99543598174927,
+                            880.0};
 void *audio_entry() {
-  // Create a new thread for the window loop
+
   Node *chain = chain_new();
-  Node *noise = add_to_chain(chain, lfnoise(8., 80., 500.));
+  Node *noise = add_to_chain(chain, rand_choice_node(6., 8, choices));
   Node *sig = add_to_chain(chain, sine(100.0));
   sig = pipe_output(noise, sig);
   sig = add_to_chain(chain, tanh_node(8.0, sig));
-  sig = add_to_chain(chain, comb_node(0.0, 1.0, 0.9, sig));
+  // sig = add_to_chain(chain, comb_node(0.0, 1.0, 0.9, sig));
+  sig = add_to_chain(chain, freeverb_node(sig));
+  // sig = add_to_chain(chain, op_lp_node(50., sig));
 
   add_to_dac(chain);
   ctx_add(chain);
-  //
-  // sleep(10);
 }
 
 int entry() {
@@ -413,7 +668,7 @@ int entry() {
     return 1;
   }
   // Raylib wants to be in the main thread :(
-  win();
+  create_window();
 
   pthread_join(thread, NULL);
 }

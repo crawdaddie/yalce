@@ -21,6 +21,7 @@ void init_ctx() {
 }
 
 Ctx *get_audio_ctx() { return &ctx; }
+int ctx_sample_rate() { return ctx.SR; }
 Node *ctx_get_tail() { return tail; }
 
 Node *ctx_add(Node *node) {

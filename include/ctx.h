@@ -23,6 +23,8 @@ Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
                     Signal *dac_buffer, int output_num);
 
 Ctx *get_audio_ctx();
+int ctx_sample_rate();
+
 Node *ctx_get_tail();
 Node *ctx_add(Node *node);
 #endif
