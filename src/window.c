@@ -7,7 +7,7 @@ void *create_window(void) {
   int screen_width = 400;
   int screen_height = 400;
   InitWindow(screen_width, screen_height,
-             "raylib [core] example - basic window");
+             "oscilloscope [Audio Context DAC buffer]");
   Vector2 position[LAYOUT_CHANNELS] = {0, 0};
   // double prev_pos_y[LAYOUT_CHANNELS] = {0};
 
