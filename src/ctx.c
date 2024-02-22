@@ -70,14 +70,10 @@ void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
       }
     }
   } else {
-    // double *samps = output->data;
     double *dest = dac_sig->buf;
     for (int f = 0; f < nframes; f++) {
-      // printf("write to output from %p\n", output);
       double samp_val = *output;
 
-      // printf("write output %f\n", samp_val);
-      // TODO: why is this zero????
       for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
         if (output_num == 0) {
           *dest = samp_val;

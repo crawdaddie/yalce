@@ -58,5 +58,5 @@ dkms.conf
 .cache
 log.txt
 .ccls
-.ropeproject
+.ropeproject/
 lib

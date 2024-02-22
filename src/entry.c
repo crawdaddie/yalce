@@ -19,6 +19,8 @@ static inline void underguard(double *x) {
     *x = 0.0f;
 }
 
+Signal *get_sig_default(int layout, double value);
+
 double random_double() {
   // Generate a random integer between 0 and RAND_MAX
   int rand_int = rand();
@@ -80,8 +82,11 @@ void maketable_sin(void) {
 
 node_perform sine_perform(Node *node, int nframes, double spf) {
   sin_state *state = node->state;
+  double *input = node->ins[0]->buf;
+
+  // printf("read freq input %p\n", input);
+
   double *out = node->out->buf;
-  double *input = node->ins->buf;
 
   double d_index;
   int index = 0;
@@ -91,7 +96,6 @@ node_perform sine_perform(Node *node, int nframes, double spf) {
 
   while (nframes--) {
     freq = *input;
-
     d_index = state->phase * SIN_TABSIZE;
     index = (int)d_index;
     frac = d_index - index;
@@ -113,12 +117,14 @@ Node *sine(double freq) {
   state->phase = 0.0;
 
   Signal *in = get_sig(1);
-  for (int i = 0; i < in->size; i++) {
-    in->buf[i] = freq;
-  }
 
-  Node *s = node_new(state, (node_perform *)sine_perform, in, get_sig(1));
-  s->ins = in;
+  Node *s = node_new(state, (node_perform *)sine_perform, NULL, get_sig(1));
+  s->ins = malloc(sizeof(Signal *));
+  s->ins[0] = get_sig(1);
+
+  for (int i = 0; i < in->size; i++) {
+    s->ins[0]->buf[i] = freq;
+  }
   return s;
 }
 
@@ -132,7 +138,7 @@ node_perform sq_perform(Node *node, int nframes, double spf) {
   sq_state *state = node->state;
 
   double *out = node->out->buf;
-  double *in = node->ins->buf;
+  double *in = (*node->ins)->buf;
 
   while (nframes--) {
     double samp =
@@ -156,7 +162,7 @@ Node *sq_node(double freq) {
   }
 
   Node *s = node_new(state, sq_perform, in, get_sig(1));
-  s->ins = in;
+  s->ins = &in;
   return s;
 }
 
@@ -191,11 +197,13 @@ typedef struct {
 
 node_perform tanh_perform(Node *node, int nframes, double spf) {
   tanh_state *state = node->state;
-  double *in = node->ins->buf;
+  double *in = node->ins[0]->buf;
+  double *gain = node->ins[1]->buf;
   double *out = node->out->buf;
   while (nframes--) {
-    *out = tanh(state->gain * (*in));
+    *out = tanh(*gain * (*in));
     in++;
+    gain++;
     out++;
   }
 }
@@ -204,10 +212,13 @@ Node *tanh_node(double gain, Node *node) {
 
   tanh_state *state = malloc(sizeof(tanh_state));
   state->gain = gain;
-  Signal *in = node->out;
+  // Signal *in = node->out;
   Signal *out = node->out;
 
-  Node *s = node_new(state, tanh_perform, in, out);
+  Node *s = node_new(NULL, tanh_perform, NULL, out);
+  s->ins = malloc(2 * (sizeof(Signal *)));
+  s->ins[0] = node->out;
+  s->ins[1] = get_sig_default(1, gain);
   return s;
 }
 
@@ -228,18 +239,24 @@ typedef struct {
   double mem;
 } op_lp_state;
 
-static inline void op_lp_perform_tick(op_lp_state *state, double *in,
+static inline void op_lp_perform_tick(op_lp_state *state, double in,
                                       double *out) {
-  *out = state->a0 * *in - state->b1 * state->mem;
+  *out = state->a0 * in - state->b1 * state->mem;
   state->mem = *out;
+}
+
+static inline double op_lp_perform_tick_return(op_lp_state *state, double in) {
+  double out = state->a0 * in - state->b1 * state->mem;
+  state->mem = out;
+  return out;
 }
 node_perform op_lp_perform(Node *node, int nframes, double spf) {
 
-  double *in = node->ins->buf;
+  double *in = node->ins[0]->buf;
   double *out = node->out->buf;
   op_lp_state *state = node->state;
   while (nframes--) {
-    op_lp_perform_tick(state, in, out);
+    op_lp_perform_tick(state, *in, out);
     in++;
     out++;
   }
@@ -256,7 +273,9 @@ void set_op_lp_params(op_lp_state *state, double freq) {
 Node *op_lp_node(double freq, Node *input) {
   op_lp_state *state = malloc(sizeof(op_lp_state));
   set_op_lp_params(state, freq);
-  return node_new(state, op_lp_perform, input->out, get_sig(1));
+  Node *s = node_new(state, op_lp_perform, NULL, get_sig(1));
+  s->ins = &input->out;
+  return s;
 }
 
 typedef struct {
@@ -268,7 +287,7 @@ typedef struct {
 } comb_state;
 
 node_perform comb_perform(Node *node, int nframes, double spf) {
-  double *in = node->ins->buf;
+  double *in = node->ins[0]->buf;
   double *out = node->out->buf;
   comb_state *state = node->state;
 
@@ -322,7 +341,8 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
                 Node *input) {
   comb_state *state = malloc(sizeof(comb_state));
   set_comb_params(state, delay_time, max_delay_time, fb);
-  Node *s = node_new(state, comb_perform, input->out, get_sig(1));
+  Node *s = node_new(state, comb_perform, NULL, get_sig(1));
+  s->ins = &input->out;
   return s;
 }
 // ------------------------------------------- ALLPASS DELAY
@@ -334,7 +354,7 @@ typedef struct {
 } allpass_state;
 
 node_perform allpass_perform(Node *node, int nframes, double spf) {
-  double *in = node->ins->buf;
+  double *in = node->ins[0]->buf;
   double *out = node->out->buf;
   allpass_state *state = node->state;
 
@@ -376,7 +396,9 @@ void set_allpass_params(allpass_state *state, double delay_time) {
 Node *allpass_node(double delay_time, double max_delay_time, Node *input) {
   allpass_state *state = malloc(sizeof(allpass_state));
   set_allpass_params(state, delay_time);
-  return node_new(state, allpass_perform, input->out, get_sig(1));
+  Node *s = node_new(state, allpass_perform, NULL, get_sig(1));
+  s->ins = &input->out;
+  return s;
 }
 // ------------------------------------------- FREEVERB
 //
@@ -416,7 +438,7 @@ static inline void parallel_comblp_perform(comb_state *state,
     *out += del_val;
   }
 
-  *write_ptr = state->fb * (*out);
+  *write_ptr = state->fb * op_lp_perform_tick_return(lp_state, *out);
 
   state->read_pos = (state->read_pos + 1) % state->buf_size;
   state->write_pos = (state->write_pos + 1) % state->buf_size;
@@ -437,7 +459,7 @@ static inline void allpass_perform_tick(allpass_state *state, double in,
 }
 
 node_perform freeverb_perform(Node *node, int nframes, double spf) {
-  double *in = node->ins->buf;
+  double *in = node->ins[0]->buf;
   double *out = node->out->buf;
   freeverb_state *state = node->state;
   while (nframes--) {
@@ -471,30 +493,31 @@ node_perform freeverb_perform(Node *node, int nframes, double spf) {
       allpass_state *ap = state->series_ap + i + 4;
       allpass_perform_tick(ap, *out, out);
     }
-    out++;
 
+    out++;
     in++;
   }
 }
 
 Node *freeverb_node(Node *input) {
+  double damping_freq = 1000.0;
+  double comb_fb = 0.7;
 
   freeverb_state *state = malloc(sizeof(freeverb_state));
   int SR = ctx_sample_rate();
   for (int i = 0; i < 8; i++) {
     double len = comb_delay_lengths[i];
     set_comb_params(state->parallel_combs + i, len / 1000.0, (len + 1) / 1000.0,
-                    0.25 /*comb gain*/
+                    comb_fb /*comb gain*/
     );
-    set_op_lp_params(state->comb_lps + i, 100.0);
+    set_op_lp_params(state->comb_lps + i, damping_freq);
   }
 
   for (int i = 0; i < 8; i++) {
     double len = comb_delay_lengths[i] + stereo_spread;
     set_comb_params(state->parallel_combs + i + 8, len / 1000.0,
-                    (len + 1) / 1000.0, 0.25 /*comb gain*/
-    );
-    set_op_lp_params(state->comb_lps + i + 8, 100.0);
+                    (len + 1) / 1000.0, comb_fb);
+    set_op_lp_params(state->comb_lps + i + 8, damping_freq);
   }
 
   for (int i = 0; i < 4; i++) {
@@ -507,7 +530,9 @@ Node *freeverb_node(Node *input) {
     set_allpass_params(state->series_ap + i + 4, len / 1000.0);
   }
 
-  return node_new(state, freeverb_perform, input->out, get_sig(2));
+  Node *s = node_new(state, freeverb_perform, NULL, get_sig(2));
+  s->ins = &input->out;
+  return s;
 }
 
 // ------------------------------------------- NOISE UGENS
@@ -590,6 +615,47 @@ Node *rand_choice_node(double freq, int size, double *choices) {
   return node_new(state, rand_choice_perform, &(Signal){}, get_sig(1));
 }
 
+// ------------------------------ SIGNAL ARITHMETIC
+//
+node_perform sum_perform(Node *node, int nframes, double spf) {
+  // Signal *a = node->out;
+  // Signal *b = node->ins;
+
+  while (nframes--) {
+  }
+}
+
+Node *sum_node(Node *nodes, int num) {
+  Node *sum = node_new(NULL, sum_perform, NULL, NULL);
+  return sum;
+}
+
+node_perform mul_perform(Node *node, int nframes, double spf) {
+
+  Signal *b = node->ins[0];
+  int in_chans = b->layout;
+  double *in = b->buf;
+
+  Signal *a = node->out;
+  double *out = a->buf;
+
+  while (nframes--) {
+    for (int ch = 0; ch < a->layout; ch++) {
+      *out = *in * *out;
+      out++;
+    }
+    in++;
+  }
+}
+
+Node *mul_node(Node *a, Node *b) {
+  Node *mul = node_new(NULL, mul_perform, NULL, NULL);
+
+  mul->ins = &b->out;
+  mul->out = a->out;
+  return mul;
+}
+
 // ------------------------------ SIGNAL / BUFFER ALLOC
 //
 static double buf_pool[BUF_SIZE * LAYOUT_CHANNELS * 100];
@@ -605,18 +671,30 @@ Signal *get_sig(int layout) {
   buf_ptr += BUF_SIZE * layout;
   return sig;
 }
+
+Signal *get_sig_default(int layout, double value) {
+  Signal *sig = malloc(sizeof(Signal));
+  sig->buf = buf_ptr;
+  sig->layout = layout;
+  sig->size = BUF_SIZE;
+  buf_ptr += BUF_SIZE * layout;
+  for (int i = 0; i < BUF_SIZE * layout; i++) {
+    sig->buf[i] = value;
+  }
+  return sig;
+}
 // ----------------------------- Node alloc
 Node *node_new(void *data, node_perform *perform, Signal *ins, Signal *out) {
   Node *node = malloc(sizeof(Node));
   node->state = data;
-  node->ins = ins;
+  node->ins = &ins;
   node->out = out;
   node->perform = (node_perform)perform;
   return node;
 }
 
 Node *pipe_output(Node *send, Node *recv) {
-  recv->ins = send->out;
+  recv->ins = &send->out;
   return recv;
 }
 Node *add_to_dac(Node *node) {
@@ -652,9 +730,15 @@ void *audio_entry() {
   Node *noise = add_to_chain(chain, rand_choice_node(6., 8, choices));
   Node *sig = add_to_chain(chain, sine(100.0));
   sig = pipe_output(noise, sig);
-  sig = add_to_chain(chain, tanh_node(8.0, sig));
-  // sig = add_to_chain(chain, comb_node(0.0, 1.0, 0.9, sig));
+  // Node *gain_mod = add_to_chain(chain, sine(8.));
+  sig = add_to_chain(chain, tanh_node(5.0, sig));
+
+  Node *mod_freq = add_to_chain(chain, lfnoise(2., 1., 10.));
+  mod_freq = add_to_chain(chain, op_lp_node(10., mod_freq));
+  Node *mod = add_to_chain(chain, sine(8.));
+  pipe_output(mod_freq, mod);
   sig = add_to_chain(chain, freeverb_node(sig));
+  sig = add_to_chain(chain, mul_node(sig, mod));
   // sig = add_to_chain(chain, op_lp_node(50., sig));
 
   add_to_dac(chain);

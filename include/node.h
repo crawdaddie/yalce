@@ -23,7 +23,7 @@ typedef struct Node {
 
   node_perform perform;
   void *state;
-  Signal *ins;
+  Signal **ins;
   int num_ins;
 
   Signal *out;
