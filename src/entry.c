@@ -4,6 +4,7 @@
 #include "window.h"
 #include <math.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -113,6 +114,7 @@ node_perform sine_perform(Node *node, int nframes, double spf) {
 }
 
 Node *sine(double freq) {
+
   sin_state *state = malloc(sizeof(sin_state));
   state->phase = 0.0;
 
@@ -120,11 +122,8 @@ Node *sine(double freq) {
 
   Node *s = node_new(state, (node_perform *)sine_perform, NULL, get_sig(1));
   s->ins = malloc(sizeof(Signal *));
-  s->ins[0] = get_sig(1);
+  s->ins[0] = get_sig_default(1, freq);
 
-  for (int i = 0; i < in->size; i++) {
-    s->ins[0]->buf[i] = freq;
-  }
   return s;
 }
 
@@ -617,17 +616,83 @@ Node *rand_choice_node(double freq, int size, double *choices) {
 
 // ------------------------------ SIGNAL ARITHMETIC
 //
-node_perform sum_perform(Node *node, int nframes, double spf) {
-  // Signal *a = node->out;
-  // Signal *b = node->ins;
-
-  while (nframes--) {
+void *sum_signals(double *out, int out_chans, double *in, int in_chans) {
+  // printf("sum signals %p %d %p %d\n", out, out_chans, in, in_chans);
+  for (int ch = 0; ch < out_chans; ch++) {
+    *(out + ch) += *(in + (ch % in_chans));
   }
 }
 
-Node *sum_node(Node *nodes, int num) {
-  Node *sum = node_new(NULL, sum_perform, NULL, NULL);
-  return sum;
+node_perform sum_perform(Node *node, int nframes, double spf) {
+  int num_ins = node->num_ins;
+  double *out = node->out->buf;
+  int layout = node->out->layout;
+  // printf("out %p [%d] (num_ins %d)\n", out, layout, num_ins);
+
+  for (int i = 0; i < nframes; i++) {
+    for (int x = 0; x < num_ins; x++) {
+      int in_layout = node->ins[x]->layout;
+      double *in = node->ins[x]->buf + (i * in_layout);
+      sum_signals(out, layout, in, in_layout);
+    }
+    out += layout;
+  }
+}
+
+Node *sum_nodes(int num, ...) {
+  va_list args; // Define a variable to hold the arguments
+  va_start(args, num);
+  Node *new_node = node_new(NULL, sum_perform, NULL, NULL);
+  new_node->ins = malloc(sizeof(Signal *) * (num - 1));
+  new_node->num_ins = num - 1;
+
+  Node *first = va_arg(args, Node *);
+  new_node->out = first->out;
+  Node *n;
+  for (int i = 0; i < num - 1; i++) {
+    n = va_arg(args, Node *);
+    new_node->ins[i] = n->out;
+    (new_node->ins[i])->layout = n->out->layout;
+    // new_node->ins[i]->layout = 1;
+  }
+
+  // Clean up the argument list
+  va_end(args);
+
+  // return sum;
+  return new_node;
+}
+
+Node *sum_nodes_arr(int num, Node **nodes) {
+  Node *new_node = node_new(NULL, sum_perform, NULL, NULL);
+
+  Node *first = *nodes;
+  new_node->out = first->out;
+
+  new_node->ins = malloc(sizeof(Signal *) * (num - 1));
+  new_node->num_ins = num - 1;
+  Node *n;
+  for (int i = 1; i < num; i++) {
+    n = *(nodes + i);
+    new_node->ins[i - 1] = n->out;
+  }
+  return new_node;
+}
+
+Node *mix_nodes_arr(int num, Node **nodes, double *scalars) {
+  Node *new_node = node_new(NULL, sum_perform, NULL, NULL);
+
+  Node *first = *nodes;
+  new_node->out = first->out;
+
+  new_node->ins = malloc(sizeof(Signal *) * (num - 1));
+  new_node->num_ins = num - 1;
+  Node *n;
+  for (int i = 1; i < num; i++) {
+    n = *(nodes + i);
+    new_node->ins[i - 1] = n->out;
+  }
+  return new_node;
 }
 
 node_perform mul_perform(Node *node, int nframes, double spf) {
@@ -641,7 +706,25 @@ node_perform mul_perform(Node *node, int nframes, double spf) {
 
   while (nframes--) {
     for (int ch = 0; ch < a->layout; ch++) {
-      *out = *in * *out;
+      *out = *(in + (ch % in_chans)) * *out;
+      out++;
+    }
+    in = in + in_chans;
+  }
+}
+
+node_perform div_perform(Node *node, int nframes, double spf) {
+
+  Signal *b = node->ins[0];
+  int in_chans = b->layout;
+  double *in = b->buf;
+
+  Signal *a = node->out;
+  double *out = a->buf;
+
+  while (nframes--) {
+    for (int ch = 0; ch < a->layout; ch++) {
+      *out = *in / *out;
       out++;
     }
     in++;
@@ -653,6 +736,15 @@ Node *mul_node(Node *a, Node *b) {
 
   mul->ins = &b->out;
   mul->out = a->out;
+  return mul;
+}
+
+Node *mul_scalar_node(double scalar, Node *node) {
+  Node *mul = node_new(NULL, mul_perform, NULL, NULL);
+  mul->ins = malloc(sizeof(Signal *));
+  mul->ins[0] = get_sig_default(1, scalar);
+  mul->num_ins = 1;
+  mul->out = node->out;
   return mul;
 }
 
@@ -688,6 +780,7 @@ Node *node_new(void *data, node_perform *perform, Signal *ins, Signal *out) {
   Node *node = malloc(sizeof(Node));
   node->state = data;
   node->ins = &ins;
+  node->num_ins = 1;
   node->out = out;
   node->perform = (node_perform)perform;
   return node;
@@ -724,7 +817,7 @@ static double choices[8] = {220.0,
                             349.2282314330039,
                             391.99543598174927,
                             880.0};
-void *audio_entry() {
+void *audio_entry_() {
 
   Node *chain = chain_new();
   Node *noise = add_to_chain(chain, rand_choice_node(6., 8, choices));
@@ -739,6 +832,24 @@ void *audio_entry() {
   pipe_output(mod_freq, mod);
   sig = add_to_chain(chain, freeverb_node(sig));
   sig = add_to_chain(chain, mul_node(sig, mod));
+  // sig = add_to_chain(chain, op_lp_node(50., sig));
+
+  add_to_dac(chain);
+  ctx_add(chain);
+}
+
+void *audio_entry() {
+
+  Node *chain = chain_new();
+  Node *sig1 = add_to_chain(chain, sine(100.0));
+  Node *sig2 = add_to_chain(chain, sine(800.0));
+  // Node *sig3 = add_to_chain(chain, sine(400.0));
+  // Node *sig4 = add_to_chain(chain, sine(800.0));
+  // add_to_chain(chain, sum_nodes(sig1, sig2, sig3));
+  Node *sum = add_to_chain(chain, sum_nodes(2, sig1, sig2));
+  sum = add_to_chain(chain, mul_scalar_node(0.3, sum));
+
+  // sig = add_to_chain(chain, sum_nodes(sig, sig2));
   // sig = add_to_chain(chain, op_lp_node(50., sig));
 
   add_to_dac(chain);

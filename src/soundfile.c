@@ -24,11 +24,12 @@ int read_file(const char *filename, Signal *result) {
     return 1;
   };
   size_t total_size = sfinfo.channels * sfinfo.frames;
-  result->data = malloc(sizeof(double) * total_size);
+  result->buf = malloc(sizeof(double) * total_size);
   result->size = sfinfo.frames;
   result->layout = sfinfo.channels;
 
-  sf_read_double(infile, result->data, total_size);
+  sf_read_double(infile, result->buf, total_size);
+
   sf_close(infile);
 
   return 0;
