@@ -85,41 +85,42 @@ void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
       output++;
     }
   }
+}
 
-  Node *perform_graph(Node * head, int nframes, double seconds_per_frame,
-                      Signal *dac_sig, int output_num) {
-    if (!head) {
-      return NULL;
-    };
+Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
+                    Signal *dac_sig, int output_num) {
+  if (!head) {
+    return NULL;
+  };
 
-    if (head->killed) {
-      Node *next = head->next;
-      if (next) {
-        return perform_graph(next, nframes, seconds_per_frame, dac_sig,
-                             output_num);
-      }
-    }
-    Signal *out = NULL;
-    if (head->head) {
-      Node *tail = perform_graph(head->head, nframes, seconds_per_frame,
-                                 dac_sig, output_num);
-      out = tail->out;
-    }
-
-    if (head->perform) {
-      head->perform(head, nframes, seconds_per_frame);
-    }
-
-    if (head->type == OUTPUT && out) {
-      write_to_output_buf(out, nframes, seconds_per_frame, dac_sig, output_num);
-      output_num++;
-    }
-
+  if (head->killed) {
     Node *next = head->next;
-
     if (next) {
       return perform_graph(next, nframes, seconds_per_frame, dac_sig,
-                           output_num); // keep going until you return tail
-    };
-    return head;
+                           output_num);
+    }
   }
+  Signal *out = NULL;
+  if (head->head) {
+    Node *tail = perform_graph(head->head, nframes, seconds_per_frame, dac_sig,
+                               output_num);
+    out = tail->out;
+  }
+
+  if (head->perform) {
+    head->perform(head, nframes, seconds_per_frame);
+  }
+
+  if (head->type == OUTPUT && out) {
+    write_to_output_buf(out, nframes, seconds_per_frame, dac_sig, output_num);
+    output_num++;
+  }
+
+  Node *next = head->next;
+
+  if (next) {
+    return perform_graph(next, nframes, seconds_per_frame, dac_sig,
+                         output_num); // keep going until you return tail
+  };
+  return head;
+}

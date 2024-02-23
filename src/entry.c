@@ -617,7 +617,6 @@ Node *rand_choice_node(double freq, int size, double *choices) {
 // ------------------------------ SIGNAL ARITHMETIC
 //
 void *sum_signals(double *out, int out_chans, double *in, int in_chans) {
-  // printf("sum signals %p %d %p %d\n", out, out_chans, in, in_chans);
   for (int ch = 0; ch < out_chans; ch++) {
     *(out + ch) += *(in + (ch % in_chans));
   }
@@ -633,6 +632,7 @@ node_perform sum_perform(Node *node, int nframes, double spf) {
     for (int x = 0; x < num_ins; x++) {
       int in_layout = node->ins[x]->layout;
       double *in = node->ins[x]->buf + (i * in_layout);
+      // printf("scalar inbuf %p\n", in);
       sum_signals(out, layout, in, in_layout);
     }
     out += layout;
@@ -707,6 +707,7 @@ node_perform mul_perform(Node *node, int nframes, double spf) {
   while (nframes--) {
     for (int ch = 0; ch < a->layout; ch++) {
       *out = *(in + (ch % in_chans)) * *out;
+      // printf("scalar inbuf %p\n", in);
       out++;
     }
     in = in + in_chans;
@@ -746,6 +747,15 @@ Node *mul_scalar_node(double scalar, Node *node) {
   mul->num_ins = 1;
   mul->out = node->out;
   return mul;
+}
+
+Node *add_scalar_node(double scalar, Node *node) {
+  Node *add = node_new(NULL, sum_perform, NULL, NULL);
+  add->ins = malloc(sizeof(Signal *));
+  add->ins[0] = get_sig_default(1, scalar);
+  add->num_ins = 1;
+  add->out = node->out;
+  return add;
 }
 
 // ------------------------------ SIGNAL / BUFFER ALLOC
@@ -788,6 +798,11 @@ Node *node_new(void *data, node_perform *perform, Signal *ins, Signal *out) {
 
 Node *pipe_output(Node *send, Node *recv) {
   recv->ins = &send->out;
+  return recv;
+}
+
+Node *pipe_output_to_idx(int idx, Node *send, Node *recv) {
+  recv->ins[idx] = send->out;
   return recv;
 }
 Node *add_to_dac(Node *node) {
@@ -847,7 +862,7 @@ void *audio_entry() {
   // Node *sig4 = add_to_chain(chain, sine(800.0));
   // add_to_chain(chain, sum_nodes(sig1, sig2, sig3));
   Node *sum = add_to_chain(chain, sum_nodes(2, sig1, sig2));
-  sum = add_to_chain(chain, mul_scalar_node(0.3, sum));
+  sum = add_to_chain(chain, mul_scalar_node(0.2, sum));
 
   // sig = add_to_chain(chain, sum_nodes(sig, sig2));
   // sig = add_to_chain(chain, op_lp_node(50., sig));
