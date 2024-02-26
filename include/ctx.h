@@ -1,5 +1,6 @@
 #ifndef _CTX_H
 #define _CTX_H
+#include "msg_queue.h"
 #include "node.h"
 
 typedef struct {
@@ -7,7 +8,8 @@ typedef struct {
   double block_time;
   Node *head;
   Signal dac_buffer;
-  int SR;
+  int sample_rate;
+  msg_queue msg_queue;
 } Ctx;
 
 double **alloc_buses(int num_buses);
@@ -27,4 +29,8 @@ int ctx_sample_rate();
 
 Node *ctx_get_tail();
 Node *ctx_add(Node *node);
+
+int process_msg_queue_pre(msg_queue *msg_queue);
+void process_msg_queue_post(msg_queue *msg_queue, int consumed);
+
 #endif

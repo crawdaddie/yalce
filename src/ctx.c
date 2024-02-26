@@ -18,10 +18,13 @@ void init_ctx() {
 
   ctx.head = NULL;
   tail = ctx.head;
+  ctx.msg_queue.num_msgs = 0;
+  ctx.msg_queue.write_ptr = 0;
+  ctx.msg_queue.read_ptr = 0;
 }
 
 Ctx *get_audio_ctx() { return &ctx; }
-int ctx_sample_rate() { return ctx.SR; }
+int ctx_sample_rate() { return ctx.sample_rate; }
 Node *ctx_get_tail() { return tail; }
 
 Node *ctx_add(Node *node) {
@@ -38,11 +41,15 @@ Node *ctx_add(Node *node) {
 }
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
+
+  int consumed = process_msg_queue_pre(&ctx->msg_queue);
+  // printf("consumed %d msgs\n", consumed);
   if (ctx->head == NULL) {
     return NULL;
   }
   perform_graph(ctx->head, nframes, seconds_per_frame, &ctx->dac_buffer, 0);
   // ctx->dac_bufer
+  process_msg_queue_post(&ctx->msg_queue, consumed);
 }
 
 static inline int min(int a, int b) { return (a <= b) ? a : b; }
@@ -123,4 +130,70 @@ Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
                          output_num); // keep going until you return tail
   };
   return head;
+}
+
+static void process_msg_pre(scheduler_msg msg) {
+
+  switch (msg.type) {
+  case NODE_ADD: {
+    break;
+  }
+
+  case NODE_SET_SCALAR: {
+    struct NODE_SET_SCALAR payload = msg.body.NODE_SET_SCALAR;
+    Node *node = payload.target;
+    // printf("set scalar offset %d %f\n", msg.frame_offset, payload.value);
+    Signal *target_input = node->ins[payload.input];
+    for (int i = msg.frame_offset; i < target_input->size; i++) {
+      *(target_input->buf + i) = payload.value;
+    }
+    break;
+  }
+  default:
+    break;
+  }
+}
+
+static void process_msg_post(scheduler_msg msg) {
+  switch (msg.type) {
+  case NODE_ADD: {
+    break;
+  }
+
+  case NODE_SET_SCALAR: {
+    struct NODE_SET_SCALAR payload = msg.body.NODE_SET_SCALAR;
+    Node *node = payload.target;
+    Signal *target_input = node->ins[payload.input];
+    for (int i = 0; i < msg.frame_offset; i++) {
+      *(target_input->buf + i) = payload.value;
+    }
+    break;
+  }
+  default:
+    break;
+  }
+}
+
+int process_msg_queue_pre(msg_queue *queue) {
+  int read_ptr = queue->read_ptr;
+  scheduler_msg *msg;
+  int consumed = 0;
+  while (read_ptr != queue->write_ptr) {
+    // printf("msg queue pre %d %d\n", read_ptr, msg_queue->write_ptr);
+    msg = queue->buffer + read_ptr;
+    process_msg_pre(*msg);
+    read_ptr = (read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
+    consumed++;
+  }
+  return consumed;
+}
+
+void process_msg_queue_post(msg_queue *queue, int consumed) {
+  scheduler_msg msg;
+  while (consumed--) {
+    // printf("msg queue post %d %d\n", msg_queue->read_ptr,
+    // msg_queue->write_ptr);
+    msg = pop_msg(queue);
+    process_msg_post(msg);
+  }
 }

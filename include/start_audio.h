@@ -12,4 +12,6 @@
 int start_audio();
 int stop_audio();
 
+void get_block_time(struct timespec *time);
+
 #endif

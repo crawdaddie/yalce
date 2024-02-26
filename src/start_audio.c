@@ -1,7 +1,9 @@
 #include "start_audio.h"
 #include "ctx.h"
 #include "log.h"
+#include "scheduling.h"
 #include "write_sample.h"
+#include <time.h>
 
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
@@ -9,6 +11,13 @@ static struct SoundIoOutStream *outstream = NULL;
 
 static void (*write_sample)(char *ptr, double sample);
 static volatile bool want_pause = false;
+
+static struct timespec block_time;
+
+void get_block_time(struct timespec *time) { *time = block_time; }
+static inline void set_block_time() {
+  clock_gettime(CLOCK_REALTIME, &block_time);
+}
 
 static void _write_callback(struct SoundIoOutStream *outstream,
                             int frame_count_min, int frame_count_max) {
@@ -47,6 +56,8 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     //   }
     // }
 
+
+    set_block_time();
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
 
     int sample_idx;
@@ -63,6 +74,8 @@ static void _write_callback(struct SoundIoOutStream *outstream,
         areas[channel].ptr += areas[channel].step;
       }
     }
+
+
 
     // ctx->block_time = get_time();
 
@@ -209,9 +222,10 @@ int start_audio() {
   }
   write_log("Software latency:  %f\n", outstream->software_latency);
   write_log("Sample rate:       %d\n", outstream->sample_rate);
-  ctx.SR = outstream->sample_rate;
-
+  ctx.sample_rate = outstream->sample_rate;
   write_log("------------------\n");
+
+  set_block_time();
   return 0;
 }
 

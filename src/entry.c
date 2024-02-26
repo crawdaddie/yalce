@@ -1,6 +1,9 @@
 #include "entry.h"
 #include "common.h"
 #include "node.h"
+#include "scheduling.h"
+#include "soundfile.h"
+#include "start_audio.h"
 #include "window.h"
 #include <math.h>
 #include <pthread.h>
@@ -137,31 +140,27 @@ node_perform sq_perform(Node *node, int nframes, double spf) {
   sq_state *state = node->state;
 
   double *out = node->out->buf;
-  double *in = (*node->ins)->buf;
+  double *input = node->ins[0]->buf;
 
   while (nframes--) {
     double samp =
-        sq_sample(state->phase, *in) + sq_sample(state->phase, *in * 1.01);
+        sq_sample(state->phase, *input) + sq_sample(state->phase, *input * 1.01);
     samp /= 2;
 
     state->phase += spf;
     *out = samp;
     out++;
-    in++;
+    input++;
   }
 }
 
 Node *sq_node(double freq) {
   sq_state *state = malloc(sizeof(sq_state));
   state->phase = 0.0;
-  Signal *in = get_sig(1);
-  int n = in->size;
-  for (int i = 0; i < n; i++) {
-    in->buf[i] = freq;
-  }
 
-  Node *s = node_new(state, sq_perform, in, get_sig(1));
-  s->ins = &in;
+  Node *s = node_new(state, (node_perform *)sq_perform, NULL, get_sig(1));
+  s->ins = malloc(sizeof(Signal *));
+  s->ins[0] = get_sig_default(1, freq);
   return s;
 }
 
@@ -187,6 +186,31 @@ node_perform lf_noise_perform(Node *node, int nframes, double spf) {
     out++;
     // in.data++;
   }
+}
+// ------------------------------------------- BUF PLAYERS
+typedef struct {
+  double phase;
+} bufplayer_state;
+node_perform bufplayer_perform(Node *node, int nframes, double spf) {
+  bufplayer_state *state = node->state;
+  int chans = node->ins[0]->layout;
+  double *buf = node->ins[0]->buf;
+
+  while (nframes--) {
+  }
+}
+Node *bufplayer_node(const char *filename) {
+
+  sq_state *state = malloc(sizeof(sq_state));
+  state->phase = 0.0;
+
+  Node *s = node_new(state, (node_perform *)bufplayer_perform, NULL, NULL);
+  s->num_ins = 2;
+  s->ins = malloc(sizeof(Signal *) *2 );
+  read_file(filename, s->ins[0]);
+  s->ins[1] = get_sig_default(1, 1.0);
+  s->out = get_sig(s->ins[0]->layout);
+  return s;
 }
 
 // ------------------------------------------- DISTORTION
@@ -262,8 +286,8 @@ node_perform op_lp_perform(Node *node, int nframes, double spf) {
 }
 
 void set_op_lp_params(op_lp_state *state, double freq) {
-  int SR = ctx_sample_rate();
-  double x = exp(-2 * PI * freq / SR);
+  int SAMPLE_RATE = ctx_sample_rate();
+  double x = exp(-2 * PI * freq / SAMPLE_RATE);
   state->a0 = 1.0 - x;
   state->b1 = -x;
   state->mem = 0.0;
@@ -274,6 +298,58 @@ Node *op_lp_node(double freq, Node *input) {
   set_op_lp_params(state, freq);
   Node *s = node_new(state, op_lp_perform, NULL, get_sig(1));
   s->ins = &input->out;
+  return s;
+}
+
+typedef struct {
+  double mem;
+} op_lp_dyn_state;
+
+static inline void op_lp_dyn_perform_tick(op_lp_dyn_state *state, double in, double freq,
+                                      double *out) {
+
+  int SAMPLE_RATE = 48000;
+  double x = exp(-2 * PI * freq / SAMPLE_RATE);
+  double a0 = 1.0 - x;
+  double b1 = -x;
+  *out = a0 * in - b1 * state->mem;
+  state->mem = *out;
+}
+
+static inline double op_lp_dyn_perform_tick_return(op_lp_dyn_state *state, double in) {
+  double out = state->a0 * in - state->b1 * state->mem;
+  state->mem = out;
+  return out;
+}
+node_perform op_lp_dyn_perform(Node *node, int nframes, double spf) {
+
+  double *in = node->ins[0]->buf;
+  double *freq = node->ins[1]->buf;
+  double *out = node->out->buf;
+  op_lp_state *state = node->state;
+  while (nframes--) {
+    op_lp_dyn_perform_tick(state, *in, *freq, out);
+    in++;
+    freq++;
+    out++;
+  }
+}
+
+void set_op_dyn_lp_params(op_lp_dyn_state *state, double freq) {
+  int SAMPLE_RATE = ctx_sample_rate();
+  double x = exp(-2 * PI * freq / SAMPLE_RATE);
+  state->a0 = 1.0 - x;
+  state->b1 = -x;
+  state->mem = 0.0;
+}
+
+Node *op_lp_dyn_node(double freq, Node *input) {
+  op_lp_state *state = malloc(sizeof(op_lp_state));
+  set_op_lp_params(state, freq);
+  Node *s = node_new(state, op_lp_dyn_perform, NULL, get_sig(1));
+  s->ins = malloc(sizeof(Signal *)*2);
+  s->ins[0] = input->out;
+  s->ins[1] = get_sig_default(1, freq);
   return s;
 }
 
@@ -311,7 +387,7 @@ node_perform comb_perform(Node *node, int nframes, double spf) {
 void set_comb_params(comb_state *state, double delay_time,
                      double max_delay_time, double fb) {
   Ctx *ctx = get_audio_ctx();
-  int SR = ctx->SR;
+  int SAMPLE_RATE = ctx->sample_rate;
 
   if (delay_time >= max_delay_time) {
     printf("Error: cannot set delay time %f longer than the max delay time %f",
@@ -319,9 +395,9 @@ void set_comb_params(comb_state *state, double delay_time,
     return;
   }
 
-  int buf_size = (int)max_delay_time * SR;
+  int buf_size = (int)max_delay_time * SAMPLE_RATE;
   state->buf_size = buf_size;
-  double *buf = malloc(sizeof(double) * (int)max_delay_time * SR);
+  double *buf = malloc(sizeof(double) * (int)max_delay_time * SAMPLE_RATE);
   double *b = buf;
   while (buf_size--) {
     *b = 0.0;
@@ -331,7 +407,7 @@ void set_comb_params(comb_state *state, double delay_time,
   state->buf = buf;
   state->write_pos = 0;
 
-  int read_pos = state->buf_size - (int)(delay_time * SR);
+  int read_pos = state->buf_size - (int)(delay_time * SAMPLE_RATE);
   state->read_pos = read_pos;
   state->fb = fb;
 }
@@ -374,7 +450,7 @@ node_perform allpass_perform(Node *node, int nframes, double spf) {
 }
 void set_allpass_params(allpass_state *state, double delay_time) {
   Ctx *ctx = get_audio_ctx();
-  int SR = ctx->SR;
+  int SR = ctx->sample_rate;
 
   int buf_size = 1 + (int)delay_time * SR;
   state->buf_size = buf_size;
@@ -611,7 +687,7 @@ Node *rand_choice_node(double freq, int size, double *choices) {
   state->size = size;
   state->freq = freq;
 
-  return node_new(state, rand_choice_perform, &(Signal){}, get_sig(1));
+  return node_new(state, rand_choice_perform, NULL, get_sig(1));
 }
 
 // ------------------------------ SIGNAL ARITHMETIC
@@ -805,12 +881,42 @@ Node *pipe_output_to_idx(int idx, Node *send, Node *recv) {
   recv->ins[idx] = send->out;
   return recv;
 }
+double get_block_diff() {
+  struct timespec current_time;
+  clock_gettime(CLOCK_REALTIME, &current_time);
+
+  struct timespec audio_block_time;
+  get_block_time(&audio_block_time);
+
+  return timespec_diff(current_time, audio_block_time);
+}
+
 Node *add_to_dac(Node *node) {
   node->type = OUTPUT;
   return node;
 }
+Node *chain_set_out(Node *chain, Node *out) {
+  chain->out = out->out;
+  return chain;
+}
 
-Node *chain_new() { return node_new(NULL, NULL, &(Signal){}, &(Signal){}); }
+Node *chain_new() { return
+  node_new(NULL, NULL, &(Signal){}, &(Signal){}); }
+
+Node *chain_with_inputs(int num_ins, double *defaults) {
+  Node *chain = node_new(NULL, NULL, NULL, &(Signal){});
+
+  chain->ins = malloc(num_ins * (sizeof(Signal *)));
+  for (int i = 0; i < num_ins; i++) {
+    chain->ins[i] = get_sig_default(1, defaults[i]);
+  }
+  return chain;
+}
+
+Node *node_set_input_signal(Node *node, int num_in, Signal *sig) {
+  node->ins[num_in] = sig;
+  return node;
+}
 
 Node *add_to_chain(Node *chain, Node *node) {
   if (chain->head == NULL) {
@@ -838,37 +944,43 @@ void *audio_entry_() {
   Node *noise = add_to_chain(chain, rand_choice_node(6., 8, choices));
   Node *sig = add_to_chain(chain, sine(100.0));
   sig = pipe_output(noise, sig);
-  // Node *gain_mod = add_to_chain(chain, sine(8.));
-  sig = add_to_chain(chain, tanh_node(5.0, sig));
-
-  Node *mod_freq = add_to_chain(chain, lfnoise(2., 1., 10.));
-  mod_freq = add_to_chain(chain, op_lp_node(10., mod_freq));
-  Node *mod = add_to_chain(chain, sine(8.));
-  pipe_output(mod_freq, mod);
+  sig = add_to_chain(chain, tanh_node(2.0, sig));
   sig = add_to_chain(chain, freeverb_node(sig));
-  sig = add_to_chain(chain, mul_node(sig, mod));
-  // sig = add_to_chain(chain, op_lp_node(50., sig));
 
   add_to_dac(chain);
   ctx_add(chain);
 }
 
+void set_node_scalar(Node *target, int input, double value) {
+  Ctx *ctx = get_audio_ctx();
+  int offset = (int)(get_block_diff() * ctx->sample_rate);
+  scheduler_msg msg = {NODE_SET_SCALAR, offset, {.NODE_SET_SCALAR = (struct NODE_SET_SCALAR){
+    target,
+    input,
+    value,
+  }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
+
 void *audio_entry() {
 
   Node *chain = chain_new();
   Node *sig1 = add_to_chain(chain, sine(100.0));
-  Node *sig2 = add_to_chain(chain, sine(800.0));
-  // Node *sig3 = add_to_chain(chain, sine(400.0));
-  // Node *sig4 = add_to_chain(chain, sine(800.0));
-  // add_to_chain(chain, sum_nodes(sig1, sig2, sig3));
-  Node *sum = add_to_chain(chain, sum_nodes(2, sig1, sig2));
-  sum = add_to_chain(chain, mul_scalar_node(0.2, sum));
 
-  // sig = add_to_chain(chain, sum_nodes(sig, sig2));
-  // sig = add_to_chain(chain, op_lp_node(50., sig));
+  Node *dist = add_to_chain(chain, tanh_node(8.0, sig1));
 
   add_to_dac(chain);
   ctx_add(chain);
+
+  // sleep(1);
+  while (true) {
+    set_node_scalar(sig1, 0, choices[rand_int(8)]);
+    set_node_scalar(dist, 1, rand_int(8) + 1.0);
+    msleep(250);
+  }
+
+
 }
 
 int entry() {
