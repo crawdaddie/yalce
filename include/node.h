@@ -13,6 +13,26 @@ typedef struct Signal {
   int layout; // how they are laid out
 } Signal;
 
+typedef struct SignalFloat {
+  // size of the data array will be size * layout
+  // data is interleaved, so sample for frame x, channel 0 will be at index
+  // layout * x + 0
+  // sample for frame x, channel 1 will be at index layout * x + 1
+  float *buf;
+  int size;   // number of frames
+  int layout; // how they are laid out
+} SignalFloat;
+
+typedef struct SignalFloatDeinterleaved {
+  // size of the data array will be size * layout
+  // data is interleaved, so sample for frame x, channel 0 will be at index
+  // layout * x + 0
+  // sample for frame x, channel 1 will be at index layout * x + 1
+  float *buf;
+  int size;   // number of frames
+  int layout; // how they are laid out
+} SignalFloatDeinterleaved;
+
 typedef struct Node {
   enum {
     INTERMEDIATE = 0,

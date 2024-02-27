@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "rubberband/rubberband-c.h"
 
 static inline void underguard(double *x) {
   union {
@@ -143,8 +144,8 @@ node_perform sq_perform(Node *node, int nframes, double spf) {
   double *input = node->ins[0]->buf;
 
   while (nframes--) {
-    double samp =
-        sq_sample(state->phase, *input) + sq_sample(state->phase, *input * 1.01);
+    double samp = sq_sample(state->phase, *input) +
+                  sq_sample(state->phase, *input * 1.01);
     samp /= 2;
 
     state->phase += spf;
@@ -188,28 +189,170 @@ node_perform lf_noise_perform(Node *node, int nframes, double spf) {
   }
 }
 // ------------------------------------------- BUF PLAYERS
+//
 typedef struct {
+  double sample_rate_scaling;
   double phase;
 } bufplayer_state;
+
+    // d_index = state->phase * SIN_TABSIZE;
+    // index = (int)d_index;
+    // frac = d_index - index;
+    //
+    // a = sin_table[index];
+    // b = sin_table[(index + 1) % SIN_TABSIZE];
+    //
+    // sample = (1.0 - frac) * a + (frac * b);
+    // *out = sample;
+    // state->phase = fmod(freq * spf + (state->phase), 1.0);
+//  bufplayer_data *data = NODE_DATA(bufplayer_data, node);
+  // double sample;
+  // double rate;
+  //
+  // double *buffer = node->ins[0].data;
+  // int bufsize = node->ins[0].size;
+  //
+  // Signal trig = IN(node, BUFPLAYER_TRIG);
+  // Signal start_pos = IN(node, BUFPLAYER_STARTPOS);
+  //
+  // for (int f = get_block_offset(node); f < nframes; f++) {
+  //
+  //   if (handle_trig(trig, f)) {
+  //     data->read_ptr = *start_pos.data * bufsize;
+  //   }
+  //
+  //   sample = get_sample_interp(data->read_ptr, buffer, bufsize);
+  //
+  //   rate = unwrap(IN(node, BUFPLAYER_RATE), f);
+  //   data->read_ptr = fmod(data->read_ptr + rate, bufsize);
+  //   node_write_out(node, f, sample);
+
 node_perform bufplayer_perform(Node *node, int nframes, double spf) {
   bufplayer_state *state = node->state;
   int chans = node->ins[0]->layout;
   double *buf = node->ins[0]->buf;
+  double *rate = node->ins[1]->buf;
+  int buf_size = node->ins[0]->size;
+  double *out = node->out->buf;
 
+  double d_index, frac, a, b, sample;
+  int index;
   while (nframes--) {
+
+    d_index = state->phase * buf_size;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    a = buf[index];
+    b = buf[(index + 1) % buf_size];
+
+    sample = (1.0 - frac) * a + (frac * b);
+    state->phase = fmod(state->phase + state->sample_rate_scaling * *rate / buf_size, 1.0); 
+    *out = sample;
+
+    out++;
+    rate++;
   }
 }
+
+Signal *get_sig_float(int layout);
 Node *bufplayer_node(const char *filename) {
 
-  sq_state *state = malloc(sizeof(sq_state));
+  bufplayer_state *state = malloc(sizeof(bufplayer_state));
   state->phase = 0.0;
 
+
   Node *s = node_new(state, (node_perform *)bufplayer_perform, NULL, NULL);
+  Signal *input_buf = malloc(sizeof(Signal));
+  int sf_sample_rate;
+  read_file(filename, input_buf, &sf_sample_rate);
+  state->sample_rate_scaling = (double)sf_sample_rate / ctx_sample_rate();
+
+  s->ins = malloc(sizeof(Signal *) * 2);
   s->num_ins = 2;
-  s->ins = malloc(sizeof(Signal *) *2 );
-  read_file(filename, s->ins[0]);
+  s->ins[0] = input_buf;
   s->ins[1] = get_sig_default(1, 1.0);
   s->out = get_sig(s->ins[0]->layout);
+  return s;
+}
+
+typedef struct {
+  RubberBandState rubberband_state; 
+  int processed_frames;
+  int buf_offset;
+  int hopsize;
+  SignalFloatDeinterleaved *buf;
+  int sfsample_rate;
+} bufplayer_pitchshift_state;
+  // // third parameter is always 0 since we are never expecting a final frame
+  // rubberband_process(p->rb, (const float* const*)&(in->data), p->hopsize, 0);
+  // if (rubberband_available(p->rb) >= (int)p->hopsize) {
+  //   rubberband_retrieve(p->rb, (float* const*)&(out->data), p->hopsize);
+  // } else {
+  //   AUBIO_WRN("pitchshift: catching up with zeros"
+  //       ", only %d available, needed: %d, current pitchscale: %f\n",
+  //       rubberband_available(p->rb), p->hopsize, p->pitchscale);
+  //   fvec_zeros(out);
+  // }
+int minimum(int a, int b) {
+  if (a <= b) {
+    return a;
+  } 
+  return b;
+}
+node_perform bufplayer_pitchshift_perform(Node *node, int nframes, double spf) {
+
+  bufplayer_pitchshift_state *state = node->state;
+
+  float *buf = state->buf->buf + state->buf_offset;
+  int buf_size = state->buf->size;
+
+  double *rate = node->ins[0]->buf;
+  float *out = (float *)node->out->buf;
+
+  state->buf_offset = (state->buf_offset + state->hopsize) % buf_size;
+  int frames_processed = nframes;
+  int out_offset = 0;
+  while (frames_processed) {
+    rubberband_process(state->rubberband_state, (const float *const *)&buf, state->hopsize, false);
+    // printf("available: %d\n", rubberband_available(state->rubberband_state));
+    int available = minimum(rubberband_available(state->rubberband_state), nframes - out_offset);
+    printf("out_offset %d buf_offset %d available %d\n", out_offset, state->buf_offset, available);
+    rubberband_retrieve(state->rubberband_state, (float* const*)&out, available);
+    out_offset = (out_offset + available) % nframes;
+    out = out + out_offset;
+    state->buf_offset = (state->buf_offset + state->hopsize) % buf_size;
+    buf = state->buf->buf + state->hopsize;
+    frames_processed -= available;
+
+  }
+}
+
+Node *bufplayer_pitchshift_node(const char *filename) {
+
+  bufplayer_pitchshift_state *state = malloc(sizeof(bufplayer_pitchshift_state));
+  state->rubberband_state = rubberband_new(
+    ctx_sample_rate(),
+    1,
+    RubberBandOptionTransientsCrisp,
+    1.0,
+    2.0
+  );
+  state->buf_offset = 0;
+  state->hopsize = 256;
+  int sfsample_rate;
+  SignalFloatDeinterleaved *input_buf = malloc(sizeof(SignalFloatDeinterleaved));
+  read_file_float_deinterleaved(filename, input_buf, &sfsample_rate);
+  state->buf = input_buf;
+  state->sfsample_rate = sfsample_rate;
+  //
+
+  Node *s = node_new(state, (node_perform *)bufplayer_pitchshift_perform, NULL, NULL);
+
+  s->ins = malloc(sizeof(Signal *));
+  s->num_ins = 1;
+  s->ins[0] = get_sig_default(1, 1.0);
+  s->out = get_sig_float(s->ins[0]->layout);
   return s;
 }
 
@@ -305,8 +448,8 @@ typedef struct {
   double mem;
 } op_lp_dyn_state;
 
-static inline void op_lp_dyn_perform_tick(op_lp_dyn_state *state, double in, double freq,
-                                      double *out) {
+static inline void op_lp_dyn_perform_tick(op_lp_dyn_state *state, double in,
+                                          double freq, double *out) {
 
   int SAMPLE_RATE = 48000;
   double x = exp(-2 * PI * freq / SAMPLE_RATE);
@@ -316,8 +459,14 @@ static inline void op_lp_dyn_perform_tick(op_lp_dyn_state *state, double in, dou
   state->mem = *out;
 }
 
-static inline double op_lp_dyn_perform_tick_return(op_lp_dyn_state *state, double in) {
-  double out = state->a0 * in - state->b1 * state->mem;
+static inline double op_lp_dyn_perform_tick_return(op_lp_dyn_state *state,
+                                                   double in, double freq) {
+
+  int SAMPLE_RATE = 48000;
+  double x = exp(-2 * PI * freq / SAMPLE_RATE);
+  double a0 = 1.0 - x;
+  double b1 = -x;
+  double out = a0 * in - b1 * state->mem;
   state->mem = out;
   return out;
 }
@@ -338,8 +487,6 @@ node_perform op_lp_dyn_perform(Node *node, int nframes, double spf) {
 void set_op_dyn_lp_params(op_lp_dyn_state *state, double freq) {
   int SAMPLE_RATE = ctx_sample_rate();
   double x = exp(-2 * PI * freq / SAMPLE_RATE);
-  state->a0 = 1.0 - x;
-  state->b1 = -x;
   state->mem = 0.0;
 }
 
@@ -347,7 +494,7 @@ Node *op_lp_dyn_node(double freq, Node *input) {
   op_lp_state *state = malloc(sizeof(op_lp_state));
   set_op_lp_params(state, freq);
   Node *s = node_new(state, op_lp_dyn_perform, NULL, get_sig(1));
-  s->ins = malloc(sizeof(Signal *)*2);
+  s->ins = malloc(sizeof(Signal *) * 2);
   s->ins[0] = input->out;
   s->ins[1] = get_sig_default(1, freq);
   return s;
@@ -850,6 +997,15 @@ Signal *get_sig(int layout) {
   return sig;
 }
 
+Signal *get_sig_float(int layout) {
+  Signal *sig = malloc(sizeof(SignalFloat));
+  sig->buf = buf_ptr;
+  sig->layout = layout;
+  sig->size = BUF_SIZE;
+  buf_ptr += BUF_SIZE * layout;
+  return sig;
+}
+
 Signal *get_sig_default(int layout, double value) {
   Signal *sig = malloc(sizeof(Signal));
   sig->buf = buf_ptr;
@@ -900,8 +1056,7 @@ Node *chain_set_out(Node *chain, Node *out) {
   return chain;
 }
 
-Node *chain_new() { return
-  node_new(NULL, NULL, &(Signal){}, &(Signal){}); }
+Node *chain_new() { return node_new(NULL, NULL, &(Signal){}, &(Signal){}); }
 
 Node *chain_with_inputs(int num_ins, double *defaults) {
   Node *chain = node_new(NULL, NULL, NULL, &(Signal){});
@@ -954,33 +1109,35 @@ void *audio_entry_() {
 void set_node_scalar(Node *target, int input, double value) {
   Ctx *ctx = get_audio_ctx();
   int offset = (int)(get_block_diff() * ctx->sample_rate);
-  scheduler_msg msg = {NODE_SET_SCALAR, offset, {.NODE_SET_SCALAR = (struct NODE_SET_SCALAR){
-    target,
-    input,
-    value,
-  }}};
+  scheduler_msg msg = {NODE_SET_SCALAR,
+                       offset,
+                       {.NODE_SET_SCALAR = (struct NODE_SET_SCALAR){
+                            target,
+                            input,
+                            value,
+                        }}};
   push_msg(&ctx->msg_queue, msg);
 }
-
 
 void *audio_entry() {
 
   Node *chain = chain_new();
-  Node *sig1 = add_to_chain(chain, sine(100.0));
+  Node *sig1 = add_to_chain(chain, bufplayer_node("assets/fat_amen_mono.wav"));
+  // Node *sig1 = add_to_chain(chain, bufplayer_pitchshift_node("assets/fat_amen_mono.wav"));
+  // sig1 = add_to_chain(chain, mul_scalar_node(2.0, sig1));
 
-  Node *dist = add_to_chain(chain, tanh_node(8.0, sig1));
+  // Node *dist = add_to_chain(chain, tanh_node(8.0, sig1));
 
   add_to_dac(chain);
   ctx_add(chain);
 
   // sleep(1);
   while (true) {
-    set_node_scalar(sig1, 0, choices[rand_int(8)]);
-    set_node_scalar(dist, 1, rand_int(8) + 1.0);
-    msleep(250);
+    // set_node_scalar(sig1, 0, choices[rand_int(8)]);
+    // set_node_scalar(sig1, 1, rand_int(2.0) + 0.5);
+    // // set_node_scalar(dist, 1, rand_int(8) + 1.0);
+    // msleep(250);
   }
-
-
 }
 
 int entry() {

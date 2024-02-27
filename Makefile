@@ -9,7 +9,7 @@ SRCS := $(wildcard $(SRCDIR)/*.c)
 
 OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
-LDFLAGS = -lsoundio -lm -lsndfile -lraylib
+LDFLAGS = -lsoundio -lm -lsndfile -lraylib -Llib/rubberband/build/ -lrubberband
 FRAMEWORKS =-framework opengl -framework CoreMIDI -framework cocoa
 # RAYLIB_INCLUDE=/opt/homebrew/include
 # RAYLIB_LIB=/opt/homebrew/lib/
@@ -44,6 +44,8 @@ install:
 	cp build/libyalce_synth.so /usr/local/lib/libyalce_synth.so
 	mkdir -p /usr/local/lib/pkgconfig
 	cp libyalce_synth.pc /usr/local/lib/pkgconfig/libyalce_synth.pc
+	cp lib/rubberband/lib/librubberband.a /usr/local/lib/librubberband.a
+	cp lib/rubberband/rubberband.pc.in /usr/local/lib/pkgconfig/librubberband.pc
 #
 # libyalce_synth.a: $(obj)
 # 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(EXPORT_COMPILER_OPTIONS)
