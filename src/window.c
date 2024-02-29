@@ -1,6 +1,7 @@
 #include "common.h"
 #include "ctx.h"
 #include "raylib.h"
+#include <stdlib.h>
 
 void *create_window(void) {
   SetTraceLogLevel(LOG_ERROR);
@@ -41,4 +42,5 @@ void *create_window(void) {
     EndDrawing();
   }
   CloseWindow();
+  exit(0);
 }

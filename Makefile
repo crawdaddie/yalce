@@ -40,7 +40,7 @@ $(SHARED_LIB_TARGET): $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 install:
 	mkdir -p /usr/local/include/yalce 
 	cp -r $(INCLUDE_DIR)/* /usr/local/include/yalce
-	rm /usr/local/lib/libyalce_synth.so
+	rm -f /usr/local/lib/libyalce_synth.so
 	cp build/libyalce_synth.so /usr/local/lib/libyalce_synth.so
 	mkdir -p /usr/local/lib/pkgconfig
 	cp libyalce_synth.pc /usr/local/lib/pkgconfig/libyalce_synth.pc
