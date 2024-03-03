@@ -142,11 +142,18 @@ static void process_msg_pre(scheduler_msg msg) {
   case NODE_SET_SCALAR: {
     struct NODE_SET_SCALAR payload = msg.body.NODE_SET_SCALAR;
     Node *node = payload.target;
-    // printf("set scalar offset %d %f\n", msg.frame_offset, payload.value);
     Signal *target_input = node->ins[payload.input];
     for (int i = msg.frame_offset; i < target_input->size; i++) {
       *(target_input->buf + i) = payload.value;
     }
+    break;
+  }
+
+  case NODE_SET_TRIG: {
+    struct NODE_SET_TRIG payload = msg.body.NODE_SET_TRIG;
+    Node *node = payload.target;
+    Signal *target_input = node->ins[payload.input];
+    *(target_input->buf + msg.frame_offset) = 1.0;
     break;
   }
   default:
@@ -167,6 +174,14 @@ static void process_msg_post(scheduler_msg msg) {
     for (int i = 0; i < msg.frame_offset; i++) {
       *(target_input->buf + i) = payload.value;
     }
+    break;
+  }
+
+  case NODE_SET_TRIG: {
+    struct NODE_SET_TRIG payload = msg.body.NODE_SET_TRIG;
+    Node *node = payload.target;
+    Signal *target_input = node->ins[payload.input];
+    *(target_input->buf + msg.frame_offset) = 0.0;
     break;
   }
   default:

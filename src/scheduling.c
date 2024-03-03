@@ -1,4 +1,5 @@
 #include "scheduling.h"
+#include "start_audio.h"
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
@@ -81,3 +82,13 @@ int msleepd(double msec) {
 }
 
 void init_scheduling() { clock_gettime(CLOCK_REALTIME, &start_time); }
+
+double get_block_diff() {
+  struct timespec current_time;
+  clock_gettime(CLOCK_REALTIME, &current_time);
+
+  struct timespec audio_block_time;
+  get_block_time(&audio_block_time);
+
+  return timespec_diff(current_time, audio_block_time);
+}

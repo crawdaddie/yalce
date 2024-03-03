@@ -11,14 +11,20 @@ node_perform bufplayer_perform(Node *node, int nframes, double spf) {
   int chans = node->ins[0]->layout;
   double *buf = node->ins[0]->buf;
   double *rate = node->ins[1]->buf;
+  double *trig = node->ins[2]->buf;
+  double *start_pos = node->ins[3]->buf;
+
   int buf_size = node->ins[0]->size;
   double *out = node->out->buf;
 
   double d_index, frac, a, b, sample;
   int index;
   while (nframes--) {
+    if (*trig == 1.0) {
+      state->phase = 0;
+    }
 
-    d_index = state->phase * buf_size;
+    d_index = (fmod(state->phase + *start_pos, 1.0)) * buf_size;
     index = (int)d_index;
     frac = d_index - index;
 
@@ -32,6 +38,8 @@ node_perform bufplayer_perform(Node *node, int nframes, double spf) {
 
     out++;
     rate++;
+    trig++;
+    start_pos++;
   }
 }
 
@@ -46,10 +54,14 @@ Node *bufplayer_node(const char *filename) {
   read_file(filename, input_buf, &sf_sample_rate);
   state->sample_rate_scaling = (double)sf_sample_rate / ctx_sample_rate();
 
-  s->ins = malloc(sizeof(Signal *) * 2);
-  s->num_ins = 2;
+  int num_ins = 4;
+  s->ins = malloc(sizeof(Signal *) * num_ins);
+  s->num_ins = num_ins;
   s->ins[0] = input_buf;
-  s->ins[1] = get_sig_default(1, 1.0);
+  s->ins[1] = get_sig_default(1, 1.0); // playback rate
+  s->ins[2] = get_sig_default(1, 0.0); // trigger
+  s->ins[2]->buf[0] = 1.0;
+  s->ins[3] = get_sig_default(1, 0.0); // startpos 0-1.0
   s->out = get_sig(s->ins[0]->layout);
   return s;
 }

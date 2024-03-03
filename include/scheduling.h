@@ -17,4 +17,6 @@ double timespec_diff(struct timespec a, struct timespec b);
 void init_scheduling();
 double get_time();
 // int thread_func();
+//
+double get_block_diff();
 #endif

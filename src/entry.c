@@ -1,4 +1,5 @@
 #include "entry.h"
+#include "biquad.h"
 #include "bufplayer.h"
 #include "delay.h"
 #include "node.h"
@@ -56,14 +57,20 @@ double random_double_range(double min, double max) {
 }
 
 node_perform noise_perform(Node *node, int nframes, double spf) {
-  Signal *out = node->out;
+  int layout = node->out->layout;
+  double *out = node->out->buf;
 
   while (nframes--) {
-    for (int ch = 0; ch < out->layout; ch++) {
-      *out->buf = random_double();
-      out->buf++;
+    for (int ch = 0; ch < layout; ch++) {
+      *out = random_double();
+      out++;
     }
   }
+}
+
+Node *white_noise() {
+  Node *n = node_new(NULL, (node_perform *)noise_perform, NULL, get_sig(1));
+  return n;
 }
 
 node_perform lf_noise_perform(Node *node, int nframes, double spf) {
@@ -221,7 +228,7 @@ node_perform lag_perform(Node *node, int nframes, double spf) {
 
   while (nframes--) {
     if (*in != state->level) {
-      counter = (int)(state->lagtime * 48000);
+      counter = (int)(state->lagtime / spf);
       state->counter = counter;
       state->target = *in;
       state->slope = (state->target - state->level) / counter;
@@ -243,7 +250,7 @@ node_perform lag_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *lag_node(double lagtime, Signal *in) {
+Node *lag_sig(double lagtime, Signal *in) {
   lag_state *state = malloc(sizeof(lag_state));
   state->lagtime = lagtime;
   state->counter = 0;
@@ -255,6 +262,67 @@ Node *lag_node(double lagtime, Signal *in) {
   s->ins[0] = in;
   s->out = get_sig(1);
 
+  return s;
+}
+typedef struct {
+  double min;
+  double max;
+} scale_state;
+
+// perform scaling of an input which is between 0-1 to min-max
+node_perform scale_perform(Node *node, int nframes, double spf) {
+  scale_state *state = node->state;
+  double *in = node->ins[0]->buf;
+  double *out = node->out->buf;
+  double min = state->min;
+  double max = state->max;
+  while (nframes--) {
+    double val = *in;
+    val *= max - min;
+    val += min;
+    *out = val;
+    out++;
+    in++;
+  }
+}
+
+// perform scaling of an input which is between -1-1 to min-max
+node_perform scale2_perform(Node *node, int nframes, double spf) {
+  scale_state *state = node->state;
+  double *in = node->ins[0]->buf;
+  double *out = node->out->buf;
+  double min = state->min;
+  double max = state->max;
+  while (nframes--) {
+    double val = (*in * (0.5)) + 0.5; // scale to 0-1 first
+    val *= max - min;
+    val += min;
+    *out = val;
+    out++;
+    in++;
+  }
+}
+// scales a node with outputs between 0-1 to values between min & max (linear)
+Node *scale_node(double min, double max, Node *in) {
+  scale_state *state = malloc(sizeof(scale_state));
+  state->min = min;
+  state->max = max;
+  Node *s = node_new(state, (node_perform *)scale_perform, NULL, NULL);
+  s->ins = malloc(sizeof(Signal *));
+  s->ins[0] = in->out;
+  s->out = get_sig(in->out->layout);
+  return s;
+}
+
+// scales a node with outputs between -1-1 to values between min & max (linear)
+Node *scale2_node(double min, double max, Node *in) {
+  scale_state *state = malloc(sizeof(scale_state));
+  state->min = min;
+  state->max = max;
+  Node *s = node_new(state, (node_perform *)scale2_perform, NULL, NULL);
+  s->ins = malloc(sizeof(Signal *));
+  s->ins[0] = in->out;
+  s->out = get_sig(in->out->layout);
   return s;
 }
 
@@ -422,15 +490,6 @@ Node *pipe_output_to_idx(int idx, Node *send, Node *recv) {
   recv->ins[idx] = send->out;
   return recv;
 }
-double get_block_diff() {
-  struct timespec current_time;
-  clock_gettime(CLOCK_REALTIME, &current_time);
-
-  struct timespec audio_block_time;
-  get_block_time(&audio_block_time);
-
-  return timespec_diff(current_time, audio_block_time);
-}
 
 Node *add_to_dac(Node *node) {
   node->type = OUTPUT;
@@ -447,6 +506,7 @@ Node *chain_with_inputs(int num_ins, double *defaults) {
   Node *chain = node_new(NULL, NULL, NULL, &(Signal){});
 
   chain->ins = malloc(num_ins * (sizeof(Signal *)));
+  chain->num_ins = num_ins;
   for (int i = 0; i < num_ins; i++) {
     chain->ins[i] = get_sig_default(1, defaults[i]);
   }
@@ -491,6 +551,37 @@ void *audio_entry_() {
   ctx_add(chain);
 }
 
+int get_block_offset() {
+
+  Ctx *ctx = get_audio_ctx();
+  int offset = (int)(get_block_diff() * ctx->sample_rate);
+  return offset;
+}
+
+void set_node_scalar_at(Node *target, int offset, int input, double value) {
+
+  Ctx *ctx = get_audio_ctx();
+  scheduler_msg msg = {NODE_SET_SCALAR,
+                       offset,
+                       {.NODE_SET_SCALAR = (struct NODE_SET_SCALAR){
+                            target,
+                            input,
+                            value,
+                        }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
+void set_node_trig_at(Node *target, int offset, int input) {
+  Ctx *ctx = get_audio_ctx();
+  scheduler_msg msg = {NODE_SET_TRIG,
+                       offset,
+                       {.NODE_SET_TRIG = (struct NODE_SET_TRIG){
+                            target,
+                            input,
+                        }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
 void set_node_scalar(Node *target, int input, double value) {
   Ctx *ctx = get_audio_ctx();
   int offset = (int)(get_block_diff() * ctx->sample_rate);
@@ -504,18 +595,53 @@ void set_node_scalar(Node *target, int input, double value) {
   push_msg(&ctx->msg_queue, msg);
 }
 
+void set_node_trig(Node *target, int input) {
+  Ctx *ctx = get_audio_ctx();
+  int offset = (int)(get_block_diff() * ctx->sample_rate);
+  scheduler_msg msg = {NODE_SET_TRIG,
+                       offset,
+                       {.NODE_SET_TRIG = (struct NODE_SET_TRIG){
+                            target,
+                            input,
+                        }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
+void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
+  Ctx *ctx = get_audio_ctx();
+  int offset = (int)(get_block_diff() * ctx->sample_rate);
+  for (int i = 0; i < num_msgs; i++) {
+    printf("push msgs %d %p type: %d\n", offset, scheduler_msgs + i,
+           (scheduler_msgs + i)->type);
+    scheduler_msg msg = scheduler_msgs[i];
+    msg.frame_offset = offset;
+    push_msg(&ctx->msg_queue, msg);
+  }
+}
+
 void *audio_entry() {
   Node *chain = chain_new();
-  Signal *in_sig = get_sig_default(1, 110.);
-  Node *freq = add_to_chain(chain, lag_node(0.2, in_sig));
-  Node *sig1 = add_to_chain(chain, sine(100.0));
-  pipe_output(freq, sig1);
+  // Signal *in_sig = get_sig_default(1, 110.);
+  // Node *freq = add_to_chain(chain, lag_sig(0.2, in_sig));
+  // Node *sig1 = add_to_chain(chain, sine(100.0));
+  // pipe_output(freq, sig1);
+  // add_to_dac(chain);
+  // ctx_add(chain);
+  //
+  // while (true) {
+  //   set_node_scalar(freq, 0, random_double_range(200., 1000.));
+  //   msleep(500);
+  // }
+  //
+  //
+  Node *noise = add_to_chain(chain, sine(100.));
+  noise = add_to_chain(chain, biquad_lp_node(1000., 0.1, noise));
   add_to_dac(chain);
   ctx_add(chain);
 
   while (true) {
-    set_node_scalar(freq, 0, random_double_range(200., 1000.));
-    msleep(500);
+    // set_node_scalar(freq, 0, random_double_range(200., 1000.));
+    msleep(1000);
   }
 }
 int entry() {

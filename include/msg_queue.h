@@ -3,7 +3,7 @@
 #include "node.h"
 
 typedef struct {
-  enum { NODE_ADD, NODE_SET_SCALAR } type;
+  enum { NODE_ADD, NODE_SET_SCALAR, NODE_SET_TRIG } type;
   int frame_offset;
   union {
     struct NODE_ADD {
@@ -13,6 +13,11 @@ typedef struct {
       int input;
       double value;
     } NODE_SET_SCALAR;
+
+    struct NODE_SET_TRIG {
+      Node *target;
+      int input;
+    } NODE_SET_TRIG;
   } body;
 } scheduler_msg;
 
@@ -28,6 +33,9 @@ typedef struct {
 } msg_queue;
 
 void push_msg(msg_queue *queue, scheduler_msg msg);
+
 scheduler_msg pop_msg(msg_queue *queue);
+int get_write_ptr();
+void update_bundle(int write_ptr);
 
 #endif
