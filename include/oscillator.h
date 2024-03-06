@@ -35,4 +35,17 @@ node_perform sq_perform(Node *node, int nframes, double spf);
 
 Node *sq_node(double freq);
 
+typedef struct {
+
+  unsigned int num_harmonics;
+  unsigned int m;
+  double rate;
+  double phase;
+  double p;
+  double C2;
+  double a;
+  double state;
+} blsaw_state;
+Node *blsaw_node(double freq, int num_harmonics);
+
 #endif

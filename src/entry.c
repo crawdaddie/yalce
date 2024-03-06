@@ -1,12 +1,11 @@
 #include "entry.h"
 #include "biquad.h"
-#include "bufplayer.h"
 #include "delay.h"
+#include "impulse.h"
 #include "node.h"
 #include "oscillator.h"
 #include "scheduling.h"
 #include "signal.h"
-#include "start_audio.h"
 #include "window.h"
 #include <math.h>
 #include <pthread.h>
@@ -486,8 +485,17 @@ Node *pipe_output(Node *send, Node *recv) {
   return recv;
 }
 
+Node *pipe_sig(Signal *send, Node *recv) {
+  recv->ins = &send;
+  return recv;
+}
 Node *pipe_output_to_idx(int idx, Node *send, Node *recv) {
   recv->ins[idx] = send->out;
+  return recv;
+}
+
+Node *pipe_sig_to_idx(int idx, Signal *send, Node *recv) {
+  recv->ins[idx] = send;
   return recv;
 }
 
@@ -621,21 +629,8 @@ void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
 
 void *audio_entry() {
   Node *chain = chain_new();
-  // Signal *in_sig = get_sig_default(1, 110.);
-  // Node *freq = add_to_chain(chain, lag_sig(0.2, in_sig));
-  // Node *sig1 = add_to_chain(chain, sine(100.0));
-  // pipe_output(freq, sig1);
-  // add_to_dac(chain);
-  // ctx_add(chain);
-  //
-  // while (true) {
-  //   set_node_scalar(freq, 0, random_double_range(200., 1000.));
-  //   msleep(500);
-  // }
-  //
-  //
   Node *noise = add_to_chain(chain, sine(100.));
-  noise = add_to_chain(chain, biquad_lp_node(1000., 0.1, noise));
+  // noise = add_to_chain(chain, op_lp_node(1000., noise));
   add_to_dac(chain);
   ctx_add(chain);
 
@@ -651,6 +646,7 @@ int entry() {
     return 1;
   }
   // Raylib wants to be in the main thread :(
+  // create_spectrogram_window();
   create_window();
 
   pthread_join(thread, NULL);

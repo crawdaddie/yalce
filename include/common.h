@@ -12,4 +12,5 @@
 #define PI M_PI
 /* static const double PI = 3.14159265358979323846264338328; */
 
+#define EPSILON 2.220446e-16
 #endif

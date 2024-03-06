@@ -56,7 +56,6 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     //   }
     // }
 
-
     set_block_time();
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
 
@@ -74,8 +73,6 @@ static void _write_callback(struct SoundIoOutStream *outstream,
         areas[channel].ptr += areas[channel].step;
       }
     }
-
-
 
     // ctx->block_time = get_time();
 

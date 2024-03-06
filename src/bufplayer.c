@@ -3,7 +3,6 @@
 #include "node.h"
 #include "soundfile.h"
 #include <math.h>
-#include <rubberband/rubberband-c.h>
 #include <stdlib.h>
 
 node_perform bufplayer_perform(Node *node, int nframes, double spf) {
@@ -65,6 +64,7 @@ Node *bufplayer_node(const char *filename) {
   s->out = get_sig(s->ins[0]->layout);
   return s;
 }
+/*
 
 typedef struct {
   RubberBandState rubberband_state;
@@ -146,3 +146,4 @@ Node *bufplayer_pitchshift_node(const char *filename) {
   s->out = get_sig_float(s->ins[0]->layout);
   return s;
 }
+*/

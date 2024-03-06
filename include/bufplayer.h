@@ -10,4 +10,3 @@ typedef struct {
 Node *bufplayer_node(const char *filename);
 
 #endif
-

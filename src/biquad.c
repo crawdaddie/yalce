@@ -1,12 +1,13 @@
 #include "biquad.h"
 #include "common.h"
+#include "ctx.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 static void set_common_filter_values(biquad_state *state, double fc, double Q) {
 
-  double K_ = tan(PI * fc / 48000);
+  double K_ = tan(PI * fc / ctx_sample_rate());
   double kSqr_ = K_ * K_;
   double denom_ = 1 / (kSqr_ * Q + K_ + Q);
   state->K_ = K_;
@@ -21,7 +22,7 @@ static void set_resonance(biquad_state *state, double frequency, double radius,
                           bool normalize) {
 
   state->a[2] = radius * radius;
-  state->a[1] = -2.0 * radius * cos(2. * PI * frequency / 48000.);
+  state->a[1] = -2.0 * radius * cos(2. * PI * frequency / ctx_sample_rate());
 
   if (normalize) {
     // Use zeros at +- 1 and normalize the filter peak gain.
@@ -125,7 +126,7 @@ Node *biquad_node(Node *in) {
 
 Node *biquad_lp_node(double freq, double res, Node *in) {
   Node *node = biquad_node(in);
-  set_low_pass(node->state, freq, 1.0);
+  set_low_pass(node->state, freq, res);
   set_resonance(node->state, freq, res, true);
   return node;
 }

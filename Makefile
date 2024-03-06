@@ -1,5 +1,5 @@
 INCLUDE_DIR = include
-CC = clang -Iinclude
+CC = clang -Iinclude -g
 
 SRCDIR := src
 BUILDDIR := build
@@ -9,7 +9,8 @@ SRCS := $(wildcard $(SRCDIR)/*.c)
 
 OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
-LDFLAGS = -lsoundio -lm -lsndfile -lraylib -Llib/rubberband/build/ -lrubberband
+LDFLAGS = -lsoundio -lm -lsndfile -lraylib -lfftw3
+# -Llib/rubberband/build/ -lrubberband
 FRAMEWORKS =-framework opengl -framework CoreMIDI -framework cocoa
 # RAYLIB_INCLUDE=/opt/homebrew/include
 # RAYLIB_LIB=/opt/homebrew/lib/
