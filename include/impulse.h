@@ -31,7 +31,9 @@ typedef struct {
   double rate;
   double phase;
   double p;
+  double tightness;
 } windowed_impulse_state;
 
-Node *windowed_impulse_node(double pulse_freq, double freq, int num_harmonics);
+Node *windowed_impulse_node(double pulse_freq, int num_harmonics,
+                            double tightness);
 #endif

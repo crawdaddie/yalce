@@ -151,6 +151,7 @@ module Synth = struct
     let sq f = Osc.sq f |> chain_wrap
     let saw f = Osc.blsaw f 100 |> chain_wrap
     let blit f = Osc.blit f 1000 |> chain_wrap
+    let winblit f t = Osc.winblit f 800 t |> chain_wrap
 
     let sum2 x y =
       let len, arr = node_list_to_carr_ptr [ x; y ] in
@@ -199,4 +200,12 @@ let init_yalce () =
   maketable_sin ();
   maketable_sq ();
   start_audio ()
+;;
+
+(* let start_audio = foreign "start_audio" (void @-> returning void) *)
+
+let create_window = foreign "create_window" (void @-> returning void)
+
+let create_spectrogram_window =
+  foreign "create_spectrogram_window" (void @-> returning void)
 ;;

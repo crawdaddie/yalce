@@ -24,10 +24,14 @@ $(BUILDDIR):
 	mkdir -p $(BUILDDIR)/audio
 
 all: $(TARGET)
-.PHONY: all clean install
+.PHONY: all clean
+
+synth: build/synth
+	./build/synth
 
 clean:
-	$(RM) -r $(BUILDDIR)
+	rm -r $(BUILDDIR)
+	dune clean 
 
 build/synth: $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(COMPILER_OPTIONS)
@@ -39,11 +43,12 @@ $(SHARED_LIB_TARGET): $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 	$(CC) -shared -o $@  $^ $(LDFLAGS) $(FRAMEWORKS) $(EXPORT_COMPILER_OPTIONS)
 
 OCAML_EXAMPLE_DIR := examples
-clicks_cuts: build/libyalce_synth.so 
-	dune exec ocamlbin/clicks_cuts.exe --profile release
 
-ergonomic: build/libyalce_synth.so 
-	dune exec ocamlbin/ergonomic.exe --profile release
-
-$(OCAML_EXAMPLE_DIR)/%.ml: build/libyalce_synth.so 
+$(OCAML_EXAMPLE_DIR)/%.ml: $(SHARED_LIB_TARGET) .touch_file
 	dune exec $(basename $@).exe --profile release
+
+.touch_file: $(SHARED_LIB_TARGET)
+	touch .touch_file
+
+.PHONY: example
+example: $(OCAML_EXAMPLE_DIR)/%.ml

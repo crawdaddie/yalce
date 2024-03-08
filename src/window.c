@@ -23,7 +23,6 @@ void *create_window(void) {
 
   while (!WindowShouldClose()) {
 
-
     BeginDrawing();
     ClearBackground(RAYWHITE);
 
@@ -49,7 +48,7 @@ void *create_window(void) {
 }
 #define FFT_SIZE 512
 
-void *create_spectrogram_window(void) {
+void create_spectrogram_window(void) {
   SetTraceLogLevel(LOG_ERROR);
   int screen_width = 400;
   int screen_height = 400;
@@ -74,7 +73,6 @@ void *create_spectrogram_window(void) {
   while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(RAYWHITE);
-
 
     for (int j = 0; j < FFT_SIZE; j++) {
       summed_audio[j] = 0.5 * (data[j] + data[j + 1]);

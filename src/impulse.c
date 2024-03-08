@@ -144,16 +144,18 @@ node_perform windowed_impulse_perform(Node *node, int nframes, double spf) {
 
   windowed_impulse_state *state = node->state;
   double *in = node->ins[0]->buf;
+  double *tightness = node->ins[1]->buf;
   double *out = node->out->buf;
   double tmp, denominator;
   double freq;
 
   while (nframes--) {
     freq = *in;
+
     state->p = (1.0 / spf) / freq;
     state->rate = PI / state->p;
-
     denominator = sin(state->phase);
+
     tmp = denominator;
     if (denominator <= EPSILON) {
       tmp = 1.0;
@@ -161,29 +163,39 @@ node_perform windowed_impulse_perform(Node *node, int nframes, double spf) {
       tmp = sin(state->m * state->phase);
       tmp /= state->m * denominator;
     }
-    double window = (1.0 + cos(4 * state->phase)) * 0.5;
+    // double window;
+
+    double window = (state->phase >= *tightness * PI &&
+                     state->phase <= (1 - *tightness) * PI)
+                        ? 0.0
+                        : (1.0 + cos(state->phase / *tightness)) * 0.5;
     tmp *= window;
+    // printf("%f %f %f\n", tmp, window, state->phase);
 
     state->phase += state->rate;
     if (state->phase >= PI)
       state->phase -= PI;
 
     *out = tmp;
-    printf("%f\n", *out);
     out++;
     in++;
+    tightness++;
   }
 }
 
-Node *windowed_impulse_node(double pulse_freq, double freq, int num_harmonics) {
+Node *windowed_impulse_node(double pulse_freq, int num_harmonics,
+                            double tightness) {
   windowed_impulse_state *state = malloc(sizeof(windowed_impulse_state));
   state->phase = 0.0;
-  state->p = ctx_sample_rate() / freq;
+  state->p = ctx_sample_rate() / pulse_freq;
   state->m = 2 * num_harmonics + 1;
   state->rate = PI / state->p;
+  state->tightness = tightness;
+
   Node *n = node_new(state, (node_perform *)windowed_impulse_perform, NULL,
                      get_sig(1));
-  n->ins = malloc(sizeof(Signal *));
+  n->ins = malloc(sizeof(Signal *) * 2);
   n->ins[0] = get_sig_default(1, pulse_freq);
+  n->ins[1] = get_sig_default(1, tightness);
   return n;
 }

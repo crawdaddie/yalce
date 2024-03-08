@@ -629,7 +629,7 @@ void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
 
 void *audio_entry() {
   Node *chain = chain_new();
-  Node *noise = add_to_chain(chain, windowed_impulse_node(10., 1000., 100));
+  Node *noise = add_to_chain(chain, windowed_impulse_node(10., 100, 0.05));
   // noise = add_to_chain(chain, op_lp_node(1000., noise));
   add_to_dac(chain);
   ctx_add(chain);
