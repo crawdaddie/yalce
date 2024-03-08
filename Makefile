@@ -38,22 +38,12 @@ EXPORT_COMPILER_OPTIONS = $(COMPILER_OPTIONS) -fPIC
 $(SHARED_LIB_TARGET): $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 	$(CC) -shared -o $@  $^ $(LDFLAGS) $(FRAMEWORKS) $(EXPORT_COMPILER_OPTIONS)
 
-install:
-	mkdir -p /usr/local/include/yalce 
-	cp -r $(INCLUDE_DIR)/* /usr/local/include/yalce
-	rm -f /usr/local/lib/libyalce_synth.so
-	cp build/libyalce_synth.so /usr/local/lib/libyalce_synth.so
-	mkdir -p /usr/local/lib/pkgconfig
-	cp libyalce_synth.pc /usr/local/lib/pkgconfig/libyalce_synth.pc
-	cp lib/rubberband/lib/librubberband.a /usr/local/lib/librubberband.a
-	cp lib/rubberband/rubberband.pc.in /usr/local/lib/pkgconfig/librubberband.pc
+OCAML_EXAMPLE_DIR := examples
+clicks_cuts: build/libyalce_synth.so 
+	dune exec ocamlbin/clicks_cuts.exe --profile release
 
-#
-# libyalce_synth.a: $(obj)
-# 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(EXPORT_COMPILER_OPTIONS)
-#
-# libyalce_synth.so: $(obj)
-# 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(EXPORT_COMPILER_OPTIONS) -fPIC
-#
-# # .PHONY install
-#
+ergonomic: build/libyalce_synth.so 
+	dune exec ocamlbin/ergonomic.exe --profile release
+
+$(OCAML_EXAMPLE_DIR)/%.ml: build/libyalce_synth.so 
+	dune exec $(basename $@).exe --profile release
