@@ -5,14 +5,14 @@
 FILE *log_file;
 FILE *log_stream;
 void write_log(const char *format, ...) {
-  va_list args;
-  va_start(args, format);
+  // va_list args;
+  // va_start(args, format);
   /* fprintf(log_stream, "[%5.f] ", (double)clock() / (double)CLOCKS_PER_SEC);
    */
-  vprintf(format, args);
+  // vprintf(format, args);
   // printf(format,
 
-  va_end(args);
+  // va_end(args);
   // fflush(log_stream);
 }
 

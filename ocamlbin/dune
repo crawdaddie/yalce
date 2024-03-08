@@ -1,0 +1,5 @@
+(executables
+ (names main ergonomic clicks_cuts)
+ (preprocess (pps ppx_jane))
+ (libraries core yalce unix raylib ctypes-foreign core_unix.command_unix)
+)

@@ -1,0 +1,9 @@
+(library
+ (name            yalce)
+ (libraries       core re lwt ctypes-foreign portmidi)
+ (foreign_stubs
+  (language c)
+  (include_dirs ../include))
+ (c_library_flags (-lyalce_synth))
+)
+

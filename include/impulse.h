@@ -25,6 +25,13 @@ typedef struct {
 } blit_state;
 Node *blit_node(double freq, int num_harmonics);
 
-#define EPSILON 2.220446e-16
+typedef struct {
+  unsigned int num_harmonics;
+  unsigned int m;
+  double rate;
+  double phase;
+  double p;
+} windowed_impulse_state;
 
+Node *windowed_impulse_node(double pulse_freq, double freq, int num_harmonics);
 #endif

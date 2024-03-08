@@ -136,5 +136,54 @@ Node *blit_node(double freq, int num_harmonics) {
   return n;
 }
 
+// Function to apply Hann window to a given value
+double hann_window(double x) {
+  return 0.5 * (1 - cos(2 * PI * 12 * (x - 0.5)));
+}
+node_perform windowed_impulse_perform(Node *node, int nframes, double spf) {
+
+  windowed_impulse_state *state = node->state;
+  double *in = node->ins[0]->buf;
+  double *out = node->out->buf;
+  double tmp, denominator;
+  double freq;
+
+  while (nframes--) {
+    freq = *in;
+    state->p = (1.0 / spf) / freq;
+    state->rate = PI / state->p;
+
+    denominator = sin(state->phase);
+    tmp = denominator;
+    if (denominator <= EPSILON) {
+      tmp = 1.0;
+    } else {
+      tmp = sin(state->m * state->phase);
+      tmp /= state->m * denominator;
+    }
+    double window = (1.0 + cos(4 * state->phase)) * 0.5;
+    tmp *= window;
+
+    state->phase += state->rate;
+    if (state->phase >= PI)
+      state->phase -= PI;
+
+    *out = tmp;
+    printf("%f\n", *out);
+    out++;
+    in++;
+  }
+}
+
 Node *windowed_impulse_node(double pulse_freq, double freq, int num_harmonics) {
+  windowed_impulse_state *state = malloc(sizeof(windowed_impulse_state));
+  state->phase = 0.0;
+  state->p = ctx_sample_rate() / freq;
+  state->m = 2 * num_harmonics + 1;
+  state->rate = PI / state->p;
+  Node *n = node_new(state, (node_perform *)windowed_impulse_perform, NULL,
+                     get_sig(1));
+  n->ins = malloc(sizeof(Signal *));
+  n->ins[0] = get_sig_default(1, pulse_freq);
+  return n;
 }
