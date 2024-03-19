@@ -6,19 +6,22 @@ highly unsafe
 ## dependencies
 - [libsoundio](http://libsound.io/)
 - [ocaml](https://ocaml.org/)
+- [raylib](https://www.raylib.com/)
+- [fftw3](https://www.fftw.org/)
 
 # build
 ```
-make synth
+make build/synth
 ```
-# build ocaml bindings
-```make ocamlbindings```
+builds a standalone test program
 
-```make utop_test```
-opens utop ocaml repl with synth bindings loaded
-# make a square wave
-```ocaml
-let s = sq_detune 100.;; (* create a square wave node *)
-play s;; (* add it to the live synthesis graph which writes its result to the DAC *)
+
+# examples
+```
+make examples/clicks_cuts.ml
+```
+
+```
+make examples/ergonomic.ml
 ```
 
