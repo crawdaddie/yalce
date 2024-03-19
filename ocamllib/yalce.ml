@@ -65,6 +65,10 @@ let mix_nodes_arr =
   foreign "mix_nodes_arr" (int @-> ptr Node.node @-> ptr double @-> returning Node.node)
 ;;
 
+let env_node =
+  foreign "env_node" (int @-> ptr double @-> ptr double @-> returning Node.node)
+;;
+
 let ctx_add = foreign "ctx_add" (Node.node @-> returning Node.node)
 let add_to_chain = foreign "add_to_chain" (Node.node @-> Node.node @-> returning Node.node)
 let add_to_dac = foreign "add_to_dac" (Node.node @-> returning Node.node)
@@ -156,6 +160,14 @@ module Synth = struct
     let sum2 x y =
       let len, arr = node_list_to_carr_ptr [ x; y ] in
       chain_wrap (sum_nodes_arr len arr)
+    ;;
+
+    let env levels times =
+      env_node
+        (List.length times)
+        (levels |> CArray.of_list double |> CArray.start)
+        (times |> CArray.of_list double |> CArray.start)
+      |> chain_wrap
     ;;
 
     let ( +~ ) = sum2

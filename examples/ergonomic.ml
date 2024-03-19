@@ -21,6 +21,7 @@ let saw_synth () =
       let inputs = [ 100. ]
     end) in
   let s = chorus_list [ 1.; 1.01; 1.02 ] (chain_input_sig 0) (fun _ -> saw 100.) in
+  let s = s *~ env [ 0.; 1.; 0. ] [ 0.2; 0.5 ] in
   finish s
 ;;
 
