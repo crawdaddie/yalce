@@ -50,5 +50,5 @@ $(OCAML_EXAMPLE_DIR)/%.ml: $(SHARED_LIB_TARGET) .touch_file
 .touch_file: $(SHARED_LIB_TARGET)
 	touch .touch_file
 
-.PHONY: example
-example: $(OCAML_EXAMPLE_DIR)/%.ml
+.PHONY: examples
+examples: $(OCAML_EXAMPLE_DIR)/%.ml

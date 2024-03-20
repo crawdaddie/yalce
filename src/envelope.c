@@ -9,6 +9,7 @@ node_perform env_perform(Node *node, int nframes, double spf) {
 
   while (nframes--) {
     if (*trig == 1.0) {
+      // printf("trig!\n")
       state->value = state->levels[0];
       state->state = 0;
     }
@@ -17,7 +18,7 @@ node_perform env_perform(Node *node, int nframes, double spf) {
 
     double target = state->levels[state->state + 1];
     double rate =
-        (state->state >= state->len) ? 0.0 : state->rates[state->state];
+        (state->state > state->len) ? 0.0 : state->rates[state->state];
 
     state->value += rate;
 
@@ -61,6 +62,7 @@ Node *env_node(int len, double *levels, double *times) {
   env->num_ins = 1;
   env->ins = malloc(sizeof(Signal *));
   env->ins[0] = get_sig(1);
+  printf("env node:: %d %p\n", len, env);
   return env;
 }
 

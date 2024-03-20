@@ -1,6 +1,7 @@
 #include "entry.h"
 #include "biquad.h"
 #include "delay.h"
+#include "envelope.h"
 #include "impulse.h"
 #include "node.h"
 #include "oscillator.h"
@@ -630,12 +631,17 @@ void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
 void *audio_entry() {
   Node *chain = chain_new();
   Node *noise = add_to_chain(chain, windowed_impulse_node(10., 100, 0.05));
+  double levels[3] = {0.0, 1.0, 0.0};
+  double times[2] = {0.002, 0.80};
+  Node *env = add_to_chain(chain, env_node(2, levels, times));
+  noise = add_to_chain(chain, mul_node(noise, env));
   // noise = add_to_chain(chain, op_lp_node(1000., noise));
   add_to_dac(chain);
   ctx_add(chain);
 
   while (true) {
     // set_node_scalar(freq, 0, random_double_range(200., 1000.));
+    set_node_trig(env, 0);
     msleep(1000);
   }
 }

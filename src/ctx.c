@@ -107,6 +107,7 @@ Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
                            output_num);
     }
   }
+
   Signal *out = NULL;
   if (head->head) {
     Node *tail = perform_graph(head->head, nframes, seconds_per_frame, dac_sig,
