@@ -628,20 +628,38 @@ void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
   }
 }
 
+void **sq_perform_linear(void **graph_ptr, int nframes, double spf) {
+  double *freq_in = ((Signal *)*graph_ptr)->buf;
+  double *out = ((Signal *)*(graph_ptr + 1))->buf;
+  sq_state *state = (sq_state *)*(graph_ptr + 2);
+  while (nframes--) {
+    *out = sq_sample(state->phase);
+    // *out += sq_sample(state->phase * 1.5, *input);
+    // *out /= 2.;
+    state->phase = fmod(*freq_in * spf + (state->phase), 1.0);
+    freq_in++;
+    out++;
+  }
+  return graph_ptr + 4;
+}
+static void **square_node(double freq) {
+  Ctx *ctx = get_audio_ctx();
+  void **graph_ptr = ctx->graph + ctx->graph_len;
+  *(graph_ptr) = (void *)sq_perform_linear;
+  *(graph_ptr + 1) = (void *)get_sig_default(1, freq); // freq input
+  *(graph_ptr + 2) = get_sig(1);                       // output
+  sq_state *state = malloc(sizeof(sq_state));
+  state->phase = 0.0;
+  *(graph_ptr + 3) = state;
+  ctx->graph_len += 4;
+  return graph_ptr + 4;
+}
+
 void *audio_entry() {
-  Node *chain = chain_new();
-  Node *noise = add_to_chain(chain, windowed_impulse_node(10., 100, 0.05));
-  double levels[3] = {0.0, 1.0, 0.0};
-  double times[2] = {0.002, 0.80};
-  Node *env = add_to_chain(chain, env_node(2, levels, times));
-  noise = add_to_chain(chain, mul_node(noise, env));
-  // noise = add_to_chain(chain, op_lp_node(1000., noise));
-  add_to_dac(chain);
-  ctx_add(chain);
+  square_node(100.);
 
   while (true) {
     // set_node_scalar(freq, 0, random_double_range(200., 1000.));
-    set_node_trig(env, 0);
     msleep(1000);
   }
 }

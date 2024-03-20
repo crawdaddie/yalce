@@ -21,6 +21,9 @@ void init_ctx() {
   ctx.msg_queue.num_msgs = 0;
   ctx.msg_queue.write_ptr = 0;
   ctx.msg_queue.read_ptr = 0;
+  ctx.max_graph_len = 32;
+  ctx.graph = malloc(sizeof(void *) * ctx.max_graph_len);
+  ctx.graph_len = 0;
 }
 
 Ctx *get_audio_ctx() { return &ctx; }
@@ -40,6 +43,10 @@ Node *ctx_add(Node *node) {
   return node;
 }
 
+void perform_linear_graph(void **graph_ptr, int len, int nframes, double spf) {
+  void **perform = *graph_ptr;
+}
+
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
 
   int consumed = process_msg_queue_pre(&ctx->msg_queue);
@@ -47,7 +54,8 @@ UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
   if (ctx->head == NULL) {
     return NULL;
   }
-  perform_graph(ctx->head, nframes, seconds_per_frame, &ctx->dac_buffer, 0);
+  // perform_graph(ctx->head, nframes, seconds_per_frame, &ctx->dac_buffer, 0);
+  perform_linear_graph(ctx->graph, ctx->graph_len, nframes, seconds_per_frame);
   // ctx->dac_bufer
   process_msg_queue_post(&ctx->msg_queue, consumed);
 }

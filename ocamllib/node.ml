@@ -34,4 +34,4 @@ type node
 let node = ptr node_struct
 let out node = getf !@node node_out
 let ins node = getf !@node node_ins
-let in_sig i node = !@(ins node +@ i)
+let input_sig i node = !@(ins node +@ i)

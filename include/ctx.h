@@ -10,6 +10,9 @@ typedef struct {
   Signal dac_buffer;
   int sample_rate;
   msg_queue msg_queue;
+  void **graph;
+  int graph_len;
+  int max_graph_len;
 } Ctx;
 
 double **alloc_buses(int num_buses);

@@ -162,6 +162,9 @@ module Synth = struct
       chain_wrap (sum_nodes_arr len arr)
     ;;
 
+    let mul x y = mul x y |> chain_wrap
+    let ( *~ ) = mul
+
     let env levels times =
       env_node
         (List.length times)
@@ -198,7 +201,18 @@ module Synth = struct
     let chorus_list list input f =
       List.map
         (fun freq_mul ->
-          let freq = lag_sig 0.012 input |> mul_scalar freq_mul in
+          let freq = lag_sig 0.0 input |> mul_scalar freq_mul in
+          let n = f () in
+          pipe_output freq n)
+        list
+      |> sumn
+      |> mul_scalar @@ (1. /. (Int.to_float @@ List.length list))
+    ;;
+
+    let chorus_list_lag list input f lagtime =
+      List.map
+        (fun freq_mul ->
+          let freq = lag_sig lagtime input |> mul_scalar freq_mul in
           let n = f () in
           pipe_output freq n)
         list
