@@ -1,4 +1,6 @@
 #include "node.h"
+#include "common.h"
+#include "signal.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -143,13 +145,21 @@ void graph_print(Graph *dll) {
   while (temp != NULL) {
     printf("[ %p [%s] [%s] ", temp, temp->name, node_type_names[temp->type]);
     printf("ins: ");
+    double *buf_pool_start = get_buf_pool_start();
     for (int i = 0; i < temp->num_ins; i++) {
-      printf("[%d],", temp->ins[i]->layout);
+      int buf_offset = (temp->ins[i]->buf - buf_pool_start) / BUF_SIZE;
+      printf("(\x1b[38;5;%dmbuf %d\x1b[0m [%d]), ", buf_offset, buf_offset,
+             temp->ins[i]->layout);
     }
+
+    int out_buf_offset = (temp->out->buf - buf_pool_start) / BUF_SIZE;
+    printf("out: \x1b[38;5;%dmbuf %d\x1b[0m [%d]", out_buf_offset,
+           out_buf_offset, temp->out->layout);
+
     printf(" ]");
     temp = temp->next;
     if (temp) {
-      printf(" -> ");
+      printf("\n");
     }
   }
   printf("\n");

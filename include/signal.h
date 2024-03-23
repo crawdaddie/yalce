@@ -1,5 +1,6 @@
 #ifndef _SIGNAL_H
 #define _SIGNAL_H
+double *get_buf_pool_start();
 
 typedef struct Signal {
   // size of the data array will be size * layout

@@ -455,6 +455,7 @@ void *audio_entry() {
     add_to_dac(sq);
     ctx_add(sq);
   }
+  graph_print(&get_audio_ctx()->graph);
 
   msleep(2000);
   Node *t = ctx_get_tail();

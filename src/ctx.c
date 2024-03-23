@@ -41,7 +41,6 @@ Node *ctx_add(Node *node) {
   //   tail = node;
   // }
   graph_add_tail(&ctx->graph, node);
-  graph_print(&ctx->graph);
   return node;
 }
 
