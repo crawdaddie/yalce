@@ -27,28 +27,10 @@ typedef struct Node {
   int frame_offset;
 } Node;
 
-double random_double();
-
-double random_double_range(double min, double max);
-
-node_perform noise_perform(Node *node, int nframes, double spf);
-
 typedef struct {
-  double phase;
-  double target;
-  double min;
-  double max;
-  double freq;
-} lf_noise_state;
-
-node_perform lf_noise_perform(Node *node, int nframes, double spf);
-
-typedef struct {
-  double phase;
-  double target;
-  double current;
-} lf_noise_interp_state;
-node_perform lf_noise_interp_perform(Node *node, int nframes, double spf);
+  Node *head;
+  Node *tail;
+} Graph;
 
 void init_sig_ptrs();
 

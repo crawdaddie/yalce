@@ -4,11 +4,6 @@
 #include "node.h"
 
 typedef struct {
-  Node *head;
-  Node *tail;
-} Graph;
-
-typedef struct {
   double main_vol;
   double block_time;
   Node *head;
