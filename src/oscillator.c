@@ -235,8 +235,79 @@ Node *blsaw_node(double freq, int num_harmonics) {
   state->num_harmonics = num_harmonics;
   state->a = state->m / state->p;
 
-  Node *s = node_new(state, (node_perform *)sq_perform, NULL, get_sig(1));
+  Node *s = node_new(state, (node_perform *)blsaw_perform, NULL, get_sig(1));
   s->ins = malloc(sizeof(Signal *));
   s->ins[0] = get_sig_default(1, freq);
+  return s;
+}
+
+node_perform sawsinc_perform(Node *node, int nframes, double spf) {
+  sawsinc_state *state = node->state;
+
+  double *base_freq_in = node->ins[0]->buf;
+  double *in = node->ins[1]->buf;
+  double *out = node->out->buf;
+  double tmp, denominator;
+  double freq;
+
+  while (nframes--) {
+    freq = *in;
+
+    state->p = (1.0 / spf) / freq;
+    state->C2 = 1 / state->p;
+    state->rate = PI * state->C2;
+    state->a = state->m / state->p;
+
+    denominator = sin(state->phase);
+    tmp = denominator;
+    if (fabs(denominator) <= EPSILON)
+      tmp = state->a;
+    else {
+      tmp = sin(state->m * state->phase);
+      tmp /= state->p * denominator;
+    }
+
+    tmp += state->state - state->C2;
+    state->state = tmp * 0.995;
+
+    state->phase += state->rate;
+
+    state->p = (1.0 / spf) / freq;
+    state->C2 = 1 / state->p;
+    double base_rate = PI * *base_freq_in / ((1.0 / spf));
+
+    state->base_phase += base_rate;
+
+    if (state->phase >= PI)
+      state->phase -= PI;
+
+    if (state->base_phase >= 2 * PI) {
+      state->phase = 0.0;
+      state->base_phase -= 2 * PI;
+    }
+
+    *out = tmp;
+
+    base_freq_in++;
+    out++;
+    in++;
+  }
+}
+
+Node *sawsinc_node(double base_freq, double freq, int num_harmonics) {
+
+  blsaw_state *state = malloc(sizeof(blsaw_state));
+
+  state->p = ctx_sample_rate() / freq;
+  state->C2 = 1 / state->p;
+  state->rate = PI * state->C2;
+  state->m = 2 * num_harmonics + 1;
+  state->num_harmonics = num_harmonics;
+  state->a = state->m / state->p;
+
+  Node *s = node_new(state, (node_perform *)sawsinc_perform, NULL, get_sig(1));
+  s->ins = malloc(sizeof(Signal *) * 2);
+  s->ins[0] = get_sig_default(1, base_freq);
+  s->ins[1] = get_sig_default(1, freq);
   return s;
 }

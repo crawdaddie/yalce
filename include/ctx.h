@@ -4,12 +4,18 @@
 #include "node.h"
 
 typedef struct {
+  Node *head;
+  Node *tail;
+} Graph;
+
+typedef struct {
   double main_vol;
   double block_time;
   Node *head;
   Signal dac_buffer;
   int sample_rate;
   msg_queue msg_queue;
+  Graph graph;
 } Ctx;
 
 double **alloc_buses(int num_buses);
@@ -30,7 +36,11 @@ int ctx_sample_rate();
 Node *ctx_get_tail();
 Node *ctx_add(Node *node);
 
+Node *ctx_add_head(Node *node);
+
 int process_msg_queue_pre(msg_queue *msg_queue);
 void process_msg_queue_post(msg_queue *msg_queue, int consumed);
+
+void ctx_rm_node(Node *node);
 
 #endif

@@ -27,17 +27,58 @@ Ctx *get_audio_ctx() { return &ctx; }
 int ctx_sample_rate() { return ctx.sample_rate; }
 Node *ctx_get_tail() { return tail; }
 
+/*
+ * adds a node after the tail of the audio ctx graph
+ * */
 Node *ctx_add(Node *node) {
   Ctx *ctx = get_audio_ctx();
-  // Node *tail = ctx_get_tail();
   if (ctx->head) {
     tail->next = node;
+    node->prev = tail;
     tail = node;
   } else {
     ctx->head = node;
     tail = node;
   }
   return node;
+}
+
+/*
+ * adds a node before the head of the audio ctx graph
+ * */
+Node *ctx_add_head(Node *node) {
+  Ctx *ctx = get_audio_ctx();
+  if (ctx->head) {
+    node->next = ctx->head;
+    ctx->head = node;
+  } else {
+    ctx->head = node;
+  }
+  return node;
+}
+
+/*
+ * removes a node from the audio ctx graph
+ * */
+void ctx_rm_node(Node *node) {
+  Node *prev = node->prev;
+  Node *next = node->next;
+
+  // Handle removal from linked list
+  if (prev && next) {
+    prev->next = next;
+    next->prev = prev;
+  } else if (prev) {
+    if (node == ctx_get_tail()) {
+      tail = prev;
+    }
+    prev->next = NULL;
+  } else if (next) {
+    if (node == ctx.head) {
+      ctx.head = next;
+    }
+    next->prev = NULL;
+  }
 }
 
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
@@ -108,19 +149,13 @@ Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
     }
   }
 
-  Signal *out = NULL;
-  if (head->head) {
-    Node *tail = perform_graph(head->head, nframes, seconds_per_frame, dac_sig,
-                               output_num);
-    out = tail->out;
-  }
-
   if (head->perform) {
     head->perform(head, nframes, seconds_per_frame);
   }
 
-  if (head->type == OUTPUT && out) {
-    write_to_output_buf(out, nframes, seconds_per_frame, dac_sig, output_num);
+  if (head->type == OUTPUT) {
+    write_to_output_buf(head->out, nframes, seconds_per_frame, dac_sig,
+                        output_num);
     output_num++;
   }
 

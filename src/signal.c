@@ -3,7 +3,7 @@
 #include <stdlib.h>
 // ------------------------------ SIGNAL / BUFFER ALLOC
 //
-static double buf_pool[BUF_SIZE * LAYOUT_CHANNELS * 100];
+static double buf_pool[BUF_SIZE * LAYOUT_CHANNELS * 200];
 static double *buf_ptr = buf_pool;
 
 void init_sig_ptrs() { buf_ptr = buf_pool; }

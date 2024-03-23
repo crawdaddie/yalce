@@ -1,13 +1,9 @@
 #include "entry.h"
-#include "biquad.h"
 #include "delay.h"
-#include "envelope.h"
-#include "impulse.h"
 #include "node.h"
 #include "oscillator.h"
 #include "scheduling.h"
 #include "signal.h"
-#include "window.h"
 #include <math.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -470,75 +466,6 @@ Node *add_scalar_node(double scalar, Node *node) {
   return add;
 }
 
-// ----------------------------- Node alloc
-Node *node_new(void *data, node_perform *perform, Signal *ins, Signal *out) {
-  Node *node = malloc(sizeof(Node));
-  node->state = data;
-  node->ins = &ins;
-  node->num_ins = 1;
-  node->out = out;
-  node->perform = (node_perform)perform;
-  return node;
-}
-
-Node *pipe_output(Node *send, Node *recv) {
-  recv->ins = &send->out;
-  return recv;
-}
-
-Node *pipe_sig(Signal *send, Node *recv) {
-  recv->ins = &send;
-  return recv;
-}
-Node *pipe_output_to_idx(int idx, Node *send, Node *recv) {
-  recv->ins[idx] = send->out;
-  return recv;
-}
-
-Node *pipe_sig_to_idx(int idx, Signal *send, Node *recv) {
-  recv->ins[idx] = send;
-  return recv;
-}
-
-Node *add_to_dac(Node *node) {
-  node->type = OUTPUT;
-  return node;
-}
-Node *chain_set_out(Node *chain, Node *out) {
-  chain->out = out->out;
-  return chain;
-}
-
-Node *chain_new() { return node_new(NULL, NULL, &(Signal){}, &(Signal){}); }
-
-Node *chain_with_inputs(int num_ins, double *defaults) {
-  Node *chain = node_new(NULL, NULL, NULL, &(Signal){});
-
-  chain->ins = malloc(num_ins * (sizeof(Signal *)));
-  chain->num_ins = num_ins;
-  for (int i = 0; i < num_ins; i++) {
-    chain->ins[i] = get_sig_default(1, defaults[i]);
-  }
-  return chain;
-}
-
-Node *node_set_input_signal(Node *node, int num_in, Signal *sig) {
-  node->ins[num_in] = sig;
-  return node;
-}
-
-Node *add_to_chain(Node *chain, Node *node) {
-  if (chain->head == NULL) {
-    chain->head = node;
-    chain->tail = node;
-    return node;
-  }
-
-  chain->tail->next = node;
-  chain->tail = node;
-  return node;
-}
-
 static double choices[8] = {220.0,
                             246.94165062806206,
                             261.6255653005986,
@@ -628,21 +555,63 @@ void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
   }
 }
 
+// void *audio_entry() {
+//   Node *chain = chain_new();
+//   Node *noise = add_to_chain(chain, windowed_impulse_node(10., 100, 0.05));
+//   double levels[3] = {0.0, 1.0, 0.0};
+//   double times[2] = {0.002, 0.80};
+//   Node *env = add_to_chain(chain, env_node(2, levels, times));
+//   noise = add_to_chain(chain, mul_node(noise, env));
+//   // noise = add_to_chain(chain, op_lp_node(1000., noise));
+//   add_to_dac(chain);
+//   ctx_add(chain);
+//
+//   while (true) {
+//     // set_node_scalar(freq, 0, random_double_range(200., 1000.));
+//     set_node_trig(env, 0);
+//     msleep(1000);
+//   }
+// }
+//
+// void *audio_entry() {
+//   Node *mod = sine(0.3);
+//   ctx_add(mod);
+//   mod = mul_scalar_node(3.0, mod);
+//   ctx_add(mod);
+//   mod = add_scalar_node(100., mod);
+//   ctx_add(mod);
+//
+//   Node *sq;
+//   for (int i = 0; i < 4; i++) {
+//     double freq = 300. * (1. + 0.01 * i);
+//     sq = sawsinc_node(freq, freq * 0.99, 100);
+//     pipe_output_to_idx(1, mod, sq);
+//     add_to_dac(sq);
+//     ctx_add(sq);
+//   }
+//
+//   while (true) {
+//     msleep(1000);
+//   }
+// }
+//
+//
 void *audio_entry() {
-  Node *chain = chain_new();
-  Node *noise = add_to_chain(chain, windowed_impulse_node(10., 100, 0.05));
-  double levels[3] = {0.0, 1.0, 0.0};
-  double times[2] = {0.002, 0.80};
-  Node *env = add_to_chain(chain, env_node(2, levels, times));
-  noise = add_to_chain(chain, mul_node(noise, env));
-  // noise = add_to_chain(chain, op_lp_node(1000., noise));
-  add_to_dac(chain);
-  ctx_add(chain);
 
-  while (true) {
-    // set_node_scalar(freq, 0, random_double_range(200., 1000.));
-    set_node_trig(env, 0);
-    msleep(1000);
+  Node *sq;
+  for (int i = 0; i < 4; i++) {
+    double freq = 300. * (1. + 0.01 * i);
+    sq = sq_node(freq);
+    add_to_dac(sq);
+    ctx_add(sq);
+  }
+
+  msleep(2000);
+  Node *t = ctx_get_tail();
+  while (t) {
+    ctx_rm_node(t);
+    t = ctx_get_tail();
+    msleep(2000);
   }
 }
 int entry() {
@@ -652,7 +621,7 @@ int entry() {
     return 1;
   }
   // Raylib wants to be in the main thread :(
-  create_spectrogram_window();
+  // create_spectrogram_window();
   // create_window();
 
   pthread_join(thread, NULL);

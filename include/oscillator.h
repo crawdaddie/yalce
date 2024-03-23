@@ -48,4 +48,19 @@ typedef struct {
 } blsaw_state;
 Node *blsaw_node(double freq, int num_harmonics);
 
+typedef struct {
+
+  unsigned int num_harmonics;
+  unsigned int m;
+  double rate;
+  double phase;
+  double p;
+  double C2;
+  double a;
+  double state;
+
+  double base_phase;
+} sawsinc_state;
+Node *sawsinc_node(double base_freq, double freq, int num_harmonics);
+
 #endif
