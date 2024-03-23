@@ -8,6 +8,7 @@ typedef struct Node {
   enum {
     INTERMEDIATE = 0,
     OUTPUT,
+    GROUP,
   } type;
 
   bool killed;
@@ -25,10 +26,8 @@ typedef struct Node {
   char *name;
 } Node;
 
-static char *node_type_names[2] = {
-    [INTERMEDIATE] = "m",
-    [OUTPUT] = "~",
-};
+static char *node_type_names[3] = {
+    [INTERMEDIATE] = "m", [OUTPUT] = "~", [GROUP] = "g"};
 
 typedef struct {
   Node *head;
@@ -47,6 +46,13 @@ Node *pipe_output_to_idx(int idx, Node *send, Node *recv);
 Node *pipe_sig_to_idx(int idx, Signal *send, Node *recv);
 
 Node *add_to_dac(Node *node);
+
+typedef struct {
+  Graph *graph;
+} group_state;
+
+Node *group_new();
+
 Node *chain_set_out(Node *chain, Node *out);
 
 Node *chain_new();

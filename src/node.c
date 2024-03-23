@@ -1,5 +1,6 @@
 #include "node.h"
 #include "common.h"
+#include "ctx.h"
 #include "signal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,7 +44,17 @@ Node *chain_set_out(Node *chain, Node *out) {
   return chain;
 }
 
-Node *chain_new() { return node_new(NULL, NULL, &(Signal){}, &(Signal){}); }
+static node_perform group_perform(Node *group, int nframes, double spf) {
+  group_state *state = group->state;
+  perform_graph(state->graph->head, nframes, spf, group->out, 0);
+}
+Node *group_new() {
+  group_state *state = malloc(sizeof(group_state));
+  return node_new(state, (node_perform *)group_perform, &(Signal){},
+                  get_sig(1));
+}
+
+Node *chain_new() { return node_new(NULL, NULL, &(Signal){}, get_sig(1)); }
 
 Node *chain_with_inputs(int num_ins, double *defaults) {
   Node *chain = node_new(NULL, NULL, NULL, &(Signal){});
@@ -147,14 +158,15 @@ void graph_print(Graph *dll) {
     printf("ins: ");
     double *buf_pool_start = get_buf_pool_start();
     for (int i = 0; i < temp->num_ins; i++) {
-      int buf_offset = (temp->ins[i]->buf - buf_pool_start) / BUF_SIZE;
-      printf("(\x1b[38;5;%dmbuf %d\x1b[0m [%d]), ", buf_offset, buf_offset,
+      double *buf = temp->ins[i]->buf;
+      int buf_offset = (buf - buf_pool_start) / BUF_SIZE;
+      printf("(\x1b[38;5;%dmbuf %p\x1b[0m [%d]), ", buf, buf,
              temp->ins[i]->layout);
     }
 
-    int out_buf_offset = (temp->out->buf - buf_pool_start) / BUF_SIZE;
-    printf("out: \x1b[38;5;%dmbuf %d\x1b[0m [%d]", out_buf_offset,
-           out_buf_offset, temp->out->layout);
+    double *out_buf = temp->out->buf;
+    printf("out: \x1b[38;5;%dmbuf %p\x1b[0m [%d]", out_buf, out_buf,
+           temp->out->layout);
 
     printf(" ]");
     temp = temp->next;

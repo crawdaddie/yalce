@@ -38,10 +38,11 @@ Node *ctx_add(Node *node) {
 void ctx_rm_node(Node *node) { graph_delete_node(&(ctx.graph), node); }
 
 static inline int min(int a, int b) { return (a <= b) ? a : b; }
-static void write_null_to_output_buf(Signal *dac_sig, int nframes) {
-  double *dest = dac_sig->buf;
+
+static void write_null_to_output_buf(Signal *out, int nframes) {
+  double *dest = out->buf;
   for (int f = 0; f < nframes; f++) {
-    for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
+    for (int ch = 0; ch < out->layout; ch++) {
       *dest = 0.0;
       dest++;
     }

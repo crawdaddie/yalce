@@ -451,7 +451,7 @@ void *audio_entry() {
 
   Node *sq;
   for (int i = 0; i < 8; i++) {
-    double freq = 100. * i;
+    double freq = 100. * i * 1.01;
     sq = sq_node(freq);
     add_to_dac(sq);
     ctx_add(sq);
