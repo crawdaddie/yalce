@@ -7,7 +7,6 @@
 static double output_channel_pool[OUTPUT_CHANNELS][BUF_SIZE * LAYOUT_CHANNELS];
 
 Ctx ctx;
-static Node *tail = NULL;
 void init_ctx() {
 
   ctx.main_vol = 0.125;
@@ -16,86 +15,38 @@ void init_ctx() {
   ctx.dac_buffer.size = BUF_SIZE;
   ctx.dac_buffer.layout = LAYOUT_CHANNELS;
 
-  ctx.head = NULL;
-  tail = ctx.head;
   ctx.msg_queue.num_msgs = 0;
   ctx.msg_queue.write_ptr = 0;
   ctx.msg_queue.read_ptr = 0;
+  ctx.graph.head = NULL;
+  ctx.graph.tail = NULL;
 }
 
 Ctx *get_audio_ctx() { return &ctx; }
 int ctx_sample_rate() { return ctx.sample_rate; }
-Node *ctx_get_tail() { return tail; }
+Node *ctx_get_tail() { return ctx.graph.tail; }
 
 /*
  * adds a node after the tail of the audio ctx graph
  * */
 Node *ctx_add(Node *node) {
   Ctx *ctx = get_audio_ctx();
-  // if (ctx->head) {
-  //   tail->next = node;
-  //   node->prev = tail;
-  //   tail = node;
-  // } else {
-  //   ctx->head = node;
-  //   tail = node;
-  // }
-  graph_add_tail(&ctx->graph, node);
+  graph_add_tail(&(ctx->graph), node);
   return node;
 }
 
-/*
- * adds a node before the head of the audio ctx graph
- * */
-Node *ctx_add_head(Node *node) {
-  Ctx *ctx = get_audio_ctx();
-  if (ctx->head) {
-    node->next = ctx->head;
-    ctx->head = node;
-  } else {
-    ctx->head = node;
-  }
-  return node;
-}
-
-/*
- * removes a node from the audio ctx graph
- * */
-void ctx_rm_node(Node *node) {
-  Node *prev = node->prev;
-  Node *next = node->next;
-
-  // Handle removal from linked list
-  if (prev && next) {
-    prev->next = next;
-    next->prev = prev;
-  } else if (prev) {
-    if (node == ctx_get_tail()) {
-      tail = prev;
-    }
-    prev->next = NULL;
-  } else if (next) {
-    if (node == ctx.head) {
-      ctx.head = next;
-    }
-    next->prev = NULL;
-  }
-}
-
-UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
-
-  int consumed = process_msg_queue_pre(&ctx->msg_queue);
-  // printf("consumed %d msgs\n", consumed);
-  if (ctx->head == NULL) {
-    return NULL;
-  }
-  perform_graph(ctx->head, nframes, seconds_per_frame, &ctx->dac_buffer, 0);
-  // ctx->dac_bufer
-  process_msg_queue_post(&ctx->msg_queue, consumed);
-}
+void ctx_rm_node(Node *node) { graph_delete_node(&(ctx.graph), node); }
 
 static inline int min(int a, int b) { return (a <= b) ? a : b; }
-
+static void write_null_to_output_buf(Signal *dac_sig, int nframes) {
+  double *dest = dac_sig->buf;
+  for (int f = 0; f < nframes; f++) {
+    for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
+      *dest = 0.0;
+      dest++;
+    }
+  }
+}
 void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
                          Signal *dac_sig, int output_num) {
 
@@ -103,7 +54,6 @@ void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
   double *output = out->buf;
   int out_layout = out->layout;
   if (out_layout >= 2) {
-
     double *dest = dac_sig->buf;
     for (int f = 0; f < nframes; f++) {
       for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
@@ -134,6 +84,20 @@ void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
       output++;
     }
   }
+}
+
+UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
+
+  int consumed = process_msg_queue_pre(&ctx->msg_queue);
+  // printf("consumed %d msgs\n", consumed);
+  if (ctx->graph.head == NULL) {
+    write_null_to_output_buf(&ctx->dac_buffer, nframes);
+    return NULL;
+  }
+  perform_graph(ctx->graph.head, nframes, seconds_per_frame, &ctx->dac_buffer,
+                0);
+  // ctx->dac_bufer
+  process_msg_queue_post(&ctx->msg_queue, consumed);
 }
 
 Node *perform_graph(Node *head, int nframes, double seconds_per_frame,

@@ -5,6 +5,7 @@
 #include "oscillator.h"
 #include "scheduling.h"
 #include "signal.h"
+#include "window.h"
 #include <math.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -449,19 +450,27 @@ void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
 void *audio_entry() {
 
   Node *sq;
-  for (int i = 0; i < 4; i++) {
-    double freq = 300. * (1. + 0.01 * i);
+  for (int i = 0; i < 8; i++) {
+    double freq = 100. * i;
     sq = sq_node(freq);
     add_to_dac(sq);
     ctx_add(sq);
+    msleep(1000);
   }
-  graph_print(&get_audio_ctx()->graph);
+
+  graph_print(&(get_audio_ctx()->graph));
 
   msleep(2000);
   Node *t = ctx_get_tail();
   while (t) {
     ctx_rm_node(t);
     t = ctx_get_tail();
+    msleep(2000);
+  }
+  while (true) {
+
+    printf("----------\n");
+    graph_print(&(get_audio_ctx()->graph));
     msleep(2000);
   }
 }
@@ -472,7 +481,7 @@ int entry() {
     return 1;
   }
   // Raylib wants to be in the main thread :(
-  // create_spectrogram_window();
+  create_spectrogram_window();
   // create_window();
 
   pthread_join(thread, NULL);
