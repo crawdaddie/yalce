@@ -324,18 +324,18 @@ static double choices[8] = {220.0,
                             349.2282314330039,
                             391.99543598174927,
                             880.0};
-void *audio_entry_() {
-
-  Node *chain = chain_new();
-  Node *noise = add_to_chain(chain, rand_choice_node(6., 8, choices));
-  Node *sig = add_to_chain(chain, sine(100.0));
-  sig = pipe_output(noise, sig);
-  sig = add_to_chain(chain, tanh_node(2.0, sig));
-  sig = add_to_chain(chain, freeverb_node(sig));
-
-  add_to_dac(chain);
-  ctx_add(chain);
-}
+// void *audio_entry_() {
+//
+//   Node *chain = chain_new();
+//   // Node *noise = add_to_chain(chain, rand_choice_node(6., 8, choices));
+//   // Node *sig = add_to_chain(chain, sine(100.0));
+//   sig = pipe_output(noise, sig);
+//   // sig = add_to_chain(chain, tanh_node(2.0, sig));
+//   // sig = add_to_chain(chain, freeverb_node(sig));
+//
+//   add_to_dac(chain);
+//   ctx_add(chain);
+// }
 
 int get_block_offset() {
 

@@ -32,14 +32,16 @@ Node *ctx_get_tail() { return tail; }
  * */
 Node *ctx_add(Node *node) {
   Ctx *ctx = get_audio_ctx();
-  if (ctx->head) {
-    tail->next = node;
-    node->prev = tail;
-    tail = node;
-  } else {
-    ctx->head = node;
-    tail = node;
-  }
+  // if (ctx->head) {
+  //   tail->next = node;
+  //   node->prev = tail;
+  //   tail = node;
+  // } else {
+  //   ctx->head = node;
+  //   tail = node;
+  // }
+  graph_add_tail(&ctx->graph, node);
+  graph_print(&ctx->graph);
   return node;
 }
 

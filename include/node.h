@@ -4,7 +4,6 @@
 #include <stdbool.h>
 
 typedef struct Node (*node_perform)(struct Node *node, int nframes, double spf);
-
 typedef struct Node {
   enum {
     INTERMEDIATE = 0,
@@ -22,10 +21,14 @@ typedef struct Node {
 
   struct Node *prev;
   struct Node *next;
-  struct Node *head;
-  struct Node *tail;
   int frame_offset;
+  char *name;
 } Node;
+
+static char *node_type_names[2] = {
+    [INTERMEDIATE] = "m",
+    [OUTPUT] = "~",
+};
 
 typedef struct {
   Node *head;
@@ -52,5 +55,13 @@ Node *chain_with_inputs(int num_ins, double *defaults);
 
 Node *node_set_input_signal(Node *node, int num_in, Signal *sig);
 Node *add_to_chain(Node *chain, Node *node);
+
+void node_add_after(Node *tail, Node *node);
+void node_add_before(Node *head, Node *node);
+void graph_add_tail(Graph *graph, Node *node);
+void graph_add_head(Graph *graph, Node *node);
+void graph_delete_node(Graph *graph, Node *node);
+
+void graph_print(Graph *dll);
 
 #endif

@@ -180,6 +180,7 @@ node_perform sq_perform(Node *node, int nframes, double spf) {
 //     in++;
 //   }
 // }
+static char *sq_name = "square";
 Node *sq_node(double freq) {
   sq_state *state = malloc(sizeof(sq_state));
   state->phase = 0.0;
@@ -187,6 +188,7 @@ Node *sq_node(double freq) {
   Node *s = node_new(state, (node_perform *)sq_perform, NULL, get_sig(1));
   s->ins = malloc(sizeof(Signal *));
   s->ins[0] = get_sig_default(1, freq);
+  s->name = sq_name;
   return s;
 }
 node_perform blsaw_perform(Node *node, int nframes, double spf) {

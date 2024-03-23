@@ -1,4 +1,5 @@
 #include "node.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 // ----------------------------- Node alloc
@@ -58,14 +59,98 @@ Node *node_set_input_signal(Node *node, int num_in, Signal *sig) {
   return node;
 }
 
-Node *add_to_chain(Node *chain, Node *node) {
-  if (chain->head == NULL) {
-    chain->head = node;
-    chain->tail = node;
-    return node;
+void node_add_after(Node *tail, Node *node) {
+  if (tail == NULL) {
+    printf("Previous node cannot be NULL\n");
+    return;
+  }
+  node->next = tail->next;
+  if (tail->next != NULL) {
+    tail->next->prev = node;
+  }
+  tail->next = node;
+  node->prev = tail;
+};
+
+// Function to add a node before a particular node
+void node_add_before(Node *head, Node *node) {
+  if (head == NULL) {
+    printf("Next node cannot be NULL\n");
+    return;
+  }
+  node->prev = head->prev;
+  if (head->prev != NULL) {
+    head->prev->next = node;
+  }
+  head->prev = node;
+  node->next = head;
+}
+
+void graph_add_tail(Graph *graph, Node *node) {
+  if (graph->tail == NULL) {
+    graph->tail = node;
+    return;
+  }
+  node_add_after(graph->tail, node);
+  graph->tail = node;
+  if (graph->head == NULL) {
+    graph->head = graph->tail;
+  }
+};
+
+void graph_add_head(Graph *graph, Node *node) {
+  if (graph->head == NULL) {
+    graph->head = node;
+    return;
+  }
+  node_add_before(graph->head, node);
+  graph->head = node;
+
+  if (graph->tail == NULL) {
+    graph->tail = graph->head;
+  }
+};
+
+void graph_delete_node(Graph *graph, Node *node) {
+
+  if (graph == NULL || node == NULL) {
+    printf("Invalid arguments\n");
+    return;
+  }
+  if (graph->head == node) {
+    graph->head = node->next;
+  }
+  if (graph->tail == node) {
+    graph->tail = node->prev;
+  }
+  if (node->prev != NULL) {
+    node->prev->next = node->next;
+  }
+  if (node->next != NULL) {
+    node->next->prev = node->prev;
   }
 
-  chain->tail->next = node;
-  chain->tail = node;
-  return node;
+  free(node);
+};
+
+// Function to print the doubly linked list
+void graph_print(Graph *dll) {
+  if (dll == NULL || dll->head == NULL) {
+    printf("Doubly linked list is empty\n");
+    return;
+  }
+  Node *temp = dll->head;
+  while (temp != NULL) {
+    printf("[ %p [%s] [%s] ", temp, temp->name, node_type_names[temp->type]);
+    printf("ins: ");
+    for (int i = 0; i < temp->num_ins; i++) {
+      printf("[%d],", temp->ins[i]->layout);
+    }
+    printf(" ]");
+    temp = temp->next;
+    if (temp) {
+      printf(" -> ");
+    }
+  }
+  printf("\n");
 }
