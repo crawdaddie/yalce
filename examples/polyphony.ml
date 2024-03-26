@@ -3,6 +3,13 @@ open Ctypes;;
 
 init_yalce ()
 
+let rand_float min mx = min +. Random.float (mx -. min)
+
+let rand_choice arr =
+  let i = Random.int (Array.length arr) in
+  arr.(i)
+;;
+
 let synth freq dec =
   let sq = Osc.sq freq in
   let sq2 = Osc.sq (freq *. 1.01) in
@@ -10,7 +17,7 @@ let synth freq dec =
     env_node
       2
       ([ 0.; 1.; 0. ] |> CArray.of_list double |> CArray.start)
-      ([ 0.01; dec ] |> CArray.of_list double |> CArray.start)
+      ([ rand_choice [| 0.01; 0.2 |]; dec ] |> CArray.of_list double |> CArray.start)
   in
   let sm = sum2 sq sq2 in
   let out = sm *~ ev in
@@ -34,11 +41,6 @@ let comp arr =
   aux g arr
 ;;
 
-let rand_choice arr =
-  let i = Random.int (Array.length arr) in
-  arr.(i)
-;;
-
 let choices =
   [| 220.0
    ; 246.94165062806206
@@ -54,7 +56,6 @@ let choices =
 while true do
   let del = rand_choice [| 0.25; 0.5; 1.5; 0.125 |] in
   comp @@ synth (rand_choice choices /. 4.) (del *. 2.);
-  Printf.printf "---------\n";
   print_ctx ();
   Thread.delay del
 done
