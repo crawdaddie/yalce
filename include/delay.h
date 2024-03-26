@@ -75,7 +75,7 @@ Node *allpass_node(double delay_time, double max_delay_time, Node *input);
 typedef struct {
   comb_state parallel_combs[16];
   op_lp_state comb_lps[16];
-  allpass_state series_ap[8]
+  allpass_state series_ap[8];
 } freeverb_state;
 
 node_perform freeverb_perform(Node *node, int nframes, double spf);
