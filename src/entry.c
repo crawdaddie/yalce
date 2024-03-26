@@ -114,7 +114,7 @@ Node *cleanup_graph(Graph *graph, Node *head) {
   };
   return NULL;
 }
-void cleanup_job() {
+void audio_ctx_gc() {
   while (true) {
     Ctx *ctx = get_audio_ctx();
     // printf("cleanup thread\n");
@@ -122,6 +122,13 @@ void cleanup_job() {
     msleep(250);
   }
 }
+void cleanup_job() {
+  pthread_t cleanup_thread;
+  if (pthread_create(&cleanup_thread, NULL, (void *)audio_ctx_gc, NULL) != 0) {
+    fprintf(stderr, "Error creating thread\n");
+  }
+}
+
 static double levels[3] = {0.0, 1.0, 0.0};
 static double times[2] = {0.001, 0.8};
 Node *synth(double freq) {
@@ -165,6 +172,7 @@ void *audio_entry() {
     msleep(250);
   }
 }
+void print_ctx() { graph_print(&(get_audio_ctx()->graph), 0); }
 
 int entry() {
   pthread_t thread;
@@ -175,7 +183,7 @@ int entry() {
 
   // Raylib wants to be in the main thread :(
   pthread_t cleanup_thread;
-  if (pthread_create(&thread, NULL, (void *)cleanup_job, NULL) != 0) {
+  if (pthread_create(&thread, NULL, (void *)audio_ctx_gc, NULL) != 0) {
     fprintf(stderr, "Error creating thread\n");
     return 1;
   }

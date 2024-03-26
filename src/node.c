@@ -93,7 +93,9 @@ void free_node(Node *node) {
   if (node->destroy != NULL) {
     return node->destroy(node);
   }
-  free(node->ins);
+  if (node->num_ins) {
+    free(node->ins);
+  }
   free(node->state);
   free(node->out);
   free(node);

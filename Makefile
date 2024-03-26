@@ -50,5 +50,8 @@ $(OCAML_EXAMPLE_DIR)/%.ml: $(SHARED_LIB_TARGET) .touch_file
 .touch_file: $(SHARED_LIB_TARGET)
 	touch .touch_file
 
-.PHONY: examples
+.PHONY: examples utop
 examples: $(OCAML_EXAMPLE_DIR)/%.ml
+
+utop:
+	dune utop

@@ -20,6 +20,17 @@ Node *group_new() {
   return g;
 }
 
+Node *group_with_inputs(int num_ins, double *defaults) {
+  Node *group = group_new();
+
+  group->ins = malloc(num_ins * (sizeof(Signal *)));
+  group->num_ins = num_ins;
+  for (int i = 0; i < num_ins; i++) {
+    group->ins[i] = get_sig_default(1, defaults[i]);
+  }
+  return group;
+}
+
 void group_add_tail(Node *group, Node *node) {
   graph_add_tail(group->state, node);
   node->parent = group;

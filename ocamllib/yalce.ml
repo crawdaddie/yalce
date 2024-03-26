@@ -11,11 +11,13 @@ type audio_ctx = unit ptr
 
 let audio_ctx : audio_ctx typ = ptr void
 let start_audio = foreign "start_audio" (void @-> returning void)
+let cleanup_job = foreign "cleanup_job" (void @-> returning void)
 let get_audio_ctx = foreign "get_audio_ctx" (void @-> returning audio_ctx)
 let maketable_sin = foreign "maketable_sin" (void @-> returning void)
 let maketable_sq = foreign "maketable_sq" (void @-> returning void)
 let pipe_output = foreign "pipe_output" (Node.node @-> Node.node @-> returning Node.node)
 let pipe_sig = foreign "pipe_sig" (Signal.signal @-> Node.node @-> returning Node.node)
+let print_ctx = foreign "print_ctx" (void @-> returning void)
 
 let pipe_output_to_idx =
   foreign "pipe_output_to_idx" (int @-> Node.node @-> Node.node @-> returning Node.node)
@@ -35,7 +37,7 @@ let bufplayer_node_ = foreign "bufplayer_node" (ptr char @-> returning Node.node
 (*   foreign "bufplayer_pitchshift_node" (ptr char @-> returning Node.node) *)
 (* ;; *)
 
-let mul = foreign "mul_node" (Node.node @-> Node.node @-> returning Node.node)
+let mul = foreign "mul_nodes" (Node.node @-> Node.node @-> returning Node.node)
 let mul_scalar = foreign "mul_scalar_node" (double @-> Node.node @-> returning Node.node)
 let add_scalar = foreign "add_scalar_node" (double @-> Node.node @-> returning Node.node)
 let lag_sig = foreign "lag_sig" (double @-> Signal.signal @-> returning Node.node)
@@ -70,9 +72,19 @@ let env_node =
 ;;
 
 let ctx_add = foreign "ctx_add" (Node.node @-> returning Node.node)
-let add_to_chain = foreign "add_to_chain" (Node.node @-> Node.node @-> returning Node.node)
+
+let add_to_chain =
+  foreign "group_add_tail" (Node.node @-> Node.node @-> returning Node.node)
+;;
+
 let add_to_dac = foreign "add_to_dac" (Node.node @-> returning Node.node)
-let chain_new = foreign "chain_new" (void @-> returning Node.node)
+let chain_new = foreign "group_new" (void @-> returning Node.node)
+let group_new = foreign "group_new" (void @-> returning Node.node)
+let group_add_tail = foreign "group_add_tail" (Node.node @-> Node.node @-> returning void)
+
+let group_with_inputs =
+  foreign "group_with_inputs" (int @-> ptr double @-> returning Node.node)
+;;
 
 let chain_set_out =
   foreign "chain_set_out" (Node.node @-> Node.node @-> returning Node.node)
@@ -195,10 +207,21 @@ module Synth = struct
     (*   foreign "pipe_sig_to_idx" (int @-> Signal.signal @-> Node.node @-> returning Node.node) *)
     (* ;; *)
 
-    let chorus_list list input f =
+    let chorus_list_lag list input f =
       List.map
         (fun freq_mul ->
           let freq = lag_sig 0.012 input |> mul_scalar freq_mul in
+          let n = f () in
+          pipe_output freq n)
+        list
+      |> sumn
+      |> mul_scalar @@ (1. /. (Int.to_float @@ List.length list))
+    ;;
+
+    let chorus_list list input f =
+      List.map
+        (fun freq_mul ->
+          let freq = lag_sig 0.0 input |> mul_scalar freq_mul in
           let n = f () in
           pipe_output freq n)
         list
@@ -211,7 +234,8 @@ end
 let init_yalce () =
   maketable_sin ();
   maketable_sq ();
-  start_audio ()
+  start_audio ();
+  cleanup_job ()
 ;;
 
 (* let start_audio = foreign "start_audio" (void @-> returning void) *)
