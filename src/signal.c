@@ -11,7 +11,8 @@ void init_sig_ptrs() { buf_ptr = buf_pool; }
 
 Signal *get_sig(int layout) {
   Signal *sig = malloc(sizeof(Signal));
-  sig->buf = buf_ptr;
+  // sig->buf = buf_ptr;
+  sig->buf = malloc(sizeof(double) * BUF_SIZE * layout);
   sig->layout = layout;
   sig->size = BUF_SIZE;
   buf_ptr += BUF_SIZE * layout;
@@ -20,7 +21,8 @@ Signal *get_sig(int layout) {
 
 Signal *get_sig_float(int layout) {
   Signal *sig = malloc(sizeof(SignalFloat));
-  sig->buf = buf_ptr;
+  // sig->buf = buf_ptr;
+  sig->buf = malloc(sizeof(double) * BUF_SIZE * layout);
   sig->layout = layout;
   sig->size = BUF_SIZE;
   buf_ptr += BUF_SIZE * layout;
@@ -29,7 +31,9 @@ Signal *get_sig_float(int layout) {
 
 Signal *get_sig_default(int layout, double value) {
   Signal *sig = malloc(sizeof(Signal));
-  sig->buf = buf_ptr;
+  // sig->buf = buf_ptr;
+
+  sig->buf = malloc(sizeof(double) * BUF_SIZE * layout);
   sig->layout = layout;
   sig->size = BUF_SIZE;
   buf_ptr += BUF_SIZE * layout;

@@ -5,6 +5,8 @@ double random_double();
 
 double random_double_range(double min, double max);
 
+int rand_int(int range);
+
 node_perform noise_perform(Node *node, int nframes, double spf);
 
 typedef struct {
@@ -37,4 +39,5 @@ typedef struct {
 
 node_perform rand_choice_perform(Node *node, int nframes, double spf);
 Node *rand_choice_node(double freq, int size, double *choices);
+
 #endif

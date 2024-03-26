@@ -4,8 +4,7 @@
 #include "node.h"
 
 typedef struct {
-  double *levels;
-  double *rates;
+  double *arr;
   int len;
   int state;
   double value;

@@ -1,5 +1,7 @@
 #include "entry.h"
+#include "ctx.h"
 #include "delay.h"
+#include "envelope.h"
 #include "node.h"
 #include "noise.h"
 #include "oscillator.h"
@@ -254,25 +256,6 @@ Node *mix_nodes_arr(int num, Node **nodes, double *scalars) {
   return new_node;
 }
 
-node_perform mul_perform(Node *node, int nframes, double spf) {
-
-  Signal *b = node->ins[0];
-  int in_chans = b->layout;
-  double *in = b->buf;
-
-  Signal *a = node->out;
-  double *out = a->buf;
-
-  while (nframes--) {
-    for (int ch = 0; ch < a->layout; ch++) {
-      *out = *(in + (ch % in_chans)) * *out;
-      // printf("scalar inbuf %p\n", in);
-      out++;
-    }
-    in = in + in_chans;
-  }
-}
-
 node_perform div_perform(Node *node, int nframes, double spf) {
 
   Signal *b = node->ins[0];
@@ -291,11 +274,32 @@ node_perform div_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *mul_node(Node *a, Node *b) {
-  Node *mul = node_new(NULL, mul_perform, NULL, NULL);
+node_perform mul_perform(Node *node, int nframes, double spf) {
 
-  mul->ins = &b->out;
+  Signal *b = node->ins[0];
+  int in_chans = b->layout;
+  double *in = b->buf;
+
+  Signal *a = node->out;
+  double *out = a->buf;
+
+  while (nframes--) {
+    for (int ch = 0; ch < a->layout; ch++) {
+      *out = *(in + (ch % in_chans)) * *out;
+      // printf("scalar inbuf %p\n", in);
+      out++;
+    }
+    in = in + in_chans;
+  }
+}
+static char *mul_name = "mul";
+Node *mul_nodes(Node *a, Node *b) {
+  Node *mul = node_new(NULL, mul_perform, &(Signal){}, &(Signal){});
+
+  mul->ins = malloc(sizeof(Signal *));
+  mul->ins[0] = b->out;
   mul->out = a->out;
+  mul->name = mul_name;
   return mul;
 }
 
@@ -406,6 +410,33 @@ void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
   }
 }
 
+Node *cleanup_graph(Graph *graph, Node *head) {
+  if (!head) {
+    return NULL;
+  };
+
+  Node *next = head->next;
+  if (head->killed) {
+    // head->perform(head, nframes, seconds_per_frame);
+    if (head->is_group) {
+      cleanup_graph((Graph *)head->state, ((Graph *)head->state)->head);
+    }
+    graph_delete_node(graph, head);
+  }
+
+  if (next) {
+    return cleanup_graph(graph, next);
+  };
+  return NULL;
+}
+void cleanup_job() {
+  while (true) {
+    Ctx *ctx = get_audio_ctx();
+    // printf("cleanup thread\n");
+    cleanup_graph(&ctx->graph, ctx->graph.head);
+    msleep(500);
+  }
+}
 // void *audio_entry() {
 //   Node *chain = chain_new();
 //   Node *noise = add_to_chain(chain, windowed_impulse_node(10., 100, 0.05));
@@ -447,33 +478,137 @@ void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
 // }
 //
 //
-void *audio_entry() {
+// void *audio_entry_() {
+//
+//   Node *sq;
+//   for (int i = 0; i < 8; i++) {
+//     double freq = 100. * i * 1.01;
+//     sq = sq_node(freq);
+//     add_to_dac(sq);
+//     ctx_add(sq);
+//     msleep(1000);
+//   }
+//
+//   graph_print(&(get_audio_ctx()->graph), 0);
+//   msleep(1000);
+//   Node *t = ctx_get_tail();
+//   while (t) {
+//     ctx_rm_node(t);
+//     t = ctx_get_tail();
+//     msleep(1000);
+//   }
+//   while (true) {
+//
+//     printf("----------\n");
+//     graph_print(&(get_audio_ctx()->graph), 0);
+//     msleep(1000);
+//   }
+// }
 
+void *audio_entry_() {
+  int del = 250;
+
+  Node *group = group_new();
+  ctx_add(group);
+  add_to_dac(group);
   Node *sq;
-  for (int i = 0; i < 8; i++) {
-    double freq = 100. * i * 1.01;
-    sq = sq_node(freq);
+  for (int i = 0; i < 10; i++) {
+    double freq = 100. * (i + 0.1);
+    sq = sine(freq);
     add_to_dac(sq);
-    ctx_add(sq);
+    group_add_tail(group, sq);
+    msleep(del);
+  }
+
+  graph_print(&(get_audio_ctx()->graph), 0);
+  msleep(1000);
+  Node *t = ((Graph *)group->state)->tail;
+
+  while (t) {
+    printf("----------\n");
+    t->killed = true;
+    graph_print(&(get_audio_ctx()->graph), 0);
+    graph_delete_node(group->state, t);
+    msleep(del);
+    t = ((Graph *)group->state)->tail;
+  }
+  graph_delete_node(&ctx.graph, group);
+
+  while (true) {
+    printf("----------\n");
+    // graph_print(&(get_audio_ctx()->graph), 0);
     msleep(1000);
   }
+}
+static double levels[3] = {0.0, 1.0, 0.0};
+static double times[2] = {0.01, 0.5};
+Node *synth(double freq) {
+  Node *group = group_new();
+  group->num_ins = 1;
+  group->ins = malloc(sizeof(Signal *));
+  group->ins[0] = get_sig_default(1, 0);
 
-  graph_print(&(get_audio_ctx()->graph));
+  Node *sq = sq_node(freq);
+  group_add_tail(group, sq);
+  Node *env = env_node(2, levels, times);
+  pipe_sig_to_idx(0, group->ins[0], env);
 
-  msleep(2000);
-  Node *t = ctx_get_tail();
-  while (t) {
-    ctx_rm_node(t);
-    t = ctx_get_tail();
-    msleep(2000);
-  }
+  set_node_trig(group, 0);
+  group_add_tail(group, env);
+
+  sq = mul_nodes(env, sq);
+  group_add_tail(group, sq);
+
+  // Node *sq2 = sq_node(freq * 1.01);
+  // group_add_tail(group, sq2);
+  // add_to_dac(sq2);
+
+  add_to_dac(sq);
+  return group;
+}
+
+void *audio_entry() {
+  // int del = 250;
+
+  // Node *group = group_new();
+  // Node *sq = synth(100.);
+  // set_node_trig(sq, 0);
+  // add_to_dac(sq);
+  // ctx_add(sq);
+  //
+  // Node *sq2 = synth(300.);
+  // add_to_dac(sq2);
+  // ctx_add(sq2);
+
+  // group_add_tail(group, sq);
+  // ctx_add(sq);
+  // add_to_dac(sq);
+
+  // graph_print(&(get_audio_ctx()->graph), 0);
+  // msleep(1000);
+  // Node *t = ((Graph *)group->state)->tail;
+
+  // while (t) {
+  //   printf("----------\n");
+  //   t->killed = true;
+  //   graph_print(&(get_audio_ctx()->graph), 0);
+  //   graph_delete_node(group->state, t);
+  //   msleep(del);
+  //   t = ((Graph *)group->state)->tail;
+  // }
+  // graph_delete_node(&ctx.graph, group);
+  //
   while (true) {
-
+    Node *sq = synth(choices[rand_int(8)] / 2.0);
+    add_to_dac(sq);
+    ctx_add(sq);
     printf("----------\n");
-    graph_print(&(get_audio_ctx()->graph));
-    msleep(2000);
+    graph_print(&(get_audio_ctx()->graph), 0);
+
+    msleep(250);
   }
 }
+
 int entry() {
   pthread_t thread;
   if (pthread_create(&thread, NULL, (void *)audio_entry, NULL) != 0) {
@@ -481,8 +616,16 @@ int entry() {
     return 1;
   }
   // Raylib wants to be in the main thread :(
-  create_spectrogram_window();
   // create_window();
+  //
+  pthread_t cleanup_thread;
+  if (pthread_create(&thread, NULL, (void *)cleanup_job, NULL) != 0) {
+    fprintf(stderr, "Error creating thread\n");
+    return 1;
+  }
+  create_spectrogram_window();
+
+  pthread_join(cleanup_thread, NULL);
 
   pthread_join(thread, NULL);
 }

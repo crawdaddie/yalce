@@ -1,5 +1,6 @@
 #ifndef _CTX_H
 #define _CTX_H
+#include "graph.h"
 #include "msg_queue.h"
 #include "node.h"
 

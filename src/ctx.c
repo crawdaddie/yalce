@@ -51,13 +51,14 @@ static void write_null_to_output_buf(Signal *out, int nframes) {
 void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
                          Signal *dac_sig, int output_num) {
 
+  // printf("write %p to output %p\n", out->buf, dac_sig->buf);
   // write output to dac_buffer
   double *output = out->buf;
   int out_layout = out->layout;
   if (out_layout >= 2) {
     double *dest = dac_sig->buf;
     for (int f = 0; f < nframes; f++) {
-      for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
+      for (int ch = 0; ch < dac_sig->layout; ch++) {
         if (output_num == 0) {
           *dest = *output;
         } else {
@@ -74,7 +75,7 @@ void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
     for (int f = 0; f < nframes; f++) {
       double samp_val = *output;
 
-      for (int ch = 0; ch < LAYOUT_CHANNELS; ch++) {
+      for (int ch = 0; ch < dac_sig->layout; ch++) {
         if (output_num == 0) {
           *dest = samp_val;
         } else {
@@ -104,6 +105,7 @@ UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
 Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
                     Signal *dac_sig, int output_num) {
   if (!head) {
+    write_null_to_output_buf(dac_sig, nframes);
     return NULL;
   };
 

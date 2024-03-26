@@ -56,6 +56,7 @@ node_perform sine_perform(Node *node, int nframes, double spf) {
   }
 }
 
+static char *sine_name = "sine";
 Node *sine(double freq) {
 
   sin_state *state = malloc(sizeof(sin_state));
@@ -66,6 +67,7 @@ Node *sine(double freq) {
   Node *s = node_new(state, (node_perform *)sine_perform, NULL, get_sig(1));
   s->ins = malloc(sizeof(Signal *));
   s->ins[0] = get_sig_default(1, freq);
+  s->name = sine_name;
 
   return s;
 }

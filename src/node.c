@@ -44,16 +44,6 @@ Node *chain_set_out(Node *chain, Node *out) {
   return chain;
 }
 
-static node_perform group_perform(Node *group, int nframes, double spf) {
-  group_state *state = group->state;
-  perform_graph(state->graph->head, nframes, spf, group->out, 0);
-}
-Node *group_new() {
-  group_state *state = malloc(sizeof(group_state));
-  return node_new(state, (node_perform *)group_perform, &(Signal){},
-                  get_sig(1));
-}
-
 Node *chain_new() { return node_new(NULL, NULL, &(Signal){}, get_sig(1)); }
 
 Node *chain_with_inputs(int num_ins, double *defaults) {
@@ -99,80 +89,12 @@ void node_add_before(Node *head, Node *node) {
   node->next = head;
 }
 
-void graph_add_tail(Graph *graph, Node *node) {
-  if (graph->tail == NULL) {
-    graph->tail = node;
-    return;
+void free_node(Node *node) {
+  if (node->destroy != NULL) {
+    return node->destroy(node);
   }
-  node_add_after(graph->tail, node);
-  graph->tail = node;
-  if (graph->head == NULL) {
-    graph->head = graph->tail;
-  }
-};
-
-void graph_add_head(Graph *graph, Node *node) {
-  if (graph->head == NULL) {
-    graph->head = node;
-    return;
-  }
-  node_add_before(graph->head, node);
-  graph->head = node;
-
-  if (graph->tail == NULL) {
-    graph->tail = graph->head;
-  }
-};
-
-void graph_delete_node(Graph *graph, Node *node) {
-
-  if (graph == NULL || node == NULL) {
-    printf("Invalid arguments\n");
-    return;
-  }
-  if (graph->head == node) {
-    graph->head = node->next;
-  }
-  if (graph->tail == node) {
-    graph->tail = node->prev;
-  }
-  if (node->prev != NULL) {
-    node->prev->next = node->next;
-  }
-  if (node->next != NULL) {
-    node->next->prev = node->prev;
-  }
-
+  free(node->ins);
+  free(node->state);
+  free(node->out);
   free(node);
-};
-
-// Function to print the doubly linked list
-void graph_print(Graph *dll) {
-  if (dll == NULL || dll->head == NULL) {
-    printf("Doubly linked list is empty\n");
-    return;
-  }
-  Node *temp = dll->head;
-  while (temp != NULL) {
-    printf("[ %p [%s] [%s] ", temp, temp->name, node_type_names[temp->type]);
-    printf("ins: ");
-    double *buf_pool_start = get_buf_pool_start();
-    for (int i = 0; i < temp->num_ins; i++) {
-      double *buf = temp->ins[i]->buf;
-      int buf_offset = (buf - buf_pool_start) / BUF_SIZE;
-      printf("(\x1b[38;5;%dmbuf %p\x1b[0m [%d]), ", buf, buf,
-             temp->ins[i]->layout);
-    }
-
-    double *out_buf = temp->out->buf;
-    printf("out: \x1b[38;5;%dmbuf %p\x1b[0m [%d]", out_buf, out_buf,
-           temp->out->layout);
-
-    printf(" ]");
-    temp = temp->next;
-    if (temp) {
-      printf("\n");
-    }
-  }
-  printf("\n");
 }

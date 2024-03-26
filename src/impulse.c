@@ -2,6 +2,7 @@
 #include "common.h"
 #include "ctx.h"
 #include "node.h"
+#include "noise.h"
 #include "signal.h"
 #include <stdio.h>
 #include <stdlib.h>
