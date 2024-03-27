@@ -1,6 +1,5 @@
 #include "entry.h"
 #include "ctx.h"
-#include "delay.h"
 #include "envelope.h"
 #include "node.h"
 #include "noise.h"
@@ -9,9 +8,7 @@
 #include "signal.h"
 #include "signal_arithmetic.h"
 #include "window.h"
-#include <math.h>
 #include <pthread.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

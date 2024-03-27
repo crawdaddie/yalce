@@ -6,6 +6,7 @@ module Signal = Signal
 module Node = Node
 module Osc = Osc
 module Filter = Filter
+module Env = Env
 
 type audio_ctx = unit ptr
 
@@ -65,10 +66,6 @@ let sum_nodes_arr = foreign "sum_nodes_arr" (int @-> ptr Node.node @-> returning
 
 let mix_nodes_arr =
   foreign "mix_nodes_arr" (int @-> ptr Node.node @-> ptr double @-> returning Node.node)
-;;
-
-let env_node =
-  foreign "env_node" (int @-> ptr double @-> ptr double @-> returning Node.node)
 ;;
 
 let ctx_add = foreign "ctx_add" (Node.node @-> returning Node.node)
@@ -174,13 +171,13 @@ module Synth = struct
       chain_wrap (sum_nodes_arr len arr)
     ;;
 
-    let env levels times =
-      env_node
-        (List.length times)
-        (levels |> CArray.of_list double |> CArray.start)
-        (times |> CArray.of_list double |> CArray.start)
-      |> chain_wrap
-    ;;
+    (* let env levels times = *)
+    (*   env_node *)
+    (*     (List.length times) *)
+    (*     (levels |> CArray.of_list double |> CArray.start) *)
+    (*     (times |> CArray.of_list double |> CArray.start) *)
+    (*   |> chain_wrap *)
+    (* ;; *)
 
     let ( +~ ) = sum2
     let bufplayer filename = bufplayer_node filename |> chain_wrap
