@@ -40,7 +40,7 @@ void process_msg_queue_post(msg_queue *msg_queue, int consumed);
 void ctx_rm_node(Node *node);
 
 int get_block_offset();
-void node_add_msg(Node *target, int offset);
+void add_node_msg(Node *target, int offset);
 
 void set_node_scalar_at(Node *target, int offset, int input, double value);
 

@@ -33,10 +33,11 @@ let compile_synth arr =
       aux g rest
   in
 
-  let g = aux g arr in
-  let _ = ctx_add g in
-  add_to_dac g
+  aux g arr
 ;;
+
+(* let _ = ctx_add g in *)
+(* add_to_dac g *)
 
 let freq_choices =
   [| 220.0
@@ -53,6 +54,8 @@ let freq_choices =
 while true do
   let del = rand_choice [| 0.25; 0.5; 1.5; 0.125 |] in
 
-  let _g = del |> synth (rand_choice freq_choices /. 4.) |> compile_synth in
+  let g = del |> synth (rand_choice freq_choices /. 4.) |> compile_synth in
+  let fo = Messaging.get_block_offset () in
+  let () = Messaging.schedule_add_node g fo in
   Thread.delay del
 done
