@@ -1,6 +1,8 @@
 open Ctypes
 open Foreign
 
+let schedule_add_node = foreign "add_node_msg" (Node.node @-> int @-> returning void)
+
 let set_node_scalar =
   foreign "set_node_scalar" (Node.node @-> int @-> double @-> returning void)
 ;;

@@ -47,6 +47,16 @@ OCAML_EXAMPLE_DIR := examples
 $(OCAML_EXAMPLE_DIR)/%.ml: $(SHARED_LIB_TARGET) .touch_file
 	dune exec $(basename $@).exe --profile release
 
+OCAML_EXAMPLE_BUILD_DIR := _build/default/examples
+
+$(OCAML_EXAMPLE_BUILD_DIR)/%.exe: $(SHARED_LIB_TARGET)
+	# $(OCAML_EXAMPLE_DIR)/$*.ml
+	# echo $(notdir $@) 
+	dune build $(OCAML_EXAMPLE_DIR)/$(notdir $@) --profile release
+	./$@
+
+
+
 .touch_file: $(SHARED_LIB_TARGET)
 	touch .touch_file
 

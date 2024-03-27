@@ -89,6 +89,18 @@ void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
   }
 }
 
+static void offset_node_bufs(Node *head, int frame_offset) {
+  for (int i = 0; i < head->num_ins; i++) {
+    head->ins[i]->buf += frame_offset;
+  }
+}
+
+static void unoffset_node_bufs(Node *head, int frame_offset) {
+  for (int i = 0; i < head->num_ins; i++) {
+    head->ins[i]->buf -= frame_offset;
+  }
+}
+
 UserCtxCb user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame) {
 
   int consumed = process_msg_queue_pre(&ctx->msg_queue);
@@ -118,13 +130,17 @@ Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
     }
   }
 
+  int frame_offset = head->frame_offset;
   if (head->perform) {
-    head->perform(head, nframes, seconds_per_frame);
+    head->perform(head, nframes - frame_offset, seconds_per_frame);
   }
 
   if (head->type == OUTPUT) {
-    write_to_output_buf(head->out, nframes, seconds_per_frame, dac_sig,
-                        output_num);
+    Signal dac = (Signal){.buf = dac_sig->buf + frame_offset * dac_sig->layout,
+                          .size = dac_sig->size,
+                          .layout = dac_sig->layout};
+    write_to_output_buf(head->out, nframes - frame_offset, seconds_per_frame,
+                        &dac, output_num);
     output_num++;
   }
 
@@ -141,6 +157,12 @@ static void process_msg_pre(scheduler_msg msg) {
 
   switch (msg.type) {
   case NODE_ADD: {
+    struct NODE_ADD payload = msg.body.NODE_ADD;
+    int frame_offset = msg.frame_offset;
+    offset_node_bufs(payload.target, frame_offset);
+    payload.target->frame_offset = frame_offset;
+    add_to_dac(payload.target);
+    ctx_add(payload.target);
     break;
   }
 
@@ -169,6 +191,10 @@ static void process_msg_pre(scheduler_msg msg) {
 static void process_msg_post(scheduler_msg msg) {
   switch (msg.type) {
   case NODE_ADD: {
+    struct NODE_ADD payload = msg.body.NODE_ADD;
+    int frame_offset = msg.frame_offset;
+    unoffset_node_bufs(payload.target, frame_offset);
+    payload.target->frame_offset = 0;
     break;
   }
 
@@ -224,7 +250,7 @@ int get_block_offset() {
   int offset = (int)(get_block_diff() * ctx->sample_rate);
   return offset;
 }
-void node_add_msg(Node *target, int offset) {
+void add_node_msg(Node *target, int offset) {
   Ctx *ctx = get_audio_ctx();
   scheduler_msg msg = {NODE_ADD,
                        offset,
