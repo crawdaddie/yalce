@@ -7,6 +7,7 @@ typedef struct {
   int frame_offset;
   union {
     struct NODE_ADD {
+      Node *target;
     } NODE_ADD;
     struct NODE_SET_SCALAR {
       Node *target;

@@ -1,6 +1,7 @@
 #include "ctx.h"
 #include "common.h"
 #include "node.h"
+#include "scheduling.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -214,5 +215,82 @@ void process_msg_queue_post(msg_queue *queue, int consumed) {
     // msg_queue->write_ptr);
     msg = pop_msg(queue);
     process_msg_post(msg);
+  }
+}
+
+int get_block_offset() {
+
+  Ctx *ctx = get_audio_ctx();
+  int offset = (int)(get_block_diff() * ctx->sample_rate);
+  return offset;
+}
+void node_add_msg(Node *target, int offset) {
+  Ctx *ctx = get_audio_ctx();
+  scheduler_msg msg = {NODE_ADD,
+                       offset,
+                       {.NODE_ADD = (struct NODE_ADD){
+                            target,
+                        }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
+void set_node_scalar_at(Node *target, int offset, int input, double value) {
+
+  Ctx *ctx = get_audio_ctx();
+  scheduler_msg msg = {NODE_SET_SCALAR,
+                       offset,
+                       {.NODE_SET_SCALAR = (struct NODE_SET_SCALAR){
+                            target,
+                            input,
+                            value,
+                        }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
+void set_node_trig_at(Node *target, int offset, int input) {
+  Ctx *ctx = get_audio_ctx();
+  scheduler_msg msg = {NODE_SET_TRIG,
+                       offset,
+                       {.NODE_SET_TRIG = (struct NODE_SET_TRIG){
+                            target,
+                            input,
+                        }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
+void set_node_scalar(Node *target, int input, double value) {
+  Ctx *ctx = get_audio_ctx();
+  int offset = (int)(get_block_diff() * ctx->sample_rate);
+  scheduler_msg msg = {NODE_SET_SCALAR,
+                       offset,
+                       {.NODE_SET_SCALAR = (struct NODE_SET_SCALAR){
+                            target,
+                            input,
+                            value,
+                        }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
+void set_node_trig(Node *target, int input) {
+  Ctx *ctx = get_audio_ctx();
+  int offset = (int)(get_block_diff() * ctx->sample_rate);
+  scheduler_msg msg = {NODE_SET_TRIG,
+                       offset,
+                       {.NODE_SET_TRIG = (struct NODE_SET_TRIG){
+                            target,
+                            input,
+                        }}};
+  push_msg(&ctx->msg_queue, msg);
+}
+
+void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs) {
+  Ctx *ctx = get_audio_ctx();
+  int offset = (int)(get_block_diff() * ctx->sample_rate);
+  for (int i = 0; i < num_msgs; i++) {
+    printf("push msgs %d %p type: %d\n", offset, scheduler_msgs + i,
+           (scheduler_msgs + i)->type);
+    scheduler_msg msg = scheduler_msgs[i];
+    msg.frame_offset = offset;
+    push_msg(&ctx->msg_queue, msg);
   }
 }

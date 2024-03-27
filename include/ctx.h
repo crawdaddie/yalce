@@ -39,4 +39,14 @@ void process_msg_queue_post(msg_queue *msg_queue, int consumed);
 
 void ctx_rm_node(Node *node);
 
+int get_block_offset();
+void node_add_msg(Node *target, int offset);
+
+void set_node_scalar_at(Node *target, int offset, int input, double value);
+
+void set_node_trig_at(Node *target, int offset, int input);
+void set_node_scalar(Node *target, int input, double value);
+
+void set_node_trig(Node *target, int input);
+void push_msgs(int num_msgs, scheduler_msg *scheduler_msgs);
 #endif

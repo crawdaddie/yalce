@@ -12,9 +12,8 @@ typedef struct {
   bool should_kill;
 } env_state;
 
-node_perform env_perform(Node *node, int nframes, double spf);
-
 Node *env_node(int len, double *levels, double *times);
+Node *autotrig_env_node(int len, double *levels, double *times);
 
 typedef enum { ATTACK, DECAY, SUSTAIN, RELEASE, IDLE } _adsr_state;
 typedef struct {
