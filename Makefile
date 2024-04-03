@@ -15,6 +15,7 @@ FRAMEWORKS =-framework opengl -framework CoreMIDI -framework cocoa
 # RAYLIB_INCLUDE=/opt/homebrew/include
 # RAYLIB_LIB=/opt/homebrew/lib/
 COMPILER_OPTIONS = -Werror -Wall -Wextra -Iinclude -g
+# -fsanitize=address
 
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -44,16 +45,14 @@ $(SHARED_LIB_TARGET): $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 
 OCAML_EXAMPLE_DIR := examples
 
-$(OCAML_EXAMPLE_DIR)/%.ml: $(SHARED_LIB_TARGET) .touch_file
-	dune exec $(basename $@).exe --profile release
+# $(OCAML_EXAMPLE_DIR)/%.ml: $(SHARED_LIB_TARGET) .touch_file
+# 	dune build $(basename $@).exe --profile release
 
 OCAML_EXAMPLE_BUILD_DIR := _build/default/examples
 
-$(OCAML_EXAMPLE_BUILD_DIR)/%.exe: $(SHARED_LIB_TARGET)
-	# $(OCAML_EXAMPLE_DIR)/$*.ml
-	# echo $(notdir $@) 
+$(OCAML_EXAMPLE_BUILD_DIR)/%.exe: $(OCAML_EXAMPLE_DIR)/%.ml $(SHARED_LIB_TARGET)
 	dune build $(OCAML_EXAMPLE_DIR)/$(notdir $@) --profile release
-	./$@
+	# ./$@
 
 
 

@@ -4,6 +4,6 @@
  (foreign_stubs
   (language c)
   (include_dirs ../include))
- (c_library_flags (-L/Users/adam.juraszek/projects/yalce/build -lyalce_synth))
+ (c_library_flags (-L/Users/adam/projects/yalce/build -lyalce_synth))
 )
 

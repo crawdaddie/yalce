@@ -8,7 +8,7 @@ typedef struct {
   Node *tail;
 } Graph;
 
-Node *group_new();
+Node *group_new(int chans);
 void group_add_tail(Node *group, Node *node);
 
 void graph_print(Graph *graph, int indent);

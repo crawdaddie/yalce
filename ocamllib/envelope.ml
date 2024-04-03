@@ -6,7 +6,7 @@ let trig_env_node =
 ;;
 
 let autotrig_env_node =
-  foreign "auto_trig_env_node" (int @-> ptr double @-> ptr double @-> returning Node.node)
+  foreign "autotrig_env_node" (int @-> ptr double @-> ptr double @-> returning Node.node)
 ;;
 
 let trig levels times =

@@ -21,6 +21,7 @@ void init_ctx() {
   ctx.msg_queue.read_ptr = 0;
   ctx.graph.head = NULL;
   ctx.graph.tail = NULL;
+  // ctx._buf_counter = 0;
 }
 
 Ctx *get_audio_ctx() { return &ctx; }

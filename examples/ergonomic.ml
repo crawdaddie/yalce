@@ -20,12 +20,10 @@ let saw_synth () =
   let open Synth.Make (struct
       let inputs = [ 100.; 0. ]
     end) in
-  let s =
-    chorus_list_lag [ 1.; 1.01; 1.02 ] (chain_input_sig 0) (fun _ -> saw 100.) 0.05
-  in
-  let ev = env [ 0.; 1.; 0. ] [ 0.05; 1. ] in
-  let ev = node_set_input_signal ev 0 (chain_input_sig 1) in
-  let s = ev *~ s in
+  let s = chorus_list_lag [ 1.; 1.01; 1.02 ] (chain_input_sig 0) (fun _ -> saw 100.) in
+  (* let ev = env [ 0.; 1.; 0. ] [ 0.05; 1. ] in *)
+  (* let ev = node_set_input_signal ev 0 (chain_input_sig 1) in *)
+  (* let s = ev *~ s in *)
   finish s
 ;;
 
@@ -68,10 +66,10 @@ let rec proc () =
   (* ); *)
   let pos = rand_choice [| 0.; 0.25; 0.5; 0.75 |] in
 
-  (* start_pos_z fo pos; *)
+  start_pos_z fo pos;
   let repeats = rand_choice [| 1; 1; 1; 2; 4; 8 |] in
   let i = ref repeats in
-  (* let del = rand_choice [| 0.0625; 0.125; 0.25; 0.5 |] *. (164. /. 120.) in *)
+  let del = rand_choice [| 0.0625; 0.125; 0.25; 0.5 |] *. (164. /. 120.) in
   let rate = ref 1. in
 
   let pitch_up = rand_choice [| 1.; 1.02; 0.9 |] in
@@ -79,7 +77,7 @@ let rec proc () =
     let fo = get_block_offset () in
     if pos = 0.25 || pos = 0.75 then rate := !rate *. pitch_up;
 
-    (* trig_x fo; *)
+    trig_x fo;
     trig_z fo;
     rate_z fo !rate;
     Thread.delay (tempo_scale *. 0.25 /. Int.to_float repeats);

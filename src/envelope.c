@@ -116,8 +116,8 @@ static node_perform autotrig_env_perform(Node *node, int nframes, double spf) {
 }
 
 // one-shot autotrig env -- doesn't need a trig input
-Node *auto_trig_env_node(int len, // length of times array
-                         double *levels, double *times) {
+Node *autotrig_env_node(int len, // length of times array
+                        double *levels, double *times) {
 
   int SR = ctx_sample_rate();
   env_state *state = malloc(sizeof(env_state));

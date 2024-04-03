@@ -8,7 +8,7 @@ static node_perform group_perform(Node *group, int nframes, double spf) {
   perform_graph(graph->head, nframes, spf, group->out, 0);
 }
 static char *group_name = "group";
-Node *group_new() {
+Node *group_new(int chans) {
   Graph *graph = malloc(sizeof(Graph));
   Node *g = node_new((void *)graph, (node_perform *)group_perform, &(Signal){},
                      &(Signal){});
@@ -16,12 +16,12 @@ Node *group_new() {
   // g->ins = NULL;
   g->is_group = true;
   g->name = group_name;
-  g->out = get_sig(1);
+  g->out = get_sig(chans);
   return g;
 }
 
 Node *group_with_inputs(int num_ins, double *defaults) {
-  Node *group = group_new();
+  Node *group = group_new(1);
 
   group->ins = malloc(num_ins * (sizeof(Signal *)));
   group->num_ins = num_ins;
@@ -33,6 +33,12 @@ Node *group_with_inputs(int num_ins, double *defaults) {
 
 void group_add_tail(Node *group, Node *node) {
   graph_add_tail(group->state, node);
+  node->parent = group;
+}
+
+void group_add_head(Node *group, Node *node) {
+  printf("group add head %p\n", node);
+  graph_add_head(group->state, node);
   node->parent = group;
 }
 

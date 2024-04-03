@@ -1,5 +1,6 @@
 #ifndef _CTX_H
 #define _CTX_H
+#include "bufplayer.h"
 #include "graph.h"
 #include "msg_queue.h"
 #include "node.h"
@@ -12,10 +13,11 @@ typedef struct {
   int sample_rate;
   msg_queue msg_queue;
   Graph graph;
+  // SharedBuf shared_bufs[100];
+  // int _buf_counter;
 } Ctx;
 
 double **alloc_buses(int num_buses);
-
 void init_ctx();
 typedef void (*UserCtxCb)(Ctx *ctx, int nframes, double spf);
 

@@ -1,5 +1,4 @@
 #include "soundfile.h"
-#include "node.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,8 +9,6 @@ int read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
   int readcount;
   memset(&sfinfo, 0, sizeof(sfinfo));
 
-  printf("filename '%s'\n", filename);
-
   if (!(infile =
             sf_open(filename, SFM_READ,
                     &sfinfo))) { /* Open failed so print an error message. */
@@ -29,12 +26,16 @@ int read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
 
   size_t total_size = sfinfo.channels * sfinfo.frames;
 
+  // double *buf = calloc((int)total_size, sizeof(double));
+  double *buf = signal->buf;
+  printf("filename '%s' buf %p\n", filename, buf);
 
-  // result->buf =
-  double *buf = calloc((int)total_size, sizeof(double));
-
-  sf_read_double(infile, buf, total_size);
-
+  // reads channels in interleaved
+  int read = sf_read_double(infile, buf, total_size);
+  if (read != total_size) {
+    printf("warning read failure, read %d != total size) %zu", read,
+           total_size);
+  }
 
   sf_close(infile);
   signal->size = total_size;
@@ -44,7 +45,9 @@ int read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
   return 0;
 };
 
-int read_file_float_deinterleaved(const char *filename, SignalFloatDeinterleaved *signal, int *sf_sample_rate) {
+int read_file_float_deinterleaved(const char *filename,
+                                  SignalFloatDeinterleaved *signal,
+                                  int *sf_sample_rate) {
   SNDFILE *infile;
   SF_INFO sfinfo;
   int readcount;
@@ -69,14 +72,11 @@ int read_file_float_deinterleaved(const char *filename, SignalFloatDeinterleaved
 
   size_t total_size = sfinfo.channels * sfinfo.frames;
 
-
   // result->buf =
   float *buf = calloc((int)total_size, sizeof(float));
 
   // TODO: ensure properly deinterleave data
   sf_read_float(infile, buf, total_size);
-
-
 
   sf_close(infile);
   signal->size = total_size;

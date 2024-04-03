@@ -40,4 +40,8 @@ Signal *get_sig(int layout);
 
 Signal *get_sig_float(int layout);
 
+// Signal *get_sig_buf(const char *filename);
+int buf_alloc(const char *filename);
+Signal *get_sig_of_soundfile(const char *filename);
+
 #endif

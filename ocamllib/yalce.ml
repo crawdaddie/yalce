@@ -6,7 +6,7 @@ module Signal = Signal
 module Node = Node
 module Osc = Osc
 module Filter = Filter
-module Env = Env
+module Envelope = Envelope
 
 type audio_ctx = unit ptr
 
@@ -32,7 +32,14 @@ let rand_choice_ =
   foreign "rand_choice_node" (double @-> int @-> ptr double @-> returning Node.node)
 ;;
 
-let bufplayer_node_ = foreign "bufplayer_node" (ptr char @-> returning Node.node)
+(* let bufplayer_node_ = foreign "bufplayer_node" (ptr char @-> returning Node.node) *)
+let bufplayer_node = foreign "bufplayer_node" (Signal.signal @-> returning Node.node)
+
+let bufplayer_autotrig_node =
+  foreign
+    "bufplayer_autotrig_node"
+    (Signal.signal @-> double @-> double @-> returning Node.node)
+;;
 
 (* let bufplayer_pitchshift_node_ = *)
 (*   foreign "bufplayer_pitchshift_node" (ptr char @-> returning Node.node) *)
@@ -48,10 +55,10 @@ let scale2 =
   foreign "scale2_node" (double @-> double @-> Node.node @-> returning Node.node)
 ;;
 
-let bufplayer_node filename =
-  let filename_ptr = CArray.start (CArray.of_string filename) in
-  bufplayer_node_ filename_ptr
-;;
+(* let bufplayer_node filename = *)
+(*   let filename_ptr = CArray.start (CArray.of_string filename) in *)
+(*   bufplayer_node_ filename_ptr *)
+(* ;; *)
 
 (* let bufplayer_pitchshift_node filename = *)
 (*   let filename_ptr = CArray.start (CArray.of_string filename) in *)
@@ -76,8 +83,9 @@ let add_to_chain =
 
 let add_to_dac = foreign "add_to_dac" (Node.node @-> returning Node.node)
 let chain_new = foreign "group_new" (void @-> returning Node.node)
-let group_new = foreign "group_new" (void @-> returning Node.node)
+let group_new = foreign "group_new" (int @-> returning Node.node)
 let group_add_tail = foreign "group_add_tail" (Node.node @-> Node.node @-> returning void)
+let group_add_head = foreign "group_add_head" (Node.node @-> Node.node @-> returning void)
 
 let group_with_inputs =
   foreign "group_with_inputs" (int @-> ptr double @-> returning Node.node)
@@ -152,7 +160,7 @@ module type SynthSignature = sig
   val inputs : float list
 end
 
-module Synth = struct
+module Synth_ = struct
   module Make (X : SynthSignature) = struct
     let chain =
       match X.inputs with
@@ -180,7 +188,8 @@ module Synth = struct
     (* ;; *)
 
     let ( +~ ) = sum2
-    let bufplayer filename = bufplayer_node filename |> chain_wrap
+
+    (* let bufplayer filename = bufplayer_node filename |> chain_wrap *)
     let sumn nodes = sumn nodes |> chain_wrap
     let lag_sig t s = lag_sig t s |> chain_wrap
     let mul_scalar f x = mul_scalar f x |> chain_wrap

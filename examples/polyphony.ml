@@ -10,31 +10,129 @@ let rand_choice arr =
   arr.(i)
 ;;
 
+module type Monad = sig
+  type 'a t
+
+  val return : 'a -> 'a t
+  val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
+end
+
+module Synth = struct
+  type 'a t = 'a * Node.node list
+
+  let chain = ref []
+
+  let add_to_chain x =
+    chain
+      := match !chain with
+         | [] -> [ x ]
+         | h :: rest when h = x -> !chain
+         | r -> x :: r
+  ;;
+
+  let ( ~. ) x =
+    add_to_chain x;
+    x
+  ;;
+
+  let ( >>= ) m f =
+    let x, s1 = m in
+    let y, s2 = f x in
+    y, List.append s1 s2
+  ;;
+
+  (* chain := x :: !chain *)
+
+  let ( +~ ) x f =
+    add_to_chain f;
+    add_to_chain x;
+    let y = sum2 x f in
+    add_to_chain y;
+    y
+  ;;
+
+  let ( *~ ) x f =
+    add_to_chain x;
+    add_to_chain f;
+    let y = mul x f in
+    add_to_chain y;
+    y
+  ;;
+
+  let ( let* ) x m =
+    add_to_chain x;
+    x
+  ;;
+
+  let ( and* ) m x = ()
+
+  (* let cont m f = *)
+  (*   let x, s1 = m in *)
+  (*   let y, s2 = ~.f in *)
+  (*   y, List.append s1 s2 *)
+  (* ;; *)
+  (* let compile_synth ch = () *)
+
+  let compile_synth arr =
+    let out_layout = List.hd arr |> Node.out |> Signal.layout in
+    let g = group_new out_layout in
+    let rec aux g arr =
+      match arr with
+      | [] -> g
+      | x :: rest ->
+        group_add_head g x;
+        aux g rest
+    in
+
+    aux g arr
+  ;;
+
+  let output x =
+    add_to_chain x;
+    let _ = add_to_dac x in
+    compile_synth !chain
+  ;;
+end
+
 let synth freq dec =
-  let sq1 = Osc.sq freq in
-  let sq2 = Osc.sq (freq *. 1.01) in
-  let ev = Env.autotrig [ 0.; 1.; 0. ] [ 0.01; dec ] in
-  let sm = sum2 sq1 sq2 in
-  let out = sm *~ ev in
-  [ sq1; sq2; sm; ev; out ]
+  let open Synth in
+  let sq1 = ~.(Osc.sq freq) in
+  let sq1 = ~.(Osc.sq (freq *. 1.01) +~ sq1) in
+  let ev = ~.(Envelope.autotrig [ 0.; 1.; 0. ] [ 0.01; dec ]) in
+  output sq1 *~ ev
 ;;
 
-let compile_synth arr =
-  let g = group_new () in
-  let rec aux g arr =
-    match arr with
-    | [] -> g
-    | x :: [] ->
-      let _ = add_to_dac x in
-      group_add_tail g x;
-      aux g []
-    | x :: rest ->
-      group_add_tail g x;
-      aux g rest
-  in
+(* let sm = sq1 +~ sq2 in *)
+(* let out = sm *~ ev in *)
+(* [ sq1; sq2; sm; ev; out ] *)
 
-  aux g arr
-;;
+(* let synth freq dec = *)
+(*   let sq1 = Osc.sq freq in *)
+(*   let sq2 = Osc.sq (freq *. 1.01) in *)
+(*   let ev = Envelope.autotrig [ 0.; 1.; 0. ] [ 0.01; dec ] in *)
+(*   let sm = sq1 +~ sq2 in *)
+(*   let out = sm *~ ev in *)
+(*   [ sq1; sq2; sm; ev; out ] *)
+(* ;; *)
+
+(* let compile_synth arr = *)
+(*   let g = group_new 1 in *)
+(*   let rec aux g arr = *)
+(*     match arr with *)
+(*     | [] -> g *)
+(*     | x :: [] -> *)
+(*       let _ = add_to_dac x in *)
+(*       group_add_tail g x; *)
+(*       aux g [] *)
+(*     | x :: rest -> *)
+(*       group_add_tail g x; *)
+(*       aux g rest *)
+(*   in *)
+(**)
+(*   aux g arr *)
+(* ;; *)
+
+(* let _ = synth' 100. 0.2 *)
 
 (* let _ = ctx_add g in *)
 (* add_to_dac g *)
@@ -51,12 +149,24 @@ let freq_choices =
   |]
 ;;
 
-while true do
-  (* let del = rand_choice [| 0.25; 0.5; 1.5; 0.125 |] in *)
-  let del = 0.25 in
+let g = 0.5 |> synth (rand_choice freq_choices /. 4.)
+let fo = Messaging.get_block_offset ()
 
-  let g = del *. 2. |> synth (rand_choice freq_choices /. 2.) |> compile_synth in
-  let fo = Messaging.get_block_offset () in
-  let () = Messaging.schedule_add_node g fo in
-  Thread.delay del
-done
+let () =
+  Messaging.schedule_add_node g fo;
+  Thread.delay 4.;
+  print_ctx ();
+  Thread.delay 4.;
+  print_ctx ()
+;;
+
+(* while true do *)
+(*   let del = rand_choice [| 0.25; 0.5; 1.5; 0.125 |] in *)
+(*   print_ctx (); *)
+(**)
+(*   (* let del = 0.125 in *) *)
+(*   let g = del *. 2. |> synth' (rand_choice freq_choices /. 4.) in *)
+(*   let fo = Messaging.get_block_offset () in *)
+(*   let () = Messaging.schedule_add_node g fo in *)
+(*   Thread.delay del *)
+(* done *)
