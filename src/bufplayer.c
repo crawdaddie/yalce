@@ -191,8 +191,7 @@ int buf_alloc(const char *filename) {
   // return buf_counter;
   return 0;
 }
-static double _buf[20000];
-// static Signal buf_sig;
+static double _buf[200000];
 
 // warning! highly unstable
 Signal *buf_alloc_to_sig(const char *filename) {

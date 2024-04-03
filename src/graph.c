@@ -37,7 +37,6 @@ void group_add_tail(Node *group, Node *node) {
 }
 
 void group_add_head(Node *group, Node *node) {
-  printf("group add head %p\n", node);
   graph_add_head(group->state, node);
   node->parent = group;
 }

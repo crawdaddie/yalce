@@ -26,8 +26,8 @@ int read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
 
   size_t total_size = sfinfo.channels * sfinfo.frames;
 
-  // double *buf = calloc((int)total_size, sizeof(double));
-  double *buf = signal->buf;
+  double *buf = calloc((int)total_size, sizeof(double));
+  // double *buf = signal->buf;
   printf("filename '%s' buf %p\n", filename, buf);
 
   // reads channels in interleaved
