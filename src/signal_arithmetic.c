@@ -1,5 +1,6 @@
 #include "signal_arithmetic.h"
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 // ------------------------------ SIGNAL ARITHMETIC
 
@@ -66,6 +67,25 @@ node_perform scale_perform(Node *node, int nframes, double spf) {
   }
 }
 
+// perform scaling of an input which is between 0-1 to min-max input signals
+node_perform scale_perform_dyn(Node *node, int nframes, double spf) {
+  scale_state *state = node->state;
+  double *in = node->ins[0]->buf;
+  double *min = node->ins[1]->buf;
+  double *max = node->ins[2]->buf;
+  double *out = node->out->buf;
+  while (nframes--) {
+    double val = *in;
+    val *= *max - *min;
+    val += *min;
+    *out = val;
+    out++;
+    in++;
+    min++;
+    max++;
+  }
+}
+
 // perform scaling of an input which is between -1-1 to min-max
 node_perform scale2_perform(Node *node, int nframes, double spf) {
   scale_state *state = node->state;
@@ -90,6 +110,18 @@ Node *scale_node(double min, double max, Node *in) {
   Node *s = node_new(state, (node_perform *)scale_perform, NULL, NULL);
   s->ins = malloc(sizeof(Signal *));
   s->ins[0] = in->out;
+  s->out = get_sig(in->out->layout);
+  return s;
+}
+
+// scales a node with outputs between 0-1 to values between min & max (linear)
+Node *scale_node_dyn(Signal *min, Signal *max, Node *in) {
+  scale_state *state = malloc(sizeof(scale_state));
+  Node *s = node_new(state, (node_perform *)scale_perform_dyn, NULL, NULL);
+  s->ins = malloc(sizeof(Signal *) * 3);
+  s->ins[0] = in->out;
+  s->ins[1] = min;
+  s->ins[2] = max;
   s->out = get_sig(in->out->layout);
   return s;
 }
@@ -124,7 +156,7 @@ node_perform sum_perform(Node *node, int nframes, double spf) {
     for (int x = 0; x < num_ins; x++) {
       int in_layout = node->ins[x]->layout;
       double *in = node->ins[x]->buf + (i * in_layout);
-      // printf("scalar inbuf %p\n", in);
+      // printf("sum: %f %f\n", *out, *in);
       sum_signals(out, layout, in, in_layout);
     }
     out += layout;
@@ -250,4 +282,29 @@ Node *add_scalar_node(double scalar, Node *node) {
   add->num_ins = 1;
   add->out = node->out;
   return add;
+}
+
+node_perform mul_sig_perform(Node *node, int nframes, double spf) {
+
+  double *in = node->ins[0]->buf;
+  double *in_mul = node->ins[1]->buf;
+
+  double *out = node->out->buf;
+
+  while (nframes--) {
+    *out = *(in) * *in_mul;
+    in++;
+    in_mul++;
+    out++;
+  }
+}
+
+Node *mul_scalar_sig_node(double scalar, Signal *signal) {
+  Node *mul = node_new(NULL, mul_sig_perform, NULL, NULL);
+  mul->ins = malloc(sizeof(Signal *) * 2);
+  mul->ins[0] = get_sig_default(1, scalar);
+  mul->ins[1] = signal;
+  mul->num_ins = 2;
+  mul->out = get_sig(signal->layout);
+  return mul;
 }

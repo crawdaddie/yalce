@@ -46,4 +46,6 @@ Node *mul_nodes(Node *a, Node *b);
 Node *mul_scalar_node(double scalar, Node *node);
 
 Node *add_scalar_node(double scalar, Node *node);
+
+Node *mul_scalar_sig_node(double scalar, Signal *signal);
 #endif

@@ -1,13 +1,16 @@
 #include "entry.h"
+#include "biquad.h"
 #include "common.h"
 #include "ctx.h"
 #include "envelope.h"
 #include "gc.h"
 #include "node.h"
+#include "noise.h"
+#include "oscillator.h"
 #include "scheduling.h"
 #include "signal.h"
 #include "signal_arithmetic.h"
-#include "soundfile.h"
+#include "window.h"
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -26,26 +29,40 @@ static inline void underguard(double *x) {
 }
 
 static double levels[3] = {0.0, 1.0, 0.0};
-static double times[2] = {0.001, 0.8};
+static double times[2] = {0.2, 0.5};
 
-Node *synth(Signal *bufnum) {
-  Node *group = group_new(2);
-  // group->num_ins = 1;
-  // group->ins = malloc(sizeof(Signal *));
-  // group->ins[0] = get_sig_default(1, 0);
+Node *synth(double freq, double cutoff) {
+  Node *group = group_new(1);
+  group->num_ins = 0;
+  // group->ins = malloc(sizeof(Signal *) * 2);
+  // group->ins[0] = get_sig_default(1, 100.);
+  // group->ins[1] = get_sig_default(1, 100.);
 
-  Node *b = bufplayer_autotrig_node(bufnum, 1.0, 0.);
-  group_add_tail(group, b);
+  Node *sq1 = sq_node(freq);
+  group_add_tail(group, sq1);
+  // node_set_input_signal(sq1, 0, group->ins[0]);
+
+  Node *sq2 = sq_node(freq * 1.01);
+  group_add_tail(group, sq2);
+  // node_set_input_signal(sq2, 0, group->ins[0]);
+
+  Node *nodes[2] = {sq1, sq2};
+
+  Node *summed = sum_nodes_arr(2, nodes);
+  group_add_tail(group, summed);
+
+  Node *filtered = biquad_lp_dyn_node(cutoff, 1., summed);
+  group_add_tail(group, filtered);
+  // node_set_input_signal(filtered, 1, group->ins[1]);
+
   Node *env = autotrig_env_node(2, levels, times);
-  pipe_sig_to_idx(0, group->ins[0], env);
-
-  // set_node_trig(group, 0);
   group_add_tail(group, env);
 
-  b = mul_nodes(b, env);
-  group_add_tail(group, b);
+  Node *m = mul_nodes(filtered, env);
 
-  add_to_dac(b);
+  group_add_tail(group, m);
+
+  add_to_dac(m);
   return group;
 }
 
@@ -74,24 +91,40 @@ void write_sig(Signal *sig) {
     phase += phsinc;
   }
 }
-void *audio_entry() {
-  Signal *sig = malloc(sizeof(Signal));
-  // int bufnum = buf_alloc("assets/sor_sample_pack/Kicks/SOR_OB_Kick_Mid.wav");
-  // int buf_sr;
-  // read_file("assets/sor_sample_pack/Kicks/SOR_OB_Kick_Mid.wav", sig,
-  // &buf_sr);
-  write_sig(sig);
-  while (true) {
-    Node *sq = synth(sig);
-    int offset = get_block_offset();
-    add_node_msg(sq, offset);
-    // add_to_dac(sq);
-    // ctx_add(sq);
-    // printf("----------\n");
-    graph_print(&(get_audio_ctx()->graph), 0);
 
-    msleep(1000);
-  }
+void compile_synth(const char *name, Node *synth_graph) {
+  printf("compile bin:\n");
+  Graph g = {.head = synth_graph};
+  graph_print(&g, 0);
+}
+
+void *audio_entry() {
+  // Node *proto = synth();
+  // compile_synth("sq_env_simple", proto);
+
+  // while (true) {
+  //
+  //   double freq = choices[rand_int(8)];
+  //
+  //   double cutoff = choices[rand_int(8)];
+  //   // choices[rand_int(8)];
+  //   Node *sq = synth(freq, cutoff);
+  //   int offset = get_block_offset();
+  //   add_node_msg(sq, offset);
+  //   // set_node_scalar_at(sq, offset, 0, choices[rand_int(8)]);
+  //   // add_to_dac(sq);
+  //   // ctx_add(sq);
+  //   // printf("----------\n");
+  //   // graph_print(&(get_audio_ctx()->graph), 0);
+  //
+  //   msleep(250);
+  // }
+  //
+  Node *env = env_node(2, levels, times);
+  add_to_dac(env);
+  ctx_add(env);
+  set_node_trig(env, 0);
+  msleep(1000);
 }
 void print_ctx() { graph_print(&(get_audio_ctx()->graph), 0); }
 
@@ -108,8 +141,9 @@ int entry() {
     fprintf(stderr, "Error creating thread\n");
     return 1;
   }
-
   // create_spectrogram_window();
+
+  create_window();
   pthread_join(cleanup_thread, NULL);
   pthread_join(thread, NULL);
 }

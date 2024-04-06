@@ -52,7 +52,7 @@ OCAML_EXAMPLE_BUILD_DIR := _build/default/examples
 
 $(OCAML_EXAMPLE_BUILD_DIR)/%.exe: $(OCAML_EXAMPLE_DIR)/%.ml $(SHARED_LIB_TARGET)
 	dune build $(OCAML_EXAMPLE_DIR)/$(notdir $@) --profile release
-	# ./$@
+	./$@
 
 
 

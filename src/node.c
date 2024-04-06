@@ -31,6 +31,8 @@ Node *pipe_output_to_idx(int idx, Node *send, Node *recv) {
 }
 
 Node *pipe_sig_to_idx(int idx, Signal *send, Node *recv) {
+  free(recv->ins[idx]->buf);
+  free(recv->ins[idx]);
   recv->ins[idx] = send;
   return recv;
 }
@@ -58,7 +60,11 @@ Node *chain_with_inputs(int num_ins, double *defaults) {
 }
 
 Node *node_set_input_signal(Node *node, int num_in, Signal *sig) {
+  printf("set input sig %p\n", sig);
+  Signal *old_sig = node->ins[num_in];
   node->ins[num_in] = sig;
+  free(old_sig->buf);
+  free(old_sig);
   return node;
 }
 
@@ -100,3 +106,5 @@ void free_node(Node *node) {
   free(node->out);
   free(node);
 }
+Signal *get_input_sig(Node *node, int i) { return node->ins[i]; }
+Signal *get_output_sig(Node *node) { return node->out; }

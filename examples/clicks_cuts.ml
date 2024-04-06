@@ -3,7 +3,7 @@ open Yalce;;
 init_yalce ()
 
 let clicks () =
-  let open Synth.Make (struct
+  let open Synth_.Make (struct
       let inputs = [ 10.; 0.01 ]
     end) in
   let clicks =

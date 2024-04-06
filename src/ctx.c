@@ -91,12 +91,18 @@ void write_to_output_buf(Signal *out, int nframes, double seconds_per_frame,
 }
 
 static void offset_node_bufs(Node *head, int frame_offset) {
+  if (frame_offset == 0) {
+    return;
+  }
   for (int i = 0; i < head->num_ins; i++) {
     head->ins[i]->buf += frame_offset;
   }
 }
 
 static void unoffset_node_bufs(Node *head, int frame_offset) {
+  if (frame_offset == 0) {
+    return;
+  }
   for (int i = 0; i < head->num_ins; i++) {
     head->ins[i]->buf -= frame_offset;
   }
@@ -132,8 +138,12 @@ Node *perform_graph(Node *head, int nframes, double seconds_per_frame,
   }
 
   int frame_offset = head->frame_offset;
+
   if (head->perform) {
+
+    offset_node_bufs(head, frame_offset);
     head->perform(head, nframes - frame_offset, seconds_per_frame);
+    unoffset_node_bufs(head, frame_offset);
   }
 
   if (head->type == OUTPUT) {
@@ -160,7 +170,7 @@ static void process_msg_pre(scheduler_msg msg) {
   case NODE_ADD: {
     struct NODE_ADD payload = msg.body.NODE_ADD;
     int frame_offset = msg.frame_offset;
-    offset_node_bufs(payload.target, frame_offset);
+    // offset_node_bufs(payload.target, frame_offset);
     payload.target->frame_offset = frame_offset;
     add_to_dac(payload.target);
     ctx_add(payload.target);
@@ -194,7 +204,7 @@ static void process_msg_post(scheduler_msg msg) {
   case NODE_ADD: {
     struct NODE_ADD payload = msg.body.NODE_ADD;
     int frame_offset = msg.frame_offset;
-    unoffset_node_bufs(payload.target, frame_offset);
+    // unoffset_node_bufs(payload.target, frame_offset);
     payload.target->frame_offset = 0;
     break;
   }
@@ -212,7 +222,9 @@ static void process_msg_post(scheduler_msg msg) {
   case NODE_SET_TRIG: {
     struct NODE_SET_TRIG payload = msg.body.NODE_SET_TRIG;
     Node *node = payload.target;
+
     Signal *target_input = node->ins[payload.input];
+
     *(target_input->buf + msg.frame_offset) = 0.0;
     break;
   }
@@ -226,7 +238,6 @@ int process_msg_queue_pre(msg_queue *queue) {
   scheduler_msg *msg;
   int consumed = 0;
   while (read_ptr != queue->write_ptr) {
-    // printf("msg queue pre %d %d\n", read_ptr, msg_queue->write_ptr);
     msg = queue->buffer + read_ptr;
     process_msg_pre(*msg);
     read_ptr = (read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
@@ -238,8 +249,6 @@ int process_msg_queue_pre(msg_queue *queue) {
 void process_msg_queue_post(msg_queue *queue, int consumed) {
   scheduler_msg msg;
   while (consumed--) {
-    // printf("msg queue post %d %d\n", msg_queue->read_ptr,
-    // msg_queue->write_ptr);
     msg = pop_msg(queue);
     process_msg_post(msg);
   }
@@ -288,6 +297,7 @@ void set_node_trig_at(Node *target, int offset, int input) {
 void set_node_scalar(Node *target, int input, double value) {
   Ctx *ctx = get_audio_ctx();
   int offset = (int)(get_block_diff() * ctx->sample_rate);
+
   scheduler_msg msg = {NODE_SET_SCALAR,
                        offset,
                        {.NODE_SET_SCALAR = (struct NODE_SET_SCALAR){

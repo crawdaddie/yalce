@@ -20,8 +20,8 @@ Node *group_new(int chans) {
   return g;
 }
 
-Node *group_with_inputs(int num_ins, double *defaults) {
-  Node *group = group_new(1);
+Node *group_with_inputs(int layout, int num_ins, double *defaults) {
+  Node *group = group_new(layout);
 
   group->ins = malloc(num_ins * (sizeof(Signal *)));
   group->num_ins = num_ins;

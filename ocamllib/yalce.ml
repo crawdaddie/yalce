@@ -47,9 +47,22 @@ let bufplayer_autotrig_node =
 
 let mul = foreign "mul_nodes" (Node.node @-> Node.node @-> returning Node.node)
 let mul_scalar = foreign "mul_scalar_node" (double @-> Node.node @-> returning Node.node)
+
+let mul_scalar_sig_node =
+  foreign "mul_scalar_sig_node" (double @-> Signal.signal @-> returning Node.node)
+;;
+
 let add_scalar = foreign "add_scalar_node" (double @-> Node.node @-> returning Node.node)
 let lag_sig = foreign "lag_sig" (double @-> Signal.signal @-> returning Node.node)
 let scale = foreign "scale_node" (double @-> double @-> Node.node @-> returning Node.node)
+
+let biquad_lp =
+  foreign "biquad_lp_node" (double @-> double @-> Node.node @-> returning Node.node)
+;;
+
+let biquad_lp_dyn =
+  foreign "biquad_lp_dyn_node" (double @-> double @-> Node.node @-> returning Node.node)
+;;
 
 let scale2 =
   foreign "scale2_node" (double @-> double @-> Node.node @-> returning Node.node)
@@ -88,7 +101,7 @@ let group_add_tail = foreign "group_add_tail" (Node.node @-> Node.node @-> retur
 let group_add_head = foreign "group_add_head" (Node.node @-> Node.node @-> returning void)
 
 let group_with_inputs =
-  foreign "group_with_inputs" (int @-> ptr double @-> returning Node.node)
+  foreign "group_with_inputs" (int @-> int @-> ptr double @-> returning Node.node)
 ;;
 
 let chain_set_out =
@@ -200,11 +213,11 @@ module Synth_ = struct
       chain_set_out !chain out
     ;;
 
-    let chain_input_sig idx = Node.in_sig idx !chain
+    (* let chain_input_sig idx = Node.in_sig idx !chain *)
 
-    let set_input src_idx dest_idx node =
-      node_set_input_signal node dest_idx (chain_input_sig src_idx)
-    ;;
+    (* let set_input src_idx dest_idx node = *)
+    (*   node_set_input_signal node dest_idx (chain_input_sig src_idx) *)
+    (* ;; *)
 
     let freeverb input = Filter.freeverb_node input |> chain_wrap
     let tanh x input = Filter.tanh_node x input |> chain_wrap

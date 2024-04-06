@@ -54,4 +54,7 @@ void node_add_after(Node *tail, Node *node);
 void node_add_before(Node *head, Node *node);
 
 void free_node(Node *node);
+
+Signal *get_input_sig(Node *node, int i);
+Signal *get_output_sig(Node *node);
 #endif

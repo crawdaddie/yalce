@@ -1,4 +1,6 @@
 open Ctypes
+open Foreign
+module Signal = Signal
 
 type node_type =
   | INTERMEDIATE
@@ -32,6 +34,8 @@ let () = seal node_struct
 type node
 
 let node = ptr node_struct
-let out node = getf !@node node_out
+let get_input_sig = foreign "get_input_sig" (node @-> int @-> returning Signal.signal)
+let get_output_sig = foreign "get_output_sig" (node @-> returning Signal.signal)
 let ins node = getf !@node node_ins
-let in_sig i node = !@(ins node +@ i)
+let in_sig i node = get_input_sig node i
+let out node = get_output_sig node
