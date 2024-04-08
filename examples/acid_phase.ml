@@ -1,6 +1,7 @@
 open Yalce
 open Ctypes
-open Foreign;;
+open Foreign
+open Lwt;;
 
 init_yalce ()
 
@@ -30,6 +31,7 @@ let fo = Messaging.get_block_offset () in
 let () = Messaging.schedule_add_node g fo in
 let () = Messaging.schedule_add_node k fo in
 
+(* let () = Messaging.schedule_add_node r fo in *)
 let cc_scale mn mx v = mn +. ((mx -. mn) *. Int32.to_float v /. 127.) in
 
 let _midi_thread = Midi.Listener.start_midi () in
@@ -53,28 +55,33 @@ in
 
 let () = Midi.Listener.register_noteon_callback note_cb in
 
+(* let subdivs = [| [| 0.25; 0.25 |]; *)
+(*   [| 0.125; 0.125; 0.125; 0.125 |]; [| 0.5 |] |] in *)
 (* let subdivs = [| [| 0.25; 0.25 |]; [| 0.125; 0.125; 0.125; 0.125 |]; [| 0.5 |] |] in *)
+(* let subdivs = [| [| 0.5 |]; [| 0.25; 0.25 |] |] in *)
 let subdivs = [| [| 0.5 |] |] in
-
 let tempo = 400. in
 
 let rec process_loop subd freqs_idx =
   let freq = freq_choices1.(freqs_idx) in
-  Array.iteri
-    (fun i del ->
+  let fmod12 = freqs_idx mod 12 in
+  let fo = Messaging.get_block_offset () in
+  if fmod12 = 0 || fmod12 = 3 || fmod12 = 6
+  then Messaging.schedule_add_node (Drums.kick (rand_choice [| 55.; 55. *. 1.5 |]) 0.5) fo;
+  let rec aux i l =
+    match l with
+    | [] -> Lwt.return_unit
+    | del :: res ->
       let fo = Messaging.get_block_offset () in
-      let fmod12 = freqs_idx mod 12 in
-      if fmod12 = 0 || fmod12 = 3 || fmod12 = 6
-      then
-        Messaging.schedule_add_node
-          (Drums.kick (rand_choice [| 55.; 55. *. 1.5 |]) 0.5)
-          fo;
-      (* let () = Messaging.set_node_trig_at g fo 2 in *)
-      (* let () = Messaging.set_node_scalar_at g fo 0 freq in *)
-      (* Thread.delay (del *. 2. *. (60. /. tempo)) *)
+
+      let () = Messaging.set_node_trig_at g fo 2 in
+      let () =
+        Messaging.set_node_scalar_at g fo 0 (freq *. rand_choice [| 0.5; 1.; 2. |])
+      in
       let%lwt () = Lwt_unix.sleep (del *. 2. *. (60. /. tempo)) in
-      Lwt.return_unit)
-    subd;
+      aux (i + 1) res
+  in
+  let%lwt () = aux 0 @@ Array.to_list subd in
   process_loop (rand_choice subdivs) ((freqs_idx + 1) mod Array.length freq_choices1)
 in
 

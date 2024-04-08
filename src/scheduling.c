@@ -1,11 +1,22 @@
 #include "scheduling.h"
-#include "start_audio.h"
+#include "audio_loop.h"
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <time.h>
-static struct timespec start_time;
+// static struct timespec start_time;
 
+static struct timespec block_time;
+static struct timespec start_time;
+void get_block_time(struct timespec *time) { *time = block_time; }
+
+void set_block_time() {
+  clock_gettime(CLOCK_REALTIME, &block_time);
+  if (start_time.tv_sec == 0) {
+    start_time.tv_sec = block_time.tv_sec;
+    start_time.tv_nsec = block_time.tv_nsec;
+  }
+}
 void sub_timespec(struct timespec t1, struct timespec t2, struct timespec *td) {
   td->tv_nsec = t2.tv_nsec - t1.tv_nsec;
   td->tv_sec = t2.tv_sec - t1.tv_sec;
@@ -83,12 +94,29 @@ int msleepd(double msec) {
 
 void init_scheduling() { clock_gettime(CLOCK_REALTIME, &start_time); }
 
+/*
+ * get difference between now and start of current audio block
+ * in seconds
+ * */
 double get_block_diff() {
   struct timespec current_time;
   clock_gettime(CLOCK_REALTIME, &current_time);
 
   struct timespec audio_block_time;
+
+  // get_block_time(&audio_block_time);
   get_block_time(&audio_block_time);
 
   return timespec_diff(current_time, audio_block_time);
 }
+
+void print_block_time() {
+  struct timespec current_time;
+  get_block_time(&current_time);
+  clock_gettime(CLOCK_REALTIME, &current_time);
+
+  double t = timespec_diff(current_time, start_time);
+  printf("time: %f %f\n", t, fmod(t, 0.5));
+}
+
+void handle_scheduler_tick() { print_block_time(); }

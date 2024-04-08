@@ -1,7 +1,11 @@
-#include "start_audio.h"
+#include "audio_loop.h"
 #include "ctx.h"
+#include "dbg.h"
 #include "log.h"
+#include "scheduling.h"
 #include "write_sample.h"
+#include <soundio/soundio.h>
+#include <string.h>
 #include <time.h>
 
 static struct SoundIo *soundio = NULL;
@@ -10,13 +14,6 @@ static struct SoundIoOutStream *outstream = NULL;
 
 static void (*write_sample)(char *ptr, double sample);
 static volatile bool want_pause = false;
-
-static struct timespec block_time;
-
-void get_block_time(struct timespec *time) { *time = block_time; }
-static inline void set_block_time() {
-  clock_gettime(CLOCK_REALTIME, &block_time);
-}
 
 static void _write_callback(struct SoundIoOutStream *outstream,
                             int frame_count_min, int frame_count_max) {
@@ -56,6 +53,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     // }
 
     set_block_time();
+    handle_scheduler_tick();
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
 
     int sample_idx;
@@ -134,6 +132,7 @@ int start_audio() {
       device = soundio_get_output_device(soundio, i);
       bool select_this_one =
           strcmp(device->id, device_id) == 0 && device->is_raw == raw;
+
       soundio_device_unref(device);
       if (select_this_one) {
         selected_device_index = i;

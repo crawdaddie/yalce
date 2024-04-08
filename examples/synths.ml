@@ -12,9 +12,9 @@ let acid_mono freq dec =
 
       let layout = 1
     end) in
-  let freq = lag_sig 0.04 (in_sig 0) in
+  let freq = lag_sig 0.03 (in_sig 0) in
   let trig_sig = in_sig 2 in
-  let osc_src = saw in
+  let osc_src = sq in
 
   let sq1 = osc_src 100. |> map_sig (Node.out freq) 0 in
   let freq2_sig = Node.out (mul_scalar 1.01 freq) in

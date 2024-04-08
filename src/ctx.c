@@ -255,7 +255,6 @@ void process_msg_queue_post(msg_queue *queue, int consumed) {
 }
 
 int get_block_offset() {
-
   Ctx *ctx = get_audio_ctx();
   int offset = (int)(get_block_diff() * ctx->sample_rate);
   return offset;

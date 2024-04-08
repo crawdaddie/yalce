@@ -120,11 +120,14 @@ void *audio_entry() {
   //   msleep(250);
   // }
   //
-  Node *env = env_node(2, levels, times);
-  add_to_dac(env);
-  ctx_add(env);
-  set_node_trig(env, 0);
-  msleep(1000);
+  // Node *env = env_node(2, levels, times);
+  // add_to_dac(env);
+  // ctx_add(env);
+  // set_node_trig(env, 0);
+  // msleep(1000);
+  while (true) {
+    msleep(500);
+  }
 }
 void print_ctx() { graph_print(&(get_audio_ctx()->graph), 0); }
 

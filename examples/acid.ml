@@ -57,27 +57,24 @@ let _midi () =
 
   Midi.Listener.register_noteon_callback note_cb
 in
+let () = _midi () in
 
 let subdivs = [| [| 0.25; 0.25 |]; [| 0.125; 0.125; 0.125; 0.125 |]; [| 0.5 |] |] in
 
 let rec process_loop subd freqs_idx =
   let freq = !freq_choices.(freqs_idx) in
-  let l = Array.length subd in
-  let rec aux i =
-    match i with
-    | l -> ()
-    | _ ->
-      let del = subd.(i) in
+  let rec aux i l =
+    match l with
+    | [] -> Lwt.return_unit
+    | del :: res ->
       let fo = Messaging.get_block_offset () in
       if i = 0 then Messaging.schedule_add_node (Drums.kick 55. (0.4 *. del)) fo;
       let () = Messaging.set_node_trig_at g fo 2 in
       let () = Messaging.set_node_scalar_at g fo 0 freq in
-      (* Thread.delay (del *. 2. *. (60. /. 145.)); *)
-      Lwt_unix.sleep (del *. 2. *. (60. /. 145.));
-      aux (i + 1)
+      let%lwt () = Lwt_unix.sleep (del *. 2. *. (60. /. 145.)) in
+      aux (i + 1) res
   in
-  aux 0;
-
+  let%lwt () = aux 0 @@ Array.to_list subd in
   process_loop (rand_choice subdivs) ((freqs_idx + 1) mod Array.length !freq_choices)
 in
 

@@ -16,7 +16,14 @@ double timespec_diff(struct timespec a, struct timespec b);
 
 void init_scheduling();
 double get_time();
-// int thread_func();
-//
+
 double get_block_diff();
+
+void get_block_time(struct timespec *time);
+
+void print_block_time();
+
+void set_block_time();
+
+void handle_scheduler_tick();
 #endif

@@ -23,7 +23,7 @@ let kick freq dec =
   output osc
 ;;
 
-let snare ?(freq = 300.) accent =
+let snare ?(freq = 300.) ?(accent = 1.) () =
   let open Synth.Make (struct
       let inputs = []
       let layout = 1
