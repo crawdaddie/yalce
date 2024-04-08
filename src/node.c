@@ -31,9 +31,11 @@ Node *pipe_output_to_idx(int idx, Node *send, Node *recv) {
 }
 
 Node *pipe_sig_to_idx(int idx, Signal *send, Node *recv) {
-  free(recv->ins[idx]->buf);
-  free(recv->ins[idx]);
+  Signal *old = recv->ins[idx];
   recv->ins[idx] = send;
+
+  free(old->buf);
+  free(old);
   return recv;
 }
 

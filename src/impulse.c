@@ -31,6 +31,7 @@ Node *trig_node_const(double freq) {
   Node *n = node_new(state, (node_perform *)trig_perform, NULL, get_sig(1));
   n->ins = malloc(sizeof(Signal *) * 1);
   n->ins[0] = get_sig_default(1, freq);
+  // printf("impulse out %p\n", n->out);
   return n;
 }
 

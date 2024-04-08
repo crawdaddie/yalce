@@ -1,39 +1,38 @@
 open Yalce
-open Ctypes;;
+open Ctypes
 
-init_yalce ()
+let kick freq dec =
+  let open Synth.Make (struct
+      let inputs = [ freq ]
+      let layout = 1
+    end) in
+  let freq_env = env_autotrig [ 2000.; freq *. 1.8; freq; freq ] [ 0.01; 0.2; 1. ] in
 
-let buf_sig = Signal.of_sf "assets/sor_sample_pack/Kicks/SOR_OB_Kick_Mohashe.wav"
+  let osc = sin freq |> map_sig (Node.out freq_env) 0 |> tanh 1.2 in
 
-let compile_synth g l =
-  let rec aux g l =
-    match l with
-    | [] -> g
-    | x :: [] ->
-      let x = add_to_dac x in
-      group_add_tail g x;
-      aux g []
-    | x :: rest ->
-      group_add_tail g x;
-      aux g rest
+  let noise_env = env_autotrig [ 0.; 1.; 0.; 0. ] [ 0.001; 0.07; 0.01 ] in
+  let noise_burst = (noise () |> biquad_lp 2000. 1.) *~ noise_env |> mul_scalar 0.2 in
+
+  (* let noise_burst = noise_burst |> comb 0.1 0.5 0.2 in *)
+  let osc = osc +~ noise_burst in
+
+  let env = env_autotrig [ 0.0; 1.0; 0.5; 0. ] [ 0.01; dec; 0.2 ] in
+
+  let osc = env *~ osc in
+
+  output osc
+;;
+
+let snare ?(freq = 300.) accent =
+  let open Synth.Make (struct
+      let inputs = []
+      let layout = 1
+    end) in
+  let resonance = noise () |> biquad_hp freq 10. |> biquad_lp 5000. 1. in
+  let decay =
+    resonance *~ env_autotrig [ 0.; 1.; 0.1; 0.0 ] [ 0.0001; 0.05; 0.02 ]
+    |> mul_scalar accent
   in
 
-  aux g l
+  output decay
 ;;
-
-let synth () =
-  let g = group_new 2 in
-  let p = bufplayer_autotrig_node buf_sig 1. 0. in
-  let ev = Envelope.autotrig [ 0.; 1.; 0. ] [ 0.001; 0.25 ] in
-  let out = p *~ ev in
-  compile_synth g [ p; ev; out ]
-;;
-
-(* Messaging.set_node_trig_at g fo 0; *)
-while true do
-  print_ctx ();
-  let g = synth () in
-  let fo = Messaging.get_block_offset () in
-  Messaging.schedule_add_node g fo;
-  Thread.delay 2.0
-done

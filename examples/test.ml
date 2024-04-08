@@ -1,11 +1,11 @@
-Yalce.start_audio () ;;
+open Yalce
+open Stdio;;
 
-let sq = Yalce.sq 200.0 ;;
+let cc_cb cc v = Printf.printf "cc: %ld v: %ld\n" cc v in
 
+let _midi_thread = Midi.Listener.start_midi () in
+Midi.Listener.register_cc_callback cc_cb;
 
-let cont = Yalce.play sq ;;
-
-Yalce.dump_graph () ;;
-
-
-sq;;
+while true do
+  Thread.delay 1.
+done

@@ -34,8 +34,13 @@ Node *biquad_node(Node *in);
 Node *biquad_lp_node(double freq, double res, Node *in);
 Node *biquad_lp_dyn_node(double freq, double res, Node *in);
 
+Node *biquad_hp_dyn_node(double freq, double res, Node *in);
+
 Node *biquad_hp_node(double freq, double res, Node *in);
 
 Node *biquad_bp_node(double freq, double res, Node *in);
+Node *biquad_bp_dyn_node(double freq, double res, Node *in);
+
+Node *butterworth_hp_dyn_node(double freq, Node *in);
 
 #endif

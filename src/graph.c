@@ -28,6 +28,7 @@ Node *group_with_inputs(int layout, int num_ins, double *defaults) {
   for (int i = 0; i < num_ins; i++) {
     group->ins[i] = get_sig_default(1, defaults[i]);
   }
+  // group->out = get_sig(layout);
   return group;
 }
 

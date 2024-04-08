@@ -56,14 +56,6 @@ let add_scalar = foreign "add_scalar_node" (double @-> Node.node @-> returning N
 let lag_sig = foreign "lag_sig" (double @-> Signal.signal @-> returning Node.node)
 let scale = foreign "scale_node" (double @-> double @-> Node.node @-> returning Node.node)
 
-let biquad_lp =
-  foreign "biquad_lp_node" (double @-> double @-> Node.node @-> returning Node.node)
-;;
-
-let biquad_lp_dyn =
-  foreign "biquad_lp_dyn_node" (double @-> double @-> Node.node @-> returning Node.node)
-;;
-
 let scale2 =
   foreign "scale2_node" (double @-> double @-> Node.node @-> returning Node.node)
 ;;
@@ -169,87 +161,6 @@ let sum2 x y = sumn [ x; y ]
 let ( +~ ) = sum2
 let ( *~ ) = mul
 
-module type SynthSignature = sig
-  val inputs : float list
-end
-
-module Synth_ = struct
-  module Make (X : SynthSignature) = struct
-    let chain =
-      match X.inputs with
-      | [] -> ref @@ chain_new ()
-      | ins -> ref @@ chain_with_inputs (List.length ins) (list_to_carr ins)
-    ;;
-
-    let chain_wrap f = add_to_chain !chain f
-    let sq f = Osc.sq f |> chain_wrap
-    let saw f = Osc.blsaw f 100 |> chain_wrap
-    let blit f = Osc.blit f 1000 |> chain_wrap
-    let winblit f t = Osc.winblit f 800 t |> chain_wrap
-
-    let sum2 x y =
-      let len, arr = node_list_to_carr_ptr [ x; y ] in
-      chain_wrap (sum_nodes_arr len arr)
-    ;;
-
-    (* let env levels times = *)
-    (*   env_node *)
-    (*     (List.length times) *)
-    (*     (levels |> CArray.of_list double |> CArray.start) *)
-    (*     (times |> CArray.of_list double |> CArray.start) *)
-    (*   |> chain_wrap *)
-    (* ;; *)
-
-    let ( +~ ) = sum2
-
-    (* let bufplayer filename = bufplayer_node filename |> chain_wrap *)
-    let sumn nodes = sumn nodes |> chain_wrap
-    let lag_sig t s = lag_sig t s |> chain_wrap
-    let mul_scalar f x = mul_scalar f x |> chain_wrap
-
-    let finish out =
-      let _ = add_to_dac !chain in
-      let _ = ctx_add !chain in
-      chain_set_out !chain out
-    ;;
-
-    (* let chain_input_sig idx = Node.in_sig idx !chain *)
-
-    (* let set_input src_idx dest_idx node = *)
-    (*   node_set_input_signal node dest_idx (chain_input_sig src_idx) *)
-    (* ;; *)
-
-    let freeverb input = Filter.freeverb_node input |> chain_wrap
-    let tanh x input = Filter.tanh_node x input |> chain_wrap
-
-    (* let pipe_sig_to_idx = *)
-    (*   foreign "pipe_sig_to_idx" (int @-> Signal.signal @-> Node.node @-> returning Node.node) *)
-    (* ;; *)
-
-    let chorus_list_lag list input f =
-      List.map
-        (fun freq_mul ->
-          let freq = lag_sig 0.012 input |> mul_scalar freq_mul in
-          let n = f () in
-          pipe_output freq n)
-        list
-      |> sumn
-      |> mul_scalar @@ (1. /. (Int.to_float @@ List.length list))
-    ;;
-
-    let chorus_list list input f =
-      List.map
-        (fun freq_mul ->
-          let freq = lag_sig 0.0 input |> mul_scalar freq_mul in
-          let n = f () in
-          pipe_output freq n)
-        list
-      |> sumn
-      |> mul_scalar @@ (1. /. (Int.to_float @@ List.length list))
-    ;;
-  end
-end
-
 let init_yalce () =
   maketable_sin ();
   maketable_sq ();
@@ -264,3 +175,59 @@ let create_window = foreign "create_window" (void @-> returning void)
 let create_spectrogram_window =
   foreign "create_spectrogram_window" (void @-> returning void)
 ;;
+
+module type SynthSignature = sig
+  val inputs : float list
+  val layout : int
+end
+
+let scale_ =
+  foreign
+    "scale_node_dyn"
+    (Signal.signal @-> Signal.signal @-> Node.node @-> returning Node.node)
+;;
+
+module Synth = struct
+  module Make (X : SynthSignature) = struct
+    let chain =
+      match X.inputs with
+      | [] -> ref @@ group_new X.layout
+      | ins -> ref @@ group_with_inputs X.layout (List.length ins) (list_to_carr ins)
+    ;;
+
+    let chain_wrap n =
+      let () = group_add_tail !chain n in
+      n
+    ;;
+
+    let scale mn mx n = scale_ mn mx n |> chain_wrap
+    let sum2 a b = sum2 a b |> chain_wrap
+    let ( +~ ) = sum2
+    let mul_ a b = mul a b |> chain_wrap
+    let ( *~ ) = mul_
+    let mul_scalar s n = mul_scalar s n |> chain_wrap
+    let sq f = Osc.sq f |> chain_wrap
+    let saw f = Osc.blsaw f 100 |> chain_wrap
+    let sin f = Osc.sin f |> chain_wrap
+    let env_trig l t = Envelope.trig l t |> chain_wrap
+    let env_autotrig l t = Envelope.autotrig l t |> chain_wrap
+    let biquad_lp f r n = Filter.biquad_lp_dyn f r n |> chain_wrap
+    let biquad_hp f r n = Filter.biquad_hp_dyn f r n |> chain_wrap
+    let butterworth_hp f n = Filter.butterworth_hp_dyn f n |> chain_wrap
+    let comb t max_t fb node = Filter.comb t max_t fb node |> chain_wrap
+    let in_sig i = Node.in_sig i !chain
+    let map_input src dest node = pipe_sig_to_idx dest (in_sig src) node
+    let map_sig src_sig dest_input node = pipe_sig_to_idx dest_input src_sig node
+    let mul_scalar_sig_to_node d isig = mul_scalar_sig_node d isig |> chain_wrap
+    let mul_sig mul_val isig = mul_scalar_sig_to_node mul_val isig |> Node.out
+    let lag_sig t s = lag_sig t s |> chain_wrap
+    let tanh gain n = Filter.tanh_node gain n |> chain_wrap
+    let impulse_const freq = Osc.trig_const freq |> chain_wrap
+    let noise () = Osc.noise () |> chain_wrap
+
+    let output n =
+      let _ = add_to_dac n in
+      !chain
+    ;;
+  end
+end

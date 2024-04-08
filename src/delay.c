@@ -154,7 +154,8 @@ void set_comb_params(comb_state *state, double delay_time,
     return;
   }
 
-  int buf_size = (int)max_delay_time * SAMPLE_RATE;
+  int buf_size = (int)(max_delay_time * SAMPLE_RATE);
+  // printf("comb bufsize %d\n", buf_size);
   state->buf_size = buf_size;
   double *buf = malloc(sizeof(double) * (int)max_delay_time * SAMPLE_RATE);
   double *b = buf;
@@ -246,9 +247,10 @@ Node *comb_dyn_node(double delay_time, double max_delay_time, double fb,
     return NULL;
   }
 
-  int buf_size = (int)max_delay_time * SAMPLE_RATE;
+  int buf_size = (int)(max_delay_time * SAMPLE_RATE);
+
   state->buf_size = buf_size;
-  double *buf = malloc(sizeof(double) * (int)max_delay_time * SAMPLE_RATE);
+  double *buf = malloc(sizeof(double) * buf_size);
   double *b = buf;
   while (buf_size--) {
     *b = 0.0;
