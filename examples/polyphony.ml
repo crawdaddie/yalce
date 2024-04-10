@@ -28,11 +28,11 @@ let synth freq dec =
   let sq1 = Osc.sq freq in
   let sq2 = Osc.sq (freq *. 1.01) in
   let sq_sum = sq1 +~ sq2 in
-  let lp = biquad_lp 1000. 10. sq_sum in
+  (* let lp = biquad_lp 1000. 10. sq_sum in *)
   let ev = Envelope.autotrig [ 0.; 1.; 0.2; 0. ] [ 0.01; 0.1; dec ] in
-  let o = lp *~ ev in
+  let o = sq_sum *~ ev in
 
-  compile_synth [ o; ev; lp; sq_sum; sq2; sq1 ]
+  compile_synth [ o; ev; sq_sum; sq2; sq1 ]
 ;;
 
 let freq_choices =

@@ -7,6 +7,7 @@ module Node = Node
 module Osc = Osc
 module Filter = Filter
 module Envelope = Envelope
+module Clock = Clock
 
 type audio_ctx = unit ptr
 

@@ -7,10 +7,10 @@
 
 typedef struct {
   double main_vol;
-  double block_time;
   Node *head;
   Signal dac_buffer;
   int sample_rate;
+  double software_latency;
   msg_queue msg_queue;
   Graph graph;
   // SharedBuf shared_bufs[100];
