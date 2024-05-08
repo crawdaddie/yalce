@@ -64,3 +64,9 @@ examples: $(OCAML_EXAMPLE_DIR)/%.ml
 
 utop:
 	dune utop
+
+.PHONY: lang
+lang:
+	$(MAKE) -C lang
+	./lang/audio_lang
+		
