@@ -52,13 +52,19 @@ void print_ser_ast(Ast *ast) {
   }
 
   case AST_APPLICATION: {
+    // printf("(");
+    // for (size_t i = 0; i < ast->data.AST_APPLICATION.len; ++i) {
+    //   Ast *stmt = ast->data.AST_APPLICATION.args[i];
+    //   print_ser_ast(stmt);
+    //   printf(" ");
+    // }
+    // printf(")");
+    // break;
     printf("(");
-    for (size_t i = 0; i < ast->data.AST_APPLICATION.len; ++i) {
-      Ast *stmt = ast->data.AST_APPLICATION.args[i];
-      print_ser_ast(stmt);
-      printf(" ");
-    }
-    printf(")"); 
+    print_ser_ast(ast->data.AST_APPLICATION.applicable);
+    printf(" ");
+    print_ser_ast(ast->data.AST_APPLICATION.arg);
+    printf(")");
     break;
   }
 
@@ -69,7 +75,7 @@ void print_ser_ast(Ast *ast) {
       print_ser_ast(stmt);
       printf(", ");
     }
-    printf(")"); 
+    printf(")");
     break;
   }
 
@@ -83,6 +89,21 @@ void print_ser_ast(Ast *ast) {
     print_ser_ast(ast->data.AST_BINOP.right);
     printf(")");
     break;
+  }
+  case AST_FN_DECLARATION: {
+    if (ast->data.AST_FN_DECLARATION.fn_name != NULL) {
+      printf("fn (%s) ", ast->data.AST_FN_DECLARATION.fn_name);
+    } else
+      printf("fn ");
+    for (size_t i = 0; i < ast->data.AST_FN_DECLARATION.params_len; ++i) {
+      printf("%s ", ast->data.AST_FN_DECLARATION.params[i]);
+    }
+    if (ast->data.AST_FN_DECLARATION.body) {
+      printf("-> ");
+      print_ser_ast(ast->data.AST_FN_DECLARATION.body);
+    } else {
+      printf("extern definition");
+    }
   }
 
   default: {

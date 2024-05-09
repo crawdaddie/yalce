@@ -32,8 +32,9 @@ typedef enum token_type {
   TOKEN_GT,
   TOKEN_LTE,
   TOKEN_GTE,
-  TOKEN_NL,   // statement terminator
-  TOKEN_PIPE, // special pipe operator |>
+  TOKEN_NL,    // statement terminator
+  TOKEN_PIPE,  // special pipe operator |>
+  TOKEN_ARROW, // special fn arrow operator |>
   TOKEN_IDENTIFIER,
   TOKEN_STRING, // literal
   TOKEN_NUMBER,
@@ -78,8 +79,7 @@ static keyword keywords[NUM_KEYWORDS] = {
     {TOKEN_FALSE, "false"}, {TOKEN_LET, "let"},       {TOKEN_IF, "if"},
     {TOKEN_ELSE, "else"},   {TOKEN_WHILE, "while"},   {TOKEN_NIL, "nil"},
     {TOKEN_MATCH, "match"}, {TOKEN_EXTERN, "extern"}, {TOKEN_STRUCT, "struct"},
-    {TOKEN_TYPE, "type"},   {TOKEN_IMPORT, "import"}, {TOKEN_IN, "in"}
-};
+    {TOKEN_TYPE, "type"},   {TOKEN_IMPORT, "import"}, {TOKEN_IN, "in"}};
 
 typedef union literal {
   char *vstr;

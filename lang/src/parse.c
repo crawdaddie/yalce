@@ -18,6 +18,7 @@ void advance() {
 }
 
 bool check(enum token_type type) { return parser->current.type == type; }
+
 static bool match(enum token_type type) {
   if (!check(type)) {
     return false;
@@ -25,6 +26,7 @@ static bool match(enum token_type type) {
   advance();
   return true;
 }
+
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = malloc(sizeof(Ast));
   node->tag = tag;
@@ -33,9 +35,38 @@ Ast *Ast_new(enum ast_tag tag) {
 
 static Ast *parse_expression();
 
+static void push_fn_param(Ast *fn, const char *param) {
+  if (param) {
+    const char **args = fn->data.AST_FN_DECLARATION.params;
+    fn->data.AST_FN_DECLARATION.params_len++;
+    size_t len = fn->data.AST_FN_DECLARATION.params_len;
+
+    fn->data.AST_FN_DECLARATION.params = realloc(args, sizeof(Ast *) * len);
+    fn->data.AST_FN_DECLARATION.params[len - 1] = param;
+  }
+}
+
+static Ast *parse_fn_declaration() {
+  Ast *fn = Ast_new(AST_FN_DECLARATION);
+  fn->data.AST_FN_DECLARATION.params = malloc(sizeof(char *));
+  fn->data.AST_FN_DECLARATION.params_len = 0;
+  fn->data.AST_FN_DECLARATION.fn_name = NULL;
+  advance();
+  while (!check(TOKEN_ARROW)) {
+    if (check(TOKEN_IDENTIFIER)) {
+      const char *param_name = parser->current.as.vident;
+      push_fn_param(fn, param_name);
+      advance();
+    };
+  }
+  Ast *body = parse_body(NULL);
+  fn->data.AST_FN_DECLARATION.body = body;
+  return fn;
+}
 static Ast *parse_let_statement() {
   advance();
   advance();
+
   if (!check(TOKEN_ASSIGNMENT)) {
     fprintf(stderr, "Error: assignment = must follow let\n");
     return NULL;
@@ -46,10 +77,39 @@ static Ast *parse_let_statement() {
   char *id = parser->previous.as.vstr;
   advance();
   ast_let->data.AST_LET.name = id;
-  ast_let->data.AST_LET.expr = parse_expression(NULL);
+  if (check(TOKEN_FN)) {
+    ast_let->data.AST_LET.expr = parse_fn_declaration();
+    ast_let->data.AST_LET.expr->data.AST_FN_DECLARATION.fn_name = id;
+    return ast_let;
+  }
+  ast_let->data.AST_LET.expr = parse_expression();
   return ast_let;
 }
 
+Ast *handle_applications(Ast *application, Ast *item) {
+  if (application == NULL) {
+    application = Ast_new(AST_APPLICATION);
+    application->data.AST_APPLICATION.applicable = item;
+    return application;
+  }
+  if (application != NULL &&
+      application->data.AST_APPLICATION.applicable != NULL &&
+      application->data.AST_APPLICATION.arg == NULL) {
+    application->data.AST_APPLICATION.arg = item;
+    return application;
+  }
+
+  if (application != NULL &&
+      application->data.AST_APPLICATION.applicable != NULL &&
+      application->data.AST_APPLICATION.arg != NULL) {
+
+    Ast *new_application = Ast_new(AST_APPLICATION);
+    new_application->data.AST_APPLICATION.applicable = application;
+    new_application->data.AST_APPLICATION.arg = item;
+    return new_application;
+  }
+  return NULL;
+}
 
 static Ast *parse_statement() {
   token tok = parser->current;
@@ -63,8 +123,7 @@ static Ast *parse_statement() {
   }
 }
 
-static void push_statement(Ast *body) {
-  Ast *stmt = parse_statement();
+static void push_statement(Ast *body, Ast *stmt) {
   if (stmt) {
     Ast **members = body->data.AST_BODY.members;
     body->data.AST_BODY.len++;
@@ -84,7 +143,8 @@ Ast *parse_body(Ast *body) {
 
   advance();
   while (!check(TOKEN_EOF)) {
-    push_statement(body);
+    Ast *stmt = parse_statement();
+    push_statement(body, stmt);
   }
   return body;
 }
@@ -102,38 +162,47 @@ ParserPrecedence token_to_precedence(token tok) {
   case TOKEN_ASSIGNMENT:
     return PREC_ASSIGNMENT;
   case TOKEN_EQUALITY:
-  case TOKEN_NOT_EQUAL:   return PREC_EQUALITY;
+  case TOKEN_NOT_EQUAL:
+    return PREC_EQUALITY;
   case TOKEN_LT:
   case TOKEN_LTE:
   case TOKEN_GT:
-  case TOKEN_GTE:         return PREC_COMPARISON;
+  case TOKEN_GTE:
+    return PREC_COMPARISON;
   case TOKEN_PLUS:
-  case TOKEN_MINUS:       return PREC_TERM;
+  case TOKEN_MINUS:
+    return PREC_TERM;
   case TOKEN_SLASH:
   case TOKEN_STAR:
-  case TOKEN_MODULO:      return PREC_FACTOR;
-  case TOKEN_LEFT_SQ:     return PREC_INDEX;
+  case TOKEN_MODULO:
+    return PREC_FACTOR;
+  case TOKEN_LEFT_SQ:
+    return PREC_INDEX;
   case TOKEN_LP:
-  case TOKEN_DOT:         return PREC_CALL;
-  case TOKEN_RP:          return PREC_NONE;
-  case TOKEN_BANG:        return PREC_UNARY;
-  case TOKEN_LOGICAL_OR:  return PREC_OR;
-  case TOKEN_LOGICAL_AND: return PREC_AND;
-  default:                return PREC_NONE;
+  case TOKEN_DOT:
+    return PREC_CALL;
+  case TOKEN_RP:
+    return PREC_NONE;
+  case TOKEN_BANG:
+    return PREC_UNARY;
+  case TOKEN_LOGICAL_OR:
+    return PREC_OR;
+  case TOKEN_LOGICAL_AND:
+    return PREC_AND;
+  default:
+    return PREC_NONE;
   }
 }
 static Ast *parse_prefix();
-static Ast *parse_infix_expr() { return NULL; }
 
 static Ast *parse_precedence(Ast *prefix, ParserPrecedence precedence) {
   Ast *left = prefix;
-  // printf("precedence: %d\ncurrent token to prec: %d\n", precedence, token_to_precedence(parser->current));
-  // print_token(parser->current);
+  // printf("precedence: %d\ncurrent token to prec: %d\n", precedence,
+  // token_to_precedence(parser->current)); print_token(parser->current);
   // printf("\nleft: ");
   // print_ser_ast(left);
   // printf("\n");
   // printf("-----\n");
-
 
   while (precedence <= token_to_precedence(parser->current)) {
     switch (parser->current.type) {
@@ -165,27 +234,43 @@ static Ast *parse_precedence(Ast *prefix, ParserPrecedence precedence) {
   return left;
 };
 
-
-static Ast *parse_expression() {
-  while (check(TOKEN_NL)) {
-    advance();
-  }
+static Ast *_parse_expression() {
+  // while (check(TOKEN_NL)) {
+  //   advance();
+  // }
 
   // prefix
   Ast *prefix = parse_prefix();
   Ast *ast = parse_precedence(prefix, PREC_ASSIGNMENT);
   return ast;
 }
+static Ast *reduce_application(Ast *application) {
+  if (application && application->data.AST_APPLICATION.arg == NULL) {
+    return application->data.AST_APPLICATION.applicable;
+  }
 
-static void push_arg(Ast *fn_application, Ast *arg) {
+  return application;
+}
+
+static Ast *parse_expression() {
+  Ast *application = NULL;
+  while (!check(TOKEN_DOUBLE_SEMICOLON) && !check(TOKEN_NL)) {
+    Ast *expr = _parse_expression();
+    application = handle_applications(application, expr);
+  }
+  advance();
+  return reduce_application(application);
+}
+
+static void _push_application_param(Ast *fn_application, Ast *arg) {
   if (arg) {
-    Ast **args = fn_application->data.AST_APPLICATION.args;
-    fn_application->data.AST_APPLICATION.len++;
-    int len = fn_application->data.AST_APPLICATION.len;
+    Ast **args = fn_application->data._AST_APPLICATION.args;
+    fn_application->data._AST_APPLICATION.len++;
+    int len = fn_application->data._AST_APPLICATION.len;
 
-    fn_application->data.AST_APPLICATION.args =
+    fn_application->data._AST_APPLICATION.args =
         realloc(args, sizeof(Ast *) * len);
-    fn_application->data.AST_APPLICATION.args[len - 1] = arg;
+    fn_application->data._AST_APPLICATION.args[len - 1] = arg;
   }
 }
 
@@ -207,9 +292,10 @@ static void push_tuple_member(Ast *tuple, Ast *member) {
 static bool is_terminator() {
   return check(TOKEN_RP) || check(TOKEN_DOUBLE_SEMICOLON) || check(TOKEN_NL);
 }
+
 static Ast *parse_grouping() {
   advance();
-  Ast *first = parse_expression(NULL);
+  Ast *first = parse_expression();
   if (check(TOKEN_COMMA)) {
     Ast *tuple = Ast_new(AST_TUPLE);
     tuple->data.AST_TUPLE.len = 1;
@@ -223,14 +309,14 @@ static Ast *parse_grouping() {
     }
     return tuple;
   }
-  if (parser->current.type == TOKEN_RP) {
-    advance();
-    return first;
-  }
-  return NULL;
+
+  return first;
 }
 
 static Ast *parse_prefix() {
+  // printf("inside grouping");
+  // print_token(parser->current);
+  // print_ser_ast(first);
   // printf("prefix: ");
   // print_token(parser->current);
   switch (parser->current.type) {
@@ -260,21 +346,24 @@ static Ast *parse_prefix() {
     return prefix;
   }
   case TOKEN_IDENTIFIER: {
-    Ast *prefix = Ast_new(AST_APPLICATION);
-    prefix->data.AST_APPLICATION.len = 0;
-    prefix->data.AST_APPLICATION.args = malloc(sizeof(Ast *));
-
+    // Ast *prefix = Ast_new(AST_APPLICATION);
+    // prefix->data.AST_APPLICATION.len = 0;
+    // prefix->data.AST_APPLICATION.args = malloc(sizeof(Ast *));
+    //
     Ast *id = Ast_new(AST_IDENTIFIER);
     id->data.AST_IDENTIFIER.value = parser->current.as.vident;
-    push_arg(prefix, id);
+    // push_application_param(prefix, id);
     advance();
+    //
+    // while (!is_terminator()) {
+    //   Ast *arg = parse_expression();
+    //   push_application_param(prefix, arg);
+    // }
 
-    while (!is_terminator()) {
-      Ast *arg = parse_expression(NULL);
-      push_arg(prefix, arg);
-    }
-
-    return prefix;
+    return id;
+  }
+  case TOKEN_FN: {
+    return parse_fn_declaration();
   }
   case TOKEN_BANG: {
     Ast *prefix = Ast_new(AST_UNOP);

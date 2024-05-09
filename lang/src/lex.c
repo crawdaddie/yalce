@@ -171,6 +171,11 @@ void print_token(token token) {
     break;
   }
 
+  case TOKEN_DOUBLE_SEMICOLON: {
+
+    printf(";;");
+    break;
+  }
   case TOKEN_LET: {
 
     printf("let");
@@ -449,9 +454,9 @@ static int _GREATER_THAN_MATCHER(const char *input, token *tail) {
   return 0;
 }
 
-static int _PIPE_MATCHER(const char *input, token *tail) {
+static int _ARROW_MATCHER(const char *input, token *tail) {
   if (strncmp(input, "->", 2) == 0) {
-    *tail = create_symbol_token(TOKEN_PIPE);
+    *tail = create_symbol_token(TOKEN_ARROW);
     return 2;
   }
   return 0;
@@ -670,7 +675,7 @@ static token_matcher matchers[NUM_MATCHERS] = {
     _COLON_MATCHER,   _SEMICOLON_MATCHER, _QUESTION_MATCHER,
     _BRACKET_MATCHER, _COMMA_MATCHER,     _DOT_MATCHER,
     _EQL_MATCHER,     _LESS_THAN_MATCHER, _GREATER_THAN_MATCHER,
-    _ASSIGN_MATCHER,  _PIPE_MATCHER,      _MINUS_MATCHER,
+    _ASSIGN_MATCHER,  _ARROW_MATCHER,     _MINUS_MATCHER,
     _BANG_MATCHER,    _MODULO_MATCHER,    _PLUS_MATCHER,
     _SLASH_MATCHER,   _STAR_MATCHER,      _NL_MATCHER,
     _STRING_MATCHER,  _NUMBER_MATCHER,    _IDENTIFIER_MATCHER,

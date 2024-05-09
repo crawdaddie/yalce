@@ -21,7 +21,8 @@ typedef enum ast_tag {
   AST_BINOP,
   AST_UNOP,
   AST_APPLICATION,
-  AST_TUPLE
+  AST_TUPLE,
+  AST_FN_DECLARATION
 } ast_tag;
 
 struct Ast {
@@ -68,14 +69,26 @@ struct Ast {
     } AST_BINOP;
 
     struct AST_APPLICATION {
+      Ast *applicable;
+      Ast *arg;
+    } AST_APPLICATION;
+
+    struct _AST_APPLICATION {
       size_t len;
       Ast **args;
-    } AST_APPLICATION;
+    } _AST_APPLICATION;
 
     struct AST_TUPLE {
       size_t len;
       Ast **members;
     } AST_TUPLE;
+
+    struct AST_FN_DECLARATION {
+      size_t params_len;
+      const char **params;
+      const char *fn_name;
+      Ast *body;
+    } AST_FN_DECLARATION;
   } data;
 };
 

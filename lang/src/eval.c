@@ -2,6 +2,7 @@
 #include "serde.h"
 #include <stdio.h>
 void eval(Ast *top) {
-  printf("evaluating top-level: ");
+  printf("\nevaluating top-level: ");
   print_ser_ast(top);
+  printf("\n");
 }
