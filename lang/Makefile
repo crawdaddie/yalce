@@ -2,6 +2,7 @@ SRCDIR := src
 BUILDDIR := build
 
 SRCS := $(wildcard $(SRCDIR)/*.c)
+SRCS := $(filter-out src/parse_.c, $(SRCS))
 
 OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 

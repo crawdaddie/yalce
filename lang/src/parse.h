@@ -30,7 +30,7 @@ struct Ast {
   union {
     struct AST_BODY {
       size_t len;
-      Ast **members;
+      Ast **stmts;
     } AST_BODY;
 
     struct AST_LET {
@@ -73,18 +73,13 @@ struct Ast {
       Ast *arg;
     } AST_APPLICATION;
 
-    struct _AST_APPLICATION {
-      size_t len;
-      Ast **args;
-    } _AST_APPLICATION;
-
     struct AST_TUPLE {
       size_t len;
       Ast **members;
     } AST_TUPLE;
 
     struct AST_FN_DECLARATION {
-      size_t params_len;
+      size_t len;
       const char **params;
       const char *fn_name;
       Ast *body;

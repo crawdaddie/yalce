@@ -45,6 +45,13 @@ void repl_input(char *input, int bufsize, const char *prompt) {
   printf("\033[1;0m");
 }
 
+Ast *ast_body_peek(Ast *body) {
+  if (body->data.AST_BODY.len == 0 || body->data.AST_BODY.stmts == NULL) {
+    return NULL;
+  }
+  return body->data.AST_BODY.stmts[body->data.AST_BODY.len - 1];
+}
+
 int main(int argc, char **argv) {
 
   bool repl = true;
@@ -54,27 +61,27 @@ int main(int argc, char **argv) {
            "--------------------\n"
            "version 0.0.0       \n"
            "\033[1;0m");
-    char *input = (char *)malloc(sizeof(char) * INPUT_BUFSIZE);
-    Lexer lexer;
 
     Ast *prog = Ast_new(AST_BODY);
-
     prog->data.AST_BODY.len = 0;
-    prog->data.AST_BODY.members = malloc(sizeof(Ast *));
+    prog->data.AST_BODY.stmts = malloc(sizeof(Ast *));
+    char *input = (char *)malloc(sizeof(char) * INPUT_BUFSIZE);
 
     while (true) {
+      Lexer lexer;
       repl_input(input, INPUT_BUFSIZE, NULL);
       init_lexer(input, &lexer);
 
       Parser parser;
       init_parser(&parser, &lexer);
 
-      Ast *ast = parse_body(prog);
-      print_ser_ast(ast);
+      prog = parse_body(prog);
+      print_ser_ast(prog);
 
-      Ast *top = body_return(ast);
+      Ast *top = ast_body_peek(prog);
       eval(top);
     }
+    free(input);
   }
   return 0;
 }
