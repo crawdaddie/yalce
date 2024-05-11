@@ -1,7 +1,7 @@
 #include "serde.h"
 #include <stdio.h>
 
-void print_ser_ast(Ast *ast) {
+void print_ast(Ast *ast) {
   if (ast == NULL) {
     printf("[null]");
     return;
@@ -11,8 +11,8 @@ void print_ser_ast(Ast *ast) {
   case AST_BODY: {
     printf("[\n");
     for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
-      Ast *stmt = ast->data.AST_BODY.members[i];
-      print_ser_ast(stmt);
+      Ast *stmt = ast->data.AST_BODY.stmts[i];
+      print_ast(stmt);
       printf("\n");
     }
 
@@ -22,7 +22,7 @@ void print_ser_ast(Ast *ast) {
 
   case AST_LET: {
     printf("assign %s to ", ast->data.AST_LET.name);
-    print_ser_ast(ast->data.AST_LET.expr);
+    print_ast(ast->data.AST_LET.expr);
     break;
   }
 
@@ -61,9 +61,9 @@ void print_ser_ast(Ast *ast) {
     // printf(")");
     // break;
     printf("(");
-    print_ser_ast(ast->data.AST_APPLICATION.applicable);
+    print_ast(ast->data.AST_APPLICATION.applicable);
     printf(" ");
-    print_ser_ast(ast->data.AST_APPLICATION.arg);
+    print_ast(ast->data.AST_APPLICATION.arg);
     printf(")");
     break;
   }
@@ -72,7 +72,7 @@ void print_ser_ast(Ast *ast) {
     printf("(");
     for (size_t i = 0; i < ast->data.AST_TUPLE.len; ++i) {
       Ast *stmt = ast->data.AST_TUPLE.members[i];
-      print_ser_ast(stmt);
+      print_ast(stmt);
       printf(", ");
     }
     printf(")");
@@ -84,9 +84,9 @@ void print_ser_ast(Ast *ast) {
     token tok = {.type = ast->data.AST_BINOP.op};
     print_token(tok);
     printf(" ");
-    print_ser_ast(ast->data.AST_BINOP.left);
+    print_ast(ast->data.AST_BINOP.left);
     printf(" ");
-    print_ser_ast(ast->data.AST_BINOP.right);
+    print_ast(ast->data.AST_BINOP.right);
     printf(")");
     break;
   }
@@ -95,12 +95,12 @@ void print_ser_ast(Ast *ast) {
       printf("fn (%s) ", ast->data.AST_FN_DECLARATION.fn_name);
     } else
       printf("fn ");
-    for (size_t i = 0; i < ast->data.AST_FN_DECLARATION.params_len; ++i) {
+    for (size_t i = 0; i < ast->data.AST_FN_DECLARATION.len; ++i) {
       printf("%s ", ast->data.AST_FN_DECLARATION.params[i]);
     }
     if (ast->data.AST_FN_DECLARATION.body) {
       printf("-> ");
-      print_ser_ast(ast->data.AST_FN_DECLARATION.body);
+      print_ast(ast->data.AST_FN_DECLARATION.body);
     } else {
       printf("extern definition");
     }

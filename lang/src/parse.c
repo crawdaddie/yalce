@@ -74,8 +74,29 @@ static Ast *reduce_nested_applications(Ast *application) {
 
   return application;
 }
-static Ast *parse_grouping() { return NULL; }
+static Ast *parse_grouping() {
+  Ast *first = parse_expression();
+  if (check(TOKEN_COMMA)) {
+    Ast *tuple = Ast_new(AST_TUPLE);
+    tuple->data.AST_TUPLE.len = 1;
+    tuple->data.AST_TUPLE.members = malloc(sizeof(Ast *));
+    tuple->data.AST_TUPLE.members[0] = first;
+    advance();
 
+    while (!match(TOKEN_RP)) {
+      size_t index = tuple->data.AST_TUPLE.len;
+      tuple->data.AST_TUPLE.len++;
+      tuple->data.AST_TUPLE.members[index] = parse_expression();
+      check(TOKEN_COMMA);
+    }
+    return tuple;
+  }
+
+  if (match(TOKEN_RP)) {
+    return first;
+  }
+  return NULL;
+}
 #define AST_LITERAL_PREFIX(type, val)                                          \
   Ast *prefix = Ast_new(type);                                                 \
   prefix->data.type.value = val
@@ -127,9 +148,10 @@ static Ast *parse_prefix() {
     prefix->data.AST_UNOP.expr = parse_expression();
     return prefix;
   }
-  // case TOKEN_LP: {
-  //   return parse_grouping();
-  // }
+  case TOKEN_LP: {
+    advance();
+    return parse_grouping();
+  }
   case TOKEN_IF:
   default: {
     advance();
@@ -166,12 +188,12 @@ ParserPrecedence token_to_precedence(token tok) {
   case TOKEN_GT:
   case TOKEN_GTE:         return PREC_COMPARISON;
 
+  case TOKEN_SLASH:
+  case TOKEN_STAR:
+  case TOKEN_MODULO:      return PREC_FACTOR; 
   case TOKEN_PLUS:
   case TOKEN_MINUS:       return PREC_TERM;
 
-  case TOKEN_SLASH:
-  case TOKEN_STAR:
-  case TOKEN_MODULO:      return PREC_FACTOR;
 
   case TOKEN_LEFT_SQ:     return PREC_INDEX;
 
@@ -191,8 +213,8 @@ ParserPrecedence token_to_precedence(token tok) {
 }
 // clang-format on
 
-static Ast *parse_precedence(Ast *prefix, ParserPrecedence precedence) {
-  Ast *left = prefix;
+static Ast *parse_precedence(ParserPrecedence precedence) {
+  Ast *left = parse_prefix();
 
   while (precedence <= token_to_precedence(parser->current)) {
     switch (parser->current.type) {
@@ -213,8 +235,9 @@ static Ast *parse_precedence(Ast *prefix, ParserPrecedence precedence) {
       binop->data.AST_BINOP.op = parser->current.type;
       binop->data.AST_BINOP.left = left;
       advance();
+      binop->data.AST_BINOP.right =
+          parse_precedence(token_to_precedence(parser->previous));
 
-      binop->data.AST_BINOP.right = parse_expression();
       left = binop;
       break;
     }
@@ -224,28 +247,7 @@ static Ast *parse_precedence(Ast *prefix, ParserPrecedence precedence) {
   }
   return left;
 };
-static Ast *_parse_expression() {
-  Ast *prefix = parse_prefix();
-  if (prefix) {
-    prefix = parse_precedence(prefix, PREC_ASSIGNMENT);
-  }
-  return prefix;
-}
-
-static Ast *parse_expression() {
-  // Ast *application = NULL;
-  // while (!match(TOKEN_DOUBLE_SEMICOLON) && !match(TOKEN_NL)) {
-  //   Ast *expr = _parse_expression();
-  //
-  //   if (expr) {
-  //     application = nest_applications(application, expr);
-  //   }
-  // }
-  // return reduce_nested_applications(application);
-
-  Ast *expr = _parse_expression();
-  return expr;
-}
+static Ast *parse_expression() { return parse_precedence(PREC_ASSIGNMENT); }
 
 static Ast *parse_statement() { return parse_expression(); }
 
