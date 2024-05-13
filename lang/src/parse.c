@@ -13,16 +13,12 @@ void init_parser(Parser *_parser, Lexer *lexer) {
   advance();
 }
 
-void advance() {
-  parser->previous = parser->current;
+token advance() { parser->previous = parser->current;
   parser->current = scan_token(parser->lexer);
+  return parser->current;
 }
 
 bool check(enum token_type type) { return parser->current.type == type; }
-
-static bool is_terminator() {
-  return check(TOKEN_RP) || check(TOKEN_DOUBLE_SEMICOLON) || check(TOKEN_NL);
-}
 
 static bool match(enum token_type type) {
   if (!check(type)) {
@@ -32,6 +28,9 @@ static bool match(enum token_type type) {
   return true;
 }
 
+static bool is_terminator() {
+  return match(TOKEN_DOUBLE_SEMICOLON) || match(TOKEN_NL) || match(TOKEN_EOF);
+}
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = malloc(sizeof(Ast));
   node->tag = tag;
@@ -67,7 +66,7 @@ Ast *nest_applications(Ast *application, Ast *item) {
   return NULL;
 }
 
-static Ast *reduce_nested_applications(Ast *application) {
+static Ast *reduce_degenerate_application(Ast *application) {
   if (application && application->data.AST_APPLICATION.arg == NULL) {
     return application->data.AST_APPLICATION.applicable;
   }
@@ -75,38 +74,36 @@ static Ast *reduce_nested_applications(Ast *application) {
   return application;
 }
 static Ast *parse_grouping() {
+
+  match(TOKEN_LP);
   Ast *first = parse_expression();
+
   if (check(TOKEN_COMMA)) {
+    advance();
     Ast *tuple = Ast_new(AST_TUPLE);
     tuple->data.AST_TUPLE.len = 1;
     tuple->data.AST_TUPLE.members = malloc(sizeof(Ast *));
     tuple->data.AST_TUPLE.members[0] = first;
-    advance();
 
     while (!match(TOKEN_RP)) {
       size_t index = tuple->data.AST_TUPLE.len;
       tuple->data.AST_TUPLE.len++;
       tuple->data.AST_TUPLE.members[index] = parse_expression();
-      check(TOKEN_COMMA);
+      match(TOKEN_COMMA);
     }
     return tuple;
-  }
+  } 
 
-  if (match(TOKEN_RP)) {
-    return first;
-  }
-  return NULL;
+  match(TOKEN_RP);
+
+
+  return first;
 }
 #define AST_LITERAL_PREFIX(type, val)                                          \
   Ast *prefix = Ast_new(type);                                                 \
   prefix->data.type.value = val
 
 static Ast *parse_prefix() {
-  // printf("inside grouping");
-  // print_token(parser->current);
-  // print_ser_ast(first);
-  // printf("prefix: ");
-  // print_token(parser->current);
   switch (parser->current.type) {
   case TOKEN_INTEGER: {
     AST_LITERAL_PREFIX(AST_INT, parser->current.as.vint);
@@ -149,66 +146,52 @@ static Ast *parse_prefix() {
     return prefix;
   }
   case TOKEN_LP: {
-    advance();
     return parse_grouping();
   }
   case TOKEN_IF:
+
   default: {
-    advance();
+    // advance();
     return NULL;
   }
   }
 }
-// clang-format off
-// static ParserPrecedence precedence_rules[] = {
-//   [TOKEN_ASSIGNMENT]  = PREC_ASSIGNMENT,
-//   [TOKEN_EQUALITY]    = PREC_EQUALITY,
-//   [TOKEN_NOT_EQUAL]   = PREC_EQUALITY,
-//   [TOKEN_LT]          = PREC_COMPARISON,
-//   [TOKEN_LTE]         = PREC_COMPARISON,
-//   [TOKEN_GT]          = PREC_COMPARISON,
-//   [TOKEN_GTE]         = PREC_COMPARISON,
-//   [TOKEN_PLUS]        = PREC_TERM,
-//   [TOKEN_MINUS]       = PREC_TERM,
-//   [TOKEN_SLASH]       = PREC_FACTOR,
-//   [TOKEN_STAR]        = PREC_FACTOR,
-//   [TOKEN_MODULO]      = PREC_FACTOR,
-//   [TOKEN_LEFT_SQ]     = PREC_INDEX
-// };
+//
+// fn token_to_precedence(tok: &Token) -> Precedence {
+//     match tok {
+//     }
+// }
 
+// clang-format off
 ParserPrecedence token_to_precedence(token tok) {
   switch (tok.type) {
-  case TOKEN_ASSIGNMENT:  return PREC_ASSIGNMENT;
+    case TOKEN_ASSIGNMENT:  return PREC_ASSIGNMENT;
 
-  case TOKEN_EQUALITY:
-  case TOKEN_NOT_EQUAL:   return PREC_EQUALITY;
+    case TOKEN_EQUALITY:
+    case TOKEN_NOT_EQUAL:   return PREC_EQUALITY;
 
-  case TOKEN_LT:
-  case TOKEN_LTE:
-  case TOKEN_GT:
-  case TOKEN_GTE:         return PREC_COMPARISON;
+    case TOKEN_LT:
+    case TOKEN_LTE:
+    case TOKEN_GT:
+    case TOKEN_GTE:         return PREC_COMPARISON;
 
-  case TOKEN_SLASH:
-  case TOKEN_STAR:
-  case TOKEN_MODULO:      return PREC_FACTOR; 
-  case TOKEN_PLUS:
-  case TOKEN_MINUS:       return PREC_TERM;
+    case TOKEN_PLUS:
+    case TOKEN_MINUS:       return PREC_TERM;
 
+    case TOKEN_SLASH:
+    case TOKEN_STAR:
+    case TOKEN_MODULO:      return PREC_FACTOR;
 
-  case TOKEN_LEFT_SQ:     return PREC_INDEX;
+    case TOKEN_LEFT_SQ:     return PREC_INDEX;
 
-  case TOKEN_LP:
-  case TOKEN_DOT:         return PREC_CALL;
+    case TOKEN_LP:
+    case TOKEN_RP:
+    case TOKEN_DOT:         return PREC_NONE;
 
-  case TOKEN_RP:          return PREC_NONE;
-
-  case TOKEN_BANG:        return PREC_UNARY;
-
-  case TOKEN_LOGICAL_OR:  return PREC_OR;
-
-  case TOKEN_LOGICAL_AND: return PREC_AND;
-
-  default:                return PREC_NONE;
+    case TOKEN_BANG:        return PREC_UNARY;
+    case TOKEN_LOGICAL_OR:  return PREC_OR;
+    case TOKEN_LOGICAL_AND: return PREC_AND;
+    default:                return PREC_NONE;
   }
 }
 // clang-format on
@@ -216,38 +199,49 @@ ParserPrecedence token_to_precedence(token tok) {
 static Ast *parse_precedence(ParserPrecedence precedence) {
   Ast *left = parse_prefix();
 
-  while (precedence <= token_to_precedence(parser->current)) {
+  while (precedence < token_to_precedence(parser->current)) {
     switch (parser->current.type) {
 
-    case TOKEN_PLUS:
-    case TOKEN_MINUS:
-    case TOKEN_SLASH:
-    case TOKEN_STAR:
-    case TOKEN_MODULO:
-    case TOKEN_EQUALITY:
-    case TOKEN_NOT_EQUAL:
-    case TOKEN_LT:
-    case TOKEN_LTE:
-    case TOKEN_GT:
-    case TOKEN_GTE: {
+      case TOKEN_PLUS:
+      case TOKEN_MINUS: case TOKEN_SLASH:
+      case TOKEN_STAR:
+      case TOKEN_MODULO:
+      case TOKEN_EQUALITY:
+      case TOKEN_NOT_EQUAL:
+      case TOKEN_LT:
+      case TOKEN_LTE:
+      case TOKEN_GT:
+      case TOKEN_GTE: {
+        Ast *binop = Ast_new(AST_BINOP);
+        binop->data.AST_BINOP.op = parser->current.type;
+        binop->data.AST_BINOP.left = left;
+        advance();
+        binop->data.AST_BINOP.right =
+            parse_precedence(token_to_precedence(parser->previous));
 
-      Ast *binop = Ast_new(AST_BINOP);
-      binop->data.AST_BINOP.op = parser->current.type;
-      binop->data.AST_BINOP.left = left;
-      advance();
-      binop->data.AST_BINOP.right =
-          parse_precedence(token_to_precedence(parser->previous));
-
-      left = binop;
-      break;
-    }
-    default:
-      return left;
+        left = binop;
+        break;
+      }
+      default:
+        return left;
     }
   }
+
+  match(TOKEN_RP);
   return left;
-};
-static Ast *parse_expression() { return parse_precedence(PREC_ASSIGNMENT); }
+}
+
+static Ast *parse_expression() {
+
+  Ast *application = NULL;
+
+  while (!is_terminator()) {
+    Ast *item = parse_precedence(PREC_NONE);
+    application = nest_applications(application, item);
+  }
+
+  return reduce_degenerate_application(application);
+}
 
 static Ast *parse_statement() { return parse_expression(); }
 

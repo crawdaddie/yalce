@@ -11,13 +11,13 @@ typedef struct {
 
 typedef struct Ast Ast;
 typedef enum ast_tag {
-  AST_BODY,
-  AST_LET,
   AST_INT,
   AST_NUMBER,
   AST_STRING,
   AST_BOOL,
   AST_IDENTIFIER,
+  AST_BODY,
+  AST_LET,
   AST_BINOP,
   AST_UNOP,
   AST_APPLICATION,
@@ -88,7 +88,7 @@ struct Ast {
 };
 
 void init_parser(Parser *parser, Lexer *lexer);
-void advance();
+token advance();
 
 Ast *rec_parse(Ast *ast);
 
@@ -112,4 +112,5 @@ typedef enum ParserPrecedence {
   PREC_INDEX,      // []
   PREC_PRIMARY,
 } ParserPrecedence;
+
 #endif

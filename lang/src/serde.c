@@ -1,114 +1,135 @@
 #include "serde.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 void print_ast(Ast *ast) {
-  if (ast == NULL) {
-    printf("[null]");
-    return;
-  }
+  char *buf = malloc(sizeof(char));
+  printf("%s\n", ast_to_sexpr(ast, buf));
+  free(buf);
+}
+static bool is_term(ast_tag tag) {
+  return tag == AST_INT || tag== AST_NUMBER || tag == AST_BOOL || tag== AST_STRING || tag== AST_IDENTIFIER;
+}
 
-  switch (ast->tag) {
-  case AST_BODY: {
-    printf("[\n");
-    for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
-      Ast *stmt = ast->data.AST_BODY.stmts[i];
-      print_ast(stmt);
-      printf("\n");
+char* ast_to_sexpr(Ast *ast, char *buffer) {
+    if (!ast) {
+      buffer = strcat(buffer, " null");
+      return buffer;
     }
 
-    printf("]");
-    break;
-  }
+    switch (ast->tag) {
+        case AST_BODY: {
+            for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
+                Ast *stmt = ast->data.AST_BODY.stmts[i];
+                buffer = strcat(buffer, "\n");
+                buffer = ast_to_sexpr(stmt, buffer);
+            }
+            break;
+        }
 
-  case AST_LET: {
-    printf("assign %s to ", ast->data.AST_LET.name);
-    print_ast(ast->data.AST_LET.expr);
-    break;
-  }
+        case AST_LET: {
+            break;
+        }
 
-  case AST_NUMBER: {
-    printf("%f", ast->data.AST_NUMBER.value);
-    break;
-  }
+        case AST_NUMBER: {
 
-  case AST_INT: {
-    printf("%d", ast->data.AST_INT.value);
-    break;
-  }
+            char *buf = malloc(sizeof(char) * 12);
+            if (buf == NULL) {
+                // Handle memory allocation failure
+                return buffer;
+            }
+            sprintf(buf, " %f", ast->data.AST_NUMBER.value);
+            buffer = strcat(buffer, buf);
+            // free(buf);
+            break;
+        }
 
-  case AST_STRING: {
-    printf("%s", ast->data.AST_STRING.value);
-    break;
-  }
+        case AST_INT: {
+            char *buf = malloc(sizeof(char) * 12);
+            if (buf == NULL) {
+                // Handle memory allocation failure
+                return buffer;
+            }
+            sprintf(buf, " %d", ast->data.AST_INT.value);
+            buffer = strcat(buffer, buf);
+            // free(buf);
+            break;
+        }
 
-  case AST_BOOL: {
-    printf("%d", ast->data.AST_BOOL.value);
-    break;
-  }
+        case AST_STRING: {
+            buffer = strcat(buffer, " \"");
+            buffer = strcat(buffer, ast->data.AST_STRING.value);
+            buffer = strcat(buffer, "\"");
+            break;
+        }
 
-  case AST_IDENTIFIER: {
-    printf("%s", ast->data.AST_IDENTIFIER.value);
-    break;
-  }
+        case AST_BOOL: {
+            if (ast->data.AST_BOOL.value) {
+                buffer = strcat(buffer, "true");
+            } else {
+                buffer = strcat(buffer, "false");
+            }
+            break;
+        }
+        case AST_IDENTIFIER: {
+            buffer = strcat(buffer, ast->data.AST_IDENTIFIER.value);
+            break;
+        }
 
-  case AST_APPLICATION: {
-    // printf("(");
-    // for (size_t i = 0; i < ast->data.AST_APPLICATION.len; ++i) {
-    //   Ast *stmt = ast->data.AST_APPLICATION.args[i];
-    //   print_ser_ast(stmt);
-    //   printf(" ");
-    // }
-    // printf(")");
-    // break;
-    printf("(");
-    print_ast(ast->data.AST_APPLICATION.applicable);
-    printf(" ");
-    print_ast(ast->data.AST_APPLICATION.arg);
-    printf(")");
-    break;
-  }
+        case AST_APPLICATION: {
+            buffer = strcat(buffer, "(");
+            buffer = ast_to_sexpr(ast->data.AST_APPLICATION.applicable, buffer);
+            buffer = ast_to_sexpr(ast->data.AST_APPLICATION.arg, buffer);
+            buffer = strcat(buffer, ")");
+            break;
+        }
 
-  case AST_TUPLE: {
-    printf("(");
-    for (size_t i = 0; i < ast->data.AST_TUPLE.len; ++i) {
-      Ast *stmt = ast->data.AST_TUPLE.members[i];
-      print_ast(stmt);
-      printf(", ");
+        case AST_TUPLE: {
+            buffer = strcat(buffer, "(");
+            for (int i = 0; i < ast->data.AST_TUPLE.len; i++) {
+                buffer = ast_to_sexpr(ast->data.AST_TUPLE.members[i], buffer);
+                buffer = strcat(buffer, ",");
+            }
+            buffer = strcat(buffer, ")");
+            break;
+        }
+
+        case AST_BINOP: {
+            buffer = strcat(buffer, "(");
+            switch (ast->data.AST_BINOP.op) {
+                case TOKEN_PLUS: 
+                    buffer = strcat(buffer, "+");
+                    break;
+                case TOKEN_MINUS:
+                    buffer = strcat(buffer, "-");
+                    break;
+                case TOKEN_STAR:
+                    buffer = strcat(buffer, "*");
+                    break;
+
+                case TOKEN_SLASH:
+                    buffer = strcat(buffer, "/");
+                    break;
+                // Add more cases for other operators if needed
+            }
+            if (!is_term(ast->data.AST_BINOP.left->tag)) {
+              buffer = strcat(buffer, " ");
+            }
+            buffer = ast_to_sexpr(ast->data.AST_BINOP.left, buffer);
+            buffer = ast_to_sexpr(ast->data.AST_BINOP.right, buffer);
+            buffer = strcat(buffer, ")");
+            break;
+        }
+
+        case AST_FN_DECLARATION: {
+            break;
+        }
+
+        default: {
+            // Handle unsupported node types or other errors
+            break;
+        }
     }
-    printf(")");
-    break;
-  }
-
-  case AST_BINOP: {
-    printf("(");
-    token tok = {.type = ast->data.AST_BINOP.op};
-    print_token(tok);
-    printf(" ");
-    print_ast(ast->data.AST_BINOP.left);
-    printf(" ");
-    print_ast(ast->data.AST_BINOP.right);
-    printf(")");
-    break;
-  }
-  case AST_FN_DECLARATION: {
-    if (ast->data.AST_FN_DECLARATION.fn_name != NULL) {
-      printf("fn (%s) ", ast->data.AST_FN_DECLARATION.fn_name);
-    } else
-      printf("fn ");
-    for (size_t i = 0; i < ast->data.AST_FN_DECLARATION.len; ++i) {
-      printf("%s ", ast->data.AST_FN_DECLARATION.params[i]);
-    }
-    if (ast->data.AST_FN_DECLARATION.body) {
-      printf("-> ");
-      print_ast(ast->data.AST_FN_DECLARATION.body);
-    } else {
-      printf("extern definition");
-    }
-  }
-
-  default: {
-    printf("[%d]", ast->tag);
-  }
-  }
-  // printf("\n");
+    return buffer;
 }
