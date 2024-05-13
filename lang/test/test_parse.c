@@ -39,6 +39,7 @@ bool test_parse(char *input, char *expected_sexpr) {
 }
 
 int main() {
+
   bool status;
   status = test_parse(
     "1 + 2;; # single binop expression",
