@@ -2,6 +2,7 @@
 #include "serde.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 Parser *parser;
 void print_current() { print_token(parser->current); }
@@ -13,7 +14,8 @@ void init_parser(Parser *_parser, Lexer *lexer) {
   advance();
 }
 
-token advance() { parser->previous = parser->current;
+token advance() {
+  parser->previous = parser->current;
   parser->current = scan_token(parser->lexer);
   return parser->current;
 }
@@ -29,8 +31,37 @@ static bool match(enum token_type type) {
 }
 
 static bool is_terminator() {
-  return match(TOKEN_DOUBLE_SEMICOLON) || match(TOKEN_NL) || match(TOKEN_EOF);
+  switch (parser->current.type) {
+  case TOKEN_DOUBLE_SEMICOLON:
+  case TOKEN_NL:
+  case TOKEN_EOF:
+    advance();
+    return true;
+  default:
+    return false;
+  }
 }
+
+static bool is_binop_token() {
+  switch (parser->current.type) {
+  case TOKEN_PLUS:
+  case TOKEN_MINUS:
+  case TOKEN_SLASH:
+  case TOKEN_STAR:
+  case TOKEN_MODULO:
+  case TOKEN_EQUALITY:
+  case TOKEN_NOT_EQUAL:
+  case TOKEN_LT:
+  case TOKEN_LTE:
+  case TOKEN_GT:
+  case TOKEN_GTE:
+    return true;
+  // case TOKEN_RP: return true;
+  default:
+    return false;
+  }
+}
+
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = malloc(sizeof(Ast));
   node->tag = tag;
@@ -39,40 +70,6 @@ Ast *Ast_new(enum ast_tag tag) {
 
 static Ast *parse_expression();
 
-Ast *nest_applications(Ast *application, Ast *item) {
-
-  if (application == NULL) {
-    application = Ast_new(AST_APPLICATION);
-    application->data.AST_APPLICATION.applicable = item;
-    return application;
-  }
-
-  if (application != NULL &&
-      application->data.AST_APPLICATION.applicable != NULL &&
-      application->data.AST_APPLICATION.arg == NULL) {
-    application->data.AST_APPLICATION.arg = item;
-    return application;
-  }
-
-  if (application != NULL &&
-      application->data.AST_APPLICATION.applicable != NULL &&
-      application->data.AST_APPLICATION.arg != NULL) {
-
-    Ast *new_application = Ast_new(AST_APPLICATION);
-    new_application->data.AST_APPLICATION.applicable = application;
-    new_application->data.AST_APPLICATION.arg = item;
-    return new_application;
-  }
-  return NULL;
-}
-
-static Ast *reduce_degenerate_application(Ast *application) {
-  if (application && application->data.AST_APPLICATION.arg == NULL) {
-    return application->data.AST_APPLICATION.applicable;
-  }
-
-  return application;
-}
 static Ast *parse_grouping() {
 
   match(TOKEN_LP);
@@ -92,10 +89,12 @@ static Ast *parse_grouping() {
       match(TOKEN_COMMA);
     }
     return tuple;
-  } 
+  }
 
   match(TOKEN_RP);
-
+  // printf("finish grouping: ");
+  // print_ast(first);
+  // printf("\n");
 
   return first;
 }
@@ -202,28 +201,29 @@ static Ast *parse_precedence(ParserPrecedence precedence) {
   while (precedence < token_to_precedence(parser->current)) {
     switch (parser->current.type) {
 
-      case TOKEN_PLUS:
-      case TOKEN_MINUS: case TOKEN_SLASH:
-      case TOKEN_STAR:
-      case TOKEN_MODULO:
-      case TOKEN_EQUALITY:
-      case TOKEN_NOT_EQUAL:
-      case TOKEN_LT:
-      case TOKEN_LTE:
-      case TOKEN_GT:
-      case TOKEN_GTE: {
-        Ast *binop = Ast_new(AST_BINOP);
-        binop->data.AST_BINOP.op = parser->current.type;
-        binop->data.AST_BINOP.left = left;
-        advance();
-        binop->data.AST_BINOP.right =
-            parse_precedence(token_to_precedence(parser->previous));
+    case TOKEN_PLUS:
+    case TOKEN_MINUS:
+    case TOKEN_SLASH:
+    case TOKEN_STAR:
+    case TOKEN_MODULO:
+    case TOKEN_EQUALITY:
+    case TOKEN_NOT_EQUAL:
+    case TOKEN_LT:
+    case TOKEN_LTE:
+    case TOKEN_GT:
+    case TOKEN_GTE: {
+      Ast *binop = Ast_new(AST_BINOP);
+      binop->data.AST_BINOP.op = parser->current.type;
+      binop->data.AST_BINOP.left = left;
+      advance();
+      binop->data.AST_BINOP.right =
+          parse_precedence(token_to_precedence(parser->previous));
 
-        left = binop;
-        break;
-      }
-      default:
-        return left;
+      left = binop;
+      break;
+    }
+    default:
+      return left;
     }
   }
 
@@ -231,14 +231,54 @@ static Ast *parse_precedence(ParserPrecedence precedence) {
   return left;
 }
 
+Ast *nest_applications(Ast *application, Ast *item) {
+
+  if (application->data.AST_APPLICATION.applicable == NULL) {
+    application->data.AST_APPLICATION.applicable = item;
+    return application;
+  }
+
+  if (application->data.AST_APPLICATION.arg == NULL) {
+    application->data.AST_APPLICATION.arg = item;
+    return application;
+  }
+
+  Ast *new_app = Ast_new(AST_APPLICATION);
+  new_app->data.AST_APPLICATION.applicable = application;
+  new_app->data.AST_APPLICATION.arg = item;
+
+  return new_app;
+}
+
+static Ast *reduce_degenerate_application(Ast *application) {
+  if (application && application->data.AST_APPLICATION.arg == NULL) {
+    return application->data.AST_APPLICATION.applicable;
+  }
+
+  return application;
+}
+static bool application_is_empty(Ast *app) {
+  return app->data.AST_APPLICATION.applicable == NULL &&
+         app->data.AST_APPLICATION.arg == NULL;
+}
+static bool is_applicable(Ast *item) {
+  return (item->tag != AST_FN_DECLARATION) && (item->tag != AST_IDENTIFIER) &&
+         (item->tag != AST_LAMBDA);
+}
+
 static Ast *parse_expression() {
 
-  Ast *application = NULL;
+  Ast *application = Ast_new(AST_APPLICATION);
 
-  while (!is_terminator()) {
+  while (!is_terminator() && !is_binop_token()) {
     Ast *item = parse_precedence(PREC_NONE);
+    if (application_is_empty(application) && is_applicable(item)) {
+      free(application);
+      return item;
+    }
     application = nest_applications(application, item);
   }
+  // parser->application = NULL;
 
   return reduce_degenerate_application(application);
 }

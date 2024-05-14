@@ -3,13 +3,17 @@
 #include "lex.h"
 #include <stdbool.h>
 #include <stddef.h>
+
+typedef struct Ast Ast;
+
 typedef struct {
   Lexer *lexer;
   token previous;
   token current;
+  Ast *application_stack;
+  size_t application_stack_ptr;
 } Parser;
 
-typedef struct Ast Ast;
 typedef enum ast_tag {
   AST_INT,
   AST_NUMBER,
@@ -22,7 +26,8 @@ typedef enum ast_tag {
   AST_UNOP,
   AST_APPLICATION,
   AST_TUPLE,
-  AST_FN_DECLARATION
+  AST_FN_DECLARATION,
+  AST_LAMBDA
 } ast_tag;
 
 struct Ast {
@@ -71,6 +76,7 @@ struct Ast {
     struct AST_APPLICATION {
       Ast *applicable;
       Ast *arg;
+      // size_t num_args;
     } AST_APPLICATION;
 
     struct AST_TUPLE {
@@ -84,6 +90,13 @@ struct Ast {
       const char *fn_name;
       Ast *body;
     } AST_FN_DECLARATION;
+
+    struct AST_LAMBDA {
+      size_t len;
+      const char **params;
+      const char *fn_name;
+      Ast *body;
+    } AST_LAMBDA;
   } data;
 };
 

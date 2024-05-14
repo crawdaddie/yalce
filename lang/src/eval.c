@@ -3,6 +3,6 @@
 #include <stdio.h>
 void eval(Ast *top) {
   // printf("\nevaluating top-level: ");
-  print_ast(top);
+  // print_ast(top);
   // printf("\n");
 }

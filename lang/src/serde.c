@@ -10,7 +10,8 @@ void print_ast(Ast *ast) {
 }
 
 static bool is_term(ast_tag tag) {
-  return (tag == AST_INT || tag == AST_NUMBER || tag == AST_BOOL || tag == AST_STRING || tag == AST_IDENTIFIER);
+  return tag <= AST_IDENTIFIER;
+  // return (tag == AST_INT || tag == AST_NUMBER || tag == AST_BOOL || tag == AST_STRING || tag == AST_IDENTIFIER);
 }
 
 char* ast_to_sexpr(Ast *ast, char *buffer) {
@@ -35,26 +36,17 @@ char* ast_to_sexpr(Ast *ast, char *buffer) {
 
       case AST_NUMBER: {
 
-          char *buf = malloc(sizeof(char) * 12);
-          if (buf == NULL) {
-              // Handle memory allocation failure
-              return buffer;
-          }
+          char buf[12];
           sprintf(buf, "%f", ast->data.AST_NUMBER.value);
           buffer = strcat(buffer, buf);
-          // free(buf);
           break;
       }
 
       case AST_INT: {
-          char *buf = malloc(sizeof(char) * 12);
-          if (buf == NULL) {
-              // Handle memory allocation failure
-              return buffer;
-          }
+
+          char buf[12];
           sprintf(buf, "%d", ast->data.AST_INT.value);
           buffer = strcat(buffer, buf);
-          // free(buf);
           break;
       }
 
@@ -81,6 +73,8 @@ char* ast_to_sexpr(Ast *ast, char *buffer) {
       case AST_APPLICATION: {
           buffer = strcat(buffer, "(");
           buffer = ast_to_sexpr(ast->data.AST_APPLICATION.applicable, buffer);
+
+          buffer = strcat(buffer, " ");
           buffer = ast_to_sexpr(ast->data.AST_APPLICATION.arg, buffer);
           buffer = strcat(buffer, ")");
           break;
@@ -108,7 +102,6 @@ char* ast_to_sexpr(Ast *ast, char *buffer) {
               case TOKEN_STAR:
                   buffer = strcat(buffer, "* ");
                   break;
-
               case TOKEN_SLASH:
                   buffer = strcat(buffer, "/ ");
                   break;
