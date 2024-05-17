@@ -40,52 +40,50 @@
       know about them.  */
    enum yytokentype {
      INTEGER = 258,
-     token = 259,
-     NUMBER = 260,
-     IDENTIFIER = 261,
-     STRING = 262,
-     TRUE = 263,
-     FALSE = 264,
-     WHILE = 265,
-     IF = 266,
-     PRINT = 267,
-     PIPE = 268,
-     LET = 269,
-     FN = 270,
-     ARROW = 271,
-     IFX = 272,
-     ELSE = 273,
-     MODULO = 274,
-     NE = 275,
-     EQ = 276,
-     LE = 277,
-     GE = 278,
-     UMINUS = 279
+     NUMBER = 259,
+     IDENTIFIER = 260,
+     STRING = 261,
+     TRUE = 262,
+     FALSE = 263,
+     WHILE = 264,
+     IF = 265,
+     PRINT = 266,
+     PIPE = 267,
+     LET = 268,
+     FN = 269,
+     ARROW = 270,
+     IFX = 271,
+     ELSE = 272,
+     MODULO = 273,
+     NE = 274,
+     EQ = 275,
+     LE = 276,
+     GE = 277,
+     UMINUS = 278
    };
 #endif
 /* Tokens.  */
 #define INTEGER 258
-#define token 259
-#define NUMBER 260
-#define IDENTIFIER 261
-#define STRING 262
-#define TRUE 263
-#define FALSE 264
-#define WHILE 265
-#define IF 266
-#define PRINT 267
-#define PIPE 268
-#define LET 269
-#define FN 270
-#define ARROW 271
-#define IFX 272
-#define ELSE 273
-#define MODULO 274
-#define NE 275
-#define EQ 276
-#define LE 277
-#define GE 278
-#define UMINUS 279
+#define NUMBER 259
+#define IDENTIFIER 260
+#define STRING 261
+#define TRUE 262
+#define FALSE 263
+#define WHILE 264
+#define IF 265
+#define PRINT 266
+#define PIPE 267
+#define LET 268
+#define FN 269
+#define ARROW 270
+#define IFX 271
+#define ELSE 272
+#define MODULO 273
+#define NE 274
+#define EQ 275
+#define LE 276
+#define GE 277
+#define UMINUS 278
 
 
 
@@ -101,7 +99,7 @@ typedef union YYSTYPE
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 105 "src/y.tab.h"
+#line 103 "src/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

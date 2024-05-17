@@ -32,13 +32,15 @@ Ast* ast_root = NULL;
     double vfloat;
 };
 
-%token <vint>   INTEGER token <vfloat> NUMBER
+%token <vint>   INTEGER
+%token <vfloat> NUMBER
 %token <vident> IDENTIFIER
 %token <vstr>   STRING
 %token TRUE FALSE
 %token WHILE IF PRINT PIPE
 %token LET
-%token FN ARROW
+%token FN
+%token ARROW
 
 %nonassoc IFX
 %nonassoc ELSE
@@ -63,6 +65,8 @@ function:
   function stmt           {
                             if (ast_root == NULL) {
                               ast_root = Ast_new(AST_BODY);
+                              ast_root->data.AST_BODY.len = 0;
+                              ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
                             }
                             Ast_body_push(ast_root, $2);
                           }
@@ -85,7 +89,7 @@ stmt_list:
   ;
 expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
-  | NUMBER                { $$ = AST_CONST(AST_INT, $1); }
+  | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
   | STRING                { $$ = AST_CONST(AST_STRING, $1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
@@ -103,12 +107,14 @@ expr:
   | expr NE expr          { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }
   | expr EQ expr          { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | '(' expr ')'          { $$ = $2; }
-  | pipe_expr             { $$ = $1; }
   | lambda_expr           { $$ = $1; }
+  | pipe_expr             { $$ = $1; }
   ;
 
 lambda_expr:
-  FN lambda_args ARROW stmt_list { $$ = ast_lambda($2, $4); }
+  FN lambda_args %prec ARROW  {
+                                $$ = ast_lambda($2, NULL);
+                              }
   ;
 
 lambda_args:

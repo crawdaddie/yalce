@@ -128,7 +128,8 @@ typedef enum ast_tag {
   AST_APPLICATION,
   AST_TUPLE,
   AST_FN_DECLARATION,
-  AST_LAMBDA
+  AST_LAMBDA,
+  AST_LAMBDA_ARGS
 } ast_tag;
 
 struct Ast {
@@ -199,6 +200,10 @@ struct Ast {
       const char *fn_name;
       Ast *body;
     } AST_LAMBDA;
+    struct AST_LAMBDA_ARGS {
+      char **ids;
+      size_t len;
+    } AST_LAMBDA_ARGS;
   } data;
 };
 
@@ -215,8 +220,8 @@ Ast *ast_identifier(char *name);
 Ast *ast_let(char *name, Ast *expr);
 Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
-Ast *ast_arg_list(Ast *arg);
-Ast *ast_arg_list_push(Ast *arg_list, Ast *arg);
+Ast *ast_arg_list(char *arg);
+Ast *ast_arg_list_push(Ast *arg_list, char *arg);
 
 Ast *parse_input(char *input);
 #endif

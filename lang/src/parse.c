@@ -1,4 +1,5 @@
 #include "parse.h"
+#include "serde.h"
 #include <stdarg.h>
 #include <stdlib.h>
 
@@ -127,6 +128,28 @@ Ast *ast_application(Ast *func, Ast *arg) {
   return app;
 }
 
-Ast *ast_lambda(Ast *args, Ast *body) { return NULL; }
-Ast *ast_arg_list(Ast *arg) { return NULL; }
-Ast *ast_arg_list_push(Ast *arg_list, Ast *arg) { return NULL; }
+Ast *ast_lambda(Ast *args, Ast *body) {
+  printf("lambda\n");
+  Ast *lambda = Ast_new(AST_LAMBDA);
+  lambda->data.AST_LAMBDA.len = args->data.AST_LAMBDA_ARGS.len;
+  lambda->data.AST_LAMBDA.params = args->data.AST_LAMBDA_ARGS.ids;
+  return lambda;
+}
+
+Ast *ast_arg_list(char *arg) {
+
+  printf("arg list\n");
+  Ast *list = Ast_new(AST_LAMBDA_ARGS);
+  list->data.AST_LAMBDA_ARGS.ids = malloc(sizeof(char *));
+  list->data.AST_LAMBDA_ARGS.len = 1;
+  list->data.AST_LAMBDA_ARGS.ids[0] = arg;
+  return list;
+}
+Ast *ast_arg_list_push(Ast *arg_list, char *arg) {
+  char **ids = arg_list->data.AST_LAMBDA_ARGS.ids;
+  arg_list->data.AST_LAMBDA_ARGS.len++;
+  size_t len = arg_list->data.AST_LAMBDA_ARGS.len;
+
+  arg_list->data.AST_LAMBDA_ARGS.ids = realloc(ids, sizeof(char *) * len);
+  arg_list->data.AST_LAMBDA_ARGS.ids[len - 1] = arg;
+}

@@ -6,6 +6,7 @@
 
 %%
 
+"fn"            return FN;
 [a-zA-Z_][a-zA-Z0-9_]*  {
                           yylval.vident = strdup(yytext); // Store the matched identifier in yylval
                           return IDENTIFIER; // Return the IDENTIFIER token
@@ -55,8 +56,7 @@
 "true"          return TRUE;
 "false"         return FALSE;
 "let"           return LET;
-"fn"            return FN;
-"->"            return ARROW;
+"->"            { printf("lexing -> \n"); return ARROW; }
 [ \t\n]+        ;       /* ignore whitespace */
 "#".*           ;       /* ignore comments starting with # */
 

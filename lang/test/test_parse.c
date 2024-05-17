@@ -51,14 +51,21 @@ int main() {
   bool status;
 
   status = test_parse("1 + 2;", "(+ 1 2)"); // single binop expression"
+  //
+  status &= test_parse("-1;", "-1");
+  status &= test_parse("1.;", "1.000000");
+  status &= test_parse("-4.;", "-4.000000");
+  status &= test_parse("1f;", "1.000000");
+  status &= test_parse("-4f;", "-4.000000");
+
+  status &= test_parse("(1 + 2);", "(+ 1 2)");
 
   // # multiple binop expression",
-  status = test_parse("1 + 2 - 3 * 4 + 5;", "(+ (- (+ 1 2) (* 3 4)) 5)");
-  status &= test_parse("(1 + 2);", "(+ 1 2)");
-  status &= test_parse("(1 + 2) * 8;",
-                       // complex grouped expression -
-                       // parentheses have higher precedence,
-                       "(* (+ 1 2) 8)");
+  status &= test_parse("1 + 2 - 3 * 4 + 5;", "(+ (- (+ 1 2) (* 3 4)) 5)");
+
+  // complex grouped expression -
+  // parentheses have higher precedence,
+  status &= test_parse("(1 + 2) * 8;", "(* (+ 1 2) 8)");
 
   status &= test_parse("(1 + 2) * 8 + 5;", "(+ (* (+ 1 2) 8) 5)");
 
@@ -82,6 +89,6 @@ int main() {
   status &= test_parse("3 |> f;", "(f 3)");
   status &= test_parse("3 + 1 |> f;", "(f (+ 3 1))");
   status &= test_parse("g 3 4 |> f 1 2;", "(((f 1) 2) ((g 3) 4))");
-  status &= test_parse("fn x y -> x + y;", "");
+  status &= test_parse("fn x y -> x + y;", "(fn (x y) -> (+ x y))");
   return status ? 0 : 1;
 }

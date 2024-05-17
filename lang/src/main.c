@@ -118,7 +118,8 @@ int main(int argc, char **argv) {
       repl_input(input, INPUT_BUFSIZE, NULL);
       Ast *prog = parse_input(input);
 
-      printf("prog:\n");
+      printf("parsed program:");
+
       print_ast(prog);
 
       eval(prog);

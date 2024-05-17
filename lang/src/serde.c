@@ -140,6 +140,18 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_LAMBDA: {
+
+    buffer = strcat(buffer, "(λ ");
+    for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+      buffer = strcat(buffer, ast->data.AST_LAMBDA.params[i]);
+      buffer = strcat(buffer, " ");
+    }
+    buffer = strcat(buffer, ")");
+
+    break;
+  }
+
   default: {
     // Handle unsupported node types or other errors
     break;
