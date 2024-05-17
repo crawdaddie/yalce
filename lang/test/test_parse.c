@@ -18,23 +18,22 @@ Ast *parse(const char *input) {
   return parse_body(prog);
 }
 
-
 bool test_parse(char *input, char *expected_sexpr) {
 
   Ast *prog;
   prog = parse(input);
-
 
   char *sexpr = malloc(sizeof(char) * 200);
   sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts[0], sexpr);
   if (strcmp(sexpr, expected_sexpr) != 0) {
     printf("❌ %s\n", input);
     printf("expected %s\n"
-           "     got %s\n", expected_sexpr, sexpr);
-        
+           "     got %s\n",
+           expected_sexpr, sexpr);
+
     return false;
   } else {
-    printf("✅ %s\n", input);
+    printf("✅ %s -> %s\n", input, sexpr);
     return true;
   }
   free(sexpr);
@@ -44,62 +43,35 @@ bool test_parse(char *input, char *expected_sexpr) {
 int main() {
 
   bool status;
-  status = test_parse(
-    "1 + 2;; # single binop expression",
-    "(+ 1 2)"
-  );
 
-  status = test_parse(
-    "1 + 2 - 3 * 4 + 5;; # multiple binop expression",
-    "(+ (- (+ 1 2) (* 3 4)) 5)"
-  );
-  status &= test_parse(
-    "(1 + 2);;",
-    "(+ 1 2)"
-  );
-  status &= test_parse(
-    "(1 + 2) * 8;; # complex grouped expression - parentheses have higher precedence",
-    "(* (+ 1 2) 8)"
-  );
+  status = test_parse("1 + 2;; # single binop expression", "(+ 1 2)");
 
-  status &= test_parse(
-    "(1 + 2) * 8 + 5", 
-    "(+ (* (+ 1 2) 8) 5)"
-  );
+  status = test_parse("1 + 2 - 3 * 4 + 5;; # multiple binop expression",
+                      "(+ (- (+ 1 2) (* 3 4)) 5)");
+  status &= test_parse("(1 + 2);;", "(+ 1 2)");
+  status &= test_parse("(1 + 2) * 8;; # complex grouped expression - "
+                       "parentheses have higher precedence",
+                       "(* (+ 1 2) 8)");
 
-  status &= test_parse(
-    "(1 + 2) * (8 + 5)", 
-    "(* (+ 1 2) (+ 8 5))"
-  );
+  status &= test_parse("(1 + 2) * 8 + 5", "(+ (* (+ 1 2) 8) 5)");
 
-  status &= test_parse(
-    "f 1 2 3 4;;",
-    "((((f 1) 2) 3) 4)"
-  );
+  status &= test_parse("(1 + 2) * (8 + 5)", "(* (+ 1 2) (+ 8 5))");
 
-  status &= test_parse(
-    "(f 1 2);;",
-    "((f 1) 2)"
-  );
+  status &= test_parse("f 1 2 3 4;;", "((((f 1) 2) 3) 4)");
 
-  status &= test_parse(
-    "(f 1 2) + 1;;",
-    "(+ ((f 1) 2) 1)"
-  );
+  status &= test_parse("(f 1 2);;", "((f 1) 2)");
 
-  status &= test_parse(
-    "1 + (f 1 2);;",
-    "(+ 1 ((f 1) 2))"
-  );
+  status &= test_parse("(f 1 2) + 1;;", "(+ ((f 1) 2) 1)");
 
-  status &= test_parse(
-    "f 1 2 (3 + 1) 4;;",
-    "((((f 1) 2) (+ 3 1)) 4)"
-  );
+  status &= test_parse("1 + (f 1 2);;", "(+ 1 ((f 1) 2))");
 
-  status &= test_parse(
-    "f (8 + 5) 2;;", 
-    "((f (+ 8 5)) 2)"
-  );
+  status &= test_parse("f 1 2 (3 + 1) 4;;", "((((f 1) 2) (+ 3 1)) 4)");
+
+  status &= test_parse("f (8 + 5) 2;;", "((f (+ 8 5)) 2)");
+
+  // status &= test_parse("3 |> f 1 2;;", "(|> ((f 1) 2) 3)");
+
+  status &= test_parse("g 1 2 |> f 1 2;;", "(|> (g 1 2) ((f 1) 2))");
+
   return status ? 0 : 1;
 }

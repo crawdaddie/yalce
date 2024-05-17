@@ -117,6 +117,12 @@ void print_token(token token) {
   }
   case TOKEN_PIPE: {
 
+    printf("|>");
+    break;
+  }
+
+  case TOKEN_ARROW: {
+
     printf("->");
     break;
   }

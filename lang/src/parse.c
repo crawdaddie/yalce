@@ -165,6 +165,7 @@ static Ast *parse_prefix() {
 ParserPrecedence token_to_precedence(token tok) {
   switch (tok.type) {
     case TOKEN_ASSIGNMENT:  return PREC_ASSIGNMENT;
+    case TOKEN_PIPE:        return PREC_NONE;
 
     case TOKEN_EQUALITY:
     case TOKEN_NOT_EQUAL:   return PREC_EQUALITY;
@@ -222,12 +223,21 @@ static Ast *parse_precedence(ParserPrecedence precedence) {
       left = binop;
       break;
     }
+    // case TOKEN_PIPE: {
+    //   print_current();
+    //   return left;
+    // }
     default:
       return left;
     }
   }
 
   match(TOKEN_RP);
+  // || match(TOKEN_PIPE);
+  // if (match(TOKEN_PIPE)) {
+  //   print_ast(left);
+  //   print_current();
+  // }
   return left;
 }
 
@@ -271,12 +281,19 @@ static Ast *parse_expression() {
   Ast *application = Ast_new(AST_APPLICATION);
 
   while (!is_terminator() && !is_binop_token()) {
+
     Ast *item = parse_precedence(PREC_NONE);
+
+    print_ast(item);
     if (application_is_empty(application) && is_applicable(item)) {
       free(application);
       return item;
     }
     application = nest_applications(application, item);
+
+    if (item == NULL) {
+      break;
+    }
   }
   // parser->application = NULL;
 
