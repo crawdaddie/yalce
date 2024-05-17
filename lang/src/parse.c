@@ -1,66 +1,69 @@
 #include "parse.h"
-#include "serde.h"
-#include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
-#include <string.h>
 
-Parser *parser;
-void print_current() { print_token(parser->current); }
-void print_previous() { print_token(parser->previous); }
+Ast *con(int value) {
+  nodeType *p;
 
-void init_parser(Parser *_parser, Lexer *lexer) {
-  parser = _parser;
-  parser->lexer = lexer;
-  advance();
+  /* allocate node */
+  if ((p = malloc(sizeof(nodeType))) == NULL)
+    yyerror("out of memory");
+
+  /* copy information */
+  p->type = typeCon;
+  p->con.value = value;
+
+  return p;
 }
 
-token advance() {
-  parser->previous = parser->current;
-  parser->current = scan_token(parser->lexer);
-  return parser->current;
+Ast *_id(int i) {
+  nodeType *p;
+
+  /* allocate node */
+  if ((p = malloc(sizeof(nodeType))) == NULL)
+    yyerror("out of memory");
+
+  /* copy information */
+  p->type = typeId;
+  p->id.i = i;
+
+  return p;
 }
 
-bool check(enum token_type type) { return parser->current.type == type; }
+Ast *opr(int oper, int nops, ...) {
+  va_list ap;
+  nodeType *p;
+  int i;
 
-static bool match(enum token_type type) {
-  if (!check(type)) {
-    return false;
+  /* allocate node, extending op array */
+  if ((p = malloc(sizeof(nodeType) + (nops - 1) * sizeof(nodeType *))) == NULL)
+    yyerror("out of memory");
+
+  /* copy information */
+  p->type = typeOpr;
+  p->opr.oper = oper;
+  p->opr.nops = nops;
+  va_start(ap, nops);
+  for (i = 0; i < nops; i++)
+    p->opr.op[i] = va_arg(ap, nodeType *);
+  va_end(ap);
+  return p;
+}
+
+void freeNode(nodeType *p) {
+  int i;
+
+  if (!p)
+    return;
+  if (p->type == typeOpr) {
+    for (i = 0; i < p->opr.nops; i++)
+      freeNode(p->opr.op[i]);
   }
-  advance();
-  return true;
+  free(p);
 }
 
-static bool is_terminator() {
-  switch (parser->current.type) {
-  case TOKEN_DOUBLE_SEMICOLON:
-  case TOKEN_NL:
-  case TOKEN_EOF:
-    advance();
-    return true;
-  default:
-    return false;
-  }
-}
-
-static bool is_binop_token() {
-  switch (parser->current.type) {
-  case TOKEN_PLUS:
-  case TOKEN_MINUS:
-  case TOKEN_SLASH:
-  case TOKEN_STAR:
-  case TOKEN_MODULO:
-  case TOKEN_EQUALITY:
-  case TOKEN_NOT_EQUAL:
-  case TOKEN_LT:
-  case TOKEN_LTE:
-  case TOKEN_GT:
-  case TOKEN_GTE:
-    return true;
-  // case TOKEN_RP: return true;
-  default:
-    return false;
-  }
-}
+// void yyerror(const char *s) { fprintf(stdout, "%s\n", s); }
+//
 
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = malloc(sizeof(Ast));
@@ -68,241 +71,7 @@ Ast *Ast_new(enum ast_tag tag) {
   return node;
 }
 
-static Ast *parse_expression();
-
-static Ast *parse_grouping() {
-
-  match(TOKEN_LP);
-  Ast *first = parse_expression();
-
-  if (check(TOKEN_COMMA)) {
-    advance();
-    Ast *tuple = Ast_new(AST_TUPLE);
-    tuple->data.AST_TUPLE.len = 1;
-    tuple->data.AST_TUPLE.members = malloc(sizeof(Ast *));
-    tuple->data.AST_TUPLE.members[0] = first;
-
-    while (!match(TOKEN_RP)) {
-      size_t index = tuple->data.AST_TUPLE.len;
-      tuple->data.AST_TUPLE.len++;
-      tuple->data.AST_TUPLE.members[index] = parse_expression();
-      match(TOKEN_COMMA);
-    }
-    return tuple;
-  }
-
-  match(TOKEN_RP);
-  // printf("finish grouping: ");
-  // print_ast(first);
-  // printf("\n");
-
-  return first;
-}
-#define AST_LITERAL_PREFIX(type, val)                                          \
-  Ast *prefix = Ast_new(type);                                                 \
-  prefix->data.type.value = val
-
-static Ast *parse_prefix() {
-  switch (parser->current.type) {
-  case TOKEN_INTEGER: {
-    AST_LITERAL_PREFIX(AST_INT, parser->current.as.vint);
-    advance();
-    return prefix;
-  }
-  case TOKEN_NUMBER: {
-    AST_LITERAL_PREFIX(AST_NUMBER, parser->current.as.vfloat);
-    advance();
-    return prefix;
-  }
-  case TOKEN_STRING: {
-    AST_LITERAL_PREFIX(AST_STRING, parser->current.as.vstr);
-    advance();
-    return prefix;
-  }
-  case TOKEN_TRUE: {
-    AST_LITERAL_PREFIX(AST_BOOL, true);
-    advance();
-    return prefix;
-  }
-  case TOKEN_FALSE: {
-    AST_LITERAL_PREFIX(AST_BOOL, false);
-    advance();
-    return prefix;
-  }
-  case TOKEN_IDENTIFIER: {
-    AST_LITERAL_PREFIX(AST_IDENTIFIER, parser->current.as.vident);
-    advance();
-    return prefix;
-  }
-  // case TOKEN_FN: {
-  //   return parse_fn_declaration();
-  // }
-  case TOKEN_BANG: {
-    Ast *prefix = Ast_new(AST_UNOP);
-    prefix->data.AST_UNOP.op = parser->current.type;
-    advance();
-    prefix->data.AST_UNOP.expr = parse_expression();
-    return prefix;
-  }
-  case TOKEN_LP: {
-    return parse_grouping();
-  }
-  case TOKEN_IF:
-
-  default: {
-    // advance();
-    return NULL;
-  }
-  }
-}
-//
-// fn token_to_precedence(tok: &Token) -> Precedence {
-//     match tok {
-//     }
-// }
-
-// clang-format off
-ParserPrecedence token_to_precedence(token tok) {
-  switch (tok.type) {
-    case TOKEN_ASSIGNMENT:  return PREC_ASSIGNMENT;
-    case TOKEN_PIPE:        return PREC_NONE;
-
-    case TOKEN_EQUALITY:
-    case TOKEN_NOT_EQUAL:   return PREC_EQUALITY;
-
-    case TOKEN_LT:
-    case TOKEN_LTE:
-    case TOKEN_GT:
-    case TOKEN_GTE:         return PREC_COMPARISON;
-
-    case TOKEN_PLUS:
-    case TOKEN_MINUS:       return PREC_TERM;
-
-    case TOKEN_SLASH:
-    case TOKEN_STAR:
-    case TOKEN_MODULO:      return PREC_FACTOR;
-
-    case TOKEN_LEFT_SQ:     return PREC_INDEX;
-
-    case TOKEN_LP:
-    case TOKEN_RP:
-    case TOKEN_DOT:         return PREC_NONE;
-
-    case TOKEN_BANG:        return PREC_UNARY;
-    case TOKEN_LOGICAL_OR:  return PREC_OR;
-    case TOKEN_LOGICAL_AND: return PREC_AND;
-    default:                return PREC_NONE;
-  }
-}
-// clang-format on
-
-static Ast *parse_precedence(ParserPrecedence precedence) {
-  Ast *left = parse_prefix();
-
-  while (precedence < token_to_precedence(parser->current)) {
-    switch (parser->current.type) {
-
-    case TOKEN_PLUS:
-    case TOKEN_MINUS:
-    case TOKEN_SLASH:
-    case TOKEN_STAR:
-    case TOKEN_MODULO:
-    case TOKEN_EQUALITY:
-    case TOKEN_NOT_EQUAL:
-    case TOKEN_LT:
-    case TOKEN_LTE:
-    case TOKEN_GT:
-    case TOKEN_GTE: {
-      Ast *binop = Ast_new(AST_BINOP);
-      binop->data.AST_BINOP.op = parser->current.type;
-      binop->data.AST_BINOP.left = left;
-      advance();
-      binop->data.AST_BINOP.right =
-          parse_precedence(token_to_precedence(parser->previous));
-
-      left = binop;
-      break;
-    }
-    // case TOKEN_PIPE: {
-    //   print_current();
-    //   return left;
-    // }
-    default:
-      return left;
-    }
-  }
-
-  match(TOKEN_RP);
-  // || match(TOKEN_PIPE);
-  // if (match(TOKEN_PIPE)) {
-  //   print_ast(left);
-  //   print_current();
-  // }
-  return left;
-}
-
-Ast *nest_applications(Ast *application, Ast *item) {
-
-  if (application->data.AST_APPLICATION.applicable == NULL) {
-    application->data.AST_APPLICATION.applicable = item;
-    return application;
-  }
-
-  if (application->data.AST_APPLICATION.arg == NULL) {
-    application->data.AST_APPLICATION.arg = item;
-    return application;
-  }
-
-  Ast *new_app = Ast_new(AST_APPLICATION);
-  new_app->data.AST_APPLICATION.applicable = application;
-  new_app->data.AST_APPLICATION.arg = item;
-
-  return new_app;
-}
-
-static Ast *reduce_degenerate_application(Ast *application) {
-  if (application && application->data.AST_APPLICATION.arg == NULL) {
-    return application->data.AST_APPLICATION.applicable;
-  }
-
-  return application;
-}
-static bool application_is_empty(Ast *app) {
-  return app->data.AST_APPLICATION.applicable == NULL &&
-         app->data.AST_APPLICATION.arg == NULL;
-}
-static bool is_applicable(Ast *item) {
-  return (item->tag != AST_FN_DECLARATION) && (item->tag != AST_IDENTIFIER) &&
-         (item->tag != AST_LAMBDA);
-}
-
-static Ast *parse_expression() {
-
-  Ast *application = Ast_new(AST_APPLICATION);
-
-  while (!is_terminator() && !is_binop_token()) {
-
-    Ast *item = parse_precedence(PREC_NONE);
-
-    print_ast(item);
-    if (application_is_empty(application) && is_applicable(item)) {
-      free(application);
-      return item;
-    }
-    application = nest_applications(application, item);
-
-    if (item == NULL) {
-      break;
-    }
-  }
-  // parser->application = NULL;
-
-  return reduce_degenerate_application(application);
-}
-
-static Ast *parse_statement() { return parse_expression(); }
-
-static void push_statement(Ast *body, Ast *stmt) {
+void Ast_body_push(Ast *body, Ast *stmt) {
   if (stmt) {
     Ast **members = body->data.AST_BODY.stmts;
     body->data.AST_BODY.len++;
@@ -313,10 +82,51 @@ static void push_statement(Ast *body, Ast *stmt) {
   }
 }
 
-Ast *parse_body(Ast *body) {
-  while (!check(TOKEN_EOF)) {
-    push_statement(body, parse_statement());
-  }
-
-  return body;
+Ast *ast_binop(token_type op, Ast *left, Ast *right) {
+  Ast *node = Ast_new(AST_BINOP);
+  node->data.AST_BINOP.op = op;
+  node->data.AST_BINOP.left = left;
+  node->data.AST_BINOP.right = right;
+  return node;
 }
+
+Ast *ast_unop(token_type op, Ast *right) {
+  Ast *node = Ast_new(AST_UNOP);
+  node->data.AST_BINOP.op = op;
+  node->data.AST_BINOP.right = right;
+  return node;
+}
+
+Ast *ast_identifier(char *name) {
+  Ast *node = Ast_new(AST_IDENTIFIER);
+  node->data.AST_IDENTIFIER.value = name;
+  return node;
+}
+
+Ast *ast_let(char *name, Ast *expr) {
+  printf("let node: %s\n", name);
+  Ast *node = Ast_new(AST_LET);
+  node->data.AST_LET.name = name;
+  node->data.AST_LET.expr = expr;
+  return node;
+}
+
+void yy_scan_string(char *);
+/* Define the parsing function */
+Ast *parse_input(char *input) {
+  yy_scan_string(input); // Set the input for the lexer
+  yyparse();             // Parse the input
+
+  return ast_root; // Placeholder
+}
+
+Ast *ast_application(Ast *func, Ast *arg) {
+  Ast *app = Ast_new(AST_APPLICATION);
+  app->data.AST_APPLICATION.function = func;
+  app->data.AST_APPLICATION.arg = arg;
+  return app;
+}
+
+Ast *ast_lambda(Ast *args, Ast *body) { return NULL; }
+Ast *ast_arg_list(Ast *arg) { return NULL; }
+Ast *ast_arg_list_push(Ast *arg_list, Ast *arg) { return NULL; }

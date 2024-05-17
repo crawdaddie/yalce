@@ -1,45 +1,45 @@
+LEX_FILE = src/lex.l
+YACC_FILE = src/parser.y
+LEX_OUTPUT = src/lex.yy.c
+YACC_OUTPUT = src/y.tab.c src/y.tab.h
+
+
 SRCDIR := src
 BUILDDIR := build
 TESTDIR := test
+CC = clang -I../include -I./src -g
 
 SRCS := $(wildcard $(SRCDIR)/*.c)
-OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
+OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o) $(BUILDDIR)/y.tab.o $(BUILDDIR)/lex.yy.o
 
-# Variables
-# INCLUDE_DIR = ../include
-CC = clang -I../include -Iinclude -g
-# CFLAGS = -Werror -Wall -Wextra
-#
-# LDFLAGS =
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR) $(YACC_OUTPUT) $(LEX_OUTPUT)
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-# Targets
-all: build/audio_lang
+$(YACC_OUTPUT): $(YACC_FILE)
+	bison -yd $(YACC_FILE) -b src/y
+
+$(LEX_OUTPUT): $(LEX_FILE)
+	flex -o $(LEX_OUTPUT) $(LEX_FILE)
+
+.PHONY: all clean
+
+all: build/audio_lang 
 
 build/audio_lang: $(OBJS)
-	$(CC) -o $@ $^ $(LDFLAGS) $(FRAMEWORKS) $(COMPILER_OPTIONS)
+	$(CC) -o $@ $^
 
-# main.o: src/main.c
-# 	$(CC) $(CFLAGS) -c src/main.c
-
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR)
-	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
 
-.PHONY: clean run test
 clean:
 	rm -Rf $(BUILDDIR)
+	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT) parser
 
-run:
-	$(MAKE) all
-	./build/audio_lang -i
-
-test_parse: $(TESTDIR)/test_parse.c
-	$(CC) -o $(BUILDDIR)/$@ \
-		$(filter-out $(BUILDDIR)/main.o, $(OBJS)) \
-		$(TESTDIR)/$@.c $(LDFLAGS) \
-		$(FRAMEWORKS) $(COMPILER_OPTIONS)
-
+test_parse: $(TESTDIR)/test_parse.o $(BUILDDIR)/y.tab.o $(BUILDDIR)/lex.yy.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
+	$(CC) -o $(BUILDDIR)/$@ $^
 	./$(BUILDDIR)/test_parse
+
+$(TESTDIR)/test_parse.o: $(TESTDIR)/test_parse.c $(YACC_OUTPUT) $(LEX_OUTPUT)
+	$(CC) $(CFLAGS) -c -o $@ $< 
 

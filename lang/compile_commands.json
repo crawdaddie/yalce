@@ -1,0 +1,18 @@
+[
+  {
+    "arguments": [
+      "/opt/homebrew/opt/llvm@16/bin/clang",
+      "-I./src",
+      "-g",
+      "-c",
+      "-I",
+      "/opt/homebrew/include",
+      "-o",
+      "build/main.o",
+      "src/main.c"
+    ],
+    "directory": "/Users/adam/projects/langs/lex_yacc_ml",
+    "file": "/Users/adam/projects/langs/lex_yacc_ml/src/main.c",
+    "output": "/Users/adam/projects/langs/lex_yacc_ml/build/main.o"
+  }
+]

@@ -1,11 +1,12 @@
-#include "eval.h"
-#include "lex.h"
 #include "parse.h"
+#include "y.tab.h"
+
 #include "serde.h"
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+void eval(Ast *ast){};
 
 #define INPUT_BUFSIZE 2048
 void repl_input(char *input, int bufsize, const char *prompt) {
@@ -46,12 +47,6 @@ void repl_input(char *input, int bufsize, const char *prompt) {
   printf("\033[1;0m");
 }
 
-Ast *ast_body_peek(Ast *body) {
-  if (body->data.AST_BODY.len == 0 || body->data.AST_BODY.stmts == NULL) {
-    return NULL;
-  }
-  return body->data.AST_BODY.stmts[body->data.AST_BODY.len - 1];
-}
 char *read_script(const char *filename) {
 
   FILE *fp = fopen(filename, "r");
@@ -88,17 +83,7 @@ int eval_script(const char *filename) {
     return 1;
   }
 
-  Lexer lexer;
-  init_lexer(fcontent, &lexer);
-
-  Parser parser;
-  init_parser(&parser, &lexer);
-
-  Ast *prog = Ast_new(AST_BODY);
-  prog->data.AST_BODY.len = 0;
-  prog->data.AST_BODY.stmts = malloc(sizeof(Ast *));
-
-  prog = parse_body(prog);
+  Ast *prog = parse_input(fcontent);
   print_ast(prog);
 
   for (int i = 0; i < prog->data.AST_BODY.len; i++) {
@@ -127,24 +112,16 @@ int main(int argc, char **argv) {
            "version 0.0.0       \n"
            "\033[1;0m");
 
-    Ast *prog = Ast_new(AST_BODY);
-    prog->data.AST_BODY.len = 0;
-    prog->data.AST_BODY.stmts = malloc(sizeof(Ast *));
     char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
 
     while (true) {
-      Lexer lexer;
       repl_input(input, INPUT_BUFSIZE, NULL);
-      init_lexer(input, &lexer);
+      Ast *prog = parse_input(input);
 
-      Parser parser;
-      init_parser(&parser, &lexer);
-
-      prog = parse_body(prog);
+      printf("prog:\n");
       print_ast(prog);
 
-      Ast *top = ast_body_peek(prog);
-      eval(top);
+      eval(prog);
     }
     free(input);
   }
