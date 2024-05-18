@@ -105,10 +105,10 @@ Ast *ast_identifier(char *name) {
 }
 
 Ast *ast_let(char *name, Ast *expr) {
-  printf("let node: %s\n", name);
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.name = name;
   node->data.AST_LET.expr = expr;
+  print_ast(node);
   return node;
 }
 

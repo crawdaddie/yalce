@@ -7,6 +7,7 @@
 %%
 
 "fn"                    { return FN; }
+"let"                   return LET;
 [a-zA-Z_][a-zA-Z0-9_]*  {
                           yylval.vident = strdup(yytext); // Store the matched identifier in yylval
                           return IDENTIFIER; // Return the IDENTIFIER token
@@ -42,8 +43,6 @@
                           return *yytext;
                         }
 "%"             return MODULO;
-
-
 ">="            return GE;
 "<="            return LE;
 "=="            return EQ;
@@ -55,7 +54,6 @@
 "|>"            return PIPE;
 "true"          return TRUE;
 "false"         return FALSE;
-"let"           return LET;
 "->"            { return ARROW; }
 [ \t\n]+        ;       /* ignore whitespace */
 "#".*           ;       /* ignore comments starting with # */

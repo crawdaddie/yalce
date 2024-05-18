@@ -72,6 +72,8 @@ int main() {
 
   status &= test_parse("(1 + 2) * (8 + 5);", "(* (+ 1 2) (+ 8 5))");
 
+  status &= test_parse("2 % 7;", "(% 2 7)");
+
   status &= test_parse("f 1 2 3 4;", "((((f 1) 2) 3) 4)");
 
   status &= test_parse("(f 1 2);", "((f 1) 2)");
@@ -100,6 +102,19 @@ int main() {
 
   // lambda declaration
   status &= test_parse("(fn x y -> x + y);", "(λ x y -> (+ x y))");
+  status &=
+      test_parse("(fn x y z -> x + y + z);", "(λ x y z -> (+ (+ x y) z))");
+
+  status &= test_parse("(fn x y z -> \n"
+                       "x + y + z; \n"
+                       "x + y;\n"
+                       ");",
+                       "(λ x y z -> \n"
+                       "(+ (+ x y) z)\n"
+                       "(+ x y))");
+
+  // let declaration
+  status &= test_parse("let x = 1 + y;", "(let x (+ 1 y))");
 
   return status ? 0 : 1;
 }
