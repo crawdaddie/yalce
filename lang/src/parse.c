@@ -72,7 +72,7 @@ Ast *Ast_new(enum ast_tag tag) {
   return node;
 }
 
-void Ast_body_push(Ast *body, Ast *stmt) {
+void ast_body_push(Ast *body, Ast *stmt) {
   if (stmt) {
     Ast **members = body->data.AST_BODY.stmts;
     body->data.AST_BODY.len++;
@@ -128,28 +128,38 @@ Ast *ast_application(Ast *func, Ast *arg) {
   return app;
 }
 
-Ast *ast_lambda(Ast *args, Ast *body) {
-  printf("lambda\n");
-  Ast *lambda = Ast_new(AST_LAMBDA);
-  lambda->data.AST_LAMBDA.len = args->data.AST_LAMBDA_ARGS.len;
-  lambda->data.AST_LAMBDA.params = args->data.AST_LAMBDA_ARGS.ids;
+Ast *ast_lambda(Ast *lambda, Ast *body) {
+  lambda->data.AST_LAMBDA.body = body;
   return lambda;
 }
 
 Ast *ast_arg_list(char *arg) {
-
-  printf("arg list\n");
-  Ast *list = Ast_new(AST_LAMBDA_ARGS);
-  list->data.AST_LAMBDA_ARGS.ids = malloc(sizeof(char *));
-  list->data.AST_LAMBDA_ARGS.len = 1;
-  list->data.AST_LAMBDA_ARGS.ids[0] = arg;
-  return list;
+  Ast *lambda = Ast_new(AST_LAMBDA);
+  lambda->data.AST_LAMBDA.params = malloc(sizeof(char *));
+  lambda->data.AST_LAMBDA.len = 1;
+  lambda->data.AST_LAMBDA.params[0] = arg;
+  return lambda;
 }
-Ast *ast_arg_list_push(Ast *arg_list, char *arg) {
-  char **ids = arg_list->data.AST_LAMBDA_ARGS.ids;
-  arg_list->data.AST_LAMBDA_ARGS.len++;
-  size_t len = arg_list->data.AST_LAMBDA_ARGS.len;
 
-  arg_list->data.AST_LAMBDA_ARGS.ids = realloc(ids, sizeof(char *) * len);
-  arg_list->data.AST_LAMBDA_ARGS.ids[len - 1] = arg;
+Ast *ast_arg_list_push(Ast *lambda, char *arg) {
+  const char **params = lambda->data.AST_LAMBDA.params;
+  lambda->data.AST_LAMBDA.len++;
+  size_t len = lambda->data.AST_LAMBDA.len;
+
+  lambda->data.AST_LAMBDA.params = realloc(params, sizeof(char *) * len);
+  lambda->data.AST_LAMBDA.params[len - 1] = arg;
+  return lambda;
+}
+
+Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
+  if (stmts->tag == AST_BODY) {
+    ast_body_push(stmts, new_stmt);
+    return stmts;
+  }
+
+  Ast *body = Ast_new(AST_BODY);
+  body->data.AST_BODY.stmts = malloc(sizeof(Ast *));
+  ast_body_push(body, stmts);
+  ast_body_push(body, new_stmt);
+  return body;
 }

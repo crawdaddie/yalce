@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include "parse.h"
+#include "serde.h"
 
 /* prototypes */
 extern void yyerror(const char *s);
@@ -45,33 +46,31 @@ Ast* ast_root = NULL;
 %nonassoc IFX
 %nonassoc ELSE
 
+%left PIPE
 %left MODULO
 %left GE LE EQ NE '>' '<'
 %left '+' '-'
 %left '*' '/'
-%left PIPE
 
 %nonassoc UMINUS
 
-%type <ast_node_ptr> stmt expr stmt_list application pipe_expr lambda_expr lambda_args
+%type <ast_node_ptr> stmt expr stmt_list application lambda_expr lambda_args lambda_body
 
 %%
 
 program:
-  function                {return 0;}
-  ;
-
-function:
-  function stmt           {
+  stmt_list               {
                             if (ast_root == NULL) {
                               ast_root = Ast_new(AST_BODY);
                               ast_root->data.AST_BODY.len = 0;
                               ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
                             }
-                            Ast_body_push(ast_root, $2);
+                            ast_body_push(ast_root, $1);
                           }
+
   | /* NULL */
   ;
+
 
 stmt:
     ';'                            { $$ = opr(';', 2, NULL, NULL); }
@@ -80,12 +79,15 @@ stmt:
   | WHILE '(' expr ')' stmt        { $$ = opr(WHILE, 2, $3, $5); }
   | IF '(' expr ')' stmt %prec IFX { $$ = opr(IF, 2, $3, $5); }
   | IF '(' expr ')' stmt ELSE stmt { $$ = opr(IF, 3, $3, $5, $7); }
-  | '{' stmt_list '}'              { $$ = $2; }
   ;
 
 stmt_list:
-    stmt                  { $$ = $1; }
-  | stmt_list stmt        { $$ = opr(';', 2, $1, $2); }
+    stmt                  {
+                            $$ = $1;
+                          }
+  | stmt_list stmt        {
+                            $$ = parse_stmt_list($1, $2);
+                          }
   ;
 expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
@@ -106,28 +108,29 @@ expr:
   | expr LE expr          { $$ = ast_binop(TOKEN_LTE, $1, $3); }
   | expr NE expr          { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }
   | expr EQ expr          { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
+  | expr PIPE expr        { $$ = ast_application($3, $1); }
   | '(' expr ')'          { $$ = $2; }
   | lambda_expr           { $$ = $1; }
-  | pipe_expr             { $$ = $1; }
+  | application           { $$ = $1; }
   ;
 
 lambda_expr:
-  FN lambda_args %prec ARROW  {
-                                $$ = ast_lambda($2, NULL);
-                              }
+  FN lambda_args ARROW lambda_body { $$ = ast_lambda($2, $4); }
   ;
+
+lambda_body:
+  expr                    { $$ = $1;
+  }
+  | stmt_list             {
+  $$ = $1; }
+; 
+
 
 lambda_args:
     IDENTIFIER              { $$ = ast_arg_list($1); }
   | lambda_args IDENTIFIER  { $$ = ast_arg_list_push($1, $2); }
   ;
 
-pipe_expr:
-    expr PIPE pipe_expr   { $$ = ast_application($3, $1); }
-  | expr PIPE application { $$ = ast_application($3, $1); }
-  | expr PIPE expr        { $$ = ast_application($3, $1); }
-  | application
-  ;
 
 application:
     IDENTIFIER expr       { $$ = ast_application(ast_identifier($1), $2); }

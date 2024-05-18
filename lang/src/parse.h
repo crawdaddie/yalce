@@ -201,7 +201,7 @@ struct Ast {
       Ast *body;
     } AST_LAMBDA;
     struct AST_LAMBDA_ARGS {
-      char **ids;
+      const char **ids;
       size_t len;
     } AST_LAMBDA_ARGS;
   } data;
@@ -209,7 +209,7 @@ struct Ast {
 
 Ast *Ast_new(enum ast_tag tag);
 
-void Ast_body_push(Ast *body, Ast *stmt);
+void ast_body_push(Ast *body, Ast *stmt);
 
 /* External declaration of ast root */
 extern Ast *ast_root;
@@ -222,6 +222,8 @@ Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
 Ast *ast_arg_list(char *arg);
 Ast *ast_arg_list_push(Ast *arg_list, char *arg);
+Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 
 Ast *parse_input(char *input);
+
 #endif

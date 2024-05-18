@@ -52,6 +52,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   }
 
   case AST_STRING: {
+
     buffer = strcat(buffer, "\"");
     buffer = strcat(buffer, ast->data.AST_STRING.value);
     buffer = strcat(buffer, "\"");
@@ -141,14 +142,22 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   }
 
   case AST_LAMBDA: {
-
     buffer = strcat(buffer, "(λ ");
     for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
       buffer = strcat(buffer, ast->data.AST_LAMBDA.params[i]);
       buffer = strcat(buffer, " ");
     }
+
+    buffer = strcat(buffer, "-> ");
+    buffer = ast_to_sexpr(ast->data.AST_LAMBDA.body, buffer);
     buffer = strcat(buffer, ")");
 
+    break;
+  }
+
+  case AST_LAMBDA_ARGS: {
+
+    buffer = strcat(buffer, "(arg list )");
     break;
   }
 

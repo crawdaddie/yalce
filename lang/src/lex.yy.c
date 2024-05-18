@@ -782,7 +782,7 @@ do_action:	/* This label is used only to access EOF actions. */
 case 1:
 YY_RULE_SETUP
 #line 9 "src/lex.l"
-return FN;
+{ return FN; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
@@ -915,7 +915,7 @@ return LET;
 case 23:
 YY_RULE_SETUP
 #line 59 "src/lex.l"
-{ printf("lexing -> \n"); return ARROW; }
+{ return ARROW; }
 	YY_BREAK
 case 24:
 /* rule 24 can match eol */

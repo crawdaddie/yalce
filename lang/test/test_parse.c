@@ -59,6 +59,7 @@ int main() {
   status &= test_parse("-4f;", "-4.000000");
 
   status &= test_parse("(1 + 2);", "(+ 1 2)");
+  status &= test_parse("x + y;", "(+ x y)");
 
   // # multiple binop expression",
   status &= test_parse("1 + 2 - 3 * 4 + 5;", "(+ (- (+ 1 2) (* 3 4)) 5)");
@@ -86,9 +87,19 @@ int main() {
   // status &= test_parse("3 |> f 1 2;", "(|> ((f 1) 2) 3)");
 
   status &= test_parse("3 |> f 1 2;", "(((f 1) 2) 3)");
+
   status &= test_parse("3 |> f;", "(f 3)");
+
   status &= test_parse("3 + 1 |> f;", "(f (+ 3 1))");
-  status &= test_parse("g 3 4 |> f 1 2;", "(((f 1) 2) ((g 3) 4))");
-  status &= test_parse("fn x y -> x + y;", "(fn (x y) -> (+ x y))");
+
+  status &= test_parse("(g 3 4) |> f 1 2;", "(((f 1) 2) ((g 3) 4))");
+
+  status &= test_parse("(g 3 4 + 1) |> f 1 2;", "(((f 1) 2) ((g 3) (+ 4 1)))");
+
+  status &= test_parse("x + y;\nx + z;", "\n(+ x y)\n(+ x z)");
+
+  // lambda declaration
+  status &= test_parse("(fn x y -> x + y);", "(λ x y -> (+ x y))");
+
   return status ? 0 : 1;
 }

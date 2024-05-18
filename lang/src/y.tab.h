@@ -90,7 +90,7 @@
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 27 "src/parser.y"
+#line 28 "src/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
     char *vident;               /* identifier */
