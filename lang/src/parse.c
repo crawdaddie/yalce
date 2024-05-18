@@ -108,7 +108,7 @@ Ast *ast_let(char *name, Ast *expr) {
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.name = name;
   node->data.AST_LET.expr = expr;
-  print_ast(node);
+  // print_ast(node);
   return node;
 }
 

@@ -161,8 +161,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   }
 
   case AST_LAMBDA_ARGS: {
-
-    buffer = strcat(buffer, "(arg list )");
     break;
   }
 
