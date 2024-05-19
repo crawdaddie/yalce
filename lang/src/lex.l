@@ -9,12 +9,13 @@
 "fn"                    { return FN; }
 "let"                   return LET;
 [a-zA-Z_][a-zA-Z0-9_]*  {
-                          yylval.vident = strdup(yytext); // Store the matched identifier in yylval
-                          return IDENTIFIER; // Return the IDENTIFIER token
+                          yylval.vident = strdup(yytext); 
+                          return IDENTIFIER;
                         }
 \"([^\"\n]|\\.)*\"      {
-                          yylval.vstr = strdup(yytext); // Store the matched string in yylval
-                          return STRING; // Return the STRING token
+                          int len = yyleng - 2;
+                          yylval.vstr = strndup(yytext + 1, len); // remove surrounding " chars
+                          return STRING;
                         }
 
 -?0                     { 

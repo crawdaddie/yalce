@@ -54,12 +54,13 @@ Ast* ast_root = NULL;
 
 %nonassoc UMINUS
 
-%type <ast_node_ptr> stmt expr stmt_list application lambda_expr lambda_args lambda_body
+%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args lambda_body
+
 
 %%
 
 program:
-  stmt_list               {
+  stmt_list_opt           {
                             if (ast_root == NULL) {
                               ast_root = Ast_new(AST_BODY);
                               ast_root->data.AST_BODY.len = 0;
@@ -73,20 +74,26 @@ program:
 
 
 stmt:
-    ';'                            { $$ = opr(';', 2, NULL, NULL); }
-  | expr ';'                       { $$ = $1; }
-  | LET IDENTIFIER '=' expr ';'    { $$ = ast_let($2, $4); }
-  | WHILE '(' expr ')' stmt        { $$ = opr(WHILE, 2, $3, $5); }
-  | IF '(' expr ')' stmt %prec IFX { $$ = opr(IF, 2, $3, $5); }
-  | IF '(' expr ')' stmt ELSE stmt { $$ = opr(IF, 3, $3, $5, $7); }
+  expr                              { $$ = $1; }
+  | LET IDENTIFIER '=' expr         { $$ = ast_let($2, $4); }
+  | WHILE '(' expr ')' stmt         { $$ = opr(WHILE, 2, $3, $5); }
+  | IF '(' expr ')' stmt %prec IFX  { $$ = opr(IF, 2, $3, $5); }
+  | IF '(' expr ')' stmt ELSE stmt  { $$ = opr(IF, 3, $3, $5, $7); }
+  ;
+
+stmt_list_opt:
+    stmt_list ';'         { $$ = $1; }
+  | stmt_list             { $$ = $1; }
+  | /* empty */           { $$ = NULL; }
   ;
 
 stmt_list:
     stmt                  {
                             $$ = $1;
                           }
-  | stmt_list stmt        {
-                            $$ = parse_stmt_list($1, $2);
+
+  | stmt_list ';' stmt    {
+                            $$ = parse_stmt_list($1, $3);
                           }
   ;
 expr:

@@ -106,8 +106,8 @@ int main() {
       test_parse("(fn x y z -> x + y + z);", "(λ x y z -> (+ (+ x y) z))");
 
   status &= test_parse("(fn x y z -> \n"
-                       "x + y + z; \n"
-                       "x + y;\n"
+                       "  x + y + z;\n"
+                       "  x + y\n"
                        ");",
                        "(λ x y z -> \n"
                        "(+ (+ x y) z)\n"

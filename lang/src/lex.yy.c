@@ -793,21 +793,22 @@ case 3:
 YY_RULE_SETUP
 #line 11 "src/lex.l"
 {
-                          yylval.vident = strdup(yytext); // Store the matched identifier in yylval
-                          return IDENTIFIER; // Return the IDENTIFIER token
+                          yylval.vident = strdup(yytext); 
+                          return IDENTIFIER;
                         }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
 #line 15 "src/lex.l"
 {
-                          yylval.vstr = strdup(yytext); // Store the matched string in yylval
-                          return STRING; // Return the STRING token
+                          int len = yyleng - 2;
+                          yylval.vstr = strndup(yytext + 1, len); // remove surrounding " chars
+                          return STRING;
                         }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 20 "src/lex.l"
+#line 21 "src/lex.l"
 { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
@@ -815,7 +816,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 25 "src/lex.l"
+#line 26 "src/lex.l"
 { 
                           yylval.vfloat = atof(yytext);
                           return NUMBER;
@@ -823,7 +824,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 29 "src/lex.l"
+#line 30 "src/lex.l"
 { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
@@ -831,7 +832,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 33 "src/lex.l"
+#line 34 "src/lex.l"
 {
                         yylval.vfloat = atof(yytext);
                         return NUMBER;
@@ -839,7 +840,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 37 "src/lex.l"
+#line 38 "src/lex.l"
 {
                         yylval.vfloat = atof(yytext);
                         return NUMBER;
@@ -847,98 +848,98 @@ YY_RULE_SETUP
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 42 "src/lex.l"
+#line 43 "src/lex.l"
 {
                           return *yytext;
                         }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 45 "src/lex.l"
+#line 46 "src/lex.l"
 return MODULO;
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 46 "src/lex.l"
+#line 47 "src/lex.l"
 return GE;
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 47 "src/lex.l"
+#line 48 "src/lex.l"
 return LE;
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 48 "src/lex.l"
+#line 49 "src/lex.l"
 return EQ;
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 49 "src/lex.l"
+#line 50 "src/lex.l"
 return NE;
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 50 "src/lex.l"
+#line 51 "src/lex.l"
 return WHILE;
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 51 "src/lex.l"
+#line 52 "src/lex.l"
 return IF;
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 52 "src/lex.l"
+#line 53 "src/lex.l"
 return ELSE;
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 53 "src/lex.l"
+#line 54 "src/lex.l"
 return PRINT;
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 54 "src/lex.l"
+#line 55 "src/lex.l"
 return PIPE;
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 55 "src/lex.l"
+#line 56 "src/lex.l"
 return TRUE;
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 56 "src/lex.l"
+#line 57 "src/lex.l"
 return FALSE;
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 57 "src/lex.l"
+#line 58 "src/lex.l"
 { return ARROW; }
 	YY_BREAK
 case 24:
 /* rule 24 can match eol */
 YY_RULE_SETUP
-#line 58 "src/lex.l"
+#line 59 "src/lex.l"
 ;       /* ignore whitespace */
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 59 "src/lex.l"
+#line 60 "src/lex.l"
 ;       /* ignore comments starting with # */
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 61 "src/lex.l"
+#line 62 "src/lex.l"
 { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 62 "src/lex.l"
+#line 63 "src/lex.l"
 ECHO;
 	YY_BREAK
-#line 941 "src/lex.yy.c"
+#line 942 "src/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1943,7 +1944,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 62 "src/lex.l"
+#line 63 "src/lex.l"
 
 int yywrap(void) {
     return 1;
