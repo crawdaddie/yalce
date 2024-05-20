@@ -12,7 +12,6 @@ extern void yyerror(const char *s);
 extern int yylineno;
 extern char *yytext;
 
-
 Ast* ast_root = NULL;
 
 #define AST_CONST(type, val)                                            \
@@ -27,8 +26,8 @@ Ast* ast_root = NULL;
 
 %union {
     Ast *ast_node_ptr;          /* node pointer */
-    char *vident;               /* identifier */
-    char *vstr;                 /* string */
+    LexId vident;               /* identifier */
+    LexString vstr;                 /* string */
     int vint;                   /* int val */
     double vfloat;
 };
@@ -98,7 +97,7 @@ stmt_list:
 expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
   | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
-  | STRING                { $$ = AST_CONST(AST_STRING, $1); }
+  | STRING                { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
   | IDENTIFIER            { $$ = ast_identifier($1); }

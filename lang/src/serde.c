@@ -33,7 +33,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   case AST_LET: {
     buffer = strcat(buffer, "(let ");
-    buffer = strcat(buffer, ast->data.AST_LET.name);
+    buffer = strcat(buffer, ast->data.AST_LET.name.chars);
     buffer = strcat(buffer, " ");
     buffer = ast_to_sexpr(ast->data.AST_LET.expr, buffer);
     buffer = strcat(buffer, ")");
@@ -153,15 +153,15 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   case AST_LAMBDA: {
     buffer = strcat(buffer, "(");
-    if (ast->data.AST_LAMBDA.fn_name != NULL) {
-      buffer = strcat(buffer, ast->data.AST_LAMBDA.fn_name);
+    if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
+      buffer = strcat(buffer, ast->data.AST_LAMBDA.fn_name.chars);
       buffer = strcat(buffer, " ");
     }
     if (ast->data.AST_LAMBDA.len == 0) {
       buffer = strcat(buffer, "() ");
     } else {
       for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-        buffer = strcat(buffer, ast->data.AST_LAMBDA.params[i]);
+        buffer = strcat(buffer, ast->data.AST_LAMBDA.params[i].chars);
         buffer = strcat(buffer, " ");
       }
     }

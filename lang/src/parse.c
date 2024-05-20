@@ -33,13 +33,16 @@ Ast *ast_unop(token_type op, Ast *right) {
   return node;
 }
 
-Ast *ast_identifier(char *name) {
+Ast *ast_identifier(LexId lex_id) {
+  char *name = lex_id.chars;
+  int length = lex_id.length;
   Ast *node = Ast_new(AST_IDENTIFIER);
   node->data.AST_IDENTIFIER.value = name;
+  node->data.AST_IDENTIFIER.length = length;
   return node;
 }
 
-Ast *ast_let(char *name, Ast *expr) {
+Ast *ast_let(LexId name, Ast *expr) {
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.name = name;
   if (expr->tag == AST_LAMBDA) {
@@ -76,20 +79,20 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   return lambda;
 }
 
-Ast *ast_arg_list(char *arg) {
+Ast *ast_arg_list(LexId arg) {
   Ast *lambda = Ast_new(AST_LAMBDA);
-  lambda->data.AST_LAMBDA.params = malloc(sizeof(char *));
+  lambda->data.AST_LAMBDA.params = malloc(sizeof(LexId));
   lambda->data.AST_LAMBDA.len = 1;
   lambda->data.AST_LAMBDA.params[0] = arg;
   return lambda;
 }
 
-Ast *ast_arg_list_push(Ast *lambda, char *arg) {
-  const char **params = lambda->data.AST_LAMBDA.params;
+Ast *ast_arg_list_push(Ast *lambda, LexId arg) {
+  LexId *params = lambda->data.AST_LAMBDA.params;
   lambda->data.AST_LAMBDA.len++;
   size_t len = lambda->data.AST_LAMBDA.len;
 
-  lambda->data.AST_LAMBDA.params = realloc(params, sizeof(char *) * len);
+  lambda->data.AST_LAMBDA.params = realloc(params, sizeof(LexId) * len);
   lambda->data.AST_LAMBDA.params[len - 1] = arg;
   return lambda;
 }
@@ -107,3 +110,9 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
   return body;
 }
 Ast *ast_void() { return Ast_new(AST_VOID); }
+Ast *ast_string(LexString lex_string) {
+  Ast *s = Ast_new(AST_STRING);
+  s->data.AST_STRING.value = lex_string.chars;
+  s->data.AST_STRING.length = lex_string.length;
+  return s;
+}

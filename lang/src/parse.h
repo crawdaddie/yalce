@@ -2,8 +2,17 @@
 #define _LANG_PARSE_H
 #include <stdbool.h>
 #include <stdio.h>
-
 typedef struct Ast Ast;
+
+typedef struct {
+  char *chars;
+  int length;
+} LexString;
+
+typedef struct {
+  char *chars;
+  int length;
+} LexId;
 
 // parser prototypes
 extern FILE *yyin;
@@ -104,7 +113,7 @@ struct Ast {
     } AST_BODY;
 
     struct AST_LET {
-      char *name;
+      LexId name;
       Ast *expr;
     } AST_LET;
 
@@ -118,10 +127,12 @@ struct Ast {
 
     struct AST_STRING {
       char *value;
+      int length;
     } AST_STRING;
 
     struct AST_IDENTIFIER {
       char *value;
+      int length;
     } AST_IDENTIFIER;
 
     struct AST_BOOL {
@@ -152,20 +163,20 @@ struct Ast {
 
     struct AST_FN_DECLARATION {
       size_t len;
-      const char **params;
-      const char *fn_name;
+      LexId *params;
+      LexId *fn_name;
       Ast *body;
     } AST_FN_DECLARATION;
 
     struct AST_LAMBDA {
       size_t len;
-      const char **params;
-      const char *fn_name;
+      LexId *params;
+      LexId fn_name;
       Ast *body;
     } AST_LAMBDA;
 
     struct AST_LAMBDA_ARGS {
-      const char **ids;
+      LexId *ids;
       size_t len;
     } AST_LAMBDA_ARGS;
   } data;
@@ -180,14 +191,15 @@ extern Ast *ast_root;
 
 Ast *ast_binop(token_type op, Ast *left, Ast *right);
 Ast *ast_unop(token_type op, Ast *right);
-Ast *ast_identifier(char *name);
-Ast *ast_let(char *name, Ast *expr);
+Ast *ast_identifier(LexId lex_id);
+Ast *ast_let(LexId name, Ast *expr);
 Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
-Ast *ast_arg_list(char *arg);
-Ast *ast_arg_list_push(Ast *arg_list, char *arg);
+Ast *ast_arg_list(LexId arg);
+Ast *ast_arg_list_push(Ast *arg_list, LexId arg);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input);
 Ast *ast_void();
+Ast *ast_string(LexString lex_string);
 
 #endif

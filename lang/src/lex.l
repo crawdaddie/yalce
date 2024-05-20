@@ -15,12 +15,16 @@
 ";;"                    return DOUBLE_SEMICOLON;
 "in"                    return IN;
 [a-zA-Z_][a-zA-Z0-9_]*  {
-                          yylval.vident = strdup(yytext); 
+
+                          int len = yyleng;
+                          yylval.vident.chars = strdup(yytext); 
+                          yylval.vident.length = len;
                           return IDENTIFIER;
                         }
 \"([^\"\n]|\\.)*\"      {
                           int len = yyleng - 2;
-                          yylval.vstr = strndup(yytext + 1, len); // remove surrounding " chars
+                          yylval.vstr.chars = strndup(yytext + 1, len); // remove surrounding " chars
+                          yylval.vstr.length = len;
                           return STRING;
                         }
 

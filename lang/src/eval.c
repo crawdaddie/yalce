@@ -2,6 +2,15 @@
 #include <math.h>
 #include <stdlib.h>
 
+static uint32_t hash_string(const char *key, int length) {
+  uint32_t hash = 2166136261u;
+  for (int i = 0; i < length; i++) {
+    hash ^= (uint8_t)key[i];
+    hash *= 16777619;
+  }
+  return hash;
+}
+
 #define NUMERIC_OPERATION(op, l, r)                                            \
   do {                                                                         \
     if ((l)->type == VALUE_INT && (r)->type == VALUE_INT) {                    \
@@ -45,17 +54,14 @@ static Value *add_ops(Value *l, Value *r) {
   NUMERIC_OPERATION(+, l, r);
   return NULL;
 }
-
 static Value *sub_ops(Value *l, Value *r) {
   NUMERIC_OPERATION(-, l, r);
   return NULL;
 }
-
 static Value *mul_ops(Value *l, Value *r) {
   NUMERIC_OPERATION(*, l, r);
   return NULL;
 }
-
 static Value *div_ops(Value *l, Value *r) {
   NUMERIC_OPERATION(-, l, r);
   return NULL;
@@ -95,8 +101,18 @@ static Value *gte_ops(Value *l, Value *r) {
   NUMERIC_COMPARISON_OPERATION(>=, l, r);
   return NULL;
 }
+inline static bool is_numeric(Value *l) {
+  return l->type == VALUE_INT || l->type == VALUE_NUMBER;
+}
 static Value *eq_ops(Value *l, Value *r) {
-  NUMERIC_COMPARISON_OPERATION(==, l, r);
+  if (is_numeric(l) && is_numeric(r)) {
+    NUMERIC_COMPARISON_OPERATION(==, l, r);
+  } else if (l->type == VALUE_STRING && r->type == VALUE_STRING) {
+    l->type = VALUE_BOOL;
+    l->value.vbool = (l->value.vstr.length == r->value.vstr.length) &&
+                     (l->value.vstr.hash == r->value.vstr.hash);
+    return l;
+  }
   return NULL;
 }
 static Value *neq_ops(Value *l, Value *r) {
@@ -120,6 +136,10 @@ Value *eval(Ast *ast, Value *val) {
     }
     return final;
   }
+  case AST_LET: {
+    Value *expr = eval(ast->data.AST_LET.expr, val);
+    return expr;
+  }
 
   case AST_NUMBER: {
     val->type = VALUE_NUMBER;
@@ -135,7 +155,10 @@ Value *eval(Ast *ast, Value *val) {
 
   case AST_STRING: {
     val->type = VALUE_STRING;
-    val->value.vstr = ast->data.AST_STRING.value;
+    char *chars = ast->data.AST_STRING.value;
+    int length = ast->data.AST_STRING.length;
+    val->value.vstr = (ObjString){
+        .chars = chars, .length = length, .hash = hash_string(chars, length)};
     return val;
   }
 
@@ -146,8 +169,14 @@ Value *eval(Ast *ast, Value *val) {
   }
   case AST_BINOP: {
     Value *l = eval(ast->data.AST_BINOP.left, val);
-    Value *r = malloc(sizeof(Value));
-    r = eval(ast->data.AST_BINOP.right, r);
+    // Value _r;
+    // Value *r = &_r;
+    Value *r = eval(ast->data.AST_BINOP.right, malloc(sizeof(Value)));
+
+    if (l == NULL || r == NULL) {
+      return NULL;
+    }
+
     switch (ast->data.AST_BINOP.op) {
     case TOKEN_PLUS: {
       l = add_ops(l, r);
@@ -194,8 +223,15 @@ Value *eval(Ast *ast, Value *val) {
       break;
     }
     }
-    free(r);
     return l;
+  }
+  case AST_LAMBDA: {
+    val->type = VALUE_FN;
+    val->value.function.len = ast->data.AST_LAMBDA.len;
+    val->value.function.params = ast->data.AST_LAMBDA.params;
+    val->value.function.fn_name = ast->data.AST_LAMBDA.fn_name.chars;
+    val->value.function.body = ast->data.AST_LAMBDA.body;
+    return val;
   }
   }
 }
@@ -215,7 +251,10 @@ void print_value(Value *val) {
     break;
 
   case VALUE_STRING:
-    printf("[%s]", val->value.vstr);
+    // printf("[%s] (%d %d)", val->value.vstr.chars, val->value.vstr.length,
+    //        val->value.vstr.hash);
+
+    printf("[%s]", val->value.vstr.chars);
     break;
 
   case VALUE_BOOL:
@@ -224,6 +263,10 @@ void print_value(Value *val) {
 
   case VALUE_VOID:
     printf("[()]");
+    break;
+
+  case VALUE_FN:
+    printf("[function [%p]]", val);
     break;
   }
 }

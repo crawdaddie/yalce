@@ -124,6 +124,7 @@ int main(int argc, char **argv) {
       print_ast(prog);
 
       print_value(eval(prog, NULL));
+      printf("\n");
     }
     free(input);
   }

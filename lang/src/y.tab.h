@@ -98,11 +98,11 @@
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 28 "src/parser.y"
+#line 27 "src/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
-    char *vident;               /* identifier */
-    char *vstr;                 /* string */
+    LexId vident;               /* identifier */
+    LexString vstr;                 /* string */
     int vint;                   /* int val */
     double vfloat;
 }
