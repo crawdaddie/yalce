@@ -4,7 +4,7 @@
 #include <string.h>
 
 void print_ast(Ast *ast) {
-  char *buf = malloc(sizeof(char));
+  char *buf = malloc(sizeof(char) * 300);
   printf("%s\n", ast_to_sexpr(ast, buf));
   free(buf);
 }
@@ -70,6 +70,11 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     } else {
       buffer = strcat(buffer, "false");
     }
+    break;
+  }
+
+  case AST_VOID: {
+    buffer = strcat(buffer, "()");
     break;
   }
   case AST_IDENTIFIER: {
@@ -147,15 +152,23 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   }
 
   case AST_LAMBDA: {
-    buffer = strcat(buffer, "(λ ");
-    for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-      buffer = strcat(buffer, ast->data.AST_LAMBDA.params[i]);
+    buffer = strcat(buffer, "(");
+    if (ast->data.AST_LAMBDA.fn_name != NULL) {
+      buffer = strcat(buffer, ast->data.AST_LAMBDA.fn_name);
       buffer = strcat(buffer, " ");
+    }
+    if (ast->data.AST_LAMBDA.len == 0) {
+      buffer = strcat(buffer, "() ");
+    } else {
+      for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+        buffer = strcat(buffer, ast->data.AST_LAMBDA.params[i]);
+        buffer = strcat(buffer, " ");
+      }
     }
 
     buffer = strcat(buffer, "-> ");
     buffer = ast_to_sexpr(ast->data.AST_LAMBDA.body, buffer);
-    buffer = strcat(buffer, ")");
+    buffer = strcat(buffer, ")\n");
 
     break;
   }

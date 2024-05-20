@@ -6,8 +6,14 @@
 
 %%
 
-"fn"                    { return FN; }
+"fn"                    return FN;
 "let"                   return LET;
+"()"                    return VOID;
+"extern"                return EXTERN;
+"true"                  return TRUE;
+"false"                 return FALSE;
+";;"                    return DOUBLE_SEMICOLON;
+"in"                    return IN;
 [a-zA-Z_][a-zA-Z0-9_]*  {
                           yylval.vident = strdup(yytext); 
                           return IDENTIFIER;
@@ -48,13 +54,7 @@
 "<="            return LE;
 "=="            return EQ;
 "!="            return NE;
-"while"         return WHILE;
-"if"            return IF;
-"else"          return ELSE;
-"print"         return PRINT;
 "|>"            return PIPE;
-"true"          return TRUE;
-"false"         return FALSE;
 "->"            { return ARROW; }
 [ \t\n]+        ;       /* ignore whitespace */
 "#".*           ;       /* ignore comments starting with # */

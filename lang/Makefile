@@ -8,7 +8,7 @@ SRCDIR := src
 BUILDDIR := build
 TESTDIR := test
 CC = clang -I../include -I./src -g
-
+LDFLAGS = -lm
 SRCS := $(wildcard $(SRCDIR)/*.c)
 OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o) $(BUILDDIR)/y.tab.o $(BUILDDIR)/lex.yy.o
 
@@ -26,7 +26,7 @@ $(LEX_OUTPUT): $(LEX_FILE)
 all: build/audio_lang 
 
 build/audio_lang: $(OBJS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ $(LDFLAGS) 
 
 
 $(BUILDDIR):
@@ -41,5 +41,5 @@ test_parse: $(TESTDIR)/test_parse.o $(BUILDDIR)/y.tab.o $(BUILDDIR)/lex.yy.o $(f
 	./$(BUILDDIR)/test_parse
 
 $(TESTDIR)/test_parse.o: $(TESTDIR)/test_parse.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-	$(CC) $(CFLAGS) -c -o $@ $< 
+	$(CC) $(CFLAGS) -c -o $@ $< $(LDFLAGS)  
 

@@ -2,39 +2,8 @@
 #define _LANG_PARSE_H
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
-typedef enum { typeCon, typeId, typeOpr } nodeEnum;
 
 typedef struct Ast Ast;
-
-/* constants */
-typedef struct {
-  int value; /* value of constant */
-} conNodeType;
-
-/* identifiers */
-typedef struct {
-  int i; /* subscript to sym array */
-} idNodeType;
-
-/* operators */
-typedef struct {
-  int oper;                  /* operator */
-  int nops;                  /* number of operands */
-  struct nodeTypeTag *op[1]; /* operands, extended at runtime */
-} oprNodeType;
-
-typedef struct nodeTypeTag {
-  nodeEnum type; /* type of node */
-
-  union {
-    conNodeType con; /* constants */
-    idNodeType id;   /* identifiers */
-    oprNodeType opr; /* operators */
-  };
-} nodeType;
-
-extern int sym[26];
 
 // parser prototypes
 extern FILE *yyin;
@@ -44,13 +13,6 @@ void yyrestart(FILE *);
 void yyerror(const char *s);
 
 int yylex(void);
-
-Ast *opr(int oper, int nops, ...);
-Ast *_id(int i);
-Ast *con(int value);
-
-void freeNode(nodeType *p);
-int ex(nodeType *p);
 
 typedef enum token_type {
   TOKEN_START, // dummy token
@@ -129,7 +91,8 @@ typedef enum ast_tag {
   AST_TUPLE,
   AST_FN_DECLARATION,
   AST_LAMBDA,
-  AST_LAMBDA_ARGS
+  AST_LAMBDA_ARGS,
+  AST_VOID,
 } ast_tag;
 
 struct Ast {
@@ -200,6 +163,7 @@ struct Ast {
       const char *fn_name;
       Ast *body;
     } AST_LAMBDA;
+
     struct AST_LAMBDA_ARGS {
       const char **ids;
       size_t len;
@@ -223,7 +187,7 @@ Ast *ast_lambda(Ast *args, Ast *body);
 Ast *ast_arg_list(char *arg);
 Ast *ast_arg_list_push(Ast *arg_list, char *arg);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
-
 Ast *parse_input(char *input);
+Ast *ast_void();
 
 #endif

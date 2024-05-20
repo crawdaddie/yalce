@@ -1,70 +1,5 @@
 #include "parse.h"
-#include "serde.h"
-#include <stdarg.h>
 #include <stdlib.h>
-
-Ast *con(int value) {
-  nodeType *p;
-
-  /* allocate node */
-  if ((p = malloc(sizeof(nodeType))) == NULL)
-    yyerror("out of memory");
-
-  /* copy information */
-  p->type = typeCon;
-  p->con.value = value;
-
-  return p;
-}
-
-Ast *_id(int i) {
-  nodeType *p;
-
-  /* allocate node */
-  if ((p = malloc(sizeof(nodeType))) == NULL)
-    yyerror("out of memory");
-
-  /* copy information */
-  p->type = typeId;
-  p->id.i = i;
-
-  return p;
-}
-
-Ast *opr(int oper, int nops, ...) {
-  va_list ap;
-  nodeType *p;
-  int i;
-
-  /* allocate node, extending op array */
-  if ((p = malloc(sizeof(nodeType) + (nops - 1) * sizeof(nodeType *))) == NULL)
-    yyerror("out of memory");
-
-  /* copy information */
-  p->type = typeOpr;
-  p->opr.oper = oper;
-  p->opr.nops = nops;
-  va_start(ap, nops);
-  for (i = 0; i < nops; i++)
-    p->opr.op[i] = va_arg(ap, nodeType *);
-  va_end(ap);
-  return p;
-}
-
-void freeNode(nodeType *p) {
-  int i;
-
-  if (!p)
-    return;
-  if (p->type == typeOpr) {
-    for (i = 0; i < p->opr.nops; i++)
-      freeNode(p->opr.op[i]);
-  }
-  free(p);
-}
-
-// void yyerror(const char *s) { fprintf(stdout, "%s\n", s); }
-//
 
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = malloc(sizeof(Ast));
@@ -107,6 +42,9 @@ Ast *ast_identifier(char *name) {
 Ast *ast_let(char *name, Ast *expr) {
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.name = name;
+  if (expr->tag == AST_LAMBDA) {
+    expr->data.AST_LAMBDA.fn_name = name;
+  }
   node->data.AST_LET.expr = expr;
   // print_ast(node);
   return node;
@@ -129,6 +67,11 @@ Ast *ast_application(Ast *func, Ast *arg) {
 }
 
 Ast *ast_lambda(Ast *lambda, Ast *body) {
+  if (lambda == NULL) {
+    lambda = Ast_new(AST_LAMBDA);
+    lambda->data.AST_LAMBDA.params = NULL;
+    lambda->data.AST_LAMBDA.len = 0;
+  }
   lambda->data.AST_LAMBDA.body = body;
   return lambda;
 }
@@ -163,3 +106,4 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
   ast_body_push(body, new_stmt);
   return body;
 }
+Ast *ast_void() { return Ast_new(AST_VOID); }

@@ -49,17 +49,21 @@
      IF = 265,
      PRINT = 266,
      PIPE = 267,
-     LET = 268,
-     FN = 269,
-     ARROW = 270,
-     IFX = 271,
-     ELSE = 272,
-     MODULO = 273,
-     NE = 274,
-     EQ = 275,
-     LE = 276,
-     GE = 277,
-     UMINUS = 278
+     EXTERN = 268,
+     LET = 269,
+     FN = 270,
+     ARROW = 271,
+     VOID = 272,
+     DOUBLE_SEMICOLON = 273,
+     IN = 274,
+     IFX = 275,
+     ELSE = 276,
+     MODULO = 277,
+     NE = 278,
+     EQ = 279,
+     LE = 280,
+     GE = 281,
+     UMINUS = 282
    };
 #endif
 /* Tokens.  */
@@ -73,17 +77,21 @@
 #define IF 265
 #define PRINT 266
 #define PIPE 267
-#define LET 268
-#define FN 269
-#define ARROW 270
-#define IFX 271
-#define ELSE 272
-#define MODULO 273
-#define NE 274
-#define EQ 275
-#define LE 276
-#define GE 277
-#define UMINUS 278
+#define EXTERN 268
+#define LET 269
+#define FN 270
+#define ARROW 271
+#define VOID 272
+#define DOUBLE_SEMICOLON 273
+#define IN 274
+#define IFX 275
+#define ELSE 276
+#define MODULO 277
+#define NE 278
+#define EQ 279
+#define LE 280
+#define GE 281
+#define UMINUS 282
 
 
 
@@ -99,7 +107,7 @@ typedef union YYSTYPE
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 103 "src/y.tab.h"
+#line 111 "src/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

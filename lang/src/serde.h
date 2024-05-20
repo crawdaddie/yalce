@@ -3,6 +3,6 @@
 #include "parse.h"
 char *serialize_ast(Ast *ast);
 
-void print_ast(Ast *ast);
-char *ast_to_sexpr(Ast *ast, char *buffer);
+void print_ast(Ast *);
+char *ast_to_sexpr(Ast *, char *);
 #endif

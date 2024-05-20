@@ -39,9 +39,13 @@ Ast* ast_root = NULL;
 %token <vstr>   STRING
 %token TRUE FALSE
 %token WHILE IF PRINT PIPE
+%token EXTERN
 %token LET
 %token FN
 %token ARROW
+%token VOID
+%token DOUBLE_SEMICOLON
+%token IN 
 
 %nonassoc IFX
 %nonassoc ELSE
@@ -54,7 +58,7 @@ Ast* ast_root = NULL;
 
 %nonassoc UMINUS
 
-%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args lambda_body
+%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args
 
 
 %%
@@ -74,28 +78,23 @@ program:
 
 
 stmt:
-  expr                              { $$ = $1; }
-  | LET IDENTIFIER '=' expr         { $$ = ast_let($2, $4); }
-  | WHILE '(' expr ')' stmt         { $$ = opr(WHILE, 2, $3, $5); }
-  | IF '(' expr ')' stmt %prec IFX  { $$ = opr(IF, 2, $3, $5); }
-  | IF '(' expr ')' stmt ELSE stmt  { $$ = opr(IF, 3, $3, $5, $7); }
+  expr                        { $$ = $1; }
+  | LET IDENTIFIER '=' expr   { $$ = ast_let($2, $4); }
+  | LET VOID '=' expr         { $$ = $4; }
   ;
 
 stmt_list_opt:
-    stmt_list ';'         { $$ = $1; }
-  | stmt_list             { $$ = $1; }
-  | /* empty */           { $$ = NULL; }
+    stmt_list                 { $$ = $1; }
+  | /* empty */               { $$ = NULL; }
   ;
 
 stmt_list:
-    stmt                  {
-                            $$ = $1;
-                          }
-
-  | stmt_list ';' stmt    {
-                            $$ = parse_stmt_list($1, $3);
-                          }
+    stmt                      { $$ = $1; }
+  | stmt_list ';' stmt        { $$ = parse_stmt_list($1, $3); }
+  | stmt_list                 { $$ = $1; } // To handle optional ';' at the end
   ;
+
+
 expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
   | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
@@ -103,6 +102,7 @@ expr:
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
   | IDENTIFIER            { $$ = ast_identifier($1); }
+  | VOID                  { $$ = ast_void(); }
   | '-' expr %prec UMINUS { $$ = ast_unop(TOKEN_MINUS, $2); }
   | expr '+' expr         { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr         { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
@@ -122,15 +122,10 @@ expr:
   ;
 
 lambda_expr:
-  FN lambda_args ARROW lambda_body { $$ = ast_lambda($2, $4); }
+    FN lambda_args ARROW stmt_list_opt  { $$ = ast_lambda($2, $4); }
+  | FN VOID ARROW stmt_list_opt         { $$ = ast_lambda(NULL, $4); }
   ;
 
-lambda_body:
-  expr                    { $$ = $1;
-  }
-  | stmt_list             {
-  $$ = $1; }
-; 
 
 
 lambda_args:
@@ -140,8 +135,8 @@ lambda_args:
 
 
 application:
-    IDENTIFIER expr       { $$ = ast_application(ast_identifier($1), $2); }
-  | application expr      { $$ = ast_application($1, $2); }
+    IDENTIFIER expr         { $$ = ast_application(ast_identifier($1), $2); }
+  | application expr        { $$ = ast_application($1, $2); }
   ;
 %%
 

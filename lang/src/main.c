@@ -1,3 +1,4 @@
+#include "eval.h"
 #include "parse.h"
 #include "y.tab.h"
 
@@ -5,8 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-void eval(Ast *ast){};
 
 #define INPUT_BUFSIZE 2048
 void repl_input(char *input, int bufsize, const char *prompt) {
@@ -86,15 +85,14 @@ int eval_script(const char *filename) {
   Ast *prog = parse_input(fcontent);
   print_ast(prog);
 
-  for (int i = 0; i < prog->data.AST_BODY.len; i++) {
-    eval(prog->data.AST_BODY.stmts[i]);
-  }
+  print_value(eval(prog, NULL));
 
   free(fcontent);
   return 0; // Return success
 }
 
 int main(int argc, char **argv) {
+
   bool repl = false;
 
   for (int i = 1; i < argc; i++) {
@@ -104,6 +102,9 @@ int main(int argc, char **argv) {
       return eval_script(argv[i]);
     }
   }
+
+  char *prompt = "\033[1;31mλ \033[1;0m"
+                 "\033[1;36m";
 
   if (repl) {
     printf("\033[1;31m"
@@ -115,14 +116,14 @@ int main(int argc, char **argv) {
     char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
 
     while (true) {
-      repl_input(input, INPUT_BUFSIZE, NULL);
+      repl_input(input, INPUT_BUFSIZE, prompt);
       Ast *prog = parse_input(input);
 
       printf("parsed program:");
 
       print_ast(prog);
 
-      eval(prog);
+      print_value(eval(prog, NULL));
     }
     free(input);
   }
