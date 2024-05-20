@@ -85,7 +85,13 @@ int eval_script(const char *filename) {
   Ast *prog = parse_input(fcontent);
   print_ast(prog);
 
-  print_value(eval(prog, NULL));
+  EnvStack stack;
+  for (int i = 0; i < STACK_MAX; i++) {
+    (stack.envs + i)->count = 0;
+    (stack.envs + i)->capacity = 8;
+    (stack.envs + i)->entries = malloc(sizeof(Entry) * 8);
+  }
+  print_value(eval(prog, NULL, &stack));
 
   free(fcontent);
   return 0; // Return success
@@ -115,6 +121,17 @@ int main(int argc, char **argv) {
 
     char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
 
+    EnvStack stack;
+    for (int i = 0; i < STACK_MAX; i++) {
+      (stack.envs + i)->count = 0;
+      (stack.envs + i)->capacity = 8;
+      (stack.envs + i)->entries = malloc(sizeof(Entry) * 8);
+      for (int j = 0; j < 8; j++) {
+
+        (stack.envs + i)->entries[j].key = NULL;
+        (stack.envs + i)->entries[j].value.type = VALUE_VOID;
+      }
+    }
     while (true) {
       repl_input(input, INPUT_BUFSIZE, prompt);
       Ast *prog = parse_input(input);
@@ -123,7 +140,7 @@ int main(int argc, char **argv) {
 
       print_ast(prog);
 
-      print_value(eval(prog, NULL));
+      print_value(eval(prog, NULL, &stack));
       printf("\n");
     }
     free(input);
