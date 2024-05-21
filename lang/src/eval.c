@@ -1,16 +1,7 @@
 #include "eval.h"
-#include "memory.h"
+#include "ht.h"
 #include <math.h>
 #include <stdlib.h>
-
-static uint32_t hash_string(const char *key, int length) {
-  uint32_t hash = 2166136261u;
-  for (int i = 0; i < length; i++) {
-    hash ^= (uint8_t)key[i];
-    hash *= 16777619;
-  }
-  return hash;
-}
 
 #define NUMERIC_OPERATION(op, l, r)                                            \
   do {                                                                         \
@@ -121,7 +112,7 @@ static Value *neq_ops(Value *l, Value *r) {
   return NULL;
 }
 
-Value *eval(Ast *ast, Value *val, Table *stack, int stack_ptr, Table *fn_args) {
+Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr, ht *fn_args) {
   if (!ast) {
     return NULL;
   }
@@ -143,6 +134,8 @@ Value *eval(Ast *ast, Value *val, Table *stack, int stack_ptr, Table *fn_args) {
                       hash_string(name_.chars, name_.length)};
 
     Value *expr = eval(ast->data.AST_LET.expr, val, stack, stack_ptr, fn_args);
+    ht_set_hash(stack + stack_ptr, name.chars, name.hash, expr);
+
     return expr;
   }
 
@@ -239,6 +232,7 @@ Value *eval(Ast *ast, Value *val, Table *stack, int stack_ptr, Table *fn_args) {
     val->value.function.params = ast->data.AST_LAMBDA.params;
     val->value.function.fn_name = ast->data.AST_LAMBDA.fn_name.chars;
     val->value.function.body = ast->data.AST_LAMBDA.body;
+    val->value.function.scope_ptr = stack_ptr;
     return val;
   }
 
@@ -246,39 +240,8 @@ Value *eval(Ast *ast, Value *val, Table *stack, int stack_ptr, Table *fn_args) {
     char *chars = ast->data.AST_IDENTIFIER.value;
     int length = ast->data.AST_IDENTIFIER.length;
     ObjString key = {length, chars, hash_string(chars, length)};
+    *val = *(Value *)ht_get_hash(stack + stack_ptr, chars, key.hash);
     return val;
   }
-  }
-}
-
-void print_value(Value *val) {
-  if (!val) {
-    return;
-  }
-
-  switch (val->type) {
-  case VALUE_INT:
-    printf("[%d]", val->value.vint);
-    break;
-
-  case VALUE_NUMBER:
-    printf("[%f]", val->value.vnum);
-    break;
-
-  case VALUE_STRING:
-    printf("[%s]", val->value.vstr.chars);
-    break;
-
-  case VALUE_BOOL:
-    printf("[%s]", val->value.vbool ? "true" : "false");
-    break;
-
-  case VALUE_VOID:
-    printf("[()]");
-    break;
-
-  case VALUE_FN:
-    printf("[function [%p]]", val);
-    break;
   }
 }

@@ -17,6 +17,7 @@ typedef struct {
   void *env_ptr;
   // bool is_recursive;
   Ast *body;
+  int scope_ptr;
 } Function;
 
 typedef struct {

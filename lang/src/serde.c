@@ -184,3 +184,35 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   }
   return buffer;
 }
+
+void print_value(Value *val) {
+  if (!val) {
+    return;
+  }
+
+  switch (val->type) {
+  case VALUE_INT:
+    printf("[%d]", val->value.vint);
+    break;
+
+  case VALUE_NUMBER:
+    printf("[%f]", val->value.vnum);
+    break;
+
+  case VALUE_STRING:
+    printf("[%s]", val->value.vstr.chars);
+    break;
+
+  case VALUE_BOOL:
+    printf("[%s]", val->value.vbool ? "true" : "false");
+    break;
+
+  case VALUE_VOID:
+    printf("[()]");
+    break;
+
+  case VALUE_FN:
+    printf("[function [%p]]", val);
+    break;
+  }
+}

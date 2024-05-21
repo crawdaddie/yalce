@@ -1,80 +1,12 @@
 #include "eval.h"
+#include "ht.h"
+#include "input.h"
 #include "parse.h"
-#include "y.tab.h"
-
 #include "serde.h"
+#include "y.tab.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define INPUT_BUFSIZE 2048
-void repl_input(char *input, int bufsize, const char *prompt) {
-  char prev;
-  char c;
-  int position = 0;
-  if (prompt == NULL) {
-    prompt = "\033[1;31mλ \033[1;0m"
-             "\033[1;36m";
-  }
-
-  printf("%s", prompt);
-  while (1) {
-    prev = c;
-    c = getchar();
-
-    if (c == 'n' && prev == '\\') {
-      input[position - 1] = '\n';
-      continue;
-    }
-
-    if (c == EOF || c == '\n') {
-      if (prev == '\\') {
-        return repl_input(input + position, bufsize, "  ");
-      }
-      input[position] = '\n';
-      input[++position] = '\0';
-      return;
-    }
-    if (position == bufsize) {
-      printf("input exceeds bufsize\n");
-      // TODO: increase size of input buffer
-    }
-
-    input[position] = c;
-    position++;
-  }
-  printf("\033[1;0m");
-}
-
-char *read_script(const char *filename) {
-
-  FILE *fp = fopen(filename, "r");
-  if (fp == NULL) {
-    fprintf(stderr, "Error opening file: %s\n", filename);
-    return NULL;
-  }
-
-  // Determine the size of the file
-  fseek(fp, 0, SEEK_END); // Move the file pointer to the end of the file
-  long fsize = ftell(fp); // Get the position, which is the file size
-  rewind(fp);
-
-  char *fcontent = (char *)malloc(fsize + 1);
-
-  size_t bytes_read = fread(fcontent, 1, fsize, fp);
-
-  if (bytes_read != fsize) {
-    fprintf(stderr, "Error reading file: %s\n", filename);
-    fclose(fp);
-    free(fcontent); // Don't forget to free the allocated memory
-    return NULL;
-  }
-
-  // Null-terminate the string
-  fcontent[fsize] = '\0';
-  fclose(fp);
-  return fcontent;
-}
 
 int eval_script(const char *filename) {
   char *fcontent = read_script(filename);
@@ -85,11 +17,20 @@ int eval_script(const char *filename) {
   Ast *prog = parse_input(fcontent);
   print_ast(prog);
 
-  Table stack[STACK_MAX];
+  ht stack[STACK_MAX];
+
+  for (int i = 0; i < STACK_MAX; i++) {
+    ht_init(stack + i);
+  }
   print_value(eval(prog, NULL, stack, 0, NULL));
 
   free(fcontent);
   return 0; // Return success
+}
+Ast *peek_body(Ast *body) {
+  size_t len = body->data.AST_BODY.len;
+  Ast *last = body->data.AST_BODY.stmts[len - 1];
+  return last;
 }
 
 int main(int argc, char **argv) {
@@ -116,16 +57,18 @@ int main(int argc, char **argv) {
 
     char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
 
-    Table stack[STACK_MAX];
+    ht stack[STACK_MAX];
+    for (int i = 0; i < STACK_MAX; i++) {
+      ht_init(stack + i);
+    }
     while (true) {
       repl_input(input, INPUT_BUFSIZE, prompt);
       Ast *prog = parse_input(input);
 
-      printf("parsed program:");
-
-      print_ast(prog);
-
-      print_value(eval(prog, NULL, stack, 0, NULL));
+      Value *val = malloc(sizeof(Value));
+      Ast *top = peek_body(prog);
+      print_ast(top);
+      print_value(eval(top, val, stack, 0, NULL));
       printf("\n");
     }
     free(input);
