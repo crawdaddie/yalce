@@ -42,7 +42,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   case AST_NUMBER: {
 
-    char buf[12];
+    char buf[100];
     sprintf(buf, "%f", ast->data.AST_NUMBER.value);
     buffer = strcat(buffer, buf);
     break;
@@ -50,7 +50,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   case AST_INT: {
 
-    char buf[12];
+    char buf[100];
     sprintf(buf, "%d", ast->data.AST_INT.value);
     buffer = strcat(buffer, buf);
     break;

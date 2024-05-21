@@ -121,7 +121,7 @@ static Value *neq_ops(Value *l, Value *r) {
   return NULL;
 }
 
-Value *eval(Ast *ast, Value *val, EnvStack *stack) {
+Value *eval(Ast *ast, Value *val, Table *stack, int stack_ptr, Table *fn_args) {
   if (!ast) {
     return NULL;
   }
@@ -129,12 +129,11 @@ Value *eval(Ast *ast, Value *val, EnvStack *stack) {
   switch (ast->tag) {
 
   case AST_BODY: {
-    Table *env = stack->envs + stack->stack_ptr;
     void *final;
     for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
       Ast *stmt = ast->data.AST_BODY.stmts[i];
       Value *val = malloc(sizeof(Value));
-      final = eval(stmt, val, stack);
+      final = eval(stmt, val, stack, stack_ptr, fn_args);
     }
     return final;
   }
@@ -143,10 +142,7 @@ Value *eval(Ast *ast, Value *val, EnvStack *stack) {
     ObjString name = {name_.length, name_.chars,
                       hash_string(name_.chars, name_.length)};
 
-    Value *expr = eval(ast->data.AST_LET.expr, val, stack);
-    table_set(&stack->envs[stack->stack_ptr], &name, *expr);
-    printf("count %d capacity %d\n", stack->envs[stack->stack_ptr].count,
-           stack->envs[stack->stack_ptr].capacity);
+    Value *expr = eval(ast->data.AST_LET.expr, val, stack, stack_ptr, fn_args);
     return expr;
   }
 
@@ -177,10 +173,13 @@ Value *eval(Ast *ast, Value *val, EnvStack *stack) {
     return val;
   }
   case AST_BINOP: {
-    Value *l = eval(ast->data.AST_BINOP.left, val, stack);
+    Value *l = eval(ast->data.AST_BINOP.left, val, stack, stack_ptr, fn_args);
     // Value _r;
     // Value *r = &_r;
-    Value *r = eval(ast->data.AST_BINOP.right, malloc(sizeof(Value)), stack);
+    // r = eval(ast->data.AST_BINOP.right, r, stack, stack_ptr, fn_args);
+
+    Value *r = eval(ast->data.AST_BINOP.right, malloc(sizeof(Value)), stack,
+                    stack_ptr, fn_args);
 
     if (l == NULL || r == NULL) {
       return NULL;
@@ -247,10 +246,6 @@ Value *eval(Ast *ast, Value *val, EnvStack *stack) {
     char *chars = ast->data.AST_IDENTIFIER.value;
     int length = ast->data.AST_IDENTIFIER.length;
     ObjString key = {length, chars, hash_string(chars, length)};
-    int ptr = stack->stack_ptr;
-    while (!table_get(stack->envs + ptr, &key, val) && ptr >= 0) {
-      ptr--;
-    }
     return val;
   }
   }
@@ -271,9 +266,6 @@ void print_value(Value *val) {
     break;
 
   case VALUE_STRING:
-    // printf("[%s] (%d %d)", val->value.vstr.chars, val->value.vstr.length,
-    //        val->value.vstr.hash);
-
     printf("[%s]", val->value.vstr.chars);
     break;
 
