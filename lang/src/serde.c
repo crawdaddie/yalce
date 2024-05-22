@@ -83,12 +83,17 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   }
 
   case AST_APPLICATION: {
-    buffer = strcat(buffer, "(");
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      buffer = strcat(buffer, "(");
+    }
     buffer = ast_to_sexpr(ast->data.AST_APPLICATION.function, buffer);
 
-    buffer = strcat(buffer, " ");
-    buffer = ast_to_sexpr(ast->data.AST_APPLICATION.arg, buffer);
-    buffer = strcat(buffer, ")");
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      buffer = strcat(buffer, " ");
+      buffer = ast_to_sexpr(ast->data.AST_APPLICATION.args[i], buffer);
+      buffer = strcat(buffer, ")");
+    }
+
     break;
   }
 
@@ -147,10 +152,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
-  case AST_FN_DECLARATION: {
-    break;
-  }
-
   case AST_LAMBDA: {
     buffer = strcat(buffer, "(");
     if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
@@ -173,6 +174,32 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_EXTERN_FN_DECLARATION: {
+    buffer = strcat(buffer, "(extern ");
+    if (ast->data.AST_EXTERN_FN_DECLARATION.fn_name.chars != NULL) {
+      buffer =
+          strcat(buffer, ast->data.AST_EXTERN_FN_DECLARATION.fn_name.chars);
+      buffer = strcat(buffer, " ");
+    }
+    if (ast->data.AST_EXTERN_FN_DECLARATION.len == 0) {
+      buffer = strcat(buffer, "() ");
+    } else {
+      for (int i = 0; i < ast->data.AST_EXTERN_FN_DECLARATION.len; i++) {
+        buffer =
+            strcat(buffer, ast->data.AST_EXTERN_FN_DECLARATION.params[i].chars);
+        buffer = strcat(buffer, " ");
+      }
+    }
+
+    buffer = strcat(buffer, "-> ");
+
+    buffer =
+        strcat(buffer, ast->data.AST_EXTERN_FN_DECLARATION.return_type.chars);
+    buffer = strcat(buffer, ")\n");
+
+    break;
+  }
+
   case AST_LAMBDA_ARGS: {
     break;
   }
@@ -187,6 +214,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
 void print_value(Value *val) {
   if (!val) {
+    printf("()");
     return;
   }
 
@@ -212,6 +240,10 @@ void print_value(Value *val) {
     break;
 
   case VALUE_FN:
+    printf("[function [%p]]", val);
+    break;
+
+  case VALUE_EXTERN_FN:
     printf("[function [%p]]", val);
     break;
   }

@@ -60,11 +60,12 @@ hti ht_iterator(ht *table);
 bool ht_next(hti *it);
 
 uint64_t hash_key(const char *key);
-uint64_t hash_string(const char *key, int length);
 
 const char *ht_set_hash(ht *table, const char *key, uint64_t hash, void *value);
 
 void *ht_get_hash(ht *table, const char *key, uint64_t hash);
 
 void ht_init(ht *table);
+
+void ht_reinit(ht *table);
 #endif // _HT_H

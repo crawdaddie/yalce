@@ -1,118 +1,36 @@
 #include "eval.h"
+#include "arithmetic.h"
+#include "extern.h"
 #include "ht.h"
-#include <math.h>
+#include "serde.h"
 #include <stdlib.h>
+#include <string.h>
 
-#define NUMERIC_OPERATION(op, l, r)                                            \
-  do {                                                                         \
-    if ((l)->type == VALUE_INT && (r)->type == VALUE_INT) {                    \
-      (l)->value.vint = (l)->value.vint op(r)->value.vint;                     \
-      return (l);                                                              \
-    } else if ((l)->type == VALUE_INT && (r)->type == VALUE_NUMBER) {          \
-      (l)->type = VALUE_NUMBER;                                                \
-      (l)->value.vnum = (l)->value.vint op(r)->value.vnum;                     \
-      return (l);                                                              \
-    } else if ((l)->type == VALUE_NUMBER && (r)->type == VALUE_INT) {          \
-      (l)->value.vnum = (l)->value.vnum op(r)->value.vint;                     \
-      return (l);                                                              \
-    } else if ((l)->type == VALUE_NUMBER && (r)->type == VALUE_NUMBER) {       \
-      (l)->value.vnum = (l)->value.vnum op(r)->value.vnum;                     \
-      return (l);                                                              \
-    }                                                                          \
-  } while (0)
+static Value *call_function(Value *fn, Value *args, int num_args, ht *stack) {
+  int stack_ptr = fn->value.function.scope_ptr + 1;
 
-#define NUMERIC_COMPARISON_OPERATION(op, l, r)                                 \
-  do {                                                                         \
-    if ((l)->type == VALUE_INT && (r)->type == VALUE_INT) {                    \
-      (l)->type = VALUE_BOOL;                                                  \
-      (l)->value.vbool = (l)->value.vint op(r)->value.vint;                    \
-      return (l);                                                              \
-    } else if ((l)->type == VALUE_INT && (r)->type == VALUE_NUMBER) {          \
-      (l)->type = VALUE_BOOL;                                                  \
-      (l)->value.vbool = (l)->value.vint op(r)->value.vnum;                    \
-      return (l);                                                              \
-    } else if ((l)->type == VALUE_NUMBER && (r)->type == VALUE_INT) {          \
-      (l)->type = VALUE_BOOL;                                                  \
-      (l)->value.vbool = (l)->value.vnum op(r)->value.vint;                    \
-      return (l);                                                              \
-    } else if ((l)->type == VALUE_NUMBER && (r)->type == VALUE_NUMBER) {       \
-      (l)->type = VALUE_BOOL;                                                  \
-      (l)->value.vbool = (l)->value.vnum op(r)->value.vnum;                    \
-      return (l);                                                              \
-    }                                                                          \
-  } while (0)
+  ht *fn_scope = stack + stack_ptr;
 
-static Value *add_ops(Value *l, Value *r) {
-  NUMERIC_OPERATION(+, l, r);
-  return NULL;
-}
-static Value *sub_ops(Value *l, Value *r) {
-  NUMERIC_OPERATION(-, l, r);
-  return NULL;
-}
-static Value *mul_ops(Value *l, Value *r) {
-  NUMERIC_OPERATION(*, l, r);
-  return NULL;
-}
-static Value *div_ops(Value *l, Value *r) {
-  NUMERIC_OPERATION(-, l, r);
-  return NULL;
-}
-static Value *modulo_ops(Value *l, Value *r) {
-  if (l->type == VALUE_INT && r->type == VALUE_INT) {
-    l->value.vint = l->value.vint % r->value.vint;
-    return l;
-  } else if (l->type == VALUE_INT && r->type == VALUE_NUMBER) {
-    l->type = VALUE_NUMBER;
-    l->value.vnum = fmod(l->value.vint, r->value.vnum);
-    return l;
-  } else if (l->type == VALUE_NUMBER && r->type == VALUE_INT) {
-    l->value.vnum = fmod(l->value.vnum, r->value.vint);
-    return l;
-  } else if (l->type == VALUE_NUMBER && r->type == VALUE_NUMBER) {
-    l->value.vnum = fmod(l->value.vnum, r->value.vnum);
-    return l;
+  for (int i = 0; i < num_args; i++) {
+    ObjString param_id = fn->value.function.params[i];
+    ht_set_hash(fn_scope, param_id.chars, param_id.hash, (args + i));
   }
-  return NULL;
-}
 
-static Value *lt_ops(Value *l, Value *r) {
-  NUMERIC_COMPARISON_OPERATION(<, l, r);
-  return NULL;
-}
+  if (fn->value.function.fn_name != NULL) {
 
-static Value *lte_ops(Value *l, Value *r) {
-  NUMERIC_COMPARISON_OPERATION(<=, l, r);
-  return NULL;
-}
-static Value *gt_ops(Value *l, Value *r) {
-  NUMERIC_COMPARISON_OPERATION(>, l, r);
-  return NULL;
-}
-static Value *gte_ops(Value *l, Value *r) {
-  NUMERIC_COMPARISON_OPERATION(>=, l, r);
-  return NULL;
-}
-inline static bool is_numeric(Value *l) {
-  return l->type == VALUE_INT || l->type == VALUE_NUMBER;
-}
-static Value *eq_ops(Value *l, Value *r) {
-  if (is_numeric(l) && is_numeric(r)) {
-    NUMERIC_COMPARISON_OPERATION(==, l, r);
-  } else if (l->type == VALUE_STRING && r->type == VALUE_STRING) {
-    l->type = VALUE_BOOL;
-    l->value.vbool = (l->value.vstr.length == r->value.vstr.length) &&
-                     (l->value.vstr.hash == r->value.vstr.hash);
-    return l;
+    const char *fn_name = fn->value.function.fn_name;
+    uint64_t hash = hash_string(fn_name, strlen(fn_name));
+
+    Value recursive_ref = {VALUE_RECURSIVE_REF,
+                           .value = {.recursive_ref = fn->value.function}};
+    ht_set_hash(fn_scope, fn_name, hash, &recursive_ref);
   }
-  return NULL;
-}
-static Value *neq_ops(Value *l, Value *r) {
-  NUMERIC_COMPARISON_OPERATION(!=, l, r);
-  return NULL;
+  Value *return_val = eval(fn->value.function.body, NULL, stack, stack_ptr);
+  ht_reinit(fn_scope);
+  return return_val;
 }
 
-Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr, ht *fn_args) {
+Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr) {
   if (!ast) {
     return NULL;
   }
@@ -124,18 +42,15 @@ Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr, ht *fn_args) {
     for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
       Ast *stmt = ast->data.AST_BODY.stmts[i];
       Value *val = malloc(sizeof(Value));
-      final = eval(stmt, val, stack, stack_ptr, fn_args);
+      final = eval(stmt, val, stack, stack_ptr);
     }
     return final;
   }
   case AST_LET: {
-    LexId name_ = ast->data.AST_LET.name;
-    ObjString name = {name_.length, name_.chars,
-                      hash_string(name_.chars, name_.length)};
+    ObjString name = ast->data.AST_LET.name;
 
-    Value *expr = eval(ast->data.AST_LET.expr, val, stack, stack_ptr, fn_args);
+    Value *expr = eval(ast->data.AST_LET.expr, val, stack, stack_ptr);
     ht_set_hash(stack + stack_ptr, name.chars, name.hash, expr);
-
     return expr;
   }
 
@@ -166,13 +81,11 @@ Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr, ht *fn_args) {
     return val;
   }
   case AST_BINOP: {
-    Value *l = eval(ast->data.AST_BINOP.left, val, stack, stack_ptr, fn_args);
-    // Value _r;
-    // Value *r = &_r;
-    // r = eval(ast->data.AST_BINOP.right, r, stack, stack_ptr, fn_args);
+    Value *l =
+        eval(ast->data.AST_BINOP.left, malloc(sizeof(Value)), stack, stack_ptr);
 
     Value *r = eval(ast->data.AST_BINOP.right, malloc(sizeof(Value)), stack,
-                    stack_ptr, fn_args);
+                    stack_ptr); // reuse val
 
     if (l == NULL || r == NULL) {
       return NULL;
@@ -180,51 +93,51 @@ Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr, ht *fn_args) {
 
     switch (ast->data.AST_BINOP.op) {
     case TOKEN_PLUS: {
-      l = add_ops(l, r);
+      val = add_ops(l, r, val);
       break;
     }
     case TOKEN_MINUS: {
-      l = sub_ops(l, r);
+      val = sub_ops(l, r, val);
       break;
     }
     case TOKEN_STAR: {
-      l = mul_ops(l, r);
+      val = mul_ops(l, r, val);
       break;
     }
     case TOKEN_SLASH: {
-      l = div_ops(l, r);
+      val = div_ops(l, r, val);
       break;
     }
     case TOKEN_MODULO: {
-      l = modulo_ops(l, r);
+      val = modulo_ops(l, r, val);
       break;
     }
     case TOKEN_LT: {
-      l = lt_ops(l, r);
+      val = lt_ops(l, r, val);
       break;
     }
     case TOKEN_LTE: {
-      l = lte_ops(l, r);
+      val = lte_ops(l, r, val);
       break;
     }
     case TOKEN_GT: {
-      l = gt_ops(l, r);
+      val = gt_ops(l, r, val);
       break;
     }
     case TOKEN_GTE: {
-      l = gte_ops(l, r);
+      val = gte_ops(l, r, val);
       break;
     }
     case TOKEN_EQUALITY: {
-      l = eq_ops(l, r);
+      val = eq_ops(l, r, val);
       break;
     }
     case TOKEN_NOT_EQUAL: {
-      l = neq_ops(l, r);
+      val = neq_ops(l, r, val);
       break;
     }
     }
-    return l;
+    return val;
   }
   case AST_LAMBDA: {
     val->type = VALUE_FN;
@@ -236,12 +149,55 @@ Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr, ht *fn_args) {
     return val;
   }
 
+  case AST_EXTERN_FN_DECLARATION: {
+    return register_external_symbol(ast);
+  }
+
   case AST_IDENTIFIER: {
     char *chars = ast->data.AST_IDENTIFIER.value;
     int length = ast->data.AST_IDENTIFIER.length;
-    ObjString key = {length, chars, hash_string(chars, length)};
-    *val = *(Value *)ht_get_hash(stack + stack_ptr, chars, key.hash);
-    return val;
+    ObjString key = {chars, length, hash_string(chars, length)};
+    Value *res;
+    int ptr = stack_ptr;
+
+    while (ptr >= 0 &&
+           !((res = (Value *)ht_get_hash(stack + ptr, key.chars, key.hash)))) {
+      *val = *res;
+      ptr--;
+    }
+    return res;
   }
+
+  case AST_APPLICATION: {
+    Value *func = malloc(sizeof(Value));
+    func = eval(ast->data.AST_APPLICATION.function, func, stack, stack_ptr);
+
+    if (func->type == VALUE_FN &&
+        func->value.function.len == ast->data.AST_APPLICATION.len) {
+
+      int len = func->value.function.len;
+
+      Value *args = malloc(sizeof(Value) * len);
+      for (int i = 0; i < len; i++) {
+        eval(ast->data.AST_APPLICATION.args[i], args + i, stack, stack_ptr);
+      }
+      return call_function(func, args, len, stack);
+    }
+
+    if (func->type == VALUE_EXTERN_FN &&
+        func->value.extern_fn.len == ast->data.AST_APPLICATION.len) {
+
+      Value *vals = malloc(sizeof(Value) * ast->data.AST_APPLICATION.len);
+      for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+        *(vals + i) = *eval(ast->data.AST_APPLICATION.args[i], vals + i, stack,
+                            stack_ptr);
+      }
+
+      return call_external_function(func, vals, ast->data.AST_APPLICATION.len);
+    }
+    return NULL;
+  }
+  default:
+    return NULL;
   }
 }

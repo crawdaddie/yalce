@@ -1,4 +1,5 @@
 #include "parse.h"
+#include "serde.h"
 #include <stdlib.h>
 
 Ast *Ast_new(enum ast_tag tag) {
@@ -33,16 +34,16 @@ Ast *ast_unop(token_type op, Ast *right) {
   return node;
 }
 
-Ast *ast_identifier(LexId lex_id) {
-  char *name = lex_id.chars;
-  int length = lex_id.length;
+Ast *ast_identifier(ObjString id) {
+  char *name = id.chars;
+  int length = id.length;
   Ast *node = Ast_new(AST_IDENTIFIER);
   node->data.AST_IDENTIFIER.value = name;
   node->data.AST_IDENTIFIER.length = length;
   return node;
 }
 
-Ast *ast_let(LexId name, Ast *expr) {
+Ast *ast_let(ObjString name, Ast *expr) {
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.name = name;
   if (expr->tag == AST_LAMBDA) {
@@ -63,10 +64,24 @@ Ast *parse_input(char *input) {
 }
 
 Ast *ast_application(Ast *func, Ast *arg) {
-  Ast *app = Ast_new(AST_APPLICATION);
-  app->data.AST_APPLICATION.function = func;
-  app->data.AST_APPLICATION.arg = arg;
-  return app;
+  if (func->tag == AST_IDENTIFIER) {
+    Ast *app = Ast_new(AST_APPLICATION);
+    app->data.AST_APPLICATION.function = func;
+    app->data.AST_APPLICATION.args = malloc(sizeof(Ast *));
+    app->data.AST_APPLICATION.args[0] = arg;
+    app->data.AST_APPLICATION.len = 1;
+    return app;
+  }
+  if (func->tag == AST_APPLICATION) {
+    Ast **args = func->data.AST_APPLICATION.args;
+    func->data.AST_APPLICATION.len++;
+    int len = func->data.AST_APPLICATION.len;
+
+    func->data.AST_APPLICATION.args = realloc(args, sizeof(Ast *) * len);
+    func->data.AST_APPLICATION.args[len - 1] = arg;
+    return func;
+  }
+  return NULL;
 }
 
 Ast *ast_lambda(Ast *lambda, Ast *body) {
@@ -79,21 +94,36 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   return lambda;
 }
 
-Ast *ast_arg_list(LexId arg) {
+Ast *ast_arg_list(ObjString arg_id) {
   Ast *lambda = Ast_new(AST_LAMBDA);
-  lambda->data.AST_LAMBDA.params = malloc(sizeof(LexId));
+  lambda->data.AST_LAMBDA.params = malloc(sizeof(ObjString));
   lambda->data.AST_LAMBDA.len = 1;
-  lambda->data.AST_LAMBDA.params[0] = arg;
+  lambda->data.AST_LAMBDA.params[0] = arg_id;
   return lambda;
 }
 
-Ast *ast_arg_list_push(Ast *lambda, LexId arg) {
-  LexId *params = lambda->data.AST_LAMBDA.params;
+Ast *ast_arg_list_push(Ast *lambda, ObjString arg_id) {
+  ObjString *params = lambda->data.AST_LAMBDA.params;
   lambda->data.AST_LAMBDA.len++;
   size_t len = lambda->data.AST_LAMBDA.len;
 
-  lambda->data.AST_LAMBDA.params = realloc(params, sizeof(LexId) * len);
-  lambda->data.AST_LAMBDA.params[len - 1] = arg;
+  lambda->data.AST_LAMBDA.params = realloc(params, sizeof(ObjString) * len);
+  lambda->data.AST_LAMBDA.params[len - 1] = arg_id;
+  return lambda;
+}
+
+Ast *ast_extern_declaration(ObjString extern_name, Ast *lambda,
+                            ObjString return_type) {
+
+  size_t len = lambda->data.AST_LAMBDA.len;
+  ObjString *params = lambda->data.AST_LAMBDA.params;
+
+  lambda->tag = AST_EXTERN_FN_DECLARATION;
+
+  lambda->data.AST_EXTERN_FN_DECLARATION.fn_name = extern_name;
+  lambda->data.AST_EXTERN_FN_DECLARATION.len = len;
+  lambda->data.AST_EXTERN_FN_DECLARATION.params = params;
+  lambda->data.AST_EXTERN_FN_DECLARATION.return_type = return_type;
   return lambda;
 }
 
@@ -110,7 +140,7 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
   return body;
 }
 Ast *ast_void() { return Ast_new(AST_VOID); }
-Ast *ast_string(LexString lex_string) {
+Ast *ast_string(ObjString lex_string) {
   Ast *s = Ast_new(AST_STRING);
   s->data.AST_STRING.value = lex_string.chars;
   s->data.AST_STRING.length = lex_string.length;

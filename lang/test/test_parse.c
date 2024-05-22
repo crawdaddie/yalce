@@ -101,6 +101,8 @@ int main() {
   status &= test_parse("-4f", "-4.000000");
   status &= test_parse("(1 + 2)", "(+ 1 2)");
   status &= test_parse("x + y", "(+ x y)");
+  status &= test_parse("x - y", "(- x y)");
+  status &= test_parse("1 + -2.", "(+ 1 -2.000000)");
   status &= test_parse("()", "()");
 
   // # multiple binop expression",
@@ -169,6 +171,9 @@ int main() {
                             "(+ 1 1)");
   // let declaration
   status &= test_parse("let x = 1 + y", "(let x (+ 1 y))");
+
+  status &= test_parse("let print = extern \"printf\" fn str -> void",
+                       "(let print (extern printf str -> void)\n)");
 
   return status ? 0 : 1;
 }

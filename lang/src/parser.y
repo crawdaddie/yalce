@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include "parse.h"
 #include "serde.h"
+#include "common.h"
 
 /* prototypes */
 extern void yyerror(const char *s);
@@ -26,8 +27,8 @@ Ast* ast_root = NULL;
 
 %union {
     Ast *ast_node_ptr;          /* node pointer */
-    LexId vident;               /* identifier */
-    LexString vstr;                 /* string */
+    ObjString vident;               /* identifier */
+    ObjString vstr;                 /* string */
     int vint;                   /* int val */
     double vfloat;
 };
@@ -39,6 +40,7 @@ Ast* ast_root = NULL;
 %token TRUE FALSE
 %token WHILE IF PRINT PIPE
 %token EXTERN
+%token TRIPLE_DOT
 %token LET
 %token FN
 %token ARROW
@@ -90,7 +92,7 @@ stmt_list_opt:
 stmt_list:
     stmt                      { $$ = $1; }
   | stmt_list ';' stmt        { $$ = parse_stmt_list($1, $3); }
-  | stmt_list                 { $$ = $1; } // To handle optional ';' at the end
+  /*| stmt_list                 { $$ = $1; } // To handle optional ';' at the end */
   ;
 
 
@@ -102,7 +104,7 @@ expr:
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
   | IDENTIFIER            { $$ = ast_identifier($1); }
   | VOID                  { $$ = ast_void(); }
-  | '-' expr %prec UMINUS { $$ = ast_unop(TOKEN_MINUS, $2); }
+  /*| '-' expr %prec UMINUS { $$ = ast_unop(TOKEN_MINUS, $2); } */
   | expr '+' expr         { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr         { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
   | expr '*' expr         { $$ = ast_binop(TOKEN_STAR, $1, $3); }
@@ -122,6 +124,10 @@ expr:
 
 lambda_expr:
     FN lambda_args ARROW stmt_list_opt  { $$ = ast_lambda($2, $4); }
+  | EXTERN STRING FN lambda_args ARROW IDENTIFIER {
+                                          $$ = ast_extern_declaration($2, ast_lambda($4, NULL), $6);
+                                        }
+
   | FN VOID ARROW stmt_list_opt         { $$ = ast_lambda(NULL, $4); }
   ;
 

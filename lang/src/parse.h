@@ -1,18 +1,9 @@
 #ifndef _LANG_PARSE_H
 #define _LANG_PARSE_H
+#include "common.h"
 #include <stdbool.h>
 #include <stdio.h>
 typedef struct Ast Ast;
-
-typedef struct {
-  char *chars;
-  int length;
-} LexString;
-
-typedef struct {
-  char *chars;
-  int length;
-} LexId;
 
 // parser prototypes
 extern FILE *yyin;
@@ -98,10 +89,11 @@ typedef enum ast_tag {
   AST_UNOP,
   AST_APPLICATION,
   AST_TUPLE,
-  AST_FN_DECLARATION,
   AST_LAMBDA,
   AST_LAMBDA_ARGS,
   AST_VOID,
+  AST_EXTERN_FN_DECLARATION,
+  // AST_EXTERN_DECLARATION,
 } ast_tag;
 
 struct Ast {
@@ -113,7 +105,7 @@ struct Ast {
     } AST_BODY;
 
     struct AST_LET {
-      LexId name;
+      ObjString name;
       Ast *expr;
     } AST_LET;
 
@@ -152,7 +144,8 @@ struct Ast {
 
     struct AST_APPLICATION {
       Ast *function;
-      Ast *arg;
+      Ast **args;
+      int len;
       // size_t num_args;
     } AST_APPLICATION;
 
@@ -161,24 +154,25 @@ struct Ast {
       Ast **members;
     } AST_TUPLE;
 
-    struct AST_FN_DECLARATION {
-      size_t len;
-      LexId *params;
-      LexId *fn_name;
-      Ast *body;
-    } AST_FN_DECLARATION;
-
     struct AST_LAMBDA {
       size_t len;
-      LexId *params;
-      LexId fn_name;
+      ObjString *params;
+      ObjString fn_name;
       Ast *body;
     } AST_LAMBDA;
 
+    struct AST_EXTERN_FN_DECLARATION {
+      size_t len;
+      ObjString *params;
+      ObjString return_type;
+      ObjString fn_name;
+    } AST_EXTERN_FN_DECLARATION;
+
     struct AST_LAMBDA_ARGS {
-      LexId *ids;
+      Ast **ids;
       size_t len;
     } AST_LAMBDA_ARGS;
+
   } data;
 };
 
@@ -191,15 +185,17 @@ extern Ast *ast_root;
 
 Ast *ast_binop(token_type op, Ast *left, Ast *right);
 Ast *ast_unop(token_type op, Ast *right);
-Ast *ast_identifier(LexId lex_id);
-Ast *ast_let(LexId name, Ast *expr);
+Ast *ast_identifier(ObjString id);
+Ast *ast_let(ObjString name, Ast *expr);
 Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
-Ast *ast_arg_list(LexId arg);
-Ast *ast_arg_list_push(Ast *arg_list, LexId arg);
+Ast *ast_arg_list(ObjString arg_id);
+Ast *ast_arg_list_push(Ast *arg_list, ObjString arg_id);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input);
 Ast *ast_void();
-Ast *ast_string(LexString lex_string);
+Ast *ast_string(ObjString lex_string);
+Ast *ast_extern_declaration(ObjString extern_name, Ast *arg_list,
+                            ObjString return_type);
 
 #endif

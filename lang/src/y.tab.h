@@ -50,20 +50,21 @@
      PRINT = 266,
      PIPE = 267,
      EXTERN = 268,
-     LET = 269,
-     FN = 270,
-     ARROW = 271,
-     VOID = 272,
-     DOUBLE_SEMICOLON = 273,
-     IN = 274,
-     IFX = 275,
-     ELSE = 276,
-     MODULO = 277,
-     NE = 278,
-     EQ = 279,
-     LE = 280,
-     GE = 281,
-     UMINUS = 282
+     TRIPLE_DOT = 269,
+     LET = 270,
+     FN = 271,
+     ARROW = 272,
+     VOID = 273,
+     DOUBLE_SEMICOLON = 274,
+     IN = 275,
+     IFX = 276,
+     ELSE = 277,
+     MODULO = 278,
+     NE = 279,
+     EQ = 280,
+     LE = 281,
+     GE = 282,
+     UMINUS = 283
    };
 #endif
 /* Tokens.  */
@@ -78,36 +79,37 @@
 #define PRINT 266
 #define PIPE 267
 #define EXTERN 268
-#define LET 269
-#define FN 270
-#define ARROW 271
-#define VOID 272
-#define DOUBLE_SEMICOLON 273
-#define IN 274
-#define IFX 275
-#define ELSE 276
-#define MODULO 277
-#define NE 278
-#define EQ 279
-#define LE 280
-#define GE 281
-#define UMINUS 282
+#define TRIPLE_DOT 269
+#define LET 270
+#define FN 271
+#define ARROW 272
+#define VOID 273
+#define DOUBLE_SEMICOLON 274
+#define IN 275
+#define IFX 276
+#define ELSE 277
+#define MODULO 278
+#define NE 279
+#define EQ 280
+#define LE 281
+#define GE 282
+#define UMINUS 283
 
 
 
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 27 "src/parser.y"
+#line 28 "src/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
-    LexId vident;               /* identifier */
-    LexString vstr;                 /* string */
+    ObjString vident;               /* identifier */
+    ObjString vstr;                 /* string */
     int vint;                   /* int val */
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 111 "src/y.tab.h"
+#line 113 "src/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

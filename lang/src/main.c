@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define DEBUG_AST
+
 int eval_script(const char *filename) {
   char *fcontent = read_script(filename);
   if (!fcontent) {
@@ -15,14 +17,19 @@ int eval_script(const char *filename) {
   }
 
   Ast *prog = parse_input(fcontent);
+#ifdef DEBUG_AST
   print_ast(prog);
+#endif
 
   ht stack[STACK_MAX];
 
   for (int i = 0; i < STACK_MAX; i++) {
     ht_init(stack + i);
   }
-  print_value(eval(prog, NULL, stack, 0, NULL));
+
+  Value *res = eval(prog, NULL, stack, 0);
+  // printf("> ");
+  // print_value(res);
 
   free(fcontent);
   return 0; // Return success
@@ -67,8 +74,13 @@ int main(int argc, char **argv) {
 
       Value *val = malloc(sizeof(Value));
       Ast *top = peek_body(prog);
+#ifdef DEBUG_AST
       print_ast(top);
-      print_value(eval(top, val, stack, 0, NULL));
+#endif
+
+      Value *res = eval(top, val, stack, 0);
+      printf("> ");
+      print_value(res);
       printf("\n");
     }
     free(input);

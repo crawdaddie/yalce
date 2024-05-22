@@ -1,6 +1,7 @@
 // Simple hash table implemented in C.
 
 #include "ht.h"
+#include "common.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -43,6 +44,21 @@ void ht_init(ht *table) {
   }
 }
 
+void ht_reinit(ht *table) {
+  // ht *table = malloc(sizeof(ht));
+  if (table == NULL) {
+    return;
+  }
+  table->length = 0;
+  table->capacity = INITIAL_CAPACITY;
+
+  // (zero) space for entry buckets.
+  for (int i = 0; i < table->capacity; i++) {
+    // free((table->entries + i)->value);
+    *(table->entries + i) = (ht_entry){NULL, NULL};
+  }
+}
+
 void ht_destroy(ht *table) {
   // First free allocated keys.
   for (size_t i = 0; i < table->capacity; i++) {
@@ -52,32 +68,6 @@ void ht_destroy(ht *table) {
   // Then free entries array and table itself.
   free(table->entries);
   free(table);
-}
-
-#define FNV_OFFSET 14695981039346656037UL
-#define FNV_PRIME 1099511628211UL
-
-// Return 64-bit FNV-1a hash for key (NUL-terminated). See description:
-// https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function
-uint64_t hash_key(const char *key) {
-  uint64_t hash = FNV_OFFSET;
-  for (const char *p = key; *p; p++) {
-    hash ^= (uint64_t)(unsigned char)(*p);
-    hash *= FNV_PRIME;
-  }
-  return hash;
-}
-
-// Return 64-bit FNV-1a hash for key (NUL-terminated). See description:
-// https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function
-uint64_t hash_string(const char *key, int length) {
-  uint64_t hash = FNV_OFFSET;
-  for (int i = 0; i < length; i++) {
-    const char *p = key + i;
-    hash ^= (uint64_t)(unsigned char)(*p);
-    hash *= FNV_PRIME;
-  }
-  return hash;
 }
 
 void *ht_get_hash(ht *table, const char *key, uint64_t hash) {
