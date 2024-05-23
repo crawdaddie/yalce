@@ -1,4 +1,3 @@
-let print = extern "printf" fn str -> void;
 let x = "adam";
 let y = 200;
 

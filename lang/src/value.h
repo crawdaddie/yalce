@@ -77,4 +77,42 @@ struct Value {
   } value;
 };
 
+#define INT(i)                                                                 \
+  (Value) {                                                                    \
+    VALUE_INT, { .vint = i }                                                   \
+  }
+
+#define NUM(i)                                                                 \
+  (Value) {                                                                    \
+    VALUE_NUMBER, { .vnum = i }                                                \
+  }
+
+#define STRING(i)                                                              \
+  (Value) {                                                                    \
+    VALUE_STRING, { .vstr = i }                                                \
+  }
+
+#define BOOL(i)                                                                \
+  (Value) {                                                                    \
+    VALUE_BOOL, { .vbool = i }                                                 \
+  }
+
+#define NATIVE_FN(_handle, _len)                                               \
+  &(Value) {                                                                   \
+    .type = VALUE_NATIVE_FN, .value = {                                        \
+      .native_fn = {.handle = &_handle, .len = _len}                           \
+    }                                                                          \
+  }
+
+#define TYPE_MAP(_id, _type)                                                   \
+  (native_symbol_map) {                                                        \
+    .id = _id, &(Value) {                                                      \
+      .type = VALUE_TYPE, .value = {.type = _type }                            \
+    }                                                                          \
+  }
+typedef struct {
+  const char *id;
+  Value *type;
+} native_symbol_map;
+
 #endif

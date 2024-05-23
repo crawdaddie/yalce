@@ -8,7 +8,8 @@ SRCDIR := src
 BUILDDIR := build
 TESTDIR := test
 CC = clang -I../include -I./src -g
-LDFLAGS = -L../build -lyalce_synth -lm
+# LDFLAGS = -L../build -lyalce_synth -lm
+
 
 SRCS := $(wildcard $(SRCDIR)/*.c)
 OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o) $(BUILDDIR)/y.tab.o $(BUILDDIR)/lex.yy.o
