@@ -203,6 +203,20 @@ Value *eval(Ast *ast, ht *stack, int stack_ptr) {
                              val);
       return val;
     }
+
+    if (func->type == VALUE_NATIVE_FN &&
+        func->value.native_fn.len == ast->data.AST_APPLICATION.len) {
+      int len = func->value.native_fn.len;
+
+      Value *input_vals = malloc(sizeof(Value) * ast->data.AST_APPLICATION.len);
+      for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+        Value *v = eval(ast->data.AST_APPLICATION.args[i], stack, stack_ptr);
+        input_vals[i] = *v;
+      }
+      *val = func->value.native_fn.handle(len, input_vals);
+
+      return val;
+    }
     return NULL;
   }
   default:

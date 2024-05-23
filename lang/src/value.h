@@ -12,12 +12,15 @@ typedef union {
   uintptr_t up;
 } UniversalType;
 
+typedef struct Value Value;
+
 // typedef UniversalType (*extern_handle_t)(UniversalType, ...);
 typedef double (*extern_double)(void *, ...);
 typedef int (*extern_int)(void *, ...);
 typedef void *(*extern_void_ptr)(void *, ...);
 typedef void (*extern_void)(void *, ...);
 typedef char *(*extern_str)(void *, ...);
+typedef Value (*native_fn_t)(int, Value *);
 
 typedef enum value_type {
   VALUE_INT,
@@ -31,6 +34,7 @@ typedef enum value_type {
   VALUE_RECURSIVE_REF,
   VALUE_CURRIED_FN,
   VALUE_TYPE,
+  VALUE_NATIVE_FN,
 } value_type;
 
 typedef struct {
@@ -48,10 +52,16 @@ typedef struct {
   value_type *input_types;
   int len;
   value_type return_type;
-
 } ExternFn;
 
 typedef struct {
+  native_fn_t handle;
+  value_type *input_types;
+  int len;
+  value_type return_type;
+} NativeFn;
+
+struct Value {
   value_type type;
   union {
     int vint;
@@ -62,7 +72,9 @@ typedef struct {
     Function function;
     Function recursive_ref;
     ExternFn extern_fn;
+    NativeFn native_fn;
     value_type type;
   } value;
-} Value;
+};
+
 #endif

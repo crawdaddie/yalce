@@ -1,6 +1,7 @@
 #include "eval.h"
 #include "ht.h"
 #include "input.h"
+#include "native_functions.h"
 #include "parse.h"
 #include "serde.h"
 #include "types.h"
@@ -48,6 +49,7 @@ int main(int argc, char **argv) {
     ht_init(stack + i);
   }
   add_type_lookups(stack);
+  add_native_functions(stack);
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-i") == 0) {
