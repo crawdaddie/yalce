@@ -1,4 +1,5 @@
 #include "serde.h"
+#include "native_functions.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -203,6 +204,20 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   case AST_LAMBDA_ARGS: {
     break;
   }
+  case AST_LIST: {
+
+    buffer = strcat(buffer, "[");
+    int len = ast->data.AST_LIST.len;
+    for (int i = 0; i < len; i++) {
+      buffer = ast_to_sexpr(ast->data.AST_LIST.items + i, buffer);
+      if (i < len - 1) {
+        buffer = strcat(buffer, ", ");
+      }
+    }
+
+    buffer = strcat(buffer, "]");
+    break;
+  }
 
   default: {
     // Handle unsupported node types or other errors
@@ -220,37 +235,52 @@ void print_value(Value *val) {
 
   switch (val->type) {
   case VALUE_INT:
-    printf("[%d]", val->value.vint);
+    printf("%d", val->value.vint);
     break;
 
   case VALUE_NUMBER:
-    printf("[%f]", val->value.vnum);
+    printf("%f", val->value.vnum);
     break;
 
   case VALUE_STRING:
-    printf("[%s]", val->value.vstr.chars);
+    printf("%s", val->value.vstr.chars);
     break;
 
   case VALUE_BOOL:
-    printf("[%s]", val->value.vbool ? "true" : "false");
+    printf("%s", val->value.vbool ? "true" : "false");
     break;
 
   case VALUE_VOID:
-    printf("[()]");
+    printf("()");
     break;
 
   case VALUE_FN:
-    printf("[function [%p]]", val);
+    printf("function %p", val);
     break;
 
   case VALUE_EXTERN_FN:
-    printf("[function [%p]]", val);
+    printf("function %p", val);
     break;
 
   case VALUE_TYPE:
-    printf("[type %d]", val->value.type);
+
+    printf("type %d", val->value.type);
     break;
 
+  case VALUE_LIST:
+
+    printf("[");
+
+    int len = _list_length(1, val);
+    for (int i = 0; i < len; i++) {
+      Value v = list_nth(i, val);
+      print_value(&v);
+      if (i < len - 1) {
+        printf(", ");
+      }
+    }
+    printf("]");
+    break;
   default:
     printf("unknown value type %d %d", val->type, val->value.type);
   }

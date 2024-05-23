@@ -15,7 +15,9 @@
 ";;"                    return DOUBLE_SEMICOLON;
 "..."                   return TRIPLE_DOT;
 "in"                    return IN;
-[a-zA-Z_][a-zA-Z0-9_]*  {
+"["                     return *yytext;
+"]"                     return *yytext;
+[a-zA-Z_][a-zA-Z0-9_.]*  {
 
                           int len = yyleng;
                           yylval.vident.chars = strdup(yytext); 
@@ -63,7 +65,7 @@
                         return NUMBER;
                         }
 
-[-()<>=+*/;{}.]         {
+[-()<>=+*/;{},]         {
                           /*printf("operator '%s'", yytext);*/
                           return *yytext;
                         }

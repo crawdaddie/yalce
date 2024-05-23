@@ -177,5 +177,7 @@ int main() {
 
   status &=
       test_parse("`hello {x} {y}`", "(((_format \"hello {x} {y}\") x) y)");
+
+  status &= test_parse("[1, 2, 3, 4]", "[1, 2, 3, 4]");
   return status ? 0 : 1;
 }

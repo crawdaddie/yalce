@@ -94,6 +94,7 @@ typedef enum ast_tag {
   AST_VOID,
   AST_EXTERN_FN_DECLARATION,
   // AST_EXTERN_DECLARATION,
+  AST_LIST,
 } ast_tag;
 
 struct Ast {
@@ -173,6 +174,11 @@ struct Ast {
       size_t len;
     } AST_LAMBDA_ARGS;
 
+    struct AST_LIST {
+      Ast *items;
+      size_t len;
+    } AST_LIST;
+
   } data;
 };
 
@@ -199,4 +205,7 @@ Ast *ast_extern_declaration(ObjString extern_name, Ast *arg_list,
                             ObjString return_type);
 
 Ast *parse_format_expr(ObjString fstring);
+Ast *ast_empty_list();
+Ast *ast_list(Ast *val);
+Ast *ast_list_push(Ast *list, Ast *val);
 #endif

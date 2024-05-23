@@ -29,6 +29,7 @@ typedef enum value_type {
   VALUE_BOOL,
   VALUE_VOID,
   VALUE_OBJ,
+  VALUE_LIST,
   VALUE_FN,
   VALUE_EXTERN_FN,
   VALUE_RECURSIVE_REF,
@@ -61,6 +62,32 @@ typedef struct {
   value_type return_type;
 } NativeFn;
 
+typedef struct {
+  int len;
+  value_type type;
+  int *items;
+} IntList;
+
+typedef struct {
+  int len;
+  value_type type;
+  double *items;
+} NumberList;
+
+typedef struct {
+  int len;
+  value_type type;
+  char **items;
+  int *lens;
+  uint64_t *hashes;
+} StringList;
+
+typedef struct {
+  int len;
+  value_type type;
+  void **items;
+} ObjList;
+
 struct Value {
   value_type type;
   union {
@@ -74,6 +101,7 @@ struct Value {
     ExternFn extern_fn;
     NativeFn native_fn;
     value_type type;
+    void *vlist;
   } value;
 };
 
@@ -97,6 +125,15 @@ struct Value {
     VALUE_BOOL, { .vbool = i }                                                 \
   }
 
+#define OBJ(i)                                                                 \
+  (Value) {                                                                    \
+    VALUE_OBJ, { .vobj = i }                                                   \
+  }
+
+#define LIST(l)                                                                \
+  (Value) {                                                                    \
+    VALUE_LIST, { .vlist = l }                                                 \
+  }
 #define NATIVE_FN(_handle, _len)                                               \
   &(Value) {                                                                   \
     .type = VALUE_NATIVE_FN, .value = {                                        \

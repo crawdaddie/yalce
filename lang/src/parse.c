@@ -172,3 +172,26 @@ Ast *parse_format_expr(ObjString fstring) {
 
   return ast_string(fstring);
 }
+
+Ast *ast_empty_list() {
+  Ast *l = Ast_new(AST_LIST);
+  l->data.AST_LIST.len = 0;
+  l->data.AST_LIST.items = NULL;
+  return l;
+}
+
+Ast *ast_list(Ast *val) {
+  Ast *l = Ast_new(AST_LIST);
+  l->data.AST_LIST.len = 1;
+  l->data.AST_LIST.items = val;
+  return l;
+}
+Ast *ast_list_push(Ast *list, Ast *val) {
+  Ast *items = list->data.AST_LIST.items;
+  list->data.AST_LIST.len++;
+  int len = list->data.AST_LIST.len;
+
+  list->data.AST_LIST.items = realloc(items, sizeof(Ast) * len);
+  list->data.AST_LIST.items[len - 1] = *val;
+  return list;
+}

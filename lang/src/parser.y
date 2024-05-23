@@ -60,7 +60,7 @@ Ast* ast_root = NULL;
 
 %nonassoc UMINUS
 
-%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args
+%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args list expr_list
 
 
 %%
@@ -122,6 +122,7 @@ expr:
   | lambda_expr           { $$ = $1; }
   | application           { $$ = $1; }
   | FSTRING               { $$ = parse_format_expr($1); }
+  | list                  { $$ = $1; }
   ;
 
 lambda_expr:
@@ -145,6 +146,17 @@ application:
     IDENTIFIER expr         { $$ = ast_application(ast_identifier($1), $2); }
   | application expr        { $$ = ast_application($1, $2); }
   ;
+
+list
+    : '[' ']'                     { $$ = ast_empty_list(); }
+    | '[' expr_list ']'           { $$ = $2; }
+    ;
+
+expr_list
+    : expr                        { $$ = ast_list($1); }
+    | expr_list ',' expr          { $$ = ast_list_push($1, $3); }
+    ;
+
 %%
 
 
