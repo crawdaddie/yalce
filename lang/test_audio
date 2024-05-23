@@ -1,0 +1,4 @@
+let init_audio = extern "init_audio" fn void -> void;
+let get_audio_ctx = extern "get_audio_ctx" fn void -> ptr;
+
+init_audio ()

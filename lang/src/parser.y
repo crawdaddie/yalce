@@ -37,6 +37,7 @@ Ast* ast_root = NULL;
 %token <vfloat> NUMBER
 %token <vident> IDENTIFIER
 %token <vstr>   STRING
+%token <vstr>   FSTRING
 %token TRUE FALSE
 %token WHILE IF PRINT PIPE
 %token EXTERN
@@ -120,6 +121,7 @@ expr:
   | '(' expr ')'          { $$ = $2; }
   | lambda_expr           { $$ = $1; }
   | application           { $$ = $1; }
+  | FSTRING               { $$ = parse_format_expr($1); }
   ;
 
 lambda_expr:

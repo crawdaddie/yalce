@@ -198,4 +198,5 @@ Ast *ast_string(ObjString lex_string);
 Ast *ast_extern_declaration(ObjString extern_name, Ast *arg_list,
                             ObjString return_type);
 
+Ast *parse_format_expr(ObjString fstring);
 #endif

@@ -11,7 +11,7 @@ static Value *call_function(Value *fn, Value *args, int num_args, ht *stack) {
 
   ht *fn_scope = stack + stack_ptr;
 
-  for (int i = 0; i < num_args; i++) {
+  for (int i = 0; i < fn->value.function.len; i++) {
     ObjString param_id = fn->value.function.params[i];
     ht_set_hash(fn_scope, param_id.chars, param_id.hash, (args + i));
   }
@@ -25,31 +25,32 @@ static Value *call_function(Value *fn, Value *args, int num_args, ht *stack) {
                            .value = {.recursive_ref = fn->value.function}};
     ht_set_hash(fn_scope, fn_name, hash, &recursive_ref);
   }
-  Value *return_val = eval(fn->value.function.body, NULL, stack, stack_ptr);
+  Value *return_val = eval(fn->value.function.body, stack, stack_ptr);
   ht_reinit(fn_scope);
   return return_val;
 }
 
-Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr) {
+Value *eval(Ast *ast, ht *stack, int stack_ptr) {
   if (!ast) {
     return NULL;
   }
 
+  Value *val = malloc(sizeof(Value));
+  val->type = VALUE_VOID;
   switch (ast->tag) {
 
   case AST_BODY: {
-    void *final;
+    Value *final;
     for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
       Ast *stmt = ast->data.AST_BODY.stmts[i];
-      Value *val = malloc(sizeof(Value));
-      final = eval(stmt, val, stack, stack_ptr);
+      final = eval(stmt, stack + stack_ptr, stack_ptr);
     }
     return final;
   }
   case AST_LET: {
     ObjString name = ast->data.AST_LET.name;
 
-    Value *expr = eval(ast->data.AST_LET.expr, val, stack, stack_ptr);
+    Value *expr = eval(ast->data.AST_LET.expr, stack, stack_ptr);
     ht_set_hash(stack + stack_ptr, name.chars, name.hash, expr);
     return expr;
   }
@@ -80,12 +81,15 @@ Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr) {
     val->value.vbool = ast->data.AST_BOOL.value;
     return val;
   }
-  case AST_BINOP: {
-    Value *l =
-        eval(ast->data.AST_BINOP.left, malloc(sizeof(Value)), stack, stack_ptr);
 
-    Value *r = eval(ast->data.AST_BINOP.right, malloc(sizeof(Value)), stack,
-                    stack_ptr); // reuse val
+  case AST_VOID: {
+    val->type = VALUE_VOID;
+    return val;
+  }
+  case AST_BINOP: {
+    Value *l = eval(ast->data.AST_BINOP.left, stack, stack_ptr);
+
+    Value *r = eval(ast->data.AST_BINOP.right, stack, stack_ptr);
 
     if (l == NULL || r == NULL) {
       return NULL;
@@ -101,6 +105,7 @@ Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr) {
       break;
     }
     case TOKEN_STAR: {
+
       val = mul_ops(l, r, val);
       break;
     }
@@ -150,7 +155,7 @@ Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr) {
   }
 
   case AST_EXTERN_FN_DECLARATION: {
-    return register_external_symbol(ast);
+    return register_external_symbol(ast, stack, stack_ptr);
   }
 
   case AST_IDENTIFIER: {
@@ -162,38 +167,41 @@ Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr) {
 
     while (ptr >= 0 &&
            !((res = (Value *)ht_get_hash(stack + ptr, key.chars, key.hash)))) {
-      *val = *res;
       ptr--;
     }
     return res;
   }
 
   case AST_APPLICATION: {
-    Value *func = malloc(sizeof(Value));
-    func = eval(ast->data.AST_APPLICATION.function, func, stack, stack_ptr);
+    Value *func = eval(ast->data.AST_APPLICATION.function, stack, stack_ptr);
 
     if (func->type == VALUE_FN &&
-        func->value.function.len == ast->data.AST_APPLICATION.len) {
+        (func->value.function.len == ast->data.AST_APPLICATION.len ||
+         func->value.function.len == 0 &&
+             ast->data.AST_APPLICATION.args[0]->tag == AST_VOID)) {
 
-      int len = func->value.function.len;
+      int len = func->value.function.len || ast->data.AST_APPLICATION.len;
 
-      Value *args = malloc(sizeof(Value) * len);
+      Value *arg_vals = malloc(sizeof(Value) * len);
       for (int i = 0; i < len; i++) {
-        eval(ast->data.AST_APPLICATION.args[i], args + i, stack, stack_ptr);
+        *(arg_vals + i) =
+            *eval(ast->data.AST_APPLICATION.args[i], stack, stack_ptr);
       }
-      return call_function(func, args, len, stack);
+      return call_function(func, arg_vals, len, stack);
     }
 
     if (func->type == VALUE_EXTERN_FN &&
         func->value.extern_fn.len == ast->data.AST_APPLICATION.len) {
 
-      Value *vals = malloc(sizeof(Value) * ast->data.AST_APPLICATION.len);
+      Value *input_vals = malloc(sizeof(Value) * ast->data.AST_APPLICATION.len);
       for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-        *(vals + i) = *eval(ast->data.AST_APPLICATION.args[i], vals + i, stack,
-                            stack_ptr);
+        Value *v = eval(ast->data.AST_APPLICATION.args[i], stack, stack_ptr);
+        input_vals[i] = *v;
       }
 
-      return call_external_function(func, vals, ast->data.AST_APPLICATION.len);
+      call_external_function(func, input_vals, ast->data.AST_APPLICATION.len,
+                             val);
+      return val;
     }
     return NULL;
   }

@@ -34,6 +34,17 @@
                           return STRING;
                         }
 
+\`([^\"\n]|\\.)*\`      {
+                          int len = yyleng - 2;
+                          char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars
+                          char *processed_str = process_escapes(raw_str, len); // process escape sequences
+                          free(raw_str);
+                          yylval.vstr.chars = processed_str;
+                          yylval.vstr.length = strlen(processed_str);
+                          yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
+                          return FSTRING;
+                        }
+
 -?0                     { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;

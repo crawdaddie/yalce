@@ -1,6 +1,7 @@
 #include "parse.h"
 #include "serde.h"
 #include <stdlib.h>
+#include <string.h>
 
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = malloc(sizeof(Ast));
@@ -139,10 +140,35 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
   ast_body_push(body, new_stmt);
   return body;
 }
+
 Ast *ast_void() { return Ast_new(AST_VOID); }
 Ast *ast_string(ObjString lex_string) {
   Ast *s = Ast_new(AST_STRING);
   s->data.AST_STRING.value = lex_string.chars;
   s->data.AST_STRING.length = lex_string.length;
   return s;
+}
+
+Ast *parse_format_expr(ObjString fstring) {
+  // TODO: split fstring on { & } and create concatenation expression with
+  // identifiers in between { & }
+  // eg `hello {x} and {y}` -> "hello " + (str x) + " and " + (str y)
+  Ast *fmt = Ast_new(AST_APPLICATION);
+  Ast *func_id = Ast_new(AST_IDENTIFIER);
+  func_id->data.AST_IDENTIFIER.value = strdup("_concat");
+  fmt->data.AST_APPLICATION.function = func_id;
+  char *ch = fstring.chars;
+
+  // while (*ch != '\0') {
+  //   ch++;
+  // }
+
+  // struct AST_APPLICATION {
+  //   Ast *function;
+  //   Ast **args;
+  //   int len;
+  //   // size_t num_args;
+  // } AST_APPLICATION;
+
+  return ast_string(fstring);
 }

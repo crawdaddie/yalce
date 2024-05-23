@@ -175,5 +175,7 @@ int main() {
   status &= test_parse("let print = extern \"printf\" fn str -> void",
                        "(let print (extern printf str -> void)\n)");
 
+  status &=
+      test_parse("`hello {x} {y}`", "(((_format \"hello {x} {y}\") x) y)");
   return status ? 0 : 1;
 }

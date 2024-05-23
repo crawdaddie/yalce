@@ -33,6 +33,7 @@ void audio_ctx_gc() {
     msleep(250);
   }
 }
+
 void cleanup_job() {
   pthread_t cleanup_thread;
   if (pthread_create(&cleanup_thread, NULL, (void *)audio_ctx_gc, NULL) != 0) {

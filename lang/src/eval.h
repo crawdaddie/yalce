@@ -6,6 +6,6 @@
 
 #define STACK_MAX 256
 
-Value *eval(Ast *ast, Value *val, ht *stack, int stack_ptr);
+Value *eval(Ast *ast, ht *stack, int stack_ptr);
 
 #endif

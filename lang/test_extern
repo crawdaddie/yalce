@@ -1,0 +1,6 @@
+let print = extern "printf" fn str -> void;
+let x = "adam";
+let y = 200;
+
+print `hello {x} {y}\n`
+

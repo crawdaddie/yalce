@@ -4,7 +4,21 @@
 #include "parse.h"
 #include <stdbool.h>
 
-typedef void *(*extern_handle_t)(void *, ...);
+typedef union {
+  double d;
+  void *vp;
+  char *cp;
+  int i;
+  uintptr_t up;
+} UniversalType;
+
+// typedef UniversalType (*extern_handle_t)(UniversalType, ...);
+typedef double (*extern_double)(void *, ...);
+typedef int (*extern_int)(void *, ...);
+typedef void *(*extern_void_ptr)(void *, ...);
+typedef void (*extern_void)(void *, ...);
+typedef char *(*extern_str)(void *, ...);
+
 typedef enum value_type {
   VALUE_INT,
   VALUE_NUMBER,
@@ -16,6 +30,7 @@ typedef enum value_type {
   VALUE_EXTERN_FN,
   VALUE_RECURSIVE_REF,
   VALUE_CURRIED_FN,
+  VALUE_TYPE,
 } value_type;
 
 typedef struct {
@@ -29,9 +44,10 @@ typedef struct {
 } Function;
 
 typedef struct {
-  extern_handle_t handle;
+  void *handle;
   value_type *input_types;
   int len;
+  value_type return_type;
 
 } ExternFn;
 
@@ -46,6 +62,7 @@ typedef struct {
     Function function;
     Function recursive_ref;
     ExternFn extern_fn;
+    value_type type;
   } value;
 } Value;
 #endif

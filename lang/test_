@@ -1,11 +1,5 @@
 let x = 1;
-let b = 2;
-let c = "hello";
-
-let f = (fn x y z -> 
-  x + y + z; 
-);
-
-(f x b 3) |> printf "%d";
+let y = 2.;
+x + y * 1.01231
 
 

@@ -43,28 +43,29 @@
      NUMBER = 259,
      IDENTIFIER = 260,
      STRING = 261,
-     TRUE = 262,
-     FALSE = 263,
-     WHILE = 264,
-     IF = 265,
-     PRINT = 266,
-     PIPE = 267,
-     EXTERN = 268,
-     TRIPLE_DOT = 269,
-     LET = 270,
-     FN = 271,
-     ARROW = 272,
-     VOID = 273,
-     DOUBLE_SEMICOLON = 274,
-     IN = 275,
-     IFX = 276,
-     ELSE = 277,
-     MODULO = 278,
-     NE = 279,
-     EQ = 280,
-     LE = 281,
-     GE = 282,
-     UMINUS = 283
+     FSTRING = 262,
+     TRUE = 263,
+     FALSE = 264,
+     WHILE = 265,
+     IF = 266,
+     PRINT = 267,
+     PIPE = 268,
+     EXTERN = 269,
+     TRIPLE_DOT = 270,
+     LET = 271,
+     FN = 272,
+     ARROW = 273,
+     VOID = 274,
+     DOUBLE_SEMICOLON = 275,
+     IN = 276,
+     IFX = 277,
+     ELSE = 278,
+     MODULO = 279,
+     NE = 280,
+     EQ = 281,
+     LE = 282,
+     GE = 283,
+     UMINUS = 284
    };
 #endif
 /* Tokens.  */
@@ -72,28 +73,29 @@
 #define NUMBER 259
 #define IDENTIFIER 260
 #define STRING 261
-#define TRUE 262
-#define FALSE 263
-#define WHILE 264
-#define IF 265
-#define PRINT 266
-#define PIPE 267
-#define EXTERN 268
-#define TRIPLE_DOT 269
-#define LET 270
-#define FN 271
-#define ARROW 272
-#define VOID 273
-#define DOUBLE_SEMICOLON 274
-#define IN 275
-#define IFX 276
-#define ELSE 277
-#define MODULO 278
-#define NE 279
-#define EQ 280
-#define LE 281
-#define GE 282
-#define UMINUS 283
+#define FSTRING 262
+#define TRUE 263
+#define FALSE 264
+#define WHILE 265
+#define IF 266
+#define PRINT 267
+#define PIPE 268
+#define EXTERN 269
+#define TRIPLE_DOT 270
+#define LET 271
+#define FN 272
+#define ARROW 273
+#define VOID 274
+#define DOUBLE_SEMICOLON 275
+#define IN 276
+#define IFX 277
+#define ELSE 278
+#define MODULO 279
+#define NE 280
+#define EQ 281
+#define LE 282
+#define GE 283
+#define UMINUS 284
 
 
 
@@ -109,7 +111,7 @@ typedef union YYSTYPE
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 113 "src/y.tab.h"
+#line 115 "src/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

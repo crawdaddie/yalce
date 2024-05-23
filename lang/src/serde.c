@@ -246,5 +246,12 @@ void print_value(Value *val) {
   case VALUE_EXTERN_FN:
     printf("[function [%p]]", val);
     break;
+
+  case VALUE_TYPE:
+    printf("[type %d]", val->value.type);
+    break;
+
+  default:
+    printf("unknown value type %d %d", val->type, val->value.type);
   }
 }

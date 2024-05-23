@@ -1,7 +1,9 @@
 #include "audio_loop.h"
 #include "ctx.h"
 #include "dbg.h"
+#include "gc.h"
 #include "log.h"
+#include "oscillator.h"
 #include "scheduling.h"
 #include "write_sample.h"
 #include <soundio/soundio.h>
@@ -30,7 +32,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     int frame_count = frames_left;
     if ((err =
              soundio_outstream_begin_write(outstream, &areas, &frame_count))) {
-      write_log("unrecoverable stream error: %s\n", soundio_strerror(err));
+      printf("unrecoverable stream error: %s\n", soundio_strerror(err));
       exit(1);
     }
 
@@ -53,7 +55,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     // }
 
     set_block_time();
-    handle_scheduler_tick();
+    // handle_scheduler_tick();
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
 
     int sample_idx;
@@ -76,7 +78,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     if ((err = soundio_outstream_end_write(outstream))) {
       if (err == SoundIoErrorUnderflow)
         return;
-      write_log("unrecoverable stream error: %s\n", soundio_strerror(err));
+      printf("unrecoverable stream error: %s\n", soundio_strerror(err));
       exit(1);
     }
 
@@ -90,7 +92,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
 static void underflow_callback(struct SoundIoOutStream *outstream) {
   static int count = 0;
-  write_log("underflow %d\n", count++);
+  printf("underflow %d\n", count++);
 }
 int start_audio() {
   enum SoundIoBackend backend = SoundIoBackendNone;
@@ -102,12 +104,12 @@ int start_audio() {
   double latency = 0.0;
   int sample_rate = 0;
   char *filename = NULL;
-  write_log("------------------\n");
+  printf("------------------\n");
 
   soundio = soundio_create();
 
   if (!soundio) {
-    write_log("out of memory\n");
+    printf("out of memory\n");
     return 1;
   }
 
@@ -116,12 +118,12 @@ int start_audio() {
                 : soundio_connect_backend(soundio, backend);
 
   if (err) {
-    write_log("Unable to connect to backend: %s\n", soundio_strerror(err));
+    printf("Unable to connect to backend: %s\n", soundio_strerror(err));
     return 1;
   }
-  write_log(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
-  write_log("Backend:           %s\n",
-            soundio_backend_name(soundio->current_backend));
+  printf(ANSI_COLOR_MAGENTA "Simple Synth" ANSI_COLOR_RESET "\n");
+  printf("Backend:           %s\n",
+         soundio_backend_name(soundio->current_backend));
 
   soundio_flush_events(soundio);
 
@@ -144,29 +146,28 @@ int start_audio() {
   }
 
   if (selected_device_index < 0) {
-    write_log("Output device not found\n");
+    printf("Output device not found\n");
     return 1;
   }
 
   struct SoundIoDevice *device =
       soundio_get_output_device(soundio, selected_device_index);
   if (!device) {
-    write_log("out of memory\n");
+    printf("out of memory\n");
     return 1;
   }
 
-  write_log("Output device:     %s\n", device->name);
-  // write_log("Output device ID:  %s\n", device->id);
+  printf("Output device:     %s\n", device->name);
+  // printf("Output device ID:  %s\n", device->id);
 
   if (device->probe_error) {
-    write_log("Cannot probe device: %s\n",
-              soundio_strerror(device->probe_error));
+    printf("Cannot probe device: %s\n", soundio_strerror(device->probe_error));
     return 1;
   }
 
   struct SoundIoOutStream *outstream = soundio_outstream_create(device);
   if (!outstream) {
-    write_log("out of memory\n");
+    printf("out of memory\n");
     return 1;
   }
 
@@ -196,29 +197,29 @@ int start_audio() {
     outstream->format = SoundIoFormatS16NE;
     write_sample = write_sample_s16ne;
   } else {
-    write_log("No suitable device format available.\n");
+    printf("No suitable device format available.\n");
     return 1;
   }
 
   if ((err = soundio_outstream_open(outstream))) {
-    write_log("unable to open device: %s", soundio_strerror(err));
+    printf("unable to open device: %s", soundio_strerror(err));
     return 1;
   }
 
   if (outstream->layout_error)
-    write_log("unable to set channel layout: %s\n",
-              soundio_strerror(outstream->layout_error));
+    printf("unable to set channel layout: %s\n",
+           soundio_strerror(outstream->layout_error));
 
   if ((err = soundio_outstream_start(outstream))) {
 
-    write_log("unable to start device: %s\n", soundio_strerror(err));
+    printf("unable to start device: %s\n", soundio_strerror(err));
 
     return 1;
   }
-  write_log("Software latency:  %f\n", outstream->software_latency);
-  write_log("Sample rate:       %d\n", outstream->sample_rate);
+  printf("Software latency:  %f\n", outstream->software_latency);
+  printf("Sample rate:       %d\n", outstream->sample_rate);
   ctx.sample_rate = outstream->sample_rate;
-  write_log("------------------\n");
+  printf("------------------\n");
 
   set_block_time();
   return 0;
@@ -233,4 +234,12 @@ int stop_audio() {
 
   // logging_teardown();
   return 0;
+}
+
+int init_audio() {
+  maketable_sin();
+  maketable_sq();
+  start_audio();
+  init_scheduling();
+  cleanup_job();
 }
