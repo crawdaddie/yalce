@@ -14,6 +14,8 @@
 "false"                 return FALSE;
 ";;"                    return DOUBLE_SEMICOLON;
 "..."                   return TRIPLE_DOT;
+"match"                 return MATCH;
+"with"                  return WITH;
 "in"                    return IN;
 "["                     return *yytext;
 "]"                     return *yytext;
@@ -33,7 +35,7 @@
                           yylval.vstr.chars = processed_str;
                           yylval.vstr.length = strlen(processed_str);
                           yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
-                          return STRING;
+                          return TOK_STRING;
                         }
 
 \`([^\"\n]|\\.)*\`      {
@@ -65,7 +67,9 @@
                         return NUMBER;
                         }
 
-[-()<>=+*/;{},]         {
+"|>"                    return PIPE;
+
+[-()<>=+*/;{},|]         {
                           /*printf("operator '%s'", yytext);*/
                           return *yytext;
                         }
@@ -74,7 +78,6 @@
 "<="            return LE;
 "=="            return EQ;
 "!="            return NE;
-"|>"            return PIPE;
 "->"            { return ARROW; }
 [ \t\n]+        ;       /* ignore whitespace */
 "#".*           ;       /* ignore comments starting with # */

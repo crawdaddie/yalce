@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define INPUT_BUFSIZE 2048
 void repl_input(char *input, int bufsize, const char *prompt) {
   char prev;
   char c;

@@ -42,7 +42,7 @@
      INTEGER = 258,
      NUMBER = 259,
      IDENTIFIER = 260,
-     STRING = 261,
+     TOK_STRING = 261,
      FSTRING = 262,
      TRUE = 263,
      FALSE = 264,
@@ -54,25 +54,27 @@
      TRIPLE_DOT = 270,
      LET = 271,
      FN = 272,
-     ARROW = 273,
-     VOID = 274,
-     DOUBLE_SEMICOLON = 275,
-     IN = 276,
-     IFX = 277,
-     ELSE = 278,
-     MODULO = 279,
-     NE = 280,
-     EQ = 281,
-     LE = 282,
-     GE = 283,
-     UMINUS = 284
+     MATCH = 273,
+     WITH = 274,
+     ARROW = 275,
+     VOID = 276,
+     DOUBLE_SEMICOLON = 277,
+     IN = 278,
+     IFX = 279,
+     ELSE = 280,
+     MODULO = 281,
+     NE = 282,
+     EQ = 283,
+     LE = 284,
+     GE = 285,
+     UMINUS = 286
    };
 #endif
 /* Tokens.  */
 #define INTEGER 258
 #define NUMBER 259
 #define IDENTIFIER 260
-#define STRING 261
+#define TOK_STRING 261
 #define FSTRING 262
 #define TRUE 263
 #define FALSE 264
@@ -84,25 +86,27 @@
 #define TRIPLE_DOT 270
 #define LET 271
 #define FN 272
-#define ARROW 273
-#define VOID 274
-#define DOUBLE_SEMICOLON 275
-#define IN 276
-#define IFX 277
-#define ELSE 278
-#define MODULO 279
-#define NE 280
-#define EQ 281
-#define LE 282
-#define GE 283
-#define UMINUS 284
+#define MATCH 273
+#define WITH 274
+#define ARROW 275
+#define VOID 276
+#define DOUBLE_SEMICOLON 277
+#define IN 278
+#define IFX 279
+#define ELSE 280
+#define MODULO 281
+#define NE 282
+#define EQ 283
+#define LE 284
+#define GE 285
+#define UMINUS 286
 
 
 
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 28 "src/parser.y"
+#line 27 "src/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
     ObjString vident;               /* identifier */
@@ -111,7 +115,7 @@ typedef union YYSTYPE
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 115 "src/y.tab.h"
+#line 119 "src/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

@@ -8,4 +8,5 @@ void print_ast(Ast *);
 char *ast_to_sexpr(Ast *, char *);
 
 void print_value(Value *val);
+
 #endif

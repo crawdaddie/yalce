@@ -14,7 +14,6 @@ extern int yylineno;
 extern char *yytext;
 
 Ast* ast_root = NULL;
-
 #define AST_CONST(type, val)                                            \
     ({                                                                  \
       Ast *prefix = Ast_new(type);                                      \
@@ -36,7 +35,7 @@ Ast* ast_root = NULL;
 %token <vint>   INTEGER
 %token <vfloat> NUMBER
 %token <vident> IDENTIFIER
-%token <vstr>   STRING
+%token <vstr>   TOK_STRING
 %token <vstr>   FSTRING
 %token TRUE FALSE
 %token WHILE IF PRINT PIPE
@@ -44,6 +43,8 @@ Ast* ast_root = NULL;
 %token TRIPLE_DOT
 %token LET
 %token FN
+%token MATCH
+%token WITH 
 %token ARROW
 %token VOID
 %token DOUBLE_SEMICOLON
@@ -60,7 +61,7 @@ Ast* ast_root = NULL;
 
 %nonassoc UMINUS
 
-%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args list expr_list
+%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args list expr_list match_expr match_branches
 
 
 %%
@@ -100,7 +101,7 @@ stmt_list:
 expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
   | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
-  | STRING                { $$ = ast_string($1); }
+  | TOK_STRING                { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
   | IDENTIFIER            { $$ = ast_identifier($1); }
@@ -123,11 +124,12 @@ expr:
   | application           { $$ = $1; }
   | FSTRING               { $$ = parse_format_expr($1); }
   | list                  { $$ = $1; }
+  | match_expr            { $$ = $1; }
   ;
 
 lambda_expr:
     FN lambda_args ARROW stmt_list_opt  { $$ = ast_lambda($2, $4); }
-  | EXTERN STRING FN lambda_args ARROW IDENTIFIER {
+  | EXTERN TOK_STRING FN lambda_args ARROW IDENTIFIER {
                                           $$ = ast_extern_declaration($2, ast_lambda($4, NULL), $6);
                                         }
 
@@ -147,16 +149,24 @@ application:
   | application expr        { $$ = ast_application($1, $2); }
   ;
 
-list
-    : '[' ']'                     { $$ = ast_empty_list(); }
-    | '[' expr_list ']'           { $$ = $2; }
-    ;
+list:
+    '[' ']'                 { $$ = ast_empty_list(); }
+  | '[' expr_list ']'       { $$ = $2; }
+  ;
 
-expr_list
-    : expr                        { $$ = ast_list($1); }
-    | expr_list ',' expr          { $$ = ast_list_push($1, $3); }
-    ;
+expr_list:
+    expr                  { $$ = ast_list($1); }
+  | expr_list ',' expr    { $$ = ast_list_push($1, $3); }
+  ;
 
+match_expr:
+    MATCH expr WITH match_branches { $$ = ast_match($2, $4); }
+  ;
+
+match_branches:
+    '|' expr ARROW stmt_list                {$$ = ast_match_branches(NULL, $2, $4);}
+  | match_branches '|' expr ARROW stmt_list {$$ = ast_match_branches($1, $3, $5);}
+  ;
 %%
 
 

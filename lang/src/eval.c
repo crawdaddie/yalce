@@ -183,14 +183,16 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
          func.value.function.len == 0 &&
              ast->data.AST_APPLICATION.args[0]->tag == AST_VOID)) {
 
-      int len = func.value.function.len || ast->data.AST_APPLICATION.len;
+      int len = func.value.function.len;
 
       Value *arg_vals = malloc(sizeof(Value) * len);
       for (int i = 0; i < len; i++) {
         *(arg_vals + i) =
             eval(ast->data.AST_APPLICATION.args[i], stack, stack_ptr);
       }
-      return call_function(&func, arg_vals, len, stack);
+      val = call_function(&func, arg_vals, len, stack);
+      free(arg_vals);
+      return val;
     }
 
     if (func.type == VALUE_EXTERN_FN &&

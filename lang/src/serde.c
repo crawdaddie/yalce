@@ -219,6 +219,28 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_MATCH: {
+
+    buffer = strcat(buffer, "(match ");
+    buffer = ast_to_sexpr(ast->data.AST_MATCH.expr, buffer);
+
+    buffer = strcat(buffer, " with\n");
+    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+
+      buffer = strcat(buffer, "\t");
+      buffer = ast_to_sexpr(ast->data.AST_MATCH.branches + (i * 2), buffer);
+
+      buffer = strcat(buffer, " -> ");
+
+      buffer = ast_to_sexpr(ast->data.AST_MATCH.branches + (i * 2) + 1, buffer);
+
+      buffer = strcat(buffer, "\n");
+    }
+
+    buffer = strcat(buffer, ")");
+    break;
+  }
+
   default: {
     // Handle unsupported node types or other errors
     break;

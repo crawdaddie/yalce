@@ -95,6 +95,7 @@ typedef enum ast_tag {
   AST_EXTERN_FN_DECLARATION,
   // AST_EXTERN_DECLARATION,
   AST_LIST,
+  AST_MATCH,
 } ast_tag;
 
 struct Ast {
@@ -179,6 +180,12 @@ struct Ast {
       size_t len;
     } AST_LIST;
 
+    struct AST_MATCH {
+      Ast *expr;
+      Ast *branches;
+      int len;
+    } AST_MATCH
+
   } data;
 };
 
@@ -208,4 +215,7 @@ Ast *parse_format_expr(ObjString fstring);
 Ast *ast_empty_list();
 Ast *ast_list(Ast *val);
 Ast *ast_list_push(Ast *list, Ast *val);
+
+Ast *ast_match(Ast *expr, Ast *match);
+Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result);
 #endif

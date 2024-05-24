@@ -195,3 +195,28 @@ Ast *ast_list_push(Ast *list, Ast *val) {
   list->data.AST_LIST.items[len - 1] = *val;
   return list;
 }
+
+Ast *ast_match(Ast *expr, Ast *match) {
+  match->data.AST_MATCH.expr = expr;
+  return match;
+}
+Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result) {
+  if (match == NULL) {
+    match = Ast_new(AST_MATCH);
+    match->data.AST_MATCH.branches = malloc(sizeof(Ast) * 2);
+    match->data.AST_MATCH.branches[0] = *expr;
+    match->data.AST_MATCH.branches[1] = *result;
+    match->data.AST_MATCH.len = 1;
+    return match;
+  }
+
+  Ast *branches = match->data.AST_MATCH.branches;
+  // ite->data.AST_LIST.len++;
+  match->data.AST_MATCH.len++;
+  int len = match->data.AST_MATCH.len;
+
+  match->data.AST_MATCH.branches = realloc(branches, sizeof(Ast) * len * 2);
+  match->data.AST_MATCH.branches[len * 2 - 2] = *expr;
+  match->data.AST_MATCH.branches[len * 2 - 1] = *result;
+  return match;
+}

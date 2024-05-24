@@ -179,5 +179,26 @@ int main() {
       test_parse("`hello {x} {y}`", "(((_format \"hello {x} {y}\") x) y)");
 
   status &= test_parse("[1, 2, 3, 4]", "[1, 2, 3, 4]");
+  status &= test_parse("match x with\n"
+                       "| 1 -> 1\n"
+                       "| 2 -> 0\n"
+                       "| _ -> 3",
+                       "(match x with\n"
+                       "\t1 -> 1\n"
+                       "\t2 -> 0\n"
+                       "\t_ -> 3\n"
+                       ")");
+
+  // more complex match expr
+  status &= test_parse("match x + y with\n"
+                       "| 1 -> 1\n"
+                       "| 2 -> let a = 1; a + 1\n"
+                       "| _ -> 3",
+                       "(match (+ x y) with\n"
+                       "\t1 -> 1\n"
+                       "\t2 -> "
+                       "\n(let a 1)\n(+ a 1)"
+                       "\n\t_ -> 3\n"
+                       ")");
   return status ? 0 : 1;
 }
