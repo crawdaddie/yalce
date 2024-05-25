@@ -38,30 +38,27 @@ typedef enum value_type {
   VALUE_NATIVE_FN,
 } value_type;
 
+// FUNCTIONS
 typedef struct {
-  size_t len;
+  int len;
   ObjString *params;
   const char *fn_name;
-  void *env_ptr;
-  // bool is_recursive;
   Ast *body;
   int scope_ptr;
+  Value *partial_args;
+  int num_partial_args;
 } Function;
 
 typedef struct {
-  void *handle;
-  value_type *input_types;
   int len;
-  value_type return_type;
-} ExternFn;
-
-typedef struct {
   native_fn_t handle;
   value_type *input_types;
-  int len;
   value_type return_type;
+  Value *partial_args;
+  int num_partial_args;
 } NativeFn;
 
+// LIST TYPES
 typedef struct {
   int len;
   value_type type;
@@ -98,7 +95,6 @@ struct Value {
     void *vobj;
     Function function;
     Function recursive_ref;
-    ExternFn extern_fn;
     NativeFn native_fn;
     value_type type;
     void *vlist;

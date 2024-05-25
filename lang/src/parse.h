@@ -184,7 +184,7 @@ struct Ast {
       Ast *expr;
       Ast *branches;
       int len;
-    } AST_MATCH
+    } AST_MATCH;
 
   } data;
 };

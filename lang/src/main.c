@@ -1,9 +1,10 @@
+#include "builtins.h"
 #include "eval.h"
 #include "ht.h"
 #include "input.h"
-#include "native_functions.h"
 #include "parse.h"
 #include "serde.h"
+#include "synth_functions.h"
 #include "types.h"
 #include "y.tab.h"
 #include <stdio.h>
@@ -50,6 +51,7 @@ int main(int argc, char **argv) {
   }
   add_type_lookups(stack);
   add_native_functions(stack);
+  add_synth_functions(stack);
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-i") == 0) {

@@ -1,35 +1,11 @@
 #include "eval.h"
 #include "arithmetic.h"
-#include "extern.h"
+#include "function.h"
 #include "ht.h"
 #include "value.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-
-static Value call_function(Value *fn, Value *args, int num_args, ht *stack) {
-  int stack_ptr = fn->value.function.scope_ptr + 1;
-
-  ht *fn_scope = stack + stack_ptr;
-
-  for (int i = 0; i < fn->value.function.len; i++) {
-    ObjString param_id = fn->value.function.params[i];
-    ht_set_hash(fn_scope, param_id.chars, param_id.hash, (args + i));
-  }
-
-  if (fn->value.function.fn_name != NULL) {
-
-    const char *fn_name = fn->value.function.fn_name;
-    uint64_t hash = hash_string(fn_name, strlen(fn_name));
-
-    Value recursive_ref = {VALUE_RECURSIVE_REF,
-                           .value = {.recursive_ref = fn->value.function}};
-    ht_set_hash(fn_scope, fn_name, hash, &recursive_ref);
-  }
-  Value return_val = eval(fn->value.function.body, stack, stack_ptr);
-  ht_reinit(fn_scope);
-  return return_val;
-}
 
 Value eval(Ast *ast, ht *stack, int stack_ptr) {
   if (!ast) {
@@ -149,11 +125,10 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
     val.value.function.fn_name = ast->data.AST_LAMBDA.fn_name.chars;
     val.value.function.body = ast->data.AST_LAMBDA.body;
     val.value.function.scope_ptr = stack_ptr;
-    return val;
-  }
+    val.value.function.partial_args = NULL;
+    val.value.function.num_partial_args = 0;
 
-  case AST_EXTERN_FN_DECLARATION: {
-    return *register_external_symbol(ast, stack, stack_ptr);
+    return val;
   }
 
   case AST_IDENTIFIER: {
@@ -171,57 +146,14 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
     if (!res) {
       return (Value){VALUE_VOID};
     }
+    // printf("ast id %s\n", chars);
+    // print_value(res);
 
     return *res;
   }
 
   case AST_APPLICATION: {
-    Value func = eval(ast->data.AST_APPLICATION.function, stack, stack_ptr);
-
-    if (func.type == VALUE_FN &&
-        (func.value.function.len == ast->data.AST_APPLICATION.len ||
-         func.value.function.len == 0 &&
-             ast->data.AST_APPLICATION.args[0]->tag == AST_VOID)) {
-
-      int len = func.value.function.len;
-
-      Value *arg_vals = malloc(sizeof(Value) * len);
-      for (int i = 0; i < len; i++) {
-        *(arg_vals + i) =
-            eval(ast->data.AST_APPLICATION.args[i], stack, stack_ptr);
-      }
-      val = call_function(&func, arg_vals, len, stack);
-      free(arg_vals);
-      return val;
-    }
-
-    if (func.type == VALUE_EXTERN_FN &&
-        func.value.extern_fn.len == ast->data.AST_APPLICATION.len) {
-
-      Value *input_vals = malloc(sizeof(Value) * ast->data.AST_APPLICATION.len);
-      for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-        Value v = eval(ast->data.AST_APPLICATION.args[i], stack, stack_ptr);
-        input_vals[i] = v;
-      }
-
-      call_external_function(&func, input_vals, ast->data.AST_APPLICATION.len,
-                             &val);
-      return val;
-    }
-
-    if (func.type == VALUE_NATIVE_FN &&
-        func.value.native_fn.len == ast->data.AST_APPLICATION.len) {
-      int len = func.value.native_fn.len;
-
-      Value *input_vals = malloc(sizeof(Value) * ast->data.AST_APPLICATION.len);
-      for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-        Value v = eval(ast->data.AST_APPLICATION.args[i], stack, stack_ptr);
-        input_vals[i] = v;
-      }
-      val = func.value.native_fn.handle(len, input_vals);
-
-      return val;
-    }
+    val = eval_application(ast, stack, stack_ptr);
     return val;
   }
   case AST_LIST: {

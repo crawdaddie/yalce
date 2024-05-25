@@ -1,4 +1,4 @@
-let init_audio = extern "init_audio" fn void -> void;
-let get_audio_ctx = extern "get_audio_ctx" fn void -> ptr;
+let () = Synth.init_audio ();
+let s1 = (sq 100.) |> ctx_add |> add_to_dac;
+let s2 = (sq 101.) |> ctx_add |> add_to_dac
 
-init_audio ()

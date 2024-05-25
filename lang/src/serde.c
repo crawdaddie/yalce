@@ -1,5 +1,5 @@
 #include "serde.h"
-#include "native_functions.h"
+#include "builtins.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -303,6 +303,11 @@ void print_value(Value *val) {
     }
     printf("]");
     break;
+
+  case VALUE_OBJ:
+    printf("void * (%p)", val->value.vobj);
+    break;
+
   default:
     printf("unknown value type %d %d", val->type, val->value.type);
   }
