@@ -242,4 +242,5 @@ int init_audio() {
   start_audio();
   init_scheduling();
   cleanup_job();
+  return 1;
 }
