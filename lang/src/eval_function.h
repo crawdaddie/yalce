@@ -5,4 +5,5 @@
 #include "value.h"
 
 Value eval_application(Ast *ast, ht *stack, int stack_ptr);
+Value eval_lambda_declaration(Ast *ast, ht *stack, int stack_ptr);
 #endif

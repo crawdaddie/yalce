@@ -1,4 +1,4 @@
-#include "function.h"
+#include "eval_function.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -92,7 +92,7 @@ static Value fn_application(Function func, int app_len, Ast **args, ht *stack,
     Value val = call_function(func, stack);
     return val;
   }
-  return (Value){VALUE_VOID};
+  return VOID;
 }
 
 static Value native_fn_application(NativeFn func, int app_len, Ast **args,
@@ -124,7 +124,7 @@ static Value native_fn_application(NativeFn func, int app_len, Ast **args,
     return val;
   }
 
-  return (Value){VALUE_VOID};
+  return VOID;
 }
 
 Value eval_application(Ast *ast, ht *stack, int stack_ptr) {
@@ -146,5 +146,20 @@ Value eval_application(Ast *ast, ht *stack, int stack_ptr) {
     return native_fn_application(func, app_len, ast->data.AST_APPLICATION.args,
                                  stack, stack_ptr);
   }
-  return (Value){VALUE_VOID};
+  return VOID;
+}
+
+Value eval_lambda_declaration(Ast *ast, ht *stack, int stack_ptr) {
+  Value val;
+
+  val.type = VALUE_FN;
+  val.value.function.len = ast->data.AST_LAMBDA.len;
+  val.value.function.params = ast->data.AST_LAMBDA.params;
+  val.value.function.fn_name = ast->data.AST_LAMBDA.fn_name.chars;
+  val.value.function.body = ast->data.AST_LAMBDA.body;
+  val.value.function.scope_ptr = stack_ptr;
+  val.value.function.partial_args = NULL;
+  val.value.function.num_partial_args = 0;
+
+  return val;
 }

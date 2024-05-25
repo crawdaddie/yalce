@@ -1,6 +1,9 @@
 let sum3 = (fn a b c -> a + b + c);
-let p = 3 |> sum3 1 2;
-p
+let p = sum3 1 2;
+let x = 1 |> p |> sum3 1 2
+
+
+
 
 
 

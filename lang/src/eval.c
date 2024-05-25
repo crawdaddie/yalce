@@ -1,6 +1,7 @@
 #include "eval.h"
 #include "arithmetic.h"
-#include "function.h"
+#include "eval_function.h"
+#include "eval_list.h"
 #include "ht.h"
 #include "value.h"
 #include <stdint.h>
@@ -9,7 +10,7 @@
 
 Value eval(Ast *ast, ht *stack, int stack_ptr) {
   if (!ast) {
-    return (Value){VALUE_VOID};
+    return VOID;
   }
 
   Value val;
@@ -66,7 +67,7 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
     Value r = eval(ast->data.AST_BINOP.right, stack, stack_ptr);
 
     if (l.type == VALUE_VOID || r.type == VALUE_VOID) {
-      return (Value){VALUE_VOID};
+      return VOID;
     }
 
     switch (ast->data.AST_BINOP.op) {
@@ -119,15 +120,7 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
     return val;
   }
   case AST_LAMBDA: {
-    val.type = VALUE_FN;
-    val.value.function.len = ast->data.AST_LAMBDA.len;
-    val.value.function.params = ast->data.AST_LAMBDA.params;
-    val.value.function.fn_name = ast->data.AST_LAMBDA.fn_name.chars;
-    val.value.function.body = ast->data.AST_LAMBDA.body;
-    val.value.function.scope_ptr = stack_ptr;
-    val.value.function.partial_args = NULL;
-    val.value.function.num_partial_args = 0;
-
+    val = eval_lambda_declaration(ast, stack, stack_ptr);
     return val;
   }
 
@@ -144,7 +137,7 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
       ptr--;
     }
     if (!res) {
-      return (Value){VALUE_VOID};
+      return VOID;
     }
     // printf("ast id %s\n", chars);
     // print_value(res);
@@ -157,109 +150,7 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
     return val;
   }
   case AST_LIST: {
-    int len = ast->data.AST_LIST.len;
-    if (len == 0) {
-      return (Value){VALUE_LIST,
-                     .value = {.vlist = &(IntList){.items = NULL, .len = 0}}};
-    }
-    val.type = VALUE_LIST;
-    Ast first_el_ast = ast->data.AST_LIST.items[0];
-    Value first_el_value = eval(&first_el_ast, stack, stack_ptr);
-
-    switch (first_el_value.type) {
-    case VALUE_INT: {
-      val.value.vlist = malloc(sizeof(IntList));
-      ((IntList *)val.value.vlist)->type = VALUE_INT;
-      ((IntList *)val.value.vlist)->items = malloc(sizeof(int) * len);
-      ((IntList *)val.value.vlist)->items[0] = first_el_value.value.vint;
-      ((IntList *)val.value.vlist)->len = len;
-      for (int i = 1; i < len; i++) {
-        ((IntList *)val.value.vlist)->items[i] =
-            eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vint;
-      }
-      break;
-    }
-
-    case VALUE_BOOL: {
-      val.value.vlist = malloc(sizeof(IntList));
-      ((IntList *)val.value.vlist)->type = VALUE_BOOL;
-      ((IntList *)val.value.vlist)->items = malloc(sizeof(bool) * len);
-      ((IntList *)val.value.vlist)->items[0] = first_el_value.value.vbool;
-      ((IntList *)val.value.vlist)->len = len;
-      for (int i = 1; i < len; i++) {
-        ((IntList *)val.value.vlist)->items[i] =
-            eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vbool;
-      }
-
-      break;
-    }
-    case VALUE_NUMBER: {
-      val.value.vlist = malloc(sizeof(NumberList));
-      ((NumberList *)val.value.vlist)->type = VALUE_NUMBER;
-      ((NumberList *)val.value.vlist)->items = malloc(sizeof(double) * len);
-      ((NumberList *)val.value.vlist)->items[0] = first_el_value.value.vnum;
-      ((NumberList *)val.value.vlist)->len = len;
-      for (int i = 1; i < len; i++) {
-        ((NumberList *)val.value.vlist)->items[i] =
-            eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vnum;
-      }
-
-      break;
-    }
-    case VALUE_STRING: {
-      val.value.vlist = malloc(sizeof(StringList));
-      ((StringList *)val.value.vlist)->type = VALUE_STRING;
-      ((StringList *)val.value.vlist)->items = malloc(sizeof(char *) * len);
-      ((StringList *)val.value.vlist)->lens = malloc(sizeof(int) * len);
-      ((StringList *)val.value.vlist)->hashes = malloc(sizeof(uint64_t) * len);
-      ((StringList *)val.value.vlist)->items[0] =
-          first_el_value.value.vstr.chars;
-
-      ((StringList *)val.value.vlist)->lens[0] =
-          first_el_value.value.vstr.length;
-
-      ((StringList *)val.value.vlist)->hashes[0] =
-          first_el_value.value.vstr.hash;
-
-      ((StringList *)val.value.vlist)->len = len;
-      for (int i = 1; i < len; i++) {
-        Value str_val = eval(ast->data.AST_LIST.items + i, stack, stack_ptr);
-        ((StringList *)val.value.vlist)->items[i] = str_val.value.vstr.chars;
-        ((StringList *)val.value.vlist)->lens[i] = str_val.value.vstr.length;
-        ((StringList *)val.value.vlist)->hashes[i] = str_val.value.vstr.hash;
-      }
-
-      break;
-    }
-    case VALUE_LIST: {
-      val.value.vlist = malloc(sizeof(ObjList));
-      ((ObjList *)val.value.vlist)->type = VALUE_LIST;
-      ((ObjList *)val.value.vlist)->items = malloc(sizeof(void *) * len);
-      ((ObjList *)val.value.vlist)->items[0] = first_el_value.value.vlist;
-      ((ObjList *)val.value.vlist)->len = len;
-      for (int i = 1; i < len; i++) {
-        ((ObjList *)val.value.vlist)->items[i] =
-            eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vlist;
-      }
-
-      break;
-    }
-    case VALUE_OBJ: {
-      val.value.vlist = malloc(sizeof(ObjList));
-
-      ((ObjList *)val.value.vlist)->type = VALUE_LIST;
-      ((ObjList *)val.value.vlist)->items = malloc(sizeof(void *) * len);
-      ((ObjList *)val.value.vlist)->items[0] = first_el_value.value.vobj;
-      ((ObjList *)val.value.vlist)->len = len;
-      for (int i = 1; i < len; i++) {
-        ((ObjList *)val.value.vlist)->items[i] =
-            eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vobj;
-      }
-
-      break;
-    }
-    }
-
+    val = eval_list(ast, stack, stack_ptr);
     return val;
   }
   default:

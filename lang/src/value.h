@@ -126,6 +126,9 @@ struct Value {
     VALUE_OBJ, { .vobj = i }                                                   \
   }
 
+#define VOID                                                                   \
+  (Value) { VALUE_VOID }
+
 #define LIST(l)                                                                \
   (Value) {                                                                    \
     VALUE_LIST, { .vlist = l }                                                 \
