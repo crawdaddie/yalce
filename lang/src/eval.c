@@ -4,11 +4,30 @@
 #include "eval_list.h"
 #include "ht.h"
 #include "value.h"
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+static bool process_match_branch(Value predicate, Ast *branch, Value *result,
+                                 ht *stack, int stack_ptr) {
+  Ast *test_ast = branch;
+  Ast *body = branch + 1;
+  if (test_ast->tag >= AST_INT && test_ast->tag <= AST_BOOL) {
+    Value l = eval(test_ast, stack, stack_ptr);
+    Value is_eq = eq_ops(l, predicate);
+
+    if (is_eq.value.vbool) {
+      *result = eval(body, stack, stack_ptr + 1);
+      return true;
+    }
+  } else if (test_ast->tag == AST_PLACEHOLDER_ID) {
+    *result = eval(body, stack, stack_ptr + 1);
+    return true;
+  }
+  return false;
+}
+
 Value eval(Ast *ast, ht *stack, int stack_ptr) {
+  // print_ast(ast);
   if (!ast) {
     return VOID;
   }
@@ -18,10 +37,9 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
   switch (ast->tag) {
 
   case AST_BODY: {
-    // Value *final;
     for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
       Ast *stmt = ast->data.AST_BODY.stmts[i];
-      val = eval(stmt, stack + stack_ptr, stack_ptr);
+      val = eval(stmt, stack, stack_ptr);
     }
     return val;
   }
@@ -109,11 +127,11 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
       break;
     }
     case TOKEN_EQUALITY: {
-      val = eq_ops(l, r, &val);
+      val = eq_ops(l, r);
       break;
     }
     case TOKEN_NOT_EQUAL: {
-      val = neq_ops(l, r, &val);
+      val = neq_ops(l, r);
       break;
     }
     }
@@ -139,8 +157,6 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
     if (!res) {
       return VOID;
     }
-    // printf("ast id %s\n", chars);
-    // print_value(res);
 
     return *res;
   }
@@ -153,7 +169,25 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
     val = eval_list(ast, stack, stack_ptr);
     return val;
   }
+  case AST_MATCH: {
+    // val = eval_list(ast, stack, stack_ptr);
+    Value predicate = eval(ast->data.AST_MATCH.expr, stack, stack_ptr);
+    // print_value(&predicate);
+    // printf("\n");
+    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+
+      if (process_match_branch(predicate,
+                               ast->data.AST_MATCH.branches + (i * 2), &val,
+                               stack, stack_ptr)) {
+        return val;
+      }
+    }
+    // printf("\n");
+
+    return VOID;
+  }
   default:
+
     return val;
   }
 }

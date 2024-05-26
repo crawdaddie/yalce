@@ -83,6 +83,11 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_PLACEHOLDER_ID: {
+    buffer = strcat(buffer, "_");
+    break;
+  }
+
   case AST_APPLICATION: {
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       buffer = strcat(buffer, "(");

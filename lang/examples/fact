@@ -1,10 +1,10 @@
-let _fact = (fn n acc ->
+let _fact = (fn acc n ->
   match n with
-  | 0 -> 1
-  | _ -> _fact (n - 1) (n * acc)
+  | 0 -> acc
+  | _ -> _fact (n * acc) (n - 1)
 );
 
-let fact = (fn n ->
-  _fact n 1
-)
+let fact = _fact 1;
+
+fact 5
 

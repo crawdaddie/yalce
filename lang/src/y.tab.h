@@ -57,7 +57,7 @@
      MATCH = 273,
      WITH = 274,
      ARROW = 275,
-     VOID = 276,
+     TOK_VOID = 276,
      DOUBLE_SEMICOLON = 277,
      IN = 278,
      IFX = 279,
@@ -89,7 +89,7 @@
 #define MATCH 273
 #define WITH 274
 #define ARROW 275
-#define VOID 276
+#define TOK_VOID 276
 #define DOUBLE_SEMICOLON 277
 #define IN 278
 #define IFX 279

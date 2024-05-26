@@ -8,7 +8,7 @@
 %%
 "fn"                    return FN;
 "let"                   return LET;
-"()"                    return VOID;
+"()"                    return TOK_VOID;
 "extern"                return EXTERN;
 "true"                  return TRUE;
 "false"                 return FALSE;
@@ -19,6 +19,7 @@
 "in"                    return IN;
 "["                     return *yytext;
 "]"                     return *yytext;
+"_"                     return *yytext;
 [a-zA-Z_][a-zA-Z0-9_.]*  {
 
                           int len = yyleng;

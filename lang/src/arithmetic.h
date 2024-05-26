@@ -11,6 +11,6 @@ Value lt_ops(Value l, Value r, Value *res);
 Value lte_ops(Value l, Value r, Value *res);
 Value gt_ops(Value l, Value r, Value *res);
 Value gte_ops(Value l, Value r, Value *res);
-Value eq_ops(Value l, Value r, Value *res);
-Value neq_ops(Value l, Value r, Value *res);
+Value eq_ops(Value l, Value r);
+Value neq_ops(Value l, Value r);
 #endif

@@ -1,4 +1,5 @@
 #include "builtins.h"
+#include "serde.h"
 #include "value.h"
 #include <stdlib.h>
 
@@ -67,7 +68,13 @@ Value _strconcat(int argc, Value *argv) {
 
 Value _print(int argc, Value *argv) {
   printf("%s", argv->value.vstr.chars);
-  return (Value){VALUE_VOID};
+  return VOID;
+}
+
+Value _printv(int argc, Value *argv) {
+  print_value(argv);
+  printf("\n");
+  return VOID;
 }
 #define EXTEND_LIST(argv, list_type, item_type, val)                           \
   item_type *items = ((list_type *)argv->value.vlist)->items;                  \
@@ -122,10 +129,11 @@ Value list_push(int argc, Value *argv) {
   return *list;
 }
 
-#define NUM_NATIVES 6
+#define NUM_NATIVES 7
 static native_symbol_map builtin_native_fns[NUM_NATIVES] = {
     {"strlen", NATIVE_FN(_strlen, 1)},
     {"print", NATIVE_FN(_print, 1)},
+    {"printv", NATIVE_FN(_printv, 1)},
     {"List.length", NATIVE_FN(list_length, 1)},
     {"List.type", NATIVE_FN(list_type, 1)},
     {"List.push", NATIVE_FN(list_push, 2)},

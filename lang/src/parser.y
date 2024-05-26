@@ -46,7 +46,7 @@ Ast* ast_root = NULL;
 %token MATCH
 %token WITH 
 %token ARROW
-%token VOID
+%token TOK_VOID
 %token DOUBLE_SEMICOLON
 %token IN 
 
@@ -83,7 +83,7 @@ program:
 stmt:
   expr                        { $$ = $1; }
   | LET IDENTIFIER '=' expr   { $$ = ast_let($2, $4); }
-  | LET VOID '=' expr         { $$ = $4; }
+  | LET TOK_VOID '=' expr     { $$ = $4; }
   ;
 
 stmt_list_opt:
@@ -101,11 +101,11 @@ stmt_list:
 expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
   | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
-  | TOK_STRING                { $$ = ast_string($1); }
+  | TOK_STRING            { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
   | IDENTIFIER            { $$ = ast_identifier($1); }
-  | VOID                  { $$ = ast_void(); }
+  | TOK_VOID                  { $$ = ast_void(); }
   /*| '-' expr %prec UMINUS { $$ = ast_unop(TOKEN_MINUS, $2); } */
   | expr '+' expr         { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr         { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
@@ -133,7 +133,7 @@ lambda_expr:
                                           $$ = ast_extern_declaration($2, ast_lambda($4, NULL), $6);
                                         }
 
-  | FN VOID ARROW stmt_list_opt         { $$ = ast_lambda(NULL, $4); }
+  | FN TOK_VOID ARROW stmt_list_opt         { $$ = ast_lambda(NULL, $4); }
   ;
 
 
@@ -166,6 +166,7 @@ match_expr:
 match_branches:
     '|' expr ARROW stmt_list                {$$ = ast_match_branches(NULL, $2, $4);}
   | match_branches '|' expr ARROW stmt_list {$$ = ast_match_branches($1, $3, $5);}
+  | match_branches '|' '_' ARROW stmt_list  {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
   ;
 %%
 

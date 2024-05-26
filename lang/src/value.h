@@ -47,6 +47,7 @@ typedef struct {
   int scope_ptr;
   Value *partial_args;
   int num_partial_args;
+  bool is_recursive_ref;
 } Function;
 
 typedef struct {

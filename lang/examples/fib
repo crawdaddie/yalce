@@ -1,0 +1,14 @@
+let _fib = (fn current prev n ->
+  match n with
+  | 0 -> current 
+  | 1 -> current
+  | _ -> _fib (prev + current) (current) (n - 1) 
+);
+let fib = _fib 0 1;
+
+printv fib 1;
+printv fib 2;
+printv fib 3; 
+printv fib 4;
+printv fib 5
+

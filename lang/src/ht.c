@@ -5,10 +5,11 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define INITIAL_CAPACITY 16 // must not be zero
+#define INITIAL_CAPACITY 256 // must not be zero
 
 ht *ht_create(void) {
   // Allocate space for hash table struct.
@@ -106,6 +107,7 @@ static const char *ht_set_entry_w_hash(ht_entry *entries, size_t capacity,
   // Loop till we find an empty entry.
   while (entries[index].key != NULL) {
     if (strcmp(key, entries[index].key) == 0) {
+      // printf("update existing entry %s\n", key);
       // Found key (it already exists), update value.
       entries[index].value = value;
       return entries[index].key;
@@ -168,7 +170,7 @@ static bool ht_expand(ht *table) {
 }
 
 const char *ht_set(ht *table, const char *key, void *value) {
-  assert(value != NULL);
+  // assert(value != NULL);
   if (value == NULL) {
     return NULL;
   }
@@ -187,7 +189,7 @@ const char *ht_set(ht *table, const char *key, void *value) {
 
 const char *ht_set_hash(ht *table, const char *key, uint64_t hash,
                         void *value) {
-  assert(value != NULL);
+  // assert(value != NULL);
   if (value == NULL) {
     return NULL;
   }
@@ -195,6 +197,7 @@ const char *ht_set_hash(ht *table, const char *key, uint64_t hash,
   // If length will exceed half of current capacity, expand it.
   if (table->length >= table->capacity / 2) {
     if (!ht_expand(table)) {
+      // printf("cannot expand\n");
       return NULL;
     }
   }

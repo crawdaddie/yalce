@@ -96,6 +96,7 @@ typedef enum ast_tag {
   // AST_EXTERN_DECLARATION,
   AST_LIST,
   AST_MATCH,
+  AST_PLACEHOLDER_ID,
 } ast_tag;
 
 struct Ast {
