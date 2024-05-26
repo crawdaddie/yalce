@@ -60,14 +60,15 @@
      TOK_VOID = 276,
      DOUBLE_SEMICOLON = 277,
      IN = 278,
-     IFX = 279,
-     ELSE = 280,
-     MODULO = 281,
-     NE = 282,
-     EQ = 283,
-     LE = 284,
-     GE = 285,
-     UMINUS = 286
+     AND = 279,
+     IFX = 280,
+     ELSE = 281,
+     MODULO = 282,
+     NE = 283,
+     EQ = 284,
+     LE = 285,
+     GE = 286,
+     UMINUS = 287
    };
 #endif
 /* Tokens.  */
@@ -92,14 +93,15 @@
 #define TOK_VOID 276
 #define DOUBLE_SEMICOLON 277
 #define IN 278
-#define IFX 279
-#define ELSE 280
-#define MODULO 281
-#define NE 282
-#define EQ 283
-#define LE 284
-#define GE 285
-#define UMINUS 286
+#define AND 279
+#define IFX 280
+#define ELSE 281
+#define MODULO 282
+#define NE 283
+#define EQ 284
+#define LE 285
+#define GE 286
+#define UMINUS 287
 
 
 
@@ -115,7 +117,7 @@ typedef union YYSTYPE
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 119 "src/y.tab.h"
+#line 121 "src/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

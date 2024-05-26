@@ -48,7 +48,7 @@ Ast* ast_root = NULL;
 %token ARROW
 %token TOK_VOID
 %token DOUBLE_SEMICOLON
-%token IN 
+%token IN AND
 
 %nonassoc IFX
 %nonassoc ELSE
@@ -82,7 +82,7 @@ program:
 
 stmt:
   expr                        { $$ = $1; }
-  | LET IDENTIFIER '=' expr   { $$ = ast_let($2, $4); }
+  | LET IDENTIFIER '=' expr   { $$ = ast_let($2, $4, NULL); }
   | LET TOK_VOID '=' expr     { $$ = $4; }
   ;
 

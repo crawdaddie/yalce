@@ -8,6 +8,8 @@
 %%
 "fn"                    return FN;
 "let"                   return LET;
+"in"                    return IN;
+"and"                   return AND;
 "()"                    return TOK_VOID;
 "extern"                return EXTERN;
 "true"                  return TRUE;
@@ -16,11 +18,10 @@
 "..."                   return TRIPLE_DOT;
 "match"                 return MATCH;
 "with"                  return WITH;
-"in"                    return IN;
 "["                     return *yytext;
 "]"                     return *yytext;
 "_"                     return *yytext;
-[a-zA-Z_][a-zA-Z0-9_.]*  {
+[a-zA-Z_][a-zA-Z0-9_]*  {
 
                           int len = yyleng;
                           yylval.vident.chars = strdup(yytext); 

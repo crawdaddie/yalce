@@ -36,6 +36,7 @@ typedef enum value_type {
   VALUE_CURRIED_FN,
   VALUE_TYPE,
   VALUE_NATIVE_FN,
+  VALUE_SYNTH_NODE,
 } value_type;
 
 // FUNCTIONS
@@ -99,6 +100,7 @@ struct Value {
     NativeFn native_fn;
     value_type type;
     void *vlist;
+    void *vnode;
   } value;
 };
 

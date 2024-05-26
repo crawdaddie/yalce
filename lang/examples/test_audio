@@ -1,4 +1,11 @@
-let () = Synth.init_audio ();
-let s1 = (sq 100.) |> ctx_add |> add_to_dac;
-let s2 = (sq 101.) |> ctx_add |> add_to_dac
+let () = init_audio ();
+
+let dt_sq = (fn f ->
+  let s1 = (sq f) |> ctx_add |> add_to_dac;
+  let s2 = (sq f * 1.01 ) |> ctx_add |> add_to_dac
+);
+
+dt_sq 50.
+
+
 

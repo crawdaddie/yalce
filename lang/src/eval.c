@@ -22,7 +22,16 @@ static bool process_match_branch(Value predicate, Ast *branch, Value *result,
   } else if (test_ast->tag == AST_PLACEHOLDER_ID) {
     *result = eval(body, stack, stack_ptr + 1);
     return true;
+  } else if (test_ast->tag == AST_IDENTIFIER) {
+    Value l = eval(test_ast, stack, stack_ptr);
+    Value is_eq = eq_ops(l, predicate);
+
+    if (is_eq.value.vbool) {
+      *result = eval(body, stack, stack_ptr + 1);
+      return true;
+    }
   }
+
   return false;
 }
 
@@ -90,40 +99,40 @@ Value eval(Ast *ast, ht *stack, int stack_ptr) {
 
     switch (ast->data.AST_BINOP.op) {
     case TOKEN_PLUS: {
-      val = add_ops(l, r, &val);
+      val = add_ops(l, r);
       break;
     }
     case TOKEN_MINUS: {
-      val = sub_ops(l, r, &val);
+      val = sub_ops(l, r);
       break;
     }
     case TOKEN_STAR: {
 
-      val = mul_ops(l, r, &val);
+      val = mul_ops(l, r);
       break;
     }
     case TOKEN_SLASH: {
-      val = div_ops(l, r, &val);
+      val = div_ops(l, r);
       break;
     }
     case TOKEN_MODULO: {
-      val = modulo_ops(l, r, &val);
+      val = modulo_ops(l, r);
       break;
     }
     case TOKEN_LT: {
-      val = lt_ops(l, r, &val);
+      val = lt_ops(l, r);
       break;
     }
     case TOKEN_LTE: {
-      val = lte_ops(l, r, &val);
+      val = lte_ops(l, r);
       break;
     }
     case TOKEN_GT: {
-      val = gt_ops(l, r, &val);
+      val = gt_ops(l, r);
       break;
     }
     case TOKEN_GTE: {
-      val = gte_ops(l, r, &val);
+      val = gte_ops(l, r);
       break;
     }
     case TOKEN_EQUALITY: {

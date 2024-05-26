@@ -200,7 +200,7 @@ extern Ast *ast_root;
 Ast *ast_binop(token_type op, Ast *left, Ast *right);
 Ast *ast_unop(token_type op, Ast *right);
 Ast *ast_identifier(ObjString id);
-Ast *ast_let(ObjString name, Ast *expr);
+Ast *ast_let(ObjString name, Ast *expr, Ast *in_continuation);
 Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
 Ast *ast_arg_list(ObjString arg_id);

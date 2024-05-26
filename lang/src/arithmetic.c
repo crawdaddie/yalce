@@ -1,95 +1,63 @@
 #include "arithmetic.h"
 #include <math.h>
-#include <stdlib.h>
-#include <string.h>
 
-#define NUMERIC_OPERATION(op, l, r, res)                                       \
-  do {                                                                         \
-    if ((l).type == VALUE_INT && (r).type == VALUE_INT) {                      \
-      (res)->type = VALUE_INT;                                                 \
-      (res)->value.vint = (l).value.vint op(r).value.vint;                     \
-    } else if ((l).type == VALUE_INT && (r).type == VALUE_NUMBER) {            \
-      (res)->type = VALUE_NUMBER;                                              \
-      (res)->value.vnum = (l).value.vint op(r).value.vnum;                     \
-    } else if ((l).type == VALUE_NUMBER && (r).type == VALUE_INT) {            \
-      (res)->type = VALUE_NUMBER;                                              \
-      (res)->value.vnum = (l).value.vnum op(r).value.vint;                     \
-    } else if ((l).type == VALUE_NUMBER && (r).type == VALUE_NUMBER) {         \
-      (res)->type = VALUE_NUMBER;                                              \
-      (res)->value.vnum = (l).value.vnum op(r).value.vnum;                     \
-    }                                                                          \
-  } while (0)
-
-#define NUMERIC_COMPARISON_OPERATION(op, l, r, res)                            \
-  do {                                                                         \
-    res->type = VALUE_BOOL;                                                    \
-    if ((l).type == VALUE_INT && (r).type == VALUE_INT) {                      \
-      (res)->value.vbool = (l).value.vint op(r).value.vint;                    \
-    } else if ((l).type == VALUE_INT && (r).type == VALUE_NUMBER) {            \
-      (res)->value.vbool = (l).value.vint op(r).value.vnum;                    \
-    } else if ((l).type == VALUE_NUMBER && (r).type == VALUE_INT) {            \
-      (res)->value.vbool = (l).value.vnum op(r).value.vint;                    \
-    } else if ((l).type == VALUE_NUMBER && (r).type == VALUE_NUMBER) {         \
-      (res)->value.vbool = (l).value.vnum op(r).value.vnum;                    \
-    }                                                                          \
-  } while (0)
-
-Value add_ops(Value l, Value r, Value *res) {
-  NUMERIC_OPERATION(+, l, r, res);
-  return *res;
-}
-Value sub_ops(Value l, Value r, Value *res) {
-  NUMERIC_OPERATION(-, l, r, res);
-  return *res;
-}
-Value mul_ops(Value l, Value r, Value *res) {
-  NUMERIC_OPERATION(*, l, r, res);
-  return *res;
-}
-
-Value div_ops(Value l, Value r, Value *res) {
-  NUMERIC_OPERATION(/, l, r, res);
-  return *res;
-}
-
-Value modulo_ops(Value l, Value r, Value *res) {
-  if (l.type == VALUE_INT && r.type == VALUE_INT) {
-    res->type = VALUE_INT;
-    res->value.vint = l.value.vint % r.value.vint;
-    return *res;
-  } else if (l.type == VALUE_INT && r.type == VALUE_NUMBER) {
-    res->type = VALUE_NUMBER;
-    res->value.vnum = fmod(l.value.vint, r.value.vnum);
-    return *res;
-  } else if (l.type == VALUE_NUMBER && r.type == VALUE_INT) {
-    res->type = VALUE_NUMBER;
-    res->value.vnum = fmod(l.value.vnum, r.value.vint);
-    return *res;
-  } else if (l.type == VALUE_NUMBER && r.type == VALUE_NUMBER) {
-    res->type = VALUE_NUMBER;
-    res->value.vnum = fmod(l.value.vnum, r.value.vnum);
-    return *res;
+#define NUMERIC_OPERATION(op, l, r)                                            \
+  if ((l).type == VALUE_INT && (r).type == VALUE_INT) {                        \
+    return (Value){VALUE_INT, {.vint = (l).value.vint op(r).value.vint}};      \
+  } else if ((l).type == VALUE_INT && (r).type == VALUE_NUMBER) {              \
+    return (Value){VALUE_NUMBER, {.vnum = (l).value.vint op(r).value.vnum}};   \
+  } else if ((l).type == VALUE_NUMBER && (r).type == VALUE_INT) {              \
+    return (Value){VALUE_NUMBER, {.vnum = (l).value.vnum op(r).value.vint}};   \
+  } else if ((l).type == VALUE_NUMBER && (r).type == VALUE_NUMBER) {           \
+    return (Value){VALUE_NUMBER, {.vnum = (l).value.vnum op(r).value.vnum}};   \
   }
-  return *res;
+
+#define NUMERIC_COMPARISON_OPERATION(op, l, r)                                 \
+  if ((l).type == VALUE_INT && (r).type == VALUE_INT) {                        \
+    return (Value){VALUE_BOOL, {.vbool = (l).value.vint op(r).value.vint}};    \
+  } else if ((l).type == VALUE_INT && (r).type == VALUE_NUMBER) {              \
+    return (Value){VALUE_BOOL, {.vbool = (l).value.vint op(r).value.vnum}};    \
+  } else if ((l).type == VALUE_NUMBER && (r).type == VALUE_INT) {              \
+    return (Value){VALUE_BOOL, {.vbool = (l).value.vnum op(r).value.vint}};    \
+  } else if ((l).type == VALUE_NUMBER && (r).type == VALUE_NUMBER) {           \
+    return (Value){VALUE_BOOL, {.vbool = (l).value.vnum op(r).value.vnum}};    \
+  }
+
+Value synth_add(Value l, Value r);
+
+Value add_ops(Value l, Value r) {
+  if (l.type == VALUE_SYNTH_NODE || r.type == VALUE_SYNTH_NODE) {
+    return synth_add(l, r);
+  }
+  NUMERIC_OPERATION(+, l, r)
 }
 
-Value lt_ops(Value l, Value r, Value *res) {
-  NUMERIC_COMPARISON_OPERATION(<, l, r, res);
-  return *res;
+Value sub_ops(Value l, Value r) { NUMERIC_OPERATION(-, l, r); }
+
+Value mul_ops(Value l, Value r) { NUMERIC_OPERATION(*, l, r); }
+
+Value div_ops(Value l, Value r) { NUMERIC_OPERATION(/, l, r); }
+
+Value modulo_ops(Value l, Value r) {
+  if (l.type == VALUE_INT && r.type == VALUE_INT) {
+    return (Value){VALUE_INT, {.vint = l.value.vint % r.value.vint}};
+  } else if (l.type == VALUE_INT && r.type == VALUE_NUMBER) {
+    return (Value){VALUE_NUMBER, {.vnum = fmod(l.value.vint, r.value.vnum)}};
+  } else if (l.type == VALUE_NUMBER && r.type == VALUE_INT) {
+    return (Value){VALUE_NUMBER, {.vnum = fmod(l.value.vnum, r.value.vint)}};
+  } else if (l.type == VALUE_NUMBER && r.type == VALUE_NUMBER) {
+    return (Value){VALUE_NUMBER, {.vnum = fmod(l.value.vnum, r.value.vnum)}};
+  }
 }
 
-Value lte_ops(Value l, Value r, Value *res) {
-  NUMERIC_COMPARISON_OPERATION(<=, l, r, res);
-  return *res;
+Value lt_ops(Value l, Value r){NUMERIC_COMPARISON_OPERATION(<, l, r)}
+
+Value lte_ops(Value l, Value r) {
+  NUMERIC_COMPARISON_OPERATION(<=, l, r);
 }
-Value gt_ops(Value l, Value r, Value *res) {
-  NUMERIC_COMPARISON_OPERATION(>, l, r, res);
-  return *res;
-}
-Value gte_ops(Value l, Value r, Value *res) {
-  NUMERIC_COMPARISON_OPERATION(>=, l, r, res);
-  return *res;
-}
+Value gt_ops(Value l, Value r) { NUMERIC_COMPARISON_OPERATION(>, l, r); }
+Value gte_ops(Value l, Value r) { NUMERIC_COMPARISON_OPERATION(>=, l, r); }
+
 inline static bool is_numeric(Value l) {
   return l.type == VALUE_INT || l.type == VALUE_NUMBER;
 }
@@ -97,7 +65,7 @@ inline static bool is_numeric(Value l) {
 Value eq_ops(Value l, Value r) {
   Value res;
   if (is_numeric(l) && is_numeric(r)) {
-    NUMERIC_COMPARISON_OPERATION(==, l, r, (&res));
+    NUMERIC_COMPARISON_OPERATION(==, l, r);
   } else if (l.type == VALUE_STRING && r.type == VALUE_STRING) {
     res.type = VALUE_BOOL;
     res.value.vbool = (l.value.vstr.length == r.value.vstr.length) &&
@@ -114,7 +82,7 @@ Value eq_ops(Value l, Value r) {
 Value neq_ops(Value l, Value r) {
   Value res;
   if (is_numeric(l) && is_numeric(r)) {
-    NUMERIC_COMPARISON_OPERATION(!=, l, r, (&res));
+    NUMERIC_COMPARISON_OPERATION(!=, l, r);
   } else if (l.type == VALUE_STRING && r.type == VALUE_STRING) {
     res.type = VALUE_BOOL;
     res.value.vbool = (l.value.vstr.length != r.value.vstr.length) ||

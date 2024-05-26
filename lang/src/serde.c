@@ -309,6 +309,9 @@ void print_value(Value *val) {
     printf("]");
     break;
 
+  case VALUE_SYNTH_NODE:
+    printf("synth node (%p)", val->value.vobj);
+    break;
   case VALUE_OBJ:
     printf("void * (%p)", val->value.vobj);
     break;

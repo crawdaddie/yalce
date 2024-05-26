@@ -44,7 +44,7 @@ Ast *ast_identifier(ObjString id) {
   return node;
 }
 
-Ast *ast_let(ObjString name, Ast *expr) {
+Ast *ast_let(ObjString name, Ast *expr, Ast *in_continuation) {
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.name = name;
   if (expr->tag == AST_LAMBDA) {

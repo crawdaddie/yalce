@@ -6,5 +6,5 @@ let _fact = (fn acc n ->
 
 let fact = _fact 1;
 
-fact 5
+fact 21
 
