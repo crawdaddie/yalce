@@ -26,8 +26,8 @@ Ast* ast_root = NULL;
 
 %union {
     Ast *ast_node_ptr;          /* node pointer */
-    ObjString vident;               /* identifier */
-    ObjString vstr;                 /* string */
+    ObjString vident;           /* identifier */
+    ObjString vstr;             /* string */
     int vint;                   /* int val */
     double vfloat;
 };
@@ -61,7 +61,8 @@ Ast* ast_root = NULL;
 
 %nonassoc UMINUS
 
-%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args list expr_list match_expr match_branches
+%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args list tuple expr_list match_expr match_branches
+
 
 
 %%
@@ -105,7 +106,7 @@ expr:
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
   | IDENTIFIER            { $$ = ast_identifier($1); }
-  | TOK_VOID                  { $$ = ast_void(); }
+  | TOK_VOID              { $$ = ast_void(); }
   /*| '-' expr %prec UMINUS { $$ = ast_unop(TOKEN_MINUS, $2); } */
   | expr '+' expr         { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr         { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
@@ -119,11 +120,12 @@ expr:
   | expr NE expr          { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }
   | expr EQ expr          { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr        { $$ = ast_application($3, $1); }
-  | '(' expr ')'          { $$ = $2; }
+  /*| '(' expr ')'          { $$ = $2; } */
   | lambda_expr           { $$ = $1; }
   | application           { $$ = $1; }
   | FSTRING               { $$ = parse_format_expr($1); }
   | list                  { $$ = $1; }
+  | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
   ;
 
@@ -154,9 +156,15 @@ list:
   | '[' expr_list ']'       { $$ = $2; }
   ;
 
+tuple:
+    '(' expr ')'          { $$ = $2; }
+  | '(' expr_list ')'     { $$ = ast_tuple($2); }
+  ;
+
 expr_list:
     expr                  { $$ = ast_list($1); }
   | expr_list ',' expr    { $$ = ast_list_push($1, $3); }
+
   ;
 
 match_expr:

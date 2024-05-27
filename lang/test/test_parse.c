@@ -4,13 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-bool test_parse(char *input, char *expected_sexpr) {
+bool test_parse(char input[], char *expected_sexpr) {
 
   Ast *prog;
+  printf("test input: %s\n", input);
   prog = parse_input(input);
 
   char *sexpr = malloc(sizeof(char) * 200);
-  if (prog == NULL) {
+  if (prog == NULL && expected_sexpr != NULL) {
 
     printf("❌ %s\n", input);
     printf("expected %s\n"
@@ -24,9 +25,19 @@ bool test_parse(char *input, char *expected_sexpr) {
     ast_root = NULL;
     return false;
   }
+  bool res;
+  if (expected_sexpr == NULL && prog == NULL) {
+    printf("✅ %s :: parse error\n", input, sexpr);
+    res = true;
+    free(sexpr);
+    free(prog);
+    yyrestart(NULL);
+    // extern Ast *ast_root;
+    ast_root = NULL;
+    return res;
+  }
 
   sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts[0], sexpr);
-  bool res;
   if (strcmp(sexpr, expected_sexpr) != 0) {
     printf("❌ %s\n", input);
     printf("expected %s\n"
@@ -179,6 +190,9 @@ int main() {
       test_parse("`hello {x} {y}`", "(((_format \"hello {x} {y}\") x) y)");
 
   status &= test_parse("[1, 2, 3, 4]", "[1, 2, 3, 4]");
+  status &= test_parse("(1, )", NULL);
+  status &= test_parse("(1, 2)", "(1, 2)");
+  status &= test_parse("(1, 2, 3)", "(1, 2, 3)");
   status &= test_parse("match x with\n"
                        "| 1 -> 1\n"
                        "| 2 -> 0\n"

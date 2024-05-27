@@ -220,3 +220,16 @@ Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result) {
   match->data.AST_MATCH.branches[len * 2 - 1] = *result;
   return match;
 }
+
+Ast *ast_tuple(Ast *list) {
+  // if (list->tag == AST_LIST && list->data.AST_LIST.len == 1) {
+  //   return list->data.AST_LIST.items;
+  // }
+  print_ast(list);
+
+  if (list->tag == AST_LIST) {
+    list->tag = AST_TUPLE;
+    return list;
+  }
+  return NULL;
+}

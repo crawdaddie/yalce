@@ -7,6 +7,7 @@ typedef struct Ast Ast;
 
 // parser prototypes
 extern FILE *yyin;
+extern char *yytext;
 int yyparse();
 void yyrestart(FILE *);
 
@@ -219,4 +220,5 @@ Ast *ast_list_push(Ast *list, Ast *val);
 
 Ast *ast_match(Ast *expr, Ast *match);
 Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result);
+Ast *ast_tuple(Ast *list);
 #endif

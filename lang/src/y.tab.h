@@ -111,8 +111,8 @@ typedef union YYSTYPE
 #line 27 "src/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
-    ObjString vident;               /* identifier */
-    ObjString vstr;                 /* string */
+    ObjString vident;           /* identifier */
+    ObjString vstr;             /* string */
     int vint;                   /* int val */
     double vfloat;
 }
