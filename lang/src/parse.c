@@ -225,11 +225,18 @@ Ast *ast_tuple(Ast *list) {
   // if (list->tag == AST_LIST && list->data.AST_LIST.len == 1) {
   //   return list->data.AST_LIST.items;
   // }
-  print_ast(list);
+  // print_ast(list);
 
   if (list->tag == AST_LIST) {
     list->tag = AST_TUPLE;
     return list;
   }
   return NULL;
+}
+Ast *ast_meta(ObjString meta_id, Ast *next) {
+  Ast *meta = Ast_new(AST_META);
+  meta->data.AST_META.value = meta_id.chars;
+  meta->data.AST_META.length = meta_id.length;
+  meta->data.AST_META.next = next;
+  return meta;
 }

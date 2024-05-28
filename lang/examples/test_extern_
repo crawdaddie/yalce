@@ -1,5 +1,0 @@
-let get_int = extern "return_int" fn void -> int;
-let get_double = extern "return_double" fn void -> double;
-
-
-get_double ()

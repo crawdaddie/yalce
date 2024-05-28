@@ -5,15 +5,14 @@
 #    else loop (n - 1) (current) (prev + now)
 #  in loop n 1 1
 
-let fib = (fn n ->
-  let _fib = (fn i a b ->
+let fib = fn n ->
+  let _fib = fn i a b ->
     match i with 
     | n -> a
     | _ -> _fib (i + 1) (b) (a + b)
-  ); 
   _fib 0 0 1
-);
-
+;;
+)
 
 printv fib 3
 

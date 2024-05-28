@@ -98,6 +98,7 @@ typedef enum ast_tag {
   AST_LIST,
   AST_MATCH,
   AST_PLACEHOLDER_ID,
+  AST_META,
 } ast_tag;
 
 struct Ast {
@@ -130,6 +131,12 @@ struct Ast {
       char *value;
       int length;
     } AST_IDENTIFIER;
+
+    struct AST_META {
+      char *value;
+      int length;
+      Ast *next;
+    } AST_META;
 
     struct AST_BOOL {
       bool value;
@@ -221,4 +228,5 @@ Ast *ast_list_push(Ast *list, Ast *val);
 Ast *ast_match(Ast *expr, Ast *match);
 Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result);
 Ast *ast_tuple(Ast *list);
+Ast *ast_meta(ObjString meta_id, Ast *next);
 #endif

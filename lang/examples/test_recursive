@@ -1,8 +1,8 @@
-let rec = (fn a ->
-  printv a;
-  match a with
+let rec = fn a ->
+  (match a with
   | 100 -> 100
   | _   -> rec a + 1
-);
+  )
+  ;;
 
 rec 0

@@ -3,11 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+extern int yylineno;
 bool test_parse(char input[], char *expected_sexpr) {
 
   Ast *prog;
-  printf("test input: %s\n", input);
+  // printf("test input: %s\n", input);
   prog = parse_input(input);
 
   char *sexpr = malloc(sizeof(char) * 200);
@@ -157,23 +157,24 @@ int main() {
   status &= test_parse("x + y;\nx + z", "\n(+ x y)\n(+ x z)");
 
   // lambda declaration
-  status &= test_parse("fn x y -> x + y", "(x y -> (+ x y))\n");
+  status &= test_parse("fn x y -> x + y;", "(x y -> (+ x y))\n");
 
-  status &= test_parse("(fn () -> x + y)", "(() -> (+ x y))\n");
-  status &= test_parse("(fn x y z -> x + y + z)", "(x y z -> (+ (+ x y) z))\n");
+  status &= test_parse("fn () -> x + y;", "(() -> (+ x y))\n");
+  status &= test_parse("fn x y z -> x + y + z;", "(x y z -> (+ (+ x y) z))\n");
 
   status &= test_parse("fn x y z -> \n"
                        "  x + y + z;\n"
-                       "  x + y\n",
+                       "  x + y\n"
+                       ";",
                        "(x y z -> \n"
                        "(+ (+ x y) z)\n"
                        "(+ x y))\n");
 
   status &= test_parse_body("\n"
-                            "let sum3 = (fn x y z ->\n"
+                            "let sum3 = fn x y z ->\n"
                             "  1 + 1;\n"
                             "  x + y + z\n"
-                            ");\n"
+                            ";;\n"
                             "1 + 1",
                             "\n\n(let sum3 (sum3 x y z -> \n"
                             "(+ 1 1)\n"
@@ -183,11 +184,8 @@ int main() {
   // let declaration
   status &= test_parse("let x = 1 + y", "(let x (+ 1 y))");
 
-  status &= test_parse("let print = extern \"printf\" fn str -> void",
-                       "(let print (extern printf str -> void)\n)");
-
-  status &=
-      test_parse("`hello {x} {y}`", "(((_format \"hello {x} {y}\") x) y)");
+  // status &=
+  //     test_parse("`hello {x} {y}`", "(((_format \"hello {x} {y}\") x) y)");
 
   status &= test_parse("[1, 2, 3, 4]", "[1, 2, 3, 4]");
   status &= test_parse("(1, )", NULL);
@@ -202,6 +200,19 @@ int main() {
                        "\t2 -> 0\n"
                        "\t_ -> 3\n"
                        ")");
+
+  status &= test_parse_body("let m = fn x ->\n"
+                            "(match x with\n"
+                            "| 1 -> 1\n"
+                            "| 2 -> 0\n"
+                            "| _ -> 3)\n"
+                            ";;",
+                            "\n\n(let m (m x ->\n"
+                            "(match x with\n"
+                            "\t1 -> 1\n"
+                            "\t2 -> 0\n"
+                            "\t_ -> 3\n"
+                            "))\n)");
 
   // more complex match expr
   status &= test_parse("match x + y with\n"

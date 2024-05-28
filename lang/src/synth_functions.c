@@ -1,9 +1,13 @@
 #include "synth_functions.h"
+#include "eval.h"
+#include "eval_function.h"
+#include "serde.h"
 #include "value.h"
 #include <audio_loop.h>
 #include <ctx.h>
 #include <node.h>
 #include <oscillator.h>
+#include <stdlib.h>
 
 static Value _init_audio(int argc, Value *argv) { return INT(init_audio()); }
 
@@ -48,7 +52,10 @@ static Value _group_add_tail(int argc, Value *argv) {
 //   return VOID;
 // }
 
-Value synth_add(Value l, Value r) { return VOID; }
+Value synth_add(Value l, Value r) {
+  // printf("synth add\n");
+  return VOID;
+}
 
 #define SYNTH_FNS 7
 static native_symbol_map builtin_native_fns[SYNTH_FNS] = {
@@ -61,11 +68,47 @@ static native_symbol_map builtin_native_fns[SYNTH_FNS] = {
     {"group_add_tail", NATIVE_FN(_group_add_tail, 2)},
 };
 
+static Node *current_graph = NULL;
+
+static Value synth_val_bind(Value val) {
+  if (val.type == VALUE_SYNTH_NODE) {
+    // printf("bind value to parent graph %p\n", current_graph);
+    // printf("\n");
+    // print_value(&val);
+  }
+  return val;
+}
+
+static Value synth_wrapper_meta(Ast *ast, ht *stack, int stack_ptr) {
+  printf("synth wrapper meta\n");
+  // print_ast(ast);
+  if (ast->tag == AST_LET && ast->data.AST_LET.expr->tag == AST_LAMBDA) {
+    Value synth_func_ =
+        eval_lambda_declaration(ast->data.AST_LET.expr, stack, stack_ptr);
+    // printf("synth function\n");
+    Function synth_func = synth_func_.value.function;
+    synth_func.partial_args = malloc(sizeof(Value) * synth_func.len);
+    for (int i = 0; i < synth_func.len; i++) {
+      synth_func.partial_args[i] = NUM(100);
+      synth_func.num_partial_args++;
+    }
+    current_graph = group_new(1);
+    Value result_node = call_function(synth_func, stack, synth_val_bind);
+
+    return result_node;
+  }
+  return eval(ast, stack, stack_ptr, NULL);
+}
+
 void add_synth_functions(ht *stack) {
   for (int i = 0; i < SYNTH_FNS; i++) {
     native_symbol_map t = builtin_native_fns[i];
     ht_set(stack, t.id, t.type);
   }
+
+  ht_set(stack, "@synth",
+         &(Value){VALUE_META_FN, {.vmeta_fn = &synth_wrapper_meta}});
 }
 #undef NODE
 #undef NODE_OF_VALUE
+#undef INT_OF_VALUE

@@ -1,8 +1,9 @@
 #include "eval_function.h"
+#include "serde.h"
 #include <stdlib.h>
 #include <string.h>
-Value eval(Ast *ast, ht *stack, int stack_ptr);
-static Value call_function(Function fn, ht *stack) {
+Value eval(Ast *ast, ht *stack, int stack_ptr, val_bind_fn_t val_bind);
+Value call_function(Function fn, ht *stack, val_bind_fn_t val_bind) {
 
   int stack_ptr = fn.is_recursive_ref ? fn.scope_ptr : fn.scope_ptr + 1;
 
@@ -10,6 +11,9 @@ static Value call_function(Function fn, ht *stack) {
 
   for (int i = 0; i < fn.len; i++) {
     ObjString param_id = fn.params[i];
+    // printf("\nparam: %s ", param_id.chars);
+    // print_value(fn.partial_args + i);
+    // printf("\n");
     ht_set_hash(fn_scope, param_id.chars, param_id.hash, (fn.partial_args + i));
   }
 
@@ -23,8 +27,12 @@ static Value call_function(Function fn, ht *stack) {
     ht_set_hash(fn_scope, fn_name, hash, &recursive_ref);
   }
 
-  Value return_val = eval(fn.body, stack, stack_ptr);
+  // printf("application void??\n");
+  //   printf("\n");
+  // print_ast(fn.body);
 
+  Value return_val = eval(fn.body, stack, stack_ptr, val_bind);
+  // print_value(&return_val);
   return return_val;
 }
 
@@ -35,23 +43,31 @@ static Value call_native_function(NativeFn fn) {
 }
 
 static Value partial_fn_application(Function func, int app_len, Ast **args,
-                                    ht *stack, int stack_ptr) {
+                                    ht *stack, int stack_ptr,
+                                    val_bind_fn_t val_bind) {
 
   int len = func.len;
   if (func.partial_args == NULL) {
     func.partial_args = malloc(sizeof(Value) * len);
   }
+  // else {
+  //   Value *prev_partial_args = func.partial_args;
+  //   func.partial_args = malloc(sizeof(Value) * len);
+  //   for (int i = 0; i < func.num_partial_args; i++) {
+  //     *(func.partial_args + i) = prev_partial_args[i];
+  //   }
+  // }
   int num_partial_args = func.num_partial_args;
   for (int i = func.num_partial_args; i < num_partial_args + app_len; i++) {
-    *(func.partial_args + i) = eval(args[i], stack, stack_ptr);
+    *(func.partial_args + i) = eval(args[i], stack, stack_ptr, val_bind);
     func.num_partial_args++;
   }
   return (Value){VALUE_FN, {.function = func}};
 }
 
 static Value partial_native_fn_application(NativeFn func, int app_len,
-                                           Ast **args, ht *stack,
-                                           int stack_ptr) {
+                                           Ast **args, ht *stack, int stack_ptr,
+                                           val_bind_fn_t val_bind) {
 
   int len = func.len;
   if (func.partial_args == NULL) {
@@ -59,29 +75,30 @@ static Value partial_native_fn_application(NativeFn func, int app_len,
   }
   int num_partial_args = func.num_partial_args;
   for (int i = func.num_partial_args; i < num_partial_args + app_len; i++) {
-    *(func.partial_args + i) = eval(args[i], stack, stack_ptr);
+    *(func.partial_args + i) = eval(args[i], stack, stack_ptr, val_bind);
     func.num_partial_args++;
   }
   return (Value){VALUE_NATIVE_FN, {.native_fn = func}};
 }
 
 static Value fn_application(Function func, int app_len, Ast **args, ht *stack,
-                            int stack_ptr) {
+                            int stack_ptr, val_bind_fn_t val_bind) {
 
   int len = func.len;
 
   if (app_len + func.num_partial_args < len) {
-    return partial_fn_application(func, app_len, args, stack, stack_ptr);
+    return partial_fn_application(func, app_len, args, stack, stack_ptr,
+                                  val_bind);
   }
 
   if (app_len == len) {
     Value *arg_vals = func.partial_args != NULL ? func.partial_args
                                                 : malloc(sizeof(Value) * len);
     for (int i = 0; i < len; i++) {
-      *(arg_vals + i) = eval(args[i], stack, stack_ptr);
+      *(arg_vals + i) = eval(args[i], stack, stack_ptr, val_bind);
     }
     func.partial_args = arg_vals;
-    Value val = call_function(func, stack);
+    Value val = call_function(func, stack, val_bind);
     if (!func.is_recursive_ref) {
       free(arg_vals);
     }
@@ -92,26 +109,29 @@ static Value fn_application(Function func, int app_len, Ast **args, ht *stack,
 
     for (int i = 0; i < app_len; i++) {
       *(func.partial_args + (func.num_partial_args + i)) =
-          eval(args[i], stack, stack_ptr);
+          eval(args[i], stack, stack_ptr, val_bind);
     }
-    Value val = call_function(func, stack);
+    Value val = call_function(func, stack, val_bind);
     return val;
   }
+
   return VOID;
 }
 
 static Value native_fn_application(NativeFn func, int app_len, Ast **args,
-                                   ht *stack, int stack_ptr) {
+                                   ht *stack, int stack_ptr,
+                                   val_bind_fn_t val_bind) {
 
   int len = func.len;
   if (app_len + func.num_partial_args < len) {
-    return partial_native_fn_application(func, app_len, args, stack, stack_ptr);
+    return partial_native_fn_application(func, app_len, args, stack, stack_ptr,
+                                         val_bind);
   }
 
   if (app_len == len) {
     Value *arg_vals = malloc(sizeof(Value) * len);
     for (int i = 0; i < len; i++) {
-      *(arg_vals + i) = eval(args[i], stack, stack_ptr);
+      *(arg_vals + i) = eval(args[i], stack, stack_ptr, val_bind);
     }
     func.partial_args = arg_vals;
     Value val = call_native_function(func);
@@ -123,7 +143,7 @@ static Value native_fn_application(NativeFn func, int app_len, Ast **args,
 
     for (int i = 0; i < app_len; i++) {
       *(func.partial_args + (func.num_partial_args + i)) =
-          eval(args[i], stack, stack_ptr);
+          eval(args[i], stack, stack_ptr, val_bind);
     }
     Value val = call_native_function(func);
     return val;
@@ -132,15 +152,18 @@ static Value native_fn_application(NativeFn func, int app_len, Ast **args,
   return VOID;
 }
 
-Value eval_application(Ast *ast, ht *stack, int stack_ptr) {
-  Value func_ = eval(ast->data.AST_APPLICATION.function, stack, stack_ptr);
+Value eval_application(Ast *ast, ht *stack, int stack_ptr,
+                       val_bind_fn_t val_bind) {
+
+  Value func_ =
+      eval(ast->data.AST_APPLICATION.function, stack, stack_ptr, val_bind);
 
   if (func_.type == VALUE_FN) {
     Function func = func_.value.function;
 
     int app_len = ast->data.AST_APPLICATION.len;
     return fn_application(func, app_len, ast->data.AST_APPLICATION.args, stack,
-                          stack_ptr);
+                          stack_ptr, val_bind);
   }
 
   if (func_.type == VALUE_NATIVE_FN) {
@@ -149,7 +172,7 @@ Value eval_application(Ast *ast, ht *stack, int stack_ptr) {
 
     int app_len = ast->data.AST_APPLICATION.len;
     return native_fn_application(func, app_len, ast->data.AST_APPLICATION.args,
-                                 stack, stack_ptr);
+                                 stack, stack_ptr, val_bind);
   }
   return VOID;
 }

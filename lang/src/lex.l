@@ -4,6 +4,7 @@
 #include "y.tab.h"
 #include "string_proc.h"
 %}
+%option yylineno
 
 %%
 "fn"                    return FN;
@@ -14,7 +15,6 @@
 "extern"                return EXTERN;
 "true"                  return TRUE;
 "false"                 return FALSE;
-";;"                    return DOUBLE_SEMICOLON;
 "..."                   return TRIPLE_DOT;
 "match"                 return MATCH;
 "with"                  return WITH;
@@ -28,6 +28,15 @@
                           yylval.vident.length = len;
                           yylval.vident.hash = hash_string(yylval.vident.chars, len);
                           return IDENTIFIER;
+                        }
+
+@[a-zA-Z_][a-zA-Z0-9_]*  {
+
+                          int len = yyleng;
+                          yylval.vident.chars = strdup(yytext); 
+                          yylval.vident.length = len;
+                          yylval.vident.hash = hash_string(yylval.vident.chars, len);
+                          return META_IDENTIFIER;
                         }
 \"([^\"\n]|\\.)*\"      {
                           int len = yyleng - 2;

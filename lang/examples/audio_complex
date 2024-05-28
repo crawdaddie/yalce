@@ -1,0 +1,13 @@
+let () = init_audio ();
+
+@synth
+let dt_sq = fn f ->
+  let s = (sq f) + (sq f * 1.01)
+;;
+
+@synth
+let dt_sq2 = fn f ->
+  let s = (sq f) + (sq f * 1.01)
+;;
+
+printv dt_sq 50.

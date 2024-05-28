@@ -35,6 +35,7 @@ Ast* ast_root = NULL;
 %token <vint>   INTEGER
 %token <vfloat> NUMBER
 %token <vident> IDENTIFIER
+%token <vident> META_IDENTIFIER
 %token <vstr>   TOK_STRING
 %token <vstr>   FSTRING
 %token TRUE FALSE
@@ -47,7 +48,6 @@ Ast* ast_root = NULL;
 %token WITH 
 %token ARROW
 %token TOK_VOID
-%token DOUBLE_SEMICOLON
 %token IN AND
 
 %nonassoc IFX
@@ -61,14 +61,17 @@ Ast* ast_root = NULL;
 
 %nonassoc UMINUS
 
-%type <ast_node_ptr> stmt expr stmt_list stmt_list_opt application lambda_expr lambda_args list tuple expr_list match_expr match_branches
+%type <ast_node_ptr>
+  stmt expr stmt_list application
+  lambda_expr lambda_args list tuple expr_list
+  match_expr match_branches
 
 
 
 %%
 
 program:
-  stmt_list_opt           {
+  stmt_list           {
                             if (ast_root == NULL) {
                               ast_root = Ast_new(AST_BODY);
                               ast_root->data.AST_BODY.len = 0;
@@ -80,22 +83,21 @@ program:
   | /* NULL */
   ;
 
-
 stmt:
-  expr                        { $$ = $1; }
+  expr                            { $$ = $1; }
+  | LET TOK_VOID '=' expr         { $$ = $4; }
+  | META_IDENTIFIER LET IDENTIFIER '=' lambda_expr  
+                                  { $$ = ast_meta($1, ast_let($3, $5, NULL)); }
+
+  | LET IDENTIFIER '=' lambda_expr  { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' expr   { $$ = ast_let($2, $4, NULL); }
-  | LET TOK_VOID '=' expr     { $$ = $4; }
   ;
 
-stmt_list_opt:
-    stmt_list                 { $$ = $1; }
-  | /* empty */               { $$ = NULL; }
-  ;
 
 stmt_list:
-    stmt                      { $$ = $1; }
-  | stmt_list ';' stmt        { $$ = parse_stmt_list($1, $3); }
-  /*| stmt_list                 { $$ = $1; } // To handle optional ';' at the end */
+    stmt                        { $$ = $1; }
+  | stmt_list ';' stmt          { $$ = parse_stmt_list($1, $3); }
+  | stmt_list ';' stmt          { $$ = parse_stmt_list($1, $3); }
   ;
 
 
@@ -105,6 +107,7 @@ expr:
   | TOK_STRING            { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
+  /*| META_IDENTIFIER expr  { $$ = ast_meta($1, $2); } */
   | IDENTIFIER            { $$ = ast_identifier($1); }
   | TOK_VOID              { $$ = ast_void(); }
   /*| '-' expr %prec UMINUS { $$ = ast_unop(TOKEN_MINUS, $2); } */
@@ -130,12 +133,8 @@ expr:
   ;
 
 lambda_expr:
-    FN lambda_args ARROW stmt_list_opt  { $$ = ast_lambda($2, $4); }
-  | EXTERN TOK_STRING FN lambda_args ARROW IDENTIFIER {
-                                          $$ = ast_extern_declaration($2, ast_lambda($4, NULL), $6);
-                                        }
-
-  | FN TOK_VOID ARROW stmt_list_opt         { $$ = ast_lambda(NULL, $4); }
+    FN lambda_args ARROW stmt_list ';' { $$ = ast_lambda($2, $4); }
+  | FN TOK_VOID ARROW stmt_list ';'   { $$ = ast_lambda(NULL, $4); }
   ;
 
 

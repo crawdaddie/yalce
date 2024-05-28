@@ -1,6 +1,7 @@
 #ifndef _LANG_VALUE_H
 #define _LANG_VALUE_H
 #include "common.h"
+#include "ht.h"
 #include "parse.h"
 #include <stdbool.h>
 
@@ -15,12 +16,14 @@ typedef union {
 typedef struct Value Value;
 
 // typedef UniversalType (*extern_handle_t)(UniversalType, ...);
-typedef double (*extern_double)(void *, ...);
-typedef int (*extern_int)(void *, ...);
-typedef void *(*extern_void_ptr)(void *, ...);
-typedef void (*extern_void)(void *, ...);
-typedef char *(*extern_str)(void *, ...);
+// typedef double (*extern_double)(void *, ...);
+// typedef int (*extern_int)(void *, ...);
+// typedef void *(*extern_void_ptr)(void *, ...);
+// typedef void (*extern_void)(void *, ...);
+// typedef char *(*extern_str)(void *, ...);
 typedef Value (*native_fn_t)(int, Value *);
+typedef Value (*meta_fn_t)(Ast *ast, ht *stack, int stack_ptr);
+typedef Value (*val_bind_fn_t)(Value val);
 
 typedef enum value_type {
   VALUE_INT,
@@ -37,6 +40,7 @@ typedef enum value_type {
   VALUE_TYPE,
   VALUE_NATIVE_FN,
   VALUE_SYNTH_NODE,
+  VALUE_META_FN,
 } value_type;
 
 // FUNCTIONS
@@ -101,6 +105,7 @@ struct Value {
     value_type type;
     void *vlist;
     void *vnode;
+    meta_fn_t vmeta_fn;
   } value;
 };
 

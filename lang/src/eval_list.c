@@ -1,9 +1,9 @@
 #include "eval_list.h"
 #include <stdlib.h>
 
-Value eval(Ast *ast, ht *stack, int stack_ptr);
+Value eval(Ast *ast, ht *stack, int stack_ptr, val_bind_fn_t val_bind);
 
-Value eval_list(Ast *ast, ht *stack, int stack_ptr) {
+Value eval_list(Ast *ast, ht *stack, int stack_ptr, val_bind_fn_t val_bind) {
   Value val;
   int len = ast->data.AST_LIST.len;
   if (len == 0) {
@@ -12,7 +12,7 @@ Value eval_list(Ast *ast, ht *stack, int stack_ptr) {
   }
   val.type = VALUE_LIST;
   Ast first_el_ast = ast->data.AST_LIST.items[0];
-  Value first_el_value = eval(&first_el_ast, stack, stack_ptr);
+  Value first_el_value = eval(&first_el_ast, stack, stack_ptr, val_bind);
 
   switch (first_el_value.type) {
   case VALUE_INT: {
@@ -23,7 +23,8 @@ Value eval_list(Ast *ast, ht *stack, int stack_ptr) {
     ((IntList *)val.value.vlist)->len = len;
     for (int i = 1; i < len; i++) {
       ((IntList *)val.value.vlist)->items[i] =
-          eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vint;
+          eval(ast->data.AST_LIST.items + i, stack, stack_ptr, val_bind)
+              .value.vint;
     }
     break;
   }
@@ -36,7 +37,8 @@ Value eval_list(Ast *ast, ht *stack, int stack_ptr) {
     ((IntList *)val.value.vlist)->len = len;
     for (int i = 1; i < len; i++) {
       ((IntList *)val.value.vlist)->items[i] =
-          eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vbool;
+          eval(ast->data.AST_LIST.items + i, stack, stack_ptr, val_bind)
+              .value.vbool;
     }
 
     break;
@@ -49,7 +51,8 @@ Value eval_list(Ast *ast, ht *stack, int stack_ptr) {
     ((NumberList *)val.value.vlist)->len = len;
     for (int i = 1; i < len; i++) {
       ((NumberList *)val.value.vlist)->items[i] =
-          eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vnum;
+          eval(ast->data.AST_LIST.items + i, stack, stack_ptr, val_bind)
+              .value.vnum;
     }
 
     break;
@@ -68,7 +71,8 @@ Value eval_list(Ast *ast, ht *stack, int stack_ptr) {
 
     ((StringList *)val.value.vlist)->len = len;
     for (int i = 1; i < len; i++) {
-      Value str_val = eval(ast->data.AST_LIST.items + i, stack, stack_ptr);
+      Value str_val =
+          eval(ast->data.AST_LIST.items + i, stack, stack_ptr, val_bind);
       ((StringList *)val.value.vlist)->items[i] = str_val.value.vstr.chars;
       ((StringList *)val.value.vlist)->lens[i] = str_val.value.vstr.length;
       ((StringList *)val.value.vlist)->hashes[i] = str_val.value.vstr.hash;
@@ -84,7 +88,8 @@ Value eval_list(Ast *ast, ht *stack, int stack_ptr) {
     ((ObjList *)val.value.vlist)->len = len;
     for (int i = 1; i < len; i++) {
       ((ObjList *)val.value.vlist)->items[i] =
-          eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vlist;
+          eval(ast->data.AST_LIST.items + i, stack, stack_ptr, val_bind)
+              .value.vlist;
     }
 
     break;
@@ -98,7 +103,8 @@ Value eval_list(Ast *ast, ht *stack, int stack_ptr) {
     ((ObjList *)val.value.vlist)->len = len;
     for (int i = 1; i < len; i++) {
       ((ObjList *)val.value.vlist)->items[i] =
-          eval(ast->data.AST_LIST.items + i, stack, stack_ptr).value.vobj;
+          eval(ast->data.AST_LIST.items + i, stack, stack_ptr, val_bind)
+              .value.vobj;
     }
 
     break;

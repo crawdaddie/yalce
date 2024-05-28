@@ -4,5 +4,5 @@
 #include "parse.h"
 #include "value.h"
 
-Value eval_list(Ast *list, ht *stack, int stack_ptr);
+Value eval_list(Ast *list, ht *stack, int stack_ptr, val_bind_fn_t val_bind);
 #endif

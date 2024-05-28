@@ -42,23 +42,23 @@
      INTEGER = 258,
      NUMBER = 259,
      IDENTIFIER = 260,
-     TOK_STRING = 261,
-     FSTRING = 262,
-     TRUE = 263,
-     FALSE = 264,
-     WHILE = 265,
-     IF = 266,
-     PRINT = 267,
-     PIPE = 268,
-     EXTERN = 269,
-     TRIPLE_DOT = 270,
-     LET = 271,
-     FN = 272,
-     MATCH = 273,
-     WITH = 274,
-     ARROW = 275,
-     TOK_VOID = 276,
-     DOUBLE_SEMICOLON = 277,
+     META_IDENTIFIER = 261,
+     TOK_STRING = 262,
+     FSTRING = 263,
+     TRUE = 264,
+     FALSE = 265,
+     WHILE = 266,
+     IF = 267,
+     PRINT = 268,
+     PIPE = 269,
+     EXTERN = 270,
+     TRIPLE_DOT = 271,
+     LET = 272,
+     FN = 273,
+     MATCH = 274,
+     WITH = 275,
+     ARROW = 276,
+     TOK_VOID = 277,
      IN = 278,
      AND = 279,
      IFX = 280,
@@ -75,23 +75,23 @@
 #define INTEGER 258
 #define NUMBER 259
 #define IDENTIFIER 260
-#define TOK_STRING 261
-#define FSTRING 262
-#define TRUE 263
-#define FALSE 264
-#define WHILE 265
-#define IF 266
-#define PRINT 267
-#define PIPE 268
-#define EXTERN 269
-#define TRIPLE_DOT 270
-#define LET 271
-#define FN 272
-#define MATCH 273
-#define WITH 274
-#define ARROW 275
-#define TOK_VOID 276
-#define DOUBLE_SEMICOLON 277
+#define META_IDENTIFIER 261
+#define TOK_STRING 262
+#define FSTRING 263
+#define TRUE 264
+#define FALSE 265
+#define WHILE 266
+#define IF 267
+#define PRINT 268
+#define PIPE 269
+#define EXTERN 270
+#define TRIPLE_DOT 271
+#define LET 272
+#define FN 273
+#define MATCH 274
+#define WITH 275
+#define ARROW 276
+#define TOK_VOID 277
 #define IN 278
 #define AND 279
 #define IFX 280

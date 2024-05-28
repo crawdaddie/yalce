@@ -27,7 +27,7 @@ int eval_script(const char *filename, ht *stack) {
   print_ast(prog);
 #endif
 
-  Value res = eval(prog, stack, 0);
+  Value res = eval(prog, stack, 0, NULL);
 
   printf("> ");
   print_value(&res);
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
       print_ast(top);
 #endif
 
-      Value res = eval(top, stack, 0);
+      Value res = eval(top, stack, 0, NULL);
       printf("> ");
       print_value(&res);
       printf("\n");
