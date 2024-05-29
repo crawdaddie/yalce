@@ -11,9 +11,6 @@ Value call_function(Function fn, ht *stack, val_bind_fn_t val_bind) {
 
   for (int i = 0; i < fn.len; i++) {
     ObjString param_id = fn.params[i];
-    // printf("\nparam: %s ", param_id.chars);
-    // print_value(fn.partial_args + i);
-    // printf("\n");
     ht_set_hash(fn_scope, param_id.chars, param_id.hash, (fn.partial_args + i));
   }
 
@@ -27,12 +24,7 @@ Value call_function(Function fn, ht *stack, val_bind_fn_t val_bind) {
     ht_set_hash(fn_scope, fn_name, hash, &recursive_ref);
   }
 
-  // printf("application void??\n");
-  //   printf("\n");
-  // print_ast(fn.body);
-
   Value return_val = eval(fn.body, stack, stack_ptr, val_bind);
-  // print_value(&return_val);
   return return_val;
 }
 
@@ -47,15 +39,8 @@ static Value partial_fn_application(Function func, int app_len, Ast **args,
                                     val_bind_fn_t val_bind) {
 
   int len = func.len;
-  if (func.partial_args == NULL) {
-    func.partial_args = malloc(sizeof(Value) * len);
-  }
-  // else {
-  //   Value *prev_partial_args = func.partial_args;
-  //   func.partial_args = malloc(sizeof(Value) * len);
-  //   for (int i = 0; i < func.num_partial_args; i++) {
-  //     *(func.partial_args + i) = prev_partial_args[i];
-  //   }
+  // if (func.partial_args == NULL) {
+  func.partial_args = malloc(sizeof(Value) * len);
   // }
   int num_partial_args = func.num_partial_args;
   for (int i = func.num_partial_args; i < num_partial_args + app_len; i++) {
@@ -99,6 +84,7 @@ static Value fn_application(Function func, int app_len, Ast **args, ht *stack,
     }
     func.partial_args = arg_vals;
     Value val = call_function(func, stack, val_bind);
+
     if (!func.is_recursive_ref) {
       free(arg_vals);
     }

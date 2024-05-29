@@ -1,12 +1,20 @@
-let _fact = fn acc n ->
-  (
-  match n with
-  | 0 -> acc
-  | _ -> _fact (n * acc) (n - 1)
-  )
+# let _fact = fn acc n -> (
+#   match n with
+#   | 0 -> acc
+#   | _ -> _fact (n * acc) (n - 1)
+# );;
+
+
+let fact = fn n ->
+  let aux = fn acc n -> (
+    match n with
+    | 0 -> acc
+    | _ -> aux (n * acc) (n - 1)
+  );;
+  aux 1 n
 ;;
 
-let fact = _fact 1;
-printv fact 4;
 
+printv fact 4;
 printv fact 4
+

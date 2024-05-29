@@ -295,11 +295,17 @@ void print_value(Value *val) {
     break;
 
   case VALUE_FN:
-    printf("function %p", val);
+    printf("function %s %p", val->value.function.fn_name, val);
     break;
 
-  case VALUE_EXTERN_FN:
-    printf("function %p", val);
+  case VALUE_PARTIAL_FN:
+    printf("partial function %s %d/%d %p",
+           val->value.partial_fn.function->value.function.fn_name,
+           val->value.partial_fn.num_partial_args, val->value.function.len);
+    break;
+
+  case VALUE_NATIVE_FN:
+    printf("native function %p", val);
     break;
 
   case VALUE_TYPE:

@@ -98,6 +98,7 @@ stmt_list:
     stmt                        { $$ = $1; }
   | stmt_list ';' stmt          { $$ = parse_stmt_list($1, $3); }
   | stmt_list ';' stmt          { $$ = parse_stmt_list($1, $3); }
+  | '(' stmt_list ')'           { $$ = $2; }
   ;
 
 
@@ -133,8 +134,10 @@ expr:
   ;
 
 lambda_expr:
-    FN lambda_args ARROW stmt_list ';' { $$ = ast_lambda($2, $4); }
-  | FN TOK_VOID ARROW stmt_list ';'   { $$ = ast_lambda(NULL, $4); }
+    FN lambda_args ARROW stmt_list ';'      { $$ = ast_lambda($2, $4); }
+  | FN TOK_VOID ARROW stmt_list ';'         { $$ = ast_lambda(NULL, $4); }
+  | '(' FN lambda_args ARROW stmt_list ')'  { $$ = ast_lambda($3, $5); }
+  | '(' FN TOK_VOID ARROW stmt_list ')'     { $$ = ast_lambda(NULL, $5); }
   ;
 
 
@@ -147,6 +150,7 @@ lambda_args:
 
 application:
     IDENTIFIER expr         { $$ = ast_application(ast_identifier($1), $2); }
+  /*| expr expr               { $$ = ast_application($1, $2); } */
   | application expr        { $$ = ast_application($1, $2); }
   ;
 

@@ -22,7 +22,7 @@ Value test_eval(Ast *ast, native_symbol_map *ctx, int ctx_size, ht *stack) {
     ht_set(stack, t.id, t.type);
   }
 
-  return eval(ast, stack, 0);
+  return eval(ast, stack, 0, NULL);
 }
 
 #define ast_binop(_op, l, r)                                                   \
@@ -71,6 +71,19 @@ Value test_eval(Ast *ast, native_symbol_map *ctx, int ctx_size, ht *stack) {
       .AST_BODY = { len, &(Ast *[]){__VA_ARGS__} }                             \
     }                                                                          \
   }
+
+#define ast_match(subject, _len, ...)                                          \
+  &(Ast) {                                                                     \
+    AST_MATCH, {                                                               \
+      .AST_MATCH = {                                                           \
+        subject,                                                               \
+        .len = _len,                                                           \
+        .branches = &(Ast *[]){__VA_ARGS__}                                    \
+      }                                                                        \
+    }                                                                          \
+  }
+#define ast_und                                                                \
+  &(Ast) { AST_PLACEHOLDER_ID }
 
 int main() {
   bool status = true;
@@ -134,12 +147,11 @@ int main() {
   TEST("partial function application (currying)",
        test_eval(ast_app(ast_id("f"), 1, ast_int(1)), TEST_CTX, 1, stack),
        test_result_bool =
-           (res.type == VALUE_FN && res.value.function.num_partial_args == 1 &&
-            res.value.function.partial_args[0].type == VALUE_INT &&
-            res.value.function.partial_args[0].value.vint == 1))
+           (res.type == VALUE_PARTIAL_FN &&
+            res.value.partial_fn.num_partial_args == 1 &&
+            res.value.partial_fn.partial_args[0].value.vint == 1))
 
 #undef TEST_CTX
-
   return status ? 0 : 1;
 }
 #undef ast_binop

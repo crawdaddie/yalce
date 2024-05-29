@@ -80,18 +80,19 @@ static Value synth_val_bind(Value val) {
 }
 
 static Value synth_wrapper_meta(Ast *ast, ht *stack, int stack_ptr) {
-  printf("synth wrapper meta\n");
+  // printf("synth wrapper meta\n");
   // print_ast(ast);
   if (ast->tag == AST_LET && ast->data.AST_LET.expr->tag == AST_LAMBDA) {
     Value synth_func_ =
         eval_lambda_declaration(ast->data.AST_LET.expr, stack, stack_ptr);
     // printf("synth function\n");
     Function synth_func = synth_func_.value.function;
-    synth_func.partial_args = malloc(sizeof(Value) * synth_func.len);
+    Value *args = malloc(sizeof(Value) * synth_func.len);
     for (int i = 0; i < synth_func.len; i++) {
-      synth_func.partial_args[i] = NUM(100);
-      synth_func.num_partial_args++;
+      args[i] = NUM(100);
     }
+    synth_func.partial_args = args;
+    synth_func.num_partial_args = synth_func.len;
     current_graph = group_new(1);
     Value result_node = call_function(synth_func, stack, synth_val_bind);
 

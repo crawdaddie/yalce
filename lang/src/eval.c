@@ -206,6 +206,19 @@ Value eval(Ast *ast, ht *stack, int stack_ptr, val_bind_fn_t val_bind) {
     char *chars = ast->data.AST_IDENTIFIER.value;
     int length = ast->data.AST_IDENTIFIER.length;
     val = lookup_id(chars, length, stack, stack_ptr);
+    if (val.type == VALUE_VOID) {
+      fprintf(stderr, "Error: value %s not found\n", chars);
+    }
+    // if ((val.type == VALUE_FN && val.value.function.partial_args != NULL) ||
+    //     (val.type == VALUE_NATIVE_FN &&
+    //      val.value.native_fn.partial_args != NULL)) {
+    //
+    //   Value *args = malloc(sizeof(Value) * val.value.function.len);
+    //   for (int i = 0; i < val.value.function.len; i++) {
+    //     *(args + i) = *(val.value.function.partial_args + i);
+    //   }
+    //   val.value.function.partial_args = args;
+    // }
     break;
   }
 
