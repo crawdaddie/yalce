@@ -15,6 +15,5 @@ let fact = fn n ->
 ;;
 
 
-printv fact 4;
 printv fact 4
 

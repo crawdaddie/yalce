@@ -39,7 +39,7 @@ typedef enum value_type {
   VALUE_NATIVE_FN,
   VALUE_SYNTH_NODE,
   VALUE_META_FN,
-  VALUE_PARTIAL_FN,
+  // VALUE_PARTIAL_FN,
 } value_type;
 
 // FUNCTIONS
@@ -108,7 +108,7 @@ struct Value {
     void *vlist;
     void *vnode;
     meta_fn_t vmeta_fn;
-    PartialFn partial_fn;
+    // PartialFn partial_fn;
     Function function;
     Function recursive_ref;
     NativeFn native_fn;

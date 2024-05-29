@@ -1,0 +1,10 @@
+let _fact = fn acc n ->
+  (match n with
+  | 0 -> acc
+  | _ -> _fact (n * acc) (n - 1)
+  )
+;;
+
+let fact = _fact 1;
+printv fact 4
+

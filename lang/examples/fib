@@ -7,12 +7,12 @@
 
 let fib = fn n ->
   let _fib = fn i a b ->
-    match i with 
+    (match i with 
     | n -> a
     | _ -> _fib (i + 1) (b) (a + b)
+  );;
   _fib 0 0 1
 ;;
-)
 
 printv fib 3
 

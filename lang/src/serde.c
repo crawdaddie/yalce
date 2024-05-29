@@ -295,14 +295,18 @@ void print_value(Value *val) {
     break;
 
   case VALUE_FN:
+    if (val->value.function.num_partial_args < val->value.function.len) {
+      printf("partial ");
+    }
     printf("function %s %p", val->value.function.fn_name, val);
     break;
 
-  case VALUE_PARTIAL_FN:
-    printf("partial function %s %d/%d %p",
-           val->value.partial_fn.function->value.function.fn_name,
-           val->value.partial_fn.num_partial_args, val->value.function.len);
-    break;
+    // case VALUE_PARTIAL_FN:
+    //   printf("partial function %s %d/%d %p",
+    //          val->value.partial_fn.function->value.function.fn_name,
+    //          val->value.partial_fn.num_partial_args,
+    //          val->value.function.len);
+    //   break;
 
   case VALUE_NATIVE_FN:
     printf("native function %p", val);
@@ -331,6 +335,7 @@ void print_value(Value *val) {
   case VALUE_SYNTH_NODE:
     printf("synth node (%p)", val->value.vobj);
     break;
+
   case VALUE_OBJ:
     printf("void * (%p)", val->value.vobj);
     break;
