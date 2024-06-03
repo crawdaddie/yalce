@@ -143,6 +143,8 @@ static native_symbol_map builtin_native_fns[NUM_NATIVES] = {
 void add_native_functions(ht *stack) {
   for (int i = 0; i < NUM_NATIVES; i++) {
     native_symbol_map t = builtin_native_fns[i];
+    // int len = t.type->value.native_fn.len;
+    // t.type->value.native_fn.partial_args = malloc(sizeof(Value) * len);
     ht_set(stack, t.id, t.type);
   }
 }

@@ -155,7 +155,7 @@ struct Ast {
 
     struct AST_APPLICATION {
       Ast *function;
-      Ast **args;
+      Ast *args;
       int len;
       // size_t num_args;
     } AST_APPLICATION;

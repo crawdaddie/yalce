@@ -2,6 +2,7 @@
 #include "eval.h"
 #include "ht.h"
 #include "parse.h"
+#include "serde.h"
 #include "synth_functions.h"
 #include "types.h"
 #include "value.h"
@@ -36,7 +37,7 @@ Value test_eval(Ast *ast, native_symbol_map *ctx, int ctx_size, ht *stack) {
     }                                                                          \
   }
 #define ast_int(i)                                                             \
-  &(Ast) {                                                                     \
+  (Ast) {                                                                      \
     AST_INT, {                                                                 \
       .AST_INT = {.value = i }                                                 \
     }                                                                          \
@@ -55,7 +56,7 @@ Value test_eval(Ast *ast, native_symbol_map *ctx, int ctx_size, ht *stack) {
       .AST_APPLICATION = {                                                     \
         .function = fn,                                                        \
         .len = _len,                                                           \
-        .args = &(Ast *[]){__VA_ARGS__}                                        \
+        .args = (Ast[_len]){__VA_ARGS__}                                       \
       }                                                                        \
     }                                                                          \
   }
@@ -104,18 +105,18 @@ int main() {
   }                                                                            \
   status &= test_result_bool;
 
-  TEST(
-      "simple arithmetic 98. * 2",
-      test_eval(ast_binop(TOKEN_STAR, ast_num(98), ast_int(2)), NULL, 0, stack),
-      test_result_bool = (res.type == VALUE_NUMBER && res.value.vnum == 196.))
+  TEST("simple arithmetic 98. * 2",
+       test_eval(ast_binop(TOKEN_STAR, ast_num(98), &ast_int(2)), NULL, 0,
+                 stack),
+       test_result_bool = (res.type == VALUE_NUMBER && res.value.vnum == 196.))
 
   TEST("simple arithmetic 98. / 2",
-       test_eval(ast_binop(TOKEN_SLASH, ast_num(98), ast_int(2)), NULL, 0,
+       test_eval(ast_binop(TOKEN_SLASH, ast_num(98), &ast_int(2)), NULL, 0,
                  stack),
        (res.type == VALUE_NUMBER && res.value.vnum == 49.))
 
   TEST("simple arithmetic 97 / 2 == 48",
-       test_eval(ast_binop(TOKEN_SLASH, ast_int(97), ast_int(2)), NULL, 0,
+       test_eval(ast_binop(TOKEN_SLASH, &ast_int(97), &ast_int(2)), NULL, 0,
                  stack),
        test_result_bool = (res.type == VALUE_INT && res.value.vint == 48))
 
@@ -147,9 +148,8 @@ int main() {
   TEST("partial function application (currying)",
        test_eval(ast_app(ast_id("f"), 1, ast_int(1)), TEST_CTX, 1, stack),
        test_result_bool =
-           (res.type == VALUE_PARTIAL_FN &&
-            res.value.partial_fn.num_partial_args == 1 &&
-            res.value.partial_fn.partial_args[0].value.vint == 1))
+           (res.type == VALUE_FN && res.value.function.num_partial_args == 1 &&
+            res.value.function.partial_args[0].value.vint == 1))
 
 #undef TEST_CTX
   return status ? 0 : 1;

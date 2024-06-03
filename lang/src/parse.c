@@ -68,18 +68,18 @@ Ast *ast_application(Ast *func, Ast *arg) {
   if (func->tag == AST_IDENTIFIER) {
     Ast *app = Ast_new(AST_APPLICATION);
     app->data.AST_APPLICATION.function = func;
-    app->data.AST_APPLICATION.args = malloc(sizeof(Ast *));
-    app->data.AST_APPLICATION.args[0] = arg;
+    app->data.AST_APPLICATION.args = malloc(sizeof(Ast));
+    app->data.AST_APPLICATION.args[0] = *arg;
     app->data.AST_APPLICATION.len = 1;
     return app;
   }
   if (func->tag == AST_APPLICATION) {
-    Ast **args = func->data.AST_APPLICATION.args;
+    Ast *args = func->data.AST_APPLICATION.args;
     func->data.AST_APPLICATION.len++;
     int len = func->data.AST_APPLICATION.len;
 
-    func->data.AST_APPLICATION.args = realloc(args, sizeof(Ast *) * len);
-    func->data.AST_APPLICATION.args[len - 1] = arg;
+    func->data.AST_APPLICATION.args = realloc(args, sizeof(Ast) * len);
+    func->data.AST_APPLICATION.args[len - 1] = *arg;
     return func;
   }
   return NULL;

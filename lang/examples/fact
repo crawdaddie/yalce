@@ -1,10 +1,3 @@
-# let _fact = fn acc n -> (
-#   match n with
-#   | 0 -> acc
-#   | _ -> _fact (n * acc) (n - 1)
-# );;
-
-
 let fact = fn n ->
   let aux = fn acc n -> (
     match n with
@@ -15,5 +8,9 @@ let fact = fn n ->
 ;;
 
 
-printv fact 4
+let x = fact 4;
+let y = fact 5;
+
+printv x;
+printv y
 

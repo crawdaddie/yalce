@@ -5,10 +5,8 @@ let sum3 = fn a b c -> a + b + c
 # printv w;
 
 let p = sum3 1 2;
-let x = 1 |> p |> sum3 1 2
-
-
-
+p 3;
+p 5
 
 
 

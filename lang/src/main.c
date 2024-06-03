@@ -29,7 +29,7 @@ int eval_script(const char *filename, ht *stack) {
 
   Value res = eval(prog, stack, 0, NULL);
 
-  printf("> ");
+  printf("-------------\n> ");
   print_value(&res);
   printf("\n");
 

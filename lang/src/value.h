@@ -5,17 +5,8 @@
 #include "parse.h"
 #include <stdbool.h>
 
-typedef union {
-  double d;
-  void *vp;
-  char *cp;
-  int i;
-  uintptr_t up;
-} UniversalType;
-
 typedef struct Value Value;
 
-// typedef UniversalType (*extern_handle_t)(UniversalType, ...);
 // typedef double (*extern_double)(void *, ...);
 // typedef int (*extern_int)(void *, ...);
 // typedef void *(*extern_void_ptr)(void *, ...);
@@ -39,7 +30,7 @@ typedef enum value_type {
   VALUE_NATIVE_FN,
   VALUE_SYNTH_NODE,
   VALUE_META_FN,
-  // VALUE_PARTIAL_FN,
+  VALUE_PARTIAL_FN,
 } value_type;
 
 // FUNCTIONS
@@ -63,11 +54,19 @@ typedef struct {
   value_type return_type;
 } NativeFn;
 
-typedef struct {
-  Value *function;
-  Value *partial_args;
-  int num_partial_args;
-} PartialFn;
+// typedef struct {
+//   enum {
+//     FN,
+//     NATIVE_FN,
+//   } type;
+//   union {
+//     Function fn;
+//     NativeFn native_fn;
+//   } function;
+//   Value *partial_args;
+//   int num_partial_args;
+//   int len; // length of underlying function for convenience
+// } PartialFn;
 
 // LIST TYPES
 typedef struct {
@@ -108,10 +107,10 @@ struct Value {
     void *vlist;
     void *vnode;
     meta_fn_t vmeta_fn;
-    // PartialFn partial_fn;
     Function function;
     Function recursive_ref;
     NativeFn native_fn;
+    // PartialFn partial_fn;
   } value;
 };
 

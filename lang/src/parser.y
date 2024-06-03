@@ -97,7 +97,6 @@ stmt:
 stmt_list:
     stmt                        { $$ = $1; }
   | stmt_list ';' stmt          { $$ = parse_stmt_list($1, $3); }
-  | stmt_list ';' stmt          { $$ = parse_stmt_list($1, $3); }
   | '(' stmt_list ')'           { $$ = $2; }
   ;
 

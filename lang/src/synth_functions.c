@@ -72,9 +72,9 @@ static Node *current_graph = NULL;
 
 static Value synth_val_bind(Value val) {
   if (val.type == VALUE_SYNTH_NODE) {
-    // printf("bind value to parent graph %p\n", current_graph);
-    // printf("\n");
-    // print_value(&val);
+    printf("bind value to parent graph %p ", current_graph);
+    print_value(&val);
+    printf("\n");
   }
   return val;
 }
@@ -91,10 +91,10 @@ static Value synth_wrapper_meta(Ast *ast, ht *stack, int stack_ptr) {
     for (int i = 0; i < synth_func.len; i++) {
       args[i] = NUM(100);
     }
-    synth_func.partial_args = args;
-    synth_func.num_partial_args = synth_func.len;
+    // synth_func.partial_args = args;
+    // synth_func.num_partial_args = synth_func.len;
     current_graph = group_new(1);
-    Value result_node = call_function(synth_func, stack, synth_val_bind);
+    Value result_node = fn_call(synth_func, args, stack, synth_val_bind);
 
     return result_node;
   }
@@ -104,6 +104,8 @@ static Value synth_wrapper_meta(Ast *ast, ht *stack, int stack_ptr) {
 void add_synth_functions(ht *stack) {
   for (int i = 0; i < SYNTH_FNS; i++) {
     native_symbol_map t = builtin_native_fns[i];
+    // int len = t.type->value.native_fn.len;
+    // t.type->value.native_fn.partial_args = malloc(sizeof(Value) * len);
     ht_set(stack, t.id, t.type);
   }
 

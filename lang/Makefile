@@ -14,6 +14,8 @@ LDFLAGS = -Lbuild -lyalce_synth -lm
 SRCS := $(wildcard $(SRCDIR)/*.c)
 OBJS := $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o) $(BUILDDIR)/y.tab.o $(BUILDDIR)/lex.yy.o
 
+all: build/audio_lang 
+
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR) $(YACC_OUTPUT) $(LEX_OUTPUT)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -23,9 +25,7 @@ $(YACC_OUTPUT): $(YACC_FILE)
 $(LEX_OUTPUT): $(LEX_FILE)
 	flex -o $(LEX_OUTPUT) $(LEX_FILE)
 
-.PHONY: all clean
-
-all: build/audio_lang 
+.PHONY: all clean run runi
 
 build/audio_lang: $(OBJS)
 	cp ../build/libyalce_synth.so build/libyalce_synth.so
@@ -53,4 +53,15 @@ test_eval: $(TESTDIR)/test_eval.o $(BUILDDIR)/y.tab.o $(BUILDDIR)/lex.yy.o $(fil
 $(TESTDIR)/test_eval.o: $(TESTDIR)/test_eval.c $(YACC_OUTPUT) $(LEX_OUTPUT)
 	$(CC) $(CFLAGS) -c -o $@ $< $(LDFLAGS)  
 
+run: $(BUILDDIR)/audio_lang
+	./$(BUILDDIR)/audio_lang $(input)
 
+# run --debug: $(BUILDDIR)/audio_lang
+# 	lldb ./$(BUILDDIR)/audio_lang $(input)
+
+runi: $(BUILDDIR)/audio_lang
+	./$(BUILDDIR)/audio_lang $(input) -i
+
+
+# runi --debug: $(BUILDDIR)/audio_lang
+# 	lldb ./$(BUILDDIR)/audio_lang $(input) -- -i

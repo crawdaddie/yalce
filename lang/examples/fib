@@ -2,17 +2,25 @@
 #  let rec loop n prev current =
 #    if n < 3
 #    then current
-#    else loop (n - 1) (current) (prev + now)
+#    else loop (n - 1) (current) (prev + current)
 #  in loop n 1 1
 
-let fib = fn n ->
-  let _fib = fn i a b ->
-    (match i with 
-    | n -> a
-    | _ -> _fib (i + 1) (b) (a + b)
-  );;
-  _fib 0 0 1
-;;
+let _fib = fn prev current i -> (
+  match i with 
+  | 0 -> current 
+  | _ -> _fib  (current) (prev + current) (i - 1)
+);;
 
-printv fib 3
+let fib = _fib 1 1;
+
+printv fib 0;
+printv fib 1;
+printv fib 2;
+printv fib 3;
+printv fib 4;
+printv fib 5;
+printv fib 6;
+printv fib 7;
+printv fib 8;
+printv fib 9
 

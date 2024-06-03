@@ -96,7 +96,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       buffer = strcat(buffer, " ");
-      buffer = ast_to_sexpr(ast->data.AST_APPLICATION.args[i], buffer);
+      buffer = ast_to_sexpr(ast->data.AST_APPLICATION.args + i, buffer);
       buffer = strcat(buffer, ")");
     }
 
@@ -295,21 +295,47 @@ void print_value(Value *val) {
     break;
 
   case VALUE_FN:
-    if (val->value.function.num_partial_args < val->value.function.len) {
-      printf("partial ");
-    }
     printf("function %s %p", val->value.function.fn_name, val);
+    if (val->value.function.num_partial_args < val->value.function.len) {
+
+      printf(" [");
+      for (int i = 0; i < val->value.function.num_partial_args; i++) {
+        print_value(val->value.function.partial_args + i);
+      }
+      printf("]");
+      printf(" (%d / %d)", val->value.function.num_partial_args,
+             val->value.function.len);
+    }
     break;
 
-    // case VALUE_PARTIAL_FN:
-    //   printf("partial function %s %d/%d %p",
-    //          val->value.partial_fn.function->value.function.fn_name,
-    //          val->value.partial_fn.num_partial_args,
-    //          val->value.function.len);
-    //   break;
-
+  // case VALUE_PARTIAL_FN:
+  //   if (val->value.partial_fn.type == FN) {
+  //     printf("partial function %s %d/%d",
+  //            val->value.partial_fn.function.fn.fn_name,
+  //            val->value.partial_fn.num_partial_args,
+  //            val->value.partial_fn.function.fn.len);
+  //     break;
+  //   } else {
+  //
+  //     printf("partial native function %d/%d",
+  //            val->value.partial_fn.num_partial_args,
+  //            val->value.partial_fn.function.native_fn.len);
+  //     break;
+  //   }
+  //
   case VALUE_NATIVE_FN:
     printf("native function %p", val);
+
+    if (val->value.native_fn.num_partial_args < val->value.function.len) {
+
+      printf(" [");
+      for (int i = 0; i < val->value.function.num_partial_args; i++) {
+        print_value(val->value.function.partial_args + i);
+      }
+      printf("]");
+      printf(" (%d / %d)", val->value.function.num_partial_args,
+             val->value.function.len);
+    }
     break;
 
   case VALUE_TYPE:

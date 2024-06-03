@@ -32,6 +32,7 @@ static bool process_match_branch(Value predicate, Ast *branch, Value *result,
                                  val_bind_fn_t val_bind) {
   Ast *test_ast = branch;
   Ast *body = branch + 1;
+
   if (test_ast->tag >= AST_INT && test_ast->tag <= AST_BOOL) {
     Value l = eval(test_ast, stack, stack_ptr, val_bind);
     Value is_eq = eq_ops(l, predicate);
@@ -72,7 +73,10 @@ static Value eval_match(Ast *ast, ht *stack, int stack_ptr,
         return eval(body, stack, stack_ptr + 1, val_bind);
       }
     } else if (test_ast->tag == AST_PLACEHOLDER_ID) {
-      return eval(body, stack, stack_ptr + 1, val_bind);
+      // printf("default branch eval: ");
+      Value res = eval(body, stack, stack_ptr + 1, val_bind);
+      // print_value(&res);
+      return res;
     } else if (test_ast->tag == AST_IDENTIFIER) {
       Value l = eval(test_ast, stack, stack_ptr, val_bind);
       Value is_eq = eq_ops(l, predicate);
