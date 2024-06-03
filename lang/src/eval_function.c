@@ -160,7 +160,7 @@ static Value native_fn_application(NativeFn func, int num_input,
 
 Value eval_application(Ast *ast, ht *stack, int stack_ptr,
                        val_bind_fn_t val_bind) {
-  print_ast(ast);
+  // print_ast(ast);
 
   Value func_val =
       eval(ast->data.AST_APPLICATION.function, stack, stack_ptr, val_bind);
