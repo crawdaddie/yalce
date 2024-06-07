@@ -1,0 +1,34 @@
+let () = init_audio ();
+
+# @synth
+# let dt_sq = fn f=100. ->
+#   let s = (sq f) + (sq f * 1.01)
+# ;;
+# 
+# @synth
+# let dt_sq2 = fn f=100. ->
+#   let s = (sq f) + (sq f * 1.01)
+# ;;
+
+
+let modulate = fn n -> 
+  let m = (1 + sq 0.25) * 0.5;
+  n * m
+;;
+
+let dt_sq = fn f -> 
+  (sq f) + (sq f * 1.01)
+;;
+
+let osc = fn f -> 
+  (sin f)
+;;
+
+
+# osc 500
+(dt_sq 150) |> play_node
+# |> play_node
+# dt_sq 450
+
+
+
