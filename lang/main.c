@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEBUG_AST
+// #define DEBUG_AST
 
 int return_int(void) { return 1; }
 double return_double(void) { return 1.00; }

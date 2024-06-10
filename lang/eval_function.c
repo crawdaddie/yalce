@@ -11,7 +11,6 @@ Value fn_call(Function fn, Value *input_vals, LangCtx *ctx) {
 
   ht *fn_scope = ctx->stack + stack_ptr;
 
-
   for (int i = 0; i < fn.len; i++) {
     ObjString param_id = fn.params[i];
     ht_set_hash(fn_scope, param_id.chars, param_id.hash, (input_vals + i));
@@ -107,7 +106,7 @@ static Value fn_application(Function func, int num_input, Value *input_vals,
 
 static Value native_fn_call(NativeFn fn, Value *input_vals) {
   int len = fn.len;
-  return fn.handle(len, input_vals);
+  return fn.handle(input_vals);
 }
 
 static Value native_fn_application(NativeFn func, int num_input,

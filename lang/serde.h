@@ -8,5 +8,6 @@ void print_ast(Ast *);
 char *ast_to_sexpr(Ast *, char *);
 
 void print_value(Value *val);
+void fprint_value(FILE *f, Value *val);
 
 #endif

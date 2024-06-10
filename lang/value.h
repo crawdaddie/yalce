@@ -2,8 +2,8 @@
 #define _LANG_VALUE_H
 #include "common.h"
 #include "ht.h"
-#include "node.h"
 #include "parse.h"
+#include <node.h>
 #include <stdbool.h>
 
 typedef struct Value Value;
@@ -23,7 +23,7 @@ typedef struct {
 // typedef void *(*extern_void_ptr)(void *, ...);
 // typedef void (*extern_void)(void *, ...);
 // typedef char *(*extern_str)(void *, ...);
-typedef Value (*native_fn_t)(int, Value *);
+typedef Value (*native_fn_t)(Value *);
 typedef Value (*meta_fn_t)(Ast *ast, LangCtx *ctx);
 
 typedef enum value_type {

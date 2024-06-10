@@ -117,7 +117,8 @@ Ast *ast_arg_list_push(Ast *lambda, ObjString arg_id, Ast *def) {
   size_t len = lambda->data.AST_LAMBDA.len;
 
   lambda->data.AST_LAMBDA.params = realloc(params, sizeof(ObjString) * len);
-  lambda->data.AST_LAMBDA.defaults = realloc(lambda->data.AST_LAMBDA.defaults, sizeof(Ast *) * len);
+  lambda->data.AST_LAMBDA.defaults =
+      realloc(lambda->data.AST_LAMBDA.defaults, sizeof(Ast *) * len);
   lambda->data.AST_LAMBDA.params[len - 1] = arg_id;
 
   if (def) {

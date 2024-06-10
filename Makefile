@@ -26,9 +26,15 @@ LANG_LD_FLAGS := -L./build -lyalce_synth -lm
 
 SHARED_LIB_TARGET := $(BUILDDIR)/libyalce_synth.so
 
-.PHONY: all clean run runi
+.PHONY: all clean run runi audio_test
 
 all: $(BUILDDIR)/audio_lang
+
+audio_test: $(ENGINE_OBJS)
+	$(ENGINE_CC) $(ENGINE_LDFLAGS) $(ENGINE_FRAMEWORKS) $(ENGINE_OBJS) -o build/engine_test
+	./build/engine_test
+
+
 
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
@@ -38,7 +44,7 @@ $(BUILDDIR)/_engine_%.o: $(ENGINE_SRC_DIR)/%.c | $(BUILDDIR)
 	$(ENGINE_CC) $(ENGINE_COMPILER_OPTIONS) -c -o $@ $<
 
 # Build the shared library
-$(SHARED_LIB_TARGET): $(ENGINE_OBJS)
+$(SHARED_LIB_TARGET): $(filter-out $(BUILDDIR)/_engine_main.o, $(ENGINE_OBJS))
 	$(ENGINE_CC) -shared -o $@ $^ $(ENGINE_LDFLAGS) $(ENGINE_FRAMEWORKS)
 
 # Build lex and yacc output files

@@ -5,7 +5,7 @@
 
 void add_native_functions(ht *stack);
 
-int _list_length(int argc, Value *argv);
+int _list_length(Value *argv);
 
 Value list_nth(int n, Value *list);
 #endif

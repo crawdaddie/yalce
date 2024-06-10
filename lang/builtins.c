@@ -3,25 +3,25 @@
 #include "value.h"
 #include <stdlib.h>
 
-Value _strlen(int argc, Value *argv) {
+Value _strlen(Value *argv) {
   Value string = *argv;
   return INT(string.value.vstr.length);
 }
 
-Value type_of(int argc, Value *argv) { return INT(argv->type); }
+Value type_of(Value *argv) { return INT(argv->type); }
 
-int _list_length(int argc, Value *argv) {
+int _list_length(Value *argv) {
   IntList *list = (IntList *)(*argv).value.vlist;
   return list->len;
 }
 
-Value list_length(int argc, Value *argv) { return INT(_list_length(1, argv)); }
+Value list_length(Value *argv) { return INT(_list_length(argv)); }
 
 value_type _list_type(Value *argv) {
   IntList *list = (IntList *)(*argv).value.vlist;
   return list->type;
 }
-Value list_type(int argc, Value *argv) { return INT(_list_type(argv)); }
+Value list_type(Value *argv) { return INT(_list_type(argv)); }
 
 #define LIST_NTH(list, list_type, item_type, n)                                \
   item_type item = ((list_type *)list->value.vlist)->items[n]
@@ -61,17 +61,17 @@ Value list_nth(int n, Value *list) {
   }
 }
 
-Value _strconcat(int argc, Value *argv) {
+Value _strconcat(Value *argv) {
   Value string = *argv;
   return INT(string.value.vstr.length);
 }
 
-Value _print(int argc, Value *argv) {
+Value _print(Value *argv) {
   printf("%s", argv->value.vstr.chars);
   return VOID;
 }
 
-Value _printv(int argc, Value *argv) {
+Value _printv(Value *argv) {
   print_value(argv);
   printf("\n");
   return VOID;
@@ -84,7 +84,7 @@ Value _printv(int argc, Value *argv) {
       realloc(items, sizeof(item_type) * len);                                 \
   ((list_type *)argv->value.vlist)->items[len - 1] = val
 
-Value list_push(int argc, Value *argv) {
+Value list_push(Value *argv) {
   Value *list = argv + 1;
   Value *val = argv;
 

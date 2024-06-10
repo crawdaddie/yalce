@@ -41,8 +41,24 @@ void write_to_output(double *src, double *dest, int nframes, int output_num) {
   }
 }
 
-static void offset_node_bufs(Node *node, int frame_offset) {}
-static void unoffset_node_bufs(Node *node, int frame_offset) {}
+static void offset_node_bufs(Node *node, int frame_offset) {
+
+  if (frame_offset == 0) {
+    return;
+  }
+  for (int i = 0; i < node->num_ins; i++) {
+    node->ins[i] += frame_offset;
+  }
+}
+
+static void unoffset_node_bufs(Node *node, int frame_offset) {
+  if (frame_offset == 0) {
+    return;
+  }
+  for (int i = 0; i < node->num_ins; i++) {
+    node->ins[i] -= frame_offset;
+  }
+}
 
 Node *perform_graph(Node *head, int nframes, double spf, double *dac_buf,
                     int output_num) {
@@ -80,7 +96,7 @@ void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
   perform_graph(ctx->head, frame_count, spf, ctx->output_buf, 0);
 }
 
-Node *ctx_add(Node *node) {
+Node *audio_ctx_add(Node *node) {
   if (ctx.head == NULL) {
     ctx.head = node;
     ctx.tail = node;
@@ -92,3 +108,5 @@ Node *ctx_add(Node *node) {
 }
 
 Node *add_to_dac(Node *node) { return NULL; }
+
+Ctx *get_audio_ctx() { return &ctx; }

@@ -385,13 +385,13 @@ static const flex_int16_t yy_accept[95] =
     {   0,
         0,    0,   35,   33,   31,   31,   33,   33,   32,   25,
        24,   24,   24,   22,   19,   21,   24,   24,   24,   33,
-       15,   12,   13,   14,   33,   15,   15,   15,   15,   15,
-       15,   15,   15,   24,   31,   29,    0,   17,    0,   32,
+       14,   12,   13,   14,   33,   14,   14,   14,   14,   14,
+       14,   14,   14,   24,   31,   29,    0,   17,    0,   32,
         5,   22,   19,   21,   30,    0,   22,    0,   21,   20,
-       27,   28,   26,   16,   15,    0,    0,   18,   15,   15,
-       15,    1,    3,   15,   15,   15,   15,   23,    0,   17,
-        0,    9,   22,   16,    0,    0,   18,    4,   15,   15,
-        2,   15,   15,   15,   15,   15,   15,    7,   11,   15,
+       27,   28,   26,   15,   14,    0,    0,   18,   14,   14,
+       14,    1,    3,   14,   14,   14,   14,   23,    0,   17,
+        0,    9,   22,   15,    0,    0,   18,    4,   14,   14,
+        2,   14,   14,   14,   14,   14,   14,    7,   11,   14,
         8,   10,    6,    0
 
     } ;
@@ -904,11 +904,6 @@ return *yytext;
 case 14:
 YY_RULE_SETUP
 #line 23 "lang/lex.l"
-return *yytext;
-	YY_BREAK
-case 15:
-YY_RULE_SETUP
-#line 24 "lang/lex.l"
 {
 
                           int len = yyleng;
@@ -918,9 +913,9 @@ YY_RULE_SETUP
                           return IDENTIFIER;
                         }
 	YY_BREAK
-case 16:
+case 15:
 YY_RULE_SETUP
-#line 33 "lang/lex.l"
+#line 32 "lang/lex.l"
 {
 
                           int len = yyleng;
@@ -929,6 +924,11 @@ YY_RULE_SETUP
                           yylval.vident.hash = hash_string(yylval.vident.chars, len);
                           return META_IDENTIFIER;
                         }
+	YY_BREAK
+case 16:
+YY_RULE_SETUP
+#line 40 "lang/lex.l"
+return *yytext;
 	YY_BREAK
 case 17:
 YY_RULE_SETUP

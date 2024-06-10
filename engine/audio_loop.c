@@ -1,6 +1,6 @@
 #ifndef _ENGINE_AUDIO_LOOP_H
 #define _ENGINE_AUDIO_LOOP_H
-
+#include "audio_loop.h"
 #include "ctx.h"
 #include "oscillators.h"
 #include <soundio/soundio.h>
@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
@@ -55,8 +56,39 @@ void write_sample_float64ne(char *ptr, double sample) {
   *buf = sample;
 }
 
+// static long block_time;
+
+// static time_t loc_time;
+static struct timespec start;
+static struct timespec block_time;
+
+static void set_block_time(struct timespec *to_set) {
+  clock_gettime(CLOCK_MONOTONIC_RAW, to_set);
+}
+
+uint64_t us_offset(struct timespec start, struct timespec end) {
+  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+  // uint64_t delta_us = (end.tv_sec - start.tv_sec) * 1000000 +
+  //                     (end.tv_nsec - start.tv_nsec) / 1000.0;
+  uint64_t delta_us = (end.tv_sec - start.tv_sec) * 1000 +
+                      (end.tv_nsec - start.tv_nsec) / 1000000;
+  return delta_us;
+}
+
+int block_sample_offset(struct timespec start, struct timespec end,
+                        int sample_rate) {
+
+  double ms_per_frame = 1000.0 / sample_rate;
+  uint64_t ms = us_offset(start, end);
+  return ms / ms_per_frame;
+}
+
+struct timespec get_block_time() { return block_time; }
+struct timespec get_start_time() { return start; }
+
 static void _write_callback(struct SoundIoOutStream *outstream,
                             int frame_count_min, int frame_count_max) {
+
   double float_sample_rate = outstream->sample_rate;
   double seconds_per_frame = 1.0 / float_sample_rate;
 
@@ -92,8 +124,8 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     //   }
     // }
 
-    // set_block_time();
-    // handle_scheduler_tick();
+    set_block_time(&block_time);
+
     user_ctx_callback(ctx, frame_count, seconds_per_frame);
 
     int sample_idx;
@@ -257,10 +289,10 @@ int start_audio() {
   }
   printf("Software latency:  %f\n", outstream->software_latency);
   printf("Sample rate:       %d\n", outstream->sample_rate);
-  // ctx.sample_rate = outstream->sample_rate;
+  ctx.sample_rate = outstream->sample_rate;
   printf("------------------\n");
 
-  // set_block_time();
+  set_block_time(&start);
   return 0;
 }
 

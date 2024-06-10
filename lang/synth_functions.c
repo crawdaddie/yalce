@@ -9,7 +9,7 @@
 #include <oscillators.h>
 #include <stdlib.h>
 
-static Value _init_audio(int argc, Value *argv) { return INT(init_audio()); }
+static Value _init_audio(Value *argv) { return INT(init_audio()); }
 
 #define NODE(i)                                                                \
   (Value) {                                                                    \
@@ -21,31 +21,101 @@ static Value _init_audio(int argc, Value *argv) { return INT(init_audio()); }
   v->type == VALUE_INT ? (double)v->value.vint : v->value.vnum
 
 #define INT_OF_VALUE(v) v->value.vint
+typedef struct {
+  void *blob;
+  void *blob_ptr;
+  int capacity;
+} AllocArena;
 
-static Value _sq(int argc, Value *argv) {
+#define SIGNAL_SIZE sizeof(double) * BUF_SIZE
+
+typedef struct {
+  Node *head;
+  Node *tail;
+} SynthCtx;
+
+static SynthCtx current_synth_ctx;
+
+static Node *ctx_add(Node *node) {
+  if (current_synth_ctx.head == NULL) {
+    current_synth_ctx.head = node;
+    current_synth_ctx.tail = node;
+    return node;
+  }
+  current_synth_ctx.tail->next = node;
+  current_synth_ctx.tail = node;
+  return node;
+}
+
+
+
+void *alloc(AllocArena *arena, unsigned long size) {
+  void *ptr = arena->blob_ptr;
+
+  unsigned long offset = ptr - arena->blob;
+
+  // if (offset + size > arena->capacity) {
+  //   printf("realloc to accommodate %d from %d\n", offset + size,
+  //          arena->capacity);
+  //   arena->capacity *= 2;
+  //   arena->blob = realloc(arena->blob, arena->capacity);
+  //   arena->blob_ptr = arena->blob + offset;
+  //   ptr = arena->blob_ptr;
+  // }
+
+  arena->blob_ptr += size;
+  return ptr;
+}
+
+AllocArena get_arena(int size) {
+  void *mem = malloc(size + 4);
+  // printf("size %lu\n", size * sizeof(void *));
+  return (AllocArena){.blob = mem, .blob_ptr = mem, .capacity = size};
+}
+
+double *const_signal(AllocArena *arena, double v) {
+  double *input = alloc(arena, SIGNAL_SIZE);
+  for (int i = 0; i < BUF_SIZE; i++) {
+    input[i] = v;
+  }
+  return input;
+}
+
+static inline bool is_synth_input(Value i) {
+  return (i.type == VALUE_SYNTH_NODE) || (i.type == VALUE_INT) ||
+         (i.type == VALUE_NUMBER);
+}
+
+static Value _sq(Value *argv) {
   Value freq = argv[0];
+  if (!is_synth_input(freq)) {
+    fprintf(stderr, "Error: incompatible input to synth function ");
+    fprint_value(stderr, argv);
+    return VOID;
+  }
+  int input_is_sig = freq.type == VALUE_SYNTH_NODE;
+
+  int size = sizeof(Node) + sizeof(sq_state) + SIGNAL_SIZE;
+  if (input_is_sig) {
+    size += SIGNAL_SIZE;
+  }
+  AllocArena arena = get_arena(size);
+
   double *input;
-  if (freq.type == VALUE_SYNTH_NODE) {
+  Node *sq_node = alloc(&arena, sizeof(Node));
+  sq_node->perform = sq_perform;
+  sq_node->state = alloc(&arena, sizeof(sq_state));
+
+  if (input_is_sig) {
     Node *freq_input_node = freq.value.vnode;
     input = freq_input_node->output_buf;
   } else if (freq.type == VALUE_INT || freq.type == VALUE_NUMBER) {
-    input = malloc(sizeof(double) * BUF_SIZE);
-    for (int i = 0; i < BUF_SIZE; i++) {
-      input[i] = NUM_OF_VALUE(argv);
-    }
-  } else {
-    fprintf(stderr, "Error: incompatible input to synth function ");
-    print_value(argv);
-    printf("\n");
-    return VOID;
+    input = const_signal(&arena, NUM_OF_VALUE(argv));
   }
-  Node *sq_node = malloc(sizeof(Node));
-  sq_node->perform = sq_perform;
-  sq_node->state = malloc(sizeof(sq_state));
 
   ((sq_state *)sq_node->state)->phase = 0.0;
 
-  sq_node->ins = malloc(sizeof(double *) * 1);
+  sq_node->ins = alloc(&arena, sizeof(double *) * 1);
   sq_node->ins[0] = input;
   sq_node->num_ins = 1;
   ctx_add(sq_node);
@@ -53,30 +123,37 @@ static Value _sq(int argc, Value *argv) {
   return (Value){VALUE_SYNTH_NODE, {.vnode = sq_node}};
 }
 
-static Value _sin(int argc, Value *argv) {
+static Value _sin(Value *argv) {
   Value freq = argv[0];
+  if (!is_synth_input(freq)) {
+    fprintf(stderr, "Error: incompatible input to synth function ");
+    fprint_value(stderr, argv);
+    return VOID;
+  }
+
+  int input_is_sig = freq.type == VALUE_SYNTH_NODE;
+
+  int size = sizeof(Node) + sizeof(sq_state) + SIGNAL_SIZE;
+  if (input_is_sig) {
+    size += SIGNAL_SIZE;
+  }
+  AllocArena arena = get_arena(size);
   double *input;
-  if (freq.type == VALUE_SYNTH_NODE) {
+
+  Node *sin_node = alloc(&arena, sizeof(Node));
+  sin_node->perform = sin_perform;
+  sin_node->state = alloc(&arena, sizeof(sin_state));
+
+  if (input_is_sig) {
     Node *freq_input_node = freq.value.vnode;
     input = freq_input_node->output_buf;
   } else if (freq.type == VALUE_INT || freq.type == VALUE_NUMBER) {
-    input = malloc(sizeof(double) * BUF_SIZE);
-    for (int i = 0; i < BUF_SIZE; i++) {
-      input[i] = NUM_OF_VALUE(argv);
-    }
-  } else {
-    fprintf(stderr, "Error: incompatible input to synth function ");
-    print_value(argv);
-    printf("\n");
-    return VOID;
+    input = const_signal(&arena, NUM_OF_VALUE(argv));
   }
-  Node *sin_node = malloc(sizeof(Node));
-  sin_node->perform = sin_perform;
-  sin_node->state = malloc(sizeof(sin_state));
 
   ((sq_state *)sin_node->state)->phase = 0.0;
 
-  sin_node->ins = malloc(sizeof(double *) * 1);
+  sin_node->ins = alloc(&arena, sizeof(double *) * 1);
   sin_node->ins[0] = input;
   sin_node->num_ins = 1;
   ctx_add(sin_node);
@@ -84,37 +161,43 @@ static Value _sin(int argc, Value *argv) {
   return (Value){VALUE_SYNTH_NODE, {.vnode = sin_node}};
 }
 
-static Value _play_node(int argc, Value *argv) {
-  print_value(argv);
+static Value _play_node(Value *argv) {
+  // printf("head %p tail %p\n", current_synth_ctx.head, current_synth_ctx.tail);
+
   Node *node = argv->value.vnode;
 
-  node->type = OUTPUT;
+  struct timespec bt = get_block_time();
+  struct timespec start = get_start_time();
+  current_synth_ctx = (SynthCtx){};
 
   return *argv;
 }
 
-static Value _group_add_tail(int argc, Value *argv) {
+static Value _group_add_tail(Value *argv) {
   group_add_tail(NODE_OF_VALUE(argv), NODE_OF_VALUE((argv + 1)));
   return VOID;
 }
 
 Value synth_add(Value l, Value r) {
+
   if (l.type == VALUE_SYNTH_NODE && r.type == VALUE_SYNTH_NODE) {
+    AllocArena arena = get_arena(sizeof(Node) + sizeof(double *) * 2);
     Node *ln = l.value.vnode;
     Node *rn = r.value.vnode;
-    Node *sum = malloc(sizeof(Node));
-    double **ins = malloc(sizeof(double *) * 2);
-    *sum = (Node){
-        .perform = sum_perform,
-        .ins = ins,
-        .num_ins = 2,
-    };
+    Node *sum = alloc(&arena, sizeof(Node));
+    double **ins = alloc(&arena, sizeof(double *) * 2);
+    sum->perform = sum_perform;
+    sum->ins = ins;
+    sum->num_ins = 2;
     sum->ins[0] = ln->output_buf;
     sum->ins[1] = rn->output_buf;
-    ctx_add(sum);
 
+    ctx_add(sum);
     return NODE(sum);
   }
+
+  AllocArena arena =
+      get_arena(sizeof(Node) + (sizeof(double *) * 2) + SIGNAL_SIZE);
 
   Node *n;
   double scalar;
@@ -126,15 +209,14 @@ Value synth_add(Value l, Value r) {
     n = l.value.vnode;
   }
 
-  Node *sum = malloc(sizeof(Node));
-  double **ins = malloc(sizeof(double *) * 2);
-  *sum = (Node){
-      .perform = sum_perform,
-      .ins = ins,
-      .num_ins = 2,
-  };
+  Node *sum = alloc(&arena, sizeof(Node));
+  double **ins = alloc(&arena, sizeof(double *) * 2);
 
-  sum->ins[0] = malloc(sizeof(double) * BUF_SIZE);
+  sum->perform = sum_perform;
+  sum->ins = ins;
+  sum->num_ins = 2;
+
+  sum->ins[0] = alloc(&arena, SIGNAL_SIZE);
   for (int i = 0; i < BUF_SIZE; i++) {
     sum->ins[0][i] = scalar;
   }
@@ -145,12 +227,14 @@ Value synth_add(Value l, Value r) {
 
 Value synth_mul(Value l, Value r) {
   if (l.type == VALUE_SYNTH_NODE && r.type == VALUE_SYNTH_NODE) {
+
+    AllocArena arena = get_arena(sizeof(Node) + sizeof(double *) * 2);
     Node *ln = l.value.vnode;
     ctx_add(ln);
     Node *rn = r.value.vnode;
     ctx_add(rn);
-    Node *mul = malloc(sizeof(Node));
-    double **ins = malloc(sizeof(double *) * 2);
+    Node *mul = alloc(&arena, sizeof(Node));
+    double **ins = alloc(&arena, sizeof(double *) * 2);
     *mul = (Node){
         .perform = mul_perform,
         .ins = ins,
@@ -161,6 +245,9 @@ Value synth_mul(Value l, Value r) {
     ctx_add(mul);
     return NODE(mul);
   }
+
+  AllocArena arena =
+      get_arena(sizeof(Node) + sizeof(double *) * 2 + SIGNAL_SIZE);
 
   Node *n;
   double scalar;
@@ -175,15 +262,15 @@ Value synth_mul(Value l, Value r) {
     scalar = r.type == VALUE_INT ? r.value.vint : r.value.vnum;
     n = l.value.vnode;
   }
-  Node *mul = malloc(sizeof(Node));
-  double **ins = malloc(sizeof(double *) * 2);
+  Node *mul = alloc(&arena, sizeof(Node));
+  double **ins = alloc(&arena, sizeof(double *) * 2);
   *mul = (Node){
       .perform = mul_perform,
       .ins = ins,
       .num_ins = 2,
   };
 
-  mul->ins[0] = malloc(sizeof(double) * BUF_SIZE);
+  mul->ins[0] = alloc(&arena, SIGNAL_SIZE);
   for (int i = 0; i < BUF_SIZE; i++) {
     mul->ins[0][i] = scalar;
   }

@@ -5,7 +5,7 @@
 #include <string.h>
 
 void print_ast(Ast *ast) {
-  char *buf = malloc(sizeof(char) * 300);
+  char *buf = malloc(sizeof(char) * 500);
   printf("%s\n", ast_to_sexpr(ast, buf));
   free(buf);
 }
@@ -267,106 +267,108 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   return buffer;
 }
 
-void print_value(Value *val) {
+void fprint_value(FILE *f, Value *val) {
   if (!val) {
-    printf("()");
+    fprintf(f, "()");
     return;
   }
 
   switch (val->type) {
   case VALUE_INT:
-    printf("%d", val->value.vint);
+    fprintf(f, "%d", val->value.vint);
     break;
 
   case VALUE_NUMBER:
-    printf("%f", val->value.vnum);
+    fprintf(f, "%f", val->value.vnum);
     break;
 
   case VALUE_STRING:
-    printf("%s", val->value.vstr.chars);
+    fprintf(f, "%s", val->value.vstr.chars);
     break;
 
   case VALUE_BOOL:
-    printf("%s", val->value.vbool ? "true" : "false");
+    fprintf(f, "%s", val->value.vbool ? "true" : "false");
     break;
 
   case VALUE_VOID:
-    printf("()");
+    fprintf(f, "()");
     break;
 
   case VALUE_FN:
-    printf("function %s %p", val->value.function.fn_name, val);
+    fprintf(f, "function %s %p", val->value.function.fn_name, val);
     if (val->value.function.num_partial_args < val->value.function.len) {
 
-      printf(" [");
+      fprintf(f, " [");
       for (int i = 0; i < val->value.function.num_partial_args; i++) {
         print_value(val->value.function.partial_args + i);
       }
-      printf("]");
-      printf(" (%d / %d)", val->value.function.num_partial_args,
-             val->value.function.len);
+      fprintf(f, "]");
+      fprintf(f, " (%d / %d)", val->value.function.num_partial_args,
+              val->value.function.len);
     }
     break;
 
   // case VALUE_PARTIAL_FN:
   //   if (val->value.partial_fn.type == FN) {
-  //     printf("partial function %s %d/%d",
+  //     fprintf(f, "partial function %s %d/%d",
   //            val->value.partial_fn.function.fn.fn_name,
   //            val->value.partial_fn.num_partial_args,
   //            val->value.partial_fn.function.fn.len);
   //     break;
   //   } else {
   //
-  //     printf("partial native function %d/%d",
+  //     fprintf(f, "partial native function %d/%d",
   //            val->value.partial_fn.num_partial_args,
   //            val->value.partial_fn.function.native_fn.len);
   //     break;
   //   }
   //
   case VALUE_NATIVE_FN:
-    printf("native function %p", val);
+    fprintf(f, "native function %p", val);
 
     if (val->value.native_fn.num_partial_args < val->value.function.len) {
 
-      printf(" [");
+      fprintf(f, " [");
       for (int i = 0; i < val->value.function.num_partial_args; i++) {
         print_value(val->value.function.partial_args + i);
       }
-      printf("]");
-      printf(" (%d / %d)", val->value.function.num_partial_args,
-             val->value.function.len);
+      fprintf(f, "]");
+      fprintf(f, " (%d / %d)", val->value.function.num_partial_args,
+              val->value.function.len);
     }
     break;
 
   case VALUE_TYPE:
 
-    printf("type %d", val->value.type);
+    fprintf(f, "type %d", val->value.type);
     break;
 
   case VALUE_LIST:
 
-    printf("[");
+    fprintf(f, "[");
 
-    int len = _list_length(1, val);
+    int len = _list_length(val);
     for (int i = 0; i < len; i++) {
       Value v = list_nth(i, val);
       print_value(&v);
       if (i < len - 1) {
-        printf(", ");
+        fprintf(f, ", ");
       }
     }
-    printf("]");
+    fprintf(f, "]");
     break;
 
   case VALUE_SYNTH_NODE:
-    printf("synth node (%p)", val->value.vobj);
+    fprintf(f, "synth node (%p)", val->value.vobj);
     break;
 
   case VALUE_OBJ:
-    printf("void * (%p)", val->value.vobj);
+    fprintf(f, "void * (%p)", val->value.vobj);
     break;
 
   default:
-    printf("unknown value type %d %d", val->type, val->value.type);
+    fprintf(f, "unknown value type %d %d", val->type, val->value.type);
   }
 }
+
+void print_value(Value *val) { fprint_value(stdout, val); }

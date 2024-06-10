@@ -20,7 +20,6 @@
 "with"                  return WITH;
 "["                     return *yytext;
 "]"                     return *yytext;
-"_"                     return *yytext;
 [a-zA-Z_][a-zA-Z0-9_]*  {
 
                           int len = yyleng;
@@ -38,6 +37,7 @@
                           yylval.vident.hash = hash_string(yylval.vident.chars, len);
                           return META_IDENTIFIER;
                         }
+"_"                     return *yytext;
 \"([^\"\n]|\\.)*\"      {
                           int len = yyleng - 2;
                           char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars

@@ -1,0 +1,45 @@
+let () = init_audio ();
+
+# @synth
+# let dt_sq = fn f=100. ->
+#   let s = (sq f) + (sq f * 1.01)
+# ;;
+
+# @synth
+# let dt_sq2 = fn f=100. ->
+#   let s = (sq f) + (sq f * 1.01)
+# ;;
+
+let modulate = fn n -> 
+  let m = (1 + sq 0.25) * 0.5;
+  n * m
+;;
+
+let dt_sq = fn f -> 
+  (sq f) + (sq f * 1.01)
+;;
+
+let dt_osc = fn o f -> 
+  (o f) + (o f * 1.01)
+;;
+
+let wavy = fn ff f ->
+  (f + (sin ff)) |> (dt_osc sq)
+;;
+
+let scale = fn b r i -> 
+  b + r + (r * i)
+;;
+
+let scale2 = fn b r _i -> 
+  let i = (1 + _i) * 0.5;
+  b + (r * i)
+;;
+
+let freq = (sin 8) |> scale 100 (scale 300 300 sin 0.05);
+let x = freq |> sq |> play_node
+
+
+
+
+
