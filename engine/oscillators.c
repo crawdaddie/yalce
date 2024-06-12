@@ -92,6 +92,7 @@ void maketable_sin(void) {
 
 void sin_perform(void *_state, double *out, int num_ins, double **inputs,
                  int nframes, double spf) {
+
   sin_state *state = (sin_state *)_state;
   double *input = inputs[0];
 

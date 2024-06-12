@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
@@ -59,10 +60,10 @@ void write_sample_float64ne(char *ptr, double sample) {
 // static long block_time;
 
 // static time_t loc_time;
-static struct timespec start;
+static struct timespec start_time;
 static struct timespec block_time;
 
-static void set_block_time(struct timespec *to_set) {
+void set_block_time(struct timespec *to_set) {
   clock_gettime(CLOCK_MONOTONIC_RAW, to_set);
 }
 
@@ -75,19 +76,20 @@ uint64_t us_offset(struct timespec start, struct timespec end) {
   return delta_us;
 }
 
-int block_sample_offset(struct timespec start, struct timespec end,
-                        int sample_rate) {
+int get_block_frame_offset(struct timespec start, struct timespec end,
+                           int sample_rate) {
 
   double ms_per_frame = 1000.0 / sample_rate;
   uint64_t ms = us_offset(start, end);
-  return ms / ms_per_frame;
+  return ((int)(ms / ms_per_frame)) % 512;
 }
 
 struct timespec get_block_time() { return block_time; }
-struct timespec get_start_time() { return start; }
+struct timespec get_start_time() { return start_time; }
 
 static void _write_callback(struct SoundIoOutStream *outstream,
                             int frame_count_min, int frame_count_max) {
+  // printf("frame count %d %d\n", frame_count_min, frame_count_max);
 
   double float_sample_rate = outstream->sample_rate;
   double seconds_per_frame = 1.0 / float_sample_rate;
@@ -292,7 +294,7 @@ int start_audio() {
   ctx.sample_rate = outstream->sample_rate;
   printf("------------------\n");
 
-  set_block_time(&start);
+  set_block_time(&start_time);
   return 0;
 }
 
@@ -300,6 +302,7 @@ int init_audio() {
   maketable_sq();
   maketable_sin();
   start_audio();
+  // sleep(1);
   return 0;
 }
 

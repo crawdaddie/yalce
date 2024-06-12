@@ -32,11 +32,14 @@ typedef struct {
 typedef struct {
   Node *head;
   Node *tail;
+  int num;
 } SynthCtx;
 
-static SynthCtx current_synth_ctx;
+static SynthCtx current_synth_ctx = {.num = 0};
 
 static Node *ctx_add(Node *node) {
+  // printf("adding %p\n", node);
+  current_synth_ctx.num++;
   if (current_synth_ctx.head == NULL) {
     current_synth_ctx.head = node;
     current_synth_ctx.tail = node;
@@ -46,8 +49,6 @@ static Node *ctx_add(Node *node) {
   current_synth_ctx.tail = node;
   return node;
 }
-
-
 
 void *alloc(AllocArena *arena, unsigned long size) {
   void *ptr = arena->blob_ptr;
@@ -118,6 +119,7 @@ static Value _sq(Value *argv) {
   sq_node->ins = alloc(&arena, sizeof(double *) * 1);
   sq_node->ins[0] = input;
   sq_node->num_ins = 1;
+  // printf("sq %p\n", sq_node);
   ctx_add(sq_node);
 
   return (Value){VALUE_SYNTH_NODE, {.vnode = sq_node}};
@@ -161,15 +163,101 @@ static Value _sin(Value *argv) {
   return (Value){VALUE_SYNTH_NODE, {.vnode = sin_node}};
 }
 
-static Value _play_node(Value *argv) {
-  // printf("head %p tail %p\n", current_synth_ctx.head, current_synth_ctx.tail);
+static Node *make_group(SynthCtx sctx) {
+  Node *group = malloc(sizeof(Node));
+  group_state *gr = (group_state *)malloc(sizeof(group_state));
+  group->state = gr;
+  ((group_state *)group->state)->head = sctx.head;
+  ((group_state *)group->state)->tail = sctx.tail;
+  group->perform = group_perform;
+  group->num_ins = 0;
+  group->ins = NULL;
+  return group;
+}
+
+static Value __play_node(Value *argv) {
+  // printf("head %p tail %p num %d\n", current_synth_ctx.head,
+  //        current_synth_ctx.tail, current_synth_ctx.num);
 
   Node *node = argv->value.vnode;
 
   struct timespec bt = get_block_time();
-  struct timespec start = get_start_time();
-  current_synth_ctx = (SynthCtx){};
+  struct timespec now;
+  set_block_time(&now);
 
+  Ctx *ctx = get_audio_ctx();
+  int frame_offset = get_block_frame_offset(bt, now, ctx->sample_rate);
+  if (current_synth_ctx.num == 1) {
+    push_msg(&ctx->msg_queue, (scheduler_msg){
+                                  .type = NODE_ADD,
+                                  .frame_offset = frame_offset,
+                                  .body = {.NODE_ADD = node},
+                              });
+  } else if (current_synth_ctx.num > 1) {
+    Node *group = make_group(current_synth_ctx);
+
+    push_msg(&ctx->msg_queue, (scheduler_msg){
+                                  NODE_ADD,
+                                  frame_offset,
+                                  .body = {.NODE_ADD = current_synth_ctx.head},
+                              });
+
+    current_synth_ctx = (SynthCtx){};
+    return NODE(group);
+  }
+
+  current_synth_ctx = (SynthCtx){};
+  return *argv;
+}
+
+void add_node_msg(Node *node, int frame_offset) {
+  Ctx *ctx = get_audio_ctx();
+  push_msg(&ctx->msg_queue,
+           (scheduler_msg){NODE_ADD, frame_offset,
+                           .body = {.NODE_ADD = {.target = node}}});
+}
+void add_group_msg(Node *head, Node *tail, int frame_offset) {
+  Ctx *ctx = get_audio_ctx();
+  push_msg(
+      &ctx->msg_queue,
+      (scheduler_msg){GROUP_ADD, frame_offset,
+                      .body = {.GROUP_ADD = {.head = head, .tail = tail}}});
+}
+
+static Value _play_node(Value *argv) {
+  // printf("head %p tail %p num %d\n", current_synth_ctx.head,
+  //        current_synth_ctx.tail, current_synth_ctx.num);
+
+  Node *node = argv->value.vnode;
+
+  struct timespec bt = get_block_time();
+  struct timespec now;
+  set_block_time(&now);
+
+  Ctx *ctx = get_audio_ctx();
+  int frame_offset = get_block_frame_offset(bt, now, ctx->sample_rate);
+  // current_synth_ctx.tail->type = OUTPUT;
+  // audio_ctx_add(current_synth_ctx.head);
+  //
+  //
+  if (current_synth_ctx.num > 1) {
+
+    // node->type = OUTPUT;
+
+    // Node *group = make_group(current_synth_ctx);
+    // printf("group %p\n", group);
+    // group->frame_offset = frame_offset;
+
+    // audio_ctx_add(current_synth_ctx.head);
+    add_group_msg(current_synth_ctx.head, node, frame_offset);
+
+    current_synth_ctx = (SynthCtx){};
+    return *argv;
+  }
+
+  // node->type = OUTPUT;
+  add_node_msg(node, frame_offset);
+  current_synth_ctx = (SynthCtx){};
   return *argv;
 }
 
@@ -192,6 +280,7 @@ Value synth_add(Value l, Value r) {
     sum->ins[0] = ln->output_buf;
     sum->ins[1] = rn->output_buf;
 
+    // printf("sum %p\n", sum);
     ctx_add(sum);
     return NODE(sum);
   }
@@ -221,6 +310,8 @@ Value synth_add(Value l, Value r) {
     sum->ins[0][i] = scalar;
   }
   sum->ins[1] = n->output_buf;
+
+  // printf("sum %p\n", sum);
   ctx_add(sum);
   return NODE(sum);
 }
@@ -303,7 +394,7 @@ typedef struct {
 } SynthContext;
 
 static GraphContext _graph_context = {.current_graph = NULL, .num_nodes = 0};
-static SynthContext _synth_context = {.head = NULL, .tail = NULL};
+// static SynthContext _synth_context = {.head = NULL, .tail = NULL};
 
 static Value synth_val_bind(Value val) {
   // if (val.type == VALUE_SYNTH_NODE) {

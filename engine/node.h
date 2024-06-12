@@ -14,6 +14,18 @@ typedef struct Node {
   double **ins;
   struct Node *next;
   struct Node *prev;
+  int frame_offset;
 } Node;
+
+
+typedef struct {
+  Node *head;
+  Node *tail;
+} group_state;
+
+Node *perform_graph(Node *head, int frame_count, double spf, double *output_buf,
+                    int output_num);
+void group_perform(void *state, double *output, int num_ins,
+                             double **inputs, int nframes, double spf);
 
 #endif

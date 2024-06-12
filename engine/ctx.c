@@ -6,19 +6,6 @@
 Ctx ctx;
 void init_ctx() {}
 
-//
-// int consumed = process_msg_queue_pre(&ctx->msg_queue);
-// // printf("consumed %d msgs\n", consumed);
-// if (ctx->graph.head == NULL) {
-//   write_null_to_output_buf(&ctx->dac_buffer, nframes);
-//   return NULL;
-// }
-// perform_graph(ctx->graph.head, nframes, seconds_per_frame, &ctx->dac_buffer,
-//               0);
-// // ctx->dac_bufer
-// process_msg_queue_post(&ctx->msg_queue, consumed);
-//
-//
 static void write_null_to_output_buf(double *out, int nframes, int layout) {
   double *dest = out;
   for (int f = 0; f < nframes; f++) {
@@ -28,72 +15,149 @@ static void write_null_to_output_buf(double *out, int nframes, int layout) {
     }
   }
 }
-void write_to_output(double *src, double *dest, int nframes, int output_num) {
-  for (int f = 0; f < nframes; f++) {
-    for (int ch = 0; ch < 2; ch++) {
-      if (output_num > 0) {
-        *dest += *(src + f);
-      } else {
-        *dest = *(src + f);
-      }
-      dest++;
+
+void print_graph(Node *node) {
+  Node *n = node;
+  while (n != NULL) {
+    // printf("node %p\n", n);
+    if (n->perform == group_perform) {
+      print_graph(((group_state *)n->state)->head);
     }
+    n = n->next;
   }
 }
 
-static void offset_node_bufs(Node *node, int frame_offset) {
+static void process_msg_pre(scheduler_msg msg) {
 
-  if (frame_offset == 0) {
-    return;
+  switch (msg.type) {
+  case NODE_ADD: {
+    struct NODE_ADD payload = msg.body.NODE_ADD;
+    int frame_offset = msg.frame_offset;
+    // offset_node_bufs(payload.target, frame_offset);
+    payload.target->frame_offset = frame_offset;
+    payload.target->type = OUTPUT;
+    // add_to_dac(payload.target);
+    //
+    audio_ctx_add(payload.target);
+    print_graph(get_audio_ctx()->head);
+
+    break;
   }
-  for (int i = 0; i < node->num_ins; i++) {
-    node->ins[i] += frame_offset;
+
+  case GROUP_ADD: {
+    struct GROUP_ADD payload = msg.body.GROUP_ADD;
+    int frame_offset = msg.frame_offset;
+    Node *t = payload.head;
+    while (t != payload.tail) {
+      t->frame_offset = frame_offset;
+      t = t->next;
+    }
+    t->frame_offset = frame_offset;
+    t->type = OUTPUT;
+
+    audio_ctx_add(payload.head);
+    ctx.tail = t;
+
+    break;
+  }
+
+  case NODE_SET_SCALAR: {
+    struct NODE_SET_SCALAR payload = msg.body.NODE_SET_SCALAR;
+    // Node *node = payload.target;
+    // Signal *target_input = node->ins[payload.input];
+    // for (int i = msg.frame_offset; i < target_input->size; i++) {
+    //   *(target_input->buf + i) = payload.value;
+    // }
+    break;
+  }
+
+  case NODE_SET_TRIG: {
+    struct NODE_SET_TRIG payload = msg.body.NODE_SET_TRIG;
+    // Node *node = payload.target;
+    // Signal *target_input = node->ins[payload.input];
+    // *(target_input->buf + msg.frame_offset) = 1.0;
+    break;
+  }
+  default:
+    break;
   }
 }
 
-static void unoffset_node_bufs(Node *node, int frame_offset) {
-  if (frame_offset == 0) {
-    return;
+static void process_msg_post(scheduler_msg msg) {
+  switch (msg.type) {
+  case NODE_ADD: {
+    // struct NODE_ADD payload = msg.body.NODE_ADD;
+    // int frame_offset = msg.frame_offset;
+    // printf("node add %d\n", frame_offset);
+    // unoffset_node_bufs(payload.target, frame_offset);
+    // payload.target->frame_offset = 0;
+    break;
   }
-  for (int i = 0; i < node->num_ins; i++) {
-    node->ins[i] -= frame_offset;
+
+  case GROUP_ADD: {
+    // struct NODE_ADD payload = msg.body.NODE_ADD;
+    // int frame_offset = msg.frame_offset;
+    // printf("node add %d\n", frame_offset);
+    // unoffset_node_bufs(payload.target, frame_offset);
+    // payload.target->frame_offset = 0;
+    break;
+  }
+
+  case NODE_SET_SCALAR: {
+    struct NODE_SET_SCALAR payload = msg.body.NODE_SET_SCALAR;
+    // Node *node = payload.target;
+    // Signal *target_input = node->ins[payload.input];
+    // for (int i = 0; i < msg.frame_offset; i++) {
+    //   *(target_input->buf + i) = payload.value;
+    // }
+    break;
+  }
+
+  case NODE_SET_TRIG: {
+    struct NODE_SET_TRIG payload = msg.body.NODE_SET_TRIG;
+    // Node *node = payload.target;
+    //
+    // Signal *target_input = node->ins[payload.input];
+    //
+    // *(target_input->buf + msg.frame_offset) = 0.0;
+    break;
+  }
+  default:
+    break;
   }
 }
 
-Node *perform_graph(Node *head, int nframes, double spf, double *dac_buf,
-                    int output_num) {
-  if (!head) {
-    return NULL;
+int process_msg_queue_pre(msg_queue *queue) {
+  int read_ptr = queue->read_ptr;
+  scheduler_msg *msg;
+  int consumed = 0;
+  while (read_ptr != queue->write_ptr) {
+    msg = queue->buffer + read_ptr;
+    process_msg_pre(*msg);
+    read_ptr = (read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
+    consumed++;
   }
-
-  int frame_offset = 0;
-  if (head->perform) {
-    offset_node_bufs(head, frame_offset);
-
-    head->perform(head->state, head->output_buf, head->num_ins, head->ins,
-                  nframes, spf);
-    unoffset_node_bufs(head, frame_offset);
-  }
-
-  if (head->type == OUTPUT) {
-    write_to_output(head->output_buf, dac_buf + frame_offset,
-                    nframes - frame_offset, output_num);
-    output_num++;
-  }
-
-  Node *next = head->next;
-  if (next) {
-    // keep going until you return tail
-    return perform_graph(next, nframes, spf, dac_buf, output_num);
-  };
-  return head;
+  return consumed;
 }
 
+void process_msg_queue_post(msg_queue *queue, int consumed) {
+  scheduler_msg msg;
+  while (consumed--) {
+    msg = pop_msg(queue);
+    process_msg_post(msg);
+  }
+}
 void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
+
+  int consumed = process_msg_queue_pre(&ctx->msg_queue);
+
   if (ctx->head == NULL) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
   }
+
   perform_graph(ctx->head, frame_count, spf, ctx->output_buf, 0);
+
+  process_msg_queue_post(&ctx->msg_queue, consumed);
 }
 
 Node *audio_ctx_add(Node *node) {
@@ -110,3 +174,30 @@ Node *audio_ctx_add(Node *node) {
 Node *add_to_dac(Node *node) { return NULL; }
 
 Ctx *get_audio_ctx() { return &ctx; }
+
+void push_msg(msg_queue *queue, scheduler_msg msg) {
+  if (queue->num_msgs == MSG_QUEUE_MAX_SIZE) {
+    printf("Error: Command FIFO full\n");
+    return;
+  }
+
+  *(queue->buffer + queue->write_ptr) = msg;
+  queue->write_ptr = (queue->write_ptr + 1) % MSG_QUEUE_MAX_SIZE;
+  queue->num_msgs++;
+}
+
+scheduler_msg pop_msg(msg_queue *queue) {
+  scheduler_msg msg = *(queue->buffer + queue->read_ptr);
+  queue->read_ptr = (queue->read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
+  queue->num_msgs--;
+  return msg;
+}
+
+scheduler_msg *create_bundle(int length) {
+  return malloc(sizeof(scheduler_msg) * length);
+}
+
+int get_write_ptr() {
+  Ctx *ctx = get_audio_ctx();
+  return ctx->msg_queue.write_ptr;
+}
