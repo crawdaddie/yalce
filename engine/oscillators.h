@@ -7,15 +7,13 @@ typedef struct {
   double phase;
 } sq_state;
 
-void sq_perform(void *state, double *out, int num_ins, double **inputs,
-                int nframes, double spf);
+node_perform sq_perform(Node *node, int nframes, double spf);
 
 typedef struct {
   double phase;
 } sin_state;
 
-void sin_perform(void *state, double *out, int num_ins, double **inputs,
-                 int nframes, double spf);
+node_perform sin_perform(Node *node, int nframes, double spf);
 
 void maketable_sin(void);
 

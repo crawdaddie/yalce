@@ -59,15 +59,18 @@ double sq_sample(double phase) {
   // *out = sample;
 }
 
-void sq_perform(void *_state, double *out, int num_ins, double **inputs,
-                int nframes, double spf) {
-  sq_state *state = (sq_state *)_state;
-  double *input = inputs[0];
+node_perform sq_perform(Node *node, int nframes, double spf) {
+
+  sq_state *state = (sq_state *)node->state;
+
+  double *input = node->ins[0];
+  double *out = node->output_buf;
 
   while (nframes--) {
     *out = sq_sample(state->phase);
     // *out += sq_sample(state->phase * 1.5, *input);
     // *out /= 2.;
+    // printf("sq perform *out %f\n", *out);
     state->phase = fmod(*input * spf + (state->phase), 1.0);
     out++;
     input++;
@@ -90,11 +93,11 @@ void maketable_sin(void) {
   }
 }
 
-void sin_perform(void *_state, double *out, int num_ins, double **inputs,
-                 int nframes, double spf) {
+node_perform sin_perform(Node *node, int nframes, double spf) {
 
-  sin_state *state = (sin_state *)_state;
-  double *input = inputs[0];
+  sin_state *state = (sin_state *)node->state;
+  double *input = node->ins[0];
+  double *out = node->output_buf;
 
   // printf("read freq input %p\n", input);
 

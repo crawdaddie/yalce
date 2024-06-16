@@ -12,8 +12,8 @@ typedef struct {
     } NODE_ADD;
 
     struct GROUP_ADD {
-      Node *head;
-      Node *tail;
+      Node *group;
+      // Node *tail;
     } GROUP_ADD;
 
     struct NODE_SET_SCALAR {

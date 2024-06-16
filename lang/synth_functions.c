@@ -45,7 +45,8 @@ static Node *ctx_add(Node *node) {
     current_synth_ctx.tail = node;
     return node;
   }
-  current_synth_ctx.tail->next = node;
+  Node *tail = current_synth_ctx.tail;
+  tail->next = node;
   current_synth_ctx.tail = node;
   return node;
 }
@@ -104,7 +105,7 @@ static Value _sq(Value *argv) {
 
   double *input;
   Node *sq_node = alloc(&arena, sizeof(Node));
-  sq_node->perform = sq_perform;
+  sq_node->perform = (node_perform *)sq_perform;
   sq_node->state = alloc(&arena, sizeof(sq_state));
 
   if (input_is_sig) {
@@ -119,9 +120,10 @@ static Value _sq(Value *argv) {
   sq_node->ins = alloc(&arena, sizeof(double *) * 1);
   sq_node->ins[0] = input;
   sq_node->num_ins = 1;
-  // printf("sq %p\n", sq_node);
-  ctx_add(sq_node);
+  sq_node->frame_offset = 0;
+  sq_node->next = NULL;
 
+  ctx_add(sq_node);
   return (Value){VALUE_SYNTH_NODE, {.vnode = sq_node}};
 }
 
@@ -143,7 +145,7 @@ static Value _sin(Value *argv) {
   double *input;
 
   Node *sin_node = alloc(&arena, sizeof(Node));
-  sin_node->perform = sin_perform;
+  sin_node->perform = (node_perform *)sin_perform;
   sin_node->state = alloc(&arena, sizeof(sin_state));
 
   if (input_is_sig) {
@@ -155,7 +157,7 @@ static Value _sin(Value *argv) {
 
   ((sq_state *)sin_node->state)->phase = 0.0;
 
-  sin_node->ins = alloc(&arena, sizeof(double *) * 1);
+  sin_node->ins = alloc(&arena, sizeof(double *));
   sin_node->ins[0] = input;
   sin_node->num_ins = 1;
   ctx_add(sin_node);
@@ -163,51 +165,20 @@ static Value _sin(Value *argv) {
   return (Value){VALUE_SYNTH_NODE, {.vnode = sin_node}};
 }
 
-static Node *make_group(SynthCtx sctx) {
-  Node *group = malloc(sizeof(Node));
-  group_state *gr = (group_state *)malloc(sizeof(group_state));
+static Node *___make_group(SynthCtx sctx) {
+  int size = sizeof(Node) + sizeof(group_state) + SIGNAL_SIZE;
+  AllocArena arena = get_arena(size);
+
+  Node *group = alloc(&arena, sizeof(Node));
+  group_state *gr = (group_state *)alloc(&arena, sizeof(group_state));
   group->state = gr;
   ((group_state *)group->state)->head = sctx.head;
-  ((group_state *)group->state)->tail = sctx.tail;
-  group->perform = group_perform;
+  group->perform = (node_perform *)group_perform;
   group->num_ins = 0;
   group->ins = NULL;
+  group->next = NULL;
+  group->frame_offset = 0;
   return group;
-}
-
-static Value __play_node(Value *argv) {
-  // printf("head %p tail %p num %d\n", current_synth_ctx.head,
-  //        current_synth_ctx.tail, current_synth_ctx.num);
-
-  Node *node = argv->value.vnode;
-
-  struct timespec bt = get_block_time();
-  struct timespec now;
-  set_block_time(&now);
-
-  Ctx *ctx = get_audio_ctx();
-  int frame_offset = get_block_frame_offset(bt, now, ctx->sample_rate);
-  if (current_synth_ctx.num == 1) {
-    push_msg(&ctx->msg_queue, (scheduler_msg){
-                                  .type = NODE_ADD,
-                                  .frame_offset = frame_offset,
-                                  .body = {.NODE_ADD = node},
-                              });
-  } else if (current_synth_ctx.num > 1) {
-    Node *group = make_group(current_synth_ctx);
-
-    push_msg(&ctx->msg_queue, (scheduler_msg){
-                                  NODE_ADD,
-                                  frame_offset,
-                                  .body = {.NODE_ADD = current_synth_ctx.head},
-                              });
-
-    current_synth_ctx = (SynthCtx){};
-    return NODE(group);
-  }
-
-  current_synth_ctx = (SynthCtx){};
-  return *argv;
 }
 
 void add_node_msg(Node *node, int frame_offset) {
@@ -216,18 +187,55 @@ void add_node_msg(Node *node, int frame_offset) {
            (scheduler_msg){NODE_ADD, frame_offset,
                            .body = {.NODE_ADD = {.target = node}}});
 }
-void add_group_msg(Node *head, Node *tail, int frame_offset) {
+
+static Node *make_group(Node *head, Node *tail) {
+  // int size = sizeof(Node) + sizeof(group_state) + SIGNAL_SIZE;
+  // AllocArena arena = get_arena(size);
+  //
+  // Node *group = alloc(&arena, sizeof(Node));
+  // group_state *gr = (group_state *)alloc(&arena, sizeof(group_state));
+  // group->state = gr;
+  // ((group_state *)group->state)->head = head;
+  // group->perform = group_perform;
+  // group->num_ins = 0;
+  // group->ins = NULL;
+  //
+  //
+  group_state *grs = malloc(sizeof(group_state));
+  grs->head = head;
+
+  Node *group = malloc(sizeof(Node));
+  group->state = grs;
+  group->type = OUTPUT;
+  group->frame_offset = 0;
+
+  group->state = grs;
+  group->perform = (node_perform)group_perform;
+  group->num_ins = 0;
+  group->ins = NULL;
+  printf("grs %p %p\n", group->state,  ((group_state *)group->state)->head);
+  return group;
+}
+
+Node * add_group_msg(Node *head, Node *tail, int frame_offset) {
+  // Ctx *ctx = get_audio_ctx();
+  // push_msg(
+  //     &ctx->msg_queue,
+  //     (scheduler_msg){GROUP_ADD, frame_offset,
+  //                     .body = {.GROUP_ADD = {.head = head, .tail = tail}}});
+  //
+  Node *group = make_group(head, tail);
+  printf("make group %p %p\n", group, group->state);
   Ctx *ctx = get_audio_ctx();
   push_msg(
       &ctx->msg_queue,
       (scheduler_msg){GROUP_ADD, frame_offset,
-                      .body = {.GROUP_ADD = {.head = head, .tail = tail}}});
+                      .body = {.GROUP_ADD = {.group = group}}});
+  return group;
+
 }
 
 static Value _play_node(Value *argv) {
-  // printf("head %p tail %p num %d\n", current_synth_ctx.head,
-  //        current_synth_ctx.tail, current_synth_ctx.num);
-
   Node *node = argv->value.vnode;
 
   struct timespec bt = get_block_time();
@@ -236,26 +244,14 @@ static Value _play_node(Value *argv) {
 
   Ctx *ctx = get_audio_ctx();
   int frame_offset = get_block_frame_offset(bt, now, ctx->sample_rate);
-  // current_synth_ctx.tail->type = OUTPUT;
-  // audio_ctx_add(current_synth_ctx.head);
-  //
-  //
   if (current_synth_ctx.num > 1) {
-
-    // node->type = OUTPUT;
-
-    // Node *group = make_group(current_synth_ctx);
-    // printf("group %p\n", group);
-    // group->frame_offset = frame_offset;
-
-    // audio_ctx_add(current_synth_ctx.head);
-    add_group_msg(current_synth_ctx.head, node, frame_offset);
-
+    node->type = OUTPUT;
+    Node *g = add_group_msg(current_synth_ctx.head, node, frame_offset);
+    // current_synth_ctx = (SynthCtx){.head = g, .tail = g};
     current_synth_ctx = (SynthCtx){};
-    return *argv;
+    return NODE(g);
   }
 
-  // node->type = OUTPUT;
   add_node_msg(node, frame_offset);
   current_synth_ctx = (SynthCtx){};
   return *argv;
@@ -269,16 +265,17 @@ static Value _group_add_tail(Value *argv) {
 Value synth_add(Value l, Value r) {
 
   if (l.type == VALUE_SYNTH_NODE && r.type == VALUE_SYNTH_NODE) {
-    AllocArena arena = get_arena(sizeof(Node) + sizeof(double *) * 2);
+    AllocArena arena = get_arena(sizeof(Node) + SIGNAL_SIZE + sizeof(double *) * 2);
     Node *ln = l.value.vnode;
     Node *rn = r.value.vnode;
     Node *sum = alloc(&arena, sizeof(Node));
     double **ins = alloc(&arena, sizeof(double *) * 2);
-    sum->perform = sum_perform;
+    sum->perform = (node_perform *)sum_perform;
     sum->ins = ins;
     sum->num_ins = 2;
     sum->ins[0] = ln->output_buf;
     sum->ins[1] = rn->output_buf;
+    sum->next = NULL;
 
     // printf("sum %p\n", sum);
     ctx_add(sum);
@@ -301,7 +298,7 @@ Value synth_add(Value l, Value r) {
   Node *sum = alloc(&arena, sizeof(Node));
   double **ins = alloc(&arena, sizeof(double *) * 2);
 
-  sum->perform = sum_perform;
+  sum->perform = (node_perform *)sum_perform;
   sum->ins = ins;
   sum->num_ins = 2;
 
@@ -327,7 +324,7 @@ Value synth_mul(Value l, Value r) {
     Node *mul = alloc(&arena, sizeof(Node));
     double **ins = alloc(&arena, sizeof(double *) * 2);
     *mul = (Node){
-        .perform = mul_perform,
+        .perform = (node_perform *)mul_perform,
         .ins = ins,
         .num_ins = 2,
     };
@@ -356,7 +353,7 @@ Value synth_mul(Value l, Value r) {
   Node *mul = alloc(&arena, sizeof(Node));
   double **ins = alloc(&arena, sizeof(double *) * 2);
   *mul = (Node){
-      .perform = mul_perform,
+      .perform = (node_perform *)mul_perform,
       .ins = ins,
       .num_ins = 2,
   };

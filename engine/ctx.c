@@ -47,16 +47,20 @@ static void process_msg_pre(scheduler_msg msg) {
   case GROUP_ADD: {
     struct GROUP_ADD payload = msg.body.GROUP_ADD;
     int frame_offset = msg.frame_offset;
-    Node *t = payload.head;
-    while (t != payload.tail) {
-      t->frame_offset = frame_offset;
-      t = t->next;
-    }
-    t->frame_offset = frame_offset;
-    t->type = OUTPUT;
-
-    audio_ctx_add(payload.head);
-    ctx.tail = t;
+    Node *g = payload.group;
+    // while (t != payload.tail) {
+    //   t->frame_offset = frame_offset;
+    //   t = t->next;
+    // }
+    // t->type = OUTPUT;
+    //
+    g->frame_offset = frame_offset;
+    g->type = OUTPUT;
+    g->next = NULL;
+    audio_ctx_add(g);
+    printf("added to ctx\n");
+    printf("add group %p %d %d %p\n", g, g->frame_offset, g->type, g->state);
+    // ctx.tail = t;
 
     break;
   }
@@ -161,11 +165,13 @@ void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
 }
 
 Node *audio_ctx_add(Node *node) {
+  // printf("audio ctx add %p\n", node);
   if (ctx.head == NULL) {
     ctx.head = node;
     ctx.tail = node;
     return node;
   }
+
   ctx.tail->next = node;
   ctx.tail = node;
   return node;

@@ -3,8 +3,10 @@
 #include "common.h"
 typedef struct Node Node;
 
-typedef void (*node_perform)(void *state, double *output, int num_ins,
-                             double **inputs, int nframes, double spf);
+// typedef void (*node_perform)(Node *node, int nframes, double spf);
+
+typedef struct Node (*node_perform)(struct Node *node, int nframes, double spf);
+
 typedef struct Node {
   enum { INTERMEDIATE = 0, OUTPUT } type;
   void *state;
@@ -15,17 +17,16 @@ typedef struct Node {
   struct Node *next;
   struct Node *prev;
   int frame_offset;
+  int is_group;
 } Node;
-
-
-typedef struct {
-  Node *head;
-  Node *tail;
-} group_state;
 
 Node *perform_graph(Node *head, int frame_count, double spf, double *output_buf,
                     int output_num);
-void group_perform(void *state, double *output, int num_ins,
-                             double **inputs, int nframes, double spf);
 
+typedef struct {
+  Node *head;
+  // Node *tail;
+} group_state;
+
+node_perform group_perform(Node *group, int nframes, double spf);
 #endif

@@ -5,9 +5,11 @@
 Node *sin_node(double freq) { return NULL; }
 void group_add_tail(Node *group, Node *node) {}
 
-void sum_perform(void *_state, double *out, int num_ins, double **inputs,
-                 int nframes, double spf) {
+node_perform sum_perform(Node *node, int nframes, double spf) {
 
+  double *out = node->output_buf;
+  int num_ins = node->num_ins;
+  double **inputs = node->ins;
   for (int i = 0; i < nframes; i++) {
     out[i] = 0.;
     for (int j = 0; j < num_ins; j++) {
@@ -16,8 +18,10 @@ void sum_perform(void *_state, double *out, int num_ins, double **inputs,
   }
 }
 
-void mul_perform(void *_state, double *out, int num_ins, double **inputs,
-                 int nframes, double spf) {
+node_perform mul_perform(Node *node, int nframes, double spf) {
+  double *out = node->output_buf;
+  int num_ins = node->num_ins;
+  double **inputs = node->ins;
 
   for (int i = 0; i < nframes; i++) {
     out[i] = inputs[0][i];

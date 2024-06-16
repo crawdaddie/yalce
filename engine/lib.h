@@ -7,9 +7,7 @@ Node *sin_node(double freq);
 void group_add_tail(Node *group, Node *node);
 Node *sum_nodes(Node *l, Node *r);
 
-void sum_perform(void *_state, double *out, int num_ins, double **inputs,
-                 int nframes, double spf);
+node_perform sum_perform(Node *node, int nframes, double spf);
 
-void mul_perform(void *_state, double *out, int num_ins, double **inputs,
-                 int nframes, double spf);
+node_perform mul_perform(Node *node, int nframes, double spf);
 #endif

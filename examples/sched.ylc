@@ -1,0 +1,7 @@
+let wait = fn t f args ->
+  printf "defer"  
+;;
+
+let deferred = fn () -> printf "deferred";; 
+
+wait 1. 

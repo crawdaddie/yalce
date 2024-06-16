@@ -3,6 +3,7 @@
 #include "audio_loop.h"
 #include "ctx.h"
 #include "oscillators.h"
+#include <errno.h>
 #include <soundio/soundio.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -140,7 +141,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
         sample_idx = LAYOUT * frame + channel;
         sample = ctx->output_buf[sample_idx];
 
-        write_sample(areas[channel].ptr, 0.5 * sample);
+        write_sample(areas[channel].ptr, 0.125 * sample);
         areas[channel].ptr += areas[channel].step;
       }
     }
@@ -298,10 +299,30 @@ int start_audio() {
   return 0;
 }
 
+static int msleep(long msec) {
+  struct timespec ts;
+  int res;
+
+  if (msec < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  ts.tv_sec = msec / 1000;
+  ts.tv_nsec = (msec % 1000) * 1000000;
+
+  do {
+    res = nanosleep(&ts, NULL);
+  } while (res && errno == EINTR);
+
+  return res;
+}
 int init_audio() {
   maketable_sq();
   maketable_sin();
   start_audio();
+
+  msleep(100);
   // sleep(1);
   return 0;
 }
