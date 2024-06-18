@@ -197,6 +197,7 @@ struct Ast {
     } AST_MATCH;
 
   } data;
+  void *md;
 };
 
 Ast *Ast_new(enum ast_tag tag);

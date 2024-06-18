@@ -1,5 +1,6 @@
 #include "serde.h"
 #include "builtins.h"
+#include "type_inference/infer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

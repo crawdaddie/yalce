@@ -65,6 +65,7 @@ static bool process_match_branch(Value predicate, Ast *branch, Value *result,
 
   return false;
 }
+
 static Value eval_match(Ast *ast, LangCtx *ctx) {
   ht *stack = ctx->stack;
   int stack_ptr = ctx->stack_ptr;

@@ -9,15 +9,22 @@ typedef struct {
   int stack_ptr;
 } JITLangCtx;
 
+typedef enum symbol_type {
+  STYPE_FN_PARAM,
+  STYPE_TOP_LEVEL_VAR,
+  STYPE_LOCAL_VAR,
+  STYPE_FUNCTION
+} symbol_type;
+
 typedef struct {
-  LLVMTypeRef type;
+  symbol_type symbol_type;
+  LLVMTypeRef llvm_type;
   LLVMValueRef val;
-} JITValue;
+} JITSymbol;
 
 typedef struct {
   int stack_level;
-  JITValue val;
-  // LLVMValueRef val;
+  JITSymbol val;
 } JITLookupResult;
 
 #endif

@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 typedef struct {
-  char *chars;
+  const char *chars;
   int length;
   uint64_t hash;
 } ObjString;

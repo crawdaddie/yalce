@@ -18,6 +18,10 @@ LANG_SRCS := $(wildcard $(LANG_SRC_DIR)/*.c)
 LANG_CC := clang -I./lang -I./engine -g
 LANG_LD_FLAGS := -L./build -lyalce_synth -lm
 
+# type inference
+LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/type_inference/*.c)
+LANG_CC += -I./lang/type_inference
+
 # Check for VM flag
 ifdef VM_BACKEND
 LANG_CC += -DVM_BACKEND
@@ -54,6 +58,7 @@ audio_test: $(ENGINE_OBJS)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(BUILD_DIR)/backend_llvm
+	mkdir -p $(BUILD_DIR)/type_inference
 
 # Build engine object files
 $(BUILD_DIR)/_engine_%.o: $(ENGINE_SRC_DIR)/%.c | $(BUILD_DIR)
