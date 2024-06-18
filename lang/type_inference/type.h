@@ -73,4 +73,8 @@ typedef struct Map {
   Vector *value;
 } Map;
 
+extern Type t_int;
+extern Type t_num;
+extern Type t_string;
+extern Type t_bool;
 #endif

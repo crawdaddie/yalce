@@ -1,14 +1,15 @@
 #include "type_inference/infer.h"
+#include "serde.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
 static int unique_id = 0;
 char unique_name = 'a';
-static Type t_int = {T_INT};
-static Type t_num = {T_NUM};
-static Type t_string = {T_STRING};
-static Type t_bool = {T_BOOL};
+Type t_int = {T_INT};
+Type t_num = {T_NUM};
+Type t_string = {T_STRING};
+Type t_bool = {T_BOOL};
 
 NonGeneric *new_non_generic() {
   NonGeneric *self = malloc(sizeof(NonGeneric));
@@ -287,6 +288,14 @@ Type *lookup(Env *self, char *key, NonGeneric *nongeneric) {
   return NULL;
 }
 
+static bool is_numeric_type(Type *t) {
+  if (t == NULL) {
+    return false;
+  }
+  return (t->kind == T_INT) || (t->kind == T_NUM);
+}
+
+static inline uint32_t max(uint32_t a, uint32_t b) { return a >= b ? a : b; }
 Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
   if (nongeneric == NULL) {
     nongeneric = new_non_generic();
@@ -325,15 +334,36 @@ Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
     e->md = ty;
 
     if (ty == NULL) {
-      printf("unknown identifer `%s`\n", id);
+      // printf("unknown identifer `%s`\n", id);
       return NULL;
     }
 
     return ty;
   }
 
+    // case AST_LET: {
+    // }
   case AST_LET: {
-    Type *ty = infer(env, e->data.AST_LET.expr, nongeneric);
+
+    Type *def = infer(env, e->data.AST_LET.expr, nongeneric);
+
+    Env *new = copy_env(env);
+    add_to_env(new, e->data.AST_LET.name.chars, def);
+    if (e->data.AST_LET.in_expr != NULL) {
+      Type *result = infer(new, e->data.AST_LET.in_expr, nongeneric);
+      e->md = result;
+      return result;
+    }
+    e->md = def;
+    return def;
+  }
+
+  case AST_BODY: {
+    Type *ty;
+    for (size_t i = 0; i < e->data.AST_BODY.len; ++i) {
+      Ast *stmt = e->data.AST_BODY.stmts[i];
+      ty = infer(env, stmt, NULL);
+    }
     e->md = ty;
     return ty;
   }
@@ -341,8 +371,21 @@ Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
   case AST_BINOP: {
     Type *lt = infer(env, e->data.AST_BINOP.left, nongeneric);
     Type *rt = infer(env, e->data.AST_BINOP.right, nongeneric);
-    // e->md = ty;
-    // return ty;
+
+    Type *res;
+    if (is_numeric_type(lt) && is_numeric_type(rt)) {
+      token_type op = e->data.AST_BINOP.op;
+      if (op >= TOKEN_PLUS && op <= TOKEN_MODULO) {
+        res = lt->kind >= rt->kind ? lt : rt;
+        e->md = res;
+        return res;
+      } else if (op >= TOKEN_LT && op <= TOKEN_NOT_EQUAL) {
+        res = &t_bool;
+        e->md = res;
+        return res;
+      }
+    }
+    e->md = lt;
     return lt;
   }
     // case LAMBDA: {
@@ -379,18 +422,6 @@ Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
     //
     //   return res;
     // }
-    // case LET: {
-    //   Type *def = analyze(env, e->ldef, nongeneric);
-    //
-    //   Env *new = copy_env(env);
-    //   add_to_env(new, e->lname, def);
-    //
-    //   Type *result = analyze(new, e->lbody, nongeneric);
-    //   printf("let %s: ", e->lname);
-    //   typedump(result);
-    //
-    //   return result;
-    // }
     // case LETREC: {
     //   Type *new = type_var();
     //
@@ -416,8 +447,7 @@ Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
   }
   return NULL;
 }
-
-void typedump_core(Type *ty) {
+void print_type(Type *ty) {
   if (ty == NULL) {
     return;
   }
@@ -439,15 +469,15 @@ void typedump_core(Type *ty) {
     break;
   case T_FN: {
     printf("(");
-    typedump_core(ty->t_data.T_FN.arg);
+    print_type(ty->t_data.T_FN.arg);
     printf(" -> ");
-    typedump_core(ty->t_data.T_FN.result);
+    print_type(ty->t_data.T_FN.result);
     printf(")");
     break;
   }
   case T_VAR: {
     if (ty->t_data.T_VAR.instance != NULL) {
-      typedump_core(prune(ty));
+      print_type(prune(ty));
     } else if (ty->t_data.T_VAR.name == 0) {
       printf("%c", ty->t_data.T_VAR.name = unique_name++);
     } else {
@@ -457,13 +487,13 @@ void typedump_core(Type *ty) {
   }
   case T_PAIR: {
     printf("(");
-    typedump_core(ty->t_data.T_PAIR.fst);
+    print_type(ty->t_data.T_PAIR.fst);
     printf(" * ");
-    typedump_core(ty->t_data.T_PAIR.snd);
+    print_type(ty->t_data.T_PAIR.snd);
     printf(")");
     break;
   }
   default:
-    printf("error");
+    printf("Error: Type serialization not implemented");
   }
 }

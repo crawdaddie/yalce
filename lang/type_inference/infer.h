@@ -7,6 +7,8 @@ Type *infer(Env *env, Ast *e, NonGeneric *nongeneric);
 
 Env *new_env();
 
-void typedump_core(Type *ty);
+void print_type(Type *ty);
+
+Type *type_var();
 
 #endif

@@ -112,6 +112,7 @@ struct Ast {
     struct AST_LET {
       ObjString name;
       Ast *expr;
+      Ast *in_expr;
     } AST_LET;
 
     struct AST_INT {

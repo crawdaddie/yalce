@@ -89,9 +89,9 @@ stmt:
   | META_IDENTIFIER LET IDENTIFIER '=' lambda_expr  
                                   { $$ = ast_meta($1, ast_let($3, $5, NULL)); }
 
-
   | LET IDENTIFIER '=' lambda_expr  { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' expr         { $$ = ast_let($2, $4, NULL); }
+  /*| LET IDENTIFIER '=' expr IN expr { $$ = ast_let($2, $4, $6); } */
   ;
 
 
@@ -131,6 +131,8 @@ expr:
   | list                  { $$ = $1; }
   | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
+  | LET IDENTIFIER '=' expr IN expr { $$ = ast_let($2, $4, $6); }
+  | LET IDENTIFIER '=' lambda_expr IN expr { $$ = ast_let($2, $4, $6); }
   ;
 
 lambda_expr:

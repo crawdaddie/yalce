@@ -51,6 +51,7 @@ Ast *ast_let(ObjString name, Ast *expr, Ast *in_continuation) {
     expr->data.AST_LAMBDA.fn_name = name;
   }
   node->data.AST_LET.expr = expr;
+  node->data.AST_LET.in_expr = in_continuation;
   // print_ast(node);
   return node;
 }

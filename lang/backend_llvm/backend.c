@@ -1,6 +1,6 @@
 #include "backend_llvm/backend.h"
-#include "backend_llvm/common.h"
 #include "backend_llvm/binop.h"
+#include "backend_llvm/common.h"
 #include "backend_llvm/function.h"
 #include "backend_llvm/symbols.h"
 #include "input.h"
@@ -31,18 +31,19 @@ static void add_native_functions(ht *stack, LLVMModuleRef module) {
   // Declare the external printf function
   const char *name = "printf";
   int name_len = strlen(name);
-  LLVMTypeRef printf_args[] = { LLVMPointerType(LLVMInt8Type(), 0) }; // char* (i8*)
-  LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt32Type(), printf_args, 1, 1); // return type i32, 1 arg, varargs
+  LLVMTypeRef printf_args[] = {
+      LLVMPointerType(LLVMInt8Type(), 0)}; // char* (i8*)
+  LLVMTypeRef printf_type = LLVMFunctionType(
+      LLVMInt32Type(), printf_args, 1, 1); // return type i32, 1 arg, varargs
   LLVMValueRef printf_func = LLVMAddFunction(module, name, printf_type);
 
   JITSymbol *v = malloc(sizeof(JITSymbol));
-  *v = (JITSymbol){
-      .llvm_type = printf_type, .symbol_type = STYPE_FUNCTION, .val = printf_func};
-
+  *v = (JITSymbol){.llvm_type = printf_type,
+                   .symbol_type = STYPE_FUNCTION,
+                   .val = printf_func};
 
   ht_set_hash(stack, name, hash_string(name, name_len), v);
 }
-
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
@@ -80,7 +81,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_LET: {
-      return codegen_assignment(ast, ctx, module, builder);
+    return codegen_assignment(ast, ctx, module, builder);
   }
   case AST_IDENTIFIER: {
     return codegen_identifier(ast, ctx, module, builder);
@@ -251,9 +252,9 @@ int jit(int argc, char **argv) {
 
 #ifdef DEBUG_AST
       print_ast(top);
-
-      typedump_core((Type *)top->md);
       LLVMDumpModule(module);
+      typedump_core((Type *)top->md);
+      printf("\n");
 #endif
 
       LLVMExecutionEngineRef engine;

@@ -39,6 +39,11 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, " ");
     buffer = ast_to_sexpr(ast->data.AST_LET.expr, buffer);
     buffer = strcat(buffer, ")");
+
+    if (ast->data.AST_LET.in_expr) {
+      buffer = strcat(buffer, " : ");
+      buffer = ast_to_sexpr(ast->data.AST_LET.in_expr, buffer);
+    }
     break;
   }
 
