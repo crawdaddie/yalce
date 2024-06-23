@@ -51,7 +51,7 @@ Node *perform_graph(Node *head, int nframes, double spf, double *dac_buf,
   // int frame_offset = 0;
 
   offset_node_bufs(head, frame_offset);
-  head->perform(head->state, nframes, spf);
+  head->perform(head, nframes, spf);
 
   if (head->type == OUTPUT) {
     write_to_output(head->output_buf + frame_offset, dac_buf + frame_offset,
