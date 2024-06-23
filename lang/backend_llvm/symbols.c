@@ -6,6 +6,26 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+int codegen_lookup_id(const char *id, int length, JITLangCtx *ctx,
+                      JITSymbol *result) {
+
+  ObjString key = {.chars = id, length, hash_string(id, length)};
+  JITSymbol *res = NULL;
+
+  int ptr = ctx->stack_ptr;
+
+  while (ptr >= 0 && !((res = (JITSymbol *)ht_get_hash(ctx->stack + ptr,
+                                                       key.chars, key.hash)))) {
+    ptr--;
+  }
+
+  if (!res) {
+    return 1;
+  }
+  *result = *res;
+  return 0;
+}
+
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 
@@ -39,41 +59,23 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return res.val;
 }
 
-int codegen_lookup_id(const char *id, int length, JITLangCtx *ctx,
-                      JITSymbol *result) {
-
-  ObjString key = {.chars = id, length, hash_string(id, length)};
-  JITSymbol *res = NULL;
-
-  int ptr = ctx->stack_ptr;
-
-  while (ptr >= 0 && !((res = (JITSymbol *)ht_get_hash(ctx->stack + ptr,
-                                                       key.chars, key.hash)))) {
-    ptr--;
-  }
-
-  if (!res) {
-    return 1;
-  }
-  *result = *res;
-  return 0;
-}
-
-LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *_ctx,
+LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ambient_ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
   ObjString name = ast->data.AST_LET.name;
 
   LLVMValueRef expr_val =
-      codegen(ast->data.AST_LET.expr, _ctx, module, builder);
+      codegen(ast->data.AST_LET.expr, ambient_ctx, module, builder);
+
+  if (!expr_val) {
+    return NULL;
+  }
+
   LLVMTypeRef type = LLVMTypeOf(expr_val);
-  print_ast(ast);
 
-  ht *next_scope;
-
-  JITLangCtx ctx = {.stack = _ctx->stack,
+  JITLangCtx ctx = {.stack = ambient_ctx->stack,
                     .stack_ptr = ast->data.AST_LET.in_expr != NULL
-                                     ? _ctx->stack_ptr + 1
-                                     : _ctx->stack_ptr
+                                     ? ambient_ctx->stack_ptr + 1
+                                     : ambient_ctx->stack_ptr
 
   };
 
@@ -86,9 +88,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *_ctx,
         .llvm_type = type, .symbol_type = STYPE_FUNCTION, .val = expr_val};
 
     ht_set_hash(scope, name.chars, name.hash, v);
-  }
-
-  if (ctx.stack_ptr == 0) {
+  } else if (ctx.stack_ptr == 0) {
     // top-level
     LLVMValueRef alloca_val =
         LLVMAddGlobalInAddressSpace(module, type, name.chars, 0);
@@ -102,7 +102,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *_ctx,
     ht_set_hash(scope, name.chars, name.hash, v);
 
   } else {
-    // top-level
+    // not-top-level or symbol is used in subsequent in expr
     LLVMValueRef alloca_val = LLVMBuildAlloca(builder, type, name.chars);
     LLVMBuildStore(builder, expr_val, alloca_val);
 
@@ -114,8 +114,6 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *_ctx,
   }
 
   if (ast->data.AST_LET.in_expr != NULL) {
-
-    fprintf(stderr, "in expr\n");
 
     LLVMValueRef res =
         codegen(ast->data.AST_LET.in_expr, &ctx, module, builder);

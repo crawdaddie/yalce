@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// #define DEBUG_AST
+#define DEBUG_AST
 
 static int return_int(void) { return 1; }
 static double return_double(void) { return 1.00; }

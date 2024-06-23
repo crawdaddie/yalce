@@ -1,6 +1,6 @@
 #include "backend_llvm/function.h"
-#include "serde.h"
 #include "backend_llvm/symbols.h"
+#include "serde.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -21,17 +21,13 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef fn_type = LLVMFunctionType(LLVMInt32Type(), params, fn_len, 0);
 
   // Create function.
-  //
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, fn_type);
   LLVMSetLinkage(func, LLVMExternalLinkage);
   return func;
 }
 
-
-static LLVMTypeRef param_type() {
-  return LLVMInt32Type();
-}
+static LLVMTypeRef param_type() { return LLVMInt32Type(); }
 
 LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
@@ -68,14 +64,13 @@ LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // add function as recursive ref
   JITSymbol *v = malloc(sizeof(JITSymbol));
-  *v = (JITSymbol){.llvm_type = param_type(),
-                   .val = func,
-                   .symbol_type = STYPE_FUNCTION};
-  ht_set_hash(fn_scope.stack + fn_scope.stack_ptr, fn_name.chars,
-              fn_name.hash, v);
+  *v = (JITSymbol){
+      .llvm_type = param_type(), .val = func, .symbol_type = STYPE_FUNCTION};
+
+  ht_set_hash(fn_scope.stack + fn_scope.stack_ptr, fn_name.chars, fn_name.hash,
+              v);
 
   // Generate body.
-  // print_ast(ast->data.AST_LAMBDA.body);
   LLVMValueRef body =
       codegen(ast->data.AST_LAMBDA.body, &fn_scope, module, builder);
 
@@ -92,25 +87,43 @@ LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
-LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
+static bool is_void_fn(LLVMValueRef fn) { return LLVMCountParams(fn) == 0; }
+static bool is_void_application(LLVMValueRef fn, Ast *ast) {
+  int app_len = ast->data.AST_APPLICATION.len;
+  return is_void_fn(fn) && app_len == 1 &&
+         ast->data.AST_APPLICATION.args[0].tag == AST_VOID;
+}
 
-  LLVMValueRef func = codegen_identifier(ast->data.AST_APPLICATION.function, ctx, module, builder);
+LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  LLVMValueRef func = codegen_identifier(ast->data.AST_APPLICATION.function,
+                                         ctx, module, builder);
+  if (!func) {
+    return NULL;
+  }
 
   int app_len = ast->data.AST_APPLICATION.len;
+
+  if (is_void_application(func, ast)) {
+    LLVMValueRef args[] = {};
+    return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, args, 0,
+                          "call_func");
+  }
   unsigned int args_len = LLVMCountParams(func);
   if (app_len == args_len) {
     LLVMValueRef *args = malloc(sizeof(LLVMValueRef) * app_len);
     for (int i = 0; i < app_len; i++) {
-      args[i] = codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
+      args[i] =
+          codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
     }
-    return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, args, app_len, "call_func");
+    return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, args,
+                          app_len, "call_func");
   }
 
   if (app_len < args_len) {
-    printf("curry function\n");
     return NULL;
   }
   return NULL;
-
 }

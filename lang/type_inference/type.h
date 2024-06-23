@@ -7,6 +7,7 @@ enum TypeKind {
   T_NUM,
   T_STRING,
   T_BOOL,
+  T_VOID,
   T_FN,
   T_PAIR,
   T_TUPLE,
@@ -24,8 +25,9 @@ struct Type {
   union {
     /* Function */
     struct {
-      Type *arg;
-      Type *result;
+      int len;
+      Type *args;
+      Type *ret_type;
     } T_FN;
 
     /* Pair */

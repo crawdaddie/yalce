@@ -77,7 +77,17 @@ program:
                               ast_root->data.AST_BODY.len = 0;
                               ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
                             }
-                            ast_body_push(ast_root, $1);
+
+                            if ($1->tag != AST_BODY) {
+                              ast_body_push(ast_root, $1);
+                            } else {
+                              Ast *b = $1;
+                              for (int i = 0; i < b->data.AST_BODY.len; i++) {
+                                ast_body_push(ast_root, b->data.AST_BODY.stmts[i]);
+                              }
+                            }
+
+
                           }
 
   | /* NULL */

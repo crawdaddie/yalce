@@ -1,25 +1,24 @@
 #include "type_inference/infer.h"
-#include "serde.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
 static int unique_id = 0;
 char unique_name = 'a';
+
 Type t_int = {T_INT};
 Type t_num = {T_NUM};
 Type t_string = {T_STRING};
 Type t_bool = {T_BOOL};
+Type t_void = {T_VOID};
 
 NonGeneric *new_non_generic() {
-  NonGeneric *self = malloc(sizeof(NonGeneric));
-  self->cursor = 0;
-  return self;
+  NonGeneric *ng = malloc(sizeof(NonGeneric));
+  ng->cursor = 0;
+  return ng;
 }
 
-void add_to_non_generic(NonGeneric *self, Type *s) {
-  self->list[self->cursor++] = s;
-}
+void add_to_non_generic(NonGeneric *ng, Type *s) { ng->list[ng->cursor++] = s; }
 
 NonGeneric *copy_non_generic(NonGeneric *src) {
   NonGeneric *dst = malloc(sizeof(NonGeneric));
@@ -94,9 +93,9 @@ static bool occursin_type(Type *tvar, Type *texp) {
     return false;
 }
 
-static bool occursin(Type *tyvar, Type *tope) {
-  for (int i = 0; i < tope->ntype; i++) {
-    if (occursin_type(tyvar, tope->types[i]))
+static bool occursin(Type *tyvar, Type *type) {
+  for (int i = 0; i < type->ntype; i++) {
+    if (occursin_type(tyvar, type->types[i]))
       return true;
   }
 
@@ -114,27 +113,27 @@ Type *type_map_exist(Map *self, Type *key) {
 }
 
 Vector *New_Vector() {
-  Vector *self = malloc(sizeof(Vector));
+  Vector *vec = malloc(sizeof(Vector));
 
-  self->data = malloc(sizeof(void *) * 16);
-  self->len = 0;
-  self->reserved = 16;
+  vec->data = malloc(sizeof(void *) * 16);
+  vec->len = 0;
+  vec->reserved = 16;
 
-  return self;
+  return vec;
 }
 
 Vector *New_Vector_With_Size(int size) {
-  Vector *self = malloc(sizeof(Vector));
+  Vector *vec = malloc(sizeof(Vector));
 
-  self->data = malloc(sizeof(void *) * size);
-  self->len = size;
-  self->reserved = size;
+  vec->data = malloc(sizeof(void *) * size);
+  vec->len = size;
+  vec->reserved = size;
 
   for (int i = 0; i < size; ++i) {
-    self->data[i] = NULL;
+    vec->data[i] = NULL;
   }
 
-  return self;
+  return vec;
 }
 
 void Delete_Vector(Vector *self) {
@@ -173,6 +172,7 @@ void map_push(Map *self, void *key, void *value) {
   vec_push(self->key, key);
   vec_push(self->value, value);
 }
+
 Type *type_get_or_put(Map *self, Type *key, Type *default_value) {
   Type *e = type_map_exist(self, key);
 
@@ -204,10 +204,10 @@ Type *type_operator2(enum TypeKind k, Type *a1, Type *a2) {
   self->types[1] = a2;
 
   switch (k) {
-  case T_FN:
-    self->t_data.T_FN.arg = a1;
-    self->t_data.T_FN.result = a2;
-    break;
+  // case T_FN:
+  //   self->t_data.T_FN.arg = a1;
+  //   self->t_data.T_FN.result = a2;
+  //   break;
   case T_PAIR:
     self->t_data.T_PAIR.fst = a1;
     self->t_data.T_PAIR.snd = a2;
@@ -295,6 +295,57 @@ static bool is_numeric_type(Type *t) {
   return (t->kind == T_INT) || (t->kind == T_NUM);
 }
 
+Type *type_fn(int arg_len, Type *args, Type *ret) {
+  Type *ty = malloc(sizeof(Type));
+  ty->kind = T_FN;
+  ty->t_data.T_FN.len = arg_len;
+  ty->t_data.T_FN.args = args;
+  ty->t_data.T_FN.ret_type = ret;
+  return ty;
+}
+
+void unify(Type *t1, Type *t2) {
+  t1 = prune(t1);
+  t2 = prune(t2);
+
+  // printf("unifying...");
+  // typedump_core(t1);
+  // printf(", ");
+  // typedump_core(t2);
+  // puts("");
+
+  if (is_type_variable(t1)) {
+    if (!same_type(t1, t2)) {
+      if (occursin_type(t1, t2)) {
+        printf("recursive unification");
+        error_occurred = true;
+        return;
+      }
+      t1->t_data.T_VAR.instance = t2;
+    }
+  } else if (is_type_operator(t1) && is_type_variable(t2)) {
+    unify(t2, t1);
+  } else if (is_type_operator(t1) && is_type_operator(t2)) {
+    if (t1->kind != t2->kind || t1->ntype != t2->ntype) {
+      // printf("type error: ");
+      // typedump_core(t1);
+      // printf(", ");
+      // typedump_core(t2);
+      // puts("");
+
+      error_occurred = true;
+
+      return;
+    }
+
+    for (int i = 0; i < t1->ntype; i++) {
+      unify(t1->types[i], t2->types[i]);
+    }
+  } else {
+    puts("cannot infer");
+  }
+}
+
 static inline uint32_t max(uint32_t a, uint32_t b) { return a >= b ? a : b; }
 Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
   if (nongeneric == NULL) {
@@ -334,7 +385,7 @@ Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
     e->md = ty;
 
     if (ty == NULL) {
-      // printf("unknown identifer `%s`\n", id);
+      printf("unknown identifer `%s`\n", id);
       return NULL;
     }
 
@@ -346,9 +397,14 @@ Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
   case AST_LET: {
 
     Type *def = infer(env, e->data.AST_LET.expr, nongeneric);
-
     Env *new = copy_env(env);
-    add_to_env(new, e->data.AST_LET.name.chars, def);
+    // char *id_ = malloc(sizeof(char) * e->data.AST_LET.name.length);
+    // strcpy(id_, e->data.AST_LET.name.chars);
+    // printf("before segfault? %s\n", id_);
+    //
+    char *id = e->data.AST_LET.name.chars;
+    add_to_env(new, id, def);
+
     if (e->data.AST_LET.in_expr != NULL) {
       Type *result = infer(new, e->data.AST_LET.in_expr, nongeneric);
       e->md = result;
@@ -385,43 +441,60 @@ Type *infer(Env *env, Ast *e, NonGeneric *nongeneric) {
         return res;
       }
     }
+    if (is_type_variable(lt) && is_numeric_type(rt)) {
+      e->md = lt;
+      return lt;
+    }
+
+    if (is_type_variable(rt) && is_numeric_type(lt)) {
+      e->md = rt;
+      return rt;
+    }
     e->md = lt;
     return lt;
   }
-    // case LAMBDA: {
-    //   Type *argty = type_var();
-    //
-    //   Env *copied_env = copy_env(env);
-    //   add_to_env(copied_env, e->x, argty);
-    //
-    //   NonGeneric *copied_ng = copy_non_generic(nongeneric);
-    //   add_to_non_generic(copied_ng, argty);
-    //
-    //   Type *ret = analyze(copied_env, e->e, copied_ng);
-    //
-    //   Type *result = type_fn(argty, ret);
-    //
-    //   printf("lambda");
-    //   exprdump(e);
-    //   printf(": ");
-    //   typedump(result);
-    //
-    //   return result;
-    // }
-    // case APPLY: {
-    //   Type *fn = analyze(env, e->fn, nongeneric);
-    //   Type *arg = analyze(env, e->arg, nongeneric);
-    //   Type *res = type_var();
-    //
-    //   unify(fn, type_fn(arg, res));
-    //
-    //   printf("apply ");
-    //   exprdump(e);
-    //   printf(": ");
-    //   typedump(res);
-    //
-    //   return res;
-    // }
+  case AST_LAMBDA: {
+    bool is_recursive = e->data.AST_LAMBDA.fn_name.chars != NULL;
+    char *fn_name = e->data.AST_LAMBDA.fn_name.chars;
+    Type *fn_name_type = type_var();
+
+    Env *copied_env = copy_env(env);
+    int arg_len = e->data.AST_LAMBDA.len;
+    Type *arg_types = malloc(sizeof(Type) * arg_len);
+    NonGeneric *copied_ng = copy_non_generic(nongeneric);
+    for (int i = 0; i < e->data.AST_LAMBDA.len; i++) {
+      Type *argty = arg_types + i;
+      argty->kind = T_VAR;
+      argty->t_data.T_VAR.id = unique_id++;
+      argty->t_data.T_VAR.name = 0;
+      argty->t_data.T_VAR.instance = NULL;
+      add_to_env(copied_env, e->data.AST_LAMBDA.params[i].chars, argty);
+
+      add_to_non_generic(copied_ng, argty);
+    }
+
+    // NonGeneric *copied_ng = copy_non_generic(nongeneric);
+
+    add_to_env(copied_env, fn_name, fn_name_type);
+    Type *ret = infer(copied_env, e->data.AST_LAMBDA.body, copied_ng);
+    Type *result = type_fn(arg_len, arg_types, ret);
+    e->md = result;
+    return result;
+  }
+  case AST_APPLICATION: {
+    Type *fn = infer(env, e->data.AST_APPLICATION.function, nongeneric);
+    int app_len = e->data.AST_APPLICATION.len;
+    Type *args = malloc(sizeof(Type) * e->data.AST_APPLICATION.len);
+    for (int i = 0; i < e->data.AST_APPLICATION.len; i++) {
+      *(args + i) = *infer(env, e->data.AST_APPLICATION.args + i, nongeneric);
+    }
+    // infer(env, e->arg, nongeneric);
+    Type *res = type_var();
+    // unify(fn, type_fn(arg, res));
+    e->md = res;
+
+    return res;
+  }
     // case LETREC: {
     //   Type *new = type_var();
     //
@@ -460,6 +533,7 @@ void print_type(Type *ty) {
   case T_NUM:
     printf("double");
     break;
+
   case T_BOOL:
     printf("bool");
     break;
@@ -467,11 +541,18 @@ void print_type(Type *ty) {
   case T_STRING:
     printf("string");
     break;
+
+  case T_VOID:
+    printf("()");
+    break;
+
   case T_FN: {
     printf("(");
-    print_type(ty->t_data.T_FN.arg);
-    printf(" -> ");
-    print_type(ty->t_data.T_FN.result);
+    for (int i = 0; i < ty->t_data.T_FN.len; i++) {
+      print_type(ty->t_data.T_FN.args + i);
+      printf(" -> ");
+    }
+    print_type(ty->t_data.T_FN.ret_type);
     printf(")");
     break;
   }
@@ -479,9 +560,9 @@ void print_type(Type *ty) {
     if (ty->t_data.T_VAR.instance != NULL) {
       print_type(prune(ty));
     } else if (ty->t_data.T_VAR.name == 0) {
-      printf("%c", ty->t_data.T_VAR.name = unique_name++);
+      printf("'%c", ty->t_data.T_VAR.name = unique_name++);
     } else {
-      printf("%c", ty->t_data.T_VAR.name);
+      printf("'%c", ty->t_data.T_VAR.name);
     }
     break;
   }

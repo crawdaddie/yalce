@@ -14,7 +14,6 @@ ENGINE_CC = clang
 
 LANG_SRC_DIR := lang
 LANG_SRCS := $(wildcard $(LANG_SRC_DIR)/*.c)
-
 LANG_CC := clang -I./lang -I./engine -g
 LANG_LD_FLAGS := -L./build -lyalce_synth -lm
 
@@ -88,22 +87,41 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 
-test_parse: $(TEST_DIR)/test_parse.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(filter-out $(BUILD_DIR)/_lang_main.o $(BUILD_DIR)/main.o $(BUILD_DIR)/test_eval.o, $(LANG_OBJS))
+test_parse: $(TEST_DIR)/test_parse.o \
+	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
+	$(filter-out \
+		$(BUILD_DIR)/_lang_main.o \
+		$(BUILD_DIR)/main.o $(BUILD_DIR)/test_eval.o \
+		$(BUILD_DIR)/test_typecheck.o, \
+	$(LANG_OBJS))
+
 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_LD_FLAGS)
 	./$(BUILD_DIR)/test_parse
 
 $(TEST_DIR)/test_parse.o: $(TEST_DIR)/test_parse.c $(YACC_OUTPUT) $(LEX_OUTPUT)
 	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_LD_FLAGS)
 
-test_eval: $(TEST_DIR)/test_eval.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(filter-out $(BUILD_DIR)/_lang_main.o $(BUILD_DIR)/test_parse.o, $(LANG_OBJS))
+test_eval: $(TEST_DIR)/test_eval.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(filter-out $(BUILD_DIR)/_lang_main.o $(BUILD_DIR)/test_parse.o $(BUILD_DIR)/test_typecheck.o, $(LANG_OBJS))
 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_LD_FLAGS)
 	./$(BUILD_DIR)/test_eval
 
 $(TEST_DIR)/test_eval.o: $(TEST_DIR)/test_eval.c $(YACC_OUTPUT) $(LEX_OUTPUT)
 	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_LD_FLAGS)
 
-run: $(BUILD_DIR)/audio_lang
-	./$(BUILD_DIR)/audio_lang $(input)
+test_typecheck: $(TEST_DIR)/test_typecheck.o \
+	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
+	$(filter-out \
+		$(BUILD_DIR)/_lang_main.o \
+		$(BUILD_DIR)/main.o \
+		$(BUILD_DIR)/test_eval.o \
+		$(BUILD_DIR)/test_parse.o, \
+	$(LANG_OBJS))
+
+	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_LD_FLAGS)
+	./$(BUILD_DIR)/test_typecheck
+
+$(TEST_DIR)/test_typecheck.o: $(TEST_DIR)/test_typecheck.c $(YACC_OUTPUT) $(LEX_OUTPUT)
+	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_LD_FLAGS)
 
 runi: $(BUILD_DIR)/audio_lang
 	./$(BUILD_DIR)/audio_lang $(input) -i

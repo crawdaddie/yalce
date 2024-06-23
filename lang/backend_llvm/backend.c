@@ -151,13 +151,14 @@ static int eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   Ast *prog = parse_input(fcontent);
+  print_ast(prog);
+  printf("-----\n");
   LLVMTypeRef top_level_ret_type;
 
   LLVMValueRef top_level_func =
       codegen_top_level(prog, &top_level_ret_type, ctx, module, builder);
 
 #ifdef DEBUG_AST
-  print_ast(prog);
   LLVMDumpModule(module);
 #endif
 
@@ -253,7 +254,7 @@ int jit(int argc, char **argv) {
 #ifdef DEBUG_AST
       print_ast(top);
       LLVMDumpModule(module);
-      typedump_core((Type *)top->md);
+      print_type((Type *)top->md);
       printf("\n");
 #endif
 

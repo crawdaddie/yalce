@@ -148,7 +148,6 @@ int main() {
 
   bool status;
 
-  printf("int type %p\n", &t_int);
   status = test_parse("1 + 2", "(+ 1 2)", &t_int); // single binop expression"
   //
   status &= test_parse("-1", "-1", &t_int);
