@@ -19,7 +19,6 @@ static void write_null_to_output_buf(double *out, int nframes, int layout) {
 void print_graph(Node *node) {
   Node *n = node;
   while (n != NULL) {
-    // printf("node %p\n", n);
     if (n->perform == group_perform) {
       print_graph(((group_state *)n->state)->head);
     }
@@ -177,7 +176,11 @@ Node *audio_ctx_add(Node *node) {
   return node;
 }
 
-Node *add_to_dac(Node *node) { return NULL; }
+Node *add_to_dac(Node *node) {
+  // return NULL;
+  node->type = OUTPUT;
+  return node;
+}
 
 Ctx *get_audio_ctx() { return &ctx; }
 

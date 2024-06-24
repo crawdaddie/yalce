@@ -4,15 +4,16 @@
 
 void write_to_output(double *src, double *dest, int nframes, int output_num) {
   for (int f = 0; f < nframes; f++) {
-    for (int ch = 0; ch < 2; ch++) {
-      // printf("data %f\n", *(src + f));
-      if (output_num > 0) {
-        *dest += *(src + f);
-      } else {
-        *dest = *(src + f);
-      }
-      dest++;
+
+    // for (int ch = 0; ch < 2; ch++) {
+    //   // printf("data %f\n", *(src + f));
+    // }
+    if (output_num > 0) {
+      *dest += *(src + f);
+    } else {
+      *dest = *(src + f);
     }
+    dest++;
   }
 }
 static void offset_node_bufs(Node *node, int frame_offset) {
@@ -26,7 +27,7 @@ static void offset_node_bufs(Node *node, int frame_offset) {
   }
 
   for (int i = 0; i < node->num_ins; i++) {
-    node->ins[i] += frame_offset;
+    node->ins[i].buf += frame_offset;
   }
 }
 
@@ -35,7 +36,7 @@ static void unoffset_node_bufs(Node *node, int frame_offset) {
     return;
   }
   for (int i = 0; i < node->num_ins; i++) {
-    node->ins[i] -= frame_offset;
+    node->ins[i].buf -= frame_offset;
   }
   node->frame_offset = 0;
 }
@@ -54,7 +55,7 @@ Node *perform_graph(Node *head, int nframes, double spf, double *dac_buf,
   head->perform(head, nframes, spf);
 
   if (head->type == OUTPUT) {
-    write_to_output(head->output_buf + frame_offset, dac_buf + frame_offset,
+    write_to_output(head->out.buf + frame_offset, dac_buf + frame_offset,
                     nframes - frame_offset, output_num);
     output_num++;
   }
@@ -67,8 +68,6 @@ Node *perform_graph(Node *head, int nframes, double spf, double *dac_buf,
 }
 
 node_perform group_perform(Node *group_node, int nframes, double spf) {
-
   group_state *state = group_node->state;
-  printf("group %p graph %p graph head  p\n", group_node, state);
-  perform_graph(state->head, nframes, spf, group_node->output_buf, 0);
+  perform_graph(state->head, nframes, spf, group_node->out.buf, 0);
 }

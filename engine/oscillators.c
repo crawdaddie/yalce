@@ -63,8 +63,8 @@ node_perform sq_perform(Node *node, int nframes, double spf) {
 
   sq_state *state = (sq_state *)node->state;
 
-  double *input = node->ins[0];
-  double *out = node->output_buf;
+  double *input = node->ins[0].buf;
+  double *out = node->out.buf;
 
   while (nframes--) {
     *out = sq_sample(state->phase);
@@ -96,8 +96,8 @@ void maketable_sin(void) {
 node_perform sin_perform(Node *node, int nframes, double spf) {
 
   sin_state *state = (sin_state *)node->state;
-  double *input = node->ins[0];
-  double *out = node->output_buf;
+  double *input = node->ins[0].buf;
+  double *out = node->out.buf;
 
   // printf("read freq input %p\n", input);
 

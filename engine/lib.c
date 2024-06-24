@@ -3,9 +3,8 @@
 #include <stdlib.h>
 // Node *sq_node(double freq) { return NULL; }
 Node *sin_node(double freq) { return NULL; }
-void group_add_tail(Node *group, Node *node) {}
 
-node_perform sum_perform(Node *node, int nframes, double spf) {
+node_perform _sum_perform(Node *node, int nframes, double spf) {
 
   double *out = node->output_buf;
   int num_ins = node->num_ins;

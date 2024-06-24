@@ -13,7 +13,7 @@ typedef struct {
 
     struct GROUP_ADD {
       Node *group;
-      // Node *tail;
+      Node *tail;
     } GROUP_ADD;
 
     struct NODE_SET_SCALAR {
@@ -47,7 +47,7 @@ int get_write_ptr();
 void update_bundle(int write_ptr);
 
 typedef struct {
-  double output_buf[BUF_SIZE * LAYOUT];
+  double output_buf[BUF_SIZE];
   Node *head;
   Node *tail;
   int sample_rate;
