@@ -27,8 +27,8 @@ typedef struct Node {
   int frame_offset;
 } Node;
 
-Node *perform_graph(Node *head, int frame_count, double spf, double *output_buf,
-                    int output_num);
+Node *perform_graph(Node *head, int frame_count, double spf, double *dest,
+                    int dest_layout, int output_num);
 
 typedef struct {
   Node *head;

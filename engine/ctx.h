@@ -47,13 +47,13 @@ int get_write_ptr();
 void update_bundle(int write_ptr);
 
 typedef struct {
-  double output_buf[BUF_SIZE];
+  double output_buf[BUF_SIZE * LAYOUT];
   Node *head;
   Node *tail;
   int sample_rate;
-
   msg_queue msg_queue;
 } Ctx;
+
 extern Ctx ctx;
 
 Ctx *get_audio_ctx();

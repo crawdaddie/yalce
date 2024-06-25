@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 Ctx ctx;
+
 void init_ctx() {}
 
 static void write_null_to_output_buf(double *out, int nframes, int layout) {
@@ -158,7 +159,7 @@ void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
   }
 
-  perform_graph(ctx->head, frame_count, spf, ctx->output_buf, 0);
+  perform_graph(ctx->head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
 
   process_msg_queue_post(&ctx->msg_queue, consumed);
 }

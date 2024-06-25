@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 Node *group_add_tail(Node *group, Node *node) {
   group_state *group_ctx = group->state;
@@ -65,7 +66,7 @@ Node *sq_node(double freq) {
   return s;
 }
 
-node_perform sum_perform(Node *node, int nframes, double spf) {
+node_perform sum_perform_(Node *node, int nframes, double spf) {
   int num_ins = node->num_ins;
   double *out = node->out.buf;
 
@@ -79,6 +80,47 @@ node_perform sum_perform(Node *node, int nframes, double spf) {
   }
 }
 
+node_perform sum_perform(Node *node, int nframes, double spf) {
+  int num_ins = node->num_ins;
+  double *out = node->out.buf;
+  Signal *input_sigs = node->ins;
+  double *in0 = input_sigs[0].buf;
+  int i, j;
+
+  if (num_ins == 1) {
+    memcpy(out, in0, nframes * sizeof(double));
+  } else {
+    for (i = 0; i < nframes; i += 4) {
+      double sum0 = in0[i];
+      double sum1 = in0[i + 1];
+      double sum2 = in0[i + 2];
+      double sum3 = in0[i + 3];
+
+      for (j = 1; j < num_ins; j++) {
+        double *in = input_sigs[j].buf + i;
+        sum0 += in[0];
+        sum1 += in[1];
+        sum2 += in[2];
+        sum3 += in[3];
+      }
+
+      out[i] = sum0;
+      out[i + 1] = sum1;
+      out[i + 2] = sum2;
+      out[i + 3] = sum3;
+    }
+
+    // Handle remaining frames if nframes is not divisible by 4
+    for (; i < nframes; i++) {
+      double sum = in0[i];
+      for (j = 1; j < num_ins; j++) {
+        sum += input_sigs[j].buf[i];
+      }
+      out[i] = sum;
+    }
+  }
+}
+
 Node *sum_nodes2(Node *a, Node *b) {
   Signal *ins = malloc(sizeof(double *) * 2);
   Node *sum = node_new(NULL, (node_perform *)sum_perform, 2, ins);
@@ -88,8 +130,7 @@ Node *sum_nodes2(Node *a, Node *b) {
 }
 
 Node *synth(double freq, double cutoff) {
-  Node *group = group_new(1);
-  group->num_ins = 0;
+  Node *group = group_new(0);
   Node *sq1 = sq_node(freq);
   group_add_tail(group, sq1);
 
@@ -105,7 +146,7 @@ Node *synth(double freq, double cutoff) {
 
 int main(int argc, char **argv) {
   init_audio();
-  Node *s = synth(100., 500.);
+  Node *s = synth(50., 500.);
 
   add_to_dac(s);
   audio_ctx_add(s);
