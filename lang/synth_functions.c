@@ -50,37 +50,25 @@ static Node *ctx_add(Node *node) {
   current_synth_ctx.tail = node;
   return node;
 }
+static Value node_val(Node *node) {
+  ctx_add(node);
+  return NODE(node);
+}
 
 void *alloc(AllocArena *arena, unsigned long size) {
   void *ptr = arena->blob_ptr;
-
   unsigned long offset = ptr - arena->blob;
-
-  // if (offset + size > arena->capacity) {
-  //   printf("realloc to accommodate %d from %d\n", offset + size,
-  //          arena->capacity);
-  //   arena->capacity *= 2;
-  //   arena->blob = realloc(arena->blob, arena->capacity);
-  //   arena->blob_ptr = arena->blob + offset;
-  //   ptr = arena->blob_ptr;
-  // }
-
   arena->blob_ptr += size;
   return ptr;
 }
 
 AllocArena get_arena(int size) {
   void *mem = malloc(size + 4);
-  // printf("size %lu\n", size * sizeof(void *));
   return (AllocArena){.blob = mem, .blob_ptr = mem, .capacity = size};
 }
 
-double *const_signal(AllocArena *arena, double v) {
-  double *input = alloc(arena, SIGNAL_SIZE);
-  for (int i = 0; i < BUF_SIZE; i++) {
-    input[i] = v;
-  }
-  return input;
+Signal *const_signal(int layout, double v) {
+  return get_sig_default(layout, v);
 }
 
 static inline bool is_synth_input(Value i) {
@@ -96,89 +84,35 @@ static Value _sq(Value *argv) {
     return VOID;
   }
   int input_is_sig = freq.type == VALUE_SYNTH_NODE;
-
-  int size = sizeof(Node) + sizeof(sq_state) + SIGNAL_SIZE;
+  Node *sq;
   if (input_is_sig) {
-    size += SIGNAL_SIZE;
-  }
-  AllocArena arena = get_arena(size);
-
-  double *input;
-  Node *sq_node = alloc(&arena, sizeof(Node));
-  sq_node->perform = (node_perform *)sq_perform;
-  sq_node->state = alloc(&arena, sizeof(sq_state));
-
-  if (input_is_sig) {
-    Node *freq_input_node = freq.value.vnode;
-    input = freq_input_node->output_buf;
-  } else if (freq.type == VALUE_INT || freq.type == VALUE_NUMBER) {
-    input = const_signal(&arena, NUM_OF_VALUE(argv));
+    sq = sq_node(100.);
+    sq->ins[0].buf = freq.value.vnode->out.buf;
+  } else {
+    sq = sq_node(NUM_OF_VALUE(argv));
   }
 
-  ((sq_state *)sq_node->state)->phase = 0.0;
-
-  sq_node->ins = alloc(&arena, sizeof(double *) * 1);
-  sq_node->ins[0] = input;
-  sq_node->num_ins = 1;
-  sq_node->frame_offset = 0;
-  sq_node->next = NULL;
-
-  ctx_add(sq_node);
-  return (Value){VALUE_SYNTH_NODE, {.vnode = sq_node}};
+  return node_val(sq);
 }
 
 static Value _sin(Value *argv) {
+
   Value freq = argv[0];
   if (!is_synth_input(freq)) {
     fprintf(stderr, "Error: incompatible input to synth function ");
     fprint_value(stderr, argv);
     return VOID;
   }
-
   int input_is_sig = freq.type == VALUE_SYNTH_NODE;
-
-  int size = sizeof(Node) + sizeof(sq_state) + SIGNAL_SIZE;
+  Node *s;
   if (input_is_sig) {
-    size += SIGNAL_SIZE;
-  }
-  AllocArena arena = get_arena(size);
-  double *input;
-
-  Node *sin_node = alloc(&arena, sizeof(Node));
-  sin_node->perform = (node_perform *)sin_perform;
-  sin_node->state = alloc(&arena, sizeof(sin_state));
-
-  if (input_is_sig) {
-    Node *freq_input_node = freq.value.vnode;
-    input = freq_input_node->output_buf;
-  } else if (freq.type == VALUE_INT || freq.type == VALUE_NUMBER) {
-    input = const_signal(&arena, NUM_OF_VALUE(argv));
+    s = sin_node(100.);
+    s->ins[0].buf = freq.value.vnode->out.buf;
+  } else {
+    s = sin_node(NUM_OF_VALUE(argv));
   }
 
-  ((sq_state *)sin_node->state)->phase = 0.0;
-
-  sin_node->ins = alloc(&arena, sizeof(double *));
-  sin_node->ins[0] = input;
-  sin_node->num_ins = 1;
-  ctx_add(sin_node);
-
-  return (Value){VALUE_SYNTH_NODE, {.vnode = sin_node}};
-}
-
-static Node *___make_group(SynthCtx sctx) {
-  int size = sizeof(Node) + sizeof(group_state) + SIGNAL_SIZE;
-  AllocArena arena = get_arena(size);
-
-  Node *group = alloc(&arena, sizeof(Node));
-  group_state *gr = (group_state *)alloc(&arena, sizeof(group_state));
-  group->state = gr;
-  ((group_state *)group->state)->head = sctx.head;
-  group->perform = (node_perform *)group_perform;
-  group->num_ins = 0;
-  group->ins = NULL;
-  group->next = NULL;
-  group->frame_offset = 0;
-  return group;
+  return node_val(s);
 }
 
 void add_node_msg(Node *node, int frame_offset) {
@@ -189,50 +123,19 @@ void add_node_msg(Node *node, int frame_offset) {
 }
 
 static Node *make_group(Node *head, Node *tail) {
-  // int size = sizeof(Node) + sizeof(group_state) + SIGNAL_SIZE;
-  // AllocArena arena = get_arena(size);
-  //
-  // Node *group = alloc(&arena, sizeof(Node));
-  // group_state *gr = (group_state *)alloc(&arena, sizeof(group_state));
-  // group->state = gr;
-  // ((group_state *)group->state)->head = head;
-  // group->perform = group_perform;
-  // group->num_ins = 0;
-  // group->ins = NULL;
-  //
-  //
-  group_state *grs = malloc(sizeof(group_state));
-  grs->head = head;
-
-  Node *group = malloc(sizeof(Node));
-  group->state = grs;
-  group->type = OUTPUT;
-  group->frame_offset = 0;
-
-  group->state = grs;
-  group->perform = (node_perform)group_perform;
-  group->num_ins = 0;
-  group->ins = NULL;
-  printf("grs %p %p\n", group->state,  ((group_state *)group->state)->head);
+  Node *group = group_new(0);
+  ((group_state *)group->state)->head = head;
+  ((group_state *)group->state)->tail = tail;
   return group;
 }
 
-Node * add_group_msg(Node *head, Node *tail, int frame_offset) {
-  // Ctx *ctx = get_audio_ctx();
-  // push_msg(
-  //     &ctx->msg_queue,
-  //     (scheduler_msg){GROUP_ADD, frame_offset,
-  //                     .body = {.GROUP_ADD = {.head = head, .tail = tail}}});
-  //
+Node *add_group_msg(Node *head, Node *tail, int frame_offset) {
   Node *group = make_group(head, tail);
-  printf("make group %p %p\n", group, group->state);
   Ctx *ctx = get_audio_ctx();
-  push_msg(
-      &ctx->msg_queue,
-      (scheduler_msg){GROUP_ADD, frame_offset,
-                      .body = {.GROUP_ADD = {.group = group}}});
+  push_msg(&ctx->msg_queue,
+           (scheduler_msg){GROUP_ADD, frame_offset,
+                           .body = {.GROUP_ADD = {.group = group}}});
   return group;
-
 }
 
 static Value _play_node(Value *argv) {
@@ -246,10 +149,11 @@ static Value _play_node(Value *argv) {
   int frame_offset = get_block_frame_offset(bt, now, ctx->sample_rate);
   if (current_synth_ctx.num > 1) {
     node->type = OUTPUT;
-    Node *g = add_group_msg(current_synth_ctx.head, node, frame_offset);
-    // current_synth_ctx = (SynthCtx){.head = g, .tail = g};
+    Node *g = make_group(current_synth_ctx.head, node);
+    g->type = OUTPUT;
+    add_node_msg(g, frame_offset);
     current_synth_ctx = (SynthCtx){};
-    return NODE(g);
+    return node_val(g);
   }
 
   add_node_msg(node, frame_offset);
@@ -262,29 +166,17 @@ static Value _group_add_tail(Value *argv) {
   return VOID;
 }
 
-Value synth_add(Value l, Value r) {
+Value add_nodes(Value l, Value r) {
 
   if (l.type == VALUE_SYNTH_NODE && r.type == VALUE_SYNTH_NODE) {
-    AllocArena arena = get_arena(sizeof(Node) + SIGNAL_SIZE + sizeof(double *) * 2);
     Node *ln = l.value.vnode;
     Node *rn = r.value.vnode;
-    Node *sum = alloc(&arena, sizeof(Node));
-    double **ins = alloc(&arena, sizeof(double *) * 2);
-    sum->perform = (node_perform *)sum_perform;
-    sum->ins = ins;
-    sum->num_ins = 2;
-    sum->ins[0] = ln->output_buf;
-    sum->ins[1] = rn->output_buf;
-    sum->next = NULL;
+    Node *sum = sum2_node(ln, rn);
 
-    // printf("sum %p\n", sum);
     ctx_add(sum);
     return NODE(sum);
   }
 
-  AllocArena arena =
-      get_arena(sizeof(Node) + (sizeof(double *) * 2) + SIGNAL_SIZE);
-
   Node *n;
   double scalar;
   if (l.type != VALUE_SYNTH_NODE) {
@@ -295,77 +187,43 @@ Value synth_add(Value l, Value r) {
     n = l.value.vnode;
   }
 
-  Node *sum = alloc(&arena, sizeof(Node));
-  double **ins = alloc(&arena, sizeof(double *) * 2);
+  Node *sum = node_new(NULL, (node_perform *)sum_perform, 2, NULL);
+  sum->ins = malloc(sizeof(Signal) * 2);
+  sum->ins[0].buf = get_sig_default(1, scalar)->buf;
+  sum->ins[1].buf = (n->out).buf;
 
-  sum->perform = (node_perform *)sum_perform;
-  sum->ins = ins;
-  sum->num_ins = 2;
-
-  sum->ins[0] = alloc(&arena, SIGNAL_SIZE);
-  for (int i = 0; i < BUF_SIZE; i++) {
-    sum->ins[0][i] = scalar;
-  }
-  sum->ins[1] = n->output_buf;
-
-  // printf("sum %p\n", sum);
   ctx_add(sum);
   return NODE(sum);
 }
 
-Value synth_mul(Value l, Value r) {
+Value mul_nodes(Value l, Value r) {
+
   if (l.type == VALUE_SYNTH_NODE && r.type == VALUE_SYNTH_NODE) {
-
-    AllocArena arena = get_arena(sizeof(Node) + sizeof(double *) * 2);
     Node *ln = l.value.vnode;
-    ctx_add(ln);
     Node *rn = r.value.vnode;
-    ctx_add(rn);
-    Node *mul = alloc(&arena, sizeof(Node));
-    double **ins = alloc(&arena, sizeof(double *) * 2);
-    *mul = (Node){
-        .perform = (node_perform *)mul_perform,
-        .ins = ins,
-        .num_ins = 2,
-    };
-    mul->ins[0] = ln->output_buf;
-    mul->ins[1] = rn->output_buf;
-    ctx_add(mul);
-    return NODE(mul);
-  }
+    Node *sum = mul2_node(ln, rn);
 
-  AllocArena arena =
-      get_arena(sizeof(Node) + sizeof(double *) * 2 + SIGNAL_SIZE);
+    ctx_add(sum);
+    return NODE(sum);
+  }
 
   Node *n;
   double scalar;
   if (l.type != VALUE_SYNTH_NODE) {
-    // l is a scalar
-
     scalar = l.type == VALUE_INT ? l.value.vint : l.value.vnum;
     n = r.value.vnode;
-    // ctx_add(n);
   } else if (r.type != VALUE_SYNTH_NODE) {
-    // r is a scalar
     scalar = r.type == VALUE_INT ? r.value.vint : r.value.vnum;
     n = l.value.vnode;
   }
-  Node *mul = alloc(&arena, sizeof(Node));
-  double **ins = alloc(&arena, sizeof(double *) * 2);
-  *mul = (Node){
-      .perform = (node_perform *)mul_perform,
-      .ins = ins,
-      .num_ins = 2,
-  };
 
-  mul->ins[0] = alloc(&arena, SIGNAL_SIZE);
-  for (int i = 0; i < BUF_SIZE; i++) {
-    mul->ins[0][i] = scalar;
-  }
-  mul->ins[1] = n->output_buf;
+  Node *mul = node_new(NULL, (node_perform *)mul_perform, 2, NULL);
+  mul->ins = malloc(sizeof(Signal) * 2);
+  mul->ins[0].buf = get_sig_default(1, scalar)->buf;
+  mul->ins[1].buf = (n->out).buf;
+
   ctx_add(mul);
   return NODE(mul);
-  // TODO: handle scalar * node
 }
 
 #define SYNTH_FNS 5
@@ -391,82 +249,6 @@ typedef struct {
 } SynthContext;
 
 static GraphContext _graph_context = {.current_graph = NULL, .num_nodes = 0};
-// static SynthContext _synth_context = {.head = NULL, .tail = NULL};
-
-static Value synth_val_bind(Value val) {
-  // if (val.type == VALUE_SYNTH_NODE) {
-  //   if (((Graph *)_graph_context.current_graph->state)->tail !=
-  //       val.value.vnode) {
-  //     group_add_tail(_graph_context.current_graph, val.value.vnode);
-  //     _graph_context.num_nodes++;
-  //   }
-  // }
-  // return val;
-  return VOID;
-}
-
-static Value _synth_wrapper_meta(Ast *ast, LangCtx *ctx) {
-  if (ast->tag == AST_LET && ast->data.AST_LET.expr->tag == AST_LAMBDA) {
-    Ast *lambda = ast->data.AST_LET.expr;
-
-    Value synth_func_ = eval_lambda_declaration(ast->data.AST_LET.expr, ctx);
-
-    Function synth_def = synth_func_.value.function;
-
-    Value *args = malloc(sizeof(Value) * synth_def.len);
-
-    for (int i = 0; i < synth_def.len; i++) {
-      Ast *default_arg = lambda->data.AST_LAMBDA.defaults[i];
-      if (default_arg != NULL) {
-        args[i] = eval(default_arg, ctx);
-      } else {
-        args[i] = NUM(0);
-      }
-    }
-
-    // _graph_context.current_graph = group_new(1);
-    // _graph_context.num_nodes = 0;
-    LangCtx new_ctx = {
-        .stack = ctx->stack,
-        .stack_ptr = ctx->stack_ptr,
-        .val_bind = synth_val_bind,
-    };
-
-    Value result_node = fn_call(synth_def, args, &new_ctx);
-
-    // add_to_dac(result_node.value.vnode);
-
-    // flatten_synth(_graph_context.num_nodes, _graph_context.current_graph);
-
-    // Return new function that returns a copy of current_graph
-    // return NODE(current_graph);
-    Value *synth_func = malloc(sizeof(Value));
-    *synth_func = (Value){.type = VALUE_NATIVE_FN, .value = {.native_fn = {}}};
-    ht_set_hash(ctx->stack + ctx->stack_ptr, ast->data.AST_LET.name.chars,
-                ast->data.AST_LET.name.hash, synth_func);
-    return *synth_func;
-  }
-  return eval(ast, ctx);
-}
-
-static Value synth_wrapper_meta(Ast *ast, LangCtx *ctx) {
-  if (!(ast->tag == AST_LET && ast->data.AST_LET.expr->tag == AST_LAMBDA)) {
-    return eval(ast, ctx);
-  }
-
-  Ast *lambda = ast->data.AST_LET.expr;
-  Value synth_def_func = eval_lambda_declaration(ast->data.AST_LET.expr, ctx);
-
-  int synth_def_len = lambda->data.AST_LAMBDA.len;
-  Value *args = malloc(sizeof(Value) * (synth_def_len + 1));
-  args[0] = synth_def_func;
-
-  Value mk_synth = (Value){VALUE_NATIVE_FN,
-                           {.native_fn = {.len = synth_def_len + 1,
-                                          .num_partial_args = 1,
-                                          .partial_args = args}}};
-  return mk_synth;
-}
 
 static ht synth_blobs;
 void add_synth_functions(ht *stack) {
@@ -475,8 +257,8 @@ void add_synth_functions(ht *stack) {
     ht_set(stack, t.id, t.type);
   }
 
-  ht_set(stack, "@synth",
-         &(Value){VALUE_META_FN, {.vmeta_fn = &synth_wrapper_meta}});
+  // ht_set(stack, "@synth",
+  //        &(Value){VALUE_META_FN, {.vmeta_fn = &synth_wrapper_meta}});
   ht_init(&synth_blobs);
 }
 #undef NODE

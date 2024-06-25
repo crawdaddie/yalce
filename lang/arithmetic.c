@@ -23,21 +23,21 @@
     return (Value){VALUE_BOOL, {.vbool = (l).value.vnum op(r).value.vnum}};    \
   }
 
-Value synth_add(Value l, Value r);
+Value add_nodes(Value l, Value r);
 
 Value add_ops(Value l, Value r) {
   if (l.type == VALUE_SYNTH_NODE || r.type == VALUE_SYNTH_NODE) {
-    return synth_add(l, r);
+    return add_nodes(l, r);
   }
   NUMERIC_OPERATION(+, l, r)
 }
 
 Value sub_ops(Value l, Value r) { NUMERIC_OPERATION(-, l, r); }
 
-Value synth_mul(Value l, Value r);
+Value mul_nodes(Value l, Value r);
 Value mul_ops(Value l, Value r) {
   if (l.type == VALUE_SYNTH_NODE || r.type == VALUE_SYNTH_NODE) {
-    return synth_mul(l, r);
+    return mul_nodes(l, r);
   }
 
   NUMERIC_OPERATION(*, l, r);

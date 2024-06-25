@@ -10,6 +10,9 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder);
 
-LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder);
+LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder);
+
+void llvm_add_native_functions(ht *stack, LLVMModuleRef module);
 #endif

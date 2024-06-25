@@ -33,13 +33,8 @@ static void process_msg_pre(scheduler_msg msg) {
   case NODE_ADD: {
     struct NODE_ADD payload = msg.body.NODE_ADD;
     int frame_offset = msg.frame_offset;
-    // offset_node_bufs(payload.target, frame_offset);
     payload.target->frame_offset = frame_offset;
-    payload.target->type = OUTPUT;
-    // add_to_dac(payload.target);
-    //
     audio_ctx_add(payload.target);
-    print_graph(get_audio_ctx()->head);
 
     break;
   }
@@ -48,19 +43,10 @@ static void process_msg_pre(scheduler_msg msg) {
     struct GROUP_ADD payload = msg.body.GROUP_ADD;
     int frame_offset = msg.frame_offset;
     Node *g = payload.group;
-    // while (t != payload.tail) {
-    //   t->frame_offset = frame_offset;
-    //   t = t->next;
-    // }
-    // t->type = OUTPUT;
-    //
     g->frame_offset = frame_offset;
     g->type = OUTPUT;
     g->next = NULL;
     audio_ctx_add(g);
-    printf("added to ctx\n");
-    printf("add group %p %d %d %p\n", g, g->frame_offset, g->type, g->state);
-    // ctx.tail = t;
 
     break;
   }

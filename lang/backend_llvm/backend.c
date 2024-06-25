@@ -26,25 +26,6 @@ static Ast *top_level_ast(Ast *body) {
   return last;
 }
 
-static void add_native_functions(ht *stack, LLVMModuleRef module) {
-
-  // Declare the external printf function
-  const char *name = "printf";
-  int name_len = strlen(name);
-  LLVMTypeRef printf_args[] = {
-      LLVMPointerType(LLVMInt8Type(), 0)}; // char* (i8*)
-  LLVMTypeRef printf_type = LLVMFunctionType(
-      LLVMInt32Type(), printf_args, 1, 1); // return type i32, 1 arg, varargs
-  LLVMValueRef printf_func = LLVMAddFunction(module, name, printf_type);
-
-  JITSymbol *v = malloc(sizeof(JITSymbol));
-  *v = (JITSymbol){.llvm_type = printf_type,
-                   .symbol_type = STYPE_FUNCTION,
-                   .val = printf_func};
-
-  ht_set_hash(stack, name, hash_string(name, name_len), v);
-}
-
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
   switch (ast->tag) {
@@ -207,7 +188,7 @@ int jit(int argc, char **argv) {
   }
 
   // add_type_lookups(stack);
-  add_native_functions(stack, module);
+  llvm_add_native_functions(stack, module);
   // add_synth_functions(stack);
 
   JITLangCtx ctx = {

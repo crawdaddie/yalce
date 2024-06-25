@@ -36,4 +36,23 @@ typedef struct {
 } group_state;
 
 node_perform group_perform(Node *group, int nframes, double spf);
+
+Node *group_add_tail(Node *group, Node *node);
+
+Node *node_new(void *data, node_perform *perform, int num_ins, Signal *ins);
+
+Signal *get_sig(int layout);
+Signal *get_sig_default(int layout, double value);
+
+Node *group_new(int chans);
+
+Node *sq_node(double freq);
+Node *sin_node(double freq);
+
+node_perform sum_perform(Node *node, int nframes, double spf);
+node_perform mul_perform(Node *node, int nframes, double spf);
+
+Node *sum2_node(Node *a, Node *b);
+
+Node *mul2_node(Node *a, Node *b);
 #endif
