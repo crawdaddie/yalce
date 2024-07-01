@@ -1,6 +1,6 @@
 #include "serde.h"
 #include "builtins.h"
-#include "type_inference/infer.h"
+// #include "type_inference/infer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -176,32 +176,36 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
-  case AST_EXTERN_FN_DECLARATION: {
+  case AST_EXTERN_FN: {
+    // printf("serde extern fn\n");
     buffer = strcat(buffer, "(extern ");
-    if (ast->data.AST_EXTERN_FN_DECLARATION.fn_name.chars != NULL) {
-      buffer =
-          strcat(buffer, ast->data.AST_EXTERN_FN_DECLARATION.fn_name.chars);
+    if (ast->data.AST_EXTERN_FN.fn_name.chars != NULL) {
+      buffer = strcat(buffer, ast->data.AST_EXTERN_FN.fn_name.chars);
       buffer = strcat(buffer, " ");
     }
-    if (ast->data.AST_EXTERN_FN_DECLARATION.len == 0) {
+    if (ast->data.AST_EXTERN_FN.len == 0) {
       buffer = strcat(buffer, "() ");
+    } else if (ast->data.AST_EXTERN_FN.len == 1) {
+      buffer = strcat(buffer, "() -> ");
+      buffer = ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[0], buffer);
     } else {
-      for (int i = 0; i < ast->data.AST_EXTERN_FN_DECLARATION.len; i++) {
-        buffer =
-            strcat(buffer, ast->data.AST_EXTERN_FN_DECLARATION.params[i].chars);
-        buffer = strcat(buffer, " ");
+      int len = ast->data.AST_EXTERN_FN.len;
+      for (int i = 0; i < len; i++) {
+        buffer = ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[i], buffer);
+        if (i < len - 1) {
+          buffer = strcat(buffer, " -> ");
+        }
       }
     }
 
-    buffer = strcat(buffer, "-> ");
+    // buffer = strcat(buffer, "-> ");
 
-    buffer =
-        strcat(buffer, ast->data.AST_EXTERN_FN_DECLARATION.return_type.chars);
-    buffer = strcat(buffer, ")\n");
+    // buffer = ast_to_sexpr(ast->data.AST_EXTERN_FN.return_type, buffer);
+    // buffer = strcat(buffer, ")\n");
 
     break;
   }
-
+  //
   case AST_LAMBDA_ARGS: {
     break;
   }

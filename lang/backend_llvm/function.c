@@ -1,70 +1,13 @@
 #include "backend_llvm/function.h"
 #include "backend_llvm/symbols.h"
 #include "serde.h"
+#include "type_inference.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
-
-#define LLVM_TYPE_int LLVMInt32Type()
-#define LLVM_TYPE_float LLVMFloatType()
-#define LLVM_TYPE_double LLVMDoubleType()
-#define LLVM_TYPE_void LLVMVoidType()
-#define LLVM_TYPE_str LLVMPointerType(LLVMInt8Type(), 0)
-#define LLVM_TYPE_ptr(type) LLVMPointerType(LLVM_TYPE_##type, 0)
-
-#define GET_LLVM_TYPE(type) LLVM_TYPE_##type
-#define ADD_NATIVE_FUNCTION(stack, module, func_name, return_type, num_args,   \
-                            ...)                                               \
-  do {                                                                         \
-    const char *name = #func_name;                                             \
-    int name_len = strlen(name);                                               \
-    LLVMTypeRef args[] = {MAP_LLVM_TYPES(num_args, __VA_ARGS__)};              \
-    LLVMTypeRef func_type =                                                    \
-        LLVMFunctionType(GET_LLVM_TYPE(return_type), args, num_args, false);   \
-    LLVMValueRef func = LLVMAddFunction(module, name, func_type);              \
-    JITSymbol *v = malloc(sizeof(JITSymbol));                                  \
-    *v = (JITSymbol){                                                          \
-        .llvm_type = func_type, .symbol_type = STYPE_FUNCTION, .val = func};   \
-    ht_set_hash(stack, name, hash_string(name, name_len), v);                  \
-  } while (0)
-
-#define MAP_LLVM_TYPES(num_args, ...)                                          \
-  MAP_LLVM_TYPES_HELPER(num_args, __VA_ARGS__)
-
-#define MAP_LLVM_TYPES_HELPER(num_args, ...)                                   \
-  MAP_LLVM_TYPES_##num_args(__VA_ARGS__)
-
-#define MAP_LLVM_TYPES_0()
-#define MAP_LLVM_TYPES_1(a) GET_LLVM_TYPE(a)
-#define MAP_LLVM_TYPES_2(a, b) GET_LLVM_TYPE(a), GET_LLVM_TYPE(b)
-#define MAP_LLVM_TYPES_3(a, b, c)                                              \
-  GET_LLVM_TYPE(a), GET_LLVM_TYPE(b), GET_LLVM_TYPE(c)
-#define MAP_LLVM_TYPES_4(a, b, c, d)                                           \
-  GET_LLVM_TYPE(a), GET_LLVM_TYPE(b), GET_LLVM_TYPE(c), GET_LLVM_TYPE(d)
-// Add more MAP_LLVM_TYPES_X macros as needed for more arguments
-
-void llvm_add_native_functions(ht *stack, LLVMModuleRef module) {
-  // Declare the external printf function
-  const char *name = "printf";
-  int name_len = strlen(name);
-  LLVMTypeRef printf_args[] = {
-      LLVMPointerType(LLVMInt8Type(), 0)}; // char* (i8*)
-  LLVMTypeRef printf_type = LLVMFunctionType(
-      LLVMInt32Type(), printf_args, 1, 1); // return type i32, 1 arg, varargs
-  LLVMValueRef printf_func = LLVMAddFunction(module, name, printf_type);
-
-  JITSymbol *v = malloc(sizeof(JITSymbol));
-  *v = (JITSymbol){.llvm_type = printf_type,
-                   .symbol_type = STYPE_FUNCTION,
-                   .val = printf_func};
-
-  ht_set_hash(stack, name, hash_string(name, name_len), v);
-
-  ADD_NATIVE_FUNCTION(stack, module, init_audio, void, 0);
-}
 
 LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
@@ -83,6 +26,7 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, fn_type);
   LLVMSetLinkage(func, LLVMExternalLinkage);
+  free(params);
   return func;
 }
 
@@ -151,6 +95,69 @@ static bool is_void_application(LLVMValueRef fn, Ast *ast) {
   int app_len = ast->data.AST_APPLICATION.len;
   return is_void_fn(fn) && app_len == 1 &&
          ast->data.AST_APPLICATION.args[0].tag == AST_VOID;
+}
+
+#define LLVM_TYPE_int LLVMInt32Type()
+#define LLVM_TYPE_bool LLVMInt1Type()
+#define LLVM_TYPE_float LLVMFloatType()
+#define LLVM_TYPE_double LLVMDoubleType()
+#define LLVM_TYPE_void LLVMVoidType()
+#define LLVM_TYPE_str LLVMPointerType(LLVMInt8Type(), 0)
+#define LLVM_TYPE_ptr(type) LLVMPointerType(LLVM_TYPE_##type, 0)
+
+static LLVMTypeRef llvm_type_id(Ast *id) {
+  if (id->tag == AST_VOID) {
+    return LLVM_TYPE_void;
+  }
+
+  if (id->tag != AST_IDENTIFIER) {
+    return NULL;
+  }
+  char *id_chars = id->data.AST_IDENTIFIER.value;
+
+  if (strcmp(id_chars, "int") == 0) {
+    return LLVM_TYPE_int;
+  } else if (strcmp(id_chars, "double") == 0) {
+    return LLVM_TYPE_float;
+  } else if (strcmp(id_chars, "bool") == 0) {
+    return LLVM_TYPE_bool;
+  } else if (strcmp(id_chars, "string") == 0) {
+    return LLVM_TYPE_str;
+  }
+
+  return NULL;
+}
+LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+
+  const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
+  int name_len = strlen(name);
+  int params_count = ast->data.AST_EXTERN_FN.len - 1;
+
+  Ast *signature_types = ast->data.AST_EXTERN_FN.signature_types;
+  if (params_count == 0) {
+    // LLVMTypeRef llvm_param_types[] = {};
+
+    LLVMTypeRef ret_type = llvm_type_id(signature_types);
+    LLVMTypeRef fn_type =
+        LLVMFunctionType(ret_type, NULL, 0, false);
+
+    LLVMValueRef func = LLVMAddFunction(module, name, fn_type);
+    return func;
+  }
+
+  LLVMTypeRef *llvm_param_types = malloc(sizeof(LLVMTypeRef) * params_count);
+  for (int i = 0; i < params_count; i++) {
+    llvm_param_types[i] = llvm_type_id(signature_types + i);
+  }
+
+  LLVMTypeRef ret_type = llvm_type_id(signature_types + params_count);
+  LLVMTypeRef fn_type =
+      LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
+
+  LLVMValueRef func = LLVMAddFunction(module, name, fn_type);
+  free(llvm_param_types);
+  return func;
 }
 
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,

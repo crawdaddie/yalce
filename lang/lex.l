@@ -20,6 +20,7 @@
 "with"                  return WITH;
 "["                     return *yytext;
 "]"                     return *yytext;
+
 [a-zA-Z_][a-zA-Z0-9_]*  {
 
                           int len = yyleng;
@@ -80,16 +81,18 @@
 
 "|>"                    return PIPE;
 
-[-()<>=+*/;{},|]         {
+[-()<>=+*/;{},|]        {
                           /*printf("operator '%s'", yytext);*/
                           return *yytext;
                         }
+
 "%"             return MODULO;
 ">="            return GE;
 "<="            return LE;
 "=="            return EQ;
 "!="            return NE;
-"->"            { return ARROW; }
+":"             return *yytext;
+"->"            return ARROW;
 [ \t\n]+        ;       /* ignore whitespace */
 "#".*           ;       /* ignore comments starting with # */
 

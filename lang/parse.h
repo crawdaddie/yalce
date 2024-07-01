@@ -93,8 +93,7 @@ typedef enum ast_tag {
   AST_LAMBDA,
   AST_LAMBDA_ARGS,
   AST_VOID,
-  AST_EXTERN_FN_DECLARATION,
-  // AST_EXTERN_DECLARATION,
+  AST_EXTERN_FN,
   AST_LIST,
   AST_MATCH,
   AST_PLACEHOLDER_ID,
@@ -129,7 +128,7 @@ struct Ast {
     } AST_STRING;
 
     struct AST_IDENTIFIER {
-      char *value;
+      const char *value;
       int length;
     } AST_IDENTIFIER;
 
@@ -174,12 +173,11 @@ struct Ast {
       Ast **defaults;
     } AST_LAMBDA;
 
-    struct AST_EXTERN_FN_DECLARATION {
+    struct AST_EXTERN_FN {
       size_t len;
-      ObjString *params;
-      ObjString return_type;
+      Ast *signature_types;
       ObjString fn_name;
-    } AST_EXTERN_FN_DECLARATION;
+    } AST_EXTERN_FN;
 
     struct AST_LAMBDA_ARGS {
       Ast **ids;
@@ -232,4 +230,12 @@ Ast *ast_match(Ast *expr, Ast *match);
 Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result);
 Ast *ast_tuple(Ast *list);
 Ast *ast_meta(ObjString meta_id, Ast *next);
+Ast *ast_extern_decl(Ast);
+Ast *ast_assoc(Ast *l, Ast *r);
+Ast *typed_arg_list(Ast *list, Ast *item);
+
+Ast *extern_typed_signature(Ast *item);
+Ast *extern_typed_signature_push(Ast *sig, Ast *def);
+Ast *ast_extern_fn(ObjString name, Ast *signature);
+bool ast_is_placeholder(Ast *ast);
 #endif

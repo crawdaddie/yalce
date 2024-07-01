@@ -63,7 +63,7 @@ Ast* ast_root = NULL;
 
 %type <ast_node_ptr>
   stmt expr stmt_list application
-  lambda_expr lambda_args list tuple expr_list
+  lambda_expr lambda_args extern_typed_signature list tuple expr_list
   match_expr match_branches
 
 
@@ -78,9 +78,9 @@ program:
                               ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
                             }
 
-                            if ($1->tag != AST_BODY) {
+                            if ($1->tag != AST_BODY && $1 != NULL) {
                               ast_body_push(ast_root, $1);
-                            } else {
+                            } else if ($1 != NULL) {
                               Ast *b = $1;
                               for (int i = 0; i < b->data.AST_BODY.len; i++) {
                                 ast_body_push(ast_root, b->data.AST_BODY.stmts[i]);
@@ -101,9 +101,11 @@ stmt:
 
   | LET IDENTIFIER '=' lambda_expr  { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' expr         { $$ = ast_let($2, $4, NULL); }
+
+  | LET IDENTIFIER '=' EXTERN FN extern_typed_signature ';' 
+                                    { $$ = ast_let($2, ast_extern_fn($2, $6), NULL); }
   /*| LET IDENTIFIER '=' expr IN expr { $$ = ast_let($2, $4, $6); } */
   ;
-
 
 stmt_list:
     stmt                        { $$ = $1; }
@@ -118,7 +120,7 @@ expr:
   | TOK_STRING            { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
-  /*| META_IDENTIFIER expr  { $$ = ast_meta($1, $2); } */
+  | META_IDENTIFIER expr  { $$ = ast_meta($1, $2); }
   | IDENTIFIER            { $$ = ast_identifier($1); }
   | TOK_VOID              { $$ = ast_void(); }
   /*| '-' expr %prec UMINUS { $$ = ast_unop(TOKEN_MINUS, $2); } */
@@ -134,16 +136,23 @@ expr:
   | expr NE expr          { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }
   | expr EQ expr          { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr        { $$ = ast_application($3, $1); }
-  /*| '(' expr ')'          { $$ = $2; } */
+  | '(' expr ')'          { $$ = $2; }
   | lambda_expr           { $$ = $1; }
   | application           { $$ = $1; }
   | FSTRING               { $$ = parse_format_expr($1); }
   | list                  { $$ = $1; }
   | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
+  | expr ':' expr         { $$ = ast_assoc($1, $3); }
   | LET IDENTIFIER '=' expr IN expr { $$ = ast_let($2, $4, $6); }
-  | LET IDENTIFIER '=' lambda_expr IN expr { $$ = ast_let($2, $4, $6); }
+  | LET IDENTIFIER '=' lambda_expr IN expr  { $$ = ast_let($2, $4, $6); }
   ;
+
+extern_typed_signature:
+  expr                                  { $$ = extern_typed_signature($1); }
+  | extern_typed_signature ARROW expr   { $$ = extern_typed_signature_push($1, $3); }
+  ;
+
 
 lambda_expr:
     FN lambda_args ARROW stmt_list ';'      { $$ = ast_lambda($2, $4); }
@@ -154,11 +163,16 @@ lambda_expr:
 
 
 
+
 lambda_args:
     IDENTIFIER              { $$ = ast_arg_list($1, NULL); }
   | IDENTIFIER '=' expr     { $$ = ast_arg_list($1, $3); }
   | lambda_args IDENTIFIER  { $$ = ast_arg_list_push($1, $2, NULL); }
   | lambda_args IDENTIFIER '=' expr { $$ = ast_arg_list_push($1, $2, $4); }
+  | IDENTIFIER              { $$ = ast_arg_list($1, NULL); }
+  | IDENTIFIER ':' expr     { $$ = ast_arg_list($1, $3); }
+  | lambda_args IDENTIFIER  { $$ = ast_arg_list_push($1, $2, NULL); }
+  | lambda_args IDENTIFIER ':' expr { $$ = ast_arg_list_push($1, $2, $4); }
   ;
 
 

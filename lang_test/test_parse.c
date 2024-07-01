@@ -1,15 +1,14 @@
 #include "../lang/parse.h"
 #include "../lang/serde.h"
-#include "type_inference/infer.h"
-#include "type_inference/type.h"
+#include "../lang/type_inference.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 extern int yylineno;
 
 bool test_typecheck(Ast *prog, Type *type) {
-  Env env;
-  infer(&env, prog, NULL);
+  // Env env;
+  infer_ast(NULL, prog);
   if (!type) {
     return true;
   }
@@ -49,7 +48,7 @@ bool test_parse(char input[], char *expected_sexpr, Type *type) {
   }
   bool res;
   if (expected_sexpr == NULL && prog == NULL) {
-    printf("✅ %s :: parse error\n", input, sexpr);
+    printf("✅ %s :: parse error\n", input);
     res = true;
     free(sexpr);
     free(prog);
@@ -241,11 +240,11 @@ int main() {
   status &= test_parse("(1, )", NULL, NULL);
   status &= test_parse("(1, 2)", "(1, 2)", NULL);
   status &= test_parse("(1, 2, 3)", "(1, 2, 3)", NULL);
-  status &= test_parse("match x with\n"
+  status &= test_parse("match 3 with\n"
                        "| 1 -> 1\n"
                        "| 2 -> 0\n"
                        "| _ -> 3",
-                       "(match x with\n"
+                       "(match 3 with\n"
                        "\t1 -> 1\n"
                        "\t2 -> 0\n"
                        "\t_ -> 3\n"
@@ -257,9 +256,8 @@ int main() {
                             "| 1 -> 1\n"
                             "| 2 -> 0\n"
                             "| _ -> 3)\n"
-                            ";;",
-                            "\n\n(let m (m x ->\n"
-                            "(match x with\n"
+                            ";",
+                            "\n(let m (m x -> (match x with\n"
                             "\t1 -> 1\n"
                             "\t2 -> 0\n"
                             "\t_ -> 3\n"
@@ -277,5 +275,14 @@ int main() {
                        "\n\t_ -> 3\n"
                        ")",
                        NULL);
+
+  status &=
+      test_parse("let printf2 = extern fn string -> string -> () ;",
+                 "(let printf2 (extern printf2 string -> string -> ())", NULL);
+
+  status &= test_parse("let voidf = extern fn () -> () ;",
+                       "(let voidf (extern voidf () -> ())", NULL);
+
+  // extern funcs
   return status ? 0 : 1;
 }

@@ -36,7 +36,7 @@ Ast *ast_unop(token_type op, Ast *right) {
 }
 
 Ast *ast_identifier(ObjString id) {
-  char *name = id.chars;
+  const char *name = id.chars;
   int length = id.length;
   Ast *node = Ast_new(AST_IDENTIFIER);
   node->data.AST_IDENTIFIER.value = name;
@@ -50,6 +50,9 @@ Ast *ast_let(ObjString name, Ast *expr, Ast *in_continuation) {
   if (expr->tag == AST_LAMBDA) {
     expr->data.AST_LAMBDA.fn_name = name;
   }
+  // else if (expr->tag == AST_EXTERN_FN) {
+  //   expr->data.AST_EXTERN_FN.fn_name = name;
+  // }
   node->data.AST_LET.expr = expr;
   node->data.AST_LET.in_expr = in_continuation;
   // print_ast(node);
@@ -129,22 +132,26 @@ Ast *ast_arg_list_push(Ast *lambda, ObjString arg_id, Ast *def) {
   return lambda;
 }
 
-Ast *ast_extern_declaration(ObjString extern_name, Ast *lambda,
-                            ObjString return_type) {
-
-  size_t len = lambda->data.AST_LAMBDA.len;
-  ObjString *params = lambda->data.AST_LAMBDA.params;
-
-  lambda->tag = AST_EXTERN_FN_DECLARATION;
-
-  lambda->data.AST_EXTERN_FN_DECLARATION.fn_name = extern_name;
-  lambda->data.AST_EXTERN_FN_DECLARATION.len = len;
-  lambda->data.AST_EXTERN_FN_DECLARATION.params = params;
-  lambda->data.AST_EXTERN_FN_DECLARATION.return_type = return_type;
-  return lambda;
-}
+// Ast *ast_extern_declaration(ObjString extern_name, Ast *lambda,
+//                             ObjString return_type) {
+//
+//   size_t len = lambda->data.AST_LAMBDA.len;
+//   ObjString *params = lambda->data.AST_LAMBDA.params;
+//
+//   lambda->tag = AST_EXTERN_FN_DECLARATION;
+//
+//   lambda->data.AST_EXTERN_FN_DECLARATION.fn_name = extern_name;
+//   lambda->data.AST_EXTERN_FN_DECLARATION.len = len;
+//   lambda->data.AST_EXTERN_FN_DECLARATION.params = params;
+//   lambda->data.AST_EXTERN_FN_DECLARATION.return_type = return_type;
+//   return lambda;
+// }
 
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
+  if (new_stmt == NULL) {
+    return stmts;
+  }
+
   if (stmts->tag == AST_BODY) {
     ast_body_push(stmts, new_stmt);
     return stmts;
@@ -255,4 +262,52 @@ Ast *ast_meta(ObjString meta_id, Ast *next) {
   meta->data.AST_META.length = meta_id.length;
   meta->data.AST_META.next = next;
   return meta;
+}
+
+Ast *ast_extern_fn(ObjString name, Ast *signature) {
+  int len = signature->data.AST_LIST.len;
+  Ast *param_types = signature->data.AST_LIST.items;
+  signature->tag = AST_EXTERN_FN;
+  signature->data.AST_EXTERN_FN.len = len;
+  signature->data.AST_EXTERN_FN.signature_types = param_types;
+  signature->data.AST_EXTERN_FN.fn_name = name;
+
+  return signature;
+}
+Ast *ast_assoc(Ast *l, Ast *r) { return NULL; }
+
+Ast *typed_arg_list(Ast *list, Ast *item) {
+  if (list == NULL) {
+    return ast_list(item);
+  } else if (list->tag == AST_LIST && item != NULL) {
+    return ast_list_push(list, item);
+  }
+  return NULL;
+}
+
+Ast *extern_typed_signature(Ast *item) {
+  if (item->tag == AST_VOID) {
+    return NULL;
+  }
+  return ast_list(item);
+}
+
+Ast *extern_typed_signature_push(Ast *sig, Ast *item) {
+  if (sig == NULL) {
+    return ast_list(item);
+  }
+  ast_list_push(sig, item);
+  return sig;
+}
+
+bool ast_is_placeholder(Ast *ast) {
+  if (ast->tag != AST_IDENTIFIER) {
+    return false;
+  }
+
+  if (*(ast->data.AST_IDENTIFIER.value) == '_') {
+    return true;
+  }
+
+  return false;
 }

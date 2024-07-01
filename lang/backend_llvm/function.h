@@ -14,5 +14,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder);
 
-void llvm_add_native_functions(ht *stack, LLVMModuleRef module);
+LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
 #endif

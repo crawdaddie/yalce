@@ -6,7 +6,7 @@
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
-#include "type_inference/infer.h"
+#include "type_inference.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Support.h>
@@ -74,6 +74,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_APPLICATION: {
     return codegen_fn_application(ast, ctx, module, builder);
   }
+
+  case AST_EXTERN_FN: {
+    return codegen_extern_fn(ast, ctx, module, builder);
+  }
   }
 
   return NULL;
@@ -124,22 +128,28 @@ int prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
   }
 }
 
-static int eval_script(const char *filename, JITLangCtx *ctx,
-                       LLVMModuleRef module, LLVMBuilderRef builder) {
+static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder, TypeEnv env,
+                                       Ast **prog) {
+
   char *fcontent = read_script(filename);
   if (!fcontent) {
-    return 1;
+    return NULL;
   }
 
-  Ast *prog = parse_input(fcontent);
-  print_ast(prog);
-  printf("-----\n");
+  *prog = parse_input(fcontent);
+
+  infer_ast(env, *prog);
+
   LLVMTypeRef top_level_ret_type;
 
   LLVMValueRef top_level_func =
-      codegen_top_level(prog, &top_level_ret_type, ctx, module, builder);
+      codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
 
 #ifdef DEBUG_AST
+  print_ast(*prog);
+  printf("-----\n");
   LLVMDumpModule(module);
 #endif
 
@@ -148,7 +158,7 @@ static int eval_script(const char *filename, JITLangCtx *ctx,
 
   if (top_level_func == NULL) {
     fprintf(stderr, "Unable to codegen for node\n");
-    return 1;
+    return NULL;
   }
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result =
@@ -156,8 +166,9 @@ static int eval_script(const char *filename, JITLangCtx *ctx,
   printf("> %d\n", (int)LLVMGenericValueToInt(result, 0));
 
   free(fcontent);
-  return 0; // Return success
+  return result; // Return success
 }
+
 
 int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
@@ -187,9 +198,8 @@ int jit(int argc, char **argv) {
     ht_init(&stack[i]);
   }
 
-  // add_type_lookups(stack);
-  llvm_add_native_functions(stack, module);
-  // add_synth_functions(stack);
+  // shared type env
+  TypeEnv env = NULL;
 
   JITLangCtx ctx = {
       .stack = stack,
@@ -198,11 +208,12 @@ int jit(int argc, char **argv) {
 
   bool repl = false;
 
+  Ast *script_prog;
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-i") == 0) {
       repl = true;
     } else {
-      eval_script(argv[i], &ctx, module, builder);
+      eval_script(argv[i], &ctx, module, builder, env, &script_prog);
     }
   }
 
@@ -224,18 +235,16 @@ int jit(int argc, char **argv) {
 
       Ast *top = top_level_ast(prog);
 
-      Env *env = new_env();
-      infer(env, top, NULL);
+      infer_ast(env, top);
+
 
       // Generate node.
-
       LLVMValueRef top_level_func =
           codegen_top_level(top, &top_level_ret_type, &ctx, module, builder);
 
 #ifdef DEBUG_AST
       print_ast(top);
       LLVMDumpModule(module);
-      print_type((Type *)top->md);
       printf("\n");
 #endif
 
@@ -249,35 +258,10 @@ int jit(int argc, char **argv) {
       LLVMGenericValueRef exec_args[] = {};
       LLVMGenericValueRef result =
           LLVMRunFunction(engine, top_level_func, 0, exec_args);
-      printf("> %d\n", (int)LLVMGenericValueToInt(result, 0));
-      // switch (LLVMGetTypeKind(top_level_ret_type)) {
 
-      // typedef enum {
-      //   LLVMVoidTypeKind,      /**< type with no size */
-      //   LLVMHalfTypeKind,      /**< 16 bit floating point type */
-      //   LLVMFloatTypeKind,     /**< 32 bit floating point type */
-      //   LLVMDoubleTypeKind,    /**< 64 bit floating point type */
-      //   LLVMX86_FP80TypeKind,  /**< 80 bit floating point type (X87) */
-      //   LLVMFP128TypeKind,     /**< 128 bit floating point type (112-bit
-      //   mantissa)*/ LLVMPPC_FP128TypeKind, /**< 128 bit floating point type
-      //   (two 64-bits) */ LLVMLabelTypeKind,     /**< Labels */
-      //   LLVMIntegerTypeKind,   /**< Arbitrary bit width integers */
-      //   LLVMFunctionTypeKind,  /**< Functions */
-      //   LLVMStructTypeKind,    /**< Structures */
-      //   LLVMArrayTypeKind,     /**< Arrays */
-      //   LLVMPointerTypeKind,   /**< Pointers */
-      //   LLVMVectorTypeKind,    /**< Fixed width SIMD vector type */
-      //   LLVMMetadataTypeKind,  /**< Metadata */
-      //   LLVMX86_MMXTypeKind,   /**< X86 MMX */
-      //   LLVMTokenTypeKind,     /**< Tokens */
-      //   LLVMScalableVectorTypeKind, /**< Scalable SIMD vector type */
-      //   LLVMBFloatTypeKind,         /**< 16 bit brain floating point type
-      //   */ LLVMX86_AMXTypeKind,        /**< X86 AMX */
-      //   LLVMTargetExtTypeKind,      /**< Target extension type */
-      // } LLVMTypeKind;
-      //
-      // default:
-      // }
+      printf("> val: ");
+      print_type(top->md);
+      printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
     }
     free(input);
   }

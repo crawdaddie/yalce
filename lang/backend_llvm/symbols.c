@@ -81,7 +81,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ambient_ctx,
 
   ht *scope = ctx.stack + ctx.stack_ptr;
 
-  if (ast->data.AST_LET.expr->tag == AST_LAMBDA) {
+  if (ast->data.AST_LET.expr->tag == AST_LAMBDA || ast->data.AST_LET.expr->tag == AST_EXTERN_FN) {
     JITSymbol *v = malloc(sizeof(JITSymbol));
 
     *v = (JITSymbol){
@@ -117,7 +117,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ambient_ctx,
 
     LLVMValueRef res =
         codegen(ast->data.AST_LET.in_expr, &ctx, module, builder);
-    LLVMDumpValue(res);
+    // LLVMDumpValue(res);
     return res;
   }
 

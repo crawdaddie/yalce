@@ -1,0 +1,10 @@
+let init_audio  = extern fn () -> () ;;
+let printf      = extern fn string -> () ;;
+
+let () = init_audio ();
+let () = printf "hello\n"
+
+
+
+
+
