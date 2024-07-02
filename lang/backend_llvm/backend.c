@@ -6,7 +6,7 @@
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
-#include "type_inference.h"
+#include "types/inference.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Support.h>
@@ -169,7 +169,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   return result; // Return success
 }
 
-
 int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
   LLVMInitializeNativeTarget();
@@ -236,7 +235,6 @@ int jit(int argc, char **argv) {
       Ast *top = top_level_ast(prog);
 
       infer_ast(env, top);
-
 
       // Generate node.
       LLVMValueRef top_level_func =
