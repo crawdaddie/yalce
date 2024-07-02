@@ -7,6 +7,7 @@
 #include "parse.h"
 #include "serde.h"
 #include "types/inference.h"
+#include "types/util.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Support.h>

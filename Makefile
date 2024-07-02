@@ -33,13 +33,18 @@ LANG_LD_FLAGS += `llvm-config --libs --cflags --ldflags core analysis executione
 endif
 
 
-LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
-
 LEX_FILE := $(LANG_SRC_DIR)/lex.l
 YACC_FILE := $(LANG_SRC_DIR)/parser.y
 LEX_OUTPUT := $(LANG_SRC_DIR)/lex.yy.c
 YACC_OUTPUT := $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/y.tab.h
 
+# Ensure y.tab.c and lex.yy.c are built before any object files that depend on them
+$(LANG_OBJS): $(YACC_OUTPUT) $(LEX_OUTPUT)
+
+LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+
+# Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
+LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
 SHARED_LIB_TARGET := $(BUILD_DIR)/libyalce_synth.so
 

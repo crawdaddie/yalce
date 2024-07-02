@@ -35,9 +35,7 @@ This constraint should be enforced by consumers of the library by embedding node
 ```
 make audio_test
 ```
-builds & runs a standalone audio engine test program that plays a square wave
-[program](engine/main.c)
-
+builds & runs a standalone audio engine [test program](engine/main.c) that plays a square wave
 
 ```
 make build/libyalce_synth.so

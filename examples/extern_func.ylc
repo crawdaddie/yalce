@@ -1,5 +1,5 @@
-let init_audio  = extern fn () -> () ;;
-let printf      = extern fn string -> () ;;
+let init_audio  = extern fn () -> () ;; # audio engine library init func
+let printf      = extern fn string -> () ;; # simplified printf from c stdlib
 
 let () = init_audio ();
 let () = printf "hello\n"

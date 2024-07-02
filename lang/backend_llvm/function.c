@@ -1,7 +1,7 @@
 #include "backend_llvm/function.h"
 #include "backend_llvm/symbols.h"
 #include "serde.h"
-#include "type_inference.h"
+#include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -139,8 +139,7 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // LLVMTypeRef llvm_param_types[] = {};
 
     LLVMTypeRef ret_type = llvm_type_id(signature_types);
-    LLVMTypeRef fn_type =
-        LLVMFunctionType(ret_type, NULL, 0, false);
+    LLVMTypeRef fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
 
     LLVMValueRef func = LLVMAddFunction(module, name, fn_type);
     return func;
