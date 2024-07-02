@@ -44,6 +44,17 @@ builds the audio engine as a shared-object library
 
 
 # Lang:
+## Build lang executable
+```
+make
+```
+builds the build/audio_lang executable using a tree-walk interpreter as the evaluator
+
+```
+make LLVM_BACKEND=1
+```
+builds the build/audio_lang executable using the LLVM JIT-compiler as a backend backend 
+
 ## Usage
 ```
 build/audio_lang -i
@@ -60,16 +71,6 @@ build/audio_lang filename.ylc -i
 ```
 compile and run the file filename.ylc and continue to accept interactive repl input
 
-## Build lang executable
-```
-make
-```
-builds the build/audio_lang executable using a tree-walk interpreter as the evaluator
-
-```
-make LLVM_BACKEND=1
-```
-builds the build/audio_lang executable using the LLVM JIT-compiler as a backend backend 
 
 
 ## Audio lang tests
