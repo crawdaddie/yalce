@@ -155,14 +155,15 @@ int main() {
 
   status &= test_parse_body("x + y;\n"
                             "x + z",
-                            "\n(+ x y)\n"
+                            "(+ x y)\n"
                             "(+ x z)");
 
   // lambda declaration
-  status &= test_parse("fn x y -> x + y;", "(x y -> (+ x y))\n");
+  status &= test_parse("fn x y -> x + y;", "(x y -> \n(+ x y))\n");
 
-  status &= test_parse("fn () -> x + y;", "(() -> (+ x y))\n");
-  status &= test_parse("fn x y z -> x + y + z;", "(x y z -> (+ (+ x y) z))\n");
+  status &= test_parse("fn () -> x + y;", "(() -> \n(+ x y))\n");
+  status &=
+      test_parse("fn x y z -> x + y + z;", "(x y z -> \n(+ (+ x y) z))\n");
 
   status &= test_parse("fn x y z -> \n"
                        "  x + y + z;\n"
@@ -177,7 +178,7 @@ int main() {
                             "  x + y + z\n"
                             ";;\n"
                             "1 + 1",
-                            "\n(let sum3 (sum3 x y z -> \n"
+                            "(let sum3 (sum3 x y z -> \n"
                             "(+ 1 1)\n"
                             "(+ (+ x y) z))\n"
                             ")\n"
@@ -209,7 +210,8 @@ int main() {
                             "| 2 -> 0\n"
                             "| _ -> 3)\n"
                             ";",
-                            "\n(let m (m x -> (match x with\n"
+                            "(let m (m x -> \n"
+                            "(match x with\n"
                             "\t1 -> 1\n"
                             "\t2 -> 0\n"
                             "\t_ -> 3\n"
@@ -222,8 +224,8 @@ int main() {
                        "| _ -> 3",
                        "(match (+ x y) with\n"
                        "\t1 -> 1\n"
-                       "\t2 -> "
-                       "\n(let a 1)\n(+ a 1)"
+                       "\t2 -> (let a 1)\n"
+                       "(+ a 1)"
                        "\n\t_ -> 3\n"
                        ")");
 
