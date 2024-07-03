@@ -30,26 +30,20 @@ bool test_parse(char input[], char *expected_sexpr) {
   if (expected_sexpr == NULL && prog == NULL) {
     printf("✅ %s :: parse error\n", input);
     res = true;
-    free(sexpr);
-    free(prog);
-    yyrestart(NULL);
-    // extern Ast *ast_root;
-    ast_root = NULL;
-    return res;
-  }
-
-  sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts[0], sexpr);
-  if (strcmp(sexpr, expected_sexpr) != 0) {
-    printf("❌ %s\n", input);
-    printf("expected %s\n"
-           "     got %s\n",
-           expected_sexpr, sexpr);
-
-    res = false;
   } else {
+    sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts[0], sexpr);
+    if (strcmp(sexpr, expected_sexpr) != 0) {
+      printf("❌ %s\n", input);
+      printf("expected %s\n"
+             "     got %s\n",
+             expected_sexpr, sexpr);
 
-    printf("✅ %s => %s\n", input, sexpr);
-    res = true;
+      res = false;
+    } else {
+
+      printf("✅ %s => %s\n", input, sexpr);
+      res = true;
+    }
   }
 
   free(sexpr);
@@ -66,34 +60,36 @@ bool test_parse_body(char *input, char *expected_sexpr) {
   prog = parse_input(input);
 
   char *sexpr = malloc(sizeof(char) * 200);
+  bool res;
   if (prog == NULL) {
 
     printf("❌ %s\n", input);
     printf("expected %s\n"
            "     got syntax error\n",
            expected_sexpr);
-
-    free(sexpr);
-    free(prog);
-    yyrestart(NULL);
-    // extern Ast *ast_root;
-    ast_root = NULL;
-    return false;
-  }
-
-  sexpr = ast_to_sexpr(prog, sexpr);
-  bool res;
-  if (strcmp(sexpr, expected_sexpr) != 0) {
-    printf("❌ %s\n", input);
-    printf("expected %s\n"
-           "     got %s\n",
-           expected_sexpr, sexpr);
-
     res = false;
+
+    // free(sexpr);
+    // free(prog);
+    // yyrestart(NULL);
+    // // extern Ast *ast_root;
+    // ast_root = NULL;
+    // return false;
   } else {
-    printf("✅ %s :: %s\n", input, sexpr);
-    res = true;
+    sexpr = ast_to_sexpr(prog, sexpr);
+    if (strcmp(sexpr, expected_sexpr) != 0) {
+      printf("❌ %s\n", input);
+      printf("expected %s\n"
+             "     got %s\n",
+             expected_sexpr, sexpr);
+
+      res = false;
+    } else {
+      printf("✅ %s :: %s\n", input, sexpr);
+      res = true;
+    }
   }
+
   free(sexpr);
   free(prog);
   yyrestart(NULL);
@@ -157,7 +153,10 @@ int main() {
 
   status &= test_parse("(g 3 4 + 1) |> f 1 2", "(((f 1) 2) ((g 3) (+ 4 1)))");
 
-  status &= test_parse("x + y;\nx + z", "\n(+ x y)\n(+ x z)");
+  status &= test_parse_body("x + y;\n"
+                            "x + z",
+                            "\n(+ x y)\n"
+                            "(+ x z)");
 
   // lambda declaration
   status &= test_parse("fn x y -> x + y;", "(x y -> (+ x y))\n");
@@ -173,13 +172,12 @@ int main() {
                        "(+ (+ x y) z)\n"
                        "(+ x y))\n");
 
-  status &= test_parse_body("\n"
-                            "let sum3 = fn x y z ->\n"
+  status &= test_parse_body("let sum3 = fn x y z ->\n"
                             "  1 + 1;\n"
                             "  x + y + z\n"
                             ";;\n"
                             "1 + 1",
-                            "\n\n(let sum3 (sum3 x y z -> \n"
+                            "\n(let sum3 (sum3 x y z -> \n"
                             "(+ 1 1)\n"
                             "(+ (+ x y) z))\n"
                             ")\n"
