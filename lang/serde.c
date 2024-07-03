@@ -27,8 +27,10 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   case AST_BODY: {
     for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
       Ast *stmt = ast->data.AST_BODY.stmts[i];
-      buffer = strcat(buffer, "\n");
       buffer = ast_to_sexpr(stmt, buffer);
+      if (i < ast->data.AST_BODY.len - 1) {
+        buffer = strcat(buffer, "\n");
+      }
     }
     break;
   }
@@ -169,7 +171,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
       }
     }
 
-    buffer = strcat(buffer, "-> ");
+    buffer = strcat(buffer, "-> \n");
     buffer = ast_to_sexpr(ast->data.AST_LAMBDA.body, buffer);
     buffer = strcat(buffer, ")\n");
 
@@ -187,11 +189,13 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
       buffer = strcat(buffer, "() ");
     } else if (ast->data.AST_EXTERN_FN.len == 1) {
       buffer = strcat(buffer, "() -> ");
-      buffer = ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[0], buffer);
+      buffer =
+          ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[0], buffer);
     } else {
       int len = ast->data.AST_EXTERN_FN.len;
       for (int i = 0; i < len; i++) {
-        buffer = ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[i], buffer);
+        buffer =
+            ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[i], buffer);
         if (i < len - 1) {
           buffer = strcat(buffer, " -> ");
         }
