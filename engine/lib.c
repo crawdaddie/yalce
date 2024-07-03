@@ -1,4 +1,5 @@
 #include "lib.h"
+#include "ctx.h"
 #include <stdio.h>
 #include <stdlib.h>
 // Node *sq_node(double freq) { return NULL; }
@@ -29,3 +30,25 @@
 //     }
 //   }
 // }
+//
+Node *play_test_synth() {
+  double freq = 100.;
+  double cutoff = 500.;
+  Node *group = group_new(0);
+
+  Node *sq1 = sq_node(freq);
+  group_add_tail(group, sq1);
+
+  Node *sq2 = sq_node(freq * 1.01);
+  group_add_tail(group, sq2);
+
+  Node *summed = sum2_node(sq1, sq2);
+  group_add_tail(group, summed);
+  add_to_dac(summed);
+
+  // return group;
+
+  add_to_dac(group);
+  audio_ctx_add(group);
+  return group;
+}

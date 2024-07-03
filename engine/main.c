@@ -2,7 +2,7 @@
 #include "ctx.h"
 #include "node.h"
 
-Node *synth(double freq, double cutoff) {
+Node *test_synth(double freq, double cutoff) {
   Node *group = group_new(0);
   Node *sq1 = sq_node(freq);
   group_add_tail(group, sq1);
@@ -19,7 +19,7 @@ Node *synth(double freq, double cutoff) {
 
 int main(int argc, char **argv) {
   init_audio();
-  Node *s = synth(50., 500.);
+  Node *s = test_synth(50., 500.);
 
   add_to_dac(s);
   audio_ctx_add(s);

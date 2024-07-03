@@ -10,4 +10,6 @@
 // node_perform sum_perform(Node *node, int nframes, double spf);
 //
 // node_perform mul_perform(Node *node, int nframes, double spf);
+//
+Node *play_test_synth();
 #endif

@@ -83,10 +83,10 @@ void print_type_scheme(TypeScheme *scheme) {
 }
 
 // Helper function to print the type environment (for debugging)
-void print_type_env(TypeEnv env) {
+void print_type_env(TypeEnv *env) {
   while (env != NULL) {
     printf("%s : ", env->name);
-    print_type_scheme(env->scheme);
+    print_type(env->type);
     printf("\n");
     env = env->next;
   }
@@ -133,10 +133,20 @@ bool types_equal(Type *t1, Type *t2) {
   if (t1 == t2) {
     return true;
   }
+
   if (t1->kind != t2->kind) {
     return false;
   }
+
   switch (t1->kind) {
+  case T_INT:
+  case T_NUM:
+  case T_STRING:
+  case T_BOOL:
+  case T_VOID: {
+    return true;
+  }
+
   case T_VAR: {
     return strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
   }

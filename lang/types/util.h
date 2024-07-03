@@ -7,7 +7,7 @@
 
 void print_type(Type *type);
 void print_type_scheme(TypeScheme *scheme);
-void print_type_env(TypeEnv env);
+void print_type_env(TypeEnv *env);
 
 bool is_numeric_type(Type *type);
 bool is_type_variable(Type *type);
