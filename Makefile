@@ -91,19 +91,29 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 
+LANG_TEST_LD_FLAGS := -L./build -lm
+
 test_parse: $(TEST_DIR)/test_parse.o \
 	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
 	$(filter-out \
 		$(BUILD_DIR)/_lang_main.o \
-		$(BUILD_DIR)/main.o $(BUILD_DIR)/test_eval.o \
+		$(BUILD_DIR)/main.o \
+		$(BUILD_DIR)/test_eval.o \
+		$(BUILD_DIR)/synth_functions.o \
+		$(BUILD_DIR)/arithmetic.o \
+		$(BUILD_DIR)/eval.o \
+		$(BUILD_DIR)/backend_vm.o \
+		$(BUILD_DIR)/backend.o \
+		$(BUILD_DIR)/eval_function.o \
+		$(BUILD_DIR)/eval_list.o \
 		$(BUILD_DIR)/test_typecheck.o, \
 	$(LANG_OBJS))
 
-	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_LD_FLAGS)
+	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
 	./$(BUILD_DIR)/test_parse
 
 $(TEST_DIR)/test_parse.o: $(TEST_DIR)/test_parse.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_LD_FLAGS)
+	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
 
 test_eval: $(TEST_DIR)/test_eval.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(filter-out $(BUILD_DIR)/_lang_main.o $(BUILD_DIR)/test_parse.o $(BUILD_DIR)/test_typecheck.o, $(LANG_OBJS))
 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_LD_FLAGS)
@@ -118,14 +128,21 @@ test_typecheck: $(TEST_DIR)/test_typecheck.o \
 		$(BUILD_DIR)/_lang_main.o \
 		$(BUILD_DIR)/main.o \
 		$(BUILD_DIR)/test_eval.o \
+		$(BUILD_DIR)/synth_functions.o \
+		$(BUILD_DIR)/arithmetic.o \
+		$(BUILD_DIR)/eval.o \
+		$(BUILD_DIR)/backend_vm.o \
+		$(BUILD_DIR)/backend.o \
+		$(BUILD_DIR)/eval_function.o \
+		$(BUILD_DIR)/eval_list.o \
 		$(BUILD_DIR)/test_parse.o, \
 	$(LANG_OBJS))
 
-	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_LD_FLAGS)
+	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
 	./$(BUILD_DIR)/test_typecheck
 
 $(TEST_DIR)/test_typecheck.o: $(TEST_DIR)/test_typecheck.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_LD_FLAGS)
+	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
 
 runi: $(BUILD_DIR)/audio_lang
 	./$(BUILD_DIR)/audio_lang $(input) -i
