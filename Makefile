@@ -93,9 +93,7 @@ clean:
 
 LANG_TEST_LD_FLAGS := -L./build -lm
 
-test_parse: $(TEST_DIR)/test_parse.o \
-	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
-	$(filter-out \
+TEST_OBJS = $(filter-out \
 		$(BUILD_DIR)/_lang_main.o \
 		$(BUILD_DIR)/main.o \
 		$(BUILD_DIR)/test_eval.o \
@@ -105,9 +103,15 @@ test_parse: $(TEST_DIR)/test_parse.o \
 		$(BUILD_DIR)/backend_vm.o \
 		$(BUILD_DIR)/backend.o \
 		$(BUILD_DIR)/eval_function.o \
-		$(BUILD_DIR)/eval_list.o \
-		$(BUILD_DIR)/test_typecheck.o, \
+		$(BUILD_DIR)/eval_list.o, \
 	$(LANG_OBJS))
+
+test_parse: $(TEST_DIR)/test_parse.o \
+	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
+	$(filter-out \
+		$(BUILD_DIR)/test_typecheck.o, \
+		$(TEST_OBJS))
+
 
 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
 	./$(BUILD_DIR)/test_parse
@@ -125,18 +129,8 @@ $(TEST_DIR)/test_eval.o: $(TEST_DIR)/test_eval.c $(YACC_OUTPUT) $(LEX_OUTPUT)
 test_typecheck: $(TEST_DIR)/test_typecheck.o \
 	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
 	$(filter-out \
-		$(BUILD_DIR)/_lang_main.o \
-		$(BUILD_DIR)/main.o \
-		$(BUILD_DIR)/test_eval.o \
-		$(BUILD_DIR)/synth_functions.o \
-		$(BUILD_DIR)/arithmetic.o \
-		$(BUILD_DIR)/eval.o \
-		$(BUILD_DIR)/backend_vm.o \
-		$(BUILD_DIR)/backend.o \
-		$(BUILD_DIR)/eval_function.o \
-		$(BUILD_DIR)/eval_list.o \
 		$(BUILD_DIR)/test_parse.o, \
-	$(LANG_OBJS))
+		$(TEST_OBJS))
 
 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
 	./$(BUILD_DIR)/test_typecheck
