@@ -201,9 +201,14 @@ int typecheck_ast() {
                    ";",
                    T(create_type_multi_param_fn(1, T(&t_int), &t_int)));
 
-  // // currying
-  // status &= test_typecheck("let m = fn x y z -> x + y + z;;\n"
-  //                          "m 1 2");
+  // currying
+  status &=
+      tcheck("let m = fn x y z -> x + y + z;;\n"
+             "m 1 2",
+             T(create_type_multi_param_fn(
+                   3, T(&TVAR("t2"), &TVAR("t1"), &TVAR("t2")), &TVAR("t2")),
+
+               create_type_multi_param_fn(1, T(&t_int), &t_int)));
   return status;
 }
 
