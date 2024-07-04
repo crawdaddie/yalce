@@ -129,6 +129,7 @@ Type *builtin_type(Ast *id) {
 
   return NULL;
 }
+
 bool types_equal(Type *t1, Type *t2) {
   if (t1 == t2) {
     return true;

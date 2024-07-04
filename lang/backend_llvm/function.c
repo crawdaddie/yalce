@@ -11,6 +11,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
+  printf("codegen function: ");
+  print_type(ast->md);
+  printf("\n");
   int fn_len = ast->data.AST_LAMBDA.len;
 
   // Create argument list.
