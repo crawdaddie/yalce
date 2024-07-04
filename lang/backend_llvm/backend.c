@@ -3,6 +3,7 @@
 #include "backend_llvm/common.h"
 #include "backend_llvm/function.h"
 #include "backend_llvm/symbols.h"
+#include "codegen_types.h"
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
@@ -89,7 +90,8 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
                                       LLVMBuilderRef builder) {
 
   // Create function type.
-  LLVMTypeRef funcType = LLVMFunctionType(LLVMInt32Type(), NULL, 0, 0);
+  LLVMTypeRef funcType =
+      LLVMFunctionType(type_to_llvm_type(ast->md), NULL, 0, 0);
 
   // Create function.
   LLVMValueRef func = LLVMAddFunction(module, "tmp", funcType);
@@ -131,7 +133,7 @@ int prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
 
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMModuleRef module,
-                                       LLVMBuilderRef builder, TypeEnv *env,
+                                       LLVMBuilderRef builder, TypeEnv **env,
                                        Ast **prog) {
 
   char *fcontent = read_script(filename);
@@ -213,7 +215,7 @@ int jit(int argc, char **argv) {
     if (strcmp(argv[i], "-i") == 0) {
       repl = true;
     } else {
-      eval_script(argv[i], &ctx, module, builder, env, &script_prog);
+      eval_script(argv[i], &ctx, module, builder, &env, &script_prog);
     }
   }
 
@@ -235,7 +237,7 @@ int jit(int argc, char **argv) {
 
       Ast *top = top_level_ast(prog);
 
-      infer_ast(env, top);
+      infer_ast(&env, top);
 
       // Generate node.
       LLVMValueRef top_level_func =
@@ -258,9 +260,30 @@ int jit(int argc, char **argv) {
       LLVMGenericValueRef result =
           LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
-      printf("> val: ");
+      printf("> ['");
       print_type(top->md);
-      printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
+      printf("]");
+      switch (((Type *)top->md)->kind) {
+      case T_INT: {
+        printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
+        break;
+      }
+
+      case T_NUM: {
+        printf(" %f\n",
+               (double)LLVMGenericValueToFloat(LLVMDoubleType(), result));
+        break;
+      }
+
+      case T_STRING: {
+        printf(" %s\n", (char *)LLVMGenericValueToPointer(result));
+        break;
+      }
+
+      default:
+        printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
+        break;
+      }
     }
     free(input);
   }

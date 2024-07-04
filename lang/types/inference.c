@@ -1,4 +1,5 @@
 #include "types/inference.h"
+#include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
 #include <stdlib.h>
@@ -59,7 +60,7 @@ static void free_fn_type_copy(Type *fn) {
 
 // Main type inference function
 //
-Type *infer(TypeEnv *env, Ast *ast) {
+Type *infer(TypeEnv **env, Ast *ast) {
   if (!ast)
     return NULL;
 
@@ -67,15 +68,12 @@ Type *infer(TypeEnv *env, Ast *ast) {
 
   switch (ast->tag) {
   case AST_BODY: {
-    TypeEnv *current_env = env;
+    TypeEnv **current_env = env;
     for (size_t i = 0; i < ast->data.AST_BODY.len; i++) {
       Ast *stmt = ast->data.AST_BODY.stmts[i];
       type = infer(current_env, stmt);
-      if (stmt->tag == AST_LET) {
-        current_env =
-            env_extend(current_env, stmt->data.AST_LET.name.chars, type);
-      }
     }
+
     break;
   }
   case AST_BINOP: {
@@ -135,7 +133,7 @@ Type *infer(TypeEnv *env, Ast *ast) {
     break;
 
   case AST_IDENTIFIER: {
-    type = env_lookup(env, ast->data.AST_IDENTIFIER.value);
+    type = env_lookup(*env, ast->data.AST_IDENTIFIER.value);
     // printf("infer id %s: ", ast->data.AST_IDENTIFIER.value);
     // print_type(type);
     // printf("\n");
@@ -148,10 +146,13 @@ Type *infer(TypeEnv *env, Ast *ast) {
     break;
   }
   case AST_LET: {
+
     Type *expr_type = infer(env, ast->data.AST_LET.expr);
-    TypeEnv *new_env = env_extend(env, ast->data.AST_LET.name.chars, expr_type);
+
+    *env = env_extend(*env, ast->data.AST_LET.name.chars, expr_type);
+
     if (ast->data.AST_LET.in_expr) {
-      type = infer(new_env, ast->data.AST_LET.in_expr);
+      type = infer(env, ast->data.AST_LET.in_expr);
     } else {
       type = expr_type;
     }
@@ -191,7 +192,7 @@ Type *infer(TypeEnv *env, Ast *ast) {
       current = next;
     }
 
-    TypeEnv *new_env = env;
+    TypeEnv *new_env = *env;
 
     // If the lambda has a name, add it to the environment for recursion
     if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
@@ -201,12 +202,13 @@ Type *infer(TypeEnv *env, Ast *ast) {
 
     // Add parameters to the environment
     for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+
       new_env = env_extend(new_env, ast->data.AST_LAMBDA.params[i].chars,
                            param_types[i]);
     }
 
     // Infer the type of the body
-    Type *body_type = infer(new_env, ast->data.AST_LAMBDA.body);
+    Type *body_type = infer(&new_env, ast->data.AST_LAMBDA.body);
 
     // Unify the return type with the body type
     unify(current, body_type);
@@ -272,7 +274,7 @@ Type *infer(TypeEnv *env, Ast *ast) {
   return type;
 }
 
-Type *infer_ast(TypeEnv *env, Ast *ast) {
+Type *infer_ast(TypeEnv **env, Ast *ast) {
   // TypeTypeEnv env = NULL;
   // Add initial environment entries (e.g., built-in functions)
   // env = extend_env(env, "+", create_type_scheme(...));

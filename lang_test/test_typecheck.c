@@ -72,8 +72,11 @@ bool tcheck(char input[], Type **exp_types) {
 
   reset_type_var_counter();
 
+  TypeEnv *env = NULL;
   printf("\e[1minput:\e[0m\n%s\n", input);
-  Type *tcheck_val = infer_ast(NULL, prog);
+
+  Type *tcheck_val = infer_ast(&env, prog);
+
   if (!tcheck_val) {
     printf("❌ Type inference failed\n");
   } else {
@@ -102,7 +105,7 @@ bool tcheck_w_env(TypeEnv *env, char input[], Type **exp_types) {
   reset_type_var_counter();
 
   printf("\e[1minput:\e[0m\n%s\n", input);
-  Type *tcheck_val = infer_ast(env, prog);
+  Type *tcheck_val = infer_ast(&env, prog);
   if (!tcheck_val) {
     printf("❌ Type inference failed\n");
   } else {
