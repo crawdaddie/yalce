@@ -157,33 +157,20 @@ Type *infer(TypeEnv *env, Ast *ast) {
     }
     break;
   }
-    /*
-  case AST_LAMBDA: {
-    Type *param_types[ast->data.AST_LAMBDA.len];
-    for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-      param_types[i] = next_tvar();
+
+  case AST_EXTERN_FN: {
+    int param_count = ast->data.AST_EXTERN_FN.len - 1;
+    Type **params = malloc(param_count * sizeof(Type *));
+    for (int i = 0; i < param_count; i++) {
+      params[i] = builtin_type(ast->data.AST_EXTERN_FN.signature_types + i);
     }
-
-    TypeEnv *new_env = env;
-    for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-      new_env = env_extend(new_env, ast->data.AST_LAMBDA.params[i].chars,
-                           param_types[i]);
-    }
-
-    Type *body_type = infer(new_env, ast->data.AST_LAMBDA.body);
-    type = body_type;
-
-    for (int i = ast->data.AST_LAMBDA.len - 1; i >= 0; i--) {
-
-      type = create_type_fn(param_types[i], type);
-    }
-    printf("inferred fn type: ");
-    print_type(type);
-    printf("\n");
-
+    Type *ex_t = create_type_multi_param_fn(
+        param_count, params,
+        builtin_type(ast->data.AST_EXTERN_FN.signature_types + param_count));
+    type = ex_t;
     break;
   }
-*/
+
   case AST_LAMBDA: {
     Type *param_types[ast->data.AST_LAMBDA.len];
     for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
@@ -246,16 +233,13 @@ Type *infer(TypeEnv *env, Ast *ast) {
       expected_fn_type = create_type_fn(arg_types[i], expected_fn_type);
     }
 
-    printf("apply: ");
-    print_type(expected_fn_type);
-    printf(" -- ");
-    print_type(fn_type);
-    printf("\n");
+    // printf("apply: ");
+    // print_type(expected_fn_type);
+    // printf(" -- ");
+    // print_type(fn_type);
+    // printf("\n");
 
-    // Type *substitutions[100] = {NULL};
     unify(fn_type, expected_fn_type);
-
-    // unify(make_fn_type_specific(substitutions, fn_type), expected_fn_type);
 
     free_fn_type_copy(fn_type);
     type = result_type;

@@ -131,7 +131,7 @@ int prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
 
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMModuleRef module,
-                                       LLVMBuilderRef builder, TypeEnv env,
+                                       LLVMBuilderRef builder, TypeEnv *env,
                                        Ast **prog) {
 
   char *fcontent = read_script(filename);
@@ -199,7 +199,7 @@ int jit(int argc, char **argv) {
   }
 
   // shared type env
-  TypeEnv env = NULL;
+  TypeEnv *env = NULL;
 
   JITLangCtx ctx = {
       .stack = stack,
