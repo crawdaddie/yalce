@@ -34,7 +34,7 @@ static Type *copy_type(Type *t) {
   *copy = *t;
   if (copy->kind == T_VAR) {
     char *new_name = malloc(5 * sizeof(char));
-    sprintf(new_name, "%s'", t->data.T_VAR);
+    sprintf(new_name, "%s", t->data.T_VAR);
     copy->data.T_VAR = new_name;
   }
   return copy;
@@ -49,6 +49,14 @@ static Type *copy_fn_type(Type *fn) {
                               copy_fn_type(fn->data.T_FN.to));
   return copy;
 }
+static void free_fn_type_copy(Type *fn) {
+  if (fn->kind == T_FN) {
+    free_fn_type_copy(fn->data.T_FN.from);
+    free_fn_type_copy(fn->data.T_FN.to);
+    free(fn);
+  }
+}
+
 // Main type inference function
 //
 Type *infer(TypeEnv *env, Ast *ast) {
@@ -221,7 +229,8 @@ Type *infer(TypeEnv *env, Ast *ast) {
     break;
   }
   case AST_APPLICATION: {
-    Type *fn_type = infer(env, ast->data.AST_APPLICATION.function);
+    Type *fn_type =
+        copy_fn_type(infer(env, ast->data.AST_APPLICATION.function));
     if (!fn_type) {
       return NULL;
     }
@@ -236,13 +245,19 @@ Type *infer(TypeEnv *env, Ast *ast) {
     for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
       expected_fn_type = create_type_fn(arg_types[i], expected_fn_type);
     }
+
     printf("apply: ");
     print_type(expected_fn_type);
     printf(" -- ");
     print_type(fn_type);
     printf("\n");
 
+    // Type *substitutions[100] = {NULL};
     unify(fn_type, expected_fn_type);
+
+    // unify(make_fn_type_specific(substitutions, fn_type), expected_fn_type);
+
+    free_fn_type_copy(fn_type);
     type = result_type;
     break;
   }
