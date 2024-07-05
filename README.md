@@ -46,7 +46,7 @@ builds the audio engine as a shared-object library
 # Lang:
 the DSL is a language loosely based on ocaml syntax for creating and linking audio node objects
 it supports declaring external functions:
-```
+```ocaml
 let init_audio  = extern fn () -> () ;; # audio engine library init func
 let printf      = extern fn string -> () ;; # simplified printf from c stdlib
 
@@ -54,7 +54,7 @@ let () = init_audio ();
 let () = printf "hello\n"
 ```
 basic arithmetic, functions, currying and piping:
-```
+```ocaml
 (1 + 2) * 8;
 
 let f = fn x y z -> x + y + z ;;
@@ -67,7 +67,8 @@ g 3 # returns: 6
 
 ```
 recursion and basic pattern-matching:
-```
+
+```ocaml
 let fib = fn x ->
   (match x with
   | 0 -> 0
