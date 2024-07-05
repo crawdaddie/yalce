@@ -66,6 +66,17 @@ g 3 # returns: 6
 3 |> f 1 2; # evaluates f 1 2 3 
 
 ```
+recursion and basic pattern-matching:
+```
+let fib = fn x ->
+  (match x with
+  | 0 -> 0
+  | 1 -> 1
+  | _ -> (fib (x - 1)) + (fib (x - 2))
+  )
+;;
+
+```
 
  
 ## Build lang executable

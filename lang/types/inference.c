@@ -3,6 +3,7 @@
 #include "types/type.h"
 #include "types/util.h"
 #include <stdlib.h>
+#include <string.h>
 
 // Global variables
 static int type_var_counter = 0;
@@ -57,6 +58,10 @@ static void free_fn_type_copy(Type *fn) {
     free(fn);
   }
 }
+static bool is_placeholder(Ast *p) {
+  return p->tag == AST_IDENTIFIER &&
+         strcmp(p->data.AST_IDENTIFIER.value, "_") == 0;
+}
 
 // Main type inference function
 //
@@ -92,10 +97,9 @@ Type *infer(TypeEnv **env, Ast *ast) {
         unify(lt, rt);
         type = lt;
 
-        fprintf(
-            stderr,
-            "Not implemented err: type coercion for non-arithmetic (eg T_VAR) "
-            "type to Arithmetic typeclass\n");
+        fprintf(stderr, "Not implemented warning: type coercion for "
+                        "non-arithmetic (eg T_VAR) "
+                        "type to Arithmetic typeclass\n");
         break;
       }
       // arithmetic binop
@@ -110,7 +114,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
         unify(lt, rt);
         type = lt;
 
-        fprintf(stderr, "Not implemented err: type coercion for non-ord "
+        fprintf(stderr, "Not implemented warning: type coercion for non-ord "
                         "type to Ord typeclass\n");
         break;
       }
@@ -253,15 +257,22 @@ Type *infer(TypeEnv **env, Ast *ast) {
     Type *expr_type = infer(env, expr);
 
     Type *test_type;
-    Type *body_type;
+    Type *body_type = NULL;
 
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
-      Ast *test = ++branches;
-      test_type = infer(env, test);
-      unify(expr_type, test_type);
+      Ast *test = branches;
+      if (!ast_is_placeholder_id(test)) {
+        test_type = infer(env, test);
+        unify(expr_type, test_type);
+      }
 
-      Ast *body = ++branches;
-      body_type = infer(env, body);
+      Ast *body = branches + 1;
+      Type *btype = infer(env, body);
+      if (body_type != NULL) {
+        unify(btype, body_type);
+      }
+
+      body_type = btype;
 
       branches += 2;
     }

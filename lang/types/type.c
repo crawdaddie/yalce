@@ -20,7 +20,7 @@ Type t_void =   {T_VOID};
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
   TypeEnv *new_env = malloc(sizeof(TypeEnv));
-  new_env->name = strdup(name);
+  new_env->name = name;
   new_env->type = type;
   new_env->next = env;
   return new_env;

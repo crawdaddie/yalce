@@ -6,4 +6,7 @@
 #include "llvm-c/Types.h"
 LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
+
+LLVMValueRef codegen_int_binop(LLVMBuilderRef builder, token_type op,
+                               LLVMValueRef l, LLVMValueRef r);
 #endif

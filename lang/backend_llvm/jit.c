@@ -1,8 +1,6 @@
-#include "backend_llvm/backend.h"
-#include "backend_llvm/binop.h"
+#include "backend_llvm/jit.h"
 #include "backend_llvm/common.h"
-#include "backend_llvm/function.h"
-#include "backend_llvm/symbols.h"
+#include "codegen.h"
 #include "codegen_types.h"
 #include "input.h"
 #include "parse.h"
@@ -11,6 +9,7 @@
 #include "types/util.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/IRReader.h>
 #include <llvm-c/Support.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Transforms/Scalar.h>
@@ -26,63 +25,6 @@ static Ast *top_level_ast(Ast *body) {
   size_t len = body->data.AST_BODY.len;
   Ast *last = body->data.AST_BODY.stmts[len - 1];
   return last;
-}
-
-LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                     LLVMBuilderRef builder) {
-  switch (ast->tag) {
-
-  case AST_BODY: {
-    LLVMValueRef val;
-    for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
-      Ast *stmt = ast->data.AST_BODY.stmts[i];
-      val = codegen(stmt, ctx, module, builder);
-    }
-    return val;
-  }
-  case AST_INT: {
-    return LLVMConstInt(LLVMInt32Type(), ast->data.AST_INT.value, true);
-  }
-
-  case AST_NUMBER: {
-    return LLVMConstReal(LLVMDoubleType(), ast->data.AST_INT.value);
-  }
-
-  case AST_STRING: {
-    char *chars = ast->data.AST_STRING.value;
-    int length = ast->data.AST_STRING.length;
-    ObjString vstr = (ObjString){
-        .chars = chars, .length = length, .hash = hash_string(chars, length)};
-    return LLVMBuildGlobalStringPtr(builder, chars, ".str");
-  }
-
-  case AST_BOOL: {
-    return LLVMConstInt(LLVMInt1Type(), ast->data.AST_BOOL.value, false);
-  }
-  case AST_BINOP: {
-    return codegen_binop(ast, ctx, module, builder);
-  }
-
-  case AST_LET: {
-    return codegen_assignment(ast, ctx, module, builder);
-  }
-  case AST_IDENTIFIER: {
-    return codegen_identifier(ast, ctx, module, builder);
-  }
-  case AST_LAMBDA: {
-    return codegen_lambda(ast, ctx, module, builder);
-  }
-
-  case AST_APPLICATION: {
-    return codegen_fn_application(ast, ctx, module, builder);
-  }
-
-  case AST_EXTERN_FN: {
-    return codegen_extern_fn(ast, ctx, module, builder);
-  }
-  }
-
-  return NULL;
 }
 
 static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,

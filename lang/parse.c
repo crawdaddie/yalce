@@ -300,7 +300,7 @@ Ast *extern_typed_signature_push(Ast *sig, Ast *item) {
   return sig;
 }
 
-bool ast_is_placeholder(Ast *ast) {
+bool ast_is_placeholder_id(Ast *ast) {
   if (ast->tag != AST_IDENTIFIER) {
     return false;
   }

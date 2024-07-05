@@ -1,4 +1,4 @@
-#include "backend_llvm/symbols.h"
+#include "backend_llvm/codegen_symbols.h"
 #include "serde.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -81,7 +81,8 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ambient_ctx,
 
   ht *scope = ctx.stack + ctx.stack_ptr;
 
-  if (ast->data.AST_LET.expr->tag == AST_LAMBDA || ast->data.AST_LET.expr->tag == AST_EXTERN_FN) {
+  if (ast->data.AST_LET.expr->tag == AST_LAMBDA ||
+      ast->data.AST_LET.expr->tag == AST_EXTERN_FN) {
     JITSymbol *v = malloc(sizeof(JITSymbol));
 
     *v = (JITSymbol){
