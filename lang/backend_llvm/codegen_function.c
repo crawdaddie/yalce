@@ -1,5 +1,5 @@
-#include "backend_llvm/function.h"
-#include "backend_llvm/symbols.h"
+#include "backend_llvm/codegen_function.h"
+#include "backend_llvm/codegen_symbols.h"
 #include "serde.h"
 #include "types/util.h"
 #include "llvm-c/Core.h"
@@ -11,9 +11,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
-  printf("codegen function: ");
-  print_type(ast->md);
-  printf("\n");
   int fn_len = ast->data.AST_LAMBDA.len;
 
   // Create argument list.

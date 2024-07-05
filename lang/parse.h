@@ -237,5 +237,6 @@ Ast *typed_arg_list(Ast *list, Ast *item);
 Ast *extern_typed_signature(Ast *item);
 Ast *extern_typed_signature_push(Ast *sig, Ast *def);
 Ast *ast_extern_fn(ObjString name, Ast *signature);
-bool ast_is_placeholder(Ast *ast);
+bool ast_is_placeholder_id(Ast *ast);
+
 #endif

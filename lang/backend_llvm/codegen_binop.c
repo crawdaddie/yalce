@@ -1,4 +1,4 @@
-#include "backend_llvm/binop.h"
+#include "backend_llvm/codegen_binop.h"
 #include "backend_llvm/common.h"
 #include "parse.h"
 #include "serde.h"
@@ -56,8 +56,8 @@ static int float_ops_map[] = {
 
 // clang-format on
 
-static LLVMValueRef codegen_int_binop(LLVMBuilderRef builder, token_type op,
-                                      LLVMValueRef l, LLVMValueRef r) {
+LLVMValueRef codegen_int_binop(LLVMBuilderRef builder, token_type op,
+                               LLVMValueRef l, LLVMValueRef r) {
 
   switch (op) {
   case TOKEN_PLUS:
@@ -115,7 +115,6 @@ static bool is_llvm_int(LLVMValueRef v) {
   LLVMTypeKind kind = LLVMGetTypeKind(LLVMTypeOf(v));
   return kind == LLVMIntegerTypeKind;
 }
-
 
 LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
