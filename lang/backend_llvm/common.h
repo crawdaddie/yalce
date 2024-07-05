@@ -21,6 +21,7 @@ typedef struct {
   symbol_type symbol_type;
   LLVMTypeRef llvm_type;
   LLVMValueRef val;
+  int idx;
 } JITSymbol;
 
 typedef struct {

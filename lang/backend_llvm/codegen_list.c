@@ -52,9 +52,9 @@ static LLVMValueRef ll_insert_at_head(LLVMValueRef old_head,
                                       LLVMTypeRef node_type,
                                       LLVMBuilderRef builder) {
 
-  // Set the next pointer to null
   LLVMValueRef next_ptr =
       LLVMBuildStructGEP2(builder, node_type, new_head, 1, "next_ptr");
+
   LLVMBuildStore(builder, old_head, next_ptr);
   return new_head;
 }
@@ -77,6 +77,10 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   while (end--) {
     LLVMValueRef data =
         codegen(ast->data.AST_LIST.items + end, ctx, module, builder);
+
+    fprintf(stderr, "%d inserting at head: ", end);
+    LLVMDumpValue(data);
+    fprintf(stderr, "\n");
     LLVMValueRef new_head =
         ll_create_list_node(node_type, data, ctx, module, builder);
     head = ll_insert_at_head(head, new_head, node_type, builder);

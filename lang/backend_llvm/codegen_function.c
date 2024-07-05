@@ -1,5 +1,6 @@
 #include "backend_llvm/codegen_function.h"
 #include "backend_llvm/codegen_symbols.h"
+#include "codegen_types.h"
 #include "serde.h"
 #include "types/util.h"
 #include "llvm-c/Core.h"
@@ -14,17 +15,20 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int fn_len = ast->data.AST_LAMBDA.len;
 
   // Create argument list.
+  Type *fn_type = ast->md;
   LLVMTypeRef *params = malloc(sizeof(LLVMTypeRef) * fn_len);
   for (int i = 0; i < fn_len; i++) {
-    params[i] = LLVMInt32Type();
+    params[i] = type_to_llvm_type(fn_type->data.T_FN.from);
+    fn_type = fn_type->data.T_FN.to;
   }
 
   // Create function type.
-  LLVMTypeRef fn_type = LLVMFunctionType(LLVMInt32Type(), params, fn_len, 0);
+  LLVMTypeRef llvm_fn_type =
+      LLVMFunctionType(type_to_llvm_type(fn_type), params, fn_len, 0);
 
   // Create function.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
-  LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, fn_type);
+  LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, llvm_fn_type);
   LLVMSetLinkage(func, LLVMExternalLinkage);
   free(params);
   return func;
@@ -58,6 +62,7 @@ LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     JITSymbol *v = malloc(sizeof(JITSymbol));
     *v = (JITSymbol){.llvm_type = param_type(),
                      .val = param_val,
+                     .idx = i,
                      .symbol_type = STYPE_FN_PARAM};
 
     // add param value to hash-table
