@@ -36,7 +36,7 @@ typedef struct Type {
     // inference.
     const char *T_VAR;
     struct {
-      char *name;
+      const char *name;
       struct Type **args;
       int num_args;
     } T_CONS;
@@ -84,6 +84,7 @@ Type *create_type_var(const char *name);
 Type *tvar(const char *name);
 
 Type *create_type_cons(const char *name, Type *args, int num_args);
+Type *tcons(const char *name, Type **args, int num_args);
 Type *create_type_fn(Type *from, Type *to);
 Type *create_type_multi_param_fn(int num_params, Type **params,
                                  Type *return_type);

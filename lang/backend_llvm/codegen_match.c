@@ -11,9 +11,13 @@ LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
                                      JITLangCtx *ctx, LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
   if (((Type *)pattern->md)->kind == T_INT) {
-    printf("build int compare\n");
     return codegen_int_binop(builder, TOKEN_EQUALITY, expr_val,
                              codegen(pattern, ctx, module, builder));
+  }
+
+  if (((Type *)pattern->md)->kind == T_NUM) {
+    return codegen_float_binop(builder, TOKEN_EQUALITY, expr_val,
+                               codegen(pattern, ctx, module, builder));
   }
   return NULL;
 }

@@ -9,4 +9,7 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef codegen_int_binop(LLVMBuilderRef builder, token_type op,
                                LLVMValueRef l, LLVMValueRef r);
+
+LLVMValueRef codegen_float_binop(LLVMBuilderRef builder, token_type op,
+                                 LLVMValueRef l, LLVMValueRef r);
 #endif

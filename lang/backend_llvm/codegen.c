@@ -3,7 +3,26 @@
 #include "backend_llvm/codegen_function.h"
 #include "backend_llvm/codegen_match.h"
 #include "backend_llvm/codegen_symbols.h"
+#include "codegen_list.h"
+#include "codegen_types.h"
 #include "llvm-c/Core.h"
+#include <stdlib.h>
+
+// Function to create an LLVM tuple value
+LLVMValueRef codegen_tuple(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+
+  LLVMTypeRef tuple_type = type_to_llvm_type(ast->md);
+  LLVMValueRef tuple = LLVMGetUndef(tuple_type);
+
+  for (int i = 0; i < ast->data.AST_LIST.len; i++) {
+    // Convert each element's AST node to its corresponding LLVM value
+    LLVMValueRef tuple_element =
+        codegen(ast->data.AST_LIST.items + i, ctx, module, builder);
+    tuple = LLVMBuildInsertValue(builder, tuple, tuple_element, i, "");
+  }
+  return tuple;
+}
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
@@ -38,6 +57,14 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   case AST_BINOP: {
     return codegen_binop(ast, ctx, module, builder);
+  }
+
+  case AST_TUPLE: {
+    return codegen_tuple(ast, ctx, module, builder);
+  }
+
+  case AST_LIST: {
+    return codegen_list(ast, ctx, module, builder);
   }
 
   case AST_LET: {

@@ -164,6 +164,7 @@ int typecheck_ast() {
   status &= tcheck("(1 + 2) * 8. <= 2", T(&t_bool));
   status &= tcheck("let a = (1 + 2) * 8 in a + 212.", T(&t_num));
   status &= tcheck("let a = (1 + 2) * 8 in a + 212", T(&t_int));
+
   //
   status &= tcheck("let f = fn x -> (1 + 2 ) * 8 - x;",
                    T(&(Type){T_FN, {.T_FN = {&t_int, &t_int}}}));
@@ -212,6 +213,20 @@ int typecheck_ast() {
                    3, T(&TVAR("t2"), &TVAR("t1"), &TVAR("t2")), &TVAR("t2")),
 
                create_type_multi_param_fn(1, T(&t_int), &t_int)));
+
+  status &=
+      tcheck("(1, 2, 3)", T(tcons("Tuple", T(&t_int, &t_int, &t_int), 3)));
+
+  status &= tcheck("(1, 2., \"hello\", false)",
+                   T(tcons("Tuple", T(&t_int, &t_num, &t_string, &t_bool), 4)));
+
+  status &= tcheck(
+      "(1, 2., \"hello\", false, ())",
+      T(tcons("Tuple", T(&t_int, &t_num, &t_string, &t_bool, &t_void), 5)));
+
+  status &= tcheck("[1, 2, 3]", T(tcons("List", T(&t_int), 1)));
+  status &= tcheck("[1., 2., 3.]", T(tcons("List", T(&t_num), 1)));
+
   return status;
 }
 

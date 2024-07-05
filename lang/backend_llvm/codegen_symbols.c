@@ -29,7 +29,7 @@ int codegen_lookup_id(const char *id, int length, JITLangCtx *ctx,
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 
-  char *chars = ast->data.AST_IDENTIFIER.value;
+  const char *chars = ast->data.AST_IDENTIFIER.value;
   int length = ast->data.AST_IDENTIFIER.length;
 
   JITSymbol res;
@@ -40,7 +40,9 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (res.symbol_type == STYPE_TOP_LEVEL_VAR) {
     LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
-    LLVMValueRef val = LLVMGetInitializer(glob);
+    // LLVMValueRef val = LLVMGetInitializer(glob);
+    //
+    LLVMValueRef val = LLVMBuildLoad2(builder, res.llvm_type, glob, "");
     return val;
   } else if (res.symbol_type == STYPE_LOCAL_VAR) {
     LLVMValueRef val = LLVMBuildLoad2(builder, res.llvm_type, res.val, "");
@@ -89,7 +91,26 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ambient_ctx,
         .llvm_type = type, .symbol_type = STYPE_FUNCTION, .val = expr_val};
 
     ht_set_hash(scope, name.chars, name.hash, v);
-  } else if (ctx.stack_ptr == 0) {
+  } else if (ctx.stack_ptr == 0 && ast->data.AST_LET.expr->tag == AST_LIST) {
+
+    LLVMValueRef alloca_val =
+        LLVMAddGlobalInAddressSpace(module, type, name.chars, 0);
+
+    LLVMSetInitializer(alloca_val, LLVMConstNull(type));
+
+    LLVMBuildStore(builder, expr_val, alloca_val);
+
+    JITSymbol *v = malloc(sizeof(JITSymbol));
+
+    *v = (JITSymbol){.llvm_type = type, .symbol_type = STYPE_TOP_LEVEL_VAR};
+
+    ht_set_hash(scope, name.chars, name.hash, v);
+
+    return expr_val;
+  }
+
+  else if (ctx.stack_ptr == 0) {
+
     // top-level
     LLVMValueRef alloca_val =
         LLVMAddGlobalInAddressSpace(module, type, name.chars, 0);
