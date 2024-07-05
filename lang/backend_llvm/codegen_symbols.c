@@ -25,6 +25,10 @@ int codegen_lookup_id(const char *id, int length, JITLangCtx *ctx,
   *result = *res;
   return 0;
 }
+static LLVMValueRef current_func(LLVMBuilderRef builder) {
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  return LLVMGetBasicBlockParent(current_block);
+}
 
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
@@ -53,7 +57,9 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // LLVMValueRef param_val = LLVMGetParam(func, i);
     // LLVMDumpValue(res.val);
     // LLVMDumpType(res.llvm_type);
-    return res.val;
+    int idx = res.idx;
+
+    return LLVMGetParam(current_func(builder), idx);
   } else if (res.symbol_type == STYPE_FUNCTION) {
     return LLVMGetNamedFunction(module, chars);
   }

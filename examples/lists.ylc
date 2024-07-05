@@ -1,1 +1,7 @@
-let a = [1,2,3,4]
+let list_func = fn x -> 
+  let a = [2,3,4,x];
+  a
+;;
+
+list_func 2
+

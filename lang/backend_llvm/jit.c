@@ -231,18 +231,15 @@ int jit(int argc, char **argv) {
         if (strcmp(top_type->data.T_CONS.name, "List") == 0 &&
             top_type->data.T_CONS.args[0]->kind == T_INT) {
 
-          int_ll_t *l = (int_ll_t *)LLVMGenericValueToPointer(result);
-          printf("list:%p", l);
-          // Traverse and print the list
-          int_ll_t *current = l;
+          int_ll_t *current = (int_ll_t *)LLVMGenericValueToPointer(result);
+          printf("list: %p\n", current);
+          //        curret->next->el, current->next->next->el,
+          //        current->next->next->next->el);
+          //
           while (current != NULL) {
-            printf("%d ", current->el);
+            printf("%d, \n", current->el);
             current = current->next;
           }
-
-          // while (l != NULL) {
-          //   l = l->next;
-          // }
         }
         break;
       }
