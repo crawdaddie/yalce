@@ -251,7 +251,10 @@ Ast *ast_tuple(Ast *list) {
   // print_ast(list);
 
   if (list->tag == AST_LIST) {
+
     list->tag = AST_TUPLE;
+    // Ast **members = list->data.AST_TUPLE.members;
+    // list->data.AST_TUPLE;
     return list;
   }
   return NULL;

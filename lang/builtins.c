@@ -21,7 +21,7 @@ value_type _list_type(Value *argv) {
   IntList *list = (IntList *)(*argv).value.vlist;
   return list->type;
 }
-Value list_type(Value *argv) { return INT(_list_type(argv)); }
+Value __list_type(Value *argv) { return INT(_list_type(argv)); }
 
 #define LIST_NTH(list, list_type, item_type, n)                                \
   item_type item = ((list_type *)list->value.vlist)->items[n]
@@ -135,7 +135,7 @@ static native_symbol_map builtin_native_fns[NUM_NATIVES] = {
     {"print", NATIVE_FN(_print, 1)},
     {"printv", NATIVE_FN(_printv, 1)},
     {"List.length", NATIVE_FN(list_length, 1)},
-    {"List.type", NATIVE_FN(list_type, 1)},
+    {"List.type", NATIVE_FN(__list_type, 1)},
     {"List.push", NATIVE_FN(list_push, 2)},
     {"type_of", NATIVE_FN(type_of, 1)},
 };

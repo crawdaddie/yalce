@@ -177,6 +177,25 @@ Type *create_type_cons(const char *name, Type *args, int num_args) {
   //
 }
 
+Type *tcons(const char *name, Type **_args, int num_args) {
+  Type *type = malloc(sizeof(Type));
+  type->kind = T_CONS;
+  type->data.T_CONS.name = name;
+  type->data.T_CONS.args = _args;
+  type->data.T_CONS.num_args = num_args;
+  return type;
+}
+
+Type *create_tuple_type(Type **element_types, int num_elements) {
+  Type *tuple_type = malloc(sizeof(Type));
+  tuple_type->kind = T_CONS;
+  tuple_type->data.T_CONS.name = "Tuple";
+  tuple_type->data.T_CONS.args = element_types;
+  tuple_type->data.T_CONS.num_args = num_elements;
+  tuple_type->type_class = NULL; // Or set appropriately if needed
+  return tuple_type;
+}
+
 Type *create_type_fn(Type *from, Type *to) {
   Type *type = malloc(sizeof(Type));
   *type = (Type){T_FN, .data = {.T_FN = {.from = from, .to = to}}};

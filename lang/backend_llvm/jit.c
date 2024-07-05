@@ -113,6 +113,10 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   free(fcontent);
   return result; // Return success
 }
+typedef struct int_ll_t {
+  int el;
+  struct int_ll_t *next;
+} int_ll_t;
 
 int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
@@ -205,7 +209,8 @@ int jit(int argc, char **argv) {
       printf("> ['");
       print_type(top->md);
       printf("]");
-      switch (((Type *)top->md)->kind) {
+      Type *top_type = top->md;
+      switch (top_type->kind) {
       case T_INT: {
         printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
         break;
@@ -219,6 +224,26 @@ int jit(int argc, char **argv) {
 
       case T_STRING: {
         printf(" %s\n", (char *)LLVMGenericValueToPointer(result));
+        break;
+      }
+
+      case T_CONS: {
+        if (strcmp(top_type->data.T_CONS.name, "List") == 0 &&
+            top_type->data.T_CONS.args[0]->kind == T_INT) {
+
+          int_ll_t *l = (int_ll_t *)LLVMGenericValueToPointer(result);
+          printf("list:%p", l);
+          // Traverse and print the list
+          int_ll_t *current = l;
+          while (current != NULL) {
+            printf("%d ", current->el);
+            current = current->next;
+          }
+
+          // while (l != NULL) {
+          //   l = l->next;
+          // }
+        }
         break;
       }
 

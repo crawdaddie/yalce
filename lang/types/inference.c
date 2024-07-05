@@ -136,6 +136,11 @@ Type *infer(TypeEnv **env, Ast *ast) {
     type = &t_bool;
     break;
 
+  case AST_VOID: {
+    type = &t_void;
+    break;
+  }
+
   case AST_IDENTIFIER: {
     type = env_lookup(*env, ast->data.AST_IDENTIFIER.value);
     // printf("infer id %s: ", ast->data.AST_IDENTIFIER.value);
@@ -277,6 +282,33 @@ Type *infer(TypeEnv **env, Ast *ast) {
       branches += 2;
     }
     type = body_type;
+    break;
+  }
+
+  case AST_TUPLE: {
+    int arity = ast->data.AST_LIST.len;
+
+    Type **cons_args = malloc(sizeof(Type) * arity);
+    for (int i = 0; i < arity; i++) {
+      Ast *member = ast->data.AST_LIST.items + i;
+      cons_args[i] = infer(env, member);
+    }
+    type = tcons("Tuple", cons_args, arity);
+    break;
+  }
+
+  case AST_LIST: {
+    Type *list_type = infer(env, ast->data.AST_LIST.items);
+
+    int len = ast->data.AST_LIST.len;
+    Type **cons_args = malloc(sizeof(Type));
+    for (int i = 1; i < len; i++) {
+      Ast *list_member = ast->data.AST_LIST.items + i;
+      Type *member_type = infer(env, list_member);
+      unify(member_type, list_type);
+    }
+    cons_args[0] = list_type;
+    type = tcons("List", cons_args, 1);
     break;
   }
   }

@@ -1,11 +1,4 @@
-let f = fn x ->
-  (match x with
-  | 0 -> 0
-  | 10 -> 300
-  | _ -> f (x + 1)
-  )
-;;
-
+let printf = extern fn string -> () ;; # simplified printf from c stdlib
 
 let fib = fn x ->
   (match x with
@@ -15,5 +8,5 @@ let fib = fn x ->
   )
 ;;
 
-fib 11
+fib 40
 

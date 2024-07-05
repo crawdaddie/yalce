@@ -80,8 +80,8 @@ LLVMValueRef codegen_int_binop(LLVMBuilderRef builder, token_type op,
   }
 }
 
-static LLVMValueRef codegen_float_binop(LLVMBuilderRef builder, token_type op,
-                                        LLVMValueRef l, LLVMValueRef r) {
+LLVMValueRef codegen_float_binop(LLVMBuilderRef builder, token_type op,
+                                 LLVMValueRef l, LLVMValueRef r) {
   switch (op) {
   case TOKEN_PLUS:
   case TOKEN_MINUS:
