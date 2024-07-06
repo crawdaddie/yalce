@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+// forward decl
+Type *infer(TypeEnv **env, Ast *ast);
+
 // Global variables
 static int type_var_counter = 0;
 void reset_type_var_counter() { type_var_counter = 0; }
@@ -61,6 +64,27 @@ static void free_fn_type_copy(Type *fn) {
 static bool is_placeholder(Ast *p) {
   return p->tag == AST_IDENTIFIER &&
          strcmp(p->data.AST_IDENTIFIER.value, "_") == 0;
+}
+static Type *infer_void_arg_lambda(TypeEnv **env, Ast *ast) {
+
+  // Create the function type
+  Type *ret_var = next_tvar();
+  Type *fn_type = create_type_fn(&t_void, ret_var);
+
+  TypeEnv *new_env = *env;
+
+  // If the lambda has a name, add it to the environment for recursion
+  if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
+    new_env = env_extend(new_env, ast->data.AST_LAMBDA.fn_name.chars, fn_type);
+  }
+
+  // Infer the type of the body
+  Type *body_type = infer(&new_env, ast->data.AST_LAMBDA.body);
+
+  // Unify the return type with the body type
+  unify(ret_var, body_type);
+
+  return fn_type;
 }
 
 // Main type inference function
@@ -182,6 +206,11 @@ Type *infer(TypeEnv **env, Ast *ast) {
   }
 
   case AST_LAMBDA: {
+    if (ast->data.AST_LAMBDA.len == 0) {
+      type = infer_void_arg_lambda(env, ast);
+
+      break;
+    }
     Type *param_types[ast->data.AST_LAMBDA.len];
     for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
       param_types[i] = next_tvar();
@@ -211,9 +240,14 @@ Type *infer(TypeEnv **env, Ast *ast) {
 
     // Add parameters to the environment
     for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-
-      new_env = env_extend(new_env, ast->data.AST_LAMBDA.params[i].chars,
-                           param_types[i]);
+      Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+      if (param_ast->tag == AST_IDENTIFIER) {
+        new_env = env_extend(new_env, param_ast->data.AST_IDENTIFIER.value,
+                             param_types[i]);
+      } else if (param_ast->tag == AST_TUPLE) {
+        // new_env = env_extend(new_env, param_ast->data.AST_IDENTIFIER.value,
+        //                      param_types[i]);
+      }
     }
 
     // Infer the type of the body

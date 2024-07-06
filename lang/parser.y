@@ -63,7 +63,7 @@ Ast* ast_root = NULL;
 
 %type <ast_node_ptr>
   stmt expr stmt_list application
-  lambda_expr lambda_args extern_typed_signature list tuple expr_list
+  lambda_expr lambda_arg lambda_args extern_typed_signature list tuple expr_list
   match_expr match_branches
 
 
@@ -165,16 +165,20 @@ lambda_expr:
 
 
 lambda_args:
-    IDENTIFIER              { $$ = ast_arg_list($1, NULL); }
-  | IDENTIFIER '=' expr     { $$ = ast_arg_list($1, $3); }
-  | lambda_args IDENTIFIER  { $$ = ast_arg_list_push($1, $2, NULL); }
-  | lambda_args IDENTIFIER '=' expr { $$ = ast_arg_list_push($1, $2, $4); }
-  | IDENTIFIER              { $$ = ast_arg_list($1, NULL); }
-  | IDENTIFIER ':' expr     { $$ = ast_arg_list($1, $3); }
-  | lambda_args IDENTIFIER  { $$ = ast_arg_list_push($1, $2, NULL); }
-  | lambda_args IDENTIFIER ':' expr { $$ = ast_arg_list_push($1, $2, $4); }
+    lambda_arg              { $$ = ast_arg_list($1, NULL); }
+  | lambda_arg '=' expr     { $$ = ast_arg_list($1, $3); }
+  | lambda_args lambda_arg  { $$ = ast_arg_list_push($1, $2, NULL); }
+  | lambda_args lambda_arg '=' expr { $$ = ast_arg_list_push($1, $2, $4); }
+  | lambda_arg              { $$ = ast_arg_list($1, NULL); }
+  | lambda_arg ':' expr     { $$ = ast_arg_list($1, $3); }
+  | lambda_args lambda_arg  { $$ = ast_arg_list_push($1, $2, NULL); }
+  | lambda_args lambda_arg ':' expr { $$ = ast_arg_list_push($1, $2, $4); }
   ;
 
+lambda_arg:
+    IDENTIFIER              { $$ = ast_identifier($1); }
+  | '(' expr_list ')'       { $$ = ast_tuple($2); }
+  ;
 
 application:
     IDENTIFIER expr         { $$ = ast_application(ast_identifier($1), $2); }

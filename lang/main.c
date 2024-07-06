@@ -1,7 +1,7 @@
 #ifdef VM_BACKEND
 #include "backend_vm.h"
 #elif defined(LLVM_BACKEND)
-#include "backend_llvm/backend.h"
+#include "backend_llvm/jit.h"
 #else
 #include "backend.h"
 #endif

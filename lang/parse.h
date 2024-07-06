@@ -167,7 +167,7 @@ struct Ast {
 
     struct AST_LAMBDA {
       size_t len;
-      ObjString *params;
+      Ast *params;
       ObjString fn_name;
       Ast *body;
       Ast **defaults;
@@ -212,8 +212,8 @@ Ast *ast_identifier(ObjString id);
 Ast *ast_let(ObjString name, Ast *expr, Ast *in_continuation);
 Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
-Ast *ast_arg_list(ObjString arg_id, Ast *def);
-Ast *ast_arg_list_push(Ast *arg_list, ObjString arg_id, Ast *def);
+Ast *ast_arg_list(Ast *arg_id, Ast *def);
+Ast *ast_arg_list_push(Ast *arg_list, Ast *arg_id, Ast *def);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input);
 Ast *ast_void();

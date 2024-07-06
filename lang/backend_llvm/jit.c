@@ -114,8 +114,8 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   return result; // Return success
 }
 typedef struct int_ll_t {
-  int el;
-  struct int_ll_t *next;
+    int32_t el;
+    struct int_ll_t* next;
 } int_ll_t;
 
 int jit(int argc, char **argv) {
@@ -232,13 +232,16 @@ int jit(int argc, char **argv) {
             top_type->data.T_CONS.args[0]->kind == T_INT) {
 
           int_ll_t *current = (int_ll_t *)LLVMGenericValueToPointer(result);
-          printf("list: %p\n", current);
-          //        curret->next->el, current->next->next->el,
-          //        current->next->next->next->el);
-          //
-          while (current != NULL) {
-            printf("%d, \n", current->el);
-            current = current->next;
+          printf("list head: %p\n", current);
+          int count = 0;
+          while (current != NULL && count < 10) {  // Limit to prevent infinite loop
+              printf("Node %d: address=%p, value=%d, next=%p\n", 
+                     count, current, current->el, current->next);
+              current = current->next;
+              count++;
+          }
+          if (count == 10) {
+              printf("Reached limit. Possible circular list?\n");
           }
         }
         break;

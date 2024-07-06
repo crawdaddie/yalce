@@ -166,7 +166,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
       buffer = strcat(buffer, "() ");
     } else {
       for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-        buffer = strcat(buffer, ast->data.AST_LAMBDA.params[i].chars);
+        buffer = ast_to_sexpr(ast->data.AST_LAMBDA.params + i, buffer);
         buffer = strcat(buffer, " ");
       }
     }
