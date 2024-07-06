@@ -16,21 +16,26 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create argument list.
   Type *fn_type = ast->md;
-  LLVMTypeRef *params = malloc(sizeof(LLVMTypeRef) * fn_len);
+
+  LLVMTypeRef *llvm_param_type_refs = malloc(sizeof(LLVMTypeRef) * fn_len);
+
   for (int i = 0; i < fn_len; i++) {
-    params[i] = type_to_llvm_type(fn_type->data.T_FN.from);
+    llvm_param_type_refs[i] = type_to_llvm_type(fn_type->data.T_FN.from);
     fn_type = fn_type->data.T_FN.to;
   }
 
-  // Create function type.
+  Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
+  LLVMTypeRef llvm_return_type_ref = type_to_llvm_type(return_type);
+
+  // Create function type with return.
   LLVMTypeRef llvm_fn_type =
-      LLVMFunctionType(type_to_llvm_type(fn_type), params, fn_len, 0);
+      LLVMFunctionType(llvm_return_type_ref, llvm_param_type_refs, fn_len, 0);
 
   // Create function.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, llvm_fn_type);
   LLVMSetLinkage(func, LLVMExternalLinkage);
-  free(params);
+  free(llvm_param_type_refs);
   return func;
 }
 
@@ -55,19 +60,23 @@ LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   int fn_len = ast->data.AST_LAMBDA.len;
   for (int i = 0; i < fn_len; i++) {
-    ObjString param_name = ast->data.AST_LAMBDA.params[i];
-    LLVMValueRef param_val = LLVMGetParam(func, i);
-    LLVMSetValueName2(param_val, param_name.chars, param_name.length);
+    Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+    if (param_ast->tag == AST_IDENTIFIER) {
+      const char *chars = param_ast->data.AST_IDENTIFIER.value;
+      int length = param_ast->data.AST_IDENTIFIER.length;
 
-    JITSymbol *v = malloc(sizeof(JITSymbol));
-    *v = (JITSymbol){.llvm_type = param_type(),
-                     .val = param_val,
-                     .idx = i,
-                     .symbol_type = STYPE_FN_PARAM};
+      LLVMValueRef param_val = LLVMGetParam(func, i);
+      LLVMSetValueName2(param_val, chars, length);
+      JITSymbol *v = malloc(sizeof(JITSymbol));
+      *v = (JITSymbol){.llvm_type = param_type(),
+                       .val = param_val,
+                       .idx = i,
+                       .symbol_type = STYPE_FN_PARAM};
 
-    // add param value to hash-table
-    ht_set_hash(fn_scope.stack + fn_scope.stack_ptr, param_name.chars,
-                param_name.hash, v);
+      // add param value to hash-table
+      ht_set_hash(fn_scope.stack + fn_scope.stack_ptr, chars,
+                  hash_string(chars, length), v);
+    }
   }
 
   // add function as recursive ref

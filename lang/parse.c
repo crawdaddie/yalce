@@ -100,12 +100,12 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   return lambda;
 }
 
-Ast *ast_arg_list(ObjString arg_id, Ast *def) {
+Ast *ast_arg_list(Ast *arg_id, Ast *def) {
   Ast *lambda = Ast_new(AST_LAMBDA);
 
-  lambda->data.AST_LAMBDA.params = malloc(sizeof(ObjString));
+  lambda->data.AST_LAMBDA.params = malloc(sizeof(Ast));
   lambda->data.AST_LAMBDA.len = 1;
-  lambda->data.AST_LAMBDA.params[0] = arg_id;
+  lambda->data.AST_LAMBDA.params[0] = *arg_id;
   lambda->data.AST_LAMBDA.defaults = malloc(sizeof(Ast *));
 
   if (def) {
@@ -115,15 +115,15 @@ Ast *ast_arg_list(ObjString arg_id, Ast *def) {
   return lambda;
 }
 
-Ast *ast_arg_list_push(Ast *lambda, ObjString arg_id, Ast *def) {
+Ast *ast_arg_list_push(Ast *lambda, Ast *arg_id, Ast *def) {
   ObjString *params = lambda->data.AST_LAMBDA.params;
   lambda->data.AST_LAMBDA.len++;
   size_t len = lambda->data.AST_LAMBDA.len;
 
-  lambda->data.AST_LAMBDA.params = realloc(params, sizeof(ObjString) * len);
+  lambda->data.AST_LAMBDA.params = realloc(params, sizeof(Ast) * len);
   lambda->data.AST_LAMBDA.defaults =
       realloc(lambda->data.AST_LAMBDA.defaults, sizeof(Ast *) * len);
-  lambda->data.AST_LAMBDA.params[len - 1] = arg_id;
+  lambda->data.AST_LAMBDA.params[len - 1] = *arg_id;
 
   if (def) {
     lambda->data.AST_LAMBDA.defaults[len - 1] = def;
