@@ -5,6 +5,7 @@
 #include "backend_llvm/codegen_symbols.h"
 #include "codegen_list.h"
 #include "codegen_tuple.h"
+#include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -57,6 +58,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_IDENTIFIER: {
     return codegen_identifier(ast, ctx, module, builder);
   }
+
   case AST_LAMBDA: {
     return codegen_lambda(ast, ctx, module, builder);
   }

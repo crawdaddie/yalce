@@ -230,6 +230,21 @@ int typecheck_ast() {
   status &= tcheck("(1, 2., \"hello\", false)",
                    T(tcons("Tuple", T(&t_int, &t_num, &t_string, &t_bool), 4)));
 
+  status &= tcheck("let (x, y) = (1, 2) in x", T(&t_int));
+  status &= tcheck("let (x, y) = (1, 2) in y", T(&t_int));
+  status &= tcheck("let (x, _) = (1, 2) in x", T(&t_int));
+
+  status &=
+      tcheck("let complex_match = fn x -> \n"
+             "(match x with\n"
+             "| (1, _) -> 0\n"
+             "| (2, _) -> 100\n"
+             "| _      -> 1000\n"
+             ");",
+             T(&(Type){T_FN,
+                       {.T_FN = {tcons("Tuple", T(&t_int, &TVAR("t4")), 2),
+                                 &t_int}}}));
+
   status &= tcheck(
       "(1, 2., \"hello\", false, ())",
       T(tcons("Tuple", T(&t_int, &t_num, &t_string, &t_bool, &t_void), 5)));

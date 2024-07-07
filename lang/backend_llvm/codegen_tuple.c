@@ -26,10 +26,18 @@ LLVMValueRef codegen_tuple_access(int n, LLVMValueRef tuple,
                                   LLVMTypeRef tuple_type,
                                   LLVMBuilderRef builder) {
 
+  // Check if the tuple is a pointer type
+  if (LLVMGetTypeKind(LLVMTypeOf(tuple)) != LLVMPointerTypeKind) {
+    // If it's not a pointer, use LLVMBuildExtractValue - extracts value from a
+    // direct value rather than a ptr which needs a GEP2 instruction
+    return LLVMBuildExtractValue(builder, tuple, n, "struct_element");
+  }
+
   LLVMValueRef element_ptr =
       LLVMBuildStructGEP2(builder, tuple_type, tuple, n, "get_tuple_element");
 
   LLVMTypeRef element_type = LLVMStructGetTypeAtIndex(tuple_type, n);
 
-  return LLVMBuildLoad2(builder, element_type, element_ptr, "tuple_element_load");
+  return LLVMBuildLoad2(builder, element_type, element_ptr,
+                        "tuple_element_load");
 }
