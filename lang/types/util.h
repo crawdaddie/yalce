@@ -14,4 +14,8 @@ bool is_type_variable(Type *type);
 Type *get_general_numeric_type(Type *t1, Type *t2);
 Type *builtin_type(Ast *id);
 bool types_equal(Type *t1, Type *t2);
+
+bool is_list_type(Type *type);
+
+bool is_tuple_type(Type *type);
 #endif

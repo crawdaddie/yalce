@@ -109,7 +109,7 @@ struct Ast {
     } AST_BODY;
 
     struct AST_LET {
-      ObjString name;
+      Ast *binding;
       Ast *expr;
       Ast *in_expr;
     } AST_LET;
@@ -209,7 +209,7 @@ extern Ast *ast_root;
 Ast *ast_binop(token_type op, Ast *left, Ast *right);
 Ast *ast_unop(token_type op, Ast *right);
 Ast *ast_identifier(ObjString id);
-Ast *ast_let(ObjString name, Ast *expr, Ast *in_continuation);
+Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation);
 Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
 Ast *ast_arg_list(Ast *arg_id, Ast *def);
@@ -238,5 +238,6 @@ Ast *extern_typed_signature(Ast *item);
 Ast *extern_typed_signature_push(Ast *sig, Ast *def);
 Ast *ast_extern_fn(ObjString name, Ast *signature);
 bool ast_is_placeholder_id(Ast *ast);
+int get_let_binding_name(Ast *ast, ObjString *name);
 
 #endif

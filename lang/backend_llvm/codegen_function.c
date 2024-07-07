@@ -14,10 +14,11 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
   int fn_len = ast->data.AST_LAMBDA.len;
 
-  // Create argument list.
   Type *fn_type = ast->md;
 
-  LLVMTypeRef *llvm_param_type_refs = malloc(sizeof(LLVMTypeRef) * fn_len);
+  // Create argument list.
+  LLVMTypeRef llvm_param_type_refs[fn_len];
+  // = malloc(sizeof(LLVMTypeRef) * fn_len);
 
   for (int i = 0; i < fn_len; i++) {
     llvm_param_type_refs[i] = type_to_llvm_type(fn_type->data.T_FN.from);
@@ -35,7 +36,7 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, llvm_fn_type);
   LLVMSetLinkage(func, LLVMExternalLinkage);
-  free(llvm_param_type_refs);
+  // free(llvm_param_type_refs);
   return func;
 }
 
@@ -59,33 +60,19 @@ LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, block);
 
   int fn_len = ast->data.AST_LAMBDA.len;
+  Type *fn_type = ast->md;
   for (int i = 0; i < fn_len; i++) {
+    Type *param_type = fn_type->data.T_FN.from;
+    fn_type = fn_type->data.T_FN.to;
+
     Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-    if (param_ast->tag == AST_IDENTIFIER) {
-      const char *chars = param_ast->data.AST_IDENTIFIER.value;
-      int length = param_ast->data.AST_IDENTIFIER.length;
-
-      LLVMValueRef param_val = LLVMGetParam(func, i);
-      LLVMSetValueName2(param_val, chars, length);
-      JITSymbol *v = malloc(sizeof(JITSymbol));
-      *v = (JITSymbol){.llvm_type = param_type(),
-                       .val = param_val,
-                       .idx = i,
-                       .symbol_type = STYPE_FN_PARAM};
-
-      // add param value to hash-table
-      ht_set_hash(fn_scope.stack + fn_scope.stack_ptr, chars,
-                  hash_string(chars, length), v);
-    }
+    LLVMValueRef param_val = LLVMGetParam(func, i);
+    codegen_multiple_assignment(param_ast, param_val, param_type, &fn_scope,
+                                module, builder, true);
   }
-
   // add function as recursive ref
-  JITSymbol *v = malloc(sizeof(JITSymbol));
-  *v = (JITSymbol){
-      .llvm_type = param_type(), .val = func, .symbol_type = STYPE_FUNCTION};
-
-  ht_set_hash(fn_scope.stack + fn_scope.stack_ptr, fn_name.chars, fn_name.hash,
-              v);
+  bind_symbol_in_scope(fn_name.chars, fn_name.hash, LLVMTypeOf(func), func,
+                       STYPE_FUNCTION, &fn_scope);
 
   // Generate body.
   LLVMValueRef body =

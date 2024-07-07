@@ -109,6 +109,14 @@ void substitute(Type *type, const char *var, Type *replacement) {
 //
 
 void unify(Type *t1, Type *t2) {
+#ifdef DBG_UNIFY
+  printf("unify l: ");
+  print_type(t1);
+
+  printf(" r: ");
+  print_type(t2);
+  printf("\n");
+#endif
 
   if (types_equal(t1, t2)) {
     return;
@@ -132,14 +140,6 @@ void unify(Type *t1, Type *t2) {
     return;
   }
   if (t1->kind == T_FN && t2->kind == T_FN) {
-#ifdef DBG_UNIFY
-    printf("unify fns l: ");
-    print_type(t1);
-
-    printf(" r: ");
-    print_type(t2);
-    printf("\n");
-#endif
     if (t1->data.T_FN.from->kind == T_VAR) {
       substitute(t1, t1->data.T_FN.from->data.T_VAR, t2->data.T_FN.from);
     }

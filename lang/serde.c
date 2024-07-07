@@ -37,7 +37,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   case AST_LET: {
     buffer = strcat(buffer, "(let ");
-    buffer = strcat(buffer, ast->data.AST_LET.name.chars);
+    buffer = ast_to_sexpr(ast->data.AST_LET.binding, buffer);
     buffer = strcat(buffer, " ");
     buffer = ast_to_sexpr(ast->data.AST_LET.expr, buffer);
     buffer = strcat(buffer, ")");

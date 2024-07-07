@@ -65,6 +65,7 @@ Ast* ast_root = NULL;
   stmt expr stmt_list application
   lambda_expr lambda_arg lambda_args extern_typed_signature list tuple expr_list
   match_expr match_branches
+  let_binding
 
 
 
@@ -94,17 +95,22 @@ program:
   ;
 
 stmt:
-  expr                            { $$ = $1; }
-  | LET TOK_VOID '=' expr         { $$ = $4; }
-  | META_IDENTIFIER LET IDENTIFIER '=' lambda_expr  
-                                  { $$ = ast_meta($1, ast_let($3, $5, NULL)); }
+    let_binding                   { $$ = $1; }
+  | expr                          { $$ = $1; }
+  | META_IDENTIFIER let_binding   { $$ = ast_meta($1, $2); }
+  ;
 
-  | LET IDENTIFIER '=' lambda_expr  { $$ = ast_let($2, $4, NULL); }
-  | LET IDENTIFIER '=' expr         { $$ = ast_let($2, $4, NULL); }
-
+let_binding:
+    LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
+  | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
+  | LET IDENTIFIER '=' lambda_expr  { $$ = ast_let(ast_identifier($2), $4, NULL); }
   | LET IDENTIFIER '=' EXTERN FN extern_typed_signature ';' 
-                                    { $$ = ast_let($2, ast_extern_fn($2, $6), NULL); }
-  /*| LET IDENTIFIER '=' expr IN expr { $$ = ast_let($2, $4, $6); } */
+                                    {
+                                    $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL);
+                                    }
+  | LET TOK_VOID '=' expr {$$ = $4;}
+  /*| LET lambda_arg '=' expr IN expr { $$ = ast_let($2, $4, $6); }*/
+
   ;
 
 stmt_list:
@@ -144,8 +150,9 @@ expr:
   | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
   | expr ':' expr         { $$ = ast_assoc($1, $3); }
-  | LET IDENTIFIER '=' expr IN expr { $$ = ast_let($2, $4, $6); }
-  | LET IDENTIFIER '=' lambda_expr IN expr  { $$ = ast_let($2, $4, $6); }
+  | LET IDENTIFIER '=' expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }
+  | LET lambda_arg '=' expr IN expr  { $$ = ast_let($2, $4, $6); }
+  /*| LET IDENTIFIER '=' lambda_expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }*/
   ;
 
 extern_typed_signature:
@@ -169,6 +176,7 @@ lambda_args:
   | lambda_arg '=' expr     { $$ = ast_arg_list($1, $3); }
   | lambda_args lambda_arg  { $$ = ast_arg_list_push($1, $2, NULL); }
   | lambda_args lambda_arg '=' expr { $$ = ast_arg_list_push($1, $2, $4); }
+
   | lambda_arg              { $$ = ast_arg_list($1, NULL); }
   | lambda_arg ':' expr     { $$ = ast_arg_list($1, $3); }
   | lambda_args lambda_arg  { $$ = ast_arg_list_push($1, $2, NULL); }

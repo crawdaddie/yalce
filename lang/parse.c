@@ -44,11 +44,21 @@ Ast *ast_identifier(ObjString id) {
   return node;
 }
 
-Ast *ast_let(ObjString name, Ast *expr, Ast *in_continuation) {
+Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
   Ast *node = Ast_new(AST_LET);
-  node->data.AST_LET.name = name;
+  node->data.AST_LET.binding = name;
+
   if (expr->tag == AST_LAMBDA) {
-    expr->data.AST_LAMBDA.fn_name = name;
+
+    const char *chars = name->data.AST_IDENTIFIER.value;
+    int length = name->data.AST_IDENTIFIER.length;
+    uint64_t hash = hash_string(chars, length);
+    ObjString fn_name = {
+        .chars = chars,
+        .length = length,
+        .hash = hash,
+    };
+    expr->data.AST_LAMBDA.fn_name = fn_name;
   }
   // else if (expr->tag == AST_EXTERN_FN) {
   //   expr->data.AST_EXTERN_FN.fn_name = name;
@@ -313,4 +323,17 @@ bool ast_is_placeholder_id(Ast *ast) {
   }
 
   return false;
+}
+
+int get_let_binding_name(Ast *ast, ObjString *name) {
+  Ast *binding = ast->data.AST_LET.binding;
+  if (binding->tag != AST_IDENTIFIER) {
+    return 1;
+  }
+
+  const char *chars = binding->data.AST_IDENTIFIER.value;
+  int length = binding->data.AST_IDENTIFIER.length;
+  *name = (ObjString){
+      .chars = chars, .length = length, .hash = hash_string(chars, length)};
+  return 0;
 }

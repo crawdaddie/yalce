@@ -1,5 +1,6 @@
 #include "backend_llvm/codegen_match.h"
 #include "codegen_binop.h"
+#include "serde.h"
 #include "types/type.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -90,6 +91,10 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // Compile the result expression in the branch block
     LLVMPositionBuilderAtEnd(builder, branch_block);
     LLVMValueRef branch_result = codegen(result_expr, ctx, module, builder);
+    print_ast(result_expr);
+    printf("branch result %p\n", branch_result);
+    LLVMDumpValue(branch_result);
+    printf("\n");
     LLVMBuildBr(builder, end_block);
     LLVMAddIncoming(phi, &branch_result, &branch_block, 1);
 

@@ -165,6 +165,9 @@ int main() {
   status &=
       test_parse("fn x y z -> x + y + z;", "(x y z -> \n(+ (+ x y) z))\n");
 
+  status &= test_parse("fn x (y, z) -> x + y + z;",
+                       "(x (y, z) -> \n(+ (+ x y) z))\n");
+
   status &= test_parse("fn x y z -> \n"
                        "  x + y + z;\n"
                        "  x + y\n"
@@ -184,8 +187,15 @@ int main() {
                             ")\n"
                             "(+ 1 1)");
   // let declaration
+  //
+  status &= test_parse("let x = 1", "(let x 1)");
+  status &= test_parse("let (x, y) = (1, 2)", "(let (x, y) (1, 2))");
   status &= test_parse("let x = 1 + y", "(let x (+ 1 y))");
   status &= test_parse("let x = 1 in x", "(let x 1) : x");
+  status &= test_parse("let x = 1 in x + 2", "(let x 1) : (+ x 2)");
+  status &= test_parse("let x = 1 + 2 in x * 3", "(let x (+ 1 2)) : (* x 3)");
+  status &= test_parse("let (x, y) = (1, 2) in x + y",
+                       "(let (x, y) (1, 2)) : (+ x y)");
 
   // status &=
   //     test_parse("`hello {x} {y}`", "(((_format \"hello {x} {y}\") x) y)");
