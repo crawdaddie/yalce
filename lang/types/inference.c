@@ -212,6 +212,11 @@ Type *infer(TypeEnv **env, Ast *ast) {
   }
 
   case AST_IDENTIFIER: {
+    if (is_placeholder(ast)) {
+      type = next_tvar();
+      break;
+    }
+
     type = env_lookup(*env, ast->data.AST_IDENTIFIER.value);
 
     if (!type) {
@@ -332,8 +337,8 @@ Type *infer(TypeEnv **env, Ast *ast) {
     print_type(fn_type);
     printf("\n");
 
-    unify(fn_type, expected_fn_type);
 #endif
+    unify(fn_type, expected_fn_type);
 
     free_fn_type_copy(fn_type);
     type = result_type;

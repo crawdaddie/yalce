@@ -107,6 +107,36 @@ bool is_numeric_type(Type *type) {
 }
 
 bool is_type_variable(Type *type) { return type->kind == T_VAR; }
+bool is_generic(Type *type) {
+  switch (type->kind) {
+  case T_VAR: {
+    return true;
+  }
+  case T_CONS: {
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      if (is_generic(type->data.T_CONS.args[i])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  case T_FN: {
+    if (is_generic(type->data.T_FN.from)) {
+      return true;
+    }
+
+    if (type->data.T_FN.to->kind != T_FN) {
+      // return type of function (doesn't matter for genericity)
+      return false;
+    }
+
+    return is_generic(type->data.T_FN.to);
+  }
+  default:
+    false;
+  }
+}
 
 // Helper function to get the most general numeric type
 Type *get_general_numeric_type(Type *t1, Type *t2) {

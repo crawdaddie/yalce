@@ -40,10 +40,18 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
-static LLVMTypeRef param_type() { return LLVMInt32Type(); }
-
 LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
+
+  if (is_generic(ast->md)) {
+
+    printf("-------\n");
+    print_type(ast->md);
+    printf("\nfn %s is generic!!!\n-------\n",
+           ast->data.AST_LAMBDA.fn_name.chars);
+    return NULL;
+  }
+
   // Generate the prototype first.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   LLVMValueRef func = codegen_fn_proto(ast, ctx, module, builder);
@@ -66,9 +74,9 @@ LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     fn_type = fn_type->data.T_FN.to;
 
     Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-    LLVMValueRef param_val = LLVMGetParam(func, i);
-    codegen_multiple_assignment(param_ast, param_val, param_type, &fn_scope,
-                                module, builder, true);
+    // LLVMValueRef param_val = LLVMGetParam(func, i);
+    codegen_multiple_assignment(param_ast, NULL, param_type, &fn_scope, module,
+                                builder, true, i);
   }
   // add function as recursive ref
   bind_symbol_in_scope(fn_name.chars, fn_name.hash, LLVMTypeOf(func), func,
@@ -160,12 +168,48 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
+static LLVMValueRef codegen_fn_application_identifier(Ast *ast, JITLangCtx *ctx,
+                                                      LLVMModuleRef module,
+                                                      LLVMBuilderRef builder) {
+  const char *chars = ast->data.AST_IDENTIFIER.value;
+  int length = ast->data.AST_IDENTIFIER.length;
+
+  JITSymbol *res = NULL;
+
+  if (codegen_lookup_id(chars, length, ctx, &res)) {
+
+    printf("codegen identifier failed symbol %s not found in scope %d\n", chars,
+           ctx->stack_ptr);
+    return NULL;
+  }
+
+  if (res->type == STYPE_TOP_LEVEL_VAR) {
+    LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
+    LLVMValueRef val = LLVMGetInitializer(glob);
+    //
+    //
+    // LLVMValueRef glob = res->val;
+    // LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, glob, "");
+    return val;
+  } else if (res->type == STYPE_LOCAL_VAR) {
+    LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, res->val, "");
+    return val;
+  } else if (res->type == STYPE_FN_PARAM) {
+    int idx = res->symbol_data.STYPE_FN_PARAM;
+    return LLVMGetParam(current_func(builder), idx);
+  } else if (res->type == STYPE_FUNCTION) {
+    return LLVMGetNamedFunction(module, chars);
+  } else if (res->type == STYPE_GENERIC_FUNCTION) {
+    return NULL;
+  }
+}
+
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
-  LLVMValueRef func = codegen_identifier(ast->data.AST_APPLICATION.function,
-                                         ctx, module, builder);
+  LLVMValueRef func = codegen_fn_application_identifier(
+      ast->data.AST_APPLICATION.function, ctx, module, builder);
   if (!func) {
     return NULL;
   }

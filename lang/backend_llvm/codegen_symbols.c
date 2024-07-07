@@ -28,7 +28,7 @@ int codegen_lookup_id(const char *id, int length, JITLangCtx *ctx,
   *result = res;
   return 0;
 }
-static LLVMValueRef current_func(LLVMBuilderRef builder) {
+LLVMValueRef current_func(LLVMBuilderRef builder) {
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   return LLVMGetBasicBlockParent(current_block);
 }
@@ -48,7 +48,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 
-  if (res->symbol_type == STYPE_TOP_LEVEL_VAR) {
+  if (res->type == STYPE_TOP_LEVEL_VAR) {
     LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
     LLVMValueRef val = LLVMGetInitializer(glob);
     //
@@ -56,15 +56,16 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // LLVMValueRef glob = res->val;
     // LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, glob, "");
     return val;
-  } else if (res->symbol_type == STYPE_LOCAL_VAR) {
+  } else if (res->type == STYPE_LOCAL_VAR) {
     LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, res->val, "");
     return val;
-  } else if (res->symbol_type == STYPE_FN_PARAM) {
-    int idx = res->idx;
+  } else if (res->type == STYPE_FN_PARAM) {
+    int idx = res->symbol_data.STYPE_FN_PARAM;
     return LLVMGetParam(current_func(builder), idx);
-  } else if (res->symbol_type == STYPE_FUNCTION) {
-    printf("found res fn::::\n");
+  } else if (res->type == STYPE_FUNCTION) {
     return LLVMGetNamedFunction(module, chars);
+  } else if (res->type == STYPE_GENERIC_FUNCTION) {
+    return NULL;
   }
 
   return res->val;
@@ -74,7 +75,19 @@ void bind_symbol_in_scope(const char *id, uint64_t id_hash, LLVMTypeRef type,
                           LLVMValueRef val, symbol_type sym_type,
                           JITLangCtx *ctx) {
   JITSymbol *v = malloc(sizeof(JITSymbol));
-  *v = (JITSymbol){.llvm_type = type, .symbol_type = sym_type, .val = val};
+  *v = (JITSymbol){.llvm_type = type, .type = sym_type, .val = val};
+  ht *scope = ctx->stack + ctx->stack_ptr;
+  ht_set_hash(scope, id, id_hash, v);
+}
+
+void bind_fn_param_in_scope(const char *id, uint64_t id_hash, int param_idx,
+                            LLVMTypeRef type, LLVMValueRef val,
+                            symbol_type sym_type, JITLangCtx *ctx) {
+  JITSymbol *v = malloc(sizeof(JITSymbol));
+  *v = (JITSymbol){.llvm_type = type,
+                   .type = sym_type,
+                   .val = val,
+                   .symbol_data = {.STYPE_FN_PARAM = param_idx}};
   ht *scope = ctx->stack + ctx->stack_ptr;
   ht_set_hash(scope, id, id_hash, v);
 }
@@ -82,17 +95,19 @@ void bind_symbol_in_scope(const char *id, uint64_t id_hash, LLVMTypeRef type,
 LLVMValueRef codegen_single_assignment(Ast *id, LLVMValueRef expr_val,
                                        Type *expr_type, JITLangCtx *ctx,
                                        LLVMModuleRef module,
-                                       LLVMBuilderRef builder, bool fn_param) {
+                                       LLVMBuilderRef builder, bool is_fn_param,
+                                       int fn_param_idx) {
 
-  LLVMTypeRef llvm_val_type = LLVMTypeOf(expr_val);
   const char *id_chars = id->data.AST_IDENTIFIER.value;
   int id_length = id->data.AST_IDENTIFIER.length;
   uint64_t id_hash = hash_string(id_chars, id_length);
 
-  if (fn_param) {
-    bind_symbol_in_scope(id_chars, id_hash, llvm_val_type, expr_val,
-                         STYPE_FN_PARAM, ctx);
+  if (is_fn_param) {
+    bind_fn_param_in_scope(id_chars, id_hash, fn_param_idx, NULL, expr_val,
+                           STYPE_FN_PARAM, ctx);
+    return expr_val;
   }
+  LLVMTypeRef llvm_val_type = LLVMTypeOf(expr_val);
 
   if (expr_type->kind == T_FN) {
     bind_symbol_in_scope(id_chars, id_hash, llvm_val_type, expr_val,
@@ -130,12 +145,12 @@ LLVMValueRef codegen_multiple_assignment(Ast *binding, LLVMValueRef expr_val,
                                          Type *expr_type, JITLangCtx *ctx,
                                          LLVMModuleRef module,
                                          LLVMBuilderRef builder,
-                                         bool fn_param) {
+                                         bool is_fn_param, int fn_param_idx) {
 
   switch (binding->tag) {
   case AST_IDENTIFIER: {
     return codegen_single_assignment(binding, expr_val, expr_type, ctx, module,
-                                     builder, fn_param);
+                                     builder, is_fn_param, fn_param_idx);
   }
   case AST_TUPLE: {
     if (!is_tuple_type(expr_type)) {
@@ -162,7 +177,8 @@ LLVMValueRef codegen_multiple_assignment(Ast *binding, LLVMValueRef expr_val,
       Type *tuple_member_type = expr_type->data.T_CONS.args[i];
 
       if (!codegen_multiple_assignment(b, tuple_member, tuple_member_type, ctx,
-                                       module, builder, fn_param)) {
+                                       module, builder, is_fn_param,
+                                       fn_param_idx)) {
         return NULL;
       }
     }
@@ -199,7 +215,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ambient_ctx,
   };
 
   codegen_multiple_assignment(binding_identifier, expr_val, expr_type, &ctx,
-                              module, builder, false);
+                              module, builder, false, 0);
 
   if (ast->data.AST_LET.in_expr != NULL) {
     LLVMValueRef res =

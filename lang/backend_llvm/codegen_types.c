@@ -9,7 +9,7 @@ LLVMTypeRef tuple_type(Type *tuple_type) {
 
   int len = tuple_type->data.T_CONS.num_args;
 
-  LLVMTypeRef *element_types = malloc(len * sizeof(LLVMTypeRef));
+  LLVMTypeRef element_types[len];
 
   for (int i = 0; i < len; i++) {
     // Convert each element's AST node to its corresponding LLVM type
@@ -18,7 +18,6 @@ LLVMTypeRef tuple_type(Type *tuple_type) {
 
   LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
 
-  free(element_types);
   return llvm_tuple_type;
 }
 
