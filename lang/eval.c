@@ -119,7 +119,13 @@ Value eval(Ast *ast, LangCtx *ctx) {
     break;
   }
   case AST_LET: {
-    ObjString name = ast->data.AST_LET.name;
+
+    ObjString name;
+    if (get_let_binding_name(ast, &name)) {
+      fprintf(stderr, "Error - codegen assignment: destructuring multiple "
+                      "binding identifiers not yet supported");
+      break;
+    }
 
     Value *expr = malloc(sizeof(Value));
     *expr = eval(ast->data.AST_LET.expr, ctx);

@@ -180,6 +180,12 @@ int typecheck_ast() {
                    T(create_type_multi_param_fn(2, T(&TVAR("t1"), &TVAR("t1")),
                                                 &TVAR("t1"))));
 
+  status &=
+      tcheck("let f = fn (a, b) -> a + b;",
+             T(&(Type){T_FN,
+                       {.T_FN = {tcons("Tuple", T(&TVAR("t1"), &TVAR("t1")), 2),
+                                 &TVAR("t1")}}}));
+
   status &= tcheck("let f = fn () -> 1 + 2;",
 
                    T(&(Type){T_FN, {.T_FN = {&t_void, &t_int}}}));

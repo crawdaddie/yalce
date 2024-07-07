@@ -87,9 +87,55 @@ static Type *infer_void_arg_lambda(TypeEnv **env, Ast *ast) {
   return fn_type;
 }
 
+static Type *type_of_var(Ast *ast) {
+  switch (ast->tag) {
+  case AST_IDENTIFIER: {
+    return next_tvar();
+  }
+  case AST_TUPLE: {
+    int len = ast->data.AST_LIST.len;
+    Type **tuple_mems = malloc(sizeof(Type *) * len);
+    for (int i = 0; i < len; i++) {
+      tuple_mems[i] = type_of_var(ast->data.AST_LIST.items + i);
+    }
+    return tcons("Tuple", tuple_mems, len);
+  }
+  default: {
+    print_ast(ast);
+    printf("\n");
+    fprintf(stderr, "Typecheck err: lambda arg type %d unsupported\n",
+            ast->tag);
+    return NULL;
+  }
+  }
+}
+static TypeEnv *add_var_to_env(TypeEnv *env, Type *param_type, Ast *param_ast) {
+  switch (param_ast->tag) {
+  case AST_IDENTIFIER: {
+    return env_extend(env, param_ast->data.AST_IDENTIFIER.value, param_type);
+  }
+
+  case AST_TUPLE: {
+    int len = param_ast->data.AST_LIST.len;
+    Ast *arg_asts = param_ast->data.AST_LIST.items;
+    TypeEnv *new_env = env;
+    for (int i = 0; i < len; i++) {
+      Type *arg_type_var = param_type->data.T_CONS.args[i];
+      new_env = add_var_to_env(new_env, arg_type_var, arg_asts + i);
+    }
+    return new_env;
+  }
+
+  default: {
+    return env;
+  }
+  }
+}
+
 // Main type inference function
 //
 Type *infer(TypeEnv **env, Ast *ast) {
+
   if (!ast)
     return NULL;
 
@@ -167,9 +213,6 @@ Type *infer(TypeEnv **env, Ast *ast) {
 
   case AST_IDENTIFIER: {
     type = env_lookup(*env, ast->data.AST_IDENTIFIER.value);
-    // printf("infer id %s: ", ast->data.AST_IDENTIFIER.value);
-    // print_type(type);
-    // printf("\n");
 
     if (!type) {
       fprintf(stderr, "Typecheck Error: unbound variable %s\n",
@@ -181,8 +224,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
   case AST_LET: {
 
     Type *expr_type = infer(env, ast->data.AST_LET.expr);
-
-    *env = env_extend(*env, ast->data.AST_LET.name.chars, expr_type);
+    *env = add_var_to_env(*env, expr_type, ast->data.AST_LET.binding);
 
     if (ast->data.AST_LET.in_expr) {
       type = infer(env, ast->data.AST_LET.in_expr);
@@ -194,26 +236,36 @@ Type *infer(TypeEnv **env, Ast *ast) {
 
   case AST_EXTERN_FN: {
     int param_count = ast->data.AST_EXTERN_FN.len - 1;
-    Type **params = malloc(param_count * sizeof(Type *));
-    for (int i = 0; i < param_count; i++) {
-      params[i] = builtin_type(ast->data.AST_EXTERN_FN.signature_types + i);
+
+    Type **param_types;
+    if (param_count == 0) {
+      param_types = malloc(sizeof(Type *));
+      *param_types = &t_void;
+    } else {
+      param_types = malloc(param_count * sizeof(Type *));
+      for (int i = 0; i < param_count; i++) {
+        param_types[i] =
+            builtin_type(ast->data.AST_EXTERN_FN.signature_types + i);
+      }
     }
     Type *ex_t = create_type_multi_param_fn(
-        param_count, params,
+        param_count || 1, param_types,
         builtin_type(ast->data.AST_EXTERN_FN.signature_types + param_count));
     type = ex_t;
     break;
   }
 
   case AST_LAMBDA: {
-    if (ast->data.AST_LAMBDA.len == 0) {
+    int args_len = ast->data.AST_LAMBDA.len;
+    if (args_len == 0) {
       type = infer_void_arg_lambda(env, ast);
-
       break;
     }
-    Type *param_types[ast->data.AST_LAMBDA.len];
+    Type *param_types[args_len];
+    // = malloc(sizeof(Type *) * ast->data.AST_LAMBDA.len);
     for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-      param_types[i] = next_tvar();
+      Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+      param_types[i] = type_of_var(param_ast);
     }
 
     // Create the function type
@@ -241,13 +293,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
     // Add parameters to the environment
     for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-      if (param_ast->tag == AST_IDENTIFIER) {
-        new_env = env_extend(new_env, param_ast->data.AST_IDENTIFIER.value,
-                             param_types[i]);
-      } else if (param_ast->tag == AST_TUPLE) {
-        // new_env = env_extend(new_env, param_ast->data.AST_IDENTIFIER.value,
-        //                      param_types[i]);
-      }
+      new_env = add_var_to_env(new_env, param_types[i], param_ast);
     }
 
     // Infer the type of the body
@@ -256,6 +302,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
     // Unify the return type with the body type
     unify(current, body_type);
 
+    // free(param_types);
     type = fn_type;
 
     break;
@@ -278,13 +325,15 @@ Type *infer(TypeEnv **env, Ast *ast) {
       expected_fn_type = create_type_fn(arg_types[i], expected_fn_type);
     }
 
-    // printf("apply: ");
-    // print_type(expected_fn_type);
-    // printf(" -- ");
-    // print_type(fn_type);
-    // printf("\n");
+#ifdef DBG_UNIFY
+    printf("apply: ");
+    print_type(expected_fn_type);
+    printf(" -- ");
+    print_type(fn_type);
+    printf("\n");
 
     unify(fn_type, expected_fn_type);
+#endif
 
     free_fn_type_copy(fn_type);
     type = result_type;

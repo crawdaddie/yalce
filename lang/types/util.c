@@ -4,6 +4,15 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+
+bool is_list_type(Type *type) {
+  return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "List") == 0);
+}
+
+bool is_tuple_type(Type *type) {
+  return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "Tuple") == 0);
+}
+
 void print_type(Type *type) {
   if (type == NULL) {
     printf("NULL");
