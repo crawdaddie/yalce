@@ -36,7 +36,6 @@ static bool is_default_case(Ast *test, int len, int i) {
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
-  // Compile the scrutinee expression
   LLVMValueRef expr_val =
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
 
@@ -74,14 +73,16 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       next_block = NULL; // Last iteration, no need for a next block
     }
 
+    JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1};
     // Check if this is the default case (represented by '_' in your example)
     if (is_default_case(test_expr, len, i)) {
       // If it's the default case, just jump to the branch block
       LLVMBuildBr(builder, branch_block);
     } else {
+
       // Compile the test expression
-      LLVMValueRef test_value =
-          codegen_match_condition(expr_val, test_expr, ctx, module, builder);
+      LLVMValueRef test_value = codegen_match_condition(
+          expr_val, test_expr, &branch_ctx, module, builder);
 
       // Create the conditional branch
       LLVMBuildCondBr(builder, test_value, branch_block,
@@ -90,11 +91,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     // Compile the result expression in the branch block
     LLVMPositionBuilderAtEnd(builder, branch_block);
-    LLVMValueRef branch_result = codegen(result_expr, ctx, module, builder);
-    print_ast(result_expr);
-    printf("branch result %p\n", branch_result);
-    LLVMDumpValue(branch_result);
-    printf("\n");
+    LLVMValueRef branch_result =
+        codegen(result_expr, &branch_ctx, module, builder);
     LLVMBuildBr(builder, end_block);
     LLVMAddIncoming(phi, &branch_result, &branch_block, 1);
 

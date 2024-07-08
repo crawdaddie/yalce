@@ -10,23 +10,6 @@ bool is_builtin_type(Type *t) {
   return (t == &t_int) || (t == &t_num) || (t == &t_string) || (t == &t_bool) ||
          (t == &t_void);
 }
-static void free_type(Type *t) {
-  if (is_builtin_type(t)) {
-    printf("don't free %p\n", t);
-    return;
-  }
-  switch (t->kind) {
-  case T_VAR: {
-    // free(t->data.T_VAR);
-  }
-
-  case T_FN: {
-    free_type(t->data.T_FN.from);
-    free_type(t->data.T_FN.to);
-  }
-  };
-  free(t);
-}
 
 bool typecheck_prog(Ast *prog) {
   infer_ast(NULL, prog);
@@ -124,6 +107,9 @@ bool tcheck_w_env(TypeEnv *env, char input[], Type **exp_types) {
 #define T(...)                                                                 \
   (Type *[]) { __VA_ARGS__ }
 
+#define TUPLE(num, ...) tcons("Tuple", T(__VA_ARGS__), num)
+#define TLIST(t) tcons("List", T(t), 1)
+
 #define TVAR(name)                                                             \
   (Type) {                                                                     \
     T_VAR, { .T_VAR = name }                                                   \
@@ -140,20 +126,35 @@ bool schemes_equal(TypeScheme *s1, TypeScheme *s2) {
   return types_equal(s1->type, s2->type);
 }
 
-#define TYPES_EQUAL(id, tvx, exp_type, status)                                 \
-  if (types_equal(tvx, exp_type)) {                                            \
-    printf("✅\e[1m" id "\e[0m");                                              \
-    print_type(tvx);                                                           \
+#define TYPES_EQUAL(desc, actual_type, exp_type, status)                       \
+  if (types_equal(actual_type, exp_type)) {                                    \
+    printf("✅\e[1m" desc "\e[0m");                                            \
+    print_type(actual_type);                                                   \
     printf("\n");                                                              \
     status &= true;                                                            \
   } else {                                                                     \
-    printf("❌\e[1m" id "\e[0m");                                              \
-    print_type(tvx);                                                           \
-    printf("expected ");                                                       \
-    print_type(&t_int);                                                        \
+    printf("❌\e[1m" desc "\e[0m got ");                                       \
+    print_type(actual_type);                                                   \
+    printf(" expected ");                                                      \
+    print_type(exp_type);                                                      \
     printf("\n");                                                              \
     status &= false;                                                           \
   };
+
+bool test_unify() {
+  bool status = true;
+  Type *result = &TVAR("t0");
+  Type *t0 = create_type_fn(TUPLE(2, &t_int, &t_int), result);
+  Type *t1 = create_type_fn(TUPLE(2, &TVAR("t0"), &TVAR("t1")), &TVAR("t0"));
+
+  unify(t0, t1, NULL);
+
+  TYPES_EQUAL("Unify: specific vs generic type:", t0,
+              create_type_fn(tcons("Tuple", T(&t_int, &t_int), 2), &t_int),
+              status)
+
+  return status;
+}
 
 int typecheck_ast() {
   bool status = true;
@@ -180,11 +181,10 @@ int typecheck_ast() {
                    T(create_type_multi_param_fn(2, T(&TVAR("t1"), &TVAR("t1")),
                                                 &TVAR("t1"))));
 
-  status &=
-      tcheck("let f = fn (a, b) -> a + b;",
-             T(&(Type){T_FN,
-                       {.T_FN = {tcons("Tuple", T(&TVAR("t1"), &TVAR("t1")), 2),
-                                 &TVAR("t1")}}}));
+  status &= tcheck(
+      "let f = fn (a, b) -> a + b;",
+      T(&(Type){T_FN,
+                {.T_FN = {TUPLE(2, &TVAR("t1"), &TVAR("t1")), &TVAR("t1")}}}));
 
   status &= tcheck("let f = fn () -> 1 + 2;",
 
@@ -224,33 +224,30 @@ int typecheck_ast() {
 
                create_type_multi_param_fn(1, T(&t_int), &t_int)));
 
-  status &=
-      tcheck("(1, 2, 3)", T(tcons("Tuple", T(&t_int, &t_int, &t_int), 3)));
+  status &= tcheck("(1, 2, 3)", T(TUPLE(3, &t_int, &t_int, &t_int)));
 
   status &= tcheck("(1, 2., \"hello\", false)",
-                   T(tcons("Tuple", T(&t_int, &t_num, &t_string, &t_bool), 4)));
+                   T(TUPLE(4, &t_int, &t_num, &t_string, &t_bool)));
 
   status &= tcheck("let (x, y) = (1, 2) in x", T(&t_int));
   status &= tcheck("let (x, y) = (1, 2) in y", T(&t_int));
   status &= tcheck("let (x, _) = (1, 2) in x", T(&t_int));
 
-  status &=
-      tcheck("let complex_match = fn x -> \n"
-             "(match x with\n"
-             "| (1, _) -> 0\n"
-             "| (2, _) -> 100\n"
-             "| _      -> 1000\n"
-             ");",
-             T(&(Type){T_FN,
-                       {.T_FN = {tcons("Tuple", T(&t_int, &TVAR("t4")), 2),
-                                 &t_int}}}));
+  status &= tcheck(
+      "let complex_match = fn x -> \n"
+      "(match x with\n"
+      "| (1, _) -> 0\n"
+      "| (2, _) -> 100\n"
+      "| _      -> 1000\n"
+      ");",
+      T(&(Type){T_FN, {.T_FN = {TUPLE(2, &t_int, &TVAR("t4")), &t_int}}}));
 
   status &= tcheck(
       "(1, 2., \"hello\", false, ())",
       T(tcons("Tuple", T(&t_int, &t_num, &t_string, &t_bool, &t_void), 5)));
 
-  status &= tcheck("[1, 2, 3]", T(tcons("List", T(&t_int), 1)));
-  status &= tcheck("[1., 2., 3.]", T(tcons("List", T(&t_num), 1)));
+  status &= tcheck("[1, 2, 3]", T(TLIST(&t_int)));
+  status &= tcheck("[1., 2., 3.]", T(TLIST(&t_num)));
 
   return status;
 }
@@ -258,8 +255,7 @@ int typecheck_ast() {
 int main() {
   bool status = true;
   status &= typecheck_ast();
-  // test_generalize();
-  // test_instantiate();
+  status &= test_unify();
   return !status;
 }
 
