@@ -171,20 +171,20 @@ int typecheck_ast() {
                    T(&(Type){T_FN, {.T_FN = {&t_int, &t_int}}}));
 
   status &= tcheck("let f = fn x y -> x + y;",
-                   T(create_type_multi_param_fn(2, T(&TVAR("t1"), &TVAR("t1")),
-                                                &TVAR("t1"))));
+                   T(create_type_multi_param_fn(2, T(&TVAR("t2"), &TVAR("t2")),
+                                                &TVAR("t2"))));
 
   status &= tcheck("let f = fn x -> (1 + 2 ) * 8 - x > 2; f 1;",
-                   T(&(Type){T_FN, {.T_FN = {&t_int, &TVAR("t3")}}}));
+                   T(&(Type){T_FN, {.T_FN = {&t_int, &TVAR("t2")}}}));
 
   status &= tcheck("let f = fn a b -> a + b;",
-                   T(create_type_multi_param_fn(2, T(&TVAR("t1"), &TVAR("t1")),
-                                                &TVAR("t1"))));
+                   T(create_type_multi_param_fn(2, T(&TVAR("t2"), &TVAR("t2")),
+                                                &TVAR("t2"))));
 
   status &= tcheck(
       "let f = fn (a, b) -> a + b;",
       T(&(Type){T_FN,
-                {.T_FN = {TUPLE(2, &TVAR("t1"), &TVAR("t1")), &TVAR("t1")}}}));
+                {.T_FN = {TUPLE(2, &TVAR("t2"), &TVAR("t2")), &TVAR("t2")}}}));
 
   status &= tcheck("let f = fn () -> 1 + 2;",
 
@@ -193,7 +193,7 @@ int typecheck_ast() {
   status &= tcheck(
       "let f = fn a b -> a + b;;\n"
       "f 1 2",
-      T(create_type_multi_param_fn(2, T(&TVAR("t1"), &TVAR("t1")), &TVAR("t1")),
+      T(create_type_multi_param_fn(2, T(&TVAR("t2"), &TVAR("t2")), &TVAR("t2")),
         &t_int));
 
   {
@@ -220,7 +220,7 @@ int typecheck_ast() {
       tcheck("let m = fn x y z -> x + y + z;;\n"
              "m 1 2",
              T(create_type_multi_param_fn(
-                   3, T(&TVAR("t2"), &TVAR("t1"), &TVAR("t2")), &TVAR("t2")),
+                   3, T(&TVAR("t3"), &TVAR("t2"), &TVAR("t3")), &TVAR("t3")),
 
                create_type_multi_param_fn(1, T(&t_int), &t_int)));
 
@@ -254,7 +254,7 @@ int typecheck_ast() {
              "  a\n"
              ";;\n"
              "first (1, 2)",
-             T(create_type_fn(TUPLE(2, &TVAR("t0"), &TVAR("t1")), &TVAR("t0")),
+             T(create_type_fn(TUPLE(2, &TVAR("t1"), &TVAR("t2")), &TVAR("t1")),
                &t_int));
 
   return status;
