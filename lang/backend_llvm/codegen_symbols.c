@@ -109,6 +109,9 @@ LLVMValueRef codegen_single_assignment(Ast *id, LLVMValueRef expr_val,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder, bool is_fn_param,
                                        int fn_param_idx) {
+  if (ast_is_placeholder_id(id)) {
+    return expr_val;
+  }
 
   const char *id_chars = id->data.AST_IDENTIFIER.value;
   int id_length = id->data.AST_IDENTIFIER.length;
@@ -126,6 +129,7 @@ LLVMValueRef codegen_single_assignment(Ast *id, LLVMValueRef expr_val,
                          STYPE_FUNCTION, ctx);
     return expr_val;
   }
+
   if (ctx->stack_ptr == 0) {
 
     // top-level
