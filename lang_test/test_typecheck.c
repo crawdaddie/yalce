@@ -256,6 +256,13 @@ int typecheck_ast() {
              "first (1, 2)",
              T(create_type_fn(TUPLE(2, &TVAR("t1"), &TVAR("t2")), &TVAR("t1")),
                &t_int));
+  status &= tcheck("let complex_match = fn x -> \n"
+                   "(match x with\n"
+                   "| (1, _) -> 0\n"
+                   "| (2, z) -> 100 + z\n"
+                   "| _      -> 1000\n"
+                   ");",
+                   T(create_type_fn(TUPLE(2, &t_int, &t_int), &t_int)));
 
   return status;
 }

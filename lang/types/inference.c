@@ -106,6 +106,76 @@ static TypeEnv *add_var_to_env(TypeEnv *env, Type *param_type, Ast *param_ast) {
   }
 }
 
+static TypeEnv *create_vars(TypeEnv *env, Ast *expr) {
+  if (is_placeholder(expr)) {
+    return env;
+  }
+
+  if (expr->tag == AST_IDENTIFIER) {
+    const char *id = expr->data.AST_IDENTIFIER.value;
+    if (!env_lookup(env, id)) {
+      Type *t = next_tvar();
+      expr->md = t;
+      return env_extend(env, id, t);
+    }
+    return env;
+  }
+
+  if (expr->tag == AST_TUPLE) {
+    for (int i = 0; i < expr->data.AST_LIST.len; i++) {
+      env = create_vars(env, expr->data.AST_LIST.items + i);
+    }
+    return env;
+  }
+
+  return env;
+}
+
+static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
+
+  Ast *expr = ast->data.AST_MATCH.expr;
+  Type *expr_type = infer(env, expr);
+
+  Type *test_type;
+  Type *final_type = NULL;
+  int len = ast->data.AST_MATCH.len;
+
+  Ast *branches = ast->data.AST_MATCH.branches;
+  for (int i = 0; i < len; i++) {
+    Ast *test_expr = branches + (2 * i);
+    Ast *result_expr = branches + (2 * i + 1);
+
+    *env = create_vars(*env, test_expr);
+    if (i == len - 1) {
+      if (!is_placeholder(test_expr)) {
+        test_type = infer(env, test_expr);
+        unify(expr_type, test_type);
+      }
+    } else {
+      *env = create_vars(*env, test_expr);
+      test_type = infer(env, test_expr);
+      unify(expr_type, test_type);
+    }
+
+    Type *res_type = infer(env, result_expr);
+
+    if (final_type != NULL) {
+      unify(res_type, final_type);
+    }
+
+    unify(expr_type, test_type);
+    // printf("match branch: ");
+    // print_type(test_expr->md);
+    // printf(" -> ");
+    // print_type(result_expr->md);
+    // printf("\n");
+
+    final_type = res_type;
+  }
+  // print_type_env(*env);
+  return final_type;
+}
+
 // Main type inference function
 //
 Type *infer(TypeEnv **env, Ast *ast) {
@@ -250,11 +320,18 @@ Type *infer(TypeEnv **env, Ast *ast) {
     for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
       Type *param_type = type_of_var(param_ast);
+      // printf("lambda arg: ");
+      // print_ast(param_ast);
+      // printf(" : ");
+      // print_type(param_type);
+      // printf("\n");
       // Add parameter to the environment
       fn_scope_env = add_var_to_env(fn_scope_env, param_type, param_ast);
+
       Type *next = (i == ast->data.AST_LAMBDA.len - 1)
                        ? next_tvar()
                        : create_type_fn(NULL, NULL);
+
       current->kind = T_FN;
       current->data.T_FN.from = param_type;
       current->data.T_FN.to = next;
@@ -309,31 +386,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
     break;
   }
   case AST_MATCH: {
-    Ast *branches = ast->data.AST_MATCH.branches;
-    Ast *expr = ast->data.AST_MATCH.expr;
-    Type *expr_type = infer(env, expr);
-
-    Type *test_type;
-    Type *body_type = NULL;
-
-    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
-      Ast *test = branches;
-      if (!ast_is_placeholder_id(test)) {
-        test_type = infer(env, test);
-        unify(expr_type, test_type);
-      }
-
-      Ast *body = branches + 1;
-      Type *btype = infer(env, body);
-      if (body_type != NULL) {
-        unify(btype, body_type);
-      }
-
-      body_type = btype;
-
-      branches += 2;
-    }
-    type = body_type;
+    type = infer_match_expr(env, ast);
     break;
   }
 

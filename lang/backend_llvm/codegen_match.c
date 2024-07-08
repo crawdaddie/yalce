@@ -2,15 +2,51 @@
 #include "codegen_binop.h"
 #include "serde.h"
 #include "types/type.h"
+#include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+
+#define _TRUE LLVMConstInt(LLVMInt1Type(), 1, 0)
+#define _FALSE LLVMConstInt(LLVMInt1Type(), 0, 0)
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+static LLVMValueRef codegen_match_tuple(LLVMValueRef expr_val, Ast *pattern,
+                                        JITLangCtx *ctx, LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+
+  LLVMValueRef res = _TRUE;
+  size_t len = pattern->data.AST_LIST.len;
+  Ast *items = pattern->data.AST_LIST.items;
+  for (size_t i = 0; i < len; i++) {
+    Ast *tuple_item = items + i;
+    if (ast_is_placeholder_id(tuple_item)) {
+      continue;
+    }
+
+    // res = LLVMBuildAnd(builder, res, codegen_match_condition(),
+    // "and_result");
+  }
+
+  return NULL;
+}
+
 LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
                                      JITLangCtx *ctx, LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
+
+  if (ast_is_placeholder_id(pattern)) {
+    return _TRUE;
+  }
+
+  if (pattern->tag == AST_IDENTIFIER) {
+  }
+
+  if (is_tuple_type(pattern->md)) {
+    return codegen_match_tuple(expr_val, pattern, ctx, module, builder);
+  }
+
   if (((Type *)pattern->md)->kind == T_INT) {
     return codegen_int_binop(builder, TOKEN_EQUALITY, expr_val,
                              codegen(pattern, ctx, module, builder));
@@ -20,18 +56,10 @@ LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
     return codegen_float_binop(builder, TOKEN_EQUALITY, expr_val,
                                codegen(pattern, ctx, module, builder));
   }
-  return NULL;
+  return _FALSE;
 }
-#define AST_TRUE                                                               \
-  &(Ast) {                                                                     \
-    AST_BOOL, {                                                                \
-      .AST_BOOL = { true }                                                     \
-    }                                                                          \
-  }
 
-static bool is_default_case(Ast *test, int len, int i) {
-  return ast_is_placeholder_id(test) && (i == (len - 1));
-}
+static bool is_default_case(int len, int i) { return i == (len - 1); }
 
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
@@ -74,8 +102,14 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
 
     JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1};
-    // Check if this is the default case (represented by '_' in your example)
-    if (is_default_case(test_expr, len, i)) {
+
+    // Check if this is the default case
+    if (is_default_case(len, i)) {
+
+      // Compile the test expression
+      LLVMValueRef test_value = codegen_match_condition(
+          expr_val, test_expr, &branch_ctx, module, builder);
+
       // If it's the default case, just jump to the branch block
       LLVMBuildBr(builder, branch_block);
     } else {
