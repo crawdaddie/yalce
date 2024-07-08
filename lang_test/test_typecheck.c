@@ -147,7 +147,7 @@ bool test_unify() {
   Type *t0 = create_type_fn(TUPLE(2, &t_int, &t_int), result);
   Type *t1 = create_type_fn(TUPLE(2, &TVAR("t0"), &TVAR("t1")), &TVAR("t0"));
 
-  unify(t0, t1, NULL);
+  unify(t0, t1);
 
   TYPES_EQUAL("Unify: specific vs generic type:", t0,
               create_type_fn(tcons("Tuple", T(&t_int, &t_int), 2), &t_int),

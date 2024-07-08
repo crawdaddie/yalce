@@ -19,4 +19,6 @@ bool is_list_type(Type *type);
 bool is_tuple_type(Type *type);
 bool is_generic(Type *type);
 
+Type *deep_copy_type(Type *t);
+void free_type(Type *t);
 #endif

@@ -34,37 +34,11 @@ static Type *max_numeric_type(Type *lt, Type *rt) {
   return rt;
 }
 
-static Type *copy_type(Type *t) {
-  Type *copy = malloc(sizeof(Type));
-  *copy = *t;
-  if (copy->kind == T_VAR) {
-    char *new_name = malloc(5 * sizeof(char));
-    sprintf(new_name, "%s", t->data.T_VAR);
-    copy->data.T_VAR = new_name;
-  }
-  return copy;
-}
-
-static Type *copy_fn_type(Type *fn) {
-  if (fn->kind != T_FN) {
-    return copy_type(fn);
-  }
-
-  Type *copy = create_type_fn(copy_fn_type(fn->data.T_FN.from),
-                              copy_fn_type(fn->data.T_FN.to));
-  return copy;
-}
-static void free_fn_type_copy(Type *fn) {
-  if (fn->kind == T_FN) {
-    free_fn_type_copy(fn->data.T_FN.from);
-    free_fn_type_copy(fn->data.T_FN.to);
-    free(fn);
-  }
-}
 static bool is_placeholder(Ast *p) {
   return p->tag == AST_IDENTIFIER &&
          strcmp(p->data.AST_IDENTIFIER.value, "_") == 0;
 }
+
 static Type *infer_void_arg_lambda(TypeEnv **env, Ast *ast) {
 
   // Create the function type
@@ -314,7 +288,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
   }
   case AST_APPLICATION: {
     Type *fn_type =
-        copy_fn_type(infer(env, ast->data.AST_APPLICATION.function));
+        deep_copy_type(infer(env, ast->data.AST_APPLICATION.function));
     if (!fn_type) {
       return NULL;
     }
@@ -340,8 +314,8 @@ Type *infer(TypeEnv **env, Ast *ast) {
 #endif
     unify(fn_type, expected_fn_type);
 
-    free_fn_type_copy(fn_type);
-    type = result_type;
+    type = deep_copy_type(result_type);
+    free_type(fn_type);
     break;
   }
   case AST_MATCH: {
