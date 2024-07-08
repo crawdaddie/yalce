@@ -292,29 +292,28 @@ Type *infer(TypeEnv **env, Ast *ast) {
     if (!fn_type) {
       return NULL;
     }
-    Type *arg_types[ast->data.AST_APPLICATION.len];
-    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-      arg_types[i] = infer(env, ast->data.AST_APPLICATION.args + i);
-    }
 
     Type *result_type = next_tvar();
     Type *expected_fn_type = result_type;
 
+    Type *fn_return = fn_type;
+
     for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
-      expected_fn_type = create_type_fn(arg_types[i], expected_fn_type);
+      expected_fn_type = create_type_fn(
+          infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
+
+      fn_return = fn_return->data.T_FN.to;
     }
 
-#ifdef DBG_UNIFY
-    printf("apply: ");
-    print_type(expected_fn_type);
-    printf(" -- ");
-    print_type(fn_type);
-    printf("\n");
-
-#endif
+    unify(result_type, fn_return);
     unify(fn_type, expected_fn_type);
 
-    type = deep_copy_type(result_type);
+    Type *res = fn_type;
+
+    for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+      res = res->data.T_FN.to;
+    }
+    type = deep_copy_type(res);
     free_type(fn_type);
     break;
   }

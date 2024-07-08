@@ -47,6 +47,7 @@ builds the audio engine as a shared-object library
 ## Requirements in order of importance
 REPL - want to be able to iteratively modify the running audio graph  
 
+## features / syntax
 the DSL is a language loosely based on ocaml syntax for creating and linking audio node objects
 it supports declaring external functions:
 ```ocaml
