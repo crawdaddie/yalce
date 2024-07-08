@@ -106,7 +106,7 @@ static TypeEnv *add_var_to_env(TypeEnv *env, Type *param_type, Ast *param_ast) {
   }
 }
 
-static TypeEnv *create_vars(TypeEnv *env, Ast *expr) {
+static TypeEnv *create_implicit_var_bindings(TypeEnv *env, Ast *expr) {
   if (is_placeholder(expr)) {
     return env;
   }
@@ -123,7 +123,7 @@ static TypeEnv *create_vars(TypeEnv *env, Ast *expr) {
 
   if (expr->tag == AST_TUPLE) {
     for (int i = 0; i < expr->data.AST_LIST.len; i++) {
-      env = create_vars(env, expr->data.AST_LIST.items + i);
+      env = create_implicit_var_bindings(env, expr->data.AST_LIST.items + i);
     }
     return env;
   }
@@ -145,14 +145,14 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
     Ast *test_expr = branches + (2 * i);
     Ast *result_expr = branches + (2 * i + 1);
 
-    *env = create_vars(*env, test_expr);
+    *env = create_implicit_var_bindings(*env, test_expr);
     if (i == len - 1) {
       if (!is_placeholder(test_expr)) {
         test_type = infer(env, test_expr);
         unify(expr_type, test_type);
       }
     } else {
-      *env = create_vars(*env, test_expr);
+      // *env = create_implicit_var_bindings(*env, test_expr);
       test_type = infer(env, test_expr);
       unify(expr_type, test_type);
     }
@@ -164,11 +164,6 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
     }
 
     unify(expr_type, test_type);
-    // printf("match branch: ");
-    // print_type(test_expr->md);
-    // printf(" -> ");
-    // print_type(result_expr->md);
-    // printf("\n");
 
     final_type = res_type;
   }

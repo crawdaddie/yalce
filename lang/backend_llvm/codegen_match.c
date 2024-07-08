@@ -1,5 +1,7 @@
 #include "backend_llvm/codegen_match.h"
 #include "codegen_binop.h"
+#include "codegen_symbols.h"
+#include "codegen_tuple.h"
 #include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
@@ -12,24 +14,40 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
+                                     JITLangCtx *ctx, LLVMModuleRef module,
+                                     LLVMBuilderRef builder);
+
 static LLVMValueRef codegen_match_tuple(LLVMValueRef expr_val, Ast *pattern,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
 
   LLVMValueRef res = _TRUE;
+  LLVMTypeRef tuple_type = LLVMTypeOf(expr_val);
   size_t len = pattern->data.AST_LIST.len;
   Ast *items = pattern->data.AST_LIST.items;
   for (size_t i = 0; i < len; i++) {
-    Ast *tuple_item = items + i;
-    if (ast_is_placeholder_id(tuple_item)) {
+    Ast *tuple_item_ast = items + i;
+    if (ast_is_placeholder_id(tuple_item_ast)) {
       continue;
     }
 
-    // res = LLVMBuildAnd(builder, res, codegen_match_condition(),
-    // "and_result");
+    LLVMValueRef tuple_member_val =
+        codegen_tuple_access(i, expr_val, tuple_type, builder);
+
+    if (!codegen_multiple_assignment(tuple_item_ast, tuple_member_val,
+                                     tuple_item_ast->md, ctx, module, builder,
+                                     false, 0)) {
+      // assignment returns null - no var so compare literal val
+      res =
+          LLVMBuildAnd(builder, res,
+                       codegen_match_condition(tuple_member_val, tuple_item_ast,
+                                               ctx, module, builder),
+                       "tuple_match");
+    }
   }
 
-  return NULL;
+  return res;
 }
 
 LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
