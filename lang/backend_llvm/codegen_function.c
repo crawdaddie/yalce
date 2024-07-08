@@ -43,16 +43,16 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
-  printf("fn: %s\n", ast->data.AST_LAMBDA.fn_name.chars);
-  print_type(ast->md);
-  printf("\n");
+  // printf("fn: %s\n", ast->data.AST_LAMBDA.fn_name.chars);
+  // print_type(ast->md);
+  // printf("\n");
 
   if (is_generic(ast->md)) {
 
-    printf("-------\n");
-    print_type(ast->md);
-    printf("\nfn %s is generic!!!\n-------\n",
-           ast->data.AST_LAMBDA.fn_name.chars);
+    // printf("-------\n");
+    // print_type(ast->md);
+    // printf("\nfn %s is generic!!!\n-------\n",
+    //        ast->data.AST_LAMBDA.fn_name.chars);
     return NULL;
   }
 
@@ -199,7 +199,7 @@ static LLVMValueRef codegen_fn_application_identifier(Ast *ast, JITLangCtx *ctx,
   } else if (res->type == STYPE_FUNCTION) {
     return res->val;
   } else if (res->type == STYPE_GENERIC_FUNCTION) {
-    printf("found generic function\n");
+    // printf("found generic function\n");
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
 }
@@ -208,10 +208,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
-  printf("application type: ");
-  print_ast(ast);
-  print_type(ast->md);
-  printf("\n");
+  // printf("application type: ");
+  // print_ast(ast);
+  // print_type(ast->md);
+  // printf("\n");
   LLVMValueRef func = codegen_fn_application_identifier(
       ast->data.AST_APPLICATION.function, ctx, module, builder);
 
