@@ -240,48 +240,39 @@ Type *infer(TypeEnv **env, Ast *ast) {
       type = infer_void_arg_lambda(env, ast);
       break;
     }
-    Type *param_types[args_len];
-    // = malloc(sizeof(Type *) * ast->data.AST_LAMBDA.len);
-    for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-      Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-      param_types[i] = type_of_var(param_ast);
-    }
+    TypeEnv *fn_scope_env = *env;
 
     // Create the function type
     Type *fn_type =
         next_tvar(); // Start with a type variable for the whole function
     Type *current = fn_type;
-    for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+
+    for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+      Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+      Type *param_type = type_of_var(param_ast);
+      // Add parameter to the environment
+      fn_scope_env = add_var_to_env(fn_scope_env, param_type, param_ast);
       Type *next = (i == ast->data.AST_LAMBDA.len - 1)
                        ? next_tvar()
                        : create_type_fn(NULL, NULL);
       current->kind = T_FN;
-      current->data.T_FN.from = param_types[i];
+      current->data.T_FN.from = param_type;
       current->data.T_FN.to = next;
       current = next;
     }
 
-    TypeEnv *new_env = *env;
-
     // If the lambda has a name, add it to the environment for recursion
     if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
-      new_env =
-          env_extend(new_env, ast->data.AST_LAMBDA.fn_name.chars, fn_type);
-    }
-
-    // Add parameters to the environment
-    for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-      Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-      new_env = add_var_to_env(new_env, param_types[i], param_ast);
+      fn_scope_env =
+          env_extend(fn_scope_env, ast->data.AST_LAMBDA.fn_name.chars, fn_type);
     }
 
     // Infer the type of the body
-    Type *body_type = infer(&new_env, ast->data.AST_LAMBDA.body);
+    Type *body_type = infer(&fn_scope_env, ast->data.AST_LAMBDA.body);
 
     // Unify the return type with the body type
     unify(current, body_type);
 
-    // free(param_types);
     type = fn_type;
 
     break;
