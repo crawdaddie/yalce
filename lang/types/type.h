@@ -79,7 +79,6 @@ TypeScheme *generalize(TypeEnv env, Type *type);
 Type *instantiate(TypeScheme *scheme);
 void unify(Type *t1, Type *t2);
 
-Type *env_lookup(TypeEnv *env, const char *name);
 Type *create_type_var(const char *name);
 Type *tvar(const char *name);
 
@@ -90,6 +89,8 @@ Type *create_type_multi_param_fn(int num_params, Type **params,
                                  Type *return_type);
 
 Type *fresh(Type *type);
+
+Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 
 #endif

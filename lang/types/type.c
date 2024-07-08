@@ -77,91 +77,6 @@ void substitute(Type *type, const char *var, Type *replacement) {
   }
 }
 
-// Main unification function
-
-//
-// unify(Meta(α), t) =
-//
-// if α ∈ domain(σm)
-// then unify(σm(α),t)
-//
-// else if t ≡ App(TyFun . . .)
-//
-//    then unify(Meta(α), expand TyFun type as usual)
-//
-// else if t ≡ Meta(γ ) and γ ∈ domain(σm )
-//
-//    then unify(Meta(α), σm (γ ))
-//
-// else if t ≡ Meta(α)
-//     then OK
-//
-// else if Meta(α) occurs in t
-//      then error
-//
-// else σm ← σm + {α → t}; # extend σm with {α → t}
-// OK
-//
-// unify(t, Meta(α)) = where t is not a Meta
-//      unify(Meta(α), t)
-//
-//
-//
-
-void unify(Type *t1, Type *t2) {
-#ifdef DBG_UNIFY
-  printf("unify l: ");
-  print_type(t1);
-
-  printf(" r: ");
-  print_type(t2);
-  printf("\n");
-#endif
-
-  if (types_equal(t1, t2)) {
-    return;
-  }
-
-  if (t1->kind == T_VAR && t2->kind == T_VAR &&
-      strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0) {
-    return;
-  }
-  if (t1->kind == T_VAR) {
-    if (occurs(t1->data.T_VAR, t2)) {
-      fprintf(stderr, "Error: Recursive unification\n");
-    }
-    substitute(t2, t1->data.T_VAR, t1);
-    *t1 = *t2; // Update t1 to point to t2
-
-    return;
-  }
-  if (t2->kind == T_VAR) {
-    unify(t2, t1);
-    return;
-  }
-  if (t1->kind == T_FN && t2->kind == T_FN) {
-    if (t1->data.T_FN.from->kind == T_VAR) {
-      substitute(t1, t1->data.T_FN.from->data.T_VAR, t2->data.T_FN.from);
-    }
-    unify(t1->data.T_FN.from, t2->data.T_FN.from);
-    unify(t1->data.T_FN.to, t2->data.T_FN.to);
-    return;
-  }
-  if (t1->kind == T_CONS && t2->kind == T_CONS) {
-    if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
-        t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
-      fprintf(stderr, "Error: Type mismatch between %s and %s\n",
-              t1->data.T_CONS.name, t2->data.T_CONS.name);
-      exit(1);
-    }
-    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-      unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i]);
-    }
-    return;
-  }
-  fprintf(stderr, "Error: Types are not unifiable\n");
-}
-
 // Helper functions (implement these)
 Type *create_type_var(const char *name) {
   Type *type = malloc(sizeof(Type));
@@ -215,4 +130,110 @@ Type *create_type_multi_param_fn(int param_count, Type **param_types,
 
 Type *fresh(Type *type) {
   // Create a fresh instance of a type, replacing type variables with new ones
+}
+
+// Main unification function
+//
+// unify(Meta(α), t) =
+//
+// if α ∈ domain(σm)
+// then unify(σm(α),t)
+//
+// else if t ≡ App(TyFun . . .)
+//
+//    then unify(Meta(α), expand TyFun type as usual)
+//
+// else if t ≡ Meta(γ ) and γ ∈ domain(σm )
+//
+//    then unify(Meta(α), σm (γ ))
+//
+// else if t ≡ Meta(α)
+//     then OK
+//
+// else if Meta(α) occurs in t
+//      then error
+//
+// else σm ← σm + {α → t}; # extend σm with {α → t}
+// OK
+//
+// unify(t, Meta(α)) = where t is not a Meta
+//      unify(Meta(α), t)
+//
+//
+//
+static void _unify(Type *t1, Type *t2, TypeEnv **env) {
+#ifdef DBG_UNIFY
+  printf("unify l: ");
+  print_type(t1);
+
+  printf(" r: ");
+  print_type(t2);
+  printf("\n");
+#endif
+
+  if (types_equal(t1, t2)) {
+    return;
+  }
+
+  if (t1->kind == T_VAR && t2->kind == T_VAR &&
+      strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0) {
+    return;
+  }
+
+  if (t1->kind == T_VAR) {
+
+    if (occurs(t1->data.T_VAR, t2)) {
+      fprintf(stderr, "Error: Recursive unification\n");
+    }
+
+    substitute(t2, t1->data.T_VAR, t1);
+
+    *env = env_extend(*env, t1->data.T_VAR, t2);
+    *t1 = *t2; // Update t1 to point to t2
+
+    return;
+  }
+
+  if (t2->kind == T_VAR) {
+    _unify(t2, t1, env);
+    return;
+  }
+
+  if (t1->kind == T_FN && t2->kind == T_FN) {
+    if (t1->data.T_FN.from->kind == T_VAR) {
+      substitute(t1, t1->data.T_FN.from->data.T_VAR, t2->data.T_FN.from);
+    }
+
+    _unify(t1->data.T_FN.from, t2->data.T_FN.from, env);
+    _unify(t1->data.T_FN.to, t2->data.T_FN.to, env);
+
+    for (Type *lookedup;
+         ((t1->data.T_FN.to->kind == T_VAR) &&
+          (lookedup = env_lookup(*env, t1->data.T_FN.to->data.T_VAR)));) {
+      substitute(t1->data.T_FN.to, t1->data.T_FN.to->data.T_VAR, lookedup);
+    }
+
+    return;
+  }
+
+  if (t1->kind == T_CONS && t2->kind == T_CONS) {
+    if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
+        t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+      fprintf(stderr, "Error: Type mismatch between %s and %s\n",
+              t1->data.T_CONS.name, t2->data.T_CONS.name);
+      exit(1);
+    }
+
+    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+      _unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], env);
+    }
+
+    return;
+  }
+  fprintf(stderr, "Error: Types are not unifiable\n");
+}
+
+void unify(Type *t1, Type *t2) {
+  TypeEnv *env = NULL;
+  _unify(t1, t2, &env);
 }

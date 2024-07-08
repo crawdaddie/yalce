@@ -208,6 +208,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
+  printf("application type: ");
+  print_ast(ast);
+  print_type(ast->md);
+  printf("\n");
   LLVMValueRef func = codegen_fn_application_identifier(
       ast->data.AST_APPLICATION.function, ctx, module, builder);
 

@@ -249,6 +249,14 @@ int typecheck_ast() {
   status &= tcheck("[1, 2, 3]", T(TLIST(&t_int)));
   status &= tcheck("[1., 2., 3.]", T(TLIST(&t_num)));
 
+  status &=
+      tcheck("let first = fn (a, _) -> \n"
+             "  a\n"
+             ";;\n"
+             "first (1, 2)",
+             T(create_type_fn(TUPLE(2, &TVAR("t0"), &TVAR("t1")), &TVAR("t0")),
+               &t_int));
+
   return status;
 }
 
