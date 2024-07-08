@@ -63,7 +63,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     int idx = res->symbol_data.STYPE_FN_PARAM;
     return LLVMGetParam(current_func(builder), idx);
   } else if (res->type == STYPE_FUNCTION) {
-    return LLVMGetNamedFunction(module, chars);
+    return res->val;
   } else if (res->type == STYPE_GENERIC_FUNCTION) {
     return NULL;
   }
@@ -74,8 +74,20 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 void bind_symbol_in_scope(const char *id, uint64_t id_hash, LLVMTypeRef type,
                           LLVMValueRef val, symbol_type sym_type,
                           JITLangCtx *ctx) {
+
   JITSymbol *v = malloc(sizeof(JITSymbol));
   *v = (JITSymbol){.llvm_type = type, .type = sym_type, .val = val};
+
+  ht *scope = ctx->stack + ctx->stack_ptr;
+  ht_set_hash(scope, id, id_hash, v);
+}
+
+void bind_fn_in_scope(const char *id, uint64_t id_hash, LLVMTypeRef type,
+                      LLVMValueRef val, symbol_type sym_type, JITLangCtx *ctx) {
+
+  JITSymbol *v = malloc(sizeof(JITSymbol));
+  *v = (JITSymbol){.llvm_type = type, .type = sym_type, .val = val};
+
   ht *scope = ctx->stack + ctx->stack_ptr;
   ht_set_hash(scope, id, id_hash, v);
 }
@@ -120,10 +132,6 @@ LLVMValueRef codegen_single_assignment(Ast *id, LLVMValueRef expr_val,
     LLVMValueRef alloca_val =
         LLVMAddGlobalInAddressSpace(module, llvm_val_type, id_chars, 0);
     LLVMSetInitializer(alloca_val, expr_val);
-
-    // LLVMValueRef alloca_val =
-    //     LLVMBuildMalloc(builder, llvm_val_type, "top_level_var");
-    // LLVMBuildStore(builder, expr_val, alloca_val);
 
     bind_symbol_in_scope(id_chars, id_hash, llvm_val_type, alloca_val,
                          STYPE_TOP_LEVEL_VAR, ctx);

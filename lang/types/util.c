@@ -3,6 +3,7 @@
 #include "types/type.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 bool is_list_type(Type *type) {
@@ -212,4 +213,51 @@ bool types_equal(Type *t1, Type *t2) {
   }
   }
   return false;
+}
+
+// Deep copy implementation (simplified)
+Type *deep_copy_type(const Type *original) {
+  Type *copy = malloc(sizeof(Type));
+  copy->kind = original->kind;
+
+  switch (original->kind) {
+  case T_VAR:
+    copy->data.T_VAR = strdup(original->data.T_VAR);
+    break;
+  case T_CONS:
+    // Deep copy of name and args
+    copy->data.T_CONS.name = strdup(original->data.T_CONS.name);
+    copy->data.T_CONS.num_args = original->data.T_CONS.num_args;
+    copy->data.T_CONS.args =
+        malloc(sizeof(Type *) * copy->data.T_CONS.num_args);
+    for (int i = 0; i < copy->data.T_CONS.num_args; i++) {
+      copy->data.T_CONS.args[i] = deep_copy_type(original->data.T_CONS.args[i]);
+    }
+    break;
+  case T_FN:
+    copy->data.T_FN.from = deep_copy_type(original->data.T_FN.from);
+    copy->data.T_FN.to = deep_copy_type(original->data.T_FN.to);
+    break;
+  }
+  return copy;
+}
+
+// Deep free a type var
+void free_type(const Type *type) {
+  switch (type->kind) {
+  case T_VAR:
+    // free((void *)type->data.T_VAR);
+    break;
+  case T_CONS:
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      free_type(type->data.T_CONS.args[i]);
+    }
+    free(type->data.T_CONS.args);
+    break;
+  case T_FN:
+    free_type(type->data.T_FN.from);
+    free_type(type->data.T_FN.to);
+    break;
+  }
+  free((void *)type);
 }
