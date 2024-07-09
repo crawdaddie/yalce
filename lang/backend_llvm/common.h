@@ -3,6 +3,7 @@
 
 #include "ht.h"
 #include "parse.h"
+#include "types/util.h"
 #include "llvm-c/Types.h"
 
 typedef struct {
@@ -10,6 +11,12 @@ typedef struct {
   ht *stack;
   int stack_ptr;
 } JITLangCtx;
+
+typedef struct SpecificFns {
+  const char *serialized_type;
+  LLVMValueRef func;
+  struct SpecificFns *next;
+} SpecificFns;
 
 typedef enum symbol_type {
   STYPE_FN_PARAM,
@@ -29,6 +36,7 @@ typedef struct {
     struct {
       Ast *ast;
       int stack_ptr;
+      SpecificFns *specific_fns;
     } STYPE_GENERIC_FUNCTION;
   } symbol_data;
 } JITSymbol;

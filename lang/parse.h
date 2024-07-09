@@ -124,17 +124,17 @@ struct Ast {
 
     struct AST_STRING {
       char *value;
-      int length;
+      size_t length;
     } AST_STRING;
 
     struct AST_IDENTIFIER {
       const char *value;
-      int length;
+      size_t length;
     } AST_IDENTIFIER;
 
     struct AST_META {
       char *value;
-      int length;
+      size_t length;
       Ast *next;
     } AST_META;
 
@@ -156,7 +156,7 @@ struct Ast {
     struct AST_APPLICATION {
       Ast *function;
       Ast *args;
-      int len;
+      size_t len;
       // size_t num_args;
     } AST_APPLICATION;
 
@@ -192,7 +192,7 @@ struct Ast {
     struct AST_MATCH {
       Ast *expr;
       Ast *branches;
-      int len;
+      size_t len;
     } AST_MATCH;
 
   } data;

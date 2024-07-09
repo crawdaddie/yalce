@@ -5,6 +5,11 @@
 #include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+#define _DBG_GENERIC_SYMBOLS
+
+// forward decl
+JITSymbol *create_generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
+                                    JITLangCtx *ctx);
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
@@ -28,6 +33,22 @@ int codegen_lookup_id(const char *id, int length, JITLangCtx *ctx,
   *result = res;
   return 0;
 }
+
+JITSymbol *lookup_id_mutable(const char *id, int length, JITLangCtx *ctx) {
+
+  ObjString key = {.chars = id, length, hash_string(id, length)};
+  int ptr = ctx->stack_ptr;
+
+  while (ptr >= 0) {
+    JITSymbol *res = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
+    if (res != NULL) {
+      return res;
+    }
+    ptr--;
+  }
+  return NULL;
+}
+
 LLVMValueRef current_func(LLVMBuilderRef builder) {
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   return LLVMGetBasicBlockParent(current_block);
@@ -209,16 +230,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ambient_ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
 
   Ast *binding_identifier = ast->data.AST_LET.binding;
-  LLVMValueRef expr_val =
-      codegen(ast->data.AST_LET.expr, ambient_ctx, module, builder);
 
-  Type *expr_type = ast->data.AST_LET.expr->md;
-
-  if (!expr_val) {
-    return NULL;
-  }
-
-  LLVMTypeRef llvm_expr_type = LLVMTypeOf(expr_val);
   JITLangCtx ctx = {.stack = ambient_ctx->stack,
                     .stack_ptr = ast->data.AST_LET.in_expr != NULL
                                      ? ambient_ctx->stack_ptr + 1
@@ -226,6 +238,32 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ambient_ctx,
 
   };
 
+  if (is_generic(ast->md) && ast->data.AST_LET.expr->tag == AST_LAMBDA) {
+    JITSymbol *generic_sym = create_generic_fn_symbol(
+        binding_identifier, ast->data.AST_LET.expr, ambient_ctx);
+
+    ht *scope = ambient_ctx->stack + ambient_ctx->stack_ptr;
+    const char *id = binding_identifier->data.AST_IDENTIFIER.value;
+    int id_len = binding_identifier->data.AST_IDENTIFIER.length;
+    ht_set_hash(scope, id, hash_string(id, id_len), generic_sym);
+
+#ifdef _DBG_GENERIC_SYMBOLS
+    printf("generic symbol '%s':\n", id);
+    print_type(generic_sym->symbol_data.STYPE_GENERIC_FUNCTION.ast->md);
+    printf("\n");
+#endif
+    return NULL;
+  }
+
+  LLVMValueRef expr_val =
+      codegen(ast->data.AST_LET.expr, ambient_ctx, module, builder);
+
+  LLVMTypeRef llvm_expr_type = LLVMTypeOf(expr_val);
+  Type *expr_type = ast->data.AST_LET.expr->md;
+
+  if (!expr_val) {
+    return NULL;
+  }
   codegen_multiple_assignment(binding_identifier, expr_val, expr_type, &ctx,
                               module, builder, false, 0);
 

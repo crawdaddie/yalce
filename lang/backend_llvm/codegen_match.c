@@ -38,7 +38,8 @@ static LLVMValueRef codegen_match_tuple(LLVMValueRef expr_val, Ast *pattern,
     if (!codegen_multiple_assignment(tuple_item_ast, tuple_member_val,
                                      tuple_item_ast->md, ctx, module, builder,
                                      false, 0)) {
-      // assignment returns null - no var so compare literal val
+
+      // assignment returns null - no assignment made so compare literal val
       res =
           LLVMBuildAnd(builder, res,
                        codegen_match_condition(tuple_member_val, tuple_item_ast,
