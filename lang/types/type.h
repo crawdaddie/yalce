@@ -79,6 +79,8 @@ TypeScheme *generalize(TypeEnv env, Type *type);
 Type *instantiate(TypeScheme *scheme);
 void unify(Type *t1, Type *t2);
 
+void _unify(Type *t1, Type *t2, TypeEnv **env);
+
 Type *create_type_var(const char *name);
 Type *tvar(const char *name);
 

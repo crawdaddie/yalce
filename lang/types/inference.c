@@ -1,4 +1,6 @@
 #include "types/inference.h"
+#include "common.h"
+#include "format_utils.h"
 #include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
@@ -75,8 +77,8 @@ static Type *type_of_var(Ast *ast) {
     return tcons("Tuple", tuple_mems, len);
   }
   default: {
-    print_ast(ast);
-    printf("\n");
+    // print_ast(ast);
+    // printf("\n");
     fprintf(stderr, "Typecheck err: lambda arg type %d unsupported\n",
             ast->tag);
     return NULL;
@@ -171,6 +173,93 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
   return final_type;
 }
 
+static Type *resolve_single_type(Type *t, TypeEnv *env) {
+  if (t == NULL)
+    return NULL;
+
+  switch (t->kind) {
+  case T_VAR: {
+    Type *resolved = env_lookup(env, t->data.T_VAR);
+    if (resolved != NULL) {
+      // Recursively resolve the found type
+      return resolve_single_type(resolved, env);
+    }
+    return t; // If not found in env, return the original type
+  }
+  case T_CONS: {
+    Type *new_type = malloc(sizeof(Type));
+    if (new_type == NULL)
+      return NULL; // Handle allocation failure
+
+    *new_type = *t; // Copy the original type
+    new_type->data.T_CONS.args =
+        malloc(sizeof(Type *) * t->data.T_CONS.num_args);
+    if (new_type->data.T_CONS.args == NULL) {
+      free(new_type);
+      return NULL; // Handle allocation failure
+    }
+
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      new_type->data.T_CONS.args[i] =
+          resolve_single_type(t->data.T_CONS.args[i], env);
+    }
+    return new_type;
+  }
+  case T_FN: {
+    Type *new_type = malloc(sizeof(Type));
+    if (new_type == NULL)
+      return NULL; // Handle allocation failure
+
+    *new_type = *t; // Copy the original type
+    new_type->data.T_FN.from = resolve_single_type(t->data.T_FN.from, env);
+    new_type->data.T_FN.to = resolve_single_type(t->data.T_FN.to, env);
+    return new_type;
+  }
+  default:
+    // For other types, just return a copy
+    return t;
+  }
+}
+static Type *resolve_in_env(Type *t, TypeEnv *env) {
+  if (t == NULL)
+    return NULL;
+
+  return resolve_single_type(t, env);
+}
+
+static Type *infer_fn_application(TypeEnv **env, Ast *ast) {
+
+  Type *fn_type =
+      deep_copy_type(infer(env, ast->data.AST_APPLICATION.function));
+  if (!fn_type) {
+    return NULL;
+  }
+
+  Type *result_type = next_tvar();
+
+  Type *expected_fn_type = result_type;
+
+  Type *fn_return = fn_type;
+
+  for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+    expected_fn_type = create_type_fn(
+        infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
+
+    fn_return = fn_return->data.T_FN.to;
+  }
+
+  TypeEnv *_env = NULL;
+  _unify(result_type, fn_return, &_env);
+  _unify(fn_type, expected_fn_type, &_env);
+
+  Type *res = fn_type;
+
+  for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+    res = res->data.T_FN.to;
+  }
+  return resolve_in_env(res, _env);
+}
+
 // Main type inference function
 //
 Type *infer(TypeEnv **env, Ast *ast) {
@@ -206,9 +295,10 @@ Type *infer(TypeEnv **env, Ast *ast) {
         unify(lt, rt);
         type = lt;
 
-        fprintf(stderr, "Not implemented warning: type coercion for "
-                        "non-arithmetic (eg T_VAR) "
-                        "type to Arithmetic typeclass\n");
+        fprintf(stderr,
+                STYLE_DIM "Not implemented warning: type coercion for "
+                          "non-arithmetic (eg T_VAR) "
+                          "type to Arithmetic typeclass\n" STYLE_RESET_ALL);
         break;
       }
       // arithmetic binop
@@ -223,8 +313,9 @@ Type *infer(TypeEnv **env, Ast *ast) {
         unify(lt, rt);
         type = lt;
 
-        fprintf(stderr, "Not implemented warning: type coercion for non-ord "
-                        "type to Ord typeclass\n");
+        fprintf(stderr,
+                STYLE_DIM "Not implemented warning: type coercion for non-ord "
+                          "type to Ord typeclass\n" STYLE_RESET_ALL);
         break;
       }
       break;
@@ -350,34 +441,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
     break;
   }
   case AST_APPLICATION: {
-    Type *fn_type =
-        deep_copy_type(infer(env, ast->data.AST_APPLICATION.function));
-    if (!fn_type) {
-      return NULL;
-    }
-
-    Type *result_type = next_tvar();
-    Type *expected_fn_type = result_type;
-
-    Type *fn_return = fn_type;
-
-    for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
-      expected_fn_type = create_type_fn(
-          infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
-
-      fn_return = fn_return->data.T_FN.to;
-    }
-
-    unify(result_type, fn_return);
-    unify(fn_type, expected_fn_type);
-
-    Type *res = fn_type;
-
-    for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
-      res = res->data.T_FN.to;
-    }
-    type = deep_copy_type(res);
-    free_type(fn_type);
+    type = infer_fn_application(env, ast);
     break;
   }
   case AST_MATCH: {

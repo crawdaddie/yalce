@@ -16,61 +16,16 @@ bool is_tuple_type(Type *type) {
 }
 
 void print_type(Type *type) {
+
   if (type == NULL) {
     printf("NULL");
     return;
   }
-
-  switch (type->kind) {
-
-  case T_INT:
-    printf("Int");
-    break;
-
-  case T_NUM:
-    printf("Double");
-    break;
-
-  case T_BOOL:
-    printf("Bool");
-    break;
-
-  case T_STRING:
-    printf("String");
-    break;
-
-  case T_VOID:
-    printf("()");
-    break;
-
-  case T_VAR:
-    printf("%s", type->data.T_VAR);
-    break;
-
-  case T_CONS:
-    printf("%s", type->data.T_CONS.name);
-    if (type->data.T_CONS.num_args > 0) {
-      printf("(");
-      for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-        if (i > 0)
-          printf(", ");
-        print_type(type->data.T_CONS.args[i]);
-      }
-      printf(")");
-    }
-    break;
-
-  case T_FN:
-    printf("(");
-    print_type(type->data.T_FN.from);
-    printf(" -> ");
-    print_type(type->data.T_FN.to);
-    printf(")");
-    break;
-  default:
-    printf("Unknown");
-    break;
-  }
+  TypeSerBuf *b = create_type_ser_buffer(100);
+  serialize_type(type, b);
+  printf("%s", (char *)b->data);
+  free(b->data);
+  free(b);
 }
 
 // Helper function to print type schemes (for debugging)
@@ -296,6 +251,25 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
     break;
   }
   case T_CONS: {
+    if (strcmp(type->data.T_CONS.name, "Tuple") == 0) {
+
+      buffer_write(buf, "(", 1);
+      for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+        serialize_type(type->data.T_CONS.args[i], buf);
+        if (i < type->data.T_CONS.num_args - 1) {
+          buffer_write(buf, " * ", 3);
+        }
+      }
+      buffer_write(buf, ")", 1);
+      break;
+    }
+
+    if (strcmp(type->data.T_CONS.name, "List") == 0) {
+      buffer_write(buf, "[", 1);
+      serialize_type(type->data.T_CONS.args[0], buf);
+      buffer_write(buf, "]", 1);
+      break;
+    }
     buffer_write(buf, "cons(", 5);
     buffer_write(buf, type->data.T_CONS.name, strlen(type->data.T_CONS.name));
     buffer_write(buf, ", ", 2);

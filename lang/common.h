@@ -11,5 +11,6 @@ typedef struct {
 
 uint64_t hash_string(const char *key, int length);
 uint64_t hash_key(const char *key);
+#include <stdio.h>
 
 #endif

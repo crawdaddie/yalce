@@ -161,7 +161,7 @@ Type *fresh(Type *type) {
 //
 //
 //
-static void _unify(Type *t1, Type *t2, TypeEnv **env) {
+void _unify(Type *t1, Type *t2, TypeEnv **env) {
 #ifdef DBG_UNIFY
   printf("unify l: ");
   print_type(t1);

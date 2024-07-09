@@ -178,6 +178,15 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
+static TypeSerBuf *get_specific_fn_args_key(size_t len, Ast *args) {
+  TypeSerBuf *specific_fn_buf = create_type_ser_buffer(10);
+
+  for (size_t i = 0; i < len; i++) {
+    serialize_type(args[i].md, specific_fn_buf);
+  }
+  return specific_fn_buf;
+}
+
 static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
                                                   LLVMModuleRef module,
                                                   LLVMBuilderRef builder) {
@@ -209,25 +218,21 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
 
     Ast *args = ast->data.AST_APPLICATION.args;
     size_t len = ast->data.AST_APPLICATION.len;
-    TypeSerBuf *specific_fn_buf = create_type_ser_buffer(10);
 
-    for (size_t i = 0; i < len; i++) {
-      serialize_type(args[i].md, specific_fn_buf);
-    }
+    TypeSerBuf *specific_fn_buf = get_specific_fn_args_key(len, args);
 
     SpecificFns *specific_fns =
         res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
 
-    LLVMValueRef func = specific_fns_lookup(
-        res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
-        (char *)specific_fn_buf->data);
+    LLVMValueRef func =
+        specific_fns_lookup(specific_fns, (char *)specific_fn_buf->data);
 
     if (func == NULL) {
-
       Type *specific_arg_types[len];
       for (size_t i = 0; i < len; i++) {
         specific_arg_types[i] = (Type *)deep_copy_type(args[i].md);
       }
+
       // compile new variant & save
       Type *specific_fn_type = create_type_multi_param_fn(
           len, specific_arg_types, deep_copy_type(ast->md));
@@ -239,12 +244,12 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
       Ast *specific_ast = malloc(sizeof(Ast));
       *specific_ast = *(res->symbol_data.STYPE_GENERIC_FUNCTION.ast);
       specific_ast->md = specific_fn_type;
-      int total_fn_name_len = fn_name_len + 1 + fn_md_key_len + 2;
+      int total_fn_name_len = fn_name_len + 1 + fn_md_key_len + 1;
       specific_ast->data.AST_LAMBDA.fn_name =
           (ObjString){.chars = malloc(sizeof(char) * (total_fn_name_len + 1))};
 
-      snprintf(specific_ast->data.AST_LAMBDA.fn_name.chars, total_fn_name_len,
-               "%s[%s]", fn_name, fn_md_key);
+      snprintf(specific_ast->data.AST_LAMBDA.fn_name.chars,
+               total_fn_name_len + 1, "%s[%s]", fn_name, fn_md_key);
       JITLangCtx compilation_ctx = {
           ctx->stack, res->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr};
 
