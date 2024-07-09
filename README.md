@@ -109,7 +109,7 @@ is typed as `((t1 * t2) ->  t1)` - in other words it maps a tuple `'t1 * 't2` to
 since this function is generic in t1 & t2 (even though t2 isn't used)
 it's compilation in the LLVM backend is deferred until it's called with concrete parameters, 
 
-eg `first (1, "hi")` results in the compilation and caching of a monomorphised version of 
+eg `first (1, "hi")` results in the compilation and caching of a concrete version of 
 `first`
 
 which looks like this in LLVM IR:
