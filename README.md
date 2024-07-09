@@ -49,7 +49,8 @@ REPL - want to be able to iteratively modify the running audio graph
 
 ## features / syntax
 the DSL is a language loosely based on ocaml syntax for creating and linking audio node objects
-it supports declaring external functions:
+
+it supports declaring external C functions:
 ```ocaml
 let init_audio  = extern fn () -> () ;; # audio engine library init func
 let printf      = extern fn string -> () ;; # simplified printf from c stdlib
@@ -68,10 +69,8 @@ let g = f 1 2;
 g 3 # returns: 6
 
 3 |> f 1 2; # evaluates f 1 2 3 
-
 ```
 recursion and basic pattern-matching:
-
 ```ocaml
 let fib = fn x ->
   (match x with
@@ -80,8 +79,48 @@ let fib = fn x ->
   | _ -> (fib (x - 1)) + (fib (x - 2))
   )
 ;;
-
 ```
+destructuring values in let bindings, function parameters and more complex pattern-matching:
+```ocaml
+let (x, _) = (1, 2) in x + 1;
+let first = fn (a, _) -> a ;;
+
+let complex_match = fn x -> 
+  (match x with
+  | (1, _) -> 0
+  | (2, z) -> 100 + z
+  | _      -> 1000
+  )
+;;
+
+complex_match (2, 2)
+```
+
+and type inference:
+
+this function
+```ocaml
+let first = fn (a, _) ->
+    a
+;;
+```
+is typed as `((t1 * t2) ->  t1)` - in other words it maps a tuple of 't1 * 't2 to 't1
+since this function is generic in t1 & t2 (even though t2 isn't used)
+it's compilation in the LLVM backend is deferred until it's called with concrete parameters, 
+eg `first (1, "hi")` results in the compilation and caching of a monomorphised version of 
+`first`
+
+which looks like this in LLVM IR:
+```
+define i32 @"first[(Int * String)]"({ i32, ptr } %0) {
+entry:
+  %struct_element = extractvalue { i32, ptr } %0, 0
+  ret { i32, ptr } %0
+}
+```
+
+
+
 
  
 ## Build lang executable

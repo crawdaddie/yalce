@@ -5,7 +5,7 @@
 #include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
-#define _DBG_GENERIC_SYMBOLS
+// #define _DBG_GENERIC_SYMBOLS
 
 // forward decl
 JITSymbol *create_generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
