@@ -104,9 +104,11 @@ let first = fn (a, _) ->
     a
 ;;
 ```
-is typed as `((t1 * t2) ->  t1)` - in other words it maps a tuple of 't1 * 't2 to 't1
+is typed as `((t1 * t2) ->  t1)` - in other words it maps a tuple `'t1 * 't2` to `'t1`
+
 since this function is generic in t1 & t2 (even though t2 isn't used)
 it's compilation in the LLVM backend is deferred until it's called with concrete parameters, 
+
 eg `first (1, "hi")` results in the compilation and caching of a monomorphised version of 
 `first`
 
@@ -118,6 +120,8 @@ entry:
   ret { i32, ptr } %0
 }
 ```
+
+monomorphization and type inference is necessary when using the LLVM backend because boxed or tagged datatypes aren't implemented and all function inputs and sizes must be known when compiling
 
 
 
