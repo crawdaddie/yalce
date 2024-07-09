@@ -2,6 +2,7 @@
 #include "../lang/serde.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/util.h"
+#include "format_utils.h"
 #include "test_typecheck_utils.h"
 #include <stdlib.h>
 #include <string.h>
@@ -16,26 +17,32 @@ bool typecheck_prog(Ast *prog) {
   return true;
 }
 
-bool test(Ast *prog, Type **exp_types) {
+bool test(char *input, Ast *prog, Type **exp_types) {
   int pass = true;
   for (size_t i = 0; i < prog->data.AST_BODY.len; ++i) {
 
     Ast *stmt = prog->data.AST_BODY.stmts[i];
 
     if (stmt->tag == AST_BODY) {
-      pass &= test(stmt, exp_types + i);
+      pass &= test(input, stmt, exp_types + i);
     } else {
       bool t = types_equal(stmt->md, exp_types[i]);
-      printf("\e[1mstmt:\e[0m\n");
-      print_ast(stmt);
-
-      printf("%s\e[1mtype: \e[0m", t ? "✅" : "❌");
-      print_type(stmt->md);
-      if (!t) {
-        printf(" expected ");
+      if (t) {
+        printf("✅ ");
+        print_ast(stmt);
+        printf(" => \e[1mtype: \e[0m");
+        print_type(stmt->md);
+      } else {
+        printf("❌ ");
+        print_ast(stmt);
+        printf(" => ");
+        printf(STYLE_BOLD "type: " STYLE_RESET_ALL);
+        print_type(stmt->md);
+        printf(STYLE_BOLD " expected: " STYLE_RESET_ALL);
         print_type(exp_types[i]);
       }
       printf("\n");
+
       pass &= t;
     }
     // free_type(exp_types[i]);
@@ -56,18 +63,16 @@ bool tcheck(char input[], Type **exp_types) {
   reset_type_var_counter();
 
   TypeEnv *env = NULL;
-  printf("\e[1minput:\e[0m\n%s\n", input);
 
   Type *tcheck_val = infer_ast(&env, prog);
 
   if (!tcheck_val) {
-    printf("❌ Type inference failed\n");
+    printf("❌ input: %s Type inference failed\n", input);
   } else {
-    bool pass = test(prog, exp_types);
+    bool pass = test(input, prog, exp_types);
   }
 
-  printf("-----\n");
-
+  printf("---------------------------\n");
   free(sexpr);
   free(prog);
   yyrestart(NULL);
@@ -87,15 +92,14 @@ bool tcheck_w_env(TypeEnv *env, char input[], Type **exp_types) {
 
   reset_type_var_counter();
 
-  printf("\e[1minput:\e[0m\n%s\n", input);
   Type *tcheck_val = infer_ast(&env, prog);
   if (!tcheck_val) {
-    printf("❌ Type inference failed\n");
+    printf("❌ input: %s Type inference failed\n", input);
   } else {
-    bool pass = test(prog, exp_types);
+    bool pass = test(input, prog, exp_types);
   }
 
-  printf("-----\n");
+  printf("---------------------------\n");
 
   free(sexpr);
   free(prog);
@@ -117,12 +121,12 @@ bool schemes_equal(TypeScheme *s1, TypeScheme *s2) {
 
 #define TYPES_EQUAL(desc, actual_type, exp_type, status)                       \
   if (types_equal(actual_type, exp_type)) {                                    \
-    printf("✅\e[1m" desc "\e[0m");                                            \
+    printf("✅ \e[1m" desc "\e[0m");                                           \
     print_type(actual_type);                                                   \
     printf("\n");                                                              \
     status &= true;                                                            \
   } else {                                                                     \
-    printf("❌\e[1m" desc "\e[0m got ");                                       \
+    printf("❌ \e[1m" desc "\e[0m got ");                                      \
     print_type(actual_type);                                                   \
     printf(" expected ");                                                      \
     print_type(exp_type);                                                      \
@@ -132,15 +136,17 @@ bool schemes_equal(TypeScheme *s1, TypeScheme *s2) {
 
 bool test_unify() {
   bool status = true;
-  Type *result = &TVAR("t0");
-  Type *t0 = create_type_fn(TUPLE(2, &t_int, &t_int), result);
-  Type *t1 = create_type_fn(TUPLE(2, &TVAR("t0"), &TVAR("t1")), &TVAR("t0"));
+  {
+    Type *result = &TVAR("t0");
+    Type *t0 = create_type_fn(TUPLE(2, &t_int, &t_int), result);
+    Type *t1 = create_type_fn(TUPLE(2, &TVAR("t0"), &TVAR("t1")), &TVAR("t0"));
 
-  unify(t0, t1);
+    unify(t0, t1);
 
-  TYPES_EQUAL("Unify: specific vs generic type:", t0,
-              create_type_fn(tcons("Tuple", T(&t_int, &t_int), 2), &t_int),
-              status)
+    TYPES_EQUAL("Unify: specific vs generic type:", t0,
+                create_type_fn(tcons("Tuple", T(&t_int, &t_int), 2), &t_int),
+                status)
+  }
 
   return status;
 }
@@ -263,13 +269,14 @@ int typecheck_ast() {
                      T(create_type_multi_param_fn(2, T(t, t), t), res));
   }
 
-  status &=
-      tcheck("let first = fn (a, _) b -> \n"
-             "  a\n"
-             ";;\n"
-             "first (1, 2) (1, 2)",
-             T(create_type_fn(TUPLE(2, &TVAR("t1"), &TVAR("t2")), &TVAR("t1")),
-               &t_int));
+  status &= tcheck(
+      "let first = fn (a, _) b -> \n"
+      "  a\n"
+      ";;\n"
+      "first (1, 2) (1, 2)",
+      T(create_type_multi_param_fn(
+            2, T(TUPLE(2, &TVAR("t1"), &TVAR("t2")), &TVAR("t3")), &TVAR("t1")),
+        &t_int));
 
   return status;
 }

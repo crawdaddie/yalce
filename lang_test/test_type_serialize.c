@@ -33,7 +33,9 @@ int main() {
 
   status &= TEST_CONCAT_TYPES(
       3, T(TUPLE(3, &t_num, &t_string, &t_int), &t_string, &t_int),
-      "cons(Tuple, 3, Double, String, Int)StringInt");
+      "(Double * String * Int)StringInt");
+
+  status &= TEST_CONCAT_TYPES(1, T(TLIST(&t_num)), "[Double]");
 
   return !status;
 }
