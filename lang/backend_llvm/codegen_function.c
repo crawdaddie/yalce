@@ -7,6 +7,27 @@
 #include <stdlib.h>
 #include <string.h>
 
+SpecificFns *specific_fns_extend(SpecificFns *list, const char *serialized_type,
+                                 LLVMValueRef func) {
+  SpecificFns *new_specific_fn = malloc(sizeof(SpecificFns));
+
+  new_specific_fn->serialized_type = serialized_type;
+  new_specific_fn->func = func;
+  new_specific_fn->next = list;
+  return new_specific_fn;
+};
+
+LLVMValueRef specific_fns_lookup(SpecificFns *list,
+                                 const char *serialized_type) {
+  while (list) {
+    if (strcmp(serialized_type, list->serialized_type) == 0) {
+      return list->func;
+    }
+    list = list->next;
+  }
+  return NULL;
+};
+
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
@@ -17,11 +38,10 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = ast->md;
 
   // Create argument list.
-  LLVMTypeRef llvm_param_type_refs[fn_len];
-  // = malloc(sizeof(LLVMTypeRef) * fn_len);
+  LLVMTypeRef llvm_param_types[fn_len];
 
   for (int i = 0; i < fn_len; i++) {
-    llvm_param_type_refs[i] = type_to_llvm_type(fn_type->data.T_FN.from);
+    llvm_param_types[i] = type_to_llvm_type(fn_type->data.T_FN.from);
     fn_type = fn_type->data.T_FN.to;
   }
 
@@ -30,31 +50,18 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create function type with return.
   LLVMTypeRef llvm_fn_type =
-      LLVMFunctionType(llvm_return_type_ref, llvm_param_type_refs, fn_len, 0);
+      LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
 
   // Create function.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, llvm_fn_type);
   LLVMSetLinkage(func, LLVMExternalLinkage);
-  // free(llvm_param_type_refs);
+
   return func;
 }
 
 LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-
-  // printf("fn: %s\n", ast->data.AST_LAMBDA.fn_name.chars);
-  // print_type(ast->md);
-  // printf("\n");
-
-  if (is_generic(ast->md)) {
-
-    // printf("-------\n");
-    // print_type(ast->md);
-    // printf("\nfn %s is generic!!!\n-------\n",
-    //        ast->data.AST_LAMBDA.fn_name.chars);
-    return NULL;
-  }
 
   // Generate the prototype first.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
@@ -158,7 +165,7 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return func;
   }
 
-  LLVMTypeRef *llvm_param_types = malloc(sizeof(LLVMTypeRef) * params_count);
+  LLVMTypeRef llvm_param_types[params_count];
   for (int i = 0; i < params_count; i++) {
     llvm_param_types[i] = llvm_type_id(signature_types + i);
   }
@@ -168,27 +175,27 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
 
   LLVMValueRef func = LLVMAddFunction(module, name, fn_type);
-  free(llvm_param_types);
   return func;
 }
 
-static LLVMValueRef codegen_fn_application_identifier(Ast *ast, JITLangCtx *ctx,
-                                                      LLVMModuleRef module,
-                                                      LLVMBuilderRef builder) {
-  const char *chars = ast->data.AST_IDENTIFIER.value;
-  int length = ast->data.AST_IDENTIFIER.length;
+static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
+                                                  LLVMModuleRef module,
+                                                  LLVMBuilderRef builder) {
+  Ast *fn_id = ast->data.AST_APPLICATION.function;
+  const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
+  int fn_name_len = fn_id->data.AST_IDENTIFIER.length;
 
   JITSymbol *res = NULL;
 
-  if (codegen_lookup_id(chars, length, ctx, &res)) {
+  if (codegen_lookup_id(fn_name, fn_name_len, ctx, &res)) {
 
-    printf("codegen identifier failed symbol %s not found in scope %d\n", chars,
-           ctx->stack_ptr);
+    printf("codegen identifier failed symbol %s not found in scope %d\n",
+           fn_name, ctx->stack_ptr);
     return NULL;
   }
 
   if (res->type == STYPE_TOP_LEVEL_VAR) {
-    LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
+    LLVMValueRef glob = LLVMGetNamedGlobal(module, fn_name);
     LLVMValueRef val = LLVMGetInitializer(glob);
     return val;
   } else if (res->type == STYPE_LOCAL_VAR) {
@@ -199,8 +206,59 @@ static LLVMValueRef codegen_fn_application_identifier(Ast *ast, JITLangCtx *ctx,
   } else if (res->type == STYPE_FUNCTION) {
     return res->val;
   } else if (res->type == STYPE_GENERIC_FUNCTION) {
-    // printf("found generic function\n");
-    return LLVMConstInt(LLVMInt32Type(), 1, 0);
+
+    Ast *args = ast->data.AST_APPLICATION.args;
+    size_t len = ast->data.AST_APPLICATION.len;
+    TypeSerBuf *specific_fn_buf = create_type_ser_buffer(10);
+
+    for (size_t i = 0; i < len; i++) {
+      serialize_type(args[i].md, specific_fn_buf);
+    }
+
+    SpecificFns *specific_fns =
+        res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
+
+    LLVMValueRef func = specific_fns_lookup(
+        res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
+        (char *)specific_fn_buf->data);
+
+    if (func == NULL) {
+
+      Type *specific_arg_types[len];
+      for (size_t i = 0; i < len; i++) {
+        specific_arg_types[i] = (Type *)deep_copy_type(args[i].md);
+      }
+      // compile new variant & save
+      Type *specific_fn_type = create_type_multi_param_fn(
+          len, specific_arg_types, deep_copy_type(ast->md));
+
+      size_t fn_md_key_len = specific_fn_buf->size;
+      char *fn_md_key = malloc(sizeof(char) * (fn_md_key_len + 1));
+      strncpy(fn_md_key, (const char *)specific_fn_buf->data, fn_md_key_len);
+
+      Ast *specific_ast = malloc(sizeof(Ast));
+      *specific_ast = *(res->symbol_data.STYPE_GENERIC_FUNCTION.ast);
+      specific_ast->md = specific_fn_type;
+      int total_fn_name_len = fn_name_len + 1 + fn_md_key_len + 2;
+      specific_ast->data.AST_LAMBDA.fn_name =
+          (ObjString){.chars = malloc(sizeof(char) * (total_fn_name_len + 1))};
+
+      snprintf(specific_ast->data.AST_LAMBDA.fn_name.chars, total_fn_name_len,
+               "%s[%s]", fn_name, fn_md_key);
+      JITLangCtx compilation_ctx = {
+          ctx->stack, res->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr};
+
+      func = codegen_lambda(specific_ast, &compilation_ctx, module, builder);
+
+      res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+          specific_fns_extend(specific_fns, fn_md_key, func);
+
+      ht *scope = ctx->stack + ctx->stack_ptr;
+      ht_set_hash(scope, fn_name, hash_string(fn_name, fn_name_len), res);
+    }
+    free(specific_fn_buf->data);
+    free(specific_fn_buf);
+    return func;
   }
 }
 
@@ -208,12 +266,14 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
-  // printf("application type: ");
-  // print_ast(ast);
-  // print_type(ast->md);
-  // printf("\n");
-  LLVMValueRef func = codegen_fn_application_identifier(
-      ast->data.AST_APPLICATION.function, ctx, module, builder);
+  Type *application_result_type = ast->md;
+
+  if (is_generic(application_result_type)) {
+    fprintf(stderr, "Error: fn application result is generic");
+    return NULL;
+  }
+
+  LLVMValueRef func = codegen_fn_application_callee(ast, ctx, module, builder);
 
   if (!func) {
     return NULL;
@@ -241,4 +301,18 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
   return NULL;
+}
+
+JITSymbol *create_generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
+                                    JITLangCtx *ctx) {
+  JITSymbol *sym = malloc(sizeof(JITSymbol));
+  ht *fn_lookup_table = ht_create();
+  ht_init(fn_lookup_table);
+
+  *sym = (JITSymbol){
+      STYPE_GENERIC_FUNCTION,
+      .symbol_data = {
+          .STYPE_GENERIC_FUNCTION = {fn_ast, ctx->stack_ptr, fn_lookup_table}}};
+
+  return sym;
 }

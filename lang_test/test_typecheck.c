@@ -2,7 +2,7 @@
 #include "../lang/serde.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/util.h"
-#include <assert.h>
+#include "test_typecheck_utils.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -103,17 +103,6 @@ bool tcheck_w_env(TypeEnv *env, char input[], Type **exp_types) {
   ast_root = NULL;
   return true;
 }
-
-#define T(...)                                                                 \
-  (Type *[]) { __VA_ARGS__ }
-
-#define TUPLE(num, ...) tcons("Tuple", T(__VA_ARGS__), num)
-#define TLIST(t) tcons("List", T(t), 1)
-
-#define TVAR(name)                                                             \
-  (Type) {                                                                     \
-    T_VAR, { .T_VAR = name }                                                   \
-  }
 
 // Helper function to compare type schemes
 bool schemes_equal(TypeScheme *s1, TypeScheme *s2) {
@@ -256,6 +245,7 @@ int typecheck_ast() {
              "first (1, 2)",
              T(create_type_fn(TUPLE(2, &TVAR("t1"), &TVAR("t2")), &TVAR("t1")),
                &t_int));
+
   status &= tcheck("let complex_match = fn x -> \n"
                    "(match x with\n"
                    "| (1, _) -> 0\n"
@@ -263,6 +253,23 @@ int typecheck_ast() {
                    "| _      -> 1000\n"
                    ");",
                    T(create_type_fn(TUPLE(2, &t_int, &t_int), &t_int)));
+  {
+    Type *t = TUPLE(2, &TVAR("t3"), &TVAR("t4"));
+    Type *res = TUPLE(2, &t_int, &t_int);
+    status &= tcheck("let add_tuples = fn (a1, a2) (b1, b2) -> \n"
+                     "  (a1 + b1, a2 + b2)\n"
+                     ";;\n"
+                     "add_tuples (1, 2) (3, 4)",
+                     T(create_type_multi_param_fn(2, T(t, t), t), res));
+  }
+
+  status &=
+      tcheck("let first = fn (a, _) b -> \n"
+             "  a\n"
+             ";;\n"
+             "first (1, 2) (1, 2)",
+             T(create_type_fn(TUPLE(2, &TVAR("t1"), &TVAR("t2")), &TVAR("t1")),
+               &t_int));
 
   return status;
 }

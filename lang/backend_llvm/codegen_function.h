@@ -16,4 +16,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
+
+JITSymbol *create_generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
+                                    JITLangCtx *ctx);
 #endif

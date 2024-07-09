@@ -19,6 +19,21 @@ bool is_list_type(Type *type);
 bool is_tuple_type(Type *type);
 bool is_generic(Type *type);
 
-Type *deep_copy_type(Type *t);
-void free_type(Type *t);
+Type *deep_copy_type(const Type *t);
+void free_type(const Type *t);
+
+typedef struct {
+  uint8_t *data;
+  size_t size;
+  size_t capacity;
+} TypeSerBuf;
+
+TypeSerBuf *serialize_generic_types(Type *fn);
+
+void serialize_type(Type *type, TypeSerBuf *buf);
+bool type_ser_bufs_equal(TypeSerBuf buf1, TypeSerBuf buf2);
+
+void buffer_write(TypeSerBuf *buf, const void *data, size_t size);
+
+TypeSerBuf *create_type_ser_buffer(size_t initial_capacity);
 #endif
