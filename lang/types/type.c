@@ -77,7 +77,6 @@ void substitute(Type *type, const char *var, Type *replacement) {
   }
 }
 
-// Helper functions (implement these)
 Type *create_type_var(const char *name) {
   Type *type = malloc(sizeof(Type));
   type->kind = T_VAR;
@@ -86,11 +85,6 @@ Type *create_type_var(const char *name) {
 }
 
 Type *tvar(const char *name) { return create_type_var(name); }
-
-Type *create_type_cons(const char *name, Type *args, int num_args) {
-  // Create a new type constructor
-  //
-}
 
 Type *tcons(const char *name, Type **_args, int num_args) {
   Type *type = malloc(sizeof(Type));

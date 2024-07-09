@@ -1,7 +1,6 @@
 #include "types/inference.h"
 #include "common.h"
 #include "format_utils.h"
-#include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
 #include <stdlib.h>
@@ -169,7 +168,6 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
 
     final_type = res_type;
   }
-  // print_type_env(*env);
   return final_type;
 }
 
@@ -187,17 +185,7 @@ static Type *resolve_single_type(Type *t, TypeEnv *env) {
     return t; // If not found in env, return the original type
   }
   case T_CONS: {
-    Type *new_type = malloc(sizeof(Type));
-    if (new_type == NULL)
-      return NULL; // Handle allocation failure
-
-    *new_type = *t; // Copy the original type
-    new_type->data.T_CONS.args =
-        malloc(sizeof(Type *) * t->data.T_CONS.num_args);
-    if (new_type->data.T_CONS.args == NULL) {
-      free(new_type);
-      return NULL; // Handle allocation failure
-    }
+    Type *new_type = deep_copy_type(t);
 
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       new_type->data.T_CONS.args[i] =
@@ -207,16 +195,12 @@ static Type *resolve_single_type(Type *t, TypeEnv *env) {
   }
   case T_FN: {
     Type *new_type = malloc(sizeof(Type));
-    if (new_type == NULL)
-      return NULL; // Handle allocation failure
-
-    *new_type = *t; // Copy the original type
+    new_type->kind = T_FN;
     new_type->data.T_FN.from = resolve_single_type(t->data.T_FN.from, env);
     new_type->data.T_FN.to = resolve_single_type(t->data.T_FN.to, env);
     return new_type;
   }
   default:
-    // For other types, just return a copy
     return t;
   }
 }

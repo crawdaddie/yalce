@@ -28,26 +28,6 @@ void print_type(Type *type) {
   free(b);
 }
 
-// Helper function to print type schemes (for debugging)
-void print_type_scheme(TypeScheme *scheme) {
-  if (scheme == NULL) {
-    printf("NULL");
-    return;
-  }
-
-  if (scheme->num_variables > 0) {
-    printf("forall ");
-    for (int i = 0; i < scheme->num_variables; i++) {
-      if (i > 0)
-        printf(", ");
-      printf("%s", scheme->variables[i]);
-    }
-    printf(". ");
-  }
-
-  print_type(scheme->type);
-}
-
 // Helper function to print the type environment (for debugging)
 void print_type_env(TypeEnv *env) {
   while (env != NULL) {
@@ -226,7 +206,7 @@ TypeSerBuf *create_type_ser_buffer(size_t initial_capacity) {
   return buf;
 }
 
-void buffer_write(TypeSerBuf *buf, const void *data, size_t size) {
+static void buffer_write(TypeSerBuf *buf, const void *data, size_t size) {
   if (buf->size + size > buf->capacity) {
     buf->capacity = (buf->size + size) * 2;
     buf->data = realloc(buf->data, buf->capacity);
@@ -320,107 +300,9 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
     // No additional data for other types
     break;
   }
-
-  // case T_CONS:
-  //   printf("%s", type->data.T_CONS.name);
-  //   if (type->data.T_CONS.num_args > 0) {
-  //     printf("(");
-  //     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-  //       if (i > 0)
-  //         printf(", ");
-  //       print_type(type->data.T_CONS.args[i]);
-  //     }
-  //     printf(")");
-  //   }
-  //   break;
-  //
-  // case T_FN:
-  //   printf("(");
-  //   print_type(type->data.T_FN.from);
-  //   printf(" -> ");
-  //   print_type(type->data.T_FN.to);
-  //   printf(")");
-  //   break;
-  // default:
-  //   printf("Unknown");
-  //   break;
-  // }
 }
 
-TypeSerBuf *serialize_generic_types(Type *fn) {
-  if (fn == NULL)
-    return NULL;
-
-  TypeSerBuf *buf = create_type_ser_buffer(1024); // Start with 1KB buffer
-
-  // Assuming the first type in the array is the function type
-  Type func_type = *fn;
-  if (func_type.kind != T_FN) {
-    fprintf(stderr, "Error: Expected function type\n");
-    free(buf->data);
-    free(buf);
-    return NULL;
-  }
-
-  serialize_type(&func_type, buf);
-
-  return buf;
-}
-
-void free_buffer(TypeSerBuf *buf) {
+static void free_buffer(TypeSerBuf *buf) {
   free(buf->data);
   free(buf);
-}
-
-// Deserialization functions
-
-Type *deserialize_type(uint8_t **data) {
-  uint8_t kind = *(*data)++;
-  if (kind == 0xFF)
-    return NULL; // Special value for NULL
-
-  Type *type = malloc(sizeof(Type));
-  type->kind = kind;
-
-  switch (kind) {
-  case T_VAR: {
-    size_t len;
-    memcpy(&len, *data, sizeof(size_t));
-    *data += sizeof(size_t);
-    type->data.T_VAR = malloc(len);
-    memcpy((char *)type->data.T_VAR, *data, len);
-    *data += len;
-    break;
-  }
-  case T_CONS: {
-    size_t name_len;
-    memcpy(&name_len, *data, sizeof(size_t));
-    *data += sizeof(size_t);
-    type->data.T_CONS.name = malloc(name_len);
-    memcpy((char *)type->data.T_CONS.name, *data, name_len);
-    *data += name_len;
-    memcpy(&type->data.T_CONS.num_args, *data, sizeof(int));
-    *data += sizeof(int);
-    type->data.T_CONS.args =
-        malloc(sizeof(Type *) * type->data.T_CONS.num_args);
-    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-      type->data.T_CONS.args[i] = deserialize_type(data);
-    }
-    break;
-  }
-  case T_FN:
-    type->data.T_FN.from = deserialize_type(data);
-    type->data.T_FN.to = deserialize_type(data);
-    break;
-  default:
-    // No additional data for other types
-    break;
-  }
-
-  return type;
-}
-
-Type *deserialize_generic_types(TypeSerBuf *buf) {
-  uint8_t *data = buf->data;
-  return deserialize_type(&data);
 }
