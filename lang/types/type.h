@@ -57,17 +57,6 @@ extern Type t_void;
 
 extern TypeClass TClassOrd;
 
-// A TypeScheme represents a polymorphic type in Hindley-Milner type systems.
-// It consists of two parts:
-// A set of type variables that are universally quantified.
-// A type expression that may contain these quantified
-// variables.
-typedef struct TypeScheme {
-  Type *variables; // A set of type variables that are universally quantified.
-  int num_variables;
-  Type *type; // A type expression that may contain these quantified variables
-} TypeScheme;
-
 // TypeEnv represents a mapping from variable names to their types
 typedef struct TypeEnv {
   const char *name;
@@ -75,8 +64,6 @@ typedef struct TypeEnv {
   struct TypeEnv *next;
 } TypeEnv;
 
-TypeScheme *generalize(TypeEnv env, Type *type);
-Type *instantiate(TypeScheme *scheme);
 void unify(Type *t1, Type *t2);
 
 void _unify(Type *t1, Type *t2, TypeEnv **env);
