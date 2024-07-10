@@ -58,17 +58,18 @@
      MATCH = 274,
      WITH = 275,
      ARROW = 276,
-     TOK_VOID = 277,
-     IN = 278,
-     AND = 279,
-     IFX = 280,
-     ELSE = 281,
-     MODULO = 282,
-     NE = 283,
-     EQ = 284,
-     LE = 285,
-     GE = 286,
-     UMINUS = 287
+     DOUBLE_COLON = 277,
+     TOK_VOID = 278,
+     IN = 279,
+     AND = 280,
+     IFX = 281,
+     ELSE = 282,
+     MODULO = 283,
+     NE = 284,
+     EQ = 285,
+     LE = 286,
+     GE = 287,
+     UMINUS = 288
    };
 #endif
 /* Tokens.  */
@@ -91,17 +92,18 @@
 #define MATCH 274
 #define WITH 275
 #define ARROW 276
-#define TOK_VOID 277
-#define IN 278
-#define AND 279
-#define IFX 280
-#define ELSE 281
-#define MODULO 282
-#define NE 283
-#define EQ 284
-#define LE 285
-#define GE 286
-#define UMINUS 287
+#define DOUBLE_COLON 277
+#define TOK_VOID 278
+#define IN 279
+#define AND 280
+#define IFX 281
+#define ELSE 282
+#define MODULO 283
+#define NE 284
+#define EQ 285
+#define LE 286
+#define GE 287
+#define UMINUS 288
 
 
 
@@ -117,7 +119,7 @@ typedef union YYSTYPE
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 121 "lang/y.tab.h"
+#line 123 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

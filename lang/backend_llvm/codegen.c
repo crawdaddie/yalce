@@ -60,7 +60,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_LAMBDA: {
-    return codegen_lambda(ast, ctx, module, builder);
+    return codegen_fn(ast, ctx, module, builder);
   }
 
   case AST_APPLICATION: {

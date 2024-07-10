@@ -26,6 +26,7 @@ typedef enum token_type {
   TOKEN_COMMA,
   TOKEN_DOT,
   TOKEN_TRIPLE_DOT,
+
   // OPERATORS
   TOKEN_PLUS,
   TOKEN_MINUS,
@@ -73,6 +74,7 @@ typedef enum token_type {
   TOKEN_LOGICAL_OR,
   TOKEN_QUESTION,
   TOKEN_COLON,
+  TOKEN_DOUBLE_COLON,
   TOKEN_SEMICOLON,
   TOKEN_DOUBLE_SEMICOLON,
   TOKEN_IN,
@@ -232,6 +234,7 @@ Ast *ast_tuple(Ast *list);
 Ast *ast_meta(ObjString meta_id, Ast *next);
 Ast *ast_extern_decl(Ast);
 Ast *ast_assoc(Ast *l, Ast *r);
+Ast *ast_list_prepend(Ast *l, Ast *r);
 Ast *typed_arg_list(Ast *list, Ast *item);
 
 Ast *extern_typed_signature(Ast *item);

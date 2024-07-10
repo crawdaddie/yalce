@@ -60,8 +60,9 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
-LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
+// compile an AST_LAMBDA node into a function
+LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                        LLVMBuilderRef builder) {
 
   // Generate the prototype first.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
@@ -89,6 +90,7 @@ LLVMValueRef codegen_lambda(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     codegen_multiple_assignment(param_ast, param_val, param_type, &fn_ctx,
                                 module, builder, true, i);
   }
+
   // add function as recursive ref
   bind_symbol_in_scope(fn_name.chars, fn_name.hash, LLVMTypeOf(func), func,
                        STYPE_FUNCTION, &fn_ctx);
@@ -186,6 +188,35 @@ static TypeSerBuf *get_specific_fn_args_key(size_t len, Ast *args) {
   }
   return specific_fn_buf;
 }
+static Type *create_specific_fn_type(size_t len, Ast *args, Type *ret_type) {
+
+  Type *specific_arg_types[len];
+  for (size_t i = 0; i < len; i++) {
+    specific_arg_types[i] = (Type *)deep_copy_type(args[i].md);
+  }
+  return create_type_multi_param_fn(len, specific_arg_types,
+                                    deep_copy_type(ret_type));
+}
+
+static Ast *get_specific_fn_ast_variant(Ast *original_fn_ast,
+                                        Type *specific_fn_type,
+                                        size_t fn_name_len,
+                                        size_t fn_md_key_len,
+                                        const char *fn_md_key) {
+  const char *fn_name = original_fn_ast->data.AST_LAMBDA.fn_name.chars;
+
+  Ast *specific_ast = malloc(sizeof(Ast));
+  *specific_ast = *(original_fn_ast);
+  specific_ast->md = specific_fn_type;
+  int total_fn_name_len = fn_name_len + 1 + fn_md_key_len + 1;
+
+  specific_ast->data.AST_LAMBDA.fn_name =
+      (ObjString){.chars = malloc(sizeof(char) * (total_fn_name_len + 1))};
+
+  snprintf(specific_ast->data.AST_LAMBDA.fn_name.chars, total_fn_name_len + 1,
+           "%s[%s]", fn_name, fn_md_key);
+  return specific_ast;
+}
 
 static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
                                                   LLVMModuleRef module,
@@ -228,38 +259,30 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
         specific_fns_lookup(specific_fns, (char *)specific_fn_buf->data);
 
     if (func == NULL) {
-      Type *specific_arg_types[len];
-      for (size_t i = 0; i < len; i++) {
-        specific_arg_types[i] = (Type *)deep_copy_type(args[i].md);
-      }
+      Type *specific_fn_type = create_specific_fn_type(len, args, ast->md);
 
-      // compile new variant & save
-      Type *specific_fn_type = create_type_multi_param_fn(
-          len, specific_arg_types, deep_copy_type(ast->md));
-
+      // get metadata key for caching compiled variant
       size_t fn_md_key_len = specific_fn_buf->size;
       char *fn_md_key = malloc(sizeof(char) * (fn_md_key_len + 1));
       strncpy(fn_md_key, (const char *)specific_fn_buf->data, fn_md_key_len);
 
-      Ast *specific_ast = malloc(sizeof(Ast));
-      *specific_ast = *(res->symbol_data.STYPE_GENERIC_FUNCTION.ast);
-      specific_ast->md = specific_fn_type;
-      int total_fn_name_len = fn_name_len + 1 + fn_md_key_len + 1;
-      specific_ast->data.AST_LAMBDA.fn_name =
-          (ObjString){.chars = malloc(sizeof(char) * (total_fn_name_len + 1))};
+      // compile new variant & save
+      Ast *specific_ast = get_specific_fn_ast_variant(
+          res->symbol_data.STYPE_GENERIC_FUNCTION.ast, specific_fn_type,
+          fn_name_len, fn_md_key_len, fn_md_key);
 
-      snprintf(specific_ast->data.AST_LAMBDA.fn_name.chars,
-               total_fn_name_len + 1, "%s[%s]", fn_name, fn_md_key);
       JITLangCtx compilation_ctx = {
           ctx->stack, res->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr};
 
-      func = codegen_lambda(specific_ast, &compilation_ctx, module, builder);
+      func = codegen_fn(specific_ast, &compilation_ctx, module, builder);
 
       res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
           specific_fns_extend(specific_fns, fn_md_key, func);
 
-      ht *scope = ctx->stack + ctx->stack_ptr;
+      // save back in its own context (not in the call-site context)
+      ht *scope = compilation_ctx.stack + compilation_ctx.stack_ptr;
       ht_set_hash(scope, fn_name, hash_string(fn_name, fn_name_len), res);
+      free(specific_ast);
     }
     free(specific_fn_buf->data);
     free(specific_fn_buf);
@@ -274,7 +297,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   Type *application_result_type = ast->md;
 
   if (is_generic(application_result_type)) {
-    fprintf(stderr, "Error: fn application result is generic");
+    fprintf(stderr, "Error: fn application result is generic - result unknown");
     return NULL;
   }
 
@@ -311,13 +334,12 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 JITSymbol *create_generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
                                     JITLangCtx *ctx) {
   JITSymbol *sym = malloc(sizeof(JITSymbol));
-  ht *fn_lookup_table = ht_create();
-  ht_init(fn_lookup_table);
 
-  *sym = (JITSymbol){
-      STYPE_GENERIC_FUNCTION,
-      .symbol_data = {
-          .STYPE_GENERIC_FUNCTION = {fn_ast, ctx->stack_ptr, fn_lookup_table}}};
+  *sym = (JITSymbol){STYPE_GENERIC_FUNCTION,
+                     .symbol_data = {.STYPE_GENERIC_FUNCTION = {
+                                         fn_ast,
+                                         ctx->stack_ptr,
+                                     }}};
 
   return sym;
 }
