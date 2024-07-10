@@ -206,9 +206,8 @@ int jit(int argc, char **argv) {
       LLVMGenericValueRef result =
           LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
-      printf("> ['");
+      printf("> '");
       print_type(top->md);
-      printf("]");
       Type *top_type = top->md;
       switch (top_type->kind) {
       case T_INT: {
@@ -232,18 +231,18 @@ int jit(int argc, char **argv) {
             top_type->data.T_CONS.args[0]->kind == T_INT) {
 
           int_ll_t *current = (int_ll_t *)LLVMGenericValueToPointer(result);
-          printf("list head: %p\n", current);
           int count = 0;
+          printf(" [");
           while (current != NULL &&
                  count < 10) { // Limit to prevent infinite loop
-            printf("Node %d: address=%p, value=%d, next=%p\n", count, current,
-                   current->el, current->next);
+            printf("%d, ", current->el);
             current = current->next;
             count++;
           }
           if (count == 10) {
-            printf("Reached limit. Possible circular list?\n");
+            printf("...");
           }
+          printf("]\n");
         }
         break;
       }

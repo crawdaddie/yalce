@@ -91,6 +91,7 @@
 "<="            return LE;
 "=="            return EQ;
 "!="            return NE;
+"::"            return DOUBLE_COLON;
 ":"             return *yytext;
 "->"            return ARROW;
 [ \t\n]+        ;       /* ignore whitespace */

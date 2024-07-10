@@ -288,6 +288,9 @@ Ast *ast_extern_fn(ObjString name, Ast *signature) {
   return signature;
 }
 Ast *ast_assoc(Ast *l, Ast *r) { return NULL; }
+Ast *ast_list_prepend(Ast *item, Ast *rest) {
+  return ast_binop(TOKEN_DOUBLE_COLON, item, rest);
+}
 
 Ast *typed_arg_list(Ast *list, Ast *item) {
   if (list == NULL) {

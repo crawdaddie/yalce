@@ -1,0 +1,6 @@
+let first = fn (a, _) -> 
+  a
+;;
+
+first (100, "")
+

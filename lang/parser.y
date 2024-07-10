@@ -47,6 +47,7 @@ Ast* ast_root = NULL;
 %token MATCH
 %token WITH 
 %token ARROW
+%token DOUBLE_COLON
 %token TOK_VOID
 %token IN AND
 
@@ -149,6 +150,7 @@ expr:
   | list                  { $$ = $1; }
   | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
+  | expr DOUBLE_COLON expr{ $$ = ast_list_prepend($1, $3); }
   | expr ':' expr         { $$ = ast_assoc($1, $3); }
   | LET IDENTIFIER '=' expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }
   | LET lambda_arg '=' expr IN expr  { $$ = ast_let($2, $4, $6); }

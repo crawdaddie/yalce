@@ -108,17 +108,6 @@ bool tcheck_w_env(TypeEnv *env, char input[], Type **exp_types) {
   return true;
 }
 
-// Helper function to compare type schemes
-bool schemes_equal(TypeScheme *s1, TypeScheme *s2) {
-  if (s1->num_variables != s2->num_variables)
-    return false;
-  for (int i = 0; i < s1->num_variables; i++) {
-    if (!types_equal(&s1->variables[i], &s2->variables[i]))
-      return false;
-  }
-  return types_equal(s1->type, s2->type);
-}
-
 #define TYPES_EQUAL(desc, actual_type, exp_type, status)                       \
   if (types_equal(actual_type, exp_type)) {                                    \
     printf("✅ \e[1m" desc "\e[0m");                                           \

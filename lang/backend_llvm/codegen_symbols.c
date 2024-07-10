@@ -72,10 +72,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (res->type == STYPE_TOP_LEVEL_VAR) {
     LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
     LLVMValueRef val = LLVMGetInitializer(glob);
-    //
-    //
-    // LLVMValueRef glob = res->val;
-    // LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, glob, "");
     return val;
   } else if (res->type == STYPE_LOCAL_VAR) {
     LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, res->val, "");
