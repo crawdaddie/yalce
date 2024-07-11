@@ -10,6 +10,7 @@
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/IRReader.h>
+#include <llvm-c/Linker.h>
 #include <llvm-c/Support.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Transforms/Scalar.h>
@@ -24,6 +25,12 @@ static Ast *top_level_ast(Ast *body) {
   Ast *last = body->data.AST_BODY.stmts[len - 1];
   return last;
 }
+
+static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder,
+                                       LLVMContextRef llvm_ctx, TypeEnv **env,
+                                       Ast **prog);
 
 static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
                                       JITLangCtx *ctx, LLVMModuleRef module,
@@ -71,17 +78,73 @@ int prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
   }
 }
 
+void import_module(char *dirname, Ast *import, TypeEnv **env, JITLangCtx *ctx,
+                   LLVMModuleRef main_module, LLVMContextRef llvm_ctx) {
+  const char *module_name = import->data.AST_IMPORT.module_name;
+  uint64_t module_name_hash = hash_string(module_name, strlen(module_name));
+  if (ht_get_hash(ctx->stack, module_name, module_name_hash)) {
+    return;
+  }
+
+  int len = strlen(dirname) + 1 + strlen(module_name) + 4;
+  char *fully_qualified_name = malloc(sizeof(char) * len);
+  snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", dirname, module_name);
+
+  LLVMModuleRef module =
+      LLVMModuleCreateWithNameInContext(fully_qualified_name, llvm_ctx);
+
+  LLVMBuilderRef builder = LLVMCreateBuilderInContext(llvm_ctx);
+
+  ht *stack = malloc(sizeof(ht) * STACK_MAX);
+
+  for (int i = 0; i < STACK_MAX; i++) {
+    ht_init(stack + i);
+  }
+  JITLangCtx module_ctx = {.stack = stack, .stack_ptr = 0};
+  eval_script(fully_qualified_name, &module_ctx, module, builder, llvm_ctx, env,
+              &ast_root);
+
+  stack = realloc(stack, sizeof(ht));
+  // Link the imported module with the main module
+  LLVMBool link_result = LLVMLinkModules2(main_module, module);
+  JITSymbol *sym = malloc(sizeof(JITSymbol));
+
+  *sym = (JITSymbol){STYPE_MODULE,
+                     .symbol_data = {.STYPE_MODULE = {.symbols = stack}}};
+
+  ht_set_hash(ctx->stack, module_name, module_name_hash, sym);
+}
+
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMModuleRef module,
-                                       LLVMBuilderRef builder, TypeEnv **env,
+                                       LLVMBuilderRef builder,
+                                       LLVMContextRef llvm_ctx, TypeEnv **env,
                                        Ast **prog) {
 
   char *fcontent = read_script(filename);
+  LLVMSetSourceFileName(module, filename, strlen(filename));
   if (!fcontent) {
     return NULL;
   }
 
   *prog = parse_input(fcontent);
+
+  char *dirname = get_dirname(filename);
+  if (dirname == NULL) {
+    return NULL;
+  }
+  if (!(*prog)) {
+    return NULL;
+  }
+  for (int i = 0; i < (*prog)->data.AST_BODY.len; i++) {
+    Ast *stmt = *((*prog)->data.AST_BODY.stmts + i);
+    if (stmt->tag == AST_IMPORT) {
+
+      yyrestart(NULL);
+      ast_root = NULL;
+      import_module(dirname, stmt, env, ctx, module, llvm_ctx);
+    }
+  }
 
   infer_ast(env, *prog);
 
@@ -89,12 +152,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   LLVMValueRef top_level_func =
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
-
-#ifdef DUMP_AST
-  print_ast(*prog);
-  printf("-----\n");
-  LLVMDumpModule(module);
-#endif
 
   LLVMExecutionEngineRef engine;
   prepare_ex_engine(&engine, module);
@@ -111,23 +168,13 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   free(fcontent);
   return result; // Return success
 }
+
 typedef struct int_ll_t {
   int32_t el;
   struct int_ll_t *next;
 } int_ll_t;
 
-int jit(int argc, char **argv) {
-  LLVMInitializeCore(LLVMGetGlobalPassRegistry());
-  LLVMInitializeNativeTarget();
-  LLVMInitializeNativeAsmPrinter();
-  LLVMInitializeNativeAsmParser();
-
-  LLVMLinkInMCJIT();
-
-  LLVMContextRef context = LLVMGetGlobalContext();
-  LLVMModuleRef module = LLVMModuleCreateWithNameInContext("ylc", context);
-  LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
-
+void module_passes(LLVMModuleRef module) {
   LLVMPassManagerRef pass_manager =
       LLVMCreateFunctionPassManagerForModule(module);
 
@@ -137,6 +184,20 @@ int jit(int argc, char **argv) {
   LLVMAddGVNPass(pass_manager);
   LLVMAddCFGSimplificationPass(pass_manager);
   LLVMAddTailCallEliminationPass(pass_manager);
+}
+int jit(int argc, char **argv) {
+  LLVMInitializeCore(LLVMGetGlobalPassRegistry());
+  LLVMInitializeNativeTarget();
+  LLVMInitializeNativeAsmPrinter();
+  LLVMInitializeNativeAsmParser();
+  LLVMLinkInMCJIT();
+
+  LLVMContextRef context = LLVMGetGlobalContext();
+  LLVMModuleRef module =
+      LLVMModuleCreateWithNameInContext("ylc.top-level", context);
+
+  LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
+  module_passes(module);
 
   ht stack[STACK_MAX];
 
@@ -154,12 +215,17 @@ int jit(int argc, char **argv) {
 
   bool repl = false;
 
-  Ast *script_prog;
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-i") == 0) {
       repl = true;
     } else {
-      eval_script(argv[i], &ctx, module, builder, &env, &script_prog);
+      Ast *script_prog;
+      eval_script(argv[i], &ctx, module, builder, context, &env, &script_prog);
+#ifdef DUMP_AST
+      print_ast(script_prog);
+      printf("-----\n");
+      LLVMDumpModule(module);
+#endif
     }
   }
 
@@ -190,7 +256,7 @@ int jit(int argc, char **argv) {
       LLVMValueRef top_level_func =
           codegen_top_level(top, &top_level_ret_type, &ctx, module, builder);
 
-#ifdef DEBUG_AST
+#ifdef DUMP_AST
       print_ast(top);
       LLVMDumpModule(module);
       printf("\n");

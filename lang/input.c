@@ -42,7 +42,6 @@ void repl_input(char *input, int bufsize, const char *prompt) {
 }
 
 char *read_script(const char *filename) {
-
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
     fprintf(stderr, "Error opening file: %s\n", filename);
@@ -69,4 +68,36 @@ char *read_script(const char *filename) {
   fcontent[fsize] = '\0';
   fclose(fp);
   return fcontent;
+}
+
+char *get_dirname(const char *path) {
+  // Make a copy of the path to avoid modifying the original
+  char *path_copy = strdup(path);
+  if (path_copy == NULL) {
+    return NULL; // Memory allocation failed
+  }
+
+  // Find the last occurrence of '/' or '\'
+  char *last_slash = strrchr(path_copy, '/');
+  char *last_backslash = strrchr(path_copy, '\\');
+  char *last_separator =
+      (last_slash > last_backslash) ? last_slash : last_backslash;
+
+  if (last_separator == NULL) {
+    // No directory separator found, return "." for current directory
+    free(path_copy);
+    return strdup(".");
+  }
+
+  // Null-terminate the string at the last separator
+  *last_separator = '\0';
+
+  // If the path is now empty (e.g., "/file.txt"), return "/"
+  if (path_copy[0] == '\0' && (path[0] == '/' || path[0] == '\\')) {
+    free(path_copy);
+    return NULL;
+  }
+
+  // Return the modified path
+  return path_copy;
 }

@@ -4,4 +4,6 @@
 #define INPUT_BUFSIZE 2048
 void repl_input(char *input, int bufsize, const char *prompt);
 char *read_script(const char *filename);
+
+char *get_dirname(const char *path);
 #endif
