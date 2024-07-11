@@ -101,8 +101,16 @@ void import_module(char *dirname, Ast *import, TypeEnv **env, JITLangCtx *ctx,
     ht_init(stack + i);
   }
   JITLangCtx module_ctx = {.stack = stack, .stack_ptr = 0};
-  eval_script(fully_qualified_name, &module_ctx, module, builder, llvm_ctx, env,
-              &ast_root);
+  TypeEnv *module_type_env = NULL;
+
+  eval_script(fully_qualified_name, &module_ctx, module, builder, llvm_ctx,
+              &module_type_env, &ast_root);
+
+  Type *module_type = malloc(sizeof(Type));
+  module_type->kind = T_MODULE;
+  module_type->data.T_MODULE = module_type_env;
+
+  *env = env_extend(*env, module_name, module_type);
 
   stack = realloc(stack, sizeof(ht));
   // Link the imported module with the main module
@@ -261,21 +269,20 @@ int jit(int argc, char **argv) {
       LLVMDumpModule(module);
       printf("\n");
 #endif
-
-      LLVMExecutionEngineRef engine;
-      prepare_ex_engine(&engine, module);
+      Type *top_type = top->md;
+      printf("> '");
+      print_type(top_type);
 
       if (top_level_func == NULL) {
         fprintf(stderr, "Unable to codegen for node\n");
         continue;
       }
+      LLVMExecutionEngineRef engine;
+      prepare_ex_engine(&engine, module);
       LLVMGenericValueRef exec_args[] = {};
       LLVMGenericValueRef result =
           LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
-      printf("> '");
-      print_type(top->md);
-      Type *top_type = top->md;
       switch (top_type->kind) {
       case T_INT: {
         printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));

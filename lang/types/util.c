@@ -21,6 +21,13 @@ void print_type(Type *type) {
     printf("NULL");
     return;
   }
+
+  if (type->kind == T_MODULE) {
+    printf("Module: \n");
+    print_type_env(type->data.T_MODULE);
+    return;
+  }
+
   TypeSerBuf *b = create_type_ser_buffer(100);
   serialize_type(type, b);
   printf("%s", (char *)b->data);
