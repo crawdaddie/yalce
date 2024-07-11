@@ -1,11 +1,15 @@
 #include "backend_llvm/codegen_function.h"
 #include "backend_llvm/codegen_symbols.h"
+#include "codegen_function_currying.h"
 #include "codegen_types.h"
 #include "serde.h"
 #include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
+
+LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                     LLVMBuilderRef builder);
 
 SpecificFns *specific_fns_extend(SpecificFns *list, const char *serialized_type,
                                  LLVMValueRef func) {
@@ -28,14 +32,9 @@ LLVMValueRef specific_fns_lookup(SpecificFns *list,
   return NULL;
 };
 
-LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                     LLVMBuilderRef builder);
-
-LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+LLVMValueRef codegen_fn_proto(Type *fn_type, int fn_len, const char *fn_name,
+                              JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
-  int fn_len = ast->data.AST_LAMBDA.len;
-
-  Type *fn_type = ast->md;
 
   // Create argument list.
   LLVMTypeRef llvm_param_types[fn_len];
@@ -53,8 +52,7 @@ LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
 
   // Create function.
-  ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
-  LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, llvm_fn_type);
+  LLVMValueRef func = LLVMAddFunction(module, fn_name, llvm_fn_type);
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   return func;
@@ -66,7 +64,10 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Generate the prototype first.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
-  LLVMValueRef func = codegen_fn_proto(ast, ctx, module, builder);
+  Type *fn_type = ast->md;
+  int fn_len = ast->data.AST_LAMBDA.len;
+  LLVMValueRef func =
+      codegen_fn_proto(fn_type, fn_len, fn_name.chars, ctx, module, builder);
 
   if (func == NULL) {
     return NULL;
@@ -79,8 +80,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMPositionBuilderAtEnd(builder, block);
 
-  int fn_len = ast->data.AST_LAMBDA.len;
-  Type *fn_type = ast->md;
   for (int i = 0; i < fn_len; i++) {
     Type *param_type = fn_type->data.T_FN.from;
     fn_type = fn_type->data.T_FN.to;
@@ -96,7 +95,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   *v = (JITSymbol){.llvm_type = LLVMTypeOf(func),
                    .type = STYPE_FUNCTION,
                    .val = func,
-                   .symbol_data = {.STYPE_FUNCTION = {fn_type = ast->md}}};
+                   .symbol_data = {.STYPE_FUNCTION = {.fn_type = ast->md}}};
   // LLVMDumpValue(func);
   // printf("recursive fn ref '%s' %llu\n", fn_name.chars, fn_name.hash);
 
@@ -324,19 +323,21 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, args, 0,
                           "call_func");
   }
+
   unsigned int args_len = LLVMCountParams(func);
+
   if (app_len == args_len) {
-    LLVMValueRef *args = malloc(sizeof(LLVMValueRef) * app_len);
+    LLVMValueRef app_vals[app_len];
     for (int i = 0; i < app_len; i++) {
-      args[i] =
+      app_vals[i] =
           codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
     }
-    return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, args,
+    return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, app_vals,
                           app_len, "call_func");
   }
 
   if (app_len < args_len) {
-    return NULL;
+    return codegen_curry_fn(ast, func, args_len, ctx, module, builder);
   }
   return NULL;
 }

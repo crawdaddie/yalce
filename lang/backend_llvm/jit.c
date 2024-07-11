@@ -183,7 +183,10 @@ int jit(int argc, char **argv) {
 
       Ast *top = top_level_ast(prog);
 
-      infer_ast(&env, top);
+      Type *typecheck_result = infer_ast(&env, top);
+      if (typecheck_result == NULL) {
+        continue;
+      }
 
       // Generate node.
       LLVMValueRef top_level_func =

@@ -4,7 +4,8 @@
 #include "common.h"
 #include "parse.h"
 #include "llvm-c/Types.h"
-LLVMValueRef codegen_fn_proto(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+LLVMValueRef codegen_fn_proto(Type *fn_type, int fn_len, const char *fn_name,
+                              JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder);
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
