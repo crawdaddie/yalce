@@ -93,7 +93,16 @@ let complex_match = fn x ->
   )
 ;;
 
-complex_match (2, 2)
+complex_match (2, 2);
+
+let list_sum = fn acc l ->
+  (match l with
+  | [] -> acc
+  | head::rest -> list_sum (acc + head) rest
+  )
+;;
+
+list_sum 0 [1, 2, 3] # --returns 6 
 ```
 
 and type inference:
