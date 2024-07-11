@@ -119,8 +119,8 @@ static TypeEnv *add_var_to_env(TypeEnv *env, Type *param_type, Ast *param_ast) {
       new_env = add_var_to_env(new_env, param_type->data.T_CONS.args[0],
                                param_ast->data.AST_BINOP.left);
 
-      new_env = add_var_to_env(new_env, param_type->data.T_CONS.args[0],
-                               param_ast->data.AST_BINOP.right);
+      new_env =
+          add_var_to_env(new_env, param_type, param_ast->data.AST_BINOP.right);
       return new_env;
     }
   }
@@ -386,7 +386,9 @@ Type *infer(TypeEnv **env, Ast *ast) {
   case AST_LET: {
 
     Type *expr_type = infer(env, ast->data.AST_LET.expr);
-    *env = add_var_to_env(*env, expr_type, ast->data.AST_LET.binding);
+    Ast *binding = ast->data.AST_LET.binding;
+    *env = add_var_to_env(*env, expr_type, binding);
+    infer(env, binding);
 
     if (ast->data.AST_LET.in_expr) {
       type = infer(env, ast->data.AST_LET.in_expr);
