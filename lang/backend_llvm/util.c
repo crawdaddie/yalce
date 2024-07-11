@@ -54,3 +54,7 @@ LLVMValueRef is_not_null_node(LLVMValueRef node, LLVMTypeRef node_type,
   return LLVMBuildICmp(builder, LLVMIntNE, node, null_node_value,
                        "is_null_node");
 }
+
+LLVMValueRef and_vals(LLVMValueRef l, LLVMValueRef r, LLVMBuilderRef builder) {
+  return LLVMBuildAnd(builder, l, r, "and_vals");
+}

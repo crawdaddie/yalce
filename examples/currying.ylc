@@ -5,5 +5,11 @@ let list_sum = fn s l ->
   )
 ;;
 
-list_sum 0 [1,2,3]
+let sum = list_sum 0;
+let sum3 = fn a b c -> a + b + c;;
+let ss = sum3 1 2;
+
+5 |> ss
+
+
 

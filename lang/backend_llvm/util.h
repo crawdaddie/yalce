@@ -20,4 +20,7 @@ LLVMValueRef is_null_node(LLVMValueRef node, LLVMTypeRef node_type,
 
 LLVMValueRef is_not_null_node(LLVMValueRef node, LLVMTypeRef node_type,
                               LLVMBuilderRef builder);
+
+LLVMValueRef and_vals(LLVMValueRef res, LLVMValueRef res2,
+                      LLVMBuilderRef builder);
 #endif

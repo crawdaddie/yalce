@@ -264,6 +264,10 @@ static Type *infer_fn_application(TypeEnv **env, Ast *ast) {
   for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
     expected_fn_type = create_type_fn(
         infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
+    if (fn_return->data.T_FN.to == NULL) {
+      fprintf(stderr, "Error: too may parameters to function\n");
+      return NULL;
+    }
 
     fn_return = fn_return->data.T_FN.to;
   }
