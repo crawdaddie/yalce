@@ -19,8 +19,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEBUG_AST
-
 static Ast *top_level_ast(Ast *body) {
   size_t len = body->data.AST_BODY.len;
   Ast *last = body->data.AST_BODY.stmts[len - 1];
@@ -92,7 +90,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   LLVMValueRef top_level_func =
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
 
-#ifdef DEBUG_AST
+#ifdef DUMP_AST
   print_ast(*prog);
   printf("-----\n");
   LLVMDumpModule(module);
@@ -246,7 +244,14 @@ int jit(int argc, char **argv) {
             printf("...");
           }
           printf("]\n");
+          break;
         }
+
+        break;
+      }
+
+      case T_FN: {
+        printf(" %p\n", result);
         break;
       }
 

@@ -100,6 +100,7 @@ typedef enum ast_tag {
   AST_MATCH,
   AST_PLACEHOLDER_ID,
   AST_META,
+  AST_IMPORT,
 } ast_tag;
 
 struct Ast {
@@ -196,8 +197,11 @@ struct Ast {
       Ast *branches;
       size_t len;
     } AST_MATCH;
-
+    struct AST_IMPORT {
+      const char *module_name;
+    } AST_IMPORT;
   } data;
+
   void *md;
 };
 
@@ -245,5 +249,7 @@ bool ast_is_placeholder_id(Ast *ast);
 Ast *ast_placeholder();
 
 int get_let_binding_name(Ast *ast, ObjString *name);
+
+Ast *ast_bare_import(ObjString module_name);
 
 #endif

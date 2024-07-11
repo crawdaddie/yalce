@@ -20,6 +20,7 @@
 "with"                  return WITH;
 "["                     return *yytext;
 "]"                     return *yytext;
+"import"                return *yytext;
 
 [a-zA-Z_][a-zA-Z0-9_]*  {
 
