@@ -77,6 +77,9 @@ Type *create_type_fn(Type *from, Type *to);
 Type *create_type_multi_param_fn(int num_params, Type **params,
                                  Type *return_type);
 
+Type *create_tuple_type(Type **element_types, int num_elements);
+Type *create_list_type(Type *element_type);
+
 Type *fresh(Type *type);
 
 Type *env_lookup(TypeEnv *env, const char *name);

@@ -1,8 +1,9 @@
 #include "backend_llvm/codegen_symbols.h"
+#include "codegen_list.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
-#include "serde.h"
 #include "types/util.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 // #define _DBG_GENERIC_SYMBOLS
@@ -131,6 +132,7 @@ LLVMValueRef codegen_single_assignment(Ast *id, LLVMValueRef expr_val,
   }
 
   const char *id_chars = id->data.AST_IDENTIFIER.value;
+  // printf("binding symbol '%s'\n", id_chars);
   int id_length = id->data.AST_IDENTIFIER.length;
   uint64_t id_hash = hash_string(id_chars, id_length);
 
@@ -142,8 +144,15 @@ LLVMValueRef codegen_single_assignment(Ast *id, LLVMValueRef expr_val,
   LLVMTypeRef llvm_val_type = LLVMTypeOf(expr_val);
 
   if (expr_type->kind == T_FN) {
-    bind_symbol_in_scope(id_chars, id_hash, llvm_val_type, expr_val,
-                         STYPE_FUNCTION, ctx);
+
+    JITSymbol *v = malloc(sizeof(JITSymbol));
+    *v = (JITSymbol){.llvm_type = LLVMTypeOf(expr_val),
+                     .type = STYPE_FUNCTION,
+                     .val = expr_val,
+                     .symbol_data = {.STYPE_FUNCTION = {.fn_type = expr_type}}};
+
+    ht *scope = ctx->stack + ctx->stack_ptr;
+    ht_set_hash(scope, id_chars, id_hash, v);
     return expr_val;
   }
 
@@ -178,8 +187,35 @@ LLVMValueRef codegen_multiple_assignment(Ast *binding, LLVMValueRef expr_val,
 
   switch (binding->tag) {
   case AST_IDENTIFIER: {
+
     return codegen_single_assignment(binding, expr_val, expr_type, ctx, module,
                                      builder, is_fn_param, fn_param_idx);
+  }
+  case AST_BINOP: {
+    if (binding->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+      Ast *left = binding->data.AST_BINOP.left;
+
+      LLVMValueRef res_left = codegen_multiple_assignment(
+          left, ll_get_head_val(expr_val, type_to_llvm_type(left->md), builder),
+          left->md, ctx, module, builder, is_fn_param, fn_param_idx);
+
+      // assign left to first member
+
+      Ast *right = binding->data.AST_BINOP.right;
+      LLVMValueRef res_right = codegen_multiple_assignment(
+          right, ll_get_next(expr_val, type_to_llvm_type(left->md), builder),
+          left->md, ctx, module, builder, is_fn_param, fn_param_idx);
+
+      if (res_left || res_right) {
+        return expr_val;
+      } else {
+        return NULL;
+      }
+
+    } else {
+      fprintf(stderr, "Error - codegen assignment: invalid binding syntax");
+      return NULL;
+    }
   }
   case AST_TUPLE: {
     if (!is_tuple_type(expr_type)) {

@@ -49,6 +49,7 @@ bool is_generic(Type *type) {
   case T_VAR: {
     return true;
   }
+
   case T_CONS: {
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
       if (is_generic(type->data.T_CONS.args[i])) {
@@ -70,6 +71,7 @@ bool is_generic(Type *type) {
 
     return is_generic(type->data.T_FN.to);
   }
+
   default:
     false;
   }

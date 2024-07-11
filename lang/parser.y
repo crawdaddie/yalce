@@ -65,7 +65,7 @@ Ast* ast_root = NULL;
 %type <ast_node_ptr>
   stmt expr stmt_list application
   lambda_expr lambda_arg lambda_args extern_typed_signature list tuple expr_list
-  match_expr match_branches
+  match_expr match_branches list_match_expr
   let_binding
 
 
@@ -111,6 +111,7 @@ let_binding:
                                     }
   | LET TOK_VOID '=' expr {$$ = $4;}
   /*| LET lambda_arg '=' expr IN expr { $$ = ast_let($2, $4, $6); }*/
+  /*| LET list_match_expr '=' expr    { $$ = ast_let($2, $4, NULL); }*/
 
   ;
 
@@ -150,11 +151,13 @@ expr:
   | list                  { $$ = $1; }
   | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
-  | expr DOUBLE_COLON expr{ $$ = ast_list_prepend($1, $3); }
   | expr ':' expr         { $$ = ast_assoc($1, $3); }
   | LET IDENTIFIER '=' expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }
   | LET lambda_arg '=' expr IN expr  { $$ = ast_let($2, $4, $6); }
   /*| LET IDENTIFIER '=' lambda_expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }*/
+  | expr DOUBLE_COLON expr { $$ = ast_list_prepend($1, $3); }
+  | LET expr DOUBLE_COLON expr '=' expr IN expr { $$ = ast_let(ast_list_prepend($2, $4), $6, $8); }
+  | LET expr DOUBLE_COLON expr '=' expr { $$ = ast_let(ast_list_prepend($2, $4), $6, NULL); }
   ;
 
 extern_typed_signature:
@@ -188,6 +191,7 @@ lambda_args:
 lambda_arg:
     IDENTIFIER              { $$ = ast_identifier($1); }
   | '(' expr_list ')'       { $$ = ast_tuple($2); }
+  | list_match_expr               { $$ = $1; }
   ;
 
 application:
@@ -199,6 +203,11 @@ application:
 list:
     '[' ']'                 { $$ = ast_empty_list(); }
   | '[' expr_list ']'       { $$ = $2; }
+  ;
+
+list_match_expr:
+    IDENTIFIER DOUBLE_COLON IDENTIFIER  { $$ = ast_list_prepend(ast_identifier($1), ast_identifier($3)); }
+  | IDENTIFIER DOUBLE_COLON expr  { $$ = ast_list_prepend(ast_identifier($1), $3); }
   ;
 
 tuple:
