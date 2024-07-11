@@ -101,6 +101,7 @@ typedef enum ast_tag {
   AST_PLACEHOLDER_ID,
   AST_META,
   AST_IMPORT,
+  AST_RECORD_ACCESS,
 } ast_tag;
 
 struct Ast {
@@ -200,6 +201,11 @@ struct Ast {
     struct AST_IMPORT {
       const char *module_name;
     } AST_IMPORT;
+
+    struct AST_RECORD_ACCESS {
+      Ast *record;
+      Ast *member;
+    } AST_RECORD_ACCESS;
   } data;
 
   void *md;
@@ -251,5 +257,6 @@ Ast *ast_placeholder();
 int get_let_binding_name(Ast *ast, ObjString *name);
 
 Ast *ast_bare_import(ObjString module_name);
+Ast *ast_record_access(Ast *record, Ast *member);
 
 #endif

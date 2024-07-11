@@ -79,14 +79,6 @@ Ast *parse_input(char *input) {
 }
 
 Ast *ast_application(Ast *func, Ast *arg) {
-  if (func->tag == AST_IDENTIFIER) {
-    Ast *app = Ast_new(AST_APPLICATION);
-    app->data.AST_APPLICATION.function = func;
-    app->data.AST_APPLICATION.args = malloc(sizeof(Ast));
-    app->data.AST_APPLICATION.args[0] = *arg;
-    app->data.AST_APPLICATION.len = 1;
-    return app;
-  }
   if (func->tag == AST_APPLICATION) {
     Ast *args = func->data.AST_APPLICATION.args;
     func->data.AST_APPLICATION.len++;
@@ -96,7 +88,12 @@ Ast *ast_application(Ast *func, Ast *arg) {
     func->data.AST_APPLICATION.args[len - 1] = *arg;
     return func;
   }
-  return NULL;
+  Ast *app = Ast_new(AST_APPLICATION);
+  app->data.AST_APPLICATION.function = func;
+  app->data.AST_APPLICATION.args = malloc(sizeof(Ast));
+  app->data.AST_APPLICATION.args[0] = *arg;
+  app->data.AST_APPLICATION.len = 1;
+  return app;
 }
 
 Ast *ast_lambda(Ast *lambda, Ast *body) {
@@ -351,4 +348,11 @@ Ast *ast_bare_import(ObjString name) {
   Ast *import = Ast_new(AST_IMPORT);
   import->data.AST_IMPORT.module_name = name.chars;
   return import;
+}
+
+Ast *ast_record_access(Ast *record, Ast *member) {
+  Ast *rec_access = Ast_new(AST_RECORD_ACCESS);
+  rec_access->data.AST_RECORD_ACCESS.record = record;
+  rec_access->data.AST_RECORD_ACCESS.member = member;
+  return rec_access;
 }

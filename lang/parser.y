@@ -39,7 +39,7 @@ Ast* ast_root = NULL;
 %token <vstr>   TOK_STRING
 %token <vstr>   FSTRING
 %token TRUE FALSE
-%token WHILE IF PRINT PIPE
+%token PIPE
 %token EXTERN
 %token TRIPLE_DOT
 %token LET
@@ -51,10 +51,10 @@ Ast* ast_root = NULL;
 %token TOK_VOID
 %token IN AND
 
-%nonassoc IFX
-%nonassoc ELSE
 
+%left '.' 
 %left PIPE
+%left APPLICATION 
 %left MODULO
 %left GE LE EQ NE '>' '<'
 %left '+' '-'
@@ -65,7 +65,7 @@ Ast* ast_root = NULL;
 %type <ast_node_ptr>
   stmt expr stmt_list application
   lambda_expr lambda_arg lambda_args extern_typed_signature list tuple expr_list
-  match_expr match_branches list_match_expr
+  match_expr match_branches list_match_expr simple_expr
   let_binding
 
 
@@ -79,8 +79,9 @@ program:
                               ast_root->data.AST_BODY.len = 0;
                               ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
                             }
-
-                            if ($1->tag != AST_BODY && $1 != NULL) {
+                            if ($1 == NULL) {
+                            }
+                            else if ($1->tag != AST_BODY && $1 != NULL) {
                               ast_body_push(ast_root, $1);
                             } else if ($1 != NULL) {
                               Ast *b = $1;
@@ -122,17 +123,10 @@ stmt_list:
   | '(' stmt_list ')'           { $$ = $2; }
   ;
 
-
 expr:
-    INTEGER               { $$ = AST_CONST(AST_INT, $1); }
-  | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
-  | TOK_STRING            { $$ = ast_string($1); }
-  | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
-  | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
-  | META_IDENTIFIER expr  { $$ = ast_meta($1, $2); }
-  | IDENTIFIER            { $$ = ast_identifier($1); }
-  | TOK_VOID              { $$ = ast_void(); }
-  /*| '-' expr %prec UMINUS { $$ = ast_unop(TOKEN_MINUS, $2); } */
+    simple_expr
+  | expr '.' IDENTIFIER   { $$ = ast_record_access($1, ast_identifier($3)); }
+  | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
   | expr '+' expr         { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr         { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
   | expr '*' expr         { $$ = ast_binop(TOKEN_STAR, $1, $3); }
@@ -145,20 +139,28 @@ expr:
   | expr NE expr          { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }
   | expr EQ expr          { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr        { $$ = ast_application($3, $1); }
+  | expr ':' expr         { $$ = ast_assoc($1, $3); }
+  | expr DOUBLE_COLON expr { $$ = ast_list_prepend($1, $3); }
+  | LET IDENTIFIER '=' expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }
+  | LET lambda_arg '=' expr IN expr  { $$ = ast_let($2, $4, $6); }
+  | LET expr DOUBLE_COLON expr '=' expr IN expr { $$ = ast_let(ast_list_prepend($2, $4), $6, $8); }
+  | LET expr DOUBLE_COLON expr '=' expr { $$ = ast_let(ast_list_prepend($2, $4), $6, NULL); }
+  ;
+
+simple_expr:
+    INTEGER               { $$ = AST_CONST(AST_INT, $1); }
+  | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
+  | TOK_STRING            { $$ = ast_string($1); }
+  | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
+  | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
+  | IDENTIFIER            { $$ = ast_identifier($1); }
+  | TOK_VOID              { $$ = ast_void(); }
   | '(' expr ')'          { $$ = $2; }
-  | lambda_expr           { $$ = $1; }
-  | application           { $$ = $1; }
   | FSTRING               { $$ = parse_format_expr($1); }
   | list                  { $$ = $1; }
   | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
-  | expr ':' expr         { $$ = ast_assoc($1, $3); }
-  | LET IDENTIFIER '=' expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }
-  | LET lambda_arg '=' expr IN expr  { $$ = ast_let($2, $4, $6); }
-  /*| LET IDENTIFIER '=' lambda_expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }*/
-  | expr DOUBLE_COLON expr { $$ = ast_list_prepend($1, $3); }
-  | LET expr DOUBLE_COLON expr '=' expr IN expr { $$ = ast_let(ast_list_prepend($2, $4), $6, $8); }
-  | LET expr DOUBLE_COLON expr '=' expr { $$ = ast_let(ast_list_prepend($2, $4), $6, NULL); }
+  | lambda_expr           { $$ = $1; }
   ;
 
 extern_typed_signature:
@@ -196,9 +198,9 @@ lambda_arg:
   ;
 
 application:
-    IDENTIFIER expr         { $$ = ast_application(ast_identifier($1), $2); }
+    IDENTIFIER expr %prec APPLICATION   { $$ = ast_application(ast_identifier($1), $2); }
   /*| expr expr               { $$ = ast_application($1, $2); } */
-  | application expr        { $$ = ast_application($1, $2); }
+  | application expr %prec APPLICATION  { $$ = ast_application($1, $2); }
   ;
 
 list:

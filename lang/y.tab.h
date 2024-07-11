@@ -47,29 +47,25 @@
      FSTRING = 263,
      TRUE = 264,
      FALSE = 265,
-     WHILE = 266,
-     IF = 267,
-     PRINT = 268,
-     PIPE = 269,
-     EXTERN = 270,
-     TRIPLE_DOT = 271,
-     LET = 272,
-     FN = 273,
-     MATCH = 274,
-     WITH = 275,
-     ARROW = 276,
-     DOUBLE_COLON = 277,
-     TOK_VOID = 278,
-     IN = 279,
-     AND = 280,
-     IFX = 281,
-     ELSE = 282,
-     MODULO = 283,
-     NE = 284,
-     EQ = 285,
-     LE = 286,
-     GE = 287,
-     UMINUS = 288
+     PIPE = 266,
+     EXTERN = 267,
+     TRIPLE_DOT = 268,
+     LET = 269,
+     FN = 270,
+     MATCH = 271,
+     WITH = 272,
+     ARROW = 273,
+     DOUBLE_COLON = 274,
+     TOK_VOID = 275,
+     IN = 276,
+     AND = 277,
+     APPLICATION = 278,
+     MODULO = 279,
+     NE = 280,
+     EQ = 281,
+     LE = 282,
+     GE = 283,
+     UMINUS = 284
    };
 #endif
 /* Tokens.  */
@@ -81,29 +77,25 @@
 #define FSTRING 263
 #define TRUE 264
 #define FALSE 265
-#define WHILE 266
-#define IF 267
-#define PRINT 268
-#define PIPE 269
-#define EXTERN 270
-#define TRIPLE_DOT 271
-#define LET 272
-#define FN 273
-#define MATCH 274
-#define WITH 275
-#define ARROW 276
-#define DOUBLE_COLON 277
-#define TOK_VOID 278
-#define IN 279
-#define AND 280
-#define IFX 281
-#define ELSE 282
-#define MODULO 283
-#define NE 284
-#define EQ 285
-#define LE 286
-#define GE 287
-#define UMINUS 288
+#define PIPE 266
+#define EXTERN 267
+#define TRIPLE_DOT 268
+#define LET 269
+#define FN 270
+#define MATCH 271
+#define WITH 272
+#define ARROW 273
+#define DOUBLE_COLON 274
+#define TOK_VOID 275
+#define IN 276
+#define AND 277
+#define APPLICATION 278
+#define MODULO 279
+#define NE 280
+#define EQ 281
+#define LE 282
+#define GE 283
+#define UMINUS 284
 
 
 
@@ -119,7 +111,7 @@ typedef union YYSTYPE
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 123 "lang/y.tab.h"
+#line 115 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

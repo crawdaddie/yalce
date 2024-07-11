@@ -149,9 +149,10 @@ int main() {
 
   status &= test_parse("3 + 1 |> f", "(f (+ 3 1))");
 
-  status &= test_parse("(g 3 4) |> f 1 2", "(((f 1) 2) ((g 3) 4))");
+  status &= test_parse("g 3 4 |> f 1 2", "(((f 1) 2) ((g 3) 4))");
 
-  status &= test_parse("(g 3 4 + 1) |> f 1 2", "(((f 1) 2) ((g 3) (+ 4 1)))");
+  status &= test_parse("g 3 (4 + 1) |> f 1 2", "(((f 1) 2) ((g 3) (+ 4 1)))");
+  status &= test_parse("g 3 4 + 1 |> f 1 2", "(((f 1) 2) (+ ((g 3) 4) 1))");
 
   status &= test_parse_body("x + y;\n"
                             "x + z",
