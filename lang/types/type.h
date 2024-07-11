@@ -12,6 +12,8 @@ typedef struct InstTypeClass {
   struct InstTypeClass *next;
 } InstTypeClass;
 
+typedef struct TypeEnv TypeEnv;
+
 enum TypeKind {
   /* Type Operator */
   T_INT,
@@ -26,6 +28,7 @@ enum TypeKind {
   T_CONS,
   /* Type Variable  */
   T_VAR,
+  T_MODULE,
 };
 
 typedef struct Type {
@@ -44,6 +47,7 @@ typedef struct Type {
       struct Type *from;
       struct Type *to;
     } T_FN;
+    TypeEnv *T_MODULE;
   } data;
   InstTypeClass *type_class;
 
