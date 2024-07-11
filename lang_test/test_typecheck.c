@@ -244,6 +244,8 @@ int typecheck_ast() {
     TYPES_EQUAL("list prepend x with means x has type:", &tvx, &t_int, status)
   }
 
+  status &= tcheck("let x::rest = [1,2,3] in x", T(&t_int));
+
   status &=
       tcheck("let first = fn (a, _) -> \n"
              "  a\n"
