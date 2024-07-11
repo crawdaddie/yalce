@@ -372,8 +372,8 @@ static void yynoreturn yy_fatal_error ( const char* msg  );
 	(yy_hold_char) = *yy_cp; \
 	*yy_cp = '\0'; \
 	(yy_c_buf_p) = yy_cp;
-#define YY_NUM_RULES 37
-#define YY_END_OF_BUFFER 38
+#define YY_NUM_RULES 38
+#define YY_END_OF_BUFFER 39
 /* This struct is not used in this scanner,
    but its presence is necessary. */
 struct yy_trans_info
@@ -383,16 +383,16 @@ struct yy_trans_info
 	};
 static const flex_int16_t yy_accept[102] =
     {   0,
-        0,    0,   38,   36,   34,   34,   36,   36,   35,   26,
-       25,   25,   25,   23,   20,   22,   32,   25,   25,   25,
-       36,   15,   12,   13,   15,   36,   15,   15,   15,   15,
-       15,   15,   15,   15,   25,   34,   30,    0,   18,    0,
-       35,    5,   23,   20,   22,   33,    0,   23,    0,   22,
-       21,   31,   28,   29,   27,   16,   15,    0,    0,   19,
-       15,   15,   15,    1,   15,    3,   15,   15,   15,   15,
-       24,    0,   18,    0,    9,   23,   16,    0,    0,   19,
-        4,   15,   15,   15,    2,   15,   15,   15,   15,   15,
-       15,   15,    7,   11,   15,    8,   15,   10,    6,   14,
+        0,    0,   39,   37,   35,   35,   37,   37,   36,   27,
+       26,   26,   26,   15,   21,   23,   33,   26,   26,   26,
+       37,   16,   12,   13,   16,   37,   16,   16,   16,   16,
+       16,   16,   16,   16,   26,   35,   31,    0,   19,    0,
+       36,    5,   24,   21,   23,   34,    0,   24,    0,   23,
+       22,   32,   29,   30,   28,   17,   16,    0,    0,   20,
+       16,   16,   16,    1,   16,    3,   16,   16,   16,   16,
+       25,    0,   19,    0,    9,   24,   17,    0,    0,   20,
+        4,   16,   16,   16,    2,   16,   16,   16,   16,   16,
+       16,   16,    7,   11,   16,    8,   16,   10,    6,   14,
 
         0
     } ;
@@ -527,10 +527,10 @@ static const flex_int16_t yy_chk[221] =
     } ;
 
 /* Table of booleans, true if rule could match eol. */
-static const flex_int32_t yy_rule_can_match_eol[38] =
+static const flex_int32_t yy_rule_can_match_eol[39] =
     {   0,
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,     };
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,     };
 
 static yy_state_type yy_last_accepting_state;
 static char *yy_last_accepting_cpos;
@@ -911,7 +911,12 @@ return *yytext;
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 25 "lang/lex.l"
+#line 24 "lang/lex.l"
+return *yytext;
+	YY_BREAK
+case 16:
+YY_RULE_SETUP
+#line 26 "lang/lex.l"
 {
 
                           int len = yyleng;
@@ -921,9 +926,9 @@ YY_RULE_SETUP
                           return IDENTIFIER;
                         }
 	YY_BREAK
-case 16:
+case 17:
 YY_RULE_SETUP
-#line 34 "lang/lex.l"
+#line 35 "lang/lex.l"
 {
 
                           int len = yyleng;
@@ -933,14 +938,14 @@ YY_RULE_SETUP
                           return META_IDENTIFIER;
                         }
 	YY_BREAK
-case 17:
-YY_RULE_SETUP
-#line 42 "lang/lex.l"
-return *yytext;
-	YY_BREAK
 case 18:
 YY_RULE_SETUP
 #line 43 "lang/lex.l"
+return *yytext;
+	YY_BREAK
+case 19:
+YY_RULE_SETUP
+#line 44 "lang/lex.l"
 {
                           int len = yyleng - 2;
                           char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars
@@ -952,9 +957,9 @@ YY_RULE_SETUP
                           return TOK_STRING;
                         }
 	YY_BREAK
-case 19:
+case 20:
 YY_RULE_SETUP
-#line 54 "lang/lex.l"
+#line 55 "lang/lex.l"
 {
                           int len = yyleng - 2;
                           char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars
@@ -966,113 +971,113 @@ YY_RULE_SETUP
                           return FSTRING;
                         }
 	YY_BREAK
-case 20:
+case 21:
 YY_RULE_SETUP
-#line 65 "lang/lex.l"
+#line 66 "lang/lex.l"
 { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
                         }
 	YY_BREAK
-case 21:
+case 22:
 YY_RULE_SETUP
-#line 70 "lang/lex.l"
+#line 71 "lang/lex.l"
 { 
                           yylval.vfloat = atof(yytext);
                           return NUMBER;
                         }
 	YY_BREAK
-case 22:
+case 23:
 YY_RULE_SETUP
-#line 74 "lang/lex.l"
+#line 75 "lang/lex.l"
 { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
                         }
 	YY_BREAK
-case 23:
+case 24:
 YY_RULE_SETUP
-#line 78 "lang/lex.l"
+#line 79 "lang/lex.l"
 {
                         yylval.vfloat = atof(yytext);
                         return NUMBER;
                         }
 	YY_BREAK
-case 24:
-YY_RULE_SETUP
-#line 83 "lang/lex.l"
-return PIPE;
-	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 85 "lang/lex.l"
+#line 84 "lang/lex.l"
+return PIPE;
+	YY_BREAK
+case 26:
+YY_RULE_SETUP
+#line 86 "lang/lex.l"
 {
                           /*printf("operator '%s'", yytext);*/
                           return *yytext;
                         }
 	YY_BREAK
-case 26:
-YY_RULE_SETUP
-#line 90 "lang/lex.l"
-return MODULO;
-	YY_BREAK
 case 27:
 YY_RULE_SETUP
 #line 91 "lang/lex.l"
-return GE;
+return MODULO;
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
 #line 92 "lang/lex.l"
-return LE;
+return GE;
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
 #line 93 "lang/lex.l"
-return EQ;
+return LE;
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
 #line 94 "lang/lex.l"
-return NE;
+return EQ;
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
 #line 95 "lang/lex.l"
-return DOUBLE_COLON;
+return NE;
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
 #line 96 "lang/lex.l"
-return *yytext;
+return DOUBLE_COLON;
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
 #line 97 "lang/lex.l"
-return ARROW;
+return *yytext;
 	YY_BREAK
 case 34:
-/* rule 34 can match eol */
 YY_RULE_SETUP
 #line 98 "lang/lex.l"
-;       /* ignore whitespace */
+return ARROW;
 	YY_BREAK
 case 35:
+/* rule 35 can match eol */
 YY_RULE_SETUP
 #line 99 "lang/lex.l"
-;       /* ignore comments starting with # */
+;       /* ignore whitespace */
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 101 "lang/lex.l"
-{ char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
+#line 100 "lang/lex.l"
+;       /* ignore comments starting with # */
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
 #line 102 "lang/lex.l"
+{ char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
+	YY_BREAK
+case 38:
+YY_RULE_SETUP
+#line 103 "lang/lex.l"
 ECHO;
 	YY_BREAK
-#line 1075 "lang/lex.yy.c"
+#line 1080 "lang/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2089,7 +2094,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 102 "lang/lex.l"
+#line 103 "lang/lex.l"
 
 int yywrap(void) {
     return 1;

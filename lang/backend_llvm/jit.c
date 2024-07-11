@@ -165,7 +165,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   prepare_ex_engine(&engine, module);
 
   if (top_level_func == NULL) {
-    fprintf(stderr, "Unable to codegen for node\n");
+    // fprintf(stderr, "Unable to codegen for node\n");
     return NULL;
   }
   LLVMGenericValueRef exec_args[] = {};
@@ -256,6 +256,8 @@ int jit(int argc, char **argv) {
       Ast *top = top_level_ast(prog);
 
       Type *typecheck_result = infer_ast(&env, top);
+
+      print_ast(top);
       if (typecheck_result == NULL) {
         continue;
       }
@@ -274,7 +276,8 @@ int jit(int argc, char **argv) {
       print_type(top_type);
 
       if (top_level_func == NULL) {
-        fprintf(stderr, "Unable to codegen for node\n");
+        // fprintf(stderr, "Unable to codegen for node\n");
+        printf("\n");
         continue;
       }
       LLVMExecutionEngineRef engine;

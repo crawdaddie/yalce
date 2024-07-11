@@ -511,6 +511,18 @@ Type *infer(TypeEnv **env, Ast *ast) {
     type = next_tvar();
     break;
   }
+  case AST_RECORD_ACCESS: {
+    Ast *record = ast->data.AST_RECORD_ACCESS.record;
+    infer(env, record);
+    Ast *member = ast->data.AST_RECORD_ACCESS.member;
+    if (member->tag != AST_IDENTIFIER) {
+      return NULL;
+    }
+    member->md = env_lookup(((Type *)record->md)->data.T_MODULE,
+                            member->data.AST_IDENTIFIER.value);
+    type = member->md;
+    break;
+  }
   }
 
   ast->md = type;

@@ -159,6 +159,17 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_RECORD_ACCESS: {
+    buffer = strcat(buffer, "(");
+    buffer = strcat(buffer, ". ");
+
+    buffer = ast_to_sexpr(ast->data.AST_RECORD_ACCESS.record, buffer);
+    buffer = strcat(buffer, " ");
+    buffer = ast_to_sexpr(ast->data.AST_RECORD_ACCESS.member, buffer);
+    buffer = strcat(buffer, ")");
+    break;
+  }
+
   case AST_LAMBDA: {
     buffer = strcat(buffer, "(");
     if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
@@ -272,6 +283,13 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, " ");
     buffer = ast_to_sexpr(ast->data.AST_META.next, buffer);
 
+    buffer = strcat(buffer, ")");
+    break;
+  }
+
+  case AST_IMPORT: {
+    buffer = strcat(buffer, "(import ");
+    buffer = strcat(buffer, ast->data.AST_IMPORT.module_name);
     buffer = strcat(buffer, ")");
     break;
   }
