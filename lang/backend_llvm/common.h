@@ -23,7 +23,8 @@ typedef enum symbol_type {
   STYPE_TOP_LEVEL_VAR,
   STYPE_LOCAL_VAR,
   STYPE_FUNCTION,
-  STYPE_GENERIC_FUNCTION
+  STYPE_GENERIC_FUNCTION,
+  STYPE_MODULE,
 } symbol_type;
 
 typedef struct {
@@ -40,6 +41,9 @@ typedef struct {
       int stack_ptr;
       SpecificFns *specific_fns;
     } STYPE_GENERIC_FUNCTION;
+    struct {
+      ht *symbols;
+    } STYPE_MODULE;
   } symbol_data;
 } JITSymbol;
 

@@ -25,7 +25,6 @@ ifdef VM_BACKEND
 LANG_CC += -DVM_BACKEND
 endif
 
-# Check for VM flag
 ifdef DUMP_AST 
 LANG_CC += -DDUMP_AST
 endif
