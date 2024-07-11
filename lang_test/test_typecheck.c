@@ -233,6 +233,17 @@ int typecheck_ast() {
   status &= tcheck("[1, 2, 3]", T(TLIST(&t_int)));
   status &= tcheck("[1., 2., 3.]", T(TLIST(&t_num)));
 
+  status &= tcheck("1::[1,2]", T(TLIST(&t_int)));
+
+  status &= tcheck("let x::rest = [1,2,3,4]", T(TLIST(&t_int)));
+
+  status &= tcheck("let x::_ = [1,2,3,4] in x + 1", T(&t_int));
+  {
+    Type tvx = TVAR("'x");
+    status &= tcheck_w_env(&(TypeEnv){"x", &tvx}, "x::[1,2]", T(TLIST(&t_int)));
+    TYPES_EQUAL("list prepend x with means x has type:", &tvx, &t_int, status)
+  }
+
   status &=
       tcheck("let first = fn (a, _) -> \n"
              "  a\n"
@@ -258,6 +269,36 @@ int typecheck_ast() {
                      T(create_type_multi_param_fn(2, T(t, t), t), res));
   }
 
+  status &= tcheck("let iter = fn l ->\n"
+                   "  (match l with\n"
+                   "  | [] -> 0\n"
+                   "  | x::rest -> iter rest\n"
+                   "  );",
+                   T(create_type_fn(TLIST(&TVAR("t6")), &t_int)));
+  {
+
+    Type *t = &TVAR("t7");
+    status &= tcheck("let sum = fn s l ->\n"
+                     "  (match l with\n"
+                     "  | [] -> s\n"
+                     "  | x::rest -> sum (s + x) rest\n"
+                     "  );",
+                     T(create_type_multi_param_fn(2, T(t, TLIST(t)), t)));
+  }
+
+  {
+
+    Type *t = &TVAR("t7");
+    status &=
+        tcheck("let list_sum = fn s l ->\n"
+               "  (match l with\n"
+               "  | [] -> s\n"
+               "  | x::rest -> list_sum (s + x) rest\n"
+               "  )\n"
+               ";;\n"
+               "list_sum 0 [1,2,3,4]",
+               T(create_type_multi_param_fn(2, T(t, TLIST(t)), t), &t_int));
+  }
   status &= tcheck(
       "let first = fn (a, _) b -> \n"
       "  a\n"

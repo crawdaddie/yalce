@@ -340,3 +340,9 @@ int get_let_binding_name(Ast *ast, ObjString *name) {
       .chars = chars, .length = length, .hash = hash_string(chars, length)};
   return 0;
 }
+
+Ast *ast_placeholder() {
+  char *c = malloc(sizeof(char) * 2);
+  *c = '_';
+  return ast_identifier((ObjString){.chars = c, .length = 1});
+}

@@ -1,6 +1,7 @@
 #include "types/inference.h"
 #include "common.h"
 #include "format_utils.h"
+#include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
 #include <stdlib.h>
@@ -101,6 +102,29 @@ static TypeEnv *add_var_to_env(TypeEnv *env, Type *param_type, Ast *param_ast) {
     return new_env;
   }
 
+  case AST_LIST: {
+    int len = param_ast->data.AST_LIST.len;
+    Ast *arg_asts = param_ast->data.AST_LIST.items;
+    TypeEnv *new_env = env;
+    for (int i = 0; i < len; i++) {
+      Type *arg_type_var = param_type->data.T_CONS.args[i];
+      new_env = add_var_to_env(new_env, arg_type_var, arg_asts + i);
+    }
+    return new_env;
+  }
+
+  case AST_BINOP: {
+    if (param_ast->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+      TypeEnv *new_env = env;
+      new_env = add_var_to_env(new_env, param_type->data.T_CONS.args[0],
+                               param_ast->data.AST_BINOP.left);
+
+      new_env = add_var_to_env(new_env, param_type->data.T_CONS.args[0],
+                               param_ast->data.AST_BINOP.right);
+      return new_env;
+    }
+  }
+
   default: {
     return env;
   }
@@ -129,6 +153,18 @@ static TypeEnv *create_implicit_var_bindings(TypeEnv *env, Ast *expr) {
     return env;
   }
 
+  if (expr->tag == AST_LIST) {
+    for (int i = 0; i < expr->data.AST_LIST.len; i++) {
+      env = create_implicit_var_bindings(env, expr->data.AST_LIST.items + i);
+    }
+    return env;
+  }
+  if (expr->tag == AST_BINOP && expr->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+    env = create_implicit_var_bindings(env, expr->data.AST_BINOP.left);
+    env = create_implicit_var_bindings(env, expr->data.AST_BINOP.right);
+    return env;
+  }
+
   return env;
 }
 
@@ -153,8 +189,8 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
         unify(expr_type, test_type);
       }
     } else {
-      // *env = create_implicit_var_bindings(*env, test_expr);
       test_type = infer(env, test_expr);
+
       unify(expr_type, test_type);
     }
 
@@ -241,11 +277,11 @@ static Type *infer_fn_application(TypeEnv **env, Ast *ast) {
   for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
     res = res->data.T_FN.to;
   }
+
   return resolve_in_env(res, _env);
 }
 
 // Main type inference function
-//
 Type *infer(TypeEnv **env, Ast *ast) {
 
   if (!ast)
@@ -269,7 +305,14 @@ Type *infer(TypeEnv **env, Ast *ast) {
     if (lt == NULL || rt == NULL) {
       return NULL;
     }
-
+    if (ast->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+      Type *list_el_type = next_tvar();
+      Type *list_type = create_list_type(list_el_type);
+      unify(rt, list_type);
+      unify(lt, list_el_type);
+      type = list_type;
+      break;
+    }
     if ((ast->data.AST_BINOP.op >= TOKEN_PLUS) &&
         (ast->data.AST_BINOP.op <= TOKEN_MODULO)) {
       if (is_arithmetic(lt) && is_arithmetic(rt)) {
@@ -390,12 +433,6 @@ Type *infer(TypeEnv **env, Ast *ast) {
     for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
       Type *param_type = type_of_var(param_ast);
-      // printf("lambda arg: ");
-      // print_ast(param_ast);
-      // printf(" : ");
-      // print_type(param_type);
-      // printf("\n");
-      // Add parameter to the environment
       fn_scope_env = add_var_to_env(fn_scope_env, param_type, param_ast);
 
       Type *next = (i == ast->data.AST_LAMBDA.len - 1)
@@ -450,6 +487,11 @@ Type *infer(TypeEnv **env, Ast *ast) {
 
     int len = ast->data.AST_LIST.len;
     Type **cons_args = malloc(sizeof(Type));
+    if (len == 0) {
+      cons_args[0] = next_tvar();
+      type = tcons("List", cons_args, 1);
+      break;
+    }
     for (int i = 1; i < len; i++) {
       Ast *list_member = ast->data.AST_LIST.items + i;
       Type *member_type = infer(env, list_member);
@@ -462,6 +504,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
   }
 
   ast->md = type;
+
   return type;
 }
 

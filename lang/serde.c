@@ -147,6 +147,9 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     case TOKEN_EQUALITY:
       buffer = strcat(buffer, "== ");
       break;
+    case TOKEN_DOUBLE_COLON:
+      buffer = strcat(buffer, ":: ");
+      break;
     }
 
     buffer = ast_to_sexpr(ast->data.AST_BINOP.left, buffer);

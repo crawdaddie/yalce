@@ -32,7 +32,9 @@ typedef struct {
   LLVMValueRef val;
   union {
     int STYPE_FN_PARAM;
-    const char *STYPE_FUNCTION;
+    struct {
+      Type *fn_type;
+    } STYPE_FUNCTION;
     struct {
       Ast *ast;
       int stack_ptr;

@@ -92,8 +92,16 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   // add function as recursive ref
-  bind_symbol_in_scope(fn_name.chars, fn_name.hash, LLVMTypeOf(func), func,
-                       STYPE_FUNCTION, &fn_ctx);
+  JITSymbol *v = malloc(sizeof(JITSymbol));
+  *v = (JITSymbol){.llvm_type = LLVMTypeOf(func),
+                   .type = STYPE_FUNCTION,
+                   .val = func,
+                   .symbol_data = {.STYPE_FUNCTION = {fn_type = ast->md}}};
+  // LLVMDumpValue(func);
+  // printf("recursive fn ref '%s' %llu\n", fn_name.chars, fn_name.hash);
+
+  ht *scope = fn_ctx.stack + fn_ctx.stack_ptr;
+  ht_set_hash(scope, fn_name.chars, fn_name.hash, v);
 
   // Generate body.
   LLVMValueRef body =
@@ -208,13 +216,14 @@ static Ast *get_specific_fn_ast_variant(Ast *original_fn_ast,
   Ast *specific_ast = malloc(sizeof(Ast));
   *specific_ast = *(original_fn_ast);
   specific_ast->md = specific_fn_type;
-  int total_fn_name_len = fn_name_len + 1 + fn_md_key_len + 1;
-
-  specific_ast->data.AST_LAMBDA.fn_name =
-      (ObjString){.chars = malloc(sizeof(char) * (total_fn_name_len + 1))};
-
-  snprintf(specific_ast->data.AST_LAMBDA.fn_name.chars, total_fn_name_len + 1,
-           "%s[%s]", fn_name, fn_md_key);
+  // int total_fn_name_len = fn_name_len + 1 + fn_md_key_len + 1;
+  //
+  // specific_ast->data.AST_LAMBDA.fn_name =
+  //     (ObjString){.chars = malloc(sizeof(char) * (total_fn_name_len + 1))};
+  //
+  // snprintf(specific_ast->data.AST_LAMBDA.fn_name.chars, total_fn_name_len +
+  // 1,
+  //          "%s[%s]", fn_name, fn_md_key);
   return specific_ast;
 }
 
@@ -244,6 +253,14 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
   } else if (res->type == STYPE_FN_PARAM) {
     return res->val;
   } else if (res->type == STYPE_FUNCTION) {
+    // printf("found function {recursive??}\n");
+    // print_type(res->symbol_data.STYPE_FUNCTION.fn_type);
+    if (is_generic(res->symbol_data.STYPE_FUNCTION.fn_type)) {
+      // if (is_generic(application_result_type)) {
+      fprintf(stderr,
+              "Error: fn application result is generic - result unknown\n");
+      return NULL;
+    }
     return res->val;
   } else if (res->type == STYPE_GENERIC_FUNCTION) {
 
@@ -293,13 +310,6 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-
-  Type *application_result_type = ast->md;
-
-  if (is_generic(application_result_type)) {
-    fprintf(stderr, "Error: fn application result is generic - result unknown");
-    return NULL;
-  }
 
   LLVMValueRef func = codegen_fn_application_callee(ast, ctx, module, builder);
 

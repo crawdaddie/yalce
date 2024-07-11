@@ -1,10 +1,13 @@
 #include "backend_llvm/codegen_match.h"
 #include "codegen_binop.h"
+#include "codegen_list.h"
 #include "codegen_symbols.h"
 #include "codegen_tuple.h"
+#include "codegen_types.h"
 #include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -51,6 +54,91 @@ static LLVMValueRef codegen_match_tuple(LLVMValueRef expr_val, Ast *pattern,
   return res;
 }
 
+static LLVMValueRef codegen_match_list(LLVMValueRef list, Ast *pattern,
+                                       JITLangCtx *ctx, LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+
+  LLVMValueRef res = _TRUE;
+  LLVMTypeRef list_type = LLVMTypeOf(list);
+  LLVMTypeRef list_el_type =
+      type_to_llvm_type(((Type *)pattern->md)->data.T_CONS.args[0]);
+
+  if (pattern->tag == AST_BINOP &&
+      pattern->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+
+    res = LLVMBuildAnd(builder, res, ll_is_not_null(list, list_el_type, builder), "");
+
+    Ast *left = pattern->data.AST_BINOP.left;
+
+    LLVMValueRef list_head_val =
+        ll_get_head_val(list, list_el_type, builder);
+
+    if (!codegen_multiple_assignment(left, list_head_val, left->md, ctx, module,
+                                     builder, false, 0)) {
+
+      // assignment returns null - no assignment made so compare literal val
+      res = LLVMBuildAnd(
+          builder, res,
+          codegen_match_condition(list_head_val, left, ctx, module, builder),
+          "list_head_match");
+    }
+    Ast *right = pattern->data.AST_BINOP.right;
+    LLVMValueRef list_next =
+        ll_get_next(list, list_el_type, builder);
+
+    if (!codegen_multiple_assignment(right, list_next, right->md, ctx, module,
+                                     builder, false, 0)) {
+
+      // assignment returns null - no assignment made so compare literal val
+      res = LLVMBuildAnd(
+          builder, res,
+          codegen_match_condition(list_next, right, ctx, module, builder),
+          "list_next_match");
+    }
+
+    return res;
+  }
+
+  if (pattern->tag == AST_LIST) {
+    size_t len = pattern->data.AST_LIST.len;
+
+    if (len == 0) {
+      return is_null_node(list, list_el_type, builder);
+    }
+
+    Ast *items = pattern->data.AST_LIST.items;
+    LLVMValueRef list_head = list;
+    for (size_t i = 0; i < len; i++) {
+      Ast *list_item_ast = items + i;
+
+      if (ast_is_placeholder_id(list_item_ast)) {
+        continue;
+      }
+
+      LLVMValueRef list_member_val =
+          ll_get_head_val(list_head, list_el_type, builder);
+
+      if (!codegen_multiple_assignment(list_item_ast, list_member_val,
+                                       list_item_ast->md, ctx, module, builder,
+                                       false, 0)) {
+
+        // assignment returns null - no assignment made so compare literal val
+        res =
+            LLVMBuildAnd(builder, res,
+                         codegen_match_condition(list_member_val, list_item_ast,
+                                                 ctx, module, builder),
+                         "list_el_match");
+      }
+
+      list_head = ll_get_next(list_head, list_el_type, builder);
+    }
+
+    return res;
+  }
+
+  return _TRUE;
+}
+
 LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
                                      JITLangCtx *ctx, LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
@@ -64,6 +152,10 @@ LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
 
   if (is_tuple_type(pattern->md)) {
     return codegen_match_tuple(expr_val, pattern, ctx, module, builder);
+  }
+
+  if (is_list_type(pattern->md)) {
+    return codegen_match_list(expr_val, pattern, ctx, module, builder);
   }
 
   if (((Type *)pattern->md)->kind == T_INT) {
@@ -83,6 +175,10 @@ static bool is_default_case(int len, int i) { return i == (len - 1); }
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
+  // printf("codegen match final type: ");
+  // print_type(ast->md);
+  // printf("\n");
+
   LLVMValueRef expr_val =
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
 
@@ -94,8 +190,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Create a PHI node for the result
   LLVMPositionBuilderAtEnd(builder, end_block);
   LLVMValueRef phi =
-      LLVMBuildPhi(builder, LLVMTypeOf(expr_val), "match.result");
-
+      LLVMBuildPhi(builder, type_to_llvm_type(ast->md), "match.result");
+  //
   // Return to the current block to start generating comparisons
   LLVMPositionBuilderAtEnd(builder, current_block);
 

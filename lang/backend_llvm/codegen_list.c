@@ -26,22 +26,6 @@ LLVMTypeRef list_type(Type *list_el_type) {
   return LLVMPointerType(node_type, 0);
 }
 
-static LLVMValueRef null_node(LLVMTypeRef node_type) {
-  return LLVMConstNull(LLVMPointerType(node_type, 0));
-}
-
-static LLVMValueRef ll_insert_at_head(LLVMValueRef old_head,
-                                      LLVMValueRef new_head,
-                                      LLVMTypeRef node_type,
-                                      LLVMBuilderRef builder) {
-
-  LLVMValueRef next_ptr =
-      LLVMBuildStructGEP2(builder, node_type, new_head, 1, "next_ptr");
-
-  LLVMBuildStore(builder, old_head, next_ptr);
-  return new_head;
-}
-
 LLVMValueRef ll_create_list_node(LLVMValueRef mem, LLVMTypeRef node_type,
                                  LLVMValueRef data, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -60,6 +44,33 @@ LLVMValueRef ll_create_list_node(LLVMValueRef mem, LLVMTypeRef node_type,
   LLVMBuildStore(builder, null_node(node_type), next_ptr);
 
   return alloced_node;
+}
+
+// Helper function to check if a list is null
+LLVMValueRef ll_is_null(LLVMValueRef list, LLVMTypeRef list_el_type,
+                        LLVMBuilderRef builder) {
+  LLVMTypeRef node_type = llnode_type(list_el_type);
+  LLVMValueRef null_list = LLVMConstNull(LLVMPointerType(node_type, 0));
+  return LLVMBuildICmp(builder, LLVMIntEQ, list, null_list, "is_null");
+}
+
+// Helper function to check if a list is null
+LLVMValueRef ll_is_not_null(LLVMValueRef list, LLVMTypeRef list_el_type,
+                            LLVMBuilderRef builder) {
+  LLVMTypeRef node_type = llnode_type(list_el_type);
+  LLVMValueRef null_list = LLVMConstNull(LLVMPointerType(node_type, 0));
+  return LLVMBuildICmp(builder, LLVMIntNE, list, null_list, "is_null");
+}
+LLVMValueRef ll_get_head_val(LLVMValueRef list, LLVMTypeRef list_el_type,
+                             LLVMBuilderRef builder) {
+  LLVMTypeRef node_type = llnode_type(list_el_type);
+  return struct_ptr_get(0, list, node_type, builder);
+}
+
+LLVMValueRef ll_get_next(LLVMValueRef list, LLVMTypeRef list_el_type,
+                         LLVMBuilderRef builder) {
+  LLVMTypeRef node_type = llnode_type(list_el_type);
+  return struct_ptr_get(1, list, node_type, builder);
 }
 
 LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

@@ -241,6 +241,9 @@ Ast *extern_typed_signature(Ast *item);
 Ast *extern_typed_signature_push(Ast *sig, Ast *def);
 Ast *ast_extern_fn(ObjString name, Ast *signature);
 bool ast_is_placeholder_id(Ast *ast);
+
+Ast *ast_placeholder();
+
 int get_let_binding_name(Ast *ast, ObjString *name);
 
 #endif

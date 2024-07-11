@@ -105,6 +105,17 @@ Type *create_tuple_type(Type **element_types, int num_elements) {
   return tuple_type;
 }
 
+Type *create_list_type(Type *element_type) {
+  Type *tuple_type = malloc(sizeof(Type));
+  tuple_type->kind = T_CONS;
+  tuple_type->data.T_CONS.name = "List";
+  tuple_type->data.T_CONS.args = malloc(sizeof(Type *));
+  tuple_type->data.T_CONS.args[0] = element_type;
+  tuple_type->data.T_CONS.num_args = 1;
+  tuple_type->type_class = NULL; // Or set appropriately if needed
+  return tuple_type;
+}
+
 Type *create_type_fn(Type *from, Type *to) {
   Type *type = malloc(sizeof(Type));
   *type = (Type){T_FN, .data = {.T_FN = {.from = from, .to = to}}};
