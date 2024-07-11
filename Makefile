@@ -25,6 +25,11 @@ ifdef VM_BACKEND
 LANG_CC += -DVM_BACKEND
 endif
 
+# Check for VM flag
+ifdef DUMP_AST 
+LANG_CC += -DDUMP_AST
+endif
+
 # Check for LLVM flag
 ifdef LLVM_BACKEND
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)

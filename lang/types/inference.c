@@ -507,6 +507,10 @@ Type *infer(TypeEnv **env, Ast *ast) {
     type = tcons("List", cons_args, 1);
     break;
   }
+  case AST_IMPORT: {
+    type = next_tvar();
+    break;
+  }
   }
 
   ast->md = type;

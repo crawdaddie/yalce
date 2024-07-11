@@ -346,3 +346,9 @@ Ast *ast_placeholder() {
   *c = '_';
   return ast_identifier((ObjString){.chars = c, .length = 1});
 }
+
+Ast *ast_bare_import(ObjString name) {
+  Ast *import = Ast_new(AST_IMPORT);
+  import->data.AST_IMPORT.module_name = name.chars;
+  return import;
+}

@@ -99,6 +99,7 @@ stmt:
     let_binding                   { $$ = $1; }
   | expr                          { $$ = $1; }
   | META_IDENTIFIER let_binding   { $$ = ast_meta($1, $2); }
+  | 'import' IDENTIFIER           { $$ = ast_bare_import($2); }
   ;
 
 let_binding:
