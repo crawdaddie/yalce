@@ -33,4 +33,7 @@ void bind_symbol_in_scope(const char *id, uint64_t id_hash, LLVMTypeRef type,
                           JITLangCtx *ctx);
 
 LLVMValueRef current_func(LLVMBuilderRef builder);
+
+JITSymbol *lookup_id_ast(Ast *id, JITLangCtx *ctx);
+
 #endif

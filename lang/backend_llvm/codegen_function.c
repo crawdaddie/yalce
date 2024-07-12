@@ -233,11 +233,10 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
   int fn_name_len = fn_id->data.AST_IDENTIFIER.length;
 
-  JITSymbol *res = NULL;
+  JITSymbol *res = lookup_id_ast(fn_id, ctx);
 
-  if (codegen_lookup_id(fn_name, fn_name_len, ctx, &res)) {
+  if (!res) {
 
-    print_ast(ast);
     fprintf(stderr,
             "codegen identifier failed symbol '%s' not found in scope %d\n",
             fn_name, ctx->stack_ptr);
@@ -254,12 +253,7 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
   } else if (res->type == STYPE_FN_PARAM) {
     return res->val;
   } else if (res->type == STYPE_FUNCTION) {
-    // printf("found function {recursive??}\n");
-    // print_type(res->symbol_data.STYPE_FUNCTION.fn_type);
     if (is_generic(res->symbol_data.STYPE_FUNCTION.fn_type)) {
-      // if (is_generic(application_result_type)) {
-      print_type(res->symbol_data.STYPE_FUNCTION.fn_type);
-      printf("\n");
       fprintf(stderr,
               "Error: fn application result is generic - result unknown\n");
       return NULL;
@@ -336,7 +330,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
       app_vals[i] =
           codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
     }
-    printf("build call fib\n");
     return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, app_vals,
                           app_len, "call_func");
   }
