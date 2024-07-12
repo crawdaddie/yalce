@@ -45,9 +45,11 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
 
   // Create function.
   LLVMValueRef func = LLVMAddFunction(module, "tmp", funcType);
+
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   if (func == NULL) {
+    printf("body null");
     return NULL;
   }
 
@@ -60,6 +62,7 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
 
   if (body == NULL) {
     LLVMDeleteFunction(func);
+
     return NULL;
   }
 
@@ -160,6 +163,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   infer_ast(env, *prog);
+  Type *result_type = top_level_ast(*prog)->md;
 
   LLVMTypeRef top_level_ret_type;
 
@@ -170,21 +174,15 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   prepare_ex_engine(&engine, module);
 
   if (top_level_func == NULL) {
-    // fprintf(stderr, "Unable to codegen for node\n");
+    printf("> ");
+    print_result(result_type, NULL);
+    free(fcontent);
     return NULL;
   }
-
-#ifdef DUMP_AST
-  print_ast(*prog);
-  printf("-----\n");
-  LLVMDumpModule(module);
-#endif
-
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
-  Type *result_type = top_level_ast(*prog)->md;
   printf("> ");
   print_result(result_type, result);
 
@@ -267,12 +265,11 @@ int jit(int argc, char **argv) {
       }
 
       Ast *prog = parse_input(input);
-
       Ast *top = top_level_ast(prog);
-
       Type *typecheck_result = infer_ast(&env, top);
 
       if (typecheck_result == NULL) {
+        printf("typecheck failed\n");
         continue;
       }
 
@@ -280,21 +277,22 @@ int jit(int argc, char **argv) {
       LLVMValueRef top_level_func =
           codegen_top_level(top, &top_level_ret_type, &ctx, module, builder);
 
+      printf("> ");
+
       Type *top_type = top->md;
-      printf("> '");
-      print_type(top_type);
 
       if (top_level_func == NULL) {
-        // fprintf(stderr, "Unable to codegen for node\n");
-        printf("\n");
+        print_result(top_type, NULL);
         continue;
+      } else {
+        LLVMExecutionEngineRef engine;
+        prepare_ex_engine(&engine, module);
+        LLVMGenericValueRef exec_args[] = {};
+        LLVMGenericValueRef result =
+            LLVMRunFunction(engine, top_level_func, 0, exec_args);
+        print_result(top_type, result);
       }
-      LLVMExecutionEngineRef engine;
-      prepare_ex_engine(&engine, module);
-      LLVMGenericValueRef exec_args[] = {};
-      LLVMGenericValueRef result =
-          LLVMRunFunction(engine, top_level_func, 0, exec_args);
-      print_result(top_type, result);
+
     }
     free(input);
   }
@@ -303,6 +301,13 @@ int jit(int argc, char **argv) {
 }
 
 void print_result(Type *type, LLVMGenericValueRef result) {
+  printf("`");
+  print_type(type);
+
+  if (result == NULL) {
+    printf("llvm value null\n");
+    return;
+  }
   switch (type->kind) {
   case T_INT: {
     printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
