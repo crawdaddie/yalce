@@ -32,7 +32,7 @@ LLVMValueRef codegen_curry_fn(Ast *curry, LLVMValueRef func,
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMPositionBuilderAtEnd(builder, block);
 
-  JITLangCtx fn_ctx = {.stack = ctx->stack, .stack_ptr = ctx->stack_ptr + 1};
+  JITLangCtx fn_ctx = ctx_push(*ctx);
 
   for (int i = 0; i < curried_fn_len; i++) {
     LLVMValueRef param_val = LLVMGetParam(curried_func, i);
