@@ -4,6 +4,7 @@
 #include "codegen_symbols.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
+#include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
 #include "util.h"
@@ -168,6 +169,10 @@ static bool is_default_case(int len, int i) { return i == (len - 1); }
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
+  // printf("codegen match final type: ");
+  // print_type(ast->md);
+  // printf("\n");
+
   LLVMValueRef expr_val =
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
 
@@ -229,8 +234,10 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     // Compile the result expression in the branch block
     LLVMPositionBuilderAtEnd(builder, branch_block);
+
     LLVMValueRef branch_result =
         codegen(result_expr, &branch_ctx, module, builder);
+
     LLVMBuildBr(builder, end_block);
     LLVMAddIncoming(phi, &branch_result, &branch_block, 1);
 

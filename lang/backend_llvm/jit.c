@@ -70,9 +70,11 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
 
 int prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
   char *error = NULL;
+
   struct LLVMMCJITCompilerOptions *Options =
       malloc(sizeof(struct LLVMMCJITCompilerOptions));
   Options->OptLevel = 2;
+
   if (LLVMCreateMCJITCompilerForModule(engine, module, Options, 1, &error) !=
       0) {
     fprintf(stderr, "Failed to create execution engine: %s\n", error);
@@ -139,9 +141,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   *prog = parse_input(fcontent);
-  if (had_errors) {
-    return NULL;
-  }
 
   char *dirname = get_dirname(filename);
   if (dirname == NULL) {
@@ -154,7 +153,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     Ast *stmt = *((*prog)->data.AST_BODY.stmts + i);
     if (stmt->tag == AST_IMPORT) {
 
-      yyrestart(NULL);
+      // yyrestart(NULL);
       ast_root = NULL;
       import_module(dirname, stmt, env, ctx, module, llvm_ctx);
     }
@@ -216,7 +215,7 @@ int jit(int argc, char **argv) {
   LLVMInitializeNativeAsmParser();
   LLVMLinkInMCJIT();
 
-  LLVMContextRef context = LLVMGetGlobalContext();
+  LLVMContextRef context = LLVMContextCreate();
   LLVMModuleRef module =
       LLVMModuleCreateWithNameInContext("ylc.top-level", context);
 
@@ -268,9 +267,6 @@ int jit(int argc, char **argv) {
       }
 
       Ast *prog = parse_input(input);
-      if (had_errors) {
-        continue;
-      }
 
       Ast *top = top_level_ast(prog);
 
