@@ -36,8 +36,8 @@ let scale2 = fn b r _i ->
   b + (r * i)
 ;;
 
-let freq = (sin 50) |> scale 10 (scale 10 1000 sin 0.05);
-let x = (dt_sq freq) |> play_node
+let freq = sin 50 |> scale 10 (scale 10 1000 (sin .05));
+let x = dt_sq freq |> play_node
 
 
 

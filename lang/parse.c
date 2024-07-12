@@ -2,6 +2,7 @@
 #include "serde.h"
 #include <stdlib.h>
 #include <string.h>
+int had_errors = 0;
 
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = malloc(sizeof(Ast));
@@ -72,8 +73,10 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
 void yy_scan_string(char *);
 /* Define the parsing function */
 Ast *parse_input(char *input) {
+  yylineno = 0;
   yy_scan_string(input); // Set the input for the lexer
-  yyparse();             // Parse the input
+  had_errors = 0;
+  yyparse(); // Parse the input
 
   return ast_root; // Placeholder
 }

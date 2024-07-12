@@ -237,8 +237,10 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
 
   if (codegen_lookup_id(fn_name, fn_name_len, ctx, &res)) {
 
-    printf("codegen identifier failed symbol %s not found in scope %d\n",
-           fn_name, ctx->stack_ptr);
+    print_ast(ast);
+    fprintf(stderr,
+            "codegen identifier failed symbol '%s' not found in scope %d\n",
+            fn_name, ctx->stack_ptr);
     return NULL;
   }
 

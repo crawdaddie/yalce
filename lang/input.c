@@ -1,4 +1,5 @@
 #include "input.h"
+#include "format_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,10 +8,6 @@ void repl_input(char *input, int bufsize, const char *prompt) {
   char prev;
   char c;
   int position = 0;
-  if (prompt == NULL) {
-    prompt = "\033[1;31mλ \033[1;0m"
-             "\033[1;36m";
-  }
 
   printf("%s", prompt);
   while (1) {
@@ -38,7 +35,7 @@ void repl_input(char *input, int bufsize, const char *prompt) {
     input[position] = c;
     position++;
   }
-  printf("\033[1;0m");
+  printf(STYLE_RESET_ALL);
 }
 
 char *read_script(const char *filename) {

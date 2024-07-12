@@ -2,24 +2,27 @@
 #include "backend_llvm/common.h"
 #include "codegen.h"
 #include "codegen_types.h"
+#include "format_utils.h"
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
 #include "types/inference.h"
 #include "types/util.h"
+#include "llvm-c/Transforms/Utils.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/IRReader.h>
 #include <llvm-c/Linker.h>
 #include <llvm-c/Support.h>
 #include <llvm-c/Target.h>
+#include <llvm-c/Transforms/InstCombine.h>
 #include <llvm-c/Transforms/Scalar.h>
-#include <llvm-c/Transforms/Utils.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+void print_result(Type *type, LLVMGenericValueRef result);
 static Ast *top_level_ast(Ast *body) {
   size_t len = body->data.AST_BODY.len;
   Ast *last = body->data.AST_BODY.stmts[len - 1];
@@ -136,6 +139,9 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   *prog = parse_input(fcontent);
+  if (had_errors) {
+    return NULL;
+  }
 
   char *dirname = get_dirname(filename);
   if (dirname == NULL) {
@@ -168,10 +174,20 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     // fprintf(stderr, "Unable to codegen for node\n");
     return NULL;
   }
+
+#ifdef DUMP_AST
+  print_ast(*prog);
+  printf("-----\n");
+  LLVMDumpModule(module);
+#endif
+
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
-  printf("> %d\n", (int)LLVMGenericValueToInt(result, 0));
+
+  Type *result_type = top_level_ast(*prog)->md;
+  printf("> ");
+  print_result(result_type, result);
 
   free(fcontent);
   return result; // Return success
@@ -229,35 +245,37 @@ int jit(int argc, char **argv) {
     } else {
       Ast *script_prog;
       eval_script(argv[i], &ctx, module, builder, context, &env, &script_prog);
-#ifdef DUMP_AST
-      print_ast(script_prog);
-      printf("-----\n");
-      LLVMDumpModule(module);
-#endif
     }
   }
 
   if (repl) {
-    char *prompt = "\033[1;31mλ \033[1;0m"
-                   "\033[1;36m";
-    printf("\033[1;31m"
-           "YLC LANG REPL       \n"
-           "------------------\n"
-           "version 0.0.0       \n"
-           "\033[1;0m");
+    char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
+
+    printf(COLOR_MAGENTA "YLC LANG REPL     \n"
+                         "------------------\n"
+                         "version 0.0.0     \n" STYLE_RESET_ALL);
 
     char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
 
     LLVMTypeRef top_level_ret_type;
     while (true) {
       repl_input(input, INPUT_BUFSIZE, prompt);
+
+      if (strcmp("# dump module\n", input) == 0) {
+        printf(STYLE_RESET_ALL "\n");
+        LLVMDumpModule(module);
+        continue;
+      }
+
       Ast *prog = parse_input(input);
+      if (had_errors) {
+        continue;
+      }
 
       Ast *top = top_level_ast(prog);
 
       Type *typecheck_result = infer_ast(&env, top);
 
-      print_ast(top);
       if (typecheck_result == NULL) {
         continue;
       }
@@ -266,11 +284,6 @@ int jit(int argc, char **argv) {
       LLVMValueRef top_level_func =
           codegen_top_level(top, &top_level_ret_type, &ctx, module, builder);
 
-#ifdef DUMP_AST
-      print_ast(top);
-      LLVMDumpModule(module);
-      printf("\n");
-#endif
       Type *top_type = top->md;
       printf("> '");
       print_type(top_type);
@@ -285,59 +298,60 @@ int jit(int argc, char **argv) {
       LLVMGenericValueRef exec_args[] = {};
       LLVMGenericValueRef result =
           LLVMRunFunction(engine, top_level_func, 0, exec_args);
-
-      switch (top_type->kind) {
-      case T_INT: {
-        printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
-        break;
-      }
-
-      case T_NUM: {
-        printf(" %f\n",
-               (double)LLVMGenericValueToFloat(LLVMDoubleType(), result));
-        break;
-      }
-
-      case T_STRING: {
-        printf(" %s\n", (char *)LLVMGenericValueToPointer(result));
-        break;
-      }
-
-      case T_CONS: {
-        if (strcmp(top_type->data.T_CONS.name, "List") == 0 &&
-            top_type->data.T_CONS.args[0]->kind == T_INT) {
-
-          int_ll_t *current = (int_ll_t *)LLVMGenericValueToPointer(result);
-          int count = 0;
-          printf(" [");
-          while (current != NULL &&
-                 count < 10) { // Limit to prevent infinite loop
-            printf("%d, ", current->el);
-            current = current->next;
-            count++;
-          }
-          if (count == 10) {
-            printf("...");
-          }
-          printf("]\n");
-          break;
-        }
-
-        break;
-      }
-
-      case T_FN: {
-        printf(" %p\n", result);
-        break;
-      }
-
-      default:
-        printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
-        break;
-      }
+      print_result(top_type, result);
     }
     free(input);
   }
 
   return 0;
+}
+
+void print_result(Type *type, LLVMGenericValueRef result) {
+  switch (type->kind) {
+  case T_INT: {
+    printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
+    break;
+  }
+
+  case T_NUM: {
+    printf(" %f\n", (double)LLVMGenericValueToFloat(LLVMDoubleType(), result));
+    break;
+  }
+
+  case T_STRING: {
+    printf(" %s\n", (char *)LLVMGenericValueToPointer(result));
+    break;
+  }
+
+  case T_CONS: {
+    if (strcmp(type->data.T_CONS.name, "List") == 0 &&
+        type->data.T_CONS.args[0]->kind == T_INT) {
+
+      int_ll_t *current = (int_ll_t *)LLVMGenericValueToPointer(result);
+      int count = 0;
+      printf(" [");
+      while (current != NULL && count < 10) { // Limit to prevent infinite loop
+        printf("%d, ", current->el);
+        current = current->next;
+        count++;
+      }
+      if (count == 10) {
+        printf("...");
+      }
+      printf("]\n");
+      break;
+    }
+
+    break;
+  }
+
+  case T_FN: {
+    printf(" %p\n", result);
+    break;
+  }
+
+  default:
+    printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
+    break;
+  }
 }
