@@ -242,3 +242,9 @@ void unify(Type *t1, Type *t2) {
   TypeEnv *env = NULL;
   _unify(t1, t2, &env);
 }
+void free_type_env(TypeEnv *env) {
+  if (env->next) {
+    free_type_env(env->next);
+    free(env);
+  }
+}

@@ -21,6 +21,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
     return val;
   }
+
   case AST_INT: {
     return LLVMConstInt(LLVMInt32Type(), ast->data.AST_INT.value, true);
   }

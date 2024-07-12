@@ -82,7 +82,6 @@ LLVMValueRef codegen_int_binop(LLVMBuilderRef builder, token_type op,
 
 LLVMValueRef codegen_float_binop(LLVMBuilderRef builder, token_type op,
                                  LLVMValueRef l, LLVMValueRef r) {
-  printf("codegen float binop\n");
   switch (op) {
   case TOKEN_PLUS:
   case TOKEN_MINUS:
@@ -109,7 +108,7 @@ static LLVMValueRef cast_to_float(LLVMBuilderRef builder, LLVMValueRef i) {
 
 static bool is_llvm_float(LLVMValueRef v) {
   LLVMTypeKind kind = LLVMGetTypeKind(LLVMTypeOf(v));
-  return kind == LLVMDoubleTypeKind;
+  return kind == LLVMDoubleTypeKind || kind == LLVMFloatTypeKind;
 }
 
 static bool is_llvm_int(LLVMValueRef v) {
@@ -128,20 +127,22 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   token_type op = ast->data.AST_BINOP.op;
 
-
   if (is_llvm_int(l) && is_llvm_int(r)) {
     return codegen_int_binop(builder, op, l, r);
   }
 
   if (is_llvm_int(l) && is_llvm_float(r)) {
+
     return codegen_float_binop(builder, op, cast_to_float(builder, l), r);
   }
 
   if (is_llvm_float(l) && is_llvm_int(r)) {
+
     return codegen_float_binop(builder, op, l, cast_to_float(builder, r));
   }
 
   if (is_llvm_float(l) && is_llvm_float(r)) {
+
     return codegen_float_binop(builder, op, l, r);
   }
 

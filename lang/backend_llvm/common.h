@@ -10,6 +10,7 @@ typedef struct {
   // ht stack[STACK_MAX];
   ht *stack;
   int stack_ptr;
+  TypeEnv *env;
 } JITLangCtx;
 
 typedef struct SpecificFns {
@@ -51,5 +52,7 @@ typedef struct {
   int stack_level;
   JITSymbol val;
 } JITLookupResult;
+
+JITLangCtx ctx_push(JITLangCtx ctx);
 
 #endif

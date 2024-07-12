@@ -41,7 +41,7 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
 
   // Create function type.
   LLVMTypeRef funcType =
-      LLVMFunctionType(type_to_llvm_type(ast->md), NULL, 0, 0);
+      LLVMFunctionType(type_to_llvm_type(ast->md, ctx->env), NULL, 0, 0);
 
   // Create function.
   LLVMValueRef func = LLVMAddFunction(module, "tmp", funcType);
@@ -155,8 +155,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   for (int i = 0; i < (*prog)->data.AST_BODY.len; i++) {
     Ast *stmt = *((*prog)->data.AST_BODY.stmts + i);
     if (stmt->tag == AST_IMPORT) {
-
-      // yyrestart(NULL);
       ast_root = NULL;
       import_module(dirname, stmt, env, ctx, module, llvm_ctx);
     }
@@ -176,7 +174,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   if (top_level_func == NULL) {
     printf("> ");
     print_result(result_type, NULL);
-    free(fcontent);
+    // free(fcontent);
     return NULL;
   }
   LLVMGenericValueRef exec_args[] = {};
@@ -292,7 +290,6 @@ int jit(int argc, char **argv) {
             LLVMRunFunction(engine, top_level_func, 0, exec_args);
         print_result(top_type, result);
       }
-
     }
     free(input);
   }

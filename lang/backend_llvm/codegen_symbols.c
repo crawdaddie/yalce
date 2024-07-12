@@ -89,7 +89,7 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
     if (sym_rec->type == STYPE_MODULE) {
       ht *t = sym_rec->symbol_data.STYPE_MODULE.symbols;
       while (sym_rec->type == STYPE_MODULE) {
-        JITLangCtx _ctx = {.stack = t, .stack_ptr = 0};
+        JITLangCtx _ctx = {.stack = t, .stack_ptr = 0 };
         sym_rec = lookup_id_ast(ast->data.AST_RECORD_ACCESS.member, &_ctx);
       }
       return sym_rec;
@@ -130,12 +130,13 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return val;
   } else if (res->type == STYPE_FN_PARAM) {
     int idx = res->symbol_data.STYPE_FN_PARAM;
-    return LLVMGetParam(current_func(builder), idx);
+    // return LLVMGetParam(current_func(builder), idx);
+    return res->val;
   } else if (res->type == STYPE_FUNCTION) {
     return res->val;
   } else if (res->type == STYPE_GENERIC_FUNCTION) {
     return NULL;
-  } 
+  }
   return res->val;
 }
 
@@ -237,23 +238,29 @@ LLVMValueRef codegen_multiple_assignment(Ast *binding, LLVMValueRef expr_val,
 
   switch (binding->tag) {
   case AST_IDENTIFIER: {
-
     return codegen_single_assignment(binding, expr_val, expr_type, ctx, module,
                                      builder, is_fn_param, fn_param_idx);
   }
   case AST_BINOP: {
+      // printf("codegen multiple ass: \n");
     if (binding->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
       Ast *left = binding->data.AST_BINOP.left;
+        // printf("x::rest assign: ");
+        // print_type(left->md);
+        // printf("\n");
 
       LLVMValueRef res_left = codegen_multiple_assignment(
-          left, ll_get_head_val(expr_val, type_to_llvm_type(left->md), builder),
+          left,
+          ll_get_head_val(expr_val, type_to_llvm_type(left->md, ctx->env),
+                          builder),
           left->md, ctx, module, builder, is_fn_param, fn_param_idx);
 
       // assign left to first member
 
       Ast *right = binding->data.AST_BINOP.right;
       LLVMValueRef res_right = codegen_multiple_assignment(
-          right, ll_get_next(expr_val, type_to_llvm_type(left->md), builder),
+          right,
+          ll_get_next(expr_val, type_to_llvm_type(left->md, ctx->env), builder),
           left->md, ctx, module, builder, is_fn_param, fn_param_idx);
 
       if (res_left || res_right) {

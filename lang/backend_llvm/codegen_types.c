@@ -5,7 +5,7 @@
 #include <string.h>
 
 // Function to create an LLVM tuple type
-LLVMTypeRef tuple_type(Type *tuple_type) {
+LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env) {
 
   int len = tuple_type->data.T_CONS.num_args;
 
@@ -13,7 +13,7 @@ LLVMTypeRef tuple_type(Type *tuple_type) {
 
   for (int i = 0; i < len; i++) {
     // Convert each element's AST node to its corresponding LLVM type
-    element_types[i] = type_to_llvm_type(tuple_type->data.T_CONS.args[i]);
+    element_types[i] = type_to_llvm_type(tuple_type->data.T_CONS.args[i], env);
   }
 
   LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
@@ -22,9 +22,9 @@ LLVMTypeRef tuple_type(Type *tuple_type) {
 }
 
 // Function to create an LLVM list type forward decl
-LLVMTypeRef list_type(Type *list_el_type);
+LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env);
 
-LLVMTypeRef type_to_llvm_type(Type *type) {
+LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
   switch (type->kind) {
 
   case T_INT: {
@@ -43,13 +43,20 @@ LLVMTypeRef type_to_llvm_type(Type *type) {
     return LLVMPointerType(LLVMInt8Type(), 0);
   }
 
+  case T_VAR: {
+    if (env) {
+      return type_to_llvm_type(env_lookup(env, type->data.T_VAR), env);
+    }
+    return LLVMInt32Type();
+  }
+
   case T_CONS: {
     if (strcmp(type->data.T_CONS.name, "Tuple") == 0) {
-      return tuple_type(type);
+      return tuple_type(type, env);
     }
 
     if (strcmp(type->data.T_CONS.name, "List") == 0) {
-      return list_type(type->data.T_CONS.args[0]);
+      return list_type(type->data.T_CONS.args[0], env);
     }
 
     return LLVMInt32Type();

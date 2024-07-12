@@ -88,5 +88,6 @@ Type *fresh(Type *type);
 
 Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
+void free_type_env(TypeEnv *env);
 
 #endif
