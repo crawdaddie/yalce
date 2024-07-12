@@ -307,10 +307,12 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-
   LLVMValueRef func = codegen_fn_application_callee(ast, ctx, module, builder);
 
+
   if (!func) {
+    printf("no function found for \n");
+    print_ast(ast);
     return NULL;
   }
 

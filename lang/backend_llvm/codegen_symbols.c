@@ -108,9 +108,11 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   const char *chars = ast->data.AST_IDENTIFIER.value;
   int length = ast->data.AST_IDENTIFIER.length;
 
-  JITSymbol *res = NULL;
+  // JITSymbol *res = NULL;
 
-  if (codegen_lookup_id(chars, length, ctx, &res)) {
+  JITSymbol *res = lookup_id_ast(ast, ctx);
+
+  if (!res) {
     print_ast(ast);
 
     fprintf(stderr,
@@ -133,8 +135,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return res->val;
   } else if (res->type == STYPE_GENERIC_FUNCTION) {
     return NULL;
-  }
-
+  } 
   return res->val;
 }
 
