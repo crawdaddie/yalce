@@ -10,7 +10,6 @@
 extern void yyerror(const char *s);
 
 extern int yylineno;
-extern int had_errors;
 extern char *yytext;
 
 /* Define global variable for the root of AST */
@@ -236,6 +235,5 @@ match_branches:
 
 
 void yyerror(const char *s) {
-  had_errors = 1;
   fprintf(stderr, "Error: %s at line %d near '%s'\n", s, yylineno, yytext);
 }

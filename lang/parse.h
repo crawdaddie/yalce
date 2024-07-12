@@ -9,7 +9,6 @@ typedef struct Ast Ast;
 extern FILE *yyin;
 extern char *yytext;
 extern int yylineno;
-extern int had_errors;
 int yyparse();
 void yyrestart(FILE *);
 

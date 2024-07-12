@@ -258,6 +258,8 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
     // print_type(res->symbol_data.STYPE_FUNCTION.fn_type);
     if (is_generic(res->symbol_data.STYPE_FUNCTION.fn_type)) {
       // if (is_generic(application_result_type)) {
+      print_type(res->symbol_data.STYPE_FUNCTION.fn_type);
+      printf("\n");
       fprintf(stderr,
               "Error: fn application result is generic - result unknown\n");
       return NULL;
@@ -334,6 +336,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
       app_vals[i] =
           codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
     }
+    printf("build call fib\n");
     return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, app_vals,
                           app_len, "call_func");
   }

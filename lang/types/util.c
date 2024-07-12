@@ -80,7 +80,7 @@ bool is_generic(Type *type) {
   }
 
   default:
-    false;
+    return false;
   }
 }
 

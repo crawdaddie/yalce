@@ -3,6 +3,9 @@ ENGINE_SRC_DIR := engine
 ENGINE_SRCS := $(wildcard $(ENGINE_SRC_DIR)/*.c)
 ENGINE_OBJS := $(ENGINE_SRCS:$(ENGINE_SRC_DIR)/%.c=$(BUILD_DIR)/_engine_%.o)
 
+LLVM := /opt/homebrew/opt/llvm@16
+LLVM_CONFIG := $(LLVM)/bin/llvm-config
+
 
 TEST_DIR := lang_test
 ENGINE_LDFLAGS = -lsoundio -lm -lsndfile -lraylib -lfftw3
@@ -32,8 +35,8 @@ endif
 # Check for LLVM flag
 ifdef LLVM_BACKEND
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
-LANG_CC += -I./lang/backend_llvm -DLLVM_BACKEND `llvm-config --cflags`
-LANG_LD_FLAGS += `llvm-config --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
+LANG_CC += -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags`
+LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
 endif
 
 
