@@ -7,6 +7,7 @@
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+#include <string.h>
 // #define _DBG_GENERIC_SYMBOLS
 
 // forward decl
@@ -49,6 +50,51 @@ JITSymbol *lookup_id_mutable(const char *id, int length, JITLangCtx *ctx) {
     ptr--;
   }
   return NULL;
+}
+
+JITSymbol *get_id_in_scope(const char *id, int length, ht *t) {
+  ObjString key = {.chars = id, length, hash_string(id, length)};
+  JITSymbol *res = ht_get_hash(t, key.chars, key.hash);
+  if (res != NULL) {
+    return res;
+  }
+  return NULL;
+}
+
+JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
+  if (ast->tag == AST_IDENTIFIER) {
+
+    const char *chars = ast->data.AST_IDENTIFIER.value;
+    int chars_len = ast->data.AST_IDENTIFIER.length;
+    ObjString key = {.chars = chars, chars_len, hash_string(chars, chars_len)};
+    int ptr = ctx->stack_ptr;
+
+    while (ptr >= 0) {
+      JITSymbol *res = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
+      if (res != NULL) {
+        return res;
+      }
+      ptr--;
+    }
+    return NULL;
+  }
+
+  if (ast->tag == AST_RECORD_ACCESS) {
+    JITSymbol *sym_rec = lookup_id_ast(ast->data.AST_RECORD_ACCESS.record, ctx);
+
+    if (!sym_rec) {
+      return NULL;
+    }
+
+    if (sym_rec->type == STYPE_MODULE) {
+      ht *t = sym_rec->symbol_data.STYPE_MODULE.symbols;
+      while (sym_rec->type == STYPE_MODULE) {
+        JITLangCtx _ctx = {.stack = t, .stack_ptr = 0};
+        sym_rec = lookup_id_ast(ast->data.AST_RECORD_ACCESS.member, &_ctx);
+      }
+      return sym_rec;
+    }
+  }
 }
 
 LLVMValueRef current_func(LLVMBuilderRef builder) {
