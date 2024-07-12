@@ -59,8 +59,11 @@ static LLVMValueRef codegen_match_list(LLVMValueRef list, Ast *pattern,
 
   LLVMValueRef res = _TRUE;
   LLVMTypeRef list_type = LLVMTypeOf(list);
+
   LLVMTypeRef list_el_type =
-      type_to_llvm_type(((Type *)pattern->md)->data.T_CONS.args[0]);
+      type_to_llvm_type(((Type *)pattern->md)->data.T_CONS.args[0], ctx->env);
+
+  LLVMDumpType(list_el_type);
 
   if (pattern->tag == AST_BINOP &&
       pattern->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
@@ -183,8 +186,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create a PHI node for the result
   LLVMPositionBuilderAtEnd(builder, end_block);
-  LLVMValueRef phi =
-      LLVMBuildPhi(builder, type_to_llvm_type(ast->md), "match.result");
+  LLVMValueRef phi = LLVMBuildPhi(builder, type_to_llvm_type(ast->md, ctx->env),
+                                  "match.result");
   //
   // Return to the current block to start generating comparisons
   LLVMPositionBuilderAtEnd(builder, current_block);
@@ -210,7 +213,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       next_block = NULL; // Last iteration, no need for a next block
     }
 
-    JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1};
+    JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
 
     // Check if this is the default case
     if (is_default_case(len, i)) {
