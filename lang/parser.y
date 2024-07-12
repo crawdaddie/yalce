@@ -8,11 +8,12 @@
 
 /* prototypes */
 extern void yyerror(const char *s);
-/* Define global variable for the root of AST */
 
 extern int yylineno;
+extern int had_errors;
 extern char *yytext;
 
+/* Define global variable for the root of AST */
 Ast* ast_root = NULL;
 #define AST_CONST(type, val)                                            \
     ({                                                                  \
@@ -108,10 +109,8 @@ let_binding:
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' lambda_expr  { $$ = ast_let(ast_identifier($2), $4, NULL); }
   | LET IDENTIFIER '=' EXTERN FN extern_typed_signature ';' 
-                                    {
-                                    $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL);
-                                    }
-  | LET TOK_VOID '=' expr {$$ = $4;}
+                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
+  | LET TOK_VOID '=' expr           { $$ = $4; }
   /*| LET lambda_arg '=' expr IN expr { $$ = ast_let($2, $4, $6); }*/
   /*| LET list_match_expr '=' expr    { $$ = ast_let($2, $4, NULL); }*/
 
@@ -125,24 +124,24 @@ stmt_list:
 
 expr:
     simple_expr
-  | expr '.' IDENTIFIER   { $$ = ast_record_access($1, ast_identifier($3)); }
+  | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
-  | expr '+' expr         { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
-  | expr '-' expr         { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
-  | expr '*' expr         { $$ = ast_binop(TOKEN_STAR, $1, $3); }
-  | expr '/' expr         { $$ = ast_binop(TOKEN_SLASH, $1, $3); }
-  | expr MODULO expr      { $$ = ast_binop(TOKEN_MODULO, $1, $3); }
-  | expr '<' expr         { $$ = ast_binop(TOKEN_LT, $1, $3); }
-  | expr '>' expr         { $$ = ast_binop(TOKEN_GT, $1, $3); }
-  | expr GE expr          { $$ = ast_binop(TOKEN_GTE, $1, $3); }
-  | expr LE expr          { $$ = ast_binop(TOKEN_LTE, $1, $3); }
-  | expr NE expr          { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }
-  | expr EQ expr          { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
-  | expr PIPE expr        { $$ = ast_application($3, $1); }
-  | expr ':' expr         { $$ = ast_assoc($1, $3); }
-  | expr DOUBLE_COLON expr { $$ = ast_list_prepend($1, $3); }
-  | LET IDENTIFIER '=' expr IN expr  { $$ = ast_let(ast_identifier($2), $4, $6); }
-  | LET lambda_arg '=' expr IN expr  { $$ = ast_let($2, $4, $6); }
+  | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
+  | expr '-' expr                     { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
+  | expr '*' expr                     { $$ = ast_binop(TOKEN_STAR, $1, $3); }
+  | expr '/' expr                     { $$ = ast_binop(TOKEN_SLASH, $1, $3); }
+  | expr MODULO expr                  { $$ = ast_binop(TOKEN_MODULO, $1, $3); }
+  | expr '<' expr                     { $$ = ast_binop(TOKEN_LT, $1, $3); }
+  | expr '>' expr                     { $$ = ast_binop(TOKEN_GT, $1, $3); }
+  | expr GE expr                      { $$ = ast_binop(TOKEN_GTE, $1, $3); }
+  | expr LE expr                      { $$ = ast_binop(TOKEN_LTE, $1, $3); }
+  | expr NE expr                      { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }
+  | expr EQ expr                      { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
+  | expr PIPE expr                    { $$ = ast_application($3, $1); }
+  | expr ':' expr                     { $$ = ast_assoc($1, $3); }
+  | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
+  | LET IDENTIFIER '=' expr IN expr   { $$ = ast_let(ast_identifier($2), $4, $6); }
+  | LET lambda_arg '=' expr IN expr   { $$ = ast_let($2, $4, $6); }
   | LET expr DOUBLE_COLON expr '=' expr IN expr { $$ = ast_let(ast_list_prepend($2, $4), $6, $8); }
   | LET expr DOUBLE_COLON expr '=' expr { $$ = ast_let(ast_list_prepend($2, $4), $6, NULL); }
   ;
@@ -237,5 +236,6 @@ match_branches:
 
 
 void yyerror(const char *s) {
+  had_errors = 1;
   fprintf(stderr, "Error: %s at line %d near '%s'\n", s, yylineno, yytext);
 }

@@ -75,7 +75,6 @@ bool tcheck(char input[], Type **exp_types) {
   printf("---------------------------\n");
   free(sexpr);
   free(prog);
-  yyrestart(NULL);
   ast_root = NULL;
   return true;
 }

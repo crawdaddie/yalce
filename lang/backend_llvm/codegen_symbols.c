@@ -2,6 +2,7 @@
 #include "codegen_list.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
+#include "serde.h"
 #include "types/util.h"
 #include "util.h"
 #include "llvm-c/Core.h"
@@ -64,9 +65,11 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   JITSymbol *res = NULL;
 
   if (codegen_lookup_id(chars, length, ctx, &res)) {
+    print_ast(ast);
 
-    printf("codegen identifier failed symbol %s not found in scope %d\n", chars,
-           ctx->stack_ptr);
+    fprintf(stderr,
+            "codegen identifier failed symbol '%s' not found in scope %d\n",
+            chars, ctx->stack_ptr);
     return NULL;
   }
 
