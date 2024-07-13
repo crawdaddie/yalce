@@ -49,7 +49,6 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   if (func == NULL) {
-    printf("body null");
     return NULL;
   }
 
@@ -88,6 +87,7 @@ int prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
 
 void import_module(char *dirname, Ast *import, TypeEnv **env, JITLangCtx *ctx,
                    LLVMModuleRef main_module, LLVMContextRef llvm_ctx) {
+
   const char *module_name = import->data.AST_IMPORT.module_name;
   uint64_t module_name_hash = hash_string(module_name, strlen(module_name));
   if (ht_get_hash(ctx->stack, module_name, module_name_hash)) {
