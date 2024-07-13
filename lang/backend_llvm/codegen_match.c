@@ -4,7 +4,6 @@
 #include "codegen_symbols.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
-#include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
 #include "util.h"
@@ -20,6 +19,21 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
                                      JITLangCtx *ctx, LLVMModuleRef module,
                                      LLVMBuilderRef builder);
+
+LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
+                          JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder) {
+  switch (left->tag) {
+  case AST_IDENTIFIER: {
+    if (*(left->data.AST_IDENTIFIER.value) == '_') {
+      return *res;
+    }
+    break;
+  }
+  default:
+    return *res;
+  }
+}
 
 static LLVMValueRef codegen_match_tuple(LLVMValueRef expr_val, Ast *pattern,
                                         JITLangCtx *ctx, LLVMModuleRef module,
@@ -143,6 +157,9 @@ LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
   }
 
   if (pattern->tag == AST_IDENTIFIER) {
+    codegen_single_assignment(pattern, expr_val, pattern->md, ctx, module,
+                              builder, false, 0);
+    return _TRUE;
   }
 
   if (is_tuple_type(pattern->md)) {
