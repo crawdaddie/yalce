@@ -63,8 +63,6 @@ static LLVMValueRef codegen_match_list(LLVMValueRef list, Ast *pattern,
   LLVMTypeRef list_el_type =
       type_to_llvm_type(((Type *)pattern->md)->data.T_CONS.args[0], ctx->env);
 
-  LLVMDumpType(list_el_type);
-
   if (pattern->tag == AST_BINOP &&
       pattern->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
 

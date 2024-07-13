@@ -17,9 +17,9 @@ static LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
 }
 
 // Function to create an LLVM list type
-LLVMTypeRef list_type(Type *list_el_type, JITLangCtx *ctx) {
+LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env) {
   // Convert the custom Type to LLVMTypeRef
-  LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, ctx->env);
+  LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, env);
   LLVMTypeRef node_type = llnode_type(llvm_el_type);
 
   // The list type is a pointer to the node type
