@@ -164,7 +164,8 @@ runi: $(BUILD_DIR)/audio_lang
 # List all test files
 TEST_SOURCES := $(wildcard $(TEST_DIR)/test_*.c)
 TEST_OBJS := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/%.o,$(TEST_SOURCES))
-TEST_TARGETS := $(patsubst $(TEST_DIR)/test_%.c,%,$(TEST_SOURCES))
+_TEST_TARGETS := $(patsubst $(TEST_DIR)/test_%.c,%,$(TEST_SOURCES))
+TEST_TARGETS := $(filter-out llvm_codegen,$(_TEST_TARGETS))
 
 # Common objects for all tests
 COMMON_OBJS := $(filter-out \
@@ -179,9 +180,16 @@ COMMON_OBJS := $(filter-out \
 							 $(BUILD_DIR)/eval_list.o, \
 							 $(LANG_OBJS))
 
+build/test_llvm_codegen.o: $(TEST_DIR)/test_llvm_codegen.c
+	$(LANG_CC) -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags` $(CFLAGS) -c -o $@ $<
+
+test_llvm_codegen: build/test_llvm_codegen.o $(COMMON_OBJS) build/backend_llvm/*.o build/types/*.o
+	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
+	-./$(BUILD_DIR)/$@
+
 # Rule for building test objects
-$(BUILD_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
+# $(BUILD_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(YACC_OUTPUT) $(LEX_OUTPUT)
+# 	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
 
 # Generic rule for building and running tests
 define make-test-rule
@@ -194,13 +202,15 @@ endef
 $(foreach test,$(TEST_TARGETS),$(eval $(call make-test-rule,$(test))))
 
 # Generic rule for any other tests
-test_%: $(BUILD_DIR)/test_%.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(COMMON_OBJS)
-	-$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
-	-./$(BUILD_DIR)/$@
+# test_%: $(BUILD_DIR)/test_%.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(COMMON_OBJS)
+# 	-$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
+	# -./$(BUILD_DIR)/$@
+
+
 
 # Phony target to run all tests
 .PHONY: test
-test: $(TEST_TARGETS)
+test: $(TEST_TARGETS) test_llvm_codegen
 
 # Phony target to clean test files
 .PHONY: clean_tests

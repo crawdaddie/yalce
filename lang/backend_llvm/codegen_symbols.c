@@ -89,7 +89,7 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
     if (sym_rec->type == STYPE_MODULE) {
       ht *t = sym_rec->symbol_data.STYPE_MODULE.symbols;
       while (sym_rec->type == STYPE_MODULE) {
-        JITLangCtx _ctx = {.stack = t, .stack_ptr = 0 };
+        JITLangCtx _ctx = {.stack = t, .stack_ptr = 0};
         sym_rec = lookup_id_ast(ast->data.AST_RECORD_ACCESS.member, &_ctx);
       }
       return sym_rec;
@@ -242,12 +242,12 @@ LLVMValueRef codegen_multiple_assignment(Ast *binding, LLVMValueRef expr_val,
                                      builder, is_fn_param, fn_param_idx);
   }
   case AST_BINOP: {
-      // printf("codegen multiple ass: \n");
+    // printf("codegen multiple ass: \n");
     if (binding->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
       Ast *left = binding->data.AST_BINOP.left;
-        // printf("x::rest assign: ");
-        // print_type(left->md);
-        // printf("\n");
+      // printf("x::rest assign: ");
+      // print_type(left->md);
+      // printf("\n");
 
       LLVMValueRef res_left = codegen_multiple_assignment(
           left,
@@ -326,7 +326,6 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     cont_ctx = ctx_push(cont_ctx);
   }
 
-
   if (is_generic(ast->md) && ast->data.AST_LET.expr->tag == AST_LAMBDA) {
     JITSymbol *generic_sym = create_generic_fn_symbol(
         binding_identifier, ast->data.AST_LET.expr, outer_ctx);
@@ -348,8 +347,8 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     return NULL;
   }
 
-  codegen_multiple_assignment(binding_identifier, expr_val, expr_type, &cont_ctx,
-                              module, builder, false, 0);
+  codegen_multiple_assignment(binding_identifier, expr_val, expr_type,
+                              &cont_ctx, module, builder, false, 0);
 
   if (ast->data.AST_LET.in_expr != NULL) {
     LLVMValueRef res =
