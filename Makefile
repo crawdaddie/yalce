@@ -99,65 +99,6 @@ clean:
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 
 LANG_TEST_LD_FLAGS := -L./build -lm
-#
-# TEST_OBJS = $(filter-out \
-# 		$(BUILD_DIR)/_lang_main.o \
-# 		$(BUILD_DIR)/main.o \
-# 		$(BUILD_DIR)/test_eval.o \
-# 		$(BUILD_DIR)/synth_functions.o \
-# 		$(BUILD_DIR)/arithmetic.o \
-# 		$(BUILD_DIR)/eval.o \
-# 		$(BUILD_DIR)/backend_vm.o \
-# 		$(BUILD_DIR)/backend.o \
-# 		$(BUILD_DIR)/eval_function.o \
-# 		$(BUILD_DIR)/eval_list.o, \
-# 	$(LANG_OBJS))
-#
-# test_parse: $(TEST_DIR)/test_parse.o \
-# 	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
-# 	$(filter-out \
-# 		$(BUILD_DIR)/test_typecheck.o, \
-# 		$(TEST_OBJS))
-#
-#
-# 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
-# 	./$(BUILD_DIR)/test_parse
-#
-# $(TEST_DIR)/test_parse.o: $(TEST_DIR)/test_parse.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-# 	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
-#
-# test_eval: $(TEST_DIR)/test_eval.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(filter-out $(BUILD_DIR)/_lang_main.o $(BUILD_DIR)/test_parse.o $(BUILD_DIR)/test_typecheck.o, $(LANG_OBJS))
-# 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_LD_FLAGS)
-# 	./$(BUILD_DIR)/test_eval
-#
-# $(TEST_DIR)/test_eval.o: $(TEST_DIR)/test_eval.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-# 	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_LD_FLAGS)
-#
-# test_typecheck: $(TEST_DIR)/test_typecheck.o \
-# 	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
-# 	$(filter-out \
-# 		$(BUILD_DIR)/test_parse.o, \
-# 		$(TEST_OBJS))
-#
-# 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
-# 	./$(BUILD_DIR)/test_typecheck
-#
-# $(TEST_DIR)/test_typecheck.o: $(TEST_DIR)/test_typecheck.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-# 	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
-#
-# test_type_serialize: $(TEST_DIR)/test_type_serialize.o \
-# 	$(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o \
-# 	$(filter-out \
-# 		$(BUILD_DIR)/test_parse.o, \
-# 		$(BUILD_DIR)/test_typecheck.o, \
-# 		$(TEST_OBJS))
-#
-# 	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
-# 	./$(BUILD_DIR)/test_type_serialize
-#
-# $(TEST_DIR)/test_type_serialize.o: $(TEST_DIR)/test_type_serialize.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-# 	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
-
 runi: $(BUILD_DIR)/audio_lang
 	./$(BUILD_DIR)/audio_lang $(input) -i
 
@@ -180,7 +121,7 @@ COMMON_OBJS := $(filter-out \
 							 $(BUILD_DIR)/eval_list.o, \
 							 $(LANG_OBJS))
 
-build/test_llvm_codegen.o: $(TEST_DIR)/test_llvm_codegen.c
+build/test_llvm_codegen.o: $(TEST_DIR)/test_llvm_codegen.c lang/backend_llvm/*.c
 	$(LANG_CC) -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags` $(CFLAGS) -c -o $@ $<
 
 test_llvm_codegen: build/test_llvm_codegen.o $(COMMON_OBJS) build/backend_llvm/*.o build/types/*.o
@@ -188,8 +129,8 @@ test_llvm_codegen: build/test_llvm_codegen.o $(COMMON_OBJS) build/backend_llvm/*
 	-./$(BUILD_DIR)/$@
 
 # Rule for building test objects
-# $(BUILD_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-# 	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
+$(BUILD_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(YACC_OUTPUT) $(LEX_OUTPUT)
+	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
 
 # Generic rule for building and running tests
 define make-test-rule
@@ -202,15 +143,15 @@ endef
 $(foreach test,$(TEST_TARGETS),$(eval $(call make-test-rule,$(test))))
 
 # Generic rule for any other tests
-# test_%: $(BUILD_DIR)/test_%.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(COMMON_OBJS)
-# 	-$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
-	# -./$(BUILD_DIR)/$@
+test_%: $(BUILD_DIR)/test_%.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(COMMON_OBJS)
+	-$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
+	-./$(BUILD_DIR)/$@
 
 
 
 # Phony target to run all tests
 .PHONY: test
-test: $(TEST_TARGETS) test_llvm_codegen
+test: $(TEST_TARGETS) test_llvm_codegen $(BUILD_DIR)
 
 # Phony target to clean test files
 .PHONY: clean_tests

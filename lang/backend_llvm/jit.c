@@ -204,6 +204,7 @@ void module_passes(LLVMModuleRef module) {
   LLVMAddCFGSimplificationPass(pass_manager);
   LLVMAddTailCallEliminationPass(pass_manager);
 }
+
 int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
   LLVMInitializeNativeTarget();
