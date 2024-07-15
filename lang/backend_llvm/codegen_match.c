@@ -28,11 +28,44 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
     if (*(left->data.AST_IDENTIFIER.value) == '_') {
       return *res;
     }
-    break;
+
+    LLVMTypeRef llvm_type = LLVMTypeOf(right);
+    const char *id_chars = left->data.AST_IDENTIFIER.value;
+    int id_len = left->data.AST_IDENTIFIER.length;
+
+    JITSymbol *sym = malloc(sizeof(JITSymbol));
+
+    if (ctx->stack_ptr == 0) {
+
+      // top-level
+      LLVMValueRef alloca_val =
+          LLVMAddGlobalInAddressSpace(module, llvm_type, id_chars, 0);
+      LLVMSetInitializer(alloca_val, right);
+
+      *sym = (JITSymbol){STYPE_TOP_LEVEL_VAR, llvm_type, alloca_val};
+
+      ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+                  hash_string(id_chars, id_len), sym);
+      return *res;
+    }
+
+    *sym = (JITSymbol){STYPE_LOCAL_VAR, llvm_type, right};
+    ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+                hash_string(id_chars, id_len), sym);
+    return *res;
   }
+  case AST_BINOP: {
+    return *res;
+  }
+
+  case AST_TUPLE: {
+    return *res;
+  }
+
   default:
     return *res;
   }
+  return *res;
 }
 
 static LLVMValueRef codegen_match_tuple(LLVMValueRef expr_val, Ast *pattern,

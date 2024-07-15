@@ -192,7 +192,7 @@ lambda_args:
 lambda_arg:
     IDENTIFIER              { $$ = ast_identifier($1); }
   | '(' expr_list ')'       { $$ = ast_tuple($2); }
-  | list_match_expr               { $$ = $1; }
+  | list_match_expr         { $$ = $1; }
   ;
 
 application:
@@ -208,7 +208,7 @@ list:
 
 list_match_expr:
     IDENTIFIER DOUBLE_COLON IDENTIFIER  { $$ = ast_list_prepend(ast_identifier($1), ast_identifier($3)); }
-  | IDENTIFIER DOUBLE_COLON expr  { $$ = ast_list_prepend(ast_identifier($1), $3); }
+  | IDENTIFIER DOUBLE_COLON expr        { $$ = ast_list_prepend(ast_identifier($1), $3); }
   ;
 
 tuple:
