@@ -20,6 +20,20 @@ LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
                                      JITLangCtx *ctx, LLVMModuleRef module,
                                      LLVMBuilderRef builder);
 
+LLVMValueRef codegen_equality(LLVMValueRef left, Type *left_type,
+                              LLVMValueRef right, JITLangCtx *ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  if (left_type->kind == T_INT) {
+    return codegen_int_binop(builder, TOKEN_EQUALITY, left, right);
+  }
+
+  if (left_type->kind == T_NUM) {
+    return codegen_float_binop(builder, TOKEN_EQUALITY, left, right);
+  }
+  return _FALSE;
+}
+
 LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
                           JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
@@ -56,6 +70,24 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
   }
   case AST_BINOP: {
     if (left->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+      Ast *pattern_left = left->data.AST_BINOP.left;
+      Ast *pattern_right = left->data.AST_BINOP.right;
+      LLVMTypeRef list_el_type = type_to_llvm_type(pattern_left->md, ctx->env);
+      *res =
+          and_vals(*res, ll_is_not_null(right, list_el_type, builder), builder);
+      LLVMValueRef list_head_val =
+          ll_get_head_val(right, list_el_type, builder);
+      LLVMValueRef temp_res = _TRUE;
+      *res = and_vals(*res,
+                      match_values(pattern_left, list_head_val, &temp_res, ctx,
+                                   module, builder),
+                      builder);
+      LLVMValueRef list_next = ll_get_next(right, list_el_type, builder);
+      temp_res = _TRUE;
+      *res = and_vals(*res,
+                      match_values(pattern_right, list_next, &temp_res, ctx,
+                                   module, builder),
+                      builder);
     }
     return *res;
   }
@@ -64,8 +96,13 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
     return *res;
   }
 
-  default:
+  default: {
+    LLVMValueRef left_val = codegen(left, ctx, module, builder);
+    *res = and_vals(
+        *res, codegen_equality(left_val, left->md, right, ctx, module, builder),
+        builder);
     return *res;
+  }
   }
   return *res;
 }
