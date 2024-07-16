@@ -55,6 +55,8 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
     return *res;
   }
   case AST_BINOP: {
+    if (left->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+    }
     return *res;
   }
 
