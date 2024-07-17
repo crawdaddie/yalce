@@ -21,4 +21,8 @@ LLVMValueRef ll_is_null(LLVMValueRef list, LLVMTypeRef list_el_type,
 
 LLVMValueRef ll_is_not_null(LLVMValueRef list, LLVMTypeRef list_el_type,
                             LLVMBuilderRef builder);
+
+LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type);
+
+LLVMValueRef null_node(LLVMTypeRef node_type);
 #endif

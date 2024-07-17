@@ -1,6 +1,8 @@
 #include "../lang/backend_llvm/codegen_match.h"
 #include "../lang/backend_llvm/common.h"
 #include "../lang/parse.h"
+#include "codegen_list.h"
+#include "util.h"
 #include "value.h"
 #include <llvm-c/Core.h>
 #include <stdio.h>
@@ -27,6 +29,18 @@ Codegen setup_codegen(ht *stack) {
   for (int i = 0; i < STACK_MAX; i++) {
     ht_init(&stack[i]);
   }
+
+  LLVMTypeRef funcType = LLVMFunctionType(LLVMVoidType(), NULL, 0, 0);
+
+  // Create function.
+  LLVMValueRef func = LLVMAddFunction(module, "tmp", funcType);
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  // Create basic block.
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMPositionBuilderAtEnd(builder, block);
+
   JITLangCtx ctx = {.stack = stack, .stack_ptr = 0, env};
   return (Codegen){ctx, context, module, builder};
 }
@@ -200,6 +214,85 @@ bool test_match_assignment_top_level() {
   return test_res;
 }
 
+LLVMValueRef int_list(int items[], int len, LLVMBuilderRef builder) {
+  LLVMTypeRef llvm_el_type = LLVMInt32Type();
+  LLVMTypeRef node_type = llnode_type(llvm_el_type);
+
+  if (len == 0) {
+    return null_node(node_type);
+  }
+
+  LLVMValueRef end_node = null_node(node_type);
+
+  LLVMValueRef head = LLVMBuildArrayMalloc(
+      builder, node_type, LLVMConstInt(LLVMInt32Type(), len, 0),
+      "list_array_malloc"); // malloc an array all at once since we know we'll
+                            // need len nodes off the bat
+  LLVMValueRef tail = head;
+
+  LLVMValueRef element_size = LLVMSizeOf(node_type);
+  for (int i = 0; i < len; i++) {
+
+    // Set the data
+    struct_ptr_set(0, tail, node_type,
+                   LLVMConstInt(LLVMInt32Type(), *(items + i), true), builder);
+
+    if (i < len - 1) {
+      LLVMValueRef next_tail =
+          increment_ptr(tail, node_type, element_size, builder);
+      struct_ptr_set(1, tail, node_type, next_tail, builder);
+
+      tail = next_tail;
+    } else {
+      // Set the final next pointer to null
+      struct_ptr_set(1, tail, node_type, end_node, builder);
+    }
+  }
+
+  return head;
+}
+
+bool test_match_list() {
+  const char *desc = "match [1, 2, 3] with [1, 2, 3]";
+  ht stack[STACK_MAX];
+  Codegen env = setup_codegen(stack);
+
+  // Test case : AST_IDENTIFIER with 'x'
+  Ast ast_list = {
+      AST_LIST,
+      .data = {.AST_LIST = {.items =
+                                (Ast[]){
+                                    (Ast){AST_INT,
+                                          .data = {.AST_INT = {.value = 1}},
+                                          .md = &t_int},
+                                    (Ast){AST_INT,
+                                          .data = {.AST_INT = {.value = 2}},
+                                          .md = &t_int},
+                                    (Ast){AST_INT, .data = {.AST_INT = {.value = 3}},
+                                          .md = &t_int},
+                                },
+                            .len = 3}},
+      .md = tcons("List", (Type *[]){&t_int}, 1)};
+
+  LLVMValueRef res = _TRUE;
+  LLVMValueRef exp_true =
+      match_values(&ast_list, int_list((int[]){1, 2, 3}, 3, env.builder), &res,
+                   &env.ctx, env.module, env.builder);
+
+  bool test_res = (LLVMConstIntGetZExtValue(exp_true) == 1 &&
+                   LLVMConstIntGetZExtValue(res) == 1);
+
+  if (test_res) {
+    printf("✅ %s\n", desc);
+  } else {
+    LLVMDumpModule(env.module);
+    printf("❌ %s\n", desc);
+  };
+
+  cleanup_codegen(env);
+  return test_res;
+}
+
 int main() {
   bool status = true;
 
@@ -211,5 +304,6 @@ int main() {
   status &= test_match_value_fail();
   status &= test_match_assignment();
   status &= test_match_assignment_top_level();
+  status &= test_match_list();
   return status != true;
 }

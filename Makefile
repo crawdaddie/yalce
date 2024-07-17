@@ -88,7 +88,7 @@ $(LEX_OUTPUT): $(LEX_FILE)
 
 # Build language object files
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
-	$(LANG_CC) $(CFLAGS) -c -o $@ $<
+	$(LANG_CC) -c -o $@ $<
 
 # Build the final executable
 $(BUILD_DIR)/audio_lang: $(LANG_OBJS) $(SHARED_LIB_TARGET)
@@ -122,15 +122,15 @@ COMMON_OBJS := $(filter-out \
 							 $(LANG_OBJS))
 
 build/test_llvm_codegen.o: $(TEST_DIR)/test_llvm_codegen.c lang/backend_llvm/*.c
-	$(LANG_CC) -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags` $(CFLAGS) -c -o $@ $<
+	$(LANG_CC) -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags` -c -o $@ $<
 
 test_llvm_codegen: build/test_llvm_codegen.o $(COMMON_OBJS) build/backend_llvm/*.o build/types/*.o
-	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
+	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ `$(LLVM_CONFIG) --libs --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
 	-./$(BUILD_DIR)/$@
 
 # Rule for building test objects
 $(BUILD_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-	$(LANG_CC) $(CFLAGS) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
+	$(LANG_CC) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
 
 # Generic rule for building and running tests
 define make-test-rule

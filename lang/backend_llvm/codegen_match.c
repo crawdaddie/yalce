@@ -4,6 +4,7 @@
 #include "codegen_symbols.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
+#include "serde.h"
 #include "types/type.h"
 #include "types/util.h"
 #include "util.h"
@@ -77,17 +78,100 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
           and_vals(*res, ll_is_not_null(right, list_el_type, builder), builder);
       LLVMValueRef list_head_val =
           ll_get_head_val(right, list_el_type, builder);
-      LLVMValueRef temp_res = _TRUE;
-      *res = and_vals(*res,
-                      match_values(pattern_left, list_head_val, &temp_res, ctx,
-                                   module, builder),
-                      builder);
+      *res = and_vals(
+          *res,
+          match_values(pattern_left, list_head_val, res, ctx, module, builder),
+          builder);
       LLVMValueRef list_next = ll_get_next(right, list_el_type, builder);
-      temp_res = _TRUE;
-      *res = and_vals(*res,
-                      match_values(pattern_right, list_next, &temp_res, ctx,
-                                   module, builder),
-                      builder);
+      *res = and_vals(
+          *res,
+          match_values(pattern_right, list_next, res, ctx, module, builder),
+          builder);
+    }
+    return *res;
+  }
+    // case AST_LIST: {
+    //   Type *t = ((Type *)left->md)->data.T_CONS.args[0];
+    //   LLVMTypeRef list_el_type = type_to_llvm_type(t, ctx->env);
+    //
+    //   if (left->data.AST_LIST.len == 0) {
+    //     return and_vals(*res, ll_is_null(right, list_el_type, builder),
+    //     builder);
+    //   } else {
+    //
+    //     int len = left->data.AST_LIST.len;
+    //     Ast *items = left->data.AST_LIST.items;
+    //
+    //     Ast *head_item = items;
+    //     LLVMValueRef list = right;
+    //     while (len--) {
+    //       *res = and_vals(*res, ll_is_not_null(list, list_el_type, builder),
+    //                       builder);
+    //
+    //       LLVMValueRef list_head_val =
+    //           ll_get_head_val(list, list_el_type, builder);
+    //
+    //       *res = and_vals(
+    //           *res,
+    //           match_values(head_item, list_head_val, res, ctx, module,
+    //           builder), builder);
+    //
+    //       list = ll_get_next(list, list_el_type, builder);
+    //       head_item++;
+    //     }
+    //
+    //     *res = and_vals(*res, ll_is_null(list, list_el_type, builder),
+    //     builder);
+    //
+    //     return *res;
+    //   }
+    // }
+  case AST_LIST: {
+    Type *t = ((Type *)left->md)->data.T_CONS.args[0];
+    LLVMTypeRef list_el_type = type_to_llvm_type(t, ctx->env);
+    if (left->data.AST_LIST.len == 0) {
+      *res = ll_is_null(right, list_el_type, builder);
+    } else {
+      LLVMValueRef _true = _TRUE;
+      int len = left->data.AST_LIST.len;
+      Ast *items = left->data.AST_LIST.items;
+      LLVMValueRef list = right;
+
+      LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+      LLVMBasicBlockRef continue_block = LLVMAppendBasicBlock(
+          LLVMGetBasicBlockParent(current_block), "continue");
+      LLVMBasicBlockRef fail_block =
+          LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block), "fail");
+      LLVMBasicBlockRef end_block =
+          LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block), "end");
+
+      for (int i = 0; i < len; i++) {
+        LLVMValueRef is_not_null = ll_is_not_null(list, list_el_type, builder);
+        LLVMBuildCondBr(builder, is_not_null, continue_block, fail_block);
+
+        LLVMPositionBuilderAtEnd(builder, continue_block);
+        LLVMValueRef list_head_val =
+            ll_get_head_val(list, list_el_type, builder);
+
+        LLVMValueRef match_result = match_values(&items[i], list_head_val,
+                                                 &_true, ctx, module, builder);
+        LLVMBuildCondBr(builder, match_result,
+                        LLVMAppendBasicBlock(
+                            LLVMGetBasicBlockParent(current_block), "continue"),
+                        fail_block);
+
+        list = ll_get_next(list, list_el_type, builder);
+        continue_block = LLVMGetInsertBlock(builder);
+      }
+
+      LLVMValueRef is_null = ll_is_null(list, list_el_type, builder);
+      LLVMBuildCondBr(builder, is_null, end_block, fail_block);
+
+      LLVMPositionBuilderAtEnd(builder, fail_block);
+      LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), *res);
+      LLVMBuildBr(builder, end_block);
+
+      LLVMPositionBuilderAtEnd(builder, end_block);
     }
     return *res;
   }
@@ -98,6 +182,7 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
 
   default: {
     LLVMValueRef left_val = codegen(left, ctx, module, builder);
+
     *res = and_vals(
         *res, codegen_equality(left_val, left->md, right, ctx, module, builder),
         builder);
@@ -186,7 +271,7 @@ static LLVMValueRef codegen_match_list(LLVMValueRef list, Ast *pattern,
     size_t len = pattern->data.AST_LIST.len;
 
     if (len == 0) {
-      return is_null_node(list, list_el_type, builder);
+      return ll_is_null(list, list_el_type, builder);
     }
 
     Ast *items = pattern->data.AST_LIST.items;

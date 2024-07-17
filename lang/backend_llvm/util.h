@@ -13,14 +13,6 @@ LLVMValueRef struct_ptr_get(int item_offset, LLVMValueRef struct_ptr,
 LLVMValueRef increment_ptr(LLVMValueRef ptr, LLVMTypeRef node_type,
                            LLVMValueRef element_size, LLVMBuilderRef builder);
 
-LLVMValueRef null_node(LLVMTypeRef node_type);
-
-LLVMValueRef is_null_node(LLVMValueRef node, LLVMTypeRef node_type,
-                          LLVMBuilderRef builder);
-
-LLVMValueRef is_not_null_node(LLVMValueRef node, LLVMTypeRef node_type,
-                              LLVMBuilderRef builder);
-
 LLVMValueRef and_vals(LLVMValueRef res, LLVMValueRef res2,
                       LLVMBuilderRef builder);
 #endif

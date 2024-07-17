@@ -31,30 +31,6 @@ LLVMValueRef increment_ptr(LLVMValueRef ptr, LLVMTypeRef node_type,
                        "next_element_ptr");
 }
 
-LLVMValueRef null_node(LLVMTypeRef node_type) {
-  return LLVMConstNull(LLVMPointerType(node_type, 0));
-}
-
-LLVMValueRef is_null_node(LLVMValueRef node, LLVMTypeRef node_type,
-                          LLVMBuilderRef builder) {
-  // Create a null node of the same type
-  LLVMValueRef null_node_value = LLVMConstNull(LLVMPointerType(node_type, 0));
-
-  // Compare the node with the null node
-  return LLVMBuildICmp(builder, LLVMIntEQ, node, null_node_value,
-                       "is_null_node");
-}
-
-LLVMValueRef is_not_null_node(LLVMValueRef node, LLVMTypeRef node_type,
-                              LLVMBuilderRef builder) {
-  // Create a null node of the same type
-  LLVMValueRef null_node_value = LLVMConstNull(LLVMPointerType(node_type, 0));
-
-  // Compare the node with the null node
-  return LLVMBuildICmp(builder, LLVMIntNE, node, null_node_value,
-                       "is_null_node");
-}
-
 LLVMValueRef and_vals(LLVMValueRef l, LLVMValueRef r, LLVMBuilderRef builder) {
   return LLVMBuildAnd(builder, l, r, "and_vals");
 }
