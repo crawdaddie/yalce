@@ -6,7 +6,7 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-static LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
+LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
   LLVMTypeRef node_types[2];
   node_types[0] = llvm_el_type;
   node_types[1] = LLVMPointerType(LLVMVoidType(), 0); // Pointer to next node
@@ -24,6 +24,10 @@ LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env) {
 
   // The list type is a pointer to the node type
   return LLVMPointerType(node_type, 0);
+}
+
+LLVMValueRef null_node(LLVMTypeRef node_type) {
+  return LLVMConstNull(LLVMPointerType(node_type, 0));
 }
 
 LLVMValueRef ll_create_list_node(LLVMValueRef mem, LLVMTypeRef node_type,
@@ -59,7 +63,7 @@ LLVMValueRef ll_is_not_null(LLVMValueRef list, LLVMTypeRef list_el_type,
                             LLVMBuilderRef builder) {
   LLVMTypeRef node_type = llnode_type(list_el_type);
   LLVMValueRef null_list = LLVMConstNull(LLVMPointerType(node_type, 0));
-  return LLVMBuildICmp(builder, LLVMIntNE, list, null_list, "is_null");
+  return LLVMBuildICmp(builder, LLVMIntNE, list, null_list, "is_not_null");
 }
 LLVMValueRef ll_get_head_val(LLVMValueRef list, LLVMTypeRef list_el_type,
                              LLVMBuilderRef builder) {
@@ -75,6 +79,7 @@ LLVMValueRef ll_get_next(LLVMValueRef list, LLVMTypeRef list_el_type,
 
 LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
+
   Type *list_el_type = *((Type *)ast->md)->data.T_CONS.args;
   LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, ctx->env);
   LLVMTypeRef node_type = llnode_type(llvm_el_type);

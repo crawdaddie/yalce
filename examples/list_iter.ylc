@@ -5,5 +5,12 @@ let list_sum = fn s l ->
   )
 ;;
 
+# let list_match = fn l ->
+#   (match l with
+#   | [1,2,3] -> 0
+#   | [] -> 100
+#   )
+# ;;
+
 let sum = list_sum 0
 
