@@ -293,6 +293,47 @@ bool test_match_list() {
   return test_res;
 }
 
+bool test_match_list_fail() {
+  const char *desc = "match [1, 2, 3] with [2, 2, 3]";
+  ht stack[STACK_MAX];
+  Codegen env = setup_codegen(stack);
+
+  // Test case : AST_IDENTIFIER with 'x'
+  Ast ast_list = {
+      AST_LIST,
+      .data = {.AST_LIST = {.items =
+                                (Ast[]){
+                                    (Ast){AST_INT,
+                                          .data = {.AST_INT = {.value = 2}},
+                                          .md = &t_int},
+                                    (Ast){AST_INT,
+                                          .data = {.AST_INT = {.value = 2}},
+                                          .md = &t_int},
+                                    (Ast){AST_INT, .data = {.AST_INT = {.value = 3}},
+                                          .md = &t_int},
+                                },
+                            .len = 3}},
+      .md = tcons("List", (Type *[]){&t_int}, 1)};
+
+  LLVMValueRef res = _TRUE;
+  LLVMValueRef exp_true =
+      match_values(&ast_list, int_list((int[]){1, 2, 3}, 3, env.builder), &res,
+                   &env.ctx, env.module, env.builder);
+
+  bool test_res = (LLVMConstIntGetZExtValue(exp_true) == 0 &&
+                   LLVMConstIntGetZExtValue(res) == 0);
+
+  if (test_res) {
+    printf("✅ %s\n", desc);
+  } else {
+    LLVMDumpModule(env.module);
+    printf("❌ %s\n", desc);
+  };
+
+  cleanup_codegen(env);
+  return test_res;
+}
+
 int main() {
   bool status = true;
 
@@ -305,5 +346,6 @@ int main() {
   status &= test_match_assignment();
   status &= test_match_assignment_top_level();
   status &= test_match_list();
+  status &= test_match_list_fail();
   return status != true;
 }
