@@ -1,5 +1,4 @@
 #include "../lang/backend_llvm/common.h"
-#include "../lang/backend_llvm/jit.h"
 #include "../lang/parse.h"
 #include "codegen_list.h"
 #include "codegen_match_values.h"
@@ -55,13 +54,28 @@ void cleanup_codegen(Codegen env) {
   LLVMContextDispose(env.context);
 }
 
+int _prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
+  char *error = NULL;
+
+  struct LLVMMCJITCompilerOptions *Options =
+      malloc(sizeof(struct LLVMMCJITCompilerOptions));
+  Options->OptLevel = 2;
+
+  if (LLVMCreateMCJITCompilerForModule(engine, module, Options, 1, &error) !=
+      0) {
+    fprintf(stderr, "Failed to create execution engine: %s\n", error);
+    LLVMDisposeMessage(error);
+    return 1;
+  }
+}
+
 #define _TRUE LLVMConstInt(LLVMInt1Type(), 1, 0)
 #define _FALSE LLVMConstInt(LLVMInt1Type(), 0, 0)
 
 LLVMGenericValueRef ex_test_func(Codegen env, LLVMValueRef code) {
   LLVMBuildRet(env.builder, code);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
 }
@@ -85,7 +99,7 @@ bool test_match_underscore() {
                                        &env.ctx, env.module, env.builder);
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
   bool test_res = (int)LLVMGenericValueToInt(result, 0) == 1;
@@ -148,7 +162,7 @@ bool test_match_value_fail() {
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
   bool test_res = (int)LLVMGenericValueToInt(result, 0) == 0;
@@ -193,7 +207,7 @@ bool test_match_assignment() {
   if (sym) {
     LLVMBuildRet(env.builder, sym->val);
     LLVMExecutionEngineRef engine;
-    prepare_ex_engine(&engine, env.module);
+    _prepare_ex_engine(&engine, env.module);
     LLVMGenericValueRef exec_args[] = {};
     LLVMGenericValueRef result =
         LLVMRunFunction(engine, env.func, 0, exec_args);
@@ -209,6 +223,10 @@ bool test_match_assignment() {
 
   cleanup_codegen(env);
   return test_res;
+}
+LLVMValueRef get_glob_val(LLVMBuilderRef builder, LLVMValueRef alloca,
+                          LLVMTypeRef type) {
+  return LLVMBuildLoad2(builder, type, alloca, "");
 }
 
 bool test_match_assignment_top_level() {
@@ -236,9 +254,10 @@ bool test_match_assignment_top_level() {
   test_res &= sym != NULL;
   if (sym) {
 
-    LLVMBuildRet(env.builder, LLVMGetInitializer(sym->val));
+    LLVMBuildRet(env.builder,
+                 get_glob_val(env.builder, sym->val, LLVMInt32Type()));
     LLVMExecutionEngineRef engine;
-    prepare_ex_engine(&engine, env.module);
+    _prepare_ex_engine(&engine, env.module);
     LLVMGenericValueRef exec_args[] = {};
     LLVMGenericValueRef result =
         LLVMRunFunction(engine, env.func, 0, exec_args);
@@ -337,7 +356,7 @@ bool test_match_list() {
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
   bool test_res = (int)LLVMGenericValueToInt(result, 0) == 1;
@@ -383,7 +402,7 @@ bool test_match_list_fail() {
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
   bool test_res = (int)LLVMGenericValueToInt(result, 0) == 0;
@@ -436,7 +455,7 @@ bool test_match_list_assignment() {
   if (sym) {
     LLVMBuildRet(env.builder, sym->val);
     LLVMExecutionEngineRef engine;
-    prepare_ex_engine(&engine, env.module);
+    _prepare_ex_engine(&engine, env.module);
     LLVMGenericValueRef exec_args[] = {};
     LLVMGenericValueRef result =
         LLVMRunFunction(engine, env.func, 0, exec_args);
@@ -491,7 +510,7 @@ bool test_match_list_assignment_destructure_success() {
 
   LLVMBuildRet(env.builder, match);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
 
@@ -552,7 +571,7 @@ bool test_match_list_assignment_destructure() {
   if (sym) {
     LLVMBuildRet(env.builder, sym->val);
     LLVMExecutionEngineRef engine;
-    prepare_ex_engine(&engine, env.module);
+    _prepare_ex_engine(&engine, env.module);
     LLVMGenericValueRef exec_args[] = {};
     LLVMGenericValueRef result =
         LLVMRunFunction(engine, env.func, 0, exec_args);
@@ -617,7 +636,7 @@ bool test_match_list_assignment_destructure2() {
   if (sym) {
     LLVMBuildRet(env.builder, sym->val);
     LLVMExecutionEngineRef engine;
-    prepare_ex_engine(&engine, env.module);
+    _prepare_ex_engine(&engine, env.module);
     LLVMGenericValueRef exec_args[] = {};
     LLVMGenericValueRef result =
         LLVMRunFunction(engine, env.func, 0, exec_args);
@@ -668,7 +687,7 @@ bool test_match_tuple() {
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
   bool test_res = (int)LLVMGenericValueToInt(result, 0) == 1;
@@ -714,7 +733,7 @@ bool test_match_tuple_fail() {
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
   bool test_res = (int)LLVMGenericValueToInt(result, 0) == 1;
@@ -767,7 +786,7 @@ bool test_match_tuple_assignment() {
   if (sym) {
     LLVMBuildRet(env.builder, sym->val);
     LLVMExecutionEngineRef engine;
-    prepare_ex_engine(&engine, env.module);
+    _prepare_ex_engine(&engine, env.module);
     LLVMGenericValueRef exec_args[] = {};
     LLVMGenericValueRef result =
         LLVMRunFunction(engine, env.func, 0, exec_args);
@@ -823,7 +842,7 @@ bool test_match_list_assignment_destructure_success_global_scope() {
 
   LLVMBuildRet(env.builder, match);
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, env.module);
+  _prepare_ex_engine(&engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
 

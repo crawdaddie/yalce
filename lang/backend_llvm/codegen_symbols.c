@@ -127,12 +127,14 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (res->type == STYPE_TOP_LEVEL_VAR) {
     LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
     // LLVMValueRef glob = res->val;
-    if (LLVMGetTypeKind(LLVMTypeOf(glob)) == LLVMPointerTypeKind) {
-      // printf("global is pointer type eg on the heap - need to load value\n");
-      return LLVMBuildLoad2(builder, res->llvm_type, glob, "");
-    }
-    LLVMValueRef val = LLVMGetInitializer(glob);
-    return val;
+    // if (LLVMGetTypeKind(LLVMTypeOf(glob)) == LLVMPointerTypeKind) {
+    //   printf("global is pointer type eg on the heap - need to load value\n");
+    //   return LLVMBuildLoad2(builder, res->llvm_type, glob, "");
+    // }
+    // LLVMValueRef val = LLVMGetInitializer(glob);
+
+    return LLVMBuildLoad2(builder, res->llvm_type, glob, "");
+    // return val;
   } else if (res->type == STYPE_LOCAL_VAR) {
     LLVMValueRef val = res->val;
     // if (LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMPointerTypeKind) {
