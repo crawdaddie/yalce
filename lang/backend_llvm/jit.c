@@ -255,7 +255,7 @@ int jit(int argc, char **argv) {
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
 
-    char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
+    // char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
     LLVMTypeRef top_level_ret_type;
     char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
     while (true) {
@@ -265,13 +265,11 @@ int jit(int argc, char **argv) {
       hti it = ht_iterator(ctx.stack);
       // printf("key: '%s'\n", it.key);
 
-      int completion_entry = 0;
-      while (ht_next(&it)) {
+      for (int completion_entry = 0; ht_next(&it); completion_entry++) {
         add_completion_item(it.key, completion_entry);
-        completion_entry++;
       };
 
-      repl_input(input, INPUT_BUFSIZE, prompt);
+      char *input = repl_input(prompt);
 
       if (strcmp("# dump module\n", input) == 0) {
         printf(STYLE_RESET_ALL "\n");
@@ -314,7 +312,6 @@ int jit(int argc, char **argv) {
       }
       printf(COLOR_RESET);
     }
-    free(input);
   }
 
   return 0;

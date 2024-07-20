@@ -106,7 +106,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 
-LANG_TEST_LD_FLAGS := -L./build -lm
+LANG_TEST_LD_FLAGS := -L./build -lm -L$(READLINE_PREFIX)/lib -lreadline
 runi: $(BUILD_DIR)/audio_lang
 	./$(BUILD_DIR)/audio_lang $(input) -i
 
@@ -133,7 +133,7 @@ build/test_llvm_codegen.o: $(TEST_DIR)/test_llvm_codegen.c lang/backend_llvm/*.c
 	$(LANG_CC) -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags` -c -o $@ $<
 
 test_llvm_codegen: build/test_llvm_codegen.o $(COMMON_OBJS) build/backend_llvm/*.o build/types/*.o
-	$(LANG_CC) -o $(BUILD_DIR)/$@ $^ `$(LLVM_CONFIG) --libs --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
+	$(LANG_CC) $(LANG_TEST_LD_FLAGS) -o $(BUILD_DIR)/$@ $^ `$(LLVM_CONFIG) --libs --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
 	-./$(BUILD_DIR)/$@
 
 # Rule for building test objects
@@ -143,7 +143,7 @@ $(BUILD_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(YACC_OUTPUT) $(LEX_OUTPUT)
 # Generic rule for building and running tests
 define make-test-rule
 $(1): $(BUILD_DIR)/test_$(1).o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(COMMON_OBJS)
-	- $$(LANG_CC) -o $$(BUILD_DIR)/$$@ $$^ $$(LANG_TEST_LD_FLAGS)
+	- $$(LANG_CC) $$(LANG_TEST_LD_FLAGS) -o $$(BUILD_DIR)/$$@ $$^ $$(LANG_TEST_LD_FLAGS)
 	- ./$(BUILD_DIR)/$$@ 
 endef
 
@@ -152,7 +152,7 @@ $(foreach test,$(TEST_TARGETS),$(eval $(call make-test-rule,$(test))))
 
 # Generic rule for any other tests
 test_%: $(BUILD_DIR)/test_%.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(COMMON_OBJS)
-	-$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
+	-$(LANG_CC) $(LANG_TEST_LD_FLAGS) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
 	-./$(BUILD_DIR)/$@
 
 

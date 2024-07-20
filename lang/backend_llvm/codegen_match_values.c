@@ -65,19 +65,25 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
       LLVMValueRef alloca_val =
           LLVMAddGlobalInAddressSpace(module, llvm_type, id_chars, 0);
 
-      // Check if the value is a pointer type
-      if (LLVMGetTypeKind(llvm_type) == LLVMPointerTypeKind) {
-        // create a const null pointer because global vars must be initialized
-        // with a constant
-        // printf("store pointer to global (ptr)\n");
-        // LLVMDumpValue(right);
-        // printf("\n");
-        LLVMSetInitializer(alloca_val, LLVMConstNull(llvm_type));
-        LLVMBuildStore(builder, right, alloca_val);
+      LLVMSetInitializer(alloca_val, LLVMConstNull(llvm_type));
+      LLVMBuildStore(builder, right, alloca_val);
 
-      } else {
-        LLVMSetInitializer(alloca_val, right);
-      }
+      // LLVMSetInitializer(global_j, LLVMConstInt(llvm_type, 0, 0));
+      /*
+    // Check if the value is a pointer type
+    if (LLVMGetTypeKind(llvm_type) == LLVMPointerTypeKind) {
+      // create a const null pointer because global vars must be initialized
+      // with a constant
+      // printf("store pointer to global (ptr)\n");
+      // LLVMDumpValue(right);
+      // printf("\n");
+      LLVMSetInitializer(alloca_val, LLVMConstNull(llvm_type));
+      LLVMBuildStore(builder, right, alloca_val);
+
+    } else {
+      LLVMSetInitializer(alloca_val, right);
+    }
+    */
 
       *sym = (JITSymbol){STYPE_TOP_LEVEL_VAR, llvm_type, alloca_val,
                          .symbol_type = left->md};

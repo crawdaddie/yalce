@@ -46,47 +46,13 @@ char **custom_completion(const char *text, int start, int end) {
   return rl_completion_matches(text, completion_generator);
 }
 
-void repl_input_(char *input, int bufsize, const char *prompt) {
-  char prev;
-  char c;
-  int position = 0;
-
-  printf("%s", prompt);
-  while (1) {
-    prev = c;
-    c = getchar();
-
-    if (c == 'n' && prev == '\\') {
-      input[position - 1] = '\n';
-      continue;
-    }
-
-    if (c == EOF || c == '\n') {
-      if (prev == '\\') {
-        return repl_input_(input + position, bufsize, "  ");
-      }
-      input[position] = '\n';
-      input[++position] = '\0';
-      return;
-    }
-    if (position == bufsize) {
-      printf("input exceeds bufsize\n");
-      // TODO: increase size of input buffer
-    }
-
-    input[position] = c;
-    position++;
-  }
-  printf(STYLE_RESET_ALL);
-}
-
 void init_readline() {
   rl_attempted_completion_function = custom_completion;
   rl_completion_entry_function = completion_generator;
   rl_read_init_file(NULL); // read .initrc
 }
 
-void repl_input(char *input, int bufsize, const char *prompt) {
+void repl_input_(char *input, int bufsize, const char *prompt) {
   char *line = readline(prompt);
   if (line == NULL) {
     // Handle EOF
@@ -141,6 +107,67 @@ void repl_input(char *input, int bufsize, const char *prompt) {
     input[len + 1] = '\0';
   }
   // printf("%s", COLOR_RESET);
+}
+
+char *repl_input(const char *prompt) {
+  char *line = readline(prompt);
+  if (line == NULL) {
+    // Handle EOF
+    return NULL;
+  }
+
+  // Add input to history if non-empty
+  if (*line) {
+    add_history(line);
+  }
+
+  // Handle line continuation
+  while (strlen(line) > 0 && line[strlen(line) - 1] == '\\') {
+    char *continuation = readline("  ");
+    if (continuation == NULL) {
+      // Handle EOF in continuation
+      break;
+    }
+
+    // Replace '\' with '\n'
+    line[strlen(line) - 1] = '\n';
+
+    // Reallocate line buffer to accommodate continuation
+    size_t new_len = strlen(line) + strlen(continuation) + 1;
+    char *new_line = realloc(line, new_len);
+    if (new_line == NULL) {
+      // Handle memory allocation failure
+      free(line);
+      free(continuation);
+      return NULL;
+    }
+    line = new_line;
+
+    // Append continuation
+    strcat(line, continuation);
+
+    if (*continuation) {
+      add_history(continuation);
+    }
+
+    free(continuation);
+  }
+
+  // Ensure the input ends with a newline
+  size_t len = strlen(line);
+  if (len == 0 || line[len - 1] != '\n') {
+    char *new_line = realloc(line, len + 2);
+    if (new_line == NULL) {
+      // Handle memory allocation failure
+      free(line);
+      return NULL;
+    }
+    line = new_line;
+    line[len] = '\n';
+    line[len + 1] = '\0';
+  }
+
+  return line;
 }
 
 char *read_script(const char *filename) {
