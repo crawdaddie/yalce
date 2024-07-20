@@ -193,7 +193,7 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
 
       unify(expr_type, test_type);
     }
-
+    result_expr->md = test_type;
     Type *res_type = infer(env, result_expr);
 
     if (final_type != NULL) {

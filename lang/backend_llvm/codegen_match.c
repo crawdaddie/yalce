@@ -1,13 +1,6 @@
 #include "backend_llvm/codegen_match.h"
-#include "codegen_binop.h"
-#include "codegen_list.h"
-#include "codegen_symbols.h"
-#include "codegen_tuple.h"
+#include "codegen_match_values.h"
 #include "codegen_types.h"
-#include "serde.h"
-#include "types/type.h"
-#include "types/util.h"
-#include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -16,298 +9,15 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
-
-LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
-                                     JITLangCtx *ctx, LLVMModuleRef module,
-                                     LLVMBuilderRef builder);
-
-LLVMValueRef short_circuit() {}
-
-LLVMValueRef codegen_equality(LLVMValueRef left, Type *left_type,
-                              LLVMValueRef right, JITLangCtx *ctx,
-                              LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  if (left_type->kind == T_INT) {
-    return codegen_int_binop(builder, TOKEN_EQUALITY, left, right);
-  }
-
-  if (left_type->kind == T_NUM) {
-    return codegen_float_binop(builder, TOKEN_EQUALITY, left, right);
-  }
-  return _FALSE;
-}
-
-LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
-                          JITLangCtx *ctx, LLVMModuleRef module,
-                          LLVMBuilderRef builder) {
-  switch (left->tag) {
-  case AST_IDENTIFIER: {
-    if (*(left->data.AST_IDENTIFIER.value) == '_') {
-      return *res;
-    }
-
-    LLVMTypeRef llvm_type = LLVMTypeOf(right);
-    const char *id_chars = left->data.AST_IDENTIFIER.value;
-    int id_len = left->data.AST_IDENTIFIER.length;
-
-    JITSymbol *sym = malloc(sizeof(JITSymbol));
-
-    if (ctx->stack_ptr == 0) {
-
-      // top-level
-      LLVMValueRef alloca_val =
-          LLVMAddGlobalInAddressSpace(module, llvm_type, id_chars, 0);
-      LLVMSetInitializer(alloca_val, right);
-
-      *sym = (JITSymbol){STYPE_TOP_LEVEL_VAR, llvm_type, alloca_val};
-
-      ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
-                  hash_string(id_chars, id_len), sym);
-      return *res;
-    }
-
-    *sym = (JITSymbol){STYPE_LOCAL_VAR, llvm_type, right};
-    ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
-                hash_string(id_chars, id_len), sym);
-    return *res;
-  }
-  case AST_BINOP: {
-    if (left->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
-      Ast *pattern_left = left->data.AST_BINOP.left;
-      Ast *pattern_right = left->data.AST_BINOP.right;
-      LLVMTypeRef list_el_type = type_to_llvm_type(pattern_left->md, ctx->env);
-      *res =
-          and_vals(*res, ll_is_not_null(right, list_el_type, builder), builder);
-      LLVMValueRef list_head_val =
-          ll_get_head_val(right, list_el_type, builder);
-      *res = and_vals(
-          *res,
-          match_values(pattern_left, list_head_val, res, ctx, module, builder),
-          builder);
-      LLVMValueRef list_next = ll_get_next(right, list_el_type, builder);
-      *res = and_vals(
-          *res,
-          match_values(pattern_right, list_next, res, ctx, module, builder),
-          builder);
-    }
-    return *res;
-  }
-  case AST_LIST: {
-    Type *t = ((Type *)left->md)->data.T_CONS.args[0];
-    LLVMTypeRef list_el_type = type_to_llvm_type(t, ctx->env);
-    if (left->data.AST_LIST.len == 0) {
-      *res = ll_is_null(right, list_el_type, builder);
-    } else {
-      // TODO: crudely computes all values & comparisons and ands them together
-      // would be better to implement this using short-circuiting logic
-      int len = left->data.AST_LIST.len;
-      LLVMValueRef list = right;
-      LLVMValueRef and = _TRUE;
-      for (int i = 0; i < len; i++) {
-        Ast *list_item_ast = left->data.AST_LIST.items + i;
-        and =
-            and_vals(and, ll_is_not_null(list, list_el_type, builder), builder);
-
-        LLVMValueRef list_head = ll_get_head_val(list, list_el_type, builder);
-        and = and_vals(and,
-                       match_values(list_item_ast, list_head, &and, ctx, module,
-                                    builder),
-                       builder);
-        list = ll_get_next(list, list_el_type, builder);
-      }
-
-      and = and_vals(and, ll_is_null(list, list_el_type, builder), builder);
-      *res = and;
-    }
-    return *res;
-  }
-
-  case AST_TUPLE: {
-    int len = left->data.AST_LIST.len;
-    LLVMValueRef and = _TRUE;
-    for (int i = 0; i < len; i++) {
-      Ast *tuple_item_ast = left->data.AST_LIST.items + i;
-
-      LLVMValueRef tuple_item_val =
-          codegen_tuple_access(i, right, LLVMTypeOf(right), builder);
-      and = and_vals(and,
-                     match_values(tuple_item_ast, tuple_item_val, &and, ctx,
-                                  module, builder),
-                     builder);
-    }
-    return *res;
-  }
-
-  default: {
-    LLVMValueRef left_val = codegen(left, ctx, module, builder);
-
-    *res = and_vals(
-        *res, codegen_equality(left_val, left->md, right, ctx, module, builder),
-        builder);
-    return *res;
-  }
-  }
-  return *res;
-}
-
-static LLVMValueRef codegen_match_tuple(LLVMValueRef expr_val, Ast *pattern,
-                                        JITLangCtx *ctx, LLVMModuleRef module,
-                                        LLVMBuilderRef builder) {
-
-  LLVMValueRef res = _TRUE;
-  LLVMTypeRef tuple_type = LLVMTypeOf(expr_val);
-  size_t len = pattern->data.AST_LIST.len;
-  Ast *items = pattern->data.AST_LIST.items;
-  for (size_t i = 0; i < len; i++) {
-    Ast *tuple_item_ast = items + i;
-    if (ast_is_placeholder_id(tuple_item_ast)) {
-      continue;
-    }
-
-    LLVMValueRef tuple_member_val =
-        codegen_tuple_access(i, expr_val, tuple_type, builder);
-
-    if (!codegen_multiple_assignment(tuple_item_ast, tuple_member_val,
-                                     tuple_item_ast->md, ctx, module, builder,
-                                     false, 0)) {
-
-      // assignment returns null - no assignment made so compare literal val
-      LLVMValueRef match_cond = codegen_match_condition(
-          tuple_member_val, tuple_item_ast, ctx, module, builder);
-
-      res = and_vals(res, match_cond, builder);
-    }
-  }
-
-  return res;
-}
-
-static LLVMValueRef codegen_match_list(LLVMValueRef list, Ast *pattern,
-                                       JITLangCtx *ctx, LLVMModuleRef module,
-                                       LLVMBuilderRef builder) {
-
-  LLVMValueRef res = _TRUE;
-  LLVMTypeRef list_type = LLVMTypeOf(list);
-
-  LLVMTypeRef list_el_type =
-      type_to_llvm_type(((Type *)pattern->md)->data.T_CONS.args[0], ctx->env);
-
-  if (pattern->tag == AST_BINOP &&
-      pattern->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
-
-    res = LLVMBuildAnd(builder, res,
-                       ll_is_not_null(list, list_el_type, builder), "");
-
-    Ast *left = pattern->data.AST_BINOP.left;
-
-    LLVMValueRef list_head_val = ll_get_head_val(list, list_el_type, builder);
-
-    if (!codegen_multiple_assignment(left, list_head_val, left->md, ctx, module,
-                                     builder, false, 0)) {
-
-      // assignment returns null - no assignment made so compare literal val
-      LLVMValueRef match_cond =
-          codegen_match_condition(list_head_val, left, ctx, module, builder);
-      res = and_vals(res, match_cond, builder);
-    }
-    Ast *right = pattern->data.AST_BINOP.right;
-    LLVMValueRef list_next = ll_get_next(list, list_el_type, builder);
-
-    if (!codegen_multiple_assignment(right, list_next, right->md, ctx, module,
-                                     builder, false, 0)) {
-
-      // assignment returns null - no assignment made so compare literal val
-      LLVMValueRef match_cond =
-          codegen_match_condition(list_next, right, ctx, module, builder);
-      res = and_vals(res, match_cond, builder);
-    }
-
-    return res;
-  }
-
-  if (pattern->tag == AST_LIST) {
-    size_t len = pattern->data.AST_LIST.len;
-
-    if (len == 0) {
-      return ll_is_null(list, list_el_type, builder);
-    }
-
-    Ast *items = pattern->data.AST_LIST.items;
-    LLVMValueRef list_head = list;
-    for (size_t i = 0; i < len; i++) {
-      Ast *list_item_ast = items + i;
-
-      if (ast_is_placeholder_id(list_item_ast)) {
-        continue;
-      }
-
-      LLVMValueRef list_member_val =
-          ll_get_head_val(list_head, list_el_type, builder);
-
-      if (!codegen_multiple_assignment(list_item_ast, list_member_val,
-                                       list_item_ast->md, ctx, module, builder,
-                                       false, 0)) {
-
-        // assignment returns null - no assignment made so compare literal val
-        LLVMValueRef match_cond = codegen_match_condition(
-            list_member_val, list_item_ast, ctx, module, builder);
-        res = and_vals(res, match_cond, builder);
-      }
-
-      list_head = ll_get_next(list_head, list_el_type, builder);
-    }
-
-    return res;
-  }
-
-  return _TRUE;
-}
-
-LLVMValueRef codegen_match_condition(LLVMValueRef expr_val, Ast *pattern,
-                                     JITLangCtx *ctx, LLVMModuleRef module,
-                                     LLVMBuilderRef builder) {
-
-  if (ast_is_placeholder_id(pattern)) {
-    return _TRUE;
-  }
-
-  if (pattern->tag == AST_IDENTIFIER) {
-    codegen_single_assignment(pattern, expr_val, pattern->md, ctx, module,
-                              builder, false, 0);
-    return _TRUE;
-  }
-
-  if (is_tuple_type(pattern->md)) {
-    return codegen_match_tuple(expr_val, pattern, ctx, module, builder);
-  }
-
-  if (is_list_type(pattern->md)) {
-    return codegen_match_list(expr_val, pattern, ctx, module, builder);
-  }
-
-  if (((Type *)pattern->md)->kind == T_INT) {
-    return codegen_int_binop(builder, TOKEN_EQUALITY, expr_val,
-                             codegen(pattern, ctx, module, builder));
-  }
-
-  if (((Type *)pattern->md)->kind == T_NUM) {
-    return codegen_float_binop(builder, TOKEN_EQUALITY, expr_val,
-                               codegen(pattern, ctx, module, builder));
-  }
-  return _FALSE;
-}
-
 static bool is_default_case(int len, int i) { return i == (len - 1); }
 
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
-  // printf("codegen match final type: ");
-  // print_type(ast->md);
-  // printf("\n");
-
   LLVMValueRef expr_val =
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
+
+  Type *expr_val_type = ast->data.AST_MATCH.expr->md;
 
   // Create basic blocks
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
@@ -346,20 +56,17 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
 
     // Check if this is the default case
+    // Compile the test expression
+    // LLVMValueRef test_value = codegen_match_condition(
+    //     expr_val, test_expr, &branch_ctx, module, builder);
+    LLVMValueRef _and = _TRUE;
+    LLVMValueRef test_value = match_values(test_expr, expr_val, expr_val_type,
+                                           &_and, &branch_ctx, module, builder);
+
     if (is_default_case(len, i)) {
-
-      // Compile the test expression
-      LLVMValueRef test_value = codegen_match_condition(
-          expr_val, test_expr, &branch_ctx, module, builder);
-
       // If it's the default case, just jump to the branch block
       LLVMBuildBr(builder, branch_block);
     } else {
-
-      // Compile the test expression
-      LLVMValueRef test_value = codegen_match_condition(
-          expr_val, test_expr, &branch_ctx, module, builder);
-
       // Create the conditional branch
       LLVMBuildCondBr(builder, test_value, branch_block,
                       next_block ? next_block : end_block);

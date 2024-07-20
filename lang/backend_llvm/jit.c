@@ -177,6 +177,9 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     // free(fcontent);
     return NULL;
   }
+#ifdef DUMP_AST
+  LLVMDumpModule(module);
+#endif
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
@@ -188,9 +191,9 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   return result; // Return success
 }
 
-typedef struct int_ll_t {
+typedef struct ll_int_t {
   int32_t el;
-  struct int_ll_t *next;
+  struct ll_int_t *next;
 } int_ll_t;
 
 void module_passes(LLVMModuleRef module) {
@@ -245,15 +248,14 @@ int jit(int argc, char **argv) {
   }
 
   if (repl) {
-    char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
 
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
 
     char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
-
     LLVMTypeRef top_level_ret_type;
+    char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
     while (true) {
       repl_input(input, INPUT_BUFSIZE, prompt);
 
@@ -275,6 +277,10 @@ int jit(int argc, char **argv) {
       // Generate node.
       LLVMValueRef top_level_func =
           codegen_top_level(top, &top_level_ret_type, &ctx, module, builder);
+
+#ifdef DUMP_AST
+      LLVMDumpModule(module);
+#endif
 
       printf("> ");
 
@@ -303,7 +309,7 @@ void print_result(Type *type, LLVMGenericValueRef result) {
   print_type(type);
 
   if (result == NULL) {
-    printf("llvm value null\n");
+    printf("\n");
     return;
   }
   switch (type->kind) {

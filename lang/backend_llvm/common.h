@@ -46,6 +46,7 @@ typedef struct {
       ht *symbols;
     } STYPE_MODULE;
   } symbol_data;
+  Type *symbol_type;
 } JITSymbol;
 
 typedef struct {
