@@ -249,6 +249,8 @@ int jit(int argc, char **argv) {
 
   if (repl) {
 
+    init_readline();
+
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
@@ -257,6 +259,18 @@ int jit(int argc, char **argv) {
     LLVMTypeRef top_level_ret_type;
     char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
     while (true) {
+
+      int top_level_size = ctx.stack->length;
+
+      hti it = ht_iterator(ctx.stack);
+      // printf("key: '%s'\n", it.key);
+
+      int completion_entry = 0;
+      while (ht_next(&it)) {
+        add_completion_item(it.key, completion_entry);
+        completion_entry++;
+      };
+
       repl_input(input, INPUT_BUFSIZE, prompt);
 
       if (strcmp("# dump module\n", input) == 0) {
@@ -279,10 +293,11 @@ int jit(int argc, char **argv) {
           codegen_top_level(top, &top_level_ret_type, &ctx, module, builder);
 
 #ifdef DUMP_AST
+      printf("%s\n", COLOR_RESET);
       LLVMDumpModule(module);
 #endif
 
-      printf("> ");
+      printf(COLOR_GREEN "> ");
 
       Type *top_type = top->md;
 
@@ -297,6 +312,7 @@ int jit(int argc, char **argv) {
             LLVMRunFunction(engine, top_level_func, 0, exec_args);
         print_result(top_type, result);
       }
+      printf(COLOR_RESET);
     }
     free(input);
   }
