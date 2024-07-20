@@ -320,6 +320,7 @@ static int msleep(long msec) {
 int init_audio() {
   maketable_sq();
   maketable_sin();
+
   start_audio();
 
   msleep(100);

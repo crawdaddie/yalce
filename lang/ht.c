@@ -189,6 +189,7 @@ const char *ht_set(ht *table, const char *key, void *value) {
 
 const char *ht_set_hash(ht *table, const char *key, uint64_t hash,
                         void *value) {
+  // printf("set ht key '%s'\n", key);
   // assert(value != NULL);
   if (value == NULL) {
     return NULL;
