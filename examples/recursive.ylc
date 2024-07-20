@@ -6,5 +6,5 @@ let fib = fn x ->
   )
 ;;
 
-fib 40
+fib 10
 

@@ -1,8 +1,8 @@
 #include "backend_llvm/codegen_function.h"
 #include "backend_llvm/codegen_symbols.h"
 #include "codegen_function_currying.h"
+#include "codegen_match_values.h"
 #include "codegen_types.h"
-#include "serde.h"
 #include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -38,7 +38,8 @@ static void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func,
   *v = (JITSymbol){.llvm_type = LLVMTypeOf(func),
                    .type = STYPE_FUNCTION,
                    .val = func,
-                   .symbol_data = {.STYPE_FUNCTION = {.fn_type = fn_type}}};
+                   .symbol_data = {.STYPE_FUNCTION = {.fn_type = fn_type}},
+                   .symbol_type = fn_type};
 
   ht *scope = fn_ctx->stack + fn_ctx->stack_ptr;
   ht_set_hash(scope, fn_name.chars, fn_name.hash, v);
@@ -113,8 +114,12 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Generate the prototype first.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
+  printf("codegen fn: %s\n", fn_name.chars);
   Type *fn_type = ast->md;
+  print_type(fn_type);
+  printf("\n");
   int fn_len = ast->data.AST_LAMBDA.len;
+
   LLVMValueRef func =
       codegen_fn_proto(fn_type, fn_len, fn_name.chars, ctx, module, builder);
 
@@ -132,12 +137,13 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   for (int i = 0; i < fn_len; i++) {
     Type *param_type = fn_type->data.T_FN.from;
-    fn_type = fn_type->data.T_FN.to;
 
     Ast *param_ast = ast->data.AST_LAMBDA.params + i;
     LLVMValueRef param_val = LLVMGetParam(func, i);
-    codegen_multiple_assignment(param_ast, param_val, param_type, &fn_ctx,
-                                module, builder, true, i);
+    LLVMValueRef _true = LLVMConstInt(LLVMInt1Type(), 1, 0);
+    match_values(param_ast, param_val, param_type, &_true, &fn_ctx, module,
+                 builder);
+    fn_type = fn_type->data.T_FN.to;
   }
 
   add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
@@ -303,19 +309,16 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
     LLVMValueRef val = LLVMGetInitializer(glob);
     return val;
   } else if (res->type == STYPE_LOCAL_VAR) {
-    LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, res->val, "");
+    // LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, res->val, "");
+    // return val;
+    LLVMValueRef val = res->val;
+    // if (LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMPointerTypeKind) {
+    //   return LLVMBuildLoad2(builder, res->llvm_type, val, "");
+    // }
     return val;
   } else if (res->type == STYPE_FN_PARAM) {
     return res->val;
-  } else if (res->type == STYPE_FUNCTION) {
-    if (is_generic(res->symbol_data.STYPE_FUNCTION.fn_type)) {
-      fprintf(stderr,
-              "Error: fn application result is generic - result unknown\n");
-      return NULL;
-    }
-    return res->val;
   } else if (res->type == STYPE_GENERIC_FUNCTION) {
-
     Ast *args = ast->data.AST_APPLICATION.args;
     size_t len = ast->data.AST_APPLICATION.len;
 
@@ -351,6 +354,13 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
     // free(specific_fn_buf->data);
     // free(specific_fn_buf);
     return func;
+  } else if (res->type == STYPE_FUNCTION) {
+    if (is_generic(res->symbol_type)) {
+      fprintf(stderr,
+              "Error: fn application result is generic - result unknown\n");
+      return NULL;
+    }
+    return res->val;
   }
 }
 
@@ -386,6 +396,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (app_len < args_len) {
+    printf("codegen curry: \n");
     return codegen_curry_fn(ast, func, args_len, ctx, module, builder);
   }
   return NULL;
@@ -402,4 +413,14 @@ JITSymbol *create_generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
                                      }}};
 
   return sym;
+}
+
+JITSymbol generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
+                            JITLangCtx *ctx) {
+
+  return (JITSymbol){STYPE_GENERIC_FUNCTION,
+                     .symbol_data = {.STYPE_GENERIC_FUNCTION = {
+                                         fn_ast,
+                                         ctx->stack_ptr,
+                                     }}};
 }

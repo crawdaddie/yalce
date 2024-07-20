@@ -1,8 +1,8 @@
-#include "../lang/backend_llvm/codegen_match.h"
 #include "../lang/backend_llvm/common.h"
 #include "../lang/backend_llvm/jit.h"
 #include "../lang/parse.h"
 #include "codegen_list.h"
+#include "codegen_match_values.h"
 #include "codegen_types.h"
 #include "util.h"
 #include "value.h"
@@ -81,7 +81,7 @@ bool test_match_underscore() {
                         .md = &t_int};
 
   LLVMValueRef res = _TRUE;
-  LLVMValueRef exp_true = match_values(&ast_underscore, match_val, &res,
+  LLVMValueRef exp_true = match_values(&ast_underscore, match_val, &t_int, &res,
                                        &env.ctx, env.module, env.builder);
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
@@ -115,8 +115,8 @@ bool test_match_value() {
   Ast ast = {.tag = AST_INT, .data = {.AST_INT = {.value = 42}}, .md = &t_int};
 
   LLVMValueRef res = _TRUE;
-  LLVMValueRef exp_true =
-      match_values(&ast, match_val, &res, &env.ctx, env.module, env.builder);
+  LLVMValueRef exp_true = match_values(&ast, match_val, &t_int, &res, &env.ctx,
+                                       env.module, env.builder);
 
   bool test_res = (LLVMConstIntGetZExtValue(exp_true) == 1 &&
                    LLVMConstIntGetZExtValue(res) == 1);
@@ -131,7 +131,7 @@ bool test_match_value() {
 }
 
 bool test_match_value_fail() {
-  const char *desc = "match 42 with 41";
+  const char *desc = "match 42 with 41 (fails)";
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt1Type());
   env.ctx.stack_ptr = 1;
@@ -143,8 +143,8 @@ bool test_match_value_fail() {
   Ast ast = {.tag = AST_INT, .data = {.AST_INT = {.value = 41}}, .md = &t_int};
 
   LLVMValueRef res = _TRUE;
-  LLVMValueRef exp_true =
-      match_values(&ast, match_val, &res, &env.ctx, env.module, env.builder);
+  LLVMValueRef exp_true = match_values(&ast, match_val, &t_int, &res, &env.ctx,
+                                       env.module, env.builder);
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
@@ -157,9 +157,9 @@ bool test_match_value_fail() {
   //                  LLVMConstIntGetZExtValue(res) == 1);
 
   if (test_res) {
-    printf("✅ %s (%d)\n", desc, (int)LLVMGenericValueToInt(result, 0));
+    printf("✅ %s\n", desc);
   } else {
-    printf("❌ %s (%d)\n", desc, (int)LLVMGenericValueToInt(result, 0));
+    printf("❌ %s\n", desc);
   };
 
   cleanup_codegen(env);
@@ -181,7 +181,7 @@ bool test_match_assignment() {
                         .md = &t_int};
 
   LLVMValueRef res = _TRUE;
-  LLVMValueRef exp_true = match_values(&ast_underscore, match_val, &res,
+  LLVMValueRef exp_true = match_values(&ast_underscore, match_val, &t_int, &res,
                                        &env.ctx, env.module, env.builder);
 
   bool test_res = true;
@@ -225,7 +225,7 @@ bool test_match_assignment_top_level() {
       .data = {.AST_IDENTIFIER = {.value = "x", .length = 1}}};
 
   LLVMValueRef res = _TRUE;
-  LLVMValueRef exp_true = match_values(&ast_underscore, match_val, &res,
+  LLVMValueRef exp_true = match_values(&ast_underscore, match_val, &t_int, &res,
                                        &env.ctx, env.module, env.builder);
 
   bool test_res = true;
@@ -312,6 +312,7 @@ bool test_match_list() {
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt1Type());
 
+  Type *list_type = tcons("List", (Type *[]){&t_int}, 1);
   // Test case : AST_IDENTIFIER with 'x'
   Ast ast_list = {
       AST_LIST,
@@ -327,12 +328,12 @@ bool test_match_list() {
                                           .md = &t_int},
                                 },
                             .len = 3}},
-      .md = tcons("List", (Type *[]){&t_int}, 1)};
+      .md = list_type};
 
   LLVMValueRef res = _TRUE;
   LLVMValueRef exp_true =
-      match_values(&ast_list, int_list((int[]){1, 2, 3}, 3, env.builder), &res,
-                   &env.ctx, env.module, env.builder);
+      match_values(&ast_list, int_list((int[]){1, 2, 3}, 3, env.builder),
+                   list_type, &res, &env.ctx, env.module, env.builder);
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
@@ -353,10 +354,11 @@ bool test_match_list() {
 }
 
 bool test_match_list_fail() {
-  const char *desc = "match [1, 2, 3] with [2, 2, 3]";
+  const char *desc = "match [1, 2, 3] with [2, 2, 3] (fails)";
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt1Type());
 
+  Type *list_type = tcons("List", (Type *[]){&t_int}, 1);
   // Test case : AST_IDENTIFIER with 'x'
   Ast ast_list = {
       AST_LIST,
@@ -372,12 +374,12 @@ bool test_match_list_fail() {
                                           .md = &t_int},
                                 },
                             .len = 3}},
-      .md = tcons("List", (Type *[]){&t_int}, 1)};
+      .md = list_type};
 
   LLVMValueRef res = _TRUE;
   LLVMValueRef exp_true =
-      match_values(&ast_list, int_list((int[]){1, 2, 3}, 3, env.builder), &res,
-                   &env.ctx, env.module, env.builder);
+      match_values(&ast_list, int_list((int[]){1, 2, 3}, 3, env.builder),
+                   list_type, &res, &env.ctx, env.module, env.builder);
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
@@ -387,10 +389,10 @@ bool test_match_list_fail() {
   bool test_res = (int)LLVMGenericValueToInt(result, 0) == 0;
 
   if (test_res) {
-    printf("✅ %s (%d)\n", desc, (int)LLVMGenericValueToInt(result, 0));
+    printf("✅ %s\n", desc);
   } else {
     LLVMDumpModule(env.module);
-    printf("❌ %s (%d)\n", desc, (int)LLVMGenericValueToInt(result, 0));
+    printf("❌ %s\n", desc);
   };
 
   cleanup_codegen(env);
@@ -402,6 +404,7 @@ bool test_match_list_assignment() {
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt32Type());
   env.ctx.stack_ptr = 1;
+  Type *list_type = tcons("List", (Type *[]){&t_int}, 1);
 
   // Test case : AST_IDENTIFIER with 'x'
   Ast ast_list = {
@@ -418,12 +421,12 @@ bool test_match_list_assignment() {
                                     (Ast){AST_INT, .data = {.AST_INT = {.value = 3}}, .md = &t_int},
                                 },
                             .len = 3}},
-      .md = tcons("List", (Type *[]){&t_int}, 1)};
+      .md = list_type};
 
   LLVMValueRef res = _TRUE;
   LLVMValueRef exp_true =
-      match_values(&ast_list, int_list((int[]){42, 2, 3}, 3, env.builder), &res,
-                   &env.ctx, env.module, env.builder);
+      match_values(&ast_list, int_list((int[]){42, 2, 3}, 3, env.builder),
+                   list_type, &res, &env.ctx, env.module, env.builder);
 
   JITSymbol *sym =
       ht_get_hash(env.ctx.stack + env.ctx.stack_ptr, "x", hash_string("x", 1));
@@ -451,10 +454,133 @@ bool test_match_list_assignment() {
   return test_res;
 }
 
+bool test_match_list_assignment_destructure_success() {
+  const char *desc = "match [42, 2, 3] with x::rest -- success";
+  ht stack[STACK_MAX];
+  Codegen env = setup_codegen(stack, LLVMInt1Type());
+  env.ctx.stack_ptr = 1;
+
+  Type *list_type = tcons("List", (Type *[]){&t_int}, 1);
+  // Test case : AST_IDENTIFIER with 'x'
+  Ast ast_list = {AST_BINOP,
+                  .data = {.AST_BINOP =
+                               {
+                                   .op = TOKEN_DOUBLE_COLON,
+                                   .left = &(Ast){AST_IDENTIFIER,
+                                                  .data = {.AST_IDENTIFIER =
+                                                               {.value = "x",
+                                                                .length = 1}},
+                                                  .md = &t_int},
+                                   .right =
+
+                                       &(Ast){AST_IDENTIFIER,
+                                              .data = {.AST_IDENTIFIER = {.value =
+                                                                              "rest",
+                                                                          .length =
+                                                                              4}},
+                                              .md = &t_int},
+                               }},
+                  .md = list_type};
+
+  LLVMValueRef res = _TRUE;
+  LLVMValueRef match =
+      match_values(&ast_list, int_list((int[]){42, 2, 3}, 3, env.builder),
+                   list_type, &res, &env.ctx, env.module, env.builder);
+
+  bool test_res = true;
+
+  LLVMBuildRet(env.builder, match);
+  LLVMExecutionEngineRef engine;
+  prepare_ex_engine(&engine, env.module);
+  LLVMGenericValueRef exec_args[] = {};
+  LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
+
+  test_res &= ((int)LLVMGenericValueToInt(result, 0) == 1);
+
+  if (test_res) {
+    printf("✅ %s\n", desc);
+  } else {
+    LLVMDumpModule(env.module);
+    printf("❌ %s\n", desc);
+  };
+
+  cleanup_codegen(env);
+  return test_res;
+}
+
 bool test_match_list_assignment_destructure() {
-  const char *desc = "match [42, 2, 3] with x::rest";
+  const char *desc = "match [42, 2, 3] with x::rest -- x == 42";
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt32Type());
+  env.ctx.stack_ptr = 1;
+  Type *list_type = tcons("List", (Type *[]){&t_int}, 1);
+  // Test case : AST_IDENTIFIER with 'x'
+  Ast ast_list = {AST_BINOP,
+                  .data = {.AST_BINOP =
+                               {
+                                   .op = TOKEN_DOUBLE_COLON,
+                                   .left = &(Ast){AST_IDENTIFIER,
+                                                  .data = {.AST_IDENTIFIER =
+                                                               {.value = "x",
+                                                                .length = 1}},
+                                                  .md = &t_int},
+                                   .right =
+
+                                       &(Ast){AST_IDENTIFIER,
+                                              .data = {.AST_IDENTIFIER = {.value =
+                                                                              "rest",
+                                                                          .length =
+                                                                              4}},
+                                              .md = &t_int},
+                               }},
+                  .md = list_type};
+
+  LLVMValueRef res = _TRUE;
+  LLVMValueRef exp_true =
+      match_values(&ast_list, int_list((int[]){42, 2, 3}, 3, env.builder),
+                   list_type, &res, &env.ctx, env.module, env.builder);
+
+  JITSymbol *sym =
+      ht_get_hash(env.ctx.stack + env.ctx.stack_ptr, "x", hash_string("x", 1));
+  bool test_res = true;
+  test_res &= sym != NULL;
+
+  JITSymbol *sym_rest = ht_get_hash(env.ctx.stack + env.ctx.stack_ptr, "rest",
+                                    hash_string("rest", 4));
+  test_res &= sym_rest != NULL;
+
+  if (sym) {
+    LLVMBuildRet(env.builder, sym->val);
+    LLVMExecutionEngineRef engine;
+    prepare_ex_engine(&engine, env.module);
+    LLVMGenericValueRef exec_args[] = {};
+    LLVMGenericValueRef result =
+        LLVMRunFunction(engine, env.func, 0, exec_args);
+
+    test_res &= ((int)LLVMGenericValueToInt(result, 0) == 42);
+  }
+
+  if (test_res) {
+    printf("✅ %s\n", desc);
+  } else {
+    LLVMDumpModule(env.module);
+    printf("❌ %s\n", desc);
+  };
+
+  cleanup_codegen(env);
+  return test_res;
+}
+
+typedef struct ll_int_t {
+  int32_t el;
+  struct ll_int_t *next;
+} ll_int_t;
+
+bool test_match_list_assignment_destructure2() {
+  const char *desc = "match [42, 2, 3] with x::rest -- rest == [2,3]";
+  ht stack[STACK_MAX];
+  Type *list_type = tcons("List", (Type *[]){&t_int}, 1);
+  Codegen env = setup_codegen(stack, type_to_llvm_type(list_type, NULL));
   env.ctx.stack_ptr = 1;
 
   // Test case : AST_IDENTIFIER with 'x'
@@ -473,18 +599,18 @@ bool test_match_list_assignment_destructure() {
                                               .data = {.AST_IDENTIFIER = {.value =
                                                                               "rest",
                                                                           .length =
-                                                                              1}},
+                                                                              4}},
                                               .md = &t_int},
                                }},
-                  .md = tcons("List", (Type *[]){&t_int}, 1)};
+                  .md = list_type};
 
   LLVMValueRef res = _TRUE;
   LLVMValueRef exp_true =
-      match_values(&ast_list, int_list((int[]){42, 2, 3}, 3, env.builder), &res,
-                   &env.ctx, env.module, env.builder);
+      match_values(&ast_list, int_list((int[]){42, 2, 3}, 3, env.builder),
+                   list_type, &res, &env.ctx, env.module, env.builder);
 
-  JITSymbol *sym =
-      ht_get_hash(env.ctx.stack + env.ctx.stack_ptr, "x", hash_string("x", 1));
+  JITSymbol *sym = ht_get_hash(env.ctx.stack + env.ctx.stack_ptr, "rest",
+                               hash_string("rest", 4));
   bool test_res = true;
   test_res &= sym != NULL;
 
@@ -496,7 +622,10 @@ bool test_match_list_assignment_destructure() {
     LLVMGenericValueRef result =
         LLVMRunFunction(engine, env.func, 0, exec_args);
 
-    test_res &= ((int)LLVMGenericValueToInt(result, 0) == 42);
+    ll_int_t *current = (ll_int_t *)LLVMGenericValueToPointer(result);
+    test_res &= current->el == 2;
+    test_res &= current->next->el == 3;
+    test_res &= current->next->next == NULL;
   }
 
   if (test_res) {
@@ -534,8 +663,8 @@ bool test_match_tuple() {
 
   LLVMValueRef res = _TRUE;
   LLVMValueRef exp_true = match_values(
-      &ast_list, int_tuple(tuple_type, (int[]){1, 2, 3}, 3, env.builder), &res,
-      &env.ctx, env.module, env.builder);
+      &ast_list, int_tuple(tuple_type, (int[]){1, 2, 3}, 3, env.builder),
+      tuple_type, &res, &env.ctx, env.module, env.builder);
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
@@ -556,7 +685,7 @@ bool test_match_tuple() {
 }
 
 bool test_match_tuple_fail() {
-  const char *desc = "match (1, 2, 3) with (2, 2, 3)";
+  const char *desc = "match (1, 2, 3) with (2, 2, 3) (fails)";
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt1Type());
   Type *tuple_type = tcons("Tuple", (Type *[]){&t_int, &t_int, &t_int}, 3);
@@ -580,8 +709,8 @@ bool test_match_tuple_fail() {
 
   LLVMValueRef res = _TRUE;
   LLVMValueRef exp_true = match_values(
-      &ast_list, int_tuple(tuple_type, (int[]){1, 2, 3}, 3, env.builder), &res,
-      &env.ctx, env.module, env.builder);
+      &ast_list, int_tuple(tuple_type, (int[]){1, 2, 3}, 3, env.builder),
+      tuple_type, &res, &env.ctx, env.module, env.builder);
 
   LLVMBuildRet(env.builder, exp_true);
   LLVMExecutionEngineRef engine;
@@ -602,7 +731,7 @@ bool test_match_tuple_fail() {
 }
 
 bool test_match_tuple_assignment() {
-  const char *desc = "match (42, 2, 3) with (x, 2, 3)";
+  const char *desc = "match (42, 2, 3) with (x, 2, 3) -- x == 42";
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt1Type());
   env.ctx.stack_ptr = 1;
@@ -627,8 +756,8 @@ bool test_match_tuple_assignment() {
 
   LLVMValueRef res = _TRUE;
   LLVMValueRef exp_true = match_values(
-      &ast_list, int_tuple(tuple_type, (int[]){42, 2, 3}, 3, env.builder), &res,
-      &env.ctx, env.module, env.builder);
+      &ast_list, int_tuple(tuple_type, (int[]){42, 2, 3}, 3, env.builder),
+      tuple_type, &res, &env.ctx, env.module, env.builder);
 
   JITSymbol *sym =
       ht_get_hash(env.ctx.stack + env.ctx.stack_ptr, "x", hash_string("x", 1));
@@ -657,6 +786,59 @@ bool test_match_tuple_assignment() {
   return test_res;
 }
 
+bool test_match_list_assignment_destructure_success_global_scope() {
+  const char *desc = "match [42, 2, 3] with x::rest -- success";
+  ht stack[STACK_MAX];
+  Codegen env = setup_codegen(stack, LLVMInt1Type());
+  env.ctx.stack_ptr = 0;
+  Type *int_list_type = tcons("List", (Type *[]){&t_int}, 1);
+
+  // Test case : AST_IDENTIFIER with 'x'
+  Ast ast_list = {AST_BINOP,
+                  .data = {.AST_BINOP =
+                               {
+                                   .op = TOKEN_DOUBLE_COLON,
+                                   .left = &(Ast){AST_IDENTIFIER,
+                                                  .data = {.AST_IDENTIFIER =
+                                                               {.value = "_",
+                                                                .length = 1}},
+                                                  .md = &t_int},
+                                   .right =
+
+                                       &(Ast){AST_IDENTIFIER,
+                                              .data = {.AST_IDENTIFIER = {.value =
+                                                                              "rest",
+                                                                          .length =
+                                                                              4}},
+                                              .md = int_list_type},
+                               }},
+                  .md = int_list_type};
+
+  LLVMValueRef res = _TRUE;
+  LLVMValueRef match =
+      match_values(&ast_list, int_list((int[]){42, 2, 3}, 3, env.builder),
+                   int_list_type, &res, &env.ctx, env.module, env.builder);
+
+  bool test_res = true;
+
+  LLVMBuildRet(env.builder, match);
+  LLVMExecutionEngineRef engine;
+  prepare_ex_engine(&engine, env.module);
+  LLVMGenericValueRef exec_args[] = {};
+  LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
+
+  test_res &= ((int)LLVMGenericValueToInt(result, 0) == 1);
+
+  if (test_res) {
+    printf("✅ %s\n", desc);
+  } else {
+    printf("❌ %s\n", desc);
+  };
+
+  cleanup_codegen(env);
+  return test_res;
+}
+
 int main() {
   bool status = true;
 
@@ -674,8 +856,11 @@ int main() {
   status &= test_match_list_fail();
   status &= test_match_list_assignment();
   status &= test_match_list_assignment_destructure();
+  status &= test_match_list_assignment_destructure_success();
+  status &= test_match_list_assignment_destructure2();
   status &= test_match_tuple();
   status &= test_match_tuple_fail();
   status &= test_match_tuple_assignment();
+  status &= test_match_list_assignment_destructure_success_global_scope();
   return status != true;
 }

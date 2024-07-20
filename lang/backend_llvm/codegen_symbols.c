@@ -1,5 +1,8 @@
 #include "backend_llvm/codegen_symbols.h"
+#include "codegen_function.h"
 #include "codegen_list.h"
+#include "codegen_match.h"
+#include "codegen_match_values.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
 #include "serde.h"
@@ -123,10 +126,18 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (res->type == STYPE_TOP_LEVEL_VAR) {
     LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
+    // LLVMValueRef glob = res->val;
+    if (LLVMGetTypeKind(LLVMTypeOf(glob)) == LLVMPointerTypeKind) {
+      // printf("global is pointer type eg on the heap - need to load value\n");
+      return LLVMBuildLoad2(builder, res->llvm_type, glob, "");
+    }
     LLVMValueRef val = LLVMGetInitializer(glob);
     return val;
   } else if (res->type == STYPE_LOCAL_VAR) {
-    LLVMValueRef val = LLVMBuildLoad2(builder, res->llvm_type, res->val, "");
+    LLVMValueRef val = res->val;
+    // if (LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMPointerTypeKind) {
+    //   return LLVMBuildLoad2(builder, res->llvm_type, val, "");
+    // }
     return val;
   } else if (res->type == STYPE_FN_PARAM) {
     int idx = res->symbol_data.STYPE_FN_PARAM;
@@ -327,8 +338,9 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   }
 
   if (is_generic(ast->md) && ast->data.AST_LET.expr->tag == AST_LAMBDA) {
-    JITSymbol *generic_sym = create_generic_fn_symbol(
-        binding_identifier, ast->data.AST_LET.expr, outer_ctx);
+    JITSymbol *generic_sym = malloc(sizeof(JITSymbol));
+    *generic_sym = generic_fn_symbol(binding_identifier, ast->data.AST_LET.expr,
+                                     outer_ctx);
 
     ht *scope = outer_ctx->stack + outer_ctx->stack_ptr;
     const char *id = binding_identifier->data.AST_IDENTIFIER.value;
@@ -347,8 +359,13 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     return NULL;
   }
 
-  codegen_multiple_assignment(binding_identifier, expr_val, expr_type,
-                              &cont_ctx, module, builder, false, 0);
+  // codegen_multiple_assignment(binding_identifier, expr_val, expr_type,
+  //                             &cont_ctx, module, builder, false, 0);
+
+  LLVMValueRef _true = LLVMConstInt(LLVMInt1Type(), 1, 0);
+
+  match_values(binding_identifier, expr_val, ast->data.AST_LET.expr->md, &_true,
+               &cont_ctx, module, builder);
 
   if (ast->data.AST_LET.in_expr != NULL) {
     LLVMValueRef res =

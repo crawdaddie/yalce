@@ -7,7 +7,4 @@
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
 
-LLVMValueRef match_values(Ast *left, LLVMValueRef right, LLVMValueRef *res,
-                          JITLangCtx *ctx, LLVMModuleRef module,
-                          LLVMBuilderRef builder);
 #endif
