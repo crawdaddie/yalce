@@ -11,6 +11,9 @@ typedef struct {
   ht *stack;
   int stack_ptr;
   TypeEnv *env;
+  int *num_globals;
+  void **global_storage_array;
+  int *global_storage_capacity;
 } JITLangCtx;
 
 typedef struct SpecificFns {
@@ -33,6 +36,7 @@ typedef struct {
   LLVMTypeRef llvm_type;
   LLVMValueRef val;
   union {
+    int STYPE_TOP_LEVEL_VAR;
     int STYPE_FN_PARAM;
     struct {
       Type *fn_type;

@@ -1,5 +1,6 @@
 #include "backend_llvm/codegen_match_values.h"
 #include "codegen_binop.h"
+#include "codegen_globals.h"
 #include "codegen_list.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
@@ -56,41 +57,35 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
 
-      return right;
+      return *res;
     }
 
     if (ctx->stack_ptr == 0) {
+      codegen_set_global(sym, right, right_type, llvm_type, ctx, module,
+                         builder);
 
-      // top-level
-      LLVMValueRef alloca_val =
-          LLVMAddGlobalInAddressSpace(module, llvm_type, id_chars, 0);
+      // Check if the value is a pointer type
+      // if (LLVMGetTypeKind(llvm_type) == LLVMPointerTypeKind) {
+      //   // create a const null pointer because global vars must be
+      //   initialized
+      //   // with a constant
+      //   // printf("store pointer to global (ptr)\n");
+      //   // LLVMDumpValue(right);
+      //   // printf("\n");
+      //   LLVMSetInitializer(alloca_val, LLVMConstNull(llvm_type));
+      //   LLVMBuildStore(builder, right, alloca_val);
+      //
+      // } else {
+      //   LLVMSetInitializer(alloca_val, right);
+      // }
 
-      LLVMSetInitializer(alloca_val, LLVMConstNull(llvm_type));
-      LLVMBuildStore(builder, right, alloca_val);
-
-      // LLVMSetInitializer(global_j, LLVMConstInt(llvm_type, 0, 0));
-      /*
-    // Check if the value is a pointer type
-    if (LLVMGetTypeKind(llvm_type) == LLVMPointerTypeKind) {
-      // create a const null pointer because global vars must be initialized
-      // with a constant
-      // printf("store pointer to global (ptr)\n");
-      // LLVMDumpValue(right);
-      // printf("\n");
-      LLVMSetInitializer(alloca_val, LLVMConstNull(llvm_type));
-      LLVMBuildStore(builder, right, alloca_val);
-
-    } else {
-      LLVMSetInitializer(alloca_val, right);
-    }
-    */
-
-      *sym = (JITSymbol){STYPE_TOP_LEVEL_VAR, llvm_type, alloca_val,
-                         .symbol_type = left->md};
+      // *sym = (JITSymbol){STYPE_TOP_LEVEL_VAR, llvm_type, global_ptr,
+      //                    .symbol_type = left->md};
 
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
 
+      // codegen_get_global(sym, module, builder);
       return *res;
     }
 

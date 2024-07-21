@@ -1,6 +1,7 @@
 #include "backend_llvm/jit.h"
 #include "backend_llvm/common.h"
 #include "codegen.h"
+#include "codegen_globals.h"
 #include "codegen_types.h"
 #include "format_utils.h"
 #include "input.h"
@@ -44,7 +45,7 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
       LLVMFunctionType(type_to_llvm_type(ast->md, ctx->env), NULL, 0, 0);
 
   // Create function.
-  LLVMValueRef func = LLVMAddFunction(module, "tmp", funcType);
+  LLVMValueRef func = LLVMAddFunction(module, "top", funcType);
 
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
@@ -70,7 +71,8 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
   return func;
 }
 
-int prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
+int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
+                      LLVMModuleRef module) {
   char *error = NULL;
 
   struct LLVMMCJITCompilerOptions *Options =
@@ -83,6 +85,13 @@ int prepare_ex_engine(LLVMExecutionEngineRef *engine, LLVMModuleRef module) {
     LLVMDisposeMessage(error);
     return 1;
   }
+
+  LLVMValueRef array_global =
+      LLVMGetNamedGlobal(module, "global_storage_array");
+  LLVMValueRef size_global = LLVMGetNamedGlobal(module, "global_storage_size");
+
+  LLVMAddGlobalMapping(*engine, array_global, ctx->global_storage_array);
+  LLVMAddGlobalMapping(*engine, size_global, ctx->global_storage_capacity);
 }
 
 void import_module(char *dirname, Ast *import, TypeEnv **env, JITLangCtx *ctx,
@@ -108,7 +117,14 @@ void import_module(char *dirname, Ast *import, TypeEnv **env, JITLangCtx *ctx,
   for (int i = 0; i < STACK_MAX; i++) {
     ht_init(stack + i);
   }
-  JITLangCtx module_ctx = {.stack = stack, .stack_ptr = 0};
+  JITLangCtx module_ctx = {
+      .stack = stack,
+      .stack_ptr = 0,
+      .env = ctx->env,
+      .num_globals = ctx->num_globals,
+      .global_storage_array = ctx->global_storage_array,
+      .global_storage_capacity = ctx->global_storage_capacity,
+  };
   TypeEnv *module_type_env = NULL;
 
   eval_script(fully_qualified_name, &module_ctx, module, builder, llvm_ctx,
@@ -169,7 +185,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
 
   LLVMExecutionEngineRef engine;
-  prepare_ex_engine(&engine, module);
+  prepare_ex_engine(ctx, &engine, module);
 
   if (top_level_func == NULL) {
     printf("> ");
@@ -222,6 +238,12 @@ int jit(int argc, char **argv) {
   LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
   module_passes(module);
 
+  void **global_storage_array = calloc(1024, sizeof(void *));
+  int global_storage_capacity = 1024;
+  int num_globals = 0;
+
+  setup_global_storage(module, builder);
+
   ht stack[STACK_MAX];
 
   for (int i = 0; i < STACK_MAX; i++) {
@@ -231,10 +253,12 @@ int jit(int argc, char **argv) {
   // shared type env
   TypeEnv *env = NULL;
 
-  JITLangCtx ctx = {
-      .stack = stack,
-      .stack_ptr = 0,
-  };
+  JITLangCtx ctx = {.stack = stack,
+                    .stack_ptr = 0,
+                    .env = env,
+                    .num_globals = &num_globals,
+                    .global_storage_array = global_storage_array,
+                    .global_storage_capacity = &global_storage_capacity};
 
   bool repl = false;
 
@@ -258,6 +282,7 @@ int jit(int argc, char **argv) {
     // char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
     LLVMTypeRef top_level_ret_type;
     char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
+
     while (true) {
 
       int top_level_size = ctx.stack->length;
@@ -271,7 +296,7 @@ int jit(int argc, char **argv) {
 
       char *input = repl_input(prompt);
 
-      if (strcmp("# dump module\n", input) == 0) {
+      if (strcmp("#! dump module\n", input) == 0) {
         printf(STYLE_RESET_ALL "\n");
         LLVMDumpModule(module);
         continue;
@@ -304,7 +329,7 @@ int jit(int argc, char **argv) {
         continue;
       } else {
         LLVMExecutionEngineRef engine;
-        prepare_ex_engine(&engine, module);
+        prepare_ex_engine(&ctx, &engine, module);
         LLVMGenericValueRef exec_args[] = {};
         LLVMGenericValueRef result =
             LLVMRunFunction(engine, top_level_func, 0, exec_args);

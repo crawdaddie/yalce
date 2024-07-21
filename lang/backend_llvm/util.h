@@ -15,4 +15,11 @@ LLVMValueRef increment_ptr(LLVMValueRef ptr, LLVMTypeRef node_type,
 
 LLVMValueRef and_vals(LLVMValueRef res, LLVMValueRef res2,
                       LLVMBuilderRef builder);
+
+LLVMValueRef codegen_printf(const char *format, LLVMValueRef *args,
+                            int arg_count, LLVMModuleRef module,
+                            LLVMBuilderRef builder);
+
+LLVMValueRef insert_printf_call(const char *format, LLVMModuleRef module,
+                                LLVMBuilderRef builder);
 #endif

@@ -1,5 +1,6 @@
 #include "backend_llvm/codegen_symbols.h"
 #include "codegen_function.h"
+#include "codegen_globals.h"
 #include "codegen_list.h"
 #include "codegen_match.h"
 #include "codegen_match_values.h"
@@ -125,7 +126,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   if (res->type == STYPE_TOP_LEVEL_VAR) {
-    LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
+    // LLVMValueRef glob = LLVMGetNamedGlobal(module, chars);
     // LLVMValueRef glob = res->val;
     // if (LLVMGetTypeKind(LLVMTypeOf(glob)) == LLVMPointerTypeKind) {
     //   printf("global is pointer type eg on the heap - need to load value\n");
@@ -133,8 +134,10 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // }
     // LLVMValueRef val = LLVMGetInitializer(glob);
 
-    return LLVMBuildLoad2(builder, res->llvm_type, glob, "");
-    // return val;
+    // LLVMValueRef mem = LLVMBuildLoad2(builder,
+    // LLVMPointerType(res->llvm_type, 0), res->val, ""); LLVMValueRef val =
+    // LLVMBuildLoad2(builder, res->llvm_type, mem, ""); return val;
+    return codegen_get_global(res, module, builder);
   } else if (res->type == STYPE_LOCAL_VAR) {
     LLVMValueRef val = res->val;
     // if (LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMPointerTypeKind) {

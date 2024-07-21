@@ -76,10 +76,8 @@ int interpreter_vm(int argc, char **argv) {
            "version 0.0.0       \n"
            "\033[1;0m");
 
-    char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
-
     while (true) {
-      repl_input(input, INPUT_BUFSIZE, prompt);
+      char *input = repl_input(prompt);
       Ast *prog = parse_input(input);
 
       Ast *top = peek_body(prog);
@@ -92,7 +90,6 @@ int interpreter_vm(int argc, char **argv) {
       print_value(&res);
       printf("\n");
     }
-    free(input);
   }
   return 0;
 }
