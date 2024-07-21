@@ -223,7 +223,7 @@ void module_passes(LLVMModuleRef module) {
   LLVMAddCFGSimplificationPass(pass_manager);
   LLVMAddTailCallEliminationPass(pass_manager);
 }
-
+#define GLOBAL_STORAGE_CAPACITY 1024
 int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
   LLVMInitializeNativeTarget();
@@ -238,8 +238,10 @@ int jit(int argc, char **argv) {
   LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
   module_passes(module);
 
-  void **global_storage_array = calloc(1024, sizeof(void *));
-  int global_storage_capacity = 1024;
+  // void **global_storage_array = calloc(GLOBAL_STORAGE_CAPACITY, sizeof(void
+  // *));
+  void *global_storage_array[GLOBAL_STORAGE_CAPACITY];
+  int global_storage_capacity = GLOBAL_STORAGE_CAPACITY;
   int num_globals = 0;
 
   setup_global_storage(module, builder);
