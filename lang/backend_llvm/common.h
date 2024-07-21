@@ -6,6 +6,8 @@
 #include "types/util.h"
 #include "llvm-c/Types.h"
 
+#define STACK_MAX 256
+
 typedef struct {
   // ht stack[STACK_MAX];
   ht *stack;

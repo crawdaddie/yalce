@@ -1,5 +1,4 @@
 #include "parse.h"
-#include "serde.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -69,7 +68,7 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
   return node;
 }
 
-void yy_scan_string(char *);
+int yy_scan_string(char *);
 /* Define the parsing function */
 Ast *parse_input(char *input) {
   yy_scan_string(input); // Set the input for the lexer

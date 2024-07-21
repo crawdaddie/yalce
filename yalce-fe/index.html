@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yalce Wasm</title>
+    <style>
+      body {}
+      .container {
+        width: 100%;
+      }
+      textarea {
+        padding: 10px;
+        margin-bottom: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: #f3c2c2;
+        width: 99%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="container">
+        <textarea id="expression" rows="10" placeholder="Enter expressions here..."></textarea>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
