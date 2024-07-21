@@ -3,6 +3,7 @@
 #include "codegen_function_currying.h"
 #include "codegen_match_values.h"
 #include "codegen_types.h"
+#include "serde.h"
 #include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -139,6 +140,9 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *param_type = fn_type->data.T_FN.from;
 
     Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+    // printf("setting param ");
+    // print_ast(param_ast);
+    // printf(" in fn scope %d\n", fn_ctx.stack_ptr);
     LLVMValueRef param_val = LLVMGetParam(func, i);
     LLVMValueRef _true = LLVMConstInt(LLVMInt1Type(), 1, 0);
     match_values(param_ast, param_val, param_type, &_true, &fn_ctx, module,
@@ -396,7 +400,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (app_len < args_len) {
-    printf("codegen curry: \n");
     return codegen_curry_fn(ast, func, args_len, ctx, module, builder);
   }
   return NULL;
