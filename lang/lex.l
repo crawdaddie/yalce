@@ -5,7 +5,7 @@
 #include "string_proc.h"
 %}
 %option yylineno
-
+%x FSTRING
 %%
 "fn"                    return FN;
 "let"                   return LET;
@@ -40,7 +40,29 @@
                           yylval.vident.hash = hash_string(yylval.vident.chars, len);
                           return META_IDENTIFIER;
                         }
+
 "_"                     return *yytext;
+
+
+
+"`"                     { BEGIN(FSTRING); return FSTRING_START; }
+<FSTRING>"`"            { BEGIN(INITIAL); return FSTRING_END; }
+<FSTRING>"{"            { BEGIN(INITIAL); return FSTRING_INTERP_START; }
+<FSTRING>[^`{]+         { 
+                          yylval.vstr.chars = strdup(yytext);
+                          yylval.vstr.length = yyleng;
+                          yylval.vstr.hash = hash_string(yytext, yyleng);
+                          return FSTRING_TEXT;
+                        }
+"}"                     { 
+                          if (YYSTATE == FSTRING) {
+                            return FSTRING_INTERP_END;
+                          } else {
+                            BEGIN(FSTRING); 
+                            return FSTRING_INTERP_END;
+                          }
+                        }
+
 \"([^\"\n]|\\.)*\"      {
                           int len = yyleng - 2;
                           char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars
@@ -52,16 +74,6 @@
                           return TOK_STRING;
                         }
 
-\`([^\"\n]|\\.)*\`      {
-                          int len = yyleng - 2;
-                          char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars
-                          char *processed_str = process_escapes(raw_str, len); // process escape sequences
-                          free(raw_str);
-                          yylval.vstr.chars = processed_str;
-                          yylval.vstr.length = strlen(processed_str);
-                          yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
-                          return FSTRING;
-                        }
 
 -?0                     { 
                           yylval.vint = atoi(yytext);

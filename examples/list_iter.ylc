@@ -12,6 +12,7 @@ let list_sum = fn s l ->
 #   )
 # ;;
 
-let sum = list_sum 0;
-sum [1,2,3]
+# let sum = list_sum 0;
 
+let a = [1,2,3,4];
+let x::rest = a

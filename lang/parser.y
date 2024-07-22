@@ -37,7 +37,6 @@ Ast* ast_root = NULL;
 %token <vident> IDENTIFIER
 %token <vident> META_IDENTIFIER
 %token <vstr>   TOK_STRING
-%token <vstr>   FSTRING
 %token TRUE FALSE
 %token PIPE
 %token EXTERN
@@ -50,6 +49,10 @@ Ast* ast_root = NULL;
 %token DOUBLE_COLON
 %token TOK_VOID
 %token IN AND
+
+%token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
+%token <vstr> FSTRING_TEXT
+
 
 
 %left '.' 
@@ -65,8 +68,8 @@ Ast* ast_root = NULL;
 %type <ast_node_ptr>
   stmt expr stmt_list application
   lambda_expr lambda_arg lambda_args extern_typed_signature list tuple expr_list
-  match_expr match_branches list_match_expr simple_expr
-  let_binding
+  match_expr match_branches list_match_expr simple_expr let_binding fstring fstring_parts fstring_part
+
 
 
 
@@ -143,6 +146,7 @@ expr:
   | LET lambda_arg '=' expr IN expr   { $$ = ast_let($2, $4, $6); }
   | LET expr DOUBLE_COLON expr '=' expr IN expr { $$ = ast_let(ast_list_prepend($2, $4), $6, $8); }
   | LET expr DOUBLE_COLON expr '=' expr { $$ = ast_let(ast_list_prepend($2, $4), $6, NULL); }
+  | fstring                           { $$ = parse_fstring_expr($1); }
   ;
 
 simple_expr:
@@ -154,7 +158,6 @@ simple_expr:
   | IDENTIFIER            { $$ = ast_identifier($1); }
   | TOK_VOID              { $$ = ast_void(); }
   | '(' expr ')'          { $$ = $2; }
-  | FSTRING               { $$ = parse_format_expr($1); }
   | list                  { $$ = $1; }
   | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
@@ -219,7 +222,6 @@ tuple:
 expr_list:
     expr                  { $$ = ast_list($1); }
   | expr_list ',' expr    { $$ = ast_list_push($1, $3); }
-
   ;
 
 match_expr:
@@ -230,6 +232,19 @@ match_branches:
     '|' expr ARROW stmt_list                {$$ = ast_match_branches(NULL, $2, $4);}
   | match_branches '|' expr ARROW stmt_list {$$ = ast_match_branches($1, $3, $5);}
   | match_branches '|' '_' ARROW stmt_list  {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
+  ;
+
+fstring: FSTRING_START fstring_parts FSTRING_END { $$ = $2; }
+  ;
+
+fstring_parts:
+  /* empty */                   { $$ = ast_empty_list(); }
+  | fstring_parts fstring_part  { $$ = ast_list_push($1, $2); }
+  ;
+
+fstring_part:
+  FSTRING_TEXT                                    { $$ = ast_string($1); }
+  | FSTRING_INTERP_START expr FSTRING_INTERP_END  { $$ = $2; }
   ;
 %%
 

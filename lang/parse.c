@@ -178,16 +178,53 @@ Ast *ast_string(ObjString lex_string) {
   s->data.AST_STRING.length = lex_string.length;
   return s;
 }
-
+Ast *parse_fstring_expr(Ast *list) {
+  printf("fstrings: ");
+  print_ast(list);
+  return NULL;
+}
 Ast *parse_format_expr(ObjString fstring) {
   // TODO: split fstring on { & } and create concatenation expression with
   // identifiers in between { & }
   // eg `hello {x} and {y}` -> "hello " + (str x) + " and " + (str y)
-  Ast *fmt = Ast_new(AST_APPLICATION);
-  Ast *func_id = Ast_new(AST_IDENTIFIER);
-  func_id->data.AST_IDENTIFIER.value = strdup("_concat");
-  fmt->data.AST_APPLICATION.function = func_id;
-  char *ch = fstring.chars;
+
+  int seg_start = 0;
+  ObjString segment = {.chars = fstring.chars + seg_start};
+
+  for (int i = 0; i < fstring.length; i++) {
+    const char *curs = fstring.chars + i;
+    if (*curs == '{') {
+      if (i == 0) {
+      } else if (*(fstring.chars + i - 1) != '\\') {
+        int len = i - seg_start;
+        segment.length = len - 1;
+        Ast *str_segment = ast_string(segment);
+        printf("pure string segment: ");
+        print_ast(str_segment);
+
+        seg_start = i;
+      } else {
+        continue;
+      }
+    } else if (*curs == '}' && i != 0 && *(fstring.chars + i - 1) != '\\') {
+      printf("interpolated expression: '%.*s'\n", i - seg_start - 1,
+             fstring.chars + seg_start + 1);
+      segment = (ObjString){.chars = fstring.chars + i + 1};
+      seg_start = i;
+    } else if (i == fstring.length - 1) {
+      printf("seg_start %d %d\n", seg_start, fstring.length);
+      int len = i - seg_start;
+      segment.length = len;
+      Ast *str_segment = ast_string(segment);
+      printf("pure string segment: ");
+      print_ast(str_segment);
+    }
+  }
+
+  Ast *fmt_args = ast_arg_list(
+      ast_identifier((ObjString){.chars = "fmt_string", .length = 10}), NULL);
+
+  Ast *fmt_lambda = Ast_new(AST_LAMBDA);
 
   // while (*ch != '\0') {
   //   ch++;
@@ -201,6 +238,56 @@ Ast *parse_format_expr(ObjString fstring) {
   // } AST_APPLICATION;
 
   return ast_string(fstring);
+}
+Ast *parse_fstring(ObjString fstring) {
+  // Remove backticks
+  char *content = strndup(fstring.chars + 1, fstring.length - 2);
+  int content_length = fstring.length - 2;
+
+  Ast *result = ast_empty_list();
+  char *current = content;
+  char *end = content + content_length;
+
+  while (current < end) {
+    char *next_brace = strchr(current, '{');
+
+    if (next_brace == NULL) {
+      // No more expressions, add the rest as a string
+      ObjString str = {current, end - current,
+                       hash_string(current, end - current)};
+      result = ast_list_push(result, ast_string(str));
+      break;
+    }
+
+    if (next_brace > current) {
+      // Add the text before the brace as a string
+      ObjString str = {current, next_brace - current,
+                       hash_string(current, next_brace - current)};
+      result = ast_list_push(result, ast_string(str));
+    }
+
+    // Find the closing brace
+    char *closing_brace = strchr(next_brace + 1, '}');
+    if (closing_brace == NULL) {
+      yyerror("Unclosed brace in interpolated string");
+      free(content);
+      return NULL;
+    }
+
+    // Parse the expression inside the braces
+    *closing_brace = '\0'; // Temporarily null-terminate the expression
+    // YY_BUFFER_STATE buffer = yy_scan_string(next_brace + 1);
+    // Ast *expr = parse_expression(); // You'll need to implement this function
+    // yy_delete_buffer(buffer);
+    *closing_brace = '}'; // Restore the closing brace
+
+    // result = ast_list_push(result, expr);
+
+    current = closing_brace + 1;
+  }
+
+  free(content);
+  return result;
 }
 
 Ast *ast_empty_list() {

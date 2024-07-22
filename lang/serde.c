@@ -68,7 +68,8 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   case AST_STRING: {
 
     buffer = strcat(buffer, "\"");
-    buffer = strcat(buffer, ast->data.AST_STRING.value);
+    buffer = strncat(buffer, ast->data.AST_STRING.value,
+                     ast->data.AST_STRING.length);
     buffer = strcat(buffer, "\"");
     break;
   }

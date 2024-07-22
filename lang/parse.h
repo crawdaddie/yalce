@@ -128,7 +128,7 @@ struct Ast {
     } AST_NUMBER;
 
     struct AST_STRING {
-      char *value;
+      const char *value;
       size_t length;
     } AST_STRING;
 
@@ -234,7 +234,7 @@ Ast *ast_string(ObjString lex_string);
 Ast *ast_extern_declaration(ObjString extern_name, Ast *arg_list,
                             ObjString return_type);
 
-Ast *parse_format_expr(ObjString fstring);
+Ast *parse_fstring_expr(Ast *list);
 Ast *ast_empty_list();
 Ast *ast_list(Ast *val);
 Ast *ast_list_push(Ast *list, Ast *val);

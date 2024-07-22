@@ -44,28 +44,32 @@
      IDENTIFIER = 260,
      META_IDENTIFIER = 261,
      TOK_STRING = 262,
-     FSTRING = 263,
-     TRUE = 264,
-     FALSE = 265,
-     PIPE = 266,
-     EXTERN = 267,
-     TRIPLE_DOT = 268,
-     LET = 269,
-     FN = 270,
-     MATCH = 271,
-     WITH = 272,
-     ARROW = 273,
-     DOUBLE_COLON = 274,
-     TOK_VOID = 275,
-     IN = 276,
-     AND = 277,
-     APPLICATION = 278,
-     MODULO = 279,
-     NE = 280,
-     EQ = 281,
-     LE = 282,
-     GE = 283,
-     UMINUS = 284
+     TRUE = 263,
+     FALSE = 264,
+     PIPE = 265,
+     EXTERN = 266,
+     TRIPLE_DOT = 267,
+     LET = 268,
+     FN = 269,
+     MATCH = 270,
+     WITH = 271,
+     ARROW = 272,
+     DOUBLE_COLON = 273,
+     TOK_VOID = 274,
+     IN = 275,
+     AND = 276,
+     FSTRING_START = 277,
+     FSTRING_END = 278,
+     FSTRING_INTERP_START = 279,
+     FSTRING_INTERP_END = 280,
+     FSTRING_TEXT = 281,
+     APPLICATION = 282,
+     MODULO = 283,
+     NE = 284,
+     EQ = 285,
+     LE = 286,
+     GE = 287,
+     UMINUS = 288
    };
 #endif
 /* Tokens.  */
@@ -74,28 +78,32 @@
 #define IDENTIFIER 260
 #define META_IDENTIFIER 261
 #define TOK_STRING 262
-#define FSTRING 263
-#define TRUE 264
-#define FALSE 265
-#define PIPE 266
-#define EXTERN 267
-#define TRIPLE_DOT 268
-#define LET 269
-#define FN 270
-#define MATCH 271
-#define WITH 272
-#define ARROW 273
-#define DOUBLE_COLON 274
-#define TOK_VOID 275
-#define IN 276
-#define AND 277
-#define APPLICATION 278
-#define MODULO 279
-#define NE 280
-#define EQ 281
-#define LE 282
-#define GE 283
-#define UMINUS 284
+#define TRUE 263
+#define FALSE 264
+#define PIPE 265
+#define EXTERN 266
+#define TRIPLE_DOT 267
+#define LET 268
+#define FN 269
+#define MATCH 270
+#define WITH 271
+#define ARROW 272
+#define DOUBLE_COLON 273
+#define TOK_VOID 274
+#define IN 275
+#define AND 276
+#define FSTRING_START 277
+#define FSTRING_END 278
+#define FSTRING_INTERP_START 279
+#define FSTRING_INTERP_END 280
+#define FSTRING_TEXT 281
+#define APPLICATION 282
+#define MODULO 283
+#define NE 284
+#define EQ 285
+#define LE 286
+#define GE 287
+#define UMINUS 288
 
 
 
@@ -111,7 +119,7 @@ typedef union YYSTYPE
     double vfloat;
 }
 /* Line 1529 of yacc.c.  */
-#line 115 "lang/y.tab.h"
+#line 123 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
