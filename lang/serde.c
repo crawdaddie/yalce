@@ -257,6 +257,20 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_FMT_STRING: {
+    buffer = strcat(buffer, "(");
+    int len = ast->data.AST_LIST.len;
+    for (int i = 0; i < len; i++) {
+      buffer = ast_to_sexpr(ast->data.AST_LIST.items + i, buffer);
+      if (i < len - 1 || len == 1) {
+        buffer = strcat(buffer, ", ");
+      }
+    }
+
+    buffer = strcat(buffer, ")");
+    break;
+  }
+
   case AST_MATCH: {
 
     buffer = strcat(buffer, "(match ");

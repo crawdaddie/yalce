@@ -1,6 +1,7 @@
 #ifndef _LANG_BACKEND_LLVM_UTIL_H
 #define _LANG_BACKEND_LLVM_UTIL_H
 
+#include "types/type.h"
 #include "llvm-c/Types.h"
 
 void struct_ptr_set(int item_offset, LLVMValueRef struct_ptr,
@@ -22,4 +23,12 @@ LLVMValueRef codegen_printf(const char *format, LLVMValueRef *args,
 
 LLVMValueRef insert_printf_call(const char *format, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
+
+LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
+
+LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
+                                  LLVMModuleRef module, LLVMBuilderRef builder);
+const char *string_concat(const char **strings, int num_strings);
 #endif

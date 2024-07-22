@@ -252,15 +252,15 @@ int main() {
   status &= test_parse("let voidf = extern fn () -> () ;",
                        "(let voidf (extern voidf () -> ())");
 
-  status &= test_parse("`here's a printed "
-                       "version of {x} and {y}\\n`",
-                       "((((fmt_str x y -> (((_fmt fmt_str) x) y)) "
-                       "\"here's a printed version of {x} and {y}\") x) y)");
+  status &= test_parse(
+      "`here's a printed "
+      "version of {x} and {y}\\n`",
+      "(\"here's a printed version of \", x, \" and \", y, \"\\n\")");
 
   status &= test_parse("`here's a printed "
                        "version of {1 + 2000} and {y 1 2}`",
-                       "((((fmt_str x y -> (((_fmt fmt_str) x) y)) "
-                       "\"here's a printed version of {x} and {y}\") x) y)");
+                       "(\"here's a printed version of \", (+ 1 2000), \" and "
+                       "\", ((y 1) 2))");
 
   // extern funcs
   return status ? 0 : 1;

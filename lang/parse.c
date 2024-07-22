@@ -179,9 +179,8 @@ Ast *ast_string(ObjString lex_string) {
   return s;
 }
 Ast *parse_fstring_expr(Ast *list) {
-  printf("fstrings: ");
-  print_ast(list);
-  return NULL;
+  list->tag = AST_FMT_STRING;
+  return list;
 }
 Ast *parse_format_expr(ObjString fstring) {
   // TODO: split fstring on { & } and create concatenation expression with

@@ -488,6 +488,16 @@ Type *infer(TypeEnv **env, Ast *ast) {
     break;
   }
 
+  case AST_FMT_STRING: {
+    int arity = ast->data.AST_LIST.len;
+    for (int i = 0; i < arity; i++) {
+      Ast *member = ast->data.AST_LIST.items + i;
+      infer(env, member);
+    }
+    type = &t_string;
+    break;
+  }
+
   case AST_LIST: {
     Type *list_type = infer(env, ast->data.AST_LIST.items);
 

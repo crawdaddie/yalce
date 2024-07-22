@@ -103,6 +103,7 @@ typedef enum ast_tag {
   AST_META,
   AST_IMPORT,
   AST_RECORD_ACCESS,
+  AST_FMT_STRING,
 } ast_tag;
 
 struct Ast {

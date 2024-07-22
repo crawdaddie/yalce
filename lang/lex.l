@@ -49,9 +49,13 @@
 <FSTRING>"`"            { BEGIN(INITIAL); return FSTRING_END; }
 <FSTRING>"{"            { BEGIN(INITIAL); return FSTRING_INTERP_START; }
 <FSTRING>[^`{]+         { 
-                          yylval.vstr.chars = strdup(yytext);
-                          yylval.vstr.length = yyleng;
-                          yylval.vstr.hash = hash_string(yytext, yyleng);
+                          int len = yyleng;
+                          char *raw_str = strndup(yytext, len); // remove surrounding " chars
+                          char *processed_str = process_escapes(raw_str, len); // process escape sequences
+                          free(raw_str);
+                          yylval.vstr.chars = processed_str;
+                          yylval.vstr.length = strlen(processed_str);
+                          yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
                           return FSTRING_TEXT;
                         }
 "}"                     { 

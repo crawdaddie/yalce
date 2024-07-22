@@ -146,7 +146,6 @@ expr:
   | LET lambda_arg '=' expr IN expr   { $$ = ast_let($2, $4, $6); }
   | LET expr DOUBLE_COLON expr '=' expr IN expr { $$ = ast_let(ast_list_prepend($2, $4), $6, $8); }
   | LET expr DOUBLE_COLON expr '=' expr { $$ = ast_let(ast_list_prepend($2, $4), $6, NULL); }
-  | fstring                           { $$ = parse_fstring_expr($1); }
   ;
 
 simple_expr:
@@ -162,6 +161,7 @@ simple_expr:
   | tuple                 { $$ = $1; }
   | match_expr            { $$ = $1; }
   | lambda_expr           { $$ = $1; }
+  | fstring               { $$ = parse_fstring_expr($1); }
   ;
 
 extern_typed_signature:
