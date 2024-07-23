@@ -294,7 +294,7 @@ static Type *infer_fn_application(TypeEnv **env, Ast *ast) {
         infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
 
     if (fn_return->data.T_FN.to == NULL) {
-      fprintf(stderr, "Error: too may parameters to function\n");
+      fprintf(stderr, "Error: too many parameters to function\n");
       return NULL;
     }
 
