@@ -143,10 +143,20 @@ eg `first (1, "hi")` results in the compilation and caching of a concrete versio
 
 which looks like this in LLVM IR:
 ```
-define i32 @"first[(Int * String)]"({ i32, ptr } %0) {
+define i32 @first({ i32, ptr } %0) #0 {
 entry:
   %struct_element = extractvalue { i32, ptr } %0, 0
-  ret { i32, ptr } %0
+  %struct_element1 = extractvalue { i32, ptr } %0, 1
+  ret i32 %struct_element
+}
+```
+and `first (200., 200.)` will result in a slightly different concrete version to be used 
+```
+define double @first.2({ double, double } %0) #0 {
+entry:
+  %struct_element = extractvalue { double, double } %0, 0
+  %struct_element1 = extractvalue { double, double } %0, 1
+  ret double %struct_element
 }
 ```
 
