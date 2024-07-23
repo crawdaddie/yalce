@@ -12,7 +12,8 @@ Type t_int =    {T_INT};
 //  .type_class = &((InstTypeClass){&TClassOrd})};
 Type t_num =    {T_NUM};
 // , .type_class = &((InstTypeClass){&TClassOrd})};
-Type t_string = {T_STRING};
+Type t_char =   {T_CHAR};
+Type t_string = {T_CONS, {.T_CONS = {"List", (Type*[]){&t_char}, 1}}};
 Type t_bool =   {T_BOOL};
 Type t_void =   {T_VOID};
 // clang-format on
@@ -235,6 +236,10 @@ void _unify(Type *t1, Type *t2, TypeEnv **env) {
 
     return;
   }
+  printf("---\n");
+  print_type(t1);
+  print_type(t2);
+  printf("\n");
   fprintf(stderr, "Error: Types are not unifiable\n");
 }
 

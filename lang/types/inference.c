@@ -284,6 +284,12 @@ static Type *infer_fn_application(TypeEnv **env, Ast *ast) {
 
   return resolve_in_env(res, _env);
 }
+Type *cast_char_list(Type *t) {
+  if (is_list_type(t) && t->data.T_CONS.args[0]->kind == T_CHAR) {
+    return &t_string;
+  }
+  return t;
+}
 
 // Main type inference function
 Type *infer(TypeEnv **env, Ast *ast) {
@@ -310,6 +316,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
       return NULL;
     }
     if (ast->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+
       Type *list_el_type = next_tvar();
       Type *list_type = create_list_type(list_el_type);
       unify(rt, list_type);
@@ -362,6 +369,9 @@ Type *infer(TypeEnv **env, Ast *ast) {
     break;
   case AST_STRING:
     type = &t_string;
+    break;
+  case AST_CHAR:
+    type = &t_char;
     break;
   case AST_BOOL:
     type = &t_bool;

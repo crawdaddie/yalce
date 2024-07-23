@@ -44,32 +44,33 @@
      IDENTIFIER = 260,
      META_IDENTIFIER = 261,
      TOK_STRING = 262,
-     TRUE = 263,
-     FALSE = 264,
-     PIPE = 265,
-     EXTERN = 266,
-     TRIPLE_DOT = 267,
-     LET = 268,
-     FN = 269,
-     MATCH = 270,
-     WITH = 271,
-     ARROW = 272,
-     DOUBLE_COLON = 273,
-     TOK_VOID = 274,
-     IN = 275,
-     AND = 276,
-     FSTRING_START = 277,
-     FSTRING_END = 278,
-     FSTRING_INTERP_START = 279,
-     FSTRING_INTERP_END = 280,
-     FSTRING_TEXT = 281,
-     APPLICATION = 282,
-     MODULO = 283,
-     NE = 284,
-     EQ = 285,
-     LE = 286,
-     GE = 287,
-     UMINUS = 288
+     TOK_CHAR = 263,
+     TRUE = 264,
+     FALSE = 265,
+     PIPE = 266,
+     EXTERN = 267,
+     TRIPLE_DOT = 268,
+     LET = 269,
+     FN = 270,
+     MATCH = 271,
+     WITH = 272,
+     ARROW = 273,
+     DOUBLE_COLON = 274,
+     TOK_VOID = 275,
+     IN = 276,
+     AND = 277,
+     FSTRING_START = 278,
+     FSTRING_END = 279,
+     FSTRING_INTERP_START = 280,
+     FSTRING_INTERP_END = 281,
+     FSTRING_TEXT = 282,
+     APPLICATION = 283,
+     MODULO = 284,
+     NE = 285,
+     EQ = 286,
+     LE = 287,
+     GE = 288,
+     UMINUS = 289
    };
 #endif
 /* Tokens.  */
@@ -78,32 +79,33 @@
 #define IDENTIFIER 260
 #define META_IDENTIFIER 261
 #define TOK_STRING 262
-#define TRUE 263
-#define FALSE 264
-#define PIPE 265
-#define EXTERN 266
-#define TRIPLE_DOT 267
-#define LET 268
-#define FN 269
-#define MATCH 270
-#define WITH 271
-#define ARROW 272
-#define DOUBLE_COLON 273
-#define TOK_VOID 274
-#define IN 275
-#define AND 276
-#define FSTRING_START 277
-#define FSTRING_END 278
-#define FSTRING_INTERP_START 279
-#define FSTRING_INTERP_END 280
-#define FSTRING_TEXT 281
-#define APPLICATION 282
-#define MODULO 283
-#define NE 284
-#define EQ 285
-#define LE 286
-#define GE 287
-#define UMINUS 288
+#define TOK_CHAR 263
+#define TRUE 264
+#define FALSE 265
+#define PIPE 266
+#define EXTERN 267
+#define TRIPLE_DOT 268
+#define LET 269
+#define FN 270
+#define MATCH 271
+#define WITH 272
+#define ARROW 273
+#define DOUBLE_COLON 274
+#define TOK_VOID 275
+#define IN 276
+#define AND 277
+#define FSTRING_START 278
+#define FSTRING_END 279
+#define FSTRING_INTERP_START 280
+#define FSTRING_INTERP_END 281
+#define FSTRING_TEXT 282
+#define APPLICATION 283
+#define MODULO 284
+#define NE 285
+#define EQ 286
+#define LE 287
+#define GE 288
+#define UMINUS 289
 
 
 
@@ -117,9 +119,10 @@ typedef union YYSTYPE
     ObjString vstr;             /* string */
     int vint;                   /* int val */
     double vfloat;
+    char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 123 "lang/y.tab.h"
+#line 126 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

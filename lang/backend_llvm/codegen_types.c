@@ -39,8 +39,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
     return LLVMInt1Type();
   }
 
-  case T_STRING: {
-    return LLVMPointerType(LLVMInt8Type(), 0);
+  case T_CHAR: {
+    return LLVMInt8Type();
   }
 
   case T_VAR: {
@@ -56,6 +56,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
     }
 
     if (strcmp(type->data.T_CONS.name, "List") == 0) {
+      if (type->data.T_CONS.args[0]->kind == T_CHAR) {
+        return LLVMPointerType(LLVMInt8Type(), 0);
+      }
+
       return list_type(type->data.T_CONS.args[0], env);
     }
 

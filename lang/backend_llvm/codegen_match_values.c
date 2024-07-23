@@ -4,6 +4,7 @@
 #include "codegen_list.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
+#include "serde.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -22,7 +23,15 @@ LLVMValueRef codegen_equality(LLVMValueRef left, Type *left_type,
                               LLVMValueRef right, JITLangCtx *ctx,
                               LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  if (is_string_type(left_type)) {
+    return strings_equal(left, right, module, builder);
+  }
+
   if (left_type->kind == T_INT) {
+    return codegen_int_binop(builder, TOKEN_EQUALITY, left, right);
+  }
+
+  if (left_type->kind == T_CHAR) {
     return codegen_int_binop(builder, TOKEN_EQUALITY, left, right);
   }
 
@@ -35,6 +44,7 @@ LLVMValueRef codegen_equality(LLVMValueRef left, Type *left_type,
 LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
                           LLVMValueRef *res, JITLangCtx *ctx,
                           LLVMModuleRef module, LLVMBuilderRef builder) {
+
   switch (left->tag) {
   case AST_IDENTIFIER: {
     if (*(left->data.AST_IDENTIFIER.value) == '_') {
@@ -64,24 +74,6 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
       codegen_set_global(sym, right, right_type, llvm_type, ctx, module,
                          builder);
 
-      // Check if the value is a pointer type
-      // if (LLVMGetTypeKind(llvm_type) == LLVMPointerTypeKind) {
-      //   // create a const null pointer because global vars must be
-      //   initialized
-      //   // with a constant
-      //   // printf("store pointer to global (ptr)\n");
-      //   // LLVMDumpValue(right);
-      //   // printf("\n");
-      //   LLVMSetInitializer(alloca_val, LLVMConstNull(llvm_type));
-      //   LLVMBuildStore(builder, right, alloca_val);
-      //
-      // } else {
-      //   LLVMSetInitializer(alloca_val, right);
-      // }
-
-      // *sym = (JITSymbol){STYPE_TOP_LEVEL_VAR, llvm_type, global_ptr,
-      //                    .symbol_type = left->md};
-
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
 
@@ -97,6 +89,31 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
   }
   case AST_BINOP: {
     if (left->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+      if (is_string_type(right_type)) {
+        Type *right_list_el_type = &t_char;
+
+        Ast *pattern_left = left->data.AST_BINOP.left;
+        Ast *pattern_right = left->data.AST_BINOP.right;
+
+        *res = and_vals(*res, string_is_not_empty(right, builder), builder);
+
+        LLVMValueRef first_char = LLVMBuildLoad2(builder, LLVMInt8Type(), right,
+                                                 "first_char_of_string");
+
+        *res =
+            and_vals(*res,
+                     match_values(pattern_left, first_char, right_list_el_type,
+                                  res, ctx, module, builder),
+                     builder);
+
+        LLVMValueRef list_next = increment_string(builder, right);
+
+        *res = and_vals(*res,
+                        match_values(pattern_right, list_next, right_type, res,
+                                     ctx, module, builder),
+                        builder);
+        return *res;
+      }
 
       Type *right_list_el_type = right_type->data.T_CONS.args[0];
 
@@ -123,6 +140,7 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
                       match_values(pattern_right, list_next, right_type, res,
                                    ctx, module, builder),
                       builder);
+      return *res;
     }
     return *res;
   }

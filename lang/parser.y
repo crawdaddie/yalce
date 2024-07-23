@@ -30,6 +30,7 @@ Ast* ast_root = NULL;
     ObjString vstr;             /* string */
     int vint;                   /* int val */
     double vfloat;
+    char vchar;
 };
 
 %token <vint>   INTEGER
@@ -37,6 +38,7 @@ Ast* ast_root = NULL;
 %token <vident> IDENTIFIER
 %token <vident> META_IDENTIFIER
 %token <vstr>   TOK_STRING
+%token <vchar>  TOK_CHAR
 %token TRUE FALSE
 %token PIPE
 %token EXTERN
@@ -162,6 +164,7 @@ simple_expr:
   | match_expr            { $$ = $1; }
   | lambda_expr           { $$ = $1; }
   | fstring               { $$ = parse_fstring_expr($1); }
+  | TOK_CHAR              { $$ = ast_char($1); }
   ;
 
 extern_typed_signature:

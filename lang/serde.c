@@ -74,6 +74,14 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_CHAR: {
+
+    buffer = strcat(buffer, "'");
+    buffer = strcat(buffer, &(ast->data.AST_CHAR.value));
+    buffer = strcat(buffer, "'");
+    break;
+  }
+
   case AST_BOOL: {
     if (ast->data.AST_BOOL.value) {
       buffer = strcat(buffer, "true");

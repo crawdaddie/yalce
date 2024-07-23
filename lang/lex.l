@@ -6,6 +6,8 @@
 %}
 %option yylineno
 %x FSTRING
+ESCAPE          \\(['"?\\abfnrtv]|[0-7]{1,3}|x[0-9a-fA-F]+)
+CHAR            '([^'\\\n]|{ESCAPE})'
 %%
 "fn"                    return FN;
 "let"                   return LET;
@@ -114,7 +116,12 @@
 "->"            return ARROW;
 [ \t\n]+        ;       /* ignore whitespace */
 "#".*           ;       /* ignore comments starting with # */
-
+{CHAR}          { 
+                    /* Matched a character literal */
+                    /* You might want to return a token here, e.g., return CHAR_LITERAL; */
+                    yylval.vchar = *(yytext + 1);
+                    return TOK_CHAR;
+                }
 .               { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 %%
 int yywrap(void) {

@@ -442,3 +442,9 @@ Ast *ast_record_access(Ast *record, Ast *member) {
   rec_access->data.AST_RECORD_ACCESS.member = member;
   return rec_access;
 }
+
+Ast *ast_char(char ch) {
+  Ast *a = Ast_new(AST_CHAR);
+  a->data.AST_CHAR.value = ch;
+  return a;
+}

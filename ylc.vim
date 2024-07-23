@@ -23,6 +23,8 @@ syn match   ylcSpecial	  "\\\d\d\d\|\\."
 syn region  ylcStringD	  start=+"+  skip=+\\\\\|\\"+  end=+"\|$+	contains=ylcSpecial,@htmlPreproc
 
 " syn region  ylcEmbed	          start=+${+  end=+}+	contains=@ylcEmbededExpr
+"" New syntax for character literals
+syn region  ylcCharacter  start=+'+ end=+'+ contains=ylcSpecial
 
 " number handling by Christopher Leonard chris.j.leonard@gmx.com
 syn match   ylcNumber       "\<0[bB][0-1]\+\(_[0-1]\+\)*\>"
@@ -78,7 +80,7 @@ hi def link ylcSpecial		    Special
 hi def link ylcStringS		    String
 hi def link ylcStringD		    String
 hi def link ylcStringT		    String
-hi def link ylcCharacter		  Character
+hi def link ylcCharacter	    Character
 hi def link ylcNumber		      Number
 hi def link ylcConditional		Conditional
 hi def link ylcRepeat		      Repeat

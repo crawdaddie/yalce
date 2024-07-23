@@ -31,4 +31,12 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                                   LLVMModuleRef module, LLVMBuilderRef builder);
 const char *string_concat(const char **strings, int num_strings);
+
+LLVMValueRef string_is_empty(LLVMValueRef string, LLVMBuilderRef builder);
+LLVMValueRef string_is_not_empty(LLVMValueRef string, LLVMBuilderRef builder);
+
+LLVMValueRef strings_equal(LLVMValueRef left, LLVMValueRef right,
+                           LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string);
 #endif

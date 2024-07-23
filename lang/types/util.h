@@ -17,6 +17,7 @@ bool is_type_variable(Type *type);
 bool is_list_type(Type *type);
 bool is_tuple_type(Type *type);
 bool is_generic(Type *type);
+bool is_string_type(Type *type);
 
 Type *deep_copy_type(const Type *t);
 void free_type(const Type *t);

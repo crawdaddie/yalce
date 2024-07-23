@@ -19,6 +19,7 @@ enum TypeKind {
   T_INT,
   T_NUM,
   T_STRING,
+  T_CHAR,
   T_BOOL,
   T_VOID,
   T_FN,
@@ -58,6 +59,7 @@ extern Type t_num;
 extern Type t_string;
 extern Type t_bool;
 extern Type t_void;
+extern Type t_char;
 
 extern TypeClass TClassOrd;
 

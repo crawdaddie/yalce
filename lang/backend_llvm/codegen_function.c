@@ -115,10 +115,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Generate the prototype first.
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
-  printf("codegen fn: %s\n", fn_name.chars);
   Type *fn_type = ast->md;
-  print_type(fn_type);
-  printf("\n");
   int fn_len = ast->data.AST_LAMBDA.len;
 
   LLVMValueRef func =

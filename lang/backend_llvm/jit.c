@@ -6,7 +6,6 @@
 #include "format_utils.h"
 #include "input.h"
 #include "parse.h"
-#include "serde.h"
 #include "types/inference.h"
 #include "types/util.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -22,6 +21,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define STACK_MAX 256
 
 void print_result(Type *type, LLVMGenericValueRef result);
 static Ast *top_level_ast(Ast *body) {
@@ -368,7 +369,16 @@ void print_result(Type *type, LLVMGenericValueRef result) {
     break;
   }
 
+  case T_CHAR: {
+    printf(" %c\n", (int)LLVMGenericValueToInt(result, 0));
+    break;
+  }
+
   case T_CONS: {
+    if (is_string_type(type)) {
+      printf(" %s\n", (char *)LLVMGenericValueToPointer(result));
+      break;
+    }
     if (strcmp(type->data.T_CONS.name, "List") == 0 &&
         type->data.T_CONS.args[0]->kind == T_INT) {
 

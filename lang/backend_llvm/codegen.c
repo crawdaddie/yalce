@@ -33,11 +33,16 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_STRING: {
-    char *chars = ast->data.AST_STRING.value;
+    const char *chars = ast->data.AST_STRING.value;
     int length = ast->data.AST_STRING.length;
     ObjString vstr = (ObjString){
         .chars = chars, .length = length, .hash = hash_string(chars, length)};
     return LLVMBuildGlobalStringPtr(builder, chars, ".str");
+  }
+
+  case AST_CHAR: {
+    const char ch = ast->data.AST_CHAR.value;
+    return LLVMConstInt(LLVMInt8Type(), ch, 0);
   }
 
   case AST_FMT_STRING: {

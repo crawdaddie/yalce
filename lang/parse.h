@@ -85,6 +85,7 @@ typedef enum ast_tag {
   AST_INT,
   AST_NUMBER,
   AST_STRING,
+  AST_CHAR,
   AST_BOOL,
   AST_IDENTIFIER,
   AST_BODY,
@@ -132,6 +133,10 @@ struct Ast {
       const char *value;
       size_t length;
     } AST_STRING;
+
+    struct AST_CHAR {
+      char value;
+    } AST_CHAR;
 
     struct AST_IDENTIFIER {
       const char *value;
@@ -261,4 +266,5 @@ int get_let_binding_name(Ast *ast, ObjString *name);
 Ast *ast_bare_import(ObjString module_name);
 Ast *ast_record_access(Ast *record, Ast *member);
 
+Ast *ast_char(char ch);
 #endif

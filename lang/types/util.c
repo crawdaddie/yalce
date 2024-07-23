@@ -11,6 +11,12 @@ bool is_list_type(Type *type) {
   return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "List") == 0);
 }
 
+bool is_string_type(Type *type) {
+  return type->kind == T_CONS &&
+         (strcmp(type->data.T_CONS.name, "List") == 0) &&
+         (type->data.T_CONS.args[0]->kind == T_CHAR);
+}
+
 bool is_tuple_type(Type *type) {
   return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "Tuple") == 0);
 }
@@ -129,6 +135,7 @@ bool types_equal(Type *t1, Type *t2) {
   case T_NUM:
   case T_STRING:
   case T_BOOL:
+  case T_CHAR:
   case T_VOID: {
     return true;
   }
@@ -253,7 +260,13 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
       break;
     }
 
+    if (is_string_type(type)) {
+      buffer_write(buf, "String", 6);
+      break;
+    }
+
     if (strcmp(type->data.T_CONS.name, "List") == 0) {
+
       buffer_write(buf, "[", 1);
       serialize_type(type->data.T_CONS.args[0], buf);
       buffer_write(buf, "]", 1);
@@ -303,6 +316,10 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
 
   case T_VOID:
     buffer_write(buf, "()", 2);
+    break;
+
+  case T_CHAR:
+    buffer_write(buf, "Char", 4);
     break;
 
   default:
