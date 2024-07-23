@@ -65,6 +65,33 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
 
     return LLVMInt32Type();
   }
+  case T_FN: {
+
+    printf("\nreplace types in fn: ");
+    print_type(type);
+    printf(" with ");
+    print_type_env(env);
+
+    Type *fn_type = type->data.T_FN.from;
+    while (fn_type->data.T_FN.to->kind == T_FN) {
+      fn_type = fn_type->data.T_FN.to;
+    }
+
+    // for (int i = 0; i < fn_len; i++) {
+    //   llvm_param_types[i] =
+    //       type_to_llvm_type(fn_type->data.T_FN.from, ctx->env);
+    //   fn_type = fn_type->data.T_FN.to;
+    // }
+    //
+    // Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
+    // LLVMTypeRef llvm_return_type_ref = type_to_llvm_type(return_type,
+    // ctx->env);
+    //
+    // // Create function type with return.
+    // LLVMTypeRef llvm_fn_type =
+    //     LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
+    //
+  }
 
   default: {
     return LLVMInt32Type();

@@ -77,8 +77,6 @@ static Type *type_of_var(Ast *ast) {
     return tcons("Tuple", tuple_mems, len);
   }
   default: {
-    // print_ast(ast);
-    // printf("\n");
     fprintf(stderr, "Typecheck err: lambda arg type %d unsupported\n",
             ast->tag);
     return NULL;
@@ -249,21 +247,52 @@ static Type *resolve_in_env(Type *t, TypeEnv *env) {
 
 static Type *infer_fn_application(TypeEnv **env, Ast *ast) {
 
-  Type *fn_type =
-      deep_copy_type(infer(env, ast->data.AST_APPLICATION.function));
+  Type *fn_type = infer(env, ast->data.AST_APPLICATION.function);
+
   if (!fn_type) {
     return NULL;
   }
+  if (fn_type->kind == T_VAR) {
+    Type *result_type = next_tvar();
+    Type *expected_fn_type = result_type;
+    Type *fn_return;
+
+    for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+
+      expected_fn_type = create_type_fn(
+          infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
+      result_type = expected_fn_type->data.T_FN.to;
+    }
+
+    fn_return = result_type->data.T_FN.to;
+
+    TypeEnv *_env = NULL;
+
+    _unify(fn_type, expected_fn_type, &_env);
+
+    Type *res = fn_type;
+
+    for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+      res = res->data.T_FN.to;
+    }
+
+    return resolve_in_env(res, _env);
+  }
+
+  if (fn_type->kind == T_FN) {
+    fn_type = deep_copy_type(fn_type);
+  };
 
   Type *result_type = next_tvar();
 
   Type *expected_fn_type = result_type;
-
   Type *fn_return = fn_type;
 
   for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+
     expected_fn_type = create_type_fn(
         infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
+
     if (fn_return->data.T_FN.to == NULL) {
       fprintf(stderr, "Error: too may parameters to function\n");
       return NULL;
@@ -474,6 +503,10 @@ Type *infer(TypeEnv **env, Ast *ast) {
     unify(current, body_type);
 
     type = fn_type;
+    printf("lambda type: ");
+
+    print_type(type);
+    printf("\n");
 
     break;
   }

@@ -299,9 +299,11 @@ int jit(int argc, char **argv) {
 
       char *input = repl_input(prompt);
 
-      if (strcmp("#! dump module\n", input) == 0) {
+      if (strcmp("%dump_module\n", input) == 0) {
         printf(STYLE_RESET_ALL "\n");
         LLVMDumpModule(module);
+        continue;
+      } else if (strcmp("\n", input) == 0) {
         continue;
       }
 

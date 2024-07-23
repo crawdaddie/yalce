@@ -7,6 +7,7 @@ highly unsafe
 - [raylib](https://www.raylib.com/)
 - [fftw3](https://www.fftw.org/)
 - [llvm](https://llvm.org/)
+- [readline](https://tiswww.case.edu/php/chet/readline/rltop.html)
 
 # Audio Engine:
 ## Architecture
@@ -103,6 +104,25 @@ let list_sum = fn acc l ->
 ;;
 
 list_sum 0 [1, 2, 3] # --returns 6 
+```
+string processing
+```ocaml
+let printf = extern fn string -> () ;; # simplified printf from c stdlib
+let x = 1;
+let y = 42;
+let formatted = `{x} hello {y}\n`; # interpolates serialized versions of x & y into a string 
+
+let () = printf formatted;
+
+let find_h = fn i l ->
+  (match l with
+  | "" -> -1
+  | 'h'::_ -> i # finds the first 'h' character in the string
+  | _::rest -> find_h (i + 1) rest
+  )
+;;
+
+find_h 0 "ooooohello" # returns 5
 ```
 
 and type inference:
