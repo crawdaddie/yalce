@@ -1,9 +1,9 @@
 let sum = fn l -> 
   let _list_sum = fn s l ->
-    (match l with
+    match l with
     | [] -> s
     | x::rest -> _list_sum (s + x) rest
-    );;
+  ;;
   _list_sum 0 l
 ;;
 
