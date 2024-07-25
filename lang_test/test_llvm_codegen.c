@@ -757,7 +757,7 @@ bool test_match_tuple_fail() {
   _prepare_ex_engine(&env.ctx, &engine, env.module);
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result = LLVMRunFunction(engine, env.func, 0, exec_args);
-  bool test_res = (int)LLVMGenericValueToInt(result, 0) == 1;
+  bool test_res = (int)LLVMGenericValueToInt(result, 0) == false;
 
   if (test_res) {
     printf("✅ %s\n", desc);

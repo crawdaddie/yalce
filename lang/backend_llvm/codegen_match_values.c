@@ -154,23 +154,24 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
       // would be better to implement this using short-circuiting logic
       int len = left->data.AST_LIST.len;
       LLVMValueRef list = right;
-      // LLVMValueRef and = _TRUE;
+      LLVMValueRef and = _TRUE;
       Type *right_list_el_type = right_type->data.T_CONS.args[0];
       for (int i = 0; i < len; i++) {
         Ast *list_item_ast = left->data.AST_LIST.items + i;
-        *res = and_vals(_TRUE, ll_is_not_null(list, list_el_type, builder),
-                        builder);
+        and =
+            and_vals(and, ll_is_not_null(list, list_el_type, builder), builder);
 
         LLVMValueRef list_head = ll_get_head_val(list, list_el_type, builder);
-        *res =
-            and_vals(*res,
+        and =
+            and_vals(and,
                      match_values(list_item_ast, list_head, right_list_el_type,
-                                  res, ctx, module, builder),
+                                  &and, ctx, module, builder),
                      builder);
         list = ll_get_next(list, list_el_type, builder);
       }
 
-      *res = and_vals(*res, ll_is_null(list, list_el_type, builder), builder);
+      and = and_vals(and, ll_is_null(list, list_el_type, builder), builder);
+      *res = and;
     }
     return *res;
   }
@@ -185,12 +186,11 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
           codegen_tuple_access(i, right, LLVMTypeOf(right), builder);
       Type *tuple_item_type = right_type->data.T_CONS.args[i];
 
-      and = and_vals(and,
-                     match_values(tuple_item_ast, tuple_item_val,
-                                  tuple_item_type, &and, ctx, module, builder),
-                     builder);
+      *res = and_vals(*res,
+                      match_values(tuple_item_ast, tuple_item_val,
+                                   tuple_item_type, &and, ctx, module, builder),
+                      builder);
     }
-    *res = and;
     return *res;
   }
 
