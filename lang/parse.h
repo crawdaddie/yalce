@@ -267,4 +267,6 @@ Ast *ast_bare_import(ObjString module_name);
 Ast *ast_record_access(Ast *record, Ast *member);
 
 Ast *ast_char(char ch);
+
+Ast *ast_sequence(Ast *seq, Ast *new);
 #endif

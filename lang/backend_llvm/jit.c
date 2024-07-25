@@ -6,6 +6,7 @@
 #include "format_utils.h"
 #include "input.h"
 #include "parse.h"
+#include "serde.h"
 #include "types/inference.h"
 #include "types/util.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -195,6 +196,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 #ifdef DUMP_AST
+  print_ast(*prog);
   LLVMDumpModule(module);
 #endif
   LLVMGenericValueRef exec_args[] = {};

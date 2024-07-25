@@ -10,13 +10,24 @@ Ast *Ast_new(enum ast_tag tag) {
 }
 
 void ast_body_push(Ast *body, Ast *stmt) {
-  if (stmt) {
+  if (!stmt) {
+    return;
+  }
+
+  if (stmt->tag != AST_BODY) {
     Ast **members = body->data.AST_BODY.stmts;
     body->data.AST_BODY.len++;
     int len = body->data.AST_BODY.len;
 
     body->data.AST_BODY.stmts = realloc(members, sizeof(Ast *) * len);
     body->data.AST_BODY.stmts[len - 1] = stmt;
+    return;
+  }
+  if (stmt->tag == AST_BODY) {
+    for (int i = 0; i < stmt->data.AST_BODY.len; i++) {
+      ast_body_push(body, stmt->data.AST_BODY.stmts[i]);
+    }
+    return;
   }
 }
 
@@ -72,10 +83,23 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
 void yy_scan_string(char *);
 /* Define the parsing function */
 Ast *parse_input(char *input) {
+  Ast *prev = NULL;
+
+  if (ast_root != NULL && ast_root->data.AST_BODY.len > 0) {
+    prev = ast_root;
+  }
+
+  ast_root = Ast_new(AST_BODY);
+  ast_root->data.AST_BODY.len = 0;
+  ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
 
-  return ast_root; // Placeholder
+  Ast *res = ast_root;
+  if (prev != NULL) {
+    ast_root = prev;
+  }
+  return res;
 }
 
 Ast *ast_application(Ast *func, Ast *arg) {
@@ -447,4 +471,19 @@ Ast *ast_char(char ch) {
   Ast *a = Ast_new(AST_CHAR);
   a->data.AST_CHAR.value = ch;
   return a;
+}
+
+Ast *ast_sequence(Ast *seq, Ast *new) {
+  if (seq->tag == AST_BODY) {
+    ast_body_push(seq, new);
+    return seq;
+  }
+
+  Ast *body = Ast_new(AST_BODY);
+  body = Ast_new(AST_BODY);
+  body->data.AST_BODY.len = 2;
+  body->data.AST_BODY.stmts = malloc(sizeof(Ast *) * 2);
+  body->data.AST_BODY.stmts[0] = seq;
+  body->data.AST_BODY.stmts[1] = new;
+  return body;
 }

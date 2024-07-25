@@ -1,11 +1,10 @@
 let complex_match = fn x -> 
-  (match x with
+  match x with
   | (1, _) -> 0
-  | (2, z) -> 100 + z
+  | (2, z) -> (100 + z; 100 + z)
   | _      -> 1000
-  )
 ;;
 
+complex_match (3,2)
 
 
-complex_match (2, 2)
