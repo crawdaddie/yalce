@@ -363,9 +363,9 @@ bool test_first_class_fns() {
 
 int main() {
   bool status = true;
-  // status &= typecheck_ast();
-  // status &= test_unify();
   status &= test_first_class_fns();
+  status &= typecheck_ast();
+  status &= test_unify();
   return !status;
 }
 
