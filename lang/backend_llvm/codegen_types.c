@@ -67,11 +67,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
   }
   case T_FN: {
 
-    printf("\nreplace types in fn: ");
-    print_type(type);
-    printf(" with ");
-    print_type_env(env);
-
     Type *fn_type = type->data.T_FN.from;
     while (fn_type->data.T_FN.to->kind == T_FN) {
       fn_type = fn_type->data.T_FN.to;
