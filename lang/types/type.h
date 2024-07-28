@@ -62,6 +62,7 @@ extern Type t_void;
 extern Type t_char;
 
 extern TypeClass TClassOrd;
+extern TypeClass TClassNum;
 
 // TypeEnv represents a mapping from variable names to their types
 typedef struct TypeEnv {
@@ -91,5 +92,7 @@ Type *fresh(Type *type);
 Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 void free_type_env(TypeEnv *env);
+
+Type *resolve_in_env(Type *t, TypeEnv *env);
 
 #endif

@@ -1,7 +1,7 @@
 let sum = fn a b -> a + b;;
-let proc = fn f a b -> f a b;;
+let proc = fn f p q -> f p q;;
 
-proc sum 1 2
+let r = proc sum 1 2
 
 
 

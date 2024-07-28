@@ -7,11 +7,20 @@
 // #define DBG_UNIFY
 // clang-format off
 TypeClass TClassOrd = {"Ord"};
-
+TypeClass TClassNum = {"Num"};
 Type t_int =    {T_INT};
-//  .type_class = &((InstTypeClass){&TClassOrd})};
+// Type t_int =    {T_INT,
+//   .type_class = &(InstTypeClass){
+//     .class = &TClassNum
+//   }
+// };
+
 Type t_num =    {T_NUM};
-// , .type_class = &((InstTypeClass){&TClassOrd})};
+// Type t_num =    {T_NUM,
+//   .type_class = &(InstTypeClass){
+//     .class = &TClassNum
+//   }
+// };
 Type t_char =   {T_CHAR};
 Type t_string = {T_CONS, {.T_CONS = {"List", (Type*[]){&t_char}, 1}}};
 Type t_bool =   {T_BOOL};
@@ -253,4 +262,45 @@ void free_type_env(TypeEnv *env) {
     free_type_env(env->next);
     free(env);
   }
+}
+
+static Type *resolve_single_type(Type *t, TypeEnv *env) {
+  if (t == NULL)
+    return NULL;
+
+  switch (t->kind) {
+  case T_VAR: {
+    Type *resolved = env_lookup(env, t->data.T_VAR);
+    if (resolved != NULL) {
+      // Recursively resolve the found type
+      return resolve_single_type(resolved, env);
+    }
+    return t; // If not found in env, return the original type
+  }
+  case T_CONS: {
+    Type *new_type = deep_copy_type(t);
+
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      new_type->data.T_CONS.args[i] =
+          resolve_single_type(t->data.T_CONS.args[i], env);
+    }
+    return new_type;
+  }
+  case T_FN: {
+    Type *new_type = malloc(sizeof(Type));
+    new_type->kind = T_FN;
+    new_type->data.T_FN.from = resolve_single_type(t->data.T_FN.from, env);
+    new_type->data.T_FN.to = resolve_single_type(t->data.T_FN.to, env);
+    return new_type;
+  }
+  default:
+    return t;
+  }
+}
+
+Type *resolve_in_env(Type *t, TypeEnv *env) {
+  if (t == NULL)
+    return NULL;
+
+  return resolve_single_type(t, env);
 }

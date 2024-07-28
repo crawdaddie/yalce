@@ -34,4 +34,6 @@ void serialize_type(Type *type, TypeSerBuf *buf);
 bool type_ser_bufs_equal(TypeSerBuf buf1, TypeSerBuf buf2);
 
 TypeSerBuf *create_type_ser_buffer(size_t initial_capacity);
+
+int fn_type_args_len(Type *fn_type);
 #endif

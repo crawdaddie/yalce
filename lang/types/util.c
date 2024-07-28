@@ -56,6 +56,18 @@ bool is_numeric_type(Type *type) {
   return type->kind == T_INT || type->kind == T_NUM;
 }
 
+int fn_type_args_len(Type *fn_type) {
+  Type *t = fn_type;
+  int fn_len = 0;
+
+  while (t->kind == T_FN) {
+    Type *from = t->data.T_FN.from;
+    t = t->data.T_FN.to;
+    fn_len++;
+  }
+  return fn_len;
+}
+
 bool is_type_variable(Type *type) { return type->kind == T_VAR; }
 bool is_generic(Type *type) {
   switch (type->kind) {

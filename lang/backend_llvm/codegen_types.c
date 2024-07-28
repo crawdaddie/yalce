@@ -1,7 +1,5 @@
 #include "backend_llvm/codegen_types.h"
-#include "common.h"
 #include "llvm-c/Core.h"
-#include <stdlib.h>
 #include <string.h>
 
 // Function to create an LLVM tuple type
@@ -20,6 +18,8 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env) {
 
   return llvm_tuple_type;
 }
+
+LLVMTypeRef fn_proto_type(Type *fn_type, int fn_len, TypeEnv *env);
 
 // Function to create an LLVM list type forward decl
 LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env);
@@ -45,7 +45,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
 
   case T_VAR: {
     if (env) {
-      return type_to_llvm_type(env_lookup(env, type->data.T_VAR), env);
+      return type_to_llvm_type(resolve_in_env(type, env), env);
     }
     return LLVMInt32Type();
   }
@@ -67,25 +67,15 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
   }
   case T_FN: {
 
-    Type *fn_type = type->data.T_FN.from;
-    while (fn_type->data.T_FN.to->kind == T_FN) {
-      fn_type = fn_type->data.T_FN.to;
-    }
+    Type *t = type;
+    int fn_len = 0;
 
-    // for (int i = 0; i < fn_len; i++) {
-    //   llvm_param_types[i] =
-    //       type_to_llvm_type(fn_type->data.T_FN.from, ctx->env);
-    //   fn_type = fn_type->data.T_FN.to;
-    // }
-    //
-    // Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
-    // LLVMTypeRef llvm_return_type_ref = type_to_llvm_type(return_type,
-    // ctx->env);
-    //
-    // // Create function type with return.
-    // LLVMTypeRef llvm_fn_type =
-    //     LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
-    //
+    while (t->kind == T_FN) {
+      Type *from = t->data.T_FN.from;
+      t = t->data.T_FN.to;
+      fn_len++;
+    }
+    return fn_proto_type(type, fn_len, env);
   }
 
   default: {

@@ -79,25 +79,31 @@ TypeEnv *create_replacement_env(Type *generic_fn_type, Type *specific_fn_type,
 
   return env;
 }
-
-LLVMValueRef codegen_fn_proto(Type *fn_type, int fn_len, const char *fn_name,
-                              JITLangCtx *ctx, LLVMModuleRef module,
-                              LLVMBuilderRef builder) {
+LLVMTypeRef fn_proto_type(Type *fn_type, int fn_len, TypeEnv *env) {
 
   // Create argument list.
   LLVMTypeRef llvm_param_types[fn_len];
 
   for (int i = 0; i < fn_len; i++) {
-    llvm_param_types[i] = type_to_llvm_type(fn_type->data.T_FN.from, ctx->env);
+    llvm_param_types[i] = type_to_llvm_type(fn_type->data.T_FN.from, env);
     fn_type = fn_type->data.T_FN.to;
   }
 
   Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
-  LLVMTypeRef llvm_return_type_ref = type_to_llvm_type(return_type, ctx->env);
+  LLVMTypeRef llvm_return_type_ref = type_to_llvm_type(return_type, env);
 
   // Create function type with return.
   LLVMTypeRef llvm_fn_type =
       LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
+  return llvm_fn_type;
+}
+
+LLVMValueRef codegen_fn_proto(Type *fn_type, int fn_len, const char *fn_name,
+                              JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+
+  // Create function type with return.
+  LLVMTypeRef llvm_fn_type = fn_proto_type(fn_type, fn_len, ctx->env);
 
   // Create function.
   LLVMValueRef func = LLVMAddFunction(module, fn_name, llvm_fn_type);
@@ -131,9 +137,9 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, block);
 
   for (int i = 0; i < fn_len; i++) {
+    Ast *param_ast = ast->data.AST_LAMBDA.params + i;
     Type *param_type = fn_type->data.T_FN.from;
 
-    Ast *param_ast = ast->data.AST_LAMBDA.params + i;
     LLVMValueRef param_val = LLVMGetParam(func, i);
     LLVMValueRef _true = LLVMConstInt(LLVMInt1Type(), 1, 0);
     match_values(param_ast, param_val, param_type, &_true, &fn_ctx, module,
@@ -276,7 +282,8 @@ LLVMValueRef create_new_specific_fn(int len, Ast *args, Ast *fn_ast,
   LLVMValueRef func =
       codegen_fn(specific_ast, compilation_ctx, module, builder);
 
-  // free_type_env(env);
+
+  free_type_env(env);
   // free(specific_ast);
   return func;
 }
@@ -355,11 +362,16 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+  // printf("fn application: ");
+  // print_ast(ast);
+  // printf("type: ");
+  // print_type(ast->data.AST_APPLICATION.function->md);
+  // printf("\n");
 
   LLVMValueRef func = codegen_fn_application_callee(ast, ctx, module, builder);
 
   if (!func) {
-    printf("no function found for \n");
+    printf("no function found for ");
     print_ast(ast);
     return NULL;
   }
@@ -372,14 +384,26 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                           "call_func");
   }
 
-  unsigned int args_len = LLVMCountParams(func);
+
+  unsigned int args_len = fn_type_args_len(ast->data.AST_APPLICATION.function->md);
 
   if (app_len == args_len) {
+
     LLVMValueRef app_vals[app_len];
+
     for (int i = 0; i < app_len; i++) {
-      app_vals[i] =
-          codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
+
+      // printf("compiling arg %d ", i);
+      // print_ast(ast->data.AST_APPLICATION.args + i);
+      // print_type(ast->data.AST_APPLICATION.args[i].md);
+      // print_type_env(ctx->env);
+      // printf("\n");
+
+      LLVMValueRef app_val = codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
+      app_vals[i] = app_val;
+          
     }
+
     return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, app_vals,
                           app_len, "call_func");
   }

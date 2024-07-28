@@ -167,23 +167,13 @@ Type *resolve_in_map(TypeMap *constraint_map, Type *key) {
         Type *resolved_from = resolve_in_map(constraint_map, from);
         from->kind = resolved_from->kind;
         from->data = resolved_from->data;
-        // printf("resolve in map ");
-        // print_type(from);
-        // printf(" resolve to ");
-        // print_type(resolved_from);
-        // printf("\n");
       }
 
       if (t->kind == T_VAR) {
-        // printf("resolve in map ");
-        // print_type(t);
         Type *resolved_from = resolve_in_map(constraint_map, t);
 
         t->kind = resolved_from->kind;
         t->data = resolved_from->data;
-        // printf(" resolve to ");
-        // print_type(resolved_from);
-        // printf("\n");
       }
     }
     return key;
@@ -295,46 +285,6 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
   return final_type;
 }
 
-static Type *resolve_single_type(Type *t, TypeEnv *env) {
-  if (t == NULL)
-    return NULL;
-
-  switch (t->kind) {
-  case T_VAR: {
-    Type *resolved = env_lookup(env, t->data.T_VAR);
-    if (resolved != NULL) {
-      // Recursively resolve the found type
-      return resolve_single_type(resolved, env);
-    }
-    return t; // If not found in env, return the original type
-  }
-  case T_CONS: {
-    Type *new_type = deep_copy_type(t);
-
-    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      new_type->data.T_CONS.args[i] =
-          resolve_single_type(t->data.T_CONS.args[i], env);
-    }
-    return new_type;
-  }
-  case T_FN: {
-    Type *new_type = malloc(sizeof(Type));
-    new_type->kind = T_FN;
-    new_type->data.T_FN.from = resolve_single_type(t->data.T_FN.from, env);
-    new_type->data.T_FN.to = resolve_single_type(t->data.T_FN.to, env);
-    return new_type;
-  }
-  default:
-    return t;
-  }
-}
-static Type *resolve_in_env(Type *t, TypeEnv *env) {
-  if (t == NULL)
-    return NULL;
-
-  return resolve_single_type(t, env);
-}
-
 TypeMap *add_constraints(TypeMap *constraints_map, Type *arg_type, Type *t) {
 
   if (arg_type->kind == T_CONS && t->kind == T_CONS &&
@@ -438,11 +388,14 @@ static Type *infer_fn_application(TypeEnv **env, Ast *ast) {
     Type *res = fn_type;
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       Type *resolved = resolve_in_map(constraints_map, res->data.T_FN.from);
+      res->data.T_FN.from = resolved;
       ast->data.AST_APPLICATION.args[i].md = resolved;
-
       res = res->data.T_FN.to;
     }
-    ret_type = resolve_in_map(constraints_map, res);
+
+    *res = *resolve_in_map(constraints_map, res);
+    ret_type = res;
+    ast->data.AST_APPLICATION.function->md = fn_type;
   } else {
     TypeEnv *_env = NULL;
     _unify(result_type, fn_return, &_env);
