@@ -41,6 +41,19 @@ void print_type(Type *type) {
   free(b);
 }
 
+void print_type_w_tc(Type *type) {
+  print_type(type);
+  if (type->num_implements == 0) {
+    return;
+  }
+  printf(" [");
+  for (int i = 0; i < type->num_implements; i++) {
+    TypeClass *tc = type->implements[i];
+    printf("%s, ", tc->name);
+  }
+  printf("]");
+}
+
 // Helper function to print the type environment (for debugging)
 void print_type_env(TypeEnv *env) {
   while (env != NULL) {
@@ -120,15 +133,47 @@ Type *builtin_type(Ast *id) {
 
   const char *id_chars = id->data.AST_IDENTIFIER.value;
 
-  if (strcmp(id_chars, "int") == 0) {
+  if (strcmp(id_chars, "Int") == 0) {
     return &t_int;
-  } else if (strcmp(id_chars, "double") == 0) {
+  } else if (strcmp(id_chars, "Double") == 0) {
     return &t_num;
-  } else if (strcmp(id_chars, "bool") == 0) {
+  } else if (strcmp(id_chars, "Bool") == 0) {
     return &t_bool;
-  } else if (strcmp(id_chars, "string") == 0) {
+  } else if (strcmp(id_chars, "String") == 0) {
     return &t_string;
+  } else if (strcmp(id_chars, "Ptr") == 0) {
+    return &t_ptr;
   }
+
+  return NULL;
+}
+
+Type *get_type(TypeEnv *env, Ast *id) {
+  if (id->tag == AST_VOID) {
+    return &t_void;
+  }
+  if (id->tag != AST_IDENTIFIER) {
+    return NULL;
+  }
+
+  const char *id_chars = id->data.AST_IDENTIFIER.value;
+  Type *named_type = env_lookup(env, id_chars);
+  if (named_type) {
+    return named_type;
+  }
+
+  if (strcmp(id_chars, "Int") == 0) {
+    return &t_int;
+  } else if (strcmp(id_chars, "Double") == 0) {
+    return &t_num;
+  } else if (strcmp(id_chars, "Bool") == 0) {
+    return &t_bool;
+  } else if (strcmp(id_chars, "String") == 0) {
+    return &t_string;
+  } else if (strcmp(id_chars, "Ptr") == 0) {
+    return &t_ptr;
+  }
+  fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
 
   return NULL;
 }
@@ -183,6 +228,9 @@ bool types_equal(Type *t1, Type *t2) {
 Type *deep_copy_type(const Type *original) {
   Type *copy = malloc(sizeof(Type));
   copy->kind = original->kind;
+  for (int i = 0; i < original->num_implements; i++) {
+    add_typeclass_impl(copy, original->implements[i]);
+  }
 
   switch (original->kind) {
   case T_VAR:

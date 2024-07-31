@@ -179,6 +179,13 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   infer_ast(env, *prog);
+  ctx->env = *env;
+
+#ifdef DUMP_AST
+  LLVMDumpModule(module);
+  print_ast(*prog);
+#endif
+
   Type *result_type = top_level_ast(*prog)->md;
 
   LLVMTypeRef top_level_ret_type;
@@ -195,10 +202,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     // free(fcontent);
     return NULL;
   }
-#ifdef DUMP_AST
-  print_ast(*prog);
-  LLVMDumpModule(module);
-#endif
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
@@ -257,6 +260,7 @@ int jit(int argc, char **argv) {
 
   // shared type env
   TypeEnv *env = NULL;
+  env = initialize_type_env(env);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
@@ -312,6 +316,7 @@ int jit(int argc, char **argv) {
       Ast *prog = parse_input(input);
       Ast *top = top_level_ast(prog);
       Type *typecheck_result = infer_ast(&env, top);
+      ctx.env = env;
 
       if (typecheck_result == NULL) {
         printf("typecheck failed\n");
@@ -351,7 +356,7 @@ int jit(int argc, char **argv) {
 
 void print_result(Type *type, LLVMGenericValueRef result) {
   printf("`");
-  print_type(type);
+  print_type_w_tc(type);
 
   if (result == NULL) {
     printf("\n");
@@ -413,4 +418,5 @@ void print_result(Type *type, LLVMGenericValueRef result) {
     printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
+  printf("\n");
 }

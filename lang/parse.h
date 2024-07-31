@@ -83,7 +83,7 @@ typedef enum token_type {
 
 typedef enum ast_tag {
   AST_INT,
-  AST_NUMBER,
+  AST_DOUBLE,
   AST_STRING,
   AST_CHAR,
   AST_BOOL,
@@ -105,6 +105,7 @@ typedef enum ast_tag {
   AST_IMPORT,
   AST_RECORD_ACCESS,
   AST_FMT_STRING,
+  AST_TYPE_DECL,
 } ast_tag;
 
 struct Ast {
@@ -125,9 +126,9 @@ struct Ast {
       int value;
     } AST_INT;
 
-    struct AST_NUMBER {
+    struct AST_DOUBLE {
       double value;
-    } AST_NUMBER;
+    } AST_DOUBLE;
 
     struct AST_STRING {
       const char *value;
@@ -205,6 +206,7 @@ struct Ast {
       Ast *branches;
       size_t len;
     } AST_MATCH;
+
     struct AST_IMPORT {
       const char *module_name;
     } AST_IMPORT;

@@ -122,9 +122,15 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef l = codegen(ast->data.AST_BINOP.left, ctx, module, builder);
   LLVMValueRef r = codegen(ast->data.AST_BINOP.right, ctx, module, builder);
 
+  printf("llvm binop codegen: ");
+  print_ast(ast);
+  print_type_w_tc(ast->md);
+  printf("\n");
+
   if (l == NULL || r == NULL) {
     return NULL;
   }
+
   token_type op = ast->data.AST_BINOP.op;
 
   if (is_llvm_int(l) && is_llvm_int(r)) {

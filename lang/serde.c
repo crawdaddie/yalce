@@ -48,11 +48,24 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     }
     break;
   }
+  case AST_TYPE_DECL: {
+    buffer = strcat(buffer, "(let ");
+    buffer = ast_to_sexpr(ast->data.AST_LET.binding, buffer);
+    buffer = strcat(buffer, " ");
+    buffer = ast_to_sexpr(ast->data.AST_LET.expr, buffer);
+    buffer = strcat(buffer, ")");
 
-  case AST_NUMBER: {
+    if (ast->data.AST_LET.in_expr) {
+      buffer = strcat(buffer, " : ");
+      buffer = ast_to_sexpr(ast->data.AST_LET.in_expr, buffer);
+    }
+    break;
+  }
+
+  case AST_DOUBLE: {
 
     char buf[100];
-    sprintf(buf, "%f", ast->data.AST_NUMBER.value);
+    sprintf(buf, "%f", ast->data.AST_DOUBLE.value);
     buffer = strcat(buffer, buf);
     break;
   }

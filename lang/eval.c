@@ -134,8 +134,8 @@ Value eval(Ast *ast, LangCtx *ctx) {
     break;
   }
 
-  case AST_NUMBER: {
-    val = NUM(ast->data.AST_NUMBER.value);
+  case AST_DOUBLE: {
+    val = NUM(ast->data.AST_DOUBLE.value);
     break;
   }
 

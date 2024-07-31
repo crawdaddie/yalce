@@ -2,6 +2,14 @@
 #include "llvm-c/Core.h"
 #include <string.h>
 
+#define LLVM_TYPE_int LLVMInt32Type()
+#define LLVM_TYPE_bool LLVMInt1Type()
+#define LLVM_TYPE_float LLVMFloatType()
+#define LLVM_TYPE_double LLVMDoubleType()
+#define LLVM_TYPE_void LLVMVoidType()
+#define LLVM_TYPE_str LLVMPointerType(LLVMInt8Type(), 0)
+#define LLVM_TYPE_char LLVMInt8Type()
+#define LLVM_TYPE_ptr(type) LLVMPointerType(LLVM_TYPE_##type, 0)
 // Function to create an LLVM tuple type
 LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env) {
 
@@ -28,15 +36,15 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
   switch (type->kind) {
 
   case T_INT: {
-    return LLVMInt32Type();
+    return LLVM_TYPE_int;
   }
 
   case T_NUM: {
-    return LLVMDoubleType();
+    return LLVM_TYPE_double;
   }
 
   case T_BOOL: {
-    return LLVMInt1Type();
+    return LLVM_TYPE_bool;
   }
 
   case T_CHAR: {
@@ -63,6 +71,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
       return list_type(type->data.T_CONS.args[0], env);
     }
 
+    if (strcmp(type->data.T_CONS.name, "ptr") == 0) {
+      return LLVM_TYPE_ptr(char);
+    }
+
     return LLVMInt32Type();
   }
   case T_FN: {
@@ -83,3 +95,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
   }
   }
 }
+
+LLVMValueRef codegen_signal_add() { return NULL; }
+LLVMValueRef codegen_signal_sub() { return NULL; }
+LLVMValueRef codegen_signal_mul() { return NULL; }
+LLVMValueRef codegen_signal_mod() { return NULL; }

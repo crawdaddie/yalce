@@ -3,6 +3,7 @@
 #include "format_utils.h"
 #include "serde.h"
 #include "types/type.h"
+#include "types/type_declaration.h"
 #include "types/util.h"
 #include <stdlib.h>
 #include <string.h>
@@ -34,11 +35,6 @@ static Type *max_numeric_type(Type *lt, Type *rt) {
     return lt;
   }
   return rt;
-}
-
-static bool is_placeholder(Ast *p) {
-  return p->tag == AST_IDENTIFIER &&
-         strcmp(p->data.AST_IDENTIFIER.value, "_") == 0;
 }
 
 static Type *infer_void_arg_lambda(TypeEnv **env, Ast *ast) {
@@ -210,7 +206,7 @@ void free_type_map(TypeMap *env) {
 }
 
 static TypeEnv *create_implicit_var_bindings(TypeEnv *env, Ast *expr) {
-  if (is_placeholder(expr)) {
+  if (ast_is_placeholder_id(expr)) {
     return env;
   }
 
@@ -262,7 +258,7 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
 
     *env = create_implicit_var_bindings(*env, test_expr);
     if (i == len - 1) {
-      if (!is_placeholder(test_expr)) {
+      if (!ast_is_placeholder_id(test_expr)) {
         test_type = infer(env, test_expr);
         unify(expr_type, test_type);
       }
@@ -420,6 +416,31 @@ Type *cast_char_list(Type *t) {
   return t;
 }
 
+// Function to determine the resulting type of an arithmetic operation
+Type *arithmetic_result_type(Type *lt, Type *rt) {
+  if (is_arithmetic(lt) && is_arithmetic(rt)) {
+    Type *type = max_numeric_type(lt, rt);
+    return type;
+  } else {
+    unify(lt, rt);
+
+    if (implements_typeclass(lt, &TCNum) && implements_typeclass(rt, &TCNum)) {
+      // TODO: this is not quite correct logic for upcasting
+      if ((lt->kind != T_NUM) && (lt->kind != T_INT)) {
+        return lt;
+      }
+
+      if ((rt->kind != T_NUM) && (rt->kind != T_INT)) {
+        return rt;
+      }
+    }
+
+    return lt;
+  }
+
+  return NULL;
+}
+
 // Main type inference function
 Type *infer(TypeEnv **env, Ast *ast) {
 
@@ -455,23 +476,11 @@ Type *infer(TypeEnv **env, Ast *ast) {
     }
     if ((ast->data.AST_BINOP.op >= TOKEN_PLUS) &&
         (ast->data.AST_BINOP.op <= TOKEN_MODULO)) {
-      if (is_arithmetic(lt) && is_arithmetic(rt)) {
-        type = max_numeric_type(lt, rt);
-        break;
-      } else {
-        unify(lt, rt);
-        type = lt;
-
-        fprintf(stderr,
-                STYLE_DIM "Not implemented warning: type coercion for "
-                          "non-arithmetic (eg T_VAR) "
-                          "type to Arithmetic typeclass\n" STYLE_RESET_ALL);
-        break;
-      }
-      // arithmetic binop
-
-    } else if ((ast->data.AST_BINOP.op >= TOKEN_LT) &&
-               (ast->data.AST_BINOP.op <= TOKEN_NOT_EQUAL)) {
+      type = arithmetic_result_type(lt, rt);
+      break;
+    }
+    if ((ast->data.AST_BINOP.op >= TOKEN_LT) &&
+        (ast->data.AST_BINOP.op <= TOKEN_NOT_EQUAL)) {
 
       if (is_arithmetic(lt) && is_arithmetic(rt)) {
         type = &t_bool;
@@ -493,7 +502,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
   case AST_INT:
     type = &t_int;
     break;
-  case AST_NUMBER:
+  case AST_DOUBLE:
     type = &t_num;
     break;
   case AST_STRING:
@@ -512,7 +521,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
   }
 
   case AST_IDENTIFIER: {
-    if (is_placeholder(ast)) {
+    if (ast_is_placeholder_id(ast)) {
       type = next_tvar();
       break;
     }
@@ -529,6 +538,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
   case AST_LET: {
 
     Type *expr_type = infer(env, ast->data.AST_LET.expr);
+
     Ast *binding = ast->data.AST_LET.binding;
     *env = add_var_to_env(*env, expr_type, binding);
     infer(env, binding);
@@ -549,15 +559,23 @@ Type *infer(TypeEnv **env, Ast *ast) {
       param_types = malloc(sizeof(Type *));
       *param_types = &t_void;
     } else {
+
       param_types = malloc(param_count * sizeof(Type *));
+
       for (int i = 0; i < param_count; i++) {
-        param_types[i] =
-            builtin_type(ast->data.AST_EXTERN_FN.signature_types + i);
+        Ast *param_ast = ast->data.AST_EXTERN_FN.signature_types + i;
+        Type *param_type = get_type(*env, param_ast);
+        if (!param_type) {
+          fprintf(stderr, "Error declaring extern function: type %s not found",
+                  param_ast->data.AST_IDENTIFIER.value);
+        }
+        param_types[i] = param_type;
       }
     }
-    Type *ex_t = create_type_multi_param_fn(
-        param_count || 1, param_types,
-        builtin_type(ast->data.AST_EXTERN_FN.signature_types + param_count));
+
+    Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
+    Type *ex_t = create_type_multi_param_fn(param_count || 1, param_types,
+                                            get_type(*env, ret_type_ast));
     type = ex_t;
     break;
   }
@@ -603,6 +621,17 @@ Type *infer(TypeEnv **env, Ast *ast) {
     unify(current, body_type);
 
     type = fn_type;
+    Type *t = fn_type;
+
+    while (t->kind == T_FN) {
+      print_type_w_tc(t->data.T_FN.from);
+      printf("->");
+
+      t = t->data.T_FN.to;
+    }
+    print_type_w_tc(t);
+
+    printf("\n");
 
     break;
   }
@@ -670,6 +699,10 @@ Type *infer(TypeEnv **env, Ast *ast) {
     member->md = env_lookup(((Type *)record->md)->data.T_MODULE,
                             member->data.AST_IDENTIFIER.value);
     type = member->md;
+    break;
+  }
+  case AST_TYPE_DECL: {
+    type_declaration(ast, env);
     break;
   }
   }

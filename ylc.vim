@@ -55,7 +55,7 @@ syn keyword ylcMessage	    alert confirm prompt status
 syn keyword ylcGlobal	    self window top parent
 syn keyword ylcMember	    document event location 
 syn keyword ylcDeprecated   escape unescape
-syn keyword ylcReserved     abstract boolean byte char class const debugger double enum export extends final float goto implements import int interface long native package private protected public short static super synchronized throws transient volatile async
+syn keyword ylcReserved     abstract boolean byte char class const debugger Double Bool Int Num Char String type match with enum export extends final float goto implements import int interface long native package private protected public short static super synchronized throws transient volatile async
 
 syn cluster ylcEmbededExpr  contains=ylcBoolean,ylcNull,ylcIdentifier,ylcStringD,ylcStringS,ylcStringT
 
@@ -80,7 +80,7 @@ hi def link ylcSpecial		    Special
 hi def link ylcStringS		    String
 hi def link ylcStringD		    String
 hi def link ylcStringT		    String
-hi def link ylcCharacter	    Character
+hi def link ylcCharacter	    String 
 hi def link ylcNumber		    Number
 hi def link ylcConditional	    Conditional
 hi def link ylcRepeat		    Repeat

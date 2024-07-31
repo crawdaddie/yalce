@@ -2,17 +2,17 @@
 #define _LANG_TYPE_TYPE_H
 
 #include <stdbool.h>
+typedef struct TypeEnv TypeEnv;
+
+typedef struct Method {
+  const char *name;
+} Method;
 
 typedef struct TypeClass {
   const char *name;
+  Method *methods;
+  int num_methods;
 } TypeClass;
-
-typedef struct InstTypeClass {
-  TypeClass *class;
-  struct InstTypeClass *next;
-} InstTypeClass;
-
-typedef struct TypeEnv TypeEnv;
 
 enum TypeKind {
   /* Type Operator */
@@ -27,9 +27,11 @@ enum TypeKind {
   T_TUPLE,
   T_LIST,
   T_CONS,
+  T_UNION,
   /* Type Variable  */
   T_VAR,
   T_MODULE,
+  T_TYPECLASS,
 };
 
 typedef struct Type {
@@ -49,10 +51,17 @@ typedef struct Type {
       struct Type *to;
     } T_FN;
     TypeEnv *T_MODULE;
+    struct {
+      struct Type **args;
+      int num_args;
+    } T_UNION;
+    TypeClass *T_TYPECLASS;
   } data;
-  InstTypeClass *type_class;
 
+  TypeClass **implements; // Array of type classes this type implements
+  int num_implements;
 } Type;
+extern TypeClass TCNum;
 
 extern Type t_int;
 extern Type t_num;
@@ -60,9 +69,8 @@ extern Type t_string;
 extern Type t_bool;
 extern Type t_void;
 extern Type t_char;
-
-extern TypeClass TClassOrd;
-extern TypeClass TClassNum;
+extern Type t_ptr;
+extern Type t_synth;
 
 // TypeEnv represents a mapping from variable names to their types
 typedef struct TypeEnv {
@@ -94,5 +102,9 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 void free_type_env(TypeEnv *env);
 
 Type *resolve_in_env(Type *t, TypeEnv *env);
+
+void add_typeclass_impl(Type *t, TypeClass *class);
+bool implements_typeclass(Type *t, TypeClass *class);
+TypeEnv *initialize_type_env(TypeEnv *env);
 
 #endif

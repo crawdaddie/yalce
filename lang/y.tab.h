@@ -40,7 +40,7 @@
       know about them.  */
    enum yytokentype {
      INTEGER = 258,
-     NUMBER = 259,
+     DOUBLE = 259,
      IDENTIFIER = 260,
      META_IDENTIFIER = 261,
      TOK_STRING = 262,
@@ -75,7 +75,7 @@
 #endif
 /* Tokens.  */
 #define INTEGER 258
-#define NUMBER 259
+#define DOUBLE 259
 #define IDENTIFIER 260
 #define META_IDENTIFIER 261
 #define TOK_STRING 262
@@ -118,7 +118,7 @@ typedef union YYSTYPE
     ObjString vident;           /* identifier */
     ObjString vstr;             /* string */
     int vint;                   /* int val */
-    double vfloat;
+    double vdouble;
     char vchar;
 }
 /* Line 1529 of yacc.c.  */

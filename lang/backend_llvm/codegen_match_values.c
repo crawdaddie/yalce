@@ -59,9 +59,6 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
     Type *val_type = right_type;
 
     if (val_type->kind == T_FN) {
-      printf("matching id %s to function: \n", id_chars);
-      // LLVMDumpValue(right);
-      // printf("\n");
       *sym = (JITSymbol){.type = STYPE_FUNCTION,
                          .llvm_type = llvm_type,
                          .val = right,

@@ -28,8 +28,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return LLVMConstInt(LLVMInt32Type(), ast->data.AST_INT.value, true);
   }
 
-  case AST_NUMBER: {
-    return LLVMConstReal(LLVMDoubleType(), ast->data.AST_NUMBER.value);
+  case AST_DOUBLE: {
+    return LLVMConstReal(LLVMDoubleType(), ast->data.AST_DOUBLE.value);
   }
 
   case AST_STRING: {

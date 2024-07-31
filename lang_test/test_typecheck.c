@@ -9,7 +9,7 @@
 
 bool is_builtin_type(Type *t) {
   return (t == &t_int) || (t == &t_num) || (t == &t_string) || (t == &t_bool) ||
-         (t == &t_void);
+         (t == &t_void) || (t == &t_ptr);
 }
 
 bool typecheck_prog(Ast *prog) {
@@ -309,6 +309,32 @@ int typecheck_ast() {
             2, T(TUPLE(2, &TVAR("t1"), &TVAR("t2")), &TVAR("t3")), &TVAR("t1")),
         &t_int));
 
+  {
+    Type tvx = TVAR("'x");
+    status &= tcheck_w_env(&(TypeEnv){"x", &tvx}, "1 + x", T(&t_int));
+    bool implements_num = implements_typeclass(&tvx, &TCNum);
+    printf("%s",
+           implements_num
+               ? "✅ \e[1mx implements typeclass 'Num'\e[0m\n"
+               : "❌ \e[1mx does not implement typeclass 'Num'\e[0m got \n");
+    status &= implements_num;
+  }
+
+  {
+    Type tvx = TVAR("'x");
+    Type tvy = TVAR("'y");
+    status &= tcheck_w_env(&(TypeEnv){"x", &tvx, &(TypeEnv){"y", &tvy}},
+                           "x + y", T(&tvy));
+
+    bool implements_num = implements_typeclass(&tvy, &TCNum);
+    implements_num &= implements_typeclass(&tvy, &TCNum);
+    printf("%s", implements_num
+                     ? "✅ \e[1m'x & 'y implement typeclass 'Num'\e[0m\n"
+                     : "❌ \e[1m'x or 'y does not implement typeclass "
+                       "'Num'\e[0m got \n");
+    status &= implements_num;
+  }
+
   return status;
 }
 
@@ -330,9 +356,6 @@ bool test_first_class_fns() {
 
   // proc typecheck
   Ast *proc_ast = prog->data.AST_BODY.stmts[1];
-  print_ast(proc_ast);
-  print_type(proc_ast->md);
-  printf("\n");
   TYPES_EQUAL("proc func ", proc_ast->md,
               create_type_multi_param_fn(
                   3,

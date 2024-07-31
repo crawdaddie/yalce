@@ -24,6 +24,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "]"                     return *yytext;
 "import"                return *yytext;
 "."                     return *yytext;
+"type"                  return *yytext;
 
 [a-zA-Z_][a-zA-Z0-9_]*  {
 
@@ -34,7 +35,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return IDENTIFIER;
                         }
 
-@[a-zA-Z_][a-zA-Z0-9_]*  {
+@[a-zA-Z_][a-zA-Z0-9_]* {
 
                           int len = yyleng;
                           yylval.vident.chars = strdup(yytext); 
@@ -87,16 +88,16 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                         }
 
 -?[1-9][0-9]*f          { 
-                          yylval.vfloat = atof(yytext);
-                          return NUMBER;
+                          yylval.vdouble = atof(yytext);
+                          return DOUBLE;
                         }
 -?[1-9][0-9]*           { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
                         }
 -?[0-9]*\.([0-9]*[1-9]|[0-9][0-9]*)? {
-                        yylval.vfloat = atof(yytext);
-                        return NUMBER;
+                        yylval.vdouble = atof(yytext);
+                        return DOUBLE;
                         }
 
 "|>"                    return PIPE;

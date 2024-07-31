@@ -1,0 +1,5 @@
+let sq_node = extern fn Double -> Synth
+;
+
+let x = 0.5 * sq_node 100.
+

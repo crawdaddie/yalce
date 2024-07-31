@@ -29,12 +29,12 @@ Ast* ast_root = NULL;
     ObjString vident;           /* identifier */
     ObjString vstr;             /* string */
     int vint;                   /* int val */
-    double vfloat;
+    double vdouble;
     char vchar;
 };
 
 %token <vint>   INTEGER
-%token <vfloat> NUMBER
+%token <vdouble>DOUBLE 
 %token <vident> IDENTIFIER
 %token <vident> META_IDENTIFIER
 %token <vstr>   TOK_STRING
@@ -69,9 +69,7 @@ Ast* ast_root = NULL;
 %nonassoc UMINUS
 
 %type <ast_node_ptr>
-  stmt
   expr
-  stmt_list
   application
   lambda_expr
   lambda_arg
@@ -89,24 +87,16 @@ Ast* ast_root = NULL;
   fstring_parts
   fstring_part
   expr_sequence
+  type_decl
+  type_expr
 
 %%
 
 program:
-    expr_sequence                   { parse_stmt_list(ast_root, $1); }
+    expr_sequence               { parse_stmt_list(ast_root, $1); }
   | /* NULL */
   ;
 
-stmt_list:
-    stmt                        { $$ = $1; }
-  | stmt_list ';' stmt          { $$ = parse_stmt_list($1, $3); }
-  | '(' stmt_list ')'           { $$ = $2; }
-  ;
-
-stmt:
-    expr                          { $$ = $1; }
-  | 'import' IDENTIFIER           { $$ = ast_bare_import($2); }
-  ;
 
 
 expr:
@@ -129,11 +119,12 @@ expr:
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
+  | type_decl                         { $$ = $1; }
   ;
 
 simple_expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
-  | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
+  | DOUBLE                { $$ = AST_CONST(AST_DOUBLE, $1); }
   | TOK_STRING            { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
@@ -167,10 +158,10 @@ extern_typed_signature:
 
 
 lambda_expr:
-    FN lambda_args ARROW stmt_list ';'      { $$ = ast_lambda($2, $4); }
-  | FN TOK_VOID ARROW stmt_list ';'         { $$ = ast_lambda(NULL, $4); }
-  | '(' FN lambda_args ARROW stmt_list ')'  { $$ = ast_lambda($3, $5); }
-  | '(' FN TOK_VOID ARROW stmt_list ')'     { $$ = ast_lambda(NULL, $5); }
+    FN lambda_args ARROW expr_sequence ';'      { $$ = ast_lambda($2, $4); }
+  | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_lambda(NULL, $4); }
+  | '(' FN lambda_args ARROW expr_sequence ')'  { $$ = ast_lambda($3, $5); }
+  | '(' FN TOK_VOID ARROW expr_sequence ')'     { $$ = ast_lambda(NULL, $5); }
   ;
 
 
@@ -225,9 +216,9 @@ match_expr:
   ;
 
 match_branches:
-    '|' expr ARROW expr                {$$ = ast_match_branches(NULL, $2, $4);}
-  | match_branches '|' expr ARROW expr {$$ = ast_match_branches($1, $3, $5);}
-  | match_branches '|' '_' ARROW expr {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
+    '|' expr ARROW expr                 {$$ = ast_match_branches(NULL, $2, $4);}
+  | match_branches '|' expr ARROW expr  {$$ = ast_match_branches($1, $3, $5);}
+  | match_branches '|' '_' ARROW expr   {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
   ;
 
 fstring: FSTRING_START fstring_parts FSTRING_END { $$ = $2; }
@@ -239,9 +230,25 @@ fstring_parts:
   ;
 
 fstring_part:
-  FSTRING_TEXT                                    { $$ = ast_string($1); }
+    FSTRING_TEXT                                  { $$ = ast_string($1); }
   | FSTRING_INTERP_START expr FSTRING_INTERP_END  { $$ = $2; }
   ;
+
+type_decl:
+  'type' IDENTIFIER '=' type_expr {
+                                    Ast *type_decl = ast_let(ast_identifier($2), $4, NULL);
+                                    type_decl->tag = AST_TYPE_DECL;
+                                    $$ = type_decl;
+                                  }
+
+type_expr:
+    expr                { $$ = ast_list($1); }
+  | type_expr '|' expr  { $$ = ast_list_push($1, $3); } 
+
+
+
+
+
 %%
 
 
