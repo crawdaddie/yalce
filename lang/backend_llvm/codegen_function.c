@@ -5,6 +5,7 @@
 #include "codegen_types.h"
 #include "serde.h"
 #include "types/util.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -186,6 +187,7 @@ static LLVMTypeRef llvm_type_id(Ast *id, TypeEnv *env) {
   LLVMTypeRef t = type_to_llvm_type(lookup_type, env);
   return t;
 }
+
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
 
@@ -195,7 +197,6 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Ast *signature_types = ast->data.AST_EXTERN_FN.signature_types;
   if (params_count == 0) {
-    // LLVMTypeRef llvm_param_types[] = {};
 
     LLVMTypeRef ret_type = llvm_type_id(signature_types, ctx->env);
     LLVMTypeRef fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
@@ -213,7 +214,7 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef fn_type =
       LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
 
-  LLVMValueRef func = LLVMAddFunction(module, name, fn_type);
+  LLVMValueRef func = get_extern_fn(name, fn_type, module);
   return func;
 }
 

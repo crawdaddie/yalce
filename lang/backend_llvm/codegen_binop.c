@@ -146,31 +146,41 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
   LLVMValueRef l = codegen(ast->data.AST_BINOP.left, ctx, module, builder);
+  Type *ltype = ast->data.AST_BINOP.left->md;
   LLVMValueRef r = codegen(ast->data.AST_BINOP.right, ctx, module, builder);
+  Type *rtype = ast->data.AST_BINOP.right->md;
 
   if (l == NULL || r == NULL) {
     return NULL;
   }
 
   token_type op = ast->data.AST_BINOP.op;
-  TypeClass *tc_impl = typeclass_impl(ast->md, &TCNum);
-
-  if (is_num_op(op)) {
+  switch (op) {
+  case TOKEN_PLUS:
+  case TOKEN_MINUS:
+  case TOKEN_STAR:
+  case TOKEN_SLASH:
+  case TOKEN_MODULO: {
+    TypeClass *tc_impl = typeclass_impl(ast->md, &TCNum);
     if ((tc_impl != NULL) && !(is_arithmetic(ast->md))) {
 
-      return typeclass_num_binop_impl(
-          op, typeclass_impl(ast->md, &TCNum), l, ast->data.AST_BINOP.left->md,
-          r, ast->data.AST_BINOP.right->md, module, builder);
+      return typeclass_num_binop_impl(op, typeclass_impl(ast->md, &TCNum), l,
+                                      ltype, r, rtype, module, builder);
     }
+    break;
   }
 
-  tc_impl = typeclass_impl(ast->md, &TCOrd);
-  if (is_ord_op(op)) {
+  case TOKEN_LT:
+  case TOKEN_LTE:
+  case TOKEN_GT:
+  case TOKEN_GTE: {
+    TypeClass *tc_impl = typeclass_impl(ast->md, &TCOrd);
     if ((tc_impl != NULL) && !(is_arithmetic(ast->md))) {
-      return typeclass_ord_binop_impl(
-          op, typeclass_impl(ast->md, &TCNum), l, ast->data.AST_BINOP.left->md,
-          r, ast->data.AST_BINOP.right->md, module, builder);
+      return typeclass_ord_binop_impl(op, typeclass_impl(ast->md, &TCNum), l,
+                                      ltype, r, rtype, module, builder);
     }
+    break;
+  }
   }
 
   if (is_llvm_int(l) && is_llvm_int(r)) {

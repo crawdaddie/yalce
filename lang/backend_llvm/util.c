@@ -244,3 +244,13 @@ LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string) {
 
   return incremented;
 }
+
+LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
+                           LLVMModuleRef module) {
+  LLVMValueRef fn = LLVMGetNamedFunction(module, name);
+
+  if (fn == NULL) {
+    fn = LLVMAddFunction(module, name, fn_type);
+  }
+  return fn;
+}

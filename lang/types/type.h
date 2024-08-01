@@ -4,9 +4,11 @@
 #include <stdbool.h>
 #include <stdlib.h>
 typedef struct TypeEnv TypeEnv;
+typedef struct Type Type;
 
 typedef struct Method {
   const char *name;
+  Type *type;
 } Method;
 
 typedef struct TypeClass {

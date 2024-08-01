@@ -6,17 +6,48 @@
 
 // #define DBG_UNIFY
 // clang-format off
-TypeClass TCNum = {"Num", NULL, .num_methods = 5};
-TypeClass TCOrd = {"Ord", NULL, 6};
+Type t_num_method_signature = {T_FN, {.T_FN = {
+  &(Type){T_VAR, {.T_VAR = "a : Num"}},
+    &(Type){T_FN, {.T_FN = {
+      &(Type){T_VAR, {.T_VAR = "b : Num"}},
+      &(Type){T_VAR, {.T_VAR = "c : Num"}},
+}}}
+
+}}};
+static Method tcnum_methods[] = {
+  {.name = "+", &t_num_method_signature},
+  {.name = "-", &t_num_method_signature},
+  {.name = "*", &t_num_method_signature},
+  {.name = "/", &t_num_method_signature},
+  {.name = "%", &t_num_method_signature},
+};
+TypeClass TCNum = {"Num", tcnum_methods, .method_size = sizeof(Method), .num_methods = 5};
+
+Type t_ord_method_signature = {T_FN, {.T_FN = {
+  &(Type){T_VAR, {.T_VAR = "a : Ord"}},
+    &(Type){T_FN, {.T_FN = {
+      &(Type){T_VAR, {.T_VAR = "b : Ord"}},
+      &(Type){T_BOOL},
+}}}
+
+}}};
+
+static Method tcord_methods[] = {
+  {.name = "<", &t_ord_method_signature},
+  {.name = "<=", &t_ord_method_signature},
+  {.name = ">", &t_ord_method_signature},
+  {.name = ">=", &t_ord_method_signature},
+};
+TypeClass TCOrd = {"Ord", tcord_methods, .method_size = sizeof(Method), .num_methods = 4};
 
 
 Type t_int =      {T_INT, .implements = (TypeClass *[]){&TCNum}, .num_implements = 1};
 Type t_num =      {T_NUM, .implements = (TypeClass *[]){&TCNum}, .num_implements = 1};
 Type t_char =     {T_CHAR};
-Type t_string =   {T_CONS, {.T_CONS = {LIST_TYPE_NAME, (Type*[]){&t_char}, 1}}};
+Type t_string =   {T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type*[]){&t_char}, 1}}};
 Type t_bool =     {T_BOOL};
 Type t_void =     {T_VOID};
-Type t_ptr =      {T_CONS, {.T_CONS = {PTR_TYPE_NAME, (Type*[]){&t_char}, 1}}};
+Type t_ptr =      {T_CONS, {.T_CONS = {TYPE_NAME_PTR, (Type*[]){&t_char}, 1}}};
 // {T_CONS, {.T_CONS = {"Synth", (Type *[]){&t_ptr}, 1}}};
 // clang-format on
 //
@@ -353,6 +384,10 @@ TypeEnv *initialize_type_env(TypeEnv *env) {
   Type *t = malloc(sizeof(Type));
   *t = TYPE_FROM_TYPECLASS(&TCNum);
   env = env_extend(env, "Num", t);
+
+  Type *tt = malloc(sizeof(Type));
+  *tt = TYPE_FROM_TYPECLASS(&TCOrd);
+  env = env_extend(env, "Ord", tt);
 
   return env;
 }

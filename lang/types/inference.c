@@ -571,9 +571,15 @@ Type *infer(TypeEnv **env, Ast *ast) {
     }
 
     Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
-    Type *ex_t = create_type_multi_param_fn(param_count || 1, param_types,
-                                            get_type(*env, ret_type_ast));
+    Type *ret_type = get_type(*env, ret_type_ast);
+
+    Type *ex_t =
+        create_type_multi_param_fn(param_count || 1, param_types, ret_type);
+
     type = ex_t;
+    printf("extern lambda type: ");
+    print_type_w_tc(type);
+    printf("\n");
     break;
   }
 
@@ -626,9 +632,6 @@ Type *infer(TypeEnv **env, Ast *ast) {
 
       t = t->data.T_FN.to;
     }
-    print_type_w_tc(t);
-
-    printf("\n");
 
     break;
   }

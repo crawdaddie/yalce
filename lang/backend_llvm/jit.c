@@ -311,6 +311,9 @@ int jit(int argc, char **argv) {
         printf(STYLE_RESET_ALL "\n");
         LLVMDumpModule(module);
         continue;
+      } else if (strcmp("%dump_type_env\n", input) == 0) {
+        print_type_env(env);
+        continue;
       } else if (strcmp("\n", input) == 0) {
         continue;
       }
@@ -358,7 +361,11 @@ int jit(int argc, char **argv) {
 
 void print_result(Type *type, LLVMGenericValueRef result) {
   printf("`");
-  print_type_w_tc(type);
+  if (type->alias != NULL) {
+    printf("%s", type->alias);
+  } else {
+    print_type_w_tc(type);
+  }
 
   if (result == NULL) {
     printf("\n");

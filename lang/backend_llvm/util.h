@@ -39,4 +39,7 @@ LLVMValueRef strings_equal(LLVMValueRef left, LLVMValueRef right,
                            LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string);
+
+LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
+                           LLVMModuleRef module);
 #endif

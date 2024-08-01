@@ -2,6 +2,7 @@
 #include "parse.h"
 #include "types/type.h"
 #include "types/util.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 
@@ -9,18 +10,24 @@ Type t_synth = {T_CONS,
                 {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
                 .alias = "Synth"};
 
-LLVMValueRef node_of_double_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
-
-  LLVMValueRef node_of_double_func =
-      LLVMGetNamedFunction(module, "node_of_double");
+LLVMValueRef node_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
 
   *fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
                               (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
 
-  if (!node_of_double_func) {
-    node_of_double_func = LLVMAddFunction(module, "node_of_double", *fn_type);
-  }
-  return node_of_double_func;
+  return get_extern_fn("node_of_double", *fn_type, module);
+}
+
+LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  LLVMTypeRef fn_type;
+  LLVMValueRef node_of_double_func = node_of_val_fn(&fn_type, module);
+  LLVMValueRef double_val =
+      LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+
+  LLVMValueRef const_node = LLVMBuildCall2(
+      builder, fn_type, node_of_double_func, &double_val, 1, "const_node");
+  return const_node;
 }
 
 #define GENERATE_NODE_BINOP_FN_GETTER(name)                                    \
@@ -40,18 +47,6 @@ GENERATE_NODE_BINOP_FN_GETTER(sub2_node)
 GENERATE_NODE_BINOP_FN_GETTER(mul2_node)
 GENERATE_NODE_BINOP_FN_GETTER(div2_node)
 GENERATE_NODE_BINOP_FN_GETTER(mod2_node)
-
-LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
-                               LLVMBuilderRef builder) {
-  LLVMTypeRef fn_type;
-  LLVMValueRef node_of_double_func = node_of_double_fn(&fn_type, module);
-  LLVMValueRef double_val =
-      LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
-  LLVMValueRef const_node =
-      LLVMBuildCall2(builder, fn_type, node_of_double_func, &double_val, 1,
-                     "const_node_of_double");
-  return const_node;
-}
 
 static LLVMValueRef SYNTH_BINOP(LLVMValueRef fn, LLVMTypeRef fn_type,
                                 LLVMValueRef lval, Type *ltype,
