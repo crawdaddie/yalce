@@ -74,11 +74,10 @@ g 3 # returns: 6
 recursion and basic pattern-matching:
 ```ocaml
 let fib = fn x ->
-  (match x with
+  match x with
   | 0 -> 0
   | 1 -> 1
   | _ -> (fib (x - 1)) + (fib (x - 2))
-  )
 ;;
 ```
 destructuring values in let bindings, function parameters and more complex pattern-matching:
@@ -87,20 +86,18 @@ let (x, _) = (1, 2) in x + 1;
 let first = fn (a, _) -> a ;;
 
 let complex_match = fn x -> 
-  (match x with
+  match x with
   | (1, _) -> 0
   | (2, z) -> 100 + z
   | _      -> 1000
-  )
 ;;
 
 complex_match (2, 2);
 
 let list_sum = fn acc l ->
-  (match l with
+  match l with
   | [] -> acc
   | head::rest -> list_sum (acc + head) rest
-  )
 ;;
 
 list_sum 0 [1, 2, 3] # --returns 6 
@@ -115,11 +112,10 @@ let formatted = `{x} hello {y}\n`; # interpolates serialized versions of x & y i
 let () = printf formatted;
 
 let find_h = fn i l ->
-  (match l with
+  match l with
   | "" -> -1
   | 'h'::_ -> i # finds the first 'h' character in the string
   | _::rest -> find_h (i + 1) rest
-  )
 ;;
 
 find_h 0 "ooooohello" # returns 5
