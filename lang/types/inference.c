@@ -15,7 +15,6 @@ Type *infer(TypeEnv **env, Ast *ast);
 static int type_var_counter = 0;
 void reset_type_var_counter() { type_var_counter = 0; }
 const char *fresh_tvar_name() {
-  char prefix = 't';
   char *new_name = malloc(5 * sizeof(char));
   if (new_name == NULL) {
     return NULL;
@@ -27,9 +26,7 @@ const char *fresh_tvar_name() {
 
 static Type *next_tvar() { return create_type_var(fresh_tvar_name()); }
 static bool is_ord(Type *t) { return (t->kind >= T_INT) && (t->kind <= T_NUM); }
-static bool is_arithmetic(Type *t) {
-  return (t->kind >= T_INT) && (t->kind <= T_NUM);
-}
+
 static Type *max_numeric_type(Type *lt, Type *rt) {
   if (lt->kind >= rt->kind) {
     return lt;

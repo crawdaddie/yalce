@@ -27,6 +27,10 @@ void print_type(Type *type) {
     printf("NULL");
     return;
   }
+  if (type->alias) {
+    printf("%s", type->alias);
+    return;
+  }
 
   if (type->kind == T_MODULE) {
     printf("Module: \n");
@@ -46,7 +50,7 @@ void print_type_w_tc(Type *type) {
   if (type->num_implements == 0) {
     return;
   }
-  printf(" [");
+  printf(" implements : [");
   for (int i = 0; i < type->num_implements; i++) {
     TypeClass *tc = type->implements[i];
     printf("%s, ", tc->name);
@@ -123,30 +127,6 @@ Type *get_general_numeric_type(Type *t1, Type *t2) {
   return &t_int;
 }
 
-Type *builtin_type(Ast *id) {
-  if (id->tag == AST_VOID) {
-    return &t_void;
-  }
-  if (id->tag != AST_IDENTIFIER) {
-    return NULL;
-  }
-
-  const char *id_chars = id->data.AST_IDENTIFIER.value;
-
-  if (strcmp(id_chars, "Int") == 0) {
-    return &t_int;
-  } else if (strcmp(id_chars, "Double") == 0) {
-    return &t_num;
-  } else if (strcmp(id_chars, "Bool") == 0) {
-    return &t_bool;
-  } else if (strcmp(id_chars, "String") == 0) {
-    return &t_string;
-  } else if (strcmp(id_chars, "Ptr") == 0) {
-    return &t_ptr;
-  }
-
-  return NULL;
-}
 
 Type *get_type(TypeEnv *env, Ast *id) {
   if (id->tag == AST_VOID) {
@@ -162,15 +142,15 @@ Type *get_type(TypeEnv *env, Ast *id) {
     return named_type;
   }
 
-  if (strcmp(id_chars, "Int") == 0) {
+  if (strcmp(id_chars, TYPE_NAME_INT) == 0) {
     return &t_int;
-  } else if (strcmp(id_chars, "Double") == 0) {
+  } else if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
     return &t_num;
-  } else if (strcmp(id_chars, "Bool") == 0) {
+  } else if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
     return &t_bool;
-  } else if (strcmp(id_chars, "String") == 0) {
+  } else if (strcmp(id_chars, TYPE_NAME_STRING ) == 0) {
     return &t_string;
-  } else if (strcmp(id_chars, "Ptr") == 0) {
+  } else if (strcmp(id_chars, TYPE_NAME_PTR) == 0) {
     return &t_ptr;
   }
   fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
@@ -226,8 +206,12 @@ bool types_equal(Type *t1, Type *t2) {
 
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
+  if (!is_generic(original)) {
+    return original;
+  }
   Type *copy = malloc(sizeof(Type));
   copy->kind = original->kind;
+  copy->alias = original->alias;
   for (int i = 0; i < original->num_implements; i++) {
     add_typeclass_impl(copy, original->implements[i]);
   }
@@ -307,7 +291,7 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
     break;
   }
   case T_CONS: {
-    if (strcmp(type->data.T_CONS.name, "Tuple") == 0) {
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0) {
 
       buffer_write(buf, "(", 1);
       for (int i = 0; i < type->data.T_CONS.num_args; i++) {
@@ -321,11 +305,11 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
     }
 
     if (is_string_type(type)) {
-      buffer_write(buf, "String", 6);
+      buffer_write(buf, TYPE_NAME_STRING, 6);
       break;
     }
 
-    if (strcmp(type->data.T_CONS.name, "List") == 0) {
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
 
       buffer_write(buf, "[", 1);
       serialize_type(type->data.T_CONS.args[0], buf);
@@ -358,20 +342,20 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
     break;
 
   case T_INT:
-    buffer_write(buf, "Int", 3);
+    buffer_write(buf,TYPE_NAME_INT, 3);
     break;
 
   case T_NUM:
-    buffer_write(buf, "Double", 6);
+    buffer_write(buf,TYPE_NAME_DOUBLE, 6);
     break;
 
   case T_BOOL:
 
-    buffer_write(buf, "Bool", 4);
+    buffer_write(buf, TYPE_NAME_BOOL, 4);
     break;
 
   case T_STRING:
-    buffer_write(buf, "String", 6);
+    buffer_write(buf, TYPE_NAME_STRING, 6);
     break;
 
   case T_VOID:
@@ -379,7 +363,7 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
     break;
 
   case T_CHAR:
-    buffer_write(buf, "Char", 4);
+    buffer_write(buf, TYPE_NAME_CHAR, 4);
     break;
 
   default:

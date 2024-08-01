@@ -52,6 +52,7 @@ void type_declaration(Ast *ast, TypeEnv **env) {
 
   Ast *type_expr_ast = ast->data.AST_LET.expr;
   Type *type = compute_type_expression(type_expr_ast, *env);
+  type->alias = name;
 
   *env = env_extend(*env, name, type);
 }

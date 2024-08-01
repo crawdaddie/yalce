@@ -10,7 +10,6 @@ void print_type_w_tc(Type *type);
 void print_type_env(TypeEnv *env);
 
 Type *get_general_numeric_type(Type *t1, Type *t2);
-Type *builtin_type(Ast *id);
 Type *get_type(TypeEnv *env, Ast *id);
 
 bool types_equal(Type *t1, Type *t2);

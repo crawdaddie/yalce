@@ -8,48 +8,34 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-// assert(LLVMFRem - LLVMAdd == nkSmmFRem - nkSmmAdd);
-// LLVMValueRef res = NULL;
-//
-// switch (expr->kind) {
-// case nkSmmAdd: case nkSmmFAdd: case nkSmmSub: case nkSmmFSub:
-// case nkSmmMul: case nkSmmFMul: case nkSmmUDiv: case nkSmmSDiv: case
-// nkSmmFDiv: case nkSmmURem: case nkSmmSRem: case nkSmmFRem:
-// 	{
-// 		LLVMValueRef left = processExpression(data, expr->left, a);
-// 		LLVMValueRef right = processExpression(data, expr->right, a);
-// 		res = LLVMBuildBinOp(data->builder, expr->kind - nkSmmAdd +
-// LLVMAdd, left, right, ""); 		break;
-// 	}
-
 // clang-format off
 static int int_ops_map[] = {
-  [TOKEN_PLUS] = LLVMAdd,
-  [TOKEN_MINUS] = LLVMSub,
-  [TOKEN_STAR] = LLVMMul,
-  [TOKEN_SLASH] = LLVMSDiv,
-  [TOKEN_MODULO] = LLVMSRem,
+  [TOKEN_PLUS] =      LLVMAdd,
+  [TOKEN_MINUS] =     LLVMSub,
+  [TOKEN_STAR] =      LLVMMul,
+  [TOKEN_SLASH] =     LLVMSDiv,
+  [TOKEN_MODULO] =    LLVMSRem,
 
-  [TOKEN_LT] = LLVMIntSLT,
-  [TOKEN_LTE] = LLVMIntSLE,
-  [TOKEN_GT] = LLVMIntSGT,
-  [TOKEN_GTE] = LLVMIntSGE,
-  [TOKEN_EQUALITY] = LLVMIntEQ,
+  [TOKEN_LT] =        LLVMIntSLT,
+  [TOKEN_LTE] =       LLVMIntSLE,
+  [TOKEN_GT] =        LLVMIntSGT,
+  [TOKEN_GTE] =       LLVMIntSGE,
+  [TOKEN_EQUALITY] =  LLVMIntEQ,
   [TOKEN_NOT_EQUAL] = LLVMIntNE,
 };
 
 static int float_ops_map[] = {
-  [TOKEN_PLUS] = LLVMFAdd,
-  [TOKEN_MINUS] = LLVMFSub,
-  [TOKEN_STAR] = LLVMFMul,   
-  [TOKEN_SLASH] = LLVMFDiv,
-  [TOKEN_MODULO] = LLVMFRem,
+  [TOKEN_PLUS] =      LLVMFAdd,
+  [TOKEN_MINUS] =     LLVMFSub,
+  [TOKEN_STAR] =      LLVMFMul,   
+  [TOKEN_SLASH] =     LLVMFDiv,
+  [TOKEN_MODULO] =    LLVMFRem,
 
-  [TOKEN_LT] = LLVMRealOLT,
-  [TOKEN_LTE] = LLVMRealOLE,
-  [TOKEN_GT] = LLVMRealOGT,
-  [TOKEN_GTE] = LLVMRealOGE,
-  [TOKEN_EQUALITY] = LLVMRealOEQ,
+  [TOKEN_LT] =        LLVMRealOLT,
+  [TOKEN_LTE] =       LLVMRealOLE,
+  [TOKEN_GT] =        LLVMRealOGT,
+  [TOKEN_GTE] =       LLVMRealOGE,
+  [TOKEN_EQUALITY] =  LLVMRealOEQ,
   [TOKEN_NOT_EQUAL] = LLVMRealONE,
 
 };
@@ -116,22 +102,76 @@ static bool is_llvm_int(LLVMValueRef v) {
   return kind == LLVMIntegerTypeKind;
 }
 
+bool is_num_op(token_type op) {
+  return (op >= TOKEN_PLUS) && (op <= TOKEN_MODULO);
+}
+bool is_ord_op(token_type op) { return (op >= TOKEN_LT) && (op <= TOKEN_GTE); }
+
+typedef LLVMValueRef (*NumTypeClassMethod)(LLVMValueRef, Type *, LLVMValueRef,
+                                           Type *, LLVMModuleRef,
+                                           LLVMBuilderRef);
+
+LLVMValueRef typeclass_num_binop_impl(token_type op, TypeClass *num,
+                                      LLVMValueRef lval, Type *ltype,
+                                      LLVMValueRef rval, Type *rtype,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+  int op_index = op - TOKEN_PLUS;
+  NumTypeClassMethod *method_ptr = get_typeclass_method(num, op_index);
+
+  if (method_ptr == NULL) {
+    fprintf(stderr, "Invalid operation index for typeclass %s\n", num->name);
+    return NULL;
+  }
+
+  NumTypeClassMethod method = *method_ptr;
+
+  if (method == NULL) {
+    fprintf(stderr, "typeclass %s method not implemented for op %d\n",
+            num->name, op);
+    return NULL;
+  }
+  return method(lval, ltype, rval, rtype, module, builder);
+}
+
+LLVMValueRef typeclass_ord_binop_impl(token_type op, TypeClass *num,
+                                      LLVMValueRef lval, Type *ltype,
+                                      LLVMValueRef rval, Type *rtype,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+  return NULL;
+}
+
 LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
   LLVMValueRef l = codegen(ast->data.AST_BINOP.left, ctx, module, builder);
   LLVMValueRef r = codegen(ast->data.AST_BINOP.right, ctx, module, builder);
 
-  printf("llvm binop codegen: ");
-  print_ast(ast);
-  print_type_w_tc(ast->md);
-  printf("\n");
-
   if (l == NULL || r == NULL) {
     return NULL;
   }
 
   token_type op = ast->data.AST_BINOP.op;
+  TypeClass *tc_impl = typeclass_impl(ast->md, &TCNum);
+
+  if (is_num_op(op)) {
+    if ((tc_impl != NULL) && !(is_arithmetic(ast->md))) {
+
+      return typeclass_num_binop_impl(
+          op, typeclass_impl(ast->md, &TCNum), l, ast->data.AST_BINOP.left->md,
+          r, ast->data.AST_BINOP.right->md, module, builder);
+    }
+  }
+
+  tc_impl = typeclass_impl(ast->md, &TCOrd);
+  if (is_ord_op(op)) {
+    if ((tc_impl != NULL) && !(is_arithmetic(ast->md))) {
+      return typeclass_ord_binop_impl(
+          op, typeclass_impl(ast->md, &TCNum), l, ast->data.AST_BINOP.left->md,
+          r, ast->data.AST_BINOP.right->md, module, builder);
+    }
+  }
 
   if (is_llvm_int(l) && is_llvm_int(r)) {
     return codegen_int_binop(builder, op, l, r);

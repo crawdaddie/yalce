@@ -1,4 +1,5 @@
 #include "backend_llvm/codegen_types.h"
+#include "types/type.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 
@@ -59,11 +60,11 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
   }
 
   case T_CONS: {
-    if (strcmp(type->data.T_CONS.name, "Tuple") == 0) {
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0) {
       return tuple_type(type, env);
     }
 
-    if (strcmp(type->data.T_CONS.name, "List") == 0) {
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
       if (type->data.T_CONS.args[0]->kind == T_CHAR) {
         return LLVMPointerType(LLVMInt8Type(), 0);
       }
@@ -71,7 +72,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
       return list_type(type->data.T_CONS.args[0], env);
     }
 
-    if (strcmp(type->data.T_CONS.name, "ptr") == 0) {
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_PTR) == 0) {
       return LLVM_TYPE_ptr(char);
     }
 

@@ -6,16 +6,17 @@
 
 // #define DBG_UNIFY
 // clang-format off
-TypeClass TCNum = {"Num", NULL, 11};
+TypeClass TCNum = {"Num", NULL, .num_methods = 5};
+TypeClass TCOrd = {"Ord", NULL, 6};
+
 
 Type t_int =      {T_INT, .implements = (TypeClass *[]){&TCNum}, .num_implements = 1};
 Type t_num =      {T_NUM, .implements = (TypeClass *[]){&TCNum}, .num_implements = 1};
 Type t_char =     {T_CHAR};
-Type t_string =   {T_CONS, {.T_CONS = {"List", (Type*[]){&t_char}, 1}}};
+Type t_string =   {T_CONS, {.T_CONS = {LIST_TYPE_NAME, (Type*[]){&t_char}, 1}}};
 Type t_bool =     {T_BOOL};
 Type t_void =     {T_VOID};
-Type t_ptr =      {T_CONS, {.T_CONS = {"Ptr", (Type*[]){&t_char}, 1}}};
-Type t_synth =    {T_CONS, {.T_CONS = {"Ptr", (Type*[]){&t_char}, 1}}};
+Type t_ptr =      {T_CONS, {.T_CONS = {PTR_TYPE_NAME, (Type*[]){&t_char}, 1}}};
 // {T_CONS, {.T_CONS = {"Synth", (Type *[]){&t_ptr}, 1}}};
 // clang-format on
 //
@@ -325,6 +326,16 @@ bool implements_typeclass(Type *t, TypeClass *class) {
   return false;
 }
 
+// Helper function to check if a type implements a specific type class
+TypeClass *typeclass_impl(Type *t, TypeClass *class) {
+  for (int i = 0; i < t->num_implements; i++) {
+    if (strcmp(t->implements[i]->name, class->name) == 0) {
+      return t->implements[i];
+    }
+  }
+  return NULL;
+}
+
 #define TYPE_FROM_TYPECLASS(tc)                                                \
   (Type) {                                                                     \
     T_TYPECLASS, { .T_TYPECLASS = tc }                                         \
@@ -343,8 +354,15 @@ TypeEnv *initialize_type_env(TypeEnv *env) {
   *t = TYPE_FROM_TYPECLASS(&TCNum);
   env = env_extend(env, "Num", t);
 
-  add_typeclass_impl(&t_synth, typeclass_instance(&TCNum));
-  env = env_extend(env, "Synth", &t_synth);
-
   return env;
 }
+
+// Generic function to get a method from a TypeClass
+void *get_typeclass_method(TypeClass *tc, int index) {
+  if (index < 0 || index >= tc->num_methods) {
+    return NULL;
+  }
+  return (void *)tc->methods + (index * tc->method_size);
+}
+
+bool is_arithmetic(Type *t) { return (t->kind >= T_INT) && (t->kind <= T_NUM); }

@@ -360,11 +360,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   if (!expr_val) {
     return NULL;
   }
-  LLVMTypeRef llvm_expr_type = LLVMTypeOf(expr_val);
   Type *expr_type = ast->data.AST_LET.expr->md;
-
-  // codegen_multiple_assignment(binding_identifier, expr_val, expr_type,
-  //                             &cont_ctx, module, builder, false, 0);
 
   LLVMValueRef _true = LLVMConstInt(LLVMInt1Type(), 1, 0);
 

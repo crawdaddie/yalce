@@ -168,9 +168,7 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
   LLVMValueRef string_concat_func =
       LLVMGetNamedFunction(module, "string_concat");
   LLVMTypeRef string_type = LLVMPointerType(LLVMInt8Type(), 0);
-  LLVMTypeRef string_array_type =
-      LLVMArrayType(string_type, num_strings); // Changed this line
-  //
+  LLVMTypeRef string_array_type = LLVMArrayType(string_type, num_strings);
   LLVMTypeRef fn_type = LLVMFunctionType(
       string_type,
       (LLVMTypeRef[]){LLVMPointerType(string_type, 0), LLVMInt32Type()}, 2, 0);

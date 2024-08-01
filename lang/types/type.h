@@ -2,6 +2,7 @@
 #define _LANG_TYPE_TYPE_H
 
 #include <stdbool.h>
+#include <stdlib.h>
 typedef struct TypeEnv TypeEnv;
 
 typedef struct Method {
@@ -10,9 +11,20 @@ typedef struct Method {
 
 typedef struct TypeClass {
   const char *name;
-  Method *methods;
-  int num_methods;
+  void *methods;
+  size_t method_size;
+  size_t num_methods;
 } TypeClass;
+// clang-format off
+#define TYPE_NAME_LIST    "List"
+#define TYPE_NAME_TUPLE   "Tuple"
+#define TYPE_NAME_PTR     "Ptr"
+#define TYPE_NAME_CHAR    "Char"
+#define TYPE_NAME_STRING  "String"
+#define TYPE_NAME_BOOL    "Bool"
+#define TYPE_NAME_INT     "Int"
+#define TYPE_NAME_DOUBLE  "Double"
+// clang-format on
 
 enum TypeKind {
   /* Type Operator */
@@ -60,8 +72,10 @@ typedef struct Type {
 
   TypeClass **implements; // Array of type classes this type implements
   int num_implements;
+  const char *alias;
 } Type;
 extern TypeClass TCNum;
+extern TypeClass TCOrd;
 
 extern Type t_int;
 extern Type t_num;
@@ -70,7 +84,6 @@ extern Type t_bool;
 extern Type t_void;
 extern Type t_char;
 extern Type t_ptr;
-extern Type t_synth;
 
 // TypeEnv represents a mapping from variable names to their types
 typedef struct TypeEnv {
@@ -106,5 +119,9 @@ Type *resolve_in_env(Type *t, TypeEnv *env);
 void add_typeclass_impl(Type *t, TypeClass *class);
 bool implements_typeclass(Type *t, TypeClass *class);
 TypeEnv *initialize_type_env(TypeEnv *env);
+TypeClass *typeclass_instance(TypeClass *tc);
+TypeClass *typeclass_impl(Type *t, TypeClass *class);
+void *get_typeclass_method(TypeClass *tc, int index);
 
+bool is_arithmetic(Type *t);
 #endif

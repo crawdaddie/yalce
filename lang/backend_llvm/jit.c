@@ -7,6 +7,7 @@
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
+#include "synths.h"
 #include "types/inference.h"
 #include "types/util.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -261,6 +262,7 @@ int jit(int argc, char **argv) {
   // shared type env
   TypeEnv *env = NULL;
   env = initialize_type_env(env);
+  env = initialize_type_env_synth(env);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,

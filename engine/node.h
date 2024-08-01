@@ -53,6 +53,10 @@ node_perform sum_perform(Node *node, int nframes, double spf);
 node_perform mul_perform(Node *node, int nframes, double spf);
 
 Node *sum2_node(Node *a, Node *b);
-
+Node *sub2_node(Node *a, Node *b);
 Node *mul2_node(Node *a, Node *b);
+Node *div2_node(Node *a, Node *b);
+Node *mod2_node(Node *a, Node *b);
+
+Node *node_of_double(double val);
 #endif
