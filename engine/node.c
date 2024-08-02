@@ -1,9 +1,9 @@
 #include "node.h"
+#include "common.h"
 #include "oscillators.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "common.h"
 
 Node *_chain;
 
@@ -236,7 +236,6 @@ Node *sq_node_of_int(int freq) {
   return s;
 }
 
-
 Node *sq_node(Node *freq) {
   sq_state *state = malloc(sizeof(sq_state));
   state->phase = 0.0;
@@ -286,87 +285,6 @@ node_perform sum_perform_(Node *node, int nframes, double spf) {
   }
 }
 
-// node_perform sum_perform(Node *node, int nframes, double spf) {
-//   int num_ins = node->num_ins;
-//   double *out = node->out.buf;
-//   Signal *input_sigs = node->ins;
-//   double *in0 = input_sigs[0].buf;
-//   int i, j;
-//
-//   if (num_ins == 1) {
-//     memcpy(out, in0, nframes * sizeof(double));
-//   } else {
-//     for (i = 0; i < nframes; i += 4) {
-//       double sum0 = in0[i];
-//       double sum1 = in0[i + 1];
-//       double sum2 = in0[i + 2];
-//       double sum3 = in0[i + 3];
-//
-//       for (j = 1; j < num_ins; j++) {
-//         double *in = input_sigs[j].buf + i;
-//         sum0 += in[0];
-//         sum1 += in[1];
-//         sum2 += in[2];
-//         sum3 += in[3];
-//       }
-//
-//       out[i] = sum0;
-//       out[i + 1] = sum1;
-//       out[i + 2] = sum2;
-//       out[i + 3] = sum3;
-//     }
-//
-//     // Handle remaining frames if nframes is not divisible by 4
-//     for (; i < nframes; i++) {
-//       double sum = in0[i];
-//       for (j = 1; j < num_ins; j++) {
-//         sum += input_sigs[j].buf[i];
-//       }
-//       out[i] = sum;
-//     }
-//   }
-// }
-//
-// node_perform mul_perform(Node *node, int nframes, double spf) {
-//   int num_ins = node->num_ins;
-//   double *out = node->out.buf;
-//   Signal *input_sigs = node->ins;
-//   double *in0 = input_sigs[0].buf;
-//   int i, j;
-//
-//   if (num_ins == 1) {
-//     memcpy(out, in0, nframes * sizeof(double));
-//   } else {
-//     for (i = 0; i < nframes; i += 4) {
-//       double sum0 = in0[i];
-//       double sum1 = in0[i + 1];
-//       double sum2 = in0[i + 2];
-//       double sum3 = in0[i + 3];
-//
-//       for (j = 1; j < num_ins; j++) {
-//         double *in = input_sigs[j].buf + i;
-//         sum0 *= in[0];
-//         sum1 *= in[1];
-//         sum2 *= in[2];
-//         sum3 *= in[3];
-//       }
-//
-//       out[i] = sum0;
-//       out[i + 1] = sum1;
-//       out[i + 2] = sum2;
-//       out[i + 3] = sum3;
-//     }
-//
-//     // Handle remaining frames if nframes is not divisible by 4
-//     for (; i < nframes; i++) {
-//       double sum = in0[i];
-//       for (j = 1; j < num_ins; j++) {
-//         sum *= input_sigs[j].buf[i];
-//       }
-//       out[i] = sum;
-//     }
-//   }
-// }
 #define OP_PERFORM(name, op)                                                   \
   node_perform name##_perform(Node *node, int nframes, double spf) {           \
     int num_ins = node->num_ins;                                               \
@@ -453,24 +371,6 @@ node_perform mod_perform(Node *node, int nframes, double spf) {
     }
   }
 }
-
-/*
-Node *sum2_node(Node *a, Node *b) {
-Signal *ins = malloc(sizeof(double *) * 2);
-Node *sum = node_new(NULL, (node_perform *)sum_perform, 2, ins);
-sum->ins[0] = a->out;
-sum->ins[1] = b->out;
-return sum;
-}
-
-Node *mul2_node(Node *a, Node *b) {
-Signal *ins = malloc(sizeof(double *) * 2);
-Node *sum = node_new(NULL, (node_perform *)mul_perform, 2, ins);
-sum->ins[0] = a->out;
-sum->ins[1] = b->out;
-return sum;
-}
-*/
 
 #define BINARY_OP_NODE(name, perform_func)                                     \
   Node *name(Node *a, Node *b) {                                               \

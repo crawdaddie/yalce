@@ -1,5 +1,5 @@
 #  yalce_synth
-simple C synthesis environment  
+simple C audio synthesis library & high-level language
 highly unsafe
 
 ## dependencies
@@ -53,12 +53,72 @@ the DSL is a language loosely based on ocaml syntax for creating and linking aud
 
 it supports declaring external C functions:
 ```ocaml
-let init_audio  = extern fn () -> () ;; # audio engine library init func
-let printf      = extern fn string -> () ;; # simplified printf from c stdlib
+let printf      = extern fn string -> () ; # simplified printf from c stdlib
+let play_node   = extern fn Synth -> Synth ;
 
-let () = init_audio ();
-let () = printf "hello\n"
+let sq_node = (
+  extern fn Synth -> Synth  : "sq_node", # declare several variants for explicit polymorphism
+  extern fn Double -> Synth : "sq_node_of_scalar",
+  extern fn Int -> Synth    : "sq_node_of_int",
+);
+# now `sq_node` can be called with an int, a double or with another Synth node as its frequency input
+
+let sin_node = (
+  extern fn Synth -> Synth  : "sin_node",
+  extern fn Double -> Synth : "sin_node_of_scalar",
+  extern fn Int -> Synth    : "sin_node_of_int",
+);
+
+
+let init_audio = extern fn () -> () in
+init_audio ()
+; # declare and invoke immediately
+
+let freq = 100 in
+let x = sq_node (freq * 1.01) + sq_node freq |> play_node
 ```
+here are a few of the C functions that are declared above:
+```c
+
+Node *sq_node_of_scalar(double freq) {
+  sq_state *state = malloc(sizeof(sq_state));
+  state->phase = 0.0;
+
+  Node *s =
+      node_new(state, (node_perform *)sq_perform, 1, get_sig_default(1, freq)); // set freq input to scalar value
+
+  return s;
+}
+
+Node *sq_node_of_int(int freq) {
+  sq_state *state = malloc(sizeof(sq_state));
+  state->phase = 0.0;
+
+  Node *s =
+      node_new(state, (node_perform *)sq_perform, 1, get_sig_default(1, freq)); // set freq input to scalar value
+
+  return s;
+}
+
+Node *sq_node(Node *freq) {
+  sq_state *state = malloc(sizeof(sq_state));
+  state->phase = 0.0;
+
+  Node *s = node_new(state, (node_perform *)sq_perform, 1, &freq->out); // use input node directly
+
+  return s;
+}
+
+int init_audio() {
+  maketable_sq();
+  maketable_sin();
+
+  start_audio();
+  return 0;
+}
+```
+
+
 basic arithmetic, functions, currying and piping:
 ```ocaml
 (1 + 2) * 8;

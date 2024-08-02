@@ -316,6 +316,9 @@ int jit(int argc, char **argv) {
       } else if (strcmp("%dump_type_env\n", input) == 0) {
         print_type_env(env);
         continue;
+      } else if (strcmp("%dump_ast\n", input) == 0) {
+        print_ast(ast_root);
+        continue;
       } else if (strcmp("\n", input) == 0) {
         continue;
       }

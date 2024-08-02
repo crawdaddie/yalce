@@ -179,6 +179,8 @@ extern_variants:
 
   | extern_variants ',' extern_typed_signature ':' TOK_STRING 
                                     { $$ = ast_list_push($1, ast_extern_fn($5, $3)); }
+
+  | extern_variants ','             { $$ = $1; } /* Allow trailing comma */
   ;
 
 
@@ -219,6 +221,7 @@ application:
 list:
     '[' ']'                 { $$ = ast_empty_list(); }
   | '[' expr_list ']'       { $$ = $2; }
+  | '[' expr_list ',' ']'       { $$ = $2; }
   ;
 
 list_match_expr:
@@ -229,6 +232,7 @@ list_match_expr:
 tuple:
     '(' expr ')'          { $$ = $2; }
   | '(' expr_list ')'     { $$ = ast_tuple($2); }
+  | '(' expr_list ',' ')' { $$ = ast_tuple($2); }
   ;
 
 expr_list:
