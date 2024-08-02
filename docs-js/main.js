@@ -1,7 +1,8 @@
 import { init, WASI } from "@wasmer/wasi";
+
 await init();
 // Create a WebAssembly Memory instance
-const memory = new WebAssembly.Memory({ initial: 2 }); // Size is in pages (64KB each)
+// const memory = new WebAssembly.Memory({ initial: 2 }); // Size is in pages (64KB each)
 
 let wasi = new WASI({
   env: {
@@ -14,7 +15,7 @@ let wasi = new WASI({
   ],
 });
 
-const moduleBytes = fetch("jit.wasm");
+const moduleBytes = fetch("assets/jit.wasm");
 const module = await WebAssembly.compileStreaming(moduleBytes);
 
 const instance = wasi.instantiate(module, {
