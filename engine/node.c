@@ -217,7 +217,6 @@ Node *group_new(int chans) {
 }
 
 Node *sq_node_of_scalar(double freq) {
-  printf("sq node %f\n", freq);
   sq_state *state = malloc(sizeof(sq_state));
   state->phase = 0.0;
 
@@ -226,6 +225,17 @@ Node *sq_node_of_scalar(double freq) {
 
   return s;
 }
+
+Node *sq_node_of_int(int freq) {
+  sq_state *state = malloc(sizeof(sq_state));
+  state->phase = 0.0;
+
+  Node *s =
+      node_new(state, (node_perform *)sq_perform, 1, get_sig_default(1, freq));
+
+  return s;
+}
+
 
 Node *sq_node(Node *freq) {
   sq_state *state = malloc(sizeof(sq_state));
@@ -250,6 +260,15 @@ Node *sin_node(Node *freq) {
   state->phase = 0.0;
 
   Node *s = node_new(state, (node_perform *)sin_perform, 1, &freq->out);
+  return s;
+}
+
+Node *sin_node_of_int(int freq) {
+  sin_state *state = malloc(sizeof(sin_state));
+  state->phase = 0.0;
+
+  Node *s =
+      node_new(state, (node_perform *)sin_perform, 1, get_sig_default(1, freq));
   return s;
 }
 
@@ -471,7 +490,6 @@ BINARY_OP_NODE(div2_node, div_perform)
 BINARY_OP_NODE(mod2_node, mod_perform)
 
 Node *node_of_double(double val) {
-  printf("node of double %f\n", val);
   Node *const_node = node_new(NULL, NULL, 0, NULL);
   for (int i = 0; i < const_node->out.size; i++) {
     const_node->out.buf[i] = val;
