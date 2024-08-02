@@ -227,18 +227,13 @@ monomorphization and type inference is necessary when using the LLVM backend bec
 ```
 make
 ```
-builds the build/audio_lang executable using a tree-walk interpreter as the evaluator
-
-```
-make LLVM_BACKEND=1
-```
-builds the build/audio_lang executable using the LLVM JIT-compiler as a backend backend 
+builds the build/audio_lang executable using the LLVM JIT-compiler as a backend
 
 ## Usage
 ```
 build/audio_lang -i
 ```
-run the lang interpreter / compiler as a repl
+run the lang interpreter / JIT compiler as a repl
 
 ```
 build/audio_lang filename.ylc
