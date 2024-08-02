@@ -163,6 +163,9 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   *prog = parse_input(fcontent);
+#ifdef DUMP_AST
+  print_ast(*prog);
+#endif
 
   char *dirname = get_dirname(filename);
   if (dirname == NULL) {
@@ -184,7 +187,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
 #ifdef DUMP_AST
   LLVMDumpModule(module);
-  print_ast(*prog);
 #endif
 
   Type *result_type = top_level_ast(*prog)->md;
@@ -284,11 +286,10 @@ int jit(int argc, char **argv) {
 
   if (repl) {
 
-    init_readline();
-
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
+    init_readline();
 
     // char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
     LLVMTypeRef top_level_ret_type;

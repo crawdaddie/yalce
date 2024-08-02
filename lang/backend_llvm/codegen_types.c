@@ -1,6 +1,8 @@
 #include "backend_llvm/codegen_types.h"
 #include "types/type.h"
+#include "types/util.h"
 #include "llvm-c/Core.h"
+#include <stdio.h>
 #include <string.h>
 
 #define LLVM_TYPE_int LLVMInt32Type()
@@ -78,8 +80,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
 
     return LLVMInt32Type();
   }
-  case T_FN: {
 
+  case T_FN: {
     Type *t = type;
     int fn_len = 0;
 
@@ -101,3 +103,14 @@ LLVMValueRef codegen_signal_add() { return NULL; }
 LLVMValueRef codegen_signal_sub() { return NULL; }
 LLVMValueRef codegen_signal_mul() { return NULL; }
 LLVMValueRef codegen_signal_mod() { return NULL; }
+
+// Define the function pointer type
+typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
+                                   LLVMBuilderRef);
+
+LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
+                                      Type *type_to, LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+  ConsMethod constructor = type_to->constructor;
+  return constructor(value, type_from, module, builder);
+}

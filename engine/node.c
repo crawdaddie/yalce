@@ -3,6 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "common.h"
+
+Node *_chain;
+
+void reset_chain() { _chain = NULL; }
 
 void write_to_output_(double *src, int src_layout, double *dest,
                       int dest_layout, int nframes, int output_num) {
@@ -46,6 +51,7 @@ void write_to_output_(double *src, int src_layout, double *dest,
     }
   }
 }
+
 void write_to_output(double *src, int src_layout, double *dest, int dest_layout,
                      int nframes, int output_num) {
   int i;
@@ -121,7 +127,9 @@ Node *perform_graph(Node *head, int nframes, double spf, double *dest_buf,
   // int frame_offset = 0;
 
   offset_node_bufs(head, frame_offset);
-  head->perform(head, nframes, spf);
+  if (head->perform != NULL) {
+    head->perform(head, nframes, spf);
+  }
 
   if (head->type == OUTPUT) {
     write_to_output(head->out.buf, head->out.layout, dest_buf + frame_offset,
@@ -167,6 +175,12 @@ Node *node_new(void *data, node_perform *perform, int num_ins, Signal *ins) {
   node->out.buf = calloc(BUF_SIZE, sizeof(double));
   node->perform = (node_perform)perform;
   node->frame_offset = 0;
+
+  if (_chain == NULL) {
+    _chain = group_new(0);
+  }
+  group_add_tail(_chain, node);
+
   return node;
 }
 
@@ -188,11 +202,22 @@ Signal *get_sig_default(int layout, double value) {
 
 Node *group_new(int chans) {
   group_state *graph = malloc(sizeof(group_state));
-  Node *g = node_new((void *)graph, (node_perform *)group_perform, 0, NULL);
-  return g;
+
+  Node *node = malloc(sizeof(Node));
+  node->state = graph;
+  node->num_ins = 0;
+  node->ins = NULL;
+  node->out.layout = 1;
+  node->out.size = BUF_SIZE;
+  node->out.buf = calloc(BUF_SIZE, sizeof(double));
+  node->perform = (node_perform)group_perform;
+  node->frame_offset = 0;
+
+  return node;
 }
 
-Node *sq_node(double freq) {
+Node *sq_node_of_scalar(double freq) {
+  printf("sq node %f\n", freq);
   sq_state *state = malloc(sizeof(sq_state));
   state->phase = 0.0;
 
@@ -202,12 +227,29 @@ Node *sq_node(double freq) {
   return s;
 }
 
-Node *sin_node(double freq) {
+Node *sq_node(Node *freq) {
+  sq_state *state = malloc(sizeof(sq_state));
+  state->phase = 0.0;
+
+  Node *s = node_new(state, (node_perform *)sq_perform, 1, &freq->out);
+
+  return s;
+}
+
+Node *sin_node_of_scalar(double freq) {
   sin_state *state = malloc(sizeof(sin_state));
   state->phase = 0.0;
 
   Node *s =
       node_new(state, (node_perform *)sin_perform, 1, get_sig_default(1, freq));
+  return s;
+}
+
+Node *sin_node(Node *freq) {
+  sin_state *state = malloc(sizeof(sin_state));
+  state->phase = 0.0;
+
+  Node *s = node_new(state, (node_perform *)sin_perform, 1, &freq->out);
   return s;
 }
 
@@ -412,27 +454,24 @@ return sum;
 */
 
 #define BINARY_OP_NODE(name, perform_func)                                     \
-  Node *name##_node(Node *a, Node *b) {                                        \
-    Signal *ins = malloc(sizeof(Signal) * 2);                                  \
-    Node *op_node = node_new(NULL, (node_perform *)perform_func, 2, ins);      \
+  Node *name(Node *a, Node *b) {                                               \
+    int num_ins = 2;                                                           \
+    Signal *ins = malloc(sizeof(Signal) * num_ins);                            \
+    Node *op_node =                                                            \
+        node_new(NULL, (node_perform *)perform_func, num_ins, ins);            \
     op_node->ins[0] = a->out;                                                  \
     op_node->ins[1] = b->out;                                                  \
     return op_node;                                                            \
   }
 
-BINARY_OP_NODE(sum2, sum_perform)
-BINARY_OP_NODE(sub2, sub_perform)
-Node *mul2_node(Node *a, Node *b) {
-  Signal *ins = malloc(sizeof(Signal) * 2);
-  Node *op_node = node_new(((void *)0), (node_perform *)mul_perform, 2, ins);
-  op_node->ins[0] = a->out;
-  op_node->ins[1] = b->out;
-  return op_node;
-}
-BINARY_OP_NODE(div2, div_perform)
-BINARY_OP_NODE(mod2, mod_perform)
+BINARY_OP_NODE(sum2_node, sum_perform)
+BINARY_OP_NODE(sub2_node, sub_perform)
+BINARY_OP_NODE(mul2_node, mul_perform)
+BINARY_OP_NODE(div2_node, div_perform)
+BINARY_OP_NODE(mod2_node, mod_perform)
 
 Node *node_of_double(double val) {
+  printf("node of double %f\n", val);
   Node *const_node = node_new(NULL, NULL, 0, NULL);
   for (int i = 0; i < const_node->out.size; i++) {
     const_node->out.buf[i] = val;

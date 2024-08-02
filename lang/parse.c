@@ -391,10 +391,14 @@ Ast *ast_extern_fn(ObjString name, Ast *signature) {
   signature->data.AST_EXTERN_FN.len = len;
   signature->data.AST_EXTERN_FN.signature_types = param_types;
   signature->data.AST_EXTERN_FN.fn_name = name;
-
   return signature;
 }
 Ast *ast_assoc(Ast *l, Ast *r) { return NULL; }
+
+Ast *ast_assoc_extern(Ast *l, ObjString name) {
+  Ast *assoc = ast_binop(TOKEN_COLON, l, ast_identifier(name));
+  return assoc;
+}
 Ast *ast_list_prepend(Ast *item, Ast *rest) {
   return ast_binop(TOKEN_DOUBLE_COLON, item, rest);
 }

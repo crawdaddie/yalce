@@ -48,6 +48,8 @@ enum TypeKind {
   T_TYPECLASS,
 };
 
+// typedef LLVMValueRef ConsSynth(LLVMValueRef value, Type *type_from) {}
+
 typedef struct Type {
   enum TypeKind kind;
   union {
@@ -75,6 +77,8 @@ typedef struct Type {
   TypeClass **implements; // Array of type classes this type implements
   int num_implements;
   const char *alias;
+  void *constructor;
+  size_t constructor_size;
 } Type;
 extern TypeClass TCNum;
 extern TypeClass TCOrd;

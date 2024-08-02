@@ -64,6 +64,7 @@ Ast* ast_root = NULL;
 %left GE LE EQ NE '>' '<'
 %left '+' '-'
 %left '*' '/'
+%left ':'
 %left MATCH
 
 %nonassoc UMINUS
@@ -75,6 +76,7 @@ Ast* ast_root = NULL;
   lambda_arg
   lambda_args
   extern_typed_signature
+  extern_variants
   list
   tuple
   expr_list
@@ -145,15 +147,38 @@ expr_sequence:
 let_binding:
     LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
-  | LET IDENTIFIER '=' EXTERN FN extern_typed_signature  
-                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
+  | LET IDENTIFIER '=' extern_typed_signature  
+                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $4), NULL); }
+
+
+  | LET IDENTIFIER '=' '(' extern_variants ')'  
+                                    {
+                                      Ast *variants = $5;
+                                      variants->tag = AST_EXTERN_VARIANTS;
+                                      $$ = ast_let(ast_identifier($2), variants, NULL);
+                                    }
+
   | LET TOK_VOID '=' expr           { $$ = $4; }
-  | let_binding IN expr               { Ast *let = $1; let->data.AST_LET.in_expr = $3; $$ = let; }
+  | let_binding IN expr             {
+                                      Ast *let = $1;
+                                      let->data.AST_LET.in_expr = $3;
+                                      $$ = let;
+                                    }
   | lambda_expr                     { $$ = $1; }
   ;
+
 extern_typed_signature:
-  expr                                  { $$ = extern_typed_signature($1); }
-  | extern_typed_signature ARROW expr   { $$ = extern_typed_signature_push($1, $3); }
+    EXTERN FN expr                  { $$ = extern_typed_signature($3); }
+  | extern_typed_signature ARROW expr %prec ':'
+                                    { $$ = extern_typed_signature_push($1, $3); }
+  ;
+
+extern_variants:
+    extern_typed_signature ':' TOK_STRING 
+                                    { $$ = ast_list(ast_extern_fn($3, $1)); }
+
+  | extern_variants ',' extern_typed_signature ':' TOK_STRING 
+                                    { $$ = ast_list_push($1, ast_extern_fn($5, $3)); }
   ;
 
 

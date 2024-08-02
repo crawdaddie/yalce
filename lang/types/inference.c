@@ -532,8 +532,8 @@ Type *infer(TypeEnv **env, Ast *ast) {
     }
     break;
   }
-  case AST_LET: {
 
+  case AST_LET: {
     Type *expr_type = infer(env, ast->data.AST_LET.expr);
 
     Ast *binding = ast->data.AST_LET.binding;
@@ -577,9 +577,46 @@ Type *infer(TypeEnv **env, Ast *ast) {
         create_type_multi_param_fn(param_count || 1, param_types, ret_type);
 
     type = ex_t;
-    printf("extern lambda type: ");
-    print_type_w_tc(type);
-    printf("\n");
+    break;
+  }
+
+  case AST_EXTERN_VARIANTS: {
+
+    Ast *extern_variant_ast = ast->data.AST_LIST.items;
+    infer(env, extern_variant_ast);
+
+    Type *generic_fn = deep_copy_type(extern_variant_ast->md);
+    generic_fn->data.T_FN.from = next_tvar();
+
+    size_t fn_len = extern_variant_ast->data.AST_EXTERN_FN.len;
+
+    Ast ret_type =
+        extern_variant_ast->data.AST_EXTERN_FN.signature_types[fn_len - 1];
+
+    for (int i = 1; i < ast->data.AST_LIST.len; i++) {
+      extern_variant_ast = ast->data.AST_LIST.items + i;
+      infer(env, extern_variant_ast);
+      size_t this_fn_len = extern_variant_ast->data.AST_EXTERN_FN.len;
+
+      Ast this_ret_type = extern_variant_ast->data.AST_EXTERN_FN
+                              .signature_types[this_fn_len - 1];
+
+      if (this_fn_len != fn_len) {
+        fprintf(stderr, "Error: function variants must all have the same size");
+        return NULL;
+      }
+
+      if ((this_ret_type.data.AST_IDENTIFIER.length !=
+           ret_type.data.AST_IDENTIFIER.length) ||
+          (strcmp(this_ret_type.data.AST_IDENTIFIER.value,
+                  ret_type.data.AST_IDENTIFIER.value) != 0)) {
+        fprintf(stderr,
+                "Error: function variants must all return the same type");
+        return NULL;
+      }
+    }
+
+    type = generic_fn;
     break;
   }
 

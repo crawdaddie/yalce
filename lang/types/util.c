@@ -252,9 +252,6 @@ bool types_equal(Type *t1, Type *t2) {
 
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
-  // if (!is_generic(original)) {
-  //   return original;
-  // }
   Type *copy = malloc(sizeof(Type));
   copy->kind = original->kind;
   copy->alias = original->alias;

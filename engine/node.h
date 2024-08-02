@@ -1,6 +1,5 @@
 #ifndef _ENGINE_NODE_H
 #define _ENGINE_NODE_H
-#include "common.h"
 typedef struct Node Node;
 
 // typedef void (*node_perform)(Node *node, int nframes, double spf);
@@ -35,6 +34,11 @@ typedef struct {
   Node *tail;
 } group_state;
 
+extern Node *_chain_head;
+extern Node *_chain_tail;
+extern Node *_chain;
+void reset_chain();
+
 node_perform group_perform(Node *group, int nframes, double spf);
 
 Node *group_add_tail(Node *group, Node *node);
@@ -46,8 +50,10 @@ Signal *get_sig_default(int layout, double value);
 
 Node *group_new(int chans);
 
-Node *sq_node(double freq);
-Node *sin_node(double freq);
+Node *sq_node_of_scalar(double freq);
+Node *sq_node(Node *freq);
+Node *sin_node_of_scalar(double freq);
+Node *sin_node(Node *freq);
 
 node_perform sum_perform(Node *node, int nframes, double spf);
 node_perform mul_perform(Node *node, int nframes, double spf);
@@ -59,4 +65,5 @@ Node *div2_node(Node *a, Node *b);
 Node *mod2_node(Node *a, Node *b);
 
 Node *node_of_double(double val);
+Node *node_of_int(double val);
 #endif

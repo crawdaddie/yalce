@@ -74,9 +74,9 @@ int interpreter(int argc, char **argv) {
     char *prompt = "\033[1;31mλ \033[1;0m"
                    "\033[1;36m";
     printf("\033[1;31m"
-           "YLC LANG REPL       \n"
+           "YLC LANG REPL     \n"
            "------------------\n"
-           "version 0.0.0       \n"
+           "version 0.0.0     \n"
            "\033[1;0m");
 
     while (true) {

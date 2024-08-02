@@ -106,6 +106,8 @@ typedef enum ast_tag {
   AST_RECORD_ACCESS,
   AST_FMT_STRING,
   AST_TYPE_DECL,
+  AST_ASSOC,
+  AST_EXTERN_VARIANTS
 } ast_tag;
 
 struct Ast {
@@ -239,8 +241,6 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input);
 Ast *ast_void();
 Ast *ast_string(ObjString lex_string);
-Ast *ast_extern_declaration(ObjString extern_name, Ast *arg_list,
-                            ObjString return_type);
 
 Ast *parse_fstring_expr(Ast *list);
 Ast *ast_empty_list();
@@ -271,4 +271,6 @@ Ast *ast_record_access(Ast *record, Ast *member);
 Ast *ast_char(char ch);
 
 Ast *ast_sequence(Ast *seq, Ast *new);
+
+Ast *ast_assoc_extern(Ast *l, ObjString name);
 #endif

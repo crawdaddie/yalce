@@ -23,4 +23,7 @@ JITSymbol *create_generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
 
 JITSymbol generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
                             JITLangCtx *ctx);
+
+JITSymbol extern_variants_symbol(Ast *variants_ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

@@ -19,6 +19,7 @@ static void write_null_to_output_buf(double *out, int nframes, int layout) {
 
 void print_graph(Node *node) {
   Node *n = node;
+
   while (n != NULL) {
     if (n->perform == group_perform) {
       print_graph(((group_state *)n->state)->head);

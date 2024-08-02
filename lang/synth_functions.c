@@ -86,10 +86,10 @@ static Value _sq(Value *argv) {
   int input_is_sig = freq.type == VALUE_SYNTH_NODE;
   Node *sq;
   if (input_is_sig) {
-    sq = sq_node(100.);
+    sq = sq_node_of_scalar(100.);
     sq->ins[0].buf = freq.value.vnode->out.buf;
   } else {
-    sq = sq_node(NUM_OF_VALUE(argv));
+    sq = sq_node_of_scalar(NUM_OF_VALUE(argv));
   }
 
   return node_val(sq);
@@ -106,10 +106,10 @@ static Value _sin(Value *argv) {
   int input_is_sig = freq.type == VALUE_SYNTH_NODE;
   Node *s;
   if (input_is_sig) {
-    s = sin_node(100.);
+    s = sin_node_of_scalar(100.);
     s->ins[0].buf = freq.value.vnode->out.buf;
   } else {
-    s = sin_node(NUM_OF_VALUE(argv));
+    s = sin_node_of_scalar(NUM_OF_VALUE(argv));
   }
 
   return node_val(s);

@@ -6,10 +6,6 @@
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 
-Type t_synth = {T_CONS,
-                {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
-                .alias = "Synth"};
-
 LLVMValueRef node_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
 
   *fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
@@ -24,11 +20,30 @@ LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
   LLVMValueRef node_of_double_func = node_of_val_fn(&fn_type, module);
   LLVMValueRef double_val =
       LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
-
   LLVMValueRef const_node = LLVMBuildCall2(
       builder, fn_type, node_of_double_func, &double_val, 1, "const_node");
   return const_node;
 }
+
+// Define the function pointer type
+typedef LLVMValueRef (*SynthConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
+                                        LLVMBuilderRef);
+
+LLVMValueRef ConsSynth(LLVMValueRef value, Type *type_from,
+                       LLVMModuleRef module, LLVMBuilderRef builder) {
+  return const_node_of_val(value, module, builder);
+}
+
+Type t_synth = {T_CONS,
+                {.T_CONS =
+                     {
+                         TYPE_NAME_PTR,
+                         (Type *[]){&t_char},
+                         1,
+                     }},
+                .alias = "Synth",
+                .constructor = ConsSynth,
+                .constructor_size = sizeof(SynthConsMethod)};
 
 #define GENERATE_NODE_BINOP_FN_GETTER(name)                                    \
   LLVMValueRef get_##name##_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {   \
@@ -61,6 +76,8 @@ static LLVMValueRef SYNTH_BINOP(LLVMValueRef fn, LLVMTypeRef fn_type,
                           "Synth_binop");
   case 0b10: {
     LLVMValueRef node_of_rval = const_node_of_val(rval, module, builder);
+    printf("node of rval \n");
+
     return LLVMBuildCall2(builder, fn_type, fn,
                           (LLVMValueRef[]){lval, node_of_rval}, 2,
                           "Synth_binop");
@@ -153,6 +170,7 @@ TypeEnv *initialize_type_env_synth(TypeEnv *env) {
   synth_num_typeclass->method_size = sizeof(NumTypeClassMethod);
 
   add_typeclass_impl(&t_synth, synth_num_typeclass);
+
   env = env_extend(env, "Synth", &t_synth);
   return env;
 }

@@ -214,6 +214,21 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_EXTERN_VARIANTS: {
+
+    buffer = strcat(buffer, "[\n\t");
+    int len = ast->data.AST_LIST.len;
+    for (int i = 0; i < len; i++) {
+      buffer = ast_to_sexpr(ast->data.AST_LIST.items + i, buffer);
+      if (i < len - 1) {
+        buffer = strcat(buffer, ",\n\t");
+      }
+    }
+
+    buffer = strcat(buffer, "\n]");
+    break;
+  }
+
   case AST_EXTERN_FN: {
     // printf("serde extern fn\n");
     buffer = strcat(buffer, "(extern ");
@@ -242,6 +257,8 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
     // buffer = ast_to_sexpr(ast->data.AST_EXTERN_FN.return_type, buffer);
     // buffer = strcat(buffer, ")\n");
+    //
+    buffer = strcat(buffer, ")");
 
     break;
   }
