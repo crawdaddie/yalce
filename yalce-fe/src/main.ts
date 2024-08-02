@@ -1,10 +1,13 @@
 import { init, WASI } from "@wasmer/wasi";
 await init();
+// Create a WebAssembly Memory instance
+const memory = new WebAssembly.Memory({ initial: 2 }); // Size is in pages (64KB each)
 
 let wasi = new WASI({
   env: {
     // 'ENVVAR1': '1',
     // 'ENVVAR2': '2'
+    //
   },
   args: [
     // 'command', 'arg1', 'arg2'
@@ -14,17 +17,27 @@ let wasi = new WASI({
 const moduleBytes = fetch("jit.wasm");
 const module = await WebAssembly.compileStreaming(moduleBytes);
 
-
 const instance = wasi.instantiate(module, {
+
   wasi_snapshot_preview1: {
     sock_accept() {
       return 0;
     }
-  }
+  },
 });
 
+function allocateString(instance, str) {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str + '\0'); // null-terminated string
+  const ptr = instance.exports.malloc(bytes.length);
+  const memory = instance.exports.memory.buffer;
+  new Uint8Array(memory).set(bytes, ptr);
+  return ptr;
+}
 
-// console.log(wasi);
+function freeString(instance, ptr) {
+  instance.exports.free(ptr);
+}
 
 const textarea = document.getElementById('expression');
 
@@ -39,16 +52,15 @@ async function onTestChange(event) {
     let resultText = "\n";
 
     try {
-      // Simple expression evaluation
-      // const [a, b] = lastLine.split('+').map(n => parseInt(n.trim(), 10));
-      // if (!isNaN(a) && !isNaN(b)) {
-      //   const sum = instance.exports.add(a, b);
-      //   resultText = `\n> Result: ${sum}\n`;
-      // } else {
-      //   resultText = '\n> Invalid input. Please enter two numbers separated by +\n';
-      // }
-      let res = instance.exports.jit(lastLine);
-      console.log(res)
+      // Allocate memory for the input string
+      const inputPtr = allocateString(instance, lastLine);
+      let res = instance.exports.jit(inputPtr);
+      const stdout = wasi.getStdoutString();
+      console.log(stdout);
+
+      resultText = `\n> ${stdout}`;
+
+      freeString(instance, inputPtr);
     } catch (error) {
       console.error(error);
       resultText = `\n> Error: ${error.message}\n`;

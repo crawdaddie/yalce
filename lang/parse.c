@@ -1,4 +1,5 @@
 #include "parse.h"
+#include "serde.h"
 #include <stdlib.h>
 #include <string.h>
 

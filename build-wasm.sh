@@ -1,25 +1,12 @@
-# clang --target=wasm32-unknown-wasi \
-#   --sysroot /tmp/wasi-libc \
-#   -nostartfiles \
-#   -Wl,--export-all \
-#   -Wl,--no-entry \
-#   -o yalce-fe/jit.wasm \
-#   lang/backend_wasm/jit.c
-#
-clang --target=wasm32-unknown-wasi \
-  --sysroot /tmp/wasi-libc \
+WASI_SDK_PATH=~/Desktop/wasi-sdk-23.0-arm64-macos
+$WASI_SDK_PATH/bin/clang \
+  --target=wasm32-wasi \
+  -O3 \
   -nostartfiles \
-  -Wl,--export-all \
   -Wl,--no-entry \
-  -Ilang/ \
+  -Wl,--export-all \
+  -I$WASI_SDK_PATH/share/wasi-sysroot/include \
+  -I./lang/ \
   -o yalce-fe/jit.wasm \
-  lang/backend_wasm/jit.c \
-  lang/parse.c \
-  lang/y.tab.c \
-  lang/lex.yy.c \
-  lang/string_proc.c \
-  lang/ht.c \
-  lang/common.c
-
-
-
+  $(find lang -name '*.c' ! -name 'input.c' ! -name 'synths.c' ! -name 'main.c' ! -path '*/backend_llvm/*') \
+  -Wl,--allow-undefined
