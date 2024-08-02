@@ -3,6 +3,7 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 export default defineConfig({
+base: '/yalce/',
   plugins: [nodePolyfills(),viteStaticCopy({
       targets: [
         {
