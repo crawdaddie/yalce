@@ -65,10 +65,10 @@ async function onTestChange(event) {
     } catch (error) {
       console.error(error);
       resultText = `\n> Error: ${error.message}\n`;
-
     }
 
     textarea.value += resultText;
+    textarea.value += "λ ";
     lockTextArea(false);
   }
 }
