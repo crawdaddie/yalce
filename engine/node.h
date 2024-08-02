@@ -2,8 +2,6 @@
 #define _ENGINE_NODE_H
 typedef struct Node Node;
 
-// typedef void (*node_perform)(Node *node, int nframes, double spf);
-
 typedef struct {
   double *buf;
   int size;
@@ -15,14 +13,13 @@ typedef struct Node (*node_perform)(struct Node *node, int nframes, double spf);
 typedef struct Node {
   enum { INTERMEDIATE = 0, OUTPUT } type;
   void *state;
-  // double *output_buf;
-  Signal out;
   node_perform perform;
+  Signal out;
+
   int num_ins;
-  // double **ins;
   Signal *ins;
+
   struct Node *next;
-  struct Node *prev;
   int frame_offset;
 } Node;
 

@@ -163,6 +163,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   *prog = parse_input(fcontent);
+
 #ifdef DUMP_AST
   print_ast(*prog);
 #endif
