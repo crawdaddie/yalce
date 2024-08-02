@@ -49,6 +49,9 @@ builds the audio engine as a shared-object library
 - [ ] REPL - want to be able to iteratively modify the running audio graph  
 - [ ] easy C interop  
 
+## [web ui](https://crawdaddie.github.io/yalce/)
+code can be entered here and you can inspect the AST generated
+
 ## features / syntax
 the DSL is a language loosely based on ocaml syntax for creating and linking audio node objects
 
