@@ -7,6 +7,7 @@
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
+#include "synths.h"
 #include "types/inference.h"
 #include "types/util.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -22,6 +23,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define STACK_MAX 256
 
 void print_result(Type *type, LLVMGenericValueRef result);
 static Ast *top_level_ast(Ast *body) {
@@ -161,6 +164,10 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   *prog = parse_input(fcontent);
 
+#ifdef DUMP_AST
+  print_ast(*prog);
+#endif
+
   char *dirname = get_dirname(filename);
   if (dirname == NULL) {
     return NULL;
@@ -177,6 +184,12 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   infer_ast(env, *prog);
+  ctx->env = *env;
+
+#ifdef DUMP_AST
+  LLVMDumpModule(module);
+#endif
+
   Type *result_type = top_level_ast(*prog)->md;
 
   LLVMTypeRef top_level_ret_type;
@@ -193,9 +206,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     // free(fcontent);
     return NULL;
   }
-#ifdef DUMP_AST
-  LLVMDumpModule(module);
-#endif
   LLVMGenericValueRef exec_args[] = {};
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
@@ -223,7 +233,7 @@ void module_passes(LLVMModuleRef module) {
   LLVMAddCFGSimplificationPass(pass_manager);
   LLVMAddTailCallEliminationPass(pass_manager);
 }
-
+#define GLOBAL_STORAGE_CAPACITY 1024
 int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
   LLVMInitializeNativeTarget();
@@ -238,8 +248,10 @@ int jit(int argc, char **argv) {
   LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
   module_passes(module);
 
-  void **global_storage_array = calloc(1024, sizeof(void *));
-  int global_storage_capacity = 1024;
+  // void **global_storage_array = calloc(GLOBAL_STORAGE_CAPACITY, sizeof(void
+  // *));
+  void *global_storage_array[GLOBAL_STORAGE_CAPACITY];
+  int global_storage_capacity = GLOBAL_STORAGE_CAPACITY;
   int num_globals = 0;
 
   setup_global_storage(module, builder);
@@ -252,6 +264,8 @@ int jit(int argc, char **argv) {
 
   // shared type env
   TypeEnv *env = NULL;
+  env = initialize_type_env(env);
+  env = initialize_type_env_synth(env);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
@@ -273,11 +287,10 @@ int jit(int argc, char **argv) {
 
   if (repl) {
 
-    init_readline();
-
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
+    init_readline();
 
     // char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
     LLVMTypeRef top_level_ret_type;
@@ -296,15 +309,24 @@ int jit(int argc, char **argv) {
 
       char *input = repl_input(prompt);
 
-      if (strcmp("#! dump module\n", input) == 0) {
+      if (strcmp("%dump_module\n", input) == 0) {
         printf(STYLE_RESET_ALL "\n");
         LLVMDumpModule(module);
+        continue;
+      } else if (strcmp("%dump_type_env\n", input) == 0) {
+        print_type_env(env);
+        continue;
+      } else if (strcmp("%dump_ast\n", input) == 0) {
+        print_ast(ast_root);
+        continue;
+      } else if (strcmp("\n", input) == 0) {
         continue;
       }
 
       Ast *prog = parse_input(input);
       Ast *top = top_level_ast(prog);
       Type *typecheck_result = infer_ast(&env, top);
+      ctx.env = env;
 
       if (typecheck_result == NULL) {
         printf("typecheck failed\n");
@@ -344,7 +366,11 @@ int jit(int argc, char **argv) {
 
 void print_result(Type *type, LLVMGenericValueRef result) {
   printf("`");
-  print_type(type);
+  if (type->alias != NULL) {
+    printf("%s", type->alias);
+  } else {
+    print_type_w_tc(type);
+  }
 
   if (result == NULL) {
     printf("\n");
@@ -366,7 +392,16 @@ void print_result(Type *type, LLVMGenericValueRef result) {
     break;
   }
 
+  case T_CHAR: {
+    printf(" %c\n", (int)LLVMGenericValueToInt(result, 0));
+    break;
+  }
+
   case T_CONS: {
+    if (is_string_type(type)) {
+      printf(" %s\n", (char *)LLVMGenericValueToPointer(result));
+      break;
+    }
     if (strcmp(type->data.T_CONS.name, "List") == 0 &&
         type->data.T_CONS.args[0]->kind == T_INT) {
 
@@ -397,4 +432,5 @@ void print_result(Type *type, LLVMGenericValueRef result) {
     printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
+  printf("\n");
 }

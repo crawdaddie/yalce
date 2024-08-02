@@ -1,0 +1,8 @@
+let accept_callback = extern fn String -> ()
+
+let cb = fn a b ->
+  a + b
+;;
+
+
+let () = accept_callback cb

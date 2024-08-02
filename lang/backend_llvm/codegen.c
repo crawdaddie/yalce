@@ -5,7 +5,9 @@
 #include "backend_llvm/codegen_symbols.h"
 #include "codegen_list.h"
 #include "codegen_tuple.h"
+#include "serde.h"
 #include "types/util.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -26,16 +28,38 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return LLVMConstInt(LLVMInt32Type(), ast->data.AST_INT.value, true);
   }
 
-  case AST_NUMBER: {
-    return LLVMConstReal(LLVMDoubleType(), ast->data.AST_NUMBER.value);
+  case AST_DOUBLE: {
+    return LLVMConstReal(LLVMDoubleType(), ast->data.AST_DOUBLE.value);
   }
 
   case AST_STRING: {
-    char *chars = ast->data.AST_STRING.value;
+    const char *chars = ast->data.AST_STRING.value;
     int length = ast->data.AST_STRING.length;
     ObjString vstr = (ObjString){
         .chars = chars, .length = length, .hash = hash_string(chars, length)};
     return LLVMBuildGlobalStringPtr(builder, chars, ".str");
+  }
+
+  case AST_CHAR: {
+    const char ch = ast->data.AST_CHAR.value;
+    return LLVMConstInt(LLVMInt8Type(), ch, 0);
+  }
+
+  case AST_FMT_STRING: {
+    int len = ast->data.AST_LIST.len;
+    LLVMValueRef strings_to_concat[len];
+    for (int i = 0; i < len; i++) {
+      Ast *item = ast->data.AST_LIST.items + i;
+
+      LLVMValueRef val = codegen(item, ctx, module, builder);
+      LLVMValueRef str_val =
+          llvm_string_serialize(val, item->md, module, builder);
+      strings_to_concat[i] = str_val;
+    }
+    LLVMValueRef concat_strings =
+        stream_string_concat(strings_to_concat, len, module, builder);
+
+    return concat_strings;
   }
 
   case AST_BOOL: {

@@ -9,13 +9,24 @@ Ast *Ast_new(enum ast_tag tag) {
 }
 
 void ast_body_push(Ast *body, Ast *stmt) {
-  if (stmt) {
+  if (!stmt) {
+    return;
+  }
+
+  if (stmt->tag != AST_BODY) {
     Ast **members = body->data.AST_BODY.stmts;
     body->data.AST_BODY.len++;
     int len = body->data.AST_BODY.len;
 
     body->data.AST_BODY.stmts = realloc(members, sizeof(Ast *) * len);
     body->data.AST_BODY.stmts[len - 1] = stmt;
+    return;
+  }
+  if (stmt->tag == AST_BODY) {
+    for (int i = 0; i < stmt->data.AST_BODY.len; i++) {
+      ast_body_push(body, stmt->data.AST_BODY.stmts[i]);
+    }
+    return;
   }
 }
 
@@ -71,10 +82,23 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
 int yy_scan_string(char *);
 /* Define the parsing function */
 Ast *parse_input(char *input) {
+  Ast *prev = NULL;
+
+  if (ast_root != NULL && ast_root->data.AST_BODY.len > 0) {
+    prev = ast_root;
+  }
+
+  ast_root = Ast_new(AST_BODY);
+  ast_root->data.AST_BODY.len = 0;
+  ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
 
-  return ast_root; // Placeholder
+  Ast *res = ast_root;
+  if (prev != NULL) {
+    ast_root = prev;
+  }
+  return res;
 }
 
 Ast *ast_application(Ast *func, Ast *arg) {
@@ -177,16 +201,52 @@ Ast *ast_string(ObjString lex_string) {
   s->data.AST_STRING.length = lex_string.length;
   return s;
 }
-
+Ast *parse_fstring_expr(Ast *list) {
+  list->tag = AST_FMT_STRING;
+  return list;
+}
 Ast *parse_format_expr(ObjString fstring) {
   // TODO: split fstring on { & } and create concatenation expression with
   // identifiers in between { & }
   // eg `hello {x} and {y}` -> "hello " + (str x) + " and " + (str y)
-  Ast *fmt = Ast_new(AST_APPLICATION);
-  Ast *func_id = Ast_new(AST_IDENTIFIER);
-  func_id->data.AST_IDENTIFIER.value = strdup("_concat");
-  fmt->data.AST_APPLICATION.function = func_id;
-  char *ch = fstring.chars;
+
+  int seg_start = 0;
+  ObjString segment = {.chars = fstring.chars + seg_start};
+
+  for (int i = 0; i < fstring.length; i++) {
+    const char *curs = fstring.chars + i;
+    if (*curs == '{') {
+      if (i == 0) {
+      } else if (*(fstring.chars + i - 1) != '\\') {
+        int len = i - seg_start;
+        segment.length = len - 1;
+        Ast *str_segment = ast_string(segment);
+        printf("pure string segment: ");
+        print_ast(str_segment);
+
+        seg_start = i;
+      } else {
+        continue;
+      }
+    } else if (*curs == '}' && i != 0 && *(fstring.chars + i - 1) != '\\') {
+      printf("interpolated expression: '%.*s'\n", i - seg_start - 1,
+             fstring.chars + seg_start + 1);
+      segment = (ObjString){.chars = fstring.chars + i + 1};
+      seg_start = i;
+    } else if (i == fstring.length - 1) {
+      printf("seg_start %d %d\n", seg_start, fstring.length);
+      int len = i - seg_start;
+      segment.length = len;
+      Ast *str_segment = ast_string(segment);
+      printf("pure string segment: ");
+      print_ast(str_segment);
+    }
+  }
+
+  Ast *fmt_args = ast_arg_list(
+      ast_identifier((ObjString){.chars = "fmt_string", .length = 10}), NULL);
+
+  Ast *fmt_lambda = Ast_new(AST_LAMBDA);
 
   // while (*ch != '\0') {
   //   ch++;
@@ -200,6 +260,56 @@ Ast *parse_format_expr(ObjString fstring) {
   // } AST_APPLICATION;
 
   return ast_string(fstring);
+}
+Ast *parse_fstring(ObjString fstring) {
+  // Remove backticks
+  char *content = strndup(fstring.chars + 1, fstring.length - 2);
+  int content_length = fstring.length - 2;
+
+  Ast *result = ast_empty_list();
+  char *current = content;
+  char *end = content + content_length;
+
+  while (current < end) {
+    char *next_brace = strchr(current, '{');
+
+    if (next_brace == NULL) {
+      // No more expressions, add the rest as a string
+      ObjString str = {current, end - current,
+                       hash_string(current, end - current)};
+      result = ast_list_push(result, ast_string(str));
+      break;
+    }
+
+    if (next_brace > current) {
+      // Add the text before the brace as a string
+      ObjString str = {current, next_brace - current,
+                       hash_string(current, next_brace - current)};
+      result = ast_list_push(result, ast_string(str));
+    }
+
+    // Find the closing brace
+    char *closing_brace = strchr(next_brace + 1, '}');
+    if (closing_brace == NULL) {
+      yyerror("Unclosed brace in interpolated string");
+      free(content);
+      return NULL;
+    }
+
+    // Parse the expression inside the braces
+    *closing_brace = '\0'; // Temporarily null-terminate the expression
+    // YY_BUFFER_STATE buffer = yy_scan_string(next_brace + 1);
+    // Ast *expr = parse_expression(); // You'll need to implement this function
+    // yy_delete_buffer(buffer);
+    *closing_brace = '}'; // Restore the closing brace
+
+    // result = ast_list_push(result, expr);
+
+    current = closing_brace + 1;
+  }
+
+  free(content);
+  return result;
 }
 
 Ast *ast_empty_list() {
@@ -280,10 +390,14 @@ Ast *ast_extern_fn(ObjString name, Ast *signature) {
   signature->data.AST_EXTERN_FN.len = len;
   signature->data.AST_EXTERN_FN.signature_types = param_types;
   signature->data.AST_EXTERN_FN.fn_name = name;
-
   return signature;
 }
 Ast *ast_assoc(Ast *l, Ast *r) { return NULL; }
+
+Ast *ast_assoc_extern(Ast *l, ObjString name) {
+  Ast *assoc = ast_binop(TOKEN_COLON, l, ast_identifier(name));
+  return assoc;
+}
 Ast *ast_list_prepend(Ast *item, Ast *rest) {
   return ast_binop(TOKEN_DOUBLE_COLON, item, rest);
 }
@@ -354,4 +468,25 @@ Ast *ast_record_access(Ast *record, Ast *member) {
   rec_access->data.AST_RECORD_ACCESS.record = record;
   rec_access->data.AST_RECORD_ACCESS.member = member;
   return rec_access;
+}
+
+Ast *ast_char(char ch) {
+  Ast *a = Ast_new(AST_CHAR);
+  a->data.AST_CHAR.value = ch;
+  return a;
+}
+
+Ast *ast_sequence(Ast *seq, Ast *new) {
+  if (seq->tag == AST_BODY) {
+    ast_body_push(seq, new);
+    return seq;
+  }
+
+  Ast *body = Ast_new(AST_BODY);
+  body = Ast_new(AST_BODY);
+  body->data.AST_BODY.len = 2;
+  body->data.AST_BODY.stmts = malloc(sizeof(Ast *) * 2);
+  body->data.AST_BODY.stmts[0] = seq;
+  body->data.AST_BODY.stmts[1] = new;
+  return body;
 }

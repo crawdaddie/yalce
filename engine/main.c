@@ -4,10 +4,10 @@
 
 Node *test_synth(double freq, double cutoff) {
   Node *group = group_new(0);
-  Node *sq1 = sq_node(freq);
+  Node *sq1 = sq_node_of_scalar(freq);
   group_add_tail(group, sq1);
 
-  Node *sq2 = sq_node(freq * 1.01);
+  Node *sq2 = sq_node_of_scalar(freq * 1.01);
   group_add_tail(group, sq2);
 
   Node *summed = sum2_node(sq1, sq2);

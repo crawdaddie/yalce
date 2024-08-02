@@ -36,10 +36,10 @@ Node *play_test_synth() {
   double cutoff = 500.;
   Node *group = group_new(0);
 
-  Node *sq1 = sq_node(freq);
+  Node *sq1 = sq_node_of_scalar(freq);
   group_add_tail(group, sq1);
 
-  Node *sq2 = sq_node(freq * 1.01);
+  Node *sq2 = sq_node_of_scalar(freq * 1.01);
   group_add_tail(group, sq2);
 
   Node *summed = sum2_node(sq1, sq2);
@@ -51,4 +51,21 @@ Node *play_test_synth() {
   add_to_dac(group);
   audio_ctx_add(group);
   return group;
+}
+
+Node *play_node(Node *s) {
+  Node *group = _chain;
+  add_to_dac(s);
+  add_to_dac(group);
+  audio_ctx_add(group);
+  reset_chain();
+  return group;
+}
+
+void accept_callback(int (*callback)(int, int)) {
+  // Function body
+  if (callback != NULL) {
+    printf("called callback %p %d\n", callback,
+           callback(1, 2)); // Call the callback function
+  }
 }

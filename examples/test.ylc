@@ -1,0 +1,8 @@
+let f = fn x -> 
+  let x = 1 in
+  let y = x + 2 in
+  (match y with
+  | 1 -> 1
+  | 2 -> 0 
+  | _ -> 3)
+  ;

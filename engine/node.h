@@ -1,9 +1,6 @@
 #ifndef _ENGINE_NODE_H
 #define _ENGINE_NODE_H
-#include "common.h"
 typedef struct Node Node;
-
-// typedef void (*node_perform)(Node *node, int nframes, double spf);
 
 typedef struct {
   double *buf;
@@ -16,14 +13,13 @@ typedef struct Node (*node_perform)(struct Node *node, int nframes, double spf);
 typedef struct Node {
   enum { INTERMEDIATE = 0, OUTPUT } type;
   void *state;
-  // double *output_buf;
-  Signal out;
   node_perform perform;
+  Signal out;
+
   int num_ins;
-  // double **ins;
   Signal *ins;
+
   struct Node *next;
-  struct Node *prev;
   int frame_offset;
 } Node;
 
@@ -34,6 +30,11 @@ typedef struct {
   Node *head;
   Node *tail;
 } group_state;
+
+extern Node *_chain_head;
+extern Node *_chain_tail;
+extern Node *_chain;
+void reset_chain();
 
 node_perform group_perform(Node *group, int nframes, double spf);
 
@@ -46,13 +47,22 @@ Signal *get_sig_default(int layout, double value);
 
 Node *group_new(int chans);
 
-Node *sq_node(double freq);
-Node *sin_node(double freq);
+Node *sq_node_of_scalar(double freq);
+
+Node *sq_node_of_int(int freq);
+Node *sq_node(Node *freq);
+Node *sin_node_of_scalar(double freq);
+Node *sin_node_of_int(int freq);
+Node *sin_node(Node *freq);
 
 node_perform sum_perform(Node *node, int nframes, double spf);
 node_perform mul_perform(Node *node, int nframes, double spf);
 
 Node *sum2_node(Node *a, Node *b);
-
+Node *sub2_node(Node *a, Node *b);
 Node *mul2_node(Node *a, Node *b);
+Node *div2_node(Node *a, Node *b);
+Node *mod2_node(Node *a, Node *b);
+
+Node *node_of_double(double val);
 #endif

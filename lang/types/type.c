@@ -6,15 +6,49 @@
 
 // #define DBG_UNIFY
 // clang-format off
-TypeClass TClassOrd = {"Ord"};
+Type t_num_method_signature = {T_FN, {.T_FN = {
+  &(Type){T_VAR, {.T_VAR = "a : Num"}},
+    &(Type){T_FN, {.T_FN = {
+      &(Type){T_VAR, {.T_VAR = "b : Num"}},
+      &(Type){T_VAR, {.T_VAR = "c : Num"}},
+}}}
 
-Type t_int =    {T_INT};
-//  .type_class = &((InstTypeClass){&TClassOrd})};
-Type t_num =    {T_NUM};
-// , .type_class = &((InstTypeClass){&TClassOrd})};
-Type t_string = {T_STRING};
-Type t_bool =   {T_BOOL};
-Type t_void =   {T_VOID};
+}}};
+static Method tcnum_methods[] = {
+  {.name = "+", &t_num_method_signature},
+  {.name = "-", &t_num_method_signature},
+  {.name = "*", &t_num_method_signature},
+  {.name = "/", &t_num_method_signature},
+  {.name = "%", &t_num_method_signature},
+};
+TypeClass TCNum = {"Num", tcnum_methods, .method_size = sizeof(Method), .num_methods = 5};
+
+Type t_ord_method_signature = {T_FN, {.T_FN = {
+  &(Type){T_VAR, {.T_VAR = "a : Ord"}},
+    &(Type){T_FN, {.T_FN = {
+      &(Type){T_VAR, {.T_VAR = "b : Ord"}},
+      &(Type){T_BOOL},
+}}}
+
+}}};
+
+static Method tcord_methods[] = {
+  {.name = "<", &t_ord_method_signature},
+  {.name = "<=", &t_ord_method_signature},
+  {.name = ">", &t_ord_method_signature},
+  {.name = ">=", &t_ord_method_signature},
+};
+TypeClass TCOrd = {"Ord", tcord_methods, .method_size = sizeof(Method), .num_methods = 4};
+
+
+Type t_int =      {T_INT, .implements = (TypeClass *[]){&TCNum}, .num_implements = 1};
+Type t_num =      {T_NUM, .implements = (TypeClass *[]){&TCNum}, .num_implements = 1};
+Type t_char =     {T_CHAR};
+Type t_string =   {T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type*[]){&t_char}, 1}}};
+Type t_bool =     {T_BOOL};
+Type t_void =     {T_VOID};
+Type t_ptr =      {T_CONS, {.T_CONS = {TYPE_NAME_PTR, (Type*[]){&t_char}, 1}}};
+// {T_CONS, {.T_CONS = {"Synth", (Type *[]){&t_ptr}, 1}}};
 // clang-format on
 //
 
@@ -101,7 +135,6 @@ Type *create_tuple_type(Type **element_types, int num_elements) {
   tuple_type->data.T_CONS.name = "Tuple";
   tuple_type->data.T_CONS.args = element_types;
   tuple_type->data.T_CONS.num_args = num_elements;
-  tuple_type->type_class = NULL; // Or set appropriately if needed
   return tuple_type;
 }
 
@@ -112,7 +145,6 @@ Type *create_list_type(Type *element_type) {
   tuple_type->data.T_CONS.args = malloc(sizeof(Type *));
   tuple_type->data.T_CONS.args[0] = element_type;
   tuple_type->data.T_CONS.num_args = 1;
-  tuple_type->type_class = NULL; // Or set appropriately if needed
   return tuple_type;
 }
 
@@ -175,6 +207,14 @@ void _unify(Type *t1, Type *t2, TypeEnv **env) {
   print_type(t2);
   printf("\n");
 #endif
+  if (t2->implements != NULL) {
+    for (int i = 0; i < t2->num_implements; i++) {
+      TypeClass *tc = t2->implements[i];
+      if (!implements_typeclass(t1, tc)) {
+        add_typeclass_impl(t1, tc);
+      }
+    }
+  }
 
   if (types_equal(t1, t2)) {
     return;
@@ -242,9 +282,122 @@ void unify(Type *t1, Type *t2) {
   TypeEnv *env = NULL;
   _unify(t1, t2, &env);
 }
+
 void free_type_env(TypeEnv *env) {
   if (env->next) {
     free_type_env(env->next);
     free(env);
   }
 }
+
+static Type *resolve_single_type(Type *t, TypeEnv *env) {
+  if (t == NULL)
+    return NULL;
+
+  switch (t->kind) {
+  case T_VAR: {
+    Type *resolved = env_lookup(env, t->data.T_VAR);
+    if (resolved != NULL) {
+      // Recursively resolve the found type
+      return resolve_single_type(resolved, env);
+    }
+    return t; // If not found in env, return the original type
+  }
+
+  case T_CONS: {
+    Type *new_type = deep_copy_type(t);
+
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      new_type->data.T_CONS.args[i] =
+          resolve_single_type(t->data.T_CONS.args[i], env);
+    }
+    return new_type;
+  }
+
+  case T_FN: {
+    Type *new_type = malloc(sizeof(Type));
+    new_type->kind = T_FN;
+    new_type->data.T_FN.from = resolve_single_type(t->data.T_FN.from, env);
+    new_type->data.T_FN.to = resolve_single_type(t->data.T_FN.to, env);
+    return new_type;
+  }
+  default:
+    return t;
+  }
+}
+
+Type *resolve_in_env(Type *t, TypeEnv *env) {
+  if (t == NULL)
+    return NULL;
+
+  return resolve_single_type(t, env);
+}
+
+// Helper function to add a type class implementation to a type
+void add_typeclass_impl(Type *t, TypeClass *class) {
+  if (!(t->kind == T_VAR || t->kind == T_CONS)) {
+    return;
+  }
+  t->num_implements++;
+  t->implements =
+      t->implements != NULL
+          ? realloc(t->implements, t->num_implements * sizeof(TypeClass *))
+          : malloc(sizeof(TypeClass *));
+
+  t->implements[t->num_implements - 1] = class;
+}
+
+// Helper function to check if a type implements a specific type class
+bool implements_typeclass(Type *t, TypeClass *class) {
+  for (int i = 0; i < t->num_implements; i++) {
+    if (strcmp(t->implements[i]->name, class->name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Helper function to check if a type implements a specific type class
+TypeClass *typeclass_impl(Type *t, TypeClass *class) {
+  for (int i = 0; i < t->num_implements; i++) {
+    if (strcmp(t->implements[i]->name, class->name) == 0) {
+      return t->implements[i];
+    }
+  }
+  return NULL;
+}
+
+#define TYPE_FROM_TYPECLASS(tc)                                                \
+  (Type) {                                                                     \
+    T_TYPECLASS, { .T_TYPECLASS = tc }                                         \
+  }
+
+TypeClass *typeclass_instance(TypeClass *tc) {
+  TypeClass *new_tc = malloc(sizeof(TypeClass));
+  new_tc->name = tc->name;
+  new_tc->num_methods = tc->num_methods;
+  new_tc->methods = malloc(sizeof(Method) * tc->num_methods);
+  return new_tc;
+}
+
+TypeEnv *initialize_type_env(TypeEnv *env) {
+  Type *t = malloc(sizeof(Type));
+  *t = TYPE_FROM_TYPECLASS(&TCNum);
+  env = env_extend(env, "Num", t);
+
+  Type *tt = malloc(sizeof(Type));
+  *tt = TYPE_FROM_TYPECLASS(&TCOrd);
+  env = env_extend(env, "Ord", tt);
+
+  return env;
+}
+
+// Generic function to get a method from a TypeClass
+void *get_typeclass_method(TypeClass *tc, int index) {
+  if (index < 0 || index >= tc->num_methods) {
+    return NULL;
+  }
+  return (void *)tc->methods + (index * tc->method_size);
+}
+
+bool is_arithmetic(Type *t) { return (t->kind >= T_INT) && (t->kind <= T_NUM); }

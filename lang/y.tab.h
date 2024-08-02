@@ -40,11 +40,11 @@
       know about them.  */
    enum yytokentype {
      INTEGER = 258,
-     NUMBER = 259,
+     DOUBLE = 259,
      IDENTIFIER = 260,
      META_IDENTIFIER = 261,
      TOK_STRING = 262,
-     FSTRING = 263,
+     TOK_CHAR = 263,
      TRUE = 264,
      FALSE = 265,
      PIPE = 266,
@@ -59,22 +59,27 @@
      TOK_VOID = 275,
      IN = 276,
      AND = 277,
-     APPLICATION = 278,
-     MODULO = 279,
-     NE = 280,
-     EQ = 281,
-     LE = 282,
-     GE = 283,
-     UMINUS = 284
+     FSTRING_START = 278,
+     FSTRING_END = 279,
+     FSTRING_INTERP_START = 280,
+     FSTRING_INTERP_END = 281,
+     FSTRING_TEXT = 282,
+     APPLICATION = 283,
+     MODULO = 284,
+     NE = 285,
+     EQ = 286,
+     LE = 287,
+     GE = 288,
+     UMINUS = 289
    };
 #endif
 /* Tokens.  */
 #define INTEGER 258
-#define NUMBER 259
+#define DOUBLE 259
 #define IDENTIFIER 260
 #define META_IDENTIFIER 261
 #define TOK_STRING 262
-#define FSTRING 263
+#define TOK_CHAR 263
 #define TRUE 264
 #define FALSE 265
 #define PIPE 266
@@ -89,13 +94,18 @@
 #define TOK_VOID 275
 #define IN 276
 #define AND 277
-#define APPLICATION 278
-#define MODULO 279
-#define NE 280
-#define EQ 281
-#define LE 282
-#define GE 283
-#define UMINUS 284
+#define FSTRING_START 278
+#define FSTRING_END 279
+#define FSTRING_INTERP_START 280
+#define FSTRING_INTERP_END 281
+#define FSTRING_TEXT 282
+#define APPLICATION 283
+#define MODULO 284
+#define NE 285
+#define EQ 286
+#define LE 287
+#define GE 288
+#define UMINUS 289
 
 
 
@@ -108,10 +118,11 @@ typedef union YYSTYPE
     ObjString vident;           /* identifier */
     ObjString vstr;             /* string */
     int vint;                   /* int val */
-    double vfloat;
+    double vdouble;
+    char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 115 "lang/y.tab.h"
+#line 126 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

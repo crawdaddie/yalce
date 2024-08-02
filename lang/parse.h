@@ -83,8 +83,9 @@ typedef enum token_type {
 
 typedef enum ast_tag {
   AST_INT,
-  AST_NUMBER,
+  AST_DOUBLE,
   AST_STRING,
+  AST_CHAR,
   AST_BOOL,
   AST_IDENTIFIER,
   AST_BODY,
@@ -103,6 +104,10 @@ typedef enum ast_tag {
   AST_META,
   AST_IMPORT,
   AST_RECORD_ACCESS,
+  AST_FMT_STRING,
+  AST_TYPE_DECL,
+  AST_ASSOC,
+  AST_EXTERN_VARIANTS
 } ast_tag;
 
 struct Ast {
@@ -123,14 +128,18 @@ struct Ast {
       int value;
     } AST_INT;
 
-    struct AST_NUMBER {
+    struct AST_DOUBLE {
       double value;
-    } AST_NUMBER;
+    } AST_DOUBLE;
 
     struct AST_STRING {
-      char *value;
+      const char *value;
       size_t length;
     } AST_STRING;
+
+    struct AST_CHAR {
+      char value;
+    } AST_CHAR;
 
     struct AST_IDENTIFIER {
       const char *value;
@@ -199,6 +208,7 @@ struct Ast {
       Ast *branches;
       size_t len;
     } AST_MATCH;
+
     struct AST_IMPORT {
       const char *module_name;
     } AST_IMPORT;
@@ -231,10 +241,8 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input);
 Ast *ast_void();
 Ast *ast_string(ObjString lex_string);
-Ast *ast_extern_declaration(ObjString extern_name, Ast *arg_list,
-                            ObjString return_type);
 
-Ast *parse_format_expr(ObjString fstring);
+Ast *parse_fstring_expr(Ast *list);
 Ast *ast_empty_list();
 Ast *ast_list(Ast *val);
 Ast *ast_list_push(Ast *list, Ast *val);
@@ -260,4 +268,9 @@ int get_let_binding_name(Ast *ast, ObjString *name);
 Ast *ast_bare_import(ObjString module_name);
 Ast *ast_record_access(Ast *record, Ast *member);
 
+Ast *ast_char(char ch);
+
+Ast *ast_sequence(Ast *seq, Ast *new);
+
+Ast *ast_assoc_extern(Ast *l, ObjString name);
 #endif

@@ -1,0 +1,9 @@
+let sum = fn a b -> a + b;;
+let proc = fn f p q -> f p q;;
+
+let r = proc sum 1 2
+
+
+
+
+

@@ -1,6 +1,6 @@
-let init_audio      = extern fn () -> () ;;     # audio engine library init func
-let printf          = extern fn string -> () ;; # simplified printf from c stdlib
-let play_test_synth = extern fn () -> () ;;
+let init_audio      = extern fn () -> () ;     # audio engine library init func
+let printf          = extern fn String -> () ; # simplified printf from c stdlib
+let play_test_synth = extern fn () -> () ;
 
 init_audio ();
 printf "hello\n" ;

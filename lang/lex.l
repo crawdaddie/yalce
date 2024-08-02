@@ -5,7 +5,9 @@
 #include "string_proc.h"
 %}
 %option yylineno
-
+%x FSTRING
+ESCAPE          \\(['"?\\abfnrtv]|[0-7]{1,3}|x[0-9a-fA-F]+)
+CHAR            '([^'\\\n]|{ESCAPE})'
 %%
 "fn"                    return FN;
 "let"                   return LET;
@@ -22,6 +24,7 @@
 "]"                     return *yytext;
 "import"                return *yytext;
 "."                     return *yytext;
+"type"                  return *yytext;
 
 [a-zA-Z_][a-zA-Z0-9_]*  {
 
@@ -32,7 +35,7 @@
                           return IDENTIFIER;
                         }
 
-@[a-zA-Z_][a-zA-Z0-9_]*  {
+@[a-zA-Z_][a-zA-Z0-9_]* {
 
                           int len = yyleng;
                           yylval.vident.chars = strdup(yytext); 
@@ -40,7 +43,33 @@
                           yylval.vident.hash = hash_string(yylval.vident.chars, len);
                           return META_IDENTIFIER;
                         }
+
 "_"                     return *yytext;
+
+
+
+"`"                     { BEGIN(FSTRING); return FSTRING_START; }
+<FSTRING>"`"            { BEGIN(INITIAL); return FSTRING_END; }
+<FSTRING>"{"            { BEGIN(INITIAL); return FSTRING_INTERP_START; }
+<FSTRING>[^`{]+         { 
+                          int len = yyleng;
+                          char *raw_str = strndup(yytext, len); // remove surrounding " chars
+                          char *processed_str = process_escapes(raw_str, len); // process escape sequences
+                          free(raw_str);
+                          yylval.vstr.chars = processed_str;
+                          yylval.vstr.length = strlen(processed_str);
+                          yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
+                          return FSTRING_TEXT;
+                        }
+"}"                     { 
+                          if (YYSTATE == FSTRING) {
+                            return FSTRING_INTERP_END;
+                          } else {
+                            BEGIN(FSTRING); 
+                            return FSTRING_INTERP_END;
+                          }
+                        }
+
 \"([^\"\n]|\\.)*\"      {
                           int len = yyleng - 2;
                           char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars
@@ -52,16 +81,6 @@
                           return TOK_STRING;
                         }
 
-\`([^\"\n]|\\.)*\`      {
-                          int len = yyleng - 2;
-                          char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars
-                          char *processed_str = process_escapes(raw_str, len); // process escape sequences
-                          free(raw_str);
-                          yylval.vstr.chars = processed_str;
-                          yylval.vstr.length = strlen(processed_str);
-                          yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
-                          return FSTRING;
-                        }
 
 -?0                     { 
                           yylval.vint = atoi(yytext);
@@ -69,16 +88,16 @@
                         }
 
 -?[1-9][0-9]*f          { 
-                          yylval.vfloat = atof(yytext);
-                          return NUMBER;
+                          yylval.vdouble = atof(yytext);
+                          return DOUBLE;
                         }
 -?[1-9][0-9]*           { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
                         }
 -?[0-9]*\.([0-9]*[1-9]|[0-9][0-9]*)? {
-                        yylval.vfloat = atof(yytext);
-                        return NUMBER;
+                        yylval.vdouble = atof(yytext);
+                        return DOUBLE;
                         }
 
 "|>"                    return PIPE;
@@ -98,7 +117,12 @@
 "->"            return ARROW;
 [ \t\n]+        ;       /* ignore whitespace */
 "#".*           ;       /* ignore comments starting with # */
-
+{CHAR}          { 
+                    /* Matched a character literal */
+                    /* You might want to return a token here, e.g., return CHAR_LITERAL; */
+                    yylval.vchar = *(yytext + 1);
+                    return TOK_CHAR;
+                }
 .               { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 %%
 int yywrap(void) {

@@ -12,4 +12,8 @@
 // node_perform mul_perform(Node *node, int nframes, double spf);
 //
 Node *play_test_synth();
+
+Node *play_node(Node *s);
+
+void accept_callback(int (*callback)(int, int));
 #endif

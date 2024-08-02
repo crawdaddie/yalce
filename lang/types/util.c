@@ -11,6 +11,12 @@ bool is_list_type(Type *type) {
   return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "List") == 0);
 }
 
+bool is_string_type(Type *type) {
+  return type->kind == T_CONS &&
+         (strcmp(type->data.T_CONS.name, "List") == 0) &&
+         (type->data.T_CONS.args[0]->kind == T_CHAR);
+}
+
 bool is_tuple_type(Type *type) {
   return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "Tuple") == 0);
 }
@@ -35,11 +41,74 @@ void print_type(Type *type) {
   free(b);
 }
 
+void print_type_w_tc(Type *type) {
+  print_type(type);
+  if (type->num_implements == 0) {
+    return;
+  }
+  printf(" implements : [");
+  for (int i = 0; i < type->num_implements; i++) {
+    TypeClass *tc = type->implements[i];
+    printf("%s, ", tc->name);
+  }
+  printf("]");
+}
+
+void print_type_class(TypeClass *tc) {
+  for (int i = 0; i < tc->num_methods; i++) {
+    Method *method = get_typeclass_method(tc, i);
+    printf("\t%s \t: ", method->name);
+    print_type(method->type);
+    printf("\n");
+  }
+}
+
+void _serialize_type(Type *type, TypeSerBuf *buf, int level);
+static void _print_type(Type *type, bool alias, bool tc) {
+
+  if (type == NULL) {
+    printf("NULL");
+    return;
+  }
+
+  if (type->kind == T_MODULE) {
+    printf("Module: \n");
+    print_type_env(type->data.T_MODULE);
+    return;
+  }
+
+  if (type->kind == T_TYPECLASS) {
+    print_type_class(type->data.T_TYPECLASS);
+    return;
+  }
+
+  TypeSerBuf *b = create_type_ser_buffer(100);
+  _serialize_type(type, b, alias ? 1 : 0);
+  printf("%s", (char *)b->data);
+  free(b->data);
+  free(b);
+
+  if (type->num_implements == 0 || !(tc)) {
+    return;
+  }
+  printf(" implements : [");
+  for (int i = 0; i < type->num_implements; i++) {
+    TypeClass *tc = type->implements[i];
+    printf("%s, ", tc->name);
+  }
+  printf("]");
+}
+
 // Helper function to print the type environment (for debugging)
 void print_type_env(TypeEnv *env) {
   while (env != NULL) {
     printf("%s : ", env->name);
-    print_type(env->type);
+    Type *type = env->type;
+    if (type->alias && strcmp(env->name, type->alias) == 0) {
+      _print_type(type, false, true);
+    } else {
+      _print_type(type, true, false);
+    }
     printf("\n");
     env = env->next;
   }
@@ -48,6 +117,18 @@ void print_type_env(TypeEnv *env) {
 // Helper functions
 bool is_numeric_type(Type *type) {
   return type->kind == T_INT || type->kind == T_NUM;
+}
+
+int fn_type_args_len(Type *fn_type) {
+  Type *t = fn_type;
+  int fn_len = 0;
+
+  while (t->kind == T_FN) {
+    Type *from = t->data.T_FN.from;
+    t = t->data.T_FN.to;
+    fn_len++;
+  }
+  return fn_len;
 }
 
 bool is_type_variable(Type *type) { return type->kind == T_VAR; }
@@ -92,7 +173,7 @@ Type *get_general_numeric_type(Type *t1, Type *t2) {
   return &t_int;
 }
 
-Type *builtin_type(Ast *id) {
+Type *get_type(TypeEnv *env, Ast *id) {
   if (id->tag == AST_VOID) {
     return &t_void;
   }
@@ -101,16 +182,24 @@ Type *builtin_type(Ast *id) {
   }
 
   const char *id_chars = id->data.AST_IDENTIFIER.value;
+  Type *named_type = env_lookup(env, id_chars);
 
-  if (strcmp(id_chars, "int") == 0) {
-    return &t_int;
-  } else if (strcmp(id_chars, "double") == 0) {
-    return &t_num;
-  } else if (strcmp(id_chars, "bool") == 0) {
-    return &t_bool;
-  } else if (strcmp(id_chars, "string") == 0) {
-    return &t_string;
+  if (named_type) {
+    return named_type;
   }
+
+  if (strcmp(id_chars, TYPE_NAME_INT) == 0) {
+    return &t_int;
+  } else if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
+    return &t_num;
+  } else if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
+    return &t_bool;
+  } else if (strcmp(id_chars, TYPE_NAME_STRING) == 0) {
+    return &t_string;
+  } else if (strcmp(id_chars, TYPE_NAME_PTR) == 0) {
+    return &t_ptr;
+  }
+  fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
 
   return NULL;
 }
@@ -129,6 +218,7 @@ bool types_equal(Type *t1, Type *t2) {
   case T_NUM:
   case T_STRING:
   case T_BOOL:
+  case T_CHAR:
   case T_VOID: {
     return true;
   }
@@ -164,6 +254,10 @@ bool types_equal(Type *t1, Type *t2) {
 Type *deep_copy_type(const Type *original) {
   Type *copy = malloc(sizeof(Type));
   copy->kind = original->kind;
+  copy->alias = original->alias;
+  for (int i = 0; i < original->num_implements; i++) {
+    add_typeclass_impl(copy, original->implements[i]);
+  }
 
   switch (original->kind) {
   case T_VAR:
@@ -224,14 +318,17 @@ static void buffer_write(TypeSerBuf *buf, const void *data, size_t size) {
   buf->size += size;
 }
 
-void serialize_type(Type *type, TypeSerBuf *buf) {
+void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
   if (type == NULL) {
     uint8_t kind = 0xFF; // Special value for NULL
     buffer_write(buf, &kind, sizeof(uint8_t));
     return;
   }
 
-  // buffer_write(buf, &type->kind, sizeof(uint8_t));
+  if (level > 0 && (type->alias != NULL)) {
+    buffer_write(buf, type->alias, strlen(type->alias));
+    return;
+  }
 
   switch (type->kind) {
   case T_VAR: {
@@ -240,11 +337,11 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
     break;
   }
   case T_CONS: {
-    if (strcmp(type->data.T_CONS.name, "Tuple") == 0) {
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0) {
 
       buffer_write(buf, "(", 1);
       for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-        serialize_type(type->data.T_CONS.args[i], buf);
+        _serialize_type(type->data.T_CONS.args[i], buf, level + 1);
         if (i < type->data.T_CONS.num_args - 1) {
           buffer_write(buf, " * ", 3);
         }
@@ -253,22 +350,32 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
       break;
     }
 
-    if (strcmp(type->data.T_CONS.name, "List") == 0) {
+    if (is_string_type(type)) {
+      buffer_write(buf, TYPE_NAME_STRING, 6);
+      break;
+    }
+
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
+
       buffer_write(buf, "[", 1);
-      serialize_type(type->data.T_CONS.args[0], buf);
+      _serialize_type(type->data.T_CONS.args[0], buf, level + 1);
       buffer_write(buf, "]", 1);
       break;
     }
-    buffer_write(buf, "cons(", 5);
+
+    buffer_write(buf, "cons('", 6);
     buffer_write(buf, type->data.T_CONS.name, strlen(type->data.T_CONS.name));
-    buffer_write(buf, ", ", 2);
-    char int_str[32];
-    int length =
-        snprintf(int_str, sizeof(int_str), "%d", type->data.T_CONS.num_args);
-    buffer_write(buf, int_str, length);
-    buffer_write(buf, ", ", 2);
+    buffer_write(buf, "', ", 3);
+
+    // char int_str[32];
+    // int length =
+    //     snprintf(int_str, sizeof(int_str), "%d", type->data.T_CONS.num_args);
+    // buffer_write(buf, int_str, length);
+    //
+    // buffer_write(buf, ", ", 2);
+
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-      serialize_type(type->data.T_CONS.args[i], buf);
+      _serialize_type(type->data.T_CONS.args[i], buf, level + 1);
       if (i < type->data.T_CONS.num_args - 1) {
         buffer_write(buf, ", ", 2);
       }
@@ -278,37 +385,47 @@ void serialize_type(Type *type, TypeSerBuf *buf) {
   }
   case T_FN:
     buffer_write(buf, "(", 1);
-    serialize_type(type->data.T_FN.from, buf);
+    _serialize_type(type->data.T_FN.from, buf, level + 1);
     buffer_write(buf, " -> ", 4);
-    serialize_type(type->data.T_FN.to, buf);
+    _serialize_type(type->data.T_FN.to, buf, level + 1);
     buffer_write(buf, ")", 1);
     break;
 
   case T_INT:
-    buffer_write(buf, "Int", 3);
+    buffer_write(buf, TYPE_NAME_INT, 3);
     break;
 
   case T_NUM:
-    buffer_write(buf, "Double", 6);
+    buffer_write(buf, TYPE_NAME_DOUBLE, 6);
     break;
 
   case T_BOOL:
 
-    buffer_write(buf, "Bool", 4);
+    buffer_write(buf, TYPE_NAME_BOOL, 4);
     break;
 
   case T_STRING:
-    buffer_write(buf, "String", 6);
+    buffer_write(buf, TYPE_NAME_STRING, 6);
     break;
 
   case T_VOID:
     buffer_write(buf, "()", 2);
     break;
 
+  case T_CHAR:
+    buffer_write(buf, TYPE_NAME_CHAR, 4);
+    break;
+  case T_TYPECLASS:
+    break;
+
   default:
     // No additional data for other types
     break;
   }
+}
+
+void serialize_type(Type *type, TypeSerBuf *buf) {
+  _serialize_type(type, buf, 0);
 }
 
 static void free_buffer(TypeSerBuf *buf) {

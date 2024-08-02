@@ -2,23 +2,38 @@
 #define _LANG_TYPE_TYPE_H
 
 #include <stdbool.h>
+#include <stdlib.h>
+typedef struct TypeEnv TypeEnv;
+typedef struct Type Type;
+
+typedef struct Method {
+  const char *name;
+  Type *type;
+} Method;
 
 typedef struct TypeClass {
   const char *name;
+  void *methods;
+  size_t method_size;
+  size_t num_methods;
 } TypeClass;
-
-typedef struct InstTypeClass {
-  TypeClass *class;
-  struct InstTypeClass *next;
-} InstTypeClass;
-
-typedef struct TypeEnv TypeEnv;
+// clang-format off
+#define TYPE_NAME_LIST    "List"
+#define TYPE_NAME_TUPLE   "Tuple"
+#define TYPE_NAME_PTR     "Ptr"
+#define TYPE_NAME_CHAR    "Char"
+#define TYPE_NAME_STRING  "String"
+#define TYPE_NAME_BOOL    "Bool"
+#define TYPE_NAME_INT     "Int"
+#define TYPE_NAME_DOUBLE  "Double"
+// clang-format on
 
 enum TypeKind {
   /* Type Operator */
   T_INT,
   T_NUM,
   T_STRING,
+  T_CHAR,
   T_BOOL,
   T_VOID,
   T_FN,
@@ -26,10 +41,14 @@ enum TypeKind {
   T_TUPLE,
   T_LIST,
   T_CONS,
+  T_UNION,
   /* Type Variable  */
   T_VAR,
   T_MODULE,
+  T_TYPECLASS,
 };
+
+// typedef LLVMValueRef ConsSynth(LLVMValueRef value, Type *type_from) {}
 
 typedef struct Type {
   enum TypeKind kind;
@@ -48,18 +67,29 @@ typedef struct Type {
       struct Type *to;
     } T_FN;
     TypeEnv *T_MODULE;
+    struct {
+      struct Type **args;
+      int num_args;
+    } T_UNION;
+    TypeClass *T_TYPECLASS;
   } data;
-  InstTypeClass *type_class;
 
+  TypeClass **implements; // Array of type classes this type implements
+  int num_implements;
+  const char *alias;
+  void *constructor;
+  size_t constructor_size;
 } Type;
+extern TypeClass TCNum;
+extern TypeClass TCOrd;
 
 extern Type t_int;
 extern Type t_num;
 extern Type t_string;
 extern Type t_bool;
 extern Type t_void;
-
-extern TypeClass TClassOrd;
+extern Type t_char;
+extern Type t_ptr;
 
 // TypeEnv represents a mapping from variable names to their types
 typedef struct TypeEnv {
@@ -90,4 +120,14 @@ Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 void free_type_env(TypeEnv *env);
 
+Type *resolve_in_env(Type *t, TypeEnv *env);
+
+void add_typeclass_impl(Type *t, TypeClass *class);
+bool implements_typeclass(Type *t, TypeClass *class);
+TypeEnv *initialize_type_env(TypeEnv *env);
+TypeClass *typeclass_instance(TypeClass *tc);
+TypeClass *typeclass_impl(Type *t, TypeClass *class);
+void *get_typeclass_method(TypeClass *tc, int index);
+
+bool is_arithmetic(Type *t);
 #endif

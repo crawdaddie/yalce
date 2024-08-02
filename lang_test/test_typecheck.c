@@ -9,7 +9,7 @@
 
 bool is_builtin_type(Type *t) {
   return (t == &t_int) || (t == &t_num) || (t == &t_string) || (t == &t_bool) ||
-         (t == &t_void);
+         (t == &t_void) || (t == &t_ptr);
 }
 
 bool typecheck_prog(Ast *prog) {
@@ -218,11 +218,11 @@ int typecheck_ast() {
 
   status &= tcheck(
       "let complex_match = fn x -> \n"
-      "(match x with\n"
+      "match x with\n"
       "| (1, _) -> 0\n"
       "| (2, _) -> 100\n"
       "| _      -> 1000\n"
-      ");",
+      ";",
       T(&(Type){T_FN, {.T_FN = {TUPLE(2, &t_int, &TVAR("t4")), &t_int}}}));
 
   status &= tcheck(
@@ -254,11 +254,11 @@ int typecheck_ast() {
                &t_int));
 
   status &= tcheck("let complex_match = fn x -> \n"
-                   "(match x with\n"
+                   "match x with\n"
                    "| (1, _) -> 0\n"
                    "| (2, z) -> 100 + z\n"
                    "| _      -> 1000\n"
-                   ");",
+                   ";",
                    T(create_type_fn(TUPLE(2, &t_int, &t_int), &t_int)));
   {
     Type *t = TUPLE(2, &TVAR("t3"), &TVAR("t4"));
@@ -271,19 +271,19 @@ int typecheck_ast() {
   }
 
   status &= tcheck("let iter = fn l ->\n"
-                   "  (match l with\n"
+                   "  match l with\n"
                    "  | [] -> 0\n"
                    "  | x::rest -> iter rest\n"
-                   "  );",
+                   "  ;",
                    T(create_type_fn(TLIST(&TVAR("t6")), &t_int)));
   {
 
     Type *t = &TVAR("t7");
     status &= tcheck("let sum = fn s l ->\n"
-                     "  (match l with\n"
+                     "  match l with\n"
                      "  | [] -> s\n"
                      "  | x::rest -> sum (s + x) rest\n"
-                     "  );",
+                     "  ;",
                      T(create_type_multi_param_fn(2, T(t, TLIST(t)), t)));
   }
 
@@ -292,10 +292,10 @@ int typecheck_ast() {
     Type *t = &TVAR("t7");
     status &=
         tcheck("let list_sum = fn s l ->\n"
-               "  (match l with\n"
+               "  match l with\n"
                "  | [] -> s\n"
                "  | x::rest -> list_sum (s + x) rest\n"
-               "  )\n"
+               "  \n"
                ";;\n"
                "list_sum 0 [1,2,3,4]",
                T(create_type_multi_param_fn(2, T(t, TLIST(t)), t), &t_int));
@@ -309,11 +309,84 @@ int typecheck_ast() {
             2, T(TUPLE(2, &TVAR("t1"), &TVAR("t2")), &TVAR("t3")), &TVAR("t1")),
         &t_int));
 
+  {
+    Type tvx = TVAR("'x");
+    status &= tcheck_w_env(&(TypeEnv){"x", &tvx}, "1 + x", T(&t_int));
+    bool implements_num = implements_typeclass(&tvx, &TCNum);
+    printf("%s",
+           implements_num
+               ? "✅ \e[1mx implements typeclass 'Num'\e[0m\n"
+               : "❌ \e[1mx does not implement typeclass 'Num'\e[0m got \n");
+    status &= implements_num;
+  }
+
+  {
+    Type tvx = TVAR("'x");
+    Type tvy = TVAR("'y");
+    status &= tcheck_w_env(&(TypeEnv){"x", &tvx, &(TypeEnv){"y", &tvy}},
+                           "x + y", T(&tvy));
+
+    bool implements_num = implements_typeclass(&tvy, &TCNum);
+    implements_num &= implements_typeclass(&tvy, &TCNum);
+    printf("%s", implements_num
+                     ? "✅ \e[1m'x & 'y implement typeclass 'Num'\e[0m\n"
+                     : "❌ \e[1m'x or 'y does not implement typeclass "
+                       "'Num'\e[0m got \n");
+    status &= implements_num;
+  }
+
   return status;
+}
+
+bool test_first_class_fns() {
+  bool result = true;
+
+  Ast *prog = parse_input("let sum = fn a b -> a + b;;\n"
+                          "let proc = fn f a b -> f a b;;\n"
+                          "\n"
+                          "proc sum 1 2\n");
+  TypeEnv *env;
+  infer_ast(&env, prog);
+  // sum typecheck
+  Ast *sum_ast = prog->data.AST_BODY.stmts[0];
+  TYPES_EQUAL(
+      "sum func ", sum_ast->md,
+      create_type_multi_param_fn(2, T(&TVAR("t2"), &TVAR("t2")), &TVAR("t2")),
+      result)
+
+  // proc typecheck
+  Ast *proc_ast = prog->data.AST_BODY.stmts[1];
+  TYPES_EQUAL("proc func ", proc_ast->md,
+              create_type_multi_param_fn(
+                  3,
+                  T(create_type_multi_param_fn(2, T(&TVAR("t6"), &TVAR("t7")),
+                                               &TVAR("t9")),
+                    &TVAR("t6"), &TVAR("t7")),
+                  &TVAR("t9")),
+              result);
+
+  // application typecheck
+  Ast *proc_application_ast = prog->data.AST_BODY.stmts[2];
+
+  TYPES_EQUAL("application arg 1 ",
+              proc_application_ast->data.AST_APPLICATION.args[0].md,
+              create_type_multi_param_fn(2, T(&t_int, &t_int), &t_int), result)
+
+  TYPES_EQUAL("application arg 2 ",
+              proc_application_ast->data.AST_APPLICATION.args[1].md, &t_int,
+              result)
+
+  TYPES_EQUAL("application arg 3 ",
+              proc_application_ast->data.AST_APPLICATION.args[2].md, &t_int,
+              result)
+
+  TYPES_EQUAL("application result ", proc_application_ast->md, &t_int, result)
+  return result;
 }
 
 int main() {
   bool status = true;
+  status &= test_first_class_fns();
   status &= typecheck_ast();
   status &= test_unify();
   return !status;

@@ -21,6 +21,7 @@ bool test_parse(char input[], char *expected_sexpr) {
 
     free(sexpr);
     free(prog);
+    yylineno = 1;
     yyrestart(NULL);
     // extern Ast *ast_root;
     ast_root = NULL;
@@ -48,6 +49,8 @@ bool test_parse(char input[], char *expected_sexpr) {
 
   free(sexpr);
   free(prog);
+
+  yylineno = 1;
   yyrestart(NULL);
   // extern Ast *ast_root;
   ast_root = NULL;
@@ -92,6 +95,7 @@ bool test_parse_body(char *input, char *expected_sexpr) {
 
   free(sexpr);
   free(prog);
+  yylineno = 1;
   yyrestart(NULL);
   // extern Ast *ast_root;
   ast_root = NULL;
@@ -208,7 +212,6 @@ int main() {
 
   status &= test_parse("let x::_ = [1, 2, 3]", "(let (:: x _) [1, 2, 3])");
 
-  status &= test_parse("(1, )", NULL);
   status &= test_parse("(1, 2)", "(1, 2)");
   status &= test_parse("(1, 2, 3)", "(1, 2, 3)");
   status &= test_parse("match 3 with\n"
@@ -222,10 +225,10 @@ int main() {
                        ")");
 
   status &= test_parse_body("let m = fn x ->\n"
-                            "(match x with\n"
+                            "match x with\n"
                             "| 1 -> 1\n"
                             "| 2 -> 0\n"
-                            "| _ -> 3)\n"
+                            "| _ -> 3\n"
                             ";",
                             "(let m (m x -> \n"
                             "(match x with\n"
@@ -237,25 +240,40 @@ int main() {
   // more complex match expr
   status &= test_parse("match x + y with\n"
                        "| 1 -> 1\n"
-                       "| 2 -> let a = 1; a + 1\n"
+                       "| 2 -> let a = 1 in a + 1\n"
+                       "| _ -> 3",
+                       "(match (+ x y) with\n"
+                       "\t1 -> 1\n"
+                       "\t2 -> (let a 1) : (+ a 1)"
+                       "\n\t_ -> 3\n"
+                       ")");
+
+  status &= test_parse("match x + y with\n"
+                       "| 1 -> 1\n"
+                       "| 2 -> (let a = 1; a + 1)\n"
                        "| _ -> 3",
                        "(match (+ x y) with\n"
                        "\t1 -> 1\n"
                        "\t2 -> (let a 1)\n"
-                       "(+ a 1)"
-                       "\n\t_ -> 3\n"
+                       "(+ a 1)\n"
+                       "\t_ -> 3\n"
                        ")");
 
-  status &= test_parse("let printf2 = extern fn string -> string -> () ;",
+  status &= test_parse("let printf2 = extern fn string -> string -> ()",
                        "(let printf2 (extern printf2 string -> string -> ())");
 
-  status &= test_parse("let voidf = extern fn () -> () ;",
+  status &= test_parse("let voidf = extern fn () -> ()",
                        "(let voidf (extern voidf () -> ())");
 
-  status &= test_parse(
-      "print `here's a printed "
-      "version of {x} and {y}`",
-      "(print \"here's a printed version of {x} {x} and {y}\" (x, x, y))");
+  status &=
+      test_parse("`here's a printed "
+                 "version of {x} and {y}\\n`",
+                 "(\"here's a printed version of \", x, \" and \", y, \"\n\")");
+
+  status &= test_parse("`here's a printed "
+                       "version of {1 + 2000} and {y 1 2}`",
+                       "(\"here's a printed version of \", (+ 1 2000), \" and "
+                       "\", ((y 1) 2))");
 
   // extern funcs
   return status ? 0 : 1;

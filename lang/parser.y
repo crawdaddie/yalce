@@ -29,15 +29,16 @@ Ast* ast_root = NULL;
     ObjString vident;           /* identifier */
     ObjString vstr;             /* string */
     int vint;                   /* int val */
-    double vfloat;
+    double vdouble;
+    char vchar;
 };
 
 %token <vint>   INTEGER
-%token <vfloat> NUMBER
+%token <vdouble>DOUBLE 
 %token <vident> IDENTIFIER
 %token <vident> META_IDENTIFIER
 %token <vstr>   TOK_STRING
-%token <vstr>   FSTRING
+%token <vchar>  TOK_CHAR
 %token TRUE FALSE
 %token PIPE
 %token EXTERN
@@ -51,6 +52,10 @@ Ast* ast_root = NULL;
 %token TOK_VOID
 %token IN AND
 
+%token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
+%token <vstr> FSTRING_TEXT
+
+
 
 %left '.' 
 %left PIPE
@@ -59,67 +64,42 @@ Ast* ast_root = NULL;
 %left GE LE EQ NE '>' '<'
 %left '+' '-'
 %left '*' '/'
+%left ':'
+%left MATCH
 
 %nonassoc UMINUS
 
 %type <ast_node_ptr>
-  stmt expr stmt_list application
-  lambda_expr lambda_arg lambda_args extern_typed_signature list tuple expr_list
-  match_expr match_branches list_match_expr simple_expr
+  expr
+  application
+  lambda_expr
+  lambda_arg
+  lambda_args
+  extern_typed_signature
+  extern_variants
+  list
+  tuple
+  expr_list
+  match_expr
+  match_branches
+  list_match_expr
+  simple_expr
   let_binding
-
-
+  fstring
+  fstring_parts
+  fstring_part
+  expr_sequence
+  type_decl
+  type_expr
 
 %%
 
 program:
-  stmt_list           {
-                            if (ast_root == NULL) {
-                              ast_root = Ast_new(AST_BODY);
-                              ast_root->data.AST_BODY.len = 0;
-                              ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
-                            }
-                            if ($1 == NULL) {
-                            }
-                            else if ($1->tag != AST_BODY && $1 != NULL) {
-                              ast_body_push(ast_root, $1);
-                            } else if ($1 != NULL) {
-                              Ast *b = $1;
-                              for (int i = 0; i < b->data.AST_BODY.len; i++) {
-                                ast_body_push(ast_root, b->data.AST_BODY.stmts[i]);
-                              }
-                            }
-
-
-                          }
-
+    expr_sequence               { parse_stmt_list(ast_root, $1); }
   | /* NULL */
   ;
 
-stmt:
-    let_binding                   { $$ = $1; }
-  | expr                          { $$ = $1; }
-  | META_IDENTIFIER let_binding   { $$ = ast_meta($1, $2); }
-  | 'import' IDENTIFIER           { $$ = ast_bare_import($2); }
-  ;
 
-let_binding:
-    LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
-  | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
-  | LET IDENTIFIER '=' lambda_expr  { $$ = ast_let(ast_identifier($2), $4, NULL); }
-  | LET IDENTIFIER '=' EXTERN FN extern_typed_signature ';' 
-                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
-  | LET TOK_VOID '=' expr           { $$ = $4; }
-  /*| LET lambda_arg '=' expr IN expr { $$ = ast_let($2, $4, $6); }*/
-  /*| LET list_match_expr '=' expr    { $$ = ast_let($2, $4, NULL); }*/
-
-  ;
-
-stmt_list:
-    stmt                        { $$ = $1; }
-  | stmt_list ';' stmt          { $$ = parse_stmt_list($1, $3); }
-  | '(' stmt_list ')'           { $$ = $2; }
-  ;
 
 expr:
     simple_expr
@@ -139,39 +119,76 @@ expr:
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
-  | LET IDENTIFIER '=' expr IN expr   { $$ = ast_let(ast_identifier($2), $4, $6); }
-  | LET lambda_arg '=' expr IN expr   { $$ = ast_let($2, $4, $6); }
-  | LET expr DOUBLE_COLON expr '=' expr IN expr { $$ = ast_let(ast_list_prepend($2, $4), $6, $8); }
-  | LET expr DOUBLE_COLON expr '=' expr { $$ = ast_let(ast_list_prepend($2, $4), $6, NULL); }
+  | let_binding                       { $$ = $1; }
+  | match_expr                        { $$ = $1; }
+  | type_decl                         { $$ = $1; }
   ;
 
 simple_expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
-  | NUMBER                { $$ = AST_CONST(AST_NUMBER, $1); }
+  | DOUBLE                { $$ = AST_CONST(AST_DOUBLE, $1); }
   | TOK_STRING            { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
   | IDENTIFIER            { $$ = ast_identifier($1); }
   | TOK_VOID              { $$ = ast_void(); }
-  | '(' expr ')'          { $$ = $2; }
-  | FSTRING               { $$ = parse_format_expr($1); }
   | list                  { $$ = $1; }
   | tuple                 { $$ = $1; }
-  | match_expr            { $$ = $1; }
-  | lambda_expr           { $$ = $1; }
+  | fstring               { $$ = parse_fstring_expr($1); }
+  | TOK_CHAR              { $$ = ast_char($1); }
+  | '(' expr_sequence ')' { $$ = $2; }
+  ;
+
+expr_sequence:
+    expr                        { $$ = $1; }
+  | expr_sequence ';' expr      { $$ = parse_stmt_list($1, $3); }
+  ;
+
+let_binding:
+    LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
+  | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
+  | LET IDENTIFIER '=' extern_typed_signature  
+                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $4), NULL); }
+
+
+  | LET IDENTIFIER '=' '(' extern_variants ')'  
+                                    {
+                                      Ast *variants = $5;
+                                      variants->tag = AST_EXTERN_VARIANTS;
+                                      $$ = ast_let(ast_identifier($2), variants, NULL);
+                                    }
+
+  | LET TOK_VOID '=' expr           { $$ = $4; }
+  | let_binding IN expr             {
+                                      Ast *let = $1;
+                                      let->data.AST_LET.in_expr = $3;
+                                      $$ = let;
+                                    }
+  | lambda_expr                     { $$ = $1; }
   ;
 
 extern_typed_signature:
-  expr                                  { $$ = extern_typed_signature($1); }
-  | extern_typed_signature ARROW expr   { $$ = extern_typed_signature_push($1, $3); }
+    EXTERN FN expr                  { $$ = extern_typed_signature($3); }
+  | extern_typed_signature ARROW expr %prec ':'
+                                    { $$ = extern_typed_signature_push($1, $3); }
+  ;
+
+extern_variants:
+    extern_typed_signature ':' TOK_STRING 
+                                    { $$ = ast_list(ast_extern_fn($3, $1)); }
+
+  | extern_variants ',' extern_typed_signature ':' TOK_STRING 
+                                    { $$ = ast_list_push($1, ast_extern_fn($5, $3)); }
+
+  | extern_variants ','             { $$ = $1; } /* Allow trailing comma */
   ;
 
 
 lambda_expr:
-    FN lambda_args ARROW stmt_list ';'      { $$ = ast_lambda($2, $4); }
-  | FN TOK_VOID ARROW stmt_list ';'         { $$ = ast_lambda(NULL, $4); }
-  | '(' FN lambda_args ARROW stmt_list ')'  { $$ = ast_lambda($3, $5); }
-  | '(' FN TOK_VOID ARROW stmt_list ')'     { $$ = ast_lambda(NULL, $5); }
+    FN lambda_args ARROW expr_sequence ';'      { $$ = ast_lambda($2, $4); }
+  | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_lambda(NULL, $4); }
+  | '(' FN lambda_args ARROW expr_sequence ')'  { $$ = ast_lambda($3, $5); }
+  | '(' FN TOK_VOID ARROW expr_sequence ')'     { $$ = ast_lambda(NULL, $5); }
   ;
 
 
@@ -204,6 +221,7 @@ application:
 list:
     '[' ']'                 { $$ = ast_empty_list(); }
   | '[' expr_list ']'       { $$ = $2; }
+  | '[' expr_list ',' ']'       { $$ = $2; }
   ;
 
 list_match_expr:
@@ -214,12 +232,12 @@ list_match_expr:
 tuple:
     '(' expr ')'          { $$ = $2; }
   | '(' expr_list ')'     { $$ = ast_tuple($2); }
+  | '(' expr_list ',' ')' { $$ = ast_tuple($2); }
   ;
 
 expr_list:
     expr                  { $$ = ast_list($1); }
   | expr_list ',' expr    { $$ = ast_list_push($1, $3); }
-
   ;
 
 match_expr:
@@ -227,10 +245,39 @@ match_expr:
   ;
 
 match_branches:
-    '|' expr ARROW stmt_list                {$$ = ast_match_branches(NULL, $2, $4);}
-  | match_branches '|' expr ARROW stmt_list {$$ = ast_match_branches($1, $3, $5);}
-  | match_branches '|' '_' ARROW stmt_list  {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
+    '|' expr ARROW expr                 {$$ = ast_match_branches(NULL, $2, $4);}
+  | match_branches '|' expr ARROW expr  {$$ = ast_match_branches($1, $3, $5);}
+  | match_branches '|' '_' ARROW expr   {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
   ;
+
+fstring: FSTRING_START fstring_parts FSTRING_END { $$ = $2; }
+  ;
+
+fstring_parts:
+  /* empty */                   { $$ = ast_empty_list(); }
+  | fstring_parts fstring_part  { $$ = ast_list_push($1, $2); }
+  ;
+
+fstring_part:
+    FSTRING_TEXT                                  { $$ = ast_string($1); }
+  | FSTRING_INTERP_START expr FSTRING_INTERP_END  { $$ = $2; }
+  ;
+
+type_decl:
+  'type' IDENTIFIER '=' type_expr {
+                                    Ast *type_decl = ast_let(ast_identifier($2), $4, NULL);
+                                    type_decl->tag = AST_TYPE_DECL;
+                                    $$ = type_decl;
+                                  }
+
+type_expr:
+    expr                { $$ = ast_list($1); }
+  | type_expr '|' expr  { $$ = ast_list_push($1, $3); } 
+
+
+
+
+
 %%
 
 

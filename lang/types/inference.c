@@ -3,6 +3,7 @@
 #include "format_utils.h"
 #include "serde.h"
 #include "types/type.h"
+#include "types/type_declaration.h"
 #include "types/util.h"
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +15,6 @@ Type *infer(TypeEnv **env, Ast *ast);
 static int type_var_counter = 0;
 void reset_type_var_counter() { type_var_counter = 0; }
 const char *fresh_tvar_name() {
-  char prefix = 't';
   char *new_name = malloc(5 * sizeof(char));
   if (new_name == NULL) {
     return NULL;
@@ -26,19 +26,12 @@ const char *fresh_tvar_name() {
 
 static Type *next_tvar() { return create_type_var(fresh_tvar_name()); }
 static bool is_ord(Type *t) { return (t->kind >= T_INT) && (t->kind <= T_NUM); }
-static bool is_arithmetic(Type *t) {
-  return (t->kind >= T_INT) && (t->kind <= T_NUM);
-}
+
 static Type *max_numeric_type(Type *lt, Type *rt) {
   if (lt->kind >= rt->kind) {
     return lt;
   }
   return rt;
-}
-
-static bool is_placeholder(Ast *p) {
-  return p->tag == AST_IDENTIFIER &&
-         strcmp(p->data.AST_IDENTIFIER.value, "_") == 0;
 }
 
 static Type *infer_void_arg_lambda(TypeEnv **env, Ast *ast) {
@@ -77,8 +70,6 @@ static Type *type_of_var(Ast *ast) {
     return tcons("Tuple", tuple_mems, len);
   }
   default: {
-    // print_ast(ast);
-    // printf("\n");
     fprintf(stderr, "Typecheck err: lambda arg type %d unsupported\n",
             ast->tag);
     return NULL;
@@ -131,8 +122,88 @@ static TypeEnv *add_var_to_env(TypeEnv *env, Type *param_type, Ast *param_ast) {
   }
 }
 
+typedef struct TypeMap {
+  Type *key;
+  Type *type;
+  struct TypeMap *next;
+} TypeMap;
+
+TypeMap *map_extend(TypeMap *env, Type *key, Type *type) {
+  TypeMap *new_env = malloc(sizeof(TypeMap));
+  new_env->key = key;
+  new_env->type = type;
+  new_env->next = env;
+  return new_env;
+}
+
+Type *map_lookup(TypeMap *env, Type *key) {
+  while (env) {
+    if (types_equal(env->key, key)) {
+      return env->type;
+    }
+    env = env->next;
+  }
+  return NULL;
+}
+
+Type *resolve_in_map(TypeMap *constraint_map, Type *key) {
+  if (key->kind == T_CONS) {
+    return key;
+  }
+  if (key->kind == T_FN) {
+    Type *t = key;
+    while (t->kind == T_FN) {
+      Type *from = t->data.T_FN.from;
+      t = t->data.T_FN.to;
+
+      if (from->kind == T_VAR) {
+        Type *resolved_from = resolve_in_map(constraint_map, from);
+        from->kind = resolved_from->kind;
+        from->data = resolved_from->data;
+      }
+
+      if (t->kind == T_VAR) {
+        Type *resolved_from = resolve_in_map(constraint_map, t);
+
+        t->kind = resolved_from->kind;
+        t->data = resolved_from->data;
+      }
+    }
+    return key;
+  }
+
+  while (constraint_map) {
+    if (types_equal(constraint_map->key, key)) {
+      Type *t = constraint_map->type;
+      if (is_generic(t)) {
+        return resolve_in_map(constraint_map->next, t);
+      } else {
+        return t;
+      }
+    }
+    constraint_map = constraint_map->next;
+  }
+}
+
+void map_print(TypeMap *env) {
+  while (env) {
+    print_type(env->key);
+    printf(" : ");
+    print_type(env->type);
+    printf("\n");
+    env = env->next;
+  }
+}
+
+void free_type_map(TypeMap *env) {
+  if (env->next) {
+    free_type_map(env->next);
+    free(env);
+  }
+}
+
 static TypeEnv *create_implicit_var_bindings(TypeEnv *env, Ast *expr) {
-  if (is_placeholder(expr)) {
+  if (ast_is_placeholder_id(expr)) {
     return env;
   }
 
@@ -184,7 +255,7 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
 
     *env = create_implicit_var_bindings(*env, test_expr);
     if (i == len - 1) {
-      if (!is_placeholder(test_expr)) {
+      if (!ast_is_placeholder_id(test_expr)) {
         test_type = infer(env, test_expr);
         unify(expr_type, test_type);
       }
@@ -207,82 +278,164 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
   return final_type;
 }
 
-static Type *resolve_single_type(Type *t, TypeEnv *env) {
-  if (t == NULL)
-    return NULL;
+TypeMap *add_constraints(TypeMap *constraints_map, Type *arg_type, Type *t) {
 
-  switch (t->kind) {
-  case T_VAR: {
-    Type *resolved = env_lookup(env, t->data.T_VAR);
-    if (resolved != NULL) {
-      // Recursively resolve the found type
-      return resolve_single_type(resolved, env);
+  if (arg_type->kind == T_CONS && t->kind == T_CONS &&
+      (strcmp(arg_type->data.T_CONS.name, t->data.T_CONS.name) == 0) &&
+      (arg_type->data.T_CONS.num_args == t->data.T_CONS.num_args)) {
+
+    for (int i = 0; i < arg_type->data.T_CONS.num_args; i++) {
+      constraints_map = add_constraints(constraints_map, t->data.T_CONS.args[i],
+                                        arg_type->data.T_CONS.args[i]);
     }
-    return t; // If not found in env, return the original type
-  }
-  case T_CONS: {
-    Type *new_type = deep_copy_type(t);
+    return constraints_map;
 
-    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      new_type->data.T_CONS.args[i] =
-          resolve_single_type(t->data.T_CONS.args[i], env);
-    }
-    return new_type;
-  }
-  case T_FN: {
-    Type *new_type = malloc(sizeof(Type));
-    new_type->kind = T_FN;
-    new_type->data.T_FN.from = resolve_single_type(t->data.T_FN.from, env);
-    new_type->data.T_FN.to = resolve_single_type(t->data.T_FN.to, env);
-    return new_type;
-  }
-  default:
-    return t;
-  }
-}
-static Type *resolve_in_env(Type *t, TypeEnv *env) {
-  if (t == NULL)
-    return NULL;
+  } else if (arg_type->kind == T_FN && t->kind == T_FN) {
+    Type *a = arg_type;
+    Type *_t = t;
 
-  return resolve_single_type(t, env);
+    constraints_map =
+        map_extend(constraints_map, a->data.T_FN.from, _t->data.T_FN.from);
+    return add_constraints(constraints_map, a->data.T_FN.to, _t->data.T_FN.to);
+  } else {
+    constraints_map = map_extend(constraints_map, t, arg_type);
+    return constraints_map;
+  }
 }
 
 static Type *infer_fn_application(TypeEnv **env, Ast *ast) {
 
-  Type *fn_type =
-      deep_copy_type(infer(env, ast->data.AST_APPLICATION.function));
+  Type *fn_type = infer(env, ast->data.AST_APPLICATION.function);
+
   if (!fn_type) {
     return NULL;
   }
 
-  Type *result_type = next_tvar();
+  if (fn_type->kind == T_VAR) {
+    Type *result_type = next_tvar();
+    Type *expected_fn_type = result_type;
+    Type *fn_return;
 
-  Type *expected_fn_type = result_type;
+    for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+
+      expected_fn_type = create_type_fn(
+          infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
+      result_type = expected_fn_type->data.T_FN.to;
+    }
+
+    fn_return = result_type->data.T_FN.to;
+
+    TypeEnv *_env = NULL;
+
+    _unify(fn_type, expected_fn_type, &_env);
+
+    Type *res = fn_type;
+
+    for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+      res = res->data.T_FN.to;
+    }
+
+    return resolve_in_env(res, _env);
+  }
+
+  Type *_fn_type = fn_type;
+  if (fn_type->kind == T_FN) {
+
+    fn_type = deep_copy_type(fn_type);
+  };
+
+  Type *result_type = next_tvar();
 
   Type *fn_return = fn_type;
 
-  for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
-    expected_fn_type = create_type_fn(
-        infer(env, ast->data.AST_APPLICATION.args + i), expected_fn_type);
+  Type *arg_types[ast->data.AST_APPLICATION.len];
+
+  TypeMap *constraints_map = NULL;
+
+  int len = ast->data.AST_APPLICATION.len;
+  bool contains_generic_fn_arg = false;
+  for (int i = 0; i < len; i++) {
+    Type *arg_type = infer(env, ast->data.AST_APPLICATION.args + i);
+    arg_types[i] = arg_type;
+
+    if (arg_type->kind == T_FN && is_generic(arg_type)) {
+      contains_generic_fn_arg = true;
+    }
+
+    Type *t = fn_return->data.T_FN.from;
+    constraints_map = add_constraints(constraints_map, arg_type, t);
+
     if (fn_return->data.T_FN.to == NULL) {
-      fprintf(stderr, "Error: too may parameters to function\n");
+      fprintf(stderr, "Error: too many parameters to function\n");
       return NULL;
     }
 
+    Type *next = (i == len - 1) ? result_type : create_type_fn(NULL, NULL);
+
     fn_return = fn_return->data.T_FN.to;
   }
+  Type *ret_type;
+  Type *exp = create_type_multi_param_fn(len, arg_types, result_type);
+  if (contains_generic_fn_arg) {
 
-  TypeEnv *_env = NULL;
-  _unify(result_type, fn_return, &_env);
-  _unify(fn_type, expected_fn_type, &_env);
+    Type *res = fn_type;
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      Type *resolved = resolve_in_map(constraints_map, res->data.T_FN.from);
+      res->data.T_FN.from = resolved;
+      ast->data.AST_APPLICATION.args[i].md = resolved;
+      res = res->data.T_FN.to;
+    }
 
-  Type *res = fn_type;
+    *res = *resolve_in_map(constraints_map, res);
+    ret_type = res;
+    ast->data.AST_APPLICATION.function->md = fn_type;
+  } else {
+    TypeEnv *_env = NULL;
+    _unify(result_type, fn_return, &_env);
+    _unify(fn_type, exp, &_env);
 
-  for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
-    res = res->data.T_FN.to;
+    Type *res = fn_type;
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      res = res->data.T_FN.to;
+    }
+    ret_type = resolve_in_env(res, _env);
+    free_type_env(_env);
   }
 
-  return resolve_in_env(res, _env);
+  free_type_map(constraints_map);
+  return ret_type;
+}
+
+Type *cast_char_list(Type *t) {
+  if (is_list_type(t) && t->data.T_CONS.args[0]->kind == T_CHAR) {
+    return &t_string;
+  }
+  return t;
+}
+
+// Function to determine the resulting type of an arithmetic operation
+Type *arithmetic_result_type(Type *lt, Type *rt) {
+  if (is_arithmetic(lt) && is_arithmetic(rt)) {
+    Type *type = max_numeric_type(lt, rt);
+    return type;
+  } else {
+    unify(lt, rt);
+
+    if (implements_typeclass(lt, &TCNum) && implements_typeclass(rt, &TCNum)) {
+      // TODO: this is not quite correct logic for upcasting
+      if ((lt->kind != T_NUM) && (lt->kind != T_INT)) {
+        return lt;
+      }
+
+      if ((rt->kind != T_NUM) && (rt->kind != T_INT)) {
+        return rt;
+      }
+    }
+
+    return lt;
+  }
+
+  return NULL;
 }
 
 // Main type inference function
@@ -310,6 +463,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
       return NULL;
     }
     if (ast->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+
       Type *list_el_type = next_tvar();
       Type *list_type = create_list_type(list_el_type);
       unify(rt, list_type);
@@ -319,23 +473,11 @@ Type *infer(TypeEnv **env, Ast *ast) {
     }
     if ((ast->data.AST_BINOP.op >= TOKEN_PLUS) &&
         (ast->data.AST_BINOP.op <= TOKEN_MODULO)) {
-      if (is_arithmetic(lt) && is_arithmetic(rt)) {
-        type = max_numeric_type(lt, rt);
-        break;
-      } else {
-        unify(lt, rt);
-        type = lt;
-
-        fprintf(stderr,
-                STYLE_DIM "Not implemented warning: type coercion for "
-                          "non-arithmetic (eg T_VAR) "
-                          "type to Arithmetic typeclass\n" STYLE_RESET_ALL);
-        break;
-      }
-      // arithmetic binop
-
-    } else if ((ast->data.AST_BINOP.op >= TOKEN_LT) &&
-               (ast->data.AST_BINOP.op <= TOKEN_NOT_EQUAL)) {
+      type = arithmetic_result_type(lt, rt);
+      break;
+    }
+    if ((ast->data.AST_BINOP.op >= TOKEN_LT) &&
+        (ast->data.AST_BINOP.op <= TOKEN_NOT_EQUAL)) {
 
       if (is_arithmetic(lt) && is_arithmetic(rt)) {
         type = &t_bool;
@@ -357,11 +499,14 @@ Type *infer(TypeEnv **env, Ast *ast) {
   case AST_INT:
     type = &t_int;
     break;
-  case AST_NUMBER:
+  case AST_DOUBLE:
     type = &t_num;
     break;
   case AST_STRING:
     type = &t_string;
+    break;
+  case AST_CHAR:
+    type = &t_char;
     break;
   case AST_BOOL:
     type = &t_bool;
@@ -373,7 +518,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
   }
 
   case AST_IDENTIFIER: {
-    if (is_placeholder(ast)) {
+    if (ast_is_placeholder_id(ast)) {
       type = next_tvar();
       break;
     }
@@ -387,9 +532,10 @@ Type *infer(TypeEnv **env, Ast *ast) {
     }
     break;
   }
-  case AST_LET: {
 
+  case AST_LET: {
     Type *expr_type = infer(env, ast->data.AST_LET.expr);
+
     Ast *binding = ast->data.AST_LET.binding;
     *env = add_var_to_env(*env, expr_type, binding);
     infer(env, binding);
@@ -410,16 +556,67 @@ Type *infer(TypeEnv **env, Ast *ast) {
       param_types = malloc(sizeof(Type *));
       *param_types = &t_void;
     } else {
+
       param_types = malloc(param_count * sizeof(Type *));
+
       for (int i = 0; i < param_count; i++) {
-        param_types[i] =
-            builtin_type(ast->data.AST_EXTERN_FN.signature_types + i);
+        Ast *param_ast = ast->data.AST_EXTERN_FN.signature_types + i;
+        Type *param_type = get_type(*env, param_ast);
+        if (!param_type) {
+          fprintf(stderr, "Error declaring extern function: type %s not found",
+                  param_ast->data.AST_IDENTIFIER.value);
+        }
+        param_types[i] = param_type;
       }
     }
-    Type *ex_t = create_type_multi_param_fn(
-        param_count || 1, param_types,
-        builtin_type(ast->data.AST_EXTERN_FN.signature_types + param_count));
+
+    Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
+    Type *ret_type = get_type(*env, ret_type_ast);
+
+    Type *ex_t =
+        create_type_multi_param_fn(param_count || 1, param_types, ret_type);
+
     type = ex_t;
+    break;
+  }
+
+  case AST_EXTERN_VARIANTS: {
+
+    Ast *extern_variant_ast = ast->data.AST_LIST.items;
+    infer(env, extern_variant_ast);
+
+    Type *generic_fn = deep_copy_type(extern_variant_ast->md);
+    generic_fn->data.T_FN.from = next_tvar();
+
+    size_t fn_len = extern_variant_ast->data.AST_EXTERN_FN.len;
+
+    Ast ret_type =
+        extern_variant_ast->data.AST_EXTERN_FN.signature_types[fn_len - 1];
+
+    for (int i = 1; i < ast->data.AST_LIST.len; i++) {
+      extern_variant_ast = ast->data.AST_LIST.items + i;
+      infer(env, extern_variant_ast);
+      size_t this_fn_len = extern_variant_ast->data.AST_EXTERN_FN.len;
+
+      Ast this_ret_type = extern_variant_ast->data.AST_EXTERN_FN
+                              .signature_types[this_fn_len - 1];
+
+      if (this_fn_len != fn_len) {
+        fprintf(stderr, "Error: function variants must all have the same size");
+        return NULL;
+      }
+
+      if ((this_ret_type.data.AST_IDENTIFIER.length !=
+           ret_type.data.AST_IDENTIFIER.length) ||
+          (strcmp(this_ret_type.data.AST_IDENTIFIER.value,
+                  ret_type.data.AST_IDENTIFIER.value) != 0)) {
+        fprintf(stderr,
+                "Error: function variants must all return the same type");
+        return NULL;
+      }
+    }
+
+    type = generic_fn;
     break;
   }
 
@@ -464,6 +661,14 @@ Type *infer(TypeEnv **env, Ast *ast) {
     unify(current, body_type);
 
     type = fn_type;
+    Type *t = fn_type;
+
+    while (t->kind == T_FN) {
+      print_type_w_tc(t->data.T_FN.from);
+      printf("->");
+
+      t = t->data.T_FN.to;
+    }
 
     break;
   }
@@ -485,6 +690,16 @@ Type *infer(TypeEnv **env, Ast *ast) {
       cons_args[i] = infer(env, member);
     }
     type = tcons("Tuple", cons_args, arity);
+    break;
+  }
+
+  case AST_FMT_STRING: {
+    int arity = ast->data.AST_LIST.len;
+    for (int i = 0; i < arity; i++) {
+      Ast *member = ast->data.AST_LIST.items + i;
+      infer(env, member);
+    }
+    type = &t_string;
     break;
   }
 
@@ -521,6 +736,10 @@ Type *infer(TypeEnv **env, Ast *ast) {
     member->md = env_lookup(((Type *)record->md)->data.T_MODULE,
                             member->data.AST_IDENTIFIER.value);
     type = member->md;
+    break;
+  }
+  case AST_TYPE_DECL: {
+    type_declaration(ast, env);
     break;
   }
   }

@@ -323,8 +323,6 @@ int init_audio() {
 
   start_audio();
 
-  msleep(100);
-  // sleep(1);
   return 0;
 }
 

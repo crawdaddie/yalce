@@ -24,6 +24,12 @@ typedef struct SpecificFns {
   struct SpecificFns *next;
 } SpecificFns;
 
+typedef struct FnVariants {
+  Type *type;
+  LLVMValueRef func;
+  struct FnVariants *next;
+} FnVariants;
+
 typedef enum symbol_type {
   STYPE_FN_PARAM,
   STYPE_TOP_LEVEL_VAR,
@@ -31,6 +37,7 @@ typedef enum symbol_type {
   STYPE_FUNCTION,
   STYPE_GENERIC_FUNCTION,
   STYPE_MODULE,
+  STYPE_FN_VARIANTS
 } symbol_type;
 
 typedef struct {
@@ -40,14 +47,19 @@ typedef struct {
   union {
     int STYPE_TOP_LEVEL_VAR;
     int STYPE_FN_PARAM;
+
     struct {
       Type *fn_type;
     } STYPE_FUNCTION;
+
     struct {
       Ast *ast;
       int stack_ptr;
       SpecificFns *specific_fns;
     } STYPE_GENERIC_FUNCTION;
+
+    FnVariants STYPE_FN_VARIANTS;
+
     struct {
       ht *symbols;
     } STYPE_MODULE;

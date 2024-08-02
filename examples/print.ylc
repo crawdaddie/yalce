@@ -1,0 +1,5 @@
+let printf = extern fn string -> () ;; # simplified printf from c stdlib
+let x = 1;
+let y = 42;
+
+let () = printf `{x} hello {y}\n`
