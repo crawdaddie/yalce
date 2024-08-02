@@ -1,9 +1,11 @@
 #include "input.h"
-#include "format_utils.h"
+// clang-format off
+// -- need to make sure stdio is included BEFORE readline
+#include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>
+// clang-format on
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 

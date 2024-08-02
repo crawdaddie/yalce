@@ -2,7 +2,6 @@
 #define _LANG_INPUT_H
 
 #define INPUT_BUFSIZE 2048
-#include <stdio.h>
 char *repl_input(const char *prompt);
 char *read_script(const char *filename);
 

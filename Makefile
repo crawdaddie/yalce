@@ -31,21 +31,14 @@ LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 
-# Check for VM flag
-ifdef VM_BACKEND
-LANG_CC += -DVM_BACKEND
-endif
 
 ifdef DUMP_AST 
 LANG_CC += -DDUMP_AST
 endif
 
-# Check for LLVM flag
-ifdef LLVM_BACKEND
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_CC += -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags`
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
-endif
 
 
 LEX_FILE := $(LANG_SRC_DIR)/lex.l
