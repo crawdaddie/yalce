@@ -14,7 +14,7 @@ async function load_wasm_jit_demo() {
   let print = console.log;
 
   function pushToEditor(text) {
-    editor.innerHTML += text;
+    editor.innerHTML += `<span contenteditable="false" class="jit-output">> ${text}</span>`;
     editorOffset = editor.textContent.length;
   }
 
@@ -63,7 +63,7 @@ async function load_wasm_jit_demo() {
       }
 
       if (fd === 1) {
-        pushToEditor(`<span class="jit-output">${out}</span>`);
+        pushToEditor(out);
       }
       print(out);
       return out.length;
@@ -192,17 +192,22 @@ async function load_wasm_jit_demo() {
   // }
   // editor.addEventListener('keydown', onTextChange);
   function appendLambda() {
-    editor.innerHTML += '<span class="lambda">λ</span> ';
+    editor.innerHTML += '<span contenteditable="false" class="lambda">λ </span>';
+    editorOffset = editor.textContent.length;
+  }
+
+  function appendNL() {
+    editor.innerHTML += '<br>';
     editorOffset = editor.textContent.length;
   }
   async function onTextChange(event) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       const content = editor.innerHTML;
-      const lastInput = content.slice(content.lastIndexOf('</span> ') + 7);
+      const lastInput = content.slice(content.lastIndexOf('λ </span>') + 9);
       lockEditor(true);
 
-      pushToEditor('<br>');
+      appendNL();
 
       try {
         // Allocate memory for the input string
