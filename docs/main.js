@@ -1,8 +1,7 @@
-console.log("hello");
 const $ = document.getElementById.bind(document);
-const textarea = $('expression');
+const editor = $('expression');
 
-let textareaOffset = 0;
+let editorOffset = 0;
 
 async function load_wasm_jit_demo() {
   function throw_error() { throw new Error; }
@@ -14,8 +13,9 @@ async function load_wasm_jit_demo() {
 
   let print = console.log;
 
-  function pushToTextArea(text) {
-      textarea.value += text;
+  function pushToEditor(text) {
+    editor.innerHTML += text;
+    editorOffset = editor.textContent.length;
   }
 
   // WASI polyfill that's enough to implement fwrite(stdout, "foo");
@@ -63,7 +63,7 @@ async function load_wasm_jit_demo() {
       }
 
       if (fd === 1) {
-        pushToTextArea(out);
+        pushToEditor(`<span class="jit-output">${out}</span>`);
       }
       print(out);
       return out.length;
@@ -157,15 +157,52 @@ async function load_wasm_jit_demo() {
     instance.exports.free(ptr);
   }
 
+  // async function onTextChange(event) {
+  //
+  //   if (event.key === 'Enter' && !event.shiftKey) {
+  //     event.preventDefault();
+  //     const lastInput = editor.value.slice(editorOffset);
+  //     lockTextArea(true);
+  //
+  //
+  //     editor.value += "\n";
+  //
+  //     try {
+  //       // Allocate memory for the input string
+  //       const inputPtr = allocateString(instance, lastInput);
+  //       instance.exports.jit(inputPtr);
+  //       freeString(instance, inputPtr);
+  //     } catch (error) {
+  //       console.error(error);
+  //       resultText = `\n> Error: ${error.message}\n`;
+  //     }
+  //
+  //     editor.value += "λ ";
+  //     editorOffset = editor.value.length;
+  //     lockTextArea(false);
+  //   }
+  //   if (event.key === 'Backspace' && editor.value.length == editorOffset) {
+  //     event.preventDefault();
+  //   }
+  // }
+  //
+  // function lockTextArea(lock) {
+  //   editor.readOnly = lock;
+  //   editor.classList.toggle('locked', lock);
+  // }
+  // editor.addEventListener('keydown', onTextChange);
+  function appendLambda() {
+    editor.innerHTML += '<span class="lambda">λ</span> ';
+    editorOffset = editor.textContent.length;
+  }
   async function onTextChange(event) {
-
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      const lastInput = textarea.value.slice(textareaOffset);
-      lockTextArea(true);
+      const content = editor.innerHTML;
+      const lastInput = content.slice(content.lastIndexOf('</span> ') + 7);
+      lockEditor(true);
 
-
-      textarea.value += "\n";
+      pushToEditor('<br>');
 
       try {
         // Allocate memory for the input string
@@ -174,23 +211,39 @@ async function load_wasm_jit_demo() {
         freeString(instance, inputPtr);
       } catch (error) {
         console.error(error);
-        resultText = `\n> Error: ${error.message}\n`;
+        pushToEditor(`<br>> Error: ${error.message}<br>`);
       }
 
-      textarea.value += "λ ";
-      textareaOffset = textarea.value.length;
-      lockTextArea(false);
+      appendLambda();
+      lockEditor(false);
+
+      // Set cursor to the end
+      setCaretToEnd(editor);
     }
-    if (event.key === 'Backspace' && textarea.value.length == textareaOffset) {
+    if (event.key === 'Backspace' && editor.textContent.length <= editorOffset) {
       event.preventDefault();
     }
   }
 
-  function lockTextArea(lock) {
-    textarea.readOnly = lock;
-    textarea.classList.toggle('locked', lock);
+  function lockEditor(lock) {
+    editor.contentEditable = !lock;
+    editor.classList.toggle('locked', lock);
   }
-  textarea.addEventListener('keydown', onTextChange);
+
+  function setCaretToEnd(element) {
+    const range = document.createRange();
+    const selection = window.getSelection();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.focus();
+  }
+
+  editor.addEventListener('keydown', onTextChange);
+
+  appendLambda();
+  editorOffset = editor.textContent.length;
 }
 
 load_wasm_jit_demo();

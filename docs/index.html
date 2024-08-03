@@ -9,20 +9,38 @@
       .container {
         width: 100%;
       }
-      textarea {
+
+      #expression {
         padding: 10px;
         margin-bottom: 10px;
         border: 1px solid #ddd;
         border-radius: 4px;
         background: #f3c2c2;
-        width: 99%;
+        font-family: monospace;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-y: auto;
+      }
+
+      .lambda {
+        color: #de00de;
+        font-weight: bold;
+      }
+
+      .jit-output {
+        color: #af00ff; 
+        font-weight: lighter;
       }
     </style>
   </head>
   <body>
     <div id="app">
       <div class="container">
-        <textarea id="expression" rows="10" placeholder="Enter expressions here..."></textarea>
+        <div
+          id="expression"
+          contenteditable="true"
+          placeholder="Enter expressions here..."
+        ></div>
       </div>
     </div>
   <script type="text/javascript" src="./main.js"></script>
