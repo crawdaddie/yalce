@@ -357,7 +357,7 @@ bool implements_typeclass(Type *t, TypeClass *class) {
   return false;
 }
 
-// Helper function to check if a type implements a specific type class
+// Helper function to get a specific type class implementation from a type
 TypeClass *typeclass_impl(Type *t, TypeClass *class) {
   for (int i = 0; i < t->num_implements; i++) {
     if (strcmp(t->implements[i]->name, class->name) == 0) {

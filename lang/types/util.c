@@ -78,6 +78,7 @@ static void _print_type(Type *type, bool alias, bool tc) {
   }
 
   if (type->kind == T_TYPECLASS) {
+    printf("\n");
     print_type_class(type->data.T_TYPECLASS);
     return;
   }

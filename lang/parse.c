@@ -92,6 +92,7 @@ Ast *parse_input(char *input) {
   ast_root = Ast_new(AST_BODY);
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
+
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
 
