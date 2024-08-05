@@ -37,6 +37,10 @@ typedef enum Op {
   I32Const = 0x41,
   F64Const = 0x44,
 
+  // Types
+  I32Type = 0x7F, // i32 type
+  F64Type = 0x7C, // f64 type
+
   // Comparison operators
   I32Eqz = 0x45,
   I32Eq = 0x46,
@@ -58,6 +62,7 @@ typedef enum Op {
   RefNull = 0xd0,
 
   MiscPrefix = 0xfc,
+
 } Op;
 
 typedef struct {
@@ -292,29 +297,11 @@ WasmModule *codegen(Ast *ast, WasmModule *module) {
 
 // shared type env
 static TypeEnv *env = NULL;
-void _initialize() { env = initialize_type_env(env); }
 
 size_t module_size(WasmModule *module) { return module->size; }
 uint8_t *module_data(WasmModule *module) { return module->buffer; }
 
-void *jit(char *input) {
-  if (strcmp("%dump_type_env", input) == 0) {
-    print_type_env(env);
-    return NULL;
-  }
-
-  Ast *prog = parse_input(input);
-  // print_ast(prog);
-  Type *typecheck_result = infer_ast(&env, prog);
-  if (typecheck_result) {
-    printf("`");
-    print_type(typecheck_result);
-    printf("\n");
-  }
-
-  WasmModule *module = create_wasm_module();
-  generate_wasm_header(module);
-
+void generate_type_section(Type *result_type, WasmModule *module) {
   // Type section
   size_t type_section_start = module->size;
   append_byte(module, 1);    // Section ID
@@ -323,14 +310,16 @@ void *jit(char *input) {
   append_byte(module, 0x60); // Function type
   append_byte(module, 0);    // 0 parameters
   append_byte(module, 1);    // 1 result
-  if (typecheck_result->kind == T_INT) {
-    append_byte(module, 0x7F); // i32 type
-  } else if (typecheck_result->kind == T_NUM) {
-    append_byte(module, 0x7C); // f64 type
+  //
+  if (result_type->kind == T_INT) {
+    append_byte(module, I32Type); // i32 type
+  } else if (result_type->kind == T_NUM) {
+    append_byte(module, F64Type); // f64 type
   }
   module->buffer[type_section_start + 1] =
       module->size - type_section_start - 2;
-
+}
+void generate_function_section(WasmModule *module) {
   // Function section
   size_t function_section_start = module->size;
   append_byte(module, 3); // Section ID
@@ -339,7 +328,9 @@ void *jit(char *input) {
   append_byte(module, 0); // Type index
   module->buffer[function_section_start + 1] =
       module->size - function_section_start - 2;
+}
 
+void generate_export_section(WasmModule *module) {
   // Export section
   size_t export_section_start = module->size;
   append_byte(module, 7); // Section ID for Export
@@ -356,7 +347,9 @@ void *jit(char *input) {
   // Update export section size
   module->buffer[export_section_start + 1] =
       module->size - export_section_start - 2;
+}
 
+void generate_code_section(Ast *prog, WasmModule *module) {
   // Code section
   size_t code_section_start = module->size;
   append_byte(module, 10); // Section ID
@@ -369,7 +362,7 @@ void *jit(char *input) {
 
   module = codegen(prog, module);
   // Add return instruction
-  append_byte(module, 0x0F); // return opcode
+  append_byte(module, Return); // return opcode
   append_byte(module, End);
 
   // Update function body size
@@ -378,6 +371,33 @@ void *jit(char *input) {
   // Update code section size
   module->buffer[code_section_start + 1] =
       module->size - code_section_start - 2;
+}
 
+void _initialize() { env = initialize_type_env(env); }
+void *jit(char *input) {
+
+  if (strcmp("%dump_type_env", input) == 0) {
+    print_type_env(env);
+    return NULL;
+  }
+
+  Ast *prog = parse_input(input);
+
+  Type *typecheck_result = infer_ast(&env, prog);
+  if (typecheck_result) {
+    printf("`");
+    print_type(typecheck_result);
+    printf("\n");
+  } else {
+    fprintf(stderr, "Error: typecheck failed\n");
+    return NULL;
+  }
+
+  WasmModule *module = create_wasm_module();
+  generate_wasm_header(module);
+  generate_type_section(typecheck_result, module);
+  generate_function_section(module);
+  generate_export_section(module);
+  generate_code_section(prog, module);
   return module;
 }
