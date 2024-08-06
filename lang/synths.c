@@ -76,8 +76,6 @@ static LLVMValueRef SYNTH_BINOP(LLVMValueRef fn, LLVMTypeRef fn_type,
                           "Synth_binop");
   case 0b10: {
     LLVMValueRef node_of_rval = const_node_of_val(rval, module, builder);
-    printf("node of rval \n");
-
     return LLVMBuildCall2(builder, fn_type, fn,
                           (LLVMValueRef[]){lval, node_of_rval}, 2,
                           "Synth_binop");

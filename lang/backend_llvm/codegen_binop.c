@@ -183,6 +183,13 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   }
 
+  if (!(is_arithmetic(ltype) && is_arithmetic(rtype))) {
+    return NULL;
+  }
+
+  // builtin numeric types:
+  int type_check = ((ltype->kind == T_NUM) << 1) | (rtype->kind == T_NUM);
+
   if (is_llvm_int(l) && is_llvm_int(r)) {
     return codegen_int_binop(builder, op, l, r);
   }
