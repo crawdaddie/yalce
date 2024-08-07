@@ -1,5 +1,4 @@
 #include "types/type_declaration.h"
-#include "serde.h"
 #include "types/util.h"
 #include <stdlib.h>
 #include <string.h>
@@ -36,34 +35,63 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
               TYPE_NAME_LIST) == 0)) {
     Type **ltype = malloc(sizeof(Type *));
     ltype[0] = compute_type_expression(expr->data.AST_BINOP.right, env);
-    return tcons(TYPE_NAME_LIST, ltype, 1);
+    Type *t = tcons(TYPE_NAME_LIST, ltype, 1);
+    return t;
   }
   switch (expr->tag) {
 
   case AST_LIST: {
-
     int len = expr->data.AST_LIST.len;
+
     if (len == 1) {
       return compute_type_expression(expr->data.AST_LIST.items, env);
     }
 
-    Type *un = malloc(sizeof(Type));
-    un->kind = T_VARIANT;
-    un->data.T_VARIANT.num_args = len;
-    un->data.T_VARIANT.args = malloc(sizeof(Type *));
+    Type *var = malloc(sizeof(Type));
+    var->kind = T_VARIANT;
+    var->data.T_VARIANT.num_args = len;
+    var->data.T_VARIANT.args = malloc(sizeof(Type *) * len);
+
+    bool is_numeric_enum = false;
+    if (expr->data.AST_LIST.items[0].tag == AST_LET) {
+      is_numeric_enum = true;
+    }
+
+    int enum_max = -1;
 
     for (int i = 0; i < len; i++) {
       Ast *item = expr->data.AST_LIST.items + i;
 
       Type *t;
+      if (item->tag == AST_LET) {
+        int enum_val = item->data.AST_LET.expr->data.AST_INT.value;
+
+        if (enum_val <= enum_max) {
+          fprintf(stderr, "enum literal values must be non-negative & "
+                          "incrementing\n");
+          return NULL;
+        };
+
+        enum_max = enum_val;
+        item = item->data.AST_LET.binding;
+
+      } else {
+        enum_max++;
+      }
+
       if (item->tag != AST_IDENTIFIER) {
-        t = compute_type_expression(expr->data.AST_LIST.items + i, env);
+        t = compute_type_expression(item, env);
       } else {
         t = tvar(item->data.AST_IDENTIFIER.value);
       }
-      un->data.T_VARIANT.args[i] = t;
+
+      if (is_numeric_enum) {
+      }
+
+      var->data.T_VARIANT.args[i] = t;
     }
-    return un;
+
+    return var;
   }
 
   case AST_APPLICATION: {
@@ -87,12 +115,29 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     }
 
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
+
       Type *cons_type =
+
           compute_type_expression(expr->data.AST_BINOP.right, env);
+
+      if (cons_type->kind == T_CONS &&
+          strcmp(cons_type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
+
+        Type **ts = malloc(sizeof(Type *));
+        ts[0] = cons_type;
+
+        Type *t =
+            tcons(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value, ts, 1);
+
+        return t;
+      }
+
       if (cons_type->kind == T_CONS) {
+
         Type *t =
             tcons(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
                   cons_type->data.T_CONS.args, cons_type->data.T_CONS.num_args);
+
         return t;
       }
     }

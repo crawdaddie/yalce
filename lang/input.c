@@ -11,11 +11,12 @@
 
 #define MAX_COMPLETIONS 100
 const char *completions_array[MAX_COMPLETIONS] = {
-    "fn",   "let",   "in",    "and",  "()",     "extern",
-    "true", "false", "match", "with", "import",
+    "fn",        "let",   "in",    "and",  "()",     "extern",
+    "true",      "false", "match", "with", "import", "%dump_type_env",
+    "%dump_ast",
 };
 
-static int completion_count = 11;
+static int completion_count = 13;
 
 void add_completion_item(const char *item, int count) {
   completions_array[11 + count] = item;

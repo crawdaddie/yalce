@@ -1,15 +1,13 @@
 let sum = fn s l ->
-  (match l with
+  match l with
   | [] -> s
   | x::rest -> sum (s + x) rest
-  )
 ;;
 
 
 let fib = fn x ->
-  (match x with
+  match x with
   | 0 -> 0
   | 1 -> 1
   | _ -> fib (x - 1) + fib (x - 2)
-  )
 ;

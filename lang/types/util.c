@@ -420,14 +420,18 @@ void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
   case T_TYPECLASS:
     break;
 
-  case T_VARIANT:
+  case T_VARIANT: {
     for (int i = 0; i < type->data.T_VARIANT.num_args; i++) {
+      // char b[3];
+      // sprintf(b, "%d.", type->data.T_VARIANT.args[i]->variant_idx);
+      // buffer_write(buf, b, 3);
       _serialize_type(type->data.T_VARIANT.args[i], buf, level);
       if (i < type->data.T_VARIANT.num_args - 1) {
         buffer_write(buf, " | ", 3);
       }
     }
     break;
+  }
 
   default:
     // No additional data for other types

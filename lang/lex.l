@@ -96,6 +96,12 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           yylval.vint = atoi(yytext);
                           return INTEGER;
                         }
+
+0x[0-9a-fA-F]+          { 
+                          yylval.vint = (int)strtol(yytext, NULL, 16);
+                          return INTEGER;
+                        }
+
 -?[0-9]*\.([0-9]*[1-9]|[0-9][0-9]*)? {
                         yylval.vdouble = atof(yytext);
                         return DOUBLE;

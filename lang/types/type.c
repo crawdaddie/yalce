@@ -140,7 +140,7 @@ Type *tcons(const char *name, Type **_args, int num_args) {
 Type *create_tuple_type(Type **element_types, int num_elements) {
   Type *tuple_type = malloc(sizeof(Type));
   tuple_type->kind = T_CONS;
-  tuple_type->data.T_CONS.name = "Tuple";
+  tuple_type->data.T_CONS.name = TYPE_NAME_TUPLE;
   tuple_type->data.T_CONS.args = element_types;
   tuple_type->data.T_CONS.num_args = num_elements;
   return tuple_type;
@@ -149,7 +149,7 @@ Type *create_tuple_type(Type **element_types, int num_elements) {
 Type *create_list_type(Type *element_type) {
   Type *tuple_type = malloc(sizeof(Type));
   tuple_type->kind = T_CONS;
-  tuple_type->data.T_CONS.name = "List";
+  tuple_type->data.T_CONS.name = TYPE_NAME_LIST;
   tuple_type->data.T_CONS.args = malloc(sizeof(Type *));
   tuple_type->data.T_CONS.args[0] = element_type;
   tuple_type->data.T_CONS.num_args = 1;

@@ -4,5 +4,10 @@ type X =
   | C of Int * Int * String
   | D
   | E
-  ;
+;
 
+type Enum = 
+  | A = 0x1b # doesn't do anything yet
+  | B
+  | C
+;

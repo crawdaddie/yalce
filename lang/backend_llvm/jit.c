@@ -319,10 +319,10 @@ int jit(int argc, char **argv) {
         printf(STYLE_RESET_ALL "\n");
         LLVMDumpModule(module);
         continue;
-      } else if (strcmp("%dump_type_env\n", input) == 0) {
+      } else if (strncmp("%dump_type_env", input, 14) == 0) {
         print_type_env(env);
         continue;
-      } else if (strcmp("%dump_ast\n", input) == 0) {
+      } else if (strncmp("%dump_ast", input, 9) == 0) {
         print_ast(ast_root);
         continue;
       } else if (strcmp("\n", input) == 0) {
