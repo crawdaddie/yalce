@@ -14,7 +14,7 @@ let sin_node = (
 
 let init_audio = extern fn () -> () in
 init_audio ()
-;     
+;
 
 let freq = 200 + (sin_node 0.25) * 99 * sin_node 8 in
 let x = sq_node (freq * 1.01) + sq_node freq |> play_node

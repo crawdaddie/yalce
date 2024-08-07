@@ -192,6 +192,12 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   Type *result_type = top_level_ast(*prog)->md;
 
+  if (result_type == NULL) {
+    printf("typecheck failed\n");
+    free(fcontent);
+    return NULL;
+  }
+
   LLVMTypeRef top_level_ret_type;
 
   LLVMValueRef top_level_func =

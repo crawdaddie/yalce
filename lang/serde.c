@@ -172,6 +172,10 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     case TOKEN_DOUBLE_COLON:
       buffer = strcat(buffer, ":: ");
       break;
+
+    case TOKEN_OF:
+      buffer = strcat(buffer, "cons ");
+      break;
     }
 
     buffer = ast_to_sexpr(ast->data.AST_BINOP.left, buffer);

@@ -17,6 +17,9 @@ typedef struct TypeClass {
   size_t method_size;
   size_t num_methods;
 } TypeClass;
+
+void type_arena_init();
+
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_TUPLE   "Tuple"
@@ -41,7 +44,7 @@ enum TypeKind {
   T_TUPLE,
   T_LIST,
   T_CONS,
-  T_UNION,
+  T_VARIANT,
   /* Type Variable  */
   T_VAR,
   T_MODULE,
@@ -67,10 +70,12 @@ typedef struct Type {
       struct Type *to;
     } T_FN;
     TypeEnv *T_MODULE;
+
     struct {
       struct Type **args;
       int num_args;
-    } T_UNION;
+    } T_VARIANT;
+
     TypeClass *T_TYPECLASS;
   } data;
 
@@ -130,4 +135,6 @@ TypeClass *typeclass_impl(Type *t, TypeClass *class);
 void *get_typeclass_method(TypeClass *tc, int index);
 
 bool is_arithmetic(Type *t);
+
+Type *deep_copy_type(const Type *t);
 #endif

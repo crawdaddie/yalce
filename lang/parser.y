@@ -91,11 +91,13 @@ Ast* ast_root = NULL;
   expr_sequence
   type_decl
   type_expr
-
+  type_atom
 %%
 
+
 program:
-    expr_sequence               { parse_stmt_list(ast_root, $1); }
+    expr_sequence ';' { parse_stmt_list(ast_root, $1); }
+  | expr_sequence    { parse_stmt_list(ast_root, $1); }
   | /* NULL */
   ;
 
@@ -119,8 +121,7 @@ expr:
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
-  | let_binding                       { $$ = $1; }
-  | match_expr                        { $$ = $1; }
+  | let_binding                       { $$ = $1; } | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
   ;
 
@@ -269,13 +270,18 @@ type_decl:
                                     type_decl->tag = AST_TYPE_DECL;
                                     $$ = type_decl;
                                   }
+  ;
 
 type_expr:
-    expr                { $$ = ast_list($1); }
-  | type_expr '|' expr  { $$ = ast_list_push($1, $3); } 
+    type_atom                 { $$ = $1; }
+  | '|' type_atom             { $$ = ast_list($2); }
+  | type_expr '|' type_atom   { $$ = ast_list_push($1, $3); } 
+  ;
 
-
-
+type_atom:
+    expr                      { $$ = $1; }
+  | IDENTIFIER 'of' type_atom { $$ = ast_binop(TOKEN_OF, ast_identifier($1), $3); } 
+  ;
 
 
 %%

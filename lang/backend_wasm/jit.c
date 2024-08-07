@@ -232,10 +232,10 @@ WasmModule *codegen(Ast *ast, WasmModule *module) {
 
   case AST_BODY: {
     if (ast->data.AST_BODY.len == 1) {
-      return codegen(ast->data.AST_BODY.stmts[0], module);
+      return codegen(ast->data.AST_BODY.head[0], module);
     }
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      Ast *stmt = ast->data.AST_BODY.stmts[i];
+      Ast *stmt = ast->data.AST_BODY.head[i];
       codegen(stmt, module);
     }
     return module;

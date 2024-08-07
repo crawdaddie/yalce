@@ -159,3 +159,12 @@ test: $(TEST_TARGETS) test_llvm_codegen $(BUILD_DIR)
 clean_tests:
 	rm -f $(BUILD_DIR)/test_*
 	rm -f $(TEST_OBJS)
+
+
+.PHONY: wasm
+wasm:
+	./build_wasm.sh
+
+.PHONY: serve_docs
+serve_docs:
+	python -m http.server -d docs

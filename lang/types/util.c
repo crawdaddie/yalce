@@ -416,7 +416,17 @@ void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
   case T_CHAR:
     buffer_write(buf, TYPE_NAME_CHAR, 4);
     break;
+
   case T_TYPECLASS:
+    break;
+
+  case T_VARIANT:
+    for (int i = 0; i < type->data.T_VARIANT.num_args; i++) {
+      _serialize_type(type->data.T_VARIANT.args[i], buf, level);
+      if (i < type->data.T_VARIANT.num_args - 1) {
+        buffer_write(buf, " | ", 3);
+      }
+    }
     break;
 
   default:

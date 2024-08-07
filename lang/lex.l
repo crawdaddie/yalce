@@ -25,6 +25,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "import"                return *yytext;
 "."                     return *yytext;
 "type"                  return *yytext;
+"of"                    return *yytext;
 
 [a-zA-Z_][a-zA-Z0-9_]*  {
 

@@ -79,6 +79,7 @@ typedef enum token_type {
   TOKEN_SEMICOLON,
   TOKEN_DOUBLE_SEMICOLON,
   TOKEN_IN,
+  TOKEN_OF,
 } token_type;
 
 typedef enum ast_tag {

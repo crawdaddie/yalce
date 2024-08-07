@@ -1,0 +1,8 @@
+type X = 
+  | A of List of Int
+  | B of String
+  | C of Int * Int * String
+  | D
+  | E
+  ;
+
