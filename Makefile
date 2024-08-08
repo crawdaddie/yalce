@@ -17,17 +17,17 @@ ENGINE_CC = clang
 
 # macOS-specific settings
 READLINE_PREFIX := $(shell brew --prefix readline)
+# RAYLIB_PREFIX := $(shell brew --prefix raylib)
 
 LANG_SRC_DIR := lang
 LANG_SRCS := $(wildcard $(LANG_SRC_DIR)/*.c)
 LANG_CC := clang -I./lang -I./engine
-LANG_CC += -I$(READLINE_PREFIX)/include 
+LANG_CC += -I$(READLINE_PREFIX)/include
 LANG_CC += -g
 
 
 LANG_LD_FLAGS := -L./build -lyalce_synth -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
-
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 
@@ -35,6 +35,7 @@ LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 ifdef DUMP_AST 
 LANG_CC += -DDUMP_AST
 endif
+
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_CC += -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags`

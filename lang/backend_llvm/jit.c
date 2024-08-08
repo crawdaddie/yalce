@@ -280,14 +280,19 @@ int jit(int argc, char **argv) {
                     .global_storage_capacity = &global_storage_capacity};
 
   bool repl = false;
-
-  for (int i = 1; i < argc; i++) {
+  int gui_pid = -1;
+  int i = 1;
+  while (i < argc) {
     if (strcmp(argv[i], "-i") == 0) {
       repl = true;
+    } else if (strcmp(argv[i], "--gui-pid") == 0) {
+      i++;
+      gui_pid = atoi(argv[i]);
     } else {
       Ast *script_prog;
       eval_script(argv[i], &ctx, module, builder, context, &env, &script_prog);
     }
+    i++;
   }
 
   if (repl) {
