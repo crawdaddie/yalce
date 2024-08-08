@@ -4,6 +4,7 @@
 #include "codegen_globals.h"
 #include "codegen_types.h"
 #include "format_utils.h"
+#include "gui.h"
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
@@ -11,6 +12,7 @@
 #include "types/inference.h"
 #include "types/util.h"
 #include "llvm-c/Transforms/Utils.h"
+#include <fcntl.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/IRReader.h>
@@ -23,6 +25,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+void plot_buf(void *sig) {
+  struct Signal *s = sig;
+  printf("plot buf\n");
+#ifdef GUI
+  create_dynamic_window("buf", 0, 0, 100, 100);
+#endif
+}
 
 #define STACK_MAX 256
 
@@ -281,13 +294,15 @@ int jit(int argc, char **argv) {
 
   bool repl = false;
 
-  for (int i = 1; i < argc; i++) {
+  int i = 1;
+  while (i < argc) {
     if (strcmp(argv[i], "-i") == 0) {
       repl = true;
     } else {
       Ast *script_prog;
       eval_script(argv[i], &ctx, module, builder, context, &env, &script_prog);
     }
+    i++;
   }
 
   if (repl) {

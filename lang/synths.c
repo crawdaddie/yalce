@@ -1,8 +1,8 @@
 #include "synths.h"
-#include "backend_llvm/util.h"
 #include "parse.h"
 #include "types/type.h"
 #include "types/util.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 

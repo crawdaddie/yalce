@@ -6,6 +6,7 @@ init_audio ();
 type Signal = Ptr;
 let read_buf = extern fn String -> Signal;
 let amen_buf = read_buf "fat_amen_mono_48000.wav";
+let plot_buf = extern fn Signal -> ();
 
 let bufplayer_node = (
   extern fn Signal -> Synth -> Synth : "bufplayer_node", 
@@ -14,4 +15,5 @@ let bufplayer_node = (
 );
 
 let x = bufplayer_node amen_buf 0.8 |> play_node;
+# plot_buf amen_buf;
 

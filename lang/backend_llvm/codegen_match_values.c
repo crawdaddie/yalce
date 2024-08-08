@@ -5,6 +5,7 @@
 #include "codegen_tuple.h"
 #include "codegen_types.h"
 #include "serde.h"
+#include "types/util.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
