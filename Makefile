@@ -26,7 +26,8 @@ LANG_CC += -g
 
 
 LANG_LD_FLAGS := -L./build -lyalce_synth -lm
-LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
+LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline 
+# LANG_LD_FLAGS += -lrt
 
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
@@ -35,6 +36,12 @@ LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 ifdef DUMP_AST 
 LANG_CC += -DDUMP_AST
 endif
+
+ifdef GUI
+LANG_CC += -DGUI $(shell pkg-config --cflags sdl2)
+LANG_LD_FLAGS += $(shell pkg-config --libs sdl2)
+endif
+
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_CC += -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags`
