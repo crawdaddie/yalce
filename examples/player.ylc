@@ -1,0 +1,13 @@
+let play_node = extern fn Synth -> Synth ;
+
+let init_audio = extern fn () -> () in
+init_audio ();
+
+type Signal = Ptr;
+let read_buf = extern fn String -> Signal;
+let amen_buf = read_buf "fat_amen_mono_48000.wav";
+
+let bufplayer_node = extern fn Signal -> Double -> Synth ;
+
+let x = bufplayer_node amen_buf 0.8 |> play_node;
+
