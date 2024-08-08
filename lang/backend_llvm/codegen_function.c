@@ -274,13 +274,12 @@ LLVMValueRef create_new_specific_fn(int len, Ast *args, Ast *fn_ast,
   return func;
 }
 
-static Type *get_application_type(size_t len, Ast *args, Type *ret_type) {
-
-}
+static Type *get_application_type(size_t len, Ast *args, Type *ret_type) {}
 
 static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
                                                   LLVMModuleRef module,
-                                                  LLVMBuilderRef builder, Type **fn_type) {
+                                                  LLVMBuilderRef builder,
+                                                  Type **fn_type) {
   Ast *fn_id = ast->data.AST_APPLICATION.function;
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
   int fn_name_len = fn_id->data.AST_IDENTIFIER.length;
@@ -351,7 +350,8 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
     size_t len = ast->data.AST_APPLICATION.len;
     Type *specific_fn_type = create_specific_fn_type(len, args, ret_type);
 
-    LLVMValueRef specific_fn = find_variant(&res->symbol_data.STYPE_FN_VARIANTS, specific_fn_type);
+    LLVMValueRef specific_fn =
+        find_variant(&res->symbol_data.STYPE_FN_VARIANTS, specific_fn_type);
     if (specific_fn) {
       *fn_type = specific_fn_type;
     }
@@ -364,7 +364,8 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMBuilderRef builder) {
 
   Type *fn_type = NULL;
-  LLVMValueRef func = codegen_fn_application_callee(ast, ctx, module, builder, &fn_type);
+  LLVMValueRef func =
+      codegen_fn_application_callee(ast, ctx, module, builder, &fn_type);
 
   if (!func) {
     printf("no function found for ");
@@ -386,7 +387,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   if (fn_type == NULL) {
     fn_type = ast->data.AST_APPLICATION.function->md;
   }
-
 
   if (app_len == args_len) {
     LLVMValueRef app_vals[app_len];
@@ -443,7 +443,7 @@ JITSymbol generic_fn_symbol(Ast *binding_identifier, Ast *fn_ast,
 }
 
 FnVariants *fn_variants_extend(FnVariants *list, Type *type,
-                                 LLVMValueRef func) {
+                               LLVMValueRef func) {
   FnVariants *new_specific_fn = malloc(sizeof(FnVariants));
   new_specific_fn->type = type;
   new_specific_fn->func = func;
@@ -461,16 +461,17 @@ LLVMValueRef find_variant(FnVariants *variants, Type *type) {
   return find_variant(variants->next, type);
 }
 
-JITSymbol extern_variants_symbol(Ast *variants_ast, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+JITSymbol extern_variants_symbol(Ast *variants_ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
 
   FnVariants *variants = NULL;
   for (int i = 0; i < variants_ast->data.AST_LIST.len; i++) {
     Ast *variant_ast = variants_ast->data.AST_LIST.items + i;
-    LLVMValueRef variant_fn = codegen_extern_fn(variant_ast, ctx, module, builder);
+    LLVMValueRef variant_fn =
+        codegen_extern_fn(variant_ast, ctx, module, builder);
     variants = fn_variants_extend(variants, variant_ast->md, variant_fn);
   }
 
-  return (JITSymbol){STYPE_FN_VARIANTS, .symbol_data = {
-    .STYPE_FN_VARIANTS = *variants 
-  }};
+  return (JITSymbol){STYPE_FN_VARIANTS,
+                     .symbol_data = {.STYPE_FN_VARIANTS = *variants}};
 }

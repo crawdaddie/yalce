@@ -16,4 +16,6 @@ Node *play_test_synth();
 Node *play_node(Node *s);
 
 void accept_callback(int (*callback)(int, int));
+
+Signal *read_buf(const char *filename);
 #endif

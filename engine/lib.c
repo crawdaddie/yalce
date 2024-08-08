@@ -2,6 +2,8 @@
 #include "ctx.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sndfile.h>
+#include <string.h>
 // Node *sq_node(double freq) { return NULL; }
 // Node *sin_node(double freq) { return NULL; }
 
@@ -68,4 +70,55 @@ void accept_callback(int (*callback)(int, int)) {
     printf("called callback %p %d\n", callback,
            callback(1, 2)); // Call the callback function
   }
+}
+
+#define MAX_CHANNELS 6
+
+int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
+  SNDFILE *infile;
+  SF_INFO sfinfo;
+  int readcount;
+  memset(&sfinfo, 0, sizeof(sfinfo));
+
+  if (!(infile =
+            sf_open(filename, SFM_READ,
+                    &sfinfo))) { /* Open failed so print an error message. */
+    printf("Not able to open input file %s.\n", filename);
+    /* Print the error message from libsndfile. */
+    puts(sf_strerror(NULL));
+    return 1;
+  };
+
+  if (sfinfo.channels > MAX_CHANNELS) {
+    printf("Not able to process more than %d channels\n", MAX_CHANNELS);
+    sf_close(infile);
+    return 1;
+  };
+
+  size_t total_size = sfinfo.channels * sfinfo.frames;
+
+  double *buf = calloc((int)total_size, sizeof(double));
+  // double *buf = signal->buf;
+
+  // reads channels in interleaved
+  int read = sf_read_double(infile, buf, total_size);
+  if (read != total_size) {
+    printf("warning read failure, read %d != total size) %zu", read,
+           total_size);
+  }
+  fprintf(stderr, "read %d frames from '%s' buf %p\n", read, filename, buf);
+
+  sf_close(infile);
+  signal->size = total_size;
+  signal->layout = sfinfo.channels;
+  signal->buf = buf;
+  *sf_sample_rate = sfinfo.samplerate;
+  return 0;
+};
+
+Signal *read_buf(const char *filename) {
+  Signal *sig = malloc(sizeof(Signal));
+  int sf_sample_rate;
+  _read_file(filename, sig, &sf_sample_rate);
+  return sig;
 }

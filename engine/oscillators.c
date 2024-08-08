@@ -124,3 +124,64 @@ node_perform sin_perform(Node *node, int nframes, double spf) {
     input++;
   }
 }
+
+typedef struct bufplayer_state {
+  double phase;
+} bufplayer_state;
+
+node_perform bufplayer_perform(Node *node, int nframes, double spf) {
+
+  bufplayer_state *state = (bufplayer_state *)node->state;
+  double *buf = node->ins[0].buf;
+  int buf_size = node->ins[0].size;
+
+  double *rate = node->ins[1].buf;
+  double *out = node->out.buf;
+
+  double d_index, frac, a, b, sample;
+  int index;
+  while (nframes--) {
+    d_index = state->phase * buf_size;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    a = buf[index];
+    b = buf[(index + 1) % buf_size];
+
+    sample = (1.0 - frac) * a + (frac * b);
+
+    state->phase =
+        fmod(state->phase + (*rate) / buf_size, 1.0);
+
+    *out = sample;
+
+    out++;
+    rate++;
+  }
+}
+
+Node *bufplayer_node(Signal *buf, double rate) {
+  bufplayer_state *state = malloc(sizeof(bufplayer_state));
+  state->phase = 0.0;
+
+
+  Signal *sigs = malloc(sizeof(Signal) * 2);
+  sigs[0].buf = buf->buf;
+  sigs[0].size = buf->size;
+  sigs[0].layout = buf->layout;
+
+  sigs[1].buf = calloc(BUF_SIZE, sizeof(double));
+  for (int i = 0; i < BUF_SIZE; i++) {
+    sigs[1].buf[i] = rate;
+  }
+  sigs[1].size = BUF_SIZE;
+  sigs[1].layout = 1;
+
+
+  Node *bufplayer =
+      node_new(state, (node_perform *)bufplayer_perform, 2, sigs);
+
+  // printf("create bufplayer node %p with buf signal %p\n", bufplayer, buf);
+  return bufplayer;
+}
+

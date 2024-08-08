@@ -103,7 +103,7 @@ static void _print_type(Type *type, bool alias, bool tc) {
 // Helper function to print the type environment (for debugging)
 void print_type_env(TypeEnv *env) {
   while (env != NULL) {
-    printf("%s : ", env->name);
+    printf("%s\t: ", env->name);
     Type *type = env->type;
     if (type->alias && strcmp(env->name, type->alias) == 0) {
       _print_type(type, false, true);
@@ -129,6 +129,7 @@ int fn_type_args_len(Type *fn_type) {
     t = t->data.T_FN.to;
     fn_len++;
   }
+
   return fn_len;
 }
 
