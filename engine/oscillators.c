@@ -2,7 +2,6 @@
 #include "common.h"
 #include "node.h"
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #define SQ_TABSIZE (1 << 11)
@@ -160,7 +159,30 @@ node_perform bufplayer_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *bufplayer_node(Signal *buf, double rate) {
+Node *bufplayer_node(Signal *buf, Signal *rate) {
+  bufplayer_state *state = malloc(sizeof(bufplayer_state));
+  state->phase = 0.0;
+
+
+  Signal *sigs = malloc(sizeof(Signal) * 2);
+  sigs[0].buf = buf->buf;
+  sigs[0].size = buf->size;
+  sigs[0].layout = buf->layout;
+
+  sigs[1].buf = rate->buf;
+  sigs[1].size = rate->size;
+  sigs[1].layout = rate->layout;
+
+
+  Node *bufplayer =
+      node_new(state, (node_perform *)bufplayer_perform, 2, sigs);
+
+  // printf("create bufplayer node %p with buf signal %p\n", bufplayer, buf);
+  return bufplayer;
+}
+
+
+Node *bufplayer_node_of_scalar(Signal *buf, double rate) {
   bufplayer_state *state = malloc(sizeof(bufplayer_state));
   state->phase = 0.0;
 
@@ -185,3 +207,27 @@ Node *bufplayer_node(Signal *buf, double rate) {
   return bufplayer;
 }
 
+Node *bufplayer_node_of_scalar_int(Signal *buf, int rate) {
+  bufplayer_state *state = malloc(sizeof(bufplayer_state));
+  state->phase = 0.0;
+
+
+  Signal *sigs = malloc(sizeof(Signal) * 2);
+  sigs[0].buf = buf->buf;
+  sigs[0].size = buf->size;
+  sigs[0].layout = buf->layout;
+
+  sigs[1].buf = calloc(BUF_SIZE, sizeof(double));
+  for (int i = 0; i < BUF_SIZE; i++) {
+    sigs[1].buf[i] = rate;
+  }
+  sigs[1].size = BUF_SIZE;
+  sigs[1].layout = 1;
+
+
+  Node *bufplayer =
+      node_new(state, (node_perform *)bufplayer_perform, 2, sigs);
+
+  // printf("create bufplayer node %p with buf signal %p\n", bufplayer, buf);
+  return bufplayer;
+}

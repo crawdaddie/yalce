@@ -17,5 +17,8 @@ node_perform sin_perform(Node *node, int nframes, double spf);
 
 void maketable_sin(void);
 
-Node *bufplayer_node(Signal *buf, double rate);
+Node *bufplayer_node(Signal *buf, Signal *rate);
+Node *bufplayer_node_of_scalar(Signal *buf, double rate);
+Node *bufplayer_node_of_scalar_int(Signal *buf, int rate);
+
 #endif
