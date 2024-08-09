@@ -260,6 +260,8 @@ Type *deep_copy_type(const Type *original) {
   Type *copy = malloc(sizeof(Type));
   copy->kind = original->kind;
   copy->alias = original->alias;
+  copy->constructor = original->constructor;
+  copy->constructor_size = original->constructor_size;
   for (int i = 0; i < original->num_implements; i++) {
     add_typeclass_impl(copy, original->implements[i]);
   }

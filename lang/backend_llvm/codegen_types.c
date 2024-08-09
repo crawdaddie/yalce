@@ -122,6 +122,8 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
     printf("[%s]", type_to->alias);
   }
   printf("\n");
+
   ConsMethod constructor = type_to->constructor;
+  printf("constructor func %p \n", constructor);
   return constructor(value, type_from, module, builder);
 }

@@ -73,6 +73,10 @@ LLVMValueRef ConsSynth(LLVMValueRef value, Type *type_from,
 LLVMValueRef ConsSignal(LLVMValueRef value, Type *type_from,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  printf("signal constructor of ");
+  print_type(type_from);
+  printf("\n");
+
   switch (type_from->kind) {
   case T_INT:
   case T_NUM: {
