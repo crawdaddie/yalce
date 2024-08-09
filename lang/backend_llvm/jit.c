@@ -381,30 +381,31 @@ void print_result(Type *type, LLVMGenericValueRef result) {
     printf("\n");
     return;
   }
+
   switch (type->kind) {
   case T_INT: {
-    printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
+    printf(" %d", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
 
   case T_NUM: {
-    printf(" %f\n", (double)LLVMGenericValueToFloat(LLVMDoubleType(), result));
+    printf(" %f", (double)LLVMGenericValueToFloat(LLVMDoubleType(), result));
     break;
   }
 
   case T_STRING: {
-    printf(" %s\n", (char *)LLVMGenericValueToPointer(result));
+    printf(" %s", (char *)LLVMGenericValueToPointer(result));
     break;
   }
 
   case T_CHAR: {
-    printf(" %c\n", (int)LLVMGenericValueToInt(result, 0));
+    printf(" %c", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
 
   case T_CONS: {
     if (is_string_type(type)) {
-      printf(" %s\n", (char *)LLVMGenericValueToPointer(result));
+      printf(" %s", (char *)LLVMGenericValueToPointer(result));
       break;
     }
     if (strcmp(type->data.T_CONS.name, "List") == 0 &&
@@ -421,7 +422,7 @@ void print_result(Type *type, LLVMGenericValueRef result) {
       if (count == 10) {
         printf("...");
       }
-      printf("]\n");
+      printf("]");
       break;
     }
 
@@ -429,12 +430,12 @@ void print_result(Type *type, LLVMGenericValueRef result) {
   }
 
   case T_FN: {
-    printf(" %p\n", result);
+    printf(" %p", result);
     break;
   }
 
   default:
-    printf(" %d\n", (int)LLVMGenericValueToInt(result, 0));
+    printf(" %d", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
   printf("\n");

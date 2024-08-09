@@ -230,6 +230,9 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   case T_CONS: {
+    if (t1->alias && t2->alias && (strcmp(t1->alias, t2->alias) != 0)) {
+      return false;
+    }
     if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0) {
       return false;
     } else if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {

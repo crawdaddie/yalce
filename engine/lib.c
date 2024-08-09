@@ -1,9 +1,11 @@
 #include "lib.h"
+#include "audio_loop.h"
 #include "ctx.h"
+#include <sndfile.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sndfile.h>
 #include <string.h>
+#include <time.h>
 // Node *sq_node(double freq) { return NULL; }
 // Node *sin_node(double freq) { return NULL; }
 
@@ -54,13 +56,25 @@ Node *play_test_synth() {
   audio_ctx_add(group);
   return group;
 }
+int get_frame_offset() {
+  struct timespec t;
+  struct timespec btime = get_block_time();
+  set_block_time(&t);
+  int frame_offset = get_block_frame_offset(btime, t, 48000);
+  // printf("frame offset %d\n", frame_offset);
+  return frame_offset;
+}
 
 Node *play_node(Node *s) {
   Node *group = _chain;
+  reset_chain();
   add_to_dac(s);
   add_to_dac(group);
-  audio_ctx_add(group);
-  reset_chain();
+
+  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_ADD,
+                                           get_frame_offset(),
+                                           {.NODE_ADD = {.target = group}}});
+  // audio_ctx_add(group);
   return group;
 }
 

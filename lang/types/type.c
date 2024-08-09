@@ -283,9 +283,19 @@ void _unify(Type *t1, Type *t2, TypeEnv **env) {
 
     return;
   }
-  print_type(t1);
+
+  if (t1->alias) {
+    printf("[%s]", t1->alias);
+  } else {
+    print_type(t1);
+  }
   printf(" != ");
-  print_type(t2);
+
+  if (t2->alias) {
+    printf("[%s]", t2->alias);
+  } else {
+    print_type(t2);
+  }
   printf("\n");
   fprintf(stderr, "Error: Types are not unifiable\n");
 }

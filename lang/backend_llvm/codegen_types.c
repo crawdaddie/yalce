@@ -113,8 +113,14 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       LLVMBuilderRef builder) {
   printf("attempt value conversion: ");
   print_type(type_from);
+  if (type_from->alias) {
+    printf("[%s]", type_from->alias);
+  }
   printf(" => ");
   print_type(type_to);
+  if (type_to->alias) {
+    printf("[%s]", type_to->alias);
+  }
   printf("\n");
   ConsMethod constructor = type_to->constructor;
   return constructor(value, type_from, module, builder);

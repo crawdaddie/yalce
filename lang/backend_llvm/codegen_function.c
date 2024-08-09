@@ -400,6 +400,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
         app_val = attempt_value_conversion(
             app_val, app_val_ast->md, fn_type->data.T_FN.from, module, builder);
+
         if (!app_val) {
           fprintf(stderr, "Error: attempted type conversion failed\n");
           return NULL;

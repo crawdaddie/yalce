@@ -236,11 +236,11 @@ Node *sq_node_of_int(int freq) {
   return s;
 }
 
-Node *sq_node(Node *freq) {
+Node *sq_node(Signal *freq) {
   sq_state *state = malloc(sizeof(sq_state));
   state->phase = 0.0;
 
-  Node *s = node_new(state, (node_perform *)sq_perform, 1, &freq->out);
+  Node *s = node_new(state, (node_perform *)sq_perform, 1, freq);
 
   return s;
 }
@@ -254,11 +254,11 @@ Node *sin_node_of_scalar(double freq) {
   return s;
 }
 
-Node *sin_node(Node *freq) {
+Node *sin_node(Signal *freq) {
   sin_state *state = malloc(sizeof(sin_state));
   state->phase = 0.0;
 
-  Node *s = node_new(state, (node_perform *)sin_perform, 1, &freq->out);
+  Node *s = node_new(state, (node_perform *)sin_perform, 1, freq);
   return s;
 }
 
@@ -396,4 +396,19 @@ Node *node_of_double(double val) {
   }
 
   return const_node;
+}
+
+Signal *out_sig(Node *n) { return &n->out; }
+
+Signal *input_sig(int i, Node *n) { return n->ins + i; }
+int num_inputs(Node *n) { return n->num_ins; }
+
+Signal *signal_of_double(double val) {
+  Signal *signal = get_sig_default(1, val);
+  return signal;
+}
+
+Signal *signal_of_int(int val) {
+  Signal *signal = get_sig_default(1, val);
+  return signal;
 }

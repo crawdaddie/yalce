@@ -5,6 +5,7 @@
 #include "types/util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
+#include <string.h>
 
 LLVMValueRef node_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
 
@@ -12,6 +13,21 @@ LLVMValueRef node_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
                               (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
 
   return get_extern_fn("node_of_double", *fn_type, module);
+}
+
+LLVMValueRef sig_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
+
+  *fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
+                              (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
+  return get_extern_fn("signal_of_double", *fn_type, module);
+}
+
+LLVMValueRef out_sig_of_node_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
+
+  *fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
+                              (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
+
+  return get_extern_fn("out_sig", *fn_type, module);
 }
 
 LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
@@ -25,6 +41,26 @@ LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
   return const_node;
 }
 
+LLVMValueRef const_sig_of_val(LLVMValueRef val, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  LLVMTypeRef fn_type;
+  LLVMValueRef sig_of_val_func = sig_of_val_fn(&fn_type, module);
+  LLVMValueRef double_val =
+      LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+  LLVMValueRef const_sig = LLVMBuildCall2(builder, fn_type, sig_of_val_func,
+                                          &double_val, 1, "sig_of_val");
+  return const_sig;
+}
+
+LLVMValueRef out_sig_of_node_val(LLVMValueRef val, LLVMModuleRef module,
+                                 LLVMBuilderRef builder) {
+  LLVMTypeRef fn_type;
+  LLVMValueRef out_sig_of_node_func = out_sig_of_node_fn(&fn_type, module);
+  LLVMValueRef const_sig = LLVMBuildCall2(
+      builder, fn_type, out_sig_of_node_func, &val, 1, "sig_of_val");
+  return const_sig;
+}
+
 // Define the function pointer type
 typedef LLVMValueRef (*SynthConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                         LLVMBuilderRef);
@@ -32,6 +68,29 @@ typedef LLVMValueRef (*SynthConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
 LLVMValueRef ConsSynth(LLVMValueRef value, Type *type_from,
                        LLVMModuleRef module, LLVMBuilderRef builder) {
   return const_node_of_val(value, module, builder);
+}
+
+LLVMValueRef ConsSignal(LLVMValueRef value, Type *type_from,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  switch (type_from->kind) {
+  case T_INT:
+  case T_NUM: {
+    return const_sig_of_val(value, module, builder);
+  }
+  case T_CONS: {
+    if (type_from->alias && (strcmp(type_from->alias, "Synth") == 0)) {
+      return out_sig_of_node_val(value, module, builder);
+    }
+
+    if (type_from->alias && (strcmp(type_from->alias, "Signal") == 0)) {
+      return value;
+    }
+  }
+  default: {
+    return NULL;
+  }
+  }
 }
 
 Type t_synth = {T_CONS,
@@ -44,6 +103,17 @@ Type t_synth = {T_CONS,
                 .alias = "Synth",
                 .constructor = ConsSynth,
                 .constructor_size = sizeof(SynthConsMethod)};
+
+Type t_signal = {T_CONS,
+                 {.T_CONS =
+                      {
+                          TYPE_NAME_PTR,
+                          (Type *[]){&t_char},
+                          1,
+                      }},
+                 .alias = "Signal",
+                 .constructor = ConsSignal,
+                 .constructor_size = sizeof(SynthConsMethod)};
 
 #define GENERATE_NODE_BINOP_FN_GETTER(name)                                    \
   LLVMValueRef get_##name##_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {   \
@@ -170,5 +240,7 @@ TypeEnv *initialize_type_env_synth(TypeEnv *env) {
   add_typeclass_impl(&t_synth, synth_num_typeclass);
 
   env = env_extend(env, "Synth", &t_synth);
+  env = env_extend(env, "Signal", &t_signal);
+
   return env;
 }

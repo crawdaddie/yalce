@@ -18,4 +18,13 @@ Node *play_node(Node *s);
 void accept_callback(int (*callback)(int, int));
 
 Signal *read_buf(const char *filename);
+
+Signal *out_sig(Node *n);
+
+Signal *input_sig(int i, Node *n);
+
+int num_inputs(Node *n);
+
+Signal *signal_of_double(double val);
+Signal *signal_of_int(int val);
 #endif

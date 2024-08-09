@@ -26,7 +26,7 @@ typedef struct {
       Node *target;
       int input;
     } NODE_SET_TRIG;
-  } body;
+  } payload;
 } scheduler_msg;
 
 #define MSG_QUEUE_MAX_SIZE 100

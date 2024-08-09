@@ -32,16 +32,15 @@ static void process_msg_pre(scheduler_msg msg) {
 
   switch (msg.type) {
   case NODE_ADD: {
-    struct NODE_ADD payload = msg.body.NODE_ADD;
+    struct NODE_ADD payload = msg.payload.NODE_ADD;
     int frame_offset = msg.frame_offset;
     payload.target->frame_offset = frame_offset;
     audio_ctx_add(payload.target);
-
     break;
   }
 
   case GROUP_ADD: {
-    struct GROUP_ADD payload = msg.body.GROUP_ADD;
+    struct GROUP_ADD payload = msg.payload.GROUP_ADD;
     int frame_offset = msg.frame_offset;
     Node *g = payload.group;
     g->frame_offset = frame_offset;
@@ -53,7 +52,7 @@ static void process_msg_pre(scheduler_msg msg) {
   }
 
   case NODE_SET_SCALAR: {
-    struct NODE_SET_SCALAR payload = msg.body.NODE_SET_SCALAR;
+    struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     // Node *node = payload.target;
     // Signal *target_input = node->ins[payload.input];
     // for (int i = msg.frame_offset; i < target_input->size; i++) {
@@ -63,7 +62,7 @@ static void process_msg_pre(scheduler_msg msg) {
   }
 
   case NODE_SET_TRIG: {
-    struct NODE_SET_TRIG payload = msg.body.NODE_SET_TRIG;
+    struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
     // Node *node = payload.target;
     // Signal *target_input = node->ins[payload.input];
     // *(target_input->buf + msg.frame_offset) = 1.0;
@@ -95,7 +94,7 @@ static void process_msg_post(scheduler_msg msg) {
   }
 
   case NODE_SET_SCALAR: {
-    struct NODE_SET_SCALAR payload = msg.body.NODE_SET_SCALAR;
+    struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     // Node *node = payload.target;
     // Signal *target_input = node->ins[payload.input];
     // for (int i = 0; i < msg.frame_offset; i++) {
@@ -105,7 +104,7 @@ static void process_msg_post(scheduler_msg msg) {
   }
 
   case NODE_SET_TRIG: {
-    struct NODE_SET_TRIG payload = msg.body.NODE_SET_TRIG;
+    struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
     // Node *node = payload.target;
     //
     // Signal *target_input = node->ins[payload.input];
