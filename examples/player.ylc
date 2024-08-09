@@ -7,9 +7,6 @@ let read_buf = extern fn String -> Signal;
 let bufplayer_node = extern fn Signal -> Signal -> Synth;
 let amen_buf = read_buf "fat_amen_mono_48000.wav";
 
-let amen = fn rate ->
-  bufplayer_node amen_buf rate
-;;  
 
 let out_sig = extern fn Synth -> Signal;
 let input_sig = extern fn Int -> Synth -> Signal;
@@ -18,6 +15,10 @@ let num_inputs = extern fn Synth -> Int;
 
 let sin_node = extern fn Signal -> Synth;
 
-let rate = 0.8;
-let x = amen rate + (amen ((sin_node 0.2 ) * rate)) |> play_node;
+let amen = bufplayer_node amen_buf;  
+
+let rate = 0.5 + 0.4999 * sin_node 0.5;
+let x =  (rate |> amen)
+      +  (rate + 0.1 |> amen)
+      |> play_node;
 

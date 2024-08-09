@@ -31,45 +31,48 @@ void codegen_set_global(JITSymbol *sym, LLVMValueRef value, Type *ttype,
 
   // Get the pointer to the correct slot in the global storage
   LLVMValueRef indices[] = {ZERO, slot_index};
-  LLVMValueRef slot_ptr = LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE, global_storage_array_llvm, indices, 2, "slot_ptr");
+  LLVMValueRef slot_ptr =
+      LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE, global_storage_array_llvm,
+                    indices, 2, "slot_ptr");
 
   // Store the generic_ptr into the slot
   LLVMBuildStore(builder, generic_ptr, slot_ptr);
-
 
   *sym = (JITSymbol){STYPE_TOP_LEVEL_VAR, llvm_type, value,
                      .symbol_data = {.STYPE_TOP_LEVEL_VAR = slot},
                      .symbol_type = ttype};
 
   *(ctx->num_globals) = slot + 1;
-
 }
 
+LLVMValueRef codegen_get_global(JITSymbol *sym, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  int slot = sym->symbol_data.STYPE_TOP_LEVEL_VAR;
+  LLVMTypeRef llvm_type = sym->llvm_type;
 
-LLVMValueRef codegen_get_global(JITSymbol *sym, 
-                                LLVMModuleRef module, LLVMBuilderRef builder) {
-    int slot = sym->symbol_data.STYPE_TOP_LEVEL_VAR;
-    LLVMTypeRef llvm_type = sym->llvm_type;
+  LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
 
-    LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
+  // Get the pointer to the correct slot in the global storage
+  LLVMValueRef indices[] = {ZERO, slot_index};
+  LLVMValueRef slot_ptr =
+      LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE, global_storage_array_llvm,
+                    indices, 2, "slot_ptr");
 
-    // Get the pointer to the correct slot in the global storage
-    LLVMValueRef indices[] = {ZERO, slot_index};
-    LLVMValueRef slot_ptr = LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE, global_storage_array_llvm, indices, 2, "slot_ptr");
+  // Load the void* from the slot
+  LLVMValueRef generic_ptr =
+      LLVMBuildLoad2(builder, _VOID_PTR_T, slot_ptr, "void_ptr");
 
-
-    // Load the void* from the slot
-    LLVMValueRef generic_ptr = LLVMBuildLoad2(builder, _VOID_PTR_T, slot_ptr, "void_ptr");
-
-    LLVMValueRef typed_ptr = LLVMBuildBitCast(builder, generic_ptr, LLVMPointerType(llvm_type, 0), "typed_ptr");
-    return LLVMBuildLoad2(builder, llvm_type, typed_ptr, "loaded_value");
+  LLVMValueRef typed_ptr = LLVMBuildBitCast(
+      builder, generic_ptr, LLVMPointerType(llvm_type, 0), "typed_ptr");
+  return LLVMBuildLoad2(builder, llvm_type, typed_ptr, "loaded_value");
 }
 
 void setup_global_storage(LLVMModuleRef module, LLVMBuilderRef builder) {
-  global_storage_array_llvm = LLVMAddGlobal(module, _GLOBAL_STORAGE_TYPE, "global_storage_array");
+  global_storage_array_llvm =
+      LLVMAddGlobal(module, _GLOBAL_STORAGE_TYPE, "global_storage_array");
   LLVMSetLinkage(global_storage_array_llvm, LLVMExternalLinkage);
 
   // Create global variable for the size
-  global_storage_size_llvm = LLVMAddGlobal(module, LLVMInt32Type(), "global_storage_size");
-    
+  global_storage_size_llvm =
+      LLVMAddGlobal(module, LLVMInt32Type(), "global_storage_size");
 }

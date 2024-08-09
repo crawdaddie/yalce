@@ -1,5 +1,6 @@
 #include "backend_llvm/codegen_function_currying.h"
 #include "backend_llvm/codegen_function.h"
+#include "serde.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -14,17 +15,12 @@ LLVMValueRef codegen_curry_fn(Ast *curry, LLVMValueRef func,
   int curried_fn_len = total_params_len - saved_args_len;
 
   Type *fn_type = curry->md;
+
   LLVMValueRef curried_func = codegen_fn_proto(
       fn_type, curried_fn_len, "curried_fn", ctx, module, builder);
 
   if (curried_func == NULL) {
     return NULL;
-  }
-
-  LLVMValueRef app_vals[total_params_len];
-  for (int i = 0; i < saved_args_len; i++) {
-    app_vals[i] =
-        codegen(curry->data.AST_APPLICATION.args + i, ctx, module, builder);
   }
 
   LLVMBasicBlockRef block = LLVMAppendBasicBlock(curried_func, "entry");
@@ -33,6 +29,11 @@ LLVMValueRef codegen_curry_fn(Ast *curry, LLVMValueRef func,
   LLVMPositionBuilderAtEnd(builder, block);
 
   JITLangCtx fn_ctx = ctx_push(*ctx);
+  LLVMValueRef app_vals[total_params_len];
+  for (int i = 0; i < saved_args_len; i++) {
+    Ast *app_val_ast = curry->data.AST_APPLICATION.args + i;
+    app_vals[i] = codegen(app_val_ast, &fn_ctx, module, builder);
+  }
 
   for (int i = 0; i < curried_fn_len; i++) {
     LLVMValueRef param_val = LLVMGetParam(curried_func, i);
