@@ -111,6 +111,7 @@ typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       Type *type_to, LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
+
   printf("attempt value conversion: ");
   print_type(type_from);
   if (type_from->alias) {
@@ -124,6 +125,5 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
   printf("\n");
 
   ConsMethod constructor = type_to->constructor;
-  printf("constructor func %p \n", constructor);
   return constructor(value, type_from, module, builder);
 }
