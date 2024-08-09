@@ -1,21 +1,14 @@
 let play_node = extern fn Synth -> Synth ;
-let sq_node = (
-  extern fn Synth -> Synth  : "sq_node",
-  extern fn Double -> Synth : "sq_node_of_scalar",
-  extern fn Int -> Synth    : "sq_node_of_int",
-);
 
-let sin_node = (
-  extern fn Synth -> Synth  : "sin_node",
-  extern fn Double -> Synth : "sin_node_of_scalar",
-  extern fn Int -> Synth    : "sin_node_of_int",
-);
+let sq_node = extern fn Signal -> Synth;
+let sin_node = extern fn Signal -> Synth;
 
 
 let init_audio = extern fn () -> () in
 init_audio ()
 ;
 
-let freq = 200 + (sin_node 0.25) * 99 * sin_node 8 in
+let freq = 200 + (sin_node 0.25) * 99 * sin_node 8. in
 let x = sq_node (freq * 1.01) + sq_node freq |> play_node
+
 ;
