@@ -29,8 +29,16 @@ void print_type(Type *type) {
   }
 
   if (type->kind == T_MODULE) {
-    printf("Module: \n");
-    print_type_env(type->data.T_MODULE);
+    printf("Module %s:\n", type->alias);
+
+    hti it = ht_iterator(type->data.T_MODULE);
+
+    for (hti it = ht_iterator(type->data.T_MODULE); ht_next(&it); it) {
+      printf("%s\t: ", it.key);
+      print_type((Type *)it.value);
+      printf("\n");
+    };
+
     return;
   }
 

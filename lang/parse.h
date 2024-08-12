@@ -274,4 +274,5 @@ Ast *ast_char(char ch);
 Ast *ast_sequence(Ast *seq, Ast *new);
 
 Ast *ast_assoc_extern(Ast *l, ObjString name);
+Ast *ast_import(ObjString name);
 #endif

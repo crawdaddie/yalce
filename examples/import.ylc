@@ -1,4 +1,10 @@
-import List;
+import Synth;
 
+Synth.init_audio ();
 
-List.sum 0 [1,2,3,4]
+let amen_buf = Synth.read_buf "fat_amen_mono_48000.wav";
+let amen = Synth.bufplayer_node amen_buf;  
+
+# let rate = 0.5 + 0.4999 * Synth.sin_node 0.5;
+
+# let x =  rate |> amen |> Synth.play_node;

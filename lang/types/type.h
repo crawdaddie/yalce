@@ -1,6 +1,7 @@
 #ifndef _LANG_TYPE_TYPE_H
 #define _LANG_TYPE_TYPE_H
 
+#include "ht.h"
 #include <stdbool.h>
 #include <stdlib.h>
 typedef struct TypeEnv TypeEnv;
@@ -69,7 +70,8 @@ typedef struct Type {
       struct Type *from;
       struct Type *to;
     } T_FN;
-    TypeEnv *T_MODULE;
+
+    ht *T_MODULE;
 
     struct {
       struct Type **args;

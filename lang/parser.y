@@ -121,7 +121,8 @@ expr:
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
-  | let_binding                       { $$ = $1; } | match_expr                        { $$ = $1; }
+  | let_binding                       { $$ = $1; }
+  | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
   ;
 
@@ -150,6 +151,7 @@ let_binding:
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' extern_typed_signature  
                                     { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $4), NULL); }
+  | 'import' IDENTIFIER             { $$ = ast_let(ast_identifier($2), ast_import($2), NULL); }
 
 
   | LET IDENTIFIER '=' '(' extern_variants ')'  

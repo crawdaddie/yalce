@@ -255,8 +255,8 @@ Type *infer(TypeEnv **env, Ast *ast) {
     if (lt == NULL || rt == NULL) {
       return NULL;
     }
-    if (ast->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
 
+    if (ast->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
       Type *list_el_type = next_tvar();
       Type *list_type = create_list_type(list_el_type);
       unify(rt, list_type);
@@ -329,10 +329,10 @@ Type *infer(TypeEnv **env, Ast *ast) {
   case AST_LET: {
     Type *expr_type = infer(env, ast->data.AST_LET.expr);
 
+
     Ast *binding = ast->data.AST_LET.binding;
     *env = add_var_to_env(*env, expr_type, binding);
     infer(env, binding);
-
     if (ast->data.AST_LET.in_expr) {
       type = infer(env, ast->data.AST_LET.in_expr);
     } else {
@@ -520,20 +520,36 @@ Type *infer(TypeEnv **env, Ast *ast) {
     type = tcons("List", cons_args, 1);
     break;
   }
+
   case AST_IMPORT: {
-    type = next_tvar();
+    if (ast->md == NULL) {
+      fprintf(stderr, "Error: no type information for module");
+      return NULL;
+    }
+    type = ast->md;
     break;
   }
+
   case AST_RECORD_ACCESS: {
     Ast *record = ast->data.AST_RECORD_ACCESS.record;
     infer(env, record);
+
     Ast *member = ast->data.AST_RECORD_ACCESS.member;
     if (member->tag != AST_IDENTIFIER) {
       return NULL;
     }
-    member->md = env_lookup(((Type *)record->md)->data.T_MODULE,
-                            member->data.AST_IDENTIFIER.value);
-    type = member->md;
+
+    if (((Type *)record->md)->kind == T_MODULE) {
+      const char *name = member->data.AST_IDENTIFIER.value;
+      uint64_t hash = hash_string(name, member->data.AST_IDENTIFIER.length);
+      member->md = ht_get_hash(((Type *)record->md)->data.T_MODULE, name, hash);
+      type = member->md;
+      // printf("found record access type: ");
+      // print_ast(ast);
+      // print_type(type);
+      // printf("\n");
+      break;
+    }
     break;
   }
   case AST_TYPE_DECL: {

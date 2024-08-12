@@ -492,3 +492,9 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
   body->data.AST_BODY.stmts[1] = new;
   return body;
 }
+
+Ast *ast_import(ObjString module_name) {
+  Ast *import = Ast_new(AST_IMPORT);
+  import->data.AST_IMPORT.module_name = module_name.chars;
+  return import;
+}

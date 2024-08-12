@@ -1,4 +1,5 @@
 #include "fn_application.h"
+#include "serde.h"
 #include "types/util.h"
 #include <string.h>
 
@@ -185,7 +186,6 @@ Type *infer_fn_application(TypeEnv **env, Ast *ast) {
       ast->data.AST_APPLICATION.args[i].md = resolved;
       res = res->data.T_FN.to;
     }
-
     *res = *resolve_in_map(constraints_map, res);
     ret_type = res;
     ast->data.AST_APPLICATION.function->md = fn_type;

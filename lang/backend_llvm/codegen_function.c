@@ -7,6 +7,7 @@
 #include "types/util.h"
 #include "util.h"
 #include "llvm-c/Core.h"
+#include "llvm-c/ExecutionEngine.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -280,6 +281,7 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
                                                   LLVMModuleRef module,
                                                   LLVMBuilderRef builder,
                                                   Type **fn_type) {
+
   Ast *fn_id = ast->data.AST_APPLICATION.function;
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
   int fn_name_len = fn_id->data.AST_IDENTIFIER.length;
@@ -409,6 +411,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
       app_vals[i] = app_val;
       fn_type = fn_type->data.T_FN.to;
     }
+    printf("application build call");
+    print_ast(ast);
+    LLVMDumpValue(func);
+    printf("\n");
 
     return LLVMBuildCall2(builder, LLVMGlobalGetValueType(func), func, app_vals,
                           app_len, "call_func");
