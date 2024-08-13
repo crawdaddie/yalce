@@ -47,14 +47,6 @@ Signal *get_sig_default(int layout, double value);
 
 Node *group_new(int chans);
 
-Node *sq_node(Signal *freq);
-
-Node *sq_node_of_scalar(double freq);
-Node *sq_node_of_int(int freq);
-Node *sin_node_of_scalar(double freq);
-Node *sin_node_of_int(int freq);
-Node *sin_node(Signal *freq);
-
 node_perform sum_perform(Node *node, int nframes, double spf);
 node_perform mul_perform(Node *node, int nframes, double spf);
 

@@ -2,8 +2,12 @@
 #include "common.h"
 #include "node.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
+typedef struct sq_state {
+  double phase;
+} sq_state;
 #define SQ_TABSIZE (1 << 11)
 static double sq_table[SQ_TABSIZE] = {0};
 
@@ -76,6 +80,18 @@ node_perform sq_perform(Node *node, int nframes, double spf) {
   }
 }
 
+Node *sq_node(Signal *freq) {
+  sq_state *state = malloc(sizeof(sq_state));
+  state->phase = 0.0;
+
+  Node *s = node_new(state, (node_perform *)sq_perform, 1, freq);
+
+  return s;
+}
+typedef struct sin_state {
+  double phase;
+} sin_state;
+
 #define SIN_TABSIZE (1 << 11)
 static double sin_table[SIN_TABSIZE];
 
@@ -122,6 +138,14 @@ node_perform sin_perform(Node *node, int nframes, double spf) {
     out++;
     input++;
   }
+}
+
+Node *sin_node(Signal *freq) {
+  sin_state *state = malloc(sizeof(sin_state));
+  state->phase = 0.0;
+
+  Node *s = node_new(state, (node_perform *)sin_perform, 1, freq);
+  return s;
 }
 
 typedef struct bufplayer_state {
@@ -178,46 +202,75 @@ Node *bufplayer_node(Signal *buf, Signal *rate) {
   return bufplayer;
 }
 
-Node *bufplayer_node_of_scalar(Signal *buf, double rate) {
-  bufplayer_state *state = malloc(sizeof(bufplayer_state));
-  state->phase = 0.0;
-
-  Signal *sigs = malloc(sizeof(Signal) * 2);
-  sigs[0].buf = buf->buf;
-  sigs[0].size = buf->size;
-  sigs[0].layout = buf->layout;
-
-  sigs[1].buf = calloc(BUF_SIZE, sizeof(double));
-  for (int i = 0; i < BUF_SIZE; i++) {
-    sigs[1].buf[i] = rate;
-  }
-  sigs[1].size = BUF_SIZE;
-  sigs[1].layout = 1;
-
-  Node *bufplayer = node_new(state, (node_perform *)bufplayer_perform, 2, sigs);
-
-  // printf("create bufplayer node %p with buf signal %p\n", bufplayer, buf);
-  return bufplayer;
+double random_double() {
+  // Generate a random integer between 0 and RAND_MAX
+  int rand_int = rand();
+  // Scale the integer to a double between 0 and 1
+  double rand_double = (double)rand_int / RAND_MAX;
+  // Scale and shift the double to be between -1 and 1
+  rand_double = rand_double * 2 - 1;
+  return rand_double;
 }
 
-Node *bufplayer_node_of_scalar_int(Signal *buf, int rate) {
-  bufplayer_state *state = malloc(sizeof(bufplayer_state));
-  state->phase = 0.0;
-
-  Signal *sigs = malloc(sizeof(Signal) * 2);
-  sigs[0].buf = buf->buf;
-  sigs[0].size = buf->size;
-  sigs[0].layout = buf->layout;
-
-  sigs[1].buf = calloc(BUF_SIZE, sizeof(double));
-  for (int i = 0; i < BUF_SIZE; i++) {
-    sigs[1].buf[i] = rate;
-  }
-  sigs[1].size = BUF_SIZE;
-  sigs[1].layout = 1;
-
-  Node *bufplayer = node_new(state, (node_perform *)bufplayer_perform, 2, sigs);
-
-  // printf("create bufplayer node %p with buf signal %p\n", bufplayer, buf);
-  return bufplayer;
+int rand_int(int range) {
+  // Generate a random integer between 0 and RAND_MAX
+  int rand_int = rand();
+  // Scale the integer to a double between 0 and 1
+  double rand_double = (double)rand_int / RAND_MAX;
+  // Scale and shift the double to be between -1 and 1
+  rand_double = rand_double * range;
+  return (int)rand_double;
 }
+
+double random_double_range(double min, double max) {
+  // Generate a random integer between 0 and RAND_MAX
+  int rand_int = rand();
+  // Scale the integer to a double between 0 and 1
+  double rand_double = (double)rand_int / RAND_MAX;
+  // Scale and shift the double to be between -1 and 1
+  rand_double = rand_double * (max - min) + min;
+  return rand_double;
+}
+node_perform white_noise_perform(Node *node, int nframes, double spf) {
+  double *out = node->out.buf;
+  while (nframes--) {
+    *out = random_double_range(-1.0, 1.0);
+    out++;
+  }
+}
+
+Node *white_noise_node() {
+
+  Node *noise = node_new(NULL, (node_perform *)white_noise_perform, 0, NULL);
+  return noise;
+}
+
+typedef struct brown_noise_state {
+  double last;
+} brown_noise_state;
+
+node_perform brown_noise_perform(Node *node, int nframes, double spf) {
+  double scale = sqrt(spf);
+  // double scale = spf;
+  brown_noise_state *st = node->state;
+  double *out = node->out.buf;
+
+  while (nframes--) {
+    double add = scale * random_double_range(-1.0, 1.0);
+    st->last += add; 
+    // Prevent unbounded drift
+    if (st->last > 1.0 || st->last < -1.0) {
+      st->last = st->last * 0.999;
+    }
+    *out = st->last;
+    out++;
+  }
+}
+
+Node *brown_noise_node() {
+  brown_noise_state *st = malloc(sizeof(brown_noise_state));
+  Node *noise = node_new(st, (node_perform *)brown_noise_perform, 0, NULL);
+  return noise;
+}
+
+Node *lfnoise_node() {}

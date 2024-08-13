@@ -67,5 +67,6 @@ Node *audio_ctx_add(Node *node);
 Node *add_to_dac(Node *node);
 
 void print_graph(Node *node);
+int ctx_sample_rate();
 
 #endif

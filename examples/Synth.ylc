@@ -1,9 +1,21 @@
 let read_buf = extern fn String -> Signal;
+
+# oscillators
 let bufplayer_node = extern fn Signal -> Signal -> Synth;
 let sin_node = extern fn Signal -> Synth;
 let sq_node = extern fn Signal -> Synth;
+let white_noise_node = extern fn () -> Synth;
+let brown_noise_node = extern fn () -> Synth;
+
+# filters
+let biquad_lp_node = extern fn Signal -> Signal -> Signal -> Synth;
+let biquad_bp_node = extern fn Signal -> Signal -> Signal -> Synth;
+let biquad_hp_node = extern fn Signal -> Signal -> Signal -> Synth;
+
 let out_sig = extern fn Synth -> Signal;
 let input_sig = extern fn Int -> Synth -> Signal;
 let num_inputs = extern fn Synth -> Int;
 let play_node = extern fn Synth -> Synth;
-let init_audio = extern fn () -> () in init_audio ();
+
+let init_audio = extern fn () -> () in
+init_audio ();

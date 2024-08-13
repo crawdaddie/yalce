@@ -9,6 +9,25 @@ struct string_list {
   struct string_list *next;
 };
 
+struct string_list *string_list_push_left(struct string_list *list,
+                                          const char *data) {
+  struct string_list *new = malloc(sizeof(struct string_list));
+  new->next = list;
+  new->data = data;
+  return new;
+}
+
+const char *string_list_find(struct string_list *list, const char *data) {
+
+  for (struct string_list *inc = list; inc != NULL; inc = inc->next) {
+    if (strcmp(inc->data, data) == 0) {
+      // module already included
+      return inc->data;
+    }
+  }
+  return NULL;
+}
+
 static struct string_list *included = NULL;
 
 Ast *Ast_new(enum ast_tag tag) {
@@ -107,18 +126,18 @@ Ast *parse_input(char *input, const char *dirname) {
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
 
-  struct string_list *_input_stack = malloc(sizeof(struct string_list));
-  _input_stack->next = input_stack;
-  _input_stack->data = input;
-  input_stack = _input_stack;
+  input_stack = string_list_push_left(input_stack, input);
+
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
 
-  input_stack = input_stack->next;
+  struct string_list *_input_stack = input_stack->next;
+  free(input_stack);
+
+  input_stack = _input_stack;
   if (input_stack && input_stack->data) {
     yy_scan_string(input_stack->data);
   }
-  free(_input_stack);
 
   Ast *res = ast_root;
   if (prev != NULL) {
@@ -524,17 +543,10 @@ void handle_macro(Ast *root, const char *macro_text) {
     char *fully_qualified_name = malloc(sizeof(char) * len);
     snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", current_dir,
              macro_text + 8);
-    for (struct string_list *inc = included; inc != NULL; inc = inc->next) {
-      if (strcmp(inc->data, fully_qualified_name) == 0) {
-        // module already included
-        return;
-      }
+    if (string_list_find(included, fully_qualified_name)) {
+      return;
     }
-    struct string_list *_included = malloc(sizeof(struct string_list));
-    _included->next = included;
-    _included->data = fully_qualified_name;
-    included = _included;
-
+    included = string_list_push_left(included, fully_qualified_name);
     char *fcontent = read_script(fully_qualified_name);
     Ast *mod = parse_input(fcontent, current_dir);
     ast_root = parse_stmt_list(root, mod);

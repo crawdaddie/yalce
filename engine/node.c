@@ -216,61 +216,6 @@ Node *group_new(int chans) {
   return node;
 }
 
-Node *sq_node_of_scalar(double freq) {
-  sq_state *state = malloc(sizeof(sq_state));
-  state->phase = 0.0;
-
-  Node *s =
-      node_new(state, (node_perform *)sq_perform, 1, get_sig_default(1, freq));
-
-  return s;
-}
-
-Node *sq_node_of_int(int freq) {
-  sq_state *state = malloc(sizeof(sq_state));
-  state->phase = 0.0;
-
-  Node *s =
-      node_new(state, (node_perform *)sq_perform, 1, get_sig_default(1, freq));
-
-  return s;
-}
-
-Node *sq_node(Signal *freq) {
-  sq_state *state = malloc(sizeof(sq_state));
-  state->phase = 0.0;
-
-  Node *s = node_new(state, (node_perform *)sq_perform, 1, freq);
-
-  return s;
-}
-
-Node *sin_node_of_scalar(double freq) {
-  sin_state *state = malloc(sizeof(sin_state));
-  state->phase = 0.0;
-
-  Node *s =
-      node_new(state, (node_perform *)sin_perform, 1, get_sig_default(1, freq));
-  return s;
-}
-
-Node *sin_node(Signal *freq) {
-  sin_state *state = malloc(sizeof(sin_state));
-  state->phase = 0.0;
-
-  Node *s = node_new(state, (node_perform *)sin_perform, 1, freq);
-  return s;
-}
-
-Node *sin_node_of_int(int freq) {
-  sin_state *state = malloc(sizeof(sin_state));
-  state->phase = 0.0;
-
-  Node *s =
-      node_new(state, (node_perform *)sin_perform, 1, get_sig_default(1, freq));
-  return s;
-}
-
 node_perform sum_perform_(Node *node, int nframes, double spf) {
   int num_ins = node->num_ins;
   double *out = node->out.buf;

@@ -197,3 +197,5 @@ int get_write_ptr() {
   Ctx *ctx = get_audio_ctx();
   return ctx->msg_queue.write_ptr;
 }
+
+int ctx_sample_rate() { return ctx.sample_rate; }

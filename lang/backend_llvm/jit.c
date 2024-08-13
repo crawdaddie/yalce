@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define STACK_MAX 256
 
@@ -293,6 +294,9 @@ int jit(int argc, char **argv) {
 
   if (repl) {
 
+    char dirname[100];
+    getcwd(dirname, 100);
+
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
@@ -329,11 +333,10 @@ int jit(int argc, char **argv) {
         continue;
       }
 
-      char *dirname = get_dirname(argv[0]);
 
       Ast *prog = parse_input(input, dirname);
-      Ast *top = top_level_ast(prog);
-      Type *typecheck_result = infer_ast(&env, top);
+      // Ast *top = top_level_ast(prog);
+      Type *typecheck_result = infer_ast(&env, prog);
       ctx.env = env;
 
       if (typecheck_result == NULL) {
@@ -343,7 +346,7 @@ int jit(int argc, char **argv) {
 
       // Generate node.
       LLVMValueRef top_level_func =
-          codegen_top_level(top, &top_level_ret_type, &ctx, module, builder);
+          codegen_top_level(prog, &top_level_ret_type, &ctx, module, builder);
 
 #ifdef DUMP_AST
       printf("%s\n", COLOR_RESET);
@@ -352,7 +355,7 @@ int jit(int argc, char **argv) {
 
       printf(COLOR_GREEN "> ");
 
-      Type *top_type = top->md;
+      Type *top_type = prog->md;
 
       if (top_level_func == NULL) {
         print_result(top_type, NULL);
@@ -377,7 +380,7 @@ void print_result(Type *type, LLVMGenericValueRef result) {
   if (type->alias != NULL) {
     printf("%s", type->alias);
   } else {
-    print_type_w_tc(type);
+    print_type(type);
   }
 
   if (result == NULL) {
