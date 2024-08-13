@@ -161,17 +161,17 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   if (!fcontent) {
     return NULL;
   }
+  char *dirname = get_dirname(filename);
+  if (dirname == NULL) {
+    return NULL;
+  }
 
-  *prog = parse_input(fcontent);
+  *prog = parse_input(fcontent, dirname);
 
 #ifdef DUMP_AST
   print_ast(*prog);
 #endif
 
-  char *dirname = get_dirname(filename);
-  if (dirname == NULL) {
-    return NULL;
-  }
   if (!(*prog)) {
     return NULL;
   }
@@ -329,7 +329,9 @@ int jit(int argc, char **argv) {
         continue;
       }
 
-      Ast *prog = parse_input(input);
+      char *dirname = get_dirname(argv[0]);
+
+      Ast *prog = parse_input(input, dirname);
       Ast *top = top_level_ast(prog);
       Type *typecheck_result = infer_ast(&env, top);
       ctx.env = env;

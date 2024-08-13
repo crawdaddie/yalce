@@ -239,7 +239,7 @@ Ast *ast_lambda(Ast *args, Ast *body);
 Ast *ast_arg_list(Ast *arg_id, Ast *def);
 Ast *ast_arg_list_push(Ast *arg_list, Ast *arg_id, Ast *def);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
-Ast *parse_input(char *input);
+Ast *parse_input(char *input, const char *dirname);
 Ast *ast_void();
 Ast *ast_string(ObjString lex_string);
 

@@ -60,19 +60,8 @@ it supports declaring external C functions:
 let printf      = extern fn string -> () ; # simplified printf from c stdlib
 let play_node   = extern fn Synth -> Synth ;
 
-let sq_node = (
-  extern fn Synth -> Synth  : "sq_node", # declare several variants for explicit polymorphism
-  extern fn Double -> Synth : "sq_node_of_scalar",
-  extern fn Int -> Synth    : "sq_node_of_int",
-);
-# now `sq_node` can be called with an int, a double or with another Synth node as its frequency input
-
-let sin_node = (
-  extern fn Synth -> Synth  : "sin_node",
-  extern fn Double -> Synth : "sin_node_of_scalar",
-  extern fn Int -> Synth    : "sin_node_of_int",
-);
-
+let sin_node = extern fn Signal -> Synth;
+let sq_node = extern fn Signal -> Synth;
 
 let init_audio = extern fn () -> () in
 init_audio ()

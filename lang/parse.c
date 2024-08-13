@@ -1,7 +1,15 @@
 #include "parse.h"
+#include "input.h"
 #include "serde.h"
 #include <stdlib.h>
 #include <string.h>
+
+struct string_list {
+  const char *data;
+  struct string_list *next;
+};
+
+static struct string_list *included = NULL;
 
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = malloc(sizeof(Ast));
@@ -81,8 +89,14 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
 }
 
 int yy_scan_string(char *);
+
+static char *current_dir;
+static int current_buf;
+static struct string_list *input_stack = NULL;
+
 /* Define the parsing function */
-Ast *parse_input(char *input) {
+Ast *parse_input(char *input, const char *dirname) {
+  current_dir = dirname;
   Ast *prev = NULL;
 
   if (ast_root != NULL && ast_root->data.AST_BODY.len > 0) {
@@ -93,8 +107,18 @@ Ast *parse_input(char *input) {
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
 
+  struct string_list *_input_stack = malloc(sizeof(struct string_list));
+  _input_stack->next = input_stack;
+  _input_stack->data = input;
+  input_stack = _input_stack;
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
+
+  input_stack = input_stack->next;
+  if (input_stack && input_stack->data) {
+    yy_scan_string(input_stack->data);
+  }
+  free(_input_stack);
 
   Ast *res = ast_root;
   if (prev != NULL) {
@@ -494,11 +518,25 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
   return body;
 }
 
-Ast *macro(Ast *expr) {
-  print_ast(expr);
-  return NULL;
-}
-
 void handle_macro(Ast *root, const char *macro_text) {
-  printf("handle macro '%s'\n", macro_text);
+  if (strncmp("include", macro_text, 7) == 0) {
+    int len = strlen(current_dir) + 1 + strlen(macro_text + 8) + 4;
+    char *fully_qualified_name = malloc(sizeof(char) * len);
+    snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", current_dir,
+             macro_text + 8);
+    for (struct string_list *inc = included; inc != NULL; inc = inc->next) {
+      if (strcmp(inc->data, fully_qualified_name) == 0) {
+        // module already included
+        return;
+      }
+    }
+    struct string_list *_included = malloc(sizeof(struct string_list));
+    _included->next = included;
+    _included->data = fully_qualified_name;
+    included = _included;
+
+    char *fcontent = read_script(fully_qualified_name);
+    Ast *mod = parse_input(fcontent, current_dir);
+    ast_root = parse_stmt_list(root, mod);
+  }
 }
