@@ -274,4 +274,7 @@ Ast *ast_char(char ch);
 Ast *ast_sequence(Ast *seq, Ast *new);
 
 Ast *ast_assoc_extern(Ast *l, ObjString name);
+// Ast *macro(Ast *expr);
+void handle_macro(Ast *root, const char *macro_text);
+
 #endif

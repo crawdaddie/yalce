@@ -97,7 +97,7 @@ Ast* ast_root = NULL;
 
 program:
     expr_sequence ';' { parse_stmt_list(ast_root, $1); }
-  | expr_sequence    { parse_stmt_list(ast_root, $1); }
+  | expr_sequence     { parse_stmt_list(ast_root, $1); }
   | /* NULL */
   ;
 
@@ -121,7 +121,8 @@ expr:
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
-  | let_binding                       { $$ = $1; } | match_expr                        { $$ = $1; }
+  | let_binding                       { $$ = $1; }
+  | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
   ;
 

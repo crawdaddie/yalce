@@ -180,6 +180,7 @@ Ast *ast_arg_list_push(Ast *lambda, Ast *arg_id, Ast *def) {
 // }
 
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
+
   if (new_stmt == NULL) {
     return stmts;
   }
@@ -491,4 +492,13 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
   body->data.AST_BODY.stmts[0] = seq;
   body->data.AST_BODY.stmts[1] = new;
   return body;
+}
+
+Ast *macro(Ast *expr) {
+  print_ast(expr);
+  return NULL;
+}
+
+void handle_macro(Ast *root, const char *macro_text) {
+  printf("handle macro '%s'\n", macro_text);
 }
