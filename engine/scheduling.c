@@ -185,3 +185,6 @@ void schedule_event(void (*callback)(void *, uint64_t), void *userdata,
 
   return _schedule_event(queue, callback, userdata, delay_seconds, now);
 }
+
+typedef struct Timer {
+} Timer;

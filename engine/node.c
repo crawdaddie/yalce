@@ -184,6 +184,46 @@ Node *node_new(void *data, node_perform *perform, int num_ins, Signal *ins) {
   return node;
 }
 
+Signal *group_add_input(Node *group) {
+  if (group->num_ins == 0) {
+    group->num_ins = 1;
+    group->ins = malloc(sizeof(Signal));
+    return group->ins;
+  }
+  group->num_ins++;
+  Signal *ins = group->ins;
+  group->ins = malloc(sizeof(Signal) * group->num_ins);
+  for (int i = 0; i < group->num_ins - 1; i++) {
+    group->ins[i].buf = ins[i].buf;
+    group->ins[i].size = ins[i].size;
+    group->ins[i].layout = ins[i].layout;
+  }
+  group->ins[group->num_ins - 1].buf = calloc(BUF_SIZE, sizeof(double));
+  group->ins[group->num_ins - 1].size = BUF_SIZE;
+  group->ins[group->num_ins - 1].layout = 1;
+
+  return &group->ins[group->num_ins - 1];
+}
+
+Signal *inlet(double default_val) {
+  Signal *sig;
+  if (_chain == NULL) {
+    _chain = group_new(1);
+    sig = _chain->ins;
+    // printf("created sig %p %p\n", sig, sig->buf);
+  } else {
+    sig = group_add_input(_chain);
+    // printf("created sig %p %p in existing group\n", sig, sig->buf);
+  }
+
+  for (int i = 0; i < sig->size; i++) {
+    sig->buf[i] = default_val;
+    // printf("sig val %f\n", sig->buf[i]);
+  }
+
+  return sig;
+}
+
 Signal *get_sig(int layout) {
   Signal *sig = malloc(sizeof(Signal));
   sig->buf = calloc(BUF_SIZE * layout, sizeof(double));
@@ -200,13 +240,20 @@ Signal *get_sig_default(int layout, double value) {
   return sig;
 }
 
-Node *group_new(int chans) {
+Node *group_new(int ins) {
   group_state *graph = malloc(sizeof(group_state));
 
   Node *node = malloc(sizeof(Node));
   node->state = graph;
-  node->num_ins = 0;
-  node->ins = NULL;
+  node->num_ins = ins;
+  node->ins = ins == 0 ? NULL : malloc(sizeof(Signal) * ins);
+
+  for (int i = 0; i < ins; i++) {
+    node->ins[i].buf = calloc(BUF_SIZE, sizeof(double));
+    node->ins[i].size = BUF_SIZE;
+    node->ins[i].layout = 1;
+  }
+
   node->out.layout = 1;
   node->out.size = BUF_SIZE;
   node->out.buf = calloc(BUF_SIZE, sizeof(double));
@@ -343,6 +390,14 @@ Node *node_of_double(double val) {
   return const_node;
 }
 
+Node *node_of_sig(Signal *val) {
+  Node *const_node = node_new(NULL, NULL, 0, NULL);
+  const_node->out.buf = val->buf;
+  const_node->out.size = val->size;
+  const_node->out.layout = val->layout;
+  return const_node;
+}
+
 Signal *out_sig(Node *n) { return &n->out; }
 
 Signal *input_sig(int i, Node *n) { return n->ins + i; }
@@ -358,3 +413,11 @@ Signal *signal_of_int(int val) {
   return signal;
 }
 
+Node *mul_sig(Signal *a, Signal *b) {
+  int num_ins = 2;
+  Signal *ins = malloc(sizeof(Signal) * num_ins);
+  Node *op_node = node_new(NULL, (node_perform *)mul_perform, num_ins, ins);
+  op_node->ins[0].buf = a->buf;
+  op_node->ins[1].buf = b->buf;
+  return op_node;
+}

@@ -1,3 +1,11 @@
+# uniformly distributed integer between 0 and range-1
 let rand_int = extern fn Int -> Int ;
+
+# uniformly distributed double between 0 and 1.0
 let rand_double = extern fn () -> Double ;
+
+# uniformly distributed double between min and max
 let rand_double_range = extern fn Double -> Double -> Double ;
+
+let amp_db = extern fn Double -> Double;
+let db_amp = extern fn Double -> Double;

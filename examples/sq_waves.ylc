@@ -1,0 +1,46 @@
+%include Synth
+%include Math
+
+
+let dtsq = fn default_freq -> 
+  let freq = inlet default_freq in
+
+  let sq = sq_node freq
+         + sq_node (mul_sig freq 1.01) in
+
+  play_node (sq * db_amp -5)
+;;
+
+
+let amen_buf = read_buf "fat_amen_mono_48000.wav";
+let tempo_adjust = 0.37;
+let sample_rate_adjust = 0.9187;
+
+let playmen = fn rate trig -> 
+  let x = bufplayer_node 
+    amen_buf
+    (inlet rate)
+    (inlet 0.0)
+    (inlet trig) in
+
+  play_node x
+;;
+  
+
+
+
+
+let a = playmen 0.8 0.0;
+let adjust = tempo_adjust * sample_rate_adjust / 0.8;
+let s = dtsq 50.;
+
+let trigr = fn () -> 
+  set_input_scalar a 1 ((rand_int 4) / 4.0);
+  set_input_trig 2 a;
+  set_input_scalar s 0 (rand_double_range 50. 300.);
+
+  schedule_event trigr () (adjust * (0.25 + (rand_int 4) / 4.0) )
+;;
+trigr ();
+
+

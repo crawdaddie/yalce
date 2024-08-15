@@ -8,4 +8,6 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       Type *type_to, LLVMModuleRef module,
                                       LLVMBuilderRef builder);
 void initialize_ptr_constructor();
+
+void initialize_double_constructor();
 #endif

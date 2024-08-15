@@ -151,9 +151,30 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
     return NULL;
   }
 }
+
+LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
+  switch (from_type->kind) {
+  case T_NUM: {
+    return val;
+  }
+
+  case T_INT: {
+    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+  }
+
+  default:
+    return NULL;
+  }
+}
 void initialize_ptr_constructor() {
   t_ptr.constructor = ptr_constructor;
   t_ptr.constructor_size = sizeof(ConsMethod);
+}
+
+void initialize_double_constructor() {
+  t_num.constructor = double_constructor;
+  t_num.constructor_size = sizeof(ConsMethod);
 }
 
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,

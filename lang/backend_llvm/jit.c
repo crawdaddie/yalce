@@ -19,40 +19,40 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/Transforms/InstCombine.h>
 #include <llvm-c/Transforms/Scalar.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+// YALCE STDLIB
 
+// uniformly distributed integer between 0 and range-1
 int rand_int(int range) {
-  // Generate a random integer between 0 and RAND_MAX
   int rand_int = rand();
-  // Scale the integer to a double between 0 and 1
   double rand_double = (double)rand_int / RAND_MAX;
-  // Scale and shift the double to be between -1 and 1
   rand_double = rand_double * range;
   return (int)rand_double;
 }
 
+// uniformly distributed double between 0 and 1.0
 double rand_double() {
-  // Generate a random integer between 0 and RAND_MAX
   int rand_int = rand();
-  // Scale the integer to a double between 0 and 1
   double rand_double = (double)rand_int / RAND_MAX;
-  // Scale and shift the double to be between -1 and 1
   rand_double = rand_double * 2 - 1;
   return rand_double;
 }
 
+// uniformly distributed double between min and max
 double rand_double_range(double min, double max) {
-  // Generate a random integer between 0 and RAND_MAX
   int rand_int = rand();
-  // Scale the integer to a double between 0 and 1
   double rand_double = (double)rand_int / RAND_MAX;
   rand_double = rand_double * (max - min) + min;
   return rand_double;
 }
+
+double amp_db(double amplitude) { return 20.0f * log10(amplitude); }
+double db_amp(double db) { return pow(10.0f, db / 20.0f); }
 
 FILE *get_stderr() { return stderr; }
 FILE *get_stdout() { return stdout; }
@@ -65,6 +65,8 @@ static Ast *top_level_ast(Ast *body) {
   Ast *last = body->data.AST_BODY.stmts[len - 1];
   return last;
 }
+
+// ---------------------------
 
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMModuleRef module,
@@ -319,6 +321,7 @@ int jit(int argc, char **argv) {
   TypeEnv *env = NULL;
   env = initialize_type_env(env);
   initialize_ptr_constructor();
+  initialize_double_constructor();
 
   env = initialize_type_env_synth(env);
 

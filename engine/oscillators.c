@@ -269,7 +269,8 @@ node_perform bufplayer_trig_perform(Node *node, int nframes, double spf) {
     start_pos++;
   }
 }
-Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos) {
+Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
+                     Signal *trig) {
   bufplayer_state *state = malloc(sizeof(bufplayer_state));
   state->phase = 0.0;
 
@@ -278,15 +279,22 @@ Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos) {
   sigs[0].size = buf->size;
   sigs[0].layout = buf->layout;
 
+  printf("rate sig %p %p\n", rate, rate->buf);
   sigs[1].buf = rate->buf;
   sigs[1].size = rate->size;
   sigs[1].layout = rate->layout;
 
-  sigs[2].buf = malloc(sizeof(double) * BUF_SIZE);
-  // sigs[2].buf[0] = 1.0;
-  sigs[2].size = BUF_SIZE;
-  sigs[2].layout = 1;
+  // sigs[2].buf = calloc(BUF_SIZE, sizeof(double));
+  // // sigs[2].buf[0] = 1.0;
+  // sigs[2].size = BUF_SIZE;
+  // sigs[2].layout = 1;
 
+  sigs[2].buf = trig->buf;
+  // sigs[2].buf[0] = 1.0;
+  sigs[2].size = trig->size;
+  sigs[2].layout = trig->layout;
+
+  printf("startpos sig %p %p\n", start_pos, start_pos->buf);
   sigs[3].buf = start_pos->buf;
   sigs[3].size = start_pos->size;
   sigs[3].layout = start_pos->layout;

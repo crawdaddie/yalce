@@ -66,4 +66,8 @@ int num_inputs(Node *n);
 
 Signal *signal_of_double(double val);
 Signal *signal_of_int(int val);
+
+Signal *inlet(double default_val);
+
+Node *node_of_sig(Signal *val);
 #endif

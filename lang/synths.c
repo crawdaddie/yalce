@@ -15,6 +15,14 @@ LLVMValueRef node_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
   return get_extern_fn("node_of_double", *fn_type, module);
 }
 
+LLVMValueRef node_of_sig_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
+
+  *fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
+                              (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
+
+  return get_extern_fn("node_of_sig", *fn_type, module);
+}
+
 LLVMValueRef sig_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
 
   *fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
@@ -38,6 +46,16 @@ LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
       LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
   LLVMValueRef const_node = LLVMBuildCall2(
       builder, fn_type, node_of_double_func, &double_val, 1, "const_node");
+  return const_node;
+}
+
+LLVMValueRef const_node_of_sig(LLVMValueRef val, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  printf("CONST node of SIG\n");
+  LLVMTypeRef fn_type;
+  LLVMValueRef node_of_sig_func = node_of_sig_fn(&fn_type, module);
+  LLVMValueRef const_node =
+      LLVMBuildCall2(builder, fn_type, node_of_sig_func, &val, 1, "const_node");
   return const_node;
 }
 
@@ -67,6 +85,11 @@ typedef LLVMValueRef (*SynthConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
 
 LLVMValueRef ConsSynth(LLVMValueRef value, Type *type_from,
                        LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  if (type_from->alias && strcmp(type_from->alias, "Signal") == 0) {
+    return const_node_of_sig(value, module, builder);
+  }
+
   return const_node_of_val(value, module, builder);
 }
 
@@ -137,6 +160,7 @@ static LLVMValueRef SYNTH_BINOP(LLVMValueRef fn, LLVMTypeRef fn_type,
                                 LLVMValueRef lval, Type *ltype,
                                 LLVMValueRef rval, Type *rtype,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+
   int type_check =
       (types_equal(ltype, &t_synth) << 1) | types_equal(rtype, &t_synth);
 
@@ -156,9 +180,10 @@ static LLVMValueRef SYNTH_BINOP(LLVMValueRef fn, LLVMTypeRef fn_type,
                           (LLVMValueRef[]){node_of_lval, rval}, 2,
                           "Synth_binop");
   }
-  default:
+  default: {
     fprintf(stderr, "Expected two Synth operands");
     return NULL;
+  }
   }
   return NULL;
 }

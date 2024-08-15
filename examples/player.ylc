@@ -2,19 +2,46 @@
 %include Math
 
 let amen_buf = read_buf "fat_amen_mono_48000.wav";
+let tempo_adjust = 0.37;
+let sample_rate_adjust = 0.9187;
+
 let amen = bufplayer_node amen_buf;  
 
-let rate = 0.8 + 0.1 * sin_node 0.1;
 
-let x = amen 0.8 0.;
+let rate = 1.0;
+let x = amen rate 0.;
+let adjust = tempo_adjust * sample_rate_adjust / rate;
+
 let set_rate = set_input_scalar x 1;
+let trig  = set_input_trig 2;
+let start_pos = set_input_scalar x 3;
 
-let trig = fn () ->
-  set_input_trig x 2;
-  schedule_event trig () 0.25
+let trigr = fn () ->
+  trig x;
+  # (rand_int 4) / 4.0 |> start_pos;
+
+  start_pos ((rand_int 4) / 4.0);
+  adjust * (0.5 + rand_int 3 / 4.0) |> schedule_event trigr () 
 ;;
 
+# let _trigr = fn (T, dur) ->
+#   (rand_int 4) / 4.0 |> start_pos;
+#   # TODO: need to implement matching on variants of Type
+#   match T with
+#   | None -> (
+#     (new_timer (), dur * 1.01) |> schedule_event trigr  
+#   )  
+#   | _ -> (T, dur * 1.01) |> schedule_event trigr  
+# ;;
+
+
+
+# let _trigr = fn (T, dur) ->
+#   start_pos (rand_int 4) / 4.0
+#   (T, dur * 1.01) |> schedule_event trigr  
+# ;;
 
 x |> play_node;
+trigr ()
 
 
