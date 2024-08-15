@@ -9,7 +9,7 @@ LLVM_CONFIG := $(LLVM)/bin/llvm-config
 
 TEST_DIR := lang_test
 ENGINE_LDFLAGS = -lsoundio -lm -lsndfile -lraylib -lfftw3
-ENGINE_FRAMEWORKS = -framework opengl -framework CoreMIDI -framework cocoa
+ENGINE_FRAMEWORKS = -framework opengl -framework CoreMIDI -framework cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
 # ENGINE_COMPILER_OPTIONS = -Werror -Wall -Wextra -g
 ENGINE_COMPILER_OPTIONS =-g
 

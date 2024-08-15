@@ -152,7 +152,7 @@ typedef struct bufplayer_state {
   double phase;
 } bufplayer_state;
 
-node_perform bufplayer_perform(Node *node, int nframes, double spf) {
+node_perform _bufplayer_perform(Node *node, int nframes, double spf) {
 
   bufplayer_state *state = (bufplayer_state *)node->state;
   double *buf = node->ins[0].buf;
@@ -183,7 +183,7 @@ node_perform bufplayer_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *bufplayer_node(Signal *buf, Signal *rate) {
+Node *_bufplayer_node(Signal *buf, Signal *rate) {
   bufplayer_state *state = malloc(sizeof(bufplayer_state));
   state->phase = 0.0;
 
@@ -196,13 +196,118 @@ Node *bufplayer_node(Signal *buf, Signal *rate) {
   sigs[1].size = rate->size;
   sigs[1].layout = rate->layout;
 
-  Node *bufplayer = node_new(state, (node_perform *)bufplayer_perform, 2, sigs);
+  Node *_bufplayer =
+      node_new(state, (node_perform *)_bufplayer_perform, 2, sigs);
 
-  // printf("create bufplayer node %p with buf signal %p\n", bufplayer, buf);
-  return bufplayer;
+  // printf("create _bufplayer node %p with buf signal %p\n", _bufplayer, buf);
+  return _bufplayer;
 }
 
-double random_double() {
+node_perform _bufplayer_trig_perform(Node *node, int nframes, double spf) {
+
+  bufplayer_state *state = (bufplayer_state *)node->state;
+  double *buf = node->ins[0].buf;
+  int buf_size = node->ins[0].size;
+
+  double *rate = node->ins[1].buf;
+
+  double *out = node->out.buf;
+
+  double d_index, frac, a, b, sample;
+  int index;
+  while (nframes--) {
+    d_index = state->phase * buf_size;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    a = buf[index];
+    b = buf[(index + 1) % buf_size];
+
+    sample = (1.0 - frac) * a + (frac * b);
+
+    state->phase = fmod(state->phase + (*rate) / buf_size, 1.0);
+
+    *out = sample;
+
+    out++;
+    rate++;
+  }
+}
+
+node_perform bufplayer_trig_perform(Node *node, int nframes, double spf) {
+  bufplayer_state *state = node->state;
+  int chans = node->ins[0].layout;
+  double *buf = node->ins[0].buf;
+  double *rate = node->ins[1].buf;
+  double *trig = node->ins[2].buf;
+  double *start_pos = node->ins[3].buf;
+
+  int buf_size = node->ins[0].size;
+  double *out = node->out.buf;
+
+  double d_index, frac, a, b, sample;
+  int index;
+  while (nframes--) {
+    if (*trig == 1.0) {
+      state->phase = 0;
+    }
+
+    d_index = (fmod(state->phase + *start_pos, 1.0)) * buf_size;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    a = buf[index];
+    b = buf[(index + 1) % buf_size];
+
+    sample = (1.0 - frac) * a + (frac * b);
+    state->phase = fmod(state->phase + *rate / buf_size, 1.0);
+    *out = sample;
+
+    out++;
+    rate++;
+    trig++;
+    start_pos++;
+  }
+}
+Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos) {
+  bufplayer_state *state = malloc(sizeof(bufplayer_state));
+  state->phase = 0.0;
+
+  Signal *sigs = malloc(sizeof(Signal) * 4);
+  sigs[0].buf = buf->buf;
+  sigs[0].size = buf->size;
+  sigs[0].layout = buf->layout;
+
+  sigs[1].buf = rate->buf;
+  sigs[1].size = rate->size;
+  sigs[1].layout = rate->layout;
+
+  sigs[2].buf = malloc(sizeof(double) * BUF_SIZE);
+  // sigs[2].buf[0] = 1.0;
+  sigs[2].size = BUF_SIZE;
+  sigs[2].layout = 1;
+
+  sigs[3].buf = start_pos->buf;
+  sigs[3].size = start_pos->size;
+  sigs[3].layout = start_pos->layout;
+
+  Node *_bufplayer =
+      node_new(state, (node_perform *)bufplayer_trig_perform, 4, sigs);
+
+  // printf("create _bufplayer node %p with buf signal %p\n", _bufplayer, buf);
+  return _bufplayer;
+}
+
+int _rand_int(int range) {
+  // Generate a random integer between 0 and RAND_MAX
+  int rand_int = rand();
+  // Scale the integer to a double between 0 and 1
+  double rand_double = (double)rand_int / RAND_MAX;
+  // Scale and shift the double to be between -1 and 1
+  rand_double = rand_double * range;
+  return (int)rand_double;
+}
+double _random_double() {
   // Generate a random integer between 0 and RAND_MAX
   int rand_int = rand();
   // Scale the integer to a double between 0 and 1
@@ -212,17 +317,7 @@ double random_double() {
   return rand_double;
 }
 
-int rand_int(int range) {
-  // Generate a random integer between 0 and RAND_MAX
-  int rand_int = rand();
-  // Scale the integer to a double between 0 and 1
-  double rand_double = (double)rand_int / RAND_MAX;
-  // Scale and shift the double to be between -1 and 1
-  rand_double = rand_double * range;
-  return (int)rand_double;
-}
-
-double random_double_range(double min, double max) {
+double _random_double_range(double min, double max) {
   // Generate a random integer between 0 and RAND_MAX
   int rand_int = rand();
   // Scale the integer to a double between 0 and 1
@@ -231,10 +326,11 @@ double random_double_range(double min, double max) {
   rand_double = rand_double * (max - min) + min;
   return rand_double;
 }
+
 node_perform white_noise_perform(Node *node, int nframes, double spf) {
   double *out = node->out.buf;
   while (nframes--) {
-    *out = random_double_range(-1.0, 1.0);
+    *out = _random_double_range(-1.0, 1.0);
     out++;
   }
 }
@@ -256,8 +352,8 @@ node_perform brown_noise_perform(Node *node, int nframes, double spf) {
   double *out = node->out.buf;
 
   while (nframes--) {
-    double add = scale * random_double_range(-1.0, 1.0);
-    st->last += add; 
+    double add = scale * _random_double_range(-1.0, 1.0);
+    st->last += add;
     // Prevent unbounded drift
     if (st->last > 1.0 || st->last < -1.0) {
       st->last = st->last * 0.999;

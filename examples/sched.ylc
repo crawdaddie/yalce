@@ -1,7 +1,12 @@
-let wait = fn t f args ->
-  printf "defer"  
-;;
+%include Fmt
+%include Synth
+%include Math
 
-let deferred = fn () -> printf "deferred";; 
+let x = fn () ->
+  let wait = 
+  fprintf stderr "scheduled fn\n";
+  schedule_event x () (rand_double_range 0.125 1.);
+;
 
-wait 1. 
+x ();
+

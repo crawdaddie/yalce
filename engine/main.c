@@ -6,10 +6,10 @@
 
 Node *test_synth(double freq, double cutoff) {
   Node *group = group_new(0);
-  Node *sq1 = sq_node_of_scalar(freq);
+  Node *sq1 = sq_node(get_sig_default(1, freq));
   group_add_tail(group, sq1);
 
-  Node *sq2 = sq_node_of_scalar(freq * 1.01);
+  Node *sq2 = sq_node(get_sig_default(1, freq * 1.01));
   group_add_tail(group, sq2);
 
   Node *summed = sum2_node(sq1, sq2);
@@ -19,7 +19,7 @@ Node *test_synth(double freq, double cutoff) {
   return group;
 }
 
-int main_(int argc, char **argv) {
+int main(int argc, char **argv) {
   init_audio();
   Node *s = test_synth(50., 500.);
 
@@ -32,11 +32,12 @@ int main_(int argc, char **argv) {
   return 0;
 }
 
-int main(int argc, char **argv) {
+int _main(int argc, char **argv) {
   init_audio();
   Signal *buf = read_buf("fat_amen_mono_48000.wav");
 
-  Node *b = bufplayer_node(buf, 0.8);
+  Node *b =
+      bufplayer_node(buf, get_sig_default(1, 0.99), get_sig_default(1, 0.75));
 
   add_to_dac(b);
   audio_ctx_add(b);

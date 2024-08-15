@@ -50,8 +50,10 @@ TypeClass TCOrd = {"Ord", tcord_methods, .method_size = sizeof(Method),
 
 Type t_int =    {T_INT, .implements = (TypeClass *[]){&TCNum},
                         .num_implements = 1};
+
 Type t_num =    {T_NUM, .implements = (TypeClass *[]){&TCNum},
                         .num_implements = 1};
+
 Type t_char =   {T_CHAR};
 Type t_string = {T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_char}, 1}}};
 Type t_bool =   {T_BOOL};
@@ -274,7 +276,7 @@ void _unify(Type *t1, Type *t2, TypeEnv **env) {
         t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
       fprintf(stderr, "Error: Type mismatch between %s and %s\n",
               t1->data.T_CONS.name, t2->data.T_CONS.name);
-      exit(1);
+      // exit(1);
     }
 
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
@@ -410,7 +412,6 @@ TypeEnv *initialize_type_env(TypeEnv *env) {
   Type *tt = malloc(sizeof(Type));
   *tt = TYPE_FROM_TYPECLASS(&TCOrd);
   env = env_extend(env, "Ord", tt);
-
   return env;
 }
 

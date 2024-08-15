@@ -108,6 +108,54 @@ LLVMValueRef codegen_signal_mod() { return NULL; }
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
 
+LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
+                             LLVMModuleRef module, LLVMBuilderRef builder) {
+  switch (from_type->kind) {
+
+  case T_VOID: {
+    return LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0));
+  }
+  case T_FN: {
+    printf("value conversion function to function ptr\n");
+    // Create the function type
+    LLVMTypeRef paramTypes[] = {
+        LLVMPointerType(LLVMVoidType(), 0), // void*
+        LLVMInt64Type()                     // uint64_t
+    };
+    LLVMTypeRef functionType =
+        LLVMFunctionType(LLVMVoidType(), paramTypes, 2, 0);
+
+    // Create a pointer to this function type
+    LLVMTypeRef functionPtrType = LLVMPointerType(functionType, 0);
+
+    // Cast the function to the correct pointer type
+    return LLVMBuildBitCast(builder, val, functionPtrType, "callback_cast");
+  }
+
+  case T_CONS: {
+    // printf("value conversion str to ptr\n");
+    // Cast the function to the correct pointer type
+
+    if (strcmp(from_type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
+      if (from_type->data.T_CONS.args[0]->kind == T_CHAR) {
+        return val;
+        // return LLVMBuildBitCast(
+        //     builder, val, LLVMPointerType(LLVMInt8Type(), 0),
+        //     "callback_cast");
+      }
+    }
+    return NULL;
+  }
+
+  default:
+    return NULL;
+  }
+}
+void initialize_ptr_constructor() {
+  t_ptr.constructor = ptr_constructor;
+  t_ptr.constructor_size = sizeof(ConsMethod);
+}
+
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       Type *type_to, LLVMModuleRef module,
                                       LLVMBuilderRef builder) {

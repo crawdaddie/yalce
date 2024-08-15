@@ -1,7 +1,7 @@
 let read_buf = extern fn String -> Signal;
 
 # oscillators
-let bufplayer_node = extern fn Signal -> Signal -> Synth;
+let bufplayer_node = extern fn Signal -> Signal -> Signal -> Synth;
 let sin_node = extern fn Signal -> Synth;
 let sq_node = extern fn Signal -> Synth;
 let white_noise_node = extern fn () -> Synth;
@@ -17,5 +17,11 @@ let input_sig = extern fn Int -> Synth -> Signal;
 let num_inputs = extern fn Synth -> Int;
 let play_node = extern fn Synth -> Synth;
 
-let init_audio = extern fn () -> () in
+let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
+let set_input_trig = extern fn Synth -> Int -> Synth;
+
+let init_audio = extern fn () -> ();
+
+let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
 init_audio ();
+

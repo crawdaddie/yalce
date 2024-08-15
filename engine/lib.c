@@ -79,6 +79,24 @@ Node *play_node(Node *s) {
   return group;
 }
 
+Node *set_input_scalar(Node *node, int input, double value) {
+  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_SCALAR,
+                                           get_frame_offset(),
+                                           {.NODE_SET_SCALAR = {node, input, value}}});
+  return node;
+}
+
+Node *set_input_trig(Node *node, int input) {
+  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
+                                           get_frame_offset(),
+                                           {.NODE_SET_TRIG = {node, input}}});
+  return node;
+}
+
+ 
+
+
+
 void accept_callback(int (*callback)(int, int)) {
   // Function body
   if (callback != NULL) {

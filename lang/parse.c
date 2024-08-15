@@ -538,17 +538,25 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
 }
 
 void handle_macro(Ast *root, const char *macro_text) {
+
   if (strncmp("include", macro_text, 7) == 0) {
     int len = strlen(current_dir) + 1 + strlen(macro_text + 8) + 4;
     char *fully_qualified_name = malloc(sizeof(char) * len);
     snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", current_dir,
              macro_text + 8);
+
     if (string_list_find(included, fully_qualified_name)) {
       return;
     }
+    printf("include %s\n", fully_qualified_name);
     included = string_list_push_left(included, fully_qualified_name);
     char *fcontent = read_script(fully_qualified_name);
     Ast *mod = parse_input(fcontent, current_dir);
     ast_root = parse_stmt_list(root, mod);
   }
+}
+
+Ast *ast_await(Ast *awaitable) {
+  printf("parse await\n");
+  return awaitable;
 }

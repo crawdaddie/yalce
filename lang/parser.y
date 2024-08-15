@@ -51,6 +51,7 @@ Ast* ast_root = NULL;
 %token DOUBLE_COLON
 %token TOK_VOID
 %token IN AND
+%token ASYNC
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -124,6 +125,7 @@ expr:
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
+  | 'await' expr                      { $$ = ast_await($2); }
   ;
 
 simple_expr:
@@ -167,6 +169,11 @@ let_binding:
                                       $$ = let;
                                     }
   | lambda_expr                     { $$ = $1; }
+
+  | ASYNC lambda_expr               { Ast *lambda = $2;
+                                      lambda->data.AST_LAMBDA.is_async = true;
+                                      $$ = lambda;
+                                    }
   ;
 
 extern_typed_signature:

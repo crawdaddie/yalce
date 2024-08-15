@@ -357,3 +357,4 @@ Signal *signal_of_int(int val) {
   Signal *signal = get_sig_default(1, val);
   return signal;
 }
+

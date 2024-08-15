@@ -1,8 +1,10 @@
 #ifndef _ENGINE_AUDIO_LOOP_H
 #define _ENGINE_AUDIO_LOOP_H
+#include <pthread.h>
 #include "audio_loop.h"
 #include "ctx.h"
 #include "oscillators.h"
+#include "scheduling.h"
 #include <errno.h>
 #include <soundio/soundio.h>
 #include <stdbool.h>
@@ -320,9 +322,10 @@ static int msleep(long msec) {
 int init_audio() {
   maketable_sq();
   maketable_sin();
-
   start_audio();
+  scheduler_event_loop();
 
+  
   return 0;
 }
 

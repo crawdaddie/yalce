@@ -85,6 +85,7 @@ typedef struct Type {
   void *constructor;
   size_t constructor_size;
 } Type;
+
 extern TypeClass TCNum;
 extern TypeClass TCOrd;
 

@@ -25,6 +25,38 @@
 #include <string.h>
 #include <unistd.h>
 
+int rand_int(int range) {
+  // Generate a random integer between 0 and RAND_MAX
+  int rand_int = rand();
+  // Scale the integer to a double between 0 and 1
+  double rand_double = (double)rand_int / RAND_MAX;
+  // Scale and shift the double to be between -1 and 1
+  rand_double = rand_double * range;
+  return (int)rand_double;
+}
+
+double rand_double() {
+  // Generate a random integer between 0 and RAND_MAX
+  int rand_int = rand();
+  // Scale the integer to a double between 0 and 1
+  double rand_double = (double)rand_int / RAND_MAX;
+  // Scale and shift the double to be between -1 and 1
+  rand_double = rand_double * 2 - 1;
+  return rand_double;
+}
+
+double rand_double_range(double min, double max) {
+  // Generate a random integer between 0 and RAND_MAX
+  int rand_int = rand();
+  // Scale the integer to a double between 0 and 1
+  double rand_double = (double)rand_int / RAND_MAX;
+  rand_double = rand_double * (max - min) + min;
+  return rand_double;
+}
+
+FILE *get_stderr() { return stderr; }
+FILE *get_stdout() { return stdout; }
+
 #define STACK_MAX 256
 
 void print_result(Type *type, LLVMGenericValueRef result);
@@ -43,6 +75,11 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
                                       JITLangCtx *ctx, LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
+  // intrinsic decl
+  // LLVMTypeRef param_types[] = {LLVMDoubleType()};
+  // LLVMTypeRef fn_type =
+  //     LLVMFunctionType(LLVMDoubleType(), param_types, 1, false);
+  // LLVMValueRef fn = LLVMAddFunction(module, "llvm.cos.f64", fn_type);
 
   // Create function type.
   LLVMTypeRef funcType =
@@ -54,6 +91,7 @@ static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   if (func == NULL) {
+    printf("top level return null??\n");
     return NULL;
   }
 
@@ -213,7 +251,15 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     free(fcontent);
     return NULL;
   }
+
   LLVMGenericValueRef exec_args[] = {};
+
+  if (result_type->kind == T_FN) {
+    printf("> ");
+    print_type(result_type);
+    printf("\n");
+    return NULL;
+  }
 
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
@@ -272,6 +318,8 @@ int jit(int argc, char **argv) {
   // shared type env
   TypeEnv *env = NULL;
   env = initialize_type_env(env);
+  initialize_ptr_constructor();
+
   env = initialize_type_env_synth(env);
 
   JITLangCtx ctx = {.stack = stack,
@@ -332,7 +380,6 @@ int jit(int argc, char **argv) {
       } else if (strcmp("\n", input) == 0) {
         continue;
       }
-
 
       Ast *prog = parse_input(input, dirname);
       // Ast *top = top_level_ast(prog);

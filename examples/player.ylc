@@ -1,10 +1,20 @@
 %include Synth
+%include Math
 
 let amen_buf = read_buf "fat_amen_mono_48000.wav";
 let amen = bufplayer_node amen_buf;  
 
 let rate = 0.8 + 0.1 * sin_node 0.1;
-let x =  (rate |> amen)
-      +  (rate * 1.01 |> amen)
-      |> play_node;
+
+let x = amen 0.8 0.;
+let set_rate = set_input_scalar x 1;
+
+let trig = fn () ->
+  set_input_trig x 2;
+  schedule_event trig () 0.25
+;;
+
+
+x |> play_node;
+
 

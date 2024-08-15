@@ -7,7 +7,7 @@ void maketable_sq(void);
 node_perform sq_perform(Node *node, int nframes, double spf);
 node_perform sin_perform(Node *node, int nframes, double spf);
 void maketable_sin(void);
-Node *bufplayer_node(Signal *buf, Signal *rate);
+Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos);
 Node *white_noise_node();
 Node *brown_noise_node();
 Node *sin_node(Signal *freq);

@@ -186,6 +186,7 @@ struct Ast {
       ObjString fn_name;
       Ast *body;
       Ast **defaults;
+      bool is_async;
     } AST_LAMBDA;
 
     struct AST_EXTERN_FN {
@@ -276,5 +277,7 @@ Ast *ast_sequence(Ast *seq, Ast *new);
 Ast *ast_assoc_extern(Ast *l, ObjString name);
 // Ast *macro(Ast *expr);
 void handle_macro(Ast *root, const char *macro_text);
+
+Ast *ast_await(Ast *awaitable);
 
 #endif

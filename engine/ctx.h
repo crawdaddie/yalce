@@ -3,7 +3,7 @@
 #include "common.h"
 #include "node.h"
 
-typedef struct {
+typedef struct scheduler_msg {
   enum { NODE_ADD, GROUP_ADD, NODE_SET_SCALAR, NODE_SET_TRIG } type;
   int frame_offset;
   union {

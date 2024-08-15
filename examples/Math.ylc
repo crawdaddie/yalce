@@ -1,0 +1,3 @@
+let rand_int = extern fn Int -> Int ;
+let rand_double = extern fn () -> Double ;
+let rand_double_range = extern fn Double -> Double -> Double ;

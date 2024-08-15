@@ -26,6 +26,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "."                     return *yytext;
 "type"                  return *yytext;
 "of"                    return *yytext;
+"await"                 return *yytext;
+"async"                 return ASYNC;
 
 [a-zA-Z_][a-zA-Z0-9_]*  {
 
