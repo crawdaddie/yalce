@@ -6,6 +6,7 @@
 #include <string.h>
 
 #define LLVM_TYPE_int LLVMInt32Type()
+#define LLVM_TYPE_uint64 LLVMInt64Type()
 #define LLVM_TYPE_bool LLVMInt1Type()
 #define LLVM_TYPE_float LLVMFloatType()
 #define LLVM_TYPE_double LLVMDoubleType()
@@ -42,6 +43,9 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
     return LLVM_TYPE_int;
   }
 
+  case T_UINT64: {
+    return LLVM_TYPE_uint64;
+  }
   case T_NUM: {
     return LLVM_TYPE_double;
   }
@@ -161,6 +165,10 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
 
   case T_INT: {
     return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+  }
+
+  case T_UINT64: {
+    return LLVMBuildUIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
   }
 
   default:

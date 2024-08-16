@@ -50,9 +50,9 @@ double rand_double_range(double min, double max) {
   rand_double = rand_double * (max - min) + min;
   return rand_double;
 }
-
 double amp_db(double amplitude) { return 20.0f * log10(amplitude); }
 double db_amp(double db) { return pow(10.0f, db / 20.0f); }
+double get_pi() { return M_PI; }
 
 FILE *get_stderr() { return stderr; }
 FILE *get_stdout() { return stdout; }

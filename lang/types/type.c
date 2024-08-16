@@ -48,17 +48,27 @@ static Method tcord_methods[] = {
 TypeClass TCOrd = {"Ord", tcord_methods, .method_size = sizeof(Method),
                    .num_methods = 4};
 
-Type t_int =    {T_INT, .implements = (TypeClass *[]){&TCNum},
-                        .num_implements = 1};
+Type t_int =    {T_INT, 
+                .implements = (TypeClass *[]){&TCNum},
+                .num_implements = 1
+                };
 
-Type t_num =    {T_NUM, .implements = (TypeClass *[]){&TCNum},
-                        .num_implements = 1};
+Type t_uint64 = {T_UINT64,
+                .implements = (TypeClass *[]){&TCNum},
+                .num_implements = 1
+                };
+
+Type t_num =    {T_NUM,
+                .implements = (TypeClass *[]){&TCNum},
+                .num_implements = 1
+                };
 
 Type t_char =   {T_CHAR};
 Type t_string = {T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_char}, 1}}};
 Type t_bool =   {T_BOOL};
 Type t_void =   {T_VOID};
 Type t_ptr =    {T_CONS, {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}}};
+// Type t_tuple =  {T_CONS, {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}}};
 
 // clang-format on
 
@@ -303,6 +313,11 @@ void _unify(Type *t1, Type *t2, TypeEnv **env) {
 }
 
 void unify(Type *t1, Type *t2) {
+  printf("unify ");
+  print_type(t1);
+  printf(" :: ");
+  print_type(t2);
+  printf("\n");
   TypeEnv *env = NULL;
   _unify(t1, t2, &env);
 }

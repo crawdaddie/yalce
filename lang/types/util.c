@@ -142,6 +142,9 @@ bool is_generic(Type *type) {
 
   case T_CONS: {
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+
+      Type *cons_member = type->data.T_CONS.args[i];
+
       if (is_generic(type->data.T_CONS.args[i])) {
         return true;
       }
@@ -194,6 +197,8 @@ Type *get_type(TypeEnv *env, Ast *id) {
     return &t_int;
   } else if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
     return &t_num;
+  } else if (strcmp(id_chars, TYPE_NAME_UINT64) == 0) {
+    return &t_uint64;
   } else if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
     return &t_bool;
   } else if (strcmp(id_chars, TYPE_NAME_STRING) == 0) {
@@ -217,6 +222,7 @@ bool types_equal(Type *t1, Type *t2) {
 
   switch (t1->kind) {
   case T_INT:
+  case T_UINT64:
   case T_NUM:
   case T_STRING:
   case T_BOOL:
@@ -255,13 +261,14 @@ bool types_equal(Type *t1, Type *t2) {
   return false;
 }
 
-// Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
+
   Type *copy = malloc(sizeof(Type));
   copy->kind = original->kind;
   copy->alias = original->alias;
   copy->constructor = original->constructor;
   copy->constructor_size = original->constructor_size;
+
   for (int i = 0; i < original->num_implements; i++) {
     add_typeclass_impl(copy, original->implements[i]);
   }
@@ -270,7 +277,22 @@ Type *deep_copy_type(const Type *original) {
   case T_VAR:
     copy->data.T_VAR = strdup(original->data.T_VAR);
     break;
-  case T_CONS:
+
+  case T_CONS: {
+    // if (strcmp(original->data.T_CONS.name, TYPE_NAME_TUPLE) == 0) {
+    //   // printf("deep copy tuple\n");
+    //   for (int i = 0; i < original->data.T_CONS.num_args; i++) {
+    //
+    //     // printf("member type: %d", original->data.T_CONS.args[i]->kind);
+    //     // printf("member type: %d ", i);
+    //     // print_type(original->data.T_CONS.args[i]);
+    //     // printf("\n");
+    //   }
+    //   // print_type(original);
+    //   // printf("\n");
+    //   // printf("----\n");
+    //   break;
+    // }
     // Deep copy of name and args
     copy->data.T_CONS.name = strdup(original->data.T_CONS.name);
     copy->data.T_CONS.num_args = original->data.T_CONS.num_args;
@@ -280,11 +302,13 @@ Type *deep_copy_type(const Type *original) {
       copy->data.T_CONS.args[i] = deep_copy_type(original->data.T_CONS.args[i]);
     }
     break;
+  }
   case T_FN:
     copy->data.T_FN.from = deep_copy_type(original->data.T_FN.from);
     copy->data.T_FN.to = deep_copy_type(original->data.T_FN.to);
     break;
   }
+
   return copy;
 }
 
@@ -400,6 +424,10 @@ void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
 
   case T_INT:
     buffer_write(buf, TYPE_NAME_INT, 3);
+    break;
+
+  case T_UINT64:
+    buffer_write(buf, TYPE_NAME_UINT64, 6);
     break;
 
   case T_NUM:

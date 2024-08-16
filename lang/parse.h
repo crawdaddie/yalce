@@ -108,7 +108,8 @@ typedef enum ast_tag {
   AST_FMT_STRING,
   AST_TYPE_DECL,
   AST_ASSOC,
-  AST_EXTERN_VARIANTS
+  AST_EXTERN_VARIANTS,
+  AST_FN_SIGNATURE,
 } ast_tag;
 
 struct Ast {
@@ -219,6 +220,7 @@ struct Ast {
       Ast *record;
       Ast *member;
     } AST_RECORD_ACCESS;
+
   } data;
 
   void *md;
@@ -279,5 +281,10 @@ Ast *ast_assoc_extern(Ast *l, ObjString name);
 void handle_macro(Ast *root, const char *macro_text);
 
 Ast *ast_await(Ast *awaitable);
+Ast *ast_fn_sig(Ast *, Ast *);
+Ast *ast_fn_sig_push(Ast *, Ast *);
+
+Ast *ast_tuple_type(Ast *, Ast *);
+Ast *ast_tuple_type_push(Ast *, Ast *);
 
 #endif

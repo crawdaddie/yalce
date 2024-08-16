@@ -1,4 +1,5 @@
 #include "fn_application.h"
+#include "serde.h"
 #include "types/util.h"
 #include <string.h>
 
@@ -136,10 +137,7 @@ Type *infer_fn_application(TypeEnv **env, Ast *ast) {
 
     return resolve_in_env(res, _env);
   }
-
-  Type *_fn_type = fn_type;
   if (fn_type->kind == T_FN) {
-
     fn_type = deep_copy_type(fn_type);
   };
 
@@ -193,6 +191,11 @@ Type *infer_fn_application(TypeEnv **env, Ast *ast) {
     TypeEnv *_env = NULL;
 
     _unify(result_type, fn_return, &_env);
+    printf("unify in application: ");
+    printf("%s : ", fn_type->data.T_FN.to->data.T_CONS.name);
+    print_type(fn_type);
+    print_type(exp);
+    printf("\n");
     _unify(fn_type, exp, &_env);
 
     Type *res = fn_type;

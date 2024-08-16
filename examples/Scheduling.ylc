@@ -1,0 +1,1 @@
+let schedule_event = extern fn Ptr -> Ptr -> Double -> ();

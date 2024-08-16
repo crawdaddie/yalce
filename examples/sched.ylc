@@ -1,12 +1,29 @@
-%include Fmt
-%include Synth
-%include Math
+# %include Synth
 
-let x = fn () ->
-  let wait = 
-  fprintf stderr "scheduled fn\n";
-  schedule_event x () (rand_double_range 0.125 1.);
-;
-
-x ();
-
+# type Timer = Double * Int;
+# # * UInt64 * UInt64;
+# let new_timer = extern fn () -> Timer;
+#
+# # let timer_frame_offset = extern fn Timer -> Int;
+# # let timer_phase = extern fn Timer -> Double;
+#
+#
+# # type SchedulerCb = Timer -> Ptr -> ();
+# #
+# # let schedule = extern fn Timer -> SchedulerCb -> Ptr -> Double -> ();
+#
+# let (a, _, _, _) = new_timer ();
+# a
+#
+# # timer_frame_offset T;
+#
+#
+#
+# #
+# #
+# # let x = fn T _ ->
+# #   fprintf stderr "scheduled fn\n"
+# # ;;
+# #
+# # schedule (new_timer ()) x "" 0.5; 
+# #

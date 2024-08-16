@@ -1,4 +1,5 @@
 #include "scheduling.h"
+#include "lib.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,18 +14,6 @@ pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define SECONDS_TO_RUN 5
 
 #define INITIAL_CAPACITY 16
-
-typedef struct {
-  void (*callback)(void *userdata, uint64_t now);
-  void *userdata;
-  uint64_t timestamp;
-} ScheduledEvent;
-
-typedef struct {
-  ScheduledEvent *events;
-  size_t capacity;
-  size_t size;
-} EventHeap;
 
 EventHeap *create_event_heap() {
   EventHeap *heap = malloc(sizeof(EventHeap));
@@ -85,8 +74,7 @@ uint64_t now;
 uint64_t start;
 
 void _schedule_event(EventHeap *heap, void (*callback)(void *, uint64_t),
-                     void *userdata, double delay_seconds,
-                     uint64_t start_time) {
+                     void *userdata, double delay_seconds, uint64_t now) {
 
   if (heap->size >= heap->capacity) {
     heap->capacity *= 2;
@@ -94,12 +82,12 @@ void _schedule_event(EventHeap *heap, void (*callback)(void *, uint64_t),
         realloc(heap->events, sizeof(ScheduledEvent) * heap->capacity);
   }
 
-  uint64_t timestamp = start_time + (S_TO_NS * delay_seconds);
+  uint64_t timestamp = now + (S_TO_NS * delay_seconds);
 
-  ScheduledEvent event = {callback, userdata, timestamp};
-  heap->events[heap->size] = event;
-  heapify_up(heap, heap->size);
-  heap->size++;
+  // ScheduledEvent event = {callback, userdata, timestamp};
+  // heap->events[heap->size] = event;
+  // heapify_up(heap, heap->size);
+  // heap->size++;
 }
 
 ScheduledEvent pop_event(EventHeap *heap) {
@@ -141,7 +129,15 @@ void *timer(void *arg) {
     if (now >= nextTick) {
       while (queue->size && queue->events[0].timestamp <= now) {
         ScheduledEvent ev = pop_event(queue);
-        ev.callback(ev.userdata, now);
+        Timer prev_timer = ev.timer;
+        Timer t = {
+            .now = ((double)(now - prev_timer._timer_start)) / S_TO_NS,
+            .frame_offset = get_frame_offset(),
+            // TODO: use specified event timestamp instead?
+            ._abs_time = now,
+            ._timer_start = prev_timer._timer_start,
+        };
+        ev.callback(t, ev.userdata);
       }
 
       // Calculate next tick
@@ -186,5 +182,58 @@ void schedule_event(void (*callback)(void *, uint64_t), void *userdata,
   return _schedule_event(queue, callback, userdata, delay_seconds, now);
 }
 
+void __schedule_event(EventHeap *heap, void (*callback)(void *, uint64_t),
+                      void *userdata, double delay_seconds, uint64_t now) {
+
+  if (heap->size >= heap->capacity) {
+    heap->capacity *= 2;
+    heap->events =
+        realloc(heap->events, sizeof(ScheduledEvent) * heap->capacity);
+  }
+
+  uint64_t timestamp = now + (S_TO_NS * delay_seconds);
+
+  // ScheduledEvent event = {callback, userdata, timestamp};
+  // heap->events[heap->size] = event;
+  heapify_up(heap, heap->size);
+  heap->size++;
+}
+
+void schedule(void (*callback)(double, int, void *), void *userdata,
+              double delay_seconds, uint64_t thread_start) {
+
+  if (queue->size >= queue->capacity) {
+    queue->capacity *= 2;
+    queue->events =
+        realloc(queue->events, sizeof(ScheduledEvent) * queue->capacity);
+  }
+
+  uint64_t timestamp = now + (S_TO_NS * delay_seconds);
+
+  ScheduledEvent event = {callback, userdata, timestamp, timer};
+  queue->events[queue->size] = event;
+  heapify_up(queue, queue->size);
+  queue->size++;
+}
+
+Timer new_timer() {
+  Timer t = (Timer){
+      .now = 0.,
+      .frame_offset = get_frame_offset(),
+      ._abs_time = now,
+      ._timer_start = now,
+  };
+  return t;
+}
+
+/*
 typedef struct Timer {
+  double now;
+  int frame_offset;
+  uint64_t _abs_time;
+  uint64_t _timer_start;
 } Timer;
+*/
+
+int timer_frame_offset(Timer t) { return t.frame_offset; }
+double timer_phase(Timer t) { return t.now; }

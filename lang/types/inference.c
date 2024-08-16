@@ -342,16 +342,23 @@ Type *infer(TypeEnv **env, Ast *ast) {
   }
 
   case AST_EXTERN_FN: {
+
     int param_count = ast->data.AST_EXTERN_FN.len - 1;
+    int real_param_count = param_count || 1;
 
-    Type **param_types;
+    Type **param_types = malloc(sizeof(Type *) * real_param_count);
+
+    Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
+    Type *ret_type = get_type(*env, ret_type_ast);
+
     if (param_count == 0) {
-      param_types = malloc(sizeof(Type *));
-      *param_types = &t_void;
-    } else {
-      param_types = malloc(param_count * sizeof(Type *));
 
-      for (int i = 0; i < param_count; i++) {
+      // param_types = malloc(sizeof(Type *));
+      param_types[0] = &t_void;
+
+    } else {
+
+      for (int i = 0; i < param_count - 1; i++) {
         Ast *param_ast = ast->data.AST_EXTERN_FN.signature_types + i;
 
         Type *param_type = get_type(*env, param_ast);
@@ -364,15 +371,8 @@ Type *infer(TypeEnv **env, Ast *ast) {
       }
     }
 
-    Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
-    Type *ret_type = get_type(*env, ret_type_ast);
-
-    Type *ex_t = create_type_fn(param_types[param_count - 1], ret_type);
-
-    for (int i = param_count - 2; i >= 0; i--) {
-      ex_t = create_type_fn(param_types[i], ex_t);
-    }
-    ex_t->data.T_FN.from = param_types[0];
+    Type *ex_t =
+        create_type_multi_param_fn(real_param_count, param_types, ret_type);
 
     type = ex_t;
     break;

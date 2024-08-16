@@ -1,7 +1,7 @@
-let get_stderr = extern fn () -> Ptr;
-let get_stdout = extern fn () -> Ptr;
 let printf = extern fn String -> () ; # simplified printf from c stdlib
 
+let get_stderr = extern fn () -> Ptr;
+let get_stdout = extern fn () -> Ptr;
 let stderr = get_stderr ();
 let stdout = get_stdout ();
 

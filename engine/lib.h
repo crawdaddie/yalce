@@ -31,4 +31,6 @@ Signal *signal_of_int(int val);
 Node *set_input_scalar(Node *node, int input, double value);
 Node *set_input_trig(int input, Node *node);
 
+int get_frame_offset();
+
 #endif
