@@ -1,4 +1,5 @@
 #include "fn_application.h"
+#include "serde.h"
 #include "types/util.h"
 #include <string.h>
 
@@ -105,6 +106,8 @@ static TypeMap *add_constraints(TypeMap *constraints_map, Type *arg_type,
 
 Type *infer_fn_application(TypeEnv **env, Ast *ast) {
   Type *fn_type = infer(env, ast->data.AST_APPLICATION.function);
+  printf("extern fn application: ");
+  print_ast(ast);
 
   if (!fn_type) {
     return NULL;
@@ -154,6 +157,8 @@ Type *infer_fn_application(TypeEnv **env, Ast *ast) {
   int len = ast->data.AST_APPLICATION.len;
   bool contains_generic_fn_arg = false;
 
+  // print_ast(ast);
+
   for (int i = 0; i < len; i++) {
     Type *arg_type = infer(env, ast->data.AST_APPLICATION.args + i);
     arg_types[i] = arg_type;
@@ -196,6 +201,8 @@ Type *infer_fn_application(TypeEnv **env, Ast *ast) {
     _unify(fn_type, exp, &_env);
 
     Type *res = fn_type;
+    print_type(res);
+    printf("\n");
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       res = res->data.T_FN.to;
     }
@@ -204,5 +211,6 @@ Type *infer_fn_application(TypeEnv **env, Ast *ast) {
   }
 
   free_type_map(constraints_map);
+
   return ret_type;
 }

@@ -29,11 +29,13 @@ void type_arena_init();
 #define TYPE_NAME_BOOL    "Bool"
 #define TYPE_NAME_INT     "Int"
 #define TYPE_NAME_DOUBLE  "Double"
+#define TYPE_NAME_UINT64  "UInt64"
 // clang-format on
 
 enum TypeKind {
   /* Type Operator */
   T_INT,
+  T_UINT64,
   T_NUM,
   T_STRING,
   T_CHAR,
@@ -90,6 +92,7 @@ extern TypeClass TCNum;
 extern TypeClass TCOrd;
 
 extern Type t_int;
+extern Type t_uint64;
 extern Type t_num;
 extern Type t_string;
 extern Type t_bool;

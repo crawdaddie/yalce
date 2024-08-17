@@ -51,6 +51,9 @@ TypeClass TCOrd = {"Ord", tcord_methods, .method_size = sizeof(Method),
 Type t_int =    {T_INT, .implements = (TypeClass *[]){&TCNum},
                         .num_implements = 1};
 
+Type t_uint64 = {T_UINT64, .implements = (TypeClass *[]){&TCNum},
+                        .num_implements = 1};
+
 Type t_num =    {T_NUM, .implements = (TypeClass *[]){&TCNum},
                         .num_implements = 1};
 

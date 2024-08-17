@@ -1,12 +1,15 @@
-%include Fmt
-%include Synth
-%include Math
+let init_audio = extern fn () -> ();
 
-let x = fn () ->
-  let wait = 
-  fprintf stderr "scheduled fn\n";
-  schedule_event x () (rand_double_range 0.125 1.);
-;
+init_audio ();
 
-x ();
+type Timer = Double * Int;
+
+let schedule_event = extern fn Ptr -> Ptr -> UInt64 -> Double -> ();
+
+let x = fn now ->
+  # fprintf stderr "trig x\n";
+  schedule_event x () now 1.
+;;
+
+x 0;
 

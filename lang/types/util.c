@@ -192,6 +192,8 @@ Type *get_type(TypeEnv *env, Ast *id) {
 
   if (strcmp(id_chars, TYPE_NAME_INT) == 0) {
     return &t_int;
+  } else if (strcmp(id_chars, TYPE_NAME_UINT64) == 0) {
+    return &t_uint64;
   } else if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
     return &t_num;
   } else if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
@@ -217,6 +219,7 @@ bool types_equal(Type *t1, Type *t2) {
 
   switch (t1->kind) {
   case T_INT:
+  case T_UINT64:
   case T_NUM:
   case T_STRING:
   case T_BOOL:
@@ -402,6 +405,10 @@ void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
     buffer_write(buf, TYPE_NAME_INT, 3);
     break;
 
+
+  case T_UINT64:
+    buffer_write(buf, TYPE_NAME_UINT64, 6);
+    break;
   case T_NUM:
     buffer_write(buf, TYPE_NAME_DOUBLE, 6);
     break;

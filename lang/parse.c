@@ -560,3 +560,28 @@ Ast *ast_await(Ast *awaitable) {
   printf("parse await\n");
   return awaitable;
 }
+
+Ast *ast_fn_sig(Ast *arg, Ast *arg2) {
+  Ast *a = ast_list(arg);
+  ast_list_push(a, arg2);
+  a->tag = AST_FN_SIGNATURE;
+  return a;
+}
+Ast *ast_fn_sig_push(Ast *l, Ast *a) {
+  Ast *sig = ast_list_push(l, a);
+  sig->tag = AST_FN_SIGNATURE;
+  return sig;
+}
+
+Ast *ast_tuple_type(Ast *a, Ast *b) {
+  a = ast_list(a);
+  ast_list_push(a, b);
+  a->tag = AST_TUPLE;
+  return a;
+}
+
+Ast *ast_tuple_type_push(Ast *tuple, Ast *mem) {
+  Ast *tup = ast_list_push(tuple, mem);
+  tup->tag = AST_TUPLE;
+  return tup;
+}

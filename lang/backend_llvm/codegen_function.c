@@ -1,6 +1,7 @@
 #include "backend_llvm/codegen_function.h"
 #include "backend_llvm/codegen_symbols.h"
 #include "codegen_function_currying.h"
+#include "codegen_globals.h"
 #include "codegen_match_values.h"
 #include "codegen_types.h"
 #include "serde.h"
@@ -296,9 +297,11 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
   }
 
   if (res->type == STYPE_TOP_LEVEL_VAR) {
-    LLVMValueRef glob = LLVMGetNamedGlobal(module, fn_name);
-    LLVMValueRef val = LLVMGetInitializer(glob);
-    return val;
+
+    return codegen_get_global(res, module, builder);
+    // LLVMValueRef glob = LLVMGetNamedGlobal(module, fn_name);
+    // LLVMValueRef val = LLVMGetInitializer(glob);
+    // return val;
   } else if (res->type == STYPE_LOCAL_VAR) {
     LLVMValueRef val = res->val;
     return val;

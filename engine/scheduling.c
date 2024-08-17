@@ -15,7 +15,7 @@ pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define INITIAL_CAPACITY 16
 
 typedef struct {
-  void (*callback)(void *userdata, uint64_t now);
+  void (*callback)(uint64_t now, void *userdata);
   void *userdata;
   uint64_t timestamp;
 } ScheduledEvent;
@@ -84,7 +84,7 @@ static inline uint64_t get_time_ns() {
 uint64_t now;
 uint64_t start;
 
-void _schedule_event(EventHeap *heap, void (*callback)(void *, uint64_t),
+void _schedule_event(EventHeap *heap, void (*callback)(uint64_t, void *),
                      void *userdata, double delay_seconds,
                      uint64_t start_time) {
 
@@ -141,7 +141,7 @@ void *timer(void *arg) {
     if (now >= nextTick) {
       while (queue->size && queue->events[0].timestamp <= now) {
         ScheduledEvent ev = pop_event(queue);
-        ev.callback(ev.userdata, now);
+        ev.callback(now, ev.userdata);
       }
 
       // Calculate next tick
@@ -160,13 +160,6 @@ void *timer(void *arg) {
   return NULL;
 }
 
-// Example callback function
-void example_cb(void *user_data, uint64_t t) {
-  printf("Callback executed at %f\n", ((double)(t - start) / S_TO_NS));
-
-  _schedule_event(queue, example_cb, NULL, 10, t);
-}
-
 int scheduler_event_loop() {
   queue = create_event_heap();
 
@@ -179,9 +172,15 @@ int scheduler_event_loop() {
   }
   return 1;
 }
+struct tuple {
+  int a;
+  int b;
+};
 
-void schedule_event(void (*callback)(void *, uint64_t), void *userdata,
-                    double delay_seconds) {
+void schedule_event(void (*callback)(uint64_t, void *), void *userdata,
+                    uint64_t now, double delay_seconds) {
+  // struct tuple t = *(struct tuple *)userdata;
+  // printf("userdata: %d %d", t.a, t.b);
 
   return _schedule_event(queue, callback, userdata, delay_seconds, now);
 }

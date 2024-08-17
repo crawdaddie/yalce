@@ -10,4 +10,6 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
 void initialize_ptr_constructor();
 
 void initialize_double_constructor();
+
+void initialize_uint64_constructor();
 #endif

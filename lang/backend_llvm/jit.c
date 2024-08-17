@@ -322,6 +322,7 @@ int jit(int argc, char **argv) {
   env = initialize_type_env(env);
   initialize_ptr_constructor();
   initialize_double_constructor();
+  initialize_uint64_constructor();
 
   env = initialize_type_env_synth(env);
 

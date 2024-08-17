@@ -6,6 +6,7 @@
 #include <string.h>
 
 #define LLVM_TYPE_int LLVMInt32Type()
+#define LLVM_TYPE_int64 LLVMInt64Type()
 #define LLVM_TYPE_bool LLVMInt1Type()
 #define LLVM_TYPE_float LLVMFloatType()
 #define LLVM_TYPE_double LLVMDoubleType()
@@ -139,10 +140,19 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
     if (strcmp(from_type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
       if (from_type->data.T_CONS.args[0]->kind == T_CHAR) {
         return val;
-        // return LLVMBuildBitCast(
-        //     builder, val, LLVMPointerType(LLVMInt8Type(), 0),
-        //     "callback_cast");
       }
+    }
+
+    if (strcmp(from_type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0) {
+      // Allocate space for the struct
+      LLVMValueRef allocaInst =
+          LLVMBuildAlloca(builder, LLVMTypeOf(val), "struct.addr");
+
+      // Store the struct value into the allocated space
+      LLVMBuildStore(builder, val, allocaInst);
+
+      // The allocaInst is now a pointer to the struct
+      return allocaInst;
     }
     return NULL;
   }
@@ -163,6 +173,35 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
     return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
   }
 
+  case T_UINT64: {
+    return LLVMBuildUIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+  }
+
+  default:
+    return NULL;
+  }
+}
+
+LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
+  switch (from_type->kind) {
+
+  case T_INT: {
+    // Get the types we need
+    LLVMTypeRef i32Type = LLVM_TYPE_int;
+    LLVMTypeRef i64Type = LLVM_TYPE_int64;
+
+    // Sign extend from i32 to i64
+    LLVMValueRef signExtended =
+        LLVMBuildSExt(builder, val, i64Type, "signext");
+
+    // Bitcast from signed i64 to unsigned i64
+    LLVMValueRef unsignedValue =
+        LLVMBuildBitCast(builder, signExtended, i64Type, "unsigned");
+
+    return unsignedValue;
+  }
+
   default:
     return NULL;
   }
@@ -175,6 +214,11 @@ void initialize_ptr_constructor() {
 void initialize_double_constructor() {
   t_num.constructor = double_constructor;
   t_num.constructor_size = sizeof(ConsMethod);
+}
+
+void initialize_uint64_constructor() {
+  t_uint64.constructor = uint64_constructor;
+  t_uint64.constructor_size = sizeof(ConsMethod);
 }
 
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
