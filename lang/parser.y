@@ -59,6 +59,7 @@ Ast* ast_root = NULL;
 
 
 %left '.' 
+%left '|'
 %left PIPE
 %left APPLICATION 
 %left MODULO
@@ -93,6 +94,8 @@ Ast* ast_root = NULL;
   type_decl
   type_expr
   type_atom
+  fn_signature
+  tuple_type
 %%
 
 
@@ -230,7 +233,7 @@ application:
 list:
     '[' ']'                 { $$ = ast_empty_list(); }
   | '[' expr_list ']'       { $$ = $2; }
-  | '[' expr_list ',' ']'       { $$ = $2; }
+  | '[' expr_list ',' ']'   { $$ = $2; }
   ;
 
 list_match_expr:
@@ -280,19 +283,31 @@ type_decl:
                                   }
   ;
 
+fn_signature:
+    type_expr ARROW type_expr           { $$ = ast_fn_sig($1, $3); }
+  | fn_signature ARROW type_expr        { $$ = ast_fn_sig_push($1, $3); }
+  ;
+
+tuple_type:
+    type_atom '*' type_atom         { $$ = ast_tuple_type($1, $3); }
+  | tuple_type '*' type_atom        { $$ = ast_tuple_type_push($1, $3); }
+  ;
+
 type_expr:
     type_atom                 { $$ = $1; }
   | '|' type_atom             { $$ = ast_list($2); }
   | type_expr '|' type_atom   { $$ = ast_list_push($1, $3); } 
+  | fn_signature              { $$ = $1; }
+  | tuple_type                { $$ = $1; }
   ;
 
 type_atom:
-    expr                      { $$ = $1; }
+    IDENTIFIER                { $$ = ast_identifier($1); }
   | IDENTIFIER '=' INTEGER    { $$ = ast_let(ast_identifier($1), AST_CONST(AST_INT, $3), NULL); } 
   | IDENTIFIER 'of' type_atom { $$ = ast_binop(TOKEN_OF, ast_identifier($1), $3); } 
+  | '(' type_expr ')'         { $$ = $2; }
+  | TOK_VOID                  { $$ = ast_void(); }
   ;
-
-
 %%
 
 

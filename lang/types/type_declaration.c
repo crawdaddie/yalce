@@ -109,10 +109,6 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   }
 
   case AST_BINOP: {
-    if (expr->data.AST_BINOP.op == TOKEN_STAR) {
-      Type *type = parse_tuple(expr, env);
-      return type;
-    }
 
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
 
@@ -146,6 +142,16 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   case AST_IDENTIFIER: {
     Type *type = get_type(env, expr);
     return type;
+  }
+  case AST_TUPLE: {
+    int len = expr->data.AST_LIST.len;
+    Type **types = malloc(sizeof(Type *) * len);
+    for (int i = 0; i < len; i++) {
+      Ast *it = expr->data.AST_LIST.items + i;
+      types[i] = compute_type_expression(it, env);
+
+    }
+    return create_tuple_type(types, len);
   }
   }
   return NULL;

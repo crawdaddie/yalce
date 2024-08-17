@@ -275,7 +275,11 @@ int main() {
                        "(\"here's a printed version of \", (+ 1 2000), \" and "
                        "\", ((y 1) 2))");
 
-  status &= test_parse("type Timer = Double * Int * UInt64;", "");
+  status &= test_parse("type Timer = Double * Int * Uint64;",
+                       "(let Timer (Double, Int, Uint64))");
+
+  status &= test_parse("type Cb = Double -> Int -> ();",
+                       "(let Cb (Double -> (Int -> ())))");
 
   // extern funcs
   return status ? 0 : 1;
