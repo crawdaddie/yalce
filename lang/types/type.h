@@ -29,11 +29,13 @@ void type_arena_init();
 #define TYPE_NAME_BOOL    "Bool"
 #define TYPE_NAME_INT     "Int"
 #define TYPE_NAME_DOUBLE  "Double"
+#define TYPE_NAME_UINT64  "Uint64"
 // clang-format on
 
 enum TypeKind {
   /* Type Operator */
   T_INT,
+  T_UINT64,
   T_NUM,
   T_STRING,
   T_CHAR,
@@ -44,14 +46,13 @@ enum TypeKind {
   T_TUPLE,
   T_LIST,
   T_CONS,
-  T_VARIANT,
   /* Type Variable  */
   T_VAR,
+  T_VARIANT,
+  T_VARIANT_MEMBER,
   T_MODULE,
   T_TYPECLASS,
 };
-
-// typedef LLVMValueRef ConsSynth(LLVMValueRef value, Type *type_from) {}
 
 typedef struct Type {
   enum TypeKind kind;
@@ -75,6 +76,7 @@ typedef struct Type {
       struct Type **args;
       int num_args;
     } T_VARIANT;
+    Type *T_VARIANT_MEMBER_OF;
 
     TypeClass *T_TYPECLASS;
   } data;
@@ -90,6 +92,7 @@ extern TypeClass TCNum;
 extern TypeClass TCOrd;
 
 extern Type t_int;
+extern Type t_uint64;
 extern Type t_num;
 extern Type t_string;
 extern Type t_bool;

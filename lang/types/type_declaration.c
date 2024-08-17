@@ -29,15 +29,6 @@ static Type *parse_tuple(Ast *binop, TypeEnv *env) {
 }
 
 static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
-  if ((expr->tag == AST_BINOP) &&
-      (expr->data.AST_BINOP.left->tag == AST_IDENTIFIER) &&
-      (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
-              TYPE_NAME_LIST) == 0)) {
-    Type **ltype = malloc(sizeof(Type *));
-    ltype[0] = compute_type_expression(expr->data.AST_BINOP.right, env);
-    Type *t = tcons(TYPE_NAME_LIST, ltype, 1);
-    return t;
-  }
   switch (expr->tag) {
 
   case AST_LIST: {
@@ -85,8 +76,8 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
         t = tvar(item->data.AST_IDENTIFIER.value);
       }
 
-      if (is_numeric_enum) {
-      }
+      // if (is_numeric_enum) {
+      // }
 
       var->data.T_VARIANT.args[i] = t;
     }
@@ -109,6 +100,15 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   }
 
   case AST_BINOP: {
+
+    if ((expr->data.AST_BINOP.left->tag == AST_IDENTIFIER) &&
+        (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+                TYPE_NAME_LIST) == 0)) {
+      Type **ltype = malloc(sizeof(Type *));
+      ltype[0] = compute_type_expression(expr->data.AST_BINOP.right, env);
+      Type *t = tcons(TYPE_NAME_LIST, ltype, 1);
+      return t;
+    }
 
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
 
@@ -149,7 +149,6 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     for (int i = 0; i < len; i++) {
       Ast *it = expr->data.AST_LIST.items + i;
       types[i] = compute_type_expression(it, env);
-
     }
     return create_tuple_type(types, len);
   }

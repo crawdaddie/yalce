@@ -6,6 +6,10 @@ type X =
   | E
 ;
 
+
+
+
+
 type Enum = 
   | A = 0x1b # doesn't do anything yet
   | B

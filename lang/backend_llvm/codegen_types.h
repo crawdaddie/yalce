@@ -10,4 +10,13 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
 void initialize_ptr_constructor();
 
 void initialize_double_constructor();
+
+// Define the function pointer type
+typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
+                                   LLVMBuilderRef);
+LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
+                                LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
+                             LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

@@ -194,6 +194,8 @@ Type *get_type(TypeEnv *env, Ast *id) {
     return &t_int;
   } else if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
     return &t_num;
+  } else if (strcmp(id_chars, TYPE_NAME_UINT64) == 0) {
+    return &t_uint64;
   } else if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
     return &t_bool;
   } else if (strcmp(id_chars, TYPE_NAME_STRING) == 0) {
@@ -339,6 +341,7 @@ void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
 
   switch (type->kind) {
   case T_VAR: {
+    // printf("type->data.T_VAR %s\n", type->data.T_VAR);
     size_t len = strlen(type->data.T_VAR);
     buffer_write(buf, type->data.T_VAR, len);
     break;
@@ -402,6 +405,10 @@ void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
     buffer_write(buf, TYPE_NAME_INT, 3);
     break;
 
+  case T_UINT64:
+    buffer_write(buf, TYPE_NAME_UINT64, 6);
+    break;
+
   case T_NUM:
     buffer_write(buf, TYPE_NAME_DOUBLE, 6);
     break;
@@ -438,6 +445,19 @@ void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
     }
     break;
   }
+
+    /*
+  case T_VARIANT_MEMBER: {
+
+    char int_str[16];
+    int length = snprintf(int_str, sizeof(int_str), "%p",
+                          type->data.T_VARIANT_MEMBER_OF);
+    // buffer_write(buf, int_str, length);
+    buffer_write(buf, "member of ", 10);
+    buffer_write(buf, int_str, 16);
+    break;
+  }
+    */
 
   default:
     // No additional data for other types

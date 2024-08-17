@@ -216,15 +216,16 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   if (!(*prog)) {
     return NULL;
   }
-  for (int i = 0; i < (*prog)->data.AST_BODY.len; i++) {
-    Ast *stmt = *((*prog)->data.AST_BODY.stmts + i);
-    if (stmt->tag == AST_IMPORT) {
-      ast_root = NULL;
-      import_module(dirname, stmt, env, ctx, module, llvm_ctx);
-    }
-  }
+  // for (int i = 0; i < (*prog)->data.AST_BODY.len; i++) {
+  //   Ast *stmt = *((*prog)->data.AST_BODY.stmts + i);
+  //   if (stmt->tag == AST_IMPORT) {
+  //     ast_root = NULL;
+  //     import_module(dirname, stmt, env, ctx, module, llvm_ctx);
+  //   }
+  // }
 
   infer_ast(env, *prog);
+  print_type_env(*env);
   ctx->env = *env;
 
 #ifdef DUMP_AST
@@ -320,8 +321,6 @@ int jit(int argc, char **argv) {
   // shared type env
   TypeEnv *env = NULL;
   env = initialize_type_env(env);
-  initialize_ptr_constructor();
-  initialize_double_constructor();
 
   env = initialize_type_env_synth(env);
 

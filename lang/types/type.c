@@ -1,4 +1,5 @@
 #include "types/type.h"
+#include "backend_llvm/codegen_types.h"
 #include "types/util.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,14 +52,23 @@ TypeClass TCOrd = {"Ord", tcord_methods, .method_size = sizeof(Method),
 Type t_int =    {T_INT, .implements = (TypeClass *[]){&TCNum},
                         .num_implements = 1};
 
-Type t_num =    {T_NUM, .implements = (TypeClass *[]){&TCNum},
+Type t_uint64 = {T_UINT64, .implements = (TypeClass *[]){&TCNum},
                         .num_implements = 1};
+Type t_num =    {T_NUM,
+                .constructor = double_constructor,
+                .constructor_size = sizeof(ConsMethod),
+                .implements = (TypeClass *[]){&TCNum},
+                .num_implements = 1};
 
 Type t_char =   {T_CHAR};
 Type t_string = {T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_char}, 1}}};
 Type t_bool =   {T_BOOL};
 Type t_void =   {T_VOID};
-Type t_ptr =    {T_CONS, {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}}};
+Type t_ptr =    {T_CONS,
+                {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
+                .constructor = ptr_constructor,
+                .constructor_size = sizeof(ConsMethod),
+                };
 
 // clang-format on
 

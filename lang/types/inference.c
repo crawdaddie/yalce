@@ -172,6 +172,8 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
   Ast *branches = ast->data.AST_MATCH.branches;
   for (int i = 0; i < len; i++) {
     Ast *test_expr = branches + (2 * i);
+    printf("match: ");
+    print_ast(test_expr);
     Ast *result_expr = branches + (2 * i + 1);
 
     *env = create_implicit_var_bindings(*env, test_expr);
@@ -182,6 +184,9 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
       }
     } else {
       test_type = infer(env, test_expr);
+      if (test_expr->tag == AST_IDENTIFIER && test_type == NULL) {
+        // try to lookup variant types
+      }
 
       unify(expr_type, test_type);
     }

@@ -1,14 +1,40 @@
-%include Fmt
-%include Math
+# %include Fmt
+# %include Math
 
 let init_audio = extern fn () -> ();
 init_audio ();
 
-let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
-let x = fn t ->
-  fprintf stderr "scheduled fn\n";
-  schedule_event x () (rand_double_range 0.125 1.)
-;;
+let schedule_event = extern fn Uint64 -> Ptr -> Ptr -> Double -> ();
 
-x 0.;
+# type RoutineContinuation =
+#   | Continue of (Double * Int * Uint64 * Ptr)
+#   | None
+# ;
 
+# type a t = 
+#   | None
+#   | Some of a
+# ;
+
+# let handle_continuation = fn x ->
+#   match x with
+#   | None -> ()
+#   | Continue (off, offi, ui64, data) -> (
+#     printf "continue";
+#     ()
+#   )
+# ;;
+# let routine = fn (foffset, now, d) -> 
+#   None
+# ;;
+
+# let sched_routine = fn cb data -> 
+#   let sch_data = cb (get_frame_offset (), 0, data);
+#   schedule_event cb sch_data 
+#
+#   
+#
+# sched_routine routine;
+  
+
+let x = 1

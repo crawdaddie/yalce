@@ -104,10 +104,6 @@ LLVMValueRef codegen_signal_sub() { return NULL; }
 LLVMValueRef codegen_signal_mul() { return NULL; }
 LLVMValueRef codegen_signal_mod() { return NULL; }
 
-// Define the function pointer type
-typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
-                                   LLVMBuilderRef);
-
 LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (from_type->kind) {
@@ -167,6 +163,20 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
     return NULL;
   }
 }
+
+LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
+  switch (from_type->kind) {
+
+  case T_INT: {
+    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+  }
+
+  default:
+    return NULL;
+  }
+}
+
 void initialize_ptr_constructor() {
   t_ptr.constructor = ptr_constructor;
   t_ptr.constructor_size = sizeof(ConsMethod);
