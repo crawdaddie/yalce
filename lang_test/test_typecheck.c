@@ -53,7 +53,7 @@ bool test(char *input, Ast *prog, Type **exp_types) {
 bool tcheck(char input[], Type **exp_types) {
   Ast *prog;
 
-  prog = parse_input(input);
+  prog = parse_input(input, "");
 
   char *sexpr = malloc(sizeof(char) * 200);
   if (prog == NULL) {
@@ -82,7 +82,7 @@ bool tcheck(char input[], Type **exp_types) {
 bool tcheck_w_env(TypeEnv *env, char input[], Type **exp_types) {
   Ast *prog;
 
-  prog = parse_input(input);
+  prog = parse_input(input, "");
 
   char *sexpr = malloc(sizeof(char) * 200);
   if (prog == NULL) {
@@ -344,7 +344,8 @@ bool test_first_class_fns() {
   Ast *prog = parse_input("let sum = fn a b -> a + b;;\n"
                           "let proc = fn f a b -> f a b;;\n"
                           "\n"
-                          "proc sum 1 2\n");
+                          "proc sum 1 2\n",
+                          "");
   TypeEnv *env;
   infer_ast(&env, prog);
   // sum typecheck

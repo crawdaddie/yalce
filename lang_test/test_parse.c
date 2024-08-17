@@ -9,7 +9,7 @@ bool test_parse(char input[], char *expected_sexpr) {
 
   Ast *prog;
   // printf("test input: %s\n", input);
-  prog = parse_input(input);
+  prog = parse_input(input, "");
 
   char *sexpr = malloc(sizeof(char) * 200);
   if (prog == NULL && expected_sexpr != NULL) {
@@ -60,7 +60,7 @@ bool test_parse(char input[], char *expected_sexpr) {
 bool test_parse_body(char *input, char *expected_sexpr) {
 
   Ast *prog;
-  prog = parse_input(input);
+  prog = parse_input(input, "");
 
   char *sexpr = malloc(sizeof(char) * 200);
   bool res;
@@ -260,10 +260,10 @@ int main() {
                        ")");
 
   status &= test_parse("let printf2 = extern fn string -> string -> ()",
-                       "(let printf2 (extern printf2 string -> string -> ())");
+                       "(let printf2 (extern printf2 string -> string -> ()))");
 
   status &= test_parse("let voidf = extern fn () -> ()",
-                       "(let voidf (extern voidf () -> ())");
+                       "(let voidf (extern voidf () -> ()))");
 
   status &=
       test_parse("`here's a printed "
@@ -274,6 +274,8 @@ int main() {
                        "version of {1 + 2000} and {y 1 2}`",
                        "(\"here's a printed version of \", (+ 1 2000), \" and "
                        "\", ((y 1) 2))");
+
+  status &= test_parse("type Timer = Double * Int * UInt64;", "");
 
   // extern funcs
   return status ? 0 : 1;

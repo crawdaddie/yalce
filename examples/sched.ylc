@@ -1,12 +1,14 @@
 %include Fmt
-%include Synth
 %include Math
 
-let x = fn () ->
-  let wait = 
-  fprintf stderr "scheduled fn\n";
-  schedule_event x () (rand_double_range 0.125 1.);
-;
+let init_audio = extern fn () -> ();
+init_audio ();
 
-x ();
+let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
+let x = fn t ->
+  fprintf stderr "scheduled fn\n";
+  schedule_event x () (rand_double_range 0.125 1.)
+;;
+
+x 0.;
 

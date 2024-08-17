@@ -23,11 +23,7 @@ let play_node = extern fn Synth -> Synth;
 let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
 let set_input_trig = extern fn Int -> Synth -> Synth;
 
-let init_audio = extern fn () -> ();
-
-let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
-
 let mul_sig = extern fn Signal -> Signal -> Synth;
+# let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
 
-init_audio ();
 
