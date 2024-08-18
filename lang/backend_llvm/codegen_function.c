@@ -152,7 +152,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
 
-  // Generate body.
   LLVMValueRef body =
       codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
 

@@ -131,6 +131,29 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_UNOP: {
+    switch (ast->data.AST_BINOP.op) {
+    case TOKEN_STAR: {
+
+      buffer = strcat(buffer, "(deref ");
+
+      buffer = ast_to_sexpr(ast->data.AST_BINOP.right, buffer);
+      buffer = strcat(buffer, ")");
+
+      break;
+    }
+
+    case TOKEN_AMPERSAND: {
+      buffer = strcat(buffer, "(addr_of ");
+      buffer = ast_to_sexpr(ast->data.AST_BINOP.right, buffer);
+      buffer = strcat(buffer, ")");
+      break;
+    }
+    }
+
+    break;
+  }
+
   case AST_BINOP: {
     buffer = strcat(buffer, "(");
     switch (ast->data.AST_BINOP.op) {

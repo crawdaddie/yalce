@@ -65,8 +65,21 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_BOOL: {
     return LLVMConstInt(LLVMInt1Type(), ast->data.AST_BOOL.value, false);
   }
+
   case AST_BINOP: {
     return codegen_binop(ast, ctx, module, builder);
+  }
+
+  case AST_UNOP: {
+    switch (ast->data.AST_BINOP.op) {
+    case TOKEN_STAR: {
+      break;
+    }
+
+    case TOKEN_AMPERSAND: {
+      break;
+    }
+    }
   }
 
   case AST_TUPLE: {

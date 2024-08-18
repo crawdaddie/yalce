@@ -289,6 +289,7 @@ void module_passes(LLVMModuleRef module) {
   LLVMAddCFGSimplificationPass(pass_manager);
   LLVMAddTailCallEliminationPass(pass_manager);
 }
+
 #define GLOBAL_STORAGE_CAPACITY 1024
 int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());

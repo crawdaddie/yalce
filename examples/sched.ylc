@@ -37,4 +37,8 @@ let schedule_event = extern fn Uint64 -> Ptr -> Ptr -> Double -> ();
 # sched_routine routine;
   
 
-let x = 1
+let x = 1;
+let z = 1 * 5;
+let y = &x;
+let zz = *y;
+

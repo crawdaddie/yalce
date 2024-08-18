@@ -545,6 +545,20 @@ Type *infer(TypeEnv **env, Ast *ast) {
     type_declaration(ast, env);
     break;
   }
+
+  case AST_UNOP: {
+    switch (ast->data.AST_BINOP.op) {
+    case TOKEN_STAR: {
+      // deref
+      break;
+    }
+
+    case TOKEN_AMPERSAND: {
+      // addr of
+      break;
+    }
+    }
+  }
   }
 
   ast->md = type;
