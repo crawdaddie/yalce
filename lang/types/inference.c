@@ -172,8 +172,8 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
   Ast *branches = ast->data.AST_MATCH.branches;
   for (int i = 0; i < len; i++) {
     Ast *test_expr = branches + (2 * i);
-    printf("match: ");
-    print_ast(test_expr);
+    // printf("match: ");
+    // print_ast(test_expr);
     Ast *result_expr = branches + (2 * i + 1);
 
     *env = create_implicit_var_bindings(*env, test_expr);
@@ -324,10 +324,16 @@ Type *infer(TypeEnv **env, Ast *ast) {
     type = env_lookup(*env, ast->data.AST_IDENTIFIER.value);
 
     if (!type) {
-      fprintf(stderr, "Typecheck Error: unbound variable %s\n",
-              ast->data.AST_IDENTIFIER.value);
-      return NULL;
+      Type *t = get_builtin_type(ast->data.AST_IDENTIFIER.value);
+      if (!t) {
+        fprintf(stderr, "Typecheck Error: unbound variable %s\n",
+                ast->data.AST_IDENTIFIER.value);
+        return NULL;
+      } else {
+        type = t;
+      }
     }
+      
     break;
   }
 

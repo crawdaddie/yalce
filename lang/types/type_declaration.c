@@ -1,4 +1,5 @@
 #include "types/type_declaration.h"
+#include "serde.h"
 #include "types/util.h"
 #include <stdlib.h>
 #include <string.h>
@@ -111,25 +112,16 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     }
 
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
-
       Type *cons_type =
-
           compute_type_expression(expr->data.AST_BINOP.right, env);
 
-      if (cons_type->kind == T_CONS &&
-          strcmp(cons_type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
-
-        Type **ts = malloc(sizeof(Type *));
-        ts[0] = cons_type;
-
-        Type *t =
-            tcons(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value, ts, 1);
-
+      if (cons_type->kind == T_VAR) {
+        Type *t = tcons(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+                        &cons_type, 1);
         return t;
       }
 
       if (cons_type->kind == T_CONS) {
-
         Type *t =
             tcons(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
                   cons_type->data.T_CONS.args, cons_type->data.T_CONS.num_args);
@@ -151,6 +143,16 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       types[i] = compute_type_expression(it, env);
     }
     return create_tuple_type(types, len);
+  }
+  case AST_LAMBDA: {
+    TypeEnv *_env = env;
+    for (int i = 0; i < expr->data.AST_LAMBDA.len; i++) {
+      Ast *param_ast = expr->data.AST_LAMBDA.params + i;
+      const char *param_name = param_ast->data.AST_IDENTIFIER.value;
+      Type *param_type = tvar(param_ast->data.AST_IDENTIFIER.value);
+      _env = env_extend(_env, param_name, param_type);
+    }
+    return compute_type_expression(expr->data.AST_LAMBDA.body, _env);
   }
   }
   return NULL;

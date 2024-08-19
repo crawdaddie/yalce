@@ -6,6 +6,15 @@ init_audio ();
 
 let schedule_event = extern fn Uint64 -> Ptr -> Ptr -> Double -> ();
 
+type Option t = 
+  | Some of t
+  | None
+  ;
+
+let o = Some 1.;
+let j = Uint64 1;
+let k = Double 1;
+
 # type RoutineContinuation =
 #   | Continue of (Double * Int * Uint64 * Ptr)
 #   | None
@@ -39,6 +48,6 @@ let schedule_event = extern fn Uint64 -> Ptr -> Ptr -> Double -> ();
 
 let x = 1;
 let z = 1 * 5;
-let y = &x;
-let zz = *y;
-
+# let y = &x;
+# let zz = *y;
+#

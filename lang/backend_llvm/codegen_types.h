@@ -19,4 +19,7 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
 
 LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
                              LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
+                                LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

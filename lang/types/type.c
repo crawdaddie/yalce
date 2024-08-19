@@ -52,8 +52,11 @@ TypeClass TCOrd = {"Ord", tcord_methods, .method_size = sizeof(Method),
 Type t_int =    {T_INT, .implements = (TypeClass *[]){&TCNum},
                         .num_implements = 1};
 
-Type t_uint64 = {T_UINT64, .implements = (TypeClass *[]){&TCNum},
-                        .num_implements = 1};
+Type t_uint64 = {T_UINT64,
+                .constructor = uint64_constructor,
+                .constructor_size = sizeof(ConsMethod),
+                .implements = (TypeClass *[]){&TCNum},
+                .num_implements = 1};
 Type t_num =    {T_NUM,
                 .constructor = double_constructor,
                 .constructor_size = sizeof(ConsMethod),
@@ -80,10 +83,81 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
   return new_env;
 }
 
+bool variant_contains(Type *variant, const char *name) {
+  for (int i = 0; i < variant->data.T_VARIANT.num_args; i++) {
+    Type *variant_member = variant->data.T_VARIANT.args[i];
+    const char *mem_name;
+    if (variant_member->kind == T_CONS) {
+      mem_name = variant_member->data.T_CONS.name;
+    } else if (variant_member->kind == T_VAR) {
+      mem_name = variant_member->data.T_VAR;
+    } else {
+      continue;
+    }
+
+    if (strcmp(mem_name, name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool find_variant_index(Type *variant, const char *name, int *index) {
+  for (int i = 0; i < variant->data.T_VARIANT.num_args; i++) {
+    Type *variant_member = variant->data.T_VARIANT.args[i];
+    const char *mem_name;
+    if (variant_member->kind == T_CONS) {
+      mem_name = variant_member->data.T_CONS.name;
+    } else if (variant_member->kind == T_VAR) {
+      mem_name = variant_member->data.T_VAR;
+    } else {
+      continue;
+    }
+
+    if (strcmp(mem_name, name) == 0) {
+      *index = i;
+      return true;
+    }
+  }
+  return false;
+}
+
 Type *env_lookup(TypeEnv *env, const char *name) {
   while (env) {
     if (strcmp(env->name, name) == 0) {
       return env->type;
+    }
+    if (env->type->kind == T_VARIANT) {
+      Type *variant = env->type;
+      for (int i = 0; i < variant->data.T_VARIANT.num_args; i++) {
+        Type *variant_member = variant->data.T_VARIANT.args[i];
+        const char *mem_name;
+        if (variant_member->kind == T_CONS) {
+          mem_name = variant_member->data.T_CONS.name;
+        } else if (variant_member->kind == T_VAR) {
+          mem_name = variant_member->data.T_VAR;
+        } else {
+          continue;
+        }
+
+        if (strcmp(mem_name, name) == 0) {
+          return variant_member;
+        }
+      }
+    }
+    env = env->next;
+  }
+  return NULL;
+}
+
+Type *find_variant_type(TypeEnv *env, const char *name) {
+  while (env) {
+
+    if (env->type->kind == T_VARIANT) {
+      Type *variant = env->type;
+      if (variant_contains(variant, name)) {
+        return variant;
+      }
     }
     env = env->next;
   }

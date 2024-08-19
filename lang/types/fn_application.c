@@ -1,4 +1,5 @@
 #include "fn_application.h"
+#include "serde.h"
 #include "types/util.h"
 #include <string.h>
 
@@ -103,7 +104,23 @@ static TypeMap *add_constraints(TypeMap *constraints_map, Type *arg_type,
   }
 }
 
+Type *infer_cons(TypeEnv **env, Ast *ast, Type *cons) {
+  cons = deep_copy_type(cons);
+  Type *cons_param = cons->data.T_CONS.args[0];
+
+  Type *specific_type = infer(env, ast->data.AST_APPLICATION.args);
+
+  TypeEnv *resolution_env =
+      env_extend(NULL, cons_param->data.T_VAR, specific_type);
+
+  cons = resolve_in_env(cons, resolution_env);
+  ast->data.AST_APPLICATION.function->md = cons;
+
+  return cons;
+}
+
 Type *infer_fn_application(TypeEnv **env, Ast *ast) {
+
   Type *fn_type = infer(env, ast->data.AST_APPLICATION.function);
 
   if (!fn_type) {
@@ -137,9 +154,17 @@ Type *infer_fn_application(TypeEnv **env, Ast *ast) {
     return resolve_in_env(res, _env);
   }
 
+  if (fn_type->kind == T_CONS) {
+    return infer_cons(env, ast, fn_type);
+  }
+
+  if (fn_type->constructor != NULL) {
+    infer(env, ast->data.AST_APPLICATION.args);
+    return fn_type;
+  }
+
   Type *_fn_type = fn_type;
   if (fn_type->kind == T_FN) {
-
     fn_type = deep_copy_type(fn_type);
   };
 

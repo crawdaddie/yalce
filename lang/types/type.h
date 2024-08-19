@@ -49,7 +49,7 @@ enum TypeKind {
   /* Type Variable  */
   T_VAR,
   T_VARIANT,
-  T_VARIANT_MEMBER,
+  // T_VARIANT_MEMBER,
   T_MODULE,
   T_TYPECLASS,
 };
@@ -76,7 +76,6 @@ typedef struct Type {
       struct Type **args;
       int num_args;
     } T_VARIANT;
-    Type *T_VARIANT_MEMBER_OF;
 
     TypeClass *T_TYPECLASS;
   } data;
@@ -126,6 +125,9 @@ Type *create_list_type(Type *element_type);
 Type *fresh(Type *type);
 
 Type *env_lookup(TypeEnv *env, const char *name);
+Type *find_variant_type(TypeEnv *env, const char *name);
+bool find_variant_index(Type *variant, const char *name, int *index);
+
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 void free_type_env(TypeEnv *env);
 

@@ -96,6 +96,7 @@ Ast* ast_root = NULL;
   type_atom
   fn_signature
   tuple_type
+  type_args
 %%
 
 
@@ -278,12 +279,27 @@ fstring_part:
   ;
 
 type_decl:
-  'type' IDENTIFIER '=' type_expr {
+    'type' IDENTIFIER '=' type_expr {
                                     Ast *type_decl = ast_let(ast_identifier($2), $4, NULL);
                                     type_decl->tag = AST_TYPE_DECL;
                                     $$ = type_decl;
                                   }
+
+  | 'type' type_args '=' type_expr {
+                                    Ast *args = $2;
+                                    Ast *name = args->data.AST_LAMBDA.params;
+                                    args->data.AST_LAMBDA.params = args->data.AST_LAMBDA.params + 1;
+                                    args->data.AST_LAMBDA.len--;
+                                    args->data.AST_LAMBDA.body = $4;
+                                    Ast *type_decl = ast_let(name, args, NULL);
+                                    type_decl->tag = AST_TYPE_DECL;
+                                    $$ = type_decl;
+                                  }
   ;
+
+type_args:
+    IDENTIFIER              { $$ = ast_arg_list(ast_identifier($1), NULL); }
+  | type_args IDENTIFIER    { $$ = ast_arg_list_push($1, ast_identifier($2), NULL); }
 
 fn_signature:
     type_expr ARROW type_expr           { $$ = ast_fn_sig($1, $3); }

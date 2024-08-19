@@ -174,21 +174,7 @@ Type *get_general_numeric_type(Type *t1, Type *t2) {
   }
   return &t_int;
 }
-
-Type *get_type(TypeEnv *env, Ast *id) {
-  if (id->tag == AST_VOID) {
-    return &t_void;
-  }
-  if (id->tag != AST_IDENTIFIER) {
-    return NULL;
-  }
-
-  const char *id_chars = id->data.AST_IDENTIFIER.value;
-  Type *named_type = env_lookup(env, id_chars);
-
-  if (named_type) {
-    return named_type;
-  }
+Type *get_builtin_type(const char *id_chars) {
 
   if (strcmp(id_chars, TYPE_NAME_INT) == 0) {
     return &t_int;
@@ -206,6 +192,23 @@ Type *get_type(TypeEnv *env, Ast *id) {
   fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
 
   return NULL;
+}
+
+Type *get_type(TypeEnv *env, Ast *id) {
+  if (id->tag == AST_VOID) {
+    return &t_void;
+  }
+  if (id->tag != AST_IDENTIFIER) {
+    return NULL;
+  }
+
+  const char *id_chars = id->data.AST_IDENTIFIER.value;
+  Type *named_type = env_lookup(env, id_chars);
+
+  if (named_type) {
+    return named_type;
+  }
+  return get_builtin_type(id_chars);
 }
 
 bool types_equal(Type *t1, Type *t2) {
@@ -445,19 +448,6 @@ void _serialize_type(Type *type, TypeSerBuf *buf, int level) {
     }
     break;
   }
-
-    /*
-  case T_VARIANT_MEMBER: {
-
-    char int_str[16];
-    int length = snprintf(int_str, sizeof(int_str), "%p",
-                          type->data.T_VARIANT_MEMBER_OF);
-    // buffer_write(buf, int_str, length);
-    buffer_write(buf, "member of ", 10);
-    buffer_write(buf, int_str, 16);
-    break;
-  }
-    */
 
   default:
     // No additional data for other types

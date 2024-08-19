@@ -4,13 +4,15 @@
 #include "codegen_match_values.h"
 #include "codegen_types.h"
 #include "serde.h"
+#include "types/type.h"
 #include "types/util.h"
+
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
-LLVMValueRef find_variant(FnVariants *variants, Type *type);
+LLVMValueRef find_fn_variant(FnVariants *variants, Type *type);
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
@@ -279,9 +281,11 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
                                                   LLVMModuleRef module,
                                                   LLVMBuilderRef builder,
                                                   Type **fn_type) {
+
   Ast *fn_id = ast->data.AST_APPLICATION.function;
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
   int fn_name_len = fn_id->data.AST_IDENTIFIER.length;
+
   Type *ret_type = ast->md;
 
   JITSymbol *res = lookup_id_ast(fn_id, ctx);
@@ -350,7 +354,7 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
     Type *specific_fn_type = create_specific_fn_type(len, args, ret_type);
 
     LLVMValueRef specific_fn =
-        find_variant(&res->symbol_data.STYPE_FN_VARIANTS, specific_fn_type);
+        find_fn_variant(&res->symbol_data.STYPE_FN_VARIANTS, specific_fn_type);
     if (specific_fn) {
       *fn_type = specific_fn_type;
     }
@@ -358,9 +362,60 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
   }
 }
 
+LLVMValueRef codegen_constructor(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+  Type *cons = ast->data.AST_APPLICATION.function->md;
+
+  Type *val_type = ast->data.AST_APPLICATION.args->md; 
+  LLVMValueRef val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  if (cons->constructor != NULL) {
+    ConsMethod constructor = cons->constructor;
+    val = constructor(val, ast->data.AST_APPLICATION.args->md, module, builder);
+    if (val == NULL) {
+      fprintf(stderr, "Error: constructor method for type %s didn't work",
+              cons->data.T_CONS.name);
+      return NULL;
+    }
+  }
+
+  Type *t = find_variant_type(ctx->env, cons->data.T_CONS.name);
+
+  if (t) {
+    int i;
+    find_variant_index(t, cons->data.T_CONS.name, &i);
+
+    LLVMTypeRef element_types[2] = {
+      LLVMInt32Type(),
+      LLVMTypeOf(val),
+    };
+
+    LLVMTypeRef struct_type = LLVMStructType(element_types, 2, 0); 
+    LLVMValueRef str = LLVMGetUndef(struct_type);
+
+    str = LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt32Type(), i, 0), 0, "variant_tag"); // variant tag
+    str = LLVMBuildInsertValue(builder, str, val, 1, "variant_contained_val"); // variant tag
+    return str;
+  } else {
+    return val;
+  }
+}
+
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+
+  if (((Type *)ast->data.AST_APPLICATION.function->md)->kind == T_CONS) {
+    return codegen_constructor(ast, ctx, module, builder);
+  }
+
+  if (((Type *)ast->data.AST_APPLICATION.function->md)->constructor != NULL && ast->data.AST_APPLICATION.len == 1) {
+    Ast *cons_input = ast->data.AST_APPLICATION.args;
+    LLVMValueRef val = codegen(cons_input, ctx, module, builder); 
+    return attempt_value_conversion(val, cons_input->md, ast->data.AST_APPLICATION.function->md, module, builder);
+  }
+  
 
   Type *fn_type = NULL;
   LLVMValueRef func =
@@ -451,14 +506,14 @@ FnVariants *fn_variants_extend(FnVariants *list, Type *type,
   return new_specific_fn;
 };
 
-LLVMValueRef find_variant(FnVariants *variants, Type *type) {
+LLVMValueRef find_fn_variant(FnVariants *variants, Type *type) {
   if (types_equal(type, variants->type)) {
     return variants->func;
   }
   if (variants->next == NULL) {
     return NULL;
   }
-  return find_variant(variants->next, type);
+  return find_fn_variant(variants->next, type);
 }
 
 JITSymbol extern_variants_symbol(Ast *variants_ast, JITLangCtx *ctx,
