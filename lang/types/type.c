@@ -370,6 +370,16 @@ void _unify(Type *t1, Type *t2, TypeEnv **env) {
     return;
   }
 
+  // variants
+  if (t2->kind == T_VARIANT) {
+    if (t1->kind == T_VAR && variant_contains(t2, t1->data.T_VAR)) {
+      return;
+    }
+    if (t1->kind == T_CONS && variant_contains(t2, t1->data.T_CONS.name)) {
+      return;
+    }
+  } 
+
   if (t1->alias) {
     printf("[%s]", t1->alias);
   } else {

@@ -11,9 +11,15 @@ type Option t =
   | None
   ;
 
-let o = Some 1.;
+let o = Some 1;
 let j = Uint64 1;
 let k = Double 1;
+
+let z = (match o with
+  | Some 1 -> 2 
+  | Some 2 -> 3 
+  | None -> 4
+);
 
 # type RoutineContinuation =
 #   | Continue of (Double * Int * Uint64 * Ptr)
@@ -46,8 +52,8 @@ let k = Double 1;
 # sched_routine routine;
   
 
-let x = 1;
-let z = 1 * 5;
+# let x = 1;
+# let z = 1 * 5;
 # let y = &x;
 # let zz = *y;
 #

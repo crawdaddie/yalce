@@ -13,6 +13,7 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
+
   switch (ast->tag) {
 
   case AST_BODY: {
@@ -91,6 +92,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_LET: {
+    print_type_env(ctx->env);
+    Type *t = env_lookup(ctx->env, "Option");
+    print_type(t);
+    printf("\n");
+
     return codegen_assignment(ast, ctx, module, builder);
   }
   case AST_IDENTIFIER: {

@@ -1,5 +1,6 @@
 #include "types/type_declaration.h"
 #include "serde.h"
+#include "types/inference.h"
 #include "types/util.h"
 #include <stdlib.h>
 #include <string.h>
@@ -148,8 +149,8 @@ static Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     TypeEnv *_env = env;
     for (int i = 0; i < expr->data.AST_LAMBDA.len; i++) {
       Ast *param_ast = expr->data.AST_LAMBDA.params + i;
-      const char *param_name = param_ast->data.AST_IDENTIFIER.value;
-      Type *param_type = tvar(param_ast->data.AST_IDENTIFIER.value);
+      const char *param_name = strdup(param_ast->data.AST_IDENTIFIER.value);
+      Type *param_type = next_tvar();
       _env = env_extend(_env, param_name, param_type);
     }
     return compute_type_expression(expr->data.AST_LAMBDA.body, _env);

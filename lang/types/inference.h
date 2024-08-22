@@ -5,4 +5,6 @@
 Type *infer_ast(TypeEnv **env, Ast *ast);
 void reset_type_var_counter();
 
+Type *next_tvar();
+
 #endif

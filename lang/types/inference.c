@@ -159,6 +159,18 @@ static TypeEnv *create_implicit_var_bindings(TypeEnv *env, Ast *expr) {
 
   return env;
 }
+Type *find_variant_parent(Type *test_type, TypeEnv *env) {
+  const char *name;
+  if (test_type->kind == T_VAR) {
+    name = test_type->data.T_VAR;
+  } else if (test_type->kind == T_CONS) {
+    name = test_type->data.T_CONS.name;
+  } else {
+    return NULL;
+  }
+  Type *variant_type = find_variant_type(env, name);
+  return variant_type;
+}
 
 static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
 
@@ -170,26 +182,22 @@ static Type *infer_match_expr(TypeEnv **env, Ast *ast) {
   int len = ast->data.AST_MATCH.len;
 
   Ast *branches = ast->data.AST_MATCH.branches;
+
+  Type *variant = NULL;
+
   for (int i = 0; i < len; i++) {
     Ast *test_expr = branches + (2 * i);
-    // printf("match: ");
-    // print_ast(test_expr);
     Ast *result_expr = branches + (2 * i + 1);
 
     *env = create_implicit_var_bindings(*env, test_expr);
-    if (i == len - 1) {
-      if (!ast_is_placeholder_id(test_expr)) {
-        test_type = infer(env, test_expr);
-        unify(expr_type, test_type);
-      }
+
+    if ((i == len - 1) && (ast_is_placeholder_id(test_expr))) {
+      test_type = infer(env, test_expr);
+      continue;
     } else {
       test_type = infer(env, test_expr);
-      if (test_expr->tag == AST_IDENTIFIER && test_type == NULL) {
-        // try to lookup variant types
-      }
-
-      unify(expr_type, test_type);
     }
+
     result_expr->md = test_type;
     Type *res_type = infer(env, result_expr);
 
@@ -333,7 +341,7 @@ Type *infer(TypeEnv **env, Ast *ast) {
         type = t;
       }
     }
-      
+
     break;
   }
 

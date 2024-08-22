@@ -224,9 +224,10 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   //   }
   // }
 
+
   infer_ast(env, *prog);
-  print_type_env(*env);
   ctx->env = *env;
+
 
 #ifdef DUMP_AST
   LLVMDumpModule(module);

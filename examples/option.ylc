@@ -1,0 +1,26 @@
+type Option t = 
+  | Some of t
+  | None
+  ;
+
+let x = Some 2;
+
+# let o = Some 1;
+#
+#
+# let z = (match o with
+#   | Some 1 -> 2 
+#   | Some 2 -> 3 
+#   | None -> 4
+# );
+# let f = fn x -> 
+#   match x with
+#   | Some 1 -> 2
+#   | Some 2 -> 4
+#   | None -> 4
+# ;;
+
+# let y = None;
+
+
+# let z = Some 1;

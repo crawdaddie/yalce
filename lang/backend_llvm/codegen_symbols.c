@@ -344,7 +344,8 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   ht *scope = outer_ctx->stack + outer_ctx->stack_ptr;
   if (ast->data.AST_LET.expr->tag == AST_EXTERN_VARIANTS) {
     JITSymbol *generic_sym = malloc(sizeof(JITSymbol));
-    *generic_sym = extern_variants_symbol(ast->data.AST_LET.expr, outer_ctx, module, builder);
+    *generic_sym = extern_variants_symbol(ast->data.AST_LET.expr, outer_ctx,
+                                          module, builder);
 
     const char *id = binding_identifier->data.AST_IDENTIFIER.value;
     int id_len = binding_identifier->data.AST_IDENTIFIER.length;
@@ -370,6 +371,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   if (!expr_val) {
     return NULL;
   }
+
   Type *expr_type = ast->data.AST_LET.expr->md;
 
   LLVMValueRef _true = LLVMConstInt(LLVMInt1Type(), 1, 0);

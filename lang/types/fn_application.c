@@ -120,7 +120,6 @@ Type *infer_cons(TypeEnv **env, Ast *ast, Type *cons) {
 }
 
 Type *infer_fn_application(TypeEnv **env, Ast *ast) {
-
   Type *fn_type = infer(env, ast->data.AST_APPLICATION.function);
 
   if (!fn_type) {
@@ -155,7 +154,9 @@ Type *infer_fn_application(TypeEnv **env, Ast *ast) {
   }
 
   if (fn_type->kind == T_CONS) {
-    return infer_cons(env, ast, fn_type);
+
+    Type *t = infer_cons(env, ast, fn_type);
+    return t;
   }
 
   if (fn_type->constructor != NULL) {

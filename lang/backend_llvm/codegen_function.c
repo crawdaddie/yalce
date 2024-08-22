@@ -364,9 +364,10 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef codegen_constructor(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+
   Type *cons = ast->data.AST_APPLICATION.function->md;
 
-  Type *val_type = ast->data.AST_APPLICATION.args->md; 
+  Type *val_type = ast->data.AST_APPLICATION.args->md;
   LLVMValueRef val =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
@@ -387,15 +388,19 @@ LLVMValueRef codegen_constructor(Ast *ast, JITLangCtx *ctx,
     find_variant_index(t, cons->data.T_CONS.name, &i);
 
     LLVMTypeRef element_types[2] = {
-      LLVMInt32Type(),
-      LLVMTypeOf(val),
+        LLVMInt32Type(),
+        LLVMTypeOf(val),
     };
 
-    LLVMTypeRef struct_type = LLVMStructType(element_types, 2, 0); 
+    LLVMTypeRef struct_type = LLVMStructType(element_types, 2, 0);
     LLVMValueRef str = LLVMGetUndef(struct_type);
 
-    str = LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt32Type(), i, 0), 0, "variant_tag"); // variant tag
-    str = LLVMBuildInsertValue(builder, str, val, 1, "variant_contained_val"); // variant tag
+    str =
+        LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt32Type(), i, 0),
+                             0, "variant_tag"); // variant tag
+    str = LLVMBuildInsertValue(builder, str, val, 1,
+                               "variant_contained_val"); // variant tag
+    //
     return str;
   } else {
     return val;
@@ -410,12 +415,14 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     return codegen_constructor(ast, ctx, module, builder);
   }
 
-  if (((Type *)ast->data.AST_APPLICATION.function->md)->constructor != NULL && ast->data.AST_APPLICATION.len == 1) {
+  if (((Type *)ast->data.AST_APPLICATION.function->md)->constructor != NULL &&
+      ast->data.AST_APPLICATION.len == 1) {
     Ast *cons_input = ast->data.AST_APPLICATION.args;
-    LLVMValueRef val = codegen(cons_input, ctx, module, builder); 
-    return attempt_value_conversion(val, cons_input->md, ast->data.AST_APPLICATION.function->md, module, builder);
+    LLVMValueRef val = codegen(cons_input, ctx, module, builder);
+    return attempt_value_conversion(val, cons_input->md,
+                                    ast->data.AST_APPLICATION.function->md,
+                                    module, builder);
   }
-  
 
   Type *fn_type = NULL;
   LLVMValueRef func =
