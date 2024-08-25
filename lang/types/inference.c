@@ -43,6 +43,65 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
     }                                                                          \
   })
 
+#define INFER_ENV(ast, _env, msg)                                              \
+  ({                                                                           \
+    if (infer(ast, _env)) {                                                    \
+      char buf[500];                                                           \
+      ast_to_sexpr(ast, buf);                                                  \
+      if (msg)                                                                 \
+        fprintf(stderr, "%s %s\n", msg, buf);                                  \
+      return 1;                                                                \
+    }                                                                          \
+  })
+
+#define TTUPLE(num, ...)                                                       \
+  ((Type){T_CONS, {.T_CONS = {"Tuple", (Type[]){__VA_ARGS__}, num}}})
+
+#define DEBUG_UNIFY
+
+static void unify(Type *l, Type *r, TypeEnv *env) {
+#ifdef DEBUG_UNIFY
+  printf("unify: \t");
+  print_type(*l);
+  printf("with \t");
+  print_type(*r);
+#endif
+
+  if (r->kind == T_VAR) {
+    return unify(r, l, env);
+  }
+  if (l->kind == T_VAR && r->num_implements > 0) {
+    // merge_typeclasses(l, r);
+    printf("l typeclasses: %d\n", l->num_implements);
+  }
+}
+
+static TypeEnv *set_param_binding_type(Ast *ast, TypeEnv **env) {
+  switch (ast->tag) {
+  case AST_IDENTIFIER: {
+    ast->md = next_tvar();
+    const char *name = ast->data.AST_IDENTIFIER.value;
+    *env = add_binding_to_env(*env, ast, &ast->md);
+    return *env;
+  }
+  case AST_TUPLE: {
+    int len = ast->data.AST_LIST.len;
+    Type tuple_mems[len];
+    for (int i = 0; i < len; i++) {
+      *env = set_param_binding_type(ast->data.AST_LIST.items + i, env);
+      tuple_mems[i] = ast->data.AST_LIST.items[i].md;
+      ast->md = (Type){T_CONS, {.T_CONS = {"Tuple", tuple_mems, len}}};
+    }
+    return *env;
+  }
+  default: {
+    fprintf(stderr, "Typecheck err: lambda arg type %d unsupported\n",
+            ast->tag);
+    return NULL;
+  }
+  }
+}
+
 int infer(Ast *ast, TypeEnv **env) {
   Type type;
   switch (ast->tag) {
@@ -83,16 +142,24 @@ int infer(Ast *ast, TypeEnv **env) {
     INFER(ast->data.AST_BINOP.left, "Failure typechecking lhs of binop: ");
     INFER(ast->data.AST_BINOP.right, "Failure typechecking rhs of binop: ");
 
-    Type lt = ast->data.AST_BINOP.left->md;
-    Type rt = ast->data.AST_BINOP.right->md;
+    Type *lt = &ast->data.AST_BINOP.left->md;
+    Type *rt = &ast->data.AST_BINOP.right->md;
+
     token_type op = ast->data.AST_BINOP.op;
-    if (lt.kind == rt.kind) {
-      type = lt;
+
+    if (types_equal(*lt, *rt)) {
+      type = *lt;
       break;
     }
 
-    TypeClass *l_op_tc = find_op_impl(lt, op);
-    TypeClass *r_op_tc = find_op_impl(rt, op);
+    if (is_generic(lt) || is_generic(rt)) {
+      unify(lt, rt, *env);
+      print_ast(ast);
+      print_full_type(*rt);
+    }
+
+    TypeClass *l_op_tc = find_op_impl(*lt, op);
+    TypeClass *r_op_tc = find_op_impl(*rt, op);
 
     if (l_op_tc && r_op_tc) {
       if (l_op_tc->rank > r_op_tc->rank) {
@@ -193,6 +260,32 @@ int infer(Ast *ast, TypeEnv **env) {
     break;
   }
   case AST_LAMBDA: {
+    set_fn_type(&type, ast->data.AST_LAMBDA.len);
+    printf("typecheck lambda len %zu\n", ast->data.AST_LAMBDA.len);
+    print_ast(ast);
+
+    Type fn_type = next_tvar();
+
+    TypeEnv *fn_scope = *env;
+    for (size_t i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+      fn_scope =
+          set_param_binding_type(ast->data.AST_LAMBDA.params + i, &fn_scope);
+
+      Type t = ast->data.AST_LAMBDA.params[i].md;
+    }
+
+    if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
+      fn_scope =
+          env_extend(fn_scope, ast->data.AST_LAMBDA.fn_name.chars, &fn_type);
+    }
+
+    INFER_ENV(ast->data.AST_LAMBDA.body, &fn_scope,
+              "Typechecking function body failed");
+    print_type_env(fn_scope);
+
+    type = fn_type;
+    print_type(type);
+    break;
   }
   }
   ast->md = type;

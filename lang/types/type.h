@@ -55,13 +55,13 @@ typedef struct Type {
       const char *name;
       struct Type *args;
       int num_args;
-      void *constructor;
-      size_t constructor_size;
     } T_CONS;
 
   } data;
   int num_implements;
   TypeClass *implements;
+  void *constructor;
+  size_t constructor_size;
 } Type;
 
 typedef struct TypeEnv {
@@ -84,6 +84,7 @@ extern Type t_ptr;
 
 char *type_to_string(Type t, char *buffer);
 void print_type(Type t);
+void print_full_type(Type t);
 
 Type *fn_ret_type(Type *fn_type);
 
@@ -95,6 +96,9 @@ void print_type_env(TypeEnv *env);
 Type *get_type(TypeEnv *env, const char *name);
 
 void set_tuple_type(Type *type, Type *cons_args, int arity);
-
 void set_list_type(Type *type, Type *el_type);
+void set_fn_type(Type *type, int num_args);
+
+bool is_generic(Type *t);
+
 #endif

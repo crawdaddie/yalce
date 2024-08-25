@@ -11,6 +11,20 @@ typedef struct {
 uint64_t hash_string(const char *key, int length);
 uint64_t hash_key(const char *key);
 
+typedef enum binop_token {
+  _BINOP_TOKEN_PLUS,
+  _BINOP_TOKEN_MINUS,
+  _BINOP_TOKEN_STAR,
+  _BINOP_TOKEN_SLASH,
+  _BINOP_TOKEN_MODULO,
+  _BINOP_TOKEN_LT,
+  _BINOP_TOKEN_GT,
+  _BINOP_TOKEN_LTE,
+  _BINOP_TOKEN_GTE,
+  _BINOP_TOKEN_EQUALITY,
+  _BINOP_TOKEN_NOT_EQUAL,
+} binop_token;
+
 typedef enum token_type {
   TOKEN_START, // dummy token
   TOKEN_LP,    // parens
@@ -24,7 +38,7 @@ typedef enum token_type {
   TOKEN_TRIPLE_DOT,
 
   // OPERATORS
-  TOKEN_PLUS,
+  TOKEN_PLUS = TOKEN_TRIPLE_DOT + 1 + _BINOP_TOKEN_PLUS,
   TOKEN_MINUS,
   TOKEN_STAR,
   TOKEN_SLASH,

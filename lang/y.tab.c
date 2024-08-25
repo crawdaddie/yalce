@@ -2045,7 +2045,7 @@ yyreduce:
 
   case 56:
 #line 204 "lang/parser.y"
-    { (yyval.ast_node_ptr) = ast_lambda(NULL, (yyvsp[(4) - (5)].ast_node_ptr)); }
+    { (yyval.ast_node_ptr) = ast_void_lambda((yyvsp[(4) - (5)].ast_node_ptr)); }
     break;
 
   case 57:
@@ -2055,7 +2055,7 @@ yyreduce:
 
   case 58:
 #line 206 "lang/parser.y"
-    { (yyval.ast_node_ptr) = ast_lambda(NULL, (yyvsp[(5) - (6)].ast_node_ptr)); }
+    { (yyval.ast_node_ptr) = ast_void_lambda((yyvsp[(5) - (6)].ast_node_ptr)); }
     break;
 
   case 59:

@@ -14,9 +14,9 @@ static char *type_name_mapping[] = {
 #define ADD_IMPL(tcs, num) .implements = tcs, .num_implements = num
 
 // clang-format off
-Type t_int =    {T_INT,     ADD_IMPL(int_tc_table,     11)};
-Type t_uint64 = {T_UINT64,  ADD_IMPL(uint64_tc_table,  11)};
-Type t_num =    {T_NUM,     ADD_IMPL(num_tc_table,     11)};
+Type t_int =    {T_INT,     ADD_IMPL(int_traits,     2)};
+Type t_uint64 = {T_UINT64,  ADD_IMPL(uint64_traits,  2)};
+Type t_num =    {T_NUM,     ADD_IMPL(num_traits,     2)};
 Type t_bool =   {T_BOOL};
 Type t_void =   {T_VOID};
 Type t_char =   {T_CHAR};
@@ -95,6 +95,10 @@ char *type_to_string(Type t, char *buffer) {
       }
       break;
     }
+    case T_VAR: {
+      buffer = strcat(buffer, t.data.T_VAR);
+      break;
+    }
   }
 
   return buffer;
@@ -102,6 +106,14 @@ char *type_to_string(Type t, char *buffer) {
 
 // clang-format off
 void print_type(Type t) {
+  char *buf = malloc(sizeof(char) * 100);
+  printf("%s\n", type_to_string(t, buf));
+  free(buf);
+}
+
+/* Print's type including typeclass slots
+ * */
+void print_full_type(Type t) {
   char *buf = malloc(sizeof(char) * 100);
   printf("%s\n", type_to_string(t, buf));
   free(buf);
@@ -165,7 +177,6 @@ void free_type_env(TypeEnv *env) {
 void print_type_env(TypeEnv *env) {
   printf("%s : ", env->name);
   print_type(*env->type);
-  printf("\n");
   if (env->next) {
     print_type_env(env->next);
   }
@@ -215,4 +226,39 @@ void set_list_type(Type *type, Type *el_type) {
   type->data.T_CONS.name = "List";
   type->data.T_CONS.args = el_type;
   type->data.T_CONS.num_args = 1;
+}
+
+void set_fn_type(Type *type, int num_args) {
+  type->kind = T_FN;
+  Type *fn_type = type;
+  for (int i = 0; i < num_args; i++) {
+    // fn_type->data.T_FN.from = 
+
+    fn_type = fn_type->data.T_FN.to;
+  }
+}
+
+bool is_generic(Type *t) {
+  switch (t->kind) {
+    case T_VAR: {
+      return true;
+    }
+    case T_CONS: {
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        if (is_generic(t->data.T_CONS.args + i)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    case T_FN: {
+      if (!is_generic(t->data.T_FN.from)) {
+        return is_generic(t->data.T_FN.to);
+      }
+      return false;
+    }
+    default:
+      return false;
+  }
 }

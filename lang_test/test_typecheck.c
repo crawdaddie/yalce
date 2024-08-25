@@ -28,6 +28,7 @@ int main() {
   bool status = true;
 #define TEST_SIMPLE_AST_TYPE(i, t)                                             \
   ({                                                                           \
+    reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
     Ast *p = parse_input(i, NULL);                                             \
     TypeEnv *env = NULL;                                                       \
@@ -48,6 +49,7 @@ int main() {
   ({                                                                           \
     Ast *p = parse_input(i, NULL);                                             \
     TypeEnv *env = NULL;                                                       \
+    reset_type_var_counter();                                                  \
     bool fails = infer(p, &env);                                               \
     if (fails) {                                                               \
       fprintf(stderr, "✅ typecheck should fail: " i "\n");                    \
@@ -100,7 +102,10 @@ int main() {
 
   TEST_SIMPLE_AST_TYPE("(1,2,3.9)", TTUPLE(3, t_int, t_int, t_num, ));
 
-  TEST_SIMPLE_AST_TYPE("let f = fn x -> (1 + 2 ) * 8 - x;",
+  TEST_SIMPLE_AST_TYPE("let f = fn x -> (1 + 2) * 8 - x;",
+                       MAKE_FN_TYPE_2(&t_int, &t_int));
+
+  TEST_SIMPLE_AST_TYPE("let f = fn (x, y) -> (1 + 2) * 8 - x;",
                        MAKE_FN_TYPE_2(&t_int, &t_int));
 
   return !status;
