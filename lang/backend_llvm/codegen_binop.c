@@ -1,7 +1,6 @@
 #include "backend_llvm/codegen_binop.h"
 #include "backend_llvm/common.h"
 #include "parse.h"
-#include "serde.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 
@@ -146,9 +145,9 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
   LLVMValueRef l = codegen(ast->data.AST_BINOP.left, ctx, module, builder);
-  Type *ltype = ast->data.AST_BINOP.left->md;
+  Type ltype = ast->data.AST_BINOP.left->md;
   LLVMValueRef r = codegen(ast->data.AST_BINOP.right, ctx, module, builder);
-  Type *rtype = ast->data.AST_BINOP.right->md;
+  Type rtype = ast->data.AST_BINOP.right->md;
 
   if (l == NULL || r == NULL) {
     return NULL;
@@ -161,11 +160,11 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case TOKEN_STAR:
   case TOKEN_SLASH:
   case TOKEN_MODULO: {
-    TypeClass *tc_impl = typeclass_impl(ast->md, &TCNum);
-    if ((tc_impl != NULL) && !(is_arithmetic(ast->md))) {
+    TypeClass *tc_impl = typeclass_impl(&ast->md, &TCNum);
+    if ((tc_impl != NULL) && !(is_arithmetic(&ast->md))) {
 
-      return typeclass_num_binop_impl(op, typeclass_impl(ast->md, &TCNum), l,
-                                      ltype, r, rtype, module, builder);
+      return typeclass_num_binop_impl(op, typeclass_impl(&ast->md, &TCNum), l,
+                                      &ltype, r, &rtype, module, builder);
     }
     break;
   }
@@ -174,21 +173,21 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case TOKEN_LTE:
   case TOKEN_GT:
   case TOKEN_GTE: {
-    TypeClass *tc_impl = typeclass_impl(ast->md, &TCOrd);
-    if ((tc_impl != NULL) && !(is_arithmetic(ast->md))) {
-      return typeclass_ord_binop_impl(op, typeclass_impl(ast->md, &TCNum), l,
-                                      ltype, r, rtype, module, builder);
+    TypeClass *tc_impl = typeclass_impl(&ast->md, &TCOrd);
+    if ((tc_impl != NULL) && !(is_arithmetic(&ast->md))) {
+      return typeclass_ord_binop_impl(op, typeclass_impl(&ast->md, &TCNum), l,
+                                      &ltype, r, &rtype, module, builder);
     }
     break;
   }
   }
 
-  if (!(is_arithmetic(ltype) && is_arithmetic(rtype))) {
+  if (!(is_arithmetic(&ltype) && is_arithmetic(&rtype))) {
     return NULL;
   }
 
   // builtin numeric types:
-  int type_check = ((ltype->kind == T_NUM) << 1) | (rtype->kind == T_NUM);
+  int type_check = ((ltype.kind == T_NUM) << 1) | (rtype.kind == T_NUM);
 
   if (is_llvm_int(l) && is_llvm_int(r)) {
     return codegen_int_binop(builder, op, l, r);

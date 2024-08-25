@@ -1,7 +1,7 @@
 BUILD_DIR := build
 ENGINE_SRC_DIR := engine
 ENGINE_SRCS := $(wildcard $(ENGINE_SRC_DIR)/*.c)
-ENGINE_OBJS := $(ENGINE_SRCS:$(ENGINE_SRC_DIR)/%.c=$(BUILD_DIR)/_engine_%.o)
+ENGINE_OBJS := $(ENGINE_SRCS:$(ENGINE_SRC_DIR)/%.c=$(BUILD_DIR)/engine/%.o)
 
 LLVM := /opt/homebrew/opt/llvm@16
 LLVM_CONFIG := $(LLVM)/bin/llvm-config
@@ -37,6 +37,7 @@ LANG_CC += -DDUMP_AST
 endif
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
+LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 LANG_CC += -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags`
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
 
@@ -70,9 +71,11 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(BUILD_DIR)/backend_llvm
 	mkdir -p $(BUILD_DIR)/types
+	mkdir -p $(BUILD_DIR)/engine
+	mkdir -p $(BUILD_DIR)/test
 
 # Build engine object files
-$(BUILD_DIR)/_engine_%.o: $(ENGINE_SRC_DIR)/%.c | $(BUILD_DIR)
+$(BUILD_DIR)/engine/%.o: $(ENGINE_SRC_DIR)/%.c | $(BUILD_DIR)
 	$(ENGINE_CC) $(ENGINE_COMPILER_OPTIONS) -c -o $@ $<
 
 # Build the shared library
@@ -99,66 +102,46 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 
-LANG_TEST_LD_FLAGS := -L./build -lm -L$(READLINE_PREFIX)/lib -lreadline `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native` -mmacosx-version-min=13.6
-runi: $(BUILD_DIR)/audio_lang
-	./$(BUILD_DIR)/audio_lang $(input) -i
 
-# List all test files
-TEST_SOURCES := $(wildcard $(TEST_DIR)/test_*.c)
-TEST_OBJS := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/%.o,$(TEST_SOURCES))
-_TEST_TARGETS := $(patsubst $(TEST_DIR)/test_%.c,%,$(TEST_SOURCES))
-TEST_TARGETS := $(filter-out llvm_codegen,$(_TEST_TARGETS))
 
-# Common objects for all tests
-COMMON_OBJS := $(filter-out \
-							 $(BUILD_DIR)/_lang_main.o \
-							 $(BUILD_DIR)/main.o \
-							 $(BUILD_DIR)/synth_functions.o \
-							 $(BUILD_DIR)/arithmetic.o \
-							 $(BUILD_DIR)/eval.o \
-							 $(BUILD_DIR)/backend_vm.o \
-							 $(BUILD_DIR)/backend.o \
-							 $(BUILD_DIR)/eval_function.o \
-							 $(BUILD_DIR)/eval_list.o, \
-							 $(LANG_OBJS))
+# # Modified rule for test_typecheck
+test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
+	clang -g lang_test/test_typecheck.c -o build/test/test_typecheck \
+		lang/types/*.c \
+		lang/parse.c \
+		lang/ht.c \
+		lang/lex.yy.c \
+		lang/y.tab.c \
+		lang/common.c \
+		lang/input.c \
+		lang/string_proc.c \
+		lang/print_ast.c \
+		-I./lang \
+		-I$(READLINE_PREFIX)/include \
+		-L$(READLINE_PREFIX)/lib -lreadline
+	./build/test/test_typecheck
 
-build/test_llvm_codegen.o: $(TEST_DIR)/test_llvm_codegen.c lang/backend_llvm/*.c
-	$(LANG_CC) -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags` -c -o $@ $<
-
-test_llvm_codegen: build/test_llvm_codegen.o $(COMMON_OBJS) build/backend_llvm/*.o build/types/*.o
-	$(LANG_CC) $(LANG_TEST_LD_FLAGS) -o $(BUILD_DIR)/$@ $^ 
-	-./$(BUILD_DIR)/$@
-
-# Rule for building test objects
-$(BUILD_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(YACC_OUTPUT) $(LEX_OUTPUT)
-	$(LANG_CC) -c -o $@ $< $(LANG_TEST_LD_FLAGS)
-
-# Generic rule for building and running tests
-define make-test-rule
-$(1): $(BUILD_DIR)/test_$(1).o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(COMMON_OBJS)
-	- $$(LANG_CC) -o $$(BUILD_DIR)/$$@ $$^ $$(LANG_TEST_LD_FLAGS)
-	- ./$(BUILD_DIR)/$$@ 
-endef
-
-# Generate rules for all tests
-$(foreach test,$(TEST_TARGETS),$(eval $(call make-test-rule,$(test))))
-
-# Generic rule for any other tests
-test_%: $(BUILD_DIR)/test_%.o $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o $(COMMON_OBJS)
-	-$(LANG_CC) -o $(BUILD_DIR)/$@ $^ $(LANG_TEST_LD_FLAGS)
-	-./$(BUILD_DIR)/$@
-
+# # Modified rule for test_parse
+test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
+	clang -g lang_test/test_parse.c -o build/test/test_parse \
+		lang/parse.c \
+		lang/ht.c \
+		lang/lex.yy.c \
+		lang/y.tab.c \
+		lang/common.c \
+		lang/input.c \
+		lang/string_proc.c \
+		lang/print_ast.c \
+		-I./lang \
+		-I$(READLINE_PREFIX)/include \
+		-L$(READLINE_PREFIX)/lib -lreadline
+	./build/test/test_parse
 
 
 # Phony target to run all tests
-.PHONY: test
-test: $(TEST_TARGETS) test_llvm_codegen $(BUILD_DIR)
+# .PHONY: test
+# test: $(TEST_TARGETS) test_llvm_codegen $(BUILD_DIR)
 
-# Phony target to clean test files
-.PHONY: clean_tests
-clean_tests:
-	rm -f $(BUILD_DIR)/test_*
-	rm -f $(TEST_OBJS)
 
 
 .PHONY: wasm

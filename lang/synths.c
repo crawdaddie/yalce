@@ -2,11 +2,11 @@
 #include "backend_llvm/util.h"
 #include "parse.h"
 #include "types/type.h"
-#include "types/util.h"
+// #include "types/util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <string.h>
-
+/*
 LLVMValueRef node_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
 
   *fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
@@ -255,7 +255,6 @@ static NumTypeClassMethod synth_num_methods[] = {
 };
 
 // clang-format on
-
 TypeEnv *initialize_type_env_synth(TypeEnv *env) {
   TypeClass *synth_num_typeclass = typeclass_instance(&TCNum);
 
@@ -269,3 +268,4 @@ TypeEnv *initialize_type_env_synth(TypeEnv *env) {
 
   return env;
 }
+*/

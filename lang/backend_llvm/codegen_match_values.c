@@ -4,7 +4,6 @@
 #include "codegen_list.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
-#include "serde.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -81,8 +80,8 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
       return *res;
     }
 
-    *sym =
-        (JITSymbol){STYPE_LOCAL_VAR, llvm_type, right, .symbol_type = left->md};
+    *sym = (JITSymbol){STYPE_LOCAL_VAR, llvm_type, right,
+                       .symbol_type = &left->md};
     ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                 hash_string(id_chars, id_len), sym);
     return *res;
@@ -120,7 +119,7 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
       Ast *pattern_left = left->data.AST_BINOP.left;
       Ast *pattern_right = left->data.AST_BINOP.right;
 
-      LLVMTypeRef list_el_type = type_to_llvm_type(pattern_left->md, ctx->env);
+      LLVMTypeRef list_el_type = type_to_llvm_type(&pattern_left->md, ctx->env);
 
       *res =
           and_vals(*res, ll_is_not_null(right, list_el_type, builder), builder);
@@ -145,7 +144,7 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
     return *res;
   }
   case AST_LIST: {
-    Type *t = ((Type *)left->md)->data.T_CONS.args[0];
+    Type *t = ((Type)left->md).data.T_CONS.args[0];
     LLVMTypeRef list_el_type = type_to_llvm_type(t, ctx->env);
     if (left->data.AST_LIST.len == 0) {
       *res = ll_is_null(right, list_el_type, builder);
@@ -198,7 +197,8 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
     LLVMValueRef left_val = codegen(left, ctx, module, builder);
 
     *res = and_vals(
-        *res, codegen_equality(left_val, left->md, right, ctx, module, builder),
+        *res,
+        codegen_equality(left_val, &left->md, right, ctx, module, builder),
         builder);
     return *res;
   }

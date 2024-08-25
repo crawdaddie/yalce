@@ -24,7 +24,7 @@ LLVMValueRef codegen_printf(const char *format, LLVMValueRef *args,
 LLVMValueRef insert_printf_call(const char *format, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
 
-LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
+LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type val_type,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
 

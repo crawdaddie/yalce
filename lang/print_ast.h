@@ -1,5 +1,5 @@
-#ifndef _LANG_SERDE_H
-#define _LANG_SERDE_H
+#ifndef _LANG_PRINT_AST_H
+#define _LANG_PRINT_AST_H
 #include "parse.h"
 char *serialize_ast(Ast *ast);
 

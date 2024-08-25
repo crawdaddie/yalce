@@ -6,8 +6,7 @@
 #include "codegen_match_values.h"
 #include "codegen_tuple.h"
 #include "codegen_types.h"
-#include "serde.h"
-#include "types/util.h"
+#include "print_ast.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -266,17 +265,18 @@ LLVMValueRef codegen_multiple_assignment(Ast *binding, LLVMValueRef expr_val,
 
       LLVMValueRef res_left = codegen_multiple_assignment(
           left,
-          ll_get_head_val(expr_val, type_to_llvm_type(left->md, ctx->env),
+          ll_get_head_val(expr_val, type_to_llvm_type(&left->md, ctx->env),
                           builder),
-          left->md, ctx, module, builder, is_fn_param, fn_param_idx);
+          &left->md, ctx, module, builder, is_fn_param, fn_param_idx);
 
       // assign left to first member
 
       Ast *right = binding->data.AST_BINOP.right;
       LLVMValueRef res_right = codegen_multiple_assignment(
           right,
-          ll_get_next(expr_val, type_to_llvm_type(left->md, ctx->env), builder),
-          left->md, ctx, module, builder, is_fn_param, fn_param_idx);
+          ll_get_next(expr_val, type_to_llvm_type(&left->md, ctx->env),
+                      builder),
+          &left->md, ctx, module, builder, is_fn_param, fn_param_idx);
 
       if (res_left || res_right) {
         return expr_val;
@@ -354,7 +354,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     return NULL;
   }
 
-  if (is_generic(ast->md) && ast->data.AST_LET.expr->tag == AST_LAMBDA) {
+  if (is_generic(&ast->md) && ast->data.AST_LET.expr->tag == AST_LAMBDA) {
     JITSymbol *generic_sym = malloc(sizeof(JITSymbol));
     *generic_sym = generic_fn_symbol(binding_identifier, ast->data.AST_LET.expr,
                                      outer_ctx);
@@ -372,12 +372,12 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     return NULL;
   }
 
-  Type *expr_type = ast->data.AST_LET.expr->md;
+  Type *expr_type = &ast->data.AST_LET.expr->md;
 
   LLVMValueRef _true = LLVMConstInt(LLVMInt1Type(), 1, 0);
 
-  match_values(binding_identifier, expr_val, ast->data.AST_LET.expr->md, &_true,
-               &cont_ctx, module, builder);
+  match_values(binding_identifier, expr_val, &ast->data.AST_LET.expr->md,
+               &_true, &cont_ctx, module, builder);
 
   if (ast->data.AST_LET.in_expr != NULL) {
     LLVMValueRef res =

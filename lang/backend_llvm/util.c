@@ -126,18 +126,18 @@ LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
   return buffer;
 }
 
-LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
+LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type val_type,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
-  if (val_type->kind == T_STRING) {
+  if (val_type.kind == T_STRING) {
     return val;
   }
 
-  if (is_string_type(val_type)) {
+  if (is_string_type(&val_type)) {
     return val;
   }
 
-  if (val_type->kind == T_INT) {
+  if (val_type.kind == T_INT) {
     return int_to_string(val, module, builder);
   }
 

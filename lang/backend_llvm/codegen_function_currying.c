@@ -1,6 +1,6 @@
 #include "backend_llvm/codegen_function_currying.h"
 #include "backend_llvm/codegen_function.h"
-#include "serde.h"
+#include "print_ast.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -14,10 +14,10 @@ LLVMValueRef codegen_curry_fn(Ast *curry, LLVMValueRef func,
   int saved_args_len = curry->data.AST_APPLICATION.len;
   int curried_fn_len = total_params_len - saved_args_len;
 
-  Type *fn_type = curry->md;
+  Type fn_type = curry->md;
 
   LLVMValueRef curried_func = codegen_fn_proto(
-      fn_type, curried_fn_len, "curried_fn", ctx, module, builder);
+      &fn_type, curried_fn_len, "curried_fn", ctx, module, builder);
 
   if (curried_func == NULL) {
     return NULL;

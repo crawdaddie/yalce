@@ -1,3 +1,4 @@
 .cache
 build
 lang_test/*.o
+*.h.gch

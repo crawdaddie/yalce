@@ -1,6 +1,5 @@
 #include "../lang/parse.h"
-#include "../lang/serde.h"
-#include <stdio.h>
+#include "../lang/print_ast.h" #include < stdio.h>
 #include <stdlib.h>
 #include <string.h>
 extern int yylineno;

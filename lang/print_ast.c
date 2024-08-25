@@ -1,4 +1,5 @@
-#include "serde.h"
+#include "print_ast.h"
+// #include "types/util.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,7 @@ void print_ast(Ast *ast) {
   char *buf = malloc(sizeof(char) * 500);
   printf("%s\n", ast_to_sexpr(ast, buf));
   free(buf);
+  // print_type(&ast->md);
 }
 
 static bool is_term(ast_tag tag) {

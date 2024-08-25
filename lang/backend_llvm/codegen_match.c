@@ -17,7 +17,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef expr_val =
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
 
-  Type *expr_val_type = ast->data.AST_MATCH.expr->md;
+  Type *expr_val_type = &ast->data.AST_MATCH.expr->md;
 
   // Create basic blocks
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
@@ -26,8 +26,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create a PHI node for the result
   LLVMPositionBuilderAtEnd(builder, end_block);
-  LLVMValueRef phi = LLVMBuildPhi(builder, type_to_llvm_type(ast->md, ctx->env),
-                                  "match.result");
+  LLVMValueRef phi = LLVMBuildPhi(
+      builder, type_to_llvm_type(&ast->md, ctx->env), "match.result");
   //
   // Return to the current block to start generating comparisons
   LLVMPositionBuilderAtEnd(builder, current_block);

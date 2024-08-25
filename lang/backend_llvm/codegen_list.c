@@ -80,7 +80,7 @@ LLVMValueRef ll_get_next(LLVMValueRef list, LLVMTypeRef list_el_type,
 LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
 
-  Type *list_el_type = *((Type *)ast->md)->data.T_CONS.args;
+  Type *list_el_type = *((Type)ast->md).data.T_CONS.args;
   LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, ctx->env);
   LLVMTypeRef node_type = llnode_type(llvm_el_type);
   int len = ast->data.AST_LIST.len;
