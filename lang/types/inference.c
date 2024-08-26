@@ -1,7 +1,6 @@
 #include "types/inference.h"
 #include "common.h"
 #include "format_utils.h"
-#include "serde.h"
 #include "types/fn_application.h"
 #include "types/type.h"
 #include "types/type_declaration.h"

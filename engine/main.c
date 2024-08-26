@@ -36,8 +36,8 @@ int _main(int argc, char **argv) {
   init_audio();
   Signal *buf = read_buf("fat_amen_mono_48000.wav");
 
-  Node *b =
-      bufplayer_node(buf, get_sig_default(1, 0.99), get_sig_default(1, 0.75));
+  Node *b = bufplayer_node(buf, get_sig_default(1, 0.99),
+                           get_sig_default(1, 0.75), get_sig_default(1, 0.0));
 
   add_to_dac(b);
   audio_ctx_add(b);

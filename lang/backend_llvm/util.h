@@ -1,7 +1,7 @@
 #ifndef _LANG_BACKEND_LLVM_UTIL_H
 #define _LANG_BACKEND_LLVM_UTIL_H
 
-#include "types/type.h"
+#include "../types/type.h"
 #include "llvm-c/Types.h"
 
 void struct_ptr_set(int item_offset, LLVMValueRef struct_ptr,

@@ -1,9 +1,9 @@
 #ifndef _LANG_BACKEND_LLVM_COMMON_H
 #define _LANG_BACKEND_LLVM_COMMON_H
 
-#include "ht.h"
-#include "parse.h"
-#include "types/util.h"
+#include "../ht.h"
+#include "../parse.h"
+#include "../types/type.h"
 #include "llvm-c/Types.h"
 
 #define STACK_MAX 256
