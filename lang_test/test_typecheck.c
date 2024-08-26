@@ -1,5 +1,7 @@
-#include "parse.h"
-#include "types/inference.h"
+#include "../lang/parse.h"
+#include "../lang/types/inference.h"
+#include "../lang/types/type.h"
+#include "serde.h"
 #include <stdbool.h>
 
 #define MAKE_FN_TYPE_1(ret_type)                                               \
@@ -25,13 +27,14 @@
   }
 int main() {
   bool status = true;
+
 #define TEST_SIMPLE_AST_TYPE(i, t)                                             \
   ({                                                                           \
     reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
     Ast *p = parse_input(i, NULL);                                             \
     TypeEnv *env = NULL;                                                       \
-    stat &= !(infer(&env, p));                                                 \
+    stat &= (infer(p, &env) != NULL);                                          \
     stat &= (types_equal(p->md, t));                                           \
     char buf[100];                                                             \
     if (stat) {                                                                \
@@ -49,7 +52,7 @@ int main() {
     Ast *p = parse_input(i, NULL);                                             \
     TypeEnv *env = NULL;                                                       \
     reset_type_var_counter();                                                  \
-    bool fails = infer(&env, p);                                               \
+    bool fails = infer(p, &env);                                               \
     if (fails) {                                                               \
       fprintf(stderr, "✅ typecheck should fail: " i "\n");                    \
     } else {                                                                   \
@@ -59,53 +62,54 @@ int main() {
     }                                                                          \
     status &= fails;                                                           \
   })
-  TEST_SIMPLE_AST_TYPE("1", t_int);
+  TEST_SIMPLE_AST_TYPE("1", &t_int);
   // TODO: u64 parse not yet implemented
   // TEST_SIMPLE_AST_TYPE("1u64", t_uint64);
-  TEST_SIMPLE_AST_TYPE("1.0", t_num);
-  TEST_SIMPLE_AST_TYPE("1.", t_num);
-  TEST_SIMPLE_AST_TYPE("'c'", t_char);
+  TEST_SIMPLE_AST_TYPE("1.0", &t_num);
+  TEST_SIMPLE_AST_TYPE("1.", &t_num);
+  TEST_SIMPLE_AST_TYPE("'c'", &t_char);
   // TEST_SIMPLE_AST_TYPE("\"hello\"", t_string);
-  TEST_SIMPLE_AST_TYPE("true", t_bool);
-  TEST_SIMPLE_AST_TYPE("false", t_bool);
-  TEST_SIMPLE_AST_TYPE("()", t_void);
+  TEST_SIMPLE_AST_TYPE("true", &t_bool);
+  TEST_SIMPLE_AST_TYPE("false", &t_bool);
+  TEST_SIMPLE_AST_TYPE("()", &t_void);
 
-  TEST_SIMPLE_AST_TYPE("(1 + 2) * 8", t_int);
-  TEST_SIMPLE_AST_TYPE("1 + 2.0 * 8", t_num);
-  TEST_SIMPLE_AST_TYPE("1 + 2.0", t_num);
-  TEST_SIMPLE_AST_TYPE("2.0 - 1", t_num);
-  TEST_SIMPLE_AST_TYPE("1 == 2.0", t_bool);
-  TEST_SIMPLE_AST_TYPE("1 != 2.0", t_bool);
-  TEST_SIMPLE_AST_TYPE("1 < 2.0", t_bool);
-  TEST_SIMPLE_AST_TYPE("1 > 2.0", t_bool);
-  TEST_SIMPLE_AST_TYPE("1 >= 2.0", t_bool);
-  TEST_SIMPLE_AST_TYPE("1 <= 2.0", t_bool);
+  TEST_SIMPLE_AST_TYPE("(1 + 2) * 8", &t_int);
+  TEST_SIMPLE_AST_TYPE("1 + 2.0 * 8", &t_num);
+  TEST_SIMPLE_AST_TYPE("1 + 2.0", &t_num);
+  TEST_SIMPLE_AST_TYPE("2.0 - 1", &t_num);
+  TEST_SIMPLE_AST_TYPE("1 == 2.0", &t_bool);
+  TEST_SIMPLE_AST_TYPE("1 != 2.0", &t_bool);
+  TEST_SIMPLE_AST_TYPE("1 < 2.0", &t_bool);
+  TEST_SIMPLE_AST_TYPE("1 > 2.0", &t_bool);
+  TEST_SIMPLE_AST_TYPE("1 >= 2.0", &t_bool);
+  TEST_SIMPLE_AST_TYPE("1 <= 2.0", &t_bool);
 
-  TEST_SIMPLE_AST_TYPE("let x = 1", t_int);
-  TEST_SIMPLE_AST_TYPE("let x = 1 in x + 2.", t_num);
+  TEST_SIMPLE_AST_TYPE("let x = 1", &t_int);
+  TEST_SIMPLE_AST_TYPE("let x = 1 in x + 2.", &t_num);
 
   Type opt = {T_VARIANT, {}};
   TEST_SIMPLE_AST_TYPE("type Option t =\n"
                        "  | Some of t\n"
                        "  | None\n"
                        "  ;\n",
-                       opt);
+                       &opt);
 
-#define TLIST(t) ((Type){T_CONS, {.T_CONS = {"List", &t, 1}}})
-  TEST_SIMPLE_AST_TYPE("[1,2,3]", TLIST(t_int));
+#define TLIST(t) ((Type){T_CONS, {.T_CONS = {"List", (Type *[]){t}, 1}}})
+
+  TEST_SIMPLE_AST_TYPE("[1,2,3]", &(TLIST(&t_int)));
 
   TEST_TYPECHECK_FAIL("[1,2.0,3]");
 
 #define TTUPLE(num, ...)                                                       \
-  ((Type){T_CONS, {.T_CONS = {"Tuple", (Type[]){__VA_ARGS__}, num}}})
+  ((Type){T_CONS, {.T_CONS = {"Tuple", (Type *[]){__VA_ARGS__}, num}}})
 
-  TEST_SIMPLE_AST_TYPE("(1,2,3.9)", TTUPLE(3, t_int, t_int, t_num, ));
+  TEST_SIMPLE_AST_TYPE("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
 
   TEST_SIMPLE_AST_TYPE("let f = fn x -> (1 + 2) * 8 - x;",
-                       MAKE_FN_TYPE_2(&t_int, &t_int));
+                       &MAKE_FN_TYPE_2(&t_int, &t_int));
 
   TEST_SIMPLE_AST_TYPE("let f = fn (x, y) -> (1 + 2) * 8 - x;",
-                       MAKE_FN_TYPE_2(&t_int, &t_int));
+                       &MAKE_FN_TYPE_2(&t_int, &t_int));
 
   return !status;
 }

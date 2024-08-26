@@ -47,7 +47,7 @@ test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(BUILD_DIR)/test_parse
 
 test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
-	$(CC) $(CFLAGS) test_typecheck.c $(LANG_SRCS) -o $(BUILD_DIR)/test_typecheck $(LDFLAGS)
+	$(CC) $(CFLAGS) test_typecheck.c $(LANG_SRCS) $(LANG_SRC_DIR)/types/*.c -o $(BUILD_DIR)/test_typecheck $(LDFLAGS)
 	$(BUILD_DIR)/test_typecheck
 
 clean:

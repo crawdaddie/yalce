@@ -41,7 +41,7 @@ LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 # Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
-.PHONY: all clean audio_test engine
+.PHONY: all clean engine test wasm serve_docs
 
 all: $(BUILD_DIR)/audio_lang
 
@@ -52,7 +52,6 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(BUILD_DIR)/backend_llvm
 	mkdir -p $(BUILD_DIR)/types
-	mkdir -p $(BUILD_DIR)/tests
 
 # Build lex and yacc output files
 $(YACC_OUTPUT): $(YACC_FILE)
@@ -74,14 +73,11 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 
-.PHONY: test
 test:
 	$(MAKE) -C lang_test
 
-.PHONY: wasm
 wasm:
 	./build_wasm.sh
 
-.PHONY: serve_docs
 serve_docs:
 	python -m http.server -d docs
