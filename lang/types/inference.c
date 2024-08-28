@@ -36,7 +36,21 @@ Type *next_tvar() {
     t;                                                                         \
   })
 
-void unify(Type *l, Type *r) {}
+void unify(Type *l, Type *r) {
+  printf("unify: ");
+  print_type(l);
+  printf(" == ");
+  print_type(r);
+
+  if (l->kind == T_VAR && r->num_implements > 0) {
+    l->implements = r->implements;
+    l->num_implements = r->num_implements;
+  }
+
+  if (l->kind == T_VAR && r->kind != T_VAR) {
+    *l = *r;
+  }
+}
 
 static char *op_to_name[] = {
     [TOKEN_PLUS] = "+",      [TOKEN_MINUS] = "-",      [TOKEN_STAR] = "*",
@@ -114,6 +128,13 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
   case AST_IDENTIFIER: {
     return env_extend(env, binding->data.AST_IDENTIFIER.value, type);
   }
+  case AST_TUPLE: {
+    for (int i = 0; i < binding->data.AST_LIST.len; i++) {
+      env = add_binding_to_env(env, binding->data.AST_LIST.items + i,
+                               type->data.T_CONS.args[i]);
+    }
+    return env;
+  }
   }
   return env;
 }
@@ -146,7 +167,69 @@ static TypeEnv *set_param_binding(Ast *ast, TypeEnv **env) {
   }
 }
 
+static Type *binding_type(Ast *ast) {
+  switch (ast->tag) {
+  case AST_IDENTIFIER: {
+    return next_tvar();
+  }
+  case AST_TUPLE: {
+    int len = ast->data.AST_LIST.len;
+    Type **tuple_mems = malloc(sizeof(Type *) * len);
+    for (int i = 0; i < len; i++) {
+      tuple_mems[i] = binding_type(ast->data.AST_LIST.items + i);
+    }
+    Type *tup = empty_type();
+    *tup = (Type){
+        T_CONS,
+        {.T_CONS = {.name = "Tuple", .args = tuple_mems, .num_args = len}}};
+    return tup;
+  }
+
+  default: {
+    fprintf(stderr, "Typecheck err: lambda arg type %d unsupported\n",
+            ast->tag);
+    return NULL;
+  }
+  }
+}
+
+static Type *infer_lambda(Ast *ast, TypeEnv **env) {
+  int len = ast->data.AST_LAMBDA.len;
+  TypeEnv *fn_scope_env = *env;
+
+  Type *fn = NULL;
+  if (len == 1 && ast->data.AST_LAMBDA.params->tag == AST_VOID) {
+    fn = &t_void;
+  } else {
+    for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+      Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+      Type *ptype = binding_type(param_ast);
+      fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
+      fn = fn == NULL ? ptype : type_fn(fn, ptype);
+    }
+  }
+
+  if (fn == NULL) {
+    return NULL;
+  }
+
+  Type *return_type = next_tvar();
+  fn = type_fn(fn, return_type);
+  if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
+    fn_scope_env =
+        env_extend(fn_scope_env, ast->data.AST_LAMBDA.fn_name.chars, fn);
+  }
+
+  Type *body_type = infer(ast->data.AST_LAMBDA.body, &fn_scope_env);
+
+  unify(return_type, body_type);
+
+  print_type(fn);
+  print_type(body_type);
+  return fn;
+}
 Type *infer(Ast *ast, TypeEnv **env) {
+
   Type *type = NULL;
   switch (ast->tag) {
   case AST_BODY: {
@@ -264,6 +347,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
   case AST_LAMBDA: {
+    type = infer_lambda(ast, env);
     break;
   }
   }

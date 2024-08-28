@@ -25,10 +25,23 @@ static char *type_name_mapping[] = {
     [T_NUM] = TYPE_NAME_DOUBLE, [T_BOOL] = TYPE_NAME_BOOL,
     [T_VOID] = TYPE_NAME_VOID,  [T_CHAR] = TYPE_NAME_CHAR,
 };
-
+char *tc_list_to_string(Type *t, char *buffer) {
+  if (t->num_implements > 0 && t->implements != NULL) {
+    buffer = strncat(buffer, " [", 2);
+    for (int i = 0; i < t->num_implements; i++) {
+      buffer = strncat(buffer, t->implements[i]->name,
+                       strlen(t->implements[i]->name));
+      if (i != t->num_implements - 1) {
+        buffer = strncat(buffer, ", ", 2);
+      }
+    }
+    buffer = strncat(buffer, "]", 1);
+  }
+  return buffer;
+}
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
-    return "null";
+    buffer = strncat(buffer, "null", 4);
   }
   switch (t->kind) {
   case T_INT:
@@ -45,7 +58,7 @@ char *type_to_string(Type *t, char *buffer) {
 
     if (strcmp(t->data.T_CONS.name, "List") == 0) {
       buffer = type_to_string(t->data.T_CONS.args[0], buffer);
-      buffer = strcat(buffer, "[]");
+      buffer = strncat(buffer, "[]", 2);
       break;
     }
 
@@ -53,7 +66,7 @@ char *type_to_string(Type *t, char *buffer) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
         if (i < t->data.T_CONS.num_args - 1) {
-          buffer = strcat(buffer, " * ");
+          buffer = strncat(buffer, " * ", 3);
         }
       }
       break;
@@ -63,23 +76,36 @@ char *type_to_string(Type *t, char *buffer) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
         if (i < t->data.T_CONS.num_args - 1) {
-          buffer = strcat(buffer, " | ");
+          buffer = strncat(buffer, " | ", 3);
         }
       }
       break;
     }
 
-    buffer = strcat(buffer, t->data.T_CONS.name);
+    buffer = strncat(buffer, t->data.T_CONS.name, strlen(t->data.T_CONS.name));
     if (t->data.T_CONS.args > 0) {
-      buffer = strcat(buffer, " of ");
+      buffer = strncat(buffer, " of ", 4);
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
       }
     }
+    buffer = tc_list_to_string(t, buffer);
     break;
   }
   case T_VAR: {
-    buffer = strcat(buffer, t->data.T_VAR);
+    buffer = strncat(buffer, t->data.T_VAR, strlen(t->data.T_VAR));
+    buffer = tc_list_to_string(t, buffer);
+    break;
+  }
+  case T_FN: {
+    Type *fn = t;
+    while (fn->kind == T_FN) {
+      buffer = type_to_string(fn->data.T_FN.from, buffer);
+      buffer = strncat(buffer, " -> ", 4);
+      fn = fn->data.T_FN.to;
+    }
+    // If it's not a function type, it's the return type itself
+    buffer = type_to_string(fn, buffer);
     break;
   }
   }
@@ -91,9 +117,8 @@ void print_type(Type *t) {
   if (!t) {
     return;
   }
-  char *buf = malloc(sizeof(char) * 100);
+  char buf[200] = {};
   printf("%s\n", type_to_string(t, buf));
-  free(buf);
 }
 
 bool types_equal(Type *t1, Type *t2) {
@@ -119,7 +144,18 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   case T_VAR: {
-    return strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
+
+    bool eq = strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
+    if (t2->num_implements > 0) {
+
+      if (t1->num_implements == 0 || t1->implements == NULL) {
+        eq &= false;
+      }
+      for (int i = 0; i < t2->num_implements; i++) {
+        eq &= implements(t1, t2->implements[i]);
+      }
+    }
+    return eq;
   }
 
   case T_CONS: {
@@ -300,4 +336,12 @@ void print_type_env(TypeEnv *env) {
   if (env->next) {
     print_type_env(env->next);
   }
+}
+
+Type *type_fn(Type *from, Type *to) {
+  Type *fn = empty_type();
+  fn->kind = T_FN;
+  fn->data.T_FN.from = from;
+  fn->data.T_FN.to = to;
+  return fn;
 }

@@ -3,4 +3,4 @@
 #include "../parse.h"
 #include "type.h"
 Type *type_declaration(Ast *ast, TypeEnv **env);
-#endifh
+#endif

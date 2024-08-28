@@ -175,6 +175,15 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   return lambda;
 }
 
+Ast *ast_void_lambda(Ast *body) {
+  Ast *lambda = Ast_new(AST_LAMBDA);
+  lambda->data.AST_LAMBDA.params = ast_void();
+  lambda->data.AST_LAMBDA.len = 1;
+  lambda->data.AST_LAMBDA.defaults = NULL;
+  lambda->data.AST_LAMBDA.body = body;
+  return lambda;
+}
+
 Ast *ast_arg_list(Ast *arg_id, Ast *def) {
   Ast *lambda = Ast_new(AST_LAMBDA);
 

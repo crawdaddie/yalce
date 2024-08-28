@@ -1,5 +1,6 @@
 #ifndef _LANG_TYPE_TYPECLASS_H
 #define _LANG_TYPE_TYPECLASS_H
+#include <stdbool.h>
 #include <stddef.h>
 
 typedef struct Type Type;
@@ -38,4 +39,5 @@ TypeClass *get_typeclass_by_name(Type *t, const char *name);
 
 Type *typeclass_method_signature(TypeClass *tc, const char *name);
 
+bool implements(Type *t, TypeClass *tc);
 #endif

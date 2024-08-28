@@ -3,25 +3,17 @@
 #include "../lang/types/type.h"
 #include "serde.h"
 #include <stdbool.h>
-
-#define MAKE_FN_TYPE_1(ret_type)                                               \
-  {                                                                            \
-    T_FN, {                                                                    \
-      .T_FN = {.from = NULL, .to = (ret_type) }                                \
-    }                                                                          \
-  }
+#include <stdlib.h>
 
 #define MAKE_FN_TYPE_2(arg_type, ret_type)                                     \
-  ((Type){                                                                     \
-      T_FN,                                                                    \
-      {.T_FN = {.from = (arg_type), .to = &(Type)MAKE_FN_TYPE_1(ret_type)}}})
+  ((Type){T_FN, {.T_FN = {.from = arg_type, .to = ret_type}}})
 
 #define MAKE_FN_TYPE_3(arg1_type, arg2_type, ret_type)                         \
   {                                                                            \
     T_FN, {                                                                    \
       .T_FN = {                                                                \
-        .from = (arg1_type),                                                   \
-        .to = &(Type)MAKE_FN_TYPE_2(arg2_type, ret_type)                       \
+        .from = &(Type)MAKE_FN_TYPE_2(arg1_type, arg2_type),                   \
+        .to = ret_type                                                         \
       }                                                                        \
     }                                                                          \
   }
@@ -36,12 +28,12 @@ int main() {
     TypeEnv *env = NULL;                                                       \
     stat &= (infer(p, &env) != NULL);                                          \
     stat &= (types_equal(p->md, t));                                           \
-    char buf[100];                                                             \
+    char buf[100] = {};                                                        \
     if (stat) {                                                                \
-      fprintf(stderr, "✅ " i " -> %s\n", type_to_string(t, buf));             \
+      fprintf(stderr, "✅ " i " => %s\n", type_to_string(t, buf));             \
     } else {                                                                   \
-      char buf2[100];                                                          \
-      fprintf(stderr, "❌ " i " -> %s (got %s)\n", type_to_string(t, buf),     \
+      char buf2[100] = {};                                                     \
+      fprintf(stderr, "❌ " i " => %s (got %s)\n", type_to_string(t, buf),     \
               type_to_string(p->md, buf2));                                    \
     }                                                                          \
     status &= stat;                                                            \
@@ -56,7 +48,7 @@ int main() {
     if (succeed == NULL) {                                                     \
       fprintf(stderr, "✅ typecheck should fail: " i "\n");                    \
     } else {                                                                   \
-      char buf2[100];                                                          \
+      char buf2[100] = {};                                                     \
       fprintf(stderr, "❌ typecheck doesn't fail" i " (got %s)\n",             \
               type_to_string(p->md, buf2));                                    \
     }                                                                          \
@@ -97,13 +89,19 @@ int main() {
                                                          .num_args = 1}}},
                                      &(Type){T_VAR, {.T_VAR = "None"}}},
                   .num_args = 2}}};
+  Type opt_func = {T_FN,
+                   {.T_FN = {
+                        &t,
+                        &opt,
+                    }}};
+
   TEST_SIMPLE_AST_TYPE("type Option t =\n"
                        "  | Some of t\n"
                        "  | None\n"
-                       "  ;\n",
-                       &opt);
+                       "  ;",
+                       &opt_func);
 
-#define TLIST(t) ((Type){T_CONS, {.T_CONS = {"List", (Type *[]){t}, 1}}})
+#define TLIST(_t) ((Type){T_CONS, {.T_CONS = {"List", (Type *[]){_t}, 1}}})
 
   TEST_SIMPLE_AST_TYPE("[1,2,3]", &(TLIST(&t_int)));
 
@@ -114,8 +112,20 @@ int main() {
 
   TEST_SIMPLE_AST_TYPE("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
 
+  Type t_arithmetic = {T_VAR,
+                       {.T_VAR = "t0"},
+                       .implements =
+                           (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},
+                       .num_implements = 1};
+
   TEST_SIMPLE_AST_TYPE("let f = fn x -> (1 + 2) * 8 - x;",
-                       &MAKE_FN_TYPE_2(&t_int, &t_int));
+                       &MAKE_FN_TYPE_2(&t_arithmetic, &t_arithmetic));
+
+  t = (Type){T_VAR, {.T_VAR = "t0"}};
+  TEST_SIMPLE_AST_TYPE("let f = fn x -> x;", &MAKE_FN_TYPE_2(&t, &t));
+
+  TEST_SIMPLE_AST_TYPE("let f = fn () -> (1 + 2) * 8;",
+                       &MAKE_FN_TYPE_2(&t_void, &t_int));
 
   TEST_SIMPLE_AST_TYPE("let f = fn (x, y) -> (1 + 2) * 8 - x;",
                        &MAKE_FN_TYPE_2(&t_int, &t_int));
