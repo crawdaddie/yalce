@@ -52,15 +52,15 @@ int main() {
     Ast *p = parse_input(i, NULL);                                             \
     TypeEnv *env = NULL;                                                       \
     reset_type_var_counter();                                                  \
-    bool fails = infer(p, &env);                                               \
-    if (fails) {                                                               \
+    Type *succeed = infer(p, &env);                                            \
+    if (succeed == NULL) {                                                     \
       fprintf(stderr, "✅ typecheck should fail: " i "\n");                    \
     } else {                                                                   \
       char buf2[100];                                                          \
       fprintf(stderr, "❌ typecheck doesn't fail" i " (got %s)\n",             \
               type_to_string(p->md, buf2));                                    \
     }                                                                          \
-    status &= fails;                                                           \
+    status &= (succeed == NULL);                                               \
   })
   TEST_SIMPLE_AST_TYPE("1", &t_int);
   // TODO: u64 parse not yet implemented

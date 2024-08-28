@@ -1,5 +1,6 @@
 #include "typeclass.h"
 #include "types/type.h"
+#include <stdio.h>
 #include <string.h>
 
 #define MAKE_FN_TYPE_2(arg_type, ret_type)                                     \
@@ -25,68 +26,68 @@
 // TOKEN_NOT_EQUAL,
 
 #define DERIVE_ARITHMETIC_TYPECLASS(type_name, _rank)                          \
-  static Type type_name##_arithmetic_fn_sig =                                  \
+  Type type_name##_arithmetic_fn_sig =                                         \
       MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_##type_name);             \
   TypeClass TCArithmetic_##type_name = {                                       \
       "arithmetic", .num_methods = 5, .rank = _rank,                           \
-      .methods = {                                                             \
+      .methods = (Method[]){                                                   \
           {                                                                    \
               "+",                                                             \
-              &type_name##_arithmetic_fn_sig,                                  \
+              .signature = &type_name##_arithmetic_fn_sig,                     \
           },                                                                   \
           {                                                                    \
               "-",                                                             \
-              &type_name##_arithmetic_fn_sig,                                  \
+              .signature = &type_name##_arithmetic_fn_sig,                     \
           },                                                                   \
           {                                                                    \
               "*",                                                             \
-              &type_name##_arithmetic_fn_sig,                                  \
+              .signature = &type_name##_arithmetic_fn_sig,                     \
           },                                                                   \
           {                                                                    \
               "/",                                                             \
-              &type_name##_arithmetic_fn_sig,                                  \
+              .signature = &type_name##_arithmetic_fn_sig,                     \
           },                                                                   \
           {                                                                    \
               "%",                                                             \
-              &type_name##_arithmetic_fn_sig,                                  \
+              .signature = &type_name##_arithmetic_fn_sig,                     \
           },                                                                   \
       }}
 
 #define DERIVE_ORD_TYPECLASS(type_name, _rank)                                 \
-  static Type type_name##_ord_fn_sig =                                         \
+  Type type_name##_ord_fn_sig =                                                \
       MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_bool);                    \
   TypeClass TCOrd_##type_name = {"ord", .num_methods = 4, .rank = _rank,       \
-                                 .methods = {                                  \
+                                 .methods = (Method[]){                        \
                                      {                                         \
                                          ">",                                  \
-                                         &type_name##_ord_fn_sig,              \
+                                         .signature = &type_name##_ord_fn_sig, \
                                      },                                        \
                                      {                                         \
                                          "<",                                  \
-                                         &type_name##_ord_fn_sig,              \
+                                         .signature = &type_name##_ord_fn_sig, \
                                      },                                        \
                                      {                                         \
                                          ">=",                                 \
-                                         &type_name##_ord_fn_sig,              \
+                                         .signature = &type_name##_ord_fn_sig, \
                                      },                                        \
                                      {                                         \
                                          "<=",                                 \
-                                         &type_name##_ord_fn_sig,              \
+                                         .signature = &type_name##_ord_fn_sig, \
                                      },                                        \
                                  }}
 
 #define DERIVE_EQ_TYPECLASS(type_name, _rank)                                  \
-  static Type type_name##_eq_fn_sig =                                          \
+  Type type_name##_eq_fn_sig =                                                 \
       MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_bool);                    \
-  TypeClass TCeq_##type_name = {"eq", .num_methods = 4, .rank = _rank,         \
-                                .methods = {                                   \
+  TypeClass TCEq_##type_name = {"eq", .num_methods = 2, .rank = _rank,         \
+                                .methods = (Method[]){                         \
                                     {                                          \
                                         "==",                                  \
-                                        &type_name##_eq_fn_sig,                \
+                                        .signature = &type_name##_eq_fn_sig,   \
                                     },                                         \
                                     {                                          \
                                         "!=",                                  \
-                                        &type_name##_eq_fn_sig,                \
+                                        .signature = &type_name##_eq_fn_sig,   \
                                     },                                         \
                                 }}
 
@@ -104,6 +105,11 @@ DERIVE_EQ_TYPECLASS(num, 1.0);
 
 int find_typeclass_for_method(Type *t, const char *method_name, TypeClass *itc,
                               Type *method_signature) {
+
+  if (t->kind == T_INT) {
+  } else if (t->kind == T_UINT64) {
+  } else if (t->kind == T_NUM) {
+  }
   for (int i = 0; i < t->num_implements; i++) {
     TypeClass *tc = t->implements[i];
     for (int j = 0; j < tc->num_methods; j++) {
@@ -117,6 +123,7 @@ int find_typeclass_for_method(Type *t, const char *method_name, TypeClass *itc,
   }
   return 0;
 }
+
 bool implements(Type *t, TypeClass *tc) {
   for (int i = 0; i < t->num_implements; i++) {
     if (strcmp(t->implements[i]->name, tc->name) == 0) {
@@ -124,4 +131,39 @@ bool implements(Type *t, TypeClass *tc) {
     }
   }
   return false;
+}
+
+TypeClass *get_typeclass(Type *t, TypeClass *tc) {
+  for (int i = 0; i < t->num_implements; i++) {
+    if (strcmp(t->implements[i]->name, tc->name) == 0) {
+      return t->implements[i];
+    }
+  }
+  return NULL;
+}
+
+TypeClass *get_typeclass_by_name(Type *t, const char *name) {
+  for (int i = 0; i < t->num_implements; i++) {
+    if (strcmp(t->implements[i]->name, name) == 0) {
+      return t->implements[i];
+    }
+  }
+  return NULL;
+}
+Type *typeclass_method_signature(TypeClass *tc, const char *name) {
+  for (int i = 0; i < tc->num_methods; i++) {
+    if (strcmp(name, tc->methods[i].name) == 0) {
+      return tc->methods[i].signature;
+    }
+  }
+  return NULL;
+}
+
+void print_type_class(TypeClass *tc) {
+  printf("TypeClass %s:", tc->name);
+  for (int i = 0; i < tc->num_methods; i++) {
+    char buffer[200];
+    printf("\t%s : %s\n", tc->methods[i].name,
+           type_to_string(tc->methods[i].signature, buffer));
+  }
 }

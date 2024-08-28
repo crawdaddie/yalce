@@ -149,3 +149,120 @@ void *talloc(size_t size) {
   }
   return mem;
 }
+
+Type *fn_return_type(Type *fn) {
+  if (fn->kind != T_FN) {
+    // If it's not a function type, it's the return type itself
+    return fn;
+  }
+  // Recursively check the 'to' field
+  return fn_return_type(fn->data.T_FN.to);
+}
+
+bool is_generic(Type *t) {
+  switch (t->kind) {
+  case T_VAR: {
+    return true;
+  }
+  case T_CONS: {
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      if (is_generic(t->data.T_CONS.args + i)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  case T_FN: {
+    if (!is_generic(t->data.T_FN.from)) {
+      return is_generic(t->data.T_FN.to);
+    }
+    return false;
+  }
+  default:
+    return false;
+  }
+}
+
+TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
+  TypeEnv *new_env = malloc(sizeof(TypeEnv));
+  new_env->name = name;
+  new_env->type = type;
+  new_env->next = env;
+  return new_env;
+}
+
+Type *env_lookup(TypeEnv *env, const char *name) {
+  while (env) {
+    if (strcmp(env->name, name) == 0) {
+      return env->type;
+    }
+    /*
+    if (env->type->kind == T_VARIANT) {
+      Type *variant = env->type;
+      for (int i = 0; i < variant->data.T_VARIANT.num_args; i++) {
+        Type *variant_member = variant->data.T_VARIANT.args[i];
+        const char *mem_name;
+        if (variant_member->kind == T_CONS) {
+          mem_name = variant_member->data.T_CONS.name;
+        } else if (variant_member->kind == T_VAR) {
+          mem_name = variant_member->data.T_VAR;
+        } else {
+          continue;
+        }
+
+        if (strcmp(mem_name, name) == 0) {
+          return variant_member;
+        }
+      }
+    }
+    */
+    env = env->next;
+  }
+  return NULL;
+}
+Type *get_builtin_type(const char *id_chars) {
+
+  if (strcmp(id_chars, TYPE_NAME_INT) == 0) {
+    return &t_int;
+  } else if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
+    return &t_num;
+  } else if (strcmp(id_chars, TYPE_NAME_UINT64) == 0) {
+    return &t_uint64;
+  } else if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
+    return &t_bool;
+  } else if (strcmp(id_chars, TYPE_NAME_STRING) == 0) {
+    return &t_string;
+  } else if (strcmp(id_chars, TYPE_NAME_PTR) == 0) {
+    return &t_ptr;
+  }
+  fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
+
+  return NULL;
+}
+
+Type *find_type_in_env(TypeEnv *env, const char *name) {
+  Type *_type = env_lookup(env, name);
+  if (!_type) {
+    _type = get_builtin_type(name);
+    if (!_type) {
+      return NULL;
+    }
+  }
+  return _type;
+}
+
+void free_type_env(TypeEnv *env) {
+  // if (env->next) {
+  //   free_type_env(env->next);
+  //   free(env);
+  // }
+}
+
+void print_type_env(TypeEnv *env) {
+  printf("%s : ", env->name);
+  print_type(env->type);
+  if (env->next) {
+    print_type_env(env->next);
+  }
+}

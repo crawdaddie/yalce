@@ -15,7 +15,7 @@ typedef struct TypeClass {
   const char *name;
   size_t num_methods;
   double rank;
-  Method methods[];
+  Method *methods;
 } TypeClass;
 
 extern TypeClass TCArithmetic_int;
@@ -32,4 +32,10 @@ extern TypeClass TCEq_num;
 
 int find_typeclass_for_method(Type *t, const char *method_name, TypeClass *tc,
                               Type *method_signature);
+
+TypeClass *get_typeclass(Type *t, TypeClass *tc);
+TypeClass *get_typeclass_by_name(Type *t, const char *name);
+
+Type *typeclass_method_signature(TypeClass *tc, const char *name);
+
 #endif

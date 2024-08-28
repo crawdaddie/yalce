@@ -83,10 +83,19 @@ typedef struct TypeEnv {
   struct TypeEnv *next;
 } TypeEnv;
 
+TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
+Type *env_lookup(TypeEnv *env, const char *name);
+void free_type_env(TypeEnv *env);
+void print_type_env(TypeEnv *env);
+Type *find_type_in_env(TypeEnv *env, const char *name);
+
 char *type_to_string(Type *t, char *buffer);
 
 void print_type(Type *t);
 bool types_equal(Type *l, Type *r);
 
+Type *fn_return_type(Type *);
+
 void *talloc(size_t size);
+bool is_generic(Type *t);
 #endif
