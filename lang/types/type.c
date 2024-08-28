@@ -58,6 +58,24 @@ char *type_to_string(Type *t, char *buffer) {
       }
       break;
     }
+
+    if (strcmp(t->data.T_CONS.name, "Variant") == 0) {
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        buffer = type_to_string(t->data.T_CONS.args[i], buffer);
+        if (i < t->data.T_CONS.num_args - 1) {
+          buffer = strcat(buffer, " | ");
+        }
+      }
+      break;
+    }
+
+    buffer = strcat(buffer, t->data.T_CONS.name);
+    if (t->data.T_CONS.args > 0) {
+      buffer = strcat(buffer, " of ");
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        buffer = type_to_string(t->data.T_CONS.args[i], buffer);
+      }
+    }
     break;
   }
   case T_VAR: {
@@ -150,6 +168,23 @@ void *talloc(size_t size) {
   return mem;
 }
 
+Type *empty_type() {
+  Type *mem = malloc(sizeof(Type));
+  if (!mem) {
+    fprintf(stderr, "Error allocating memory for type");
+  }
+  return mem;
+}
+
+Type *tvar(const char *name) {
+  Type *mem = malloc(sizeof(Type));
+  if (!mem) {
+    fprintf(stderr, "Error allocating memory for type");
+  }
+  *mem = (Type){T_VAR, {.T_VAR = strdup(name)}};
+  return mem;
+}
+
 Type *fn_return_type(Type *fn) {
   if (fn->kind != T_FN) {
     // If it's not a function type, it's the return type itself
@@ -166,7 +201,7 @@ bool is_generic(Type *t) {
   }
   case T_CONS: {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      if (is_generic(t->data.T_CONS.args + i)) {
+      if (is_generic(t->data.T_CONS.args[i])) {
         return true;
       }
     }
@@ -236,7 +271,7 @@ Type *get_builtin_type(const char *id_chars) {
   } else if (strcmp(id_chars, TYPE_NAME_PTR) == 0) {
     return &t_ptr;
   }
-  fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
+  // fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
 
   return NULL;
 }

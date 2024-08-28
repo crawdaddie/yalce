@@ -69,9 +69,9 @@ typedef struct Type {
 
   } data;
 
+  const char *alias;
   TypeClass **implements; // Array of type classes this type implements
   int num_implements;
-  const char *alias;
   void *constructor;
   size_t constructor_size;
 } Type;
@@ -97,5 +97,7 @@ bool types_equal(Type *l, Type *r);
 Type *fn_return_type(Type *);
 
 void *talloc(size_t size);
+Type *empty_type();
+Type *tvar(const char *name);
 bool is_generic(Type *t);
 #endif

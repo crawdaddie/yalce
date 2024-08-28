@@ -87,7 +87,16 @@ int main() {
   TEST_SIMPLE_AST_TYPE("let x = 1", &t_int);
   TEST_SIMPLE_AST_TYPE("let x = 1 in x + 2.", &t_num);
 
-  Type opt = {T_VARIANT, {}};
+  Type t = {T_VAR, {.T_VAR = "t"}};
+  Type opt = {
+      T_CONS,
+      {.T_CONS = {.name = "Variant",
+                  .args = (Type *[]){&(Type){T_CONS,
+                                             {.T_CONS = {.name = "Some",
+                                                         .args = &(Type *){&t},
+                                                         .num_args = 1}}},
+                                     &(Type){T_VAR, {.T_VAR = "None"}}},
+                  .num_args = 2}}};
   TEST_SIMPLE_AST_TYPE("type Option t =\n"
                        "  | Some of t\n"
                        "  | None\n"

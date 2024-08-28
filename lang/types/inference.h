@@ -4,4 +4,5 @@
 #include "types/type.h"
 void reset_type_var_counter();
 Type *infer(Ast *ast, TypeEnv **env);
+Type *next_tvar();
 #endif
