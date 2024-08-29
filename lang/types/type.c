@@ -204,6 +204,8 @@ void *talloc(size_t size) {
   return mem;
 }
 
+void tfree(void *mem) { free(mem); }
+
 Type *empty_type() {
   Type *mem = malloc(sizeof(Type));
   if (!mem) {

@@ -37,17 +37,23 @@ Type *next_tvar() {
   })
 
 void unify(Type *l, Type *r) {
-  printf("unify: ");
-  print_type(l);
-  printf(" == ");
-  print_type(r);
-
-  if (l->kind == T_VAR && r->num_implements > 0) {
-    l->implements = r->implements;
-    l->num_implements = r->num_implements;
-  }
+  // printf("unify: ");
+  // print_type(l);
+  // printf(" == ");
+  // print_type(r);
 
   if (l->kind == T_VAR && r->kind != T_VAR) {
+    *l = *r;
+  }
+  if (l->kind == T_VAR && r->num_implements > 0) {
+    // l->implements = r->implements;
+    // l->num_implements = r->num_implements;
+    *l = *r;
+  }
+
+  if (l->kind == T_VAR && r->kind == T_VAR) {
+    // l->implements = r->implements;
+    // l->num_implements = r->num_implements;
     *l = *r;
   }
 }
@@ -73,53 +79,27 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
     return lt;
   }
 
-  // builtin-binops
-  TypeClass *tcl = NULL;
-  TypeClass *tcr = NULL;
+  Type *result_type = NULL;
+
+  if ((!is_generic(lt)) && (!is_generic(rt))) {
+    return resolve_binop_typeclass(lt, rt, op);
+  }
+
+  if (is_generic(lt) && (!is_generic(rt))) {
+    result_type = lt;
+  } else if (is_generic(rt) && (!is_generic(lt))) {
+    result_type = rt;
+  }
+
   if (op >= TOKEN_PLUS && op <= TOKEN_MODULO) {
-    // arithmetic typeclass
-    tcl = get_typeclass_by_name(lt, "arithmetic");
-    tcr = get_typeclass_by_name(rt, "arithmetic");
+    add_typeclass(result_type, derive_arithmetic_for_type(result_type));
+  } else if (op >= TOKEN_LT && op <= TOKEN_GTE) {
+    add_typeclass(result_type, derive_ord_for_type(result_type));
+  } else if (op >= TOKEN_EQUALITY && op <= TOKEN_NOT_EQUAL) {
+    add_typeclass(result_type, derive_eq_for_type(result_type));
   }
 
-  if (op >= TOKEN_LT && op <= TOKEN_GTE) {
-    // ord typeclass
-    tcl = get_typeclass_by_name(lt, "ord");
-    tcr = get_typeclass_by_name(rt, "ord");
-  }
-
-  if (op >= TOKEN_EQUALITY && op <= TOKEN_NOT_EQUAL) {
-    // eq typeclass
-    tcl = get_typeclass_by_name(lt, "eq");
-    tcr = get_typeclass_by_name(rt, "eq");
-  }
-
-  if (tcl && tcr) {
-    if (tcl->rank >= tcr->rank) {
-      Type *method = typeclass_method_signature(tcl, op_to_name[op]);
-      return fn_return_type(method);
-    } else {
-      Type *method = typeclass_method_signature(tcr, op_to_name[op]);
-      return fn_return_type(method);
-    }
-  }
-
-  if (!tcl && tcr && is_generic(lt)) {
-    // unify(lt, rt);
-    Type *method = typeclass_method_signature(tcr, op_to_name[op]);
-    return fn_return_type(method);
-  }
-
-  if (!tcr && tcl && is_generic(rt)) {
-    // unify(rt, lt);
-    Type *method = typeclass_method_signature(tcl, op_to_name[op]);
-    return fn_return_type(method);
-  }
-  if (!tcl && !tcr) {
-    // TODO: implement if neither required typeclass exists
-  }
-
-  return NULL;
+  return result_type;
 }
 
 static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
@@ -222,10 +202,9 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   Type *body_type = infer(ast->data.AST_LAMBDA.body, &fn_scope_env);
 
+  // if (!types_equal(fn->data.T_FN.from, body_type)) {
+  // }
   unify(return_type, body_type);
-
-  print_type(fn);
-  print_type(body_type);
   return fn;
 }
 Type *infer(Ast *ast, TypeEnv **env) {

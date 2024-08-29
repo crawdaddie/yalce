@@ -1,6 +1,5 @@
 #include "types/type.h"
 #include "backend_llvm/codegen_types.h"
-#include "types/util.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -378,7 +377,7 @@ void _unify(Type *t1, Type *t2, TypeEnv **env) {
     if (t1->kind == T_CONS && variant_contains(t2, t1->data.T_CONS.name)) {
       return;
     }
-  } 
+  }
 
   if (t1->alias) {
     printf("[%s]", t1->alias);

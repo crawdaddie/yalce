@@ -1,5 +1,6 @@
 #ifndef _LANG_TYPE_TYPECLASS_H
 #define _LANG_TYPE_TYPECLASS_H
+#include "parse.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -40,4 +41,12 @@ TypeClass *get_typeclass_by_name(Type *t, const char *name);
 Type *typeclass_method_signature(TypeClass *tc, const char *name);
 
 bool implements(Type *t, TypeClass *tc);
+
+TypeClass *derive_eq_for_type(Type *t);
+TypeClass *derive_arithmetic_for_type(Type *t);
+TypeClass *derive_ord_for_type(Type *t);
+
+int add_typeclass(Type *t, TypeClass *tc);
+
+Type *resolve_binop_typeclass(Type *l, Type *r, token_type op);
 #endif

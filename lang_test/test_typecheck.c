@@ -127,8 +127,10 @@ int main() {
   TEST_SIMPLE_AST_TYPE("let f = fn () -> (1 + 2) * 8;",
                        &MAKE_FN_TYPE_2(&t_void, &t_int));
 
-  TEST_SIMPLE_AST_TYPE("let f = fn (x, y) -> (1 + 2) * 8 - x;",
-                       &MAKE_FN_TYPE_2(&t_int, &t_int));
+  Type t1 = {T_VAR, {.T_VAR = "t1"}};
+  TEST_SIMPLE_AST_TYPE(
+      "let f = fn (x, y) -> (1 + 2) * 8 - x;",
+      &MAKE_FN_TYPE_2(&TTUPLE(2, &t_arithmetic, &t1), &t_arithmetic));
 
   return !status;
 }
