@@ -54,6 +54,23 @@ int main() {
     }                                                                          \
     status &= (succeed == NULL);                                               \
   })
+#define TLIST(_t) ((Type){T_CONS, {.T_CONS = {"List", (Type *[]){_t}, 1}}})
+
+#define TTUPLE(num, ...)                                                       \
+  ((Type){T_CONS, {.T_CONS = {"Tuple", (Type *[]){__VA_ARGS__}, num}}})
+
+#define arithmetic_var(n)                                                      \
+  (Type){T_VAR,                                                                \
+         {.T_VAR = n},                                                         \
+         .implements = (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},    \
+         .num_implements = 1}
+
+#define tvar(n)                                                                \
+  (Type){                                                                      \
+      T_VAR,                                                                   \
+      {.T_VAR = n},                                                            \
+  }
+
   TEST_SIMPLE_AST_TYPE("1", &t_int);
   // TODO: u64 parse not yet implemented
   // TEST_SIMPLE_AST_TYPE("1u64", t_uint64);
@@ -79,58 +96,79 @@ int main() {
   TEST_SIMPLE_AST_TYPE("let x = 1", &t_int);
   TEST_SIMPLE_AST_TYPE("let x = 1 in x + 2.", &t_num);
 
-  Type t = {T_VAR, {.T_VAR = "t"}};
-  Type opt = {
-      T_CONS,
-      {.T_CONS = {.name = "Variant",
-                  .args = (Type *[]){&(Type){T_CONS,
-                                             {.T_CONS = {.name = "Some",
-                                                         .args = &(Type *){&t},
-                                                         .num_args = 1}}},
-                                     &(Type){T_VAR, {.T_VAR = "None"}}},
-                  .num_args = 2}}};
-  Type opt_func = {T_FN,
-                   {.T_FN = {
-                        &t,
-                        &opt,
-                    }}};
+  ({
+    Type t = {T_VAR, {.T_VAR = "t"}};
+    Type opt = {
+        T_CONS,
+        {.T_CONS = {.name = "Variant",
+                    .args =
+                        (Type *[]){&(Type){T_CONS,
+                                           {.T_CONS = {.name = "Some",
+                                                       .args = &(Type *){&t},
+                                                       .num_args = 1}}},
+                                   &(Type){T_VAR, {.T_VAR = "None"}}},
+                    .num_args = 2}}};
 
-  TEST_SIMPLE_AST_TYPE("type Option t =\n"
-                       "  | Some of t\n"
-                       "  | None\n"
-                       "  ;",
-                       &opt_func);
+    Type opt_func = MAKE_FN_TYPE_2(&t, &opt);
 
-#define TLIST(_t) ((Type){T_CONS, {.T_CONS = {"List", (Type *[]){_t}, 1}}})
+    TEST_SIMPLE_AST_TYPE("type Option t =\n"
+                         "  | Some of t\n"
+                         "  | None\n"
+                         "  ;",
+                         &opt_func);
+  });
 
   TEST_SIMPLE_AST_TYPE("[1,2,3]", &(TLIST(&t_int)));
-
   TEST_TYPECHECK_FAIL("[1,2.0,3]");
-
-#define TTUPLE(num, ...)                                                       \
-  ((Type){T_CONS, {.T_CONS = {"Tuple", (Type *[]){__VA_ARGS__}, num}}})
-
   TEST_SIMPLE_AST_TYPE("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
 
-  Type t_arithmetic = {T_VAR,
-                       {.T_VAR = "t0"},
-                       .implements =
-                           (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},
-                       .num_implements = 1};
+  ({
+    Type t_arithmetic = arithmetic_var("t0");
+    TEST_SIMPLE_AST_TYPE("let f = fn x -> (1 + 2) * 8 - x;",
+                         &MAKE_FN_TYPE_2(&t_arithmetic, &t_arithmetic));
+  });
 
-  TEST_SIMPLE_AST_TYPE("let f = fn x -> (1 + 2) * 8 - x;",
-                       &MAKE_FN_TYPE_2(&t_arithmetic, &t_arithmetic));
-
-  t = (Type){T_VAR, {.T_VAR = "t0"}};
-  TEST_SIMPLE_AST_TYPE("let f = fn x -> x;", &MAKE_FN_TYPE_2(&t, &t));
+  ({
+    Type t0 = tvar("t0");
+    TEST_SIMPLE_AST_TYPE("let f = fn x -> x;", &MAKE_FN_TYPE_2(&t0, &t0));
+  });
 
   TEST_SIMPLE_AST_TYPE("let f = fn () -> (1 + 2) * 8;",
                        &MAKE_FN_TYPE_2(&t_void, &t_int));
 
-  Type t1 = {T_VAR, {.T_VAR = "t1"}};
-  TEST_SIMPLE_AST_TYPE(
-      "let f = fn (x, y) -> (1 + 2) * 8 - x;",
-      &MAKE_FN_TYPE_2(&TTUPLE(2, &t_arithmetic, &t1), &t_arithmetic));
+  ({
+    Type t_arithmetic = arithmetic_var("t0");
+    Type t1 = tvar("t1");
+    TEST_SIMPLE_AST_TYPE(
+        "let f = fn (x, y) -> (1 + 2) * 8 - x;",
+        &MAKE_FN_TYPE_2(&TTUPLE(2, &t_arithmetic, &t1), &t_arithmetic));
+  });
+
+  ({
+    Type t = {T_VAR, {.T_VAR = "t"}};
+    Type opt = {
+        T_CONS,
+        {.T_CONS = {.name = "Variant",
+                    .args =
+                        (Type *[]){&(Type){T_CONS,
+                                           {.T_CONS = {.name = "Some",
+                                                       .args = &(Type *){&t},
+                                                       .num_args = 1}}},
+                                   &(Type){T_VAR, {.T_VAR = "None"}}},
+                    .num_args = 2}}};
+
+    Type opt_func = MAKE_FN_TYPE_2(&t, &opt);
+
+    Type some_int = {
+        T_CONS,
+        {.T_CONS = {.name = "Some", .args = &(Type *){&t_int}, .num_args = 1}}};
+    TEST_SIMPLE_AST_TYPE("type Option t =\n"
+                         "  | Some of t\n"
+                         "  | None\n"
+                         "  ;\n"
+                         "let x = Some 1",
+                         &some_int);
+  });
 
   return !status;
 }

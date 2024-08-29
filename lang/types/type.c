@@ -4,16 +4,26 @@
 #include <string.h>
 
 Type t_int = {T_INT, .num_implements = 3,
-              .implements =
-                  (TypeClass *[]){&TCArithmetic_int, &TCOrd_int, &TCEq_int}};
+              .implements = (TypeClass *[]){
+                  &TCEq_int,
+                  &TCOrd_int,
+                  &TCArithmetic_int,
+              }};
 
 Type t_uint64 = {T_UINT64, .num_implements = 3,
-                 .implements = (TypeClass *[]){&TCArithmetic_uint64,
-                                               &TCOrd_uint64, &TCEq_uint64}};
+                 .implements = (TypeClass *[]){
+                     &TCEq_uint64,
+                     &TCOrd_uint64,
+                     &TCArithmetic_uint64,
+                 }};
 
 Type t_num = {T_NUM, .num_implements = 3,
-              .implements =
-                  (TypeClass *[]){&TCArithmetic_num, &TCOrd_num, &TCEq_num}};
+              .implements = (TypeClass *[]){
+                  &TCEq_num,
+                  &TCOrd_num,
+                  &TCArithmetic_num,
+              }};
+
 Type t_string;
 Type t_bool = {T_BOOL};
 Type t_void = {T_VOID};
@@ -39,6 +49,7 @@ char *tc_list_to_string(Type *t, char *buffer) {
   }
   return buffer;
 }
+
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     buffer = strncat(buffer, "null", 4);
@@ -270,12 +281,14 @@ Type *env_lookup(TypeEnv *env, const char *name) {
     if (strcmp(env->name, name) == 0) {
       return env->type;
     }
-    /*
-    if (env->type->kind == T_VARIANT) {
+    if (env->type->kind == T_CONS &&
+        strcmp(env->type->data.T_CONS.name, "Variant") == 0) {
       Type *variant = env->type;
-      for (int i = 0; i < variant->data.T_VARIANT.num_args; i++) {
-        Type *variant_member = variant->data.T_VARIANT.args[i];
+      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
+        Type *variant_member = variant->data.T_CONS.args[i];
+        print_type(variant_member);
         const char *mem_name;
+
         if (variant_member->kind == T_CONS) {
           mem_name = variant_member->data.T_CONS.name;
         } else if (variant_member->kind == T_VAR) {
@@ -289,7 +302,36 @@ Type *env_lookup(TypeEnv *env, const char *name) {
         }
       }
     }
-    */
+
+    if (env->type->kind == T_FN && env->type->data.T_FN.to->kind == T_CONS &&
+        strcmp(env->type->data.T_FN.to->data.T_CONS.name, "Variant") == 0) {
+
+      // printf("check variant fn in env\n");
+      Type *variant = env->type->data.T_FN.to;
+      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
+        Type *variant_member = variant->data.T_CONS.args[i];
+        const char *mem_name;
+
+        if (variant_member->kind == T_CONS) {
+          mem_name = variant_member->data.T_CONS.name;
+        } else if (variant_member->kind == T_VAR) {
+          mem_name = variant_member->data.T_VAR;
+        } else {
+          continue;
+        }
+
+        if (strcmp(mem_name, name) == 0) {
+          Type *to = empty_type();
+          to->kind = T_CONS;
+          to->data.T_CONS.name = strdup(mem_name);
+          to->data.T_CONS.args = talloc(sizeof(Type *));
+          to->data.T_CONS.args[0] = env->type->data.T_FN.from;
+          to->data.T_CONS.num_args = 1;
+          Type *f = type_fn(env->type->data.T_FN.from, to);
+          return f;
+        }
+      }
+    }
     env = env->next;
   }
   return NULL;
@@ -316,6 +358,7 @@ Type *get_builtin_type(const char *id_chars) {
 
 Type *find_type_in_env(TypeEnv *env, const char *name) {
   Type *_type = env_lookup(env, name);
+
   if (!_type) {
     _type = get_builtin_type(name);
     if (!_type) {
@@ -333,6 +376,9 @@ void free_type_env(TypeEnv *env) {
 }
 
 void print_type_env(TypeEnv *env) {
+  if (!env) {
+    return;
+  }
   printf("%s : ", env->name);
   print_type(env->type);
   if (env->next) {

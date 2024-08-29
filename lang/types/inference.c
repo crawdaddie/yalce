@@ -99,6 +99,13 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
     add_typeclass(result_type, derive_eq_for_type(result_type));
   }
 
+  // TODO: find typeclass rank for non-generic operand and apply to result_type
+  // as 'min rank'
+  // for example x + 1.0 -> 'x [arithmetic]
+  // the result type is at least the same rank as float
+  // if x is an int, then the result should be a float
+  // if x is something 'higher' than a float use that instead
+
   return result_type;
 }
 
@@ -207,6 +214,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
   unify(return_type, body_type);
   return fn;
 }
+
 Type *infer(Ast *ast, TypeEnv **env) {
 
   Type *type = NULL;
@@ -269,11 +277,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
       type = next_tvar();
       break;
     }
-    Type *_type = find_type_in_env(*env, ast->data.AST_IDENTIFIER.value);
-    if (!_type) {
-      return NULL;
-    }
-    type = _type;
+    type = find_type_in_env(*env, ast->data.AST_IDENTIFIER.value);
     break;
   }
   case AST_TYPE_DECL: {
@@ -327,6 +331,16 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
   case AST_LAMBDA: {
     type = infer_lambda(ast, env);
+    break;
+  }
+  case AST_APPLICATION: {
+    Type *callee = TRY_INFER(ast->data.AST_APPLICATION.function, env,
+                             "Failure could not infer type of callee ");
+    printf("application:\n");
+    print_type(callee);
+    print_ast(ast);
+    printf("-----\n");
+    type = NULL;
     break;
   }
   }
