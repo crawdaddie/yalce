@@ -126,6 +126,8 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
   return env;
 }
 
+/*
+
 static TypeEnv *set_param_binding(Ast *ast, TypeEnv **env) {
   switch (ast->tag) {
   case AST_IDENTIFIER: {
@@ -153,6 +155,7 @@ static TypeEnv *set_param_binding(Ast *ast, TypeEnv **env) {
   }
   }
 }
+*/
 
 static Type *binding_type(Ast *ast) {
   switch (ast->tag) {
@@ -260,6 +263,24 @@ Type *generic_cons(Type *generic_cons, int len, Ast *args, TypeEnv **env) {
 Type *infer_match(Ast *ast, TypeEnv **env) {
   Ast *with = ast->data.AST_MATCH.expr;
   Type *wtype = infer(with, env);
+  Type *result_type = NULL;
+  int len = ast->data.AST_MATCH.len;
+  Ast *branches = ast->data.AST_MATCH.branches;
+
+  Type *res_type = NULL;
+  for (int i = 0; i < len; i++) {
+    Ast *test_expr = branches + (2 * i);
+    Ast *result_expr = branches + (2 * i + 1);
+    Type *test_type = infer(test_expr, env);
+    TypeEnv *_env = add_binding_to_env(*env, test_expr, test_type);
+    Type *_res_type = infer(result_expr, &_env);
+    unify(wtype, test_type);
+    if (res_type != NULL) {
+      unify(res_type, _res_type);
+    }
+    res_type = _res_type;
+  }
+  return res_type;
 }
 
 Type *infer(Ast *ast, TypeEnv **env) {

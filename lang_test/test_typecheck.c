@@ -17,8 +17,6 @@
       }                                                                        \
     }                                                                          \
   }
-int main() {
-  bool status = true;
 
 #define TEST_SIMPLE_AST_TYPE(i, t)                                             \
   ({                                                                           \
@@ -26,6 +24,24 @@ int main() {
     bool stat = true;                                                          \
     Ast *p = parse_input(i, NULL);                                             \
     TypeEnv *env = NULL;                                                       \
+    stat &= (infer(p, &env) != NULL);                                          \
+    stat &= (types_equal(p->md, t));                                           \
+    char buf[100] = {};                                                        \
+    if (stat) {                                                                \
+      fprintf(stderr, "✅ " i " => %s\n", type_to_string(t, buf));             \
+    } else {                                                                   \
+      char buf2[100] = {};                                                     \
+      fprintf(stderr, "❌ " i " => %s (got %s)\n", type_to_string(t, buf),     \
+              type_to_string(p->md, buf2));                                    \
+    }                                                                          \
+    status &= stat;                                                            \
+  })
+
+#define TEST_SIMPLE_AST_TYPE_ENV(i, t, env)                                    \
+  ({                                                                           \
+    reset_type_var_counter();                                                  \
+    bool stat = true;                                                          \
+    Ast *p = parse_input(i, NULL);                                             \
     stat &= (infer(p, &env) != NULL);                                          \
     stat &= (types_equal(p->md, t));                                           \
     char buf[100] = {};                                                        \
@@ -60,15 +76,21 @@ int main() {
   ((Type){T_CONS, {.T_CONS = {"Tuple", (Type *[]){__VA_ARGS__}, num}}})
 
 #define arithmetic_var(n)                                                      \
-  (Type){T_VAR,                                                                \
-         {.T_VAR = n},                                                         \
-         .implements = (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},    \
-         .num_implements = 1}
+  (Type) {                                                                     \
+    T_VAR, {.T_VAR = n},                                                       \
+        .implements = (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},     \
+        .num_implements = 1                                                    \
+  }
 #define tcons(name, num, ...)                                                  \
   ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
 
 #define tvar(n)                                                                \
   (Type) { T_VAR, {.T_VAR = n}, }
+
+#define SEP printf("------------------------------------------------\n")
+
+int main() {
+  bool status = true;
 
   TEST_SIMPLE_AST_TYPE("1", &t_int);
   // TODO: u64 parse not yet implemented
@@ -138,11 +160,8 @@ int main() {
   ({
     Type t = {T_VAR, {.T_VAR = "t"}};
     Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
-    Type opt_func = MAKE_FN_TYPE_2(&t, &opt);
 
-    Type some_int = {
-        T_CONS,
-        {.T_CONS = {.name = "Some", .args = &(Type *){&t_int}, .num_args = 1}}};
+    Type some_int = tcons("Some", 1, &t_int);
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
                          "  | None\n"
@@ -150,12 +169,31 @@ int main() {
                          "let x = Some 1",
                          &some_int);
   });
+  ({
+    SEP;
+    TypeEnv *env = &(TypeEnv){"x", &tvar("x")};
 
-  TEST_SIMPLE_AST_TYPE("match x with\n"
-                       "| 1 -> 1\n"
-                       "| 2 -> 0\n"
-                       "| _ -> 3",
-                       &t_int);
+    TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
+                             "| 1 -> 1\n"
+                             "| 2 -> 0\n"
+                             "| _ -> 3\n",
+                             &t_int, env);
+    TEST_SIMPLE_AST_TYPE_ENV("x", &t_int, env);
+  });
+
+  ({
+    SEP;
+    Type t = {T_VAR, {.T_VAR = "t"}};
+    Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
+    TypeEnv *env = &(TypeEnv){"Option", &opt};
+    Type some_int = tcons("Some", 1, &t_int);
+    TEST_SIMPLE_AST_TYPE_ENV("let x = Some 1;\n", &some_int, env);
+    TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
+                             "  | Some y -> y\n"
+                             "  | None -> 0\n"
+                             "  ;\n",
+                             &t_int, env);
+  });
 
   return !status;
 }
