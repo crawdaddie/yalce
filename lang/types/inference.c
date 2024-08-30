@@ -214,6 +214,53 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
   unify(return_type, body_type);
   return fn;
 }
+static Type *copy_type(Type *t) {
+  Type *copy = empty_type();
+
+  *copy = *t;
+
+  if (copy->kind == T_CONS) {
+    Type **args = t->data.T_CONS.args;
+    copy->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      copy->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
+    }
+  }
+
+  if (t->implements != NULL && t->num_implements > 0) {
+    copy->implements = talloc(sizeof(TypeClass *) * t->num_implements);
+    copy->num_implements = t->num_implements;
+    for (int i = 0; i < t->num_implements; i++) {
+      copy->implements[i] = t->implements[i];
+    }
+  }
+
+  return copy;
+}
+
+Type *generic_cons(Type *generic_cons, int len, Ast *args, TypeEnv **env) {
+
+  if (len > generic_cons->data.T_CONS.num_args) {
+    fprintf(stderr, "Error, too many arguments to cons type");
+    return NULL;
+  }
+
+  // if (len < generic_cons->data.T_CONS.num_args) {
+  //   // TODO: return function t1 -> t2 -> cons of arg1 arg2 t1 t2
+  //   return NULL;
+  // }
+
+  Type *type = copy_type(generic_cons);
+
+  for (int i = 0; i < len; i++) {
+    type->data.T_CONS.args[i] = infer(args + i, env);
+  }
+  return type;
+}
+Type *infer_match(Ast *ast, TypeEnv **env) {
+  Ast *with = ast->data.AST_MATCH.expr;
+  Type *wtype = infer(with, env);
+}
 
 Type *infer(Ast *ast, TypeEnv **env) {
 
@@ -334,16 +381,28 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
   case AST_APPLICATION: {
-    Type *callee = TRY_INFER(ast->data.AST_APPLICATION.function, env,
-                             "Failure could not infer type of callee ");
-    printf("application:\n");
-    print_type(callee);
-    print_ast(ast);
-    printf("-----\n");
-    type = NULL;
+    Type *t = infer(ast->data.AST_APPLICATION.function, env);
+
+    if (t == NULL) {
+      fprintf(stderr, "%s %s\n", "Failure could not infer type of callee ");
+      return NULL;
+    }
+
+    if (is_generic(t) && t->kind == T_CONS) {
+      type = generic_cons(t, ast->data.AST_APPLICATION.len,
+                          ast->data.AST_APPLICATION.args, env);
+      break;
+    }
+
+    break;
+  }
+
+  case AST_MATCH: {
+    type = infer_match(ast, env);
     break;
   }
   }
+
   ast->md = type;
   return type;
 }

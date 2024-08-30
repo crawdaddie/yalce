@@ -52,7 +52,7 @@ char *tc_list_to_string(Type *t, char *buffer) {
 
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
-    buffer = strncat(buffer, "null", 4);
+    return strncat(buffer, "null", 4);
   }
   switch (t->kind) {
   case T_INT:
@@ -218,7 +218,7 @@ void *talloc(size_t size) {
 void tfree(void *mem) { free(mem); }
 
 Type *empty_type() {
-  Type *mem = malloc(sizeof(Type));
+  Type *mem = talloc(sizeof(Type));
   if (!mem) {
     fprintf(stderr, "Error allocating memory for type");
   }
@@ -226,7 +226,7 @@ Type *empty_type() {
 }
 
 Type *tvar(const char *name) {
-  Type *mem = malloc(sizeof(Type));
+  Type *mem = talloc(sizeof(Type));
   if (!mem) {
     fprintf(stderr, "Error allocating memory for type");
   }
@@ -269,7 +269,7 @@ bool is_generic(Type *t) {
 }
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
-  TypeEnv *new_env = malloc(sizeof(TypeEnv));
+  TypeEnv *new_env = talloc(sizeof(TypeEnv));
   new_env->name = name;
   new_env->type = type;
   new_env->next = env;
@@ -286,7 +286,6 @@ Type *env_lookup(TypeEnv *env, const char *name) {
       Type *variant = env->type;
       for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
         Type *variant_member = variant->data.T_CONS.args[i];
-        print_type(variant_member);
         const char *mem_name;
 
         if (variant_member->kind == T_CONS) {

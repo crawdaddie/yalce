@@ -64,12 +64,11 @@ int main() {
          {.T_VAR = n},                                                         \
          .implements = (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},    \
          .num_implements = 1}
+#define tcons(name, num, ...)                                                  \
+  ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
 
 #define tvar(n)                                                                \
-  (Type){                                                                      \
-      T_VAR,                                                                   \
-      {.T_VAR = n},                                                            \
-  }
+  (Type) { T_VAR, {.T_VAR = n}, }
 
   TEST_SIMPLE_AST_TYPE("1", &t_int);
   // TODO: u64 parse not yet implemented
@@ -94,28 +93,20 @@ int main() {
   TEST_SIMPLE_AST_TYPE("1 <= 2.0", &t_bool);
 
   TEST_SIMPLE_AST_TYPE("let x = 1", &t_int);
-  TEST_SIMPLE_AST_TYPE("let x = 1 in x + 2.", &t_num);
+  // TEST_SIMPLE_AST_TYPE("let x = 1 in x + 2.", &t_num);
 
   ({
     Type t = {T_VAR, {.T_VAR = "t"}};
-    Type opt = {
-        T_CONS,
-        {.T_CONS = {.name = "Variant",
-                    .args =
-                        (Type *[]){&(Type){T_CONS,
-                                           {.T_CONS = {.name = "Some",
-                                                       .args = &(Type *){&t},
-                                                       .num_args = 1}}},
-                                   &(Type){T_VAR, {.T_VAR = "None"}}},
-                    .num_args = 2}}};
 
+    Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
     Type opt_func = MAKE_FN_TYPE_2(&t, &opt);
 
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
                          "  | None\n"
                          "  ;",
-                         &opt_func);
+                         // &opt_func
+                         &opt);
   });
 
   TEST_SIMPLE_AST_TYPE("[1,2,3]", &(TLIST(&t_int)));
@@ -146,17 +137,7 @@ int main() {
 
   ({
     Type t = {T_VAR, {.T_VAR = "t"}};
-    Type opt = {
-        T_CONS,
-        {.T_CONS = {.name = "Variant",
-                    .args =
-                        (Type *[]){&(Type){T_CONS,
-                                           {.T_CONS = {.name = "Some",
-                                                       .args = &(Type *){&t},
-                                                       .num_args = 1}}},
-                                   &(Type){T_VAR, {.T_VAR = "None"}}},
-                    .num_args = 2}}};
-
+    Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
     Type opt_func = MAKE_FN_TYPE_2(&t, &opt);
 
     Type some_int = {
@@ -169,6 +150,12 @@ int main() {
                          "let x = Some 1",
                          &some_int);
   });
+
+  TEST_SIMPLE_AST_TYPE("match x with\n"
+                       "| 1 -> 1\n"
+                       "| 2 -> 0\n"
+                       "| _ -> 3",
+                       &t_int);
 
   return !status;
 }

@@ -37,19 +37,21 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     Ast *param_ast = expr->data.AST_LAMBDA.params;
     const char *param_name = strdup(param_ast->data.AST_IDENTIFIER.value);
     Type *param_type = tvar(param_name);
+
     _env = env_extend(_env, param_name, param_type);
-    Type *fn = param_type;
+    // Type *fn = param_type;
 
     for (int i = 1; i < len; i++) {
       Ast *param_ast = expr->data.AST_LAMBDA.params + i;
       const char *param_name = strdup(param_ast->data.AST_IDENTIFIER.value);
       Type *param_type = tvar(param_name);
       _env = env_extend(_env, param_name, param_type);
-      fn = type_fn(fn, param_type);
+      // fn = type_fn(fn, param_type);
     }
 
-    fn = type_fn(fn, compute_type_expression(expr->data.AST_LAMBDA.body, _env));
-    return fn;
+    // fn = type_fn(fn, compute_type_expression(expr->data.AST_LAMBDA.body,
+    // _env)); return fn;
+    return compute_type_expression(expr->data.AST_LAMBDA.body, _env);
   }
 
   case AST_BINOP: {
