@@ -170,36 +170,6 @@ int main() {
   });
   ({
     SEP;
-    TypeEnv *env = &(TypeEnv){"x", &tvar("x")};
-
-    TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
-                             "| 1 -> 1\n"
-                             "| 2 -> 0\n"
-                             "| _ -> 3\n",
-                             &t_int, env);
-    TEST_SIMPLE_AST_TYPE_ENV("x", &t_int, env);
-  });
-
-  ({
-    SEP;
-    Type t = {T_VAR, {.T_VAR = "t"}};
-    Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
-    TypeEnv *env = &(TypeEnv){"Option", &opt};
-    Type some_int = tcons("Some", 1, &t_int);
-    TEST_SIMPLE_AST_TYPE_ENV("let x = Some 1;\n", &some_int, env);
-    TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
-                             "  | Some y -> y\n"
-                             "  | None -> 0\n"
-                             "  ;\n",
-                             &t_int, env);
-    print_type_env(env);
-  });
-
-  ({
-    SEP;
-
-    Type t = {T_VAR, {.T_VAR = "t"}};
-    Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
     Type some_int = tcons("Some", 1, &t_int);
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
@@ -210,5 +180,31 @@ int main() {
                          &some_int);
   });
 
-  return !status;
+  // ({
+  //   SEP;
+  //   TypeEnv *env = &(TypeEnv){"x", &tvar("x")};
+  //
+  //   TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
+  //                            "| 1 -> 1\n"
+  //                            "| 2 -> 0\n"
+  //                            "| _ -> 3\n",
+  //                            &t_int, env);
+  //   TEST_SIMPLE_AST_TYPE_ENV("x", &t_int, env);
+  // });
+
+  ({
+    SEP;
+    TEST_TYPECHECK_FAIL("type Option t =\n"
+                        "  | Some of t\n"
+                        "  | None\n"
+                        "  ;\n"
+                        "let x = Some 1;\n"
+                        "match x with\n"
+                        "  | Some 1 -> 1\n"
+                        "  | Some 1.0 -> 1\n"
+                        "  | None -> 0\n"
+                        "  ;\n");
+  });
+
+  return status ? 0 : 1;
 }

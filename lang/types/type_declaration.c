@@ -11,11 +11,10 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       return compute_type_expression(expr->data.AST_LIST.items, env);
     }
 
-    Type **variant_members = talloc(sizeof(Type *) * len);
     Type *variant = empty_type();
     variant->kind = T_CONS;
     variant->data.T_CONS.name = "Variant";
-    variant->data.T_CONS.args = variant_members;
+    variant->data.T_CONS.args = talloc(sizeof(Type *) * len);
     variant->data.T_CONS.num_args = len;
 
     for (int i = 0; i < len; i++) {

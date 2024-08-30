@@ -129,6 +129,8 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
 /*
 
 static TypeEnv *set_param_binding(Ast *ast, TypeEnv **env) {
+    if (is_variant_member(test_type, *env)) {
+    }
   switch (ast->tag) {
   case AST_IDENTIFIER: {
     ast->md = next_tvar();
@@ -260,6 +262,10 @@ Type *generic_cons(Type *generic_cons, int len, Ast *args, TypeEnv **env) {
   }
   return type;
 }
+
+static Type *resolve_generic_variant(Type *t, Type *member) { return t; }
+static bool type_is_variant_member(Type *member, Type *variant) { return true; }
+
 Type *infer_match(Ast *ast, TypeEnv **env) {
   Ast *with = ast->data.AST_MATCH.expr;
   Type *wtype = infer(with, env);
@@ -268,10 +274,29 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   Ast *branches = ast->data.AST_MATCH.branches;
 
   Type *res_type = NULL;
+  Type *variant = NULL;
+
   for (int i = 0; i < len; i++) {
     Ast *test_expr = branches + (2 * i);
     Ast *result_expr = branches + (2 * i + 1);
     Type *test_type = infer(test_expr, env);
+
+    Type *_variant = variant_lookup(*env, test_type);
+
+    bool _variant_immediate_set = false;
+    if (_variant && variant == NULL) {
+
+      printf("variant member in match expr: ");
+      print_type(_variant);
+      variant = resolve_generic_variant(_variant, test_type);
+      _variant_immediate_set = true;
+    }
+    if (!_variant_immediate_set && variant != NULL &&
+        !(type_is_variant_member(test_type, variant))) {
+      fprintf(stderr, "Error type not in variant");
+      return NULL;
+    }
+
     TypeEnv *_env = add_binding_to_env(*env, test_expr, test_type);
     Type *_res_type = infer(result_expr, &_env);
     unify(wtype, test_type);

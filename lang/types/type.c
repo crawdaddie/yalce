@@ -327,35 +327,43 @@ Type *env_lookup(TypeEnv *env, const char *name) {
       }
     }
 
-    // if (env->type->kind == T_FN && env->type->data.T_FN.to->kind == T_CONS &&
-    //     strcmp(env->type->data.T_FN.to->data.T_CONS.name, "Variant") == 0) {
-    //
-    //   // printf("check variant fn in env\n");
-    //   Type *variant = env->type->data.T_FN.to;
-    //   for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-    //     Type *variant_member = variant->data.T_CONS.args[i];
-    //     const char *mem_name;
-    //
-    //     if (variant_member->kind == T_CONS) {
-    //       mem_name = variant_member->data.T_CONS.name;
-    //     } else if (variant_member->kind == T_VAR) {
-    //       mem_name = variant_member->data.T_VAR;
-    //     } else {
-    //       continue;
-    //     }
-    //
-    //     if (strcmp(mem_name, name) == 0) {
-    //       Type *to = empty_type();
-    //       to->kind = T_CONS;
-    //       to->data.T_CONS.name = strdup(mem_name);
-    //       to->data.T_CONS.args = talloc(sizeof(Type *));
-    //       to->data.T_CONS.args[0] = env->type->data.T_FN.from;
-    //       to->data.T_CONS.num_args = 1;
-    //       Type *f = type_fn(env->type->data.T_FN.from, to);
-    //       return f;
-    //     }
-    //   }
-    // }
+    env = env->next;
+  }
+  return NULL;
+}
+
+Type *variant_lookup(TypeEnv *env, Type *member) {
+  const char *name;
+  if (member->kind == T_CONS) {
+    name = member->data.T_CONS.name;
+  } else if (member->kind == T_VAR) {
+    name = member->data.T_CONS.name;
+  }
+
+  while (env) {
+    if (strcmp(env->name, name) == 0) {
+      return env->type;
+    }
+    if (env->type->kind == T_CONS &&
+        strcmp(env->type->data.T_CONS.name, "Variant") == 0) {
+      Type *variant = env->type;
+      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
+        Type *variant_member = variant->data.T_CONS.args[i];
+        char *mem_name;
+        if (variant_member->kind == T_CONS) {
+          mem_name = variant_member->data.T_CONS.name;
+        } else if (variant_member->kind == T_VAR) {
+          mem_name = variant_member->data.T_VAR;
+        } else {
+          continue;
+        }
+
+        if (strcmp(mem_name, name) == 0) {
+          return variant;
+        }
+      }
+    }
+
     env = env->next;
   }
   return NULL;
