@@ -405,7 +405,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
     Type *t = infer(ast->data.AST_APPLICATION.function, env);
 
     if (t == NULL) {
-      fprintf(stderr, "%s %s\n", "Failure could not infer type of callee ");
+      fprintf(stderr, "%s\n", "Failure could not infer type of callee ");
       return NULL;
     }
 

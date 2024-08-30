@@ -207,11 +207,29 @@ bool types_equal(Type *t1, Type *t2) {
   return false;
 }
 
+static struct TStorage {
+  void *data;
+  size_t size;
+  size_t capacity;
+} TStorage;
+#define _TSTORAGE_SIZE 200000
+static void *_tstorage_data[_TSTORAGE_SIZE];
+
+static struct TStorage _tstorage = {_tstorage_data, 0, _TSTORAGE_SIZE};
+
 void *talloc(size_t size) {
-  void *mem = malloc(size);
-  if (!mem) {
+  // malloc
+  // void *mem = malloc(size);
+  // if (!mem) {
+  //   fprintf(stderr, "Error allocating memory for type");
+  // }
+  // return mem;
+  if (_tstorage.size + size > _tstorage.capacity) {
     fprintf(stderr, "Error allocating memory for type");
+    return NULL;
   }
+  void *mem = _tstorage.data + _tstorage.size;
+  _tstorage.size += size;
   return mem;
 }
 
@@ -226,11 +244,13 @@ Type *empty_type() {
 }
 
 Type *tvar(const char *name) {
-  Type *mem = talloc(sizeof(Type));
+  Type *mem = empty_type();
   if (!mem) {
     fprintf(stderr, "Error allocating memory for type");
   }
-  *mem = (Type){T_VAR, {.T_VAR = strdup(name)}};
+  mem->kind = T_VAR;
+  mem->data.T_VAR = talloc(sizeof(char) * strlen(name));
+  memcpy(mem->data.T_VAR, name, strlen(name));
   return mem;
 }
 
@@ -244,6 +264,12 @@ Type *fn_return_type(Type *fn) {
 }
 
 bool is_generic(Type *t) {
+
+  if (t == NULL) {
+    fprintf(stderr, "Error type passed to generic test is null");
+    return NULL;
+  }
+
   switch (t->kind) {
   case T_VAR: {
     return true;
@@ -286,8 +312,7 @@ Type *env_lookup(TypeEnv *env, const char *name) {
       Type *variant = env->type;
       for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
         Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-
+        char *mem_name;
         if (variant_member->kind == T_CONS) {
           mem_name = variant_member->data.T_CONS.name;
         } else if (variant_member->kind == T_VAR) {
@@ -302,35 +327,35 @@ Type *env_lookup(TypeEnv *env, const char *name) {
       }
     }
 
-    if (env->type->kind == T_FN && env->type->data.T_FN.to->kind == T_CONS &&
-        strcmp(env->type->data.T_FN.to->data.T_CONS.name, "Variant") == 0) {
-
-      // printf("check variant fn in env\n");
-      Type *variant = env->type->data.T_FN.to;
-      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-        Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-
-        if (variant_member->kind == T_CONS) {
-          mem_name = variant_member->data.T_CONS.name;
-        } else if (variant_member->kind == T_VAR) {
-          mem_name = variant_member->data.T_VAR;
-        } else {
-          continue;
-        }
-
-        if (strcmp(mem_name, name) == 0) {
-          Type *to = empty_type();
-          to->kind = T_CONS;
-          to->data.T_CONS.name = strdup(mem_name);
-          to->data.T_CONS.args = talloc(sizeof(Type *));
-          to->data.T_CONS.args[0] = env->type->data.T_FN.from;
-          to->data.T_CONS.num_args = 1;
-          Type *f = type_fn(env->type->data.T_FN.from, to);
-          return f;
-        }
-      }
-    }
+    // if (env->type->kind == T_FN && env->type->data.T_FN.to->kind == T_CONS &&
+    //     strcmp(env->type->data.T_FN.to->data.T_CONS.name, "Variant") == 0) {
+    //
+    //   // printf("check variant fn in env\n");
+    //   Type *variant = env->type->data.T_FN.to;
+    //   for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
+    //     Type *variant_member = variant->data.T_CONS.args[i];
+    //     const char *mem_name;
+    //
+    //     if (variant_member->kind == T_CONS) {
+    //       mem_name = variant_member->data.T_CONS.name;
+    //     } else if (variant_member->kind == T_VAR) {
+    //       mem_name = variant_member->data.T_VAR;
+    //     } else {
+    //       continue;
+    //     }
+    //
+    //     if (strcmp(mem_name, name) == 0) {
+    //       Type *to = empty_type();
+    //       to->kind = T_CONS;
+    //       to->data.T_CONS.name = strdup(mem_name);
+    //       to->data.T_CONS.args = talloc(sizeof(Type *));
+    //       to->data.T_CONS.args[0] = env->type->data.T_FN.from;
+    //       to->data.T_CONS.num_args = 1;
+    //       Type *f = type_fn(env->type->data.T_FN.from, to);
+    //       return f;
+    //     }
+    //   }
+    // }
     env = env->next;
   }
   return NULL;

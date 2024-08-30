@@ -126,8 +126,7 @@ int main() {
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
                          "  | None\n"
-                         "  ;",
-                         // &opt_func
+                         "  ;\n",
                          &opt);
   });
 
@@ -193,6 +192,22 @@ int main() {
                              "  | None -> 0\n"
                              "  ;\n",
                              &t_int, env);
+    print_type_env(env);
+  });
+
+  ({
+    SEP;
+
+    Type t = {T_VAR, {.T_VAR = "t"}};
+    Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
+    Type some_int = tcons("Some", 1, &t_int);
+    TEST_SIMPLE_AST_TYPE("type Option t =\n"
+                         "  | Some of t\n"
+                         "  | None\n"
+                         "  ;\n"
+                         "let x = Some 1;\n"
+                         "let y = Some 2;\n",
+                         &some_int);
   });
 
   return !status;

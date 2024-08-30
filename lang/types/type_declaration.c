@@ -11,47 +11,36 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       return compute_type_expression(expr->data.AST_LIST.items, env);
     }
 
-    Type *variant = empty_type();
     Type **variant_members = talloc(sizeof(Type *) * len);
+    Type *variant = empty_type();
+    variant->kind = T_CONS;
+    variant->data.T_CONS.name = "Variant";
+    variant->data.T_CONS.args = variant_members;
+    variant->data.T_CONS.num_args = len;
 
     for (int i = 0; i < len; i++) {
       Ast *item = expr->data.AST_LIST.items + i;
-      variant_members[i] = compute_type_expression(item, env);
+      variant->data.T_CONS.args[i] = compute_type_expression(item, env);
     }
-    *variant = (Type){T_CONS, {.T_CONS = {"Variant", variant_members, len}}};
     return variant;
   }
 
   case AST_IDENTIFIER: {
     Type *type = find_type_in_env(env, expr->data.AST_IDENTIFIER.value);
     if (!type) {
-      return tvar(expr->data.AST_IDENTIFIER.value);
+      const char *id_chars = expr->data.AST_IDENTIFIER.value;
+      type = talloc(sizeof(Type));
+      type->kind = T_VAR;
+      type->data.T_VAR = id_chars;
+
+      return type;
     }
     return type;
   }
 
   case AST_LAMBDA: {
-    TypeEnv *_env = env;
-    int len = expr->data.AST_LAMBDA.len;
-
-    Ast *param_ast = expr->data.AST_LAMBDA.params;
-    const char *param_name = strdup(param_ast->data.AST_IDENTIFIER.value);
-    Type *param_type = tvar(param_name);
-
-    _env = env_extend(_env, param_name, param_type);
-    // Type *fn = param_type;
-
-    for (int i = 1; i < len; i++) {
-      Ast *param_ast = expr->data.AST_LAMBDA.params + i;
-      const char *param_name = strdup(param_ast->data.AST_IDENTIFIER.value);
-      Type *param_type = tvar(param_name);
-      _env = env_extend(_env, param_name, param_type);
-      // fn = type_fn(fn, param_type);
-    }
-
-    // fn = type_fn(fn, compute_type_expression(expr->data.AST_LAMBDA.body,
-    // _env)); return fn;
-    return compute_type_expression(expr->data.AST_LAMBDA.body, _env);
+    Type *t = compute_type_expression(expr->data.AST_LAMBDA.body, env);
+    return t;
   }
 
   case AST_BINOP: {
@@ -82,7 +71,9 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   Type *type = compute_type_expression(type_expr_ast, *env);
   if (!type) {
     fprintf(stderr, "Error computing type declaration");
+    return NULL;
   }
+
   type->alias = name;
 
   *env = env_extend(*env, name, type);
