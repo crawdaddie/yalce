@@ -49,4 +49,6 @@ TypeClass *derive_ord_for_type(Type *t);
 int add_typeclass(Type *t, TypeClass *tc);
 
 Type *resolve_binop_typeclass(Type *l, Type *r, token_type op);
+
+Type *resolve_op_typeclass_in_type(Type *l, token_type op);
 #endif

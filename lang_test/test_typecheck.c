@@ -11,10 +11,7 @@
 #define MAKE_FN_TYPE_3(arg1_type, arg2_type, ret_type)                         \
   {                                                                            \
     T_FN, {                                                                    \
-      .T_FN = {                                                                \
-        .from = &(Type)MAKE_FN_TYPE_2(arg1_type, arg2_type),                   \
-        .to = ret_type                                                         \
-      }                                                                        \
+      .T_FN = {.from = &MAKE_FN_TYPE_2(arg1_type, arg2_type), .to = ret_type } \
     }                                                                          \
   }
 
@@ -107,6 +104,8 @@ int main() {
   TEST_SIMPLE_AST_TYPE("1 + 2.0 * 8", &t_num);
   TEST_SIMPLE_AST_TYPE("1 + 2.0", &t_num);
   TEST_SIMPLE_AST_TYPE("2.0 - 1", &t_num);
+  TEST_SIMPLE_AST_TYPE("1 == 1", &t_bool);
+  TEST_SIMPLE_AST_TYPE("1 == 2", &t_bool);
   TEST_SIMPLE_AST_TYPE("1 == 2.0", &t_bool);
   TEST_SIMPLE_AST_TYPE("1 != 2.0", &t_bool);
   TEST_SIMPLE_AST_TYPE("1 < 2.0", &t_bool);
@@ -204,6 +203,11 @@ int main() {
                         "  | Some 1.0 -> 1\n"
                         "  | None -> 0\n"
                         "  ;\n");
+  });
+
+  ({
+    Type fn = MAKE_FN_TYPE_3(&t_int, &t_num, &t_int);
+    TEST_SIMPLE_AST_TYPE("let ex_fn = extern fn Int -> Double -> Int;", &fn);
   });
 
   return status ? 0 : 1;

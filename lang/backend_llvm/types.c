@@ -5,6 +5,7 @@
 #include <string.h>
 
 #define LLVM_TYPE_int LLVMInt32Type()
+#define LLVM_TYPE_uint64 LLVMInt64Type()
 #define LLVM_TYPE_bool LLVMInt1Type()
 #define LLVM_TYPE_float LLVMFloatType()
 #define LLVM_TYPE_double LLVMDoubleType()
@@ -55,7 +56,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
 
   case T_VAR: {
     if (env) {
-      return type_to_llvm_type(resolve_in_env(type, env), env);
+      // return type_to_llvm_type(resolve_in_env(type, env), env);
+      return type_to_llvm_type(env_lookup(env, type->data.T_VAR), env);
     }
     return LLVMInt32Type();
   }
@@ -112,7 +114,6 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
   }
   case T_FN: {
     printf("value conversion function to function ptr\n");
-    // Create the function type
     LLVMTypeRef paramTypes[] = {
         LLVMPointerType(LLVMVoidType(), 0), // void*
         LLVMInt64Type()                     // uint64_t
@@ -120,23 +121,15 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
     LLVMTypeRef functionType =
         LLVMFunctionType(LLVMVoidType(), paramTypes, 2, 0);
 
-    // Create a pointer to this function type
     LLVMTypeRef functionPtrType = LLVMPointerType(functionType, 0);
 
-    // Cast the function to the correct pointer type
     return LLVMBuildBitCast(builder, val, functionPtrType, "callback_cast");
   }
 
   case T_CONS: {
-    // printf("value conversion str to ptr\n");
-    // Cast the function to the correct pointer type
-
     if (strcmp(from_type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
       if (from_type->data.T_CONS.args[0]->kind == T_CHAR) {
         return val;
-        // return LLVMBuildBitCast(
-        //     builder, val, LLVMPointerType(LLVMInt8Type(), 0),
-        //     "callback_cast");
       }
     }
     return NULL;
@@ -155,7 +148,11 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
   }
 
   case T_INT: {
-    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_int_to_double");
+  }
+
+  case T_UINT64: {
+    return LLVMBuildUIToFP(builder, val, LLVMDoubleType(), "cast_uint64_to_double");
   }
 
   default:
@@ -169,6 +166,11 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
 
   case T_INT: {
     return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+    LLVMTypeRef uint64Type = LLVMInt64Type();
+
+    // Perform zero extension to convert i32 to i64
+    LLVMValueRef ext = LLVMBuildZExt(builder, val, uint64Type, "extended");
+    return ext;
   }
 
   default:
@@ -191,17 +193,387 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       LLVMBuilderRef builder) {
 
   printf("attempt value conversion: ");
-  if (type_from->alias) {
-    printf("[%s]", type_from->alias);
-  }
   print_type(type_from);
   printf(" => ");
-  if (type_to->alias) {
-    printf("[%s]", type_to->alias);
-  }
   print_type(type_to);
-  printf("\n");
+  // if (type_from->alias) {
+  //   printf("[%s]", type_from->alias);
+  // }
+  // print_type(type_from);
+  // printf(" => ");
+  // if (type_to->alias) {
+  //   printf("[%s]", type_to->alias);
+  // }
+  // print_type(type_to);
+  // printf("\n");
 
   ConsMethod constructor = type_to->constructor;
   return constructor(value, type_from, module, builder);
+}
+// clang-format off
+static int int_ops_map[] = {
+  [TOKEN_PLUS] =      LLVMAdd,
+  [TOKEN_MINUS] =     LLVMSub,
+  [TOKEN_STAR] =      LLVMMul,
+  [TOKEN_SLASH] =     LLVMSDiv,
+  [TOKEN_MODULO] =    LLVMSRem,
+
+  [TOKEN_LT] =        LLVMIntSLT,
+  [TOKEN_LTE] =       LLVMIntSLE,
+  [TOKEN_GT] =        LLVMIntSGT,
+  [TOKEN_GTE] =       LLVMIntSGE,
+  [TOKEN_EQUALITY] =  LLVMIntEQ,
+  [TOKEN_NOT_EQUAL] = LLVMIntNE,
+};
+
+static int float_ops_map[] = {
+  [TOKEN_PLUS] =      LLVMFAdd,
+  [TOKEN_MINUS] =     LLVMFSub,
+  [TOKEN_STAR] =      LLVMFMul,   
+  [TOKEN_SLASH] =     LLVMFDiv,
+  [TOKEN_MODULO] =    LLVMFRem,
+
+  [TOKEN_LT] =        LLVMRealOLT,
+  [TOKEN_LTE] =       LLVMRealOLE,
+  [TOKEN_GT] =        LLVMRealOGT,
+  [TOKEN_GTE] =       LLVMRealOGE,
+  [TOKEN_EQUALITY] =  LLVMRealOEQ,
+  [TOKEN_NOT_EQUAL] = LLVMRealONE,
+
+};
+
+// clang-format on
+
+LLVMValueRef codegen_int_binop(LLVMBuilderRef builder, token_type op,
+                               LLVMValueRef l, LLVMValueRef r) {
+
+  switch (op) {
+  case TOKEN_PLUS:
+  case TOKEN_MINUS:
+  case TOKEN_STAR:
+  case TOKEN_SLASH:
+  case TOKEN_MODULO: {
+    return LLVMBuildBinOp(builder, int_ops_map[op], l, r, "");
+  }
+  case TOKEN_LT:
+  case TOKEN_LTE:
+  case TOKEN_GT:
+  case TOKEN_GTE:
+  case TOKEN_EQUALITY:
+  case TOKEN_NOT_EQUAL: {
+    return LLVMBuildICmp(builder, int_ops_map[op], l, r, "");
+  }
+  default:
+    return NULL;
+  }
+}
+
+LLVMValueRef codegen_float_binop(LLVMBuilderRef builder, token_type op,
+                                 LLVMValueRef l, LLVMValueRef r) {
+  switch (op) {
+  case TOKEN_PLUS:
+  case TOKEN_MINUS:
+  case TOKEN_STAR:
+  case TOKEN_SLASH:
+  case TOKEN_MODULO: {
+    return LLVMBuildBinOp(builder, float_ops_map[op], l, r, "float_binop");
+  }
+
+  case TOKEN_LT:
+  case TOKEN_LTE:
+  case TOKEN_GT:
+  case TOKEN_GTE:
+  case TOKEN_EQUALITY:
+  case TOKEN_NOT_EQUAL: {
+    return LLVMBuildFCmp(builder, float_ops_map[op], l, r, "");
+  }
+  }
+}
+
+typedef LLVMValueRef (*EqMethod)(LLVMValueRef, LLVMValueRef, Type *,
+                                 LLVMModuleRef, LLVMBuilderRef);
+static LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  return LLVMBuildICmp(builder, LLVMIntEQ, l, r, "Int ==");
+}
+static LLVMValueRef codegen_neq_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntNE, l, r, "Int !=");
+}
+
+static LLVMValueRef codegen_eq_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntEQ, l, r, "Uint64 ==");
+}
+static LLVMValueRef codegen_neq_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntNE, l, r, "Uint64 !=");
+}
+
+static LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  return LLVMBuildFCmp(builder, LLVMRealOEQ, l, r, "Uint64 ==");
+}
+static LLVMValueRef codegen_neq_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildFCmp(builder, LLVMRealONE, l, r, "Uint64 ==");
+}
+
+typedef LLVMValueRef (*OrdMethod)(LLVMValueRef, LLVMValueRef, Type *,
+                                  LLVMModuleRef, LLVMBuilderRef);
+static LLVMValueRef codegen_lt_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  return LLVMBuildICmp(builder, LLVMIntSLT, l, r, "Int <");
+}
+static LLVMValueRef codegen_gt_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntSGT, l, r, "Int >");
+}
+static LLVMValueRef codegen_lte_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntSLE, l, r, "Int <=");
+}
+static LLVMValueRef codegen_gte_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntSGE, l, r, "Int >=");
+}
+
+static LLVMValueRef codegen_lt_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntULT, l, r, "Uint64 <");
+}
+static LLVMValueRef codegen_gt_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntUGT, l, r, "Uint64 >");
+}
+static LLVMValueRef codegen_lte_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntULE, l, r, "Uint64 <=");
+}
+static LLVMValueRef codegen_gte_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+
+  return LLVMBuildICmp(builder, LLVMIntUGE, l, r, "Uint64 >=");
+}
+
+static LLVMValueRef codegen_lt_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  return LLVMBuildFCmp(builder, LLVMRealOLT, l, r, "Num <");
+}
+static LLVMValueRef codegen_gt_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  return LLVMBuildFCmp(builder, LLVMRealOGT, l, r, "Num >");
+}
+static LLVMValueRef codegen_lte_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildFCmp(builder, LLVMRealOLE, l, r, "Num <=");
+}
+static LLVMValueRef codegen_gte_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  return LLVMBuildFCmp(builder, LLVMRealOGE, l, r, "Num >=");
+}
+
+typedef LLVMValueRef (*ArithmeticMethod)(LLVMValueRef, LLVMValueRef, Type *,
+                                         LLVMModuleRef, LLVMBuilderRef);
+static LLVMValueRef codegen_add_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  printf("codegen int add: \n");
+  return LLVMBuildBinOp(builder, LLVMAdd, l, r, "Int +");
+}
+static LLVMValueRef codegen_sub_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildBinOp(builder, LLVMSub, l, r, "Int -");
+}
+static LLVMValueRef codegen_mul_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildBinOp(builder, LLVMMul, l, r, "Int *");
+}
+static LLVMValueRef codegen_div_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMSDiv, l, r, "Int /");
+}
+static LLVMValueRef codegen_mod_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMSRem, l, r, "Int %");
+}
+
+static LLVMValueRef codegen_add_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMAdd, l, r, "Uint64 +");
+}
+static LLVMValueRef codegen_sub_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMSub, l, r, "Uint64 -");
+}
+static LLVMValueRef codegen_mul_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMMul, l, r, "Uint64 *");
+}
+static LLVMValueRef codegen_div_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMUDiv, l, r, "Uint64 /");
+}
+static LLVMValueRef codegen_mod_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMURem, l, r, "Uint64 %");
+}
+
+static LLVMValueRef codegen_add_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMFAdd, l, r, "Num *");
+}
+static LLVMValueRef codegen_sub_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildBinOp(builder, LLVMFSub, l, r, "Num -");
+}
+static LLVMValueRef codegen_mul_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMFMul, l, r, "Num *");
+}
+static LLVMValueRef codegen_div_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  return LLVMBuildBinOp(builder, LLVMFDiv, l, r, "Num /");
+}
+static LLVMValueRef codegen_mod_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  return LLVMBuildBinOp(builder, LLVMFRem, l, r, "Num %");
+}
+
+#define EQ_TC(t) t.implements[0]
+#define ORD_TC(t) t.implements[1]
+#define ARITHMETIC_TC(t) t.implements[2]
+
+void initialize_builtin_numeric_types(TypeEnv *env) {
+  EQ_TC(t_int)->methods[0].method = &codegen_eq_int;
+  EQ_TC(t_int)->methods[0].size = sizeof(EqMethod);
+  EQ_TC(t_int)->methods[1].method = &codegen_neq_int;
+  EQ_TC(t_int)->methods[1].size = sizeof(EqMethod);
+
+  ORD_TC(t_int)->methods[0].method = &codegen_lt_int;
+  ORD_TC(t_int)->methods[0].size = sizeof(OrdMethod);
+  ORD_TC(t_int)->methods[1].method = &codegen_gt_int;
+  ORD_TC(t_int)->methods[1].size = sizeof(OrdMethod);
+  ORD_TC(t_int)->methods[2].method = &codegen_lte_int;
+  ORD_TC(t_int)->methods[2].size = sizeof(OrdMethod);
+  ORD_TC(t_int)->methods[3].method = &codegen_gte_int;
+  ORD_TC(t_int)->methods[3].size = sizeof(OrdMethod);
+
+  ARITHMETIC_TC(t_int)->methods[0].method = &codegen_add_int;
+  ARITHMETIC_TC(t_int)->methods[0].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_int)->methods[1].method = &codegen_sub_int;
+  ARITHMETIC_TC(t_int)->methods[1].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_int)->methods[2].method = &codegen_mul_int;
+  ARITHMETIC_TC(t_int)->methods[2].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_int)->methods[3].method = &codegen_div_int;
+  ARITHMETIC_TC(t_int)->methods[3].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_int)->methods[4].method = &codegen_mod_int;
+  ARITHMETIC_TC(t_int)->methods[4].size = sizeof(ArithmeticMethod);
+
+  EQ_TC(t_uint64)->methods[0].method = &codegen_eq_uint64;
+  EQ_TC(t_uint64)->methods[0].size = sizeof(EqMethod);
+  EQ_TC(t_uint64)->methods[1].method = &codegen_neq_uint64;
+  EQ_TC(t_uint64)->methods[1].size = sizeof(EqMethod);
+
+  ORD_TC(t_uint64)->methods[0].method = &codegen_lt_uint64;
+  ORD_TC(t_uint64)->methods[0].size = sizeof(OrdMethod);
+  ORD_TC(t_uint64)->methods[1].method = &codegen_gt_uint64;
+  ORD_TC(t_uint64)->methods[1].size = sizeof(OrdMethod);
+  ORD_TC(t_uint64)->methods[2].method = &codegen_lte_uint64;
+  ORD_TC(t_uint64)->methods[2].size = sizeof(OrdMethod);
+  ORD_TC(t_uint64)->methods[3].method = &codegen_gte_uint64;
+  ORD_TC(t_uint64)->methods[3].size = sizeof(OrdMethod);
+
+  ARITHMETIC_TC(t_uint64)->methods[0].method = &codegen_add_uint64;
+  ARITHMETIC_TC(t_uint64)->methods[0].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_uint64)->methods[1].method = &codegen_sub_uint64;
+  ARITHMETIC_TC(t_uint64)->methods[1].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_uint64)->methods[2].method = &codegen_mul_uint64;
+  ARITHMETIC_TC(t_uint64)->methods[2].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_uint64)->methods[3].method = &codegen_div_uint64;
+  ARITHMETIC_TC(t_uint64)->methods[3].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_uint64)->methods[4].method = &codegen_mod_uint64;
+  ARITHMETIC_TC(t_uint64)->methods[4].size = sizeof(ArithmeticMethod);
+
+  t_uint64.constructor = uint64_constructor;
+  t_uint64.constructor_size = sizeof(ConsMethod);
+
+  EQ_TC(t_num)->methods[0].method = &codegen_eq_num;
+  EQ_TC(t_num)->methods[0].size = sizeof(EqMethod);
+  EQ_TC(t_num)->methods[1].method = &codegen_neq_num;
+  EQ_TC(t_num)->methods[1].size = sizeof(EqMethod);
+
+  ORD_TC(t_num)->methods[0].method = &codegen_lt_num;
+  ORD_TC(t_num)->methods[0].size = sizeof(OrdMethod);
+  ORD_TC(t_num)->methods[1].method = &codegen_gt_num;
+  ORD_TC(t_num)->methods[1].size = sizeof(OrdMethod);
+  ORD_TC(t_num)->methods[2].method = &codegen_lte_num;
+  ORD_TC(t_num)->methods[2].size = sizeof(OrdMethod);
+  ORD_TC(t_num)->methods[3].method = &codegen_gte_num;
+  ORD_TC(t_num)->methods[3].size = sizeof(OrdMethod);
+
+  ARITHMETIC_TC(t_num)->methods[0].method = &codegen_add_num;
+  ARITHMETIC_TC(t_num)->methods[0].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_num)->methods[1].method = &codegen_sub_num;
+  ARITHMETIC_TC(t_num)->methods[1].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_num)->methods[2].method = &codegen_mul_num;
+  ARITHMETIC_TC(t_num)->methods[2].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_num)->methods[3].method = &codegen_div_num;
+  ARITHMETIC_TC(t_num)->methods[3].size = sizeof(ArithmeticMethod);
+  ARITHMETIC_TC(t_num)->methods[4].method = &codegen_mod_num;
+  ARITHMETIC_TC(t_num)->methods[4].size = sizeof(ArithmeticMethod);
+
+  t_num.constructor = double_constructor;
+  t_num.constructor_size = sizeof(ConsMethod);
+
+
 }

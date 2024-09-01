@@ -19,7 +19,7 @@ typedef struct {
 } JITLangCtx;
 
 typedef struct SpecificFns {
-  const char *serialized_type;
+  Type *arg_types_key;
   LLVMValueRef func;
   struct SpecificFns *next;
 } SpecificFns;

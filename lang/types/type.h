@@ -2,6 +2,7 @@
 #define _LANG_TYPE_TYPE_H
 #include "typeclass.h"
 #include <stdbool.h>
+#include <string.h>
 
 typedef struct TypeEnv TypeEnv;
 typedef struct Type Type;
@@ -10,6 +11,8 @@ extern Type t_int;
 extern Type t_uint64;
 extern Type t_num;
 extern Type t_string;
+bool is_string_type(Type *type);
+
 extern Type t_bool;
 extern Type t_void;
 extern Type t_char;
@@ -96,6 +99,8 @@ void print_type(Type *t);
 bool types_equal(Type *l, Type *r);
 
 Type *fn_return_type(Type *);
+int fn_type_args_len(Type *);
+
 
 void *talloc(size_t size);
 void tfree(void *mem);
@@ -104,4 +109,11 @@ Type *tvar(const char *name);
 bool is_generic(Type *t);
 
 Type *type_fn(Type *from, Type *to);
+Type *create_type_multi_param_fn(int len, Type **from, Type *to);
+
+Type *deep_copy_type(const Type *original);
+
+bool is_list_type(Type *type);
+bool is_tuple_type(Type *type);
+
 #endif

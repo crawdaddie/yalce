@@ -136,6 +136,8 @@ bool types_equal(Type *t1, Type *t2) {
   if (t1 == t2) {
     return true;
   }
+
+
   if (t1 == NULL || t2 == NULL) {
     return false;
   }
@@ -311,7 +313,7 @@ Type *env_lookup(TypeEnv *env, const char *name) {
 
       for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
         Type *variant_member = variant->data.T_CONS.args[i];
-        char *mem_name;
+        const char *mem_name;
         if (variant_member->kind == T_CONS) {
           mem_name = variant_member->data.T_CONS.name;
         } else if (variant_member->kind == T_VAR) {
@@ -351,7 +353,7 @@ Type *variant_lookup(TypeEnv *env, Type *member) {
       Type *variant = env->type;
       for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
         Type *variant_member = variant->data.T_CONS.args[i];
-        char *mem_name;
+        const char *mem_name;
         if (variant_member->kind == T_CONS) {
           mem_name = variant_member->data.T_CONS.name;
         } else if (variant_member->kind == T_VAR) {
@@ -426,4 +428,73 @@ Type *type_fn(Type *from, Type *to) {
   fn->data.T_FN.from = from;
   fn->data.T_FN.to = to;
   return fn;
+}
+
+Type *create_type_multi_param_fn(int len, Type **from, Type *to) {
+  Type *fn = NULL;
+  for (int i = 0; i < len; i++) {
+    fn = fn == NULL ? from[i] : type_fn(fn, from[i]);
+  }
+  fn = type_fn(fn, to);
+  return to;
+}
+
+// Deep copy implementation (simplified)
+Type *deep_copy_type(const Type *original) {
+  Type *copy = talloc(sizeof(Type));
+  copy->kind = original->kind;
+  copy->alias = original->alias;
+  copy->constructor = original->constructor;
+  copy->constructor_size = original->constructor_size;
+  for (int i = 0; i < original->num_implements; i++) {
+    add_typeclass(copy, original->implements[i]);
+  }
+
+  switch (original->kind) {
+  case T_VAR:
+    copy->data.T_VAR = strdup(original->data.T_VAR);
+    break;
+  case T_CONS:
+    // Deep copy of name and args
+    copy->data.T_CONS.name = strdup(original->data.T_CONS.name);
+    copy->data.T_CONS.num_args = original->data.T_CONS.num_args;
+    copy->data.T_CONS.args =
+        talloc(sizeof(Type *) * copy->data.T_CONS.num_args);
+    for (int i = 0; i < copy->data.T_CONS.num_args; i++) {
+      copy->data.T_CONS.args[i] = deep_copy_type(original->data.T_CONS.args[i]);
+    }
+    break;
+  case T_FN:
+    copy->data.T_FN.from = deep_copy_type(original->data.T_FN.from);
+    copy->data.T_FN.to = deep_copy_type(original->data.T_FN.to);
+    break;
+  }
+  return copy;
+}
+
+int fn_type_args_len(Type *fn_type) {
+  Type *t = fn_type;
+  int fn_len = 0;
+
+  while (t->kind == T_FN) {
+    Type *from = t->data.T_FN.from;
+    t = t->data.T_FN.to;
+    fn_len++;
+  }
+
+  return fn_len;
+}
+
+bool is_list_type(Type *type) {
+  return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "List") == 0);
+}
+
+bool is_string_type(Type *type) {
+  return type->kind == T_CONS &&
+         (strcmp(type->data.T_CONS.name, "List") == 0) &&
+         (type->data.T_CONS.args[0]->kind == T_CHAR);
+}
+
+bool is_tuple_type(Type *type) {
+  return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "Tuple") == 0);
 }

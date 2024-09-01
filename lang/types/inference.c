@@ -92,7 +92,7 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
   token_type op = ast->data.AST_BINOP.op;
 
   if (types_equal(lt, rt)) {
-    return lt;
+    return resolve_op_typeclass_in_type(lt, op);
   }
 
   Type *result_type = NULL;
@@ -311,6 +311,9 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   }
   return res_type;
 }
+Type *infer_fn_application(Ast *ast, TypeEnv **env) {
+  return NULL;
+} 
 
 Type *infer(Ast *ast, TypeEnv **env) {
 
@@ -411,6 +414,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
 
+
   case AST_TUPLE: {
     int arity = ast->data.AST_LIST.len;
 
@@ -426,8 +430,58 @@ Type *infer(Ast *ast, TypeEnv **env) {
 
     break;
   }
+  case AST_FMT_STRING: {
+    int arity = ast->data.AST_LIST.len;
+    for (int i = 0; i < arity; i++) {
+      Ast *member = ast->data.AST_LIST.items + i;
+      infer(member, env);
+    }
+    type = &t_string;
+    break;
+  }
   case AST_LAMBDA: {
     type = infer_lambda(ast, env);
+    break;
+  }
+
+  case AST_EXTERN_FN: {
+    int param_count = ast->data.AST_EXTERN_FN.len - 1;
+
+    Type **param_types;
+    if (param_count == 0) {
+      param_types = talloc(sizeof(Type *));
+      *param_types = &t_void;
+    } else {
+      param_types = talloc(param_count * sizeof(Type *));
+
+      for (int i = 0; i < param_count; i++) {
+        Ast *param_ast = ast->data.AST_EXTERN_FN.signature_types + i;
+
+        Type *param_type = find_type_in_env(*env, param_ast->data.AST_IDENTIFIER.value);
+
+        if (!param_type) {
+          fprintf(stderr, "Error declaring extern function: type %s not found",
+                  param_ast->data.AST_IDENTIFIER.value);
+        }
+        param_types[i] = param_type;
+      }
+    }
+
+    Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
+    Type *ret_type = find_type_in_env(*env, ret_type_ast->data.AST_IDENTIFIER.value);
+
+    Type *fn = NULL;
+    if (param_count == 1 && ast->data.AST_LAMBDA.params->tag == AST_VOID) {
+      fn = &t_void;
+    } else {
+      for (int i = 0; i < param_count; i++) {
+        Type *ptype = param_types[i];
+        fn = fn == NULL ? ptype : type_fn(fn, ptype);
+      }
+    }
+
+
+    type = type_fn(fn, ret_type);
     break;
   }
   case AST_APPLICATION: {
@@ -441,6 +495,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
     if (is_generic(t) && t->kind == T_CONS) {
       type = generic_cons(t, ast->data.AST_APPLICATION.len,
                           ast->data.AST_APPLICATION.args, env);
+      break;
+    }
+    if (t->kind == T_FN) {
+      type = infer_fn_application(ast, env);
       break;
     }
 

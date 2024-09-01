@@ -42,8 +42,8 @@ void import_module(char *dirname, Ast *import, TypeEnv **env, JITLangCtx *ctx,
   };
   TypeEnv *module_type_env = NULL;
 
-  eval_script(fully_qualified_name, &module_ctx, module, builder, llvm_ctx,
-              &module_type_env, &ast_root);
+  // eval_script(fully_qualified_name, &module_ctx, module, builder, llvm_ctx,
+  //             &module_type_env, &ast_root);
   //
   // Type *module_type = malloc(sizeof(Type));
   // module_type->kind = T_MODULE;

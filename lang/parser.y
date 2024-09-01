@@ -1,4 +1,6 @@
 %{
+#ifndef _LANG_TAB_H
+#define _LANG_TAB_H
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -332,3 +334,4 @@ type_atom:
 void yyerror(const char *s) {
   fprintf(stderr, "Error: %s at line %d near '%s'\n", s, yylineno, yytext);
 }
+#endif _LANG_TAB_H

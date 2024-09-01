@@ -8,7 +8,7 @@ LLVM_CONFIG := $(LLVM)/bin/llvm-config
 READLINE_PREFIX := $(shell brew --prefix readline)
 
 LANG_SRC_DIR := lang
-LANG_SRCS := $(wildcard $(LANG_SRC_DIR)/*.c)
+LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wildcard $(LANG_SRC_DIR)/*.c))
 LANG_CC := clang -I./lang -I./engine
 LANG_CC += -I$(READLINE_PREFIX)/include 
 LANG_CC += -g

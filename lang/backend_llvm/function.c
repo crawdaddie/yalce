@@ -16,20 +16,32 @@ LLVMValueRef find_fn_variant(FnVariants *variants, Type *type);
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-SpecificFns *specific_fns_extend(SpecificFns *list, const char *serialized_type,
+SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
                                  LLVMValueRef func) {
-  SpecificFns *new_specific_fn = malloc(sizeof(SpecificFns));
 
-  new_specific_fn->serialized_type = serialized_type;
+  SpecificFns *new_specific_fn = malloc(sizeof(SpecificFns));
+  new_specific_fn->arg_types_key = arg_types;
   new_specific_fn->func = func;
   new_specific_fn->next = list;
   return new_specific_fn;
 };
 
+static bool match_arg_types(int len, Type **arg_types, int _len, Type **_arg_types) {
+  if (len != _len) {
+    return false;
+  }
+  for (int i = 0; i < len; i++) {
+    if (!types_equal(arg_types[i], _arg_types[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 LLVMValueRef specific_fns_lookup(SpecificFns *list,
-                                 const char *serialized_type) {
+                                 Type *key) {
   while (list) {
-    if (strcmp(serialized_type, list->serialized_type) == 0) {
+    if (types_equal(key, list->arg_types_key)) {
       return list->func;
     }
     list = list->next;
@@ -185,7 +197,7 @@ static LLVMTypeRef llvm_type_id(Ast *id, TypeEnv *env) {
     return NULL;
   }
 
-  Type *lookup_type = get_type(env, id);
+  Type *lookup_type = find_type_in_env(env, id->data.AST_IDENTIFIER.value);
   LLVMTypeRef t = type_to_llvm_type(lookup_type, env);
   return t;
 }
@@ -220,14 +232,6 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
-static TypeSerBuf *get_specific_fn_args_key(size_t len, Ast *args) {
-  TypeSerBuf *specific_fn_buf = create_type_ser_buffer(10);
-
-  for (size_t i = 0; i < len; i++) {
-    serialize_type(args[i].md, specific_fn_buf);
-  }
-  return specific_fn_buf;
-}
 
 static Type *create_specific_fn_type(size_t len, Ast *args, Type *ret_type) {
 
@@ -308,20 +312,22 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
     return res->val;
   } else if (res->type == STYPE_GENERIC_FUNCTION) {
     Ast *args = ast->data.AST_APPLICATION.args;
-    size_t len = ast->data.AST_APPLICATION.len;
+    size_t type_key_len = ast->data.AST_APPLICATION.len;
 
-    TypeSerBuf *serialized_fn_buf = get_specific_fn_args_key(len, args);
 
     SpecificFns *specific_fns =
         res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
 
+    Type *type_key = NULL;
+    for (int i = 0; i < type_key_len; i++) {
+      type_key = type_key == NULL ? args[i].md : type_fn(type_key, args[i].md);
+
+    }
+
     LLVMValueRef func =
-        specific_fns_lookup(specific_fns, (char *)serialized_fn_buf->data);
+        specific_fns_lookup(specific_fns, type_key);
 
     if (func == NULL) {
-      size_t fn_md_key_len = serialized_fn_buf->size;
-      char *serialized_type = malloc(sizeof(char) * (fn_md_key_len + 1));
-      strcpy(serialized_type, (const char *)serialized_fn_buf->data);
 
       JITLangCtx compilation_ctx = {
           ctx->stack,
@@ -330,11 +336,11 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
 
       // save back in its own context (not in the call-site context)
       func = create_new_specific_fn(
-          len, args, res->symbol_data.STYPE_GENERIC_FUNCTION.ast, ret_type,
+          type_key_len, args, res->symbol_data.STYPE_GENERIC_FUNCTION.ast, ret_type,
           &compilation_ctx, module, builder);
 
       res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
-          specific_fns_extend(specific_fns, serialized_type, func);
+          specific_fns_extend(specific_fns, type_key, func);
 
       ht *scope = compilation_ctx.stack + compilation_ctx.stack_ptr;
       ht_set_hash(scope, fn_name, hash_string(fn_name, fn_name_len), res);
@@ -373,13 +379,17 @@ LLVMValueRef codegen_constructor(Ast *ast, JITLangCtx *ctx,
   if (cons->constructor != NULL) {
     ConsMethod constructor = cons->constructor;
     val = constructor(val, ast->data.AST_APPLICATION.args->md, module, builder);
+
     if (val == NULL) {
-      fprintf(stderr, "Error: constructor method for type %s didn't work",
+      fprintf(stderr, "Error: constructor method for type %s failed",
               cons->data.T_CONS.name);
       return NULL;
     }
+    return val;
   }
+  return NULL;
 
+  /*
   Type *t = find_variant_type(ctx->env, cons->data.T_CONS.name);
 
   if (t) {
@@ -404,6 +414,7 @@ LLVMValueRef codegen_constructor(Ast *ast, JITLangCtx *ctx,
   } else {
     return val;
   }
+  */
 }
 
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,

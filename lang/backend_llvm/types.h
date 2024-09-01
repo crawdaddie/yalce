@@ -22,4 +22,6 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
 
 LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
                                 LLVMModuleRef module, LLVMBuilderRef builder);
+
+void initialize_builtin_numeric_types(TypeEnv *env);
 #endif

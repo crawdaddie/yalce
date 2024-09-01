@@ -7,6 +7,7 @@
 #include "parse.h"
 #include "serde.h"
 #include "synths.h"
+#include "types.h"
 #include "types/inference.h"
 #include "llvm-c/Transforms/Utils.h"
 #include <llvm-c/Core.h>
@@ -216,8 +217,10 @@ int jit(int argc, char **argv) {
   }
 
   // shared type env
+  //
   TypeEnv *env = NULL;
-  env = initialize_type_env(env);
+  initialize_builtin_numeric_types(env);
+  // env = initialize_type_env(env);
 
   env = initialize_type_env_synth(env);
 
@@ -282,7 +285,7 @@ int jit(int argc, char **argv) {
 
       Ast *prog = parse_input(input, dirname);
       // Ast *top = top_level_ast(prog);
-      Type *typecheck_result = infer_ast(&env, prog);
+      Type *typecheck_result = infer(prog, &env);
       ctx.env = env;
 
       if (typecheck_result == NULL) {
@@ -336,6 +339,11 @@ void print_result(Type *type, LLVMGenericValueRef result) {
 
   switch (type->kind) {
   case T_INT: {
+    printf(" %d", (int)LLVMGenericValueToInt(result, 0));
+    break;
+  }
+
+  case T_BOOL: {
     printf(" %d", (int)LLVMGenericValueToInt(result, 0));
     break;
   }

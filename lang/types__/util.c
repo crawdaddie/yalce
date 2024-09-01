@@ -261,7 +261,8 @@ bool types_equal(Type *t1, Type *t2) {
       return false;
     }
     for (int i = 0; i < t1->data.T_VARIANT.num_args; i++) {
-      if (!types_equal(t1->data.T_VARIANT.args[i], t2->data.T_VARIANT.args[i])) {
+      if (!types_equal(t1->data.T_VARIANT.args[i],
+                       t2->data.T_VARIANT.args[i])) {
         return false;
       }
     }

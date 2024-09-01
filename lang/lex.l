@@ -1,4 +1,6 @@
 %{
+#ifndef _LEX_YY_C
+#define _LEX_YY_C
 #include <stdlib.h>
 #include "parse.h"
 #include "y.tab.h"
@@ -148,3 +150,4 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 int yywrap(void) {
     return 1;
 }
+#endif _LEX_YY_C
