@@ -1,15 +1,44 @@
 #include "backend_llvm/codegen.h"
-#include "backend_llvm/codegen_binop.h"
-#include "backend_llvm/codegen_function.h"
-#include "backend_llvm/codegen_match.h"
-#include "backend_llvm/codegen_symbols.h"
-#include "codegen_list.h"
-#include "codegen_tuple.h"
-#include "serde.h"
-#include "types/util.h"
-#include "util.h"
+#include "backend_llvm/binop.h"
+#include "backend_llvm/function.h"
+#include "backend_llvm/list.h"
+#include "backend_llvm/match.h"
+#include "backend_llvm/symbols.h"
+#include "backend_llvm/tuple.h"
+#include "backend_llvm/types.h"
+#include "backend_llvm/util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+
+LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
+                               LLVMModuleRef module, LLVMBuilderRef builder) {
+  LLVMTypeRef funcType =
+      LLVMFunctionType(type_to_llvm_type(ast->md, ctx->env), NULL, 0, 0);
+
+  LLVMValueRef func = LLVMAddFunction(module, "top", funcType);
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  if (func == NULL) {
+    printf("top level return null??\n");
+    return NULL;
+  }
+
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMPositionBuilderAtEnd(builder, block);
+
+  LLVMValueRef body = codegen(ast, ctx, module, builder);
+
+  if (body == NULL) {
+    LLVMDeleteFunction(func);
+
+    return NULL;
+  }
+
+  *ret_type = LLVMTypeOf(body);
+  LLVMBuildRet(builder, body);
+  return func;
+}
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {

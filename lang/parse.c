@@ -4,6 +4,34 @@
 #include <stdlib.h>
 #include <string.h>
 
+// static struct PStorage {
+//   void *data;
+//   size_t size;
+//   size_t capacity;
+// } PStorage;
+// #define _PSTORAGE_SIZE 200000
+// static void *_tstorage_data[_PSTORAGE_SIZE];
+//
+// static struct PStorage _pstorage = {_tstorage_data, 0, _PSTORAGE_SIZE};
+
+// parser-specific allocation
+static void *palloc(size_t size) {
+  // if (_pstorage.size + size > _pstorage.capacity) {
+  //   fprintf(stderr, "Error allocating memory for type");
+  //   return NULL;
+  // }
+  // void *mem = _pstorage.data + _pstorage.size;
+  // _pstorage.size += size;
+  // return mem;
+  return malloc(size);
+}
+static void *prealloc(void *p, size_t size) {
+  // void *n = palloc(size);
+  // memcpy(n, p, size);
+  // return n;
+  return realloc(p, size);
+}
+
 struct string_list {
   const char *data;
   struct string_list *next;
@@ -11,7 +39,7 @@ struct string_list {
 
 struct string_list *string_list_push_left(struct string_list *list,
                                           const char *data) {
-  struct string_list *new = malloc(sizeof(struct string_list));
+  struct string_list *new = palloc(sizeof(struct string_list));
   new->next = list;
   new->data = data;
   return new;
@@ -31,7 +59,7 @@ const char *string_list_find(struct string_list *list, const char *data) {
 static struct string_list *included = NULL;
 
 Ast *Ast_new(enum ast_tag tag) {
-  Ast *node = malloc(sizeof(Ast));
+  Ast *node = palloc(sizeof(Ast));
   node->tag = tag;
   return node;
 }
@@ -46,7 +74,7 @@ void ast_body_push(Ast *body, Ast *stmt) {
     body->data.AST_BODY.len++;
     int len = body->data.AST_BODY.len;
 
-    body->data.AST_BODY.stmts = realloc(members, sizeof(Ast *) * len);
+    body->data.AST_BODY.stmts = prealloc(members, sizeof(Ast *) * len);
     body->data.AST_BODY.stmts[len - 1] = stmt;
     return;
   }
@@ -124,7 +152,7 @@ Ast *parse_input(char *input, const char *dirname) {
 
   ast_root = Ast_new(AST_BODY);
   ast_root->data.AST_BODY.len = 0;
-  ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
+  ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
 
   input_stack = string_list_push_left(input_stack, input);
 
@@ -132,7 +160,8 @@ Ast *parse_input(char *input, const char *dirname) {
   yyparse();             // Parse the input
 
   struct string_list *_input_stack = input_stack->next;
-  free(input_stack);
+
+  // free(input_stack);
 
   input_stack = _input_stack;
   if (input_stack && input_stack->data) {
@@ -152,13 +181,13 @@ Ast *ast_application(Ast *func, Ast *arg) {
     func->data.AST_APPLICATION.len++;
     int len = func->data.AST_APPLICATION.len;
 
-    func->data.AST_APPLICATION.args = realloc(args, sizeof(Ast) * len);
+    func->data.AST_APPLICATION.args = prealloc(args, sizeof(Ast) * len);
     func->data.AST_APPLICATION.args[len - 1] = *arg;
     return func;
   }
   Ast *app = Ast_new(AST_APPLICATION);
   app->data.AST_APPLICATION.function = func;
-  app->data.AST_APPLICATION.args = malloc(sizeof(Ast));
+  app->data.AST_APPLICATION.args = palloc(sizeof(Ast));
   app->data.AST_APPLICATION.args[0] = *arg;
   app->data.AST_APPLICATION.len = 1;
   return app;
@@ -175,13 +204,22 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   return lambda;
 }
 
+Ast *ast_void_lambda(Ast *body) {
+  Ast *lambda = Ast_new(AST_LAMBDA);
+  lambda->data.AST_LAMBDA.params = ast_void();
+  lambda->data.AST_LAMBDA.len = 1;
+  lambda->data.AST_LAMBDA.defaults = NULL;
+  lambda->data.AST_LAMBDA.body = body;
+  return lambda;
+}
+
 Ast *ast_arg_list(Ast *arg_id, Ast *def) {
   Ast *lambda = Ast_new(AST_LAMBDA);
 
-  lambda->data.AST_LAMBDA.params = malloc(sizeof(Ast));
+  lambda->data.AST_LAMBDA.params = palloc(sizeof(Ast));
   lambda->data.AST_LAMBDA.len = 1;
   lambda->data.AST_LAMBDA.params[0] = *arg_id;
-  lambda->data.AST_LAMBDA.defaults = malloc(sizeof(Ast *));
+  lambda->data.AST_LAMBDA.defaults = palloc(sizeof(Ast *));
 
   if (def) {
     lambda->data.AST_LAMBDA.defaults[0] = def;
@@ -195,9 +233,9 @@ Ast *ast_arg_list_push(Ast *lambda, Ast *arg_id, Ast *def) {
   lambda->data.AST_LAMBDA.len++;
   size_t len = lambda->data.AST_LAMBDA.len;
 
-  lambda->data.AST_LAMBDA.params = realloc(params, sizeof(Ast) * len);
+  lambda->data.AST_LAMBDA.params = prealloc(params, sizeof(Ast) * len);
   lambda->data.AST_LAMBDA.defaults =
-      realloc(lambda->data.AST_LAMBDA.defaults, sizeof(Ast *) * len);
+      prealloc(lambda->data.AST_LAMBDA.defaults, sizeof(Ast *) * len);
   lambda->data.AST_LAMBDA.params[len - 1] = *arg_id;
 
   if (def) {
@@ -234,7 +272,7 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
   }
 
   Ast *body = Ast_new(AST_BODY);
-  body->data.AST_BODY.stmts = malloc(sizeof(Ast *));
+  body->data.AST_BODY.stmts = palloc(sizeof(Ast *));
   ast_body_push(body, stmts);
   ast_body_push(body, new_stmt);
   return body;
@@ -376,7 +414,7 @@ Ast *ast_list_push(Ast *list, Ast *val) {
   list->data.AST_LIST.len++;
   int len = list->data.AST_LIST.len;
 
-  list->data.AST_LIST.items = realloc(items, sizeof(Ast) * len);
+  list->data.AST_LIST.items = prealloc(items, sizeof(Ast) * len);
   list->data.AST_LIST.items[len - 1] = *val;
   return list;
 }
@@ -388,7 +426,7 @@ Ast *ast_match(Ast *expr, Ast *match) {
 Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result) {
   if (match == NULL) {
     match = Ast_new(AST_MATCH);
-    match->data.AST_MATCH.branches = malloc(sizeof(Ast) * 2);
+    match->data.AST_MATCH.branches = palloc(sizeof(Ast) * 2);
     match->data.AST_MATCH.branches[0] = *expr;
     match->data.AST_MATCH.branches[1] = *result;
     match->data.AST_MATCH.len = 1;
@@ -400,7 +438,7 @@ Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result) {
   match->data.AST_MATCH.len++;
   int len = match->data.AST_MATCH.len;
 
-  match->data.AST_MATCH.branches = realloc(branches, sizeof(Ast) * len * 2);
+  match->data.AST_MATCH.branches = prealloc(branches, sizeof(Ast) * len * 2);
   match->data.AST_MATCH.branches[len * 2 - 2] = *expr;
   match->data.AST_MATCH.branches[len * 2 - 1] = *result;
   return match;
@@ -498,7 +536,7 @@ int get_let_binding_name(Ast *ast, ObjString *name) {
 }
 
 Ast *ast_placeholder() {
-  char *c = malloc(sizeof(char) * 2);
+  char *c = palloc(sizeof(char) * 2);
   *c = '_';
   return ast_identifier((ObjString){.chars = c, .length = 1});
 }
@@ -531,7 +569,7 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
   Ast *body = Ast_new(AST_BODY);
   body = Ast_new(AST_BODY);
   body->data.AST_BODY.len = 2;
-  body->data.AST_BODY.stmts = malloc(sizeof(Ast *) * 2);
+  body->data.AST_BODY.stmts = palloc(sizeof(Ast *) * 2);
   body->data.AST_BODY.stmts[0] = seq;
   body->data.AST_BODY.stmts[1] = new;
   return body;
@@ -541,7 +579,7 @@ void handle_macro(Ast *root, const char *macro_text) {
 
   if (strncmp("include", macro_text, 7) == 0) {
     int len = strlen(current_dir) + 1 + strlen(macro_text + 8) + 4;
-    char *fully_qualified_name = malloc(sizeof(char) * len);
+    char *fully_qualified_name = palloc(sizeof(char) * len);
     snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", current_dir,
              macro_text + 8);
 

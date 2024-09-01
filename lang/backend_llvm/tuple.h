@@ -1,9 +1,8 @@
 #ifndef _LANG_BACKEND_LLVM_CODEGEN_TUPLE_H
 #define _LANG_BACKEND_LLVM_CODEGEN_TUPLE_H
 
-#include "common.h"
+#include "backend_llvm/common.h"
 #include "parse.h"
-#include "types/type.h"
 #include "llvm-c/Types.h"
 
 // Function to create an LLVM tuple value

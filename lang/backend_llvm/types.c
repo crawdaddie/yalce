@@ -1,6 +1,5 @@
-#include "backend_llvm/codegen_types.h"
+#include "backend_llvm/types.h"
 #include "types/type.h"
-#include "types/util.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>
 #include <string.h>

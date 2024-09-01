@@ -1,5 +1,5 @@
-#include "backend_llvm/codegen_function_currying.h"
-#include "backend_llvm/codegen_function.h"
+#include "backend_llvm/function_currying.h"
+#include "backend_llvm/function.h"
 #include "serde.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>

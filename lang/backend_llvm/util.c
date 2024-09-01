@@ -1,7 +1,6 @@
 #include "backend_llvm/util.h"
-#include "codegen_binop.h"
+#include "backend_llvm/binop.h"
 #include "types/type.h"
-#include "types/util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <llvm-c/Core.h>

@@ -238,6 +238,7 @@ Ast *ast_identifier(ObjString id);
 Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation);
 Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
+Ast *ast_void_lambda(Ast *body);
 Ast *ast_arg_list(Ast *arg_id, Ast *def);
 Ast *ast_arg_list_push(Ast *arg_list, Ast *arg_id, Ast *def);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
@@ -273,7 +274,7 @@ Ast *ast_record_access(Ast *record, Ast *member);
 
 Ast *ast_char(char ch);
 
-Ast *ast_sequence(Ast *seq, Ast *new);
+Ast *ast_sequence(Ast *seq, Ast *new_);
 
 Ast *ast_assoc_extern(Ast *l, ObjString name);
 // Ast *macro(Ast *expr);

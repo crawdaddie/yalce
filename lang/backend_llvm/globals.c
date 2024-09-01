@@ -1,8 +1,6 @@
-#include "backend_llvm/codegen_globals.h"
+#include "backend_llvm/globals.h"
 #include "backend_llvm/common.h"
-#include "util.h"
 #include "llvm-c/Core.h"
-#include "llvm-c/ExecutionEngine.h"
 
 // Global variables
 LLVMValueRef global_storage_array_llvm;

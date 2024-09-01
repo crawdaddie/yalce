@@ -1,6 +1,6 @@
-#include "backend_llvm/codegen_list.h"
-#include "backend_llvm/codegen_types.h"
-#include "util.h"
+#include "backend_llvm/list.h"
+#include "backend_llvm/types.h"
+#include "backend_llvm/util.h"
 #include "llvm-c/Core.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

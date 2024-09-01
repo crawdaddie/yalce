@@ -2,7 +2,6 @@
 #include "backend_llvm/util.h"
 #include "parse.h"
 #include "types/type.h"
-#include "types/util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <string.h>
@@ -257,12 +256,12 @@ static NumTypeClassMethod synth_num_methods[] = {
 // clang-format on
 
 TypeEnv *initialize_type_env_synth(TypeEnv *env) {
-  TypeClass *synth_num_typeclass = typeclass_instance(&TCNum);
-
-  synth_num_typeclass->methods = synth_num_methods;
-  synth_num_typeclass->method_size = sizeof(NumTypeClassMethod);
-
-  add_typeclass_impl(&t_synth, synth_num_typeclass);
+  // TypeClass *synth_num_typeclass = typeclass_instance(&TCNum);
+  //
+  // synth_num_typeclass->methods = synth_num_methods;
+  // synth_num_typeclass->method_size = sizeof(NumTypeClassMethod);
+  //
+  // add_typeclass_impl(&t_synth, synth_num_typeclass);
 
   env = env_extend(env, "Synth", &t_synth);
   env = env_extend(env, "Signal", &t_signal);

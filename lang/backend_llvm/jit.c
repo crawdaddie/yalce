@@ -1,15 +1,13 @@
 #include "backend_llvm/jit.h"
+#include "backend_llvm/codegen.h"
 #include "backend_llvm/common.h"
-#include "codegen.h"
-#include "codegen_globals.h"
-#include "codegen_types.h"
+#include "backend_llvm/globals.h"
 #include "format_utils.h"
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
 #include "synths.h"
 #include "types/inference.h"
-#include "types/util.h"
 #include "llvm-c/Transforms/Utils.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -74,47 +72,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMContextRef llvm_ctx, TypeEnv **env,
                                        Ast **prog);
 
-static LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type,
-                                      JITLangCtx *ctx, LLVMModuleRef module,
-                                      LLVMBuilderRef builder) {
-  // intrinsic decl
-  // LLVMTypeRef param_types[] = {LLVMDoubleType()};
-  // LLVMTypeRef fn_type =
-  //     LLVMFunctionType(LLVMDoubleType(), param_types, 1, false);
-  // LLVMValueRef fn = LLVMAddFunction(module, "llvm.cos.f64", fn_type);
-
-  // Create function type.
-  LLVMTypeRef funcType =
-      LLVMFunctionType(type_to_llvm_type(ast->md, ctx->env), NULL, 0, 0);
-
-  // Create function.
-  LLVMValueRef func = LLVMAddFunction(module, "top", funcType);
-
-  LLVMSetLinkage(func, LLVMExternalLinkage);
-
-  if (func == NULL) {
-    printf("top level return null??\n");
-    return NULL;
-  }
-
-  // Create basic block.
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
-  LLVMPositionBuilderAtEnd(builder, block);
-
-  // Generate body.
-  LLVMValueRef body = codegen(ast, ctx, module, builder);
-
-  if (body == NULL) {
-    LLVMDeleteFunction(func);
-
-    return NULL;
-  }
-
-  *ret_type = LLVMTypeOf(body);
-  LLVMBuildRet(builder, body);
-  return func;
-}
-
 int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
                       LLVMModuleRef module) {
   char *error = NULL;
@@ -136,59 +93,6 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
 
   LLVMAddGlobalMapping(*engine, array_global, ctx->global_storage_array);
   LLVMAddGlobalMapping(*engine, size_global, ctx->global_storage_capacity);
-}
-
-void import_module(char *dirname, Ast *import, TypeEnv **env, JITLangCtx *ctx,
-                   LLVMModuleRef main_module, LLVMContextRef llvm_ctx) {
-
-  const char *module_name = import->data.AST_IMPORT.module_name;
-  uint64_t module_name_hash = hash_string(module_name, strlen(module_name));
-  if (ht_get_hash(ctx->stack, module_name, module_name_hash)) {
-    return;
-  }
-
-  int len = strlen(dirname) + 1 + strlen(module_name) + 4;
-  char *fully_qualified_name = malloc(sizeof(char) * len);
-  snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", dirname, module_name);
-
-  LLVMModuleRef module =
-      LLVMModuleCreateWithNameInContext(fully_qualified_name, llvm_ctx);
-
-  LLVMBuilderRef builder = LLVMCreateBuilderInContext(llvm_ctx);
-
-  ht *stack = malloc(sizeof(ht) * STACK_MAX);
-
-  for (int i = 0; i < STACK_MAX; i++) {
-    ht_init(stack + i);
-  }
-  JITLangCtx module_ctx = {
-      .stack = stack,
-      .stack_ptr = 0,
-      .env = ctx->env,
-      .num_globals = ctx->num_globals,
-      .global_storage_array = ctx->global_storage_array,
-      .global_storage_capacity = ctx->global_storage_capacity,
-  };
-  TypeEnv *module_type_env = NULL;
-
-  eval_script(fully_qualified_name, &module_ctx, module, builder, llvm_ctx,
-              &module_type_env, &ast_root);
-
-  Type *module_type = malloc(sizeof(Type));
-  module_type->kind = T_MODULE;
-  module_type->data.T_MODULE = module_type_env;
-
-  *env = env_extend(*env, module_name, module_type);
-
-  stack = realloc(stack, sizeof(ht));
-  // Link the imported module with the main module
-  LLVMBool link_result = LLVMLinkModules2(main_module, module);
-  JITSymbol *sym = malloc(sizeof(JITSymbol));
-
-  *sym = (JITSymbol){STYPE_MODULE,
-                     .symbol_data = {.STYPE_MODULE = {.symbols = stack}}};
-
-  ht_set_hash(ctx->stack, module_name, module_name_hash, sym);
 }
 
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
@@ -216,18 +120,9 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   if (!(*prog)) {
     return NULL;
   }
-  // for (int i = 0; i < (*prog)->data.AST_BODY.len; i++) {
-  //   Ast *stmt = *((*prog)->data.AST_BODY.stmts + i);
-  //   if (stmt->tag == AST_IMPORT) {
-  //     ast_root = NULL;
-  //     import_module(dirname, stmt, env, ctx, module, llvm_ctx);
-  //   }
-  // }
 
-
-  infer_ast(env, *prog);
+  infer(*prog, env);
   ctx->env = *env;
-
 
 #ifdef DUMP_AST
   LLVMDumpModule(module);

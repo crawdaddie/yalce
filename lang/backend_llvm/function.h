@@ -1,7 +1,7 @@
 #ifndef _LANG_BACKEND_FUNCTION_H
 #define _LANG_BACKEND_FUNCTION_H
 
-#include "common.h"
+#include "backend_llvm/common.h"
 #include "parse.h"
 #include "llvm-c/Types.h"
 LLVMValueRef codegen_fn_proto(Type *fn_type, int fn_len, const char *fn_name,

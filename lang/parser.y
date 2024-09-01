@@ -201,9 +201,9 @@ extern_variants:
 
 lambda_expr:
     FN lambda_args ARROW expr_sequence ';'      { $$ = ast_lambda($2, $4); }
-  | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_lambda(NULL, $4); }
+  | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_void_lambda($4); }
   | '(' FN lambda_args ARROW expr_sequence ')'  { $$ = ast_lambda($3, $5); }
-  | '(' FN TOK_VOID ARROW expr_sequence ')'     { $$ = ast_lambda(NULL, $5); }
+  | '(' FN TOK_VOID ARROW expr_sequence ')'     { $$ = ast_void_lambda($5); }
   ;
 
 
