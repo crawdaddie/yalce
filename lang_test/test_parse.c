@@ -281,6 +281,9 @@ int main() {
   status &= test_parse("type Cb = Double -> Int -> ();",
                        "(let Cb (Double -> (Int -> ())))");
 
+  status &= test_parse("let ($~) = fn a b -> a + b;;", "(let $~ ($~ a b -> \n"
+                                                       "(+ a b))\n"
+                                                       ")");
   // extern funcs
   return status ? 0 : 1;
 }

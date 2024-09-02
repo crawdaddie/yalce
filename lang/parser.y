@@ -182,6 +182,10 @@ let_binding:
                                       lambda->data.AST_LAMBDA.is_async = true;
                                       $$ = lambda;
                                     }
+  | LET '(' IDENTIFIER ')' '=' lambda_expr 
+                                    {
+                                      $$ = ast_let(ast_identifier($3), $6, NULL);
+                                    }
   ;
 
 extern_typed_signature:

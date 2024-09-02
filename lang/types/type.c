@@ -140,7 +140,6 @@ bool types_equal(Type *t1, Type *t2) {
     return true;
   }
 
-
   if (t1 == NULL || t2 == NULL) {
     return false;
   }
@@ -434,12 +433,12 @@ Type *type_fn(Type *from, Type *to) {
 }
 
 Type *create_type_multi_param_fn(int len, Type **from, Type *to) {
-  Type *fn = NULL;
-  for (int i = 0; i < len; i++) {
-    fn = fn == NULL ? from[i] : type_fn(fn, from[i]);
+  Type *fn = to;
+  for (int i = len - 1; i >= 0; i--) {
+    Type *ptype = from[i];
+    fn = type_fn(ptype, fn);
   }
-  fn = type_fn(fn, to);
-  return to;
+  return fn;
 }
 
 // Deep copy implementation (simplified)
@@ -482,7 +481,6 @@ int fn_type_args_len(Type *fn_type) {
     t = t->data.T_FN.from;
     fn_len++;
   }
-
 
   return fn_len;
 }

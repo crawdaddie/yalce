@@ -42,7 +42,6 @@ enum TypeKind {
   T_VOID,
   T_STRING,
   T_FN,
-  T_TUPLE,
   T_CONS,
   T_VARIANT,
   /* Type Variable  */
@@ -100,7 +99,6 @@ bool types_equal(Type *l, Type *r);
 
 Type *fn_return_type(Type *);
 int fn_type_args_len(Type *);
-
 
 void *talloc(size_t size);
 void tfree(void *mem);

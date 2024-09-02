@@ -52,6 +52,7 @@
               .signature = &type_name##_arithmetic_fn_sig,                     \
           },                                                                   \
       }}
+
 TypeClass *derive_arithmetic_for_type(Type *t) {
   TypeClass *tc = talloc(sizeof(TypeClass));
   Method *methods = talloc(sizeof(Method) * 5);
@@ -278,7 +279,6 @@ Type *resolve_binop_typeclass(Type *l, Type *r, token_type op) {
   // print_type(l);
   // print_type(r);
 
-
   TypeClass *tcl = get_typeclass_by_name(l, tc_name);
   TypeClass *tcr = get_typeclass_by_name(r, tc_name);
   if (!tcl || !tcr) {
@@ -320,7 +320,6 @@ Type *resolve_op_typeclass_in_type(Type *l, token_type op) {
   // print_type(l);
   // print_type(r);
 
-
   TypeClass *tcl = get_typeclass_by_name(l, tc_name);
   if (!tcl) {
     fprintf(stderr, "Error: typeclass %s not implemented for operand", tc_name);
@@ -329,4 +328,32 @@ Type *resolve_op_typeclass_in_type(Type *l, token_type op) {
 
   Method dominant_method = tcl->methods[index];
   return fn_return_type(dominant_method.signature);
+}
+
+TypeClass *find_op_typeclass_in_type(Type *t, token_type op, int *index) {
+
+  const char *tc_name;
+  if (op >= TOKEN_PLUS && op <= TOKEN_MODULO) {
+    tc_name = "arithmetic";
+    *index = op - TOKEN_PLUS;
+
+  } else if (op >= TOKEN_LT && op <= TOKEN_GTE) {
+    tc_name = "ord";
+    *index = op - TOKEN_LT;
+  } else if (op >= TOKEN_EQUALITY && op <= TOKEN_NOT_EQUAL) {
+    tc_name = "eq";
+    *index = op - TOKEN_EQUALITY;
+  }
+  // printf("find binary tc %s\n", tc_name);
+  // print_type(l);
+  // print_type(r);
+
+  TypeClass *tcl = get_typeclass_by_name(t, tc_name);
+  if (!tcl) {
+    fprintf(stderr, "Error: typeclass %s not implemented for operand\n",
+            tc_name);
+    return NULL;
+  }
+
+  return tcl;
 }

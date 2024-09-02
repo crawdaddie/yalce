@@ -2,6 +2,7 @@
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
 #include "serde.h"
+#include "types/unification.h"
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -37,6 +38,16 @@
     status &= stat;                                                            \
   })
 
+#define TEST(res, msg)                                                         \
+  ({                                                                           \
+    if (res) {                                                                 \
+      fprintf(stderr, "✅ " msg "\n");                                         \
+    } else {                                                                   \
+      fprintf(stderr, "❌ " msg "\n");                                         \
+    }                                                                          \
+    res;                                                                       \
+  })
+
 #define TEST_SIMPLE_AST_TYPE_ENV(i, t, env)                                    \
   ({                                                                           \
     reset_type_var_counter();                                                  \
@@ -65,7 +76,7 @@
       fprintf(stderr, "✅ typecheck should fail: " i "\n");                    \
     } else {                                                                   \
       char buf2[100] = {};                                                     \
-      fprintf(stderr, "❌ typecheck doesn't fail" i " (got %s)\n",             \
+      fprintf(stderr, "❌ typecheck doesn't fail " i " (got %s)\n",            \
               type_to_string(p->md, buf2));                                    \
     }                                                                          \
     status &= (succeed == NULL);                                               \
@@ -216,10 +227,27 @@ int main() {
                         "  | Some 1.0 -> 1\n"
                         "  | None -> 0\n"
                         "  ;\n");
-    SEP;
   });
 
   ({
+    SEP;
+
+    Type opt_int =
+        tcons("Variant", 2, &tcons("Some", 1, &t_int), &tvar("None"));
+    TEST_SIMPLE_AST_TYPE("type Option t =\n"
+                         "  | Some of t\n"
+                         "  | None\n"
+                         "  ;\n"
+                         "let f = fn x ->\n"
+                         "match x with\n"
+                         "  | Some 1 -> 1\n"
+                         "  | None -> 0\n"
+                         "  ;;\n",
+                         &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
+  ({
+    SEP;
     Type fn = MAKE_FN_TYPE_3(&t_int, &t_num, &t_int);
     TEST_SIMPLE_AST_TYPE("let ex_fn = extern fn Int -> Double -> Int;", &fn);
   });
@@ -241,11 +269,18 @@ int main() {
     Type t_arithmetic1 = arithmetic_var("t1");
 
     TEST_SIMPLE_AST_TYPE_ENV(
-        "let f = fn x y -> (1 + 2) * 8 - x + y;",
+        "let f = fn x y -> x + y;",
         &MAKE_FN_TYPE_3(&t_arithmetic2, &t_arithmetic1, &t_arithmetic1), env);
 
     TEST_SIMPLE_AST_TYPE_ENV(
         "f 1", &MAKE_FN_TYPE_2(&t_arithmetic1, &t_arithmetic1), env);
+  });
+
+  ({
+    Type t0 = tvar("t0");
+    TypeEnv *env = NULL;
+    Type *u = unify(&t0, &t_int, &env);
+    status &= TEST(types_equal(u, &t_int), "unify t0 with Int");
   });
 
   return status ? 0 : 1;

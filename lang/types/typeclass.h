@@ -20,6 +20,36 @@ typedef struct TypeClass {
   Method *methods;
 } TypeClass;
 
+// class Arithmetic a where
+//   (+) :: a -> a -> a
+//   (-) :: a -> a -> a
+//   (*) :: a -> a -> a
+//   (/) :: a -> a -> a
+//   (%) :: a -> a -> a
+//
+// instance Arithmetic Int where
+//   (+)    = addInt
+//   (-)    = subInt
+//   (*)    = mulInt
+//   (/)    = divInt
+//   (%)    = remInt or modulo Int
+//
+// instance Arithmetic Float where
+//   (+)    = addFloat
+//   (*)    = mulFloat
+//   etc ...
+//
+//
+// a type a belongs to class Arithmetic if there are functions named (+), (-),
+// (*), (/) & (%) of the appropriate types, defined on it.
+// therefore the type expression Arithmetic a means
+// ∃ functions (+), (-), (*), (/) & (%) for a
+//
+// square       :: Arithmetic a => a -> a
+// square x     = x * x
+// squares      :: Arithmetic a * Arithmetic b * Arithmetic c => (a,b,c) ->
+// (a,b,c) squares (x, y, z) = (square x, square y, square z)
+
 extern TypeClass TCArithmetic_int;
 extern TypeClass TCOrd_int;
 extern TypeClass TCEq_int;
@@ -51,4 +81,6 @@ int add_typeclass(Type *t, TypeClass *tc);
 Type *resolve_binop_typeclass(Type *l, Type *r, token_type op);
 
 Type *resolve_op_typeclass_in_type(Type *l, token_type op);
+
+TypeClass *find_op_typeclass_in_type(Type *t, token_type op, int *index);
 #endif

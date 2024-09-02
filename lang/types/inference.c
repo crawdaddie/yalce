@@ -1,6 +1,7 @@
 #include "inference.h"
 #include "serde.h"
 #include "types/type_declaration.h"
+#include "types/unification.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,43 +38,6 @@ Type *next_tvar() {
     t;                                                                         \
   })
 
-void unify(Type *l, Type *r) {
-
-  if (types_equal(l, r)) {
-    return;
-  }
-
-  if (l->kind == T_VAR && r->kind != T_VAR) {
-    *l = *r;
-  }
-
-  if (l->kind == T_VAR && r->num_implements > 0) {
-    // l->implements = r->implements;
-    // l->num_implements = r->num_implements;
-    *l = *r;
-  }
-
-  if (l->kind == T_VAR && r->kind == T_VAR) {
-    // l->implements = r->implements;
-    // l->num_implements = r->num_implements;
-    *l = *r;
-  }
-
-  if (l->kind == T_CONS && r->kind == T_CONS) {
-    if (strcmp(l->data.T_CONS.name, r->data.T_CONS.name) != 0 ||
-        l->data.T_CONS.num_args != r->data.T_CONS.num_args) {
-      fprintf(stderr, "Error: Type mismatch between %s and %s\n",
-              l->data.T_CONS.name, r->data.T_CONS.name);
-    }
-
-    for (int i = 0; i < l->data.T_CONS.num_args; i++) {
-      unify(l->data.T_CONS.args[i], r->data.T_CONS.args[i]);
-    }
-
-    return;
-  }
-}
-
 static char *op_to_name[] = {
     [TOKEN_PLUS] = "+",      [TOKEN_MINUS] = "-",      [TOKEN_STAR] = "*",
     [TOKEN_SLASH] = "/",     [TOKEN_MODULO] = "%",     [TOKEN_LT] = "<",
@@ -81,7 +45,7 @@ static char *op_to_name[] = {
     [TOKEN_EQUALITY] = "==", [TOKEN_NOT_EQUAL] = "!=",
 };
 
-Type *infer_binop(Ast *ast, TypeEnv **env) {
+Type *infer_binop_(Ast *ast, TypeEnv **env) {
 
   Type *lt = TRY_INFER(ast->data.AST_BINOP.left, env,
                        "Failure typechecking lhs of binop: ");
@@ -95,12 +59,17 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
     return resolve_op_typeclass_in_type(lt, op);
   }
 
-  Type *result_type = NULL;
-
   if ((!is_generic(lt)) && (!is_generic(rt))) {
     return resolve_binop_typeclass(lt, rt, op);
   }
 
+  // find most likely typeclass
+  printf("find most likely typeclass\n");
+  print_ast(ast);
+  print_type(lt);
+  print_type(rt);
+
+  Type *result_type = NULL;
   if (is_generic(lt) && (!is_generic(rt))) {
     result_type = lt;
   } else if (is_generic(rt) && (!is_generic(lt))) {
@@ -125,6 +94,57 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
   // if x is something 'higher' than a float use that instead
 
   return result_type;
+}
+Type *infer_binop(Ast *ast, TypeEnv **env) {
+
+  token_type op = ast->data.AST_BINOP.op;
+  Type *l = TRY_INFER(ast->data.AST_BINOP.left, env,
+                      "Failure typechecking lhs of binop: ");
+  int lmidx;
+  TypeClass *ltc = find_op_typeclass_in_type(l, op, &lmidx);
+
+  Type *r = TRY_INFER(ast->data.AST_BINOP.right, env,
+                      "Failure typechecking rhs of binop: ");
+
+  int rmidx;
+  TypeClass *rtc = find_op_typeclass_in_type(r, op, &rmidx);
+
+  TypeClass *tc;
+  Method meth;
+  int typeclasses = ((ltc != NULL) << 1) | (rtc != NULL);
+  switch (typeclasses) {
+  case 0b11: {
+    bool use_l = ltc->rank >= rtc->rank;
+    tc = use_l ? ltc : rtc;
+    meth = tc->methods[use_l ? lmidx : rmidx];
+    break;
+  }
+  case 0b10: {
+    tc = ltc;
+    meth = tc->methods[lmidx];
+    // add tc to r
+    break;
+  }
+  case 0b01: {
+    tc = rtc;
+    meth = tc->methods[rmidx];
+    // add tc to l
+    break;
+  }
+  case 0b00: {
+    // if both l & r are type vars then we can add tc constraint to both
+    // if not then typechecking fails
+    if (!(is_generic(l) && is_generic(r))) {
+      fprintf(stderr,
+              "Error invalid args passed to binop - typeclass not found\n");
+      return NULL;
+    }
+    // construct typeclass with lowest rank (0.0) and apply to both l & r
+    break;
+  }
+  }
+
+  return fn_return_type(meth.signature);
 }
 
 static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
@@ -213,13 +233,15 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
     fn = &t_void;
     fn = type_fn(fn, return_type);
   } else {
-    fn = return_type;
+    Type *param_types[len];
+
     for (int i = len - 1; i >= 0; i--) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
       Type *ptype = binding_type(param_ast);
+      param_types[i] = ptype;
       fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
-      fn = type_fn(ptype, fn);
     }
+    fn = create_type_multi_param_fn(len, param_types, return_type);
   }
 
   if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
@@ -229,7 +251,10 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   Type *body_type = infer(ast->data.AST_LAMBDA.body, &fn_scope_env);
 
-  unify(return_type, body_type);
+  TypeEnv **_env = env;
+  Type *unified_ret = unify(return_type, body_type, _env);
+  *return_type = *unified_ret;
+
   return fn;
 }
 static Type *copy_type(Type *t) {
@@ -300,14 +325,17 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
 
     TypeEnv *_env = add_binding_to_env(*env, test_expr, test_type);
     Type *_res_type = infer(result_expr, &_env);
-    unify(wtype, test_type);
+
+    // unify(wtype, test_type, env);
+
     if (res_type != NULL) {
-      unify(res_type, _res_type);
+      // unify(res_type, _res_type, env);
     }
     res_type = _res_type;
   }
   return res_type;
 }
+
 typedef struct TypeMap {
   Type *key;
   Type *val;
@@ -538,19 +566,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
     if (param_count == 1 && ast->data.AST_LAMBDA.params->tag == AST_VOID) {
       fn = type_fn(&t_void, ret_type);
     } else {
-      fn = ret_type;
-
-      // fn = return_type;
-      // for (int i = len - 1; i >= 0; i--) {
-      //   Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-      //   Type *ptype = binding_type(param_ast);
-      //   fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
-      //   fn = type_fn(ptype, fn);
-      // }
-      for (int i = param_count - 1; i >= 0; i--) {
-        Type *ptype = param_types[i];
-        fn = type_fn(ptype, fn);
-      }
+      fn = create_type_multi_param_fn(param_count, param_types, ret_type);
     }
     type = fn;
     break;
@@ -583,5 +599,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   ast->md = type;
+
   return type;
 }

@@ -145,6 +145,14 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                     yylval.vchar = *(yytext + 1);
                     return TOK_CHAR;
                 }
+[&$*+\-/=>@^|%<]([&$*+\-/=>@^|%<!.:\?~]*)       {
+                          int len = yyleng;
+                          yylval.vident.chars = strdup(yytext); 
+                          yylval.vident.length = len;
+                          yylval.vident.hash = hash_string(yylval.vident.chars, len);
+                          printf("custom binop '%s'", yytext);
+                          return IDENTIFIER;
+}
 .               { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 %%
 int yywrap(void) {
