@@ -110,6 +110,8 @@ char *type_to_string(Type *t, char *buffer) {
   }
   case T_FN: {
     Type *fn = t;
+
+    buffer = strcat(buffer, "(");
     while (fn->kind == T_FN) {
       buffer = type_to_string(fn->data.T_FN.from, buffer);
       buffer = strncat(buffer, " -> ", 4);
@@ -117,6 +119,7 @@ char *type_to_string(Type *t, char *buffer) {
     }
     // If it's not a function type, it's the return type itself
     buffer = type_to_string(fn, buffer);
+    buffer = strcat(buffer, ")");
     break;
   }
   }
@@ -157,7 +160,6 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   case T_VAR: {
-
     bool eq = strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
     if (t2->num_implements > 0) {
 
@@ -235,7 +237,9 @@ void *talloc(size_t size) {
   return mem;
 }
 
-void tfree(void *mem) { free(mem); }
+void tfree(void *mem) {
+  // free(mem);
+}
 
 Type *empty_type() {
   Type *mem = talloc(sizeof(Type));
@@ -266,9 +270,8 @@ Type *fn_return_type(Type *fn) {
 }
 
 bool is_generic(Type *t) {
-
   if (t == NULL) {
-    fprintf(stderr, "Error type passed to generic test is null");
+    fprintf(stderr, "Error type passed to generic test is null\n");
     return NULL;
   }
 
@@ -473,14 +476,13 @@ Type *deep_copy_type(const Type *original) {
 }
 
 int fn_type_args_len(Type *fn_type) {
-  Type *t = fn_type;
   int fn_len = 0;
-
+  Type *t = fn_type;
   while (t->kind == T_FN) {
-    Type *from = t->data.T_FN.from;
-    t = t->data.T_FN.to;
+    t = t->data.T_FN.from;
     fn_len++;
   }
+
 
   return fn_len;
 }

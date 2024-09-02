@@ -105,6 +105,8 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
     result_type = lt;
   } else if (is_generic(rt) && (!is_generic(lt))) {
     result_type = rt;
+  } else if (is_generic(lt) && is_generic(rt)) {
+    result_type = rt;
   }
 
   if (op >= TOKEN_PLUS && op <= TOKEN_MODULO) {
@@ -205,24 +207,21 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
   int len = ast->data.AST_LAMBDA.len;
   TypeEnv *fn_scope_env = *env;
 
-  Type *fn = NULL;
+  Type *return_type = next_tvar();
+  Type *fn;
   if (len == 1 && ast->data.AST_LAMBDA.params->tag == AST_VOID) {
     fn = &t_void;
+    fn = type_fn(fn, return_type);
   } else {
-    for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+    fn = return_type;
+    for (int i = len - 1; i >= 0; i--) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
       Type *ptype = binding_type(param_ast);
       fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
-      fn = fn == NULL ? ptype : type_fn(fn, ptype);
+      fn = type_fn(ptype, fn);
     }
   }
 
-  if (fn == NULL) {
-    return NULL;
-  }
-
-  Type *return_type = next_tvar();
-  fn = type_fn(fn, return_type);
   if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
     fn_scope_env =
         env_extend(fn_scope_env, ast->data.AST_LAMBDA.fn_name.chars, fn);
@@ -230,8 +229,6 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   Type *body_type = infer(ast->data.AST_LAMBDA.body, &fn_scope_env);
 
-  // if (!types_equal(fn->data.T_FN.from, body_type)) {
-  // }
   unify(return_type, body_type);
   return fn;
 }
@@ -311,9 +308,76 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   }
   return res_type;
 }
-Type *infer_fn_application(Ast *ast, TypeEnv **env) {
+typedef struct TypeMap {
+  Type *key;
+  Type *val;
+  struct TypeMap *next;
+} TypeMap;
+
+TypeMap *constraints_map_extend(TypeMap *map, Type *key, Type *val) {
+  TypeMap *new_map = talloc(sizeof(TypeMap));
+  new_map->key = key;
+  new_map->val = val;
+  new_map->next = map;
+  return new_map;
+}
+
+Type *constraints_map_lookup(TypeMap *map, Type *key) {
+  while (map) {
+    if (types_equal(map->key, key)) {
+      return map->val;
+    }
+
+    map = map->next;
+  }
   return NULL;
-} 
+}
+
+Type *infer_fn_application(Ast *ast, TypeEnv **env) {
+  Type *fn_type = infer(ast->data.AST_APPLICATION.function, env);
+
+  if (fn_type->kind != T_FN) {
+    fprintf(stderr, "Error: Attempting to apply a non-function type\n");
+    return NULL;
+  }
+
+  Type *a = fn_type;
+  TypeMap *map = NULL;
+
+  for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+    Type *app_arg_type = TRY_INFER(ast->data.AST_APPLICATION.args + i, env,
+                                   "could not infer application argument");
+
+    Type *fn_arg_type = a->data.T_FN.from;
+    if (is_generic(fn_arg_type)) {
+      map = constraints_map_extend(map, fn_arg_type, app_arg_type);
+    }
+
+    if (a->kind != T_FN) {
+      fprintf(stderr, "Error too may args passed to fn\n");
+      return NULL;
+    }
+
+    a = a->data.T_FN.to;
+  }
+
+  Type *app_result_type = a;
+  if (app_result_type->kind == T_FN) {
+    return app_result_type;
+  }
+
+  if (is_generic(app_result_type)) {
+    Type *lookup = constraints_map_lookup(map, app_result_type);
+    if (lookup == NULL) {
+      fprintf(stderr, "Error: constraint not found in constraint map\n");
+      print_type(app_result_type);
+      printf("\n");
+    }
+    return lookup;
+  }
+
+  return app_result_type;
+}
 
 Type *infer(Ast *ast, TypeEnv **env) {
 
@@ -414,7 +478,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
 
-
   case AST_TUPLE: {
     int arity = ast->data.AST_LIST.len;
 
@@ -446,6 +509,9 @@ Type *infer(Ast *ast, TypeEnv **env) {
 
   case AST_EXTERN_FN: {
     int param_count = ast->data.AST_EXTERN_FN.len - 1;
+    Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
+    Type *ret_type =
+        find_type_in_env(*env, ret_type_ast->data.AST_IDENTIFIER.value);
 
     Type **param_types;
     if (param_count == 0) {
@@ -457,7 +523,8 @@ Type *infer(Ast *ast, TypeEnv **env) {
       for (int i = 0; i < param_count; i++) {
         Ast *param_ast = ast->data.AST_EXTERN_FN.signature_types + i;
 
-        Type *param_type = find_type_in_env(*env, param_ast->data.AST_IDENTIFIER.value);
+        Type *param_type =
+            find_type_in_env(*env, param_ast->data.AST_IDENTIFIER.value);
 
         if (!param_type) {
           fprintf(stderr, "Error declaring extern function: type %s not found",
@@ -467,21 +534,25 @@ Type *infer(Ast *ast, TypeEnv **env) {
       }
     }
 
-    Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
-    Type *ret_type = find_type_in_env(*env, ret_type_ast->data.AST_IDENTIFIER.value);
-
-    Type *fn = NULL;
+    Type *fn;
     if (param_count == 1 && ast->data.AST_LAMBDA.params->tag == AST_VOID) {
-      fn = &t_void;
+      fn = type_fn(&t_void, ret_type);
     } else {
-      for (int i = 0; i < param_count; i++) {
+      fn = ret_type;
+
+      // fn = return_type;
+      // for (int i = len - 1; i >= 0; i--) {
+      //   Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+      //   Type *ptype = binding_type(param_ast);
+      //   fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
+      //   fn = type_fn(ptype, fn);
+      // }
+      for (int i = param_count - 1; i >= 0; i--) {
         Type *ptype = param_types[i];
-        fn = fn == NULL ? ptype : type_fn(fn, ptype);
+        fn = type_fn(ptype, fn);
       }
     }
-
-
-    type = type_fn(fn, ret_type);
+    type = fn;
     break;
   }
   case AST_APPLICATION: {

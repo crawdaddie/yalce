@@ -9,11 +9,14 @@
   ((Type){T_FN, {.T_FN = {.from = arg_type, .to = ret_type}}})
 
 #define MAKE_FN_TYPE_3(arg1_type, arg2_type, ret_type)                         \
-  {                                                                            \
-    T_FN, {                                                                    \
-      .T_FN = {.from = &MAKE_FN_TYPE_2(arg1_type, arg2_type), .to = ret_type } \
-    }                                                                          \
-  }
+  ((Type){T_FN,                                                                \
+          {.T_FN = {.from = arg1_type,                                         \
+                    .to = &MAKE_FN_TYPE_2(arg2_type, ret_type)}}})
+
+#define MAKE_FN_TYPE_4(arg1_type, arg2_type, arg3_type, ret_type)              \
+  ((Type){T_FN,                                                                \
+          {.T_FN = {.from = arg1_type,                                         \
+                    .to = &MAKE_FN_TYPE_3(arg2_type, arg3_type, ret_type)}}})
 
 #define TEST_SIMPLE_AST_TYPE(i, t)                                             \
   ({                                                                           \
@@ -134,22 +137,32 @@ int main() {
   TEST_SIMPLE_AST_TYPE("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
 
   ({
-    Type t_arithmetic = arithmetic_var("t0");
+    Type t_arithmetic = arithmetic_var("t1");
     TEST_SIMPLE_AST_TYPE("let f = fn x -> (1 + 2) * 8 - x;",
                          &MAKE_FN_TYPE_2(&t_arithmetic, &t_arithmetic));
   });
 
   ({
-    Type t0 = tvar("t0");
-    TEST_SIMPLE_AST_TYPE("let f = fn x -> x;", &MAKE_FN_TYPE_2(&t0, &t0));
+    Type t1 = tvar("t1");
+    TEST_SIMPLE_AST_TYPE("let f = fn x -> x;", &MAKE_FN_TYPE_2(&t1, &t1));
   });
 
   TEST_SIMPLE_AST_TYPE("let f = fn () -> (1 + 2) * 8;",
                        &MAKE_FN_TYPE_2(&t_void, &t_int));
 
   ({
-    Type t_arithmetic = arithmetic_var("t0");
-    Type t1 = tvar("t1");
+    Type t_arithmetic0 = arithmetic_var("t0");
+    Type t_arithmetic1 = arithmetic_var("t1");
+    Type t_arithmetic2 = arithmetic_var("t2");
+    Type t_arithmetic3 = arithmetic_var("t3");
+    TEST_SIMPLE_AST_TYPE("let f = fn x y z -> x + y + z;",
+                         &MAKE_FN_TYPE_4(&t_arithmetic3, &t_arithmetic2,
+                                         &t_arithmetic1, &t_arithmetic1));
+  });
+
+  ({
+    Type t_arithmetic = arithmetic_var("t1");
+    Type t1 = tvar("t2");
     TEST_SIMPLE_AST_TYPE(
         "let f = fn (x, y) -> (1 + 2) * 8 - x;",
         &MAKE_FN_TYPE_2(&TTUPLE(2, &t_arithmetic, &t1), &t_arithmetic));
@@ -203,11 +216,36 @@ int main() {
                         "  | Some 1.0 -> 1\n"
                         "  | None -> 0\n"
                         "  ;\n");
+    SEP;
   });
 
   ({
     Type fn = MAKE_FN_TYPE_3(&t_int, &t_num, &t_int);
     TEST_SIMPLE_AST_TYPE("let ex_fn = extern fn Int -> Double -> Int;", &fn);
+  });
+  ({
+    SEP;
+    TypeEnv *env = NULL;
+    Type t_arithmetic = arithmetic_var("t1");
+    TEST_SIMPLE_AST_TYPE_ENV("let f = fn x -> (1 + 2) * 8 - x;",
+                             &MAKE_FN_TYPE_2(&t_arithmetic, &t_arithmetic),
+                             env);
+    TEST_SIMPLE_AST_TYPE_ENV("f 1", &t_int, env);
+    TEST_SIMPLE_AST_TYPE_ENV("f 1.", &t_num, env);
+  });
+
+  ({
+    SEP;
+    TypeEnv *env = NULL;
+    Type t_arithmetic2 = arithmetic_var("t2");
+    Type t_arithmetic1 = arithmetic_var("t1");
+
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "let f = fn x y -> (1 + 2) * 8 - x + y;",
+        &MAKE_FN_TYPE_3(&t_arithmetic2, &t_arithmetic1, &t_arithmetic1), env);
+
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "f 1", &MAKE_FN_TYPE_2(&t_arithmetic1, &t_arithmetic1), env);
   });
 
   return status ? 0 : 1;

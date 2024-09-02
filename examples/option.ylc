@@ -4,6 +4,7 @@ type Option t =
   ;
 
 let x = Some 2;
+# let z = None
 
 # let o = Some 1;
 #
