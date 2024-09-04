@@ -148,11 +148,13 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
   }
 
   case T_INT: {
-    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_int_to_double");
+    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(),
+                           "cast_int_to_double");
   }
 
   case T_UINT64: {
-    return LLVMBuildUIToFP(builder, val, LLVMDoubleType(), "cast_uint64_to_double");
+    return LLVMBuildUIToFP(builder, val, LLVMDoubleType(),
+                           "cast_uint64_to_double");
   }
 
   default:
@@ -574,6 +576,4 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
 
   t_num.constructor = double_constructor;
   t_num.constructor_size = sizeof(ConsMethod);
-
-
 }

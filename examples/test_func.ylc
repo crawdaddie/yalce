@@ -4,9 +4,3 @@ let sum3 = fn a b c ->
   a + b + c
 ;;
 
-let void_func = fn () ->
-  printf "hello\n"
-;;
-
-void_func ()
-

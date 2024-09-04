@@ -30,16 +30,6 @@ bool occurs_check_helper(const char *var_name, Type *type) {
     }
     return false;
   }
-  case T_VARIANT: {
-
-    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-      if (occurs_check_helper(var_name, type->data.T_CONS.args[i])) {
-        return true;
-      }
-    }
-
-    return false;
-  }
   case T_TYPECLASS_RESOLVE: {
     return occurs_check_helper(
                var_name, type->data.T_TYPECLASS_RESOLVE.dependencies[0]) ||
@@ -95,7 +85,7 @@ Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
 
 Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
 
-  if (strcmp(t1->data.T_CONS.name, "Variant") == 0) {
+  if (strcmp(t1->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
     return t1;
   }
 

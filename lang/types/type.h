@@ -29,6 +29,7 @@ extern Type t_ptr;
 #define TYPE_NAME_DOUBLE  "Double"
 #define TYPE_NAME_UINT64  "Uint64"
 #define TYPE_NAME_VOID    "()"
+#define TYPE_NAME_VARIANT "Variant"
 // clang-format on
 //
 
@@ -43,7 +44,6 @@ enum TypeKind {
   T_STRING,
   T_FN,
   T_CONS,
-  T_VARIANT,
   /* Type Variable  */
   T_VAR,
   // T_VARIANT_MEMBER,

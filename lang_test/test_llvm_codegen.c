@@ -681,7 +681,8 @@ bool test_match_tuple() {
   const char *desc = "match (1, 2, 3) with (1, 2, 3)";
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt1Type());
-  Type *tuple_type = tcons("Tuple", (Type *[]){&t_int, &t_int, &t_int}, 3);
+  Type *tuple_type =
+      tcons(TYPE_NAME_TUPLE, (Type *[]){&t_int, &t_int, &t_int}, 3);
 
   // Test case : AST_IDENTIFIER with 'x'
   Ast ast_list = {
@@ -727,7 +728,8 @@ bool test_match_tuple_fail() {
   const char *desc = "match (1, 2, 3) with (2, 2, 3) (fails)";
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt1Type());
-  Type *tuple_type = tcons("Tuple", (Type *[]){&t_int, &t_int, &t_int}, 3);
+  Type *tuple_type =
+      tcons(TYPE_NAME_TUPLE, (Type *[]){&t_int, &t_int, &t_int}, 3);
 
   // Test case : AST_IDENTIFIER with 'x'
   Ast ast_list = {
@@ -774,7 +776,8 @@ bool test_match_tuple_assignment() {
   ht stack[STACK_MAX];
   Codegen env = setup_codegen(stack, LLVMInt1Type());
   env.ctx.stack_ptr = 1;
-  Type *tuple_type = tcons("Tuple", (Type *[]){&t_int, &t_int, &t_int}, 3);
+  Type *tuple_type =
+      tcons(TYPE_NAME_TUPLE, (Type *[]){&t_int, &t_int, &t_int}, 3);
 
   // Test case : AST_IDENTIFIER with 'x'
   Ast ast_list = {

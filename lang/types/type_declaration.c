@@ -13,7 +13,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
     Type *variant = empty_type();
     variant->kind = T_CONS;
-    variant->data.T_CONS.name = "Variant";
+    variant->data.T_CONS.name = TYPE_NAME_VARIANT;
     variant->data.T_CONS.args = talloc(sizeof(Type *) * len);
     variant->data.T_CONS.num_args = len;
 

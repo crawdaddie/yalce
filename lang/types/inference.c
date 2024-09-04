@@ -223,7 +223,7 @@ static TypeEnv *set_param_binding(Ast *ast, TypeEnv **env) {
       tuple_mems[i] = ast->data.AST_LIST.items[i].md;
       ast->md = talloc(sizeof(Type));
       *((Type *)ast->md) =
-          (Type){T_CONS, {.T_CONS = {"Tuple", tuple_mems, len}}};
+          (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, tuple_mems, len}}};
     }
     return *env;
   }
@@ -248,9 +248,10 @@ static Type *binding_type(Ast *ast) {
       tuple_mems[i] = binding_type(ast->data.AST_LIST.items + i);
     }
     Type *tup = empty_type();
-    *tup = (Type){
-        T_CONS,
-        {.T_CONS = {.name = "Tuple", .args = tuple_mems, .num_args = len}}};
+    *tup = (Type){T_CONS,
+                  {.T_CONS = {.name = TYPE_NAME_TUPLE,
+                              .args = tuple_mems,
+                              .num_args = len}}};
     return tup;
   }
 
@@ -707,7 +708,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
       cons_args[i] = mtype;
     }
     type = talloc(sizeof(Type));
-    *type = (Type){T_CONS, {.T_CONS = {"Tuple", cons_args, arity}}};
+    *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, cons_args, arity}}};
 
     break;
   }

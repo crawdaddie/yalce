@@ -73,7 +73,7 @@ char *type_to_string(Type *t, char *buffer) {
       break;
     }
 
-    if (strcmp(t->data.T_CONS.name, "Tuple") == 0) {
+    if (strcmp(t->data.T_CONS.name, TYPE_NAME_TUPLE) == 0) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
         if (i < t->data.T_CONS.num_args - 1) {
@@ -83,7 +83,7 @@ char *type_to_string(Type *t, char *buffer) {
       break;
     }
 
-    if (strcmp(t->data.T_CONS.name, "Variant") == 0) {
+    if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
         if (i < t->data.T_CONS.num_args - 1) {
@@ -220,18 +220,6 @@ bool types_equal(Type *t1, Type *t2) {
     }
     return false;
   }
-    // case T_VARIANT: {
-    //   if (t1->data.T_VARIANT.num_args != t2->data.T_VARIANT.num_args) {
-    //     return false;
-    //   }
-    //   for (int i = 0; i < t1->data.T_VARIANT.num_args; i++) {
-    //     if (!types_equal(t1->data.T_VARIANT.args[i],
-    //                      t2->data.T_VARIANT.args[i])) {
-    //       return false;
-    //     }
-    //   }
-    //   return true;
-    // }
   case T_TYPECLASS_RESOLVE: {
     if (strcmp(t1->data.T_TYPECLASS_RESOLVE.comparison_tc,
                t2->data.T_TYPECLASS_RESOLVE.comparison_tc) != 0) {
@@ -363,7 +351,7 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
 Type *env_lookup(TypeEnv *env, const char *name) {
   while (env) {
     if (env->type->kind == T_CONS &&
-        strcmp(env->type->data.T_CONS.name, "Variant") == 0) {
+        strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
 
       Type *variant = env->type;
 
@@ -403,7 +391,7 @@ Type *variant_lookup(TypeEnv *env, Type *member) {
 
   while (env) {
     if (env->type->kind == T_CONS &&
-        strcmp(env->type->data.T_CONS.name, "Variant") == 0) {
+        strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
       Type *variant = env->type;
       for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
         Type *variant_member = variant->data.T_CONS.args[i];
@@ -590,5 +578,6 @@ bool is_string_type(Type *type) {
 }
 
 bool is_tuple_type(Type *type) {
-  return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "Tuple") == 0);
+  return type->kind == T_CONS &&
+         (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
 }

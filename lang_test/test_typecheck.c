@@ -82,7 +82,7 @@
 #define TLIST(_t) ((Type){T_CONS, {.T_CONS = {"List", (Type *[]){_t}, 1}}})
 
 #define TTUPLE(num, ...)                                                       \
-  ((Type){T_CONS, {.T_CONS = {"Tuple", (Type *[]){__VA_ARGS__}, num}}})
+  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
 
 #define arithmetic_var(n)                                                      \
   (Type) {                                                                     \
@@ -139,7 +139,8 @@ int main() {
   ({
     Type t = {T_VAR, {.T_VAR = "t"}};
 
-    Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
+    Type opt =
+        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &tvar("None"));
     Type opt_func = MAKE_FN_TYPE_2(&t, &opt);
 
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
@@ -199,7 +200,8 @@ int main() {
   ({
     RESET
     Type t = {T_VAR, {.T_VAR = "t"}};
-    Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
+    Type opt =
+        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &tvar("None"));
 
     Type some_int = tcons("Some", 1, &t_int);
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
@@ -265,7 +267,7 @@ int main() {
     SEP;
 
     Type opt_int =
-        tcons("Variant", 2, &tcons("Some", 1, &t_int), &tvar("None"));
+        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &tvar("None"));
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
                          "  | None\n"
