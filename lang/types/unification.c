@@ -1,4 +1,5 @@
 #include "types/unification.h"
+#include "types/type.h"
 #include <stdbool.h>
 #include <string.h>
 
@@ -21,22 +22,30 @@ bool occurs_check_helper(const char *var_name, Type *type) {
     return occurs_check_helper(var_name, type->data.T_FN.from) ||
            occurs_check_helper(var_name, type->data.T_FN.to);
 
-  case T_CONS:
+  case T_CONS: {
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
       if (occurs_check_helper(var_name, type->data.T_CONS.args[i])) {
         return true;
       }
     }
     return false;
-
-  case T_VARIANT:
+  }
+  case T_VARIANT: {
 
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
       if (occurs_check_helper(var_name, type->data.T_CONS.args[i])) {
         return true;
       }
     }
+
     return false;
+  }
+  case T_TYPECLASS_RESOLVE: {
+    return occurs_check_helper(
+               var_name, type->data.T_TYPECLASS_RESOLVE.dependencies[0]) ||
+           occurs_check_helper(var_name,
+                               type->data.T_TYPECLASS_RESOLVE.dependencies[1]);
+  }
 
   default:
     // For atomic types (T_INT, T_BOOL, etc.), no occurrence is possible
@@ -45,10 +54,6 @@ bool occurs_check_helper(const char *var_name, Type *type) {
 }
 
 Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
-  // printf("unify tvars: ");
-  // print_type(var);
-  // print_type(t);
-  // printf("\n");
   if (occurs_check(var, t)) {
     // Occurs check failed, infinite type error
     return NULL;
@@ -65,49 +70,88 @@ Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
   *env = env_extend(*env, var->data.T_VAR, t);
   return t;
 }
+Type *create_cons_type(const char *name, int len, Type **unified_args) {
+  Type *cons = empty_type();
+  cons->kind = T_CONS;
+  cons->data.T_CONS.name = name;
+  cons->data.T_CONS.num_args = len;
+  cons->data.T_CONS.args = unified_args;
+  return cons;
+}
 
-Type *unify_function(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
-Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
-Type *unify_variant(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
+// Type *unify_function(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
+// Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
+Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
+  Type *from = unify(t1->data.T_FN.from, t2->data.T_FN.from, env);
+  if (!from)
+    return NULL;
 
-// void unify(Type *l, Type *r) {
-//
-//   if (types_equal(l, r)) {
-//     return;
-//   }
-//
-//   if (l->kind == T_VAR && r->kind != T_VAR) {
-//     *l = *r;
-//   }
-//
-//   if (l->kind == T_VAR && r->num_implements > 0) {
-//     // l->implements = r->implements;
-//     // l->num_implements = r->num_implements;
-//     *l = *r;
-//   }
-//
-//   if (l->kind == T_VAR && r->kind == T_VAR) {
-//     // l->implements = r->implements;
-//     // l->num_implements = r->num_implements;
-//     *l = *r;
-//   }
-//
-//   if (l->kind == T_CONS && r->kind == T_CONS) {
-//     if (strcmp(l->data.T_CONS.name, r->data.T_CONS.name) != 0 ||
-//         l->data.T_CONS.num_args != r->data.T_CONS.num_args) {
-//       fprintf(stderr, "Error: Type mismatch between %s and %s\n",
-//               l->data.T_CONS.name, r->data.T_CONS.name);
-//     }
-//
-//     for (int i = 0; i < l->data.T_CONS.num_args; i++) {
-//       unify(l->data.T_CONS.args[i], r->data.T_CONS.args[i]);
-//     }
-//
-//     return;
-//   }
-// }
-//
+  Type *to = unify(t1->data.T_FN.to, t2->data.T_FN.to, env);
+  if (!to)
+    return NULL;
+
+  return type_fn(from, to);
+}
+
+Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
+
+  if (strcmp(t1->data.T_CONS.name, "Variant") == 0) {
+    return t1;
+  }
+
+  if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
+      t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+    return NULL;
+  }
+
+  if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+    return NULL;
+  }
+  int len = t1->data.T_CONS.num_args;
+
+  Type **unified_args = talloc(sizeof(Type *) * len);
+  for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+    unified_args[i] =
+        unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], env);
+    if (!unified_args[i])
+      return NULL;
+  }
+
+  return create_cons_type(t1->data.T_CONS.name, t1->data.T_CONS.num_args,
+                          unified_args);
+}
+Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
+                                    Type *dep2) {
+  Type *tcr = empty_type();
+  tcr->kind = T_TYPECLASS_RESOLVE;
+  tcr->data.T_TYPECLASS_RESOLVE.comparison_tc = comparison_tc;
+  tcr->data.T_TYPECLASS_RESOLVE.dependencies = talloc(sizeof(Type *) * 2);
+  tcr->data.T_TYPECLASS_RESOLVE.dependencies[0] = dep1;
+  tcr->data.T_TYPECLASS_RESOLVE.dependencies[1] = dep2;
+  return tcr;
+}
+
+Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
+  Type *dep1 = unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[0],
+                     t2->data.T_TYPECLASS_RESOLVE.dependencies[0], env);
+  if (!dep1)
+    return NULL;
+
+  Type *dep2 = unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[1],
+                     t2->data.T_TYPECLASS_RESOLVE.dependencies[1], env);
+  if (!dep2)
+    return NULL;
+
+  return create_typeclass_resolve_type(
+      t1->data.T_TYPECLASS_RESOLVE.comparison_tc, dep1, dep2);
+}
+
 Type *unify(Type *t1, Type *t2, TypeEnv **env) {
+  // printf("unify ");
+  // print_type(t1);
+  // printf(" with ");
+  // print_type(t2);
+
   if (t1->kind == T_VAR) {
     return unify_variable(t1, t2, env);
   }
@@ -116,9 +160,9 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   }
 
   if (t1->kind != t2->kind) {
-    // Type mismatch error
     return NULL;
   }
+
   switch (t1->kind) {
   case T_INT:
   case T_UINT64:
@@ -137,10 +181,6 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   case T_CONS:
     // Unify constructed types
     return unify_cons(t1, t2, env);
-
-  case T_VARIANT:
-    // Unify variant types
-    return unify_variant(t1, t2, env);
 
   default:
     // Unsupported type error

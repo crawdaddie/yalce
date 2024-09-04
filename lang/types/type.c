@@ -103,6 +103,22 @@ char *type_to_string(Type *t, char *buffer) {
     buffer = tc_list_to_string(t, buffer);
     break;
   }
+  case T_TYPECLASS_RESOLVE: {
+    buffer = strncat(buffer, "^^ ", 3);
+    buffer = strncat(buffer, t->data.T_TYPECLASS_RESOLVE.comparison_tc,
+                     strlen(t->data.T_TYPECLASS_RESOLVE.comparison_tc));
+    buffer = strncat(buffer, " of (", 5);
+    buffer =
+        type_to_string(t->data.T_TYPECLASS_RESOLVE.dependencies[0], buffer);
+    buffer = strncat(buffer, " ", 1);
+
+    buffer =
+        type_to_string(t->data.T_TYPECLASS_RESOLVE.dependencies[1], buffer);
+    buffer = strncat(buffer, " ", 1);
+
+    buffer = strncat(buffer, ")", 1);
+    break;
+  }
   case T_VAR: {
     buffer = strncat(buffer, t->data.T_VAR, strlen(t->data.T_VAR));
     buffer = tc_list_to_string(t, buffer);
@@ -129,6 +145,7 @@ char *type_to_string(Type *t, char *buffer) {
 
 void print_type(Type *t) {
   if (!t) {
+    printf("null\n");
     return;
   }
   char buf[200] = {};
@@ -206,6 +223,22 @@ bool types_equal(Type *t1, Type *t2) {
     //   }
     //   return true;
     // }
+  case T_TYPECLASS_RESOLVE: {
+    if (strcmp(t1->data.T_TYPECLASS_RESOLVE.comparison_tc,
+               t2->data.T_TYPECLASS_RESOLVE.comparison_tc) != 0) {
+      return false;
+    }
+    if (!(types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[0],
+                      t2->data.T_TYPECLASS_RESOLVE.dependencies[0]))) {
+      return false;
+    }
+
+    if (!(types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[1],
+                      t2->data.T_TYPECLASS_RESOLVE.dependencies[1]))) {
+      return false;
+    }
+    return true;
+  }
   }
   return false;
 }
@@ -278,6 +311,18 @@ bool is_generic(Type *t) {
   case T_VAR: {
     return true;
   }
+
+  case T_TYPECLASS_RESOLVE: {
+
+    if (is_generic(t->data.T_TYPECLASS_RESOLVE.dependencies[0])) {
+      return true;
+    }
+
+    if (is_generic(t->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
+      return true;
+    }
+    return false;
+  }
   case T_CONS: {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       if (is_generic(t->data.T_CONS.args[i])) {
@@ -340,6 +385,7 @@ Type *env_lookup(TypeEnv *env, const char *name) {
 
 Type *variant_lookup(TypeEnv *env, Type *member) {
   const char *name;
+
   if (member->kind == T_CONS) {
     name = member->data.T_CONS.name;
   } else if (member->kind == T_VAR) {
@@ -347,9 +393,6 @@ Type *variant_lookup(TypeEnv *env, Type *member) {
   }
 
   while (env) {
-    if (strcmp(env->name, name) == 0) {
-      return env->type;
-    }
     if (env->type->kind == T_CONS &&
         strcmp(env->type->data.T_CONS.name, "Variant") == 0) {
       Type *variant = env->type;
@@ -365,6 +408,7 @@ Type *variant_lookup(TypeEnv *env, Type *member) {
         }
 
         if (strcmp(mem_name, name) == 0) {
+          // return copy_type(variant);
           return variant;
         }
       }
@@ -372,7 +416,7 @@ Type *variant_lookup(TypeEnv *env, Type *member) {
 
     env = env->next;
   }
-  return NULL;
+  return member;
 }
 Type *get_builtin_type(const char *id_chars) {
 
@@ -471,6 +515,47 @@ Type *deep_copy_type(const Type *original) {
     copy->data.T_FN.to = deep_copy_type(original->data.T_FN.to);
     break;
   }
+  return copy;
+}
+
+Type *copy_type(Type *t) {
+  Type *copy = empty_type();
+  *copy = *t;
+
+  if (copy->kind == T_TYPECLASS_RESOLVE) {
+
+    copy->data.T_TYPECLASS_RESOLVE.dependencies = talloc(sizeof(Type *) * 2);
+
+    copy->data.T_TYPECLASS_RESOLVE.dependencies[0] =
+        copy_type(t->data.T_TYPECLASS_RESOLVE.dependencies[0]);
+
+    copy->data.T_TYPECLASS_RESOLVE.dependencies[1] =
+        copy_type(t->data.T_TYPECLASS_RESOLVE.dependencies[1]);
+  }
+
+  if (copy->kind == T_CONS) {
+    Type **args = t->data.T_CONS.args;
+    copy->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      copy->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
+    }
+  }
+
+  if (copy->kind == T_FN) {
+    copy->data.T_FN.from = copy_type(t->data.T_FN.from);
+    if (copy->data.T_FN.to) {
+      copy->data.T_FN.to = copy_type(t->data.T_FN.to);
+    }
+  }
+
+  if (t->implements != NULL && t->num_implements > 0) {
+    copy->implements = talloc(sizeof(TypeClass *) * t->num_implements);
+    copy->num_implements = t->num_implements;
+    for (int i = 0; i < t->num_implements; i++) {
+      copy->implements[i] = t->implements[i];
+    }
+  }
+
   return copy;
 }
 

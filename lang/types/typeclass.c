@@ -275,14 +275,13 @@ Type *resolve_binop_typeclass(Type *l, Type *r, token_type op) {
     tc_name = "eq";
     index = op - TOKEN_EQUALITY;
   }
-  // printf("find binary tc %s\n", tc_name);
-  // print_type(l);
-  // print_type(r);
 
   TypeClass *tcl = get_typeclass_by_name(l, tc_name);
   TypeClass *tcr = get_typeclass_by_name(r, tc_name);
+
   if (!tcl || !tcr) {
-    fprintf(stderr, "Error: typeclass %s not implemented for operand", tc_name);
+    // fprintf(stderr, "Error: typeclass %s not implemented for operand",
+    // tc_name);
     return NULL;
   }
 
@@ -350,8 +349,8 @@ TypeClass *find_op_typeclass_in_type(Type *t, token_type op, int *index) {
 
   TypeClass *tcl = get_typeclass_by_name(t, tc_name);
   if (!tcl) {
-    fprintf(stderr, "Error: typeclass %s not implemented for operand\n",
-            tc_name);
+    // fprintf(stderr, "Error: typeclass %s not implemented for operand\n",
+    //         tc_name);
     return NULL;
   }
 

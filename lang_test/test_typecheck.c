@@ -1,7 +1,6 @@
 #include "../lang/parse.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
-#include "serde.h"
 #include "types/unification.h"
 #include <stdbool.h>
 #include <stdlib.h>
@@ -50,7 +49,6 @@
 
 #define TEST_SIMPLE_AST_TYPE_ENV(i, t, env)                                    \
   ({                                                                           \
-    reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
     Ast *p = parse_input(i, NULL);                                             \
     stat &= (infer(p, &env) != NULL);                                          \
@@ -97,6 +95,14 @@
 
 #define tvar(n)                                                                \
   (Type) { T_VAR, {.T_VAR = n}, }
+
+#define TYPECLASS_RESOLVE(tc_name, dep1, dep2)                                 \
+  ((Type){.kind = T_TYPECLASS_RESOLVE,                                         \
+          .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,           \
+                                           .dependencies =                     \
+                                               (Type *[]){dep1, dep2}}}})
+
+#define RESET reset_type_var_counter();
 
 #define SEP printf("------------------------------------------------\n")
 
@@ -149,8 +155,10 @@ int main() {
 
   ({
     Type t_arithmetic = arithmetic_var("t1");
-    TEST_SIMPLE_AST_TYPE("let f = fn x -> (1 + 2) * 8 - x;",
-                         &MAKE_FN_TYPE_2(&t_arithmetic, &t_arithmetic));
+    TEST_SIMPLE_AST_TYPE(
+        "let f = fn x -> (1 + 2) * 8 - x;",
+        &MAKE_FN_TYPE_2(&t_arithmetic, &TYPECLASS_RESOLVE("arithmetic", &t_int,
+                                                          &t_arithmetic)));
   });
 
   ({
@@ -162,24 +170,34 @@ int main() {
                        &MAKE_FN_TYPE_2(&t_void, &t_int));
 
   ({
+    RESET
     Type t_arithmetic0 = arithmetic_var("t0");
     Type t_arithmetic1 = arithmetic_var("t1");
     Type t_arithmetic2 = arithmetic_var("t2");
     Type t_arithmetic3 = arithmetic_var("t3");
-    TEST_SIMPLE_AST_TYPE("let f = fn x y z -> x + y + z;",
-                         &MAKE_FN_TYPE_4(&t_arithmetic3, &t_arithmetic2,
-                                         &t_arithmetic1, &t_arithmetic1));
+    TEST_SIMPLE_AST_TYPE(
+        "let f = fn x y z -> x + y + z;",
+        &MAKE_FN_TYPE_4(
+            &t_arithmetic3, &t_arithmetic2, &t_arithmetic1,
+            &TYPECLASS_RESOLVE("arithmetic",
+                               &TYPECLASS_RESOLVE("arithmetic", &t_arithmetic3,
+                                                  &t_arithmetic2),
+                               &t_arithmetic1)));
   });
 
   ({
+    RESET
     Type t_arithmetic = arithmetic_var("t1");
     Type t1 = tvar("t2");
     TEST_SIMPLE_AST_TYPE(
         "let f = fn (x, y) -> (1 + 2) * 8 - x;",
-        &MAKE_FN_TYPE_2(&TTUPLE(2, &t_arithmetic, &t1), &t_arithmetic));
+        &MAKE_FN_TYPE_2(
+            &TTUPLE(2, &t_arithmetic, &t1),
+            &TYPECLASS_RESOLVE("arithmetic", &t_int, &t_arithmetic)));
   });
 
   ({
+    RESET
     Type t = {T_VAR, {.T_VAR = "t"}};
     Type opt = tcons("Variant", 2, &tcons("Some", 1, &t), &tvar("None"));
 
@@ -193,6 +211,7 @@ int main() {
   });
   ({
     SEP;
+    RESET
     Type some_int = tcons("Some", 1, &t_int);
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
@@ -231,6 +250,19 @@ int main() {
 
   ({
     SEP;
+    TEST_TYPECHECK_FAIL("type Option t =\n"
+                        "  | Some of t\n"
+                        "  | None\n"
+                        "  ;\n"
+                        "let x = Some 1;\n"
+                        "match x with\n"
+                        "  | Some 1 -> 1\n"
+                        "  | None -> 2.0\n"
+                        "  ;\n");
+  });
+
+  ({
+    SEP;
 
     Type opt_int =
         tcons("Variant", 2, &tcons("Some", 1, &t_int), &tvar("None"));
@@ -253,34 +285,72 @@ int main() {
   });
   ({
     SEP;
+
+    RESET
     TypeEnv *env = NULL;
     Type t_arithmetic = arithmetic_var("t1");
-    TEST_SIMPLE_AST_TYPE_ENV("let f = fn x -> (1 + 2) * 8 - x;",
-                             &MAKE_FN_TYPE_2(&t_arithmetic, &t_arithmetic),
-                             env);
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "let f = fn x -> (1 + 2) * 8 - x;",
+        &MAKE_FN_TYPE_2(&t_arithmetic, &TYPECLASS_RESOLVE("arithmetic", &t_int,
+                                                          &t_arithmetic)),
+        env);
     TEST_SIMPLE_AST_TYPE_ENV("f 1", &t_int, env);
     TEST_SIMPLE_AST_TYPE_ENV("f 1.", &t_num, env);
   });
 
   ({
     SEP;
+
+    RESET
+
     TypeEnv *env = NULL;
     Type t_arithmetic2 = arithmetic_var("t2");
     Type t_arithmetic1 = arithmetic_var("t1");
 
     TEST_SIMPLE_AST_TYPE_ENV(
         "let f = fn x y -> x + y;",
-        &MAKE_FN_TYPE_3(&t_arithmetic2, &t_arithmetic1, &t_arithmetic1), env);
+        &MAKE_FN_TYPE_3(
+            &t_arithmetic2, &t_arithmetic1,
+            &TYPECLASS_RESOLVE("arithmetic", &t_arithmetic2, &t_arithmetic1)),
+        env);
 
     TEST_SIMPLE_AST_TYPE_ENV(
-        "f 1", &MAKE_FN_TYPE_2(&t_arithmetic1, &t_arithmetic1), env);
+        "f 1",
+        &MAKE_FN_TYPE_2(&t_arithmetic1, &TYPECLASS_RESOLVE("arithmetic", &t_int,
+                                                           &t_arithmetic1)),
+        env);
   });
 
   ({
+    RESET
     Type t0 = tvar("t0");
     TypeEnv *env = NULL;
     Type *u = unify(&t0, &t_int, &env);
     status &= TEST(types_equal(u, &t_int), "unify t0 with Int");
+  });
+
+  ({
+    RESET
+    SEP;
+    TypeEnv *env = NULL;
+    Type t_arithmetic1 = arithmetic_var("t1");
+    Type t_arithmetic2 = arithmetic_var("t2");
+    Type t4 = tvar("t4");
+    Type t5 = tvar("t5");
+    Type t6 = tvar("t6");
+    Type t7 = tvar("t7");
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "let sum = fn a b -> a + b;;",
+        &MAKE_FN_TYPE_3(
+            &t_arithmetic2, &t_arithmetic1,
+            &TYPECLASS_RESOLVE("arithmetic", &t_arithmetic2, &t_arithmetic1)),
+        env);
+
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "let proc = fn f a b -> f a b;;\n",
+        &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t5, &t4, &t7), &t5, &t4, &t7), env);
+
+    TEST_SIMPLE_AST_TYPE_ENV("proc sum 1 2", &t_int, env);
   });
 
   return status ? 0 : 1;

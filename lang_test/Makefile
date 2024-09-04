@@ -13,25 +13,17 @@ LEX_FILE := $(LANG_SRC_DIR)/lex.l
 YACC_FILE := $(LANG_SRC_DIR)/parser.y
 LEX_OUTPUT := $(LANG_SRC_DIR)/lex.yy.c
 YACC_OUTPUT := $(LANG_SRC_DIR)/y.tab.c
-# Build lex and yacc output files
-$(YACC_OUTPUT): $(YACC_FILE)
-	bison -yd $(YACC_FILE) -o $(YACC_OUTPUT)
-
-$(LEX_OUTPUT): $(LEX_FILE)
-	flex -o $(LEX_OUTPUT) $(LEX_FILE)
-
-# Ensure lex.yy.c depends on y.tab.c
-$(LEX_OUTPUT): $(YACC_OUTPUT)
+YACC_HEADER := $(LANG_SRC_DIR)/y.tab.h
 
 # Source files
 LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
-								$(LANG_SRC_DIR)/ht.c \
-								$(LEX_OUTPUT) \
-								$(YACC_OUTPUT) \
-                $(LANG_SRC_DIR)/common.c \
-								$(LANG_SRC_DIR)/input.c \
-								$(LANG_SRC_DIR)/string_proc.c \
-								$(LANG_SRC_DIR)/serde.c
+             $(LANG_SRC_DIR)/ht.c \
+             $(LANG_SRC_DIR)/common.c \
+             $(LANG_SRC_DIR)/input.c \
+             $(LANG_SRC_DIR)/string_proc.c \
+             $(LANG_SRC_DIR)/serde.c \
+             $(LEX_OUTPUT) \
+             $(YACC_OUTPUT)
 
 # Phony targets
 .PHONY: all clean test_parse test_typecheck
@@ -41,6 +33,13 @@ all: test_parse test_typecheck
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
+# Build yacc output files
+$(YACC_OUTPUT) $(YACC_HEADER): $(YACC_FILE)
+	bison -d $(YACC_FILE) -o $(YACC_OUTPUT)
+
+# Build lex output file
+$(LEX_OUTPUT): $(LEX_FILE) $(YACC_HEADER)
+	flex -o $(LEX_OUTPUT) $(LEX_FILE)
 
 test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_parse.c $(LANG_SRCS) -o $(BUILD_DIR)/test_parse $(LDFLAGS)
@@ -52,6 +51,4 @@ test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT) $(LANG_SRC_DIR)/y.tab.h
-
-
+	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT) $(YACC_HEADER)

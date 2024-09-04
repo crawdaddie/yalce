@@ -49,6 +49,7 @@ enum TypeKind {
   // T_VARIANT_MEMBER,
   // T_MODULE,
   // T_TYPECLASS,
+  T_TYPECLASS_RESOLVE,
 };
 
 typedef struct Type {
@@ -68,6 +69,11 @@ typedef struct Type {
       struct Type *from;
       struct Type *to;
     } T_FN;
+    struct {
+      struct Type **dependencies; // contains 2
+      const char *comparison_tc; // use the comparison typeclass name to compare
+                                 // the rank of all dependencies
+    } T_TYPECLASS_RESOLVE;
 
   } data;
 
@@ -113,5 +119,7 @@ Type *deep_copy_type(const Type *original);
 
 bool is_list_type(Type *type);
 bool is_tuple_type(Type *type);
+
+Type *copy_type(Type *t);
 
 #endif
