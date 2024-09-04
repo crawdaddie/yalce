@@ -387,7 +387,7 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
     test_type = infer(test_expr, &test_expr_env);
 
     if (test_type == NULL) {
-      fprintf(stderr, "could not resolve match test expr %d\n", i);
+      fprintf(stderr, "could not resolve match test expr in branch %d\n", i);
       return NULL;
     }
 
@@ -405,8 +405,10 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
     if (res_type != NULL) {
       Type *unif_res = unify(res_type, _res_type, env);
       if (!unif_res) {
-        fprintf(stderr,
-                "Error cannot unify result types in match expression\n");
+        fprintf(stderr, "Error cannot unify result types in match expression ");
+        print_type_err(res_type);
+        fprintf(stderr, " != ");
+        print_type_err(_res_type);
         return NULL;
       }
       *res_type = *unif_res;
@@ -523,7 +525,8 @@ Type *_infer_fn_application(Type *fn_type, Type **arg_types, int len,
   fn_type = copy_type(fn_type);
 
   if (fn_type->kind != T_FN) {
-    fprintf(stderr, "Error: Attempting to apply a non-function type\n");
+    fprintf(stderr, "Error: Attempting to apply a non-function type ");
+    print_type_err(fn_type);
     return NULL;
   }
 
@@ -541,7 +544,8 @@ Type *_infer_fn_application(Type *fn_type, Type **arg_types, int len,
     map = constraints_map_extend(map, fn_arg_type, app_arg_type);
 
     if (a->kind != T_FN) {
-      fprintf(stderr, "Error too may args passed to fn\n");
+      fprintf(stderr, "Error too may args (%d) passed to fn\n", len);
+      print_type_err(fn_type);
       return NULL;
     }
 
@@ -549,6 +553,7 @@ Type *_infer_fn_application(Type *fn_type, Type **arg_types, int len,
   }
 
   Type *app_result_type = a;
+
   if (app_result_type->kind == T_FN) {
     TypeMap *_map = map;
     while (_map) {
@@ -679,6 +684,9 @@ Type *infer(Ast *ast, TypeEnv **env) {
       if (!types_equal(element_type, el_type)) {
         fprintf(stderr, "Error typechecking list literal - all elements must "
                         "be of the same type\n");
+        print_type_err(element_type);
+        fprintf(stderr, " != ");
+        print_type_err(el_type);
         return NULL;
       }
     }

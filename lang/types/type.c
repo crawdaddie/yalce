@@ -152,6 +152,15 @@ void print_type(Type *t) {
   printf("%s\n", type_to_string(t, buf));
 }
 
+void print_type_err(Type *t) {
+  if (!t) {
+    fprintf(stderr, "null\n");
+    return;
+  }
+  char buf[200] = {};
+  fprintf(stderr, "%s\n", type_to_string(t, buf));
+}
+
 bool types_equal(Type *t1, Type *t2) {
   if (t1 == t2) {
     return true;
