@@ -1,93 +1,61 @@
 #include "backend_llvm/match.h"
-#include "backend_llvm/match_values.h"
-#include "backend_llvm/types.h"
+#include "globals.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+
+JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
+                      LLVMTypeRef llvm_type);
+LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  return NULL;
+}
 
 #define _TRUE LLVMConstInt(LLVMInt1Type(), 1, 0)
 #define _FALSE LLVMConstInt(LLVMInt1Type(), 0, 0)
 
-LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                     LLVMBuilderRef builder);
-static bool is_default_case(int len, int i) { return i == (len - 1); }
+LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
+                          JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder) {
+  switch (binding->tag) {
+  case AST_IDENTIFIER: {
+    const char *id_chars = binding->data.AST_IDENTIFIER.value;
+    int id_len = binding->data.AST_IDENTIFIER.length;
 
-LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                           LLVMBuilderRef builder) {
-
-  LLVMValueRef expr_val =
-      codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
-
-  Type *expr_val_type = ast->data.AST_MATCH.expr->md;
-
-  // Create basic blocks
-  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
-  LLVMBasicBlockRef end_block =
-      LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block), "match.end");
-
-  // Create a PHI node for the result
-  LLVMPositionBuilderAtEnd(builder, end_block);
-  LLVMValueRef phi = LLVMBuildPhi(builder, type_to_llvm_type(ast->md, ctx->env),
-                                  "match.result");
-  //
-  // Return to the current block to start generating comparisons
-  LLVMPositionBuilderAtEnd(builder, current_block);
-
-  LLVMBasicBlockRef next_block = NULL;
-  int len = ast->data.AST_MATCH.len;
-
-  // Compile each branch
-  for (int i = 0; i < len; i++) {
-    Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
-    Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
-
-    // Create a basic block for this branch
-    char block_name[20];
-    snprintf(block_name, sizeof(block_name), "match.branch%d", i);
-    LLVMBasicBlockRef branch_block = LLVMAppendBasicBlock(
-        LLVMGetBasicBlockParent(current_block), block_name);
-
-    if (i < len - 1) {
-      next_block = LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block),
-                                        "match.next");
-    } else {
-      next_block = NULL; // Last iteration, no need for a next block
+    if (*(binding->data.AST_IDENTIFIER.value) == '_') {
+      return _TRUE;
     }
 
-    JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
+    if (val_type->kind == T_FN && !(is_generic(val_type))) {
+      LLVMTypeRef llvm_type = LLVMTypeOf(val);
+      JITSymbol *sym = new_symbol(STYPE_FUNCTION, val_type, val, llvm_type);
 
-    // Check if this is the default case
-    // Compile the test expression
-    // LLVMValueRef test_value = codegen_match_condition(
-    //     expr_val, test_expr, &branch_ctx, module, builder);
-    LLVMValueRef _and = _TRUE;
-    LLVMValueRef test_value = match_values(test_expr, expr_val, expr_val_type,
-                                           &_and, &branch_ctx, module, builder);
+      ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+                  hash_string(id_chars, id_len), sym);
 
-    if (is_default_case(len, i)) {
-      // If it's the default case, just jump to the branch block
-      LLVMBuildBr(builder, branch_block);
-    } else {
-      // Create the conditional branch
-      LLVMBuildCondBr(builder, test_value, branch_block,
-                      next_block ? next_block : end_block);
+      return _TRUE;
     }
 
-    // Compile the result expression in the branch block
-    LLVMPositionBuilderAtEnd(builder, branch_block);
+    if (ctx->stack_ptr == 0) {
 
-    LLVMValueRef branch_result =
-        codegen(result_expr, &branch_ctx, module, builder);
+      LLVMTypeRef llvm_type = LLVMTypeOf(val);
+      JITSymbol *sym =
+          new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
 
-    LLVMBuildBr(builder, end_block);
-    LLVMAddIncoming(phi, &branch_result, &branch_block, 1);
-
-    // Continue with the next comparison if there is one
-    if (next_block) {
-      LLVMPositionBuilderAtEnd(builder, next_block);
+      codegen_set_global(sym, val, val_type, llvm_type, ctx, module, builder);
+      ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+                  hash_string(id_chars, id_len), sym);
+      return _TRUE;
     }
+
+    LLVMTypeRef llvm_type = LLVMTypeOf(val);
+    JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
+    ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+                hash_string(id_chars, id_len), sym);
+
+    return _TRUE;
   }
 
-  // Position the builder at the end block and return the result
-  LLVMPositionBuilderAtEnd(builder, end_block);
-  return phi;
+  default:
+    return NULL;
+  }
 }

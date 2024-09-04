@@ -313,9 +313,9 @@ Type *generic_cons(Type *generic_cons, int len, Ast *args, TypeEnv **env) {
         if (!types_equal(existing_binding, t)) {
           fprintf(stderr, "Error: generic type %s already bound in env to ",
                   name);
-          print_type(existing_binding);
-          printf(" != ");
-          print_type(t);
+          print_type_err(existing_binding);
+          fprintf(stderr, " != ");
+          print_type_err(t);
           return NULL;
         }
       }
@@ -729,8 +729,18 @@ Type *infer(Ast *ast, TypeEnv **env) {
   case AST_EXTERN_FN: {
     int param_count = ast->data.AST_EXTERN_FN.len - 1;
     Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
-    Type *ret_type =
-        find_type_in_env(*env, ret_type_ast->data.AST_IDENTIFIER.value);
+
+    Type *ret_type;
+
+    if (ret_type_ast->tag == AST_IDENTIFIER) {
+      ret_type =
+          find_type_in_env(*env, ret_type_ast->data.AST_IDENTIFIER.value);
+    } else if (ret_type_ast->tag == AST_VOID) {
+      ret_type = &t_void;
+    } else {
+      fprintf(stderr, "Error - extern return type unrecognized\n");
+      return NULL;
+    }
 
     Type **param_types;
     if (param_count == 0) {

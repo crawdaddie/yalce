@@ -580,3 +580,17 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
   t_num.constructor = double_constructor;
   t_num.constructor_size = sizeof(ConsMethod);
 }
+
+LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env) {
+  if (id->tag == AST_VOID) {
+    return LLVMVoidType();
+  }
+
+  if (id->tag != AST_IDENTIFIER) {
+    return NULL;
+  }
+
+  Type *lookup_type = find_type_in_env(env, id->data.AST_IDENTIFIER.value);
+  LLVMTypeRef t = type_to_llvm_type(lookup_type, env);
+  return t;
+}

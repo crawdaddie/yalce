@@ -50,6 +50,7 @@ typedef struct {
 
     struct {
       Type *fn_type;
+      int num_args;
     } STYPE_FUNCTION;
 
     struct {

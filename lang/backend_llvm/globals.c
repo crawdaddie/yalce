@@ -25,6 +25,7 @@ void codegen_set_global(JITSymbol *sym, LLVMValueRef value, Type *ttype,
       LLVMBuildBitCast(builder, malloced_space, _VOID_PTR_T, "generic_ptr");
   // Calculate the offset for the specific slot
   int slot = *ctx->num_globals;
+  sym->symbol_data.STYPE_TOP_LEVEL_VAR = slot;
   LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
 
   // Get the pointer to the correct slot in the global storage
@@ -35,10 +36,6 @@ void codegen_set_global(JITSymbol *sym, LLVMValueRef value, Type *ttype,
 
   // Store the generic_ptr into the slot
   LLVMBuildStore(builder, generic_ptr, slot_ptr);
-
-  *sym = (JITSymbol){STYPE_TOP_LEVEL_VAR, llvm_type, value,
-                     .symbol_data = {.STYPE_TOP_LEVEL_VAR = slot},
-                     .symbol_type = ttype};
 
   *(ctx->num_globals) = slot + 1;
 }
@@ -59,9 +56,13 @@ LLVMValueRef codegen_get_global(JITSymbol *sym, LLVMModuleRef module,
   // Load the void* from the slot
   LLVMValueRef generic_ptr =
       LLVMBuildLoad2(builder, _VOID_PTR_T, slot_ptr, "void_ptr");
+  printf("loaded void * (slot %d)\n", slot);
+  // LLVMDumpType(llvm_type);
+  // printf("\n");
 
   LLVMValueRef typed_ptr = LLVMBuildBitCast(
       builder, generic_ptr, LLVMPointerType(llvm_type, 0), "typed_ptr");
+
   return LLVMBuildLoad2(builder, llvm_type, typed_ptr, "loaded_value");
 }
 
