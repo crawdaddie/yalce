@@ -1,6 +1,7 @@
 #include "backend_llvm/function.h"
 #include "backend_llvm/types.h"
 #include "common.h"
+#include "match.h"
 #include "serde.h"
 #include "symbols.h"
 #include "util.h"
@@ -8,7 +9,7 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
-LLVMTypeRef fn_proto_type(Type *fn_type, int fn_len, TypeEnv *env) {
+LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env) {
 
   LLVMTypeRef llvm_param_types[fn_len];
 
@@ -57,11 +58,65 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return get_extern_fn(name, fn_type, module);
 }
 
+static void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func,
+                                 Type *fn_type, JITLangCtx *fn_ctx) {
+
+  JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, func, LLVMTypeOf(func));
+  sym->symbol_data.STYPE_FUNCTION.fn_type = fn_type;
+
+  ht *scope = fn_ctx->stack + fn_ctx->stack_ptr;
+  ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
+}
+
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
-  printf("codegen fn: ");
-  print_ast(ast);
-  return NULL;
+
+  // Generate the prototype first.
+  ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
+  Type *fn_type = ast->md;
+  int fn_len = ast->data.AST_LAMBDA.len;
+
+  LLVMTypeRef prototype = fn_prototype(ast->md, fn_len, ctx->env);
+
+  LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, prototype);
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  if (func == NULL) {
+    return NULL;
+  }
+
+  JITLangCtx fn_ctx = ctx_push(*ctx);
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, block);
+
+  add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
+
+  for (int i = 0; i < fn_len; i++) {
+    Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+    Type *param_type = fn_type->data.T_FN.from;
+
+    LLVMValueRef param_val = LLVMGetParam(func, i);
+    LLVMValueRef _true = LLVMConstInt(LLVMInt1Type(), 1, 0);
+    match_values(param_ast, param_val, param_type, &fn_ctx, module, builder);
+    fn_type = fn_type->data.T_FN.to;
+  }
+
+  LLVMValueRef body =
+      codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
+
+  if (body == NULL) {
+    fprintf(stderr, "Error compiling function body\n");
+    print_ast_err(ast);
+    LLVMDeleteFunction(func);
+    return NULL;
+  }
+
+  LLVMBuildRet(builder, body);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  return func;
 }
 
 LLVMValueRef codegen_constructor(Ast *ast, JITLangCtx *ctx,
@@ -73,22 +128,22 @@ LLVMValueRef call_symbol(JITSymbol *sym, Ast *args, int args_len,
                          JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
   LLVMValueRef callable;
-  int expected_args;
+  int expected_args_len;
   Type *callable_type = sym->symbol_type;
   switch (sym->type) {
   case STYPE_FUNCTION: {
     callable = sym->val;
-    expected_args = fn_type_args_len(sym->symbol_type);
-    printf("found regular function callable args %d\n", expected_args);
+    expected_args_len = fn_type_args_len(sym->symbol_type);
+  }
+  case STYPE_GENERIC_FUNCTION: {
   }
   }
 
-  if (args_len < expected_args) {
-    printf("not enough args - return curried fn\n");
+  if (args_len < expected_args_len) {
     return NULL;
   }
 
-  if (args_len == expected_args) {
+  if (args_len == expected_args_len) {
     LLVMValueRef app_vals[args_len];
 
     for (int i = 0; i < args_len; i++) {

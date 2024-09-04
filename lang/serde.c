@@ -9,6 +9,12 @@ void print_ast(Ast *ast) {
   free(buf);
 }
 
+void print_ast_err(Ast *ast) {
+  char *buf = malloc(sizeof(char) * 500);
+  fprintf(stderr, "%s\n", ast_to_sexpr(ast, buf));
+  free(buf);
+}
+
 static bool is_term(ast_tag tag) {
   return tag <= AST_IDENTIFIER;
   // return (tag == AST_INT || tag == AST_NUMBER || tag == AST_BOOL || tag ==

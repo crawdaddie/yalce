@@ -36,4 +36,7 @@ LLVMValueRef current_func(LLVMBuilderRef builder);
 
 JITSymbol *lookup_id_ast(Ast *id, JITLangCtx *ctx);
 
+JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
+                      LLVMTypeRef llvm_type);
+
 #endif

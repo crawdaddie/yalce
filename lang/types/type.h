@@ -94,7 +94,6 @@ typedef struct TypeEnv {
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 Type *env_lookup(TypeEnv *env, const char *name);
-Type *variant_lookup(TypeEnv *env, Type *member);
 void free_type_env(TypeEnv *env);
 void print_type_env(TypeEnv *env);
 Type *find_type_in_env(TypeEnv *env, const char *name);

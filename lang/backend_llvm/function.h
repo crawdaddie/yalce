@@ -5,7 +5,7 @@
 #include "types/typeclass.h"
 #include "llvm-c/Types.h"
 
-LLVMTypeRef fn_proto_type(Type *fn_type, int fn_len, TypeEnv *env);
+LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env);
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);

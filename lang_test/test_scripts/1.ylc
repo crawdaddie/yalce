@@ -1,4 +1,5 @@
-# %include ../../examples/Fmt
+let printf = extern fn String -> () ;
+printf "hello\n"; # %assert 'hello'
 let y = 3 # %assert '3'
 
 

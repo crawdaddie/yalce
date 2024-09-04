@@ -383,41 +383,6 @@ Type *env_lookup(TypeEnv *env, const char *name) {
   return NULL;
 }
 
-Type *variant_lookup(TypeEnv *env, Type *member) {
-  const char *name;
-
-  if (member->kind == T_CONS) {
-    name = member->data.T_CONS.name;
-  } else if (member->kind == T_VAR) {
-    name = member->data.T_CONS.name;
-  }
-
-  while (env) {
-    if (env->type->kind == T_CONS &&
-        strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
-      Type *variant = env->type;
-      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-        Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-        if (variant_member->kind == T_CONS) {
-          mem_name = variant_member->data.T_CONS.name;
-        } else if (variant_member->kind == T_VAR) {
-          mem_name = variant_member->data.T_VAR;
-        } else {
-          continue;
-        }
-
-        if (strcmp(mem_name, name) == 0) {
-          // return copy_type(variant);
-          return variant;
-        }
-      }
-    }
-
-    env = env->next;
-  }
-  return member;
-}
 Type *get_builtin_type(const char *id_chars) {
 
   if (strcmp(id_chars, TYPE_NAME_INT) == 0) {

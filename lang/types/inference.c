@@ -28,11 +28,10 @@ Type *next_tvar() {
   ({                                                                           \
     Type *t = infer(ast, env);                                                 \
     if (!t) {                                                                  \
-      char *buf = malloc(sizeof(char) * 500);                                  \
-      ast_to_sexpr(ast, buf);                                                  \
-      if (msg)                                                                 \
-        fprintf(stderr, "%s %s\n", msg, buf);                                  \
-      free(buf);                                                               \
+      if (msg) {                                                               \
+        fprintf(stderr, "%s\n", msg);                                          \
+        print_ast_err(ast);                                                    \
+      }                                                                        \
       return NULL;                                                             \
     }                                                                          \
     t;                                                                         \
@@ -366,6 +365,49 @@ static Type *resolve_generic_type(Type *t, TypeEnv *env) {
 
 static bool type_is_variant_member(Type *member, Type *variant) { return true; }
 
+typedef struct VariantCtx {
+  Type *variant;
+  int variant_len;
+  bool *exhaustive_usage;
+} VariantCtx;
+
+static Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
+  const char *name;
+
+  if (member->kind == T_CONS) {
+    name = member->data.T_CONS.name;
+  } else if (member->kind == T_VAR) {
+    name = member->data.T_CONS.name;
+  }
+
+  while (env) {
+    if (env->type->kind == T_CONS &&
+        strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+      Type *variant = env->type;
+      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
+        Type *variant_member = variant->data.T_CONS.args[i];
+        const char *mem_name;
+        if (variant_member->kind == T_CONS) {
+          mem_name = variant_member->data.T_CONS.name;
+        } else if (variant_member->kind == T_VAR) {
+          mem_name = variant_member->data.T_VAR;
+        } else {
+          continue;
+        }
+
+        if (strcmp(mem_name, name) == 0) {
+          // return copy_type(variant);
+          *member_idx = i;
+          return variant;
+        }
+      }
+    }
+
+    env = env->next;
+  }
+  return member;
+}
+
 Type *infer_match(Ast *ast, TypeEnv **env) {
   Ast *with = ast->data.AST_MATCH.expr;
   TypeEnv *test_expr_env = *env;
@@ -379,6 +421,8 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   Type *test_type = NULL;
 
   Type *variant = NULL;
+  bool *exhaustive_variant = NULL;
+  int variant_len;
   for (int i = 0; i < len; i++) {
     Ast *test_expr = branches + (2 * i);
     test_type = infer(test_expr, &test_expr_env);
@@ -388,13 +432,19 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
       return NULL;
     }
 
-    Type *_v = variant_lookup(*env, test_type);
+    int member_idx;
+    Type *_v = variant_lookup(*env, test_type, &member_idx);
     if (_v != NULL && variant == NULL) {
       variant = copy_type(_v);
+      variant_len = variant->data.T_CONS.num_args;
+      exhaustive_variant = malloc(sizeof(bool) * variant_len);
+      for (int i = 0; i < variant_len; i++) {
+        exhaustive_variant[i] = i == member_idx ? 1 : 0;
+      }
     } else if (variant != NULL && _v != NULL) {
       unify(variant, _v, env);
+      exhaustive_variant[member_idx] = 1;
     }
-
     TypeEnv *res_env = add_binding_to_env(*env, test_expr, test_type);
     Ast *result_expr = branches + (2 * i + 1);
     Type *_res_type = infer(result_expr, &res_env);
@@ -414,7 +464,28 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   }
 
   if (variant) {
+
     *with_type = *resolve_generic_variant(variant, test_expr_env);
+    bool is_exhaustive = true;
+    for (int i = 0; i < variant_len; i++) {
+      is_exhaustive &= exhaustive_variant[i];
+    }
+    Ast *final_test = branches + (len - 1) * 2;
+
+    if (variant != NULL && ast_is_placeholder_id(final_test)) {
+      is_exhaustive = true;
+    }
+
+    if (!is_exhaustive) {
+      fprintf(stderr,
+              "Error: match expression on variant type is not exhaustive\n");
+      free(exhaustive_variant);
+      return NULL;
+    }
+  }
+
+  if (exhaustive_variant != NULL) {
+    free(exhaustive_variant);
   }
 
   return res_type;

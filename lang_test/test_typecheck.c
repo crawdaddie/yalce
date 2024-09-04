@@ -282,6 +282,21 @@ int main() {
 
   ({
     SEP;
+    RESET;
+
+    TEST_TYPECHECK_FAIL("type Option t =\n"
+                        "  | Some of t\n"
+                        "  | None\n"
+                        "  ;\n"
+                        "let x = Some 1;\n"
+                        "match x with\n"
+                        "  | Some 1 -> 1\n"
+                        "  ;\n");
+  });
+
+  ({
+    SEP;
+    RESET;
     Type fn = MAKE_FN_TYPE_3(&t_int, &t_num, &t_int);
     TEST_SIMPLE_AST_TYPE("let ex_fn = extern fn Int -> Double -> Int;", &fn);
   });

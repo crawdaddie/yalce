@@ -4,6 +4,7 @@
 char *serialize_ast(Ast *ast);
 
 void print_ast(Ast *);
+void print_ast_err(Ast *);
 char *ast_to_sexpr(Ast *, char *);
 
 #endif
