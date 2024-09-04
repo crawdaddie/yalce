@@ -36,6 +36,9 @@ LLVMTypeRef fn_proto_type(Type *fn_type, int fn_len, TypeEnv *env);
 LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env);
 
 LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
+  if (is_generic(type)) {
+    return NULL;
+  }
   switch (type->kind) {
 
   case T_INT: {

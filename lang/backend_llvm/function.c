@@ -26,7 +26,8 @@ SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
   return new_specific_fn;
 };
 
-static bool match_arg_types(int len, Type **arg_types, int _len, Type **_arg_types) {
+static bool match_arg_types(int len, Type **arg_types, int _len,
+                            Type **_arg_types) {
   if (len != _len) {
     return false;
   }
@@ -38,8 +39,7 @@ static bool match_arg_types(int len, Type **arg_types, int _len, Type **_arg_typ
   return true;
 }
 
-LLVMValueRef specific_fns_lookup(SpecificFns *list,
-                                 Type *key) {
+LLVMValueRef specific_fns_lookup(SpecificFns *list, Type *key) {
   while (list) {
     if (types_equal(key, list->arg_types_key)) {
       return list->func;
@@ -232,7 +232,6 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
-
 static Type *create_specific_fn_type(size_t len, Ast *args, Type *ret_type) {
 
   Type *specific_arg_types[len];
@@ -314,18 +313,15 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
     Ast *args = ast->data.AST_APPLICATION.args;
     size_t type_key_len = ast->data.AST_APPLICATION.len;
 
-
     SpecificFns *specific_fns =
         res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
 
     Type *type_key = NULL;
     for (int i = 0; i < type_key_len; i++) {
       type_key = type_key == NULL ? args[i].md : type_fn(type_key, args[i].md);
-
     }
 
-    LLVMValueRef func =
-        specific_fns_lookup(specific_fns, type_key);
+    LLVMValueRef func = specific_fns_lookup(specific_fns, type_key);
 
     if (func == NULL) {
 
@@ -336,8 +332,8 @@ static LLVMValueRef codegen_fn_application_callee(Ast *ast, JITLangCtx *ctx,
 
       // save back in its own context (not in the call-site context)
       func = create_new_specific_fn(
-          type_key_len, args, res->symbol_data.STYPE_GENERIC_FUNCTION.ast, ret_type,
-          &compilation_ctx, module, builder);
+          type_key_len, args, res->symbol_data.STYPE_GENERIC_FUNCTION.ast,
+          ret_type, &compilation_ctx, module, builder);
 
       res->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
           specific_fns_extend(specific_fns, type_key, func);

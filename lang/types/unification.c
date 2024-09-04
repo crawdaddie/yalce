@@ -44,7 +44,14 @@ bool occurs_check_helper(const char *var_name, Type *type) {
 }
 
 Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
+
+  if (var->kind == T_VAR && t->kind == T_VAR &&
+      strcmp(var->data.T_VAR, t->data.T_VAR) == 0) {
+    // TODO: merge typeclasses?
+    return t;
+  }
   if (occurs_check(var, t)) {
+
     // Occurs check failed, infinite type error
     return NULL;
   }
@@ -58,6 +65,7 @@ Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
 
   // If not bound, bind it in the environment
   *env = env_extend(*env, var->data.T_VAR, t);
+  *var = *t;
   return t;
 }
 Type *create_cons_type(const char *name, int len, Type **unified_args) {
@@ -110,16 +118,6 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
   return create_cons_type(t1->data.T_CONS.name, t1->data.T_CONS.num_args,
                           unified_args);
 }
-Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
-                                    Type *dep2) {
-  Type *tcr = empty_type();
-  tcr->kind = T_TYPECLASS_RESOLVE;
-  tcr->data.T_TYPECLASS_RESOLVE.comparison_tc = comparison_tc;
-  tcr->data.T_TYPECLASS_RESOLVE.dependencies = talloc(sizeof(Type *) * 2);
-  tcr->data.T_TYPECLASS_RESOLVE.dependencies[0] = dep1;
-  tcr->data.T_TYPECLASS_RESOLVE.dependencies[1] = dep2;
-  return tcr;
-}
 
 Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
   Type *dep1 = unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[0],
@@ -135,12 +133,7 @@ Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
   return create_typeclass_resolve_type(
       t1->data.T_TYPECLASS_RESOLVE.comparison_tc, dep1, dep2);
 }
-
 Type *unify(Type *t1, Type *t2, TypeEnv **env) {
-  // printf("unify ");
-  // print_type(t1);
-  // printf(" with ");
-  // print_type(t2);
 
   if (t1->kind == T_VAR) {
     return unify_variable(t1, t2, env);

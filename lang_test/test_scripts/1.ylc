@@ -1,0 +1,5 @@
+# %include ../../examples/Fmt
+let y = 3 # %assert '3'
+
+
+

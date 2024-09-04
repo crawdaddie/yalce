@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#define _TSTORAGE_SIZE_DEFAULT 200000
 typedef struct TypeEnv TypeEnv;
 typedef struct Type Type;
 
@@ -123,4 +124,6 @@ bool is_tuple_type(Type *type);
 
 Type *copy_type(Type *t);
 
+Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
+                                    Type *dep2);
 #endif

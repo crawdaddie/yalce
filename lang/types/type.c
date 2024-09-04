@@ -24,7 +24,10 @@ Type t_num = {T_NUM, .num_implements = 3,
                   &TCArithmetic_num,
               }};
 
-Type t_string;
+Type t_string = {T_CONS,
+                 {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_char}, 1}},
+                 .alias = TYPE_NAME_STRING};
+
 Type t_bool = {T_BOOL};
 Type t_void = {T_VOID};
 Type t_char = {T_CHAR};
@@ -67,7 +70,7 @@ char *type_to_string(Type *t, char *buffer) {
   }
   case T_CONS: {
 
-    if (strcmp(t->data.T_CONS.name, "List") == 0) {
+    if (strcmp(t->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
       buffer = type_to_string(t->data.T_CONS.args[0], buffer);
       buffer = strncat(buffer, "[]", 2);
       break;
@@ -245,10 +248,9 @@ static struct TStorage {
   size_t size;
   size_t capacity;
 } TStorage;
-#define _TSTORAGE_SIZE 200000
-static void *_tstorage_data[_TSTORAGE_SIZE];
+static void *_tstorage_data[_TSTORAGE_SIZE_DEFAULT];
 
-static struct TStorage _tstorage = {_tstorage_data, 0, _TSTORAGE_SIZE};
+static struct TStorage _tstorage = {_tstorage_data, 0, _TSTORAGE_SIZE_DEFAULT};
 
 void *talloc(size_t size) {
   // malloc
@@ -330,10 +332,11 @@ bool is_generic(Type *t) {
   }
 
   case T_FN: {
-    if (!is_generic(t->data.T_FN.from)) {
-      return is_generic(t->data.T_FN.to);
+    if (is_generic(t->data.T_FN.from)) {
+      return true;
     }
-    return false;
+
+    return is_generic(t->data.T_FN.to);
   }
   default:
     return false;
@@ -568,16 +571,28 @@ int fn_type_args_len(Type *fn_type) {
 }
 
 bool is_list_type(Type *type) {
-  return type->kind == T_CONS && (strcmp(type->data.T_CONS.name, "List") == 0);
+  return type->kind == T_CONS &&
+         (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0);
 }
 
 bool is_string_type(Type *type) {
   return type->kind == T_CONS &&
-         (strcmp(type->data.T_CONS.name, "List") == 0) &&
+         (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0) &&
          (type->data.T_CONS.args[0]->kind == T_CHAR);
 }
 
 bool is_tuple_type(Type *type) {
   return type->kind == T_CONS &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
+}
+
+Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
+                                    Type *dep2) {
+  Type *tcr = empty_type();
+  tcr->kind = T_TYPECLASS_RESOLVE;
+  tcr->data.T_TYPECLASS_RESOLVE.comparison_tc = comparison_tc;
+  tcr->data.T_TYPECLASS_RESOLVE.dependencies = talloc(sizeof(Type *) * 2);
+  tcr->data.T_TYPECLASS_RESOLVE.dependencies[0] = dep1;
+  tcr->data.T_TYPECLASS_RESOLVE.dependencies[1] = dep2;
+  return tcr;
 }

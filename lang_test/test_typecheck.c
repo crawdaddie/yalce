@@ -115,7 +115,7 @@ int main() {
   TEST_SIMPLE_AST_TYPE("1.0", &t_num);
   TEST_SIMPLE_AST_TYPE("1.", &t_num);
   TEST_SIMPLE_AST_TYPE("'c'", &t_char);
-  // TEST_SIMPLE_AST_TYPE("\"hello\"", t_string);
+  TEST_SIMPLE_AST_TYPE("\"hello\"", &t_string);
   TEST_SIMPLE_AST_TYPE("true", &t_bool);
   TEST_SIMPLE_AST_TYPE("false", &t_bool);
   TEST_SIMPLE_AST_TYPE("()", &t_void);
@@ -353,6 +353,21 @@ int main() {
         &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t5, &t4, &t7), &t5, &t4, &t7), env);
 
     TEST_SIMPLE_AST_TYPE_ENV("proc sum 1 2", &t_int, env);
+  });
+  ({
+    RESET
+    SEP;
+
+    TypeEnv *env = NULL;
+    TEST_SIMPLE_AST_TYPE_ENV("let fib = fn x ->\n"
+                             "  match x with\n"
+                             "  | 0 -> 0\n"
+                             "  | 1 -> 1\n"
+                             "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+                             ";;\n",
+                             &MAKE_FN_TYPE_2(&t_int, &t_int), env);
+
+    TEST_SIMPLE_AST_TYPE_ENV("fib 50", &t_int, env);
   });
 
   return status ? 0 : 1;

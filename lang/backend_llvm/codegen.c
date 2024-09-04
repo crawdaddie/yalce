@@ -3,6 +3,7 @@
 #include "backend_llvm/function.h"
 #include "backend_llvm/list.h"
 #include "backend_llvm/match.h"
+#include "backend_llvm/strings.h"
 #include "backend_llvm/symbols.h"
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
@@ -12,8 +13,13 @@
 
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
-  LLVMTypeRef funcType =
-      LLVMFunctionType(type_to_llvm_type(ast->md, ctx->env), NULL, 0, 0);
+
+  LLVMTypeRef ret = type_to_llvm_type(ast->md, ctx->env);
+  if (!ret) {
+    ret = LLVMVoidType();
+  }
+
+  LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
   LLVMValueRef func = LLVMAddFunction(module, "top", funcType);
 
@@ -63,11 +69,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_STRING: {
-    const char *chars = ast->data.AST_STRING.value;
-    int length = ast->data.AST_STRING.length;
-    ObjString vstr = (ObjString){
-        .chars = chars, .length = length, .hash = hash_string(chars, length)};
-    return LLVMBuildGlobalStringPtr(builder, chars, ".str");
+    return codegen_string(ast, ctx, module, builder);
   }
 
   case AST_CHAR: {
@@ -121,8 +123,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_LET: {
-    Type *t = env_lookup(ctx->env, "Option");
-
     return codegen_assignment(ast, ctx, module, builder);
   }
   case AST_IDENTIFIER: {
@@ -140,6 +140,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_EXTERN_FN: {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
+
   case AST_MATCH: {
     return codegen_match(ast, ctx, module, builder);
   }

@@ -189,6 +189,7 @@ void module_passes(LLVMModuleRef module) {
 
 #define GLOBAL_STORAGE_CAPACITY 1024
 int jit(int argc, char **argv) {
+
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
   LLVMInitializeNativeTarget();
   LLVMInitializeNativeAsmPrinter();
@@ -233,12 +234,20 @@ int jit(int argc, char **argv) {
 
   bool repl = false;
 
-  for (int i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "-i") == 0) {
+  int arg_counter = 1;
+  while (arg_counter < argc) {
+    if (strcmp(argv[arg_counter], "-i") == 0) {
       repl = true;
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-type-memory") == 0) {
+      arg_counter++;
+      printf("-- type storage allocation: %d\n", atoi(argv[arg_counter]));
+      arg_counter++;
     } else {
       Ast *script_prog;
-      eval_script(argv[i], &ctx, module, builder, context, &env, &script_prog);
+      eval_script(argv[arg_counter], &ctx, module, builder, context, &env,
+                  &script_prog);
+      arg_counter++;
     }
   }
 
@@ -261,7 +270,6 @@ int jit(int argc, char **argv) {
       int top_level_size = ctx.stack->length;
 
       hti it = ht_iterator(ctx.stack);
-      // printf("key: '%s'\n", it.key);
 
       for (int completion_entry = 0; ht_next(&it); completion_entry++) {
         add_completion_item(it.key, completion_entry);
@@ -269,7 +277,7 @@ int jit(int argc, char **argv) {
 
       char *input = repl_input(prompt);
 
-      if (strcmp("%dump_module\n", input) == 0) {
+      if (strncmp("%dump_module", input, 12) == 0) {
         printf(STYLE_RESET_ALL "\n");
         LLVMDumpModule(module);
         continue;
@@ -327,7 +335,7 @@ int jit(int argc, char **argv) {
 void print_result(Type *type, LLVMGenericValueRef result) {
   printf("`");
   if (type->alias != NULL) {
-    printf("%s", type->alias);
+    printf("%s\n", type->alias);
   } else {
     print_type(type);
   }
@@ -339,33 +347,33 @@ void print_result(Type *type, LLVMGenericValueRef result) {
 
   switch (type->kind) {
   case T_INT: {
-    printf(" %d", (int)LLVMGenericValueToInt(result, 0));
+    printf("%d", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
 
   case T_BOOL: {
-    printf(" %d", (int)LLVMGenericValueToInt(result, 0));
+    printf("%d", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
 
   case T_NUM: {
-    printf(" %f", (double)LLVMGenericValueToFloat(LLVMDoubleType(), result));
+    printf("%f", (double)LLVMGenericValueToFloat(LLVMDoubleType(), result));
     break;
   }
 
   case T_STRING: {
-    printf(" %s", (char *)LLVMGenericValueToPointer(result));
+    printf("%s", (char *)LLVMGenericValueToPointer(result));
     break;
   }
 
   case T_CHAR: {
-    printf(" %c", (int)LLVMGenericValueToInt(result, 0));
+    printf("%c", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
 
   case T_CONS: {
     if (is_string_type(type)) {
-      printf(" %s", (char *)LLVMGenericValueToPointer(result));
+      printf("%s", (char *)LLVMGenericValueToPointer(result));
       break;
     }
     if (strcmp(type->data.T_CONS.name, "List") == 0 &&
@@ -373,7 +381,7 @@ void print_result(Type *type, LLVMGenericValueRef result) {
 
       int_ll_t *current = (int_ll_t *)LLVMGenericValueToPointer(result);
       int count = 0;
-      printf(" [");
+      printf("[");
       while (current != NULL && count < 10) { // Limit to prevent infinite loop
         printf("%d, ", current->el);
         current = current->next;
@@ -390,12 +398,12 @@ void print_result(Type *type, LLVMGenericValueRef result) {
   }
 
   case T_FN: {
-    printf(" %p", result);
+    printf("%p", result);
     break;
   }
 
   default:
-    printf(" %d", (int)LLVMGenericValueToInt(result, 0));
+    printf("%d", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
   printf("\n");

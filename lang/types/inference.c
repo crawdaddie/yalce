@@ -133,13 +133,10 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
         add_typeclass(r, rtc);
       }
 
-      Type *type = empty_type();
-      type->kind = T_TYPECLASS_RESOLVE;
-
-      type->data.T_TYPECLASS_RESOLVE.dependencies = talloc(sizeof(Type *) * 2);
-      type->data.T_TYPECLASS_RESOLVE.dependencies[0] = l;
-      type->data.T_TYPECLASS_RESOLVE.dependencies[1] = r;
-      type->data.T_TYPECLASS_RESOLVE.comparison_tc = "arithmetic";
+      if (types_equal(l, r)) {
+        return l;
+      }
+      Type *type = create_typeclass_resolve_type("arithmetic", l, r);
       return type;
     }
 
@@ -295,7 +292,6 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
   TypeEnv **_env = env;
   Type *unified_ret = unify(return_type, body_type, _env);
   *return_type = *unified_ret;
-
   return fn;
 }
 
@@ -630,6 +626,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
   case AST_CHAR: {
     type = &t_char;
+    break;
+  }
+  case AST_STRING: {
+    type = &t_string;
     break;
   }
   case AST_BINOP: {

@@ -26,9 +26,9 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
              $(YACC_OUTPUT)
 
 # Phony targets
-.PHONY: all clean test_parse test_typecheck
+.PHONY: all clean test_parse test_typecheck test_scripts
 
-all: test_parse test_typecheck
+all: test_parse test_typecheck test_scripts
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -48,6 +48,9 @@ test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_typecheck.c $(LANG_SRCS) $(LANG_SRC_DIR)/types/*.c -o $(BUILD_DIR)/test_typecheck $(LDFLAGS)
 	$(BUILD_DIR)/test_typecheck
+
+test_scripts: 
+	./run_test_scripts.sh ./test_scripts
 
 clean:
 	rm -rf $(BUILD_DIR)
