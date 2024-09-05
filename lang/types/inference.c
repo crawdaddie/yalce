@@ -43,52 +43,6 @@ static char *op_to_name[] = {
     [TOKEN_GT] = ">",        [TOKEN_LTE] = "<=",       [TOKEN_GTE] = ">=",
     [TOKEN_EQUALITY] = "==", [TOKEN_NOT_EQUAL] = "!=",
 };
-/*
-Type *infer_binop_(Ast *ast, TypeEnv **env) {
-
-  Type *lt = TRY_INFER(ast->data.AST_BINOP.left, env,
-                       "Failure typechecking lhs of binop: ");
-
-  Type *rt = TRY_INFER(ast->data.AST_BINOP.right, env,
-                       "Failure typechecking rhs of binop: ");
-
-  token_type op = ast->data.AST_BINOP.op;
-
-  if (types_equal(lt, rt)) {
-    return resolve_op_typeclass_in_type(lt, op);
-  }
-
-  if ((!is_generic(lt)) && (!is_generic(rt))) {
-    return resolve_binop_typeclass(lt, rt, op);
-  }
-
-  Type *result_type = NULL;
-  if (is_generic(lt) && (!is_generic(rt))) {
-    result_type = lt;
-  } else if (is_generic(rt) && (!is_generic(lt))) {
-    result_type = rt;
-  } else if (is_generic(lt) && is_generic(rt)) {
-    result_type = rt;
-  }
-
-  if (op >= TOKEN_PLUS && op <= TOKEN_MODULO) {
-    add_typeclass(result_type, derive_arithmetic_for_type(result_type));
-  } else if (op >= TOKEN_LT && op <= TOKEN_GTE) {
-    add_typeclass(result_type, derive_ord_for_type(result_type));
-  } else if (op >= TOKEN_EQUALITY && op <= TOKEN_NOT_EQUAL) {
-    add_typeclass(result_type, derive_eq_for_type(result_type));
-  }
-
-  // TODO: find typeclass rank for non-generic operand and apply to result_type
-  // as 'min rank'
-  // for example x + 1.0 -> 'x [arithmetic]
-  // the result type is at least the same rank as float
-  // if x is an int, then the result should be a float
-  // if x is something 'higher' than a float use that instead
-
-  return result_type;
-}
-*/
 
 Type *infer_binop(Ast *ast, TypeEnv **env) {
 
@@ -198,39 +152,6 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
   }
   return env;
 }
-
-/*
-
-static TypeEnv *set_param_binding(Ast *ast, TypeEnv **env) {
-    if (is_variant_member(test_type, *env)) {
-    }
-  switch (ast->tag) {
-  case AST_IDENTIFIER: {
-    ast->md = next_tvar();
-    const char *name = ast->data.AST_IDENTIFIER.value;
-    *env = add_binding_to_env(*env, ast, ast->md);
-    return *env;
-  }
-  case AST_TUPLE: {
-    int len = ast->data.AST_LIST.len;
-    Type **tuple_mems = talloc(sizeof(Type) * len);
-    for (int i = 0; i < len; i++) {
-      *env = set_param_binding(ast->data.AST_LIST.items + i, env);
-      tuple_mems[i] = ast->data.AST_LIST.items[i].md;
-      ast->md = talloc(sizeof(Type));
-      *((Type *)ast->md) =
-          (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, tuple_mems, len}}};
-    }
-    return *env;
-  }
-  default: {
-    fprintf(stderr, "Typecheck err: lambda arg type %d unsupported\n",
-            ast->tag);
-    return NULL;
-  }
-  }
-}
-*/
 
 static Type *binding_type(Ast *ast) {
   switch (ast->tag) {
@@ -352,17 +273,6 @@ static Type *resolve_generic_fn(Type *t, TypeEnv *env) {
   return t;
 }
 
-static Type *resolve_generic_type(Type *t, TypeEnv *env) {
-  while (env) {
-    const char *key = env->name;
-    Type tvar = {T_VAR, .data = {.T_VAR = key}};
-    t = replace_in(t, &tvar, env->type);
-    env = env->next;
-  }
-
-  return t;
-}
-
 static bool type_is_variant_member(Type *member, Type *variant) { return true; }
 
 typedef struct VariantCtx {
@@ -370,43 +280,6 @@ typedef struct VariantCtx {
   int variant_len;
   bool *exhaustive_usage;
 } VariantCtx;
-
-static Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
-  const char *name;
-
-  if (member->kind == T_CONS) {
-    name = member->data.T_CONS.name;
-  } else if (member->kind == T_VAR) {
-    name = member->data.T_CONS.name;
-  }
-
-  while (env) {
-    if (env->type->kind == T_CONS &&
-        strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
-      Type *variant = env->type;
-      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-        Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-        if (variant_member->kind == T_CONS) {
-          mem_name = variant_member->data.T_CONS.name;
-        } else if (variant_member->kind == T_VAR) {
-          mem_name = variant_member->data.T_VAR;
-        } else {
-          continue;
-        }
-
-        if (strcmp(mem_name, name) == 0) {
-          // return copy_type(variant);
-          *member_idx = i;
-          return variant;
-        }
-      }
-    }
-
-    env = env->next;
-  }
-  return member;
-}
 
 Type *infer_match(Ast *ast, TypeEnv **env) {
   Ast *with = ast->data.AST_MATCH.expr;
@@ -515,61 +388,6 @@ void print_constraints_map(TypeMap *map) {
     printf(" : ");
     print_type(map->val);
     print_constraints_map(map->next);
-  }
-}
-Type *resolve_tc_rank(Type *type) {
-  const char *comparison_tc = type->data.T_TYPECLASS_RESOLVE.comparison_tc;
-  Type *dep1 = type->data.T_TYPECLASS_RESOLVE.dependencies[0];
-  Type *dep2 = type->data.T_TYPECLASS_RESOLVE.dependencies[1];
-  dep1 = dep1->kind == T_TYPECLASS_RESOLVE ? resolve_tc_rank(dep1) : dep1;
-  dep2 = dep2->kind == T_TYPECLASS_RESOLVE ? resolve_tc_rank(dep2) : dep2;
-  TypeClass *tc1 = get_typeclass_by_name(dep1, comparison_tc);
-  TypeClass *tc2 = get_typeclass_by_name(dep2, comparison_tc);
-  if (tc1->rank >= tc2->rank) {
-    return dep1;
-  }
-  return dep2;
-}
-
-Type *replace_in(Type *type, Type *tvar, Type *replacement) {
-
-  switch (type->kind) {
-  case T_TYPECLASS_RESOLVE: {
-
-    type->data.T_TYPECLASS_RESOLVE.dependencies[0] = replace_in(
-        type->data.T_TYPECLASS_RESOLVE.dependencies[0], tvar, replacement);
-
-    type->data.T_TYPECLASS_RESOLVE.dependencies[1] = replace_in(
-        type->data.T_TYPECLASS_RESOLVE.dependencies[1], tvar, replacement);
-
-    if (!is_generic(type)) {
-      return resolve_tc_rank(type);
-    }
-
-    return type;
-  }
-
-  case T_CONS: {
-    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-      type->data.T_CONS.args[i] =
-          replace_in(type->data.T_CONS.args[i], tvar, replacement);
-    }
-    return type;
-  }
-  case T_FN: {
-    type->data.T_FN.from = replace_in(type->data.T_FN.from, tvar, replacement);
-    type->data.T_FN.to = replace_in(type->data.T_FN.to, tvar, replacement);
-    return type;
-  }
-
-  case T_VAR: {
-    if (strcmp(type->data.T_VAR, tvar->data.T_VAR) == 0) {
-      return replacement;
-    }
-    return type;
-  }
-  default:
-    return type;
   }
 }
 

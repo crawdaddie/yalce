@@ -43,7 +43,7 @@ LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
 .PHONY: all clean engine test wasm serve_docs
 
-all: $(BUILD_DIR)/audio_lang
+all: $(BUILD_DIR)/lang
 
 engine:
 	$(MAKE) -C engine
@@ -66,7 +66,7 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 	$(LANG_CC) -c -o $@ $<
 
 # Build the final executable
-$(BUILD_DIR)/audio_lang: $(LANG_OBJS) | engine
+$(BUILD_DIR)/lang: $(LANG_OBJS) | engine
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
 
 clean:

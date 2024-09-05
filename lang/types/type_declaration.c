@@ -47,13 +47,20 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
       Type *contained_type =
           compute_type_expression(expr->data.AST_BINOP.right, env);
+
       Type *cons = empty_type();
-      *cons = (Type){
-          T_CONS,
-          {.T_CONS = {.name = strdup(
-                          expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value),
-                      .args = &contained_type,
-                      .num_args = 1}}};
+      cons->kind = T_CONS;
+      cons->data.T_CONS.name =
+          strdup(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value);
+      cons->data.T_CONS.num_args = 1;
+      cons->data.T_CONS.args = talloc(sizeof(Type *));
+      cons->data.T_CONS.args[0] = contained_type;
+      // *cons = (Type){
+      //     T_CONS,
+      //     {.T_CONS = {.name = strdup(
+      //                     expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value),
+      //                 .args = &contained_type,
+      //                 .num_args = 1}}};
 
       return cons;
     }

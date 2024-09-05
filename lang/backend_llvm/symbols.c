@@ -85,6 +85,10 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case STYPE_GENERIC_FUNCTION: {
     return NULL;
   }
+
+  case STYPE_LOCAL_VAR: {
+    return sym->val;
+  }
   default: {
     return NULL;
   }
@@ -121,7 +125,9 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   }
 
   Type *expr_type = ast->data.AST_LET.expr->md;
+
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
+
     return create_generic_fn_binding(binding, ast->data.AST_LET.expr, &cont_ctx,
                                      module, builder);
   }
@@ -138,7 +144,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   if (match_result == NULL) {
     fprintf(stderr, "Error: codegen for matching binding in let expression "
                     "failed\n");
-    print_ast(ast);
+    print_ast_err(ast);
     return NULL;
   }
 

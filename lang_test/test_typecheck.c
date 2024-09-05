@@ -317,9 +317,7 @@ int main() {
 
   ({
     SEP;
-
     RESET
-
     TypeEnv *env = NULL;
     Type t_arithmetic2 = arithmetic_var("t2");
     Type t_arithmetic1 = arithmetic_var("t1");
@@ -372,7 +370,6 @@ int main() {
   ({
     RESET
     SEP;
-
     TypeEnv *env = NULL;
     TEST_SIMPLE_AST_TYPE_ENV("let fib = fn x ->\n"
                              "  match x with\n"

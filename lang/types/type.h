@@ -125,4 +125,11 @@ Type *copy_type(Type *t);
 
 Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
                                     Type *dep2);
+
+Type *resolve_tc_rank(Type *type);
+
+Type *replace_in(Type *type, Type *tvar, Type *replacement);
+Type *resolve_generic_type(Type *t, TypeEnv *env);
+
+Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx);
 #endif

@@ -5,5 +5,5 @@ let fib = fn x ->
   | _ -> (fib (x - 1)) + (fib (x - 2))
 ;;
 
-fib 50
+fib 20 
 

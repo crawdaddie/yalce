@@ -322,13 +322,25 @@ bool is_generic(Type *t) {
     }
     return false;
   }
+
   case T_CONS: {
-    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      if (is_generic(t->data.T_CONS.args[i])) {
-        return true;
+    if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        Type *arg = t->data.T_CONS.args[i];
+        if (arg->kind != T_VAR && is_generic(arg)) {
+          return true;
+        }
       }
+      return false;
+
+    } else {
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        if (is_generic(t->data.T_CONS.args[i])) {
+          return true;
+        }
+      }
+      return false;
     }
-    return false;
   }
 
   case T_FN: {
@@ -338,6 +350,7 @@ bool is_generic(Type *t) {
 
     return is_generic(t->data.T_FN.to);
   }
+
   default:
     return false;
   }
@@ -499,9 +512,10 @@ Type *copy_type(Type *t) {
   }
 
   if (copy->kind == T_CONS) {
-    Type **args = t->data.T_CONS.args;
+    copy->data.T_CONS.name = t->data.T_CONS.name;
     copy->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      // copy->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
       copy->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
     }
   }
@@ -560,4 +574,113 @@ Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
   tcr->data.T_TYPECLASS_RESOLVE.dependencies[0] = dep1;
   tcr->data.T_TYPECLASS_RESOLVE.dependencies[1] = dep2;
   return tcr;
+}
+
+Type *resolve_tc_rank(Type *type) {
+  if (type->kind != T_TYPECLASS_RESOLVE) {
+    return type;
+  }
+  if (is_generic(type)) {
+    return type;
+  }
+  const char *comparison_tc = type->data.T_TYPECLASS_RESOLVE.comparison_tc;
+  Type *dep1 = type->data.T_TYPECLASS_RESOLVE.dependencies[0];
+  Type *dep2 = type->data.T_TYPECLASS_RESOLVE.dependencies[1];
+  dep1 = dep1->kind == T_TYPECLASS_RESOLVE ? resolve_tc_rank(dep1) : dep1;
+  dep2 = dep2->kind == T_TYPECLASS_RESOLVE ? resolve_tc_rank(dep2) : dep2;
+  TypeClass *tc1 = get_typeclass_by_name(dep1, comparison_tc);
+  TypeClass *tc2 = get_typeclass_by_name(dep2, comparison_tc);
+  if (tc1->rank >= tc2->rank) {
+    return dep1;
+  }
+  return dep2;
+}
+
+Type *replace_in(Type *type, Type *tvar, Type *replacement) {
+
+  switch (type->kind) {
+  case T_TYPECLASS_RESOLVE: {
+
+    type->data.T_TYPECLASS_RESOLVE.dependencies[0] = replace_in(
+        type->data.T_TYPECLASS_RESOLVE.dependencies[0], tvar, replacement);
+
+    type->data.T_TYPECLASS_RESOLVE.dependencies[1] = replace_in(
+        type->data.T_TYPECLASS_RESOLVE.dependencies[1], tvar, replacement);
+
+    if (!is_generic(type)) {
+      return resolve_tc_rank(type);
+    }
+
+    return type;
+  }
+
+  case T_CONS: {
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      type->data.T_CONS.args[i] =
+          replace_in(type->data.T_CONS.args[i], tvar, replacement);
+    }
+    return type;
+  }
+  case T_FN: {
+    type->data.T_FN.from = replace_in(type->data.T_FN.from, tvar, replacement);
+    type->data.T_FN.to = replace_in(type->data.T_FN.to, tvar, replacement);
+    return type;
+  }
+
+  case T_VAR: {
+    if (strcmp(type->data.T_VAR, tvar->data.T_VAR) == 0) {
+      return replacement;
+    }
+    return type;
+  }
+  default:
+    return type;
+  }
+}
+Type *resolve_generic_type(Type *t, TypeEnv *env) {
+  while (env) {
+    const char *key = env->name;
+    Type tvar = {T_VAR, .data = {.T_VAR = key}};
+    t = replace_in(t, &tvar, env->type);
+    env = env->next;
+  }
+
+  return t;
+}
+
+Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
+  const char *name;
+
+  if (member->kind == T_CONS) {
+    name = member->data.T_CONS.name;
+  } else if (member->kind == T_VAR) {
+    name = member->data.T_CONS.name;
+  }
+
+  while (env) {
+    if (env->type->kind == T_CONS &&
+        strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+      Type *variant = env->type;
+      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
+        Type *variant_member = variant->data.T_CONS.args[i];
+        const char *mem_name;
+        if (variant_member->kind == T_CONS) {
+          mem_name = variant_member->data.T_CONS.name;
+        } else if (variant_member->kind == T_VAR) {
+          mem_name = variant_member->data.T_VAR;
+        } else {
+          continue;
+        }
+
+        if (strcmp(mem_name, name) == 0) {
+          // return copy_type(variant);
+          *member_idx = i;
+          return variant;
+        }
+      }
+    }
+
+    env = env->next;
+  }
+  return member;
 }

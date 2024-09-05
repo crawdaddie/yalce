@@ -23,19 +23,30 @@ static bool is_llvm_int(LLVMValueRef v) {
   return kind == LLVMIntegerTypeKind;
 }
 
-typedef LLVMValueRef (*LLVMBinopMethod)(LLVMValueRef, LLVMValueRef, Type *,
-                                        LLVMModuleRef, LLVMBuilderRef);
-
 LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   Type *result_type = ast->md;
+  result_type = resolve_tc_rank(result_type);
+  if (is_generic(result_type)) {
+    result_type = resolve_generic_type(result_type, ctx->env);
+  }
+
   token_type op = ast->data.AST_BINOP.op;
 
   LLVMValueRef l = codegen(ast->data.AST_BINOP.left, ctx, module, builder);
   Type *ltype = ast->data.AST_BINOP.left->md;
+  ltype = resolve_tc_rank(ltype);
+  if (is_generic(ltype)) {
+    ltype = resolve_generic_type(ltype, ctx->env);
+  }
 
   LLVMValueRef r = codegen(ast->data.AST_BINOP.right, ctx, module, builder);
+
   Type *rtype = ast->data.AST_BINOP.right->md;
+  rtype = resolve_tc_rank(rtype);
+  if (is_generic(rtype)) {
+    rtype = resolve_generic_type(rtype, ctx->env);
+  }
 
   Method method;
   switch (op) {

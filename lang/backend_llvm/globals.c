@@ -56,9 +56,6 @@ LLVMValueRef codegen_get_global(JITSymbol *sym, LLVMModuleRef module,
   // Load the void* from the slot
   LLVMValueRef generic_ptr =
       LLVMBuildLoad2(builder, _VOID_PTR_T, slot_ptr, "void_ptr");
-  printf("loaded void * (slot %d)\n", slot);
-  // LLVMDumpType(llvm_type);
-  // printf("\n");
 
   LLVMValueRef typed_ptr = LLVMBuildBitCast(
       builder, generic_ptr, LLVMPointerType(llvm_type, 0), "typed_ptr");

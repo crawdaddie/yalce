@@ -119,8 +119,17 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
-LLVMValueRef codegen_constructor(Ast *ast, JITLangCtx *ctx,
-                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef codegen_constructor(Ast *cons_id, Ast *args, int len,
+                                 JITLangCtx *ctx, LLVMModuleRef module,
+                                 LLVMBuilderRef builder) {
+
+  int member_idx;
+  Type *variant = variant_lookup(ctx->env, cons_id->md, &member_idx);
+  if (variant) {
+    printf("constructor of variant? ");
+    print_type(variant);
+  }
+
   return NULL;
 }
 
@@ -134,6 +143,7 @@ LLVMValueRef call_symbol(JITSymbol *sym, Ast *args, int args_len,
   case STYPE_FUNCTION: {
     callable = sym->val;
     expected_args_len = fn_type_args_len(sym->symbol_type);
+    break;
   }
   case STYPE_GENERIC_FUNCTION: {
   }
@@ -148,12 +158,14 @@ LLVMValueRef call_symbol(JITSymbol *sym, Ast *args, int args_len,
 
     for (int i = 0; i < args_len; i++) {
       Ast *app_val_ast = args + i;
+      Type *app_val_type = app_val_ast->md;
+      app_val_type = resolve_tc_rank(app_val_type);
 
       LLVMValueRef app_val = codegen(app_val_ast, ctx, module, builder);
 
-      if (!types_equal(app_val_ast->md, callable_type->data.T_FN.from)) {
+      if (!types_equal(app_val_type, callable_type->data.T_FN.from)) {
 
-        app_val = attempt_value_conversion(app_val, app_val_ast->md,
+        app_val = attempt_value_conversion(app_val, app_val_type,
                                            callable_type->data.T_FN.from,
                                            module, builder);
 
@@ -179,13 +191,16 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMBuilderRef builder) {
 
   if (((Type *)ast->data.AST_APPLICATION.function->md)->kind == T_CONS) {
-    return codegen_constructor(ast, ctx, module, builder);
+    return codegen_constructor(ast, ast->data.AST_APPLICATION.args,
+                               ast->data.AST_APPLICATION.len, ctx, module,
+                               builder);
   }
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
   if (!sym) {
-    fprintf(stderr, "codegen identifier failed symbol not found in scope %d\n",
+    fprintf(stderr, "codegen identifier failed symbol not found in scope %d:\n",
             ctx->stack_ptr);
+    print_ast_err(ast->data.AST_APPLICATION.function);
     return NULL;
   }
   return call_symbol(sym, ast->data.AST_APPLICATION.args,

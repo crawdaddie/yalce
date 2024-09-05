@@ -12,4 +12,7 @@ LLVMValueRef codegen_int_binop(LLVMBuilderRef builder, token_type op,
 
 LLVMValueRef codegen_float_binop(LLVMBuilderRef builder, token_type op,
                                  LLVMValueRef l, LLVMValueRef r);
+
+typedef LLVMValueRef (*LLVMBinopMethod)(LLVMValueRef, LLVMValueRef, Type *,
+                                        LLVMModuleRef, LLVMBuilderRef);
 #endif

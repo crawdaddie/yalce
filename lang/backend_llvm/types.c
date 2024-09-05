@@ -201,16 +201,6 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
   print_type(type_from);
   printf(" => ");
   print_type(type_to);
-  // if (type_from->alias) {
-  //   printf("[%s]", type_from->alias);
-  // }
-  // print_type(type_from);
-  // printf(" => ");
-  // if (type_to->alias) {
-  //   printf("[%s]", type_to->alias);
-  // }
-  // print_type(type_to);
-  // printf("\n");
 
   ConsMethod constructor = type_to->constructor;
   return constructor(value, type_from, module, builder);
@@ -326,13 +316,13 @@ static LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r, Type *t,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
-  return LLVMBuildFCmp(builder, LLVMRealOEQ, l, r, "Uint64 ==");
+  return LLVMBuildFCmp(builder, LLVMRealOEQ, l, r, "Num ==");
 }
 static LLVMValueRef codegen_neq_num(LLVMValueRef l, LLVMValueRef r, Type *t,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
-  return LLVMBuildFCmp(builder, LLVMRealONE, l, r, "Uint64 ==");
+  return LLVMBuildFCmp(builder, LLVMRealONE, l, r, "Num !=");
 }
 
 typedef LLVMValueRef (*OrdMethod)(LLVMValueRef, LLVMValueRef, Type *,
@@ -414,13 +404,11 @@ typedef LLVMValueRef (*ArithmeticMethod)(LLVMValueRef, LLVMValueRef, Type *,
 static LLVMValueRef codegen_add_int(LLVMValueRef l, LLVMValueRef r, Type *t,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-  printf("codegen int add: \n");
   return LLVMBuildBinOp(builder, LLVMAdd, l, r, "Int +");
 }
 static LLVMValueRef codegen_sub_int(LLVMValueRef l, LLVMValueRef r, Type *t,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-
   return LLVMBuildBinOp(builder, LLVMSub, l, r, "Int -");
 }
 static LLVMValueRef codegen_mul_int(LLVMValueRef l, LLVMValueRef r, Type *t,

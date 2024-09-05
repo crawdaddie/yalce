@@ -5,5 +5,4 @@ let fib = fn x ->
   | _ -> (fib (x - 1)) + (fib (x - 2))
 ;;
 
-fib 50 # %assert '500'
-
+fib 20 # %assert '6765'

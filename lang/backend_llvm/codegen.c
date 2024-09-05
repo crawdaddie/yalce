@@ -1,15 +1,13 @@
 #include "backend_llvm/codegen.h"
 #include "backend_llvm/binop.h"
-// #include "backend_llvm/function.h"
+#include "backend_llvm/function.h"
 #include "backend_llvm/list.h"
-// #include "backend_llvm/match.h"
+#include "backend_llvm/match.h"
 #include "backend_llvm/strings.h"
 #include "backend_llvm/symbols.h"
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
-#include "function.h"
-#include "match.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -28,7 +26,6 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   if (func == NULL) {
-    printf("top level return null??\n");
     return NULL;
   }
 

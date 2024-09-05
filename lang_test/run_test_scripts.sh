@@ -4,7 +4,7 @@
 make -C ../
 
 # Set the path to the executable
-EXE=../build/audio_lang
+EXE=../build/lang
 
 # Check if the executable exists
 if [ ! -f "$EXE" ]; then
@@ -79,7 +79,6 @@ for file in $YLC_FILES; do
         expected_output=$(trim "$expected_output")
         
         echo "Assertion $file_assertions: '$expected_output'"
-        echo "Actual output: '$actual_output'"
         
         if [ "$actual_output" == "$expected_output" ]; then
             echo "✅ PASSED"
@@ -87,6 +86,7 @@ for file in $YLC_FILES; do
             passed_tests=$((passed_tests + 1))
         else
             echo "❌ FAILED"
+            echo "Actual output: '$actual_output'"
         fi
         echo "-------------------------"
     done <<< "$assertions"
