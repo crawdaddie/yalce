@@ -31,6 +31,12 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
       }
       ptr--;
     }
+
+    Type *type = env_lookup(ctx->env, chars);
+    if (type) {
+      JITSymbol *sym = new_symbol(STYPE_FUNCTION, ast->md, NULL, NULL);
+      return sym;
+    }
     return NULL;
   }
 
@@ -51,6 +57,38 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
       return sym_record;
     }
   }
+}
+
+int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
+  if (ast->tag == AST_IDENTIFIER) {
+
+    const char *chars = ast->data.AST_IDENTIFIER.value;
+    int chars_len = ast->data.AST_IDENTIFIER.length;
+    ObjString key = {.chars = chars, chars_len, hash_string(chars, chars_len)};
+    int ptr = ctx->stack_ptr;
+
+    while (ptr >= 0) {
+      JITSymbol *_sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
+      if (_sym != NULL) {
+        *sym = *_sym;
+        return 0;
+      }
+      ptr--;
+    }
+
+    Type *type = ast->md;
+    if (type && type->kind == T_CONS) {
+      // printf("found constructor symbol???");
+      // print_type(type);
+
+      *sym = (JITSymbol){
+          STYPE_FUNCTION,
+      };
+      return 0;
+    }
+    return 1;
+  }
+  return 1;
 }
 
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

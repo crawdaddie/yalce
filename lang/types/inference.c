@@ -672,6 +672,8 @@ Type *infer(Ast *ast, TypeEnv **env) {
     if (is_generic(t) && t->kind == T_CONS) {
       type = generic_cons(t, ast->data.AST_APPLICATION.len,
                           ast->data.AST_APPLICATION.args, env);
+
+      ast->data.AST_APPLICATION.function->md = type;
       break;
     }
     if (t->kind == T_VAR) {

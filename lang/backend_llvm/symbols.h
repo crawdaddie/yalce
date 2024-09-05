@@ -39,4 +39,5 @@ JITSymbol *lookup_id_ast(Ast *id, JITLangCtx *ctx);
 JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type);
 
+int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym);
 #endif

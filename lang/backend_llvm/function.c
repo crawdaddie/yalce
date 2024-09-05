@@ -125,6 +125,7 @@ LLVMValueRef codegen_constructor(Ast *cons_id, Ast *args, int len,
 
   int member_idx;
   Type *variant = variant_lookup(ctx->env, cons_id->md, &member_idx);
+
   if (variant) {
     printf("constructor of variant? ");
     print_type(variant);
@@ -190,19 +191,15 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
-  if (((Type *)ast->data.AST_APPLICATION.function->md)->kind == T_CONS) {
-    return codegen_constructor(ast, ast->data.AST_APPLICATION.args,
-                               ast->data.AST_APPLICATION.len, ctx, module,
-                               builder);
-  }
+  JITSymbol sym;
 
-  JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
-  if (!sym) {
+  if (lookup_id_ast_in_place(ast->data.AST_APPLICATION.function, ctx, &sym)) {
     fprintf(stderr, "codegen identifier failed symbol not found in scope %d:\n",
             ctx->stack_ptr);
     print_ast_err(ast->data.AST_APPLICATION.function);
     return NULL;
   }
-  return call_symbol(sym, ast->data.AST_APPLICATION.args,
+
+  return call_symbol(&sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, ctx, module, builder);
 }
