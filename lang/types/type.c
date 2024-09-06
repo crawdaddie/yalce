@@ -392,10 +392,12 @@ Type *env_lookup(TypeEnv *env, const char *name) {
       Type *ret = fn_return_type(env->type);
       Type *contained_type = variant_contains(ret, name);
       if (contained_type != NULL) {
-        return contained_type;
+        // return contained_type;
+        return ret;
       }
-    } else if (env->type->kind == T_CONS &&
-               strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+    }
+    if (env->type->kind == T_CONS &&
+        strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
 
       Type *contained_type = variant_contains(env->type, name);
       if (contained_type != NULL) {

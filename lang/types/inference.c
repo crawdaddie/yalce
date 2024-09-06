@@ -689,7 +689,21 @@ Type *infer(Ast *ast, TypeEnv **env) {
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
 
+    printf("generic type fn - use the return after specialization: ");
+    print_type(t);
+    printf("\n");
+
     if (is_generic(t) && t->kind == T_CONS) {
+      type = TRY(generic_cons(t, ast->data.AST_APPLICATION.len,
+                              ast->data.AST_APPLICATION.args, env));
+
+      ast->data.AST_APPLICATION.function->md = type;
+      type = fn_return_type(type);
+
+      break;
+    }
+
+    if (is_generic(t) && t->kind == T_FN) {
       type = TRY(generic_cons(t, ast->data.AST_APPLICATION.len,
                               ast->data.AST_APPLICATION.args, env));
 

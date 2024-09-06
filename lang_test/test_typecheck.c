@@ -265,7 +265,7 @@ int main() {
 
   ({
     SEP;
-    printf("first failure????\n");
+    // printf("first failure????\n");
 
     Type opt_int =
         tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
