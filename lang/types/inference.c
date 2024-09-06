@@ -5,6 +5,28 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define TRY(expr)                                                              \
+  ({                                                                           \
+    typeof(expr) _result = (expr);                                             \
+    if (!_result) {                                                            \
+      return NULL;                                                             \
+    }                                                                          \
+    _result;                                                                   \
+  })
+
+#define TRY_MSG(expr, msg)                                                     \
+  ({                                                                           \
+    typeof(expr) _result = (expr);                                             \
+    if (!_result) {                                                            \
+      if (msg) {                                                               \
+        fprintf(stderr, "%s\n", msg);                                          \
+        print_ast_err(ast);                                                    \
+      }                                                                        \
+      return NULL;                                                             \
+    }                                                                          \
+    _result;                                                                   \
+  })
+
 // Global variables
 static int type_var_counter = 0;
 void reset_type_var_counter() { type_var_counter = 0; }
@@ -223,9 +245,11 @@ Type *generic_cons(Type *generic_cons, int len, Ast *args, TypeEnv **env) {
   }
 
   Type *type = copy_type(generic_cons);
+  Type **param_types = talloc(sizeof(Type *) * len);
 
   for (int i = 0; i < len; i++) {
     Type *t = infer(args + i, env);
+    param_types[i] = t;
     if (type->data.T_CONS.args[i]->kind == T_VAR) {
       const char *name = type->data.T_CONS.args[i]->data.T_VAR;
       Type *existing_binding = env_lookup(*env, name);
@@ -244,6 +268,9 @@ Type *generic_cons(Type *generic_cons, int len, Ast *args, TypeEnv **env) {
     }
     type->data.T_CONS.args[i] = infer(args + i, env);
   }
+
+  type = create_type_multi_param_fn(len, param_types, type);
+
   return type;
 }
 
@@ -641,13 +668,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
       for (int i = 0; i < param_count; i++) {
         Ast *param_ast = ast->data.AST_EXTERN_FN.signature_types + i;
 
-        Type *param_type =
-            find_type_in_env(*env, param_ast->data.AST_IDENTIFIER.value);
+        Type *param_type = TRY_MSG(
+            find_type_in_env(*env, param_ast->data.AST_IDENTIFIER.value),
+            "Error declaring extern function: type %s not found");
 
-        if (!param_type) {
-          fprintf(stderr, "Error declaring extern function: type %s not found",
-                  param_ast->data.AST_IDENTIFIER.value);
-        }
         param_types[i] = param_type;
       }
     }
@@ -662,20 +686,25 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
   case AST_APPLICATION: {
-    Type *t = infer(ast->data.AST_APPLICATION.function, env);
-
-    if (t == NULL) {
-      fprintf(stderr, "%s\n", "Failure could not infer type of callee ");
-      return NULL;
-    }
+    Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
+                      "Failure could not infer type of callee ");
 
     if (is_generic(t) && t->kind == T_CONS) {
-      type = generic_cons(t, ast->data.AST_APPLICATION.len,
-                          ast->data.AST_APPLICATION.args, env);
+      type = TRY(generic_cons(t, ast->data.AST_APPLICATION.len,
+                              ast->data.AST_APPLICATION.args, env));
 
       ast->data.AST_APPLICATION.function->md = type;
+      type = fn_return_type(type);
+
       break;
     }
+    if (t->kind == T_CONS) {
+      // printf("cons??\n");
+      // printf("infer application: ");
+      // print_type(t);
+      break;
+    }
+
     if (t->kind == T_VAR) {
 
       type = next_tvar();
@@ -707,6 +736,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   ast->md = type;
+  // if (type && (type->kind == T_VAR) && strcmp(type->data.T_VAR, "t0") == 0) {
+  //   print_type(type);
+  //   print_ast(ast);
+  // }
 
   return type;
 }

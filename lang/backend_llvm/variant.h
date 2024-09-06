@@ -1,0 +1,3 @@
+#ifndef _LANG_BACKEND_LLVM_VARIANT_H
+#define _LANG_BACKEND_LLVM_VARIANT_H
+#endif

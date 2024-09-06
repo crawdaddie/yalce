@@ -102,6 +102,8 @@
                                            .dependencies =                     \
                                                (Type *[]){dep1, dep2}}}})
 
+#define TNONE                                                                  \
+  ((Type){T_CONS, {.T_CONS = {"None", .args = NULL, .num_args = 0}}})
 #define RESET reset_type_var_counter();
 
 #define SEP printf("------------------------------------------------\n")
@@ -139,9 +141,8 @@ int main() {
   ({
     Type t = {T_VAR, {.T_VAR = "t"}};
 
-    Type opt =
-        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &tvar("None"));
-    Type opt_func = MAKE_FN_TYPE_2(&t, &opt);
+    Type opt = MAKE_FN_TYPE_2(
+        &t, &tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &TNONE));
 
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
@@ -200,8 +201,7 @@ int main() {
   ({
     RESET
     Type t = {T_VAR, {.T_VAR = "t"}};
-    Type opt =
-        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &tvar("None"));
+    Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &TNONE);
 
     Type some_int = tcons("Some", 1, &t_int);
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
@@ -265,9 +265,11 @@ int main() {
 
   ({
     SEP;
+    printf("first failure????\n");
 
     Type opt_int =
-        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &tvar("None"));
+        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
                          "  | None\n"

@@ -97,7 +97,7 @@ char *type_to_string(Type *t, char *buffer) {
     }
 
     buffer = strncat(buffer, t->data.T_CONS.name, strlen(t->data.T_CONS.name));
-    if (t->data.T_CONS.args > 0) {
+    if (t->data.T_CONS.num_args > 0) {
       buffer = strncat(buffer, " of ", 4);
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
@@ -324,10 +324,11 @@ bool is_generic(Type *t) {
   }
 
   case T_CONS: {
+
     if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         Type *arg = t->data.T_CONS.args[i];
-        if (arg->kind != T_VAR && is_generic(arg)) {
+        if (is_generic(arg)) {
           return true;
         }
       }
@@ -363,31 +364,44 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
   new_env->next = env;
   return new_env;
 }
+Type *variant_contains(Type *variant, const char *name) {
+  if (!(variant->kind == T_CONS &&
+        strcmp(variant->data.T_CONS.name, TYPE_NAME_VARIANT) == 0)) {
+    return NULL;
+  }
+
+  for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
+    Type *variant_member = variant->data.T_CONS.args[i];
+    const char *mem_name;
+    if (variant_member->kind == T_CONS) {
+      mem_name = variant_member->data.T_CONS.name;
+    } else {
+      continue;
+    }
+
+    if (strcmp(mem_name, name) == 0) {
+      return variant_member;
+    }
+  }
+  return NULL;
+}
 
 Type *env_lookup(TypeEnv *env, const char *name) {
   while (env) {
-    if (env->type->kind == T_CONS &&
-        strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
-
-      Type *variant = env->type;
-
-      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-        Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-        if (variant_member->kind == T_CONS) {
-          mem_name = variant_member->data.T_CONS.name;
-        } else if (variant_member->kind == T_VAR) {
-          mem_name = variant_member->data.T_VAR;
-        } else {
-          continue;
-        }
-
-        if (strcmp(mem_name, name) == 0) {
-          return variant_member;
-        }
+    if (env->type->kind == T_FN) {
+      Type *ret = fn_return_type(env->type);
+      Type *contained_type = variant_contains(ret, name);
+      if (contained_type != NULL) {
+        return contained_type;
       }
-    }
-    if (strcmp(env->name, name) == 0) {
+    } else if (env->type->kind == T_CONS &&
+               strcmp(env->type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+
+      Type *contained_type = variant_contains(env->type, name);
+      if (contained_type != NULL) {
+        return contained_type;
+      }
+    } else if (strcmp(env->name, name) == 0) {
       return env->type;
     }
 
@@ -484,6 +498,7 @@ Type *deep_copy_type(const Type *original) {
     copy->data.T_CONS.num_args = original->data.T_CONS.num_args;
     copy->data.T_CONS.args =
         talloc(sizeof(Type *) * copy->data.T_CONS.num_args);
+
     for (int i = 0; i < copy->data.T_CONS.num_args; i++) {
       copy->data.T_CONS.args[i] = deep_copy_type(original->data.T_CONS.args[i]);
     }
@@ -650,12 +665,7 @@ Type *resolve_generic_type(Type *t, TypeEnv *env) {
 
 Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
   const char *name;
-
-  if (member->kind == T_CONS) {
-    name = member->data.T_CONS.name;
-  } else if (member->kind == T_VAR) {
-    name = member->data.T_CONS.name;
-  }
+  name = member->data.T_CONS.name;
 
   while (env) {
     if (env->type->kind == T_CONS &&
@@ -666,8 +676,6 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
         const char *mem_name;
         if (variant_member->kind == T_CONS) {
           mem_name = variant_member->data.T_CONS.name;
-        } else if (variant_member->kind == T_VAR) {
-          mem_name = variant_member->data.T_VAR;
         } else {
           continue;
         }

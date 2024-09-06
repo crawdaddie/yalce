@@ -1,14 +1,16 @@
-#! /Users/Adam.Juraszek/projects/yalce/build/lang
+#! /Users/adam/projects/sound/audio_lang/build/lang -i
 
 type Option t =
   | Some of t
   | None
   ;
 
-let f = fn x ->
-  match x with
-    | Some 1 -> 1
-    | None -> 0
-;;
+let x = Some 1;
 
-f (Some 1) # %assert '1'
+# let f = fn x ->
+#   match x with
+#     | Some 1 -> 1
+#     | None -> 0
+# ;;
+#
+# f (Some 1) # %assert '1'

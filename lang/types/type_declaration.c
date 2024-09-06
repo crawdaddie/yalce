@@ -19,7 +19,17 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
     for (int i = 0; i < len; i++) {
       Ast *item = expr->data.AST_LIST.items + i;
-      Type *member = compute_type_expression(item, env);
+
+      Type *member;
+      if (item->tag == AST_IDENTIFIER) {
+        member = empty_type();
+        member->kind = T_CONS;
+        member->data.T_CONS.args = NULL;
+        member->data.T_CONS.num_args = 0;
+        member->data.T_CONS.name = item->data.AST_IDENTIFIER.value;
+      } else {
+        member = compute_type_expression(item, env);
+      }
       variant->data.T_CONS.args[i] = member;
     }
     return variant;
@@ -39,8 +49,20 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   }
 
   case AST_LAMBDA: {
-    Type *t = compute_type_expression(expr->data.AST_LAMBDA.body, env);
-    return t;
+    TypeEnv *_env = env;
+    int len = expr->data.AST_LAMBDA.len;
+    Type **param_types = talloc(sizeof(Type *) * len);
+    for (int i = 0; i < len; i++) {
+      Ast *param = expr->data.AST_LAMBDA.params + i;
+      Type *param_type = compute_type_expression(param, env);
+      param_types[i] = param_type;
+      _env = env_extend(_env, param_type->data.T_VAR, param_type);
+    }
+
+    Type *t = compute_type_expression(expr->data.AST_LAMBDA.body, _env);
+
+    expr->md = create_type_multi_param_fn(len, param_types, t);
+    return expr->md;
   }
 
   case AST_BINOP: {
@@ -55,13 +77,8 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       cons->data.T_CONS.num_args = 1;
       cons->data.T_CONS.args = talloc(sizeof(Type *));
       cons->data.T_CONS.args[0] = contained_type;
-      // *cons = (Type){
-      //     T_CONS,
-      //     {.T_CONS = {.name = strdup(
-      //                     expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value),
-      //                 .args = &contained_type,
-      //                 .num_args = 1}}};
-
+      expr->data.AST_BINOP.right = contained_type;
+      expr->md = type_fn(contained_type, cons);
       return cons;
     }
   }

@@ -1,5 +1,6 @@
 #ifndef _LANG_BACKEND_LLVM_CODEGEN_TYPES_H
 #define _LANG_BACKEND_LLVM_CODEGEN_TYPES_H
+#include "common.h"
 #include "types/type.h"
 #include "llvm-c/Types.h"
 LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env);
@@ -26,4 +27,8 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
 void initialize_builtin_numeric_types(TypeEnv *env);
 
 LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env);
+
+LLVMValueRef codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder);
 #endif

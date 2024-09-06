@@ -47,10 +47,10 @@ enum TypeKind {
   T_CONS,
   /* Type Variable  */
   T_VAR,
-  // T_VARIANT_MEMBER,
   // T_MODULE,
   // T_TYPECLASS,
   T_TYPECLASS_RESOLVE,
+  // T_VARIANT_MEMBER,
 };
 
 typedef struct Type {
@@ -75,6 +75,11 @@ typedef struct Type {
       const char *comparison_tc; // use the comparison typeclass name to compare
                                  // the rank of all dependencies
     } T_TYPECLASS_RESOLVE;
+
+    // struct {
+    //   struct Type *variant; // pointer to T_CONS with name "Variant"
+    //   int index;
+    // } T_VARIANT_MEMBER;
 
   } data;
 

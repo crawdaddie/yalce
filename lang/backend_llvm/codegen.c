@@ -143,6 +143,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_MATCH: {
     return codegen_match(ast, ctx, module, builder);
   }
+  case AST_TYPE_DECL: {
+    return codegen_type_declaration(ast, ctx, module, builder);
+  }
   }
 
   return NULL;

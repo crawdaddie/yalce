@@ -1,4 +1,7 @@
 #include "backend_llvm/types.h"
+#include "match.h"
+#include "serde.h"
+#include "symbols.h"
 #include "types/type.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>
@@ -581,4 +584,79 @@ LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env) {
   Type *lookup_type = find_type_in_env(env, id->data.AST_IDENTIFIER.value);
   LLVMTypeRef t = type_to_llvm_type(lookup_type, env);
   return t;
+}
+
+// LLVMValueRef codegen_constructor_type(Ast *ast, int variant_idx,
+//                                       JITLangCtx *ctx, LLVMModuleRef module,
+//                                       LLVMBuilderRef builder) {
+//
+//   switch (ast->tag) {
+//   case AST_IDENTIFIER: {
+//     // Create a constant integer for the tag
+//     LLVMTypeRef tag_type = LLVMInt32Type();
+//     LLVMValueRef tag_const = LLVMConstInt(tag_type, variant_idx, 0);
+//
+//     // Create an array of constant values (in this case, just the tag)
+//     LLVMValueRef const_values[] = {tag_const};
+//
+//     // Create the constant struct
+//     LLVMValueRef const_struct = LLVMConstStruct(const_values, 1, 0);
+//     return match_values(ast, const_struct, &t_int, ctx, module, builder);
+//   }
+//
+//   case AST_BINOP: {
+//     if (ast->data.AST_BINOP.op == TOKEN_OF) {
+//
+//       char *name = ast->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
+//       int len = ast->data.AST_BINOP.left->data.AST_IDENTIFIER.length;
+//       JITSymbol *sym = new_symbol(STYPE_GENERIC_CONS, ast->md, NULL, NULL);
+//       sym->symbol_data.STYPE_GENERIC_CONS.name = name;
+//       sym->symbol_data.STYPE_GENERIC_CONS.variant_idx = variant_idx;
+//       ht_set_hash(ctx->stack + ctx->stack_ptr, name, hash_string(name, len),
+//                   sym);
+//       break;
+//     }
+//   }
+//   }
+//   return NULL;
+// }
+//
+// LLVMValueRef _codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
+//                                        LLVMModuleRef module,
+//                                        LLVMBuilderRef builder) {
+//
+//   switch (ast->tag) {
+//   case AST_LAMBDA: {
+//     return _codegen_type_declaration(ast->data.AST_LAMBDA.body, ctx, module,
+//                                      builder);
+//   }
+//
+//   case AST_LIST: {
+//     for (int variant_idx = 0; variant_idx < ast->data.AST_LIST.len;
+//          variant_idx++) {
+//       Ast *item = ast->data.AST_LIST.items + variant_idx;
+//       codegen_constructor_type(item, variant_idx, ctx, module, builder);
+//     }
+//
+//     break;
+//   }
+//   }
+//   return NULL;
+// }
+
+LLVMValueRef codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+
+  printf("codegen type declaration: ");
+  print_ast(ast->data.AST_LET.binding);
+  Type *type = ast->md;
+  Ast *type_expr = ast->data.AST_LET.expr;
+
+  if (type_expr->tag == AST_LAMBDA) {
+    printf("generic type fn: ");
+    print_type(type_expr->md);
+  }
+
+  return NULL;
 }
