@@ -9,7 +9,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_tuple(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
-  LLVMTypeRef tuple_type = type_to_llvm_type(ast->md, ctx->env);
+  LLVMTypeRef tuple_type = type_to_llvm_type(ast->md, ctx->env, module);
   LLVMValueRef tuple = LLVMGetUndef(tuple_type);
 
   for (int i = 0; i < ast->data.AST_LIST.len; i++) {

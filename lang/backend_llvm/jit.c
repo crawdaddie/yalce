@@ -161,6 +161,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
+  LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
@@ -394,6 +395,7 @@ void print_result(Type *type, LLVMGenericValueRef result) {
       break;
     }
 
+    printf("%s %p", type->data.T_CONS.name, LLVMGenericValueToPointer(result));
     break;
   }
 

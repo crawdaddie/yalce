@@ -14,10 +14,7 @@
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  LLVMTypeRef ret = type_to_llvm_type(ast->md, ctx->env);
-  if (!ret) {
-    ret = LLVMVoidType();
-  }
+  LLVMTypeRef ret = type_to_llvm_type(ast->md, ctx->env, module);
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
@@ -143,9 +140,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_MATCH: {
     return codegen_match(ast, ctx, module, builder);
   }
-  case AST_TYPE_DECL: {
-    return codegen_type_declaration(ast, ctx, module, builder);
-  }
+
+    // case AST_TYPE_DECL: {
+    //   return codegen_type_declaration(ast, ctx, module, builder);
+    // }
   }
 
   return NULL;

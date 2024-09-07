@@ -24,21 +24,12 @@ typedef struct SpecificFns {
   struct SpecificFns *next;
 } SpecificFns;
 
-typedef struct FnVariants {
-  Type *type;
-  LLVMValueRef func;
-  struct FnVariants *next;
-} FnVariants;
-
 typedef enum symbol_type {
   STYPE_FN_PARAM,
   STYPE_TOP_LEVEL_VAR,
   STYPE_LOCAL_VAR,
   STYPE_FUNCTION,
   STYPE_GENERIC_FUNCTION,
-  STYPE_GENERIC_CONS,
-  STYPE_MODULE,
-  STYPE_FN_VARIANTS
 } symbol_type;
 
 typedef struct {
@@ -60,17 +51,6 @@ typedef struct {
       SpecificFns *specific_fns;
     } STYPE_GENERIC_FUNCTION;
 
-    struct {
-      const char *name;
-      int variant_idx;
-      SpecificFns *specific_fns;
-    } STYPE_GENERIC_CONS;
-
-    FnVariants STYPE_FN_VARIANTS;
-
-    struct {
-      ht *symbols;
-    } STYPE_MODULE;
   } symbol_data;
   Type *symbol_type;
 } JITSymbol;

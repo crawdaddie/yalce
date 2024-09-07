@@ -141,8 +141,10 @@ int main() {
   ({
     Type t = {T_VAR, {.T_VAR = "t"}};
 
-    Type opt = MAKE_FN_TYPE_2(
-        &t, &tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &TNONE));
+    // Type opt = MAKE_FN_TYPE_2(
+    //     &t, &tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &TNONE));
+    //
+    Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &TNONE);
 
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
@@ -211,6 +213,7 @@ int main() {
                          "let x = Some 1;\n",
                          &some_int);
   });
+
   ({
     SEP;
     RESET

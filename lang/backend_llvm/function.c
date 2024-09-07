@@ -5,6 +5,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "util.h"
+#include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -31,17 +32,22 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
-LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env) {
+
+LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env,
+                         LLVMModuleRef module) {
 
   LLVMTypeRef llvm_param_types[fn_len];
 
   for (int i = 0; i < fn_len; i++) {
-    llvm_param_types[i] = type_to_llvm_type(fn_type->data.T_FN.from, env);
+    llvm_param_types[i] =
+        type_to_llvm_type(fn_type->data.T_FN.from, env, module);
+
     fn_type = fn_type->data.T_FN.to;
   }
 
   Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
-  LLVMTypeRef llvm_return_type_ref = type_to_llvm_type(return_type, env);
+  LLVMTypeRef llvm_return_type_ref =
+      type_to_llvm_type(return_type, env, module);
 
   // Create function type with return.
   LLVMTypeRef llvm_fn_type =
@@ -59,7 +65,8 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Ast *signature_types = ast->data.AST_EXTERN_FN.signature_types;
   if (params_count == 0) {
 
-    LLVMTypeRef ret_type = llvm_type_of_identifier(signature_types, ctx->env);
+    LLVMTypeRef ret_type =
+        llvm_type_of_identifier(signature_types, ctx->env, module);
     LLVMTypeRef fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
 
     LLVMValueRef func = LLVMAddFunction(module, name, fn_type);
@@ -69,11 +76,11 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_param_types[params_count];
   for (int i = 0; i < params_count; i++) {
     llvm_param_types[i] =
-        llvm_type_of_identifier(signature_types + i, ctx->env);
+        llvm_type_of_identifier(signature_types + i, ctx->env, module);
   }
 
   LLVMTypeRef ret_type =
-      llvm_type_of_identifier(signature_types + params_count, ctx->env);
+      llvm_type_of_identifier(signature_types + params_count, ctx->env, module);
   LLVMTypeRef fn_type =
       LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
 
@@ -98,7 +105,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = ast->md;
   int fn_len = ast->data.AST_LAMBDA.len;
 
-  LLVMTypeRef prototype = fn_prototype(ast->md, fn_len, ctx->env);
+  LLVMTypeRef prototype = fn_prototype(ast->md, fn_len, ctx->env, module);
 
   LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, prototype);
   LLVMSetLinkage(func, LLVMExternalLinkage);
@@ -175,56 +182,6 @@ SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
   return new_specific_fn;
 };
 
-LLVMValueRef build_cons_func(const char *cons_name, int variant_idx,
-                             Type *expected_fn_type, JITLangCtx *ctx,
-                             LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMTypeRef prototype = fn_prototype(expected_fn_type, 1, ctx->env);
-
-  LLVMValueRef func = LLVMAddFunction(module, cons_name, prototype);
-  LLVMSetLinkage(func, LLVMExternalLinkage);
-
-  if (func == NULL) {
-    return NULL;
-  }
-
-  JITLangCtx fn_ctx = ctx_push(*ctx);
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
-  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
-  LLVMPositionBuilderAtEnd(builder, block);
-
-  LLVMValueRef param_val = LLVMGetParam(func, 0);
-  expected_fn_type = expected_fn_type->data.T_FN.to;
-
-  // Create the struct type for the tagged union
-  LLVMTypeRef tag_type = LLVMInt32Type();
-  LLVMTypeRef param_type = LLVMTypeOf(param_val);
-
-  LLVMTypeRef union_elements[] = {param_type};
-  LLVMTypeRef union_type = LLVMStructType(union_elements, 1, 0);
-
-  LLVMTypeRef struct_elements[] = {tag_type, union_type};
-  LLVMTypeRef struct_type = LLVMStructType(struct_elements, 2, 0);
-
-  // Create the tagged union value
-  LLVMValueRef tag_val = LLVMConstInt(tag_type, variant_idx, 0);
-
-  LLVMValueRef union_val = LLVMGetUndef(union_type);
-  union_val =
-      LLVMBuildInsertValue(builder, union_val, param_val, 0, "union_insert");
-
-  LLVMValueRef cons_val = LLVMGetUndef(struct_type);
-  cons_val = LLVMBuildInsertValue(builder, cons_val, tag_val, 0, "tag_insert");
-  cons_val =
-      LLVMBuildInsertValue(builder, cons_val, union_val, 1, "union_insert");
-
-  LLVMBuildRet(builder, cons_val);
-
-  LLVMPositionBuilderAtEnd(builder, prev_block);
-
-  return func;
-}
-
 LLVMValueRef call_symbol(JITSymbol *sym, Ast *args, int args_len,
                          Type *expected_fn_type, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -243,25 +200,6 @@ LLVMValueRef call_symbol(JITSymbol *sym, Ast *args, int args_len,
     // Type *cons = args[0].md;
     // Type *type_key = args[0].md;
   }
-
-  case STYPE_GENERIC_CONS: {
-    int variant_idx = sym->symbol_data.STYPE_GENERIC_CONS.variant_idx;
-    if (variant_idx >= 0) {
-      const char *cons_name = sym->symbol_data.STYPE_GENERIC_CONS.name;
-      Type *arg_type = args->md; // only one arg for cons types:
-      callable = specific_fns_lookup(
-          sym->symbol_data.STYPE_GENERIC_CONS.specific_fns, arg_type);
-      if (!callable) {
-        callable = build_cons_func(cons_name, variant_idx, expected_fn_type,
-                                   ctx, module, builder);
-        sym->symbol_data.STYPE_GENERIC_CONS.specific_fns = specific_fns_extend(
-            sym->symbol_data.STYPE_GENERIC_CONS.specific_fns, arg_type,
-            callable);
-        expected_args_len = 1;
-        callable_type = expected_fn_type;
-      }
-    }
-  }
   }
 
   if (args_len < expected_args_len) {
@@ -278,7 +216,9 @@ LLVMValueRef call_symbol(JITSymbol *sym, Ast *args, int args_len,
 
       LLVMValueRef app_val = codegen(app_val_ast, ctx, module, builder);
 
-      if (!types_equal(app_val_type, callable_type->data.T_FN.from)) {
+      if (!types_equal(app_val_type, callable_type->data.T_FN.from) &&
+          !(variant_contains_type(app_val_type, callable_type->data.T_FN.from,
+                                  NULL))) {
 
         app_val = TRY_MSG(attempt_value_conversion(
                               app_val, app_val_type,
@@ -302,9 +242,20 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
-  JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
+  JITSymbol sym;
 
-  if (!sym) {
+  int lookup_sym_err =
+      lookup_id_ast_in_place(ast->data.AST_APPLICATION.function, ctx, &sym);
+
+  LLVMTypeRef tagged_union_type =
+      variant_member_to_llvm_type(ast->md, ctx->env, module);
+
+  if (tagged_union_type) {
+    return tagged_union_constructor(ast, tagged_union_type, ctx, module,
+                                    builder);
+  }
+
+  if (lookup_sym_err) {
     fprintf(stderr, "codegen identifier failed symbol not found in scope %d:\n",
             ctx->stack_ptr);
     print_ast_err(ast->data.AST_APPLICATION.function);
@@ -312,7 +263,8 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
-  return call_symbol(sym, ast->data.AST_APPLICATION.args,
+
+  return call_symbol(&sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, expected_fn_type, ctx,
                      module, builder);
 }

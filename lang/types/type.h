@@ -99,6 +99,11 @@ typedef struct TypeEnv {
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 Type *env_lookup(TypeEnv *env, const char *name);
+
+Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
+                            char **variant_name);
+
+bool variant_contains_type(Type *variant, Type *member, int *idx);
 void free_type_env(TypeEnv *env);
 void print_type_env(TypeEnv *env);
 Type *find_type_in_env(TypeEnv *env, const char *name);
@@ -135,6 +140,10 @@ Type *resolve_tc_rank(Type *type);
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement);
 Type *resolve_generic_type(Type *t, TypeEnv *env);
-
+bool is_variant_type(Type *type);
 Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx);
+
+typedef struct VariantContext {
+} VariantContext;
+
 #endif

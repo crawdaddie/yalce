@@ -15,12 +15,6 @@ void print_ast_err(Ast *ast) {
   free(buf);
 }
 
-static bool is_term(ast_tag tag) {
-  return tag <= AST_IDENTIFIER;
-  // return (tag == AST_INT || tag == AST_NUMBER || tag == AST_BOOL || tag ==
-  // AST_STRING || tag == AST_IDENTIFIER);
-}
-
 char *ast_to_sexpr(Ast *ast, char *buffer) {
   if (!ast) {
     buffer = strcat(buffer, "null");

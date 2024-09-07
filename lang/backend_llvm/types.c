@@ -3,6 +3,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "types/type.h"
+#include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +18,7 @@
 #define LLVM_TYPE_char LLVMInt8Type()
 #define LLVM_TYPE_ptr(type) LLVMPointerType(LLVM_TYPE_##type, 0)
 // Function to create an LLVM tuple type
-LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env) {
+LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
 
   int len = tuple_type->data.T_CONS.num_args;
 
@@ -25,7 +26,8 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env) {
 
   for (int i = 0; i < len; i++) {
     // Convert each element's AST node to its corresponding LLVM type
-    element_types[i] = type_to_llvm_type(tuple_type->data.T_CONS.args[i], env);
+    element_types[i] =
+        type_to_llvm_type(tuple_type->data.T_CONS.args[i], env, module);
   }
 
   LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
@@ -38,10 +40,16 @@ LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env);
 // Function to create an LLVM list type forward decl
 LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env);
 
-LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
+LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
   if (is_generic(type)) {
     return NULL;
   }
+
+  LLVMTypeRef variant = variant_member_to_llvm_type(type, env, module);
+  if (variant) {
+    return variant;
+  }
+
   switch (type->kind) {
 
   case T_INT: {
@@ -63,14 +71,15 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
   case T_VAR: {
     if (env) {
       // return type_to_llvm_type(resolve_in_env(type, env), env);
-      return type_to_llvm_type(env_lookup(env, type->data.T_VAR), env);
+      return type_to_llvm_type(env_lookup(env, type->data.T_VAR), env, module);
     }
     return LLVMInt32Type();
   }
 
   case T_CONS: {
+
     if (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0) {
-      return tuple_type(type, env);
+      return tuple_type(type, env, module);
     }
 
     if (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
@@ -85,7 +94,30 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
       return LLVM_TYPE_ptr(char);
     }
 
-    return LLVMInt32Type();
+    if (type->data.T_CONS.num_args == 1) {
+      return type_to_llvm_type(type->data.T_CONS.args[0], env, module);
+    }
+
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+      int len = type->data.T_CONS.num_args;
+      LLVMTypeRef dts[len];
+      for (int i = 0; i < len; i++) {
+        if (type->data.T_CONS.args[i]->data.T_CONS.num_args == 0) {
+          dts[i] = NULL;
+          continue;
+        }
+        Type *contained_type = type->data.T_CONS.args[i]->data.T_CONS.args[0];
+
+        dts[i] = type_to_llvm_type(contained_type, env, module);
+      }
+      return codegen_tagged_union_type(dts, len, module);
+    }
+
+    // if (type->data.T_CONS.num_args == 0) {
+    //   return NULL;
+    // }
+
+    return tuple_type(type, env, module);
   }
 
   case T_FN: {
@@ -101,7 +133,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env) {
   }
 
   default: {
-    return LLVMInt32Type();
+
+    return LLVMVoidType();
   }
   }
 }
@@ -204,6 +237,7 @@ LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
   print_type(type_from);
   printf(" => ");
   print_type(type_to);
+  printf("\n");
 
   ConsMethod constructor = type_to->constructor;
   return constructor(value, type_from, module, builder);
@@ -288,198 +322,197 @@ LLVMValueRef codegen_float_binop(LLVMBuilderRef builder, token_type op,
   }
 }
 
-typedef LLVMValueRef (*EqMethod)(LLVMValueRef, LLVMValueRef, Type *,
-                                 LLVMModuleRef, LLVMBuilderRef);
-static LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r, Type *t,
-                                   LLVMModuleRef module,
-                                   LLVMBuilderRef builder) {
+typedef LLVMValueRef (*EqMethod)(LLVMValueRef, LLVMValueRef, LLVMModuleRef,
+                                 LLVMBuilderRef);
+
+LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r,
+                            LLVMModuleRef module, LLVMBuilderRef builder) {
   return LLVMBuildICmp(builder, LLVMIntEQ, l, r, "Int ==");
 }
-static LLVMValueRef codegen_neq_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_neq_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntNE, l, r, "Int !=");
 }
 
-static LLVMValueRef codegen_eq_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_eq_uint64(LLVMValueRef l, LLVMValueRef r,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntEQ, l, r, "Uint64 ==");
 }
-static LLVMValueRef codegen_neq_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_neq_uint64(LLVMValueRef l, LLVMValueRef r,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntNE, l, r, "Uint64 !=");
 }
 
-static LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
   return LLVMBuildFCmp(builder, LLVMRealOEQ, l, r, "Num ==");
 }
-static LLVMValueRef codegen_neq_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_neq_num(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   return LLVMBuildFCmp(builder, LLVMRealONE, l, r, "Num !=");
 }
 
-typedef LLVMValueRef (*OrdMethod)(LLVMValueRef, LLVMValueRef, Type *,
-                                  LLVMModuleRef, LLVMBuilderRef);
-static LLVMValueRef codegen_lt_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+typedef LLVMValueRef (*OrdMethod)(LLVMValueRef, LLVMValueRef, LLVMModuleRef,
+                                  LLVMBuilderRef);
+static LLVMValueRef codegen_lt_int(LLVMValueRef l, LLVMValueRef r,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
   return LLVMBuildICmp(builder, LLVMIntSLT, l, r, "Int <");
 }
-static LLVMValueRef codegen_gt_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_gt_int(LLVMValueRef l, LLVMValueRef r,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntSGT, l, r, "Int >");
 }
-static LLVMValueRef codegen_lte_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_lte_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntSLE, l, r, "Int <=");
 }
-static LLVMValueRef codegen_gte_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_gte_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntSGE, l, r, "Int >=");
 }
 
-static LLVMValueRef codegen_lt_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_lt_uint64(LLVMValueRef l, LLVMValueRef r,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntULT, l, r, "Uint64 <");
 }
-static LLVMValueRef codegen_gt_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_gt_uint64(LLVMValueRef l, LLVMValueRef r,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntUGT, l, r, "Uint64 >");
 }
-static LLVMValueRef codegen_lte_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_lte_uint64(LLVMValueRef l, LLVMValueRef r,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntULE, l, r, "Uint64 <=");
 }
-static LLVMValueRef codegen_gte_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_gte_uint64(LLVMValueRef l, LLVMValueRef r,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
 
   return LLVMBuildICmp(builder, LLVMIntUGE, l, r, "Uint64 >=");
 }
 
-static LLVMValueRef codegen_lt_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_lt_num(LLVMValueRef l, LLVMValueRef r,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
   return LLVMBuildFCmp(builder, LLVMRealOLT, l, r, "Num <");
 }
-static LLVMValueRef codegen_gt_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_gt_num(LLVMValueRef l, LLVMValueRef r,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
   return LLVMBuildFCmp(builder, LLVMRealOGT, l, r, "Num >");
 }
-static LLVMValueRef codegen_lte_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_lte_num(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   return LLVMBuildFCmp(builder, LLVMRealOLE, l, r, "Num <=");
 }
-static LLVMValueRef codegen_gte_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_gte_num(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   return LLVMBuildFCmp(builder, LLVMRealOGE, l, r, "Num >=");
 }
 
-typedef LLVMValueRef (*ArithmeticMethod)(LLVMValueRef, LLVMValueRef, Type *,
+typedef LLVMValueRef (*ArithmeticMethod)(LLVMValueRef, LLVMValueRef,
                                          LLVMModuleRef, LLVMBuilderRef);
-static LLVMValueRef codegen_add_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_add_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMAdd, l, r, "Int +");
 }
-static LLVMValueRef codegen_sub_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_sub_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMSub, l, r, "Int -");
 }
-static LLVMValueRef codegen_mul_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_mul_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-
   return LLVMBuildBinOp(builder, LLVMMul, l, r, "Int *");
 }
-static LLVMValueRef codegen_div_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_div_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMSDiv, l, r, "Int /");
 }
-static LLVMValueRef codegen_mod_int(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_mod_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMSRem, l, r, "Int %");
 }
 
-static LLVMValueRef codegen_add_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_add_uint64(LLVMValueRef l, LLVMValueRef r,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMAdd, l, r, "Uint64 +");
 }
-static LLVMValueRef codegen_sub_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_sub_uint64(LLVMValueRef l, LLVMValueRef r,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMSub, l, r, "Uint64 -");
 }
-static LLVMValueRef codegen_mul_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_mul_uint64(LLVMValueRef l, LLVMValueRef r,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMMul, l, r, "Uint64 *");
 }
-static LLVMValueRef codegen_div_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_div_uint64(LLVMValueRef l, LLVMValueRef r,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMUDiv, l, r, "Uint64 /");
 }
-static LLVMValueRef codegen_mod_uint64(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_mod_uint64(LLVMValueRef l, LLVMValueRef r,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMURem, l, r, "Uint64 %");
 }
 
-static LLVMValueRef codegen_add_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_add_num(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMFAdd, l, r, "Num *");
 }
-static LLVMValueRef codegen_sub_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_sub_num(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   return LLVMBuildBinOp(builder, LLVMFSub, l, r, "Num -");
 }
-static LLVMValueRef codegen_mul_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_mul_num(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMFMul, l, r, "Num *");
 }
-static LLVMValueRef codegen_div_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_div_num(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   return LLVMBuildBinOp(builder, LLVMFDiv, l, r, "Num /");
 }
-static LLVMValueRef codegen_mod_num(LLVMValueRef l, LLVMValueRef r, Type *t,
+static LLVMValueRef codegen_mod_num(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   return LLVMBuildBinOp(builder, LLVMFRem, l, r, "Num %");
@@ -572,7 +605,8 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
   t_num.constructor_size = sizeof(ConsMethod);
 }
 
-LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env) {
+LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env,
+                                    LLVMModuleRef module) {
   if (id->tag == AST_VOID) {
     return LLVMVoidType();
   }
@@ -582,81 +616,6 @@ LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env) {
   }
 
   Type *lookup_type = find_type_in_env(env, id->data.AST_IDENTIFIER.value);
-  LLVMTypeRef t = type_to_llvm_type(lookup_type, env);
+  LLVMTypeRef t = type_to_llvm_type(lookup_type, env, module);
   return t;
-}
-
-// LLVMValueRef codegen_constructor_type(Ast *ast, int variant_idx,
-//                                       JITLangCtx *ctx, LLVMModuleRef module,
-//                                       LLVMBuilderRef builder) {
-//
-//   switch (ast->tag) {
-//   case AST_IDENTIFIER: {
-//     // Create a constant integer for the tag
-//     LLVMTypeRef tag_type = LLVMInt32Type();
-//     LLVMValueRef tag_const = LLVMConstInt(tag_type, variant_idx, 0);
-//
-//     // Create an array of constant values (in this case, just the tag)
-//     LLVMValueRef const_values[] = {tag_const};
-//
-//     // Create the constant struct
-//     LLVMValueRef const_struct = LLVMConstStruct(const_values, 1, 0);
-//     return match_values(ast, const_struct, &t_int, ctx, module, builder);
-//   }
-//
-//   case AST_BINOP: {
-//     if (ast->data.AST_BINOP.op == TOKEN_OF) {
-//
-//       char *name = ast->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
-//       int len = ast->data.AST_BINOP.left->data.AST_IDENTIFIER.length;
-//       JITSymbol *sym = new_symbol(STYPE_GENERIC_CONS, ast->md, NULL, NULL);
-//       sym->symbol_data.STYPE_GENERIC_CONS.name = name;
-//       sym->symbol_data.STYPE_GENERIC_CONS.variant_idx = variant_idx;
-//       ht_set_hash(ctx->stack + ctx->stack_ptr, name, hash_string(name, len),
-//                   sym);
-//       break;
-//     }
-//   }
-//   }
-//   return NULL;
-// }
-//
-// LLVMValueRef _codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
-//                                        LLVMModuleRef module,
-//                                        LLVMBuilderRef builder) {
-//
-//   switch (ast->tag) {
-//   case AST_LAMBDA: {
-//     return _codegen_type_declaration(ast->data.AST_LAMBDA.body, ctx, module,
-//                                      builder);
-//   }
-//
-//   case AST_LIST: {
-//     for (int variant_idx = 0; variant_idx < ast->data.AST_LIST.len;
-//          variant_idx++) {
-//       Ast *item = ast->data.AST_LIST.items + variant_idx;
-//       codegen_constructor_type(item, variant_idx, ctx, module, builder);
-//     }
-//
-//     break;
-//   }
-//   }
-//   return NULL;
-// }
-
-LLVMValueRef codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
-                                      LLVMModuleRef module,
-                                      LLVMBuilderRef builder) {
-
-  printf("codegen type declaration: ");
-  print_ast(ast->data.AST_LET.binding);
-  Type *type = ast->md;
-  Ast *type_expr = ast->data.AST_LET.expr;
-
-  if (type_expr->tag == AST_LAMBDA) {
-    printf("generic type fn: ");
-    print_type(type_expr->md);
-  }
-
-  return NULL;
 }

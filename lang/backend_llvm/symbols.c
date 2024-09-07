@@ -2,6 +2,7 @@
 #include "globals.h"
 #include "match.h"
 #include "serde.h"
+#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -31,33 +32,23 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
       }
       ptr--;
     }
-
-    // Type *type = env_lookup(ctx->env, chars);
-    // if (type) {
-    //   JITSymbol *sym = new_symbol(STYPE_FUNCTION, ast->md, NULL, NULL);
-    //   return sym;
-    // }
-    // return NULL;
   }
 
-  // if (ast->tag == AST_RECORD_ACCESS) {
-  //   JITSymbol *sym_record =
-  //       lookup_id_ast(ast->data.AST_RECORD_ACCESS.record, ctx);
-  //
-  //   if (!sym_record) {
-  //     return NULL;
-  //   }
-  //
-  //   if (sym_record->type == STYPE_MODULE) {
-  //     ht *t = sym_record->symbol_data.STYPE_MODULE.symbols;
-  //     while (sym_record->type == STYPE_MODULE) {
-  //       JITLangCtx _ctx = {.stack = t, .stack_ptr = 0};
-  //       sym_record = lookup_id_ast(ast->data.AST_RECORD_ACCESS.member,
-  //       &_ctx);
-  //     }
-  //     return sym_record;
-  //   }
-  // }
+  return NULL;
+}
+
+JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx) {
+
+  int ptr = ctx->stack_ptr;
+
+  while (ptr >= 0) {
+    JITSymbol *sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
+    if (sym != NULL) {
+      return sym;
+    }
+    ptr--;
+  }
+  return NULL;
 }
 
 int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
@@ -77,18 +68,6 @@ int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
       ptr--;
     }
 
-    // Type *type = ast->md;
-    // int variant_member_idx;
-    // Type *variant = variant_lookup(ctx->env, type, &variant_member_idx);
-    // if (type && type->kind == T_CONS && variant) {
-    //   printf("found constructor symbol of variant (%d)???",
-    //   variant_member_idx); print_type(type); print_type(variant);
-    //
-    //   *sym = (JITSymbol){
-    //       STYPE_FUNCTION,
-    //   };
-    //   return 0;
-    // }
     return 1;
   }
   return 1;
@@ -130,6 +109,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case STYPE_LOCAL_VAR: {
     return sym->val;
   }
+
   default: {
     return NULL;
   }
@@ -172,6 +152,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     return create_generic_fn_binding(binding, ast->data.AST_LET.expr, &cont_ctx,
                                      module, builder);
   }
+
   LLVMValueRef expr_val =
       codegen(ast->data.AST_LET.expr, outer_ctx, module, builder);
 

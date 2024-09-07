@@ -3,7 +3,9 @@
 #include "common.h"
 #include "types/type.h"
 #include "llvm-c/Types.h"
-LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env);
+// LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env);
+
+LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module);
 
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       Type *type_to, LLVMModuleRef module,
@@ -26,9 +28,13 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
 
 void initialize_builtin_numeric_types(TypeEnv *env);
 
-LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env);
+LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env,
+                                    LLVMModuleRef module);
 
 LLVMValueRef codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder);
+
+LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r,
+                            LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

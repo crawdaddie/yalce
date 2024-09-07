@@ -9,20 +9,6 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-static LLVMValueRef cast_to_float(LLVMBuilderRef builder, LLVMValueRef i) {
-  return LLVMBuildSIToFP(builder, i, LLVMDoubleType(), "cast_int_to_double");
-}
-
-static bool is_llvm_float(LLVMValueRef v) {
-  LLVMTypeKind kind = LLVMGetTypeKind(LLVMTypeOf(v));
-  return kind == LLVMDoubleTypeKind || kind == LLVMFloatTypeKind;
-}
-
-static bool is_llvm_int(LLVMValueRef v) {
-  LLVMTypeKind kind = LLVMGetTypeKind(LLVMTypeOf(v));
-  return kind == LLVMIntegerTypeKind;
-}
-
 LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   Type *result_type = ast->md;
@@ -90,5 +76,5 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   LLVMBinopMethod binop_method = method.method;
-  return binop_method(l, r, result_type, module, builder);
+  return binop_method(l, r, module, builder);
 }

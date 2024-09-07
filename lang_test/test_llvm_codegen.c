@@ -4,6 +4,7 @@
 #include "codegen_list.h"
 #include "codegen_match_values.h"
 #include "codegen_types.h"
+#include "globals.h"
 #include "util.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -336,7 +337,7 @@ LLVMValueRef int_list(int items[], int len, LLVMBuilderRef builder) {
 LLVMValueRef int_tuple(Type *type, int items[], int len,
                        LLVMBuilderRef builder) {
 
-  LLVMTypeRef tuple_type = type_to_llvm_type(type, NULL);
+  LLVMTypeRef tuple_type = type_to_llvm_type(type, NULL, module);
   LLVMValueRef tuple = LLVMGetUndef(tuple_type);
 
   for (int i = 0; i < len; i++) {

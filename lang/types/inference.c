@@ -27,6 +27,16 @@
     _result;                                                                   \
   })
 
+#define TRY_EXCEPT(expr, except)                                               \
+  ({                                                                           \
+    typeof(expr) _result = (expr);                                             \
+    if (!_result) {                                                            \
+      (except);                                                                \
+      return NULL;                                                             \
+    }                                                                          \
+    _result;                                                                   \
+  })
+
 // Global variables
 static int type_var_counter = 0;
 void reset_type_var_counter() { type_var_counter = 0; }
@@ -288,26 +298,6 @@ static Type *resolve_generic_variant(Type *t, TypeEnv *env) {
   return t;
 }
 
-static Type *resolve_generic_fn(Type *t, TypeEnv *env) {
-  while (env) {
-    const char *key = env->name;
-    Type tvar = {T_VAR, .data = {.T_VAR = key}};
-    t = replace_in(t, &tvar, env->type);
-
-    env = env->next;
-  }
-
-  return t;
-}
-
-static bool type_is_variant_member(Type *member, Type *variant) { return true; }
-
-typedef struct VariantCtx {
-  Type *variant;
-  int variant_len;
-  bool *exhaustive_usage;
-} VariantCtx;
-
 Type *infer_match(Ast *ast, TypeEnv **env) {
   Ast *with = ast->data.AST_MATCH.expr;
   TypeEnv *test_expr_env = *env;
@@ -320,20 +310,20 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   Type *res_type = NULL;
   Type *test_type = NULL;
 
+  // variant ctx
   Type *variant = NULL;
   bool *exhaustive_variant = NULL;
   int variant_len;
+
   for (int i = 0; i < len; i++) {
     Ast *test_expr = branches + (2 * i);
-    test_type = infer(test_expr, &test_expr_env);
-
-    if (test_type == NULL) {
-      fprintf(stderr, "could not resolve match test expr in branch %d\n", i);
-      return NULL;
-    }
+    test_type = TRY_EXCEPT(
+        infer(test_expr, &test_expr_env),
+        fprintf(stderr, "could not resolve match test expr in branch %d\n", i));
 
     int member_idx;
     Type *_v = variant_lookup(*env, test_type, &member_idx);
+
     if (_v != NULL && variant == NULL) {
       variant = copy_type(_v);
       variant_len = variant->data.T_CONS.num_args;
@@ -345,35 +335,38 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
       unify(variant, _v, env);
       exhaustive_variant[member_idx] = 1;
     }
+
     TypeEnv *res_env = add_binding_to_env(*env, test_expr, test_type);
     Ast *result_expr = branches + (2 * i + 1);
     Type *_res_type = infer(result_expr, &res_env);
 
     if (res_type != NULL) {
-      Type *unif_res = unify(res_type, _res_type, env);
-      if (!unif_res) {
-        fprintf(stderr, "Error cannot unify result types in match expression ");
-        print_type_err(res_type);
-        fprintf(stderr, " != ");
-        print_type_err(_res_type);
-        return NULL;
-      }
+      Type *unif_res = TRY_EXCEPT(
+          unify(res_type, _res_type, env),
+
+          // exception:
+          ({
+            fprintf(stderr,
+                    "Error cannot unify result types in match expression ");
+            print_type_err(res_type);
+            fprintf(stderr, " != ");
+            print_type_err(_res_type);
+          }));
+
       *res_type = *unif_res;
     }
     res_type = _res_type;
   }
 
-  if (variant) {
-
-    *with_type = *resolve_generic_variant(variant, test_expr_env);
+  // exhaustiveness check
+  Ast *final_test = branches + (len - 1) * 2;
+  if (variant != NULL && !(ast_is_placeholder_id(final_test))) {
     bool is_exhaustive = true;
     for (int i = 0; i < variant_len; i++) {
-      is_exhaustive &= exhaustive_variant[i];
-    }
-    Ast *final_test = branches + (len - 1) * 2;
-
-    if (variant != NULL && ast_is_placeholder_id(final_test)) {
-      is_exhaustive = true;
+      if (exhaustive_variant[i] == 0) {
+        is_exhaustive = false;
+        break;
+      }
     }
 
     if (!is_exhaustive) {
@@ -382,6 +375,11 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
       free(exhaustive_variant);
       return NULL;
     }
+  }
+
+  // final retroactive resolution of input with test types
+  if (variant != NULL) {
+    *with_type = *resolve_generic_variant(variant, test_expr_env);
   }
 
   if (exhaustive_variant != NULL) {
@@ -685,13 +683,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
     type = fn;
     break;
   }
+
   case AST_APPLICATION: {
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
-
-    printf("generic type fn - use the return after specialization: ");
-    print_type(t);
-    printf("\n");
 
     if (is_generic(t) && t->kind == T_CONS) {
       type = TRY(generic_cons(t, ast->data.AST_APPLICATION.len,
@@ -703,15 +698,16 @@ Type *infer(Ast *ast, TypeEnv **env) {
       break;
     }
 
-    if (is_generic(t) && t->kind == T_FN) {
-      type = TRY(generic_cons(t, ast->data.AST_APPLICATION.len,
-                              ast->data.AST_APPLICATION.args, env));
+    // if (is_generic(t) && t->kind == T_FN) {
+    //   type = TRY(generic_cons(t, ast->data.AST_APPLICATION.len,
+    //                           ast->data.AST_APPLICATION.args, env));
+    //
+    //   ast->data.AST_APPLICATION.function->md = type;
+    //   type = fn_return_type(type);
+    //
+    //   break;
+    // }
 
-      ast->data.AST_APPLICATION.function->md = type;
-      type = fn_return_type(type);
-
-      break;
-    }
     if (t->kind == T_CONS) {
       // printf("cons??\n");
       // printf("infer application: ");

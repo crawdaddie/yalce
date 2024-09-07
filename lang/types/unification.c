@@ -93,7 +93,7 @@ Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
 
 Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
 
-  if (strcmp(t1->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+  if (is_variant_type(t1)) {
     return t1;
   }
 

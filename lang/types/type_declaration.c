@@ -62,7 +62,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     Type *t = compute_type_expression(expr->data.AST_LAMBDA.body, _env);
 
     expr->md = create_type_multi_param_fn(len, param_types, t);
-    return expr->md;
+    return t;
   }
 
   case AST_BINOP: {
@@ -77,8 +77,11 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       cons->data.T_CONS.num_args = 1;
       cons->data.T_CONS.args = talloc(sizeof(Type *));
       cons->data.T_CONS.args[0] = contained_type;
-      expr->data.AST_BINOP.right = contained_type;
-      expr->md = type_fn(contained_type, cons);
+      expr->data.AST_BINOP.right->md = contained_type;
+      expr->data.AST_BINOP.right->md = contained_type;
+
+      expr->data.AST_BINOP.left->md = type_fn(contained_type, cons);
+      expr->md = cons;
       return cons;
     }
   }

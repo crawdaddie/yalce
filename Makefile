@@ -3,7 +3,6 @@ BUILD_DIR := build
 LLVM := /opt/homebrew/opt/llvm@16
 LLVM_CONFIG := $(LLVM)/bin/llvm-config
 
-
 # macOS-specific settings
 READLINE_PREFIX := $(shell brew --prefix readline)
 
