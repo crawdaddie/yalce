@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/audio_lang/build/lang -i
+#! /Users/adam/projects/sound/yalce/build/lang -i
 type Option t =
   | Some of t
   | None

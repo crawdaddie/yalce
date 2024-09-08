@@ -32,6 +32,8 @@ uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
 
 #define BYTE_TYPE LLVMInt8Type()
 #define TAG_TYPE LLVMInt8Type()
+#define I32_TYPE LLVMInt32Type()
+#define UI32(i) LLVMConstInt(I32_TYPE, i, 0)
 LLVMTypeRef codegen_union_type(LLVMTypeRef contained_datatypes[],
                                int variant_len, LLVMModuleRef module) {
   LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
@@ -161,12 +163,28 @@ LLVMTypeRef variant_member_to_llvm_type(Type *type, TypeEnv *env,
   return NULL;
 }
 
-LLVMValueRef variant_extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
+LLVMValueRef _variant_extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
   return LLVMBuildExtractValue(builder, val, 0, "extract_tagged_union_tag");
 }
+LLVMValueRef variant_extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
+  // Get the type of the tagged union
+  LLVMTypeRef union_type = LLVMTypeOf(val);
 
-LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
-                                   LLVMBuilderRef builder) {
+  // Create indices for GEP: [0, 0] to get the first element (tag)
+  LLVMValueRef indices[2] = {LLVMConstInt(LLVMInt32Type(), 0, 0),
+                             LLVMConstInt(LLVMInt32Type(), 0, 0)};
+
+  // Use GEP to get a pointer to the tag
+  LLVMValueRef tag_ptr =
+      LLVMBuildGEP2(builder, union_type, val, indices, 2, "tag_ptr");
+
+  // Load the tag value
+  return LLVMBuildLoad2(builder, LLVMInt8Type(), tag_ptr,
+                        "extract_tagged_union_tag");
+}
+
+LLVMValueRef _variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
+                                    LLVMBuilderRef builder) {
   LLVMValueRef extracted =
       LLVMBuildExtractValue(builder, val, 1, "extract_tagged_union_value");
 
@@ -177,6 +195,28 @@ LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
   }
 
   return extracted;
+}
+LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
+                                   LLVMBuilderRef builder) {
+
+  LLVMTypeRef specific_type = LLVMStructType(
+      (LLVMTypeRef[]){
+          TAG_TYPE,
+          expected_type,
+      },
+      2, 0);
+
+  LLVMValueRef specific_variant_bitcast = LLVMBuildBitCast(
+      builder, val, LLVMPointerType(specific_type, 0), "union_as_specific");
+
+  LLVMValueRef value_indices[2] = {UI32(0), UI32(1)};
+
+  LLVMValueRef value_ptr =
+      LLVMBuildGEP2(builder, specific_type, specific_variant_bitcast,
+                    value_indices, 2, "value_ptr");
+
+  return LLVMBuildLoad2(builder, expected_type, value_ptr,
+                        "extract_tagged_union_value");
 }
 
 LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
@@ -193,25 +233,32 @@ LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
       ast->data.AST_APPLICATION.args, // only one arg for cons types in variants
       ctx, module, builder);
 
-  LLVMValueRef union_value = LLVMGetUndef(tagged_union_type);
+  LLVMValueRef union_value = LLVMBuildAlloca(builder, tagged_union_type, "");
 
-  // Insert the tag
   LLVMValueRef tag_value = LLVMConstInt(TAG_TYPE, vidx, 0);
+  LLVMValueRef tag_ptr =
+      LLVMBuildStructGEP2(builder, tagged_union_type, tag_value, 0, "tag_ptr");
+  LLVMBuildStore(builder, tag_value, tag_ptr);
 
-  union_value =
-      LLVMBuildInsertValue(builder, union_value, tag_value, 0, "insert_tag");
+  Type *contained_type = type->data.T_CONS.args[0];
 
-  // Extract the type of the second element (the union part) from
-  // tagged_union_type
-  LLVMTypeRef union_part_type = LLVMStructGetTypeAtIndex(tagged_union_type, 1);
+  LLVMTypeRef specific_type = LLVMStructType(
+      (LLVMTypeRef[]){TAG_TYPE,
+                      type_to_llvm_type(contained_type, ctx->env, module)
 
-  // Bitcast cons_input to the union part type
-  LLVMValueRef bitcast_cons_input = LLVMBuildBitCast(
-      builder, cons_input, union_part_type, "bitcast_cons_input");
+      },
+      2, 0);
 
-  // Insert the value
-  union_value = LLVMBuildInsertValue(builder, union_value, bitcast_cons_input,
-                                     1, "insert_value");
+  LLVMValueRef specific_variant_bitcast =
+      LLVMBuildBitCast(builder, union_value, LLVMPointerType(specific_type, 0),
+                       "union_as_specific");
 
+  LLVMValueRef value_indices[2] = {UI32(0), UI32(1)};
+  LLVMValueRef value_ptr =
+      LLVMBuildGEP2(builder, specific_type, specific_variant_bitcast,
+                    value_indices, 2, "value_ptr");
+  LLVMBuildStore(builder, cons_input, value_ptr);
+
+  // return LLVMBuildLoad2(builder, tagged_union_type, union_value, "");
   return union_value;
 }

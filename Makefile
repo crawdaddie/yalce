@@ -1,7 +1,15 @@
 BUILD_DIR := build
 
 LLVM := /opt/homebrew/opt/llvm@16
+# Debug LLVM path (you can change this to your debug LLVM installation path)
+DEBUG_LLVM := ~/projects/llvm-project-16.0.6.src/build
+# Use DEBUG_LLVM if the target is debug, otherwise use the default LLVM
+ifeq ($(MAKECMDGOALS),debug)
+    LLVM := $(DEBUG_LLVM)
+endif
+
 LLVM_CONFIG := $(LLVM)/bin/llvm-config
+
 
 # macOS-specific settings
 READLINE_PREFIX := $(shell brew --prefix readline)
@@ -27,6 +35,10 @@ LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_CC += -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags`
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
 
+ifeq ($(MAKECMDGOALS),debug)
+    LANG_LD_FLAGS += -lz
+endif
+
 LEX_FILE := $(LANG_SRC_DIR)/lex.l
 YACC_FILE := $(LANG_SRC_DIR)/parser.y
 LEX_OUTPUT := $(LANG_SRC_DIR)/lex.yy.c
@@ -43,6 +55,7 @@ LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 .PHONY: all clean engine test wasm serve_docs
 
 all: $(BUILD_DIR)/lang
+debug: all
 
 engine:
 	$(MAKE) -C engine
