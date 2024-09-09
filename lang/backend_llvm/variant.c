@@ -11,7 +11,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
 uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
-                           LLVMTargetDataRef target_data) {
+                           LLVMTargetDataRef target_data, int *largest_idx) {
   uint64_t max_size = 0;
 
   for (size_t i = 0; i < num_types; i++) {
@@ -23,6 +23,8 @@ uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
     uint64_t type_size = LLVMStoreSizeOfType(target_data, data_types[i]);
 
     if (type_size > max_size) {
+
+      *largest_idx = i;
       max_size = type_size;
     }
   }
@@ -37,14 +39,21 @@ uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
 LLVMTypeRef codegen_union_type(LLVMTypeRef contained_datatypes[],
                                int variant_len, LLVMModuleRef module) {
   LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
+  int largest_idx;
   uint64_t largest_size =
-      max_datatype_size(contained_datatypes, variant_len, target_data);
+      max_datatype_size(contained_datatypes, variant_len, target_data, &largest_idx);
   // use a bit of memory equal to largest_size * i8 to represent the union
   // consumers of this variant type will already know the member index of the
   // variant they're dealing with and can then bitcast the union to be the type
   // they expect
-  LLVMTypeRef union_type = LLVMArrayType(BYTE_TYPE, largest_size);
-  return union_type;
+  // LLVMTypeRef union_type = LLVMArrayType(BYTE_TYPE, largest_size);
+  // return union_type;
+  return LLVMStructType(
+      (LLVMTypeRef[]){
+        contained_datatypes[largest_idx]
+      },
+      1, 0);
+
 }
 
 LLVMTypeRef codegen_tagged_union_type(LLVMTypeRef contained_datatypes[],
@@ -163,9 +172,6 @@ LLVMTypeRef variant_member_to_llvm_type(Type *type, TypeEnv *env,
   return NULL;
 }
 
-LLVMValueRef _variant_extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
-  return LLVMBuildExtractValue(builder, val, 0, "extract_tagged_union_tag");
-}
 LLVMValueRef variant_extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
   // Get the type of the tagged union
   LLVMTypeRef union_type = LLVMTypeOf(val);
@@ -176,26 +182,12 @@ LLVMValueRef variant_extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
 
   // Use GEP to get a pointer to the tag
   LLVMValueRef tag_ptr =
-      LLVMBuildGEP2(builder, union_type, val, indices, 2, "tag_ptr");
+      LLVMBuildGEP2(builder, union_type, val, indices, 2, "");
 
   // Load the tag value
-  return LLVMBuildLoad2(builder, LLVMInt8Type(), tag_ptr,
-                        "extract_tagged_union_tag");
+  return LLVMBuildLoad2(builder, LLVMInt8Type(), tag_ptr, "");
 }
 
-LLVMValueRef _variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
-                                    LLVMBuilderRef builder) {
-  LLVMValueRef extracted =
-      LLVMBuildExtractValue(builder, val, 1, "extract_tagged_union_value");
-
-  // Check if we need to bitcast
-  if (LLVMTypeOf(extracted) != expected_type) {
-    return LLVMBuildBitCast(builder, extracted, expected_type,
-                            "bitcast_union_value");
-  }
-
-  return extracted;
-}
 LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
                                    LLVMBuilderRef builder) {
 
@@ -206,17 +198,15 @@ LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
       },
       2, 0);
 
-  LLVMValueRef specific_variant_bitcast = LLVMBuildBitCast(
-      builder, val, LLVMPointerType(specific_type, 0), "union_as_specific");
+  LLVMValueRef specific_variant_bitcast =
+      LLVMBuildBitCast(builder, val, LLVMPointerType(specific_type, 0), "");
 
   LLVMValueRef value_indices[2] = {UI32(0), UI32(1)};
 
-  LLVMValueRef value_ptr =
-      LLVMBuildGEP2(builder, specific_type, specific_variant_bitcast,
-                    value_indices, 2, "value_ptr");
+  LLVMValueRef value_ptr = LLVMBuildGEP2(
+      builder, specific_type, specific_variant_bitcast, value_indices, 2, "");
 
-  return LLVMBuildLoad2(builder, expected_type, value_ptr,
-                        "extract_tagged_union_value");
+  return LLVMBuildLoad2(builder, expected_type, value_ptr, "");
 }
 
 LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
@@ -234,30 +224,28 @@ LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
       ctx, module, builder);
 
   LLVMValueRef union_value = LLVMBuildAlloca(builder, tagged_union_type, "");
+  LLVMSetAlignment(union_value, 8);
 
   LLVMValueRef tag_value = LLVMConstInt(TAG_TYPE, vidx, 0);
   LLVMValueRef tag_ptr =
-      LLVMBuildStructGEP2(builder, tagged_union_type, tag_value, 0, "tag_ptr");
+      LLVMBuildStructGEP2(builder, tagged_union_type, tag_value, 0, "");
   LLVMBuildStore(builder, tag_value, tag_ptr);
 
   Type *contained_type = type->data.T_CONS.args[0];
 
   LLVMTypeRef specific_type = LLVMStructType(
       (LLVMTypeRef[]){TAG_TYPE,
-                      type_to_llvm_type(contained_type, ctx->env, module)
-
-      },
+                      type_to_llvm_type(contained_type, ctx->env, module)},
       2, 0);
 
-  LLVMValueRef specific_variant_bitcast =
-      LLVMBuildBitCast(builder, union_value, LLVMPointerType(specific_type, 0),
-                       "union_as_specific");
+  LLVMValueRef specific_variant_bitcast = LLVMBuildBitCast(
+      builder, union_value, LLVMPointerType(specific_type, 8), "");
 
   LLVMValueRef value_indices[2] = {UI32(0), UI32(1)};
-  LLVMValueRef value_ptr =
-      LLVMBuildGEP2(builder, specific_type, specific_variant_bitcast,
-                    value_indices, 2, "value_ptr");
+  LLVMValueRef value_ptr = LLVMBuildGEP2(
+      builder, specific_type, specific_variant_bitcast, value_indices, 2, "");
   LLVMBuildStore(builder, cons_input, value_ptr);
+  // LLVMSetAlignment(LLVMValueRef V, unsigned int Bytes)
 
   // return LLVMBuildLoad2(builder, tagged_union_type, union_value, "");
   return union_value;

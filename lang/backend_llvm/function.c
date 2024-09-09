@@ -126,7 +126,15 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *param_type = fn_type->data.T_FN.from;
 
     LLVMValueRef param_val = LLVMGetParam(func, i);
+
+    // if (is_variant_type(param_type)) {
+    //   LLVMValueRef alloca = LLVMBuildAlloca(
+    //       builder, type_to_llvm_type(param_type, ctx->env, module), "");
+    //   LLVMBuildStore(builder, param_val, alloca);
+    //   param_val = alloca;
+    // }
     match_values(param_ast, param_val, param_type, &fn_ctx, module, builder);
+
     fn_type = fn_type->data.T_FN.to;
   }
 
