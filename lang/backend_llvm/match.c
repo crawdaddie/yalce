@@ -160,6 +160,7 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
                   hash_string(id_chars, id_len), sym);
       return _TRUE;
     }
+
     LLVMValueRef simple_enum_member =
         codegen_simple_enum_member(binding, ctx, module);
 
@@ -176,17 +177,7 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
                   hash_string(id_chars, id_len), sym);
       return _TRUE;
     }
-    // else {
-    // Type *variant_member =
-    //     env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
-    // int idx;
-    // if (variant_member && is_variant_type(val_type) &&
-    //     variant_contains_type(val_type, variant_member, &idx)) {
-    //   return match_simple_variant_member(binding, idx, val_type, val, ctx,
-    //                                      module, builder);
-    // }
-    // }
-    break;
+    return _FALSE;
   }
 
   default: {

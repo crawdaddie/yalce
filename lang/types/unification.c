@@ -138,12 +138,9 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   if (t1->kind == T_VAR) {
     return unify_variable(t1, t2, env);
   }
+
   if (t2->kind == T_VAR) {
     return unify_variable(t2, t1, env);
-  }
-
-  if (t1->kind != t2->kind) {
-    return NULL;
   }
 
   switch (t1->kind) {
@@ -164,6 +161,20 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   case T_CONS:
     // Unify constructed types
     return unify_cons(t1, t2, env);
+  case T_TYPECLASS_RESOLVE: {
+    if (types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[0], t2) ||
+        types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[1], t2)) {
+      unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[0], t2, env);
+      unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[1], t2, env);
+      *t1 = *resolve_tc_rank(t1);
+
+      printf("unify tc: ");
+      print_type(t1);
+      return t1;
+    }
+
+    return unify_typeclass_resolve(t1, t2, env);
+  }
 
   default:
     // Unsupported type error

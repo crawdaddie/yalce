@@ -77,7 +77,7 @@ static char *op_to_name[] = {
 };
 
 Type *infer_binop(Ast *ast, TypeEnv **env) {
-
+  print_type_env(*env);
   token_type op = ast->data.AST_BINOP.op;
   Type *l = TRY_INFER(ast->data.AST_BINOP.left, env,
                       "Failure typechecking lhs of binop: ");
@@ -169,6 +169,8 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
 }
 
 static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
+  // printf("res binding: ");
+  // print_ast(binding);
 
   switch (binding->tag) {
   case AST_IDENTIFIER: {
@@ -178,6 +180,22 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
     for (int i = 0; i < binding->data.AST_LIST.len; i++) {
       env = add_binding_to_env(env, binding->data.AST_LIST.items + i,
                                type->data.T_CONS.args[i]);
+    }
+    return env;
+  }
+  case AST_APPLICATION: {
+    if (type->kind == T_CONS) {
+      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+        env = add_binding_to_env(env, binding->data.AST_APPLICATION.args + i,
+                                 type->data.T_CONS.args[i]);
+      }
+    } else if (type->kind == T_FN) {
+      Type *f = type;
+      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+        env = add_binding_to_env(env, binding->data.AST_APPLICATION.args + i,
+                                 f->data.T_FN.from);
+        f = f->data.T_FN.to;
+      }
     }
     return env;
   }
@@ -356,6 +374,9 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
       *res_type = *unif_res;
     }
     res_type = _res_type;
+    printf("match %d: ", i);
+    test_type = resolve_generic_type(test_type, *env);
+    print_type(test_type);
   }
 
   // exhaustiveness check
@@ -377,6 +398,8 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
     }
   }
 
+  printf("final after matching: ");
+  print_type_env(test_expr_env);
   // final retroactive resolution of input with test types
   if (variant != NULL) {
     *with_type = *resolve_generic_variant(variant, test_expr_env);
@@ -688,7 +711,31 @@ Type *infer(Ast *ast, TypeEnv **env) {
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
 
+    if (is_generic(t) && t->kind == T_CONS &&
+        ast->data.AST_APPLICATION.args[0].tag == AST_IDENTIFIER &&
+        !(env_lookup(
+            *env,
+            ast->data.AST_APPLICATION.args[0].data.AST_IDENTIFIER.value))) {
+
+      *env = env_extend(
+          *env, ast->data.AST_APPLICATION.args[0].data.AST_IDENTIFIER.value,
+          t->data.T_CONS.args[0]);
+      type = copy_type(t);
+      break;
+    }
+
     if (is_generic(t) && t->kind == T_CONS) {
+      if (ast->data.AST_APPLICATION.args[0].tag == AST_IDENTIFIER &&
+          !(env_lookup(
+              *env,
+              ast->data.AST_APPLICATION.args[0].data.AST_IDENTIFIER.value))) {
+
+        *env = env_extend(
+            *env, ast->data.AST_APPLICATION.args[0].data.AST_IDENTIFIER.value,
+            t->data.T_CONS.args[0]);
+        type = t;
+        break;
+      }
       type = TRY(generic_cons(t, ast->data.AST_APPLICATION.len,
                               ast->data.AST_APPLICATION.args, env));
 

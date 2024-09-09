@@ -268,7 +268,6 @@ int main() {
 
   ({
     SEP;
-    // printf("first failure????\n");
 
     Type opt_int =
         tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
@@ -280,6 +279,24 @@ int main() {
                          "let f = fn x ->\n"
                          "match x with\n"
                          "  | Some 1 -> 1\n"
+                         "  | None -> 0\n"
+                         "  ;;\n",
+                         &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
+  ({
+    SEP;
+
+    Type opt_int =
+        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+
+    TEST_SIMPLE_AST_TYPE("type Option t =\n"
+                         "  | Some of t\n"
+                         "  | None\n"
+                         "  ;\n"
+                         "let f = fn x ->\n"
+                         "match x with\n"
+                         "  | Some y -> y + 1\n"
                          "  | None -> 0\n"
                          "  ;;\n",
                          &MAKE_FN_TYPE_2(&opt_int, &t_int));

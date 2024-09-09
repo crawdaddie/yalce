@@ -231,6 +231,7 @@ LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
                  LLVMBuildStructGEP2(builder, tagged_union_type, tu, 1, ""));
   return LLVMBuildLoad2(builder, tagged_union_type, tu, "");
 }
+
 LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
                                         LLVMModuleRef module) {
 
