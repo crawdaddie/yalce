@@ -32,41 +32,48 @@ uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
   return max_size;
 }
 
-#define BYTE_TYPE LLVMInt8Type()
-#define TAG_TYPE LLVMInt8Type()
-#define I32_TYPE LLVMInt32Type()
-#define UI32(i) LLVMConstInt(I32_TYPE, i, 0)
 LLVMTypeRef codegen_union_type(LLVMTypeRef contained_datatypes[],
                                int variant_len, LLVMModuleRef module) {
+
   LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
   int largest_idx;
-  uint64_t largest_size =
-      max_datatype_size(contained_datatypes, variant_len, target_data, &largest_idx);
+  uint64_t largest_size = max_datatype_size(contained_datatypes, variant_len,
+                                            target_data, &largest_idx);
   // use a bit of memory equal to largest_size * i8 to represent the union
   // consumers of this variant type will already know the member index of the
   // variant they're dealing with and can then bitcast the union to be the type
   // they expect
-  // LLVMTypeRef union_type = LLVMArrayType(BYTE_TYPE, largest_size);
-  // return union_type;
-  return LLVMStructType(
-      (LLVMTypeRef[]){
-        contained_datatypes[largest_idx]
-      },
-      1, 0);
+  LLVMTypeRef largest_type = contained_datatypes[largest_idx];
+  if (largest_type == NULL) {
+    return NULL;
+  }
 
+  LLVMContextRef context = LLVMGetModuleContext(module);
+  // Create union type
+  LLVMTypeRef union_types[] = {largest_type}; // We only need the largest type
+  LLVMTypeRef union_type = LLVMStructCreateNamed(context, "anon");
+  LLVMStructSetBody(union_type, union_types, 1, 0);
+  return union_type;
 }
+
+LLVMTypeRef codegen_simple_enum_type() { return TAG_TYPE; }
 
 LLVMTypeRef codegen_tagged_union_type(LLVMTypeRef contained_datatypes[],
                                       int variant_len, LLVMModuleRef module) {
   LLVMTypeRef union_type =
       codegen_union_type(contained_datatypes, variant_len, module);
 
-  return LLVMStructType(
-      (LLVMTypeRef[]){
-          TAG_TYPE,
-          union_type,
-      },
-      2, 0);
+  if (union_type == NULL) {
+    printf("union type is null: \n");
+    return TAG_TYPE;
+  }
+
+  // Create TU struct type
+  LLVMContextRef context = LLVMGetModuleContext(module);
+  LLVMTypeRef tu_types[] = {TAG_TYPE, union_type};
+  LLVMTypeRef tu_type = LLVMStructCreateNamed(context, "TU");
+  LLVMStructSetBody(tu_type, tu_types, 2, 0);
+  return tu_type;
 }
 
 #define _TRUE LLVMConstInt(LLVMInt1Type(), 1, 0)
@@ -110,20 +117,17 @@ LLVMValueRef match_simple_variant_member(Ast *id, int vidx, Type *variant_type,
                                          LLVMModuleRef module,
                                          LLVMBuilderRef builder) {
 
-  LLVMValueRef left_tag = LLVMConstInt(LLVMInt32Type(), vidx, 0);
-  LLVMValueRef right_tag = variant_extract_tag(val, builder);
-
-  return codegen_eq_int(left_tag, right_tag, module, builder);
+  LLVMValueRef left_tag = LLVMConstInt(TAG_TYPE, vidx, 0);
+  return codegen_eq_int(left_tag, val, module, builder);
 }
 
-LLVMTypeRef simple_enum_type() {
-  // Create a struct type with just the tag
-  LLVMTypeRef tag_only_type = LLVMStructType(
-      (LLVMTypeRef[]){
-          TAG_TYPE,
-      },
-      1, 0);
-  return tag_only_type;
+LLVMTypeRef simple_enum_type(LLVMModuleRef module) {
+  LLVMContextRef context = LLVMGetModuleContext(module);
+  // Create TU struct type
+  LLVMTypeRef tu_types[] = {TAG_TYPE};
+  LLVMTypeRef tu_type = LLVMStructCreateNamed(context, "TU");
+  LLVMStructSetBody(tu_type, tu_types, 1, 0);
+  return tu_type;
 }
 
 LLVMTypeRef variant_member_to_llvm_type(Type *type, TypeEnv *env,
@@ -142,7 +146,7 @@ LLVMTypeRef variant_member_to_llvm_type(Type *type, TypeEnv *env,
   }
 
   if (type->data.T_CONS.num_args == 0) {
-    return simple_enum_type();
+    return simple_enum_type(module);
   }
 
   if (variant_parent) {
@@ -173,40 +177,34 @@ LLVMTypeRef variant_member_to_llvm_type(Type *type, TypeEnv *env,
 }
 
 LLVMValueRef variant_extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
+
   // Get the type of the tagged union
   LLVMTypeRef union_type = LLVMTypeOf(val);
+  if (union_type == TAG_TYPE) {
+    return val;
+  }
 
-  // Create indices for GEP: [0, 0] to get the first element (tag)
-  LLVMValueRef indices[2] = {LLVMConstInt(LLVMInt32Type(), 0, 0),
-                             LLVMConstInt(LLVMInt32Type(), 0, 0)};
-
-  // Use GEP to get a pointer to the tag
+  LLVMValueRef tu_alloca = LLVMBuildAlloca(builder, union_type, "tu");
+  LLVMBuildStore(builder, val, tu_alloca);
   LLVMValueRef tag_ptr =
-      LLVMBuildGEP2(builder, union_type, val, indices, 2, "");
+      LLVMBuildStructGEP2(builder, union_type, tu_alloca, 0, "tagPtr");
 
-  // Load the tag value
-  return LLVMBuildLoad2(builder, LLVMInt8Type(), tag_ptr, "");
+  LLVMValueRef tag = LLVMBuildLoad2(builder, TAG_TYPE, tag_ptr, "tag");
+  return tag;
 }
 
 LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
                                    LLVMBuilderRef builder) {
 
-  LLVMTypeRef specific_type = LLVMStructType(
-      (LLVMTypeRef[]){
-          TAG_TYPE,
-          expected_type,
-      },
-      2, 0);
+  LLVMTypeRef union_type = LLVMTypeOf(val);
+  LLVMValueRef tu_alloca = LLVMBuildAlloca(builder, union_type, "tu");
+  LLVMBuildStore(builder, val, tu_alloca);
 
-  LLVMValueRef specific_variant_bitcast =
-      LLVMBuildBitCast(builder, val, LLVMPointerType(specific_type, 0), "");
-
-  LLVMValueRef value_indices[2] = {UI32(0), UI32(1)};
-
-  LLVMValueRef value_ptr = LLVMBuildGEP2(
-      builder, specific_type, specific_variant_bitcast, value_indices, 2, "");
-
-  return LLVMBuildLoad2(builder, expected_type, value_ptr, "");
+  LLVMValueRef value_ptr =
+      LLVMBuildStructGEP2(builder, union_type, tu_alloca, 1, "valuePtr");
+  LLVMValueRef contained_value =
+      LLVMBuildLoad2(builder, expected_type, value_ptr, "aValue");
+  return contained_value;
 }
 
 LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
@@ -223,30 +221,33 @@ LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
       ast->data.AST_APPLICATION.args, // only one arg for cons types in variants
       ctx, module, builder);
 
-  LLVMValueRef union_value = LLVMBuildAlloca(builder, tagged_union_type, "");
-  LLVMSetAlignment(union_value, 8);
+  LLVMValueRef tu = LLVMBuildAlloca(builder, tagged_union_type, "");
 
-  LLVMValueRef tag_value = LLVMConstInt(TAG_TYPE, vidx, 0);
-  LLVMValueRef tag_ptr =
-      LLVMBuildStructGEP2(builder, tagged_union_type, tag_value, 0, "");
-  LLVMBuildStore(builder, tag_value, tag_ptr);
+  // Initialize t1
+  LLVMBuildStore(builder, LLVMConstInt(TAG_TYPE, vidx, 0),
+                 LLVMBuildStructGEP2(builder, tagged_union_type, tu, 0, ""));
 
-  Type *contained_type = type->data.T_CONS.args[0];
+  LLVMBuildStore(builder, cons_input,
+                 LLVMBuildStructGEP2(builder, tagged_union_type, tu, 1, ""));
+  return LLVMBuildLoad2(builder, tagged_union_type, tu, "");
+}
+LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
+                                        LLVMModuleRef module) {
 
-  LLVMTypeRef specific_type = LLVMStructType(
-      (LLVMTypeRef[]){TAG_TYPE,
-                      type_to_llvm_type(contained_type, ctx->env, module)},
-      2, 0);
+  Type *possible_enum_member_type = ast->md;
+  if (!possible_enum_member_type) {
+    return NULL;
+  }
+  if (possible_enum_member_type->kind == T_CONS) {
+    int vidx;
+    char *vname;
+    Type *type_in_env = variant_member_lookup(
+        ctx->env, possible_enum_member_type->data.T_CONS.name, &vidx, &vname);
 
-  LLVMValueRef specific_variant_bitcast = LLVMBuildBitCast(
-      builder, union_value, LLVMPointerType(specific_type, 8), "");
-
-  LLVMValueRef value_indices[2] = {UI32(0), UI32(1)};
-  LLVMValueRef value_ptr = LLVMBuildGEP2(
-      builder, specific_type, specific_variant_bitcast, value_indices, 2, "");
-  LLVMBuildStore(builder, cons_input, value_ptr);
-  // LLVMSetAlignment(LLVMValueRef V, unsigned int Bytes)
-
-  // return LLVMBuildLoad2(builder, tagged_union_type, union_value, "");
-  return union_value;
+    LLVMTypeRef t = type_to_llvm_type(type_in_env, ctx->env, module);
+    if (t == TAG_TYPE) {
+      return LLVMConstInt(t, vidx, 0);
+    }
+  }
+  return NULL;
 }

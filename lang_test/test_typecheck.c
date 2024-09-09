@@ -387,5 +387,24 @@ int main() {
     TEST_SIMPLE_AST_TYPE_ENV("fib 50", &t_int, env);
   });
 
+  ({
+    SEP;
+    Type tenum = tcons(TYPE_NAME_VARIANT, 3, &tcons("A", 0, NULL),
+                       &tcons("B", 0, NULL), &tcons("C", 0, NULL));
+
+    TEST_SIMPLE_AST_TYPE("type Enum = \n"
+                         "  | A       \n"
+                         "  | B       \n"
+                         "  | C       \n"
+                         "  ;         \n"
+                         "let f = fn x->\n"
+                         "  match x with\n"
+                         "    | A -> 1\n"
+                         "    | B -> 2\n"
+                         "    | C -> 3\n"
+                         ";;",
+                         &MAKE_FN_TYPE_2(&tenum, &t_int));
+  });
+
   return status ? 0 : 1;
 }

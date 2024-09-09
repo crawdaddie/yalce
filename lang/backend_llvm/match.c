@@ -160,6 +160,12 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
                   hash_string(id_chars, id_len), sym);
       return _TRUE;
     }
+    LLVMValueRef simple_enum_member =
+        codegen_simple_enum_member(binding, ctx, module);
+
+    if (simple_enum_member) {
+      return codegen_eq_int(simple_enum_member, val, module, builder);
+    }
 
     JITSymbol *sym = lookup_id_ast(binding, ctx);
 
@@ -169,16 +175,17 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
       return _TRUE;
-    } else {
-      Type *variant_member =
-          env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
-      int idx;
-      if (variant_member && is_variant_type(val_type) &&
-          variant_contains_type(val_type, variant_member, &idx)) {
-        return match_simple_variant_member(binding, idx, val_type, val, ctx,
-                                           module, builder);
-      }
     }
+    // else {
+    // Type *variant_member =
+    //     env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
+    // int idx;
+    // if (variant_member && is_variant_type(val_type) &&
+    //     variant_contains_type(val_type, variant_member, &idx)) {
+    //   return match_simple_variant_member(binding, idx, val_type, val, ctx,
+    //                                      module, builder);
+    // }
+    // }
     break;
   }
 

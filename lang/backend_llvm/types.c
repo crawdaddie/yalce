@@ -1,7 +1,4 @@
 #include "backend_llvm/types.h"
-#include "match.h"
-#include "serde.h"
-#include "symbols.h"
 #include "types/type.h"
 #include "variant.h"
 #include "llvm-c/Core.h"
@@ -101,15 +98,21 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     if (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
       int len = type->data.T_CONS.num_args;
       LLVMTypeRef dts[len];
+      int not_all_empty = 0;
       for (int i = 0; i < len; i++) {
         if (type->data.T_CONS.args[i]->data.T_CONS.num_args == 0) {
           dts[i] = NULL;
           continue;
         }
+        not_all_empty = 1;
         Type *contained_type = type->data.T_CONS.args[i]->data.T_CONS.args[0];
-
         dts[i] = type_to_llvm_type(contained_type, env, module);
       }
+
+      if (!not_all_empty) {
+        return codegen_simple_enum_type();
+      }
+
       return codegen_tagged_union_type(dts, len, module);
     }
 

@@ -2,6 +2,8 @@
 #include "globals.h"
 #include "match.h"
 #include "serde.h"
+#include "types.h"
+#include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -79,11 +81,28 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   const char *chars = ast->data.AST_IDENTIFIER.value;
   int length = ast->data.AST_IDENTIFIER.length;
 
-  // JITSymbol *res = NULL;
+  JITSymbol *res = NULL;
+  // printf("codegen id: (type kind %d)", ((Type *)ast->md)->kind);
+  // print_type(ast->md);
+  // print_ast(ast);
 
   JITSymbol *sym = lookup_id_ast(ast, ctx);
 
   if (!sym) {
+
+    Type *possible_enum_member_type = ast->md;
+    if (possible_enum_member_type->kind == T_CONS) {
+      int vidx;
+      char *vname;
+      Type *type_in_env = variant_member_lookup(
+          ctx->env, possible_enum_member_type->data.T_CONS.name, &vidx, &vname);
+
+      LLVMTypeRef t = type_to_llvm_type(type_in_env, ctx->env, module);
+      if (t == TAG_TYPE) {
+        return LLVMConstInt(t, vidx, 0);
+      }
+    }
+
     fprintf(stderr,
             "codegen identifier failed symbol '%s' not found in scope %d\n",
             chars, ctx->stack_ptr);
