@@ -227,17 +227,17 @@ int main() {
                          &some_int);
   });
 
-  // ({
-  //   SEP;
-  //   TypeEnv *env = &(TypeEnv){"x", &tvar("x")};
-  //
-  //   TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
-  //                            "| 1 -> 1\n"
-  //                            "| 2 -> 0\n"
-  //                            "| _ -> 3\n",
-  //                            &t_int, env);
-  //   TEST_SIMPLE_AST_TYPE_ENV("x", &t_int, env);
-  // });
+  ({
+    SEP;
+    TypeEnv *env = &(TypeEnv){"x", &tvar("x")};
+
+    TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
+                             "| 1 -> 1\n"
+                             "| 2 -> 0\n"
+                             "| _ -> 3\n",
+                             &t_int, env);
+    TEST_SIMPLE_AST_TYPE_ENV("x", &t_int, env);
+  });
 
   ({
     SEP;
@@ -286,10 +286,8 @@ int main() {
 
   ({
     SEP;
-
     Type opt_int =
         tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
-
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
                          "  | None\n"
@@ -300,6 +298,18 @@ int main() {
                          "  | None -> 0\n"
                          "  ;;\n",
                          &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
+  ({
+    SEP;
+    RESET;
+    Type tuple = tcons(TYPE_NAME_TUPLE, 2, &t_int, &t_int);
+    TEST_SIMPLE_AST_TYPE("let f = fn x ->\n"
+                         "match x with\n"
+                         "  | (1, 2) -> 1\n"
+                         "  | (1, 3) -> 0\n"
+                         "  ;;\n",
+                         &MAKE_FN_TYPE_2(&tuple, &t_int));
   });
 
   ({
