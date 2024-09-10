@@ -19,7 +19,7 @@ if [ ! -d "./test_scripts" ]; then
 fi
 
 # Find all .ylc files in the test_scripts directory
-YLC_FILES=$(find ./test_scripts -name "*.ylc")
+YLC_FILES=$(find ./test_scripts -name "*.ylc" | sort)
 
 # Check if any .ylc files were found
 if [ -z "$YLC_FILES" ]; then
@@ -38,10 +38,19 @@ trim() {
     var="${var%"${var##*[![:space:]]}"}"   
     echo -n "$var"
 }
-
+Red='\033[0;31m'
+Green='\033[0;32m'
+Yellow='\033[0;33m'
+Blue='\033[0;34m'
+Purple='\033[0;35m'
+Cyan='\033[0;36m'
+NC='\033[0m'
 # Loop through each .ylc file and run the executable
 for file in $YLC_FILES; do
-    echo "Processing file: $file"
+    echo -e "${Green}$file:${NC}"
+    echo -e "${Cyan}"
+    cat $file
+    echo -e "${NC}"
     
     # Extract all assertions from the file
     assertions=$(grep "# %assert" "$file" | sed "s/.*# %assert '\(.*\)'/\1/")
@@ -53,7 +62,7 @@ for file in $YLC_FILES; do
 
     # Run the executable and capture the output
     output=$("$EXE" "$file")
-    echo "$output"
+    # echo -e "${Cyan}$output${NC}"
     
     # Filter out lines starting with "> " and split remaining output into lines
     filtered_output=$(echo "$output" | grep -v "^> ")
@@ -81,11 +90,11 @@ for file in $YLC_FILES; do
         echo "Assertion $file_assertions: '$expected_output'"
         
         if [ "$actual_output" == "$expected_output" ]; then
-            echo "✅ PASSED"
+            echo -e "✅${Green}PASSED${NC}"
             file_passed=$((file_passed + 1))
             passed_tests=$((passed_tests + 1))
         else
-            echo "❌ FAILED"
+            echo "❌${Red}FAILED${NC}"
             echo "Actual output: '$actual_output'"
         fi
         echo "-------------------------"

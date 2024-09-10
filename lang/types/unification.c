@@ -68,14 +68,6 @@ Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
   *var = *t;
   return t;
 }
-Type *create_cons_type(const char *name, int len, Type **unified_args) {
-  Type *cons = empty_type();
-  cons->kind = T_CONS;
-  cons->data.T_CONS.name = name;
-  cons->data.T_CONS.num_args = len;
-  cons->data.T_CONS.args = unified_args;
-  return cons;
-}
 
 // Type *unify_function(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
 // Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
@@ -93,8 +85,53 @@ Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
 
 Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
 
-  if (is_variant_type(t1)) {
-    return t1;
+  int vidx1;
+  Type *v1 = is_variant_type(t1) ? t1 : variant_lookup(*env, t1, &vidx1);
+
+  int vidx2;
+  Type *v2 = types_equal(v1, t2) ? t2 : variant_lookup(*env, t2, &vidx2);
+
+  if (v1 && v2 && types_equal(v1, v2)) {
+    v1 = copy_type(v1);
+
+    TypeEnv *_env = NULL;
+
+    Type *ret = v1;
+    Type *type = t1;
+
+    for (int i = 0; i < ret->data.T_CONS.num_args; i++) {
+      Type *gen_mem = ret->data.T_CONS.args[i];
+
+      if (strcmp(gen_mem->data.T_CONS.name, type->data.T_CONS.name) == 0) {
+        for (int j = 0; j < gen_mem->data.T_CONS.num_args; j++) {
+          Type *t = gen_mem->data.T_CONS.args[i];
+          Type *v = type->data.T_CONS.args[i];
+          if (t->kind == T_VAR) {
+            _env = env_extend(_env, t->data.T_VAR, v);
+          }
+        }
+      }
+    }
+    v1 = resolve_generic_type(v1, _env);
+
+    type = t2;
+
+    for (int i = 0; i < ret->data.T_CONS.num_args; i++) {
+      Type *gen_mem = ret->data.T_CONS.args[i];
+
+      if (strcmp(gen_mem->data.T_CONS.name, type->data.T_CONS.name) == 0) {
+        for (int j = 0; j < gen_mem->data.T_CONS.num_args; j++) {
+          Type *t = gen_mem->data.T_CONS.args[i];
+          Type *v = type->data.T_CONS.args[i];
+          if (t->kind == T_VAR) {
+            _env = env_extend(_env, t->data.T_VAR, v);
+          }
+        }
+      }
+    }
+    v1 = resolve_generic_type(v1, _env);
+
+    return v1;
   }
 
   if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
@@ -168,8 +205,6 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
       unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[1], t2, env);
       *t1 = *resolve_tc_rank(t1);
 
-      printf("unify tc: ");
-      print_type(t1);
       return t1;
     }
 

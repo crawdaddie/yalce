@@ -5,6 +5,13 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#define TITLE(msg)                                                             \
+  ({                                                                           \
+    SEP;                                                                       \
+    printf(msg "\n");                                                          \
+    SEP;                                                                       \
+  });
+
 #define MAKE_FN_TYPE_2(arg_type, ret_type)                                     \
   ((Type){T_FN, {.T_FN = {.from = arg_type, .to = ret_type}}})
 
@@ -228,8 +235,9 @@ int main() {
   });
 
   ({
+    RESET;
     SEP;
-    TypeEnv *env = &(TypeEnv){"x", &tvar("x")};
+    TypeEnv *env = &(TypeEnv){"x", &tvar("t0")};
 
     TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
                              "| 1 -> 1\n"
@@ -254,7 +262,7 @@ int main() {
   });
 
   ({
-    SEP;
+    TITLE("match result different types")
     TEST_TYPECHECK_FAIL("type Option t =\n"
                         "  | Some of t\n"
                         "  | None\n"
@@ -267,8 +275,7 @@ int main() {
   });
 
   ({
-    SEP;
-
+    TITLE("variant type matching")
     Type opt_int =
         tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
 
@@ -285,7 +292,7 @@ int main() {
   });
 
   ({
-    SEP;
+    TITLE("## variables within cons values in match")
     Type opt_int =
         tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
@@ -301,7 +308,7 @@ int main() {
   });
 
   ({
-    SEP;
+    TITLE("## matching on tuple")
     RESET;
     Type tuple = tcons(TYPE_NAME_TUPLE, 2, &t_int, &t_int);
     TEST_SIMPLE_AST_TYPE("let f = fn x ->\n"
@@ -313,7 +320,19 @@ int main() {
   });
 
   ({
-    SEP;
+    TITLE("## matching on tupl containing var")
+    RESET;
+    Type tuple = tcons(TYPE_NAME_TUPLE, 2, &t_int, &t_int);
+    TEST_SIMPLE_AST_TYPE("let f = fn x ->\n"
+                         "match x with\n"
+                         "  | (1, y) -> y\n"
+                         "  | (1, 3) -> 0\n"
+                         "  ;;\n",
+                         &MAKE_FN_TYPE_2(&tuple, &t_int));
+  });
+
+  ({
+    TITLE("inexhaustive match expr")
     RESET;
 
     TEST_TYPECHECK_FAIL("type Option t =\n"

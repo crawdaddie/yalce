@@ -146,4 +146,6 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx);
 typedef struct VariantContext {
 } VariantContext;
 
+Type *create_cons_type(const char *name, int len, Type **unified_args);
+
 #endif

@@ -727,5 +727,14 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
 
     env = env->next;
   }
-  return member;
+  return NULL;
+}
+
+Type *create_cons_type(const char *name, int len, Type **unified_args) {
+  Type *cons = empty_type();
+  cons->kind = T_CONS;
+  cons->data.T_CONS.name = name;
+  cons->data.T_CONS.num_args = len;
+  cons->data.T_CONS.args = unified_args;
+  return cons;
 }
