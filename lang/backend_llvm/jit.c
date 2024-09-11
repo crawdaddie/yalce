@@ -161,6 +161,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
+  // LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
@@ -292,12 +293,18 @@ int jit(int argc, char **argv) {
       }
 
       Ast *prog = parse_input(input, dirname);
-      // Ast *top = top_level_ast(prog);
       Type *typecheck_result = infer(prog, &env);
+
       ctx.env = env;
 
       if (typecheck_result == NULL) {
-        printf("typecheck failed\n");
+        continue;
+      }
+
+      if (typecheck_result->kind == T_VAR) {
+        Ast *top = top_level_ast(prog);
+        fprintf(stderr, "value not found: ");
+        print_ast_err(top);
         continue;
       }
 

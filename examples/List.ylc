@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let sum = fn s l ->
   match l with
   | [] -> s

@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let read_buf = extern fn String -> Signal;
 
 # oscillators
@@ -27,3 +28,5 @@ let mul_sig = extern fn Signal -> Signal -> Synth;
 # let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
 
 
+let init_audio = extern fn () -> () in
+  init_audio ()

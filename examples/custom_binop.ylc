@@ -1,2 +1,3 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let ($~) = fn a b -> a + b
 ;;

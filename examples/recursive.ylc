@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let fib = fn x ->
   match x with
   | 0 -> 0

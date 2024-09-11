@@ -94,7 +94,7 @@ for file in $YLC_FILES; do
             file_passed=$((file_passed + 1))
             passed_tests=$((passed_tests + 1))
         else
-            echo "❌${Red}FAILED${NC}"
+            echo -e "❌${Red}FAILED${NC}"
             echo "Actual output: '$actual_output'"
         fi
         echo "-------------------------"

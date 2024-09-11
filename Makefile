@@ -55,7 +55,7 @@ LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 .PHONY: all clean engine test wasm serve_docs
 
 all: $(BUILD_DIR)/lang
-debug: all
+# debug: all
 
 engine:
 	$(MAKE) -C engine

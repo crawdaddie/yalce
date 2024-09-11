@@ -28,9 +28,9 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
 # Phony targets
 .PHONY: all clean test_parse test_typecheck test_scripts
 
-all: test_parse test_typecheck
-	-$(BUILD_DIR)/test_parse
-	-$(BUILD_DIR)/test_typecheck
+all:
+	-$(MAKE) test_parse
+	-$(MAKE) test_typecheck
 	-$(MAKE) test_scripts
 
 $(BUILD_DIR):
@@ -38,19 +38,19 @@ $(BUILD_DIR):
 
 # Build yacc output files
 $(YACC_OUTPUT) $(YACC_HEADER): $(YACC_FILE)
-	@bison -d $(YACC_FILE) -o $(YACC_OUTPUT)
+	bison -d $(YACC_FILE) -o $(YACC_OUTPUT)
 
 # Build lex output file
 $(LEX_OUTPUT): $(LEX_FILE) $(YACC_HEADER)
-	@flex -o $(LEX_OUTPUT) $(LEX_FILE)
+	flex -o $(LEX_OUTPUT) $(LEX_FILE)
 
 test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
-	@$(CC) $(CFLAGS) test_parse.c $(LANG_SRCS) -o $(BUILD_DIR)/test_parse $(LDFLAGS)
-	# $(BUILD_DIR)/test_parse
+	$(CC) $(CFLAGS) test_parse.c $(LANG_SRCS) -o $(BUILD_DIR)/test_parse $(LDFLAGS)
+	$(BUILD_DIR)/test_parse
 
 test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
-	@$(CC) $(CFLAGS) test_typecheck.c $(LANG_SRCS) $(LANG_SRC_DIR)/types/*.c -o $(BUILD_DIR)/test_typecheck $(LDFLAGS)
-	# $(BUILD_DIR)/test_typecheck
+	$(CC) $(CFLAGS) test_typecheck.c $(LANG_SRCS) $(LANG_SRC_DIR)/types/*.c -o $(BUILD_DIR)/test_typecheck $(LDFLAGS)
+	$(BUILD_DIR)/test_typecheck
 
 test_scripts: 
 	./run_test_scripts.sh ./test_scripts

@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let sum = fn a b -> a + b;;
 let proc = fn f p q -> f p q;;
 

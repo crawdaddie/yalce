@@ -1,3 +1,5 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+
 type Enum =
   | A
   | B 

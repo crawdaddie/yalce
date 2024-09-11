@@ -586,7 +586,7 @@ void handle_macro(Ast *root, const char *macro_text) {
     if (string_list_find(included, fully_qualified_name)) {
       return;
     }
-    printf("include %s\n", fully_qualified_name);
+    // printf("include %s\n", fully_qualified_name);
     included = string_list_push_left(included, fully_qualified_name);
     char *fcontent = read_script(fully_qualified_name);
     Ast *mod = parse_input(fcontent, current_dir);

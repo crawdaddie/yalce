@@ -1,14 +1,4 @@
-let play_node = extern fn Synth -> Synth ;
-
-let sq_node = extern fn Signal -> Synth;
-let sin_node = extern fn Signal -> Synth;
-
-
-let init_audio = extern fn () -> () in
-init_audio ()
-;
-
-let freq = 200 + (sin_node 0.25) * 99 * sin_node 8. in
-let x = sq_node (freq * 1.01) + sq_node freq |> play_node
-
-;
+#! /Users/adam/projects/sound/yalce/build/lang
+#! /Users/adam/projects/sound/yalce/build/lang -i
+%include Synth
+let x = sq_node 50 |> play_node

@@ -1,0 +1,6 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+%include ../../examples/Fmt
+
+let x = 1;
+printf `{x} hello\n` # %assert '1 hello'
+# %assert '8'

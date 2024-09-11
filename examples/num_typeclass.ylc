@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let sq_node = extern fn Signal -> Synth
 ;
 

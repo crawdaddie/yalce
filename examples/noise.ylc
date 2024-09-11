@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 %include Synth
 
 white_noise_node () |> biquad_bp_node 8000. 10. |> play_node

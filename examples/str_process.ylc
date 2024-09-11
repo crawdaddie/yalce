@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let printf = extern fn String -> () ; # simplified printf from c stdlib
 
 let find_h = fn l -> 

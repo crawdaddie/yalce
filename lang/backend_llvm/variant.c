@@ -1,6 +1,7 @@
 #include "backend_llvm/variant.h"
 #include "common.h"
 #include "match.h"
+#include "serde.h"
 #include "types.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
@@ -233,22 +234,49 @@ LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
 }
 
 LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
-                                        LLVMModuleRef module) {
+                                        LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  Type *possible_enum_member_type = ast->md;
-  if (!possible_enum_member_type) {
+
+  Type *member_type = ast->md;
+
+  if (!member_type) {
     return NULL;
   }
-  if (possible_enum_member_type->kind == T_CONS) {
-    int vidx;
-    char *vname;
-    Type *type_in_env = variant_member_lookup(
-        ctx->env, possible_enum_member_type->data.T_CONS.name, &vidx, &vname);
 
-    LLVMTypeRef t = type_to_llvm_type(type_in_env, ctx->env, module);
+  if (member_type->kind == T_CONS) {
+    int vidx;
+    Type *v = variant_lookup(
+        ctx->env, member_type, &vidx);
+
+    if (is_generic(v)) {
+      if (member_type->data.T_CONS.num_args == 0) {
+
+        LLVMContextRef context = LLVMGetModuleContext(module);
+        LLVMTypeRef tu_types[] = {TAG_TYPE};
+        LLVMTypeRef tu_type = LLVMStructCreateNamed(context, "TU");
+        LLVMStructSetBody(tu_type, tu_types, 1, 0);
+        LLVMValueRef alloca = LLVMBuildAlloca(builder, tu_type, "");
+        LLVMBuildStore(builder, LLVMConstInt(TAG_TYPE, vidx, 0), LLVMBuildStructGEP2(builder, tu_type, alloca, 0, ""));
+        return LLVMBuildLoad2(builder, tu_type, alloca, "");
+      }
+    }
+
+    LLVMTypeRef t = type_to_llvm_type(v, ctx->env, module);
+
+    if (t == NULL) {
+      return NULL;
+    }
+
     if (t == TAG_TYPE) {
       return LLVMConstInt(t, vidx, 0);
     }
+
+    LLVMValueRef tu = LLVMBuildAlloca(builder, t, "");
+
+    LLVMBuildStore(builder, LLVMConstInt(TAG_TYPE, vidx, 0),
+                 LLVMBuildStructGEP2(builder, t, tu, 0, ""));
+
+    return LLVMBuildLoad2(builder, t, tu, "");
   }
   return NULL;
 }

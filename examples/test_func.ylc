@@ -1,3 +1,5 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+
 let x = 1;
 
 let sum3 = fn a b c ->

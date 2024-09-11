@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 type X = 
   | A of List of Int
   | B of String

@@ -7,8 +7,8 @@ type Option t =
 
 let f = fn x ->
   match x with
-    | Some y -> y + 2
+    | Some y -> y + 200
     | None -> 9
 ;;
 
-f (Some 1)
+f None 

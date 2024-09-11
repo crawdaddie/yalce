@@ -1,3 +1,5 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+#! /Users/adam/projects/sound/yalce/build/lang -i
 let f = fn x -> 
   let x = 1 in
   let y = x + 2 in

@@ -31,7 +31,9 @@ Type t_string = {T_CONS,
 Type t_bool = {T_BOOL};
 Type t_void = {T_VOID};
 Type t_char = {T_CHAR};
-Type t_ptr = {T_CONS};
+Type t_ptr = {T_CONS,
+              {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
+              .alias = TYPE_NAME_PTR};
 
 static char *type_name_mapping[] = {
     [T_INT] = TYPE_NAME_INT,    [T_UINT64] = TYPE_NAME_UINT64,
@@ -56,6 +58,9 @@ char *tc_list_to_string(Type *t, char *buffer) {
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     return strncat(buffer, "null", 4);
+  }
+  if (t->alias != NULL) {
+    return strncat(buffer, t->alias, strlen(t->alias));
   }
   switch (t->kind) {
   case T_INT:

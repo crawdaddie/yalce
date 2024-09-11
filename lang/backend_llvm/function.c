@@ -221,6 +221,13 @@ LLVMValueRef call_symbol(JITSymbol *sym, Ast *args, int args_len,
       Ast *app_val_ast = args + i;
       Type *app_val_type = app_val_ast->md;
       app_val_type = resolve_tc_rank(app_val_type);
+      Type *callable_type = sym->symbol_type;
+      if (callable_type->kind == T_FN &&
+          callable_type->data.T_FN.from->kind == T_VOID) {
+
+        return LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable),
+                              callable, (LLVMValueRef[]){}, 0, "call_func");
+      }
 
       LLVMValueRef app_val = codegen(app_val_ast, ctx, module, builder);
 

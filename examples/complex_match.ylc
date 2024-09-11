@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let complex_match = fn x -> 
   match x with
   | (1, _) -> 10

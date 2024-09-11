@@ -706,8 +706,9 @@ Type *infer(Ast *ast, TypeEnv **env) {
       }
     }
 
-    Type *fn;
-    if (param_count == 1 && ast->data.AST_LAMBDA.params->tag == AST_VOID) {
+    Type *fn = NULL;
+
+    if (param_count == 0) {
       fn = type_fn(&t_void, ret_type);
     } else {
       fn = create_type_multi_param_fn(param_count, param_types, ret_type);
@@ -717,6 +718,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   case AST_APPLICATION: {
+
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
 
@@ -785,6 +787,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
       type = _infer_fn_application(fn, arg_types, len, env);
       break;
     }
+
     if (t->kind == T_FN) {
       TypeEnv *_env = *env;
       type = infer_fn_application(ast, &_env);

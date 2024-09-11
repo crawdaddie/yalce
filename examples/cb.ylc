@@ -1,3 +1,4 @@
+#! /Users/adam/projects/sound/yalce/build/lang
 let accept_callback = extern fn String -> ()
 
 let cb = fn a b ->

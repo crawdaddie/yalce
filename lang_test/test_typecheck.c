@@ -452,5 +452,14 @@ int main() {
                          &MAKE_FN_TYPE_2(&tenum, &t_int));
   });
 
+  ({
+    SEP;
+    TEST_SIMPLE_AST_TYPE(
+      "let get_stderr = extern fn () -> Ptr;\n"
+      "let stderr = get_stderr ();\n",
+                         &t_ptr);
+
+  });
+
   return status ? 0 : 1;
 }

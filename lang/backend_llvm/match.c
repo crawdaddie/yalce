@@ -161,8 +161,9 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       return _TRUE;
     }
 
+
     LLVMValueRef simple_enum_member =
-        codegen_simple_enum_member(binding, ctx, module);
+        codegen_simple_enum_member(binding, ctx, module, builder);
 
     if (simple_enum_member) {
       return codegen_eq_int(simple_enum_member, val, module, builder);
@@ -177,6 +178,27 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
                   hash_string(id_chars, id_len), sym);
       return _TRUE;
     }
+    return _FALSE;
+  }
+  case AST_APPLICATION: {
+
+    int vidx;
+    Type *variant_parent = variant_lookup(ctx->env, binding->md, &vidx);
+
+    if (variant_parent) {
+      LLVMValueRef tags_match =
+          codegen_eq_int(variant_extract_tag(val, builder),
+                         LLVMConstInt(TAG_TYPE, vidx, 0), module, builder);
+
+      LLVMValueRef vals_match = match_values(binding->data.AST_APPLICATION.args,
+                                             variant_extract_value(val,
+                                                                   type_to_llvm_type(((Type *)binding->md)->data.T_CONS.args[0], ctx->env, module),
+                                                                   builder),
+                                             binding->md, ctx, module, builder);
+
+      return LLVMBuildAnd(builder, tags_match, vals_match, "");
+    }
+    // TODO: build more cons cases
     return _FALSE;
   }
 
