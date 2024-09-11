@@ -84,9 +84,6 @@ Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
 }
 
 Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
-  // printf("unify cons: ");
-  // print_type(t1);
-  // print_type(t2);
 
   int vidx1;
   Type *v1 = is_variant_type(t1) ? t1 : variant_lookup(*env, t1, &vidx1);

@@ -2,6 +2,7 @@
 #include "backend_llvm/binop.h"
 #include "backend_llvm/globals.h"
 #include "backend_llvm/types.h"
+#include "list.h"
 #include "serde.h"
 #include "symbols.h"
 #include "variant.h"
@@ -72,6 +73,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Compile each branch
   for (int i = 0; i < len; i++) {
+    // printf("MATCH BRANCH %d:\n", i);
     Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
     Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
 
@@ -96,6 +98,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     //     expr_val, test_expr, &branch_ctx, module, builder);
     LLVMValueRef test_value = match_values(test_expr, test_val, test_val_type,
                                            &branch_ctx, module, builder);
+    // print_type(test_val_type);
+    // print_type_env(branch_ctx.env);
 
     if (i == len - 1) {
       // If it's the default case, just jump to the branch block
@@ -129,6 +133,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
                           JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
+
   switch (binding->tag) {
   case AST_IDENTIFIER: {
 
@@ -161,23 +166,25 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       return _TRUE;
     }
 
-
-    LLVMValueRef simple_enum_member =
-        codegen_simple_enum_member(binding, ctx, module, builder);
-
-    if (simple_enum_member) {
-      return codegen_eq_int(simple_enum_member, val, module, builder);
-    }
-
     JITSymbol *sym = lookup_id_ast(binding, ctx);
 
-    if (!sym) {
+    Type *v = env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
+
+    if (!sym && !v) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
       JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
       return _TRUE;
+    } else if (v) {
+      LLVMValueRef simple_enum_member =
+          codegen_simple_enum_member(binding, ctx, module, builder);
+
+      if (simple_enum_member) {
+        return codegen_eq_int(simple_enum_member, val, module, builder);
+      }
     }
+
     return _FALSE;
   }
   case AST_APPLICATION: {
@@ -190,16 +197,66 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
           codegen_eq_int(variant_extract_tag(val, builder),
                          LLVMConstInt(TAG_TYPE, vidx, 0), module, builder);
 
-      LLVMValueRef vals_match = match_values(binding->data.AST_APPLICATION.args,
-                                             variant_extract_value(val,
-                                                                   type_to_llvm_type(((Type *)binding->md)->data.T_CONS.args[0], ctx->env, module),
-                                                                   builder),
-                                             binding->md, ctx, module, builder);
+      LLVMValueRef vals_match = match_values(
+          binding->data.AST_APPLICATION.args,
+          variant_extract_value(
+              val,
+              type_to_llvm_type(((Type *)binding->md)->data.T_CONS.args[0],
+                                ctx->env, module),
+              builder),
+          binding->md, ctx, module, builder);
 
       return LLVMBuildAnd(builder, tags_match, vals_match, "");
     }
     // TODO: build more cons cases
     return _FALSE;
+  }
+  case AST_BINOP: {
+    token_type op = binding->data.AST_BINOP.op;
+    if (op != TOKEN_DOUBLE_COLON) {
+      break;
+    }
+
+    if (!is_list_type(val_type)) {
+      break;
+    }
+
+    Type *el_type = val_type->data.T_CONS.args[0];
+
+    // test x::rest against val - if val is empty list then fail
+    // if val has at least one member
+    // pop the head and bind 'x' to head
+    // bind 'rest' to the tail of val - tail can be empty
+    //
+    LLVMTypeRef el_type_llvm = type_to_llvm_type(el_type, ctx->env, module);
+    LLVMValueRef res = _TRUE;
+    LLVMValueRef is_not_null = ll_is_not_null(val, el_type_llvm, builder);
+    res = LLVMBuildAnd(builder, res, is_not_null, "");
+
+    Ast *left = binding->data.AST_BINOP.left;
+    LLVMValueRef head = ll_get_head_val(val, el_type_llvm, builder);
+
+    res = LLVMBuildAnd(builder, res,
+                       match_values(left, head, el_type, ctx, module, builder),
+                       "");
+
+    LLVMValueRef rest = ll_get_next(val, el_type_llvm, builder);
+
+    Ast *right = binding->data.AST_BINOP.right;
+    res = LLVMBuildAnd(
+        builder, res, match_values(right, rest, val_type, ctx, module, builder),
+        "");
+    return res;
+  }
+  case AST_LIST: {
+    if (binding->data.AST_LIST.len == 0) {
+
+      Type *el_type = val_type->data.T_CONS.args[0];
+      LLVMTypeRef el_type_llvm = type_to_llvm_type(el_type, ctx->env, module);
+
+      LLVMValueRef is_null = ll_is_null(val, el_type_llvm, builder);
+      return is_null;
+    }
   }
 
   default: {

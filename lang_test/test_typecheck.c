@@ -459,5 +459,34 @@ int main() {
                          &t_ptr);
   });
 
+  ({
+    TITLE("LIST PROCESSING")
+    TEST_SIMPLE_AST_TYPE("let x::_ = [1,2,3,4]; x\n", &t_int);
+  });
+
+  ({
+    TITLE("LIST PROCESSING FUNCTION")
+    TEST_SIMPLE_AST_TYPE(
+        "let f = fn l->\n"
+        "  match l with\n"
+        "    | x::_ -> x\n"
+        "    | [] -> 0\n"
+        ";;",
+        &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int));
+  });
+
+  ({
+    TITLE("LIST SUM FUNCTION")
+    Type t2 = arithmetic_var("t2");
+    Type t5 = tvar("t5");
+    TEST_SIMPLE_AST_TYPE(
+        "let sum = fn s l ->\n"
+        "  match l with\n"
+        "  | [] -> s\n"
+        "  | x::rest -> sum (s + x) rest\n"
+        ";;\n",
+        &MAKE_FN_TYPE_3(&t2, &tcons(TYPE_NAME_LIST, 1, &t5), &t2));
+  });
+
   return status ? 0 : 1;
 }

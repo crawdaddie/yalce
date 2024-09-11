@@ -91,6 +91,9 @@ test:
 test_typecheck:
 	$(MAKE) -C lang_test test_typecheck
 
+test_scripts:
+	$(MAKE) -C lang_test test_scripts
+
 wasm:
 	./build_wasm.sh
 

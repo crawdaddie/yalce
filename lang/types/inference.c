@@ -80,19 +80,26 @@ static char *op_to_name[] = {
 Type *infer_list_binop(Ast *ast, TypeEnv **env) {
   Type *l = ast->data.AST_BINOP.left->md;
   Type *r = ast->data.AST_BINOP.right->md;
+  if (r->kind == T_VAR && l->kind == T_VAR) {
+    Type **args = talloc(sizeof(Type *));
+    args[0] = copy_type(r);
+    *r = (Type){T_CONS, {.T_CONS = {.name = TYPE_NAME_LIST, args, 1}}};
+    *l = *args[0];
+  }
   unify(l, r->data.T_CONS.args[0], env);
   return r;
 }
 
 Type *infer_binop(Ast *ast, TypeEnv **env) {
   token_type op = ast->data.AST_BINOP.op;
+  // printf("binop:\n");
   Type *l = TRY_INFER(ast->data.AST_BINOP.left, env,
                       "Failure typechecking lhs of binop: ");
 
-  // print_type(ast->data.AST_BINOP.left->md);
+  // print_type(l);
   Type *r = TRY_INFER(ast->data.AST_BINOP.right, env,
                       "Failure typechecking rhs of binop: ");
-  // print_type(ast->data.AST_BINOP.right->md);
+  // print_type(r);
 
   if (op == TOKEN_DOUBLE_COLON) {
     return infer_list_binop(ast, env);
@@ -102,6 +109,11 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
   TypeClass *ltc = find_op_typeclass_in_type(l, op, &lmidx);
   int rmidx;
   TypeClass *rtc = find_op_typeclass_in_type(r, op, &rmidx);
+
+  // if (!rtc) {
+  //   // unify(r, l, env);
+  //   *r = *l;
+  // }
 
   TypeClass *tc;
   Method meth;
@@ -190,6 +202,7 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
   case AST_IDENTIFIER: {
     return env_extend(env, binding->data.AST_IDENTIFIER.value, type);
   }
+
   case AST_TUPLE: {
     for (int i = 0; i < binding->data.AST_LIST.len; i++) {
       env = add_binding_to_env(env, binding->data.AST_LIST.items + i,
@@ -197,6 +210,17 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
     }
     return env;
   }
+  case AST_BINOP: {
+    token_type op = binding->data.AST_BINOP.op;
+    Ast *left = binding->data.AST_BINOP.left;
+    Ast *right = binding->data.AST_BINOP.right;
+    if (op == TOKEN_DOUBLE_COLON && is_list_type(type)) {
+      env = add_binding_to_env(env, left, type->data.T_CONS.args[0]);
+      env = add_binding_to_env(env, right, type);
+    }
+    return env;
+  }
+
   case AST_APPLICATION: {
     if (type->kind == T_CONS) {
       for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
@@ -275,6 +299,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   TypeEnv **_env = env;
   Type *unified_ret = unify(return_type, body_type, _env);
+
   *return_type = *unified_ret;
   return fn;
 }
@@ -471,8 +496,11 @@ Type *constraints_map_lookup(TypeMap *map, Type *key) {
   return NULL;
 }
 
-Type *_infer_fn_application(Type *fn_type, Type **arg_types, int len,
+Type *_infer_fn_application(Ast *ast, Type **arg_types, int len,
                             TypeEnv **env) {
+
+  Type *fn_type = ast->data.AST_APPLICATION.function->md;
+
   fn_type = copy_type(fn_type);
 
   if (fn_type->kind != T_FN) {
@@ -485,8 +513,11 @@ Type *_infer_fn_application(Type *fn_type, Type **arg_types, int len,
   TypeMap *map = NULL;
   // TypeEnv *map = NULL;
 
+  Type **app_args = talloc(sizeof(Type *) * len);
+
   for (int i = 0; i < len; i++) {
     Type *app_arg_type = arg_types[i];
+    app_args[i] = app_arg_type;
 
     Type *fn_arg_type = a->data.T_FN.from;
 
@@ -521,11 +552,23 @@ Type *_infer_fn_application(Type *fn_type, Type **arg_types, int len,
     // lookup = resolve_generic_variant(lookup, *env);
 
     if (lookup == NULL) {
-      return resolve_generic_type(app_result_type, *env);
+      Type *res = resolve_generic_type(app_result_type, *env);
       // fprintf(stderr, "Error: constraint not found in constraint map\n");
       // print_type(app_result_type);
       // printf("\n");
+      Type *specific_fn = create_type_multi_param_fn(len, app_args, res);
+      // print_type(specific_fn);
+      // print_type(res);
+      // printf("specific_fn: ");
+      // print_type(specific_fn);
+      // printf("\n");
+      // *fn_type = *specific_fn;
+      ast->data.AST_APPLICATION.function->md = specific_fn;
+      return res;
     }
+
+    Type *specific_fn = create_type_multi_param_fn(len, app_args, lookup);
+    ast->data.AST_APPLICATION.function->md = specific_fn;
     return lookup;
   }
 
@@ -542,7 +585,7 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
                                  "could not infer application argument");
   }
 
-  return _infer_fn_application(fn_type, app_arg_types, len, env);
+  return _infer_fn_application(ast, app_arg_types, len, env);
 }
 
 Type *infer(Ast *ast, TypeEnv **env) {
@@ -593,7 +636,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
   case AST_LET: {
     Ast *expr = ast->data.AST_LET.expr;
     Type *expr_type = TRY_INFER(expr, env, NULL);
-    print_type(expr_type);
     Ast *binding = ast->data.AST_LET.binding;
 
     *env = add_binding_to_env(*env, binding, expr_type);
@@ -627,16 +669,19 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   case AST_LIST: {
-    Type *element_type = TRY_INFER(
-        ast->data.AST_LIST.items, env,
-        "Could not infer type of list literal elements (first element)");
-
     int len = ast->data.AST_LIST.len;
     if (len == 0) {
       Type *el_type = next_tvar();
+      Type **args = talloc(sizeof(Type *));
+      args[0] = el_type;
       type = talloc(sizeof(Type));
-      *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, &el_type, 1}}};
+      *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, args, 1}}};
+      break;
     }
+
+    Type *element_type = TRY_INFER(
+        ast->data.AST_LIST.items, env,
+        "Could not infer type of list literal elements (first element)");
 
     Type *el_type;
     for (int i = 1; i < len; i++) {

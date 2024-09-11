@@ -510,6 +510,7 @@ Type *create_type_multi_param_fn(int len, Type **from, Type *to) {
   Type *fn = to;
   for (int i = len - 1; i >= 0; i--) {
     Type *ptype = from[i];
+    // print_type(ptype);
     fn = type_fn(ptype, fn);
   }
   return fn;
@@ -592,10 +593,16 @@ Type *copy_type(Type *t) {
 }
 
 int fn_type_args_len(Type *fn_type) {
+
+  if (fn_type->data.T_FN.from->kind == T_VOID) {
+    return 1;
+  }
   int fn_len = 0;
   Type *t = fn_type;
   while (t->kind == T_FN) {
-    t = t->data.T_FN.from;
+    // printf("arg %d: ", fn_len);
+    // print_type(t->data.T_FN.from);
+    t = t->data.T_FN.to;
     fn_len++;
   }
 
