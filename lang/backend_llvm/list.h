@@ -25,4 +25,8 @@ LLVMValueRef ll_is_not_null(LLVMValueRef list, LLVMTypeRef list_el_type,
 LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type);
 
 LLVMValueRef null_node(LLVMTypeRef node_type);
+
+LLVMValueRef codegen_list_prepend(LLVMValueRef l, LLVMValueRef list,
+                                  JITLangCtx *ctx, LLVMModuleRef module,
+                                  LLVMBuilderRef);
 #endif

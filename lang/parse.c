@@ -595,7 +595,7 @@ void handle_macro(Ast *root, const char *macro_text) {
 }
 
 Ast *ast_await(Ast *awaitable) {
-  printf("parse await\n");
+  // printf("parse await\n");
   return awaitable;
 }
 

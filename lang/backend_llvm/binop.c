@@ -1,9 +1,8 @@
 #include "backend_llvm/binop.h"
 #include "backend_llvm/common.h"
 #include "backend_llvm/types.h"
+#include "list.h"
 #include "parse.h"
-#include "serde.h"
-#include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -32,6 +31,10 @@ LLVMValueRef codegen_binop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   rtype = resolve_tc_rank(rtype);
   if (is_generic(rtype)) {
     rtype = resolve_generic_type(rtype, ctx->env);
+  }
+
+  if (op == TOKEN_DOUBLE_COLON) {
+    return codegen_list_prepend(l, r, ctx, module, builder);
   }
 
   Method method;

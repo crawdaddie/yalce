@@ -121,3 +121,14 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return head;
 }
+
+LLVMValueRef codegen_list_prepend(LLVMValueRef l, LLVMValueRef list,
+                                  JITLangCtx *ctx, LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  LLVMTypeRef el_type = LLVMTypeOf(l);
+  LLVMTypeRef node_type = llnode_type(el_type);
+  LLVMValueRef node =
+      ll_create_list_node(NULL, node_type, l, ctx, module, builder);
+  struct_ptr_set(1, node, node_type, list, builder);
+  return node;
+}

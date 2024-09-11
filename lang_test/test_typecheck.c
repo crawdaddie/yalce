@@ -454,11 +454,9 @@ int main() {
 
   ({
     SEP;
-    TEST_SIMPLE_AST_TYPE(
-      "let get_stderr = extern fn () -> Ptr;\n"
-      "let stderr = get_stderr ();\n",
+    TEST_SIMPLE_AST_TYPE("let get_stderr = extern fn () -> Ptr;\n"
+                         "let stderr = get_stderr ();\n",
                          &t_ptr);
-
   });
 
   return status ? 0 : 1;

@@ -77,14 +77,26 @@ static char *op_to_name[] = {
     [TOKEN_EQUALITY] = "==", [TOKEN_NOT_EQUAL] = "!=",
 };
 
+Type *infer_list_binop(Ast *ast, TypeEnv **env) {
+  Type *l = ast->data.AST_BINOP.left->md;
+  Type *r = ast->data.AST_BINOP.right->md;
+  unify(l, r->data.T_CONS.args[0], env);
+  return r;
+}
+
 Type *infer_binop(Ast *ast, TypeEnv **env) {
-  // print_type_env(*env);
   token_type op = ast->data.AST_BINOP.op;
   Type *l = TRY_INFER(ast->data.AST_BINOP.left, env,
                       "Failure typechecking lhs of binop: ");
 
+  // print_type(ast->data.AST_BINOP.left->md);
   Type *r = TRY_INFER(ast->data.AST_BINOP.right, env,
                       "Failure typechecking rhs of binop: ");
+  // print_type(ast->data.AST_BINOP.right->md);
+
+  if (op == TOKEN_DOUBLE_COLON) {
+    return infer_list_binop(ast, env);
+  }
 
   int lmidx;
   TypeClass *ltc = find_op_typeclass_in_type(l, op, &lmidx);
@@ -124,6 +136,7 @@ Type *infer_binop(Ast *ast, TypeEnv **env) {
       }
       Type *type = create_typeclass_resolve_type("arithmetic", l, r);
       return type;
+      // break;
     }
 
     case TOKEN_LT:
@@ -541,9 +554,9 @@ Type *infer(Ast *ast, TypeEnv **env) {
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
 
       stmt = ast->data.AST_BODY.stmts[i];
-      TRY_INFER(stmt, env, "Failure typechecking body statement: ");
+      type = TRY_INFER(stmt, env, "Failure typechecking body statement: ");
     }
-    type = stmt->md;
+    // type = stmt->md;
     break;
   }
   case AST_INT: {
@@ -580,7 +593,9 @@ Type *infer(Ast *ast, TypeEnv **env) {
   case AST_LET: {
     Ast *expr = ast->data.AST_LET.expr;
     Type *expr_type = TRY_INFER(expr, env, NULL);
+    print_type(expr_type);
     Ast *binding = ast->data.AST_LET.binding;
+
     *env = add_binding_to_env(*env, binding, expr_type);
 
     Ast *in_expr = ast->data.AST_LET.in_expr;
@@ -620,7 +635,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
     if (len == 0) {
       Type *el_type = next_tvar();
       type = talloc(sizeof(Type));
-      *type = (Type){T_CONS, {.T_CONS = {"List", &el_type, 1}}};
+      *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, &el_type, 1}}};
     }
 
     Type *el_type;
@@ -638,7 +653,9 @@ Type *infer(Ast *ast, TypeEnv **env) {
       }
     }
     type = talloc(sizeof(Type));
-    *type = (Type){T_CONS, {.T_CONS = {"List", &el_type, 1}}};
+    Type **contained = talloc(sizeof(Type *));
+    contained[0] = el_type;
+    *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, contained, 1}}};
 
     break;
   }
