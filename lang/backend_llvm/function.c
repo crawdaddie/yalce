@@ -260,7 +260,7 @@ LLVMValueRef create_new_specific_fn(int len, Ast *args, Ast *fn_ast,
   LLVMValueRef func =
       codegen_fn(specific_ast, compilation_ctx, module, builder);
 
-  free_type_env(env);
+  // free_type_env(env);
   return func;
 }
 
@@ -293,6 +293,10 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
           ctx->stack,
           sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr,
       };
+
+      printf("compiling specific function: ");
+      print_type(expected_fn_type);
+      print_ast(fn_ast);
 
       LLVMValueRef specific_func = create_new_specific_fn(
           fn_ast->data.AST_LAMBDA.len, args, fn_ast, sym->symbol_type,

@@ -517,6 +517,12 @@ Type *_infer_fn_application(Ast *ast, Type **arg_types, int len,
 
   for (int i = 0; i < len; i++) {
     Type *app_arg_type = arg_types[i];
+    if (is_generic(app_arg_type)) {
+      Type *t = env_lookup(*env, app_arg_type->data.T_VAR);
+      if (t) {
+        app_arg_type = t;
+      }
+    }
     app_args[i] = app_arg_type;
 
     Type *fn_arg_type = a->data.T_FN.from;
@@ -556,7 +562,9 @@ Type *_infer_fn_application(Ast *ast, Type **arg_types, int len,
       // fprintf(stderr, "Error: constraint not found in constraint map\n");
       // print_type(app_result_type);
       // printf("\n");
+      //
       Type *specific_fn = create_type_multi_param_fn(len, app_args, res);
+      // print_type_env(*env);
       // print_type(specific_fn);
       // print_type(res);
       // printf("specific_fn: ");

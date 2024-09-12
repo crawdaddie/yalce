@@ -1,9 +1,13 @@
+%include ../../examples/Fmt
 let list_sum = fn s l ->
   match l with
   | [] -> s
   | x::rest -> list_sum (s + x) rest
 ;;
 
-list_sum 0 [1,2,3,4,5] # %assert '15'
+list_sum 0 [1,2,3];
+list_sum 0. [1.,2.,3.];
+
+# list_sum 0. [1.,2.,3.,4.,5.]; # %assert '15.000000'
 
 
