@@ -285,6 +285,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
       Type *ptype = binding_type(param_ast);
       param_types[i] = ptype;
+
       fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
     }
     fn = create_type_multi_param_fn(len, param_types, return_type);
@@ -846,7 +847,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
       Type *fn = create_type_multi_param_fn(len, arg_types, type);
       *t = *fn;
 
-      type = _infer_fn_application(fn, arg_types, len, env);
+      type = _infer_fn_application(ast, arg_types, len, env);
       break;
     }
 
