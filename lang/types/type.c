@@ -35,11 +35,78 @@ Type t_ptr = {T_CONS,
               {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
               .alias = TYPE_NAME_PTR};
 
+Type t_add_a = arithmetic_var("a");
+Type t_add_b = arithmetic_var("b");
+Type t_add = MAKE_FN_TYPE_3(
+    &t_add_a, &t_add_b, &TYPECLASS_RESOLVE("arithmetic", &t_add_a, &t_add_b));
+Type t_sub_a = arithmetic_var("a");
+Type t_sub_b = arithmetic_var("b");
+Type t_sub = MAKE_FN_TYPE_3(
+    &t_sub_a, &t_sub_b, &TYPECLASS_RESOLVE("arithmetic", &t_sub_a, &t_sub_b));
+
+Type t_mul_a = arithmetic_var("a");
+Type t_mul_b = arithmetic_var("b");
+Type t_mul = MAKE_FN_TYPE_3(
+    &t_mul_a, &t_mul_b, &TYPECLASS_RESOLVE("arithmetic", &t_mul_a, &t_mul_b));
+
+Type t_mod_a = arithmetic_var("a");
+Type t_mod_b = arithmetic_var("b");
+Type t_mod = MAKE_FN_TYPE_3(
+    &t_mod_a, &t_mod_b, &TYPECLASS_RESOLVE("arithmetic", &t_mod_a, &t_mod_b));
+
+Type t_lt_a = ord_var("a");
+Type t_lt_b = ord_var("b");
+Type t_lt = MAKE_FN_TYPE_3(&t_lt_a, &t_lt_b, &t_bool);
+
+Type t_gt_a = ord_var("a");
+Type t_gt_b = ord_var("b");
+Type t_gt = MAKE_FN_TYPE_3(&t_gt_a, &t_gt_b, &t_bool);
+
+Type t_lte_a = ord_var("a");
+Type t_lte_b = ord_var("b");
+Type t_lte = MAKE_FN_TYPE_3(&t_lte_a, &t_lte_b, &t_bool);
+
+Type t_gte_a = ord_var("a");
+Type t_gte_b = ord_var("b");
+Type t_gte = MAKE_FN_TYPE_3(&t_gte_a, &t_gte_b, &t_bool);
+
+Type t_eq_a = eq_var("a");
+Type t_eq_b = eq_var("b");
+Type t_eq = MAKE_FN_TYPE_3(&t_eq_a, &t_eq_b, &t_bool);
+
+Type t_neq_a = eq_var("a");
+Type t_neq_b = eq_var("b");
+Type t_neq = MAKE_FN_TYPE_3(&t_neq_a, &t_neq_b, &t_bool);
+
+Type t_list_var_el = {T_VAR, {.T_VAR = "vlist_el"}};
+Type t_list_var = {
+    T_CONS,
+    {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_list_var_el}, 1}},
+};
+
+Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var, &t_list_var);
+
+_binop_map binop_map[_NUM_BINOPS] = {
+    {TYPE_NAME_OP_ADD, &t_add},
+    {TYPE_NAME_OP_SUB, &t_sub},
+    {TYPE_NAME_OP_MUL, &t_mul},
+    {TYPE_NAME_OP_MOD, &t_mod},
+    {TYPE_NAME_OP_LT, &t_lt},
+    {TYPE_NAME_OP_GT, &t_gt},
+    {TYPE_NAME_OP_LTE, &t_lte},
+    {TYPE_NAME_OP_GTE, &t_gte},
+    {TYPE_NAME_OP_EQ, &t_eq},
+    {TYPE_NAME_OP_NEQ, &t_neq},
+    {TYPE_NAME_OP_LIST_PREPEND, &t_list_prepend},
+};
+
+//
 static char *type_name_mapping[] = {
     [T_INT] = TYPE_NAME_INT,    [T_UINT64] = TYPE_NAME_UINT64,
     [T_NUM] = TYPE_NAME_DOUBLE, [T_BOOL] = TYPE_NAME_BOOL,
     [T_VOID] = TYPE_NAME_VOID,  [T_CHAR] = TYPE_NAME_CHAR,
 };
+
 char *tc_list_to_string(Type *t, char *buffer) {
   if (t->num_implements > 0 && t->implements != NULL) {
     buffer = strncat(buffer, " [", 2);
@@ -59,9 +126,11 @@ char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     return strncat(buffer, "null", 4);
   }
-  if (t->alias != NULL) {
-    return strncat(buffer, t->alias, strlen(t->alias));
-  }
+
+  // if (t->alias != NULL) {
+  //   return strncat(buffer, t->alias, strlen(t->alias));
+  // }
+  //
   switch (t->kind) {
   case T_INT:
   case T_UINT64:
@@ -106,6 +175,9 @@ char *type_to_string(Type *t, char *buffer) {
       buffer = strncat(buffer, " of ", 4);
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
+        if (i < t->data.T_CONS.num_args - 1) {
+          buffer = strcat(buffer, ", ");
+        }
       }
     }
     buffer = tc_list_to_string(t, buffer);
@@ -452,16 +524,70 @@ Type *get_builtin_type(const char *id_chars) {
 
   if (strcmp(id_chars, TYPE_NAME_INT) == 0) {
     return &t_int;
-  } else if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
+  }
+  if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
     return &t_num;
-  } else if (strcmp(id_chars, TYPE_NAME_UINT64) == 0) {
+  }
+  if (strcmp(id_chars, TYPE_NAME_UINT64) == 0) {
     return &t_uint64;
-  } else if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
+  }
+  if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
     return &t_bool;
-  } else if (strcmp(id_chars, TYPE_NAME_STRING) == 0) {
+  }
+  if (strcmp(id_chars, TYPE_NAME_STRING) == 0) {
     return &t_string;
-  } else if (strcmp(id_chars, TYPE_NAME_PTR) == 0) {
+  }
+  if (strcmp(id_chars, TYPE_NAME_PTR) == 0) {
     return &t_ptr;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_ADD) {
+    return &t_add;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_SUB) {
+    return &t_sub;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_MUL) {
+
+    return &t_mul;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_MOD) {
+    return &t_mod;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_LT) {
+    if (*(id_chars + 1) == '=') {
+      return &t_lte;
+    }
+    return &t_lt;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_GT) {
+    if (*(id_chars + 1) == '=') {
+      return &t_gte;
+    }
+    return &t_gt;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_EQ) {
+    if (*(id_chars + 1) == '=') {
+      return &t_eq;
+    }
+    return NULL;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_NEQ) {
+    if (*(id_chars + 1) == '=') {
+      return &t_neq;
+    }
+    return NULL;
+  }
+
+  if (*id_chars == ':' && *(id_chars + 1) == ':') {
+    return &t_list_prepend;
   }
   // fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
 
@@ -503,6 +629,7 @@ Type *type_fn(Type *from, Type *to) {
   fn->kind = T_FN;
   fn->data.T_FN.from = from;
   fn->data.T_FN.to = to;
+  fn->is_recursive_fn_ref = false;
   return fn;
 }
 
@@ -671,6 +798,10 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement) {
 
     type->data.T_TYPECLASS_RESOLVE.dependencies[1] = replace_in(
         type->data.T_TYPECLASS_RESOLVE.dependencies[1], tvar, replacement);
+    if (types_equal(type->data.T_TYPECLASS_RESOLVE.dependencies[0],
+                    type->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
+      return type->data.T_TYPECLASS_RESOLVE.dependencies[0];
+    }
 
     if (!is_generic(type)) {
       return resolve_tc_rank(type);

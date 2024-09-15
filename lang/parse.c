@@ -87,10 +87,76 @@ void ast_body_push(Ast *body, Ast *stmt) {
 }
 
 Ast *ast_binop(token_type op, Ast *left, Ast *right) {
-  Ast *node = Ast_new(AST_BINOP);
-  node->data.AST_BINOP.op = op;
-  node->data.AST_BINOP.left = left;
-  node->data.AST_BINOP.right = right;
+  // Ast *node = Ast_new(AST_BINOP);
+  // node->data.AST_BINOP.op = op;
+  // node->data.AST_BINOP.left = left;
+  // node->data.AST_BINOP.right = right;
+  // return node;
+  Ast *node = Ast_new(AST_APPLICATION);
+
+  Ast *function;
+  switch (op) {
+  case TOKEN_PLUS: {
+    function = ast_identifier((ObjString){"+", 1});
+    break;
+  }
+
+  case TOKEN_MINUS: {
+    function = ast_identifier((ObjString){"-", 1});
+    break;
+  }
+
+  case TOKEN_STAR: {
+    function = ast_identifier((ObjString){"*", 1});
+    break;
+  }
+
+  case TOKEN_MODULO: {
+    function = ast_identifier((ObjString){"%", 1});
+    break;
+  }
+
+  case TOKEN_LT: {
+    function = ast_identifier((ObjString){"<", 1});
+    break;
+  }
+
+  case TOKEN_GT: {
+    function = ast_identifier((ObjString){">", 1});
+    break;
+  }
+
+  case TOKEN_LTE: {
+    function = ast_identifier((ObjString){"<=", 2});
+    break;
+  }
+
+  case TOKEN_GTE: {
+    function = ast_identifier((ObjString){">=", 2});
+    break;
+  }
+
+  case TOKEN_EQUALITY: {
+    function = ast_identifier((ObjString){"==", 2});
+    break;
+  }
+
+  case TOKEN_NOT_EQUAL: {
+    function = ast_identifier((ObjString){"!=", 2});
+    break;
+  }
+
+  case TOKEN_DOUBLE_COLON: {
+    function = ast_identifier((ObjString){"::", 2});
+    break;
+  }
+  }
+
+  node->data.AST_APPLICATION.function = function;
+  node->data.AST_APPLICATION.args = malloc(sizeof(Ast) * 2);
+  node->data.AST_APPLICATION.args[0] = *left;
+  node->data.AST_APPLICATION.args[1] = *right;
+  node->data.AST_APPLICATION.len = 2;
   return node;
 }
 
@@ -622,4 +688,13 @@ Ast *ast_tuple_type_push(Ast *tuple, Ast *mem) {
   Ast *tup = ast_list_push(tuple, mem);
   tup->tag = AST_TUPLE;
   return tup;
+}
+
+Ast *ast_cons_decl(token_type op, Ast *left, Ast *right) {
+
+  Ast *node = Ast_new(AST_BINOP);
+  node->data.AST_BINOP.op = op;
+  node->data.AST_BINOP.left = left;
+  node->data.AST_BINOP.right = right;
+  return node;
 }

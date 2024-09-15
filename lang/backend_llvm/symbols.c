@@ -185,3 +185,13 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
   return expr_val;
 }
+
+void initialize_builtin_binops(ht *stack, TypeEnv *env) {
+  print_type_env(env);
+  for (int i = 0; i < _NUM_BINOPS; i++) {
+    _binop_map bm = binop_map[i];
+    JITSymbol *sym =
+        new_symbol(STYPE_GENERIC_FUNCTION, bm.binop_fn_type, NULL, NULL);
+    ht_set_hash(stack, bm.name, hash_string(bm.name, strlen(bm.name)), sym);
+  }
+}

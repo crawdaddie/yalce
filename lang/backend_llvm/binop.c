@@ -5,6 +5,10 @@
 #include "parse.h"
 #include "llvm-c/Types.h"
 
+// let add = fn a b -> a + b
+// `a -> `b -> ^^ a b (arithmetic)
+// Int -> Int -> Int -- llvm_add_int
+
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 

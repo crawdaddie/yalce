@@ -6,6 +6,7 @@
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
+#include "symbols.h"
 #include "synths.h"
 #include "types.h"
 #include "types/inference.h"
@@ -123,6 +124,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   infer(*prog, env);
+  print_ast(*prog);
   ctx->env = *env;
 
 #ifdef DUMP_AST
@@ -222,6 +224,7 @@ int jit(int argc, char **argv) {
   //
   TypeEnv *env = NULL;
   initialize_builtin_numeric_types(env);
+  initialize_builtin_binops(stack, env);
   // env = initialize_type_env(env);
 
   env = initialize_type_env_synth(env);

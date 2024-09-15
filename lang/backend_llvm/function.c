@@ -358,6 +358,23 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   return NULL;
 }
 
+LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+  Type *ltype = ast->data.AST_APPLICATION.args->md;
+
+  Type *rtype = (ast->data.AST_APPLICATION.args + 1)->md;
+  printf("binop\n");
+  print_type(ltype);
+  print_type(rtype);
+
+  LLVMValueRef lval =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  LLVMValueRef rval =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  return NULL;
+}
+
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
@@ -383,6 +400,11 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
             ctx->stack_ptr);
     print_ast_err(ast->data.AST_APPLICATION.function);
     return NULL;
+  }
+
+  Type *builtin_binop = get_builtin_type(sym_name);
+  if (builtin_binop) {
+    return call_binop(ast, &sym, ctx, module, builder);
   }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;

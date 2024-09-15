@@ -26,86 +26,36 @@ Type *create_type_var() { return next_tvar(); }
 
 Type *infer(Ast *ast, TypeEnv **env);
 
-TypeEnv *extend_env_with_bindings(Ast *test_expr, TypeEnv *env) {
-  Type *expr_type = test_expr->md;
+TypeEnv *extend_env_with_bindings(Ast *test_expr, Type *bind_val_type,
+                                  TypeEnv *env) {
   switch (test_expr->tag) {
   case AST_IDENTIFIER:
-    return env_extend(env, test_expr->data.AST_IDENTIFIER.value, expr_type);
-  case AST_TUPLE: {
-    TypeEnv *new_env = env;
+    return env_extend(env, test_expr->data.AST_IDENTIFIER.value, bind_val_type);
+
+  case AST_TUPLE:
+  case AST_LIST: {
+
+    TypeEnv *_env = env;
     for (int i = 0; i < test_expr->data.AST_LIST.len; i++) {
-      Type *elem_type = expr_type->data.T_CONS.args[i];
-
-      new_env =
-          extend_env_with_bindings(test_expr->data.AST_LIST.items + i, new_env);
-      if (new_env == NULL)
-        return NULL;
+      _env =
+          extend_env_with_bindings(test_expr->data.AST_LIST.items + i,
+                                   test_expr->data.AST_LIST.items[i].md, _env);
     }
-    return new_env;
+    return _env;
   }
 
-  case AST_BINOP: {
-    token_type op = test_expr->data.AST_BINOP.op;
-    Ast *left = test_expr->data.AST_BINOP.left;
-    Ast *right = test_expr->data.AST_BINOP.right;
-
-    // printf("binop: ");
-    // print_type(left->md);
-    // print_type(right->md);
-
-    if (op == TOKEN_DOUBLE_COLON && is_list_type(expr_type)) {
-      env = extend_env_with_bindings(left, env);
-      env = extend_env_with_bindings(right, env);
-    }
-    return env;
-  }
   case AST_APPLICATION: {
-    if (expr_type->kind == T_CONS) {
-
-      TypeEnv *new_env = env;
-      for (int i = 0; i < test_expr->data.AST_APPLICATION.len; i++) {
-        Type *arg_type = expr_type->data.T_CONS.args[i];
-        new_env = extend_env_with_bindings(
-            test_expr->data.AST_APPLICATION.args + i, new_env);
-        if (new_env == NULL)
-          return NULL;
-      }
-      return new_env;
+    TypeEnv *_env = env;
+    for (int i = 0; i < test_expr->data.AST_APPLICATION.len; i++) {
+      _env = extend_env_with_bindings(
+          test_expr->data.AST_APPLICATION.args + i,
+          test_expr->data.AST_APPLICATION.args[i].md, _env);
     }
-    return env;
+    return _env;
   }
   default:
     // No bindings for literal values
     return env;
-  }
-}
-
-Type *infer_test_expr(Ast *test_expr, TypeEnv **env) {
-  Type *t;
-  switch (test_expr->tag) {
-  case AST_APPLICATION: {
-
-    Type **arg_types =
-        talloc(sizeof(Type *) * test_expr->data.AST_APPLICATION.len);
-
-    for (int i = 0; i < test_expr->data.AST_APPLICATION.len; i++) {
-      arg_types[i] = TRY(infer(test_expr->data.AST_APPLICATION.args + i, env));
-    }
-
-    const char *cons_name =
-        test_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
-
-    t = create_cons_type(cons_name, test_expr->data.AST_APPLICATION.len,
-                         arg_types);
-    test_expr->md = t;
-    return t;
-  }
-
-  default: {
-
-    t = infer(test_expr, env);
-    return t;
-  }
   }
 }
 
@@ -114,26 +64,39 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   Type *expr_type = TRY(infer(expr, env));
 
   Type *res_type = NULL;
+  TypeEnv *extended_env = *env;
 
   for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
     Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
     Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i) + 1;
-    Type *test_type = TRY(infer_test_expr(test_expr, env));
+    Type *test_type = TRY(infer(test_expr, &extended_env));
 
-    Type *unified_type = TRY(unify(expr_type, test_type, env));
+    Type *unified_type = TRY(unify(expr_type, test_type, &extended_env));
 
     *expr_type = *unified_type;
 
-    TypeEnv *extended_env = TRY(extend_env_with_bindings(test_expr, *env));
+    extended_env = extend_env_with_bindings(test_expr, expr_type, extended_env);
+
     Type *branch_res_type = TRY(infer(result_expr, &extended_env));
 
     if (res_type == NULL) {
       res_type = branch_res_type;
     } else {
-      Type *unified_res_type = TRY(unify(branch_res_type, res_type, env));
+
+      Type *unified_res_type =
+          TRY(unify(res_type, branch_res_type, &extended_env));
+
       res_type = unified_res_type;
     }
   }
+
+  *expr_type = *resolve_generic_type(expr_type, extended_env);
+
+  // printf("final match env: ");
+  // print_type_env(extended_env);
+  // while (extended_env) {
+  //   extended_env = extended_env->next;
+  // }
 
   return res_type;
 }

@@ -328,7 +328,7 @@ type_expr:
 type_atom:
     IDENTIFIER                { $$ = ast_identifier($1); }
   | IDENTIFIER '=' INTEGER    { $$ = ast_let(ast_identifier($1), AST_CONST(AST_INT, $3), NULL); } 
-  | IDENTIFIER 'of' type_atom { $$ = ast_binop(TOKEN_OF, ast_identifier($1), $3); } 
+  | IDENTIFIER 'of' type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); } 
   | '(' type_expr ')'         { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }
   ;

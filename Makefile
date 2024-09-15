@@ -10,16 +10,21 @@ endif
 
 LLVM_CONFIG := $(LLVM)/bin/llvm-config
 
-
 # macOS-specific settings
 READLINE_PREFIX := $(shell brew --prefix readline)
 
 LANG_SRC_DIR := lang
 LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wildcard $(LANG_SRC_DIR)/*.c))
-LANG_CC := clang -I./lang -I./engine
-LANG_CC += -I$(READLINE_PREFIX)/include 
-LANG_CC += -g
 
+# Separate CFLAGS for include paths
+CFLAGS := -I./lang -I./engine
+CFLAGS += -I$(READLINE_PREFIX)/include
+CFLAGS += -I./lang/backend_llvm
+CFLAGS += `$(LLVM_CONFIG) --cflags`
+CFLAGS += -I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include
+
+LANG_CC := clang $(CFLAGS)
+LANG_CC += -g
 
 LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
@@ -32,7 +37,7 @@ LANG_CC += -DDUMP_AST
 endif
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
-LANG_CC += -I./lang/backend_llvm -DLLVM_BACKEND `$(LLVM_CONFIG) --cflags`
+LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
 
 ifeq ($(MAKECMDGOALS),debug)
@@ -72,7 +77,6 @@ $(YACC_OUTPUT): $(YACC_FILE)
 $(LEX_OUTPUT): $(LEX_FILE)
 	flex -o $(LEX_OUTPUT) $(LEX_FILE)
 
-
 # Build language object files
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
@@ -87,6 +91,9 @@ clean:
 
 test:
 	$(MAKE) -C lang_test
+
+test_parse:
+	$(MAKE) -C lang_test test_parse
 
 test_typecheck:
 	$(MAKE) -C lang_test test_typecheck

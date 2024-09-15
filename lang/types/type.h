@@ -5,6 +5,7 @@
 #include <string.h>
 
 #define _TSTORAGE_SIZE_DEFAULT 200000
+
 typedef struct TypeEnv TypeEnv;
 typedef struct Type Type;
 
@@ -19,6 +20,19 @@ extern Type t_void;
 extern Type t_char;
 extern Type t_ptr;
 
+// builtin binop types
+extern Type t_add;
+extern Type t_sub;
+extern Type t_mul;
+extern Type t_div;
+extern Type t_mod;
+extern Type t_gt;
+extern Type t_lt;
+extern Type t_gte;
+extern Type t_lte;
+extern Type t_eq;
+extern Type t_neq;
+
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_TUPLE   "Tuple"
@@ -31,9 +45,67 @@ extern Type t_ptr;
 #define TYPE_NAME_UINT64  "Uint64"
 #define TYPE_NAME_VOID    "()"
 #define TYPE_NAME_VARIANT "Variant"
+
+#define TYPE_NAME_OP_ADD  "+"
+#define TYPE_NAME_OP_SUB  "-"
+#define TYPE_NAME_OP_MUL  "*"
+#define TYPE_NAME_OP_MOD  "%"
+#define TYPE_NAME_OP_LT  "<"
+#define TYPE_NAME_OP_GT  ">"
+#define TYPE_NAME_OP_LTE  "<="
+#define TYPE_NAME_OP_GTE  ">="
+#define TYPE_NAME_OP_EQ  "=="
+#define TYPE_NAME_OP_NEQ  "!="
+#define TYPE_NAME_OP_LIST_PREPEND  "::"
+
+typedef struct _binop_map {
+  const char *name;
+  Type *binop_fn_type;
+} _binop_map;
+
+#define _NUM_BINOPS 11
+extern _binop_map binop_map[];
 // clang-format on
 //
 
+#define MAKE_FN_TYPE_2(arg_type, ret_type)                                     \
+  ((Type){T_FN, {.T_FN = {.from = arg_type, .to = ret_type}}})
+
+#define MAKE_FN_TYPE_3(arg1_type, arg2_type, ret_type)                         \
+  ((Type){T_FN,                                                                \
+          {.T_FN = {.from = arg1_type,                                         \
+                    .to = &MAKE_FN_TYPE_2(arg2_type, ret_type)}}})
+
+#define MAKE_FN_TYPE_4(arg1_type, arg2_type, arg3_type, ret_type)              \
+  ((Type){T_FN,                                                                \
+          {.T_FN = {.from = arg1_type,                                         \
+                    .to = &MAKE_FN_TYPE_3(arg2_type, arg3_type, ret_type)}}})
+#define arithmetic_var(n)                                                      \
+  (Type) {                                                                     \
+    T_VAR, {.T_VAR = n},                                                       \
+        .implements = (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},     \
+        .num_implements = 1                                                    \
+  }
+
+#define ord_var(n)                                                             \
+  (Type) {                                                                     \
+    T_VAR, {.T_VAR = n},                                                       \
+        .implements = (TypeClass *[]){&(TypeClass){.name = "ord"}},            \
+        .num_implements = 1                                                    \
+  }
+
+#define eq_var(n)                                                              \
+  (Type) {                                                                     \
+    T_VAR, {.T_VAR = n},                                                       \
+        .implements = (TypeClass *[]){&(TypeClass){.name = "eq"}},             \
+        .num_implements = 1                                                    \
+  }
+
+#define TYPECLASS_RESOLVE(tc_name, dep1, dep2)                                 \
+  ((Type){.kind = T_TYPECLASS_RESOLVE,                                         \
+          .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,           \
+                                           .dependencies =                     \
+                                               (Type *[]){dep1, dep2}}}})
 enum TypeKind {
   /* Type Operator */
   T_INT,
@@ -88,6 +160,7 @@ typedef struct Type {
   int num_implements;
   void *constructor;
   size_t constructor_size;
+  bool is_recursive_fn_ref;
 } Type;
 
 // TypeEnv represents a mapping from variable names to their types
@@ -147,5 +220,7 @@ typedef struct VariantContext {
 } VariantContext;
 
 Type *create_cons_type(const char *name, int len, Type **unified_args);
+
+Type *get_builtin_type(const char *id_chars);
 
 #endif

@@ -1,21 +1,29 @@
 #include "serde.h"
+#include "format_utils.h"
+#include "types/type.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define DEBUG_TYPES_W_AST
+
+// char *type_to_string(Type *t, char *buffer);
 
 void print_ast(Ast *ast) {
   char *buf = malloc(sizeof(char) * 500);
   printf("%s\n", ast_to_sexpr(ast, buf));
+  // printf(COLOR_RESET);
   free(buf);
 }
 
 void print_ast_err(Ast *ast) {
   char *buf = malloc(sizeof(char) * 500);
   fprintf(stderr, "%s\n", ast_to_sexpr(ast, buf));
+  // fprintf(stderr, COLOR_RESET);
   free(buf);
 }
 
 char *ast_to_sexpr(Ast *ast, char *buffer) {
+  // buffer = strcat(buffer, COLOR_RED);
   if (!ast) {
     buffer = strcat(buffer, "null");
     return buffer;
@@ -120,6 +128,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       buffer = strcat(buffer, "(");
     }
+
     buffer = ast_to_sexpr(ast->data.AST_APPLICATION.function, buffer);
 
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
@@ -393,5 +402,13 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
   }
+  // buffer = strcat(buffer, COLOR_RESET);
+
+#ifdef DEBUG_TYPES_W_AST
+  buffer = strcat(buffer, COLOR_CYAN " [ ");
+  buffer = type_to_string(ast->md, buffer);
+  buffer = strcat(buffer, " ] " COLOR_RESET);
+#endif
+  // buffer = strcat(buffer, COLOR_RED);
   return buffer;
 }

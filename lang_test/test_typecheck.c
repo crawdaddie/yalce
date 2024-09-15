@@ -1,6 +1,7 @@
 #include "../lang/parse.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
+#include "serde.h"
 #include "types/unification.h"
 #include <stdbool.h>
 #include <stdlib.h>
@@ -11,19 +12,6 @@
     printf(msg "\n");                                                          \
     SEP;                                                                       \
   });
-
-#define MAKE_FN_TYPE_2(arg_type, ret_type)                                     \
-  ((Type){T_FN, {.T_FN = {.from = arg_type, .to = ret_type}}})
-
-#define MAKE_FN_TYPE_3(arg1_type, arg2_type, ret_type)                         \
-  ((Type){T_FN,                                                                \
-          {.T_FN = {.from = arg1_type,                                         \
-                    .to = &MAKE_FN_TYPE_2(arg2_type, ret_type)}}})
-
-#define MAKE_FN_TYPE_4(arg1_type, arg2_type, arg3_type, ret_type)              \
-  ((Type){T_FN,                                                                \
-          {.T_FN = {.from = arg1_type,                                         \
-                    .to = &MAKE_FN_TYPE_3(arg2_type, arg3_type, ret_type)}}})
 
 #define TEST_SIMPLE_AST_TYPE(i, t)                                             \
   ({                                                                           \
@@ -40,6 +28,7 @@
       char buf2[100] = {};                                                     \
       fprintf(stderr, "❌ " i " => %s (got %s)\n", type_to_string(t, buf),     \
               type_to_string(p->md, buf2));                                    \
+      fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= stat;                                                            \
   })
@@ -58,7 +47,8 @@
   ({                                                                           \
     bool stat = true;                                                          \
     Ast *p = parse_input(i, NULL);                                             \
-    stat &= (infer(p, &env) != NULL);                                          \
+    Type *infer_res = infer(p, &env);                                          \
+    stat &= ((t != NULL) ? (infer_res != NULL) : infer_res == NULL);           \
     stat &= (types_equal(p->md, t));                                           \
     char buf[100] = {};                                                        \
     if (stat) {                                                                \
@@ -67,6 +57,7 @@
       char buf2[100] = {};                                                     \
       fprintf(stderr, "❌ " i " => %s (got %s)\n", type_to_string(t, buf),     \
               type_to_string(p->md, buf2));                                    \
+      fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= stat;                                                            \
   })
@@ -83,35 +74,42 @@
       char buf2[100] = {};                                                     \
       fprintf(stderr, "❌ typecheck doesn't fail " i " (got %s)\n",            \
               type_to_string(p->md, buf2));                                    \
+      fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= (succeed == NULL);                                               \
   })
+
+#define TEST_TYPECHECK_ENV_FAIL(i, env)                                        \
+  ({                                                                           \
+    Ast *p = parse_input(i, NULL);                                             \
+    TypeEnv *env = NULL;                                                       \
+    reset_type_var_counter();                                                  \
+    Type *succeed = infer(p, &env);                                            \
+    if (succeed == NULL) {                                                     \
+      fprintf(stderr, "✅ typecheck should fail: " i "\n");                    \
+    } else {                                                                   \
+      char buf2[100] = {};                                                     \
+      fprintf(stderr, "❌ typecheck doesn't fail " i " (got %s)\n",            \
+              type_to_string(p->md, buf2));                                    \
+      fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
+    }                                                                          \
+    status &= (succeed == NULL);                                               \
+  })
+
 #define TLIST(_t) ((Type){T_CONS, {.T_CONS = {"List", (Type *[]){_t}, 1}}})
 
 #define TTUPLE(num, ...)                                                       \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
 
-#define arithmetic_var(n)                                                      \
-  (Type) {                                                                     \
-    T_VAR, {.T_VAR = n},                                                       \
-        .implements = (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},     \
-        .num_implements = 1                                                    \
-  }
 #define tcons(name, num, ...)                                                  \
   ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
 
 #define tvar(n)                                                                \
   (Type) { T_VAR, {.T_VAR = n}, }
 
-#define TYPECLASS_RESOLVE(tc_name, dep1, dep2)                                 \
-  ((Type){.kind = T_TYPECLASS_RESOLVE,                                         \
-          .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,           \
-                                           .dependencies =                     \
-                                               (Type *[]){dep1, dep2}}}})
-
 #define TNONE                                                                  \
   ((Type){T_CONS, {.T_CONS = {"None", .args = NULL, .num_args = 0}}})
-#define RESET reset_type_var_counter();
+#define RESET reset_type_var_counter()
 
 #define SEP printf("------------------------------------------------\n")
 
@@ -181,11 +179,11 @@ int main() {
                        &MAKE_FN_TYPE_2(&t_void, &t_int));
 
   ({
-    RESET
     Type t_arithmetic0 = arithmetic_var("t0");
     Type t_arithmetic1 = arithmetic_var("t1");
     Type t_arithmetic2 = arithmetic_var("t2");
     Type t_arithmetic3 = arithmetic_var("t3");
+
     TEST_SIMPLE_AST_TYPE(
         "let f = fn x y z -> x + y + z;",
         &MAKE_FN_TYPE_4(
@@ -197,7 +195,7 @@ int main() {
   });
 
   ({
-    RESET
+    RESET;
     Type t_arithmetic = arithmetic_var("t1");
     Type t1 = tvar("t2");
     TEST_SIMPLE_AST_TYPE(
@@ -208,7 +206,7 @@ int main() {
   });
 
   ({
-    RESET
+    RESET;
     Type t = {T_VAR, {.T_VAR = "t"}};
     Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t), &TNONE);
 
@@ -223,7 +221,7 @@ int main() {
 
   ({
     SEP;
-    RESET
+    RESET;
     Type some_int = tcons("Some", 1, &t_int);
     TEST_SIMPLE_AST_TYPE("type Option t =\n"
                          "  | Some of t\n"
@@ -292,24 +290,9 @@ int main() {
   });
 
   ({
-    TITLE("## variables within cons values in match")
-    Type opt_int =
-        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
-    TEST_SIMPLE_AST_TYPE("type Option t =\n"
-                         "  | Some of t\n"
-                         "  | None\n"
-                         "  ;\n"
-                         "let f = fn x ->\n"
-                         "match x with\n"
-                         "  | Some y -> y + 1\n"
-                         "  | None -> 0\n"
-                         "  ;;\n",
-                         &MAKE_FN_TYPE_2(&opt_int, &t_int));
-  });
-
-  ({
     TITLE("## matching on tuple")
     RESET;
+    ;
     Type tuple = tcons(TYPE_NAME_TUPLE, 2, &t_int, &t_int);
     TEST_SIMPLE_AST_TYPE("let f = fn x ->\n"
                          "match x with\n"
@@ -322,6 +305,7 @@ int main() {
   ({
     TITLE("## matching on tupl containing var")
     RESET;
+    ;
     Type tuple = tcons(TYPE_NAME_TUPLE, 2, &t_int, &t_int);
     TEST_SIMPLE_AST_TYPE("let f = fn x ->\n"
                          "match x with\n"
@@ -334,6 +318,7 @@ int main() {
   ({
     TITLE("inexhaustive match expr")
     RESET;
+    ;
 
     TEST_TYPECHECK_FAIL("type Option t =\n"
                         "  | Some of t\n"
@@ -348,13 +333,13 @@ int main() {
   ({
     SEP;
     RESET;
+    ;
     Type fn = MAKE_FN_TYPE_3(&t_int, &t_num, &t_int);
     TEST_SIMPLE_AST_TYPE("let ex_fn = extern fn Int -> Double -> Int;", &fn);
   });
   ({
     SEP;
-
-    RESET
+    RESET;
     TypeEnv *env = NULL;
     Type t_arithmetic = arithmetic_var("t1");
     TEST_SIMPLE_AST_TYPE_ENV(
@@ -365,10 +350,21 @@ int main() {
     TEST_SIMPLE_AST_TYPE_ENV("f 1", &t_int, env);
     TEST_SIMPLE_AST_TYPE_ENV("f 1.", &t_num, env);
   });
-
   ({
     SEP;
-    RESET
+    RESET;
+    Type t1 = tvar("t1");
+    Type t2 = tvar("t2");
+    TypeEnv *env = NULL;
+    env = env_extend(env, "s", &t1);
+    env = env_extend(env, "x", &t2);
+    TEST_SIMPLE_AST_TYPE_ENV("s + x",
+                             &TYPECLASS_RESOLVE("arithmetic", &t1, &t2), env);
+  });
+
+  ({
+    TITLE("var types in arithmetic expr");
+    RESET;
     TypeEnv *env = NULL;
     Type t_arithmetic2 = arithmetic_var("t2");
     Type t_arithmetic1 = arithmetic_var("t1");
@@ -388,7 +384,7 @@ int main() {
   });
 
   ({
-    RESET
+    RESET;
     Type t0 = tvar("t0");
     TypeEnv *env = NULL;
     Type *u = unify(&t0, &t_int, &env);
@@ -396,7 +392,7 @@ int main() {
   });
 
   ({
-    RESET
+    RESET;
     SEP;
     TypeEnv *env = NULL;
     Type t_arithmetic1 = arithmetic_var("t1");
@@ -405,6 +401,7 @@ int main() {
     Type t5 = tvar("t5");
     Type t6 = tvar("t6");
     Type t7 = tvar("t7");
+
     TEST_SIMPLE_AST_TYPE_ENV(
         "let sum = fn a b -> a + b;;",
         &MAKE_FN_TYPE_3(
@@ -418,8 +415,9 @@ int main() {
 
     TEST_SIMPLE_AST_TYPE_ENV("proc sum 1 2", &t_int, env);
   });
+
   ({
-    RESET
+    RESET;
     SEP;
     TypeEnv *env = NULL;
     TEST_SIMPLE_AST_TYPE_ENV("let fib = fn x ->\n"
@@ -465,7 +463,7 @@ int main() {
   });
 
   ({
-    TITLE("LIST PROCESSING FUNCTION")
+    TITLE("LIST PROCESSING FUNCTIONS")
     TEST_SIMPLE_AST_TYPE(
         "let f = fn l->\n"
         "  match l with\n"
@@ -473,19 +471,68 @@ int main() {
         "    | [] -> 0\n"
         ";;",
         &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int));
+
+    TEST_SIMPLE_AST_TYPE(
+        "let f = fn l->\n"
+        "  match l with\n"
+        "    | x1::x2::_ -> x1\n"
+        "    | [] -> 0\n"
+        ";;",
+        &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int));
+
+    TEST_SIMPLE_AST_TYPE(
+        "let f = fn l->\n"
+        "  match l with\n"
+        "    | x1::x2::[] -> x1\n"
+        "    | [] -> 0\n"
+        ";;",
+        &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int));
   });
 
   ({
+    RESET;
     TITLE("LIST SUM FUNCTION")
-    Type t2 = arithmetic_var("t2");
-    Type t5 = tvar("t5");
-    TEST_SIMPLE_AST_TYPE(
+    Type t4 = arithmetic_var("t4");
+    TypeEnv *env = NULL;
+    TEST_SIMPLE_AST_TYPE_ENV(
         "let sum = fn s l ->\n"
         "  match l with\n"
         "  | [] -> s\n"
         "  | x::rest -> sum (s + x) rest\n"
         ";;\n",
-        &MAKE_FN_TYPE_3(&t2, &tcons(TYPE_NAME_LIST, 1, &t5), &t2));
+        &MAKE_FN_TYPE_3(&t4, &tcons(TYPE_NAME_LIST, 1, &t4), &t4), env);
+
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "sum 0", &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int),
+        env);
+  });
+
+  ({
+    RESET;
+    TITLE("generic function with conflicting args should fail")
+    Type t = tvar("x");
+    Type f = MAKE_FN_TYPE_3(&t, &tcons(TYPE_NAME_LIST, 1, &t), &t);
+    TypeEnv *env = NULL;
+    env = env_extend(env, "sum", &f);
+    TEST_SIMPLE_AST_TYPE_ENV("sum 0 [1., 2.]", NULL, env);
+  });
+
+  ({
+    RESET;
+    TITLE("## variables within cons values in match")
+    Type opt_int =
+        tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+
+    TEST_SIMPLE_AST_TYPE("type Option t =\n"
+                         "  | Some of t\n"
+                         "  | None\n"
+                         "  ;\n"
+                         "let f = fn x ->\n"
+                         "match x with\n"
+                         "  | Some y -> y + 1\n"
+                         "  | None -> 0\n"
+                         "  ;;\n",
+                         &MAKE_FN_TYPE_2(&opt_int, &t_int));
   });
 
   return status ? 0 : 1;

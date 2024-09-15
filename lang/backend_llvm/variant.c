@@ -150,20 +150,20 @@ LLVMTypeRef variant_member_to_llvm_type(Type *type, TypeEnv *env,
     return simple_enum_type(module);
   }
 
-  if (variant_parent) {
+  if (variant_parent != NULL) {
 
     Type *vtype = copy_type(variant_parent);
 
     TypeEnv *_env = NULL;
 
-    Type *ret = vtype;
+    const Type *ret = vtype;
 
     for (int i = 0; i < ret->data.T_CONS.num_args; i++) {
-      Type *gen_mem = ret->data.T_CONS.args[i];
+      const Type *gen_mem = ret->data.T_CONS.args[i];
 
       if (strcmp(gen_mem->data.T_CONS.name, type->data.T_CONS.name) == 0) {
         for (int j = 0; j < gen_mem->data.T_CONS.num_args; j++) {
-          Type *t = gen_mem->data.T_CONS.args[i];
+          const Type *t = gen_mem->data.T_CONS.args[i];
           Type *v = type->data.T_CONS.args[i];
           if (t->kind == T_VAR) {
             _env = env_extend(_env, t->data.T_VAR, v);

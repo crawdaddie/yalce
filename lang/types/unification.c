@@ -50,7 +50,32 @@ Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
     // TODO: merge typeclasses?
     return t;
   }
+
+  if (var->kind == T_VAR && t->kind == T_VAR && var->num_implements > 0 &&
+      t->num_implements == 0) {
+    t->implements = var->implements;
+    t->num_implements = var->num_implements;
+  }
+
   if (occurs_check(var, t)) {
+    if (t->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t->data.T_TYPECLASS_RESOLVE.dependencies[0], var) &&
+        (t->data.T_TYPECLASS_RESOLVE.dependencies[1]->kind == T_VAR)) {
+
+      *env = env_extend(
+          *env, t->data.T_TYPECLASS_RESOLVE.dependencies[1]->data.T_VAR, var);
+
+      return var;
+    }
+
+    if (t->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t->data.T_TYPECLASS_RESOLVE.dependencies[1], var) &&
+        (t->data.T_TYPECLASS_RESOLVE.dependencies[0]->kind == T_VAR)) {
+
+      *env = env_extend(
+          *env, t->data.T_TYPECLASS_RESOLVE.dependencies[0]->data.T_VAR, var);
+      return var;
+    }
 
     // Occurs check failed, infinite type error
     return NULL;
@@ -58,6 +83,7 @@ Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
 
   // Check if the variable is already bound in the environment
   Type *bound = env_lookup(*env, var->data.T_VAR);
+
   if (bound) {
     // If it's bound, unify the bound type with t
     return unify(bound, t, env);
@@ -69,9 +95,8 @@ Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
   return t;
 }
 
-// Type *unify_function(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
-// Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) { return NULL; }
 Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
+
   Type *from = unify(t1->data.T_FN.from, t2->data.T_FN.from, env);
   if (!from)
     return NULL;
@@ -146,14 +171,18 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
   if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
     return NULL;
   }
+
   int len = t1->data.T_CONS.num_args;
 
   Type **unified_args = talloc(sizeof(Type *) * len);
   for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-    unified_args[i] =
-        unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], env);
-    if (!unified_args[i])
+
+    Type *unif = unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], env);
+
+    if (!unif) {
       return NULL;
+    }
+    unified_args[i] = unif;
   }
 
   return create_cons_type(t1->data.T_CONS.name, t1->data.T_CONS.num_args,
@@ -174,14 +203,43 @@ Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
   return create_typeclass_resolve_type(
       t1->data.T_TYPECLASS_RESOLVE.comparison_tc, dep1, dep2);
 }
-Type *unify(Type *t1, Type *t2, TypeEnv **env) {
 
+Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   if (t1->kind == T_VAR) {
     return unify_variable(t1, t2, env);
   }
 
   if (t2->kind == T_VAR) {
     return unify_variable(t2, t1, env);
+  }
+
+  if (t1->kind != t2->kind) {
+    if (t2->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t2->data.T_TYPECLASS_RESOLVE.dependencies[0],
+                    t2->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
+      *t2 = *t2->data.T_TYPECLASS_RESOLVE.dependencies[0];
+      return unify(t2, t1, env);
+    }
+
+    if (t1->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[0],
+                    t1->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
+      *t1 = *t1->data.T_TYPECLASS_RESOLVE.dependencies[0];
+      return unify(t1, t2, env);
+    }
+
+    if (t1->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t2, t1->data.T_TYPECLASS_RESOLVE.dependencies[0])) {
+
+      return unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[1], t2, env);
+    }
+
+    if (t1->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t2, t1->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
+
+      return unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[0], t2, env);
+    }
+    return NULL;
   }
 
   switch (t1->kind) {
@@ -221,4 +279,59 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   }
 
   return NULL;
+}
+
+Type *variable_tc_resolve(Type *a, Type *b, TypeEnv **env) {
+  Type *replacement;
+  if (types_equal(a, b->data.T_TYPECLASS_RESOLVE.dependencies[0])) {
+    replacement = b->data.T_TYPECLASS_RESOLVE.dependencies[1];
+  } else {
+    replacement = b->data.T_TYPECLASS_RESOLVE.dependencies[0];
+  }
+  *env = env_extend(*env, a->data.T_VAR, replacement);
+  *a = *replacement;
+  return a;
+}
+
+void unify_rec_fn_mem(Type *a, Type *b, TypeEnv **env) {
+  if (a->kind == T_VAR && b->kind == T_TYPECLASS_RESOLVE &&
+      occurs_check(a, b)) {
+    Type *replacement;
+    if (types_equal(a, b->data.T_TYPECLASS_RESOLVE.dependencies[0])) {
+      replacement = b->data.T_TYPECLASS_RESOLVE.dependencies[1];
+    } else {
+      replacement = b->data.T_TYPECLASS_RESOLVE.dependencies[0];
+    }
+    *env = env_extend(*env, a->data.T_VAR, replacement);
+    *a = *replacement;
+  } else {
+    Type *replacement = env_lookup(*env, a->data.T_VAR);
+    if (replacement) {
+      *a = *replacement;
+    }
+  }
+
+  // unify(a, b, env);
+
+  // printf("recursive resolve: ");
+  // print_type(a);
+  // print_type(b);
+}
+
+void unify_recursive_defs_mut(Type *fn, Type *rec_ref, TypeEnv **env) {
+  Type *a;
+  Type *b;
+  if (fn->kind == T_FN) {
+    a = fn->data.T_FN.from;
+    b = rec_ref->data.T_FN.from;
+    unify_rec_fn_mem(a, b, env);
+
+    if (fn->data.T_FN.to) {
+      unify_recursive_defs_mut(fn->data.T_FN.to, rec_ref->data.T_FN.to, env);
+    }
+  } else {
+    a = fn;
+    b = rec_ref;
+    unify_rec_fn_mem(a, b, env);
+  }
 }
