@@ -435,19 +435,22 @@ int main() {
     SEP;
     Type tenum = tcons(TYPE_NAME_VARIANT, 3, &tcons("A", 0, NULL),
                        &tcons("B", 0, NULL), &tcons("C", 0, NULL));
+    TypeEnv *env = NULL;
 
-    TEST_SIMPLE_AST_TYPE("type Enum = \n"
-                         "  | A       \n"
-                         "  | B       \n"
-                         "  | C       \n"
-                         "  ;         \n"
-                         "let f = fn x->\n"
-                         "  match x with\n"
-                         "    | A -> 1\n"
-                         "    | B -> 2\n"
-                         "    | C -> 3\n"
-                         ";;",
-                         &MAKE_FN_TYPE_2(&tenum, &t_int));
+    TEST_SIMPLE_AST_TYPE_ENV("type Enum = \n"
+                             "  | A       \n"
+                             "  | B       \n"
+                             "  | C       \n"
+                             "  ;         \n"
+                             "let f = fn x->\n"
+                             "  match x with\n"
+                             "    | A -> 1\n"
+                             "    | B -> 2\n"
+                             "    | C -> 3\n"
+                             ";;",
+                             &MAKE_FN_TYPE_2(&tenum, &t_int), env);
+
+    TEST_SIMPLE_AST_TYPE_ENV("f C", &t_int, env);
   });
 
   ({
@@ -495,16 +498,16 @@ int main() {
     Type t4 = arithmetic_var("t4");
     TypeEnv *env = NULL;
     TEST_SIMPLE_AST_TYPE_ENV(
-        "let sum = fn s l ->\n"
+        "let list_sum = fn s l ->\n"
         "  match l with\n"
         "  | [] -> s\n"
-        "  | x::rest -> sum (s + x) rest\n"
+        "  | x::rest -> list_sum (s + x) rest\n"
         ";;\n",
         &MAKE_FN_TYPE_3(&t4, &tcons(TYPE_NAME_LIST, 1, &t4), &t4), env);
 
     TEST_SIMPLE_AST_TYPE_ENV(
-        "sum 0", &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int),
-        env);
+        "list_sum 0",
+        &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int), env);
   });
 
   ({

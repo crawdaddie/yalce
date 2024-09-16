@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 extern int yylineno;
+#undef DEBUG_TYPES_W_AST
 
 bool test_parse(char input[], char *expected_sexpr) {
 

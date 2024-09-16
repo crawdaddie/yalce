@@ -38,9 +38,6 @@ LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env);
 LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env);
 
 LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
-  if (is_generic(type)) {
-    return NULL;
-  }
 
   LLVMTypeRef variant = variant_member_to_llvm_type(type, env, module);
   if (variant) {
@@ -67,8 +64,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
   case T_VAR: {
     if (env) {
-      // return type_to_llvm_type(resolve_in_env(type, env), env);
-      return type_to_llvm_type(env_lookup(env, type->data.T_VAR), env, module);
+      Type *lu = env_lookup(env, type->data.T_VAR);
+      return type_to_llvm_type(lu, env, module);
     }
     return LLVMInt32Type();
   }
@@ -139,6 +136,9 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
     return LLVMVoidType();
   }
+  }
+  if (is_generic(type)) {
+    return NULL;
   }
 }
 
@@ -606,6 +606,49 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
 
   t_num.constructor = double_constructor;
   t_num.constructor_size = sizeof(ConsMethod);
+}
+
+typedef struct _tc_key {
+  const char *binop;
+  int tc_idx;
+  int meth_idx;
+} _tc_key;
+
+// clang-format off
+static _tc_key tc_keys[] = {
+    {"==", 0, 0},
+    {"!=", 0, 1},
+    {"<", 1, 0},
+    {">", 1, 1},
+    {"<=", 1, 2},
+    {">=", 1, 3},
+    {"+", 2, 0},
+    {"-", 2, 1},
+    {"*", 2, 2},
+    {"/", 2, 3},
+    {"%", 2, 4},
+};
+
+// clang-format on
+
+LLVMValueRef get_binop_method(const char *binop, Type *t) {
+  for (int i = 0; i < 11; i++) {
+    _tc_key tc_key = tc_keys[i];
+    if (strcmp(binop, tc_key.binop) == 0) {
+      if (tc_key.tc_idx >= t->num_implements) {
+        return NULL;
+      }
+
+      if (tc_key.meth_idx >= t->implements[tc_key.tc_idx]->num_methods) {
+        return NULL;
+      }
+
+      return t->implements[tc_key.tc_idx]->methods[tc_key.meth_idx].method;
+    }
+  }
+  // TODO: handle list prepend '::'
+
+  return NULL;
 }
 
 LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env,

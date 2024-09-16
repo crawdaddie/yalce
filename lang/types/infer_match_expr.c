@@ -92,11 +92,9 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
 
   *expr_type = *resolve_generic_type(expr_type, extended_env);
 
-  // printf("final match env: ");
-  // print_type_env(extended_env);
-  // while (extended_env) {
-  //   extended_env = extended_env->next;
-  // }
+  while (extended_env) {
+    extended_env = extended_env->next;
+  }
 
   return res_type;
 }

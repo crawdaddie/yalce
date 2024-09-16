@@ -1,4 +1,5 @@
 #include "type.h"
+#include "types/unification.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -880,4 +881,40 @@ Type *create_cons_type(const char *name, int len, Type **unified_args) {
   cons->data.T_CONS.num_args = len;
   cons->data.T_CONS.args = unified_args;
   return cons;
+}
+
+TypeMap *constraints_map_extend(TypeMap *map, Type *key, Type *val) {
+  switch (key->kind) {
+  case T_VAR: {
+    TypeMap *new_map = talloc(sizeof(TypeMap));
+    new_map->key = key;
+    new_map->val = val;
+    new_map->next = map;
+    return new_map;
+  }
+  }
+  return map;
+}
+void print_constraints_map(TypeMap *map) {
+  if (map) {
+    print_type(map->key);
+    printf(" : ");
+    print_type(map->val);
+    print_constraints_map(map->next);
+  }
+}
+
+Type *constraints_map_lookup(TypeMap *map, Type *key) {
+  while (map) {
+    if (types_equal(map->key, key)) {
+      return map->val;
+    }
+
+    if (occurs_check(map->key, key)) {
+      return replace_in(key, map->key, map->val);
+    }
+
+    map = map->next;
+  }
+  return NULL;
 }

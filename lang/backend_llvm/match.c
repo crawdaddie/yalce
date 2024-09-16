@@ -8,6 +8,7 @@
 #include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+#include <string.h>
 
 JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type);
@@ -62,8 +63,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create a PHI node for the result
   LLVMPositionBuilderAtEnd(builder, end_block);
-  LLVMValueRef phi = LLVMBuildPhi(
-      builder, type_to_llvm_type(ast->md, ctx->env, module), "match.result");
+  LLVMTypeRef res_type = type_to_llvm_type(ast->md, ctx->env, module);
+  LLVMValueRef phi = LLVMBuildPhi(builder, res_type, "match.result");
   //
   // Return to the current block to start generating comparisons
   LLVMPositionBuilderAtEnd(builder, current_block);
@@ -92,14 +93,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
 
-    // Check if this is the default case
-    // Compile the test expression
-    // LLVMValueRef test_value = codegen_match_condition(
-    //     expr_val, test_expr, &branch_ctx, module, builder);
     LLVMValueRef test_value = match_values(test_expr, test_val, test_val_type,
                                            &branch_ctx, module, builder);
-    // print_type(test_val_type);
-    // print_type_env(branch_ctx.env);
 
     if (i == len - 1) {
       // If it's the default case, just jump to the branch block
@@ -123,6 +118,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     if (next_block) {
       LLVMPositionBuilderAtEnd(builder, next_block);
     }
+    ht *branch_stack_frame = branch_ctx.stack + branch_ctx.stack_ptr;
+    ht_reinit(branch_stack_frame);
   }
 
   // Position the builder at the end block and return the result
@@ -188,6 +185,42 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     return _FALSE;
   }
   case AST_APPLICATION: {
+    if (strcmp(
+            binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+            "::") == 0) {
+
+      if (!is_list_type(val_type)) {
+        fprintf(stderr, "Error: list operations on non-list type\n");
+        print_ast_err(binding);
+        return NULL;
+      }
+      Type *el_type = val_type->data.T_CONS.args[0];
+
+      // test x::rest against val - if val is empty list then fail
+      // if val has at least one member
+      // pop the head and bind 'x' to head
+      // bind 'rest' to the tail of val - tail can be empty
+      //
+      LLVMTypeRef el_type_llvm = type_to_llvm_type(el_type, ctx->env, module);
+      LLVMValueRef res = _TRUE;
+      LLVMValueRef is_not_null = ll_is_not_null(val, el_type_llvm, builder);
+      res = LLVMBuildAnd(builder, res, is_not_null, "");
+
+      Ast *left = binding->data.AST_APPLICATION.args;
+      LLVMValueRef head = ll_get_head_val(val, el_type_llvm, builder);
+
+      res = LLVMBuildAnd(
+          builder, res, match_values(left, head, el_type, ctx, module, builder),
+          "");
+
+      LLVMValueRef rest = ll_get_next(val, el_type_llvm, builder);
+
+      Ast *right = binding->data.AST_APPLICATION.args + 1;
+      res = LLVMBuildAnd(
+          builder, res,
+          match_values(right, rest, val_type, ctx, module, builder), "");
+      return res;
+    }
 
     int vidx;
     Type *variant_parent = variant_lookup(ctx->env, binding->md, &vidx);
@@ -211,43 +244,18 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     // TODO: build more cons cases
     return _FALSE;
   }
-  case AST_BINOP: {
-    token_type op = binding->data.AST_BINOP.op;
-    if (op != TOKEN_DOUBLE_COLON) {
-      break;
-    }
 
-    if (!is_list_type(val_type)) {
-      break;
-    }
-
-    Type *el_type = val_type->data.T_CONS.args[0];
-
-    // test x::rest against val - if val is empty list then fail
-    // if val has at least one member
-    // pop the head and bind 'x' to head
-    // bind 'rest' to the tail of val - tail can be empty
-    //
-    LLVMTypeRef el_type_llvm = type_to_llvm_type(el_type, ctx->env, module);
-    LLVMValueRef res = _TRUE;
-    LLVMValueRef is_not_null = ll_is_not_null(val, el_type_llvm, builder);
-    res = LLVMBuildAnd(builder, res, is_not_null, "");
-
-    Ast *left = binding->data.AST_BINOP.left;
-    LLVMValueRef head = ll_get_head_val(val, el_type_llvm, builder);
-
-    res = LLVMBuildAnd(builder, res,
-                       match_values(left, head, el_type, ctx, module, builder),
-                       "");
-
-    LLVMValueRef rest = ll_get_next(val, el_type_llvm, builder);
-
-    Ast *right = binding->data.AST_BINOP.right;
-    res = LLVMBuildAnd(
-        builder, res, match_values(right, rest, val_type, ctx, module, builder),
-        "");
-    return res;
-  }
+  // case AST_BINOP: {
+  //   token_type op = binding->data.AST_BINOP.op;
+  //   if (op != TOKEN_DOUBLE_COLON) {
+  //     break;
+  //   }
+  //
+  //   if (!is_list_type(val_type)) {
+  //     break;
+  //   }
+  //
+  // }
   case AST_LIST: {
     if (binding->data.AST_LIST.len == 0) {
 

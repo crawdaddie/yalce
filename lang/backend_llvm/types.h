@@ -37,4 +37,6 @@ LLVMValueRef codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r,
                             LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef get_binop_method(const char *binop, Type *t);
 #endif

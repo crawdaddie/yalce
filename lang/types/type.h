@@ -2,7 +2,6 @@
 #define _LANG_TYPE_TYPE_H
 #include "typeclass.h"
 #include <stdbool.h>
-#include <string.h>
 
 #define _TSTORAGE_SIZE_DEFAULT 200000
 
@@ -222,5 +221,15 @@ typedef struct VariantContext {
 Type *create_cons_type(const char *name, int len, Type **unified_args);
 
 Type *get_builtin_type(const char *id_chars);
+
+typedef struct TypeMap {
+  Type *key;
+  Type *val;
+  struct TypeMap *next;
+} TypeMap;
+
+TypeMap *constraints_map_extend(TypeMap *map, Type *key, Type *val);
+void print_constraints_map(TypeMap *map);
+Type *constraints_map_lookup(TypeMap *map, Type *key);
 
 #endif

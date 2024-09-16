@@ -8,6 +8,7 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
+#include "serde.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -20,11 +21,10 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
   LLVMValueRef func = LLVMAddFunction(module, "top", funcType);
 
-  LLVMSetLinkage(func, LLVMExternalLinkage);
-
   if (func == NULL) {
     return NULL;
   }
+  LLVMSetLinkage(func, LLVMExternalLinkage);
 
   LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
   LLVMPositionBuilderAtEnd(builder, block);
@@ -32,6 +32,9 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   LLVMValueRef body = codegen(ast, ctx, module, builder);
 
   if (body == NULL) {
+    // print_ast(ast);
+    printf("body is null??? %p\n", body);
+    // LLVMDumpValue(func);
     LLVMDeleteFunction(func);
 
     return NULL;
@@ -44,6 +47,7 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
+  // printf("ast codegen: %d\n", ast->tag);
 
   switch (ast->tag) {
 

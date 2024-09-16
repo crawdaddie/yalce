@@ -242,6 +242,11 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
     return NULL;
   }
 
+  int vidx;
+  if (is_variant_type(t1) && variant_contains_type(t1, t2, &vidx)) {
+    return t1;
+  }
+
   switch (t1->kind) {
   case T_INT:
   case T_UINT64:

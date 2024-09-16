@@ -9,6 +9,7 @@
 #include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+#include <string.h>
 
 #define TRY(expr)                                                              \
   ({                                                                           \
@@ -105,7 +106,8 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   Type *fn_type = ast->md;
   int fn_len = ast->data.AST_LAMBDA.len;
-
+  // printf("get fn prototype: ");
+  // print_type(ast->md);
   LLVMTypeRef prototype = fn_prototype(ast->md, fn_len, ctx->env, module);
 
   LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, prototype);
@@ -125,6 +127,9 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   for (int i = 0; i < fn_len; i++) {
     Ast *param_ast = ast->data.AST_LAMBDA.params + i;
     Type *param_type = fn_type->data.T_FN.from;
+
+    // printf("get fn prototype arg %d: ", i);
+    // print_type(param_type);
 
     LLVMValueRef param_val = LLVMGetParam(func, i);
 
@@ -152,6 +157,11 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildRet(builder, body);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  // clear function stack
+  ht *stack_frame = fn_ctx.stack + fn_ctx.stack_ptr;
+
+  ht_reinit(stack_frame);
 
   return func;
 }
@@ -248,19 +258,36 @@ LLVMValueRef create_new_specific_fn(int len, Ast *args, Ast *fn_ast,
                                     Type *ret_type, JITLangCtx *compilation_ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-  // print_type_env(compilation_ctx->env);
-
   // compile new variant
   Ast *specific_ast = get_specific_fn_ast_variant(fn_ast, expected_type);
 
-  TypeEnv *env = compilation_ctx->env;
-  unify(original_type, expected_type, &env);
-  compilation_ctx->env = env;
+  TypeEnv *og_env = compilation_ctx->env;
+  TypeEnv *_env = compilation_ctx->env;
+  Type *o = original_type;
+  Type *e = expected_type;
+  while (o->kind == T_FN) {
+    Type *of = o->data.T_FN.from;
+    Type *ef = e->data.T_FN.from;
+    if (of->kind == T_VAR && !(env_lookup(_env, of->data.T_VAR))) {
+      _env = env_extend(_env, of->data.T_VAR, ef);
+    }
+    o = o->data.T_FN.to;
+    e = e->data.T_FN.to;
+  }
+  if (o->kind == T_VAR) {
+    _env = env_extend(_env, o->data.T_VAR, e);
+  }
+
+  // print_type_env(_env);
+
+  // unify(copy_type(original_type), expected_type, &env);
+  compilation_ctx->env = _env;
 
   LLVMValueRef func =
       codegen_fn(specific_ast, compilation_ctx, module, builder);
 
-  free_type_env(env);
+  compilation_ctx->env = og_env;
+
   return func;
 }
 
@@ -284,6 +311,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
     SpecificFns *specific_fns =
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
     callable = specific_fns_lookup(specific_fns, expected_fn_type);
+
     expected_args_len = fn_type_args_len(expected_fn_type);
 
     if (!callable) {
@@ -294,10 +322,17 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
           sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr,
       };
 
+      // printf("ast before spec fn: ");
+      // print_ast(fn_ast);
+
       LLVMValueRef specific_func = create_new_specific_fn(
           fn_ast->data.AST_LAMBDA.len, args, fn_ast, sym->symbol_type,
           expected_fn_type, fn_return_type(expected_fn_type), &compilation_ctx,
           module, builder);
+
+      // printf("ast after spec fn: ");
+      // print_type(expected_fn_type);
+      // print_ast(fn_ast);
 
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
           specific_fns_extend(specific_fns, expected_fn_type, specific_func);
@@ -315,6 +350,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   if (args_len < expected_args_len) {
+    // TODO : currying
     return NULL;
   }
 
@@ -329,6 +365,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
                             (LLVMValueRef[]){}, 0, "call_func");
     }
 
+    // print_type_env(ctx->env);
     for (int i = 0; i < args_len; i++) {
       Ast *app_val_ast = args + i;
       Type *app_val_type = app_val_ast->md;
@@ -336,6 +373,15 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
 
       LLVMValueRef app_val = codegen(app_val_ast, ctx, module, builder);
 
+      // if (app_val_type->kind == T_VAR) {
+      //   printf("app val %d\n", i);
+      //   print_ast(app_val_ast);
+      //
+      //   Type *lu = env_lookup(ctx->env, app_val_type->data.T_VAR);
+      //   print_type(lu);
+      //   LLVMDumpType(LLVMTypeOf(app_val));
+      //   printf("/?????\n");
+      // }
       if (!types_equal(app_val_type, callable_type->data.T_FN.from) &&
           !(variant_contains_type(app_val_type, callable_type->data.T_FN.from,
                                   NULL))) {
@@ -346,6 +392,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
                           "Error: attempted type conversion failed\n");
       }
       app_vals[i] = app_val;
+
       callable_type = callable_type->data.T_FN.to;
     }
 
@@ -353,32 +400,39 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
                           app_vals, args_len, "call_func");
   }
 
-  // printf("\ncallable: \n");
-  // LLVMDumpValue(callable);
   return NULL;
 }
 
+typedef LLVMValueRef (*LLVMBinopMethod)(LLVMValueRef, LLVMValueRef,
+                                        LLVMModuleRef, LLVMBuilderRef);
 LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
-  Type *ltype = ast->data.AST_APPLICATION.args->md;
 
+  Type *ltype = ast->data.AST_APPLICATION.args->md;
   Type *rtype = (ast->data.AST_APPLICATION.args + 1)->md;
-  printf("binop\n");
-  print_type(ltype);
-  print_type(rtype);
+  const char *binop_name =
+      ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
   LLVMValueRef lval =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   LLVMValueRef rval =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  return NULL;
+  Type *res_type = ast->md;
+  if (is_generic(res_type)) {
+    res_type = resolve_generic_type(res_type, ctx->env);
+  }
+
+  LLVMBinopMethod method = get_binop_method(binop_name, res_type);
+
+  LLVMValueRef r = method(lval, rval, module, builder);
+  return r;
 }
 
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-
   JITSymbol sym;
 
   int lookup_sym_err =
@@ -409,6 +463,13 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
+  if (strcmp(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+             "list_sum") == 0) {
+    // printf("application: ");
+    // print_ast(ast);
+    // print_type(expected_fn_type);
+    // printf("args len %d\n", fn_type_args_len(expected_fn_type));
+  }
   return call_symbol(sym_name, &sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, expected_fn_type, ctx,
                      module, builder);

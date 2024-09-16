@@ -3,6 +3,7 @@
 #include "match.h"
 #include "serde.h"
 #include "variant.h"
+#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -114,6 +115,10 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_LOCAL_VAR: {
+    // printf("codegen identifier; ");
+    // print_ast(ast);
+    // LLVMDumpType(sym->llvm_type);
+    // printf("\n");
     return sym->val;
   }
 
@@ -136,6 +141,7 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
 
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
   int id_len = binding->data.AST_IDENTIFIER.length;
+
   ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
               hash_string(id_chars, id_len), sym);
 
@@ -187,7 +193,6 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 }
 
 void initialize_builtin_binops(ht *stack, TypeEnv *env) {
-  print_type_env(env);
   for (int i = 0; i < _NUM_BINOPS; i++) {
     _binop_map bm = binop_map[i];
     JITSymbol *sym =

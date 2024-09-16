@@ -4,9 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define DEBUG_TYPES_W_AST
-
-// char *type_to_string(Type *t, char *buffer);
 
 void print_ast(Ast *ast) {
   char *buf = malloc(sizeof(char) * 500);
@@ -405,9 +402,9 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   // buffer = strcat(buffer, COLOR_RESET);
 
 #ifdef DEBUG_TYPES_W_AST
-  buffer = strcat(buffer, COLOR_CYAN " [ ");
-  buffer = type_to_string(ast->md, buffer);
-  buffer = strcat(buffer, " ] " COLOR_RESET);
+  // buffer = strcat(buffer, " [ ");
+  // buffer = type_to_string(ast->md, buffer);
+  // buffer = strcat(buffer, " ] ");
 #endif
   // buffer = strcat(buffer, COLOR_RED);
   return buffer;

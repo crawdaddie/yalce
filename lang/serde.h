@@ -7,4 +7,6 @@ void print_ast(Ast *);
 void print_ast_err(Ast *);
 char *ast_to_sexpr(Ast *, char *);
 
+#define DEBUG_TYPES_W_AST
+
 #endif

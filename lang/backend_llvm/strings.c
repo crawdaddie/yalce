@@ -4,6 +4,7 @@
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <stdlib.h>
+#include <string.h>
 
 LLVMValueRef codegen_printf(const char *format, LLVMValueRef *args,
                             int arg_count, LLVMModuleRef module,
@@ -89,6 +90,36 @@ LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
   // Return the buffer
   return buffer;
 }
+
+LLVMValueRef num_to_string(LLVMValueRef double_value, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+
+  // Declare sprintf if it's not already declared
+  LLVMValueRef sprintf_func = LLVMGetNamedFunction(module, "sprintf");
+  LLVMTypeRef sprintf_type =
+      LLVMFunctionType(LLVMInt32Type(),
+                       (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
+                                       LLVMPointerType(LLVMInt8Type(), 0)},
+                       2, true);
+  if (!sprintf_func) {
+    sprintf_func = LLVMAddFunction(module, "sprintf", sprintf_type);
+  }
+
+  // Allocate a buffer for the string
+  LLVMValueRef buffer =
+      LLVMBuildAlloca(builder, LLVMArrayType(LLVMInt8Type(), 20), "str_buffer");
+
+  // Create a constant string for the format specifier
+  LLVMValueRef format_string =
+      LLVMBuildGlobalStringPtr(builder, "%f", "format_string");
+
+  // Call sprintf
+  LLVMValueRef args[] = {buffer, format_string, double_value};
+  LLVMBuildCall2(builder, sprintf_type, sprintf_func, args, 3, "");
+
+  // Return the buffer
+  return buffer;
+}
 LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
@@ -102,6 +133,10 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 
   if (val_type->kind == T_INT) {
     return int_to_string(val, module, builder);
+  }
+
+  if (val_type->kind == T_NUM) {
+    return num_to_string(val, module, builder);
   }
 
   return LLVMBuildGlobalStringPtr(builder, "dummy", ".str");

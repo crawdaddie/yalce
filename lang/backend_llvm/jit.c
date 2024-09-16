@@ -124,7 +124,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   infer(*prog, env);
-  print_ast(*prog);
+  // print_ast(*prog);
   ctx->env = *env;
 
 #ifdef DUMP_AST
@@ -163,7 +163,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  // LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
@@ -221,7 +220,6 @@ int jit(int argc, char **argv) {
   }
 
   // shared type env
-  //
   TypeEnv *env = NULL;
   initialize_builtin_numeric_types(env);
   initialize_builtin_binops(stack, env);
