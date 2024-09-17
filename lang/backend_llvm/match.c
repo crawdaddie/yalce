@@ -31,6 +31,10 @@ LLVMValueRef codegen_equality(LLVMValueRef left, Type *left_type,
     return binop_method(left, right, module, builder);
   }
 
+  if (left_type->kind == T_BOOL) {
+    return LLVMBuildICmp(builder, LLVMIntEQ, left, right, "bool_cmp");
+  }
+
   int vidx;
   if (is_variant_type(right_type) &&
       variant_contains_type(right_type, left_type, &vidx)) {

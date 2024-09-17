@@ -131,8 +131,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   LLVMDumpModule(module);
 #endif
 
-  print_ast(*prog);
-
   Type *result_type = top_level_ast(*prog)->md;
 
   if (result_type == NULL) {
@@ -165,7 +163,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  LLVMDumpModule(module);
+  // LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 

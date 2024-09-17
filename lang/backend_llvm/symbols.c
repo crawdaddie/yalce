@@ -3,6 +3,7 @@
 #include "match.h"
 #include "serde.h"
 #include "variant.h"
+#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -52,7 +53,10 @@ JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx) {
 }
 
 int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
+
   if (ast->tag == AST_IDENTIFIER) {
+    // printf("lookup sym: ");
+    // print_ast(ast);
 
     const char *chars = ast->data.AST_IDENTIFIER.value;
     int chars_len = ast->data.AST_IDENTIFIER.length;
@@ -61,8 +65,14 @@ int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
 
     while (ptr >= 0) {
       JITSymbol *_sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
+      // printf("find sym in stack %d\n", ptr);
       if (_sym != NULL) {
         *sym = *_sym;
+        sym->type = _sym->type;
+
+        // printf("sym %s -> %d stack %d hash %llu\n", key.chars, sym->type,
+        // ptr,
+        //        key.hash);
         return 0;
       }
       ptr--;
@@ -114,10 +124,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_LOCAL_VAR: {
-    // printf("codegen identifier; ");
-    // print_ast(ast);
-    // LLVMDumpType(sym->llvm_type);
-    // printf("\n");
     return sym->val;
   }
 

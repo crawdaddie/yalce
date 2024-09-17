@@ -140,7 +140,11 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
     return num_to_string(val, module, builder);
   }
 
-  return LLVMBuildGlobalStringPtr(builder, "dummy", ".str");
+  if (val_type->kind == T_BOOL) {
+    return int_to_string(val, module, builder);
+  }
+
+  return LLVMBuildGlobalStringPtr(builder, "", ".str");
 }
 
 #define INITIAL_SIZE 32

@@ -538,5 +538,16 @@ int main() {
                          &MAKE_FN_TYPE_2(&opt_int, &t_int));
   });
 
-  return status ? 0 : 1;
+  ({
+    RESET;
+    TITLE("## match on boolean fn")
+
+    Type t = tvar("t1");
+    TEST_SIMPLE_AST_TYPE("let test_val = fn b msg -> \n"
+                         "match b with\n"
+                         "| true  -> 1\n"
+                         "| _     -> 0\n"
+                         ";;\n",
+                         &MAKE_FN_TYPE_3(&t_bool, &t, &t_int));
+  });
 }

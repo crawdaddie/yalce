@@ -1,15 +1,13 @@
-#! /Users/adam/projects/sound/yalce/build/lang
 %include ../../examples/Fmt
+%include ../../examples/testing
+
+
 let list_sum = fn s l ->
   match l with
   | [] -> s
   | x::rest -> list_sum (s + x) rest
 ;;
 
-printf `{list_sum 0. [1.,2.,3.]}`;
 
-list_sum 0 [1,2,3]; # %assert '6'
-
-
-
-
+test_val (list_sum 0. [1., 2., 3.] == 6.) "list_sum doubles";
+test_val (list_sum 0 [1, 2, 3] == 6) "list_sum ints";
