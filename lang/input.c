@@ -202,7 +202,7 @@ char *read_script(const char *filename) {
   return fcontent;
 }
 
-char *get_dirname(const char *path) {
+char *_get_dirname(const char *path) {
   // Make a copy of the path to avoid modifying the original
   char *path_copy = strdup(path);
   if (path_copy == NULL) {
@@ -232,4 +232,74 @@ char *get_dirname(const char *path) {
 
   // Return the modified path
   return path_copy;
+}
+char *get_dirname(const char *path) {
+  char *last_slash = strrchr(path, '/');
+  if (last_slash == NULL) {
+    return strdup(".");
+  }
+  if (last_slash == path) {
+    return strdup("/");
+  }
+  size_t len = last_slash - path;
+  char *dirname = malloc(len + 1);
+  if (dirname == NULL) {
+    return NULL;
+  }
+  strncpy(dirname, path, len);
+  dirname[len] = '\0';
+  return dirname;
+}
+
+char *resolve_relative_path(const char *base_path, const char *relative_path) {
+  char *result = malloc(strlen(base_path) + strlen(relative_path) + 2);
+  if (result == NULL) {
+    return NULL;
+  }
+  strcpy(result, base_path);
+  strcat(result, "/");
+  strcat(result, relative_path);
+  return result;
+}
+
+char *normalize_path(const char *path) {
+  char *normalized = strdup(path);
+  if (normalized == NULL) {
+    return NULL;
+  }
+
+  char *src = normalized;
+  char *dst = normalized;
+
+  while (*src) {
+    if (src[0] == '/') {
+      *dst++ = *src++;
+      while (*src == '/')
+        src++;
+    } else if (src[0] == '.' && (src[1] == '/' || src[1] == '\0')) {
+      src += 1;
+      if (*src)
+        src++;
+    } else if (src[0] == '.' && src[1] == '.' &&
+               (src[2] == '/' || src[2] == '\0')) {
+      if (dst > normalized + 1) {
+        dst--;
+        while (dst > normalized && *(dst - 1) != '/')
+          dst--;
+      }
+      src += 2;
+      if (*src)
+        src++;
+    } else {
+      while (*src && *src != '/')
+        *dst++ = *src++;
+    }
+  }
+
+  if (dst == normalized) {
+    *dst++ = '/';
+  }
+  *dst = '\0';
+
+  return normalized;
 }

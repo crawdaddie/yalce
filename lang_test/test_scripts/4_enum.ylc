@@ -1,4 +1,5 @@
 #! /Users/adam/projects/sound/yalce/build/lang
+%include ../testing
 
 type Enum =
   | A
@@ -13,4 +14,6 @@ let f = fn x ->
     | C -> 3
 ;;
 
-f C # %assert '3'
+test_val (f C == 3) "enum function C -> 3";
+test_val (f A == 1) "enum function A -> 1";
+test_val (f B == 2) "enum function B -> 2";

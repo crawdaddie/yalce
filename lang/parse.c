@@ -371,25 +371,18 @@ Ast *parse_format_expr(ObjString fstring) {
         int len = i - seg_start;
         segment.length = len - 1;
         Ast *str_segment = ast_string(segment);
-        printf("pure string segment: ");
-        print_ast(str_segment);
 
         seg_start = i;
       } else {
         continue;
       }
     } else if (*curs == '}' && i != 0 && *(fstring.chars + i - 1) != '\\') {
-      printf("interpolated expression: '%.*s'\n", i - seg_start - 1,
-             fstring.chars + seg_start + 1);
       segment = (ObjString){.chars = fstring.chars + i + 1};
       seg_start = i;
     } else if (i == fstring.length - 1) {
-      printf("seg_start %d %d\n", seg_start, fstring.length);
       int len = i - seg_start;
       segment.length = len;
       Ast *str_segment = ast_string(segment);
-      printf("pure string segment: ");
-      print_ast(str_segment);
     }
   }
 
@@ -646,16 +639,21 @@ void handle_macro(Ast *root, const char *macro_text) {
   if (strncmp("include", macro_text, 7) == 0) {
     int len = strlen(current_dir) + 1 + strlen(macro_text + 8) + 4;
     char *fully_qualified_name = palloc(sizeof(char) * len);
+
     snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", current_dir,
              macro_text + 8);
+
+    fully_qualified_name = normalize_path(fully_qualified_name);
 
     if (string_list_find(included, fully_qualified_name)) {
       return;
     }
-    // printf("include %s\n", fully_qualified_name);
+
     included = string_list_push_left(included, fully_qualified_name);
     char *fcontent = read_script(fully_qualified_name);
-    Ast *mod = parse_input(fcontent, current_dir);
+    char *script_dir = get_dirname(fully_qualified_name);
+
+    Ast *mod = parse_input(fcontent, script_dir);
     ast_root = parse_stmt_list(root, mod);
   }
 }

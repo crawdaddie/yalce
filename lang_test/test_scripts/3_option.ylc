@@ -1,3 +1,4 @@
+%include ../testing
 type Option t =
   | Some of t
   | None
@@ -9,4 +10,5 @@ let f = fn x ->
     | None -> 0
 ;;
 
-f (Some 1) # %assert '1'
+test_val (f (Some 1) == 1) "function Some 1 -> 1";
+test_val (f None == 0) "function None -> 0"

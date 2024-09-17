@@ -1,3 +1,5 @@
+%include ../testing
+
 let fib = fn x ->
   match x with
   | 0 -> 0
@@ -5,4 +7,8 @@ let fib = fn x ->
   | _ -> (fib (x - 1)) + (fib (x - 2))
 ;;
 
-fib 20 # %assert '6765'
+test_val (fib 2 == 1) "fib 2 = 1";
+test_val (fib 3 == 2) "fib 3 = 2";
+test_val (fib 4 == 3) "fib 4 = 3";
+test_val (fib 5 == 5) "fib 5 = 5";
+test_val (fib 20 == 6765) "fib 20 = 6765";

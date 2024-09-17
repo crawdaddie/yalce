@@ -1,0 +1,6 @@
+%include Fmt
+let test_val = fn b msg ->
+  match b with
+    | true -> (printf "✅ "; printf msg; printf "\n")
+    | _ -> (printf "❌ "; printf msg; printf "\n")
+;;

@@ -1,6 +1,4 @@
-%include ../../examples/Fmt
-%include ../../examples/testing
-
+%include ../testing
 
 let list_sum = fn s l ->
   match l with
