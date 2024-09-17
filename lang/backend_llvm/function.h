@@ -11,8 +11,8 @@ LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env,
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
 
-LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                        LLVMBuilderRef builder);
+LLVMValueRef codegen_fn(Ast *ast, Type *expected_fn_type, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
