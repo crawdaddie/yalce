@@ -37,6 +37,7 @@ LLVMValueRef codegen_printf(const char *format, LLVMValueRef *args,
   // Clean up
   return call;
 }
+
 LLVMValueRef insert_printf_call(const char *format, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   // Declare printf if it hasn't been declared yet

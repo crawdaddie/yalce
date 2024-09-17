@@ -3,7 +3,6 @@
 #include "match.h"
 #include "serde.h"
 #include "variant.h"
-#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 

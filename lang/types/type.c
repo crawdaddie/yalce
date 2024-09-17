@@ -725,6 +725,7 @@ int fn_type_args_len(Type *fn_type) {
   if (fn_type->data.T_FN.from->kind == T_VOID) {
     return 1;
   }
+
   int fn_len = 0;
   Type *t = fn_type;
   while (t->kind == T_FN) {

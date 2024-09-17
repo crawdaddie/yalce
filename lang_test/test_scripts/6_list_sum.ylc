@@ -6,8 +6,10 @@ let list_sum = fn s l ->
   | x::rest -> list_sum (s + x) rest
 ;;
 
-let v = list_sum 0. [1.,2.,3.];
+printf `{list_sum 0. [1.,2.,3.]}`;
 
 list_sum 0 [1,2,3]; # %assert '6'
+
+
 
 

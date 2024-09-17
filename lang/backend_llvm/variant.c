@@ -7,6 +7,7 @@
 #include "llvm-c/Target.h"
 #include "llvm-c/Types.h"
 #include <stdlib.h>
+#include <string.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
@@ -234,8 +235,8 @@ LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
 }
 
 LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
-                                        LLVMModuleRef module, LLVMBuilderRef builder) {
-
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
 
   Type *member_type = ast->md;
 
@@ -245,8 +246,7 @@ LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
 
   if (member_type->kind == T_CONS) {
     int vidx;
-    Type *v = variant_lookup(
-        ctx->env, member_type, &vidx);
+    Type *v = variant_lookup(ctx->env, member_type, &vidx);
 
     if (is_generic(v)) {
       if (member_type->data.T_CONS.num_args == 0) {
@@ -256,7 +256,8 @@ LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
         LLVMTypeRef tu_type = LLVMStructCreateNamed(context, "TU");
         LLVMStructSetBody(tu_type, tu_types, 1, 0);
         LLVMValueRef alloca = LLVMBuildAlloca(builder, tu_type, "");
-        LLVMBuildStore(builder, LLVMConstInt(TAG_TYPE, vidx, 0), LLVMBuildStructGEP2(builder, tu_type, alloca, 0, ""));
+        LLVMBuildStore(builder, LLVMConstInt(TAG_TYPE, vidx, 0),
+                       LLVMBuildStructGEP2(builder, tu_type, alloca, 0, ""));
         return LLVMBuildLoad2(builder, tu_type, alloca, "");
       }
     }
@@ -274,7 +275,7 @@ LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
     LLVMValueRef tu = LLVMBuildAlloca(builder, t, "");
 
     LLVMBuildStore(builder, LLVMConstInt(TAG_TYPE, vidx, 0),
-                 LLVMBuildStructGEP2(builder, t, tu, 0, ""));
+                   LLVMBuildStructGEP2(builder, t, tu, 0, ""));
 
     return LLVMBuildLoad2(builder, t, tu, "");
   }

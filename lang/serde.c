@@ -343,7 +343,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   }
 
   case AST_FMT_STRING: {
-    buffer = strcat(buffer, "(");
+    buffer = strcat(buffer, "str(");
     int len = ast->data.AST_LIST.len;
     for (int i = 0; i < len; i++) {
       buffer = ast_to_sexpr(ast->data.AST_LIST.items + i, buffer);

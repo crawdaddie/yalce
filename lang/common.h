@@ -1,6 +1,5 @@
 #ifndef _LANG_COMMON_H
 #define _LANG_COMMON_H
-#include "ht.h"
 #include <stdint.h>
 
 typedef struct {
