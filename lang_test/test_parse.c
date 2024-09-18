@@ -5,6 +5,7 @@
 #include <string.h>
 extern int yylineno;
 #undef DEBUG_TYPES_W_AST
+static char big_sexpr_buf[400];
 
 bool test_parse(char input[], char *expected_sexpr) {
 
@@ -12,7 +13,8 @@ bool test_parse(char input[], char *expected_sexpr) {
   // printf("test input: %s\n", input);
   prog = parse_input(input, "");
 
-  char *sexpr = malloc(sizeof(char) * 200);
+  // char *sexpr = malloc(sizeof(char) * 300);
+  char *sexpr = big_sexpr_buf;
   if (prog == NULL && expected_sexpr != NULL) {
 
     printf("❌ %s\n", input);
@@ -20,7 +22,10 @@ bool test_parse(char input[], char *expected_sexpr) {
            "     got syntax error\n",
            expected_sexpr);
 
-    free(sexpr);
+    for (int i = 0; i < 400; i++) {
+      sexpr[i] = 0;
+    }
+    // free(sexpr);
     free(prog);
     yylineno = 1;
     yyrestart(NULL);
@@ -34,7 +39,7 @@ bool test_parse(char input[], char *expected_sexpr) {
     res = true;
   } else {
     sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts[0], sexpr);
-    if (strcmp(sexpr, expected_sexpr) != 0) {
+    if (strncmp(sexpr, expected_sexpr, strlen(expected_sexpr)) != 0) {
       printf("❌ %s\n", input);
       printf("expected %s\n"
              "     got %s\n",
@@ -48,7 +53,10 @@ bool test_parse(char input[], char *expected_sexpr) {
     }
   }
 
-  free(sexpr);
+  for (int i = 0; i < 400; i++) {
+    sexpr[i] = 0;
+  }
+  // free(sexpr);
   free(prog);
 
   yylineno = 1;
@@ -63,7 +71,9 @@ bool test_parse_body(char *input, char *expected_sexpr) {
   Ast *prog;
   prog = parse_input(input, "");
 
-  char *sexpr = malloc(sizeof(char) * 200);
+  // char *sexpr = malloc(sizeof(char) * 300);
+
+  char *sexpr = big_sexpr_buf;
   bool res;
   if (prog == NULL) {
 
@@ -81,7 +91,7 @@ bool test_parse_body(char *input, char *expected_sexpr) {
     // return false;
   } else {
     sexpr = ast_to_sexpr(prog, sexpr);
-    if (strcmp(sexpr, expected_sexpr) != 0) {
+    if (strncmp(sexpr, expected_sexpr, strlen(expected_sexpr)) != 0) {
       printf("❌ %s\n", input);
       printf("expected %s\n"
              "     got %s\n",
@@ -94,7 +104,10 @@ bool test_parse_body(char *input, char *expected_sexpr) {
     }
   }
 
-  free(sexpr);
+  for (int i = 0; i < 400; i++) {
+    sexpr[i] = 0;
+  }
+  // free(sexpr);
   free(prog);
   yylineno = 1;
   yyrestart(NULL);

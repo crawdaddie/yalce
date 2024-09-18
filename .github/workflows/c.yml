@@ -20,6 +20,9 @@ jobs:
 
     - name: Parser Test
       run: make test_parse
+
+    - name: Typecheck Test
+      run: make test_typecheck
       
     - name: Clean up
       run: make clean
