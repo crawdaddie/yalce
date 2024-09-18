@@ -287,6 +287,24 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
   return callable;
 }
 
+LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type, Type *to_type, LLVMModuleRef module, LLVMBuilderRef builder) {
+  // Type *fn_from = callable_type->kind == T_FN
+  //                     ? callable_type->data.T_FN.from
+  //                     : callable_type;
+  //
+  // if (is_generic(fn_from)) {
+  //   fn_from = resolve_generic_type(fn_from, ctx->env);
+  // }
+  //
+  // if (!types_equal(app_val_type, fn_from) &&
+  //     !(variant_contains_type(app_val_type, fn_from, NULL))) {
+  //
+  //   app_val = TRY_MSG(attempt_value_conversion(app_val, app_val_type,
+  //                                              fn_from, module, builder),
+  //                     "Error: attempted type conversion failed\n");
+  // }
+  return val;
+}
 LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
                          int args_len, Type *expected_fn_type, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -349,21 +367,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
         app_val_ast->md = callable_type->data.T_FN.from;
       }
       LLVMValueRef app_val = codegen(app_val_ast, ctx, module, builder);
-      // Type *fn_from = callable_type->kind == T_FN
-      //                     ? callable_type->data.T_FN.from
-      //                     : callable_type;
-      //
-      // if (is_generic(fn_from)) {
-      //   fn_from = resolve_generic_type(fn_from, ctx->env);
-      // }
-      //
-      // if (!types_equal(app_val_type, fn_from) &&
-      //     !(variant_contains_type(app_val_type, fn_from, NULL))) {
-      //
-      //   app_val = TRY_MSG(attempt_value_conversion(app_val, app_val_type,
-      //                                              fn_from, module, builder),
-      //                     "Error: attempted type conversion failed\n");
-      // }
+      Type *expected_type = callable_type->data.T_FN.from;
+      app_val = handle_type_conversions(app_val, app_val_ast->md, expected_type, module, builder);
       app_vals[i] = app_val;
 
       callable_type = callable_type->data.T_FN.to;
@@ -385,6 +390,7 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   if (ltype->kind == T_VAR) {
     ltype = env_lookup(ctx->env, ltype->data.T_VAR);
   }
+
   Type *rtype = (ast->data.AST_APPLICATION.args + 1)->md;
   if (rtype->kind == T_VAR) {
     rtype = env_lookup(ctx->env, rtype->data.T_VAR);

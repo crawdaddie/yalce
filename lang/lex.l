@@ -28,6 +28,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "."                     return *yytext;
 "type"                  return *yytext;
 "of"                    return *yytext;
+"if"                    return *yytext;
 "await"                 return *yytext;
 "async"                 return ASYNC;
 "&"                     return *yytext;

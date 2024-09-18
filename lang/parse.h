@@ -110,6 +110,7 @@ typedef enum ast_tag {
   AST_ASSOC,
   AST_EXTERN_VARIANTS,
   AST_FN_SIGNATURE,
+  AST_MATCH_GUARD_CLAUSE,
 } ast_tag;
 
 struct Ast {
@@ -220,6 +221,11 @@ struct Ast {
       Ast *record;
       Ast *member;
     } AST_RECORD_ACCESS;
+
+    struct AST_MATCH_GUARD_CLAUSE {
+      Ast *test_expr;
+      Ast *guard_expr;
+    } AST_MATCH_GUARD_CLAUSE;
   } data;
 
   void *md;
@@ -289,4 +295,6 @@ Ast *ast_tuple_type(Ast *, Ast *);
 Ast *ast_tuple_type_push(Ast *, Ast *);
 
 Ast *ast_cons_decl(token_type op, Ast *left, Ast *right);
+
+Ast *ast_match_guard_clause(Ast *expr, Ast *guard);
 #endif

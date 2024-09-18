@@ -99,6 +99,7 @@ Ast* ast_root = NULL;
   fn_signature
   tuple_type
   type_args
+  match_test_clause
 %%
 
 
@@ -265,9 +266,13 @@ match_expr:
     MATCH expr WITH match_branches { $$ = ast_match($2, $4); }
   ;
 
+match_test_clause:
+    expr {$$ = $1;}
+  | expr 'if' expr { $$ = ast_match_guard_clause($1, $3);}
+
 match_branches:
-    '|' expr ARROW expr                 {$$ = ast_match_branches(NULL, $2, $4);}
-  | match_branches '|' expr ARROW expr  {$$ = ast_match_branches($1, $3, $5);}
+    '|' match_test_clause ARROW expr                 {$$ = ast_match_branches(NULL, $2, $4);}
+  | match_branches '|' match_test_clause ARROW expr  {$$ = ast_match_branches($1, $3, $5);}
   | match_branches '|' '_' ARROW expr   {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
   ;
 

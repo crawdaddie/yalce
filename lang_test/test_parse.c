@@ -288,6 +288,17 @@ int main() {
   status &= test_parse("let ($~) = fn a b -> a + b;;", "(let $~ ($~ a b -> \n"
                                                        "((+ a) b))\n"
                                                        ")");
+
+  status &= test_parse("match x with\n"
+                       "| x if x > 300 -> x\n"
+                       "| 2 -> 0\n"
+                       "| _ -> 3",
+                       "(match x with\n"
+                       "	x if ((> x) 300) -> x\n"
+                       "	2 -> 0\n"
+                       "	_ -> 3\n"
+                       ")");
+
   // extern funcs
   return status ? 0 : 1;
 }

@@ -53,6 +53,12 @@ TypeEnv *extend_env_with_bindings(Ast *test_expr, Type *bind_val_type,
     }
     return _env;
   }
+
+  case AST_MATCH_GUARD_CLAUSE: {
+    return extend_env_with_bindings(
+        test_expr->data.AST_MATCH_GUARD_CLAUSE.test_expr,
+        test_expr->data.AST_MATCH_GUARD_CLAUSE.test_expr->md, env);
+  }
   default:
     // No bindings for literal values
     return env;
@@ -68,7 +74,15 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
 
   for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
     Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
+    Ast *guard = NULL;
+
+    if (test_expr->tag == AST_MATCH_GUARD_CLAUSE) {
+      guard = test_expr->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+      test_expr = test_expr->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+    }
+
     Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i) + 1;
+
     Type *test_type = TRY(infer(test_expr, &extended_env));
 
     Type *unified_type = TRY(unify(expr_type, test_type, &extended_env));
@@ -76,6 +90,11 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
     *expr_type = *unified_type;
 
     extended_env = extend_env_with_bindings(test_expr, expr_type, extended_env);
+
+    if (guard != NULL) {
+      TRY_MSG(infer(guard, &extended_env),
+              "could not infer type of guard clause\n");
+    }
 
     Type *branch_res_type = TRY(infer(result_expr, &extended_env));
 

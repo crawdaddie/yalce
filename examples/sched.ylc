@@ -12,15 +12,7 @@ type Option t =
   | None
   ;
 
-let o = Some 1;
-let j = Uint64 1;
-let k = Double 1;
-
-let z = (match o with
-  | Some 1 -> 2 
-  | Some 2 -> 3 
-  | None -> 4
-);
+let x = Some 1;
 
 # type RoutineContinuation =
 #   | Continue of (Double * Int * Uint64 * Ptr)

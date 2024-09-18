@@ -696,3 +696,11 @@ Ast *ast_cons_decl(token_type op, Ast *left, Ast *right) {
   node->data.AST_BINOP.right = right;
   return node;
 }
+
+Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
+  Ast *node = Ast_new(AST_MATCH_GUARD_CLAUSE);
+
+  node->data.AST_MATCH_GUARD_CLAUSE.test_expr = expr;
+  node->data.AST_MATCH_GUARD_CLAUSE.guard_expr = guard;
+  return node;
+}

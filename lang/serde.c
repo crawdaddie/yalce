@@ -394,6 +394,13 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_MATCH_GUARD_CLAUSE: {
+    buffer = ast_to_sexpr(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, buffer);
+    buffer = strcat(buffer, " if ");
+    buffer = ast_to_sexpr(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, buffer);
+    break;
+  }
+
   default: {
     // Handle unsupported node types or other errors
     break;

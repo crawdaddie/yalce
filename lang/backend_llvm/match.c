@@ -136,12 +136,22 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
                           LLVMBuilderRef builder) {
 
   switch (binding->tag) {
+  case AST_MATCH_GUARD_CLAUSE: {
+    LLVMValueRef test_val =
+        match_values(binding->data.AST_MATCH_GUARD_CLAUSE.test_expr, val,
+                     val_type, ctx, module, builder);
+
+    LLVMValueRef guard_val = codegen(
+        binding->data.AST_MATCH_GUARD_CLAUSE.guard_expr, ctx, module, builder);
+    return LLVMBuildAnd(builder, test_val, guard_val, "guard_and_test");
+  }
   case AST_IDENTIFIER: {
 
     const char *id_chars = binding->data.AST_IDENTIFIER.value;
     int id_len = binding->data.AST_IDENTIFIER.length;
 
-    if (*(binding->data.AST_IDENTIFIER.value) == '_') {
+    if (*(binding->data.AST_IDENTIFIER.value) == '_' &&
+        binding->data.AST_IDENTIFIER.length == 1) {
       return _TRUE;
     }
 

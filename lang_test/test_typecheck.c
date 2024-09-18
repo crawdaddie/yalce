@@ -615,4 +615,15 @@ int main() {
     print_ast(ast->data.AST_BODY.stmts[0]);
     print_type(ast->data.AST_BODY.stmts[0]->md);
   });
+  ({
+    RESET;
+    TITLE("## match expr with guard clause")
+    TypeEnv *env = NULL;
+    env = env_extend(env, "x", &t_int);
+    TEST_SIMPLE_AST_TYPE_ENV("match x with\n"
+                             "| x if x > 300 -> x\n"
+                             "| 2 -> 0\n"
+                             "| _ -> 3",
+                             &t_int, env);
+  });
 }
