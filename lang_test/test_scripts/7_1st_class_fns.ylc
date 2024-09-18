@@ -1,0 +1,6 @@
+%include ../testing
+let sum = fn a b -> a + b;;
+let proc = fn f a b -> f a b;;
+
+test_val (proc sum 1 2 == 3) "1st class int sum func";
+test_val (proc sum 1.0 2.0 == 3.0) "1st class double sum func"

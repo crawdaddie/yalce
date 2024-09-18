@@ -2,7 +2,7 @@ BUILD_DIR := build
 
 LLVM := /opt/homebrew/opt/llvm@16
 # Debug LLVM path (you can change this to your debug LLVM installation path)
-DEBUG_LLVM := ~/projects/llvm-project-16.0.6.src/build
+DEBUG_LLVM := ~/projects/llvm-debug
 # Use DEBUG_LLVM if the target is debug, otherwise use the default LLVM
 ifeq ($(MAKECMDGOALS),debug)
     LLVM := $(DEBUG_LLVM)
@@ -41,7 +41,7 @@ LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
 
 ifeq ($(MAKECMDGOALS),debug)
-    LANG_LD_FLAGS += -lz
+    LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
 endif
 
 LEX_FILE := $(LANG_SRC_DIR)/lex.l
@@ -60,7 +60,7 @@ LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 .PHONY: all clean engine test wasm serve_docs
 
 all: $(BUILD_DIR)/lang
-# debug: all
+debug: all
 
 engine:
 	$(MAKE) -C engine

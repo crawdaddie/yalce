@@ -847,8 +847,7 @@ Type *resolve_generic_type(Type *t, TypeEnv *env) {
 }
 
 Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
-  const char *name;
-  name = member->data.T_CONS.name;
+  const char *name = member->data.T_CONS.name;
 
   while (env) {
     if (is_variant_type(env->type)) {

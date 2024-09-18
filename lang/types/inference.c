@@ -263,7 +263,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
     }
 
     type = find_type_in_env(*env, ast->data.AST_IDENTIFIER.value);
-
     if (type == NULL) {
       type = next_tvar();
     }
