@@ -31,6 +31,7 @@
       fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= stat;                                                            \
+    p;                                                                         \
   })
 
 #define TEST(res, msg)                                                         \
@@ -549,5 +550,37 @@ int main() {
                          "| _     -> 0\n"
                          ";;\n",
                          &MAKE_FN_TYPE_3(&t_bool, &t, &t_int));
+  });
+
+  ({
+    RESET;
+    TITLE("## first class functions & specific")
+    Ast *ast = TEST_SIMPLE_AST_TYPE("let sum = fn a b -> a + b;;\n"
+                                    "let proc = fn f a b -> f a b;;\n"
+                                    "proc sum 1 2\n",
+                                    &t_int);
+    Ast *call = ast->data.AST_BODY.stmts[2];
+    Type *call_type = call->data.AST_APPLICATION.function->md;
+    bool t_equal = types_equal(
+        call_type, &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t_int, &t_int, &t_int),
+                                   &t_int, &t_int, &t_int));
+    if (t_equal) {
+      fprintf(stderr,
+              "✅ proc sum 1 2 => (Int -> Int -> Int) -> Int -> Int -> Int\n");
+    } else {
+      fprintf(
+          stderr,
+          "❌ proc sum 1 2 => (Int -> Int -> Int) -> Int -> Int -> Int\ngot ");
+      print_type_err(call_type);
+    }
+    status &= t_equal;
+
+    printf("proc: \n");
+    print_ast(ast->data.AST_BODY.stmts[1]);
+    print_type(ast->data.AST_BODY.stmts[1]->md);
+
+    printf("sum: \n");
+    print_ast(ast->data.AST_BODY.stmts[0]);
+    print_type(ast->data.AST_BODY.stmts[0]->md);
   });
 }

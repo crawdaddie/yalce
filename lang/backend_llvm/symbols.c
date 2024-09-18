@@ -1,4 +1,5 @@
 #include "backend_llvm/symbols.h"
+#include "function.h"
 #include "globals.h"
 #include "match.h"
 #include "serde.h"
@@ -86,6 +87,7 @@ int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 
+  // printf("codegen identifier ");
   const char *chars = ast->data.AST_IDENTIFIER.value;
   int length = ast->data.AST_IDENTIFIER.length;
 
@@ -120,7 +122,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_GENERIC_FUNCTION: {
-    return NULL;
+    return get_specific_callable(sym, chars, ast->md, ctx, module, builder);
   }
 
   case STYPE_LOCAL_VAR: {

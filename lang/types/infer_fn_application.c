@@ -26,6 +26,10 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   Type *result_fn = fn_type;
 
   for (int i = 0; i < len; i++) {
+    if (app_arg_types[i]->kind == T_FN) {
+      app_arg_types[i] = copy_type(app_arg_types[i]);
+    }
+
     Type *unif =
         unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
 
@@ -40,6 +44,8 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
 
   ast->data.AST_APPLICATION.function->md =
       resolve_generic_type(fn_type, replacement_env);
+
+  result_fn = resolve_tc_rank(result_fn);
 
   return result_fn;
 }

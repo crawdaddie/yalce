@@ -91,7 +91,10 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
+  printf("generating fn %s: ", fn_name.chars);
   Type *fn_type = ast->md;
+  print_type(fn_type);
+
   int fn_len = ast->data.AST_LAMBDA.len;
   LLVMTypeRef prototype = fn_prototype(ast->md, fn_len, ctx->env, module);
 
@@ -114,8 +117,19 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *param_type = fn_type->data.T_FN.from;
 
     LLVMValueRef param_val = LLVMGetParam(func, i);
+    if (param_type->kind == T_FN) {
+      const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+      int id_len = param_ast->data.AST_IDENTIFIER.length;
+      LLVMTypeRef llvm_type = LLVMTypeOf(param_val);
+      JITSymbol *sym =
+          new_symbol(STYPE_LOCAL_VAR, param_type, param_val, llvm_type);
 
-    match_values(param_ast, param_val, param_type, &fn_ctx, module, builder);
+      ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+                  hash_string(id_chars, id_len), sym);
+
+    } else {
+      match_values(param_ast, param_val, param_type, &fn_ctx, module, builder);
+    }
 
     fn_type = fn_type->data.T_FN.to;
   }
@@ -201,9 +215,9 @@ TypeEnv *create_replacement_env(Type *generic_fn_type, Type *specific_fn_type,
   return env;
 }
 
-LLVMValueRef create_new_specific_fn(int len, Ast *args, Ast *fn_ast,
-                                    Type *original_type, Type *expected_type,
-                                    Type *ret_type, JITLangCtx *compilation_ctx,
+LLVMValueRef create_new_specific_fn(int len, Ast *fn_ast, Type *original_type,
+                                    Type *expected_type, Type *ret_type,
+                                    JITLangCtx *compilation_ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   // compile new variant
@@ -235,33 +249,73 @@ LLVMValueRef create_new_specific_fn(int len, Ast *args, Ast *fn_ast,
   compilation_ctx->env = og_env;
   return func;
 }
+LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
+                                   Type *expected_fn_type, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  SpecificFns *specific_fns =
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
+  LLVMValueRef callable = specific_fns_lookup(specific_fns, expected_fn_type);
+
+  if (callable) {
+    return callable;
+  }
+
+  Ast *fn_ast = sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
+
+  JITLangCtx compilation_ctx = {
+      ctx->stack,
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr,
+  };
+
+  LLVMValueRef specific_func = create_new_specific_fn(
+      fn_ast->data.AST_LAMBDA.len, fn_ast, sym->symbol_type, expected_fn_type,
+      fn_return_type(expected_fn_type), &compilation_ctx, module, builder);
+
+  sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+      specific_fns_extend(specific_fns, expected_fn_type, specific_func);
+
+  ht *scope = compilation_ctx.stack + compilation_ctx.stack_ptr;
+  int sym_name_len = strlen(sym_name);
+
+  ht_set_hash(scope, sym_name, hash_string(sym_name, sym_name_len),
+              (void *)sym);
+
+  callable = specific_func;
+  return callable;
+}
 
 LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
                          int args_len, Type *expected_fn_type, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  // printf("call symbol %s %d: ", sym_name, sym->type);
-  // print_type(expected_fn_type);
   LLVMValueRef callable;
   int expected_args_len = fn_type_args_len(expected_fn_type);
   Type *callable_type = sym->symbol_type;
+  LLVMTypeRef llvm_callable_type;
 
   switch (sym->type) {
   case STYPE_FUNCTION: {
     callable = sym->val;
-    // expected_args_len = fn_type_args_len(sym->symbol_type);
+    callable_type = sym->symbol_type;
+    llvm_callable_type = LLVMGlobalGetValueType(callable);
+    break;
+  }
+
+  case STYPE_LOCAL_VAR: {
+    callable = sym->val;
+    callable_type = sym->symbol_type;
+    llvm_callable_type = LLVMTypeOf(callable);
     break;
   }
 
   case STYPE_GENERIC_FUNCTION: {
-    // printf("looking up spec func %s: ", sym_name);
-    // print_type(expected_fn_type);
     SpecificFns *specific_fns =
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
     callable = specific_fns_lookup(specific_fns, expected_fn_type);
+    callable_type = expected_fn_type;
 
     if (!callable) {
-      // printf("callable not found %s, creating new: \n", sym_name);
       Ast *fn_ast = sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
 
       JITLangCtx compilation_ctx = {
@@ -270,27 +324,21 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
       };
 
       LLVMValueRef specific_func = create_new_specific_fn(
-          fn_ast->data.AST_LAMBDA.len, args, fn_ast, sym->symbol_type,
+          fn_ast->data.AST_LAMBDA.len, fn_ast, sym->symbol_type,
           expected_fn_type, fn_return_type(expected_fn_type), &compilation_ctx,
           module, builder);
 
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
           specific_fns_extend(specific_fns, expected_fn_type, specific_func);
 
-      // sym->type = STYPE_GENERIC_FUNCTION;
-
       ht *scope = compilation_ctx.stack + compilation_ctx.stack_ptr;
       int sym_name_len = strlen(sym_name);
-      // printf("saving gen func %s ", sym_name);
-      // print_type(expected_fn_type);
-      // printf("sym kind %d", sym->type);
 
       ht_set_hash(scope, sym_name, hash_string(sym_name, sym_name_len),
                   (void *)sym);
 
       callable = specific_func;
-      // LLVMDumpType(LLVMGlobalGetValueType(callable));
-      // printf("\n");
+      llvm_callable_type = LLVMGlobalGetValueType(callable);
 
       break;
     }
@@ -306,13 +354,16 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   if (args_len == expected_args_len) {
     LLVMValueRef app_vals[args_len];
 
-    Type *callable_type = expected_fn_type;
+    // Type *callable_type = expected_fn_type;
     if (callable_type->kind == T_FN &&
         callable_type->data.T_FN.from->kind == T_VOID) {
-
-      return LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable), callable,
+      return LLVMBuildCall2(builder, llvm_callable_type, callable,
                             (LLVMValueRef[]){}, 0, "call_func");
     }
+
+    printf("%s : ", sym_name);
+    print_type(callable_type);
+    print_type(sym->symbol_type);
 
     for (int i = 0; i < args_len; i++) {
       Ast *app_val_ast = args + i;
@@ -324,8 +375,9 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
 
       app_val_type = resolve_tc_rank(app_val_type);
 
+      app_val_ast->md = callable_type->data.T_FN.from;
       LLVMValueRef app_val = codegen(app_val_ast, ctx, module, builder);
-
+      LLVMDumpValue(app_val);
       // Type *fn_from = callable_type->kind == T_FN
       //                     ? callable_type->data.T_FN.from
       //                     : callable_type;
@@ -343,10 +395,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
       // }
       app_vals[i] = app_val;
 
-      // callable_type = callable_type->data.T_FN.to;
+      callable_type = callable_type->data.T_FN.to;
     }
-    LLVMTypeRef llvm_callable_type = LLVMGlobalGetValueType(callable);
-    // LLVMDumpType(llvm_callable_type);
 
     return LLVMBuildCall2(builder, llvm_callable_type, callable, app_vals,
                           args_len, "call_func");
@@ -392,6 +442,9 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+
+  printf("application: ");
+  print_ast(ast);
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
   // int lookup_sym_err = sym == NULL;
@@ -421,6 +474,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+  print_type(expected_fn_type);
 
   return call_symbol(sym_name, sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, expected_fn_type, ctx,
