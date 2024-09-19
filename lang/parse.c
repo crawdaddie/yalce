@@ -527,13 +527,26 @@ Ast *ast_meta(ObjString meta_id, Ast *next) {
 }
 
 Ast *ast_extern_fn(ObjString name, Ast *signature) {
-  int len = signature->data.AST_LIST.len;
-  Ast *param_types = signature->data.AST_LIST.items;
-  signature->tag = AST_EXTERN_FN;
-  signature->data.AST_EXTERN_FN.len = len;
-  signature->data.AST_EXTERN_FN.signature_types = param_types;
-  signature->data.AST_EXTERN_FN.fn_name = name;
-  return signature;
+  // int param_count = 0;
+  // Ast *sig = signature;
+  // while (sig->tag == AST_FN_SIGNATURE) {
+  //   sig = sig->data.AST_LIST.items + 1;
+  //   param_count++;
+  // }
+  Ast *extern_fn = Ast_new(AST_EXTERN_FN);
+  // extern_fn->data.AST_EXTERN_FN.signature_types =
+  //     malloc(sizeof(Ast) * (param_count + 1));
+  // sig = signature;
+  // for (int i = 0; i < param_count; i++) {
+  //   *(extern_fn->data.AST_EXTERN_FN.signature_types + i) =
+  //       sig->data.AST_LIST.items[0];
+  //   sig = sig->data.AST_LIST.items + 1;
+  // }
+  //
+  extern_fn->data.AST_EXTERN_FN.signature_types = signature;
+  // extern_fn->data.AST_EXTERN_FN.len = param_count + 1;
+  extern_fn->data.AST_EXTERN_FN.fn_name = name;
+  return extern_fn;
 }
 Ast *ast_assoc(Ast *l, Ast *r) { return NULL; }
 
@@ -665,13 +678,14 @@ Ast *ast_await(Ast *awaitable) {
 
 Ast *ast_fn_sig(Ast *arg, Ast *arg2) {
   Ast *a = ast_list(arg);
-  ast_list_push(a, arg2);
   a->tag = AST_FN_SIGNATURE;
   return a;
 }
 Ast *ast_fn_sig_push(Ast *l, Ast *a) {
   Ast *sig = ast_list_push(l, a);
-  sig->tag = AST_FN_SIGNATURE;
+
+  a->tag = AST_FN_SIGNATURE;
+
   return sig;
 }
 

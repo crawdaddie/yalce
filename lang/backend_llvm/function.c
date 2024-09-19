@@ -54,27 +54,19 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
   int name_len = strlen(name);
-  int params_count = ast->data.AST_EXTERN_FN.len - 1;
-
-  Ast *signature_types = ast->data.AST_EXTERN_FN.signature_types;
-  if (params_count == 0) {
-
-    LLVMTypeRef ret_type =
-        llvm_type_of_identifier(signature_types, ctx->env, module);
-    LLVMTypeRef fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
-
-    LLVMValueRef func = LLVMAddFunction(module, name, fn_type);
-    return func;
-  }
+  int params_count = fn_type_args_len(ast->md);
 
   LLVMTypeRef llvm_param_types[params_count];
-  for (int i = 0; i < params_count; i++) {
-    llvm_param_types[i] =
-        llvm_type_of_identifier(signature_types + i, ctx->env, module);
+  Type *f = ast->md;
+  int i = 0;
+  while (f->kind == T_FN) {
+    Type *param_type = f->data.T_FN.from;
+    llvm_param_types[i] = type_to_llvm_type(param_type, ctx->env, module);
+    f = f->data.T_FN.to;
+    i++;
   }
+  LLVMTypeRef ret_type = type_to_llvm_type(f, ctx->env, module);
 
-  LLVMTypeRef ret_type =
-      llvm_type_of_identifier(signature_types + params_count, ctx->env, module);
   LLVMTypeRef fn_type =
       LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
 
@@ -287,7 +279,9 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
   return callable;
 }
 
-LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type, Type *to_type, LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
+                                     Type *to_type, LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
   // Type *fn_from = callable_type->kind == T_FN
   //                     ? callable_type->data.T_FN.from
   //                     : callable_type;
@@ -368,7 +362,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
       }
       LLVMValueRef app_val = codegen(app_val_ast, ctx, module, builder);
       Type *expected_type = callable_type->data.T_FN.from;
-      app_val = handle_type_conversions(app_val, app_val_ast->md, expected_type, module, builder);
+      app_val = handle_type_conversions(app_val, app_val_ast->md, expected_type,
+                                        module, builder);
       app_vals[i] = app_val;
 
       callable_type = callable_type->data.T_FN.to;

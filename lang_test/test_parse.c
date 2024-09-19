@@ -275,11 +275,13 @@ int main() {
                        "\t_ -> 3\n"
                        ")");
 
-  status &= test_parse("let printf2 = extern fn string -> string -> ()",
-                       "(let printf2 (extern printf2 string -> string -> ()))");
+  status &=
+      test_parse("let printf2 = extern fn string -> string -> Int -> Int -> ()",
+                 "(let printf2 (extern printf2 (string -> (string -> (Int -> "
+                 "(Int -> ()))))))");
 
   status &= test_parse("let voidf = extern fn () -> ()",
-                       "(let voidf (extern voidf () -> ()))");
+                       "(let voidf (extern voidf (() -> ())))");
 
   status &= test_parse(
       "`here's a printed "

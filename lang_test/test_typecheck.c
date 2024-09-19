@@ -626,4 +626,25 @@ int main() {
                              "| _ -> 3",
                              &t_int, env);
   });
+
+  ({
+    RESET;
+    TITLE("## function type decl")
+    TypeEnv *env = NULL;
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "type Cb = Double -> (Int * Int) -> ();",
+        &MAKE_FN_TYPE_3(&t_num, &TTUPLE(2, &t_int, &t_int), &t_void), env);
+
+    Type *cb = env_lookup(env, "Cb");
+    bool lut = types_equal(
+        cb, &MAKE_FN_TYPE_3(&t_num, &TTUPLE(2, &t_int, &t_int), &t_void));
+    if (lut) {
+      fprintf(stderr, "✅ cb lookup\n");
+    } else {
+      fprintf(stderr, "❌ cb lookup\n");
+    }
+
+    status &= lut;
+  });
+  return status == true ? 0 : 1;
 }

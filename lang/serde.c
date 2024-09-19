@@ -266,26 +266,30 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   case AST_EXTERN_FN: {
     // printf("serde extern fn\n");
     buffer = strcat(buffer, "(extern ");
+
     if (ast->data.AST_EXTERN_FN.fn_name.chars != NULL) {
       buffer = strcat(buffer, ast->data.AST_EXTERN_FN.fn_name.chars);
       buffer = strcat(buffer, " ");
     }
-    if (ast->data.AST_EXTERN_FN.len == 0) {
-      buffer = strcat(buffer, "() ");
-    } else if (ast->data.AST_EXTERN_FN.len == 1) {
-      buffer = strcat(buffer, "() -> ");
-      buffer =
-          ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[0], buffer);
-    } else {
-      int len = ast->data.AST_EXTERN_FN.len;
-      for (int i = 0; i < len; i++) {
-        buffer =
-            ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[i], buffer);
-        if (i < len - 1) {
-          buffer = strcat(buffer, " -> ");
-        }
-      }
-    }
+    buffer = ast_to_sexpr(ast->data.AST_EXTERN_FN.signature_types, buffer);
+
+    // if (ast->data.AST_EXTERN_FN.len == 0) {
+    //   buffer = strcat(buffer, "() ");
+    // } else if (ast->data.AST_EXTERN_FN.len == 1) {
+    //   buffer = strcat(buffer, "() -> ");
+    //   buffer =
+    //       ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[0], buffer);
+    // } else {
+    //   int len = ast->data.AST_EXTERN_FN.len;
+    //   for (int i = 0; i < len; i++) {
+    //     buffer =
+    //         ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[i],
+    //         buffer);
+    //     if (i < len - 1) {
+    //       buffer = strcat(buffer, " -> ");
+    //     }
+    //   }
+    // }
 
     // buffer = strcat(buffer, "-> ");
 

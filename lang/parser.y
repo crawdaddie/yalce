@@ -160,8 +160,8 @@ expr_sequence:
 let_binding:
     LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
-  | LET IDENTIFIER '=' extern_typed_signature  
-                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $4), NULL); }
+  | LET IDENTIFIER '=' EXTERN FN fn_signature  
+                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
 
 
   | LET IDENTIFIER '=' '(' extern_variants ')'  
@@ -313,8 +313,8 @@ type_args:
   | type_args IDENTIFIER    { $$ = ast_arg_list_push($1, ast_identifier($2), NULL); }
 
 fn_signature:
-    type_expr ARROW type_expr           { $$ = ast_fn_sig($1, $3); }
-  | fn_signature ARROW type_expr        { $$ = ast_fn_sig_push($1, $3); }
+    type_expr ARROW               { $$ = ast_fn_sig($1, NULL); }
+  | fn_signature type_expr        { $$ = ast_fn_sig_push($1, $2); }
   ;
 
 tuple_type:

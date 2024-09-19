@@ -191,6 +191,15 @@ static Type *resolve_generic_variant(Type *t, TypeEnv *env) {
 
   return t;
 }
+Type *extern_fn_type(Ast *sig, TypeEnv **env) {
+  if (sig->tag == AST_FN_SIGNATURE) {
+    Ast *param_ast = sig->data.AST_LIST.items;
+    Type *fn =
+        type_fn(infer(param_ast, env), extern_fn_type(param_ast + 1, env));
+    return fn;
+  }
+  return infer(sig, env);
+}
 
 Type *infer(Ast *ast, TypeEnv **env) {
 
@@ -343,47 +352,8 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   case AST_EXTERN_FN: {
-    int param_count = ast->data.AST_EXTERN_FN.len - 1;
-    Ast *ret_type_ast = ast->data.AST_EXTERN_FN.signature_types + param_count;
-
-    Type *ret_type;
-
-    if (ret_type_ast->tag == AST_IDENTIFIER) {
-      ret_type =
-          find_type_in_env(*env, ret_type_ast->data.AST_IDENTIFIER.value);
-    } else if (ret_type_ast->tag == AST_VOID) {
-      ret_type = &t_void;
-    } else {
-      fprintf(stderr, "Error - extern return type unrecognized\n");
-      return NULL;
-    }
-
-    Type **param_types;
-    if (param_count == 0) {
-      param_types = talloc(sizeof(Type *));
-      *param_types = &t_void;
-    } else {
-      param_types = talloc(param_count * sizeof(Type *));
-
-      for (int i = 0; i < param_count; i++) {
-        Ast *param_ast = ast->data.AST_EXTERN_FN.signature_types + i;
-
-        Type *param_type = TRY_MSG(
-            find_type_in_env(*env, param_ast->data.AST_IDENTIFIER.value),
-            "Error declaring extern function: type %s not found");
-
-        param_types[i] = param_type;
-      }
-    }
-
-    Type *fn = NULL;
-
-    if (param_count == 0) {
-      fn = type_fn(&t_void, ret_type);
-    } else {
-      fn = create_type_multi_param_fn(param_count, param_types, ret_type);
-    }
-    type = fn;
+    Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
+    type = extern_fn_type(sig, env);
     break;
   }
 

@@ -2,6 +2,18 @@
 #include "serde.h"
 #include <string.h>
 
+Type *compute_type_expression(Ast *expr, TypeEnv *env);
+
+Type *fn_type_decl(Ast *sig, TypeEnv *env) {
+  if (sig->tag == AST_FN_SIGNATURE) {
+    Ast *param_ast = sig->data.AST_LIST.items;
+    Type *fn = type_fn(compute_type_expression(param_ast, env),
+                       fn_type_decl(param_ast + 1, env));
+    return fn;
+  }
+  return compute_type_expression(sig, env);
+}
+
 Type *next_tvar();
 Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   switch (expr->tag) {
@@ -34,6 +46,9 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     }
     return variant;
   }
+  case AST_VOID: {
+    return &t_void;
+  }
 
   case AST_IDENTIFIER: {
     Type *type = find_type_in_env(env, expr->data.AST_IDENTIFIER.value);
@@ -63,6 +78,24 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
     expr->md = create_type_multi_param_fn(len, param_types, t);
     return t;
+  }
+  case AST_TUPLE: {
+    int arity = expr->data.AST_LIST.len;
+    Type **contained_types = talloc(sizeof(Type *) * arity);
+    for (int i = 0; i < arity; i++) {
+      contained_types[i] =
+          compute_type_expression(expr->data.AST_LIST.items + i, env);
+    }
+    Type *t = empty_type();
+    t->kind = T_CONS;
+    t->data.T_CONS.name = TYPE_NAME_TUPLE;
+    t->data.T_CONS.args = contained_types;
+    t->data.T_CONS.num_args = arity;
+    return t;
+  }
+  case AST_FN_SIGNATURE: {
+    Type *fn = fn_type_decl(expr, env);
+    return fn;
   }
 
   case AST_BINOP: {
