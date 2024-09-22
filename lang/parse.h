@@ -100,6 +100,7 @@ typedef enum ast_tag {
   AST_VOID,
   AST_EXTERN_FN,
   AST_LIST,
+  AST_ARRAY,
   AST_MATCH,
   AST_PLACEHOLDER_ID,
   AST_META,
@@ -254,6 +255,9 @@ Ast *ast_string(ObjString lex_string);
 
 Ast *parse_fstring_expr(Ast *list);
 Ast *ast_empty_list();
+Ast *ast_empty_array();
+Ast *ast_list_to_array(Ast *list);
+
 Ast *ast_list(Ast *val);
 Ast *ast_list_push(Ast *list, Ast *val);
 
@@ -297,4 +301,6 @@ Ast *ast_tuple_type_push(Ast *, Ast *);
 Ast *ast_cons_decl(token_type op, Ast *left, Ast *right);
 
 Ast *ast_match_guard_clause(Ast *expr, Ast *guard);
+
+void add_custom_binop(const char *binop_name);
 #endif

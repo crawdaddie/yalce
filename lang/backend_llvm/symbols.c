@@ -166,6 +166,12 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   }
 
   Type *expr_type = ast->data.AST_LET.expr->md;
+  // print_type(expr_type);
+  // if (is_array_type(expr_type)) {
+  //   void *contained = expr_type->data.T_CONS.args;
+  //   int *size = contained + sizeof(Type *);
+  //   printf("array size %d\n", *size);
+  // }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
 
@@ -199,11 +205,32 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   return expr_val;
 }
 
-void initialize_builtin_binops(ht *stack, TypeEnv *env) {
+TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   for (int i = 0; i < _NUM_BINOPS; i++) {
     _binop_map bm = binop_map[i];
     JITSymbol *sym =
         new_symbol(STYPE_GENERIC_FUNCTION, bm.binop_fn_type, NULL, NULL);
     ht_set_hash(stack, bm.name, hash_string(bm.name, strlen(bm.name)), sym);
   }
+
+  Type *gen_array_el = tvar("generic_array_el");
+  Type *gen_array = create_array_type(gen_array_el, 0);
+  Type *array_at_fn_sig = type_fn(gen_array, type_fn(&t_int, gen_array_el));
+  env = env_extend(env, "array_at", array_at_fn_sig);
+
+  JITSymbol *array_at_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, array_at_fn_sig, NULL, NULL);
+
+  ht_set_hash(stack, "array_at", hash_string("array_at", 8), array_at_sym);
+
+  Type *array_size_fn_sig = type_fn(gen_array, &t_int);
+  env = env_extend(env, "array_size", array_size_fn_sig);
+
+  JITSymbol *array_size_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, array_size_fn_sig, NULL, NULL);
+
+  ht_set_hash(stack, "array_size", hash_string("array_size", 10),
+              array_size_sym);
+
+  return env;
 }

@@ -5,7 +5,9 @@
 #include <time.h>
 int scheduler_event_loop();
 
-void schedule_event(void (*callback)(void *, uint64_t), void *userdata,
+void schedule_event(void (*callback)(void *, double), void *userdata,
                     double delay_seconds);
+
+void handle_cb(void (*callback)(void *), void *userdata);
 
 #endif

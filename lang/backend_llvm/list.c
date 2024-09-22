@@ -132,3 +132,111 @@ LLVMValueRef codegen_list_prepend(LLVMValueRef l, LLVMValueRef list,
   struct_ptr_set(1, node, node_type, list, builder);
   return node;
 }
+
+LLVMTypeRef codegen_array_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
+
+  Type *el_type = type;
+  LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, env, module);
+
+  return LLVMPointerType(llvm_el_type, 0);
+}
+
+LLVMValueRef array_el_ptr(LLVMValueRef array, LLVMTypeRef llvm_array_type,
+                          LLVMValueRef idx, LLVMBuilderRef builder) {
+
+  return LLVMBuildGEP2(builder, llvm_array_type, array,
+                       (LLVMValueRef[]){
+                           LLVMConstInt(LLVMInt32Type(), 0, 0),
+                           idx // Array index
+                       },
+                       2, "element_ptr");
+}
+
+LLVMValueRef codegen_array_at(LLVMValueRef array_ptr, LLVMValueRef idx,
+                              LLVMTypeRef el_type, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  LLVMTypeRef ty = LLVMArrayType(el_type, 0);
+  LLVMValueRef element_ptr = array_el_ptr(array_ptr, ty, idx, builder);
+  return LLVMBuildLoad2(builder, el_type, element_ptr, "");
+}
+
+LLVMValueRef codegen_array_set(LLVMValueRef array_ptr, LLVMValueRef idx,
+                               LLVMValueRef val, LLVMTypeRef el_type,
+                               LLVMModuleRef module, LLVMBuilderRef builder) {
+  LLVMTypeRef ty = LLVMArrayType(el_type, 0);
+  LLVMValueRef element_ptr = array_el_ptr(array_ptr, ty, idx, builder);
+  return LLVMBuildStore(builder, val, element_ptr);
+}
+
+LLVMValueRef codegen_array(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+
+  Type *array_type = ast->md;
+  Type *el_type = array_type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx->env, module);
+
+  int len = ast->data.AST_LIST.len;
+
+  LLVMTypeRef llvm_array_type = LLVMArrayType(llvm_el_type, len);
+
+  LLVMValueRef len_val = LLVMConstInt(LLVMInt32Type(), len, 0);
+
+  LLVMValueRef array_ptr;
+  if (ctx->stack_ptr == 0) {
+    array_ptr = LLVMBuildMalloc(builder, llvm_array_type, "heap_array");
+  } else {
+    array_ptr = LLVMBuildAlloca(builder, llvm_array_type, "stack_array");
+  }
+
+  for (int i = 0; i < len; i++) {
+
+    LLVMValueRef value =
+        codegen(ast->data.AST_LIST.items + i, ctx, module, builder);
+
+    codegen_array_set(array_ptr, LLVMConstInt(LLVMInt32Type(), i, 0), value,
+                      llvm_el_type, module, builder);
+  }
+
+  return array_ptr;
+}
+
+LLVMValueRef __codegen_array(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder) {
+
+  LLVMValueRef array_ptr = codegen_array(ast, ctx, module, builder);
+
+  int len = ast->data.AST_LIST.len;
+  LLVMValueRef len_val = LLVMConstInt(LLVMInt32Type(), len, 0);
+  LLVMTypeRef sized_type = LLVMStructType(
+      (LLVMTypeRef[]){LLVMInt32Type(),
+                      codegen_array_type(ast->md, ctx->env, module)},
+      2, 0);
+
+  LLVMValueRef sized = LLVMGetUndef(sized_type);
+  LLVMBuildInsertValue(builder, sized, len_val, 0, "");
+  LLVMBuildInsertValue(builder, sized, array_ptr, 1, "");
+  LLVMDumpValue(sized);
+  printf("\n");
+  return sized;
+}
+
+// Function to get size of fixed-size array
+LLVMValueRef get_array_size(LLVMBuilderRef builder, LLVMValueRef array_ptr) {
+  // Get the type of the pointer
+  LLVMTypeRef ptr_type = LLVMTypeOf(array_ptr);
+
+  // Get the element type (which should be the array type)
+  LLVMTypeRef array_type = LLVMGetElementType(ptr_type);
+
+  // Make sure it's actually an array type
+  if (LLVMGetTypeKind(array_type) != LLVMArrayTypeKind) {
+    // Handle error: not an array type
+    return NULL;
+  }
+
+  // Get the length of the array
+  unsigned array_length = LLVMGetArrayLength(array_type);
+
+  // Create an LLVM constant integer with this length
+  return LLVMConstInt(LLVMInt32Type(), array_length, 0);
+}

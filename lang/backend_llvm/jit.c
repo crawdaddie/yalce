@@ -223,10 +223,12 @@ int jit(int argc, char **argv) {
   // shared type env
   TypeEnv *env = NULL;
   initialize_builtin_numeric_types(env);
-  initialize_builtin_binops(stack, env);
+  env = initialize_builtin_funcs(stack, env);
+  initialize_types(env);
   // env = initialize_type_env(env);
 
   env = initialize_type_env_synth(env);
+  // print_type_env(env);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,

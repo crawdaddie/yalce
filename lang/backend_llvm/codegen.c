@@ -1,5 +1,4 @@
 #include "backend_llvm/codegen.h"
-#include "backend_llvm/binop.h"
 #include "backend_llvm/function.h"
 #include "backend_llvm/list.h"
 #include "backend_llvm/match.h"
@@ -95,10 +94,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return LLVMConstInt(LLVMInt1Type(), ast->data.AST_BOOL.value, false);
   }
 
-  case AST_BINOP: {
-    return codegen_binop(ast, ctx, module, builder);
-  }
-
   case AST_UNOP: {
     switch (ast->data.AST_BINOP.op) {
     case TOKEN_STAR: {
@@ -117,6 +112,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_LIST: {
     return codegen_list(ast, ctx, module, builder);
+  }
+
+  case AST_ARRAY: {
+    return codegen_array(ast, ctx, module, builder);
   }
 
   case AST_LET: {

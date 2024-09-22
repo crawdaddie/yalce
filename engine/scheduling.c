@@ -15,7 +15,7 @@ pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define INITIAL_CAPACITY 16
 
 typedef struct {
-  void (*callback)(void *userdata, uint64_t now);
+  void (*callback)(void *userdata, double now);
   void *userdata;
   uint64_t timestamp;
 } ScheduledEvent;
@@ -84,7 +84,7 @@ static inline uint64_t get_time_ns() {
 uint64_t now;
 uint64_t start;
 
-void _schedule_event(EventHeap *heap, void (*callback)(void *, uint64_t),
+void _schedule_event(EventHeap *heap, void (*callback)(void *, double),
                      void *userdata, double delay_seconds,
                      uint64_t start_time) {
 
@@ -141,7 +141,8 @@ void *timer(void *arg) {
     if (now >= nextTick) {
       while (queue->size && queue->events[0].timestamp <= now) {
         ScheduledEvent ev = pop_event(queue);
-        ev.callback(ev.userdata, now);
+        double now_d = ((double)(now - start) / S_TO_NS);
+        ev.callback(ev.userdata, now_d);
       }
 
       // Calculate next tick
@@ -161,10 +162,10 @@ void *timer(void *arg) {
 }
 
 // Example callback function
-void example_cb(void *user_data, uint64_t t) {
-  printf("Callback executed at %f\n", ((double)(t - start) / S_TO_NS));
+void example_cb(void *user_data, double t) {
+  printf("Callback executed at %f\n", t);
 
-  _schedule_event(queue, example_cb, NULL, 10, t);
+  _schedule_event(queue, example_cb, NULL, 1, t);
 }
 
 int scheduler_event_loop() {
@@ -177,14 +178,27 @@ int scheduler_event_loop() {
     fprintf(stderr, "Failed to create timer thread\n");
     return 1;
   }
-  return 1;
+  return 0;
 }
 
-void schedule_event(void (*callback)(void *, uint64_t), void *userdata,
+void schedule_event(void (*callback)(void *, double), void *userdata,
                     double delay_seconds) {
-
+  // if (delay_seconds == 0) {
+  //   callback(userdata, delay_seconds);
+  // }
+  now = get_time_ns(); // Update 'now' before scheduling
   return _schedule_event(queue, callback, userdata, delay_seconds, now);
 }
 
 typedef struct Timer {
 } Timer;
+
+struct ipt {
+  int a;
+  int b;
+} ipt;
+
+void handle_cb(void (*callback)(void *), void *userdata) {
+  // printf("handle cb %p\n", callback);
+  callback(userdata);
+}

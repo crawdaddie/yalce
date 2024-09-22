@@ -272,30 +272,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
       buffer = strcat(buffer, " ");
     }
     buffer = ast_to_sexpr(ast->data.AST_EXTERN_FN.signature_types, buffer);
-
-    // if (ast->data.AST_EXTERN_FN.len == 0) {
-    //   buffer = strcat(buffer, "() ");
-    // } else if (ast->data.AST_EXTERN_FN.len == 1) {
-    //   buffer = strcat(buffer, "() -> ");
-    //   buffer =
-    //       ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[0], buffer);
-    // } else {
-    //   int len = ast->data.AST_EXTERN_FN.len;
-    //   for (int i = 0; i < len; i++) {
-    //     buffer =
-    //         ast_to_sexpr(&ast->data.AST_EXTERN_FN.signature_types[i],
-    //         buffer);
-    //     if (i < len - 1) {
-    //       buffer = strcat(buffer, " -> ");
-    //     }
-    //   }
-    // }
-
-    // buffer = strcat(buffer, "-> ");
-
-    // buffer = ast_to_sexpr(ast->data.AST_EXTERN_FN.return_type, buffer);
-    // buffer = strcat(buffer, ")\n");
-    //
     buffer = strcat(buffer, ")");
 
     break;
@@ -305,7 +281,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
   case AST_LIST: {
-
     buffer = strcat(buffer, "[");
     int len = ast->data.AST_LIST.len;
     for (int i = 0; i < len; i++) {
@@ -316,6 +291,20 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     }
 
     buffer = strcat(buffer, "]");
+    break;
+  }
+
+  case AST_ARRAY: {
+    buffer = strcat(buffer, "[|");
+    int len = ast->data.AST_LIST.len;
+    for (int i = 0; i < len; i++) {
+      buffer = ast_to_sexpr(ast->data.AST_LIST.items + i, buffer);
+      if (i < len - 1) {
+        buffer = strcat(buffer, ", ");
+      }
+    }
+
+    buffer = strcat(buffer, "|]");
     break;
   }
   case AST_FN_SIGNATURE: {

@@ -2,6 +2,7 @@
 #include "serde.h"
 #include "types/infer_fn_application.h"
 #include "types/infer_match_expr.h"
+#include "types/type.h"
 #include "types/type_declaration.h"
 #include "types/unification.h"
 #include <stdlib.h>
@@ -210,7 +211,13 @@ Type *infer(Ast *ast, TypeEnv **env) {
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
 
       stmt = ast->data.AST_BODY.stmts[i];
-      type = TRY_MSG(infer(stmt, env), "Failure typechecking body statement: ");
+      Type *t = infer(stmt, env);
+      if (!t) {
+        fprintf(stderr, "Failure typechecking body statement: ");
+        print_ast_err(stmt);
+        return NULL;
+      }
+      type = t;
     }
     // type = stmt->md;
     break;
@@ -321,6 +328,46 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
 
+  case AST_ARRAY: {
+    int len = ast->data.AST_LIST.len;
+    if (len == 0) {
+      Type *el_type = next_tvar();
+      type = create_array_type(el_type, 0);
+      // Type **args = talloc(sizeof(Type *) + sizeof(int));
+      // args[0] = el_type;
+      // type = talloc(sizeof(Type));
+      // *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, args, 1}}};
+      break;
+    }
+
+    Type *element_type = TRY_MSG(
+        infer(ast->data.AST_LIST.items, env),
+        "Could not infer type of array literal elements (first element)");
+
+    Type *el_type;
+
+    for (int i = 1; i < len; i++) {
+      Ast *el = ast->data.AST_LIST.items + i;
+
+      el_type =
+          TRY_MSG(infer(el, env), "Failure typechecking array literal element");
+
+      if (!types_equal(element_type, el_type)) {
+
+        fprintf(stderr, "Error typechecking array literal - all elements must "
+                        "be of the same type\n");
+
+        print_type_err(element_type);
+        fprintf(stderr, " != ");
+        print_type_err(el_type);
+        return NULL;
+      }
+    }
+    type = create_array_type(el_type, len);
+
+    break;
+  }
+
   case AST_TUPLE: {
     int arity = ast->data.AST_LIST.len;
 
@@ -358,6 +405,22 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   case AST_APPLICATION: {
+    // Ast *custom_binop = ast->data.AST_APPLICATION.args;
+    // Ast *l = ast->data.AST_APPLICATION.function;
+    // Ast *r = ast->data.AST_APPLICATION.args + 1;
+    //
+    // Type *binop = env_lookup(*env, custom_binop->data.AST_IDENTIFIER.value);
+    // if (binop && binop->kind == T_FN && fn_type_args_len(binop) == 2) {
+    //   printf("custom binop: ");
+    //   print_ast(l);
+    //   print_ast(r);
+    //   ast->data.AST_APPLICATION.function =
+    //   ast_identifier((ObjString){custom_binop->data.AST_IDENTIFIER.value,
+    //   custom_binop->data.AST_IDENTIFIER.length});
+    //   ast->data.AST_APPLICATION.args[0] = *l;
+    //   ast->data.AST_APPLICATION.args[1] = *r;
+    //   return infer(ast, env);
+    // }
 
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");

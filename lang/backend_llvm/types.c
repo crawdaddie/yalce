@@ -1,4 +1,5 @@
 #include "backend_llvm/types.h"
+#include "list.h"
 #include "types/type.h"
 #include "variant.h"
 #include "llvm-c/Core.h"
@@ -35,7 +36,7 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
 LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env);
 
 // Function to create an LLVM list type forward decl
-LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env);
+LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env, LLVMModuleRef module);
 
 LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
@@ -81,7 +82,11 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
         return LLVMPointerType(LLVMInt8Type(), 0);
       }
 
-      return list_type(type->data.T_CONS.args[0], env);
+      return list_type(type->data.T_CONS.args[0], env, module);
+    }
+
+    if (strcmp(type->data.T_CONS.name, TYPE_NAME_ARRAY) == 0) {
+      return codegen_array_type(type->data.T_CONS.args[0], env, module);
     }
 
     if (strcmp(type->data.T_CONS.name, TYPE_NAME_PTR) == 0) {
@@ -149,36 +154,50 @@ LLVMValueRef codegen_signal_mod() { return NULL; }
 
 LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
+
   switch (from_type->kind) {
 
   case T_VOID: {
     return LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0));
   }
   case T_FN: {
-    printf("value conversion function to function ptr\n");
-    LLVMTypeRef paramTypes[] = {
-        LLVMPointerType(LLVMVoidType(), 0), // void*
-        LLVMInt64Type()                     // uint64_t
-    };
-    LLVMTypeRef functionType =
-        LLVMFunctionType(LLVMVoidType(), paramTypes, 2, 0);
-
-    LLVMTypeRef functionPtrType = LLVMPointerType(functionType, 0);
-
-    return LLVMBuildBitCast(builder, val, functionPtrType, "callback_cast");
+    // printf("ptr cons\n");
+    // printf("value conversion function to function ptr\n");
+    // LLVMTypeRef paramTypes[] = {
+    //     LLVMPointerType(LLVMVoidType(), 0), // void*
+    //     LLVMInt64Type()                     // uint64_t
+    // };
+    // LLVMTypeRef functionType =
+    //     LLVMFunctionType(LLVMVoidType(), paramTypes, 2, 0);
+    //
+    // LLVMTypeRef functionPtrType = LLVMPointerType(functionType, 0);
+    //
+    // return LLVMBuildBitCast(builder, val, functionPtrType, "callback_cast");
+    return val;
   }
 
-  case T_CONS: {
-    if (strcmp(from_type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
-      if (from_type->data.T_CONS.args[0]->kind == T_CHAR) {
-        return val;
-      }
-    }
-    return NULL;
-  }
+    // case T_CONS: {
+    //
+    //   printf("cons ptr\n");
+    //   if (strcmp(from_type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
+    //     if (from_type->data.T_CONS.args[0]->kind == T_CHAR) {
+    //       return val;
+    //     }
+    //   }
+    //   return val;
+    // }
 
-  default:
-    return NULL;
+  default: {
+
+    LLVMTypeRef el_type = LLVMTypeOf(val);
+    LLVMTypeRef pointer_type = LLVMPointerType(el_type, 0);
+    LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), 0, 0)};
+    LLVMValueRef ptr =
+        LLVMBuildGEP2(builder, el_type, val, indices, 1, "addr_of");
+    // LLVMDumpValue(ptr);
+    // printf("\n");
+    return ptr;
+  }
   }
 }
 
@@ -235,13 +254,9 @@ void initialize_double_constructor() {
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       Type *type_to, LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
-
-  printf("attempt value conversion: ");
-  print_type(type_from);
-  printf(" => ");
-  print_type(type_to);
-  printf("\n");
-
+  if (!type_to->constructor) {
+    return value;
+  }
   ConsMethod constructor = type_to->constructor;
   return constructor(value, type_from, module, builder);
 }
@@ -608,6 +623,8 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
   t_num.constructor_size = sizeof(ConsMethod);
 }
 
+void initialize_types(TypeEnv *env) { initialize_ptr_constructor(); }
+
 typedef struct _tc_key {
   const char *binop;
   int tc_idx;
@@ -631,19 +648,31 @@ static _tc_key tc_keys[] = {
 
 // clang-format on
 
-LLVMValueRef get_binop_method(const char *binop, Type *t) {
+#define _BINOP_METHOD_CHECKS
+
+Method *get_binop_method(const char *binop, Type *l, Type *r) {
   for (int i = 0; i < 11; i++) {
     _tc_key tc_key = tc_keys[i];
     if (strcmp(binop, tc_key.binop) == 0) {
-      if (tc_key.tc_idx >= t->num_implements) {
+
+#ifdef _BINOP_METHOD_CHECKS
+      if (tc_key.tc_idx >= l->num_implements ||
+          tc_key.tc_idx >= r->num_implements) {
         return NULL;
       }
 
-      if (tc_key.meth_idx >= t->implements[tc_key.tc_idx]->num_methods) {
+      if (tc_key.meth_idx >= l->implements[tc_key.tc_idx]->num_methods ||
+          tc_key.meth_idx >= r->implements[tc_key.tc_idx]->num_methods) {
         return NULL;
       }
+#endif
 
-      return t->implements[tc_key.tc_idx]->methods[tc_key.meth_idx].method;
+      TypeClass *tcl = l->implements[tc_key.tc_idx];
+      TypeClass *tcr = r->implements[tc_key.tc_idx];
+      if (tcl->rank >= tcr->rank) {
+        return tcl->methods + tc_key.meth_idx;
+      }
+      return tcr->methods + tc_key.meth_idx;
     }
   }
   // TODO: handle list prepend '::'

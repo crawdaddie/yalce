@@ -170,6 +170,14 @@ char *type_to_string(Type *t, char *buffer) {
       }
       break;
     }
+    // if (is_array_type(t)) {
+    //   buffer = type_to_string(t->data.T_CONS.args[0], buffer);
+    //   buffer = strncat(buffer, "[|", 1);
+    //   if (t->data.T_CONS.num_args > 1) {
+    //     buffer = strncat(buffer, "%d", 2);
+    //   }
+    //   buffer = strncat(buffer, "|]", 1);
+    // }
 
     buffer = strncat(buffer, t->data.T_CONS.name, strlen(t->data.T_CONS.name));
     if (t->data.T_CONS.num_args > 0) {
@@ -299,12 +307,18 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   case T_CONS: {
+    // if (is_array_type(t1) && is_array_type(t2)) {
+    //   return types_equal(t1->data.T_CONS.args[0], t2->data.T_CONS.args[0]);
+    // }
+
     if (t1->alias && t2->alias && (strcmp(t1->alias, t2->alias) != 0)) {
       return false;
     }
     if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0) {
       return false;
+
     } else if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+      printf("num args different??\n");
       return false;
     }
     bool eq = true;
@@ -677,9 +691,18 @@ Type *deep_copy_type(const Type *original) {
   }
   return copy;
 }
+Type *copy_array_type(Type *t) {
+  int *size = array_type_size_ptr(t);
+
+  Type *copy = create_array_type(copy_type(t->data.T_CONS.args[0]), *size);
+  copy->kind = t->kind;
+  return copy;
+}
 
 Type *copy_type(Type *t) {
+
   Type *copy = empty_type();
+
   *copy = *t;
 
   if (copy->kind == T_TYPECLASS_RESOLVE) {
@@ -696,6 +719,7 @@ Type *copy_type(Type *t) {
   if (copy->kind == T_CONS) {
     copy->data.T_CONS.name = t->data.T_CONS.name;
     copy->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
+
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       // copy->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
       copy->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
@@ -717,6 +741,7 @@ Type *copy_type(Type *t) {
     }
   }
 
+  copy->meta = t->meta;
   return copy;
 }
 
@@ -749,6 +774,15 @@ bool is_string_type(Type *type) {
          (type->data.T_CONS.args[0]->kind == T_CHAR);
 }
 
+bool is_pointer_type(Type *type) {
+  return type->kind == T_CONS &&
+         (strcmp(type->data.T_CONS.name, TYPE_NAME_PTR) == 0);
+}
+
+bool is_array_type(Type *type) {
+  return type->kind == T_CONS &&
+         (strcmp(type->data.T_CONS.name, TYPE_NAME_ARRAY) == 0);
+}
 bool is_tuple_type(Type *type) {
   return type->kind == T_CONS &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
@@ -917,4 +951,39 @@ Type *constraints_map_lookup(TypeMap *map, Type *key) {
     map = map->next;
   }
   return NULL;
+}
+
+Type *ptr_of_type(Type *pointee) {
+  Type *ptr = empty_type();
+  ptr->kind = T_CONS;
+  ptr->alias = TYPE_NAME_PTR;
+  ptr->data.T_CONS.name = TYPE_NAME_PTR;
+  ptr->data.T_CONS.args = talloc(sizeof(Type *));
+  ptr->data.T_CONS.args[0] = pointee;
+  ptr->data.T_CONS.num_args = 1;
+  return ptr;
+}
+
+int *array_type_size_ptr(Type *t) {
+  if (!is_array_type(t)) {
+    return NULL;
+  }
+  void *data = t->data.T_CONS.args;
+  int *size = t->meta;
+  return size;
+}
+
+Type *create_array_type(Type *of, int size) {
+  Type *gen_array = empty_type();
+  gen_array->kind = T_CONS;
+  gen_array->data.T_CONS.name = TYPE_NAME_ARRAY;
+  // gen_array->data.T_CONS.args = talloc(sizeof(Type *) + sizeof(int));
+  gen_array->data.T_CONS.args = talloc(sizeof(Type *));
+  gen_array->data.T_CONS.num_args = 1;
+  gen_array->data.T_CONS.args[0] = of;
+  gen_array->meta = talloc(sizeof(int));
+  *((int *)gen_array->meta) = size;
+  // int *size_ptr = array_type_size_ptr(gen_array);
+  // *size_ptr = size;
+  return gen_array;
 }

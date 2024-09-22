@@ -1,4 +1,4 @@
 #! /Users/adam/projects/sound/yalce/build/lang
-#! /Users/adam/projects/sound/yalce/build/lang -i
 %include Synth
-let x = sq_node 50 |> play_node
+let x = sq_node 50.;
+play_node

@@ -32,6 +32,21 @@ static void *prealloc(void *p, size_t size) {
   return realloc(p, size);
 }
 
+typedef struct __custom_binops_t {
+  const char *binop;
+  struct __custom_binops_t * next;
+} __custom_binops_t;
+
+__custom_binops_t *_custom_binops = NULL;
+
+void add_custom_binop(const char *binop_name) {
+  __custom_binops_t *new_custom_binops = malloc(sizeof(__custom_binops_t));
+  new_custom_binops->binop = binop_name;
+  new_custom_binops->next = _custom_binops;
+  _custom_binops = new_custom_binops;
+}
+
+
 struct string_list {
   const char *data;
   struct string_list *next;
@@ -241,8 +256,29 @@ Ast *parse_input(char *input, const char *dirname) {
   return res;
 }
 
+bool is_custom_binop(const char *id) {
+  __custom_binops_t *bb = _custom_binops;
+  while (bb) {
+    if (strcmp(id, bb->binop) == 0) {
+      return true;
+    }
+    bb = bb->next;
+  }
+  return false;
+}
+
 Ast *ast_application(Ast *func, Ast *arg) {
+
   if (func->tag == AST_APPLICATION) {
+
+    if (arg->tag == AST_IDENTIFIER && is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
+      Ast *app = Ast_new(AST_APPLICATION);
+      app->data.AST_APPLICATION.function = arg;
+      app->data.AST_APPLICATION.args = func;
+      app->data.AST_APPLICATION.len = 1;
+      return app;
+    }
+
     Ast *args = func->data.AST_APPLICATION.args;
     func->data.AST_APPLICATION.len++;
     int len = func->data.AST_APPLICATION.len;
@@ -251,11 +287,25 @@ Ast *ast_application(Ast *func, Ast *arg) {
     func->data.AST_APPLICATION.args[len - 1] = *arg;
     return func;
   }
+
+  if (arg->tag == AST_IDENTIFIER && is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
+
+    Ast *app = Ast_new(AST_APPLICATION);
+    app->data.AST_APPLICATION.function = arg;
+    app->data.AST_APPLICATION.args = palloc(sizeof(Ast));
+    app->data.AST_APPLICATION.args[0] = *func;
+    app->data.AST_APPLICATION.len = 1;
+
+    return app;
+
+  }
+
   Ast *app = Ast_new(AST_APPLICATION);
   app->data.AST_APPLICATION.function = func;
   app->data.AST_APPLICATION.args = palloc(sizeof(Ast));
   app->data.AST_APPLICATION.args[0] = *arg;
   app->data.AST_APPLICATION.len = 1;
+
   return app;
 }
 
@@ -462,12 +512,20 @@ Ast *ast_empty_list() {
   return l;
 }
 
+Ast *ast_empty_array() {
+  Ast *l = Ast_new(AST_ARRAY);
+  l->data.AST_LIST.len = 0;
+  l->data.AST_LIST.items = NULL;
+  return l;
+}
+
 Ast *ast_list(Ast *val) {
   Ast *l = Ast_new(AST_LIST);
   l->data.AST_LIST.len = 1;
   l->data.AST_LIST.items = val;
   return l;
 }
+
 Ast *ast_list_push(Ast *list, Ast *val) {
   Ast *items = list->data.AST_LIST.items;
   list->data.AST_LIST.len++;
@@ -475,6 +533,10 @@ Ast *ast_list_push(Ast *list, Ast *val) {
 
   list->data.AST_LIST.items = prealloc(items, sizeof(Ast) * len);
   list->data.AST_LIST.items[len - 1] = *val;
+  return list;
+}
+Ast *ast_list_to_array(Ast *list) {
+  list->tag = AST_ARRAY;
   return list;
 }
 
@@ -527,24 +589,8 @@ Ast *ast_meta(ObjString meta_id, Ast *next) {
 }
 
 Ast *ast_extern_fn(ObjString name, Ast *signature) {
-  // int param_count = 0;
-  // Ast *sig = signature;
-  // while (sig->tag == AST_FN_SIGNATURE) {
-  //   sig = sig->data.AST_LIST.items + 1;
-  //   param_count++;
-  // }
   Ast *extern_fn = Ast_new(AST_EXTERN_FN);
-  // extern_fn->data.AST_EXTERN_FN.signature_types =
-  //     malloc(sizeof(Ast) * (param_count + 1));
-  // sig = signature;
-  // for (int i = 0; i < param_count; i++) {
-  //   *(extern_fn->data.AST_EXTERN_FN.signature_types + i) =
-  //       sig->data.AST_LIST.items[0];
-  //   sig = sig->data.AST_LIST.items + 1;
-  // }
-  //
   extern_fn->data.AST_EXTERN_FN.signature_types = signature;
-  // extern_fn->data.AST_EXTERN_FN.len = param_count + 1;
   extern_fn->data.AST_EXTERN_FN.fn_name = name;
   return extern_fn;
 }

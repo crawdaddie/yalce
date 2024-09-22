@@ -34,6 +34,7 @@ extern Type t_neq;
 
 // clang-format off
 #define TYPE_NAME_LIST    "List"
+#define TYPE_NAME_ARRAY   "Array"
 #define TYPE_NAME_TUPLE   "Tuple"
 #define TYPE_NAME_PTR     "Ptr"
 #define TYPE_NAME_CHAR    "Char"
@@ -160,6 +161,7 @@ typedef struct Type {
   void *constructor;
   size_t constructor_size;
   bool is_recursive_fn_ref;
+  void *meta;
 } Type;
 
 // TypeEnv represents a mapping from variable names to their types
@@ -202,6 +204,9 @@ Type *deep_copy_type(const Type *original);
 
 bool is_list_type(Type *type);
 bool is_tuple_type(Type *type);
+bool is_pointer_type(Type *type);
+
+bool is_array_type(Type *type);
 
 Type *copy_type(Type *t);
 
@@ -231,5 +236,11 @@ typedef struct TypeMap {
 TypeMap *constraints_map_extend(TypeMap *map, Type *key, Type *val);
 void print_constraints_map(TypeMap *map);
 Type *constraints_map_lookup(TypeMap *map, Type *key);
+
+Type *ptr_of_type(Type *);
+
+int *array_type_size_ptr(Type *t);
+
+Type *create_array_type(Type *of, int size);
 
 #endif

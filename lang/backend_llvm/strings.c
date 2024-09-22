@@ -1,5 +1,4 @@
 #include "backend_llvm/strings.h"
-#include "binop.h"
 #include "types/type.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
@@ -205,15 +204,17 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
 LLVMValueRef string_is_empty(LLVMValueRef string, LLVMBuilderRef builder) {
   LLVMValueRef first_char =
       LLVMBuildLoad2(builder, LLVMInt8Type(), string, "first_char_of_string");
-  return codegen_int_binop(builder, TOKEN_EQUALITY, first_char,
-                           LLVMConstInt(LLVMInt8Type(), 0, 0));
+  // return LLVMbcodegen_int_binop(builder, TOKEN_EQUALITY, first_char,
+  //                          LLVMConstInt(LLVMInt8Type(), 0, 0));
+  return LLVMBuildICmp(builder, LLVMIntEQ, first_char,
+                       LLVMConstInt(LLVMInt8Type(), 0, 0), "Int8 ==");
 }
 
 LLVMValueRef string_is_not_empty(LLVMValueRef string, LLVMBuilderRef builder) {
   LLVMValueRef first_char =
       LLVMBuildLoad2(builder, LLVMInt8Type(), string, "first_char_of_string");
-  return codegen_int_binop(builder, TOKEN_NOT_EQUAL, first_char,
-                           LLVMConstInt(LLVMInt8Type(), 0, 0));
+  return LLVMBuildICmp(builder, LLVMIntNE, first_char,
+                       LLVMConstInt(LLVMInt8Type(), 0, 0), "Int8 ==");
 }
 
 LLVMValueRef strings_equal(LLVMValueRef left, LLVMValueRef right,
@@ -232,8 +233,12 @@ LLVMValueRef strings_equal(LLVMValueRef left, LLVMValueRef right,
 
   LLVMValueRef comp = LLVMBuildCall2(builder, fn_type, string_compare_func,
                                      args, 2, "str_compare_result");
-  return codegen_int_binop(builder, TOKEN_EQUALITY, comp,
-                           LLVMConstInt(LLVMInt32Type(), 0, 0));
+
+  // return codegen_int_binop(builder, TOKEN_EQUALITY, comp,
+  //                          LLVMConstInt(LLVMInt32Type(), 0, 0));
+
+  return LLVMBuildICmp(builder, LLVMIntEQ, comp,
+                       LLVMConstInt(LLVMInt32Type(), 0, 0), "Int ==");
 }
 // Assume we have an LLVMValueRef representing a string pointer
 LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string) {

@@ -3,13 +3,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#define MAKE_FN_TYPE_2(arg_type, ret_type)                                     \
+#define _MAKE_FN_TYPE_2(arg_type, ret_type)                                    \
   ((Type){T_FN, {.T_FN = {.from = &arg_type, .to = &ret_type}}})
 
-#define MAKE_FN_TYPE_3(arg1_type, arg2_type, ret_type)                         \
+#define _MAKE_FN_TYPE_3(arg1_type, arg2_type, ret_type)                        \
   ((Type){T_FN,                                                                \
           {.T_FN = {.from = &arg1_type,                                        \
-                    .to = &MAKE_FN_TYPE_2(arg2_type, ret_type)}}})
+                    .to = &_MAKE_FN_TYPE_2(arg2_type, ret_type)}}})
 
 // TOKEN_PLUS,
 // TOKEN_MINUS,
@@ -27,7 +27,7 @@
 
 #define DERIVE_ARITHMETIC_TYPECLASS(type_name, _rank)                          \
   Type type_name##_arithmetic_fn_sig =                                         \
-      MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_##type_name);             \
+      _MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_##type_name);            \
   TypeClass TCArithmetic_##type_name = {                                       \
       "arithmetic", .num_methods = 5, .rank = _rank,                           \
       .methods = (Method[]){                                                   \
@@ -84,7 +84,7 @@ TypeClass *derive_arithmetic_for_type(Type *t) {
 
 #define DERIVE_ORD_TYPECLASS(type_name, _rank)                                 \
   Type type_name##_ord_fn_sig =                                                \
-      MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_bool);                    \
+      _MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_bool);                   \
   TypeClass TCOrd_##type_name = {"ord", .num_methods = 4, .rank = _rank,       \
                                  .methods = (Method[]){                        \
                                      {                                         \
@@ -132,7 +132,7 @@ TypeClass *derive_ord_for_type(Type *t) {
 
 #define DERIVE_EQ_TYPECLASS(type_name, _rank)                                  \
   Type type_name##_eq_fn_sig =                                                 \
-      MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_bool);                    \
+      _MAKE_FN_TYPE_3(t_##type_name, t_##type_name, t_bool);                   \
   TypeClass TCEq_##type_name = {"eq", .num_methods = 2, .rank = _rank,         \
                                 .methods = (Method[]){                         \
                                     {                                          \

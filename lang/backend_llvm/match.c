@@ -1,7 +1,7 @@
 #include "backend_llvm/match.h"
-#include "backend_llvm/binop.h"
 #include "backend_llvm/globals.h"
 #include "backend_llvm/types.h"
+#include "function.h"
 #include "list.h"
 #include "serde.h"
 #include "symbols.h"
@@ -146,7 +146,6 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     return LLVMBuildAnd(builder, test_val, guard_val, "guard_and_test");
   }
   case AST_IDENTIFIER: {
-
     const char *id_chars = binding->data.AST_IDENTIFIER.value;
     int id_len = binding->data.AST_IDENTIFIER.length;
 
@@ -166,8 +165,8 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     }
 
     if (ctx->stack_ptr == 0) {
-
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
+
       JITSymbol *sym =
           new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
 
@@ -182,7 +181,9 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     Type *v = env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
 
     if (!sym && !v) {
+
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
+
       JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
@@ -279,6 +280,9 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       LLVMValueRef is_null = ll_is_null(val, el_type_llvm, builder);
       return is_null;
     }
+  }
+  case AST_VOID: {
+    return _TRUE;
   }
 
   default: {

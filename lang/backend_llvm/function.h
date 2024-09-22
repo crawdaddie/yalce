@@ -22,4 +22,7 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
                                    Type *expected_fn_type, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
+
+typedef LLVMValueRef (*LLVMBinopMethod)(LLVMValueRef, LLVMValueRef,
+                                        LLVMModuleRef, LLVMBuilderRef);
 #endif

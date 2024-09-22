@@ -97,7 +97,10 @@
     status &= (succeed == NULL);                                               \
   })
 
-#define TLIST(_t) ((Type){T_CONS, {.T_CONS = {"List", (Type *[]){_t}, 1}}})
+#define TLIST(_t)                                                              \
+  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){_t}, 1}}})
+#define TARRAY(_t)                                                             \
+  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){_t}, 1}}})
 
 #define TTUPLE(num, ...)                                                       \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
@@ -161,6 +164,9 @@ int main() {
 
   TEST_SIMPLE_AST_TYPE("[1,2,3]", &(TLIST(&t_int)));
   TEST_TYPECHECK_FAIL("[1,2.0,3]");
+
+  TEST_SIMPLE_AST_TYPE("[|1,2,3|]", &(TARRAY(&t_int)));
+  TEST_TYPECHECK_FAIL("[|1,2.0,3|]");
   TEST_SIMPLE_AST_TYPE("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
 
   ({

@@ -222,6 +222,7 @@ int main() {
   //     test_parse("`hello {x} {y}`", "(((_format \"hello {x} {y}\") x) y)");
 
   status &= test_parse("[1, 2, 3, 4]", "[1, 2, 3, 4]");
+  status &= test_parse("[|1, 2, 3, 4|]", "[|1, 2, 3, 4|]");
   status &= test_parse("1::[1,2]", "((:: 1) [1, 2])");
   status &= test_parse("x::y::[1,2]", "((:: x) ((:: y) [1, 2]))");
   status &= test_parse("x::rest", "((:: x) rest)");

@@ -24,16 +24,20 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   TypeEnv *replacement_env = NULL;
 
   Type *result_fn = fn_type;
+  // print_type(result_fn);
 
   for (int i = 0; i < len; i++) {
     if (app_arg_types[i]->kind == T_FN) {
       app_arg_types[i] = copy_type(app_arg_types[i]);
     }
 
-    Type *unif =
-        unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
+    Type *unif;
+    unif = unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
 
-    if (!unif) {
+    if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
+      fprintf(stderr, "unif fail: ");
+      print_type_err(result_fn->data.T_FN.from);
+      print_type_err(app_arg_types[i]);
       return NULL;
     }
 

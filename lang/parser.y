@@ -82,6 +82,7 @@ Ast* ast_root = NULL;
   extern_typed_signature
   extern_variants
   list
+  array
   tuple
   expr_list
   match_expr
@@ -146,6 +147,7 @@ simple_expr:
   | IDENTIFIER            { $$ = ast_identifier($1); }
   | TOK_VOID              { $$ = ast_void(); }
   | list                  { $$ = $1; }
+  | array                 { $$ = $1; }
   | tuple                 { $$ = $1; }
   | fstring               { $$ = parse_fstring_expr($1); }
   | TOK_CHAR              { $$ = ast_char($1); }
@@ -185,7 +187,9 @@ let_binding:
                                     }
   | LET '(' IDENTIFIER ')' '=' lambda_expr 
                                     {
-                                      $$ = ast_let(ast_identifier($3), $6, NULL);
+                                      Ast *id = ast_identifier($3);
+                                      add_custom_binop(id->data.AST_IDENTIFIER.value);
+                                      $$ = ast_let(id, $6, NULL);
                                     }
   ;
 
@@ -244,6 +248,12 @@ list:
     '[' ']'                 { $$ = ast_empty_list(); }
   | '[' expr_list ']'       { $$ = $2; }
   | '[' expr_list ',' ']'   { $$ = $2; }
+  ;
+
+array:
+    '[''|' '|'']'                 { $$ = ast_empty_array(); }
+  | '[''|' expr_list '|'']'       { $$ = ast_list_to_array($3); }
+  | '[''|' expr_list ',' '|'']'   { $$ = ast_list_to_array($3); }
   ;
 
 list_match_expr:

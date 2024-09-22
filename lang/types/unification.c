@@ -43,38 +43,42 @@ bool occurs_check_helper(const char *var_name, Type *type) {
   }
 }
 
-Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
+Type *unify_variable(Type *t1, Type *t2, TypeEnv **env) {
 
-  if (var->kind == T_VAR && t->kind == T_VAR &&
-      strcmp(var->data.T_VAR, t->data.T_VAR) == 0) {
+  // printf("unify var\n");
+  // print_type(t1);
+  // print_type(t2);
+
+  if (t1->kind == T_VAR && t2->kind == T_VAR &&
+      strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0) {
     // TODO: merge typeclasses?
-    return t;
+    return t2;
   }
 
-  if (var->kind == T_VAR && t->kind == T_VAR && var->num_implements > 0 &&
-      t->num_implements == 0) {
-    t->implements = var->implements;
-    t->num_implements = var->num_implements;
+  if (t1->kind == T_VAR && t2->kind == T_VAR && t1->num_implements > 0 &&
+      t2->num_implements == 0) {
+    t2->implements = t1->implements;
+    t2->num_implements = t1->num_implements;
   }
 
-  if (occurs_check(var, t)) {
-    if (t->kind == T_TYPECLASS_RESOLVE &&
-        types_equal(t->data.T_TYPECLASS_RESOLVE.dependencies[0], var) &&
-        (t->data.T_TYPECLASS_RESOLVE.dependencies[1]->kind == T_VAR)) {
+  if (occurs_check(t1, t2)) {
+    if (t2->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t2->data.T_TYPECLASS_RESOLVE.dependencies[0], t1) &&
+        (t2->data.T_TYPECLASS_RESOLVE.dependencies[1]->kind == T_VAR)) {
 
       *env = env_extend(
-          *env, t->data.T_TYPECLASS_RESOLVE.dependencies[1]->data.T_VAR, var);
+          *env, t2->data.T_TYPECLASS_RESOLVE.dependencies[1]->data.T_VAR, t1);
 
-      return var;
+      return t1;
     }
 
-    if (t->kind == T_TYPECLASS_RESOLVE &&
-        types_equal(t->data.T_TYPECLASS_RESOLVE.dependencies[1], var) &&
-        (t->data.T_TYPECLASS_RESOLVE.dependencies[0]->kind == T_VAR)) {
+    if (t2->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t2->data.T_TYPECLASS_RESOLVE.dependencies[1], t1) &&
+        (t2->data.T_TYPECLASS_RESOLVE.dependencies[0]->kind == T_VAR)) {
 
       *env = env_extend(
-          *env, t->data.T_TYPECLASS_RESOLVE.dependencies[0]->data.T_VAR, var);
-      return var;
+          *env, t2->data.T_TYPECLASS_RESOLVE.dependencies[0]->data.T_VAR, t1);
+      return t1;
     }
 
     // Occurs check failed, infinite type error
@@ -82,20 +86,23 @@ Type *unify_variable(Type *var, Type *t, TypeEnv **env) {
   }
 
   // Check if the variable is already bound in the environment
-  Type *bound = env_lookup(*env, var->data.T_VAR);
+  Type *bound = env_lookup(*env, t1->data.T_VAR);
 
   if (bound) {
     // If it's bound, unify the bound type with t
-    return unify(bound, t, env);
+    return unify(bound, t2, env);
   }
 
   // If not bound, bind it in the environment
-  *env = env_extend(*env, var->data.T_VAR, t);
-  *var = *t;
-  return t;
+  *env = env_extend(*env, t1->data.T_VAR, t2);
+  *t1 = *t2;
+  return t2;
 }
 
 Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
+  // printf("unify function\n");
+  // print_type(t1);
+  // print_type(t2);
 
   Type *from = unify(t1->data.T_FN.from, t2->data.T_FN.from, env);
   if (!from)
@@ -109,6 +116,17 @@ Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
 }
 
 Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
+
+  if (is_pointer_type(t1) && !(types_equal(t1, t2))) {
+    t1->data.T_CONS.args[0] = t2;
+    return t1;
+  }
+
+  if (is_array_type(t1) && is_array_type(t2)) {
+    Type *unif = unify(t1->data.T_CONS.args[0], t2->data.T_CONS.args[0], env);
+    t1->data.T_CONS.args[0] = unif;
+    return t1;
+  }
 
   int vidx1;
   Type *v1 = is_variant_type(t1) ? t1 : variant_lookup(*env, t1, &vidx1);
@@ -208,7 +226,6 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   if (t1->kind == T_VAR) {
     return unify_variable(t1, t2, env);
   }
-
   if (t2->kind == T_VAR) {
     return unify_variable(t2, t1, env);
   }
@@ -263,8 +280,13 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
     return unify_function(t1, t2, env);
 
   case T_CONS:
+
     // Unify constructed types
+    if (types_equal(t1, t2)) {
+      return t1;
+    }
     return unify_cons(t1, t2, env);
+
   case T_TYPECLASS_RESOLVE: {
     if (types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[0], t2) ||
         types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[1], t2)) {
@@ -279,6 +301,7 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   }
 
   default:
+
     // Unsupported type error
     return NULL;
   }

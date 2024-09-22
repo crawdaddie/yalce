@@ -3,6 +3,8 @@
 #include "lib.h"
 #include "node.h"
 #include "oscillators.h"
+#include "scheduling.h"
+#include <stdio.h>
 
 Node *test_synth(double freq, double cutoff) {
   Node *group = group_new(0);
@@ -19,7 +21,7 @@ Node *test_synth(double freq, double cutoff) {
   return group;
 }
 
-int main(int argc, char **argv) {
+int _main(int argc, char **argv) {
   init_audio();
   Node *s = test_synth(50., 500.);
 
@@ -32,15 +34,25 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-int _main(int argc, char **argv) {
+struct userdata_t {
+  int a;
+};
+// Example callback function
+void _example_cb(void *user_data, uint64_t t) {
+  printf("Callback executed at %llu\n", t);
+}
+
+int main(int argc, char **argv) {
   init_audio();
-  Signal *buf = read_buf("fat_amen_mono_48000.wav");
-
-  Node *b = bufplayer_node(buf, get_sig_default(1, 0.99),
-                           get_sig_default(1, 0.75), get_sig_default(1, 0.0));
-
-  add_to_dac(b);
-  audio_ctx_add(b);
+  // Signal *buf = read_buf("../fat_amen_mono_48000.wav");
+  //
+  // Node *b = bufplayer_node(buf, get_sig_default(1, 0.99),
+  //                          get_sig_default(1, 0.75), get_sig_default(1,
+  //                          0.0));
+  //
+  // add_to_dac(b);
+  // audio_ctx_add(b);
+  schedule_event(_example_cb, &(struct userdata_t){200}, 1.0);
 
   while (1) {
     // print_graph();

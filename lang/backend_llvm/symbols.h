@@ -41,5 +41,5 @@ JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
 
 int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym);
 JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx);
-void initialize_builtin_binops(ht *stack, TypeEnv *env);
+TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env);
 #endif

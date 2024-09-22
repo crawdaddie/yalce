@@ -2,6 +2,7 @@
 #include "backend_llvm/util.h"
 #include "parse.h"
 #include "types/type.h"
+#include "types/typeclass.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <string.h>
@@ -50,7 +51,6 @@ LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
 
 LLVMValueRef const_node_of_sig(LLVMValueRef val, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-  printf("CONST node of SIG\n");
   LLVMTypeRef fn_type;
   LLVMValueRef node_of_sig_func = node_of_sig_fn(&fn_type, module);
   LLVMValueRef const_node =
@@ -58,12 +58,25 @@ LLVMValueRef const_node_of_sig(LLVMValueRef val, LLVMModuleRef module,
   return const_node;
 }
 
-LLVMValueRef const_sig_of_val(LLVMValueRef val, LLVMModuleRef module,
-                              LLVMBuilderRef builder) {
+LLVMValueRef const_sig_of_val_int(LLVMValueRef val, LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
   LLVMTypeRef fn_type;
   LLVMValueRef sig_of_val_func = sig_of_val_fn(&fn_type, module);
   LLVMValueRef double_val =
       LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+  LLVMValueRef const_sig = LLVMBuildCall2(builder, fn_type, sig_of_val_func,
+                                          &double_val, 1, "sig_of_val");
+  return const_sig;
+}
+
+LLVMValueRef const_sig_of_val(LLVMValueRef val, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  LLVMTypeRef fn_type;
+  LLVMValueRef sig_of_val_func = sig_of_val_fn(&fn_type, module);
+
+  LLVMValueRef double_val =
+      LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
+
   LLVMValueRef const_sig = LLVMBuildCall2(builder, fn_type, sig_of_val_func,
                                           &double_val, 1, "sig_of_val");
   return const_sig;
@@ -95,6 +108,8 @@ LLVMValueRef ConsSynth(LLVMValueRef value, Type *type_from,
 LLVMValueRef ConsSignal(LLVMValueRef value, Type *type_from,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  print_type(type_from);
+
   switch (type_from->kind) {
   case T_INT:
   case T_NUM: {
@@ -115,6 +130,50 @@ LLVMValueRef ConsSignal(LLVMValueRef value, Type *type_from,
   }
 }
 
+TypeClass TCEq_synth = {
+    "eq", .num_methods = 2, .rank = 2.0,
+    .methods = (Method[]){
+        (Method){"==",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+        (Method){"!=",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+    }};
+
+TypeClass TCOrd_synth = {
+    "ord", .num_methods = 4, .rank = 2.0,
+    .methods = (Method[]){
+        (Method){">",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+
+        (Method){"<",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+
+        (Method){">=",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+
+        (Method){"<=",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+    }};
+
+TypeClass TCArithmetic_synth = {
+    "arithmetic", .num_methods = 5, .rank = 2.0,
+    .methods = (Method[]){
+        (Method){"+",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+
+        (Method){"-",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+
+        (Method){"*",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+
+        (Method){"/",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+
+        (Method){"%",
+                 .signature = &MAKE_FN_TYPE_3(&t_synth, &t_synth, &t_synth)},
+    }};
+
 Type t_synth = {T_CONS,
                 {.T_CONS =
                      {
@@ -124,7 +183,13 @@ Type t_synth = {T_CONS,
                      }},
                 .alias = "Synth",
                 .constructor = ConsSynth,
-                .constructor_size = sizeof(SynthConsMethod)};
+                .constructor_size = sizeof(SynthConsMethod),
+                .num_implements = 3,
+                .implements = (TypeClass *[]){
+                    &TCEq_synth,
+                    &TCOrd_synth,
+                    &TCArithmetic_synth,
+                }};
 
 Type t_signal = {T_CONS,
                  {.T_CONS =
@@ -187,56 +252,58 @@ static LLVMValueRef SYNTH_BINOP(LLVMValueRef fn, LLVMTypeRef fn_type,
   return NULL;
 }
 
-static LLVMValueRef codegen_synth_plus(LLVMValueRef lval, Type *ltype,
-                                       LLVMValueRef rval, Type *rtype,
+static LLVMValueRef codegen_synth_plus(LLVMValueRef lval, LLVMValueRef rval,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
-  int type_check =
-      (types_equal(ltype, &t_synth) << 1) | types_equal(rtype, &t_synth);
 
   LLVMTypeRef fn_type;
   LLVMValueRef fn = get_sum2_node_fn(&fn_type, module);
-  return SYNTH_BINOP(fn, fn_type, lval, ltype, rval, rtype, module, builder);
+  return LLVMBuildCall2(builder, fn_type, fn, (LLVMValueRef[]){lval, rval}, 2,
+                        "Synth_binop");
 }
 
-static LLVMValueRef codegen_synth_minus(LLVMValueRef lval, Type *ltype,
-                                        LLVMValueRef rval, Type *rtype,
+static LLVMValueRef codegen_synth_minus(LLVMValueRef lval, LLVMValueRef rval,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
 
   LLVMTypeRef fn_type;
   LLVMValueRef fn = get_sub2_node_fn(&fn_type, module);
-  return SYNTH_BINOP(fn, fn_type, lval, ltype, rval, rtype, module, builder);
+
+  return LLVMBuildCall2(builder, fn_type, fn, (LLVMValueRef[]){lval, rval}, 2,
+                        "Synth_binop");
 }
 
-static LLVMValueRef codegen_synth_mul(LLVMValueRef lval, Type *ltype,
-                                      LLVMValueRef rval, Type *rtype,
+static LLVMValueRef codegen_synth_mul(LLVMValueRef lval, LLVMValueRef rval,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
 
   LLVMTypeRef fn_type;
   LLVMValueRef fn = get_mul2_node_fn(&fn_type, module);
-  return SYNTH_BINOP(fn, fn_type, lval, ltype, rval, rtype, module, builder);
+
+  return LLVMBuildCall2(builder, fn_type, fn, (LLVMValueRef[]){lval, rval}, 2,
+                        "Synth_binop");
 }
 
-static LLVMValueRef codegen_synth_div(LLVMValueRef lval, Type *ltype,
-                                      LLVMValueRef rval, Type *rtype,
+static LLVMValueRef codegen_synth_div(LLVMValueRef lval, LLVMValueRef rval,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
 
   LLVMTypeRef fn_type;
   LLVMValueRef fn = get_div2_node_fn(&fn_type, module);
-  return SYNTH_BINOP(fn, fn_type, lval, ltype, rval, rtype, module, builder);
+
+  return LLVMBuildCall2(builder, fn_type, fn, (LLVMValueRef[]){lval, rval}, 2,
+                        "Synth_binop");
 }
 
-static LLVMValueRef codegen_synth_mod(LLVMValueRef lval, Type *ltype,
-                                      LLVMValueRef rval, Type *rtype,
+static LLVMValueRef codegen_synth_mod(LLVMValueRef lval, LLVMValueRef rval,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
 
   LLVMTypeRef fn_type;
   LLVMValueRef fn = get_mod2_node_fn(&fn_type, module);
-  return SYNTH_BINOP(fn, fn_type, lval, ltype, rval, rtype, module, builder);
+
+  return LLVMBuildCall2(builder, fn_type, fn, (LLVMValueRef[]){lval, rval}, 2,
+                        "Synth_binop");
 }
 
 // Define the function pointer type
@@ -244,14 +311,14 @@ typedef LLVMValueRef (*NumTypeClassMethod)(LLVMValueRef, Type *, LLVMValueRef,
                                            Type *, LLVMModuleRef,
                                            LLVMBuilderRef);
 
-// clang-format off
-static NumTypeClassMethod synth_num_methods[] = {
-    [TOKEN_PLUS -   TOKEN_PLUS] = codegen_synth_plus,
-    [TOKEN_MINUS -  TOKEN_PLUS] = codegen_synth_minus,
-    [TOKEN_STAR -   TOKEN_PLUS] = codegen_synth_mul,
-    [TOKEN_SLASH -  TOKEN_PLUS] = codegen_synth_div,
-    [TOKEN_MODULO - TOKEN_PLUS] = codegen_synth_mod,
-};
+// // clang-format off
+// static NumTypeClassMethod synth_num_methods[] = {
+//     [TOKEN_PLUS -   TOKEN_PLUS] = codegen_synth_plus,
+//     [TOKEN_MINUS -  TOKEN_PLUS] = codegen_synth_minus,
+//     [TOKEN_STAR -   TOKEN_PLUS] = codegen_synth_mul,
+//     [TOKEN_SLASH -  TOKEN_PLUS] = codegen_synth_div,
+//     [TOKEN_MODULO - TOKEN_PLUS] = codegen_synth_mod,
+// };
 
 // clang-format on
 
@@ -262,8 +329,13 @@ TypeEnv *initialize_type_env_synth(TypeEnv *env) {
   // synth_num_typeclass->method_size = sizeof(NumTypeClassMethod);
   //
   // add_typeclass_impl(&t_synth, synth_num_typeclass);
-
+  t_synth.implements[2]->methods[0].method = codegen_synth_plus;
+  t_synth.implements[2]->methods[1].method = codegen_synth_minus;
+  t_synth.implements[2]->methods[2].method = codegen_synth_mul;
+  t_synth.implements[2]->methods[3].method = codegen_synth_div;
+  t_synth.implements[2]->methods[4].method = codegen_synth_mod;
   env = env_extend(env, "Synth", &t_synth);
+
   env = env_extend(env, "Signal", &t_signal);
 
   return env;
