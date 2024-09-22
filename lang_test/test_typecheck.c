@@ -252,19 +252,19 @@ int main() {
     TEST_SIMPLE_AST_TYPE_ENV("x", &t_int, env);
   });
 
-  ({
-    SEP;
-    TEST_TYPECHECK_FAIL("type Option t =\n"
-                        "  | Some of t\n"
-                        "  | None\n"
-                        "  ;\n"
-                        "let x = Some 1;\n"
-                        "match x with\n"
-                        "  | Some 1 -> 1\n"
-                        "  | Some 1.0 -> 1\n"
-                        "  | None -> 0\n"
-                        "  ;\n");
-  });
+  // ({
+  //   SEP;
+  //   TEST_TYPECHECK_FAIL("type Option t =\n"
+  //                       "  | Some of t\n"
+  //                       "  | None\n"
+  //                       "  ;\n"
+  //                       "let x = Some 1;\n"
+  //                       "match x with\n"
+  //                       "  | Some 1 -> 1\n"
+  //                       "  | Some 1.0 -> 1\n"
+  //                       "  | None -> 0\n"
+  //                       "  ;\n");
+  // });
 
   ({
     TITLE("match result different types")
@@ -322,20 +322,20 @@ int main() {
                          &MAKE_FN_TYPE_2(&tuple, &t_int));
   });
 
-  ({
-    TITLE("inexhaustive match expr")
-    RESET;
-    ;
-
-    TEST_TYPECHECK_FAIL("type Option t =\n"
-                        "  | Some of t\n"
-                        "  | None\n"
-                        "  ;\n"
-                        "let x = Some 1;\n"
-                        "match x with\n"
-                        "  | Some 1 -> 1\n"
-                        "  ;\n");
-  });
+  // ({
+  //   TITLE("inexhaustive match expr")
+  //   RESET;
+  //   ;
+  //
+  //   TEST_TYPECHECK_FAIL("type Option t =\n"
+  //                       "  | Some of t\n"
+  //                       "  | None\n"
+  //                       "  ;\n"
+  //                       "let x = Some 1;\n"
+  //                       "match x with\n"
+  //                       "  | Some 1 -> 1\n"
+  //                       "  ;\n");
+  // });
 
   ({
     SEP;

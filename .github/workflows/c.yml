@@ -23,6 +23,9 @@ jobs:
 
     - name: Typecheck Test
       run: make test_typecheck
+
+    - name: Integration Test
+      run: make test_scripts
       
     - name: Clean up
       run: make clean
