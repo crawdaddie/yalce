@@ -200,6 +200,26 @@ LLVMValueRef codegen_array(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return array_ptr;
 }
 
+LLVMValueRef codegen_array_init(LLVMValueRef size, LLVMValueRef item,
+                                JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+
+  LLVMTypeRef llvm_el_type = LLVMTypeOf(item);
+
+  LLVMValueRef len_val = size;
+
+  LLVMValueRef array_ptr;
+  if (ctx->stack_ptr == 0) {
+    array_ptr =
+        LLVMBuildArrayMalloc(builder, llvm_el_type, len_val, "heap_array");
+  } else {
+    array_ptr =
+        LLVMBuildArrayAlloca(builder, llvm_el_type, len_val, "stack_array");
+  }
+
+  return array_ptr;
+}
+
 LLVMValueRef __codegen_array(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
 

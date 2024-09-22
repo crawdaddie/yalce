@@ -232,5 +232,14 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "array_size", hash_string("array_size", 10),
               array_size_sym);
 
+  Type *array_init_fn_sig = type_fn(&t_int, type_fn(gen_array_el, gen_array));
+
+  env = env_extend(env, "array_init", array_init_fn_sig);
+
+  JITSymbol *array_init_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
+
+  ht_set_hash(stack, "array_init", hash_string("array_init", 10),
+              array_init_sym);
   return env;
 }

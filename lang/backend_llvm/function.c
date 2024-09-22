@@ -458,6 +458,23 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     int size = *size_ptr;
     return LLVMConstInt(LLVMInt32Type(), size, 0);
   }
+
+  if (strcmp(sym_name, "array_init") == 0) {
+    // TODO: not implemented well at all
+    Type *array_type = ast->md;
+    LLVMValueRef size =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+    if ((ast->data.AST_APPLICATION.args + 1)->tag == AST_INT) {
+      int *size = array_type_size_ptr(array_type);
+      *size = ast->data.AST_APPLICATION.args[1].data.AST_INT.value;
+    }
+
+    LLVMValueRef item =
+        codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+    return codegen_array_init(size, item, ctx, module, builder);
+  }
   return NULL;
 }
 
