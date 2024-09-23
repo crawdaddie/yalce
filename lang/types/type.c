@@ -237,6 +237,12 @@ void print_type(Type *t) {
     printf("null\n");
     return;
   }
+
+  if (t->alias) {
+    printf("%s\n", t->alias);
+    return;
+  }
+
   char buf[200] = {};
   printf("%s\n", type_to_string(t, buf));
 }
@@ -371,7 +377,7 @@ void *talloc(size_t size) {
   // }
   // return mem;
   if (_tstorage.size + size > _tstorage.capacity) {
-    fprintf(stderr, "Error allocating memory for type");
+    fprintf(stderr, "OOM Error allocating memory for type");
     return NULL;
   }
   void *mem = _tstorage.data + _tstorage.size;

@@ -89,6 +89,8 @@ static void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func,
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
+  // printf("codegen fn: ");
+  // print_ast(ast);
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   Type *fn_type = ast->md;
@@ -255,6 +257,7 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
                                    Type *expected_fn_type, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
+
   SpecificFns *specific_fns =
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
   LLVMValueRef callable = specific_fns_lookup(specific_fns, expected_fn_type);
@@ -373,8 +376,6 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
                                         module, builder);
       app_vals[i] = app_val;
 
-      // LLVMDumpValue(app_vals[i]);
-
       callable_type = callable_type->data.T_FN.to;
     }
 
@@ -410,6 +411,7 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
   Type *res_type = ast->md;
+
   if (is_generic(res_type)) {
     res_type = resolve_generic_type(res_type, ctx->env);
   }

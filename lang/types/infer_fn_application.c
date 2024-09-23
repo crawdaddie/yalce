@@ -1,5 +1,6 @@
 #include "types/infer_fn_application.h"
 #include "inference.h"
+#include "serde.h"
 #include "types/unification.h"
 
 // forward decl

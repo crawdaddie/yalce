@@ -1,0 +1,75 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+
+%include Fmt
+%include Synth
+%include Math
+
+let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
+
+let sq_detune = fn () -> 
+  let f = inlet 50. in
+  sq_node f + sq_node (f * 1.01)
+;;
+
+
+let wr = fn def -> 
+  reset_chain ();
+  let x = def ();
+  end_chain x
+;;
+
+
+let x = sq_detune |> wr |> play;
+let notes = [|
+  110.0,
+  123.47082531403103,
+  130.8127826502993,
+  146.8323839587038,
+  164.81377845643496,
+  174.61411571650194,
+  195.99771799087463,
+|];
+
+let octaves = [|
+  0.5,
+  1.,
+  2.,
+  4.,
+|];
+
+let times = [|
+  0.125,
+  0.25,
+  0.5,
+  0.125,
+|];
+
+
+
+let (@) = fn array idx -> array_at array idx;;
+
+let rand_note = fn () -> 
+  notes @ (rand_int 7)
+;;
+
+let rand_oct = fn () -> 
+  octaves @ (rand_int 4)
+;;
+
+let rand_time = fn () -> 
+  times @ (rand_int 4)
+;;
+
+# let choose = fn arr ->
+#   arr @ (rand_int (array_size arr))
+# ;;
+
+# choose notes;
+
+
+let f = fn () ->
+  set_input_scalar x 0 ((rand_note ()) * (rand_oct ()));
+  schedule_event f (1, 2) (rand_time ())
+;;
+
+schedule_event (f) (1, 2) 1.0;

@@ -20,6 +20,10 @@ let out_sig = extern fn Synth -> Signal;
 let input_sig = extern fn Int -> Synth -> Signal;
 let num_inputs = extern fn Synth -> Int;
 let play_node = extern fn Synth -> Synth;
+let play = extern fn Synth -> Synth;
+
+let reset_chain = extern fn () -> ();
+let end_chain = extern fn Synth -> Synth;
 
 let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
 let set_input_trig = extern fn Int -> Synth -> Synth;

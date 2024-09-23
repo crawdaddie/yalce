@@ -247,8 +247,11 @@ LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
   if (member_type->kind == T_CONS) {
     int vidx;
     Type *v = variant_lookup(ctx->env, member_type, &vidx);
+    if (!v) {
+      return NULL;
+    }
 
-    if (is_generic(v)) {
+    if (v && is_generic(v)) {
       if (member_type->data.T_CONS.num_args == 0) {
 
         LLVMContextRef context = LLVMGetModuleContext(module);

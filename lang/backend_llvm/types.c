@@ -142,6 +142,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     return LLVMVoidType();
   }
   }
+
   if (is_generic(type)) {
     return NULL;
   }
@@ -669,6 +670,7 @@ Method *get_binop_method(const char *binop, Type *l, Type *r) {
 
       TypeClass *tcl = l->implements[tc_key.tc_idx];
       TypeClass *tcr = r->implements[tc_key.tc_idx];
+
       if (tcl->rank >= tcr->rank) {
         return tcl->methods + tc_key.meth_idx;
       }

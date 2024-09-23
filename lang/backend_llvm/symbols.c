@@ -39,6 +39,23 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
   return NULL;
 }
 
+JITSymbol *lookup_id_in_current_scope(Ast *ast, JITLangCtx *ctx) {
+  if (ast->tag == AST_IDENTIFIER) {
+
+    const char *chars = ast->data.AST_IDENTIFIER.value;
+    int chars_len = ast->data.AST_IDENTIFIER.length;
+    ObjString key = {.chars = chars, chars_len, hash_string(chars, chars_len)};
+    int ptr = ctx->stack_ptr;
+
+    JITSymbol *sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
+    if (sym != NULL) {
+      return sym;
+    }
+  }
+
+  return NULL;
+}
+
 JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx) {
 
   int ptr = ctx->stack_ptr;
@@ -86,12 +103,14 @@ int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
 
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
-
-  // printf("codegen identifier ");
   const char *chars = ast->data.AST_IDENTIFIER.value;
   int length = ast->data.AST_IDENTIFIER.length;
 
-  JITSymbol *res = NULL;
+  // hti it = ht_iterator(ctx->stack + ctx->stack_ptr);
+  //
+  // for (int entry = 0; ht_next(&it); entry++) {
+  //   printf("symbol %s %d\n", it.key, ctx->stack_ptr);
+  // };
 
   JITSymbol *sym = lookup_id_ast(ast, ctx);
 
@@ -161,17 +180,12 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   Ast *binding = ast->data.AST_LET.binding;
 
   JITLangCtx cont_ctx = *outer_ctx;
+
   if (ast->data.AST_LET.in_expr != NULL) {
     cont_ctx = ctx_push(cont_ctx);
   }
 
   Type *expr_type = ast->data.AST_LET.expr->md;
-  // print_type(expr_type);
-  // if (is_array_type(expr_type)) {
-  //   void *contained = expr_type->data.T_CONS.args;
-  //   int *size = contained + sizeof(Type *);
-  //   printf("array size %d\n", *size);
-  // }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
 
@@ -185,6 +199,13 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   if (!expr_val) {
     return NULL;
   }
+
+  // if (binding->tag == AST_IDENTIFIER &&
+  //     strcmp("x", binding->data.AST_IDENTIFIER.value) == 0) {
+  //   printf("set up binding for val x (scope %d) %d\n", outer_ctx->stack_ptr,
+  //          binding->tag);
+  //   print_ast(binding);
+  // }
 
   LLVMValueRef match_result =
       match_values(binding, expr_val, expr_type, &cont_ctx, module, builder);

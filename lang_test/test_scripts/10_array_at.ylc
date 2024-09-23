@@ -21,7 +21,10 @@ test_val (x @ 2 @ 0 == 5.) "array[2][0] == 5.";
 test_val (x @ 2 @ 1 == 6.) "array[2][1] == 6.";
 test_val (array_size x == 3) "len of array == 3";
 
-
+let rand_int = extern fn Int -> Int ;
+let choose = fn arr ->
+  arr @ (rand_int (array_size arr))
+;;
 # let xx = [|
 #   (1,2),
 #   (2,3),

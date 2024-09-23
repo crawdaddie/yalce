@@ -173,14 +173,13 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       codegen_set_global(sym, val, val_type, llvm_type, ctx, module, builder);
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
+
       return _TRUE;
     }
 
-    JITSymbol *sym = lookup_id_ast(binding, ctx);
+    JITSymbol *sym = lookup_id_in_current_scope(binding, ctx);
 
-    Type *v = env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
-
-    if (!sym && !v) {
+    if (!sym) {
 
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
 
@@ -188,7 +187,10 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
       return _TRUE;
-    } else if (v) {
+    }
+
+    Type *v = env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
+    if (v) {
       LLVMValueRef simple_enum_member =
           codegen_simple_enum_member(binding, ctx, module, builder);
 

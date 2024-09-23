@@ -66,6 +66,22 @@ int get_frame_offset() {
   return frame_offset;
 }
 
+Node *end_chain(Node *s) {
+  Node *group = _chain;
+  reset_chain();
+  add_to_dac(s);
+  return group;
+}
+
+Node *play(Node *group) {
+  add_to_dac(group);
+
+  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_ADD,
+                                           get_frame_offset(),
+                                           {.NODE_ADD = {.target = group}}});
+  return group;
+}
+
 Node *play_node(Node *s) {
   Node *group = _chain;
   reset_chain();

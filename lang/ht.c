@@ -50,6 +50,7 @@ void ht_reinit(ht *table) {
   if (table == NULL) {
     return;
   }
+
   table->length = 0;
   table->capacity = INITIAL_CAPACITY;
 
@@ -189,6 +190,8 @@ const char *ht_set(ht *table, const char *key, void *value) {
 
 const char *ht_set_hash(ht *table, const char *key, uint64_t hash,
                         void *value) {
+
+  // printf("ht set key %s %llu %p\n", key, hash, table);
   // printf("set ht key '%s'\n", key);
   // assert(value != NULL);
   if (value == NULL) {

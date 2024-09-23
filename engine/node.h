@@ -56,6 +56,12 @@ Node *mul2_node(Node *a, Node *b);
 Node *div2_node(Node *a, Node *b);
 Node *mod2_node(Node *a, Node *b);
 
+Signal *sum2_sigs(Signal *a, Signal *b);
+Signal *sub2_sigs(Signal *a, Signal *b);
+Signal *mul2_sigs(Signal *a, Signal *b);
+Signal *div2_sigs(Signal *a, Signal *b);
+Signal *mod2_sigs(Signal *a, Signal *b);
+
 Node *node_of_double(double val);
 
 Signal *out_sig(Node *n);

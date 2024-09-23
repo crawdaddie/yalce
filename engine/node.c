@@ -381,6 +381,23 @@ BINARY_OP_NODE(mul2_node, mul_perform)
 BINARY_OP_NODE(div2_node, div_perform)
 BINARY_OP_NODE(mod2_node, mod_perform)
 
+#define BINARY_OP_SIG(name, perform_func)                                      \
+  Signal *name(Signal *a, Signal *b) {                                         \
+    int num_ins = 2;                                                           \
+    Signal *ins = malloc(sizeof(Signal) * num_ins);                            \
+    Node *op_node =                                                            \
+        node_new(NULL, (node_perform *)perform_func, num_ins, ins);            \
+    op_node->ins[0].buf = a->buf;                                              \
+    op_node->ins[1].buf = b->buf;                                              \
+    return &op_node->out;                                                      \
+  }
+
+BINARY_OP_SIG(sum2_sigs, sum_perform)
+BINARY_OP_SIG(sub2_sigs, sub_perform)
+BINARY_OP_SIG(mul2_sigs, mul_perform)
+BINARY_OP_SIG(div2_sigs, div_perform)
+BINARY_OP_SIG(mod2_sigs, mod_perform)
+
 Node *node_of_double(double val) {
   Node *const_node = node_new(NULL, NULL, 0, NULL);
   for (int i = 0; i < const_node->out.size; i++) {

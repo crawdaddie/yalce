@@ -55,7 +55,6 @@ static void process_msg_pre(scheduler_msg msg) {
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     Node *node = payload.target;
 
-    printf("node set scalar %d %p %p\n", payload.input, node, node->ins);
     Signal target_input = node->ins[payload.input];
     for (int i = msg.frame_offset; i < target_input.size; i++) {
       *(target_input.buf + i) = payload.value;
