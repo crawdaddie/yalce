@@ -8,7 +8,8 @@ let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
 
 let sq_detune = fn () -> 
   let f = inlet 50. in
-  sq_node f + sq_node (f * 1.01)
+  let ff = inlet 500. in
+  (sq_node f + sq_node (f * 1.01)) |> biquad_lp_node ff 9.
 ;;
 
 
@@ -60,15 +61,16 @@ let rand_time = fn () ->
   times @ (rand_int 4)
 ;;
 
-# let choose = fn arr ->
-#   arr @ (rand_int (array_size arr))
-# ;;
+let choose = fn arr ->
+  array_at arr (rand_int (array_size arr))
+;;
 
 # choose notes;
 
 
 let f = fn () ->
   set_input_scalar x 0 ((rand_note ()) * (rand_oct ()));
+  set_input_scalar x 1 (rand_double_range 200. 1000.);
   schedule_event f (1, 2) (rand_time ())
 ;;
 

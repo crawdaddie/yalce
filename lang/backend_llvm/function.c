@@ -450,15 +450,10 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
   }
 
   if (strcmp(sym_name, "array_size") == 0) {
-    Type *array_type = ast->data.AST_APPLICATION.args->md;
 
-    int *size_ptr = array_type_size_ptr(array_type);
-
-    if (!size_ptr) {
-      return NULL;
-    }
-    int size = *size_ptr;
-    return LLVMConstInt(LLVMInt32Type(), size, 0);
+    LLVMValueRef array =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+    return codegen_get_array_size(builder, array);
   }
 
   if (strcmp(sym_name, "array_init") == 0) {
