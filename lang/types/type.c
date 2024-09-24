@@ -914,6 +914,33 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
   return NULL;
 }
 
+Type *variant_lookup_name(TypeEnv *env, const char *name, int *member_idx) {
+
+  while (env) {
+    if (is_variant_type(env->type)) {
+      Type *variant = env->type;
+      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
+        Type *variant_member = variant->data.T_CONS.args[i];
+        const char *mem_name;
+        if (variant_member->kind == T_CONS) {
+          mem_name = variant_member->data.T_CONS.name;
+        } else {
+          continue;
+        }
+
+        if (strcmp(mem_name, name) == 0) {
+          // return copy_type(variant);
+          *member_idx = i;
+          return variant;
+        }
+      }
+    }
+
+    env = env->next;
+  }
+  return NULL;
+}
+
 Type *create_cons_type(const char *name, int len, Type **unified_args) {
   Type *cons = empty_type();
   cons->kind = T_CONS;

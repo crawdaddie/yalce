@@ -179,8 +179,11 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
 
     JITSymbol *sym = lookup_id_in_current_scope(binding, ctx);
 
-    if (!sym) {
+    int vidx;
+    Type *v = variant_lookup_name(ctx->env, binding->data.AST_IDENTIFIER.value,
+                                  &vidx);
 
+    if (!sym && !v) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
 
       JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
@@ -189,7 +192,6 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       return _TRUE;
     }
 
-    Type *v = env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
     if (v) {
       LLVMValueRef simple_enum_member =
           codegen_simple_enum_member(binding, ctx, module, builder);

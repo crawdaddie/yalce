@@ -219,6 +219,7 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement);
 Type *resolve_generic_type(Type *t, TypeEnv *env);
 bool is_variant_type(Type *type);
 Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx);
+Type *variant_lookup_name(TypeEnv *env, const char *name, int *member_idx);
 
 typedef struct VariantContext {
 } VariantContext;
