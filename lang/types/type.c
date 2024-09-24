@@ -123,6 +123,15 @@ char *tc_list_to_string(Type *t, char *buffer) {
   return buffer;
 }
 
+Type t_array_var_el = {T_VAR, {.T_VAR = "varray_el"}};
+Type t_array_var = {
+    T_CONS,
+    {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_array_var_el}, 1}},
+};
+
+Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
+Type t_array_at_fn_sig = MAKE_FN_TYPE_3(&t_array_var, &t_int, &t_array_var_el);
+
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     return strncat(buffer, "null", 4);

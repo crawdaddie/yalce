@@ -9,7 +9,7 @@ let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
 let sq_detune = fn () -> 
   let f = inlet 50. in
   let ff = inlet 500. in
-  (sq_node f + sq_node (f * 1.01)) |> biquad_lp_node ff 9.
+  (sq_node f + sq_node (f * 1.01)) |> biquad_lp_node ff 1.
 ;;
 
 
@@ -62,16 +62,19 @@ let rand_time = fn () ->
 ;;
 
 let choose = fn arr ->
-  array_at arr (rand_int (array_size arr))
+  let idx = rand_int (array_size arr);
+  array_at arr idx 
 ;;
 
-# choose notes;
+choose notes; # pre-cache (Array of Double -> Double) version of choose :(
 
 
 let f = fn () ->
-  set_input_scalar x 0 ((rand_note ()) * (rand_oct ()));
-  set_input_scalar x 1 (rand_double_range 200. 1000.);
-  schedule_event f (1, 2) (rand_time ())
+  # let n = choose notes;
+  set_input_scalar x 0 ((choose notes) * (choose octaves));
+  # set_input_scalar x 1 (rand_double_range 200. 1000.);
+  schedule_event (f) (1, 2) 0.125
 ;;
 
+# f ();
 schedule_event (f) (1, 2) 1.0;

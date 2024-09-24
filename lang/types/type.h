@@ -32,6 +32,12 @@ extern Type t_lte;
 extern Type t_eq;
 extern Type t_neq;
 
+extern Type t_array_var_el;
+extern Type t_array_var;
+
+extern Type t_array_size_fn_sig;
+extern Type t_array_at_fn_sig;
+
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"

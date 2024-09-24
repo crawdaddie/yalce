@@ -657,7 +657,17 @@ int main() {
     RESET;
     TITLE("## choose from array fn")
     TypeEnv *env = NULL;
-    env = env_extend(env, "array_at", MAKE_FN_TYPE_3(&t_a))
+    env = env_extend(env, "array_at", &t_array_at_fn_sig);
+    env = env_extend(env, "array_size", &t_array_size_fn_sig);
+    TEST_SIMPLE_AST_TYPE_ENV("let choose = fn arr ->\n"
+                             "  let idx = rand_int (array_size arr);\n"
+                             "  array_at arr idx \n"
+                             ";;",
+                             &MAKE_FN_TYPE_2(&t_array_var, &t_array_var_el),
+                             env);
+    TEST_SIMPLE_AST_TYPE_ENV("choose [|1, 2, 3|]", &t_int, env);
+    TEST_SIMPLE_AST_TYPE_ENV("let x = [|1., 2.|]; choose x", &t_num, env);
+    TEST_SIMPLE_AST_TYPE_ENV("let f = fn () -> choose x;; f ()", &t_num, env);
   });
 
   return status == true ? 0 : 1;

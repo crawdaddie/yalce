@@ -42,7 +42,7 @@ NC='\033[0m'
 for file in $YLC_FILES; do
     echo -e "${Green}$file:${NC}"
     echo -e "${Cyan}"
-    cat $file
+    # cat $file
     echo -e "${NC}"
     
     # Run the executable and capture the output

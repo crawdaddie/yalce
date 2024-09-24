@@ -106,12 +106,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   const char *chars = ast->data.AST_IDENTIFIER.value;
   int length = ast->data.AST_IDENTIFIER.length;
 
-  // hti it = ht_iterator(ctx->stack + ctx->stack_ptr);
-  //
-  // for (int entry = 0; ht_next(&it); entry++) {
-  //   printf("symbol %s %d\n", it.key, ctx->stack_ptr);
-  // };
-
   JITSymbol *sym = lookup_id_ast(ast, ctx);
 
   if (!sym) {
@@ -234,26 +228,25 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
     ht_set_hash(stack, bm.name, hash_string(bm.name, strlen(bm.name)), sym);
   }
 
-  Type *gen_array_el = tvar("generic_array_el");
-  Type *gen_array = create_array_type(gen_array_el, 0);
-  Type *array_at_fn_sig = type_fn(gen_array, type_fn(&t_int, gen_array_el));
-  env = env_extend(env, "array_at", array_at_fn_sig);
+  // Type *array_at_fn_sig =
+  //     type_fn(&t_array_var, type_fn(&t_int, &t_array_var_el));
+  env = env_extend(env, "array_at", &t_array_at_fn_sig);
 
   JITSymbol *array_at_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, array_at_fn_sig, NULL, NULL);
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_at_fn_sig, NULL, NULL);
 
   ht_set_hash(stack, "array_at", hash_string("array_at", 8), array_at_sym);
 
-  Type *array_size_fn_sig = type_fn(gen_array, &t_int);
-  env = env_extend(env, "array_size", array_size_fn_sig);
+  env = env_extend(env, "array_size", &t_array_size_fn_sig);
 
   JITSymbol *array_size_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, array_size_fn_sig, NULL, NULL);
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_size_fn_sig, NULL, NULL);
 
   ht_set_hash(stack, "array_size", hash_string("array_size", 10),
               array_size_sym);
 
-  Type *array_init_fn_sig = type_fn(&t_int, type_fn(gen_array_el, gen_array));
+  Type *array_init_fn_sig =
+      type_fn(&t_int, type_fn(&t_array_var_el, &t_array_var));
 
   env = env_extend(env, "array_init", array_init_fn_sig);
 

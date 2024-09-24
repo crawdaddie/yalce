@@ -89,8 +89,6 @@ static void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func,
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
-  // printf("codegen fn: ");
-  // print_ast(ast);
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   Type *fn_type = ast->md;
@@ -134,6 +132,11 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     fn_type = fn_type->data.T_FN.to;
   }
+
+  Ast *fn_id = Ast_new(AST_IDENTIFIER);
+  fn_id->data.AST_IDENTIFIER.value = fn_name.chars;
+  fn_id->data.AST_IDENTIFIER.length = fn_name.length;
+  JITSymbol *fn_ref = lookup_id_in_current_scope(fn_id, &fn_ctx);
 
   LLVMValueRef body =
       codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
