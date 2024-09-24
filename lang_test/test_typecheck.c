@@ -652,5 +652,13 @@ int main() {
 
     status &= lut;
   });
+
+  ({
+    RESET;
+    TITLE("## choose from array fn")
+    TypeEnv *env = NULL;
+    env = env_extend(env, "array_at", MAKE_FN_TYPE_3(&t_a))
+  });
+
   return status == true ? 0 : 1;
 }
