@@ -45,7 +45,7 @@ bool occurs_check_helper(const char *var_name, Type *type) {
 
 Type *unify_variable(Type *t1, Type *t2, TypeEnv **env) {
 
-  // printf("unify var\n");
+  // printf("unify var: ");
   // print_type(t1);
   // print_type(t2);
 
@@ -84,6 +84,21 @@ Type *unify_variable(Type *t1, Type *t2, TypeEnv **env) {
     // Occurs check failed, infinite type error
     return NULL;
   }
+  // if (t2->kind == T_TYPECLASS_RESOLVE) {
+  //   if (t2->data.T_TYPECLASS_RESOLVE.dependencies[0]->kind == T_VAR) {
+  //     *env = env_extend(*env, t1->data.T_VAR,
+  //                       t2->data.T_TYPECLASS_RESOLVE.dependencies[1]);
+  //     *t1 = *t2->data.T_TYPECLASS_RESOLVE.dependencies[1];
+  //   }
+  //
+  //   if (t2->data.T_TYPECLASS_RESOLVE.dependencies[1]->kind == T_VAR) {
+  //     *env = env_extend(*env, t1->data.T_VAR,
+  //                       t2->data.T_TYPECLASS_RESOLVE.dependencies[0]);
+  //     *t1 = *t2->data.T_TYPECLASS_RESOLVE.dependencies[0];
+  //   }
+  //   print_type_env(*env);
+  //   return t1;
+  // }
 
   // Check if the variable is already bound in the environment
   Type *bound = env_lookup(*env, t1->data.T_VAR);
@@ -100,9 +115,6 @@ Type *unify_variable(Type *t1, Type *t2, TypeEnv **env) {
 }
 
 Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
-  // printf("unify function\n");
-  // print_type(t1);
-  // print_type(t2);
 
   Type *from = unify(t1->data.T_FN.from, t2->data.T_FN.from, env);
   if (!from)
@@ -125,6 +137,18 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
   if (is_array_type(t1) && is_array_type(t2)) {
     Type *unif = unify(t1->data.T_CONS.args[0], t2->data.T_CONS.args[0], env);
     t1->data.T_CONS.args[0] = unif;
+    return t1;
+  }
+
+  if (is_tuple_type(t1) && is_tuple_type(t2) &&
+      t1->data.T_CONS.num_args == t2->data.T_CONS.num_args) {
+    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+      Type *unif = unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], env);
+
+      if (unif) {
+        t1->data.T_CONS.args[i] = unif;
+      }
+    }
     return t1;
   }
 
@@ -181,12 +205,34 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
     return t2;
   }
 
+  if (is_variant_type(t1)) {
+    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+      if (strcmp(t1->data.T_CONS.args[i]->data.T_CONS.name,
+                 t2->data.T_CONS.name) == 0) {
+        Type *t = t1->data.T_CONS.args[i];
+
+        return unify(t, t2, env);
+
+        // for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        //   t->data.T_CONS.args[i] =
+        //       unify(t->data.T_CONS.args[i], t2->data.T_CONS.args[i], env);
+        // }
+        // *t1 = *unify(t1->data.T_CONS.args[i], t2, env);
+        break;
+      }
+    }
+  }
+
   if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
       t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+
+    printf("return NULL %s:%d\n", __FILE__, __LINE__);
     return NULL;
   }
 
   if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+
+    printf("retur NULL %s:%d\n", __FILE__, __LINE__);
     return NULL;
   }
 
@@ -198,6 +244,8 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
     Type *unif = unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], env);
 
     if (!unif) {
+
+      printf("retur NULL %s:%d\n", __FILE__, __LINE__);
       return NULL;
     }
     unified_args[i] = unif;

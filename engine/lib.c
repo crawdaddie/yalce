@@ -57,6 +57,7 @@ Node *play_test_synth() {
   audio_ctx_add(group);
   return group;
 }
+
 int get_frame_offset() {
   struct timespec t;
   struct timespec btime = get_block_time();

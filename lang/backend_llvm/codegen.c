@@ -13,8 +13,12 @@
 
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMTypeRef ret = type_to_llvm_type(ast->md, ctx->env, module);
+  LLVMTypeRef ret;
+  if (((Type *)ast->md)->kind == T_FN && is_generic(ast->md)) {
+    ret = LLVMVoidType();
+  } else {
+    ret = type_to_llvm_type(ast->md, ctx->env, module);
+  }
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
@@ -43,6 +47,8 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
+  // printf("codegen: \n");
+  // print_ast(ast);
 
   switch (ast->tag) {
 

@@ -61,6 +61,7 @@
       fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= stat;                                                            \
+    p;                                                                         \
   })
 
 #define TEST_TYPECHECK_FAIL(i)                                                 \
@@ -670,5 +671,86 @@ int main() {
     TEST_SIMPLE_AST_TYPE_ENV("let f = fn () -> choose x;; f ()", &t_num, env);
   });
 
+  ({
+    RESET;
+    TITLE("## return Option from generic fn")
+    TypeEnv *env = NULL;
+
+    Type opt_tuple = tcons("Some", 1, &TTUPLE(3, &t_num, &t_num, &t_num));
+
+    TEST_SIMPLE_AST_TYPE_ENV("type Option t =\n"
+                             "  | Some of t\n"
+                             "  | None\n"
+                             "  ;\n"
+                             "let f = fn (note, filter_freq) -> \n"
+                             "  Some (\n"
+                             "    0.25, # duration\n"
+                             "    note,\n"
+                             "    filter_freq\n"
+                             "  )\n"
+                             ";;\n"
+                             "f (200., 200.);\n",
+                             &opt_tuple, env);
+  });
+
+  ({
+    RESET;
+    TITLE("## return Option from generic fn")
+    TypeEnv *env = NULL;
+
+    Type opt_tuple = tcons("Some", 1, &TTUPLE(3, &t_num, &t_num, &t_num));
+
+    TEST_SIMPLE_AST_TYPE_ENV("type Option t =\n"
+                             "  | Some of t\n"
+                             "  | None\n"
+                             "  ;\n"
+                             "let f = fn (note, filter_freq) -> \n"
+                             "  Some (\n"
+                             "    0.25, # duration\n"
+                             "    note + 1,\n"
+                             "    filter_freq + 1\n"
+                             "  )\n"
+                             ";;\n"
+                             "f (200., 200.);\n",
+                             &opt_tuple, env);
+  });
+
+  ({
+    RESET;
+    TITLE("## return Option from generic fn")
+    TypeEnv *env = NULL;
+
+    Ast *ast = TEST_SIMPLE_AST_TYPE_ENV(
+        "type Option t =\n"
+        "  | Some of t\n"
+        "  | None\n"
+        "  ;\n"
+        "# stream that returns (duration * value1 * value2 *...)\n"
+        "let f = fn (note, filter_freq) -> \n"
+        "  Some (\n"
+        "    0.25, # duration\n"
+        "    note + 1.,\n"
+        "    filter_freq + 1.\n"
+        "  )\n"
+        ";;\n"
+        "let sched_wrap = fn def (note, filter_freq) -> \n"
+        "  let result = def (note, filter_freq) in\n"
+        "  match result with\n"
+        "  | Some (duration, note, filter_freq) -> (\n"
+        "    # apply note & filter_freq to node and then schedule\n"
+        "    # def with the duration\n"
+        "    set_input_scalar x 0 note;\n"
+        "    set_input_scalar x 1 filter_freq;\n"
+        "    schedule_event def (note, filter_freq) duration\n"
+        "  )\n"
+        "  | None -> ()\n"
+        ";;\n"
+        "sched_wrap f (200., 200.)\n",
+        &t_void, env);
+
+    Ast *call = ast->data.AST_BODY.stmts[3];
+    Type *spec_fn_type = call->data.AST_APPLICATION.function->md;
+    print_type(spec_fn_type);
+  });
   return status == true ? 0 : 1;
 }

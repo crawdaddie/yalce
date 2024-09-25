@@ -247,10 +247,10 @@ void print_type(Type *t) {
     return;
   }
 
-  if (t->alias) {
-    printf("%s\n", t->alias);
-    return;
-  }
+  // if (t->alias) {
+  //   printf("%s\n", t->alias);
+  //   return;
+  // }
 
   char buf[200] = {};
   printf("%s\n", type_to_string(t, buf));
@@ -333,7 +333,6 @@ bool types_equal(Type *t1, Type *t2) {
       return false;
 
     } else if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
-      printf("num args different??\n");
       return false;
     }
     bool eq = true;

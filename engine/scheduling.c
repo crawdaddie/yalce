@@ -1,4 +1,5 @@
 #include "scheduling.h"
+#include "lib.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,7 +16,7 @@ pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define INITIAL_CAPACITY 16
 
 typedef struct {
-  void (*callback)(void *userdata, double now);
+  void (*callback)(void *userdata, double now, int frame_offset);
   void *userdata;
   uint64_t timestamp;
 } ScheduledEvent;
@@ -84,7 +85,7 @@ static inline uint64_t get_time_ns() {
 uint64_t now;
 uint64_t start;
 
-void _schedule_event(EventHeap *heap, void (*callback)(void *, double),
+void _schedule_event(EventHeap *heap, void (*callback)(void *, double, int),
                      void *userdata, double delay_seconds,
                      uint64_t start_time) {
 
@@ -142,7 +143,8 @@ void *timer(void *arg) {
       while (queue->size && queue->events[0].timestamp <= now) {
         ScheduledEvent ev = pop_event(queue);
         double now_d = ((double)(now - start) / S_TO_NS);
-        ev.callback(ev.userdata, now_d);
+        int offset = get_frame_offset();
+        ev.callback(ev.userdata, now_d, offset);
       }
 
       // Calculate next tick
@@ -162,7 +164,7 @@ void *timer(void *arg) {
 }
 
 // Example callback function
-void example_cb(void *user_data, double t) {
+void example_cb(void *user_data, double t, int frame_offset) {
   printf("Callback executed at %f\n", t);
 
   _schedule_event(queue, example_cb, NULL, 1, t);
@@ -181,7 +183,7 @@ int scheduler_event_loop() {
   return 0;
 }
 
-void schedule_event(void (*callback)(void *, double), void *userdata,
+void schedule_event(void (*callback)(void *, double, int), void *userdata,
                     double delay_seconds) {
   // if (delay_seconds == 0) {
   //   callback(userdata, delay_seconds);
@@ -198,7 +200,7 @@ struct ipt {
   int b;
 } ipt;
 
-void handle_cb(void (*callback)(void *), void *userdata) {
+void handle_cb(void (*callback)(void *, double, int), void *userdata) {
   // printf("handle cb %p\n", callback);
-  callback(userdata);
+  callback(userdata, 0., 0);
 }

@@ -5,6 +5,7 @@
 #include "list.h"
 #include "serde.h"
 #include "symbols.h"
+#include "tuple.h"
 #include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -249,14 +250,13 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
           codegen_eq_int(variant_extract_tag(val, builder),
                          LLVMConstInt(TAG_TYPE, vidx, 0), module, builder);
 
+      Type *contained_type = ((Type *)binding->md)->data.T_CONS.args[0];
       LLVMValueRef vals_match = match_values(
           binding->data.AST_APPLICATION.args,
           variant_extract_value(
-              val,
-              type_to_llvm_type(((Type *)binding->md)->data.T_CONS.args[0],
-                                ctx->env, module),
+              val, type_to_llvm_type(contained_type, ctx->env, module),
               builder),
-          binding->md, ctx, module, builder);
+          contained_type, ctx, module, builder);
 
       return LLVMBuildAnd(builder, tags_match, vals_match, "");
     }
@@ -284,6 +284,22 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       LLVMValueRef is_null = ll_is_null(val, el_type_llvm, builder);
       return is_null;
     }
+  }
+
+  case AST_TUPLE: {
+    LLVMValueRef and = _TRUE;
+
+    for (int i = 0; i < binding->data.AST_LIST.len; i++) {
+      Type *el_type = val_type->data.T_CONS.args[i];
+      LLVMTypeRef tuple_type = type_to_llvm_type(val_type, ctx->env, module);
+      LLVMValueRef match_res =
+          match_values(binding->data.AST_LIST.items + i,
+                       codegen_tuple_access(i, val, tuple_type, builder),
+                       el_type, ctx, module, builder);
+      and = LLVMBuildAnd(builder, and, match_res, "");
+    }
+
+    return and;
   }
   case AST_VOID: {
     return _TRUE;

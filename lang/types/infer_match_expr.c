@@ -28,6 +28,9 @@ Type *infer(Ast *ast, TypeEnv **env);
 
 TypeEnv *extend_env_with_bindings(Ast *test_expr, Type *bind_val_type,
                                   TypeEnv *env) {
+  // printf("extend env with bindings\n");
+  // print_ast(test_expr);
+  // print_type(bind_val_type);
   switch (test_expr->tag) {
   case AST_IDENTIFIER:
     return env_extend(env, test_expr->data.AST_IDENTIFIER.value, bind_val_type);
@@ -69,6 +72,9 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   Ast *expr = ast->data.AST_MATCH.expr;
   Type *expr_type = TRY(infer(expr, env));
 
+  // printf("match expr type: ");
+  // print_type(expr_type);
+
   Type *res_type = NULL;
   TypeEnv *extended_env = *env;
 
@@ -97,6 +103,15 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
     }
 
     Type *branch_res_type = TRY(infer(result_expr, &extended_env));
+    // printf("BRANCH %d:\n", i);
+    // print_ast(result_expr->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args
+    // +
+    //           1);
+    //
+    // print_type(
+    //     (result_expr->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args + 1)
+    //         ->md);
+    // print_type(branch_res_type);
 
     if (res_type == NULL) {
       res_type = branch_res_type;

@@ -1,5 +1,6 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
+#include "serde.h"
 #include "llvm-c/Core.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

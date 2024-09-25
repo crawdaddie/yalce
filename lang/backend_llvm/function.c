@@ -127,6 +127,8 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                   hash_string(id_chars, id_len), sym);
 
     } else {
+      // param_ast->md = param_type;
+      // param_ast->md = param_type
       match_values(param_ast, param_val, param_type, &fn_ctx, module, builder);
     }
 
@@ -274,7 +276,9 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
   JITLangCtx compilation_ctx = {
       ctx->stack,
       sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr,
+      .env = ctx->env,
   };
+  printf("create new specific function for %s\n", sym_name);
 
   LLVMValueRef specific_func = create_new_specific_fn(
       fn_ast->data.AST_LAMBDA.len, fn_ast, sym->symbol_type, expected_fn_type,

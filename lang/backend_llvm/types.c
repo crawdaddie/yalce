@@ -3,6 +3,7 @@
 #include "types/type.h"
 #include "variant.h"
 #include "llvm-c/Core.h"
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,20 +16,57 @@
 #define LLVM_TYPE_str LLVMPointerType(LLVMInt8Type(), 0)
 #define LLVM_TYPE_char LLVMInt8Type()
 #define LLVM_TYPE_ptr(type) LLVMPointerType(LLVM_TYPE_##type, 0)
+
+typedef struct StructCache {
+  Type *type;
+  LLVMTypeRef struct_type;
+  struct StructCache *next;
+} StructCache;
+
+static StructCache *struct_cache = NULL;
+
+StructCache *struct_cache_extend(StructCache *env, Type *type, LLVMTypeRef struct_type) {
+  StructCache *new_env = malloc(sizeof(StructCache));
+  new_env->type = type;
+  new_env->struct_type = struct_type;
+  new_env->next = env;
+  return new_env;
+}
+
+LLVMTypeRef struct_cache_lookup(StructCache *env, Type *type) {
+  while (env) {
+    if (types_equal(type, env->type)) {
+      return env->struct_type;
+    }
+    env = env->next;
+  }
+  return NULL;
+}
+
 // Function to create an LLVM tuple type
 LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
+  LLVMTypeRef cached_struct = struct_cache_lookup(struct_cache, tuple_type);
+  if (cached_struct) {
+    return cached_struct;
+  }
 
   int len = tuple_type->data.T_CONS.num_args;
 
   LLVMTypeRef element_types[len];
 
   for (int i = 0; i < len; i++) {
-    // Convert each element's AST node to its corresponding LLVM type
     element_types[i] =
         type_to_llvm_type(tuple_type->data.T_CONS.args[i], env, module);
   }
 
-  LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
+  LLVMContextRef ctx_ref = LLVMGetModuleContext(module);
+
+  LLVMTypeRef llvm_tuple_type = LLVMStructTypeInContext(ctx_ref, element_types, len, 0);
+
+  // LLVMTypeRef llvm_tuple_type = LLVMStructCreateNamed(ctx_ref, "");
+  // LLVMStructSetBody(llvm_tuple_type, element_types, len, 0);
+
+  struct_cache = struct_cache_extend(struct_cache, tuple_type, llvm_tuple_type);
 
   return llvm_tuple_type;
 }
@@ -73,11 +111,11 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
   case T_CONS: {
 
-    if (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0) {
+    if (is_tuple_type(type)) {
       return tuple_type(type, env, module);
     }
 
-    if (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
+    if (is_list_type(type)) {
       if (type->data.T_CONS.args[0]->kind == T_CHAR) {
         return LLVMPointerType(LLVMInt8Type(), 0);
       }
@@ -85,11 +123,11 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
       return list_type(type->data.T_CONS.args[0], env, module);
     }
 
-    if (strcmp(type->data.T_CONS.name, TYPE_NAME_ARRAY) == 0) {
+    if (is_array_type(type)) {
       return codegen_array_type(type->data.T_CONS.args[0], env, module);
     }
 
-    if (strcmp(type->data.T_CONS.name, TYPE_NAME_PTR) == 0) {
+    if (is_pointer_type(type)) {
       return LLVM_TYPE_ptr(char);
     }
 
@@ -111,11 +149,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
         dts[i] = type_to_llvm_type(contained_type, env, module);
       }
 
-      if (!not_all_empty) {
-        return codegen_simple_enum_type();
+      if (not_all_empty) {
+        return codegen_tagged_union_type(dts, len, module);
       }
-
-      return codegen_tagged_union_type(dts, len, module);
+      return codegen_simple_enum_type();
     }
 
     // if (type->data.T_CONS.num_args == 0) {

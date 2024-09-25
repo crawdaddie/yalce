@@ -12,6 +12,33 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+typedef struct SizeCache {
+  LLVMTypeRef struct_type;
+  uint64_t type_size;
+  struct SizeCache *next;
+} SizeCache;
+
+static SizeCache *size_cache = NULL;
+
+SizeCache *size_cache_extend(SizeCache *env, LLVMTypeRef struct_type, uint64_t size) {
+  SizeCache *new_env = malloc(sizeof(SizeCache));
+  new_env->struct_type = struct_type;
+  new_env->type_size = size;
+  new_env->next = env;
+  return new_env;
+}
+
+bool size_cache_lookup(SizeCache *env, LLVMTypeRef type, uint64_t *size) {
+  while (env) {
+    if (type == env->struct_type) {
+      *size = env->type_size;
+      return true;
+    }
+    env = env->next;
+  }
+  return false;
+}
+
 uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
                            LLVMTargetDataRef target_data, int *largest_idx) {
   uint64_t max_size = 0;
@@ -22,7 +49,11 @@ uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
       continue;
     }
 
-    uint64_t type_size = LLVMStoreSizeOfType(target_data, data_types[i]);
+    uint64_t type_size;
+    if (!size_cache_lookup(size_cache, data_types[i], &type_size)) {
+      type_size = LLVMStoreSizeOfType(target_data, data_types[i]);
+      size_cache = size_cache_extend(size_cache, data_types[i], type_size);
+    }
 
     if (type_size > max_size) {
 
@@ -37,24 +68,30 @@ uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
 LLVMTypeRef codegen_union_type(LLVMTypeRef contained_datatypes[],
                                int variant_len, LLVMModuleRef module) {
 
+  // LLVMDumpModule(module);
   LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
-  int largest_idx;
+  int largest_idx = 0;
   uint64_t largest_size = max_datatype_size(contained_datatypes, variant_len,
                                             target_data, &largest_idx);
+
   // use a bit of memory equal to largest_size * i8 to represent the union
   // consumers of this variant type will already know the member index of the
   // variant they're dealing with and can then bitcast the union to be the type
   // they expect
   LLVMTypeRef largest_type = contained_datatypes[largest_idx];
+
   if (largest_type == NULL) {
     return NULL;
   }
 
-  LLVMContextRef context = LLVMGetModuleContext(module);
+
+  // printf("\nget module context????\n");
+  // LLVMContextRef context = LLVMGetModuleContext(module);
   // Create union type
   LLVMTypeRef union_types[] = {largest_type}; // We only need the largest type
-  LLVMTypeRef union_type = LLVMStructCreateNamed(context, "anon");
-  LLVMStructSetBody(union_type, union_types, 1, 0);
+  // LLVMTypeRef union_type = LLVMStructCreateNamed(context, "anon");
+  LLVMTypeRef union_type = LLVMStructType(union_types, 1, 0);
+  // LLVMStructSetBody(union_type, union_types, 1, 0);
   return union_type;
 }
 
@@ -62,6 +99,7 @@ LLVMTypeRef codegen_simple_enum_type() { return TAG_TYPE; }
 
 LLVMTypeRef codegen_tagged_union_type(LLVMTypeRef contained_datatypes[],
                                       int variant_len, LLVMModuleRef module) {
+
   LLVMTypeRef union_type =
       codegen_union_type(contained_datatypes, variant_len, module);
 
@@ -71,10 +109,11 @@ LLVMTypeRef codegen_tagged_union_type(LLVMTypeRef contained_datatypes[],
   }
 
   // Create TU struct type
-  LLVMContextRef context = LLVMGetModuleContext(module);
+  // LLVMContextRef context = LLVMGetModuleContext(module);
   LLVMTypeRef tu_types[] = {TAG_TYPE, union_type};
-  LLVMTypeRef tu_type = LLVMStructCreateNamed(context, "TU");
-  LLVMStructSetBody(tu_type, tu_types, 2, 0);
+  // LLVMTypeRef tu_type = LLVMStructCreateNamed(context, "TU");
+  // LLVMStructSetBody(tu_type, tu_types, 2, 0);
+  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
   return tu_type;
 }
 

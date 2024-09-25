@@ -57,10 +57,14 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
   }
 
   case AST_TUPLE: {
+    // printf("add arg binding to env: ");
+    // print_ast(binding);
+    // print_type(type);
     for (int i = 0; i < binding->data.AST_LIST.len; i++) {
       env = add_binding_to_env(env, binding->data.AST_LIST.items + i,
                                type->data.T_CONS.args[i]);
     }
+    // print_type_env(env);
     return env;
   }
   case AST_BINOP: {
@@ -141,9 +145,11 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
       param_types[i] = ptype;
 
       fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
+      // print_type_env(fn_scope_env);
     }
     fn = create_type_multi_param_fn(len, param_types, return_type);
   }
+
   const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
   Type *recursive_ref = tvar(ast->data.AST_LAMBDA.fn_name.chars);
   if (fn_name != NULL) {
@@ -163,6 +169,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
     TypeEnv *_env = NULL;
     unify_recursive_defs_mut(fn, recursive_ref, &_env);
   }
+
 
   Type *r = recursive_ref;
   Type *f = fn;
@@ -268,10 +275,18 @@ Type *infer(Ast *ast, TypeEnv **env) {
       type = expr_type;
     }
 
+
     break;
   }
 
   case AST_IDENTIFIER: {
+
+    // if ((strcmp(ast->data.AST_IDENTIFIER.value, "note") == 0) ||
+    //     (strcmp(ast->data.AST_IDENTIFIER.value, "filter_freq") == 0)) {
+    //   // printf("ast identifier\n");
+    //   // print_ast(ast);
+    //   // print_type_env(*env);
+    // }
     if (ast_is_placeholder_id(ast)) {
       type = next_tvar();
 
@@ -369,6 +384,8 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   case AST_TUPLE: {
+    // printf("infer ast tuple: ");
+    // print_ast(ast);
     int arity = ast->data.AST_LIST.len;
 
     Type **cons_args = talloc(sizeof(Type *) * arity);
@@ -458,6 +475,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   ast->md = type;
+  if (ast->tag == AST_TUPLE) {
+    print_ast(ast);
+    print_type(ast->md);
+  }
   // if (type && (type->kind == T_VAR) && strcmp(type->data.T_VAR, "t0") == 0) {
   //   print_type(type);
   //   print_ast(ast);

@@ -35,4 +35,6 @@ Node *end_chain(Node *s);
 
 Node *play(Node *group);
 
+int get_frame_offset();
+
 #endif
