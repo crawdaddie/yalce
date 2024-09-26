@@ -93,7 +93,13 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       next_block = LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block),
                                         "match.next");
     } else {
+      // print_ast(test_expr);
+      // printf("next blocK???");
       next_block = NULL; // Last iteration, no need for a next block
+      //
+      // next_block =
+      // LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block),
+      //                                   "match.next");
     }
 
     JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
@@ -101,6 +107,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMValueRef test_value = match_values(test_expr, test_val, test_val_type,
                                            &branch_ctx, module, builder);
 
+    // printf("null operand ??? %p\n", test_value);
     if (i == len - 1) {
       // If it's the default case, just jump to the branch block
       LLVMBuildBr(builder, branch_block);

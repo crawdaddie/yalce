@@ -68,7 +68,6 @@ uint64_t max_datatype_size(LLVMTypeRef data_types[], size_t num_types,
 LLVMTypeRef codegen_union_type(LLVMTypeRef contained_datatypes[],
                                int variant_len, LLVMModuleRef module) {
 
-  // LLVMDumpModule(module);
   LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
   int largest_idx = 0;
   uint64_t largest_size = max_datatype_size(contained_datatypes, variant_len,
@@ -83,16 +82,18 @@ LLVMTypeRef codegen_union_type(LLVMTypeRef contained_datatypes[],
   if (largest_type == NULL) {
     return NULL;
   }
+  return largest_type;
+  // if (largest_type
 
 
   // printf("\nget module context????\n");
   // LLVMContextRef context = LLVMGetModuleContext(module);
   // Create union type
-  LLVMTypeRef union_types[] = {largest_type}; // We only need the largest type
-  // LLVMTypeRef union_type = LLVMStructCreateNamed(context, "anon");
-  LLVMTypeRef union_type = LLVMStructType(union_types, 1, 0);
-  // LLVMStructSetBody(union_type, union_types, 1, 0);
-  return union_type;
+  // LLVMTypeRef union_types[] = {largest_type}; // We only need the largest type
+  // // LLVMTypeRef union_type = LLVMStructCreateNamed(context, "anon");
+  // LLVMTypeRef union_type = LLVMStructType(union_types, 1, 0);
+  // // LLVMStructSetBody(union_type, union_types, 1, 0);
+  // return union_type;
 }
 
 LLVMTypeRef codegen_simple_enum_type() { return TAG_TYPE; }
@@ -242,9 +243,11 @@ LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
   LLVMBuildStore(builder, val, tu_alloca);
 
   LLVMValueRef value_ptr =
-      LLVMBuildStructGEP2(builder, union_type, tu_alloca, 1, "valuePtr");
+      LLVMBuildStructGEP2(builder, union_type, tu_alloca, 1, "variant_value_ptr");
+
   LLVMValueRef contained_value =
-      LLVMBuildLoad2(builder, expected_type, value_ptr, "aValue");
+      LLVMBuildLoad2(builder, expected_type, value_ptr, "contained_value");
+
   return contained_value;
 }
 

@@ -1,26 +1,26 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+# #! /Users/adam/projects/sound/yalce/build/lang
 #
 # %include Fmt
-# %include Synth
+%include Synth
 # %include Math
 #
 # let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
 #
-# let sq_detune = fn () -> 
-#   let f = inlet 50. in
-#   let ff = inlet 500. in
-#   (sq_node f + sq_node (f * 1.01)) |> biquad_lp_node ff 10.
-# ;;
-#
-#
-# let wr = fn syndef -> 
-#   reset_chain ();
-#   let x = syndef ();
-#   end_chain x
-# ;;
-#
-#
-# let x = sq_detune |> wr |> play;
+let sq_detune = fn () -> 
+  let f = inlet 50. in
+  let ff = inlet 500. in
+  (sq_node f + sq_node (f * 1.01)) |> biquad_lp_node ff 10.
+;;
+
+
+let wr = fn syndef -> 
+  reset_chain ();
+  let x = syndef ();
+  end_chain x
+;;
+
+
+let x = sq_detune |> wr |> play;
 # let notes = [|
 #   110.0,
 #   123.47082531403103,
@@ -78,6 +78,9 @@
 
 # schedule_event (f) (1, 2) 1.0;
 
+let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
+
+let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
 type Option t =
   | Some of t
   | None
@@ -92,21 +95,20 @@ let f = fn (note, filter_freq) ->
   )
 ;;
 
-let schedule_event = extern fn Ptr -> Ptr -> Double -> ();
-
 let sched_wrap = fn def (note, filter_freq) -> 
   let result = def (note, filter_freq) in
   match result with
   | Some (duration, note, filter_freq) -> (
     # apply note & filter_freq to node and then schedule
     # def with the duration
-    # set_input_scalar x 0 note;
-    # set_input_scalar x 1 filter_freq;
+    set_input_scalar x 0 note;
+    set_input_scalar x 1 filter_freq;
     schedule_event def (note, filter_freq) duration
   )
-  | None -> ()
+  | _ -> ()
 ;;
 
+# f (200., 200.) ;
 
 sched_wrap f (200., 200.)
 
