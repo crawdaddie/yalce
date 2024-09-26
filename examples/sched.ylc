@@ -84,9 +84,9 @@ let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
 type Option t =
   | Some of t
   | None
-  ;
+; 
 
-# stream that returns (duration * value1 * value2 *...)
+# 'stream' that returns (duration * value1 * value2 *...)
 let f = fn (note, filter_freq) -> 
   Some (
     0.25, # duration
@@ -103,6 +103,8 @@ let sched_wrap = fn def (note, filter_freq) ->
     # def with the duration
     set_input_scalar x 0 note;
     set_input_scalar x 1 filter_freq;
+
+    # schedule next stream iter on the clock duration seconds from now
     schedule_event def (note, filter_freq) duration
   )
   | _ -> ()

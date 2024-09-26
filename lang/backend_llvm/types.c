@@ -3,8 +3,8 @@
 #include "types/type.h"
 #include "variant.h"
 #include "llvm-c/Core.h"
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define LLVM_TYPE_int LLVMInt32Type()
@@ -25,7 +25,8 @@ typedef struct StructCache {
 
 static StructCache *struct_cache = NULL;
 
-StructCache *struct_cache_extend(StructCache *env, Type *type, LLVMTypeRef struct_type) {
+StructCache *struct_cache_extend(StructCache *env, Type *type,
+                                 LLVMTypeRef struct_type) {
   StructCache *new_env = malloc(sizeof(StructCache));
   new_env->type = type;
   new_env->struct_type = struct_type;
@@ -61,7 +62,8 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
 
   LLVMContextRef ctx_ref = LLVMGetModuleContext(module);
 
-  LLVMTypeRef llvm_tuple_type = LLVMStructTypeInContext(ctx_ref, element_types, len, 0);
+  LLVMTypeRef llvm_tuple_type =
+      LLVMStructTypeInContext(ctx_ref, element_types, len, 0);
 
   // LLVMTypeRef llvm_tuple_type = LLVMStructCreateNamed(ctx_ref, "");
   // LLVMStructSetBody(llvm_tuple_type, element_types, len, 0);
@@ -104,6 +106,11 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
   case T_VAR: {
     if (env) {
       Type *lu = env_lookup(env, type->data.T_VAR);
+      if (!lu) {
+        fprintf(stderr, "Error type var %s not found in environment! %s:%d\n",
+                type->data.T_VAR, __FILE__, __LINE__);
+        return NULL;
+      }
       return type_to_llvm_type(lu, env, module);
     }
     return LLVMInt32Type();

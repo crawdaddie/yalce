@@ -36,6 +36,13 @@ Type t_ptr = {T_CONS,
               {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
               .alias = TYPE_NAME_PTR};
 
+Type t_ptr_generic_contained = {T_VAR, {.T_VAR = "pointer_deref_var"}};
+Type t_ptr_generic = {
+    T_CONS,
+    {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_ptr_generic_contained}, 1}}};
+
+Type t_ptr_deref_sig = MAKE_FN_TYPE_2(&t_ptr_generic, &t_ptr_generic_contained);
+
 Type t_add_a = arithmetic_var("a");
 Type t_add_b = arithmetic_var("b");
 Type t_add = MAKE_FN_TYPE_3(
@@ -617,6 +624,10 @@ Type *get_builtin_type(const char *id_chars) {
 
   if (*id_chars == ':' && *(id_chars + 1) == ':') {
     return &t_list_prepend;
+  }
+
+  if (strcmp(id_chars, "deref") == 0) {
+    return &t_ptr_deref_sig;
   }
   // fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
 

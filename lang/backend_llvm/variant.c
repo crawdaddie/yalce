@@ -20,7 +20,8 @@ typedef struct SizeCache {
 
 static SizeCache *size_cache = NULL;
 
-SizeCache *size_cache_extend(SizeCache *env, LLVMTypeRef struct_type, uint64_t size) {
+SizeCache *size_cache_extend(SizeCache *env, LLVMTypeRef struct_type,
+                             uint64_t size) {
   SizeCache *new_env = malloc(sizeof(SizeCache));
   new_env->struct_type = struct_type;
   new_env->type_size = size;
@@ -85,11 +86,11 @@ LLVMTypeRef codegen_union_type(LLVMTypeRef contained_datatypes[],
   return largest_type;
   // if (largest_type
 
-
   // printf("\nget module context????\n");
   // LLVMContextRef context = LLVMGetModuleContext(module);
   // Create union type
-  // LLVMTypeRef union_types[] = {largest_type}; // We only need the largest type
+  // LLVMTypeRef union_types[] = {largest_type}; // We only need the largest
+  // type
   // // LLVMTypeRef union_type = LLVMStructCreateNamed(context, "anon");
   // LLVMTypeRef union_type = LLVMStructType(union_types, 1, 0);
   // // LLVMStructSetBody(union_type, union_types, 1, 0);
@@ -174,6 +175,11 @@ LLVMTypeRef simple_enum_type(LLVMModuleRef module) {
 
 LLVMTypeRef variant_member_to_llvm_type(Type *type, TypeEnv *env,
                                         LLVMModuleRef module) {
+  if (type == NULL) {
+    fprintf(stderr, "Error - variant member type is null %s:%d", __FILE__,
+            __LINE__);
+    return NULL;
+  }
   if (type->kind != T_CONS) {
     return NULL;
   }
@@ -242,8 +248,8 @@ LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
   LLVMValueRef tu_alloca = LLVMBuildAlloca(builder, union_type, "tu");
   LLVMBuildStore(builder, val, tu_alloca);
 
-  LLVMValueRef value_ptr =
-      LLVMBuildStructGEP2(builder, union_type, tu_alloca, 1, "variant_value_ptr");
+  LLVMValueRef value_ptr = LLVMBuildStructGEP2(builder, union_type, tu_alloca,
+                                               1, "variant_value_ptr");
 
   LLVMValueRef contained_value =
       LLVMBuildLoad2(builder, expected_type, value_ptr, "contained_value");

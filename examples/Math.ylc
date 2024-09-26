@@ -10,3 +10,5 @@ let rand_double_range = extern fn Double -> Double -> Double ;
 
 let amp_db = extern fn Double -> Double;
 let db_amp = extern fn Double -> Double;
+let rec = extern fn Double -> Double;
+

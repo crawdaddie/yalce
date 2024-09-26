@@ -50,14 +50,16 @@ let choose = fn arr ->
   array_at arr idx 
 ;;
 
-choose notes; # pre-cache (Array of Double -> Double) version of choose :(
+choose notes; # pre-cache (Array of Double -> Double) version of choose
+              # - not ideal but needed for now while we
+              # don't have proper tree-based scope management :(
 
 
-let f = fn () ->
-  # let n = choose notes;
-  set_input_scalar x 0 ((choose notes) * (choose octaves));
-  set_input_scalar x 1 (rand_double_range 100. 2000.);
-  schedule_event (f) (1, 2) 0.25
+let f = fn args frame_offset ->
+  let (duration, note, filter_freq) = deref args in
+  set_input_scalar x 0 (note * choose octaves);
+  set_input_scalar x 1 filter_freq;
+  schedule_event (f) (choose note, (rand_double_range 100. 2000.)) duration
 ;;
 
 schedule_event (f) (1, 2) 1.0;

@@ -462,6 +462,34 @@ int main() {
   });
 
   ({
+    TITLE("## tuple destructure")
+    TEST_SIMPLE_AST_TYPE("let (x, y, z) = (1, 2, 3); x\n", &t_int);
+  });
+
+  ({
+    TITLE("## tuple destructure more")
+    TypeEnv *env = NULL;
+    TEST_SIMPLE_AST_TYPE_ENV("let (x, y, z) = (1, 2., 3);",
+                             &TTUPLE(3, &t_int, &t_num, &t_int), env);
+    TEST_SIMPLE_AST_TYPE_ENV("x;", &t_int, env);
+    TEST_SIMPLE_AST_TYPE_ENV("y;", &t_num, env);
+    TEST_SIMPLE_AST_TYPE_ENV("z;", &t_int, env);
+  });
+
+  ({
+    RESET;
+    TITLE("## tuple ptr deref")
+    TypeEnv *env = NULL;
+    env = env_extend(env, "p", &tvar("t0"));
+
+    TEST_SIMPLE_AST_TYPE_ENV("let (x, y, z) = deref p;",
+                             &TTUPLE(3, &t_int, &t_num, &t_int), env);
+    TEST_SIMPLE_AST_TYPE_ENV("x;", &t_int, env);
+    TEST_SIMPLE_AST_TYPE_ENV("y;", &t_num, env);
+    TEST_SIMPLE_AST_TYPE_ENV("z;", &t_int, env);
+  });
+
+  ({
     SEP;
     TEST_SIMPLE_AST_TYPE("let get_stderr = extern fn () -> Ptr;\n"
                          "let stderr = get_stderr ();\n",

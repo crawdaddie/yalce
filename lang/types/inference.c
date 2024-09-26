@@ -48,6 +48,9 @@ Type *next_tvar() {
 }
 
 static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
+  printf("add binding to env\n");
+  print_ast(binding);
+  print_type(type);
   // printf("res binding: ");
   // print_ast(binding);
 
@@ -60,11 +63,25 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
     // printf("add arg binding to env: ");
     // print_ast(binding);
     // print_type(type);
+    //
+    if (type->kind == T_VAR) {
+      print_type(binding->md);
+      Type **types = talloc(sizeof(Type *) * binding->data.AST_LIST.len);
+      for (int i = 0; i < binding->data.AST_LIST.len; i++) {
+        Ast *item = binding->data.AST_LIST.items + i;
+        types[i] =
+            item->md ? item->md : infer(binding->data.AST_LIST.items + i, &env);
+      }
+      env = env_extend(
+          env, type->data.T_VAR,
+          create_cons_type(TYPE_NAME_TUPLE, binding->data.AST_LIST.len, types));
+      print_type_env(env);
+      return env;
+    }
     for (int i = 0; i < binding->data.AST_LIST.len; i++) {
       env = add_binding_to_env(env, binding->data.AST_LIST.items + i,
                                type->data.T_CONS.args[i]);
     }
-    // print_type_env(env);
     return env;
   }
   case AST_BINOP: {
@@ -170,7 +187,6 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
     unify_recursive_defs_mut(fn, recursive_ref, &_env);
   }
 
-
   Type *r = recursive_ref;
   Type *f = fn;
   while (r->kind == T_FN) {
@@ -274,7 +290,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
     } else {
       type = expr_type;
     }
-
 
     break;
   }
@@ -439,11 +454,16 @@ Type *infer(Ast *ast, TypeEnv **env) {
     //   return infer(ast, env);
     // }
 
+    printf("application: ");
+    print_ast(ast);
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
+    print_type(t);
 
     if (t->kind == T_FN) {
       type = infer_fn_application(ast, env);
+      print_type(type);
+      print_type_env(*env);
       break;
     }
 
@@ -475,10 +495,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   ast->md = type;
-  if (ast->tag == AST_TUPLE) {
-    print_ast(ast);
-    print_type(ast->md);
-  }
   // if (type && (type->kind == T_VAR) && strcmp(type->data.T_VAR, "t0") == 0) {
   //   print_type(type);
   //   print_ast(ast);
