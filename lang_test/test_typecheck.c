@@ -477,19 +477,6 @@ int main() {
   });
 
   ({
-    RESET;
-    TITLE("## tuple ptr deref")
-    TypeEnv *env = NULL;
-    env = env_extend(env, "p", &tvar("t0"));
-
-    TEST_SIMPLE_AST_TYPE_ENV("let (x, y, z) = deref p;",
-                             &TTUPLE(3, &t_int, &t_num, &t_int), env);
-    TEST_SIMPLE_AST_TYPE_ENV("x;", &t_int, env);
-    TEST_SIMPLE_AST_TYPE_ENV("y;", &t_num, env);
-    TEST_SIMPLE_AST_TYPE_ENV("z;", &t_int, env);
-  });
-
-  ({
     SEP;
     TEST_SIMPLE_AST_TYPE("let get_stderr = extern fn () -> Ptr;\n"
                          "let stderr = get_stderr ();\n",
@@ -780,5 +767,60 @@ int main() {
     Type *spec_fn_type = call->data.AST_APPLICATION.function->md;
     print_type(spec_fn_type);
   });
+
+  ({
+    RESET;
+    TITLE("## tuple ptr deref")
+    TypeEnv *env = NULL;
+    env = env_extend(env, "p", &tvar("tx"));
+    Type t0 = tvar("t0");
+    Type t1 = tvar("t1");
+    Type t2 = tvar("t2");
+
+    TEST_SIMPLE_AST_TYPE_ENV("let (x, y, z) = deref p;",
+                             &TTUPLE(3, &t0, &t1, &t2), env);
+    TEST_SIMPLE_AST_TYPE_ENV("x;", &t0, env);
+    TEST_SIMPLE_AST_TYPE_ENV("y;", &t1, env);
+    TEST_SIMPLE_AST_TYPE_ENV("z;", &t2, env);
+
+    Type *lookup_ptr = env_lookup(env, "ptr_deref_var");
+
+    bool tc = types_equal(lookup_ptr, &TTUPLE(3, &t0, &t1, &t2));
+
+    if (tc) {
+      fprintf(stderr, "✅ ptr is Ptr of (t0 * t1 * t2)\n");
+    } else {
+      fprintf(stderr, "❌ ptr is Ptr of (t0 * t1 * t2)\n");
+    }
+  });
+
+  ({
+    RESET;
+    TITLE("## tuple ptr deref fn")
+    TypeEnv *env = NULL;
+    env = env_extend(env, "p", &tvar("tx"));
+    Type t2 = tvar("t2");
+    Type t3 = tvar("t3");
+    Type t4 = tvar("t4");
+
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "let f = fn p -> \n"
+        "  let (x, y, z) = deref p;\n"
+        "  ()\n"
+        ";;\n",
+        &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_PTR, 1, &TTUPLE(3, &t2, &t3, &t4)),
+                        &t_void),
+        env);
+  });
+
+  ({
+    RESET;
+    TITLE("## typed function")
+
+    TEST_SIMPLE_AST_TYPE(
+        "let f = fn x: (Int) (y, z): (Int * Double) -> x + y + z;;",
+        &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
+  });
+
   return status == true ? 0 : 1;
 }

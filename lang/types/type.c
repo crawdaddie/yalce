@@ -36,7 +36,7 @@ Type t_ptr = {T_CONS,
               {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
               .alias = TYPE_NAME_PTR};
 
-Type t_ptr_generic_contained = {T_VAR, {.T_VAR = "pointer_deref_var"}};
+Type t_ptr_generic_contained = {T_VAR, {.T_VAR = "ptr_deref_var"}};
 Type t_ptr_generic = {
     T_CONS,
     {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_ptr_generic_contained}, 1}}};

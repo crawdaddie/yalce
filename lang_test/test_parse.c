@@ -315,6 +315,8 @@ int main() {
                        "	_ -> 3\n"
                        ")");
 
+  status &= test_parse("fn x: (Int) (y, z): (Int * Double) -> x + y + z;",
+                       "(x (y, z) -> \n((+ ((+ x) y)) z))\n");
   // extern funcs
   return status ? 0 : 1;
 }

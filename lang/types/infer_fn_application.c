@@ -36,6 +36,7 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
       fprintf(stderr, "unif fail: ");
       print_type_err(result_fn->data.T_FN.from);
       print_type_err(app_arg_types[i]);
+      print_ast_err(ast);
       return NULL;
     }
 

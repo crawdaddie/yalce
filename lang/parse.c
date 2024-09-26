@@ -34,7 +34,7 @@ static void *prealloc(void *p, size_t size) {
 
 typedef struct __custom_binops_t {
   const char *binop;
-  struct __custom_binops_t * next;
+  struct __custom_binops_t *next;
 } __custom_binops_t;
 
 __custom_binops_t *_custom_binops = NULL;
@@ -45,7 +45,6 @@ void add_custom_binop(const char *binop_name) {
   new_custom_binops->next = _custom_binops;
   _custom_binops = new_custom_binops;
 }
-
 
 struct string_list {
   const char *data;
@@ -271,7 +270,8 @@ Ast *ast_application(Ast *func, Ast *arg) {
 
   if (func->tag == AST_APPLICATION) {
 
-    if (arg->tag == AST_IDENTIFIER && is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
+    if (arg->tag == AST_IDENTIFIER &&
+        is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
       Ast *app = Ast_new(AST_APPLICATION);
       app->data.AST_APPLICATION.function = arg;
       app->data.AST_APPLICATION.args = func;
@@ -288,7 +288,8 @@ Ast *ast_application(Ast *func, Ast *arg) {
     return func;
   }
 
-  if (arg->tag == AST_IDENTIFIER && is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
+  if (arg->tag == AST_IDENTIFIER &&
+      is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
 
     Ast *app = Ast_new(AST_APPLICATION);
     app->data.AST_APPLICATION.function = arg;
@@ -297,7 +298,6 @@ Ast *ast_application(Ast *func, Ast *arg) {
     app->data.AST_APPLICATION.len = 1;
 
     return app;
-
   }
 
   Ast *app = Ast_new(AST_APPLICATION);
@@ -345,7 +345,9 @@ Ast *ast_arg_list(Ast *arg_id, Ast *def) {
 }
 
 Ast *ast_arg_list_push(Ast *lambda, Ast *arg_id, Ast *def) {
-  ObjString *params = lambda->data.AST_LAMBDA.params;
+
+  Ast *params = lambda->data.AST_LAMBDA.params;
+
   lambda->data.AST_LAMBDA.len++;
   size_t len = lambda->data.AST_LAMBDA.len;
 

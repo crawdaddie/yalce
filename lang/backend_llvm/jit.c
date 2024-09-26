@@ -116,22 +116,12 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   *prog = parse_input(fcontent, dirname);
-
-#ifdef DUMP_AST
-  print_ast(*prog);
-#endif
-
   if (!(*prog)) {
     return NULL;
   }
 
   infer(*prog, env);
-  // print_ast(*prog);
   ctx->env = *env;
-
-#ifdef DUMP_AST
-  LLVMDumpModule(module);
-#endif
 
   Type *result_type = top_level_ast(*prog)->md;
 
@@ -317,11 +307,6 @@ int jit(int argc, char **argv) {
       // Generate node.
       LLVMValueRef top_level_func =
           codegen_top_level(prog, &top_level_ret_type, &ctx, module, builder);
-
-#ifdef DUMP_AST
-      printf("%s\n", COLOR_RESET);
-      LLVMDumpModule(module);
-#endif
 
       printf(COLOR_GREEN "> ");
 

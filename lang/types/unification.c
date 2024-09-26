@@ -271,6 +271,10 @@ Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
 }
 
 Type *unify(Type *t1, Type *t2, TypeEnv **env) {
+  if (t1 == NULL) {
+    printf(stderr, "Error unifying type - lhs is NULL\n");
+    return NULL;
+  }
   if (t1->kind == T_VAR) {
     return unify_variable(t1, t2, env);
   }
@@ -304,6 +308,19 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
 
       return unify(t1->data.T_TYPECLASS_RESOLVE.dependencies[0], t2, env);
     }
+
+    if (t2->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t1, t2->data.T_TYPECLASS_RESOLVE.dependencies[0])) {
+
+      return unify(t2->data.T_TYPECLASS_RESOLVE.dependencies[1], t1, env);
+    }
+
+    if (t2->kind == T_TYPECLASS_RESOLVE &&
+        types_equal(t1, t2->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
+
+      return unify(t2->data.T_TYPECLASS_RESOLVE.dependencies[0], t1, env);
+    }
+
     return NULL;
   }
 

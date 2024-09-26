@@ -47,8 +47,6 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
-  // printf("codegen: \n");
-  // print_ast(ast);
 
   switch (ast->tag) {
 
@@ -153,7 +151,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     //   return codegen_type_declaration(ast, ctx, module, builder);
     // }
   }
-
 
   return NULL;
 }

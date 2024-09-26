@@ -278,6 +278,7 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
       sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr,
       .env = ctx->env,
   };
+
   printf("create new specific function for %s\n", sym_name);
 
   LLVMValueRef specific_func = create_new_specific_fn(

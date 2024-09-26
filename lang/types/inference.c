@@ -48,9 +48,6 @@ Type *next_tvar() {
 }
 
 static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
-  printf("add binding to env\n");
-  print_ast(binding);
-  print_type(type);
   // printf("res binding: ");
   // print_ast(binding);
 
@@ -60,23 +57,16 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
   }
 
   case AST_TUPLE: {
-    // printf("add arg binding to env: ");
-    // print_ast(binding);
-    // print_type(type);
-    //
     if (type->kind == T_VAR) {
-      print_type(binding->md);
       Type **types = talloc(sizeof(Type *) * binding->data.AST_LIST.len);
       for (int i = 0; i < binding->data.AST_LIST.len; i++) {
         Ast *item = binding->data.AST_LIST.items + i;
-        types[i] =
-            item->md ? item->md : infer(binding->data.AST_LIST.items + i, &env);
+        types[i] = next_tvar();
       }
-      env = env_extend(
-          env, type->data.T_VAR,
-          create_cons_type(TYPE_NAME_TUPLE, binding->data.AST_LIST.len, types));
-      print_type_env(env);
-      return env;
+      const char *type_name = type->data.T_VAR;
+      *type =
+          *create_cons_type(TYPE_NAME_TUPLE, binding->data.AST_LIST.len, types);
+      env = env_extend(env, type_name, type);
     }
     for (int i = 0; i < binding->data.AST_LIST.len; i++) {
       env = add_binding_to_env(env, binding->data.AST_LIST.items + i,
@@ -142,6 +132,41 @@ static Type *binding_type(Ast *ast) {
   }
 }
 
+static Type *infer_typed_lambda(Ast *ast, TypeEnv **env) {
+  int num_args = ast->data.AST_LAMBDA.len;
+
+  TypeEnv *fn_scope_env = *env;
+
+  Type *param_types[num_args];
+  for (int i = 0; i < num_args; i++) {
+    Ast *def = ast->data.AST_LAMBDA.defaults[i];
+    Ast *param_ast = ast->data.AST_LAMBDA.params + i;
+    Type *arg_type = compute_type_expression(def, *env);
+    def->md = arg_type;
+
+    param_types[i] = arg_type;
+    fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, arg_type);
+  }
+
+  Type *return_type = next_tvar();
+  Type *fn = create_type_multi_param_fn(num_args, param_types, return_type);
+
+  const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
+  Type *recursive_ref = tvar(ast->data.AST_LAMBDA.fn_name.chars);
+  if (fn_name != NULL) {
+    recursive_ref->is_recursive_fn_ref = true;
+    fn_scope_env = env_extend(fn_scope_env, ast->data.AST_LAMBDA.fn_name.chars,
+                              recursive_ref);
+  }
+
+  Type *body_type = TRY(infer(ast->data.AST_LAMBDA.body, &fn_scope_env));
+
+  Type *unified_ret = unify(return_type, body_type, &fn_scope_env);
+  *return_type = *unified_ret;
+  fn = resolve_generic_type(fn, fn_scope_env);
+
+  return fn;
+}
 static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   int len = ast->data.AST_LAMBDA.len;
@@ -162,7 +187,6 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
       param_types[i] = ptype;
 
       fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
-      // print_type_env(fn_scope_env);
     }
     fn = create_type_multi_param_fn(len, param_types, return_type);
   }
@@ -199,6 +223,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
   }
   *r = *f;
 
+  fn = resolve_generic_type(fn, fn_scope_env);
   return fn;
 }
 
@@ -426,6 +451,20 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
   case AST_LAMBDA: {
+    int num_args = ast->data.AST_LAMBDA.len;
+    if (ast->data.AST_LAMBDA.defaults) {
+      int defs = 0;
+      for (int i = 0; i < num_args; i++) {
+        if (ast->data.AST_LAMBDA.defaults[i] != NULL) {
+          defs++;
+        }
+      }
+      if (defs == num_args) {
+        type = infer_typed_lambda(ast, env);
+        break;
+      }
+    }
+
     type = infer_lambda(ast, env);
     break;
   }
@@ -454,16 +493,11 @@ Type *infer(Ast *ast, TypeEnv **env) {
     //   return infer(ast, env);
     // }
 
-    printf("application: ");
-    print_ast(ast);
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
-    print_type(t);
 
     if (t->kind == T_FN) {
       type = infer_fn_application(ast, env);
-      print_type(type);
-      print_type_env(*env);
       break;
     }
 

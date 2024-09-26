@@ -227,9 +227,9 @@ lambda_args:
   | lambda_args lambda_arg '=' expr { $$ = ast_arg_list_push($1, $2, $4); }
 
   | lambda_arg              { $$ = ast_arg_list($1, NULL); }
-  | lambda_arg ':' expr     { $$ = ast_arg_list($1, $3); }
+  | lambda_arg ':' '(' type_expr ')' { $$ = ast_arg_list($1, $4); }
   | lambda_args lambda_arg  { $$ = ast_arg_list_push($1, $2, NULL); }
-  | lambda_args lambda_arg ':' expr { $$ = ast_arg_list_push($1, $2, $4); }
+  | lambda_args lambda_arg ':' '(' type_expr ')' { $$ = ast_arg_list_push($1, $2, $5); }
   ;
 
 lambda_arg:
