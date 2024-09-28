@@ -336,6 +336,7 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
   }
   return stack;
 }
+
 void dbg_input_stack(struct inputs_list *stack) {
   int i = 0;
   while (stack) {
@@ -345,15 +346,59 @@ void dbg_input_stack(struct inputs_list *stack) {
   }
 }
 
-Ast *parse_input_script(const char *filename) {
-  struct inputs_list *stack = NULL;
+static struct inputs_list *_stack = NULL;
+
+Ast *parse_repl_include(const char *fcontent) {
+  char *filename = strdup("./");
   filename = prepend_current_directory(filename);
   char *dir = get_dirname(filename);
 
+  inputs_list *stack = _stack;
+  stack = inputs_list_push_left(stack, filename, fcontent);
+  char *current_dir = get_dirname(stack->qualified_path);
+  stack = preprocess_includes(current_dir, fcontent, stack);
+
+  Ast *prev = NULL;
+
+  if (ast_root != NULL && ast_root->data.AST_BODY.len > 0) {
+    prev = ast_root;
+  }
+
+  ast_root = Ast_new(AST_BODY);
+  ast_root->data.AST_BODY.len = 0;
+  ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+
+  inputs_list *__stack = stack;
+  while (__stack != _stack) {
+    const char *input = __stack->data;
+    yy_scan_string(input);
+    yyparse();
+
+    __stack = __stack->next;
+  }
+
+  _stack = stack;
+
+  Ast *res = ast_root;
+  if (prev != NULL) {
+    ast_root = prev;
+  }
+
+  // ugly hack
+  Ast *dummy = Ast_new(AST_INT);
+  dummy->data.AST_INT.value = 1;
+  ast_body_push(res, dummy);
+  return res;
+}
+
+Ast *parse_input_script(const char *filename) {
+  filename = prepend_current_directory(filename);
+  char *dir = get_dirname(filename);
   char *fcontent = read_script(filename);
   if (!fcontent) {
     return NULL;
   }
+  inputs_list *stack = _stack;
   stack = inputs_list_push_left(stack, filename, fcontent);
   char *current_dir = get_dirname(stack->qualified_path);
   stack = preprocess_includes(current_dir, fcontent, stack);
@@ -361,13 +406,15 @@ Ast *parse_input_script(const char *filename) {
   ast_root = Ast_new(AST_BODY);
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
-  while (stack) {
-    const char *input = stack->data;
+  inputs_list *__stack = stack;
+  while (__stack != _stack) {
+    const char *input = __stack->data;
     yy_scan_string(input);
     yyparse();
 
-    stack = stack->next;
+    __stack = __stack->next;
   }
+  _stack = stack;
 
   return ast_root;
 }

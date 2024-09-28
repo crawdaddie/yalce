@@ -280,14 +280,17 @@ int jit(int argc, char **argv) {
       } else if (strncmp("%dump_ast", input, 9) == 0) {
         print_ast(ast_root);
         continue;
-      } else if (strncmp("%include", input, 8) == 0) {
-        printf("handle repl include\n");
-        continue;
       } else if (strcmp("\n", input) == 0) {
         continue;
       }
 
-      Ast *prog = parse_input(input, dirname);
+      Ast *prog;
+      if (strncmp("%include", input, 8) == 0) {
+        prog = parse_repl_include(input);
+        print_ast(prog);
+      } else {
+        prog = parse_input(input, dirname);
+      }
       Type *typecheck_result = infer(prog, &env);
 
       ctx.env = env;
