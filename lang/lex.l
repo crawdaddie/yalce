@@ -120,6 +120,14 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           /*printf("operator '%s'", yytext);*/
                           return *yytext;
                         }
+^%.*            {
+                  /*
+                  printf("possible macro %s %p %d %d\n", yytext, ast_root, ast_root->tag, ast_root->data.AST_BODY.len);
+                  handle_macro(ast_root, yytext + 1);
+                  print_ast(ast_root);
+                  printf("should insert ast nodes\n");
+                  */
+                };       
 
 "%"             return MODULO;
 ">="            return GE;
@@ -129,17 +137,10 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "::"            return DOUBLE_COLON;
 ":"             return *yytext;
 "->"            return ARROW;
-[ \t\n]+        ;       /* ignore whitespace */
 "#".*           ;       /* ignore comments starting with # */
 
-^%.*            {
-                  /*printf("possible macro %s %p %d %d\n", yytext, ast_root, ast_root->tag, ast_root->data.AST_BODY.len);
-                  print_ast(ast_root);
-                  printf("should insert ast nodes\n");
-                  */
-                  handle_macro(ast_root, yytext + 1);
-                };       
   
+[ \t\n]+        ;       /* ignore whitespace */
 {CHAR}          { 
                     /* Matched a character literal */
                     /* You might want to return a token here, e.g., return CHAR_LITERAL; */

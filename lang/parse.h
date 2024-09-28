@@ -250,6 +250,7 @@ Ast *ast_arg_list(Ast *arg_id, Ast *def);
 Ast *ast_arg_list_push(Ast *arg_list, Ast *arg_id, Ast *def);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input, const char *dirname);
+Ast *parse_input_script(const char *filename);
 Ast *ast_void();
 Ast *ast_string(ObjString lex_string);
 
@@ -288,7 +289,7 @@ Ast *ast_sequence(Ast *seq, Ast *new_);
 
 Ast *ast_assoc_extern(Ast *l, ObjString name);
 // Ast *macro(Ast *expr);
-void handle_macro(Ast *root, const char *macro_text);
+void handle_macro(Ast *root, char *macro_text);
 
 Ast *ast_await(Ast *awaitable);
 

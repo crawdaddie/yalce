@@ -387,18 +387,6 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
       callable_type = callable_type->data.T_FN.to;
     }
 
-    if (strcmp("schedule_event", sym_name) == 0) {
-      printf("call symbol %s\n", sym_name);
-      LLVMDumpType(llvm_callable_type);
-      printf("\n");
-      LLVMDumpType(LLVMTypeOf(app_vals[0]));
-      printf("\n");
-      LLVMDumpType(LLVMTypeOf(app_vals[1]));
-      printf("\n");
-      LLVMDumpType(LLVMTypeOf(app_vals[2]));
-      printf("\n");
-    }
-
     return LLVMBuildCall2(builder, llvm_callable_type, callable, app_vals,
                           args_len, "call_func");
   }
@@ -423,6 +411,10 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
 
   const char *binop_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+  //
+  // printf("call binop\n");
+  // print_type(ltype);
+  // print_type(rtype);
 
   LLVMValueRef lval =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);

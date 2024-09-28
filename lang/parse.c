@@ -51,6 +51,12 @@ struct string_list {
   struct string_list *next;
 };
 
+typedef struct inputs_list {
+  const char *data;
+  const char *qualified_path;
+  struct inputs_list *next;
+} inputs_list;
+
 struct string_list *string_list_push_left(struct string_list *list,
                                           const char *data) {
   struct string_list *new = palloc(sizeof(struct string_list));
@@ -70,7 +76,29 @@ const char *string_list_find(struct string_list *list, const char *data) {
   return NULL;
 }
 
-static struct string_list *included = NULL;
+struct inputs_list *inputs_list_push_left(struct inputs_list *list,
+                                          const char *qualified_path,
+                                          const char *data) {
+  struct inputs_list *new = palloc(sizeof(struct inputs_list));
+  new->next = list;
+  new->data = data;
+  new->qualified_path = qualified_path;
+  return new;
+}
+
+const char *inputs_lookup_by_path(struct inputs_list *list, const char *path) {
+
+  for (struct inputs_list *inc = list; inc != NULL; inc = inc->next) {
+    if (strcmp(inc->qualified_path, path) == 0) {
+      // module already included
+      return inc->data;
+    }
+  }
+  return NULL;
+}
+
+static struct string_list *_included = NULL;
+static struct inputs_List *included = NULL;
 
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = palloc(sizeof(Ast));
@@ -176,31 +204,31 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
 
 Ast *ast_unop(token_type op, Ast *right) {
   switch (op) {
-    case TOKEN_STAR: {
-      Ast *node = Ast_new(AST_APPLICATION);
-      node->data.AST_APPLICATION.function = ast_identifier((ObjString){"deref", 5});
-      node->data.AST_APPLICATION.args = malloc(sizeof(Ast));
-      node->data.AST_APPLICATION.args[0] = *right;
-      node->data.AST_APPLICATION.len = 1;
-      return node;
-
-    }
-    case TOKEN_AMPERSAND: {
-      Ast *node = Ast_new(AST_APPLICATION);
-      node->data.AST_APPLICATION.function = ast_identifier((ObjString){"addrof", 6});
-      node->data.AST_APPLICATION.args = malloc(sizeof(Ast) * 1);
-      node->data.AST_APPLICATION.args[0] = *right;
-      node->data.AST_APPLICATION.len = 1;
-      return node;
-    }
-    default: {
-      Ast *node = Ast_new(AST_UNOP);
-      node->data.AST_BINOP.op = op;
-      node->data.AST_BINOP.right = right;
-      return node;
-    }
+  case TOKEN_STAR: {
+    Ast *node = Ast_new(AST_APPLICATION);
+    node->data.AST_APPLICATION.function =
+        ast_identifier((ObjString){"deref", 5});
+    node->data.AST_APPLICATION.args = malloc(sizeof(Ast));
+    node->data.AST_APPLICATION.args[0] = *right;
+    node->data.AST_APPLICATION.len = 1;
+    return node;
   }
-
+  case TOKEN_AMPERSAND: {
+    Ast *node = Ast_new(AST_APPLICATION);
+    node->data.AST_APPLICATION.function =
+        ast_identifier((ObjString){"addrof", 6});
+    node->data.AST_APPLICATION.args = malloc(sizeof(Ast) * 1);
+    node->data.AST_APPLICATION.args[0] = *right;
+    node->data.AST_APPLICATION.len = 1;
+    return node;
+  }
+  default: {
+    Ast *node = Ast_new(AST_UNOP);
+    node->data.AST_BINOP.op = op;
+    node->data.AST_BINOP.right = right;
+    return node;
+  }
+  }
 }
 
 Ast *ast_identifier(ObjString id) {
@@ -241,11 +269,113 @@ int yy_scan_string(char *);
 
 static char *current_dir;
 static int current_buf;
-static struct string_list *input_stack = NULL;
+static struct inputs_list *input_stack = NULL;
+
+char *prepend_current_directory(const char *filename) {
+  if (filename == NULL) {
+    return NULL;
+  }
+
+  // Check if the filename already starts with "./"
+  if (strncmp(filename, "./", 2) == 0) {
+    // If it does, just return a copy of the original string
+    return strdup(filename);
+  } else {
+    // If it doesn't, allocate memory for the new string
+    char *new_filename =
+        malloc(strlen(filename) + 3); // 2 for "./" and 1 for null terminator
+    if (new_filename == NULL) {
+      return NULL; // Memory allocation failed
+    }
+
+    // Construct the new string
+    strcpy(new_filename, "./");
+    strcat(new_filename, filename);
+
+    return new_filename;
+  }
+}
+inputs_list *preprocess_includes(char *current_dir, const char *_input,
+                                 inputs_list *stack) {
+  int total_len = strlen(_input);
+  const char *input;
+  // process includes backwards so they're on the stack in the correct order
+  while (total_len >= 0) {
+    input = _input + total_len;
+    if (strncmp("%include ", input, 9) == 0) {
+      int line_len = 0;
+      const char *line = input;
+      while (*line != '\n') {
+        line_len++;
+        line++;
+      }
+      char *include_line = strndup(input, line_len);
+      char *mod_name = include_line + 9;
+      int mod_name_len = strlen(current_dir) + 1 + strlen(mod_name) + 4;
+      char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
+
+      snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc", current_dir,
+               mod_name);
+      fully_qualified_name = normalize_path(fully_qualified_name);
+      fully_qualified_name = prepend_current_directory(fully_qualified_name);
+
+      const char *previously_imported =
+          inputs_lookup_by_path(stack, fully_qualified_name);
+
+      if (previously_imported == NULL) {
+        const char *import_content = read_script(fully_qualified_name);
+        stack =
+            inputs_list_push_left(stack, fully_qualified_name, import_content);
+
+        char *_current_dir = get_dirname(stack->qualified_path);
+
+        stack = preprocess_includes(_current_dir, import_content, stack);
+      }
+    }
+    total_len--;
+  }
+  return stack;
+}
+void dbg_input_stack(struct inputs_list *stack) {
+  int i = 0;
+  while (stack) {
+    printf("%d %s: \n%s", i, stack->qualified_path, stack->data);
+    stack = stack->next;
+    i++;
+  }
+}
+
+Ast *parse_input_script(const char *filename) {
+  struct inputs_list *stack = NULL;
+  filename = prepend_current_directory(filename);
+  char *dir = get_dirname(filename);
+
+  char *fcontent = read_script(filename);
+  if (!fcontent) {
+    return NULL;
+  }
+  stack = inputs_list_push_left(stack, filename, fcontent);
+  char *current_dir = get_dirname(stack->qualified_path);
+  stack = preprocess_includes(current_dir, fcontent, stack);
+
+  ast_root = Ast_new(AST_BODY);
+  ast_root->data.AST_BODY.len = 0;
+  ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+  while (stack) {
+    const char *input = stack->data;
+    yy_scan_string(input);
+    yyparse();
+
+    stack = stack->next;
+  }
+
+  return ast_root;
+}
 
 /* Define the parsing function */
 Ast *parse_input(char *input, const char *dirname) {
   current_dir = dirname;
+
   Ast *prev = NULL;
 
   if (ast_root != NULL && ast_root->data.AST_BODY.len > 0) {
@@ -256,19 +386,8 @@ Ast *parse_input(char *input, const char *dirname) {
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
 
-  input_stack = string_list_push_left(input_stack, input);
-
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
-
-  struct string_list *_input_stack = input_stack->next;
-
-  // free(input_stack);
-
-  input_stack = _input_stack;
-  if (input_stack && input_stack->data) {
-    yy_scan_string(input_stack->data);
-  }
 
   Ast *res = ast_root;
   if (prev != NULL) {
@@ -717,16 +836,22 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
   return body;
 }
 
-void handle_macro(Ast *root, const char *macro_text) {
+void handle_macro(Ast *root, char *macro_text) {
 
   if (strncmp("include", macro_text, 7) == 0) {
+    printf("INCLUDE MACRO:\n");
+    long macro_text_len = strlen(macro_text);
+
     int len = strlen(current_dir) + 1 + strlen(macro_text + 8) + 4;
     char *fully_qualified_name = palloc(sizeof(char) * len);
 
     snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", current_dir,
              macro_text + 8);
 
+    printf("fully qualified path %s\n", fully_qualified_name);
+
     fully_qualified_name = normalize_path(fully_qualified_name);
+    printf("fully qualified path %s\n", fully_qualified_name);
 
     if (string_list_find(included, fully_qualified_name)) {
       return;
@@ -734,6 +859,7 @@ void handle_macro(Ast *root, const char *macro_text) {
 
     included = string_list_push_left(included, fully_qualified_name);
     char *fcontent = read_script(fully_qualified_name);
+    printf("fcontent: %s\n");
     char *script_dir = get_dirname(fully_qualified_name);
 
     Ast *mod = parse_input(fcontent, script_dir);

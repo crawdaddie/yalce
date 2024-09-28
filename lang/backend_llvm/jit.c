@@ -112,17 +112,9 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMContextRef llvm_ctx, TypeEnv **env,
                                        Ast **prog) {
 
-  char *fcontent = read_script(filename);
   LLVMSetSourceFileName(module, filename, strlen(filename));
-  if (!fcontent) {
-    return NULL;
-  }
-  char *dirname = get_dirname(filename);
-  if (dirname == NULL) {
-    return NULL;
-  }
 
-  *prog = parse_input(fcontent, dirname);
+  *prog = parse_input_script(filename);
   if (!(*prog)) {
     return NULL;
   }
@@ -134,7 +126,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   if (result_type == NULL) {
     printf("typecheck failed\n");
-    free(fcontent);
     return NULL;
   }
 
@@ -149,7 +140,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   if (top_level_func == NULL) {
     printf("> ");
     print_result(result_type, NULL);
-    free(fcontent);
     return NULL;
   }
 
@@ -168,7 +158,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   printf("> ");
   print_result(result_type, result);
-  free(fcontent);
   return result; // Return success
 }
 
@@ -290,6 +279,9 @@ int jit(int argc, char **argv) {
         continue;
       } else if (strncmp("%dump_ast", input, 9) == 0) {
         print_ast(ast_root);
+        continue;
+      } else if (strncmp("%include", input, 8) == 0) {
+        printf("handle repl include\n");
         continue;
       } else if (strcmp("\n", input) == 0) {
         continue;

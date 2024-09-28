@@ -53,9 +53,6 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
   if (strcmp(fn_name, "deref") == 0) {
-    print_type(result_fn);
-    print_type(app_arg_types[0]);
-    print_type_env(replacement_env);
     return app_arg_types[0]->data.T_CONS.args[0];
   }
 
