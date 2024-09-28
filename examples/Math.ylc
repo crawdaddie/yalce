@@ -10,5 +10,10 @@ let rand_double_range = extern fn Double -> Double -> Double ;
 
 let amp_db = extern fn Double -> Double;
 let db_amp = extern fn Double -> Double;
-let rec = extern fn Double -> Double;
+# let rec = extern fn Double -> Double;
+let sin = extern fn Double -> Double;
+let cos = extern fn Double -> Double;
+
+let bipolar_scale = extern fn Double -> Double -> Double -> Double;
+let unipolar_scale = extern fn Double -> Double -> Double -> Double;
 

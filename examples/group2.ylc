@@ -65,11 +65,12 @@ let times = [|
 # schedule_event (f) (1., 2.) 1.0;
 
 
-let f = fn args frame_offset ->
-  let (duration, note, filter_freq) = deref args;
+let f = fn args: (Ptr of (Double * Double * Double)) frame_offset: (Int) ->
+  let (duration, note, filter_freq) = *args;
+  printf `{duration}`;
   ()
 ;;
 
-# f (1, 2, 3) 100;
+f (1., 2., 3.) 100;
 
 

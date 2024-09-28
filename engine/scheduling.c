@@ -16,7 +16,7 @@ pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define INITIAL_CAPACITY 16
 
 typedef struct {
-  void (*callback)(void *userdata, double now, int frame_offset);
+  void (*callback)(void *userdata, int frame_offset);
   void *userdata;
   uint64_t timestamp;
 } ScheduledEvent;
@@ -85,8 +85,8 @@ static inline uint64_t get_time_ns() {
 uint64_t now;
 uint64_t start;
 
-void _schedule_event(EventHeap *heap, void (*callback)(void *, double, int),
-                     void *userdata, double delay_seconds,
+void _schedule_event(EventHeap *heap, void (*callback)(void *, int),
+                     double delay_seconds, void *userdata,
                      uint64_t start_time) {
 
   if (heap->size >= heap->capacity) {
@@ -128,6 +128,12 @@ ScheduledEvent pop_event(EventHeap *heap) {
 
 EventHeap *queue;
 
+struct triple {
+  double a;
+  double b;
+  double c;
+} triple;
+
 // Timer thread function
 void *timer(void *arg) {
   EventHeap *queue = (EventHeap *)arg;
@@ -144,7 +150,9 @@ void *timer(void *arg) {
         ScheduledEvent ev = pop_event(queue);
         double now_d = ((double)(now - start) / S_TO_NS);
         int offset = get_frame_offset();
-        ev.callback(ev.userdata, now_d, offset);
+
+        ev.callback(ev.userdata, offset);
+        free(ev.userdata);
       }
 
       // Calculate next tick
@@ -163,13 +171,6 @@ void *timer(void *arg) {
   return NULL;
 }
 
-// Example callback function
-void example_cb(void *user_data, double t, int frame_offset) {
-  printf("Callback executed at %f\n", t);
-
-  _schedule_event(queue, example_cb, NULL, 1, t);
-}
-
 int scheduler_event_loop() {
   queue = create_event_heap();
 
@@ -183,24 +184,12 @@ int scheduler_event_loop() {
   return 0;
 }
 
-void schedule_event(void (*callback)(void *, double, int), void *userdata,
-                    double delay_seconds) {
-  // if (delay_seconds == 0) {
-  //   callback(userdata, delay_seconds);
-  // }
+void schedule_event(void (*callback)(void *, int), double delay_seconds,
+                    void *userdata) {
+
   now = get_time_ns(); // Update 'now' before scheduling
-  return _schedule_event(queue, callback, userdata, delay_seconds, now);
+  return _schedule_event(queue, callback, delay_seconds, userdata, now);
 }
 
 typedef struct Timer {
 } Timer;
-
-struct ipt {
-  int a;
-  int b;
-} ipt;
-
-void handle_cb(void (*callback)(void *, double, int), void *userdata) {
-  // printf("handle cb %p\n", callback);
-  callback(userdata, 0., 0);
-}

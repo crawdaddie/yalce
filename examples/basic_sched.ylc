@@ -1,0 +1,91 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+%include Synth
+%include Fmt
+%include Math
+
+let schedule_event = extern fn Ptr -> Double -> Ptr -> ();
+
+let sq_detune = fn () -> 
+  let f = inlet 50. in
+  let ff = inlet 500. in
+  (sq_node f + sq_node (f * 1.01))
+  |> biquad_lp_node ff 5.
+;;
+
+let wr = fn def -> 
+  reset_chain ();
+  let x = def ();
+  end_chain x
+;;
+
+
+let notes = [|
+  110.0,
+  123.47082531403103,
+  130.8127826502993,
+  146.8323839587038,
+  164.81377845643496,
+  174.61411571650194,
+  195.99771799087463,
+|];
+
+let octaves = [|
+  0.5,
+  1.,
+  2.,
+  4.,
+|];
+
+let times = [|
+  0.125,
+  0.25,
+  0.5,
+  0.125,
+|];
+
+let choose = fn arr ->
+  let idx = rand_int (array_size arr);
+  array_at arr idx 
+;;
+
+choose notes; # pre-cache (Array of Double -> Double) version of choose
+              # - not ideal but needed for now while we
+              # don't have proper tree-based scope management :(
+
+let x = sq_detune |> wr |> play;
+
+let setxnote = fn offset note ->
+  set_input_scalar_offset x 0 offset note
+;;  
+
+let setxff = fn offset ff ->
+  set_input_scalar_offset x 1 offset ff
+;;  
+
+# let note_seq = fn phase ->
+#   match phase with
+#   | x if x % 
+
+
+let stream_vals = fn (dur, phase, note, _ff): (Double * Double * Double * Double) ->
+  let ff = phase * 10. |> cos |> bipolar_scale 100. 1000. in
+  (dur, phase, 100., ff)
+;;
+
+let f = fn
+  args: (Ptr of (Double * Double * Double * Double))
+  frame_offset: (Int)
+  ->
+  let (duration, phase, note, filter_freq) = *args;
+
+  note |> setxnote frame_offset;
+  filter_freq |> setxff frame_offset;
+
+  stream_vals (duration, phase + duration, note, filter_freq)
+
+  |> schedule_event f duration
+;;
+
+
+
+schedule_event f 0.0 (0.125, 0., choose notes, 200.);

@@ -6,6 +6,7 @@
 
 // forward decl
 Type *infer(Ast *ast, TypeEnv **env);
+
 Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   int len = ast->data.AST_APPLICATION.len;
   Type *app_arg_types[len];
@@ -18,7 +19,6 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
 
   Type *fn_type =
       _fn_type->is_recursive_fn_ref ? _fn_type : copy_type(_fn_type);
-  // print_type(fn_type);
 
   TypeEnv *replacement_env = NULL;
 
@@ -49,6 +49,15 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
       resolve_generic_type(fn_type, replacement_env);
 
   result_fn = resolve_tc_rank(result_fn);
+  const char *fn_name =
+      ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+
+  if (strcmp(fn_name, "deref") == 0) {
+    print_type(result_fn);
+    print_type(app_arg_types[0]);
+    print_type_env(replacement_env);
+    return app_arg_types[0]->data.T_CONS.args[0];
+  }
 
   return result_fn;
 }
@@ -76,7 +85,6 @@ Type *infer_cons(Ast *ast, TypeEnv **env) {
 }
 
 Type *infer_unknown_fn_signature(Ast *ast, TypeEnv **env) {
-
 
   const char *fn_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;

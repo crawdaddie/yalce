@@ -821,6 +821,18 @@ int main() {
         "let f = fn x: (Int) (y, z): (Int * Double) -> x + y + z;;",
         &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
   });
+  ({
+    RESET;
+
+    TITLE("## deref in fn")
+
+    TEST_SIMPLE_AST_TYPE(
+      "let f = fn args: (Ptr of (Double * Double)) frame_offset: (Int) ->\n"
+      "  let (duration, note, filter_freq) = *args;\n"
+      "  ()\n"
+      ";;\n",
+      &MAKE_FN_TYPE_3(&tcons(TYPE_NAME_PTR, 1, &TTUPLE(2, &t_num, &t_num)), &t_int, &t_void));
+  });
 
   return status == true ? 0 : 1;
 }

@@ -157,6 +157,9 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     const char *id_chars = binding->data.AST_IDENTIFIER.value;
     int id_len = binding->data.AST_IDENTIFIER.length;
 
+    // printf("set arg val %s", id_chars);
+    // print_type(val_type);
+
     if (*(binding->data.AST_IDENTIFIER.value) == '_' &&
         binding->data.AST_IDENTIFIER.length == 1) {
       return _TRUE;

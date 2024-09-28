@@ -38,6 +38,8 @@ extern Type t_array_var;
 extern Type t_array_size_fn_sig;
 extern Type t_array_at_fn_sig;
 
+extern Type t_ptr_deref_sig;
+
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"

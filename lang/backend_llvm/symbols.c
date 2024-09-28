@@ -3,6 +3,7 @@
 #include "globals.h"
 #include "match.h"
 #include "serde.h"
+#include "types/type.h"
 #include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -20,6 +21,7 @@ JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
 }
 
 JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
+
   if (ast->tag == AST_IDENTIFIER) {
 
     const char *chars = ast->data.AST_IDENTIFIER.value;
@@ -255,5 +257,11 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
 
   ht_set_hash(stack, "array_init", hash_string("array_init", 10),
               array_init_sym);
+
+  JITSymbol *deref_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_ptr_deref_sig, NULL, NULL);
+
+  ht_set_hash(stack, "deref", hash_string("deref", 5), deref_sym);
+
   return env;
 }

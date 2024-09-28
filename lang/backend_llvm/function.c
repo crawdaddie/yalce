@@ -279,7 +279,7 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
       .env = ctx->env,
   };
 
-  printf("create new specific function for %s\n", sym_name);
+  // printf("create new specific function for %s\n", sym_name);
 
   LLVMValueRef specific_func = create_new_specific_fn(
       fn_ast->data.AST_LAMBDA.len, fn_ast, sym->symbol_type, expected_fn_type,
@@ -387,6 +387,18 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
       callable_type = callable_type->data.T_FN.to;
     }
 
+    if (strcmp("schedule_event", sym_name) == 0) {
+      printf("call symbol %s\n", sym_name);
+      LLVMDumpType(llvm_callable_type);
+      printf("\n");
+      LLVMDumpType(LLVMTypeOf(app_vals[0]));
+      printf("\n");
+      LLVMDumpType(LLVMTypeOf(app_vals[1]));
+      printf("\n");
+      LLVMDumpType(LLVMTypeOf(app_vals[2]));
+      printf("\n");
+    }
+
     return LLVMBuildCall2(builder, llvm_callable_type, callable, app_vals,
                           args_len, "call_func");
   }
@@ -482,6 +494,22 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
   }
   return NULL;
 }
+LLVMValueRef call_deref_fn(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
+                           LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  Type *ptr_type = ast->data.AST_APPLICATION.args->md;
+  Type *pointed_to_type = ptr_type->data.T_CONS.args[0];
+  LLVMTypeRef deref_type = type_to_llvm_type(pointed_to_type, ctx->env, module);
+  LLVMTypeRef _ptr_type = LLVMPointerType(deref_type, 0);
+  LLVMValueRef val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  // Bitcast the input pointer to the correct pointer type if necessary
+  LLVMValueRef casted_ptr =
+      LLVMBuildBitCast(builder, val, _ptr_type, "casted_ptr");
+
+  // Create a load instruction to dereference the pointer
+  return LLVMBuildLoad2(builder, deref_type, casted_ptr, "dereferenced_value");
+}
 
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
@@ -508,6 +536,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
             ctx->stack_ptr);
     print_ast_err(ast->data.AST_APPLICATION.function);
     return NULL;
+  }
+
+  if (strcmp("deref", sym_name) == 0) {
+    return call_deref_fn(ast, sym, ctx, module, builder);
   }
 
   Type *builtin_binop = get_builtin_type(sym_name);

@@ -104,6 +104,15 @@ Node *set_input_scalar(Node *node, int input, double value) {
   return node;
 }
 
+Node *set_input_scalar_offset(Node *node, int input, int frame_offset,
+                              double value) {
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_SET_SCALAR,
+                           frame_offset,
+                           {.NODE_SET_SCALAR = {node, input, value}}});
+  return node;
+}
+
 Node *set_input_trig(int input, Node *node) {
   push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
                                            get_frame_offset(),

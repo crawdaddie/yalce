@@ -29,6 +29,9 @@ Signal *signal_of_double(double val);
 Signal *signal_of_int(int val);
 
 Node *set_input_scalar(Node *node, int input, double value);
+
+Node *set_input_scalar_offset(Node *node, int input, int frame_offset,
+                              double value);
 Node *set_input_trig(int input, Node *node);
 
 Node *end_chain(Node *s);

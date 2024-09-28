@@ -175,10 +175,32 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
 }
 
 Ast *ast_unop(token_type op, Ast *right) {
-  Ast *node = Ast_new(AST_UNOP);
-  node->data.AST_BINOP.op = op;
-  node->data.AST_BINOP.right = right;
-  return node;
+  switch (op) {
+    case TOKEN_STAR: {
+      Ast *node = Ast_new(AST_APPLICATION);
+      node->data.AST_APPLICATION.function = ast_identifier((ObjString){"deref", 5});
+      node->data.AST_APPLICATION.args = malloc(sizeof(Ast));
+      node->data.AST_APPLICATION.args[0] = *right;
+      node->data.AST_APPLICATION.len = 1;
+      return node;
+
+    }
+    case TOKEN_AMPERSAND: {
+      Ast *node = Ast_new(AST_APPLICATION);
+      node->data.AST_APPLICATION.function = ast_identifier((ObjString){"addrof", 6});
+      node->data.AST_APPLICATION.args = malloc(sizeof(Ast) * 1);
+      node->data.AST_APPLICATION.args[0] = *right;
+      node->data.AST_APPLICATION.len = 1;
+      return node;
+    }
+    default: {
+      Ast *node = Ast_new(AST_UNOP);
+      node->data.AST_BINOP.op = op;
+      node->data.AST_BINOP.right = right;
+      return node;
+    }
+  }
+
 }
 
 Ast *ast_identifier(ObjString id) {

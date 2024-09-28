@@ -48,9 +48,6 @@ Type *next_tvar() {
 }
 
 static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
-  // printf("res binding: ");
-  // print_ast(binding);
-
   switch (binding->tag) {
   case AST_IDENTIFIER: {
     return env_extend(env, binding->data.AST_IDENTIFIER.value, type);
@@ -163,10 +160,15 @@ static Type *infer_typed_lambda(Ast *ast, TypeEnv **env) {
 
   Type *unified_ret = unify(return_type, body_type, &fn_scope_env);
   *return_type = *unified_ret;
-  fn = resolve_generic_type(fn, fn_scope_env);
 
+  if (recursive_ref->kind == T_FN && is_generic(recursive_ref)) {
+    TypeEnv *_env = NULL;
+    unify_recursive_defs_mut(fn, recursive_ref, &_env);
+  }
+  fn = resolve_generic_type(fn, fn_scope_env);
   return fn;
 }
+
 static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   int len = ast->data.AST_LAMBDA.len;

@@ -46,10 +46,10 @@ LLVMTypeRef struct_cache_lookup(StructCache *env, Type *type) {
 
 // Function to create an LLVM tuple type
 LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
-  LLVMTypeRef cached_struct = struct_cache_lookup(struct_cache, tuple_type);
-  if (cached_struct) {
-    return cached_struct;
-  }
+  // LLVMTypeRef cached_struct = struct_cache_lookup(struct_cache, tuple_type);
+  // if (cached_struct) {
+  //   return cached_struct;
+  // }
 
   int len = tuple_type->data.T_CONS.num_args;
 
@@ -59,16 +59,19 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
     element_types[i] =
         type_to_llvm_type(tuple_type->data.T_CONS.args[i], env, module);
   }
-
-  LLVMContextRef ctx_ref = LLVMGetModuleContext(module);
-
-  LLVMTypeRef llvm_tuple_type =
-      LLVMStructTypeInContext(ctx_ref, element_types, len, 0);
+  // printf("segfault???\n");
+  // LLVMContextRef ctx_ref = LLVMGetModuleContext(module);
+  //
+  // LLVMTypeRef llvm_tuple_type =
+  //     LLVMStructTypeInContext(ctx_ref, element_types, len, 0);
+  //
+  LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
 
   // LLVMTypeRef llvm_tuple_type = LLVMStructCreateNamed(ctx_ref, "");
   // LLVMStructSetBody(llvm_tuple_type, element_types, len, 0);
 
-  struct_cache = struct_cache_extend(struct_cache, tuple_type, llvm_tuple_type);
+  // struct_cache = struct_cache_extend(struct_cache, tuple_type,
+  // llvm_tuple_type);
 
   return llvm_tuple_type;
 }
@@ -221,16 +224,22 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
     return val;
   }
 
-    // case T_CONS: {
-    //
-    //   printf("cons ptr\n");
-    //   if (strcmp(from_type->data.T_CONS.name, TYPE_NAME_LIST) == 0) {
-    //     if (from_type->data.T_CONS.args[0]->kind == T_CHAR) {
-    //       return val;
-    //     }
-    //   }
-    //   return val;
-    // }
+  case T_CONS: {
+    if (is_tuple_type(from_type)) {
+      LLVMTypeRef structType = LLVMTypeOf(val);
+
+      // Allocate space for the struct on the stack
+      LLVMValueRef allocaInst =
+          LLVMBuildMalloc(builder, structType, "struct.ptr");
+
+      // Store the struct value into the allocated space
+      LLVMBuildStore(builder, val, allocaInst);
+
+      // allocaInst is now a pointer to the address of the struct
+      return allocaInst;
+    }
+    return val;
+  }
 
   default: {
 
@@ -239,7 +248,9 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
     LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), 0, 0)};
     LLVMValueRef ptr =
         LLVMBuildGEP2(builder, el_type, val, indices, 1, "addr_of");
-    // LLVMDumpValue(ptr);
+
+    LLVMDumpValue(ptr);
+    LLVMDumpType(LLVMTypeOf(ptr));
     // printf("\n");
     return ptr;
   }
