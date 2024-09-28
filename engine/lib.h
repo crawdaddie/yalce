@@ -34,6 +34,7 @@ Node *set_input_scalar_offset(Node *node, int input, int frame_offset,
                               double value);
 Node *set_input_trig(int input, Node *node);
 
+Node *set_input_trig_offset(int input, int frame_offset, Node *node);
 Node *end_chain(Node *s);
 
 Node *play(Node *group);

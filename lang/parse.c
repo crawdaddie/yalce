@@ -3,6 +3,10 @@
 #include "serde.h"
 #include <stdlib.h>
 #include <string.h>
+typedef struct dbg_info {
+  char *script_name;
+  int yylineno;
+} dbg_info;
 
 // static struct PStorage {
 //   void *data;
@@ -406,6 +410,8 @@ Ast *parse_repl_include(const char *fcontent) {
   return res;
 }
 
+char *_cur_script;
+
 Ast *parse_input_script(const char *filename) {
   filename = prepend_current_directory(filename);
   char *dir = get_dirname(filename);
@@ -423,7 +429,9 @@ Ast *parse_input_script(const char *filename) {
   ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
   inputs_list *__stack = stack;
   while (__stack != _stack) {
+    _cur_script = __stack->qualified_path;
     const char *input = __stack->data;
+    yylineno = 1;
     yy_scan_string(input);
     yyparse();
 

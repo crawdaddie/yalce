@@ -1,6 +1,6 @@
 #! /Users/adam/projects/sound/yalce/build/lang
 %include Synth
-include Fmt
+%include Fmt
 %include Math
 
 let schedule_event = extern fn Ptr -> Double -> Ptr -> ();

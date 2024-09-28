@@ -28,6 +28,7 @@ let end_chain = extern fn Synth -> Synth;
 let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
 let set_input_scalar_offset = extern fn Synth -> Int -> Int -> Double -> Synth;
 let set_input_trig = extern fn Int -> Synth -> Synth;
+let set_input_trig_offset = extern fn Int -> Int -> Synth -> Synth;
 
 let mul_sig = extern fn Signal -> Signal -> Synth;
 

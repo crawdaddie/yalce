@@ -120,6 +120,13 @@ Node *set_input_trig(int input, Node *node) {
   return node;
 }
 
+Node *set_input_trig_offset(int input, int frame_offset, Node *node) {
+  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
+                                           frame_offset,
+                                           {.NODE_SET_TRIG = {node, input}}});
+  return node;
+}
+
 void accept_callback(int (*callback)(int, int)) {
   // Function body
   if (callback != NULL) {

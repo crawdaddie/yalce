@@ -9,6 +9,8 @@ typedef struct Ast Ast;
 extern FILE *yyin;
 extern char *yytext;
 extern int yylineno;
+
+extern char *_cur_script;
 int yyparse();
 void yyrestart(FILE *);
 
@@ -230,6 +232,7 @@ struct Ast {
   } data;
 
   void *md;
+  void *dbg_info;
 };
 
 Ast *Ast_new(enum ast_tag tag);

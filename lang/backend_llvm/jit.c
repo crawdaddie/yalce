@@ -56,7 +56,7 @@ double db_amp(double db) { return pow(10.0f, db / 20.0f); }
 
 // bipolar input is in the range [-1, 1]
 double bipolar_scale(double min, double max, double bipolar_input) {
-  return min + (max - min) * (bipolar_input + 1) * 0.5;
+  return min + (max - min) * (0.5 + (bipolar_input * 0.5));
 }
 // unipolar input is in the range [0, 1]
 double unipolar_scale(double min, double max, double unipolar_input) {

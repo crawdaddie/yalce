@@ -5,42 +5,60 @@
 
 let schedule_event = extern fn Ptr -> Double -> Ptr -> ();
 
-let sq_detune = fn () -> 
-  let f = inlet 50. in
-  let ff = inlet 500. in
-  (sq_node f + sq_node (f * 1.01))
-  |> biquad_hp_node ff 5.
-;;
+let amen_buf = read_buf "fat_amen_mono_48000.wav";
 
-let wr = fn def -> 
-  reset_chain ();
-  let x = def ();
-  end_chain x
-;;
+let tempo_adjust = 0.37;
+let sample_rate_adjust = 0.9187;
+
+# let play_amen = fn () -> 
+#   bufplayer_node 
+#     amen_buf
+#     1.0
+#     0.0
+#     0.0
+# ;;
+
+# let wr = fn def -> 
+#   reset_chain ();
+#   let x = def ();
+#   end_chain x
+# ;;
 
 
-let notes = [|
-  110.0,
-  123.47082531403103,
-  130.8127826502993,
-  146.8323839587038,
-  164.81377845643496,
-  174.61411571650194,
-  195.99771799087463,
-|];
+let adjust = tempo_adjust * sample_rate_adjust / 0.8;
 
-let octaves = [|
-  0.5,
-  1.,
-  2.,
-  4.,
-|];
+let a = bufplayer_node 
+    amen_buf
+    0.8
+    0.0
+    0.0;
+
+a |> play_node;
+
+
 
 let times = [|
-  0.125,
+  # 0.125,
   0.25,
   0.5,
-  0.125,
+  0.75,
+|];
+
+let sps = [|
+  0.,
+  0.25,
+  0.5,
+  0.75,
+|];
+
+let rates = [|
+  0.8,
+  0.8,
+  0.8,
+  0.8,
+  0.4,
+  -0.8,
+  1.6,
 |];
 
 let choose = fn arr ->
@@ -48,54 +66,32 @@ let choose = fn arr ->
   array_at arr idx 
 ;;
 
-choose notes; # pre-cache (Array of Double -> Double) version of choose
+choose sps; # pre-cache (Array of Double -> Double) version of choose
               # - not ideal but needed for now while we
               # don't have proper tree-based scope management :(
 
-let x = sq_detune |> wr |> play;
-
-let setxnote = fn offset note ->
-  set_input_scalar_offset x 0 offset note
-;;  
-
-let setxff = fn offset ff ->
-  set_input_scalar_offset x 1 offset ff
-;;  
-
-# let note_seq = fn phase ->
-#   match phase with
-#   | x if x % 
-
-let freq_seq = fn i: (Double) ->
-  match i with
-    | i if (i % 4.) > 3.5 -> array_at notes 5
-    | i if (i % 4.) > 2.  -> array_at notes 6 
-    | i if (i % 4.) > 1.5 -> array_at notes 2 
-    | i if (i % 4.) > 0.  -> array_at notes 0 
-;;
-
-
-
-let stream_vals = fn (dur, phase, note, _ff): (Double * Double * Double * Double) ->
-  let ff = phase * 5. |> cos |> bipolar_scale 100. 1000.;
-  let n = 0.5 * freq_seq phase;
-  (dur, phase, n, ff)
+let stream_vals = fn (dur, phase, start_pos, rate): (Double * Double * Double * Double) ->
+  
+  let sp = phase * bipolar_scale 0.2 0.5 (cos (phase * 0.7));
+  (0.04, phase, sp * 0.8 % 1.0, 0.8)
 ;;
 
 let f = fn
   args: (Ptr of (Double * Double * Double * Double))
   frame_offset: (Int)
   ->
-  let (duration, phase, note, filter_freq) = *args;
+  let (duration, phase, start_pos, rate) = *args;
 
-  note |> setxnote frame_offset;
-  filter_freq |> setxff frame_offset;
+  start_pos |> set_input_scalar_offset a 3 frame_offset;
+  rate |> set_input_scalar_offset a 1 frame_offset;
+  set_input_trig_offset 2 frame_offset a;
 
-  stream_vals (duration, phase + duration, note, filter_freq)
+
+  stream_vals (duration, phase + duration, start_pos, rate)
 
   |> schedule_event f duration
 ;;
 
 
 
-schedule_event f 0.0 (0.0125, 0., choose notes, 200.);
+schedule_event f 0.0 (0.5 * tempo_adjust, 0., 0., 0.8);

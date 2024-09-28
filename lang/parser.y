@@ -351,6 +351,6 @@ type_atom:
 
 
 void yyerror(const char *s) {
-  fprintf(stderr, "Error: %s at line %d near '%s'\n", s, yylineno, yytext);
+  fprintf(stderr, "Error: %s at line %d near '%s' in %s\n", s, yylineno, yytext, _cur_script);
 }
 #endif _LANG_TAB_H
