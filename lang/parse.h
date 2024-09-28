@@ -290,7 +290,6 @@ Ast *ast_sequence(Ast *seq, Ast *new_);
 
 Ast *ast_assoc_extern(Ast *l, ObjString name);
 // Ast *macro(Ast *expr);
-void handle_macro(Ast *root, char *macro_text);
 
 Ast *ast_await(Ast *awaitable);
 

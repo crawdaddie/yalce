@@ -348,6 +348,20 @@ void dbg_input_stack(struct inputs_list *stack) {
 
 static struct inputs_list *_stack = NULL;
 
+void parse_stack(inputs_list *current, inputs_list **last_processed) {
+
+  inputs_list *__stack = current;
+  while (__stack != _stack) {
+    const char *input = __stack->data;
+    yy_scan_string(input);
+    yyparse();
+
+    __stack = __stack->next;
+  }
+
+  *last_processed = current;
+}
+
 Ast *parse_repl_include(const char *fcontent) {
   char *filename = strdup("./");
   filename = prepend_current_directory(filename);
@@ -384,7 +398,8 @@ Ast *parse_repl_include(const char *fcontent) {
     ast_root = prev;
   }
 
-  // ugly hack
+  // ugly hack - includes that only contain extern declarations
+  // and don't emit any instructions crash the jit
   Ast *dummy = Ast_new(AST_INT);
   dummy->data.AST_INT.value = 1;
   ast_body_push(res, dummy);
@@ -881,37 +896,6 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
   body->data.AST_BODY.stmts[0] = seq;
   body->data.AST_BODY.stmts[1] = new;
   return body;
-}
-
-void handle_macro(Ast *root, char *macro_text) {
-
-  if (strncmp("include", macro_text, 7) == 0) {
-    printf("INCLUDE MACRO:\n");
-    long macro_text_len = strlen(macro_text);
-
-    int len = strlen(current_dir) + 1 + strlen(macro_text + 8) + 4;
-    char *fully_qualified_name = palloc(sizeof(char) * len);
-
-    snprintf(fully_qualified_name, len + 1, "%s/%s.ylc", current_dir,
-             macro_text + 8);
-
-    printf("fully qualified path %s\n", fully_qualified_name);
-
-    fully_qualified_name = normalize_path(fully_qualified_name);
-    printf("fully qualified path %s\n", fully_qualified_name);
-
-    if (string_list_find(included, fully_qualified_name)) {
-      return;
-    }
-
-    included = string_list_push_left(included, fully_qualified_name);
-    char *fcontent = read_script(fully_qualified_name);
-    printf("fcontent: %s\n");
-    char *script_dir = get_dirname(fully_qualified_name);
-
-    Ast *mod = parse_input(fcontent, script_dir);
-    ast_root = parse_stmt_list(root, mod);
-  }
 }
 
 Ast *ast_await(Ast *awaitable) {

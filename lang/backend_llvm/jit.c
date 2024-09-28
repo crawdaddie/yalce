@@ -287,11 +287,13 @@ int jit(int argc, char **argv) {
       Ast *prog;
       if (strncmp("%include", input, 8) == 0) {
         prog = parse_repl_include(input);
-        print_ast(prog);
+        // print_ast(prog);
       } else {
         prog = parse_input(input, dirname);
       }
+
       Type *typecheck_result = infer(prog, &env);
+      // print_type(typecheck_result);
 
       ctx.env = env;
 
