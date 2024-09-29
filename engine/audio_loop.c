@@ -2,6 +2,7 @@
 #define _ENGINE_AUDIO_LOOP_H
 #include "audio_loop.h"
 #include "ctx.h"
+#include "midi.h"
 #include "oscillators.h"
 #include "scheduling.h"
 #include <errno.h>
@@ -326,6 +327,7 @@ int init_audio() {
   maketable_sin();
   start_audio();
   scheduler_event_loop();
+  midi_setup();
 
   return 0;
 }

@@ -57,6 +57,11 @@ Type t_mul_b = arithmetic_var("b");
 Type t_mul = MAKE_FN_TYPE_3(
     &t_mul_a, &t_mul_b, &TYPECLASS_RESOLVE("arithmetic", &t_mul_a, &t_mul_b));
 
+Type t_div_a = arithmetic_var("a");
+Type t_div_b = arithmetic_var("b");
+Type t_div = MAKE_FN_TYPE_3(
+    &t_div_a, &t_div_b, &TYPECLASS_RESOLVE("arithmetic", &t_div_a, &t_div_b));
+
 Type t_mod_a = arithmetic_var("a");
 Type t_mod_b = arithmetic_var("b");
 Type t_mod = MAKE_FN_TYPE_3(
@@ -95,17 +100,12 @@ Type t_list_var = {
 Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var, &t_list_var);
 
 _binop_map binop_map[_NUM_BINOPS] = {
-    {TYPE_NAME_OP_ADD, &t_add},
-    {TYPE_NAME_OP_SUB, &t_sub},
-    {TYPE_NAME_OP_MUL, &t_mul},
-    {TYPE_NAME_OP_MOD, &t_mod},
-    {TYPE_NAME_OP_LT, &t_lt},
-    {TYPE_NAME_OP_GT, &t_gt},
-    {TYPE_NAME_OP_LTE, &t_lte},
-    {TYPE_NAME_OP_GTE, &t_gte},
-    {TYPE_NAME_OP_EQ, &t_eq},
-    {TYPE_NAME_OP_NEQ, &t_neq},
-    {TYPE_NAME_OP_LIST_PREPEND, &t_list_prepend},
+    {TYPE_NAME_OP_ADD, &t_add}, {TYPE_NAME_OP_SUB, &t_sub},
+    {TYPE_NAME_OP_MUL, &t_mul}, {TYPE_NAME_OP_DIV, &t_div},
+    {TYPE_NAME_OP_MOD, &t_mod}, {TYPE_NAME_OP_LT, &t_lt},
+    {TYPE_NAME_OP_GT, &t_gt},   {TYPE_NAME_OP_LTE, &t_lte},
+    {TYPE_NAME_OP_GTE, &t_gte}, {TYPE_NAME_OP_EQ, &t_eq},
+    {TYPE_NAME_OP_NEQ, &t_neq}, {TYPE_NAME_OP_LIST_PREPEND, &t_list_prepend},
 };
 
 //

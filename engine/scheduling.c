@@ -128,12 +128,6 @@ ScheduledEvent pop_event(EventHeap *heap) {
 
 EventHeap *queue;
 
-struct triple {
-  double a;
-  double b;
-  double c;
-} triple;
-
 // Timer thread function
 void *timer(void *arg) {
   EventHeap *queue = (EventHeap *)arg;

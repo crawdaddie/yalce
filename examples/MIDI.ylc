@@ -1,0 +1,2 @@
+let register_cc_handler = extern fn Ptr -> Int -> Int -> ();
+let REC_127 = 0.007874015748031496;

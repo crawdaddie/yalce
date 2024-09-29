@@ -57,6 +57,7 @@ extern Type t_ptr_deref_sig;
 #define TYPE_NAME_OP_ADD  "+"
 #define TYPE_NAME_OP_SUB  "-"
 #define TYPE_NAME_OP_MUL  "*"
+#define TYPE_NAME_OP_DIV  "/"
 #define TYPE_NAME_OP_MOD  "%"
 #define TYPE_NAME_OP_LT  "<"
 #define TYPE_NAME_OP_GT  ">"
@@ -71,7 +72,7 @@ typedef struct _binop_map {
   Type *binop_fn_type;
 } _binop_map;
 
-#define _NUM_BINOPS 11
+#define _NUM_BINOPS 12
 extern _binop_map binop_map[];
 // clang-format on
 //

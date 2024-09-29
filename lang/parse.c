@@ -164,6 +164,11 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
     break;
   }
 
+  case TOKEN_SLASH: {
+    function = ast_identifier((ObjString){"/", 1});
+    break;
+  }
+
   case TOKEN_MODULO: {
     function = ast_identifier((ObjString){"%", 1});
     break;

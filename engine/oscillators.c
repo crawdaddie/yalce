@@ -386,17 +386,20 @@ typedef struct chirp_state {
   int trigger_active;
   double start_freq;
   double end_freq;
-  double lag_time;
+  // double lag_time;
   double elapsed_time;
 } chirp_state;
 
 node_perform chirp_perform(Node *node, int nframes, double spf) {
   double *out = node->out.buf;
   double *trig = node->ins[0].buf;
+  double *lag = node->ins[1].buf;
 
   chirp_state *state = (chirp_state *)node->state;
 
+  double lag_time = *lag;
   while (nframes--) {
+    lag_time = *lag;
     if (*trig == 1.0) {
       state->trigger_active = 1;
       state->current_freq = state->start_freq;
@@ -405,7 +408,7 @@ node_perform chirp_perform(Node *node, int nframes, double spf) {
 
     if (state->trigger_active) {
       // Calculate progress (0 to 1)
-      double progress = state->elapsed_time / state->lag_time;
+      double progress = state->elapsed_time / lag_time;
       if (progress > 1.0)
         progress = 1.0;
 
@@ -420,34 +423,37 @@ node_perform chirp_perform(Node *node, int nframes, double spf) {
       state->elapsed_time += spf;
 
       // Check if we've reached the end of the chirp
-      if (state->elapsed_time >= state->lag_time) {
+      if (state->elapsed_time >= lag_time) {
         state->trigger_active = 0;
         state->current_freq = state->end_freq;
       }
     } else {
       *out = state->current_freq; // Output last frequency when not active
     }
-
+    lag++;
     out++;
     trig++;
   }
 }
 
-Node *chirp_node(double start, double end, double lag_time, Signal *trig) {
+Node *chirp_node(double start, double end, Signal *lag_time, Signal *trig) {
   chirp_state *state = malloc(sizeof(chirp_state));
   state->current_freq = start;
   state->target_freq = end;
   state->trigger_active = 0;
   state->start_freq = start;
   state->end_freq = end;
-  state->lag_time = lag_time;
   state->elapsed_time = 0.0;
 
-  Signal *sigs = malloc(sizeof(Signal));
+  Signal *sigs = malloc(sizeof(Signal) * 2);
 
   sigs[0].buf = trig->buf;
   sigs[0].size = trig->size;
   sigs[0].layout = trig->layout;
+
+  sigs[1].buf = lag_time->buf;
+  sigs[1].size = lag_time->size;
+  sigs[1].layout = lag_time->layout;
 
   Node *chirp = node_new(state, (node_perform *)chirp_perform, 1, sigs);
 

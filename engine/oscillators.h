@@ -15,6 +15,6 @@ Node *brown_noise_node();
 Node *sin_node(Signal *freq);
 Node *sq_node(Signal *freq);
 
-Node *chirp_node(double start, double end, double lag_time, Signal *trig);
+Node *chirp_node(double start, double end, Signal * lag_time, Signal *trig);
 
 #endif

@@ -8,7 +8,7 @@ let sq_node = extern fn Signal -> Synth;
 let white_noise_node = extern fn () -> Synth;
 let brown_noise_node = extern fn () -> Synth;
 
-let chirp_node = extern fn Double -> Double -> Double -> Signal -> Synth;
+let chirp_node = extern fn Double -> Double -> Signal -> Signal -> Synth;
 
 # filters
 let biquad_lp_node = extern fn Signal -> Signal -> Signal -> Synth;
