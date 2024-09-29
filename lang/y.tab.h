@@ -35,44 +35,44 @@
 
 /* Tokens.  */
 #ifndef YYTOKENTYPE
-# define YYTOKENTYPE
-   /* Put the tokens into the symbol table, so that GDB and other debuggers
-      know about them.  */
-   enum yytokentype {
-     INTEGER = 258,
-     DOUBLE = 259,
-     IDENTIFIER = 260,
-     META_IDENTIFIER = 261,
-     TOK_STRING = 262,
-     TOK_CHAR = 263,
-     TRUE = 264,
-     FALSE = 265,
-     PIPE = 266,
-     EXTERN = 267,
-     TRIPLE_DOT = 268,
-     LET = 269,
-     FN = 270,
-     MATCH = 271,
-     WITH = 272,
-     ARROW = 273,
-     DOUBLE_COLON = 274,
-     TOK_VOID = 275,
-     IN = 276,
-     AND = 277,
-     ASYNC = 278,
-     FSTRING_START = 279,
-     FSTRING_END = 280,
-     FSTRING_INTERP_START = 281,
-     FSTRING_INTERP_END = 282,
-     FSTRING_TEXT = 283,
-     APPLICATION = 284,
-     MODULO = 285,
-     NE = 286,
-     EQ = 287,
-     LE = 288,
-     GE = 289,
-     UMINUS = 290
-   };
+#define YYTOKENTYPE
+/* Put the tokens into the symbol table, so that GDB and other debuggers
+   know about them.  */
+enum yytokentype {
+  INTEGER = 258,
+  DOUBLE = 259,
+  IDENTIFIER = 260,
+  META_IDENTIFIER = 261,
+  TOK_STRING = 262,
+  TOK_CHAR = 263,
+  TRUE = 264,
+  FALSE = 265,
+  PIPE = 266,
+  EXTERN = 267,
+  TRIPLE_DOT = 268,
+  LET = 269,
+  FN = 270,
+  MATCH = 271,
+  WITH = 272,
+  ARROW = 273,
+  DOUBLE_COLON = 274,
+  TOK_VOID = 275,
+  IN = 276,
+  AND = 277,
+  ASYNC = 278,
+  FSTRING_START = 279,
+  FSTRING_END = 280,
+  FSTRING_INTERP_START = 281,
+  FSTRING_INTERP_END = 282,
+  FSTRING_TEXT = 283,
+  APPLICATION = 284,
+  MODULO = 285,
+  NE = 286,
+  EQ = 287,
+  LE = 288,
+  GE = 289,
+  UMINUS = 290
+};
 #endif
 /* Tokens.  */
 #define INTEGER 258
@@ -109,27 +109,37 @@
 #define GE 289
 #define UMINUS 290
 
-
-
-
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
+#if !defined YYSTYPE && !defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 29 "lang/parser.y"
+#line 30 "lang/parser.y"
 {
-    Ast *ast_node_ptr;          /* node pointer */
-    ObjString vident;           /* identifier */
-    ObjString vstr;             /* string */
-    int vint;                   /* int val */
-    double vdouble;
-    char vchar;
+  Ast *ast_node_ptr; /* node pointer */
+  ObjString vident;  /* identifier */
+  ObjString vstr;    /* string */
+  int vint;          /* int val */
+  double vdouble;
+  char vchar;
 }
 /* Line 1529 of yacc.c.  */
 #line 128 "lang/y.tab.h"
-	YYSTYPE;
-# define yystype YYSTYPE /* obsolescent; will be withdrawn */
-# define YYSTYPE_IS_DECLARED 1
-# define YYSTYPE_IS_TRIVIAL 1
+YYSTYPE;
+#define yystype YYSTYPE /* obsolescent; will be withdrawn */
+#define YYSTYPE_IS_DECLARED 1
+#define YYSTYPE_IS_TRIVIAL 1
 #endif
 
 extern YYSTYPE yylval;
 
+#if !defined YYLTYPE && !defined YYLTYPE_IS_DECLARED
+typedef struct YYLTYPE {
+  int first_line;
+  int first_column;
+  int last_line;
+  int last_column;
+} YYLTYPE;
+#define yyltype YYLTYPE /* obsolescent; will be withdrawn */
+#define YYLTYPE_IS_DECLARED 1
+#define YYLTYPE_IS_TRIVIAL 1
+#endif
+
+extern YYLTYPE yylloc;

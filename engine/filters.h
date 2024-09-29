@@ -17,4 +17,7 @@ Node *biquad_hp_node(Signal *freq, Signal *res, Signal *in);
 Node *biquad_bp_node(Signal *freq, Signal *res, Signal *in);
 
 // Node *butterworth_hp_dyn_node(double freq, Node *in);
+//
+Node *comb_node(double delay_time, double max_delay_time, double fb,
+                Signal *input);
 #endif

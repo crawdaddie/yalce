@@ -2,6 +2,7 @@
 #include "common.h"
 #include "ctx.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 // Initialize filter coefficients and state variables
@@ -276,4 +277,180 @@ static node_perform butterworth_hp_dyn_perform(Node *node, int nframes,
 //   set_butterworth_hp_coefficients(freq, ctx_sample_rate(), node->state);
 //   zero_biquad_filter_state(node->state);
 //   return node;
+// }
+//
+//
+//
+
+typedef struct {
+  double *buf;
+  int buf_size;
+  int read_pos;
+  int write_pos;
+  double fb;
+} comb_state;
+
+typedef struct {
+  double *buf;
+  int buf_size;
+  int write_pos;
+  double fb;
+} comb_dyn_state;
+
+Node *comb_dyn_node(double delay_time, double max_delay_time, double fb,
+                    Node *input);
+
+node_perform comb_perform(Node *node, int nframes, double spf) {
+  double *out = node->out.buf;
+  double *in = node->ins[0].buf;
+  comb_state *state = node->state;
+
+  double *write_ptr = (state->buf + state->write_pos);
+  double *read_ptr = state->buf + state->read_pos;
+
+  while (nframes--) {
+    // printf("nframes %d bufsize %d %d %d\n", nframes, state->buf_size,
+    //        state->read_pos, state->write_pos);
+    write_ptr = state->buf + state->write_pos;
+    read_ptr = state->buf + state->read_pos;
+
+    *out = *in + *read_ptr;
+
+    *write_ptr = state->fb * (*out);
+
+    state->read_pos = (state->read_pos + 1) % state->buf_size;
+    state->write_pos = (state->write_pos + 1) % state->buf_size;
+
+    in++;
+    out++;
+  }
+}
+
+Node *comb_node(double delay_time, double max_delay_time, double fb,
+                Signal *input) {
+
+  int SAMPLE_RATE = ctx_sample_rate();
+
+  int bufsize = (int)(max_delay_time * SAMPLE_RATE);
+  int bufsize_bytes = (bufsize * sizeof(double));
+  int total_size = sizeof(comb_state) + bufsize_bytes + sizeof(Signal);
+  // +
+  //                  sizeof(Node) + (sizeof(double) * BUF_SIZE);
+
+  void *mem = calloc(total_size, sizeof(char));
+
+  if (!mem) {
+    fprintf(stderr, "memory alloc for comb node failed\n");
+    return NULL;
+  }
+
+  double *buf = mem;
+  mem += bufsize_bytes;
+
+  comb_state *state = mem;
+  mem += sizeof(comb_state);
+
+  Signal *ins = mem;
+
+  ins->buf = input->buf;
+  ins->size = input->size;
+  ins->layout = input->layout;
+
+  state->buf = buf;
+  state->buf_size = bufsize;
+  state->fb = fb;
+
+  state->write_pos = 0;
+  state->read_pos = state->buf_size - (int)(delay_time * SAMPLE_RATE);
+
+  return node_new(state, comb_perform, 1, ins);
+}
+
+static inline void underguard(double *x) {
+  union {
+    u_int32_t i;
+    double f;
+  } ix;
+  ix.f = *x;
+  if ((ix.i & 0x7f800000) == 0)
+    *x = 0.0f;
+}
+static inline double interpolate_sample(double *in, int in_size, double frame) {
+
+  double frac, a, b, sample;
+  int index = (int)frame;
+  frac = frame - index;
+  underguard(in);
+
+  a = in[index];
+  b = in[(index + 1) % in_size];
+
+  return (1.0 - frac) * a + (frac * b);
+}
+//
+// node_perform comb_dyn_perform(Node *node, int nframes, double spf) {
+//   double *in = node->ins[0]->buf;
+//   double *delay_time = node->ins[1]->buf;
+//   double *out = node->out->buf;
+//   comb_dyn_state *state = node->state;
+//
+//   double *write_ptr = (state->buf + state->write_pos);
+//
+//   while (nframes--) {
+//
+//     double read_pos = state->write_pos - (*delay_time * ctx_sample_rate());
+//     if (read_pos < 0) {
+//       read_pos = state->buf_size + read_pos;
+//     }
+//     // state->read_pos = read_pos;
+//
+//     write_ptr = state->buf + state->write_pos;
+//
+//     double sample = interpolate_sample(state->buf, state->buf_size,
+//     read_pos);
+//
+//     *out = *in + sample;
+//
+//     *write_ptr = state->fb * (*out);
+//
+//     state->write_pos = (state->write_pos + 1) % state->buf_size;
+//     in++;
+//     out++;
+//     delay_time++;
+//   }
+// }
+//
+// Node *comb_dyn_node(double delay_time, double max_delay_time, double fb,
+//                     Node *input) {
+//   comb_dyn_state *state = malloc(sizeof(comb_dyn_state));
+//
+//   Ctx *ctx = get_audio_ctx();
+//   int SAMPLE_RATE = ctx->sample_rate;
+//
+//   if (delay_time >= max_delay_time) {
+//     printf("Error: cannot set delay time %f longer than the max delay time
+//     %f",
+//            delay_time, max_delay_time);
+//     return NULL;
+//   }
+//
+//   int buf_size = (int)(max_delay_time * SAMPLE_RATE);
+//
+//   state->buf_size = buf_size;
+//   double *buf = malloc(sizeof(double) * buf_size);
+//   double *b = buf;
+//   while (buf_size--) {
+//     *b = 0.0;
+//     b++;
+//   }
+//
+//   state->buf = buf;
+//   state->write_pos = 0;
+//   state->fb = fb;
+//
+//   Node *s = node_new(state, comb_dyn_perform, NULL, get_sig(1));
+//   s->ins = malloc(sizeof(Signal *) * 2);
+//   s->ins[0] = input->out;
+//   s->ins[1] = get_sig_default(1, delay_time);
+//   return s;
 // }

@@ -34,6 +34,7 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
 
     if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
       fprintf(stderr, "unif fail: ");
+      print_location(ast->data.AST_APPLICATION.args + i);
       print_type_err(result_fn->data.T_FN.from);
       print_type_err(app_arg_types[i]);
       print_ast_err(ast);

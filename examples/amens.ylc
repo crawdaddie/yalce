@@ -76,7 +76,7 @@ let stream_vals = fn (dur, phase, start_pos, rate): (Double * Double * Double * 
   (0.04, phase, sp * 0.8 % 1.0, 0.8)
 ;;
 
-let f = fn
+let runner = fn
   args: (Ptr of (Double * Double * Double * Double))
   frame_offset: (Int)
   ->
@@ -89,9 +89,9 @@ let f = fn
 
   stream_vals (duration, phase + duration, start_pos, rate)
 
-  |> schedule_event f duration
+  |> schedule_event runner duration
 ;;
 
 
 
-schedule_event f 0.0 (0.5 * tempo_adjust, 0., 0., 0.8);
+schedule_event runner 0.0 (0.5 * tempo_adjust, 0., 0., 0.8);

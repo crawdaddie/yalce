@@ -45,14 +45,16 @@ bool occurs_check_helper(const char *var_name, Type *type) {
 
 Type *unify_variable(Type *t1, Type *t2, TypeEnv **env) {
 
-  // printf("unify var: ");
-  // print_type(t1);
-  // print_type(t2);
-
   if (t1->kind == T_VAR && t2->kind == T_VAR &&
       strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0) {
     // TODO: merge typeclasses?
     return t2;
+  }
+
+  if (t1->kind == T_VAR && t2->kind == T_VOID) {
+    *env = env_extend(*env, t1, &t_void);
+    *t1 = t_void;
+    return t1;
   }
 
   if (t1->kind == T_VAR && t2->kind == T_VAR && t1->num_implements > 0 &&
@@ -157,8 +159,11 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
 
   int vidx2;
   Type *v2 = types_equal(v1, t2) ? t2 : variant_lookup(*env, t2, &vidx2);
-
   if (v1 && v2 && types_equal(v1, v2)) {
+    if (!is_generic(v1)) {
+      *t1 = *v1;
+      return t1;
+    }
     v1 = copy_type(v1);
 
     TypeEnv *_env = NULL;

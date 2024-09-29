@@ -5,6 +5,23 @@
 #include "parse.h"
 #include "y.tab.h"
 #include "string_proc.h"
+// Add these declarations
+int yycolumn = 1;
+int yyprevcolumn = 1;
+int yyprevlineno = 1;
+
+long long int yyabsoluteoffset = 0; 
+long long int yyprevoffset = 0; 
+// This macro is called at the beginning of each rule's action
+#define YY_USER_ACTION \
+    yyprevlineno = yylineno; \
+    yylloc.first_line = yylloc.last_line = yylineno; \
+    yylloc.first_column = yycolumn; \
+    yylloc.last_column = yycolumn + yyleng - 1; \
+    yyprevcolumn = yycolumn; \
+    yycolumn += yyleng; \
+    yyprevoffset = yyabsoluteoffset; \
+    yyabsoluteoffset += yyleng;
 %}
 %option yylineno
 %x FSTRING
@@ -121,8 +138,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return *yytext;
                         }
 ^%.*            {
+                  //printf("possible macro %s %p %d %d\n", yytext, ast_root, ast_root->tag, ast_root->data.AST_BODY.len);
                   /*
-                  printf("possible macro %s %p %d %d\n", yytext, ast_root, ast_root->tag, ast_root->data.AST_BODY.len);
                   handle_macro(ast_root, yytext + 1);
                   print_ast(ast_root);
                   printf("should insert ast nodes\n");
@@ -140,7 +157,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "#".*           ;       /* ignore comments starting with # */
 
   
-[ \t\n]+        ;       /* ignore whitespace */
+[ \t]+        ;       /* ignore whitespace */
+\n            {yycolumn = 1;}      /* ignore whitespace */
 {CHAR}          { 
                     /* Matched a character literal */
                     /* You might want to return a token here, e.g., return CHAR_LITERAL; */

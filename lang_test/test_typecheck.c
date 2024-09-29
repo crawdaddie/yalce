@@ -827,11 +827,38 @@ int main() {
     TITLE("## deref in fn")
 
     TEST_SIMPLE_AST_TYPE(
-      "let f = fn args: (Ptr of (Double * Double)) frame_offset: (Int) ->\n"
-      "  let (duration, note, filter_freq) = *args;\n"
-      "  ()\n"
-      ";;\n",
-      &MAKE_FN_TYPE_3(&tcons(TYPE_NAME_PTR, 1, &TTUPLE(2, &t_num, &t_num)), &t_int, &t_void));
+        "let f = fn args: (Ptr of (Double * Double)) frame_offset: (Int) ->\n"
+        "  let (duration, note, filter_freq) = *args;\n"
+        "  ()\n"
+        ";;\n",
+        &MAKE_FN_TYPE_3(&tcons(TYPE_NAME_PTR, 1, &TTUPLE(2, &t_num, &t_num)),
+                        &t_int, &t_void));
+  });
+
+  ({
+    RESET;
+    TITLE("## synth input ADT")
+
+    Type t_param_variant =
+        tcons(TYPE_NAME_VARIANT, 2, &tcons("Scalar", 1, &t_int),
+              &tcons("Trig", 1, &t_int));
+    TypeEnv *env = NULL;
+    env = env_extend(env, "SynthInput", &t_param_variant);
+
+    TEST_SIMPLE_AST_TYPE_ENV(
+        "let set_input_scalar_offset = extern fn Synth -> Int -> Int -> Double "
+        "-> Synth;\n"
+        "let set_input_trig_offset = extern fn Int -> Int -> Synth -> Synth;\n"
+        "let synth_meta = [|\n"
+        "  Scalar 0,\n"
+        "  Scalar 1,\n"
+        "|];\n"
+        "let set_synth_param = fn syn p offset v ->\n"
+        "  match p with\n"
+        "  | Scalar i -> set_input_scalar_offset syn i offset v\n"
+        "  | Trig i -> set_input_trig_offset i offset syn \n"
+        ";;\n",
+        &MAKE_FN_TYPE_5(&t_ptr, &t_param_variant, &t_int, &t_num, &t_ptr), env);
   });
 
   return status == true ? 0 : 1;

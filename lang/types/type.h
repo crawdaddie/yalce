@@ -88,6 +88,12 @@ extern _binop_map binop_map[];
   ((Type){T_FN,                                                                \
           {.T_FN = {.from = arg1_type,                                         \
                     .to = &MAKE_FN_TYPE_3(arg2_type, arg3_type, ret_type)}}})
+
+#define MAKE_FN_TYPE_5(arg1_type, arg2_type, arg3_type, arg4_type, ret_type)   \
+  ((Type){T_FN,                                                                \
+          {.T_FN = {.from = arg1_type,                                         \
+                    .to = &MAKE_FN_TYPE_4(arg2_type, arg3_type, arg4_type,     \
+                                          ret_type)}}})
 #define arithmetic_var(n)                                                      \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \

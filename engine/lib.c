@@ -113,14 +113,14 @@ Node *set_input_scalar_offset(Node *node, int input, int frame_offset,
   return node;
 }
 
-Node *set_input_trig(int input, Node *node) {
+Node *set_input_trig(Node *node, int input) {
   push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
                                            get_frame_offset(),
                                            {.NODE_SET_TRIG = {node, input}}});
   return node;
 }
 
-Node *set_input_trig_offset(int input, int frame_offset, Node *node) {
+Node *set_input_trig_offset(Node *node, int input, int frame_offset) {
   push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
                                            frame_offset,
                                            {.NODE_SET_TRIG = {node, input}}});

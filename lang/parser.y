@@ -12,6 +12,7 @@
 extern void yyerror(const char *s);
 
 extern int yylineno;
+extern int yycolumn;
 extern char *yytext;
 
 /* Define global variable for the root of AST */
@@ -351,6 +352,6 @@ type_atom:
 
 
 void yyerror(const char *s) {
-  fprintf(stderr, "Error: %s at line %d near '%s' in %s\n", s, yylineno, yytext, _cur_script);
+  fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, _cur_script);
 }
 #endif _LANG_TAB_H

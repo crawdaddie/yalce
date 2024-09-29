@@ -42,6 +42,8 @@ Node *group_add_tail(Node *group, Node *node);
 
 Node *node_new(void *data, node_perform *perform, int num_ins, Signal *ins);
 
+Node *node_new_w_alloc(void *data, node_perform *perform, int num_ins,
+                       Signal *ins, void **mem);
 Signal *get_sig(int layout);
 Signal *get_sig_default(int layout, double value);
 

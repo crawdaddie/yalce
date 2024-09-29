@@ -1,13 +1,12 @@
 #include "parse.h"
 #include "input.h"
 #include "serde.h"
+#include "y.tab.h"
 #include <stdlib.h>
 #include <string.h>
-typedef struct dbg_info {
-  char *script_name;
-  int yylineno;
-} dbg_info;
 
+char *_cur_script;
+const char *_cur_script_content;
 // static struct PStorage {
 //   void *data;
 //   size_t size;
@@ -95,7 +94,7 @@ const char *inputs_lookup_by_path(struct inputs_list *list, const char *path) {
   for (struct inputs_list *inc = list; inc != NULL; inc = inc->next) {
     if (strcmp(inc->qualified_path, path) == 0) {
       // module already included
-      return inc->data;
+      return inc->qualified_path;
     }
   }
   return NULL;
@@ -106,7 +105,15 @@ static struct inputs_List *included = NULL;
 
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = palloc(sizeof(Ast));
+  loc_info *loc = palloc(sizeof(loc_info));
+  loc->line = yylloc.last_line;
+  loc->col = yylloc.first_column;
+  loc->col_end = yylloc.last_column;
+  loc->src = _cur_script;
+  loc->src_content = _cur_script_content;
+  loc->absolute_offset = yyprevoffset;
   node->tag = tag;
+  node->loc_info = loc;
   return node;
 }
 
@@ -351,20 +358,20 @@ void dbg_input_stack(struct inputs_list *stack) {
 }
 
 static struct inputs_list *_stack = NULL;
-
-void parse_stack(inputs_list *current, inputs_list **last_processed) {
-
-  inputs_list *__stack = current;
-  while (__stack != _stack) {
-    const char *input = __stack->data;
-    yy_scan_string(input);
-    yyparse();
-
-    __stack = __stack->next;
-  }
-
-  *last_processed = current;
-}
+//
+// void parse_stack(inputs_list *current, inputs_list **last_processed) {
+//
+//   inputs_list *__stack = current;
+//   while (__stack != _stack) {
+//     const char *input = __stack->data;
+//     yy_scan_string(input);
+//     yyparse();
+//
+//     __stack = __stack->next;
+//   }
+//
+//   *last_processed = current;
+// }
 
 Ast *parse_repl_include(const char *fcontent) {
   char *filename = strdup("./");
@@ -389,6 +396,11 @@ Ast *parse_repl_include(const char *fcontent) {
   inputs_list *__stack = stack;
   while (__stack != _stack) {
     const char *input = __stack->data;
+    _cur_script = __stack->qualified_path;
+    _cur_script_content = input;
+    yylineno = 1;
+    yyabsoluteoffset = 0;
+
     yy_scan_string(input);
     yyparse();
 
@@ -410,8 +422,6 @@ Ast *parse_repl_include(const char *fcontent) {
   return res;
 }
 
-char *_cur_script;
-
 Ast *parse_input_script(const char *filename) {
   filename = prepend_current_directory(filename);
   char *dir = get_dirname(filename);
@@ -431,7 +441,9 @@ Ast *parse_input_script(const char *filename) {
   while (__stack != _stack) {
     _cur_script = __stack->qualified_path;
     const char *input = __stack->data;
+    _cur_script_content = input;
     yylineno = 1;
+    yyabsoluteoffset = 0;
     yy_scan_string(input);
     yyparse();
 
@@ -952,4 +964,31 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
   node->data.AST_MATCH_GUARD_CLAUSE.test_expr = expr;
   node->data.AST_MATCH_GUARD_CLAUSE.guard_expr = guard;
   return node;
+}
+void print_location(Ast *ast) {
+  loc_info *loc = ast->loc_info;
+  if (!loc) {
+    return;
+  }
+  fprintf(stderr, "%s %d:%d\n", loc->src, loc->line, loc->col);
+  // long long abs_offset = loc->absolute_offset - 100;
+  // abs_offset = abs_offset >= 0 ? abs_offset : 0;
+  const char *offset = loc->src_content + loc->absolute_offset;
+
+  while (*offset != '\n') {
+    offset--;
+  }
+  offset++;
+
+  while (*offset != '\n') {
+    fputc(*offset, stderr);
+    offset++;
+  }
+  fprintf(stderr, "\n");
+  if (loc->col_end - loc->col > 2) {
+    fprintf(stderr, "%*c", loc->col - 1, ' ');
+    fprintf(stderr, "^");
+  }
+  // printf("%d -- %d\n", loc->col, loc->col_end);
+  fprintf(stderr, "\n");
 }

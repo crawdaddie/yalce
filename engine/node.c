@@ -172,7 +172,42 @@ Node *node_new(void *data, node_perform *perform, int num_ins, Signal *ins) {
   node->ins = ins;
   node->out.layout = 1;
   node->out.size = BUF_SIZE;
-  node->out.buf = calloc(BUF_SIZE, sizeof(double));
+  double *buf = calloc(BUF_SIZE, sizeof(double));
+  if (!buf) {
+    fprintf(stderr, "Error allocating memory for output buf\n");
+  }
+  node->out.buf = buf;
+
+  node->perform = (node_perform)perform;
+  node->frame_offset = 0;
+
+  if (_chain == NULL) {
+    _chain = group_new(0);
+  }
+  group_add_tail(_chain, node);
+
+  return node;
+}
+
+Node *node_new_w_alloc(void *data, node_perform *perform, int num_ins,
+                       Signal *ins, void **mem) {
+  double *buf = *mem;
+  if (!buf) {
+    fprintf(stderr, "Error allocating memory for output buf\n");
+  }
+  *mem = *mem + (BUF_SIZE * sizeof(double));
+
+  Node *node = *mem;
+  *mem = *mem + sizeof(Node);
+
+  node->state = data;
+  node->num_ins = num_ins;
+  node->ins = ins;
+  node->out.layout = 1;
+  node->out.size = BUF_SIZE;
+
+  node->out.buf = buf;
+
   node->perform = (node_perform)perform;
   node->frame_offset = 0;
 

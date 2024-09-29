@@ -10,6 +10,11 @@ extern FILE *yyin;
 extern char *yytext;
 extern int yylineno;
 
+extern int yycolumn;
+extern int yyprevcolumn;
+extern long long int yyabsoluteoffset;
+extern long long int yyprevoffset;
+
 extern char *_cur_script;
 int yyparse();
 void yyrestart(FILE *);
@@ -17,6 +22,15 @@ void yyrestart(FILE *);
 void yyerror(const char *s);
 
 int yylex(void);
+
+typedef struct loc_info {
+  const char *src;
+  const char *src_content;
+  int line;
+  int col;
+  int col_end;
+  long long absolute_offset;
+} loc_info;
 
 typedef enum token_type {
   TOKEN_START, // dummy token
@@ -232,7 +246,7 @@ struct Ast {
   } data;
 
   void *md;
-  void *dbg_info;
+  void *loc_info;
 };
 
 Ast *Ast_new(enum ast_tag tag);
@@ -307,4 +321,6 @@ Ast *ast_cons_decl(token_type op, Ast *left, Ast *right);
 Ast *ast_match_guard_clause(Ast *expr, Ast *guard);
 
 void add_custom_binop(const char *binop_name);
+
+void print_location(Ast *ast);
 #endif

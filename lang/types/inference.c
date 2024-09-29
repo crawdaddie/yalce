@@ -264,6 +264,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
       Type *t = infer(stmt, env);
       if (!t) {
         fprintf(stderr, "Failure typechecking body statement: ");
+        print_location(stmt);
         print_ast_err(stmt);
         return NULL;
       }

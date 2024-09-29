@@ -87,7 +87,7 @@ LLVMValueRef out_sig_of_node_val(LLVMValueRef val, LLVMModuleRef module,
   LLVMTypeRef fn_type;
   LLVMValueRef out_sig_of_node_func = out_sig_of_node_fn(&fn_type, module);
   LLVMValueRef const_sig = LLVMBuildCall2(
-      builder, fn_type, out_sig_of_node_func, &val, 1, "sig_of_val");
+      builder, fn_type, out_sig_of_node_func, &val, 1, "out_sig_of_node");
   return const_sig;
 }
 
