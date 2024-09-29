@@ -454,3 +454,81 @@ static inline double interpolate_sample(double *in, int in_size, double frame) {
 //   s->ins[1] = get_sig_default(1, delay_time);
 //   return s;
 // }
+// #include <math.h>
+
+typedef struct {
+  double current_value;
+  double target_value;
+  double coeff;
+  double lag_time;
+} lag_state;
+
+node_perform lag_perform(Node *node, int nframes, double spf) {
+  double *out = node->out.buf;
+  double *in = node->ins[0].buf;
+
+  lag_state *state = (lag_state *)node->state;
+  double lag_time = state->lag_time;
+
+  if (fabs(lag_time - state->coeff) > 1e-6) {
+    state->coeff = exp(-1.0 / (lag_time * (1.0 / spf)));
+  }
+
+  while (nframes--) {
+    state->target_value = *in;
+
+    state->current_value =
+        state->current_value +
+        (state->target_value - state->current_value) * (1.0 - state->coeff);
+
+    // Write the output
+    *out = state->current_value;
+
+    out++;
+    in++;
+  }
+}
+Node *lag_node(double lag_time, Signal *in) {
+  lag_state *state = malloc(sizeof(lag_state));
+  state->current_value = 0.0;
+  state->target_value = 0.0;
+  state->lag_time = lag_time;
+  int SAMPLE_RATE = ctx_sample_rate();
+  double spf = 1. / SAMPLE_RATE;
+  state->coeff = exp(-1.0 / (lag_time * (1.0 / spf)));
+  Node *lag = node_new(state, lag_perform, 1, in);
+  return lag;
+}
+typedef struct {
+  double gain;
+} tanh_state;
+node_perform tanh_perform(Node *node, int nframes, double spf) {
+
+  double *out = node->out.buf;
+  double *in = node->ins[0].buf;
+  tanh_state *state = node->state;
+  while (nframes--) {
+    *out = tanh(*in * state->gain);
+    out++;
+    in++;
+  }
+}
+Node *tanh_node(double gain, Signal *in) {
+  tanh_state *state = malloc(sizeof(tanh_state));
+  state->gain = gain;
+
+  Node *lag = node_new(state, tanh_perform, 1, in);
+  return lag;
+}
+
+// // Initialize function
+// void lag_init(Node *node) {
+//   lag_state *state = (lag_state *)malloc(sizeof(lag_state));
+//   state->current_value = 0.0;
+//   state->target_value = 0.0;
+//   state->coeff = 0.0;
+//   node->state = state;
+// }
+//
+// // Clean up function
+// void lag_cleanup(Node *node) { free(node->state); }

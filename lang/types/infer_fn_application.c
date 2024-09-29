@@ -7,6 +7,15 @@
 // forward decl
 Type *infer(Ast *ast, TypeEnv **env);
 
+void print_unification_err(Ast *ast, Type *t1, Type *t2) {
+
+  fprintf(stderr, "unification fail: ");
+  print_location(ast);
+  print_type_err(t1);
+  fprintf(stderr, " != ");
+  print_type_err(t2);
+  fprintf(stderr, "\n");
+}
 Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   int len = ast->data.AST_APPLICATION.len;
   Type *app_arg_types[len];
@@ -33,11 +42,8 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
     unif = unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
 
     if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
-      fprintf(stderr, "unif fail: ");
-      print_location(ast->data.AST_APPLICATION.args + i);
-      print_type_err(result_fn->data.T_FN.from);
-      print_type_err(app_arg_types[i]);
-      print_ast_err(ast);
+      print_unification_err(ast->data.AST_APPLICATION.args + i,
+                            result_fn->data.T_FN.from, app_arg_types[i]);
       return NULL;
     }
 

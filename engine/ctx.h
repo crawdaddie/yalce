@@ -51,6 +51,7 @@ typedef struct {
   Node *head;
   Node *tail;
   int sample_rate;
+  double spf;
   msg_queue msg_queue;
 } Ctx;
 
@@ -68,5 +69,5 @@ Node *add_to_dac(Node *node);
 
 void print_graph(Node *node);
 int ctx_sample_rate();
-
+double ctx_spf();
 #endif

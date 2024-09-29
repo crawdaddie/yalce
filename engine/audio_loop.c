@@ -1,11 +1,11 @@
 #ifndef _ENGINE_AUDIO_LOOP_H
 #define _ENGINE_AUDIO_LOOP_H
-#include <pthread.h>
 #include "audio_loop.h"
 #include "ctx.h"
 #include "oscillators.h"
 #include "scheduling.h"
 #include <errno.h>
+#include <pthread.h>
 #include <soundio/soundio.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -295,6 +295,8 @@ int start_audio() {
   printf("Software latency:  %f\n", outstream->software_latency);
   printf("Sample rate:       %d\n", outstream->sample_rate);
   ctx.sample_rate = outstream->sample_rate;
+  ctx.spf = 1.0 / outstream->sample_rate;
+
   printf("------------------\n");
 
   set_block_time(&start_time);
@@ -325,7 +327,6 @@ int init_audio() {
   start_audio();
   scheduler_event_loop();
 
-  
   return 0;
 }
 

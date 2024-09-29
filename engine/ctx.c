@@ -198,3 +198,4 @@ int get_write_ptr() {
 }
 
 int ctx_sample_rate() { return ctx.sample_rate; }
+double ctx_spf() { return ctx.spf; }

@@ -7,11 +7,13 @@
 let schedule_event = extern fn Ptr -> Double -> Ptr -> ();
 
 let sq_detune = fn () -> 
-  let f = inlet 50. |> lag_node 0.01 in
-  let ff = inlet 500. in
-  (sq_node f + sq_node (f * 1.01))
-  |> biquad_hp_node ff 7.
-  |> comb_node 0.25 0.25 0.6
+  let f = inlet 50. |> lag_node 0.01;
+  let trig = inlet 0.0; 
+  let ff = chirp_node 2000. 150. 0.3 trig; 
+
+  (sq_node f + sq_node (f * 1.01)) * 0.5
+  |> biquad_lp_node ff 10.
+  |> comb_node 0.25 0.25 0.4
 ;;
 
 
@@ -20,12 +22,6 @@ let synth_meta = [|
   Scalar 1,
 |];
 
-
-let set_synth_param = fn syn p offset v ->
-  match p with
-  | Scalar i -> set_input_scalar_offset syn i offset v
-  | Trig i -> set_input_trig_offset syn i offset 
-;;
 
 let notes = [|
   110.0,
@@ -74,7 +70,7 @@ let set_synth_param = fn syn p offset v ->
 let stream_vals = fn (dur, phase, note, _ff): (Double * Double * Double * Double) ->
   let ff = phase |> cos |> bipolar_scale 100. 2000.;
   let n = 0.5 * (freq_seq (phase * 0.8 )) * choose octaves;
-  (0.2, phase, n, ff)
+  (choose times, phase, n, ff)
 ;;
 
 let runner = fn
@@ -84,7 +80,9 @@ let runner = fn
   let (duration, phase, note, filter_freq) = *args;
 
   note |> set_synth_param x (Scalar 0) frame_offset;
-  filter_freq |> set_synth_param x (Scalar 1) frame_offset;
+  set_input_trig_offset x 1 frame_offset;
+
+  # filter_freq |> set_synth_param x (Scalar 1) frame_offset;
 
   stream_vals (duration, phase + duration, note, filter_freq)
   |> schedule_event runner duration
@@ -92,4 +90,4 @@ let runner = fn
 
 
 
-schedule_event runner 0.0 (0.125, 0., choose notes, 200.);
+schedule_event runner 0.0 (0.4, 0., choose notes, 200.);

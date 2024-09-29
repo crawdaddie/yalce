@@ -269,7 +269,7 @@ void print_type_err(Type *t) {
     return;
   }
   char buf[200] = {};
-  fprintf(stderr, "%s\n", type_to_string(t, buf));
+  fprintf(stderr, "%s", type_to_string(t, buf));
 }
 
 bool variant_contains_type(Type *variant, Type *member, int *idx) {

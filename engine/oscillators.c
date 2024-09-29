@@ -1,5 +1,6 @@
 #include "oscillators.h"
 #include "common.h"
+#include "ctx.h"
 #include "node.h"
 #include <math.h>
 #include <stdio.h>
@@ -269,6 +270,7 @@ node_perform bufplayer_trig_perform(Node *node, int nframes, double spf) {
     start_pos++;
   }
 }
+
 Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
                      Signal *trig) {
   bufplayer_state *state = malloc(sizeof(bufplayer_state));
@@ -279,7 +281,6 @@ Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
   sigs[0].size = buf->size;
   sigs[0].layout = buf->layout;
 
-  printf("rate sig %p %p\n", rate, rate->buf);
   sigs[1].buf = rate->buf;
   sigs[1].size = rate->size;
   sigs[1].layout = rate->layout;
@@ -294,7 +295,6 @@ Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
   sigs[2].size = trig->size;
   sigs[2].layout = trig->layout;
 
-  printf("startpos sig %p %p\n", start_pos, start_pos->buf);
   sigs[3].buf = start_pos->buf;
   sigs[3].size = start_pos->size;
   sigs[3].layout = start_pos->layout;
@@ -378,3 +378,78 @@ Node *brown_noise_node() {
 }
 
 Node *lfnoise_node() {}
+
+typedef struct chirp_state {
+  double current_freq;
+  double target_freq;
+  double coeff;
+  int trigger_active;
+  double start_freq;
+  double end_freq;
+  double lag_time;
+  double elapsed_time;
+} chirp_state;
+
+node_perform chirp_perform(Node *node, int nframes, double spf) {
+  double *out = node->out.buf;
+  double *trig = node->ins[0].buf;
+
+  chirp_state *state = (chirp_state *)node->state;
+
+  while (nframes--) {
+    if (*trig == 1.0) {
+      state->trigger_active = 1;
+      state->current_freq = state->start_freq;
+      state->elapsed_time = 0.0;
+    }
+
+    if (state->trigger_active) {
+      // Calculate progress (0 to 1)
+      double progress = state->elapsed_time / state->lag_time;
+      if (progress > 1.0)
+        progress = 1.0;
+
+      // Use exponential interpolation for frequency
+      state->current_freq = state->start_freq *
+                            pow(state->end_freq / state->start_freq, progress);
+
+      // Output the current frequency
+      *out = state->current_freq;
+
+      // Update elapsed time
+      state->elapsed_time += spf;
+
+      // Check if we've reached the end of the chirp
+      if (state->elapsed_time >= state->lag_time) {
+        state->trigger_active = 0;
+        state->current_freq = state->end_freq;
+      }
+    } else {
+      *out = state->current_freq; // Output last frequency when not active
+    }
+
+    out++;
+    trig++;
+  }
+}
+
+Node *chirp_node(double start, double end, double lag_time, Signal *trig) {
+  chirp_state *state = malloc(sizeof(chirp_state));
+  state->current_freq = start;
+  state->target_freq = end;
+  state->trigger_active = 0;
+  state->start_freq = start;
+  state->end_freq = end;
+  state->lag_time = lag_time;
+  state->elapsed_time = 0.0;
+
+  Signal *sigs = malloc(sizeof(Signal));
+
+  sigs[0].buf = trig->buf;
+  sigs[0].size = trig->size;
+  sigs[0].layout = trig->layout;
+
+  Node *chirp = node_new(state, (node_perform *)chirp_perform, 1, sigs);
+
+  return chirp;
+}

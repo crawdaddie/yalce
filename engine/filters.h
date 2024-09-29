@@ -20,4 +20,8 @@ Node *biquad_bp_node(Signal *freq, Signal *res, Signal *in);
 //
 Node *comb_node(double delay_time, double max_delay_time, double fb,
                 Signal *input);
+
+Node *lag_node(double lag_time, Signal *in);
+
+Node *tanh_node(double gain, Signal *in);
 #endif
