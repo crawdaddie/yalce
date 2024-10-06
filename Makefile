@@ -17,7 +17,7 @@ LANG_SRC_DIR := lang
 LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wildcard $(LANG_SRC_DIR)/*.c))
 
 # Separate CFLAGS for include paths
-CFLAGS := -I./lang -I./engine
+CFLAGS := -I./lang -I./engine -I./gui
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
 CFLAGS += `$(LLVM_CONFIG) --cflags`
@@ -27,8 +27,9 @@ LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
 
 LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm
-LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
+LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
+LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 
@@ -57,13 +58,16 @@ LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 # Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
-.PHONY: all clean engine test wasm serve_docs
+.PHONY: all clean engine gui test wasm serve_docs
 
 all: $(BUILD_DIR)/lang
 debug: all
 
 engine:
 	$(MAKE) -C engine
+
+gui:
+	$(MAKE) -C gui
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -82,7 +86,7 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 	$(LANG_CC) -c -o $@ $<
 
 # Build the final executable
-$(BUILD_DIR)/lang: $(LANG_OBJS) | engine
+$(BUILD_DIR)/lang: $(LANG_OBJS) | engine gui
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
 
 clean:
