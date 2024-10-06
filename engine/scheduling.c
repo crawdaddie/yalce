@@ -1,5 +1,6 @@
 #include "scheduling.h"
 #include "lib.h"
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -144,7 +145,6 @@ void *timer(void *arg) {
         ScheduledEvent ev = pop_event(queue);
         double now_d = ((double)(now - start) / S_TO_NS);
         int offset = get_frame_offset();
-
         ev.callback(ev.userdata, offset);
         free(ev.userdata);
       }
@@ -184,6 +184,20 @@ void schedule_event(void (*callback)(void *, int), double delay_seconds,
   now = get_time_ns(); // Update 'now' before scheduling
   return _schedule_event(queue, callback, delay_seconds, userdata, now);
 }
+
+void schedule_event_quant(void (*callback)(void *, int), double quantization,
+                    void *userdata) {
+
+  now = get_time_ns(); // Update 'now' before scheduling
+  double now_s = ((double)now) / S_TO_NS;
+  // double delay_seconds = 0.0;
+  // printf("now_s %f %f quant %f\n", now_s, fmod(now_s, quantization), quantization);
+  
+
+  return _schedule_event(queue, callback, fmod(now_s, quantization), userdata, now);
+}
+
+
 
 typedef struct Timer {
 } Timer;

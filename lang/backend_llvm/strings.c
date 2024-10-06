@@ -62,6 +62,28 @@ LLVMValueRef insert_printf_call(const char *format, LLVMModuleRef module,
 
   return call;
 }
+
+LLVMValueRef insert_strlen_call(LLVMValueRef string_ptr, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  LLVMTypeRef strlen_type;
+  // Declare strlen if it hasn't been declared yet
+  LLVMValueRef strlen_func = LLVMGetNamedFunction(module, "strlen");
+
+  if (!strlen_func) {
+    LLVMTypeRef param_types[] = {LLVMPointerType(LLVMInt8Type(), 0)};
+    strlen_type = LLVMFunctionType(LLVMInt64Type(), param_types, 1, 0);
+    strlen_func = LLVMAddFunction(module, "strlen", strlen_type);
+  } else {
+    strlen_type = LLVMTypeOf(strlen_func);
+  }
+
+  // Insert the call to strlen
+  LLVMValueRef args[] = {string_ptr};
+  LLVMValueRef call =
+      LLVMBuildCall2(builder, strlen_type, strlen_func, args, 1, "strlen_call");
+  return call;
+}
+
 LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   // Declare sprintf if it's not already declared
@@ -260,5 +282,5 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int length = ast->data.AST_STRING.length;
   ObjString vstr = (ObjString){
       .chars = chars, .length = length, .hash = hash_string(chars, length)};
-  return LLVMBuildGlobalStringPtr(builder, chars, ".str");
+  return LLVMBuildGlobalString(builder, chars, ".str");
 }

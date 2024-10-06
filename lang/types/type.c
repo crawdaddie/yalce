@@ -29,6 +29,10 @@ Type t_string = {T_CONS,
                  {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_char}, 1}},
                  .alias = TYPE_NAME_STRING};
 
+Type t_char_array = {T_CONS,
+                 {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}}
+                 };
+
 Type t_bool = {T_BOOL};
 Type t_void = {T_VOID};
 Type t_char = {T_CHAR};
@@ -138,6 +142,8 @@ Type t_array_var = {
 
 Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
 Type t_array_at_fn_sig = MAKE_FN_TYPE_3(&t_array_var, &t_int, &t_array_var_el);
+
+Type t_array_of_chars_fn_sig = MAKE_FN_TYPE_2(&t_string, &t_char_array);
 
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {

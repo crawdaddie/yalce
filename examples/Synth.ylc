@@ -3,6 +3,7 @@ let read_buf = extern fn String -> Signal;
 
 # oscillators
 let bufplayer_node = extern fn Signal -> Signal -> Signal -> Signal -> Synth;
+let bufplayer_1shot_node = extern fn Signal -> Signal -> Signal -> Signal -> Synth;
 let sin_node = extern fn Signal -> Synth;
 let sq_node = extern fn Signal -> Synth;
 let white_noise_node = extern fn () -> Synth;

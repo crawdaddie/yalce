@@ -10,6 +10,9 @@ void maketable_sin(void);
 // Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos);
 Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
                      Signal *trig);
+
+Node *bufplayer_1shot_node(Signal *buf, Signal *rate, Signal *start_pos,
+                     Signal *trig); 
 Node *white_noise_node();
 Node *brown_noise_node();
 Node *sin_node(Signal *freq);

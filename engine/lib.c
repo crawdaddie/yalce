@@ -169,7 +169,7 @@ int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
     printf("warning read failure, read %d != total size) %zu", read,
            total_size);
   }
-  fprintf(stderr, "read %d frames from '%s' buf %p\n", read, filename, buf);
+  fprintf(stderr, "read %d frames from '%s' buf %p [%d]\n", read, filename, buf, sfinfo.channels);
 
   sf_close(infile);
   signal->size = total_size;

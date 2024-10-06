@@ -271,6 +271,44 @@ node_perform bufplayer_trig_perform(Node *node, int nframes, double spf) {
   }
 }
 
+node_perform bufplayer_1shot_trig_perform(Node *node, int nframes, double spf) {
+  bufplayer_state *state = node->state;
+  int chans = node->ins[0].layout;
+  double *buf = node->ins[0].buf;
+  double *rate = node->ins[1].buf;
+  double *trig = node->ins[2].buf;
+  double *start_pos = node->ins[3].buf;
+
+  int buf_size = node->ins[0].size;
+  double *out = node->out.buf;
+
+  double d_index, frac, a, b, sample;
+  int index;
+  while (nframes--) {
+    if (*trig == 1.0) {
+      state->phase = 0;
+    }
+
+    d_index = (fmod(state->phase + *start_pos, 1.0)) * buf_size;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    a = buf[index];
+    b = buf[(index + 1) % buf_size];
+
+    sample = (1.0 - frac) * a + (frac * b);
+    double pos = state->phase + *rate / buf_size;
+    state->phase = pos > 1.0 ? 1.0 : pos;
+    *out = sample;
+
+    out++;
+    rate++;
+    trig++;
+    start_pos++;
+  }
+}
+
+
 Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
                      Signal *trig) {
   bufplayer_state *state = malloc(sizeof(bufplayer_state));
@@ -291,7 +329,6 @@ Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
   // sigs[2].layout = 1;
 
   sigs[2].buf = trig->buf;
-  // sigs[2].buf[0] = 1.0;
   sigs[2].size = trig->size;
   sigs[2].layout = trig->layout;
 
@@ -301,6 +338,43 @@ Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
 
   Node *_bufplayer =
       node_new(state, (node_perform *)bufplayer_trig_perform, 4, sigs);
+
+  // printf("create _bufplayer node %p with buf signal %p\n", _bufplayer, buf);
+  return _bufplayer;
+}
+
+Node *bufplayer_1shot_node(Signal *buf, Signal *rate, Signal *start_pos,
+                     Signal *trig) {
+  bufplayer_state *state = malloc(sizeof(bufplayer_state));
+  state->phase = 0.0;
+
+  Signal *sigs = malloc(sizeof(Signal) * 4);
+  sigs[0].buf = buf->buf;
+  sigs[0].size = buf->size;
+  sigs[0].layout = buf->layout;
+
+  sigs[1].buf = rate->buf;
+  sigs[1].size = rate->size;
+  sigs[1].layout = rate->layout;
+
+  // sigs[2].buf = calloc(BUF_SIZE, sizeof(double));
+  // // sigs[2].buf[0] = 1.0;
+  // sigs[2].size = BUF_SIZE;
+  // sigs[2].layout = 1;
+
+  sigs[2].buf = trig->buf;
+  for (int i = 0; i < trig->size; i++) {
+    sigs[2].buf[i] = 0.0;
+  }
+  sigs[2].size = trig->size;
+  sigs[2].layout = trig->layout;
+
+  sigs[3].buf = start_pos->buf;
+  sigs[3].size = start_pos->size;
+  sigs[3].layout = start_pos->layout;
+
+  Node *_bufplayer =
+      node_new(state, (node_perform *)bufplayer_1shot_trig_perform, 4, sigs);
 
   // printf("create _bufplayer node %p with buf signal %p\n", _bufplayer, buf);
   return _bufplayer;

@@ -7,6 +7,8 @@
 LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                                   LLVMModuleRef module, LLVMBuilderRef builder);
 
+LLVMValueRef insert_strlen_call(LLVMValueRef string_ptr, LLVMModuleRef module,
+                                LLVMBuilderRef builder);
 LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder);
 #endif

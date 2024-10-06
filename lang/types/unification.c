@@ -142,6 +142,13 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
     return t1;
   }
 
+  // if (is_array_type(t1) && is_string_type(t2)) {
+  //   // Type *unif = unify(t1->data.T_CONS.args[0], t2->data.T_CONS.args[0],
+  //   // env); t1->data.T_CONS.args[0] = unif;
+  //   *t1->data.T_CONS.args[0] = t_char;
+  //   return t1;
+  // }
+
   if (is_tuple_type(t1) && is_tuple_type(t2) &&
       t1->data.T_CONS.num_args == t2->data.T_CONS.num_args) {
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
@@ -276,6 +283,9 @@ Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
 }
 
 Type *unify(Type *t1, Type *t2, TypeEnv **env) {
+  // printf("unify: ");
+  // print_type(t1);
+  // print_type(t2);
   if (t1 == NULL) {
     printf(stderr, "Error unifying type - lhs is NULL\n");
     return NULL;

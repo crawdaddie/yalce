@@ -6,6 +6,7 @@
 %include Array
 
 let schedule_event = extern fn Ptr -> Double -> Ptr -> ();
+let schedule_event_quant = extern fn Ptr -> Double -> Ptr -> ();
 
 let sq_detune = fn () -> 
   let f = inlet 50. |> lag_node 0.01;
@@ -20,16 +21,30 @@ let sq_detune = fn () ->
   |> biquad_lp_node ff res 
   |> comb_node 0.75 0.75 0.2
 ;;
+#
+# let kick_synth = fn () -> 
+#   let trig = inlet 0.1;
+#   let ch = chirp_node 1000. 27.5 0.05 trig;
+#   let amp = chirp_node 1. 0.01 2. trig;
+#   let amp_noise = chirp_node 1. 0.01 0.01 trig;
+#   amp * ((amp_noise * white_noise_node ()) + sin_node ch
+#   |> tanh_node 4.
+#   # |> biquad_lp_node 1500. 0.4
+#   )
+# ;;
+#
 
-let kick_synth = fn () -> 
-  let trig = inlet 0.1;
-  let ch = chirp_node 1000. 27.5 0.05 trig;
-  let amp = chirp_node 1. 0.01 2. trig;
-  let amp_noise = chirp_node 1. 0.01 0.01 trig;
-  amp * ((amp_noise * white_noise_node ()) + sin_node ch
-  |> tanh_node 4.
-  # |> biquad_lp_node 1500. 0.4
-  )
+let kick_buf = read_buf "kick.wav";
+let snare_buf = read_buf "snare.wav";
+let hh_buf = read_buf "hh.wav";
+let drum_machine = fn () ->
+  let kt = inlet 0.0;
+  let st = inlet 0.0;
+  let ht = inlet 0.0;
+  let k = bufplayer_1shot_node kick_buf 1. 0.0 kt;
+  let s = bufplayer_1shot_node snare_buf 1. 0.0 st;
+  let h = bufplayer_1shot_node hh_buf 1. 0.0 ht;
+  k + s + h
 ;;
 
 
@@ -42,8 +57,7 @@ let notes = [|
   146.8323839587038,
   164.81377845643496,
   174.61411571650194,
-  195.99771799087463,
-|];
+  195.99771799087463, |];
 
 let octaves = [|
   0.5,
@@ -65,38 +79,39 @@ let times = [|
 
 
 let x = sq_detune |> chain_wrap |> play;
-let k = kick_synth |> chain_wrap |> play;
+let drums = drum_machine |> chain_wrap |> play;
+# let k = kick_synth |> chain_wrap |> play;
 
 let freq_seq = fn ph: (Double) ->
-  match (ph % 7.) with
-    | ph if ph > 6.5 -> notes @ 4
-    | ph if ph > 4.5 -> choose notes
+  match (ph % 4.) with
+    # | ph if ph > 6.5 -> notes @ 4
+    # | ph if ph > 4.5 -> choose notes
     | ph if ph > 2.  -> choose [| notes @ 5, notes @ 4 |]
     | ph if ph > 2.  -> notes @ 4
     | ph if ph > 1.5 -> notes @ 2 
     | ph if ph > 0.  -> notes @ 0 
 ;;
 
-let trig_kick = fn ph: (Double) frame_offset: (Int) ->
-  match (ph % 7.) with
-
-    | ph if ph > 5. -> ()
-    | ph if ph > 4.5  -> (
-      set_input_trig_offset k 0 frame_offset;
-      ()
-    )
-
-    | ph if ph > 3. -> ()
-    | ph if ph > 2.5  -> (
-      set_input_trig_offset k 0 frame_offset;
-      ()
-    )
-    | ph if ph > 0.5 -> ()
-    | ph if ph > 0.  -> (
-      set_input_trig_offset k 0 frame_offset;
-      ()
-    )
-;;
+# let trig_kick = fn ph: (Double) frame_offset: (Int) ->
+#   match (ph % 7.) with
+#
+#     | ph if ph > 5. -> ()
+#     | ph if ph > 4.5  -> (
+#       set_input_trig_offset k 0 frame_offset;
+#       ()
+#     )
+#
+#     | ph if ph > 3. -> ()
+#     | ph if ph > 2.5  -> (
+#       set_input_trig_offset k 0 frame_offset;
+#       ()
+#     )
+#     | ph if ph > 0.5 -> ()
+#     | ph if ph > 0.  -> (
+#       set_input_trig_offset k 0 frame_offset;
+#       ()
+#     )
+# ;;
 
 let set_synth_param = fn syn p offset v ->
   match p with
@@ -118,7 +133,7 @@ let runner = fn
 
   note |> set_synth_param x (Scalar 0) frame_offset;
   set_input_trig_offset x 1 frame_offset;
-  trig_kick phase frame_offset;
+  # trig_kick phase frame_offset;
 
 
   # filter_freq |> set_synth_param x (Scalar 1) frame_offset;
@@ -142,4 +157,69 @@ register_cc_handler filter_res_setter 0 21;
 #
 
 
-schedule_event runner 0.0 (0.4, 0., choose notes, 200.);
+schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
+
+
+let drum_vals = fn (dur, phase): (Double * Double) ->
+  (0.125, phase)
+;;
+
+let drum_trigs = fn ph: (Double) offset: (Int) ->
+  # set_input_trig_offset drums 2 offset;
+  match (ph % 4.) with
+
+    # | ph if ph >= 6.25  -> ()
+    # | ph if ph >= 6.  -> (
+    #   set_input_trig_offset drums 1 offset;
+    #   ()
+    # )
+    #
+    # | ph if ph >= 5.25 -> ()
+    # | ph if ph >= 5.  -> (
+    #   set_input_trig_offset drums 0 offset;
+    #   ()
+    # )
+    # | ph if ph >= 4.125  -> ()
+    # | ph if ph >= 4.  -> (
+    #   set_input_trig_offset drums 1 offset;
+    #   ()
+    # )
+    | ph if ph >= 3.625 -> ()
+    | ph if ph >= 3.5  -> (
+      set_input_trig_offset drums 0 offset;
+      ()
+    )
+
+    | ph if ph >= 3.25  -> ()
+    | ph if ph >= 3.  -> (
+      set_input_trig_offset drums 1 offset;
+      ()
+    )
+    | ph if ph >= 1.125  -> ()
+    | ph if ph >= 1.  -> (
+      set_input_trig_offset drums 1 offset;
+      ()
+    )
+    | ph if ph >= 0.125 -> ()
+    | ph if ph >= 0.  -> (
+      set_input_trig_offset drums 0 offset;
+      ()
+    )
+  ;
+  ()
+;;
+
+let drum_runner = fn
+  args: (Ptr of (Double * Double))
+  frame_offset: (Int)
+  ->
+  let (duration, phase) = *args;
+
+  drum_trigs phase frame_offset;
+
+  drum_vals (duration, phase + duration)
+  |> schedule_event drum_runner duration
+;;
+
+
+schedule_event_quant drum_runner 1.0 (0.125, 0., choose notes, 200.);
