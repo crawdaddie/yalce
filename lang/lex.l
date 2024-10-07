@@ -12,6 +12,8 @@ int yyprevlineno = 1;
 
 long long int yyabsoluteoffset = 0; 
 long long int yyprevoffset = 0; 
+int in_test_section = 0;
+
 // This macro is called at the beginning of each rule's action
 #define YY_USER_ACTION \
     yyprevlineno = yylineno; \
@@ -24,7 +26,10 @@ long long int yyprevoffset = 0;
     yyabsoluteoffset += yyleng;
 %}
 %option yylineno
+
 %x FSTRING
+%x TEST_SECTION
+
 ESCAPE          \\(['"?\\abfnrtv]|[0-7]{1,3}|x[0-9a-fA-F]+)
 CHAR            '([^'\\\n]|{ESCAPE})'
 %%
@@ -137,8 +142,24 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           /*printf("operator '%s'", yytext);*/
                           return *yytext;
                         }
+^%test          {
+                  if (lex_test_block) {
+                    in_test_section = 1;
+                    BEGIN(TEST_SECTION);
+                  } else {
+                    yyterminate();  // This will stop lexing and return 0
+                  }
+                }
+
+<TEST_SECTION>(.|\n)   {
+                         if (lex_test_block) {
+                           // Process the test section normally
+                           REJECT;
+                         }
+                         // Otherwise, this rule won't be reached due to yyterminate()
+                       }
 ^%.*            {
-                  //printf("possible macro %s %p %d %d\n", yytext, ast_root, ast_root->tag, ast_root->data.AST_BODY.len);
+                  /*printf("possible macro %s %d\n", yytext, top_level_tests);*/
                   /*
                   handle_macro(ast_root, yytext + 1);
                   print_ast(ast_root);
@@ -157,8 +178,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "#".*           ;       /* ignore comments starting with # */
 
   
-[ \t]+        ;       /* ignore whitespace */
-\n            {yycolumn = 1;}      /* ignore whitespace */
+[ \t]+          ;       /* ignore whitespace */
+\n              {yycolumn = 1;}      /* ignore whitespace */
 {CHAR}          { 
                     /* Matched a character literal */
                     /* You might want to return a token here, e.g., return CHAR_LITERAL; */

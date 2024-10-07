@@ -1,9 +1,11 @@
 #include "parse.h"
 #include "input.h"
-#include "serde.h"
 #include "y.tab.h"
 #include <stdlib.h>
 #include <string.h>
+
+bool top_level_tests = false;
+bool lex_test_block = false;
 
 char *_cur_script;
 const char *_cur_script_content;
@@ -347,6 +349,8 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
 
         stack = preprocess_includes(_current_dir, import_content, stack);
       }
+    } else if (strncmp("%test", input, 5) == 0) {
+      // TODO: auto-include test module (eg examples/Testing.ylc)
     }
     total_len--;
   }
@@ -442,6 +446,8 @@ Ast *parse_input_script(const char *filename) {
   ast_root = Ast_new(AST_BODY);
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+
+  // dbg_input_stack(stack);
   inputs_list *__stack = stack;
   while (__stack != _stack) {
     _cur_script = __stack->qualified_path;
@@ -449,8 +455,15 @@ Ast *parse_input_script(const char *filename) {
     _cur_script_content = input;
     yylineno = 1;
     yyabsoluteoffset = 0;
-    yy_scan_string(input);
-    yyparse();
+    if (strcmp(__stack->qualified_path, filename) == 0) {
+      lex_test_block = true;
+      yy_scan_string(input);
+      yyparse();
+      lex_test_block = false;
+    } else {
+      yy_scan_string(input);
+      yyparse();
+    }
 
     __stack = __stack->next;
   }
@@ -970,30 +983,36 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
   node->data.AST_MATCH_GUARD_CLAUSE.guard_expr = guard;
   return node;
 }
+
 void print_location(Ast *ast) {
   loc_info *loc = ast->loc_info;
-  if (!loc) {
+  if (!loc || !loc->src || !loc->src_content) {
     return;
   }
   fprintf(stderr, "%s %d:%d\n", loc->src, loc->line, loc->col);
-  // long long abs_offset = loc->absolute_offset - 100;
-  // abs_offset = abs_offset >= 0 ? abs_offset : 0;
-  const char *offset = loc->src_content + loc->absolute_offset;
 
-  while (*offset != '\n') {
+  const char *start = loc->src_content;
+  const char *offset = start + loc->absolute_offset;
+
+  // Guard against going before the start of the string
+  while (offset > start && *offset != '\n') {
     offset--;
   }
-  offset++;
+  if (offset > start) {
+    offset++; // Move past the newline if we found one
+  }
 
-  while (*offset != '\n') {
+  // Print the line
+  while (*offset && *offset != '\n') {
     fputc(*offset, stderr);
     offset++;
   }
   fprintf(stderr, "\n");
+
+  // Print the caret
   if (loc->col_end - loc->col > 2) {
     fprintf(stderr, "%*c", loc->col - 1, ' ');
     fprintf(stderr, "^");
   }
-  // printf("%d -- %d\n", loc->col, loc->col_end);
   fprintf(stderr, "\n");
 }

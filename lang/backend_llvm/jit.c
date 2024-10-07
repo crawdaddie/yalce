@@ -208,15 +208,12 @@ int jit(int argc, char **argv) {
     ht_init(&stack[i]);
   }
 
-  // shared type env
   TypeEnv *env = NULL;
   initialize_builtin_numeric_types(env);
   env = initialize_builtin_funcs(stack, env);
   initialize_types(env);
-  // env = initialize_type_env(env);
 
   env = initialize_type_env_synth(env);
-  // print_type_env(env);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
@@ -232,7 +229,12 @@ int jit(int argc, char **argv) {
     if (strcmp(argv[arg_counter], "-i") == 0) {
       repl = true;
       arg_counter++;
+    } else if (strcmp(argv[arg_counter], "--test") == 0) {
+      // run top-level tests for input module
+      top_level_tests = true;
+      arg_counter++;
     } else if (strcmp(argv[arg_counter], "-type-memory") == 0) {
+      // TODO: implement specific limits for typechecker storage
       arg_counter++;
       printf("-- type storage allocation: %d\n", atoi(argv[arg_counter]));
       arg_counter++;
