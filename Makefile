@@ -22,6 +22,7 @@ CFLAGS := -I./lang -I./engine
 ifdef GUI_MODE
 CFLAGS += -I./gui -DGUI_MODE
 endif
+
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
 CFLAGS += `$(LLVM_CONFIG) --cflags`
@@ -34,8 +35,9 @@ LANG_CC += -g
 LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
+
 ifdef GUI_MODE
-LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui
+	LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L$(shell brew --prefix sdl2)/lib -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2 -lSDL2_ttf -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx
 endif
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
@@ -53,7 +55,7 @@ LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
 
 ifeq ($(MAKECMDGOALS),debug)
-    LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
+  LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
 endif
 
 LEX_FILE := $(LANG_SRC_DIR)/lex.l

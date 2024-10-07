@@ -970,30 +970,64 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
   node->data.AST_MATCH_GUARD_CLAUSE.guard_expr = guard;
   return node;
 }
+
+// void ___print_location(Ast *ast) {
+//   loc_info *loc = ast->loc_info;
+//   if (!loc) {
+//     return;
+//   }
+//   fprintf(stderr, "%s %d:%d\n", loc->src, loc->line, loc->col);
+//   // long long abs_offset = loc->absolute_offset - 100;
+//   // abs_offset = abs_offset >= 0 ? abs_offset : 0;
+//   //
+//   const char *offset = loc->src_content + loc->absolute_offset;
+//
+//   while (*offset != '\n') {
+//     offset--;
+//   }
+//   offset++;
+//
+//   while (*offset != '\n') {
+//     fputc(*offset, stderr);
+//     offset++;
+//   }
+//   fprintf(stderr, "\n");
+//   if (loc->col_end - loc->col > 2) {
+//     fprintf(stderr, "%*c", loc->col - 1, ' ');
+//     fprintf(stderr, "^");
+//   }
+//   // printf("%d -- %d\n", loc->col, loc->col_end);
+//   fprintf(stderr, "\n");
+// }
 void print_location(Ast *ast) {
   loc_info *loc = ast->loc_info;
-  if (!loc) {
+  if (!loc || !loc->src || !loc->src_content) {
     return;
   }
   fprintf(stderr, "%s %d:%d\n", loc->src, loc->line, loc->col);
-  // long long abs_offset = loc->absolute_offset - 100;
-  // abs_offset = abs_offset >= 0 ? abs_offset : 0;
-  const char *offset = loc->src_content + loc->absolute_offset;
 
-  while (*offset != '\n') {
+  const char *start = loc->src_content;
+  const char *offset = start + loc->absolute_offset;
+
+  // Guard against going before the start of the string
+  while (offset > start && *offset != '\n') {
     offset--;
   }
-  offset++;
+  if (offset > start) {
+    offset++; // Move past the newline if we found one
+  }
 
-  while (*offset != '\n') {
+  // Print the line
+  while (*offset && *offset != '\n') {
     fputc(*offset, stderr);
     offset++;
   }
   fprintf(stderr, "\n");
+
+  // Print the caret
   if (loc->col_end - loc->col > 2) {
     fprintf(stderr, "%*c", loc->col - 1, ' ');
     fprintf(stderr, "^");
   }
-  // printf("%d -- %d\n", loc->col, loc->col_end);
   fprintf(stderr, "\n");
 }

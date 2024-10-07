@@ -7,7 +7,6 @@
 #include "backend_llvm/variant.h"
 #include "list.h"
 #include "serde.h"
-#include "strings.h"
 #include "types/unification.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -450,27 +449,6 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
   if (ast->data.AST_APPLICATION.len != fn_args_len) {
     return NULL;
   }
-
-  if (strcmp(sym_name, "array_of_chars") == 0) {
-
-    LLVMValueRef string_ptr =
-        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-
-    LLVMValueRef const_len = insert_strlen_call(string_ptr, module, builder);
-    LLVMValueRef data_ptr = string_ptr;
-
-    LLVMTypeRef struct_type = array_struct_type(LLVMPointerType(LLVMInt8Type(), 0));
-
-    LLVMValueRef str = LLVMGetUndef(struct_type);
-    str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
-    str =
-        LLVMBuildInsertValue(builder, str, const_len,
-                             0, "insert_array_size");
-
-    return str;
-  }
-
 
   if (strcmp(sym_name, "array_at") == 0) {
 

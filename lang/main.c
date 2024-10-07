@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 
   if (run_gui) {
 #ifdef GUI_MODE
-    printf("run gui\n");
+    // printf("run gui\n");
     // Start JIT thread
     struct thread_args thread_args = {argc, argv};
     if (pthread_create(&jit_thread, NULL, run_jit, &thread_args) != 0) {

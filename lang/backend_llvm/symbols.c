@@ -258,14 +258,6 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "array_init", hash_string("array_init", 10),
               array_init_sym);
 
-
-  JITSymbol *array_of_chars_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_of_chars_fn_sig, NULL, NULL);
-
-  env = env_extend(env, "array_of_chars", &t_array_of_chars_fn_sig);
-  ht_set_hash(stack, "array_of_chars", hash_string("array_of_chars", 14),
-              array_of_chars_sym);
-
   JITSymbol *deref_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_ptr_deref_sig, NULL, NULL);
 

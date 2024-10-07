@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
   //
   // add_to_dac(b);
   // audio_ctx_add(b);
-  schedule_event(_example_cb, &(struct userdata_t){200}, 1.0);
+  // schedule_event(_example_cb, &(struct userdata_t){200}, 1.0);
 
   while (1) {
     // print_graph();
