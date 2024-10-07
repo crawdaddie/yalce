@@ -1,4 +1,6 @@
+#ifdef GUI_MODE
 #include "../gui/gui.h"
+#endif
 #include "backend_llvm/jit.h"
 #include <pthread.h>
 #include <stdbool.h>
@@ -26,6 +28,7 @@ int main(int argc, char **argv) {
   int jit_result;
   bool run_gui = false;
 
+#ifdef GUI_MODE
   // Check for --gui argument
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--gui") == 0) {
@@ -33,15 +36,20 @@ int main(int argc, char **argv) {
       break;
     }
   }
+#endif
 
   if (run_gui) {
+#ifdef GUI_MODE
+    printf("run gui\n");
     // Start JIT thread
     struct thread_args thread_args = {argc, argv};
     if (pthread_create(&jit_thread, NULL, run_jit, &thread_args) != 0) {
       perror("Failed to create JIT thread");
       return 1;
     }
+
     gui();
+#endif
   } else {
     return jit(argc, argv);
   }

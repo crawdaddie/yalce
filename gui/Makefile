@@ -1,6 +1,6 @@
 # gui/Makefile
 
-CC := clang
+CC := clang -g
 CFLAGS := -Wall -Wextra -I.
 LDFLAGS := -lSDL2
 

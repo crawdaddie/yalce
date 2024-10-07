@@ -1,5 +1,7 @@
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include <stdio.h>
+
 #define MAX_WINDOWS 10
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
@@ -7,6 +9,9 @@
 SDL_Window *windows[MAX_WINDOWS];
 SDL_Renderer *renderers[MAX_WINDOWS];
 int window_count = 0;
+
+// Custom event type
+Uint32 CREATE_WINDOW_EVENT;
 
 bool create_window() {
   if (window_count >= MAX_WINDOWS) {
@@ -32,6 +37,14 @@ bool create_window() {
 
   window_count++;
   return true;
+}
+
+// Function to push a create window event to the SDL event queue
+int push_create_window_event() {
+  SDL_Event event;
+  SDL_zero(event);
+  event.type = CREATE_WINDOW_EVENT;
+  return SDL_PushEvent(&event);
 }
 
 void handle_events() {
@@ -64,6 +77,11 @@ void handle_events() {
         }
       }
       break;
+    default:
+      if (event.type == CREATE_WINDOW_EVENT) {
+        create_window();
+      }
+      break;
     }
   }
 }
@@ -74,15 +92,15 @@ int gui() {
     return 1;
   }
 
-  if (!create_window()) {
-    SDL_Quit();
+  // Register custom event
+  CREATE_WINDOW_EVENT = SDL_RegisterEvents(1);
+  if (CREATE_WINDOW_EVENT == (Uint32)-1) {
+    printf("Failed to register custom event\n");
     return 1;
   }
 
-  // printf("Press 'N' to create a new window. Close a window to destroy
-  // it.\n");
-
   while (true) {
+
     handle_events();
 
     for (int i = 0; i < window_count; i++) {

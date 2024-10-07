@@ -17,11 +17,16 @@ LANG_SRC_DIR := lang
 LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wildcard $(LANG_SRC_DIR)/*.c))
 
 # Separate CFLAGS for include paths
-CFLAGS := -I./lang -I./engine -I./gui
+CFLAGS := -I./lang -I./engine
+
+ifdef GUI_MODE
+CFLAGS += -I./gui -DGUI_MODE
+endif
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
 CFLAGS += `$(LLVM_CONFIG) --cflags`
 CFLAGS += -I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include
+
 
 LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
@@ -29,9 +34,15 @@ LANG_CC += -g
 LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
+ifdef GUI_MODE
 LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui
+endif
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
+
+ifdef DUMP_AST 
+LANG_CC += -DDUMP_AST
+endif
 
 ifdef DUMP_AST 
 LANG_CC += -DDUMP_AST

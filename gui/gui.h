@@ -3,4 +3,6 @@
 
 int gui();
 
+int push_create_window_event();
+
 #endif

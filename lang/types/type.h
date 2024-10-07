@@ -12,7 +12,7 @@ extern Type t_int;
 extern Type t_uint64;
 extern Type t_num;
 extern Type t_string;
-extern Type t_string_array;
+extern Type t_char_array;
 bool is_string_type(Type *type);
 
 extern Type t_bool;

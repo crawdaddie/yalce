@@ -153,6 +153,7 @@ DEFINE_BIQUAD_DYN_PERFORM_FUNCTION(biquad_bp_dyn_perform,
 
 Node *biquad_bp_node(Signal *freq, Signal *res, Signal *in) {
 
+
   biquad_state *state = malloc(sizeof(biquad_state));
 
   Signal *ins = malloc(sizeof(Signal *) * 3);
