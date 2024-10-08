@@ -26,12 +26,11 @@ Type t_num = {T_NUM, .num_implements = 3,
               }};
 
 Type t_string = {T_CONS,
-                 {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_char}, 1}},
+                 {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}},
                  .alias = TYPE_NAME_STRING};
 
 Type t_char_array = {T_CONS,
-                 {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}}
-                 };
+                     {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}}};
 
 Type t_bool = {T_BOOL};
 Type t_void = {T_VOID};

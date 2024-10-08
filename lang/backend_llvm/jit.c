@@ -26,6 +26,13 @@
 #include <string.h>
 #include <unistd.h>
 // YALCE STDLIB
+//
+struct _String {
+  int length;
+  char *data;
+};
+
+void print(struct _String str) { printf("%s", str.data); }
 
 // uniformly distributed integer between 0 and range-1
 int rand_int(int range) {
@@ -152,7 +159,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  // LLVMDumpModule(module);
+  LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 

@@ -946,11 +946,10 @@ Ast *ast_fn_sig(Ast *arg, Ast *arg2) {
   a->tag = AST_FN_SIGNATURE;
   return a;
 }
+
 Ast *ast_fn_sig_push(Ast *l, Ast *a) {
   Ast *sig = ast_list_push(l, a);
-
   a->tag = AST_FN_SIGNATURE;
-
   return sig;
 }
 

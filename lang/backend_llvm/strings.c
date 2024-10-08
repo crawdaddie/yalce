@@ -1,88 +1,10 @@
 #include "backend_llvm/strings.h"
+#include "list.h"
 #include "types/type.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <stdlib.h>
 #include <string.h>
-
-LLVMValueRef codegen_printf(const char *format, LLVMValueRef *args,
-                            int arg_count, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
-
-  LLVMValueRef printf_func = LLVMGetNamedFunction(module, "printf");
-
-  if (!printf_func) {
-    LLVMTypeRef printf_type = LLVMFunctionType(
-        LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
-        1);
-
-    printf_func = LLVMAddFunction(module, "printf", printf_type);
-  }
-  // Create a global string constant for the format string
-  LLVMValueRef format_const =
-      LLVMBuildGlobalStringPtr(builder, format, "format");
-
-  // Prepare the arguments for the printf call
-  LLVMValueRef call_args[arg_count + 1];
-  call_args[0] = format_const;
-
-  memcpy(call_args + 1, args, arg_count * sizeof(LLVMValueRef));
-
-  // Insert the call to printf
-  LLVMValueRef call =
-      LLVMBuildCall2(builder, LLVMInt32Type(), printf_func,
-                     (LLVMValueRef[]){format_const}, arg_count + 1, "printf");
-
-  // Clean up
-  return call;
-}
-
-LLVMValueRef insert_printf_call(const char *format, LLVMModuleRef module,
-                                LLVMBuilderRef builder) {
-  // Declare printf if it hasn't been declared yet
-  LLVMValueRef printf_func = LLVMGetNamedFunction(module, "printf");
-  if (!printf_func) {
-    LLVMTypeRef param_types[] = {LLVMPointerType(LLVMInt8Type(), 0)};
-    LLVMTypeRef printf_type =
-        LLVMFunctionType(LLVMInt32Type(), param_types, 1, 0);
-    printf_func = LLVMAddFunction(module, "printf", printf_type);
-  }
-
-  // Get the type of the printf function
-  LLVMTypeRef printf_type = LLVMTypeOf(printf_func);
-
-  // Create a global string constant for the format string
-  LLVMValueRef format_const =
-      LLVMBuildGlobalStringPtr(builder, format, "format");
-
-  // Insert the call to printf
-  LLVMValueRef args[] = {format_const};
-  LLVMValueRef call =
-      LLVMBuildCall2(builder, printf_type, printf_func, args, 1, "printf_call");
-
-  return call;
-}
-
-LLVMValueRef insert_strlen_call(LLVMValueRef string_ptr, LLVMModuleRef module,
-                                LLVMBuilderRef builder) {
-  LLVMTypeRef strlen_type;
-  // Declare strlen if it hasn't been declared yet
-  LLVMValueRef strlen_func = LLVMGetNamedFunction(module, "strlen");
-
-  if (!strlen_func) {
-    LLVMTypeRef param_types[] = {LLVMPointerType(LLVMInt8Type(), 0)};
-    strlen_type = LLVMFunctionType(LLVMInt64Type(), param_types, 1, 0);
-    strlen_func = LLVMAddFunction(module, "strlen", strlen_type);
-  } else {
-    strlen_type = LLVMTypeOf(strlen_func);
-  }
-
-  // Insert the call to strlen
-  LLVMValueRef args[] = {string_ptr};
-  LLVMValueRef call =
-      LLVMBuildCall2(builder, strlen_type, strlen_func, args, 1, "strlen_call");
-  return call;
-}
 
 LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
@@ -275,12 +197,75 @@ LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string) {
   return incremented;
 }
 
-LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
+LLVMValueRef __codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
 
   const char *chars = ast->data.AST_STRING.value;
   int length = ast->data.AST_STRING.length;
   ObjString vstr = (ObjString){
       .chars = chars, .length = length, .hash = hash_string(chars, length)};
+
+  LLVMTypeRef data_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
+  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+
   return LLVMBuildGlobalString(builder, chars, ".str");
+}
+
+LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+  LLVMTypeRef char_type = LLVMInt8Type();
+  LLVMTypeRef array_type = LLVMArrayType(char_type, length + 1);
+
+  LLVMValueRef data_ptr =
+      (ctx->stack_ptr == 0)
+          ? LLVMBuildMalloc(builder, array_type, "heap_array")
+          : LLVMBuildAlloca(builder, array_type, "stack_array");
+
+  for (int i = 0; i < length; i++) {
+
+    // Calculate pointer to array element
+    LLVMValueRef element_ptr =
+        LLVMBuildGEP2(builder, array_type, data_ptr,
+                      (LLVMValueRef[]){
+                          LLVMConstInt(LLVMInt32Type(), 0, 0),
+                          LLVMConstInt(LLVMInt32Type(), i, 0) // Array index
+                      },
+                      2, "element_ptr");
+
+    LLVMValueRef value =
+        LLVMConstInt(LLVMInt8Type(), (long long)*(chars + i), 0);
+    LLVMBuildStore(builder, value, element_ptr);
+  }
+
+  // LLVMValueRef value = LLVMConstInt(LLVMInt8Type(), 0, 0);
+  // LLVMBuildStore(builder, value, element_ptr);
+
+  // LLVMValueRef const_array =
+  //     LLVMConstStringInContext(LLVMGetModuleContext(module), chars, length,
+  //     1);
+  // LLVMBuildMemCpy(builder, data_ptr, 0, const_array, 0,
+  //                 LLVMConstInt(LLVMInt32Type(), length + 1, 0));
+  //
+  return data_ptr;
+}
+
+LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+
+  const char *chars = ast->data.AST_STRING.value;
+  int length = ast->data.AST_STRING.length;
+
+  LLVMValueRef data_ptr = char_array(chars, length, ctx, module, builder);
+  LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
+  // Create struct type
+  //
+
+  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+
+  LLVMValueRef str = LLVMGetUndef(struct_type);
+  str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
+  str = LLVMBuildInsertValue(builder, str,
+                             LLVMConstInt(LLVMInt32Type(), length, 0), 0,
+                             "insert_array_size");
+  return str;
 }

@@ -126,9 +126,9 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
 
     if (is_list_type(type)) {
-      if (type->data.T_CONS.args[0]->kind == T_CHAR) {
-        return LLVMPointerType(LLVMInt8Type(), 0);
-      }
+      // if (type->data.T_CONS.args[0]->kind == T_CHAR) {
+      //   return LLVMPointerType(LLVMInt8Type(), 0);
+      // }
 
       return list_type(type->data.T_CONS.args[0], env, module);
     }
