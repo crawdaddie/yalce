@@ -6,8 +6,23 @@
 #include <stdlib.h>
 #include <string.h>
 
-LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
-                           LLVMBuilderRef builder) {
+#define STRLEN_TYPE LLVMFunctionType( \
+      LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1, \
+      false)
+
+LLVMValueRef get_strlen_func(LLVMModuleRef module) {
+  // Declare sprintf if it's not already declared
+  LLVMValueRef strlen_func = LLVMGetNamedFunction(module, "strlen");
+  LLVMTypeRef strlen_type = STRLEN_TYPE;
+
+  if (!strlen_func) {
+    strlen_func = LLVMAddFunction(module, "strlen", strlen_type);
+  }
+  return strlen_func;
+}
+
+LLVMValueRef _int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
   // Declare sprintf if it's not already declared
   LLVMValueRef sprintf_func = LLVMGetNamedFunction(module, "sprintf");
   LLVMTypeRef sprintf_type =
@@ -35,8 +50,28 @@ LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
   return buffer;
 }
 
-LLVMValueRef num_to_string(LLVMValueRef double_value, LLVMModuleRef module,
+LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+  LLVMValueRef data_ptr = _int_to_string(int_value, module, builder);
+  LLVMValueRef strlen_func = get_strlen_func(module);
+
+  LLVMTypeRef strlen_type = STRLEN_TYPE;
+  LLVMValueRef len =
+      LLVMBuildCall2(builder, strlen_type, strlen_func,
+                     (LLVMValueRef[]){data_ptr}, 1, "strlen_call");
+
+  LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
+
+  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+
+  LLVMValueRef str = LLVMGetUndef(struct_type);
+  str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
+  str = LLVMBuildInsertValue(builder, str, len, 0, "insert_array_size");
+  return str;
+}
+
+LLVMValueRef _num_to_string(LLVMValueRef double_value, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
 
   // Declare sprintf if it's not already declared
   LLVMValueRef sprintf_func = LLVMGetNamedFunction(module, "sprintf");
@@ -64,6 +99,43 @@ LLVMValueRef num_to_string(LLVMValueRef double_value, LLVMModuleRef module,
   // Return the buffer
   return buffer;
 }
+
+LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  LLVMValueRef data_ptr = _num_to_string(int_value, module, builder);
+  LLVMValueRef strlen_func = get_strlen_func(module);
+  LLVMValueRef len =
+      LLVMBuildCall2(builder, STRLEN_TYPE, strlen_func,
+                     (LLVMValueRef[]){data_ptr}, 1, "");
+
+  LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
+
+  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+
+  LLVMValueRef str = LLVMGetUndef(struct_type);
+  str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
+  str = LLVMBuildInsertValue(builder, str, len, 0, "insert_array_size");
+  return str;
+}
+
+LLVMValueRef _to_string(LLVMValueRef int_value, LLVMModuleRef module,
+                        LLVMBuilderRef builder) {
+  LLVMValueRef data_ptr = _int_to_string(int_value, module, builder);
+  LLVMValueRef strlen_func = get_strlen_func(module);
+  LLVMValueRef len =
+      LLVMBuildCall2(builder, LLVMTypeOf(strlen_func), strlen_func,
+                     (LLVMValueRef[]){data_ptr}, 1, "");
+
+  LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
+
+  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+
+  LLVMValueRef str = LLVMGetUndef(struct_type);
+  str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
+  str = LLVMBuildInsertValue(builder, str, len, 0, "insert_array_size");
+  return str;
+}
+
 LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
@@ -91,8 +163,12 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 }
 
 #define INITIAL_SIZE 32
+typedef struct String {
+  int32_t length;
+  char *chars;
+} String;
 
-const char *string_concat(const char **strings, int num_strings) {
+const char *_string_concat(const char **strings, int num_strings) {
   int total_len = 0;
   int lengths[num_strings];
   for (int i = 0; i < num_strings; i++) {
@@ -108,13 +184,38 @@ const char *string_concat(const char **strings, int num_strings) {
   return concatted;
 }
 
+String string_concat(String *strings, int num_strings) {
+  int total_len = 0;
+  int lengths[num_strings];
+
+  for (int i = 0; i < num_strings; i++) {
+    lengths[i] = strings[i].length;
+    total_len += lengths[i];
+  }
+
+  char *concatted = malloc(sizeof(char) * (total_len + 1));
+  int offset = 0;
+  for (int i = 0; i < num_strings; i++) {
+    strncpy(concatted + offset, strings[i].chars, lengths[i]);
+    offset += lengths[i];
+  }
+
+  return (String){total_len, concatted};
+}
+
 LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
+
   LLVMValueRef string_concat_func =
       LLVMGetNamedFunction(module, "string_concat");
-  LLVMTypeRef string_type = LLVMPointerType(LLVMInt8Type(), 0);
+
+  LLVMTypeRef string_type = LLVMStructType(
+      (LLVMTypeRef[]){LLVMInt32Type(), LLVMPointerType(LLVMInt8Type(), 0)}, 2,
+      0);
+
   LLVMTypeRef string_array_type = LLVMArrayType(string_type, num_strings);
+
   LLVMTypeRef fn_type = LLVMFunctionType(
       string_type,
       (LLVMTypeRef[]){LLVMPointerType(string_type, 0), LLVMInt32Type()}, 2, 0);
@@ -197,34 +298,25 @@ LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string) {
   return incremented;
 }
 
-LLVMValueRef __codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                              LLVMBuilderRef builder) {
-
-  const char *chars = ast->data.AST_STRING.value;
-  int length = ast->data.AST_STRING.length;
-  ObjString vstr = (ObjString){
-      .chars = chars, .length = length, .hash = hash_string(chars, length)};
-
-  LLVMTypeRef data_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
-  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
-
-  return LLVMBuildGlobalString(builder, chars, ".str");
-}
-
 LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
+
   LLVMTypeRef char_type = LLVMInt8Type();
   LLVMTypeRef array_type = LLVMArrayType(char_type, length + 1);
 
+  LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length + 1, 0);
   LLVMValueRef data_ptr =
       (ctx->stack_ptr == 0)
           ? LLVMBuildMalloc(builder, array_type, "heap_array")
           : LLVMBuildAlloca(builder, array_type, "stack_array");
 
+  LLVMValueRef element_ptr;
   for (int i = 0; i < length; i++) {
+    // TODO: this is not ideal - looping over every character of the string
+    // and setting the data_ptr value
 
     // Calculate pointer to array element
-    LLVMValueRef element_ptr =
+    element_ptr =
         LLVMBuildGEP2(builder, array_type, data_ptr,
                       (LLVMValueRef[]){
                           LLVMConstInt(LLVMInt32Type(), 0, 0),
@@ -237,28 +329,64 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
     LLVMBuildStore(builder, value, element_ptr);
   }
 
+  LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
+  LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
+                                             &length_val, 1, "last_elem_ptr");
+  LLVMBuildStore(builder, null_terminator, last_elem_ptr);
+  return data_ptr;
+}
+
+LLVMValueRef ___char_array(const char *chars, int length, JITLangCtx *ctx,
+                           LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMTypeRef char_type = LLVMInt8Type();
+  LLVMTypeRef array_type = LLVMArrayType(char_type, length + 1);
+
+  LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length + 1, 0);
+  LLVMValueRef data_ptr =
+      (ctx->stack_ptr == 0)
+          ? LLVMBuildArrayMalloc(builder, char_type, length_val, "heap_array")
+          : LLVMBuildArrayAlloca(builder, char_type, length_val, "stack_array");
+
+  // Declare str_copy if it's not already declared
+  LLVMValueRef str_copy_func = LLVMGetNamedFunction(module, "str_copy");
+  LLVMTypeRef str_copy_func_type = LLVMFunctionType(
+      LLVMVoidType(),
+      (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
+                      LLVMPointerType(LLVMInt8Type(), 0), LLVMInt32Type()},
+      3, false);
+
+  if (!str_copy_func) {
+    str_copy_func = LLVMAddFunction(module, "str_copy", str_copy_func_type);
+  }
+
+  LLVMValueRef const_array =
+      LLVMConstStringInContext(LLVMGetModuleContext(module), chars, length, 1);
+  LLVMValueRef l = LLVMConstInt(LLVMInt32Type(), length, 0);
+  LLVMBuildCall2(builder, str_copy_func_type, str_copy_func,
+                 (LLVMValueRef[]){data_ptr, const_array, l}, 3, "str_copy");
+
   // LLVMValueRef value = LLVMConstInt(LLVMInt8Type(), 0, 0);
   // LLVMBuildStore(builder, value, element_ptr);
-
-  // LLVMValueRef const_array =
-  //     LLVMConstStringInContext(LLVMGetModuleContext(module), chars, length,
-  //     1);
-  // LLVMBuildMemCpy(builder, data_ptr, 0, const_array, 0,
-  //                 LLVMConstInt(LLVMInt32Type(), length + 1, 0));
   //
+  // LLVMBuildMemCpy(builder, data_ptr, 0, const_array, 0,
+  //                 LLVMConstInt(LLVMInt32Type(), length, 0));
+  //
+  // LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
+  // LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
+  //                                            &length_val, 1,
+  //                                            "last_elem_ptr");
+  // LLVMBuildStore(builder, null_terminator, last_elem_ptr);
   return data_ptr;
 }
 
 LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-
   const char *chars = ast->data.AST_STRING.value;
   int length = ast->data.AST_STRING.length;
 
   LLVMValueRef data_ptr = char_array(chars, length, ctx, module, builder);
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
-  // Create struct type
-  //
 
   LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
 

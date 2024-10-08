@@ -800,7 +800,7 @@ bool is_list_type(Type *type) {
 
 bool is_string_type(Type *type) {
   return type->kind == T_CONS &&
-         (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0) &&
+         (strcmp(type->data.T_CONS.name, TYPE_NAME_ARRAY) == 0) &&
          (type->data.T_CONS.args[0]->kind == T_CHAR);
 }
 

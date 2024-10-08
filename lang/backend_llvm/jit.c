@@ -31,6 +31,11 @@ struct _String {
   int length;
   char *data;
 };
+void str_copy(char *dest, char *src, int len) {
+  printf("calling str copy %s %s %d\n", dest, src, len);
+  memcpy(dest, src, len);
+  dest[len + 1] = '\0';
+}
 
 void print(struct _String str) { printf("%s", str.data); }
 
