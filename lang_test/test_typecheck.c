@@ -860,6 +860,14 @@ int main() {
         ";;\n",
         &MAKE_FN_TYPE_5(&t_ptr, &t_param_variant, &t_int, &t_num, &t_ptr), env);
   });
+  ({
+    RESET;
+    TITLE("Array2d cons")
+    Type array_double = tcons(TYPE_NAME_ARRAY, 1, &t_num);
+    TEST_SIMPLE_AST_TYPE("type Array2d t = Int * Int * Array of t;\n"
+                         "let x = Array2d 2 3 [|1.,2.|];",
+                         &TTUPLE(3, &t_int, &t_int, &array_double));
+  });
 
   return status == true ? 0 : 1;
 }

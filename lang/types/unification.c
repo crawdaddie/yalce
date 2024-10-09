@@ -237,6 +237,8 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
 
   if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
       t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+    print_type_err(t1);
+    print_type_err(t2);
 
     printf("return NULL %s:%d\n", __FILE__, __LINE__);
     return NULL;

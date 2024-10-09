@@ -204,6 +204,59 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
                         "tuple_element_load");
 }
 
+LLVMValueRef codegen_array_increment(LLVMValueRef array, LLVMTypeRef el_type,
+                                     LLVMBuilderRef builder) {
+  // Extract the current size and data pointer from the array struct
+  LLVMValueRef current_size =
+      LLVMBuildExtractValue(builder, array, 0, "current_size");
+  LLVMValueRef current_data =
+      LLVMBuildExtractValue(builder, array, 1, "current_data");
+
+  // Decrement the size
+  LLVMValueRef new_size = LLVMBuildSub(
+      builder, current_size, LLVMConstInt(LLVMInt32Type(), 1, 0), "new_size");
+
+  // Increment the data pointer
+  LLVMValueRef new_data = LLVMBuildGEP2(
+      builder, el_type, current_data,
+      &(LLVMValueRef){LLVMConstInt(LLVMInt32Type(), 1, 0)}, 1, "new_data");
+
+  // Create a new struct with the updated size and data pointer
+  LLVMValueRef new_array = LLVMGetUndef(LLVMTypeOf(array));
+  new_array =
+      LLVMBuildInsertValue(builder, new_array, new_size, 0, "insert_new_size");
+  new_array =
+      LLVMBuildInsertValue(builder, new_array, new_data, 1, "insert_new_data");
+
+  return new_array;
+}
+
+LLVMValueRef codegen_array_slice(LLVMValueRef array, LLVMTypeRef el_type,
+                                 LLVMValueRef start, LLVMValueRef end,
+                                 LLVMBuilderRef builder) {
+  // Extract the current size and data pointer from the array struct
+  LLVMValueRef current_size =
+      LLVMBuildExtractValue(builder, array, 0, "current_size");
+  LLVMValueRef current_data =
+      LLVMBuildExtractValue(builder, array, 1, "current_data");
+
+  // Decrement the size
+  LLVMValueRef new_size = LLVMBuildSub(builder, end, start, "new_size");
+
+  // Increment the data pointer
+  LLVMValueRef new_data = LLVMBuildGEP2(builder, el_type, current_data,
+                                        &(LLVMValueRef){start}, 1, "new_data");
+
+  // Create a new struct with the updated size and data pointer
+  LLVMValueRef new_array = LLVMGetUndef(LLVMTypeOf(array));
+  new_array =
+      LLVMBuildInsertValue(builder, new_array, new_size, 0, "insert_new_size");
+  new_array =
+      LLVMBuildInsertValue(builder, new_array, new_data, 1, "insert_new_data");
+
+  return new_array;
+}
+
 LLVMValueRef codegen_array_set(LLVMValueRef array, LLVMValueRef idx,
                                LLVMValueRef val, LLVMTypeRef el_type,
                                LLVMModuleRef module, LLVMBuilderRef builder) {

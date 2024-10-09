@@ -15,6 +15,10 @@ choose [|0, 0|];
 
 let (@) = fn array idx -> array_at array idx;;
 
+
+type Array2d t = Int * Int * Array of t;
+type Array3d t = Int * Int * Int * Array of t;
+
 %test
 let x = [|
   [|1., 2.|],

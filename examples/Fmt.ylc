@@ -1,9 +1,10 @@
 #! /Users/adam/projects/sound/yalce/build/lang
 let get_stderr = extern fn () -> Ptr;
 let get_stdout = extern fn () -> Ptr;
-let printf = extern fn String -> () ; # simplified printf from c stdlib
+
+let print = extern fn String -> () ;
 
 let stderr = get_stderr ();
 let stdout = get_stdout ();
 
-let fprintf = extern fn Ptr -> String -> () ;
+let fprint = extern fn Ptr -> String -> () ;

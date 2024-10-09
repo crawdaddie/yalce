@@ -49,4 +49,11 @@ LLVMValueRef codegen_array_init(LLVMValueRef size, LLVMValueRef item,
                                 LLVMBuilderRef builder);
 
 LLVMTypeRef array_struct_type(LLVMTypeRef data_ptr_type);
+
+LLVMValueRef codegen_array_increment(LLVMValueRef array, LLVMTypeRef el_type,
+                                     LLVMBuilderRef builder);
+
+LLVMValueRef codegen_array_slice(LLVMValueRef array, LLVMTypeRef el_type,
+                                 LLVMValueRef start, LLVMValueRef end,
+                                 LLVMBuilderRef builder);
 #endif

@@ -6,9 +6,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define STRLEN_TYPE LLVMFunctionType( \
-      LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1, \
-      false)
+void str_copy(char *dest, char *src, int len) {
+  // printf("calling str copy %s %s %d\n", dest, src, len);
+  memcpy(dest, src, len);
+  dest[len + 1] = '\0';
+}
+void print(String str) { printf("%s", str.chars); }
+void printc(char c) { printf("%c", c); }
+
+void fprint(FILE *f, String str) { fprintf(f, "%s", str.chars); }
+
+#define STRLEN_TYPE                                                            \
+  LLVMFunctionType(LLVMInt32Type(),                                            \
+                   (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,     \
+                   false)
 
 LLVMValueRef get_strlen_func(LLVMModuleRef module) {
   // Declare sprintf if it's not already declared
@@ -104,9 +115,8 @@ LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   LLVMValueRef data_ptr = _num_to_string(int_value, module, builder);
   LLVMValueRef strlen_func = get_strlen_func(module);
-  LLVMValueRef len =
-      LLVMBuildCall2(builder, STRLEN_TYPE, strlen_func,
-                     (LLVMValueRef[]){data_ptr}, 1, "");
+  LLVMValueRef len = LLVMBuildCall2(builder, STRLEN_TYPE, strlen_func,
+                                    (LLVMValueRef[]){data_ptr}, 1, "");
 
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
@@ -143,6 +153,10 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
     return val;
   }
 
+  if (val_type->kind == T_CHAR) {
+    return val;
+  }
+
   if (is_string_type(val_type)) {
     return val;
   }
@@ -163,10 +177,6 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 }
 
 #define INITIAL_SIZE 32
-typedef struct String {
-  int32_t length;
-  char *chars;
-} String;
 
 const char *_string_concat(const char **strings, int num_strings) {
   int total_len = 0;
@@ -285,17 +295,9 @@ LLVMValueRef strings_equal(LLVMValueRef left, LLVMValueRef right,
   return LLVMBuildICmp(builder, LLVMIntEQ, comp,
                        LLVMConstInt(LLVMInt32Type(), 0, 0), "Int ==");
 }
-// Assume we have an LLVMValueRef representing a string pointer
+
 LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string) {
-  // Create a constant integer with value 1
-  LLVMValueRef one = LLVMConstInt(LLVMInt32Type(), 1, 0);
-
-  // Create a GEP (GetElementPtr) instruction to increment the pointer
-  LLVMValueRef indices[] = {one};
-  LLVMValueRef incremented = LLVMBuildGEP2(builder, LLVMInt8Type(), string,
-                                           indices, 1, "incrementedPtr");
-
-  return incremented;
+  return codegen_array_increment(string, LLVMInt8Type(), builder);
 }
 
 LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,

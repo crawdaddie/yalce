@@ -103,7 +103,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
   }
 
   case T_CHAR: {
-    return LLVMInt8Type();
+    return LLVM_TYPE_char;
   }
 
   case T_VAR: {
@@ -249,8 +249,8 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
     LLVMValueRef ptr =
         LLVMBuildGEP2(builder, el_type, val, indices, 1, "addr_of");
 
-    LLVMDumpValue(ptr);
-    LLVMDumpType(LLVMTypeOf(ptr));
+    // LLVMDumpValue(ptr);
+    // LLVMDumpType(LLVMTypeOf(ptr));
     // printf("\n");
     return ptr;
   }

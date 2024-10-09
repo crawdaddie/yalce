@@ -56,6 +56,8 @@ LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env,
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+  // printf("codegen extern fn\n");
+  // print_ast(ast);
 
   const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
   int name_len = strlen(name);
@@ -503,15 +505,28 @@ LLVMValueRef call_deref_fn(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   // Create a load instruction to dereference the pointer
   return LLVMBuildLoad2(builder, deref_type, casted_ptr, "dereferenced_value");
 }
+LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder) {
+
+  Type *sym_type = ast->md;
+  LLVMTypeRef llvm_type = type_to_llvm_type(sym_type, ctx->env, module);
+  LLVMValueRef v = LLVMGetUndef(llvm_type);
+  int len = ast->data.AST_APPLICATION.len;
+  Ast *args = ast->data.AST_APPLICATION.args;
+  for (int i = 0; i < len; i++) {
+    Ast *arg = args + i;
+    LLVMValueRef arg_val = codegen(arg, ctx, module, builder);
+
+    v = LLVMBuildInsertValue(builder, v, arg_val, i, "insert_struct_member");
+  }
+  return v;
+}
 
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
-
-  // int lookup_sym_err = sym == NULL;
-  // lookup_id_ast_in_place(ast->data.AST_APPLICATION.function, ctx, &sym);
 
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
@@ -522,6 +537,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   if (tagged_union_type) {
     return tagged_union_constructor(ast, tagged_union_type, ctx, module,
                                     builder);
+  }
+  Type *sym_type = ast->md;
+  if (sym_type->kind == T_CONS && !is_generic(sym_type)) {
+    return codegen_cons(ast, ctx, module, builder);
   }
 
   if (!sym) {

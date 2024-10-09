@@ -6,6 +6,7 @@
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
+#include "strings.h"
 #include "symbols.h"
 #include "synths.h"
 #include "types.h"
@@ -27,17 +28,6 @@
 #include <unistd.h>
 // YALCE STDLIB
 //
-struct _String {
-  int length;
-  char *data;
-};
-void str_copy(char *dest, char *src, int len) {
-  printf("calling str copy %s %s %d\n", dest, src, len);
-  memcpy(dest, src, len);
-  dest[len + 1] = '\0';
-}
-
-void print(struct _String str) { printf("%s", str.data); }
 
 // uniformly distributed integer between 0 and range-1
 int rand_int(int range) {
@@ -127,6 +117,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   LLVMSetSourceFileName(module, filename, strlen(filename));
 
   *prog = parse_input_script(filename);
+  print_ast(*prog);
   if (!(*prog)) {
     return NULL;
   }
@@ -164,7 +155,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  LLVMDumpModule(module);
+  // LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 

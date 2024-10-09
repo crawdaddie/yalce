@@ -67,21 +67,17 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
 }
 
 Type *infer_cons(Ast *ast, TypeEnv **env) {
-  // printf("infer cons: ");
-  // print_ast(ast);
+
   Type *cons = copy_type(ast->data.AST_APPLICATION.function->md);
 
   TypeEnv *replacement_env = *env;
   int len = ast->data.AST_APPLICATION.len;
 
   for (int i = 0; i < len; i++) {
-    // printf("infer cons arg: ");
-    // print_ast(ast->data.AST_APPLICATION.args + i);
     Type *arg_type =
         TRY_MSG(infer(ast->data.AST_APPLICATION.args + i, &replacement_env),
                 "could not infer cons argument");
-    // printf("cons arg type %d: ", i);
-    // print_type(arg_type);
+
     unify(cons->data.T_CONS.args[i], arg_type, &replacement_env);
   }
 

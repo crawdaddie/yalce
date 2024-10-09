@@ -192,6 +192,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   LLVMValueRef expr_val =
       codegen(ast->data.AST_LET.expr, outer_ctx, module, builder);
 
+  // LLVMDumpValue(expr_val);
   if (!expr_val) {
     return NULL;
   }
