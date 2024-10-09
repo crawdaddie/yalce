@@ -404,6 +404,10 @@ Type *variable_tc_resolve(Type *a, Type *b, TypeEnv **env) {
 }
 
 void unify_rec_fn_mem(Type *a, Type *b, TypeEnv **env) {
+  if (a->kind == T_VOID && b->kind == T_VOID) {
+    return;
+  }
+
   if (a->kind == T_VAR && b->kind == T_TYPECLASS_RESOLVE &&
       occurs_check(a, b)) {
     Type *replacement;

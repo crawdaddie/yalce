@@ -117,7 +117,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   LLVMSetSourceFileName(module, filename, strlen(filename));
 
   *prog = parse_input_script(filename);
-  print_ast(*prog);
+  // print_ast(*prog);
   if (!(*prog)) {
     return NULL;
   }
@@ -155,7 +155,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  // LLVMDumpModule(module);
+  LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
