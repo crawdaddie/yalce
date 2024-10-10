@@ -1,4 +1,4 @@
-%include ../testing
+%include ../Testing
 
 let fib = fn x ->
   match x with

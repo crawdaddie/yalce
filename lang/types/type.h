@@ -37,6 +37,7 @@ extern Type t_array_var_el;
 extern Type t_array_var;
 
 extern Type t_array_size_fn_sig;
+extern Type t_array_incr_fn_sig;
 extern Type t_array_at_fn_sig;
 
 extern Type t_array_of_chars_fn_sig;
@@ -261,5 +262,5 @@ Type *ptr_of_type(Type *);
 int *array_type_size_ptr(Type *t);
 
 Type *create_array_type(Type *of, int size);
-
+ 
 #endif

@@ -234,30 +234,31 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   // Type *array_at_fn_sig =
   //     type_fn(&t_array_var, type_fn(&t_int, &t_array_var_el));
   env = env_extend(env, "array_at", &t_array_at_fn_sig);
-
   JITSymbol *array_at_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_at_fn_sig, NULL, NULL);
-
   ht_set_hash(stack, "array_at", hash_string("array_at", 8), array_at_sym);
 
   env = env_extend(env, "array_size", &t_array_size_fn_sig);
-
   JITSymbol *array_size_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_size_fn_sig, NULL, NULL);
-
   ht_set_hash(stack, "array_size", hash_string("array_size", 10),
               array_size_sym);
 
-  Type *array_init_fn_sig =
-      type_fn(&t_int, type_fn(&t_array_var_el, &t_array_var));
+  env = env_extend(env, "array_incr", &t_array_incr_fn_sig);
+  JITSymbol *array_incr_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_incr_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "array_incr", hash_string("array_incr", 10),
+              array_incr_sym);
 
-  env = env_extend(env, "array_init", array_init_fn_sig);
-
-  JITSymbol *array_init_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
-
-  ht_set_hash(stack, "array_init", hash_string("array_init", 10),
-              array_init_sym);
+  // Type *array_init_fn_sig =
+  //     type_fn(&t_int, type_fn(&t_array_var_el, &t_array_var));
+  // env = env_extend(env, "array_init", array_init_fn_sig);
+  //
+  // JITSymbol *array_init_sym =
+  //     new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
+  //
+  // ht_set_hash(stack, "array_init", hash_string("array_init", 10),
+  //             array_init_sym);
 
   JITSymbol *deref_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_ptr_deref_sig, NULL, NULL);

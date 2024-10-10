@@ -1,13 +1,5 @@
-let get_stderr = extern fn () -> Ptr;
-let get_stdout = extern fn () -> Ptr;
-let printf = extern fn String -> () ; # simplified printf from c stdlib
-
-let stderr = get_stderr ();
-let stdout = get_stdout ();
-
-let fprintf = extern fn Ptr -> String -> () ;
 let test_val = fn b msg ->
   match b with
-    | true -> (printf "✅ "; printf msg; printf "\n")
-    | _ -> (printf "❌ "; printf msg; printf "\n")
+    | true -> (print "✅ "; print msg; print "\n")
+    | _ -> (print "❌ "; print msg; print "\n")
 ;;

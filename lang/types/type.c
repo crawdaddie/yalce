@@ -140,6 +140,7 @@ Type t_array_var = {
 };
 
 Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
+Type t_array_incr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_array_var);
 Type t_array_at_fn_sig = MAKE_FN_TYPE_3(&t_array_var, &t_int, &t_array_var_el);
 
 Type t_array_of_chars_fn_sig = MAKE_FN_TYPE_2(&t_string, &t_char_array);

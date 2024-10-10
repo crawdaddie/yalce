@@ -206,9 +206,11 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
 
 LLVMValueRef codegen_array_increment(LLVMValueRef array, LLVMTypeRef el_type,
                                      LLVMBuilderRef builder) {
+  printf("incr array\n");
   // Extract the current size and data pointer from the array struct
   LLVMValueRef current_size =
       LLVMBuildExtractValue(builder, array, 0, "current_size");
+
   LLVMValueRef current_data =
       LLVMBuildExtractValue(builder, array, 1, "current_data");
 

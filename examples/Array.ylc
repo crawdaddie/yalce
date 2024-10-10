@@ -12,6 +12,7 @@ let choose = fn arr ->
 choose [|0., 0.|];
 choose [|0, 0|];
 
+let array_is_empty = fn arr -> array_size arr == 0;;
 
 let (@) = fn array idx -> array_at array idx;;
 

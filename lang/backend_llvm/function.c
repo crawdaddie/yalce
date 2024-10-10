@@ -471,6 +471,16 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_get_array_size(builder, array);
   }
 
+  if (strcmp(sym_name, "array_incr") == 0) {
+    Type *array_type = ast->md;
+    LLVMTypeRef el_type =
+        type_to_llvm_type(array_type->data.T_CONS.args[0], ctx->env, module);
+
+    LLVMValueRef array =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+    return codegen_array_increment(array, el_type, builder);
+  }
+
   if (strcmp(sym_name, "array_init") == 0) {
     // TODO: not implemented well at all
     Type *array_type = ast->md;
@@ -531,16 +541,14 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
+  // printf("variant member to llvm type %s  ???", sym_name);
+  // print_type(ast->md);
   LLVMTypeRef tagged_union_type =
       variant_member_to_llvm_type(ast->md, ctx->env, module);
 
   if (tagged_union_type) {
     return tagged_union_constructor(ast, tagged_union_type, ctx, module,
                                     builder);
-  }
-  Type *sym_type = ast->md;
-  if (sym_type->kind == T_CONS && !is_generic(sym_type)) {
-    return codegen_cons(ast, ctx, module, builder);
   }
 
   if (!sym) {
@@ -561,6 +569,11 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
   if (strncmp("array_", sym_name, 6) == 0) {
     return call_array_fn(ast, sym, sym_name, ctx, module, builder);
+  }
+  Type *sym_type = ast->md;
+  if (sym_type->kind == T_CONS && !is_generic(sym_type)) {
+    // print_ast(ast);
+    return codegen_cons(ast, ctx, module, builder);
   }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
