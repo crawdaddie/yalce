@@ -138,9 +138,20 @@ Type t_array_var = {
     T_CONS,
     {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_array_var_el}, 1}},
 };
+#define TLIST(t)                                                               \
+  (Type) {                                                                     \
+    T_CONS, {                                                                  \
+      .T_CONS = { TYPE_NAME_LIST, (Type *[]){t}, 1 }                           \
+    }                                                                          \
+  }
 
 Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
 Type t_array_incr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_array_var);
+Type t_array_to_list_fn_sig =
+    MAKE_FN_TYPE_2(&t_array_var, &TLIST(&t_array_var_el));
+// , &(Type){
+//   T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_array_var_el}}});
+
 Type t_array_at_fn_sig = MAKE_FN_TYPE_3(&t_array_var, &t_int, &t_array_var_el);
 
 Type t_array_of_chars_fn_sig = MAKE_FN_TYPE_2(&t_string, &t_char_array);
@@ -336,7 +347,8 @@ bool types_equal(Type *t1, Type *t2) {
 
   case T_CONS: {
     // if (is_array_type(t1) && is_array_type(t2)) {
-    //   return types_equal(t1->data.T_CONS.args[0], t2->data.T_CONS.args[0]);
+    //   return types_equal(t1->data.T_CONS.args[0],
+    //   t2->data.T_CONS.args[0]);
     // }
 
     if (t1->alias && t2->alias && (strcmp(t1->alias, t2->alias) != 0)) {

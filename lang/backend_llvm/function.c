@@ -232,7 +232,6 @@ LLVMValueRef create_new_specific_fn(int len, Ast *fn_ast, Type *original_type,
                                     JITLangCtx *compilation_ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-  // compile new variant
   Ast *specific_ast = get_specific_fn_ast_variant(fn_ast, expected_type);
 
   TypeEnv *og_env = compilation_ctx->env;
@@ -244,6 +243,14 @@ LLVMValueRef create_new_specific_fn(int len, Ast *fn_ast, Type *original_type,
     Type *ef = e->data.T_FN.from;
     if (of->kind == T_VAR && !(env_lookup(_env, of->data.T_VAR))) {
       _env = env_extend(_env, of->data.T_VAR, ef);
+    } else if (of->kind == T_CONS) {
+      for (int i = 0; i < of->data.T_CONS.num_args; i++) {
+        Type *ofc = of->data.T_CONS.args[i];
+        Type *efc = ef->data.T_CONS.args[i];
+        if (ofc->kind == T_VAR && !(env_lookup(_env, ofc->data.T_VAR))) {
+          _env = env_extend(_env, ofc->data.T_VAR, efc);
+        }
+      }
     }
     o = o->data.T_FN.to;
     e = e->data.T_FN.to;
@@ -281,8 +288,6 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
       sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr,
       .env = ctx->env,
   };
-
-  // printf("create new specific function for %s\n", sym_name);
 
   LLVMValueRef specific_func = create_new_specific_fn(
       fn_ast->data.AST_LAMBDA.len, fn_ast, sym->symbol_type, expected_fn_type,
@@ -480,23 +485,27 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
     return codegen_array_increment(array, el_type, builder);
   }
-
-  if (strcmp(sym_name, "array_init") == 0) {
-    // TODO: not implemented well at all
-    Type *array_type = ast->md;
-    LLVMValueRef size =
-        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-    if ((ast->data.AST_APPLICATION.args + 1)->tag == AST_INT) {
-      int *size = array_type_size_ptr(array_type);
-      *size = ast->data.AST_APPLICATION.args[1].data.AST_INT.value;
-    }
-
-    LLVMValueRef item =
-        codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-
-    return codegen_array_init(size, item, ctx, module, builder);
+  if (strcmp(sym_name, "array_to_list") == 0) {
+    printf("array to list call\n");
+    return NULL;
   }
+
+  // if (strcmp(sym_name, "array_init") == 0) {
+  //   // TODO: not implemented well at all
+  //   Type *array_type = ast->md;
+  //   LLVMValueRef size =
+  //       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  //
+  //   if ((ast->data.AST_APPLICATION.args + 1)->tag == AST_INT) {
+  //     int *size = array_type_size_ptr(array_type);
+  //     *size = ast->data.AST_APPLICATION.args[1].data.AST_INT.value;
+  //   }
+  //
+  //   LLVMValueRef item =
+  //       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+  //
+  //   return codegen_array_init(size, item, ctx, module, builder);
+  // }
   return NULL;
 }
 LLVMValueRef call_deref_fn(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
@@ -551,13 +560,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     builder);
   }
 
-  if (!sym) {
-    fprintf(stderr, "codegen identifier failed symbol not found in scope %d:\n",
-            ctx->stack_ptr);
-    print_ast_err(ast->data.AST_APPLICATION.function);
-    return NULL;
-  }
-
   if (strcmp("deref", sym_name) == 0) {
     return call_deref_fn(ast, sym, ctx, module, builder);
   }
@@ -568,12 +570,22 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (strncmp("array_", sym_name, 6) == 0) {
-    return call_array_fn(ast, sym, sym_name, ctx, module, builder);
+    LLVMValueRef res = call_array_fn(ast, sym, sym_name, ctx, module, builder);
+    if (res) {
+      return res;
+    }
   }
+
   Type *sym_type = ast->md;
   if (sym_type->kind == T_CONS && !is_generic(sym_type)) {
-    // print_ast(ast);
     return codegen_cons(ast, ctx, module, builder);
+  }
+
+  if (!sym) {
+    fprintf(stderr, "codegen identifier failed symbol not found in scope %d:\n",
+            ctx->stack_ptr);
+    print_ast_err(ast->data.AST_APPLICATION.function);
+    return NULL;
   }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;

@@ -83,8 +83,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       Ast *item = ast->data.AST_LIST.items + i;
 
       LLVMValueRef val = codegen(item, ctx, module, builder);
-      LLVMValueRef str_val =
-          llvm_string_serialize(val, item->md, module, builder);
+      Type *t = item->md;
+      if (t->kind == T_VAR) {
+        t = env_lookup(ctx->env, t->data.T_VAR);
+      }
+      LLVMValueRef str_val = llvm_string_serialize(val, t, module, builder);
       strings_to_concat[i] = str_val;
     }
     LLVMValueRef concat_strings =
