@@ -1,4 +1,3 @@
-#! /Users/adam/projects/sound/yalce/build/lang
 let get_stderr = extern fn () -> Ptr;
 let get_stdout = extern fn () -> Ptr;
 
@@ -8,3 +7,5 @@ let stderr = get_stderr ();
 let stdout = get_stdout ();
 
 let fprint = extern fn Ptr -> String -> ();
+
+# let string_add = extern fn String -> String -> String;

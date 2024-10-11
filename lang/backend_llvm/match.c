@@ -110,6 +110,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // printf("null operand ??? %p\n", test_value);
     if (i == len - 1) {
       // If it's the default case, just jump to the branch block
+      // printf("If it's the default case, just jump to the branch block\n");
+      // print_ast(test_expr);
       LLVMBuildBr(builder, branch_block);
     } else {
       // Create the conditional branch
@@ -120,8 +122,10 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // Compile the result expression in the branch block
     LLVMPositionBuilderAtEnd(builder, branch_block);
 
+    // print_ast(result_expr);
     LLVMValueRef branch_result =
         codegen(result_expr, &branch_ctx, module, builder);
+    // LLVMDumpValue(branch_result);
 
     LLVMBuildBr(builder, end_block);
     LLVMAddIncoming(phi, &branch_result, &branch_block, 1);

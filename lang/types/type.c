@@ -29,6 +29,7 @@ Type t_string = {T_CONS,
                  {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}},
                  .alias = TYPE_NAME_STRING};
 
+Type t_string_add_fn_sig = MAKE_FN_TYPE_3(&t_string, &t_string, &t_string);
 Type t_char_array = {T_CONS,
                      {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}}};
 

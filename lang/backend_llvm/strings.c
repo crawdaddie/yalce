@@ -393,50 +393,6 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
   return data_ptr;
 }
 
-LLVMValueRef ___char_array(const char *chars, int length, JITLangCtx *ctx,
-                           LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMTypeRef char_type = LLVMInt8Type();
-  LLVMTypeRef array_type = LLVMArrayType(char_type, length + 1);
-
-  LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length + 1, 0);
-  LLVMValueRef data_ptr =
-      (ctx->stack_ptr == 0)
-          ? LLVMBuildArrayMalloc(builder, char_type, length_val, "heap_array")
-          : LLVMBuildArrayAlloca(builder, char_type, length_val, "stack_array");
-
-  // Declare str_copy if it's not already declared
-  LLVMValueRef str_copy_func = LLVMGetNamedFunction(module, "str_copy");
-  LLVMTypeRef str_copy_func_type = LLVMFunctionType(
-      LLVMVoidType(),
-      (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
-                      LLVMPointerType(LLVMInt8Type(), 0), LLVMInt32Type()},
-      3, false);
-
-  if (!str_copy_func) {
-    str_copy_func = LLVMAddFunction(module, "str_copy", str_copy_func_type);
-  }
-
-  LLVMValueRef const_array =
-      LLVMConstStringInContext(LLVMGetModuleContext(module), chars, length, 1);
-  LLVMValueRef l = LLVMConstInt(LLVMInt32Type(), length, 0);
-  LLVMBuildCall2(builder, str_copy_func_type, str_copy_func,
-                 (LLVMValueRef[]){data_ptr, const_array, l}, 3, "str_copy");
-
-  // LLVMValueRef value = LLVMConstInt(LLVMInt8Type(), 0, 0);
-  // LLVMBuildStore(builder, value, element_ptr);
-  //
-  // LLVMBuildMemCpy(builder, data_ptr, 0, const_array, 0,
-  //                 LLVMConstInt(LLVMInt32Type(), length, 0));
-  //
-  // LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
-  // LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
-  //                                            &length_val, 1,
-  //                                            "last_elem_ptr");
-  // LLVMBuildStore(builder, null_terminator, last_elem_ptr);
-  return data_ptr;
-}
-
 LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type) {
 
   return LLVMStructType(
@@ -446,9 +402,9 @@ LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type) {
       },
       2, 0);
 }
+
 LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-
   const char *chars = ast->data.AST_STRING.value;
   int length = ast->data.AST_STRING.length;
   LLVMValueRef data_ptr = char_array(chars, length, ctx, module, builder);
@@ -456,10 +412,57 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTypeRef struct_type = string_struct_type(data_ptr_type);
 
-  LLVMValueRef str = LLVMConstNull(struct_type);
+  LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
   str = LLVMBuildInsertValue(builder, str,
                              LLVMConstInt(LLVMInt32Type(), length, 0), 0,
                              "insert_array_size");
   return str;
+}
+
+LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
+  // Extract lengths
+  LLVMValueRef a_len = LLVMBuildExtractValue(builder, a, 0, "a_len");
+  LLVMValueRef b_len = LLVMBuildExtractValue(builder, b, 0, "b_len");
+
+  // Calculate new length
+  LLVMValueRef new_len = LLVMBuildAdd(builder, a_len, b_len, "new_len");
+
+  // Extract data pointers
+  LLVMValueRef a_data = LLVMBuildExtractValue(builder, a, 1, "a_data");
+  LLVMValueRef b_data = LLVMBuildExtractValue(builder, b, 1, "b_data");
+
+  // Allocate new memory for concatenated string
+  LLVMValueRef new_len_plus_one =
+      LLVMBuildAdd(builder, new_len, LLVMConstInt(LLVMInt32Type(), 1, 0),
+                   "new_len_plus_one");
+  LLVMTypeRef char_type = LLVMInt8Type();
+  LLVMValueRef new_data =
+      LLVMBuildMalloc(builder, LLVMArrayType(char_type, 0), "new_data");
+  new_data = LLVMBuildBitCast(builder, new_data, LLVMPointerType(char_type, 0),
+                              "new_data_ptr");
+
+  // Copy first string
+  LLVMBuildMemCpy(builder, new_data, 0, a_data, 0, a_len);
+
+  // Copy second string
+  LLVMValueRef offset =
+      LLVMBuildGEP2(builder, char_type, new_data, &a_len, 1, "offset");
+  LLVMBuildMemCpy(builder, offset, 0, b_data, 0, b_len);
+
+  // Add null terminator
+  LLVMValueRef null_terminator_ptr = LLVMBuildGEP2(
+      builder, char_type, new_data, &new_len, 1, "null_terminator_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(char_type, 0, 0), null_terminator_ptr);
+
+  // Create new string struct
+  LLVMTypeRef struct_type = string_struct_type(LLVMPointerType(char_type, 0));
+  LLVMValueRef new_str = LLVMGetUndef(struct_type);
+  new_str =
+      LLVMBuildInsertValue(builder, new_str, new_len, 0, "insert_new_len");
+  new_str =
+      LLVMBuildInsertValue(builder, new_str, new_data, 1, "insert_new_data");
+
+  return new_str;
 }

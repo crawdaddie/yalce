@@ -489,27 +489,12 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
     return codegen_array_increment(array, el_type, builder);
   }
+
   if (strcmp(sym_name, "array_to_list") == 0) {
     printf("array to list call\n");
     return NULL;
   }
 
-  // if (strcmp(sym_name, "array_init") == 0) {
-  //   // TODO: not implemented well at all
-  //   Type *array_type = ast->md;
-  //   LLVMValueRef size =
-  //       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  //
-  //   if ((ast->data.AST_APPLICATION.args + 1)->tag == AST_INT) {
-  //     int *size = array_type_size_ptr(array_type);
-  //     *size = ast->data.AST_APPLICATION.args[1].data.AST_INT.value;
-  //   }
-  //
-  //   LLVMValueRef item =
-  //       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-  //
-  //   return codegen_array_init(size, item, ctx, module, builder);
-  // }
   return NULL;
 }
 LLVMValueRef call_deref_fn(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
@@ -554,8 +539,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
-  // printf("variant member to llvm type %s  ???", sym_name);
-  // print_type(ast->md);
   LLVMTypeRef tagged_union_type =
       variant_member_to_llvm_type(ast->md, ctx->env, module);
 
@@ -580,7 +563,18 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  Type *sym_type = ast->md;
+  if (strncmp("string_add", sym_name, 10) == 0) {
+    LLVMValueRef res = codegen_string_add(
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder),
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder),
+      ctx, module, builder);
+
+    if (res) {
+      return res;
+    }
+  }
+
+  Type *sym_type = ast->data.AST_APPLICATION.function->md;
   if (sym_type->kind == T_CONS && !is_generic(sym_type)) {
     return codegen_cons(ast, ctx, module, builder);
   }

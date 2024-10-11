@@ -271,5 +271,11 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
 
   ht_set_hash(stack, "deref", hash_string("deref", 5), deref_sym);
 
+  env = env_extend(env, "string_add", &t_string_add_fn_sig);
+  JITSymbol *string_add_sym =
+      new_symbol(STYPE_FUNCTION, &t_string_add_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "string_add", hash_string("string_add", 10),
+              string_add_sym);
+
   return env;
 }
