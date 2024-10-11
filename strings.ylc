@@ -1,0 +1,38 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+%include examples/Fmt
+# let x = [|1,2,3,4,5,6|];
+#
+# let array_iter = fn a ->
+#   let s = array_size a;
+#   match s with
+#   | 0 -> 1
+#   | _ -> (
+#     print `{array_at a 0}`;
+#     array_iter (array_incr a)
+#   )
+# ;;
+#
+#
+# # let () = array_iter x;
+#
+let string_add = extern fn String -> String -> String;
+
+# let strs = ["hello", "hello2", "hello3"];
+# let join_strings = fn acc strs ->
+#   match strs with 
+#   | [] -> acc 
+#   | s::rest -> join_strings (string_add acc s) rest
+# ;;
+
+# let d = join_strings "" strs;
+# print d
+print ( string_add "hello" " no");
+
+# let reduce = fn f res strs ->
+#   match strs with 
+#   | [] -> res
+#   | s::rest -> reduce (f res s) rest
+# ;;
+#
+# let add_str = fn a b -> `{a}{b}`;;
+

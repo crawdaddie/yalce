@@ -21,4 +21,5 @@ void str_copy(char *dest, char *src, int len);
 
 void print(String str);
 void printc(char c);
+String string_add(String a, String b);
 #endif

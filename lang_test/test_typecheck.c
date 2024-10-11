@@ -912,5 +912,17 @@ int main() {
     }
   });
 
+  ({
+    RESET;
+    TITLE("string concat")
+    TEST_SIMPLE_AST_TYPE(
+        "let concat_strs = fn res strs ->\n"
+        "  match strs with \n"
+        "  | [] -> res\n"
+        "  | s::rest -> concat_strs `{res}{s}` rest\n"
+        ";;\n",
+        &MAKE_FN_TYPE_3(&t_string, &TLIST(&t_string), &t_string));
+  });
+
   return status == true ? 0 : 1;
 }

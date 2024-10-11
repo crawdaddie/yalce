@@ -56,8 +56,6 @@ LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env,
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-  // printf("codegen extern fn\n");
-  // print_ast(ast);
 
   const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
   int name_len = strlen(name);
@@ -66,17 +64,22 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_param_types[params_count];
   Type *fn_type = ast->md;
 
-  for (int i = 0; i < params_count; i++) {
-    Type *t = fn_type->data.T_FN.from;
-    llvm_param_types[i] = type_to_llvm_type(t, ctx->env, module);
-    fn_type = fn_type->data.T_FN.to;
+  LLVMTypeRef llvm_fn_type;
+  if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
+    LLVMTypeRef ret_type = type_to_llvm_type(fn_type->data.T_FN.to, ctx->env, module);
+    llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
+  } else {
+    for (int i = 0; i < params_count; i++) {
+      Type *t = fn_type->data.T_FN.from;
+      llvm_param_types[i] = type_to_llvm_type(t, ctx->env, module);
+      fn_type = fn_type->data.T_FN.to;
+    }
+
+    LLVMTypeRef ret_type = type_to_llvm_type(fn_type, ctx->env, module);
+
+    llvm_fn_type =
+        LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
   }
-
-  LLVMTypeRef ret_type = type_to_llvm_type(fn_type, ctx->env, module);
-
-  LLVMTypeRef llvm_fn_type =
-      LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
-
   return get_extern_fn(name, llvm_fn_type, module);
 }
 
@@ -365,8 +368,9 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
 
     if (callable_type->kind == T_FN &&
         callable_type->data.T_FN.from->kind == T_VOID) {
+      // fn void type
       return LLVMBuildCall2(builder, llvm_callable_type, callable,
-                            (LLVMValueRef[]){}, 0, "call_func");
+                            NULL, 0, "call_func");
     }
 
     for (int i = 0; i < args_len; i++) {

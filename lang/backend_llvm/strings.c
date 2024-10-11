@@ -264,6 +264,10 @@ String string_concat(String *strings, int num_strings) {
   return (String){total_len, concatted};
 }
 
+String string_add(String a, String b) {
+  return string_concat((String[]){a, b}, 2);
+}
+
 LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
@@ -433,17 +437,26 @@ LLVMValueRef ___char_array(const char *chars, int length, JITLangCtx *ctx,
   return data_ptr;
 }
 
+LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type) {
+
+  return LLVMStructType(
+      (LLVMTypeRef[]){
+          LLVMInt32Type(),
+          data_ptr_type,
+      },
+      2, 0);
+}
 LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
+
   const char *chars = ast->data.AST_STRING.value;
   int length = ast->data.AST_STRING.length;
-
   LLVMValueRef data_ptr = char_array(chars, length, ctx, module, builder);
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
-  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+  LLVMTypeRef struct_type = string_struct_type(data_ptr_type);
 
-  LLVMValueRef str = LLVMGetUndef(struct_type);
+  LLVMValueRef str = LLVMConstNull(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
   str = LLVMBuildInsertValue(builder, str,
                              LLVMConstInt(LLVMInt32Type(), length, 0), 0,
