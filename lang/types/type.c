@@ -455,6 +455,7 @@ Type *fn_return_type(Type *fn) {
 }
 
 bool is_generic(Type *t) {
+
   if (t == NULL) {
     fprintf(stderr, "Error type passed to generic test is null\n");
     return NULL;
@@ -594,6 +595,10 @@ Type *get_builtin_type(const char *id_chars) {
   }
   if (strcmp(id_chars, TYPE_NAME_STRING) == 0) {
     return &t_string;
+  }
+
+  if (strcmp(id_chars, TYPE_NAME_CHAR) == 0) {
+    return &t_char;
   }
   if (strcmp(id_chars, TYPE_NAME_PTR) == 0) {
     return &t_ptr;

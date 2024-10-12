@@ -27,47 +27,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <vecLib/vecLib.h>
-// YALCE STDLIB
-//
-
-// uniformly distributed integer between 0 and range-1
-int rand_int(int range) {
-  int rand_int = rand();
-  double rand_double = (double)rand_int / RAND_MAX;
-  rand_double = rand_double * range;
-  return (int)rand_double;
-}
-
-// uniformly distributed double between 0 and 1.0
-double rand_double() {
-  int rand_int = rand();
-  double rand_double = (double)rand_int / RAND_MAX;
-  rand_double = rand_double * 2 - 1;
-  return rand_double;
-}
-
-// uniformly distributed double between min and max
-double rand_double_range(double min, double max) {
-  int rand_int = rand();
-  double rand_double = (double)rand_int / RAND_MAX;
-  rand_double = rand_double * (max - min) + min;
-  return rand_double;
-}
-
-double amp_db(double amplitude) { return 20.0f * log10(amplitude); }
-double db_amp(double db) { return pow(10.0f, db / 20.0f); }
-
-// bipolar input is in the range [-1, 1]
-double bipolar_scale(double min, double max, double bipolar_input) {
-  return min + (max - min) * (0.5 + (bipolar_input * 0.5));
-}
-// unipolar input is in the range [0, 1]
-double unipolar_scale(double min, double max, double unipolar_input) {
-  return min + (max - min) * (unipolar_input);
-}
-
-FILE *get_stderr() { return stderr; }
-FILE *get_stdout() { return stdout; }
 
 #define STACK_MAX 256
 
@@ -77,8 +36,6 @@ static Ast *top_level_ast(Ast *body) {
   Ast *last = body->data.AST_BODY.stmts[len - 1];
   return last;
 }
-
-// ---------------------------
 
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMModuleRef module,
@@ -156,7 +113,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  LLVMDumpModule(module);
+  // LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 

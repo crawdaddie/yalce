@@ -32,6 +32,11 @@ LLVMValueRef codegen_equality(LLVMValueRef left, Type *left_type,
     return binop_method(left, right, module, builder);
   }
 
+  if (left_type->kind == T_CHAR) {
+
+    return LLVMBuildICmp(builder, LLVMIntEQ, left, right, "char_cmp");
+  }
+
   if (left_type->kind == T_BOOL) {
     return LLVMBuildICmp(builder, LLVMIntEQ, left, right, "bool_cmp");
   }

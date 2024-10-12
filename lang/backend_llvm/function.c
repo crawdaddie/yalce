@@ -56,6 +56,8 @@ LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env,
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+  // printf("codegen extern fn\n");
+  // print_ast(ast);
 
   const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
   int name_len = strlen(name);

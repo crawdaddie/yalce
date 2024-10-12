@@ -12,15 +12,6 @@ LLVMValueRef insert_strlen_call(LLVMValueRef string_ptr, LLVMModuleRef module,
 LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder);
 
-typedef struct String {
-  int32_t length;
-  char *chars;
-} String;
-
-void str_copy(char *dest, char *src, int len);
-
-void print(String str);
-void printc(char c);
 // String string_add(String a, String b);
 
 LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx, LLVMModuleRef module,

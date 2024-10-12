@@ -2,29 +2,12 @@
 #include "list.h"
 #include "types/type.h"
 #include "util.h"
+#include "ylc_stdlib.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <stdlib.h>
 #include <string.h>
 
-void str_copy(char *dest, char *src, int len) {
-  // printf("calling str copy %s %s %d\n", dest, src, len);
-  memcpy(dest, src, len);
-  dest[len + 1] = '\0';
-}
-void print(String str) { printf("%s", str.chars); }
-void printc(char c) { printf("%c", c); }
-
-void fprint(FILE *f, String str) { fprintf(f, "%s", str.chars); }
-
-void print_char_matrix(int m, int n, char *A) {
-  for (int row = 0; row < m; row++) {
-    for (int col = 0; col < n; col++) {
-      printf("%c", A[row * m + col]);
-    }
-    printf("\n");
-  }
-}
 LLVMValueRef codegen_print_char_matrix(LLVMValueRef array2d,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
@@ -260,45 +243,6 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 }
 
 #define INITIAL_SIZE 32
-
-const char *_string_concat(const char **strings, int num_strings) {
-  int total_len = 0;
-  int lengths[num_strings];
-  for (int i = 0; i < num_strings; i++) {
-    lengths[i] = strlen(strings[i]);
-    total_len += lengths[i];
-  }
-  char *concatted = malloc(sizeof(char) * (total_len + 1));
-  int offset = 0;
-  for (int i = 0; i < num_strings; i++) {
-    strncpy(concatted + offset, strings[i], lengths[i]);
-    offset += lengths[i];
-  }
-  return concatted;
-}
-
-String string_concat(String *strings, int num_strings) {
-  int total_len = 0;
-  int lengths[num_strings];
-
-  for (int i = 0; i < num_strings; i++) {
-    lengths[i] = strings[i].length;
-    total_len += lengths[i];
-  }
-
-  char *concatted = malloc(sizeof(char) * (total_len + 1));
-  int offset = 0;
-  for (int i = 0; i < num_strings; i++) {
-    strncpy(concatted + offset, strings[i].chars, lengths[i]);
-    offset += lengths[i];
-  }
-
-  return (String){total_len, concatted};
-}
-
-String string_add(String a, String b) {
-  return string_concat((String[]){a, b}, 2);
-}
 
 LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                                   LLVMModuleRef module,

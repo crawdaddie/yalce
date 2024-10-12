@@ -307,10 +307,12 @@ Type *infer(Ast *ast, TypeEnv **env) {
     type = &t_string;
     break;
   }
-  // case AST_BINOP: {
-  //   type = TRY_MSG(infer_binop(ast, env), "Error: binop infer failed");
-  //   break;
-  // }
+  case AST_BINOP: {
+    if (ast->data.AST_BINOP.op == TOKEN_OF) {
+      type = compute_type_expression(ast, *env);
+    }
+    break;
+  }
   case AST_LET: {
     Ast *expr = ast->data.AST_LET.expr;
     Type *expr_type = TRY_MSG(infer(expr, env), NULL);
