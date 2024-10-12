@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 typedef struct String {
-  int32_t length;
+  int length;
   char *chars;
 } String;
 
@@ -38,5 +38,6 @@ String string_concat(String *strings, int num_strings);
 
 String string_add(String a, String b);
 char *cstr(String);
+
 
 #endif

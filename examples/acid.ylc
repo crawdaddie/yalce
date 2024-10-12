@@ -123,9 +123,6 @@ let filter_res_setter = fn val: (Int) ->
 
 register_cc_handler filter_decay_setter 0 22;
 register_cc_handler filter_res_setter 0 21;
-#
-
-
 
 let pattern = [|
 "x-x",

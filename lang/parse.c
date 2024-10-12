@@ -647,6 +647,7 @@ Ast *ast_string(ObjString lex_string) {
   s->data.AST_STRING.length = lex_string.length;
   return s;
 }
+
 Ast *parse_fstring_expr(Ast *list) {
   list->tag = AST_FMT_STRING;
   return list;

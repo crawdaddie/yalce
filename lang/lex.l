@@ -28,6 +28,7 @@ int in_test_section = 0;
 %option yylineno
 
 %x FSTRING
+%x TRIPLE_FSTRING
 %x TEST_SECTION
 
 ESCAPE          \\(['"?\\abfnrtv]|[0-7]{1,3}|x[0-9a-fA-F]+)
@@ -86,6 +87,28 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           char *raw_str = strndup(yytext, len); // remove surrounding " chars
                           char *processed_str = process_escapes(raw_str, len); // process escape sequences
                           free(raw_str);
+                          yylval.vstr.chars = processed_str;
+                          yylval.vstr.length = strlen(processed_str);
+                          yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
+                          return FSTRING_TEXT;
+                        }
+"```"                   { BEGIN(TRIPLE_FSTRING); return FSTRING_START; }
+<TRIPLE_FSTRING>"```"   { BEGIN(INITIAL); return FSTRING_END; }
+<TRIPLE_FSTRING>"{"     { BEGIN(INITIAL); return FSTRING_INTERP_START; }
+<TRIPLE_FSTRING>[^`{]+  { 
+                          int len = yyleng;
+                          char *raw_str = strndup(yytext, len);
+                          // Trim first and last newline if present
+
+                          if (raw_str[0] == '\n') {
+                            raw_str++;
+                            len--;
+                          }
+                          if (len > 0 && raw_str[len-1] == '\n') {
+                            raw_str[len-1] = '\0';
+                            len--;
+                          }
+                          char *processed_str = process_escapes(raw_str, len);
                           yylval.vstr.chars = processed_str;
                           yylval.vstr.length = strlen(processed_str);
                           yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);

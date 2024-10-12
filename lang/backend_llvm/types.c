@@ -203,6 +203,15 @@ LLVMValueRef codegen_signal_mod() { return NULL; }
 LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  if (is_string_type(from_type)) {
+    LLVMTypeRef el_type = LLVMTypeOf(val);
+    LLVMTypeRef pointer_type = LLVMPointerType(el_type, 0);
+    LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), 0, 0)};
+    LLVMValueRef ptr =
+        LLVMBuildGEP2(builder, el_type, val, indices, 1, "addr_of");
+
+    return ptr;
+  }
   switch (from_type->kind) {
 
   case T_VOID: {
@@ -224,6 +233,7 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
     return val;
   }
 
+  // printf("ptr cons\n");
   case T_CONS: {
     if (is_tuple_type(from_type)) {
       LLVMTypeRef structType = LLVMTypeOf(val);
@@ -238,6 +248,7 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
       // allocaInst is now a pointer to the address of the struct
       return allocaInst;
     }
+
     return val;
   }
 
@@ -686,7 +697,6 @@ typedef struct _tc_key {
   int tc_idx;
   int meth_idx;
 } _tc_key;
-
 
 // clang-format off
 static _tc_key tc_keys[] = {
