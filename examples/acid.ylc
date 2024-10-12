@@ -117,7 +117,7 @@ let filter_decay_setter = fn val: (Int) ->
 ;;
 
 let filter_res_setter = fn val: (Int) ->
-  let v = unipolar_scale 1. 20. (val * REC_127);
+  let v = unipolar_scale 1. 15. (val * REC_127);
   set_input_scalar x 3 v
 ;;
 
@@ -164,7 +164,6 @@ let pattern = [|
 
 
 
-# this function needs to be 'pre-compiled' so we give it types to trick the compiler into thinking its not generic
 let trig_func = fn line: (String) idx: (Int) offset: (Int) ->
   let k = array_at line idx in 
   match k with
@@ -182,6 +181,9 @@ let drum_runner = fn
   ->
   let (duration, phase, tick) = *args;
   let line = array_at pattern tick;
+  # print line;
+  # print "\n";
+
   trig_func line 0 frame_offset;
   trig_func line 1 frame_offset;
   trig_func line 2 frame_offset;
