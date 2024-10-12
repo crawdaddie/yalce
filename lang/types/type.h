@@ -46,6 +46,7 @@ extern Type t_array_of_chars_fn_sig;
 
 extern Type t_ptr_deref_sig;
 
+extern Type t_for_sig;
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"

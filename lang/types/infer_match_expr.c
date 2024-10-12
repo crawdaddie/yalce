@@ -80,6 +80,8 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
 
   for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
     Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
+    printf("match test expr %d: ", i);
+    print_ast(test_expr);
     Ast *guard = NULL;
 
     if (test_expr->tag == AST_MATCH_GUARD_CLAUSE) {
@@ -90,6 +92,7 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
     Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i) + 1;
 
     Type *test_type = TRY(infer(test_expr, &extended_env));
+    print_type(test_type);
 
     Type *unified_type = TRY(unify(expr_type, test_type, &extended_env));
 

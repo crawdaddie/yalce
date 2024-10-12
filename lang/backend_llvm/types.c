@@ -687,6 +687,7 @@ typedef struct _tc_key {
   int meth_idx;
 } _tc_key;
 
+
 // clang-format off
 static _tc_key tc_keys[] = {
     {"==", 0, 0},
@@ -700,6 +701,7 @@ static _tc_key tc_keys[] = {
     {"*", 2, 2},
     {"/", 2, 3},
     {"%", 2, 4},
+    // {"::", 2, 4},
 };
 
 // clang-format on
@@ -707,6 +709,21 @@ static _tc_key tc_keys[] = {
 #define _BINOP_METHOD_CHECKS
 
 Method *get_binop_method(const char *binop, Type *l, Type *r) {
+
+  if (l == NULL) {
+    for (int i = 0; i < 11; i++) {
+      _tc_key tc_key = tc_keys[i];
+      return r->implements[tc_key.tc_idx]->methods + tc_key.meth_idx;
+    }
+  }
+
+  if (r == NULL) {
+    for (int i = 0; i < 11; i++) {
+      _tc_key tc_key = tc_keys[i];
+      return l->implements[tc_key.tc_idx]->methods + tc_key.meth_idx;
+    }
+  }
+
   for (int i = 0; i < 11; i++) {
     _tc_key tc_key = tc_keys[i];
     if (strcmp(binop, tc_key.binop) == 0) {

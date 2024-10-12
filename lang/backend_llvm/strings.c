@@ -1,6 +1,7 @@
 #include "backend_llvm/strings.h"
 #include "list.h"
 #include "types/type.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <stdlib.h>
@@ -15,6 +16,37 @@ void print(String str) { printf("%s", str.chars); }
 void printc(char c) { printf("%c", c); }
 
 void fprint(FILE *f, String str) { fprintf(f, "%s", str.chars); }
+
+void print_char_matrix(int m, int n, char *A) {
+  for (int row = 0; row < m; row++) {
+    for (int col = 0; col < n; col++) {
+      printf("%c", A[row * m + col]);
+    }
+    printf("\n");
+  }
+}
+LLVMValueRef codegen_print_char_matrix(LLVMValueRef array2d,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  // Extract lengths
+  LLVMValueRef rows = LLVMBuildExtractValue(builder, array2d, 0, "matrix_rows");
+  LLVMValueRef cols = LLVMBuildExtractValue(builder, array2d, 1, "matrix_cols");
+  LLVMValueRef string =
+      LLVMBuildExtractValue(builder, array2d, 2, "string_data");
+
+  // Extract data pointers
+  LLVMValueRef char_data = LLVMBuildExtractValue(builder, string, 1, "chars");
+  LLVMTypeRef char_m_print_type =
+      LLVMFunctionType(LLVMVoidType(),
+                       (LLVMTypeRef[]){LLVMInt32Type(), LLVMInt32Type(),
+                                       LLVMPointerType(LLVMInt8Type(), 0)},
+                       3, 0);
+  LLVMValueRef char_m_print =
+      get_extern_fn("print_char_matrix", char_m_print_type, module);
+  return LLVMBuildCall2(builder, char_m_print_type, char_m_print,
+                        (LLVMValueRef[]){rows, cols, char_data}, 3,
+                        "print_char_matrix");
+}
 
 #define STRLEN_TYPE                                                            \
   LLVMFunctionType(LLVMInt32Type(),                                            \

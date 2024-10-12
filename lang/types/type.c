@@ -157,6 +157,9 @@ Type t_array_at_fn_sig = MAKE_FN_TYPE_3(&t_array_var, &t_int, &t_array_var_el);
 
 Type t_array_of_chars_fn_sig = MAKE_FN_TYPE_2(&t_string, &t_char_array);
 
+Type t_for_sig =
+    MAKE_FN_TYPE_4(&t_int, &t_int, &MAKE_FN_TYPE_2(&t_int, &t_void), &t_void);
+
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     return strncat(buffer, "null", 4);

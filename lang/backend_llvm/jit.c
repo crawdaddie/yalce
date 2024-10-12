@@ -3,10 +3,10 @@
 #include "backend_llvm/common.h"
 #include "backend_llvm/globals.h"
 #include "format_utils.h"
+#include "function.h"
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
-#include "strings.h"
 #include "symbols.h"
 #include "synths.h"
 #include "types.h"
@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <vecLib/vecLib.h>
 // YALCE STDLIB
 //
 
@@ -155,7 +156,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  // LLVMDumpModule(module);
+  LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
@@ -217,6 +218,13 @@ int jit(int argc, char **argv) {
   initialize_types(env);
 
   env = initialize_type_env_synth(env);
+
+  // env = env_extend(env, "for", &t_for_sig);
+  // LLVMTypeRef for_func_type = codegen_for_func_sig();
+  // JITSymbol *for_sym = new_symbol(
+  //     STYPE_FUNCTION, &t_for_sig,
+  //     codegen_build_for(for_func_type, module, builder), for_func_type);
+  // ht_set_hash(stack, "for", hash_string("for", 3), for_sym);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,

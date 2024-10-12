@@ -82,6 +82,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     for (int i = 0; i < len; i++) {
       Ast *item = ast->data.AST_LIST.items + i;
 
+      // printf("codegen fmt string %d\n", i);
+      // print_ast(item);
+      // print_type(item->md);
+
       LLVMValueRef val = codegen(item, ctx, module, builder);
       Type *t = item->md;
       if (t->kind == T_VAR) {

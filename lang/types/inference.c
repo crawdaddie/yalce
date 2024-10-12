@@ -47,7 +47,7 @@ Type *next_tvar() {
   return tvar;
 }
 
-static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
+TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
   switch (binding->tag) {
   case AST_IDENTIFIER: {
     return env_extend(env, binding->data.AST_IDENTIFIER.value, type);
@@ -102,7 +102,7 @@ static TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
   return env;
 }
 
-static Type *binding_type(Ast *ast) {
+Type *binding_type(Ast *ast) {
   switch (ast->tag) {
   case AST_IDENTIFIER: {
     return next_tvar();
@@ -170,7 +170,6 @@ static Type *infer_typed_lambda(Ast *ast, TypeEnv **env) {
 }
 
 static Type *infer_lambda(Ast *ast, TypeEnv **env) {
-
   int len = ast->data.AST_LAMBDA.len;
   TypeEnv *fn_scope_env = *env;
 
@@ -187,15 +186,21 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
       Type *ptype = binding_type(param_ast);
       param_types[i] = ptype;
-
       fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
     }
     fn = create_type_multi_param_fn(len, param_types, return_type);
   }
 
+  bool is_anon = false;
+  ObjString _fn_name = ast->data.AST_LAMBDA.fn_name;
+  if (_fn_name.chars == NULL) {
+    is_anon = true;
+  }
+
+  Type *recursive_ref = NULL;
   const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
-  Type *recursive_ref = tvar(ast->data.AST_LAMBDA.fn_name.chars);
-  if (fn_name != NULL) {
+  if (!is_anon) {
+    recursive_ref = tvar(ast->data.AST_LAMBDA.fn_name.chars);
     recursive_ref->is_recursive_fn_ref = true;
     fn_scope_env = env_extend(fn_scope_env, ast->data.AST_LAMBDA.fn_name.chars,
                               recursive_ref);
@@ -208,22 +213,24 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   *return_type = *unified_ret;
 
-  if (recursive_ref->kind == T_FN && is_generic(recursive_ref)) {
+  if (recursive_ref && recursive_ref->kind == T_FN &&
+      is_generic(recursive_ref)) {
     TypeEnv *_env = NULL;
     unify_recursive_defs_mut(fn, recursive_ref, &_env);
   }
+  if (recursive_ref) {
+    Type *r = recursive_ref;
+    Type *f = fn;
+    while (r->kind == T_FN) {
+      Type *rf = r->data.T_FN.from;
+      Type *ff = f->data.T_FN.from;
+      *rf = *ff;
 
-  Type *r = recursive_ref;
-  Type *f = fn;
-  while (r->kind == T_FN) {
-    Type *rf = r->data.T_FN.from;
-    Type *ff = f->data.T_FN.from;
-    *rf = *ff;
-
-    r = r->data.T_FN.to;
-    f = f->data.T_FN.to;
+      r = r->data.T_FN.to;
+      f = f->data.T_FN.to;
+    }
+    *r = *f;
   }
-  *r = *f;
 
   fn = resolve_generic_type(fn, fn_scope_env);
   return fn;
@@ -450,6 +457,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
       Ast *member = ast->data.AST_LIST.items + i;
       infer(member, env);
     }
+
     type = &t_string;
     break;
   }
@@ -479,23 +487,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   case AST_APPLICATION: {
-    // Ast *custom_binop = ast->data.AST_APPLICATION.args;
-    // Ast *l = ast->data.AST_APPLICATION.function;
-    // Ast *r = ast->data.AST_APPLICATION.args + 1;
-    //
-    // Type *binop = env_lookup(*env, custom_binop->data.AST_IDENTIFIER.value);
-    // if (binop && binop->kind == T_FN && fn_type_args_len(binop) == 2) {
-    //   printf("custom binop: ");
-    //   print_ast(l);
-    //   print_ast(r);
-    //   ast->data.AST_APPLICATION.function =
-    //   ast_identifier((ObjString){custom_binop->data.AST_IDENTIFIER.value,
-    //   custom_binop->data.AST_IDENTIFIER.length});
-    //   ast->data.AST_APPLICATION.args[0] = *l;
-    //   ast->data.AST_APPLICATION.args[1] = *r;
-    //   return infer(ast, env);
-    // }
-
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
 

@@ -288,6 +288,7 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   // printf("unify: ");
   // print_type(t1);
   // print_type(t2);
+
   if (t1 == NULL) {
     printf(stderr, "Error unifying type - lhs is NULL\n");
     return NULL;
@@ -297,6 +298,9 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   }
   if (t2->kind == T_VAR) {
     return unify_variable(t2, t1, env);
+  }
+  if (t1->kind == T_VOID) {
+    return t1;
   }
 
   if (t1->kind != t2->kind) {
@@ -352,7 +356,7 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   case T_NUM:
   case T_CHAR:
   case T_BOOL:
-  case T_VOID:
+  // case T_VOID:
   case T_STRING:
     // These are atomic types, so they unify if they're the same kind
     return t1;

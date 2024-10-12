@@ -320,7 +320,10 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
   // process includes backwards so they're on the stack in the correct order
   while (total_len >= 0) {
     input = _input + total_len;
-    if (strncmp("%include ", input, 9) == 0) {
+    if ((strncmp("%include ", input, 9) == 0) &&
+        (*(input - 2) != '#')    // ignore if preceded by comment
+        && (*(input - 1) != '#') // ignore if preceded by comment
+    ) {
       int line_len = 0;
       const char *line = input;
       while (*line != '\n') {
