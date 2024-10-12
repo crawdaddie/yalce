@@ -1,4 +1,5 @@
 #include "ylc_stdlib.h"
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,4 +96,18 @@ String string_add(String a, String b) {
 }
 
 char *cstr(String s) { return s.chars; }
+
+int char_to_hex_int(char c) {
+  // Convert the character to lowercase for easier processing
+  c = tolower(c);
+  
+  if (c >= '0' && c <= '9') {
+      return c - '0';
+  } else if (c >= 'a' && c <= 'f') {
+      return c - 'a' + 10;
+  } else {
+      // Return -1 or another error indicator for invalid input
+      return -1;
+  }
+}
 

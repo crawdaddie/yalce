@@ -39,5 +39,6 @@ String string_concat(String *strings, int num_strings);
 String string_add(String a, String b);
 char *cstr(String);
 
+int char_to_hex_int(char c);
 
 #endif

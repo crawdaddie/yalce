@@ -16,10 +16,8 @@ let sq_detune = fn () ->
 
   (sq_node f + sq_node (f * 1.01)
   + sq_node (f * 2.)
-  # + sin_node (f * 0.5)
   ) * 0.4
   |> biquad_lp_node ff res 
-  # |> biquad_lp_node ff res 
   |> comb_node 0.75 0.75 0.2
 ;;
 
@@ -149,8 +147,8 @@ x-x
 --x
 --x
 x-x
--xx
 --x
+-xx
 --x
 --x
 -xx
