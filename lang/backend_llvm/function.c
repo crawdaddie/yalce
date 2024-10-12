@@ -501,6 +501,29 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_array_increment(array, el_type, builder);
   }
 
+
+  if (strcmp(sym_name, "array_slice") == 0) {
+    // printf("call array slice\n");
+
+    Type *array_type = (ast->data.AST_APPLICATION.args + 2)->md;
+    // print_type(array_type);
+    // print_ast(ast);
+
+    // LLVMTypeRef el_type =
+    //     type_to_llvm_type(array_type->data.T_CONS.args[0], ctx->env, module);
+    LLVMTypeRef el_type = LLVMInt8Type();
+//
+    LLVMValueRef start =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+    LLVMValueRef end =
+        codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+    LLVMValueRef array =
+        codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
+
+    return codegen_array_slice(array, el_type, start, end, builder);
+  }
+
   if (strcmp(sym_name, "array_to_list") == 0) {
     printf("array to list call\n");
     return NULL;

@@ -82,12 +82,6 @@ Type *infer_anonymous_lambda_arg(Ast *ast, Type *expected_type, TypeEnv **env) {
 Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   int len = ast->data.AST_APPLICATION.len;
 
-  // for (int i = 0; i < len; i++) {
-  //   app_arg_types[i] = TRY_MSG(infer(ast->data.AST_APPLICATION.args + i,
-  //   env),
-  //                              "could not infer application argument");
-  // }
-
   Type *_fn_type = ast->data.AST_APPLICATION.function->md;
 
   Type *fn_type =
@@ -98,15 +92,12 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   Type *result_fn = fn_type;
 
   Type *app_arg_types[len];
+  // printf("fn application: ");
+  // print_ast(ast);
   for (int i = 0; i < len; i++) {
 
     Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
 
-    // if (arg_ast->tag == AST_LAMBDA && result_fn->data.T_FN.from->kind ==
-    // T_FN) {
-    //   Type *f = result_fn->data.T_FN.from;
-    //   app_arg_types[i] = infer_anonymous_lambda_arg(arg_ast, f, env);
-    // } else {
     app_arg_types[i] =
         TRY_MSG(infer(arg_ast, env), "could not infer application argument");
 
@@ -114,9 +105,13 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
       app_arg_types[i] = copy_type(app_arg_types[i]);
     }
 
-    Type *unif;
+    // printf("app arg %d\n", i);
+    // print_type(app_arg_types[i]);
+    // printf("expected: ");
+    // print_type(result_fn->data.T_FN.from);
 
-    unif = unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
+    Type *unif =
+        unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
 
     if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
       print_unification_err(ast->data.AST_APPLICATION.args + i,

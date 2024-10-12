@@ -41,6 +41,7 @@ extern Type t_array_size_fn_sig;
 extern Type t_array_incr_fn_sig;
 extern Type t_array_to_list_fn_sig;
 extern Type t_array_at_fn_sig;
+extern Type t_array_slice_fn_sig;
 
 extern Type t_array_of_chars_fn_sig;
 

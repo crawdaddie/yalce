@@ -16,6 +16,7 @@ let sq_detune = fn () ->
 
   (sq_node f + sq_node (f * 1.01)
   + sq_node (f * 2.)
+  # + sin_node (f * 0.5)
   ) * 0.4
   |> biquad_lp_node ff res 
   # |> biquad_lp_node ff res 
@@ -124,40 +125,41 @@ let filter_res_setter = fn val: (Int) ->
 register_cc_handler filter_decay_setter 0 22;
 register_cc_handler filter_res_setter 0 21;
 
-let pattern = [|
-"x-x",
-"--x",
-"--x",
-"--x",
-"--x",
-"--x",
-"x-x",
-"--x",
-"-xx",
-"--x",
-"x-x",
-"--x",
-"--x",
-"--x",
-"--x",
-"--x",
-"--x",
-"--x",
-"x-x",
-"x-x",
-"--x",
-"--x",
-"x-x",
-"-xx",
-"--x",
-"--x",
-"--x",
-"-xx",
-"-xx",
-"x-x",
-"x-x",
-"--x",
-|];
+let pattern = ```
+x-x
+--x
+--x
+--x
+--x
+--x
+x-x
+--x
+-xx
+--x
+x-x
+--x
+--x
+--x
+--x
+--x
+--x
+--x
+x-x
+x-x
+--x
+--x
+x-x
+-xx
+--x
+--x
+--x
+-xx
+-xx
+x-x
+x-x
+--x
+```
+;
 
 
 
@@ -177,9 +179,9 @@ let drum_runner = fn
   frame_offset: (Int)
   ->
   let (duration, phase, tick) = *args;
-  let line = array_at pattern tick;
-  # print line;
-  # print "\n";
+
+  # slice as if pattern has 4 columns because it does (newlines are included)
+  let line = array_slice (tick * 4) ((tick * 4) + 3) pattern;
 
   trig_func line 0 frame_offset;
   trig_func line 1 frame_offset;

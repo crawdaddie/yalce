@@ -2,6 +2,11 @@ let get_stderr = extern fn () -> Ptr;
 let get_stdout = extern fn () -> Ptr;
 
 let print = extern fn String -> ();
+let println = fn str ->
+  print str;
+  print "\n";
+  ()
+;;
 
 let stderr = get_stderr ();
 let stdout = get_stdout ();
