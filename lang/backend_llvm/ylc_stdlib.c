@@ -60,6 +60,8 @@ double rand_double_range(double min, double max) {
 double amp_db(double amplitude) { return 20.0f * log10(amplitude); }
 double db_amp(double db) { return pow(10.0f, db / 20.0f); }
 
+double semitone_to_rate(double i) { return pow(2.0, i / 12.0f); }
+
 // bipolar input is in the range [-1, 1]
 double bipolar_scale(double min, double max, double bipolar_input) {
   return min + (max - min) * (0.5 + (bipolar_input * 0.5));
@@ -100,14 +102,32 @@ char *cstr(String s) { return s.chars; }
 int char_to_hex_int(char c) {
   // Convert the character to lowercase for easier processing
   c = tolower(c);
-  
+
   if (c >= '0' && c <= '9') {
-      return c - '0';
+    return c - '0';
   } else if (c >= 'a' && c <= 'f') {
-      return c - 'a' + 10;
+    return c - 'a' + 10;
   } else {
-      // Return -1 or another error indicator for invalid input
-      return -1;
+    // Return -1 or another error indicator for invalid input
+    return -1;
   }
 }
 
+String transpose_string(int input_rows, int input_cols, int output_rows, int output_cols, String input) {
+  char *transposed = malloc(sizeof(char) * ((output_rows * (output_cols + 1)) + 1));
+
+  memset(transposed, '\n', output_rows * (output_cols + 1));
+
+  int output_idx;
+  for (int i = 0; i < input_rows; i++) {
+    for (int j = 0; j < input_cols; j++) {
+      int input_idx = (input_cols + 1) * i + j; 
+      char c = input.chars[input_idx];
+      output_idx = (output_cols + 1) * j + i; 
+      transposed[output_idx] = c;
+    }
+  }
+  transposed[output_idx + 1] = '\0';
+  String result = {output_idx, transposed};
+  return result;
+}

@@ -24,6 +24,7 @@ double rand_double_range(double min, double max);
 double amp_db(double amplitude);
 double db_amp(double db);
 
+double semitone_to_rate(double i);
 // bipolar input is in the range [-1, 1]
 double bipolar_scale(double min, double max, double bipolar_input);
 // unipolar input is in the range [0, 1]
@@ -40,5 +41,7 @@ String string_add(String a, String b);
 char *cstr(String);
 
 int char_to_hex_int(char c);
+
+String transpose_string(int, int, int, int, String);
 
 #endif

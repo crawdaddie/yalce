@@ -16,3 +16,4 @@ let cstr = extern fn String -> Ptr;
 
 
 # let string_add = extern fn String -> String -> String;
+let transpose_string = extern fn Int -> Int -> Int -> Int -> String -> String;

@@ -123,40 +123,13 @@ let filter_res_setter = fn val: (Int) ->
 register_cc_handler filter_decay_setter 0 22;
 register_cc_handler filter_res_setter 0 21;
 
+#   |   |   |   |   |   |   |   #
 let pattern = ```
-x-x
---x
---x
---x
---x
---x
-x-x
---x
--xx
---x
-x-x
---x
---x
---x
---x
---x
---x
---x
-x-x
-x-x
---x
---x
-x-x
---x
--xx
---x
---x
--xx
--xx
-x-x
-x-x
---x
+x-----x---x-----x---------x--x--
+----x-------x-------x---xx--x-xx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+|> transpose_string 3 32 32 3
 ;
 
 
@@ -186,7 +159,6 @@ let drum_runner = fn
   trig_func line 2 frame_offset;
 
   (duration, phase + duration, (tick + 1) % 32)
-
   |> schedule_event drum_runner duration
 ;;
 
