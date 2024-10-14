@@ -73,6 +73,7 @@ Signal *input_sig(int i, Node *n);
 int num_inputs(Node *n);
 
 Signal *signal_of_double(double val);
+Signal *sig_of_array(int num, double *val);
 Signal *signal_of_int(int val);
 
 Signal *inlet(double default_val);

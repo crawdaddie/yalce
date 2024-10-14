@@ -38,7 +38,7 @@ $(BUILD_DIR):
 
 # Build yacc output files
 $(YACC_OUTPUT) $(YACC_HEADER): $(YACC_FILE)
-	bison -d $(YACC_FILE) -o $(YACC_OUTPUT)
+	bison --locations -yd $(YACC_FILE) -o $(YACC_OUTPUT)
 
 # Build lex output file
 $(LEX_OUTPUT): $(LEX_FILE) $(YACC_HEADER)

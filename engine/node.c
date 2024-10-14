@@ -460,6 +460,15 @@ Signal *signal_of_double(double val) {
   return signal;
 }
 
+Signal *sig_of_array(int num, double *vals) {
+
+  Signal *signal = malloc(sizeof(Signal));
+  signal->buf = vals;
+  signal->size = num;
+  signal->layout = 1;
+  return signal;
+}
+
 Signal *signal_of_int(int val) {
   Signal *signal = get_sig_default(1, val);
   return signal;

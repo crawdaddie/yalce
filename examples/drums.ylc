@@ -11,9 +11,9 @@ let drum_machine = fn () ->
   let kt = inlet 0.0;
   let st = inlet 0.0;
   let ht = inlet 0.0;
-  let kr = inlet 1.0;
-  let sr = inlet 1.0;
-  let hr = inlet 1.0;
+  let kr = inlet 0.0;
+  let sr = inlet 0.0;
+  let hr = inlet 0.0;
 
   let k = bufplayer_1shot_node kick_buf kr  0.0 kt
   ;

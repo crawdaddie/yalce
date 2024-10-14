@@ -19,6 +19,8 @@ void accept_callback(int (*callback)(int, int));
 
 Signal *read_buf(const char *filename);
 
+Signal *read_buf_mono(const char *filename);
+
 Signal *out_sig(Node *n);
 
 Signal *input_sig(int i, Node *n);

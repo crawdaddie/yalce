@@ -160,6 +160,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                         }
 
 "|>"                    return PIPE;
+"@@"                    return DOUBLE_AT;
 
 [-()<>=+*/;{},|]        {
                           /*printf("operator '%s'", yytext);*/

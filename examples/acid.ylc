@@ -6,7 +6,6 @@
 %include Array
 %include Sched
 
-
 let sq_detune = fn () -> 
   let f = inlet 50. |> lag_node 0.01;
   let trig = inlet 0.0; 
@@ -162,5 +161,5 @@ let drum_runner = fn
   |> schedule_event drum_runner duration
 ;;
 
-schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
+# schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
 schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);

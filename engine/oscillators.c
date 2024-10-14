@@ -308,7 +308,6 @@ node_perform bufplayer_1shot_trig_perform(Node *node, int nframes, double spf) {
   }
 }
 
-
 Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
                      Signal *trig) {
   bufplayer_state *state = malloc(sizeof(bufplayer_state));
@@ -344,7 +343,7 @@ Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
 }
 
 Node *bufplayer_1shot_node(Signal *buf, Signal *rate, Signal *start_pos,
-                     Signal *trig) {
+                           Signal *trig) {
   bufplayer_state *state = malloc(sizeof(bufplayer_state));
   state->phase = 0.0;
 
@@ -353,9 +352,9 @@ Node *bufplayer_1shot_node(Signal *buf, Signal *rate, Signal *start_pos,
   sigs[0].size = buf->size;
   sigs[0].layout = buf->layout;
 
-  sigs[1].buf = rate->buf;
   sigs[1].size = rate->size;
   sigs[1].layout = rate->layout;
+  sigs[1].buf = rate->buf;
 
   // sigs[2].buf = calloc(BUF_SIZE, sizeof(double));
   // // sigs[2].buf[0] = 1.0;
@@ -529,7 +528,317 @@ Node *chirp_node(double start, double end, Signal *lag_time, Signal *trig) {
   sigs[1].size = lag_time->size;
   sigs[1].layout = lag_time->layout;
 
-  Node *chirp = node_new(state, (node_perform *)chirp_perform, 1, sigs);
+  Node *chirp = node_new(state, (node_perform *)chirp_perform, 2, sigs);
 
   return chirp;
+}
+
+typedef struct nbl_impulse_state {
+  double phase;
+} nbl_impulse_state;
+
+node_perform nbl_impulse_perform(Node *node, int nframes, double spf) {
+  nbl_impulse_state *state = (nbl_impulse_state *)node->state;
+  double *input = node->ins[0].buf;
+  double *out = node->out.buf;
+  double sample;
+  double freq;
+
+  while (nframes--) {
+    freq = *input;
+
+    if (state->phase == 1.0) {
+      sample = 1.0;
+    } else {
+      sample = 0.0;
+    }
+    *out = sample;
+    state->phase = state->phase - (freq * spf);
+    if (state->phase <= 0.0) {
+      state->phase = 1.0;
+    }
+
+    out++;
+    input++;
+  }
+}
+
+Node *nbl_impulse_node(Signal *freq) {
+  nbl_impulse_state *state = malloc(sizeof(nbl_impulse_state));
+  state->phase = 1.0;
+  Signal *sigs = malloc(sizeof(Signal) * 1);
+  sigs[0].buf = freq->buf;
+  sigs[0].size = freq->size;
+  sigs[0].layout = freq->layout;
+  Node *nbl_impulse =
+      node_new(state, (node_perform *)nbl_impulse_perform, 1, sigs);
+  return nbl_impulse;
+}
+
+typedef struct ramp_state {
+  double phase;
+} ramp_state;
+
+node_perform ramp_perform(Node *node, int nframes, double spf) {
+  ramp_state *state = (ramp_state *)node->state;
+  double *input = node->ins[0].buf;
+  double *out = node->out.buf;
+  double sample;
+  double freq;
+
+  while (nframes--) {
+    freq = *input;
+
+    *out = state->phase;
+    state->phase = state->phase + (freq * spf);
+    if (state->phase >= 1.0) {
+      state->phase = 0.0;
+    }
+
+    out++;
+    input++;
+  }
+}
+
+Node *ramp_node(Signal *freq) {
+  ramp_state *state = malloc(sizeof(ramp_state));
+  state->phase = 0.0;
+  Signal *sigs = malloc(sizeof(Signal) * 1);
+  sigs[0].buf = freq->buf;
+  sigs[0].size = freq->size;
+  sigs[0].layout = freq->layout;
+  Node *ramp = node_new(state, (node_perform *)ramp_perform, 1, sigs);
+  return ramp;
+}
+
+node_perform trig_rand_perform(Node *node, int nframes, double spf) {
+  double *trig = node->ins[0].buf;
+  double *out = node->out.buf;
+  double prev = *out;
+
+  while (nframes--) {
+    if (*trig == 1.0) {
+      *out = _random_double_range(0.0, 1.0);
+      prev = *out;
+    } else {
+      *out = prev;
+    }
+    out++;
+    trig++;
+  }
+}
+
+Node *trig_rand_node(Signal *trig) {
+  Signal *sigs = malloc(sizeof(Signal) * 1);
+  sigs[0].buf = trig->buf;
+  sigs[0].size = trig->size;
+  sigs[0].layout = trig->layout;
+  Node *trig_rand = node_new(NULL, (node_perform *)trig_rand_perform, 1, sigs);
+  double r = _random_double_range(0.0, 1.0);
+  for (int i = 0; i < trig_rand->out.size; i++) {
+    trig_rand->out.buf[i] = r;
+  }
+  return trig_rand;
+}
+
+node_perform trig_sel_perform(Node *node, int nframes, double spf) {
+  double *trig = node->ins[0].buf;
+  double *sels = node->ins[1].buf;
+  int sels_size = node->ins[1].size;
+  double *out = node->out.buf;
+  double prev = *out;
+
+  while (nframes--) {
+    if (*trig == 1.0) {
+      *out = sels[rand() % sels_size];
+      prev = *out;
+    } else {
+      *out = prev;
+    }
+    out++;
+    trig++;
+  }
+}
+
+Node *trig_sel_node(Signal *trig, Signal *sels) {
+  Signal *sigs = malloc(sizeof(Signal) * 2);
+  sigs[0].buf = trig->buf;
+  sigs[0].size = trig->size;
+  sigs[0].layout = trig->layout;
+
+  sigs[1].buf = sels->buf;
+  sigs[1].size = sels->size;
+  sigs[1].layout = sels->layout;
+
+  Node *trig_rand = node_new(NULL, (node_perform *)trig_sel_perform, 2, sigs);
+  double r = sigs[1].buf[rand() % sigs[1].size];
+  for (int i = 0; i < trig_rand->out.size; i++) {
+    trig_rand->out.buf[i] = r;
+  }
+  return trig_rand;
+}
+
+typedef struct {
+  int start;
+  int length;
+  int position;
+  double rate;
+  double amp;
+} Grain;
+
+typedef struct granulator_state {
+  int *starts;
+  int *lengths;
+  int *positions;
+  double *rates;
+  double *amps;
+
+  int max_concurrent_grains;
+  int active_grains;
+  int min_grain_length;
+  int max_grain_length;
+  double overlap;
+  int next_free_grain; // field to keep track of the next available grain
+} granulator_state;
+
+static double rates[] = {1.0, 1.5, 2.0, 0.5, 0.75};
+
+static inline void init_grain(granulator_state *state, int index, double pos,
+                              int length, double rate) {
+
+  state->starts[index] = (int)pos;
+  state->lengths[index] = length;
+  state->positions[index] = 0.0;
+  state->rates[index] = rate;
+  state->active_grains++;
+}
+static inline void process_grain(granulator_state *state, int i, double *out,
+                                 double *buf, int buf_size) {
+  // Linear interpolation
+  double d_index = state->starts[i] + state->positions[i] * state->rates[i];
+
+  int index = (int)d_index;
+  double frac = d_index - index;
+
+  double a = buf[index % buf_size];
+  double b = buf[(index + 1) % buf_size];
+
+  double sample = ((1.0 - frac) * a + (frac * b)) * state->amps[i];
+  *out += sample;
+
+  state->positions[i] += 1;
+  if (state->positions[i] >= state->lengths[i]) {
+    state->lengths[i] = 0;
+    state->active_grains--;
+    if (i < state->next_free_grain) {
+      state->next_free_grain = i;
+    }
+  } else {
+    // Apply simple linear envelope
+    double env_pos = (double)(state->positions[i]) / state->lengths[i];
+    if (env_pos < state->overlap) {
+      state->amps[i] = env_pos / state->overlap;
+    } else if (env_pos > (1.0 - state->overlap)) {
+      state->amps[i] = (1.0 - env_pos) / state->overlap;
+    } else {
+      state->amps[i] = 1.0;
+    }
+  }
+}
+
+node_perform granulator_perform(Node *node, int nframes, double spf) {
+  granulator_state *state = node->state;
+
+  double *buf = node->ins[0].buf;
+  int buf_size = node->ins[0].size;
+
+  double *trig = node->ins[1].buf;
+  double *pos = node->ins[2].buf;
+  double *rate = node->ins[3].buf;
+  double *out = node->out.buf;
+
+  while (nframes--) {
+    *out = 0.0;
+    double p = fabs(*pos);
+
+    if (*trig == 1.0 && state->active_grains < state->max_concurrent_grains) {
+      int start_pos = (int)(p * buf_size);
+      int length = state->min_grain_length +
+                   rand() % (state->max_grain_length - state->min_grain_length);
+
+      // Initialize new grain
+      int index = state->next_free_grain;
+      init_grain(state, index, start_pos, length, *rate);
+
+      // Find the next free grain
+      do {
+        state->next_free_grain =
+            (state->next_free_grain + 1) % state->max_concurrent_grains;
+      } while (state->lengths[state->next_free_grain] != 0 &&
+               state->next_free_grain != index);
+    }
+
+    // Process active grains
+    for (int i = 0; i < state->max_concurrent_grains; i++) {
+      if (state->lengths[i] > 0) {
+        process_grain(state, i, out, buf, buf_size);
+      }
+    }
+    // Normalize output
+    if (state->active_grains > 0) {
+      *out /= state->active_grains;
+    }
+
+    trig++;
+    pos++;
+    rate++;
+    out++;
+  }
+}
+
+Node *granulator_node(int max_concurrent_grains, Signal *buf, Signal *trig,
+                      Signal *pos, Signal *rate) {
+  granulator_state *state = malloc(sizeof(granulator_state));
+  void *grain_state_arrays = malloc(3 * max_concurrent_grains * sizeof(int) +
+                                    2 * max_concurrent_grains * sizeof(double));
+
+  state->starts = grain_state_arrays;
+  grain_state_arrays += (max_concurrent_grains * sizeof(int));
+  state->lengths = grain_state_arrays;
+  grain_state_arrays += (max_concurrent_grains * sizeof(int));
+  state->positions = grain_state_arrays;
+  grain_state_arrays += (max_concurrent_grains * sizeof(int));
+
+  state->rates = grain_state_arrays;
+  grain_state_arrays += (max_concurrent_grains * sizeof(double));
+  state->amps = grain_state_arrays;
+  grain_state_arrays += (max_concurrent_grains * sizeof(double));
+
+  state->max_concurrent_grains = max_concurrent_grains;
+  state->active_grains = 0;
+  state->min_grain_length = 7000;
+  state->max_grain_length = 7001;
+  state->overlap = 0.3;
+
+  Signal *sigs = malloc(sizeof(Signal) * 4);
+  sigs[0].buf = buf->buf;
+  sigs[0].size = buf->size;
+  sigs[0].layout = buf->layout;
+
+  sigs[1].buf = trig->buf;
+  sigs[1].size = trig->size;
+  sigs[1].layout = trig->layout;
+
+  sigs[2].buf = pos->buf;
+  sigs[2].size = pos->size;
+  sigs[2].layout = pos->layout;
+
+  sigs[3].buf = rate->buf;
+  sigs[3].size = rate->size;
+  sigs[3].layout = rate->layout;
+
+  Node *granulator =
+      node_new(state, (node_perform *)granulator_perform, 4, sigs);
+
+  return granulator;
 }

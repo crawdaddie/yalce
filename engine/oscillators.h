@@ -12,12 +12,22 @@ Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
                      Signal *trig);
 
 Node *bufplayer_1shot_node(Signal *buf, Signal *rate, Signal *start_pos,
-                     Signal *trig); 
+                           Signal *trig);
 Node *white_noise_node();
 Node *brown_noise_node();
 Node *sin_node(Signal *freq);
 Node *sq_node(Signal *freq);
 
-Node *chirp_node(double start, double end, Signal * lag_time, Signal *trig);
+Node *chirp_node(double start, double end, Signal *lag_time, Signal *trig);
+
+Node *nbl_impulse_node(Signal *freq);
+
+Node *ramp_node(Signal *freq);
+
+Node *trig_rand_node(Signal *trig);
+Node *granulator_node(int max_concurrent_grains, Signal *buf, Signal *trig,
+                      Signal *pos, Signal *rate);
+
+Node *trig_sel_node(Signal *trig, Signal *sels);
 
 #endif

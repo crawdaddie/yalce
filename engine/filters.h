@@ -24,4 +24,7 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
 Node *lag_node(double lag_time, Signal *in);
 
 Node *tanh_node(double gain, Signal *in);
+
+Node *grain_delay_node(double delay_time, double max_delay_time, double fb,
+                       double pitchshift, Signal *input);
 #endif
