@@ -23,12 +23,12 @@ typedef struct Node {
   int frame_offset;
 } Node;
 
-typedef Signal * SignalRef;
-typedef Node * Synth;
-typedef Node * NodeRef;
+typedef Signal *SignalRef;
+typedef Node *Synth;
+typedef Node *NodeRef;
 
 NodeRef perform_graph(NodeRef head, int frame_count, double spf, double *dest,
-                    int dest_layout, int output_num);
+                      int dest_layout, int output_num);
 
 typedef struct {
   NodeRef head;
@@ -48,7 +48,7 @@ NodeRef group_add_tail(NodeRef group, NodeRef node);
 NodeRef node_new(void *data, node_perform *perform, int num_ins, SignalRef ins);
 
 NodeRef node_new_w_alloc(void *data, node_perform *perform, int num_ins,
-                       SignalRef ins, void **mem);
+                         SignalRef ins, void **mem);
 SignalRef get_sig(int layout);
 SignalRef get_sig_default(int layout, double value);
 

@@ -127,13 +127,13 @@ Node *set_input_trig_offset(Node *node, int input, int frame_offset) {
   return node;
 }
 
-void accept_callback(int (*callback)(int, int)) {
-  // Function body
-  if (callback != NULL) {
-    printf("called callback %p %d\n", callback,
-           callback(1, 2)); // Call the callback function
-  }
-}
+// void accept_callback(int (*callback)(int, int)) {
+//   // Function body
+//   if (callback != NULL) {
+//     printf("called callback %p %d\n", callback,
+//            callback(1, 2)); // Call the callback function
+//   }
+// }
 
 #define MAX_CHANNELS 6
 

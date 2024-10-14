@@ -148,7 +148,8 @@ Type t_array_var = {
 
 Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
 Type t_array_incr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_array_var);
-Type t_array_slice_fn_sig = MAKE_FN_TYPE_4(&t_int, &t_int, &t_array_var, &t_array_var);
+Type t_array_slice_fn_sig =
+    MAKE_FN_TYPE_4(&t_int, &t_int, &t_array_var, &t_array_var);
 Type t_array_to_list_fn_sig =
     MAKE_FN_TYPE_2(&t_array_var, &TLIST(&t_array_var_el));
 // , &(Type){

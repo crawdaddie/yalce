@@ -5,8 +5,8 @@
 #include <time.h>
 
 #define MAX_GRAINS 1000
-#define BUFFER_SIZE 44100
-#define NUM_FRAMES 44100
+#define BUFFER_SIZE 48000
+#define NUM_FRAMES 48000
 
 // Array of Structs (AoS) version
 typedef struct {

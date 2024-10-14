@@ -1,2 +1,5 @@
-let schedule_event       = extern fn Ptr -> Double -> Ptr -> ();
+# ../engine/scheduling.h
+let scheduler_event_loop = extern fn () -> Int;
+let schedule_event = extern fn Ptr -> Double -> Ptr -> ();
 let schedule_event_quant = extern fn Ptr -> Double -> Ptr -> ();
+

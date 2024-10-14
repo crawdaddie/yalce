@@ -27,6 +27,7 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 $(SHARED_LIB_TARGET): $(filter-out $(BUILD_DIR)/main.o, $(OBJS))
 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
 	install_name_tool -id @rpath/libyalce_synth.so $@
+	$(MAKE) -C ../tools engine_bindings 
 
 audio_test: $(OBJS)
 	$(CC) $(LDFLAGS) $(FRAMEWORKS) $(OBJS) -o $(BUILD_DIR)/engine_test

@@ -2,29 +2,20 @@
 #define _ENGINE_FILTERS_H
 #include "node.h"
 
-typedef struct {
-  double b0, b1, b2; // Feedforward coefficients
-  double a1, a2;     // Feedback coefficients
-  double x1, x2;     // Input delay elements (x[n-1] and x[n-2])
-  double y1, y2;     // Output delay elements (y[n-1] and y[n-2])
-} biquad_state;
+NodeRef biquad_node(SignalRef in);
+NodeRef biquad_lp_node(SignalRef freq, SignalRef res, SignalRef in);
+NodeRef biquad_hp_node(SignalRef freq, SignalRef res, SignalRef in);
+NodeRef biquad_bp_node(SignalRef freq, SignalRef res, SignalRef in);
 
-void init_biquad_filter_state(biquad_state *filter, double b0, double b1,
-                              double b2, double a1, double a2);
-Node *biquad_node(Signal *in);
-Node *biquad_lp_node(Signal *freq, Signal *res, Signal *in);
-Node *biquad_hp_node(Signal *freq, Signal *res, Signal *in);
-Node *biquad_bp_node(Signal *freq, Signal *res, Signal *in);
-
-// Node *butterworth_hp_dyn_node(double freq, Node *in);
+// NodeRef butterworth_hp_dyn_node(double freq, NodeRef in);
 //
-Node *comb_node(double delay_time, double max_delay_time, double fb,
-                Signal *input);
+NodeRef comb_node(double delay_time, double max_delay_time, double fb,
+                  SignalRef input);
 
-Node *lag_node(double lag_time, Signal *in);
+NodeRef lag_node(double lag_time, SignalRef in);
 
-Node *tanh_node(double gain, Signal *in);
+NodeRef tanh_node(double gain, SignalRef in);
 
-Node *grain_delay_node(double delay_time, double max_delay_time, double fb,
-                       double pitchshift, Signal *input);
+NodeRef grain_delay_node(double delay_time, double max_delay_time, double fb,
+                         double pitchshift, SignalRef input);
 #endif

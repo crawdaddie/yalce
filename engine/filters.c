@@ -4,7 +4,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+typedef struct {
+  double b0, b1, b2; // Feedforward coefficients
+  double a1, a2;     // Feedback coefficients
+  double x1, x2;     // Input delay elements (x[n-1] and x[n-2])
+  double y1, y2;     // Output delay elements (y[n-1] and y[n-2])
+} biquad_state;
 // Initialize filter coefficients and state variables
 void set_biquad_filter_state(biquad_state *filter, double b0, double b1,
                              double b2, double a1, double a2) {

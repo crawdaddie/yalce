@@ -2,44 +2,44 @@
 #define _ENGINE_LIB_H
 #include "node.h"
 
-// Node *sq_node(double freq);
-// Node *sin_node(double freq);
-// // void group_add_tail(Node *group, Node *node);
-// Node *sum_nodes(Node *l, Node *r);
+// NodeRef sq_node(double freq);
+// NodeRef sin_node(double freq);
+// // void group_add_tail(NodeRef group, NodeRef node);
+// NodeRef sum_nodes(NodeRef l, NodeRef r);
 //
-// node_perform sum_perform(Node *node, int nframes, double spf);
+// node_perform sum_perform(NodeRef node, int nframes, double spf);
 //
-// node_perform mul_perform(Node *node, int nframes, double spf);
+// node_perform mul_perform(NodeRef node, int nframes, double spf);
 //
-Node *play_test_synth();
+NodeRef play_test_synth();
 
-Node *play_node(Node *s);
+NodeRef play_node(NodeRef s);
 
-void accept_callback(int (*callback)(int, int));
+// void accept_callback(int (*callback)(int, int));
 
-Signal *read_buf(const char *filename);
+SignalRef read_buf(const char *filename);
 
-Signal *read_buf_mono(const char *filename);
+SignalRef read_buf_mono(const char *filename);
 
-Signal *out_sig(Node *n);
+SignalRef out_sig(NodeRef n);
 
-Signal *input_sig(int i, Node *n);
+SignalRef input_sig(int i, NodeRef n);
 
-int num_inputs(Node *n);
+int num_inputs(NodeRef n);
 
-Signal *signal_of_double(double val);
-Signal *signal_of_int(int val);
+SignalRef signal_of_double(double val);
+SignalRef signal_of_int(int val);
 
-Node *set_input_scalar(Node *node, int input, double value);
+NodeRef set_input_scalar(NodeRef node, int input, double value);
 
-Node *set_input_trig(Node *node, int input);
+NodeRef set_input_trig(NodeRef node, int input);
 
-Node *set_input_scalar_offset(Node *node, int input, int frame_offset,
-                              double value);
-Node *set_input_trig_offset(Node *node, int input, int frame_offset);
-Node *end_chain(Node *s);
+NodeRef set_input_scalar_offset(NodeRef node, int input, int frame_offset,
+                                double value);
+NodeRef set_input_trig_offset(NodeRef node, int input, int frame_offset);
+NodeRef end_chain(NodeRef s);
 
-Node *play(Node *group);
+NodeRef play(NodeRef group);
 
 int get_frame_offset();
 
