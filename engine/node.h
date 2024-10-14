@@ -23,60 +23,66 @@ typedef struct Node {
   int frame_offset;
 } Node;
 
-Node *perform_graph(Node *head, int frame_count, double spf, double *dest,
+typedef Signal * SignalRef;
+typedef Node * Synth;
+typedef Node * NodeRef;
+
+NodeRef perform_graph(NodeRef head, int frame_count, double spf, double *dest,
                     int dest_layout, int output_num);
 
 typedef struct {
-  Node *head;
-  Node *tail;
+  NodeRef head;
+  NodeRef tail;
 } group_state;
 
-extern Node *_chain_head;
-extern Node *_chain_tail;
-extern Node *_chain;
+extern NodeRef _chain_head;
+extern NodeRef _chain_tail;
+extern NodeRef _chain;
+
 void reset_chain();
 
-node_perform group_perform(Node *group, int nframes, double spf);
+node_perform group_perform(NodeRef group, int nframes, double spf);
 
-Node *group_add_tail(Node *group, Node *node);
+NodeRef group_add_tail(NodeRef group, NodeRef node);
 
-Node *node_new(void *data, node_perform *perform, int num_ins, Signal *ins);
+NodeRef node_new(void *data, node_perform *perform, int num_ins, SignalRef ins);
 
-Node *node_new_w_alloc(void *data, node_perform *perform, int num_ins,
-                       Signal *ins, void **mem);
-Signal *get_sig(int layout);
-Signal *get_sig_default(int layout, double value);
+NodeRef node_new_w_alloc(void *data, node_perform *perform, int num_ins,
+                       SignalRef ins, void **mem);
+SignalRef get_sig(int layout);
+SignalRef get_sig_default(int layout, double value);
 
-Node *group_new(int chans);
+NodeRef group_new(int chans);
 
-node_perform sum_perform(Node *node, int nframes, double spf);
-node_perform mul_perform(Node *node, int nframes, double spf);
+node_perform sum_perform(NodeRef node, int nframes, double spf);
+node_perform mul_perform(NodeRef node, int nframes, double spf);
 
-Node *sum2_node(Node *a, Node *b);
-Node *sub2_node(Node *a, Node *b);
-Node *mul2_node(Node *a, Node *b);
-Node *div2_node(Node *a, Node *b);
-Node *mod2_node(Node *a, Node *b);
+NodeRef sum2_node(NodeRef a, NodeRef b);
+NodeRef sub2_node(NodeRef a, NodeRef b);
+NodeRef mul2_node(NodeRef a, NodeRef b);
+NodeRef div2_node(NodeRef a, NodeRef b);
+NodeRef mod2_node(NodeRef a, NodeRef b);
 
-Signal *sum2_sigs(Signal *a, Signal *b);
-Signal *sub2_sigs(Signal *a, Signal *b);
-Signal *mul2_sigs(Signal *a, Signal *b);
-Signal *div2_sigs(Signal *a, Signal *b);
-Signal *mod2_sigs(Signal *a, Signal *b);
+SignalRef sum2_sigs(SignalRef a, SignalRef b);
+SignalRef sub2_sigs(SignalRef a, SignalRef b);
+SignalRef mul2_sigs(SignalRef a, SignalRef b);
+SignalRef div2_sigs(SignalRef a, SignalRef b);
+SignalRef mod2_sigs(SignalRef a, SignalRef b);
 
-Node *node_of_double(double val);
+NodeRef node_of_double(double val);
 
-Signal *out_sig(Node *n);
+SignalRef out_sig(NodeRef n);
 
-Signal *input_sig(int i, Node *n);
+SignalRef input_sig(int i, NodeRef n);
 
-int num_inputs(Node *n);
+int num_inputs(NodeRef n);
 
-Signal *signal_of_double(double val);
-Signal *sig_of_array(int num, double *val);
-Signal *signal_of_int(int val);
+SignalRef signal_of_double(double val);
+SignalRef sig_of_array(int num, double *val);
+SignalRef signal_of_int(int val);
 
-Signal *inlet(double default_val);
+SignalRef inlet(double default_val);
 
-Node *node_of_sig(Signal *val);
+NodeRef node_of_sig(SignalRef val);
+
 #endif

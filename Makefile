@@ -106,3 +106,7 @@ wasm:
 
 serve_docs:
 	python -m http.server -d docs
+
+audio_test:
+	$(MAKE) -C engine audio_test
+
