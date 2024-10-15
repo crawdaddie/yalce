@@ -1,4 +1,5 @@
 # midi.h
+type CCCallback = Int -> ();
 let midi_setup = extern fn () -> ();
 let register_cc_handler = extern fn Ptr -> Int -> Int -> ();
 

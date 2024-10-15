@@ -38,6 +38,54 @@ const char *yalce_name(name_lookup *lookups, const char *c_name) {
   }
   return c_name;
 }
+void print_function_type(CXType type, name_lookup *lookups) {
+  CXType result_type = clang_getResultType(type);
+
+  int num_args = clang_getNumArgTypes(type);
+  if (result_type.kind == CXType_Void && num_args == 0) {
+    printf("() -> ()");
+  } else {
+    int num_args = clang_getNumArgTypes(type);
+    for (int i = 0; i < num_args; ++i) {
+      CXType arg_type = clang_getArgType(type, i);
+      CXString arg_type_str = clang_getTypeSpelling(arg_type);
+      printf("%s -> ", yalce_name(lookups, clang_getCString(arg_type_str)));
+      clang_disposeString(arg_type_str);
+    }
+  }
+
+  result_type = clang_getResultType(type);
+  CXString return_type = clang_getTypeSpelling(result_type);
+  printf("%s", yalce_name(lookups, clang_getCString(return_type)));
+  clang_disposeString(return_type);
+}
+
+void print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
+    CXType underlying_type = clang_getTypedefDeclUnderlyingType(cursor);
+    CXString type_name = clang_getCursorSpelling(cursor);
+    
+    printf("type %s = ", clang_getCString(type_name));
+    
+    if (underlying_type.kind == CXType_Pointer) {
+        CXType pointee_type = clang_getPointeeType(underlying_type);
+        if (pointee_type.kind == CXType_FunctionProto) {
+            print_function_type(pointee_type, lookups);
+        } else {
+            CXString type_spelling = clang_getTypeSpelling(underlying_type);
+            printf("%s", yalce_name(lookups, clang_getCString(type_spelling)));
+            clang_disposeString(type_spelling);
+        }
+    } else if (underlying_type.kind == CXType_FunctionProto) {
+        print_function_type(underlying_type, lookups);
+    } else {
+        CXString type_spelling = clang_getTypeSpelling(underlying_type);
+        printf("%s", yalce_name(lookups, clang_getCString(type_spelling)));
+        clang_disposeString(type_spelling);
+    }
+    
+    printf(";\n");
+    clang_disposeString(type_name);
+}
 
 void print_function_decl(CXCursor cursor, name_lookup *lookups) {
 
@@ -79,17 +127,9 @@ void print_function_decl(CXCursor cursor, name_lookup *lookups) {
   clang_disposeString(return_type);
 }
 
-void print_struct_decl(CXCursor cursor, name_lookup *lookups) {
-  CXString struct_name = clang_getCursorSpelling(cursor);
-  CXType struct_type = clang_getCursorType(cursor);
-  // printf("STRUCT: %s\n", clang_getCString(struct_name));
-}
+void print_struct_decl(CXCursor cursor, name_lookup *lookups) {}
 
-void print_enum_decl(CXCursor cursor, name_lookup *lookups) {
-  CXString struct_name = clang_getCursorSpelling(cursor);
-  // CXType struct_type = clang_getCursorType(cursor);
-  // printf("ENUM: %s\n", clang_getCString(struct_name));
-}
+void print_enum_decl(CXCursor cursor, name_lookup *lookups) {}
 
 enum CXChildVisitResult visitor(CXCursor cursor, CXCursor parent,
                                 CXClientData client_data) {
@@ -97,23 +137,25 @@ enum CXChildVisitResult visitor(CXCursor cursor, CXCursor parent,
     return CXChildVisit_Continue;
   }
 
-  if (clang_getCursorKind(cursor) == CXCursor_FunctionDecl) {
+  name_lookup *lookups = client_data;
 
-    name_lookup *lookups = client_data;
+  switch (clang_getCursorKind(cursor)) {
+  case CXCursor_FunctionDecl:
     print_function_decl(cursor, lookups);
-  }
-
-  if (clang_getCursorKind(cursor) == CXCursor_StructDecl) {
-
-    name_lookup *lookups = client_data;
+    break;
+  case CXCursor_StructDecl:
     print_struct_decl(cursor, lookups);
-  }
-
-  if (clang_getCursorKind(cursor) == CXCursor_EnumDecl) {
-
-    name_lookup *lookups = client_data;
+    break;
+  case CXCursor_EnumDecl:
     print_enum_decl(cursor, lookups);
+    break;
+  case CXCursor_TypedefDecl:
+    print_typedef_decl(cursor, lookups);
+    break;
+  default:
+    break;
   }
+
   return CXChildVisit_Recurse;
 }
 
