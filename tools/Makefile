@@ -26,7 +26,3 @@ clean:
 # Define targets for each tool
 $(EXES:$(BUILD_DIR)/%=%): %: $(BUILD_DIR)/%
 
-engine_bindings: all
-	$(BUILD_DIR)/ffi_gen $(ENGINE_DIR)/oscillators.h $(ENGINE_DIR)/lib.h $(ENGINE_DIR)/filters.h > ../examples/Synth.ylc
-	cat engine_lib_extra.ylc >> ../examples/Synth.ylc
-	$(BUILD_DIR)/ffi_gen $(ENGINE_DIR)/scheduling.h > ../examples/Sched.ylc
