@@ -20,7 +20,7 @@ NodeRef sq_node(SignalRef freq);
 NodeRef chirp_node(double start, double end, SignalRef lag_time,
                    SignalRef trig);
 
-/** comment text */
+/** non-band-limited impulses - suitable for a trigger signal */
 NodeRef nbl_impulse_node(SignalRef freq);
 
 NodeRef ramp_node(SignalRef freq);
