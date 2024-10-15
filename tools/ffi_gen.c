@@ -3,7 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// scans a list of header files and prints corresponding ylc extern declarations to stdout 
+// scans a list of header files and prints corresponding ylc extern declarations
+// to stdout
 
 typedef struct name_lookup {
   const char *key;
@@ -108,7 +109,6 @@ enum CXChildVisitResult visitor(CXCursor cursor, CXCursor parent,
     print_struct_decl(cursor, lookups);
   }
 
-
   if (clang_getCursorKind(cursor) == CXCursor_EnumDecl) {
 
     name_lookup *lookups = client_data;
@@ -139,6 +139,7 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "SignalRef", "Signal");
   lookups = lookups_extend(lookups, "NodeRef", "Synth");
   lookups = lookups_extend(lookups, "SchedulerCallback", "Ptr");
+  lookups = lookups_extend(lookups, "CCCallback", "Ptr");
 
   for (int i = 1; i < argc; i++) {
 

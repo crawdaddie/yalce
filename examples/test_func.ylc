@@ -1,4 +1,5 @@
 #! /Users/adam/projects/sound/yalce/build/lang
+%include ../engine/bindings/Sched
 
 let x = 1;
 

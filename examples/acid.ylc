@@ -1,10 +1,10 @@
 #! /Users/adam/projects/sound/yalce/build/lang
-%include Synth
+%include ../engine/bindings/Synth
 %include String
 %include MIDI
 %include Math
 %include Array
-%include Sched
+%include ../engine/bindings/Sched
 
 let sq_detune = fn () -> 
   let f = inlet 50. |> lag_node 0.01;
