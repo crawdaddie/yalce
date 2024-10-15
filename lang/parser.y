@@ -66,7 +66,6 @@ Ast* ast_root = NULL;
 %left '|'
 %left PIPE
 %left DOUBLE_AT
-%left '('
 %left APPLICATION 
 %left MODULO
 %left GE LE EQ NE '>' '<'

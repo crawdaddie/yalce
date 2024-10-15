@@ -11,11 +11,8 @@ let sq_detune = fn () ->
   let trig = inlet 0.0; 
   let chirp_decay = inlet 0.3;
   let ff = chirp_node 3000. 200. chirp_decay trig; 
-  let res = inlet 1.;
-
-  (sq_node f + sq_node (f * 1.01)
-  + sq_node (f * 2.)
-  ) * 0.4
+  let res = inlet 8.;
+  (sq_node f + (sq_node @@ f * 1.01) + (sq_node @@ f * 2.)) * 0.4
   |> biquad_lp_node ff res 
   |> comb_node 0.75 0.75 0.2
 ;;
@@ -32,8 +29,6 @@ let drum_machine = fn () ->
   let h = bufplayer_1shot_node hh_buf 1. 0.0 ht;
   k + s + h
 ;;
-
-
 
 
 let notes = [|
@@ -161,5 +156,5 @@ let drum_runner = fn
   |> schedule_event drum_runner duration
 ;;
 
-# schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
+schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
 schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
