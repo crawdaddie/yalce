@@ -22,6 +22,8 @@ let read_buf = extern fn Ptr -> Signal;
 let read_buf_mono = extern fn Ptr -> Signal;
 let out_sig = extern fn Synth -> Signal;
 let input_sig = extern fn Int -> Synth -> Signal;
+let inlet = extern fn Double -> Signal;
+let reset_chain = extern fn () -> ();
 let num_inputs = extern fn Synth -> Int;
 let signal_of_double = extern fn Double -> Signal;
 let signal_of_int = extern fn Int -> Signal;
@@ -42,49 +44,6 @@ let comb_node = extern fn Double -> Double -> Double -> Signal -> Synth;
 let lag_node = extern fn Double -> Signal -> Synth;
 let tanh_node = extern fn Double -> Signal -> Synth;
 let grain_delay_node = extern fn Double -> Double -> Double -> Double -> Signal -> Synth;
-
-# node.h
-STRUCT: Node
-STRUCT: Signal
-STRUCT: Signal
-STRUCT: Node
-ENUM: enum (unnamed at node.h:14:3)
-ENUM: enum (unnamed at node.h:14:3)
-STRUCT: Node
-ENUM: enum (unnamed at node.h:14:3)
-ENUM: enum (unnamed at node.h:14:3)
-let perform_graph = extern fn Synth -> Int -> Double -> double * -> Int -> Int -> Synth;
-STRUCT: group_state
-STRUCT: group_state
-let reset_chain = extern fn () -> ();
-let group_perform = extern fn Synth -> Int -> Double -> node_perform;
-let group_add_tail = extern fn Synth -> Synth -> Synth;
-let node_new = extern fn Ptr -> node_perform * -> Int -> Signal -> Synth;
-let node_new_w_alloc = extern fn Ptr -> node_perform * -> Int -> Signal -> void ** -> Synth;
-let get_sig = extern fn Int -> Signal;
-let get_sig_default = extern fn Int -> Double -> Signal;
-let group_new = extern fn Int -> Synth;
-let sum_perform = extern fn Synth -> Int -> Double -> node_perform;
-let mul_perform = extern fn Synth -> Int -> Double -> node_perform;
-let sum2_node = extern fn Synth -> Synth -> Synth;
-let sub2_node = extern fn Synth -> Synth -> Synth;
-let mul2_node = extern fn Synth -> Synth -> Synth;
-let div2_node = extern fn Synth -> Synth -> Synth;
-let mod2_node = extern fn Synth -> Synth -> Synth;
-let sum2_sigs = extern fn Signal -> Signal -> Signal;
-let sub2_sigs = extern fn Signal -> Signal -> Signal;
-let mul2_sigs = extern fn Signal -> Signal -> Signal;
-let div2_sigs = extern fn Signal -> Signal -> Signal;
-let mod2_sigs = extern fn Signal -> Signal -> Signal;
-let node_of_double = extern fn Double -> Synth;
-let out_sig = extern fn Synth -> Signal;
-let input_sig = extern fn Int -> Synth -> Signal;
-let num_inputs = extern fn Synth -> Int;
-let signal_of_double = extern fn Double -> Signal;
-let sig_of_array = extern fn Int -> double * -> Signal;
-let signal_of_int = extern fn Int -> Signal;
-let inlet = extern fn Double -> Signal;
-let node_of_sig = extern fn Signal -> Synth;
 
 let chain_wrap = fn def -> 
   reset_chain ();

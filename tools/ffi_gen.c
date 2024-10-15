@@ -82,13 +82,13 @@ void print_function_decl(CXCursor cursor, name_lookup *lookups) {
 void print_struct_decl(CXCursor cursor, name_lookup *lookups) {
   CXString struct_name = clang_getCursorSpelling(cursor);
   CXType struct_type = clang_getCursorType(cursor);
-  printf("STRUCT: %s\n", clang_getCString(struct_name));
+  // printf("STRUCT: %s\n", clang_getCString(struct_name));
 }
 
 void print_enum_decl(CXCursor cursor, name_lookup *lookups) {
   CXString struct_name = clang_getCursorSpelling(cursor);
   // CXType struct_type = clang_getCursorType(cursor);
-  printf("ENUM: %s\n", clang_getCString(struct_name));
+  // printf("ENUM: %s\n", clang_getCString(struct_name));
 }
 
 enum CXChildVisitResult visitor(CXCursor cursor, CXCursor parent,

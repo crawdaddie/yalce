@@ -1,5 +1,0 @@
-# engine/scheduling.h
-let scheduler_event_loop = extern fn () -> Int;
-let schedule_event = extern fn void (*)(void *, int) -> Double -> void * -> ();
-let schedule_event_quant = extern fn void (*)(void *, int) -> Double -> void * -> ();
-

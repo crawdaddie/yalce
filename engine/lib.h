@@ -24,6 +24,9 @@ SignalRef read_buf_mono(const char *filename);
 SignalRef out_sig(NodeRef n);
 
 SignalRef input_sig(int i, NodeRef n);
+SignalRef inlet(double default_val);
+
+void reset_chain();
 
 int num_inputs(NodeRef n);
 

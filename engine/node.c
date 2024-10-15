@@ -240,25 +240,6 @@ Signal *group_add_input(Node *group) {
   return &group->ins[group->num_ins - 1];
 }
 
-Signal *inlet(double default_val) {
-  Signal *sig;
-  if (_chain == NULL) {
-    _chain = group_new(1);
-    sig = _chain->ins;
-    // printf("created sig %p %p\n", sig, sig->buf);
-  } else {
-    sig = group_add_input(_chain);
-    // printf("created sig %p %p in existing group\n", sig, sig->buf);
-  }
-
-  for (int i = 0; i < sig->size; i++) {
-    sig->buf[i] = default_val;
-    // printf("sig val %f\n", sig->buf[i]);
-  }
-
-  return sig;
-}
-
 Signal *get_sig(int layout) {
   Signal *sig = malloc(sizeof(Signal));
   sig->buf = calloc(BUF_SIZE * layout, sizeof(double));

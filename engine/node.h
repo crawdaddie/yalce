@@ -39,8 +39,6 @@ extern NodeRef _chain_head;
 extern NodeRef _chain_tail;
 extern NodeRef _chain;
 
-void reset_chain();
-
 node_perform group_perform(NodeRef group, int nframes, double spf);
 
 NodeRef group_add_tail(NodeRef group, NodeRef node);
@@ -84,5 +82,7 @@ SignalRef signal_of_int(int val);
 SignalRef inlet(double default_val);
 
 NodeRef node_of_sig(SignalRef val);
+
+Signal *group_add_input(Node *group);
 
 #endif

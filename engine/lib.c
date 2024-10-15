@@ -243,3 +243,22 @@ Signal *read_buf_mono(const char *filename) {
   _read_file_mono(filename, sig, &sf_sample_rate);
   return sig;
 }
+
+SignalRef inlet(double default_val) {
+  Signal *sig;
+  if (_chain == NULL) {
+    _chain = group_new(1);
+    sig = _chain->ins;
+    // printf("created sig %p %p\n", sig, sig->buf);
+  } else {
+    sig = group_add_input(_chain);
+    // printf("created sig %p %p in existing group\n", sig, sig->buf);
+  }
+
+  for (int i = 0; i < sig->size; i++) {
+    sig->buf[i] = default_val;
+    // printf("sig val %f\n", sig->buf[i]);
+  }
+
+  return sig;
+}
