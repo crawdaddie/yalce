@@ -215,13 +215,26 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
   Ast *body_stmt;
   Type *body_type;
   lambda_ctx = ast;
-  for (int i = 0; i < body_len; i++) {
-    body_stmt = body->data.AST_BODY.stmts[i];
+
+  if (body->tag == AST_BODY) {
+    for (int i = 0; i < body_len; i++) {
+      body_stmt = body->data.AST_BODY.stmts[i];
+      Type *t = infer(body_stmt, &fn_scope_env);
+      if (!t) {
+        fprintf(stderr, "Failure typechecking body statement: ");
+        print_location(body_stmt);
+        print_ast_err(body_stmt);
+        return NULL;
+      }
+      body_type = t;
+    }
+  } else {
+    body_stmt = body;
     Type *t = infer(body_stmt, &fn_scope_env);
     if (!t) {
       fprintf(stderr, "Failure typechecking body statement: ");
       print_location(body_stmt);
-      // print_ast_err(stmt);
+      print_ast_err(body_stmt);
       return NULL;
     }
     body_type = t;

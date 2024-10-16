@@ -96,7 +96,17 @@ static void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func,
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
-LLVMValueRef get_intrinsic() {}
+LLVMValueRef get_intrinsic(char *name, LLVMTypeRef *fn_type,
+                           LLVMTypeRef *param_types, int param_count,
+                           LLVMModuleRef module, LLVMContextRef llvm_ctx) {
+
+  unsigned int intrinsic_id = LLVMLookupIntrinsicID(name, strlen(name));
+  *fn_type =
+      LLVMIntrinsicGetType(llvm_ctx, intrinsic_id, param_types, param_count);
+  return LLVMGetIntrinsicDeclaration(module, intrinsic_id, param_types,
+                                     param_count);
+}
+
 void setup_coroutine(LLVMValueRef fn, LLVMTypeRef fn_type, JITLangCtx *ctx,
                      LLVMModuleRef module, LLVMBuilderRef builder) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
@@ -109,11 +119,13 @@ void setup_coroutine(LLVMValueRef fn, LLVMTypeRef fn_type, JITLangCtx *ctx,
   LLVMTypeRef i8_type = LLVMInt8Type();
 
   // llvm.coro.id
-  LLVMTypeRef coro_id_type = LLVMIntrinsicGetType(
-      llvm_ctx, LLVMLookupIntrinsicID("llvm.coro.id", 12),
-      (LLVMTypeRef[]){i32_type, void_ptr_type, void_ptr_type, void_ptr_type},
-      4);
-  LLVMValueRef coro_id_fn = get_extern_fn("llvm.coro.id", coro_id_type, module);
+
+  unsigned int coro_id_id = LLVMLookupIntrinsicID("llvm.coro.id", 12);
+  LLVMTypeRef coro_id_type;
+  LLVMValueRef coro_id_fn = get_intrinsic(
+      "llvm.coro.id", &coro_id_type,
+      (LLVMTypeRef[]){i32_type, void_ptr_type, void_ptr_type, void_ptr_type}, 4,
+      module, llvm_ctx);
 
   // llvm.coro.size.i64
   LLVMTypeRef coro_size_type = LLVMFunctionType(size_t_type, NULL, 0, 0);
@@ -121,25 +133,28 @@ void setup_coroutine(LLVMValueRef fn, LLVMTypeRef fn_type, JITLangCtx *ctx,
       get_extern_fn("llvm.coro.size.i64", coro_size_type, module);
 
   // llvm.coro.begin
+  // LLVMTypeRef coro_begin_type;
+  // LLVMValueRef coro_begin_fn = get_intrinsic(
+  //     "llvm.coro.begin", &coro_begin_type,
+  //     (LLVMTypeRef[]){void_ptr_type, void_ptr_type}, 2, module, llvm_ctx);
+
+  // llvm.coro.begin
   LLVMTypeRef coro_begin_type = LLVMFunctionType(
       void_ptr_type, (LLVMTypeRef[]){void_ptr_type, void_ptr_type}, 2, 0);
   LLVMValueRef coro_begin_fn =
       get_extern_fn("llvm.coro.begin", coro_begin_type, module);
-
   // llvm.coro.suspend
-  // LLVMTypeRef coro_suspend_type = LLVMFunctionType(
-  //     i8_type,
-  //     (LLVMTypeRef[]){LLVMTokenTypeInContext(LLVMGetModuleContext(module)),
-  //                     i1_type},
-  //     2, 0);
-  // LLVMValueRef coro_suspend_fn =
-  //     get_extern_fn("llvm.coro.suspend", coro_suspend_type, module);
+  LLVMTypeRef coro_suspend_type = LLVMFunctionType(
+      i8_type, (LLVMTypeRef[]){LLVMTokenTypeInContext(llvm_ctx), i1_type}, 2,
+      0);
+  LLVMValueRef coro_suspend_fn =
+      get_extern_fn("llvm.coro.suspend", coro_suspend_type, module);
 
   // llvm.coro.end
-  // LLVMTypeRef coro_end_type =
-  //     LLVMFunctionType(i1_type, (LLVMTypeRef[]){void_ptr_type, i1_type}, 2, 0);
-  // LLVMValueRef coro_end_fn =
-  //     get_extern_fn("llvm.coro.end", coro_end_type, module);
+  LLVMTypeRef coro_end_type =
+      LLVMFunctionType(i1_type, (LLVMTypeRef[]){void_ptr_type, i1_type}, 2, 0);
+  LLVMValueRef coro_end_fn =
+      get_extern_fn("llvm.coro.end", coro_end_type, module);
 
   // Create coroutine ID
   LLVMValueRef zero = LLVMConstInt(i32_type, 0, 0);
@@ -158,17 +173,15 @@ void setup_coroutine(LLVMValueRef fn, LLVMTypeRef fn_type, JITLangCtx *ctx,
       LLVMFunctionType(void_ptr_type, (LLVMTypeRef[]){size_t_type}, 1, 0),
       module);
 
-  LLVMValueRef frame_mem =
-      LLVMBuildArrayMalloc(builder, LLVMInt8Type(), coro_size, "frame.mem");
-  // LLVMValueRef frame_mem = LLVMBuildCall2(
-  //     builder,
-  //     LLVMFunctionType(void_ptr_type, (LLVMTypeRef[]){size_t_type}, 1, 0),
-  //     malloc_fn, &coro_size, 1, "frame.mem");
+  LLVMValueRef frame_mem = LLVMBuildCall2(
+      builder,
+      LLVMFunctionType(void_ptr_type, (LLVMTypeRef[]){size_t_type}, 1, 0),
+      malloc_fn, &coro_size, 1, "frame.mem");
   //
-  // // Create coroutine promise
-  // LLVMValueRef coro_hdl =
-  //     LLVMBuildCall2(builder, coro_begin_type, coro_begin_fn,
-  //                    (LLVMValueRef[]){coro_id, frame_mem}, 2, "coro.hdl");
+  // Create coroutine promise
+  LLVMValueRef coro_hdl =
+      LLVMBuildCall2(builder, coro_begin_type, coro_begin_fn,
+                     (LLVMValueRef[]){coro_id, frame_mem}, 2, "coro.hdl");
 }
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

@@ -347,6 +347,8 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
   for (int i = 0; i < length; i++) {
     // TODO: this is not ideal - looping over every character of the string
     // and setting the data_ptr value
+    // perhaps alternatively use memcpy intrinsic?
+    // https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic
 
     // Calculate pointer to array element
     element_ptr =
