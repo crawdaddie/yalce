@@ -393,6 +393,12 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = ast_to_sexpr(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, buffer);
     break;
   }
+  case AST_YIELD: {
+    buffer = strcat(buffer, "(yield ");
+    buffer = ast_to_sexpr(ast->data.AST_YIELD.expr, buffer);
+    buffer = strcat(buffer, ")");
+    break;
+  }
 
   default: {
     // Handle unsupported node types or other errors

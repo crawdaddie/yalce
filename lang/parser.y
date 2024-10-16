@@ -117,6 +117,7 @@ program:
 
 expr:
     simple_expr
+  | 'yield' expr                      { $$ = ast_yield($2); }
   | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
@@ -139,7 +140,6 @@ expr:
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
-  | 'await' expr                      { $$ = ast_await($2); }
   ;
 
 simple_expr:

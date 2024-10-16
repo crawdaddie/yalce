@@ -1,5 +1,6 @@
 #include "parse.h"
 #include "input.h"
+#include "serde.h"
 #include "y.tab.h"
 #include <stdlib.h>
 #include <string.h>
@@ -1017,5 +1018,11 @@ void print_location(Ast *ast) {
     fprintf(stderr, "%*c", loc->col - 1, ' ');
     fprintf(stderr, "^");
   }
-  fprintf(stderr, "\n");
+  // fprintf(stderr, "\n");
+}
+
+Ast *ast_yield(Ast *expr) {
+  Ast *y = Ast_new(AST_YIELD);
+  y->data.AST_YIELD.expr = expr;
+  return y;
 }

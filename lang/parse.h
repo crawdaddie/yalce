@@ -128,6 +128,7 @@ typedef enum ast_tag {
   AST_EXTERN_VARIANTS,
   AST_FN_SIGNATURE,
   AST_MATCH_GUARD_CLAUSE,
+  AST_YIELD,
 } ast_tag;
 
 struct Ast {
@@ -243,6 +244,11 @@ struct Ast {
       Ast *test_expr;
       Ast *guard_expr;
     } AST_MATCH_GUARD_CLAUSE;
+
+    struct AST_YIELD {
+      Ast *expr;
+    } AST_YIELD;
+
   } data;
 
   void *md;
@@ -319,6 +325,8 @@ Ast *ast_tuple_type_push(Ast *, Ast *);
 Ast *ast_cons_decl(token_type op, Ast *left, Ast *right);
 
 Ast *ast_match_guard_clause(Ast *expr, Ast *guard);
+
+Ast *ast_yield(Ast *expr);
 
 void add_custom_binop(const char *binop_name);
 

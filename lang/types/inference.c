@@ -514,7 +514,13 @@ Type *infer(Ast *ast, TypeEnv **env) {
     type = infer_match(ast, env);
     break;
   }
+
+  case AST_YIELD: {
+    type = infer(ast->data.AST_YIELD.expr, env);
+    break;
+  }
   case AST_MATCH_GUARD_CLAUSE: {
+
     type = TRY_MSG(infer(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, env),
                    "Could not infer test expression in match guard");
 
