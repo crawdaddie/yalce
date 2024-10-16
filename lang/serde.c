@@ -225,8 +225,8 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   case AST_LAMBDA: {
     buffer = strcat(buffer, "(");
-    if (ast->data.AST_LAMBDA.is_async) {
-      buffer = strcat(buffer, "async ");
+    if (ast->data.AST_LAMBDA.is_coroutine) {
+      buffer = strcat(buffer, "[coroutine] ");
     }
     if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
       buffer = strcat(buffer, ast->data.AST_LAMBDA.fn_name.chars);
@@ -391,6 +391,12 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = ast_to_sexpr(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, buffer);
     buffer = strcat(buffer, " if ");
     buffer = ast_to_sexpr(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, buffer);
+    break;
+  }
+  case AST_YIELD: {
+    buffer = strcat(buffer, "(yield ");
+    buffer = ast_to_sexpr(ast->data.AST_YIELD.expr, buffer);
+    buffer = strcat(buffer, ")");
     break;
   }
 

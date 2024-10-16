@@ -96,9 +96,85 @@ static void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func,
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
+LLVMValueRef get_intrinsic() {}
+void setup_coroutine(LLVMValueRef fn, LLVMTypeRef fn_type, JITLangCtx *ctx,
+                     LLVMModuleRef module, LLVMBuilderRef builder) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+
+  // Get necessary intrinsic functions
+  LLVMTypeRef void_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
+  LLVMTypeRef size_t_type = LLVMInt64Type();
+  LLVMTypeRef i32_type = LLVMInt32Type();
+  LLVMTypeRef i1_type = LLVMInt1Type();
+  LLVMTypeRef i8_type = LLVMInt8Type();
+
+  // llvm.coro.id
+  LLVMTypeRef coro_id_type = LLVMIntrinsicGetType(
+      llvm_ctx, LLVMLookupIntrinsicID("llvm.coro.id", 12),
+      (LLVMTypeRef[]){i32_type, void_ptr_type, void_ptr_type, void_ptr_type},
+      4);
+  LLVMValueRef coro_id_fn = get_extern_fn("llvm.coro.id", coro_id_type, module);
+
+  // llvm.coro.size.i64
+  LLVMTypeRef coro_size_type = LLVMFunctionType(size_t_type, NULL, 0, 0);
+  LLVMValueRef coro_size_fn =
+      get_extern_fn("llvm.coro.size.i64", coro_size_type, module);
+
+  // llvm.coro.begin
+  LLVMTypeRef coro_begin_type = LLVMFunctionType(
+      void_ptr_type, (LLVMTypeRef[]){void_ptr_type, void_ptr_type}, 2, 0);
+  LLVMValueRef coro_begin_fn =
+      get_extern_fn("llvm.coro.begin", coro_begin_type, module);
+
+  // llvm.coro.suspend
+  // LLVMTypeRef coro_suspend_type = LLVMFunctionType(
+  //     i8_type,
+  //     (LLVMTypeRef[]){LLVMTokenTypeInContext(LLVMGetModuleContext(module)),
+  //                     i1_type},
+  //     2, 0);
+  // LLVMValueRef coro_suspend_fn =
+  //     get_extern_fn("llvm.coro.suspend", coro_suspend_type, module);
+
+  // llvm.coro.end
+  // LLVMTypeRef coro_end_type =
+  //     LLVMFunctionType(i1_type, (LLVMTypeRef[]){void_ptr_type, i1_type}, 2, 0);
+  // LLVMValueRef coro_end_fn =
+  //     get_extern_fn("llvm.coro.end", coro_end_type, module);
+
+  // Create coroutine ID
+  LLVMValueRef zero = LLVMConstInt(i32_type, 0, 0);
+  LLVMValueRef null_ptr = LLVMConstNull(void_ptr_type);
+  LLVMValueRef coro_id = LLVMBuildCall2(
+      builder, coro_id_type, coro_id_fn,
+      (LLVMValueRef[]){zero, null_ptr, null_ptr, null_ptr}, 4, "coro.id");
+
+  // // Get coroutine frame size
+  LLVMValueRef coro_size = LLVMBuildCall2(builder, coro_size_type, coro_size_fn,
+                                          NULL, 0, "coro.size");
+  //
+  // Allocate memory for coroutine frame
+  LLVMValueRef malloc_fn = get_extern_fn(
+      "malloc",
+      LLVMFunctionType(void_ptr_type, (LLVMTypeRef[]){size_t_type}, 1, 0),
+      module);
+
+  LLVMValueRef frame_mem =
+      LLVMBuildArrayMalloc(builder, LLVMInt8Type(), coro_size, "frame.mem");
+  // LLVMValueRef frame_mem = LLVMBuildCall2(
+  //     builder,
+  //     LLVMFunctionType(void_ptr_type, (LLVMTypeRef[]){size_t_type}, 1, 0),
+  //     malloc_fn, &coro_size, 1, "frame.mem");
+  //
+  // // Create coroutine promise
+  // LLVMValueRef coro_hdl =
+  //     LLVMBuildCall2(builder, coro_begin_type, coro_begin_fn,
+  //                    (LLVMValueRef[]){coro_id, frame_mem}, 2, "coro.hdl");
+}
+
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
+  bool is_coroutine = ast->data.AST_LAMBDA.is_coroutine;
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
   if (fn_name.chars == NULL) {
@@ -125,6 +201,9 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (!is_anon) {
     add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
+  }
+  if (is_coroutine) {
+    setup_coroutine(func, prototype, ctx, module, builder);
   }
 
   for (int i = 0; i < fn_len; i++) {
@@ -501,7 +580,6 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_array_increment(array, el_type, builder);
   }
 
-
   if (strcmp(sym_name, "array_slice") == 0) {
     // printf("call array slice\n");
 
@@ -512,7 +590,7 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     // LLVMTypeRef el_type =
     //     type_to_llvm_type(array_type->data.T_CONS.args[0], ctx->env, module);
     LLVMTypeRef el_type = LLVMInt8Type();
-//
+    //
     LLVMValueRef start =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 

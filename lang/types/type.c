@@ -162,6 +162,35 @@ Type t_array_of_chars_fn_sig = MAKE_FN_TYPE_2(&t_string, &t_char_array);
 Type t_for_sig =
     MAKE_FN_TYPE_4(&t_int, &t_int, &MAKE_FN_TYPE_2(&t_int, &t_void), &t_void);
 
+Type t_option_contained_type = {T_VAR, {.T_VAR = "option_contained"}};
+Type t_option = {
+    T_CONS,
+    {.T_CONS = {
+         TYPE_NAME_VARIANT,
+         (Type *[]){
+             &(Type){T_CONS,
+                     {.T_CONS = {"Some",
+                                 .args = (Type *[]){&t_option_contained_type},
+                                 .num_args = 1}}},
+
+             &(Type){T_CONS, {.T_CONS = {"None"}}},
+         },
+         2}}};
+
+Type t_yield_option = {
+    T_CONS,
+    {.T_CONS = {
+         TYPE_NAME_VARIANT,
+         (Type *[]){
+             &(Type){T_CONS,
+                     {.T_CONS = {"Yield",
+                                 .args = (Type *[]){&t_option_contained_type},
+                                 .num_args = 1}}},
+
+             &(Type){T_CONS, {.T_CONS = {"YieldNone"}}},
+         },
+         2}}};
+
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     return strncat(buffer, "null", 4);

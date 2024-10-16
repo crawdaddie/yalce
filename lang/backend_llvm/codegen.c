@@ -8,6 +8,7 @@
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
 #include "serde.h"
+#include "yield.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -132,6 +133,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_LET: {
     return codegen_assignment(ast, ctx, module, builder);
   }
+
   case AST_IDENTIFIER: {
     return codegen_identifier(ast, ctx, module, builder);
   }
@@ -151,8 +153,13 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_MATCH: {
     return codegen_match(ast, ctx, module, builder);
   }
+
   case AST_VOID: {
     return LLVMGetUndef(LLVMVoidType());
+  }
+
+  case AST_YIELD: {
+    return codegen_yield(ast->data.AST_YIELD.expr, ctx, module, builder);
   }
 
     // case AST_TYPE_DECL: {
