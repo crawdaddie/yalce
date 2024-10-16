@@ -38,7 +38,7 @@ endif
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_CC += -DLLVM_BACKEND
-LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
+LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native coroutines`
 
 ifeq ($(MAKECMDGOALS),debug)
     LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 

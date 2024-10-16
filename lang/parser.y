@@ -185,10 +185,6 @@ let_binding:
                                     }
   | lambda_expr                     { $$ = $1; }
 
-  | ASYNC lambda_expr               { Ast *lambda = $2;
-                                      lambda->data.AST_LAMBDA.is_async = true;
-                                      $$ = lambda;
-                                    }
   | LET '(' IDENTIFIER ')' '=' lambda_expr 
                                     {
                                       Ast *id = ast_identifier($3);

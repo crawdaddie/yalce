@@ -81,7 +81,7 @@ let set_synth_param = fn syn p offset v ->
   | Trig i -> set_input_trig_offset syn i offset
 ;;
 
-# let synth_pattern = "0-1-2--34-56--7--89-0a-b-c-d-e--f--";
+let synth_pattern = "0-1-2--34-56--7--89-0a-b-c-d-e--f--";
 
 let stream_vals = fn (dur, phase, note, _ff): (Double * Double * Double * Double) ->
   let ff = phase |> cos |> bipolar_scale 100. 2000.;

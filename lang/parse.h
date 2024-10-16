@@ -206,7 +206,7 @@ struct Ast {
       ObjString fn_name;
       Ast *body;
       Ast **defaults;
-      bool is_async;
+      bool is_coroutine;
     } AST_LAMBDA;
 
     struct AST_EXTERN_FN {

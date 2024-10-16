@@ -225,8 +225,8 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   case AST_LAMBDA: {
     buffer = strcat(buffer, "(");
-    if (ast->data.AST_LAMBDA.is_async) {
-      buffer = strcat(buffer, "async ");
+    if (ast->data.AST_LAMBDA.is_coroutine) {
+      buffer = strcat(buffer, "[coroutine] ");
     }
     if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
       buffer = strcat(buffer, ast->data.AST_LAMBDA.fn_name.chars);
