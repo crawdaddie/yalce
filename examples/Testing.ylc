@@ -1,6 +1,7 @@
 %include String
+
 let test_val = fn b msg ->
   match b with
-    | true -> (println `✅ {msg}`)
-    | _ -> (println `❌ {msg}`)
+    | true -> (print "✅ "; println msg)
+    | _ -> (print "❌ "; println msg)
 ;;

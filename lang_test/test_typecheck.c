@@ -563,8 +563,7 @@ int main() {
 
   ({
     RESET;
-    TITLE("## match on boolean fn")
-
+    TITLE("## match on boolean")
     Type t = tvar("t1");
     TEST_SIMPLE_AST_TYPE("let test_val = fn b msg -> \n"
                          "match b with\n"
@@ -637,6 +636,16 @@ int main() {
     print_ast(ast->data.AST_BODY.stmts[0]);
     print_type(ast->data.AST_BODY.stmts[0]->md);
   });
+  ({
+    RESET;
+    TITLE("## currying")
+    Type t1 = arithmetic_var("t1");
+    TEST_SIMPLE_AST_TYPE(
+        "let sum3 = fn a b c -> a + b + c;;\n"
+        "let ss = sum3 1 2;\n",
+        &MAKE_FN_TYPE_2(&t1, &TYPECLASS_RESOLVE("arithmetic", &t_int, &t1)));
+  });
+
   ({
     RESET;
     TITLE("## match expr with guard clause")

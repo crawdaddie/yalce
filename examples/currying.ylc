@@ -1,16 +1,15 @@
 #! /Users/adam/projects/sound/yalce/build/lang
-let list_sum = fn s l ->
-  (match l with
-  | [] -> s
-  | x::rest -> list_sum (s + x) rest
-  )
-;;
-
-let sum = list_sum 0;
+# let list_sum = fn s l ->
+#   (match l with
+#   | [] -> s
+#   | x::rest -> list_sum (s + x) rest
+#   )
+# ;;
+#
 let sum3 = fn a b c -> a + b + c;;
 let ss = sum3 1 2;
 
-5 |> ss
+ss 3
 
 
 

@@ -3,15 +3,12 @@ let get_stdout = extern fn () -> Ptr;
 
 let print = extern fn String -> ();
 
-let stderr = get_stderr ();
-let stdout = get_stdout ();
-
 let fprint = extern fn Ptr -> String -> ();
 let cstr = extern fn String -> Ptr;
 
 let println = fn msg ->
-  print msg;
-  print `\n` 
+  print `{msg}\n`;
+  ()
 ;;
 
 # let string_add = extern fn String -> String -> String;

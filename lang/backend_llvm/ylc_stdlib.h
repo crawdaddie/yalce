@@ -29,9 +29,6 @@ double bipolar_scale(double min, double max, double bipolar_input);
 // unipolar input is in the range [0, 1]
 double unipolar_scale(double min, double max, double unipolar_input);
 
-FILE *get_stderr();
-FILE *get_stdout();
-
 const char *_string_concat(const char **strings, int num_strings);
 
 String string_concat(String *strings, int num_strings);

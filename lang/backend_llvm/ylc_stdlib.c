@@ -67,9 +67,7 @@ double bipolar_scale(double min, double max, double bipolar_input) {
 double unipolar_scale(double min, double max, double unipolar_input) {
   return min + (max - min) * (unipolar_input);
 }
-
-FILE *get_stderr() { return stderr; }
-FILE *get_stdout() { return stdout; }
+//
 
 String string_concat(String *strings, int num_strings) {
   int total_len = 0;

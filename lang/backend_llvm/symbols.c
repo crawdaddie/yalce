@@ -121,6 +121,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         stderr,
         "codegen identifier failed symbol '%s' not found in scope %d %s:%d\n",
         chars, ctx->stack_ptr, __FILE__, __LINE__);
+    print_location(ast);
     return NULL;
   }
   switch (sym->type) {
