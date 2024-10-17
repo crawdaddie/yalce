@@ -325,6 +325,15 @@ LLVMValueRef get_specific_curried_callable(JITSymbol *sym, const char *sym_name,
                                            JITLangCtx *ctx,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder) {
+
+  SpecificFns *specific_fns =
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
+  LLVMValueRef callable = specific_fns_lookup(specific_fns, expected_fn_type);
+
+  if (callable) {
+    return callable;
+  }
+
   Ast *application = sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
   Type *original_fn_type = application->data.AST_APPLICATION.function->md;
   int total_args_length = fn_type_args_len(original_fn_type);
@@ -349,8 +358,20 @@ LLVMValueRef get_specific_curried_callable(JITSymbol *sym, const char *sym_name,
 
   Type *ret = f;
   Type *full_type = create_type_multi_param_fn(total_args_length, args, ret);
-  printf("%s: ", sym_name);
-  print_type(full_type);
+
+  JITSymbol *original_sym =
+      lookup_id_ast(application->data.AST_APPLICATION.function, ctx);
+
+  const char *original_sym_name =
+      application->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+
+  LLVMValueRef original_callable = get_specific_callable(
+      original_sym, original_sym_name, full_type, ctx, module, builder);
+
+  LLVMTypeRef proto =
+      fn_prototype(expected_fn_type, new_args_length, ctx->env, module);
+
+  callable = LLVMAddFunction(module, "curried_fn", proto);
 
   return NULL;
 }
