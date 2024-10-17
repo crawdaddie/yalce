@@ -14,6 +14,9 @@ let stdout = get_stdout ();
 let fprint = extern fn Ptr -> String -> ();
 let cstr = extern fn String -> Ptr;
 
+let println = fn msg ->
+  print msg;
+  print `\n` 
+;;
 
-# let string_add = extern fn String -> String -> String;
 let transpose_string = extern fn Int -> Int -> Int -> Int -> String -> String;

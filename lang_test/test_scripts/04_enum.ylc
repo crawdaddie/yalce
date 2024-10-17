@@ -1,5 +1,5 @@
 #! /Users/adam/projects/sound/yalce/build/lang
-%include ../../../examples/Testing
+%include ../../examples/Testing
 
 type Enum =
   | A

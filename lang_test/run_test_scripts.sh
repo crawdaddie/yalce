@@ -38,6 +38,7 @@ Blue='\033[0;34m'
 Purple='\033[0;35m'
 Cyan='\033[0;36m'
 NC='\033[0m'
+
 # Loop through each .ylc file and run the executable
 for file in $YLC_FILES; do
     echo -e "${Green}$file:${NC}"

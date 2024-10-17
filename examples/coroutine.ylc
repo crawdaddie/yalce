@@ -1,0 +1,15 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+# %include ../engine/bindings/Sched
+# %include ../engine/bindings/Synth
+# %include String
+
+let co = fn () ->
+  yield 1.;
+  yield 2.;
+  yield 3.
+;;
+
+co ()
+co ()
+co ()
+co ()
