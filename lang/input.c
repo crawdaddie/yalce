@@ -270,6 +270,7 @@ char *normalize_path(const char *path) {
 
   char *src = normalized;
   char *dst = normalized;
+  int depth = 0;
 
   while (*src) {
     if (src[0] == '/') {
@@ -282,22 +283,31 @@ char *normalize_path(const char *path) {
         src++;
     } else if (src[0] == '.' && src[1] == '.' &&
                (src[2] == '/' || src[2] == '\0')) {
-      if (dst > normalized + 1) {
-        dst--;
-        while (dst > normalized && *(dst - 1) != '/')
+      if (depth > 0) {
+        depth--;
+        if (dst > normalized + 1) {
           dst--;
+          while (dst > normalized && *(dst - 1) != '/')
+            dst--;
+        }
+      } else {
+        *dst++ = '.';
+        *dst++ = '.';
+        if (src[2] == '/')
+          *dst++ = '/';
       }
       src += 2;
       if (*src)
         src++;
     } else {
+      depth++;
       while (*src && *src != '/')
         *dst++ = *src++;
     }
   }
 
   if (dst == normalized) {
-    *dst++ = '/';
+    *dst++ = '.';
   }
   *dst = '\0';
 

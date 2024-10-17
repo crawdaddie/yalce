@@ -1,5 +1,4 @@
-%include ../testing
-
+%include ../../examples/Testing
 let x = 200.;
 let y = x % 150.;
 

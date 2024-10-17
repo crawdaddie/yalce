@@ -55,6 +55,7 @@ test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 test_scripts: 
 	./run_test_scripts.sh ./test_scripts
 
+
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT) $(YACC_HEADER)

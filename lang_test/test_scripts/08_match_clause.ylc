@@ -1,4 +1,4 @@
-%include ../testing
+%include ../../examples/Testing
 let x = 302;
 
 let y = match x with
