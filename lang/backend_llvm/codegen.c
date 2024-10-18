@@ -13,11 +13,12 @@
 
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
+  Type *t = ast->md;
   LLVMTypeRef ret;
-  if (((Type *)ast->md)->kind == T_FN && is_generic(ast->md)) {
+  if (t->kind == T_FN && is_generic(ast->md)) {
     ret = LLVMVoidType();
   } else {
-    ret = type_to_llvm_type(ast->md, ctx->env, module);
+    ret = type_to_llvm_type(t, ctx->env, module);
   }
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
@@ -82,9 +83,16 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     for (int i = 0; i < len; i++) {
       Ast *item = ast->data.AST_LIST.items + i;
 
+      // printf("codegen fmt string %d\n", i);
+      // print_ast(item);
+      // print_type(item->md);
+
       LLVMValueRef val = codegen(item, ctx, module, builder);
-      LLVMValueRef str_val =
-          llvm_string_serialize(val, item->md, module, builder);
+      Type *t = item->md;
+      if (t->kind == T_VAR) {
+        t = env_lookup(ctx->env, t->data.T_VAR);
+      }
+      LLVMValueRef str_val = llvm_string_serialize(val, t, module, builder);
       strings_to_concat[i] = str_val;
     }
     LLVMValueRef concat_strings =

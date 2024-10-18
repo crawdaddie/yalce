@@ -11,4 +11,9 @@ LLVMValueRef insert_strlen_call(LLVMValueRef string_ptr, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
 LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder);
+
+// String string_add(String a, String b);
+
+LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) ;
 #endif

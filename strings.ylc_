@@ -1,0 +1,31 @@
+#! /Users/Adam.Juraszek/projects/yalce/build/lang
+%include examples/Fmt
+%include examples/Array
+let x = [|1,2,3,4,5,6|];
+
+
+
+let array_iter = fn a ->
+  let s = array_size a; 
+  match s with
+  | 0 -> 1
+  | _ -> (
+    print `{array_at a 0}`;
+    array_iter (array_incr a)
+  )
+;;
+
+# let () = array_iter x;
+# let m = Array2d 3 2 x;
+
+
+let strs = ["hello", "hello2", "hello3"];
+
+let concat_strs = fn res strs ->
+  match strs with
+  | [] -> res
+  | s::rest -> concat_strs `{res}{s}` rest
+;;
+
+
+let d = concat_strs strs;

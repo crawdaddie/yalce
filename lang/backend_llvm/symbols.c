@@ -192,6 +192,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   LLVMValueRef expr_val =
       codegen(ast->data.AST_LET.expr, outer_ctx, module, builder);
 
+  // LLVMDumpValue(expr_val);
   if (!expr_val) {
     return NULL;
   }
@@ -233,35 +234,72 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   // Type *array_at_fn_sig =
   //     type_fn(&t_array_var, type_fn(&t_int, &t_array_var_el));
   env = env_extend(env, "array_at", &t_array_at_fn_sig);
-
   JITSymbol *array_at_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_at_fn_sig, NULL, NULL);
-
   ht_set_hash(stack, "array_at", hash_string("array_at", 8), array_at_sym);
 
   env = env_extend(env, "array_size", &t_array_size_fn_sig);
-
   JITSymbol *array_size_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_size_fn_sig, NULL, NULL);
-
   ht_set_hash(stack, "array_size", hash_string("array_size", 10),
               array_size_sym);
 
-  Type *array_init_fn_sig =
-      type_fn(&t_int, type_fn(&t_array_var_el, &t_array_var));
+  env = env_extend(env, "array_incr", &t_array_incr_fn_sig);
+  JITSymbol *array_incr_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_incr_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "array_incr", hash_string("array_incr", 10),
+              array_incr_sym);
 
-  env = env_extend(env, "array_init", array_init_fn_sig);
+  env = env_extend(env, "array_to_list", &t_array_to_list_fn_sig);
+  JITSymbol *array_to_list_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_to_list_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "array_to_list", hash_string("array_to_list", 10),
+              array_to_list_sym);
 
+<<<<<<< HEAD
   JITSymbol *array_init_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
 
   ht_set_hash(stack, "array_init", hash_string("array_init", 10),
               array_init_sym);
 
+||||||| ecb097a
+  JITSymbol *array_init_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
+
+  ht_set_hash(stack, "array_init", hash_string("array_init", 10),
+              array_init_sym);
+
+
+  JITSymbol *array_of_chars_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_of_chars_fn_sig, NULL, NULL);
+
+  env = env_extend(env, "array_of_chars", &t_array_of_chars_fn_sig);
+  ht_set_hash(stack, "array_of_chars", hash_string("array_of_chars", 14),
+              array_of_chars_sym);
+
+=======
+  // Type *array_init_fn_sig =
+  //     type_fn(&t_int, type_fn(&t_array_var_el, &t_array_var));
+  // env = env_extend(env, "array_init", array_init_fn_sig);
+  //
+  // JITSymbol *array_init_sym =
+  //     new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
+  //
+  // ht_set_hash(stack, "array_init", hash_string("array_init", 10),
+  //             array_init_sym);
+
+>>>>>>> main
   JITSymbol *deref_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_ptr_deref_sig, NULL, NULL);
 
   ht_set_hash(stack, "deref", hash_string("deref", 5), deref_sym);
+
+  env = env_extend(env, "string_add", &t_string_add_fn_sig);
+  JITSymbol *string_add_sym =
+      new_symbol(STYPE_FUNCTION, &t_string_add_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "string_add", hash_string("string_add", 10),
+              string_add_sym);
 
   return env;
 }

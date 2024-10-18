@@ -116,7 +116,6 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
     if (res_type == NULL) {
       res_type = branch_res_type;
     } else {
-
       Type *unified_res_type =
           TRY(unify(res_type, branch_res_type, &extended_env));
 

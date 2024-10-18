@@ -860,6 +860,69 @@ int main() {
         ";;\n",
         &MAKE_FN_TYPE_5(&t_ptr, &t_param_variant, &t_int, &t_num, &t_ptr), env);
   });
+  ({
+    RESET;
+    TITLE("Array2d cons")
+    Type array_double = tcons(TYPE_NAME_ARRAY, 1, &t_num);
+    TEST_SIMPLE_AST_TYPE("type Array2d t = Int * Int * Array of t;\n"
+                         "let x = Array2d 2 3 [|1.,2.|];",
+                         &TTUPLE(3, &t_int, &t_int, &array_double));
+  });
+  ({
+    RESET;
+    TITLE("## array iter fn");
+    TypeEnv *env;
+    env = env_extend(env, "array_size", &t_array_size_fn_sig);
+    env = env_extend(env, "array_incr", &t_array_incr_fn_sig);
+    TEST_SIMPLE_AST_TYPE_ENV("let iter_arr = fn arr ->\n"
+                             "  match arr with\n"
+                             "  | a if (array_size a) > 0 -> (\n"
+                             "    iter_arr (array_incr a) \n"
+                             "  )   \n"
+                             "  | _ -> ()\n"
+                             ";;\n",
+                             &MAKE_FN_TYPE_2(&t_array_var, &t_void), env);
+  });
+
+  ({
+    RESET;
+    TITLE("## array iter fn call");
+    TypeEnv *env;
+    env = env_extend(env, "array_size", &t_array_size_fn_sig);
+    env = env_extend(env, "array_incr", &t_array_incr_fn_sig);
+    Ast *prog = TEST_SIMPLE_AST_TYPE_ENV("let iter_arr = fn arr ->\n"
+                                         "  match arr with\n"
+                                         "  | a if (array_size a) > 0 -> (\n"
+                                         "    iter_arr (array_incr a) \n"
+                                         "  )   \n"
+                                         "  | _ -> ()\n"
+                                         ";;\n"
+                                         "iter_arr [|1,2,3,4|]\n",
+                                         &t_void, env);
+    Ast *call = prog->data.AST_BODY.stmts[1];
+
+    Type array_int = tcons(TYPE_NAME_ARRAY, 1, &t_int);
+    bool tc = types_equal(call->data.AST_APPLICATION.function->md,
+                          &MAKE_FN_TYPE_2(&array_int, &t_void));
+
+    if (tc) {
+      fprintf(stderr, "✅ call is Array of Int -> ()\n");
+    } else {
+      fprintf(stderr, "❌ call is Array of Int -> ()\n");
+    }
+  });
+
+  ({
+    RESET;
+    TITLE("string concat")
+    TEST_SIMPLE_AST_TYPE(
+        "let concat_strs = fn res strs ->\n"
+        "  match strs with \n"
+        "  | [] -> res\n"
+        "  | s::rest -> concat_strs `{res}{s}` rest\n"
+        ";;\n",
+        &MAKE_FN_TYPE_3(&t_string, &TLIST(&t_string), &t_string));
+  });
 
   return status == true ? 0 : 1;
 }

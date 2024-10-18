@@ -1,0 +1,12 @@
+{
+  "runInTerminal": true,
+  "cwd": "${workspaceFolder}",
+  "args": [
+    "list_sum.ylc"
+  ],
+  "program": "/Users/Adam.Juraszek/projects/yalce/build/lang",
+  "type": "lldb",
+  "name": "Launch",
+  "stopOnEntry": false,
+  "request": "launch"
+}

@@ -1,4 +1,4 @@
-%include ../testing
+%include ../../examples/Testing
 let sum = fn a b -> a + b;;
 let proc = fn f a b -> f a b;;
 

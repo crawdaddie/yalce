@@ -1,0 +1,110 @@
+#! /Users/adam/projects/sound/yalce/build/lang
+%include Synth
+%include String
+%include Sched
+%include Array
+
+let kick_buf = read_buf (cstr "kick.wav");
+let snare_buf = read_buf (cstr "snare.wav");
+let hh_buf = read_buf (cstr "hh.wav");
+let drum_machine = fn () ->
+  let kt = inlet 0.0;
+  let st = inlet 0.0;
+  let ht = inlet 0.0;
+  let k = bufplayer_1shot_node kick_buf 1. 0.0 kt;
+  let s = bufplayer_1shot_node snare_buf 1. 0.0 st;
+  let h = bufplayer_1shot_node hh_buf 1. 0.0 ht;
+  k + s + h
+;;
+
+
+let drums = drum_machine |> chain_wrap |> play;
+
+let pattern = [|
+"x-x",
+"--x",
+"--x",
+"--x",
+"--x",
+"--x",
+"x-x",
+"--x",
+"-xx",
+"--x",
+"x-x",
+"--x",
+"--x",
+"--x",
+"--x",
+"--x",
+"-xx",
+"--x",
+"x-x",
+"x-x",
+"--x",
+"--x",
+"x-x",
+"--x",
+"-xx",
+"--x",
+"--x",
+"--x",
+"--x",
+"x-x",
+"x-x",
+"--x",
+|];
+
+
+
+let trig_func = fn line idx ->
+  let k = array_at line idx in 
+  match k with
+  | 'x' -> (
+    set_input_trig_offset drums idx frame_offset;
+    ()
+  )
+  | '-' -> ()
+;; 
+
+
+let drum_runner = fn
+  args: (Ptr of (Double * Double * Int))
+  frame_offset: (Int)
+  ->
+  let (duration, phase, tick) = *args;
+  let line = array_at pattern tick;
+  # print line;
+  # print "\n";
+
+  # trig_func line 0;
+  let k = array_at line 0 in 
+  match k with
+  | 'x' -> (
+    set_input_trig_offset drums 0 frame_offset;
+    ()
+  )
+  | '-' -> ();
+
+  let s = array_at line 1 in 
+  match s with
+  | 'x' -> (
+    set_input_trig_offset drums 1 frame_offset;
+    ()
+  )
+  | '-' -> ();
+
+  let h = array_at line 2 in 
+  match h with
+  | 'x' -> (
+    set_input_trig_offset drums 2 frame_offset;
+    ()
+  )
+  | '-' -> ();
+
+  (duration, phase + duration, (tick + 1) % 32)
+
+  |> schedule_event drum_runner duration
+;;
+
+schedule_event_quant drum_runner 1.0 (0.125, 0., 0);

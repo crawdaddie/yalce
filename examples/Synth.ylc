@@ -1,5 +1,5 @@
 #! /Users/adam/projects/sound/yalce/build/lang
-let read_buf = extern fn String -> Signal;
+let read_buf = extern fn Ptr -> Signal;
 
 # oscillators
 let bufplayer_node = extern fn Signal -> Signal -> Signal -> Signal -> Synth;

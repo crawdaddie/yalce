@@ -1,9 +1,7 @@
 #! /Users/adam/projects/sound/yalce/build/lang
-let printf = extern fn String -> () ; # simplified printf from c stdlib
 
 let find_h = fn l -> 
   let aux = fn i l ->
-    let _ = printf `{i} -- {l}\n` in
     match l with
     | "" -> -1
     | 'h'::_ -> i

@@ -13,6 +13,9 @@ extern Type t_uint64;
 extern Type t_num;
 extern Type t_string;
 extern Type t_char_array;
+extern Type t_string_add_fn_sig;
+extern Type t_string_array;
+
 bool is_string_type(Type *type);
 
 extern Type t_bool;
@@ -37,12 +40,15 @@ extern Type t_array_var_el;
 extern Type t_array_var;
 
 extern Type t_array_size_fn_sig;
+extern Type t_array_incr_fn_sig;
+extern Type t_array_to_list_fn_sig;
 extern Type t_array_at_fn_sig;
 
 extern Type t_array_of_chars_fn_sig;
 
 extern Type t_ptr_deref_sig;
 
+extern Type t_for_sig;
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"

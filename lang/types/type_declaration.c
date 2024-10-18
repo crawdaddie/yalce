@@ -14,6 +14,11 @@ Type *fn_type_decl(Ast *sig, TypeEnv *env) {
   return compute_type_expression(sig, env);
 }
 
+Type *compute_concrete_type(Type *generic, Type *contained) {
+  TypeEnv *env = env_extend(NULL, "t", contained);
+  return resolve_generic_type(generic, env);
+}
+
 Type *next_tvar();
 Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   switch (expr->tag) {
@@ -100,8 +105,27 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
   case AST_BINOP: {
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
+      // printf("cons decl\n");
+      // print_type_env(env);
+
       Type *contained_type =
           compute_type_expression(expr->data.AST_BINOP.right, env);
+
+      const char *name = expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
+      Type *lookup = env_lookup(env, name);
+
+      if (lookup && is_generic(lookup)) {
+        // printf("create version of declared type: ");
+        // print_type(lookup);
+        // printf("with contained: ");
+        print_type(lookup);
+        Type *t = copy_type(lookup);
+        t = compute_concrete_type(t, contained_type);
+        // printf("concrete type: ");
+        // printf("is generic? %d\n", is_generic(t));
+        // print_type(t);
+        return t;
+      }
 
       Type *cons = empty_type();
       cons->kind = T_CONS;

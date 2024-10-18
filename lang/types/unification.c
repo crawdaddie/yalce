@@ -237,6 +237,8 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
 
   if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
       t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+    print_type_err(t1);
+    print_type_err(t2);
 
     printf("return NULL %s:%d\n", __FILE__, __LINE__);
     return NULL;
@@ -286,6 +288,7 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   // printf("unify: ");
   // print_type(t1);
   // print_type(t2);
+
   if (t1 == NULL) {
     printf(stderr, "Error unifying type - lhs is NULL\n");
     return NULL;
@@ -295,6 +298,9 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   }
   if (t2->kind == T_VAR) {
     return unify_variable(t2, t1, env);
+  }
+  if (t1->kind == T_VOID) {
+    return t1;
   }
 
   if (t1->kind != t2->kind) {
@@ -350,7 +356,7 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   case T_NUM:
   case T_CHAR:
   case T_BOOL:
-  case T_VOID:
+  // case T_VOID:
   case T_STRING:
     // These are atomic types, so they unify if they're the same kind
     return t1;
@@ -402,6 +408,10 @@ Type *variable_tc_resolve(Type *a, Type *b, TypeEnv **env) {
 }
 
 void unify_rec_fn_mem(Type *a, Type *b, TypeEnv **env) {
+  if (a->kind == T_VOID && b->kind == T_VOID) {
+    return;
+  }
+
   if (a->kind == T_VAR && b->kind == T_TYPECLASS_RESOLVE &&
       occurs_check(a, b)) {
     Type *replacement;

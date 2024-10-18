@@ -1,9 +1,11 @@
 #include "parse.h"
 #include "input.h"
-#include "serde.h"
 #include "y.tab.h"
 #include <stdlib.h>
 #include <string.h>
+
+bool top_level_tests = false;
+bool lex_test_block = false;
 
 char *_cur_script;
 const char *_cur_script_content;
@@ -318,7 +320,10 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
   // process includes backwards so they're on the stack in the correct order
   while (total_len >= 0) {
     input = _input + total_len;
-    if (strncmp("%include ", input, 9) == 0) {
+    if ((strncmp("%include ", input, 9) == 0) &&
+        (*(input - 2) != '#')    // ignore if preceded by comment
+        && (*(input - 1) != '#') // ignore if preceded by comment
+    ) {
       int line_len = 0;
       const char *line = input;
       while (*line != '\n') {
@@ -332,6 +337,7 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
 
       snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc", current_dir,
                mod_name);
+
       fully_qualified_name = normalize_path(fully_qualified_name);
       fully_qualified_name = prepend_current_directory(fully_qualified_name);
 
@@ -347,6 +353,8 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
 
         stack = preprocess_includes(_current_dir, import_content, stack);
       }
+    } else if (strncmp("%test", input, 5) == 0) {
+      // TODO: auto-include test module (eg examples/Testing.ylc)
     }
     total_len--;
   }
@@ -442,6 +450,8 @@ Ast *parse_input_script(const char *filename) {
   ast_root = Ast_new(AST_BODY);
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+
+  // dbg_input_stack(stack);
   inputs_list *__stack = stack;
   while (__stack != _stack) {
     _cur_script = __stack->qualified_path;
@@ -449,8 +459,15 @@ Ast *parse_input_script(const char *filename) {
     _cur_script_content = input;
     yylineno = 1;
     yyabsoluteoffset = 0;
-    yy_scan_string(input);
-    yyparse();
+    if (strcmp(__stack->qualified_path, filename) == 0) {
+      lex_test_block = true;
+      yy_scan_string(input);
+      yyparse();
+      lex_test_block = false;
+    } else {
+      yy_scan_string(input);
+      yyparse();
+    }
 
     __stack = __stack->next;
   }
@@ -933,11 +950,10 @@ Ast *ast_fn_sig(Ast *arg, Ast *arg2) {
   a->tag = AST_FN_SIGNATURE;
   return a;
 }
+
 Ast *ast_fn_sig_push(Ast *l, Ast *a) {
   Ast *sig = ast_list_push(l, a);
-
   a->tag = AST_FN_SIGNATURE;
-
   return sig;
 }
 
@@ -970,35 +986,6 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
   node->data.AST_MATCH_GUARD_CLAUSE.guard_expr = guard;
   return node;
 }
-
-// void ___print_location(Ast *ast) {
-//   loc_info *loc = ast->loc_info;
-//   if (!loc) {
-//     return;
-//   }
-//   fprintf(stderr, "%s %d:%d\n", loc->src, loc->line, loc->col);
-//   // long long abs_offset = loc->absolute_offset - 100;
-//   // abs_offset = abs_offset >= 0 ? abs_offset : 0;
-//   //
-//   const char *offset = loc->src_content + loc->absolute_offset;
-//
-//   while (*offset != '\n') {
-//     offset--;
-//   }
-//   offset++;
-//
-//   while (*offset != '\n') {
-//     fputc(*offset, stderr);
-//     offset++;
-//   }
-//   fprintf(stderr, "\n");
-//   if (loc->col_end - loc->col > 2) {
-//     fprintf(stderr, "%*c", loc->col - 1, ' ');
-//     fprintf(stderr, "^");
-//   }
-//   // printf("%d -- %d\n", loc->col, loc->col_end);
-//   fprintf(stderr, "\n");
-// }
 void print_location(Ast *ast) {
   loc_info *loc = ast->loc_info;
   if (!loc || !loc->src || !loc->src_content) {

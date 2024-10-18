@@ -1,4 +1,4 @@
-%include ../testing
+%include ../../examples/Testing
 type Option t =
   | Some of t
   | None

@@ -55,6 +55,8 @@ LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env,
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+  // printf("codegen extern fn\n");
+  // print_ast(ast);
 
   const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
   int name_len = strlen(name);
@@ -63,17 +65,23 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_param_types[params_count];
   Type *fn_type = ast->md;
 
-  for (int i = 0; i < params_count; i++) {
-    Type *t = fn_type->data.T_FN.from;
-    llvm_param_types[i] = type_to_llvm_type(t, ctx->env, module);
-    fn_type = fn_type->data.T_FN.to;
+  LLVMTypeRef llvm_fn_type;
+  if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
+    LLVMTypeRef ret_type =
+        type_to_llvm_type(fn_type->data.T_FN.to, ctx->env, module);
+    llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
+  } else {
+    for (int i = 0; i < params_count; i++) {
+      Type *t = fn_type->data.T_FN.from;
+      llvm_param_types[i] = type_to_llvm_type(t, ctx->env, module);
+      fn_type = fn_type->data.T_FN.to;
+    }
+
+    LLVMTypeRef ret_type = type_to_llvm_type(fn_type, ctx->env, module);
+
+    llvm_fn_type =
+        LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
   }
-
-  LLVMTypeRef ret_type = type_to_llvm_type(fn_type, ctx->env, module);
-
-  LLVMTypeRef llvm_fn_type =
-      LLVMFunctionType(ret_type, llvm_param_types, params_count, false);
-
   return get_extern_fn(name, llvm_fn_type, module);
 }
 
@@ -91,12 +99,18 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
+  bool is_anon = false;
+  if (fn_name.chars == NULL) {
+    // return codegen_anonymous_fn(ast, ctx, module, builder);
+    is_anon = true;
+  }
   Type *fn_type = ast->md;
 
   int fn_len = ast->data.AST_LAMBDA.len;
   LLVMTypeRef prototype = fn_prototype(ast->md, fn_len, ctx->env, module);
 
-  LLVMValueRef func = LLVMAddFunction(module, fn_name.chars, prototype);
+  LLVMValueRef func = LLVMAddFunction(
+      module, is_anon ? "anonymous_func" : fn_name.chars, prototype);
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   if (func == NULL) {
@@ -108,7 +122,9 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMPositionBuilderAtEnd(builder, block);
 
-  add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
+  if (!is_anon) {
+    add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
+  }
 
   for (int i = 0; i < fn_len; i++) {
     Ast *param_ast = ast->data.AST_LAMBDA.params + i;
@@ -127,18 +143,18 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                   hash_string(id_chars, id_len), sym);
 
     } else {
-      // param_ast->md = param_type;
-      // param_ast->md = param_type
       match_values(param_ast, param_val, param_type, &fn_ctx, module, builder);
     }
 
     fn_type = fn_type->data.T_FN.to;
   }
 
-  Ast *fn_id = Ast_new(AST_IDENTIFIER);
-  fn_id->data.AST_IDENTIFIER.value = fn_name.chars;
-  fn_id->data.AST_IDENTIFIER.length = fn_name.length;
-  JITSymbol *fn_ref = lookup_id_in_current_scope(fn_id, &fn_ctx);
+  if (!is_anon) {
+    Ast *fn_id = Ast_new(AST_IDENTIFIER);
+    fn_id->data.AST_IDENTIFIER.value = fn_name.chars;
+    fn_id->data.AST_IDENTIFIER.length = fn_name.length;
+    JITSymbol *fn_ref = lookup_id_in_current_scope(fn_id, &fn_ctx);
+  }
 
   LLVMValueRef body =
       codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
@@ -229,7 +245,6 @@ LLVMValueRef create_new_specific_fn(int len, Ast *fn_ast, Type *original_type,
                                     JITLangCtx *compilation_ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-  // compile new variant
   Ast *specific_ast = get_specific_fn_ast_variant(fn_ast, expected_type);
 
   TypeEnv *og_env = compilation_ctx->env;
@@ -241,6 +256,14 @@ LLVMValueRef create_new_specific_fn(int len, Ast *fn_ast, Type *original_type,
     Type *ef = e->data.T_FN.from;
     if (of->kind == T_VAR && !(env_lookup(_env, of->data.T_VAR))) {
       _env = env_extend(_env, of->data.T_VAR, ef);
+    } else if (of->kind == T_CONS) {
+      for (int i = 0; i < of->data.T_CONS.num_args; i++) {
+        Type *ofc = of->data.T_CONS.args[i];
+        Type *efc = ef->data.T_CONS.args[i];
+        if (ofc->kind == T_VAR && !(env_lookup(_env, ofc->data.T_VAR))) {
+          _env = env_extend(_env, ofc->data.T_VAR, efc);
+        }
+      }
     }
     o = o->data.T_FN.to;
     e = e->data.T_FN.to;
@@ -278,8 +301,6 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
       sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr,
       .env = ctx->env,
   };
-
-  // printf("create new specific function for %s\n", sym_name);
 
   LLVMValueRef specific_func = create_new_specific_fn(
       fn_ast->data.AST_LAMBDA.len, fn_ast, sym->symbol_type, expected_fn_type,
@@ -357,8 +378,9 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
 
     if (callable_type->kind == T_FN &&
         callable_type->data.T_FN.from->kind == T_VOID) {
-      return LLVMBuildCall2(builder, llvm_callable_type, callable,
-                            (LLVMValueRef[]){}, 0, "call_func");
+      // fn void type
+      return LLVMBuildCall2(builder, llvm_callable_type, callable, NULL, 0,
+                            "call_func");
     }
 
     for (int i = 0; i < args_len; i++) {
@@ -468,22 +490,21 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_get_array_size(builder, array);
   }
 
-  if (strcmp(sym_name, "array_init") == 0) {
-    // TODO: not implemented well at all
+  if (strcmp(sym_name, "array_incr") == 0) {
     Type *array_type = ast->md;
-    LLVMValueRef size =
+    LLVMTypeRef el_type =
+        type_to_llvm_type(array_type->data.T_CONS.args[0], ctx->env, module);
+
+    LLVMValueRef array =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-    if ((ast->data.AST_APPLICATION.args + 1)->tag == AST_INT) {
-      int *size = array_type_size_ptr(array_type);
-      *size = ast->data.AST_APPLICATION.args[1].data.AST_INT.value;
-    }
-
-    LLVMValueRef item =
-        codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-
-    return codegen_array_init(size, item, ctx, module, builder);
+    return codegen_array_increment(array, el_type, builder);
   }
+
+  if (strcmp(sym_name, "array_to_list") == 0) {
+    printf("array to list call\n");
+    return NULL;
+  }
+
   return NULL;
 }
 LLVMValueRef call_deref_fn(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
@@ -502,15 +523,33 @@ LLVMValueRef call_deref_fn(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   // Create a load instruction to dereference the pointer
   return LLVMBuildLoad2(builder, deref_type, casted_ptr, "dereferenced_value");
 }
+LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder) {
+
+  Type *sym_type = ast->md;
+  // printf("cons\n");
+  // print_type(sym_type);
+  // TODO: if sym_type->constructor != NULL - use specific constructor fn
+  // otherwise codegen cons is essentially a struct / tuple
+  //
+  LLVMTypeRef llvm_type = type_to_llvm_type(sym_type, ctx->env, module);
+  LLVMValueRef v = LLVMGetUndef(llvm_type);
+  int len = ast->data.AST_APPLICATION.len;
+  Ast *args = ast->data.AST_APPLICATION.args;
+  for (int i = 0; i < len; i++) {
+    Ast *arg = args + i;
+    LLVMValueRef arg_val = codegen(arg, ctx, module, builder);
+
+    v = LLVMBuildInsertValue(builder, v, arg_val, i, "insert_struct_member");
+  }
+  return v;
+}
 
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
-
-  // int lookup_sym_err = sym == NULL;
-  // lookup_id_ast_in_place(ast->data.AST_APPLICATION.function, ctx, &sym);
 
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
@@ -523,13 +562,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     builder);
   }
 
-  if (!sym) {
-    fprintf(stderr, "codegen identifier failed symbol not found in scope %d:\n",
-            ctx->stack_ptr);
-    print_ast_err(ast->data.AST_APPLICATION.function);
-    return NULL;
-  }
-
   if (strcmp("deref", sym_name) == 0) {
     return call_deref_fn(ast, sym, ctx, module, builder);
   }
@@ -540,7 +572,35 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (strncmp("array_", sym_name, 6) == 0) {
-    return call_array_fn(ast, sym, sym_name, ctx, module, builder);
+    LLVMValueRef res = call_array_fn(ast, sym, sym_name, ctx, module, builder);
+    if (res) {
+      return res;
+    }
+  }
+
+  if (strncmp("string_add", sym_name, 10) == 0) {
+    LLVMValueRef res = codegen_string_add(
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder),
+        codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder), ctx,
+        module, builder);
+
+    if (res) {
+      return res;
+    }
+  }
+
+  Type *sym_type = ast->data.AST_APPLICATION.function->md;
+  // printf("application\n");
+  // print_type(sym_type);
+  if (sym_type->kind == T_CONS && !is_generic(sym_type)) {
+    return codegen_cons(ast, ctx, module, builder);
+  }
+
+  if (!sym) {
+    fprintf(stderr, "codegen identifier failed symbol not found in scope %d:\n",
+            ctx->stack_ptr);
+    print_ast_err(ast->data.AST_APPLICATION.function);
+    return NULL;
   }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
@@ -548,4 +608,66 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   return call_symbol(sym_name, sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, expected_fn_type, ctx,
                      module, builder);
+}
+LLVMTypeRef codegen_for_func_sig() {
+  // Create function type: (int, int, (int) -> void) -> void
+  LLVMTypeRef int_type = LLVMInt32Type();
+  LLVMTypeRef void_type = LLVMVoidType();
+  LLVMTypeRef f_type = LLVMFunctionType(void_type, &int_type, 1, 0);
+
+  LLVMTypeRef f_param_type = LLVMPointerType(f_type, 0);
+  LLVMTypeRef param_types[] = {int_type, int_type, f_param_type};
+  LLVMTypeRef for_func_type = LLVMFunctionType(void_type, param_types, 3, 0);
+  return for_func_type;
+}
+
+LLVMValueRef codegen_build_for(LLVMTypeRef for_func_type, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+
+  LLVMTypeRef int_type = LLVMInt32Type();
+  LLVMTypeRef void_type = LLVMVoidType();
+  LLVMTypeRef f_type = LLVMFunctionType(void_type, &int_type, 1, 0);
+
+  // Create the function
+  LLVMValueRef for_func = LLVMAddFunction(module, "for", for_func_type);
+
+  // Name the arguments for easier reference
+  LLVMValueRef start = LLVMGetParam(for_func, 0);
+  LLVMValueRef end = LLVMGetParam(for_func, 1);
+  LLVMValueRef fn_ptr = LLVMGetParam(for_func, 2);
+
+  LLVMSetValueName(start, "start");
+  LLVMSetValueName(end, "end");
+  LLVMSetValueName(fn_ptr, "fn_ptr");
+
+  // Create basic blocks
+  LLVMBasicBlockRef entry_block = LLVMAppendBasicBlock(for_func, "entry");
+  LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(for_func, "loop");
+  LLVMBasicBlockRef exitBlock = LLVMAppendBasicBlock(for_func, "exit");
+
+  // Entry block
+  LLVMPositionBuilderAtEnd(builder, entry_block);
+  LLVMValueRef condition =
+      LLVMBuildICmp(builder, LLVMIntSLT, start, end, "condition");
+  LLVMBuildCondBr(builder, condition, loop_block, exitBlock);
+
+  LLVMPositionBuilderAtEnd(builder, loop_block);
+  LLVMValueRef phi_node = LLVMBuildPhi(builder, LLVMInt32Type(), "phi");
+  LLVMBuildCall2(builder, f_type, fn_ptr, &phi_node, 1, "");
+  LLVMValueRef next_start = LLVMBuildAdd(
+      builder, phi_node, LLVMConstInt(LLVMInt32Type(), 1, 0), "next_s");
+  LLVMValueRef nextCondition =
+      LLVMBuildICmp(builder, LLVMIntSLT, next_start, end, "next_condition");
+  LLVMBuildCondBr(builder, nextCondition, loop_block, exitBlock);
+
+  // Update phi node
+  LLVMValueRef phi_vals[] = {start, next_start};
+  LLVMBasicBlockRef phi_blocks[] = {entry_block, loop_block};
+  LLVMAddIncoming(phi_node, phi_vals, phi_blocks, 2);
+
+  // Exit block
+  LLVMPositionBuilderAtEnd(builder, exitBlock);
+  LLVMBuildRetVoid(builder);
+
+  return for_func;
 }

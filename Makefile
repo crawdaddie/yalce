@@ -32,8 +32,9 @@ CFLAGS += -I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include
 LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
 
-LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm
+LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm -framework Accelerate
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
+LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
 
 ifdef GUI_MODE

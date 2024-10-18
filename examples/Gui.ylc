@@ -1,0 +1,1 @@
+let push_create_window_event = extern fn Int -> Ptr -> Bool;
