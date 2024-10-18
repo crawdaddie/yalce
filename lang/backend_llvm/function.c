@@ -371,6 +371,8 @@ LLVMValueRef get_specific_curried_callable(JITSymbol *sym, const char *sym_name,
   LLVMTypeRef proto =
       fn_prototype(expected_fn_type, new_args_length, ctx->env, module);
 
+  LLVMDumpType(proto);
+
   callable = LLVMAddFunction(module, "curried_fn", proto);
 
   return NULL;
@@ -482,6 +484,17 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
 
   return NULL;
 }
+Type *resolve_tcs(Type *t) {
+  if (t->kind != T_TYPECLASS_RESOLVE) {
+    return t;
+  }
+  const char *tc_name = t->data.T_TYPECLASS_RESOLVE.comparison_tc;
+  if (types_equal(t->data.T_TYPECLASS_RESOLVE.dependencies[0],
+                  t->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
+    return t->data.T_TYPECLASS_RESOLVE.dependencies[0];
+  }
+  return t;
+}
 
 LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -491,12 +504,14 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   if (ltype->kind == T_VAR) {
     ltype = env_lookup(ctx->env, ltype->data.T_VAR);
   }
+  ltype = resolve_tcs(ltype);
 
   Type *rtype = (ast->data.AST_APPLICATION.args + 1)->md;
 
   if (rtype->kind == T_VAR) {
     rtype = env_lookup(ctx->env, rtype->data.T_VAR);
   }
+  rtype = resolve_tcs(rtype);
 
   const char *binop_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;

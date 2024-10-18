@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 # uniformly distributed integer between 0 and range-1
 let rand_int = extern fn Int -> Int ;
 

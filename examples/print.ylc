@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 %include Fmt
 # let printf = extern fn String -> () ; # simplified printf from c stdlib
 let x = 1;

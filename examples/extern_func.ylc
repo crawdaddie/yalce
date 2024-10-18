@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 #! /Users/adam/projects/sound/yalce/build/lang -i
 let init_audio      = extern fn () -> () ;     # audio engine library init func
 let play_test_synth = extern fn () -> () ;

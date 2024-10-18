@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 let read_buf = extern fn Ptr -> Signal;
 
 # oscillators

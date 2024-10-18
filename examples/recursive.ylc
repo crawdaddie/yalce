@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 let fib = fn x ->
   match x with
   | 0 -> 0

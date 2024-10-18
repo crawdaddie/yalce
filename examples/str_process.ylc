@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 
 let find_h = fn l -> 
   let aux = fn i l ->

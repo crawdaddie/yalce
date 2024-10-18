@@ -687,7 +687,6 @@ typedef struct _tc_key {
   int meth_idx;
 } _tc_key;
 
-
 // clang-format off
 static _tc_key tc_keys[] = {
     {"==", 0, 0},
@@ -731,11 +730,19 @@ Method *get_binop_method(const char *binop, Type *l, Type *r) {
 #ifdef _BINOP_METHOD_CHECKS
       if (tc_key.tc_idx >= l->num_implements ||
           tc_key.tc_idx >= r->num_implements) {
+
+        fprintf(stderr, "could not find binop method for %s\n", binop);
+        print_type_err(l);
+        print_type_err(r);
         return NULL;
       }
 
       if (tc_key.meth_idx >= l->implements[tc_key.tc_idx]->num_methods ||
           tc_key.meth_idx >= r->implements[tc_key.tc_idx]->num_methods) {
+
+        fprintf(stderr, "could not find binop method for %s\n", binop);
+        print_type_err(l);
+        print_type_err(r);
         return NULL;
       }
 #endif
@@ -749,6 +756,9 @@ Method *get_binop_method(const char *binop, Type *l, Type *r) {
       return tcr->methods + tc_key.meth_idx;
     }
   }
+  fprintf(stderr, "could not find binop method for %s\n", binop);
+  print_type_err(l);
+  print_type_err(r);
   // TODO: handle list prepend '::'
 
   return NULL;
