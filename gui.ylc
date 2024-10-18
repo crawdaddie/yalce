@@ -1,0 +1,124 @@
+#! env ylc
+%include examples/Gui
+%include examples/Synth
+%include examples/String
+%include examples/MIDI
+%include examples/Math
+%include examples/Array
+%include examples/Sched
+
+
+let sq_detune = fn () -> 
+  let f = inlet 50. |> lag_node 0.01;
+  let trig = inlet 0.0; 
+  let chirp_decay = inlet 0.3;
+  let ff = chirp_node 3000. 200. chirp_decay trig; 
+  let res = inlet 1.;
+
+  (sq_node f + sq_node (f * 1.01)
+  + sq_node (f * 2.)
+  ) * 0.4
+  |> biquad_lp_node ff res 
+  # |> biquad_lp_node ff res 
+  |> comb_node 0.75 0.75 0.2
+;;
+
+
+
+
+
+let notes = [|
+  110.0,
+  123.47082531403103,
+  130.8127826502993,
+  146.8323839587038,
+  164.81377845643496,
+  174.61411571650194,
+  195.99771799087463, |];
+
+let octaves = [|
+  0.5,
+  1.,
+  2.,
+  4.,
+  8.,
+|];
+
+let times = [|
+  0.125,
+  0.125,
+  0.125,
+  0.125,
+  0.25,
+  0.5,
+  0.125,
+|];
+
+
+let x = sq_detune |> chain_wrap |> play;
+
+
+let freq_seq = fn ph: (Double) ->
+  match (ph % 4.) with
+    # | ph if ph > 6.5 -> notes @ 4
+    # | ph if ph > 4.5 -> choose notes
+    | ph if ph > 2.  -> choose [| notes @ 5, notes @ 4 |]
+    | ph if ph > 2.  -> notes @ 4
+    | ph if ph > 1.5 -> notes @ 2 
+    | ph if ph > 0.  -> notes @ 0 
+;;
+
+
+let set_synth_param = fn syn p offset v ->
+  match p with
+  | Scalar i -> set_input_scalar_offset syn i offset v
+  | Trig i -> set_input_trig_offset syn i offset
+;;
+
+let stream_vals = fn (dur, phase, note, _ff): (Double * Double * Double * Double) ->
+  let ff = phase |> cos |> bipolar_scale 100. 2000.;
+  let n = 0.5 * (freq_seq (phase * 0.8 )) * choose octaves;
+  (choose times, phase, n, ff)
+;;
+
+let runner = fn
+  args: (Ptr of (Double * Double * Double * Double))
+  frame_offset: (Int)
+  ->
+  let (duration, phase, note, filter_freq) = *args;
+
+  note |> set_synth_param x (Scalar 0) frame_offset;
+  set_input_trig_offset x 1 frame_offset;
+  # trig_kick phase frame_offset;
+
+
+  # filter_freq |> set_synth_param x (Scalar 1) frame_offset;
+
+  stream_vals (duration, phase + duration, note, filter_freq)
+  |> schedule_event runner duration
+;;
+
+let filter_decay_setter = fn val: (Int) ->
+  let v = unipolar_scale 0.01 0.8 (val * REC_127);
+  set_input_scalar x 2 v
+;;
+
+let filter_res_setter = fn val: (Int) ->
+  let v = unipolar_scale 1. 20. (val * REC_127);
+  set_input_scalar x 3 v
+;;
+
+# register_cc_handler filter_decay_setter 0 22;
+# register_cc_handler filter_res_setter 0 21;
+#
+
+
+
+schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
+
+create_scope ();
+let mut_array = [|0.9, 0.1, 0.2, 0.3|];
+create_array_editor (array_size mut_array) (array_data_ptr mut_array);
+
+let mut_array = [|0.3|];
+create_array_editor (array_size mut_array) (array_data_ptr mut_array)
