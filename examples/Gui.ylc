@@ -1,1 +1,4 @@
 let push_create_window_event = extern fn Int -> Ptr -> Bool;
+let create_scope = extern fn () -> Int;
+
+let create_array_editor = extern fn Int -> Ptr -> Int;

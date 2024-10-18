@@ -1,3 +1,4 @@
+#include "ctx.h"
 #ifdef GUI_MODE
 #include "../gui/gui.h"
 #endif
@@ -7,6 +8,30 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef GUI_MODE
+int create_scope() {
+  printf("create scope\n");
+  Ctx *audio_ctx = get_audio_ctx();
+  double *output = audio_ctx->output_buf;
+  _scope_win_data *win_data = malloc(sizeof(_scope_win_data));
+  win_data->stereo_buf = output;
+  win_data->rms_peak_left = 0.0f;
+  win_data->rms_peak_right = 0.0f;
+
+  push_create_window_event(2, win_data);
+  return 1;
+}
+
+int create_array_editor(int32_t size, double *data_ptr) {
+
+  _array_edit_win_data *win_data = malloc(sizeof(_array_edit_win_data));
+  win_data->_size = size;
+  win_data->data_ptr = data_ptr;
+
+  push_create_window_event(1, win_data);
+  return 1;
+}
+#endif
 // Global variables for thread synchronization
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;

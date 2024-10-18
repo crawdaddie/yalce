@@ -244,6 +244,12 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "array_size", hash_string("array_size", 10),
               array_size_sym);
 
+  env = env_extend(env, "array_data_ptr", &t_array_data_ptr_fn_sig);
+  JITSymbol *array_data_ptr_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_data_ptr_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "array_data_ptr", hash_string("array_data_ptr", 14),
+              array_data_ptr_sym);
+
   env = env_extend(env, "array_incr", &t_array_incr_fn_sig);
   JITSymbol *array_incr_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_incr_fn_sig, NULL, NULL);
@@ -256,29 +262,6 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "array_to_list", hash_string("array_to_list", 10),
               array_to_list_sym);
 
-<<<<<<< HEAD
-  JITSymbol *array_init_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
-
-  ht_set_hash(stack, "array_init", hash_string("array_init", 10),
-              array_init_sym);
-
-||||||| ecb097a
-  JITSymbol *array_init_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
-
-  ht_set_hash(stack, "array_init", hash_string("array_init", 10),
-              array_init_sym);
-
-
-  JITSymbol *array_of_chars_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_of_chars_fn_sig, NULL, NULL);
-
-  env = env_extend(env, "array_of_chars", &t_array_of_chars_fn_sig);
-  ht_set_hash(stack, "array_of_chars", hash_string("array_of_chars", 14),
-              array_of_chars_sym);
-
-=======
   // Type *array_init_fn_sig =
   //     type_fn(&t_int, type_fn(&t_array_var_el, &t_array_var));
   // env = env_extend(env, "array_init", array_init_fn_sig);
@@ -289,7 +272,6 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   // ht_set_hash(stack, "array_init", hash_string("array_init", 10),
   //             array_init_sym);
 
->>>>>>> main
   JITSymbol *deref_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_ptr_deref_sig, NULL, NULL);
 

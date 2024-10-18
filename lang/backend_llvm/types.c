@@ -238,7 +238,19 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
       // allocaInst is now a pointer to the address of the struct
       return allocaInst;
     }
-    return val;
+
+    LLVMTypeRef el_type = LLVMTypeOf(val);
+    LLVMTypeRef pointer_type = LLVMPointerType(el_type, 0);
+    LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), 0, 0)};
+    LLVMValueRef ptr =
+        LLVMBuildGEP2(builder, el_type, val, indices, 1, "addr_of");
+
+    // LLVMDumpValue(ptr);
+    // LLVMDumpType(LLVMTypeOf(ptr));
+    // printf("\n");
+    return ptr;
+
+    // return val;
   }
 
   default: {
@@ -249,19 +261,9 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
     LLVMValueRef ptr =
         LLVMBuildGEP2(builder, el_type, val, indices, 1, "addr_of");
 
-<<<<<<< HEAD
-    LLVMDumpValue(ptr);
-    LLVMDumpType(LLVMTypeOf(ptr));
-    printf("\n");
-||||||| ecb097a
-    LLVMDumpValue(ptr);
-    LLVMDumpType(LLVMTypeOf(ptr));
-    // printf("\n");
-=======
     // LLVMDumpValue(ptr);
     // LLVMDumpType(LLVMTypeOf(ptr));
     // printf("\n");
->>>>>>> main
     return ptr;
   }
   }
@@ -696,7 +698,6 @@ typedef struct _tc_key {
   int tc_idx;
   int meth_idx;
 } _tc_key;
-
 
 // clang-format off
 static _tc_key tc_keys[] = {

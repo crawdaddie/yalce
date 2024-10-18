@@ -7,6 +7,7 @@
 #include "backend_llvm/variant.h"
 #include "list.h"
 #include "serde.h"
+#include "strings.h"
 #include "types/unification.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -488,6 +489,18 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     LLVMValueRef array =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
     return codegen_get_array_size(builder, array);
+  }
+
+  if (strcmp(sym_name, "array_data_ptr") == 0) {
+    printf("array data ptr\n");
+
+    LLVMValueRef array =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+    Type *array_type = ast->data.AST_APPLICATION.args->md;
+    Type *el_type = array_type->data.T_CONS.args[0];
+    print_type(el_type);
+    return codegen_get_array_data_ptr(
+        builder, type_to_llvm_type(el_type, ctx->env, module), array);
   }
 
   if (strcmp(sym_name, "array_incr") == 0) {

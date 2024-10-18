@@ -1,23 +1,121 @@
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_ttf.h>
 #include "common.h"
 #include "edit_graph.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_render.h>
+#include <SDL2/SDL_ttf.h>
+#include <stdbool.h>
+#include <stdio.h>
 
 Window windows[MAX_WINDOWS];
 
 int window_count = 0;
 
-// Custom event type
-Uint32 CREATE_WINDOW_EVENT;
+#define SAMPLE_COUNT 512
+#define DECAY_RATE 0.95f
+float calculate_rms(double *data, int channel, int sample_count) {
+  float sum = 0.0f;
+  for (int i = 0; i < sample_count; i++) {
+    float sample = (float)data[i * 2 + channel];
+    sum += sample * sample;
+  }
+  return sqrtf(sum / sample_count);
+}
 
+// Define thresholds for color changes
+#define RMS_YELLOW_THRESHOLD 0.5f
+#define RMS_RED_THRESHOLD 0.8f
+
+void set_color_by_level(SDL_Renderer *renderer, double level) {
+  if (level >= RMS_RED_THRESHOLD) {
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 100); // Red
+  } else if (level >= RMS_YELLOW_THRESHOLD) {
+    SDL_SetRenderDrawColor(renderer, 255, 255, 0, 100); // Yellow
+  } else {
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 100); // Green
+  }
+}
+
+void render_rms_meter(SDL_Renderer *renderer, int x, int y, int width,
+                      int height, double rms, double *peak) {
+  // Update peak value with decay
+  *peak = fmaxf(rms, *peak * DECAY_RATE);
+
+  // Draw meter background
+  SDL_Rect meter_bg = {x, y, width, height};
+  SDL_SetRenderDrawColor(renderer, 0, 100, 0, 100);
+  SDL_RenderFillRect(renderer, &meter_bg);
+
+  // Draw RMS level with color based on intensity
+  int level_height = (int)(rms * height);
+  SDL_Rect level_rect = {x, y + height - level_height, width, level_height};
+  set_color_by_level(renderer, rms);
+  SDL_RenderFillRect(renderer, &level_rect);
+
+  // Draw peak indicator
+  int peak_y = y + height - (int)(*peak * height);
+  set_color_by_level(renderer, *peak);
+  SDL_RenderDrawLine(renderer, x, peak_y, x + width, peak_y);
+}
+
+void render_oscilloscope(Window *window) {
+  _scope_win_data *win_data = window->data;
+
+  // Set the background color to RGB(224, 224, 224)
+  SDL_SetRenderDrawColor(window->renderer, 224, 224, 224, 255);
+  SDL_RenderClear(window->renderer);
+
+  int half_height = window->height / 2;
+  int quarter_height = window->height / 4;
+
+  double *buf = (double *)win_data->stereo_buf;
+
+  // Calculate RMS values
+  float rms_left = calculate_rms(buf, 0, SAMPLE_COUNT);
+  float rms_right = calculate_rms(buf, 1, SAMPLE_COUNT);
+
+  // Render RMS meters
+  int meter_width = 30;
+  render_rms_meter(window->renderer, 0, 0, meter_width, half_height, rms_left,
+                   &win_data->rms_peak_left);
+  render_rms_meter(window->renderer, 0, half_height, meter_width, half_height,
+                   rms_right, &win_data->rms_peak_right);
+
+  // Draw left channel (black) in the top half
+  SDL_SetRenderDrawColor(window->renderer, 0, 0, 0, 255);
+  for (int i = 0; i < SAMPLE_COUNT - 1; i++) {
+    int x1 = i * window->width / SAMPLE_COUNT;
+    int x2 = (i + 1) * window->width / SAMPLE_COUNT;
+    int y1 = quarter_height + (int)(buf[i * 2] * quarter_height);
+    int y2 = quarter_height + (int)(buf[(i + 1) * 2] * quarter_height);
+
+    SDL_RenderDrawLine(window->renderer, x1, y1, x2, y2);
+  }
+
+  // Draw right channel (black) in the bottom half
+  SDL_SetRenderDrawColor(window->renderer, 0, 0, 0, 255);
+  for (int i = 0; i < SAMPLE_COUNT - 1; i++) {
+    int x1 = i * window->width / SAMPLE_COUNT;
+    int x2 = (i + 1) * window->width / SAMPLE_COUNT;
+    int y1 = 3 * quarter_height + (int)(buf[i * 2 + 1] * quarter_height);
+    int y2 = 3 * quarter_height + (int)(buf[(i + 1) * 2 + 1] * quarter_height);
+
+    SDL_RenderDrawLine(window->renderer, x1, y1, x2, y2);
+  }
+
+  SDL_RenderPresent(window->renderer);
+}
+
+typedef struct _array {
+  int32_t size;
+  double *data;
+} _array;
+
+Uint32 CREATE_WINDOW_EVENT;
 bool create_window(WindowType type, void *data) {
 
+  printf("new window %p", data);
   if (window_count >= MAX_WINDOWS) {
-    fprintf(stderr,"Maximum number of windows reached.\n");
+    fprintf(stderr, "Maximum number of windows reached.\n");
     return false;
   }
 
@@ -31,7 +129,7 @@ bool create_window(WindowType type, void *data) {
       new_window->width, new_window->height,
       SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
   if (!new_window->window) {
-    fprintf(stderr,"Window creation failed: %s\n", SDL_GetError());
+    fprintf(stderr, "Window creation failed: %s\n", SDL_GetError());
     return false;
   }
 
@@ -39,21 +137,31 @@ bool create_window(WindowType type, void *data) {
       SDL_CreateRenderer(new_window->window, -1, SDL_RENDERER_ACCELERATED);
 
   if (!new_window->renderer) {
-    fprintf(stderr,"Renderer creation failed: %s\n", SDL_GetError());
+    fprintf(stderr, "Renderer creation failed: %s\n", SDL_GetError());
     SDL_DestroyWindow(new_window->window);
     return false;
   }
 
-
-
   new_window->font = DEFAULT_FONT;
 
   switch (type) {
-    case WINDOW_TYPE_ARRAY_EDITOR: {
-      printf("create array editor window\n");
-      new_window->render_fn = draw_graph;
-      new_window->handle_event = handle_array_editor_events;
-    }
+  case WINDOW_TYPE_ARRAY_EDITOR: {
+    // _array *arr = data;
+    // printf("create array editor window for array %d\n", arr->size);
+    printf("edit graph window\n");
+    new_window->data = data;
+    new_window->render_fn = draw_graph;
+    new_window->handle_event = handle_array_editor_events;
+    break;
+  }
+
+  case WINDOW_TYPE_OSCILLOSCOPE: {
+    double *buf = data;
+    printf("create oscilloscope window %p\n", buf);
+    new_window->render_fn = render_oscilloscope;
+    new_window->data = data;
+    break;
+  }
   }
   window_count++;
   return true;
@@ -79,8 +187,6 @@ int push_create_window_event(WindowType type, void *data) {
   return SDL_PushEvent(&event);
 }
 
-
-
 void handle_events() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
@@ -94,6 +200,7 @@ void handle_events() {
             for (int j = i; j < window_count - 1; j++) {
               windows[j] = windows[j + 1];
             }
+            window_count--;
             break;
           }
         }
@@ -101,12 +208,27 @@ void handle_events() {
         for (int i = 0; i < window_count; i++) {
           if (SDL_GetWindowID(windows[i].window) == event.window.windowID) {
             if (windows[i].handle_event != NULL) {
-              windows[i].handle_event(windows + i, &event);
+              windows[i].handle_event(&windows[i], &event);
             }
             break;
           }
         }
+      }
+      break;
 
+    case SDL_MOUSEBUTTONDOWN:
+    case SDL_MOUSEBUTTONUP:
+    case SDL_MOUSEMOTION:
+      {
+        SDL_Window *mouse_window = SDL_GetWindowFromID(event.window.windowID);
+        for (int i = 0; i < window_count; i++) {
+          if (windows[i].window == mouse_window) {
+            if (windows[i].handle_event != NULL) {
+              windows[i].handle_event(&windows[i], &event);
+            }
+            break;
+          }
+        }
       }
       break;
 
@@ -123,12 +245,21 @@ void handle_events() {
 }
 
 
-
-
 int gui() {
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     printf("SDL initialization failed: %s\n", SDL_GetError());
     return 1;
+  }
+
+  // In your initialization function
+  if (TTF_Init() == -1) {
+      fprintf(stderr, "TTF_Init failed: %s\n", TTF_GetError());
+      // Handle error appropriately
+  }
+  DEFAULT_FONT = TTF_OpenFont("/System/Library/Fonts/Menlo.ttc", 12);
+  if (!DEFAULT_FONT) {
+      fprintf(stderr, "Failed to load font: %s\n", TTF_GetError());
+      // Handle error appropriately
   }
 
   // Register custom event
