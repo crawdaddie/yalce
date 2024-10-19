@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 %include ../engine/bindings/Sched
 
 let x = 1;

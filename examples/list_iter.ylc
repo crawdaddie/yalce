@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 let sum = fn l -> 
   let _list_sum = fn s l ->
     match l with

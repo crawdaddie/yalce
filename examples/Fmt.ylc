@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 let get_stderr = extern fn () -> Ptr;
 let get_stdout = extern fn () -> Ptr;
 

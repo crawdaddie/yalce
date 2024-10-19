@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 let complex_match = fn x -> 
   match x with
   | (1, _) -> 10

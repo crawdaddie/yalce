@@ -1,4 +1,4 @@
-#! /Users/adam/projects/sound/yalce/build/lang
+#! env ylc
 %include String
 %include ../engine/bindings/Synth
 %include ../engine/bindings/MIDI
