@@ -231,8 +231,6 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
     ht_set_hash(stack, bm.name, hash_string(bm.name, strlen(bm.name)), sym);
   }
 
-  // Type *array_at_fn_sig =
-  //     type_fn(&t_array_var, type_fn(&t_int, &t_array_var_el));
   env = env_extend(env, "array_at", &t_array_at_fn_sig);
   JITSymbol *array_at_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_at_fn_sig, NULL, NULL);

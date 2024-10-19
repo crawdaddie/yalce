@@ -72,25 +72,22 @@ LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 # Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
-<<<<<<< HEAD
-.PHONY: all clean engine gui test wasm serve_docs
-||||||| cf351a4
-.PHONY: all clean engine test wasm serve_docs
-=======
-.PHONY: all clean engine test wasm serve_docs engine_bindings
->>>>>>> main
+.PHONY: all clean engine test wasm serve_docs engine_bindings gui
 
-all: $(BUILD_DIR)/lang
+all: $(BUILD_DIR)/ylc
 debug: all
 
 engine:
 	$(MAKE) -C engine
 
 gui:
+	echo "######### MAKE GUI------------"
+	mkdir -p $(BUILD_DIR)/gui
 	$(MAKE) -C gui
 
 $(BUILD_DIR):
-	mkdir -p $(BUILD_DIR) mkdir -p $(BUILD_DIR)/backend_llvm
+	mkdir -p $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)/backend_llvm
 	mkdir -p $(BUILD_DIR)/types
 
 # Build lex and yacc output files
@@ -105,7 +102,7 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 	$(LANG_CC) -c -o $@ $<
 
 # Build the final executable
-$(BUILD_DIR)/lang: $(LANG_OBJS) | engine gui
+$(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
 
 clean:

@@ -195,7 +195,7 @@ int push_create_window_event(WindowType type, void *data) {
   return SDL_PushEvent(&event);
 }
 
-void handle_events() {
+void _handle_events() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     switch (event.type) {
@@ -220,6 +220,67 @@ void handle_events() {
             }
             break;
           }
+        }
+      }
+      break;
+
+    case SDL_MOUSEBUTTONDOWN:
+    case SDL_MOUSEBUTTONUP:
+    case SDL_MOUSEMOTION: {
+      SDL_Window *mouse_window = SDL_GetWindowFromID(event.window.windowID);
+      for (int i = 0; i < window_count; i++) {
+        if (windows[i].window == mouse_window) {
+          if (windows[i].handle_event != NULL) {
+            windows[i].handle_event(&windows[i], &event);
+          }
+          break;
+        }
+      }
+    } break;
+
+    default:
+      if (event.type == CREATE_WINDOW_EVENT) {
+        WindowCreationData *creation_data =
+            (WindowCreationData *)event.user.data1;
+        create_window(creation_data->type, creation_data->data);
+        free(creation_data);
+      }
+      break;
+    }
+  }
+}
+void handle_events() {
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) {
+    switch (event.type) {
+    case SDL_WINDOWEVENT:
+      for (int i = 0; i < window_count; i++) {
+        if (SDL_GetWindowID(windows[i].window) == event.window.windowID) {
+          switch (event.window.event) {
+            case SDL_WINDOWEVENT_CLOSE:
+              SDL_DestroyRenderer(windows[i].renderer);
+              SDL_DestroyWindow(windows[i].window);
+              for (int j = i; j < window_count - 1; j++) {
+                windows[j] = windows[j + 1];
+              }
+              window_count--;
+              break;
+            
+            case SDL_WINDOWEVENT_SIZE_CHANGED:
+            case SDL_WINDOWEVENT_RESIZED:
+              windows[i].width = event.window.data1;
+              windows[i].height = event.window.data2;
+              // Optionally, update logical size if you're using it
+              SDL_RenderSetLogicalSize(windows[i].renderer, windows[i].width, windows[i].height);
+              break;
+
+            default:
+              if (windows[i].handle_event != NULL) {
+                windows[i].handle_event(&windows[i], &event);
+              }
+              break;
+          }
+          break;  // Break the for loop, we've found our window
         }
       }
       break;
@@ -316,7 +377,7 @@ int create_array_editor(int32_t size, double *data_ptr) {
 }
 
 int create_slider_window(int32_t size, double *data_ptr, char **labels) {
-  printf("create slider window???\n");
+  // printf("create slider window???\n");
   _slider_window_data *data = malloc(sizeof(_slider_window_data));
   data->slider_count = size;
   data->values = data_ptr;
