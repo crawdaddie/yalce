@@ -4,20 +4,31 @@
 #include "node.h"
 
 void maketable_sq(void);
-node_perform sq_perform(Node *node, int nframes, double spf);
-node_perform sin_perform(Node *node, int nframes, double spf);
+
 void maketable_sin(void);
-// Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos);
-Node *bufplayer_node(Signal *buf, Signal *rate, Signal *start_pos,
-                     Signal *trig);
 
-Node *bufplayer_1shot_node(Signal *buf, Signal *rate, Signal *start_pos,
-                     Signal *trig); 
-Node *white_noise_node();
-Node *brown_noise_node();
-Node *sin_node(Signal *freq);
-Node *sq_node(Signal *freq);
+NodeRef bufplayer_node(SignalRef buf, SignalRef rate, SignalRef start_pos,
+                       SignalRef trig);
 
-Node *chirp_node(double start, double end, Signal * lag_time, Signal *trig);
+NodeRef bufplayer_1shot_node(SignalRef buf, SignalRef rate, SignalRef start_pos,
+                             SignalRef trig);
+NodeRef white_noise_node();
+NodeRef brown_noise_node();
+NodeRef sin_node(SignalRef freq);
+NodeRef sq_node(SignalRef freq);
+
+NodeRef chirp_node(double start, double end, SignalRef lag_time,
+                   SignalRef trig);
+
+/** non-band-limited impulses - suitable for a trigger signal */
+NodeRef nbl_impulse_node(SignalRef freq);
+
+NodeRef ramp_node(SignalRef freq);
+
+NodeRef trig_rand_node(SignalRef trig);
+NodeRef granulator_node(int max_concurrent_grains, SignalRef buf,
+                        SignalRef trig, SignalRef pos, SignalRef rate);
+
+NodeRef trig_sel_node(SignalRef trig, SignalRef sels);
 
 #endif

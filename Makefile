@@ -72,7 +72,13 @@ LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 # Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
+<<<<<<< HEAD
 .PHONY: all clean engine gui test wasm serve_docs
+||||||| cf351a4
+.PHONY: all clean engine test wasm serve_docs
+=======
+.PHONY: all clean engine test wasm serve_docs engine_bindings
+>>>>>>> main
 
 all: $(BUILD_DIR)/lang
 debug: all
@@ -84,8 +90,7 @@ gui:
 	$(MAKE) -C gui
 
 $(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-	mkdir -p $(BUILD_DIR)/backend_llvm
+	mkdir -p $(BUILD_DIR) mkdir -p $(BUILD_DIR)/backend_llvm
 	mkdir -p $(BUILD_DIR)/types
 
 # Build lex and yacc output files
@@ -124,3 +129,9 @@ wasm:
 
 serve_docs:
 	python -m http.server -d docs
+
+audio_test:
+	$(MAKE) -C engine audio_test
+
+
+

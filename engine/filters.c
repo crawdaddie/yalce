@@ -4,7 +4,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+typedef struct {
+  double b0, b1, b2; // Feedforward coefficients
+  double a1, a2;     // Feedback coefficients
+  double x1, x2;     // Input delay elements (x[n-1] and x[n-2])
+  double y1, y2;     // Output delay elements (y[n-1] and y[n-2])
+} biquad_state;
 // Initialize filter coefficients and state variables
 void set_biquad_filter_state(biquad_state *filter, double b0, double b1,
                              double b2, double a1, double a2) {
@@ -500,9 +505,11 @@ Node *lag_node(double lag_time, Signal *in) {
   Node *lag = node_new(state, lag_perform, 1, in);
   return lag;
 }
+
 typedef struct {
   double gain;
 } tanh_state;
+
 node_perform tanh_perform(Node *node, int nframes, double spf) {
 
   double *out = node->out.buf;
@@ -522,14 +529,159 @@ Node *tanh_node(double gain, Signal *in) {
   return lag;
 }
 
-// // Initialize function
-// void lag_init(Node *node) {
-//   lag_state *state = (lag_state *)malloc(sizeof(lag_state));
-//   state->current_value = 0.0;
-//   state->target_value = 0.0;
-//   state->coeff = 0.0;
-//   node->state = state;
-// }
-//
-// // Clean up function
-// void lag_cleanup(Node *node) { free(node->state); }
+#define MAX_GRAINS 32
+#define MIN_GRAIN_LENGTH 1000
+#define MAX_GRAIN_LENGTH 2000
+#define OVERLAP 0.1
+
+typedef struct {
+  int start;
+  int length;
+  int position;
+  double rate;
+  double amp;
+} Grain;
+
+typedef struct {
+  double *buf;
+  int buf_size;
+  int read_pos;
+  int write_pos;
+  double fb;
+  double pitchshift;
+
+  // Granular processing state
+  Grain grains[MAX_GRAINS];
+  int active_grains;
+  int next_free_grain;
+} grain_delay_state;
+static inline double interpolate(double *buf, int buf_size, double index) {
+  int index_floor = (int)index;
+  double frac = index - index_floor;
+  double a = buf[index_floor % buf_size];
+  double b = buf[(index_floor + 1) % buf_size];
+  return a + frac * (b - a);
+}
+
+static inline void init_grain(grain_delay_state *state, int index, int start,
+                              int length, double rate) {
+  state->grains[index].start = start;
+  state->grains[index].length = length;
+  state->grains[index].position = 0;
+  state->grains[index].rate = rate;
+  state->grains[index].amp = 0.0;
+  state->active_grains++;
+}
+
+static inline double process_grains(grain_delay_state *state) {
+  double out = 0.0;
+  for (int i = 0; i < MAX_GRAINS; i++) {
+    Grain *grain = &state->grains[i];
+    if (grain->length > 0) {
+      double index = grain->start + grain->position * grain->rate;
+      double sample =
+          interpolate(state->buf, state->buf_size, index) * grain->amp;
+      out += sample;
+
+      grain->position++;
+      if (grain->position >= grain->length) {
+        grain->length = 0;
+        state->active_grains--;
+        if (i < state->next_free_grain) {
+          state->next_free_grain = i;
+        }
+      } else {
+        // Apply envelope
+        double env_pos = (double)grain->position / grain->length;
+        if (env_pos < OVERLAP) {
+          grain->amp = env_pos / OVERLAP;
+        } else if (env_pos > (1.0 - OVERLAP)) {
+          grain->amp = (1.0 - env_pos) / OVERLAP;
+        } else {
+          grain->amp = 1.0;
+        }
+      }
+    }
+  }
+  return out / (state->active_grains > 0 ? state->active_grains : 1);
+}
+
+node_perform grain_delay_perform(Node *node, int nframes, double spf) {
+  double *out = node->out.buf;
+  double *in = node->ins[0].buf;
+  grain_delay_state *state = node->state;
+
+  double rate = state->pitchshift;
+
+  while (nframes--) {
+    // Write input to buffer
+    state->write_pos = (state->write_pos + 1) % state->buf_size;
+
+    // Trigger new grain
+    if (state->active_grains < MAX_GRAINS &&
+        (rand() % 100 < 5)) { // 5% chance of new grain
+      int grain_length =
+          MIN_GRAIN_LENGTH + rand() % (MAX_GRAIN_LENGTH - MIN_GRAIN_LENGTH);
+      init_grain(state, state->next_free_grain, state->read_pos, grain_length,
+                 rate);
+
+      // Find next free grain
+      do {
+        state->next_free_grain = (state->next_free_grain + 1) % MAX_GRAINS;
+      } while (state->grains[state->next_free_grain].length != 0 &&
+               state->next_free_grain != state->active_grains - 1);
+    }
+
+    // Process grains
+    *out = process_grains(state);
+
+    // Update read position
+    state->read_pos = (state->read_pos + 1) % state->buf_size;
+
+    state->buf[state->write_pos] = *in + state->fb * (*out);
+
+    in++;
+    out++;
+  }
+}
+
+Node *grain_delay_node(double delay_time, double max_delay_time, double fb,
+                       double pitchshift, Signal *input) {
+  int SAMPLE_RATE = ctx_sample_rate();
+
+  int bufsize = (int)(max_delay_time * SAMPLE_RATE);
+  int bufsize_bytes = (bufsize * sizeof(double));
+  int total_size = sizeof(grain_delay_state) + bufsize_bytes + sizeof(Signal);
+
+  void *mem = calloc(total_size, sizeof(char));
+
+  if (!mem) {
+    fprintf(stderr, "memory alloc for grain_delay node failed\n");
+    return NULL;
+  }
+
+  double *buf = mem;
+  mem += bufsize_bytes;
+
+  grain_delay_state *state = mem;
+  mem += sizeof(grain_delay_state);
+
+  Signal *ins = mem;
+
+  ins->buf = input->buf;
+  ins->size = input->size;
+  ins->layout = input->layout;
+
+  state->buf = buf;
+  state->buf_size = bufsize;
+  state->fb = fb;
+  state->pitchshift = pitchshift;
+
+  state->write_pos = 0;
+  state->read_pos = state->buf_size - (int)(delay_time * SAMPLE_RATE);
+
+  state->active_grains = 0;
+  state->next_free_grain = 0;
+
+  return node_new(state, grain_delay_perform, 1, ins);
+}

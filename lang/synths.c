@@ -1,5 +1,7 @@
 #include "synths.h"
 #include "backend_llvm/util.h"
+#include "list.h"
+#include "tuple.h"
 #include "types/type.h"
 #include "types/typeclass.h"
 #include "llvm-c/Core.h"
@@ -27,6 +29,15 @@ LLVMValueRef sig_of_val_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
   *fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
                               (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
   return get_extern_fn("signal_of_double", *fn_type, module);
+}
+
+LLVMValueRef sig_of_array_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
+
+  *fn_type = LLVMFunctionType(
+      LLVMPointerType(LLVMInt8Type(), 0),
+      (LLVMTypeRef[]){LLVMInt32Type(), LLVMPointerType(LLVMDoubleType(), 0)}, 2,
+      0);
+  return get_extern_fn("sig_of_array", *fn_type, module);
 }
 
 LLVMValueRef out_sig_of_node_fn(LLVMTypeRef *fn_type, LLVMModuleRef module) {
@@ -82,6 +93,25 @@ LLVMValueRef const_sig_of_val(LLVMValueRef val, LLVMModuleRef module,
   return const_sig;
 }
 
+LLVMValueRef const_sig_of_array(LLVMValueRef val, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+
+  LLVMTypeRef fn_type;
+  LLVMValueRef sig_of_array_func = sig_of_array_fn(&fn_type, module);
+  LLVMTypeRef struct_type =
+      array_struct_type(LLVMPointerType(LLVMDoubleType(), 0));
+
+  LLVMValueRef array_ptr = codegen_tuple_access(1, val, struct_type, builder);
+  LLVMValueRef const_sig =
+      LLVMBuildCall2(builder, fn_type, sig_of_array_func,
+                     (LLVMValueRef[]){
+                         codegen_get_array_size(builder, val),
+                         array_ptr,
+                     },
+                     2, "sig_of_array");
+  return const_sig;
+}
+
 LLVMValueRef out_sig_of_node_val(LLVMValueRef val, LLVMModuleRef module,
                                  LLVMBuilderRef builder) {
   LLVMTypeRef fn_type;
@@ -121,6 +151,10 @@ LLVMValueRef ConsSignal(LLVMValueRef value, Type *type_from,
 
     if (type_from->alias && (strcmp(type_from->alias, "Signal") == 0)) {
       return value;
+    }
+    if (is_array_type(type_from) &&
+        (type_from->data.T_CONS.args[0]->kind == T_NUM)) {
+      return const_sig_of_array(value, module, builder);
     }
   }
   default: {

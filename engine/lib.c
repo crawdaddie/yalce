@@ -127,13 +127,13 @@ Node *set_input_trig_offset(Node *node, int input, int frame_offset) {
   return node;
 }
 
-void accept_callback(int (*callback)(int, int)) {
-  // Function body
-  if (callback != NULL) {
-    printf("called callback %p %d\n", callback,
-           callback(1, 2)); // Call the callback function
-  }
-}
+// void accept_callback(int (*callback)(int, int)) {
+//   // Function body
+//   if (callback != NULL) {
+//     printf("called callback %p %d\n", callback,
+//            callback(1, 2)); // Call the callback function
+//   }
+// }
 
 #define MAX_CHANNELS 6
 
@@ -169,7 +169,8 @@ int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
     printf("warning read failure, read %d != total size) %zu", read,
            total_size);
   }
-  fprintf(stderr, "read %d frames from '%s' buf %p [%d]\n", read, filename, buf, sfinfo.channels);
+  fprintf(stderr, "read %d frames from '%s' buf %p [%d]\n", read, filename, buf,
+          sfinfo.channels);
 
   sf_close(infile);
   signal->size = total_size;
@@ -179,9 +180,85 @@ int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
   return 0;
 };
 
+int _read_file_mono(const char *filename, Signal *signal, int *sf_sample_rate) {
+  SNDFILE *infile;
+  SF_INFO sfinfo;
+  int readcount;
+  memset(&sfinfo, 0, sizeof(sfinfo));
+
+  if (!(infile =
+            sf_open(filename, SFM_READ,
+                    &sfinfo))) { /* Open failed so print an error message. */
+    printf("Not able to open input file %s.\n", filename);
+    /* Print the error message from libsndfile. */
+    puts(sf_strerror(NULL));
+    return 1;
+  };
+
+  if (sfinfo.channels > MAX_CHANNELS) {
+    printf("Not able to process more than %d channels\n", MAX_CHANNELS);
+    sf_close(infile);
+    return 1;
+  };
+
+  size_t total_size = sfinfo.channels * sfinfo.frames;
+
+  double *_buf = calloc((int)total_size, sizeof(double));
+  // double *buf = signal->buf;
+
+  // reads channels in interleaved
+  int read = sf_read_double(infile, _buf, total_size);
+  if (read != total_size) {
+    printf("warning read failure, read %d != total size) %zu", read,
+           total_size);
+  }
+  fprintf(stderr, "read %d frames from '%s' buf %p [%d]\n", read, filename,
+          _buf, sfinfo.channels);
+
+  sf_close(infile);
+  double *buf = calloc((int)total_size / 2, sizeof(double));
+  for (int i = 0; i < total_size / 2; i++) {
+    buf[i] = (_buf[2 * i] + _buf[2 * i + 1]);
+    // * 0.5;
+  }
+  free(_buf);
+
+  signal->size = total_size / 2;
+  signal->layout = 1;
+  signal->buf = buf;
+  *sf_sample_rate = sfinfo.samplerate;
+  return 0;
+};
+
 Signal *read_buf(const char *filename) {
   Signal *sig = malloc(sizeof(Signal));
   int sf_sample_rate;
   _read_file(filename, sig, &sf_sample_rate);
+  return sig;
+}
+
+Signal *read_buf_mono(const char *filename) {
+  Signal *sig = malloc(sizeof(Signal));
+  int sf_sample_rate;
+  _read_file_mono(filename, sig, &sf_sample_rate);
+  return sig;
+}
+
+SignalRef inlet(double default_val) {
+  Signal *sig;
+  if (_chain == NULL) {
+    _chain = group_new(1);
+    sig = _chain->ins;
+    // printf("created sig %p %p\n", sig, sig->buf);
+  } else {
+    sig = group_add_input(_chain);
+    // printf("created sig %p %p in existing group\n", sig, sig->buf);
+  }
+
+  for (int i = 0; i < sig->size; i++) {
+    sig->buf[i] = default_val;
+    // printf("sig val %f\n", sig->buf[i]);
+  }
+
   return sig;
 }

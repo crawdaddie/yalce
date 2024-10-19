@@ -186,18 +186,17 @@ void schedule_event(void (*callback)(void *, int), double delay_seconds,
 }
 
 void schedule_event_quant(void (*callback)(void *, int), double quantization,
-                    void *userdata) {
+                          void *userdata) {
 
   now = get_time_ns(); // Update 'now' before scheduling
   double now_s = ((double)now) / S_TO_NS;
   // double delay_seconds = 0.0;
-  // printf("now_s %f %f quant %f\n", now_s, fmod(now_s, quantization), quantization);
-  
+  // printf("now_s %f %f quant %f\n", now_s, fmod(now_s, quantization),
+  // quantization);
 
-  return _schedule_event(queue, callback, fmod(now_s, quantization), userdata, now);
+  return _schedule_event(queue, callback, fmod(now_s, quantization), userdata,
+                         now);
 }
-
-
 
 typedef struct Timer {
 } Timer;
