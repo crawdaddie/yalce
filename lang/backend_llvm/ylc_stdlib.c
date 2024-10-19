@@ -113,17 +113,19 @@ int char_to_hex_int(char c) {
   }
 }
 
-String transpose_string(int input_rows, int input_cols, int output_rows, int output_cols, String input) {
-  char *transposed = malloc(sizeof(char) * ((output_rows * (output_cols + 1)) + 1));
+String transpose_string(int input_rows, int input_cols, int output_rows,
+                        int output_cols, String input) {
+  char *transposed =
+      malloc(sizeof(char) * ((output_rows * (output_cols + 1)) + 1));
 
   memset(transposed, '\n', output_rows * (output_cols + 1));
 
   int output_idx;
   for (int i = 0; i < input_rows; i++) {
     for (int j = 0; j < input_cols; j++) {
-      int input_idx = (input_cols + 1) * i + j; 
+      int input_idx = (input_cols + 1) * i + j;
       char c = input.chars[input_idx];
-      output_idx = (output_cols + 1) * j + i; 
+      output_idx = (output_cols + 1) * j + i;
       transposed[output_idx] = c;
     }
   }

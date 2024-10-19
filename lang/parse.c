@@ -337,7 +337,6 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
 
       snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc", current_dir,
                mod_name);
-
       fully_qualified_name = normalize_path(fully_qualified_name);
       fully_qualified_name = prepend_current_directory(fully_qualified_name);
 
