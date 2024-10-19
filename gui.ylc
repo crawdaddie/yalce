@@ -57,6 +57,21 @@ let times = [|
 
 let x = sq_detune |> chain_wrap |> play;
 
+let kick_buf = read_buf (cstr "kick.wav");
+let snare_buf = read_buf (cstr "snare.wav");
+let hh_buf = read_buf (cstr "hh.wav");
+let drum_machine = fn () ->
+  let kt = inlet 0.0;
+  let st = inlet 0.0;
+  let ht = inlet 0.0;
+  let k = bufplayer_1shot_node kick_buf 1. 0.0 kt;
+  let s = bufplayer_1shot_node snare_buf 1. 0.0 st;
+  let h = bufplayer_1shot_node hh_buf 1. 0.0 ht;
+  k + s + h
+;;
+
+let drums = drum_machine |> chain_wrap |> play;
+
 
 let freq_seq = fn ph: (Double) ->
   match (ph % 4.) with
@@ -112,13 +127,77 @@ let filter_res_setter = fn val: (Int) ->
 # register_cc_handler filter_res_setter 0 21;
 #
 
+let pattern = [|
+"x-x",
+"--x",
+"--x",
+"--x",
+"--x",
+"--x",
+"x-x",
+"--x",
+"-xx",
+"--x",
+"x-x",
+"--x",
+"--x",
+"--x",
+"--x",
+"--x",
+"--x",
+"--x",
+"x-x",
+"x-x",
+"--x",
+"--x",
+"x-x",
+"-xx",
+"--x",
+"--x",
+"--x",
+"-xx",
+"-xx",
+"x-x",
+"x-x",
+"--x",
+|];
 
 
+
+
+
+# this function needs to be 'pre-compiled' so we give it types to trick the compiler into thinking its not generic
+let trig_func = fn line: (String) idx: (Int) offset: (Int) ->
+  let k = array_at line idx in 
+  match k with
+  | 'x' -> (
+    set_input_trig_offset drums idx offset;
+    ()
+  )
+  | '-' -> ()
+;; 
+
+
+let drum_runner = fn
+  args: (Ptr of (Double * Double * Int))
+  frame_offset: (Int)
+  ->
+  let (duration, phase, tick) = *args;
+  let line = array_at pattern tick;
+  trig_func line 0 frame_offset;
+  trig_func line 1 frame_offset;
+  trig_func line 2 frame_offset;
+
+  (duration, phase + duration, (tick + 1) % 32)
+
+  |> schedule_event drum_runner duration
+;;
+
+schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
 schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
 
 create_scope ();
-let mut_array = [|0.9, 0.1, 0.2, 0.3|];
-create_array_editor (array_size mut_array) (array_data_ptr mut_array);
 
-let mut_array = [|0.3|];
-create_array_editor (array_size mut_array) (array_data_ptr mut_array)
+let mut_array = [|0.9, 0.1, 0.2, 0.3|];
+create_slider_window (array_size mut_array) (array_data_ptr mut_array);
+

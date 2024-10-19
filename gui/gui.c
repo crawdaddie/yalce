@@ -1,5 +1,6 @@
 #include "common.h"
 #include "edit_graph.h"
+#include "slider_window.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
@@ -162,6 +163,13 @@ bool create_window(WindowType type, void *data) {
     new_window->data = data;
     break;
   }
+
+  case WINDOW_TYPE_SLIDER: {
+    new_window->render_fn = draw_slider_window;
+    new_window->handle_event = handle_slider_window_events;
+    new_window->data = data;
+    break;
+  }
   }
   window_count++;
   return true;
@@ -218,19 +226,17 @@ void handle_events() {
 
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP:
-    case SDL_MOUSEMOTION:
-      {
-        SDL_Window *mouse_window = SDL_GetWindowFromID(event.window.windowID);
-        for (int i = 0; i < window_count; i++) {
-          if (windows[i].window == mouse_window) {
-            if (windows[i].handle_event != NULL) {
-              windows[i].handle_event(&windows[i], &event);
-            }
-            break;
+    case SDL_MOUSEMOTION: {
+      SDL_Window *mouse_window = SDL_GetWindowFromID(event.window.windowID);
+      for (int i = 0; i < window_count; i++) {
+        if (windows[i].window == mouse_window) {
+          if (windows[i].handle_event != NULL) {
+            windows[i].handle_event(&windows[i], &event);
           }
+          break;
         }
       }
-      break;
+    } break;
 
     default:
       if (event.type == CREATE_WINDOW_EVENT) {
@@ -244,7 +250,6 @@ void handle_events() {
   }
 }
 
-
 int gui() {
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     printf("SDL initialization failed: %s\n", SDL_GetError());
@@ -253,13 +258,13 @@ int gui() {
 
   // In your initialization function
   if (TTF_Init() == -1) {
-      fprintf(stderr, "TTF_Init failed: %s\n", TTF_GetError());
-      // Handle error appropriately
+    fprintf(stderr, "TTF_Init failed: %s\n", TTF_GetError());
+    // Handle error appropriately
   }
   DEFAULT_FONT = TTF_OpenFont("/System/Library/Fonts/Menlo.ttc", 12);
   if (!DEFAULT_FONT) {
-      fprintf(stderr, "Failed to load font: %s\n", TTF_GetError());
-      // Handle error appropriately
+    fprintf(stderr, "Failed to load font: %s\n", TTF_GetError());
+    // Handle error appropriately
   }
 
   // Register custom event
@@ -287,4 +292,48 @@ int gui() {
   }
 
   return 0;
+}
+
+int _create_scope(double *output) {
+  printf("create scope\n");
+  _scope_win_data *win_data = malloc(sizeof(_scope_win_data));
+  win_data->stereo_buf = output;
+  win_data->rms_peak_left = 0.0f;
+  win_data->rms_peak_right = 0.0f;
+
+  push_create_window_event(2, win_data);
+  return 1;
+}
+
+int create_array_editor(int32_t size, double *data_ptr) {
+
+  _array_edit_win_data *win_data = malloc(sizeof(_array_edit_win_data));
+  win_data->_size = size;
+  win_data->data_ptr = data_ptr;
+
+  push_create_window_event(1, win_data);
+  return 1;
+}
+
+int create_slider_window(int32_t size, double *data_ptr, char **labels) {
+  printf("create slider window???\n");
+  _slider_window_data *data = malloc(sizeof(_slider_window_data));
+  data->slider_count = size;
+  data->values = data_ptr;
+  data->labels = malloc(sizeof(char *) * size);
+  for (int i = 0; i < size; i++) {
+    data->labels[i] = "label";
+  }
+  data->mins = malloc(sizeof(double) * size);
+
+  for (int i = 0; i < size; i++) {
+    data->mins[i] = 0.0;
+  }
+  data->maxes = malloc(sizeof(double) * size);
+  for (int i = 0; i < size; i++) {
+    data->maxes[i] = 1.0;
+  }
+  push_create_window_event(3, data);
+
+  return 1;
 }

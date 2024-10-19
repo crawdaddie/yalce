@@ -13,7 +13,8 @@
 typedef enum {
   WINDOW_TYPE_BASIC,
   WINDOW_TYPE_ARRAY_EDITOR,
-  WINDOW_TYPE_OSCILLOSCOPE
+  WINDOW_TYPE_OSCILLOSCOPE,
+  WINDOW_TYPE_SLIDER
 } WindowType;
 extern TTF_Font *DEFAULT_FONT;
 typedef struct Window Window;
@@ -43,4 +44,16 @@ typedef struct _array_edit_win_data {
   int32_t _size;
   double *data_ptr;
 } _array_edit_win_data;
+
+void render_text(const char *text, int x, int y, SDL_Color color,
+                 SDL_Renderer *renderer, TTF_Font *font);
+
+typedef struct {
+  double *values;
+  double *mins;
+  double *maxes;
+  char **labels;
+  int active_slider;
+  int slider_count;
+} _slider_window_data;
 #endif
