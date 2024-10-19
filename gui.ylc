@@ -1,34 +1,30 @@
-#! /Users/adam/projects/sound/yalce/build/lang
-%include String
-%include ../engine/bindings/Synth
-%include ../engine/bindings/MIDI
-%include ../engine/bindings/Sched
-%include Math
-%include Array
+#! env ylc
+%include examples/Gui
+%include engine/bindings/Synth
+%include examples/String
+%include engine/bindings//MIDI
+%include examples/Math
+%include examples/Array
+%include engine/bindings/Sched
+
 
 let sq_detune = fn () -> 
   let f = inlet 50. |> lag_node 0.01;
   let trig = inlet 0.0; 
   let chirp_decay = inlet 0.3;
   let ff = chirp_node 3000. 200. chirp_decay trig; 
-  let res = inlet 8.;
-  (sq_node f + (sq_node @@ f * 1.01) + (sq_node @@ f * 2.)) * 0.4
+  let res = inlet 1.;
+
+  (sq_node f + sq_node (f * 1.01)
+  + sq_node (f * 2.)
+  ) * 0.4
   |> biquad_lp_node ff res 
+  # |> biquad_lp_node ff res 
   |> comb_node 0.75 0.75 0.2
 ;;
 
-let kick_buf = read_buf (cstr "kick.wav");
-let snare_buf = read_buf (cstr "snare.wav");
-let hh_buf = read_buf (cstr "hh.wav");
-let drum_machine = fn () ->
-  let kt = inlet 0.0;
-  let st = inlet 0.0;
-  let ht = inlet 0.0;
-  let k = bufplayer_1shot_node kick_buf 1. 0.0 kt;
-  let s = bufplayer_1shot_node snare_buf 1. 0.0 st;
-  let h = bufplayer_1shot_node hh_buf 1. 0.0 ht;
-  k + s + h
-;;
+
+
 
 
 let notes = [|
@@ -61,8 +57,21 @@ let times = [|
 
 let x = sq_detune |> chain_wrap |> play;
 
+let kick_buf = read_buf (cstr "kick.wav");
+let snare_buf = read_buf (cstr "snare.wav");
+let hh_buf = read_buf (cstr "hh.wav");
+let drum_machine = fn () ->
+  let kt = inlet 0.0;
+  let st = inlet 0.0;
+  let ht = inlet 0.0;
+  let k = bufplayer_1shot_node kick_buf 1. 0.0 kt;
+  let s = bufplayer_1shot_node snare_buf 1. 0.0 st;
+  let h = bufplayer_1shot_node hh_buf 1. 0.0 ht;
+  k + s + h
+;;
+
 let drums = drum_machine |> chain_wrap |> play;
-# let k = kick_synth |> chain_wrap |> play;
+
 
 let freq_seq = fn ph: (Double) ->
   match (ph % 4.) with
@@ -80,8 +89,6 @@ let set_synth_param = fn syn p offset v ->
   | Scalar i -> set_input_scalar_offset syn i offset v
   | Trig i -> set_input_trig_offset syn i offset
 ;;
-
-# let synth_pattern = "0-1-2--34-56--7--89-0a-b-c-d-e--f--";
 
 let stream_vals = fn (dur, phase, note, _ff): (Double * Double * Double * Double) ->
   let ff = phase |> cos |> bipolar_scale 100. 2000.;
@@ -112,12 +119,11 @@ let filter_decay_setter = fn val: (Int) ->
 ;;
 
 let filter_res_setter = fn val: (Int) ->
-  let v = unipolar_scale 1. 15. (val * REC_127);
+  let v = unipolar_scale 1. 20. (val * REC_127);
   set_input_scalar x 3 v
 ;;
 
-register_cc_handler filter_decay_setter 0 22;
-register_cc_handler filter_res_setter 0 21;
+
 
 #   |   |   |   |   |   |   |   #
 let pattern = ```
@@ -160,3 +166,15 @@ let drum_runner = fn
 
 schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
 schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
+
+# create_scope ()
+let mut_array = [|1.,2.,3.,4.|];
+let labels = [|
+"filter freq",
+"res",
+"something",
+"something2"
+|];
+create_slider_window (array_size mut_array) (array_data_ptr mut_array) (array_data_ptr labels)
+
+

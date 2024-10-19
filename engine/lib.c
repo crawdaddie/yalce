@@ -262,3 +262,6 @@ SignalRef inlet(double default_val) {
 
   return sig;
 }
+
+double *raw_signal_data(SignalRef sig) { return sig->buf; }
+int signal_size(SignalRef sig) { return sig->size; }

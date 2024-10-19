@@ -986,7 +986,6 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
   node->data.AST_MATCH_GUARD_CLAUSE.guard_expr = guard;
   return node;
 }
-
 void print_location(Ast *ast) {
   loc_info *loc = ast->loc_info;
   if (!loc || !loc->src || !loc->src_content) {

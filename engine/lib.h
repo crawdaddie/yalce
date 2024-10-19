@@ -46,4 +46,6 @@ NodeRef play(NodeRef group);
 
 int get_frame_offset();
 
+double *raw_signal_data(SignalRef sig);
+int signal_size(SignalRef sig);
 #endif

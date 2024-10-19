@@ -249,7 +249,20 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
       return allocaInst;
     }
 
-    return val;
+    LLVMTypeRef el_type = LLVMTypeOf(val);
+    LLVMTypeRef pointer_type = LLVMPointerType(el_type, 0);
+    LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), 0, 0)};
+    LLVMValueRef ptr =
+        LLVMBuildGEP2(builder, el_type, val, indices, 1, "addr_of");
+
+    // LLVMDumpValue(ptr);
+    // LLVMDumpType(LLVMTypeOf(ptr));
+    // printf("\n");
+    return ptr;
+
+    // return val;
+
+    // return val;
   }
 
   default: {

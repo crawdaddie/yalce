@@ -221,6 +221,10 @@ make
 ```
 builds the executable `lang` in build/ using the LLVM JIT-compiler as a backend
 
+### build flags:
+`GUI_MODE=1` -- builds the executable with gui enabled 
+`DUMP_AST=1` -- displays the program's AST
+
 ## Usage
 ```
 build/lang -i

@@ -222,6 +222,11 @@ int jit(int argc, char **argv) {
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
+
+#ifdef GUI_MODE
+    printf(COLOR_MAGENTA "------------------\n"
+                         "GUI MODE ENABLED  \n" STYLE_RESET_ALL);
+#endif
     init_readline();
 
     // char *input = malloc(sizeof(char) * INPUT_BUFSIZE);

@@ -57,6 +57,10 @@ LLVMValueRef codegen_array_slice(LLVMValueRef array, LLVMTypeRef el_type,
                                  LLVMValueRef start, LLVMValueRef end,
                                  LLVMBuilderRef builder);
 
+LLVMValueRef codegen_get_array_data_ptr(LLVMBuilderRef builder,
+                                        LLVMTypeRef el_type,
+                                        LLVMValueRef array);
+
 LLVMValueRef codegen_get_array_data(LLVMBuilderRef builder,
                                     LLVMTypeRef data_type, LLVMValueRef array);
 #endif

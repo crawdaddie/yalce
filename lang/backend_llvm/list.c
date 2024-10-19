@@ -205,6 +205,24 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
 }
 
 // Function to get size of fixed-size array
+LLVMValueRef codegen_get_array_data_ptr(LLVMBuilderRef builder,
+                                        LLVMTypeRef el_type,
+                                        LLVMValueRef array) {
+
+  if (LLVMGetTypeKind(LLVMTypeOf(array)) != LLVMPointerTypeKind) {
+    // If it's not a pointer, use LLVMBuildExtractValue - extracts value from a
+    // direct value rather than a ptr which needs a GEP2 instruction
+    return LLVMBuildExtractValue(builder, array, 1, "struct_element");
+  }
+
+  LLVMValueRef element_ptr = LLVMBuildStructGEP2(builder, LLVMTypeOf(array),
+                                                 array, 1, "get_tuple_element");
+
+  return LLVMBuildLoad2(builder, LLVMPointerType(el_type, 0), element_ptr,
+                        "tuple_element_load");
+}
+
+// Function to get size of fixed-size array
 LLVMValueRef codegen_get_array_data(LLVMBuilderRef builder,
                                     LLVMTypeRef data_type, LLVMValueRef array) {
 

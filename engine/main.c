@@ -14,11 +14,6 @@ int main(int argc, char **argv) {
       "/Users/adam/Desktop/Snakes\ of\ Russia\ -\ Oblations\ Sample\ "
       "Pack/Textures/SOR_OB_Texture_Beginning_Dm.wav");
 
-  // Signal *buf =
-  //     read_buf_mono("/Users/adam/Desktop/Snakes of Russia - Oblations Sample
-  //     "
-  //                   "Pack/Textures/SOR_OB_Texture_Dusk Baby_C.wav");
-  //
   Node *impulse = nbl_impulse_node(get_sig_default(1, 90.));
   audio_ctx_add(impulse);
 

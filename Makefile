@@ -18,19 +18,34 @@ LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wi
 
 # Separate CFLAGS for include paths
 CFLAGS := -I./lang -I./engine
+
+ifdef GUI_MODE
+CFLAGS += -I./gui -DGUI_MODE
+endif
+
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
 CFLAGS += `$(LLVM_CONFIG) --cflags`
 CFLAGS += -I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include
 
+
 LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
 
 LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm -framework Accelerate
+LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
 
+ifdef GUI_MODE
+	LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L$(shell brew --prefix sdl2)/lib -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2 -lSDL2_ttf -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx
+endif
+
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
+
+ifdef DUMP_AST 
+LANG_CC += -DDUMP_AST
+endif
 
 ifdef DUMP_AST 
 LANG_CC += -DDUMP_AST
@@ -41,7 +56,7 @@ LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
 
 ifeq ($(MAKECMDGOALS),debug)
-    LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
+  LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
 endif
 
 LEX_FILE := $(LANG_SRC_DIR)/lex.l
@@ -57,16 +72,22 @@ LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 # Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
-.PHONY: all clean engine test wasm serve_docs engine_bindings
+.PHONY: all clean engine test wasm serve_docs engine_bindings gui
 
-all: $(BUILD_DIR)/lang
+all: $(BUILD_DIR)/ylc
 debug: all
 
 engine:
 	$(MAKE) -C engine
 
+gui:
+	echo "######### MAKE GUI------------"
+	mkdir -p $(BUILD_DIR)/gui
+	$(MAKE) -C gui
+
 $(BUILD_DIR):
-	mkdir -p $(BUILD_DIR) mkdir -p $(BUILD_DIR)/backend_llvm
+	mkdir -p $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)/backend_llvm
 	mkdir -p $(BUILD_DIR)/types
 
 # Build lex and yacc output files
@@ -81,7 +102,7 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 	$(LANG_CC) -c -o $@ $<
 
 # Build the final executable
-$(BUILD_DIR)/lang: $(LANG_OBJS) | engine
+$(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
 
 clean:
