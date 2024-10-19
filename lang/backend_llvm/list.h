@@ -44,7 +44,7 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
 
 LLVMTypeRef create_array_struct_type(LLVMTypeRef element_type);
 
-LLVMValueRef codegen_array_init(LLVMValueRef size, LLVMValueRef item,
+LLVMValueRef codegen_array_init(LLVMValueRef len, LLVMValueRef item,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
 

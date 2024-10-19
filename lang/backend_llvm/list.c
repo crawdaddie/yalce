@@ -377,22 +377,40 @@ LLVMValueRef codegen_array(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return str;
 }
 
-LLVMValueRef codegen_array_init(LLVMValueRef size, LLVMValueRef item,
-                                JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder) {
+LLVMValueRef _codegen_array_init(LLVMValueRef len, LLVMValueRef val,
+                                 JITLangCtx *ctx, LLVMModuleRef module,
+                                 LLVMBuilderRef builder) {
 
-  LLVMTypeRef llvm_el_type = LLVMTypeOf(item);
+  LLVMTypeRef llvm_el_type = LLVMTypeOf(val);
 
-  LLVMValueRef len_val = size;
+  LLVMTypeRef llvm_array_type = LLVMPointerType(llvm_el_type, 0);
 
-  LLVMValueRef array_ptr;
+  LLVMValueRef data_ptr;
   if (ctx->stack_ptr == 0) {
-    array_ptr =
-        LLVMBuildArrayMalloc(builder, llvm_el_type, len_val, "heap_array");
+    data_ptr =
+        LLVMBuildArrayMalloc(builder, llvm_array_type, len, "heap_array");
   } else {
-    array_ptr =
-        LLVMBuildArrayAlloca(builder, llvm_el_type, len_val, "stack_array");
+
+    data_ptr =
+        LLVMBuildArrayAlloca(builder, llvm_array_type, len, "stack_array");
   }
 
-  return array_ptr;
+
+  return data_ptr;
+}
+
+LLVMValueRef codegen_array_init(LLVMValueRef len, LLVMValueRef item,
+                                JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  // printf("array init scope: %d\n", ctx->stack_ptr);
+
+  LLVMValueRef data_ptr = _codegen_array_init(len, item, ctx, module, builder);
+  LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
+
+  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+
+  LLVMValueRef str = LLVMGetUndef(struct_type);
+  str = LLVMBuildInsertValue(builder, str, len, 0, "insert_array_size");
+  str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
+  return str;
 }

@@ -133,3 +133,19 @@ String transpose_string(int input_rows, int input_cols, int output_rows,
   String result = {output_idx, transposed};
   return result;
 }
+
+
+double *double_array_init(int32_t size, double val) {
+  double *data = malloc(sizeof(double) * size);
+  for (int32_t i = 0; i < size; i++) {
+    data[i] = val;
+  }
+  return data;
+}
+
+struct _DoubleArray double_array(int32_t size, double val) {
+  double *data = double_array_init(size, val);
+  return (struct _DoubleArray){
+    size, data
+  };
+}

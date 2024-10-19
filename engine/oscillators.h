@@ -31,4 +31,7 @@ NodeRef granulator_node(int max_concurrent_grains, SignalRef buf,
 
 NodeRef trig_sel_node(SignalRef trig, SignalRef sels);
 
+NodeRef osc_bank_node(SignalRef amps, SignalRef freq);
+
+NodeRef raw_osc_node(SignalRef osc, SignalRef freq);
 #endif

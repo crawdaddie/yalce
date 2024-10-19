@@ -14,6 +14,8 @@ let ramp_node = extern fn Signal -> Synth;
 let trig_rand_node = extern fn Signal -> Synth;
 let granulator_node = extern fn Int -> Signal -> Signal -> Signal -> Signal -> Synth;
 let trig_sel_node = extern fn Signal -> Signal -> Synth;
+let osc_bank_node = extern fn Signal -> Signal -> Synth;
+let raw_osc_node = extern fn Signal -> Signal -> Synth;
 
 # lib.h
 let play_test_synth = extern fn () -> Synth;
@@ -36,6 +38,7 @@ let play = extern fn Synth -> Synth;
 let get_frame_offset = extern fn () -> Int;
 let raw_signal_data = extern fn Signal -> Ptr;
 let signal_size = extern fn Signal -> Int;
+let signal_of_ptr = extern fn Int -> Ptr -> Signal;
 
 # filters.h
 let biquad_node = extern fn Signal -> Synth;

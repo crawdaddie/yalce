@@ -48,4 +48,6 @@ int get_frame_offset();
 
 double *raw_signal_data(SignalRef sig);
 int signal_size(SignalRef sig);
+
+SignalRef signal_of_ptr(int size, double *ptr);
 #endif

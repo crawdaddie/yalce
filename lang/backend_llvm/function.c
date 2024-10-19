@@ -492,7 +492,6 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
   }
 
   if (strcmp(sym_name, "array_data_ptr") == 0) {
-    printf("array data ptr\n");
 
     LLVMValueRef array =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
@@ -501,6 +500,17 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     print_type(el_type);
     return codegen_get_array_data_ptr(
         builder, type_to_llvm_type(el_type, ctx->env, module), array);
+  }
+
+  if (strcmp(sym_name, "array_new") == 0) {
+
+    LLVMValueRef array_size =
+        codegen(&ast->data.AST_APPLICATION.args[0], ctx, module, builder);
+
+    LLVMValueRef array_item =
+        codegen(&ast->data.AST_APPLICATION.args[1], ctx, module, builder);
+
+    return codegen_array_init(array_size, array_item, ctx, module, builder);
   }
 
   if (strcmp(sym_name, "array_incr") == 0) {
@@ -513,7 +523,6 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_array_increment(array, el_type, builder);
   }
 
-
   if (strcmp(sym_name, "array_slice") == 0) {
     // printf("call array slice\n");
 
@@ -524,7 +533,7 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     // LLVMTypeRef el_type =
     //     type_to_llvm_type(array_type->data.T_CONS.args[0], ctx->env, module);
     LLVMTypeRef el_type = LLVMInt8Type();
-//
+    //
     LLVMValueRef start =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 

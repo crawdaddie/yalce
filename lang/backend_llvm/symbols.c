@@ -260,6 +260,11 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "array_slice", hash_string("array_slice", 11),
               array_slice_sym);
 
+  env = env_extend(env, "array_new", &t_array_new_fn_sig);
+  JITSymbol *array_new_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_new_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "array_new", hash_string("array_new", 9), array_new_sym);
+
   env = env_extend(env, "array_to_list", &t_array_to_list_fn_sig);
   JITSymbol *array_to_list_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_to_list_fn_sig, NULL, NULL);

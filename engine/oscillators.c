@@ -129,7 +129,7 @@ node_perform sin_perform(Node *node, int nframes, double spf) {
     index = (int)d_index;
     frac = d_index - index;
 
-    a = sin_table[index];
+    a = sin_table[index % SIN_TABSIZE];
     b = sin_table[(index + 1) % SIN_TABSIZE];
 
     sample = (1.0 - frac) * a + (frac * b);
@@ -146,6 +146,129 @@ Node *sin_node(Signal *freq) {
   state->phase = 0.0;
 
   Node *s = node_new(state, (node_perform *)sin_perform, 1, freq);
+  return s;
+}
+
+node_perform raw_osc_perform(Node *node, int nframes, double spf) {
+
+  sin_state *state = (sin_state *)node->state;
+  double *input = node->ins[0].buf;
+  double *osc_table = node->ins[1].buf;
+  int tabsize = node->ins[1].size;
+  double *out = node->out.buf;
+
+  double d_index;
+  int index = 0;
+
+  double frac, a, b, sample;
+  double freq;
+
+  while (nframes--) {
+    freq = *input;
+    d_index = state->phase * tabsize;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    a = 2 * osc_table[index % tabsize] - 1.;
+    b = 2 * osc_table[(index + 1) % tabsize] - 1.;
+
+    sample = (1.0 - frac) * a + (frac * b);
+
+    // printf("%f\n", sample);
+    *out = sample;
+    state->phase = fmod(freq * spf + (state->phase), 1.0);
+
+    out++;
+    input++;
+  }
+}
+
+Node *raw_osc_node(Signal *osc, Signal *freq) {
+
+  sin_state *state = malloc(sizeof(sin_state));
+  state->phase = 0.0;
+  Signal *sigs = malloc(sizeof(Signal) * 2);
+  sigs[0].buf = freq->buf;
+  sigs[0].size = freq->size;
+  sigs[0].layout = freq->layout;
+
+  sigs[1].buf = osc->buf;
+  sigs[1].size = osc->size;
+  sigs[1].layout = 1;
+
+  Node *s = node_new(state, (node_perform *)raw_osc_perform, 2, sigs);
+  return s;
+}
+
+static inline double get_freq_scaled_sample(double phase, double multiplier,
+                                            double *table, int table_size) {
+
+  double d_index;
+  int index = 0;
+
+  double frac, a, b, sample;
+  // printf("multiplier %f\n", multiplier);
+
+  d_index = (phase * multiplier) * table_size;
+  index = (int)d_index;
+  frac = d_index - index;
+
+  a = sin_table[index % table_size];
+  b = sin_table[(index + 1) % table_size];
+
+  sample = (1.0 - frac) * a + (frac * b);
+  return sample;
+}
+
+node_perform osc_bank_perform(Node *node, int nframes, double spf) {
+
+  sin_state *state = (sin_state *)node->state;
+  double *input = node->ins[0].buf;
+  double *amps = node->ins[1].buf;
+  int num_amps = node->ins[1].size;
+  double *out = node->out.buf;
+
+  // printf("read freq input %p\n", input);
+
+  double d_index;
+  int index = 0;
+
+  double frac, a, b, sample;
+  double freq;
+
+  while (nframes--) {
+    freq = *input;
+    for (int i = 0; i < num_amps; i++) {
+      double sample = get_freq_scaled_sample(state->phase, (double)(i + 1),
+                                             sin_table, SIN_TABSIZE);
+      sample *= amps[i];
+      if (i == 0) {
+        *out = sample;
+      } else {
+        *out += sample;
+      }
+    }
+
+    state->phase = fmod(freq * spf + (state->phase), 1.0);
+
+    out++;
+    input++;
+  }
+}
+
+Node *osc_bank_node(Signal *amps, Signal *freq) {
+  sin_state *state = malloc(sizeof(sin_state));
+  state->phase = 0.0;
+  Signal *sigs = malloc(sizeof(Signal) * 2);
+  sigs[0].buf = freq->buf;
+  sigs[0].size = freq->size;
+  sigs[0].layout = freq->layout;
+
+  sigs[1].buf = amps->buf;
+  sigs[1].size = amps->size;
+  sigs[1].layout = 1;
+
+  Node *s = node_new(state, (node_perform *)osc_bank_perform, 2, sigs);
   return s;
 }
 
