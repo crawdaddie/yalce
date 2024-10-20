@@ -14,7 +14,8 @@ typedef enum {
   WINDOW_TYPE_BASIC,
   WINDOW_TYPE_ARRAY_EDITOR,
   WINDOW_TYPE_OSCILLOSCOPE,
-  WINDOW_TYPE_SLIDER
+  WINDOW_TYPE_SLIDER,
+  WINDOW_TYPE_PLOT_ARRAY
 } WindowType;
 extern TTF_Font *DEFAULT_FONT;
 typedef struct Window Window;
@@ -57,4 +58,10 @@ typedef struct {
   int slider_count;
   void (*on_update)(int, double);
 } _slider_window_data;
+
+typedef struct _plot_array_win_data {
+  int32_t _size;
+  double *data_ptr;
+} _plot_array_win_data;
+
 #endif

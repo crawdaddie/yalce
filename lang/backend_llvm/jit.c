@@ -280,6 +280,7 @@ int jit(int argc, char **argv) {
         Ast *top = top_level_ast(prog);
         fprintf(stderr, "value not found: ");
         print_ast_err(top);
+        print_location(top);
         continue;
       }
 

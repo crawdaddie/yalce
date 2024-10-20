@@ -109,6 +109,38 @@ void maketable_sin(void) {
   }
 }
 
+node_perform phasor_perform(Node *node, int nframes, double spf) {
+
+  sin_state *state = (sin_state *)node->state;
+  double *input = node->ins[0].buf;
+  double *out = node->out.buf;
+
+  // printf("read freq input %p\n", input);
+
+  double d_index;
+  int index = 0;
+
+  double frac, a, b, sample;
+  double freq;
+
+  while (nframes--) {
+    freq = *input;
+    *out = state->phase;
+    state->phase = fmod(freq * spf + (state->phase), 1.0);
+
+    out++;
+    input++;
+  }
+}
+
+Node *phasor_node(Signal *freq) {
+  sin_state *state = malloc(sizeof(sin_state));
+  state->phase = 0.0;
+
+  Node *s = node_new(state, (node_perform *)phasor_perform, 1, freq);
+  return s;
+}
+
 node_perform sin_perform(Node *node, int nframes, double spf) {
 
   sin_state *state = (sin_state *)node->state;
@@ -220,6 +252,26 @@ static inline double get_freq_scaled_sample(double phase, double multiplier,
   return sample;
 }
 
+static inline double
+get_freq_scaled_sample_phase(double phase, double multiplier, double phase_add,
+                             double *table, int table_size) {
+
+  double d_index;
+  int index = 0;
+
+  double frac, a, b, sample;
+
+  d_index = (phase * multiplier + phase_add) * table_size;
+  index = (int)d_index;
+  frac = d_index - index;
+
+  a = sin_table[index % table_size];
+  b = sin_table[(index + 1) % table_size];
+
+  sample = (1.0 - frac) * a + (frac * b);
+  return sample;
+}
+
 node_perform osc_bank_perform(Node *node, int nframes, double spf) {
 
   sin_state *state = (sin_state *)node->state;
@@ -238,10 +290,12 @@ node_perform osc_bank_perform(Node *node, int nframes, double spf) {
 
   while (nframes--) {
     freq = *input;
+    double norm = 1.0;
     for (int i = 0; i < num_amps; i++) {
       double sample = get_freq_scaled_sample(state->phase, (double)(i + 1),
                                              sin_table, SIN_TABSIZE);
       sample *= amps[i];
+      norm += amps[i];
       if (i == 0) {
         *out = sample;
       } else {
@@ -251,6 +305,7 @@ node_perform osc_bank_perform(Node *node, int nframes, double spf) {
 
     state->phase = fmod(freq * spf + (state->phase), 1.0);
 
+    *out /= (double)norm;
     out++;
     input++;
   }
@@ -269,6 +324,67 @@ Node *osc_bank_node(Signal *amps, Signal *freq) {
   sigs[1].layout = 1;
 
   Node *s = node_new(state, (node_perform *)osc_bank_perform, 2, sigs);
+  return s;
+}
+
+node_perform osc_bank_phase_perform(Node *node, int nframes, double spf) {
+
+  sin_state *state = (sin_state *)node->state;
+  double *input = node->ins[0].buf;
+  double *amps = node->ins[1].buf;
+  int num_amps = node->ins[1].size;
+
+  double *phases = node->ins[2].buf;
+  double *out = node->out.buf;
+
+  // printf("read freq input %p\n", input);
+
+  double d_index;
+  int index = 0;
+
+  double frac, a, b, sample;
+  double freq;
+
+  while (nframes--) {
+    freq = *input;
+    double norm = 1.0;
+    for (int i = 0; i < num_amps; i++) {
+      double sample = get_freq_scaled_sample_phase(
+          state->phase, (double)(i + 1), phases[i], sin_table, SIN_TABSIZE);
+      sample *= amps[i];
+      norm += amps[i];
+      if (i == 0) {
+        *out = sample;
+      } else {
+        *out += sample;
+      }
+    }
+
+    state->phase = fmod(freq * spf + (state->phase), 1.0);
+
+    *out /= (double)norm;
+    out++;
+    input++;
+  }
+}
+
+Node *osc_bank_phase_node(Signal *amps, Signal *phases, Signal *freq) {
+  sin_state *state = malloc(sizeof(sin_state));
+  state->phase = 0.0;
+  Signal *sigs = malloc(sizeof(Signal) * 3);
+  sigs[0].buf = freq->buf;
+  sigs[0].size = freq->size;
+  sigs[0].layout = freq->layout;
+
+  sigs[1].buf = amps->buf;
+  sigs[1].size = amps->size;
+  sigs[1].layout = 1;
+
+  sigs[2].buf = phases->buf;
+  sigs[2].size = phases->size;
+  sigs[2].layout = 1;
+
+  Node *s = node_new(state, (node_perform *)osc_bank_phase_perform, 3, sigs);
   return s;
 }
 
@@ -883,6 +999,7 @@ node_perform granulator_perform(Node *node, int nframes, double spf) {
   while (nframes--) {
     *out = 0.0;
     double p = fabs(*pos);
+    // printf("pos: %f\n", p);
 
     if (*trig == 1.0 && state->active_grains < state->max_concurrent_grains) {
       int start_pos = (int)(p * buf_size);

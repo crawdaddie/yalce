@@ -106,13 +106,13 @@ let runner = fn
   |> schedule_event runner duration
 ;;
 
-let filter_decay_setter = fn val: (Int) ->
-  let v = unipolar_scale 0.01 0.8 (val * REC_127);
+let filter_decay_setter = fn val: (Double) ->
+  let v = unipolar_scale 0.01 0.8 val;
   set_input_scalar x 2 v
 ;;
 
-let filter_res_setter = fn val: (Int) ->
-  let v = unipolar_scale 1. 15. (val * REC_127);
+let filter_res_setter = fn val: (Double) ->
+  let v = unipolar_scale 1. 15. val;
   set_input_scalar x 3 v
 ;;
 

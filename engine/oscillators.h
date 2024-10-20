@@ -33,5 +33,9 @@ NodeRef trig_sel_node(SignalRef trig, SignalRef sels);
 
 NodeRef osc_bank_node(SignalRef amps, SignalRef freq);
 
+NodeRef osc_bank_phase_node(SignalRef amps, SignalRef phases, SignalRef freq);
+
 NodeRef raw_osc_node(SignalRef osc, SignalRef freq);
+
+NodeRef phasor_node(SignalRef freq);
 #endif

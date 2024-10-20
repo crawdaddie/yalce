@@ -149,6 +149,7 @@ Type t_array_var = {
 Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
 
 Type t_array_data_ptr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_ptr);
+
 Type t_array_incr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_array_var);
 Type t_array_slice_fn_sig =
     MAKE_FN_TYPE_4(&t_int, &t_int, &t_array_var, &t_array_var);
@@ -620,10 +621,12 @@ Type *get_builtin_type(const char *id_chars) {
   }
 
   if (*id_chars == *TYPE_NAME_OP_MUL) {
-
     return &t_mul;
   }
 
+  if (*id_chars == *TYPE_NAME_OP_DIV) {
+    return &t_div;
+  }
   if (*id_chars == *TYPE_NAME_OP_MOD) {
     return &t_mod;
   }

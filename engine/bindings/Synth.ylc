@@ -15,7 +15,9 @@ let trig_rand_node = extern fn Signal -> Synth;
 let granulator_node = extern fn Int -> Signal -> Signal -> Signal -> Signal -> Synth;
 let trig_sel_node = extern fn Signal -> Signal -> Synth;
 let osc_bank_node = extern fn Signal -> Signal -> Synth;
+let osc_bank_phase_node = extern fn Signal -> Signal -> Signal -> Synth;
 let raw_osc_node = extern fn Signal -> Signal -> Synth;
+let phasor_node = extern fn Signal -> Synth;
 
 # lib.h
 let play_test_synth = extern fn () -> Synth;

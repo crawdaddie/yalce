@@ -3,10 +3,11 @@
 #include <CoreMIDI/CoreMIDI.h>
 
 #define CC 0xB0
-#define CHAN_MASK 0x0F;
+#define CHAN_MASK 0x0F
 
+#define REC_127 0.007874015748031496
 // Define the function pointer type
-typedef void (*CCCallback)(int);
+typedef void (*CCCallback)(double);
 static CCCallback cc_handlers[128];
 
 void register_cc_handler(CCCallback handler, int ch, int cc) {
@@ -19,7 +20,7 @@ static void handle_cc(MIDIPacket *packet) {
   uint8_t val = *(packet->data + 2);
   CCCallback handler = cc_handlers[cc];
   if (handler != NULL) {
-    handler(val);
+    handler((double)(val * REC_127));
   }
 
   // printf("%d %d %d\n", ch, cc, val);

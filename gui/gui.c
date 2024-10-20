@@ -1,4 +1,5 @@
 #include "gui.h"
+#include "SDL2/SDL2_gfxPrimitives.h"
 #include "common.h"
 #include "edit_graph.h"
 #include "slider_window.h"
@@ -112,6 +113,56 @@ typedef struct _array {
   double *data;
 } _array;
 
+#define INITIAL_WIDTH 800
+#define INITIAL_HEIGHT 600
+#define POINT_RADIUS 2
+#define AXIS_PADDING 40
+#define LABEL_PADDING 5
+#define NUM_Y_LABELS 5
+
+float _min_value = 0.0f, _max_value = 1.0f;
+void plot_array_window(Window *window) {
+  _array *array_data = window->data;
+
+  SDL_Renderer *renderer = window->renderer;
+  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+  SDL_RenderClear(renderer);
+
+  double *data = array_data->data;
+  int length = array_data->size;
+
+  // // Draw y-axis labels
+  // SDL_Color black = {0, 0, 0, 255};
+  // for (int i = 0; i <= NUM_Y_LABELS; i++) {
+  //   double value = max_value - i * (max_value - min_value) / NUM_Y_LABELS;
+  //   int y =
+  //       AXIS_PADDING + i * (window->height - 2 * AXIS_PADDING) /
+  //       NUM_Y_LABELS;
+  //   char label[20];
+  //   snprintf(label, sizeof(label), "%.2f", value);
+  //   render_text(label, LABEL_PADDING, y - 7, black, renderer, DEFAULT_FONT);
+  // }
+
+  // Draw graph
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+  for (int i = 0; i < length - 1; i++) {
+    int x1 =
+        AXIS_PADDING + i * (window->width - 2 * AXIS_PADDING) / (length - 1);
+    int y1 = window->height - AXIS_PADDING -
+             (int)((data[i] - _min_value) / (_max_value - _min_value) *
+                   (window->height - 2 * AXIS_PADDING));
+    int x2 = AXIS_PADDING +
+             (i + 1) * (window->width - 2 * AXIS_PADDING) / (length - 1);
+    int y2 = window->height - AXIS_PADDING -
+             (int)((data[i + 1] - _min_value) / (_max_value - _min_value) *
+                   (window->height - 2 * AXIS_PADDING));
+    SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+    aalineRGBA(renderer, x1, y1, x2, y2, 0, 0, 0, 255);
+  }
+
+  SDL_RenderPresent(renderer);
+}
+
 Uint32 CREATE_WINDOW_EVENT;
 bool create_window(WindowType type, void *data) {
 
@@ -141,6 +192,11 @@ bool create_window(WindowType type, void *data) {
 
   case WINDOW_TYPE_SLIDER: {
     wname = "Edit Values";
+    break;
+  }
+
+  case WINDOW_TYPE_PLOT_ARRAY: {
+    wname = "Array Plot";
     break;
   }
   }
@@ -189,6 +245,12 @@ bool create_window(WindowType type, void *data) {
     new_window->data = data;
     break;
   }
+
+  case WINDOW_TYPE_PLOT_ARRAY: {
+    new_window->render_fn = plot_array_window;
+    new_window->data = data;
+    break;
+  }
   }
   window_count++;
   return true;
@@ -214,60 +276,6 @@ int push_create_window_event(WindowType type, void *data) {
   return SDL_PushEvent(&event);
 }
 
-void _handle_events() {
-  SDL_Event event;
-  while (SDL_PollEvent(&event)) {
-    switch (event.type) {
-    case SDL_WINDOWEVENT:
-      if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
-        for (int i = 0; i < window_count; i++) {
-          if (SDL_GetWindowID(windows[i].window) == event.window.windowID) {
-            SDL_DestroyRenderer(windows[i].renderer);
-            SDL_DestroyWindow(windows[i].window);
-            for (int j = i; j < window_count - 1; j++) {
-              windows[j] = windows[j + 1];
-            }
-            window_count--;
-            break;
-          }
-        }
-      } else {
-        for (int i = 0; i < window_count; i++) {
-          if (SDL_GetWindowID(windows[i].window) == event.window.windowID) {
-            if (windows[i].handle_event != NULL) {
-              windows[i].handle_event(&windows[i], &event);
-            }
-            break;
-          }
-        }
-      }
-      break;
-
-    case SDL_MOUSEBUTTONDOWN:
-    case SDL_MOUSEBUTTONUP:
-    case SDL_MOUSEMOTION: {
-      SDL_Window *mouse_window = SDL_GetWindowFromID(event.window.windowID);
-      for (int i = 0; i < window_count; i++) {
-        if (windows[i].window == mouse_window) {
-          if (windows[i].handle_event != NULL) {
-            windows[i].handle_event(&windows[i], &event);
-          }
-          break;
-        }
-      }
-    } break;
-
-    default:
-      if (event.type == CREATE_WINDOW_EVENT) {
-        WindowCreationData *creation_data =
-            (WindowCreationData *)event.user.data1;
-        create_window(creation_data->type, creation_data->data);
-        free(creation_data);
-      }
-      break;
-    }
-  }
-}
 void handle_events() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
@@ -428,5 +436,14 @@ int create_slider_window(int32_t size, double *data_ptr,
 
   push_create_window_event(WINDOW_TYPE_SLIDER, data);
 
+  return 1;
+}
+
+int _create_plot_array_window(int32_t size, double *data_ptr) {
+
+  _array_edit_win_data *win_data = malloc(sizeof(_array_edit_win_data));
+  win_data->_size = size;
+  win_data->data_ptr = data_ptr;
+  push_create_window_event(WINDOW_TYPE_PLOT_ARRAY, win_data);
   return 1;
 }

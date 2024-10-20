@@ -15,6 +15,11 @@ int create_scope() {
   _create_scope(output);
   return 1;
 }
+
+int plot_sig(SignalRef sig) {
+  _create_plot_array_window(sig->size, sig->buf);
+  return 1;
+}
 #endif
 
 // Global variables for thread synchronization
