@@ -419,8 +419,6 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
 
 LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("call binop??\n");
-
   Type *ltype = ast->data.AST_APPLICATION.args->md;
 
   if (ltype->kind == T_VAR) {

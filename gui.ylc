@@ -173,6 +173,7 @@ let labels = [|
 "something",
 "something2"
 |];
-create_slider_window (array_size mut_array) (array_data_ptr mut_array) (array_data_ptr labels)
+
+create_slider_window (array_size mut_array) (array_data_ptr mut_array) (array_data_ptr labels) 
 
 
