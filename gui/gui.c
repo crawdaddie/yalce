@@ -13,12 +13,15 @@ Window windows[MAX_WINDOWS];
 
 int window_count = 0;
 
-#define SAMPLE_COUNT 512
+// Define thresholds for color changes
+#define RMS_YELLOW_THRESHOLD 0.5f
+#define RMS_RED_THRESHOLD 0.8f
 #define DECAY_RATE 0.95f
-float calculate_rms(double *data, int channel, int sample_count) {
+
+float calculate_rms(double *data, int channel, int layout, int sample_count) {
   float sum = 0.0f;
   for (int i = 0; i < sample_count; i++) {
-    float sample = (float)data[i * 2 + channel];
+    float sample = (float)data[i * layout + channel];
     sum += sample * sample;
   }
   return sqrtf(sum / sample_count);
@@ -41,7 +44,7 @@ void set_color_by_level(SDL_Renderer *renderer, double level) {
 void render_rms_meter(SDL_Renderer *renderer, int x, int y, int width,
                       int height, double rms, double *peak) {
   // Update peak value with decay
-  *peak = fmaxf(rms, *peak * DECAY_RATE);
+  *peak = fmax(rms, *peak * DECAY_RATE);
 
   // Draw meter background
   SDL_Rect meter_bg = {x, y, width, height};
@@ -67,47 +70,38 @@ void render_oscilloscope(Window *window) {
   SDL_SetRenderDrawColor(window->renderer, 224, 224, 224, 255);
   SDL_RenderClear(window->renderer);
 
-  int half_height = window->height / 2;
-  int quarter_height = window->height / 4;
+  int layout = win_data->layout;
+  int size = win_data->size;
+  double *buf = win_data->buf;
 
-  double *buf = (double *)win_data->stereo_buf;
+  int channel_height = window->height / layout;
 
-  // Calculate RMS values
-  float rms_left = calculate_rms(buf, 0, SAMPLE_COUNT);
-  float rms_right = calculate_rms(buf, 1, SAMPLE_COUNT);
-
-  // Render RMS meters
+  // Calculate RMS values and render RMS meters for each channel
   int meter_width = 30;
-  render_rms_meter(window->renderer, 0, 0, meter_width, half_height, rms_left,
-                   &win_data->rms_peak_left);
-  render_rms_meter(window->renderer, 0, half_height, meter_width, half_height,
-                   rms_right, &win_data->rms_peak_right);
-
-  // Draw left channel (black) in the top half
-  SDL_SetRenderDrawColor(window->renderer, 0, 0, 0, 255);
-  for (int i = 0; i < SAMPLE_COUNT - 1; i++) {
-    int x1 = i * window->width / SAMPLE_COUNT;
-    int x2 = (i + 1) * window->width / SAMPLE_COUNT;
-    int y1 = quarter_height + (int)(buf[i * 2] * quarter_height);
-    int y2 = quarter_height + (int)(buf[(i + 1) * 2] * quarter_height);
-
-    SDL_RenderDrawLine(window->renderer, x1, y1, x2, y2);
+  for (int channel = 0; channel < layout; channel++) {
+    float rms = calculate_rms(buf, channel, layout, size);
+    render_rms_meter(window->renderer, 0, channel * channel_height, meter_width,
+                     channel_height, rms,
+                     &win_data->rms_channel_peaks[channel]);
   }
 
-  // Draw right channel (black) in the bottom half
-  SDL_SetRenderDrawColor(window->renderer, 0, 0, 0, 255);
-  for (int i = 0; i < SAMPLE_COUNT - 1; i++) {
-    int x1 = i * window->width / SAMPLE_COUNT;
-    int x2 = (i + 1) * window->width / SAMPLE_COUNT;
-    int y1 = 3 * quarter_height + (int)(buf[i * 2 + 1] * quarter_height);
-    int y2 = 3 * quarter_height + (int)(buf[(i + 1) * 2 + 1] * quarter_height);
+  // Draw oscilloscope for each channel
+  for (int channel = 0; channel < layout; channel++) {
+    SDL_SetRenderDrawColor(window->renderer, 0, 0, 0, 255);
+    for (int i = 0; i < size - 1; i++) {
+      int x1 = i * window->width / size;
+      int x2 = (i + 1) * window->width / size;
+      int y1 = (channel + 0.5) * channel_height +
+               (int)(buf[i * layout + channel] * channel_height * 0.5);
+      int y2 = (channel + 0.5) * channel_height +
+               (int)(buf[(i + 1) * layout + channel] * channel_height * 0.5);
 
-    SDL_RenderDrawLine(window->renderer, x1, y1, x2, y2);
+      SDL_RenderDrawLine(window->renderer, x1, y1, x2, y2);
+    }
   }
 
   SDL_RenderPresent(window->renderer);
 }
-
 typedef struct _array {
   int32_t size;
   double *data;
@@ -379,11 +373,12 @@ int gui_loop() {
   return 0;
 }
 
-int _create_scope(double *output) {
+int create_scope(double *output, int layout, int size) {
   _scope_win_data *win_data = malloc(sizeof(_scope_win_data));
-  win_data->stereo_buf = output;
-  win_data->rms_peak_left = 0.0f;
-  win_data->rms_peak_right = 0.0f;
+  win_data->buf = output;
+  win_data->rms_channel_peaks = calloc(layout, sizeof(double));
+  win_data->layout = layout;
+  win_data->size = size;
 
   push_create_window_event(WINDOW_TYPE_OSCILLOSCOPE, win_data);
   return 1;

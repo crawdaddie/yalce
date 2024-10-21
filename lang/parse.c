@@ -345,6 +345,9 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
 
       if (previously_imported == NULL) {
         const char *import_content = read_script(fully_qualified_name);
+        if (!import_content) {
+          return NULL;
+        }
         stack =
             inputs_list_push_left(stack, fully_qualified_name, import_content);
 
