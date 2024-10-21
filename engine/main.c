@@ -1,4 +1,5 @@
 #include "audio_loop.h"
+#include "clap_host.h"
 #include "ctx.h"
 #include "lib.h"
 #include "node.h"
@@ -8,6 +9,7 @@
 #include <unistd.h>
 
 int main(int argc, char **argv) {
+
   init_audio();
   // Signal *buf = read_buf("../fat_amen_mono_48000.wav");
   Signal *buf = read_buf_mono(
@@ -33,6 +35,11 @@ int main(int argc, char **argv) {
 
   add_to_dac(grains);
 
+  Signal *grain_out = &grains->out;
+
+  NodeRef rev = clap_node("/Library/Audio/Plug-Ins/CLAP/TAL-Reverb-4.clap/"
+                          "Contents/MacOS/TAL-Reverb-4",
+                          1, &grain_out);
   while (1) {
     sleep(1);
   }

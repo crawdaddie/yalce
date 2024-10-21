@@ -11,10 +11,10 @@
 #include <string.h>
 
 #ifdef GUI_MODE
-int create_scope() {
+int create_main_scope() {
   Ctx *audio_ctx = get_audio_ctx();
   double *output = audio_ctx->output_buf;
-  _create_scope(output);
+  create_scope(output, 2, 512);
   return 1;
 }
 
@@ -22,6 +22,12 @@ int plot_sig(SignalRef sig) {
   _create_plot_array_window(sig->size, sig->buf);
   return 1;
 }
+
+int scope_node(NodeRef node) {
+  SignalRef out_sig = &node->out;
+  return create_scope(out_sig->buf, out_sig->layout, out_sig->size);
+}
+
 #endif
 
 // Global variables for thread synchronization

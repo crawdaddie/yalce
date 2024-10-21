@@ -23,9 +23,6 @@ let sq_detune = fn () ->
   |> comb_node 0.75 0.75 0.2
 ;;
 
-
-
-
 let notes = [|
   110.0,
   123.47082531403103,
@@ -168,12 +165,12 @@ schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
 # create_scope ()
 let mut_array = [|1.,2.,3.,4.|];
 let labels = [|
-"filter freq",
-"res",
-"something",
-"something2"
+  "filter freq",
+  "res",
+  "something",
+  "something2"
 |];
 
-create_slider_window (array_size mut_array) (array_data_ptr mut_array) (array_data_ptr labels) 
+create_slider_window (array_size mut_array) (array_data_ptr mut_array) (array_data_ptr labels) ()
 
 

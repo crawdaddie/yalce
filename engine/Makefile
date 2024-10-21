@@ -3,10 +3,10 @@
 BUILD_DIR := ../build/engine
 SRCS := $(wildcard *.c)
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
-
-LDFLAGS = -lsoundio -lm -lsndfile -lfftw3
+CLAP_SDK_PATH := /Users/adam/projects/sound/clap
+LDFLAGS = -lsoundio -lm -lsndfile -lfftw3 -ldl
 FRAMEWORKS = -framework opengl -framework CoreMIDI -framework cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
-COMPILER_OPTIONS = -g
+COMPILER_OPTIONS = -g -I$(CLAP_SDK_PATH)/include
 
 CC = clang
 

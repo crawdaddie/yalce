@@ -36,9 +36,10 @@ typedef struct Window {
 } Window;
 
 typedef struct _scope_win_data {
-  double rms_peak_left;
-  double rms_peak_right;
-  double *stereo_buf;
+  double *rms_channel_peaks;
+  double *buf;
+  int layout;
+  int size;
 } _scope_win_data;
 
 typedef struct _array_edit_win_data {

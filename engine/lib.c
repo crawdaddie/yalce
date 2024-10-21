@@ -272,3 +272,5 @@ SignalRef signal_of_ptr(int size, double *ptr) {
   sig->layout = 1;
   return sig;
 }
+
+SignalRef node_output_sig(NodeRef node) { return &node->out; }

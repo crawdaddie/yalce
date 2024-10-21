@@ -50,4 +50,6 @@ double *raw_signal_data(SignalRef sig);
 int signal_size(SignalRef sig);
 
 SignalRef signal_of_ptr(int size, double *ptr);
+
+SignalRef node_output_sig(NodeRef node);
 #endif
