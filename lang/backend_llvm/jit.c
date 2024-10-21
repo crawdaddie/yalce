@@ -3,7 +3,6 @@
 #include "backend_llvm/common.h"
 #include "backend_llvm/globals.h"
 #include "format_utils.h"
-#include "function.h"
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
@@ -20,7 +19,6 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/Transforms/InstCombine.h>
 #include <llvm-c/Transforms/Scalar.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -223,10 +221,6 @@ int jit(int argc, char **argv) {
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
 
-#ifdef GUI_MODE
-    printf(COLOR_MAGENTA "------------------\n"
-                         "GUI MODE ENABLED  \n" STYLE_RESET_ALL);
-#endif
     init_readline();
 
     // char *input = malloc(sizeof(char) * INPUT_BUFSIZE);

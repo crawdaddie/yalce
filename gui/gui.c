@@ -113,49 +113,39 @@ typedef struct _array {
   double *data;
 } _array;
 
-#define INITIAL_WIDTH 800
-#define INITIAL_HEIGHT 600
-#define POINT_RADIUS 2
-#define AXIS_PADDING 40
-#define LABEL_PADDING 5
-#define NUM_Y_LABELS 5
+#define LEFT_MARGIN 20
+#define RIGHT_MARGIN 20
+#define VERTICAL_PADDING 20
 
-float _min_value = 0.0f, _max_value = 1.0f;
 void plot_array_window(Window *window) {
-  _array *array_data = window->data;
+  _array_plot_win_data *array_data = window->data;
 
   SDL_Renderer *renderer = window->renderer;
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
   SDL_RenderClear(renderer);
 
-  double *data = array_data->data;
-  int length = array_data->size;
+  double *data = array_data->data_ptr;
+  int length = array_data->_size;
+  double _min_value = array_data->min;
+  double _max_value = array_data->max;
 
-  // // Draw y-axis labels
-  // SDL_Color black = {0, 0, 0, 255};
-  // for (int i = 0; i <= NUM_Y_LABELS; i++) {
-  //   double value = max_value - i * (max_value - min_value) / NUM_Y_LABELS;
-  //   int y =
-  //       AXIS_PADDING + i * (window->height - 2 * AXIS_PADDING) /
-  //       NUM_Y_LABELS;
-  //   char label[20];
-  //   snprintf(label, sizeof(label), "%.2f", value);
-  //   render_text(label, LABEL_PADDING, y - 7, black, renderer, DEFAULT_FONT);
-  // }
+  // Calculate the actual plotting area
+  int plot_width = window->width - LEFT_MARGIN - RIGHT_MARGIN;
+  int plot_height = window->height - 2 * VERTICAL_PADDING;
 
   // Draw graph
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
   for (int i = 0; i < length - 1; i++) {
-    int x1 =
-        AXIS_PADDING + i * (window->width - 2 * AXIS_PADDING) / (length - 1);
-    int y1 = window->height - AXIS_PADDING -
-             (int)((data[i] - _min_value) / (_max_value - _min_value) *
-                   (window->height - 2 * AXIS_PADDING));
-    int x2 = AXIS_PADDING +
-             (i + 1) * (window->width - 2 * AXIS_PADDING) / (length - 1);
-    int y2 = window->height - AXIS_PADDING -
+    int x1 = LEFT_MARGIN + i * plot_width / (length - 1);
+    int y1 =
+        window->height - VERTICAL_PADDING -
+        (int)((data[i] - _min_value) / (_max_value - _min_value) * plot_height);
+
+    int x2 = LEFT_MARGIN + (i + 1) * plot_width / (length - 1);
+    int y2 = window->height - VERTICAL_PADDING -
              (int)((data[i + 1] - _min_value) / (_max_value - _min_value) *
-                   (window->height - 2 * AXIS_PADDING));
+                   plot_height);
+
     SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
     aalineRGBA(renderer, x1, y1, x2, y2, 0, 0, 0, 255);
   }
@@ -441,9 +431,24 @@ int create_slider_window(int32_t size, double *data_ptr,
 
 int _create_plot_array_window(int32_t size, double *data_ptr) {
 
-  _array_edit_win_data *win_data = malloc(sizeof(_array_edit_win_data));
+  _array_plot_win_data *win_data = malloc(sizeof(_array_plot_win_data));
   win_data->_size = size;
   win_data->data_ptr = data_ptr;
+
+  double min = 100.;
+  double max = -100.;
+
+  for (int i = 0; i < size; i++) {
+    double val = data_ptr[i];
+    if (val <= min) {
+      min = val;
+    }
+    if (val >= max) {
+      max = val;
+    }
+  }
+  win_data->min = min;
+  win_data->max = max;
   push_create_window_event(WINDOW_TYPE_PLOT_ARRAY, win_data);
   return 1;
 }

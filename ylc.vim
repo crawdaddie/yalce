@@ -3,9 +3,9 @@
 " Maintainer: AI Assistant
 " Latest Revision: 2024-10-20
 
-if exists("b:current_syntax")
-  finish
-endif
+" if exists("b:current_syntax")
+"   finish
+" endif
 
 " Keywords
 syn keyword ylcKeyword fn let in and extern true false match with import type of if include contained
@@ -67,4 +67,4 @@ hi def link ylcChar Character
 hi def link ylcComment Comment
 hi def link ylcEscape Special
 
-let b:current_syntax = "ylc"
+" let b:current_syntax = "ylc"

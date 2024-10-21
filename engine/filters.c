@@ -158,7 +158,6 @@ DEFINE_BIQUAD_DYN_PERFORM_FUNCTION(biquad_bp_dyn_perform,
 
 Node *biquad_bp_node(Signal *freq, Signal *res, Signal *in) {
 
-
   biquad_state *state = malloc(sizeof(biquad_state));
 
   Signal *ins = malloc(sizeof(Signal *) * 3);
@@ -555,6 +554,7 @@ typedef struct {
   int active_grains;
   int next_free_grain;
 } grain_delay_state;
+
 static inline double interpolate(double *buf, int buf_size, double index) {
   int index_floor = (int)index;
   double frac = index - index_floor;
@@ -606,7 +606,7 @@ static inline double process_grains(grain_delay_state *state) {
   return out / (state->active_grains > 0 ? state->active_grains : 1);
 }
 
-node_perform grain_delay_perform(Node *node, int nframes, double spf) {
+node_perform _grain_delay_perform(Node *node, int nframes, double spf) {
   double *out = node->out.buf;
   double *in = node->ins[0].buf;
   grain_delay_state *state = node->state;
@@ -645,8 +645,8 @@ node_perform grain_delay_perform(Node *node, int nframes, double spf) {
   }
 }
 
-Node *grain_delay_node(double delay_time, double max_delay_time, double fb,
-                       double pitchshift, Signal *input) {
+Node *_grain_delay_node(double delay_time, double max_delay_time, double fb,
+                        double pitchshift, Signal *input) {
   int SAMPLE_RATE = ctx_sample_rate();
 
   int bufsize = (int)(max_delay_time * SAMPLE_RATE);
@@ -683,5 +683,13 @@ Node *grain_delay_node(double delay_time, double max_delay_time, double fb,
   state->active_grains = 0;
   state->next_free_grain = 0;
 
-  return node_new(state, grain_delay_perform, 1, ins);
+  return node_new(state, (node_perform *)_grain_delay_perform, 1, ins);
+}
+
+node_perform grain_delay_perform(NodeRef node, int nframes, double spf) {}
+
+NodeRef grain_delay_node(double spray, double freq, double pitch,
+                         double feedback, double mix, SignalRef input) {
+
+  return node_new(NULL, (node_perform *)grain_delay_perform, 1, input);
 }

@@ -8,7 +8,6 @@ let choose = fn arr ->
 # pre-cache (Array of Double -> Double) & (Array of Int -> Int) versions of choose
 # - not ideal but needed for now while we
 # don't have proper tree-based scope management :(
-
 choose [|0., 0.|];
 choose [|0, 0|];
 

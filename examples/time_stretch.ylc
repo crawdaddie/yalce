@@ -3,6 +3,7 @@
 %include ../engine/bindings/MIDI
 %include String
 %include Math
+
 let amen_buf = read_buf (cstr "fat_amen_mono_48000.wav");
 
 let timestretcher = fn () ->
@@ -28,3 +29,8 @@ let speed_set = fn val: (Double) ->
 ;;
 
 register_cc_handler speed_set 0 23;
+
+let plot_sig = extern fn Signal -> Int;
+
+plot_sig amen_buf;
+

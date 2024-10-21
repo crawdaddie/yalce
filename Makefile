@@ -19,6 +19,8 @@ LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wi
 # Separate CFLAGS for include paths
 CFLAGS := -I./lang -I./engine
 
+GUI_MODE := 1
+
 ifdef GUI_MODE
 CFLAGS += -I./gui -DGUI_MODE
 endif

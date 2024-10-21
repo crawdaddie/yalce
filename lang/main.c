@@ -1,8 +1,10 @@
 #include "ctx.h"
 #ifdef GUI_MODE
 #include "../gui/gui.h"
+
 #endif
 #include "backend_llvm/jit.h"
+#include "format_utils.h"
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -59,12 +61,17 @@ int main(int argc, char **argv) {
     if (init_gui()) {
       return 1;
     }
+
     // Start JIT thread
     struct thread_args thread_args = {argc, argv};
     if (pthread_create(&jit_thread, NULL, run_jit, &thread_args) != 0) {
       perror("Failed to create JIT thread");
       return 1;
     }
+
+    printf(COLOR_MAGENTA "------------------\n"
+                         "GUI MODE ENABLED  \n" STYLE_RESET_ALL);
+
     gui_loop();
 
 #endif

@@ -46,6 +46,13 @@ typedef struct _array_edit_win_data {
   double *data_ptr;
 } _array_edit_win_data;
 
+typedef struct _array_plot_win_data {
+  int32_t _size;
+  double *data_ptr;
+  double min;
+  double max;
+} _array_plot_win_data;
+
 void render_text(const char *text, int x, int y, SDL_Color color,
                  SDL_Renderer *renderer, TTF_Font *font);
 

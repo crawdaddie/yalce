@@ -16,6 +16,6 @@ NodeRef lag_node(double lag_time, SignalRef in);
 
 NodeRef tanh_node(double gain, SignalRef in);
 
-NodeRef grain_delay_node(double delay_time, double max_delay_time, double fb,
-                         double pitchshift, SignalRef input);
+NodeRef grain_delay_node(double spray, double freq, double pitch,
+                         double feedback, double mix, SignalRef input);
 #endif

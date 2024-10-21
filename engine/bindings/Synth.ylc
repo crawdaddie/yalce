@@ -50,7 +50,7 @@ let biquad_bp_node = extern fn Signal -> Signal -> Signal -> Synth;
 let comb_node = extern fn Double -> Double -> Double -> Signal -> Synth;
 let lag_node = extern fn Double -> Signal -> Synth;
 let tanh_node = extern fn Double -> Signal -> Synth;
-let grain_delay_node = extern fn Double -> Double -> Double -> Double -> Signal -> Synth;
+let grain_delay_node = extern fn Double -> Double -> Double -> Double -> Double -> Signal -> Synth;
 
 let chain_wrap = fn def -> 
   reset_chain ();
