@@ -83,7 +83,7 @@ engine:
 	$(MAKE) -C engine
 
 gui:
-	echo "######### MAKE GUI------------"
+	@echo "######### MAKE GUI------------"
 	mkdir -p $(BUILD_DIR)/gui
 	$(MAKE) -C gui
 
