@@ -109,14 +109,17 @@ static bool try_push(const struct clap_output_events *list,
 }
 NodeRef clap_node(SignalRef input) {
 
-  clap_plugin_entry_t *entry =
-      load_clap("/Library/Audio/Plug-Ins/CLAP/TAL-Reverb-4.clap/Contents/MacOS/"
-                "TAL-Reverb-4");
+  // clap_plugin_entry_t *entry =
+  // load_clap("/Library/Audio/Plug-Ins/CLAP/TAL-Reverb-4.clap/Contents/MacOS/"
+  //           "TAL-Reverb-4");
   //
   // clap_plugin_entry_t *entry =
   //     load_clap("/Users/adam/projects/sound/clap-plugins/builds/ninja-headless/"
   //               "plugins/Debug/clap-plugins.clap/Contents/MacOS/clap-plugins");
 
+  clap_plugin_entry_t *entry =
+      load_clap("/Users/adam/projects/sound/nih-plug/target/bundled/gain.clap/"
+                "Contents/MacOS/gain");
   entry->init("Library/Audio/Plug-Ins/CLAP/TAL-Reverb-4.clap");
 
   clap_plugin_factory_t *fac = entry->get_factory(CLAP_PLUGIN_FACTORY_ID);
