@@ -1,6 +1,5 @@
 "" Vim syntax file
 " Language: YLC
-" Maintainer: AI Assistant
 " Latest Revision: 2024-10-20
 
 if exists("b:current_syntax")
