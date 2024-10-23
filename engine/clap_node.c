@@ -4,6 +4,7 @@
 #include "clap/ext/params.h"
 #include "clap/factory/plugin-factory.h"
 #include "clap/process.h"
+#include "common.h"
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,9 @@ typedef struct clap_plugin_state {
   const clap_plugin_t *plugin;
   clap_input_events_t in_events;
   clap_output_events_t out_events;
+  int num_ins;
+  float *big_input_buf;
+  float *big_output_buf;
 } clap_plugin_state;
 
 clap_plugin_entry_t *load_clap(const char *path) {
@@ -71,34 +75,39 @@ node_perform clap_perform(NodeRef node, int nframes, double spf) {
   process.steady_time = -1;
   process.frames_count = nframes;
   process.transport = NULL; // we do need to fix this
-  const clap_audio_buffer_t clap_input = {
-      .data64 = (double *[]){input->buf, input->buf},
+
+  for (int i = 0; i < nframes; i++) {
+    state->big_input_buf[0 * BUF_SIZE + i] = (float)input_buf[i];
+    state->big_input_buf[1 * BUF_SIZE + i] = (float)input_buf[i];
+  }
+  clap_audio_buffer_t inputs[state->num_ins];
+  inputs[0] = (clap_audio_buffer_t){
+      .data32 =
+          (float *[]){state->big_input_buf, state->big_input_buf + BUF_SIZE},
       .channel_count = 2,
-      .constant_mask = 0,
   };
 
-  clap_audio_buffer_t clap_output = {
-      .data64 = (double *[]){out, out},
+  clap_audio_buffer_t output = (clap_audio_buffer_t){
+      .data32 =
+          (float *[]){state->big_output_buf, state->big_output_buf + BUF_SIZE},
       .channel_count = 2,
-      .constant_mask = 0,
   };
 
   process.in_events = &state->in_events;
   process.out_events = &state->out_events;
 
-  clap_audio_buffer_t schain_in = {
-      .data64 = (double *[]){node->ins[1].buf, node->ins[1].buf},
-      .channel_count = 2,
-      .constant_mask = 0,
-  };
+  process.audio_inputs = inputs;
+  process.audio_inputs_count = state->num_ins;
 
-  process.audio_inputs = (clap_audio_buffer_t[]){clap_input, schain_in};
-  process.audio_inputs_count = 2;
-
-  process.audio_outputs = &clap_output;
+  process.audio_outputs = &output;
   process.audio_outputs_count = 1;
 
   plugin->process(plugin, &process);
+
+  for (int i = 0; i < nframes; i++) {
+    *out = output.data32[0][i];
+    *out += output.data32[1][i];
+  }
 }
 
 uint32_t evts_size(const clap_input_events_t *evs) { return 0; }
@@ -109,17 +118,25 @@ static bool try_push(const struct clap_output_events *list,
 }
 NodeRef clap_node(SignalRef input) {
 
+  // clap_plugin_entry_t *entry = load_clap(
+  //     "/Users/adam/Library/Audio/Plug-Ins/CLAP/blepfx/"
+  //     "prisma-apple-universal.clap/Contents/MacOS/prisma-apple-universal");
+
   // clap_plugin_entry_t *entry =
-  // load_clap("/Library/Audio/Plug-Ins/CLAP/TAL-Reverb-4.clap/Contents/MacOS/"
-  //           "TAL-Reverb-4");
+  //     load_clap("/Users/adam/Library/Audio/Plug-Ins/CLAP/"
+  //               "clap-c99-distortion.clap/Contents/MacOS/clap-c99-distortion");
   //
   // clap_plugin_entry_t *entry =
   //     load_clap("/Users/adam/projects/sound/clap-plugins/builds/ninja-headless/"
   //               "plugins/Debug/clap-plugins.clap/Contents/MacOS/clap-plugins");
-
+  //
+  // clap_plugin_entry_t *entry =
+  //     load_clap("/Users/adam/projects/sound/elysiera/target/bundled/"
+  //               "Elysiera.clap/Contents/MacOS/Elysiera");
+  //
   clap_plugin_entry_t *entry =
-      load_clap("/Users/adam/projects/sound/nih-plug/target/bundled/gain.clap/"
-                "Contents/MacOS/gain");
+      load_clap("/Library/Audio/Plug-Ins/CLAP/TAL-Reverb-4.clap/Contents/MacOS/"
+                "TAL-Reverb-4");
   entry->init("Library/Audio/Plug-Ins/CLAP/TAL-Reverb-4.clap");
 
   clap_plugin_factory_t *fac = entry->get_factory(CLAP_PLUGIN_FACTORY_ID);
@@ -196,16 +213,15 @@ NodeRef clap_node(SignalRef input) {
   state->out_events.try_push = try_push;
 
   state->plugin = plugin;
-  Signal *sidechain = get_sig_default(2, 0.0);
-  Signal *ins = malloc(sizeof(Signal) * 2);
+  state->num_ins = in_ports;
+  state->big_input_buf = malloc(sizeof(float) * BUF_SIZE * in_ports * 2);
+  state->big_output_buf = malloc(sizeof(float) * BUF_SIZE * out_ports * 2);
+
+  Signal *ins = malloc(sizeof(Signal) * 1);
   ins[0].buf = input->buf;
   ins[0].size = input->size;
   ins[0].layout = input->layout;
 
-  ins[1].buf = sidechain->buf;
-  ins[1].size = sidechain->size;
-  ins[1].layout = sidechain->layout;
-
-  NodeRef node = node_new((void *)state, (node_perform *)clap_perform, 2, ins);
+  NodeRef node = node_new((void *)state, (node_perform *)clap_perform, 1, ins);
   return node;
 }
