@@ -3,6 +3,7 @@
 #include "SDL2/SDL_render.h"
 #include "SDL2/SDL_ttf.h"
 #include "SDL2/SDL_video.h"
+#include <stdbool.h>
 
 // #define DEFAULT_FONT TTF_OpenFont("/System/Library/Fonts/Menlo.ttc", 12)
 
@@ -42,6 +43,7 @@ typedef struct _scope_win_data {
   double *buf;
   int layout;
   int size;
+  bool render_spectrum;
 } _scope_win_data;
 
 typedef struct _array_edit_win_data {

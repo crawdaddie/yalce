@@ -1,10 +1,9 @@
 #ifndef _LANG_CLAP_GUI_H
 #define _LANG_CLAP_GUI_H
 
-#include "SDL2/SDL_events.h"
-#include "clap/ext/gui.h"
-#include "clap/plugin.h"
 #include "common.h"
+#include <clap/ext/gui.h>
+#include <clap/plugin.h>
 
 typedef struct clap_plugin_specs {
   int num_params;

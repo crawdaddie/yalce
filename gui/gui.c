@@ -1,5 +1,6 @@
 #include "gui.h"
 #include "SDL2/SDL2_gfxPrimitives.h"
+
 #include "clap_gui.h"
 #include "common.h"
 #include "edit_graph.h"
@@ -7,6 +8,8 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
+#include <complex.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -64,6 +67,176 @@ void render_rms_meter(SDL_Renderer *renderer, int x, int y, int width,
   SDL_RenderDrawLine(renderer, x, peak_y, x + width, peak_y);
 }
 
+// FFT implementation using Cooley-Tukey algorithm
+void fft(double complex *buf, int n) {
+  if (n <= 1)
+    return;
+
+  // Separate even and odd elements
+  double complex even[n / 2], odd[n / 2];
+  for (int i = 0; i < n / 2; i++) {
+    even[i] = buf[2 * i];
+    odd[i] = buf[2 * i + 1];
+  }
+
+  // Recursive FFT on even and odd arrays
+  fft(even, n / 2);
+  fft(odd, n / 2);
+
+  // Combine results
+  for (int k = 0; k < n / 2; k++) {
+    double complex t = cexp(-2.0 * I * M_PI * k / n) * odd[k];
+    buf[k] = even[k] + t;
+    buf[k + n / 2] = even[k] - t;
+  }
+}
+
+void __render_spectrum(Window *window) {
+  _scope_win_data *win_data = window->data;
+
+  // Set background
+  SDL_SetRenderDrawColor(window->renderer, 224, 224, 224, 255);
+  SDL_RenderClear(window->renderer);
+
+  int layout = win_data->layout;
+  int size = win_data->size;
+  double *buf = win_data->buf;
+
+  int channel_height = window->height / layout;
+  int fft_size = 1024; // Should be power of 2
+
+  double complex fft_buf[fft_size];
+  // Process and render each channel
+  for (int channel = 0; channel < layout; channel++) {
+    // Prepare data for FFT
+
+    // Copy and window the data (using Hanning window)
+    for (int i = 0; i < fft_size; i++) {
+      double window = 0.5 * (1 - cos(2 * M_PI * i / (fft_size - 1)));
+      fft_buf[i] = buf[i * layout + channel] * window;
+    }
+
+    // Perform FFT
+    fft(fft_buf, fft_size);
+
+    // Draw spectrum
+    SDL_SetRenderDrawColor(window->renderer, 0, 0, 0, 255);
+
+    int num_bars = window->width / 3; // Width of each bar + 1px gap
+    for (int i = 0; i < num_bars; i++) {
+      // Calculate magnitude for this frequency bin
+      double magnitude = 0;
+      int bin_start = (int)((i * fft_size / 2) / (double)num_bars);
+      int bin_end = (int)(((i + 1) * fft_size / 2) / (double)num_bars);
+
+      for (int j = bin_start; j < bin_end; j++) {
+        magnitude += cabs(fft_buf[j]) / (bin_end - bin_start);
+      }
+      // printf("magnitude %f\n", magnitude);
+
+      // Scale magnitude logarithmically
+      magnitude = log10(1 + magnitude) * channel_height * 0.4;
+
+      // Draw bar
+      SDL_Rect bar = {
+          i * 3,                                           // x position
+          (channel + 1) * channel_height - (int)magnitude, // y position
+          2,                                               // width
+          (int)magnitude                                   // height
+      };
+      SDL_RenderFillRect(window->renderer, &bar);
+    }
+
+    // // Draw RMS meter (keep this from original code)
+    // float rms = calculate_rms(buf, channel, layout, size);
+    // render_rms_meter(window->renderer, 0, channel * channel_height, 30,
+    //                  channel_height, rms,
+    //                  &win_data->rms_channel_peaks[channel]);
+  }
+
+  SDL_RenderPresent(window->renderer);
+}
+void render_spectrum(Window *window) {
+    _scope_win_data *win_data = window->data;
+
+    // Set background
+    SDL_SetRenderDrawColor(window->renderer, 224, 224, 224, 255);
+    SDL_RenderClear(window->renderer);
+
+    int layout = win_data->layout;
+    int size = win_data->size;
+    double *buf = win_data->buf;
+
+    int channel_height = window->height / layout;
+    int fft_size = 1024; // Should be power of 2
+
+    double complex fft_buf[fft_size];
+    // Process and render each channel
+    for (int channel = 0; channel < layout; channel++) {
+        // Clear FFT buffer
+        memset(fft_buf, 0, sizeof(fft_buf));
+
+        // Copy and window the data (using Hanning window)
+        for (int i = 0; i < fft_size && i < size; i++) {
+            double window = 0.5 * (1 - cos(2 * M_PI * i / (fft_size - 1)));
+            fft_buf[i] = buf[i * layout + channel] * window;
+        }
+
+        // Perform FFT
+        fft(fft_buf, fft_size);
+
+        // Draw spectrum
+        SDL_SetRenderDrawColor(window->renderer, 0, 0, 0, 255);
+
+        int num_bars = window->width / 3; // Width of each bar + 1px gap
+        
+        // Only use first half of FFT result (up to Nyquist frequency)
+        int usable_bins = fft_size / 2;
+        
+        for (int i = 0; i < num_bars; i++) {
+            // Calculate magnitude for this frequency bin
+            double magnitude = 0;
+            int bin_start = (int)((i * usable_bins) / (double)num_bars);
+            int bin_end = (int)(((i + 1) * usable_bins) / (double)num_bars);
+            
+            // Ensure we don't exceed usable bins
+            bin_end = (bin_end < usable_bins) ? bin_end : usable_bins - 1;
+            
+            if (bin_start < bin_end) {
+                for (int j = bin_start; j < bin_end; j++) {
+                    // Calculate magnitude and normalize by FFT size
+                    double bin_magnitude = cabs(fft_buf[j]) / (fft_size / 2.0);
+                    magnitude += bin_magnitude / (bin_end - bin_start);
+                }
+
+                // Apply frequency weighting (optional)
+                // This helps emphasize mid-range frequencies
+                // double freq = (bin_start + bin_end) / 2.0 / (double)fft_size;
+                // magnitude *= sqrt(freq);
+
+                // Scale the magnitude logarithmically
+                magnitude = 20 * log10(1 + magnitude);
+                
+                // Normalize to channel height
+                double normalized_height = (magnitude + 60) / 60.0;  // Adjust these values based on your input range
+                normalized_height = fmax(0.0, fmin(1.0, normalized_height));
+                int bar_height = (int)(normalized_height * channel_height * 0.9);  // 0.9 to leave some margin
+
+                // Draw bar
+                SDL_Rect bar = {
+                    i * 3,                                           // x position
+                    (channel + 1) * channel_height - bar_height,    // y position
+                    2,                                              // width
+                    bar_height                                      // height
+                };
+                SDL_RenderFillRect(window->renderer, &bar);
+            }
+        }
+    }
+
+    SDL_RenderPresent(window->renderer);
+}
+
 void render_oscilloscope(Window *window) {
   _scope_win_data *win_data = window->data;
 
@@ -102,6 +275,28 @@ void render_oscilloscope(Window *window) {
   }
 
   SDL_RenderPresent(window->renderer);
+}
+
+// Window event handler implementation
+void scope_event_handler(Window *window, SDL_Event *event) {
+  _scope_win_data *win_data = (_scope_win_data *)window->data;
+
+  switch (event->type) {
+  case SDL_KEYDOWN:
+    switch (event->key.keysym.sym) {
+    case SDLK_f: {
+      win_data->render_spectrum = !win_data->render_spectrum;
+      if (win_data->render_spectrum) {
+        window->render_fn = render_spectrum;
+      } else {
+
+        window->render_fn = render_oscilloscope;
+      }
+      break;
+    }
+    }
+    break;
+  }
 }
 typedef struct _array {
   int32_t size;
@@ -221,6 +416,7 @@ bool create_window(WindowType type, void *data) {
   case WINDOW_TYPE_OSCILLOSCOPE: {
     double *buf = data;
     new_window->render_fn = render_oscilloscope;
+    new_window->handle_event = scope_event_handler;
     new_window->data = data;
     break;
   }
@@ -312,6 +508,21 @@ void handle_events() {
             windows[i].handle_event(&windows[i], &event);
           }
           break;
+        }
+      }
+    } break;
+
+    case SDL_KEYDOWN:
+    case SDL_KEYUP: {
+      SDL_Window *focused_window = SDL_GetKeyboardFocus();
+      if (focused_window != NULL) {
+        for (int i = 0; i < window_count; i++) {
+          if (windows[i].window == focused_window) {
+            if (windows[i].handle_event != NULL) {
+              windows[i].handle_event(&windows[i], &event);
+            }
+            break;
+          }
         }
       }
     } break;
