@@ -213,6 +213,8 @@ int jit(int argc, char **argv) {
   }
 
   if (repl) {
+    printf("start repl: ## SYNTH??: ");
+    print_type(&t_synth);
 
     char dirname[100];
     getcwd(dirname, 100);
@@ -229,13 +231,8 @@ int jit(int argc, char **argv) {
 
     while (true) {
 
-      int top_level_size = ctx.stack->length;
-
-      hti it = ht_iterator(ctx.stack);
-
-      for (int completion_entry = 0; ht_next(&it); completion_entry++) {
-        add_completion_item(it.key, completion_entry);
-      };
+      // printf("repl: ## SYNTH??: ");
+      // print_type_err(&t_synth);
 
       char *input = repl_input(prompt);
 
@@ -247,6 +244,9 @@ int jit(int argc, char **argv) {
         print_type_env(env);
         continue;
       } else if (strncmp("%dump_ast", input, 9) == 0) {
+        print_ast(ast_root);
+        continue;
+      } else if (strncmp("%quit", input, 5) == 0) {
         print_ast(ast_root);
         continue;
       } else if (strcmp("\n", input) == 0) {

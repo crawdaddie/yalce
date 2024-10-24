@@ -57,8 +57,6 @@ let times = [|
   0.5,
   0.125,
 |];
-
-
 let x = sq_detune |> chain_wrap |> play;
 
 let drums = drum_machine |> chain_wrap |> play;
@@ -81,7 +79,7 @@ let set_synth_param = fn syn p offset v ->
   | Trig i -> set_input_trig_offset syn i offset
 ;;
 
-# let synth_pattern = "0-1-2--34-56--7--89-0a-b-c-d-e--f--";
+let synth_pattern = "0-1-2--34-56--7--89-0a-b-c-d-e--f--";
 
 let stream_vals = fn (dur, phase, note, _ff): (Double * Double * Double * Double) ->
   let ff = phase |> cos |> bipolar_scale 100. 2000.;
@@ -160,3 +158,5 @@ let drum_runner = fn
 
 schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
 schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
+
+

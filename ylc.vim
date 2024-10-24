@@ -65,5 +65,5 @@ hi def link ylcFStringInterp Special
 hi def link ylcChar Character
 hi def link ylcComment Comment
 hi def link ylcEscape Special
-
+setlocal commentstring=#\ %s
 " let b:current_syntax = "ylc"

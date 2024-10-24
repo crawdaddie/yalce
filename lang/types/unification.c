@@ -1,4 +1,5 @@
 #include "types/unification.h"
+#include "synths.h"
 #include "types/type.h"
 #include <stdbool.h>
 #include <string.h>
@@ -285,9 +286,18 @@ Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
 }
 
 Type *unify(Type *t1, Type *t2, TypeEnv **env) {
-  // printf("unify: ");
-  // print_type(t1);
-  // print_type(t2);
+
+  // printf("unify");
+  // if (t1->alias) {
+  //   printf("%s\n", t1->alias);
+  // } else {
+  //   print_type(t1);
+  // }
+  // if (t2->alias) {
+  //   printf("%s\n", t2->alias);
+  // } else {
+  //   print_type(t2);
+  // }
 
   if (t1 == NULL) {
     printf(stderr, "Error unifying type - lhs is NULL\n");

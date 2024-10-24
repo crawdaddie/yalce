@@ -1,4 +1,5 @@
 #include "type.h"
+#include "synths.h"
 #include "types/unification.h"
 #include <stdio.h>
 #include <stdlib.h>
