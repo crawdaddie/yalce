@@ -5,5 +5,6 @@
 
 NodeRef clap_node(const char *plugin_path, SignalRef input);
 NodeRef set_clap_param(NodeRef node, int idx, double value);
+void *get_clap_plugin_from_node(NodeRef node);
 
 #endif

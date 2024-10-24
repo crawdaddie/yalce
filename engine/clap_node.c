@@ -115,6 +115,7 @@ typedef struct clap_plugin_state {
   clap_output_events_t out_events;
   int num_ins;
   uint32_t param_count;
+  const char *name;
   float *input_buf;
   float *output_buf;
   event_queue input_queue;
@@ -443,6 +444,40 @@ void export_param_specs(uint32_t pc, double *param_vals, double *min_vals,
   }
 }
 
+clap_plugin_specs *get_specs(void *_state) {
+  clap_plugin_state *state = _state;
+  uint32_t pc = state->param_count;
+  const clap_plugin_t *plugin = state->plugin;
+
+  const clap_plugin_params_t *inst_params =
+      plugin->get_extension(plugin, "clap.params");
+  double *param_vals = malloc(sizeof(double) * pc);
+  double *min_vals = malloc(sizeof(double) * pc);
+
+  double *max_vals = malloc(sizeof(double) * pc);
+
+  char **labels = malloc(sizeof(char *) * pc);
+
+  for (uint32_t i = 0; i < pc; i++) {
+    clap_param_info_t inf;
+    inst_params->get_info(plugin, i, &inf);
+    double d;
+    inst_params->get_value(plugin, inf.id, &d);
+    param_vals[i] = d;
+    min_vals[i] = inf.min_value;
+    max_vals[i] = inf.max_value;
+    labels[i] = strdup(inf.name);
+  }
+  clap_plugin_specs *specs = malloc(sizeof(clap_plugin_specs));
+  specs->param_vals = param_vals;
+  specs->min_vals = min_vals;
+  specs->max_vals = max_vals;
+  specs->labels = labels;
+  specs->num_params = pc;
+  specs->name = state->name;
+  return specs;
+}
+
 static bool try_push(const struct clap_output_events *list,
                      const clap_event_header_t *event) {
   return true;
@@ -544,6 +579,7 @@ NodeRef clap_node(const char *plugin_path, SignalRef input) {
   state->input_queue.count = 0;
   state->event_ctx = state; // Point ctx to the state itself
   state->param_count = pc;
+  state->name = desc->name;
 
   // Set up input events interface
   state->in_events.ctx = state;
@@ -562,4 +598,8 @@ NodeRef clap_node(const char *plugin_path, SignalRef input) {
   NodeRef node =
       node_new((void *)state, (node_perform *)clap_perform, 1, input);
   return node;
+}
+
+void *get_clap_plugin_from_node(NodeRef node) {
+  return (void *)((clap_plugin_state *)node->state)->plugin;
 }

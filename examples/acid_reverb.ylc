@@ -6,7 +6,7 @@
 %include ../engine/bindings/ClapPlugin
 %include Math
 %include Array
-# %include Gui
+%include Gui
 
 let sq_detune = fn () -> 
   let f = inlet 50. |> lag_node 0.01;
@@ -62,9 +62,15 @@ let times = [|
 
 let x = sq_detune |> chain_wrap |> play;
 
+# let reverb = clap_node (cstr "/Users/adam/projects/sound/elysiera/target/bundled/Elysiera.clap") x;
+# let reverb = clap_node (cstr "/Library/Audio/Plug-Ins/CLAP/UnplugRed/Pisstortion.clap") x;
+# let reverb = clap_node (cstr "/Library/Audio/Plug-Ins/CLAP/UnplugRed/Pisstortion.clap") x;
+
 let reverb = clap_node (cstr "/Users/adam/projects/sound/nih-plug/target/bundled/Crisp.clap") x;
 reverb |> play;
 
+
+let drums = drum_machine |> chain_wrap |> play;
 
 let freq_seq = fn ph: (Double) ->
   match (ph % 4.) with
@@ -132,8 +138,37 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 
 
+let trig_func = fn line: (String) idx: (Int) offset: (Int) ->
+  let k = array_at line idx in 
+  match k with
+  | 'x' -> (
+    set_input_trig_offset drums idx offset;
+    ()
+  )
+  | '-' -> ()
+;; 
+
+
+let drum_runner = fn
+  args: (Ptr of (Double * Double * Int))
+  frame_offset: (Int)
+  ->
+  let (duration, phase, tick) = *args;
+
+  # slice as if pattern has 4 columns because it does (newlines are included)
+  let line = array_slice (tick * 4) ((tick * 4) + 3) pattern;
+
+  trig_func line 0 frame_offset;
+  trig_func line 1 frame_offset;
+  trig_func line 2 frame_offset;
+
+  (duration, phase + duration, (tick + 1) % 32)
+  |> schedule_event drum_runner duration
+;;
+
+schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
 schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
-# gui_for_clap_node reverb;
 
 
-# set_clap_param reverb 0 1.0
+
+clap_ui @@ node_state_ptr reverb;

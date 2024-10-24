@@ -1,7 +1,7 @@
 #ifndef _LANG_GUI_H
 #define _LANG_GUI_H
-
 #include "common.h"
+
 int init_gui();
 int gui_loop();
 
@@ -20,5 +20,5 @@ int create_slider_window(int32_t size, double *data_ptr, struct _String *labels,
 
 int create_scope(double *output, int layout, int size);
 
-int create_clap_node_slider_window(_clap_slider_window_data *data);
+int create_clap_node_slider_window(void *data);
 #endif

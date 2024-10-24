@@ -16,7 +16,8 @@ typedef enum {
   WINDOW_TYPE_OSCILLOSCOPE,
   WINDOW_TYPE_SLIDER,
   WINDOW_TYPE_CLAP_SLIDER,
-  WINDOW_TYPE_PLOT_ARRAY
+  WINDOW_TYPE_PLOT_ARRAY,
+  WINDOW_TYPE_CLAP_NATIVE
 } WindowType;
 extern TTF_Font *DEFAULT_FONT;
 typedef struct Window Window;
@@ -67,18 +68,6 @@ typedef struct {
   int slider_count;
   void (*on_update)(int, double);
 } _slider_window_data;
-
-
-typedef struct _clap_slider {
-  double *values;
-  double *mins;
-  double *maxes;
-  char **labels;
-  int active_slider;
-  int slider_count;
-  void (*on_update)(struct _clap_slider *data, int, double);
-  void *target;
-} _clap_slider_window_data;
 
 typedef struct _plot_array_win_data {
   int32_t _size;

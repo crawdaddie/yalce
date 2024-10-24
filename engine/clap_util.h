@@ -10,4 +10,14 @@ void export_param_specs(uint32_t pc, double *param_vals, double *min_vals,
 
 uint32_t get_param_num(NodeRef);
 
+typedef struct clap_plugin_specs {
+  int num_params;
+  double *param_vals;
+  double *min_vals;
+  double *max_vals;
+  char **labels;
+  char *name;
+} clap_plugin_specs;
+
+clap_plugin_specs *get_specs(void *state);
 #endif

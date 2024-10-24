@@ -1,5 +1,6 @@
 #include "gui.h"
 #include "SDL2/SDL2_gfxPrimitives.h"
+#include "clap_gui.h"
 #include "common.h"
 #include "edit_graph.h"
 #include "slider_window.h"
@@ -149,19 +150,23 @@ void plot_array_window(Window *window) {
 
 Uint32 CREATE_WINDOW_EVENT;
 bool create_window(WindowType type, void *data) {
-
-  printf("new window %p", data);
   if (window_count >= MAX_WINDOWS) {
     fprintf(stderr, "Maximum number of windows reached.\n");
     return false;
   }
-
   Window *new_window = &windows[window_count];
+
   new_window->type = type;
   new_window->width = WINDOW_WIDTH;
   new_window->height = WINDOW_HEIGHT;
+  new_window->font = DEFAULT_FONT;
+  window_count++;
 
-  const char *wname;
+  if (type == WINDOW_TYPE_CLAP_NATIVE) {
+    return init_clap_ui_window(new_window, data);
+  }
+
+  const char *wname = "New Window";
 
   switch (type) {
   case WINDOW_TYPE_ARRAY_EDITOR: {
@@ -179,20 +184,15 @@ bool create_window(WindowType type, void *data) {
     break;
   }
 
-  case WINDOW_TYPE_CLAP_SLIDER: {
-    wname = "Edit Values";
-    break;
-  }
-
   case WINDOW_TYPE_PLOT_ARRAY: {
     wname = "Array Plot";
     break;
   }
   }
-  new_window->window =
-      SDL_CreateWindow(wname, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                       new_window->width, new_window->height,
-                       SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+  new_window->window = SDL_CreateWindow(
+      wname, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+      new_window->width, new_window->height,
+      SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
   if (!new_window->window) {
     fprintf(stderr, "Window creation failed: %s\n", SDL_GetError());
     return false;
@@ -207,8 +207,6 @@ bool create_window(WindowType type, void *data) {
     return false;
   }
 
-  new_window->font = DEFAULT_FONT;
-
   switch (type) {
   case WINDOW_TYPE_ARRAY_EDITOR: {
     // _array *arr = data;
@@ -222,7 +220,6 @@ bool create_window(WindowType type, void *data) {
 
   case WINDOW_TYPE_OSCILLOSCOPE: {
     double *buf = data;
-    printf("create oscilloscope window %p\n", buf);
     new_window->render_fn = render_oscilloscope;
     new_window->data = data;
     break;
@@ -235,20 +232,12 @@ bool create_window(WindowType type, void *data) {
     break;
   }
 
-  case WINDOW_TYPE_CLAP_SLIDER: {
-    new_window->render_fn = draw_clap_slider_window;
-    new_window->handle_event = handle_clap_slider_window_events;
-    new_window->data = data;
-    break;
-  }
-
   case WINDOW_TYPE_PLOT_ARRAY: {
     new_window->render_fn = plot_array_window;
     new_window->data = data;
     break;
   }
   }
-  window_count++;
   return true;
 }
 
@@ -257,6 +246,10 @@ typedef struct {
   void *data;
 } WindowCreationData;
 
+int create_clap_node_slider_window(void *data) {
+  push_create_window_event(WINDOW_TYPE_CLAP_SLIDER, data);
+  return 1;
+}
 // Function to push a create window event to the SDL event queue
 int push_create_window_event(WindowType type, void *data) {
 
@@ -406,10 +399,6 @@ int create_array_editor(int32_t size, double *data_ptr) {
   return 1;
 }
 
-int create_clap_node_slider_window(_clap_slider_window_data *data) {
-  push_create_window_event(WINDOW_TYPE_CLAP_SLIDER, data);
-  return 1;
-}
 int create_slider_window(int32_t size, double *data_ptr,
                          struct _String *_labels,
                          void (*on_update)(int, double)) {

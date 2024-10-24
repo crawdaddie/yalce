@@ -181,7 +181,7 @@ int jit(int argc, char **argv) {
                     .global_storage_capacity = &global_storage_capacity};
 
   bool repl = false;
-  print_type_env(env);
+  // print_type_env(env);
 
   int arg_counter = 1;
   while (arg_counter < argc) {
@@ -206,10 +206,10 @@ int jit(int argc, char **argv) {
   }
 
   if (repl) {
-    printf("start repl: ## SYNTH??: ");
-    print_type(&t_synth);
+    // printf("start repl: ## SYNTH??: ");
+    // print_type(&t_synth);
 
-    print_type_env(env);
+    // print_type_env(env);
 
     char dirname[100];
     getcwd(dirname, 100);

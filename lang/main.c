@@ -27,36 +27,6 @@ int scope_node(NodeRef node) {
   SignalRef out_sig = &node->out;
   return create_scope(out_sig->buf, out_sig->layout, out_sig->size);
 }
-void update_clap_node(_clap_slider_window_data *data, int param, double val) {
-  NodeRef node = data->target;
-  printf("on update %d %f\n", param, val);
-  double min = data->mins[param];
-  double max = data->maxes[param];
-  set_clap_param(node, param, unipolar_scale(min, max, val));
-}
-
-int gui_for_clap_node(NodeRef node) {
-  int num_params = get_param_num(node);
-  _clap_slider_window_data *slider_data = malloc(sizeof(_clap_slider_window_data));
-  double *mins = malloc(sizeof(double) * num_params);
-  double *maxes = malloc(sizeof(double) * num_params);
-  double *values = malloc(sizeof(double) * num_params);
-  char **labels = malloc(sizeof(char *) * num_params);
-  export_param_specs(num_params, values, mins, maxes, labels, node);
-  for (int i = 0; i < num_params; i++) {
-    printf("auto-gui label: %s\n",labels[i]);
-  }
-
-  slider_data->slider_count = num_params;
-  slider_data->active_slider = -1;
-  slider_data->mins = mins;
-  slider_data->maxes = maxes;
-  slider_data->values = values;
-  slider_data->labels = labels;
-  slider_data->on_update = update_clap_node;
-  slider_data->target = node;
-  return create_clap_node_slider_window(slider_data);
-}
 
 // Global variables for thread synchronization
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;

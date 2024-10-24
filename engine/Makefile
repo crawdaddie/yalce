@@ -36,7 +36,6 @@ ylc_bindings:
 	../build/tools/ffi_gen midi.h > bindings/MIDI.ylc
 	cat bindings/_engine_midi_extra.ylc >> bindings/MIDI.ylc
 	../build/tools/ffi_gen clap_node.h > bindings/ClapPlugin.ylc
-	cat bindings/_engine_clap_extra.ylc >> bindings/ClapPlugin.ylc
 
 # Build the shared library
 $(SHARED_LIB_TARGET): $(filter-out $(BUILD_DIR)/main.o, $(OBJS))

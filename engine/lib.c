@@ -274,3 +274,5 @@ SignalRef signal_of_ptr(int size, double *ptr) {
 }
 
 SignalRef node_output_sig(NodeRef node) { return &node->out; }
+
+void *node_state_ptr(NodeRef node) { return node->state; }

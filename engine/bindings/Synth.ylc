@@ -42,6 +42,7 @@ let raw_signal_data = extern fn Signal -> Ptr;
 let signal_size = extern fn Signal -> Int;
 let signal_of_ptr = extern fn Int -> Ptr -> Signal;
 let node_output_sig = extern fn Synth -> Signal;
+let node_state_ptr = extern fn Synth -> Ptr;
 
 # filters.h
 let biquad_node = extern fn Signal -> Synth;
