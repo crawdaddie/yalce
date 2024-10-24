@@ -703,7 +703,10 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
   t_num.constructor_size = sizeof(ConsMethod);
 }
 
-void initialize_types(TypeEnv *env) { initialize_ptr_constructor(); }
+TypeEnv *initialize_types(TypeEnv *env) {
+  initialize_ptr_constructor();
+  return env;
+}
 
 typedef struct _tc_key {
   const char *binop;

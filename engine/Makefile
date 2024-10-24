@@ -4,10 +4,15 @@ BUILD_DIR := ../build/engine
 SRCS := $(wildcard *.c)
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 CLAP_SDK_PATH := /Users/adam/projects/sound/clap
-LDFLAGS = -lsoundio -lm -lsndfile -lfftw3 -ldl
-FRAMEWORKS = -framework opengl -framework CoreMIDI -framework cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
-COMPILER_OPTIONS = -g -I$(CLAP_SDK_PATH)/include
+LDFLAGS = -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2
+FRAMEWORKS = -framework opengl \
+						 -framework CoreMIDI \
+						 -framework cocoa \
+						 -framework CoreAudio \
+						 -framework AudioToolbox \
+						 -framework CoreFoundation
 
+COMPILER_OPTIONS = -g -I$(CLAP_SDK_PATH)/include
 CC = clang
 
 SHARED_LIB_TARGET := $(BUILD_DIR)/libyalce_synth.so
@@ -30,6 +35,8 @@ ylc_bindings:
 	../build/tools/ffi_gen scheduling.h > bindings/Sched.ylc
 	../build/tools/ffi_gen midi.h > bindings/MIDI.ylc
 	cat bindings/_engine_midi_extra.ylc >> bindings/MIDI.ylc
+	../build/tools/ffi_gen clap_node.h > bindings/ClapPlugin.ylc
+	cat bindings/_engine_clap_extra.ylc >> bindings/ClapPlugin.ylc
 
 # Build the shared library
 $(SHARED_LIB_TARGET): $(filter-out $(BUILD_DIR)/main.o, $(OBJS))

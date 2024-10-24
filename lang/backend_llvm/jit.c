@@ -170,16 +170,8 @@ int jit(int argc, char **argv) {
   TypeEnv *env = NULL;
   initialize_builtin_numeric_types(env);
   env = initialize_builtin_funcs(stack, env);
-  initialize_types(env);
-
+  env = initialize_types(env);
   env = initialize_type_env_synth(env);
-
-  // env = env_extend(env, "for", &t_for_sig);
-  // LLVMTypeRef for_func_type = codegen_for_func_sig();
-  // JITSymbol *for_sym = new_symbol(
-  //     STYPE_FUNCTION, &t_for_sig,
-  //     codegen_build_for(for_func_type, module, builder), for_func_type);
-  // ht_set_hash(stack, "for", hash_string("for", 3), for_sym);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
@@ -189,6 +181,7 @@ int jit(int argc, char **argv) {
                     .global_storage_capacity = &global_storage_capacity};
 
   bool repl = false;
+  print_type_env(env);
 
   int arg_counter = 1;
   while (arg_counter < argc) {
@@ -213,6 +206,8 @@ int jit(int argc, char **argv) {
   }
 
   if (repl) {
+
+    print_type_env(env);
 
     char dirname[100];
     getcwd(dirname, 100);
@@ -249,6 +244,8 @@ int jit(int argc, char **argv) {
       } else if (strncmp("%dump_ast", input, 9) == 0) {
         print_ast(ast_root);
         continue;
+      } else if (strncmp("quit", input, 4) == 0) {
+        exit(0);
       } else if (strcmp("\n", input) == 0) {
         continue;
       }

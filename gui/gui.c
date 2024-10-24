@@ -179,6 +179,11 @@ bool create_window(WindowType type, void *data) {
     break;
   }
 
+  case WINDOW_TYPE_CLAP_SLIDER: {
+    wname = "Edit Values";
+    break;
+  }
+
   case WINDOW_TYPE_PLOT_ARRAY: {
     wname = "Array Plot";
     break;
@@ -226,6 +231,13 @@ bool create_window(WindowType type, void *data) {
   case WINDOW_TYPE_SLIDER: {
     new_window->render_fn = draw_slider_window;
     new_window->handle_event = handle_slider_window_events;
+    new_window->data = data;
+    break;
+  }
+
+  case WINDOW_TYPE_CLAP_SLIDER: {
+    new_window->render_fn = draw_clap_slider_window;
+    new_window->handle_event = handle_clap_slider_window_events;
     new_window->data = data;
     break;
   }
@@ -394,6 +406,10 @@ int create_array_editor(int32_t size, double *data_ptr) {
   return 1;
 }
 
+int create_clap_node_slider_window(_clap_slider_window_data *data) {
+  push_create_window_event(WINDOW_TYPE_CLAP_SLIDER, data);
+  return 1;
+}
 int create_slider_window(int32_t size, double *data_ptr,
                          struct _String *_labels,
                          void (*on_update)(int, double)) {

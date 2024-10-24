@@ -415,6 +415,7 @@ static void *_tstorage_data[_TSTORAGE_SIZE_DEFAULT];
 static struct TStorage _tstorage = {_tstorage_data, 0, _TSTORAGE_SIZE_DEFAULT};
 
 void *talloc(size_t size) {
+  // printf("alloc size %zu\n", size);
   // malloc
   // void *mem = malloc(size);
   // if (!mem) {

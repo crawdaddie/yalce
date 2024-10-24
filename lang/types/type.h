@@ -3,7 +3,7 @@
 #include "typeclass.h"
 #include <stdbool.h>
 
-#define _TSTORAGE_SIZE_DEFAULT 200000
+#define _TSTORAGE_SIZE_DEFAULT 2000000
 
 typedef struct TypeEnv TypeEnv;
 typedef struct Type Type;

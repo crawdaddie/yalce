@@ -6,5 +6,4 @@ let create_array_editor = extern fn Int -> Ptr -> Int;
 
 let create_slider_window = extern fn Int -> Ptr -> Ptr -> Ptr -> Int;
 
-
 let scope_node = extern fn Ptr -> Int;

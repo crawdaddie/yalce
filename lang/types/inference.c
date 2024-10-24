@@ -249,6 +249,7 @@ static Type *resolve_generic_variant(Type *t, TypeEnv *env) {
 
   return t;
 }
+
 Type *extern_fn_type(Ast *sig, TypeEnv **env) {
   if (sig->tag == AST_FN_SIGNATURE) {
     Ast *param_ast = sig->data.AST_LIST.items;

@@ -1,0 +1,1 @@
+let gui_for_clap_node = extern fn Synth -> Int;
