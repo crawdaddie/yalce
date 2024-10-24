@@ -1,5 +1,0 @@
-#! /Users/Adam.Juraszek/projects/yalce/build/lang
-let sum = fn a b -> a + b;;
-let proc = fn f a b -> f a b;;
-
-proc sum 1 2
