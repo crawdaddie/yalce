@@ -136,4 +136,4 @@ schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
 # gui_for_clap_node reverb;
 
 
-set_clap_param reverb 0 1.0
+# set_clap_param reverb 0 1.0
