@@ -1,0 +1,20 @@
+#! env ylc
+%include Synth
+%include String
+%include MIDI
+%include Math
+%include Array
+%include Sched
+
+let buf = read_buf_mono (cstr "/Users/adam/Desktop/tinashe nasty acapella 100.wav");
+
+let voice = fn () ->
+  let t = inlet 0.0;
+  let v = bufplayer_1shot_node buf 1. 0. t;
+  grain_delay_node 0.1 0.5 1. 1.25 v
+;;
+
+let x = voice |> chain_wrap |> play;
+
+
+set_input_trig_offset x 0 0 

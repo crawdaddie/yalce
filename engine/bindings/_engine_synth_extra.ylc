@@ -1,0 +1,13 @@
+let chain_wrap = fn def -> 
+  reset_chain ();
+  let x = def ();
+  end_chain x
+;;
+
+type SynthInput = 
+  | Scalar of Int
+  | Trig of Int
+  ;
+
+let init_audio = extern fn () -> () in
+  init_audio ()

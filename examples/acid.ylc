@@ -1,24 +1,19 @@
 #! env ylc
-%include Synth
 %include String
-%include MIDI
+%include ../engine/bindings/Synth
+%include ../engine/bindings/MIDI
+%include ../engine/bindings/Sched
 %include Math
 %include Array
-%include Sched
-
 
 let sq_detune = fn () -> 
   let f = inlet 50. |> lag_node 0.01;
   let trig = inlet 0.0; 
   let chirp_decay = inlet 0.3;
   let ff = chirp_node 3000. 200. chirp_decay trig; 
-  let res = inlet 1.;
-
-  (sq_node f + sq_node (f * 1.01)
-  + sq_node (f * 2.)
-  ) * 0.4
+  let res = inlet 8.;
+  (sq_node f + (sq_node @@ f * 1.01) + (sq_node @@ f * 2.)) * 0.4
   |> biquad_lp_node ff res 
-  # |> biquad_lp_node ff res 
   |> comb_node 0.75 0.75 0.2
 ;;
 
@@ -34,8 +29,6 @@ let drum_machine = fn () ->
   let h = bufplayer_1shot_node hh_buf 1. 0.0 ht;
   k + s + h
 ;;
-
-
 
 
 let notes = [|
@@ -64,8 +57,6 @@ let times = [|
   0.5,
   0.125,
 |];
-
-
 let x = sq_detune |> chain_wrap |> play;
 
 let drums = drum_machine |> chain_wrap |> play;
@@ -87,6 +78,8 @@ let set_synth_param = fn syn p offset v ->
   | Scalar i -> set_input_scalar_offset syn i offset v
   | Trig i -> set_input_trig_offset syn i offset
 ;;
+
+let synth_pattern = "0-1-2--34-56--7--89-0a-b-c-d-e--f--";
 
 let stream_vals = fn (dur, phase, note, _ff): (Double * Double * Double * Double) ->
   let ff = phase |> cos |> bipolar_scale 100. 2000.;
@@ -111,60 +104,30 @@ let runner = fn
   |> schedule_event runner duration
 ;;
 
-let filter_decay_setter = fn val: (Int) ->
-  let v = unipolar_scale 0.01 0.8 (val * REC_127);
+let filter_decay_setter = fn val: (Double) ->
+  let v = unipolar_scale 0.01 0.8 val;
   set_input_scalar x 2 v
 ;;
 
-let filter_res_setter = fn val: (Int) ->
-  let v = unipolar_scale 1. 20. (val * REC_127);
+let filter_res_setter = fn val: (Double) ->
+  let v = unipolar_scale 1. 15. val;
   set_input_scalar x 3 v
 ;;
 
 register_cc_handler filter_decay_setter 0 22;
 register_cc_handler filter_res_setter 0 21;
-#
+
+#   |   |   |   |   |   |   |   #
+let pattern = ```
+x-----x---x-----x---------x--x--
+----x-------x-------x---xx--x-xx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+|> transpose_string 3 32 32 3
+;
 
 
 
-let pattern = [|
-"x-x",
-"--x",
-"--x",
-"--x",
-"--x",
-"--x",
-"x-x",
-"--x",
-"-xx",
-"--x",
-"x-x",
-"--x",
-"--x",
-"--x",
-"--x",
-"--x",
-"--x",
-"--x",
-"x-x",
-"x-x",
-"--x",
-"--x",
-"x-x",
-"-xx",
-"--x",
-"--x",
-"--x",
-"-xx",
-"-xx",
-"x-x",
-"x-x",
-"--x",
-|];
-
-
-
-# this function needs to be 'pre-compiled' so we give it types to trick the compiler into thinking its not generic
 let trig_func = fn line: (String) idx: (Int) offset: (Int) ->
   let k = array_at line idx in 
   match k with
@@ -181,15 +144,19 @@ let drum_runner = fn
   frame_offset: (Int)
   ->
   let (duration, phase, tick) = *args;
-  let line = array_at pattern tick;
+
+  # slice as if pattern has 4 columns because it does (newlines are included)
+  let line = array_slice (tick * 4) ((tick * 4) + 3) pattern;
+
   trig_func line 0 frame_offset;
   trig_func line 1 frame_offset;
   trig_func line 2 frame_offset;
 
   (duration, phase + duration, (tick + 1) % 32)
-
   |> schedule_event drum_runner duration
 ;;
 
 schedule_event_quant drum_runner 1.0 (0.125, 0., 0);
 schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
+
+

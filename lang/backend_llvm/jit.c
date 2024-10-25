@@ -3,7 +3,6 @@
 #include "backend_llvm/common.h"
 #include "backend_llvm/globals.h"
 #include "format_utils.h"
-#include "function.h"
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
@@ -20,7 +19,6 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/Transforms/InstCombine.h>
 #include <llvm-c/Transforms/Scalar.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -172,16 +170,8 @@ int jit(int argc, char **argv) {
   TypeEnv *env = NULL;
   initialize_builtin_numeric_types(env);
   env = initialize_builtin_funcs(stack, env);
-  initialize_types(env);
-
+  env = initialize_types(env);
   env = initialize_type_env_synth(env);
-
-  // env = env_extend(env, "for", &t_for_sig);
-  // LLVMTypeRef for_func_type = codegen_for_func_sig();
-  // JITSymbol *for_sym = new_symbol(
-  //     STYPE_FUNCTION, &t_for_sig,
-  //     codegen_build_for(for_func_type, module, builder), for_func_type);
-  // ht_set_hash(stack, "for", hash_string("for", 3), for_sym);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
@@ -191,6 +181,7 @@ int jit(int argc, char **argv) {
                     .global_storage_capacity = &global_storage_capacity};
 
   bool repl = false;
+  // print_type_env(env);
 
   int arg_counter = 1;
   while (arg_counter < argc) {
@@ -215,6 +206,10 @@ int jit(int argc, char **argv) {
   }
 
   if (repl) {
+    // printf("start repl: ## SYNTH??: ");
+    // print_type(&t_synth);
+
+    // print_type_env(env);
 
     char dirname[100];
     getcwd(dirname, 100);
@@ -222,6 +217,7 @@ int jit(int argc, char **argv) {
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n" STYLE_RESET_ALL);
+
     init_readline();
 
     // char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
@@ -230,13 +226,8 @@ int jit(int argc, char **argv) {
 
     while (true) {
 
-      int top_level_size = ctx.stack->length;
-
-      hti it = ht_iterator(ctx.stack);
-
-      for (int completion_entry = 0; ht_next(&it); completion_entry++) {
-        add_completion_item(it.key, completion_entry);
-      };
+      // printf("repl: ## SYNTH??: ");
+      // print_type_err(&t_synth);
 
       char *input = repl_input(prompt);
 
@@ -248,6 +239,9 @@ int jit(int argc, char **argv) {
         print_type_env(env);
         continue;
       } else if (strncmp("%dump_ast", input, 9) == 0) {
+        print_ast(ast_root);
+        continue;
+      } else if (strncmp("%quit", input, 5) == 0) {
         print_ast(ast_root);
         continue;
       } else if (strcmp("\n", input) == 0) {
@@ -275,6 +269,7 @@ int jit(int argc, char **argv) {
         Ast *top = top_level_ast(prog);
         fprintf(stderr, "value not found: ");
         print_ast_err(top);
+        print_location(top);
         continue;
       }
 

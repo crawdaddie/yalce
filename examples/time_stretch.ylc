@@ -1,0 +1,36 @@
+#! env ylc
+%include ../engine/bindings/Synth
+%include ../engine/bindings/MIDI
+%include String
+%include Math
+
+let amen_buf = read_buf (cstr "fat_amen_mono_48000.wav");
+
+let timestretcher = fn () ->
+  let f = inlet  (135. / (4. * 60.));
+  let phase = phasor_node f;
+  let trig = nbl_impulse_node (inlet 10.);
+  granulator_node 200 amen_buf trig phase 1. 
+;;
+
+
+let x = timestretcher |> chain_wrap |> play;
+
+let trig_set = fn val: (Double) ->
+  let v = unipolar_scale 10. 80. val;
+  set_input_scalar x 1 v
+;;
+
+register_cc_handler trig_set 0 22;
+
+let speed_set = fn val: (Double) ->
+  let v = unipolar_scale (20. / (4. * 60.)) (145. / (4. * 60.)) val;
+  set_input_scalar x 0 v
+;;
+
+register_cc_handler speed_set 0 23;
+
+let plot_sig = extern fn Signal -> Int;
+
+plot_sig amen_buf;
+

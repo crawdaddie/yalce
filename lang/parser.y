@@ -55,6 +55,7 @@ Ast* ast_root = NULL;
 %token TOK_VOID
 %token IN AND
 %token ASYNC
+%token DOUBLE_AT
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -64,6 +65,7 @@ Ast* ast_root = NULL;
 %left '.' 
 %left '|'
 %left PIPE
+%left DOUBLE_AT
 %left APPLICATION 
 %left MODULO
 %left GE LE EQ NE '>' '<'
@@ -116,6 +118,7 @@ program:
 expr:
     simple_expr
   | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
+  | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
   | '&' simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_AMPERSAND, $2); }
   | '*' simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_STAR, $2); }

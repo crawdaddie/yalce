@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-typedef void (*CCCallback)(int);
+typedef void (*CCCallback)(double);
 
 void midi_setup();
 

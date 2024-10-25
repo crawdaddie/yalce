@@ -44,7 +44,7 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
 
 LLVMTypeRef create_array_struct_type(LLVMTypeRef element_type);
 
-LLVMValueRef codegen_array_init(LLVMValueRef size, LLVMValueRef item,
+LLVMValueRef codegen_array_init(LLVMValueRef len, LLVMValueRef item,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
 
@@ -56,4 +56,11 @@ LLVMValueRef codegen_array_increment(LLVMValueRef array, LLVMTypeRef el_type,
 LLVMValueRef codegen_array_slice(LLVMValueRef array, LLVMTypeRef el_type,
                                  LLVMValueRef start, LLVMValueRef end,
                                  LLVMBuilderRef builder);
+
+LLVMValueRef codegen_get_array_data_ptr(LLVMBuilderRef builder,
+                                        LLVMTypeRef el_type,
+                                        LLVMValueRef array);
+
+LLVMValueRef codegen_get_array_data(LLVMBuilderRef builder,
+                                    LLVMTypeRef data_type, LLVMValueRef array);
 #endif

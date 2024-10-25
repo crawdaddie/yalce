@@ -1,0 +1,135 @@
+#! env ylc
+%include Synth
+%include String
+%include MIDI
+%include Math
+%include Array
+%include Sched
+
+
+let sq_detune = fn () -> 
+  let f = inlet 50. |> lag_node 0.03;
+  let trig = inlet 0.0; 
+  let chirp_decay = inlet 0.3;
+  let ff = chirp_node 3000. 200. chirp_decay trig; 
+  let res = inlet 1.;
+
+  (sq_node f + sq_node (f * 1.01)
+  + sq_node (f * 2.)
+  ) * 0.4
+  |> biquad_lp_node ff res 
+  |> comb_node 0.75 0.75 0.2
+;;
+
+let notes = [|
+  110.0,
+  116.54094037952248,
+  123.47082531403103,
+  130.8127826502993,
+  138.59131548843604,
+  146.8323839587038,
+  155.56349186104046,
+  164.81377845643496,
+  174.61411571650194,
+  184.9972113558172,
+  195.99771799087463,
+  207.65234878997256,
+|];
+
+let octaves = [|
+  0.5,
+  1.,
+  2.,
+  4.,
+  8.,
+|];
+
+# let __pattern = ```
+# 0
+# -
+# 1
+# -
+# 2
+# -
+# -
+# 3
+# 4
+# -
+# 5
+# 6
+# -
+# -
+# 7
+# -
+# -
+# 8
+# 9
+# -
+# 0
+# a
+# -
+# b
+# -
+# c
+# -
+# d
+# -
+# e
+# -
+# -
+# f
+# -
+# -
+# ```;
+#
+
+let pattern = "0-1-2--34-56--7--89-0a-b-c-d-e--f--";
+
+let char_to_hex_int = extern fn Char -> Int;
+let x = sq_detune |> chain_wrap |> play;
+
+let set_synth_param = fn syn p offset v ->
+  match p with
+  | Scalar i -> set_input_scalar_offset syn i offset v
+  | Trig i -> set_input_trig_offset syn i offset
+;;
+
+
+let note_func = fn k: (Char) offset: (Int) ->
+  match k with
+  | '-' -> ()
+  | c -> (
+    let note_idx = (char_to_hex_int c) % 12;
+    let note = array_at notes note_idx;
+    set_synth_param x (Scalar 0) offset (note * 0.5 * (choose octaves));
+    set_input_trig_offset x 1 offset;
+    ()
+  )
+;; 
+
+let runner = fn
+  args: (Ptr of (Double * Double * Double * Double * Int))
+  frame_offset: (Int)
+  ->
+  let (duration, phase, note, filter_freq, tick) = *args;
+  let line = array_slice (tick) (tick + 1) pattern;
+
+  note_func (array_at line 0) frame_offset;
+  (duration, phase + duration, note, filter_freq, (tick + 1) % 32)
+  |> schedule_event runner duration
+;;
+
+let filter_decay_setter = fn val: (Int) ->
+  let v = unipolar_scale 0.01 0.8 (val * REC_127);
+  set_input_scalar x 2 v
+;;
+
+let filter_res_setter = fn val: (Int) ->
+  let v = unipolar_scale 1. 15. (val * REC_127);
+  set_input_scalar x 3 v
+;;
+
+register_cc_handler filter_decay_setter 0 22;
+register_cc_handler filter_res_setter 0 21;
+
+schedule_event_quant runner 1.0 (0.125, 0., 200., 200., 0);

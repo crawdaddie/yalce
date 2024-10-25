@@ -3,12 +3,18 @@ let get_stdout = extern fn () -> Ptr;
 
 let print = extern fn String -> ();
 
-let fprint = extern fn Ptr -> String -> ();
-let cstr = extern fn String -> Ptr;
-
-let println = fn msg ->
-  print `{msg}\n`;
+let println = fn str ->
+  print str;
+  print "\n";
   ()
 ;;
 
+let stderr = get_stderr ();
+let stdout = get_stdout ();
+
+let fprint = extern fn Ptr -> String -> ();
+let cstr = extern fn String -> Ptr;
+
+
 # let string_add = extern fn String -> String -> String;
+let transpose_string = extern fn Int -> Int -> Int -> Int -> String -> String;

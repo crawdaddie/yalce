@@ -1,11 +1,12 @@
 #! env ylc
-# let list_sum = fn s l ->
-#   (match l with
-#   | [] -> s
-#   | x::rest -> list_sum (s + x) rest
-#   )
-# ;;
-#
+let list_sum = fn s l ->
+  (match l with
+  | [] -> s
+  | x::rest -> list_sum (s + x) rest
+  )
+;;
+
+let sum = list_sum 0;
 let sum3 = fn a b c -> a + b + c;;
 let ss = sum3 1 2;
 

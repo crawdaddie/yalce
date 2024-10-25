@@ -232,8 +232,6 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
     ht_set_hash(stack, bm.name, hash_string(bm.name, strlen(bm.name)), sym);
   }
 
-  // Type *array_at_fn_sig =
-  //     type_fn(&t_array_var, type_fn(&t_int, &t_array_var_el));
   env = env_extend(env, "array_at", &t_array_at_fn_sig);
   JITSymbol *array_at_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_at_fn_sig, NULL, NULL);
@@ -245,11 +243,28 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "array_size", hash_string("array_size", 10),
               array_size_sym);
 
+  env = env_extend(env, "array_data_ptr", &t_array_data_ptr_fn_sig);
+  JITSymbol *array_data_ptr_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_data_ptr_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "array_data_ptr", hash_string("array_data_ptr", 14),
+              array_data_ptr_sym);
+
   env = env_extend(env, "array_incr", &t_array_incr_fn_sig);
   JITSymbol *array_incr_sym =
       new_symbol(STYPE_GENERIC_FUNCTION, &t_array_incr_fn_sig, NULL, NULL);
   ht_set_hash(stack, "array_incr", hash_string("array_incr", 10),
               array_incr_sym);
+
+  env = env_extend(env, "array_slice", &t_array_slice_fn_sig);
+  JITSymbol *array_slice_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_slice_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "array_slice", hash_string("array_slice", 11),
+              array_slice_sym);
+
+  env = env_extend(env, "array_new", &t_array_new_fn_sig);
+  JITSymbol *array_new_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_new_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "array_new", hash_string("array_new", 9), array_new_sym);
 
   env = env_extend(env, "array_to_list", &t_array_to_list_fn_sig);
   JITSymbol *array_to_list_sym =

@@ -337,7 +337,6 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
 
       snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc", current_dir,
                mod_name);
-
       fully_qualified_name = normalize_path(fully_qualified_name);
       fully_qualified_name = prepend_current_directory(fully_qualified_name);
 
@@ -346,6 +345,9 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
 
       if (previously_imported == NULL) {
         const char *import_content = read_script(fully_qualified_name);
+        if (!import_content) {
+          return NULL;
+        }
         stack =
             inputs_list_push_left(stack, fully_qualified_name, import_content);
 
@@ -354,6 +356,7 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
         stack = preprocess_includes(_current_dir, import_content, stack);
       }
     } else if (strncmp("%test", input, 5) == 0) {
+      printf("found tests in module\n");
       // TODO: auto-include test module (eg examples/Testing.ylc)
     }
     total_len--;
@@ -648,6 +651,7 @@ Ast *ast_string(ObjString lex_string) {
   s->data.AST_STRING.length = lex_string.length;
   return s;
 }
+
 Ast *parse_fstring_expr(Ast *list) {
   list->tag = AST_FMT_STRING;
   return list;
@@ -986,7 +990,6 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
   node->data.AST_MATCH_GUARD_CLAUSE.guard_expr = guard;
   return node;
 }
-
 void print_location(Ast *ast) {
   loc_info *loc = ast->loc_info;
   if (!loc || !loc->src || !loc->src_content) {

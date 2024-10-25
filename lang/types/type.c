@@ -1,4 +1,5 @@
 #include "type.h"
+#include "synths.h"
 #include "types/unification.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,7 +148,15 @@ Type t_array_var = {
   }
 
 Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
+
+Type t_array_data_ptr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_ptr);
+
 Type t_array_incr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_array_var);
+Type t_array_slice_fn_sig =
+    MAKE_FN_TYPE_4(&t_int, &t_int, &t_array_var, &t_array_var);
+
+Type t_array_new_fn_sig = MAKE_FN_TYPE_3(&t_int, &t_array_var_el, &t_array_var);
+
 Type t_array_to_list_fn_sig =
     MAKE_FN_TYPE_2(&t_array_var, &TLIST(&t_array_var_el));
 // , &(Type){
@@ -407,6 +416,7 @@ static void *_tstorage_data[_TSTORAGE_SIZE_DEFAULT];
 static struct TStorage _tstorage = {_tstorage_data, 0, _TSTORAGE_SIZE_DEFAULT};
 
 void *talloc(size_t size) {
+  // printf("alloc size %zu\n", size);
   // malloc
   // void *mem = malloc(size);
   // if (!mem) {
@@ -613,10 +623,12 @@ Type *get_builtin_type(const char *id_chars) {
   }
 
   if (*id_chars == *TYPE_NAME_OP_MUL) {
-
     return &t_mul;
   }
 
+  if (*id_chars == *TYPE_NAME_OP_DIV) {
+    return &t_div;
+  }
   if (*id_chars == *TYPE_NAME_OP_MOD) {
     return &t_mod;
   }

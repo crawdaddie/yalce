@@ -3,12 +3,15 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <time.h>
+
+typedef void (*SchedulerCallback)(void *, int);
+
 int scheduler_event_loop();
 
-void schedule_event(void (*callback)(void *, int), double delay_seconds,
+void schedule_event(SchedulerCallback callback, double delay_seconds,
                     void *userdata);
 
-void schedule_event_quant(void (*callback)(void *, int), double quantization,
-                    void *userdata);
+void schedule_event_quant(SchedulerCallback callback, double quantization,
+                          void *userdata);
 
 #endif

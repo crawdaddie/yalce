@@ -3,7 +3,7 @@
 #include "typeclass.h"
 #include <stdbool.h>
 
-#define _TSTORAGE_SIZE_DEFAULT 200000
+#define _TSTORAGE_SIZE_DEFAULT 2000000
 
 typedef struct TypeEnv TypeEnv;
 typedef struct Type Type;
@@ -12,8 +12,10 @@ extern Type t_int;
 extern Type t_uint64;
 extern Type t_num;
 extern Type t_string;
+extern Type t_char_array;
 extern Type t_string_add_fn_sig;
 extern Type t_string_array;
+
 bool is_string_type(Type *type);
 
 extern Type t_bool;
@@ -41,6 +43,9 @@ extern Type t_array_size_fn_sig;
 extern Type t_array_incr_fn_sig;
 extern Type t_array_to_list_fn_sig;
 extern Type t_array_at_fn_sig;
+extern Type t_array_data_ptr_fn_sig;
+extern Type t_array_slice_fn_sig;
+extern Type t_array_new_fn_sig;
 
 extern Type t_array_of_chars_fn_sig;
 

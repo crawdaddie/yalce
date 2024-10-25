@@ -498,7 +498,6 @@ Type *resolve_tcs(Type *t) {
 
 LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
-
   Type *ltype = ast->data.AST_APPLICATION.args->md;
 
   if (ltype->kind == T_VAR) {
@@ -572,6 +571,28 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_get_array_size(builder, array);
   }
 
+  if (strcmp(sym_name, "array_data_ptr") == 0) {
+
+    LLVMValueRef array =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+    Type *array_type = ast->data.AST_APPLICATION.args->md;
+    Type *el_type = array_type->data.T_CONS.args[0];
+    print_type(el_type);
+    return codegen_get_array_data_ptr(
+        builder, type_to_llvm_type(el_type, ctx->env, module), array);
+  }
+
+  if (strcmp(sym_name, "array_new") == 0) {
+
+    LLVMValueRef array_size =
+        codegen(&ast->data.AST_APPLICATION.args[0], ctx, module, builder);
+
+    LLVMValueRef array_item =
+        codegen(&ast->data.AST_APPLICATION.args[1], ctx, module, builder);
+
+    return codegen_array_init(array_size, array_item, ctx, module, builder);
+  }
+
   if (strcmp(sym_name, "array_incr") == 0) {
     Type *array_type = ast->md;
     LLVMTypeRef el_type =
@@ -580,6 +601,28 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     LLVMValueRef array =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
     return codegen_array_increment(array, el_type, builder);
+  }
+
+  if (strcmp(sym_name, "array_slice") == 0) {
+    // printf("call array slice\n");
+
+    Type *array_type = (ast->data.AST_APPLICATION.args + 2)->md;
+    // print_type(array_type);
+    // print_ast(ast);
+
+    // LLVMTypeRef el_type =
+    //     type_to_llvm_type(array_type->data.T_CONS.args[0], ctx->env, module);
+    LLVMTypeRef el_type = LLVMInt8Type();
+    //
+    LLVMValueRef start =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+    LLVMValueRef end =
+        codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+    LLVMValueRef array =
+        codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
+
+    return codegen_array_slice(array, el_type, start, end, builder);
   }
 
   if (strcmp(sym_name, "array_to_list") == 0) {

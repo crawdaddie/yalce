@@ -4,7 +4,7 @@
 make -C ../
 
 # Set the path to the executable
-EXE=../build/lang
+EXE=../build/ylc
 
 # Check if the executable exists
 if [ ! -f "$EXE" ]; then
