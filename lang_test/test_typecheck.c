@@ -924,5 +924,22 @@ int main() {
         &MAKE_FN_TYPE_3(&t_string, &TLIST(&t_string), &t_string));
   });
 
+  ({
+    RESET;
+    TITLE("coroutine function")
+
+    Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+
+    TEST_SIMPLE_AST_TYPE("let f = fn a b c ->\n"
+                         "  yield a;\n"
+                         "  yield b;\n"
+                         "  yield c;\n"
+                         "  yield 4;\n"
+                         "  yield 5\n"
+                         ";;\n"
+                         "let x = f 1 2 3",
+                         &MAKE_FN_TYPE_2(&t_void, &opt));
+  });
+
   return status == true ? 0 : 1;
 }

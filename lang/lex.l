@@ -54,6 +54,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "if"                    return *yytext;
 "await"                 return *yytext;
 "async"                 return ASYNC;
+"yield"                 return *yytext;
 "&"                     return *yytext;
 "*"                     return *yytext;
 

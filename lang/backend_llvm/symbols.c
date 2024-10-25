@@ -1,4 +1,5 @@
 #include "backend_llvm/symbols.h"
+#include "coroutines.h"
 #include "function.h"
 #include "globals.h"
 #include "match.h"
@@ -182,6 +183,12 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   }
 
   Type *expr_type = ast->data.AST_LET.expr->md;
+
+  if (expr_type->kind == T_FN && ast->data.AST_LET.expr->tag == AST_LAMBDA &&
+      ast->data.AST_LET.expr->data.AST_LAMBDA.is_coroutine) {
+    printf("codegen coroutine\n");
+    return codegen_coroutine_binding(ast, &cont_ctx, module, builder);
+  }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
 

@@ -1008,6 +1008,18 @@ Type *create_cons_type(const char *name, int len, Type **unified_args) {
   return cons;
 }
 
+Type *create_option_type(Type *option_of) {
+  Type **variant_members = talloc(sizeof(Type *) * 2);
+
+  Type **contained = talloc(sizeof(Type *));
+  contained[0] = option_of;
+  variant_members[0] = create_cons_type(TYPE_NAME_SOME, 1, contained);
+
+  variant_members[1] = create_cons_type(TYPE_NAME_NONE, 0, NULL);
+  Type *cons = create_cons_type(TYPE_NAME_VARIANT, 2, variant_members);
+  return cons;
+}
+
 TypeMap *constraints_map_extend(TypeMap *map, Type *key, Type *val) {
   switch (key->kind) {
   case T_VAR: {

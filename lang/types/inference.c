@@ -169,7 +169,29 @@ static Type *infer_typed_lambda(Ast *ast, TypeEnv **env) {
   return fn;
 }
 
+typedef struct lambda_ctx_t {
+  Ast *lambda;
+  Type *yielded_type;
+} lambda_ctx_t;
+
+static lambda_ctx_t lambda_ctx = {};
+// take a function type a -> b -> c & return a corresponding coroutine type
+// a -> b -> (() -> Option of c)
+static Type *convert_to_coroutine_type(Type *f) {
+  Type *fn = f;
+  while (fn->data.T_FN.to->kind == T_FN) {
+    fn = fn->data.T_FN.to;
+  }
+
+  Type *return_type = fn->data.T_FN.to;
+  fn->data.T_FN.to = type_fn(&t_void, create_option_type(return_type));
+  return f;
+}
+
 static Type *infer_lambda(Ast *ast, TypeEnv **env) {
+
+  lambda_ctx_t prev_lambda_ctx = lambda_ctx;
+
   int len = ast->data.AST_LAMBDA.len;
   TypeEnv *fn_scope_env = *env;
 
@@ -206,7 +228,36 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
                               recursive_ref);
   }
 
-  Type *body_type = TRY(infer(ast->data.AST_LAMBDA.body, &fn_scope_env));
+  int body_len = ast->data.AST_LAMBDA.body->data.AST_BODY.len;
+  Ast *body = ast->data.AST_LAMBDA.body;
+
+  Ast *body_stmt;
+  Type *body_type;
+  lambda_ctx = (lambda_ctx_t){ast, NULL};
+
+  if (body->tag == AST_BODY) {
+    for (int i = 0; i < body_len; i++) {
+      body_stmt = body->data.AST_BODY.stmts[i];
+      Type *t = infer(body_stmt, &fn_scope_env);
+      if (!t) {
+        fprintf(stderr, "Failure typechecking body statement: ");
+        print_location(body_stmt);
+        print_ast_err(body_stmt);
+        return NULL;
+      }
+      body_type = t;
+    }
+  } else {
+    body_stmt = body;
+    Type *t = infer(body_stmt, &fn_scope_env);
+    if (!t) {
+      fprintf(stderr, "Failure typechecking body statement: ");
+      print_location(body_stmt);
+      print_ast_err(body_stmt);
+      return NULL;
+    }
+    body_type = t;
+  }
 
   TypeEnv **_env = env;
   Type *unified_ret = unify(return_type, body_type, _env);
@@ -233,6 +284,14 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
   }
 
   fn = resolve_generic_type(fn, fn_scope_env);
+  if (ast->data.AST_LAMBDA.is_coroutine) {
+    Type *co = convert_to_coroutine_type(fn);
+    // print_type(fn);
+    print_type(co);
+    fn = co;
+  }
+
+  lambda_ctx = prev_lambda_ctx;
   return fn;
 }
 
@@ -508,6 +567,25 @@ Type *infer(Ast *ast, TypeEnv **env) {
       break;
     }
 
+    break;
+  }
+  case AST_YIELD: {
+    if (lambda_ctx.lambda == NULL) {
+      fprintf(stderr, "Error: yield cannot appear outside a function");
+      return NULL;
+    }
+    lambda_ctx.lambda->data.AST_LAMBDA.is_coroutine = true;
+    type = infer(ast->data.AST_YIELD.expr, env);
+    if (lambda_ctx.yielded_type != NULL) {
+      // printf(
+      //     "lambda ctx already yielded something, the following should unify:
+      //     ");
+      // print_type(lambda_ctx.yielded_type);
+      // print_type(type);
+      type = unify(type, lambda_ctx.yielded_type, env);
+    } else {
+      lambda_ctx.yielded_type = type;
+    }
     break;
   }
 

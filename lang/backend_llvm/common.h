@@ -30,6 +30,7 @@ typedef enum symbol_type {
   STYPE_LOCAL_VAR,
   STYPE_FUNCTION,
   STYPE_GENERIC_FUNCTION,
+  STYPE_COROUTINE_FUNCTION,
 } symbol_type;
 
 typedef struct {
@@ -50,6 +51,10 @@ typedef struct {
       int stack_ptr;
       SpecificFns *specific_fns;
     } STYPE_GENERIC_FUNCTION;
+
+    struct {
+      bool is_complete;
+    } STYPE_COROUTINE_FUNCTION;
 
   } symbol_data;
   Type *symbol_type;

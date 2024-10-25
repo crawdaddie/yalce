@@ -65,6 +65,8 @@ extern Type t_for_sig;
 #define TYPE_NAME_UINT64  "Uint64"
 #define TYPE_NAME_VOID    "()"
 #define TYPE_NAME_VARIANT "Variant"
+#define TYPE_NAME_SOME    "Some"
+#define TYPE_NAME_NONE    "None"
 
 #define TYPE_NAME_OP_ADD  "+"
 #define TYPE_NAME_OP_SUB  "-"
@@ -252,6 +254,7 @@ typedef struct VariantContext {
 } VariantContext;
 
 Type *create_cons_type(const char *name, int len, Type **unified_args);
+Type *create_option_type(Type *option_of);
 
 Type *get_builtin_type(const char *id_chars);
 

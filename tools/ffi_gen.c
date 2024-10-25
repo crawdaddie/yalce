@@ -39,6 +39,55 @@ const char *yalce_name(name_lookup *lookups, const char *c_name) {
   return c_name;
 }
 
+void print_function_type(CXType type, name_lookup *lookups) {
+  CXType result_type = clang_getResultType(type);
+
+  int num_args = clang_getNumArgTypes(type);
+  if (result_type.kind == CXType_Void && num_args == 0) {
+    printf("() -> ()");
+  } else {
+    int num_args = clang_getNumArgTypes(type);
+    for (int i = 0; i < num_args; ++i) {
+      CXType arg_type = clang_getArgType(type, i);
+      CXString arg_type_str = clang_getTypeSpelling(arg_type);
+      printf("%s -> ", yalce_name(lookups, clang_getCString(arg_type_str)));
+      clang_disposeString(arg_type_str);
+    }
+  }
+
+  result_type = clang_getResultType(type);
+  CXString return_type = clang_getTypeSpelling(result_type);
+  printf("%s", yalce_name(lookups, clang_getCString(return_type)));
+  clang_disposeString(return_type);
+}
+
+void print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
+  CXType underlying_type = clang_getTypedefDeclUnderlyingType(cursor);
+  CXString type_name = clang_getCursorSpelling(cursor);
+
+  printf("type %s = ", clang_getCString(type_name));
+
+  if (underlying_type.kind == CXType_Pointer) {
+    CXType pointee_type = clang_getPointeeType(underlying_type);
+    if (pointee_type.kind == CXType_FunctionProto) {
+      print_function_type(pointee_type, lookups);
+    } else {
+      CXString type_spelling = clang_getTypeSpelling(underlying_type);
+      printf("%s", yalce_name(lookups, clang_getCString(type_spelling)));
+      clang_disposeString(type_spelling);
+    }
+  } else if (underlying_type.kind == CXType_FunctionProto) {
+    print_function_type(underlying_type, lookups);
+  } else {
+    CXString type_spelling = clang_getTypeSpelling(underlying_type);
+    printf("%s", yalce_name(lookups, clang_getCString(type_spelling)));
+    clang_disposeString(type_spelling);
+  }
+
+  printf(";\n");
+  clang_disposeString(type_name);
+}
+
 void print_function_decl(CXCursor cursor, name_lookup *lookups) {
 
   CXString raw_comment = clang_Cursor_getRawCommentText(cursor);

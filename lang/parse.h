@@ -128,6 +128,7 @@ typedef enum ast_tag {
   AST_EXTERN_VARIANTS,
   AST_FN_SIGNATURE,
   AST_MATCH_GUARD_CLAUSE,
+  AST_YIELD,
 } ast_tag;
 
 struct Ast {
@@ -205,7 +206,7 @@ struct Ast {
       ObjString fn_name;
       Ast *body;
       Ast **defaults;
-      bool is_async;
+      bool is_coroutine;
     } AST_LAMBDA;
 
     struct AST_EXTERN_FN {
@@ -243,6 +244,9 @@ struct Ast {
       Ast *test_expr;
       Ast *guard_expr;
     } AST_MATCH_GUARD_CLAUSE;
+    struct AST_YIELD {
+      Ast *expr;
+    } AST_YIELD;
   } data;
 
   void *md;
@@ -326,4 +330,6 @@ void print_location(Ast *ast);
 
 extern bool top_level_tests;
 extern bool lex_test_block;
+
+Ast *ast_yield(Ast *expr);
 #endif
