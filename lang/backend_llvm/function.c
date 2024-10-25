@@ -365,6 +365,7 @@ LLVMValueRef get_specific_curried_callable(JITSymbol *sym, const char *sym_name,
   const char *original_sym_name =
       application->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
+  printf("compiling original callable (%s)\n", sym_name);
   LLVMValueRef original_callable = get_specific_callable(
       original_sym, original_sym_name, full_type, ctx, module, builder);
 
@@ -372,6 +373,7 @@ LLVMValueRef get_specific_curried_callable(JITSymbol *sym, const char *sym_name,
       fn_prototype(expected_fn_type, new_args_length, ctx->env, module);
 
   LLVMDumpType(proto);
+  printf("<-- curry proto \n");
 
   callable = LLVMAddFunction(module, "curried_fn", proto);
 
