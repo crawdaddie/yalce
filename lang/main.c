@@ -1,11 +1,7 @@
-#include "../engine/clap_util.h"
 #include "../engine/ctx.h"
 #include "../gui/gui.h"
-
 #include "backend_llvm/jit.h"
-#include "clap_node.h"
 #include "format_utils.h"
-#include "ylc_stdlib.h"
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -49,7 +45,6 @@ int main(int argc, char **argv) {
   int jit_result;
   bool run_gui = false;
 
-#ifdef GUI_MODE
   // Check for --gui argument
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--gui") == 0) {
@@ -57,10 +52,8 @@ int main(int argc, char **argv) {
       break;
     }
   }
-#endif
 
   if (run_gui) {
-#ifdef GUI_MODE
     // printf("run gui\n");
     if (init_gui()) {
       return 1;
@@ -78,7 +71,6 @@ int main(int argc, char **argv) {
 
     gui_loop();
 
-#endif
   } else {
     return jit(argc, argv);
   }

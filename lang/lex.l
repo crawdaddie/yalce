@@ -183,8 +183,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                          // Otherwise, this rule won't be reached due to yyterminate()
                        }
 ^%.*            {
-                  /*printf("possible macro %s %d\n", yytext, top_level_tests);*/
                   /*
+                  printf("possible macro %s %d\n", yytext, top_level_tests);
                   handle_macro(ast_root, yytext + 1);
                   print_ast(ast_root);
                   printf("should insert ast nodes\n");

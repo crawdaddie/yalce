@@ -19,11 +19,7 @@ LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wi
 # Separate CFLAGS for include paths
 CFLAGS := -I./lang -I./engine
 
-GUI_MODE := 1
-
-ifdef GUI_MODE
-CFLAGS += -I./gui -DGUI_MODE
-endif
+CFLAGS += -I./gui
 
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
@@ -39,9 +35,7 @@ LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
 
-ifdef GUI_MODE
-	LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L$(shell brew --prefix sdl2)/lib -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2 -lSDL2_ttf -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx
-endif
+LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L$(shell brew --prefix sdl2)/lib -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2 -lSDL2_ttf -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 

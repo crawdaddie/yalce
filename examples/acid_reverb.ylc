@@ -14,8 +14,8 @@ let sq_detune = fn () ->
   let chirp_decay = inlet 0.3;
   let ff = chirp_node 3000. 200. chirp_decay trig; 
   let res = inlet 8.;
-  (sq_node f + (sq_node @@ f * 1.01) + (sq_node @@ f * 2.)) * 0.1
-  |> biquad_lp_node ff res 
+  ((sq_node f + (sq_node @@ f * 1.01) + (sq_node @@ f * 2.))
+  |> biquad_lp_node ff res) * 0.1
 ;;
 
 let kick_buf = read_buf (cstr "kick.wav");
@@ -65,8 +65,9 @@ let x = sq_detune |> chain_wrap |> play;
 # let reverb = clap_node (cstr "/Users/adam/projects/sound/elysiera/target/bundled/Elysiera.clap") x;
 # let reverb = clap_node (cstr "/Library/Audio/Plug-Ins/CLAP/UnplugRed/Pisstortion.clap") x;
 # let reverb = clap_node (cstr "/Library/Audio/Plug-Ins/CLAP/UnplugRed/Pisstortion.clap") x;
+let reverb = clap_node (cstr "/Library/Audio/Plug-Ins/CLAP/TAL-Reverb-4.clap") x;
 
-let reverb = clap_node (cstr "/Users/adam/projects/sound/nih-plug/target/bundled/Crisp.clap") x;
+# let reverb = clap_node (cstr "/Users/adam/projects/sound/nih-plug/target/bundled/Crisp.clap") x;
 reverb |> play;
 
 
@@ -171,4 +172,8 @@ schedule_event_quant runner 1.0 (0.125, 0., choose notes, 200.);
 
 
 
+
 clap_ui @@ node_state_ptr reverb;
+
+create_main_scope ();
+

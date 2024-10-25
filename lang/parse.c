@@ -356,6 +356,7 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
         stack = preprocess_includes(_current_dir, import_content, stack);
       }
     } else if (strncmp("%test", input, 5) == 0) {
+      printf("found tests in module\n");
       // TODO: auto-include test module (eg examples/Testing.ylc)
     }
     total_len--;
