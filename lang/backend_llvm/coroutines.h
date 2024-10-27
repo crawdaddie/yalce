@@ -7,9 +7,8 @@ LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);
 
-LLVMValueRef codegen_coroutine_instance(Ast *binding, Ast *application,
-                                        JITSymbol *symbol, JITLangCtx *ctx,
-                                        LLVMModuleRef module,
+LLVMValueRef codegen_coroutine_instance(Ast *application, JITSymbol *symbol,
+                                        JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder);
 
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

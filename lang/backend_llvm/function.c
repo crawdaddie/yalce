@@ -78,8 +78,8 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return get_extern_fn(name, llvm_fn_type, module);
 }
 
-static void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func,
-                                 Type *fn_type, JITLangCtx *fn_ctx) {
+void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
+                          JITLangCtx *fn_ctx) {
 
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, func, LLVMTypeOf(func));
   sym->symbol_data.STYPE_FUNCTION.fn_type = fn_type;
@@ -359,6 +359,13 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
     llvm_callable_type = LLVMGlobalGetValueType(callable);
     break;
   }
+  case STYPE_COROUTINE_GENERATOR: {
+    break;
+  }
+
+  case STYPE_COROUTINE_INSTANCE: {
+    break;
+  }
   }
 
   if (args_len < expected_args_len) {
@@ -425,10 +432,6 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
 
   const char *binop_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
-  //
-  // printf("call binop\n");
-  // print_type(ltype);
-  // print_type(rtype);
 
   LLVMValueRef lval =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
@@ -515,16 +518,8 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
   }
 
   if (strcmp(sym_name, "array_slice") == 0) {
-    // printf("call array slice\n");
-
     Type *array_type = (ast->data.AST_APPLICATION.args + 2)->md;
-    // print_type(array_type);
-    // print_ast(ast);
-
-    // LLVMTypeRef el_type =
-    //     type_to_llvm_type(array_type->data.T_CONS.args[0], ctx->env, module);
     LLVMTypeRef el_type = LLVMInt8Type();
-    //
     LLVMValueRef start =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 

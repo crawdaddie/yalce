@@ -6,6 +6,7 @@
 #include "serde.h"
 #include "types/type.h"
 #include "variant.h"
+#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -188,14 +189,14 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
   Type *expr_type = ast->data.AST_LET.expr->md;
 
-  if (expr_type->kind == T_FN && ast->data.AST_LET.expr->tag == AST_LAMBDA &&
-      ast->data.AST_LET.expr->data.AST_LAMBDA.is_coroutine) {
-    return codegen_coroutine_binding(ast, &cont_ctx, module, builder);
-  }
-
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
     return create_generic_fn_binding(binding, ast->data.AST_LET.expr, &cont_ctx,
                                      module, builder);
+  }
+
+  if (expr_type->kind == T_FN && ast->data.AST_LET.expr->tag == AST_LAMBDA &&
+      ast->data.AST_LET.expr->data.AST_LAMBDA.is_coroutine) {
+    return codegen_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN &&
@@ -207,8 +208,33 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
         lookup_id_ast(application->data.AST_APPLICATION.function, &cont_ctx);
 
     if (sym->type == STYPE_COROUTINE_GENERATOR) {
-      return codegen_coroutine_instance(binding, application, sym, &cont_ctx,
-                                        module, builder);
+      JITSymbol *generator_sym = sym;
+
+      LLVMTypeRef instance_type = LLVMStructType(
+          (LLVMTypeRef[]){
+              LLVMInt32Type(), // coroutine counter
+              generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
+                  .llvm_params_obj_type, // params tuple
+              generator_sym->llvm_type,  // coroutine generator function type
+          },
+          3, 0);
+
+      LLVMValueRef instance = codegen_coroutine_instance(
+          application, sym, &cont_ctx, module, builder);
+
+      Type *expected_fn_type = application->md;
+      JITSymbol *instance_sym = new_symbol(
+          STYPE_COROUTINE_INSTANCE, expected_fn_type, instance, instance_type);
+
+      instance_sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type =
+          generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR.def_fn_type;
+
+      const char *id_chars = binding->data.AST_IDENTIFIER.value;
+      int id_len = binding->data.AST_IDENTIFIER.length;
+
+      ht_set_hash(cont_ctx.stack + cont_ctx.stack_ptr, id_chars,
+                  hash_string(id_chars, id_len), instance_sym);
+      return instance;
     }
   }
 
