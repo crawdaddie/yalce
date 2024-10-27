@@ -359,11 +359,23 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
     llvm_callable_type = LLVMGlobalGetValueType(callable);
     break;
   }
+
   case STYPE_COROUTINE_GENERATOR: {
-    break;
+
+    JITSymbol *generator_sym = sym;
+
+    LLVMTypeRef instance_type = get_coroutine_instance_type(
+        generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
+            .llvm_params_obj_type,
+        generator_sym->llvm_type);
+
+    LLVMValueRef instance =
+        codegen_coroutine_instance(args, args_len, sym, ctx, module, builder);
+    return instance;
   }
 
   case STYPE_COROUTINE_INSTANCE: {
+    printf("call coroutine instance symbol\n");
     break;
   }
   }

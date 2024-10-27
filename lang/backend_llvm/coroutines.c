@@ -54,11 +54,29 @@ typedef struct coroutine_ctx_t {
 static coroutine_ctx_t _coroutine_ctx = {};
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+  Ast *expr = ast->data.AST_YIELD.expr;
 
-  print_ast(ast->data.AST_YIELD.expr);
-  print_type(ast->data.AST_YIELD.expr->md);
+  if (expr->tag == AST_APPLICATION) {
+    JITSymbol *sym = lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
+    if (sym->type == STYPE_COROUTINE_GENERATOR) {
+      printf("YIELD: new coroutine instance\n");
+      print_ast(expr);
+      print_type(expr->md);
 
-  LLVMValueRef val = codegen(ast->data.AST_YIELD.expr, ctx, module, builder);
+      LLVMTypeRef instance_type = get_coroutine_instance_type(
+          sym->symbol_data.STYPE_COROUTINE_GENERATOR.llvm_params_obj_type,
+          sym->llvm_type);
+
+      LLVMValueRef instance = codegen_coroutine_instance(
+          expr->data.AST_APPLICATION.args, expr->data.AST_APPLICATION.len, sym,
+          ctx, module, builder);
+      // TODO:
+      // when this happens I need to somehow replace the calling coroutine
+      // instance with this instance no idea how yet :(
+    }
+  }
+
+  LLVMValueRef val = codegen(expr, ctx, module, builder);
   LLVMValueRef ret_opt = LLVMGetUndef(_coroutine_ctx.ret_option_type);
 
   ret_opt =
@@ -86,6 +104,7 @@ void add_recursive_cr_def_ref(ObjString fn_name, LLVMValueRef func,
   ht *scope = fn_ctx->stack + fn_ctx->stack_ptr;
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
+
 /**
  * given a coroutine generator function
  * return a function that implements a switch statement with a case for each
@@ -308,12 +327,22 @@ LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
               hash_string(id_chars, id_len), sym);
   return def;
 }
+LLVMTypeRef get_coroutine_instance_type(LLVMTypeRef params_obj_type,
+                                        LLVMTypeRef generator_fn_type) {
+  return LLVMStructType(
+      (LLVMTypeRef[]){
+          LLVMInt32Type(),   // coroutine counter
+          params_obj_type,   // params tuple
+          generator_fn_type, // coroutine generator function type
+      },
+      3, 0);
+}
 
 // given a compiled coroutine generator (@param symbol)
 // create a struct containing the initial parameters, the function pointer
 // returned by `codegen_coroutine_generator` and the switch index value 0
 // (0, parameters, fn)
-LLVMValueRef codegen_coroutine_instance(Ast *application,
+LLVMValueRef codegen_coroutine_instance(Ast *args, int args_len,
                                         JITSymbol *generator_symbol,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
@@ -336,21 +365,18 @@ LLVMValueRef codegen_coroutine_instance(Ast *application,
 
   LLVMValueRef coroutine_def = generator_symbol->val;
 
-  LLVMTypeRef instance_type = LLVMStructType(
-      (LLVMTypeRef[]){
-          LLVMInt32Type(),             // coroutine counter
-          params_obj_type,             // params tuple
-          generator_symbol->llvm_type, // coroutine generator function type
-      },
-      3, 0);
+  LLVMTypeRef instance_type = get_coroutine_instance_type( // coroutine counter
+      params_obj_type,                                     // params tuple
+      generator_symbol->llvm_type // coroutine generator function type
+  );
 
   LLVMValueRef instance = LLVMGetUndef(instance_type);
   LLVMValueRef params_obj =
       LLVMGetUndef(generator_symbol->symbol_data.STYPE_COROUTINE_GENERATOR
                        .llvm_params_obj_type);
 
-  for (int i = 0; i < application->data.AST_APPLICATION.len; i++) {
-    Ast *arg = application->data.AST_APPLICATION.args + i;
+  for (int i = 0; i < args_len; i++) {
+    Ast *arg = args + i;
     params_obj = LLVMBuildInsertValue(
         builder, params_obj, codegen(arg, ctx, module, builder), i, "");
   }

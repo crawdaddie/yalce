@@ -210,17 +210,15 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     if (sym->type == STYPE_COROUTINE_GENERATOR) {
       JITSymbol *generator_sym = sym;
 
-      LLVMTypeRef instance_type = LLVMStructType(
-          (LLVMTypeRef[]){
-              LLVMInt32Type(), // coroutine counter
-              generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
-                  .llvm_params_obj_type, // params tuple
-              generator_sym->llvm_type,  // coroutine generator function type
-          },
-          3, 0);
+      LLVMTypeRef instance_type = get_coroutine_instance_type(
+          generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
+              .llvm_params_obj_type,
+          generator_sym->llvm_type);
 
-      LLVMValueRef instance = codegen_coroutine_instance(
-          application, sym, &cont_ctx, module, builder);
+      LLVMValueRef instance =
+          codegen_coroutine_instance(application->data.AST_APPLICATION.args,
+                                     application->data.AST_APPLICATION.len, sym,
+                                     &cont_ctx, module, builder);
 
       Type *expected_fn_type = application->md;
       JITSymbol *instance_sym = new_symbol(
