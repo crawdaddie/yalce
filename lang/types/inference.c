@@ -185,6 +185,7 @@ static Type *convert_to_coroutine_type(Type *f) {
 
   Type *return_type = fn->data.T_FN.to;
   fn->data.T_FN.to = type_fn(&t_void, create_option_type(return_type));
+  // fn->data.T_FN.to = create_option_type(return_type));
   return f;
 }
 
@@ -286,8 +287,6 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
   fn = resolve_generic_type(fn, fn_scope_env);
   if (ast->data.AST_LAMBDA.is_coroutine) {
     Type *co = convert_to_coroutine_type(fn);
-    // print_type(fn);
-    print_type(co);
     fn = co;
   }
 
@@ -575,6 +574,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
       return NULL;
     }
     lambda_ctx.lambda->data.AST_LAMBDA.is_coroutine = true;
+    lambda_ctx.lambda->data.AST_LAMBDA.num_yields++;
     type = infer(ast->data.AST_YIELD.expr, env);
     if (lambda_ctx.yielded_type != NULL) {
       // printf(

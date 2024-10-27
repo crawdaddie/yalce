@@ -51,4 +51,10 @@ struct _DoubleArray {
 };
 
 struct _DoubleArray double_array(int32_t size, double val);
+
+typedef struct _opt_int_t {
+  int8_t tag;
+  int32_t val;
+} _opt_int_t;
+void print_opt_int(_opt_int_t o);
 #endif

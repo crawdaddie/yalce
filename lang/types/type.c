@@ -722,6 +722,8 @@ Type *create_type_multi_param_fn(int len, Type **from, Type *to) {
   return fn;
 }
 
+Type *create_tuple_type(int len, Type **contained_types) {}
+
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
   Type *copy = talloc(sizeof(Type));

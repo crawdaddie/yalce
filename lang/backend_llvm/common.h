@@ -24,13 +24,24 @@ typedef struct SpecificFns {
   struct SpecificFns *next;
 } SpecificFns;
 
+typedef struct coroutine_generator_symbol_data_t {
+  Ast *ast;
+  int stack_ptr;
+  Type *ret_option_type;
+  LLVMTypeRef llvm_ret_option_type;
+  Type *params_obj_type;
+  LLVMTypeRef llvm_params_obj_type;
+  LLVMTypeRef def_fn_type;
+} coroutine_generator_symbol_data_t;
+
 typedef enum symbol_type {
   STYPE_FN_PARAM,
   STYPE_TOP_LEVEL_VAR,
   STYPE_LOCAL_VAR,
   STYPE_FUNCTION,
   STYPE_GENERIC_FUNCTION,
-  STYPE_COROUTINE_FUNCTION,
+  STYPE_COROUTINE_GENERATOR,
+  STYPE_COROUTINE_INSTANCE,
 } symbol_type;
 
 typedef struct {
@@ -52,9 +63,11 @@ typedef struct {
       SpecificFns *specific_fns;
     } STYPE_GENERIC_FUNCTION;
 
+    coroutine_generator_symbol_data_t STYPE_COROUTINE_GENERATOR;
+
     struct {
-      bool is_complete;
-    } STYPE_COROUTINE_FUNCTION;
+      LLVMTypeRef def_fn_type;
+    } STYPE_COROUTINE_INSTANCE;
 
   } symbol_data;
   Type *symbol_type;

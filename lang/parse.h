@@ -207,6 +207,7 @@ struct Ast {
       Ast *body;
       Ast **defaults;
       bool is_coroutine;
+      int num_yields;
     } AST_LAMBDA;
 
     struct AST_EXTERN_FN {

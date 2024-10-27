@@ -274,4 +274,5 @@ int *array_type_size_ptr(Type *t);
 
 Type *create_array_type(Type *of, int size);
 
+Type *create_tuple_type(int len, Type **contained_types);
 #endif

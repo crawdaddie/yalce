@@ -5,6 +5,7 @@
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
 #include "backend_llvm/variant.h"
+#include "coroutines.h"
 #include "list.h"
 #include "serde.h"
 #include "strings.h"
@@ -12,15 +13,6 @@
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
-
-#define TRY(expr)                                                              \
-  ({                                                                           \
-    typeof(expr) _result = (expr);                                             \
-    if (!_result) {                                                            \
-      return NULL;                                                             \
-    }                                                                          \
-    _result;                                                                   \
-  })
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
@@ -648,70 +640,12 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+  if (sym->type == STYPE_COROUTINE_INSTANCE) {
+    return codegen_coroutine_next(ast, sym, expected_fn_type, ctx, module,
+                                  builder);
+  }
 
   return call_symbol(sym_name, sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, expected_fn_type, ctx,
                      module, builder);
-}
-LLVMTypeRef codegen_for_func_sig() {
-  // Create function type: (int, int, (int) -> void) -> void
-  LLVMTypeRef int_type = LLVMInt32Type();
-  LLVMTypeRef void_type = LLVMVoidType();
-  LLVMTypeRef f_type = LLVMFunctionType(void_type, &int_type, 1, 0);
-
-  LLVMTypeRef f_param_type = LLVMPointerType(f_type, 0);
-  LLVMTypeRef param_types[] = {int_type, int_type, f_param_type};
-  LLVMTypeRef for_func_type = LLVMFunctionType(void_type, param_types, 3, 0);
-  return for_func_type;
-}
-
-LLVMValueRef codegen_build_for(LLVMTypeRef for_func_type, LLVMModuleRef module,
-                               LLVMBuilderRef builder) {
-
-  LLVMTypeRef int_type = LLVMInt32Type();
-  LLVMTypeRef void_type = LLVMVoidType();
-  LLVMTypeRef f_type = LLVMFunctionType(void_type, &int_type, 1, 0);
-
-  // Create the function
-  LLVMValueRef for_func = LLVMAddFunction(module, "for", for_func_type);
-
-  // Name the arguments for easier reference
-  LLVMValueRef start = LLVMGetParam(for_func, 0);
-  LLVMValueRef end = LLVMGetParam(for_func, 1);
-  LLVMValueRef fn_ptr = LLVMGetParam(for_func, 2);
-
-  LLVMSetValueName(start, "start");
-  LLVMSetValueName(end, "end");
-  LLVMSetValueName(fn_ptr, "fn_ptr");
-
-  // Create basic blocks
-  LLVMBasicBlockRef entry_block = LLVMAppendBasicBlock(for_func, "entry");
-  LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(for_func, "loop");
-  LLVMBasicBlockRef exitBlock = LLVMAppendBasicBlock(for_func, "exit");
-
-  // Entry block
-  LLVMPositionBuilderAtEnd(builder, entry_block);
-  LLVMValueRef condition =
-      LLVMBuildICmp(builder, LLVMIntSLT, start, end, "condition");
-  LLVMBuildCondBr(builder, condition, loop_block, exitBlock);
-
-  LLVMPositionBuilderAtEnd(builder, loop_block);
-  LLVMValueRef phi_node = LLVMBuildPhi(builder, LLVMInt32Type(), "phi");
-  LLVMBuildCall2(builder, f_type, fn_ptr, &phi_node, 1, "");
-  LLVMValueRef next_start = LLVMBuildAdd(
-      builder, phi_node, LLVMConstInt(LLVMInt32Type(), 1, 0), "next_s");
-  LLVMValueRef nextCondition =
-      LLVMBuildICmp(builder, LLVMIntSLT, next_start, end, "next_condition");
-  LLVMBuildCondBr(builder, nextCondition, loop_block, exitBlock);
-
-  // Update phi node
-  LLVMValueRef phi_vals[] = {start, next_start};
-  LLVMBasicBlockRef phi_blocks[] = {entry_block, loop_block};
-  LLVMAddIncoming(phi_node, phi_vals, phi_blocks, 2);
-
-  // Exit block
-  LLVMPositionBuilderAtEnd(builder, exitBlock);
-  LLVMBuildRetVoid(builder);
-
-  return for_func;
 }

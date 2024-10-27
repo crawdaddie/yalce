@@ -196,6 +196,7 @@ LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
 LLVMValueRef _to_string(LLVMValueRef int_value, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
+
   LLVMValueRef data_ptr = _int_to_string(int_value, module, builder);
   LLVMValueRef strlen_func = get_strlen_func(module);
   LLVMValueRef len =
@@ -238,6 +239,12 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
   if (val_type->kind == T_BOOL) {
     return int_to_string(val, module, builder);
   }
+
+  // if (val_type->kind == T_CONS &&
+  //     val_type->data.T_CONS.args[0]->kind == T_CONS &&
+  //     strcmp(val_type->data.T_CONS.args[0]->data.T_CONS.name, "Some")) {
+  //   printf("Option to string??");
+  // }
 
   return LLVMBuildGlobalStringPtr(builder, "", ".str");
 }

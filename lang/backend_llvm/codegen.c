@@ -7,6 +7,7 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
+#include "coroutines.h"
 #include "serde.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -153,6 +154,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   case AST_VOID: {
     return LLVMGetUndef(LLVMVoidType());
+  }
+  case AST_YIELD: {
+    return codegen_yield(ast, ctx, module, builder);
   }
 
     // case AST_TYPE_DECL: {

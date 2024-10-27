@@ -5,8 +5,7 @@ let print = extern fn String -> ();
 
 let println = fn str ->
   print str;
-  print "\n";
-  ()
+  print "\n"
 ;;
 
 let stderr = get_stderr ();

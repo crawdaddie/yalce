@@ -6,7 +6,6 @@
 #include "serde.h"
 #include "types/type.h"
 #include "variant.h"
-#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -133,6 +132,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // return LLVMGetParam(current_func(builder), idx);
     return sym->val;
   }
+
   case STYPE_FUNCTION: {
     return sym->val;
   }
@@ -170,6 +170,10 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
 
   return NULL;
 }
+static bool is_coroutine_generator(Ast *id, JITLangCtx *ctx) {
+  JITSymbol *sym = lookup_id_ast(id, ctx);
+  return sym->type == STYPE_COROUTINE_GENERATOR;
+}
 
 LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -186,30 +190,34 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
   if (expr_type->kind == T_FN && ast->data.AST_LET.expr->tag == AST_LAMBDA &&
       ast->data.AST_LET.expr->data.AST_LAMBDA.is_coroutine) {
-    printf("codegen coroutine\n");
     return codegen_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
-
     return create_generic_fn_binding(binding, ast->data.AST_LET.expr, &cont_ctx,
                                      module, builder);
+  }
+
+  if (expr_type->kind == T_FN &&
+      ast->data.AST_LET.expr->tag == AST_APPLICATION) {
+
+    Ast *application = ast->data.AST_LET.expr;
+    Ast *binding = ast->data.AST_LET.binding;
+    JITSymbol *sym =
+        lookup_id_ast(application->data.AST_APPLICATION.function, &cont_ctx);
+
+    if (sym->type == STYPE_COROUTINE_GENERATOR) {
+      return codegen_coroutine_instance(binding, application, sym, &cont_ctx,
+                                        module, builder);
+    }
   }
 
   LLVMValueRef expr_val =
       codegen(ast->data.AST_LET.expr, outer_ctx, module, builder);
 
-  // LLVMDumpValue(expr_val);
   if (!expr_val) {
     return NULL;
   }
-
-  // if (binding->tag == AST_IDENTIFIER &&
-  //     strcmp("x", binding->data.AST_IDENTIFIER.value) == 0) {
-  //   printf("set up binding for val x (scope %d) %d\n", outer_ctx->stack_ptr,
-  //          binding->tag);
-  //   print_ast(binding);
-  // }
 
   LLVMValueRef match_result =
       match_values(binding, expr_val, expr_type, &cont_ctx, module, builder);

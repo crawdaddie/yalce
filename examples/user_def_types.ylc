@@ -8,11 +8,13 @@ type X =
 ;
 
 
-
-
-
 type Enum = 
-  | A = 0x1b # doesn't do anything yet
+  | A = 0x1b
   | B
   | C
+;
+
+type Option t =
+  | Some of t
+  | None
 ;

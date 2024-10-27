@@ -1,10 +1,19 @@
 #! env ylc
+%include String
 type Option t = 
   | Some of t
   | None
   ;
 
 let x = Some 2;
+
+let print_opt_int = fn i: (Option of Int) ->
+  match i with
+  | Some iv -> println `Some {iv}`
+  | None -> println "None"
+;;
+
+print_opt_int x
 # let z = None
 
 # let o = Some 1;

@@ -395,7 +395,6 @@ LLVMValueRef _codegen_array_init(LLVMValueRef len, LLVMValueRef val,
         LLVMBuildArrayAlloca(builder, llvm_array_type, len, "stack_array");
   }
 
-
   return data_ptr;
 }
 
