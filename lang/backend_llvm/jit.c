@@ -230,8 +230,6 @@ int jit(int argc, char **argv) {
 
     while (true) {
 
-      // printf("repl: ## SYNTH??: ");
-      // print_type_err(&t_synth);
 
       char *input = repl_input(prompt);
 

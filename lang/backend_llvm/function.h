@@ -29,4 +29,9 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
 typedef LLVMValueRef (*LLVMBinopMethod)(LLVMValueRef, LLVMValueRef,
                                         LLVMModuleRef, LLVMBuilderRef);
 
+LLVMValueRef specific_fns_lookup(SpecificFns *list, Type *key);
+
+SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
+                                 LLVMValueRef func);
+
 #endif

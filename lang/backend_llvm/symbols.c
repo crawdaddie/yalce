@@ -7,9 +7,13 @@
 #include "serde.h"
 #include "types/type.h"
 #include "variant.h"
-#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
+
+static bool is_coroutine_generator_symbol(Ast *id, JITLangCtx *ctx) {
+  JITSymbol *sym = lookup_id_ast(id, ctx);
+  return sym->type == STYPE_COROUTINE_GENERATOR;
+}
 
 JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type) {
@@ -159,7 +163,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
                                        JITLangCtx *ctx, LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
-
   JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, fn_ast->md, NULL, NULL);
   sym->symbol_data.STYPE_GENERIC_FUNCTION.ast = fn_ast;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
@@ -172,9 +175,10 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
 
   return NULL;
 }
-static bool is_coroutine_generator(Ast *id, JITLangCtx *ctx) {
-  JITSymbol *sym = lookup_id_ast(id, ctx);
-  return sym->type == STYPE_COROUTINE_GENERATOR;
+
+bool is_coroutine_generator_ast(Ast *expr) {
+  return expr->tag == AST_LAMBDA &&
+      expr->data.AST_LAMBDA.is_coroutine;
 }
 
 LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
@@ -190,14 +194,18 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
   Type *expr_type = ast->data.AST_LET.expr->md;
 
+
+  if (expr_type->kind == T_FN && is_coroutine_generator_ast(ast->data.AST_LET.expr) && is_generic(ast->data.AST_LET.expr->md)) {
+    return codegen_generic_coroutine_binding(ast, &cont_ctx, module, builder);
+  }
+
+  if (expr_type->kind == T_FN && is_coroutine_generator_ast(ast->data.AST_LET.expr)) {
+    return codegen_coroutine_binding(ast, &cont_ctx, module, builder);
+  }
+
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
     return create_generic_fn_binding(binding, ast->data.AST_LET.expr, &cont_ctx,
                                      module, builder);
-  }
-
-  if (expr_type->kind == T_FN && ast->data.AST_LET.expr->tag == AST_LAMBDA &&
-      ast->data.AST_LET.expr->data.AST_LAMBDA.is_coroutine) {
-    return codegen_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN &&

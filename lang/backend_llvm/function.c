@@ -361,6 +361,10 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
     break;
   }
 
+  case STYPE_GENERIC_COROUTINE_GENERATOR: {
+    return codegen_specific_coroutine(sym, sym_name, expected_fn_type, ctx, module, builder);
+  }
+
   case STYPE_COROUTINE_GENERATOR: {
 
     JITSymbol *generator_sym = sym;
@@ -375,7 +379,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_COROUTINE_INSTANCE: {
-    printf("call coroutine instance symbol\n");
+    // printf("call coroutine instance symbol\n");
     break;
   }
   }
@@ -648,8 +652,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
   if (sym->type == STYPE_COROUTINE_INSTANCE) {
-    return codegen_coroutine_next(ast, sym->val, sym->llvm_type, sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type, ctx, module,
-                                  builder);
+    return codegen_coroutine_next(
+        ast, sym->val, sym->llvm_type,
+        sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type, ctx, module,
+        builder);
   }
 
   return call_symbol(sym_name, sym, ast->data.AST_APPLICATION.args,

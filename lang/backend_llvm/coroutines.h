@@ -21,4 +21,11 @@ LLVMValueRef codegen_coroutine_next(Ast *application, LLVMValueRef instance,
                                     JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder);
+
+LLVMValueRef codegen_generic_coroutine_binding(Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder);
+
+
+LLVMValueRef codegen_specific_coroutine(JITSymbol *sym, const char *sym_name, Type *expected_type, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

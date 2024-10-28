@@ -1,6 +1,8 @@
 #include "coroutines.h"
 #include "coroutine_types.h"
+#include "function.h"
 #include "match.h"
+#include "serde.h"
 #include "symbols.h"
 #include "tuple.h"
 #include "types.h"
@@ -38,11 +40,13 @@ LLVMTypeRef param_struct_type(Type *fn_type, int fn_len, Type *param_obj_type,
     param_obj_type->kind = T_VOID;
     return LLVMVoidType();
   }
+  Type param_tuple = {T_CONS, {.T_CONS = {
+    .name = TYPE_NAME_TUPLE,
+    .args = contained,
+    .num_args = fn_len
+  }}};
 
-  param_obj_type->kind = T_CONS;
-  param_obj_type->data.T_CONS.name = TYPE_NAME_TUPLE;
-  param_obj_type->data.T_CONS.args = contained;
-  param_obj_type->data.T_CONS.num_args = fn_len;
+  *param_obj_type = param_tuple;
 
   return LLVMStructType(llvm_param_types, fn_len, 0);
 }
@@ -74,30 +78,10 @@ static coroutine_ctx_t _coroutine_ctx = {};
 
 static void copy_instance(LLVMValueRef dest_ptr, LLVMValueRef src_ptr,
                           LLVMTypeRef instance_type, LLVMBuilderRef builder) {
-
   LLVMValueRef size = LLVMSizeOf(instance_type);
   LLVMBuildMemCpy(builder, dest_ptr, 0, src_ptr, 0, size);
-
-  // // Option 2: Copy field by field
-  // unsigned field_count = LLVMCountStructElementTypes(instance_type);
-  // for (unsigned i = 0; i < field_count; i++) {
-  //   // Get pointer to field in source
-  //   LLVMValueRef src_field_ptr = LLVMBuildStructGEP2(
-  //       builder, instance_type, src_ptr, i, "src_field_ptr");
-  //
-  //   // Get pointer to field in destination
-  //   LLVMValueRef dest_field_ptr = LLVMBuildStructGEP2(
-  //       builder, instance_type, dest_ptr, i, "dest_field_ptr");
-  //
-  //   // Load from source
-  //   LLVMValueRef field_val =
-  //       LLVMBuildLoad2(builder, LLVMStructGetTypeAtIndex(instance_type, i),
-  //                      src_field_ptr, "field_load");
-  //
-  //   // Store to destination
-  //   LLVMBuildStore(builder, field_val, dest_field_ptr);
-  // }
 }
+
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
@@ -161,8 +145,7 @@ void add_recursive_cr_def_ref(ObjString fn_name, LLVMValueRef func,
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
-LLVMValueRef
-codegen_coroutine_generator(Ast *ast,
+LLVMValueRef codegen_coroutine_generator(Ast *ast,
                             coroutine_generator_symbol_data_t symbol_data,
                             LLVMTypeRef instance_type, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -258,6 +241,42 @@ codegen_coroutine_generator(Ast *ast,
   return func;
 }
 
+LLVMValueRef codegen_generic_coroutine_binding(Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  Ast *binding = ast->data.AST_LET.binding;
+  Ast *def_ast = ast->data.AST_LET.expr;
+  Type *fn_type = def_ast->md;
+
+  JITSymbol *sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR, fn_type, NULL, NULL);
+  sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.ast = def_ast;
+  sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.stack_ptr = ctx->stack_ptr;
+
+  const char *id_chars = binding->data.AST_IDENTIFIER.value;
+  int id_len = binding->data.AST_IDENTIFIER.length;
+
+  ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+              hash_string(id_chars, id_len), sym);
+  return NULL;
+}
+LLVMValueRef codegen_specific_coroutine(JITSymbol *sym, const char *sym_name, Type *expected_type, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  printf("create specific coroutine instance %s\n", sym_name);
+  print_type(expected_type);
+  print_type(sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.ast->md);
+
+  SpecificFns *specific_fns =
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
+  LLVMValueRef callable = specific_fns_lookup(specific_fns, expected_type);
+  if (callable) {
+    printf("found compiled coroutine def\n");
+  } else {
+    printf("compile new specific coroutine def\n");
+  }
+
+  return NULL;
+}
+
 LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
@@ -322,7 +341,6 @@ LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
  *   fgen (a, b, c) (i+1)
  * ;;
  */
-
 LLVMValueRef codegen_coroutine_instance(Ast *args, int args_len,
                                         JITSymbol *generator_symbol,
                                         JITLangCtx *ctx, LLVMModuleRef module,

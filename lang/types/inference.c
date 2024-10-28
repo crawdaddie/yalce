@@ -129,46 +129,6 @@ Type *binding_type(Ast *ast) {
   }
 }
 
-static Type *infer_typed_lambda(Ast *ast, TypeEnv **env) {
-  int num_args = ast->data.AST_LAMBDA.len;
-
-  TypeEnv *fn_scope_env = *env;
-
-  Type *param_types[num_args];
-  for (int i = 0; i < num_args; i++) {
-    Ast *def = ast->data.AST_LAMBDA.defaults[i];
-    Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-    Type *arg_type = compute_type_expression(def, *env);
-    def->md = arg_type;
-
-    param_types[i] = arg_type;
-    fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, arg_type);
-  }
-
-  Type *return_type = next_tvar();
-  Type *fn = create_type_multi_param_fn(num_args, param_types, return_type);
-
-  const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
-  Type *recursive_ref = tvar(ast->data.AST_LAMBDA.fn_name.chars);
-  if (fn_name != NULL) {
-    recursive_ref->is_recursive_fn_ref = true;
-    fn_scope_env = env_extend(fn_scope_env, ast->data.AST_LAMBDA.fn_name.chars,
-                              recursive_ref);
-  }
-
-  Type *body_type = TRY(infer(ast->data.AST_LAMBDA.body, &fn_scope_env));
-
-  Type *unified_ret = unify(return_type, body_type, &fn_scope_env);
-  *return_type = *unified_ret;
-
-  if (recursive_ref->kind == T_FN && is_generic(recursive_ref)) {
-    TypeEnv *_env = NULL;
-    unify_recursive_defs_mut(fn, recursive_ref, &_env);
-  }
-  fn = resolve_generic_type(fn, fn_scope_env);
-  return fn;
-}
-
 typedef struct lambda_ctx_t {
   Ast *lambda;
   Type *yielded_type;
@@ -185,7 +145,7 @@ static Type *convert_to_coroutine_type(Type *f) {
 
   Type *return_type = fn->data.T_FN.to;
   fn->data.T_FN.to = type_fn(&t_void, create_option_type(return_type));
-  // fn->data.T_FN.to = create_option_type(return_type));
+  f->is_coroutine_fn = true;
   return f;
 }
 
@@ -207,7 +167,14 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
     for (int i = len - 1; i >= 0; i--) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-      Type *ptype = binding_type(param_ast);
+      Type *ptype;
+      Ast *def = ast->data.AST_LAMBDA.defaults[i];
+      if (def) {
+        ptype = compute_type_expression(def, *env);
+      } else {
+        ptype = binding_type(param_ast);
+        param_ast->md = ptype;
+      }
       param_types[i] = ptype;
       fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
     }
@@ -260,9 +227,8 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
     body_type = t;
   }
 
-  TypeEnv **_env = env;
+  TypeEnv **_env = &fn_scope_env;
   Type *unified_ret = unify(return_type, body_type, _env);
-
   *return_type = *unified_ret;
 
   if (recursive_ref && recursive_ref->kind == T_FN &&
@@ -317,7 +283,16 @@ Type *extern_fn_type(Ast *sig, TypeEnv **env) {
   }
   return infer(sig, env);
 }
+bool yield_is_new_coroutine(Ast *yield_expr) {
 
+  if (yield_expr->tag == AST_APPLICATION) {
+    Type *yielded_type = yield_expr->data.AST_APPLICATION.function->md;
+    if (yielded_type->is_coroutine_fn) {
+      return true;
+    }
+  }
+  return false;
+}
 Type *infer(Ast *ast, TypeEnv **env) {
 
   Type *type = NULL;
@@ -523,20 +498,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
   case AST_LAMBDA: {
-    int num_args = ast->data.AST_LAMBDA.len;
-    if (ast->data.AST_LAMBDA.defaults) {
-      int defs = 0;
-      for (int i = 0; i < num_args; i++) {
-        if (ast->data.AST_LAMBDA.defaults[i] != NULL) {
-          defs++;
-        }
-      }
-      if (defs == num_args) {
-        type = infer_typed_lambda(ast, env);
-        break;
-      }
-    }
-
     type = infer_lambda(ast, env);
     break;
   }
@@ -575,14 +536,21 @@ Type *infer(Ast *ast, TypeEnv **env) {
     }
     lambda_ctx.lambda->data.AST_LAMBDA.is_coroutine = true;
     lambda_ctx.lambda->data.AST_LAMBDA.num_yields++;
+
     type = infer(ast->data.AST_YIELD.expr, env);
+
+    if (yield_is_new_coroutine(ast->data.AST_YIELD.expr)) {
+      type = type_of_option(type->data.T_FN.to);
+    }
+
     if (lambda_ctx.yielded_type != NULL) {
-      // printf(
-      //     "lambda ctx already yielded something, the following should unify:
-      //     ");
-      // print_type(lambda_ctx.yielded_type);
-      // print_type(type);
-      type = unify(type, lambda_ctx.yielded_type, env);
+      Type *unified_type = unify(type, lambda_ctx.yielded_type, env);
+      if (!unified_type) {
+        fprintf(stderr, "Failed to unify yielded type\n");
+        print_location(ast);
+        return NULL;
+      }
+      type = unified_type;
     } else {
       lambda_ctx.yielded_type = type;
     }

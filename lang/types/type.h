@@ -191,6 +191,7 @@ typedef struct Type {
   void *constructor;
   size_t constructor_size;
   bool is_recursive_fn_ref;
+  bool is_coroutine_fn;
   void *meta;
 } Type;
 
@@ -256,6 +257,8 @@ typedef struct VariantContext {
 
 Type *create_cons_type(const char *name, int len, Type **unified_args);
 Type *create_option_type(Type *option_of);
+
+Type *type_of_option(Type *option);
 
 Type *get_builtin_type(const char *id_chars);
 

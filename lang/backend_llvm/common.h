@@ -42,6 +42,7 @@ typedef enum symbol_type {
   STYPE_GENERIC_FUNCTION,
   STYPE_COROUTINE_GENERATOR,
   STYPE_COROUTINE_INSTANCE,
+  STYPE_GENERIC_COROUTINE_GENERATOR,
 } symbol_type;
 
 typedef struct {
@@ -62,6 +63,12 @@ typedef struct {
       int stack_ptr;
       SpecificFns *specific_fns;
     } STYPE_GENERIC_FUNCTION;
+
+    struct {
+      Ast *ast;
+      int stack_ptr;
+      SpecificFns *specific_fns;
+    } STYPE_GENERIC_COROUTINE_GENERATOR;
 
     coroutine_generator_symbol_data_t STYPE_COROUTINE_GENERATOR;
 

@@ -177,6 +177,10 @@ Type t_none = {T_CONS, {.T_CONS = {"None", NULL, 0}}};
 Type t_option_of_var =
     TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_option_var), &t_none);
 
+Type *type_of_option(Type *option) {
+  return option->data.T_CONS.args[0]->data.T_CONS.args[0];
+}
+
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     return strncat(buffer, "null", 4);
