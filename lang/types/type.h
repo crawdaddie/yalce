@@ -50,6 +50,7 @@ extern Type t_array_new_fn_sig;
 extern Type t_array_of_chars_fn_sig;
 
 extern Type t_ptr_deref_sig;
+extern Type t_option_of_var;
 
 extern Type t_for_sig;
 // clang-format off

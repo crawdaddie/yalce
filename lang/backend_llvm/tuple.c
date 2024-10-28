@@ -9,6 +9,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 // Function to create an LLVM tuple value
 LLVMValueRef codegen_tuple(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+  // print_type_env(ctx->env);
 
   LLVMTypeRef tuple_type = type_to_llvm_type(ast->md, ctx->env, module);
   LLVMValueRef tuple = LLVMGetUndef(tuple_type);

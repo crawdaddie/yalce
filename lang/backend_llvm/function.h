@@ -23,6 +23,9 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
 
+void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
+                          JITLangCtx *fn_ctx);
+
 typedef LLVMValueRef (*LLVMBinopMethod)(LLVMValueRef, LLVMValueRef,
                                         LLVMModuleRef, LLVMBuilderRef);
 

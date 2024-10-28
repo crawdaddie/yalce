@@ -118,7 +118,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
         // printf("create version of declared type: ");
         // print_type(lookup);
         // printf("with contained: ");
-        print_type(lookup);
+        // print_type(lookup);
         Type *t = copy_type(lookup);
         t = compute_concrete_type(t, contained_type);
         // printf("concrete type: ");
@@ -147,6 +147,8 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 }
 
 Type *type_declaration(Ast *ast, TypeEnv **env) {
+  printf("type declaration\n");
+  print_ast(ast);
 
   Ast *binding = ast->data.AST_LET.binding;
   const char *name = binding->data.AST_IDENTIFIER.value;
@@ -159,6 +161,8 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   }
 
   type->alias = name;
+  // printf("name: '%s'\n", name);
+  // print_type(type);
 
   *env = env_extend(*env, name, type);
   return type;

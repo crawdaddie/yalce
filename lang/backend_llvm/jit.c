@@ -173,6 +173,11 @@ int jit(int argc, char **argv) {
   env = initialize_types(env);
   env = initialize_type_env_synth(env);
 
+  t_option_of_var.alias = "Option";
+  env = env_extend(env, "Option", &t_option_of_var);
+
+  print_type_env(env);
+
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
                     .env = env,
