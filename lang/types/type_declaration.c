@@ -147,8 +147,6 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 }
 
 Type *type_declaration(Ast *ast, TypeEnv **env) {
-  printf("type declaration\n");
-  print_ast(ast);
 
   Ast *binding = ast->data.AST_LET.binding;
   const char *name = binding->data.AST_IDENTIFIER.value;
@@ -161,8 +159,6 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   }
 
   type->alias = name;
-  // printf("name: '%s'\n", name);
-  // print_type(type);
 
   *env = env_extend(*env, name, type);
   return type;

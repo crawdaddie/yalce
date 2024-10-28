@@ -176,7 +176,6 @@ int jit(int argc, char **argv) {
   t_option_of_var.alias = "Option";
   env = env_extend(env, "Option", &t_option_of_var);
 
-  print_type_env(env);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
