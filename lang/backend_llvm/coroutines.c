@@ -145,7 +145,7 @@ void add_recursive_cr_def_ref(ObjString fn_name, LLVMValueRef func,
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
-LLVMValueRef codegen_coroutine_generator(Ast *ast,
+LLVMValueRef compile_coroutine_generator(Ast *ast,
                             coroutine_generator_symbol_data_t symbol_data,
                             LLVMTypeRef instance_type, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -233,6 +233,30 @@ LLVMValueRef codegen_coroutine_generator(Ast *ast,
   LLVMValueRef str = LLVMGetUndef(symbol_data.llvm_ret_option_type);
   str = LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt8Type(), 1, 0),
                              0, "insert None tag");
+  // TODO: maintain 'stack' of coroutine contexts so that when one completes
+  // control can be returned to the next one in the stack
+  // for example:
+  //
+  // let f2 = fn () ->
+  //   yield 100;
+  //   yield 101;
+  //   yield 102
+  // ;;
+  //
+  // let f = fn () ->
+  // # push f onto stack - f is on top
+  //   yield 1;
+  //   yield 2;
+  //   yield 3;
+  // # push f2 onto stack
+  //   yield f2 ();
+  // # f2 completes, pop it
+  // # continue with f because it's on top of the stack
+  //   yield 5
+  // # pop f from stack
+  // ;;
+
+let x = f ();
   LLVMBuildRet(builder, str);
 
   _coroutine_ctx = prev_cr_ctx;
@@ -268,6 +292,7 @@ LLVMValueRef codegen_specific_coroutine(JITSymbol *sym, const char *sym_name, Ty
   SpecificFns *specific_fns =
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns;
   LLVMValueRef callable = specific_fns_lookup(specific_fns, expected_type);
+
   if (callable) {
     printf("found compiled coroutine def\n");
   } else {
@@ -309,7 +334,7 @@ LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
       coroutine_def_fn_type(instance_type, llvm_ret_option_type);
   symbol_data.def_fn_type = def_fn_type;
 
-  LLVMValueRef def = codegen_coroutine_generator(
+  LLVMValueRef def = compile_coroutine_generator(
       def_ast, symbol_data, instance_type, ctx, module, builder);
 
   JITSymbol *sym =

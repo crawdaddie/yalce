@@ -434,10 +434,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
     if (len == 0) {
       Type *el_type = next_tvar();
       type = create_array_type(el_type, 0);
-      // Type **args = talloc(sizeof(Type *) + sizeof(int));
-      // args[0] = el_type;
-      // type = talloc(sizeof(Type));
-      // *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, args, 1}}};
       break;
     }
 
@@ -470,8 +466,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   case AST_TUPLE: {
-    // printf("infer ast tuple: ");
-    // print_ast(ast);
     int arity = ast->data.AST_LIST.len;
 
     Type **cons_args = talloc(sizeof(Type *) * arity);
