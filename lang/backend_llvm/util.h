@@ -1,6 +1,7 @@
 #ifndef _LANG_BACKEND_LLVM_UTIL_H
 #define _LANG_BACKEND_LLVM_UTIL_H
 
+#include "common.h"
 #include "types/type.h"
 #include "llvm-c/Types.h"
 
@@ -30,4 +31,5 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 
 LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
                            LLVMModuleRef module);
+LLVMValueRef alloc(LLVMTypeRef type, JITLangCtx *ctx, LLVMBuilderRef builder);
 #endif

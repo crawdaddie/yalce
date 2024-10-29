@@ -1,4 +1,5 @@
 #include "backend_llvm/util.h"
+#include "common.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <llvm-c/Core.h>
@@ -46,4 +47,9 @@ LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
     fn = LLVMAddFunction(module, name, fn_type);
   }
   return fn;
+}
+
+LLVMValueRef alloc(LLVMTypeRef type, JITLangCtx *ctx, LLVMBuilderRef builder) {
+  return ctx->stack_ptr == 0 ? LLVMBuildMalloc(builder, type, "heap_alloc")
+                             : LLVMBuildAlloca(builder, type, "stack_alloc");
 }
