@@ -1,6 +1,7 @@
 #include "coroutines.h"
-#include "coroutine_types.h"
+#include "coroutine_instance.h"
 #include "function.h"
+#include "list.h"
 #include "match.h"
 #include "serde.h"
 #include "symbols.h"
@@ -76,6 +77,8 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef func = _coroutine_ctx.func;
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
   LLVMTypeRef instance_type = _coroutine_ctx.instance_type;
+  increment_instance_counter(instance_ptr, instance_type, builder);
+  _coroutine_ctx.current_branch++;
 
   Ast *expr = ast->data.AST_YIELD.expr;
   if (expr->tag == AST_APPLICATION) {
@@ -84,21 +87,25 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       LLVMTypeRef instance_type = coroutine_instance_type(
           sym->symbol_data.STYPE_COROUTINE_GENERATOR.llvm_params_obj_type);
+      bool is_same_recursive_ref = sym->symbol_data.STYPE_COROUTINE_GENERATOR.recursive_ref;
+      if (is_same_recursive_ref) {
+        // TODO: reuse already-allocated instance and replace that if recursive ref
+      }
 
-      LLVMValueRef old_instance_ptr = alloc(instance_type, ctx, builder);
+      LLVMValueRef old_instance_ptr =
+          replace_instance(heap_alloc(instance_type, ctx, builder),
+                           instance_type, instance_ptr, builder);
 
-      copy_instance(old_instance_ptr, instance_ptr, instance_type, builder);
-
-      LLVMValueRef new_instance_ptr = codegen_coroutine_instance(
-          expr->data.AST_APPLICATION.args, expr->data.AST_APPLICATION.len, sym,
-          ctx, module, builder);
-
-      copy_instance(instance_ptr, new_instance_ptr, instance_type, builder);
+      instance_ptr = replace_instance(
+          instance_ptr, instance_type,
+          codegen_coroutine_instance(expr->data.AST_APPLICATION.args,
+                                     expr->data.AST_APPLICATION.len, sym, ctx,
+                                     module, builder),
+          builder);
 
       LLVMValueRef parent_gep =
           coroutine_instance_parent_gep(instance_ptr, instance_type, builder);
-
-      _coroutine_ctx.current_branch++;
+      LLVMBuildStore(builder, old_instance_ptr, parent_gep);
 
       LLVMValueRef ret_opt = codegen_coroutine_next(
           expr, instance_ptr, instance_type, _coroutine_ctx.func_type, ctx,
@@ -119,8 +126,6 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   ret_opt = LLVMBuildInsertValue(builder, ret_opt, val, 1, "insert Some Value");
 
-  _coroutine_ctx.current_branch++;
-  increment_instance_counter(instance_ptr, instance_type, builder);
 
   LLVMBuildRet(builder, ret_opt);
   LLVMPositionBuilderAtEnd(
@@ -136,9 +141,64 @@ void add_recursive_cr_def_ref(ObjString fn_name, LLVMValueRef func,
   JITSymbol *sym =
       new_symbol(STYPE_COROUTINE_GENERATOR, fn_type, func, LLVMTypeOf(func));
   sym->symbol_data.STYPE_COROUTINE_GENERATOR = symbol_data;
+  sym->symbol_data.STYPE_COROUTINE_GENERATOR.recursive_ref = true;
 
   ht *scope = fn_ctx->stack + fn_ctx->stack_ptr;
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
+}
+
+LLVMValueRef coroutine_default_block(LLVMValueRef instance,
+                                     LLVMTypeRef instance_type,
+                                     LLVMTypeRef ret_opt_type,
+                                     LLVMBuilderRef builder) {
+
+  // Create basic block for the non-null path
+  LLVMBasicBlockRef non_null_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "non_null_path");
+  LLVMBasicBlockRef continue_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "continue");
+
+  LLVMValueRef parent_gep =
+      coroutine_instance_parent_gep(instance, instance_type, builder);
+
+  // Load the parent pointer value
+  LLVMValueRef parent_ptr = LLVMBuildLoad2(
+      builder, LLVMPointerType(LLVMInt8Type(), 0), parent_gep, "parent_ptr");
+
+  // Create the null comparison
+  LLVMValueRef is_null = LLVMBuildICmp(
+      builder, LLVMIntEQ, parent_ptr,
+      LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)), "is_null");
+
+  // Create the conditional branch
+  LLVMBuildCondBr(builder, is_null, continue_block, non_null_block);
+
+  // Non-null path - Parent coroutine exists
+  LLVMPositionBuilderAtEnd(builder, non_null_block);
+  // Cast the parent pointer to the correct instance type
+  LLVMValueRef parent_instance = LLVMBuildPointerCast(
+      builder, parent_ptr, LLVMPointerType(instance_type, 0),
+      "parent_instance");
+
+  instance =
+      replace_instance(instance, instance_type, parent_instance, builder);
+  increment_instance_counter(instance, instance_type, builder);
+
+  LLVMValueRef func = codegen_tuple_access(0, instance, instance_type, builder);
+
+  LLVMValueRef ret_opt = LLVMBuildCall2(
+      builder, coroutine_def_fn_type(instance_type, ret_opt_type), func,
+      (LLVMValueRef[]){parent_instance}, 1, "coroutine_next");
+
+  LLVMBuildRet(builder, ret_opt);
+
+  // Continue with original null case
+  LLVMPositionBuilderAtEnd(builder, continue_block);
+  // Original null case code
+  LLVMValueRef str = LLVMGetUndef(ret_opt_type);
+  str = LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt8Type(), 1, 0),
+                             0, "insert None tag");
+  LLVMBuildRet(builder, str);
 }
 
 LLVMValueRef
@@ -226,13 +286,9 @@ compile_coroutine_generator(Ast *ast,
   LLVMValueRef body =
       codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
 
-  LLVMValueRef str = LLVMGetUndef(symbol_data.llvm_ret_option_type);
-  str = LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt8Type(), 1, 0),
-                             0, "insert None tag");
-  LLVMBuildRet(builder, str);
-
+  coroutine_default_block(instance_ptr, instance_type,
+                          symbol_data.llvm_ret_option_type, builder);
   _coroutine_ctx = prev_cr_ctx;
-
   LLVMPositionBuilderAtEnd(builder, prev_block);
   return func;
 }
@@ -355,7 +411,7 @@ LLVMValueRef codegen_coroutine_instance(Ast *args, int args_len,
 
   LLVMTypeRef instance_type = coroutine_instance_type(params_obj_type);
 
-  LLVMValueRef instance = alloc(instance_type, ctx, builder);
+  LLVMValueRef instance = heap_alloc(instance_type, ctx, builder);
 
   LLVMValueRef fn_gep =
       coroutine_instance_fn_gep(instance, instance_type, builder);
@@ -365,11 +421,15 @@ LLVMValueRef codegen_coroutine_instance(Ast *args, int args_len,
       coroutine_instance_counter_gep(instance, instance_type, builder);
   LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
 
+  LLVMValueRef parent_gep =
+      coroutine_instance_parent_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)),
+                 parent_gep);
+
   LLVMValueRef params_gep =
       coroutine_instance_params_gep(instance, instance_type, builder);
 
   if (params_gep) {
-
     LLVMValueRef params_obj =
         LLVMGetUndef(generator_symbol->symbol_data.STYPE_COROUTINE_GENERATOR
                          .llvm_params_obj_type);
@@ -412,4 +472,20 @@ LLVMValueRef codegen_coroutine_next(Ast *application, LLVMValueRef instance,
                      "coroutine_next");
 
   return result;
+}
+
+LLVMValueRef list_iter_instance(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+  Ast *list_ast = ast->data.AST_APPLICATION.args;
+  LLVMValueRef list = codegen(list_ast, ctx, module, builder);
+  Type *ret_opt_type = ast->md;
+  ret_opt_type = ret_opt_type->data.T_FN.to; 
+  Type *list_el_type = type_of_option(ret_opt_type);
+
+  LLVMTypeRef instance_type = coroutine_instance_type(list_type(list_el_type, ctx->env, module));
+
+  return LLVMConstInt(LLVMInt32Type(), 1, 0);
+}
+
+LLVMValueRef array_iter_instance() {
+  return LLVMConstInt(LLVMInt32Type(), 1, 0);
 }

@@ -32,4 +32,7 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
                            LLVMModuleRef module);
 LLVMValueRef alloc(LLVMTypeRef type, JITLangCtx *ctx, LLVMBuilderRef builder);
+
+LLVMValueRef heap_alloc(LLVMTypeRef type, JITLangCtx *ctx,
+                        LLVMBuilderRef builder);
 #endif

@@ -1,4 +1,4 @@
-#include "./coroutine_types.h"
+#include "./coroutine_instance.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>
 LLVMTypeRef coroutine_def_fn_type(LLVMTypeRef instance_type,
@@ -8,31 +8,25 @@ LLVMTypeRef coroutine_def_fn_type(LLVMTypeRef instance_type,
                           (LLVMTypeRef[]){LLVMPointerType(instance_type, 0)}, 1,
                           0);
 }
+#define GENERIC_PTR LLVMPointerType(LLVMInt8Type(), 0)
 
 LLVMTypeRef coroutine_instance_type(LLVMTypeRef params_obj_type) {
   if (LLVMGetTypeKind(params_obj_type) == LLVMVoidTypeKind) {
 
     return LLVMStructType(
         (LLVMTypeRef[]){
-            LLVMPointerType(LLVMInt8Type(),
-                            0), // coroutine generator function type
-                                // (generic - go with void *)
-            LLVMInt32Type(),    // coroutine counter
-            LLVMPointerType(
-                LLVMInt8Type(),
-                0), // pointer to 'parent instance' ie previous top of stack
+            GENERIC_PTR,     // coroutine generator function type
+            LLVMInt32Type(), // coroutine counter
+            GENERIC_PTR,     // pointer to 'parent instance' ie previous top of
+                             // stack
         },
         3, 0);
   }
   return LLVMStructType(
       (LLVMTypeRef[]){
-          LLVMPointerType(LLVMInt8Type(),
-                          0), // coroutine generator function type (generic - go
-                              // with void *)
-          LLVMInt32Type(),    // coroutine counter
-          LLVMPointerType(
-              LLVMInt8Type(),
-              0), // pointer to 'parent instance' ie previous top of stack
+          GENERIC_PTR,     // coroutine generator function type (generic - go
+          LLVMInt32Type(), // coroutine counter
+          GENERIC_PTR, // pointer to 'parent instance' ie previous top of stack
           params_obj_type, // params tuple always last
       },
       4, 0);
@@ -85,4 +79,13 @@ void increment_instance_counter(LLVMValueRef instance_ptr,
   counter = LLVMBuildAdd(builder, counter, LLVMConstInt(LLVMInt32Type(), 1, 0),
                          "instance_counter++");
   LLVMBuildStore(builder, counter, counter_gep);
+}
+
+LLVMValueRef replace_instance(LLVMValueRef instance, LLVMTypeRef instance_type,
+                              LLVMValueRef new_instance,
+                              LLVMBuilderRef builder) {
+
+  LLVMValueRef size = LLVMSizeOf(instance_type);
+  LLVMBuildMemCpy(builder, instance, 0, new_instance, 0, size);
+  return instance;
 }

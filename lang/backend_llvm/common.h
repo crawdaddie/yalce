@@ -32,6 +32,7 @@ typedef struct coroutine_generator_symbol_data_t {
   Type *params_obj_type;
   LLVMTypeRef llvm_params_obj_type;
   LLVMTypeRef def_fn_type;
+  bool recursive_ref;
 } coroutine_generator_symbol_data_t;
 
 typedef enum symbol_type {
@@ -56,6 +57,7 @@ typedef struct {
     struct {
       Type *fn_type;
       int num_args;
+      bool recursive_ref;
     } STYPE_FUNCTION;
 
     struct {

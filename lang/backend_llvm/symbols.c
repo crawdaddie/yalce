@@ -1,5 +1,5 @@
 #include "backend_llvm/symbols.h"
-#include "coroutine_types.h"
+#include "coroutine_instance.h"
 #include "coroutines.h"
 #include "function.h"
 #include "globals.h"
@@ -338,6 +338,16 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   JITSymbol *string_add_sym =
       new_symbol(STYPE_FUNCTION, &t_string_add_fn_sig, NULL, NULL);
   ht_set_hash(stack, "string_add", hash_string("string_add", 10),
+              string_add_sym);
+
+  env = env_extend(env, "iter_of_list", &t_iter_of_list_sig);
+  JITSymbol *iter_of_list_sym = new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_list_sig, NULL, NULL);
+  ht_set_hash(stack, "iter_of_list", hash_string("iter_of_list", 12),
+              string_add_sym);
+
+  env = env_extend(env, "iter_of_array", &t_iter_of_array_sig);
+  JITSymbol *iter_of_array_sym = new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_array_sig, NULL, NULL);
+  ht_set_hash(stack, "iter_of_array", hash_string("iter_of_array", 12),
               string_add_sym);
 
   return env;

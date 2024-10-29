@@ -147,6 +147,13 @@ Type t_array_var = {
     }                                                                          \
   }
 
+#define TARRAY(t)                                                              \
+  (Type) {                                                                     \
+    T_CONS, {                                                                  \
+      .T_CONS = { TYPE_NAME_ARRAY, (Type *[]){t}, 1 }                          \
+    }                                                                          \
+  }
+
 Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
 
 Type t_array_data_ptr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_ptr);
@@ -180,6 +187,12 @@ Type t_option_of_var =
 Type *type_of_option(Type *option) {
   return option->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
+
+Type t_iter_of_list_sig =
+    MAKE_FN_TYPE_3(&TLIST(&t_option_var), &t_void, &t_option_of_var);
+
+Type t_iter_of_array_sig =
+    MAKE_FN_TYPE_3(&TARRAY(&t_option_var), &t_void, &t_option_of_var);
 
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {

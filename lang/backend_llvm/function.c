@@ -5,7 +5,7 @@
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
 #include "backend_llvm/variant.h"
-#include "coroutine_types.h"
+#include "coroutine_instance.h"
 #include "coroutines.h"
 #include "list.h"
 #include "serde.h"
@@ -473,6 +473,20 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   return llvm_method(lval, rval, module, builder);
 }
 
+LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
+                           JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+
+  if (strcmp(sym_name, "iter_of_list") == 0) {
+    return list_iter_instance(ast, ctx, module, builder);
+  }
+
+  if (strcmp(sym_name, "iter_of_array") == 0) {
+    return array_iter_instance();
+  }
+
+}
+
 LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
@@ -620,6 +634,13 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
   if (strncmp("array_", sym_name, 6) == 0) {
     LLVMValueRef res = call_array_fn(ast, sym, sym_name, ctx, module, builder);
+    if (res) {
+      return res;
+    }
+  }
+
+  if (strncmp("iter_of_", sym_name, 8) == 0) {
+    LLVMValueRef res = call_iter_fn(ast, sym, sym_name, ctx, module, builder);
     if (res) {
       return res;
     }

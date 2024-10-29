@@ -52,7 +52,8 @@ extern Type t_array_of_chars_fn_sig;
 extern Type t_ptr_deref_sig;
 extern Type t_option_of_var;
 
-extern Type t_for_sig;
+extern Type t_iter_of_list_sig;
+extern Type t_iter_of_array_sig;
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"
