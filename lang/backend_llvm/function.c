@@ -362,7 +362,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_GENERIC_COROUTINE_GENERATOR: {
-    return codegen_specific_coroutine(sym, sym_name, expected_fn_type, ctx, module, builder);
+    return codegen_specific_coroutine(sym, sym_name, expected_fn_type, ctx,
+                                      module, builder);
   }
 
   case STYPE_COROUTINE_GENERATOR: {
@@ -474,17 +475,39 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
 }
 
 LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
-                           JITLangCtx *ctx, LLVMModuleRef module,
-                           LLVMBuilderRef builder) {
+                          JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder) {
 
+  Type *expected_type = ast->md;
   if (strcmp(sym_name, "iter_of_list") == 0) {
-    return list_iter_instance(ast, ctx, module, builder);
+    LLVMValueRef func = specific_fns_lookup(
+        sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_type);
+    if (!func) {
+      func =
+          coroutine_list_iter_generator_fn(expected_type, ctx, module, builder);
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+          specific_fns_extend(
+              sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
+              expected_type, func);
+    }
+
+    return list_iter_instance(ast, func, ctx, module, builder);
   }
 
   if (strcmp(sym_name, "iter_of_array") == 0) {
-    return array_iter_instance();
-  }
 
+    LLVMValueRef func = specific_fns_lookup(
+        sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_type);
+    if (!func) {
+      func = coroutine_array_iter_generator_fn(expected_type);
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+          specific_fns_extend(
+              sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
+              expected_type, func);
+    }
+
+    return array_iter_instance(ast, func, ctx, module, builder);
+  }
 }
 
 LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,

@@ -177,8 +177,7 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
 }
 
 bool is_coroutine_generator_ast(Ast *expr) {
-  return expr->tag == AST_LAMBDA &&
-      expr->data.AST_LAMBDA.is_coroutine;
+  return expr->tag == AST_LAMBDA && expr->data.AST_LAMBDA.is_coroutine;
 }
 
 LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
@@ -194,12 +193,14 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
   Type *expr_type = ast->data.AST_LET.expr->md;
 
-
-  if (expr_type->kind == T_FN && is_coroutine_generator_ast(ast->data.AST_LET.expr) && is_generic(ast->data.AST_LET.expr->md)) {
+  if (expr_type->kind == T_FN &&
+      is_coroutine_generator_ast(ast->data.AST_LET.expr) &&
+      is_generic(ast->data.AST_LET.expr->md)) {
     return codegen_generic_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
-  if (expr_type->kind == T_FN && is_coroutine_generator_ast(ast->data.AST_LET.expr)) {
+  if (expr_type->kind == T_FN &&
+      is_coroutine_generator_ast(ast->data.AST_LET.expr)) {
     return codegen_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
@@ -221,8 +222,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
       LLVMTypeRef instance_type = coroutine_instance_type(
           generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
-              .llvm_params_obj_type
-          );
+              .llvm_params_obj_type);
 
       LLVMValueRef instance =
           codegen_coroutine_instance(application->data.AST_APPLICATION.args,
@@ -341,12 +341,14 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
               string_add_sym);
 
   env = env_extend(env, "iter_of_list", &t_iter_of_list_sig);
-  JITSymbol *iter_of_list_sym = new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_list_sig, NULL, NULL);
+  JITSymbol *iter_of_list_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_list_sig, NULL, NULL);
   ht_set_hash(stack, "iter_of_list", hash_string("iter_of_list", 12),
               string_add_sym);
 
   env = env_extend(env, "iter_of_array", &t_iter_of_array_sig);
-  JITSymbol *iter_of_array_sym = new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_array_sig, NULL, NULL);
+  JITSymbol *iter_of_array_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_array_sig, NULL, NULL);
   ht_set_hash(stack, "iter_of_array", hash_string("iter_of_array", 12),
               string_add_sym);
 

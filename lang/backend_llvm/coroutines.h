@@ -30,8 +30,14 @@ LLVMValueRef codegen_specific_coroutine(JITSymbol *sym, const char *sym_name,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder);
 
+LLVMValueRef list_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder);
 
-LLVMValueRef list_iter_instance(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type);
 
-LLVMValueRef array_iter_instance();
+LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
+                                              JITLangCtx *ctx, LLVMModuleRef,
+                                              LLVMBuilderRef builder);
 #endif
