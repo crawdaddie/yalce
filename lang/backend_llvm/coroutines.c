@@ -87,9 +87,11 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       LLVMTypeRef instance_type = coroutine_instance_type(
           sym->symbol_data.STYPE_COROUTINE_GENERATOR.llvm_params_obj_type);
-      bool is_same_recursive_ref = sym->symbol_data.STYPE_COROUTINE_GENERATOR.recursive_ref;
+      bool is_same_recursive_ref =
+          sym->symbol_data.STYPE_COROUTINE_GENERATOR.recursive_ref;
       if (is_same_recursive_ref) {
-        // TODO: reuse already-allocated instance and replace that if recursive ref
+        // TODO: reuse already-allocated instance and replace that if recursive
+        // ref
       }
 
       LLVMValueRef old_instance_ptr =
@@ -125,7 +127,6 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            0, "insert Some tag");
 
   ret_opt = LLVMBuildInsertValue(builder, ret_opt, val, 1, "insert Some Value");
-
 
   LLVMBuildRet(builder, ret_opt);
   LLVMPositionBuilderAtEnd(
@@ -474,14 +475,16 @@ LLVMValueRef codegen_coroutine_next(Ast *application, LLVMValueRef instance,
   return result;
 }
 
-LLVMValueRef list_iter_instance(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef list_iter_instance(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
   Ast *list_ast = ast->data.AST_APPLICATION.args;
   LLVMValueRef list = codegen(list_ast, ctx, module, builder);
   Type *ret_opt_type = ast->md;
-  ret_opt_type = ret_opt_type->data.T_FN.to; 
+  ret_opt_type = ret_opt_type->data.T_FN.to;
   Type *list_el_type = type_of_option(ret_opt_type);
 
-  LLVMTypeRef instance_type = coroutine_instance_type(list_type(list_el_type, ctx->env, module));
+  LLVMTypeRef instance_type =
+      coroutine_instance_type(list_type(list_el_type, ctx->env, module));
 
   return LLVMConstInt(LLVMInt32Type(), 1, 0);
 }
