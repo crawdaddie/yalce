@@ -35,7 +35,11 @@ LLVMValueRef list_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
 
 LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder);
-LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type);
+
+LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
+                                              JITLangCtx *ctx,
+                                              LLVMModuleRef module,
+                                              LLVMBuilderRef builder);
 
 LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
                                               JITLangCtx *ctx, LLVMModuleRef,

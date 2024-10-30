@@ -341,15 +341,15 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
               string_add_sym);
 
   env = env_extend(env, "iter_of_list", &t_iter_of_list_sig);
-  JITSymbol *iter_of_list_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_list_sig, NULL, NULL);
+  JITSymbol *iter_of_list_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+                                           &t_iter_of_list_sig, NULL, NULL);
   ht_set_hash(stack, "iter_of_list", hash_string("iter_of_list", 12),
               string_add_sym);
 
   env = env_extend(env, "iter_of_array", &t_iter_of_array_sig);
-  JITSymbol *iter_of_array_sym =
-      new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_array_sig, NULL, NULL);
-  ht_set_hash(stack, "iter_of_array", hash_string("iter_of_array", 12),
+  JITSymbol *iter_of_array_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+                                            &t_iter_of_array_sig, NULL, NULL);
+  ht_set_hash(stack, "iter_of_array", hash_string("iter_of_array", 13),
               string_add_sym);
 
   return env;

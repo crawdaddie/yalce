@@ -16,18 +16,18 @@ LLVMTypeRef coroutine_instance_type(LLVMTypeRef params_obj_type) {
     return LLVMStructType(
         (LLVMTypeRef[]){
             GENERIC_PTR,     // coroutine generator function type
-            LLVMInt32Type(), // coroutine counter
             GENERIC_PTR,     // pointer to 'parent instance' ie previous top of
                              // stack
+            LLVMInt32Type(), // coroutine counter
         },
         3, 0);
   }
   return LLVMStructType(
       (LLVMTypeRef[]){
           GENERIC_PTR,     // coroutine generator function type (generic - go
-          LLVMInt32Type(), // coroutine counter
           GENERIC_PTR, // pointer to 'parent instance' ie previous top of stack
-          params_obj_type, // params tuple always last
+          params_obj_type, // params tuple 
+          LLVMInt32Type(), // coroutine counter
       },
       4, 0);
 }
@@ -36,7 +36,13 @@ LLVMValueRef coroutine_instance_counter_gep(LLVMValueRef instance_ptr,
                                             LLVMTypeRef instance_type,
                                             LLVMBuilderRef builder) {
 
-  return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 1,
+  unsigned num_fields = LLVMCountStructElementTypes(instance_type);
+  if (num_fields == 4) {
+    return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 3,
+                               "instance_params_ptr");
+  }
+
+  return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 2,
                              "instance_counter_ptr");
 }
 
@@ -53,7 +59,7 @@ LLVMValueRef coroutine_instance_params_gep(LLVMValueRef instance_ptr,
   unsigned num_fields = LLVMCountStructElementTypes(instance_type);
   if (num_fields == 4) {
     return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 2,
-                               "instance_params_ptr");
+                               "instance_params_gep");
   }
 
   return NULL;

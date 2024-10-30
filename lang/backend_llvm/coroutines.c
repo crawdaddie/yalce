@@ -484,9 +484,32 @@ LLVMValueRef list_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
   Type *list_el_type = type_of_option(ret_opt_type);
 
   LLVMTypeRef instance_type =
-      coroutine_instance_type(list_type(list_el_type, ctx->env, module));
+      coroutine_instance_type(
+      list_type(list_el_type, ctx->env, module)
+    );
+  LLVMDumpType(instance_type);
 
-  return LLVMConstInt(LLVMInt32Type(), 1, 0);
+  LLVMValueRef instance = alloc(instance_type, ctx, builder);
+
+  LLVMValueRef fn_gep =
+      coroutine_instance_fn_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, func, fn_gep);
+
+  LLVMValueRef counter_gep =
+      coroutine_instance_counter_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
+
+  LLVMValueRef parent_gep =
+      coroutine_instance_parent_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)),
+                 parent_gep);
+
+  LLVMValueRef params_gep =
+      coroutine_instance_params_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, list, params_gep);
+  LLVMDumpValue(instance);
+
+  return instance;
 }
 LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
                                               JITLangCtx *ctx,
@@ -516,8 +539,11 @@ LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
   LLVMPositionBuilderAtEnd(builder, entry);
 
   LLVMValueRef instance = LLVMGetParam(func, 0);
-  LLVMValueRef list_head =
-      codegen_tuple_access(2, instance, instance_type, builder);
+  LLVMValueRef params_gep = coroutine_instance_params_gep(instance, instance_type, builder);
+  LLVMValueRef list_head = LLVMBuildLoad2(builder, llvm_list_type, params_gep, "loaded_ptr");
+  // Create the null comparison
+  LLVMValueRef is_null = LLVMBuildICmp(builder, LLVMIntEQ, list_head, LLVMConstNull(LLVMPointerType(llnode_type(llvm_list_el_type), 0)), "is_null");
+
 
   // Create basic block for the non-null path
   LLVMBasicBlockRef non_null_block = LLVMAppendBasicBlock(
@@ -525,17 +551,7 @@ LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
   LLVMBasicBlockRef continue_block = LLVMAppendBasicBlock(
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "continue");
 
-  LLVMValueRef parent_gep =
-      coroutine_instance_parent_gep(instance, instance_type, builder);
 
-  // Load the parent pointer value
-  LLVMValueRef parent_ptr = LLVMBuildLoad2(
-      builder, LLVMPointerType(LLVMInt8Type(), 0), parent_gep, "parent_ptr");
-
-  // Create the null comparison
-  LLVMValueRef is_null = ll_is_null(list_head, llvm_list_el_type, builder);
-
-  // Create the conditional branch
   LLVMBuildCondBr(builder, is_null, continue_block, non_null_block);
 
   // Non-null path - list continues
@@ -574,7 +590,124 @@ LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
 
 LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
-  return LLVMConstInt(LLVMInt32Type(), 1, 0);
+
+  printf("array iter instance\n");
+  LLVMDumpValue(func);
+  Ast *array_ast = ast->data.AST_APPLICATION.args;
+  LLVMValueRef list = codegen(array_ast, ctx, module, builder);
+  Type *ret_opt_type = ast->md;
+  ret_opt_type = ret_opt_type->data.T_FN.to;
+  Type *list_el_type = type_of_option(ret_opt_type);
+
+  LLVMTypeRef instance_type =
+      coroutine_instance_type(
+      codegen_array_type(list_el_type, ctx->env, module)
+    );
+
+  LLVMDumpType(instance_type);
+
+  LLVMValueRef instance = alloc(instance_type, ctx, builder);
+
+  LLVMValueRef fn_gep =
+      coroutine_instance_fn_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, func, fn_gep);
+
+  LLVMValueRef counter_gep =
+      coroutine_instance_counter_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
+
+  LLVMValueRef parent_gep =
+      coroutine_instance_parent_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)),
+                 parent_gep);
+
+  LLVMValueRef params_gep =
+      coroutine_instance_params_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, list, params_gep);
+  LLVMDumpValue(instance);
+
+  return instance;
 }
 
-LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type) {}
+LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
+                                              JITLangCtx *ctx,
+                                              LLVMModuleRef module,
+                                              LLVMBuilderRef builder) {
+
+  Type *ret_opt_type = expected_type;
+  ret_opt_type = ret_opt_type->data.T_FN.to;
+  Type *array_el_type = type_of_option(ret_opt_type);
+  LLVMTypeRef llvm_array_el_type =
+      type_to_llvm_type(array_el_type, ctx->env, module);
+
+  LLVMTypeRef llvm_array_type = codegen_array_type(array_el_type, ctx->env, module);
+  LLVMTypeRef instance_type = coroutine_instance_type(llvm_array_type);
+  LLVMTypeRef llvm_ret_opt_type =
+      type_to_llvm_type(ret_opt_type, ctx->env, module);
+
+  LLVMTypeRef func_type =
+      coroutine_def_fn_type(instance_type, llvm_ret_opt_type);
+
+  LLVMValueRef func = LLVMAddFunction(module, "array_iter_generator", func_type);
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  JITLangCtx fn_ctx = ctx_push(*ctx);
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  LLVMValueRef instance = LLVMGetParam(func, 0);
+  LLVMValueRef params_gep = coroutine_instance_params_gep(instance, instance_type, builder);
+
+  LLVMValueRef array = LLVMBuildLoad2(builder, llvm_array_type, params_gep, "loaded_ptr");
+  LLVMValueRef array_len = codegen_get_array_size(builder, array); 
+  LLVMValueRef counter_gep = coroutine_instance_counter_gep(instance, instance_type, builder);
+  LLVMValueRef counter_val = LLVMBuildLoad2(builder, LLVMInt32Type(), counter_gep, "counter");
+
+  // Create the null comparison
+  LLVMValueRef is_null = LLVMBuildICmp(builder, LLVMIntUGE, counter_val, array_len, "is_null");
+
+
+  // Create basic block for the non-null path
+  LLVMBasicBlockRef non_null_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "non_null_path");
+  LLVMBasicBlockRef continue_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "continue");
+
+
+  LLVMBuildCondBr(builder, is_null, continue_block, non_null_block);
+
+  // Non-null path - list continues
+  LLVMPositionBuilderAtEnd(builder, non_null_block);
+  LLVMValueRef some = LLVMGetUndef(llvm_ret_opt_type);
+  some = LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), 0, 0),
+                              0, "insert Some tag");
+  some = LLVMBuildInsertValue(
+      builder, some, codegen_array_at(array, counter_val, llvm_array_el_type, module, builder), 1,
+      "insert Some val");
+
+  // replace instance with next list element and return head value
+  LLVMValueRef param_gep =
+      coroutine_instance_params_gep(instance, instance_type, builder);
+  LLVMBuildStore(builder, array, param_gep);
+  increment_instance_counter(instance, instance_type, builder);
+
+  LLVMBuildRet(builder, some);
+
+  // Continue with original null case
+  LLVMPositionBuilderAtEnd(builder, continue_block);
+
+  increment_instance_counter(instance, instance_type, builder);
+  // update instance with parent if exists
+  // Original null case code
+  LLVMValueRef none = LLVMGetUndef(llvm_ret_opt_type);
+  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
+                              0, "insert None tag");
+  LLVMBuildRet(builder, none);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  // LLVMDumpValue(func);
+  return func;
+}
