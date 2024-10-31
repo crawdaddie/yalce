@@ -5,8 +5,10 @@
 #include "globals.h"
 #include "match.h"
 #include "serde.h"
+#include "types.h"
 #include "types/type.h"
 #include "variant.h"
+#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -177,8 +179,7 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
 }
 
 bool is_coroutine_generator_ast(Ast *expr) {
-  return expr->tag == AST_LAMBDA &&
-      expr->data.AST_LAMBDA.is_coroutine;
+  return expr->tag == AST_LAMBDA && expr->data.AST_LAMBDA.is_coroutine;
 }
 
 LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
@@ -194,12 +195,14 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
   Type *expr_type = ast->data.AST_LET.expr->md;
 
-
-  if (expr_type->kind == T_FN && is_coroutine_generator_ast(ast->data.AST_LET.expr) && is_generic(ast->data.AST_LET.expr->md)) {
+  if (expr_type->kind == T_FN &&
+      is_coroutine_generator_ast(ast->data.AST_LET.expr) &&
+      is_generic(ast->data.AST_LET.expr->md)) {
     return codegen_generic_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
-  if (expr_type->kind == T_FN && is_coroutine_generator_ast(ast->data.AST_LET.expr)) {
+  if (expr_type->kind == T_FN &&
+      is_coroutine_generator_ast(ast->data.AST_LET.expr)) {
     return codegen_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
@@ -213,6 +216,9 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
     Ast *application = ast->data.AST_LET.expr;
     Ast *binding = ast->data.AST_LET.binding;
+    Type *fn_type = application->data.AST_APPLICATION.function->md;
+
+
     JITSymbol *sym =
         lookup_id_ast(application->data.AST_APPLICATION.function, &cont_ctx);
 
@@ -221,13 +227,10 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
       LLVMTypeRef instance_type = coroutine_instance_type(
           generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
-              .llvm_params_obj_type
-          );
+              .llvm_params_obj_type);
 
       LLVMValueRef instance =
-          codegen_coroutine_instance(application->data.AST_APPLICATION.args,
-                                     application->data.AST_APPLICATION.len, sym,
-                                     &cont_ctx, module, builder);
+          codegen(application, &cont_ctx, module, builder);
 
       Type *expected_fn_type = application->md;
       JITSymbol *instance_sym = new_symbol(
@@ -239,6 +242,31 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
       const char *id_chars = binding->data.AST_IDENTIFIER.value;
       int id_len = binding->data.AST_IDENTIFIER.length;
 
+      ht_set_hash(cont_ctx.stack + cont_ctx.stack_ptr, id_chars,
+                  hash_string(id_chars, id_len), instance_sym);
+      return instance;
+    }
+
+    if (sym->type == STYPE_GENERIC_COROUTINE_GENERATOR) {
+      JITSymbol *generator_sym = sym;
+      Type *expected_type = application->data.AST_APPLICATION.function->md;
+      Type *params_obj_type = expected_type->data.T_FN.from;
+      Type *ret_opt_type = expected_type->data.T_FN.to;
+      ret_opt_type = ret_opt_type->data.T_FN.to;
+      print_type(ret_opt_type);
+      LLVMTypeRef llvm_params_obj_type = type_to_llvm_type(params_obj_type, cont_ctx.env, module);
+
+      LLVMTypeRef instance_type = coroutine_instance_type(llvm_params_obj_type);
+      LLVMValueRef instance = codegen(application, &cont_ctx, module, builder);
+      Type *expected_fn_type = application->md;
+      JITSymbol *instance_sym = new_symbol(
+          STYPE_COROUTINE_INSTANCE, expected_fn_type, instance, instance_type);
+
+      LLVMTypeRef def_fn_type = LLVMFunctionType(type_to_llvm_type(ret_opt_type, cont_ctx.env, module), (LLVMTypeRef []){instance_type}, 1, 0);
+
+      instance_sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type = def_fn_type;
+      const char *id_chars = binding->data.AST_IDENTIFIER.value;
+      int id_len = binding->data.AST_IDENTIFIER.length;
       ht_set_hash(cont_ctx.stack + cont_ctx.stack_ptr, id_chars,
                   hash_string(id_chars, id_len), instance_sym);
       return instance;
@@ -340,15 +368,21 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "string_add", hash_string("string_add", 10),
               string_add_sym);
 
+  t_iter_of_list_sig.is_coroutine_fn = true;
+  t_iter_of_list_sig.data.T_FN.to->is_coroutine_instance = true;
   env = env_extend(env, "iter_of_list", &t_iter_of_list_sig);
-  JITSymbol *iter_of_list_sym = new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_list_sig, NULL, NULL);
+  JITSymbol *iter_of_list_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+                                           &t_iter_of_list_sig, NULL, NULL);
   ht_set_hash(stack, "iter_of_list", hash_string("iter_of_list", 12),
-              string_add_sym);
+              iter_of_list_sym);
 
+  t_iter_of_array_sig.is_coroutine_fn = true;
+  t_iter_of_list_sig.data.T_FN.to->is_coroutine_instance = true;
   env = env_extend(env, "iter_of_array", &t_iter_of_array_sig);
-  JITSymbol *iter_of_array_sym = new_symbol(STYPE_GENERIC_FUNCTION, &t_iter_of_array_sig, NULL, NULL);
-  ht_set_hash(stack, "iter_of_array", hash_string("iter_of_array", 12),
-              string_add_sym);
+  JITSymbol *iter_of_array_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+                                            &t_iter_of_array_sig, NULL, NULL);
+  ht_set_hash(stack, "iter_of_array", hash_string("iter_of_array", 13),
+              iter_of_array_sym);
 
   return env;
 }

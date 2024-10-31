@@ -193,6 +193,7 @@ typedef struct Type {
   size_t constructor_size;
   bool is_recursive_fn_ref;
   bool is_coroutine_fn;
+  bool is_coroutine_instance;
   void *meta;
 } Type;
 

@@ -145,6 +145,7 @@ static Type *convert_to_coroutine_type(Type *f) {
 
   Type *return_type = fn->data.T_FN.to;
   fn->data.T_FN.to = type_fn(&t_void, create_option_type(return_type));
+  fn->data.T_FN.to->is_coroutine_instance = true;
   f->is_coroutine_fn = true;
   return f;
 }

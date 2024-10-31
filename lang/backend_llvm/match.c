@@ -1,6 +1,7 @@
 #include "backend_llvm/match.h"
 #include "backend_llvm/globals.h"
 #include "backend_llvm/types.h"
+#include "coroutine_instance.h"
 #include "function.h"
 #include "list.h"
 #include "serde.h"
@@ -163,6 +164,7 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     return LLVMBuildAnd(builder, test_val, guard_val, "guard_and_test");
   }
   case AST_IDENTIFIER: {
+
     const char *id_chars = binding->data.AST_IDENTIFIER.value;
     int id_len = binding->data.AST_IDENTIFIER.length;
 
@@ -170,6 +172,10 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
         binding->data.AST_IDENTIFIER.length == 1) {
       return _TRUE;
     }
+    // if (val_type->kind == T_FN && val_type->is_coroutine_instance) {
+    //   bind_coroutine_instance(binding, val, val_type, ctx, module, builder);
+    //   return _TRUE;
+    // }
 
     if (val_type->kind == T_FN && !(is_generic(val_type))) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);

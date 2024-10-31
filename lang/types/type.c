@@ -833,6 +833,8 @@ Type *copy_type(Type *t) {
   }
 
   copy->meta = t->meta;
+  copy->is_coroutine_fn = t->is_coroutine_fn;
+  copy->is_coroutine_instance = t->is_coroutine_instance;
   return copy;
 }
 
