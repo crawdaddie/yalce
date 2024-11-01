@@ -493,11 +493,17 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
   LLVMPositionBuilderAtEnd(builder, entry);
 
   LLVMValueRef instance = LLVMGetParam(func, 0);
-  LLVMValueRef array =
-      codegen_tuple_access(2, instance, instance_type, builder);
 
-  LLVMValueRef idx = codegen_tuple_access(1, instance, instance_type, builder);
+  LLVMValueRef array_ptr = LLVMBuildStructGEP2(builder, instance_type, instance,
+                                               2, "get_tuple_element");
+  LLVMValueRef array =
+      LLVMBuildLoad2(builder, llvm_array_type, array_ptr, "tuple_element_load");
+
   LLVMValueRef array_size = codegen_get_array_size(builder, array);
+
+  LLVMValueRef counter_gep =
+      coroutine_instance_counter_gep(instance, instance_type, builder);
+  LLVMValueRef idx = LLVMBuildLoad2(builder, LLVMInt32Type(), counter_gep, "");
 
   // Create the null comparison
   LLVMValueRef is_null =
@@ -510,17 +516,18 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
   LLVMBuildCondBr(builder, is_null, continue_block, non_null_block);
 
   LLVMPositionBuilderAtEnd(builder, non_null_block);
-  // non-null path
-  LLVMValueRef value =
-      codegen_array_at(array, idx, llvm_array_el_type, module, builder);
 
   increment_instance_counter(instance, instance_type, builder);
 
   LLVMValueRef ret_opt = LLVMGetUndef(llvm_ret_opt_type);
 
+  // non-null path
   ret_opt =
       LLVMBuildInsertValue(builder, ret_opt, LLVMConstInt(LLVMInt8Type(), 0, 0),
                            0, "insert Some tag");
+
+  LLVMValueRef value =
+      codegen_array_at(array, idx, llvm_array_el_type, module, builder);
   ret_opt =
       LLVMBuildInsertValue(builder, ret_opt, value, 1, "insert Some Value");
   LLVMBuildRet(builder, ret_opt);
@@ -545,12 +552,14 @@ LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
   LLVMTypeRef llvm_array_type = type_to_llvm_type(array_type, ctx->env, module);
 
   Type *array_el_type = array_type->data.T_CONS.args[0];
+  printf("array el type: ");
+  print_type(array_el_type);
 
   LLVMValueRef array = codegen(array_arg, ctx, module, builder);
 
   LLVMTypeRef instance_type = coroutine_instance_type(llvm_array_type);
 
-  LLVMValueRef instance = heap_alloc(instance_type, ctx, builder);
+  LLVMValueRef instance = alloc(instance_type, ctx, builder);
 
   LLVMValueRef fn_gep =
       coroutine_instance_fn_gep(instance, instance_type, builder);
@@ -651,7 +660,7 @@ LLVMValueRef list_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
 
   LLVMTypeRef instance_type = coroutine_instance_type(llvm_list_type);
 
-  LLVMValueRef instance = heap_alloc(instance_type, ctx, builder);
+  LLVMValueRef instance = alloc(instance_type, ctx, builder);
 
   LLVMValueRef fn_gep =
       coroutine_instance_fn_gep(instance, instance_type, builder);
