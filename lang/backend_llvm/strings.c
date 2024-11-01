@@ -338,6 +338,7 @@ LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string) {
   return codegen_array_increment(string, LLVMInt8Type(), builder);
 }
 
+
 LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -345,34 +346,20 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
   LLVMTypeRef array_type = LLVMArrayType(char_type, length + 1);
 
   LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length + 1, 0);
+  LLVMValueRef str_const = LLVMConstString(chars, length, 0);
+  LLVMTypeRef str_const_type = LLVMTypeOf(str_const);
+
   LLVMValueRef data_ptr =
       (ctx->stack_ptr == 0)
-          ? LLVMBuildMalloc(builder, array_type, "heap_array")
-          : LLVMBuildAlloca(builder, array_type, "stack_array");
+          ? LLVMBuildMalloc(builder, str_const_type, "heap_array")
+          : LLVMBuildAlloca(builder, str_const_type, "stack_array");
 
-  LLVMValueRef element_ptr;
-  for (int i = 0; i < length; i++) {
-    // TODO: this is not ideal - looping over every character of the string
-    // and setting the data_ptr value
+  LLVMBuildStore(builder, str_const, data_ptr);
 
-    // Calculate pointer to array element
-    element_ptr =
-        LLVMBuildGEP2(builder, array_type, data_ptr,
-                      (LLVMValueRef[]){
-                          LLVMConstInt(LLVMInt32Type(), 0, 0),
-                          LLVMConstInt(LLVMInt32Type(), i, 0) // Array index
-                      },
-                      2, "element_ptr");
-
-    LLVMValueRef value =
-        LLVMConstInt(LLVMInt8Type(), (long long)*(chars + i), 0);
-    LLVMBuildStore(builder, value, element_ptr);
-  }
-
-  LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
-  LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
-                                             &length_val, 1, "last_elem_ptr");
-  LLVMBuildStore(builder, null_terminator, last_elem_ptr);
+  // LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
+  // LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
+  //                                            &length_val, 1, "last_elem_ptr");
+  // LLVMBuildStore(builder, null_terminator, last_elem_ptr);
   return data_ptr;
 }
 

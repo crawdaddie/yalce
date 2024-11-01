@@ -53,7 +53,7 @@ LLVMValueRef coroutine_instance_params_gep(LLVMValueRef instance_ptr,
   unsigned num_fields = LLVMCountStructElementTypes(instance_type);
   if (num_fields == 4) {
     return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 2,
-                               "instance_params_ptr");
+                               "instance_params_gep");
   }
 
   return NULL;
@@ -78,6 +78,23 @@ void increment_instance_counter(LLVMValueRef instance_ptr,
 
   counter = LLVMBuildAdd(builder, counter, LLVMConstInt(LLVMInt32Type(), 1, 0),
                          "instance_counter++");
+  LLVMBuildStore(builder, counter, counter_gep);
+}
+
+void reset_instance_counter(LLVMValueRef instance_ptr,
+                            LLVMTypeRef instance_type, LLVMBuilderRef builder) {
+
+  LLVMValueRef counter_gep =
+      coroutine_instance_counter_gep(instance_ptr, instance_type, builder);
+  LLVMValueRef counter = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  LLVMBuildStore(builder, counter, counter_gep);
+}
+
+void set_instance_counter(LLVMValueRef instance_ptr, LLVMTypeRef instance_type,
+                          LLVMValueRef counter, LLVMBuilderRef builder) {
+
+  LLVMValueRef counter_gep =
+      coroutine_instance_counter_gep(instance_ptr, instance_type, builder);
   LLVMBuildStore(builder, counter, counter_gep);
 }
 

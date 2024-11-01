@@ -253,7 +253,6 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
       Type *params_obj_type = expected_type->data.T_FN.from;
       Type *ret_opt_type = expected_type->data.T_FN.to;
       ret_opt_type = ret_opt_type->data.T_FN.to;
-      print_type(ret_opt_type);
       LLVMTypeRef llvm_params_obj_type = type_to_llvm_type(params_obj_type, cont_ctx.env, module);
 
       LLVMTypeRef instance_type = coroutine_instance_type(llvm_params_obj_type);
@@ -376,6 +375,12 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "iter_of_list", hash_string("iter_of_list", 12),
               iter_of_list_sym);
 
+  // env = env_extend(env, "iter_of_list_inf", &t_iter_of_list_sig);
+  // JITSymbol *iter_of_list_inf_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+  //                                          &t_iter_of_list_sig, NULL, NULL);
+  // ht_set_hash(stack, "iter_of_list_inf", hash_string("iter_of_list_inf", 16),
+  //             iter_of_list_inf_sym);
+
   t_iter_of_array_sig.is_coroutine_fn = true;
   t_iter_of_list_sig.data.T_FN.to->is_coroutine_instance = true;
   env = env_extend(env, "iter_of_array", &t_iter_of_array_sig);
@@ -383,6 +388,12 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
                                             &t_iter_of_array_sig, NULL, NULL);
   ht_set_hash(stack, "iter_of_array", hash_string("iter_of_array", 13),
               iter_of_array_sym);
+
+  env = env_extend(env, "iter_of_array_inf", &t_iter_of_array_sig);
+  JITSymbol *iter_of_array_inf_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+                                            &t_iter_of_array_sig, NULL, NULL);
+  ht_set_hash(stack, "iter_of_array_inf", hash_string("iter_of_array_inf", 17),
+              iter_of_array_inf_sym);
 
   return env;
 }

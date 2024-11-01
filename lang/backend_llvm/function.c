@@ -211,7 +211,7 @@ SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
   return new_specific_fn;
 };
 
-static Ast *get_specific_fn_ast_variant(Ast *original_fn_ast,
+Ast *get_specific_fn_ast_variant(Ast *original_fn_ast,
                                         Type *specific_fn_type) {
 
   Type *generic_type = original_fn_ast->md;
@@ -362,8 +362,20 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_GENERIC_COROUTINE_GENERATOR: {
-    return codegen_specific_coroutine(sym, sym_name, expected_fn_type, ctx,
-                                      module, builder);
+
+    LLVMValueRef func = specific_fns_lookup(
+        sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
+    if (!func) {
+      func = compile_generic_coroutine(sym, expected_fn_type, ctx, module,
+                                       builder);
+      sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
+          specific_fns_extend(
+              sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+              expected_fn_type, func);
+    }
+
+    return generic_coroutine_instance(args, args_len, expected_fn_type, func, ctx, module,
+                                      builder);
   }
 
   case STYPE_COROUTINE_GENERATOR: {
@@ -373,10 +385,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
         generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
             .llvm_params_obj_type);
 
-
     LLVMValueRef instance =
         codegen_coroutine_instance(args, args_len, sym, ctx, module, builder);
-
 
     LLVMDumpType(instance_type);
     LLVMDumpType(LLVMTypeOf(instance));
@@ -385,8 +395,10 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_COROUTINE_INSTANCE: {
-    // printf("call coroutine instance symbol\n");
-    break;
+    return codegen_coroutine_next(
+        sym->val, sym->llvm_type,
+        sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type, ctx, module,
+        builder);
   }
   }
 
@@ -495,21 +507,37 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
               sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
               expected_type, func);
     }
-    printf("list iter instance: \n");
-
 
     LLVMValueRef val = list_iter_instance(ast, func, ctx, module, builder);
-    LLVMDumpValue(val);
-    printf("\n\n");
     return val;
   }
+
 
   if (strcmp(sym_name, "iter_of_array") == 0) {
 
     LLVMValueRef func = specific_fns_lookup(
-        sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns, expected_type);
+        sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+        expected_type);
     if (!func) {
-      func = coroutine_array_iter_generator_fn(expected_type, ctx, module, builder);
+      func = coroutine_array_iter_generator_fn(expected_type, false, ctx, module,
+                                               builder);
+      sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
+          specific_fns_extend(
+              sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+              expected_type, func);
+    }
+
+    return array_iter_instance(ast, func, ctx, module, builder);
+  }
+
+  if (strcmp(sym_name, "iter_of_array_inf") == 0) {
+
+    LLVMValueRef func = specific_fns_lookup(
+        sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+        expected_type);
+    if (!func) {
+      func = coroutine_array_iter_generator_fn(expected_type, true, ctx, module,
+                                               builder);
       sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
           specific_fns_extend(
               sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
@@ -704,12 +732,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
-  if (sym->type == STYPE_COROUTINE_INSTANCE) {
-    return codegen_coroutine_next(
-        ast, sym->val, sym->llvm_type,
-        sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type, ctx, module,
-        builder);
-  }
 
   return call_symbol(sym_name, sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, expected_fn_type, ctx,

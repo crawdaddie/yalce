@@ -26,6 +26,11 @@ void increment_instance_counter(LLVMValueRef instance_ptr,
                                 LLVMTypeRef instance_type,
                                 LLVMBuilderRef builder);
 
+void reset_instance_counter(LLVMValueRef instance_ptr,
+                            LLVMTypeRef instance_type, LLVMBuilderRef builder);
+
+void set_instance_counter(LLVMValueRef instance_ptr, LLVMTypeRef instance_type,
+                          LLVMValueRef counter, LLVMBuilderRef builder);
 LLVMValueRef replace_instance(LLVMValueRef instance, LLVMTypeRef instance_type,
                               LLVMValueRef new_instance,
                               LLVMBuilderRef builder);
