@@ -546,6 +546,8 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
 
     return array_iter_instance(ast, func, ctx, module, builder);
   }
+
+  return NULL;
 }
 
 LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
@@ -702,6 +704,13 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
   if (strncmp("iter_of_", sym_name, 8) == 0) {
     LLVMValueRef res = call_iter_fn(ast, sym, sym_name, ctx, module, builder);
+    if (res) {
+      return res;
+    }
+  }
+
+  if (strcmp(SYM_NAME_LOOP, sym_name) == 0) {
+    LLVMValueRef res = coroutine_loop(ast, sym, ctx, module, builder);
     if (res) {
       return res;
     }

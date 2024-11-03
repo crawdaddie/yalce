@@ -58,4 +58,5 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env);
 #define SYM_NAME_ITER_OF_LIST "iter_of_list"
 #define SYM_NAME_ITER_OF_ARRAY "iter_of_array"
 #define SYM_NAME_ITER_OF_ARRAY_INF "iter_of_array_inf"
+#define SYM_NAME_LOOP "loop"
 #endif

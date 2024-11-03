@@ -864,3 +864,30 @@ LLVMValueRef generic_coroutine_instance(Ast *application_args, int args_len,
 
   return instance;
 }
+LLVMValueRef coroutine_loop(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
+                            LLVMModuleRef module, LLVMBuilderRef builder) {
+  print_ast(ast);
+  print_type(ast->data.AST_APPLICATION.args->md);
+  print_type(ast->data.AST_APPLICATION.function->md);
+  print_type(ast->md);
+
+  // Ast application = {
+  //     AST_APPLICATION,
+  //     {.AST_APPLICATION = {.function = ast->data.AST_APPLICATION.args,
+  //                          .args = (ast->data.AST_APPLICATION.args + 1),
+  //                          .len = 1}}};
+  // print_ast(&application);
+  //
+  // printf(" <-- instance type\n");
+  //
+  // LLVMValueRef def = codegen(&application, ctx, module, builder);
+  // LLVMDumpValue(def);
+  // if (!def) {
+  //   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.args, ctx);
+  //   printf("%d\n", sym->type);
+  // }
+
+  // LLVMTypeRef instance_type =
+  //     coroutine_instance_type(symbol_data.llvm_params_obj_type);
+  return LLVMConstInt(LLVMInt32Type(), 1, 0);
+}
