@@ -109,13 +109,14 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
           sym->symbol_data.STYPE_COROUTINE_GENERATOR.recursive_ref;
 
       if (is_same_recursive_ref) {
-        // TODO: reuse already-allocated instance and replace that if recursive
-        // ref
+        new_instance = codegen_coroutine_instance(
+            instance_ptr, expr->data.AST_APPLICATION.args,
+            expr->data.AST_APPLICATION.len, sym, ctx, module, builder);
       }
 
-      new_instance = codegen_coroutine_instance(expr->data.AST_APPLICATION.args,
-                                                expr->data.AST_APPLICATION.len,
-                                                sym, ctx, module, builder);
+      new_instance = codegen_coroutine_instance(
+          NULL, expr->data.AST_APPLICATION.args, expr->data.AST_APPLICATION.len,
+          sym, ctx, module, builder);
     }
 
     if (sym->type == STYPE_GENERIC_COROUTINE_GENERATOR) {
@@ -410,7 +411,8 @@ LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
  *   fgen (a, b, c) (i+1)
  * ;;
  */
-LLVMValueRef codegen_coroutine_instance(Ast *args, int args_len,
+LLVMValueRef codegen_coroutine_instance(LLVMValueRef instance, Ast *args,
+                                        int args_len,
                                         JITSymbol *generator_symbol,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
@@ -423,7 +425,9 @@ LLVMValueRef codegen_coroutine_instance(Ast *args, int args_len,
 
   LLVMTypeRef instance_type = coroutine_instance_type(params_obj_type);
 
-  LLVMValueRef instance = heap_alloc(instance_type, ctx, builder);
+  if (instance == NULL) {
+    instance = heap_alloc(instance_type, ctx, builder);
+  }
 
   LLVMValueRef fn_gep =
       coroutine_instance_fn_gep(instance, instance_type, builder);

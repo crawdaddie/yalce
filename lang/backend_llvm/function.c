@@ -386,7 +386,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
             .llvm_params_obj_type);
 
     LLVMValueRef instance =
-        codegen_coroutine_instance(args, args_len, sym, ctx, module, builder);
+        codegen_coroutine_instance(NULL, args, args_len, sym, ctx, module, builder);
 
     LLVMDumpType(instance_type);
     LLVMDumpType(LLVMTypeOf(instance));
