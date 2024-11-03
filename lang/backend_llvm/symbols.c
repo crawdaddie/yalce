@@ -297,7 +297,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
   return expr_val;
 }
-
+/*
 TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   for (int i = 0; i < _NUM_BINOPS; i++) {
     _binop_map bm = binop_map[i];
@@ -395,5 +395,133 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   ht_set_hash(stack, "iter_of_array_inf", hash_string("iter_of_array_inf", 17),
               iter_of_array_inf_sym);
 
+  return env;
+}
+*/
+#define SYM_NAME_ARRAY_AT "array_at"
+#define SYM_NAME_ARRAY_SIZE "array_size"
+#define SYM_NAME_ARRAY_DATA_PTR "array_data_ptr"
+#define SYM_NAME_ARRAY_INCR "array_incr"
+#define SYM_NAME_ARRAY_SLICE "array_slice"
+#define SYM_NAME_ARRAY_NEW "array_new"
+#define SYM_NAME_ARRAY_TO_LIST "array_to_list"
+#define SYM_NAME_DEREF "deref"
+#define SYM_NAME_STRING_AT "string_at"
+#define SYM_NAME_ITER_OF_LIST "iter_of_list"
+#define SYM_NAME_ITER_OF_ARRAY "iter_of_array"
+#define SYM_NAME_ITER_OF_ARRAY_INF "iter_of_array_inf"
+
+TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
+  for (int i = 0; i < _NUM_BINOPS; i++) {
+    _binop_map bm = binop_map[i];
+    JITSymbol *sym =
+        new_symbol(STYPE_GENERIC_FUNCTION, bm.binop_fn_type, NULL, NULL);
+    ht_set_hash(stack, bm.name, hash_string(bm.name, strlen(bm.name)), sym);
+  }
+
+  env = env_extend(env, SYM_NAME_ARRAY_AT, &t_array_at_fn_sig);
+  JITSymbol *array_at_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_at_fn_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ARRAY_AT, hash_string(SYM_NAME_ARRAY_AT, strlen(SYM_NAME_ARRAY_AT)), array_at_sym);
+
+  env = env_extend(env, SYM_NAME_ARRAY_SIZE, &t_array_size_fn_sig);
+  JITSymbol *array_size_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_size_fn_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ARRAY_SIZE, hash_string(SYM_NAME_ARRAY_SIZE, strlen(SYM_NAME_ARRAY_SIZE)),
+              array_size_sym);
+
+  env = env_extend(env, SYM_NAME_ARRAY_DATA_PTR, &t_array_data_ptr_fn_sig);
+  JITSymbol *array_data_ptr_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_data_ptr_fn_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ARRAY_DATA_PTR, hash_string(SYM_NAME_ARRAY_DATA_PTR, strlen(SYM_NAME_ARRAY_DATA_PTR)),
+              array_data_ptr_sym);
+
+  env = env_extend(env, SYM_NAME_ARRAY_INCR, &t_array_incr_fn_sig);
+  JITSymbol *array_incr_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_incr_fn_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ARRAY_INCR, hash_string(SYM_NAME_ARRAY_INCR, strlen(SYM_NAME_ARRAY_INCR)),
+              array_incr_sym);
+
+  env = env_extend(env, SYM_NAME_ARRAY_SLICE, &t_array_slice_fn_sig);
+  JITSymbol *array_slice_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_slice_fn_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ARRAY_SLICE, hash_string(SYM_NAME_ARRAY_SLICE, strlen(SYM_NAME_ARRAY_SLICE)),
+              array_slice_sym);
+
+  env = env_extend(env, SYM_NAME_ARRAY_NEW, &t_array_new_fn_sig);
+  JITSymbol *array_new_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_new_fn_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ARRAY_NEW, hash_string(SYM_NAME_ARRAY_NEW, strlen(SYM_NAME_ARRAY_NEW)), array_new_sym);
+
+  env = env_extend(env, SYM_NAME_ARRAY_TO_LIST, &t_array_to_list_fn_sig);
+  JITSymbol *array_to_list_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_array_to_list_fn_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ARRAY_TO_LIST, hash_string(SYM_NAME_ARRAY_TO_LIST, strlen(SYM_NAME_ARRAY_TO_LIST)),
+              array_to_list_sym);
+
+  // Commented section remains unchanged
+  // Type *array_init_fn_sig =
+  //     type_fn(&t_int, type_fn(&t_array_var_el, &t_array_var));
+  // env = env_extend(env, "array_init", array_init_fn_sig);
+  //
+  // JITSymbol *array_init_sym =
+  //     new_symbol(STYPE_GENERIC_FUNCTION, array_init_fn_sig, NULL, NULL);
+  //
+  // ht_set_hash(stack, "array_init", hash_string("array_init", 10),
+  //             array_init_sym);
+
+  JITSymbol *deref_sym =
+      new_symbol(STYPE_GENERIC_FUNCTION, &t_ptr_deref_sig, NULL, NULL);
+
+  ht_set_hash(stack, SYM_NAME_DEREF, hash_string(SYM_NAME_DEREF, strlen(SYM_NAME_DEREF)), deref_sym);
+
+  env = env_extend(env, "string_add", &t_string_add_fn_sig);
+  JITSymbol *string_add_sym =
+      new_symbol(STYPE_FUNCTION, &t_string_add_fn_sig, NULL, NULL);
+  ht_set_hash(stack, "string_add", hash_string("string_add", 10),
+              string_add_sym);
+
+  t_iter_of_list_sig.is_coroutine_fn = true;
+  t_iter_of_list_sig.data.T_FN.to->is_coroutine_instance = true;
+  env = env_extend(env, SYM_NAME_ITER_OF_LIST, &t_iter_of_list_sig);
+  JITSymbol *iter_of_list_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+                                           &t_iter_of_list_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ITER_OF_LIST, hash_string(SYM_NAME_ITER_OF_LIST, strlen(SYM_NAME_ITER_OF_LIST)),
+              iter_of_list_sym);
+
+  // Commented section remains unchanged
+  // env = env_extend(env, "iter_of_list_inf", &t_iter_of_list_sig);
+  // JITSymbol *iter_of_list_inf_sym =
+  // new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+  //                                          &t_iter_of_list_sig, NULL, NULL);
+  // ht_set_hash(stack, "iter_of_list_inf", hash_string("iter_of_list_inf", 16),
+  //             iter_of_list_inf_sym);
+
+  t_iter_of_array_sig.is_coroutine_fn = true;
+  t_iter_of_list_sig.data.T_FN.to->is_coroutine_instance = true;
+  env = env_extend(env, SYM_NAME_ITER_OF_ARRAY, &t_iter_of_array_sig);
+  JITSymbol *iter_of_array_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
+                                            &t_iter_of_array_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ITER_OF_ARRAY, hash_string(SYM_NAME_ITER_OF_ARRAY, strlen(SYM_NAME_ITER_OF_ARRAY)),
+              iter_of_array_sym);
+
+  env = env_extend(env, SYM_NAME_ITER_OF_ARRAY_INF, &t_iter_of_array_sig);
+  JITSymbol *iter_of_array_inf_sym = new_symbol(
+      STYPE_GENERIC_COROUTINE_GENERATOR, &t_iter_of_array_sig, NULL, NULL);
+  ht_set_hash(stack, SYM_NAME_ITER_OF_ARRAY_INF, hash_string(SYM_NAME_ITER_OF_ARRAY_INF, strlen(SYM_NAME_ITER_OF_ARRAY_INF)),
+              iter_of_array_inf_sym);
+/*
+  Type *t_corzip = corzip_type();
+  env = env_extend(env, "iter_zip", t_corzip);
+  JITSymbol *corzip_sym =
+      new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR, t_corzip, NULL, NULL);
+  ht_set_hash(stack, "iter_zip", hash_string("iter_zip", 8), corzip_sym);
+
+  Type *t_loop = loop_type();
+  env = env_extend(env, "loop", t_loop);
+  JITSymbol *loop_sym =
+      new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR, t_loop, NULL, NULL);
+  ht_set_hash(stack, "loop", hash_string("loop", 4), loop_sym);
+  */
   return env;
 }

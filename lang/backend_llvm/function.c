@@ -496,7 +496,7 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
                           LLVMBuilderRef builder) {
 
   Type *expected_type = ast->md;
-  if (strcmp(sym_name, "iter_of_list") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ITER_OF_LIST) == 0) {
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_type);
     if (!func) {
@@ -513,7 +513,7 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
   }
 
 
-  if (strcmp(sym_name, "iter_of_array") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ITER_OF_ARRAY) == 0) {
 
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
@@ -530,7 +530,7 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return array_iter_instance(ast, func, ctx, module, builder);
   }
 
-  if (strcmp(sym_name, "iter_of_array_inf") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ITER_OF_ARRAY_INF) == 0) {
 
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
@@ -558,7 +558,7 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return NULL;
   }
 
-  if (strcmp(sym_name, "array_at") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ARRAY_AT) == 0) {
 
     LLVMValueRef array_ptr =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
@@ -569,14 +569,14 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_array_at(array_ptr, index, el_type, module, builder);
   }
 
-  if (strcmp(sym_name, "array_size") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ARRAY_SIZE) == 0) {
 
     LLVMValueRef array =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
     return codegen_get_array_size(builder, array);
   }
 
-  if (strcmp(sym_name, "array_data_ptr") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ARRAY_DATA_PTR) == 0) {
 
     LLVMValueRef array =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
@@ -587,7 +587,7 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
         builder, type_to_llvm_type(el_type, ctx->env, module), array);
   }
 
-  if (strcmp(sym_name, "array_new") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ARRAY_NEW) == 0) {
 
     LLVMValueRef array_size =
         codegen(&ast->data.AST_APPLICATION.args[0], ctx, module, builder);
@@ -598,7 +598,7 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_array_init(array_size, array_item, ctx, module, builder);
   }
 
-  if (strcmp(sym_name, "array_incr") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ARRAY_INCR) == 0) {
     Type *array_type = ast->md;
     LLVMTypeRef el_type =
         type_to_llvm_type(array_type->data.T_CONS.args[0], ctx->env, module);
@@ -608,7 +608,7 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return codegen_array_increment(array, el_type, builder);
   }
 
-  if (strcmp(sym_name, "array_slice") == 0) {
+  if (strcmp(sym_name, SYM_NAME_ARRAY_SLICE) == 0) {
     Type *array_type = (ast->data.AST_APPLICATION.args + 2)->md;
     LLVMTypeRef el_type = LLVMInt8Type();
     LLVMValueRef start =
@@ -684,7 +684,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     builder);
   }
 
-  if (strcmp("deref", sym_name) == 0) {
+  if (strcmp(SYM_NAME_DEREF, sym_name) == 0) {
     return call_deref_fn(ast, sym, ctx, module, builder);
   }
 
