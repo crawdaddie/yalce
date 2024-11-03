@@ -388,8 +388,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
     LLVMValueRef instance =
         codegen_coroutine_instance(NULL, args, args_len, sym, ctx, module, builder);
 
-    LLVMDumpType(instance_type);
-    LLVMDumpType(LLVMTypeOf(instance));
+    // LLVMDumpType(instance_type);
+    // LLVMDumpType(LLVMTypeOf(instance));
 
     return instance;
   }
@@ -582,7 +582,7 @@ LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
     Type *array_type = ast->data.AST_APPLICATION.args->md;
     Type *el_type = array_type->data.T_CONS.args[0];
-    print_type(el_type);
+    // print_type(el_type);
     return codegen_get_array_data_ptr(
         builder, type_to_llvm_type(el_type, ctx->env, module), array);
   }

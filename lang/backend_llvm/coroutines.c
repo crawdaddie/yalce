@@ -128,6 +128,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     LLVMValueRef parent_gep =
         coroutine_instance_parent_gep(instance_ptr, instance_type, builder);
+
     LLVMBuildStore(builder, old_instance_ptr, parent_gep);
 
     LLVMValueRef ret_opt =
