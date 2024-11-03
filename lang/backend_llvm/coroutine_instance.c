@@ -52,7 +52,7 @@ LLVMValueRef coroutine_instance_params_gep(LLVMValueRef instance_ptr,
   // Get number of elements
   unsigned num_fields = LLVMCountStructElementTypes(instance_type);
   if (num_fields == 4) {
-    return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 2,
+    return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 3,
                                "instance_params_gep");
   }
 

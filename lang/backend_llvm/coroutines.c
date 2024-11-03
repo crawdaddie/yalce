@@ -270,11 +270,13 @@ compile_coroutine_generator(Ast *ast,
   }
 
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+
   if ((args_len == 1 && fn_type->data.T_FN.from->kind == T_VOID) ||
       (args_len == 0)) {
   } else {
     LLVMValueRef params_tuple =
-        codegen_tuple_access(2, instance_ptr, instance_type, builder);
+        codegen_tuple_access(3, instance_ptr, instance_type, builder);
+
     if (args_len > 1) {
       for (size_t i = 0; i < args_len; i++) {
         Ast *param_ast = ast->data.AST_LAMBDA.params + i;
@@ -287,18 +289,13 @@ compile_coroutine_generator(Ast *ast,
                      module, builder);
       }
     } else {
-      printf("single arg coroutine\n");
       Ast *param_ast = ast->data.AST_LAMBDA.params;
-      LLVMValueRef val = LLVMBuildLoad2(
-          builder, symbol_data.llvm_params_obj_type, params_tuple, "");
 
-      printf("\n");
-      LLVMDumpValue(val);
+      LLVMValueRef param = LLVMBuildStructGEP2(builder, instance_type,
+                                               instance_ptr, 3, "get_param");
 
-      printf("\n");
-      LLVMDumpType(LLVMTypeOf(val));
-
-      printf("\n");
+      LLVMValueRef val =
+          LLVMBuildLoad2(builder, symbol_data.llvm_params_obj_type, param, "");
 
       match_values(param_ast, val, symbol_data.params_obj_type, &fn_ctx, module,
                    builder);
@@ -443,18 +440,21 @@ LLVMValueRef codegen_coroutine_instance(Ast *args, int args_len,
 
   LLVMValueRef params_gep =
       coroutine_instance_params_gep(instance, instance_type, builder);
-
   if (params_gep) {
-    LLVMValueRef params_obj =
-        LLVMGetUndef(generator_symbol->symbol_data.STYPE_COROUTINE_GENERATOR
-                         .llvm_params_obj_type);
+    if (args_len == 1 && ((Type *)args[0].md)->kind != T_VOID) {
+      LLVMBuildStore(builder, codegen(args, ctx, module, builder), params_gep);
+    } else {
+      LLVMValueRef params_obj =
+          LLVMGetUndef(generator_symbol->symbol_data.STYPE_COROUTINE_GENERATOR
+                           .llvm_params_obj_type);
 
-    for (int i = 0; i < args_len; i++) {
-      Ast *arg = args + i;
-      params_obj = LLVMBuildInsertValue(
-          builder, params_obj, codegen(arg, ctx, module, builder), i, "");
+      for (int i = 0; i < args_len; i++) {
+        Ast *arg = args + i;
+        params_obj = LLVMBuildInsertValue(
+            builder, params_obj, codegen(arg, ctx, module, builder), i, "");
+      }
+      LLVMBuildStore(builder, params_obj, params_gep);
     }
-    LLVMBuildStore(builder, params_obj, params_gep);
   }
 
   return instance;
@@ -510,7 +510,7 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type, bool inf,
   LLVMValueRef instance = LLVMGetParam(func, 0);
 
   LLVMValueRef array_ptr = LLVMBuildStructGEP2(builder, instance_type, instance,
-                                               2, "get_tuple_element");
+                                               3, "get_tuple_element");
   LLVMValueRef array =
       LLVMBuildLoad2(builder, llvm_array_type, array_ptr, "tuple_element_load");
 
@@ -640,7 +640,7 @@ LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
   LLVMPositionBuilderAtEnd(builder, entry);
 
   LLVMValueRef instance = LLVMGetParam(func, 0);
-  LLVMValueRef list = codegen_tuple_access(2, instance, instance_type, builder);
+  LLVMValueRef list = codegen_tuple_access(3, instance, instance_type, builder);
 
   // Create the null comparison
   LLVMValueRef is_null = LLVMBuildICmp(
@@ -734,9 +734,10 @@ LLVMValueRef compile_generic_coroutine(JITSymbol *sym, Type *expected_fn_type,
   LLVMTypeRef llvm_params_obj_type =
       param_struct_type(expected_fn_type, args_len, symbol_data.params_obj_type,
                         symbol_data.ret_option_type, ctx->env, module);
-  printf("param obj generic cor\n");
-  LLVMDumpType(llvm_params_obj_type);
-  printf("\n");
+
+  // printf("param obj generic cor\n");
+  // LLVMDumpType(llvm_params_obj_type);
+  // printf("\n");
 
   symbol_data.llvm_params_obj_type = llvm_params_obj_type;
 
@@ -842,6 +843,10 @@ LLVMValueRef generic_coroutine_instance(Ast *application_args, int args_len,
       coroutine_instance_params_gep(instance, instance_type, builder);
 
   if (params_gep) {
+    if (args_len == 1 && ((Type *)application_args[0].md)->kind != T_VOID) {
+      LLVMBuildStore(builder, codegen(application_args, ctx, module, builder),
+                     params_gep);
+    }
     LLVMValueRef params_obj = LLVMGetUndef(llvm_params_obj_type);
 
     for (int i = 0; i < args_len; i++) {
