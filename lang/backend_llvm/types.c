@@ -118,6 +118,13 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
     return LLVMInt32Type();
   }
+  case T_TYPECLASS_RESOLVE: {
+    if (!is_generic(type)) {
+      type = resolve_tc_rank(type);
+      return type_to_llvm_type(type, env, module);
+    }
+    return NULL;
+  }
 
   case T_CONS: {
 
@@ -793,4 +800,29 @@ LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env,
   Type *lookup_type = find_type_in_env(env, id->data.AST_IDENTIFIER.value);
   LLVMTypeRef t = type_to_llvm_type(lookup_type, env, module);
   return t;
+}
+
+LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder) {
+  LLVMTypeRef tu_types[] = {TAG_TYPE, LLVMTypeOf(val)};
+  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
+  if (val != NULL) {
+    LLVMValueRef some = LLVMGetUndef(tu_type);
+    some =
+        LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), 0, 0),
+                             0, "insert Some tag");
+
+    some = LLVMBuildInsertValue(builder, some, val, 1, "insert Some Value");
+    return some;
+  }
+  LLVMValueRef none = LLVMGetUndef(tu_type);
+
+  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
+                              0, "insert None tag");
+  return none;
+}
+
+LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder) {
+  LLVMValueRef tag = variant_extract_tag(opt, builder);
+  return LLVMBuildICmp(builder, LLVMIntEQ, tag,
+                       LLVMConstInt(LLVMInt8Type(), 1, 0), "");
 }

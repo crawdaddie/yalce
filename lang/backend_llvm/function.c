@@ -211,8 +211,7 @@ SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
   return new_specific_fn;
 };
 
-Ast *get_specific_fn_ast_variant(Ast *original_fn_ast,
-                                        Type *specific_fn_type) {
+Ast *get_specific_fn_ast_variant(Ast *original_fn_ast, Type *specific_fn_type) {
 
   Type *generic_type = original_fn_ast->md;
   TypeEnv *replacement_env = NULL;
@@ -374,8 +373,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
               expected_fn_type, func);
     }
 
-    return generic_coroutine_instance(args, args_len, expected_fn_type, func, ctx, module,
-                                      builder);
+    return generic_coroutine_instance(args, args_len, expected_fn_type, func,
+                                      ctx, module, builder);
   }
 
   case STYPE_COROUTINE_GENERATOR: {
@@ -385,8 +384,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
         generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
             .llvm_params_obj_type);
 
-    LLVMValueRef instance =
-        codegen_coroutine_instance(NULL, args, args_len, sym, ctx, module, builder);
+    LLVMValueRef instance = codegen_coroutine_instance(
+        NULL, args, args_len, sym, ctx, module, builder);
 
     // LLVMDumpType(instance_type);
     // LLVMDumpType(LLVMTypeOf(instance));
@@ -512,15 +511,14 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return val;
   }
 
-
   if (strcmp(sym_name, SYM_NAME_ITER_OF_ARRAY) == 0) {
 
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
         expected_type);
     if (!func) {
-      func = coroutine_array_iter_generator_fn(expected_type, false, ctx, module,
-                                               builder);
+      func = coroutine_array_iter_generator_fn(expected_type, false, ctx,
+                                               module, builder);
       sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
           specific_fns_extend(
               sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
@@ -711,6 +709,13 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
   if (strcmp(SYM_NAME_LOOP, sym_name) == 0) {
     LLVMValueRef res = coroutine_loop(ast, sym, ctx, module, builder);
+    if (res) {
+      return res;
+    }
+  }
+
+  if (strcmp(SYM_NAME_ITER_MAP, sym_name) == 0) {
+    LLVMValueRef res = coroutine_map(ast, sym, ctx, module, builder);
     if (res) {
       return res;
     }

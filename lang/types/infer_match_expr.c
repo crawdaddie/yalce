@@ -74,12 +74,13 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
 
   // printf("match expr type: ");
   // print_type(expr_type);
-
   Type *res_type = NULL;
   TypeEnv *extended_env = *env;
 
   for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+
     Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
+
     Ast *guard = NULL;
 
     if (test_expr->tag == AST_MATCH_GUARD_CLAUSE) {
@@ -124,10 +125,6 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
   }
 
   *expr_type = *resolve_generic_type(expr_type, extended_env);
-
-  while (extended_env) {
-    extended_env = extended_env->next;
-  }
 
   return res_type;
 }

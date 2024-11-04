@@ -180,6 +180,10 @@ Type t_option_var = {T_VAR, {.T_VAR = "t"}};
 #define TCONS(name, num, ...)                                                  \
   ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
 Type t_none = {T_CONS, {.T_CONS = {"None", NULL, 0}}};
+bool is_option_type(Type *t) {
+  return t->kind == T_CONS && ((strcmp(t->data.T_CONS.name, "Some") == 0) ||
+                               (strcmp(t->data.T_CONS.name, "None") == 0));
+}
 
 Type t_option_of_var =
     TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_option_var), &t_none);

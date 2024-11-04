@@ -170,6 +170,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
       Type *ptype;
       Ast *def = ast->data.AST_LAMBDA.defaults[i];
+
       if (def) {
         ptype = compute_type_expression(def, *env);
       } else {
@@ -190,6 +191,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   Type *recursive_ref = NULL;
   const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
+
   if (!is_anon) {
     recursive_ref = tvar(ast->data.AST_LAMBDA.fn_name.chars);
     recursive_ref->is_recursive_fn_ref = true;
@@ -567,10 +569,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   ast->md = type;
-  // if (type && (type->kind == T_VAR) && strcmp(type->data.T_VAR, "t0") == 0) {
-  //   print_type(type);
-  //   print_ast(ast);
-  // }
 
   return type;
 }

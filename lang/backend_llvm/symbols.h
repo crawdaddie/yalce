@@ -45,7 +45,7 @@ int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym);
 JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx);
 TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env);
 
-// TODO: use gperf for better builtin func lookups 
+// TODO: use gperf for better builtin func lookups
 #define SYM_NAME_ARRAY_AT "array_at"
 #define SYM_NAME_ARRAY_SIZE "array_size"
 #define SYM_NAME_ARRAY_DATA_PTR "array_data_ptr"
@@ -59,4 +59,5 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env);
 #define SYM_NAME_ITER_OF_ARRAY "iter_of_array"
 #define SYM_NAME_ITER_OF_ARRAY_INF "iter_of_array_inf"
 #define SYM_NAME_LOOP "loop"
+#define SYM_NAME_ITER_MAP "iter_map"
 #endif

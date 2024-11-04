@@ -8,6 +8,7 @@
 #include "tuple.h"
 #include "types.h"
 #include "util.h"
+#include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -539,17 +540,19 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type, bool inf,
 
   increment_instance_counter(instance, instance_type, builder);
 
-  LLVMValueRef ret_opt = LLVMGetUndef(llvm_ret_opt_type);
-
   // non-null path
-  ret_opt =
-      LLVMBuildInsertValue(builder, ret_opt, LLVMConstInt(LLVMInt8Type(), 0, 0),
-                           0, "insert Some tag");
-
   LLVMValueRef value =
       codegen_array_at(array, idx, llvm_array_el_type, module, builder);
-  ret_opt =
-      LLVMBuildInsertValue(builder, ret_opt, value, 1, "insert Some Value");
+  LLVMValueRef ret_opt = codegen_option(value, builder);
+  // LLVMGetUndef(llvm_ret_opt_type);
+  //
+  // ret_opt =
+  //     LLVMBuildInsertValue(builder, ret_opt, LLVMConstInt(LLVMInt8Type(), 0,
+  //     0),
+  //                          0, "insert Some tag");
+  //
+  // ret_opt =
+  //     LLVMBuildInsertValue(builder, ret_opt, value, 1, "insert Some Value");
   LLVMBuildRet(builder, ret_opt);
 
   LLVMPositionBuilderAtEnd(builder, continue_block);
@@ -558,18 +561,21 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type, bool inf,
     set_instance_counter(instance, instance_type,
                          LLVMConstInt(LLVMInt32Type(), 1, 0), builder);
 
-    LLVMValueRef ret_opt = LLVMGetUndef(llvm_ret_opt_type);
-
-    // non-null path
-    ret_opt = LLVMBuildInsertValue(builder, ret_opt,
-                                   LLVMConstInt(LLVMInt8Type(), 0, 0), 0,
-                                   "insert Some tag");
-
     LLVMValueRef value =
         codegen_array_at(array, LLVMConstInt(LLVMInt32Type(), 0, 0),
                          llvm_array_el_type, module, builder);
-    ret_opt =
-        LLVMBuildInsertValue(builder, ret_opt, value, 1, "insert Some Value");
+
+    LLVMValueRef ret_opt = codegen_option(value, builder);
+    // LLVMGetUndef(llvm_ret_opt_type);
+    //
+    // // non-null path
+    // ret_opt = LLVMBuildInsertValue(builder, ret_opt,
+    //                                LLVMConstInt(LLVMInt8Type(), 0, 0), 0,
+    //                                "insert Some tag");
+    //
+    // ret_opt =
+    //     LLVMBuildInsertValue(builder, ret_opt, value, 1, "insert Some
+    //     Value");
     LLVMBuildRet(builder, ret_opt);
 
   } else {
@@ -871,23 +877,80 @@ LLVMValueRef coroutine_loop(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
   print_type(ast->data.AST_APPLICATION.function->md);
   print_type(ast->md);
 
-  // Ast application = {
-  //     AST_APPLICATION,
-  //     {.AST_APPLICATION = {.function = ast->data.AST_APPLICATION.args,
-  //                          .args = (ast->data.AST_APPLICATION.args + 1),
-  //                          .len = 1}}};
-  // print_ast(&application);
-  //
-  // printf(" <-- instance type\n");
-  //
-  // LLVMValueRef def = codegen(&application, ctx, module, builder);
-  // LLVMDumpValue(def);
-  // if (!def) {
-  //   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.args, ctx);
-  //   printf("%d\n", sym->type);
-  // }
-
-  // LLVMTypeRef instance_type =
-  //     coroutine_instance_type(symbol_data.llvm_params_obj_type);
   return LLVMConstInt(LLVMInt32Type(), 1, 0);
+}
+LLVMValueRef coroutine_map(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
+                           LLVMModuleRef module, LLVMBuilderRef builder) {
+  // try again, this time get the instance and only replace it's function with a
+  // new function which calls the original fn and transforms and returns the
+  // result value
+
+  Ast *func_ast = ast->data.AST_APPLICATION.args;
+  Type *ret_opt = ast->md;
+  ret_opt = ret_opt->data.T_FN.to;
+
+  LLVMValueRef transform_func = codegen(func_ast, ctx, module, builder);
+
+  Ast *instance_ast = ast->data.AST_APPLICATION.args + 1;
+  Type *in_opt = instance_ast->md;
+  in_opt = in_opt->data.T_FN.to;
+
+  LLVMValueRef in_instance = codegen(instance_ast, ctx, module, builder);
+  LLVMTypeRef in_instance_type = LLVMTypeOf(in_instance);
+
+  LLVMValueRef wrapper_function = LLVMAddFunction(
+      module, "wrapper_for_map",
+      LLVMFunctionType(type_to_llvm_type(ret_opt, ctx->env, module),
+                       (LLVMTypeRef[]){in_instance_type}, 1, 0));
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(wrapper_function, "entry");
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  LLVMValueRef inst = LLVMGetParam(wrapper_function, 0);
+  LLVMTypeRef generic_type = coroutine_instance_type(LLVMVoidType());
+  LLVMValueRef in_original_func =
+      codegen_tuple_access(0, inst, generic_type, builder);
+  LLVMTypeRef in_opt_llvm_type = type_to_llvm_type(in_opt, ctx->env, module);
+  LLVMTypeRef in_original_func_type =
+      LLVMFunctionType(in_opt_llvm_type, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+
+  LLVMValueRef in_opt_val =
+      LLVMBuildCall2(builder, in_original_func_type, in_original_func,
+                     (LLVMValueRef[]){inst}, 1, "");
+
+  // Create basic block for the non-null path
+  LLVMBasicBlockRef non_null_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "non_null_path");
+  LLVMBasicBlockRef continue_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "continue");
+
+  // Create the null comparison
+  LLVMValueRef is_null = codegen_option_is_none(in_opt_val, builder);
+
+  // Create the conditional branch
+  LLVMBuildCondBr(builder, is_null, continue_block, non_null_block);
+
+  LLVMPositionBuilderAtEnd(builder, non_null_block);
+  LLVMValueRef val =
+      codegen_tuple_access(1, in_opt_val, in_opt_llvm_type, builder);
+
+  Type *in = type_of_option(in_opt);
+  Type *out = type_of_option(ret_opt);
+  LLVMTypeRef transform_func_type =
+      type_to_llvm_type(type_fn(in, out), ctx->env, module);
+  val = LLVMBuildCall2(builder, transform_func_type, transform_func,
+                       (LLVMValueRef[]){val}, 1, "");
+  LLVMValueRef ret_opt_val = codegen_option(val, builder);
+  LLVMBuildRet(builder, ret_opt_val);
+  LLVMPositionBuilderAtEnd(builder, continue_block);
+  LLVMBuildRet(builder, in_opt_val);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  LLVMValueRef fn_gep =
+      coroutine_instance_fn_gep(in_instance, generic_type, builder);
+  LLVMBuildStore(builder, wrapper_function, fn_gep);
+
+  return in_instance;
 }

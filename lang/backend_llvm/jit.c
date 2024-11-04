@@ -111,7 +111,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  // LLVMDumpModule(module);
+  LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
@@ -176,7 +176,6 @@ int jit(int argc, char **argv) {
   t_option_of_var.alias = "Option";
   env = env_extend(env, "Option", &t_option_of_var);
 
-
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
                     .env = env,
@@ -229,7 +228,6 @@ int jit(int argc, char **argv) {
     char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
 
     while (true) {
-
 
       char *input = repl_input(prompt);
 

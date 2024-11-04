@@ -249,12 +249,15 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
       JITSymbol *generator_sym = sym;
       Type *expected_type = application->data.AST_APPLICATION.function->md;
       Type *params_obj_type = expected_type->data.T_FN.from;
+
       Type *ret_opt_type = expected_type->data.T_FN.to;
       ret_opt_type = ret_opt_type->data.T_FN.to;
+
       LLVMTypeRef llvm_params_obj_type =
           type_to_llvm_type(params_obj_type, cont_ctx.env, module);
 
       LLVMTypeRef instance_type = coroutine_instance_type(llvm_params_obj_type);
+
       LLVMValueRef instance = codegen(application, &cont_ctx, module, builder);
       Type *expected_fn_type = application->md;
       JITSymbol *instance_sym = new_symbol(
@@ -314,7 +317,25 @@ Type *create_loop_sig_type() {
   return loop_sig;
 }
 
+Type *create_iter_map_sig_type() {
+  // Type *input_type = tvar("cor_input_param");
+  Type *ret_type = tvar("cor_ret");
+  Type *instance_type = type_fn(&t_void, create_option_type(ret_type));
+  instance_type->is_coroutine_instance = true;
+
+  Type *to_type = tvar("cor_ret_to");
+  Type *to_instance_type = type_fn(&t_void, create_option_type(to_type));
+  to_instance_type->is_coroutine_instance = true;
+  Type *func = type_fn(ret_type, to_type);
+
+  Type *map_sig = to_instance_type;
+  map_sig = type_fn(instance_type, map_sig);
+  map_sig = type_fn(func, map_sig);
+  return map_sig;
+}
+
 // Type *create_iter_zip_sig_type() {
+//
 //
 //   Type *ret_type1 = tvar("cor_ret1");
 //   Type *ret_opt1 = create_option_type(ret_type1);
@@ -412,6 +433,9 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
 
   Type *t_iter_loop_sig = create_loop_sig_type();
   GENERIC_COR_SYMBOL(SYM_NAME_LOOP, t_iter_loop_sig);
+
+  Type *t_iter_map_sig = create_iter_map_sig_type();
+  GENERIC_FN_SYMBOL(SYM_NAME_ITER_MAP, t_iter_map_sig);
 
   // GENERIC_COR_SYMBOL("iter_zip", create_iter_zip_sig_type());
 

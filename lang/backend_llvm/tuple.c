@@ -43,3 +43,15 @@ LLVMValueRef codegen_tuple_access(int n, LLVMValueRef tuple,
   return LLVMBuildLoad2(builder, element_type, element_ptr,
                         "tuple_element_load");
 }
+
+// Function to get nth type out of an LLVM tuple value
+LLVMTypeRef codegen_tuple_field_type(int n, LLVMValueRef tuple,
+                                     LLVMTypeRef tuple_type,
+                                     LLVMBuilderRef builder) {
+
+  LLVMValueRef element_ptr =
+      LLVMBuildStructGEP2(builder, tuple_type, tuple, n, "get_tuple_element");
+
+  LLVMTypeRef element_type = LLVMStructGetTypeAtIndex(tuple_type, n);
+  return element_type;
+}

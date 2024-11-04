@@ -45,4 +45,7 @@ LLVMValueRef tagged_union_constructor(Ast *ast, LLVMTypeRef tagged_union_type,
 LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder);
+
+LLVMValueRef variant_extract_value(LLVMValueRef val, LLVMTypeRef expected_type,
+                                   LLVMBuilderRef builder);
 #endif

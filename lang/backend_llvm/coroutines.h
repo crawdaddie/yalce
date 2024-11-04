@@ -1,5 +1,4 @@
-#ifndef _LANG_BACKEND_LLVM_COROUTINES_H
-#define _LANG_BACKEND_LLVM_COROUTINES_H
+#ifndef _LANG_BACKEND_LLVM_COROUTINES_H #define _LANG_BACKEND_LLVM_COROUTINES_H
 #include "common.h"
 #include "llvm-c/Types.h"
 
@@ -31,7 +30,6 @@ LLVMValueRef codegen_generic_coroutine_binding(Ast *ast, JITLangCtx *ctx,
                                                LLVMModuleRef module,
                                                LLVMBuilderRef builder);
 
-
 LLVMValueRef list_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
@@ -52,14 +50,14 @@ LLVMValueRef compile_generic_coroutine(JITSymbol *sym, Type *expected_fn_type,
                                        JITLangCtx *ctx, LLVMModuleRef module,
                                        LLVMBuilderRef builder);
 
-
-
 LLVMValueRef generic_coroutine_instance(Ast *application_args, int args_len,
-                                        Type *def_type,
-                                        LLVMValueRef func, JITLangCtx *ctx,
-                                        LLVMModuleRef module,
+                                        Type *def_type, LLVMValueRef func,
+                                        JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder);
 
 LLVMValueRef coroutine_loop(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef coroutine_map(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
+                           LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

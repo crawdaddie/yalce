@@ -259,6 +259,7 @@ typedef struct VariantContext {
 
 Type *create_cons_type(const char *name, int len, Type **unified_args);
 Type *create_option_type(Type *option_of);
+bool is_option_type(Type *t);
 
 Type *type_of_option(Type *option);
 

@@ -142,6 +142,12 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
     t1->data.T_CONS.args[0] = unif;
     return t1;
   }
+  if (is_option_type(t1) && is_option_type(t2) &&
+      (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0)) {
+    Type *unif = unify(t1->data.T_CONS.args[0], t2->data.T_CONS.args[0], env);
+    t1->data.T_CONS.args[0] = unif;
+    return t1;
+  }
 
   // if (is_array_type(t1) && is_string_type(t2)) {
   //   // Type *unif = unify(t1->data.T_CONS.args[0], t2->data.T_CONS.args[0],
@@ -287,7 +293,7 @@ Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
 
 Type *unify(Type *t1, Type *t2, TypeEnv **env) {
 
-  // printf("unify");
+  // printf("## unify\n");
   // if (t1->alias) {
   //   printf("%s\n", t1->alias);
   // } else {
