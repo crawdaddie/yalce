@@ -929,6 +929,13 @@ int main() {
     TITLE("coroutine function")
 
     Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+    Type instance =
+        (Type){T_COROUTINE_INSTANCE,
+               {.T_COROUTINE_INSTANCE = {
+                    .params_type = &TTUPLE(3, &t_int, &t_int, &t_int),
+                    .yield_interface = &MAKE_FN_TYPE_2(&t_void, &opt)}}};
+
+    // tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
 
     TEST_SIMPLE_AST_TYPE("let f = fn a b c ->\n"
                          "  yield a;\n"
@@ -938,7 +945,49 @@ int main() {
                          "  yield 5\n"
                          ";;\n"
                          "let x = f 1 2 3",
-                         &MAKE_FN_TYPE_2(&t_void, &opt));
+                         &instance);
+  });
+
+  ({
+    RESET;
+    TITLE("coroutine function")
+
+    Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+    Type instance =
+        (Type){T_COROUTINE_INSTANCE,
+               {.T_COROUTINE_INSTANCE = {.params_type = &t_void,
+                                         .yield_interface =
+                                             &MAKE_FN_TYPE_2(&t_void, &opt)}}};
+
+    // tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+
+    TEST_SIMPLE_AST_TYPE("let f = fn () ->\n"
+                         "  yield 4;\n"
+                         "  yield 5\n"
+                         ";;\n"
+                         "let x = f ()",
+                         &instance);
+  });
+
+  ({
+    RESET;
+    TITLE("coroutine function")
+
+    Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+    Type instance =
+        (Type){T_COROUTINE_INSTANCE,
+               {.T_COROUTINE_INSTANCE = {.params_type = &t_int,
+                                         .yield_interface =
+                                             &MAKE_FN_TYPE_2(&t_void, &opt)}}};
+
+    // tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
+
+    TEST_SIMPLE_AST_TYPE("let f = fn a ->\n"
+                         "  yield a;\n"
+                         "  yield 5\n"
+                         ";;\n"
+                         "let x = f 1",
+                         &instance);
   });
 
   return status == true ? 0 : 1;

@@ -302,6 +302,16 @@ char *type_to_string(Type *t, char *buffer) {
     buffer = strcat(buffer, ")");
     break;
   }
+  case T_COROUTINE_INSTANCE: {
+    buffer = strcat(buffer, "(params_type: ");
+    buffer = type_to_string(t->data.T_COROUTINE_INSTANCE.params_type, buffer);
+
+    buffer = strcat(buffer, ", yield_interface: ");
+    buffer =
+        type_to_string(t->data.T_COROUTINE_INSTANCE.yield_interface, buffer);
+    buffer = strcat(buffer, ")");
+    break;
+  }
   }
 
   return buffer;
@@ -430,6 +440,12 @@ bool types_equal(Type *t1, Type *t2) {
       return false;
     }
     return true;
+  }
+  case T_COROUTINE_INSTANCE: {
+    return types_equal(t1->data.T_COROUTINE_INSTANCE.yield_interface,
+                       t2->data.T_COROUTINE_INSTANCE.yield_interface) &&
+           types_equal(t1->data.T_COROUTINE_INSTANCE.params_type,
+                       t2->data.T_COROUTINE_INSTANCE.params_type);
   }
   }
   return false;
@@ -751,7 +767,14 @@ Type *create_type_multi_param_fn(int len, Type **from, Type *to) {
   return fn;
 }
 
-Type *create_tuple_type(int len, Type **contained_types) {}
+Type *create_tuple_type(int len, Type **contained_types) {
+  Type *tuple = talloc(sizeof(Type));
+  tuple->kind = T_CONS;
+  tuple->data.T_CONS.name = TYPE_NAME_TUPLE;
+  tuple->data.T_CONS.args = contained_types;
+  tuple->data.T_CONS.num_args = len;
+  return tuple;
+}
 
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
@@ -1122,4 +1145,22 @@ Type *create_array_type(Type *of, int size) {
   // int *size_ptr = array_type_size_ptr(gen_array);
   // *size_ptr = size;
   return gen_array;
+}
+
+Type *create_coroutine_instance_type(Type *f) {
+  int args_len = 0;
+  Type *fn = f;
+  Type *params_obj;
+
+  while (fn->data.T_FN.to->kind == T_FN) {
+    fn = fn->data.T_FN.to;
+    args_len++;
+  }
+
+  Type *return_type = fn->data.T_FN.to;
+  Type *instance_type = talloc(sizeof(Type));
+  // instance_type->data.T_COROUTINE_INSTANCE.param_type =
+  fn->data.T_FN.to = type_fn(&t_void, create_option_type(return_type));
+  fn->data.T_FN.to->is_coroutine_instance = true;
+  f->is_coroutine_fn = true;
 }

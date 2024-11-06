@@ -211,6 +211,7 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
                                      module, builder);
   }
 
+  /*
   if (expr_type->kind == T_FN &&
       ast->data.AST_LET.expr->tag == AST_APPLICATION) {
 
@@ -221,61 +222,68 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     JITSymbol *sym =
         lookup_id_ast(application->data.AST_APPLICATION.function, &cont_ctx);
 
-    if (sym->type == STYPE_COROUTINE_GENERATOR) {
-      JITSymbol *generator_sym = sym;
-
-      LLVMTypeRef instance_type = coroutine_instance_type(
-          generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
-              .llvm_params_obj_type);
-
-      LLVMValueRef instance = codegen(application, &cont_ctx, module, builder);
-
-      Type *expected_fn_type = application->md;
-      JITSymbol *instance_sym = new_symbol(
-          STYPE_COROUTINE_INSTANCE, expected_fn_type, instance, instance_type);
-
-      instance_sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type =
-          generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR.def_fn_type;
-
-      const char *id_chars = binding->data.AST_IDENTIFIER.value;
-      int id_len = binding->data.AST_IDENTIFIER.length;
-
-      ht_set_hash(cont_ctx.stack + cont_ctx.stack_ptr, id_chars,
-                  hash_string(id_chars, id_len), instance_sym);
-      return instance;
-    }
-
-    if (sym->type == STYPE_GENERIC_COROUTINE_GENERATOR) {
-      JITSymbol *generator_sym = sym;
-      Type *expected_type = application->data.AST_APPLICATION.function->md;
-      Type *params_obj_type = expected_type->data.T_FN.from;
-
-      Type *ret_opt_type = expected_type->data.T_FN.to;
-      ret_opt_type = ret_opt_type->data.T_FN.to;
-
-      LLVMTypeRef llvm_params_obj_type =
-          type_to_llvm_type(params_obj_type, cont_ctx.env, module);
-
-      LLVMTypeRef instance_type = coroutine_instance_type(llvm_params_obj_type);
-
-      LLVMValueRef instance = codegen(application, &cont_ctx, module, builder);
-      Type *expected_fn_type = application->md;
-      JITSymbol *instance_sym = new_symbol(
-          STYPE_COROUTINE_INSTANCE, expected_fn_type, instance, instance_type);
-
-      LLVMTypeRef def_fn_type = LLVMFunctionType(
-          type_to_llvm_type(ret_opt_type, cont_ctx.env, module),
-          (LLVMTypeRef[]){instance_type}, 1, 0);
-
-      instance_sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type =
-          def_fn_type;
-      const char *id_chars = binding->data.AST_IDENTIFIER.value;
-      int id_len = binding->data.AST_IDENTIFIER.length;
-      ht_set_hash(cont_ctx.stack + cont_ctx.stack_ptr, id_chars,
-                  hash_string(id_chars, id_len), instance_sym);
-      return instance;
-    }
+    // if (sym->type == STYPE_COROUTINE_GENERATOR) {
+    //   JITSymbol *generator_sym = sym;
+    //
+    //   LLVMTypeRef instance_type = coroutine_instance_type(
+    //       generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
+    //           .llvm_params_obj_type);
+    //
+    //   LLVMValueRef instance = codegen(application, &cont_ctx, module,
+    //   builder);
+    //
+    //   Type *expected_fn_type = application->md;
+    //   JITSymbol *instance_sym =
+    //       new_symbol(STYPE_COROUTINE_INSTANCE,
+    //       fn_return_type(expected_fn_type),
+    //                  instance, instance_type);
+    //
+    //   instance_sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type =
+    //       generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR.def_fn_type;
+    //
+    //   const char *id_chars = binding->data.AST_IDENTIFIER.value;
+    //   int id_len = binding->data.AST_IDENTIFIER.length;
+    //
+    //   ht_set_hash(cont_ctx.stack + cont_ctx.stack_ptr, id_chars,
+    //               hash_string(id_chars, id_len), instance_sym);
+    //   return instance;
+    // }
+    //
+    // if (sym->type == STYPE_GENERIC_COROUTINE_GENERATOR) {
+    //   JITSymbol *generator_sym = sym;
+    //   Type *expected_type = application->data.AST_APPLICATION.function->md;
+    //   Type *params_obj_type = expected_type->data.T_FN.from;
+    //
+    //   Type *ret_opt_type = expected_type->data.T_FN.to;
+    //   ret_opt_type = ret_opt_type->data.T_FN.to;
+    //
+    //   LLVMTypeRef llvm_params_obj_type =
+    //       type_to_llvm_type(params_obj_type, cont_ctx.env, module);
+    //
+    //   LLVMTypeRef instance_type =
+    //   coroutine_instance_type(llvm_params_obj_type);
+    //
+    //   LLVMValueRef instance = codegen(application, &cont_ctx, module,
+    //   builder); Type *expected_fn_type = application->md;
+    //
+    //   JITSymbol *instance_sym = new_symbol(
+    //       STYPE_COROUTINE_INSTANCE, expected_fn_type, instance,
+    //       instance_type);
+    //
+    //   LLVMTypeRef def_fn_type = LLVMFunctionType(
+    //       type_to_llvm_type(ret_opt_type, cont_ctx.env, module),
+    //       (LLVMTypeRef[]){instance_type}, 1, 0);
+    //
+    //   instance_sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type =
+    //       def_fn_type;
+    //   const char *id_chars = binding->data.AST_IDENTIFIER.value;
+    //   int id_len = binding->data.AST_IDENTIFIER.length;
+    //   ht_set_hash(cont_ctx.stack + cont_ctx.stack_ptr, id_chars,
+    //               hash_string(id_chars, id_len), instance_sym);
+    //   return instance;
+    // }
   }
+  */
 
   LLVMValueRef expr_val =
       codegen(ast->data.AST_LET.expr, outer_ctx, module, builder);

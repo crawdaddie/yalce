@@ -190,9 +190,19 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
     return fn_prototype(type, fn_len, env);
   }
-
+  // case T_COROUTINE_INSTANCE: {
+  //   Type *params_type = type->data.T_COROUTINE_INSTANCE.params_type;
+  //   Type *return_opt =
+  //       type->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to;
+  //
+  //   LLVMTypeRef fn_type =
+  //       LLVMFunctionType(type_to_llvm_type(return_opt, env, module),
+  //                        (LLVMTypeRef[]){
+  //
+  //                        },
+  //                        1, 0);
+  // }
   default: {
-
     return LLVMVoidType();
   }
   }

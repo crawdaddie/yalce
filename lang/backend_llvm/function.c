@@ -361,6 +361,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_GENERIC_COROUTINE_GENERATOR: {
+    printf("call generic coroutine generator\n");
 
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
@@ -378,6 +379,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_COROUTINE_GENERATOR: {
+    printf("call coroutine generator\n");
+    print_type(expected_fn_type);
     JITSymbol *generator_sym = sym;
 
     LLVMTypeRef instance_type = coroutine_instance_type(
@@ -385,7 +388,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
             .llvm_params_obj_type);
 
     LLVMValueRef instance = codegen_coroutine_instance(
-        NULL, args, args_len, sym, ctx, module, builder);
+        NULL, args, args_len, fn_return_type(expected_fn_type), sym->val, ctx,
+        module, builder);
 
     // LLVMDumpType(instance_type);
     // LLVMDumpType(LLVMTypeOf(instance));
@@ -670,6 +674,8 @@ LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+  printf("application: \n");
+  print_ast(ast);
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
