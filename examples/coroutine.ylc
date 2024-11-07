@@ -9,7 +9,9 @@ let co = fn () ->
   yield 3.
 ;;
 
-co ()
-co ()
-co ()
-co ()
+let x = co ();
+x ();
+x ();
+x ();
+
+

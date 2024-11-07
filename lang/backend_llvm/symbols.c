@@ -326,19 +326,21 @@ Type *create_loop_sig_type() {
 }
 
 Type *create_iter_map_sig_type() {
-  // Type *input_type = tvar("cor_input_param");
-  Type *ret_type = tvar("cor_ret");
-  Type *instance_type = type_fn(&t_void, create_option_type(ret_type));
-  instance_type->is_coroutine_instance = true;
+  Type *input_param = tvar("cor_input_param");
+  Type *input_ret = tvar("cor_input_ret");
 
-  Type *to_type = tvar("cor_ret_to");
-  Type *to_instance_type = type_fn(&t_void, create_option_type(to_type));
-  to_instance_type->is_coroutine_instance = true;
-  Type *func = type_fn(ret_type, to_type);
+  Type *input_instance_type =
+      create_coroutine_instance_type(input_param, input_ret);
 
-  Type *map_sig = to_instance_type;
-  map_sig = type_fn(instance_type, map_sig);
-  map_sig = type_fn(func, map_sig);
+  Type *output_ret = tvar("cor_output_ret");
+  Type *transform_func = type_fn(input_ret, output_ret);
+
+  Type *output_instance_type =
+      create_coroutine_instance_type(input_param, output_ret);
+  Type *map_sig = output_instance_type;
+  map_sig = type_fn(input_instance_type, map_sig);
+  map_sig = type_fn(transform_func, map_sig);
+
   return map_sig;
 }
 

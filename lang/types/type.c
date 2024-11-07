@@ -858,6 +858,13 @@ Type *copy_type(Type *t) {
       copy->implements[i] = t->implements[i];
     }
   }
+  if (copy->kind == T_COROUTINE_INSTANCE) {
+    copy->data.T_COROUTINE_INSTANCE.params_type =
+        copy_type(t->data.T_COROUTINE_INSTANCE.params_type);
+
+    copy->data.T_COROUTINE_INSTANCE.yield_interface =
+        copy_type(t->data.T_COROUTINE_INSTANCE.yield_interface);
+  }
 
   copy->meta = t->meta;
   copy->is_coroutine_fn = t->is_coroutine_fn;
@@ -1147,20 +1154,39 @@ Type *create_array_type(Type *of, int size) {
   return gen_array;
 }
 
-Type *create_coroutine_instance_type(Type *f) {
-  int args_len = 0;
-  Type *fn = f;
-  Type *params_obj;
+Type *create_coroutine_instance_type(Type *param_type, Type *ret_type) {
+  Type *inst = empty_type();
+  inst->kind = T_COROUTINE_INSTANCE;
+  inst->data.T_COROUTINE_INSTANCE.params_type = param_type;
+  inst->data.T_COROUTINE_INSTANCE.yield_interface =
+      type_fn(&t_void, create_option_type(ret_type));
+  return inst;
+}
+bool is_coroutine_instance_type(Type *inst) {
+  return inst->kind == T_COROUTINE_INSTANCE;
+}
 
-  while (fn->data.T_FN.to->kind == T_FN) {
-    fn = fn->data.T_FN.to;
-    args_len++;
+bool is_coroutine_generator_fn(Type *gen) {
+  if (gen->kind != T_FN) {
+    return false;
   }
+  Type *ret = fn_return_type(gen);
+  return is_coroutine_instance_type(ret);
+}
 
-  Type *return_type = fn->data.T_FN.to;
-  Type *instance_type = talloc(sizeof(Type));
-  // instance_type->data.T_COROUTINE_INSTANCE.param_type =
-  fn->data.T_FN.to = type_fn(&t_void, create_option_type(return_type));
-  fn->data.T_FN.to->is_coroutine_instance = true;
-  f->is_coroutine_fn = true;
+Type *coroutine_instance_fn_def_type(Type *inst) {
+  Type *in_param = inst->data.T_COROUTINE_INSTANCE.params_type;
+  Type *out_ret = inst->data.T_COROUTINE_INSTANCE.yield_interface;
+  out_ret = out_ret->data.T_FN.to;
+  out_ret = type_of_option(out_ret);
+
+  Type *fn = out_ret;
+  if (is_tuple_type(in_param)) {
+    for (int i = in_param->data.T_CONS.num_args - 1; i >= 0; i--) {
+      fn = type_fn(in_param->data.T_CONS.args[i], fn);
+    }
+  } else {
+    fn = type_fn(in_param, fn);
+  }
+  return fn;
 }

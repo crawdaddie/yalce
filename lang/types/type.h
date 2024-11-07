@@ -302,5 +302,11 @@ int *array_type_size_ptr(Type *t);
 Type *create_array_type(Type *of, int size);
 
 Type *create_tuple_type(int len, Type **contained_types);
-Type *create_coroutine_instance_type(Type *fn);
+
+Type *create_coroutine_instance_type(Type *param, Type *ret_type);
+
+bool is_coroutine_instance_type(Type *inst);
+
+bool is_coroutine_generator_fn(Type *gen);
+Type *coroutine_instance_fn_def_type(Type *inst);
 #endif

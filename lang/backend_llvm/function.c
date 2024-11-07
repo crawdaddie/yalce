@@ -379,8 +379,6 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_COROUTINE_GENERATOR: {
-    printf("call coroutine generator\n");
-    print_type(expected_fn_type);
     JITSymbol *generator_sym = sym;
 
     LLVMTypeRef instance_type = coroutine_instance_type(
@@ -390,9 +388,6 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
     LLVMValueRef instance = codegen_coroutine_instance(
         NULL, args, args_len, fn_return_type(expected_fn_type), sym->val, ctx,
         module, builder);
-
-    // LLVMDumpType(instance_type);
-    // LLVMDumpType(LLVMTypeOf(instance));
 
     return instance;
   }
@@ -674,9 +669,6 @@ LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-  printf("application: \n");
-  print_ast(ast);
-
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
   const char *sym_name =
@@ -739,8 +731,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *sym_type = ast->data.AST_APPLICATION.function->md;
-  // printf("application\n");
-  // print_type(sym_type);
   if (sym_type->kind == T_CONS && !is_generic(sym_type)) {
     return codegen_cons(ast, ctx, module, builder);
   }

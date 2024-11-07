@@ -1,0 +1,34 @@
+#! env ylc
+%include ../engine/bindings/Synth
+%include ../engine/bindings/MIDI
+%include ../engine/bindings/Sched
+%include String
+
+let cb = fn
+  instance: (() -> Option of Double)
+  frame_offset: (Int) 
+  ->
+  match instance () with
+  | Some v -> (
+    schedule_event cb v instance;
+    ()
+  )
+  | None -> ()
+;;
+
+let geo = fn a ->
+  yield a; 
+  yield geo (a * 1.1)
+;;
+
+let inf = geo 0.25;
+
+schedule_event_quant cb 0.5 inf;
+
+# let map = fn inst func ->
+#   match inst () with
+#   | Some 
+ 
+
+
+  

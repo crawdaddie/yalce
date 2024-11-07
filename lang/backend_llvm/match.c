@@ -186,6 +186,21 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
 
       return _TRUE;
     }
+    if (val_type->kind == T_COROUTINE_INSTANCE) {
+      JITSymbol *sym =
+          new_symbol(STYPE_COROUTINE_INSTANCE, val_type, val,
+                     coroutine_instance_type(type_to_llvm_type(
+                         val_type->data.T_COROUTINE_INSTANCE.params_type,
+                         ctx->env, module)));
+
+      sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type = type_to_llvm_type(
+          coroutine_instance_fn_def_type(val_type), ctx->env, module);
+
+      ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+                  hash_string(id_chars, id_len), sym);
+
+      return _TRUE;
+    }
 
     if (ctx->stack_ptr == 0) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
