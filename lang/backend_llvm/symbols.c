@@ -203,15 +203,13 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
   if (expr_type->kind == T_FN &&
       is_coroutine_generator_ast(ast->data.AST_LET.expr)) {
-    print_ast(ast);
-    printf("compile coroutine generator\n");
 
-    print_type(ast->md);
     Type *def_type = ast->md;
     Type *instance_type = fn_return_type(def_type);
-    print_type(instance_type);
     LLVMValueRef coroutine_func =
-        coroutine_def(ast, &cont_ctx, module, builder);
+        coroutine_def(ast->data.AST_LET.expr, &cont_ctx, module, builder);
+    // TODO: save symbol here
+
     return NULL;
   }
 

@@ -168,6 +168,18 @@ void add_recursive_cr_def_ref(ObjString fn_name, LLVMValueRef func,
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
+// typedef struct coroutine_generator_symbol_data_t {
+//   Ast *ast;
+//   int stack_ptr;
+//   Type *ret_option_type;
+//   LLVMTypeRef llvm_ret_option_type;
+//   Type *params_obj_type;
+//   LLVMTypeRef llvm_params_obj_type;
+//   LLVMTypeRef def_fn_type;
+//   bool recursive_ref;
+// } coroutine_generator_symbol_data_t;
+//
+
 LLVMValueRef coroutine_default_block(LLVMValueRef instance,
                                      LLVMTypeRef instance_type,
                                      LLVMTypeRef ret_opt_type,
@@ -219,10 +231,149 @@ LLVMValueRef coroutine_default_block(LLVMValueRef instance,
   LLVMValueRef str = codegen_option(NULL, builder);
   LLVMBuildRet(builder, str);
 }
+LLVMTypeRef llvm_def_type_of_instance(Type *instance_type, JITLangCtx *ctx,
+                                      LLVMModuleRef module) {
+
+  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
+  Type *ret_opt =
+      fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
+  LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
+  LLVMTypeRef llvm_def_type =
+      LLVMFunctionType(llvm_ret_opt_type,
+                       (LLVMTypeRef[]){coroutine_instance_type(
+                           type_to_llvm_type(params_obj_type, ctx->env, module))
+
+                       },
+                       1, 0);
+  return llvm_def_type;
+}
 
 LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  return NULL;
+  Type *fn_type = fn_ast->md;
+  Type *instance_type = fn_return_type(fn_type);
+
+  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
+  Type *ret_opt =
+      fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
+  LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
+  LLVMTypeRef llvm_params_obj_type =
+      type_to_llvm_type(params_obj_type, ctx->env, module);
+  LLVMTypeRef llvm_instance_type =
+      coroutine_instance_type(llvm_params_obj_type);
+  LLVMTypeRef llvm_def_type = LLVMFunctionType(
+      llvm_ret_opt_type,
+      (LLVMTypeRef[]){LLVMPointerType(llvm_instance_type, 0)}, 1, 0);
+
+  int num_yields = fn_ast->data.AST_LAMBDA.num_yields;
+
+  coroutine_ctx_t prev_cr_ctx = _coroutine_ctx;
+  _coroutine_ctx =
+      (coroutine_ctx_t){.num_branches = num_yields + 1, .current_branch = 0};
+
+  ObjString fn_name = fn_ast->data.AST_LAMBDA.fn_name;
+  bool is_anon = false;
+
+  if (fn_name.chars == NULL) {
+    is_anon = true;
+  }
+
+  size_t args_len = fn_ast->data.AST_LAMBDA.len;
+
+  _coroutine_ctx.ret_option_type = llvm_ret_opt_type;
+
+  LLVMValueRef func = LLVMAddFunction(
+      module, !is_anon ? fn_name.chars : "anonymous_coroutine_def",
+      llvm_def_type);
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  _coroutine_ctx.func = func;
+  _coroutine_ctx.func_type = llvm_def_type;
+  _coroutine_ctx.instance_type = llvm_instance_type;
+
+  JITLangCtx fn_ctx = ctx_push(*ctx);
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef _block_refs[_coroutine_ctx.num_branches];
+  _coroutine_ctx.block_refs = _block_refs;
+  for (int i = 0; i < num_yields; i++) {
+    _coroutine_ctx.block_refs[i] = LLVMAppendBasicBlock(func, "yield_case");
+  }
+  _coroutine_ctx.block_refs[num_yields] = LLVMAppendBasicBlock(func, "default");
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  if (!is_anon) {
+    add_recursive_cr_def_ref(fn_name, func, fn_type,
+                             (coroutine_generator_symbol_data_t){
+                                 .ast = fn_ast,
+                                 .stack_ptr = ctx->stack_ptr,
+                                 .ret_option_type = ret_opt,
+                                 .llvm_ret_option_type = llvm_ret_opt_type,
+                                 .params_obj_type = params_obj_type,
+                                 .def_fn_type = llvm_def_type,
+                                 .recursive_ref = true},
+                             &fn_ctx);
+  }
+
+  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+
+  if (!((args_len == 1 && fn_type->data.T_FN.from->kind == T_VOID) ||
+        (args_len == 0))) {
+    LLVMValueRef params_tuple =
+        codegen_tuple_access(3, instance_ptr, llvm_instance_type, builder);
+
+    if (args_len > 1) {
+      for (size_t i = 0; i < args_len; i++) {
+        Ast *param_ast = fn_ast->data.AST_LAMBDA.params + i;
+
+        LLVMValueRef _param_val = codegen_tuple_access(
+            i, params_tuple, llvm_params_obj_type, builder);
+
+        match_values(param_ast, _param_val,
+                     params_obj_type->data.T_CONS.args[i], &fn_ctx, module,
+                     builder);
+      }
+    } else {
+      Ast *param_ast = fn_ast->data.AST_LAMBDA.params;
+
+      LLVMValueRef param = LLVMBuildStructGEP2(builder, llvm_instance_type,
+                                               instance_ptr, 3, "get_param");
+
+      LLVMValueRef val =
+          LLVMBuildLoad2(builder, llvm_params_obj_type, param, "");
+
+      match_values(param_ast, val, params_obj_type, &fn_ctx, module, builder);
+    }
+  }
+
+  LLVMValueRef switch_val =
+      codegen_tuple_access(1, instance_ptr, llvm_instance_type, builder);
+  _coroutine_ctx.switch_val = switch_val;
+
+  LLVMValueRef switch_inst = LLVMBuildSwitch(
+      builder, switch_val, _coroutine_ctx.block_refs[num_yields], num_yields);
+
+  for (int i = 0; i < num_yields; i++) {
+    LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt32Type(), i, 0),
+                _coroutine_ctx.block_refs[i]);
+  }
+
+  LLVMPositionBuilderAtEnd(builder, _coroutine_ctx.block_refs[0]);
+
+  LLVMValueRef body =
+      codegen(fn_ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
+
+
+  coroutine_default_block(instance_ptr, llvm_instance_type,
+                         llvm_ret_opt_type, builder);
+
+
+
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  _coroutine_ctx = prev_cr_ctx;
+  return func;
 }
 
 LLVMValueRef
