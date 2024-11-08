@@ -385,14 +385,21 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
         generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
             .llvm_params_obj_type);
 
+    printf("create new instance\n");
+    print_type(expected_fn_type);
+    // LLVMDumpValue(sym->val);
+    printf("\n");
     LLVMValueRef instance = codegen_coroutine_instance(
         NULL, args, args_len, fn_return_type(expected_fn_type), sym->val, ctx,
         module, builder);
+
+    LLVMDumpValue(instance);
 
     return instance;
   }
 
   case STYPE_COROUTINE_INSTANCE: {
+    printf("call cor inst\n");
     return codegen_coroutine_next(
         sym->val, sym->llvm_type,
         sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type, ctx, module,

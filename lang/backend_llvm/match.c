@@ -177,6 +177,10 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     //   return _TRUE;
     // }
 
+    if (val_type->kind == T_FN && is_coroutine_generator_fn(val_type)) {
+      printf("coroutine function\n");
+      return _TRUE;
+    }
     if (val_type->kind == T_FN && !(is_generic(val_type))) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
       JITSymbol *sym = new_symbol(STYPE_FUNCTION, val_type, val, llvm_type);

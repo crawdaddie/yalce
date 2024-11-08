@@ -60,4 +60,7 @@ LLVMValueRef coroutine_loop(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
 
 LLVMValueRef coroutine_map(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                            LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder);
 #endif

@@ -18,6 +18,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMTypeRef param_struct_type(Type *fn_type, int fn_len, Type *param_obj_type,
                               Type *return_type, TypeEnv *env,
                               LLVMModuleRef module) {
+  printf("param struct type");
+  print_type(param_obj_type);
+  print_type(return_type);
+  printf("######\n");
 
   LLVMTypeRef llvm_param_types[fn_len];
 
@@ -143,14 +147,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   LLVMValueRef val = codegen(expr, ctx, module, builder);
-  LLVMValueRef ret_opt = LLVMGetUndef(_coroutine_ctx.ret_option_type);
-
-  ret_opt =
-      LLVMBuildInsertValue(builder, ret_opt, LLVMConstInt(LLVMInt8Type(), 0, 0),
-                           0, "insert Some tag");
-
-  ret_opt = LLVMBuildInsertValue(builder, ret_opt, val, 1, "insert Some Value");
-
+  LLVMValueRef ret_opt = codegen_option(val, builder);
   LLVMBuildRet(builder, ret_opt);
   LLVMPositionBuilderAtEnd(
       builder, _coroutine_ctx.block_refs[_coroutine_ctx.current_branch]);
@@ -219,10 +216,13 @@ LLVMValueRef coroutine_default_block(LLVMValueRef instance,
   // Continue with original null case
   LLVMPositionBuilderAtEnd(builder, continue_block);
   // Original null case code
-  LLVMValueRef str = LLVMGetUndef(ret_opt_type);
-  str = LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt8Type(), 1, 0),
-                             0, "insert None tag");
+  LLVMValueRef str = codegen_option(NULL, builder);
   LLVMBuildRet(builder, str);
+}
+
+LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  return NULL;
 }
 
 LLVMValueRef
@@ -230,6 +230,7 @@ compile_coroutine_generator(Ast *ast,
                             coroutine_generator_symbol_data_t symbol_data,
                             LLVMTypeRef instance_type, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
+
   coroutine_ctx_t prev_cr_ctx = _coroutine_ctx;
   int num_yields = ast->data.AST_LAMBDA.num_yields;
 
@@ -242,6 +243,7 @@ compile_coroutine_generator(Ast *ast,
   if (fn_name.chars == NULL) {
     is_anon = true;
   }
+  printf("compile coroutine generator %s\n", fn_name.chars);
 
   Type *fn_type = ast->md;
   size_t args_len = ast->data.AST_LAMBDA.len;
@@ -323,6 +325,8 @@ compile_coroutine_generator(Ast *ast,
   LLVMValueRef body =
       codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
 
+  LLVMDumpType(symbol_data.llvm_ret_option_type);
+
   coroutine_default_block(instance_ptr, instance_type,
                           symbol_data.llvm_ret_option_type, builder);
   _coroutine_ctx = prev_cr_ctx;
@@ -354,6 +358,7 @@ LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
 
+  printf("codegen coroutine binding\n");
   Ast *def_ast = ast->data.AST_LET.expr;
   Type *fn_type = def_ast->md;
   size_t args_len = def_ast->data.AST_LAMBDA.len;
@@ -416,14 +421,14 @@ LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
  */
 LLVMValueRef codegen_coroutine_instance(LLVMValueRef instance, Ast *args,
                                         int args_len, Type *_instance_type,
-                                        LLVMValueRef def_fn, JITLangCtx *ctx,
+                                        LLVMValueRef fn, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
 
   LLVMTypeRef params_obj_type = type_to_llvm_type(
       _instance_type->data.T_COROUTINE_INSTANCE.params_type, ctx->env, module);
 
-  LLVMValueRef coroutine_def = def_fn;
+  LLVMValueRef coroutine_def = fn;
 
   LLVMTypeRef instance_type = coroutine_instance_type(params_obj_type);
 
@@ -433,7 +438,7 @@ LLVMValueRef codegen_coroutine_instance(LLVMValueRef instance, Ast *args,
 
   LLVMValueRef fn_gep =
       coroutine_instance_fn_gep(instance, instance_type, builder);
-  LLVMBuildStore(builder, def_fn, fn_gep);
+  LLVMBuildStore(builder, fn, fn_gep);
 
   LLVMValueRef counter_gep =
       coroutine_instance_counter_gep(instance, instance_type, builder);
@@ -473,6 +478,9 @@ LLVMValueRef codegen_coroutine_next(LLVMValueRef instance,
                                     LLVMTypeRef def_fn_type, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+  printf("coroutine next\n");
+  LLVMDumpType(def_fn_type);
+  printf("coroutine next\n");
   LLVMValueRef func = codegen_tuple_access(0, instance, instance_type, builder);
   LLVMValueRef result =
       LLVMBuildCall2(builder, def_fn_type, func, (LLVMValueRef[]){instance}, 1,
@@ -577,10 +585,7 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type, bool inf,
     LLVMBuildRet(builder, ret_opt);
 
   } else {
-    LLVMValueRef none = LLVMGetUndef(llvm_ret_opt_type);
-    none =
-        LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
-                             0, "insert None tag");
+    LLVMValueRef none = codegen_option(NULL, builder);
     LLVMBuildRet(builder, none);
   }
 
@@ -671,21 +676,13 @@ LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
   LLVMBuildStore(builder, list_next, params_gep);
   increment_instance_counter(instance, instance_type, builder);
 
-  LLVMValueRef ret_opt = LLVMGetUndef(llvm_ret_opt_type);
-
-  ret_opt =
-      LLVMBuildInsertValue(builder, ret_opt, LLVMConstInt(LLVMInt8Type(), 0, 0),
-                           0, "insert Some tag");
-  ret_opt =
-      LLVMBuildInsertValue(builder, ret_opt, value, 1, "insert Some Value");
+  LLVMValueRef ret_opt = codegen_option(value, builder);
   LLVMBuildRet(builder, ret_opt);
 
   LLVMPositionBuilderAtEnd(builder, continue_block);
   // null path
 
-  LLVMValueRef none = LLVMGetUndef(llvm_ret_opt_type);
-  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
-                              0, "insert None tag");
+  LLVMValueRef none = codegen_option(NULL, builder);
   LLVMBuildRet(builder, none);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
