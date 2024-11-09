@@ -92,9 +92,14 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   for (int i = 0; i < len; i++) {
 
     Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
-
-    app_arg_types[i] =
-        TRY_MSG(infer(arg_ast, env), "could not infer application argument");
+    Type *arg_type = infer(arg_ast, env);
+    if (!arg_type) {
+      fprintf(stderr, "could not infer application argument [%s:%d]\n",
+              __FILE__, __LINE__);
+      print_location(arg_ast);
+      return NULL;
+    }
+    app_arg_types[i] = arg_type;
 
     if (app_arg_types[i]->kind == T_FN && arg_ast->tag != AST_LAMBDA) {
       app_arg_types[i] = copy_type(app_arg_types[i]);

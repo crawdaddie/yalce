@@ -329,6 +329,41 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
   return constructor(val, from_type, module, builder);
 }
 
+LLVMValueRef
+call_coroutine_generator_symbol(LLVMValueRef _instance, JITSymbol *sym,
+                                Ast *args, int args_len, Type *expected_fn_type,
+                                JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  LLVMValueRef def = sym->val;
+  LLVMTypeRef llvm_def_type = sym->llvm_type;
+  Type *instance_type = fn_return_type(sym->symbol_type);
+
+  LLVMValueRef instance = codegen_coroutine_instance(_instance, instance_type,
+                                                     def, ctx, module, builder);
+
+  if (args_len == 1 && ((Type *)args[0].md)->kind == T_VOID) {
+    return instance;
+  }
+
+  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
+
+  LLVMTypeRef llvm_params_obj_type =
+      type_to_llvm_type(params_obj_type, ctx->env, module);
+
+  LLVMTypeRef llvm_instance_type =
+      coroutine_instance_type(llvm_params_obj_type);
+
+  LLVMValueRef param_args[args_len];
+  for (int i = 0; i < args_len; i++) {
+    param_args[i] = codegen(args + i, ctx, module, builder);
+  }
+
+  set_instance_params(instance, llvm_instance_type, llvm_params_obj_type,
+                      param_args, args_len, builder);
+
+  return instance;
+}
+
 LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
                          int args_len, Type *expected_fn_type, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -379,31 +414,50 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_COROUTINE_GENERATOR: {
-    JITSymbol *generator_sym = sym;
-
-    LLVMTypeRef instance_type = coroutine_instance_type(
-        generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
-            .llvm_params_obj_type);
-
-    printf("create new instance\n");
-    print_type(expected_fn_type);
-    // LLVMDumpValue(sym->val);
-    printf("\n");
-    LLVMValueRef instance = codegen_coroutine_instance(
-        NULL, args, args_len, fn_return_type(expected_fn_type), sym->val, ctx,
-        module, builder);
-
-    LLVMDumpValue(instance);
-
-    return instance;
+    return call_coroutine_generator_symbol(
+        NULL, sym, args, args_len, expected_fn_type, ctx, module, builder);
+    // LLVMValueRef def = sym->val;
+    // LLVMTypeRef llvm_def_type = sym->llvm_type;
+    // Type *instance_type = fn_return_type(sym->symbol_type);
+    //
+    // LLVMValueRef instance = codegen_coroutine_instance(NULL, instance_type,
+    // def,
+    //                                                    ctx, module, builder);
+    //
+    // if (args_len == 1 && ((Type *)args[0].md)->kind == T_VOID) {
+    //
+    //   LLVMDumpValue(instance);
+    //   return instance;
+    // }
+    //
+    // Type *params_obj_type =
+    //     instance_type->data.T_COROUTINE_INSTANCE.params_type;
+    //
+    // LLVMTypeRef llvm_params_obj_type =
+    //     type_to_llvm_type(params_obj_type, ctx->env, module);
+    //
+    // LLVMTypeRef llvm_instance_type =
+    //     coroutine_instance_type(llvm_params_obj_type);
+    //
+    // LLVMValueRef param_args[args_len];
+    // for (int i = 0; i < args_len; i++) {
+    //   param_args[i] = codegen(args + i, ctx, module, builder);
+    // }
+    //
+    // set_instance_params(instance, llvm_instance_type, llvm_params_obj_type,
+    //                     param_args, args_len, builder);
+    //
+    // return instance;
   }
 
   case STYPE_COROUTINE_INSTANCE: {
-    printf("call cor inst\n");
-    return codegen_coroutine_next(
-        sym->val, sym->llvm_type,
-        sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type, ctx, module,
-        builder);
+
+    LLVMValueRef instance_ret =
+        coroutine_call(sym->val, sym->llvm_type,
+                       sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type,
+                       ctx, module, builder);
+
+    return instance_ret;
   }
   }
 

@@ -446,6 +446,7 @@ LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
   return LLVMBuildICmp(builder, LLVMIntEQ, l, r, "Int ==");
 }
+
 static LLVMValueRef codegen_neq_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
@@ -644,6 +645,11 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
   EQ_TC(t_int)->methods[0].size = sizeof(EqMethod);
   EQ_TC(t_int)->methods[1].method = &codegen_neq_int;
   EQ_TC(t_int)->methods[1].size = sizeof(EqMethod);
+
+  EQ_TC(t_bool)->methods[0].method = &codegen_eq_int;
+  EQ_TC(t_bool)->methods[0].size = sizeof(EqMethod);
+  EQ_TC(t_bool)->methods[1].method = &codegen_neq_int;
+  EQ_TC(t_bool)->methods[1].size = sizeof(EqMethod);
 
   ORD_TC(t_int)->methods[0].method = &codegen_lt_int;
   ORD_TC(t_int)->methods[0].size = sizeof(OrdMethod);

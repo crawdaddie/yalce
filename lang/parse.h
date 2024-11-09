@@ -96,6 +96,8 @@ typedef enum token_type {
   TOKEN_DOUBLE_SEMICOLON,
   TOKEN_IN,
   TOKEN_OF,
+  TOKEN_DOUBLE_AMP,
+  TOKEN_DOUBLE_PIPE,
 } token_type;
 
 typedef enum ast_tag {

@@ -203,11 +203,20 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 
     Type *def_type = ast->md;
     Type *instance_type = fn_return_type(def_type);
-    LLVMValueRef coroutine_func =
-        coroutine_def(ast->data.AST_LET.expr, &cont_ctx, module, builder);
-    // TODO: save symbol here
+    LLVMTypeRef llvm_def_type;
+    LLVMValueRef coroutine_func = coroutine_def(
+        ast->data.AST_LET.expr, &cont_ctx, module, builder, &llvm_def_type);
 
-    return NULL;
+    JITSymbol *def_sym = new_symbol(STYPE_COROUTINE_GENERATOR, def_type,
+                                    coroutine_func, llvm_def_type);
+
+    const char *id_chars = binding->data.AST_IDENTIFIER.value;
+    int id_len = binding->data.AST_IDENTIFIER.length;
+
+    ht_set_hash(cont_ctx.stack + cont_ctx.stack_ptr, id_chars,
+                hash_string(id_chars, id_len), def_sym);
+
+    return coroutine_func;
   }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
@@ -295,6 +304,17 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
         new_symbol(STYPE_GENERIC_FUNCTION, bm.binop_fn_type, NULL, NULL);
     ht_set_hash(stack, bm.name, hash_string(bm.name, strlen(bm.name)), sym);
   }
+
+#define FN_SYMBOL(id, type)                                                    \
+  env = env_extend(env, id, type);                                             \
+  ({                                                                           \
+    JITSymbol *sym = new_symbol(STYPE_FUNCTION, type, NULL, NULL);             \
+    ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);                  \
+  })
+
+  FN_SYMBOL(TYPE_NAME_OP_AND, &t_bool_binop);
+  FN_SYMBOL(TYPE_NAME_OP_OR, &t_bool_binop);
+
 #define GENERIC_FN_SYMBOL(id, type)                                            \
   env = env_extend(env, id, type);                                             \
   ({                                                                           \

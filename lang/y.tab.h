@@ -57,22 +57,26 @@
      ARROW = 273,
      DOUBLE_COLON = 274,
      TOK_VOID = 275,
-     IN = 276,
-     AND = 277,
-     ASYNC = 278,
-     DOUBLE_AT = 279,
-     FSTRING_START = 280,
-     FSTRING_END = 281,
-     FSTRING_INTERP_START = 282,
-     FSTRING_INTERP_END = 283,
-     FSTRING_TEXT = 284,
-     APPLICATION = 285,
-     MODULO = 286,
-     NE = 287,
-     EQ = 288,
-     LE = 289,
-     GE = 290,
-     UMINUS = 291
+     TOK_DOUBLE_AMP = 276,
+     TOK_DOUBLE_PIPE = 277,
+     IN = 278,
+     AND = 279,
+     ASYNC = 280,
+     DOUBLE_AT = 281,
+     DOUBLE_AMP = 282,
+     DOUBLE_PIPE = 283,
+     FSTRING_START = 284,
+     FSTRING_END = 285,
+     FSTRING_INTERP_START = 286,
+     FSTRING_INTERP_END = 287,
+     FSTRING_TEXT = 288,
+     APPLICATION = 289,
+     MODULO = 290,
+     NE = 291,
+     EQ = 292,
+     LE = 293,
+     GE = 294,
+     UMINUS = 295
    };
 #endif
 /* Tokens.  */
@@ -94,22 +98,26 @@
 #define ARROW 273
 #define DOUBLE_COLON 274
 #define TOK_VOID 275
-#define IN 276
-#define AND 277
-#define ASYNC 278
-#define DOUBLE_AT 279
-#define FSTRING_START 280
-#define FSTRING_END 281
-#define FSTRING_INTERP_START 282
-#define FSTRING_INTERP_END 283
-#define FSTRING_TEXT 284
-#define APPLICATION 285
-#define MODULO 286
-#define NE 287
-#define EQ 288
-#define LE 289
-#define GE 290
-#define UMINUS 291
+#define TOK_DOUBLE_AMP 276
+#define TOK_DOUBLE_PIPE 277
+#define IN 278
+#define AND 279
+#define ASYNC 280
+#define DOUBLE_AT 281
+#define DOUBLE_AMP 282
+#define DOUBLE_PIPE 283
+#define FSTRING_START 284
+#define FSTRING_END 285
+#define FSTRING_INTERP_START 286
+#define FSTRING_INTERP_END 287
+#define FSTRING_TEXT 288
+#define APPLICATION 289
+#define MODULO 290
+#define NE 291
+#define EQ 292
+#define LE 293
+#define GE 294
+#define UMINUS 295
 
 
 
@@ -126,7 +134,7 @@ typedef union YYSTYPE
     char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 130 "lang/y.tab.h"
+#line 138 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

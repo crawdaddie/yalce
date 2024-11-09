@@ -1,5 +1,4 @@
 #! env ylc
-
 let co = fn () ->
   yield 1.;
   yield 2.;
@@ -7,14 +6,39 @@ let co = fn () ->
 ;;
 
 %test
-%include String
 
 
-let test_x = fn () ->
-  let x = co ();
-  match x with 
-  | Some 1 -> true
+let inst = co ();
+
+let _v = inst ();
+let test_it0 = fn () ->
+  match _v with
+  | Some 1. -> true
   | _ -> false
 ;;
+
+let _v = inst ();
+let test_it1 = fn () ->
+  match _v with
+  | Some 2. -> true
+  | _ -> false
+;;
+
+let _v = inst ();
+let test_it2 = fn () ->
+  match _v with
+  | Some 3. -> true
+  | _ -> false
+;;
+
+let _v = inst ();
+let test_cor_end = fn () ->
+  match _v with
+  | None -> true
+  | _ -> false
+;;
+
+
+
 
 

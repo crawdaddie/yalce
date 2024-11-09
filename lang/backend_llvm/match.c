@@ -33,6 +33,13 @@ LLVMValueRef codegen_equality(LLVMValueRef left, Type *left_type,
     return binop_method(left, right, module, builder);
   }
 
+  if (left_type->kind == T_NUM) {
+    Method method = left_type->implements[0]->methods[0];
+
+    LLVMBinopMethod binop_method = method.method;
+    return binop_method(left, right, module, builder);
+  }
+
   if (left_type->kind == T_CHAR) {
 
     return LLVMBuildICmp(builder, LLVMIntEQ, left, right, "char_cmp");
@@ -67,17 +74,13 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *test_val_type = ast->data.AST_MATCH.expr->md;
 
-  // Create basic blocks
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMBasicBlockRef end_block =
       LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block), "match.end");
 
-  // Create a PHI node for the result
   LLVMPositionBuilderAtEnd(builder, end_block);
   LLVMTypeRef res_type = type_to_llvm_type(ast->md, ctx->env, module);
   LLVMValueRef phi = LLVMBuildPhi(builder, res_type, "match.result");
-  //
-  // Return to the current block to start generating comparisons
   LLVMPositionBuilderAtEnd(builder, current_block);
 
   LLVMBasicBlockRef next_block = NULL;
@@ -85,7 +88,6 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Compile each branch
   for (int i = 0; i < len; i++) {
-    // printf("MATCH BRANCH %d:\n", i);
     Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
     Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
 
@@ -99,13 +101,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       next_block = LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block),
                                         "match.next");
     } else {
-      // print_ast(test_expr);
-      // printf("next blocK???");
       next_block = NULL; // Last iteration, no need for a next block
-      //
-      // next_block =
-      // LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block),
-      //                                   "match.next");
     }
 
     JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
@@ -113,7 +109,6 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMValueRef test_value = match_values(test_expr, test_val, test_val_type,
                                            &branch_ctx, module, builder);
 
-    // printf("null operand ??? %p\n", test_value);
     if (i == len - 1) {
       // If it's the default case, just jump to the branch block
       // printf("If it's the default case, just jump to the branch block\n");
@@ -128,10 +123,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // Compile the result expression in the branch block
     LLVMPositionBuilderAtEnd(builder, branch_block);
 
-    // print_ast(result_expr);
     LLVMValueRef branch_result =
         codegen(result_expr, &branch_ctx, module, builder);
-    // LLVMDumpValue(branch_result);
 
     LLVMBuildBr(builder, end_block);
     LLVMAddIncoming(phi, &branch_result, &branch_block, 1);
@@ -166,19 +159,15 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
   case AST_IDENTIFIER: {
 
     const char *id_chars = binding->data.AST_IDENTIFIER.value;
+
     int id_len = binding->data.AST_IDENTIFIER.length;
 
     if (*(binding->data.AST_IDENTIFIER.value) == '_' &&
         binding->data.AST_IDENTIFIER.length == 1) {
       return _TRUE;
     }
-    // if (val_type->kind == T_FN && val_type->is_coroutine_instance) {
-    //   bind_coroutine_instance(binding, val, val_type, ctx, module, builder);
-    //   return _TRUE;
-    // }
 
     if (val_type->kind == T_FN && is_coroutine_generator_fn(val_type)) {
-      printf("coroutine function\n");
       return _TRUE;
     }
     if (val_type->kind == T_FN && !(is_generic(val_type))) {
@@ -191,14 +180,20 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       return _TRUE;
     }
     if (val_type->kind == T_COROUTINE_INSTANCE) {
-      JITSymbol *sym =
-          new_symbol(STYPE_COROUTINE_INSTANCE, val_type, val,
-                     coroutine_instance_type(type_to_llvm_type(
-                         val_type->data.T_COROUTINE_INSTANCE.params_type,
-                         ctx->env, module)));
+      LLVMTypeRef llvm_instance_type = coroutine_instance_type(
+          type_to_llvm_type(val_type->data.T_COROUTINE_INSTANCE.params_type,
+                            ctx->env, module));
 
-      sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type = type_to_llvm_type(
-          coroutine_instance_fn_def_type(val_type), ctx->env, module);
+      JITSymbol *sym = new_symbol(STYPE_COROUTINE_INSTANCE, val_type, val,
+                                  llvm_instance_type);
+
+      Type *inst_ret = val_type->data.T_COROUTINE_INSTANCE.yield_interface;
+      inst_ret = fn_return_type(inst_ret);
+      Type *inst_params = val_type->data.T_COROUTINE_INSTANCE.params_type;
+
+      sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type = LLVMFunctionType(
+          type_to_llvm_type(inst_ret, ctx->env, module),
+          (LLVMTypeRef[]){LLVMPointerType(llvm_instance_type, 0)}, 1, 0);
 
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);
@@ -235,6 +230,7 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
     }
 
     if (v) {
+      // MATCH SIMPLE ENUM MEMBER
       LLVMValueRef simple_enum_member =
           codegen_simple_enum_member(binding, ctx, module, builder);
 
@@ -292,6 +288,7 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
                          LLVMConstInt(TAG_TYPE, vidx, 0), module, builder);
 
       Type *contained_type = ((Type *)binding->md)->data.T_CONS.args[0];
+
       LLVMValueRef vals_match = match_values(
           binding->data.AST_APPLICATION.args,
           variant_extract_value(
@@ -301,6 +298,7 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
 
       return LLVMBuildAnd(builder, tags_match, vals_match, "");
     }
+
     // TODO: build more cons cases
     return _FALSE;
   }
@@ -347,7 +345,6 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
   }
 
   default: {
-
     LLVMValueRef test_val = codegen(binding, ctx, module, builder);
 
     Type *test_type = binding->md;

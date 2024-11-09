@@ -210,6 +210,16 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
     function = ast_identifier((ObjString){"::", 2});
     break;
   }
+
+  case TOKEN_DOUBLE_AMP: {
+    function = ast_identifier((ObjString){"&&", 2});
+    break;
+  }
+
+  case TOKEN_DOUBLE_PIPE: {
+    function = ast_identifier((ObjString){"||", 2});
+    break;
+  }
   }
 
   node->data.AST_APPLICATION.function = function;

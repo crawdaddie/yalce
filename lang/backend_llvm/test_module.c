@@ -78,9 +78,15 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef num_tests = LLVMConstInt(LLVMInt32Type(), 0, 0);
   LLVMValueRef num_passes = LLVMConstInt(LLVMInt32Type(), 0, 0);
 
-  for (hti symbols_it = ht_iterator(ctx->stack); ht_next(&symbols_it);) {
-    if (strncmp(symbols_it.key, "test_", 5) == 0) {
-      JITSymbol *sym = symbols_it.value;
+  int len = ast->data.AST_BODY.len;
+  Ast **stmts = ast->data.AST_BODY.stmts;
+  for (int i = 0; i < len; i++) {
+    Ast *stmt = *(stmts + i);
+
+    const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+    if (stmt->tag == AST_LET && strncmp(key, "test_", 5) == 0) {
+
+      JITSymbol *sym = ht_get(ctx->stack, key);
 
       // Increment num_tests
       num_tests = LLVMBuildAdd(
@@ -96,8 +102,7 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
       num_passes =
           LLVMBuildAdd(builder, num_passes, should_increment, "num_passes");
 
-      LLVMValueRef name_str =
-          create_string_constant(builder, module, symbols_it.key);
+      LLVMValueRef name_str = create_string_constant(builder, module, key);
 
       LLVMValueRef report_args[] = {name_str, test_call};
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(report_func), report_func,
@@ -122,6 +127,7 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return 0;
   }
 
+  // LLVMDumpModule(module);
   LLVMExecutionEngineRef engine;
   if (prepare_ex_engine(ctx, &engine, module) != 0) {
     return 0;

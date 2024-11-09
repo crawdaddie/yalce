@@ -35,6 +35,7 @@ extern Type t_gte;
 extern Type t_lte;
 extern Type t_eq;
 extern Type t_neq;
+extern Type t_bool_binop;
 
 extern Type t_array_var_el;
 extern Type t_array_var;
@@ -82,6 +83,8 @@ extern Type t_iter_of_array_sig;
 #define TYPE_NAME_OP_EQ  "=="
 #define TYPE_NAME_OP_NEQ  "!="
 #define TYPE_NAME_OP_LIST_PREPEND  "::"
+#define TYPE_NAME_OP_AND  "&&"
+#define TYPE_NAME_OP_OR  "||"
 
 typedef struct _binop_map {
   const char *name;

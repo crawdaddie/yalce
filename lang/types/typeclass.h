@@ -53,6 +53,7 @@ typedef struct TypeClass {
 extern TypeClass TCArithmetic_int;
 extern TypeClass TCOrd_int;
 extern TypeClass TCEq_int;
+extern TypeClass TCEq_bool;
 
 extern TypeClass TCArithmetic_uint64;
 extern TypeClass TCOrd_uint64;

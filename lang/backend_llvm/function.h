@@ -34,6 +34,11 @@ LLVMValueRef specific_fns_lookup(SpecificFns *list, Type *key);
 SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
                                  LLVMValueRef func);
 
-Ast *get_specific_fn_ast_variant(Ast *original_fn_ast,
-                                        Type *specific_fn_type);
+Ast *get_specific_fn_ast_variant(Ast *original_fn_ast, Type *specific_fn_type);
+
+LLVMValueRef
+call_coroutine_generator_symbol(LLVMValueRef _instance, JITSymbol *sym,
+                                Ast *args, int args_len, Type *expected_fn_type,
+                                JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder);
 #endif

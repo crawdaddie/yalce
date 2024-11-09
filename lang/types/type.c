@@ -34,7 +34,10 @@ Type t_string_add_fn_sig = MAKE_FN_TYPE_3(&t_string, &t_string, &t_string);
 Type t_char_array = {T_CONS,
                      {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}}};
 
-Type t_bool = {T_BOOL};
+Type t_bool = {T_BOOL, .num_implements = 1,
+               .implements = (TypeClass *[]){
+                   &TCEq_bool,
+               }};
 Type t_void = {T_VOID};
 Type t_char = {T_CHAR};
 Type t_ptr = {T_CONS,
@@ -95,6 +98,8 @@ Type t_eq = MAKE_FN_TYPE_3(&t_eq_a, &t_eq_b, &t_bool);
 Type t_neq_a = eq_var("a");
 Type t_neq_b = eq_var("b");
 Type t_neq = MAKE_FN_TYPE_3(&t_neq_a, &t_neq_b, &t_bool);
+
+Type t_bool_binop = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
 
 Type t_list_var_el = {T_VAR, {.T_VAR = "vlist_el"}};
 Type t_list_var = {
@@ -705,6 +710,13 @@ Type *get_builtin_type(const char *id_chars) {
     }
     return NULL;
   }
+  if (*id_chars == *TYPE_NAME_OP_AND && *(id_chars + 1) == '&') {
+    return &t_bool_binop;
+  }
+
+  if (*id_chars == *TYPE_NAME_OP_OR && *(id_chars + 1) == '|') {
+    return &t_bool_binop;
+  }
 
   if (*id_chars == ':' && *(id_chars + 1) == ':') {
     return &t_list_prepend;
@@ -1012,6 +1024,10 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
 
   while (env) {
     if (is_variant_type(env->type)) {
+      // printf("type: ");
+      // print_type(member);
+      // printf("checking in variant: ");
+      // print_type(env->type);
       Type *variant = env->type;
       for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
         Type *variant_member = variant->data.T_CONS.args[i];
@@ -1025,6 +1041,7 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
         if (strcmp(mem_name, name) == 0) {
           // return copy_type(variant);
           *member_idx = i;
+          // printf("found member idx: %d\n", *member_idx);
           return variant;
         }
       }
