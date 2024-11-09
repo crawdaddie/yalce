@@ -1,5 +1,3 @@
-%include ../../examples/Testing
-
 let fib = fn x ->
   match x with
   | 0 -> 0
@@ -7,8 +5,9 @@ let fib = fn x ->
   | _ -> (fib (x - 1)) + (fib (x - 2))
 ;;
 
-test_val (fib 2 == 1) "fib 2 = 1";
-test_val (fib 3 == 2) "fib 3 = 2";
-test_val (fib 4 == 3) "fib 4 = 3";
-test_val (fib 5 == 5) "fib 5 = 5";
-test_val (fib 20 == 6765) "fib 20 = 6765";
+%test
+let test_fib2 = fn () -> fib 2 == 1;;
+let test_fib3 = fn () -> fib 3 == 2;;
+let test_fib4 = fn () -> fib 4 == 3;;
+let test_fib5 = fn () -> fib 5 == 5;;
+let test_fib20 = fn () -> fib 20 == 6765;;

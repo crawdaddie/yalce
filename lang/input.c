@@ -173,7 +173,7 @@ char *repl_input(const char *prompt) {
   return line;
 }
 
-char *read_script(const char *filename) {
+char *read_script(const char *filename, bool include_tests) {
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
     fprintf(stderr, "Error opening file: %s\n", filename);
@@ -188,6 +188,7 @@ char *read_script(const char *filename) {
   char *fcontent = (char *)malloc(fsize + 1);
 
   size_t bytes_read = fread(fcontent, 1, fsize, fp);
+  fclose(fp);
 
   if (bytes_read != fsize) {
     fprintf(stderr, "Error reading file: %s\n", filename);
@@ -198,7 +199,16 @@ char *read_script(const char *filename) {
 
   // Null-terminate the string
   fcontent[fsize] = '\0';
-  fclose(fp);
+
+  // If we don't want tests, search for the test marker and terminate the string
+  // there
+  if (!include_tests) {
+    char *test_marker = strstr(fcontent, "\n%test");
+    if (test_marker != NULL) {
+      *test_marker = '\0'; // Terminate the string at the marker
+    }
+  }
+
   return fcontent;
 }
 

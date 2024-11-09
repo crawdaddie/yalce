@@ -4,13 +4,7 @@
 make -C ../
 
 # Set the path to the executable
-EXE=../build/ylc
-
-# Check if the executable exists
-if [ ! -f "$EXE" ]; then
-    echo "Error: Executable not found at $EXE"
-    exit 1
-fi
+EXE=ylc --test
 
 # Check if the test_scripts directory exists
 if [ ! -d "./test_scripts" ]; then
@@ -41,24 +35,6 @@ NC='\033[0m'
 
 # Loop through each .ylc file and run the executable
 for file in $YLC_FILES; do
-    echo -e "${Green}$file:${NC}"
-    echo -e "${Cyan}"
-    # cat $file
-    echo -e "${NC}"
-    
-    # Run the executable and capture the output
-
-    output=$("$EXE" "$file" 2>&1)
-    echo -e "${Cyan}$output${NC}"
-    
-    
-    echo "File summary: $file_passed/$file_assertions assertions passed"
-    echo "========================================="
+    ylc --test $file
 done
 
-echo "Overall summary: $passed_tests/$total_tests assertions passed"
-
-# Exit with non-zero status if any assertions failed
-if [ $passed_tests -ne $total_tests ]; then
-    exit 1
-fi

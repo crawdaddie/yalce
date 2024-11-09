@@ -364,12 +364,8 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef body =
       codegen(fn_ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
 
-
-  coroutine_default_block(instance_ptr, llvm_instance_type,
-                         llvm_ret_opt_type, builder);
-
-
-
+  coroutine_default_block(instance_ptr, llvm_instance_type, llvm_ret_opt_type,
+                          builder);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
   _coroutine_ctx = prev_cr_ctx;

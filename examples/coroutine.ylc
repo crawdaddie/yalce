@@ -1,7 +1,4 @@
 #! env ylc
-# %include ../engine/bindings/Sched
-# %include ../engine/bindings/Synth
-# %include String
 
 let co = fn () ->
   yield 1.;
@@ -9,10 +6,15 @@ let co = fn () ->
   yield 3.
 ;;
 
-let x = co ();
+%test
+%include String
 
-# x ();
-# x ();
-# x ();
+
+let test_x = fn () ->
+  let x = co ();
+  match x with 
+  | Some 1 -> true
+  | _ -> false
+;;
 
 

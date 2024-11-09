@@ -345,7 +345,9 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
           inputs_lookup_by_path(stack, fully_qualified_name);
 
       if (previously_imported == NULL) {
-        const char *import_content = read_script(fully_qualified_name);
+        const char *import_content =
+            read_script(fully_qualified_name,
+                        false); // never include tests in imported code
         if (!import_content) {
           return NULL;
         }
@@ -356,9 +358,6 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
 
         stack = preprocess_includes(_current_dir, import_content, stack);
       }
-    } else if (strncmp("%test", input, 5) == 0) {
-      printf("found tests in module\n");
-      // TODO: auto-include test module (eg examples/Testing.ylc)
     }
     total_len--;
   }
@@ -442,7 +441,7 @@ Ast *parse_repl_include(const char *fcontent) {
 Ast *parse_input_script(const char *filename) {
   filename = prepend_current_directory(filename);
   char *dir = get_dirname(filename);
-  char *fcontent = read_script(filename);
+  char *fcontent = read_script(filename, top_level_tests);
   if (!fcontent) {
     return NULL;
   }

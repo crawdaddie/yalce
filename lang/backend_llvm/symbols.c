@@ -1,14 +1,11 @@
 #include "backend_llvm/symbols.h"
-#include "coroutine_instance.h"
 #include "coroutines.h"
 #include "function.h"
 #include "globals.h"
 #include "match.h"
 #include "serde.h"
-#include "types.h"
 #include "types/type.h"
 #include "variant.h"
-#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 

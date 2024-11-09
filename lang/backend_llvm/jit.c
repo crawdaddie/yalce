@@ -8,6 +8,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "synths.h"
+#include "test_module.h"
 #include "types.h"
 #include "types/inference.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -80,6 +81,18 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   infer(*prog, env);
   ctx->env = *env;
+
+  if (top_level_tests) {
+    printf("## test %s\n"
+           "-----------------------------------------\n",
+           filename);
+    int res = test_module(*prog, ctx, module, builder);
+    if (!res) {
+      exit(1);
+    } else {
+      exit(0);
+    }
+  }
 
   Type *result_type = top_level_ast(*prog)->md;
 
@@ -194,11 +207,6 @@ int jit(int argc, char **argv) {
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module
       top_level_tests = true;
-      arg_counter++;
-    } else if (strcmp(argv[arg_counter], "-type-memory") == 0) {
-      // TODO: implement specific limits for typechecker storage
-      arg_counter++;
-      printf("-- type storage allocation: %d\n", atoi(argv[arg_counter]));
       arg_counter++;
     } else {
       Ast *script_prog;
