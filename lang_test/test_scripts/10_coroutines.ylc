@@ -5,40 +5,23 @@ let co = fn () ->
   yield 3.
 ;;
 
-let test_it0 = fn () ->
+let test_iter_all = fn () ->
   let inst = co ();
-  let _v = inst ();
-  match _v with
+  (match inst () with
   | Some 1. -> true
   | _ -> false
-;;
-
-let test_it1 = fn () ->
-  let inst = co ();
-  let v = inst ();
-  let _v = inst ();
-  match _v with
+  ) && (
+  match inst () with
   | Some 2. -> true
   | _ -> false
-;;
-
-let test_it2 = fn () ->
-  let inst = co ();
-  let v = inst ();
-  let _v = inst ();
-  let __v = inst ();
-  match __v with
+  ) && (
+  match inst () with
   | Some 3. -> true
   | _ -> false
-;;
-
-let test_cor_end = fn () ->
-  let inst = co ();
-  let v = inst ();
-  let _v = inst ();
-  let __v = inst ();
-  let ___v = inst ();
-  match ___v with
+  ) && (
+  match inst () with
   | None -> true
   | _ -> false
+  )
 ;;
+
