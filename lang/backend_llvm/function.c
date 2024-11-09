@@ -538,7 +538,20 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
     res_type = resolve_generic_type(res_type, ctx->env);
   }
 
+  if (ltype->kind == T_BOOL && rtype->kind == T_BOOL &&
+      (strcmp("&&", binop_name) == 0)) {
+    return LLVMBuildAnd(builder, lval, rval, "&&");
+  }
+
+  if (ltype->kind == T_BOOL && rtype->kind == T_BOOL &&
+      (strcmp("||", binop_name) == 0)) {
+    return LLVMBuildOr(builder, lval, rval, "||");
+  }
   Method *method = get_binop_method(binop_name, ltype, rtype);
+  if (!method) {
+    fprintf(stderr, "Error: %s binop method not found\n", binop_name);
+    return NULL;
+  }
   LLVMBinopMethod llvm_method = method->method;
 
   Type *expected_l = method->signature->data.T_FN.from;
