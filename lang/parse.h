@@ -330,7 +330,6 @@ void add_custom_binop(const char *binop_name);
 void print_location(Ast *ast);
 
 extern bool top_level_tests;
-extern bool lex_test_block;
 
 Ast *ast_yield(Ast *expr);
 #endif

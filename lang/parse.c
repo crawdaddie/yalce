@@ -1,11 +1,11 @@
 #include "parse.h"
 #include "input.h"
+#include "serde.h"
 #include "y.tab.h"
 #include <stdlib.h>
 #include <string.h>
 
 bool top_level_tests = false;
-bool lex_test_block = false;
 
 char *_cur_script;
 const char *_cur_script_content;
@@ -263,6 +263,10 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
   node->data.AST_LET.binding = name;
 
   if (expr->tag == AST_LAMBDA) {
+    if (!top_level_tests &&
+        strncmp(name->data.AST_IDENTIFIER.value, "test_", 5) == 0) {
+      return NULL;
+    }
 
     const char *chars = name->data.AST_IDENTIFIER.value;
     int length = name->data.AST_IDENTIFIER.length;
@@ -274,9 +278,6 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
     };
     expr->data.AST_LAMBDA.fn_name = fn_name;
   }
-  // else if (expr->tag == AST_EXTERN_FN) {
-  //   expr->data.AST_EXTERN_FN.fn_name = name;
-  // }
   node->data.AST_LET.expr = expr;
   node->data.AST_LET.in_expr = in_continuation;
   // print_ast(node);
@@ -462,16 +463,8 @@ Ast *parse_input_script(const char *filename) {
     _cur_script_content = input;
     yylineno = 1;
     yyabsoluteoffset = 0;
-    if (strcmp(__stack->qualified_path, filename) == 0) {
-      lex_test_block = true;
-      yy_scan_string(input);
-      yyparse();
-      lex_test_block = false;
-    } else {
-      yy_scan_string(input);
-      yyparse();
-    }
-
+    yy_scan_string(input);
+    yyparse();
     __stack = __stack->next;
   }
   _stack = stack;
