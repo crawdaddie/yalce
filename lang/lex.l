@@ -52,8 +52,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "of"                    return *yytext;
 "if"                    return *yytext;
 "yield"                 return *yytext;
-"&&"                    return TOK_DOUBLE_AMP;
-"||"                    return TOK_DOUBLE_PIPE;
+"&&"                    return DOUBLE_AMP;
+"||"                    return DOUBLE_PIPE;
 "&"                     return *yytext;
 "*"                     return *yytext;
 

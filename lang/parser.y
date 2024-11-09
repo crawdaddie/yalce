@@ -53,8 +53,6 @@ Ast* ast_root = NULL;
 %token ARROW
 %token DOUBLE_COLON
 %token TOK_VOID
-%token TOK_DOUBLE_AMP
-%token TOK_DOUBLE_PIPE
 %token IN AND
 %token ASYNC
 %token DOUBLE_AT
@@ -135,8 +133,8 @@ expr:
   | expr MODULO expr                  { $$ = ast_binop(TOKEN_MODULO, $1, $3); }
   | expr '<' expr                     { $$ = ast_binop(TOKEN_LT, $1, $3); }
   | expr '>' expr                     { $$ = ast_binop(TOKEN_GT, $1, $3); }
-  | expr TOK_DOUBLE_AMP expr          { $$ = ast_binop(TOKEN_DOUBLE_AMP, $1, $3); }
-  | expr TOK_DOUBLE_PIPE expr         { $$ = ast_binop(TOKEN_DOUBLE_PIPE, $1, $3); }
+  | expr DOUBLE_AMP expr          { $$ = ast_binop(TOKEN_DOUBLE_AMP, $1, $3); }
+  | expr DOUBLE_PIPE expr         { $$ = ast_binop(TOKEN_DOUBLE_PIPE, $1, $3); }
   | expr GE expr                      { $$ = ast_binop(TOKEN_GTE, $1, $3); }
   | expr LE expr                      { $$ = ast_binop(TOKEN_LTE, $1, $3); }
   | expr NE expr                      { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }

@@ -57,26 +57,24 @@
      ARROW = 273,
      DOUBLE_COLON = 274,
      TOK_VOID = 275,
-     TOK_DOUBLE_AMP = 276,
-     TOK_DOUBLE_PIPE = 277,
-     IN = 278,
-     AND = 279,
-     ASYNC = 280,
-     DOUBLE_AT = 281,
-     DOUBLE_AMP = 282,
-     DOUBLE_PIPE = 283,
-     FSTRING_START = 284,
-     FSTRING_END = 285,
-     FSTRING_INTERP_START = 286,
-     FSTRING_INTERP_END = 287,
-     FSTRING_TEXT = 288,
-     APPLICATION = 289,
-     MODULO = 290,
-     NE = 291,
-     EQ = 292,
-     LE = 293,
-     GE = 294,
-     UMINUS = 295
+     IN = 276,
+     AND = 277,
+     ASYNC = 278,
+     DOUBLE_AT = 279,
+     DOUBLE_AMP = 280,
+     DOUBLE_PIPE = 281,
+     FSTRING_START = 282,
+     FSTRING_END = 283,
+     FSTRING_INTERP_START = 284,
+     FSTRING_INTERP_END = 285,
+     FSTRING_TEXT = 286,
+     APPLICATION = 287,
+     MODULO = 288,
+     NE = 289,
+     EQ = 290,
+     LE = 291,
+     GE = 292,
+     UMINUS = 293
    };
 #endif
 /* Tokens.  */
@@ -98,26 +96,24 @@
 #define ARROW 273
 #define DOUBLE_COLON 274
 #define TOK_VOID 275
-#define TOK_DOUBLE_AMP 276
-#define TOK_DOUBLE_PIPE 277
-#define IN 278
-#define AND 279
-#define ASYNC 280
-#define DOUBLE_AT 281
-#define DOUBLE_AMP 282
-#define DOUBLE_PIPE 283
-#define FSTRING_START 284
-#define FSTRING_END 285
-#define FSTRING_INTERP_START 286
-#define FSTRING_INTERP_END 287
-#define FSTRING_TEXT 288
-#define APPLICATION 289
-#define MODULO 290
-#define NE 291
-#define EQ 292
-#define LE 293
-#define GE 294
-#define UMINUS 295
+#define IN 276
+#define AND 277
+#define ASYNC 278
+#define DOUBLE_AT 279
+#define DOUBLE_AMP 280
+#define DOUBLE_PIPE 281
+#define FSTRING_START 282
+#define FSTRING_END 283
+#define FSTRING_INTERP_START 284
+#define FSTRING_INTERP_END 285
+#define FSTRING_TEXT 286
+#define APPLICATION 287
+#define MODULO 288
+#define NE 289
+#define EQ 290
+#define LE 291
+#define GE 292
+#define UMINUS 293
 
 
 
@@ -134,7 +130,7 @@ typedef union YYSTYPE
     char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 138 "lang/y.tab.h"
+#line 134 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

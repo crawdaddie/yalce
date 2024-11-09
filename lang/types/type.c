@@ -38,6 +38,7 @@ Type t_bool = {T_BOOL, .num_implements = 1,
                .implements = (TypeClass *[]){
                    &TCEq_bool,
                }};
+
 Type t_void = {T_VOID};
 Type t_char = {T_CHAR};
 Type t_ptr = {T_CONS,

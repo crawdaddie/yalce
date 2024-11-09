@@ -1048,12 +1048,12 @@ return *yytext;
 case 20:
 YY_RULE_SETUP
 #line 55 "lang/lex.l"
-return TOK_DOUBLE_AMP;
+return DOUBLE_AMP;
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
 #line 56 "lang/lex.l"
-return TOK_DOUBLE_PIPE;
+return DOUBLE_PIPE;
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
