@@ -1,15 +1,44 @@
 #! env ylc
-# %include ../engine/bindings/Sched
-# %include ../engine/bindings/Synth
-# %include String
-
 let co = fn () ->
   yield 1.;
   yield 2.;
   yield 3.
 ;;
 
-co ()
-co ()
-co ()
-co ()
+%test
+
+
+let inst = co ();
+
+let _v = inst ();
+let test_it0 = fn () ->
+  match _v with
+  | Some 1. -> true
+  | _ -> false
+;;
+
+let _v = inst ();
+let test_it1 = fn () ->
+  match _v with
+  | Some 2. -> true
+  | _ -> false
+;;
+
+let _v = inst ();
+let test_it2 = fn () ->
+  match _v with
+  | Some 3. -> true
+  | _ -> false
+;;
+
+let _v = inst ();
+let test_cor_end = fn () ->
+  match _v with
+  | None -> true
+  | _ -> false
+;;
+
+
+
+
+

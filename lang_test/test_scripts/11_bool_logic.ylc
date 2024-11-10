@@ -1,0 +1,24 @@
+%test
+
+let x = true;
+let y = false;
+
+let test_and = fn () ->
+  x && y == false
+;;
+
+let test_or = fn () ->
+  x || y == true
+;;
+
+let test_or1 = fn () ->
+  x || x == true
+;;
+
+let test_and1 = fn () ->
+  x && x == true
+;;
+
+let test_and2 = fn () ->
+  y && y == false
+;;

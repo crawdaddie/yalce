@@ -35,6 +35,7 @@ extern Type t_gte;
 extern Type t_lte;
 extern Type t_eq;
 extern Type t_neq;
+extern Type t_bool_binop;
 
 extern Type t_array_var_el;
 extern Type t_array_var;
@@ -82,6 +83,8 @@ extern Type t_iter_of_array_sig;
 #define TYPE_NAME_OP_EQ  "=="
 #define TYPE_NAME_OP_NEQ  "!="
 #define TYPE_NAME_OP_LIST_PREPEND  "::"
+#define TYPE_NAME_OP_AND  "&&"
+#define TYPE_NAME_OP_OR  "||"
 
 typedef struct _binop_map {
   const char *name;
@@ -154,6 +157,7 @@ enum TypeKind {
   // T_TYPECLASS,
   T_TYPECLASS_RESOLVE,
   // T_VARIANT_MEMBER,
+  T_COROUTINE_INSTANCE,
 };
 
 typedef struct Type {
@@ -178,6 +182,25 @@ typedef struct Type {
       const char *comparison_tc; // use the comparison typeclass name to compare
                                  // the rank of all dependencies
     } T_TYPECLASS_RESOLVE;
+    struct {
+      struct Type *params_type; // internal parameter type
+      struct Type *yield_interface;
+      /* interface for interaction from outside
+ie:
+```
+let f = fn a -> yield a; yield 2; yield 3;;
+let x = f 1;
+x () # : Some 1
+```
+yield interface here is () -> Option of Int so we know that x () has type
+Option Of Int
+
+for compilation purposes we want to know what's the internal parameter type of x
+which in this case would be t_int
+this is necessary so that we can properly compile higher-order stream-combining
+functions
+      */
+    } T_COROUTINE_INSTANCE;
 
     // struct {
     //   struct Type *variant; // pointer to T_CONS with name "Variant"
@@ -259,6 +282,7 @@ typedef struct VariantContext {
 
 Type *create_cons_type(const char *name, int len, Type **unified_args);
 Type *create_option_type(Type *option_of);
+bool is_option_type(Type *t);
 
 Type *type_of_option(Type *option);
 
@@ -281,4 +305,11 @@ int *array_type_size_ptr(Type *t);
 Type *create_array_type(Type *of, int size);
 
 Type *create_tuple_type(int len, Type **contained_types);
+
+Type *create_coroutine_instance_type(Type *param, Type *ret_type);
+
+bool is_coroutine_instance_type(Type *inst);
+
+bool is_coroutine_generator_fn(Type *gen);
+Type *coroutine_instance_fn_def_type(Type *inst);
 #endif

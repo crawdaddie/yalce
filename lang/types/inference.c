@@ -136,17 +136,48 @@ typedef struct lambda_ctx_t {
 
 static lambda_ctx_t lambda_ctx = {};
 // take a function type a -> b -> c & return a corresponding coroutine type
-// a -> b -> (() -> Option of c)
-static Type *convert_to_coroutine_type(Type *f) {
+// a -> b -> (yield_interface: () -> Option of c, params_type: a * b)
+static Type *convert_to_coroutine_generator_fn(Type *f, int fn_len) {
   Type *fn = f;
-  while (fn->data.T_FN.to->kind == T_FN) {
-    fn = fn->data.T_FN.to;
+  if (fn_len == 1) {
+    Type *params_type = fn->data.T_FN.from;
+    Type *instance_type = talloc(sizeof(Type));
+    instance_type->kind = T_COROUTINE_INSTANCE;
+    instance_type->data.T_COROUTINE_INSTANCE.params_type = params_type;
+    instance_type->data.T_COROUTINE_INSTANCE.yield_interface =
+        type_fn(&t_void, create_option_type(fn->data.T_FN.to));
+    fn->data.T_FN.to = instance_type;
+
+    f->is_coroutine_fn = true;
+    return f;
   }
 
+  Type *params_type;
+  Type **args = talloc(sizeof(Type *) * fn_len);
+  params_type = create_tuple_type(fn_len, args);
+
+  int idx = 0;
+
+  while (fn->data.T_FN.to->kind == T_FN) {
+    Type *param_type = fn->data.T_FN.from;
+    params_type->data.T_CONS.args[idx] = param_type;
+    fn = fn->data.T_FN.to;
+    idx++;
+  }
+
+  Type *param_type = fn->data.T_FN.from;
+  params_type->data.T_CONS.args[idx] = param_type;
+
   Type *return_type = fn->data.T_FN.to;
-  fn->data.T_FN.to = type_fn(&t_void, create_option_type(return_type));
-  fn->data.T_FN.to->is_coroutine_instance = true;
+  Type *instance_type = talloc(sizeof(Type));
+  instance_type->kind = T_COROUTINE_INSTANCE;
+  instance_type->data.T_COROUTINE_INSTANCE.params_type = params_type;
+  instance_type->data.T_COROUTINE_INSTANCE.yield_interface =
+      type_fn(&t_void, create_option_type(return_type));
+  fn->data.T_FN.to = instance_type;
+
   f->is_coroutine_fn = true;
+
   return f;
 }
 
@@ -170,6 +201,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
       Ast *param_ast = ast->data.AST_LAMBDA.params + i;
       Type *ptype;
       Ast *def = ast->data.AST_LAMBDA.defaults[i];
+
       if (def) {
         ptype = compute_type_expression(def, *env);
       } else {
@@ -190,6 +222,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   Type *recursive_ref = NULL;
   const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
+
   if (!is_anon) {
     recursive_ref = tvar(ast->data.AST_LAMBDA.fn_name.chars);
     recursive_ref->is_recursive_fn_ref = true;
@@ -253,7 +286,7 @@ static Type *infer_lambda(Ast *ast, TypeEnv **env) {
 
   fn = resolve_generic_type(fn, fn_scope_env);
   if (ast->data.AST_LAMBDA.is_coroutine) {
-    Type *co = convert_to_coroutine_type(fn);
+    Type *co = convert_to_coroutine_generator_fn(fn, len);
     fn = co;
   }
 
@@ -512,6 +545,11 @@ Type *infer(Ast *ast, TypeEnv **env) {
       break;
     }
 
+    if (t->kind == T_COROUTINE_INSTANCE) {
+      type = t->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to;
+      break;
+    }
+
     if (t->kind == T_CONS) {
       type = infer_cons(ast, env);
       break;
@@ -567,10 +605,6 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   ast->md = type;
-  // if (type && (type->kind == T_VAR) && strcmp(type->data.T_VAR, "t0") == 0) {
-  //   print_type(type);
-  //   print_ast(ast);
-  // }
 
   return type;
 }

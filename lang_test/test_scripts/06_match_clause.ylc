@@ -1,0 +1,23 @@
+%test
+let test_guard_clause = fn () -> 
+  "guard clauses xx if xx > 300";
+  let x = 302;
+  let y = match x with
+    | xx if xx > 300 -> xx
+    | 2 -> 0
+    | _ -> 3
+  ;
+  y == 302
+;;
+
+let test_guard_clause_fallthrough = fn () -> 
+  "guard clauses default";
+  let x = 100;
+  let y = match x with
+    | xx if xx > 300 -> xx
+    | 2 -> 0
+    | _ -> 3
+  ;
+  y == 3
+;;
+

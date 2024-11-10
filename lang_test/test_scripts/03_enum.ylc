@@ -1,0 +1,17 @@
+type Enum =
+  | A
+  | B 
+  | C
+  ;
+
+let f = fn x ->
+  match x with
+    | A -> 1
+    | B -> 2 
+    | C -> 3
+;;
+
+%test
+let test_enum_C = fn () -> (f C) == 3;; 
+let test_enum_A = fn () -> (f A) == 1;; 
+let test_enum_B = fn () -> (f B) == 2;; 

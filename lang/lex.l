@@ -12,7 +12,7 @@ int yyprevlineno = 1;
 
 long long int yyabsoluteoffset = 0; 
 long long int yyprevoffset = 0; 
-int in_test_section = 0;
+
 
 // This macro is called at the beginning of each rule's action
 #define YY_USER_ACTION \
@@ -29,7 +29,6 @@ int in_test_section = 0;
 
 %x FSTRING
 %x TRIPLE_FSTRING
-%x TEST_SECTION
 
 ESCAPE          \\(['"?\\abfnrtv]|[0-7]{1,3}|x[0-9a-fA-F]+)
 CHAR            '([^'\\\n]|{ESCAPE})'
@@ -52,9 +51,9 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "type"                  return *yytext;
 "of"                    return *yytext;
 "if"                    return *yytext;
-"await"                 return *yytext;
-"async"                 return ASYNC;
 "yield"                 return *yytext;
+"&&"                    return DOUBLE_AMP;
+"||"                    return DOUBLE_PIPE;
 "&"                     return *yytext;
 "*"                     return *yytext;
 
@@ -167,22 +166,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           /*printf("operator '%s'", yytext);*/
                           return *yytext;
                         }
-^%test          {
-                  if (lex_test_block) {
-                    in_test_section = 1;
-                    BEGIN(TEST_SECTION);
-                  } else {
-                    yyterminate();  // This will stop lexing and return 0
-                  }
-                }
 
-<TEST_SECTION>(.|\n)   {
-                         if (lex_test_block) {
-                           // Process the test section normally
-                           REJECT;
-                         }
-                         // Otherwise, this rule won't be reached due to yyterminate()
-                       }
 ^%.*            {
                   /*
                   printf("possible macro %s %d\n", yytext, top_level_tests);

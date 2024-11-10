@@ -1,4 +1,5 @@
 #include "backend_llvm/types.h"
+#include "coroutine_instance.h"
 #include "list.h"
 #include "types/type.h"
 #include "variant.h"
@@ -118,6 +119,13 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
     return LLVMInt32Type();
   }
+  case T_TYPECLASS_RESOLVE: {
+    if (!is_generic(type)) {
+      type = resolve_tc_rank(type);
+      return type_to_llvm_type(type, env, module);
+    }
+    return NULL;
+  }
 
   case T_CONS: {
 
@@ -183,9 +191,20 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
     return fn_prototype(type, fn_len, env);
   }
+  case T_COROUTINE_INSTANCE: {
+    Type *params_type = type->data.T_COROUTINE_INSTANCE.params_type;
+    Type *return_opt =
+        type->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to;
 
+    LLVMTypeRef fn_type = LLVMPointerType(LLVMInt8Type(), 0);
+
+    LLVMTypeRef params_obj_type = type_to_llvm_type(
+        type->data.T_COROUTINE_INSTANCE.params_type, env, module);
+
+    LLVMTypeRef instance_type = coroutine_instance_type(params_obj_type);
+    return instance_type;
+  }
   default: {
-
     return LLVMVoidType();
   }
   }
@@ -427,6 +446,7 @@ LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
   return LLVMBuildICmp(builder, LLVMIntEQ, l, r, "Int ==");
 }
+
 static LLVMValueRef codegen_neq_int(LLVMValueRef l, LLVMValueRef r,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
@@ -626,6 +646,11 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
   EQ_TC(t_int)->methods[1].method = &codegen_neq_int;
   EQ_TC(t_int)->methods[1].size = sizeof(EqMethod);
 
+  EQ_TC(t_bool)->methods[0].method = &codegen_eq_int;
+  EQ_TC(t_bool)->methods[0].size = sizeof(EqMethod);
+  EQ_TC(t_bool)->methods[1].method = &codegen_neq_int;
+  EQ_TC(t_bool)->methods[1].size = sizeof(EqMethod);
+
   ORD_TC(t_int)->methods[0].method = &codegen_lt_int;
   ORD_TC(t_int)->methods[0].size = sizeof(OrdMethod);
   ORD_TC(t_int)->methods[1].method = &codegen_gt_int;
@@ -793,4 +818,30 @@ LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env,
   Type *lookup_type = find_type_in_env(env, id->data.AST_IDENTIFIER.value);
   LLVMTypeRef t = type_to_llvm_type(lookup_type, env, module);
   return t;
+}
+
+LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder) {
+  LLVMTypeRef tu_types[] = {TAG_TYPE,
+                            val != NULL ? LLVMTypeOf(val) : LLVMInt8Type()};
+  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
+  if (val != NULL) {
+    LLVMValueRef some = LLVMGetUndef(tu_type);
+    some =
+        LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), 0, 0),
+                             0, "insert Some tag");
+
+    some = LLVMBuildInsertValue(builder, some, val, 1, "insert Some Value");
+    return some;
+  }
+  LLVMValueRef none = LLVMGetUndef(tu_type);
+
+  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
+                              0, "insert None tag");
+  return none;
+}
+
+LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder) {
+  LLVMValueRef tag = variant_extract_tag(opt, builder);
+  return LLVMBuildICmp(builder, LLVMIntEQ, tag,
+                       LLVMConstInt(LLVMInt8Type(), 1, 0), "");
 }

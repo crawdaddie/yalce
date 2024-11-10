@@ -1,5 +1,0 @@
-%include ../../examples/Testing
-
-let x = 100 + 101.;
-test_val (x == 201.) "Int + Double = Double";
-

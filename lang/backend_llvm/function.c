@@ -211,8 +211,7 @@ SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
   return new_specific_fn;
 };
 
-Ast *get_specific_fn_ast_variant(Ast *original_fn_ast,
-                                        Type *specific_fn_type) {
+Ast *get_specific_fn_ast_variant(Ast *original_fn_ast, Type *specific_fn_type) {
 
   Type *generic_type = original_fn_ast->md;
   TypeEnv *replacement_env = NULL;
@@ -362,43 +361,43 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_GENERIC_COROUTINE_GENERATOR: {
-
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
     if (!func) {
-      func = compile_generic_coroutine(sym, expected_fn_type, ctx, module,
-                                       builder);
+      func = coroutine_def_from_generic(sym, expected_fn_type, ctx, module,
+                                        builder);
+
       sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
           specific_fns_extend(
               sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
               expected_fn_type, func);
     }
+    Type *instance_type = fn_return_type(expected_fn_type);
 
-    return generic_coroutine_instance(args, args_len, expected_fn_type, func, ctx, module,
-                                      builder);
+    JITSymbol spec_symbol = {
+        .type = STYPE_COROUTINE_GENERATOR,
+        .symbol_type = expected_fn_type,
+        .llvm_type = llvm_def_type_of_instance(instance_type, ctx, module),
+        .val = func,
+    };
+    return coroutine_instance_from_def_symbol(NULL, &spec_symbol, args,
+                                              args_len, expected_fn_type, ctx,
+                                              module, builder);
   }
 
   case STYPE_COROUTINE_GENERATOR: {
-    JITSymbol *generator_sym = sym;
-
-    LLVMTypeRef instance_type = coroutine_instance_type(
-        generator_sym->symbol_data.STYPE_COROUTINE_GENERATOR
-            .llvm_params_obj_type);
-
-    LLVMValueRef instance =
-        codegen_coroutine_instance(NULL, args, args_len, sym, ctx, module, builder);
-
-    // LLVMDumpType(instance_type);
-    // LLVMDumpType(LLVMTypeOf(instance));
-
-    return instance;
+    return coroutine_instance_from_def_symbol(
+        NULL, sym, args, args_len, expected_fn_type, ctx, module, builder);
   }
 
   case STYPE_COROUTINE_INSTANCE: {
-    return codegen_coroutine_next(
-        sym->val, sym->llvm_type,
-        sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type, ctx, module,
-        builder);
+
+    LLVMValueRef instance_ret =
+        coroutine_next(sym->val, sym->llvm_type,
+                       sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type,
+                       ctx, module, builder);
+
+    return instance_ret;
   }
   }
 
@@ -479,7 +478,20 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
     res_type = resolve_generic_type(res_type, ctx->env);
   }
 
+  if (ltype->kind == T_BOOL && rtype->kind == T_BOOL &&
+      (strcmp("&&", binop_name) == 0)) {
+    return LLVMBuildAnd(builder, lval, rval, "&&");
+  }
+
+  if (ltype->kind == T_BOOL && rtype->kind == T_BOOL &&
+      (strcmp("||", binop_name) == 0)) {
+    return LLVMBuildOr(builder, lval, rval, "||");
+  }
   Method *method = get_binop_method(binop_name, ltype, rtype);
+  if (!method) {
+    fprintf(stderr, "Error: %s binop method not found\n", binop_name);
+    return NULL;
+  }
   LLVMBinopMethod llvm_method = method->method;
 
   Type *expected_l = method->signature->data.T_FN.from;
@@ -512,15 +524,14 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return val;
   }
 
-
   if (strcmp(sym_name, SYM_NAME_ITER_OF_ARRAY) == 0) {
 
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
         expected_type);
     if (!func) {
-      func = coroutine_array_iter_generator_fn(expected_type, false, ctx, module,
-                                               builder);
+      func = coroutine_array_iter_generator_fn(expected_type, false, ctx,
+                                               module, builder);
       sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
           specific_fns_extend(
               sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
@@ -672,7 +683,6 @@ LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
   const char *sym_name =
@@ -716,6 +726,13 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     }
   }
 
+  if (strcmp(SYM_NAME_ITER_MAP, sym_name) == 0) {
+    LLVMValueRef res = coroutine_map(ast, sym, ctx, module, builder);
+    if (res) {
+      return res;
+    }
+  }
+
   if (strncmp("string_add", sym_name, 10) == 0) {
     LLVMValueRef res = codegen_string_add(
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder),
@@ -728,8 +745,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *sym_type = ast->data.AST_APPLICATION.function->md;
-  // printf("application\n");
-  // print_type(sym_type);
   if (sym_type->kind == T_CONS && !is_generic(sym_type)) {
     return codegen_cons(ast, ctx, module, builder);
   }

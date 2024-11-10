@@ -1,0 +1,9 @@
+let list_sum = fn s l ->
+  match l with
+  | [] -> s
+  | x::rest -> list_sum (s + x) rest
+;;
+
+%test
+let test_sum_doubles = fn () -> (list_sum 0. [1., 2., 3.] == 6.);;
+let test_sum_ints = fn () -> (list_sum 0 [1, 2, 3] == 6);;

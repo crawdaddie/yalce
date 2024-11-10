@@ -41,4 +41,8 @@ LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r,
 Method *get_binop_method(const char *binop, Type *l, Type *r);
 
 TypeEnv *initialize_types(TypeEnv *env);
+
+LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder);
+
+LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder);
 #endif

@@ -21,9 +21,6 @@ Type *binding_type(Ast *ast);
 TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type);
 
 Type *infer_anonymous_lambda_arg(Ast *ast, Type *expected_type, TypeEnv **env) {
-  // printf("anonymous lambda arg\n");
-  // print_ast(ast);
-  // print_type(expected_type);
 
   int len = ast->data.AST_LAMBDA.len;
   TypeEnv *fn_scope_env = *env;
@@ -92,14 +89,17 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   Type *result_fn = fn_type;
 
   Type *app_arg_types[len];
-  // printf("fn application: ");
-  // print_ast(ast);
   for (int i = 0; i < len; i++) {
 
     Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
-
-    app_arg_types[i] =
-        TRY_MSG(infer(arg_ast, env), "could not infer application argument");
+    Type *arg_type = infer(arg_ast, env);
+    if (!arg_type) {
+      fprintf(stderr, "could not infer application argument [%s:%d]\n",
+              __FILE__, __LINE__);
+      print_location(arg_ast);
+      return NULL;
+    }
+    app_arg_types[i] = arg_type;
 
     if (app_arg_types[i]->kind == T_FN && arg_ast->tag != AST_LAMBDA) {
       app_arg_types[i] = copy_type(app_arg_types[i]);

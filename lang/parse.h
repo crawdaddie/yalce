@@ -96,6 +96,8 @@ typedef enum token_type {
   TOKEN_DOUBLE_SEMICOLON,
   TOKEN_IN,
   TOKEN_OF,
+  TOKEN_DOUBLE_AMP,
+  TOKEN_DOUBLE_PIPE,
 } token_type;
 
 typedef enum ast_tag {
@@ -330,7 +332,6 @@ void add_custom_binop(const char *binop_name);
 void print_location(Ast *ast);
 
 extern bool top_level_tests;
-extern bool lex_test_block;
 
 Ast *ast_yield(Ast *expr);
 #endif

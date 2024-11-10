@@ -56,6 +56,8 @@ Ast* ast_root = NULL;
 %token IN AND
 %token ASYNC
 %token DOUBLE_AT
+%token DOUBLE_AMP
+%token DOUBLE_PIPE
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -69,6 +71,7 @@ Ast* ast_root = NULL;
 %left APPLICATION 
 %left MODULO
 %left GE LE EQ NE '>' '<'
+%left DOUBLE_AMP DOUBLE_PIPE
 %left '+' '-'
 %left '*' '/'
 %left ':'
@@ -130,6 +133,8 @@ expr:
   | expr MODULO expr                  { $$ = ast_binop(TOKEN_MODULO, $1, $3); }
   | expr '<' expr                     { $$ = ast_binop(TOKEN_LT, $1, $3); }
   | expr '>' expr                     { $$ = ast_binop(TOKEN_GT, $1, $3); }
+  | expr DOUBLE_AMP expr              { $$ = ast_binop(TOKEN_DOUBLE_AMP, $1, $3); }
+  | expr DOUBLE_PIPE expr             { $$ = ast_binop(TOKEN_DOUBLE_PIPE, $1, $3); }
   | expr GE expr                      { $$ = ast_binop(TOKEN_GTE, $1, $3); }
   | expr LE expr                      { $$ = ast_binop(TOKEN_LTE, $1, $3); }
   | expr NE expr                      { $$ = ast_binop(TOKEN_NOT_EQUAL, $1, $3); }

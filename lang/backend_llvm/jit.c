@@ -8,6 +8,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "synths.h"
+#include "test_module.h"
 #include "types.h"
 #include "types/inference.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -73,13 +74,24 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   LLVMSetSourceFileName(module, filename, strlen(filename));
 
   *prog = parse_input_script(filename);
-  // print_ast(*prog);
   if (!(*prog)) {
     return NULL;
   }
 
   infer(*prog, env);
   ctx->env = *env;
+
+  if (top_level_tests) {
+    printf("# Test %s\n"
+           "-----------------------------------------\n",
+           filename);
+    int res = test_module(*prog, ctx, module, builder);
+    if (!res) {
+      exit(1);
+    } else {
+      exit(0);
+    }
+  }
 
   Type *result_type = top_level_ast(*prog)->md;
 
@@ -111,7 +123,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  // LLVMDumpModule(module);
+  LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
@@ -176,7 +188,6 @@ int jit(int argc, char **argv) {
   t_option_of_var.alias = "Option";
   env = env_extend(env, "Option", &t_option_of_var);
 
-
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
                     .env = env,
@@ -195,11 +206,6 @@ int jit(int argc, char **argv) {
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module
       top_level_tests = true;
-      arg_counter++;
-    } else if (strcmp(argv[arg_counter], "-type-memory") == 0) {
-      // TODO: implement specific limits for typechecker storage
-      arg_counter++;
-      printf("-- type storage allocation: %d\n", atoi(argv[arg_counter]));
       arg_counter++;
     } else {
       Ast *script_prog;
@@ -229,7 +235,6 @@ int jit(int argc, char **argv) {
     char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
 
     while (true) {
-
 
       char *input = repl_input(prompt);
 
