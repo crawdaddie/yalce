@@ -329,41 +329,6 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
   return constructor(val, from_type, module, builder);
 }
 
-LLVMValueRef
-call_coroutine_generator_symbol(LLVMValueRef _instance, JITSymbol *sym,
-                                Ast *args, int args_len, Type *expected_fn_type,
-                                JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder) {
-  LLVMValueRef def = sym->val;
-  LLVMTypeRef llvm_def_type = sym->llvm_type;
-  Type *instance_type = fn_return_type(sym->symbol_type);
-
-  LLVMValueRef instance = codegen_coroutine_instance(_instance, instance_type,
-                                                     def, ctx, module, builder);
-
-  if (args_len == 1 && ((Type *)args[0].md)->kind == T_VOID) {
-    return instance;
-  }
-
-  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
-
-  LLVMTypeRef llvm_params_obj_type =
-      type_to_llvm_type(params_obj_type, ctx->env, module);
-
-  LLVMTypeRef llvm_instance_type =
-      coroutine_instance_type(llvm_params_obj_type);
-
-  LLVMValueRef param_args[args_len];
-  for (int i = 0; i < args_len; i++) {
-    param_args[i] = codegen(args + i, ctx, module, builder);
-  }
-
-  set_instance_params(instance, llvm_instance_type, llvm_params_obj_type,
-                      param_args, args_len, builder);
-
-  return instance;
-}
-
 LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
                          int args_len, Type *expected_fn_type, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -396,64 +361,39 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_GENERIC_COROUTINE_GENERATOR: {
-    printf("call generic coroutine generator\n");
-
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
     if (!func) {
-      func = compile_generic_coroutine(sym, expected_fn_type, ctx, module,
-                                       builder);
+      func = coroutine_def_from_generic(sym, expected_fn_type, ctx, module,
+                                        builder);
+
       sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
           specific_fns_extend(
               sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
               expected_fn_type, func);
     }
+    Type *instance_type = fn_return_type(expected_fn_type);
 
-    return generic_coroutine_instance(args, args_len, expected_fn_type, func,
-                                      ctx, module, builder);
+    JITSymbol spec_symbol = {
+        .type = STYPE_COROUTINE_GENERATOR,
+        .symbol_type = expected_fn_type,
+        .llvm_type = llvm_def_type_of_instance(instance_type, ctx, module),
+        .val = func,
+    };
+    return coroutine_instance_from_def_symbol(NULL, &spec_symbol, args,
+                                              args_len, expected_fn_type, ctx,
+                                              module, builder);
   }
 
   case STYPE_COROUTINE_GENERATOR: {
-    return call_coroutine_generator_symbol(
+    return coroutine_instance_from_def_symbol(
         NULL, sym, args, args_len, expected_fn_type, ctx, module, builder);
-    // LLVMValueRef def = sym->val;
-    // LLVMTypeRef llvm_def_type = sym->llvm_type;
-    // Type *instance_type = fn_return_type(sym->symbol_type);
-    //
-    // LLVMValueRef instance = codegen_coroutine_instance(NULL, instance_type,
-    // def,
-    //                                                    ctx, module, builder);
-    //
-    // if (args_len == 1 && ((Type *)args[0].md)->kind == T_VOID) {
-    //
-    //   LLVMDumpValue(instance);
-    //   return instance;
-    // }
-    //
-    // Type *params_obj_type =
-    //     instance_type->data.T_COROUTINE_INSTANCE.params_type;
-    //
-    // LLVMTypeRef llvm_params_obj_type =
-    //     type_to_llvm_type(params_obj_type, ctx->env, module);
-    //
-    // LLVMTypeRef llvm_instance_type =
-    //     coroutine_instance_type(llvm_params_obj_type);
-    //
-    // LLVMValueRef param_args[args_len];
-    // for (int i = 0; i < args_len; i++) {
-    //   param_args[i] = codegen(args + i, ctx, module, builder);
-    // }
-    //
-    // set_instance_params(instance, llvm_instance_type, llvm_params_obj_type,
-    //                     param_args, args_len, builder);
-    //
-    // return instance;
   }
 
   case STYPE_COROUTINE_INSTANCE: {
 
     LLVMValueRef instance_ret =
-        coroutine_call(sym->val, sym->llvm_type,
+        coroutine_next(sym->val, sym->llvm_type,
                        sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type,
                        ctx, module, builder);
 

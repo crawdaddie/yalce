@@ -18,10 +18,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMTypeRef param_struct_type(Type *fn_type, int fn_len, Type *param_obj_type,
                               Type *return_type, TypeEnv *env,
                               LLVMModuleRef module) {
-  printf("param struct type");
-  print_type(param_obj_type);
-  print_type(return_type);
-  printf("######\n");
 
   LLVMTypeRef llvm_param_types[fn_len];
 
@@ -113,13 +109,13 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
           sym->symbol_data.STYPE_COROUTINE_GENERATOR.recursive_ref;
 
       if (is_same_recursive_ref) {
-        new_instance = call_coroutine_generator_symbol(
+        new_instance = coroutine_instance_from_def_symbol(
             instance_ptr, sym, expr->data.AST_APPLICATION.args,
             expr->data.AST_APPLICATION.len,
             expr->data.AST_APPLICATION.function->md, ctx, module, builder);
       }
 
-      new_instance = call_coroutine_generator_symbol(
+      new_instance = coroutine_instance_from_def_symbol(
           NULL, sym, expr->data.AST_APPLICATION.args,
           expr->data.AST_APPLICATION.len,
           expr->data.AST_APPLICATION.function->md, ctx, module, builder);
@@ -138,8 +134,8 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMBuildStore(builder, old_instance_ptr, parent_gep);
 
     LLVMValueRef ret_opt =
-        codegen_coroutine_next(instance_ptr, instance_type,
-                               _coroutine_ctx.func_type, ctx, module, builder);
+        coroutine_next(instance_ptr, instance_type, _coroutine_ctx.func_type,
+                       ctx, module, builder);
     LLVMBuildRet(builder, ret_opt);
     LLVMPositionBuilderAtEnd(
         builder, _coroutine_ctx.block_refs[_coroutine_ctx.current_branch]);
@@ -153,14 +149,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       builder, _coroutine_ctx.block_refs[_coroutine_ctx.current_branch]);
   return ret_opt;
 }
-/*
-LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                           LLVMBuilderRef builder) {
 
-
-}
-
-*/
 void add_recursive_cr_def_ref(ObjString fn_name, LLVMValueRef func,
                               Type *fn_type,
                               coroutine_generator_symbol_data_t symbol_data,
@@ -170,6 +159,8 @@ void add_recursive_cr_def_ref(ObjString fn_name, LLVMValueRef func,
       new_symbol(STYPE_COROUTINE_GENERATOR, fn_type, func, LLVMTypeOf(func));
   sym->symbol_data.STYPE_COROUTINE_GENERATOR = symbol_data;
   sym->symbol_data.STYPE_COROUTINE_GENERATOR.recursive_ref = true;
+  sym->symbol_data.STYPE_COROUTINE_GENERATOR.llvm_params_obj_type =
+      symbol_data.llvm_params_obj_type;
 
   ht *scope = fn_ctx->stack + fn_ctx->stack_ptr;
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
@@ -238,6 +229,7 @@ LLVMValueRef coroutine_default_block(LLVMValueRef instance,
   LLVMValueRef str = codegen_option(NULL, builder);
   LLVMBuildRet(builder, str);
 }
+
 LLVMTypeRef llvm_def_type_of_instance(Type *instance_type, JITLangCtx *ctx,
                                       LLVMModuleRef module) {
 
@@ -245,13 +237,14 @@ LLVMTypeRef llvm_def_type_of_instance(Type *instance_type, JITLangCtx *ctx,
   Type *ret_opt =
       fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
   LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
-  LLVMTypeRef llvm_def_type =
-      LLVMFunctionType(llvm_ret_opt_type,
-                       (LLVMTypeRef[]){coroutine_instance_type(
-                           type_to_llvm_type(params_obj_type, ctx->env, module))
+  LLVMTypeRef llvm_def_type = LLVMFunctionType(
+      llvm_ret_opt_type,
+      (LLVMTypeRef[]){LLVMPointerType(coroutine_instance_type(type_to_llvm_type(
+                                          params_obj_type, ctx->env, module)),
+                                      0)
 
-                       },
-                       1, 0);
+      },
+      1, 0);
   return llvm_def_type;
 }
 
@@ -270,9 +263,8 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_instance_type =
       coroutine_instance_type(llvm_params_obj_type);
 
-  LLVMTypeRef llvm_def_type = LLVMFunctionType(
-      llvm_ret_opt_type,
-      (LLVMTypeRef[]){LLVMPointerType(llvm_instance_type, 0)}, 1, 0);
+  LLVMTypeRef llvm_def_type =
+      llvm_def_type_of_instance(instance_type, ctx, module);
 
   *_llvm_def_type = llvm_def_type;
 
@@ -322,6 +314,7 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
                                  .ret_option_type = ret_opt,
                                  .llvm_ret_option_type = llvm_ret_opt_type,
                                  .params_obj_type = params_obj_type,
+                                 .llvm_params_obj_type = llvm_params_obj_type,
                                  .def_fn_type = llvm_def_type,
                                  .recursive_ref = true},
                              &fn_ctx);
@@ -512,121 +505,6 @@ LLVMValueRef codegen_generic_coroutine_binding(Ast *ast, JITLangCtx *ctx,
   return NULL;
 }
 
-LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
-                                       LLVMModuleRef module,
-                                       LLVMBuilderRef builder) {
-
-  printf("codegen coroutine binding\n");
-  Ast *def_ast = ast->data.AST_LET.expr;
-  Type *fn_type = def_ast->md;
-  size_t args_len = def_ast->data.AST_LAMBDA.len;
-
-  coroutine_generator_symbol_data_t symbol_data = {
-      .ast = def_ast,
-      .stack_ptr = ctx->stack_ptr,
-      .ret_option_type = empty_type(),
-      .params_obj_type = empty_type(),
-  };
-
-  // get correct param obj type
-  LLVMTypeRef llvm_params_obj_type =
-      param_struct_type(fn_type, args_len, symbol_data.params_obj_type,
-                        symbol_data.ret_option_type, ctx->env, module);
-  symbol_data.llvm_params_obj_type = llvm_params_obj_type;
-
-  // get correct return option type
-  LLVMTypeRef llvm_ret_option_type =
-      type_to_llvm_type(symbol_data.ret_option_type, ctx->env, module);
-  symbol_data.llvm_ret_option_type = llvm_ret_option_type;
-
-  LLVMTypeRef instance_type = coroutine_instance_type(llvm_params_obj_type);
-
-  LLVMTypeRef def_fn_type =
-      coroutine_def_fn_type(instance_type, llvm_ret_option_type);
-  symbol_data.def_fn_type = def_fn_type;
-
-  LLVMValueRef def = compile_coroutine_generator(
-      def_ast, symbol_data, instance_type, ctx, module, builder);
-
-  JITSymbol *sym =
-      new_symbol(STYPE_COROUTINE_GENERATOR, ast->md, def, LLVMTypeOf(def));
-  sym->symbol_data.STYPE_COROUTINE_GENERATOR = symbol_data;
-
-  Ast *binding = ast->data.AST_LET.binding;
-  const char *id_chars = binding->data.AST_IDENTIFIER.value;
-  int id_len = binding->data.AST_IDENTIFIER.length;
-
-  ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
-              hash_string(id_chars, id_len), sym);
-  return def;
-}
-
-// given a compiled coroutine generator (@param symbol)
-// create a struct containing the initial parameters, the function pointer
-// returned by `codegen_coroutine_generator` and the switch index value 0
-// (0, parameters, fn)
-/* coroutine instance
- * let x = f 1 2 3 ...
- * x becomes a 'curried' version of the coroutine generator f
- * x = fn () ->
- *   fgen (1, 2, 3) 0
- * ;;
- *
- * at each call `x ()` - x must be replaced with
- * fn () ->
- *   fgen (a, b, c) (i+1)
- * ;;
- */
-LLVMValueRef _codegen_coroutine_instance(LLVMValueRef instance, Ast *args,
-                                         int args_len, Type *_instance_type,
-                                         LLVMValueRef fn, JITLangCtx *ctx,
-                                         LLVMModuleRef module,
-                                         LLVMBuilderRef builder) {
-
-  LLVMTypeRef params_obj_type = type_to_llvm_type(
-      _instance_type->data.T_COROUTINE_INSTANCE.params_type, ctx->env, module);
-
-  LLVMValueRef coroutine_def = fn;
-
-  LLVMTypeRef instance_type = coroutine_instance_type(params_obj_type);
-
-  if (instance == NULL) {
-    instance = heap_alloc(instance_type, ctx, builder);
-  }
-
-  LLVMValueRef fn_gep =
-      coroutine_instance_fn_gep(instance, instance_type, builder);
-  LLVMBuildStore(builder, fn, fn_gep);
-
-  LLVMValueRef counter_gep =
-      coroutine_instance_counter_gep(instance, instance_type, builder);
-  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
-
-  LLVMValueRef parent_gep =
-      coroutine_instance_parent_gep(instance, instance_type, builder);
-  LLVMBuildStore(builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)),
-                 parent_gep);
-
-  LLVMValueRef params_gep =
-      coroutine_instance_params_gep(instance, instance_type, builder);
-  if (params_gep) {
-    if (args_len == 1 && ((Type *)args[0].md)->kind != T_VOID) {
-      LLVMBuildStore(builder, codegen(args, ctx, module, builder), params_gep);
-    } else {
-      LLVMValueRef params_obj = LLVMGetUndef(params_obj_type);
-
-      for (int i = 0; i < args_len; i++) {
-        Ast *arg = args + i;
-        params_obj = LLVMBuildInsertValue(
-            builder, params_obj, codegen(arg, ctx, module, builder), i, "");
-      }
-      LLVMBuildStore(builder, params_obj, params_gep);
-    }
-  }
-
-  return instance;
-}
-
 LLVMValueRef codegen_coroutine_instance(LLVMValueRef instance,
                                         Type *instance_type, LLVMValueRef def,
                                         JITLangCtx *ctx, LLVMModuleRef module,
@@ -654,6 +532,7 @@ LLVMValueRef codegen_coroutine_instance(LLVMValueRef instance,
 
   return instance;
 }
+
 LLVMValueRef set_instance_params(LLVMValueRef instance,
                                  LLVMTypeRef llvm_instance_type,
                                  LLVMTypeRef llvm_params_obj_type,
@@ -679,27 +558,7 @@ LLVMValueRef set_instance_params(LLVMValueRef instance,
   }
 }
 
-// given a symbol containing the coroutine:
-// (parameters, fn, i)
-// call fn(parameters,  i)
-// and update the symbol to be (new_parameters, fn, i+1)
-LLVMValueRef codegen_coroutine_next(LLVMValueRef instance,
-                                    LLVMTypeRef instance_type,
-                                    LLVMTypeRef def_fn_type, JITLangCtx *ctx,
-                                    LLVMModuleRef module,
-                                    LLVMBuilderRef builder) {
-  printf("coroutine next\n");
-  LLVMDumpType(def_fn_type);
-  printf("coroutine next\n");
-  LLVMValueRef func = codegen_tuple_access(0, instance, instance_type, builder);
-  LLVMValueRef result =
-      LLVMBuildCall2(builder, def_fn_type, func, (LLVMValueRef[]){instance}, 1,
-                     "coroutine_next");
-
-  return result;
-}
-
-LLVMValueRef coroutine_call(LLVMValueRef instance, LLVMTypeRef instance_type,
+LLVMValueRef coroutine_next(LLVMValueRef instance, LLVMTypeRef instance_type,
                             LLVMTypeRef def_fn_type, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -943,43 +802,28 @@ LLVMValueRef list_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
 
   return instance;
 }
-LLVMValueRef compile_generic_coroutine(JITSymbol *sym, Type *expected_fn_type,
-                                       JITLangCtx *ctx, LLVMModuleRef module,
-                                       LLVMBuilderRef builder) {
 
-  Ast *ast = sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.ast;
-  size_t args_len = ast->data.AST_LAMBDA.len;
+LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
+                                        JITLangCtx *ctx, LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
 
-  coroutine_generator_symbol_data_t symbol_data = {
-      .ast = ast,
-      .stack_ptr = ctx->stack_ptr,
-      .ret_option_type = empty_type(),
-      .params_obj_type = empty_type(),
-  };
+  Ast *fn_ast = sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.ast;
+  Type *instance_type = fn_return_type(expected_fn_type);
 
-  // get correct param obj type
+  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
+  Type *ret_opt =
+      fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
+  LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
   LLVMTypeRef llvm_params_obj_type =
-      param_struct_type(expected_fn_type, args_len, symbol_data.params_obj_type,
-                        symbol_data.ret_option_type, ctx->env, module);
+      type_to_llvm_type(params_obj_type, ctx->env, module);
+  LLVMTypeRef llvm_instance_type =
+      coroutine_instance_type(llvm_params_obj_type);
 
-  // printf("param obj generic cor\n");
-  // LLVMDumpType(llvm_params_obj_type);
-  // printf("\n");
+  LLVMTypeRef llvm_def_type = LLVMFunctionType(
+      llvm_ret_opt_type,
+      (LLVMTypeRef[]){LLVMPointerType(llvm_instance_type, 0)}, 1, 0);
 
-  symbol_data.llvm_params_obj_type = llvm_params_obj_type;
-
-  LLVMTypeRef instance_type =
-      coroutine_instance_type(symbol_data.llvm_params_obj_type);
-
-  LLVMTypeRef llvm_ret_option_type =
-      type_to_llvm_type(symbol_data.ret_option_type, ctx->env, module);
-  symbol_data.llvm_ret_option_type = llvm_ret_option_type;
-
-  LLVMTypeRef def_fn_type =
-      coroutine_def_fn_type(instance_type, llvm_ret_option_type);
-  symbol_data.def_fn_type = def_fn_type;
-
-  Ast *specific_ast = get_specific_fn_ast_variant(ast, expected_fn_type);
+  Ast *specific_ast = get_specific_fn_ast_variant(fn_ast, expected_fn_type);
 
   JITLangCtx compilation_ctx = {
       ctx->stack,
@@ -1014,11 +858,17 @@ LLVMValueRef compile_generic_coroutine(JITSymbol *sym, Type *expected_fn_type,
   }
 
   compilation_ctx.env = _env;
+  LLVMTypeRef _def_type;
+  LLVMValueRef def = coroutine_def(specific_ast, &compilation_ctx, module,
+                                   builder, &_def_type);
 
-  LLVMValueRef def = compile_coroutine_generator(
-      ast, symbol_data, instance_type, &compilation_ctx, module, builder);
   return def;
 }
+
+// LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef
+// module,
+//                            LLVMBuilderRef builder,
+//                            LLVMTypeRef *_llvm_def_type) {
 
 LLVMValueRef generic_coroutine_instance(Ast *application_args, int args_len,
                                         Type *def_type, LLVMValueRef func,
@@ -1168,4 +1018,39 @@ LLVMValueRef coroutine_map(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   LLVMBuildStore(builder, wrapper_function, fn_gep);
 
   return in_instance;
+}
+
+LLVMValueRef coroutine_instance_from_def_symbol(
+    LLVMValueRef _instance, JITSymbol *sym, Ast *args, int args_len,
+    Type *expected_fn_type, JITLangCtx *ctx, LLVMModuleRef module,
+    LLVMBuilderRef builder) {
+
+  LLVMValueRef def = sym->val;
+  LLVMTypeRef llvm_def_type = sym->llvm_type;
+  Type *instance_type = fn_return_type(sym->symbol_type);
+
+  LLVMValueRef instance = codegen_coroutine_instance(_instance, instance_type,
+                                                     def, ctx, module, builder);
+
+  if (args_len == 1 && ((Type *)args[0].md)->kind == T_VOID) {
+    return instance;
+  }
+
+  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
+
+  LLVMTypeRef llvm_params_obj_type =
+      type_to_llvm_type(params_obj_type, ctx->env, module);
+
+  LLVMTypeRef llvm_instance_type =
+      coroutine_instance_type(llvm_params_obj_type);
+
+  LLVMValueRef param_args[args_len];
+  for (int i = 0; i < args_len; i++) {
+    param_args[i] = codegen(args + i, ctx, module, builder);
+  }
+
+  set_instance_params(instance, llvm_instance_type, llvm_params_obj_type,
+                      param_args, args_len, builder);
+
+  return instance;
 }

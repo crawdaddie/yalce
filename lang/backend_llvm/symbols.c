@@ -4,6 +4,7 @@
 #include "globals.h"
 #include "match.h"
 #include "serde.h"
+#include "types.h"
 #include "types/type.h"
 #include "variant.h"
 #include <stdlib.h>
@@ -210,6 +211,10 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
     JITSymbol *def_sym = new_symbol(STYPE_COROUTINE_GENERATOR, def_type,
                                     coroutine_func, llvm_def_type);
 
+    def_sym->symbol_data.STYPE_COROUTINE_GENERATOR.llvm_params_obj_type =
+        type_to_llvm_type(instance_type->data.T_COROUTINE_INSTANCE.params_type,
+                          cont_ctx.env, module);
+
     const char *id_chars = binding->data.AST_IDENTIFIER.value;
     int id_len = binding->data.AST_IDENTIFIER.length;
 
@@ -397,20 +402,5 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   Type *t_iter_map_sig = create_iter_map_sig_type();
   GENERIC_FN_SYMBOL(SYM_NAME_ITER_MAP, t_iter_map_sig);
 
-  // GENERIC_COR_SYMBOL("iter_zip", create_iter_zip_sig_type());
-
-  /*
-    Type *t_corzip = corzip_type();
-    env = env_extend(env, "iter_zip", t_corzip);
-    JITSymbol *corzip_sym =
-        new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR, t_corzip, NULL, NULL);
-    ht_set_hash(stack, "iter_zip", hash_string("iter_zip", 8), corzip_sym);
-
-    Type *t_loop = loop_type();
-    env = env_extend(env, "loop", t_loop);
-    JITSymbol *loop_sym =
-        new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR, t_loop, NULL, NULL);
-    ht_set_hash(stack, "loop", hash_string("loop", 4), loop_sym);
-    */
   return env;
 }

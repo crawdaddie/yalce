@@ -25,3 +25,51 @@ let test_iter_all = fn () ->
   )
 ;;
 
+
+let rec_cor = fn () ->
+  yield 1;
+  yield 2;
+  yield 3;
+  yield rec_cor ()
+;;
+
+
+let test_recursive_cor = fn () ->
+  let inst = rec_cor ();
+  (match inst () with
+  | Some 1 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 2 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 3 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 1 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 2 -> true
+  | _ -> false
+  )
+;;
+
+let generic_cor = fn a b ->
+  yield a;
+  yield b
+;;
+let test_generic_cor = fn () ->
+  let inst = generic_cor 1 2;
+  (match inst () with
+  | Some 1 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 2 -> true
+  | _ -> false
+  )
+;;

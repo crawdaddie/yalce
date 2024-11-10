@@ -1005,6 +1005,14 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement) {
     }
     return type;
   }
+  case T_COROUTINE_INSTANCE: {
+    type->data.T_COROUTINE_INSTANCE.params_type = replace_in(
+        type->data.T_COROUTINE_INSTANCE.params_type, tvar, replacement);
+
+    type->data.T_COROUTINE_INSTANCE.yield_interface = replace_in(
+        type->data.T_COROUTINE_INSTANCE.yield_interface, tvar, replacement);
+    return type;
+  }
   default:
     return type;
   }
