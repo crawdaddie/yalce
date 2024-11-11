@@ -53,8 +53,8 @@ LLVMValueRef generic_coroutine_instance(Ast *application_args, int args_len,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder);
 
-LLVMValueRef coroutine_loop(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
-                            LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef coroutine_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder);
 
 LLVMValueRef coroutine_map(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                            LLVMModuleRef module, LLVMBuilderRef builder);

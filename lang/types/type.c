@@ -197,7 +197,6 @@ Type t_option_of_var =
 Type *type_of_option(Type *option) {
   return option->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
-
 Type t_iter_of_list_sig =
     MAKE_FN_TYPE_3(&TLIST(&t_option_var), &t_void, &t_option_of_var);
 
@@ -334,7 +333,7 @@ void print_type(Type *t) {
   //   return;
   // }
 
-  char buf[200] = {};
+  char buf[300] = {};
   printf("%s\n", type_to_string(t, buf));
 }
 
@@ -565,6 +564,12 @@ bool is_generic(Type *t) {
     }
 
     return is_generic(t->data.T_FN.to);
+  }
+  case T_COROUTINE_INSTANCE: {
+    if (is_generic(t->data.T_COROUTINE_INSTANCE.params_type)) {
+      return true;
+    }
+    return is_generic(t->data.T_COROUTINE_INSTANCE.yield_interface);
   }
 
   default:
@@ -1005,6 +1010,7 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement) {
     }
     return type;
   }
+
   case T_COROUTINE_INSTANCE: {
     type->data.T_COROUTINE_INSTANCE.params_type = replace_in(
         type->data.T_COROUTINE_INSTANCE.params_type, tvar, replacement);
@@ -1018,6 +1024,9 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement) {
   }
 }
 Type *resolve_generic_type(Type *t, TypeEnv *env) {
+  // printf("###\nRESOLVE\n###\n");
+  // print_type(t);
+  // print_type_env(env);
   while (env) {
     const char *key = env->name;
     Type tvar = {T_VAR, .data = {.T_VAR = key}};

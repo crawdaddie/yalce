@@ -5,7 +5,6 @@
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
 #include "backend_llvm/variant.h"
-#include "coroutine_instance.h"
 #include "coroutines.h"
 #include "list.h"
 #include "serde.h"
@@ -683,6 +682,8 @@ LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+  printf("application\n");
+  print_ast(ast);
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
   const char *sym_name =
@@ -719,12 +720,12 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  if (strcmp(SYM_NAME_LOOP, sym_name) == 0) {
-    LLVMValueRef res = coroutine_loop(ast, sym, ctx, module, builder);
-    if (res) {
-      return res;
-    }
-  }
+  // if (strcmp(SYM_NAME_LOOP, sym_name) == 0) {
+  //   LLVMValueRef res = coroutine_loop(ast, ctx, module, builder);
+  //   if (res) {
+  //     return res;
+  //   }
+  // }
 
   if (strcmp(SYM_NAME_ITER_MAP, sym_name) == 0) {
     LLVMValueRef res = coroutine_map(ast, sym, ctx, module, builder);
@@ -756,6 +757,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+  print_type(expected_fn_type);
 
   return call_symbol(sym_name, sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, expected_fn_type, ctx,

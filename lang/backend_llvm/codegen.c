@@ -14,9 +14,12 @@
 
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
+
   Type *t = ast->md;
   LLVMTypeRef ret;
-  if (t->kind == T_FN && is_generic(ast->md)) {
+  if (t->kind == T_FN && is_generic(t)) {
+    ret = LLVMVoidType();
+  } else if (is_generic(t)) {
     ret = LLVMVoidType();
   } else {
     ret = type_to_llvm_type(t, ctx->env, module);

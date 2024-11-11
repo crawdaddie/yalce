@@ -81,8 +81,6 @@ JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx) {
 int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
 
   if (ast->tag == AST_IDENTIFIER) {
-    // printf("lookup sym: ");
-    // print_ast(ast);
 
     const char *chars = ast->data.AST_IDENTIFIER.value;
     int chars_len = ast->data.AST_IDENTIFIER.length;
@@ -91,14 +89,10 @@ int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
 
     while (ptr >= 0) {
       JITSymbol *_sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
-      // printf("find sym in stack %d\n", ptr);
       if (_sym != NULL) {
         *sym = *_sym;
         sym->type = _sym->type;
 
-        // printf("sym %s -> %d stack %d hash %llu\n", key.chars, sym->type,
-        // ptr,
-        //        key.hash);
         return 0;
       }
       ptr--;
@@ -152,7 +146,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   default: {
-    return NULL;
+    return sym->val;
   }
   }
 }
@@ -176,8 +170,10 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
   return NULL;
 }
 
-bool is_coroutine_generator_ast(Ast *expr) {
-  return expr->tag == AST_LAMBDA && expr->data.AST_LAMBDA.is_coroutine;
+bool is_coroutine_generator(Ast *expr) {
+  Type *t = expr->md;
+  Type *ret = fn_return_type(t);
+  return ret->kind == T_COROUTINE_INSTANCE;
 }
 
 LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
@@ -194,13 +190,13 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   Type *expr_type = ast->data.AST_LET.expr->md;
 
   if (expr_type->kind == T_FN &&
-      is_coroutine_generator_ast(ast->data.AST_LET.expr) &&
+      is_coroutine_generator(ast->data.AST_LET.expr) &&
       is_generic(ast->data.AST_LET.expr->md)) {
     return codegen_generic_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN &&
-      is_coroutine_generator_ast(ast->data.AST_LET.expr)) {
+      is_coroutine_generator(ast->data.AST_LET.expr)) {
 
     Type *def_type = ast->md;
     Type *instance_type = fn_return_type(def_type);
@@ -256,36 +252,44 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
 }
 
 Type *create_loop_sig_type() {
-  // Type *input_type = tvar("cor_input_param");
-  Type *ret_type = tvar("cor_ret");
-  Type *ret_opt = create_option_type(ret_type);
-  Type *instance_type = type_fn(&t_void, create_option_type(ret_type));
-  instance_type->is_coroutine_instance = true;
-  // Type *coroutine_sig = type_fn(input_type, instance_type);
+  Type *params_type = empty_type();
+  params_type->kind = T_VAR;
+  params_type->data.T_VAR = "params_obj";
+  Type *ret = empty_type();
+  ret->kind = T_VAR;
+  ret->data.T_VAR = "cor_ret";
+  Type *ret_opt = create_option_type(ret);
+  Type *input_inst = empty_type();
+  input_inst->kind = T_COROUTINE_INSTANCE;
+  input_inst->data.T_COROUTINE_INSTANCE.params_type = params_type;
+  input_inst->data.T_COROUTINE_INSTANCE.yield_interface =
+      type_fn(&t_void, ret_opt);
 
-  Type *loop_sig = type_fn(instance_type, instance_type);
-  loop_sig->is_coroutine_fn = true;
-  // loop_sig = type_fn(coroutine_sig, loop_sig);
+  Type *input_def = type_fn(params_type, input_inst);
+  Type *loop_sig = input_inst;
+  loop_sig = type_fn(params_type, loop_sig);
+  loop_sig = type_fn(input_def, loop_sig);
+
   return loop_sig;
 }
 
 Type *create_iter_map_sig_type() {
-  Type *input_param = tvar("cor_input_param");
-  Type *input_ret = tvar("cor_input_ret");
-
-  Type *input_instance_type =
-      create_coroutine_instance_type(input_param, input_ret);
-
-  Type *output_ret = tvar("cor_output_ret");
-  Type *transform_func = type_fn(input_ret, output_ret);
-
-  Type *output_instance_type =
-      create_coroutine_instance_type(input_param, output_ret);
-  Type *map_sig = output_instance_type;
-  map_sig = type_fn(input_instance_type, map_sig);
-  map_sig = type_fn(transform_func, map_sig);
-
-  return map_sig;
+  // Type *input_param = tvar("cor_input_param");
+  // Type *input_ret = tvar("cor_input_ret");
+  //
+  // Type *input_instance_type =
+  //     create_coroutine_instance_type(input_param, input_ret);
+  //
+  // Type *output_ret = tvar("cor_output_ret");
+  // Type *transform_func = type_fn(input_ret, output_ret);
+  //
+  // Type *output_instance_type =
+  //     create_coroutine_instance_type(input_param, output_ret);
+  // Type *map_sig = output_instance_type;
+  // map_sig = type_fn(input_instance_type, map_sig);
+  // map_sig = type_fn(transform_func, map_sig);
+  //
+  // return map_sig;
 }
 
 // Type *create_iter_zip_sig_type() {
@@ -396,11 +400,11 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
 
   GENERIC_COR_SYMBOL(SYM_NAME_ITER_OF_ARRAY_INF, &t_iter_of_array_sig);
 
-  Type *t_iter_loop_sig = create_loop_sig_type();
-  GENERIC_COR_SYMBOL(SYM_NAME_LOOP, t_iter_loop_sig);
+  // Type *t_iter_loop_sig = create_loop_sig_type();
+  // GENERIC_COR_SYMBOL(SYM_NAME_LOOP, t_iter_loop_sig);
 
-  Type *t_iter_map_sig = create_iter_map_sig_type();
-  GENERIC_FN_SYMBOL(SYM_NAME_ITER_MAP, t_iter_map_sig);
-
+  // Type *t_iter_map_sig = create_iter_map_sig_type();
+  // GENERIC_FN_SYMBOL(SYM_NAME_ITER_MAP, t_iter_map_sig);
+  //
   return env;
 }

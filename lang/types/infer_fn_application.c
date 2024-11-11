@@ -93,25 +93,27 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
 
     Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
     Type *arg_type = infer(arg_ast, env);
+    printf("arg type %d: ", i);
+    print_ast(arg_ast);
+    print_type(arg_type);
+    print_type(result_fn->data.T_FN.from);
+
     if (!arg_type) {
       fprintf(stderr, "could not infer application argument [%s:%d]\n",
               __FILE__, __LINE__);
       print_location(arg_ast);
       return NULL;
     }
+
     app_arg_types[i] = arg_type;
 
     if (app_arg_types[i]->kind == T_FN && arg_ast->tag != AST_LAMBDA) {
       app_arg_types[i] = copy_type(app_arg_types[i]);
     }
 
-    // printf("app arg %d\n", i);
-    // print_type(app_arg_types[i]);
-    // printf("expected: ");
-    // print_type(result_fn->data.T_FN.from);
-
     Type *unif =
         unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
+    print_type_env(replacement_env);
 
     if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
       print_unification_err(ast->data.AST_APPLICATION.args + i,

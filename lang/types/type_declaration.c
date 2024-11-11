@@ -4,6 +4,14 @@
 
 Type *compute_type_expression(Ast *expr, TypeEnv *env);
 
+Type *type_var_of_id(Ast *expr) {
+  const char *id_chars = expr->data.AST_IDENTIFIER.value;
+  Type *type = talloc(sizeof(Type));
+  type->kind = T_VAR;
+  type->data.T_VAR = id_chars;
+  return type;
+}
+
 Type *fn_type_decl(Ast *sig, TypeEnv *env) {
   if (sig->tag == AST_FN_SIGNATURE) {
     Ast *param_ast = sig->data.AST_LIST.items;
@@ -17,6 +25,29 @@ Type *fn_type_decl(Ast *sig, TypeEnv *env) {
 Type *compute_concrete_type(Type *generic, Type *contained) {
   TypeEnv *env = env_extend(NULL, "t", contained);
   return resolve_generic_type(generic, env);
+}
+
+Type *coroutine_instance_type_parameter(Ast *expr) {
+  Ast *components = expr->data.AST_BINOP.right;
+  if (components->tag != AST_BINOP) {
+    fprintf(stderr,
+            "Invalid input parameters for parametrized type CorInstance");
+    return NULL;
+  }
+
+  Ast *params_type_id = components->data.AST_BINOP.left;
+  Type *params_type = type_var_of_id(params_type_id);
+  Ast *ret_type_id = components->data.AST_BINOP.right;
+  Type *ret_type = type_var_of_id(ret_type_id);
+
+  Type *ret_opt = create_option_type(ret_type);
+
+  Type *inst = empty_type();
+  inst->kind = T_COROUTINE_INSTANCE;
+  inst->data.T_COROUTINE_INSTANCE.params_type = params_type;
+  inst->data.T_COROUTINE_INSTANCE.yield_interface = type_fn(&t_void, ret_opt);
+
+  return inst;
 }
 
 Type *next_tvar();
@@ -58,12 +89,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   case AST_IDENTIFIER: {
     Type *type = find_type_in_env(env, expr->data.AST_IDENTIFIER.value);
     if (!type) {
-      const char *id_chars = expr->data.AST_IDENTIFIER.value;
-      type = talloc(sizeof(Type));
-      type->kind = T_VAR;
-      type->data.T_VAR = id_chars;
-
-      return type;
+      return type_var_of_id(expr);
     }
     return type;
   }
@@ -105,8 +131,12 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
   case AST_BINOP: {
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
-      // printf("cons decl\n");
-      // print_type_env(env);
+
+      if (expr->data.AST_BINOP.left->tag == AST_IDENTIFIER &&
+          strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+                 "CorInstance") == 0) {
+        return coroutine_instance_type_parameter(expr);
+      }
 
       Type *contained_type =
           compute_type_expression(expr->data.AST_BINOP.right, env);
@@ -115,15 +145,8 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       Type *lookup = env_lookup(env, name);
 
       if (lookup && is_generic(lookup)) {
-        // printf("create version of declared type: ");
-        // print_type(lookup);
-        // printf("with contained: ");
-        // print_type(lookup);
         Type *t = copy_type(lookup);
         t = compute_concrete_type(t, contained_type);
-        // printf("concrete type: ");
-        // printf("is generic? %d\n", is_generic(t));
-        // print_type(t);
         return t;
       }
 

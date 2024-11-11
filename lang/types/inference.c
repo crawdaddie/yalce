@@ -317,15 +317,10 @@ Type *extern_fn_type(Ast *sig, TypeEnv **env) {
   }
   return infer(sig, env);
 }
-bool yield_is_new_coroutine(Ast *yield_expr) {
 
-  if (yield_expr->tag == AST_APPLICATION) {
-    Type *yielded_type = yield_expr->data.AST_APPLICATION.function->md;
-    if (yielded_type->is_coroutine_fn) {
-      return true;
-    }
-  }
-  return false;
+bool yield_is_new_coroutine(Ast *yield_expr) {
+  Type *yield_type = yield_expr->md;
+  return yield_type->kind == T_COROUTINE_INSTANCE;
 }
 Type *infer(Ast *ast, TypeEnv **env) {
 
@@ -571,9 +566,14 @@ Type *infer(Ast *ast, TypeEnv **env) {
     lambda_ctx.lambda->data.AST_LAMBDA.num_yields++;
 
     type = infer(ast->data.AST_YIELD.expr, env);
+    // printf("type of yield: ");
+    // print_ast(ast);
+    // print_type(type);
+    // print_type_env(*env);
 
-    if (yield_is_new_coroutine(ast->data.AST_YIELD.expr)) {
-      type = type_of_option(type->data.T_FN.to);
+    if (type->kind == T_COROUTINE_INSTANCE) {
+      type = type_of_option(
+          fn_return_type(type->data.T_COROUTINE_INSTANCE.yield_interface));
     }
 
     if (lambda_ctx.yielded_type != NULL) {
