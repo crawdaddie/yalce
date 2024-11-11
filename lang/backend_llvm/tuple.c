@@ -35,8 +35,15 @@ LLVMValueRef codegen_tuple_access(int n, LLVMValueRef tuple,
     return LLVMBuildExtractValue(builder, tuple, n, "struct_element");
   }
 
+  // LLVMValueRef element_ptr =
+  //     LLVMBuildGEP2(builder, tuple_type, tuple, n, "get_tuple_element");
   LLVMValueRef element_ptr =
-      LLVMBuildStructGEP2(builder, tuple_type, tuple, n, "get_tuple_element");
+      LLVMBuildGEP2(builder, tuple_type, tuple,
+                    (LLVMValueRef[]){
+                        LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
+                        LLVMConstInt(LLVMInt32Type(), n, 0)  // Get nth element
+                    },
+                    2, "tuple_element_ptr");
 
   LLVMTypeRef element_type = LLVMStructGetTypeAtIndex(tuple_type, n);
 

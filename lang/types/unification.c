@@ -53,7 +53,7 @@ Type *unify_variable(Type *t1, Type *t2, TypeEnv **env) {
   }
 
   if (t1->kind == T_VAR && t2->kind == T_VOID) {
-    *env = env_extend(*env, t1, &t_void);
+    *env = env_extend(*env, t1->data.T_VAR, &t_void);
     *t1 = t_void;
     return t1;
   }
@@ -290,6 +290,15 @@ Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
   return create_typeclass_resolve_type(
       t1->data.T_TYPECLASS_RESOLVE.comparison_tc, dep1, dep2);
 }
+Type *unify_coroutine_instance(Type *t1, Type *t2, TypeEnv **env) {
+
+  Type *unif_params = unify(t1->data.T_COROUTINE_INSTANCE.params_type,
+                            t2->data.T_COROUTINE_INSTANCE.params_type, env);
+
+  Type *unif_yield = unify(t1->data.T_COROUTINE_INSTANCE.yield_interface,
+                           t2->data.T_COROUTINE_INSTANCE.yield_interface, env);
+  return create_coroutine_instance_type(unif_params, unif_yield);
+}
 
 Type *unify(Type *t1, Type *t2, TypeEnv **env) {
 
@@ -404,13 +413,7 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
     return unify_typeclass_resolve(t1, t2, env);
   }
   case T_COROUTINE_INSTANCE: {
-    Type *unif_params = unify(t1->data.T_COROUTINE_INSTANCE.params_type,
-                              t2->data.T_COROUTINE_INSTANCE.params_type, env);
-
-    Type *unif_yield =
-        unify(t1->data.T_COROUTINE_INSTANCE.yield_interface,
-              t2->data.T_COROUTINE_INSTANCE.yield_interface, env);
-    return create_coroutine_instance_type(unif_params, unif_yield);
+    return unify_coroutine_instance(t1, t2, env);
   }
 
   default:

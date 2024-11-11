@@ -93,10 +93,7 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
 
     Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
     Type *arg_type = infer(arg_ast, env);
-    printf("arg type %d: ", i);
-    print_ast(arg_ast);
-    print_type(arg_type);
-    print_type(result_fn->data.T_FN.from);
+
 
     if (!arg_type) {
       fprintf(stderr, "could not infer application argument [%s:%d]\n",
@@ -113,7 +110,7 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
 
     Type *unif =
         unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
-    print_type_env(replacement_env);
+
 
     if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
       print_unification_err(ast->data.AST_APPLICATION.args + i,

@@ -167,7 +167,27 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       return _TRUE;
     }
 
-    if (val_type->kind == T_FN && is_coroutine_generator_fn(val_type)) {
+    if (is_coroutine_generator_fn(val_type)) {
+
+      Type *def_type = val_type;
+      Type *instance_type = fn_return_type(def_type);
+      LLVMTypeRef llvm_def_type;
+      LLVMValueRef coroutine_func = val;
+
+      JITSymbol *def_sym = new_symbol(STYPE_COROUTINE_GENERATOR, def_type,
+                                      coroutine_func, llvm_def_type);
+
+      def_sym->symbol_data.STYPE_COROUTINE_GENERATOR.llvm_params_obj_type =
+          type_to_llvm_type(instance_type->data.T_COROUTINE_INSTANCE.params_type,
+                            ctx->env, module);
+
+      const char *id_chars = binding->data.AST_IDENTIFIER.value;
+      int id_len = binding->data.AST_IDENTIFIER.length;
+
+      ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+                  hash_string(id_chars, id_len), def_sym);
+
+
       return _TRUE;
     }
     if (val_type->kind == T_FN && !(is_generic(val_type))) {
@@ -200,6 +220,7 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
 
       return _TRUE;
     }
+
 
     if (ctx->stack_ptr == 0) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);

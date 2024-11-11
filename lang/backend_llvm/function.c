@@ -682,8 +682,6 @@ LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-  printf("application\n");
-  print_ast(ast);
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
   const char *sym_name =
@@ -757,7 +755,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
-  print_type(expected_fn_type);
 
   return call_symbol(sym_name, sym, ast->data.AST_APPLICATION.args,
                      ast->data.AST_APPLICATION.len, expected_fn_type, ctx,

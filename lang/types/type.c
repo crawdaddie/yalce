@@ -1225,3 +1225,8 @@ Type *coroutine_instance_fn_def_type(Type *inst) {
   }
   return fn;
 }
+
+bool is_coroutine_generator(Type *t) {
+  Type *ret = fn_return_type(t);
+  return ret->kind == T_COROUTINE_INSTANCE;
+}

@@ -312,4 +312,6 @@ bool is_coroutine_instance_type(Type *inst);
 
 bool is_coroutine_generator_fn(Type *gen);
 Type *coroutine_instance_fn_def_type(Type *inst);
+bool is_coroutine_generator(Type *t);
+
 #endif

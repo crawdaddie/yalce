@@ -170,11 +170,6 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
   return NULL;
 }
 
-bool is_coroutine_generator(Ast *expr) {
-  Type *t = expr->md;
-  Type *ret = fn_return_type(t);
-  return ret->kind == T_COROUTINE_INSTANCE;
-}
 
 LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -190,13 +185,13 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   Type *expr_type = ast->data.AST_LET.expr->md;
 
   if (expr_type->kind == T_FN &&
-      is_coroutine_generator(ast->data.AST_LET.expr) &&
+      is_coroutine_generator(ast->data.AST_LET.expr->md) &&
       is_generic(ast->data.AST_LET.expr->md)) {
     return codegen_generic_coroutine_binding(ast, &cont_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN &&
-      is_coroutine_generator(ast->data.AST_LET.expr)) {
+      is_coroutine_generator(ast->data.AST_LET.expr->md)) {
 
     Type *def_type = ast->md;
     Type *instance_type = fn_return_type(def_type);
