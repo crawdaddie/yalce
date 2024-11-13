@@ -58,6 +58,7 @@ Ast* ast_root = NULL;
 %token DOUBLE_AT
 %token DOUBLE_AMP
 %token DOUBLE_PIPE
+%token THUNK
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -145,6 +146,7 @@ expr:
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
+  | THUNK expr                        { $$ = ast_thunk_expr($2); }
   ;
 
 simple_expr:

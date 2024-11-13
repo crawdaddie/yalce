@@ -56,6 +56,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "||"                    return DOUBLE_PIPE;
 "&"                     return *yytext;
 "*"                     return *yytext;
+"\\"                    return THUNK;
 
 [a-zA-Z_][a-zA-Z0-9_]*  {
 

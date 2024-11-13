@@ -68,8 +68,7 @@ let test_generic_cor = fn () ->
   (match inst () with
   | Some 1 -> true
   | _ -> false
-  )
-  && (
+  ) && (
   match inst () with
   | Some 2 -> true
   | _ -> false
