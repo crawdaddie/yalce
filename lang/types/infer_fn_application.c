@@ -126,6 +126,11 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   ast->data.AST_APPLICATION.function->md =
       resolve_generic_type(fn_type, replacement_env);
 
+  // printf("inferred fn type\n");
+  // print_ast(ast);
+  // print_type(ast->data.AST_APPLICATION.function->md);
+  // print_type_env(replacement_env);
+
   result_fn = resolve_tc_rank(result_fn);
   const char *fn_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
