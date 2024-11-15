@@ -990,5 +990,12 @@ int main() {
                          &instance);
   });
 
+  ({
+    RESET;
+    ;
+    Type fn = MAKE_FN_TYPE_2(&MAKE_FN_TYPE_2(&t_num, &t_void), &t_void);
+    TEST_SIMPLE_AST_TYPE("let ex_fn = extern fn (Double -> ()) -> ();", &fn);
+  });
+
   return status == true ? 0 : 1;
 }

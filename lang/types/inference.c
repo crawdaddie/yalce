@@ -310,10 +310,19 @@ static Type *resolve_generic_variant(Type *t, TypeEnv *env) {
 
 Type *extern_fn_type(Ast *sig, TypeEnv **env) {
   if (sig->tag == AST_FN_SIGNATURE) {
-    Ast *param_ast = sig->data.AST_LIST.items;
-    Type *fn =
-        type_fn(infer(param_ast, env), extern_fn_type(param_ast + 1, env));
-    return fn;
+    Type *f = compute_type_expression(
+        sig->data.AST_LIST.items + sig->data.AST_LIST.len - 1, *env);
+
+    for (int i = sig->data.AST_LIST.len - 2; i >= 0; i--) {
+      Type *p = compute_type_expression(sig->data.AST_LIST.items + i, *env);
+      f = type_fn(p, f);
+    }
+    return f;
+
+    // Ast *param_ast = sig->data.AST_LIST.items;
+    // Type *fn =
+    //     type_fn(infer(param_ast, env), extern_fn_type(param_ast + 1, env));
+    // return fn;
   }
   return infer(sig, env);
 }
