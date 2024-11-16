@@ -5,6 +5,18 @@
 
 // scans a list of header files and prints corresponding ylc extern declarations
 // to stdout
+//
+struct lookup_t {
+  char *c_name;
+  char *ylc_name;
+};
+
+static struct lookup_t LOOKUPS[] = {
+    {"int", "Int"},         {"double", "Double"}, {"void", "()"},
+    {"uint64_t", "Uint64"}, {"uint32_t", "Int"},  {"bool", "Bool"},
+    {"char", "Char"},       {"char *", "Ptr"},    {"const char *", "Ptr"},
+    {"void *", "Ptr"},      {"double *", "Ptr"},
+};
 
 typedef struct name_lookup {
   const char *key;
@@ -61,7 +73,8 @@ void print_function_type(CXType type, name_lookup *lookups) {
   clang_disposeString(return_type);
 }
 
-void print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
+void __print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
+  printf("typedef decl\n");
   CXType underlying_type = clang_getTypedefDeclUnderlyingType(cursor);
   CXString type_name = clang_getCursorSpelling(cursor);
 
@@ -88,6 +101,40 @@ void print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
   clang_disposeString(type_name);
 }
 
+void print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
+  CXType underlying_type = clang_getTypedefDeclUnderlyingType(cursor);
+  CXString type_name = clang_getCursorSpelling(cursor);
+  const char *cursor_name = clang_getCString(type_name);
+
+  // Special case for CCCallback
+  if (strcmp(cursor_name, "CCCallback") == 0) {
+    printf("type CCCallback = (Double -> ());\n");
+    clang_disposeString(type_name);
+    return;
+  }
+
+  printf("type %s = ", cursor_name);
+
+  if (underlying_type.kind == CXType_Pointer) {
+    CXType pointee_type = clang_getPointeeType(underlying_type);
+    if (pointee_type.kind == CXType_FunctionProto) {
+      print_function_type(pointee_type, lookups);
+    } else {
+      CXString type_spelling = clang_getTypeSpelling(underlying_type);
+      printf("%s", yalce_name(lookups, clang_getCString(type_spelling)));
+      clang_disposeString(type_spelling);
+    }
+  } else if (underlying_type.kind == CXType_FunctionProto) {
+    print_function_type(underlying_type, lookups);
+  } else {
+    CXString type_spelling = clang_getTypeSpelling(underlying_type);
+    printf("%s", yalce_name(lookups, clang_getCString(type_spelling)));
+    clang_disposeString(type_spelling);
+  }
+
+  printf(";\n");
+  clang_disposeString(type_name);
+}
 void print_function_decl(CXCursor cursor, name_lookup *lookups) {
 
   CXString raw_comment = clang_Cursor_getRawCommentText(cursor);
@@ -142,27 +189,41 @@ void print_enum_decl(CXCursor cursor, name_lookup *lookups) {
 
 enum CXChildVisitResult visitor(CXCursor cursor, CXCursor parent,
                                 CXClientData client_data) {
+
+  CXType underlying_type = clang_getTypedefDeclUnderlyingType(cursor);
+  CXString type_name = clang_getCursorSpelling(cursor);
+  const char *cursor_name = clang_getCString(type_name);
+  name_lookup *lookups = client_data;
+
+  // fprintf(stderr, "TYPE DECL: %s\n", cursor_name);
   if (clang_Location_isFromMainFile(clang_getCursorLocation(cursor)) == 0) {
     return CXChildVisit_Continue;
   }
+  switch (clang_getCursorKind(cursor)) {
+  case CXCursor_FunctionDecl: {
 
-  if (clang_getCursorKind(cursor) == CXCursor_FunctionDecl) {
-
-    name_lookup *lookups = client_data;
     print_function_decl(cursor, lookups);
+    break;
   }
+  case CXCursor_StructDecl: {
 
-  if (clang_getCursorKind(cursor) == CXCursor_StructDecl) {
-
-    name_lookup *lookups = client_data;
     print_struct_decl(cursor, lookups);
+    break;
   }
+  case CXCursor_EnumDecl: {
 
-  if (clang_getCursorKind(cursor) == CXCursor_EnumDecl) {
-
-    name_lookup *lookups = client_data;
     print_enum_decl(cursor, lookups);
+    break;
   }
+  case CXCursor_TypedefDecl: {
+
+    print_typedef_decl(cursor, lookups);
+    break;
+  }
+  default: {
+  }
+  }
+
   return CXChildVisit_Recurse;
 }
 
@@ -173,23 +234,9 @@ int main(int argc, char *argv[]) {
   }
 
   name_lookup *lookups = NULL;
-  lookups = lookups_extend(lookups, "int", "Int");
-  lookups = lookups_extend(lookups, "double", "Double");
-  lookups = lookups_extend(lookups, "void", "()");
-  lookups = lookups_extend(lookups, "uint64_t", "Uint64");
-  lookups = lookups_extend(lookups, "uint32_t", "Int");
-  lookups = lookups_extend(lookups, "bool", "Bool");
-  lookups = lookups_extend(lookups, "char", "Char");
-  lookups = lookups_extend(lookups, "char *", "Ptr");
-  lookups = lookups_extend(lookups, "const char *", "Ptr");
-  lookups = lookups_extend(lookups, "void *", "Ptr");
-  lookups = lookups_extend(lookups, "double *", "Ptr");
-
-  // engine lib -specific lookups
-  lookups = lookups_extend(lookups, "SignalRef", "Signal");
-  lookups = lookups_extend(lookups, "NodeRef", "Synth");
-  lookups = lookups_extend(lookups, "SchedulerCallback", "Ptr");
-  lookups = lookups_extend(lookups, "CCCallback", "Ptr");
+  for (int i = 0; i < 13; i++) {
+    lookups = lookups_extend(lookups, LOOKUPS[i].c_name, LOOKUPS[i].ylc_name);
+  }
 
   for (int i = 1; i < argc; i++) {
 

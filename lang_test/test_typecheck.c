@@ -765,7 +765,7 @@ int main() {
 
     Ast *call = ast->data.AST_BODY.stmts[3];
     Type *spec_fn_type = call->data.AST_APPLICATION.function->md;
-    print_type(spec_fn_type);
+    // print_type(spec_fn_type);
   });
 
   ({
@@ -992,9 +992,25 @@ int main() {
 
   ({
     RESET;
-    ;
+    TypeEnv *env = NULL;
     Type fn = MAKE_FN_TYPE_2(&MAKE_FN_TYPE_2(&t_num, &t_void), &t_void);
-    TEST_SIMPLE_AST_TYPE("let ex_fn = extern fn (Double -> ()) -> ();", &fn);
+    Ast *prog =
+        TEST_SIMPLE_AST_TYPE_ENV("let ex_fn = extern fn (Double -> ()) -> ();\n"
+                                 "ex_fn f",
+                                 &t_void, env);
+    Ast *call = prog->data.AST_BODY.stmts[1];
+    Type *cb_type = call->data.AST_APPLICATION.function->md;
+
+    bool lut = types_equal(cb_type, &fn);
+    if (lut) {
+      fprintf(stderr, "✅ cb type => ");
+      print_type_err(&fn);
+    } else {
+      fprintf(stderr, "❌ cb type !=");
+      print_type_err(&fn);
+    }
+
+    status &= lut;
   });
 
   return status == true ? 0 : 1;
