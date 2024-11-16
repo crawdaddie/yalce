@@ -46,7 +46,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "with"                  return WITH;
 "["                     return *yytext;
 "]"                     return *yytext;
-"import"                return *yytext;
+"import"                return IMPORT;
 "."                     return *yytext;
 "type"                  return *yytext;
 "of"                    return *yytext;
@@ -65,15 +65,6 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           yylval.vident.length = len;
                           yylval.vident.hash = hash_string(yylval.vident.chars, len);
                           return IDENTIFIER;
-                        }
-
-@[a-zA-Z_][a-zA-Z0-9_]* {
-
-                          int len = yyleng;
-                          yylval.vident.chars = strdup(yytext); 
-                          yylval.vident.length = len;
-                          yylval.vident.hash = hash_string(yylval.vident.chars, len);
-                          return META_IDENTIFIER;
                         }
 
 "_"                     return *yytext;
@@ -169,12 +160,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                         }
 
 ^%.*            {
-                  /*
-                  printf("possible macro %s %d\n", yytext, top_level_tests);
-                  handle_macro(ast_root, yytext + 1);
-                  print_ast(ast_root);
-                  printf("should insert ast nodes\n");
-                  */
+                  // printf("possible macro %s\n", yytext + 1);
+                  return *(yytext + 1);
                 };       
 
 "%"             return MODULO;
@@ -189,20 +176,23 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 
   
 [ \t]+          ;       /* ignore whitespace */
-\n              {yycolumn = 1;}      /* ignore whitespace */
+\n              { yycolumn = 1; }      
 {CHAR}          { 
                     /* Matched a character literal */
                     /* You might want to return a token here, e.g., return CHAR_LITERAL; */
                     yylval.vchar = *(yytext + 1);
                     return TOK_CHAR;
                 }
+
 [&$*+\-/=>@^|%<]([&$*+\-/=>@^|%<!.:\?~]*)       {
-                          int len = yyleng;
-                          yylval.vident.chars = strdup(yytext); 
-                          yylval.vident.length = len;
-                          yylval.vident.hash = hash_string(yylval.vident.chars, len);
-                          return IDENTIFIER;
-}
+                    // special identifiers for declaring binops
+                    int len = yyleng;
+                    yylval.vident.chars = strdup(yytext); 
+                    yylval.vident.length = len;
+                    yylval.vident.hash = hash_string(yylval.vident.chars, len);
+                    return IDENTIFIER;
+                }
+
 .               { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 %%
 int yywrap(void) {

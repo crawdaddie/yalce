@@ -1,6 +1,4 @@
 #include "serde.h"
-#include "format_utils.h"
-#include "types/type.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -405,13 +403,5 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
   }
-  // buffer = strcat(buffer, COLOR_RESET);
-
-#ifdef DEBUG_TYPES_W_AST
-  // buffer = strcat(buffer, " [ ");
-  // buffer = type_to_string(ast->md, buffer);
-  // buffer = strcat(buffer, " ] ");
-#endif
-  // buffer = strcat(buffer, COLOR_RED);
   return buffer;
 }

@@ -611,6 +611,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
             "Could not infer guard expression in match guard");
     break;
   }
+  case AST_IMPORT: {
+    type = tvar(ast->data.AST_IMPORT.module_name);
+    break;
+  }
   }
 
   ast->md = type;

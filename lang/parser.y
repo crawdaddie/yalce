@@ -39,7 +39,6 @@ Ast* ast_root = NULL;
 %token <vint>   INTEGER
 %token <vdouble>DOUBLE 
 %token <vident> IDENTIFIER
-%token <vident> META_IDENTIFIER
 %token <vstr>   TOK_STRING
 %token <vchar>  TOK_CHAR
 %token TRUE FALSE
@@ -59,6 +58,7 @@ Ast* ast_root = NULL;
 %token DOUBLE_AMP
 %token DOUBLE_PIPE
 %token THUNK
+%token IMPORT
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -198,6 +198,7 @@ let_binding:
                                       add_custom_binop(id->data.AST_IDENTIFIER.value);
                                       $$ = ast_let(id, $6, NULL);
                                     }
+  | IMPORT TOK_STRING               { $$ = ast_bare_import($2); }
   ;
 
 extern_typed_signature:
