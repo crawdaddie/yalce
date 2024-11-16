@@ -232,12 +232,16 @@ char *type_to_string(Type *t, char *buffer) {
     }
 
     if (is_tuple_type(t)) {
+
+      buffer = strncat(buffer, "( ", 2);
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
         if (i < t->data.T_CONS.num_args - 1) {
           buffer = strncat(buffer, " * ", 3);
         }
       }
+
+      buffer = strncat(buffer, " )", 2);
       break;
     }
 

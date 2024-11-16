@@ -1,5 +1,5 @@
 #include "backend_llvm/types.h"
-#include "coroutine_instance.h"
+#include "coroutines.h"
 #include "list.h"
 #include "types/type.h"
 #include "variant.h"

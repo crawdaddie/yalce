@@ -505,13 +505,18 @@ Type *infer(Ast *ast, TypeEnv **env) {
 
   case AST_TUPLE: {
     int arity = ast->data.AST_LIST.len;
-
     Type **cons_args = talloc(sizeof(Type *) * arity);
     for (int i = 0; i < arity; i++) {
 
       Ast *member = ast->data.AST_LIST.items + i;
       Type *mtype =
           TRY_MSG(infer(member, env), "Error typechecking tuple item");
+      if (member->tag == AST_LET) {
+        printf("named tuple member %s:",
+               member->data.AST_LET.binding->data.AST_IDENTIFIER.value);
+        print_type(mtype);
+        // printf("member %d: ", i);
+      }
       cons_args[i] = mtype;
     }
     type = talloc(sizeof(Type));

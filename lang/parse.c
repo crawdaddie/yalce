@@ -847,7 +847,7 @@ Ast *ast_extern_fn(ObjString name, Ast *signature) {
   extern_fn->data.AST_EXTERN_FN.fn_name = name;
   return extern_fn;
 }
-Ast *ast_assoc(Ast *l, Ast *r) { return NULL; }
+Ast *ast_assoc(Ast *l, Ast *r) { return ast_let(l, r, NULL); }
 
 Ast *ast_assoc_extern(Ast *l, ObjString name) {
   Ast *assoc = ast_binop(TOKEN_COLON, l, ast_identifier(name));

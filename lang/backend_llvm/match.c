@@ -1,7 +1,7 @@
 #include "backend_llvm/match.h"
 #include "backend_llvm/globals.h"
 #include "backend_llvm/types.h"
-#include "coroutine_instance.h"
+#include "coroutines.h"
 #include "function.h"
 #include "list.h"
 #include "serde.h"
@@ -178,15 +178,15 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
                                       coroutine_func, llvm_def_type);
 
       def_sym->symbol_data.STYPE_COROUTINE_GENERATOR.llvm_params_obj_type =
-          type_to_llvm_type(instance_type->data.T_COROUTINE_INSTANCE.params_type,
-                            ctx->env, module);
+          type_to_llvm_type(
+              instance_type->data.T_COROUTINE_INSTANCE.params_type, ctx->env,
+              module);
 
       const char *id_chars = binding->data.AST_IDENTIFIER.value;
       int id_len = binding->data.AST_IDENTIFIER.length;
 
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), def_sym);
-
 
       return _TRUE;
     }
@@ -220,7 +220,6 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
 
       return _TRUE;
     }
-
 
     if (ctx->stack_ptr == 0) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);

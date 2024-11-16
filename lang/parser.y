@@ -198,7 +198,6 @@ let_binding:
                                       add_custom_binop(id->data.AST_IDENTIFIER.value);
                                       $$ = ast_let(id, $6, NULL);
                                     }
-  | IMPORT TOK_STRING               { $$ = ast_bare_import($2); }
   ;
 
 extern_typed_signature:
