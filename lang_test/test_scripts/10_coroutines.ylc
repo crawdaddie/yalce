@@ -119,11 +119,3 @@ let test_embed_coroutine = fn () ->
   | _ -> false
   )
 ;;
-#
-
-# let cor = fn () ->
-#   yield 1;
-#   yield 2;
-#   yield 3
-# ;;
-

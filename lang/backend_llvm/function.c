@@ -379,6 +379,10 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
         .llvm_type = llvm_def_type_of_instance(instance_type, ctx, module),
         .val = func,
     };
+
+    // LLVMDumpValue(func);
+    // print_type(expected_fn_type);
+
     return coroutine_instance_from_def_symbol(NULL, &spec_symbol, args,
                                               args_len, expected_fn_type, ctx,
                                               module, builder);
@@ -717,13 +721,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
       return res;
     }
   }
-
-  // if (strcmp(SYM_NAME_LOOP, sym_name) == 0) {
-  //   LLVMValueRef res = coroutine_loop(ast, ctx, module, builder);
-  //   if (res) {
-  //     return res;
-  //   }
-  // }
 
   if (strcmp(SYM_NAME_ITER_MAP, sym_name) == 0) {
     LLVMValueRef res = coroutine_map(ast, sym, ctx, module, builder);

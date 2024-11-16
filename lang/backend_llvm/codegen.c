@@ -179,10 +179,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         member_idx, rec, type_to_llvm_type(record_type, ctx->env, module),
         builder);
   }
-
-    // case AST_TYPE_DECL: {
-    //   return codegen_type_declaration(ast, ctx, module, builder);
-    // }
   }
 
   return NULL;

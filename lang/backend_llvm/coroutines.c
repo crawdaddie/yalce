@@ -965,46 +965,6 @@ LLVMValueRef generic_coroutine_instance(Ast *application_args, int args_len,
   return instance;
 }
 
-// returns a coroutine instance
-LLVMValueRef coroutine_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
-  printf("CODEGEN LOOP\n");
-  Ast *def_ast = ast->data.AST_APPLICATION.args;
-  Ast *def_args_ast = ast->data.AST_APPLICATION.args + 1;
-
-  printf("def: %d", def_ast->tag);
-  print_ast(def_ast);
-  LLVMValueRef func = codegen(def_ast, ctx, module, builder);
-  LLVMDumpValue(func);
-  printf("\n");
-
-  printf("args: ");
-  print_ast(def_args_ast);
-  LLVMValueRef llvm_params_obj = codegen(def_args_ast, ctx, module, builder);
-  LLVMDumpValue(llvm_params_obj);
-  printf("\n");
-
-  Type *instance_type = ast->md;
-  LLVMTypeRef llvm_instance_type = coroutine_instance_type(type_to_llvm_type(
-      instance_type->data.T_COROUTINE_INSTANCE.params_type, ctx->env, module));
-
-  LLVMTypeRef wrapper_func_type =
-      llvm_def_type_of_instance(instance_type, ctx, module);
-
-  LLVMValueRef wrapper_func =
-      LLVMAddFunction(module, "loop_wrapper", wrapper_func_type);
-  LLVMSetLinkage(wrapper_func, LLVMExternalLinkage);
-  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
-  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
-  LLVMPositionBuilderAtEnd(builder, entry);
-  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
-  LLVMValueRef ret_opt =
-      coroutine_next(instance_ptr, llvm_instance_type, wrapper_func_type, ctx,
-                     module, builder);
-
-  return LLVMConstInt(LLVMInt32Type(), 1, 0);
-}
-
 LLVMValueRef coroutine_map(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                            LLVMModuleRef module, LLVMBuilderRef builder) {
   Ast *func_ast = ast->data.AST_APPLICATION.args;

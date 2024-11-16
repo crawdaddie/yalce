@@ -170,7 +170,6 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
   return NULL;
 }
 
-
 LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
 
