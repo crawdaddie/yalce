@@ -5,6 +5,8 @@
 #include <stdio.h>
 typedef struct Ast Ast;
 
+extern bool top_level_tests;
+
 // parser prototypes
 extern FILE *yyin;
 extern char *yytext;
@@ -331,9 +333,8 @@ void add_custom_binop(const char *binop_name);
 
 void print_location(Ast *ast);
 
-extern bool top_level_tests;
-
 Ast *ast_yield(Ast *expr);
 
 Ast *ast_thunk_expr(Ast *expr);
+
 #endif

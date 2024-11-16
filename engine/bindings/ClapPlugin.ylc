@@ -1,5 +1,5 @@
 # clap_node.h
 let clap_node = extern fn Ptr -> Signal -> Synth;
-let set_clap_param = extern fn Synth -> Int -> Double -> Synth;
+let set_clap_param = extern fn Synth -> int -> Double -> Synth;
 let get_clap_plugin_from_node = extern fn Synth -> Ptr;
 

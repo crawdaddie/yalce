@@ -162,6 +162,24 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return codegen_yield(ast, ctx, module, builder);
   }
 
+  case AST_RECORD_ACCESS: {
+    LLVMValueRef rec =
+        codegen(ast->data.AST_RECORD_ACCESS.record, ctx, module, builder);
+
+    Type *record_type = ast->data.AST_RECORD_ACCESS.record->md;
+
+    const char *member_name =
+        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+    int member_idx = get_struct_member_idx(member_name, record_type);
+    if (member_idx < 0) {
+      fprintf(stderr, "Error: no member %s in obj\n", member_name);
+      return NULL;
+    }
+    return codegen_tuple_access(
+        member_idx, rec, type_to_llvm_type(record_type, ctx->env, module),
+        builder);
+  }
+
     // case AST_TYPE_DECL: {
     //   return codegen_type_declaration(ast, ctx, module, builder);
     // }

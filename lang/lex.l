@@ -172,6 +172,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "::"            return DOUBLE_COLON;
 ":"             return *yytext;
 "->"            return ARROW;
+"."             return *yytext;
 "#".*           ;       /* ignore comments starting with # */
 
   

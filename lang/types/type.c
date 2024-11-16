@@ -1,5 +1,4 @@
 #include "type.h"
-#include "synths.h"
 #include "types/unification.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -234,7 +233,12 @@ char *type_to_string(Type *t, char *buffer) {
     if (is_tuple_type(t)) {
 
       buffer = strncat(buffer, "( ", 2);
+      int is_named = t->names != NULL;
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        if (is_named) {
+          buffer = strncat(buffer, t->names[i], strlen(t->names[i]));
+          buffer = strncat(buffer, ": ", 2);
+        }
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
         if (i < t->data.T_CONS.num_args - 1) {
           buffer = strncat(buffer, " * ", 3);
@@ -1233,4 +1237,22 @@ Type *coroutine_instance_fn_def_type(Type *inst) {
 bool is_coroutine_generator(Type *t) {
   Type *ret = fn_return_type(t);
   return ret->kind == T_COROUTINE_INSTANCE;
+}
+
+int get_struct_member_idx(const char *member_name, Type *type) {
+  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+    char *n = type->names[i];
+    if (strcmp(member_name, n) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+Type *get_struct_member_type(const char *member_name, Type *type) {
+  int idx = get_struct_member_idx(member_name, type);
+  if (idx >= 0) {
+    return type->data.T_CONS.args[idx];
+  }
+  return NULL;
 }

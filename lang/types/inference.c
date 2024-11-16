@@ -511,16 +511,18 @@ Type *infer(Ast *ast, TypeEnv **env) {
       Ast *member = ast->data.AST_LIST.items + i;
       Type *mtype =
           TRY_MSG(infer(member, env), "Error typechecking tuple item");
-      if (member->tag == AST_LET) {
-        printf("named tuple member %s:",
-               member->data.AST_LET.binding->data.AST_IDENTIFIER.value);
-        print_type(mtype);
-        // printf("member %d: ", i);
-      }
       cons_args[i] = mtype;
     }
     type = talloc(sizeof(Type));
     *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, cons_args, arity}}};
+    if (ast->data.AST_LIST.items[0].tag == AST_LET) {
+      char **names = talloc(sizeof(char *) * arity);
+      for (int i = 0; i < arity; i++) {
+        Ast *member = ast->data.AST_LIST.items + i;
+        names[i] = member->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+      }
+      type->names = names;
+    }
 
     break;
   }
@@ -617,7 +619,26 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
   case AST_IMPORT: {
+    // TODO: handle proper module imports
     type = tvar(ast->data.AST_IMPORT.module_name);
+    break;
+  }
+  case AST_RECORD_ACCESS: {
+    Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, env);
+    if (rec_type->names == NULL) {
+      fprintf(stderr, "Error: object has no named members\n");
+    }
+
+    const char *name =
+        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+    Type *member_type = get_struct_member_type(name, rec_type);
+    if (!member_type) {
+      fprintf(stderr, "Error name %s not found in obj\n", name);
+      print_type_err(rec_type);
+      return NULL;
+    }
+
+    type = member_type;
     break;
   }
   }

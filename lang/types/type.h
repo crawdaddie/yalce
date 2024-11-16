@@ -217,6 +217,7 @@ functions
   bool is_recursive_fn_ref;
   bool is_coroutine_fn;
   bool is_coroutine_instance;
+  char **names;
   void *meta;
 } Type;
 
@@ -313,5 +314,9 @@ bool is_coroutine_instance_type(Type *inst);
 bool is_coroutine_generator_fn(Type *gen);
 Type *coroutine_instance_fn_def_type(Type *inst);
 bool is_coroutine_generator(Type *t);
+
+int get_struct_member_idx(const char *member_name, Type *type);
+
+Type *get_struct_member_type(const char *member_name, Type *type);
 
 #endif

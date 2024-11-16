@@ -6,17 +6,17 @@
 // scans a list of header files and prints corresponding ylc extern declarations
 // to stdout
 //
-struct lookup_t {
-  char *c_name;
-  char *ylc_name;
-};
-
-static struct lookup_t LOOKUPS[] = {
-    {"int", "Int"},         {"double", "Double"}, {"void", "()"},
-    {"uint64_t", "Uint64"}, {"uint32_t", "Int"},  {"bool", "Bool"},
-    {"char", "Char"},       {"char *", "Ptr"},    {"const char *", "Ptr"},
-    {"void *", "Ptr"},      {"double *", "Ptr"},
-};
+// struct lookup_t {
+//   char *c_name;
+//   char *ylc_name;
+// };
+//
+// static struct lookup_t LOOKUPS[] = {
+//     {"int", "Int"},         {"double", "Double"}, {"void", "()"},
+//     {"uint64_t", "Uint64"}, {"uint32_t", "Int"},  {"bool", "Bool"},
+//     {"char", "Char"},       {"char *", "Ptr"},    {"const char *", "Ptr"},
+//     {"void *", "Ptr"},      {"double *", "Ptr"},
+// };
 
 typedef struct name_lookup {
   const char *key;
@@ -234,9 +234,20 @@ int main(int argc, char *argv[]) {
   }
 
   name_lookup *lookups = NULL;
-  for (int i = 0; i < 13; i++) {
-    lookups = lookups_extend(lookups, LOOKUPS[i].c_name, LOOKUPS[i].ylc_name);
-  }
+  lookups = lookups_extend(lookups, "double", "Double");
+  lookups = lookups_extend(lookups, "void", "()");
+  lookups = lookups_extend(lookups, "uint64_t", "Uint64");
+  lookups = lookups_extend(lookups, "uint32_t", "Int");
+  lookups = lookups_extend(lookups, "bool", "Bool");
+  lookups = lookups_extend(lookups, "char", "Char");
+  lookups = lookups_extend(lookups, "char *", "Ptr");
+  lookups = lookups_extend(lookups, "const char *", "Ptr");
+  lookups = lookups_extend(lookups, "void *", "Ptr");
+  lookups = lookups_extend(lookups, "double *", "Ptr");
+
+  // engine lib -specific lookups
+  lookups = lookups_extend(lookups, "SignalRef", "Signal");
+  lookups = lookups_extend(lookups, "NodeRef", "Synth");
 
   for (int i = 1; i < argc; i++) {
 
