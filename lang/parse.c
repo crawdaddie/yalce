@@ -1035,3 +1035,9 @@ Ast *ast_thunk_expr(Ast *expr) {
   Ast *thunk = ast_lambda(ast_arg_list(ast_void(), NULL), expr);
   return thunk;
 }
+
+Ast *ast_spread_operator(Ast *expr) {
+  Ast *spread = Ast_new(AST_SPREAD_OP);
+  spread->data.AST_SPREAD_OP.expr = expr;
+  return spread;
+}

@@ -55,7 +55,9 @@ TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
 
   case AST_TUPLE: {
     if (type->kind == T_VAR) {
+
       Type **types = talloc(sizeof(Type *) * binding->data.AST_LIST.len);
+
       for (int i = 0; i < binding->data.AST_LIST.len; i++) {
         Ast *item = binding->data.AST_LIST.items + i;
         types[i] = next_tvar();
@@ -331,6 +333,52 @@ bool yield_is_new_coroutine(Ast *yield_expr) {
   Type *yield_type = yield_expr->md;
   return yield_type->kind == T_COROUTINE_INSTANCE;
 }
+
+Type *infer_spread_operator_tuple(Ast *ast, TypeEnv **env) {
+  size_t len = ast->data.AST_LIST.len;
+  int arity = 0;
+  bool has_names = false;
+  for (int i = 0; i < len; i++) {
+    Ast *mem_ast = (ast->data.AST_LIST.items + i);
+    Type *mem_type = infer(ast->data.AST_LIST.items + i, env);
+    if (mem_type->names != NULL) {
+      has_names = true;
+    }
+
+    if (mem_ast->tag == AST_SPREAD_OP && is_tuple_type(mem_type)) {
+      arity += mem_type->data.T_CONS.num_args;
+    } else {
+      arity++;
+    }
+  }
+
+  Type **members = talloc(sizeof(Type *) * arity);
+  char **names = NULL;
+  if (has_names) {
+    names = talloc(sizeof(char *) * arity);
+  }
+  int offset = 0;
+  for (int i = 0; i < len; i++) {
+    Ast *mem_ast = (ast->data.AST_LIST.items + i);
+    Type *mem_type = (ast->data.AST_LIST.items + i)->md;
+    if (mem_ast->tag == AST_SPREAD_OP) {
+      for (int j = 0; j < mem_type->data.T_CONS.num_args; j++) {
+        members[offset] = mem_type->data.T_CONS.args[j];
+        offset++;
+      }
+    } else {
+      members[offset] = mem_type;
+      offset++;
+    }
+  }
+  Type *new_tuple = create_tuple_type(arity, members);
+  if (names) {
+    new_tuple->names = names;
+  }
+
+  return new_tuple;
+}
+
 Type *infer(Ast *ast, TypeEnv **env) {
 
   Type *type = NULL;
@@ -419,6 +467,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
 
     type = find_type_in_env(*env, ast->data.AST_IDENTIFIER.value);
     if (type == NULL) {
+
       type = next_tvar();
     }
     break;
@@ -505,25 +554,43 @@ Type *infer(Ast *ast, TypeEnv **env) {
 
   case AST_TUPLE: {
     int arity = ast->data.AST_LIST.len;
-    Type **cons_args = talloc(sizeof(Type *) * arity);
+    bool contains_spread = false;
     for (int i = 0; i < arity; i++) {
-
-      Ast *member = ast->data.AST_LIST.items + i;
-      Type *mtype =
-          TRY_MSG(infer(member, env), "Error typechecking tuple item");
-      cons_args[i] = mtype;
-    }
-    type = talloc(sizeof(Type));
-    *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, cons_args, arity}}};
-    if (ast->data.AST_LIST.items[0].tag == AST_LET) {
-      char **names = talloc(sizeof(char *) * arity);
-      for (int i = 0; i < arity; i++) {
-        Ast *member = ast->data.AST_LIST.items + i;
-        names[i] = member->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+      if (ast->data.AST_LIST.items[i].tag == AST_SPREAD_OP) {
+        contains_spread = true;
+        break;
       }
-      type->names = names;
     }
 
+    if (contains_spread) {
+      type = infer_spread_operator_tuple(ast, env);
+      break;
+    } else {
+
+      Type **cons_args = talloc(sizeof(Type *) * arity);
+
+      for (int i = 0; i < arity; i++) {
+
+        Ast *member = ast->data.AST_LIST.items + i;
+        Type *mtype =
+            TRY_MSG(infer(member, env), "Error typechecking tuple item");
+        cons_args[i] = mtype;
+      }
+
+      type = talloc(sizeof(Type));
+
+      *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, cons_args, arity}}};
+
+      if (ast->data.AST_LIST.items[0].tag == AST_LET) {
+        char **names = talloc(sizeof(char *) * arity);
+        for (int i = 0; i < arity; i++) {
+          Ast *member = ast->data.AST_LIST.items + i;
+          names[i] = member->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+        }
+        type->names = names;
+      }
+      break;
+    }
     break;
   }
   case AST_FMT_STRING: {
@@ -639,6 +706,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
     }
 
     type = member_type;
+    break;
+  }
+  case AST_SPREAD_OP: {
+    type = TRY(infer(ast->data.AST_SPREAD_OP.expr, env));
     break;
   }
   }

@@ -373,7 +373,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, ast->data.AST_META.value);
     buffer = strcat(buffer, " ");
     buffer = ast_to_sexpr(ast->data.AST_META.next, buffer);
-
     buffer = strcat(buffer, ")");
     break;
   }
@@ -391,9 +390,17 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = ast_to_sexpr(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, buffer);
     break;
   }
+
   case AST_YIELD: {
     buffer = strcat(buffer, "(yield ");
     buffer = ast_to_sexpr(ast->data.AST_YIELD.expr, buffer);
+    buffer = strcat(buffer, ")");
+    break;
+  }
+
+  case AST_SPREAD_OP: {
+    buffer = strcat(buffer, "(... ");
+    buffer = ast_to_sexpr(ast->data.AST_SPREAD_OP.expr, buffer);
     buffer = strcat(buffer, ")");
     break;
   }

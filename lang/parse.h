@@ -133,6 +133,7 @@ typedef enum ast_tag {
   AST_FN_SIGNATURE,
   AST_MATCH_GUARD_CLAUSE,
   AST_YIELD,
+  AST_SPREAD_OP,
 } ast_tag;
 
 struct Ast {
@@ -249,9 +250,14 @@ struct Ast {
       Ast *test_expr;
       Ast *guard_expr;
     } AST_MATCH_GUARD_CLAUSE;
+
     struct AST_YIELD {
       Ast *expr;
     } AST_YIELD;
+
+    struct AST_SPREAD_OP {
+      Ast *expr;
+    } AST_SPREAD_OP;
   } data;
 
   void *md;
@@ -336,5 +342,6 @@ void print_location(Ast *ast);
 Ast *ast_yield(Ast *expr);
 
 Ast *ast_thunk_expr(Ast *expr);
+Ast *ast_spread_operator(Ast *expr);
 
 #endif

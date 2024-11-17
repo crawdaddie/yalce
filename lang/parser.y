@@ -148,6 +148,7 @@ expr:
   | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
+  | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   ;
 
 simple_expr:
