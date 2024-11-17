@@ -9,16 +9,38 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 // Function to create an LLVM tuple value
 LLVMValueRef codegen_tuple(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  // print_type_env(ctx->env);
 
   LLVMTypeRef tuple_type = type_to_llvm_type(ast->md, ctx->env, module);
   LLVMValueRef tuple = LLVMGetUndef(tuple_type);
 
-  for (int i = 0; i < ast->data.AST_LIST.len; i++) {
-    // Convert each element's AST node to its corresponding LLVM value
-    LLVMValueRef tuple_element =
-        codegen(ast->data.AST_LIST.items + i, ctx, module, builder);
-    tuple = LLVMBuildInsertValue(builder, tuple, tuple_element, i, "");
+  int len = ast->data.AST_LIST.len;
+  int offset = 0;
+
+  for (int i = 0; i < len; i++) {
+    Ast *mem_ast = ast->data.AST_LIST.items + i;
+
+    if (mem_ast->tag == AST_SPREAD_OP) {
+      Type *mem_type = mem_ast->md;
+      mem_ast = mem_ast->data.AST_SPREAD_OP.expr;
+
+      LLVMTypeRef _tuple_type = type_to_llvm_type(mem_type, ctx->env, module);
+      LLVMValueRef _tuple_element = codegen(mem_ast, ctx, module, builder);
+
+      for (int j = 0; j < mem_type->data.T_CONS.num_args; j++) {
+        // TODO: improve this with memcpy
+        LLVMValueRef __tuple_element =
+            codegen_tuple_access(j, _tuple_element, _tuple_type, builder);
+
+        tuple =
+            LLVMBuildInsertValue(builder, tuple, __tuple_element, offset, "");
+        offset++;
+      }
+    } else {
+      LLVMValueRef tuple_element = codegen(mem_ast, ctx, module, builder);
+      tuple = LLVMBuildInsertValue(builder, tuple, tuple_element, offset, "");
+
+      offset++;
+    }
   }
   return tuple;
 }
