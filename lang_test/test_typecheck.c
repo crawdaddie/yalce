@@ -1012,6 +1012,55 @@ int main() {
 
     status &= lut;
   });
+  ({
+    RESET;
+    TITLE("concat struct types")
+    Type t1 = TTUPLE(3, &t_int, &t_num, &t_bool);
+    t1.names = (char *[]){"a", "b", "c"};
+    Type t2 = TTUPLE(3, &t_int, &t_num, &t_bool);
+    t2.names = (char *[]){"c", "d", "e"};
 
+    Type t3 = TTUPLE(6, &t_int, &t_num, &t_bool, &t_int, &t_num, &t_bool);
+    t3.names = (char *[]){"a", "b", "c", "d", "e", "f"};
+    Type *concat = concat_struct_types(&t1, &t2);
+    bool te = types_equal(concat, &t3);
+    if (te) {
+      fprintf(stderr, "✅ (a: Int * b: Double * c: Bool) '+' (c: Int * d: "
+                      "Double * e: Bool) == (a: Int * b: Double * c: Bool * c: "
+                      "Int * d: Double * e: Bool))\n");
+    } else {
+
+      fprintf(stderr, "❌ (a: Int * b: Double * c: Bool) '+' (c: Int * d: "
+                      "Double * e: Bool) != (a: Int * b: Double * c: Bool * c: "
+                      "Int * d: Double * e: Bool)), got");
+      print_type_err(concat);
+    }
+
+    status &= te;
+  });
+
+  ({
+    RESET;
+    TITLE("concat struct types")
+    Type t1 = TTUPLE(3, &t_int, &t_num, &t_bool);
+    Type t2 = TTUPLE(3, &t_int, &t_num, &t_bool);
+
+    Type t3 = TTUPLE(6, &t_int, &t_num, &t_bool, &t_int, &t_num, &t_bool);
+    Type *concat = concat_struct_types(&t1, &t2);
+    bool te = types_equal(concat, &t3);
+    if (te) {
+      fprintf(stderr, "✅ (Int * Double * Bool) '+' (Int * "
+                      "Double * Bool) == (Int * Double * Bool * "
+                      "Int * Double * Bool))\n");
+    } else {
+
+      fprintf(stderr, "❌ (Int * Double * Bool) '+' (Int * "
+                      "Double * Bool) != (Int * Double * Bool * "
+                      "Int * Double * Bool)), got");
+      print_type_err(concat);
+    }
+
+    status &= te;
+  });
   return status == true ? 0 : 1;
 }

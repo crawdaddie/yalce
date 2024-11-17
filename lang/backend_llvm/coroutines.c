@@ -225,16 +225,17 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   LLVMValueRef func = _coroutine_ctx.func;
   LLVMTypeRef instance_type = _coroutine_ctx.instance_type;
-  // printf("codegen yield: \n");
-  // LLVMDumpType(instance_type);
-  // printf("\n");
+
+  printf("codegen yield %p\n", func);
+  LLVMDumpType(instance_type);
+  printf("\n");
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
   increment_instance_counter(instance_ptr, instance_type, builder);
   _coroutine_ctx.current_branch++;
 
   Ast *expr = ast->data.AST_YIELD.expr;
-  // print_ast(ast);
-  // print_type(resolve_generic_type(ast->md, ctx->env));
+  print_ast(ast);
+  print_type(resolve_generic_type(ast->md, ctx->env));
   // print_type_env(ctx->env);
   if (expr->tag == AST_APPLICATION) {
     LLVMValueRef new_instance;

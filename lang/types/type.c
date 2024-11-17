@@ -1256,3 +1256,46 @@ Type *get_struct_member_type(const char *member_name, Type *type) {
   }
   return NULL;
 }
+
+Type *concat_struct_types(Type *a, Type *b) {
+  if (strcmp(a->data.T_CONS.name, b->data.T_CONS.name) != 0) {
+    return NULL;
+  }
+  if (a->names != NULL) {
+    if (b->names == NULL) {
+      return NULL;
+    }
+  }
+
+  int lena = a->data.T_CONS.num_args;
+  int lenb = b->data.T_CONS.num_args;
+  int len = lena + lenb;
+  Type **args = talloc(sizeof(Type *) * len);
+  char **names = NULL;
+  if (a->names) {
+    names = talloc(sizeof(char *) * len);
+  }
+
+  int i;
+  for (i = 0; i < lena; i++) {
+    args[i] = a->data.T_CONS.args[i];
+    if (names) {
+      names[i] = a->names[i];
+    }
+  }
+  for (; i < len; i++) {
+    args[i] = b->data.T_CONS.args[i - lena];
+    if (names) {
+      // TODO: fail if duplicate keys used
+      names[i] = b->names[i - lena];
+    }
+  }
+
+  Type *concat = empty_type();
+  concat->kind = T_CONS;
+  concat->data.T_CONS.name = a->data.T_CONS.name;
+  concat->data.T_CONS.args = args;
+  concat->data.T_CONS.num_args = len;
+  concat->names = names;
+  return concat;
+}

@@ -167,6 +167,7 @@ typedef struct Type {
     // They represent unknown types that can be unified with other types during
     // inference.
     const char *T_VAR;
+
     struct {
       const char *name;
       struct Type **args;
@@ -177,6 +178,7 @@ typedef struct Type {
       struct Type *from;
       struct Type *to;
     } T_FN;
+
     struct {
       struct Type **dependencies; // contains 2
       const char *comparison_tc; // use the comparison typeclass name to compare
@@ -318,5 +320,7 @@ bool is_coroutine_generator(Type *t);
 int get_struct_member_idx(const char *member_name, Type *type);
 
 Type *get_struct_member_type(const char *member_name, Type *type);
+
+Type *concat_struct_types(Type *a, Type *b);
 
 #endif
