@@ -722,12 +722,12 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  if (strcmp(SYM_NAME_ITER_MAP, sym_name) == 0) {
-    LLVMValueRef res = coroutine_map(ast, sym, ctx, module, builder);
-    if (res) {
-      return res;
-    }
-  }
+  // if (strcmp(SYM_NAME_ITER_MAP, sym_name) == 0) {
+  //   LLVMValueRef res = coroutine_map(ast, sym, ctx, module, builder);
+  //   if (res) {
+  //     return res;
+  //   }
+  // }
 
   if (strncmp("string_add", sym_name, 10) == 0) {
     LLVMValueRef res = codegen_string_add(
