@@ -394,6 +394,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_COROUTINE_INSTANCE: {
+    printf("cor inst\n");
 
     LLVMValueRef instance_ret =
         coroutine_next(sym->val, sym->llvm_type,

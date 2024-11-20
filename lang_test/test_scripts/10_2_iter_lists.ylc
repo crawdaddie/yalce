@@ -1,0 +1,25 @@
+%test
+
+let test_iter_all = fn () ->
+  let inst = iter_of_array [|0.2, 0.3, 0.2, 0.3|];
+  (match inst () with
+  | Some 0.2 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.3 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.2 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.3 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | None -> true
+  | _ -> false
+  )
+;;

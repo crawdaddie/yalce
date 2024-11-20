@@ -207,13 +207,13 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       JITSymbol *sym = new_symbol(STYPE_COROUTINE_INSTANCE, val_type, val,
                                   llvm_instance_type);
 
-      Type *inst_ret = val_type->data.T_COROUTINE_INSTANCE.yield_interface;
-      inst_ret = fn_return_type(inst_ret);
+      Type *ret_opt = val_type->data.T_COROUTINE_INSTANCE.yield_interface;
+      ret_opt = fn_return_type(ret_opt);
       Type *inst_params = val_type->data.T_COROUTINE_INSTANCE.params_type;
 
-      sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type = LLVMFunctionType(
-          type_to_llvm_type(inst_ret, ctx->env, module),
-          (LLVMTypeRef[]){LLVMPointerType(llvm_instance_type, 0)}, 1, 0);
+      sym->symbol_data.STYPE_COROUTINE_INSTANCE.def_fn_type =
+          LLVMFunctionType(type_to_llvm_type(ret_opt, ctx->env, module),
+                           (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
 
       ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
                   hash_string(id_chars, id_len), sym);

@@ -8,6 +8,17 @@
 
 #define STACK_MAX 256
 
+#define GENERIC_PTR LLVMPointerType(LLVMInt8Type(), 0)
+
+typedef struct coroutine_ctx_t {
+  LLVMValueRef func;
+  LLVMTypeRef func_type;
+  LLVMTypeRef instance_type;
+  int num_branches;
+  int current_branch;
+  LLVMBasicBlockRef *block_refs;
+} coroutine_ctx_t;
+
 typedef struct {
   // ht stack[STACK_MAX];
   ht *stack;
@@ -16,6 +27,7 @@ typedef struct {
   int *num_globals;
   void **global_storage_array;
   int *global_storage_capacity;
+  coroutine_ctx_t _coroutine_ctx;
 } JITLangCtx;
 
 typedef struct SpecificFns {

@@ -39,11 +39,6 @@ LLVMValueRef codegen_coroutine_binding(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);
 
-LLVMValueRef codegen_coroutine_instance(LLVMValueRef instance,
-                                        Type *instance_type, LLVMValueRef def,
-                                        JITLangCtx *ctx, LLVMModuleRef module,
-                                        LLVMBuilderRef builder);
-
 LLVMValueRef set_instance_params(LLVMValueRef instance,
                                  LLVMTypeRef llvm_instance_type,
                                  LLVMTypeRef llvm_params_obj_type,
@@ -106,4 +101,10 @@ LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
 
 LLVMTypeRef llvm_def_type_of_instance(Type *instance_type, JITLangCtx *ctx,
                                       LLVMModuleRef module);
+
+LLVMValueRef codegen_coroutine_instance(LLVMValueRef _inst, Type *instance_type,
+                                        LLVMValueRef func, LLVMValueRef *params,
+                                        int num_params, JITLangCtx *ctx,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder);
 #endif

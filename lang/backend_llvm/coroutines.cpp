@@ -536,34 +536,6 @@ LLVMValueRef codegen_generic_coroutine_binding(Ast *ast, JITLangCtx *ctx,
   return NULL;
 }
 
-LLVMValueRef codegen_coroutine_instance(LLVMValueRef instance,
-                                        Type *instance_type, LLVMValueRef def,
-                                        JITLangCtx *ctx, LLVMModuleRef module,
-                                        LLVMBuilderRef builder) {
-
-  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
-
-  LLVMTypeRef llvm_params_obj_type =
-      type_to_llvm_type(params_obj_type, ctx->env, module);
-
-  LLVMTypeRef llvm_instance_type =
-      coroutine_instance_type(llvm_params_obj_type);
-
-  if (instance == NULL) {
-    instance = heap_alloc(llvm_instance_type, ctx, builder);
-  }
-
-  LLVMValueRef fn_gep =
-      coroutine_instance_fn_gep(instance, llvm_instance_type, builder);
-  LLVMBuildStore(builder, def, fn_gep);
-
-  LLVMValueRef counter_gep =
-      coroutine_instance_counter_gep(instance, llvm_instance_type, builder);
-  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
-
-  return instance;
-}
-
 LLVMValueRef set_instance_params(LLVMValueRef instance,
                                  LLVMTypeRef llvm_instance_type,
                                  LLVMTypeRef llvm_params_obj_type,
