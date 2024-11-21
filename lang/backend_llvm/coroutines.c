@@ -1,6 +1,7 @@
 #include "coroutines.h"
 #include "match.h"
 #include "serde.h"
+#include "symbols.h"
 #include "tuple.h"
 #include "types.h"
 #include "util.h"
@@ -73,6 +74,19 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       counter_gep);
 
   Ast *expr = ast->data.AST_YIELD.expr;
+
+  if (expr->tag == AST_APPLICATION) {
+    JITSymbol *sym = lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
+    if (sym->type == STYPE_COROUTINE_GENERATOR) {
+      bool is_recursive_cor_init = sym->val == ctx->_coroutine_ctx.func;
+
+      if (is_recursive_cor_init) {
+        printf("yield another coroutine from recursive ref???\n");
+        print_ast(expr);
+        print_type(sym->symbol_type);
+      }
+    }
+  }
 
   LLVMValueRef val = codegen(expr, ctx, module, builder);
   LLVMValueRef ret_opt = codegen_option(val, builder);
@@ -154,12 +168,19 @@ LLVMValueRef coroutine_yield_end(LLVMValueRef instance,
   LLVMValueRef str = codegen_option(NULL, builder);
   LLVMBuildRet(builder, str);
 }
+void add_recursive_cor_fn_ref(ObjString fn_name, LLVMValueRef func,
+                              Type *fn_type, JITLangCtx *fn_ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder) {
+  Ast binding = (Ast){AST_IDENTIFIER,
+                      .data = {.AST_IDENTIFIER = {.value = fn_name.chars,
+                                                  .length = fn_name.length}}};
+  match_values(&binding, func, fn_type, fn_ctx, module, builder);
+}
 
 LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder,
                            LLVMTypeRef *_llvm_def_type) {
   Type *fn_type = fn_ast->md;
-  print_type(fn_type);
   Type *instance_type = fn_return_type(fn_type);
   Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
   Type *ret_opt =
@@ -176,10 +197,8 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
   *_llvm_def_type = llvm_def_type;
 
   ObjString fn_name = fn_ast->data.AST_LAMBDA.fn_name;
-  bool is_anon = false;
-  if (fn_name.chars == NULL) {
-    is_anon = true;
-  }
+
+  bool is_anon = fn_name.chars == NULL;
 
   LLVMValueRef func = LLVMAddFunction(
       module, !is_anon ? fn_name.chars : "anonymous_coroutine_def",
@@ -208,6 +227,9 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMAppendBasicBlock(func, "default");
 
   LLVMPositionBuilderAtEnd(builder, entry);
+  if (!is_anon) {
+    add_recursive_cor_fn_ref(fn_name, func, fn_type, &fn_ctx, module, builder);
+  }
 
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
 
@@ -261,8 +283,6 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
   //                         builder);
   coroutine_yield_end(instance_ptr, llvm_instance_type, llvm_ret_opt_type,
                       builder);
-
-  LLVMDumpValue(func);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
   return func;

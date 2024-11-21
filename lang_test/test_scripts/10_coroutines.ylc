@@ -32,7 +32,7 @@ let test_iter_all = fn () ->
 #   yield 3;
 #   yield rec_cor ()
 # ;;
-#
+
 #
 # let test_recursive_cor = fn () ->
 #   let inst = rec_cor ();
@@ -47,11 +47,13 @@ let test_iter_all = fn () ->
 #   match inst () with
 #   | Some 3 -> true
 #   | _ -> false
-#   ) && (
+#   )
+#   && (
 #   match inst () with
 #   | Some 1 -> true
 #   | _ -> false
-#   ) && (
+#   )
+#   && (
 #   match inst () with
 #   | Some 2 -> true
 #   | _ -> false
