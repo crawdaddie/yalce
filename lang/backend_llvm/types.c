@@ -201,7 +201,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     LLVMTypeRef params_obj_type = type_to_llvm_type(
         type->data.T_COROUTINE_INSTANCE.params_type, env, module);
 
-    LLVMTypeRef instance_type = coroutine_instance_type(params_obj_type);
+    LLVMTypeRef instance_type = coroutine_instance_type();
     return instance_type;
   }
   default: {

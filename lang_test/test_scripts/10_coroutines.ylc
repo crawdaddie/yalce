@@ -1,29 +1,67 @@
 %test
-# let co = fn () ->
-#   yield 1.;
-#   yield 2.;
-#   yield 3.
-# ;;
-#
-# let test_iter_all = fn () ->
-#   let inst = co ();
-#   (match inst () with
-#   | Some 1. -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | Some 2. -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | Some 3. -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | None -> true
-#   | _ -> false
-#   )
-# ;;
+%include ../../examples/String
+
+let co_void = fn () ->
+  yield 1.;
+  yield 2.;
+  yield 3.
+;;
+
+let test_iter_all_void = fn () ->
+  let inst = co_void ();
+
+
+  (match inst () with
+  | Some 1. -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 2. -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 3. -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | None -> true
+  | _ -> false
+  )
+;;
+
+let co = fn a ->
+  yield 1.;
+  yield a;
+  yield 3.
+;;
+
+let test_iter_all = fn () ->
+  let inst = co 2.;
+
+
+  (match inst () with
+  | Some 1. -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 2. -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 3. -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | None -> true
+  | _ -> false
+  )
+;;
 
 
 let rec_cor = fn () ->
@@ -38,27 +76,96 @@ let test_recursive_cor = fn () ->
   let inst = rec_cor ();
   (match inst () with
   | Some 1 -> true
-  | _ -> false
+  | _ -> (
+  print `not 1\n`;
+  false
+  )
   ) && (
   match inst () with
   | Some 2 -> true
-  | _ -> false
+  | _ -> (
+  print `not 2\n`;
+  false
+  )
   ) && (
   match inst () with
   | Some 3 -> true
-  | _ -> false
+  | _ -> (
+
+  print `not 3\n`;
+  false
+  )
   )
   && (
   match inst () with
   | Some 1 -> true
+  | _ -> (
+  print `not repeat\n`;
+  false
+  )
+  )
+  && (
+  match inst () with
+  | Some 2 -> true
   | _ -> false
   )
-  # && (
+;;
+
+let sub_cor = fn () ->
+  yield 4;
+  yield 5;
+  yield 6 
+;;
+
+let cor = fn () ->
+  yield 1;
+  yield sub_cor ();
+  yield 2;
+  yield 3
+;;
+let err = fn s ->
+  print s;
+  false
+  ;;
+
+let test_embed_coroutine = fn () ->
+  let inst = cor ();
+  (
+  match inst () with
+  | Some 1 -> true
+  | x -> err `{x}\n`
+  ) && (
+  match inst () with
+  | Some 4 -> true
+  | x -> err `{x}\n`
+  ) && (
+  match inst () with
+  | Some 5 -> true
+  | x -> err `{x}\n`
+  ) && (
+  match inst () with
+  | Some 6 -> true
+  | x -> err `{x}\n`
+  )
+
+  &&
+  (
+  match inst () with
+  | Some 2 -> true
+  | x -> err `{x}\n`
+  )
+  # && 
+  # (
   # match inst () with
-  # | Some 2 -> true
+  # | Some 3 -> true
+  # | _ -> (print `not 3\n`; false)
+  # ) && (
+  # match inst () with
+  # | None -> true
   # | _ -> false
   # )
 ;;
+
 #
 # let generic_cor = fn a b ->
 #   yield a;
