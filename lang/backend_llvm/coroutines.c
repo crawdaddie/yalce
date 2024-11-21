@@ -341,7 +341,15 @@ LLVMValueRef coroutine_instance_from_def_symbol(
 
 LLVMValueRef coroutine_next(LLVMValueRef instance, LLVMTypeRef instance_type,
                             LLVMTypeRef def_fn_type, JITLangCtx *ctx,
-                            LLVMModuleRef module, LLVMBuilderRef builder) {}
+                            LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMValueRef func = codegen_tuple_access(0, instance, instance_type, builder);
+
+  LLVMValueRef result =
+      LLVMBuildCall2(builder, def_fn_type, func, (LLVMValueRef[]){instance}, 1,
+                     "coroutine_next");
+  return result;
+}
 
 LLVMTypeRef llvm_def_type_of_instance(Type *instance_type, JITLangCtx *ctx,
                                       LLVMModuleRef module) {}
