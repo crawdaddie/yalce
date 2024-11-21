@@ -20,6 +20,38 @@ LLVMValueRef coroutine_instance_counter_gep(LLVMValueRef instance_ptr,
                              "instance_counter_ptr");
 }
 
+LLVMValueRef coroutine_instance_fn_gep(LLVMValueRef instance_ptr,
+                                       LLVMTypeRef instance_type,
+                                       LLVMBuilderRef builder) {
+  return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 0,
+                             "instance_fn_ptr");
+}
+LLVMValueRef coroutine_instance_params_gep(LLVMValueRef instance_ptr,
+                                           LLVMTypeRef instance_type,
+                                           LLVMBuilderRef builder) {
+  // Get number of elements
+  unsigned num_fields = LLVMCountStructElementTypes(instance_type);
+
+  if (num_fields == 4) {
+    return LLVMBuildInBoundsGEP2(
+        builder, instance_type, instance_ptr,
+        (LLVMValueRef[]){
+            LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
+            LLVMConstInt(LLVMInt32Type(), 3, 0)  // Get nth element
+        },
+        2, "instance_params_gep");
+  }
+
+  return NULL;
+}
+
+LLVMValueRef coroutine_instance_parent_gep(LLVMValueRef instance_ptr,
+                                           LLVMTypeRef instance_type,
+                                           LLVMBuilderRef builder) {
+  return LLVMBuildStructGEP2(builder, instance_type, instance_ptr, 2,
+                             "instance_parent_ptr");
+}
+
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   if (!ctx->_coroutine_ctx.func) {
@@ -236,6 +268,29 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
+LLVMValueRef set_instance_params(LLVMValueRef instance,
+                                 LLVMTypeRef llvm_instance_type,
+                                 LLVMTypeRef llvm_params_obj_type,
+                                 LLVMValueRef *params, int params_len,
+                                 LLVMBuilderRef builder) {
+
+  LLVMValueRef params_gep =
+      coroutine_instance_params_gep(instance, llvm_instance_type, builder);
+
+  if (params_gep) {
+    if (params_len == 1) {
+      LLVMBuildStore(builder, params[0], params_gep);
+    } else {
+      LLVMValueRef params_obj = LLVMGetUndef(llvm_params_obj_type);
+
+      for (int i = 0; i < params_len; i++) {
+        params_obj =
+            LLVMBuildInsertValue(builder, params_obj, params[i], i, "");
+      }
+    }
+  }
+}
+
 LLVMValueRef codegen_coroutine_instance(LLVMValueRef _inst, Type *instance_type,
                                         LLVMValueRef func, LLVMValueRef *params,
                                         int num_params, JITLangCtx *ctx,
@@ -260,12 +315,15 @@ LLVMValueRef codegen_coroutine_instance(LLVMValueRef _inst, Type *instance_type,
   LLVMValueRef counter_gep =
       coroutine_instance_counter_gep(instance, llvm_instance_type, builder);
   LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
+
+  set_instance_params(instance, llvm_instance_type, llvm_params_obj_type,
+                      params, num_params, builder);
+  return instance;
 }
 
 LLVMValueRef coroutine_instance_from_def_symbol(
-    LLVMValueRef _instance, JITSymbol *sym, Ast *args, int args_len,
-    Type *expected_fn_type, JITLangCtx *ctx, LLVMModuleRef module,
-    LLVMBuilderRef builder) {
+    JITSymbol *sym, Ast *args, int args_len, Type *expected_fn_type,
+    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
   LLVMValueRef func = sym->val;
   LLVMTypeRef llvm_def_type = sym->llvm_type;
   Type *instance_type = fn_return_type(sym->symbol_type);
@@ -275,13 +333,10 @@ LLVMValueRef coroutine_instance_from_def_symbol(
     param_args[i] = codegen(args + i, ctx, module, builder);
   }
 
-  LLVMValueRef instance =
-      codegen_coroutine_instance(_instance, instance_type, func, param_args,
-                                 args_len, ctx, module, builder);
+  LLVMValueRef instance = codegen_coroutine_instance(
+      NULL, instance_type, func, param_args, args_len, ctx, module, builder);
 
-  print_type(instance_type);
-  printf("instance from def\n");
-  return NULL;
+  return instance;
 }
 
 LLVMValueRef coroutine_next(LLVMValueRef instance, LLVMTypeRef instance_type,

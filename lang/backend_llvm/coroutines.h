@@ -91,9 +91,8 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder, LLVMTypeRef *_llvm_def_type);
 
 LLVMValueRef coroutine_instance_from_def_symbol(
-    LLVMValueRef _instance, JITSymbol *sym, Ast *args, int args_len,
-    Type *expected_fn_type, JITLangCtx *ctx, LLVMModuleRef module,
-    LLVMBuilderRef builder);
+    JITSymbol *sym, Ast *args, int args_len, Type *expected_fn_type,
+    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
                                         JITLangCtx *ctx, LLVMModuleRef module,

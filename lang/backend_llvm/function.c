@@ -383,18 +383,16 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
     // LLVMDumpValue(func);
     // print_type(expected_fn_type);
 
-    return coroutine_instance_from_def_symbol(NULL, &spec_symbol, args,
-                                              args_len, expected_fn_type, ctx,
-                                              module, builder);
+    return coroutine_instance_from_def_symbol(
+        &spec_symbol, args, args_len, expected_fn_type, ctx, module, builder);
   }
 
   case STYPE_COROUTINE_GENERATOR: {
     return coroutine_instance_from_def_symbol(
-        NULL, sym, args, args_len, expected_fn_type, ctx, module, builder);
+        sym, args, args_len, expected_fn_type, ctx, module, builder);
   }
 
   case STYPE_COROUTINE_INSTANCE: {
-    printf("cor inst\n");
 
     LLVMValueRef instance_ret =
         coroutine_next(sym->val, sym->llvm_type,
