@@ -1,6 +1,8 @@
+include .env
+
 BUILD_DIR := build
 
-LLVM := /opt/homebrew/opt/llvm@16
+LLVM := ${LLVM_PATH}
 # Debug LLVM path (you can change this to your debug LLVM installation path)
 DEBUG_LLVM := ~/projects/llvm-debug
 # Use DEBUG_LLVM if the target is debug, otherwise use the default LLVM
@@ -11,7 +13,7 @@ endif
 LLVM_CONFIG := $(LLVM)/bin/llvm-config
 
 # macOS-specific settings
-READLINE_PREFIX := $(shell brew --prefix readline)
+READLINE_PREFIX := ${READLINE_PREFIX}
 
 LANG_SRC_DIR := lang
 LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wildcard $(LANG_SRC_DIR)/*.c))
@@ -19,7 +21,8 @@ LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wi
 # Separate CFLAGS for include paths
 CFLAGS := -I./lang -I./engine
 
-CFLAGS += -I./gui
+CFLAGS += -I./gui -I${SDL2_PATH}/include -I${SDL2_PATH}/include/SDL2 -I${SDL2_TTF_PATH}/include
+
 
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
@@ -35,7 +38,7 @@ LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
 
-LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L$(shell brew --prefix sdl2)/lib -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2 -lSDL2_ttf -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx
+LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 

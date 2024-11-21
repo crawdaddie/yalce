@@ -1,9 +1,10 @@
+include ../.env
 # engine/Makefile
 
 BUILD_DIR := ../build/engine
 SRCS := $(wildcard *.c)
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
-CLAP_SDK_PATH := /Users/adam/projects/sound/clap
+CLAP_SDK_PATH := ${CLAP_PATH}
 LDFLAGS = -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2
 FRAMEWORKS = -framework opengl \
 						 -framework CoreMIDI \

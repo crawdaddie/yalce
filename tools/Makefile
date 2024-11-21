@@ -1,21 +1,31 @@
 # tools/Makefile
-ENGINE_DIR := ../engine
-CC := clang
-CFLAGS := $(shell llvm-config --cflags)
-LDFLAGS := $(shell llvm-config --ldflags --system-libs) -lclang
+include ../.env
 
+ENGINE_DIR := ../engine
 BUILD_DIR := ../build/tools
 
+# LLVM configuration
+LLVM_PATH ?= $(shell check_library "llvm")
+LLVM_CONFIG := $(LLVM_PATH)/bin/llvm-config
+CC := clang
+CFLAGS := $(shell $(LLVM_CONFIG) --cflags)
+LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags --system-libs --libs) -lclang
+
+# Source and target configuration
 SRCS := $(wildcard *.c)
 EXES := $(SRCS:%.c=$(BUILD_DIR)/%)
 
+# Default target
 .PHONY: all clean engine_bindings
-
 all: $(EXES)
 
-$(BUILD_DIR)/%: %.c
-	@mkdir -p $(BUILD_DIR)
+# Build rules
+$(BUILD_DIR)/%: %.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
+
+# Create build directory
+$(BUILD_DIR):
+	@mkdir -p $@
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -25,4 +35,3 @@ clean:
 
 # Define targets for each tool
 $(EXES:$(BUILD_DIR)/%=%): %: $(BUILD_DIR)/%
-

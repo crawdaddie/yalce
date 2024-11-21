@@ -1,10 +1,12 @@
+include ../.env
 # gui/Makefile
-CLAP_SDK_PATH := /Users/adam/projects/sound/clap
+CLAP_SDK_PATH := ${CLAP_PATH}
 CC := clang -g
 CFLAGS := -Wall -Wextra -fPIC -I. \
-					-I$(shell brew --prefix sdl2)/include/SDL2 \
-					-I$(shell brew --prefix sdl2_ttf)/include/SDL2 \
-					-I$(shell brew --prefix sdl2_gfx)/include/SDL2 \
+					-I${SDL2_PATH}/include \
+					-I${SDL2_PATH}/include/SDL2 \
+					-I${SDL2_TTF_PATH}/include \
+					-I${SDL2_GFX_PATH}/include \
 					-I$(CLAP_SDK_PATH)/include
 
 LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
