@@ -96,19 +96,18 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     JITSymbol *sym = lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
     if (sym->type == STYPE_COROUTINE_GENERATOR) {
       bool is_recursive_cor_init = sym->val == ctx->_coroutine_ctx.func;
-      LLVMValueRef old_instance_ptr = replace_instance(
+      LLVMValueRef instance_copy = replace_instance(
           heap_alloc(instance_type, ctx, builder), instance_ptr, builder);
 
       LLVMValueRef new_instance = coroutine_instance_from_def_symbol(
           sym, expr->data.AST_APPLICATION.args, expr->data.AST_APPLICATION.len,
           expr->data.AST_APPLICATION.function->md, ctx, module, builder);
 
-      instance_ptr = replace_instance(instance_ptr, new_instance, builder);
-
       LLVMValueRef parent_gep =
           coroutine_instance_parent_gep(new_instance, builder);
+      LLVMBuildStore(builder, instance_copy, parent_gep);
 
-      LLVMBuildStore(builder, old_instance_ptr, parent_gep);
+      instance_ptr = replace_instance(instance_ptr, new_instance, builder);
 
       LLVMValueRef ret_opt =
           coroutine_next(instance_ptr, instance_type,
