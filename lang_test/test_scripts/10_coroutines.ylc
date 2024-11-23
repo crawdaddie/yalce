@@ -134,97 +134,52 @@ let test_embed_coroutine = fn () ->
   match inst () with
   | Some 1 -> true
   | x -> err `{x}\n`
-  ) && (
+  )
+  && (
   match inst () with
   | Some 4 -> true
   | x -> err `{x}\n`
-  ) && (
+  )
+  && (
   match inst () with
   | Some 5 -> true
   | x -> err `{x}\n`
-  ) && (
+  )
+  && (
   match inst () with
   | Some 6 -> true
   | x -> err `{x}\n`
   )
-
-  &&
-  (
+  && (
   match inst () with
   | Some 2 -> true
   | x -> err `{x}\n`
   )
-  # && 
-  # (
-  # match inst () with
-  # | Some 3 -> true
-  # | _ -> (print `not 3\n`; false)
-  # ) && (
-  # match inst () with
-  # | None -> true
-  # | _ -> false
-  # )
+  && (
+  match inst () with
+  | Some 3 -> true
+  | _ -> (print `not 3\n`; false)
+  )
+  && (
+  match inst () with
+  | None -> true
+  | _ -> false
+  )
 ;;
 
-#
-# let generic_cor = fn a b ->
-#   yield a;
-#   yield b
-# ;;
-#
-# let test_generic_cor = fn () ->
-#   let inst = generic_cor 1 2;
-#   (match inst () with
-#   | Some 1 -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | Some 2 -> true
-#   | _ -> false
-#   )
-# ;;
-#
-# let sub_cor = fn () ->
-#   yield 4;
-#   yield 5;
-#   yield 6 
-# ;;
-#
-# let cor = fn () ->
-#   yield sub_cor ();
-#   yield 1;
-#   yield 2;
-#   yield 3
-# ;;
-#
-# let test_embed_coroutine = fn () ->
-#   let inst = cor ();
-#   (match inst () with
-#   | Some 4 -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | Some 5 -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | Some 6 -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | Some 1 -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | Some 2 -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | Some 3 -> true
-#   | _ -> false
-#   ) && (
-#   match inst () with
-#   | None -> true
-#   | _ -> false
-#   )
-# ;;
+let generic_cor = fn a b ->
+  yield a;
+  yield b
+;;
+
+let test_generic_cor = fn () ->
+  let inst = generic_cor 1 2;
+  (match inst () with
+  | Some 1 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 2 -> true
+  | _ -> false
+  )
+;;
