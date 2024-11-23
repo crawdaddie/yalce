@@ -360,8 +360,10 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_GENERIC_COROUTINE_GENERATOR: {
+    printf("call generic cor %s\n", sym_name);
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
+
     if (!func) {
       func = coroutine_def_from_generic(sym, expected_fn_type, ctx, module,
                                         builder);

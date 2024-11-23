@@ -200,9 +200,7 @@ LLVMValueRef match_values(Ast *binding, LLVMValueRef val, Type *val_type,
       return _TRUE;
     }
     if (val_type->kind == T_COROUTINE_INSTANCE) {
-      LLVMTypeRef llvm_instance_type = coroutine_instance_type(
-          type_to_llvm_type(val_type->data.T_COROUTINE_INSTANCE.params_type,
-                            ctx->env, module));
+      LLVMTypeRef llvm_instance_type = coroutine_instance_type();
 
       JITSymbol *sym = new_symbol(STYPE_COROUTINE_INSTANCE, val_type, val,
                                   llvm_instance_type);

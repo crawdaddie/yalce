@@ -170,6 +170,24 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
   return NULL;
 }
 
+LLVMValueRef create_generic_coroutine_binding(Ast *binding, Ast *fn_ast,
+                                              JITLangCtx *ctx,
+                                              LLVMModuleRef module,
+                                              LLVMBuilderRef builder) {
+  JITSymbol *sym =
+      new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR, fn_ast->md, NULL, NULL);
+  sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.ast = fn_ast;
+  sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.stack_ptr = ctx->stack_ptr;
+
+  const char *id_chars = binding->data.AST_IDENTIFIER.value;
+  int id_len = binding->data.AST_IDENTIFIER.length;
+
+  ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
+              hash_string(id_chars, id_len), sym);
+
+  return NULL;
+}
+
 LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -186,7 +204,8 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   if (expr_type->kind == T_FN &&
       is_coroutine_generator(ast->data.AST_LET.expr->md) &&
       is_generic(ast->data.AST_LET.expr->md)) {
-    return codegen_generic_coroutine_binding(ast, &cont_ctx, module, builder);
+    return create_generic_coroutine_binding(binding, ast->data.AST_LET.expr,
+                                            &cont_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN &&
