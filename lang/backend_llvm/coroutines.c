@@ -1,6 +1,7 @@
 #include "coroutines.h"
 #include "function.h"
 #include "match.h"
+#include "serde.h"
 #include "symbols.h"
 #include "tuple.h"
 #include "types.h"
@@ -80,6 +81,22 @@ void increment_instance_counter(LLVMValueRef instance_ptr,
 
   counter = LLVMBuildAdd(builder, counter, LLVMConstInt(LLVMInt32Type(), 1, 0),
                          "instance_counter++");
+  LLVMBuildStore(builder, counter, counter_gep);
+}
+
+void reset_instance_counter(LLVMValueRef instance_ptr, LLVMBuilderRef builder) {
+
+  LLVMValueRef counter_gep =
+      coroutine_instance_counter_gep(instance_ptr, builder);
+  LLVMValueRef counter = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  LLVMBuildStore(builder, counter, counter_gep);
+}
+
+void set_instance_counter(LLVMValueRef instance_ptr, LLVMValueRef counter,
+                          LLVMBuilderRef builder) {
+
+  LLVMValueRef counter_gep =
+      coroutine_instance_counter_gep(instance_ptr, builder);
   LLVMBuildStore(builder, counter, counter_gep);
 }
 
@@ -449,17 +466,9 @@ LLVMValueRef coroutine_next(LLVMValueRef instance, LLVMTypeRef instance_type,
 LLVMTypeRef llvm_def_type_of_instance(Type *instance_type, JITLangCtx *ctx,
                                       LLVMModuleRef module) {}
 
-// LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef
-// module,
-//                            LLVMBuilderRef builder,
-//                            LLVMTypeRef *_llvm_def_type) {
-//
 LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
-  printf("coroutine def from generic\n");
-  print_type(expected_fn_type);
-
   Ast *fn_ast = sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.ast;
   Type *instance_type = fn_return_type(expected_fn_type);
   Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
@@ -470,7 +479,6 @@ LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
   LLVMTypeRef llvm_instance_type = coroutine_instance_type();
   LLVMTypeRef llvm_ret_opt = type_to_llvm_type(ret_opt, ctx->env, module);
   LLVMTypeRef llvm_def_type = coroutine_fn_type(llvm_ret_opt);
-  LLVMDumpType(llvm_def_type);
 
   Ast *specific_ast = get_specific_fn_ast_variant(fn_ast, expected_fn_type);
   JITLangCtx compilation_ctx = {
@@ -511,4 +519,70 @@ LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
   LLVMValueRef def = coroutine_def(specific_ast, &compilation_ctx, module,
                                    builder, &_def_type);
   return def;
+}
+
+LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  LLVMValueRef coroutine_def =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  Type *def_type = ast->data.AST_APPLICATION.args->md;
+
+  LLVMValueRef params[] = {
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder)};
+
+  Type *instance_type = fn_return_type(def_type);
+  Type *params_obj_type = ast->data.AST_APPLICATION.args[1].md;
+
+  Type *ret_opt = instance_type->data.T_COROUTINE_INSTANCE.yield_interface;
+  ret_opt = fn_return_type(ret_opt);
+  LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
+
+  // build wrapper around coroutine def that calls its input instance, and if
+  // that returns None, resets the instance
+  LLVMTypeRef wrapper_type = coroutine_fn_type(llvm_ret_opt_type);
+  LLVMValueRef wrapper = LLVMAddFunction(module, "loop_cor_", wrapper_type);
+  LLVMSetLinkage(wrapper, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(wrapper, "entry");
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  LLVMValueRef instance_ptr = LLVMGetParam(wrapper, 0);
+
+  LLVMValueRef next = LLVMBuildCall2(builder, wrapper_type, coroutine_def,
+                                     (LLVMValueRef[]){instance_ptr}, 1,
+                                     "call_wrapped_coroutine");
+
+  // LLVMValueRef option_tag = codegen_tuple_access(0,
+
+  // Create basic blocks for the different paths
+  LLVMBasicBlockRef some_block = LLVMAppendBasicBlock(wrapper, "case_some");
+  LLVMBasicBlockRef none_block = LLVMAppendBasicBlock(wrapper, "case_none");
+
+  // Create the conditional branch
+  LLVMValueRef cmp = codegen_option_is_some(next, builder);
+  LLVMBuildCondBr(builder, cmp, some_block, none_block);
+
+  LLVMPositionBuilderAtEnd(builder, some_block);
+  LLVMBuildRet(builder, next);
+
+  LLVMPositionBuilderAtEnd(builder, none_block);
+  LLVMTypeRef llvm_params_obj_type =
+      type_to_llvm_type(params_obj_type, ctx->env, module);
+
+  reset_instance_counter(instance_ptr, builder);
+
+  next = LLVMBuildCall2(builder, wrapper_type, coroutine_def,
+                        (LLVMValueRef[]){instance_ptr}, 1,
+                        "call_wrapped_coroutine");
+  LLVMBuildRet(builder, next);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  LLVMValueRef instance = codegen_coroutine_instance(
+      NULL, instance_type, wrapper, params, 1, ctx, module, builder);
+
+  return instance;
 }

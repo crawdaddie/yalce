@@ -845,3 +845,9 @@ LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder) {
   return LLVMBuildICmp(builder, LLVMIntEQ, tag,
                        LLVMConstInt(LLVMInt8Type(), 1, 0), "");
 }
+
+LLVMValueRef codegen_option_is_some(LLVMValueRef opt, LLVMBuilderRef builder) {
+  LLVMValueRef tag = variant_extract_tag(opt, builder);
+  return LLVMBuildICmp(builder, LLVMIntEQ, tag,
+                       LLVMConstInt(LLVMInt8Type(), 0, 0), "");
+}

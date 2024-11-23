@@ -360,10 +360,8 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
   }
 
   case STYPE_GENERIC_COROUTINE_GENERATOR: {
-    printf("call generic cor %s\n", sym_name);
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
-
     if (!func) {
       func = coroutine_def_from_generic(sym, expected_fn_type, ctx, module,
                                         builder);
@@ -381,9 +379,6 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
         .llvm_type = llvm_def_type_of_instance(instance_type, ctx, module),
         .val = func,
     };
-
-    // LLVMDumpValue(func);
-    // print_type(expected_fn_type);
 
     return coroutine_instance_from_def_symbol(
         &spec_symbol, args, args_len, expected_fn_type, ctx, module, builder);
@@ -491,6 +486,7 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
       (strcmp("||", binop_name) == 0)) {
     return LLVMBuildOr(builder, lval, rval, "||");
   }
+
   Method *method = get_binop_method(binop_name, ltype, rtype);
   if (!method) {
     fprintf(stderr, "Error: %s binop method not found\n", binop_name);
@@ -702,6 +698,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
 
   if (strcmp(SYM_NAME_DEREF, sym_name) == 0) {
     return call_deref_fn(ast, sym, ctx, module, builder);
+  }
+
+  if (strcmp(SYM_NAME_LOOP, sym_name) == 0) {
+    return codegen_loop_coroutine(ast, sym, ctx, module, builder);
   }
 
   Type *builtin_binop = get_builtin_type(sym_name);

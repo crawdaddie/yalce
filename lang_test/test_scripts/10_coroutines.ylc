@@ -76,33 +76,20 @@ let test_recursive_cor = fn () ->
   let inst = rec_cor ();
   (match inst () with
   | Some 1 -> true
-  | _ -> (
-  print `not 1\n`;
-  false
-  )
+  | _ -> false
   ) && (
   match inst () with
   | Some 2 -> true
-  | _ -> (
-  print `not 2\n`;
-  false
-  )
+  | _ -> false
   ) && (
   match inst () with
   | Some 3 -> true
-  | _ -> (
-
-  print `not 3\n`;
-  false
-  )
+  | _ -> false
   )
   && (
   match inst () with
   | Some 1 -> true
-  | _ -> (
-  print `not repeat\n`;
-  false
-  )
+  | _ -> false
   )
   && (
   match inst () with
@@ -177,4 +164,44 @@ let test_generic_cor = fn () ->
   | Some 2 -> true
   | _ -> false
   )
+;;
+
+let g = fn opt_int: (Option of Int) ->
+  match opt_int with
+  | Some x -> print `got Some {x}\n`
+  | None -> print `got None\n`
+  ;;
+
+let test_cor_loop = fn () ->
+  let cor = fn () ->
+    yield 1;
+    yield 2;
+    yield 3
+  ;;
+  let inst = loop cor ();
+  (match inst () with
+  | Some 1 -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 2 -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 3 -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 1 -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 2 -> true
+  | _ -> false
+  )
+
 ;;

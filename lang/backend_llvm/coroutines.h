@@ -98,4 +98,8 @@ LLVMValueRef codegen_coroutine_instance(LLVMValueRef _inst, Type *instance_type,
                                         int num_params, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder);
+
+LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder);
 #endif

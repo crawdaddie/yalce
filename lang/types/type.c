@@ -202,6 +202,17 @@ Type t_iter_of_list_sig =
 Type t_iter_of_array_sig =
     MAKE_FN_TYPE_3(&TARRAY(&t_option_var), &t_void, &t_option_of_var);
 
+Type t_cor_params = TVAR("cor_params");
+Type t_cor_ret = TVAR("cor_ret");
+Type t_cor_ret_opt =
+    TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_cor_ret), &t_none);
+
+Type t_looped_cor_inst = COR_INST(&t_cor_params, &t_cor_ret_opt);
+Type t_looped_cor_def = MAKE_FN_TYPE_2(&t_cor_params, &t_looped_cor_inst);
+
+Type t_cor_loop_sig =
+    MAKE_FN_TYPE_3(&t_looped_cor_def, &t_cor_params, &t_looped_cor_inst);
+
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     return strncat(buffer, "null", 4);
@@ -738,6 +749,10 @@ Type *get_builtin_type(const char *id_chars) {
 
   if (strcmp(id_chars, "deref") == 0) {
     return &t_ptr_deref_sig;
+  }
+
+  if (strcmp(id_chars, "loop") == 0) {
+    return &t_cor_loop_sig;
   }
   // fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
 

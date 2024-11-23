@@ -55,6 +55,7 @@ extern Type t_option_of_var;
 
 extern Type t_iter_of_list_sig;
 extern Type t_iter_of_array_sig;
+extern Type t_cor_loop_sig;
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"
@@ -140,6 +141,16 @@ extern _binop_map binop_map[];
           .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,           \
                                            .dependencies =                     \
                                                (Type *[]){dep1, dep2}}}})
+#define COR_INST(param, ret_opt)                                               \
+  ((Type){                                                                     \
+      .kind = T_COROUTINE_INSTANCE,                                            \
+      .data = {.T_COROUTINE_INSTANCE = {                                       \
+                   .params_type = param,                                       \
+                   .yield_interface = &MAKE_FN_TYPE_2(&t_void, ret_opt)}}})
+
+#define TVAR(n)                                                                \
+  (Type) { T_VAR, {.T_VAR = n}, }
+
 enum TypeKind {
   /* Type Operator */
   T_INT,
