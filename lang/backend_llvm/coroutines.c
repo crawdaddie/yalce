@@ -1,5 +1,6 @@
 #include "coroutines.h"
 #include "function.h"
+#include "list.h"
 #include "match.h"
 #include "serde.h"
 #include "symbols.h"
@@ -153,13 +154,76 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return ret_opt;
 }
 
-LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type, bool inf,
+LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
                                                JITLangCtx *ctx,
                                                LLVMModuleRef module,
-                                               LLVMBuilderRef builder) {}
+                                               LLVMBuilderRef builder) {
+  Type *instance_type = fn_return_type(expected_type);
+  Type *array_type = expected_type->data.T_FN.from;
 
-LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
-                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+  Type *ret_opt_type =
+      fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
+
+  Type *array_el_type = array_type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_array_el_type =
+      type_to_llvm_type(array_el_type, ctx->env, module);
+
+  LLVMTypeRef llvm_array_type =
+      codegen_array_type(array_el_type, ctx->env, module);
+  LLVMTypeRef llvm_ret_opt_type =
+      type_to_llvm_type(ret_opt_type, ctx->env, module);
+
+  LLVMTypeRef llvm_instance_type = coroutine_instance_type();
+
+  LLVMValueRef func = LLVMAddFunction(module, "array_iter_generator",
+                                      coroutine_fn_type(llvm_ret_opt_type));
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+  LLVMPositionBuilderAtEnd(builder, entry);
+  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+
+  LLVMValueRef params_in_instance_ptr =
+      codegen_tuple_access(3, instance_ptr, llvm_instance_type, builder);
+
+  LLVMValueRef array_ptr = LLVMBuildPointerCast(
+      builder, params_in_instance_ptr, LLVMPointerType(llvm_array_type, 0),
+      "params_cast_to_array");
+
+  LLVMValueRef array =
+      LLVMBuildLoad2(builder, llvm_array_type, array_ptr, "array");
+
+  LLVMValueRef array_size = codegen_get_array_size(builder, array);
+
+  LLVMValueRef counter_gep =
+      coroutine_instance_counter_gep(instance_ptr, builder);
+  LLVMValueRef idx = LLVMBuildLoad2(builder, LLVMInt32Type(), counter_gep, "");
+
+  // Create the in-range comparison
+  LLVMValueRef is_out_of_range =
+      LLVMBuildICmp(builder, LLVMIntUGE, idx, array_size, "is_out_of_range");
+
+  LLVMBasicBlockRef in_range_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "in_range_block");
+  LLVMBasicBlockRef out_of_range_block =
+      LLVMAppendBasicBlock(LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)),
+                           "out_of_range_block");
+
+  LLVMBuildCondBr(builder, is_out_of_range, out_of_range_block, in_range_block);
+  LLVMPositionBuilderAtEnd(builder, in_range_block);
+  increment_instance_counter(instance_ptr, builder);
+
+  LLVMValueRef value =
+      codegen_array_at(array, idx, llvm_array_el_type, module, builder);
+
+  LLVMValueRef ret_opt = codegen_option(value, builder);
+  LLVMBuildRet(builder, ret_opt);
+
+  LLVMPositionBuilderAtEnd(builder, out_of_range_block);
+  LLVMBuildRet(builder, codegen_none(llvm_array_el_type, builder));
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  return func;
 }
 
 LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
@@ -429,6 +493,41 @@ LLVMValueRef codegen_coroutine_instance(LLVMValueRef _inst, Type *instance_type,
                     },
                     2, "params_in_instance_ptr");
   LLVMBuildStore(builder, params_alloc, params_in_instance);
+
+  return instance;
+}
+
+LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  Ast *array_arg = ast->data.AST_APPLICATION.args;
+  Type *array_type = array_arg->md;
+  LLVMTypeRef llvm_array_type = type_to_llvm_type(array_type, ctx->env, module);
+  Type *array_el_type = array_type->data.T_CONS.args[0];
+  LLVMValueRef array = codegen(array_arg, ctx, module, builder);
+
+  LLVMTypeRef llvm_instance_type = coroutine_instance_type();
+
+  LLVMValueRef instance = heap_alloc(llvm_instance_type, ctx, builder);
+
+  LLVMValueRef fn_gep = coroutine_instance_fn_gep(instance, builder);
+  LLVMBuildStore(builder, func, fn_gep);
+
+  LLVMValueRef counter_gep = coroutine_instance_counter_gep(instance, builder);
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
+
+  // Allocate heap memory for array struct copy
+  LLVMValueRef array_heap = heap_alloc(llvm_array_type, ctx, builder);
+
+  // Store the array struct into the newly allocated memory
+  LLVMBuildStore(builder, array, array_heap);
+
+  // Get pointer to third field of instance (index 3)
+  LLVMValueRef params_gep = LLVMBuildStructGEP2(builder, llvm_instance_type,
+                                                instance, 3, "params_ptr");
+
+  // Store the pointer to the array copy in the instance
+  LLVMBuildStore(builder, array_heap, params_gep);
 
   return instance;
 }

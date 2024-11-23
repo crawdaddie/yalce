@@ -9,6 +9,7 @@
 #include "list.h"
 #include "serde.h"
 #include "strings.h"
+#include "types/type.h"
 #include "types/unification.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -525,30 +526,16 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
   }
 
   if (strcmp(sym_name, SYM_NAME_ITER_OF_ARRAY) == 0) {
+    expected_type = ast->data.AST_APPLICATION.function->md;
 
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
         expected_type);
+
     if (!func) {
-      func = coroutine_array_iter_generator_fn(expected_type, false, ctx,
-                                               module, builder);
-      sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
-          specific_fns_extend(
-              sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
-              expected_type, func);
-    }
-
-    return array_iter_instance(ast, func, ctx, module, builder);
-  }
-
-  if (strcmp(sym_name, SYM_NAME_ITER_OF_ARRAY_INF) == 0) {
-
-    LLVMValueRef func = specific_fns_lookup(
-        sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
-        expected_type);
-    if (!func) {
-      func = coroutine_array_iter_generator_fn(expected_type, true, ctx, module,
+      func = coroutine_array_iter_generator_fn(expected_type, ctx, module,
                                                builder);
+
       sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
           specific_fns_extend(
               sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
@@ -701,6 +688,11 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (strcmp(SYM_NAME_LOOP, sym_name) == 0) {
+    Type *inst_type = ast->md;
+    Type *inst_param = inst_type->data.T_COROUTINE_INSTANCE.params_type;
+    if (is_array_type(inst_param)) {
+      printf("loop array iter\n");
+    }
     return codegen_loop_coroutine(ast, sym, ctx, module, builder);
   }
 

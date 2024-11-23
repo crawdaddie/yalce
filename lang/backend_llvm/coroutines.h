@@ -51,10 +51,7 @@ LLVMValueRef codegen_generic_coroutine_binding(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef list_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
-LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
-                                 LLVMModuleRef module, LLVMBuilderRef builder);
-
-LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type, bool inf,
+LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
                                                JITLangCtx *ctx,
                                                LLVMModuleRef module,
                                                LLVMBuilderRef builder);
@@ -98,6 +95,9 @@ LLVMValueRef codegen_coroutine_instance(LLVMValueRef _inst, Type *instance_type,
                                         int num_params, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder);
+
+LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                                     LLVMModuleRef module,

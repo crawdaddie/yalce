@@ -924,7 +924,6 @@ int main() {
         &MAKE_FN_TYPE_3(&t_string, &TLIST(&t_string), &t_string));
   });
 
-
   ({
     RESET;
     TITLE("coroutine function")

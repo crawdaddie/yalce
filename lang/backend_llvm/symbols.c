@@ -411,8 +411,6 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
 
   GENERIC_COR_SYMBOL(SYM_NAME_ITER_OF_ARRAY, &t_iter_of_array_sig);
 
-  GENERIC_COR_SYMBOL(SYM_NAME_ITER_OF_ARRAY_INF, &t_iter_of_array_sig);
-
   GENERIC_COR_SYMBOL(SYM_NAME_LOOP, &t_cor_loop_sig);
 
   // Type *t_iter_map_sig = create_iter_map_sig_type();

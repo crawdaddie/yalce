@@ -166,11 +166,11 @@ let test_generic_cor = fn () ->
   )
 ;;
 
-let g = fn opt_int: (Option of Int) ->
-  match opt_int with
-  | Some x -> print `got Some {x}\n`
-  | None -> print `got None\n`
-  ;;
+# let g = fn opt_int: (Option of Int) ->
+#   match opt_int with
+#   | Some x -> print `got Some {x}\n`
+#   | None -> print `got None\n`
+#   ;;
 
 let test_cor_loop = fn () ->
   let cor = fn () ->
@@ -203,5 +203,86 @@ let test_cor_loop = fn () ->
   | Some 2 -> true
   | _ -> false
   )
-
 ;;
+
+let test_cor_loop_params = fn () ->
+  let cor = fn a ->
+    yield 1;
+    yield a;
+    yield 3
+  ;;
+  let inst = loop cor 2;
+  (match inst () with
+  | Some 1 -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 2 -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 3 -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 1 -> true
+  | _ -> false
+  )
+  && (
+  match inst () with
+  | Some 2 -> true
+  | _ -> false
+  )
+;;
+
+
+let test_iter_array = fn () ->
+  let inst = iter_of_array [|0.2, 0.3, 0.2, 0.3|];
+  (match inst () with
+  | Some 0.2 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.3 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.2 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.3 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | None -> true
+  | _ -> false
+  )
+;;
+
+# let test_iter_array_loop = fn () ->
+#   let inst = loop iter_of_array [|0.2, 0.3, 0.2, 0.3|];
+#   (match inst () with
+#   | Some 0.2 -> true
+#   | _ -> false
+#   ) && (
+#   match inst () with
+#   | Some 0.3 -> true
+#   | _ -> false
+#   ) && (
+#   match inst () with
+#   | Some 0.2 -> true
+#   | _ -> false
+#   ) && (
+#   match inst () with
+#   | Some 0.3 -> true
+#   | _ -> false
+#   ) && (
+#   match inst () with
+#   | Some 0.2 -> true
+#   | _ -> false
+#   )
+# ;;

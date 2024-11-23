@@ -840,6 +840,16 @@ LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder) {
   return none;
 }
 
+LLVMValueRef codegen_none(LLVMTypeRef val_type, LLVMBuilderRef builder) {
+  LLVMTypeRef tu_types[] = {TAG_TYPE, val_type};
+  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
+  LLVMValueRef none = LLVMGetUndef(tu_type);
+
+  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
+                              0, "insert None tag");
+  return none;
+}
+
 LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder) {
   LLVMValueRef tag = variant_extract_tag(opt, builder);
   return LLVMBuildICmp(builder, LLVMIntEQ, tag,

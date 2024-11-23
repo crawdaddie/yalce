@@ -89,11 +89,13 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   Type *result_fn = fn_type;
 
   Type *app_arg_types[len];
+  // print_ast(ast);
   for (int i = 0; i < len; i++) {
 
+    // printf("%d: ", i);
     Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
+    // print_ast(arg_ast);
     Type *arg_type = infer(arg_ast, env);
-
 
     if (!arg_type) {
       fprintf(stderr, "could not infer application argument [%s:%d]\n",
@@ -101,16 +103,17 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
       print_location(arg_ast);
       return NULL;
     }
+    // print_type(arg_type);
 
     app_arg_types[i] = arg_type;
 
-    if (app_arg_types[i]->kind == T_FN && arg_ast->tag != AST_LAMBDA) {
+    if (app_arg_types[i]->kind == T_FN && arg_ast->tag != AST_LAMBDA &&
+        !(is_coroutine_generator_fn(arg_type))) {
       app_arg_types[i] = copy_type(app_arg_types[i]);
     }
 
     Type *unif =
         unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
-
 
     if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
       print_unification_err(ast->data.AST_APPLICATION.args + i,
@@ -119,6 +122,7 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
     }
 
     result_fn = result_fn->data.T_FN.to;
+    // print_type_env(replacement_env);
   }
 
   result_fn = resolve_generic_type(result_fn, replacement_env);
