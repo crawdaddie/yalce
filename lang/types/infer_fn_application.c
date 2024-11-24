@@ -107,8 +107,7 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
 
     app_arg_types[i] = arg_type;
 
-    if (app_arg_types[i]->kind == T_FN && arg_ast->tag != AST_LAMBDA &&
-        !(is_coroutine_generator_fn(arg_type))) {
+    if (app_arg_types[i]->kind == T_FN && arg_ast->tag != AST_LAMBDA) {
       app_arg_types[i] = copy_type(app_arg_types[i]);
     }
 
@@ -122,18 +121,24 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
     }
 
     result_fn = result_fn->data.T_FN.to;
-    // print_type_env(replacement_env);
   }
 
-  result_fn = resolve_generic_type(result_fn, replacement_env);
-
-  ast->data.AST_APPLICATION.function->md =
-      resolve_generic_type(fn_type, replacement_env);
-
-  // printf("inferred fn type\n");
-  // print_ast(ast);
-  // print_type(ast->data.AST_APPLICATION.function->md);
   // print_type_env(replacement_env);
+
+  result_fn = resolve_generic_type(result_fn, replacement_env);
+  fn_type = resolve_generic_type(fn_type, replacement_env);
+  ast->data.AST_APPLICATION.function->md = fn_type;
+
+  Type *t = fn_type;
+  for (int i = 0; i < len; i++) {
+    Type *arg_type = t->data.T_FN.from;
+    // printf("inferred arg type %d: ", i);
+    // print_type(arg_type);
+    if (is_generic(ast->data.AST_APPLICATION.args[i].md)) {
+      (ast->data.AST_APPLICATION.args + i)->md = arg_type;
+    }
+    t = t->data.T_FN.to;
+  }
 
   result_fn = resolve_tc_rank(result_fn);
   const char *fn_name =

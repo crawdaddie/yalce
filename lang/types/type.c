@@ -1018,6 +1018,7 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement) {
   }
 
   case T_CONS: {
+
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
       type->data.T_CONS.args[i] =
           replace_in(type->data.T_CONS.args[i], tvar, replacement);

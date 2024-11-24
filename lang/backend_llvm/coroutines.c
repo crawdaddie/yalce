@@ -158,8 +158,11 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
                                                JITLangCtx *ctx,
                                                LLVMModuleRef module,
                                                LLVMBuilderRef builder) {
+
   Type *instance_type = fn_return_type(expected_type);
   Type *array_type = expected_type->data.T_FN.from;
+
+  print_type(instance_type);
 
   Type *ret_opt_type =
       fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
@@ -576,6 +579,7 @@ LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
   LLVMTypeRef llvm_params_obj_type =
       type_to_llvm_type(params_obj_type, ctx->env, module);
   LLVMTypeRef llvm_instance_type = coroutine_instance_type();
+
   LLVMTypeRef llvm_ret_opt = type_to_llvm_type(ret_opt, ctx->env, module);
   LLVMTypeRef llvm_def_type = coroutine_fn_type(llvm_ret_opt);
 
@@ -623,6 +627,8 @@ LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
 LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+
+  // printf("segfault? %s:%d", __FILE__, __LINE__);
   LLVMValueRef coroutine_def =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
