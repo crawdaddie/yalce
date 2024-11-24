@@ -778,6 +778,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     return codegen_loop_coroutine(ast, sym, ctx, module, builder);
   }
 
+  if (strcmp(SYM_NAME_MAP_ITER, sym_name) == 0) {
+    return codegen_map_iter(ast, sym, ctx, module, builder);
+  }
+
   Type *builtin_binop = get_builtin_type(sym_name);
   if (builtin_binop) {
     return call_binop(ast, sym, ctx, module, builder);

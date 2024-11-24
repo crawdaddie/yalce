@@ -615,6 +615,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
 
   case AST_APPLICATION: {
+
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
 
@@ -624,6 +625,8 @@ Type *infer(Ast *ast, TypeEnv **env) {
     }
 
     if (t->kind == T_COROUTINE_INSTANCE) {
+      Type *arg = TRY_MSG(infer(ast->data.AST_APPLICATION.args, env), "");
+
       type = t->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to;
       break;
     }

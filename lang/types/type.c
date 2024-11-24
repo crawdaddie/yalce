@@ -221,6 +221,8 @@ Type t_list_cor_params = TLIST(&t_list_cor_el);
 Type t_iter_of_list_sig = MAKE_FN_TYPE_2(
     &t_list_cor_params, &COR_INST(&t_list_cor_params, &t_list_cor_ret_opt));
 
+Type t_cor_map_iter_sig;
+
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {
     return strncat(buffer, "null", 4);

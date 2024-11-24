@@ -798,3 +798,9 @@ LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
 
   return new_instance;
 }
+
+LLVMValueRef codegen_map_iter(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder) {
+  printf("map iter\n");
+  print_ast(ast);
+}

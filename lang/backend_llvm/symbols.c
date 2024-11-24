@@ -408,13 +408,10 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   // ht_set_hash(stack, "iter_of_list_inf", hash_string("iter_of_list_inf", 16),
   //             iter_of_list_inf_sym);
 
-  t_iter_of_array_sig.is_coroutine_fn = true;
-  t_iter_of_list_sig.data.T_FN.to->is_coroutine_instance = true;
-
   GENERIC_COR_SYMBOL(SYM_NAME_ITER_OF_ARRAY, &t_iter_of_array_sig);
   GENERIC_COR_SYMBOL(SYM_NAME_ITER_OF_LIST, &t_iter_of_list_sig);
-
   GENERIC_COR_SYMBOL(SYM_NAME_LOOP, &t_cor_loop_sig);
+  GENERIC_COR_SYMBOL(SYM_NAME_MAP_ITER, &t_cor_map_iter_sig);
 
   // Type *t_iter_map_sig = create_iter_map_sig_type();
   // GENERIC_FN_SYMBOL(SYM_NAME_ITER_MAP, t_iter_map_sig);

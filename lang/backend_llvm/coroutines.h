@@ -102,4 +102,6 @@ LLVMValueRef array_iter_instance(Ast *ast, LLVMValueRef func, JITLangCtx *ctx,
 LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder);
+LLVMValueRef codegen_map_iter(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder);
 #endif
