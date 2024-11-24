@@ -162,8 +162,6 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
   Type *instance_type = fn_return_type(expected_type);
   Type *array_type = expected_type->data.T_FN.from;
 
-  print_type(instance_type);
-
   Type *ret_opt_type =
       fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
 
