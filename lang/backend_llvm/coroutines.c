@@ -680,8 +680,8 @@ LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
-  LLVMValueRef instance = codegen_coroutine_instance(
+  LLVMValueRef new_instance = codegen_coroutine_instance(
       NULL, instance_type, wrapper, params, 1, ctx, module, builder);
 
-  return instance;
+  return new_instance;
 }

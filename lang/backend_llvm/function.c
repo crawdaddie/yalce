@@ -312,6 +312,72 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
   return callable;
 }
 
+LLVMValueRef get_specific_coroutine_generator_callable(
+    JITSymbol *sym, const char *sym_name, Type *expected_fn_type,
+    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  if (strcmp(sym_name, SYM_NAME_ITER_OF_ARRAY) == 0) {
+
+    LLVMValueRef func = specific_fns_lookup(
+        sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+        expected_fn_type);
+
+    if (!func) {
+      func = coroutine_array_iter_generator_fn(expected_fn_type, ctx, module,
+                                               builder);
+
+      sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
+          specific_fns_extend(
+              sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+              expected_fn_type, func);
+    }
+    return func;
+  }
+
+  SpecificFns *specific_fns =
+      sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns;
+  LLVMValueRef func = specific_fns_lookup(specific_fns, expected_fn_type);
+
+  if (func) {
+    return func;
+  }
+
+  func =
+      coroutine_def_from_generic(sym, expected_fn_type, ctx, module, builder);
+
+  sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
+      specific_fns_extend(
+          sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+          expected_fn_type, func);
+
+  return func;
+
+  // Ast *fn_ast = sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
+  //
+  // JITLangCtx compilation_ctx = {
+  //     ctx->stack,
+  //     sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr,
+  //     .env = ctx->env,
+  // };
+  //
+  // LLVMValueRef specific_func = create_new_specific_fn(
+  //     fn_ast->data.AST_LAMBDA.len, fn_ast, sym->symbol_type,
+  //     expected_fn_type, fn_return_type(expected_fn_type), &compilation_ctx,
+  //     module, builder);
+  //
+  // sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+  //     specific_fns_extend(specific_fns, expected_fn_type, specific_func);
+  //
+  // ht *scope = compilation_ctx.stack + compilation_ctx.stack_ptr;
+  // int sym_name_len = strlen(sym_name);
+  //
+  // ht_set_hash(scope, sym_name, hash_string(sym_name, sym_name_len),
+  //             (void *)sym);
+  //
+  // callable = specific_func;
+  // return callable;
+}
+
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
 LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
@@ -548,6 +614,10 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
   return NULL;
 }
 
+// LLVMValueRef force_compile(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef
+// module, LLVMBuilderRef builder) {
+// }
+
 LLVMValueRef call_array_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
@@ -688,11 +758,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (strcmp(SYM_NAME_LOOP, sym_name) == 0) {
-    Type *inst_type = ast->md;
-    Type *inst_param = inst_type->data.T_COROUTINE_INSTANCE.params_type;
-    if (is_array_type(inst_param)) {
-      printf("loop array iter\n");
-    }
     return codegen_loop_coroutine(ast, sym, ctx, module, builder);
   }
 
