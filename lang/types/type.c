@@ -196,8 +196,6 @@ Type t_option_of_var =
 Type *type_of_option(Type *option) {
   return option->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
-Type t_iter_of_list_sig =
-    MAKE_FN_TYPE_3(&TLIST(&t_option_var), &t_void, &t_option_of_var);
 
 Type t_cor_params = TVAR("cor_params");
 Type t_cor_ret = TVAR("cor_ret");
@@ -215,6 +213,13 @@ Type t_array_cor_ret_opt =
 Type t_array_cor_params = TARRAY(&t_array_cor_el);
 Type t_iter_of_array_sig = MAKE_FN_TYPE_2(
     &t_array_cor_params, &COR_INST(&t_array_cor_params, &t_array_cor_ret_opt));
+
+Type t_list_cor_el = TVAR("list_cor");
+Type t_list_cor_ret_opt =
+    TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_list_cor_el), &t_none);
+Type t_list_cor_params = TLIST(&t_list_cor_el);
+Type t_iter_of_list_sig = MAKE_FN_TYPE_2(
+    &t_list_cor_params, &COR_INST(&t_list_cor_params, &t_list_cor_ret_opt));
 
 char *type_to_string(Type *t, char *buffer) {
   if (t == NULL) {

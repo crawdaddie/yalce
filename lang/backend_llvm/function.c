@@ -334,6 +334,24 @@ LLVMValueRef get_specific_coroutine_generator_callable(
     return func;
   }
 
+  if (strcmp(sym_name, SYM_NAME_ITER_OF_LIST) == 0) {
+
+    LLVMValueRef func = specific_fns_lookup(
+        sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+        expected_fn_type);
+
+    if (!func) {
+      func = coroutine_list_iter_generator_fn(expected_fn_type, ctx, module,
+                                              builder);
+
+      sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
+          specific_fns_extend(
+              sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+              expected_fn_type, func);
+    }
+    return func;
+  }
+
   SpecificFns *specific_fns =
       sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns;
   LLVMValueRef func = specific_fns_lookup(specific_fns, expected_fn_type);
@@ -574,7 +592,8 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
                           JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
 
-  Type *expected_type = ast->md;
+  Type *expected_type = ast->data.AST_APPLICATION.function->md;
+
   if (strcmp(sym_name, SYM_NAME_ITER_OF_LIST) == 0) {
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_type);
@@ -587,12 +606,10 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
               expected_type, func);
     }
 
-    LLVMValueRef val = list_iter_instance(ast, func, ctx, module, builder);
-    return val;
+    return list_iter_instance(ast, func, ctx, module, builder);
   }
 
   if (strcmp(sym_name, SYM_NAME_ITER_OF_ARRAY) == 0) {
-    expected_type = ast->data.AST_APPLICATION.function->md;
 
     LLVMValueRef func = specific_fns_lookup(
         sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,

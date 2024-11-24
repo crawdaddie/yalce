@@ -394,9 +394,6 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
     ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);                  \
   })
 
-  t_iter_of_list_sig.is_coroutine_fn = true;
-  t_iter_of_list_sig.data.T_FN.to->is_coroutine_instance = true;
-  GENERIC_COR_SYMBOL(SYM_NAME_ITER_OF_LIST, &t_iter_of_list_sig);
   // JITSymbol *iter_of_list_sym = new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR,
   //                                          &t_iter_of_list_sig, NULL, NULL);
   // ht_set_hash(stack, SYM_NAME_ITER_OF_LIST,
@@ -415,6 +412,7 @@ TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env) {
   t_iter_of_list_sig.data.T_FN.to->is_coroutine_instance = true;
 
   GENERIC_COR_SYMBOL(SYM_NAME_ITER_OF_ARRAY, &t_iter_of_array_sig);
+  GENERIC_COR_SYMBOL(SYM_NAME_ITER_OF_LIST, &t_iter_of_list_sig);
 
   GENERIC_COR_SYMBOL(SYM_NAME_LOOP, &t_cor_loop_sig);
 
