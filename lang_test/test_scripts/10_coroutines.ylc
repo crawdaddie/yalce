@@ -314,3 +314,34 @@ let test_iter_list = fn () ->
   | _ -> false
   )
 ;;
+
+let test_iter_list_loop = fn () ->
+  let inst = loop iter_of_list [0.2, 0.3, 0.2, 0.3];
+  (match inst () with
+  | Some 0.2 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.3 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.2 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.3 -> true
+  | _ -> false
+  ) && (match inst () with
+  | Some 0.2 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.3 -> true
+  | _ -> false
+  ) && (
+  match inst () with
+  | Some 0.2 -> true
+  | _ -> false
+  ) 
+;;

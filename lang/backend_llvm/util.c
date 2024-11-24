@@ -54,7 +54,6 @@ LLVMValueRef alloc(LLVMTypeRef type, JITLangCtx *ctx, LLVMBuilderRef builder) {
                              : LLVMBuildAlloca(builder, type, "stack_alloc");
 }
 
-LLVMValueRef heap_alloc(LLVMTypeRef type, JITLangCtx *ctx,
-                        LLVMBuilderRef builder) {
+LLVMValueRef heap_alloc(LLVMTypeRef type, LLVMBuilderRef builder) {
   return LLVMBuildMalloc(builder, type, "heap_alloc");
 }
