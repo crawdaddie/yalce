@@ -118,12 +118,17 @@ Type *unify_variable(Type *t1, Type *t2, TypeEnv **env) {
 }
 
 Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
+  // printf("UNIFY FUNCTION\n");
+  // print_type(t1->data.T_FN.from);
+  // print_type(t2->data.T_FN.from);
 
   Type *from = unify(t1->data.T_FN.from, t2->data.T_FN.from, env);
+
   if (!from)
     return NULL;
 
   Type *to = unify(t1->data.T_FN.to, t2->data.T_FN.to, env);
+
   if (!to)
     return NULL;
 
@@ -302,19 +307,17 @@ Type *unify_coroutine_instance(Type *t1, Type *t2, TypeEnv **env) {
 
 Type *unify(Type *t1, Type *t2, TypeEnv **env) {
 
-  /*
-  printf("## unify\n");
-  if (t1->alias) {
-    printf("%s\n", t1->alias);
-  } else {
-    print_type(t1);
-  }
-  if (t2->alias) {
-    printf("%s\n", t2->alias);
-  } else {
-    print_type(t2);
-  }
-  */
+  // printf("## unify\n");
+  // if (t1->alias) {
+  //   printf("%s\n", t1->alias);
+  // } else {
+  //   print_type(t1);
+  // }
+  // if (t2->alias) {
+  //   printf("%s\n", t2->alias);
+  // } else {
+  //   print_type(t2);
+  // }
 
   if (t1 == NULL) {
     printf(stderr, "Error unifying type - lhs is NULL\n");
@@ -326,8 +329,12 @@ Type *unify(Type *t1, Type *t2, TypeEnv **env) {
   if (t2->kind == T_VAR) {
     return unify_variable(t2, t1, env);
   }
+
   if (t1->kind == T_VOID) {
     return t1;
+  }
+  if (is_pointer_type(t1) && t2->kind == T_FN) {
+    return t2;
   }
 
   if (t1->kind != t2->kind) {

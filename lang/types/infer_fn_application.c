@@ -77,6 +77,7 @@ Type *infer_anonymous_lambda_arg(Ast *ast, Type *expected_type, TypeEnv **env) {
 }
 
 Type *infer_fn_application(Ast *ast, TypeEnv **env) {
+
   int len = ast->data.AST_APPLICATION.len;
 
   Type *_fn_type = ast->data.AST_APPLICATION.function->md;
@@ -115,6 +116,7 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
         unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
 
     if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
+
       print_unification_err(ast->data.AST_APPLICATION.args + i,
                             result_fn->data.T_FN.from, app_arg_types[i]);
       return NULL;

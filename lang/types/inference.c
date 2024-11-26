@@ -184,6 +184,8 @@ static Type *convert_to_coroutine_generator_fn(Type *f, int fn_len) {
 }
 
 static Type *infer_lambda(Ast *ast, TypeEnv **env) {
+  // printf("##INFER LAMBDA\n");
+  // print_ast(ast);
 
   lambda_ctx_t prev_lambda_ctx = lambda_ctx;
 

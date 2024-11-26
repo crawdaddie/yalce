@@ -29,16 +29,18 @@ Type *compute_concrete_type(Type *generic, Type *contained) {
 
 Type *coroutine_instance_type_parameter(Ast *expr) {
   Ast *components = expr->data.AST_BINOP.right;
-  if (components->tag != AST_BINOP) {
+
+  if (components->tag != AST_TUPLE) {
     fprintf(stderr,
             "Invalid input parameters for parametrized type CorInstance");
     return NULL;
   }
 
-  Ast *params_type_id = components->data.AST_BINOP.left;
+  Ast *params_type_id = components->data.AST_LIST.items;
   Type *params_type = type_var_of_id(params_type_id);
-  Ast *ret_type_id = components->data.AST_BINOP.right;
+  Ast *ret_type_id = components->data.AST_LIST.items + 1;
   Type *ret_type = type_var_of_id(ret_type_id);
+  print_type(ret_type);
 
   Type *ret_opt = create_option_type(ret_type);
 

@@ -518,6 +518,7 @@ LLVMValueRef call_symbol(const char *sym_name, JITSymbol *sym, Ast *args,
 
       LLVMValueRef app_val = codegen(app_val_ast, ctx, module, builder);
       Type *expected_type = callable_type->data.T_FN.from;
+      // print_type(callable_type);
 
       app_val = handle_type_conversions(app_val, app_val_type, expected_type,
                                         module, builder);
