@@ -40,7 +40,6 @@ Type *coroutine_instance_type_parameter(Ast *expr) {
   Type *params_type = type_var_of_id(params_type_id);
   Ast *ret_type_id = components->data.AST_LIST.items + 1;
   Type *ret_type = type_var_of_id(ret_type_id);
-  print_type(ret_type);
 
   Type *ret_opt = create_option_type(ret_type);
 

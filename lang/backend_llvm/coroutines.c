@@ -804,3 +804,101 @@ LLVMValueRef codegen_map_iter(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   printf("map iter\n");
   print_ast(ast);
 }
+
+LLVMValueRef codegen_iter_cor(Type *expected_type, Ast *ast, JITLangCtx *ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  // Type *side_effect_fn_type = expected_type->data.T_FN.from;
+  // Type *side_effect_input_type = side_effect_fn_type->data.T_FN.from;
+  // LLVMTypeRef llvm_side_effect_input_type =
+  //     type_to_llvm_type(side_effect_input_type, ctx->env, module);
+  //
+  // LLVMTypeRef llvm_side_effect_fn_type = LLVMFunctionType(
+  //     LLVMVoidType(), (LLVMTypeRef[]){llvm_side_effect_input_type}, 1, 0);
+  //
+  // Type *instance_type = fn_return_type(expected_type);
+  // Type *ret_opt = fn_return_type(instance_type);
+  // LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env,
+  // module);
+  //
+  // LLVMTypeRef llvm_instance_type = coroutine_instance_type();
+  //
+  // LLVMTypeRef func_type = LLVMFunctionType(
+  //     llvm_instance_type,
+  //     (LLVMTypeRef[]){llvm_side_effect_fn_type, llvm_instance_type}, 2, 0);
+  // LLVMValueRef func =
+  //     LLVMAddFunction(module, "coroutine_side_effect_applier", func_type);
+  //
+  // LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  // LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+  //
+  // LLVMPositionBuilderAtEnd(builder, entry);
+  // LLVMValueRef side_effect_func = LLVMGetParam(func, 0);
+  // LLVMValueRef instance_ptr = LLVMGetParam(func, 1);
+  //
+  // LLVMPositionBuilderAtEnd(builder, prev_block);
+  // return func;
+}
+
+LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
+                            LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  Type *side_effect_fn_type = expected_type->data.T_FN.from;
+  Type *side_effect_input_type = side_effect_fn_type->data.T_FN.from;
+  LLVMTypeRef llvm_side_effect_input_type =
+      type_to_llvm_type(side_effect_input_type, ctx->env, module);
+
+  LLVMTypeRef llvm_side_effect_fn_type = LLVMFunctionType(
+      LLVMVoidType(), (LLVMTypeRef[]){llvm_side_effect_input_type}, 1, 0);
+
+  Type *instance_type = fn_return_type(expected_type);
+  Type *ret_opt = fn_return_type(instance_type);
+  LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
+
+  LLVMTypeRef llvm_instance_type = coroutine_instance_type();
+
+  LLVMTypeRef wrapper_type = coroutine_fn_type(llvm_ret_opt_type);
+
+  LLVMValueRef side_effect_func =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMValueRef _instance_ptr =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMValueRef cor_func =
+      codegen_tuple_access(0, _instance_ptr, llvm_instance_type, builder);
+
+  LLVMValueRef wrapper =
+      LLVMAddFunction(module, "coroutine_side_effect_wrapper", wrapper_type);
+  LLVMSetLinkage(wrapper, LLVMExternalLinkage);
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(wrapper, "entry");
+  LLVMPositionBuilderAtEnd(builder, entry);
+  LLVMValueRef instance_ptr = LLVMGetParam(wrapper, 0);
+  LLVMValueRef inner_ret_opt =
+      LLVMBuildCall2(builder, coroutine_fn_type(llvm_ret_opt_type), cor_func,
+                     (LLVMValueRef[]){instance_ptr}, 1, "get_ret_opt");
+
+  LLVMValueRef is_none = codegen_option_is_none(inner_ret_opt, builder);
+
+  LLVMBasicBlockRef non_null_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "non_null_path");
+  LLVMBasicBlockRef continue_block = LLVMAppendBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "continue");
+  LLVMBuildCondBr(builder, is_none, continue_block, non_null_block);
+  LLVMPositionBuilderAtEnd(builder, non_null_block);
+
+  LLVMBuildCall2(builder, llvm_side_effect_fn_type, side_effect_func,
+                 (LLVMValueRef[]){codegen_tuple_access(
+                     1, inner_ret_opt, llvm_ret_opt_type, builder)},
+                 1, "call_side_effect");
+
+  LLVMBuildRet(builder, inner_ret_opt);
+  LLVMPositionBuilderAtEnd(builder, continue_block);
+  LLVMBuildRet(builder, inner_ret_opt);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  LLVMValueRef fn_gep = coroutine_instance_fn_gep(_instance_ptr, builder);
+  LLVMBuildStore(builder, wrapper, fn_gep);
+  return instance_ptr;
+}
