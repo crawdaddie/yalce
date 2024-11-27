@@ -104,4 +104,11 @@ LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                                     LLVMBuilderRef builder);
 LLVMValueRef codegen_map_iter(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
                               LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef codegen_iter_cor(Type *expected_type, Ast *ast, JITLangCtx *ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
+                            LLVMModuleRef module, LLVMBuilderRef builder);
+
 #endif

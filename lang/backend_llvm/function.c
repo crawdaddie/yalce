@@ -629,6 +629,24 @@ LLVMValueRef call_iter_fn(Ast *ast, JITSymbol *sym, const char *sym_name,
     return array_iter_instance(ast, func, ctx, module, builder);
   }
 
+  if (strcmp(sym_name, SYM_NAME_ITER_COR) == 0) {
+
+    // LLVMValueRef func = specific_fns_lookup(
+    //     sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+    //     expected_type);
+    //
+    // if (!func) {
+    //   func = codegen_iter_cor(expected_type, ast, ctx, module, builder);
+    //
+    //   sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns =
+    //       specific_fns_extend(
+    //           sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.specific_fns,
+    //           expected_type, func);
+    // }
+
+    return apply_iter_cor(ast, expected_type, ctx, module, builder);
+  }
+
   return NULL;
 }
 
@@ -779,10 +797,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     return codegen_loop_coroutine(ast, sym, ctx, module, builder);
   }
 
-  if (strcmp(SYM_NAME_MAP_ITER, sym_name) == 0) {
-    return codegen_map_iter(ast, sym, ctx, module, builder);
-  }
-
   Type *builtin_binop = get_builtin_type(sym_name);
   if (builtin_binop) {
     return call_binop(ast, sym, ctx, module, builder);
@@ -795,7 +809,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  if (strncmp("iter_of_", sym_name, 8) == 0) {
+  if (strncmp("iter_", sym_name, 5) == 0) {
     LLVMValueRef res = call_iter_fn(ast, sym, sym_name, ctx, module, builder);
     if (res) {
       return res;
