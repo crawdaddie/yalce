@@ -875,6 +875,7 @@ LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
   LLVMBasicBlockRef entry = LLVMAppendBasicBlock(wrapper, "entry");
   LLVMPositionBuilderAtEnd(builder, entry);
   LLVMValueRef instance_ptr = LLVMGetParam(wrapper, 0);
+
   LLVMValueRef inner_ret_opt =
       LLVMBuildCall2(builder, coroutine_fn_type(llvm_ret_opt_type), cor_func,
                      (LLVMValueRef[]){instance_ptr}, 1, "get_ret_opt");
