@@ -547,9 +547,14 @@ LLVMValueRef call_binop(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   if (rtype->kind == T_VAR) {
     rtype = env_lookup(ctx->env, rtype->data.T_VAR);
   }
-
   const char *binop_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+
+  if (ltype->kind == T_COROUTINE_INSTANCE &&
+      rtype->kind == T_COROUTINE_INSTANCE &&
+      (strcmp("iter_concat", binop_name) == 0)) {
+    return concat_coroutines(ast, ctx, module, builder);
+  }
 
   LLVMValueRef lval =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
@@ -798,7 +803,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *builtin_binop = get_builtin_type(sym_name);
-  if (builtin_binop) {
+  if (builtin_binop && ast->data.AST_APPLICATION.len == 2) {
     return call_binop(ast, sym, ctx, module, builder);
   }
 

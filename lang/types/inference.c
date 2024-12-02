@@ -381,6 +381,8 @@ Type *infer_spread_operator_tuple(Ast *ast, TypeEnv **env) {
   return new_tuple;
 }
 
+Type *infer_concat_coroutines(Type *a, Type *b, TypeEnv **env) {}
+
 Type *infer(Ast *ast, TypeEnv **env) {
 
   Type *type = NULL;
@@ -620,6 +622,14 @@ Type *infer(Ast *ast, TypeEnv **env) {
 
     Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
                       "Failure could not infer type of callee ");
+
+    if (t == &t_coroutine_concat_sig) {
+      printf("coroutine concat sig\n");
+      type = infer_concat_coroutines(
+          infer(ast->data.AST_APPLICATION.args, env),
+          infer(ast->data.AST_APPLICATION.args + 1, env), env);
+      break;
+    }
 
     if (t->kind == T_FN) {
       type = infer_fn_application(ast, env);

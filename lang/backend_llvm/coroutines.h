@@ -111,4 +111,7 @@ LLVMValueRef codegen_iter_cor(Type *expected_type, Ast *ast, JITLangCtx *ctx,
 LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder);
 
+LLVMValueRef concat_coroutines(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
+
 #endif

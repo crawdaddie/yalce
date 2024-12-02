@@ -228,6 +228,8 @@ Type t_list_cor_params = TLIST(&t_list_cor_el);
 Type t_iter_of_list_sig = MAKE_FN_TYPE_2(
     &t_list_cor_params, &COR_INST(&t_list_cor_params, &t_list_cor_ret_opt));
 
+Type t_coroutine_concat_sig = TVAR("t_coroutine_concat_sig");
+
 // Type t_cor_map_iter_sig;
 
 char *type_to_string(Type *t, char *buffer) {
@@ -770,6 +772,10 @@ Type *get_builtin_type(const char *id_chars) {
 
   if (strcmp(id_chars, "loop") == 0) {
     return &t_cor_loop_sig;
+  }
+
+  if (strcmp(id_chars, "iter_concat") == 0) {
+    return &t_coroutine_concat_sig;
   }
 
   // if (strcmp(id_chars, "iter_cor") == 0) {

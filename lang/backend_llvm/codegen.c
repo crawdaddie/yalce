@@ -21,6 +21,8 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
     ret = LLVMVoidType();
   } else if (is_generic(t)) {
     ret = LLVMVoidType();
+  } else if (t->kind == T_COROUTINE_INSTANCE) {
+    ret = LLVMPointerType(type_to_llvm_type(t, ctx->env, module), 0);
   } else {
     ret = type_to_llvm_type(t, ctx->env, module);
   }

@@ -58,6 +58,7 @@ extern Type t_iter_of_array_sig;
 extern Type t_cor_loop_sig;
 extern Type t_iter_cor_sig;
 extern Type t_cor_map_iter_sig;
+extern Type t_coroutine_concat_sig;
 
 // clang-format off
 #define TYPE_NAME_LIST    "List"

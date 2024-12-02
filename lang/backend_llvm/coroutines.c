@@ -842,6 +842,7 @@ LLVMValueRef codegen_iter_cor(Type *expected_type, Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
+  printf("apply iter cor\n");
 
   Type *side_effect_fn_type = expected_type->data.T_FN.from;
   Type *side_effect_input_type = side_effect_fn_type->data.T_FN.from;
@@ -875,7 +876,6 @@ LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
   LLVMBasicBlockRef entry = LLVMAppendBasicBlock(wrapper, "entry");
   LLVMPositionBuilderAtEnd(builder, entry);
   LLVMValueRef instance_ptr = LLVMGetParam(wrapper, 0);
-
   LLVMValueRef inner_ret_opt =
       LLVMBuildCall2(builder, coroutine_fn_type(llvm_ret_opt_type), cor_func,
                      (LLVMValueRef[]){instance_ptr}, 1, "get_ret_opt");
@@ -890,9 +890,7 @@ LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
   LLVMPositionBuilderAtEnd(builder, non_null_block);
 
   LLVMBuildCall2(builder, llvm_side_effect_fn_type, side_effect_func,
-                 (LLVMValueRef[]){codegen_tuple_access(
-                     1, inner_ret_opt, llvm_ret_opt_type, builder)},
-                 1, "call_side_effect");
+                 (LLVMValueRef[]){}, 1, "call_side_effect");
 
   LLVMBuildRet(builder, inner_ret_opt);
   LLVMPositionBuilderAtEnd(builder, continue_block);
@@ -902,4 +900,11 @@ LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
   LLVMValueRef fn_gep = coroutine_instance_fn_gep(_instance_ptr, builder);
   LLVMBuildStore(builder, wrapper, fn_gep);
   return instance_ptr;
+}
+
+LLVMValueRef concat_coroutines(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  printf("concat coroutines\n");
+  print_ast(ast);
+  return LLVMConstInt(LLVMInt32Type(), 1, 0);
 }
