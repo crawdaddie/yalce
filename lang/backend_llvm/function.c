@@ -778,6 +778,22 @@ LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return v;
 }
 
+LLVMValueRef call_weird_mixed_coroutine_struct_instance(
+    Ast *ast, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+  printf("weird mixed coroutine struct instance\n");
+  print_type(ast->md);
+  print_type(ast->data.AST_APPLICATION.function->md);
+
+  LLVMValueRef item =
+      codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
+
+  LLVMDumpValue(item);
+  printf("\n");
+  // for (int i = 0; i <
+
+  return LLVMConstInt(LLVMInt32Type(), 1, 0);
+}
+
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
@@ -786,6 +802,25 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
+  Type *fn_type = ast->data.AST_APPLICATION.function->md;
+  if (is_tuple_type(fn_type)) {
+
+    int is_coroutine_struct = 0;
+
+    for (int i = 0; i < fn_type->data.T_CONS.num_args; i++) {
+      Type *contained_type = fn_type->data.T_CONS.args[i];
+      if (is_coroutine_instance_type(contained_type)) {
+        is_coroutine_struct = true;
+        break;
+      }
+    }
+    if (is_coroutine_struct &&
+        ((Type *)ast->data.AST_APPLICATION.args[0].md)->kind == T_VOID) {
+
+      return call_weird_mixed_coroutine_struct_instance(ast, ctx, module,
+                                                        builder);
+    }
+  }
   LLVMTypeRef tagged_union_type =
       variant_member_to_llvm_type(ast->md, ctx->env, module);
 

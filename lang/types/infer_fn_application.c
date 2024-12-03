@@ -167,8 +167,33 @@ Type *infer_cons(Ast *ast, TypeEnv **env) {
 
     unify(cons->data.T_CONS.args[i], arg_type, &replacement_env);
   }
+  int is_coroutine_struct = 0;
 
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    Type *contained_type = cons->data.T_CONS.args[i];
+    if (is_coroutine_instance_type(contained_type)) {
+      is_coroutine_struct = true;
+      break;
+    }
+  }
   ast->data.AST_APPLICATION.function->md = cons;
+
+  if (is_coroutine_struct &&
+      ((Type *)ast->data.AST_APPLICATION.args[0].md)->kind == T_VOID) {
+
+    ast->data.AST_APPLICATION.function->md;
+    int len = cons->data.T_CONS.num_args;
+    Type *ret_type = copy_type(cons);
+    for (int i = 0; i < len; i++) {
+      Type *t = ret_type->data.T_CONS.args[i];
+      if (t->kind == T_COROUTINE_INSTANCE) {
+        ret_type->data.T_CONS.args[i] = type_of_option(
+            fn_return_type(t->data.T_COROUTINE_INSTANCE.yield_interface));
+      }
+    }
+    return create_option_type(ret_type);
+  }
+
   return cons;
 }
 
