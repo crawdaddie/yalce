@@ -1301,6 +1301,26 @@ Type *get_struct_member_type(const char *member_name, Type *type) {
 }
 
 Type *concat_struct_types(Type *a, Type *b) {
+
+  if (a->kind == T_VOID) {
+    return b;
+  }
+
+  if (b->kind == T_VOID) {
+    return a;
+  }
+
+  if (a->kind != T_CONS) {
+    Type *cont[] = {a};
+    a = create_tuple_type(1, cont);
+  }
+
+  if (b->kind != T_CONS) {
+
+    Type *cont[] = {b};
+    b = create_tuple_type(1, cont);
+  }
+
   if (strcmp(a->data.T_CONS.name, b->data.T_CONS.name) != 0) {
     return NULL;
   }

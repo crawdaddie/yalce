@@ -381,7 +381,16 @@ Type *infer_spread_operator_tuple(Ast *ast, TypeEnv **env) {
   return new_tuple;
 }
 
-Type *infer_concat_coroutines(Type *a, Type *b, TypeEnv **env) {}
+Type *infer_concat_coroutines(Type *a, Type *b, TypeEnv **env) {
+
+  return create_coroutine_instance_type(
+      concat_struct_types(a->data.T_COROUTINE_INSTANCE.params_type,
+                          b->data.T_COROUTINE_INSTANCE.params_type),
+      concat_struct_types(type_of_option(fn_return_type(
+                              a->data.T_COROUTINE_INSTANCE.yield_interface)),
+                          type_of_option(fn_return_type(
+                              b->data.T_COROUTINE_INSTANCE.yield_interface))));
+}
 
 Type *infer(Ast *ast, TypeEnv **env) {
 
@@ -624,10 +633,10 @@ Type *infer(Ast *ast, TypeEnv **env) {
                       "Failure could not infer type of callee ");
 
     if (t == &t_coroutine_concat_sig) {
-      printf("coroutine concat sig\n");
       type = infer_concat_coroutines(
           infer(ast->data.AST_APPLICATION.args, env),
           infer(ast->data.AST_APPLICATION.args + 1, env), env);
+      print_type(type);
       break;
     }
 

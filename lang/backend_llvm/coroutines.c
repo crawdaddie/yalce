@@ -906,5 +906,6 @@ LLVMValueRef concat_coroutines(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   printf("concat coroutines\n");
   print_ast(ast);
+  print_type(ast->md);
   return LLVMConstInt(LLVMInt32Type(), 1, 0);
 }
