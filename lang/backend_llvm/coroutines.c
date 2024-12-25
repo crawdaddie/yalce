@@ -7,6 +7,7 @@
 #include "tuple.h"
 #include "types.h"
 #include "util.h"
+#include "variant.h"
 #include "llvm-c/Core.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -842,7 +843,6 @@ LLVMValueRef codegen_iter_cor(Type *expected_type, Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef apply_iter_cor(Ast *ast, Type *expected_type, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("apply iter cor\n");
 
   Type *side_effect_fn_type = expected_type->data.T_FN.from;
   Type *side_effect_input_type = side_effect_fn_type->data.T_FN.from;
@@ -908,4 +908,78 @@ LLVMValueRef concat_coroutines(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   print_ast(ast);
   print_type(ast->md);
   return LLVMConstInt(LLVMInt32Type(), 1, 0);
+}
+
+LLVMValueRef call_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+
+  Type *result_type = ast->md;
+  Type *struct_type = ast->data.AST_APPLICATION.function->md;
+  // print_type(result_type);
+  // print_type(type_of_option(result_type));
+
+  LLVMTypeRef llvm_result_type =
+      type_to_llvm_type(type_of_option(result_type), ctx->env, module);
+
+  LLVMValueRef struct_val =
+      codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
+
+  LLVMTypeRef llvm_struct_type =
+      type_to_llvm_type(struct_type, ctx->env, module);
+
+  LLVMValueRef values[struct_type->data.T_CONS.num_args];
+
+  // map option types -> Option of (`a * `b * `c) -> (Option of `a * Option of
+  // `b * Option of `c) -> if any of the contained items is None we return None
+  LLVMValueRef tag = LLVMConstInt(LLVMInt8Type(), 0, 0);
+  int struct_len = struct_type->data.T_CONS.num_args;
+  for (int i = 0; i < struct_type->data.T_CONS.num_args; i++) {
+
+    Type *item_type = struct_type->data.T_CONS.args[i];
+
+    if (is_coroutine_instance_type(item_type)) {
+
+      LLVMValueRef item_ptr = LLVMBuildGEP2(
+          builder, llvm_struct_type, struct_val,
+          (LLVMValueRef[]){
+              LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
+              LLVMConstInt(LLVMInt32Type(), i, 0)  // Get nth element
+          },
+          2, "tuple_element_ptr");
+
+      LLVMTypeRef ret_opt_type = type_to_llvm_type(
+          item_type->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to,
+          ctx->env, module);
+
+      LLVMTypeRef llvm_instance_type =
+          type_to_llvm_type(item_type, ctx->env, module);
+
+
+      LLVMTypeRef def_fn_type = coroutine_fn_type(ret_opt_type);
+      values[i] = coroutine_next(item_ptr, llvm_instance_type, def_fn_type, ctx,
+                                 module, builder);
+      LLVMValueRef item_tag = variant_extract_tag(values[i], builder);
+      tag = LLVMBuildOr(builder, tag, item_tag, "tag_or");
+
+    } else if (item_type->kind == T_FN &&
+               item_type->data.T_FN.from->kind == T_VOID) {
+
+      LLVMValueRef item =
+          codegen_tuple_access(i, struct_val, llvm_struct_type, builder);
+      values[i] = LLVMBuildCall2(builder,
+                                 type_to_llvm_type(item_type, ctx->env, module),
+                                 item, (LLVMValueRef[]){}, 0, "");
+
+    } else {
+
+      LLVMValueRef item =
+          codegen_tuple_access(i, struct_val, llvm_struct_type, builder);
+      values[i] = item;
+    }
+  }
+  LLVMValueRef result_struct = LLVMConstStruct(values, struct_len, 0);
+
+  LLVMValueRef res = LLVMConstStruct((LLVMValueRef[]){tag, result_struct}, 2, 0);
+  return res;
 }

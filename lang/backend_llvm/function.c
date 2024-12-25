@@ -9,6 +9,7 @@
 #include "list.h"
 #include "serde.h"
 #include "strings.h"
+#include "tuple.h"
 #include "types/type.h"
 #include "types/unification.h"
 #include "llvm-c/Core.h"
@@ -778,22 +779,6 @@ LLVMValueRef codegen_cons(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return v;
 }
 
-LLVMValueRef call_weird_mixed_coroutine_struct_instance(
-    Ast *ast, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("weird mixed coroutine struct instance\n");
-  print_type(ast->md);
-  print_type(ast->data.AST_APPLICATION.function->md);
-
-  LLVMValueRef item =
-      codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
-
-  LLVMDumpValue(item);
-  printf("\n");
-  // for (int i = 0; i <
-
-  return LLVMConstInt(LLVMInt32Type(), 1, 0);
-}
-
 LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
@@ -817,8 +802,7 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
     if (is_coroutine_struct &&
         ((Type *)ast->data.AST_APPLICATION.args[0].md)->kind == T_VOID) {
 
-      return call_weird_mixed_coroutine_struct_instance(ast, ctx, module,
-                                                        builder);
+      return call_struct_of_coroutines(ast, ctx, module, builder);
     }
   }
   LLVMTypeRef tagged_union_type =
@@ -855,13 +839,6 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
       return res;
     }
   }
-
-  // if (strcmp(SYM_NAME_ITER_MAP, sym_name) == 0) {
-  //   LLVMValueRef res = coroutine_map(ast, sym, ctx, module, builder);
-  //   if (res) {
-  //     return res;
-  //   }
-  // }
 
   if (strncmp("string_add", sym_name, 10) == 0) {
     LLVMValueRef res = codegen_string_add(
