@@ -652,6 +652,13 @@ Type *env_lookup(TypeEnv *env, const char *name) {
   return NULL;
 }
 
+Type *rec_env_lookup(TypeEnv *env, Type *var) {
+  while (var && var->kind == T_VAR) {
+    var = env_lookup(env, var->data.T_VAR);
+  }
+  return var;
+}
+
 Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
                             char **variant_name) {
   while (env) {

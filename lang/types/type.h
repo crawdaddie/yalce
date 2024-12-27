@@ -247,6 +247,7 @@ typedef struct TypeEnv {
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 Type *env_lookup(TypeEnv *env, const char *name);
+Type *rec_env_lookup(TypeEnv *env, Type *var);
 
 Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
                             char **variant_name);

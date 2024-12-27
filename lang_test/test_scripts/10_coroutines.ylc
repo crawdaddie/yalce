@@ -65,7 +65,6 @@ let test_iter_all = fn () ->
 
 
 
-
 let test_recursive_cor = fn () ->
   let rec_cor = fn () ->
     yield 1;
@@ -345,3 +344,30 @@ let test_iter_list_loop = fn () ->
   | _ -> false
   ) 
 ;;
+
+# let test_struct_of_coroutines = fn () ->
+#   let cor = fn () ->
+#     yield 1;
+#     yield 2;
+#     yield 3
+#   ;;
+#
+#   let inst = (a: cor (), b: cor (), c: 2000); 
+#
+#   (match inst () with
+#   | Some _ -> true
+#   | _ -> false
+#   ) && (
+#   match inst () with
+#   | Some _ -> true
+#   | _ -> false
+#   ) && (
+#   match inst () with
+#   | Some _ -> true
+#   | _ -> false
+#   ) && (
+#   match inst () with
+#   | None -> true
+#   | _ -> false
+#   )
+# ;;

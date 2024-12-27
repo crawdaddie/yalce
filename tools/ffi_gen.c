@@ -57,6 +57,7 @@ void print_function_type(CXType type, name_lookup *lookups) {
   int num_args = clang_getNumArgTypes(type);
   if (result_type.kind == CXType_Void && num_args == 0) {
     printf("() -> ()");
+    return;
   } else {
     int num_args = clang_getNumArgTypes(type);
     for (int i = 0; i < num_args; ++i) {

@@ -128,8 +128,10 @@ ScheduledEvent pop_event(EventHeap *heap) {
 }
 
 EventHeap *queue;
+static __thread int tl_offset;
 
-// Timer thread function
+int get_tl_frame_offset(void) { return tl_offset; }
+
 void *timer(void *arg) {
   EventHeap *queue = (EventHeap *)arg;
   start = get_time_ns();
@@ -144,8 +146,8 @@ void *timer(void *arg) {
       while (queue->size && queue->events[0].timestamp <= now) {
         ScheduledEvent ev = pop_event(queue);
         double now_d = ((double)(now - start) / S_TO_NS);
-        int offset = get_frame_offset();
-        ev.callback(ev.userdata, offset);
+        tl_offset = get_frame_offset();
+        ev.callback(ev.userdata, tl_offset);
         free(ev.userdata);
       }
 
@@ -200,3 +202,8 @@ void schedule_event_quant(void (*callback)(void *, int), double quantization,
 
 typedef struct Timer {
 } Timer;
+
+void schedule_coroutine_driver(CoroutineSchedulerCallback callback,
+                               double quantization) {
+  printf("sched coroutine driver\n");
+}

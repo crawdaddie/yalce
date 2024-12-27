@@ -922,6 +922,9 @@ LLVMValueRef call_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
   LLVMTypeRef llvm_result_type =
       type_to_llvm_type(type_of_option(result_type), ctx->env, module);
 
+  LLVMTypeRef llvm_opt_result_type =
+      type_to_llvm_type(result_type, ctx->env, module);
+
   LLVMValueRef struct_val =
       codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
 
@@ -955,11 +958,19 @@ LLVMValueRef call_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
       LLVMTypeRef llvm_instance_type =
           type_to_llvm_type(item_type, ctx->env, module);
 
-
       LLVMTypeRef def_fn_type = coroutine_fn_type(ret_opt_type);
-      values[i] = coroutine_next(item_ptr, llvm_instance_type, def_fn_type, ctx,
-                                 module, builder);
-      LLVMValueRef item_tag = variant_extract_tag(values[i], builder);
+
+      LLVMValueRef cor_val = coroutine_next(item_ptr, llvm_instance_type,
+                                            def_fn_type, ctx, module, builder);
+
+      Type *expected_item_ret =
+          type_of_option(fn_return_type(item_type->data.T_COROUTINE_INSTANCE.yield_interface));
+
+
+      LLVMTypeRef llvm_item_ret = type_to_llvm_type(expected_item_ret, ctx->env, module);
+
+      values[i] = variant_extract_value(cor_val, llvm_item_ret, builder);
+      LLVMValueRef item_tag = variant_extract_tag(cor_val, builder);
       tag = LLVMBuildOr(builder, tag, item_tag, "tag_or");
 
     } else if (item_type->kind == T_FN &&
@@ -978,8 +989,20 @@ LLVMValueRef call_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
       values[i] = item;
     }
   }
+
+  LLVMValueRef res_struct = LLVMGetUndef(llvm_result_type);
+  for (int i = 0; i < struct_len; i++) {
+    LLVMBuildInsertValue(builder, res_struct, values[i], i, "");
+  }
+
   LLVMValueRef result_struct = LLVMConstStruct(values, struct_len, 0);
 
-  LLVMValueRef res = LLVMConstStruct((LLVMValueRef[]){tag, result_struct}, 2, 0);
-  return res;
+  // LLVMValueRef res =
+  //     LLVMConstStruct((LLVMValueRef[]){tag, result_struct}, 2, 0);
+
+  LLVMValueRef ret_opt = LLVMGetUndef(llvm_opt_result_type);
+  LLVMBuildInsertValue(builder, ret_opt, tag, 0, "");
+  LLVMBuildInsertValue(builder, ret_opt, result_struct, 1, "");
+
+  return ret_opt;
 }

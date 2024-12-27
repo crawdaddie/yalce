@@ -117,12 +117,12 @@ let filter_res_setter = fn val: (Double) ->
 register_cc_handler filter_decay_setter 0 22;
 register_cc_handler filter_res_setter 0 21;
 
-#   |   |   |   |   |   |   |   #
 let pattern = ```
 x-----x---x-----x---------x--x--
 ----x-------x-------x---xx--x-xx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+#   |   |   |   |   |   |   |   #
 |> transpose_string 3 32 32 3
 ;
 

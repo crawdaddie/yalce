@@ -479,10 +479,11 @@ Type *infer(Ast *ast, TypeEnv **env) {
     }
 
     type = find_type_in_env(*env, ast->data.AST_IDENTIFIER.value);
-    if (type == NULL) {
 
+    if (type == NULL) {
       type = next_tvar();
     }
+
     break;
   }
 
@@ -716,8 +717,22 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
   case AST_RECORD_ACCESS: {
     Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, env);
+    if (rec_type->kind == T_VAR) {
+      rec_type = env_lookup(*env, rec_type->data.T_VAR);
+    }
+    if (rec_type == NULL) {
+
+      fprintf(stderr, "Error: object not found in env\n");
+      return NULL;
+    }
+
     if (rec_type->names == NULL) {
-      fprintf(stderr, "Error: object has no named members\n");
+
+      print_type_env(*env);
+      printf("\n");
+      fprintf(stderr, "Error: object has no named members \n");
+      print_type_err(rec_type);
+      fprintf(stderr, "\n");
     }
 
     const char *name =
