@@ -329,6 +329,7 @@ Ast *ast_fn_sig(Ast *, Ast *);
 Ast *ast_fn_sig_push(Ast *, Ast *);
 
 Ast *ast_tuple_type(Ast *, Ast *);
+Ast *ast_tuple_type_single(Ast *a);
 Ast *ast_tuple_type_push(Ast *, Ast *);
 
 Ast *ast_cons_decl(token_type op, Ast *left, Ast *right);

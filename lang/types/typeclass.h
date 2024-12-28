@@ -13,6 +13,8 @@ typedef struct Method {
   Type *signature;
 } Method;
 
+enum TypeClassType { FN, STRUCTURAL };
+
 typedef struct TypeClass {
   const char *name;
   size_t num_methods;

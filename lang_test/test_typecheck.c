@@ -172,6 +172,7 @@ int main() {
 
   ({
     Type t_arithmetic = arithmetic_var("t1");
+
     TEST_SIMPLE_AST_TYPE(
         "let f = fn x -> (1 + 2) * 8 - x;",
         &MAKE_FN_TYPE_2(&t_arithmetic, &TYPECLASS_RESOLVE("arithmetic", &t_int,
@@ -1080,6 +1081,45 @@ int main() {
                          ";;\n"
                          "let inst = loop cor ();\n",
                          &instance);
+  });
+  ({
+    RESET;
+    TITLE("struct contains dur")
+    Type v = tvar("t2");
+
+    Type input = TTUPLE(1, &v);
+    input.names = (char *[]){"dur"};
+
+    Type fn = MAKE_FN_TYPE_2(&input, &v);
+
+    TEST_SIMPLE_AST_TYPE("let get_dur = fn x ->\n"
+                         "  x.dur\n"
+                         ";;\n",
+                         &fn);
+  });
+
+  ({
+    RESET;
+    TITLE("## typed named struct function")
+    Type el = MAKE_FN_TYPE_2(&t_void, &t_num);
+    Type input = TTUPLE(1, &el);
+    input.names = (char *[]){"dur"};
+
+    TEST_SIMPLE_AST_TYPE("let f = fn x: (dur: (() -> Double)) -> x.dur ();;",
+                         &MAKE_FN_TYPE_2(&input, &t_num));
+  });
+
+  ({
+    RESET;
+    TITLE("## typed named struct function opt")
+    Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_num), &TNONE);
+    Type el = MAKE_FN_TYPE_2(&t_void, &opt);
+    Type input = TTUPLE(1, &el);
+    input.names = (char *[]){"dur"};
+
+    TEST_SIMPLE_AST_TYPE(
+        "let f = fn x: (dur: (() -> Option of Double)) -> x.dur ();;",
+        &MAKE_FN_TYPE_2(&input, &opt));
   });
 
   return status == true ? 0 : 1;

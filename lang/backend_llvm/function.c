@@ -402,6 +402,10 @@ typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
 LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
                                      Type *to_type, LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
+  printf("handle type conversions\n");
+  print_type(from_type);
+  print_type(to_type);
+
   if (types_equal(from_type, to_type)) {
     return val;
   }
@@ -788,23 +792,10 @@ LLVMValueRef codegen_fn_application(Ast *ast, JITLangCtx *ctx,
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
-  if (is_tuple_type(fn_type)) {
-
-    int is_coroutine_struct = 0;
-
-    for (int i = 0; i < fn_type->data.T_CONS.num_args; i++) {
-      Type *contained_type = fn_type->data.T_CONS.args[i];
-      if (is_coroutine_instance_type(contained_type)) {
-        is_coroutine_struct = true;
-        break;
-      }
-    }
-    if (is_coroutine_struct &&
-        ((Type *)ast->data.AST_APPLICATION.args[0].md)->kind == T_VOID) {
-
-      return call_struct_of_coroutines(ast, ctx, module, builder);
-    }
+  if (is_struct_of_coroutines(fn_type)) {
+    return call_struct_of_coroutines(ast, ctx, module, builder);
   }
+
   LLVMTypeRef tagged_union_type =
       variant_member_to_llvm_type(ast->md, ctx->env, module);
 

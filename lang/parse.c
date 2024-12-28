@@ -971,6 +971,12 @@ Ast *ast_tuple_type(Ast *a, Ast *b) {
   return a;
 }
 
+Ast *ast_tuple_type_single(Ast *a) {
+  a = ast_list(a);
+  a->tag = AST_TUPLE;
+  return a;
+}
+
 Ast *ast_tuple_type_push(Ast *tuple, Ast *mem) {
   Ast *tup = ast_list_push(tuple, mem);
   tup->tag = AST_TUPLE;

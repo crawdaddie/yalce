@@ -186,9 +186,8 @@ Type *infer_cons(Ast *ast, TypeEnv **env) {
     Type *ret_type = copy_type(cons);
     for (int i = 0; i < len; i++) {
       Type *t = ret_type->data.T_CONS.args[i];
-      if (t->kind == T_COROUTINE_INSTANCE) {
-        ret_type->data.T_CONS.args[i] = type_of_option(
-            fn_return_type(t->data.T_COROUTINE_INSTANCE.yield_interface));
+      if (is_coroutine_instance_type(t)) {
+        ret_type->data.T_CONS.args[i] = get_coroutine_unwrapped_ret_type(t);
       }
     }
     return create_option_type(ret_type);

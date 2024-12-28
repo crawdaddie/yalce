@@ -3,6 +3,7 @@
 
 
 let test_iter_all_void = fn () ->
+
   let co_void = fn () ->
     yield 1.;
     yield 2.;
@@ -34,6 +35,7 @@ let test_iter_all_void = fn () ->
 
 
 let test_iter_all = fn () ->
+
   let co = fn a ->
     yield 1.;
     yield a;

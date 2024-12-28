@@ -146,11 +146,8 @@ extern _binop_map binop_map[];
                                            .dependencies =                     \
                                                (Type *[]){dep1, dep2}}}})
 #define COR_INST(param, ret_opt)                                               \
-  ((Type){                                                                     \
-      .kind = T_COROUTINE_INSTANCE,                                            \
-      .data = {.T_COROUTINE_INSTANCE = {                                       \
-                   .params_type = param,                                       \
-                   .yield_interface = &MAKE_FN_TYPE_2(&t_void, ret_opt)}}})
+  ((Type){.kind = T_COROUTINE_INSTANCE,                                        \
+          .data = {.T_FN = {.from = param, .to = ret_opt}}})
 
 #define TVAR(n)                                                                \
   (Type) { T_VAR, {.T_VAR = n}, }
@@ -199,10 +196,11 @@ typedef struct Type {
       const char *comparison_tc; // use the comparison typeclass name to compare
                                  // the rank of all dependencies
     } T_TYPECLASS_RESOLVE;
-    struct {
-      struct Type *params_type; // internal parameter type
-      struct Type *yield_interface;
-      /* interface for interaction from outside
+
+    // struct {
+    //   struct Type *params_type; // internal parameter type
+    //   struct Type *yield_interface;
+    /* interface for interaction from outside
 ie:
 ```
 let f = fn a -> yield a; yield 2; yield 3;;
@@ -216,8 +214,8 @@ for compilation purposes we want to know what's the internal parameter type of x
 which in this case would be t_int
 this is necessary so that we can properly compile higher-order stream-combining
 functions
-      */
-    } T_COROUTINE_INSTANCE;
+    */
+    // } T_COROUTINE_INSTANCE;
 
     // struct {
     //   struct Type *variant; // pointer to T_CONS with name "Variant"
@@ -339,4 +337,11 @@ Type *get_struct_member_type(const char *member_name, Type *type);
 
 Type *concat_struct_types(Type *a, Type *b);
 
+bool is_struct_of_coroutines(Type *fn_type);
+
+Type *get_coroutine_yield_interface(Type *instance);
+Type *get_coroutine_unwrapped_ret_type(Type *instance);
+Type *get_coroutine_ret_opt_type(Type *instance);
+Type *create_coroutine_instance(Type *params_type, Type *ret);
+Type *get_coroutine_params(Type *instance);
 #endif

@@ -1,5 +1,4 @@
 #include "type_declaration.h"
-#include "serde.h"
 #include <string.h>
 
 Type *compute_type_expression(Ast *expr, TypeEnv *env);
@@ -26,6 +25,7 @@ Type *compute_concrete_type(Type *generic, Type *contained) {
   TypeEnv *env = env_extend(NULL, "t", contained);
   return resolve_generic_type(generic, env);
 }
+Type *option_of(Ast *expr) {}
 
 Type *coroutine_instance_type_parameter(Ast *expr) {
   Ast *components = expr->data.AST_BINOP.right;
@@ -45,8 +45,8 @@ Type *coroutine_instance_type_parameter(Ast *expr) {
 
   Type *inst = empty_type();
   inst->kind = T_COROUTINE_INSTANCE;
-  inst->data.T_COROUTINE_INSTANCE.params_type = params_type;
-  inst->data.T_COROUTINE_INSTANCE.yield_interface = type_fn(&t_void, ret_opt);
+  inst->data.T_FN.from = params_type;
+  inst->data.T_FN.to = ret_opt;
 
   return inst;
 }
@@ -112,17 +112,32 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     return t;
   }
   case AST_TUPLE: {
+
     int arity = expr->data.AST_LIST.len;
     Type **contained_types = talloc(sizeof(Type *) * arity);
+    char **names = talloc(sizeof(char *) * arity);
+    bool has_names = false;
+
     for (int i = 0; i < arity; i++) {
-      contained_types[i] =
-          compute_type_expression(expr->data.AST_LIST.items + i, env);
+      Ast *item = expr->data.AST_LIST.items + i;
+      if (item->tag == AST_LET) {
+        has_names = true;
+        contained_types[i] =
+            compute_type_expression(item->data.AST_LET.expr, env);
+        names[i] = item->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+      } else {
+        contained_types[i] = compute_type_expression(item, env);
+      }
     }
     Type *t = empty_type();
     t->kind = T_CONS;
     t->data.T_CONS.name = TYPE_NAME_TUPLE;
     t->data.T_CONS.args = contained_types;
     t->data.T_CONS.num_args = arity;
+
+    if (has_names) {
+      t->names = names;
+    }
     return t;
   }
   case AST_FN_SIGNATURE: {
@@ -137,6 +152,17 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
           strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
                  "CorInstance") == 0) {
         return coroutine_instance_type_parameter(expr);
+      }
+
+      if (expr->data.AST_BINOP.left->tag == AST_IDENTIFIER &&
+          strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+                 "Option") == 0) {
+        Type *contained =
+            compute_type_expression(expr->data.AST_BINOP.right, env);
+
+        Type *opt = create_option_type(contained);
+
+        return opt;
       }
 
       Type *contained_type =

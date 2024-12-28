@@ -143,14 +143,10 @@ static Type *convert_to_coroutine_generator_fn(Type *f, int fn_len) {
   Type *fn = f;
   if (fn_len == 1) {
     Type *params_type = fn->data.T_FN.from;
-    Type *instance_type = talloc(sizeof(Type));
-    instance_type->kind = T_COROUTINE_INSTANCE;
-    instance_type->data.T_COROUTINE_INSTANCE.params_type = params_type;
-    instance_type->data.T_COROUTINE_INSTANCE.yield_interface =
-        type_fn(&t_void, create_option_type(fn->data.T_FN.to));
-    fn->data.T_FN.to = instance_type;
+    Type *instance_type =
+        create_coroutine_instance(params_type, fn->data.T_FN.to);
 
-    f->is_coroutine_fn = true;
+    fn->data.T_FN.to = instance_type;
     return f;
   }
 
@@ -171,14 +167,11 @@ static Type *convert_to_coroutine_generator_fn(Type *f, int fn_len) {
   params_type->data.T_CONS.args[idx] = param_type;
 
   Type *return_type = fn->data.T_FN.to;
-  Type *instance_type = talloc(sizeof(Type));
-  instance_type->kind = T_COROUTINE_INSTANCE;
-  instance_type->data.T_COROUTINE_INSTANCE.params_type = params_type;
-  instance_type->data.T_COROUTINE_INSTANCE.yield_interface =
-      type_fn(&t_void, create_option_type(return_type));
-  fn->data.T_FN.to = instance_type;
 
-  f->is_coroutine_fn = true;
+  Type *instance_type = create_coroutine_instance_type(
+      params_type, create_option_type(return_type));
+
+  fn->data.T_FN.to = instance_type;
 
   return f;
 }
@@ -333,7 +326,7 @@ Type *extern_fn_type(Ast *sig, TypeEnv **env) {
 
 bool yield_is_new_coroutine(Ast *yield_expr) {
   Type *yield_type = yield_expr->md;
-  return yield_type->kind == T_COROUTINE_INSTANCE;
+  return is_coroutine_instance_type(yield_type);
 }
 
 Type *infer_spread_operator_tuple(Ast *ast, TypeEnv **env) {
@@ -384,12 +377,15 @@ Type *infer_spread_operator_tuple(Ast *ast, TypeEnv **env) {
 Type *infer_concat_coroutines(Type *a, Type *b, TypeEnv **env) {
 
   return create_coroutine_instance_type(
-      concat_struct_types(a->data.T_COROUTINE_INSTANCE.params_type,
-                          b->data.T_COROUTINE_INSTANCE.params_type),
-      concat_struct_types(type_of_option(fn_return_type(
-                              a->data.T_COROUTINE_INSTANCE.yield_interface)),
-                          type_of_option(fn_return_type(
-                              b->data.T_COROUTINE_INSTANCE.yield_interface))));
+      concat_struct_types(a->data.T_FN.from, b->data.T_FN.from),
+
+      concat_struct_types(type_of_option(a->data.T_FN.to),
+                          type_of_option(b->data.T_FN.to)));
+}
+Type *convert_coroutine_struct(Type *t) {
+  printf("convert coroutine struct\n");
+  print_type(t);
+  return t;
 }
 
 Type *infer(Ast *ast, TypeEnv **env) {
@@ -582,6 +578,7 @@ Type *infer(Ast *ast, TypeEnv **env) {
     } else {
 
       Type **cons_args = talloc(sizeof(Type *) * arity);
+      int is_coroutine_struct = false;
 
       for (int i = 0; i < arity; i++) {
 
@@ -589,6 +586,9 @@ Type *infer(Ast *ast, TypeEnv **env) {
         Type *mtype =
             TRY_MSG(infer(member, env), "Error typechecking tuple item");
         cons_args[i] = mtype;
+        if (is_coroutine_instance_type(cons_args[i])) {
+          is_coroutine_struct = true;
+        }
       }
 
       type = talloc(sizeof(Type));
@@ -600,8 +600,13 @@ Type *infer(Ast *ast, TypeEnv **env) {
         for (int i = 0; i < arity; i++) {
           Ast *member = ast->data.AST_LIST.items + i;
           names[i] = member->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+          printf("name %s: ", names[i]);
+          print_type(cons_args[i]);
         }
         type->names = names;
+      }
+      if (is_coroutine_struct) {
+        type = convert_coroutine_struct(type);
       }
       break;
     }
@@ -637,19 +642,16 @@ Type *infer(Ast *ast, TypeEnv **env) {
       type = infer_concat_coroutines(
           infer(ast->data.AST_APPLICATION.args, env),
           infer(ast->data.AST_APPLICATION.args + 1, env), env);
-      print_type(type);
+
       break;
     }
 
+    if (is_coroutine_instance_type(t)) {
+      type = get_coroutine_ret_opt_type(t);
+      break;
+    }
     if (t->kind == T_FN) {
       type = infer_fn_application(ast, env);
-      break;
-    }
-
-    if (t->kind == T_COROUTINE_INSTANCE) {
-      Type *arg = TRY_MSG(infer(ast->data.AST_APPLICATION.args, env), "");
-
-      type = t->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to;
       break;
     }
 
@@ -679,9 +681,9 @@ Type *infer(Ast *ast, TypeEnv **env) {
     // print_type(type);
     // print_type_env(*env);
 
-    if (type->kind == T_COROUTINE_INSTANCE) {
-      type = type_of_option(
-          fn_return_type(type->data.T_COROUTINE_INSTANCE.yield_interface));
+    if (is_coroutine_instance_type(type)) {
+
+      type = type_of_option(type->data.T_FN.to);
     }
 
     if (lambda_ctx.yielded_type != NULL) {
@@ -717,26 +719,18 @@ Type *infer(Ast *ast, TypeEnv **env) {
   }
   case AST_RECORD_ACCESS: {
     Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, env);
-    if (rec_type->kind == T_VAR) {
-      rec_type = env_lookup(*env, rec_type->data.T_VAR);
-    }
-    if (rec_type == NULL) {
-
-      fprintf(stderr, "Error: object not found in env\n");
-      return NULL;
-    }
-
-    if (rec_type->names == NULL) {
-
-      print_type_env(*env);
-      printf("\n");
-      fprintf(stderr, "Error: object has no named members \n");
-      print_type_err(rec_type);
-      fprintf(stderr, "\n");
-    }
-
     const char *name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+
+    if (rec_type->names == NULL) {
+      Type **args = talloc(sizeof(Type *));
+      args[0] = next_tvar();
+
+      *rec_type = *create_cons_type(TYPE_NAME_TUPLE, 1, args);
+      rec_type->names = talloc(sizeof(char *));
+      rec_type->names[0] = name;
+    }
+
     Type *member_type = get_struct_member_type(name, rec_type);
     if (!member_type) {
       fprintf(stderr, "Error name %s not found in obj\n", name);

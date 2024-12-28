@@ -347,11 +347,10 @@ char *type_to_string(Type *t, char *buffer) {
   }
   case T_COROUTINE_INSTANCE: {
     buffer = strcat(buffer, "(params_type: ");
-    buffer = type_to_string(t->data.T_COROUTINE_INSTANCE.params_type, buffer);
+    buffer = type_to_string(t->data.T_FN.from, buffer);
 
     buffer = strcat(buffer, ", yield_interface: ");
-    buffer =
-        type_to_string(t->data.T_COROUTINE_INSTANCE.yield_interface, buffer);
+    buffer = type_to_string(t->data.T_FN.to, buffer);
     buffer = strcat(buffer, ")");
     break;
   }
@@ -485,10 +484,12 @@ bool types_equal(Type *t1, Type *t2) {
     return true;
   }
   case T_COROUTINE_INSTANCE: {
-    return types_equal(t1->data.T_COROUTINE_INSTANCE.yield_interface,
-                       t2->data.T_COROUTINE_INSTANCE.yield_interface) &&
-           types_equal(t1->data.T_COROUTINE_INSTANCE.params_type,
-                       t2->data.T_COROUTINE_INSTANCE.params_type);
+
+    if (types_equal(t1->data.T_FN.from, t2->data.T_FN.from)) {
+      return types_equal(t1->data.T_FN.to, t2->data.T_FN.to);
+    }
+    return types_equal(t1->data.T_FN.to, t2->data.T_FN.to) &&
+           types_equal(t1->data.T_FN.from, t2->data.T_FN.from);
   }
   }
   return false;
@@ -604,10 +605,10 @@ bool is_generic(Type *t) {
     return is_generic(t->data.T_FN.to);
   }
   case T_COROUTINE_INSTANCE: {
-    if (is_generic(t->data.T_COROUTINE_INSTANCE.params_type)) {
+    if (is_generic(t->data.T_FN.from)) {
       return true;
     }
-    return is_generic(t->data.T_COROUTINE_INSTANCE.yield_interface);
+    return is_generic(t->data.T_FN.to);
   }
 
   default:
@@ -934,11 +935,9 @@ Type *copy_type(Type *t) {
     }
   }
   if (copy->kind == T_COROUTINE_INSTANCE) {
-    copy->data.T_COROUTINE_INSTANCE.params_type =
-        copy_type(t->data.T_COROUTINE_INSTANCE.params_type);
+    copy->data.T_FN.from = copy_type(t->data.T_FN.from);
 
-    copy->data.T_COROUTINE_INSTANCE.yield_interface =
-        copy_type(t->data.T_COROUTINE_INSTANCE.yield_interface);
+    copy->data.T_FN.to = copy_type(t->data.T_FN.to);
   }
 
   copy->meta = t->meta;
@@ -1070,11 +1069,9 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement) {
   }
 
   case T_COROUTINE_INSTANCE: {
-    type->data.T_COROUTINE_INSTANCE.params_type = replace_in(
-        type->data.T_COROUTINE_INSTANCE.params_type, tvar, replacement);
+    type->data.T_FN.from = replace_in(type->data.T_FN.from, tvar, replacement);
 
-    type->data.T_COROUTINE_INSTANCE.yield_interface = replace_in(
-        type->data.T_COROUTINE_INSTANCE.yield_interface, tvar, replacement);
+    type->data.T_FN.to = replace_in(type->data.T_FN.to, tvar, replacement);
     return type;
   }
   default:
@@ -1082,9 +1079,6 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement) {
   }
 }
 Type *resolve_generic_type(Type *t, TypeEnv *env) {
-  // printf("###\nRESOLVE\n###\n");
-  // print_type(t);
-  // print_type_env(env);
   while (env) {
     const char *key = env->name;
     Type tvar = {T_VAR, .data = {.T_VAR = key}};
@@ -1100,10 +1094,6 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
 
   while (env) {
     if (is_variant_type(env->type)) {
-      // printf("type: ");
-      // print_type(member);
-      // printf("checking in variant: ");
-      // print_type(env->type);
       Type *variant = env->type;
       for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
         Type *variant_member = variant->data.T_CONS.args[i];
@@ -1250,9 +1240,8 @@ Type *create_array_type(Type *of, int size) {
 Type *create_coroutine_instance_type(Type *param_type, Type *ret_type) {
   Type *inst = empty_type();
   inst->kind = T_COROUTINE_INSTANCE;
-  inst->data.T_COROUTINE_INSTANCE.params_type = param_type;
-  inst->data.T_COROUTINE_INSTANCE.yield_interface =
-      type_fn(&t_void, create_option_type(ret_type));
+  inst->data.T_FN.from = param_type;
+  inst->data.T_FN.to = create_option_type(ret_type);
   return inst;
 }
 bool is_coroutine_instance_type(Type *inst) {
@@ -1268,9 +1257,8 @@ bool is_coroutine_generator_fn(Type *gen) {
 }
 
 Type *coroutine_instance_fn_def_type(Type *inst) {
-  Type *in_param = inst->data.T_COROUTINE_INSTANCE.params_type;
-  Type *out_ret = inst->data.T_COROUTINE_INSTANCE.yield_interface;
-  out_ret = out_ret->data.T_FN.to;
+  Type *in_param = inst->data.T_FN.from;
+  Type *out_ret = inst->data.T_FN.to;
   out_ret = type_of_option(out_ret);
 
   Type *fn = out_ret;
@@ -1279,14 +1267,14 @@ Type *coroutine_instance_fn_def_type(Type *inst) {
       fn = type_fn(in_param->data.T_CONS.args[i], fn);
     }
   } else {
-    fn = type_fn(in_param, fn);
+    fn = inst;
   }
   return fn;
 }
 
 bool is_coroutine_generator(Type *t) {
   Type *ret = fn_return_type(t);
-  return ret->kind == T_COROUTINE_INSTANCE;
+  return is_coroutine_instance_type(ret);
 }
 
 int get_struct_member_idx(const char *member_name, Type *type) {
@@ -1368,4 +1356,38 @@ Type *concat_struct_types(Type *a, Type *b) {
   concat->data.T_CONS.num_args = len;
   concat->names = names;
   return concat;
+}
+
+Type *get_coroutine_yield_interface(Type *instance) {
+  return type_fn(&t_void, instance->data.T_FN.to);
+}
+Type *get_coroutine_params(Type *instance) { return instance->data.T_FN.from; }
+
+Type *create_coroutine_instance(Type *params_type, Type *ret) {
+  Type *instance_type = talloc(sizeof(Type));
+
+  instance_type->kind = T_FN;
+  instance_type->data.T_FN.from = params_type;
+  instance_type->data.T_FN.to = create_option_type(ret);
+  return instance_type;
+}
+
+bool is_struct_of_coroutines(Type *fn_type) {
+  if (is_tuple_type(fn_type)) {
+    int is_coroutine_struct = 0;
+    for (int i = 0; i < fn_type->data.T_CONS.num_args; i++) {
+      Type *contained_type = fn_type->data.T_CONS.args[i];
+      if (is_coroutine_instance_type(contained_type)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+Type *get_coroutine_ret_opt_type(Type *instance) {
+  return instance->data.T_FN.to;
+}
+Type *get_coroutine_unwrapped_ret_type(Type *instance) {
+  return type_of_option(get_coroutine_ret_opt_type(instance));
 }

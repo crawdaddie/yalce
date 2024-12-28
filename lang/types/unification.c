@@ -135,6 +135,22 @@ Type *unify_function(Type *t1, Type *t2, TypeEnv **env) {
   return type_fn(from, to);
 }
 
+/**
+ * Type a is a struct which contains all the fields of b (Possibly more)
+ * */
+bool contains_all_names(Type *a, Type *b) {
+  int len = b->data.T_CONS.num_args;
+  bool check[len];
+
+  for (int i = 0; i < len; i++) {
+    char *field_name = b->names[i];
+    if (get_struct_member_idx(field_name, a) < 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
 
   if (is_pointer_type(t1) && !(types_equal(t1, t2))) {
@@ -246,19 +262,26 @@ Type *unify_cons(Type *t1, Type *t2, TypeEnv **env) {
       }
     }
   }
+  if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args &&
+      t1->names != NULL && contains_all_names(t2, t1)) {
+    printf("t2 contains all expected fields");
+    print_type(t1);
+    print_type(t2);
+    return t2;
+  }
 
   if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
       t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
-    print_type_err(t1);
-    print_type_err(t2);
 
+    // print_type_err(t1);
+    // print_type_err(t2);
     printf("return NULL %s:%d\n", __FILE__, __LINE__);
     return NULL;
   }
 
   if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
 
-    printf("retur NULL %s:%d\n", __FILE__, __LINE__);
+    printf("return NULL %s:%d\n", __FILE__, __LINE__);
     return NULL;
   }
 
@@ -297,11 +320,9 @@ Type *unify_typeclass_resolve(Type *t1, Type *t2, TypeEnv **env) {
 }
 Type *unify_coroutine_instance(Type *t1, Type *t2, TypeEnv **env) {
 
-  Type *unif_params = unify(t1->data.T_COROUTINE_INSTANCE.params_type,
-                            t2->data.T_COROUTINE_INSTANCE.params_type, env);
+  Type *unif_params = unify(t1->data.T_FN.from, t2->data.T_FN.from, env);
 
-  Type *unif_yield = unify(t1->data.T_COROUTINE_INSTANCE.yield_interface,
-                           t2->data.T_COROUTINE_INSTANCE.yield_interface, env);
+  Type *unif_yield = unify(t1->data.T_FN.to, t2->data.T_FN.to, env);
   return create_coroutine_instance_type(unif_params, unif_yield);
 }
 

@@ -163,8 +163,7 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
   Type *instance_type = fn_return_type(expected_type);
   Type *array_type = expected_type->data.T_FN.from;
 
-  Type *ret_opt_type =
-      fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
+  Type *ret_opt_type = fn_return_type(instance_type->data.T_FN.to);
 
   Type *array_el_type = array_type->data.T_CONS.args[0];
   LLVMTypeRef llvm_array_el_type =
@@ -233,15 +232,14 @@ LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
                                               LLVMModuleRef module,
                                               LLVMBuilderRef builder) {
   Type *instance_type = fn_return_type(expected_type);
-  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
+  Type *params_obj_type = get_coroutine_params(instance_type);
   Type *list_el_type = params_obj_type->data.T_CONS.args[0];
   LLVMTypeRef llvm_list_el_type =
       type_to_llvm_type(list_el_type, ctx->env, module);
   LLVMTypeRef llvm_list_type = list_type(list_el_type, ctx->env, module);
   LLVMTypeRef llvm_instance_type = coroutine_instance_type();
 
-  Type *ret_opt_type =
-      fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
+  Type *ret_opt_type = instance_type->data.T_FN.to;
   LLVMTypeRef llvm_ret_opt_type =
       type_to_llvm_type(ret_opt_type, ctx->env, module);
 
@@ -327,7 +325,7 @@ LLVMTypeRef params_obj_type_to_llvm_type(Type *param, JITLangCtx *ctx,
     // return t;
   }
 
-  if (param->kind == T_COROUTINE_INSTANCE) {
+  if (is_coroutine_instance_type(param)) {
     LLVMTypeRef t = type_to_llvm_type(param, ctx->env, module);
     return LLVMPointerType(t, 0);
   }
@@ -400,9 +398,8 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMTypeRef *_llvm_def_type) {
   Type *fn_type = fn_ast->md;
   Type *instance_type = fn_return_type(fn_type);
-  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
-  Type *ret_opt =
-      fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
+  Type *params_obj_type = get_coroutine_params(instance_type);
+  Type *ret_opt = instance_type->data.T_FN.to;
   LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
   LLVMTypeRef llvm_params_obj_type =
       params_obj_type_to_llvm_type(params_obj_type, ctx, module);
@@ -553,7 +550,7 @@ LLVMValueRef codegen_coroutine_instance(LLVMValueRef _inst, Type *instance_type,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
 
-  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
+  Type *params_obj_type = get_coroutine_params(instance_type);
   LLVMTypeRef llvm_params_obj_type =
       type_to_llvm_type(params_obj_type, ctx->env, module);
   LLVMTypeRef llvm_instance_type = coroutine_instance_type();
@@ -683,9 +680,8 @@ LLVMValueRef coroutine_def_from_generic(JITSymbol *sym, Type *expected_fn_type,
                                         LLVMBuilderRef builder) {
   Ast *fn_ast = sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.ast;
   Type *instance_type = fn_return_type(expected_fn_type);
-  Type *params_obj_type = instance_type->data.T_COROUTINE_INSTANCE.params_type;
-  Type *ret_opt =
-      fn_return_type(instance_type->data.T_COROUTINE_INSTANCE.yield_interface);
+  Type *params_obj_type = get_coroutine_params(instance_type);
+  Type *ret_opt = instance_type->data.T_FN.to;
   LLVMTypeRef llvm_params_obj_type =
       type_to_llvm_type(params_obj_type, ctx->env, module);
   LLVMTypeRef llvm_instance_type = coroutine_instance_type();
@@ -749,8 +745,7 @@ LLVMValueRef codegen_loop_coroutine(Ast *ast, JITSymbol *sym, JITLangCtx *ctx,
   Type *instance_type = fn_return_type(def_type);
   Type *params_obj_type = ast->data.AST_APPLICATION.args[1].md;
 
-  Type *ret_opt = instance_type->data.T_COROUTINE_INSTANCE.yield_interface;
-  ret_opt = fn_return_type(ret_opt);
+  Type *ret_opt = instance_type->data.T_FN.to;
   LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
 
   // build wrapper around coroutine def that calls its input instance, and if
@@ -951,9 +946,8 @@ LLVMValueRef call_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
           },
           2, "tuple_element_ptr");
 
-      LLVMTypeRef ret_opt_type = type_to_llvm_type(
-          item_type->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to,
-          ctx->env, module);
+      LLVMTypeRef ret_opt_type =
+          type_to_llvm_type(item_type->data.T_FN.to, ctx->env, module);
 
       LLVMTypeRef llvm_instance_type =
           type_to_llvm_type(item_type, ctx->env, module);
@@ -963,11 +957,10 @@ LLVMValueRef call_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
       LLVMValueRef cor_val = coroutine_next(item_ptr, llvm_instance_type,
                                             def_fn_type, ctx, module, builder);
 
-      Type *expected_item_ret =
-          type_of_option(fn_return_type(item_type->data.T_COROUTINE_INSTANCE.yield_interface));
+      Type *expected_item_ret = type_of_option(item_type->data.T_FN.to);
 
-
-      LLVMTypeRef llvm_item_ret = type_to_llvm_type(expected_item_ret, ctx->env, module);
+      LLVMTypeRef llvm_item_ret =
+          type_to_llvm_type(expected_item_ret, ctx->env, module);
 
       values[i] = variant_extract_value(cor_val, llvm_item_ret, builder);
       LLVMValueRef item_tag = variant_extract_tag(cor_val, builder);
