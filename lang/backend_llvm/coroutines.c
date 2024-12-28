@@ -163,7 +163,7 @@ LLVMValueRef coroutine_array_iter_generator_fn(Type *expected_type,
   Type *instance_type = fn_return_type(expected_type);
   Type *array_type = expected_type->data.T_FN.from;
 
-  Type *ret_opt_type = fn_return_type(instance_type->data.T_FN.to);
+  Type *ret_opt_type = get_coroutine_ret_opt_type(instance_type);
 
   Type *array_el_type = array_type->data.T_CONS.args[0];
   LLVMTypeRef llvm_array_el_type =
@@ -239,7 +239,7 @@ LLVMValueRef coroutine_list_iter_generator_fn(Type *expected_type,
   LLVMTypeRef llvm_list_type = list_type(list_el_type, ctx->env, module);
   LLVMTypeRef llvm_instance_type = coroutine_instance_type();
 
-  Type *ret_opt_type = instance_type->data.T_FN.to;
+  Type *ret_opt_type = get_coroutine_ret_opt_type(instance_type);
   LLVMTypeRef llvm_ret_opt_type =
       type_to_llvm_type(ret_opt_type, ctx->env, module);
 
@@ -399,7 +399,7 @@ LLVMValueRef coroutine_def(Ast *fn_ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = fn_ast->md;
   Type *instance_type = fn_return_type(fn_type);
   Type *params_obj_type = get_coroutine_params(instance_type);
-  Type *ret_opt = instance_type->data.T_FN.to;
+  Type *ret_opt = get_coroutine_ret_opt_type(instance_type);
   LLVMTypeRef llvm_ret_opt_type = type_to_llvm_type(ret_opt, ctx->env, module);
   LLVMTypeRef llvm_params_obj_type =
       params_obj_type_to_llvm_type(params_obj_type, ctx, module);
@@ -565,8 +565,6 @@ LLVMValueRef codegen_coroutine_instance(LLVMValueRef _inst, Type *instance_type,
 
   LLVMValueRef counter_gep = coroutine_instance_counter_gep(instance, builder);
   LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
-
-  // LLVMDumpType(llvm_params_obj_type);
 
   if (LLVMGetTypeKind(llvm_params_obj_type) == LLVMVoidTypeKind) {
     return instance;

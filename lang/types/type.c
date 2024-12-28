@@ -1366,7 +1366,7 @@ Type *get_coroutine_params(Type *instance) { return instance->data.T_FN.from; }
 Type *create_coroutine_instance(Type *params_type, Type *ret) {
   Type *instance_type = talloc(sizeof(Type));
 
-  instance_type->kind = T_FN;
+  instance_type->kind = T_COROUTINE_INSTANCE;
   instance_type->data.T_FN.from = params_type;
   instance_type->data.T_FN.to = create_option_type(ret);
   return instance_type;

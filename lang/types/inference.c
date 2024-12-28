@@ -168,8 +168,8 @@ static Type *convert_to_coroutine_generator_fn(Type *f, int fn_len) {
 
   Type *return_type = fn->data.T_FN.to;
 
-  Type *instance_type = create_coroutine_instance_type(
-      params_type, create_option_type(return_type));
+  Type *instance_type =
+      create_coroutine_instance_type(params_type, return_type);
 
   fn->data.T_FN.to = instance_type;
 

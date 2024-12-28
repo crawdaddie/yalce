@@ -930,11 +930,9 @@ int main() {
     TITLE("coroutine function")
 
     Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
-    Type instance =
-        (Type){T_COROUTINE_INSTANCE,
-               {.T_COROUTINE_INSTANCE = {
-                    .params_type = &TTUPLE(3, &t_int, &t_int, &t_int),
-                    .yield_interface = &MAKE_FN_TYPE_2(&t_void, &opt)}}};
+    Type instance = (Type){
+        T_COROUTINE_INSTANCE,
+        {.T_FN = {.from = &TTUPLE(3, &t_int, &t_int, &t_int), .to = &opt}}};
 
     // tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
 
@@ -955,10 +953,7 @@ int main() {
 
     Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
     Type instance =
-        (Type){T_COROUTINE_INSTANCE,
-               {.T_COROUTINE_INSTANCE = {.params_type = &t_void,
-                                         .yield_interface =
-                                             &MAKE_FN_TYPE_2(&t_void, &opt)}}};
+        (Type){T_COROUTINE_INSTANCE, {.T_FN = {.from = &t_void, .to = &opt}}};
 
     // tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
 
@@ -976,10 +971,7 @@ int main() {
 
     Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
     Type instance =
-        (Type){T_COROUTINE_INSTANCE,
-               {.T_COROUTINE_INSTANCE = {.params_type = &t_int,
-                                         .yield_interface =
-                                             &MAKE_FN_TYPE_2(&t_void, &opt)}}};
+        (Type){T_COROUTINE_INSTANCE, {.T_FN = {.from = &t_int, .to = &opt}}};
 
     // tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
 
@@ -1069,10 +1061,7 @@ int main() {
     Type opt = tcons(TYPE_NAME_VARIANT, 2, &tcons("Some", 1, &t_int), &TNONE);
 
     Type instance =
-        (Type){T_COROUTINE_INSTANCE,
-               {.T_COROUTINE_INSTANCE = {.params_type = &t_void,
-                                         .yield_interface =
-                                             &MAKE_FN_TYPE_2(&t_void, &opt)}}};
+        (Type){T_COROUTINE_INSTANCE, {.T_FN = {.from = &t_void, .to = &opt}}};
 
     TEST_SIMPLE_AST_TYPE("let cor = fn () ->\n"
                          "  yield 1;\n"
