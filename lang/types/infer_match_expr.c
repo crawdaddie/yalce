@@ -71,7 +71,6 @@ TypeEnv *extend_env_with_bindings(Ast *test_expr, Type *bind_val_type,
 Type *infer_match(Ast *ast, TypeEnv **env) {
   Ast *expr = ast->data.AST_MATCH.expr;
 
-  printf("## infer match: \n");
   Type *expr_type = TRY(infer(expr, env));
 
   // printf("match expr type: ");
@@ -93,9 +92,6 @@ Type *infer_match(Ast *ast, TypeEnv **env) {
     Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i) + 1;
 
     Type *test_type = TRY(infer(test_expr, &extended_env));
-
-    printf("## TEST TYPE\n");
-    print_type(test_type);
 
     Type *unified_type = TRY(unify(expr_type, test_type, &extended_env));
 

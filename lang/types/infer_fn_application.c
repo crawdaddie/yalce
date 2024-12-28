@@ -77,6 +77,8 @@ Type *infer_anonymous_lambda_arg(Ast *ast, Type *expected_type, TypeEnv **env) {
 }
 
 Type *infer_fn_application(Ast *ast, TypeEnv **env) {
+  printf("application: ");
+  print_ast(ast);
 
   int len = ast->data.AST_APPLICATION.len;
 
@@ -90,12 +92,10 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   Type *result_fn = fn_type;
 
   Type *app_arg_types[len];
-  // print_ast(ast);
+
   for (int i = 0; i < len; i++) {
 
-    // printf("%d: ", i);
     Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
-    // print_ast(arg_ast);
     Type *arg_type = infer(arg_ast, env);
 
     if (!arg_type) {
@@ -104,16 +104,17 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
       print_location(arg_ast);
       return NULL;
     }
-    // print_type(arg_type);
 
     app_arg_types[i] = arg_type;
 
     if (app_arg_types[i]->kind == T_FN && arg_ast->tag != AST_LAMBDA) {
       app_arg_types[i] = copy_type(app_arg_types[i]);
     }
+    Type *from = is_coroutine_instance_type(result_fn)
+                     ? &t_void
+                     : result_fn->data.T_FN.from;
 
-    Type *unif =
-        unify(result_fn->data.T_FN.from, app_arg_types[i], &replacement_env);
+    Type *unif = unify(from, app_arg_types[i], &replacement_env);
 
     if (!unif && (!is_pointer_type(result_fn->data.T_FN.from))) {
 
@@ -125,8 +126,6 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
     result_fn = result_fn->data.T_FN.to;
   }
 
-  // print_type_env(replacement_env);
-
   result_fn = resolve_generic_type(result_fn, replacement_env);
   fn_type = resolve_generic_type(fn_type, replacement_env);
   ast->data.AST_APPLICATION.function->md = fn_type;
@@ -134,8 +133,6 @@ Type *infer_fn_application(Ast *ast, TypeEnv **env) {
   Type *t = fn_type;
   for (int i = 0; i < len; i++) {
     Type *arg_type = t->data.T_FN.from;
-    // printf("inferred arg type %d: ", i);
-    // print_type(arg_type);
     if (is_generic(ast->data.AST_APPLICATION.args[i].md)) {
       (ast->data.AST_APPLICATION.args + i)->md = arg_type;
     }
