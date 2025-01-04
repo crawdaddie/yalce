@@ -291,22 +291,6 @@ char *type_to_string(Type *t, char *buffer) {
     buffer = tc_list_to_string(t, buffer);
     break;
   }
-  case T_TYPECLASS_RESOLVE: {
-    buffer = strncat(buffer, "^^ ", 3);
-    buffer = strncat(buffer, t->data.T_TYPECLASS_RESOLVE.comparison_tc,
-                     strlen(t->data.T_TYPECLASS_RESOLVE.comparison_tc));
-    buffer = strncat(buffer, " of (", 5);
-    buffer =
-        type_to_string(t->data.T_TYPECLASS_RESOLVE.dependencies[0], buffer);
-    buffer = strncat(buffer, " ", 1);
-
-    buffer =
-        type_to_string(t->data.T_TYPECLASS_RESOLVE.dependencies[1], buffer);
-    buffer = strncat(buffer, " ", 1);
-
-    buffer = strncat(buffer, ")", 1);
-    break;
-  }
   case T_VAR: {
     uint64_t vname = (uint64_t)t->data.T_VAR;
     if (vname < 65) {
@@ -450,22 +434,6 @@ bool types_equal(Type *t1, Type *t2) {
     }
     return false;
   }
-  case T_TYPECLASS_RESOLVE: {
-    if (strcmp(t1->data.T_TYPECLASS_RESOLVE.comparison_tc,
-               t2->data.T_TYPECLASS_RESOLVE.comparison_tc) != 0) {
-      return false;
-    }
-    if (!(types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[0],
-                      t2->data.T_TYPECLASS_RESOLVE.dependencies[0]))) {
-      return false;
-    }
-
-    if (!(types_equal(t1->data.T_TYPECLASS_RESOLVE.dependencies[1],
-                      t2->data.T_TYPECLASS_RESOLVE.dependencies[1]))) {
-      return false;
-    }
-    return true;
-  }
   case T_COROUTINE_INSTANCE: {
 
     if (types_equal(t1->data.T_FN.from, t2->data.T_FN.from)) {
@@ -546,11 +514,6 @@ bool is_generic(Type *t) {
   switch (t->kind) {
   case T_VAR: {
     return true;
-  }
-
-  case T_TYPECLASS_RESOLVE: {
-    return is_generic(t->data.T_TYPECLASS_RESOLVE.dependencies[0]) ||
-           is_generic(t->data.T_TYPECLASS_RESOLVE.dependencies[1]);
   }
 
   case T_CONS: {
@@ -975,6 +938,7 @@ bool is_variant_type(Type *type) {
          (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0);
 }
 
+/*
 Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
                                     Type *dep2) {
   Type *tcr = empty_type();
@@ -985,6 +949,7 @@ Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
   tcr->data.T_TYPECLASS_RESOLVE.dependencies[1] = dep2;
   return tcr;
 }
+
 
 Type *resolve_tc_rank(Type *type) {
   if (type->kind != T_TYPECLASS_RESOLVE) {
@@ -1005,28 +970,11 @@ Type *resolve_tc_rank(Type *type) {
   }
   return dep2;
 }
+*/
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement) {
 
   switch (type->kind) {
-  case T_TYPECLASS_RESOLVE: {
-
-    type->data.T_TYPECLASS_RESOLVE.dependencies[0] = replace_in(
-        type->data.T_TYPECLASS_RESOLVE.dependencies[0], tvar, replacement);
-
-    type->data.T_TYPECLASS_RESOLVE.dependencies[1] = replace_in(
-        type->data.T_TYPECLASS_RESOLVE.dependencies[1], tvar, replacement);
-    if (types_equal(type->data.T_TYPECLASS_RESOLVE.dependencies[0],
-                    type->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
-      return type->data.T_TYPECLASS_RESOLVE.dependencies[0];
-    }
-
-    if (!is_generic(type)) {
-      return resolve_tc_rank(type);
-    }
-
-    return type;
-  }
 
   case T_CONS: {
 

@@ -79,5 +79,22 @@ int main() {
   T("1 >= 2.0", &t_bool);
   T("1 <= 2.0", &t_bool);
 
+  T("[1,2,3]", &(TLIST(&t_int)));
+  TFAIL("[1,2.0,3]");
+
+  T("[|1,2,3|]", &TARRAY(&t_int));
+  TFAIL("[|1,2.0,3|]");
+  T("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
+
+  T("let x = 1", &t_int);
+  T("let x = 1 + 2.0", &t_num);
+  T("let x = 1 in x + 1.0", &t_num);
+  T("let x = 1 in let y = x + 1.0", &t_num);
+  T("let x, y = (1, 2) in x", &t_int);
+  T("let x::_ = [1,2,3] in x", &t_int);
+
+  T("let z = [1,2] in let x::_ = z in x", &t_int);
+  TFAIL("let z = 1 in let x::_ = z in x");
+
   return status == true ? 0 : 1;
 }

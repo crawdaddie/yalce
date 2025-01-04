@@ -164,6 +164,14 @@ extern _binop_map binop_map[];
         .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ},            \
   }
 
+#define TLIST(_t)                                                              \
+  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){_t}, 1}}})
+#define TARRAY(_t)                                                             \
+  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){_t}, 1}}})
+
+#define TTUPLE(num, ...)                                                       \
+  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
+
 typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
 
 // #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \

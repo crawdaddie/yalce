@@ -1,5 +1,6 @@
 #include "inference.h"
 #include "ht.h"
+#include "serde.h"
 #include "types/type.h"
 #include "types/type_declaration.h"
 #include <stdlib.h>
@@ -74,10 +75,6 @@ Type *next_tvar() {
   *tvar = (Type){T_VAR, {.T_VAR = tname}};
   type_var_counter++;
   return tvar;
-}
-
-TICtx push_ctx(TICtx *ctx) {
-  return (TICtx){.env = ctx->env, .scope = ctx->scope + 1};
 }
 
 TICtx pop_ctx(TICtx ctx) {}
@@ -265,6 +262,40 @@ Type *handle_binding_to_type(Ast *binding, Type *expr_type, TICtx *ctx) {
   }
   }
   return expr_type;
+}
+
+TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type) {
+  switch (binding->tag) {
+  case AST_IDENTIFIER: {
+    const char *name = binding->data.AST_IDENTIFIER.value;
+    if (strcmp(name, "_") == 0) {
+      break;
+    }
+    env = env_extend(env, name, expr_type);
+    break;
+  }
+
+  case AST_TUPLE: {
+    for (int i = 0; i < binding->data.AST_LIST.len; i++) {
+      Ast *b = binding->data.AST_LIST.items + i;
+      env = bind_in_env(env, b, expr_type->data.T_CONS.args[i]);
+    }
+    break;
+  }
+  case AST_APPLICATION: {
+    if (strcmp(
+            binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+            "::") == 0) {
+      Ast *b = binding->data.AST_APPLICATION.args;
+      env = bind_in_env(env, b, expr_type->data.T_CONS.args[0]);
+      Ast *r = binding->data.AST_APPLICATION.args + 1;
+      env = bind_in_env(env, r, expr_type);
+      break;
+    }
+    break;
+  }
+  }
+  return env;
 }
 
 bool is_recursive_ref_id(const char *name, TICtx *ctx) {
@@ -692,6 +723,151 @@ Type *apply_substitution(Substitution *subst, Type *t) {
 
   return t;
 }
+// Collect free type variables in a type
+void collect_type_vars(Type *t, const char **vars, int *count) {
+  if (!t)
+    return;
+
+  if (t->kind == T_VAR) {
+    // Check if we already have this variable
+    for (int i = 0; i < *count; i++) {
+      if (strcmp(vars[i], t->data.T_VAR) == 0) {
+        return;
+      }
+    }
+    // Add new variable
+    vars[*count] = t->data.T_VAR;
+    (*count)++;
+    return;
+  }
+
+  if (t->kind == T_FN) {
+    collect_type_vars(t->data.T_FN.from, vars, count);
+    collect_type_vars(t->data.T_FN.to, vars, count);
+    return;
+  }
+
+  if (t->kind == T_CONS) {
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      collect_type_vars(t->data.T_CONS.args[i], vars, count);
+    }
+  }
+}
+
+// Collect type variables free in the environment
+void collect_env_vars(TypeEnv *env, char **vars, int *count) {
+  while (env) {
+    collect_type_vars(env->type, vars, count);
+    env = env->next;
+  }
+}
+
+Type *generalize_type(TypeEnv *env, Type *t) {
+  // Collect variables from type
+  char *type_vars[100]; // Arbitrary limit
+  int type_var_count = 0;
+  collect_type_vars(t, type_vars, &type_var_count);
+
+  // Collect variables from environment
+  char *env_vars[100];
+  int env_var_count = 0;
+  collect_env_vars(env, env_vars, &env_var_count);
+
+  // Find variables to quantify (in type but not in env)
+  char *quantified_vars[100];
+  int quantified_count = 0;
+
+  for (int i = 0; i < type_var_count; i++) {
+    bool in_env = false;
+    for (int j = 0; j < env_var_count; j++) {
+      if (strcmp(type_vars[i], env_vars[j]) == 0) {
+        in_env = true;
+        break;
+      }
+    }
+    if (!in_env) {
+      quantified_vars[quantified_count++] = type_vars[i];
+    }
+  }
+
+  // If no variables to quantify, return type as is
+  if (quantified_count == 0) {
+    return t;
+  }
+
+  // Create forall type constructor
+  Type *forall = talloc(sizeof(Type));
+  forall->kind = T_CONS;
+  forall->data.T_CONS.name = "forall";
+  forall->data.T_CONS.num_args = quantified_count + 1;
+  forall->data.T_CONS.args = talloc(sizeof(Type *) * (quantified_count + 1));
+  // forall->data.T_CONS.names = talloc(sizeof(char *) * quantified_count);
+
+  // Add quantified variables
+  for (int i = 0; i < quantified_count; i++) {
+    Type *var = talloc(sizeof(Type));
+    var->kind = T_VAR;
+    var->data.T_VAR = quantified_vars[i];
+    forall->data.T_CONS.args[i] = var;
+    // forall->data.T_CONS.names[i] = quantified_vars[i];
+  }
+
+  // Add the type body
+  forall->data.T_CONS.args[quantified_count] = t;
+
+  return forall;
+}
+bool is_list_cons_pattern(Ast *pattern) {
+  Ast *fn = pattern->data.AST_APPLICATION.function;
+  if (fn->tag != AST_IDENTIFIER) {
+    return false;
+  }
+  return strcmp(fn->data.AST_IDENTIFIER.value, "::") == 0;
+}
+
+Type *infer_pattern(Ast *pattern, TICtx *ctx) {
+  switch (pattern->tag) {
+  case AST_IDENTIFIER:
+    // Simple variable binding - just create fresh type var
+    return next_tvar();
+
+  case AST_TUPLE: {
+    // Tuple pattern (x, y)
+    int len = pattern->data.AST_LIST.len;
+    Type **member_types = talloc(sizeof(Type *) * len);
+
+    for (int i = 0; i < len; i++) {
+      member_types[i] = infer_pattern(&pattern->data.AST_LIST.items[i], ctx);
+      if (!member_types[i])
+        return NULL;
+    }
+
+    Type *tuple_type = create_tuple_type(len, member_types);
+
+    return tuple_type;
+  }
+
+  case AST_APPLICATION: {
+    // Handle cons pattern (x::xs)
+    if (is_list_cons_pattern(pattern)) {
+      Type *elem_type = infer_pattern(pattern->data.AST_APPLICATION.args, ctx);
+      if (!elem_type)
+        return NULL;
+
+      // Create list type containing elem_type
+      Type **mems = talloc(sizeof(Type));
+      mems[0] = elem_type;
+      Type *list_type = create_cons_type(TYPE_NAME_LIST, 1, mems);
+      return list_type;
+    }
+    // Other application patterns...
+    break;
+  }
+  }
+
+  fprintf(stderr, "Unsupported pattern in let binding\n");
+  return NULL;
+}
 
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
@@ -748,6 +924,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_IDENTIFIER: {
+
     type = find_in_ctx(ast->data.AST_IDENTIFIER.value, ctx);
 
     if (type == NULL) {
@@ -756,7 +933,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     if (type == NULL) {
       type = next_tvar();
-      // printf("%d`%c`, ", type_var_counter, *(type->data.T_VAR) + 48);
     }
 
     break;
@@ -811,55 +987,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
-  // case AST_LET: {
-  //   Ast *def = ast->data.AST_LET.expr;
-  //   Ast *binding = ast->data.AST_LET.binding;
-  //   Ast *body = ast->data.AST_LET.in_expr;
-  //
-  //   Type *def_type = infer(def, ctx);
-  //   if (!def_type) {
-  //     return NULL;
-  //   }
-  //
-  //   Type *gen_type;
-  //   if (ctx->constraints) {
-  //     // Solve constraints collected so far
-  //     Substitution *subst = solve_constraints(ctx->constraints);
-  //     if (!subst) {
-  //       return NULL;
-  //     }
-  //
-  //     // Apply substitution to definition type
-  //     Type *solved_type = apply_substitution(subst, def_type);
-  //
-  //     gen_type = generalize(ctx->env, solved_type);
-  //   } else {
-  //     gen_type = def_type;
-  //   }
-  //
-  //   if (body != NULL) {
-  //     // Add generalized type to environment
-  //     TypeEnv *new_env =
-  //         env_extend(ctx->env, binding->data.AST_IDENTIFIER.value,
-  //         gen_type);
-  //
-  //     // Create new context with extended environment
-  //     TICtx new_ctx = *ctx;
-  //     new_ctx.env = new_env;
-  //     new_ctx.constraints = NULL; // Clear constraints
-  //     new_ctx.scope++;
-  //
-  //     type = infer(body, &new_ctx);
-  //   } else {
-  //     ctx->env =
-  //         env_extend(ctx->env, binding->data.AST_IDENTIFIER.value,
-  //         gen_type);
-  //
-  //     type = gen_type;
-  //   }
-  //
-  //   break;
-  // }
   case AST_LAMBDA: {
     break;
   }
@@ -890,11 +1017,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     fn_type = deep_copy_type(fn_type);
 
     Type *current_type = fn_type;
-    TICtx ctx = {.env = ctx.env};
 
     // Process each argument
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-      Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, &ctx);
+      Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
 
       if (!arg_type) {
         fprintf(stderr, "Could not infer argument type in application\n");
@@ -910,7 +1036,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       // Unification will handle propagating the typeclass constraints
       // because the function's parameter type (current_type->data.T_FN.from)
       // already has the typeclass constraint
-      if (!unify(arg_type, current_type->data.T_FN.from, &ctx.constraints)) {
+      if (!unify(arg_type, current_type->data.T_FN.from, &(ctx->constraints))) {
         fprintf(stderr, "Type mismatch in function application\n");
         return NULL;
       }
@@ -919,7 +1045,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       current_type = current_type->data.T_FN.to;
     }
     // After processing all arguments, solve collected constraints
-    Substitution *subst = solve_constraints(ctx.constraints);
+    Substitution *subst = solve_constraints(ctx->constraints);
 
     if (!subst) {
       fprintf(stderr, "Could not solve type constraints\n");
@@ -928,6 +1054,63 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     // Apply substitutions to get final type
     type = apply_substitution(subst, current_type);
+    Type *spec_fn = apply_substitution(subst, fn_type);
+    ast->data.AST_APPLICATION.function->md = spec_fn;
+
+    break;
+  }
+
+  case AST_LET: {
+    // First infer definition type
+    Type *def_type = infer(ast->data.AST_LET.expr, ctx);
+    if (!def_type) {
+      fprintf(stderr, "Could not infer definition type in let\n");
+      return NULL;
+    }
+
+    // Create binding pattern type and add constraints
+    Type *binding_type = infer_pattern(ast->data.AST_LET.binding, ctx);
+    if (!binding_type) {
+      fprintf(stderr, "Could not infer binding pattern type\n");
+      return NULL;
+    }
+
+    // Unify definition type with binding pattern type
+
+    TypeConstraint *constraints = ctx->constraints;
+    if (!unify(def_type, binding_type, &constraints)) {
+      fprintf(stderr, "Definition type doesn't match binding pattern\n");
+      return NULL;
+    }
+    ctx->constraints = constraints;
+
+    // Solve all constraints
+    if (ctx->constraints) {
+      Substitution *subst = solve_constraints(ctx->constraints);
+      if (!subst) {
+        fprintf(stderr, "Could not solve constraints for let definition\n");
+        return NULL;
+      }
+      def_type = apply_substitution(subst, def_type);
+    }
+
+    // Generalize the type
+    Type *gen_type = generalize_type(ctx->env, def_type);
+
+    // Infer the body type if there is one
+    if (ast->data.AST_LET.in_expr) {
+      TICtx body_ctx = *ctx;
+      body_ctx.constraints = NULL;
+      body_ctx.scope++;
+      body_ctx.env =
+          bind_in_env(body_ctx.env, ast->data.AST_LET.binding, gen_type);
+
+      type = infer(ast->data.AST_LET.in_expr, &body_ctx);
+    } else {
+      ctx->env = bind_in_env(ctx->env, ast->data.AST_LET.binding, gen_type);
+      type = gen_type;
+    }
+
     break;
   }
   }

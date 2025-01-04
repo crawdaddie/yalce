@@ -177,6 +177,7 @@ let_binding:
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' EXTERN FN fn_signature  
                                     { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
+  | LET expr_list '=' expr          {$$ = ast_let(ast_tuple($2), $4, NULL);}
 
 
   | LET IDENTIFIER '=' '(' extern_variants ')'  
