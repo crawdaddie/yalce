@@ -80,7 +80,8 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
 LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env);
 
 // Function to create an LLVM list type forward decl
-LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env, LLVMModuleRef module);
+LLVMTypeRef create_list_type(Type *list_el_type, TypeEnv *env,
+                             LLVMModuleRef module);
 
 LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
@@ -138,7 +139,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
       //   return LLVMPointerType(LLVMInt8Type(), 0);
       // }
 
-      return list_type(type->data.T_CONS.args[0], env, module);
+      return create_list_type(type->data.T_CONS.args[0], env, module);
     }
 
     if (is_array_type(type)) {
@@ -191,18 +192,20 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
     return fn_prototype(type, fn_len, env);
   }
+
   case T_COROUTINE_INSTANCE: {
-    Type *params_type = type->data.T_COROUTINE_INSTANCE.params_type;
-    Type *return_opt =
-        type->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to;
-
-    LLVMTypeRef fn_type = LLVMPointerType(LLVMInt8Type(), 0);
-
-    LLVMTypeRef params_obj_type = type_to_llvm_type(
-        type->data.T_COROUTINE_INSTANCE.params_type, env, module);
-
-    LLVMTypeRef instance_type = coroutine_instance_type();
-    return instance_type;
+    // Type *params_type = type->data.T_COROUTINE_INSTANCE.params_type;
+    // Type *return_opt =
+    //     type->data.T_COROUTINE_INSTANCE.yield_interface->data.T_FN.to;
+    //
+    // LLVMTypeRef fn_type = LLVMPointerType(LLVMInt8Type(), 0);
+    //
+    // LLVMTypeRef params_obj_type = type_to_llvm_type(
+    //     type->data.T_COROUTINE_INSTANCE.params_type, env, module);
+    //
+    // LLVMTypeRef instance_type = coroutine_instance_type();
+    // return instance_type;
+    return NULL;
   }
   default: {
     return LLVMVoidType();
@@ -641,88 +644,88 @@ static LLVMValueRef codegen_mod_num(LLVMValueRef l, LLVMValueRef r,
 #define ARITHMETIC_TC(t) t.implements[2]
 
 void initialize_builtin_numeric_types(TypeEnv *env) {
-  EQ_TC(t_int)->methods[0].method = &codegen_eq_int;
-  EQ_TC(t_int)->methods[0].size = sizeof(EqMethod);
-  EQ_TC(t_int)->methods[1].method = &codegen_neq_int;
-  EQ_TC(t_int)->methods[1].size = sizeof(EqMethod);
-
-  EQ_TC(t_bool)->methods[0].method = &codegen_eq_int;
-  EQ_TC(t_bool)->methods[0].size = sizeof(EqMethod);
-  EQ_TC(t_bool)->methods[1].method = &codegen_neq_int;
-  EQ_TC(t_bool)->methods[1].size = sizeof(EqMethod);
-
-  ORD_TC(t_int)->methods[0].method = &codegen_lt_int;
-  ORD_TC(t_int)->methods[0].size = sizeof(OrdMethod);
-  ORD_TC(t_int)->methods[1].method = &codegen_gt_int;
-  ORD_TC(t_int)->methods[1].size = sizeof(OrdMethod);
-  ORD_TC(t_int)->methods[2].method = &codegen_lte_int;
-  ORD_TC(t_int)->methods[2].size = sizeof(OrdMethod);
-  ORD_TC(t_int)->methods[3].method = &codegen_gte_int;
-  ORD_TC(t_int)->methods[3].size = sizeof(OrdMethod);
-
-  ARITHMETIC_TC(t_int)->methods[0].method = &codegen_add_int;
-  ARITHMETIC_TC(t_int)->methods[0].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_int)->methods[1].method = &codegen_sub_int;
-  ARITHMETIC_TC(t_int)->methods[1].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_int)->methods[2].method = &codegen_mul_int;
-  ARITHMETIC_TC(t_int)->methods[2].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_int)->methods[3].method = &codegen_div_int;
-  ARITHMETIC_TC(t_int)->methods[3].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_int)->methods[4].method = &codegen_mod_int;
-  ARITHMETIC_TC(t_int)->methods[4].size = sizeof(ArithmeticMethod);
-
-  EQ_TC(t_uint64)->methods[0].method = &codegen_eq_uint64;
-  EQ_TC(t_uint64)->methods[0].size = sizeof(EqMethod);
-  EQ_TC(t_uint64)->methods[1].method = &codegen_neq_uint64;
-  EQ_TC(t_uint64)->methods[1].size = sizeof(EqMethod);
-
-  ORD_TC(t_uint64)->methods[0].method = &codegen_lt_uint64;
-  ORD_TC(t_uint64)->methods[0].size = sizeof(OrdMethod);
-  ORD_TC(t_uint64)->methods[1].method = &codegen_gt_uint64;
-  ORD_TC(t_uint64)->methods[1].size = sizeof(OrdMethod);
-  ORD_TC(t_uint64)->methods[2].method = &codegen_lte_uint64;
-  ORD_TC(t_uint64)->methods[2].size = sizeof(OrdMethod);
-  ORD_TC(t_uint64)->methods[3].method = &codegen_gte_uint64;
-  ORD_TC(t_uint64)->methods[3].size = sizeof(OrdMethod);
-
-  ARITHMETIC_TC(t_uint64)->methods[0].method = &codegen_add_uint64;
-  ARITHMETIC_TC(t_uint64)->methods[0].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_uint64)->methods[1].method = &codegen_sub_uint64;
-  ARITHMETIC_TC(t_uint64)->methods[1].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_uint64)->methods[2].method = &codegen_mul_uint64;
-  ARITHMETIC_TC(t_uint64)->methods[2].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_uint64)->methods[3].method = &codegen_div_uint64;
-  ARITHMETIC_TC(t_uint64)->methods[3].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_uint64)->methods[4].method = &codegen_mod_uint64;
-  ARITHMETIC_TC(t_uint64)->methods[4].size = sizeof(ArithmeticMethod);
+  // EQ_TC(t_int)->methods[0].method = &codegen_eq_int;
+  // EQ_TC(t_int)->methods[0].size = sizeof(EqMethod);
+  // EQ_TC(t_int)->methods[1].method = &codegen_neq_int;
+  // EQ_TC(t_int)->methods[1].size = sizeof(EqMethod);
+  //
+  // EQ_TC(t_bool)->methods[0].method = &codegen_eq_int;
+  // EQ_TC(t_bool)->methods[0].size = sizeof(EqMethod);
+  // EQ_TC(t_bool)->methods[1].method = &codegen_neq_int;
+  // EQ_TC(t_bool)->methods[1].size = sizeof(EqMethod);
+  //
+  // ORD_TC(t_int)->methods[0].method = &codegen_lt_int;
+  // ORD_TC(t_int)->methods[0].size = sizeof(OrdMethod);
+  // ORD_TC(t_int)->methods[1].method = &codegen_gt_int;
+  // ORD_TC(t_int)->methods[1].size = sizeof(OrdMethod);
+  // ORD_TC(t_int)->methods[2].method = &codegen_lte_int;
+  // ORD_TC(t_int)->methods[2].size = sizeof(OrdMethod);
+  // ORD_TC(t_int)->methods[3].method = &codegen_gte_int;
+  // ORD_TC(t_int)->methods[3].size = sizeof(OrdMethod);
+  //
+  // ARITHMETIC_TC(t_int)->methods[0].method = &codegen_add_int;
+  // ARITHMETIC_TC(t_int)->methods[0].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_int)->methods[1].method = &codegen_sub_int;
+  // ARITHMETIC_TC(t_int)->methods[1].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_int)->methods[2].method = &codegen_mul_int;
+  // ARITHMETIC_TC(t_int)->methods[2].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_int)->methods[3].method = &codegen_div_int;
+  // ARITHMETIC_TC(t_int)->methods[3].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_int)->methods[4].method = &codegen_mod_int;
+  // ARITHMETIC_TC(t_int)->methods[4].size = sizeof(ArithmeticMethod);
+  //
+  // EQ_TC(t_uint64)->methods[0].method = &codegen_eq_uint64;
+  // EQ_TC(t_uint64)->methods[0].size = sizeof(EqMethod);
+  // EQ_TC(t_uint64)->methods[1].method = &codegen_neq_uint64;
+  // EQ_TC(t_uint64)->methods[1].size = sizeof(EqMethod);
+  //
+  // ORD_TC(t_uint64)->methods[0].method = &codegen_lt_uint64;
+  // ORD_TC(t_uint64)->methods[0].size = sizeof(OrdMethod);
+  // ORD_TC(t_uint64)->methods[1].method = &codegen_gt_uint64;
+  // ORD_TC(t_uint64)->methods[1].size = sizeof(OrdMethod);
+  // ORD_TC(t_uint64)->methods[2].method = &codegen_lte_uint64;
+  // ORD_TC(t_uint64)->methods[2].size = sizeof(OrdMethod);
+  // ORD_TC(t_uint64)->methods[3].method = &codegen_gte_uint64;
+  // ORD_TC(t_uint64)->methods[3].size = sizeof(OrdMethod);
+  //
+  // ARITHMETIC_TC(t_uint64)->methods[0].method = &codegen_add_uint64;
+  // ARITHMETIC_TC(t_uint64)->methods[0].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_uint64)->methods[1].method = &codegen_sub_uint64;
+  // ARITHMETIC_TC(t_uint64)->methods[1].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_uint64)->methods[2].method = &codegen_mul_uint64;
+  // ARITHMETIC_TC(t_uint64)->methods[2].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_uint64)->methods[3].method = &codegen_div_uint64;
+  // ARITHMETIC_TC(t_uint64)->methods[3].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_uint64)->methods[4].method = &codegen_mod_uint64;
+  // ARITHMETIC_TC(t_uint64)->methods[4].size = sizeof(ArithmeticMethod);
 
   t_uint64.constructor = uint64_constructor;
   t_uint64.constructor_size = sizeof(ConsMethod);
 
-  EQ_TC(t_num)->methods[0].method = &codegen_eq_num;
-  EQ_TC(t_num)->methods[0].size = sizeof(EqMethod);
-  EQ_TC(t_num)->methods[1].method = &codegen_neq_num;
-  EQ_TC(t_num)->methods[1].size = sizeof(EqMethod);
+  // EQ_TC(t_num)->methods[0].method = &codegen_eq_num;
+  // EQ_TC(t_num)->methods[0].size = sizeof(EqMethod);
+  // EQ_TC(t_num)->methods[1].method = &codegen_neq_num;
+  // EQ_TC(t_num)->methods[1].size = sizeof(EqMethod);
 
-  ORD_TC(t_num)->methods[0].method = &codegen_lt_num;
-  ORD_TC(t_num)->methods[0].size = sizeof(OrdMethod);
-  ORD_TC(t_num)->methods[1].method = &codegen_gt_num;
-  ORD_TC(t_num)->methods[1].size = sizeof(OrdMethod);
-  ORD_TC(t_num)->methods[2].method = &codegen_lte_num;
-  ORD_TC(t_num)->methods[2].size = sizeof(OrdMethod);
-  ORD_TC(t_num)->methods[3].method = &codegen_gte_num;
-  ORD_TC(t_num)->methods[3].size = sizeof(OrdMethod);
+  // ORD_TC(t_num)->methods[0].method = &codegen_lt_num;
+  // ORD_TC(t_num)->methods[0].size = sizeof(OrdMethod);
+  // ORD_TC(t_num)->methods[1].method = &codegen_gt_num;
+  // ORD_TC(t_num)->methods[1].size = sizeof(OrdMethod);
+  // ORD_TC(t_num)->methods[2].method = &codegen_lte_num;
+  // ORD_TC(t_num)->methods[2].size = sizeof(OrdMethod);
+  // ORD_TC(t_num)->methods[3].method = &codegen_gte_num;
+  // ORD_TC(t_num)->methods[3].size = sizeof(OrdMethod);
 
-  ARITHMETIC_TC(t_num)->methods[0].method = &codegen_add_num;
-  ARITHMETIC_TC(t_num)->methods[0].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_num)->methods[1].method = &codegen_sub_num;
-  ARITHMETIC_TC(t_num)->methods[1].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_num)->methods[2].method = &codegen_mul_num;
-  ARITHMETIC_TC(t_num)->methods[2].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_num)->methods[3].method = &codegen_div_num;
-  ARITHMETIC_TC(t_num)->methods[3].size = sizeof(ArithmeticMethod);
-  ARITHMETIC_TC(t_num)->methods[4].method = &codegen_mod_num;
-  ARITHMETIC_TC(t_num)->methods[4].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_num)->methods[0].method = &codegen_add_num;
+  // ARITHMETIC_TC(t_num)->methods[0].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_num)->methods[1].method = &codegen_sub_num;
+  // ARITHMETIC_TC(t_num)->methods[1].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_num)->methods[2].method = &codegen_mul_num;
+  // ARITHMETIC_TC(t_num)->methods[2].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_num)->methods[3].method = &codegen_div_num;
+  // ARITHMETIC_TC(t_num)->methods[3].size = sizeof(ArithmeticMethod);
+  // ARITHMETIC_TC(t_num)->methods[4].method = &codegen_mod_num;
+  // ARITHMETIC_TC(t_num)->methods[4].size = sizeof(ArithmeticMethod);
 
   t_num.constructor = double_constructor;
   t_num.constructor_size = sizeof(ConsMethod);
@@ -760,46 +763,49 @@ static _tc_key tc_keys[] = {
 #define _BINOP_METHOD_CHECKS
 
 Method *get_binop_method(const char *binop, Type *l, Type *r) {
+  printf("get binop method for %s\n", binop);
+  print_type(l);
+  print_type(r);
 
-  if (l == NULL) {
-    for (int i = 0; i < 11; i++) {
-      _tc_key tc_key = tc_keys[i];
-      return r->implements[tc_key.tc_idx]->methods + tc_key.meth_idx;
-    }
-  }
-
-  if (r == NULL) {
-    for (int i = 0; i < 11; i++) {
-      _tc_key tc_key = tc_keys[i];
-      return l->implements[tc_key.tc_idx]->methods + tc_key.meth_idx;
-    }
-  }
-
-  for (int i = 0; i < 11; i++) {
-    _tc_key tc_key = tc_keys[i];
-    if (strcmp(binop, tc_key.binop) == 0) {
-
-#ifdef _BINOP_METHOD_CHECKS
-      if (tc_key.tc_idx >= l->num_implements ||
-          tc_key.tc_idx >= r->num_implements) {
-        return NULL;
-      }
-
-      if (tc_key.meth_idx >= l->implements[tc_key.tc_idx]->num_methods ||
-          tc_key.meth_idx >= r->implements[tc_key.tc_idx]->num_methods) {
-        return NULL;
-      }
-#endif
-
-      TypeClass *tcl = l->implements[tc_key.tc_idx];
-      TypeClass *tcr = r->implements[tc_key.tc_idx];
-
-      if (tcl->rank >= tcr->rank) {
-        return tcl->methods + tc_key.meth_idx;
-      }
-      return tcr->methods + tc_key.meth_idx;
-    }
-  }
+  //   if (l == NULL) {
+  //     for (int i = 0; i < 11; i++) {
+  //       _tc_key tc_key = tc_keys[i];
+  //       return r->implements[tc_key.tc_idx]->methods + tc_key.meth_idx;
+  //     }
+  //   }
+  //
+  //   if (r == NULL) {
+  //     for (int i = 0; i < 11; i++) {
+  //       _tc_key tc_key = tc_keys[i];
+  //       return l->implements[tc_key.tc_idx]->methods + tc_key.meth_idx;
+  //     }
+  //   }
+  //
+  //   for (int i = 0; i < 11; i++) {
+  //     _tc_key tc_key = tc_keys[i];
+  //     if (strcmp(binop, tc_key.binop) == 0) {
+  //
+  // #ifdef _BINOP_METHOD_CHECKS
+  //       if (tc_key.tc_idx >= l->num_implements ||
+  //           tc_key.tc_idx >= r->num_implements) {
+  //         return NULL;
+  //       }
+  //
+  //       if (tc_key.meth_idx >= l->implements[tc_key.tc_idx]->num_methods ||
+  //           tc_key.meth_idx >= r->implements[tc_key.tc_idx]->num_methods) {
+  //         return NULL;
+  //       }
+  // #endif
+  //
+  //       TypeClass *tcl = l->implements[tc_key.tc_idx];
+  //       TypeClass *tcr = r->implements[tc_key.tc_idx];
+  //
+  //       if (tcl->rank >= tcr->rank) {
+  //         return tcl->methods + tc_key.meth_idx;
+  //       }
+  //       return tcr->methods + tc_key.meth_idx;
+  //     }
+  //   }
   // TODO: handle list prepend '::'
 
   return NULL;

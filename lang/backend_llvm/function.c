@@ -11,7 +11,7 @@
 #include "strings.h"
 #include "tuple.h"
 #include "types/type.h"
-#include "types/unification.h"
+// #include "types/unification.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -229,7 +229,7 @@ TypeEnv *create_replacement_env(Type *generic_fn_type, Type *specific_fn_type,
                                 TypeEnv *env) {
   Type *l = generic_fn_type;
   Type *r = specific_fn_type;
-  unify(l, r, &env);
+  // unify(l, r, &env);
 
   return env;
 }

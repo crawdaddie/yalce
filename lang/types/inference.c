@@ -1,110 +1,220 @@
 #include "inference.h"
-#include "serde.h"
-#include "types/infer_fn_application.h"
-#include "types/infer_match_expr.h"
+#include "ht.h"
 #include "types/type.h"
 #include "types/type_declaration.h"
-#include "types/unification.h"
 #include <stdlib.h>
 #include <string.h>
 
-#define TRY(expr)                                                              \
-  ({                                                                           \
-    typeof(expr) _result = (expr);                                             \
-    if (!_result) {                                                            \
-      return NULL;                                                             \
-    }                                                                          \
-    _result;                                                                   \
-  })
+// Type variable set for tracking free variables
+typedef struct TypeVarSet {
+  char **vars;
+  int count;
+  int capacity;
+} TypeVarSet;
 
-#define TRY_EXCEPT(expr, except)                                               \
-  ({                                                                           \
-    typeof(expr) _result = (expr);                                             \
-    if (!_result) {                                                            \
-      (except);                                                                \
-      return NULL;                                                             \
-    }                                                                          \
-    _result;                                                                   \
-  })
+TypeVarSet *type_var_set_new(void) {
+  TypeVarSet *set = talloc(sizeof(TypeVarSet));
+  set->capacity = 16;
+  set->count = 0;
+  set->vars = talloc(sizeof(char *) * set->capacity);
+  return set;
+}
 
-// Global variables
+void type_var_set_add(TypeVarSet *set, const char *var) {
+  // Check if variable already exists
+  for (int i = 0; i < set->count; i++) {
+    if (strcmp(set->vars[i], var) == 0) {
+      return;
+    }
+  }
+
+  // Grow array if needed
+  if (set->count >= set->capacity) {
+
+    int old_cap = set->capacity;
+    set->capacity *= 2;
+    char **vars = talloc(sizeof(char *) * set->capacity);
+    for (int i = 0; i < old_cap; i++) {
+      vars[i] = set->vars[i];
+    }
+
+    set->vars = vars;
+  }
+
+  set->vars[set->count++] = strdup(var);
+}
+
+// Substitution map for type variables
+typedef struct Substitution {
+  Type *from; // Type variable
+  Type *to;   // Replacement type
+  struct Substitution *next;
+} Substitution;
+
+Type *resolve_type_in_constraints(Type *r, TypeConstraint *env);
+TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
+                                   Type *t2);
+
+void typeclasses_extend(Type *t, TypeClass *tc);
+Type *copy_type(Type *t);
+bool occurs_check(Type *var, Type *t);
+Type *substitute_type(Type *t, Type *var, Type *replacement);
+bool unify(Type *t1, Type *t2, TypeConstraint **constraints);
+
+Type *apply_substitution(Substitution *subst, Type *t);
+
+Type *resolve_type_in_env(Type *r, TypeEnv *env);
 static int type_var_counter = 0;
 void reset_type_var_counter() { type_var_counter = 0; }
 
-static const char *fresh_tvar_name() {
-  char *new_name = talloc(5 * sizeof(char));
-  if (new_name == NULL) {
-    return NULL;
-  }
-  sprintf(new_name, "t%d", type_var_counter);
-  type_var_counter++;
-  return new_name;
-}
-
 Type *next_tvar() {
   Type *tvar = talloc(sizeof(Type));
-  *tvar = (Type){T_VAR, {.T_VAR = fresh_tvar_name()}};
+  char *tname = talloc(sizeof(char));
+  *tname = (char)type_var_counter;
+  *tvar = (Type){T_VAR, {.T_VAR = tname}};
+  type_var_counter++;
   return tvar;
 }
 
-TypeEnv *add_binding_to_env(TypeEnv *env, Ast *binding, Type *type) {
-  switch (binding->tag) {
-  case AST_IDENTIFIER: {
-    return env_extend(env, binding->data.AST_IDENTIFIER.value, type);
-  }
-
-  case AST_TUPLE: {
-    if (type->kind == T_VAR) {
-
-      Type **types = talloc(sizeof(Type *) * binding->data.AST_LIST.len);
-
-      for (int i = 0; i < binding->data.AST_LIST.len; i++) {
-        Ast *item = binding->data.AST_LIST.items + i;
-        types[i] = next_tvar();
-      }
-      const char *type_name = type->data.T_VAR;
-      *type =
-          *create_cons_type(TYPE_NAME_TUPLE, binding->data.AST_LIST.len, types);
-      env = env_extend(env, type_name, type);
-    }
-    for (int i = 0; i < binding->data.AST_LIST.len; i++) {
-      env = add_binding_to_env(env, binding->data.AST_LIST.items + i,
-                               type->data.T_CONS.args[i]);
-    }
-    return env;
-  }
-  case AST_BINOP: {
-    token_type op = binding->data.AST_BINOP.op;
-    Ast *left = binding->data.AST_BINOP.left;
-    Ast *right = binding->data.AST_BINOP.right;
-    if (op == TOKEN_DOUBLE_COLON && is_list_type(type)) {
-      env = add_binding_to_env(env, left, type->data.T_CONS.args[0]);
-      env = add_binding_to_env(env, right, type);
-    }
-    return env;
-  }
-
-  case AST_APPLICATION: {
-    if (type->kind == T_CONS) {
-      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
-        env = add_binding_to_env(env, binding->data.AST_APPLICATION.args + i,
-                                 type->data.T_CONS.args[i]);
-      }
-    } else if (type->kind == T_FN) {
-      Type *f = type;
-      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
-        env = add_binding_to_env(env, binding->data.AST_APPLICATION.args + i,
-                                 f->data.T_FN.from);
-        f = f->data.T_FN.to;
-      }
-    }
-    return env;
-  }
-  }
-  return env;
+TICtx push_ctx(TICtx *ctx) {
+  return (TICtx){.env = ctx->env, .scope = ctx->scope + 1};
 }
 
-Type *binding_type(Ast *ast) {
+TICtx pop_ctx(TICtx ctx) {}
+
+void set_in_env(const char *name, Type *t, TICtx *ctx) {
+  ctx->env = env_extend(ctx->env, name, t);
+}
+
+Type *find_in_ctx(const char *name, TICtx *ctx) {
+  return env_lookup(ctx->env, name);
+}
+
+static ht builtin_types;
+void add_builtin(char *name, Type *t) {
+  ht_set_hash(&builtin_types, name, hash_string(name, strlen(name)), t);
+}
+void print_builtin_types() {
+  printf("builtins:\n");
+  hti it = ht_iterator(&builtin_types);
+  bool cont = ht_next(&it);
+  for (; cont; cont = ht_next(&it)) {
+    const char *key = it.key;
+    Type *t = it.value;
+    printf("%s: ", key);
+    print_type(t);
+  }
+}
+
+TypeClassResolver arithmetic_resolver(Type *this, TypeConstraint *env) {
+
+  // Type *d1 = this->data.T_TYPECLASS_RESOLVE.dependencies[0];
+  // d1 = resolve_type_in_constraints(d1, env);
+  //
+  // double d1_rank =
+  //     get_typeclass_rank(d1, this->data.T_TYPECLASS_RESOLVE.comparison_tc);
+  //
+  // Type *d2 = this->data.T_TYPECLASS_RESOLVE.dependencies[1];
+  // d2 = resolve_type_in_constraints(d2, env);
+  // double d2_rank =
+  //     get_typeclass_rank(d2, this->data.T_TYPECLASS_RESOLVE.comparison_tc);
+  //
+  // if (d1->kind == T_VAR && d2->kind == T_VAR) {
+  //   return this;
+  // } else if (d1->kind == T_VAR) {
+  //   this->data.T_TYPECLASS_RESOLVE.dependencies[0] = d1;
+  //   this->data.T_TYPECLASS_RESOLVE.dependencies[1] = d2;
+  //   return this;
+  // } else if (d2->kind == T_VAR) {
+  //   this->data.T_TYPECLASS_RESOLVE.dependencies[0] = d1;
+  //   this->data.T_TYPECLASS_RESOLVE.dependencies[1] = d2;
+  //   return this;
+  // } else if (d1_rank >= d2_rank) {
+  //   return d1;
+  // } else {
+  //   return d2;
+  // }
+  return this;
+}
+
+void initialize_builtin_types() {
+
+  ht_init(&builtin_types);
+  add_builtin("+", &t_add);
+  add_builtin("-", &t_sub);
+  add_builtin("*", &t_mul);
+  add_builtin("/", &t_div);
+  add_builtin("%", &t_mod);
+  add_builtin(">", &t_gt);
+  add_builtin("<", &t_lt);
+  add_builtin(">=", &t_gte);
+  add_builtin("<=", &t_lte);
+  add_builtin("==", &t_eq);
+  add_builtin("!=", &t_neq);
+
+  t_option_of_var.alias = "Option";
+  add_builtin("Option", &t_option_of_var);
+
+  static TypeClass tc_int[] = {{
+                                   .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                   .rank = 0.0,
+                               },
+                               {
+                                   .name = TYPE_NAME_TYPECLASS_ORD,
+                                   .rank = 0.0,
+                               },
+                               {
+                                   .name = TYPE_NAME_TYPECLASS_EQ,
+                                   .rank = 0.0,
+                               }};
+  typeclasses_extend(&t_int, tc_int);
+  typeclasses_extend(&t_int, tc_int + 1);
+  typeclasses_extend(&t_int, tc_int + 2);
+
+  static TypeClass tc_uint64[] = {{
+                                      .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                      .rank = 1.0,
+                                  },
+                                  {
+                                      .name = TYPE_NAME_TYPECLASS_ORD,
+                                      .rank = 1.0,
+                                  },
+                                  {
+                                      .name = TYPE_NAME_TYPECLASS_EQ,
+                                      .rank = 1.0,
+                                  }};
+
+  typeclasses_extend(&t_uint64, tc_uint64);
+  typeclasses_extend(&t_uint64, tc_uint64 + 1);
+  typeclasses_extend(&t_uint64, tc_uint64 + 2);
+
+  static TypeClass tc_num[] = {{
+
+                                   .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                   .rank = 2.0,
+                               },
+                               {
+                                   .name = TYPE_NAME_TYPECLASS_ORD,
+                                   .rank = 2.0,
+                               },
+                               {
+                                   .name = TYPE_NAME_TYPECLASS_EQ,
+                                   .rank = 2.0,
+                               }};
+
+  typeclasses_extend(&t_num, tc_num);
+  typeclasses_extend(&t_num, tc_num + 1);
+  typeclasses_extend(&t_num, tc_num + 2);
+
+  static TypeClass TCEq_bool = {
+      .name = TYPE_NAME_TYPECLASS_EQ,
+      .rank = 0.0,
+  };
+
+  typeclasses_extend(&t_bool, &TCEq_bool);
+}
+
+Type *param_binding_type(Ast *ast) {
   switch (ast->tag) {
   case AST_IDENTIFIER: {
     return next_tvar();
@@ -113,7 +223,7 @@ Type *binding_type(Ast *ast) {
     int len = ast->data.AST_LIST.len;
     Type **tuple_mems = malloc(sizeof(Type *) * len);
     for (int i = 0; i < len; i++) {
-      tuple_mems[i] = binding_type(ast->data.AST_LIST.items + i);
+      tuple_mems[i] = param_binding_type(ast->data.AST_LIST.items + i);
     }
     Type *tup = empty_type();
     *tup = (Type){T_CONS,
@@ -131,284 +241,478 @@ Type *binding_type(Ast *ast) {
   }
 }
 
-typedef struct lambda_ctx_t {
-  Ast *lambda;
-  Type *yielded_type;
-} lambda_ctx_t;
-
-static lambda_ctx_t lambda_ctx = {};
-// take a function type a -> b -> c & return a corresponding coroutine type
-// a -> b -> (yield_interface: () -> Option of c, params_type: a * b)
-static Type *convert_to_coroutine_generator_fn(Type *f, int fn_len) {
-  Type *fn = f;
-  if (fn_len == 1) {
-    Type *params_type = fn->data.T_FN.from;
-    Type *instance_type =
-        create_coroutine_instance(params_type, fn->data.T_FN.to);
-
-    fn->data.T_FN.to = instance_type;
-    return f;
-  }
-
-  Type *params_type;
-  Type **args = talloc(sizeof(Type *) * fn_len);
-  params_type = create_tuple_type(fn_len, args);
-
-  int idx = 0;
-
-  while (fn->data.T_FN.to->kind == T_FN) {
-    Type *param_type = fn->data.T_FN.from;
-    params_type->data.T_CONS.args[idx] = param_type;
-    fn = fn->data.T_FN.to;
-    idx++;
-  }
-
-  Type *param_type = fn->data.T_FN.from;
-  params_type->data.T_CONS.args[idx] = param_type;
-
-  Type *return_type = fn->data.T_FN.to;
-
-  Type *instance_type =
-      create_coroutine_instance_type(params_type, return_type);
-
-  fn->data.T_FN.to = instance_type;
-
-  return f;
+Type *lookup_builtin_type(const char *name, TICtx *ctx) {
+  Type *t = ht_get_hash(&builtin_types, name, hash_string(name, strlen(name)));
+  return t;
 }
 
-static Type *infer_lambda(Ast *ast, TypeEnv **env) {
-  // printf("##INFER LAMBDA\n");
-  // print_ast(ast);
-
-  lambda_ctx_t prev_lambda_ctx = lambda_ctx;
-
-  int len = ast->data.AST_LAMBDA.len;
-  TypeEnv *fn_scope_env = *env;
-
-  Type *return_type = next_tvar();
-
-  Type *fn;
-  if (len == 1 && ast->data.AST_LAMBDA.params->tag == AST_VOID) {
-    fn = &t_void;
-    fn = type_fn(fn, return_type);
-  } else {
-    Type *param_types[len];
-
-    for (int i = len - 1; i >= 0; i--) {
-      Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-      Type *ptype;
-      Ast *def = ast->data.AST_LAMBDA.defaults[i];
-
-      if (def) {
-        ptype = compute_type_expression(def, *env);
-      } else {
-        ptype = binding_type(param_ast);
-        param_ast->md = ptype;
-      }
-      param_types[i] = ptype;
-      fn_scope_env = add_binding_to_env(fn_scope_env, param_ast, ptype);
-    }
-    fn = create_type_multi_param_fn(len, param_types, return_type);
+Type *handle_binding(Ast *binding, Ast *expr, TICtx *ctx) {
+  Type *expr_type = infer(expr, ctx);
+  switch (binding->tag) {
+  case AST_IDENTIFIER: {
+    char *name = binding->data.AST_IDENTIFIER.value;
+    set_in_env(name, expr_type, ctx);
   }
-
-  bool is_anon = false;
-  ObjString _fn_name = ast->data.AST_LAMBDA.fn_name;
-  if (_fn_name.chars == NULL) {
-    is_anon = true;
   }
-
-  Type *recursive_ref = NULL;
-  const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
-
-  if (!is_anon) {
-    recursive_ref = tvar(ast->data.AST_LAMBDA.fn_name.chars);
-    recursive_ref->is_recursive_fn_ref = true;
-    fn_scope_env = env_extend(fn_scope_env, ast->data.AST_LAMBDA.fn_name.chars,
-                              recursive_ref);
-  }
-
-  int body_len = ast->data.AST_LAMBDA.body->data.AST_BODY.len;
-  Ast *body = ast->data.AST_LAMBDA.body;
-
-  Ast *body_stmt;
-  Type *body_type;
-  lambda_ctx = (lambda_ctx_t){ast, NULL};
-
-  if (body->tag == AST_BODY) {
-    for (int i = 0; i < body_len; i++) {
-      body_stmt = body->data.AST_BODY.stmts[i];
-      Type *t = infer(body_stmt, &fn_scope_env);
-      if (!t) {
-        fprintf(stderr, "Failure typechecking body statement: ");
-        print_location(body_stmt);
-        print_ast_err(body_stmt);
-        return NULL;
-      }
-      body_type = t;
-    }
-  } else {
-    body_stmt = body;
-    Type *t = infer(body_stmt, &fn_scope_env);
-    if (!t) {
-      fprintf(stderr, "Failure typechecking body statement: ");
-      print_location(body_stmt);
-      print_ast_err(body_stmt);
-      return NULL;
-    }
-    body_type = t;
-  }
-
-  TypeEnv **_env = &fn_scope_env;
-  Type *unified_ret = unify(return_type, body_type, _env);
-  *return_type = *unified_ret;
-
-  if (recursive_ref && recursive_ref->kind == T_FN &&
-      is_generic(recursive_ref)) {
-    TypeEnv *_env = NULL;
-    unify_recursive_defs_mut(fn, recursive_ref, &_env);
-  }
-  if (recursive_ref) {
-    Type *r = recursive_ref;
-    Type *f = fn;
-    while (r->kind == T_FN) {
-      Type *rf = r->data.T_FN.from;
-      Type *ff = f->data.T_FN.from;
-      *rf = *ff;
-
-      r = r->data.T_FN.to;
-      f = f->data.T_FN.to;
-    }
-    *r = *f;
-  }
-
-  fn = resolve_generic_type(fn, fn_scope_env);
-  if (ast->data.AST_LAMBDA.is_coroutine) {
-    Type *co = convert_to_coroutine_generator_fn(fn, len);
-    fn = co;
-  }
-
-  lambda_ctx = prev_lambda_ctx;
-  return fn;
+  return expr_type;
 }
 
-Type *replace_in(Type *type, Type *tvar, Type *replacement);
-static Type *resolve_generic_variant(Type *t, TypeEnv *env) {
+Type *handle_binding_to_type(Ast *binding, Type *expr_type, TICtx *ctx) {
+  switch (binding->tag) {
+  case AST_IDENTIFIER: {
+    const char *name = binding->data.AST_IDENTIFIER.value;
+    set_in_env(name, expr_type, ctx);
+  }
+  }
+  return expr_type;
+}
+
+bool is_recursive_ref_id(const char *name, TICtx *ctx) {
+  return (ctx->current_fn_ast != NULL) &&
+         (ctx->current_fn_ast->data.AST_LAMBDA.fn_name.chars != NULL) &&
+         (strcmp(name, ctx->current_fn_ast->data.AST_LAMBDA.fn_name.chars) ==
+          0);
+}
+
+bool is_recursive_ref(Ast *ast, TICtx *ctx) {
+  return (ast->tag == AST_IDENTIFIER &&
+          is_recursive_ref_id(ast->data.AST_IDENTIFIER.value, ctx));
+}
+
+void compare_args(Type *free_arg, Type *arg, TypeEnv **env) {
+
+  if (free_arg->kind == T_VAR && !is_generic(arg)) {
+    *env = env_extend(*env, free_arg->data.T_VAR, arg);
+    *free_arg = *arg;
+    return;
+  }
+}
+
+Type *resolve_type_in_env(Type *r, TypeEnv *env) {
+  switch (r->kind) {
+  case T_VAR: {
+    Type *rr = env_lookup(env, r->data.T_VAR);
+    if (rr) {
+      *r = *rr;
+    }
+    return r;
+  }
+
+  case T_CONS: {
+    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
+      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
+    }
+    return r;
+  }
+
+  case T_FN: {
+    r->data.T_FN.from = resolve_type_in_env(r->data.T_FN.from, env);
+    r->data.T_FN.to = resolve_type_in_env(r->data.T_FN.to, env);
+    return r;
+  }
+
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_CHAR:
+  case T_BOOL:
+  case T_VOID:
+  case T_STRING: {
+    return r;
+  }
+  }
+  return NULL;
+}
+
+Type *constraints_lookup(TypeConstraint *env, const char *name) {
   while (env) {
-    const char *key = env->name;
-    Type tvar = {T_VAR, .data = {.T_VAR = key}};
-    Type *replaced = replace_in(t, &tvar, env->type);
-    t = replaced;
+    Type *t1 = env->t1;
+    Type *t2 = env->t2;
+    if ((t1->kind == T_VAR) && strcmp(t1->data.T_VAR, name) == 0) {
+      return t2;
+    }
 
     env = env->next;
   }
-
-  return t;
+  return NULL;
 }
 
-Type *extern_fn_type(Ast *sig, TypeEnv **env) {
-  if (sig->tag == AST_FN_SIGNATURE) {
-    Type *f = compute_type_expression(
-        sig->data.AST_LIST.items + sig->data.AST_LIST.len - 1, *env);
-
-    for (int i = sig->data.AST_LIST.len - 2; i >= 0; i--) {
-      Type *p = compute_type_expression(sig->data.AST_LIST.items + i, *env);
-      f = type_fn(p, f);
-    }
-    return f;
-
-    // Ast *param_ast = sig->data.AST_LIST.items;
-    // Type *fn =
-    //     type_fn(infer(param_ast, env), extern_fn_type(param_ast + 1, env));
-    // return fn;
-  }
-  return infer(sig, env);
-}
-
-bool yield_is_new_coroutine(Ast *yield_expr) {
-  Type *yield_type = yield_expr->md;
-  return is_coroutine_instance_type(yield_type);
-}
-
-Type *infer_spread_operator_tuple(Ast *ast, TypeEnv **env) {
-  size_t len = ast->data.AST_LIST.len;
-  int arity = 0;
-  bool has_names = false;
-  for (int i = 0; i < len; i++) {
-    Ast *mem_ast = (ast->data.AST_LIST.items + i);
-    Type *mem_type = infer(ast->data.AST_LIST.items + i, env);
-    if (mem_type->names != NULL) {
-      has_names = true;
-    }
-
-    if (mem_ast->tag == AST_SPREAD_OP && is_tuple_type(mem_type)) {
-      arity += mem_type->data.T_CONS.num_args;
-    } else {
-      arity++;
-    }
+// Deep copy a type
+Type *copy_type(Type *t) {
+  if (!t) {
+    return NULL;
   }
 
-  Type **members = talloc(sizeof(Type *) * arity);
-  char **names = NULL;
-  if (has_names) {
-    names = talloc(sizeof(char *) * arity);
-  }
-  int offset = 0;
-  for (int i = 0; i < len; i++) {
-    Ast *mem_ast = (ast->data.AST_LIST.items + i);
-    Type *mem_type = (ast->data.AST_LIST.items + i)->md;
-    if (mem_ast->tag == AST_SPREAD_OP) {
-      for (int j = 0; j < mem_type->data.T_CONS.num_args; j++) {
-        members[offset] = mem_type->data.T_CONS.args[j];
-        offset++;
+  Type *new_t = talloc(sizeof(Type));
+  memcpy(new_t, t, sizeof(Type));
+
+  switch (t->kind) {
+  case T_VAR:
+    new_t->data.T_VAR = strdup(t->data.T_VAR);
+    break;
+
+  case T_FN:
+    new_t->data.T_FN.from = copy_type(t->data.T_FN.from);
+    new_t->data.T_FN.to = copy_type(t->data.T_FN.to);
+    break;
+
+  case T_CONS:
+    new_t->data.T_CONS.name = strdup(t->data.T_CONS.name);
+    new_t->data.T_CONS.args = malloc(sizeof(Type *) * t->data.T_CONS.num_args);
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      new_t->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
+    }
+    if (t->data.T_CONS.names) {
+      new_t->data.T_CONS.names =
+          malloc(sizeof(char *) * t->data.T_CONS.num_args);
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        new_t->data.T_CONS.names[i] = strdup(t->data.T_CONS.names[i]);
       }
-    } else {
-      members[offset] = mem_type;
-      offset++;
+    }
+    break;
+  }
+
+  return new_t;
+}
+
+Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
+  Substitution *new_subst = talloc(sizeof(Substitution));
+  new_subst->from = t1;
+  new_subst->to = t2;
+  new_subst->next = subst;
+  return new_subst;
+}
+
+TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
+                                   Type *t2) {
+  TypeConstraint *c = talloc(sizeof(TypeConstraint));
+  c->t1 = t1;
+  c->t2 = t2;
+  c->next = constraints;
+  return c;
+}
+
+TypeClass *impls_extend(TypeClass *impls, TypeClass *tc) {
+  tc->next = impls;
+  return tc;
+}
+
+void typeclasses_extend(Type *t, TypeClass *tc) {
+  if (!type_implements(t, tc)) {
+    t->implements = impls_extend(t->implements, tc);
+  }
+}
+
+Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
+
+  int len = ast->data.AST_LIST.len;
+  Type *element_type = infer(ast->data.AST_LIST.items, ctx);
+
+  Type *el_type;
+  for (int i = 1; i < len; i++) {
+    Ast *el = ast->data.AST_LIST.items + i;
+    el_type = infer(el, ctx);
+
+    if (!types_equal(element_type, el_type)) {
+      fprintf(stderr, "Error typechecking list literal - all elements must "
+                      "be of the same type\n");
+      print_type_err(element_type);
+      fprintf(stderr, " != ");
+      print_type_err(el_type);
+      return NULL;
     }
   }
-  Type *new_tuple = create_tuple_type(arity, members);
-  if (names) {
-    new_tuple->names = names;
+  Type *type = talloc(sizeof(Type));
+  Type **contained = talloc(sizeof(Type *));
+  contained[0] = el_type;
+  *type = (Type){T_CONS, {.T_CONS = {cons_name, contained, 1}}};
+  return type;
+}
+
+/**
+ * given tvar t, range over all constraints in C that match t : t'
+ * and call the callback for each constraint t : t'
+ * */
+void constraints_iter(Type *tvar, TypeConstraint *constraints,
+                      void (*callback)(Type *, Type *)) {
+  for (TypeConstraint *constraint = constraints; constraint != NULL;
+       constraint = constraint->next) {
+    Type *t1 = constraint->t1;
+    Type *t2 = constraint->t2;
+    if (t1->kind == T_VAR && strcmp(t1->data.T_VAR, tvar->data.T_VAR) == 0) {
+      callback(t1, t2);
+    }
+  }
+}
+
+void constraints_iter_upto(Type *tvar, TypeConstraint *constraints,
+                           TypeConstraint *end,
+                           void (*callback)(Type *, Type *)) {
+  for (TypeConstraint *constraint = constraints;
+       constraint != NULL || constraint != end; constraint = constraint->next) {
+    Type *t1 = constraint->t1;
+    Type *t2 = constraint->t2;
+    if (t1->kind == T_VAR && strcmp(t1->data.T_VAR, tvar->data.T_VAR) == 0) {
+      callback(t1, t2);
+    }
+  }
+}
+void print_constraints(TypeConstraint *c) {
+  for (TypeConstraint *con = c; con != NULL; con = con->next) {
+
+    printf("constraint: ");
+    if (con->t1->kind == T_VAR) {
+      printf("%s : ", con->t1->data.T_VAR);
+      print_type(con->t2);
+    } else {
+      print_type(con->t1);
+      print_type(con->t2);
+    }
+  }
+}
+
+bool satisfies_tc_constraint(Type *t, TypeClass *constraint_tc) {
+  for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
+
+    if (strcmp(tc->name, constraint_tc->name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+double get_type_rank(Type *t, TypeClass *tc) {
+  if (t->kind == T_VAR) {
+    return 1000.;
+  }
+  TypeClass *T = get_typeclass_by_name(t, tc->name);
+
+  return T->rank;
+}
+
+Type *find_highest_rank_type(Type *var, Type *current, TypeConstraint *rest) {
+  TypeClass *tc = var->implements;
+
+  Type *highest = current;
+
+  // Look through remaining constraints for same type var
+  while (rest) {
+    if (rest->t1->kind == T_VAR &&
+        strcmp(rest->t1->data.T_VAR, var->data.T_VAR) == 0) {
+      if (get_type_rank(rest->t2, tc) > get_type_rank(highest, tc)) {
+        highest = rest->t2;
+      }
+    } else if (rest->t2->kind == T_VAR &&
+               strcmp(rest->t2->data.T_VAR, var->data.T_VAR) == 0) {
+      if (get_type_rank(rest->t1, tc) > get_type_rank(highest, tc)) {
+        highest = rest->t1;
+      }
+    }
+    rest = rest->next;
   }
 
-  return new_tuple;
+  return highest;
 }
 
-Type *infer_concat_coroutines(Type *a, Type *b, TypeEnv **env) {
+bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
+  // Handle type variables
+  if (t1->kind == T_VAR) {
+    if (t2->kind == T_VAR && strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0) {
+      return true; // Same type variable
+    }
 
-  return create_coroutine_instance_type(
-      concat_struct_types(a->data.T_FN.from, b->data.T_FN.from),
+    // If t1 has a typeclass constraint
+    if (t1->implements) {
 
-      concat_struct_types(type_of_option(a->data.T_FN.to),
-                          type_of_option(b->data.T_FN.to)));
+      // If t2 is a concrete type, check if it satisfies the constraint
+      if (t2->kind != T_VAR) {
+        if (!satisfies_tc_constraint(t2, t1->implements)) {
+          fprintf(stderr, "Type doesn't satisfy typeclass constraint\n");
+          return false;
+        }
+      } else {
+        // If t2 is a type var, it inherits the constraint
+        t2->implements = t1->implements;
+      }
+    }
+
+    // Check for recursive types
+    if (occurs_check(t1, t2)) {
+      return false; // Would create infinite type
+    }
+
+    // Add a new constraint
+    *constraints = constraints_extend(*constraints, t1, t2);
+    return true;
+  }
+
+  if (t2->kind == T_VAR) {
+    return unify(t2, t1, constraints);
+  }
+
+  // Handle function types
+  if (t1->kind == T_FN && t2->kind == T_FN) {
+    return unify(t1->data.T_FN.from, t2->data.T_FN.from, constraints) &&
+           unify(t1->data.T_FN.to, t2->data.T_FN.to, constraints);
+  }
+
+  // Handle constructed types
+  if (t1->kind == T_CONS && t2->kind == T_CONS) {
+    if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
+        t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+      return false;
+    }
+
+    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+      if (!unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i],
+                 constraints)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Handle primitive types
+  return t1->kind == t2->kind;
 }
-Type *convert_coroutine_struct(Type *t) {
-  printf("convert coroutine struct\n");
-  print_type(t);
+
+bool match_typeclasses(Type *t1, Type *t2) {
+  for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
+    if (!satisfies_tc_constraint(t2, tc)) {
+      return false;
+    }
+  }
+  return true;
+}
+double rank_sum(Type *t) {
+
+  double res;
+  for (TypeClass *tc = t->implements; tc; tc = tc->next) {
+    res += tc->rank;
+  }
+  return res;
+}
+
+Substitution *solve_constraints(TypeConstraint *constraints) {
+
+  Substitution *subst = NULL;
+
+  while (constraints) {
+    Type *t1 = apply_substitution(subst, constraints->t1);
+    Type *t2 = apply_substitution(subst, constraints->t2);
+
+    if (t1->kind == T_VAR) {
+      // Check for recursive types
+      if (occurs_check(t1, t2)) {
+        return NULL; // Infinite type error
+      }
+
+      // Look ahead for other constraints on this type var
+      Type *resolved = find_highest_rank_type(t1, t2, constraints->next);
+
+      if (resolved) {
+        subst = substitutions_extend(subst, t1, resolved);
+        return subst;
+      } else {
+        subst = substitutions_extend(subst, t1, t2);
+      }
+
+    } else if (t2->kind == T_VAR) {
+      if (occurs_check(t2, t1)) {
+        return NULL; // Infinite type error
+      }
+
+      subst = substitutions_extend(subst, t2, t1);
+    } else if (t1->kind != t2->kind) {
+      return NULL; // Type mismatch error
+    }
+
+    constraints = constraints->next;
+  }
+
+  return subst;
+}
+
+// Helper functions
+
+bool occurs_check(Type *var, Type *t) {
+  if (t->kind == T_VAR) {
+    return strcmp(var->data.T_VAR, t->data.T_VAR) == 0;
+  }
+
+  if (t->kind == T_FN) {
+    return occurs_check(var, t->data.T_FN.from) ||
+           occurs_check(var, t->data.T_FN.to);
+  }
+
+  if (t->kind == T_CONS) {
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      if (occurs_check(var, t->data.T_CONS.args[i])) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+Type *apply_substitution(Substitution *subst, Type *t) {
+  if (!t)
+    return NULL;
+
+  if (t->kind == T_VAR) {
+    Substitution *s = subst;
+    while (s) {
+      if (strcmp(t->data.T_VAR, s->from->data.T_VAR) == 0) {
+        return s->to;
+      }
+      s = s->next;
+    }
+    return t;
+  }
+
+  if (t->kind == T_FN) {
+    Type *new_t = talloc(sizeof(Type));
+    *new_t = *t;
+    new_t->data.T_FN.from = apply_substitution(subst, t->data.T_FN.from);
+    new_t->data.T_FN.to = apply_substitution(subst, t->data.T_FN.to);
+    return new_t;
+  }
+
+  if (t->kind == T_CONS) {
+    Type *new_t = talloc(sizeof(Type));
+    *new_t = *t;
+    new_t->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      new_t->data.T_CONS.args[i] =
+          apply_substitution(subst, t->data.T_CONS.args[i]);
+    }
+    return new_t;
+  }
+
   return t;
 }
 
-Type *infer(Ast *ast, TypeEnv **env) {
-
+Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
   switch (ast->tag) {
+
   case AST_BODY: {
     Ast *stmt;
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
 
       stmt = ast->data.AST_BODY.stmts[i];
-      Type *t = infer(stmt, env);
+      Type *t = infer(stmt, ctx);
       if (!t) {
         fprintf(stderr, "Failure typechecking body statement: ");
         print_location(stmt);
-        // print_ast_err(stmt);
         return NULL;
       }
       type = t;
     }
-    // type = stmt->md;
     break;
   }
+
   case AST_INT: {
     type = &t_int;
     break;
@@ -419,6 +723,20 @@ Type *infer(Ast *ast, TypeEnv **env) {
     break;
   }
 
+  case AST_STRING: {
+    type = &t_string;
+    break;
+  }
+
+  case AST_CHAR: {
+    type = &t_char;
+    break;
+  }
+
+    // case AST_FMT_STRING: {
+    //   break;
+    // }
+
   case AST_BOOL: {
     type = &t_bool;
     break;
@@ -428,326 +746,191 @@ Type *infer(Ast *ast, TypeEnv **env) {
     type = &t_void;
     break;
   }
-  case AST_CHAR: {
-    type = &t_char;
-    break;
-  }
-  case AST_STRING: {
-    type = &t_string;
-    break;
-  }
-  case AST_BINOP: {
-    if (ast->data.AST_BINOP.op == TOKEN_OF) {
-      type = compute_type_expression(ast, *env);
-    }
-    break;
-  }
-  case AST_LET: {
-    Ast *expr = ast->data.AST_LET.expr;
-    Type *expr_type = TRY_MSG(infer(expr, env), NULL);
-    Ast *binding = ast->data.AST_LET.binding;
-
-    *env = add_binding_to_env(*env, binding, expr_type);
-
-    Ast *in_expr = ast->data.AST_LET.in_expr;
-    if (in_expr) {
-      Type *in_expr_type = TRY_MSG(infer(in_expr, env), NULL);
-      type = in_expr_type;
-    } else {
-      type = expr_type;
-    }
-
-    break;
-  }
 
   case AST_IDENTIFIER: {
+    type = find_in_ctx(ast->data.AST_IDENTIFIER.value, ctx);
 
-    // if ((strcmp(ast->data.AST_IDENTIFIER.value, "note") == 0) ||
-    //     (strcmp(ast->data.AST_IDENTIFIER.value, "filter_freq") == 0)) {
-    //   // printf("ast identifier\n");
-    //   // print_ast(ast);
-    //   // print_type_env(*env);
-    // }
-    if (ast_is_placeholder_id(ast)) {
-      type = next_tvar();
-
-      break;
+    if (type == NULL) {
+      type = lookup_builtin_type(ast->data.AST_IDENTIFIER.value, ctx);
     }
-
-    type = find_type_in_env(*env, ast->data.AST_IDENTIFIER.value);
 
     if (type == NULL) {
       type = next_tvar();
+      // printf("%d`%c`, ", type_var_counter, *(type->data.T_VAR) + 48);
     }
 
     break;
   }
 
-  case AST_TYPE_DECL: {
-    type = type_declaration(ast, env);
+  case AST_UNOP: {
+    switch (ast->data.AST_BINOP.op) {
+    case TOKEN_STAR: {
+      break;
+    }
+
+    case TOKEN_AMPERSAND: {
+      break;
+    }
+    }
+  }
+
+  case AST_TUPLE: {
+    int len = ast->data.AST_LIST.len;
+
+    Type **cons_args = talloc(sizeof(Type *) * len);
+
+    for (int i = 0; i < len; i++) {
+
+      Ast *member = ast->data.AST_LIST.items + i;
+      Type *mtype = infer(member, ctx);
+      cons_args[i] = mtype;
+    }
+
+    type = talloc(sizeof(Type));
+
+    *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, cons_args, len}}};
+
+    if (ast->data.AST_LIST.items[0].tag == AST_LET) {
+      char **names = talloc(sizeof(char *) * len);
+      for (int i = 0; i < len; i++) {
+        Ast *member = ast->data.AST_LIST.items + i;
+        names[i] = member->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+      }
+      type->data.T_CONS.names = names;
+    }
     break;
   }
 
   case AST_LIST: {
-    int len = ast->data.AST_LIST.len;
-    if (len == 0) {
-      Type *el_type = next_tvar();
-      Type **args = talloc(sizeof(Type *));
-      args[0] = el_type;
-      type = talloc(sizeof(Type));
-      *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, args, 1}}};
-      break;
-    }
-
-    Type *element_type = TRY_MSG(
-        infer(ast->data.AST_LIST.items, env),
-        "Could not infer type of list literal elements (first element)");
-
-    Type *el_type;
-    for (int i = 1; i < len; i++) {
-      Ast *el = ast->data.AST_LIST.items + i;
-      el_type =
-          TRY_MSG(infer(el, env), "Failure typechecking list literal element");
-
-      if (!types_equal(element_type, el_type)) {
-        fprintf(stderr, "Error typechecking list literal - all elements must "
-                        "be of the same type\n");
-        print_type_err(element_type);
-        fprintf(stderr, " != ");
-        print_type_err(el_type);
-        return NULL;
-      }
-    }
-    type = talloc(sizeof(Type));
-    Type **contained = talloc(sizeof(Type *));
-    contained[0] = el_type;
-    *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, contained, 1}}};
-
+    type = create_list_type(ast, TYPE_NAME_LIST, ctx);
     break;
   }
 
   case AST_ARRAY: {
-    int len = ast->data.AST_LIST.len;
-    if (len == 0) {
-      Type *el_type = next_tvar();
-      type = create_array_type(el_type, 0);
-      break;
-    }
-
-    Type *element_type = TRY_MSG(
-        infer(ast->data.AST_LIST.items, env),
-        "Could not infer type of array literal elements (first element)");
-
-    Type *el_type;
-
-    for (int i = 1; i < len; i++) {
-      Ast *el = ast->data.AST_LIST.items + i;
-
-      el_type =
-          TRY_MSG(infer(el, env), "Failure typechecking array literal element");
-
-      if (!types_equal(element_type, el_type)) {
-
-        fprintf(stderr, "Error typechecking array literal - all elements must "
-                        "be of the same type\n");
-
-        print_type_err(element_type);
-        fprintf(stderr, " != ");
-        print_type_err(el_type);
-        return NULL;
-      }
-    }
-    type = create_array_type(el_type, len);
-
+    type = create_list_type(ast, TYPE_NAME_ARRAY, ctx);
     break;
   }
 
-  case AST_TUPLE: {
-    int arity = ast->data.AST_LIST.len;
-    bool contains_spread = false;
-    for (int i = 0; i < arity; i++) {
-      if (ast->data.AST_LIST.items[i].tag == AST_SPREAD_OP) {
-        contains_spread = true;
-        break;
-      }
-    }
-
-    if (contains_spread) {
-      type = infer_spread_operator_tuple(ast, env);
-      break;
-    } else {
-
-      Type **cons_args = talloc(sizeof(Type *) * arity);
-      int is_coroutine_struct = false;
-
-      for (int i = 0; i < arity; i++) {
-
-        Ast *member = ast->data.AST_LIST.items + i;
-        Type *mtype =
-            TRY_MSG(infer(member, env), "Error typechecking tuple item");
-        cons_args[i] = mtype;
-        if (is_coroutine_instance_type(cons_args[i])) {
-          is_coroutine_struct = true;
-        }
-      }
-
-      type = talloc(sizeof(Type));
-
-      *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, cons_args, arity}}};
-
-      if (ast->data.AST_LIST.items[0].tag == AST_LET) {
-        char **names = talloc(sizeof(char *) * arity);
-        for (int i = 0; i < arity; i++) {
-          Ast *member = ast->data.AST_LIST.items + i;
-          names[i] = member->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-          printf("name %s: ", names[i]);
-          print_type(cons_args[i]);
-        }
-        type->names = names;
-      }
-      if (is_coroutine_struct) {
-        type = convert_coroutine_struct(type);
-      }
-      break;
-    }
-    break;
-  }
-  case AST_FMT_STRING: {
-    int arity = ast->data.AST_LIST.len;
-    for (int i = 0; i < arity; i++) {
-      Ast *member = ast->data.AST_LIST.items + i;
-      infer(member, env);
-    }
-
-    type = &t_string;
-    break;
-  }
+  // case AST_LET: {
+  //   Ast *def = ast->data.AST_LET.expr;
+  //   Ast *binding = ast->data.AST_LET.binding;
+  //   Ast *body = ast->data.AST_LET.in_expr;
+  //
+  //   Type *def_type = infer(def, ctx);
+  //   if (!def_type) {
+  //     return NULL;
+  //   }
+  //
+  //   Type *gen_type;
+  //   if (ctx->constraints) {
+  //     // Solve constraints collected so far
+  //     Substitution *subst = solve_constraints(ctx->constraints);
+  //     if (!subst) {
+  //       return NULL;
+  //     }
+  //
+  //     // Apply substitution to definition type
+  //     Type *solved_type = apply_substitution(subst, def_type);
+  //
+  //     gen_type = generalize(ctx->env, solved_type);
+  //   } else {
+  //     gen_type = def_type;
+  //   }
+  //
+  //   if (body != NULL) {
+  //     // Add generalized type to environment
+  //     TypeEnv *new_env =
+  //         env_extend(ctx->env, binding->data.AST_IDENTIFIER.value,
+  //         gen_type);
+  //
+  //     // Create new context with extended environment
+  //     TICtx new_ctx = *ctx;
+  //     new_ctx.env = new_env;
+  //     new_ctx.constraints = NULL; // Clear constraints
+  //     new_ctx.scope++;
+  //
+  //     type = infer(body, &new_ctx);
+  //   } else {
+  //     ctx->env =
+  //         env_extend(ctx->env, binding->data.AST_IDENTIFIER.value,
+  //         gen_type);
+  //
+  //     type = gen_type;
+  //   }
+  //
+  //   break;
+  // }
   case AST_LAMBDA: {
-    type = infer_lambda(ast, env);
     break;
   }
 
   case AST_EXTERN_FN: {
-    Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
-    type = extern_fn_type(sig, env);
-    break;
-  }
-
-  case AST_APPLICATION: {
-
-    Type *t = TRY_MSG(infer(ast->data.AST_APPLICATION.function, env),
-                      "Failure could not infer type of callee ");
-
-    if (t == &t_coroutine_concat_sig) {
-      type = infer_concat_coroutines(
-          infer(ast->data.AST_APPLICATION.args, env),
-          infer(ast->data.AST_APPLICATION.args + 1, env), env);
-
-      break;
-    }
-
-    if (is_coroutine_instance_type(t)) {
-      type = get_coroutine_ret_opt_type(t);
-      break;
-    }
-    if (t->kind == T_FN) {
-      type = infer_fn_application(ast, env);
-      break;
-    }
-
-    if (t->kind == T_CONS) {
-      type = infer_cons(ast, env);
-      break;
-    }
-
-    if (t->kind == T_VAR) {
-      type = infer_unknown_fn_signature(ast, env);
-      break;
-    }
-
-    break;
-  }
-  case AST_YIELD: {
-    if (lambda_ctx.lambda == NULL) {
-      fprintf(stderr, "Error: yield cannot appear outside a function");
-      return NULL;
-    }
-    lambda_ctx.lambda->data.AST_LAMBDA.is_coroutine = true;
-    lambda_ctx.lambda->data.AST_LAMBDA.num_yields++;
-
-    type = infer(ast->data.AST_YIELD.expr, env);
-    // printf("type of yield: ");
-    // print_ast(ast);
-    // print_type(type);
-    // print_type_env(*env);
-
-    if (is_coroutine_instance_type(type)) {
-
-      type = type_of_option(type->data.T_FN.to);
-    }
-
-    if (lambda_ctx.yielded_type != NULL) {
-      Type *unified_type = unify(type, lambda_ctx.yielded_type, env);
-      if (!unified_type) {
-        fprintf(stderr, "Failed to unify yielded type\n");
-        print_location(ast);
-        return NULL;
-      }
-      type = unified_type;
-    } else {
-      lambda_ctx.yielded_type = type;
-    }
     break;
   }
 
   case AST_MATCH: {
-    type = infer_match(ast, env);
     break;
   }
-  case AST_MATCH_GUARD_CLAUSE: {
-    type = TRY_MSG(infer(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, env),
-                   "Could not infer test expression in match guard");
 
-    TRY_MSG(infer(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, env),
-            "Could not infer guard expression in match guard");
+  case AST_YIELD: {
     break;
   }
-  case AST_IMPORT: {
-    // TODO: handle proper module imports
-    type = tvar(ast->data.AST_IMPORT.module_name);
-    break;
-  }
+
   case AST_RECORD_ACCESS: {
-    Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, env);
-    const char *name =
-        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+    break;
+  }
+  case AST_APPLICATION: {
+    // First infer the function type
+    Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
 
-    if (rec_type->names == NULL) {
-      Type **args = talloc(sizeof(Type *));
-      args[0] = next_tvar();
-
-      *rec_type = *create_cons_type(TYPE_NAME_TUPLE, 1, args);
-      rec_type->names = talloc(sizeof(char *));
-      rec_type->names[0] = name;
+    if (!fn_type) {
+      fprintf(stderr, "Could not infer function type in application\n");
+      return NULL;
     }
+    fn_type = deep_copy_type(fn_type);
 
-    Type *member_type = get_struct_member_type(name, rec_type);
-    if (!member_type) {
-      fprintf(stderr, "Error name %s not found in obj\n", name);
-      print_type_err(rec_type);
+    Type *current_type = fn_type;
+    TICtx ctx = {.env = ctx.env};
+
+    // Process each argument
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, &ctx);
+
+      if (!arg_type) {
+        fprintf(stderr, "Could not infer argument type in application\n");
+        return NULL;
+      }
+
+      // Check that current type is a function type TODO: apply cons types too
+      if (current_type->kind != T_FN) {
+        fprintf(stderr, "Attempting to apply to non-function type\n");
+        return NULL;
+      }
+
+      // Unification will handle propagating the typeclass constraints
+      // because the function's parameter type (current_type->data.T_FN.from)
+      // already has the typeclass constraint
+      if (!unify(arg_type, current_type->data.T_FN.from, &ctx.constraints)) {
+        fprintf(stderr, "Type mismatch in function application\n");
+        return NULL;
+      }
+
+      // Move to the return type for next argument
+      current_type = current_type->data.T_FN.to;
+    }
+    // After processing all arguments, solve collected constraints
+    Substitution *subst = solve_constraints(ctx.constraints);
+
+    if (!subst) {
+      fprintf(stderr, "Could not solve type constraints\n");
       return NULL;
     }
 
-    type = member_type;
-    break;
-  }
-  case AST_SPREAD_OP: {
-    type = TRY(infer(ast->data.AST_SPREAD_OP.expr, env));
+    // Apply substitutions to get final type
+    type = apply_substitution(subst, current_type);
     break;
   }
   }
-
   ast->md = type;
-
   return type;
 }

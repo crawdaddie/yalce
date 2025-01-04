@@ -2,7 +2,6 @@
 #define _LANG_BACKEND_LLVM_FUNCTION_H
 #include "common.h"
 #include "types/type.h"
-#include "types/typeclass.h"
 #include "llvm-c/Types.h"
 
 LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env,

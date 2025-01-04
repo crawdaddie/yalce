@@ -136,7 +136,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     t->data.T_CONS.num_args = arity;
 
     if (has_names) {
-      t->names = names;
+      t->data.T_CONS.names = names;
     }
     return t;
   }

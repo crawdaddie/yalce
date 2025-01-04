@@ -1,9 +1,32 @@
 #ifndef _LANG_TYPE_TYPE_H
 #define _LANG_TYPE_TYPE_H
-#include "typeclass.h"
 #include <stdbool.h>
-
+#include <string.h>
+#include <unistd.h>
 #define _TSTORAGE_SIZE_DEFAULT 2000000
+
+typedef struct Type Type;
+
+typedef struct TypeConstraint {
+  Type *t1;
+  Type *t2;
+  struct TypeConstraint *next;
+} TypeConstraint;
+
+typedef struct Method {
+  const char *name;
+  void *method;
+  size_t size;
+  Type *signature;
+} Method;
+
+enum TypeClassType { FN, STRUCTURAL };
+
+typedef struct TypeClass {
+  const char *name;
+  double rank;
+  struct TypeClass *next;
+} TypeClass;
 
 typedef struct TypeEnv TypeEnv;
 typedef struct Type Type;
@@ -91,6 +114,10 @@ extern Type t_coroutine_concat_sig;
 #define TYPE_NAME_OP_AND  "&&"
 #define TYPE_NAME_OP_OR  "||"
 
+#define TYPE_NAME_TYPECLASS_ARITHMETIC "arithmetic"
+#define TYPE_NAME_TYPECLASS_EQ "eq"
+#define TYPE_NAME_TYPECLASS_ORD "ord"
+
 typedef struct _binop_map {
   const char *name;
   Type *binop_fn_type;
@@ -122,29 +149,29 @@ extern _binop_map binop_map[];
 #define arithmetic_var(n)                                                      \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
-        .implements = (TypeClass *[]){&(TypeClass){.name = "arithmetic"}},     \
-        .num_implements = 1                                                    \
+        .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC},    \
   }
 
 #define ord_var(n)                                                             \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
-        .implements = (TypeClass *[]){&(TypeClass){.name = "ord"}},            \
-        .num_implements = 1                                                    \
+        .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ORD},           \
   }
 
 #define eq_var(n)                                                              \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
-        .implements = (TypeClass *[]){&(TypeClass){.name = "eq"}},             \
-        .num_implements = 1                                                    \
+        .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ},            \
   }
 
-#define TYPECLASS_RESOLVE(tc_name, dep1, dep2)                                 \
-  ((Type){.kind = T_TYPECLASS_RESOLVE,                                         \
-          .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,           \
-                                           .dependencies =                     \
-                                               (Type *[]){dep1, dep2}}}})
+typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
+
+// #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
+//   ((Type){                                                                     \
+//       .kind = T_TYPECLASS_RESOLVE,                                             \
+//       .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,               \
+//                                        .dependencies = (Type *[]){dep1, dep2}, \
+//                                        .resolve_dependencies = resolver}}})
 #define COR_INST(param, ret_opt)                                               \
   ((Type){.kind = T_COROUTINE_INSTANCE,                                        \
           .data = {.T_FN = {.from = param, .to = ret_opt}}})
@@ -153,7 +180,6 @@ extern _binop_map binop_map[];
   (Type) { T_VAR, {.T_VAR = n}, }
 
 enum TypeKind {
-  /* Type Operator */
   T_INT,
   T_UINT64,
   T_NUM,
@@ -163,12 +189,7 @@ enum TypeKind {
   T_STRING,
   T_FN,
   T_CONS,
-  /* Type Variable  */
   T_VAR,
-  // T_MODULE,
-  // T_TYPECLASS,
-  T_TYPECLASS_RESOLVE,
-  // T_VARIANT_MEMBER,
   T_COROUTINE_INSTANCE,
 };
 
@@ -184,6 +205,7 @@ typedef struct Type {
       const char *name;
       struct Type **args;
       int num_args;
+      char **names;
     } T_CONS;
 
     struct {
@@ -191,48 +213,15 @@ typedef struct Type {
       struct Type *to;
     } T_FN;
 
-    struct {
-      struct Type **dependencies; // contains 2
-      const char *comparison_tc; // use the comparison typeclass name to compare
-                                 // the rank of all dependencies
-    } T_TYPECLASS_RESOLVE;
-
-    // struct {
-    //   struct Type *params_type; // internal parameter type
-    //   struct Type *yield_interface;
-    /* interface for interaction from outside
-ie:
-```
-let f = fn a -> yield a; yield 2; yield 3;;
-let x = f 1;
-x () # : Some 1
-```
-yield interface here is () -> Option of Int so we know that x () has type
-Option Of Int
-
-for compilation purposes we want to know what's the internal parameter type of x
-which in this case would be t_int
-this is necessary so that we can properly compile higher-order stream-combining
-functions
-    */
-    // } T_COROUTINE_INSTANCE;
-
-    // struct {
-    //   struct Type *variant; // pointer to T_CONS with name "Variant"
-    //   int index;
-    // } T_VARIANT_MEMBER;
-
   } data;
 
   const char *alias;
-  TypeClass **implements; // Array of type classes this type implements
-  int num_implements;
+  TypeClass *implements;
+
   void *constructor;
   size_t constructor_size;
   bool is_recursive_fn_ref;
   bool is_coroutine_fn;
-  bool is_coroutine_instance;
-  char **names;
   void *meta;
 } Type;
 
@@ -344,4 +333,10 @@ Type *get_coroutine_unwrapped_ret_type(Type *instance);
 Type *get_coroutine_ret_opt_type(Type *instance);
 Type *create_coroutine_instance(Type *params_type, Type *ret);
 Type *get_coroutine_params(Type *instance);
+
+TypeClass *get_typeclass_by_name(Type *t, const char *name);
+double get_typeclass_rank(Type *t, const char *name);
+
+bool type_implements(Type *t, TypeClass *tc);
+
 #endif

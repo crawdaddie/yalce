@@ -1002,6 +1002,7 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
 void print_location(Ast *ast) {
   loc_info *loc = ast->loc_info;
   if (!loc || !loc->src || !loc->src_content) {
+    print_ast(ast);
     return;
   }
   fprintf(stderr, "%s %d:%d\n", loc->src, loc->line, loc->col);

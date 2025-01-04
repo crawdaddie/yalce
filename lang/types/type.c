@@ -1,29 +1,13 @@
 #include "type.h"
-#include "types/unification.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-Type t_int = {T_INT, .num_implements = 3,
-              .implements = (TypeClass *[]){
-                  &TCEq_int,
-                  &TCOrd_int,
-                  &TCArithmetic_int,
-              }};
+Type t_int = {T_INT};
 
-Type t_uint64 = {T_UINT64, .num_implements = 3,
-                 .implements = (TypeClass *[]){
-                     &TCEq_uint64,
-                     &TCOrd_uint64,
-                     &TCArithmetic_uint64,
-                 }};
+Type t_uint64 = {T_UINT64};
 
-Type t_num = {T_NUM, .num_implements = 3,
-              .implements = (TypeClass *[]){
-                  &TCEq_num,
-                  &TCOrd_num,
-                  &TCArithmetic_num,
-              }};
+Type t_num = {T_NUM};
 
 Type t_string = {T_CONS,
                  {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}},
@@ -33,10 +17,7 @@ Type t_string_add_fn_sig = MAKE_FN_TYPE_3(&t_string, &t_string, &t_string);
 Type t_char_array = {T_CONS,
                      {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}}};
 
-Type t_bool = {T_BOOL, .num_implements = 1,
-               .implements = (TypeClass *[]){
-                   &TCEq_bool,
-               }};
+Type t_bool = {T_BOOL};
 
 Type t_void = {T_VOID};
 Type t_char = {T_CHAR};
@@ -53,51 +34,53 @@ Type t_ptr_deref_sig = MAKE_FN_TYPE_2(&t_ptr_generic, &t_ptr_generic_contained);
 
 Type t_add_a = arithmetic_var("a");
 Type t_add_b = arithmetic_var("b");
-Type t_add = MAKE_FN_TYPE_3(
-    &t_add_a, &t_add_b, &TYPECLASS_RESOLVE("arithmetic", &t_add_a, &t_add_b));
+
+// Type t_add =
+//     MAKE_FN_TYPE_3(&t_add_a, &t_add_a,
+//                    &TYPECLASS_RESOLVE("arithmetic", &t_add_a, &t_add_b,
+//                    NULL));
+//
+Type t_add = MAKE_FN_TYPE_3(&t_add_a, &t_add_a, &t_add_a);
+
 Type t_sub_a = arithmetic_var("a");
 Type t_sub_b = arithmetic_var("b");
-Type t_sub = MAKE_FN_TYPE_3(
-    &t_sub_a, &t_sub_b, &TYPECLASS_RESOLVE("arithmetic", &t_sub_a, &t_sub_b));
+Type t_sub = MAKE_FN_TYPE_3(&t_sub_a, &t_sub_a, &t_sub_a);
 
 Type t_mul_a = arithmetic_var("a");
 Type t_mul_b = arithmetic_var("b");
-Type t_mul = MAKE_FN_TYPE_3(
-    &t_mul_a, &t_mul_b, &TYPECLASS_RESOLVE("arithmetic", &t_mul_a, &t_mul_b));
+Type t_mul = MAKE_FN_TYPE_3(&t_mul_a, &t_mul_a, &t_mul_a);
 
 Type t_div_a = arithmetic_var("a");
 Type t_div_b = arithmetic_var("b");
-Type t_div = MAKE_FN_TYPE_3(
-    &t_div_a, &t_div_b, &TYPECLASS_RESOLVE("arithmetic", &t_div_a, &t_div_b));
+Type t_div = MAKE_FN_TYPE_3(&t_div_a, &t_div_a, &t_div_a);
 
 Type t_mod_a = arithmetic_var("a");
 Type t_mod_b = arithmetic_var("b");
-Type t_mod = MAKE_FN_TYPE_3(
-    &t_mod_a, &t_mod_b, &TYPECLASS_RESOLVE("arithmetic", &t_mod_a, &t_mod_b));
+Type t_mod = MAKE_FN_TYPE_3(&t_mod_a, &t_mod_a, &t_mod_a);
 
 Type t_lt_a = ord_var("a");
 Type t_lt_b = ord_var("b");
-Type t_lt = MAKE_FN_TYPE_3(&t_lt_a, &t_lt_b, &t_bool);
+Type t_lt = MAKE_FN_TYPE_3(&t_lt_a, &t_lt_a, &t_bool);
 
 Type t_gt_a = ord_var("a");
 Type t_gt_b = ord_var("b");
-Type t_gt = MAKE_FN_TYPE_3(&t_gt_a, &t_gt_b, &t_bool);
+Type t_gt = MAKE_FN_TYPE_3(&t_gt_a, &t_gt_a, &t_bool);
 
 Type t_lte_a = ord_var("a");
 Type t_lte_b = ord_var("b");
-Type t_lte = MAKE_FN_TYPE_3(&t_lte_a, &t_lte_b, &t_bool);
+Type t_lte = MAKE_FN_TYPE_3(&t_lte_a, &t_lte_a, &t_bool);
 
 Type t_gte_a = ord_var("a");
 Type t_gte_b = ord_var("b");
-Type t_gte = MAKE_FN_TYPE_3(&t_gte_a, &t_gte_b, &t_bool);
+Type t_gte = MAKE_FN_TYPE_3(&t_gte_a, &t_gte_a, &t_bool);
 
 Type t_eq_a = eq_var("a");
 Type t_eq_b = eq_var("b");
-Type t_eq = MAKE_FN_TYPE_3(&t_eq_a, &t_eq_b, &t_bool);
+Type t_eq = MAKE_FN_TYPE_3(&t_eq_a, &t_eq_a, &t_bool);
 
 Type t_neq_a = eq_var("a");
 Type t_neq_b = eq_var("b");
-Type t_neq = MAKE_FN_TYPE_3(&t_neq_a, &t_neq_b, &t_bool);
+Type t_neq = MAKE_FN_TYPE_3(&t_neq_a, &t_neq_a, &t_bool);
 
 Type t_bool_binop = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
 
@@ -126,14 +109,11 @@ static char *type_name_mapping[] = {
 };
 
 char *tc_list_to_string(Type *t, char *buffer) {
-  if (t->num_implements > 0 && t->implements != NULL) {
+  if (t->implements != NULL) {
     buffer = strncat(buffer, " [", 2);
-    for (int i = 0; i < t->num_implements; i++) {
-      buffer = strncat(buffer, t->implements[i]->name,
-                       strlen(t->implements[i]->name));
-      if (i != t->num_implements - 1) {
-        buffer = strncat(buffer, ", ", 2);
-      }
+    for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
+      buffer = strncat(buffer, tc->name, strlen(tc->name));
+      buffer = strncat(buffer, ", ", 2);
     }
     buffer = strncat(buffer, "]", 1);
   }
@@ -263,10 +243,11 @@ char *type_to_string(Type *t, char *buffer) {
     if (is_tuple_type(t)) {
 
       buffer = strncat(buffer, "( ", 2);
-      int is_named = t->names != NULL;
+      int is_named = t->data.T_CONS.names != NULL;
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         if (is_named) {
-          buffer = strncat(buffer, t->names[i], strlen(t->names[i]));
+          buffer = strncat(buffer, t->data.T_CONS.names[i],
+                           strlen(t->data.T_CONS.names[i]));
           buffer = strncat(buffer, ": ", 2);
         }
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
@@ -327,7 +308,15 @@ char *type_to_string(Type *t, char *buffer) {
     break;
   }
   case T_VAR: {
-    buffer = strncat(buffer, t->data.T_VAR, strlen(t->data.T_VAR));
+    uint64_t vname = (uint64_t)t->data.T_VAR;
+    if (vname < 65) {
+      vname += 65;
+      buffer = strncat(buffer, (char *)&vname, 1);
+    } else {
+
+      buffer = strncat(buffer, t->data.T_VAR, strlen(t->data.T_VAR));
+    }
+
     buffer = tc_list_to_string(t, buffer);
     break;
   }
@@ -426,15 +415,9 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   case T_VAR: {
-    bool eq = strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
-    if (t2->num_implements > 0) {
 
-      if (t1->num_implements == 0 || t1->implements == NULL) {
-        eq &= false;
-      }
-      for (int i = 0; i < t2->num_implements; i++) {
-        eq &= implements(t1, t2->implements[i]);
-      }
+    bool eq = strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
+    if (t2->implements != NULL) {
     }
     return eq;
   }
@@ -566,15 +549,8 @@ bool is_generic(Type *t) {
   }
 
   case T_TYPECLASS_RESOLVE: {
-
-    if (is_generic(t->data.T_TYPECLASS_RESOLVE.dependencies[0])) {
-      return true;
-    }
-
-    if (is_generic(t->data.T_TYPECLASS_RESOLVE.dependencies[1])) {
-      return true;
-    }
-    return false;
+    return is_generic(t->data.T_TYPECLASS_RESOLVE.dependencies[0]) ||
+           is_generic(t->data.T_TYPECLASS_RESOLVE.dependencies[1]);
   }
 
   case T_CONS: {
@@ -587,6 +563,8 @@ bool is_generic(Type *t) {
       }
       return false;
 
+    } else if (strcmp(t->data.T_CONS.name, "forall") == 0) {
+      return true;
     } else {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         if (is_generic(t->data.T_CONS.args[i])) {
@@ -598,12 +576,9 @@ bool is_generic(Type *t) {
   }
 
   case T_FN: {
-    if (is_generic(t->data.T_FN.from)) {
-      return true;
-    }
-
-    return is_generic(t->data.T_FN.to);
+    return is_generic(t->data.T_FN.from) || is_generic(t->data.T_FN.to);
   }
+
   case T_COROUTINE_INSTANCE: {
     if (is_generic(t->data.T_FN.from)) {
       return true;
@@ -625,6 +600,9 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
 }
 
 Type *env_lookup(TypeEnv *env, const char *name) {
+  if (env == NULL) {
+    return NULL;
+  }
   while (env) {
     if (is_variant_type(env->type)) {
 
@@ -859,9 +837,11 @@ Type *deep_copy_type(const Type *original) {
   copy->alias = original->alias;
   copy->constructor = original->constructor;
   copy->constructor_size = original->constructor_size;
-  for (int i = 0; i < original->num_implements; i++) {
-    add_typeclass(copy, original->implements[i]);
-  }
+  copy->implements = original->implements;
+
+  // for (int i = 0; i < original->num_implements; i++) {
+  //   add_typeclass(copy, original->implements[i]);
+  // }
 
   switch (original->kind) {
   case T_VAR:
@@ -892,6 +872,7 @@ Type *copy_array_type(Type *t) {
   copy->kind = t->kind;
   return copy;
 }
+/*
 
 Type *copy_type(Type *t) {
 
@@ -927,13 +908,13 @@ Type *copy_type(Type *t) {
     }
   }
 
-  if (t->implements != NULL && t->num_implements > 0) {
-    copy->implements = talloc(sizeof(TypeClass *) * t->num_implements);
-    copy->num_implements = t->num_implements;
-    for (int i = 0; i < t->num_implements; i++) {
-      copy->implements[i] = t->implements[i];
-    }
-  }
+  // if (t->implements != NULL && t->num_implements > 0) {
+  //   copy->implements = talloc(sizeof(TypeClass *) * t->num_implements);
+  //   copy->num_implements = t->num_implements;
+  //   for (int i = 0; i < t->num_implements; i++) {
+  //     copy->implements[i] = t->implements[i];
+  //   }
+  // }
   if (copy->kind == T_COROUTINE_INSTANCE) {
     copy->data.T_FN.from = copy_type(t->data.T_FN.from);
 
@@ -942,9 +923,9 @@ Type *copy_type(Type *t) {
 
   copy->meta = t->meta;
   copy->is_coroutine_fn = t->is_coroutine_fn;
-  copy->is_coroutine_instance = t->is_coroutine_instance;
   return copy;
 }
+*/
 
 int fn_type_args_len(Type *fn_type) {
 
@@ -1187,6 +1168,7 @@ void print_constraints_map(TypeMap *map) {
   }
 }
 
+/*
 Type *constraints_map_lookup(TypeMap *map, Type *key) {
   while (map) {
     if (types_equal(map->key, key)) {
@@ -1201,6 +1183,7 @@ Type *constraints_map_lookup(TypeMap *map, Type *key) {
   }
   return NULL;
 }
+*/
 
 Type *ptr_of_type(Type *pointee) {
   Type *ptr = empty_type();
@@ -1279,7 +1262,7 @@ bool is_coroutine_generator(Type *t) {
 
 int get_struct_member_idx(const char *member_name, Type *type) {
   for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-    char *n = type->names[i];
+    char *n = type->data.T_CONS.names[i];
     if (strcmp(member_name, n) == 0) {
       return i;
     }
@@ -1319,8 +1302,8 @@ Type *concat_struct_types(Type *a, Type *b) {
   if (strcmp(a->data.T_CONS.name, b->data.T_CONS.name) != 0) {
     return NULL;
   }
-  if (a->names != NULL) {
-    if (b->names == NULL) {
+  if (a->data.T_CONS.names != NULL) {
+    if (b->data.T_CONS.names == NULL) {
       return NULL;
     }
   }
@@ -1330,7 +1313,7 @@ Type *concat_struct_types(Type *a, Type *b) {
   int len = lena + lenb;
   Type **args = talloc(sizeof(Type *) * len);
   char **names = NULL;
-  if (a->names) {
+  if (a->data.T_CONS.names) {
     names = talloc(sizeof(char *) * len);
   }
 
@@ -1338,14 +1321,14 @@ Type *concat_struct_types(Type *a, Type *b) {
   for (i = 0; i < lena; i++) {
     args[i] = a->data.T_CONS.args[i];
     if (names) {
-      names[i] = a->names[i];
+      names[i] = a->data.T_CONS.names[i];
     }
   }
   for (; i < len; i++) {
     args[i] = b->data.T_CONS.args[i - lena];
     if (names) {
       // TODO: fail if duplicate keys used
-      names[i] = b->names[i - lena];
+      names[i] = b->data.T_CONS.names[i - lena];
     }
   }
 
@@ -1354,7 +1337,7 @@ Type *concat_struct_types(Type *a, Type *b) {
   concat->data.T_CONS.name = a->data.T_CONS.name;
   concat->data.T_CONS.args = args;
   concat->data.T_CONS.num_args = len;
-  concat->names = names;
+  concat->data.T_CONS.names = names;
   return concat;
 }
 
@@ -1390,4 +1373,31 @@ Type *get_coroutine_ret_opt_type(Type *instance) {
 }
 Type *get_coroutine_unwrapped_ret_type(Type *instance) {
   return type_of_option(get_coroutine_ret_opt_type(instance));
+}
+
+TypeClass *get_typeclass_by_name(Type *t, const char *name) {
+  for (TypeClass *tc = t->implements; tc; tc = tc->next) {
+    if (strcmp(name, tc->name) == 0) {
+      return tc;
+    }
+  }
+  return NULL;
+}
+
+bool type_implements(Type *t, TypeClass *constraint_tc) {
+  for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
+
+    if (strcmp(tc->name, constraint_tc->name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+double get_typeclass_rank(Type *t, const char *name) {
+  TypeClass *tc = get_typeclass_by_name(t, name);
+  if (!tc) {
+    return -1.;
+  }
+  return tc->rank;
 }

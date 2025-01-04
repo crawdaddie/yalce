@@ -78,8 +78,10 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  infer(*prog, env);
-  ctx->env = *env;
+  TICtx ti_ctx = {.env = *env, .scope = 0};
+  infer(*prog, &ti_ctx);
+
+  ctx->env = ti_ctx.env;
 
   if (top_level_tests) {
     printf("# Test %s\n"
@@ -180,13 +182,14 @@ int jit(int argc, char **argv) {
   }
 
   TypeEnv *env = NULL;
-  initialize_builtin_numeric_types(env);
-  env = initialize_builtin_funcs(stack, env);
-  env = initialize_types(env);
-  env = initialize_type_env_synth(env);
+  // initialize_builtin_numeric_types(env);
+  // env = initialize_builtin_funcs(stack, env);
+  // env = initialize_types(env);
+  // env = initialize_type_env_synth(env);
+  initialize_builtin_types();
 
-  t_option_of_var.alias = "Option";
-  env = env_extend(env, "Option", &t_option_of_var);
+  // t_option_of_var.alias = "Option";
+  // env = env_extend(env, "Option", &t_option_of_var);
 
   JITLangCtx ctx = {.stack = stack,
                     .stack_ptr = 0,
@@ -263,10 +266,11 @@ int jit(int argc, char **argv) {
         prog = parse_input(input, dirname);
       }
 
-      Type *typecheck_result = infer(prog, &env);
-      // print_type(typecheck_result);
+      TICtx ti_ctx = {.env = env, .scope = 0};
 
-      ctx.env = env;
+      Type *typecheck_result = infer(prog, &ti_ctx);
+
+      ctx.env = ti_ctx.env;
 
       if (typecheck_result == NULL) {
         continue;
