@@ -347,4 +347,5 @@ double get_typeclass_rank(Type *t, const char *name);
 
 bool type_implements(Type *t, TypeClass *tc);
 
+bool is_forall_type(Type *type);
 #endif

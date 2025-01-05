@@ -232,10 +232,18 @@ char *type_to_string(Type *t, char *buffer) {
     buffer = strncat(buffer, m, strlen(m));
     break;
   }
+
   case T_CONS: {
 
-    if (strcmp(t->data.T_CONS.name, "forall") == 0) {
-      buffer = strncat(buffer, "∀", 1);
+    if (is_forall_type(t)) {
+      buffer = strncat(buffer, "forall ", 7);
+      int len = t->data.T_CONS.num_args;
+      for (int i = 0; i < len - 1; i++) {
+        buffer = type_to_string(t->data.T_CONS.args[i], buffer);
+      }
+
+      buffer = strncat(buffer, " : ", 3);
+      buffer = type_to_string(t->data.T_CONS.args[len - 1], buffer);
       break;
     }
 
@@ -916,6 +924,11 @@ int fn_type_args_len(Type *fn_type) {
 bool is_list_type(Type *type) {
   return type->kind == T_CONS &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0);
+}
+
+bool is_forall_type(Type *type) {
+  return type->kind == T_CONS &&
+         (strncmp(type->data.T_CONS.name, "forall", 6) == 0);
 }
 
 bool is_string_type(Type *type) {

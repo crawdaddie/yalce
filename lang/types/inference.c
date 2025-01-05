@@ -70,8 +70,13 @@ void reset_type_var_counter() { type_var_counter = 0; }
 
 Type *next_tvar() {
   Type *tvar = talloc(sizeof(Type));
-  char *tname = talloc(sizeof(char));
-  *tname = (char)type_var_counter;
+  char *tname = talloc(sizeof(char) * 3);
+  for (int i = 0; i < 3; i++) {
+    tname[i] = 0;
+  }
+  sprintf(tname, "`%d", type_var_counter);
+  // *tname = (char)type_var_counter;
+
   *tvar = (Type){T_VAR, {.T_VAR = tname}};
   type_var_counter++;
   return tvar;
@@ -502,6 +507,21 @@ void print_constraints(TypeConstraint *c) {
   }
 }
 
+void print_subst(Substitution *c) {
+  for (Substitution *con = c; con != NULL; con = con->next) {
+
+    printf("subst: ");
+    if (con->from->kind == T_VAR) {
+      printf("%s with ", con->from->data.T_VAR);
+      print_type(con->to);
+    } else {
+      print_type(con->from);
+      printf("with ");
+      print_type(con->to);
+    }
+  }
+}
+
 bool satisfies_tc_constraint(Type *t, TypeClass *constraint_tc) {
   for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
 
@@ -525,6 +545,9 @@ double get_type_rank(Type *t, TypeClass *tc) {
 
 Type *find_highest_rank_type(Type *var, Type *current, TypeConstraint *rest) {
   TypeClass *tc = var->implements;
+  if (!tc) {
+    return NULL;
+  }
 
   Type *highest = current;
 
@@ -867,6 +890,14 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
     // Other application patterns...
     break;
   }
+  case AST_INT:
+  case AST_DOUBLE:
+  case AST_BOOL:
+  case AST_CHAR:
+  case AST_STRING:
+  case AST_VOID: {
+    return infer(pattern, ctx);
+  }
   }
 
   fprintf(stderr, "Unsupported pattern in let binding\n");
@@ -995,10 +1026,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
-  case AST_MATCH: {
-    break;
-  }
-
   case AST_YIELD: {
     break;
   }
@@ -1014,7 +1041,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
       fprintf(stderr, "Could not infer function type in application\n");
       return NULL;
     }
-    fn_type = deep_copy_type(fn_type);
+
+    if (!fn_type->is_recursive_fn_ref) {
+      fn_type = deep_copy_type(fn_type);
+    }
 
     Type *current_type = fn_type;
 
@@ -1027,22 +1057,36 @@ Type *infer(Ast *ast, TICtx *ctx) {
         return NULL;
       }
 
-      // Check that current type is a function type TODO: apply cons types too
-      if (current_type->kind != T_FN) {
+      // If current_type is a type variable, constrain it to be a function
+      if (current_type->kind == T_VAR) {
+        Type *ret_type = next_tvar();
+        Type *fn_constraint = type_fn(arg_type, ret_type);
+
+        TypeConstraint *constraints = ctx->constraints;
+        if (!unify(current_type, fn_constraint, &constraints)) {
+          fprintf(stderr,
+                  "Could not constrain type variable to function type\n");
+          return NULL;
+        }
+        ctx->constraints = constraints;
+        current_type = ret_type;
+      } else if (current_type->kind != T_FN) {
         fprintf(stderr, "Attempting to apply to non-function type\n");
         return NULL;
-      }
+      } else {
 
-      // Unification will handle propagating the typeclass constraints
-      // because the function's parameter type (current_type->data.T_FN.from)
-      // already has the typeclass constraint
-      if (!unify(arg_type, current_type->data.T_FN.from, &(ctx->constraints))) {
-        fprintf(stderr, "Type mismatch in function application\n");
-        return NULL;
-      }
+        // Regular function type case
+        //
+        TypeConstraint *constraints = ctx->constraints;
+        if (!unify(arg_type, current_type->data.T_FN.from, &constraints)) {
+          fprintf(stderr, "Type mismatch in function application\n");
+          return NULL;
+        }
 
-      // Move to the return type for next argument
-      current_type = current_type->data.T_FN.to;
+        ctx->constraints = constraints;
+
+        current_type = current_type->data.T_FN.to;
+      }
     }
     // After processing all arguments, solve collected constraints
     Substitution *subst = solve_constraints(ctx->constraints);
@@ -1112,6 +1156,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     break;
   }
+
   case AST_LAMBDA: {
     // Create new context for lambda body
     TICtx lambda_ctx = *ctx;
@@ -1119,35 +1164,159 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     // Fresh type vars for each parameter
     int num_params = ast->data.AST_LAMBDA.len;
-    Type *param_types[num_params];
+    Type **param_types = talloc(sizeof(Type *) * num_params);
 
-    // Process parameters left to right to build up the type
+    // Process parameters right to left to build up the type
     for (int i = 0; i < num_params; i++) {
       Ast *param = &ast->data.AST_LAMBDA.params[i];
-
-      // Create fresh type variable for parameter
       Type *param_type = next_tvar();
       param_types[i] = param_type;
-
-      // Add parameter to environment
       lambda_ctx.env = bind_in_env(lambda_ctx.env, param, param_type);
     }
 
-    // Infer body type in the extended environment
-    Type *body_type = infer(ast->data.AST_LAMBDA.body, &lambda_ctx);
-    if (!body_type) {
-      fprintf(stderr, "Could not infer lambda body type\n");
+    // If this is a named function that can be recursive
+    if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
+      // Create a type variable for the recursive function
+      Type *fn_type_var = next_tvar();
+      fn_type_var->is_recursive_fn_ref = true; // Mark as recursive
+
+      // Add to environment before inferring body
+      Ast rec_fn_name_binding = {
+          AST_IDENTIFIER,
+          {.AST_IDENTIFIER = {.value = ast->data.AST_LAMBDA.fn_name.chars,
+                              .length = ast->data.AST_LAMBDA.fn_name.length}}};
+      lambda_ctx.env =
+          bind_in_env(lambda_ctx.env, &rec_fn_name_binding, fn_type_var);
+
+      // Infer body type with recursive reference available
+      Type *body_type = infer(ast->data.AST_LAMBDA.body, &lambda_ctx);
+      if (!body_type)
+        return NULL;
+
+      // Build up the actual function type
+      Type *actual_fn_type = body_type;
+      for (int i = num_params - 1; i >= 0; i--) {
+        Type *new_fn = talloc(sizeof(Type));
+        new_fn->kind = T_FN;
+        new_fn->data.T_FN.from = param_types[i];
+        new_fn->data.T_FN.to = actual_fn_type;
+        actual_fn_type = new_fn;
+      }
+
+      // Solve constraints to get concrete types
+      if (lambda_ctx.constraints) {
+        Substitution *subst = solve_constraints(lambda_ctx.constraints);
+        if (!subst)
+          return NULL;
+        actual_fn_type = apply_substitution(subst, actual_fn_type);
+      }
+
+      // Only then consider generalization
+      type = actual_fn_type; // Or generalize if still has free vars
+
+      // // Unify the recursive type variable with the actual function type
+      // if (!unify(fn_type_var, actual_fn_type, &lambda_ctx.constraints)) {
+      //   fprintf(stderr, "Recursive function type mismatch\n");
+      //   return NULL;
+      // }
+      //
+      // type = actual_fn_type;
+      // print_type(type);
+      // print_ast(ast);
+      break;
+
+    } else {
+      // Non-recursive case - same as before
+      Type *body_type = infer(ast->data.AST_LAMBDA.body, &lambda_ctx);
+      if (!body_type)
+        return NULL;
+
+      Type *fn_type = body_type;
+      for (int i = num_params - 1; i >= 0; i--) {
+        Type *new_fn = talloc(sizeof(Type));
+        new_fn->kind = T_FN;
+        new_fn->data.T_FN.from = param_types[i];
+        new_fn->data.T_FN.to = fn_type;
+        fn_type = new_fn;
+      }
+
+      type = fn_type;
+      break;
+    }
+  }
+  case AST_MATCH: {
+    Type *result = next_tvar();
+
+    // Infer type of expression being matched
+    Type *expr_type = infer(ast->data.AST_MATCH.expr, ctx);
+    if (!expr_type) {
+      fprintf(stderr, "Could not infer match expression type\n");
       return NULL;
     }
 
-    // Build up function type from right to left:
-    // For λx.λy.λz.body, build: x -> y -> z -> body_type
-    Type *fn_type = body_type;
-    for (int i = num_params - 1; i >= 0; i--) {
-      fn_type = type_fn(param_types[i], fn_type);
+    // Create overall constraints list
+    TypeConstraint *match_constraints = ctx->constraints;
+
+    // Process each branch
+    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+      Ast *branch_pattern = &ast->data.AST_MATCH.branches[2 * i];
+      Ast *branch_body = &ast->data.AST_MATCH.branches[2 * i + 1];
+
+      // Create new context for this branch
+      TICtx branch_ctx = *ctx;
+      branch_ctx.scope++;
+      branch_ctx.constraints = NULL; // Start with fresh constraints for branch
+
+      // Infer pattern type and unify with match expression type
+      Type *pattern_type = infer_pattern(branch_pattern, ctx);
+      if (!pattern_type) {
+        fprintf(stderr, "Could not infer pattern type in match branch\n");
+        return NULL;
+      }
+
+      // Add pattern-expression constraint
+      if (!unify(expr_type, pattern_type, &match_constraints)) {
+        fprintf(stderr, "Pattern type doesn't match expression type\n");
+        return NULL;
+      }
+
+      // Add pattern bindings to environment
+      branch_ctx.env =
+          bind_in_env(branch_ctx.env, branch_pattern, pattern_type);
+
+      // Infer branch body type
+      Type *branch_type = infer(branch_body, &branch_ctx);
+      if (!branch_type) {
+        fprintf(stderr, "Could not infer match branch body type\n");
+        return NULL;
+      }
+
+      // Add result type constraint
+      if (!unify(result, branch_type, &match_constraints)) {
+        fprintf(stderr, "Inconsistent types in match branches\n");
+        return NULL;
+      }
+
+      // Merge branch constraints with overall constraints
+      // TypeConstraint *c = branch_ctx.constraints;
+      // while (c) {
+      //   all_constraints = constraints_extend(all_constraints, c->t1, c->t2);
+      //   c = c->next;
+      // }
+    }
+    ctx->constraints = match_constraints;
+
+    // Solve all collected constraints
+    Substitution *subst = solve_constraints(ctx->constraints);
+    if (!subst) {
+      fprintf(stderr, "Could not solve match constraints\n");
+      return NULL;
     }
 
-    type = fn_type;
+    // Apply substitutions to get final result type
+    type = apply_substitution(subst, result);
+    // Also apply substitutions to the expression type to propagate constraints
+    expr_type = apply_substitution(subst, expr_type);
     break;
   }
   }

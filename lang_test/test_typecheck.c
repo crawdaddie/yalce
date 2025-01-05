@@ -65,7 +65,7 @@ int main() {
   TFAIL("1 + \"hello\"");
 
   ({
-    Type tvar = {T_VAR, .data = {.T_VAR = ""}};
+    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
     T("x + 1", &tvar);
   });
 
@@ -97,6 +97,20 @@ int main() {
   TFAIL("let z = 1 in let x::_ = z in x");
 
   T("let f = fn a b -> 2;;", &t_int);
+
+  T("match x with\n"
+    "| 1 -> 1\n"
+    "| 2 -> 0\n"
+    "| _ -> 3\n",
+    &t_int);
+
+  T("let fib = fn x ->\n"
+    "  match x with\n"
+    "  | 0 -> 0\n"
+    "  | 1 -> 1\n"
+    "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+    ";;\n",
+    &MAKE_FN_TYPE_2(&t_int, &t_int));
 
   return status == true ? 0 : 1;
 }
