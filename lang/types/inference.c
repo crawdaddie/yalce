@@ -513,9 +513,11 @@ bool satisfies_tc_constraint(Type *t, TypeClass *constraint_tc) {
 }
 
 double get_type_rank(Type *t, TypeClass *tc) {
+
   if (t->kind == T_VAR) {
-    return 1000.;
+    return 1000.; // arbitrary large number
   }
+
   TypeClass *T = get_typeclass_by_name(t, tc->name);
 
   return T->rank;
@@ -761,10 +763,31 @@ void collect_env_vars(TypeEnv *env, char **vars, int *count) {
     env = env->next;
   }
 }
+Type *create_forall_type(int quantified_count, const char **quantified_vars,
+                         Type *t) {
+  // Create forall type constructor
+  Type *forall = talloc(sizeof(Type));
+  forall->kind = T_CONS;
+  forall->data.T_CONS.name = "forall";
+  forall->data.T_CONS.num_args = quantified_count + 1;
+  forall->data.T_CONS.args = talloc(sizeof(Type *) * (quantified_count + 1));
+  // forall->data.T_CONS.names = talloc(sizeof(char *) * quantified_count);
+
+  // Add quantified variables
+  for (int i = 0; i < quantified_count; i++) {
+    Type *var = tvar(quantified_vars[i]);
+    forall->data.T_CONS.args[i] = var;
+    // forall->data.T_CONS.names[i] = quantified_vars[i];
+  }
+
+  // Add the type body
+  forall->data.T_CONS.args[quantified_count] = t;
+  return forall;
+}
 
 Type *generalize_type(TypeEnv *env, Type *t) {
   // Collect variables from type
-  char *type_vars[100]; // Arbitrary limit
+  const char *type_vars[100]; // Arbitrary limit
   int type_var_count = 0;
   collect_type_vars(t, type_vars, &type_var_count);
 
@@ -774,7 +797,7 @@ Type *generalize_type(TypeEnv *env, Type *t) {
   collect_env_vars(env, env_vars, &env_var_count);
 
   // Find variables to quantify (in type but not in env)
-  char *quantified_vars[100];
+  const char *quantified_vars[100];
   int quantified_count = 0;
 
   for (int i = 0; i < type_var_count; i++) {
@@ -794,26 +817,7 @@ Type *generalize_type(TypeEnv *env, Type *t) {
   if (quantified_count == 0) {
     return t;
   }
-
-  // Create forall type constructor
-  Type *forall = talloc(sizeof(Type));
-  forall->kind = T_CONS;
-  forall->data.T_CONS.name = "forall";
-  forall->data.T_CONS.num_args = quantified_count + 1;
-  forall->data.T_CONS.args = talloc(sizeof(Type *) * (quantified_count + 1));
-  // forall->data.T_CONS.names = talloc(sizeof(char *) * quantified_count);
-
-  // Add quantified variables
-  for (int i = 0; i < quantified_count; i++) {
-    Type *var = talloc(sizeof(Type));
-    var->kind = T_VAR;
-    var->data.T_VAR = quantified_vars[i];
-    forall->data.T_CONS.args[i] = var;
-    // forall->data.T_CONS.names[i] = quantified_vars[i];
-  }
-
-  // Add the type body
-  forall->data.T_CONS.args[quantified_count] = t;
+  Type *forall = create_forall_type(quantified_count, quantified_vars, t);
 
   return forall;
 }
@@ -987,10 +991,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
-  case AST_LAMBDA: {
-    break;
-  }
-
   case AST_EXTERN_FN: {
     break;
   }
@@ -1076,7 +1076,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     // Unify definition type with binding pattern type
-
     TypeConstraint *constraints = ctx->constraints;
     if (!unify(def_type, binding_type, &constraints)) {
       fprintf(stderr, "Definition type doesn't match binding pattern\n");
@@ -1111,6 +1110,44 @@ Type *infer(Ast *ast, TICtx *ctx) {
       type = gen_type;
     }
 
+    break;
+  }
+  case AST_LAMBDA: {
+    // Create new context for lambda body
+    TICtx lambda_ctx = *ctx;
+    lambda_ctx.scope++;
+
+    // Fresh type vars for each parameter
+    int num_params = ast->data.AST_LAMBDA.len;
+    Type *param_types[num_params];
+
+    // Process parameters left to right to build up the type
+    for (int i = 0; i < num_params; i++) {
+      Ast *param = &ast->data.AST_LAMBDA.params[i];
+
+      // Create fresh type variable for parameter
+      Type *param_type = next_tvar();
+      param_types[i] = param_type;
+
+      // Add parameter to environment
+      lambda_ctx.env = bind_in_env(lambda_ctx.env, param, param_type);
+    }
+
+    // Infer body type in the extended environment
+    Type *body_type = infer(ast->data.AST_LAMBDA.body, &lambda_ctx);
+    if (!body_type) {
+      fprintf(stderr, "Could not infer lambda body type\n");
+      return NULL;
+    }
+
+    // Build up function type from right to left:
+    // For λx.λy.λz.body, build: x -> y -> z -> body_type
+    Type *fn_type = body_type;
+    for (int i = num_params - 1; i >= 0; i--) {
+      fn_type = type_fn(param_types[i], fn_type);
+    }
+
+    type = fn_type;
     break;
   }
   }

@@ -93,8 +93,10 @@ int main() {
   T("let x, y = (1, 2) in x", &t_int);
   T("let x::_ = [1,2,3] in x", &t_int);
 
-  T("let z = [1,2] in let x::_ = z in x", &t_int);
+  T("let z = [1, 2] in let x::_ = z in x", &t_int);
   TFAIL("let z = 1 in let x::_ = z in x");
+
+  T("let f = fn a b -> 2;;", &t_int);
 
   return status == true ? 0 : 1;
 }

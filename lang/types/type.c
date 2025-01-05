@@ -234,6 +234,11 @@ char *type_to_string(Type *t, char *buffer) {
   }
   case T_CONS: {
 
+    if (strcmp(t->data.T_CONS.name, "forall") == 0) {
+      buffer = strncat(buffer, "∀", 1);
+      break;
+    }
+
     if (is_list_type(t)) {
       buffer = type_to_string(t->data.T_CONS.args[0], buffer);
       buffer = strncat(buffer, "[]", 2);
