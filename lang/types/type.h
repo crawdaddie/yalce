@@ -45,6 +45,7 @@ extern Type t_bool;
 extern Type t_void;
 extern Type t_char;
 extern Type t_ptr;
+extern Type t_empty_list;
 
 // builtin binop types
 extern Type t_add;
@@ -185,7 +186,10 @@ typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
           .data = {.T_FN = {.from = param, .to = ret_opt}}})
 
 #define TVAR(n)                                                                \
-  (Type) { T_VAR, {.T_VAR = n}, }
+  ((Type){                                                                     \
+      T_VAR,                                                                   \
+      {.T_VAR = n},                                                            \
+  })
 
 enum TypeKind {
   T_INT,
@@ -199,6 +203,7 @@ enum TypeKind {
   T_CONS,
   T_VAR,
   T_COROUTINE_INSTANCE,
+  T_EMPTY_LIST,
 };
 
 typedef struct Type {

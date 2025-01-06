@@ -25,6 +25,7 @@ Type t_ptr = {T_CONS,
               {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
               .alias = TYPE_NAME_PTR};
 
+Type t_empty_list = {T_EMPTY_LIST};
 Type t_ptr_generic_contained = {T_VAR, {.T_VAR = "ptr_deref_var"}};
 Type t_ptr_generic = {
     T_CONS,
@@ -230,6 +231,11 @@ char *type_to_string(Type *t, char *buffer) {
   case T_CHAR: {
     char *m = type_name_mapping[t->kind];
     buffer = strncat(buffer, m, strlen(m));
+    break;
+  }
+
+  case T_EMPTY_LIST: {
+    buffer = strncat(buffer, "[]", 2);
     break;
   }
 

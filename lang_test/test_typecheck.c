@@ -23,6 +23,7 @@
       fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= stat;                                                            \
+    env = ctx.env;                                                             \
     ast;                                                                       \
   })
 
@@ -50,6 +51,7 @@ int main() {
   initialize_builtin_types();
 
   bool status = true;
+  TypeEnv *env = NULL;
 
   T("1", &t_int);
   T("1.", &t_num);
@@ -96,7 +98,9 @@ int main() {
   T("let z = [1, 2] in let x::_ = z in x", &t_int);
   TFAIL("let z = 1 in let x::_ = z in x");
 
-  T("let f = fn a b -> 2;;", &t_int);
+  T("let f = fn a b -> 2;;", &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`1"), &t_int));
+  T("let f = fn a: (Int) b: (Int) -> 2;;",
+    &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int));
 
   T("match x with\n"
     "| 1 -> 1\n"
@@ -111,6 +115,30 @@ int main() {
     "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
     ";;\n",
     &MAKE_FN_TYPE_2(&t_int, &t_int));
+
+  // LIST PROCESSING FUNCTIONS
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x::_ -> x\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x1::x2::_ -> x1\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  //
+  // T(
+  //     "let f = fn l->\n"
+  //     "  match l with\n"
+  //     "    | x1::x2::[] -> x1\n"
+  //     "    | [] -> 0\n"
+  //     ";;",
+  //     &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int));
 
   return status == true ? 0 : 1;
 }

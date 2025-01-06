@@ -440,6 +440,9 @@ void typeclasses_extend(Type *t, TypeClass *tc) {
 }
 
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
+  if (ast->data.AST_LIST.len == 0) {
+    return &t_empty_list;
+  }
 
   int len = ast->data.AST_LIST.len;
   Type *element_type = infer(ast->data.AST_LIST.items, ctx);
@@ -809,6 +812,9 @@ Type *create_forall_type(int quantified_count, const char **quantified_vars,
 }
 
 Type *generalize_type(TypeEnv *env, Type *t) {
+  if (t->kind == T_FN && is_generic(t)) {
+    return t;
+  }
   // Collect variables from type
   const char *type_vars[100]; // Arbitrary limit
   int type_var_count = 0;
@@ -895,6 +901,7 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
   case AST_BOOL:
   case AST_CHAR:
   case AST_STRING:
+  case AST_LIST:
   case AST_VOID: {
     return infer(pattern, ctx);
   }
@@ -1169,8 +1176,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // Process parameters right to left to build up the type
     for (int i = 0; i < num_params; i++) {
       Ast *param = &ast->data.AST_LAMBDA.params[i];
-      Type *param_type = next_tvar();
+      Ast *def = ast->data.AST_LAMBDA.defaults[i];
+      Type *param_type =
+          def != NULL ? compute_type_expression(def, ctx->env) : next_tvar();
+
       param_types[i] = param_type;
+
       lambda_ctx.env = bind_in_env(lambda_ctx.env, param, param_type);
     }
 
@@ -1180,7 +1191,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Type *fn_type_var = next_tvar();
       fn_type_var->is_recursive_fn_ref = true; // Mark as recursive
 
-      // Add to environment before inferring body
       Ast rec_fn_name_binding = {
           AST_IDENTIFIER,
           {.AST_IDENTIFIER = {.value = ast->data.AST_LAMBDA.fn_name.chars,
@@ -1188,12 +1198,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
       lambda_ctx.env =
           bind_in_env(lambda_ctx.env, &rec_fn_name_binding, fn_type_var);
 
-      // Infer body type with recursive reference available
       Type *body_type = infer(ast->data.AST_LAMBDA.body, &lambda_ctx);
       if (!body_type)
         return NULL;
 
-      // Build up the actual function type
       Type *actual_fn_type = body_type;
       for (int i = num_params - 1; i >= 0; i--) {
         Type *new_fn = talloc(sizeof(Type));
@@ -1211,18 +1219,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
         actual_fn_type = apply_substitution(subst, actual_fn_type);
       }
 
-      // Only then consider generalization
-      type = actual_fn_type; // Or generalize if still has free vars
+      type = actual_fn_type;
 
-      // // Unify the recursive type variable with the actual function type
-      // if (!unify(fn_type_var, actual_fn_type, &lambda_ctx.constraints)) {
-      //   fprintf(stderr, "Recursive function type mismatch\n");
-      //   return NULL;
-      // }
-      //
-      // type = actual_fn_type;
-      // print_type(type);
-      // print_ast(ast);
       break;
 
     } else {
@@ -1296,13 +1294,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fprintf(stderr, "Inconsistent types in match branches\n");
         return NULL;
       }
-
-      // Merge branch constraints with overall constraints
-      // TypeConstraint *c = branch_ctx.constraints;
-      // while (c) {
-      //   all_constraints = constraints_extend(all_constraints, c->t1, c->t2);
-      //   c = c->next;
-      // }
     }
     ctx->constraints = match_constraints;
 
@@ -1315,8 +1306,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     // Apply substitutions to get final result type
     type = apply_substitution(subst, result);
+
     // Also apply substitutions to the expression type to propagate constraints
     expr_type = apply_substitution(subst, expr_type);
+    break;
+  }
+
+  case AST_TYPE_DECL: {
+    type = compute_type_expression(ast, ctx->env);
     break;
   }
   }
