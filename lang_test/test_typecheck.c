@@ -131,14 +131,23 @@ int main() {
     ";;",
     &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
 
-  //
-  // T(
-  //     "let f = fn l->\n"
-  //     "  match l with\n"
-  //     "    | x1::x2::[] -> x1\n"
-  //     "    | [] -> 0\n"
-  //     ";;",
-  //     &MAKE_FN_TYPE_2(&tcons(TYPE_NAME_LIST, 1, &t_int), &t_int));
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x1::x2::[] -> x1\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  ({
+    Type opt_int = TOPT(&t_int);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some 1 -> 1\n"
+      "  | Some 0 -> 1\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+      &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
 
   return status == true ? 0 : 1;
 }

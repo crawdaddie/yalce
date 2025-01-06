@@ -76,6 +76,7 @@ extern Type t_array_of_chars_fn_sig;
 
 extern Type t_ptr_deref_sig;
 extern Type t_option_of_var;
+extern Type t_none;
 
 extern Type t_iter_of_list_sig;
 extern Type t_iter_of_array_sig;
@@ -165,6 +166,9 @@ extern _binop_map binop_map[];
         .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ},            \
   }
 
+#define TCONS(name, num, ...)                                                  \
+  ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
+
 #define TLIST(_t)                                                              \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){_t}, 1}}})
 #define TARRAY(_t)                                                             \
@@ -172,6 +176,8 @@ extern _binop_map binop_map[];
 
 #define TTUPLE(num, ...)                                                       \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
+
+#define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none);
 
 typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
 

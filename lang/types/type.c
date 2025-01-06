@@ -126,19 +126,6 @@ Type t_array_var = {
     T_CONS,
     {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_array_var_el}, 1}},
 };
-#define TLIST(t)                                                               \
-  (Type) {                                                                     \
-    T_CONS, {                                                                  \
-      .T_CONS = { TYPE_NAME_LIST, (Type *[]){t}, 1 }                           \
-    }                                                                          \
-  }
-
-#define TARRAY(t)                                                              \
-  (Type) {                                                                     \
-    T_CONS, {                                                                  \
-      .T_CONS = { TYPE_NAME_ARRAY, (Type *[]){t}, 1 }                          \
-    }                                                                          \
-  }
 
 Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
 
@@ -163,8 +150,6 @@ Type t_for_sig =
     MAKE_FN_TYPE_4(&t_int, &t_int, &MAKE_FN_TYPE_2(&t_int, &t_void), &t_void);
 
 Type t_option_var = {T_VAR, {.T_VAR = "t"}};
-#define TCONS(name, num, ...)                                                  \
-  ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
 Type t_none = {T_CONS, {.T_CONS = {"None", NULL, 0}}};
 bool is_option_type(Type *t) {
   return t->kind == T_CONS && ((strcmp(t->data.T_CONS.name, "Some") == 0) ||
