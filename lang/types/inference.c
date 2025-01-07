@@ -606,12 +606,18 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
 
       // If t2 is a concrete type, check if it satisfies the constraint
       if (t2->kind != T_VAR) {
+
         if (!satisfies_tc_constraint(t2, t1->implements)) {
           fprintf(stderr, "Type doesn't satisfy typeclass constraint\n");
           return false;
+        } else {
+
+          *constraints = constraints_extend(*constraints, t1, t2);
+          return true;
         }
       } else {
         // If t2 is a type var, it inherits the constraint
+        //
         t2->implements = t1->implements;
       }
     }
@@ -673,6 +679,13 @@ double rank_sum(Type *t) {
   }
   return res;
 }
+double sum_tc_ranks(Type *t1, Type *t2) {
+  double sum = 0.;
+  for (TypeClass *tc = t2->implements; tc != NULL; tc = tc->next) {
+    sum += get_typeclass_rank(t1, tc->name);
+  }
+  return sum;
+}
 
 Substitution *solve_constraints(TypeConstraint *constraints) {
 
@@ -690,6 +703,12 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
 
       // Look ahead for other constraints on this type var
       Type *resolved = find_highest_rank_type(t1, t2, constraints->next);
+
+      // printf("RESOLVED in solve constraints\n");
+      // print_type(t1);
+      // print_type(t2);
+      //
+      // print_type(resolved);
 
       if (resolved) {
         subst = substitutions_extend(subst, t1, resolved);
@@ -1095,6 +1114,18 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_EXTERN_FN: {
+    Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
+    if (sig->tag == AST_FN_SIGNATURE) {
+      Type *f = compute_type_expression(
+          sig->data.AST_LIST.items + sig->data.AST_LIST.len - 1, ctx->env);
+
+      for (int i = sig->data.AST_LIST.len - 2; i >= 0; i--) {
+        Type *p =
+            compute_type_expression(sig->data.AST_LIST.items + i, ctx->env);
+        f = type_fn(p, f);
+      }
+      type = f;
+    }
     break;
   }
 
@@ -1211,6 +1242,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         current_type = current_type->data.T_FN.to;
       }
     }
+
     // After processing all arguments, solve collected constraints
     Substitution *subst = solve_constraints(ctx->constraints);
 
@@ -1352,7 +1384,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fn_type = new_fn;
       }
 
+      // Solve constraints to get concrete types
+      if (lambda_ctx.constraints) {
+        Substitution *subst = solve_constraints(lambda_ctx.constraints);
+        if (!subst)
+          return NULL;
+        fn_type = apply_substitution(subst, fn_type);
+      }
+
       type = fn_type;
+
       break;
     }
   }

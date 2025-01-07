@@ -27,6 +27,18 @@
     ast;                                                                       \
   })
 
+#define TASSERT(t1, t2, msg)                                                   \
+  ({                                                                           \
+    if (types_equal(t1, t2)) {                                                 \
+      status &= true;                                                          \
+      fprintf(stderr, "✅ %s\n", msg);                                         \
+    } else {                                                                   \
+      status &= false;                                                         \
+      char buf[100] = {};                                                      \
+      fprintf(stderr, "❌ %s got %s\n", msg, type_to_string(t1, buf));         \
+    }                                                                          \
+  })
+
 #define TFAIL(input)                                                           \
   ({                                                                           \
     reset_type_var_counter();                                                  \
@@ -69,6 +81,11 @@ int main() {
   ({
     Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
     T("x + 1", &tvar);
+  });
+
+  ({
+    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
+    T("(1 + 2) * 8 - x", &tvar);
   });
 
   T("2.0 - 1", &t_num);
@@ -157,6 +174,36 @@ int main() {
       "  | None -> 0\n"
       "  ;;\n",
       &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
+  T("let f = fn x ->\n"
+    "match x with\n"
+    "  | (1, 2) -> 1\n"
+    "  | (1, 3) -> 0\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
+
+  T("let f = fn x ->\n"
+    "match x with\n"
+    "  | (1, y) -> y\n"
+    "  | (1, 3) -> 0\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
+
+  T("let ex_fn = extern fn Int -> Double -> Int;",
+    &MAKE_FN_TYPE_3(&t_int, &t_num, &t_int));
+
+  ({
+    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
+    Ast *body = T("let f = fn x -> 1 + x;;\n"
+                  "f 1;\n"
+                  "f 1.;\n",
+                  &t_num);
+
+    TASSERT(body->data.AST_BODY.stmts[0]->md, &MAKE_FN_TYPE_2(&tvar, &tvar),
+            "f == `0 [arithmetic] -> `0 [arithmetic]");
+    TASSERT(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
+    TASSERT(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
   });
 
   return status == true ? 0 : 1;

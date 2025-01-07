@@ -151,7 +151,8 @@ extern _binop_map binop_map[];
 #define arithmetic_var(n)                                                      \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
-        .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC},    \
+        .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC,     \
+                                   .rank = 1000.},                             \
   }
 
 #define ord_var(n)                                                             \

@@ -32,7 +32,7 @@ Type t_ptr_generic = {
     {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_ptr_generic_contained}, 1}}};
 
 Type t_ptr_deref_sig = MAKE_FN_TYPE_2(&t_ptr_generic, &t_ptr_generic_contained);
-
+Type t_arith_var = arithmetic_var("a");
 Type t_add_a = arithmetic_var("a");
 Type t_add_b = arithmetic_var("b");
 
@@ -41,23 +41,23 @@ Type t_add_b = arithmetic_var("b");
 //                    &TYPECLASS_RESOLVE("arithmetic", &t_add_a, &t_add_b,
 //                    NULL));
 //
-Type t_add = MAKE_FN_TYPE_3(&t_add_a, &t_add_a, &t_add_a);
+Type t_add = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
 
 Type t_sub_a = arithmetic_var("a");
 Type t_sub_b = arithmetic_var("b");
-Type t_sub = MAKE_FN_TYPE_3(&t_sub_a, &t_sub_a, &t_sub_a);
+Type t_sub = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
 
 Type t_mul_a = arithmetic_var("a");
 Type t_mul_b = arithmetic_var("b");
-Type t_mul = MAKE_FN_TYPE_3(&t_mul_a, &t_mul_a, &t_mul_a);
+Type t_mul = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
 
 Type t_div_a = arithmetic_var("a");
 Type t_div_b = arithmetic_var("b");
-Type t_div = MAKE_FN_TYPE_3(&t_div_a, &t_div_a, &t_div_a);
+Type t_div = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
 
 Type t_mod_a = arithmetic_var("a");
 Type t_mod_b = arithmetic_var("b");
-Type t_mod = MAKE_FN_TYPE_3(&t_mod_a, &t_mod_a, &t_mod_a);
+Type t_mod = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
 
 Type t_lt_a = ord_var("a");
 Type t_lt_b = ord_var("b");
