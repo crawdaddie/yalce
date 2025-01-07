@@ -149,5 +149,15 @@ int main() {
       &MAKE_FN_TYPE_2(&opt_int, &t_int));
   });
 
+  ({
+    Type opt_int = TOPT(&t_int);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some y -> y + 1\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+      &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
   return status == true ? 0 : 1;
 }
