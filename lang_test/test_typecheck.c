@@ -85,7 +85,17 @@ int main() {
 
   ({
     Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
+    T("1 + x", &tvar);
+  });
+
+  ({
+    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
     T("(1 + 2) * 8 - x", &tvar);
+  });
+
+  ({
+    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
+    T("x - 8", &tvar);
   });
 
   T("2.0 - 1", &t_num);

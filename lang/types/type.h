@@ -158,13 +158,15 @@ extern _binop_map binop_map[];
 #define ord_var(n)                                                             \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
-        .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ORD},           \
+        .implements =                                                          \
+            &(TypeClass){.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.},      \
   }
 
 #define eq_var(n)                                                              \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
-        .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ},            \
+        .implements =                                                          \
+            &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
   }
 
 #define TCONS(name, num, ...)                                                  \
@@ -211,7 +213,13 @@ enum TypeKind {
   T_VAR,
   T_COROUTINE_INSTANCE,
   T_EMPTY_LIST,
+  T_TYPECLASS_RESOLVE,
 };
+
+typedef struct TypeList {
+  struct Type *type;
+  struct TypeList *next;
+} TypeList;
 
 typedef struct Type {
   enum TypeKind kind;
@@ -292,8 +300,8 @@ bool is_array_type(Type *type);
 
 Type *copy_type(Type *t);
 
-Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
-                                    Type *dep2);
+Type *create_typeclass_resolve_type(const char *comparison_tc, int num_types,
+                                    Type **types);
 
 Type *resolve_tc_rank(Type *type);
 

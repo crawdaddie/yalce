@@ -32,56 +32,40 @@ Type t_ptr_generic = {
     {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_ptr_generic_contained}, 1}}};
 
 Type t_ptr_deref_sig = MAKE_FN_TYPE_2(&t_ptr_generic, &t_ptr_generic_contained);
-Type t_arith_var = arithmetic_var("a");
-Type t_add_a = arithmetic_var("a");
-Type t_add_b = arithmetic_var("b");
 
-// Type t_add =
-//     MAKE_FN_TYPE_3(&t_add_a, &t_add_a,
-//                    &TYPECLASS_RESOLVE("arithmetic", &t_add_a, &t_add_b,
-//                    NULL));
-//
-Type t_add = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
+#define MAKE_ARITH_OP(_name)                                                   \
+  Type _name##_a = arithmetic_var("a");                                        \
+  Type _name##_b = arithmetic_var("b");                                        \
+  Type _name##_res =                                                           \
+      (Type){T_TYPECLASS_RESOLVE,                                              \
+             {.T_CONS = {.name = "arithmetic",                                 \
+                         .num_args = 2,                                        \
+                         .args = (Type *[]){&t_add_a, &t_add_b}}}};            \
+  Type _name = MAKE_FN_TYPE_3(&_name##_a, &_name##_b, &_name##_res)
 
-Type t_sub_a = arithmetic_var("a");
-Type t_sub_b = arithmetic_var("b");
-Type t_sub = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
+MAKE_ARITH_OP(t_add);
+MAKE_ARITH_OP(t_sub);
+MAKE_ARITH_OP(t_mul);
+MAKE_ARITH_OP(t_div);
+MAKE_ARITH_OP(t_mod);
 
-Type t_mul_a = arithmetic_var("a");
-Type t_mul_b = arithmetic_var("b");
-Type t_mul = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
+#define MAKE_ORD_OP(_name)                                                     \
+  Type _name##_a = ord_var("a");                                               \
+  Type _name##_b = ord_var("b");                                               \
+  Type _name = MAKE_FN_TYPE_3(&_name##_a, &_name##_b, &t_bool)
 
-Type t_div_a = arithmetic_var("a");
-Type t_div_b = arithmetic_var("b");
-Type t_div = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
+MAKE_ORD_OP(t_lt);
+MAKE_ORD_OP(t_gt);
+MAKE_ORD_OP(t_lte);
+MAKE_ORD_OP(t_gte);
 
-Type t_mod_a = arithmetic_var("a");
-Type t_mod_b = arithmetic_var("b");
-Type t_mod = MAKE_FN_TYPE_3(&t_arith_var, &t_arith_var, &t_arith_var);
+#define MAKE_EQ_OP(_name)                                                      \
+  Type _name##_a = eq_var("a");                                                \
+  Type _name##_b = eq_var("b");                                                \
+  Type _name = MAKE_FN_TYPE_3(&_name##_a, &_name##_b, &t_bool)
 
-Type t_lt_a = ord_var("a");
-Type t_lt_b = ord_var("b");
-Type t_lt = MAKE_FN_TYPE_3(&t_lt_a, &t_lt_a, &t_bool);
-
-Type t_gt_a = ord_var("a");
-Type t_gt_b = ord_var("b");
-Type t_gt = MAKE_FN_TYPE_3(&t_gt_a, &t_gt_a, &t_bool);
-
-Type t_lte_a = ord_var("a");
-Type t_lte_b = ord_var("b");
-Type t_lte = MAKE_FN_TYPE_3(&t_lte_a, &t_lte_a, &t_bool);
-
-Type t_gte_a = ord_var("a");
-Type t_gte_b = ord_var("b");
-Type t_gte = MAKE_FN_TYPE_3(&t_gte_a, &t_gte_a, &t_bool);
-
-Type t_eq_a = eq_var("a");
-Type t_eq_b = eq_var("b");
-Type t_eq = MAKE_FN_TYPE_3(&t_eq_a, &t_eq_a, &t_bool);
-
-Type t_neq_a = eq_var("a");
-Type t_neq_b = eq_var("b");
-Type t_neq = MAKE_FN_TYPE_3(&t_neq_a, &t_neq_a, &t_bool);
+MAKE_EQ_OP(t_eq);
+MAKE_EQ_OP(t_neq);
 
 Type t_bool_binop = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
 
@@ -224,6 +208,21 @@ char *type_to_string(Type *t, char *buffer) {
     break;
   }
 
+  case T_TYPECLASS_RESOLVE: {
+    buffer = strncat(buffer, "tc resolve ", 12);
+
+    buffer = strncat(buffer, t->data.T_CONS.name, strlen(t->data.T_CONS.name));
+    buffer = strncat(buffer, " ", 1);
+
+    int len = t->data.T_CONS.num_args;
+    for (int i = 0; i < len - 1; i++) {
+      buffer = type_to_string(t->data.T_CONS.args[i], buffer);
+    }
+
+    buffer = strncat(buffer, " : ", 3);
+    buffer = type_to_string(t->data.T_CONS.args[len - 1], buffer);
+    break;
+  }
   case T_CONS: {
 
     if (is_forall_type(t)) {
@@ -245,7 +244,6 @@ char *type_to_string(Type *t, char *buffer) {
     }
 
     if (is_tuple_type(t)) {
-
       buffer = strncat(buffer, "( ", 2);
       int is_named = t->data.T_CONS.names != NULL;
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
@@ -520,6 +518,7 @@ bool is_generic(Type *t) {
     return true;
   }
 
+  case T_TYPECLASS_RESOLVE:
   case T_CONS: {
     if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
@@ -814,6 +813,7 @@ Type *deep_copy_type(const Type *original) {
   case T_VAR:
     copy->data.T_VAR = strdup(original->data.T_VAR);
     break;
+  case T_TYPECLASS_RESOLVE:
   case T_CONS:
     // Deep copy of name and args
     copy->data.T_CONS.name = strdup(original->data.T_CONS.name);
@@ -947,17 +947,39 @@ bool is_variant_type(Type *type) {
          (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0);
 }
 
-/*
-Type *create_typeclass_resolve_type(const char *comparison_tc, Type *dep1,
-                                    Type *dep2) {
+Type *create_typeclass_resolve_type(const char *comparison_tc, int num,
+                                    Type **types) {
   Type *tcr = empty_type();
   tcr->kind = T_TYPECLASS_RESOLVE;
-  tcr->data.T_TYPECLASS_RESOLVE.comparison_tc = comparison_tc;
-  tcr->data.T_TYPECLASS_RESOLVE.dependencies = talloc(sizeof(Type *) * 2);
-  tcr->data.T_TYPECLASS_RESOLVE.dependencies[0] = dep1;
-  tcr->data.T_TYPECLASS_RESOLVE.dependencies[1] = dep2;
+  tcr->data.T_CONS.name = comparison_tc;
+  tcr->data.T_CONS.num_args = num;
+  tcr->data.T_CONS.args = types;
   return tcr;
 }
+Type *resolve_tc_rank(Type *type) {
+  if (type->kind != T_TYPECLASS_RESOLVE) {
+    return type;
+  }
+  if (is_generic(type)) {
+    return type;
+  }
+  const char *comparison_tc = type->data.T_CONS.name;
+  Type *max_ranked = NULL;
+  double max_rank;
+  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+    Type *arg = type->data.T_CONS.args[i];
+    if (max_ranked == NULL) {
+      max_ranked = arg;
+      max_rank = get_typeclass_rank(arg, comparison_tc);
+    } else if (get_typeclass_rank(arg, comparison_tc) >= max_rank) {
+      max_ranked = arg;
+      max_rank = get_typeclass_rank(arg, comparison_tc);
+    }
+  }
+  return max_ranked;
+}
+
+/*
 
 
 Type *resolve_tc_rank(Type *type) {
@@ -967,7 +989,6 @@ Type *resolve_tc_rank(Type *type) {
   if (is_generic(type)) {
     return type;
   }
-  const char *comparison_tc = type->data.T_TYPECLASS_RESOLVE.comparison_tc;
   Type *dep1 = type->data.T_TYPECLASS_RESOLVE.dependencies[0];
   Type *dep2 = type->data.T_TYPECLASS_RESOLVE.dependencies[1];
   dep1 = dep1->kind == T_TYPECLASS_RESOLVE ? resolve_tc_rank(dep1) : dep1;

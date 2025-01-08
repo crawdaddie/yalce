@@ -547,8 +547,12 @@ void print_subst(Substitution *c) {
 }
 
 bool satisfies_tc_constraint(Type *t, TypeClass *constraint_tc) {
-  for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
+  if (t->kind == T_TYPECLASS_RESOLVE &&
+      strcmp(t->data.T_CONS.name, constraint_tc->name) == 0) {
+    return true;
+  }
 
+  for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
     if (strcmp(tc->name, constraint_tc->name) == 0) {
       return true;
     }
@@ -698,27 +702,15 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     if (t1->kind == T_VAR) {
       // Check for recursive types
       if (occurs_check(t1, t2)) {
+        printf("rec types\n");
         return NULL; // Infinite type error
       }
 
-      // Look ahead for other constraints on this type var
-      Type *resolved = find_highest_rank_type(t1, t2, constraints->next);
-
-      // printf("RESOLVED in solve constraints\n");
-      // print_type(t1);
-      // print_type(t2);
-      //
-      // print_type(resolved);
-
-      if (resolved) {
-        subst = substitutions_extend(subst, t1, resolved);
-        return subst;
-      } else {
-        subst = substitutions_extend(subst, t1, t2);
-      }
+      subst = substitutions_extend(subst, t1, t2);
 
     } else if (t2->kind == T_VAR) {
       if (occurs_check(t2, t1)) {
+
         return NULL; // Infinite type error
       }
 
@@ -750,7 +742,7 @@ bool occurs_check(Type *var, Type *t) {
            occurs_check(var, t->data.T_FN.to);
   }
 
-  if (t->kind == T_CONS) {
+  if (t->kind == T_CONS || t->kind == T_TYPECLASS_RESOLVE) {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       if (occurs_check(var, t->data.T_CONS.args[i])) {
         return true;
@@ -783,6 +775,23 @@ Type *apply_substitution(Substitution *subst, Type *t) {
     *new_t = *t;
     new_t->data.T_FN.from = apply_substitution(subst, t->data.T_FN.from);
     new_t->data.T_FN.to = apply_substitution(subst, t->data.T_FN.to);
+    return new_t;
+  }
+
+  if (t->kind == T_TYPECLASS_RESOLVE) {
+    printf("apply subst tc resolve\n");
+    print_type(t);
+    Type *new_t = talloc(sizeof(Type));
+    *new_t = *t;
+    new_t->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      new_t->data.T_CONS.args[i] =
+          apply_substitution(subst, t->data.T_CONS.args[i]);
+    }
+    if (!is_generic(new_t)) {
+      print_type(new_t);
+      return resolve_tc_rank(new_t);
+    }
     return new_t;
   }
 
@@ -1201,6 +1210,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
       break;
     }
+    TICtx app_ctx = *ctx;
 
     if (!fn_type->is_recursive_fn_ref) {
       fn_type = deep_copy_type(fn_type);
@@ -1210,7 +1220,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     // Process each argument
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-      Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
+      Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, &app_ctx);
 
       if (!arg_type) {
         fprintf(stderr, "Could not infer argument type in application\n");
@@ -1222,7 +1232,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         Type *ret_type = next_tvar();
         Type *fn_constraint = type_fn(arg_type, ret_type);
 
-        if (!unify_in_ctx(current_type, fn_constraint, ctx)) {
+        if (!unify_in_ctx(current_type, fn_constraint, &app_ctx)) {
           fprintf(stderr,
                   "Could not constrain type variable to function type\n");
           return NULL;
@@ -1234,7 +1244,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       } else {
 
         // Regular function type case
-        if (!unify_in_ctx(arg_type, current_type->data.T_FN.from, ctx)) {
+        if (!unify_in_ctx(arg_type, current_type->data.T_FN.from, &app_ctx)) {
           fprintf(stderr, "Type mismatch in function application\n");
           return NULL;
         }
@@ -1242,9 +1252,13 @@ Type *infer(Ast *ast, TICtx *ctx) {
         current_type = current_type->data.T_FN.to;
       }
     }
+    printf("application finish\n");
+    print_type(current_type);
+    print_constraints(app_ctx.constraints);
 
     // After processing all arguments, solve collected constraints
-    Substitution *subst = solve_constraints(ctx->constraints);
+    Substitution *subst = solve_constraints(app_ctx.constraints);
+    print_subst(subst);
 
     if (!subst) {
       fprintf(stderr, "Could not solve type constraints\n");
