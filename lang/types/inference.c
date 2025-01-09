@@ -571,33 +571,6 @@ double get_type_rank(Type *t, TypeClass *tc) {
   return T->rank;
 }
 
-Type *find_highest_rank_type(Type *var, Type *current, TypeConstraint *rest) {
-  TypeClass *tc = var->implements;
-  if (!tc) {
-    return NULL;
-  }
-
-  Type *highest = current;
-
-  // Look through remaining constraints for same type var
-  while (rest) {
-    if (rest->t1->kind == T_VAR &&
-        strcmp(rest->t1->data.T_VAR, var->data.T_VAR) == 0) {
-      if (get_type_rank(rest->t2, tc) > get_type_rank(highest, tc)) {
-        highest = rest->t2;
-      }
-    } else if (rest->t2->kind == T_VAR &&
-               strcmp(rest->t2->data.T_VAR, var->data.T_VAR) == 0) {
-      if (get_type_rank(rest->t1, tc) > get_type_rank(highest, tc)) {
-        highest = rest->t1;
-      }
-    }
-    rest = rest->next;
-  }
-
-  return highest;
-}
-
 bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
   // Handle type variables
   if (t1->kind == T_VAR) {
@@ -622,6 +595,9 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
       } else {
         // If t2 is a type var, it inherits the constraint
         //
+        // printf("extend typeclasses\n");
+        // print_type(t2);
+        // print_type(t1);
         t2->implements = t1->implements;
       }
     }
@@ -779,8 +755,7 @@ Type *apply_substitution(Substitution *subst, Type *t) {
   }
 
   if (t->kind == T_TYPECLASS_RESOLVE) {
-    printf("apply subst tc resolve\n");
-    print_type(t);
+
     Type *new_t = talloc(sizeof(Type));
     *new_t = *t;
     new_t->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
@@ -788,11 +763,7 @@ Type *apply_substitution(Substitution *subst, Type *t) {
       new_t->data.T_CONS.args[i] =
           apply_substitution(subst, t->data.T_CONS.args[i]);
     }
-    if (!is_generic(new_t)) {
-      print_type(new_t);
-      return resolve_tc_rank(new_t);
-    }
-    return new_t;
+    return resolve_tc_rank(new_t);
   }
 
   if (t->kind == T_CONS) {
@@ -1246,7 +1217,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       } else {
 
         // Regular function type case
-        if (!unify_in_ctx(arg_type, current_type->data.T_FN.from, &app_ctx)) {
+        if (!unify_in_ctx(current_type->data.T_FN.from, arg_type, &app_ctx)) {
           fprintf(stderr, "Type mismatch in function application\n");
           return NULL;
         }
@@ -1255,15 +1226,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
     }
 
-    printf("application finish\n");
-    print_ast(ast);
-    print_type(current_type);
-    print_constraints(app_ctx.constraints);
-    printf("------\n");
-
     // After processing all arguments, solve collected constraints
     Substitution *subst = solve_constraints(app_ctx.constraints);
-    print_subst(subst);
 
     if (!subst) {
       fprintf(stderr, "Could not solve type constraints\n");

@@ -65,156 +65,155 @@ int main() {
   bool status = true;
   TypeEnv *env = NULL;
 
-  // // T("1", &t_int);
-  // // T("1.", &t_num);
-  // // T("'c'", &t_char);
-  // // T("\"hello\"", &t_string);
-  // // T("true", &t_bool);
-  // // T("false", &t_bool);
-  // // T("()", &t_void);
-  // // T("1 + 2", &t_int);
-  // T("1 + 2.0", &t_num);
-  // T("(1 + 2) * 8", &t_int);
+  T("1", &t_int);
+  T("1.", &t_num);
+  T("'c'", &t_char);
+  T("\"hello\"", &t_string);
+  T("true", &t_bool);
+  T("false", &t_bool);
+  T("()", &t_void);
+  T("1 + 2", &t_int);
+  T("1 + 2.0", &t_num);
+  T("(1 + 2) * 8", &t_int);
   T("1 + 2.0 * 8", &t_num);
-  // TFAIL("1 + \"hello\"");
+  TFAIL("1 + \"hello\"");
   //
   ({
-    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
+    Type tvar = arithmetic_var("`0");
     T("x + 1", &tvar);
   });
+  ({
+    Type tvar = arithmetic_var("`0");
+    T("1 + x", &tvar);
+  });
   //
-  // ({
-  //   Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
-  //   T("1 + x", &tvar);
-  // });
+  ({
+    Type tvar = arithmetic_var("`0");
+    T("(1 + 2) * 8 - x", &tvar);
+  });
   //
-  // ({
-  //   Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
-  //   T("(1 + 2) * 8 - x", &tvar);
-  // });
+  ({
+    Type tvar = arithmetic_var("`0");
+    T("x - 8", &tvar);
+  });
   //
-  // ({
-  //   Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
-  //   T("x - 8", &tvar);
-  // });
+  T("2.0 - 1", &t_num);
+  T("1 == 1", &t_bool);
+  T("1 == 2", &t_bool);
+  T("1 == 2.0", &t_bool);
+  T("1 != 2.0", &t_bool);
+  T("1 < 2.0", &t_bool);
+  T("1 > 2.0", &t_bool);
+  T("1 >= 2.0", &t_bool);
+  T("1 <= 2.0", &t_bool);
+
+  T("[1,2,3]", &(TLIST(&t_int)));
+  TFAIL("[1,2.0,3]");
+
+  T("[|1,2,3|]", &TARRAY(&t_int));
+  TFAIL("[|1,2.0,3|]");
+  T("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
+
+  T("let x = 1", &t_int);
+  T("let x = 1 + 2.0", &t_num);
+  T("let x = 1 in x + 1.0", &t_num);
+  T("let x = 1 in let y = x + 1.0", &t_num);
+  T("let x, y = (1, 2) in x", &t_int);
+  T("let x::_ = [1,2,3] in x", &t_int);
   //
-  // T("2.0 - 1", &t_num);
-  // T("1 == 1", &t_bool);
-  // T("1 == 2", &t_bool);
-  // T("1 == 2.0", &t_bool);
-  // T("1 != 2.0", &t_bool);
-  // T("1 < 2.0", &t_bool);
-  // T("1 > 2.0", &t_bool);
-  // T("1 >= 2.0", &t_bool);
-  // T("1 <= 2.0", &t_bool);
-  //
-  // T("[1,2,3]", &(TLIST(&t_int)));
-  // TFAIL("[1,2.0,3]");
-  //
-  // T("[|1,2,3|]", &TARRAY(&t_int));
-  // TFAIL("[|1,2.0,3|]");
-  // T("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
-  //
-  // T("let x = 1", &t_int);
-  // T("let x = 1 + 2.0", &t_num);
-  // T("let x = 1 in x + 1.0", &t_num);
-  // T("let x = 1 in let y = x + 1.0", &t_num);
-  // T("let x, y = (1, 2) in x", &t_int);
-  // T("let x::_ = [1,2,3] in x", &t_int);
-  //
-  // T("let z = [1, 2] in let x::_ = z in x", &t_int);
-  // TFAIL("let z = 1 in let x::_ = z in x");
-  //
-  // T("let f = fn a b -> 2;;", &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`1"),
-  // &t_int)); T("let f = fn a: (Int) b: (Int) -> 2;;",
-  //   &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int));
-  //
-  // T("match x with\n"
-  //   "| 1 -> 1\n"
-  //   "| 2 -> 0\n"
-  //   "| _ -> 3\n",
-  //   &t_int);
-  //
-  // T("let fib = fn x ->\n"
-  //   "  match x with\n"
-  //   "  | 0 -> 0\n"
-  //   "  | 1 -> 1\n"
-  //   "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
-  //   ";;\n",
-  //   &MAKE_FN_TYPE_2(&t_int, &t_int));
-  //
+  T("let z = [1, 2] in let x::_ = z in x", &t_int);
+  TFAIL("let z = 1 in let x::_ = z in x");
+
+  T("let f = fn a b -> 2;;", &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`1"), &t_int));
+  T("let f = fn a: (Int) b: (Int) -> 2;;",
+    &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int));
+
+  T("match x with\n"
+    "| 1 -> 1\n"
+    "| 2 -> 0\n"
+    "| _ -> 3\n",
+    &t_int);
+
+  T("let fib = fn x ->\n"
+    "  match x with\n"
+    "  | 0 -> 0\n"
+    "  | 1 -> 1\n"
+    "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+    ";;\n",
+    &MAKE_FN_TYPE_2(&t_int, &t_int));
+
   // // LIST PROCESSING FUNCTIONS
-  // T("let f = fn l->\n"
-  //   "  match l with\n"
-  //   "    | x::_ -> x\n"
-  //   "    | [] -> 0\n"
-  //   ";;",
-  //   &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
-  //
-  // T("let f = fn l->\n"
-  //   "  match l with\n"
-  //   "    | x1::x2::_ -> x1\n"
-  //   "    | [] -> 0\n"
-  //   ";;",
-  //   &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
-  //
-  // T("let f = fn l->\n"
-  //   "  match l with\n"
-  //   "    | x1::x2::[] -> x1\n"
-  //   "    | [] -> 0\n"
-  //   ";;",
-  //   &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
-  //
-  // ({
-  //   Type opt_int = TOPT(&t_int);
-  //   T("let f = fn x ->\n"
-  //     "match x with\n"
-  //     "  | Some 1 -> 1\n"
-  //     "  | Some 0 -> 1\n"
-  //     "  | None -> 0\n"
-  //     "  ;;\n",
-  //     &MAKE_FN_TYPE_2(&opt_int, &t_int));
-  // });
-  //
-  // ({
-  //   Type opt_int = TOPT(&t_int);
-  //   T("let f = fn x ->\n"
-  //     "match x with\n"
-  //     "  | Some y -> y + 1\n"
-  //     "  | None -> 0\n"
-  //     "  ;;\n",
-  //     &MAKE_FN_TYPE_2(&opt_int, &t_int));
-  // });
-  //
-  // T("let f = fn x ->\n"
-  //   "match x with\n"
-  //   "  | (1, 2) -> 1\n"
-  //   "  | (1, 3) -> 0\n"
-  //   "  ;;\n",
-  //   &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
-  //
-  // T("let f = fn x ->\n"
-  //   "match x with\n"
-  //   "  | (1, y) -> y\n"
-  //   "  | (1, 3) -> 0\n"
-  //   "  ;;\n",
-  //   &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
-  //
-  // T("let ex_fn = extern fn Int -> Double -> Int;",
-  //   &MAKE_FN_TYPE_3(&t_int, &t_num, &t_int));
-  //
-  // ({
-  //   Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
-  //   Ast *body = T("let f = fn x -> 1 + x;;\n"
-  //                 "f 1;\n"
-  //                 "f 1.;\n",
-  //                 &t_num);
-  //
-  //   TASSERT(body->data.AST_BODY.stmts[0]->md, &MAKE_FN_TYPE_2(&tvar, &tvar),
-  //           "f == `0 [arithmetic] -> `0 [arithmetic]");
-  //   TASSERT(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
-  //   TASSERT(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
-  // });
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x::_ -> x\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x1::x2::_ -> x1\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x1::x2::[] -> x1\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  ({
+    Type opt_int = TOPT(&t_int);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some 1 -> 1\n"
+      "  | Some 0 -> 1\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+      &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
+  ({
+    Type opt_int = TOPT(&t_int);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some y -> y + 1\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+      &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
+  T("let f = fn x ->\n"
+    "match x with\n"
+    "  | (1, 2) -> 1\n"
+    "  | (1, 3) -> 0\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
+
+  T("let f = fn x ->\n"
+    "match x with\n"
+    "  | (1, y) -> y\n"
+    "  | (1, 3) -> 0\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
+
+  T("let ex_fn = extern fn Int -> Double -> Int;",
+    &MAKE_FN_TYPE_3(&t_int, &t_num, &t_int));
+
+  ({
+    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
+    Ast *body = T("let f = fn x -> 1 + x;;\n"
+                  "f 1;\n"
+                  "f 1.;\n",
+                  &t_num);
+
+    TASSERT(body->data.AST_BODY.stmts[0]->md, &MAKE_FN_TYPE_2(&tvar, &tvar),
+            "f == `0 [arithmetic] -> `0 [arithmetic]");
+    TASSERT(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
+    TASSERT(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
+  });
 
   return status == true ? 0 : 1;
 }

@@ -960,9 +960,11 @@ Type *resolve_tc_rank(Type *type) {
   if (type->kind != T_TYPECLASS_RESOLVE) {
     return type;
   }
-  if (is_generic(type)) {
-    return type;
-  }
+
+  // if (is_generic(type)) {
+  //   return type;
+  // }
+
   const char *comparison_tc = type->data.T_CONS.name;
   Type *max_ranked = NULL;
   double max_rank;
