@@ -1210,7 +1210,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
       break;
     }
+
     TICtx app_ctx = *ctx;
+    app_ctx.constraints = NULL;
 
     if (!fn_type->is_recursive_fn_ref) {
       fn_type = deep_copy_type(fn_type);
@@ -1252,9 +1254,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
         current_type = current_type->data.T_FN.to;
       }
     }
+
     printf("application finish\n");
+    print_ast(ast);
     print_type(current_type);
     print_constraints(app_ctx.constraints);
+    printf("------\n");
 
     // After processing all arguments, solve collected constraints
     Substitution *subst = solve_constraints(app_ctx.constraints);
