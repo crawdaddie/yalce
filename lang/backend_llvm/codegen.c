@@ -1,4 +1,5 @@
 #include "backend_llvm/codegen.h"
+#include "application.h"
 #include "backend_llvm/function.h"
 #include "backend_llvm/list.h"
 #include "backend_llvm/match.h"
@@ -7,7 +8,6 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
-#include "coroutines.h"
 #include "serde.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -89,10 +89,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     for (int i = 0; i < len; i++) {
       Ast *item = ast->data.AST_LIST.items + i;
 
-      // printf("codegen fmt string %d\n", i);
-      // print_ast(item);
-      // print_type(item->md);
-
       LLVMValueRef val = codegen(item, ctx, module, builder);
       Type *t = item->md;
       if (t->kind == T_VAR) {
@@ -138,7 +134,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_LET: {
     return codegen_assignment(ast, ctx, module, builder);
   }
+
   case AST_IDENTIFIER: {
+    if (strcmp(ast->data.AST_IDENTIFIER.value, "None") == 0) {
+      return codegen_none(builder);
+    }
     return codegen_identifier(ast, ctx, module, builder);
   }
 
@@ -147,7 +147,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_APPLICATION: {
-    return codegen_fn_application(ast, ctx, module, builder);
+    return codegen_application(ast, ctx, module, builder);
   }
 
   case AST_EXTERN_FN: {
@@ -160,9 +160,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_VOID: {
     return LLVMGetUndef(LLVMVoidType());
   }
-  case AST_YIELD: {
-    return codegen_yield(ast, ctx, module, builder);
-  }
+    // case AST_YIELD: {
+    //   return codegen_yield(ast, ctx, module, builder);
+    // }
 
   case AST_RECORD_ACCESS: {
     LLVMValueRef rec =

@@ -1,5 +1,4 @@
 #include "backend_llvm/types.h"
-#include "coroutines.h"
 #include "list.h"
 #include "types/type.h"
 #include "variant.h"
@@ -120,6 +119,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
     return LLVMInt32Type();
   }
+
   case T_TYPECLASS_RESOLVE: {
     if (!is_generic(type)) {
       type = resolve_tc_rank(type);
@@ -221,7 +221,7 @@ LLVMValueRef codegen_signal_add() { return NULL; }
 LLVMValueRef codegen_signal_sub() { return NULL; }
 LLVMValueRef codegen_signal_mul() { return NULL; }
 LLVMValueRef codegen_signal_mod() { return NULL; }
-
+/*
 LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -302,56 +302,10 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
   }
   }
 }
+*/
 
-LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
-                                LLVMModuleRef module, LLVMBuilderRef builder) {
-  switch (from_type->kind) {
-  case T_NUM: {
-    return val;
-  }
-
-  case T_INT: {
-    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(),
-                           "cast_int_to_double");
-  }
-
-  case T_UINT64: {
-    return LLVMBuildUIToFP(builder, val, LLVMDoubleType(),
-                           "cast_uint64_to_double");
-  }
-
-  default:
-    return NULL;
-  }
-}
-
-LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
-                                LLVMModuleRef module, LLVMBuilderRef builder) {
-  switch (from_type->kind) {
-
-  case T_INT: {
-    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
-    LLVMTypeRef uint64Type = LLVMInt64Type();
-
-    // Perform zero extension to convert i32 to i64
-    LLVMValueRef ext = LLVMBuildZExt(builder, val, uint64Type, "extended");
-    return ext;
-  }
-
-  default:
-    return NULL;
-  }
-}
-
-void initialize_ptr_constructor() {
-  t_ptr.constructor = ptr_constructor;
-  t_ptr.constructor_size = sizeof(ConsMethod);
-}
-
-void initialize_double_constructor() {
-  t_num.constructor = double_constructor;
-  t_num.constructor_size = sizeof(ConsMethod);
-}
+typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
+                                   LLVMBuilderRef);
 
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       Type *type_to, LLVMModuleRef module,
@@ -470,9 +424,8 @@ static LLVMValueRef codegen_neq_uint64(LLVMValueRef l, LLVMValueRef r,
   return LLVMBuildICmp(builder, LLVMIntNE, l, r, "Uint64 !=");
 }
 
-static LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r,
-                                   LLVMModuleRef module,
-                                   LLVMBuilderRef builder) {
+LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r,
+                            LLVMModuleRef module, LLVMBuilderRef builder) {
 
   return LLVMBuildFCmp(builder, LLVMRealOEQ, l, r, "Num ==");
 }
@@ -731,11 +684,6 @@ void initialize_builtin_numeric_types(TypeEnv *env) {
   t_num.constructor_size = sizeof(ConsMethod);
 }
 
-TypeEnv *initialize_types(TypeEnv *env) {
-  initialize_ptr_constructor();
-  return env;
-}
-
 typedef struct _tc_key {
   const char *binop;
   int tc_idx;
@@ -846,9 +794,9 @@ LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder) {
   return none;
 }
 
-LLVMValueRef codegen_none(LLVMTypeRef val_type, LLVMBuilderRef builder) {
-  LLVMTypeRef tu_types[] = {TAG_TYPE, val_type};
-  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
+LLVMValueRef codegen_none(LLVMBuilderRef builder) {
+  LLVMTypeRef tu_types[] = {TAG_TYPE};
+  LLVMTypeRef tu_type = LLVMStructType(tu_types, 1, 0);
   LLVMValueRef none = LLVMGetUndef(tu_type);
 
   none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),

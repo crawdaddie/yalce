@@ -172,7 +172,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       Type *lookup = env_lookup(env, name);
 
       if (lookup && is_generic(lookup)) {
-        Type *t = copy_type(lookup);
+        Type *t = deep_copy_type(lookup);
         t = compute_concrete_type(t, contained_type);
         return t;
       }
@@ -211,5 +211,11 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   type->alias = name;
 
   *env = env_extend(*env, name, type);
+  if (is_variant_type(type)) {
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      Type *member = type->data.T_CONS.args[i];
+      *env = env_extend(*env, member->data.T_CONS.name, type);
+    }
+  }
   return type;
 }

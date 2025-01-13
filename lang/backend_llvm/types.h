@@ -15,8 +15,6 @@ void initialize_ptr_constructor();
 void initialize_double_constructor();
 
 // Define the function pointer type
-typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
-                                   LLVMBuilderRef);
 LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
@@ -44,8 +42,11 @@ TypeEnv *initialize_types(TypeEnv *env);
 
 LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder);
 
-LLVMValueRef codegen_none(LLVMTypeRef val_type, LLVMBuilderRef builder);
+LLVMValueRef codegen_none(LLVMBuilderRef builder);
 
 LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder);
 LLVMValueRef codegen_option_is_some(LLVMValueRef opt, LLVMBuilderRef builder);
+
+LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r,
+                            LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

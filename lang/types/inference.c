@@ -6,43 +6,69 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Type variable set for tracking free variables
-typedef struct TypeVarSet {
-  char **vars;
-  int count;
-  int capacity;
-} TypeVarSet;
+uint64_t hash_type(Type *type); // Forward declaration
 
-TypeVarSet *type_var_set_new(void) {
-  TypeVarSet *set = talloc(sizeof(TypeVarSet));
-  set->capacity = 16;
-  set->count = 0;
-  set->vars = talloc(sizeof(char *) * set->capacity);
-  return set;
+uint64_t hash_spec_fn(Type *fn) {
+  // Start with the FNV offset
+  uint64_t hash = FNV_OFFSET;
+
+  // First mix in a value to distinguish function types from other types
+  hash ^= (uint64_t)T_FN;
+  hash *= FNV_PRIME;
+
+  // Hash the "from" type
+  uint64_t from_hash = hash_type(fn->data.T_FN.from);
+  hash ^= from_hash;
+  hash *= FNV_PRIME;
+
+  // Hash the "to" type
+  uint64_t to_hash = hash_type(fn->data.T_FN.to);
+  hash ^= to_hash;
+  hash *= FNV_PRIME;
+  return hash;
 }
 
-void type_var_set_add(TypeVarSet *set, const char *var) {
-  // Check if variable already exists
-  for (int i = 0; i < set->count; i++) {
-    if (strcmp(set->vars[i], var) == 0) {
-      return;
+// Helper function to hash any type
+uint64_t hash_type(Type *type) {
+  uint64_t hash = FNV_OFFSET;
+
+  // Mix in the kind
+  hash ^= (uint64_t)type->kind;
+  hash *= FNV_PRIME;
+
+  switch (type->kind) {
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_CHAR:
+  case T_BOOL:
+  case T_VOID:
+  case T_EMPTY_LIST:
+    // For simple types, just the kind is enough
+    return hash;
+
+  case T_CONS: {
+    // Hash the constructor name
+    int name_len = strlen(type->data.T_CONS.name);
+    hash ^= hash_string(type->data.T_CONS.name, name_len);
+    hash *= FNV_PRIME;
+
+    // Hash each argument
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      uint64_t arg_hash = hash_type(type->data.T_CONS.args[i]);
+      hash ^= arg_hash;
+      hash *= FNV_PRIME;
     }
+    return hash;
   }
 
-  // Grow array if needed
-  if (set->count >= set->capacity) {
+  case T_FN:
+    return hash_spec_fn(type);
 
-    int old_cap = set->capacity;
-    set->capacity *= 2;
-    char **vars = talloc(sizeof(char *) * set->capacity);
-    for (int i = 0; i < old_cap; i++) {
-      vars[i] = set->vars[i];
-    }
-
-    set->vars = vars;
+  default:
+    // For unsupported types, just use the kind
+    return hash;
   }
-
-  set->vars[set->count++] = strdup(var);
 }
 
 // Substitution map for type variables
@@ -57,7 +83,6 @@ TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
                                    Type *t2);
 
 void typeclasses_extend(Type *t, TypeClass *tc);
-Type *copy_type(Type *t);
 bool occurs_check(Type *var, Type *t);
 Type *substitute_type(Type *t, Type *var, Type *replacement);
 bool unify(Type *t1, Type *t2, TypeConstraint **constraints);
@@ -98,6 +123,7 @@ static ht builtin_types;
 void add_builtin(char *name, Type *t) {
   ht_set_hash(&builtin_types, name, hash_string(name, strlen(name)), t);
 }
+
 void print_builtin_types() {
   printf("builtins:\n");
   hti it = ht_iterator(&builtin_types);
@@ -110,35 +136,11 @@ void print_builtin_types() {
   }
 }
 
-TypeClassResolver arithmetic_resolver(Type *this, TypeConstraint *env) {
-
-  // Type *d1 = this->data.T_TYPECLASS_RESOLVE.dependencies[0];
-  // d1 = resolve_type_in_constraints(d1, env);
-  //
-  // double d1_rank =
-  //     get_typeclass_rank(d1, this->data.T_TYPECLASS_RESOLVE.comparison_tc);
-  //
-  // Type *d2 = this->data.T_TYPECLASS_RESOLVE.dependencies[1];
-  // d2 = resolve_type_in_constraints(d2, env);
-  // double d2_rank =
-  //     get_typeclass_rank(d2, this->data.T_TYPECLASS_RESOLVE.comparison_tc);
-  //
-  // if (d1->kind == T_VAR && d2->kind == T_VAR) {
-  //   return this;
-  // } else if (d1->kind == T_VAR) {
-  //   this->data.T_TYPECLASS_RESOLVE.dependencies[0] = d1;
-  //   this->data.T_TYPECLASS_RESOLVE.dependencies[1] = d2;
-  //   return this;
-  // } else if (d2->kind == T_VAR) {
-  //   this->data.T_TYPECLASS_RESOLVE.dependencies[0] = d1;
-  //   this->data.T_TYPECLASS_RESOLVE.dependencies[1] = d2;
-  //   return this;
-  // } else if (d1_rank >= d2_rank) {
-  //   return d1;
-  // } else {
-  //   return d2;
-  // }
-  return this;
+TypeList *type_list_extend(TypeList *l, Type *t) {
+  TypeList *tl = talloc(sizeof(TypeList));
+  tl->type = t;
+  tl->next = l;
+  return tl;
 }
 
 void initialize_builtin_types() {
@@ -176,6 +178,9 @@ void initialize_builtin_types() {
   typeclasses_extend(&t_int, tc_int);
   typeclasses_extend(&t_int, tc_int + 1);
   typeclasses_extend(&t_int, tc_int + 2);
+  // arithmetic_tc_registry = type_list_extend(arithmetic_tc_registry, &t_int);
+  // ord_tc_registry = type_list_extend(ord_tc_registry, &t_int);
+  // eq_tc_registry = type_list_extend(eq_tc_registry, &t_int);
 
   static TypeClass tc_uint64[] = {{
                                       .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
@@ -193,6 +198,9 @@ void initialize_builtin_types() {
   typeclasses_extend(&t_uint64, tc_uint64);
   typeclasses_extend(&t_uint64, tc_uint64 + 1);
   typeclasses_extend(&t_uint64, tc_uint64 + 2);
+  // arithmetic_tc_registry = type_list_extend(arithmetic_tc_registry,
+  // &t_uint64); ord_tc_registry = type_list_extend(ord_tc_registry, &t_uint64);
+  // eq_tc_registry = type_list_extend(eq_tc_registry, &t_uint64);
 
   static TypeClass tc_num[] = {{
 
@@ -212,12 +220,20 @@ void initialize_builtin_types() {
   typeclasses_extend(&t_num, tc_num + 1);
   typeclasses_extend(&t_num, tc_num + 2);
 
+  // arithmetic_tc_registry = type_list_extend(arithmetic_tc_registry, &t_num);
+  // ord_tc_registry = type_list_extend(ord_tc_registry, &t_num);
+  // eq_tc_registry = type_list_extend(eq_tc_registry, &t_num);
+
   static TypeClass TCEq_bool = {
       .name = TYPE_NAME_TYPECLASS_EQ,
       .rank = 0.0,
   };
 
   typeclasses_extend(&t_bool, &TCEq_bool);
+  // eq_tc_registry = type_list_extend(eq_tc_registry, &t_bool);
+  add_builtin("print", &t_builtin_print);
+  add_builtin("array_at", &t_array_at_fn_sig);
+  add_builtin("array_size", &t_array_size_fn_sig);
 }
 
 Type *param_binding_type(Ast *ast) {
@@ -394,44 +410,6 @@ Type *constraints_lookup(TypeConstraint *env, const char *name) {
   return NULL;
 }
 
-// Deep copy a type
-Type *copy_type(Type *t) {
-  if (!t) {
-    return NULL;
-  }
-
-  Type *new_t = talloc(sizeof(Type));
-  memcpy(new_t, t, sizeof(Type));
-
-  switch (t->kind) {
-  case T_VAR:
-    new_t->data.T_VAR = strdup(t->data.T_VAR);
-    break;
-
-  case T_FN:
-    new_t->data.T_FN.from = copy_type(t->data.T_FN.from);
-    new_t->data.T_FN.to = copy_type(t->data.T_FN.to);
-    break;
-
-  case T_CONS:
-    new_t->data.T_CONS.name = strdup(t->data.T_CONS.name);
-    new_t->data.T_CONS.args = malloc(sizeof(Type *) * t->data.T_CONS.num_args);
-    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      new_t->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
-    }
-    if (t->data.T_CONS.names) {
-      new_t->data.T_CONS.names =
-          malloc(sizeof(char *) * t->data.T_CONS.num_args);
-      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-        new_t->data.T_CONS.names[i] = strdup(t->data.T_CONS.names[i]);
-      }
-    }
-    break;
-  }
-
-  return new_t;
-}
-
 Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
   Substitution *new_subst = talloc(sizeof(Substitution));
   new_subst->from = t1;
@@ -461,8 +439,11 @@ void typeclasses_extend(Type *t, TypeClass *tc) {
 }
 
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
+
   if (ast->data.AST_LIST.len == 0) {
-    return &t_empty_list;
+    Type *t = talloc(sizeof(Type));
+    *t = t_empty_list;
+    return t;
   }
 
   int len = ast->data.AST_LIST.len;
@@ -678,7 +659,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     if (t1->kind == T_VAR) {
       // Check for recursive types
       if (occurs_check(t1, t2)) {
-        printf("rec types\n");
         return NULL; // Infinite type error
       }
 
@@ -686,7 +666,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
 
     } else if (t2->kind == T_VAR) {
       if (occurs_check(t2, t1)) {
-
         return NULL; // Infinite type error
       }
 
@@ -696,7 +675,19 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       // *t1 = *t2;
       // return subst;
       subst = substitutions_extend(subst, t1, t2);
+    } else if (t1->kind == T_TYPECLASS_RESOLVE && !is_generic(t2)) {
+
+      for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+        subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
+      }
+
+    } else if (is_list_type(t1) && t2->kind == T_EMPTY_LIST) {
+      // do nothing t1 is fine
     } else if (t1->kind != t2->kind) {
+      fprintf(stderr, "Error: type mismatch in solve constraints\n");
+      print_type(t1);
+      print_type(t2);
+
       return NULL; // Type mismatch error
     }
 
@@ -929,20 +920,13 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
     }
 
     return infer(pattern, ctx);
-
-    // Ast *fn_ast = pattern->data.AST_APPLICATION.function;
-    // Type *inferred_fn_type = infer(fn_ast, ctx);
-    // if (inferred_fn_type->kind != T_CONS) {
-    //   return NULL;
-    // }
-    // return deep_copy_type(inferred_fn_type);
   }
+  case AST_LIST:
   case AST_INT:
   case AST_DOUBLE:
   case AST_BOOL:
   case AST_CHAR:
   case AST_STRING:
-  case AST_LIST:
   case AST_VOID: {
     return infer(pattern, ctx);
   }
@@ -979,7 +963,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_BODY: {
     Ast *stmt;
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-
       stmt = ast->data.AST_BODY.stmts[i];
 
       Type *t = infer(stmt, ctx);
@@ -1191,53 +1174,81 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     Type *current_type = fn_type;
 
+    int app_len = ast->data.AST_APPLICATION.len;
+    Type *arg_types[app_len];
     // Process each argument
-    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+    for (int i = 0; i < app_len; i++) {
       Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, &app_ctx);
 
       if (!arg_type) {
         fprintf(stderr, "Could not infer argument type in application\n");
         return NULL;
       }
+      arg_types[i] = arg_type;
+    }
 
+    if (fn_type->kind == T_VAR) {
       // If current_type is a type variable, constrain it to be a function
-      if (current_type->kind == T_VAR) {
-        Type *ret_type = next_tvar();
-        Type *fn_constraint = type_fn(arg_type, ret_type);
+      Type *ret_type = next_tvar();
+      Type *fn_constraint =
+          create_type_multi_param_fn(app_len, arg_types, ret_type);
 
-        if (!unify_in_ctx(current_type, fn_constraint, &app_ctx)) {
-          fprintf(stderr,
-                  "Could not constrain type variable to function type\n");
-          return NULL;
-        }
-        current_type = ret_type;
-      } else if (current_type->kind != T_FN) {
-        fprintf(stderr, "Attempting to apply to non-function type\n");
+      if (!unify_in_ctx(fn_type, fn_constraint, &app_ctx)) {
+        fprintf(stderr, "Could not constrain type variable to function type\n");
         return NULL;
-      } else {
+      }
+      current_type = ret_type;
 
-        // Regular function type case
-        if (!unify_in_ctx(current_type->data.T_FN.from, arg_type, &app_ctx)) {
-          fprintf(stderr, "Type mismatch in function application\n");
+      for (TypeConstraint *c = app_ctx.constraints; c != NULL; c = c->next) {
+        ctx->constraints = constraints_extend(ctx->constraints, c->t1, c->t2);
+      }
+
+    } else {
+      for (int i = 0; i < app_len; i++) {
+        Type *arg_type = arg_types[i];
+        if (current_type->kind != T_FN) {
+          fprintf(stderr, "Attempting to apply to non-function type\n");
           return NULL;
-        }
+        } else {
+          // Regular function type case
+          if (!unify_in_ctx(current_type->data.T_FN.from, arg_type, &app_ctx)) {
+            fprintf(stderr, "Type mismatch in function application\n");
+            return NULL;
+          }
 
-        current_type = current_type->data.T_FN.to;
+          current_type = current_type->data.T_FN.to;
+        }
       }
     }
+    if (app_ctx.constraints) {
+      // After processing all arguments, solve collected constraints
+      Substitution *subst = solve_constraints(app_ctx.constraints);
 
-    // After processing all arguments, solve collected constraints
-    Substitution *subst = solve_constraints(app_ctx.constraints);
+      if (!subst) {
+        fprintf(stderr, "Could not solve type constraints in application\n");
+        print_ast(ast);
+        print_type(fn_type);
+        return NULL;
+      }
 
-    if (!subst) {
-      fprintf(stderr, "Could not solve type constraints\n");
-      return NULL;
+      // Apply substitutions to get final type
+      type = apply_substitution(subst, current_type);
+      Type *spec_fn = apply_substitution(subst, fn_type);
+      ast->data.AST_APPLICATION.function->md = spec_fn;
+    } else {
+      type = current_type;
+      ast->data.AST_APPLICATION.function->md = fn_type;
     }
 
-    // Apply substitutions to get final type
-    type = apply_substitution(subst, current_type);
-    Type *spec_fn = apply_substitution(subst, fn_type);
-    ast->data.AST_APPLICATION.function->md = spec_fn;
+    // if (!is_generic(spec_fn)) {
+    // printf("spec fn: \n");
+    // print_type(spec_fn);
+    // printf("FN HASH: %llu\n", hash_spec_fn(spec_fn));
+    // }
+
+    // for (int i = 0; i < app_len; i++) {
+    //   print_type(ast->data.AST_APPLICATION.args[i].md);
+    // }
 
     break;
   }
@@ -1305,9 +1316,18 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // Process parameters right to left to build up the type
     for (int i = 0; i < num_params; i++) {
       Ast *param = &ast->data.AST_LAMBDA.params[i];
-      Ast *def = ast->data.AST_LAMBDA.defaults[i];
-      Type *param_type =
-          def != NULL ? compute_type_expression(def, ctx->env) : next_tvar();
+      Ast *def = ast->data.AST_LAMBDA.defaults
+                     ? ast->data.AST_LAMBDA.defaults[i]
+                     : NULL;
+
+      Type *param_type;
+      if (def != NULL) {
+        param_type = compute_type_expression(def, ctx->env);
+      } else if (param->tag == AST_VOID) {
+        param_type = &t_void;
+      } else {
+        param_type = next_tvar();
+      }
 
       param_types[i] = param_type;
 
@@ -1347,6 +1367,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
           return NULL;
         actual_fn_type = apply_substitution(subst, actual_fn_type);
       }
+
+      // printf("lambda\n");
+      // print_ast(ast);
+      // print_type(actual_fn_type);
 
       type = actual_fn_type;
 
@@ -1389,6 +1413,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       fprintf(stderr, "Could not infer match expression type\n");
       return NULL;
     }
+
     int len = ast->data.AST_MATCH.len;
 
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
@@ -1396,12 +1421,13 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Ast *branch_body = &ast->data.AST_MATCH.branches[2 * i + 1];
 
       Type *pattern_type = infer_pattern(branch_pattern, ctx);
+
       if (!pattern_type) {
         fprintf(stderr, "Could not infer pattern type in match branch\n");
         return NULL;
       }
 
-      // Add pattern<->expression constraint
+      // Add pattern <> expression constraint
       if (!unify_in_ctx(expr_type, pattern_type, ctx)) {
         fprintf(stderr, "Pattern type doesn't match expression type\n");
         return NULL;
@@ -1425,7 +1451,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fprintf(stderr, "Inconsistent types in match branches\n");
         return NULL;
       }
+
+      // printf("branch constraints\n");
+      // print_constraints(branch_ctx.constraints);
     }
+    // printf("match pattern constraints\n");
+    // print_constraints(ctx->constraints);
 
     Substitution *subst = solve_constraints(ctx->constraints);
     if (!subst) {
@@ -1447,7 +1478,18 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_TYPE_DECL: {
-    type = compute_type_expression(ast, ctx->env);
+    type = type_declaration(ast, &ctx->env);
+    break;
+  }
+  case AST_FMT_STRING: {
+
+    int arity = ast->data.AST_LIST.len;
+    for (int i = 0; i < arity; i++) {
+      Ast *member = ast->data.AST_LIST.items + i;
+      infer(member, ctx);
+    }
+
+    type = &t_string;
     break;
   }
   }

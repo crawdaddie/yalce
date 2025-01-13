@@ -16,4 +16,8 @@ Type *infer(Ast *ast, TICtx *ctx);
 Type *next_tvar();
 
 void initialize_builtin_types();
+void add_builtin(char *name, Type *t);
+
+void print_builtin_types();
+
 #endif

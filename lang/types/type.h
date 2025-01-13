@@ -155,6 +155,10 @@ extern _binop_map binop_map[];
                                    .rank = 1000.},                             \
   }
 
+#define MAKE_TC_RESOLVE_2(tc, a, b)                                            \
+  ((Type){T_TYPECLASS_RESOLVE,                                                 \
+          {.T_CONS = {.name = tc, .num_args = 2, .args = (Type *[]){a, b}}}})
+
 #define ord_var(n)                                                             \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
@@ -162,11 +166,16 @@ extern _binop_map binop_map[];
             &(TypeClass){.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.},      \
   }
 
+// #define eq_var(n)                                                              \
+//   (Type) {                                                                     \
+//     T_VAR, {.T_VAR = n},                                                       \
+//         .implements =                                                          \
+//             &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
+//   }
+//
 #define eq_var(n)                                                              \
   (Type) {                                                                     \
-    T_VAR, {.T_VAR = n},                                                       \
-        .implements =                                                          \
-            &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
+    T_VAR, { .T_VAR = n }                                                      \
   }
 
 #define TCONS(name, num, ...)                                                  \
@@ -298,8 +307,6 @@ bool is_pointer_type(Type *type);
 
 bool is_array_type(Type *type);
 
-Type *copy_type(Type *t);
-
 Type *create_typeclass_resolve_type(const char *comparison_tc, int num_types,
                                     Type **types);
 
@@ -368,4 +375,12 @@ double get_typeclass_rank(Type *t, const char *name);
 bool type_implements(Type *t, TypeClass *tc);
 
 bool is_forall_type(Type *type);
+
+extern Type t_builtin_print;
+
+// extern TypeList *arithmetic_tc_registry;
+// extern TypeList *ord_tc_registry;
+// extern TypeList *eq_tc_registry;
+//
+bool is_simple_enum(Type *t);
 #endif

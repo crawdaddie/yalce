@@ -1,7 +1,5 @@
 #include "backend_llvm/variant.h"
-#include "common.h"
 #include "match.h"
-#include "serde.h"
 #include "types.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
@@ -127,32 +125,34 @@ LLVMValueRef match_variant_member(LLVMValueRef left, LLVMValueRef right,
                                   JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
 
-  LLVMValueRef left_tag = variant_extract_tag(left, builder);
-  LLVMValueRef right_tag = variant_extract_tag(right, builder);
-  LLVMValueRef tags_match =
-      codegen_eq_int(left_tag, right_tag, module, builder);
-
-  if (expected_member_type->data.T_CONS.num_args > 0) {
-    LLVMValueRef res = tags_match;
-
-    expected_member_type =
-        expected_member_type->data.T_CONS
-            .args[0]; // variant member cons should only accept one arg
-
-    LLVMValueRef vals_match = codegen_equality(
-        variant_extract_value(
-            left, type_to_llvm_type(expected_member_type, ctx->env, module),
-            builder),
-        expected_member_type,
-        variant_extract_value(
-            right, type_to_llvm_type(expected_member_type, ctx->env, module),
-            builder),
-        expected_member_type, ctx, module, builder);
-
-    return LLVMBuildAnd(builder, res, vals_match, "tag match && values match");
-  }
-
-  return tags_match;
+  // LLVMValueRef left_tag = variant_extract_tag(left, builder);
+  // LLVMValueRef right_tag = variant_extract_tag(right, builder);
+  // LLVMValueRef tags_match =
+  //     codegen_eq_int(left_tag, right_tag, module, builder);
+  //
+  // if (expected_member_type->data.T_CONS.num_args > 0) {
+  //   LLVMValueRef res = tags_match;
+  //
+  //   expected_member_type =
+  //       expected_member_type->data.T_CONS
+  //           .args[0]; // variant member cons should only accept one arg
+  //
+  //   LLVMValueRef vals_match = codegen_equality(
+  //       variant_extract_value(
+  //           left, type_to_llvm_type(expected_member_type, ctx->env, module),
+  //           builder),
+  //       expected_member_type,
+  //       variant_extract_value(
+  //           right, type_to_llvm_type(expected_member_type, ctx->env, module),
+  //           builder),
+  //       expected_member_type, ctx, module, builder);
+  //
+  //   return LLVMBuildAnd(builder, res, vals_match, "tag match && values
+  //   match");
+  // }
+  //
+  // return tags_match;
+  return NULL;
 }
 
 LLVMValueRef match_simple_variant_member(Ast *id, int vidx, Type *variant_type,
@@ -199,7 +199,7 @@ LLVMTypeRef variant_member_to_llvm_type(Type *type, TypeEnv *env,
 
   if (variant_parent != NULL) {
 
-    Type *vtype = copy_type(variant_parent);
+    Type *vtype = deep_copy_type(variant_parent);
 
     TypeEnv *_env = NULL;
 
@@ -294,59 +294,11 @@ LLVMValueRef codegen_simple_enum_member(Ast *ast, JITLangCtx *ctx,
 
   if (member_type->kind == T_CONS) {
     int vidx;
-    // print_type(member_type);
-    // printf("codegen simple enum member %d\n", vidx);
-    // print_type_env(ctx->env);
     Type *v = variant_lookup(ctx->env, member_type, &vidx);
     if (!v) {
       return NULL;
     }
     return LLVMConstInt(LLVMInt8Type(), vidx, 0);
-
-    //   LLVMTypeRef struct_type =
-    //       LLVMStructType((LLVMTypeRef[]){LLVMInt8Type(), LLVMInt1Type()}, 2,
-    //       0);
-    //
-    //   LLVMValueRef none = LLVMGetUndef(struct_type);
-    //
-    //   none = LLVMBuildInsertValue(
-    //       builder, none, LLVMConstInt(LLVMInt8Type(), vidx, 0), 0, "insert
-    //       Tag");
-    //   return none;
-    // }
-
-    //   if (v && is_generic(v)) {
-    //     if (member_type->data.T_CONS.num_args == 0) {
-    //
-    //       LLVMContextRef context = LLVMGetModuleContext(module);
-    //       LLVMTypeRef tu_types[] = {TAG_TYPE};
-    //       LLVMTypeRef tu_type = LLVMStructCreateNamed(context, "TU");
-    //       LLVMStructSetBody(tu_type, tu_types, 1, 0);
-    //       LLVMValueRef alloca = LLVMBuildAlloca(builder, tu_type, "");
-    //       LLVMBuildStore(builder, LLVMConstInt(TAG_TYPE, vidx, 0),
-    //                      LLVMBuildStructGEP2(builder, tu_type, alloca, 0,
-    //                      ""));
-    //       return LLVMBuildLoad2(builder, tu_type, alloca, "");
-    //     }
-    //   }
-    //
-    //   LLVMTypeRef t = type_to_llvm_type(v, ctx->env, module);
-    //
-    //   if (t == NULL) {
-    //     return NULL;
-    //   }
-    //
-    //   if (t == TAG_TYPE) {
-    //     return LLVMConstInt(t, vidx, 0);
-    //   }
-    //
-    //   LLVMValueRef tu = LLVMBuildAlloca(builder, t, "");
-    //
-    //   LLVMBuildStore(builder, LLVMConstInt(TAG_TYPE, vidx, 0),
-    //                  LLVMBuildStructGEP2(builder, t, tu, 0, ""));
-    //
-    //   return LLVMBuildLoad2(builder, t, tu, "");
-    // }
-    // return NULL;
   }
+  return NULL;
 }

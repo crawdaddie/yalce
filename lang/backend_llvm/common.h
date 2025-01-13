@@ -58,6 +58,10 @@ typedef enum symbol_type {
   STYPE_GENERIC_COROUTINE_GENERATOR,
 } symbol_type;
 
+typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder);
+
 typedef struct {
   symbol_type type;
   LLVMTypeRef llvm_type;
@@ -76,6 +80,7 @@ typedef struct {
       Ast *ast;
       int stack_ptr;
       SpecificFns *specific_fns;
+      BuiltinHandler builtin_handler;
     } STYPE_GENERIC_FUNCTION;
 
     struct {

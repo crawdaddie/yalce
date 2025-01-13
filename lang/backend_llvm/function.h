@@ -41,10 +41,7 @@ call_coroutine_generator_symbol(LLVMValueRef _instance, JITSymbol *sym,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
 
-LLVMValueRef force_compile(JITSymbol *sym, JITLangCtx *ctx,
-                           LLVMModuleRef module, LLVMBuilderRef builder);
-
-LLVMValueRef get_specific_coroutine_generator_callable(
-    JITSymbol *sym, const char *sym_name, Type *expected_fn_type,
-    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
+                                     Type *to_type, LLVMModuleRef module,
+                                     LLVMBuilderRef builder);
 #endif

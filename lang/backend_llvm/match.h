@@ -10,9 +10,9 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
                           JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder);
 
-LLVMValueRef codegen_equality(LLVMValueRef left, Type *left_type,
-                              LLVMValueRef right, Type *right_type,
-                              JITLangCtx *ctx, LLVMModuleRef module,
-                              LLVMBuilderRef builder);
+LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
+                                     Type *val_type, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder);
 
 #endif

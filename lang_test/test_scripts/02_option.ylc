@@ -5,5 +5,5 @@ let f = fn x ->
 ;;
 
 %test
-let test_some = fn () -> f (Some 1) == 1;;
-let test_none = fn () -> f None == 0;; # function None -> 0"
+let test_some = fn () -> f (Some 1) == 1 ;;
+let test_none = fn () -> f None == 0 ;; # function None -> 0"

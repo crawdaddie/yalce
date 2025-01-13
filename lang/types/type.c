@@ -21,11 +21,11 @@ Type t_bool = {T_BOOL};
 
 Type t_void = {T_VOID};
 Type t_char = {T_CHAR};
+Type t_empty_list = {T_EMPTY_LIST};
 Type t_ptr = {T_CONS,
               {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
               .alias = TYPE_NAME_PTR};
 
-Type t_empty_list = {T_EMPTY_LIST};
 Type t_ptr_generic_contained = {T_VAR, {.T_VAR = "ptr_deref_var"}};
 Type t_ptr_generic = {
     T_CONS,
@@ -36,11 +36,7 @@ Type t_ptr_deref_sig = MAKE_FN_TYPE_2(&t_ptr_generic, &t_ptr_generic_contained);
 #define MAKE_ARITH_OP(_name)                                                   \
   Type _name##_a = arithmetic_var("a");                                        \
   Type _name##_b = arithmetic_var("b");                                        \
-  Type _name##_res =                                                           \
-      (Type){T_TYPECLASS_RESOLVE,                                              \
-             {.T_CONS = {.name = "arithmetic",                                 \
-                         .num_args = 2,                                        \
-                         .args = (Type *[]){&t_add_a, &t_add_b}}}};            \
+  Type _name##_res = MAKE_TC_RESOLVE_2("arithmetic", &_name##_a, &_name##_b);  \
   Type _name = MAKE_FN_TYPE_3(&_name##_a, &_name##_b, &_name##_res)
 
 MAKE_ARITH_OP(t_add);
@@ -202,8 +198,8 @@ char *type_to_string(Type *t, char *buffer) {
     buffer = strncat(buffer, m, strlen(m));
     break;
   }
-
   case T_EMPTY_LIST: {
+
     buffer = strncat(buffer, "[]", 2);
     break;
   }
@@ -212,7 +208,7 @@ char *type_to_string(Type *t, char *buffer) {
     buffer = strncat(buffer, "tc resolve ", 12);
 
     buffer = strncat(buffer, t->data.T_CONS.name, strlen(t->data.T_CONS.name));
-    buffer = strncat(buffer, " ", 1);
+    buffer = strncat(buffer, " [ ", 3);
 
     int len = t->data.T_CONS.num_args;
     for (int i = 0; i < len - 1; i++) {
@@ -221,6 +217,8 @@ char *type_to_string(Type *t, char *buffer) {
 
     buffer = strncat(buffer, " : ", 3);
     buffer = type_to_string(t->data.T_CONS.args[len - 1], buffer);
+
+    buffer = strncat(buffer, "]", 1);
     break;
   }
   case T_CONS: {
@@ -263,6 +261,7 @@ char *type_to_string(Type *t, char *buffer) {
     }
 
     if (is_variant_type(t)) {
+
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
         if (i < t->data.T_CONS.num_args - 1) {
@@ -396,7 +395,8 @@ bool types_equal(Type *t1, Type *t2) {
   case T_STRING:
   case T_BOOL:
   case T_CHAR:
-  case T_VOID: {
+  case T_VOID:
+  case T_EMPTY_LIST: {
     return true;
   }
 
@@ -408,11 +408,8 @@ bool types_equal(Type *t1, Type *t2) {
     return eq;
   }
 
+  case T_TYPECLASS_RESOLVE:
   case T_CONS: {
-    // if (is_array_type(t1) && is_array_type(t2)) {
-    //   return types_equal(t1->data.T_CONS.args[0],
-    //   t2->data.T_CONS.args[0]);
-    // }
 
     if (t1->alias && t2->alias && (strcmp(t1->alias, t2->alias) != 0)) {
       return false;
@@ -567,27 +564,11 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
 
 Type *env_lookup(TypeEnv *env, const char *name) {
   if (env == NULL) {
+
     return NULL;
   }
+
   while (env) {
-    if (is_variant_type(env->type)) {
-
-      Type *variant = env->type;
-
-      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-        Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-        if (variant_member->kind == T_CONS) {
-          mem_name = variant_member->data.T_CONS.name;
-        } else {
-          continue;
-        }
-
-        if (strcmp(mem_name, name) == 0) {
-          return variant_member;
-        }
-      }
-    }
     if (strcmp(env->name, name) == 0) {
       return env->type;
     }
@@ -832,67 +813,14 @@ Type *deep_copy_type(const Type *original) {
   }
   return copy;
 }
+
 Type *copy_array_type(Type *t) {
   int *size = array_type_size_ptr(t);
 
-  Type *copy = create_array_type(copy_type(t->data.T_CONS.args[0]), *size);
+  Type *copy = create_array_type(deep_copy_type(t->data.T_CONS.args[0]), *size);
   copy->kind = t->kind;
   return copy;
 }
-/*
-
-Type *copy_type(Type *t) {
-
-  Type *copy = empty_type();
-
-  *copy = *t;
-
-  if (copy->kind == T_TYPECLASS_RESOLVE) {
-
-    copy->data.T_TYPECLASS_RESOLVE.dependencies = talloc(sizeof(Type *) * 2);
-
-    copy->data.T_TYPECLASS_RESOLVE.dependencies[0] =
-        copy_type(t->data.T_TYPECLASS_RESOLVE.dependencies[0]);
-
-    copy->data.T_TYPECLASS_RESOLVE.dependencies[1] =
-        copy_type(t->data.T_TYPECLASS_RESOLVE.dependencies[1]);
-  }
-
-  if (copy->kind == T_CONS) {
-    copy->data.T_CONS.name = t->data.T_CONS.name;
-    copy->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
-
-    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      // copy->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
-      copy->data.T_CONS.args[i] = copy_type(t->data.T_CONS.args[i]);
-    }
-  }
-
-  if (copy->kind == T_FN) {
-    copy->data.T_FN.from = copy_type(t->data.T_FN.from);
-    if (copy->data.T_FN.to) {
-      copy->data.T_FN.to = copy_type(t->data.T_FN.to);
-    }
-  }
-
-  // if (t->implements != NULL && t->num_implements > 0) {
-  //   copy->implements = talloc(sizeof(TypeClass *) * t->num_implements);
-  //   copy->num_implements = t->num_implements;
-  //   for (int i = 0; i < t->num_implements; i++) {
-  //     copy->implements[i] = t->implements[i];
-  //   }
-  // }
-  if (copy->kind == T_COROUTINE_INSTANCE) {
-    copy->data.T_FN.from = copy_type(t->data.T_FN.from);
-
-    copy->data.T_FN.to = copy_type(t->data.T_FN.to);
-  }
-
-  copy->meta = t->meta;
-  copy->is_coroutine_fn = t->is_coroutine_fn;
-  return copy;
-}
-*/
 
 int fn_type_args_len(Type *fn_type) {
 
@@ -960,10 +888,14 @@ Type *resolve_tc_rank(Type *type) {
   if (type->kind != T_TYPECLASS_RESOLVE) {
     return type;
   }
+  bool all_generic = true;
+  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+    all_generic &= is_generic(type->data.T_CONS.args[i]);
+  }
 
-  // if (is_generic(type)) {
-  //   return type;
-  // }
+  if (all_generic) {
+    return type;
+  }
 
   const char *comparison_tc = type->data.T_CONS.name;
   Type *max_ranked = NULL;
@@ -1066,7 +998,6 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
         }
 
         if (strcmp(mem_name, name) == 0) {
-          // return copy_type(variant);
           *member_idx = i;
           // printf("found member idx: %d\n", *member_idx);
           return variant;
@@ -1380,4 +1311,19 @@ double get_typeclass_rank(Type *t, const char *name) {
     return -1.;
   }
   return tc->rank;
+}
+
+Type t_builtin_print = MAKE_FN_TYPE_2(&t_string, &t_void);
+
+// TypeList *arithmetic_tc_registry = NULL;
+// TypeList *ord_tc_registry = NULL;
+// TypeList *eq_tc_registry = NULL;
+bool is_simple_enum(Type *t) {
+  for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+    Type *mem_type = t->data.T_CONS.args[i];
+    if (mem_type->data.T_CONS.num_args > 0) {
+      return false;
+    }
+  }
+  return true;
 }

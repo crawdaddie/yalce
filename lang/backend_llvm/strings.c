@@ -240,13 +240,7 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
     return int_to_string(val, module, builder);
   }
 
-  // if (val_type->kind == T_CONS &&
-  //     val_type->data.T_CONS.args[0]->kind == T_CONS &&
-  //     strcmp(val_type->data.T_CONS.args[0]->data.T_CONS.name, "Some")) {
-  //   printf("Option to string??");
-  // }
-
-  return LLVMBuildGlobalStringPtr(builder, "", ".str");
+  return char_to_string(LLVMConstInt(LLVMInt8Type(), 60, 0), module, builder);
 }
 
 #define INITIAL_SIZE 32
@@ -280,6 +274,7 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                               LLVMConstInt(LLVMInt32Type(), i, 0)};
     LLVMValueRef ptr =
         LLVMBuildGEP2(builder, string_array_type, array_alloca, indices, 2, "");
+
     LLVMBuildStore(builder, strings[i], ptr);
   }
 

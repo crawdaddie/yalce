@@ -4,7 +4,7 @@
 make -C ../
 
 # Set the path to the executable
-EXE=ylc --test
+EXE=ylc
 
 # Check if the test_scripts directory exists
 if [ ! -d "./test_scripts" ]; then

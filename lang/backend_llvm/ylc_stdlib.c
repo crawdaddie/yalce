@@ -10,6 +10,7 @@ void str_copy(char *dest, char *src, int len) {
   memcpy(dest, src, len);
   dest[len + 1] = '\0';
 }
+
 void print(String str) { printf("%s", str.chars); }
 void printc(char c) { printf("%c", c); }
 
@@ -146,4 +147,3 @@ struct _DoubleArray double_array(int32_t size, double val) {
   double *data = double_array_init(size, val);
   return (struct _DoubleArray){size, data};
 }
-

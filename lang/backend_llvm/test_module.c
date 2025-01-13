@@ -1,6 +1,7 @@
 #include "./test_module.h"
 #include "codegen.h"
 #include "jit.h"
+#include "serde.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/ExecutionEngine.h"
 #include <string.h>
@@ -65,6 +66,7 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
   if (body == NULL) {
+    fprintf(stderr, "Error: test runner could not compile module under test\n");
     LLVMDeleteFunction(func);
     return NULL;
   }
@@ -123,6 +125,7 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                 LLVMBuilderRef builder) {
   LLVMValueRef exec_tests = codegen_test_module(ast, ctx, module, builder);
+
   if (!exec_tests) {
     return 0;
   }

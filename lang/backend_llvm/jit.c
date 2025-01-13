@@ -2,6 +2,7 @@
 #include "backend_llvm/codegen.h"
 #include "backend_llvm/common.h"
 #include "backend_llvm/globals.h"
+#include "builtin_functions.h"
 #include "format_utils.h"
 #include "input.h"
 #include "parse.h"
@@ -183,7 +184,6 @@ int jit(int argc, char **argv) {
 
   TypeEnv *env = NULL;
   // initialize_builtin_numeric_types(env);
-  // env = initialize_builtin_funcs(stack, env);
   // env = initialize_types(env);
   // env = initialize_type_env_synth(env);
   initialize_builtin_types();
@@ -198,6 +198,7 @@ int jit(int argc, char **argv) {
                     .global_storage_array = global_storage_array,
                     .global_storage_capacity = &global_storage_capacity};
 
+  initialize_builtin_funcs(&ctx, module, builder);
   bool repl = false;
   // print_type_env(env);
 
@@ -246,13 +247,16 @@ int jit(int argc, char **argv) {
         LLVMDumpModule(module);
         continue;
       } else if (strncmp("%dump_type_env", input, 14) == 0) {
-        print_type_env(env);
+        print_type_env(ctx.env);
         continue;
       } else if (strncmp("%dump_ast", input, 9) == 0) {
         print_ast(ast_root);
         continue;
       } else if (strncmp("%quit", input, 5) == 0) {
         print_ast(ast_root);
+        continue;
+      } else if (strncmp("%builtins", input, 8) == 0) {
+        print_builtin_types();
         continue;
       } else if (strcmp("\n", input) == 0) {
         continue;
@@ -266,10 +270,9 @@ int jit(int argc, char **argv) {
         prog = parse_input(input, dirname);
       }
 
-      TICtx ti_ctx = {.env = env, .scope = 0};
+      TICtx ti_ctx = {.env = ctx.env, .scope = 0};
 
       Type *typecheck_result = infer(prog, &ti_ctx);
-
       ctx.env = ti_ctx.env;
 
       if (typecheck_result == NULL) {

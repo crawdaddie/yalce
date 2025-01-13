@@ -179,15 +179,6 @@ LLVMValueRef codegen_array_at(LLVMValueRef array, LLVMValueRef idx,
 LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
                                     LLVMValueRef array) {
 
-  // printf("codegen get array size\n");
-  // LLVMDumpType(LLVMTypeOf(array));
-  // printf("\n");
-  // LLVMValueRef element_ptr = LLVMBuildStructGEP2(builder, LLVMTypeOf(array),
-  //                                                array, 0,
-  //                                                "get_size_element");
-  // LLVMTypeRef element_type = LLVMInt32Type();
-  // return LLVMBuildLoad2(builder, element_type, element_ptr, "size_load");
-  //
   // Check if the tuple is a pointer type
   if (LLVMGetTypeKind(LLVMTypeOf(array)) != LLVMPointerTypeKind) {
     // If it's not a pointer, use LLVMBuildExtractValue - extracts value from a
@@ -364,8 +355,6 @@ LLVMValueRef codegen_array(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int len = ast->data.AST_LIST.len;
   LLVMValueRef data_ptr = _codegen_array(ast, ctx, module, builder);
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
-  // Create struct type
-  //
 
   LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
 

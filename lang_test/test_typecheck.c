@@ -13,11 +13,11 @@
     TICtx ctx = {.env = NULL};                                                 \
     stat &= (infer(ast, &ctx) != NULL);                                        \
     stat &= (types_equal(ast->md, type));                                      \
-    char buf[100] = {};                                                        \
+    char buf[200] = {};                                                        \
     if (stat) {                                                                \
       fprintf(stderr, "✅ " input " => %s\n", type_to_string(type, buf));      \
     } else {                                                                   \
-      char buf2[100] = {};                                                     \
+      char buf2[200] = {};                                                     \
       fprintf(stderr, "❌ " input " => %s (got %s)\n",                         \
               type_to_string(type, buf), type_to_string(ast->md, buf2));       \
       fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
@@ -72,6 +72,7 @@ int main() {
   T("true", &t_bool);
   T("false", &t_bool);
   T("()", &t_void);
+  T("[]", &t_empty_list);
   T("1 + 2", &t_int);
   T("1 + 2.0", &t_num);
   T("(1 + 2) * 8", &t_int);
@@ -134,36 +135,6 @@ int main() {
     "| _ -> 3\n",
     &t_int);
 
-  T("let fib = fn x ->\n"
-    "  match x with\n"
-    "  | 0 -> 0\n"
-    "  | 1 -> 1\n"
-    "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
-    ";;\n",
-    &MAKE_FN_TYPE_2(&t_int, &t_int));
-
-  // // LIST PROCESSING FUNCTIONS
-  T("let f = fn l->\n"
-    "  match l with\n"
-    "    | x::_ -> x\n"
-    "    | [] -> 0\n"
-    ";;",
-    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
-
-  T("let f = fn l->\n"
-    "  match l with\n"
-    "    | x1::x2::_ -> x1\n"
-    "    | [] -> 0\n"
-    ";;",
-    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
-
-  T("let f = fn l->\n"
-    "  match l with\n"
-    "    | x1::x2::[] -> x1\n"
-    "    | [] -> 0\n"
-    ";;",
-    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
-
   ({
     Type opt_int = TOPT(&t_int);
     T("let f = fn x ->\n"
@@ -213,6 +184,121 @@ int main() {
             "f == `0 [arithmetic] -> `0 [arithmetic]");
     TASSERT(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
     TASSERT(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
+  });
+
+  ({
+    Type t0 = arithmetic_var("`0");
+    Type t1 = arithmetic_var("`1");
+    Type t2 = arithmetic_var("`2");
+
+    T("let f = fn x y z -> x + y + z;",
+      &MAKE_FN_TYPE_4(
+          &t0, &t1, &t2,
+          &MAKE_TC_RESOLVE_2("arithmetic",
+                             &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1), &t2)));
+  });
+
+  T("let count_10 = fn x ->\n"
+    "  match x with\n"
+    "  | 10 -> 10\n"
+    "  | _ -> count_10 (x + 1)\n"
+    ";;\n",
+    &MAKE_FN_TYPE_2(&t_int, &t_int));
+
+  T("let fib = fn x ->\n"
+    "  match x with\n"
+    "  | 0 -> 0\n"
+    "  | 1 -> 1\n"
+    "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+    ";;\n",
+    &MAKE_FN_TYPE_2(&t_int, &t_int));
+
+  T("let f = fn x: (Int) (y, z): (Int * Double) -> x + y + z;;",
+    &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
+
+  // first-class functions
+  ({
+    Type t0 = {T_VAR, .data = {.T_VAR = "`5"}};
+    Type t1 = {T_VAR, .data = {.T_VAR = "`6"}};
+    Type t2 = {T_VAR, .data = {.T_VAR = "`8"}};
+    Ast *b = T("let sum = fn a b -> a + b;;\n"
+               "let proc = fn f a b -> f a b;;\n"
+               "proc sum 1 2;\n",
+               &t_int);
+    TASSERT(b->data.AST_BODY.stmts[1]->md,
+            &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2),
+            "proc == (`5 -> `6 -> `8) -> `5 -> `6 -> `8");
+  });
+
+  ({
+    Type t0 = {T_VAR, .data = {.T_VAR = "`5"}};
+    Type t1 = {T_VAR, .data = {.T_VAR = "`6"}};
+    Type t2 = {T_VAR, .data = {.T_VAR = "`8"}};
+    Ast *b = T("let sum = fn a b -> a + b;;\n"
+               "let proc = fn f a b -> f a b;;\n"
+               "proc sum 1.0 2.0;\n"
+               "proc sum 1 2;\n",
+               &t_int);
+
+    TASSERT(b->data.AST_BODY.stmts[2]->md, &t_num, "proc sum 1. 2. == Double");
+    TASSERT(b->data.AST_BODY.stmts[1]->md,
+            &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2),
+            "proc == (`5 -> `6 -> `8) -> `5 -> `6 -> `8");
+  });
+
+  T("type Cb = Double -> (Int * Int) -> ();",
+    &MAKE_FN_TYPE_3(&t_num, &TTUPLE(2, &t_int, &t_int), &t_void));
+
+  ({
+    Type tenum = TCONS(TYPE_NAME_VARIANT, 3, &TCONS("A", 0, NULL),
+                       &TCONS("B", 0, NULL), &TCONS("C", 0, NULL));
+
+    T("type Enum =\n"
+      "  | A\n"
+      "  | B \n"
+      "  | C\n"
+      "  ;\n"
+      "\n"
+      "let f = fn x ->\n"
+      "  match x with\n"
+      "    | A -> 1\n"
+      "    | B -> 2 \n"
+      "    | C -> 3\n"
+      ";;\n",
+      &MAKE_FN_TYPE_2(&tenum, &t_int));
+  });
+
+  // // LIST PROCESSING FUNCTIONS
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x::_ -> x\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x1::x2::_ -> x1\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x1::x2::[] -> x1\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  ({
+    Type s = arithmetic_var("`4");
+    Type t = arithmetic_var("`0");
+    T("let list_sum = fn s l ->\n"
+      "  match l with\n"
+      "  | [] -> s\n"
+      "  | x::rest -> list_sum (s + x) rest\n"
+      ";;\n",
+      &MAKE_FN_TYPE_3(&t, &TLIST(&s), &t));
   });
 
   return status == true ? 0 : 1;
