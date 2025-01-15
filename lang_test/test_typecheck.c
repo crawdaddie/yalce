@@ -301,5 +301,10 @@ int main() {
       &MAKE_FN_TYPE_3(&t, &TLIST(&s), &t));
   });
 
+  ({
+    Type opt_int = TOPT(&t_int);
+    T("Some 1", &opt_int);
+  });
+
   return status == true ? 0 : 1;
 }

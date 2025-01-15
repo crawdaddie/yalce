@@ -132,13 +132,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_LET: {
-    return codegen_assignment(ast, ctx, module, builder);
+    return codegen_let_expr(ast, ctx, module, builder);
   }
 
   case AST_IDENTIFIER: {
-    if (strcmp(ast->data.AST_IDENTIFIER.value, "None") == 0) {
-      return codegen_none(builder);
-    }
     return codegen_identifier(ast, ctx, module, builder);
   }
 

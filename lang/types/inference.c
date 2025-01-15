@@ -263,7 +263,7 @@ Type *param_binding_type(Ast *ast) {
   }
 }
 
-Type *lookup_builtin_type(const char *name, TICtx *ctx) {
+Type *lookup_builtin_type(const char *name) {
   Type *t = ht_get_hash(&builtin_types, name, hash_string(name, strlen(name)));
   return t;
 }
@@ -1016,9 +1016,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
     const char *name = ast->data.AST_IDENTIFIER.value;
     type = find_in_ctx(name, ctx);
 
-    if (type == NULL) {
-      type = lookup_builtin_type(name, ctx);
-    }
+    // if (type == NULL) {
+    //   type = lookup_builtin_type(name);
+    // }
 
     if (type == NULL) {
       type = next_tvar();
@@ -1139,6 +1139,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         }
         Substitution *subst = solve_constraints(ctx->constraints);
         type = apply_substitution(subst, fn_type);
+
       } else {
 
         Type *cons = fn_type;

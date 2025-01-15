@@ -69,6 +69,7 @@ void setup_global_storage(LLVMModuleRef module, LLVMBuilderRef builder) {
   LLVMSetLinkage(global_storage_array_llvm, LLVMExternalLinkage);
 
   // Create global variable for the size
+  //
   global_storage_size_llvm =
       LLVMAddGlobal(module, LLVMInt32Type(), "global_storage_size");
 }

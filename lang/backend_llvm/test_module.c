@@ -66,7 +66,9 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
   if (body == NULL) {
-    fprintf(stderr, "Error: test runner could not compile module under test\n");
+    fprintf(stderr,
+            "Error: test runner could not compile module under test %s\n",
+            ctx->module_name);
     LLVMDeleteFunction(func);
     return NULL;
   }

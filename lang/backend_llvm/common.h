@@ -28,6 +28,7 @@ typedef struct {
   void **global_storage_array;
   int *global_storage_capacity;
   coroutine_ctx_t _coroutine_ctx;
+  char *module_name;
 } JITLangCtx;
 
 typedef struct SpecificFns {

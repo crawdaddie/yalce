@@ -1,7 +1,7 @@
 #include "backend_llvm/types.h"
+#include "adt.h"
 #include "list.h"
 #include "types/type.h"
-#include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,10 +84,10 @@ LLVMTypeRef create_list_type(Type *list_el_type, TypeEnv *env,
 
 LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
-  LLVMTypeRef variant = variant_member_to_llvm_type(type, env, module);
-  if (variant) {
-    return variant;
-  }
+  // LLVMTypeRef variant = variant_member_to_llvm_type(type, env, module);
+  // if (variant) {
+  //   return variant;
+  // }
 
   switch (type->kind) {
 
@@ -110,11 +110,13 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
   case T_VAR: {
     if (env) {
       Type *lu = env_lookup(env, type->data.T_VAR);
+
       if (!lu) {
         fprintf(stderr, "Error type var %s not found in environment! %s:%d\n",
                 type->data.T_VAR, __FILE__, __LINE__);
         return NULL;
       }
+
       return type_to_llvm_type(lu, env, module);
     }
     return LLVMInt32Type();
@@ -155,23 +157,11 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
 
     if (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
-      int len = type->data.T_CONS.num_args;
-      LLVMTypeRef dts[len];
-      int not_all_empty = 0;
-      for (int i = 0; i < len; i++) {
-        if (type->data.T_CONS.args[i]->data.T_CONS.num_args == 0) {
-          dts[i] = NULL;
-          continue;
-        }
-        not_all_empty = 1;
-        Type *contained_type = type->data.T_CONS.args[i]->data.T_CONS.args[0];
-        dts[i] = type_to_llvm_type(contained_type, env, module);
+      if (is_simple_enum(type)) {
+        return LLVMInt8Type();
+      } else {
+        return codegen_adt_type(type, env, module);
       }
-
-      if (not_all_empty) {
-        return codegen_tagged_union_type(dts, len, module);
-      }
-      return codegen_simple_enum_type();
     }
 
     // if (type->data.T_CONS.num_args == 0) {
@@ -772,46 +762,4 @@ LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env,
   Type *lookup_type = find_type_in_env(env, id->data.AST_IDENTIFIER.value);
   LLVMTypeRef t = type_to_llvm_type(lookup_type, env, module);
   return t;
-}
-
-LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder) {
-  LLVMTypeRef tu_types[] = {TAG_TYPE,
-                            val != NULL ? LLVMTypeOf(val) : LLVMInt8Type()};
-  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
-  if (val != NULL) {
-    LLVMValueRef some = LLVMGetUndef(tu_type);
-    some =
-        LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), 0, 0),
-                             0, "insert Some tag");
-
-    some = LLVMBuildInsertValue(builder, some, val, 1, "insert Some Value");
-    return some;
-  }
-  LLVMValueRef none = LLVMGetUndef(tu_type);
-
-  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
-                              0, "insert None tag");
-  return none;
-}
-
-LLVMValueRef codegen_none(LLVMBuilderRef builder) {
-  LLVMTypeRef tu_types[] = {TAG_TYPE};
-  LLVMTypeRef tu_type = LLVMStructType(tu_types, 1, 0);
-  LLVMValueRef none = LLVMGetUndef(tu_type);
-
-  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
-                              0, "insert None tag");
-  return none;
-}
-
-LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder) {
-  LLVMValueRef tag = variant_extract_tag(opt, builder);
-  return LLVMBuildICmp(builder, LLVMIntEQ, tag,
-                       LLVMConstInt(LLVMInt8Type(), 1, 0), "");
-}
-
-LLVMValueRef codegen_option_is_some(LLVMValueRef opt, LLVMBuilderRef builder) {
-  LLVMValueRef tag = variant_extract_tag(opt, builder);
-  return LLVMBuildICmp(builder, LLVMIntEQ, tag,
-                       LLVMConstInt(LLVMInt8Type(), 0, 0), "");
 }

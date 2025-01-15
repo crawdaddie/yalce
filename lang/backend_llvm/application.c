@@ -36,6 +36,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
+
   if (!sym) {
     return NULL;
   }

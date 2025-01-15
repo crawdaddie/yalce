@@ -1,16 +1,17 @@
 #include "backend_llvm/symbols.h"
-#include "backend_llvm/builtin_functions.h"
+#include "adt.h"
 #include "function.h"
 #include "globals.h"
 #include "match.h"
 #include "serde.h"
-#include "types.h"
+#include "types/inference.h"
 #include "types/type.h"
-#include "variant.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
+LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                     LLVMBuilderRef builder);
 static bool is_coroutine_generator_symbol(Ast *id, JITLangCtx *ctx) {
   JITSymbol *sym = lookup_id_ast(id, ctx);
   return sym->type == STYPE_COROUTINE_GENERATOR;
@@ -79,31 +80,6 @@ JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx) {
   return NULL;
 }
 
-int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym) {
-
-  if (ast->tag == AST_IDENTIFIER) {
-
-    const char *chars = ast->data.AST_IDENTIFIER.value;
-    int chars_len = ast->data.AST_IDENTIFIER.length;
-    ObjString key = {.chars = chars, chars_len, hash_string(chars, chars_len)};
-    int ptr = ctx->stack_ptr;
-
-    while (ptr >= 0) {
-      JITSymbol *_sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
-      if (_sym != NULL) {
-        *sym = *_sym;
-        sym->type = _sym->type;
-
-        return 0;
-      }
-      ptr--;
-    }
-
-    return 1;
-  }
-  return 1;
-}
-
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   const char *chars = ast->data.AST_IDENTIFIER.value;
@@ -113,27 +89,19 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (!sym) {
     Type *enum_type = env_lookup(ctx->env, chars);
-    if (!enum_type) {
-      enum_type = get_builtin_type(chars);
-    }
 
     if (!enum_type) {
       fprintf(
           stderr,
-          "codegen identifier failed symbol '%s' not found in scope %d %s:%d\n",
+          "codegen identifier failed enum '%s' not found in scope %d %s:%d\n",
           chars, ctx->stack_ptr, __FILE__, __LINE__);
       return NULL;
     }
 
     if (is_simple_enum(enum_type)) {
-      int vidx;
-      for (vidx = 0; vidx < enum_type->data.T_CONS.num_args; vidx++) {
-        if (strcmp(chars,
-                   enum_type->data.T_CONS.args[vidx]->data.T_CONS.name) == 0) {
-          break;
-        }
-      }
-      return LLVMConstInt(LLVMInt8Type(), vidx, 0);
+      return codegen_simple_enum_member(enum_type, chars, ctx, module, builder);
+    } else {
+      return codegen_adt_member(enum_type, chars, ctx, module, builder);
     }
 
     fprintf(
@@ -176,9 +144,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 }
 
-LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                     LLVMBuilderRef builder);
-
 LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
                                        JITLangCtx *ctx, LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
@@ -206,7 +171,7 @@ LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
   ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
               hash_string(id_chars, id_len), sym);
 
-  return NULL;
+  return fn;
 }
 
 LLVMValueRef create_generic_coroutine_binding(Ast *binding, Ast *fn_ast,
@@ -227,8 +192,8 @@ LLVMValueRef create_generic_coroutine_binding(Ast *binding, Ast *fn_ast,
   return NULL;
 }
 
-LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
-                                LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder) {
 
   Ast *binding = ast->data.AST_LET.binding;
 
@@ -245,10 +210,12 @@ LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *outer_ctx,
   }
 
   if (expr_type->kind == T_FN) {
-    return create_fn_binding(
+
+    LLVMValueRef res = create_fn_binding(
         binding, expr_type,
         codegen_fn(ast->data.AST_LET.expr, outer_ctx, module, builder),
         &cont_ctx, module, builder);
+    return res;
   }
 
   LLVMValueRef expr_val =

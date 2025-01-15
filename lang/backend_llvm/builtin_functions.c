@@ -158,6 +158,7 @@ LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
+
 LLVMValueRef cons_equality(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
@@ -360,7 +361,8 @@ LLVMValueRef SomeConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Ast *contained_ast = ast->data.AST_APPLICATION.args;
   LLVMValueRef contained = codegen(contained_ast, ctx, module, builder);
 
-  return codegen_option(contained, builder);
+  LLVMValueRef res = codegen_option(contained, builder);
+  return res;
 }
 
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,

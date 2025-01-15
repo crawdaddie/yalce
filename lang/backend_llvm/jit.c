@@ -83,8 +83,10 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   infer(*prog, &ti_ctx);
 
   ctx->env = ti_ctx.env;
+  ctx->module_name = filename;
 
   if (top_level_tests) {
+    ctx->module_name = filename;
     printf("# Test %s\n"
            "-----------------------------------------\n",
            filename);
@@ -127,10 +129,10 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   LLVMDumpModule(module);
+  printf("> ");
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
-  printf("> ");
   print_result(result_type, result);
   return result; // Return success
 }

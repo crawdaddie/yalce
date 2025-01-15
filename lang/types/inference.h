@@ -20,4 +20,6 @@ void add_builtin(char *name, Type *t);
 
 void print_builtin_types();
 
+Type *lookup_builtin_type(const char *name);
+
 #endif

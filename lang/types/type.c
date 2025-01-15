@@ -1,4 +1,5 @@
 #include "type.h"
+#include "types/inference.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -563,11 +564,10 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
 }
 
 Type *env_lookup(TypeEnv *env, const char *name) {
-  if (env == NULL) {
-
-    return NULL;
-  }
-
+  // if (env == NULL) {
+  //   return NULL;
+  // }
+  //
   while (env) {
     if (strcmp(env->name, name) == 0) {
       return env->type;
@@ -575,7 +575,8 @@ Type *env_lookup(TypeEnv *env, const char *name) {
 
     env = env->next;
   }
-  return NULL;
+
+  return lookup_builtin_type(name);
 }
 
 Type *rec_env_lookup(TypeEnv *env, Type *var) {
@@ -1319,6 +1320,9 @@ Type t_builtin_print = MAKE_FN_TYPE_2(&t_string, &t_void);
 // TypeList *ord_tc_registry = NULL;
 // TypeList *eq_tc_registry = NULL;
 bool is_simple_enum(Type *t) {
+  if (t->kind != T_CONS) {
+    return false;
+  }
   for (int i = 0; i < t->data.T_CONS.num_args; i++) {
     Type *mem_type = t->data.T_CONS.args[i];
     if (mem_type->data.T_CONS.num_args > 0) {

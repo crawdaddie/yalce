@@ -13,8 +13,8 @@ int codegen_lookup_id(const char *id, int length, JITLangCtx *ctx,
 
 JITSymbol *lookup_id_mutable(const char *id, int length, JITLangCtx *ctx);
 
-LLVMValueRef codegen_assignment(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder);
+LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder);
 
 LLVMValueRef codegen_multiple_assignment(Ast *binding, LLVMValueRef expr_val,
                                          Type *expr_type, JITLangCtx *ctx,
