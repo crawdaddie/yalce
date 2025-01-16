@@ -3,6 +3,7 @@
 #include "backend_llvm/globals.h"
 #include "backend_llvm/types.h"
 #include "builtin_functions.h"
+#include "serde.h"
 #include "symbols.h"
 #include "tuple.h"
 #include "types/inference.h"
@@ -103,8 +104,11 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       next_block = NULL; // Last iteration, no need for a next block
     }
 
-    JITLangCtx branch_ctx = ctx_push(*ctx);
+    // JITLangCtx branch_ctx = ctx_push(*ctx);
     // {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
+    //
+    STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
+    JITLangCtx branch_ctx = fn_ctx;
 
     LLVMValueRef test_value = codegen_pattern_binding(
         test_expr, test_val, test_val_type, &branch_ctx, module, builder);
@@ -134,8 +138,10 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMPositionBuilderAtEnd(builder, next_block);
     }
 
-    ht_destroy(branch_ctx.frame->table);
-    free(branch_ctx.frame);
+    destroy_ctx(&branch_ctx);
+
+    // ht_destroy(branch_ctx.frame->table);
+    // free(branch_ctx.frame);
   }
 
   // Position the builder at the end block and return the result
@@ -257,6 +263,16 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
   }
   case AST_VOID: {
     return _TRUE;
+  }
+  case AST_MATCH_GUARD_CLAUSE: {
+    LLVMValueRef test_val =
+        codegen_pattern_binding(binding->data.AST_MATCH_GUARD_CLAUSE.test_expr,
+                                val, val_type, ctx, module, builder);
+
+    LLVMValueRef guard_val = codegen(
+        binding->data.AST_MATCH_GUARD_CLAUSE.guard_expr, ctx, module, builder);
+
+    return LLVMBuildAnd(builder, test_val, guard_val, "guard_and_test");
   }
   default: {
     // test equality of real values

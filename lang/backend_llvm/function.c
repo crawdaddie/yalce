@@ -1,5 +1,6 @@
 #include "backend_llvm/function.h"
 #include "match.h"
+#include "serde.h"
 #include "symbols.h"
 #include "types.h"
 #include "util.h"
@@ -96,7 +97,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 
-  JITLangCtx fn_ctx = ctx_push(*ctx);
+  STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
 
   LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
@@ -112,19 +113,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     LLVMValueRef param_val = LLVMGetParam(func, i);
 
-    // if (param_type->kind == T_FN) {
-    //   const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
-    //   int id_len = param_ast->data.AST_IDENTIFIER.length;
-    //   LLVMTypeRef llvm_type = type_to_llvm_type(param_type, ctx->env,
-    //   module); JITSymbol *sym =
-    //       new_symbol(STYPE_LOCAL_VAR, param_type, param_val, llvm_type);
-    //
-    //   ht_set_hash(&ctx->frame->table, id_chars, hash_string(id_chars,
-    //   id_len),
-    //               sym);
-    //
-    // } else {
-    // }
     codegen_pattern_binding(param_ast, param_val, param_type, &fn_ctx, module,
                             builder);
 
@@ -132,24 +120,24 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   LLVMValueRef body;
-  for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-    Ast *stmt = ast->data.AST_BODY.stmts[i];
-    if (i == 0 && stmt->tag == AST_STRING) {
-      // skip docstring
-      continue;
+  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+    body = codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
+  } else {
+    for (int i = 0; i < ast->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
+
+      Ast *stmt = ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+      if (i == 0 && stmt->tag == AST_STRING) {
+        continue;
+      }
+      body = codegen(stmt, &fn_ctx, module, builder);
     }
-    body = codegen(stmt, &fn_ctx, module, builder);
   }
 
   LLVMBuildRet(builder, body);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
-  // clear function stack frame
-  if (fn_ctx.frame->next != NULL) {
-    ht_destroy(fn_ctx.frame->table);
-    free(fn_ctx.frame);
-  }
+  destroy_ctx(&fn_ctx);
 
   return func;
 }

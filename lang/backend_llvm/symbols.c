@@ -204,17 +204,21 @@ LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
   JITLangCtx cont_ctx = *outer_ctx;
 
   if (ast->data.AST_LET.in_expr != NULL) {
-    cont_ctx = ctx_push(cont_ctx);
+    STACK_ALLOC_CTX_PUSH(fn_ctx, outer_ctx)
+    cont_ctx = fn_ctx;
   }
 
   LLVMValueRef res = _codegen_let_expr(binding, ast->data.AST_LET.expr,
                                        ast->data.AST_LET.in_expr, outer_ctx,
                                        &cont_ctx, module, builder);
 
-  if (!is_top_level_frame(cont_ctx.frame)) {
-    // clear function stack frame
-    ht_destroy(cont_ctx.frame->table);
-    free(cont_ctx.frame);
+  if (ast->data.AST_LET.in_expr != NULL) {
+    destroy_ctx(&cont_ctx);
   }
+  // if (!is_top_level_frame(cont_ctx.frame)) {
+  //   // clear function stack frame
+  //   ht_destroy(cont_ctx.frame->table);
+  //   free(cont_ctx.frame);
+  // }
   return res;
 }

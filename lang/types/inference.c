@@ -930,9 +930,13 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
   case AST_VOID: {
     return infer(pattern, ctx);
   }
+  case AST_MATCH_GUARD_CLAUSE: {
+    return infer_pattern(pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr, ctx);
+  }
   }
 
   fprintf(stderr, "Unsupported pattern in let binding\n");
+  print_ast_err(pattern);
   return NULL;
 }
 
@@ -1440,6 +1444,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
       branch_ctx.constraints = NULL; // Start with fresh constraints for branch
       branch_ctx.env =
           bind_in_env(branch_ctx.env, branch_pattern, pattern_type);
+      if (branch_pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+        infer(branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr,
+              &branch_ctx);
+      }
+
+      print_ast(branch_pattern);
+      print_constraints(branch_ctx.constraints);
+      print_type_env(branch_ctx.env);
 
       Type *branch_type = infer(branch_body, &branch_ctx);
 
@@ -1470,7 +1482,21 @@ Type *infer(Ast *ast, TICtx *ctx) {
     for (int i = 0; i < len; i++) {
       Ast *branch_pattern = &ast->data.AST_MATCH.branches[2 * i];
       branch_pattern->md = apply_substitution(subst, branch_pattern->md);
+
+      // if (branch_pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+      //   branch_pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr->md =
+      //       apply_substitution(
+      //           subst,
+      //           branch_pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr->md);
+      //
+      //   branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr->md =
+      //       apply_substitution(
+      //           subst,
+      //           branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr->md);
+      // }
     }
+    printf("match exprs\n");
+    print_type_env(ctx->env);
 
     // Also apply substitutions to the expression type to propagate
     // constraints

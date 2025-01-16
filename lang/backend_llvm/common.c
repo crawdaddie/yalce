@@ -26,6 +26,6 @@ JITSymbol *find_in_ctx(const char *name, int name_len, JITLangCtx *ctx) {
     }
     frame = frame->next;
   }
-  fprintf(stderr, "Error: find in ctx %s failed:\n", name);
   return NULL;
 }
+void destroy_ctx(JITLangCtx *ctx) { free(ctx->frame->table->entries); }

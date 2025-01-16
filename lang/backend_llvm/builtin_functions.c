@@ -112,16 +112,24 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     case T_NUM: {                                                              \
       return LLVMBuildFCmp(builder, _flop, l, r, _name "_num");                \
     }                                                                          \
+    default: {                                                                 \
+      fprintf(stderr, "Error: unrecognized operands for ord binop");           \
+      return NULL;                                                             \
+    }                                                                          \
     }                                                                          \
   })
 
 LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
+  printf("GT Handler\n");
+  print_ast(ast);
+  print_type(ast->md);
+  print_type(ast->data.AST_APPLICATION.function->md);
+
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP("gt", LLVMRealOGT, LLVMIntSGT);
-  return NULL;
 }
 LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
@@ -130,8 +138,6 @@ LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP("gte", LLVMRealOGE, LLVMIntSGE);
-
-  return NULL;
 }
 
 LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -141,8 +147,6 @@ LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP("lt", LLVMRealOLT, LLVMIntSLT);
-
-  return NULL;
 }
 
 LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -152,8 +156,6 @@ LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP("lte", LLVMRealOLE, LLVMIntSLE);
-
-  return NULL;
 }
 
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,

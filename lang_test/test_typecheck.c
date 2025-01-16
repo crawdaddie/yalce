@@ -306,5 +306,21 @@ int main() {
     T("Some 1", &opt_int);
   });
 
+  ({
+    Ast *b = T("let x = 1;\n"
+               "match x with\n"
+               "| xx if xx > 300 -> xx\n"
+               "| 2 -> 0\n"
+               "| _ -> 3",
+               &t_int);
+    Ast *branch = b->data.AST_BODY.stmts[1]->data.AST_MATCH.branches;
+    print_type(branch->md);
+    Ast *guard = branch->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+    print_ast(guard);
+    print_type(guard->md);
+    print_type(guard->data.AST_APPLICATION.args->md);
+    print_type(guard->data.AST_APPLICATION.args[1].md);
+  });
+
   return status == true ? 0 : 1;
 }

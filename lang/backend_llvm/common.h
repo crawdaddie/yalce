@@ -116,4 +116,14 @@ JITLangCtx ctx_push(JITLangCtx ctx);
 JITSymbol *find_in_ctx(const char *name, int name_len, JITLangCtx *ctx);
 
 bool is_top_level_frame(StackFrame *frame);
+
+void destroy_ctx(JITLangCtx *ctx);
+#define STACK_ALLOC_CTX_PUSH(_ctx_name, _ctx)                                  \
+  JITLangCtx _ctx_name = *_ctx;                                                \
+  ht table;                                                                    \
+  ht_init(&table);                                                             \
+  StackFrame sf = {.table = &table, .next = _ctx_name.frame};                  \
+  _ctx_name.frame = &sf;                                                       \
+  _ctx_name.stack_ptr++;
+
 #endif
