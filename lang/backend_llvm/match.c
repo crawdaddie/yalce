@@ -103,7 +103,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       next_block = NULL; // Last iteration, no need for a next block
     }
 
-    JITLangCtx branch_ctx = {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
+    JITLangCtx branch_ctx = ctx_push(*ctx);
+    // {ctx->stack, ctx->stack_ptr + 1, .env = ctx->env};
 
     LLVMValueRef test_value = codegen_pattern_binding(
         test_expr, test_val, test_val_type, &branch_ctx, module, builder);
@@ -132,8 +133,9 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     if (next_block) {
       LLVMPositionBuilderAtEnd(builder, next_block);
     }
-    ht *branch_stack_frame = branch_ctx.stack + branch_ctx.stack_ptr;
-    ht_reinit(branch_stack_frame);
+
+    ht_destroy(branch_ctx.frame->table);
+    free(branch_ctx.frame);
   }
 
   // Position the builder at the end block and return the result
@@ -178,12 +180,12 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
       JITSymbol *sym =
           new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
       codegen_set_global(sym, val, val_type, llvm_type, ctx, module, builder);
-      ht_set_hash(ctx->stack, chars, id_hash, sym);
+      ht_set_hash(ctx->frame->table, chars, id_hash, sym);
       return _TRUE;
     } else {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
       JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
-      ht_set_hash(ctx->stack + ctx->stack_ptr, chars, id_hash, sym);
+      ht_set_hash(ctx->frame->table, chars, id_hash, sym);
       return _TRUE;
     }
 

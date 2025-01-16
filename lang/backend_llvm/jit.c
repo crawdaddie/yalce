@@ -195,7 +195,10 @@ int jit(int argc, char **argv) {
 
   ht table;
   ht_init(&table);
-  StackFrame initial_stack_frame = {.table = table, .next = NULL};
+  printf("table length@ %zu\n table capacity@ %zu\n entries: %p\n",
+         table.length, table.capacity, table.entries);
+
+  StackFrame initial_stack_frame = {.table = &table, .next = NULL};
   JITLangCtx ctx = {.stack_ptr = 0,
                     .env = env,
                     .num_globals = &num_globals,

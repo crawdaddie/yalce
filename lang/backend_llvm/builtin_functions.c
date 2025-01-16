@@ -1,4 +1,5 @@
 #include "backend_llvm/builtin_functions.h"
+#include "application.h"
 #include "backend_llvm/common.h"
 #include "function.h"
 #include "list.h"
@@ -367,7 +368,7 @@ LLVMValueRef SomeConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
-  ht *stack = ctx->stack;
+  ht *stack = (ctx->frame->table);
 #define GENERIC_FN_SYMBOL(id, type, _builtin_handler)                          \
   ({                                                                           \
     JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, type, NULL, NULL);     \

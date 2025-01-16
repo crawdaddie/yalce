@@ -90,7 +90,7 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
     const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
     if (stmt->tag == AST_LET && strncmp(key, "test_", 5) == 0) {
 
-      JITSymbol *sym = ht_get(ctx->stack, key);
+      JITSymbol *sym = find_in_ctx(key, strlen(key), ctx);
 
       // Increment num_tests
       num_tests = LLVMBuildAdd(

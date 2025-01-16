@@ -43,20 +43,6 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
   return NULL;
 }
 
-JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx) {
-
-  int ptr = ctx->stack_ptr;
-
-  while (ptr >= 0) {
-    JITSymbol *sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
-    if (sym != NULL) {
-      return sym;
-    }
-    ptr--;
-  }
-  return NULL;
-}
-
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   const char *chars = ast->data.AST_IDENTIFIER.value;
@@ -127,12 +113,12 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
   JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, fn_ast->md, NULL, NULL);
   sym->symbol_data.STYPE_GENERIC_FUNCTION.ast = fn_ast;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
+  sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
 
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
   int id_len = binding->data.AST_IDENTIFIER.length;
 
-  ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
-              hash_string(id_chars, id_len), sym);
+  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len), sym);
 
   return NULL;
 }
@@ -145,8 +131,7 @@ LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
   int id_len = binding->data.AST_IDENTIFIER.length;
 
-  ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
-              hash_string(id_chars, id_len), sym);
+  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len), sym);
 
   return fn;
 }
@@ -163,8 +148,7 @@ LLVMValueRef create_generic_coroutine_binding(Ast *binding, Ast *fn_ast,
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
   int id_len = binding->data.AST_IDENTIFIER.length;
 
-  ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
-              hash_string(id_chars, id_len), sym);
+  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len), sym);
 
   return NULL;
 }
@@ -192,8 +176,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     return NULL;
   }
 
-  LLVMValueRef match_result = codegen_pattern_binding(
-      binding, expr_val, expr_type, inner_ctx, module, builder);
+  LLVMValueRef match_result =
+      codegen_pattern_binding(binding, expr_val, expr_type,
+                              in_expr ? inner_ctx : outer_ctx, module, builder);
 
   if (match_result == NULL) {
     fprintf(stderr, "Error: codegen for pattern binding in let expression "
@@ -221,7 +206,15 @@ LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
   if (ast->data.AST_LET.in_expr != NULL) {
     cont_ctx = ctx_push(cont_ctx);
   }
-  return _codegen_let_expr(binding, ast->data.AST_LET.expr,
-                           ast->data.AST_LET.in_expr, outer_ctx, &cont_ctx,
-                           module, builder);
+
+  LLVMValueRef res = _codegen_let_expr(binding, ast->data.AST_LET.expr,
+                                       ast->data.AST_LET.in_expr, outer_ctx,
+                                       &cont_ctx, module, builder);
+
+  if (!is_top_level_frame(cont_ctx.frame)) {
+    // clear function stack frame
+    ht_destroy(cont_ctx.frame->table);
+    free(cont_ctx.frame);
+  }
+  return res;
 }

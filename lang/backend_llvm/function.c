@@ -71,7 +71,7 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, func, LLVMTypeOf(func));
   sym->symbol_data.STYPE_FUNCTION.fn_type = fn_type;
 
-  ht *scope = fn_ctx->stack + fn_ctx->stack_ptr;
+  ht *scope = fn_ctx->frame->table;
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
@@ -112,20 +112,21 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     LLVMValueRef param_val = LLVMGetParam(func, i);
 
-    if (param_type->kind == T_FN) {
-      const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
-      int id_len = param_ast->data.AST_IDENTIFIER.length;
-      LLVMTypeRef llvm_type = type_to_llvm_type(param_type, ctx->env, module);
-      JITSymbol *sym =
-          new_symbol(STYPE_LOCAL_VAR, param_type, param_val, llvm_type);
-
-      ht_set_hash(ctx->stack + ctx->stack_ptr, id_chars,
-                  hash_string(id_chars, id_len), sym);
-
-    } else {
-      codegen_pattern_binding(param_ast, param_val, param_type, &fn_ctx, module,
-                              builder);
-    }
+    // if (param_type->kind == T_FN) {
+    //   const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+    //   int id_len = param_ast->data.AST_IDENTIFIER.length;
+    //   LLVMTypeRef llvm_type = type_to_llvm_type(param_type, ctx->env,
+    //   module); JITSymbol *sym =
+    //       new_symbol(STYPE_LOCAL_VAR, param_type, param_val, llvm_type);
+    //
+    //   ht_set_hash(&ctx->frame->table, id_chars, hash_string(id_chars,
+    //   id_len),
+    //               sym);
+    //
+    // } else {
+    // }
+    codegen_pattern_binding(param_ast, param_val, param_type, &fn_ctx, module,
+                            builder);
 
     fn_type = fn_type->data.T_FN.to;
   }
@@ -145,9 +146,9 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
   // clear function stack frame
-  if (fn_ctx.stack_ptr > 0) {
-    ht *stack_frame = fn_ctx.stack + fn_ctx.stack_ptr;
-    ht_reinit(stack_frame);
+  if (fn_ctx.frame->next != NULL) {
+    ht_destroy(fn_ctx.frame->table);
+    free(fn_ctx.frame);
   }
 
   return func;

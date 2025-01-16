@@ -11,7 +11,7 @@
 #define GENERIC_PTR LLVMPointerType(LLVMInt8Type(), 0)
 
 typedef struct StackFrame {
-  ht table;
+  ht *table;
   struct StackFrame *next;
 } StackFrame;
 
@@ -85,6 +85,7 @@ typedef struct {
     struct {
       Ast *ast;
       int stack_ptr;
+      StackFrame *stack_frame;
       SpecificFns *specific_fns;
       BuiltinHandler builtin_handler;
     } STYPE_GENERIC_FUNCTION;
@@ -114,4 +115,5 @@ JITLangCtx ctx_push(JITLangCtx ctx);
 
 JITSymbol *find_in_ctx(const char *name, int name_len, JITLangCtx *ctx);
 
+bool is_top_level_frame(StackFrame *frame);
 #endif

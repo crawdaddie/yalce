@@ -39,10 +39,6 @@ JITSymbol *lookup_id_ast(Ast *id, JITLangCtx *ctx);
 JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type);
 
-int lookup_id_ast_in_place(Ast *ast, JITLangCtx *ctx, JITSymbol *sym);
-JITSymbol *sym_lookup_by_name_mut(ObjString key, JITLangCtx *ctx);
-// TypeEnv *initialize_builtin_funcs(ht *stack, TypeEnv *env);
-
 // TODO: use gperf for better builtin func lookups
 #define SYM_NAME_ARRAY_AT "array_at"
 #define SYM_NAME_ARRAY_SIZE "array_size"
