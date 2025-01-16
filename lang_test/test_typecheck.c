@@ -314,12 +314,12 @@ int main() {
                "| _ -> 3",
                &t_int);
     Ast *branch = b->data.AST_BODY.stmts[1]->data.AST_MATCH.branches;
-    print_type(branch->md);
+
     Ast *guard = branch->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
-    print_ast(guard);
-    print_type(guard->md);
-    print_type(guard->data.AST_APPLICATION.args->md);
-    print_type(guard->data.AST_APPLICATION.args[1].md);
+
+    TASSERT(guard->data.AST_APPLICATION.function->md,
+            &MAKE_FN_TYPE_3(&t_int, &t_int, &t_bool),
+            "guard clause has type Int -> Int -> Bool\n");
   });
 
   return status == true ? 0 : 1;

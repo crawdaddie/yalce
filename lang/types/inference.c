@@ -770,6 +770,22 @@ Type *apply_substitution(Substitution *subst, Type *t) {
 
   return t;
 }
+void apply_substitution_to_nodes_rec(Substitution *subst, Ast *ast) {
+  switch (ast->tag) {
+  case AST_APPLICATION: {
+    ast->data.AST_APPLICATION.function->md =
+        apply_substitution(subst, ast->data.AST_APPLICATION.function->md);
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      apply_substitution_to_nodes_rec(subst,
+                                      ast->data.AST_APPLICATION.args + i);
+    }
+  }
+  default: {
+    ast->md = apply_substitution(subst, ast->md);
+  }
+  }
+}
+
 // Collect free type variables in a type
 void collect_type_vars(Type *t, const char **vars, int *count) {
   if (!t)
@@ -1423,6 +1439,13 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
       Ast *branch_pattern = &ast->data.AST_MATCH.branches[2 * i];
+      Ast *guard_clause = NULL;
+
+      if (branch_pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+        guard_clause = branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+        branch_pattern = branch_pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+      }
+
       Ast *branch_body = &ast->data.AST_MATCH.branches[2 * i + 1];
 
       Type *pattern_type = infer_pattern(branch_pattern, ctx);
@@ -1442,16 +1465,15 @@ Type *infer(Ast *ast, TICtx *ctx) {
       TICtx branch_ctx = *ctx;
       branch_ctx.scope++;
       branch_ctx.constraints = NULL; // Start with fresh constraints for branch
+                                     //
       branch_ctx.env =
           bind_in_env(branch_ctx.env, branch_pattern, pattern_type);
-      if (branch_pattern->tag == AST_MATCH_GUARD_CLAUSE) {
-        infer(branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr,
-              &branch_ctx);
-      }
 
-      print_ast(branch_pattern);
-      print_constraints(branch_ctx.constraints);
-      print_type_env(branch_ctx.env);
+      if (guard_clause) {
+        infer(guard_clause, &branch_ctx);
+        print_ast(guard_clause);
+        print_type(guard_clause->md);
+      }
 
       Type *branch_type = infer(branch_body, &branch_ctx);
 
@@ -1464,14 +1486,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fprintf(stderr, "Inconsistent types in match branches\n");
         return NULL;
       }
-
-      // printf("branch constraints\n");
-      // print_constraints(branch_ctx.constraints);
     }
-    // printf("match pattern constraints\n");
-    // print_constraints(ctx->constraints);
 
     Substitution *subst = solve_constraints(ctx->constraints);
+
     if (!subst) {
       fprintf(stderr, "Could not solve match constraints\n");
       return NULL;
@@ -1481,25 +1499,22 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     for (int i = 0; i < len; i++) {
       Ast *branch_pattern = &ast->data.AST_MATCH.branches[2 * i];
-      branch_pattern->md = apply_substitution(subst, branch_pattern->md);
+      Ast *guard_clause = NULL;
 
-      // if (branch_pattern->tag == AST_MATCH_GUARD_CLAUSE) {
-      //   branch_pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr->md =
-      //       apply_substitution(
-      //           subst,
-      //           branch_pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr->md);
-      //
-      //   branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr->md =
-      //       apply_substitution(
-      //           subst,
-      //           branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr->md);
-      // }
+      if (branch_pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+        guard_clause = branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+        branch_pattern = branch_pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+
+        branch_pattern->md = apply_substitution(subst, branch_pattern->md);
+        ast->data.AST_MATCH.branches[2 * i].md = branch_pattern->md;
+        guard_clause->md = apply_substitution(subst, guard_clause->md);
+        apply_substitution_to_nodes_rec(subst, guard_clause);
+
+      } else {
+        branch_pattern->md = apply_substitution(subst, branch_pattern->md);
+      }
     }
-    printf("match exprs\n");
-    print_type_env(ctx->env);
 
-    // Also apply substitutions to the expression type to propagate
-    // constraints
     expr_type = apply_substitution(subst, expr_type);
     break;
   }
