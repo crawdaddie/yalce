@@ -178,11 +178,11 @@ int jit(int argc, char **argv) {
 
   setup_global_storage(module, builder);
 
-  ht stack[STACK_MAX];
-
-  for (int i = 0; i < STACK_MAX; i++) {
-    ht_init(&stack[i]);
-  }
+  // ht stack[STACK_MAX];
+  //
+  // for (int i = 0; i < STACK_MAX; i++) {
+  //   ht_init(&stack[i]);
+  // }
 
   TypeEnv *env = NULL;
   // initialize_builtin_numeric_types(env);
@@ -193,12 +193,15 @@ int jit(int argc, char **argv) {
   // t_option_of_var.alias = "Option";
   // env = env_extend(env, "Option", &t_option_of_var);
 
-  JITLangCtx ctx = {.stack = stack,
-                    .stack_ptr = 0,
+  ht table;
+  ht_init(&table);
+  StackFrame initial_stack_frame = {.table = table, .next = NULL};
+  JITLangCtx ctx = {.stack_ptr = 0,
                     .env = env,
                     .num_globals = &num_globals,
                     .global_storage_array = global_storage_array,
-                    .global_storage_capacity = &global_storage_capacity};
+                    .global_storage_capacity = &global_storage_capacity,
+                    .frame = &initial_stack_frame};
 
   initialize_builtin_funcs(&ctx, module, builder);
   bool repl = false;

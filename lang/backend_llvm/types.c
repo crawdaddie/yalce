@@ -76,7 +76,7 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
   return llvm_tuple_type;
 }
 
-LLVMTypeRef fn_prototype(Type *fn_type, int fn_len, TypeEnv *env);
+LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env);
 
 // Function to create an LLVM list type forward decl
 LLVMTypeRef create_list_type(Type *list_el_type, TypeEnv *env,
@@ -180,7 +180,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
       t = t->data.T_FN.to;
       fn_len++;
     }
-    return fn_prototype(type, fn_len, env);
+    return codegen_fn_type(type, fn_len, env);
   }
 
   case T_COROUTINE_INSTANCE: {

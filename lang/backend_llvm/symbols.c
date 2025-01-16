@@ -1,7 +1,9 @@
 #include "backend_llvm/symbols.h"
+
 #include "adt.h"
 #include "function.h"
 #include "globals.h"
+#include "ht.h"
 #include "match.h"
 #include "serde.h"
 #include "types/inference.h"
@@ -34,33 +36,8 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
 
     const char *chars = ast->data.AST_IDENTIFIER.value;
     int chars_len = ast->data.AST_IDENTIFIER.length;
-    ObjString key = {.chars = chars, chars_len, hash_string(chars, chars_len)};
-    int ptr = ctx->stack_ptr;
 
-    while (ptr >= 0) {
-      JITSymbol *sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
-      if (sym != NULL) {
-        return sym;
-      }
-      ptr--;
-    }
-  }
-
-  return NULL;
-}
-
-JITSymbol *lookup_id_in_current_scope(Ast *ast, JITLangCtx *ctx) {
-  if (ast->tag == AST_IDENTIFIER) {
-
-    const char *chars = ast->data.AST_IDENTIFIER.value;
-    int chars_len = ast->data.AST_IDENTIFIER.length;
-    ObjString key = {.chars = chars, chars_len, hash_string(chars, chars_len)};
-    int ptr = ctx->stack_ptr;
-
-    JITSymbol *sym = ht_get_hash(ctx->stack + ptr, key.chars, key.hash);
-    if (sym != NULL) {
-      return sym;
-    }
+    return find_in_ctx(chars, chars_len, ctx);
   }
 
   return NULL;
@@ -192,6 +169,48 @@ LLVMValueRef create_generic_coroutine_binding(Ast *binding, Ast *fn_ast,
   return NULL;
 }
 
+LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
+                               JITLangCtx *outer_ctx, JITLangCtx *inner_ctx,
+                               LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  Type *expr_type = expr->md;
+  if (expr_type->kind == T_FN && is_generic(expr_type)) {
+    return create_generic_fn_binding(binding, expr, inner_ctx, module, builder);
+  }
+
+  if (expr_type->kind == T_FN) {
+
+    LLVMValueRef res = create_fn_binding(
+        binding, expr_type, codegen_fn(expr, outer_ctx, module, builder),
+        inner_ctx, module, builder);
+    return res;
+  }
+
+  LLVMValueRef expr_val = codegen(expr, outer_ctx, module, builder);
+
+  if (!expr_val) {
+    return NULL;
+  }
+
+  LLVMValueRef match_result = codegen_pattern_binding(
+      binding, expr_val, expr_type, inner_ctx, module, builder);
+
+  if (match_result == NULL) {
+    fprintf(stderr, "Error: codegen for pattern binding in let expression "
+                    "failed\n");
+    print_ast_err(binding);
+    print_ast_err(expr);
+    return NULL;
+  }
+
+  if (in_expr != NULL) {
+    LLVMValueRef res = codegen(in_expr, inner_ctx, module, builder);
+    return res;
+  }
+
+  return expr_val;
+}
+
 LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
                               LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -202,44 +221,7 @@ LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
   if (ast->data.AST_LET.in_expr != NULL) {
     cont_ctx = ctx_push(cont_ctx);
   }
-
-  Type *expr_type = ast->data.AST_LET.expr->md;
-  if (expr_type->kind == T_FN && is_generic(expr_type)) {
-    return create_generic_fn_binding(binding, ast->data.AST_LET.expr, &cont_ctx,
-                                     module, builder);
-  }
-
-  if (expr_type->kind == T_FN) {
-
-    LLVMValueRef res = create_fn_binding(
-        binding, expr_type,
-        codegen_fn(ast->data.AST_LET.expr, outer_ctx, module, builder),
-        &cont_ctx, module, builder);
-    return res;
-  }
-
-  LLVMValueRef expr_val =
-      codegen(ast->data.AST_LET.expr, outer_ctx, module, builder);
-
-  if (!expr_val) {
-    return NULL;
-  }
-
-  LLVMValueRef match_result = codegen_pattern_binding(
-      binding, expr_val, expr_type, &cont_ctx, module, builder);
-
-  if (match_result == NULL) {
-    fprintf(stderr, "Error: codegen for pattern binding in let expression "
-                    "failed\n");
-    print_ast_err(ast);
-    return NULL;
-  }
-
-  if (ast->data.AST_LET.in_expr != NULL) {
-    LLVMValueRef res =
-        codegen(ast->data.AST_LET.in_expr, &cont_ctx, module, builder);
-    return res;
-  }
-
-  return expr_val;
+  return _codegen_let_expr(binding, ast->data.AST_LET.expr,
+                           ast->data.AST_LET.in_expr, outer_ctx, &cont_ctx,
+                           module, builder);
 }

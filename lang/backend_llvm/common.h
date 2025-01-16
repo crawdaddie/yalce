@@ -10,6 +10,11 @@
 
 #define GENERIC_PTR LLVMPointerType(LLVMInt8Type(), 0)
 
+typedef struct StackFrame {
+  ht table;
+  struct StackFrame *next;
+} StackFrame;
+
 typedef struct coroutine_ctx_t {
   LLVMValueRef func;
   LLVMTypeRef func_type;
@@ -21,8 +26,8 @@ typedef struct coroutine_ctx_t {
 
 typedef struct {
   // ht stack[STACK_MAX];
-  ht *stack;
   int stack_ptr;
+  StackFrame *frame;
   TypeEnv *env;
   int *num_globals;
   void **global_storage_array;
@@ -106,5 +111,7 @@ typedef struct {
 } JITLookupResult;
 
 JITLangCtx ctx_push(JITLangCtx ctx);
+
+JITSymbol *find_in_ctx(const char *name, int name_len, JITLangCtx *ctx);
 
 #endif

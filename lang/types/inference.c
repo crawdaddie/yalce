@@ -115,7 +115,7 @@ void set_in_env(const char *name, Type *t, TICtx *ctx) {
   ctx->env = env_extend(ctx->env, name, t);
 }
 
-Type *find_in_ctx(const char *name, TICtx *ctx) {
+Type *find_type_in_ctx(const char *name, TICtx *ctx) {
   return env_lookup(ctx->env, name);
 }
 
@@ -1014,7 +1014,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_IDENTIFIER: {
 
     const char *name = ast->data.AST_IDENTIFIER.value;
-    type = find_in_ctx(name, ctx);
+    type = find_type_in_ctx(name, ctx);
 
     // if (type == NULL) {
     //   type = lookup_builtin_type(name);
