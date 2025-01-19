@@ -16,8 +16,13 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y llvm-16 llvm-16-dev clang-16
-        # Add any other dependencies your project needs
+        sudo apt-get install -y \
+          llvm-16 \
+          llvm-16-dev \
+          clang-16 \
+          libreadline-dev \
+          flex \
+          bison
 
     - name: Create .env file
       run: |
