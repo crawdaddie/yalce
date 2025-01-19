@@ -7,25 +7,29 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang flex bison
+        sudo apt-get install -y llvm-16 llvm-16-dev clang-16
+        # Add any other dependencies your project needs
 
-    - name: Parser Test
-      run: make test_parse
+    - name: Set up environment
+      run: |
+        echo "CPATH=/usr/include" >> $GITHUB_ENV
+        echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+        echo "LLVM_PATH=/usr/lib/llvm-16" >> $GITHUB_ENV
 
-    - name: Typecheck Test
+    - name: Run typecheck test
       run: make test_typecheck
 
-    - name: Integration Test
+    - name: Run parse test
+      run: make test_parse
+
+    - name: Run scripts test
       run: make test_scripts
-      
-    - name: Clean up
-      run: make clean
