@@ -182,7 +182,6 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 
     if (ctx->stack_ptr == 0) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
-
       JITSymbol *sym =
           new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
       codegen_set_global(sym, val, val_type, llvm_type, ctx, module, builder);

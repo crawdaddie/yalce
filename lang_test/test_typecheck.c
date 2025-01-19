@@ -322,5 +322,38 @@ int main() {
             "guard clause has type Int -> Int -> Bool\n");
   });
 
+  ({
+    bool res =
+        (fn_types_match(&MAKE_FN_TYPE_3(&t_int, &t_num, &t_void),
+                        &MAKE_FN_TYPE_3(&t_int, &t_num, &t_num)) == true);
+
+    const char *msg =
+        "fn types match function - comparing two fn types ignoring "
+        "return type\n";
+    if (res) {
+      printf("✅ %s", msg);
+    } else {
+
+      printf("❌ %s", msg);
+    }
+    status &= res;
+  });
+
+  ({
+    bool res =
+        (fn_types_match(&MAKE_FN_TYPE_3(&t_int, &t_int, &t_void),
+                        &MAKE_FN_TYPE_3(&t_int, &t_num, &t_num)) == false);
+    const char *msg =
+        "fn types match function - comparing two fn types ignoring "
+        "return type\n";
+    if (res) {
+      printf("✅ %s", msg);
+    } else {
+
+      printf("❌ %s", msg);
+    }
+    status &= res;
+  });
+
   return status == true ? 0 : 1;
 }

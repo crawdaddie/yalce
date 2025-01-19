@@ -86,6 +86,7 @@ typedef struct {
       Ast *ast;
       int stack_ptr;
       StackFrame *stack_frame;
+      TypeEnv *type_env;
       SpecificFns *specific_fns;
       BuiltinHandler builtin_handler;
     } STYPE_GENERIC_FUNCTION;

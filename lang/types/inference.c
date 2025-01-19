@@ -71,13 +71,6 @@ uint64_t hash_type(Type *type) {
   }
 }
 
-// Substitution map for type variables
-typedef struct Substitution {
-  Type *from; // Type variable
-  Type *to;   // Replacement type
-  struct Substitution *next;
-} Substitution;
-
 Type *resolve_type_in_constraints(Type *r, TypeConstraint *env);
 TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
                                    Type *t2);
@@ -234,6 +227,9 @@ void initialize_builtin_types() {
   add_builtin("print", &t_builtin_print);
   add_builtin("array_at", &t_array_at_fn_sig);
   add_builtin("array_size", &t_array_size_fn_sig);
+
+  add_builtin("||", &t_builtin_or);
+  add_builtin("&&", &t_builtin_and);
 }
 
 Type *param_binding_type(Ast *ast) {
@@ -359,42 +355,6 @@ void compare_args(Type *free_arg, Type *arg, TypeEnv **env) {
     *free_arg = *arg;
     return;
   }
-}
-
-Type *resolve_type_in_env(Type *r, TypeEnv *env) {
-  switch (r->kind) {
-  case T_VAR: {
-    Type *rr = env_lookup(env, r->data.T_VAR);
-    if (rr) {
-      *r = *rr;
-    }
-    return r;
-  }
-
-  case T_CONS: {
-    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
-      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
-    }
-    return r;
-  }
-
-  case T_FN: {
-    r->data.T_FN.from = resolve_type_in_env(r->data.T_FN.from, env);
-    r->data.T_FN.to = resolve_type_in_env(r->data.T_FN.to, env);
-    return r;
-  }
-
-  case T_INT:
-  case T_UINT64:
-  case T_NUM:
-  case T_CHAR:
-  case T_BOOL:
-  case T_VOID:
-  case T_STRING: {
-    return r;
-  }
-  }
-  return NULL;
 }
 
 Type *constraints_lookup(TypeConstraint *env, const char *name) {
@@ -566,7 +526,8 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
       if (t2->kind != T_VAR) {
 
         if (!satisfies_tc_constraint(t2, t1->implements)) {
-          fprintf(stderr, "Type doesn't satisfy typeclass constraint\n");
+          fprintf(stderr, "Type doesn't satisfy typeclass constraint '%s'\n",
+                  t1->implements->name);
           return false;
         } else {
 
@@ -1471,8 +1432,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       if (guard_clause) {
         infer(guard_clause, &branch_ctx);
-        print_ast(guard_clause);
-        print_type(guard_clause->md);
       }
 
       Type *branch_type = infer(branch_body, &branch_ctx);

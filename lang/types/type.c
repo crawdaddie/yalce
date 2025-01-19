@@ -176,6 +176,8 @@ Type t_iter_of_list_sig = MAKE_FN_TYPE_2(
     &t_list_cor_params, &COR_INST(&t_list_cor_params, &t_list_cor_ret_opt));
 
 Type t_coroutine_concat_sig = TVAR("t_coroutine_concat_sig");
+Type t_builtin_or = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
+Type t_builtin_and = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
 
 // Type t_cor_map_iter_sig;
 
@@ -885,11 +887,13 @@ Type *create_typeclass_resolve_type(const char *comparison_tc, int num,
   tcr->data.T_CONS.args = types;
   return tcr;
 }
+
 Type *resolve_tc_rank(Type *type) {
   if (type->kind != T_TYPECLASS_RESOLVE) {
     return type;
   }
   bool all_generic = true;
+
   for (int i = 0; i < type->data.T_CONS.num_args; i++) {
     all_generic &= is_generic(type->data.T_CONS.args[i]);
   }
@@ -914,28 +918,92 @@ Type *resolve_tc_rank(Type *type) {
   return max_ranked;
 }
 
-/*
+Type *resolve_type_in_env(Type *r, TypeEnv *env) {
+  switch (r->kind) {
+  case T_VAR: {
+    Type *rr = env_lookup(env, r->data.T_VAR);
+    if (rr) {
+      *r = *rr;
+    }
+    return r;
+  }
 
+  case T_TYPECLASS_RESOLVE: {
+    bool still_generic = false;
+    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
+      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
+      if (r->data.T_CONS.args[i]->kind == T_VAR) {
+        still_generic = true;
+      }
+    }
+    if (!still_generic) {
+      return resolve_tc_rank(r);
+    }
+    return r;
+  }
+  case T_CONS: {
+    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
+      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
+    }
+    return r;
+  }
 
-Type *resolve_tc_rank(Type *type) {
+  case T_FN: {
+    r->data.T_FN.from = resolve_type_in_env(r->data.T_FN.from, env);
+    r->data.T_FN.to = resolve_type_in_env(r->data.T_FN.to, env);
+    return r;
+  }
+
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_CHAR:
+  case T_BOOL:
+  case T_VOID:
+  case T_STRING: {
+    return r;
+  }
+  }
+  return NULL;
+}
+// Type *resolve_type_in_env(Type *t, TypeEnv *env) {
+//   if (t->kind == T_VAR) {
+//     return env_lookup(env, t->data.T_VAR);
+//   }
+//   if (t->kind == T_CONS || t->kind == T_TYPECLASS_RESOLVE) {
+//     Type *cp = deep_copy_type(t);
+//     for (int i = 0; i < cp->data.T_CONS.num_args; i++) {
+//       cp->data.T_CONS.args[i] =
+//           resolve_type_in_env(cp->data.T_CONS.args[i], env);
+//     }
+//     return cp;
+//   }
+//
+//   return t;
+// }
+
+Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env) {
   if (type->kind != T_TYPECLASS_RESOLVE) {
     return type;
   }
-  if (is_generic(type)) {
-    return type;
+
+  const char *comparison_tc = type->data.T_CONS.name;
+  Type *max_ranked = NULL;
+  double max_rank;
+  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+    Type *arg = type->data.T_CONS.args[i];
+    arg = resolve_type_in_env(arg, env);
+
+    if (max_ranked == NULL) {
+      max_ranked = arg;
+      max_rank = get_typeclass_rank(arg, comparison_tc);
+    } else if (get_typeclass_rank(arg, comparison_tc) >= max_rank) {
+      max_ranked = arg;
+      max_rank = get_typeclass_rank(arg, comparison_tc);
+    }
   }
-  Type *dep1 = type->data.T_TYPECLASS_RESOLVE.dependencies[0];
-  Type *dep2 = type->data.T_TYPECLASS_RESOLVE.dependencies[1];
-  dep1 = dep1->kind == T_TYPECLASS_RESOLVE ? resolve_tc_rank(dep1) : dep1;
-  dep2 = dep2->kind == T_TYPECLASS_RESOLVE ? resolve_tc_rank(dep2) : dep2;
-  TypeClass *tc1 = get_typeclass_by_name(dep1, comparison_tc);
-  TypeClass *tc2 = get_typeclass_by_name(dep2, comparison_tc);
-  if (tc1->rank >= tc2->rank) {
-    return dep1;
-  }
-  return dep2;
+  return max_ranked;
 }
-*/
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement) {
 
@@ -1316,18 +1384,37 @@ double get_typeclass_rank(Type *t, const char *name) {
 
 Type t_builtin_print = MAKE_FN_TYPE_2(&t_string, &t_void);
 
-// TypeList *arithmetic_tc_registry = NULL;
-// TypeList *ord_tc_registry = NULL;
-// TypeList *eq_tc_registry = NULL;
 bool is_simple_enum(Type *t) {
   if (t->kind != T_CONS) {
     return false;
   }
+
+  if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) != 0) {
+    return false;
+  }
+
   for (int i = 0; i < t->data.T_CONS.num_args; i++) {
     Type *mem_type = t->data.T_CONS.args[i];
     if (mem_type->data.T_CONS.num_args > 0) {
       return false;
     }
+  }
+  return true;
+}
+
+/**
+ * compares two function types for equality, ignoring the return type of each
+ * */
+bool fn_types_match(Type *t1, Type *t2) {
+  while (t1->kind == T_FN) {
+    Type *c1 = t1->data.T_FN.from;
+    Type *c2 = t2->data.T_FN.from;
+    if (!types_equal(c1, c2)) {
+      return false;
+    }
+
+    t1 = t1->data.T_FN.to;
+    t2 = t2->data.T_FN.to;
   }
   return true;
 }

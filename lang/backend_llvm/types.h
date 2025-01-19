@@ -24,11 +24,6 @@ LLVMValueRef ptr_constructor(LLVMValueRef val, Type *from_type,
 LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
-void initialize_builtin_numeric_types(TypeEnv *env);
-
-LLVMTypeRef llvm_type_of_identifier(Ast *id, TypeEnv *env,
-                                    LLVMModuleRef module);
-
 LLVMValueRef codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder);

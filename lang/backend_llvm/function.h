@@ -16,8 +16,9 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder);
 
-LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
-                                   Type *expected_fn_type, JITLangCtx *ctx,
-                                   LLVMModuleRef module,
+LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
+                                   JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder);
+
+bool fn_types_match(Type *t1, Type *t2);
 #endif

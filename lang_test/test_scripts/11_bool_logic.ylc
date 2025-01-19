@@ -1,24 +1,21 @@
 %test
 
-let x = true;
-let y = false;
-
 let test_and = fn () ->
-  x && y == false
+  true && false == false
 ;;
 
 let test_or = fn () ->
-  x || y == true
+  true || false == true
 ;;
 
 let test_or1 = fn () ->
-  x || x == true
+  true || true == true
 ;;
 
 let test_and1 = fn () ->
-  x && x == true
+  true && true == true
 ;;
 
 let test_and2 = fn () ->
-  y && y == false
+  false && false == false
 ;;

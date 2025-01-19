@@ -85,6 +85,9 @@ extern Type t_iter_cor_sig;
 extern Type t_cor_map_iter_sig;
 extern Type t_coroutine_concat_sig;
 
+extern Type t_builtin_or;
+extern Type t_builtin_and;
+
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"
@@ -383,4 +386,10 @@ extern Type t_builtin_print;
 // extern TypeList *eq_tc_registry;
 //
 bool is_simple_enum(Type *t);
+
+bool fn_types_match(Type *t1, Type *t2);
+
+Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
+
+Type *resolve_type_in_env(Type *r, TypeEnv *env);
 #endif

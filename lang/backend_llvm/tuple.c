@@ -57,8 +57,6 @@ LLVMValueRef codegen_tuple_access(int n, LLVMValueRef tuple,
     return LLVMBuildExtractValue(builder, tuple, n, "struct_element");
   }
 
-  // LLVMValueRef element_ptr =
-  //     LLVMBuildGEP2(builder, tuple_type, tuple, n, "get_tuple_element");
   LLVMValueRef element_ptr =
       LLVMBuildGEP2(builder, tuple_type, tuple,
                     (LLVMValueRef[]){

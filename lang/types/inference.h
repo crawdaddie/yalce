@@ -12,6 +12,18 @@ typedef struct TICtx {
 
 } TICtx;
 
+// Substitution map for type variables
+typedef struct Substitution {
+  Type *from; // Type variable
+  Type *to;   // Replacement type
+  struct Substitution *next;
+} Substitution;
+
+Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2);
+
+Type *apply_substitution(Substitution *subst, Type *t);
+void print_subst(Substitution *c);
+
 Type *infer(Ast *ast, TICtx *ctx);
 Type *next_tvar();
 

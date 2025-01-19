@@ -114,6 +114,7 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
   sym->symbol_data.STYPE_GENERIC_FUNCTION.ast = fn_ast;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
+  sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env = ctx->env;
 
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
   int id_len = binding->data.AST_IDENTIFIER.length;

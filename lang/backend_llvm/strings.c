@@ -1,4 +1,5 @@
 #include "backend_llvm/strings.h"
+#include "backend_llvm/array.h"
 #include "list.h"
 #include "types/type.h"
 #include "util.h"
@@ -117,7 +118,7 @@ LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
-  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -139,7 +140,7 @@ LLVMValueRef char_to_string(LLVMValueRef char_value, LLVMModuleRef module,
 
   LLVMTypeRef data_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
 
-  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -186,26 +187,7 @@ LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
-  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
-
-  LLVMValueRef str = LLVMGetUndef(struct_type);
-  str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
-  str = LLVMBuildInsertValue(builder, str, len, 0, "insert_array_size");
-  return str;
-}
-
-LLVMValueRef _to_string(LLVMValueRef int_value, LLVMModuleRef module,
-                        LLVMBuilderRef builder) {
-
-  LLVMValueRef data_ptr = _int_to_string(int_value, module, builder);
-  LLVMValueRef strlen_func = get_strlen_func(module);
-  LLVMValueRef len =
-      LLVMBuildCall2(builder, LLVMTypeOf(strlen_func), strlen_func,
-                     (LLVMValueRef[]){data_ptr}, 1, "");
-
-  LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
-
-  LLVMTypeRef struct_type = array_struct_type(data_ptr_type);
+  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -327,10 +309,6 @@ LLVMValueRef strings_equal(LLVMValueRef left, LLVMValueRef right,
 
   return LLVMBuildICmp(builder, LLVMIntEQ, comp,
                        LLVMConstInt(LLVMInt32Type(), 0, 0), "Int ==");
-}
-
-LLVMValueRef increment_string(LLVMBuilderRef builder, LLVMValueRef string) {
-  return codegen_array_increment(string, LLVMInt8Type(), builder);
 }
 
 LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,

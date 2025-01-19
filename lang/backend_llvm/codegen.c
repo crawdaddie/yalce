@@ -1,5 +1,6 @@
 #include "backend_llvm/codegen.h"
-#include "application.h"
+#include "backend_llvm/application.h"
+#include "backend_llvm/array.h"
 #include "backend_llvm/function.h"
 #include "backend_llvm/list.h"
 #include "backend_llvm/match.h"
@@ -128,7 +129,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_ARRAY: {
-    return codegen_array(ast, ctx, module, builder);
+    return codegen_create_array(ast, ctx, module, builder);
   }
 
   case AST_LET: {

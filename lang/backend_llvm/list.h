@@ -1,6 +1,5 @@
 #ifndef _LANG_BACKEND_LLVM_CODEGEN_LIST_H
 #define _LANG_BACKEND_LLVM_CODEGEN_LIST_H
-
 #include "backend_llvm/common.h"
 #include "parse.h"
 #include "types/type.h"
@@ -30,37 +29,4 @@ LLVMValueRef codegen_list_prepend(LLVMValueRef l, LLVMValueRef list,
                                   JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef);
 
-LLVMValueRef codegen_array(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                           LLVMBuilderRef builder);
-
-LLVMTypeRef codegen_array_type(Type *type, TypeEnv *env, LLVMModuleRef module);
-
-LLVMValueRef codegen_array_at(LLVMValueRef array_ptr, LLVMValueRef idx,
-                              LLVMTypeRef el_type, LLVMModuleRef module,
-                              LLVMBuilderRef builder);
-
-LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
-                                    LLVMValueRef array_struct);
-
-LLVMTypeRef create_array_struct_type(LLVMTypeRef element_type);
-
-LLVMValueRef codegen_array_init(LLVMValueRef len, LLVMValueRef item,
-                                JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder);
-
-LLVMTypeRef array_struct_type(LLVMTypeRef data_ptr_type);
-
-LLVMValueRef codegen_array_increment(LLVMValueRef array, LLVMTypeRef el_type,
-                                     LLVMBuilderRef builder);
-
-LLVMValueRef codegen_array_slice(LLVMValueRef array, LLVMTypeRef el_type,
-                                 LLVMValueRef start, LLVMValueRef end,
-                                 LLVMBuilderRef builder);
-
-LLVMValueRef codegen_get_array_data_ptr(LLVMBuilderRef builder,
-                                        LLVMTypeRef el_type,
-                                        LLVMValueRef array);
-
-LLVMValueRef codegen_get_array_data(LLVMBuilderRef builder,
-                                    LLVMTypeRef data_type, LLVMValueRef array);
 #endif

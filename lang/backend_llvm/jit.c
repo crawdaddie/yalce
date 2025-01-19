@@ -8,7 +8,7 @@
 #include "parse.h"
 #include "serde.h"
 #include "symbols.h"
-#include "synths.h"
+// #include "synths.h"
 #include "test_module.h"
 #include "types.h"
 #include "types/inference.h"
@@ -128,7 +128,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  LLVMDumpModule(module);
+  // LLVMDumpModule(module);
   printf("> ");
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);

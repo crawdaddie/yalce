@@ -3,16 +3,13 @@
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/inference.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
-
-LLVMValueRef specific_fns_lookup(SpecificFns *list, Type *key);
-
-SpecificFns *specific_fns_extend(SpecificFns *list, Type *arg_types,
-                                 LLVMValueRef func);
 
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
                             LLVMModuleRef module) {
@@ -129,22 +126,110 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       if (i == 0 && stmt->tag == AST_STRING) {
         continue;
       }
+      print_ast(stmt);
+
       body = codegen(stmt, &fn_ctx, module, builder);
     }
   }
-
   LLVMBuildRet(builder, body);
-
   LLVMPositionBuilderAtEnd(builder, prev_block);
-
   destroy_ctx(&fn_ctx);
+  return func;
+}
+
+TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
+                                   Type *specific_type) {
+  Substitution *subst = NULL;
+
+  Type *gen;
+  Type *spec;
+
+  Type *_gen = generic_type;
+  while (_gen->kind == T_FN) {
+    gen = _gen->data.T_FN.from;
+    spec = specific_type->data.T_FN.from;
+    subst = substitutions_extend(subst, gen, spec);
+
+    _gen = _gen->data.T_FN.to;
+    specific_type = specific_type->data.T_FN.to;
+  }
+
+  // return types:
+  gen = _gen;
+  spec = specific_type;
+  subst = substitutions_extend(subst, gen, spec);
+
+  _gen = generic_type;
+  while (_gen->kind == T_FN) {
+    Type *f = _gen->data.T_FN.from;
+    if (f->kind == T_VAR) {
+      env = env_extend(env, f->data.T_VAR, apply_substitution(subst, f));
+    }
+    _gen = _gen->data.T_FN.to;
+  }
+
+  Type *f = _gen;
+  if (f->kind == T_VAR) {
+    env = env_extend(env, f->data.T_VAR, apply_substitution(subst, f));
+  }
+
+  return env;
+}
+
+LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
+                                 JITLangCtx *ctx, LLVMModuleRef module,
+                                 LLVMBuilderRef builder) {
+  JITLangCtx compilation_ctx = *ctx;
+
+  Type *generic_type = sym->symbol_type;
+  compilation_ctx.stack_ptr = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
+  compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
+  compilation_ctx.env = create_env_for_generic_fn(
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
+      specific_type);
+  Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
+  fn_ast.md = specific_type;
+
+  LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
 
   return func;
 }
 
-LLVMValueRef get_specific_callable(JITSymbol *sym, const char *sym_name,
-                                   Type *expected_fn_type, JITLangCtx *ctx,
-                                   LLVMModuleRef module,
-                                   LLVMBuilderRef builder) {
+LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key) {
+  while (fns) {
+    if (fn_types_match(key, fns->arg_types_key)) {
+      return fns->func;
+    }
+    fns = fns->next;
+  }
   return NULL;
+}
+
+SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
+                                 LLVMValueRef func) {
+  SpecificFns *new_fns = malloc(sizeof(SpecificFns));
+  new_fns->arg_types_key = key;
+  new_fns->func = func;
+  new_fns->next = fns;
+  return new_fns;
+}
+
+LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
+                                   JITLangCtx *ctx, LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  LLVMValueRef func = specific_fns_lookup(
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
+
+  if (func) {
+    return func;
+  }
+
+  LLVMValueRef specific_fn =
+      compile_specific_fn(expected_fn_type, sym, ctx, module, builder);
+  sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+      specific_fns_extend(sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
+                          expected_fn_type, specific_fn);
+
+  return specific_fn;
 }

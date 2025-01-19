@@ -15,14 +15,14 @@ void codegen_set_global(JITSymbol *sym, LLVMValueRef value, Type *ttype,
                         LLVMTypeRef llvm_type, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  LLVMValueRef malloced_space = LLVMBuildMalloc(builder, llvm_type, "");
+  LLVMValueRef malloced_space = LLVMBuildMalloc(builder, llvm_type, "malloc_for_global");
 
   // Store the value in the malloced space
   LLVMBuildStore(builder, value, malloced_space);
 
   // Cast the malloced space to a generic void ptr for storage in global array
   LLVMValueRef generic_ptr =
-      LLVMBuildBitCast(builder, malloced_space, _VOID_PTR_T, "generic_ptr");
+      LLVMBuildBitCast(builder, malloced_space, _VOID_PTR_T, "generic_ptr_to_global");
   // Calculate the offset for the specific slot
   int slot = *ctx->num_globals;
   sym->symbol_data.STYPE_TOP_LEVEL_VAR = slot;
