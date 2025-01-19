@@ -19,12 +19,13 @@ jobs:
         sudo apt-get install -y llvm-16 llvm-16-dev clang-16
         # Add any other dependencies your project needs
 
-    - name: Set up environment
+    - name: Create .env file
       run: |
-        echo "CPATH=/usr/include" >> $GITHUB_ENV
-        echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
-        echo "LLVM_PATH=/usr/lib/llvm-16" >> $GITHUB_ENV
-
+        cat > .env << 'EOL'
+        export CPATH=/usr/include
+        export LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
+        export LLVM_PATH=/usr/lib/llvm-16
+        EOL
     - name: Run typecheck test
       run: make test_typecheck
 
