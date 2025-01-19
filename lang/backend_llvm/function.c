@@ -84,7 +84,10 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   Type *fn_type = ast->md;
   int fn_len = ast->data.AST_LAMBDA.len;
-  LLVMTypeRef prototype = codegen_fn_type(ast->md, fn_len, ctx->env, module);
+  LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx->env, module);
+  printf("fn proto:\n");
+  LLVMDumpType(prototype);
+  printf("\n");
 
   LLVMValueRef func = LLVMAddFunction(
       module, is_anon ? "anonymous_func" : fn_name.chars, prototype);
@@ -126,7 +129,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       if (i == 0 && stmt->tag == AST_STRING) {
         continue;
       }
-      print_ast(stmt);
 
       body = codegen(stmt, &fn_ctx, module, builder);
     }
@@ -187,9 +189,9 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   compilation_ctx.env = create_env_for_generic_fn(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
       specific_type);
+
   Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
   fn_ast.md = specific_type;
-
   LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
 
   return func;
@@ -224,6 +226,9 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
   if (func) {
     return func;
   }
+  printf("about to compile specific fn type: ");
+  print_ast(sym->symbol_data.STYPE_GENERIC_FUNCTION.ast);
+  print_type(expected_fn_type);
 
   LLVMValueRef specific_fn =
       compile_specific_fn(expected_fn_type, sym, ctx, module, builder);

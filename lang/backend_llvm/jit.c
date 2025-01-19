@@ -261,14 +261,13 @@ int jit(int argc, char **argv) {
       } else if (strncmp("%dump_ast", input, 9) == 0) {
         print_ast(ast_root);
         continue;
-      } else if (strncmp("%quit", input, 5) == 0) {
-        print_ast(ast_root);
-        continue;
       } else if (strncmp("%builtins", input, 8) == 0) {
         print_builtin_types();
         continue;
       } else if (strcmp("\n", input) == 0) {
         continue;
+      } else if (strncmp("%quit", input, 5) == 0) {
+        break;
       }
 
       Ast *prog;

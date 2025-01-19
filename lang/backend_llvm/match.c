@@ -3,6 +3,7 @@
 #include "backend_llvm/globals.h"
 #include "backend_llvm/types.h"
 #include "builtin_functions.h"
+#include "list.h"
 #include "serde.h"
 #include "symbols.h"
 #include "tuple.h"
@@ -200,6 +201,19 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     if (binding->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
       return NULL;
     }
+    printf("match values\n");
+    print_ast(binding);
+
+    if (strcmp(
+            binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+            "::") == 0) {
+      Ast *head_expr = binding->data.AST_APPLICATION.args;
+      Ast *tail_expr = binding->data.AST_APPLICATION.args + 1;
+      print_ast(head_expr);
+      print_ast(tail_expr);
+      break;
+    }
+
     const char *chars =
         binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
@@ -262,6 +276,11 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
   }
   case AST_VOID: {
     return _TRUE;
+  }
+  case AST_LIST: {
+    if (binding->data.AST_LIST.len == 0) {
+      return ll_is_null(val, NULL, builder);
+    }
   }
   case AST_MATCH_GUARD_CLAUSE: {
     LLVMValueRef test_val =

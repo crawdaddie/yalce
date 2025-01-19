@@ -7,7 +7,8 @@
 LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder);
 
-LLVMTypeRef list_type(Type *list_el_type, TypeEnv *env, LLVMModuleRef module);
+LLVMTypeRef create_llvm_list_type(Type *list_el_type, TypeEnv *env,
+                                  LLVMModuleRef module);
 
 LLVMValueRef ll_get_head_val(LLVMValueRef list, LLVMTypeRef list_el_type,
                              LLVMBuilderRef builder);

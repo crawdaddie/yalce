@@ -36,8 +36,8 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env);
 
 // Function to create an LLVM list type forward decl
-LLVMTypeRef create_list_type(Type *list_el_type, TypeEnv *env,
-                             LLVMModuleRef module);
+LLVMTypeRef create_llvm_list_type(Type *list_el_type, TypeEnv *env,
+                                  LLVMModuleRef module);
 
 LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
@@ -97,7 +97,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
       //   return LLVMPointerType(LLVMInt8Type(), 0);
       // }
 
-      return create_list_type(type->data.T_CONS.args[0], env, module);
+      return create_llvm_list_type(type->data.T_CONS.args[0], env, module);
     }
 
     if (is_array_type(type)) {
