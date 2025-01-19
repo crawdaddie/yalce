@@ -364,7 +364,6 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
 LLVMValueRef ArraySizeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
 
-  printf("array size");
   Ast *array_ast = ast->data.AST_APPLICATION.args;
 
   Type *arr_type = array_ast->md;

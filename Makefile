@@ -109,16 +109,16 @@ clean:
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 
 test:
-	$(MAKE) -C lang_test
+	$(MAKE) -C test
 
 test_parse:
-	$(MAKE) -C lang_test test_parse
+	$(MAKE) -C test test_parse
 
 test_typecheck:
-	$(MAKE) -C lang_test test_typecheck
+	$(MAKE) -C test test_typecheck
 
 test_scripts:
-	$(MAKE) -C lang_test test_scripts
+	$(MAKE) -C test test_scripts
 
 wasm:
 	./build_wasm.sh

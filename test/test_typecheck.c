@@ -354,6 +354,25 @@ int main() {
     }
     status &= res;
   });
+  ({
+    Ast *b = T("let fib = fn x ->\n"
+               "  match x with\n"
+               "  | 0 -> 0\n"
+               "  | 1 -> 1\n"
+               "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+               ";;",
+
+               &MAKE_FN_TYPE_2(&t_int, &t_int));
+
+    Ast final_branch = b->data.AST_BODY.stmts[0]
+                           ->data.AST_LET.expr->data.AST_LAMBDA.body->data
+                           .AST_MATCH.branches[5];
+
+    TASSERT(final_branch.data.AST_APPLICATION.args[0]
+                .data.AST_APPLICATION.args[0]
+                .md,
+            &t_int, "references in sub-nodes properly typed :: (x - 1) == Int");
+  });
 
   return status == true ? 0 : 1;
 }

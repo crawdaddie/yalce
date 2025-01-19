@@ -72,6 +72,8 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+  // printf("## application\n");
+  // print_ast(ast);
 
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
@@ -101,7 +103,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (sym->type == STYPE_FUNCTION) {
     Type *callable_type = sym->symbol_type;
-    return call_callable(ast, callable_type, sym->val, ctx, module, builder);
+    LLVMValueRef res =
+        call_callable(ast, callable_type, sym->val, ctx, module, builder);
+    return res;
   }
+
   return NULL;
 }

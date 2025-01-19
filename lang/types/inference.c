@@ -740,11 +740,26 @@ void apply_substitution_to_nodes_rec(Substitution *subst, Ast *ast) {
       apply_substitution_to_nodes_rec(subst,
                                       ast->data.AST_APPLICATION.args + i);
     }
+    break;
   }
-  default: {
-    ast->md = apply_substitution(subst, ast->md);
+
+  case AST_BODY: {
+    for (int i = 0; i < ast->data.AST_BODY.len; i++) {
+      apply_substitution_to_nodes_rec(subst, ast->data.AST_BODY.stmts[i]);
+    }
+    break;
+  }
+
+  case AST_TUPLE:
+  case AST_ARRAY:
+  case AST_LIST: {
+    for (int i = 0; i < ast->data.AST_LIST.len; i++) {
+      apply_substitution_to_nodes_rec(subst, ast->data.AST_LIST.items + i);
+    }
+    break;
   }
   }
+  ast->md = apply_substitution(subst, ast->md);
 }
 
 // Collect free type variables in a type
@@ -1208,7 +1223,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       if (!subst) {
         fprintf(stderr, "Could not solve type constraints in application\n");
-        print_ast(ast);
+        print_ast_err(ast);
         print_type(fn_type);
         return NULL;
       }
@@ -1350,10 +1365,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
         actual_fn_type = apply_substitution(subst, actual_fn_type);
       }
 
-      // printf("lambda\n");
-      // print_ast(ast);
-      // print_type(actual_fn_type);
-
       type = actual_fn_type;
 
       break;
@@ -1457,8 +1468,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
     type = apply_substitution(subst, result);
 
     for (int i = 0; i < len; i++) {
-      Ast *branch_pattern = &ast->data.AST_MATCH.branches[2 * i];
+      Ast *branch_pattern = ast->data.AST_MATCH.branches + (2 * i);
       Ast *guard_clause = NULL;
+
+      Ast *branch_body = ast->data.AST_MATCH.branches + (2 * i + 1);
+      apply_substitution_to_nodes_rec(subst, branch_body);
 
       if (branch_pattern->tag == AST_MATCH_GUARD_CLAUSE) {
         guard_clause = branch_pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
