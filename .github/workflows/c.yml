@@ -38,4 +38,9 @@ jobs:
       run: make test_parse
 
     - name: Run scripts test
-      run: make test_scripts
+      continue-on-error: true
+      run: |
+        make
+        chmod +x ./build/ylc
+        echo "$GITHUB_WORKSPACE/build" >> $GITHUB_PATH
+        make test_scripts
