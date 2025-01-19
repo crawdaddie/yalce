@@ -72,6 +72,12 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMContextRef llvm_ctx, TypeEnv **env,
                                        Ast **prog) {
 
+  if (top_level_tests) {
+    printf("\n# Test %s\n"
+           "-----------------------------------------\n",
+           filename);
+  }
+
   LLVMSetSourceFileName(module, filename, strlen(filename));
 
   *prog = parse_input_script(filename);
@@ -87,9 +93,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   if (top_level_tests) {
     ctx->module_name = filename;
-    printf("# Test %s\n"
-           "-----------------------------------------\n",
-           filename);
     int res = test_module(*prog, ctx, module, builder);
     if (!res) {
       exit(1);

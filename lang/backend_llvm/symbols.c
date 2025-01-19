@@ -88,7 +88,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_GENERIC_FUNCTION: {
-    return get_specific_callable(sym, chars, ast->md, ctx, module, builder);
+    return get_specific_callable(sym, ast->md, ctx, module, builder);
   }
 
     // case STYPE_GENERIC_COROUTINE_GENERATOR: {

@@ -965,6 +965,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       if (!t) {
         fprintf(stderr, "Failure typechecking body statement: ");
+        print_ast_err(stmt);
         print_location(stmt);
         return NULL;
       }

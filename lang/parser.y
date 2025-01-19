@@ -70,11 +70,11 @@ Ast* ast_root = NULL;
 %left PIPE
 %left DOUBLE_AT
 %left APPLICATION 
-%left MODULO
 %left GE LE EQ NE '>' '<'
 %left DOUBLE_AMP DOUBLE_PIPE
 %left '+' '-'
 %left '*' '/'
+%left MODULO
 %left ':'
 %left MATCH
 

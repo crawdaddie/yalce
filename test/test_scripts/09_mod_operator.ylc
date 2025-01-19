@@ -11,6 +11,10 @@ let test_float_modulo = fn () ->
   200. % 150. == 50.
 ;;
 
+let test_float_add = fn () -> 
+  200. + 150. == 350.
+;;
+
 # let test_quant0 = fn () ->
 #   quantize_mod 3.5 == 3
 # ;;

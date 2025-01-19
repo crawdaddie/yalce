@@ -70,11 +70,11 @@
      FSTRING_INTERP_END = 286,
      FSTRING_TEXT = 287,
      APPLICATION = 288,
-     MODULO = 289,
-     NE = 290,
-     EQ = 291,
-     LE = 292,
-     GE = 293,
+     NE = 289,
+     EQ = 290,
+     LE = 291,
+     GE = 292,
+     MODULO = 293,
      UMINUS = 294
    };
 #endif
@@ -110,11 +110,11 @@
 #define FSTRING_INTERP_END 286
 #define FSTRING_TEXT 287
 #define APPLICATION 288
-#define MODULO 289
-#define NE 290
-#define EQ 291
-#define LE 292
-#define GE 293
+#define NE 289
+#define EQ 290
+#define LE 291
+#define GE 292
+#define MODULO 293
 #define UMINUS 294
 
 
@@ -122,7 +122,7 @@
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 30 "lang/parser.y"
+#line 30 "../lang/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
     ObjString vident;           /* identifier */
@@ -132,7 +132,7 @@ typedef union YYSTYPE
     char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 136 "lang/y.tab.h"
+#line 136 "../lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
