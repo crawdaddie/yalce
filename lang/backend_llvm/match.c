@@ -201,17 +201,34 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     if (binding->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
       return NULL;
     }
-    printf("match values\n");
-    print_ast(binding);
 
     if (strcmp(
             binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
             "::") == 0) {
+
       Ast *head_expr = binding->data.AST_APPLICATION.args;
       Ast *tail_expr = binding->data.AST_APPLICATION.args + 1;
-      print_ast(head_expr);
-      print_ast(tail_expr);
-      break;
+
+      Type *list_el_type = val_type->data.T_CONS.args[0];
+
+      LLVMTypeRef llvm_list_el_type =
+          type_to_llvm_type(list_el_type, ctx->env, module);
+
+      LLVMValueRef res = LLVM_IF_ELSE(
+          builder, ll_is_not_null(val, llvm_list_el_type, builder),
+
+          LLVM_IF_ELSE(
+              builder,
+              (codegen_pattern_binding(
+                  head_expr, ll_get_head_val(val, llvm_list_el_type, builder),
+                  list_el_type, ctx, module, builder)),
+              codegen_pattern_binding(
+                  tail_expr, ll_get_next(val, llvm_list_el_type, builder),
+                  val_type, ctx, module, builder),
+              _FALSE),
+          _FALSE);
+
+      return res;
     }
 
     const char *chars =

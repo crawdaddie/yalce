@@ -1400,9 +1400,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_MATCH: {
     Type *result = next_tvar();
-
+    Ast *expr = ast->data.AST_MATCH.expr;
     // Infer type of expression being matched
-    Type *expr_type = infer(ast->data.AST_MATCH.expr, ctx);
+    Type *expr_type = infer(expr, ctx);
     if (!expr_type) {
       fprintf(stderr, "Could not infer match expression type\n");
       return NULL;
@@ -1467,6 +1467,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     type = apply_substitution(subst, result);
+    apply_substitution_to_nodes_rec(subst, expr);
 
     for (int i = 0; i < len; i++) {
       Ast *branch_pattern = ast->data.AST_MATCH.branches + (2 * i);
@@ -1485,7 +1486,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         apply_substitution_to_nodes_rec(subst, guard_clause);
 
       } else {
-        branch_pattern->md = apply_substitution(subst, branch_pattern->md);
+        apply_substitution_to_nodes_rec(subst, branch_pattern);
       }
     }
 

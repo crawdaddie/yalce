@@ -1,6 +1,5 @@
 #include "backend_llvm/function.h"
 #include "match.h"
-#include "serde.h"
 #include "symbols.h"
 #include "types.h"
 #include "types/inference.h"
@@ -85,9 +84,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = ast->md;
   int fn_len = ast->data.AST_LAMBDA.len;
   LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx->env, module);
-  printf("fn proto:\n");
-  LLVMDumpType(prototype);
-  printf("\n");
 
   LLVMValueRef func = LLVMAddFunction(
       module, is_anon ? "anonymous_func" : fn_name.chars, prototype);
@@ -139,6 +135,67 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
+static Substitution *create_fn_arg_subst(Substitution *subst, Type *gen,
+                                         Type *spec) {
+
+  if (gen->kind == T_VAR) {
+    subst = substitutions_extend(subst, gen, spec);
+    return subst;
+  }
+
+  if (gen->kind == T_CONS || gen->kind == T_TYPECLASS_RESOLVE) {
+    for (int i = 0; i < gen->data.T_CONS.num_args; i++) {
+      Type *gt = gen->data.T_CONS.args[i];
+      Type *st = spec->data.T_CONS.args[i];
+      subst = create_fn_arg_subst(subst, gt, st);
+    }
+    return subst;
+  }
+
+  if (gen->kind == T_FN) {
+    while (gen->kind == T_FN) {
+      Type *gt = gen->data.T_FN.from;
+      Type *st = spec->data.T_FN.from;
+      subst = create_fn_arg_subst(subst, gt, st);
+      gen = gen->data.T_FN.to;
+      spec = spec->data.T_FN.to;
+    }
+
+    Type *gt = gen;
+    Type *st = spec;
+    subst = create_fn_arg_subst(subst, gt, st);
+    return subst;
+  }
+  return subst;
+}
+
+static TypeEnv *subst_fn_arg(TypeEnv *env, Substitution *subst, Type *arg) {
+
+  if (arg->kind == T_VAR) {
+    env = env_extend(env, arg->data.T_VAR, apply_substitution(subst, arg));
+    return env;
+  }
+
+  if (arg->kind == T_CONS || arg->kind == T_TYPECLASS_RESOLVE) {
+    for (int i = 0; i < arg->data.T_CONS.num_args; i++) {
+      Type *t = arg->data.T_CONS.args[i];
+      env = subst_fn_arg(env, subst, t);
+    }
+    return env;
+  }
+
+  if (arg->kind == T_FN) {
+    while (arg->kind == T_FN) {
+      Type *t = arg->data.T_FN.from;
+      env = subst_fn_arg(env, subst, t);
+      arg = arg->data.T_FN.to;
+    }
+    env = subst_fn_arg(env, subst, arg);
+    return env;
+  }
+  return env;
+}
+
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type) {
   Substitution *subst = NULL;
@@ -146,34 +203,23 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
   Type *gen;
   Type *spec;
 
-  Type *_gen = generic_type;
-  while (_gen->kind == T_FN) {
-    gen = _gen->data.T_FN.from;
-    spec = specific_type->data.T_FN.from;
-    subst = substitutions_extend(subst, gen, spec);
-
-    _gen = _gen->data.T_FN.to;
-    specific_type = specific_type->data.T_FN.to;
-  }
+  subst = create_fn_arg_subst(subst, generic_type, specific_type);
 
   // return types:
-  gen = _gen;
+  gen = generic_type;
   spec = specific_type;
   subst = substitutions_extend(subst, gen, spec);
 
-  _gen = generic_type;
+  Type *_gen = generic_type;
   while (_gen->kind == T_FN) {
     Type *f = _gen->data.T_FN.from;
-    if (f->kind == T_VAR) {
-      env = env_extend(env, f->data.T_VAR, apply_substitution(subst, f));
-    }
+    env = subst_fn_arg(env, subst, f);
+
     _gen = _gen->data.T_FN.to;
   }
 
   Type *f = _gen;
-  if (f->kind == T_VAR) {
-    env = env_extend(env, f->data.T_VAR, apply_substitution(subst, f));
-  }
+  env = subst_fn_arg(env, subst, f);
 
   return env;
 }
@@ -226,9 +272,6 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
   if (func) {
     return func;
   }
-  printf("about to compile specific fn type: ");
-  print_ast(sym->symbol_data.STYPE_GENERIC_FUNCTION.ast);
-  print_type(expected_fn_type);
 
   LLVMValueRef specific_fn =
       compile_specific_fn(expected_fn_type, sym, ctx, module, builder);
