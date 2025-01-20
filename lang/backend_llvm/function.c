@@ -1,5 +1,6 @@
 #include "backend_llvm/function.h"
 #include "match.h"
+#include "serde.h"
 #include "symbols.h"
 #include "types.h"
 #include "types/inference.h"
@@ -78,11 +79,12 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
   if (fn_name.chars == NULL) {
-    // return codegen_anonymous_fn(ast, ctx, module, builder);
     is_anon = true;
   }
   Type *fn_type = ast->md;
+
   int fn_len = ast->data.AST_LAMBDA.len;
+
   LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx->env, module);
 
   LLVMValueRef func = LLVMAddFunction(
@@ -108,14 +110,41 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *param_type = fn_type->data.T_FN.from;
 
     LLVMValueRef param_val = LLVMGetParam(func, i);
+    if (strcmp(fn_name.chars, "proc") == 0) {
+      printf("proc param %d: ", i);
+      print_ast(param_ast);
+      print_type(param_type);
+      LLVMDumpValue(param_val);
+      printf("\n");
+    }
 
-    codegen_pattern_binding(param_ast, param_val, param_type, &fn_ctx, module,
-                            builder);
+    if (param_type->kind == T_FN) {
 
+      const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+      int id_len = param_ast->data.AST_IDENTIFIER.length;
+      LLVMTypeRef llvm_type = type_to_llvm_type(param_type, ctx->env, module);
+
+      if (strcmp(fn_name.chars, "proc") == 0) {
+        LLVMDumpType(llvm_type);
+        printf("\n");
+        printf("\n----\n");
+      }
+
+      JITSymbol *sym =
+          new_symbol(STYPE_FUNCTION, param_type, param_val, llvm_type);
+
+      ht_set_hash(fn_ctx.frame->table, id_chars, hash_string(id_chars, id_len),
+                  sym);
+
+    } else {
+      codegen_pattern_binding(param_ast, param_val, param_type, &fn_ctx, module,
+                              builder);
+    }
     fn_type = fn_type->data.T_FN.to;
   }
 
   LLVMValueRef body;
+
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     body = codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
   } else {
@@ -129,6 +158,13 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       body = codegen(stmt, &fn_ctx, module, builder);
     }
   }
+  if (strcmp(fn_name.chars, "proc") == 0) {
+    print_ast(ast->data.AST_LAMBDA.body);
+    printf("compiled body for proc: %p\n", body);
+    LLVMDumpType(prototype);
+    printf("\n");
+  }
+
   LLVMBuildRet(builder, body);
   LLVMPositionBuilderAtEnd(builder, prev_block);
   destroy_ctx(&fn_ctx);
@@ -143,10 +179,20 @@ static Substitution *create_fn_arg_subst(Substitution *subst, Type *gen,
     return subst;
   }
 
-  if (gen->kind == T_CONS || gen->kind == T_TYPECLASS_RESOLVE) {
+  if (gen->kind == T_CONS ||
+      gen->kind == T_TYPECLASS_RESOLVE && gen->kind == spec->kind) {
     for (int i = 0; i < gen->data.T_CONS.num_args; i++) {
       Type *gt = gen->data.T_CONS.args[i];
       Type *st = spec->data.T_CONS.args[i];
+      subst = create_fn_arg_subst(subst, gt, st);
+    }
+    return subst;
+  }
+
+  if (gen->kind == T_TYPECLASS_RESOLVE && gen->kind != spec->kind) {
+    for (int i = 0; i < gen->data.T_CONS.num_args; i++) {
+      Type *gt = gen->data.T_CONS.args[i];
+      Type *st = spec;
       subst = create_fn_arg_subst(subst, gt, st);
     }
     return subst;
@@ -232,6 +278,7 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   Type *generic_type = sym->symbol_type;
   compilation_ctx.stack_ptr = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
   compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
+
   compilation_ctx.env = create_env_for_generic_fn(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
       specific_type);

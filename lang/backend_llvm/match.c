@@ -291,12 +291,18 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 
     return _FALSE;
   }
+
   case AST_VOID: {
     return _TRUE;
   }
+
   case AST_LIST: {
     if (binding->data.AST_LIST.len == 0) {
-      return ll_is_null(val, NULL, builder);
+      Type *list_el_type = val_type->data.T_CONS.args[0];
+      LLVMTypeRef llvm_list_el_type =
+          type_to_llvm_type(list_el_type, ctx->env, module);
+
+      return ll_is_null(val, llvm_list_el_type, builder);
     }
   }
   case AST_MATCH_GUARD_CLAUSE: {
