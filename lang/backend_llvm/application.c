@@ -2,6 +2,7 @@
 #include "function.h"
 #include "serde.h"
 #include "symbols.h"
+#include "types.h"
 #include "llvm-c/Core.h"
 
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
@@ -30,9 +31,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
 static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
-                                  LLVMValueRef callable,
-                                  LLVMTypeRef llvm_callable_type,
-                                  JITLangCtx *ctx, LLVMModuleRef module,
+                                  LLVMValueRef callable, JITLangCtx *ctx,
+                                  LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
 
   if (!callable) {
@@ -42,12 +42,16 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
 
   int expected_args_len = fn_type_args_len(callable_type);
 
+  LLVMTypeRef llvm_callable_type =
+      type_to_llvm_type(callable_type, ctx->env, module);
+
   if (callable_type->kind == T_FN &&
       callable_type->data.T_FN.from->kind == T_VOID) {
 
     return LLVMBuildCall2(builder, llvm_callable_type, callable, NULL, 0,
                           "call_func");
   }
+
   if (args_len < expected_args_len) {
     // TODO: currying
     return NULL;
@@ -73,10 +77,6 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
 
     app_vals[i] = app_val;
   }
-  printf("call callable:\n ");
-  print_type(callable_type);
-  LLVMDumpType(llvm_callable_type);
-  printf("\n");
 
   LLVMValueRef res = LLVMBuildCall2(builder, llvm_callable_type, callable,
                                     app_vals, args_len, "call_func");
@@ -105,29 +105,25 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     }
 
     Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
-    printf("get specific callable for %s:\n", sym_name);
 
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);
 
-    LLVMTypeRef llvm_callable_type = LLVMGlobalGetValueType(callable);
-    return call_callable(ast, expected_fn_type, callable, llvm_callable_type,
-                         ctx, module, builder);
+    return call_callable(ast, expected_fn_type, callable, ctx, module, builder);
   }
 
   if (sym->type == STYPE_FUNCTION) {
     Type *callable_type = sym->symbol_type;
 
-    // LLVMTypeRef llvm_callable_type = LLVMGlobalGetValueType(sym->val);
-    LLVMValueRef res = call_callable(ast, callable_type, sym->val,
-                                     sym->llvm_type, ctx, module, builder);
+    LLVMValueRef res =
+        call_callable(ast, callable_type, sym->val, ctx, module, builder);
     return res;
   }
 
   if (sym->type == STYPE_LOCAL_VAR) {
     Type *callable_type = sym->symbol_type;
-    LLVMValueRef res = call_callable(ast, callable_type, sym->val,
-                                     sym->llvm_type, ctx, module, builder);
+    LLVMValueRef res =
+        call_callable(ast, callable_type, sym->val, ctx, module, builder);
     return res;
   }
 

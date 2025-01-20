@@ -110,25 +110,11 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *param_type = fn_type->data.T_FN.from;
 
     LLVMValueRef param_val = LLVMGetParam(func, i);
-    if (strcmp(fn_name.chars, "proc") == 0) {
-      printf("proc param %d: ", i);
-      print_ast(param_ast);
-      print_type(param_type);
-      LLVMDumpValue(param_val);
-      printf("\n");
-    }
 
     if (param_type->kind == T_FN) {
-
       const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
       int id_len = param_ast->data.AST_IDENTIFIER.length;
       LLVMTypeRef llvm_type = type_to_llvm_type(param_type, ctx->env, module);
-
-      if (strcmp(fn_name.chars, "proc") == 0) {
-        LLVMDumpType(llvm_type);
-        printf("\n");
-        printf("\n----\n");
-      }
 
       JITSymbol *sym =
           new_symbol(STYPE_FUNCTION, param_type, param_val, llvm_type);
@@ -157,12 +143,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       body = codegen(stmt, &fn_ctx, module, builder);
     }
-  }
-  if (strcmp(fn_name.chars, "proc") == 0) {
-    print_ast(ast->data.AST_LAMBDA.body);
-    printf("compiled body for proc: %p\n", body);
-    LLVMDumpType(prototype);
-    printf("\n");
   }
 
   LLVMBuildRet(builder, body);

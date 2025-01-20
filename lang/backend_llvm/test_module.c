@@ -137,7 +137,6 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return 0;
   }
 
-  // LLVMDumpModule(module);
   LLVMGenericValueRef result = LLVMRunFunction(engine, exec_tests, 0, NULL);
   int int_res = (int)LLVMGenericValueToInt(result, 0);
 
