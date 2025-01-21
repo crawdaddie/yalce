@@ -109,6 +109,7 @@ typedef struct {
       LLVMValueRef *args;
       int provided_args_len;
       int original_args_len;
+      Type *original_callable_type;
     } STYPE_PARTIAL_EVAL_CLOSURE;
 
   } symbol_data;

@@ -123,7 +123,14 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
-    printf("call curried func\n");
+
+    printf("call curried func original len %d\n"
+           "app len %d\n", sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len, sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len);
+    printf("original: ");
+    print_type(sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type);
+
+    printf("this one: ");
+    print_type(sym->symbol_type);
   }
 
   return NULL;
