@@ -373,6 +373,21 @@ int main() {
                 .md,
             &t_int, "references in sub-nodes properly typed :: (x - 1) == Int");
   });
+  ({
+    Type s = arithmetic_var("`4");
+    Type t = arithmetic_var("`0");
+    Ast *b = T("let arr_sum = fn s a ->\n"
+               "  let len = array_size a in\n"
+               "  let aux = fn i su -> \n"
+               "    match i with\n"
+               "    | i if i == len -> su\n"
+               "    | i -> aux (i + 1) (su + array_at a i)\n"
+               "    ; in\n"
+               "  aux 0 s\n"
+               "  ;;\n",
+               &MAKE_FN_TYPE_3(&t, &TARRAY(&s), &t));
+    print_ast(b);
+  });
 
   return status == true ? 0 : 1;
 }

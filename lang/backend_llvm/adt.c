@@ -58,7 +58,8 @@ LLVMTypeRef get_largest_type(LLVMContextRef context, LLVMTypeRef *types,
 
   LLVMTypeRef largest_type = types[0];
   unsigned largest_size = LLVMStoreSizeOfType(target_data, largest_type);
-  unsigned largest_align = LLVMABIAlignmentOfType(target_data, largest_type);
+  // unsigned largest_align = LLVMABIAlignmentOfType(target_data, largest_type);
+  unsigned largest_align = 256;
 
   for (size_t i = 1; i < count; i++) {
     unsigned current_size = LLVMStoreSizeOfType(target_data, types[i]);

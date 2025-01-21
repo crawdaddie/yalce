@@ -43,10 +43,9 @@ LLVMValueRef get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
       LLVMBuildExtractValue(builder, array_struct, 1, "get_array_data_ptr");
 
   // Get element pointer using the index
-  LLVMValueRef element_ptr = LLVMBuildGEP2(
-      builder, element_type, data_ptr,
-      (LLVMValueRef[]){index}, 1,
-      "element_ptr");
+  LLVMValueRef element_ptr =
+      LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
+                    "element_ptr");
   // Load and return element
   return LLVMBuildLoad2(builder, element_type, element_ptr, "element");
 }
@@ -94,9 +93,8 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   return array_struct;
 }
 
-LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
-                                    LLVMValueRef array, LLVMTypeRef element_type) {
-
+LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder, LLVMValueRef array,
+                                    LLVMTypeRef element_type) {
 
   LLVMTypeRef array_type = codegen_array_type(element_type);
   LLVMValueRef array_struct;

@@ -120,12 +120,5 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return res;
   }
 
-  if (sym->type == STYPE_LOCAL_VAR) {
-    Type *callable_type = sym->symbol_type;
-    LLVMValueRef res =
-        call_callable(ast, callable_type, sym->val, ctx, module, builder);
-    return res;
-  }
-
   return NULL;
 }
