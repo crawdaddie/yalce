@@ -30,6 +30,11 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+LLVMValueRef curry_callable_symbol(JITSymbol *sym, Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  return NULL;
+}
 static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
                                   LLVMValueRef callable, JITLangCtx *ctx,
                                   LLVMModuleRef module,
@@ -38,9 +43,8 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
   if (!callable) {
     return NULL;
   }
-  int args_len = ast->data.AST_APPLICATION.len;
 
-  int expected_args_len = fn_type_args_len(callable_type);
+  int args_len = ast->data.AST_APPLICATION.len;
 
   LLVMTypeRef llvm_callable_type =
       type_to_llvm_type(callable_type, ctx->env, module);
@@ -50,11 +54,6 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
 
     return LLVMBuildCall2(builder, llvm_callable_type, callable, NULL, 0,
                           "call_func");
-  }
-
-  if (args_len < expected_args_len) {
-    // TODO: currying
-    return NULL;
   }
 
   LLVMValueRef app_vals[args_len];
@@ -97,6 +96,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
 
+  int args_len = ast->data.AST_APPLICATION.len;
+  int expected_args_len = fn_type_args_len(sym->symbol_type);
+
   if (sym->type == STYPE_GENERIC_FUNCTION) {
     if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
 
@@ -118,6 +120,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     LLVMValueRef res =
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
     return res;
+  }
+
+  if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
+    printf("call curried func\n");
   }
 
   return NULL;

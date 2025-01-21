@@ -1418,3 +1418,9 @@ bool fn_types_match(Type *t1, Type *t2) {
   }
   return true;
 }
+bool application_is_partial(Ast *app) {
+  int expected_args_len =
+      fn_type_args_len(app->data.AST_APPLICATION.function->md);
+  int actual_args_len = app->data.AST_APPLICATION.len;
+  return actual_args_len < expected_args_len;
+}

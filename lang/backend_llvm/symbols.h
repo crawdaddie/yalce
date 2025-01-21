@@ -11,8 +11,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 int codegen_lookup_id(const char *id, int length, JITLangCtx *ctx,
                       JITSymbol **result);
 
-JITSymbol *lookup_id_mutable(const char *id, int length, JITLangCtx *ctx);
-
 LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder);
 

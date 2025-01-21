@@ -6,9 +6,7 @@
 #include "ht.h"
 #include "match.h"
 #include "serde.h"
-#include "types/inference.h"
 #include "types/type.h"
-#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -137,6 +135,35 @@ LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
   return fn;
 }
 
+LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+
+  Ast *function_ast = app->data.AST_APPLICATION.function;
+  JITSymbol *callable_sym = lookup_id_ast(function_ast, ctx);
+  Type *original_callable_type = function_ast->md;
+  Type *symbol_type = app->md;
+  int len = app->data.AST_APPLICATION.len;
+  LLVMValueRef *app_args = malloc(sizeof(LLVMValueRef) * len);
+  for (int i = 0; i < len; i++) {
+    app_args[i] =
+        codegen(app->data.AST_APPLICATION.args + i, ctx, module, builder);
+  }
+
+  JITSymbol *curried_sym =
+      new_symbol(STYPE_PARTIAL_EVAL_CLOSURE, symbol_type, NULL, NULL);
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym =
+      callable_sym;
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args = app_args;
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len = len;
+  const char *id_chars = binding->data.AST_IDENTIFIER.value;
+  int id_len = binding->data.AST_IDENTIFIER.length;
+
+  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
+              curried_sym);
+  return NULL;
+}
+
 LLVMValueRef create_generic_coroutine_binding(Ast *binding, Ast *fn_ast,
                                               JITLangCtx *ctx,
                                               LLVMModuleRef module,
@@ -157,6 +184,10 @@ LLVMValueRef create_generic_coroutine_binding(Ast *binding, Ast *fn_ast,
 LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                                JITLangCtx *outer_ctx, JITLangCtx *inner_ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
+    return create_curried_fn_binding(binding, expr, outer_ctx, module, builder);
+  }
 
   Type *expr_type = expr->md;
   if (expr_type->kind == T_FN && is_generic(expr_type)) {

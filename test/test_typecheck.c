@@ -1,7 +1,7 @@
 #include "../lang/parse.h"
+#include "../lang/serde.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
-#include "serde.h"
 
 // #define xT(input, type)
 
@@ -373,21 +373,60 @@ int main() {
                 .md,
             &t_int, "references in sub-nodes properly typed :: (x - 1) == Int");
   });
+  /*
+    ({
+      Type s = arithmetic_var("`4");
+      Type t = arithmetic_var("`0");
+      Ast *b = T("let arr_sum = fn s a ->\n"
+                 "  let len = array_size a in\n"
+                 "  let aux = fn i su -> \n"
+                 "    match i with\n"
+                 "    | i if i == len -> su\n"
+                 "    | i -> aux (i + 1) (su + array_at a i)\n"
+                 "    ; in\n"
+                 "  aux 0 s\n"
+                 "  ;;\n",
+                 &MAKE_FN_TYPE_3(&t, &TARRAY(&s), &t));
+    });
+    */
+
   ({
-    Type s = arithmetic_var("`4");
-    Type t = arithmetic_var("`0");
-    Ast *b = T("let arr_sum = fn s a ->\n"
-               "  let len = array_size a in\n"
-               "  let aux = fn i su -> \n"
-               "    match i with\n"
-               "    | i if i == len -> su\n"
-               "    | i -> aux (i + 1) (su + array_at a i)\n"
-               "    ; in\n"
-               "  aux 0 s\n"
-               "  ;;\n",
-               &MAKE_FN_TYPE_3(&t, &TARRAY(&s), &t));
-    print_ast(b);
+    Type t = TVAR("`3");
+    T("let f = fn a b c d -> a == b && c == d;;\n"
+      "f 1 2 3\n",
+      &MAKE_FN_TYPE_2(&t, &t_bool));
   });
+
+  ({
+    Type t = arithmetic_var("`2");
+    Ast *b = T("let f = fn a b c -> a + b + c;;\n"
+               "f 1 2\n",
+               &MAKE_FN_TYPE_2(&t, &t));
+
+    Ast *original_func =
+        b->data.AST_BODY.stmts[1]->data.AST_APPLICATION.function;
+    bool is_partial = application_is_partial(b->data.AST_BODY.stmts[1]);
+
+    const char *msg = "application_is_partial fn test\n";
+    if (is_partial) {
+      printf("✅ %s", msg);
+    } else {
+
+      printf("❌ %s", msg);
+    }
+    status &= is_partial;
+  });
+
+  ({
+    Type t = arithmetic_var("`2");
+    T("let f = fn a b c -> a + b + c;;\n"
+      "f 1. 2.\n",
+      &MAKE_FN_TYPE_2(&t, &t));
+  });
+
+  T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
+    "f 1 2\n",
+    &MAKE_FN_TYPE_2(&t_int, &t_bool));
 
   return status == true ? 0 : 1;
 }

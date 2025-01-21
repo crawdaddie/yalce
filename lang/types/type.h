@@ -1,5 +1,6 @@
 #ifndef _LANG_TYPE_TYPE_H
 #define _LANG_TYPE_TYPE_H
+#include "parse.h"
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
@@ -392,4 +393,6 @@ bool fn_types_match(Type *t1, Type *t2);
 Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
 
 Type *resolve_type_in_env(Type *r, TypeEnv *env);
+
+bool application_is_partial(Ast *app);
 #endif

@@ -144,7 +144,6 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return int_res;
 }
 
-// Implementation of the report function
 void _report_test_result(const char *name, int result) {
   if (result) {
     printf("✅ %s\n", name);
