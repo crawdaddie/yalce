@@ -1,0 +1,2 @@
+let x = (a: 1, b: 2, f: fn s t -> s + t;) in 
+x.f 1 2

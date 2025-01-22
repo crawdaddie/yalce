@@ -27,7 +27,8 @@
     ast;                                                                       \
   })
 
-#define _T(input)                                                              \ 
+#define _T(input)                                                              \
+  \ 
   ({                                                                           \
     reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
@@ -417,10 +418,9 @@ int main() {
 
     bool is_partial = application_is_partial(b->data.AST_BODY.stmts[1]);
 
-    const char *msg =
-      "let f = fn a b c -> a + b + c;;\n"
-      "f 1 2\n"
-      "application_is_partial fn test\n";
+    const char *msg = "let f = fn a b c -> a + b + c;;\n"
+                      "f 1 2\n"
+                      "application_is_partial fn test\n";
     if (is_partial) {
       printf("✅ %s", msg);
     } else {
@@ -432,21 +432,22 @@ int main() {
 
   ({
     Ast *b = _T("let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
-      "let x1 = f 1;\n"
-      "let x2 = x1 2;\n"
-      "let x3 = x2 3;\n"
-    );
+                "let x1 = f 1;\n"
+                "let x2 = x1 2;\n"
+                "let x3 = x2 3;\n");
     bool is_partial = true;
-    is_partial &= application_is_partial(b->data.AST_BODY.stmts[1]->data.AST_LET.expr); 
-    is_partial &= application_is_partial(b->data.AST_BODY.stmts[2]->data.AST_LET.expr); 
-    is_partial &= application_is_partial(b->data.AST_BODY.stmts[3]->data.AST_LET.expr); 
+    is_partial &=
+        application_is_partial(b->data.AST_BODY.stmts[1]->data.AST_LET.expr);
+    is_partial &=
+        application_is_partial(b->data.AST_BODY.stmts[2]->data.AST_LET.expr);
+    is_partial &=
+        application_is_partial(b->data.AST_BODY.stmts[3]->data.AST_LET.expr);
 
-    const char *msg =
-      "let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
-      "let x1 = f 1;\n"
-      "let x2 = x1 2;\n"
-      "let x3 = x2 3;\n"
-      "several application_is_partial fn tests\n";
+    const char *msg = "let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
+                      "let x1 = f 1;\n"
+                      "let x2 = x1 2;\n"
+                      "let x3 = x2 3;\n"
+                      "several application_is_partial fn tests\n";
     if (is_partial) {
       printf("✅ %s", msg);
     } else {
@@ -454,7 +455,6 @@ int main() {
       printf("❌ %s", msg);
     }
     status &= is_partial;
-
   });
 
   ({
@@ -468,5 +468,13 @@ int main() {
     "f 1 2\n",
     &MAKE_FN_TYPE_2(&t_int, &t_bool));
 
+  ({
+    Type t0 = arithmetic_var("`0");
+    Type t1 = arithmetic_var("`1");
+    T("(1, 2, fn a b -> a + b;);\n",
+      &TTUPLE(3, &t_int, &t_int,
+              &MAKE_FN_TYPE_3(&t0, &t1,
+                              &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1))));
+  });
   return status == true ? 0 : 1;
 }
