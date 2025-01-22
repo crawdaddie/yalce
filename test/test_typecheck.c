@@ -476,5 +476,16 @@ int main() {
               &MAKE_FN_TYPE_3(&t0, &t1,
                               &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1))));
   });
+
+  ({
+    Type t0 = arithmetic_var("`2");
+    Type t1 = arithmetic_var("`3");
+    Type tuple = TTUPLE(
+        3, &t_int, &t_int,
+        &MAKE_FN_TYPE_3(&t0, &t1, &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1)));
+
+    tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
+    T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
+  });
   return status == true ? 0 : 1;
 }

@@ -239,9 +239,12 @@ Type *param_binding_type(Ast *ast) {
   }
   case AST_TUPLE: {
     int len = ast->data.AST_LIST.len;
+
     Type **tuple_mems = malloc(sizeof(Type *) * len);
+
     for (int i = 0; i < len; i++) {
-      tuple_mems[i] = param_binding_type(ast->data.AST_LIST.items + i);
+      Ast *mem = ast->data.AST_LIST.items + i;
+      tuple_mems[i] = param_binding_type(mem);
     }
     Type *tup = empty_type();
     *tup = (Type){T_CONS,
@@ -1094,6 +1097,22 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_RECORD_ACCESS: {
+    Ast *obj = ast->data.AST_RECORD_ACCESS.record;
+    Ast *mem_ast = ast->data.AST_RECORD_ACCESS.member;
+    const char *mem = mem_ast->data.AST_IDENTIFIER.value;
+    Type *obj_type = infer(obj, ctx);
+
+    for (int i = 0; i < obj_type->data.T_CONS.num_args; i++) {
+      if (strcmp(obj_type->data.T_CONS.names[i], mem) == 0) {
+        type = obj_type->data.T_CONS.args[i];
+        break;
+      }
+    }
+    if (type == NULL) {
+      fprintf(stderr, "Typecheck Error, no member %s found in\n", mem);
+      print_ast_err(obj);
+    }
+
     break;
   }
   case AST_APPLICATION: {

@@ -57,6 +57,7 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
   }
 
   LLVMValueRef app_vals[args_len];
+
   for (int i = 0; i < args_len; i++) {
 
     Type *expected_type = callable_type->data.T_FN.from;
@@ -84,6 +85,19 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+  Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+
+  if (ast->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
+    LLVMValueRef callable =
+        codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
+
+    if (!callable) {
+      fprintf(stderr, "Error: could not access record\n");
+      return NULL;
+    }
+
+    return call_callable(ast, expected_fn_type, callable, ctx, module, builder);
+  }
 
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
@@ -106,8 +120,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
           ast, ctx, module, builder);
     }
 
-    Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
-
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);
 
@@ -123,14 +135,42 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
+    if (args_len +
+            sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len ==
+        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len) {
 
-    printf("call curried func original len %d\n"
-           "app len %d\n", sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len, sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len);
-    printf("original: ");
-    print_type(sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type);
+      LLVMValueRef *provided_args =
+          sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args;
+      int provided_args_len =
+          sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len;
+      int total_len =
+          sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len;
 
-    printf("this one: ");
-    print_type(sym->symbol_type);
+      Type *original_callable_type =
+          sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type;
+
+      JITSymbol *original_callable_sym =
+          (JITSymbol *)sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym;
+
+      LLVMValueRef full_args[total_len];
+
+      for (int i = 0;
+           i < sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len;
+           i++) {
+        full_args[i] = sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args[i];
+      }
+
+      for (int i = 0; i < args_len; i++) {
+        full_args[sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE
+                      .provided_args_len +
+                  i] =
+            codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
+      }
+
+      printf("gathered args for callable curried\n");
+      print_type(original_callable_type);
+      print_type(expected_fn_type);
+    }
   }
 
   return NULL;

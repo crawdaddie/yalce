@@ -171,10 +171,12 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
     int member_idx = get_struct_member_idx(member_name, record_type);
+
     if (member_idx < 0) {
       fprintf(stderr, "Error: no member %s in obj\n", member_name);
       return NULL;
     }
+
     return codegen_tuple_access(
         member_idx, rec, type_to_llvm_type(record_type, ctx->env, module),
         builder);

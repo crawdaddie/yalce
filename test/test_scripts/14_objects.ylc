@@ -1,2 +1,5 @@
-let x = (a: 1, b: 2, f: fn s t -> s + t;) in 
-x.f 1 2
+%test 
+let test_record_access = fn () ->
+  let x = (a: 1, b: 2, f: (fn s: (Int) t: (Int) -> s + t)) in
+  x.f 1 2 == 3
+;;

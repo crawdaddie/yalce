@@ -36,6 +36,7 @@ LLVMValueRef codegen_tuple(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         offset++;
       }
     } else {
+
       LLVMValueRef tuple_element = codegen(mem_ast, ctx, module, builder);
       tuple = LLVMBuildInsertValue(builder, tuple, tuple_element, offset, "");
 
