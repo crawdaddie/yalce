@@ -155,6 +155,16 @@ void initialize_builtin_types() {
   add_builtin("Option", &t_option_of_var);
   add_builtin("Some", &t_option_of_var);
   add_builtin("None", &t_option_of_var);
+  add_builtin(TYPE_NAME_INT, &t_int);
+  add_builtin(TYPE_NAME_DOUBLE, &t_num);
+  add_builtin(TYPE_NAME_UINT64, &t_uint64);
+
+  add_builtin(TYPE_NAME_BOOL, &t_bool);
+
+  add_builtin(TYPE_NAME_STRING, &t_string);
+
+  add_builtin(TYPE_NAME_CHAR, &t_char);
+  add_builtin(TYPE_NAME_PTR, &t_ptr);
 
   static TypeClass tc_int[] = {{
                                    .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
@@ -955,6 +965,44 @@ bool unify_in_ctx(Type *arg_type, Type *constraint_type, TICtx *ctx) {
   return true;
 }
 
+Type *coroutine_type_from_fn_type(Type *fn_type) {
+  int args_len = fn_type_args_len(fn_type);
+  Type *state;
+  Type *ret;
+  if (args_len == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
+    state = NULL;
+    ret = fn_type->data.T_FN.to;
+  } else {
+    Type *f = fn_type;
+    Type **contained_types = talloc(sizeof(Type *) * args_len);
+    int idx = 0;
+    while (f->kind == T_FN) {
+      contained_types[idx] = f->data.T_FN.from;
+      idx++;
+      f = f->data.T_FN.to;
+    }
+    ret = f;
+    Type *state =
+        create_cons_type("coroutine_state", args_len, contained_types);
+  }
+  Type **cs = talloc(sizeof(Type *) * 2);
+  cs[0] = state == NULL ? &t_void : state;
+  cs[1] = type_fn(&t_void, create_option_type(ret));
+  Type *coroutine_fn = create_cons_type("coroutine", 2, cs);
+  Type *f = deep_copy_type(fn_type);
+  Type *ff = f;
+
+  while (ff->kind == T_FN) {
+    ff = ff->data.T_FN.to;
+  }
+
+  *ff = *coroutine_fn;
+  return f;
+}
+bool is_coroutine_type(Type *fn_type) {
+  return strncmp(fn_type->data.T_CONS.name, "coroutine", 9) == 0;
+}
+
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
   switch (ast->tag) {
@@ -1092,10 +1140,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
-  case AST_YIELD: {
-    break;
-  }
-
   case AST_RECORD_ACCESS: {
     Ast *obj = ast->data.AST_RECORD_ACCESS.record;
     Ast *mem_ast = ast->data.AST_RECORD_ACCESS.member;
@@ -1128,15 +1172,23 @@ Type *infer(Ast *ast, TICtx *ctx) {
       // cons application
       Ast *fn_id = ast->data.AST_APPLICATION.function;
       const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
+      if (is_coroutine_type(fn_type)) {
+        type = fn_type->data.T_CONS.args[1];
+        type = type->data.T_FN.to;
+        break;
 
-      if (is_variant_type(fn_type)) {
+      }
+
+      else if (is_variant_type(fn_type)) {
         Type *cons = find_variant_member(fn_type, fn_name);
         if (!cons) {
           fprintf(stderr, "Error: %s not found in variant %s\n", fn_name,
                   cons->data.T_CONS.name);
           return NULL;
         }
+
         for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+
           Type *cons_arg = cons->data.T_CONS.args[i];
           Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
 
@@ -1324,6 +1376,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_LAMBDA: {
     // Create new context for lambda body
     TICtx lambda_ctx = *ctx;
+    lambda_ctx.yielded_expr = NULL;
     lambda_ctx.scope++;
 
     // Fresh type vars for each parameter
@@ -1387,8 +1440,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       type = actual_fn_type;
 
-      break;
-
     } else {
       // Non-recursive case - same as before
       Type *body_type = infer(ast->data.AST_LAMBDA.body, &lambda_ctx);
@@ -1413,9 +1464,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
 
       type = fn_type;
-
-      break;
     }
+    if (lambda_ctx.yielded_expr) {
+      type = coroutine_type_from_fn_type(type);
+    }
+    break;
   }
   case AST_MATCH: {
     Type *result = next_tvar();
@@ -1526,6 +1579,22 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     type = &t_string;
+    break;
+  }
+  case AST_YIELD: {
+    Ast *yield_expr = ast->data.AST_YIELD.expr;
+    type = infer(yield_expr, ctx);
+    if (ctx->yielded_expr == NULL) {
+      ctx->yielded_expr = yield_expr;
+    } else {
+      Ast *prev_yield = ctx->yielded_expr;
+      if (!unify_in_ctx(prev_yield->md, yield_expr->md, ctx)) {
+        fprintf(stderr, "Error: yielded values must be of the same type!");
+        return NULL;
+      }
+      ctx->yielded_expr = yield_expr;
+    }
+
     break;
   }
   }

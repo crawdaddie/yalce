@@ -12,10 +12,6 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
-static bool is_coroutine_generator_symbol(Ast *id, JITLangCtx *ctx) {
-  JITSymbol *sym = lookup_id_ast(id, ctx);
-  return sym->type == STYPE_COROUTINE_GENERATOR;
-}
 
 JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type) {
@@ -88,12 +84,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case STYPE_GENERIC_FUNCTION: {
     return get_specific_callable(sym, ast->md, ctx, module, builder);
   }
-
-    // case STYPE_GENERIC_COROUTINE_GENERATOR: {
-    //   return get_specific_coroutine_generator_callable(sym, chars, ast->md,
-    //   ctx,
-    //                                                    module, builder);
-    // }
 
   case STYPE_LOCAL_VAR: {
     return sym->val;
@@ -200,18 +190,11 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
 
     JITSymbol *curried_sym =
         new_symbol(STYPE_PARTIAL_EVAL_CLOSURE, symbol_type, NULL, NULL);
+    *curried_sym = *callable_sym;
 
-    curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym =
-        original_callable_sym;
     curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args = app_args;
-
     curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len =
         provided_args_len + len;
-    curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len =
-        total_len;
-
-    curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type =
-        original_callable_type;
 
     const char *id_chars = binding->data.AST_IDENTIFIER.value;
     int id_len = binding->data.AST_IDENTIFIER.length;
@@ -219,23 +202,6 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
     ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
                 curried_sym);
   }
-  return NULL;
-}
-
-LLVMValueRef create_generic_coroutine_binding(Ast *binding, Ast *fn_ast,
-                                              JITLangCtx *ctx,
-                                              LLVMModuleRef module,
-                                              LLVMBuilderRef builder) {
-  JITSymbol *sym =
-      new_symbol(STYPE_GENERIC_COROUTINE_GENERATOR, fn_ast->md, NULL, NULL);
-  sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.ast = fn_ast;
-  sym->symbol_data.STYPE_GENERIC_COROUTINE_GENERATOR.stack_ptr = ctx->stack_ptr;
-
-  const char *id_chars = binding->data.AST_IDENTIFIER.value;
-  int id_len = binding->data.AST_IDENTIFIER.length;
-
-  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len), sym);
-
   return NULL;
 }
 

@@ -27,30 +27,6 @@ Type *compute_concrete_type(Type *generic, Type *contained) {
 }
 Type *option_of(Ast *expr) {}
 
-Type *coroutine_instance_type_parameter(Ast *expr) {
-  Ast *components = expr->data.AST_BINOP.right;
-
-  if (components->tag != AST_TUPLE) {
-    fprintf(stderr,
-            "Invalid input parameters for parametrized type CorInstance");
-    return NULL;
-  }
-
-  Ast *params_type_id = components->data.AST_LIST.items;
-  Type *params_type = type_var_of_id(params_type_id);
-  Ast *ret_type_id = components->data.AST_LIST.items + 1;
-  Type *ret_type = type_var_of_id(ret_type_id);
-
-  Type *ret_opt = create_option_type(ret_type);
-
-  Type *inst = empty_type();
-  inst->kind = T_COROUTINE_INSTANCE;
-  inst->data.T_FN.from = params_type;
-  inst->data.T_FN.to = ret_opt;
-
-  return inst;
-}
-
 Type *next_tvar();
 Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   switch (expr->tag) {
@@ -88,7 +64,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   }
 
   case AST_IDENTIFIER: {
-    Type *type = find_type_in_env(env, expr->data.AST_IDENTIFIER.value);
+    Type *type = env_lookup(env, expr->data.AST_IDENTIFIER.value);
     if (!type) {
       return type_var_of_id(expr);
     }
@@ -147,12 +123,6 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
   case AST_BINOP: {
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
-
-      if (expr->data.AST_BINOP.left->tag == AST_IDENTIFIER &&
-          strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
-                 "CorInstance") == 0) {
-        return coroutine_instance_type_parameter(expr);
-      }
 
       if (expr->data.AST_BINOP.left->tag == AST_IDENTIFIER &&
           strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,

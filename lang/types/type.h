@@ -193,7 +193,7 @@ extern _binop_map binop_map[];
 #define TTUPLE(num, ...)                                                       \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
 
-#define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none);
+#define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none)
 
 typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
 
@@ -203,9 +203,6 @@ typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
 //       .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,               \
 //                                        .dependencies = (Type *[]){dep1, dep2}, \
 //                                        .resolve_dependencies = resolver}}})
-#define COR_INST(param, ret_opt)                                               \
-  ((Type){.kind = T_COROUTINE_INSTANCE,                                        \
-          .data = {.T_FN = {.from = param, .to = ret_opt}}})
 
 #define TVAR(n)                                                                \
   ((Type){                                                                     \
@@ -224,7 +221,6 @@ enum TypeKind {
   T_FN,
   T_CONS,
   T_VAR,
-  T_COROUTINE_INSTANCE,
   T_EMPTY_LIST,
   T_TYPECLASS_RESOLVE,
 };
@@ -253,6 +249,12 @@ typedef struct Type {
       struct Type *from;
       struct Type *to;
     } T_FN;
+
+    struct {
+      struct Type *from;
+      struct Type *to;
+      struct Type *state;
+    } T_COROUTINE_FN;
 
   } data;
 
@@ -350,14 +352,6 @@ int *array_type_size_ptr(Type *t);
 Type *create_array_type(Type *of, int size);
 
 Type *create_tuple_type(int len, Type **contained_types);
-
-Type *create_coroutine_instance_type(Type *param, Type *ret_type);
-
-bool is_coroutine_instance_type(Type *inst);
-
-bool is_coroutine_generator_fn(Type *gen);
-Type *coroutine_instance_fn_def_type(Type *inst);
-bool is_coroutine_generator(Type *t);
 
 int get_struct_member_idx(const char *member_name, Type *type);
 

@@ -487,5 +487,33 @@ int main() {
     tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
     T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
   });
+
+  ({
+    Type cor =
+        TCONS("coroutine", 2, &t_void, &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)));
+
+    T("let co_void = fn () ->\n"
+      "  yield 1.;\n"
+      "  yield 2.;\n"
+      "  yield 3.\n"
+      ";;\n",
+      &MAKE_FN_TYPE_2(&t_void, &cor));
+  });
+
+  TFAIL("let co_void = fn () ->\n"
+        "  yield 1.;\n"
+        "  yield 2;\n"
+        "  yield 3.\n"
+        ";;\n");
+
+  T("let co_void = fn () ->\n"
+    "  yield 1.;\n"
+    "  yield 2.;\n"
+    "  yield 3.\n"
+    ";;\n"
+    "let x = co_void () in\n"
+    "x ()\n",
+    &TOPT(&t_num));
+
   return status == true ? 0 : 1;
 }

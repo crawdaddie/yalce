@@ -143,7 +143,7 @@ Type t_option_of_var =
 Type *type_of_option(Type *option) {
   return option->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
-
+/*
 Type t_cor_params = TVAR("cor_params");
 Type t_cor_ret = TVAR("cor_ret");
 Type t_cor_ret_opt =
@@ -176,6 +176,7 @@ Type t_iter_of_list_sig = MAKE_FN_TYPE_2(
     &t_list_cor_params, &COR_INST(&t_list_cor_params, &t_list_cor_ret_opt));
 
 Type t_coroutine_concat_sig = TVAR("t_coroutine_concat_sig");
+*/
 Type t_builtin_or = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
 Type t_builtin_and = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
 
@@ -322,15 +323,6 @@ char *type_to_string(Type *t, char *buffer) {
     buffer = strcat(buffer, ")");
     break;
   }
-  case T_COROUTINE_INSTANCE: {
-    buffer = strcat(buffer, "(params_type: ");
-    buffer = type_to_string(t->data.T_FN.from, buffer);
-
-    buffer = strcat(buffer, ", yield_interface: ");
-    buffer = type_to_string(t->data.T_FN.to, buffer);
-    buffer = strcat(buffer, ")");
-    break;
-  }
   }
 
   return buffer;
@@ -436,14 +428,6 @@ bool types_equal(Type *t1, Type *t2) {
     }
     return false;
   }
-  case T_COROUTINE_INSTANCE: {
-
-    if (types_equal(t1->data.T_FN.from, t2->data.T_FN.from)) {
-      return types_equal(t1->data.T_FN.to, t2->data.T_FN.to);
-    }
-    return types_equal(t1->data.T_FN.to, t2->data.T_FN.to) &&
-           types_equal(t1->data.T_FN.from, t2->data.T_FN.from);
-  }
   }
   return false;
 }
@@ -545,13 +529,6 @@ bool is_generic(Type *t) {
     return is_generic(t->data.T_FN.from) || is_generic(t->data.T_FN.to);
   }
 
-  case T_COROUTINE_INSTANCE: {
-    if (is_generic(t->data.T_FN.from)) {
-      return true;
-    }
-    return is_generic(t->data.T_FN.to);
-  }
-
   default:
     return false;
   }
@@ -617,121 +594,6 @@ Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
     env = env->next;
   }
   return NULL;
-}
-
-Type *get_builtin_type(const char *id_chars) {
-
-  if (strcmp(id_chars, TYPE_NAME_INT) == 0) {
-    return &t_int;
-  }
-  if (strcmp(id_chars, TYPE_NAME_DOUBLE) == 0) {
-    return &t_num;
-  }
-  if (strcmp(id_chars, TYPE_NAME_UINT64) == 0) {
-    return &t_uint64;
-  }
-  if (strcmp(id_chars, TYPE_NAME_BOOL) == 0) {
-    return &t_bool;
-  }
-  if (strcmp(id_chars, TYPE_NAME_STRING) == 0) {
-    return &t_string;
-  }
-
-  if (strcmp(id_chars, TYPE_NAME_CHAR) == 0) {
-    return &t_char;
-  }
-  if (strcmp(id_chars, TYPE_NAME_PTR) == 0) {
-    return &t_ptr;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_ADD) {
-    return &t_add;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_SUB) {
-    return &t_sub;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_MUL) {
-    return &t_mul;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_DIV) {
-    return &t_div;
-  }
-  if (*id_chars == *TYPE_NAME_OP_MOD) {
-    return &t_mod;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_LT) {
-    if (*(id_chars + 1) == '=') {
-      return &t_lte;
-    }
-    return &t_lt;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_GT) {
-    if (*(id_chars + 1) == '=') {
-      return &t_gte;
-    }
-    return &t_gt;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_EQ) {
-    if (*(id_chars + 1) == '=') {
-      return &t_eq;
-    }
-    return NULL;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_NEQ) {
-    if (*(id_chars + 1) == '=') {
-      return &t_neq;
-    }
-    return NULL;
-  }
-  if (*id_chars == *TYPE_NAME_OP_AND && *(id_chars + 1) == '&') {
-    return &t_bool_binop;
-  }
-
-  if (*id_chars == *TYPE_NAME_OP_OR && *(id_chars + 1) == '|') {
-    return &t_bool_binop;
-  }
-
-  if (*id_chars == ':' && *(id_chars + 1) == ':') {
-    return &t_list_prepend;
-  }
-
-  if (strcmp(id_chars, "deref") == 0) {
-    return &t_ptr_deref_sig;
-  }
-
-  if (strcmp(id_chars, "loop") == 0) {
-    return &t_cor_loop_sig;
-  }
-
-  if (strcmp(id_chars, "iter_concat") == 0) {
-    return &t_coroutine_concat_sig;
-  }
-
-  // if (strcmp(id_chars, "iter_cor") == 0) {
-  //   return &t_iter_cor_sig;
-  // }
-  // fprintf(stderr, "Error: type or typeclass %s not found\n", id_chars);
-
-  return NULL;
-}
-
-Type *find_type_in_env(TypeEnv *env, const char *name) {
-  Type *_type = env_lookup(env, name);
-
-  if (!_type) {
-    _type = get_builtin_type(name);
-    if (!_type) {
-      return NULL;
-    }
-  }
-  return _type;
 }
 
 void free_type_env(TypeEnv *env) {
@@ -1030,12 +892,6 @@ Type *replace_in(Type *type, Type *tvar, Type *replacement) {
     return type;
   }
 
-  case T_COROUTINE_INSTANCE: {
-    type->data.T_FN.from = replace_in(type->data.T_FN.from, tvar, replacement);
-
-    type->data.T_FN.to = replace_in(type->data.T_FN.to, tvar, replacement);
-    return type;
-  }
   default:
     return type;
   }
@@ -1148,23 +1004,6 @@ void print_constraints_map(TypeMap *map) {
   }
 }
 
-/*
-Type *constraints_map_lookup(TypeMap *map, Type *key) {
-  while (map) {
-    if (types_equal(map->key, key)) {
-      return map->val;
-    }
-
-    if (occurs_check(map->key, key)) {
-      return replace_in(key, map->key, map->val);
-    }
-
-    map = map->next;
-  }
-  return NULL;
-}
-*/
-
 Type *ptr_of_type(Type *pointee) {
   Type *ptr = empty_type();
   ptr->kind = T_CONS;
@@ -1198,46 +1037,6 @@ Type *create_array_type(Type *of, int size) {
   // int *size_ptr = array_type_size_ptr(gen_array);
   // *size_ptr = size;
   return gen_array;
-}
-
-Type *create_coroutine_instance_type(Type *param_type, Type *ret_type) {
-  Type *inst = empty_type();
-  inst->kind = T_COROUTINE_INSTANCE;
-  inst->data.T_FN.from = param_type;
-  inst->data.T_FN.to = create_option_type(ret_type);
-  return inst;
-}
-bool is_coroutine_instance_type(Type *inst) {
-  return inst->kind == T_COROUTINE_INSTANCE;
-}
-
-bool is_coroutine_generator_fn(Type *gen) {
-  if (gen->kind != T_FN) {
-    return false;
-  }
-  Type *ret = fn_return_type(gen);
-  return is_coroutine_instance_type(ret);
-}
-
-Type *coroutine_instance_fn_def_type(Type *inst) {
-  Type *in_param = inst->data.T_FN.from;
-  Type *out_ret = inst->data.T_FN.to;
-  out_ret = type_of_option(out_ret);
-
-  Type *fn = out_ret;
-  if (is_tuple_type(in_param)) {
-    for (int i = in_param->data.T_CONS.num_args - 1; i >= 0; i--) {
-      fn = type_fn(in_param->data.T_CONS.args[i], fn);
-    }
-  } else {
-    fn = inst;
-  }
-  return fn;
-}
-
-bool is_coroutine_generator(Type *t) {
-  Type *ret = fn_return_type(t);
-  return is_coroutine_instance_type(ret);
 }
 
 int get_struct_member_idx(const char *member_name, Type *type) {
@@ -1319,40 +1118,6 @@ Type *concat_struct_types(Type *a, Type *b) {
   concat->data.T_CONS.num_args = len;
   concat->data.T_CONS.names = names;
   return concat;
-}
-
-Type *get_coroutine_yield_interface(Type *instance) {
-  return type_fn(&t_void, instance->data.T_FN.to);
-}
-Type *get_coroutine_params(Type *instance) { return instance->data.T_FN.from; }
-
-Type *create_coroutine_instance(Type *params_type, Type *ret) {
-  Type *instance_type = talloc(sizeof(Type));
-
-  instance_type->kind = T_COROUTINE_INSTANCE;
-  instance_type->data.T_FN.from = params_type;
-  instance_type->data.T_FN.to = create_option_type(ret);
-  return instance_type;
-}
-
-bool is_struct_of_coroutines(Type *fn_type) {
-  if (is_tuple_type(fn_type)) {
-    int is_coroutine_struct = 0;
-    for (int i = 0; i < fn_type->data.T_CONS.num_args; i++) {
-      Type *contained_type = fn_type->data.T_CONS.args[i];
-      if (is_coroutine_instance_type(contained_type)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-Type *get_coroutine_ret_opt_type(Type *instance) {
-  return instance->data.T_FN.to;
-}
-Type *get_coroutine_unwrapped_ret_type(Type *instance) {
-  return type_of_option(get_coroutine_ret_opt_type(instance));
 }
 
 TypeClass *get_typeclass_by_name(Type *t, const char *name) {

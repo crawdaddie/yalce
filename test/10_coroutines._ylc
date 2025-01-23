@@ -1,7 +1,6 @@
 %test
 %include ../../examples/String
 
-
 let test_iter_all_void = fn () ->
 
   let co_void = fn () ->

@@ -1,0 +1,12 @@
+%test
+
+let test_iter_all_void = fn () ->
+  let co_void = fn () ->
+    yield 1.;
+    yield 2.;
+    yield 3.
+  ;;
+
+  let inst = co_void () in
+  inst () == Some 1. && inst () == Some 2. && inst () == Some 3. && inst () == None
+;;
