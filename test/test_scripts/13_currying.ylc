@@ -1,7 +1,13 @@
 let sum3 = fn a b c -> a + b + c;;
+let sum4 = fn a b c d -> a + b + c + d;;
 
-let c = sum3 1 2;
 %test
+let c = sum3 1 2;
 let test_curry = fn () -> c 3 == 6;;
+let test_curry2 = fn () -> c 2 == 5;;
+
+let cc = sum4 1 2;
+let ccc = cc 3;
+let test_curry_second_order = fn () -> ccc 4 == 10;;
 
 

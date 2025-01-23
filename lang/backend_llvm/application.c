@@ -83,6 +83,30 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
   return res;
 }
 
+static LLVMValueRef
+call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
+                        LLVMValueRef callable, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  if (!callable) {
+    return NULL;
+  }
+
+  LLVMTypeRef llvm_callable_type =
+      type_to_llvm_type(callable_type, ctx->env, module);
+
+  if (callable_type->kind == T_FN &&
+      callable_type->data.T_FN.from->kind == T_VOID) {
+
+    return LLVMBuildCall2(builder, llvm_callable_type, callable, NULL, 0,
+                          "call_func");
+  }
+
+  LLVMValueRef res = LLVMBuildCall2(builder, llvm_callable_type, callable, args,
+                                    len, "call_func");
+  return res;
+}
+
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
@@ -135,41 +159,52 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
-    if (args_len +
-            sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len ==
-        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len) {
+    LLVMValueRef *provided_args =
+        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args;
+    int provided_args_len =
+        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len;
+    int total_len =
+        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len;
+    Type *original_callable_type =
+        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type;
 
-      LLVMValueRef *provided_args =
-          sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args;
-      int provided_args_len =
-          sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len;
-      int total_len =
-          sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len;
+    JITSymbol *original_callable_sym =
+        (JITSymbol *)sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym;
 
-      Type *original_callable_type =
-          sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type;
-
-      JITSymbol *original_callable_sym =
-          (JITSymbol *)sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym;
+    if (args_len + provided_args_len == total_len) {
 
       LLVMValueRef full_args[total_len];
+      Type *full_expected_fn_type = deep_copy_type(original_callable_type);
+      Type *f = full_expected_fn_type;
 
       for (int i = 0;
            i < sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len;
            i++) {
         full_args[i] = sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args[i];
+        f = f->data.T_FN.to;
       }
 
+      *f = *expected_fn_type;
+
       for (int i = 0; i < args_len; i++) {
-        full_args[sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE
-                      .provided_args_len +
-                  i] =
+        full_args[provided_args_len + i] =
             codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
       }
 
-      printf("gathered args for callable curried\n");
-      print_type(original_callable_type);
-      print_type(expected_fn_type);
+      LLVMValueRef callable;
+      if (original_callable_sym->type == STYPE_FUNCTION) {
+        callable = original_callable_sym->val;
+      } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION) {
+        callable = get_specific_callable(
+            original_callable_sym, full_expected_fn_type, ctx, module, builder);
+      } else {
+        fprintf(stderr, "Error: currying failed");
+        return NULL;
+      }
+
+      return call_callable_with_args(full_args, total_len,
+                                     full_expected_fn_type, callable, ctx,
+                                     module, builder);
     }
   }
 

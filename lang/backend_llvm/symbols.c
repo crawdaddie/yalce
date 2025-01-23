@@ -140,12 +140,12 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
                                        LLVMBuilderRef builder) {
 
   Ast *function_ast = app->data.AST_APPLICATION.function;
+  int len = app->data.AST_APPLICATION.len;
   JITSymbol *callable_sym = lookup_id_ast(function_ast, ctx);
+  Type *symbol_type = app->md;
   if (callable_sym->type == STYPE_FUNCTION ||
       callable_sym->type == STYPE_GENERIC_FUNCTION) {
     Type *original_callable_type = function_ast->md;
-    Type *symbol_type = app->md;
-    int len = app->data.AST_APPLICATION.len;
 
     LLVMValueRef *app_args = malloc(sizeof(LLVMValueRef) * len);
 
@@ -156,6 +156,7 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
 
     JITSymbol *curried_sym =
         new_symbol(STYPE_PARTIAL_EVAL_CLOSURE, symbol_type, NULL, NULL);
+
     curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym =
         callable_sym;
     curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args = app_args;
@@ -172,6 +173,51 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
     ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
                 curried_sym);
   } else if (callable_sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
+
+    LLVMValueRef *provided_args =
+        callable_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args;
+    int provided_args_len =
+        callable_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len;
+    int total_len =
+        callable_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len;
+    Type *original_callable_type =
+        callable_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE
+            .original_callable_type;
+
+    JITSymbol *original_callable_sym =
+        (JITSymbol *)
+            callable_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym;
+
+    LLVMValueRef *app_args =
+        malloc(sizeof(LLVMValueRef) * (provided_args_len + len));
+    for (int i = 0; i < provided_args_len; i++) {
+      app_args[i] = provided_args[i];
+    }
+    for (int i = 0; i < len; i++) {
+      app_args[provided_args_len + i] =
+          codegen(app->data.AST_APPLICATION.args + i, ctx, module, builder);
+    }
+
+    JITSymbol *curried_sym =
+        new_symbol(STYPE_PARTIAL_EVAL_CLOSURE, symbol_type, NULL, NULL);
+
+    curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym =
+        original_callable_sym;
+    curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args = app_args;
+
+    curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len =
+        provided_args_len + len;
+    curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len =
+        total_len;
+
+    curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type =
+        original_callable_type;
+
+    const char *id_chars = binding->data.AST_IDENTIFIER.value;
+    int id_len = binding->data.AST_IDENTIFIER.length;
+
+    ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
+                curried_sym);
   }
   return NULL;
 }
@@ -198,7 +244,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
   if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
-    return create_curried_fn_binding(binding, expr, outer_ctx, module, builder);
+    LLVMValueRef res =
+        create_curried_fn_binding(binding, expr, outer_ctx, module, builder);
+    return res;
   }
 
   Type *expr_type = expr->md;
