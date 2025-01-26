@@ -1,6 +1,7 @@
 #include "backend_llvm/symbols.h"
 
 #include "adt.h"
+#include "coroutines.h"
 #include "function.h"
 #include "globals.h"
 #include "ht.h"
@@ -162,6 +163,7 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
 
     ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
                 curried_sym);
+
   } else if (callable_sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
 
     LLVMValueRef *provided_args =
@@ -216,6 +218,12 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   Type *expr_type = expr->md;
+
+  if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {
+    return create_coroutine_constructor_binding(binding, expr, inner_ctx,
+                                                module, builder);
+  }
+
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
     return create_generic_fn_binding(binding, expr, inner_ctx, module, builder);
   }

@@ -1,4 +1,5 @@
 #include "backend_llvm/application.h"
+#include "coroutines.h"
 #include "function.h"
 #include "serde.h"
 #include "symbols.h"
@@ -30,11 +31,6 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-LLVMValueRef curry_callable_symbol(JITSymbol *sym, Ast *ast, JITLangCtx *ctx,
-                                   LLVMModuleRef module,
-                                   LLVMBuilderRef builder) {
-  return NULL;
-}
 static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
                                   LLVMValueRef callable, JITLangCtx *ctx,
                                   LLVMModuleRef module,
@@ -136,10 +132,17 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   int args_len = ast->data.AST_APPLICATION.len;
   int expected_args_len = fn_type_args_len(sym->symbol_type);
+  Type *symbol_type = sym->symbol_type;
+
+  if (is_coroutine_constructor_type(symbol_type)) {
+    return create_coroutine_instance_from_constructor(
+        sym, ast->data.AST_APPLICATION.args, args_len, ctx, module, builder);
+  } else if (is_coroutine_type(symbol_type)) {
+    return yield_coroutine_instance(sym, ctx, module, builder);
+  }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
     if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
-
       return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
           ast, ctx, module, builder);
     }

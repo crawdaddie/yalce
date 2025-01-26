@@ -999,9 +999,6 @@ Type *coroutine_type_from_fn_type(Type *fn_type) {
   *ff = *coroutine_fn;
   return f;
 }
-bool is_coroutine_type(Type *fn_type) {
-  return strncmp(fn_type->data.T_CONS.name, "coroutine", 9) == 0;
-}
 
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;

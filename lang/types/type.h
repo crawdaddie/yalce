@@ -361,12 +361,6 @@ Type *concat_struct_types(Type *a, Type *b);
 
 bool is_struct_of_coroutines(Type *fn_type);
 
-Type *get_coroutine_yield_interface(Type *instance);
-Type *get_coroutine_unwrapped_ret_type(Type *instance);
-Type *get_coroutine_ret_opt_type(Type *instance);
-Type *create_coroutine_instance(Type *params_type, Type *ret);
-Type *get_coroutine_params(Type *instance);
-
 TypeClass *get_typeclass_by_name(Type *t, const char *name);
 double get_typeclass_rank(Type *t, const char *name);
 
@@ -389,4 +383,8 @@ Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
 Type *resolve_type_in_env(Type *r, TypeEnv *env);
 
 bool application_is_partial(Ast *app);
+
+bool is_coroutine_type(Type *fn_type);
+
+bool is_coroutine_constructor_type(Type *fn_type);
 #endif

@@ -1189,3 +1189,12 @@ bool application_is_partial(Ast *app) {
   int actual_args_len = app->data.AST_APPLICATION.len;
   return actual_args_len < expected_args_len;
 }
+
+bool is_coroutine_type(Type *fn_type) {
+  return fn_type->kind == T_CONS &&
+         strncmp(fn_type->data.T_CONS.name, "coroutine", 9) == 0;
+}
+
+bool is_coroutine_constructor_type(Type *fn_type) {
+  return fn_type->kind == T_FN && is_coroutine_type(fn_return_type(fn_type));
+}
