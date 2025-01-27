@@ -36,5 +36,9 @@ NC='\033[0m'
 # Loop through each .ylc file and run the executable
 for file in $YLC_FILES; do
     ylc --test $file
+    exit_code=$?
+    if [ $exit_code -eq 139 ]; then  # 139 indicates segmentation fault
+        echo -e "❌ - segfault running $file"
+    fi
 done
 

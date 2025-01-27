@@ -144,6 +144,10 @@ LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMPositionBuilderAtEnd(builder, block);
 
+  if (!is_anon) {
+    add_recursive_fn_ref(fn_name, func, constructor_type, &fn_ctx);
+  }
+
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
   LLVMValueRef counter = LLVMBuildLoad2(
       builder, LLVMInt32Type(), get_instance_counter_gep(instance_ptr, builder),
@@ -235,6 +239,7 @@ LLVMValueRef create_coroutine_instance_from_constructor(
     JITSymbol *sym, Ast *args, int args_len, JITLangCtx *ctx,
     LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  // printf("create coroutine instance from constructor\n");
   if (sym->type == STYPE_GENERIC_FUNCTION) {
     return NULL;
   }
@@ -318,6 +323,10 @@ LLVMValueRef yield_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
 
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+
+  print_ast(ast);
+  print_type(ast->data.AST_YIELD.expr->md);
+  printf("------\n");
 
   LLVMBasicBlockRef current_case_block = LLVMGetInsertBlock(builder);
   LLVMValueRef current_func_ref = LLVMGetBasicBlockParent(current_case_block);

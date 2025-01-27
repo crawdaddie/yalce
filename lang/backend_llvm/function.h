@@ -24,4 +24,7 @@ bool fn_types_match(Type *t1, Type *t2);
 
 LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder);
+
+void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
+                          JITLangCtx *fn_ctx);
 #endif

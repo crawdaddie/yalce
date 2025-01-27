@@ -159,7 +159,9 @@ LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
   print_type(val_type);
   LLVMValueRef result = LLVMBuildSelect(
       builder, codegen_option_is_none(opt_value, builder),
+
       _codegen_string("None", 4, ctx, module, builder),
+
       stream_string_concat(
           (LLVMValueRef[]){
               _codegen_string("Some ", 5, ctx, module, builder),

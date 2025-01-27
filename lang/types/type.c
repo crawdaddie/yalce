@@ -650,6 +650,7 @@ Type *deep_copy_type(const Type *original) {
   copy->constructor = original->constructor;
   copy->constructor_size = original->constructor_size;
   copy->implements = original->implements;
+  copy->is_recursive_fn_ref = original->is_recursive_fn_ref;
 
   // for (int i = 0; i < original->num_implements; i++) {
   //   add_typeclass(copy, original->implements[i]);

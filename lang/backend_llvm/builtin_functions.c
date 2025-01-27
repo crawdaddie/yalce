@@ -244,24 +244,22 @@ LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
                        JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
-
   Type *t = type_of_option(type);
   if (is_generic(t)) {
     *t = t_int;
   }
 
-  LLVMValueRef tag1 = LLVMBuildExtractValue(builder, l, 0, "option_eq_get_tag_l");
-  LLVMValueRef tag2 = LLVMBuildExtractValue(builder, r, 0, "option_eq_get_tag_r");
+  LLVMValueRef tag1 =
+      LLVMBuildExtractValue(builder, l, 0, "option_eq_get_tag_l");
+  LLVMValueRef tag2 =
+      LLVMBuildExtractValue(builder, r, 0, "option_eq_get_tag_r");
   LLVMValueRef phi = LLVM_IF_ELSE(
-    builder,
-    codegen_option_is_none(r, builder),
-    LLVMBuildICmp(builder, LLVMIntEQ, tag1, tag2, "none-type-tags-equal"),
-    _codegen_equality(
-      t, LLVMBuildExtractValue(builder, l, 1, "option_eq_get_val_l"), 
-    LLVMBuildExtractValue(builder, r, 1, "option_eq_get_val_r"), ctx, module, builder
-    )
-  );
-
+      builder, codegen_option_is_none(r, builder),
+      LLVMBuildICmp(builder, LLVMIntEQ, tag1, tag2, "none-type-tags-equal"),
+      _codegen_equality(
+          t, LLVMBuildExtractValue(builder, l, 1, "option_eq_get_val_l"),
+          LLVMBuildExtractValue(builder, r, 1, "option_eq_get_val_r"), ctx,
+          module, builder));
 
   return phi;
 }

@@ -972,6 +972,8 @@ Type *coroutine_type_from_fn_type(Type *fn_type) {
   if (args_len == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
     state = NULL;
     ret = fn_type->data.T_FN.to;
+  } else if (args_len == 1) {
+    state = fn_type->data.T_FN.from;
   } else {
     Type *f = fn_type;
     Type **contained_types = talloc(sizeof(Type *) * args_len);
@@ -982,9 +984,9 @@ Type *coroutine_type_from_fn_type(Type *fn_type) {
       f = f->data.T_FN.to;
     }
     ret = f;
-    Type *state =
-        create_cons_type("coroutine_state", args_len, contained_types);
+    state = create_cons_type("coroutine_state", args_len, contained_types);
   }
+
   Type **cs = talloc(sizeof(Type *) * 2);
   cs[0] = state == NULL ? &t_void : state;
   cs[1] = type_fn(&t_void, create_option_type(ret));
@@ -998,6 +1000,32 @@ Type *coroutine_type_from_fn_type(Type *fn_type) {
 
   *ff = *coroutine_fn;
   return f;
+}
+
+Type *infer_anonymous_lambda(Ast *ast, Type **param_types, int num_params,
+                             TICtx *lambda_ctx) {
+
+  Type *body_type = infer(ast->data.AST_LAMBDA.body, lambda_ctx);
+  if (!body_type)
+    return NULL;
+
+  Type *fn_type = body_type;
+  for (int i = num_params - 1; i >= 0; i--) {
+    Type *new_fn = talloc(sizeof(Type));
+    new_fn->kind = T_FN;
+    new_fn->data.T_FN.from = param_types[i];
+    new_fn->data.T_FN.to = fn_type;
+    fn_type = new_fn;
+  }
+
+  // Solve constraints to get concrete types
+  if (lambda_ctx->constraints) {
+    Substitution *subst = solve_constraints(lambda_ctx->constraints);
+    if (!subst)
+      return NULL;
+    fn_type = apply_substitution(subst, fn_type);
+  }
+  return fn_type;
 }
 
 Type *infer(Ast *ast, TICtx *ctx) {
@@ -1305,6 +1333,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
       type = current_type;
       ast->data.AST_APPLICATION.function->md = fn_type;
     }
+    if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+        is_recursive_ref(ast->data.AST_APPLICATION.function, ctx)) {
+      // TODO: special handling for recursive ref??
+      if (ctx->yielded_expr != NULL) {
+        printf("handle recursive coroutine call\n");
+        print_ast(ast);
+      }
+    }
 
     // if (!is_generic(spec_fn)) {
     // printf("spec fn: \n");
@@ -1403,9 +1439,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     // If this is a named function that can be recursive
+    Type *fn_type_var = NULL;
     if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
       // Create a type variable for the recursive function
-      Type *fn_type_var = next_tvar();
+      fn_type_var = next_tvar();
       fn_type_var->is_recursive_fn_ref = true; // Mark as recursive
 
       Ast rec_fn_name_binding = {
@@ -1416,6 +1453,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
           bind_in_env(lambda_ctx.env, &rec_fn_name_binding, fn_type_var);
 
       Type *body_type = infer(ast->data.AST_LAMBDA.body, &lambda_ctx);
+
       if (!body_type)
         return NULL;
 
@@ -1439,33 +1477,13 @@ Type *infer(Ast *ast, TICtx *ctx) {
       type = actual_fn_type;
 
     } else {
-      // Non-recursive case - same as before
-      Type *body_type = infer(ast->data.AST_LAMBDA.body, &lambda_ctx);
-      if (!body_type)
-        return NULL;
-
-      Type *fn_type = body_type;
-      for (int i = num_params - 1; i >= 0; i--) {
-        Type *new_fn = talloc(sizeof(Type));
-        new_fn->kind = T_FN;
-        new_fn->data.T_FN.from = param_types[i];
-        new_fn->data.T_FN.to = fn_type;
-        fn_type = new_fn;
-      }
-
-      // Solve constraints to get concrete types
-      if (lambda_ctx.constraints) {
-        Substitution *subst = solve_constraints(lambda_ctx.constraints);
-        if (!subst)
-          return NULL;
-        fn_type = apply_substitution(subst, fn_type);
-      }
-
-      type = fn_type;
+      type = infer_anonymous_lambda(ast, param_types, num_params, &lambda_ctx);
     }
+
     if (lambda_ctx.yielded_expr) {
       type = coroutine_type_from_fn_type(type);
     }
+
     break;
   }
   case AST_MATCH: {
@@ -1581,7 +1599,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_YIELD: {
     Ast *yield_expr = ast->data.AST_YIELD.expr;
+
     type = infer(yield_expr, ctx);
+
     if (ctx->yielded_expr == NULL) {
       ctx->yielded_expr = yield_expr;
     } else {
@@ -1590,6 +1610,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fprintf(stderr, "Error: yielded values must be of the same type!");
         return NULL;
       }
+
       ctx->yielded_expr = yield_expr;
     }
     ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;

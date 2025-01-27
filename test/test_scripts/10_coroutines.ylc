@@ -1,12 +1,23 @@
 %test
 
-let test_iter_all_void = fn () ->
-  let co_void = fn () ->
+# let test_iter_all_void = fn () ->
+#   let co_void = fn () ->
+#     yield 1.;
+#     yield 2.;
+#     yield 3.
+#   ;;
+#
+#   let inst = co_void () in
+#   let x = (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
+#   ;;
+
+let test_iter_rec = fn () ->
+  let co_void_rec = fn () ->
     yield 1.;
     yield 2.;
-    yield 3.
+    yield co_void_rec ()
   ;;
 
-  let inst = co_void () in
-  let x = (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) in (inst () == None)
+  let inst = co_void_rec () in
+  let x = (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 1.) && (inst () == Some 2.)
   ;;
