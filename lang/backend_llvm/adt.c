@@ -22,6 +22,16 @@ LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
 LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
+
+  if ((strcmp(enum_type->data.T_CONS.name, "Variant") == 0) &&
+      (enum_type->data.T_CONS.num_args == 2) &&
+      (strcmp(enum_type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
+      (strcmp(enum_type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
+
+    if (strcmp(mem_name, "None") == 0) {
+      return codegen_none(builder);
+    }
+  }
   if (is_option_type(enum_type)) {
     if (strcmp(mem_name, "None") == 0) {
       return codegen_none(builder);
@@ -77,7 +87,19 @@ LLVMTypeRef get_largest_type(LLVMContextRef context, LLVMTypeRef *types,
   return largest_type;
 }
 
+#define OPTION_TAG_TYPE LLVMInt8Type()
+
+LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type) {
+  LLVMTypeRef tu_types[] = {OPTION_TAG_TYPE, type};
+  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
+  return tu_type;
+}
+
 LLVMTypeRef codegen_adt_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
+  if (type->alias != NULL && strcmp(type->alias, "Option") == 0) {
+    return codegen_option_struct_type(
+        type_to_llvm_type(type_of_option(type), env, module));
+  }
 
   int len = type->data.T_CONS.num_args;
   LLVMTypeRef contained_types[len];
@@ -91,33 +113,42 @@ LLVMTypeRef codegen_adt_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
   return LLVMStructType((LLVMTypeRef[]){TAG_TYPE, largest_type}, 2, 0);
 }
 
-LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder) {
-  LLVMTypeRef tu_types[] = {TAG_TYPE,
-                            val != NULL ? LLVMTypeOf(val) : LLVMInt8Type()};
+LLVMValueRef codegen_some(LLVMValueRef val, LLVMBuilderRef builder) {
+  LLVMTypeRef tu_types[] = {OPTION_TAG_TYPE, LLVMTypeOf(val)};
   LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
-  if (val != NULL) {
-    LLVMValueRef some = LLVMGetUndef(tu_type);
-    some =
-        LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), 0, 0),
-                             0, "insert Some tag");
+  LLVMValueRef some = LLVMGetUndef(tu_type);
+  some = LLVMBuildInsertValue(
+      builder, some, LLVMConstInt(OPTION_TAG_TYPE, 0, 0), 0, "insert Some tag");
 
-    some = LLVMBuildInsertValue(builder, some, val, 1, "insert Some Value");
-    return some;
-  }
-  LLVMValueRef none = LLVMGetUndef(tu_type);
-
-  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
-                              0, "insert None tag");
-  return none;
+  some = LLVMBuildInsertValue(builder, some, val, 1, "insert Some Value");
+  return some;
 }
 
 LLVMValueRef codegen_none(LLVMBuilderRef builder) {
-  LLVMTypeRef tu_types[] = {TAG_TYPE};
-  LLVMTypeRef tu_type = LLVMStructType(tu_types, 1, 0);
+  LLVMTypeRef tu_types[] = {OPTION_TAG_TYPE, LLVMInt8Type()};
+  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
   LLVMValueRef none = LLVMGetUndef(tu_type);
 
-  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 1, 0),
-                              0, "insert None tag");
+  none = LLVMBuildInsertValue(
+      builder, none, LLVMConstInt(OPTION_TAG_TYPE, 1, 0), 0, "insert None tag");
+
+  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 0, 0),
+                              1, "insert None dummy val");
+
+  return none;
+}
+
+LLVMValueRef codegen_none_typed(LLVMBuilderRef builder, LLVMTypeRef type) {
+  LLVMTypeRef tu_types[] = {OPTION_TAG_TYPE, type};
+  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
+  LLVMValueRef none = LLVMGetUndef(tu_type);
+
+  none = LLVMBuildInsertValue(
+      builder, none, LLVMConstInt(OPTION_TAG_TYPE, 1, 0), 0, "insert None tag");
+
+  none = LLVMBuildInsertValue(builder, none, LLVMGetUndef(type), 1,
+                              "insert None dummy val");
+
   return none;
 }
 
@@ -146,11 +177,11 @@ LLVMValueRef extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
 LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder) {
   LLVMValueRef tag = extract_tag(opt, builder);
   return LLVMBuildICmp(builder, LLVMIntEQ, tag,
-                       LLVMConstInt(LLVMInt8Type(), 1, 0), "");
+                       LLVMConstInt(OPTION_TAG_TYPE, 1, 0), "");
 }
 
 LLVMValueRef codegen_option_is_some(LLVMValueRef opt, LLVMBuilderRef builder) {
   LLVMValueRef tag = extract_tag(opt, builder);
   return LLVMBuildICmp(builder, LLVMIntEQ, tag,
-                       LLVMConstInt(LLVMInt8Type(), 0, 0), "");
+                       LLVMConstInt(OPTION_TAG_TYPE, 0, 0), "");
 }

@@ -13,4 +13,8 @@ LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
 LLVMTypeRef codegen_adt_type(Type *type, TypeEnv *env, LLVMModuleRef module);
 
 LLVMValueRef extract_tag(LLVMValueRef val, LLVMBuilderRef builder);
+
+LLVMValueRef codegen_some(LLVMValueRef val, LLVMBuilderRef builder);
+LLVMValueRef codegen_none(LLVMBuilderRef builder);
+LLVMValueRef codegen_none_typed(LLVMBuilderRef builder, LLVMTypeRef type);
 #endif

@@ -1375,6 +1375,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     TICtx lambda_ctx = *ctx;
     lambda_ctx.yielded_expr = NULL;
     lambda_ctx.scope++;
+    lambda_ctx.current_fn_ast = ast;
 
     // Fresh type vars for each parameter
     int num_params = ast->data.AST_LAMBDA.len;
@@ -1591,6 +1592,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
       ctx->yielded_expr = yield_expr;
     }
+    ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
 
     break;
   }

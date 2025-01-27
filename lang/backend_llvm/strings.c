@@ -1,6 +1,7 @@
 #include "backend_llvm/strings.h"
 #include "backend_llvm/array.h"
 #include "list.h"
+#include "types.h"
 #include "types/type.h"
 #include "util.h"
 #include "ylc_stdlib.h"
@@ -8,6 +9,9 @@
 #include "llvm-c/Types.h"
 #include <stdlib.h>
 #include <string.h>
+
+LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
+                             LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef codegen_print_char_matrix(LLVMValueRef array2d,
                                        LLVMModuleRef module,
@@ -148,6 +152,27 @@ LLVMValueRef char_to_string(LLVMValueRef char_value, LLVMModuleRef module,
   return str;
 }
 
+LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
+                           JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  LLVMDumpValue(opt_value);
+  print_type(val_type);
+  LLVMValueRef result = LLVMBuildSelect(
+      builder, codegen_option_is_none(opt_value, builder),
+      _codegen_string("None", 4, ctx, module, builder),
+      stream_string_concat(
+          (LLVMValueRef[]){
+              _codegen_string("Some ", 5, ctx, module, builder),
+
+              llvm_string_serialize(
+                  LLVMBuildExtractValue(builder, opt_value, 1, ""),
+                  type_of_option(val_type), ctx, module, builder),
+          },
+          2, module, builder),
+      "select");
+  return result;
+}
+
 LLVMValueRef _num_to_string(LLVMValueRef double_value, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
@@ -196,8 +221,9 @@ LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 }
 
 LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
-                                   LLVMModuleRef module,
+                                   JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
+
   if (val_type->kind == T_STRING) {
     return val;
   }
@@ -220,6 +246,18 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 
   if (val_type->kind == T_BOOL) {
     return int_to_string(val, module, builder);
+  }
+
+  if ((strcmp(val_type->data.T_CONS.name, "Variant") == 0) &&
+      (val_type->data.T_CONS.num_args == 2) &&
+      (strcmp(val_type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
+      (strcmp(val_type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
+
+    return opt_to_string(val, val_type, ctx, module, builder);
+  }
+
+  if (is_option_type(val_type)) {
+    return opt_to_string(val, val_type, ctx, module, builder);
   }
 
   return char_to_string(LLVMConstInt(LLVMInt8Type(), 60, 0), module, builder);
@@ -346,10 +384,8 @@ LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type) {
       2, 0);
 }
 
-LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
-  const char *chars = ast->data.AST_STRING.value;
-  int length = ast->data.AST_STRING.length;
+LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
+                             LLVMModuleRef module, LLVMBuilderRef builder) {
   LLVMValueRef data_ptr = char_array(chars, length, ctx, module, builder);
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
@@ -361,6 +397,13 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMConstInt(LLVMInt32Type(), length, 0), 0,
                              "insert_array_size");
   return str;
+}
+
+LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+  const char *chars = ast->data.AST_STRING.value;
+  int length = ast->data.AST_STRING.length;
+  return _codegen_string(chars, length, ctx, module, builder);
 }
 
 LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx,

@@ -1,4 +1,5 @@
 #include "backend_llvm/builtin_functions.h"
+#include "adt.h"
 #include "application.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/common.h"
@@ -239,6 +240,32 @@ LLVMValueRef cons_equality(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
   return result_phi;
 }
 
+LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
+                       JITLangCtx *ctx, LLVMModuleRef module,
+                       LLVMBuilderRef builder) {
+
+
+  Type *t = type_of_option(type);
+  if (is_generic(t)) {
+    *t = t_int;
+  }
+
+  LLVMValueRef tag1 = LLVMBuildExtractValue(builder, l, 0, "option_eq_get_tag_l");
+  LLVMValueRef tag2 = LLVMBuildExtractValue(builder, r, 0, "option_eq_get_tag_r");
+  LLVMValueRef phi = LLVM_IF_ELSE(
+    builder,
+    codegen_option_is_none(r, builder),
+    LLVMBuildICmp(builder, LLVMIntEQ, tag1, tag2, "none-type-tags-equal"),
+    _codegen_equality(
+      t, LLVMBuildExtractValue(builder, l, 1, "option_eq_get_val_l"), 
+    LLVMBuildExtractValue(builder, r, 1, "option_eq_get_val_r"), ctx, module, builder
+    )
+  );
+
+
+  return phi;
+}
+
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
@@ -256,11 +283,17 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
     return LLVMBuildFCmp(builder, LLVMRealOEQ, l, r, "eq_num");
   }
   case T_CONS: {
-    if (is_option_type(type)) {
-      printf("eq option types??\n");
-      print_type(type);
-      return NULL;
+
+    if ((strcmp(type->data.T_CONS.name, "Variant") == 0) &&
+        (type->data.T_CONS.num_args == 2) &&
+        (strcmp(type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
+        (strcmp(type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
+      return option_eq(type, l, r, ctx, module, builder);
     }
+    if (is_option_type(type)) {
+      return option_eq(type, l, r, ctx, module, builder);
+    }
+
     return cons_equality(type, l, r, ctx, module, builder);
   }
   }
@@ -389,7 +422,7 @@ LLVMValueRef SomeConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Ast *contained_ast = ast->data.AST_APPLICATION.args;
   LLVMValueRef contained = codegen(contained_ast, ctx, module, builder);
 
-  LLVMValueRef res = codegen_option(contained, builder);
+  LLVMValueRef res = codegen_some(contained, builder);
   return res;
 }
 

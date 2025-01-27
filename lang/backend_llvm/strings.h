@@ -4,6 +4,10 @@
 #include "common.h"
 #include "parse.h"
 #include "llvm-c/Types.h"
+
+LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
+                                   JITLangCtx *ctx, LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
 LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                                   LLVMModuleRef module, LLVMBuilderRef builder);
 
@@ -14,6 +18,6 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 // String string_add(String a, String b);
 
-LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) ;
+LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

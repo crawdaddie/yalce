@@ -8,5 +8,5 @@ let test_iter_all_void = fn () ->
   ;;
 
   let inst = co_void () in
-  (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
-;;
+  let x = (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) in (inst () == None)
+  ;;

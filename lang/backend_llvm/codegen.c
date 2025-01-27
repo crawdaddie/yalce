@@ -9,6 +9,7 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
+#include "coroutines.h"
 #include "serde.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -93,7 +94,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       if (t->kind == T_VAR) {
         t = env_lookup(ctx->env, t->data.T_VAR);
       }
-      LLVMValueRef str_val = llvm_string_serialize(val, t, module, builder);
+      LLVMValueRef str_val =
+          llvm_string_serialize(val, t, ctx, module, builder);
+
       strings_to_concat[i] = str_val;
     }
     LLVMValueRef concat_strings =
@@ -178,6 +181,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return codegen_tuple_access(
         member_idx, rec, type_to_llvm_type(record_type, ctx->env, module),
         builder);
+  }
+
+  case AST_YIELD: {
+    return codegen_yield(ast, ctx, module, builder);
   }
   }
 

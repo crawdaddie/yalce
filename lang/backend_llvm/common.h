@@ -32,8 +32,10 @@ typedef struct {
   int *num_globals;
   void **global_storage_array;
   int *global_storage_capacity;
-  coroutine_ctx_t _coroutine_ctx;
   char *module_name;
+  int num_coroutine_yields;
+  int current_yield;
+  LLVMValueRef yield_switch_ref;
 } JITLangCtx;
 
 typedef struct SpecificFns {
@@ -140,6 +142,6 @@ void destroy_ctx(JITLangCtx *ctx);
   ht_init(&table);                                                             \
   StackFrame sf = {.table = &table, .next = _ctx_name.frame};                  \
   _ctx_name.frame = &sf;                                                       \
-  _ctx_name.stack_ptr++;
+  _ctx_name.stack_ptr = ctx->stack_ptr + 1;
 
 #endif

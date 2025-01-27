@@ -132,6 +132,7 @@ Type t_for_sig =
 
 Type t_option_var = {T_VAR, {.T_VAR = "t"}};
 Type t_none = {T_CONS, {.T_CONS = {"None", NULL, 0}}};
+
 bool is_option_type(Type *t) {
   return t->kind == T_CONS && ((strcmp(t->data.T_CONS.name, "Some") == 0) ||
                                (strcmp(t->data.T_CONS.name, "None") == 0));
@@ -491,7 +492,6 @@ Type *fn_return_type(Type *fn) {
 }
 
 bool is_generic(Type *t) {
-
   if (t == NULL) {
     fprintf(stderr, "Error type passed to generic test is null\n");
     return NULL;
@@ -688,7 +688,6 @@ Type *copy_array_type(Type *t) {
 }
 
 int fn_type_args_len(Type *fn_type) {
-
   if (fn_type->data.T_FN.from->kind == T_VOID) {
     return 1;
   }
@@ -868,7 +867,6 @@ Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env) {
 }
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement) {
-
   switch (type->kind) {
 
   case T_CONS: {
@@ -936,7 +934,6 @@ Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
 }
 
 Type *variant_lookup_name(TypeEnv *env, const char *name, int *member_idx) {
-
   while (env) {
     if (is_variant_type(env->type)) {
       Type *variant = env->type;
@@ -1058,7 +1055,6 @@ Type *get_struct_member_type(const char *member_name, Type *type) {
 }
 
 Type *concat_struct_types(Type *a, Type *b) {
-
   if (a->kind == T_VOID) {
     return b;
   }

@@ -21,4 +21,7 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    LLVMBuilderRef builder);
 
 bool fn_types_match(Type *t1, Type *t2);
+
+LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

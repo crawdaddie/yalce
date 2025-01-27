@@ -72,6 +72,25 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
   ht *scope = fn_ctx->frame->table;
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
+LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMValueRef body;
+  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+    body = codegen(ast->data.AST_LAMBDA.body, fn_ctx, module, builder);
+  } else {
+    for (int i = 0; i < ast->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
+
+      Ast *stmt = ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+      if (i == 0 && stmt->tag == AST_STRING) {
+        continue;
+      }
+
+      body = codegen(stmt, fn_ctx, module, builder);
+    }
+  }
+  return body;
+}
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
@@ -129,21 +148,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     fn_type = fn_type->data.T_FN.to;
   }
 
-  LLVMValueRef body;
-
-  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
-    body = codegen(ast->data.AST_LAMBDA.body, &fn_ctx, module, builder);
-  } else {
-    for (int i = 0; i < ast->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
-
-      Ast *stmt = ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
-      if (i == 0 && stmt->tag == AST_STRING) {
-        continue;
-      }
-
-      body = codegen(stmt, &fn_ctx, module, builder);
-    }
-  }
+  LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
   LLVMBuildRet(builder, body);
   LLVMPositionBuilderAtEnd(builder, prev_block);

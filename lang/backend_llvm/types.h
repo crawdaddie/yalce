@@ -35,10 +35,6 @@ Method *get_binop_method(const char *binop, Type *l, Type *r);
 
 TypeEnv *initialize_types(TypeEnv *env);
 
-LLVMValueRef codegen_option(LLVMValueRef val, LLVMBuilderRef builder);
-
-LLVMValueRef codegen_none(LLVMBuilderRef builder);
-
 LLVMValueRef codegen_option_is_none(LLVMValueRef opt, LLVMBuilderRef builder);
 LLVMValueRef codegen_option_is_some(LLVMValueRef opt, LLVMBuilderRef builder);
 
