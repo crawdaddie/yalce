@@ -89,6 +89,8 @@ extern Type t_coroutine_concat_sig;
 extern Type t_builtin_or;
 extern Type t_builtin_and;
 
+extern Type t_builtin_char_of;
+
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"

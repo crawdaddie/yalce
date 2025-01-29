@@ -1146,6 +1146,8 @@ double get_typeclass_rank(Type *t, const char *name) {
 
 Type t_builtin_print = MAKE_FN_TYPE_2(&t_string, &t_void);
 
+Type t_builtin_char_of = MAKE_FN_TYPE_2(&t_int, &t_char);
+
 bool is_simple_enum(Type *t) {
   if (t->kind != T_CONS) {
     return false;

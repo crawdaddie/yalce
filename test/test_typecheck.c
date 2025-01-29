@@ -525,12 +525,31 @@ int main() {
                "  yield co_void_rec ()\n"
                ";;\n",
                &MAKE_FN_TYPE_2(&t_void, &cor));
+
     Ast *rec_yield =
         b->data.AST_BODY.stmts[0]
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts[2];
+    print_ast(rec_yield);
+    print_type(rec_yield->md);
 
     // printf("## rec yield:\n");
     // print_type(rec_yield->data.AST_YIELD.expr->md);
+  });
+
+  ({
+    Type cor =
+        TCONS("coroutine", 2, &t_void, &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)));
+    T("let ne = fn () ->\n"
+      "  yield 300.;\n"
+      "  yield 400.\n"
+      ";;\n"
+      "let co_void = fn () ->\n"
+      "  yield 1.;\n"
+      "  yield 2.;\n"
+      "  yield ne ();\n"
+      "  yield 3.\n"
+      ";;\n",
+      &MAKE_FN_TYPE_2(&t_void, &cor));
   });
 
   // ({

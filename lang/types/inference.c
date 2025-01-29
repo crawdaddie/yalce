@@ -1302,6 +1302,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         Type *arg_type = arg_types[i];
         if (current_type->kind != T_FN) {
           fprintf(stderr, "Attempting to apply to non-function type\n");
+          print_ast_err(ast);
           return NULL;
         } else {
           // Regular function type case
@@ -1333,12 +1334,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
       type = current_type;
       ast->data.AST_APPLICATION.function->md = fn_type;
     }
+
     if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
         is_recursive_ref(ast->data.AST_APPLICATION.function, ctx)) {
-      // TODO: special handling for recursive ref??
-      if (ctx->yielded_expr != NULL) {
-        printf("handle recursive coroutine call\n");
-        print_ast(ast);
+      if (ctx->yielded_type != NULL) {
+        // TODO: special handling for recursive ref??
       }
     }
 
@@ -1409,7 +1409,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_LAMBDA: {
     // Create new context for lambda body
     TICtx lambda_ctx = *ctx;
-    lambda_ctx.yielded_expr = NULL;
+    lambda_ctx.yielded_type = NULL;
     lambda_ctx.scope++;
     lambda_ctx.current_fn_ast = ast;
 
@@ -1480,7 +1480,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       type = infer_anonymous_lambda(ast, param_types, num_params, &lambda_ctx);
     }
 
-    if (lambda_ctx.yielded_expr) {
+    if (lambda_ctx.yielded_type) {
       type = coroutine_type_from_fn_type(type);
     }
 
@@ -1601,17 +1601,23 @@ Type *infer(Ast *ast, TICtx *ctx) {
     Ast *yield_expr = ast->data.AST_YIELD.expr;
 
     type = infer(yield_expr, ctx);
+    Type *yield_expr_type = yield_expr->md;
 
-    if (ctx->yielded_expr == NULL) {
-      ctx->yielded_expr = yield_expr;
+    if (ctx->yielded_type == NULL) {
+      ctx->yielded_type = yield_expr_type;
     } else {
-      Ast *prev_yield = ctx->yielded_expr;
-      if (!unify_in_ctx(prev_yield->md, yield_expr->md, ctx)) {
+      if (is_coroutine_type(yield_expr_type)) {
+        yield_expr_type = type_of_option(
+            fn_return_type(yield_expr_type->data.T_CONS.args[1]));
+      }
+      // Ast *prev_yield = ctx->yielded_expr;
+      Type *prev_yield_type = ctx->yielded_type;
+      if (!unify_in_ctx(prev_yield_type, yield_expr_type, ctx)) {
         fprintf(stderr, "Error: yielded values must be of the same type!");
         return NULL;
       }
 
-      ctx->yielded_expr = yield_expr;
+      ctx->yielded_type = yield_expr_type;
     }
     ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
 

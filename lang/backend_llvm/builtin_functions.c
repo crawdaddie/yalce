@@ -326,6 +326,12 @@ LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return _codegen_equality(target_type, l, r, ctx, module, builder);
 }
 
+LLVMValueRef CharHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
+
+  return NULL;
+}
+
 LLVMValueRef NeqHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
@@ -555,6 +561,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("||", &t_builtin_or, LogicalOrHandler);
   GENERIC_FN_SYMBOL("&&", &t_builtin_and, LogicalAndHandler);
+  // GENERIC_FN_SYMBOL("Char", &t_builtin_char_of, CharHandler);
   // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_DATA_PTR, &t_array_data_ptr_fn_sig);
   //
   // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_INCR, &t_array_incr_fn_sig);
