@@ -174,6 +174,10 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return *yytext;
                         }
 
+^%.*            {
+                  // printf("possible macro %s\n", yytext + 1);
+                  //return *(yytext + 1);
+                };       
 "%"             return MODULO;
 ">="            return GE;
 "<="            return LE;

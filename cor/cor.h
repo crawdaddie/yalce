@@ -1,12 +1,10 @@
 typedef void *(*CoroutineFn)(void *coroutine, void *ret_val);
 
 typedef struct cor {
-  // int id;
   int counter;
   CoroutineFn fn_ptr;
   struct cor *next;
-  // int argc;
-  void *argv[];
+  void **argv;
 } cor;
 
 #define MAPSIZE
@@ -15,7 +13,6 @@ typedef struct cor_runtime {
 } cor_runtime;
 
 cor *cor_next(cor *coroutine, void *ret_val);
-
 cor *cor_init(cor *cor, CoroutineFn fn);
 cor *cor_alloc();
 cor *cor_defer(cor *this, cor next_struct, void *ret_val);

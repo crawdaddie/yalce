@@ -23,7 +23,6 @@ CFLAGS := -I./lang -I./engine
 
 CFLAGS += -I./gui -I${SDL2_PATH}/include -I${SDL2_PATH}/include/SDL2 -I${SDL2_TTF_PATH}/include
 
-
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
 CFLAGS += `$(LLVM_CONFIG) --cflags`
@@ -39,8 +38,11 @@ LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
 
 LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx
+LANG_LD_FLAGS += -L$(BUILD_DIR)/cor -lcor
+LANG_LD_FLAGS += -Wl,-rpath,@executable_path/cor
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
+# Add cor source to LANG_SRCS
 
 ifdef DUMP_AST 
 LANG_CC += -DDUMP_AST
@@ -71,13 +73,16 @@ LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 # Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
-.PHONY: all clean engine test wasm serve_docs engine_bindings gui
+.PHONY: all clean engine cor test wasm serve_docs engine_bindings gui cor
 
 all: $(BUILD_DIR)/ylc
 debug: all
 
 engine:
 	$(MAKE) -C engine
+
+cor:
+	$(MAKE) -C cor
 
 gui:
 	@echo "######### MAKE GUI------------"
@@ -101,7 +106,7 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 	$(LANG_CC) -c -o $@ $<
 
 # Build the final executable
-$(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
+$(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui cor
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
 
 clean:
@@ -128,6 +133,5 @@ serve_docs:
 
 audio_test:
 	$(MAKE) -C engine audio_test
-
 
 

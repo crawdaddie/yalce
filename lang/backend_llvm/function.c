@@ -68,6 +68,7 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
                           JITLangCtx *fn_ctx) {
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, func, LLVMTypeOf(func));
   sym->symbol_data.STYPE_FUNCTION.fn_type = fn_type;
+  sym->symbol_data.STYPE_FUNCTION.recursive_ref = true;
 
   ht *scope = fn_ctx->frame->table;
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);

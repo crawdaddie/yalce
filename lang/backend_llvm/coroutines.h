@@ -14,9 +14,10 @@ LLVMValueRef create_coroutine_instance_from_constructor(JITSymbol *sym,
                                                         LLVMModuleRef module,
                                                         LLVMBuilderRef builder);
 
-LLVMValueRef yield_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
-                                      LLVMModuleRef module,
-                                      LLVMBuilderRef builder);
+LLVMValueRef yield_from_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder);
 
-LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder);
 #endif

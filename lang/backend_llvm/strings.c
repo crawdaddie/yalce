@@ -155,8 +155,6 @@ LLVMValueRef char_to_string(LLVMValueRef char_value, LLVMModuleRef module,
 LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  LLVMDumpValue(opt_value);
-  print_type(val_type);
   LLVMValueRef result = LLVMBuildSelect(
       builder, codegen_option_is_none(opt_value, builder),
 

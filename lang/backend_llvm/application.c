@@ -135,14 +135,13 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   Type *symbol_type = sym->symbol_type;
 
   if (is_coroutine_constructor_type(symbol_type)) {
-    printf("call coroutine constructor: (scope %d) \n", ctx->stack_ptr);
     ast->md = fn_return_type(symbol_type);
-    print_type(ast->md);
-
     return create_coroutine_instance_from_constructor(
         sym, ast->data.AST_APPLICATION.args, args_len, ctx, module, builder);
+
   } else if (is_coroutine_type(symbol_type)) {
-    return yield_coroutine_instance(sym, ctx, module, builder);
+
+    return yield_from_coroutine_instance(sym, ctx, module, builder);
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
