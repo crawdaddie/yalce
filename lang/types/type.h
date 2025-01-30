@@ -91,6 +91,8 @@ extern Type t_builtin_and;
 
 extern Type t_builtin_char_of;
 
+extern Type t_cor_wrap_effect_fn_sig;
+
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"

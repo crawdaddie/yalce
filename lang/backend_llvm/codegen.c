@@ -41,9 +41,12 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
 
+  // print_ast(ast->data.AST_BODY.stmts[0]);
+  // printf("body? %p next in expr %p\n", body,
+  //        ast->data.AST_BODY.stmts[0]->data.AST_LET.in_expr);
+
   if (body == NULL) {
     LLVMDeleteFunction(func);
-
     return NULL;
   }
 

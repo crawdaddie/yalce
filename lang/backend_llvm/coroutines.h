@@ -20,4 +20,9 @@ LLVMValueRef yield_from_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
 
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
+
+LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder);
+
 #endif

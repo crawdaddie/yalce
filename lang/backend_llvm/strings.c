@@ -1,13 +1,10 @@
 #include "backend_llvm/strings.h"
 #include "backend_llvm/array.h"
-#include "list.h"
 #include "types.h"
 #include "types/type.h"
 #include "util.h"
-#include "ylc_stdlib.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
-#include <stdlib.h>
 #include <string.h>
 
 LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,

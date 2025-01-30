@@ -161,6 +161,28 @@ LLVMValueRef _cor_defer(LLVMValueRef instance_ptr, LLVMValueRef next_struct,
       (LLVMValueRef[]){instance_ptr, next_struct, ret_val_ref}, 3,
       "call_cor_defer");
 }
+LLVMValueRef _cor_wrap_effect(LLVMValueRef instance_ptr,
+                              LLVMValueRef effect_handler, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  // cor *cor_wrap_effect(cor *this, EffectWrapper effect_fn);
+  //
+  LLVMValueRef cor_wrap_effect_func =
+      LLVMGetNamedFunction(module, "cor_wrap_effect");
+  LLVMTypeRef inst_type = cor_inst_struct_type();
+
+  LLVMTypeRef cor_wrap_effect_type = LLVMFunctionType(
+      LLVMPointerType(inst_type, 0),
+      (LLVMTypeRef[]){LLVMPointerType(inst_type, 0), GENERIC_PTR}, 2, false);
+
+  if (!cor_wrap_effect_func) {
+    cor_wrap_effect_func =
+        LLVMAddFunction(module, "cor_wrap_effect", cor_wrap_effect_type);
+  }
+
+  return LLVMBuildCall2(builder, cor_wrap_effect_type, cor_wrap_effect_func,
+                        (LLVMValueRef[]){instance_ptr, effect_handler}, 2,
+                        "call_cor_wrap_effect");
+}
 
 LLVMValueRef null_cor_inst() {
   LLVMValueRef null_ptr =
@@ -241,8 +263,6 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
   LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
   int fn_len = ast->data.AST_LAMBDA.len;
 
-  printf("set local state args %d\n", fn_len);
-  print_type(constructor_type);
   if (fn_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
   } else {
     LLVMValueRef state_gep = get_instance_state_gep(instance_ptr, builder);
@@ -411,10 +431,6 @@ LLVMValueRef create_coroutine_instance_from_constructor(
 
   LLVMValueRef state_struct_ptr =
       create_coroutine_state_ptr(constructor_type, args, ctx, module, builder);
-  if (state_struct_ptr) {
-    LLVMDumpValue(state_struct_ptr);
-    printf("\n");
-  }
 
   // Create and initialize the cor struct
   LLVMValueRef cor_struct =
@@ -552,4 +568,48 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMPositionBuilderAtEnd(builder, next_case_block);
   }
   return NULL;
+}
+
+LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
+                                            LLVMModuleRef module,
+                                            LLVMBuilderRef builder) {
+  LLVMValueRef instance_ptr =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMValueRef wrapper_func =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  Type *coroutine_type = ast->md;
+  Type *ret_val_type = coroutine_type->data.T_CONS.args[1];
+  ret_val_type = fn_return_type(ret_val_type);
+  ret_val_type = type_of_option(ret_val_type);
+
+  LLVMTypeRef llvm_ret_val_type =
+      type_to_llvm_type(ret_val_type, ctx->env, module);
+
+
+  LLVMValueRef func = LLVMAddFunction(
+      module, "coroutine_effect_wrapper",
+      LLVMFunctionType(LLVMVoidType(),
+                       (LLVMTypeRef[]){LLVMPointerType(llvm_ret_val_type, 0)},
+                       1, false));
+
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, block);
+  LLVMValueRef ret_val_ptr = LLVMGetParam(func, 0);
+  LLVMValueRef ret_val =
+      LLVMBuildLoad2(builder, llvm_ret_val_type, ret_val_ptr, "ret_val");
+
+  LLVMBuildCall2(builder,
+                 LLVMFunctionType(LLVMVoidType(),
+                                  (LLVMTypeRef[]){llvm_ret_val_type}, 1, false),
+                 wrapper_func, (LLVMValueRef[]){ret_val}, 1,
+                 "call_wrapper_func");
+
+  LLVMBuildRet(builder, LLVMGetUndef(LLVMVoidType()));
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  return _cor_wrap_effect(instance_ptr, func, module, builder);
+
 }

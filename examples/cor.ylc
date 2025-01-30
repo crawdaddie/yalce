@@ -79,9 +79,8 @@ let iter_all_arg = fn () ->
     yield 3.
   ;;
 
-  let inst = co_void 2. 1. in
+  let inst = co_void 2. 1.;
   print `
-
 ## with args 1. -> 2. -> 1. -> 3. ...
 {inst ()}
 {inst ()}
@@ -90,6 +89,6 @@ let iter_all_arg = fn () ->
 {inst ()}
 {inst ()}
 `
-;;
-
+;; 
 iter_all_arg ();
+

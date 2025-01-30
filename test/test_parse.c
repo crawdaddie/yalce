@@ -321,6 +321,12 @@ int main() {
   status &= test_parse("*x;", "(deref x)");
 
   status &= test_parse("f @@ x y;", "(f (x y))");
+  status &= test_parse("let f = (fn () ->\n"
+                       "1\n"
+                       ";) in f ();\n",
+                       "(let f (f () -> \n"
+                       "1)\n"
+                       ") : (f ())");
   // extern funcs
   return status ? 0 : 1;
 }

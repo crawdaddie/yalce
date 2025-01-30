@@ -144,6 +144,21 @@ Type t_option_of_var =
 Type *type_of_option(Type *option) {
   return option->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
+
+Type t_cor_wrap_ret_type = {T_VAR, {.T_VAR = "tt"}};
+Type t_cor_wrap_state_type = {T_VAR, {.T_VAR = "xx"}};
+
+Type t_cor_wrap = {
+    T_CONS,
+    {.T_CONS = {
+         "coroutine",
+         (Type *[]){&t_cor_wrap_state_type,
+                    &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_cor_wrap_ret_type))},
+         2}}};
+
+Type t_cor_wrap_effect_fn_sig = MAKE_FN_TYPE_3(
+    &MAKE_FN_TYPE_2(&t_cor_wrap_ret_type, &t_void), &t_cor_wrap, &t_cor_wrap);
+
 /*
 Type t_cor_params = TVAR("cor_params");
 Type t_cor_ret = TVAR("cor_ret");
@@ -159,15 +174,15 @@ Type t_itered_cor_inst = COR_INST(&t_cor_params, &t_cor_ret_opt);
 Type t_iter_cor_def = MAKE_FN_TYPE_2(&t_cor_ret, &t_void);
 
 Type t_iter_cor_sig =
-    MAKE_FN_TYPE_3(&t_iter_cor_def, &COR_INST(&t_cor_params, &t_cor_ret_opt),
-                   &COR_INST(&t_cor_params, &t_cor_ret_opt));
+    MAKE_FN_TYPE_3(&t_iter_cor_def, &COR_INST(&t_cor_params,
+&t_cor_ret_opt), &COR_INST(&t_cor_params, &t_cor_ret_opt));
 
 Type t_array_cor_el = TVAR("array_cor");
 Type t_array_cor_ret_opt =
-    TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_array_cor_el), &t_none);
-Type t_array_cor_params = TARRAY(&t_array_cor_el);
-Type t_iter_of_array_sig = MAKE_FN_TYPE_2(
-    &t_array_cor_params, &COR_INST(&t_array_cor_params, &t_array_cor_ret_opt));
+    TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_array_cor_el),
+&t_none); Type t_array_cor_params = TARRAY(&t_array_cor_el); Type
+t_iter_of_array_sig = MAKE_FN_TYPE_2( &t_array_cor_params,
+&COR_INST(&t_array_cor_params, &t_array_cor_ret_opt));
 
 Type t_list_cor_el = TVAR("list_cor");
 Type t_list_cor_ret_opt =

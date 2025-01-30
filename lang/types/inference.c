@@ -240,6 +240,7 @@ void initialize_builtin_types() {
 
   add_builtin("||", &t_builtin_or);
   add_builtin("&&", &t_builtin_and);
+  add_builtin("cor_wrap_effect", &t_cor_wrap_effect_fn_sig);
 }
 
 Type *param_binding_type(Ast *ast) {
@@ -1305,9 +1306,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
           print_ast_err(ast);
           return NULL;
         } else {
+
           // Regular function type case
           if (!unify_in_ctx(current_type->data.T_FN.from, arg_type, &app_ctx)) {
             fprintf(stderr, "Type mismatch in function application\n");
+            print_ast_err(ast);
             return NULL;
           }
 

@@ -49,3 +49,11 @@ cor *cor_reset(cor *this, cor next_struct, void *ret_val);
     return NULL;                                                               \
   }                                                                            \
     }
+
+typedef void (*EffectWrapper)(void *ret_val);
+
+struct wrap_state {
+  cor *wrapped;
+  void (*effect)(void *ret_val);
+};
+cor *cor_wrap_effect(cor *this, EffectWrapper effect_fn);

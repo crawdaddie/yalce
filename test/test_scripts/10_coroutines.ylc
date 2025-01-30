@@ -19,38 +19,35 @@ let test_iter_all_arg = fn () ->
   ;;
 
   let inst = co_void 2. in
-  # (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
-  print `{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n`;
-  false
+  (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
 ;;
 
-# let test_rec = fn () ->
-#   let co_void_rec = fn () ->
-#     yield 1.;
-#     yield 2.;
-#     yield co_void_rec ()
-#   ;;
-#
-#   let inst = co_void_rec () in
-#   print `{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n`;
-#   true
-# ;;
-
-let test_seq = fn () ->
+let test_embed_seq = fn () ->
 
   let ne = fn () ->
-    yield 300.;
-    yield 400.
+    yield 300;
+    yield 400
   ;;
 
   let co_void = fn () ->
-    yield 1.;
-    yield 2.;
+    yield 1;
+    yield 2;
     yield ne ();
-    yield 3.
+    yield 3
   ;;
 
   let inst = co_void () in
-  # print `{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n`;
-  true
+  (inst () == Some 1) && (inst () == Some 2) && (inst () == Some 300) && (inst () == Some 400) && (inst () == Some 3) && (inst () == None)
 ;;
+
+let test_rec = fn () ->
+  let co_void_rec = fn () ->
+    yield 1;
+    yield 2;
+    yield co_void_rec ()
+  ;;
+
+  let inst = co_void_rec () in
+  (inst () == Some 1) && (inst () == Some 2) && (inst () == Some 1) && (inst () == Some 2)
+;;
+

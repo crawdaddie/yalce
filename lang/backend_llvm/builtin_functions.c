@@ -9,6 +9,7 @@
 #include "types.h"
 #include "util.h"
 #include "llvm-c/Core.h"
+#include "backend_llvm/coroutines.h"
 
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
@@ -561,6 +562,9 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("||", &t_builtin_or, LogicalOrHandler);
   GENERIC_FN_SYMBOL("&&", &t_builtin_and, LogicalAndHandler);
+
+  GENERIC_FN_SYMBOL("cor_wrap_effect", &t_cor_wrap_effect_fn_sig, WrapCoroutineWithEffectHandler);
+
   // GENERIC_FN_SYMBOL("Char", &t_builtin_char_of, CharHandler);
   // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_DATA_PTR, &t_array_data_ptr_fn_sig);
   //
