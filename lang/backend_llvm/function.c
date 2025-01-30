@@ -96,8 +96,6 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
-  printf("codegen fn\n");
-  print_ast(ast);
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
   if (fn_name.chars == NULL) {

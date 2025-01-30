@@ -1,0 +1,95 @@
+let iter_all_void = fn () ->
+  let co_void = fn () ->
+    yield 1.;
+    yield 2.;
+    yield 3.
+  ;;
+
+  let inst = co_void () in
+
+  print `
+## co_void 1. -> 2. -> 3. -> done
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+`
+
+;;
+
+iter_all_void ();
+
+let rec = fn () ->
+  let co_void_rec = fn () ->
+    yield 1.;
+    yield 2.;
+    yield co_void_rec ()
+  ;;
+
+  let inst = co_void_rec () in
+  print `
+
+## co_void_rec 1. -> 2. -> 1. -> 2. ...
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+`
+;;
+
+rec ();
+
+let seq = fn () ->
+
+  let ne = fn () ->
+    yield 300.;
+    yield 400.
+  ;;
+
+  let co_void = fn () ->
+    yield 1.;
+    yield 2.;
+    yield ne ();
+    yield 3.
+  ;;
+
+  let inst = co_void () in
+  print `
+
+## embed 1. -> 2. -> 300. -> 400. -> 3. -> done
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+`
+;;
+seq ();
+
+let iter_all_arg = fn () ->
+  let co_void = fn a b ->
+    yield 1.;
+    yield a;
+    yield b;
+    yield 3.
+  ;;
+
+  let inst = co_void 2. 1. in
+  print `
+
+## with args 1. -> 2. -> 1. -> 3. ...
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+`
+;;
+
+iter_all_arg ();
