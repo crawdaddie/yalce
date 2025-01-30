@@ -153,6 +153,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
+
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);
 
@@ -204,6 +205,13 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
       if (original_callable_sym->type == STYPE_FUNCTION) {
         callable = original_callable_sym->val;
       } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION) {
+
+    print_ast(ast);
+    printf("get specific callable\n");
+    print_type(expected_fn_type);
+    print_type(ast->data.AST_APPLICATION.function->md);
+    print_type(ast->data.AST_APPLICATION.args->md);
+    print_type(ast->data.AST_APPLICATION.args[1].md);
         callable = get_specific_callable(
             original_callable_sym, full_expected_fn_type, ctx, module, builder);
       } else {

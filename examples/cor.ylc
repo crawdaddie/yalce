@@ -92,3 +92,26 @@ let iter_all_arg = fn () ->
 ;; 
 iter_all_arg ();
 
+let wrapper = fn x -> print `specially wrapped: {x}\n`
+;;
+
+let co_void = fn () ->
+  yield 1;
+  yield 2;
+  yield 3;
+  yield 200
+;;
+
+let inst = (co_void () |> cor_wrap_effect wrapper);
+
+print `
+## co_void wrapped 1 -> 2 -> 3 -> done
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+{inst ()}
+`
+
+

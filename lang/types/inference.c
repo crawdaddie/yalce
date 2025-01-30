@@ -696,6 +696,8 @@ bool occurs_check(Type *var, Type *t) {
 }
 
 Type *apply_substitution(Substitution *subst, Type *t) {
+
+
   if (!t)
     return NULL;
 
@@ -1260,12 +1262,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
       break;
     }
 
+
     TICtx app_ctx = *ctx;
     app_ctx.constraints = NULL;
 
     if (!fn_type->is_recursive_fn_ref) {
       fn_type = deep_copy_type(fn_type);
     }
+    // printf("infer application\n");
+    // print_ast(ast);
+    // print_type(fn_type);
 
     Type *current_type = fn_type;
 
@@ -1299,6 +1305,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
 
     } else {
+
       for (int i = 0; i < app_len; i++) {
         Type *arg_type = arg_types[i];
         if (current_type->kind != T_FN) {

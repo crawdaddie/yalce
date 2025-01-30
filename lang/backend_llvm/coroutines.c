@@ -573,16 +573,26 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
                                             LLVMModuleRef module,
                                             LLVMBuilderRef builder) {
-  LLVMValueRef instance_ptr =
-      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-
-  LLVMValueRef wrapper_func =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
   Type *coroutine_type = ast->md;
   Type *ret_val_type = coroutine_type->data.T_CONS.args[1];
   ret_val_type = fn_return_type(ret_val_type);
   ret_val_type = type_of_option(ret_val_type);
+
+  Ast *instance_ptr_arg = ast->data.AST_APPLICATION.args + 1;
+  LLVMValueRef instance_ptr =
+      codegen(instance_ptr_arg, ctx, module, builder);
+
+  Ast *wrapper_arg = ast->data.AST_APPLICATION.args;
+
+  if (is_generic(wrapper_arg->md)) {
+    Type *new_spec_type = type_fn(ret_val_type, &t_void);
+    wrapper_arg->md = new_spec_type;
+
+  }
+
+  LLVMValueRef wrapper_func =
+      codegen(wrapper_arg, ctx, module, builder);
+
 
   LLVMTypeRef llvm_ret_val_type =
       type_to_llvm_type(ret_val_type, ctx->env, module);
