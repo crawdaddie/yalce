@@ -1,30 +1,29 @@
 %test
 
-# let test_iter_all_void = fn () ->
-#   let co_void = fn () ->
-#     yield 1.;
-#     yield 2.;
-#     yield 3.
-#   ;;
-#
-#   let inst = co_void () in
-#   (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
-# ;;
-#
-# let test_iter_all_arg = fn () ->
-#   let co_void = fn a ->
-#     yield 1.;
-#     yield a;
-#     yield 3.
-#   ;;
-#
-#   let inst = co_void 2. in
-#   # print `{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n`;
-#   # true
-#   # # # true
-#   (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
-# ;;
-#
+let test_iter_all_void = fn () ->
+  let co_void = fn () ->
+    yield 1.;
+    yield 2.;
+    yield 3.
+  ;;
+
+  let inst = co_void () in
+  (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
+;;
+
+let test_iter_all_arg = fn () ->
+  let co_void = fn a ->
+    yield 1.;
+    yield a;
+    yield 3.
+  ;;
+
+  let inst = co_void 2. in
+  # (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
+  print `{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n{inst ()}\n`;
+  false
+;;
+
 # let test_rec = fn () ->
 #   let co_void_rec = fn () ->
 #     yield 1.;
