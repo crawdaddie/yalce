@@ -19,7 +19,7 @@ cor *foo_rec(cor *this, int *ret_val) {
 
   case 3: {
     cor next = (cor){.counter = 0, .fn_ptr = (CoroutineFn)foo_rec};
-    return cor_reset(this, &next, ret_val);
+    return cor_reset(this, next, ret_val);
   }
 
   default: {
@@ -64,25 +64,25 @@ cor *bar(cor *this, int *ret_val) {
   }
 
   case 3: {
-    int val = *((int *)this->argv[0]);
+    int val = *((int *)this->argv);
     val += 1000;
-    *(int *)this->argv[0] = val;
+    *(int *)this->argv = val;
     *ret_val = val;
     return this;
   }
 
   case 4: {
-    int val = *((int *)this->argv[0]);
+    int val = *((int *)this->argv);
     val += 1000;
-    *(int *)this->argv[0] = val;
+    *(int *)this->argv = val;
     *ret_val = val;
     return this;
   }
 
   case 5: {
-    int val = *((int *)this->argv[0]);
+    int val = *((int *)this->argv);
     val += 1000;
-    *(int *)this->argv[0] = val;
+    *(int *)this->argv = val;
     *ret_val = val;
     return this;
   }
@@ -109,7 +109,7 @@ cor *foo(cor *this, int *ret_val) {
 
   case 3: {
     cor next = {.counter = 0, .fn_ptr = (CoroutineFn)foo2};
-    return cor_defer(this, &next, ret_val);
+    return cor_defer(this, next, ret_val);
   }
 
   case 4: {
@@ -126,10 +126,10 @@ cor *foo(cor *this, int *ret_val) {
 cor *foo_incr(cor *this, int *ret_val) {
   switch (this->counter) {
   case 0: {
-    int val = *((int *)this->argv[0]);
+    int val = *((int *)this->argv);
     *ret_val = val;
     val += 1;
-    *(int *)this->argv[0] = val;
+    *(int *)this->argv = val;
     return this;
   }
 
@@ -139,7 +139,7 @@ cor *foo_incr(cor *this, int *ret_val) {
                      .fn_ptr = (CoroutineFn)foo_incr,
                      .next = NULL,
                      .argv = this->argv};
-    return cor_reset(this, &next, ret_val);
+    return cor_reset(this, next, ret_val);
   }
 
   default: {
@@ -196,13 +196,12 @@ int main(int argc, char *argv[]) {
 
   ({
     int val = 2;
-    int *vals[1] = {&val};
     cor co = {
-        .counter = 0, .fn_ptr = (CoroutineFn)bar, .next = NULL, .argv = vals};
+        .counter = 0, .fn_ptr = (CoroutineFn)bar, .next = NULL, .argv = &val};
 
     int ret;
     while (cor_next(&co, &ret)) {
-      printf("cor yielded %d state: (%d)\n", ret, *(int *)vals[0]);
+      printf("cor yielded %d state: (%d)\n", ret, val);
     }
 
     printf("cor finished\n\n");
@@ -210,11 +209,10 @@ int main(int argc, char *argv[]) {
 
   ({
     int val = 1;
-    int *vals[1] = {&val};
     cor co = {.counter = 0,
               .fn_ptr = (CoroutineFn)foo_incr,
               .next = NULL,
-              .argv = vals};
+              .argv = &val};
 
     int ret;
     int count = 0;

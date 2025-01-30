@@ -237,6 +237,8 @@ LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *fn_ast,
     return NULL;
   }
 
+  printf("create coroutine cons binding\n");
+  print_ast(fn_ast);
   LLVMValueRef constructor =
       compile_coroutine_fn(constructor_type, fn_ast, ctx, module, builder);
 
@@ -261,10 +263,83 @@ LLVMValueRef create_cor_inst_struct(LLVMBuilderRef builder, LLVMValueRef fn,
   cor_struct = LLVMBuildInsertValue(builder, cor_struct, null_cor_inst(), 2,
                                     "insert_next_null");
   cor_struct = LLVMBuildInsertValue(
-      builder, cor_struct, LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)), 3,
+      builder, cor_struct, state ? state : LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)), 3,
       "insert_state_ptr");
   // LLVMConstStruct();
   return cor_struct;
+}
+LLVMTypeRef create_coroutine_state_type(Type *constructor_type, JITLangCtx *ctx, LLVMModuleRef module) {
+
+  int args_len = fn_type_args_len(constructor_type);
+  Type *state_arg_types[args_len];
+
+  if (args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
+    args_len = 0;
+    return NULL;
+  }
+
+  Type *f = constructor_type;
+  LLVMTypeRef llvm_state_arg_types[args_len];
+  for (int i = 0; i < args_len; i++) {
+    Type *arg_type = f->data.T_FN.from;
+    state_arg_types[i] = arg_type;
+    llvm_state_arg_types[i] = type_to_llvm_type(arg_type, ctx->env, module);
+    f = f->data.T_FN.to;
+  }
+  if (args_len == 1) {
+    return llvm_state_arg_types[0];
+  }
+
+  LLVMTypeRef instance_state_struct_type =
+      LLVMStructType(llvm_state_arg_types, args_len, 0);
+
+  return instance_state_struct_type;
+}
+LLVMValueRef create_coroutine_state_ptr(Type *constructor_type, Ast *args, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  int args_len = fn_type_args_len(constructor_type);
+  Type *state_arg_types[args_len]; 
+
+  if (args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
+    args_len = 0;
+    return NULL;
+  }
+
+  Type *f = constructor_type;
+  LLVMTypeRef llvm_state_arg_types[args_len];
+  for (int i = 0; i < args_len; i++) {
+    Type *arg_type = f->data.T_FN.from;
+    state_arg_types[i] = arg_type;
+    llvm_state_arg_types[i] = type_to_llvm_type(arg_type, ctx->env, module);
+    f = f->data.T_FN.to;
+  }
+
+  if (args_len == 1) {
+    LLVMValueRef state_ptr_alloca = LLVMBuildAlloca(builder, llvm_state_arg_types[0], "");
+    LLVMBuildStore(builder, codegen(args, ctx, module, builder), state_ptr_alloca);
+    return state_ptr_alloca;
+  } 
+
+  LLVMTypeRef instance_state_struct_type =
+      LLVMStructType(llvm_state_arg_types, args_len, 0);
+
+
+  LLVMValueRef inst_state_struct = LLVMGetUndef(instance_state_struct_type);
+
+  for (int i = 0; i < args_len; i++) {
+    Ast *arg_ast = args + i;
+    LLVMValueRef state_arg_val = codegen(arg_ast, ctx, module, builder);
+    inst_state_struct =
+        LLVMBuildInsertValue(builder, inst_state_struct, state_arg_val, i,
+                             "initial_instance_state_arg");
+  }
+
+
+  LLVMValueRef state_ptr_alloca =
+      LLVMBuildAlloca(builder, instance_state_struct_type, "");
+
+  LLVMBuildStore(builder, inst_state_struct, state_ptr_alloca);
+  return state_ptr_alloca;
 }
 
 LLVMValueRef create_coroutine_instance_from_constructor(
@@ -275,48 +350,19 @@ LLVMValueRef create_coroutine_instance_from_constructor(
     return NULL;
   }
 
+  printf("create coroutine instance from cons\n");
+  print_ast(args);
+
   Type *constructor_type = sym->symbol_type;
 
-  // Allocate state variables if we have args
-  // LLVMValueRef state_vars_array = NULL;
-  // if (args_len > 0) {
-  //   // Create array to hold pointers to state variables
-  //   LLVMTypeRef void_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
-  //   LLVMTypeRef argv_array_type = LLVMArrayType(void_ptr_type, args_len);
-  //
-  //   // Allocate the array
-  //   state_vars_array = LLVMBuildAlloca(builder, argv_array_type,
-  //   "state_vars");
-  //
-  //   // Process each argument
-  //   for (int i = 0; i < args_len; i++) {
-  //     // Allocate space for the state variable
-  //     LLVMValueRef state_var = LLVMBuildAlloca(
-  //         builder,
-  //         type_to_llvm_type(constructor_type->data.T_FN.from, ctx->env,
-  //         module), "state_var");
-  //
-  //     // Store the initial value
-  //     LLVMValueRef init_val = codegen(args + i, ctx, module, builder);
-  //     LLVMBuildStore(builder, init_val, state_var);
-  //
-  //     // Cast state var pointer to void*
-  //     LLVMValueRef state_var_void_ptr = LLVMBuildBitCast(
-  //         builder, state_var, void_ptr_type, "state_var_void_ptr");
-  //
-  //     // Store the pointer in the array
-  //     LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), 0, 0),
-  //                               LLVMConstInt(LLVMInt32Type(), i, 0)};
-  //     LLVMValueRef ptr =
-  //         LLVMBuildGEP2(builder, argv_array_type, state_vars_array, indices,
-  //         2,
-  //                       "state_var_ptr");
-  //     LLVMBuildStore(builder, state_var_void_ptr, ptr);
-  //   }
-  // }
+  LLVMValueRef state_struct_ptr = create_coroutine_state_ptr(constructor_type, args, ctx, module, builder);
+  if (state_struct_ptr) {
+    LLVMDumpValue(state_struct_ptr);
+  printf("\n");
+  }
 
   // Create and initialize the cor struct
-  LLVMValueRef cor_struct = create_cor_inst_struct(builder, sym->val, NULL);
+  LLVMValueRef cor_struct = create_cor_inst_struct(builder, sym->val, state_struct_ptr);
 
   LLVMTypeRef cor_struct_type = cor_inst_struct_type();
   LLVMValueRef alloca =

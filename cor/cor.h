@@ -4,7 +4,7 @@ typedef struct cor {
   int counter;
   CoroutineFn fn_ptr;
   struct cor *next;
-  void **argv;
+  void *argv;
 } cor;
 
 #define MAPSIZE
