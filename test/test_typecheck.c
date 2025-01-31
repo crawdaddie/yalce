@@ -551,6 +551,7 @@ int main() {
       ";;\n",
       &MAKE_FN_TYPE_2(&t_void, &cor));
   });
+  T("let sq = fn x: (Int) -> x * 1.;;", &MAKE_FN_TYPE_2(&t_int, &t_num));
 
   // ({
   //   Type cor =

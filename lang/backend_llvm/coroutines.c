@@ -183,7 +183,37 @@ LLVMValueRef _cor_wrap_effect(LLVMValueRef instance_ptr,
                         (LLVMValueRef[]){instance_ptr, effect_handler}, 2,
                         "call_cor_wrap_effect");
 }
+LLVMValueRef _cor_map(LLVMValueRef instance_ptr, LLVMValueRef map_fn,
+                      LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  // cor *cor_map(cor *this, CoroutineFn map_fn) {
+  //
+  //   cor mapped_struct = (cor){
+  //       .counter = 0, .fn_ptr = (CoroutineFn)map_fn, .next = NULL, .argv =
+  //       this};
+  //   cor *mapped = cor_alloc();
+  //   *mapped = mapped_struct;
+  //
+  //   return mapped;
+  // }
+  //
+  //
+  LLVMValueRef cor_map_func = LLVMGetNamedFunction(module, "cor_map");
+  LLVMTypeRef inst_type = cor_inst_struct_type();
+
+  LLVMTypeRef cor_map_type = LLVMFunctionType(
+      LLVMPointerType(inst_type, 0),
+      (LLVMTypeRef[]){LLVMPointerType(inst_type, 0), cor_coroutine_fn_type()},
+      2, false);
+
+  if (!cor_map_func) {
+    cor_map_func = LLVMAddFunction(module, "cor_map", cor_map_type);
+  }
+
+  return LLVMBuildCall2(builder, cor_map_type, cor_map_func,
+                        (LLVMValueRef[]){instance_ptr, map_fn}, 2,
+                        "call_cor_map");
+}
 LLVMValueRef null_cor_inst() {
   LLVMValueRef null_ptr =
       LLVMConstNull(LLVMPointerType(cor_inst_struct_type(), 0));
@@ -579,24 +609,19 @@ LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
   ret_val_type = type_of_option(ret_val_type);
 
   Ast *instance_ptr_arg = ast->data.AST_APPLICATION.args + 1;
-  LLVMValueRef instance_ptr =
-      codegen(instance_ptr_arg, ctx, module, builder);
+  LLVMValueRef instance_ptr = codegen(instance_ptr_arg, ctx, module, builder);
 
   Ast *wrapper_arg = ast->data.AST_APPLICATION.args;
 
   if (is_generic(wrapper_arg->md)) {
     Type *new_spec_type = type_fn(ret_val_type, &t_void);
     wrapper_arg->md = new_spec_type;
-
   }
 
-  LLVMValueRef wrapper_func =
-      codegen(wrapper_arg, ctx, module, builder);
-
+  LLVMValueRef wrapper_func = codegen(wrapper_arg, ctx, module, builder);
 
   LLVMTypeRef llvm_ret_val_type =
       type_to_llvm_type(ret_val_type, ctx->env, module);
-
 
   LLVMValueRef func = LLVMAddFunction(
       module, "coroutine_effect_wrapper",
@@ -621,5 +646,68 @@ LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
   return _cor_wrap_effect(instance_ptr, func, module, builder);
+}
 
+LLVMValueRef MapCoroutineHandler(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+  printf("map handler\n");
+  print_type(ast->md);
+  Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+
+  Type *map_func_type = expected_fn_type->data.T_FN.from;
+  Type *from = map_func_type->data.T_FN.from;
+  Type *to = map_func_type->data.T_FN.to;
+
+  Ast *map_func_arg = ast->data.AST_APPLICATION.args;
+  map_func_arg->md = map_func_type;
+  LLVMValueRef map_func = codegen(map_func_arg, ctx, module, builder);
+
+  LLVMValueRef original_coroutine =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMTypeRef llvm_to_val_type = type_to_llvm_type(to, ctx->env, module);
+  LLVMTypeRef llvm_from_val_type = type_to_llvm_type(from, ctx->env, module);
+
+  LLVMTypeRef llvm_map_func_type = LLVMFunctionType(
+      llvm_to_val_type, (LLVMTypeRef[]){llvm_from_val_type}, 1, false);
+
+  LLVMTypeRef map_wrapper_func_type = cor_coroutine_fn_type();
+  LLVMValueRef map_wrapper_func = LLVMAddFunction(
+      module, "coroutine_map_wrapper_func", map_wrapper_func_type);
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(map_wrapper_func, "entry");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, block);
+  LLVMValueRef mapped_instance_ptr = LLVMGetParam(map_wrapper_func, 0);
+  LLVMValueRef mapped_ret_val_ptr = LLVMGetParam(map_wrapper_func, 1);
+  LLVMValueRef state_gep = get_instance_state_gep(mapped_instance_ptr, builder);
+  LLVMValueRef original_instance_ptr =
+      LLVMBuildLoad2(builder, LLVMPointerType(cor_inst_struct_type(), 0),
+                     state_gep, "follow_gep_to_pointer");
+
+  LLVMValueRef from_ret_val_ptr =
+      LLVMBuildAlloca(builder, llvm_from_val_type, "from_ret_val_ptr");
+
+  LLVMValueRef next =
+      _cor_next(original_instance_ptr, from_ret_val_ptr, module, builder);
+
+  LLVMValueRef mapped_val =
+      LLVMBuildCall2(builder, llvm_map_func_type, map_func,
+                     (LLVMValueRef[]){
+                         LLVMBuildLoad2(builder, llvm_from_val_type,
+                                        from_ret_val_ptr, "from_val"),
+                     },
+                     1, "map_call_to_val");
+
+  LLVMValueRef phi = LLVM_IF_ELSE(
+      builder,
+      (LLVMBuildICmp(builder, LLVMIntEQ, next, null_cor_inst(), "is_null")),
+      null_cor_inst(), ({
+        LLVMBuildStore(builder, mapped_val, mapped_ret_val_ptr);
+        mapped_instance_ptr;
+      }));
+
+  LLVMBuildRet(builder, phi);
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  return _cor_map(original_coroutine, map_wrapper_func, module, builder);
 }

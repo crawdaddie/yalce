@@ -2,7 +2,6 @@
 #define _LANG_TYPE_TYPE_H
 #include "parse.h"
 #include <stdbool.h>
-#include <string.h>
 #include <unistd.h>
 #define _TSTORAGE_SIZE_DEFAULT 2000000
 
@@ -92,6 +91,7 @@ extern Type t_builtin_and;
 extern Type t_builtin_char_of;
 
 extern Type t_cor_wrap_effect_fn_sig;
+extern Type t_cor_map_fn_sig;
 
 // clang-format off
 #define TYPE_NAME_LIST    "List"

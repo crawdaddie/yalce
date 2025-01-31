@@ -134,12 +134,11 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   int expected_args_len = fn_type_args_len(sym->symbol_type);
   Type *symbol_type = sym->symbol_type;
 
-
-  if (sym->type == STYPE_GENERIC_FUNCTION && sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
-      return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
-          ast, ctx, module, builder);
+  if (sym->type == STYPE_GENERIC_FUNCTION &&
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
+    return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
+        ast, ctx, module, builder);
   }
-
 
   if (is_coroutine_constructor_type(symbol_type)) {
     ast->md = fn_return_type(symbol_type);
@@ -150,7 +149,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
     return yield_from_coroutine_instance(sym, ctx, module, builder);
   }
-
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
 
@@ -205,13 +203,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
       if (original_callable_sym->type == STYPE_FUNCTION) {
         callable = original_callable_sym->val;
       } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION) {
-
-    print_ast(ast);
-    printf("get specific callable\n");
-    print_type(expected_fn_type);
-    print_type(ast->data.AST_APPLICATION.function->md);
-    print_type(ast->data.AST_APPLICATION.args->md);
-    print_type(ast->data.AST_APPLICATION.args[1].md);
         callable = get_specific_callable(
             original_callable_sym, full_expected_fn_type, ctx, module, builder);
       } else {

@@ -159,6 +159,28 @@ Type t_cor_wrap = {
 Type t_cor_wrap_effect_fn_sig = MAKE_FN_TYPE_3(
     &MAKE_FN_TYPE_2(&t_cor_wrap_ret_type, &t_void), &t_cor_wrap, &t_cor_wrap);
 
+Type t_cor_map_from_type = {T_VAR, {.T_VAR = "map_from"}};
+Type t_cor_map_to_type = {T_VAR, {.T_VAR = "map_to"}};
+
+Type t_cor_from = {
+    T_CONS,
+    {.T_CONS = {
+         "coroutine",
+         (Type *[]){&(Type){T_VAR, {.T_VAR = "cor_state"}},
+                    &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_cor_map_from_type))},
+         2}}};
+
+Type t_cor_to = {
+    T_CONS,
+    {.T_CONS = {"coroutine",
+                (Type *[]){&(Type){T_VAR, {.T_VAR = "cor_state"}},
+                           &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_cor_map_to_type))},
+                2}}};
+
+Type t_cor_map_fn_sig =
+    MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_cor_map_from_type, &t_cor_map_to_type),
+                   &t_cor_from, &t_cor_to);
+
 /*
 Type t_cor_params = TVAR("cor_params");
 Type t_cor_ret = TVAR("cor_ret");

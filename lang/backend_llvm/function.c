@@ -7,6 +7,7 @@
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+#include <string.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
@@ -96,6 +97,9 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
+  if (ast->tag == AST_EXTERN_FN) {
+    return codegen_extern_fn(ast, ctx, module, builder);
+  }
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
   if (fn_name.chars == NULL) {
@@ -299,7 +303,6 @@ SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
 LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
-
 
   LLVMValueRef func = specific_fns_lookup(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);

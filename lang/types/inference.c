@@ -241,6 +241,7 @@ void initialize_builtin_types() {
   add_builtin("||", &t_builtin_or);
   add_builtin("&&", &t_builtin_and);
   add_builtin("cor_wrap_effect", &t_cor_wrap_effect_fn_sig);
+  add_builtin("cor_map", &t_cor_map_fn_sig);
 }
 
 Type *param_binding_type(Ast *ast) {
@@ -696,7 +697,6 @@ bool occurs_check(Type *var, Type *t) {
 }
 
 Type *apply_substitution(Substitution *subst, Type *t) {
-
 
   if (!t)
     return NULL;
@@ -1261,7 +1261,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
       break;
     }
-
 
     TICtx app_ctx = *ctx;
     app_ctx.constraints = NULL;

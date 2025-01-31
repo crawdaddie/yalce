@@ -52,8 +52,15 @@ cor *cor_reset(cor *this, cor next_struct, void *ret_val);
 
 typedef void (*EffectWrapper)(void *ret_val);
 
-struct wrap_state {
+struct cor_effect_wrap_state {
   cor *wrapped;
   void (*effect)(void *ret_val);
 };
+
 cor *cor_wrap_effect(cor *this, EffectWrapper effect_fn);
+
+struct cor_map_state {
+  cor *original_cor;
+};
+
+cor *cor_map(cor *this, CoroutineFn map_fn);

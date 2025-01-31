@@ -22,7 +22,10 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
 
 LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
-                                       LLVMModuleRef module,
-                                       LLVMBuilderRef builder);
+                                            LLVMModuleRef module,
+                                            LLVMBuilderRef builder);
+
+LLVMValueRef MapCoroutineHandler(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
 #endif
