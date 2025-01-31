@@ -14,6 +14,10 @@ LLVMValueRef create_coroutine_instance_from_constructor(JITSymbol *sym,
                                                         LLVMModuleRef module,
                                                         LLVMBuilderRef builder);
 
+LLVMValueRef create_coroutine_instance_from_generic_constructor(
+    JITSymbol *sym, Type *expected_type, Ast *args, int args_len,
+    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder);
+
 LLVMValueRef yield_from_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder);

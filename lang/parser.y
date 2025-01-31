@@ -70,8 +70,8 @@ Ast* ast_root = NULL;
 %left PIPE
 %left DOUBLE_AT
 %left APPLICATION 
-%left GE LE EQ NE '>' '<'
 %left DOUBLE_AMP DOUBLE_PIPE
+%left GE LE EQ NE '>' '<'
 %left '+' '-'
 %left '*' '/'
 %left MODULO

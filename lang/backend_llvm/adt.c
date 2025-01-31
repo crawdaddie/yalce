@@ -3,6 +3,7 @@
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/Types.h"
+#include <string.h>
 
 LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
                                         JITLangCtx *ctx, LLVMModuleRef module,

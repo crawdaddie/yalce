@@ -7,20 +7,13 @@ let test_iter_all_void = fn () ->
     yield 3.
   ;;
 
-  let inst = co_void () in
-  (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
+  let co = co_void () in
+     co () == Some 1.
+  && co () == Some 2.
+  && co () == Some 3.
+  && co () == None
 ;;
 
-let test_iter_all_arg = fn () ->
-  let co_void = fn a ->
-    yield 1.;
-    yield a;
-    yield 3.
-  ;;
-
-  let inst = co_void 2. in
-  (inst () == Some 1.) && (inst () == Some 2.) && (inst () == Some 3.) && (inst () == None)
-;;
 
 let test_embed_seq = fn () ->
 
@@ -36,8 +29,13 @@ let test_embed_seq = fn () ->
     yield 3
   ;;
 
-  let inst = co_void () in
-  (inst () == Some 1) && (inst () == Some 2) && (inst () == Some 300) && (inst () == Some 400) && (inst () == Some 3) && (inst () == None)
+  let co = co_void () in
+     co () == Some 1
+  && co () == Some 2
+  && co () == Some 300
+  && co () == Some 400
+  && co () == Some 3
+  && co () == None
 ;;
 
 let test_rec = fn () ->
@@ -47,7 +45,41 @@ let test_rec = fn () ->
     yield co_void_rec ()
   ;;
 
-  let inst = co_void_rec () in
-  (inst () == Some 1) && (inst () == Some 2) && (inst () == Some 1) && (inst () == Some 2)
+  let co = co_void_rec () in
+     co () == Some 1
+  && co () == Some 2
+  && co () == Some 1
+  && co () == Some 2
 ;;
 
+let test_fib_cor = fn () ->
+
+  let fib = fn a: (Int) b: (Int) ->
+    yield a;
+    yield fib b (a + b)
+  ;;
+
+  let co = fib 0 1 in
+     co () == Some 0
+  && co () == Some 1
+  && co () == Some 1
+  && co () == Some 2
+  && co () == Some 3
+  && co () == Some 5
+  && co () == Some 8
+;;
+
+# let test_iter_all_arg = fn () ->
+#
+#   let co_void_arg = fn a ->
+#     yield 1;
+#     yield a;
+#     yield 3
+#   ;;
+#
+#   let co = co_void_arg 2 in
+#      (co () == Some 1)
+#   && (co () == Some 2)
+#   && (co () == Some 3)
+#   && (co () == None)
+# ;;

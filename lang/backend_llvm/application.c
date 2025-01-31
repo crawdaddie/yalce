@@ -5,6 +5,7 @@
 #include "symbols.h"
 #include "types.h"
 #include "llvm-c/Core.h"
+#include <string.h>
 
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
@@ -68,6 +69,9 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
     } else {
       app_val = codegen(app_arg, ctx, module, builder);
     }
+    // printf("convert types??");
+    // print_type(expected_type);
+    // print_type(app_arg->md);
 
     callable_type = callable_type->data.T_FN.to;
 
@@ -136,14 +140,22 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (sym->type == STYPE_GENERIC_FUNCTION &&
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
+
     return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
         ast, ctx, module, builder);
   }
 
   if (is_coroutine_constructor_type(symbol_type)) {
     ast->md = fn_return_type(symbol_type);
-    return create_coroutine_instance_from_constructor(
-        sym, ast->data.AST_APPLICATION.args, args_len, ctx, module, builder);
+
+    if (sym->type == STYPE_GENERIC_FUNCTION) {
+      return create_coroutine_instance_from_generic_constructor(
+          sym, expected_fn_type, ast->data.AST_APPLICATION.args, args_len, ctx,
+          module, builder);
+    } else {
+      return create_coroutine_instance_from_constructor(
+          sym, ast->data.AST_APPLICATION.args, args_len, ctx, module, builder);
+    }
 
   } else if (is_coroutine_type(symbol_type)) {
 
@@ -160,6 +172,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (sym->type == STYPE_FUNCTION) {
     Type *callable_type = sym->symbol_type;
+    // if (strcmp(sym_name, "sin") == 0) {
+    //   printf("call callable\n");
+    //   print_type(callable_type);
+    // }
 
     LLVMValueRef res =
         call_callable(ast, callable_type, sym->val, ctx, module, builder);

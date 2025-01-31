@@ -595,6 +595,9 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
     }
     return true;
   }
+  if (t1->kind == T_UINT64 && t2->kind == T_INT) {
+    return true;
+  }
 
   // Handle primitive types
   return t1->kind == t2->kind;
@@ -1191,6 +1194,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // First infer the function type
     Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
 
+    const char *fn_name =
+        ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+
     if (!fn_type) {
       fprintf(stderr, "Could not infer function type in application\n");
       return NULL;
@@ -1360,6 +1366,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // for (int i = 0; i < app_len; i++) {
     //   print_type(ast->data.AST_APPLICATION.args[i].md);
     // }
+    if (strcmp(fn_name, "cor_map") == 0) {
+      print_ast(ast);
+      print_type(ast->data.AST_APPLICATION.args->md);
+    }
 
     break;
   }

@@ -20,6 +20,8 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder);
 
+LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key);
+
 bool fn_types_match(Type *t1, Type *t2);
 
 LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
@@ -27,4 +29,10 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
 void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
                           JITLangCtx *fn_ctx);
+
+SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
+                                 LLVMValueRef func);
+
+TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
+                                   Type *specific_type);
 #endif
