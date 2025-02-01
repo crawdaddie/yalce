@@ -5,6 +5,7 @@
 #include "backend_llvm/util.h"
 #include "builtin_functions.h"
 #include "list.h"
+#include "serde.h"
 #include "symbols.h"
 #include "tuple.h"
 #include "llvm-c/Core.h"
@@ -17,7 +18,6 @@ JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
-
 
 LLVMValueRef codegen_simple_if_else(LLVMValueRef test_val, Ast *branches,
                                     JITLangCtx *ctx, LLVMModuleRef module,

@@ -148,34 +148,37 @@ Type *type_of_option(Type *option) {
 Type t_cor_wrap_ret_type = {T_VAR, {.T_VAR = "tt"}};
 Type t_cor_wrap_state_type = {T_VAR, {.T_VAR = "xx"}};
 
-Type t_cor_wrap = {
-    T_CONS,
-    {.T_CONS = {
-         "coroutine",
-         (Type *[]){&t_cor_wrap_state_type,
-                    &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_cor_wrap_ret_type))},
-         2}}};
+// Type t_cor_wrap = {
+//     T_CONS,
+//     {.T_CONS = {
+//          "coroutine",
+//          (Type *[]){&t_cor_wrap_state_type,
+//                     &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_cor_wrap_ret_type))},
+//          2}}};
+//
+Type t_cor_wrap = {T_FN,
+                   {.T_FN =
+                        {
+                            .from = &t_void,
+                            .to = &TOPT(&t_cor_wrap_ret_type),
+                        }},
+                   .is_coroutine_instance = true};
 
 Type t_cor_wrap_effect_fn_sig = MAKE_FN_TYPE_3(
     &MAKE_FN_TYPE_2(&t_cor_wrap_ret_type, &t_void), &t_cor_wrap, &t_cor_wrap);
 
 Type t_cor_map_from_type = {T_VAR, {.T_VAR = "map_from"}};
+
 Type t_cor_map_to_type = {T_VAR, {.T_VAR = "map_to"}};
 
 Type t_cor_from = {
-    T_CONS,
-    {.T_CONS = {
-         "coroutine",
-         (Type *[]){&(Type){T_VAR, {.T_VAR = "cor_state"}},
-                    &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_cor_map_from_type))},
-         2}}};
+    T_FN,
+    {.T_FN = {.from = &t_void, .to = &TOPT(&t_cor_map_from_type)}},
+    .is_coroutine_instance = true};
 
-Type t_cor_to = {
-    T_CONS,
-    {.T_CONS = {"coroutine",
-                (Type *[]){&(Type){T_VAR, {.T_VAR = "cor_state"}},
-                           &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_cor_map_to_type))},
-                2}}};
+Type t_cor_to = {T_FN,
+                 {.T_FN = {.from = &t_void, .to = &TOPT(&t_cor_map_to_type)}},
+                 .is_coroutine_instance = true};
 
 Type t_cor_map_fn_sig =
     MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_cor_map_from_type, &t_cor_map_to_type),
@@ -347,11 +350,19 @@ char *type_to_string(Type *t, char *buffer) {
     buffer = tc_list_to_string(t, buffer);
     break;
   }
+
   case T_FN: {
     Type *fn = t;
 
     buffer = strcat(buffer, "(");
+    if (fn->is_coroutine_constructor) {
+      buffer = strcat(buffer, "[coroutine constructor]");
+    }
+
     while (fn->kind == T_FN) {
+      if (fn->is_coroutine_instance) {
+        buffer = strcat(buffer, "[coroutine instance]");
+      }
       buffer = type_to_string(fn->data.T_FN.from, buffer);
       buffer = strncat(buffer, " -> ", 4);
       fn = fn->data.T_FN.to;
@@ -679,6 +690,12 @@ Type *create_tuple_type(int len, Type **contained_types) {
   return tuple;
 }
 
+Type *create_coroutine_instance_type(Type *ret_type) {
+  Type *coroutine_fn = type_fn(&t_void, create_option_type(ret_type));
+  coroutine_fn->is_coroutine_instance = true;
+  return coroutine_fn;
+}
+
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
   Type *copy = talloc(sizeof(Type));
@@ -688,6 +705,8 @@ Type *deep_copy_type(const Type *original) {
   copy->constructor_size = original->constructor_size;
   copy->implements = original->implements;
   copy->is_recursive_fn_ref = original->is_recursive_fn_ref;
+  copy->is_coroutine_constructor = original->is_coroutine_constructor;
+  copy->is_coroutine_instance = original->is_coroutine_instance;
 
   // for (int i = 0; i < original->num_implements; i++) {
   //   add_typeclass(copy, original->implements[i]);
@@ -726,6 +745,16 @@ Type *copy_array_type(Type *t) {
 }
 
 int fn_type_args_len(Type *fn_type) {
+  if (fn_type->is_coroutine_constructor) {
+    int args_len = 0;
+    Type *f = fn_type;
+    while (!(f->is_coroutine_instance)) {
+      args_len++;
+      f = f->data.T_FN.to;
+    }
+    return args_len;
+  }
+
   if (fn_type->data.T_FN.from->kind == T_VOID) {
     return 1;
   }
@@ -1227,10 +1256,9 @@ bool application_is_partial(Ast *app) {
 }
 
 bool is_coroutine_type(Type *fn_type) {
-  return fn_type->kind == T_CONS &&
-         strncmp(fn_type->data.T_CONS.name, "coroutine", 9) == 0;
+  return fn_type->kind == T_FN && fn_type->is_coroutine_instance;
 }
 
 bool is_coroutine_constructor_type(Type *fn_type) {
-  return fn_type->kind == T_FN && is_coroutine_type(fn_return_type(fn_type));
+  return fn_type->kind == T_FN && fn_type->is_coroutine_constructor;
 }

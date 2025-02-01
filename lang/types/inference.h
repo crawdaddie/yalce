@@ -35,4 +35,5 @@ void print_builtin_types();
 
 Type *lookup_builtin_type(const char *name);
 
+Type *coroutine_constructor_type_from_fn_type(Type *fn_type);
 #endif

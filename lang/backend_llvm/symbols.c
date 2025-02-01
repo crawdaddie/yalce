@@ -211,18 +211,35 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
 LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                                JITLangCtx *outer_ctx, JITLangCtx *inner_ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
+
   LLVMValueRef expr_val;
   Type *expr_type = expr->md;
 
   if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
-    expr_val =
-        create_curried_fn_binding(binding, expr, outer_ctx, module, builder);
+    if (is_coroutine_type(expr_type)) {
+      expr_val = codegen(expr, outer_ctx, module, builder);
+      LLVMValueRef match_result = codegen_pattern_binding(
+          binding, expr_val, expr_type, in_expr ? inner_ctx : outer_ctx, module,
+          builder);
+      if (!match_result) {
+        fprintf(stderr,
+                "Error: could not bind coroutine instance in let expression "
+                "failed\n");
+        print_ast_err(binding);
+        print_ast_err(expr);
+        return NULL;
+      }
+    } else {
+      expr_val =
+          create_curried_fn_binding(binding, expr, outer_ctx, module, builder);
+    }
 
     return in_expr == NULL ? expr_val
                            : codegen(in_expr, inner_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {
+
     expr_val = create_coroutine_constructor_binding(binding, expr, inner_ctx,
                                                     module, builder);
 
@@ -238,7 +255,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                            : codegen(in_expr, inner_ctx, module, builder);
   }
 
-  if (expr_type->kind == T_FN) {
+  if (expr_type->kind == T_FN && !is_coroutine_type(expr_type)) {
     expr_val = create_fn_binding(binding, expr_type,
                                  codegen_fn(expr, outer_ctx, module, builder),
                                  inner_ctx, module, builder);

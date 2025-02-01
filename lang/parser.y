@@ -55,8 +55,6 @@ Ast* ast_root = NULL;
 %token IN AND
 %token ASYNC
 %token DOUBLE_AT
-%token DOUBLE_AMP
-%token DOUBLE_PIPE
 %token THUNK
 %token IMPORT
 

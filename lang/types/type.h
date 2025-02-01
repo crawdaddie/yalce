@@ -268,7 +268,8 @@ typedef struct Type {
   void *constructor;
   size_t constructor_size;
   bool is_recursive_fn_ref;
-  bool is_coroutine_fn;
+  bool is_coroutine_instance;
+  bool is_coroutine_constructor;
   void *meta;
 } Type;
 
@@ -391,4 +392,6 @@ bool application_is_partial(Ast *app);
 bool is_coroutine_type(Type *fn_type);
 
 bool is_coroutine_constructor_type(Type *fn_type);
+
+Type *create_coroutine_instance_type(Type *ret_type);
 #endif

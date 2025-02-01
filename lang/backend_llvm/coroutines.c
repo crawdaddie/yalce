@@ -35,6 +35,7 @@ LLVMTypeRef create_coroutine_state_type(Type *constructor_type, JITLangCtx *ctx,
                                         LLVMModuleRef module) {
 
   int args_len = fn_type_args_len(constructor_type);
+
   Type *state_arg_types[args_len];
 
   if (args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
@@ -59,6 +60,7 @@ LLVMTypeRef create_coroutine_state_type(Type *constructor_type, JITLangCtx *ctx,
 
   return instance_state_struct_type;
 }
+
 LLVMValueRef get_instance_counter_gep(LLVMValueRef instance_ptr,
                                       LLVMBuilderRef builder) {
   LLVMValueRef element_ptr =
@@ -237,8 +239,8 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
                                          JITLangCtx *ctx, LLVMModuleRef module,
                                          LLVMBuilderRef builder) {
 
-  Type *ret_opt_type =
-      fn_return_type(fn_return_type(constructor_type)->data.T_CONS.args[1]);
+  Type *ret_opt_type = fn_return_type(constructor_type);
+
   Type *ret_type = type_of_option(ret_opt_type);
 
   LLVMTypeRef fn_type = cor_coroutine_fn_type();
@@ -523,17 +525,7 @@ LLVMValueRef yield_from_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
                                            LLVMBuilderRef builder) {
 
   Type *coroutine_type = sym->symbol_type;
-
-  int args_len =
-      coroutine_type->data.T_CONS.args[0] == &t_void
-          ? 0
-          : coroutine_type->data.T_CONS.args[0]->data.T_CONS.num_args;
-
-  Type **state_arg_types =
-      args_len == 0 ? NULL
-                    : coroutine_type->data.T_CONS.args[0]->data.T_CONS.args;
-
-  Type *ret_opt_type = fn_return_type(coroutine_type->data.T_CONS.args[1]);
+  Type *ret_opt_type = fn_return_type(coroutine_type);
   Type *ret_type = type_of_option(ret_opt_type);
   LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx->env, module);
   LLVMValueRef instance_ptr = sym->val;
@@ -569,7 +561,6 @@ codegen_yield_nested_coroutine(JITSymbol *sym, LLVMValueRef instance_ptr,
   if (args_len == 1 && state_type->kind == T_VOID) {
     new_state_ptr = NULL;
   } else {
-
     if (sym->symbol_data.STYPE_FUNCTION.recursive_ref == true) {
       new_state_ptr = get_instance_state_gep(instance_ptr, builder);
       new_state_ptr = LLVMBuildLoad2(
@@ -624,20 +615,20 @@ codegen_yield_nested_coroutine(JITSymbol *sym, LLVMValueRef instance_ptr,
 }
 
 JITSymbol *is_nested_coroutine_expr(Ast *ast, JITLangCtx *ctx) {
+
   if (ast->tag == AST_APPLICATION) {
     JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
     const char *sym_name =
         ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+
     if (!sym) {
       fprintf(stderr, "Error callable symbol %s not found in scope\n",
               sym_name);
       return NULL;
     }
 
-    Type *symbol_type = sym->symbol_type;
-
-    if (is_coroutine_constructor_type(symbol_type)) {
+    if (is_coroutine_constructor_type(sym->symbol_type)) {
       return sym;
     }
   }
@@ -667,17 +658,48 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Ast *yield_expr = ast->data.AST_YIELD.expr;
   JITSymbol *sym = is_nested_coroutine_expr(yield_expr, ctx);
+
   if (sym != NULL) {
     Type *symbol_type = sym->symbol_type;
 
-    Type *nested_cor_type = fn_return_type(symbol_type);
-    Type *state_type = nested_cor_type->data.T_CONS.args[0];
+    // Type *nested_cor_type = fn_return_type(symbol_type);
+    // Type *state_type = neted_cor_type->data.T_CONS.args[0];
+    //
+    int args_len = fn_type_args_len(symbol_type);
 
-    LLVMBuildRet(builder, codegen_yield_nested_coroutine(
-                              sym, instance_ptr, state_type,
-                              yield_expr->data.AST_APPLICATION.args,
-                              yield_expr->data.AST_APPLICATION.len, ret_val_ref,
-                              ctx, module, builder));
+    if (args_len > 1) {
+      Type *contained_types[args_len];
+      Type *f = symbol_type;
+      for (int i = 0; i < args_len; i++) {
+        contained_types[i] = f->data.T_FN.from;
+        f = f->data.T_FN.to;
+      }
+      Type state_type = {T_CONS,
+                         {.T_CONS = {.name = "coroutine_state",
+                                     .args = contained_types,
+                                     .num_args = args_len}}};
+
+      LLVMBuildRet(builder, codegen_yield_nested_coroutine(
+                                sym, instance_ptr, &state_type,
+                                yield_expr->data.AST_APPLICATION.args,
+                                yield_expr->data.AST_APPLICATION.len,
+                                ret_val_ref, ctx, module, builder));
+
+    } else {
+      Type *state_type;
+      if (args_len == 1 && symbol_type->data.T_FN.from->kind == T_VOID) {
+        args_len = 1;
+        state_type = &t_void;
+      } else if (args_len == 1) {
+        state_type = symbol_type->data.T_FN.from;
+      }
+      LLVMBuildRet(builder, codegen_yield_nested_coroutine(
+                                sym, instance_ptr, state_type,
+                                yield_expr->data.AST_APPLICATION.args,
+                                yield_expr->data.AST_APPLICATION.len,
+                                ret_val_ref, ctx, module, builder));
+    }
+
   } else {
     LLVMValueRef expr_val = codegen(yield_expr, ctx, module, builder);
     LLVMBuildStore(builder, expr_val, ret_val_ref);
@@ -693,8 +715,7 @@ LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
                                             LLVMModuleRef module,
                                             LLVMBuilderRef builder) {
   Type *coroutine_type = ast->md;
-  Type *ret_val_type = coroutine_type->data.T_CONS.args[1];
-  ret_val_type = fn_return_type(ret_val_type);
+  Type *ret_val_type = fn_return_type(coroutine_type);
   ret_val_type = type_of_option(ret_val_type);
 
   Ast *instance_ptr_arg = ast->data.AST_APPLICATION.args + 1;

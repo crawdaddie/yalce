@@ -981,32 +981,10 @@ bool unify_in_ctx(Type *arg_type, Type *constraint_type, TICtx *ctx) {
   return true;
 }
 
-Type *coroutine_type_from_fn_type(Type *fn_type) {
-  int args_len = fn_type_args_len(fn_type);
-  Type *state;
-  Type *ret;
-  if (args_len == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
-    state = NULL;
-    ret = fn_type->data.T_FN.to;
-  } else if (args_len == 1) {
-    state = fn_type->data.T_FN.from;
-  } else {
-    Type *f = fn_type;
-    Type **contained_types = talloc(sizeof(Type *) * args_len);
-    int idx = 0;
-    while (f->kind == T_FN) {
-      contained_types[idx] = f->data.T_FN.from;
-      idx++;
-      f = f->data.T_FN.to;
-    }
-    ret = f;
-    state = create_cons_type("coroutine_state", args_len, contained_types);
-  }
+Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
+  Type *ret = fn_return_type(fn_type);
+  Type *coroutine_fn = create_coroutine_instance_type(ret);
 
-  Type **cs = talloc(sizeof(Type *) * 2);
-  cs[0] = state == NULL ? &t_void : state;
-  cs[1] = type_fn(&t_void, create_option_type(ret));
-  Type *coroutine_fn = create_cons_type("coroutine", 2, cs);
   Type *f = deep_copy_type(fn_type);
   Type *ff = f;
 
@@ -1015,6 +993,8 @@ Type *coroutine_type_from_fn_type(Type *fn_type) {
   }
 
   *ff = *coroutine_fn;
+  f->is_coroutine_constructor = true;
+
   return f;
 }
 
@@ -1536,7 +1516,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     if (lambda_ctx.yielded_type) {
-      type = coroutine_type_from_fn_type(type);
+      type = coroutine_constructor_type_from_fn_type(type);
     }
 
     break;
@@ -1664,8 +1644,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       ctx->yielded_type = yield_expr_type;
     } else {
       if (is_coroutine_type(yield_expr_type)) {
-        yield_expr_type = type_of_option(
-            fn_return_type(yield_expr_type->data.T_CONS.args[1]));
+        yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
       }
       // Ast *prev_yield = ctx->yielded_expr;
       Type *prev_yield_type = ctx->yielded_type;
