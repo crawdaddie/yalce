@@ -8,6 +8,7 @@
 #include "match.h"
 #include "serde.h"
 #include "types/type.h"
+#include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -210,33 +211,43 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
 LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                                JITLangCtx *outer_ctx, JITLangCtx *inner_ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
-    LLVMValueRef res =
-        create_curried_fn_binding(binding, expr, outer_ctx, module, builder);
-    return res;
-  }
-
+  LLVMValueRef expr_val;
   Type *expr_type = expr->md;
 
+  if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
+    expr_val =
+        create_curried_fn_binding(binding, expr, outer_ctx, module, builder);
+
+    return in_expr == NULL ? expr_val
+                           : codegen(in_expr, inner_ctx, module, builder);
+  }
+
   if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {
-    return create_coroutine_constructor_binding(binding, expr, inner_ctx,
-                                                module, builder);
+    expr_val = create_coroutine_constructor_binding(binding, expr, inner_ctx,
+                                                    module, builder);
+
+    return in_expr == NULL ? expr_val
+                           : codegen(in_expr, inner_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
-    return create_generic_fn_binding(binding, expr, inner_ctx, module, builder);
+    expr_val =
+        create_generic_fn_binding(binding, expr, inner_ctx, module, builder);
+
+    return in_expr == NULL ? expr_val
+                           : codegen(in_expr, inner_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN) {
+    expr_val = create_fn_binding(binding, expr_type,
+                                 codegen_fn(expr, outer_ctx, module, builder),
+                                 inner_ctx, module, builder);
 
-    LLVMValueRef res = create_fn_binding(
-        binding, expr_type, codegen_fn(expr, outer_ctx, module, builder),
-        inner_ctx, module, builder);
-    return res;
+    return in_expr == NULL ? expr_val
+                           : codegen(in_expr, inner_ctx, module, builder);
   }
 
-  LLVMValueRef expr_val = codegen(expr, outer_ctx, module, builder);
+  expr_val = codegen(expr, outer_ctx, module, builder);
 
   if (!expr_val) {
     return NULL;
@@ -254,12 +265,8 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     return NULL;
   }
 
-  if (in_expr != NULL) {
-    LLVMValueRef res = codegen(in_expr, inner_ctx, module, builder);
-    return res;
-  }
-
-  return expr_val;
+  return in_expr == NULL ? expr_val
+                         : codegen(in_expr, inner_ctx, module, builder);
 }
 
 LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,

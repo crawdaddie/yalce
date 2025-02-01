@@ -5,13 +5,13 @@ let ANSI_YELLOW = `{0x1bc}[33m`;
 let ANSI_BLUE = `{0x1bc}[34m`;
 let ANSI_MAGENTA = `{0x1bc}[35m`;
 let ANSI_CYAN = `{0x1bc}[36m`;
-let ANSI_RESET = `{0x1bc}[0m`;
 
 # Background colors
 let ANSI_BG_RED = `{0x1bc}[41m`;
 let ANSI_BG_GREEN = `{0x1bc}[42m`;
 let ANSI_BG_YELLOW = `{0x1bc}[43m`;
 let ANSI_BG_BLUE = `{0x1bc}[44m`;
+let ANSI_BG_BLUE_BRIGHT = `{0x1bc}[104m`;
 let ANSI_BG_MAGENTA = `{0x1bc}[45m`;
 let ANSI_BG_CYAN = `{0x1bc}[46m`;
 

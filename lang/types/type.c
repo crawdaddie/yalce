@@ -24,7 +24,7 @@ Type t_void = {T_VOID};
 Type t_char = {T_CHAR};
 Type t_empty_list = {T_EMPTY_LIST};
 Type t_ptr = {T_CONS,
-              {.T_CONS = {TYPE_NAME_PTR, (Type *[]){&t_char}, 1}},
+              {.T_CONS = {.name = TYPE_NAME_PTR, .num_args = 0}},
               .alias = TYPE_NAME_PTR};
 
 Type t_ptr_generic_contained = {T_VAR, {.T_VAR = "ptr_deref_var"}};

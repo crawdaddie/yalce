@@ -124,15 +124,32 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   case AST_BINOP: {
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
 
-      if (expr->data.AST_BINOP.left->tag == AST_IDENTIFIER &&
-          strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
-                 "Option") == 0) {
-        Type *contained =
-            compute_type_expression(expr->data.AST_BINOP.right, env);
+      if (expr->data.AST_BINOP.left->tag == AST_IDENTIFIER) {
+        if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+                   "Option") == 0) {
+          Type *contained =
+              compute_type_expression(expr->data.AST_BINOP.right, env);
 
-        Type *opt = create_option_type(contained);
+          Type *opt = create_option_type(contained);
 
-        return opt;
+          return opt;
+        }
+
+        if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+                   "Coroutine") == 0) {
+
+          Type *r = compute_type_expression(expr->data.AST_BINOP.right, env);
+
+          Type *opt = create_option_type(r);
+          Type *f = type_fn(&t_void, opt);
+          Type **contained = talloc(sizeof(Type *) * 2);
+
+          contained[0] = &t_void;
+          contained[1] = f;
+          Type *cor = create_cons_type("coroutine", 2, contained);
+
+          return cor;
+        }
       }
 
       Type *contained_type =

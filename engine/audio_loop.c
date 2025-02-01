@@ -322,7 +322,9 @@ static int msleep(long msec) {
 
   return res;
 }
+
 int init_audio() {
+  printf("init audio\n");
   maketable_sq();
   maketable_sin();
   start_audio();

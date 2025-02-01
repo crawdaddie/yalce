@@ -581,6 +581,9 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
 
   // Handle constructed types
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
+    if (is_pointer_type(t1) && is_coroutine_type(t2)) {
+      return true;
+    }
 
     if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
         t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
@@ -596,6 +599,13 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
     return true;
   }
   if (t1->kind == T_UINT64 && t2->kind == T_INT) {
+    return true;
+  }
+  if (t1->kind != t2->kind && is_coroutine_type(t2)) {
+    return unify(t1, t2->data.T_CONS.args[1], constraints);
+  }
+
+  if ((t1->kind != t2->kind) && is_pointer_type(t1) && (t2->kind == T_FN)) {
     return true;
   }
 
@@ -1203,9 +1213,15 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     if (fn_type->kind == T_CONS) {
+      if (is_pointer_type(fn_type) &&
+          ast->data.AST_APPLICATION.args->tag == AST_VOID) {
+        return create_option_type(&t_num);
+      }
+
       // cons application
       Ast *fn_id = ast->data.AST_APPLICATION.function;
       const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
+
       if (is_coroutine_type(fn_type)) {
         type = fn_type->data.T_CONS.args[1];
         type = type->data.T_FN.to;
@@ -1235,7 +1251,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
           if (!unify_in_ctx(arg_type, cons_arg, ctx)) {
             fprintf(stderr,
-                    "Could not constrain type variable to function type\n");
+                    "Could not constrain type variable to function type x\n");
+
+            print_type_err(arg_type);
+            print_type_err(cons_arg);
+
             return NULL;
           }
         }
@@ -1245,6 +1265,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
       } else {
 
         Type *cons = fn_type;
+
+        if (is_pointer_type(cons)) {
+          break;
+        }
+
         for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
           Type *cons_arg = cons->data.T_CONS.args[i];
           Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
@@ -1258,7 +1283,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
           if (!unify_in_ctx(arg_type, cons_arg, ctx)) {
             fprintf(stderr,
-                    "Could not constrain type variable to function type\n");
+                    "Could not constrain type variable to function type y\n");
+
+            print_type_err(arg_type);
+            print_type_err(cons_arg);
             return NULL;
           }
         }
@@ -1301,6 +1329,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       if (!unify_in_ctx(fn_type, fn_constraint, &app_ctx)) {
         fprintf(stderr, "Could not constrain type variable to function type\n");
+
+        print_type_err(fn_type);
+        print_type_err(fn_constraint);
         return NULL;
       }
       current_type = ret_type;
@@ -1323,6 +1354,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
           if (!unify_in_ctx(current_type->data.T_FN.from, arg_type, &app_ctx)) {
             fprintf(stderr, "Type mismatch in function application\n");
             print_ast_err(ast);
+            print_type_err(current_type->data.T_FN.from);
+            fprintf(stderr, " != ");
+            print_type_err(arg_type);
+            fprintf(stderr, "\n");
+
             return NULL;
           }
 
@@ -1367,8 +1403,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
     //   print_type(ast->data.AST_APPLICATION.args[i].md);
     // }
     if (strcmp(fn_name, "cor_map") == 0) {
-      print_ast(ast);
-      print_type(ast->data.AST_APPLICATION.args->md);
+      // print_ast(ast);
+      // print_type(ast->data.AST_APPLICATION.args->md);
     }
 
     break;
@@ -1510,8 +1546,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     Ast *expr = ast->data.AST_MATCH.expr;
     // Infer type of expression being matched
     Type *expr_type = infer(expr, ctx);
+
     if (!expr_type) {
       fprintf(stderr, "Could not infer match expression type\n");
+      print_ast_err(expr);
       return NULL;
     }
 

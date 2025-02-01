@@ -183,6 +183,7 @@ int scheduler_event_loop() {
 void schedule_event(void (*callback)(void *, int), double delay_seconds,
                     void *userdata) {
 
+  printf("schedule event %f\n", delay_seconds);
   now = get_time_ns(); // Update 'now' before scheduling
   return _schedule_event(queue, callback, delay_seconds, userdata, now);
 }

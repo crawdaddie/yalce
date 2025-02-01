@@ -38,8 +38,6 @@ LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
 
 LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx
-LANG_LD_FLAGS += -L$(BUILD_DIR)/cor -lcor
-LANG_LD_FLAGS += -Wl,-rpath,@executable_path/cor
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 # Add cor source to LANG_SRCS
@@ -73,16 +71,13 @@ LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 # Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
-.PHONY: all clean engine cor test wasm serve_docs engine_bindings gui cor
+.PHONY: all clean engine test wasm serve_docs engine_bindings gui cor
 
 all: $(BUILD_DIR)/ylc
 debug: all
 
 engine:
 	$(MAKE) -C engine
-
-cor:
-	$(MAKE) -C cor
 
 gui:
 	@echo "######### MAKE GUI------------"
