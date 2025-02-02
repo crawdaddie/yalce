@@ -552,9 +552,9 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
       } else {
         // If t2 is a type var, it inherits the constraint
         //
-        // printf("extend typeclasses\n");
-        // print_type(t2);
-        // print_type(t1);
+        printf("extend typeclasses\n");
+        print_type(t2);
+        print_type(t1);
         t2->implements = t1->implements;
       }
     }
@@ -581,10 +581,6 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
 
   // Handle constructed types
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
-    if (is_pointer_type(t1) && is_coroutine_type(t2)) {
-      return true;
-    }
-
     if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
         t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
       return false;
@@ -600,9 +596,6 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
   }
   if (t1->kind == T_UINT64 && t2->kind == T_INT) {
     return true;
-  }
-  if (t1->kind != t2->kind && is_coroutine_type(t2)) {
-    return unify(t1, t2->data.T_CONS.args[1], constraints);
   }
 
   if ((t1->kind != t2->kind) && is_pointer_type(t1) && (t2->kind == T_FN)) {
@@ -1184,6 +1177,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // First infer the function type
     Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
 
+    if (!fn_type->is_recursive_fn_ref) {
+      fn_type = deep_copy_type(fn_type);
+    }
+
     const char *fn_name =
         ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
@@ -1210,7 +1207,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
 
       else if (is_variant_type(fn_type)) {
+
         Type *cons = find_variant_member(fn_type, fn_name);
+
         if (!cons) {
           fprintf(stderr, "Error: %s not found in variant %s\n", fn_name,
                   cons->data.T_CONS.name);
@@ -1239,7 +1238,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
             return NULL;
           }
         }
+
         Substitution *subst = solve_constraints(ctx->constraints);
+
         type = apply_substitution(subst, fn_type);
 
       } else {
@@ -1277,11 +1278,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     TICtx app_ctx = *ctx;
-    app_ctx.constraints = NULL;
-
-    if (!fn_type->is_recursive_fn_ref) {
-      fn_type = deep_copy_type(fn_type);
-    }
+    // app_ctx.constraints = NULL;
     // printf("infer application\n");
     // print_ast(ast);
     // print_type(fn_type);
@@ -1346,6 +1343,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
         }
       }
     }
+
+    Type *spec_fn;
+
     if (app_ctx.constraints) {
       // After processing all arguments, solve collected constraints
       Substitution *subst = solve_constraints(app_ctx.constraints);
@@ -1359,11 +1359,26 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       // Apply substitutions to get final type
       type = apply_substitution(subst, current_type);
-      Type *spec_fn = apply_substitution(subst, fn_type);
+      spec_fn = apply_substitution(subst, fn_type);
       ast->data.AST_APPLICATION.function->md = spec_fn;
+
+      for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+        Type inferred = *((Type *)ast->data.AST_APPLICATION.args[i].md);
+
+        apply_substitution_to_nodes_rec(subst,
+                                        ast->data.AST_APPLICATION.args + i);
+
+        Type *after = ast->data.AST_APPLICATION.args[i].md;
+        if (inferred.kind == T_VAR && !is_generic(after)) {
+          ctx->current_fn_constraints = constraints_extend(
+              ctx->current_fn_constraints, deep_copy_type(&inferred), after);
+        }
+      }
+
     } else {
       type = current_type;
       ast->data.AST_APPLICATION.function->md = fn_type;
+      spec_fn = fn_type;
     }
 
     if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
@@ -1447,6 +1462,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     lambda_ctx.yielded_type = NULL;
     lambda_ctx.scope++;
     lambda_ctx.current_fn_ast = ast;
+    lambda_ctx.current_fn_constraints = NULL;
 
     // Fresh type vars for each parameter
     int num_params = ast->data.AST_LAMBDA.len;
@@ -1519,6 +1535,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
       type = coroutine_constructor_type_from_fn_type(type);
     }
 
+    if (lambda_ctx.current_fn_constraints) {
+      Substitution *subst =
+          solve_constraints(lambda_ctx.current_fn_constraints);
+      if (subst) {
+        type = apply_substitution(subst, type);
+      }
+    }
+
     break;
   }
   case AST_MATCH: {
@@ -1563,7 +1587,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
       TICtx branch_ctx = *ctx;
       branch_ctx.scope++;
       branch_ctx.constraints = NULL; // Start with fresh constraints for branch
-                                     //
+      // print_constraints(ctx->current_fn_constraints);
+      //
       branch_ctx.env =
           bind_in_env(branch_ctx.env, branch_pattern, pattern_type);
 
@@ -1582,6 +1607,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fprintf(stderr, "Inconsistent types in match branches\n");
         return NULL;
       }
+      ctx->current_fn_constraints = branch_ctx.current_fn_constraints;
     }
 
     Substitution *subst = solve_constraints(ctx->constraints);

@@ -388,7 +388,7 @@ void print_type(Type *t) {
   //   return;
   // }
 
-  char buf[300] = {};
+  char buf[400] = {};
   printf("%s\n", type_to_string(t, buf));
 }
 
@@ -1044,6 +1044,7 @@ Type *create_option_type(Type *option_of) {
 
   variant_members[1] = create_cons_type(TYPE_NAME_NONE, 0, NULL);
   Type *cons = create_cons_type(TYPE_NAME_VARIANT, 2, variant_members);
+  cons->alias = "Option";
   return cons;
 }
 

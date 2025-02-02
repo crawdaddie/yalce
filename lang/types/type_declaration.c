@@ -1,4 +1,5 @@
 #include "type_declaration.h"
+#include "types/type.h"
 #include <string.h>
 
 Type *compute_type_expression(Ast *expr, TypeEnv *env);
@@ -140,13 +141,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
           Type *r = compute_type_expression(expr->data.AST_BINOP.right, env);
 
-          Type *opt = create_option_type(r);
-          Type *f = type_fn(&t_void, opt);
-          Type **contained = talloc(sizeof(Type *) * 2);
-
-          contained[0] = &t_void;
-          contained[1] = f;
-          Type *cor = create_cons_type("coroutine", 2, contained);
+          Type *cor = create_coroutine_instance_type(r);
 
           return cor;
         }

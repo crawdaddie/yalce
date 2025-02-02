@@ -12,8 +12,13 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+LLVMTypeRef cor_inst_struct_type();
+
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
                             LLVMModuleRef module) {
+  if (is_coroutine_type(fn_type)) {
+    return LLVMPointerType(cor_inst_struct_type(), 0);
+  }
 
   LLVMTypeRef llvm_param_types[fn_len];
   LLVMTypeRef llvm_fn_type;
@@ -166,6 +171,10 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 static Substitution *create_fn_arg_subst(Substitution *subst, Type *gen,
                                          Type *spec) {
+
+  if (!spec) {
+    return NULL;
+  }
 
   if (gen->kind == T_VAR) {
     subst = substitutions_extend(subst, gen, spec);

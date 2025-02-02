@@ -28,30 +28,121 @@ LLVMValueRef codegen_simple_if_else(LLVMValueRef test_val, Ast *branches,
   return phi;
 }
 
+static LLVMValueRef simple_option_match(LLVMValueRef test_val,
+                                        Type *test_val_type, Type *res_val_type,
+                                        Ast *branches, JITLangCtx *ctx,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+  // Get the current function we're building in
+  LLVMValueRef current_function =
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+
+  // Create basic blocks for the branches and merge point
+  LLVMBasicBlockRef some_block = LLVMAppendBasicBlock(current_function, "some");
+  LLVMBasicBlockRef none_block = LLVMAppendBasicBlock(current_function, "none");
+  LLVMBasicBlockRef merge_block =
+      LLVMAppendBasicBlock(current_function, "merge");
+
+  // Generate the Some/None condition
+  LLVMValueRef is_some = codegen_option_is_some(test_val, builder);
+
+  // Create the conditional branch
+  LLVMBuildCondBr(builder, is_some, some_block, none_block);
+
+  // Some branch
+  LLVMPositionBuilderAtEnd(builder, some_block);
+  // Space for custom Some branch code here
+  LLVMValueRef some_result = ({
+    LLVMValueRef some_val = LLVMBuildExtractValue(builder, test_val, 1, "");
+    Ast *binding = branches->data.AST_APPLICATION.args;
+    STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
+    JITLangCtx branch_ctx = fn_ctx;
+    codegen_pattern_binding(binding, some_val, type_of_option(test_val_type),
+                            &branch_ctx, module, builder);
+
+    LLVMValueRef branch_result =
+        codegen(branches + 1, &branch_ctx, module, builder);
+
+    if (res_val_type->kind == T_VOID) {
+      branch_result = LLVMGetUndef(LLVMVoidType());
+    }
+    destroy_ctx(&branch_ctx);
+    branch_result;
+  });
+
+  LLVMBuildBr(builder, merge_block);
+
+  // Save the Some block's last value for phi
+  LLVMBasicBlockRef some_end_block = LLVMGetInsertBlock(builder);
+
+  // None branch
+  LLVMPositionBuilderAtEnd(builder, none_block);
+
+  LLVMValueRef none_result = ({
+    STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
+    JITLangCtx branch_ctx = fn_ctx;
+
+    LLVMValueRef branch_result =
+        codegen(branches + 3, &branch_ctx, module, builder);
+
+    if (res_val_type->kind == T_VOID) {
+      branch_result = LLVMGetUndef(LLVMVoidType());
+    }
+
+    destroy_ctx(&branch_ctx);
+    branch_result;
+  });
+  LLVMBuildBr(builder, merge_block);
+
+  // Save the None block's last value for phi
+  LLVMBasicBlockRef none_end_block = LLVMGetInsertBlock(builder);
+
+  // Merge block
+  LLVMPositionBuilderAtEnd(builder, merge_block);
+
+  // Create PHI node if we need to merge values
+  LLVMValueRef phi =
+      LLVMBuildPhi(builder, LLVMTypeOf(some_result), "match.result");
+
+  // Add the incoming values to the PHI node
+  LLVMValueRef incoming_values[] = {some_result, none_result};
+  LLVMBasicBlockRef incoming_blocks[] = {some_end_block, none_end_block};
+  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
+
+  return phi;
+}
+
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   LLVMValueRef test_val =
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
 
   Type *test_val_type = ast->data.AST_MATCH.expr->md;
-
-  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
-  LLVMBasicBlockRef end_block =
-      LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block), "match.end");
-
-  LLVMPositionBuilderAtEnd(builder, end_block);
   LLVMTypeRef res_type = type_to_llvm_type(ast->md, ctx->env, module);
-  LLVMValueRef phi = LLVMBuildPhi(builder, res_type, "match.result");
-  LLVMPositionBuilderAtEnd(builder, current_block);
 
-  LLVMBasicBlockRef next_block = NULL;
   int len = ast->data.AST_MATCH.len;
   if (len == 2) {
     if (types_equal(test_val_type, &t_bool)) {
       return codegen_simple_if_else(test_val, ast->data.AST_MATCH.branches, ctx,
                                     module, builder);
     }
+
+    if (test_val_type->alias && strcmp(test_val_type->alias, "Option") == 0) {
+      return simple_option_match(test_val, test_val_type, ast->md,
+                                 ast->data.AST_MATCH.branches, ctx, module,
+                                 builder);
+    }
   }
+
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef end_block =
+      LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block), "match.end");
+
+  LLVMPositionBuilderAtEnd(builder, end_block);
+  LLVMValueRef phi = LLVMBuildPhi(builder, res_type, "match.result");
+  LLVMPositionBuilderAtEnd(builder, current_block);
+
+  LLVMBasicBlockRef next_block = NULL;
 
   // Compile each branch
   for (int i = 0; i < len; i++) {
@@ -94,6 +185,10 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     LLVMValueRef branch_result =
         codegen(result_expr, &branch_ctx, module, builder);
+
+    if (((Type *)ast->md)->kind == T_VOID) {
+      branch_result = LLVMGetUndef(LLVMVoidType());
+    }
 
     LLVMBuildBr(builder, end_block);
     LLVMAddIncoming(phi, &branch_result, &branch_block, 1);
@@ -147,6 +242,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 
     if (ctx->stack_ptr == 0) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
+
       JITSymbol *sym =
           new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
       codegen_set_global(sym, val, val_type, llvm_type, ctx, module, builder);

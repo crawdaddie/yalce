@@ -23,6 +23,7 @@ cor *cor_next(cor *coroutine, void *ret_val) {
   }
 
   res->counter++;
+  // *coroutine = *res;
   return res;
 }
 

@@ -1,5 +1,4 @@
 #include "../lang/parse.h"
-#include "../lang/serde.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
 
@@ -552,6 +551,7 @@ int main() {
       coroutine_constructor_type_from_fn_type(
           &MAKE_FN_TYPE_2(&t_void, &t_num)));
   });
+
   T("let sq = fn x: (Int) -> x * 1.;;", &MAKE_FN_TYPE_2(&t_int, &t_num));
 
   // ({
@@ -567,6 +567,38 @@ int main() {
   //
   //     &MAKE_FN_TYPE_2(&t_num, &cor));
   // });
+  //
+  //
+  ({
+    Ast *b = T(
+        "type SchedulerCallback = Ptr -> Int -> ();\n"
+        "let schedule_event = extern fn SchedulerCallback -> Double -> Ptr -> "
+        "();\n"
+        "let runner = fn c off ->\n"
+        "  match c () with\n"
+        "  | Some dur -> schedule_event runner dur c\n"
+        "  | None -> () \n"
+        ";;\n"
+        "schedule_event runner 0. c\n",
+        &t_void);
+    Ast *runner_arg = b->data.AST_BODY.stmts[3]->data.AST_APPLICATION.args;
+    Type runner_fn_arg_type = MAKE_FN_TYPE_3(
+        &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)), &t_int, &t_void);
+
+    bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
+    const char *msg = "runner arg can be materialised to specific type:";
+    if (res) {
+      printf("✅ %s\n", msg);
+      print_type(&runner_fn_arg_type);
+      status &= true;
+    } else {
+      status &= false;
+      printf("❌ %s\nexpected:\n", msg);
+      print_type(&runner_fn_arg_type);
+      printf("got:\n");
+      print_type(runner_arg->md);
+    }
+  });
 
   return status == true ? 0 : 1;
 }

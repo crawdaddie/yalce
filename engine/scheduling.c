@@ -100,6 +100,9 @@ void _schedule_event(EventHeap *heap, void (*callback)(void *, int),
 
   ScheduledEvent event = {callback, userdata, timestamp};
   heap->events[heap->size] = event;
+
+  struct C *c = heap->events[heap->size].userdata;
+
   heapify_up(heap, heap->size);
   heap->size++;
 }
@@ -124,6 +127,7 @@ ScheduledEvent pop_event(EventHeap *heap) {
     // Restore the heap property
     heapify_down(heap, 0);
   }
+
   return earliest;
 }
 
@@ -148,7 +152,6 @@ void *timer(void *arg) {
         double now_d = ((double)(now - start) / S_TO_NS);
         tl_offset = get_frame_offset();
         ev.callback(ev.userdata, tl_offset);
-        free(ev.userdata);
       }
 
       // Calculate next tick
@@ -183,7 +186,6 @@ int scheduler_event_loop() {
 void schedule_event(void (*callback)(void *, int), double delay_seconds,
                     void *userdata) {
 
-  printf("schedule event %f\n", delay_seconds);
   now = get_time_ns(); // Update 'now' before scheduling
   return _schedule_event(queue, callback, delay_seconds, userdata, now);
 }
@@ -193,9 +195,6 @@ void schedule_event_quant(void (*callback)(void *, int), double quantization,
 
   now = get_time_ns(); // Update 'now' before scheduling
   double now_s = ((double)now) / S_TO_NS;
-  // double delay_seconds = 0.0;
-  // printf("now_s %f %f quant %f\n", now_s, fmod(now_s, quantization),
-  // quantization);
 
   return _schedule_event(queue, callback, fmod(now_s, quantization), userdata,
                          now);

@@ -8,6 +8,8 @@ typedef struct TICtx {
   TypeEnv *env;
   TypeConstraint *constraints;
   Ast *current_fn_ast;
+
+  TypeConstraint *current_fn_constraints;
   // Ast *yielded_expr;
   Type *yielded_type;
   int scope;

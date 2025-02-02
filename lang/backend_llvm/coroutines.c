@@ -514,10 +514,27 @@ LLVMValueRef create_coroutine_instance_from_constructor(
   LLVMValueRef alloca =
       ctx->stack_ptr > 0
           ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
-          : LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_malloc");
+          : _cor_alloc(module, builder);
+  // LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_malloc");
 
   LLVMBuildStore(builder, cor_struct, alloca);
   return alloca;
+}
+
+static LLVMValueRef wrap_yield_result_in_option(LLVMValueRef instance_ptr,
+                                                LLVMValueRef ret_val_ref,
+                                                LLVMTypeRef ret_val_type,
+                                                LLVMBuilderRef builder) {
+  LLVMValueRef sel = LLVMBuildSelect(
+      builder,
+      LLVMBuildICmp(builder, LLVMIntEQ, instance_ptr, null_cor_inst(),
+                    "is_null"),
+      codegen_none_typed(builder, ret_val_type),
+      codegen_some(LLVMBuildLoad2(builder, ret_val_type, ret_val_ref,
+                                  "load_from_ret_val_ref"),
+                   builder),
+      "select Some ret_val or None");
+  return sel;
 }
 
 LLVMValueRef yield_from_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
@@ -535,17 +552,12 @@ LLVMValueRef yield_from_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
 
   instance_ptr = _cor_next(instance_ptr, ret_val_ref, module, builder);
 
-  LLVMValueRef phi = LLVM_IF_ELSE(
-      builder,
-      (LLVMBuildICmp(builder, LLVMIntEQ, instance_ptr, null_cor_inst(),
-                     "is_null")),
+  // LLVMValueRef instance_struct =
+  //     LLVMBuildLoad2(builder, cor_inst_struct_type(), instance_ptr, "");
+  // LLVMBuildStore(builder, instance_struct, sym->val);
 
-      (codegen_none_typed(builder, llvm_ret_type)),
-      (codegen_some(LLVMBuildLoad2(builder, llvm_ret_type, ret_val_ref,
-                                   "load_from_ret_val_ref"),
-                    builder)));
-
-  return phi;
+  return wrap_yield_result_in_option(instance_ptr, ret_val_ref, llvm_ret_type,
+                                     builder);
 }
 
 LLVMValueRef
@@ -785,7 +797,9 @@ LLVMValueRef MapCoroutineHandler(Ast *ast, JITLangCtx *ctx,
   LLVMBasicBlockRef block = LLVMAppendBasicBlock(map_wrapper_func, "entry");
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMPositionBuilderAtEnd(builder, block);
+
   LLVMValueRef mapped_instance_ptr = LLVMGetParam(map_wrapper_func, 0);
+
   LLVMValueRef mapped_ret_val_ptr = LLVMGetParam(map_wrapper_func, 1);
   LLVMValueRef state_gep = get_instance_state_gep(mapped_instance_ptr, builder);
   LLVMValueRef original_instance_ptr =
