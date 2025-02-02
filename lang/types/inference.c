@@ -552,9 +552,9 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
       } else {
         // If t2 is a type var, it inherits the constraint
         //
-        printf("extend typeclasses\n");
-        print_type(t2);
-        print_type(t1);
+        // printf("extend typeclasses\n");
+        // print_type(t2);
+        // print_type(t1);
         t2->implements = t1->implements;
       }
     }
