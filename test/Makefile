@@ -52,9 +52,6 @@ test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_typecheck.c $(LANG_SRCS) $(LANG_SRC_DIR)/types/*.c -o $(BUILD_DIR)/test_typecheck $(LDFLAGS)
 	$(BUILD_DIR)/test_typecheck
 
-test_typecheck2: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
-	$(CC) $(CFLAGS) test_typecheck2.c $(LANG_SRCS) $(LANG_SRC_DIR)/types/*.c -o $(BUILD_DIR)/test_typecheck2 $(LDFLAGS)
-	$(BUILD_DIR)/test_typecheck2
 
 test_scripts: 
 	./run_test_scripts.sh ./test_scripts

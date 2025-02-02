@@ -1,6 +1,7 @@
 #include "../lang/parse.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
+#include "serde.h"
 
 // #define xT(input, type)
 
@@ -582,8 +583,50 @@ int main() {
         "schedule_event runner 0. c\n",
         &t_void);
     Ast *runner_arg = b->data.AST_BODY.stmts[3]->data.AST_APPLICATION.args;
-    Type runner_fn_arg_type = MAKE_FN_TYPE_3(
-        &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)), &t_int, &t_void);
+    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
+    // cor_type.is_coroutine_instance = true;
+    Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
+
+    bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
+    const char *msg = "runner arg can be materialised to specific type:";
+    if (res) {
+      printf("✅ %s\n", msg);
+      print_type(&runner_fn_arg_type);
+      status &= true;
+    } else {
+      status &= false;
+      printf("❌ %s\nexpected:\n", msg);
+      print_type(&runner_fn_arg_type);
+      printf("got:\n");
+      print_type(runner_arg->md);
+    }
+  });
+
+  ({
+    Ast *b =
+        T("let schedule_event = extern fn (u -> Int -> ()) -> Double -> u -> "
+          "();\n"
+          "let co_void = fn () ->\n"
+          "  yield 0.125;\n"
+          "  yield co_void ()\n"
+          ";;\n"
+          "let c = co_void ();\n"
+          "let runner = fn c off ->\n"
+          "  match c () with\n"
+          "  | Some dur -> schedule_event runner dur c\n"
+          "  | None -> () \n"
+          ";;\n"
+          "schedule_event runner 0. c\n",
+          &t_void);
+    Ast *runner_arg = b->data.AST_BODY.stmts[4]->data.AST_APPLICATION.args;
+    Ast *cor_arg = b->data.AST_BODY.stmts[4]->data.AST_APPLICATION.args + 2;
+
+    print_ast(cor_arg);
+    print_type(cor_arg->md);
+
+    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
+    cor_type.is_coroutine_instance = true;
+    Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
 
     bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
     const char *msg = "runner arg can be materialised to specific type:";

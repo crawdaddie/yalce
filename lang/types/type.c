@@ -473,7 +473,8 @@ bool types_equal(Type *t1, Type *t2) {
   }
   case T_FN: {
     if (types_equal(t1->data.T_FN.from, t2->data.T_FN.from)) {
-      return types_equal(t1->data.T_FN.to, t2->data.T_FN.to);
+      return types_equal(t1->data.T_FN.to, t2->data.T_FN.to) &&
+             (t1->is_coroutine_instance == t2->is_coroutine_instance);
     }
     return false;
   }
