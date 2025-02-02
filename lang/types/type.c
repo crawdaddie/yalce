@@ -1049,27 +1049,6 @@ Type *create_option_type(Type *option_of) {
   return cons;
 }
 
-TypeMap *constraints_map_extend(TypeMap *map, Type *key, Type *val) {
-  switch (key->kind) {
-  case T_VAR: {
-    TypeMap *new_map = talloc(sizeof(TypeMap));
-    new_map->key = key;
-    new_map->val = val;
-    new_map->next = map;
-    return new_map;
-  }
-  }
-  return map;
-}
-void print_constraints_map(TypeMap *map) {
-  if (map) {
-    print_type(map->key);
-    printf(" : ");
-    print_type(map->val);
-    print_constraints_map(map->next);
-  }
-}
-
 Type *ptr_of_type(Type *pointee) {
   Type *ptr = empty_type();
   ptr->kind = T_CONS;

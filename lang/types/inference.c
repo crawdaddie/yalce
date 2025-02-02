@@ -1387,7 +1387,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
         // TODO: special handling for recursive ref??
       }
     }
-    print_constraints(app_ctx.constraints);
+
+    // print_constraints(app_ctx.constraints);
 
     // if (!is_generic(spec_fn)) {
     // printf("spec fn: \n");

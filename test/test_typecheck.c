@@ -603,21 +603,21 @@ int main() {
   });
 
   ({
-    Ast *b =
-        T("let schedule_event = extern fn (u -> Int -> ()) -> Double -> u -> "
-          "();\n"
-          "let co_void = fn () ->\n"
-          "  yield 0.125;\n"
-          "  yield co_void ()\n"
-          ";;\n"
-          "let c = co_void ();\n"
-          "let runner = fn c off ->\n"
-          "  match c () with\n"
-          "  | Some dur -> schedule_event runner dur c\n"
-          "  | None -> () \n"
-          ";;\n"
-          "schedule_event runner 0. c\n",
-          &t_void);
+    Ast *b = T("let schedule_event = extern fn (tUserData -> Int -> ()) -> "
+               "Double -> tUserdData -> "
+               "();\n"
+               "let co_void = fn () ->\n"
+               "  yield 0.125;\n"
+               "  yield co_void ()\n"
+               ";;\n"
+               "let c = co_void ();\n"
+               "let runner = fn c off ->\n"
+               "  match c () with\n"
+               "  | Some dur -> schedule_event runner dur c\n"
+               "  | None -> () \n"
+               ";;\n"
+               "schedule_event runner 0. c\n",
+               &t_void);
     Ast *runner_arg = b->data.AST_BODY.stmts[4]->data.AST_APPLICATION.args;
     Ast *cor_arg = b->data.AST_BODY.stmts[4]->data.AST_APPLICATION.args + 2;
 

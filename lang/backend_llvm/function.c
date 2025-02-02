@@ -287,6 +287,9 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
   fn_ast.md = specific_type;
+  print_ast(&fn_ast);
+  print_type(specific_type);
+  printf("compile specific fn\n");
   LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
 
   return func;
@@ -324,6 +327,7 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
 
   LLVMValueRef specific_fn =
       compile_specific_fn(expected_fn_type, sym, ctx, module, builder);
+
   sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
       specific_fns_extend(sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
                           expected_fn_type, specific_fn);
