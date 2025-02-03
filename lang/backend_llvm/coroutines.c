@@ -1127,3 +1127,9 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef instance_ptr = codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   return _cor_loop(instance_ptr, module, builder);
 }
+
+LLVMValueRef CorPlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  LLVMValueRef instance_ptr = codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  return _cor_loop(instance_ptr, module, builder);
+}

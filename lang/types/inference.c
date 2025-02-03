@@ -245,6 +245,7 @@ void initialize_builtin_types() {
   add_builtin("iter_of_list", &t_iter_of_list_sig);
   add_builtin("iter_of_array", &t_iter_of_array_sig);
   add_builtin("cor_loop", &t_cor_loop_sig);
+  add_builtin("cor_play", &t_cor_play_sig);
 }
 
 Type *param_binding_type(Ast *ast) {

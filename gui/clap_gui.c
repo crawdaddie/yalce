@@ -26,7 +26,8 @@ int clap_ui(void *state_ptr) {
   data->unit_vals = malloc(sizeof(double) * num);
 
   for (int i = 0; i < num; i++) {
-    data->unit_vals[i] = (specs->param_vals[i] - specs->min_vals[i])/(specs->max_vals[i] - specs->min_vals[i]);
+    data->unit_vals[i] = (specs->param_vals[i] - specs->min_vals[i]) /
+                         (specs->max_vals[i] - specs->min_vals[i]);
   }
 
   push_create_window_event(WINDOW_TYPE_CLAP_NATIVE, data);
@@ -90,8 +91,7 @@ static void draw_slider_window(Window *window) {
     render_text(data->specs->labels[i], SLIDER_L_START, y, text_color, renderer,
                 window->font);
     // Draw slider handle
-    int handle_x =
-        SLIDER_L_START + (int)(data->unit_vals[i] * slider_width);
+    int handle_x = SLIDER_L_START + (int)(data->unit_vals[i] * slider_width);
     SDL_Rect handle_rect = {handle_x, y, 1, SLIDER_HEIGHT};
     SDL_SetRenderDrawColor(renderer, 255, 0, 144, 255);
     SDL_RenderFillRect(renderer, &handle_rect);

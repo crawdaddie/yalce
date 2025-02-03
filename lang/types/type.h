@@ -96,6 +96,7 @@ extern Type t_builtin_char_of;
 extern Type t_cor_wrap_effect_fn_sig;
 extern Type t_cor_map_fn_sig;
 extern Type t_cor_loop_sig;
+extern Type t_cor_play_sig;
 
 // clang-format off
 #define TYPE_NAME_LIST    "List"

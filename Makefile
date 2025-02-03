@@ -25,6 +25,7 @@ CFLAGS += -I./gui -I${SDL2_PATH}/include -I${SDL2_PATH}/include/SDL2 -I${SDL2_TT
 
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
+CFLAGS += -I./lang/runtime
 CFLAGS += `$(LLVM_CONFIG) --cflags`
 CFLAGS += -I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include
 
@@ -51,6 +52,7 @@ LANG_CC += -DDUMP_AST
 endif
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
+LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/runtime/*.c)
 LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
 
@@ -88,6 +90,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(BUILD_DIR)/backend_llvm
 	mkdir -p $(BUILD_DIR)/types
+	mkdir -p $(BUILD_DIR)/runtime
 
 # Build lex and yacc output files
 $(YACC_OUTPUT): $(YACC_FILE)
