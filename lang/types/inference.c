@@ -242,6 +242,9 @@ void initialize_builtin_types() {
   add_builtin("&&", &t_builtin_and);
   add_builtin("cor_wrap_effect", &t_cor_wrap_effect_fn_sig);
   add_builtin("cor_map", &t_cor_map_fn_sig);
+  add_builtin("iter_of_list", &t_iter_of_list_sig);
+  add_builtin("iter_of_array", &t_iter_of_array_sig);
+  add_builtin("cor_loop", &t_cor_loop_sig);
 }
 
 Type *param_binding_type(Ast *ast) {
@@ -530,6 +533,18 @@ double get_type_rank(Type *t, TypeClass *tc) {
   TypeClass *T = get_typeclass_by_name(t, tc->name);
 
   return T->rank;
+}
+
+bool unify_option(Type *t1, Type *t2, TypeConstraint **constraints) {
+
+  if (is_option_type(t1) && t2->alias && (strcmp(t2->alias, "Option") == 0)) {
+    return true;
+  }
+
+  if (is_option_type(t2) && t1->alias && (strcmp(t1->alias, "Option") == 0)) {
+    return true;
+  }
+  return false;
 }
 
 bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
@@ -1687,22 +1702,29 @@ Type *infer(Ast *ast, TICtx *ctx) {
     type = infer(yield_expr, ctx);
     Type *yield_expr_type = yield_expr->md;
 
+    if (is_coroutine_type(yield_expr_type)) {
+      yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
+    }
+
+
     if (ctx->yielded_type == NULL) {
       ctx->yielded_type = yield_expr_type;
+
     } else {
-      if (is_coroutine_type(yield_expr_type)) {
-        yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
-      }
-      // Ast *prev_yield = ctx->yielded_expr;
       Type *prev_yield_type = ctx->yielded_type;
+
       if (!unify_in_ctx(prev_yield_type, yield_expr_type, ctx)) {
         fprintf(stderr, "Error: yielded values must be of the same type!");
+        print_type_err(prev_yield_type);
+        fprintf(stderr, " != ");
+        print_type_err(yield_expr_type);
         return NULL;
       }
 
       ctx->yielded_type = yield_expr_type;
     }
     ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
+    type = yield_expr_type;
 
     break;
   }

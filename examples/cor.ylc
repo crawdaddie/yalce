@@ -8,14 +8,13 @@ let iter_all_void = fn () ->
 
   let inst = co_void () in
 
-  print `
-{ANSI_MAGENTA}{ANSI_BOLD}## simple coroutine 1. -> 2. -> 3. -> done{ANSI_RESET}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
+  print `{ANSI_MAGENTA}{ANSI_BOLD}## simple coroutine 1. -> 2. -> 3. -> done{ANSI_RESET}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
 `
 
 ;;
@@ -28,15 +27,13 @@ let rec = fn () ->
   ;;
 
   let inst = co_void_rec () in
-  print `
-
-{ANSI_MAGENTA}{ANSI_BOLD}## recursive coroutine 1. -> 2. -> 1. -> 2. ...{ANSI_RESET}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
+  print `{ANSI_MAGENTA}{ANSI_BOLD}## recursive coroutine 1. -> 2. -> 1. -> 2. ...{ANSI_RESET}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
 `
 ;;
 
@@ -57,14 +54,13 @@ let seq = fn () ->
   ;;
 
   let inst = co_void () in
-  print `
-
-{ANSI_MAGENTA}{ANSI_BOLD}## embed coroutine in another 1. -> 2. -> 300. -> 400. -> 3. -> done{ANSI_RESET}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()} {inst ()}
+  print `{ANSI_MAGENTA}{ANSI_BOLD}## embed coroutine in another 1. -> 2. -> 300. -> 400. -> 3. -> done{ANSI_RESET}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
 `
 ;;
 seq ();
@@ -79,13 +75,13 @@ let iter_all_arg = fn () ->
   ;;
 
   let inst = co_void 2. 1.;
-  print `
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
+  print `## coroutine with state args
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
 `
 ;; 
 iter_all_arg ();
@@ -103,15 +99,14 @@ let wrapped_cor = fn () ->
 
   let inst = (co_void () |> cor_wrap_effect wrapper);
 
-  print `
-#{ANSI_MAGENTA}{ANSI_BOLD}# coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
+  print `#{ANSI_MAGENTA}{ANSI_BOLD}# coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
 ## (effects printed above ^^){ANSI_RESET}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
-{inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
 `
 ;;
 wrapped_cor ();
@@ -132,14 +127,13 @@ let map_cor = fn () ->
 
   let co = co_void () |> cor_map str_map;
 
-  print `
-{ANSI_MAGENTA}{ANSI_BOLD}## coroutine mapped 1 -> 2 -> 3 -> done{ANSI_RESET}
-{co ()}
-{co ()}
-{co ()}
-{co ()}
-{co ()}
-{co ()}
+  print `{ANSI_MAGENTA}{ANSI_BOLD}## coroutine mapped 1 -> 2 -> 3 -> done{ANSI_RESET}
+  {co ()}
+  {co ()}
+  {co ()}
+  {co ()}
+  {co ()}
+  {co ()}
 `
 ;;
 map_cor ();
@@ -151,27 +145,77 @@ let fib_cor = fn () ->
   ;;
 
   let coi = fib 0 1 in
-  print `
-{ANSI_MAGENTA}{ANSI_BOLD}# fibonnaci coroutine{ANSI_RESET}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
-{coi ()}
+  print `{ANSI_MAGENTA}{ANSI_BOLD}# fibonnaci coroutine{ANSI_RESET}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
+  {coi ()}
 `
 ;;
 fib_cor();
+
+let cor_list = fn () -> 
+  let l = [1, 2, 3] in
+  let c = iter_of_list l in
+
+  print `## list yield:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+cor_list ();
+
+
+let cor_array = fn () -> 
+  let l = [|1, 2, 3|] in
+  let c = iter_of_array l in
+
+  print `## array yield:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+cor_array ();
+
+let loop_cor = fn () ->  
+  let co_void = fn () -> 
+    yield 1;
+    yield 2;
+    yield 3
+  ;;
+
+  let c = co_void () |> cor_loop in
+
+  print `## looped coroutine:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+loop_cor ();

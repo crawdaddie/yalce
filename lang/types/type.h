@@ -85,6 +85,9 @@ extern Type t_iter_cor_sig;
 extern Type t_cor_map_iter_sig;
 extern Type t_coroutine_concat_sig;
 
+
+extern Type t_cor_iter_of_list_sig;
+
 extern Type t_builtin_or;
 extern Type t_builtin_and;
 
@@ -92,6 +95,7 @@ extern Type t_builtin_char_of;
 
 extern Type t_cor_wrap_effect_fn_sig;
 extern Type t_cor_map_fn_sig;
+extern Type t_cor_loop_sig;
 
 // clang-format off
 #define TYPE_NAME_LIST    "List"

@@ -193,6 +193,32 @@ Type t_cor_map_fn_sig =
     MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_cor_map_from_type, &t_cor_map_to_type),
                    &t_cor_from, &t_cor_to);
 
+Type t_cor_loop_var = {
+    T_FN,
+    {.T_FN = {.from = &t_void, .to = &TOPT(&t_cor_map_from_type)}},
+    .is_coroutine_instance = true};
+
+Type t_cor_loop_sig =
+    MAKE_FN_TYPE_2(&t_cor_loop_var, &t_cor_loop_var);
+
+Type t_list_cor = {T_FN,
+                   {.T_FN = {.from = &t_void, .to = &TOPT(&t_list_var_el)}},
+                   .is_coroutine_instance = true};
+
+Type t_iter_of_list_sig = ((Type){
+    T_FN,
+    {.T_FN = {.from = &((Type){
+                  T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_list_var_el}, 1}}}),
+              .to = &t_list_cor}},
+    .is_coroutine_constructor = true});
+
+Type t_iter_of_array_sig = ((Type){
+    T_FN,
+    {.T_FN = {.from = &((Type){
+                  T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_list_var_el}, 1}}}),
+              .to = &t_list_cor}},
+    .is_coroutine_constructor = true});
+
 /*
 Type t_cor_params = TVAR("cor_params");
 Type t_cor_ret = TVAR("cor_ret");

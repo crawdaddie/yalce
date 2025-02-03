@@ -569,6 +569,9 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                     WrapCoroutineWithEffectHandler);
 
   GENERIC_FN_SYMBOL("cor_map", &t_cor_map_fn_sig, MapCoroutineHandler);
+  GENERIC_FN_SYMBOL("iter_of_list", &t_iter_of_list_sig, IterOfListHandler);
+  GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig, IterOfArrayHandler);
+  GENERIC_FN_SYMBOL("cor_loop", &t_cor_loop_sig, CorLoopHandler);
 
   // GENERIC_FN_SYMBOL("Char", &t_builtin_char_of, CharHandler);
   // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_DATA_PTR, &t_array_data_ptr_fn_sig);

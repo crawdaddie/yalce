@@ -287,9 +287,6 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
   fn_ast.md = specific_type;
-  print_ast(&fn_ast);
-  print_type(specific_type);
-  printf("compile specific fn\n");
   LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
 
   return func;

@@ -17,6 +17,7 @@ cor *cor_init(cor *cor, CoroutineFn fn);
 cor *cor_alloc();
 cor *cor_defer(cor *this, cor next_struct, void *ret_val);
 cor *cor_reset(cor *this, cor next_struct, void *ret_val);
+cor *cor_loop(cor *this);
 
 #define YIELD(n, r, c, v)                                                      \
   case n: {                                                                    \
@@ -64,3 +65,5 @@ struct cor_map_state {
 };
 
 cor *cor_map(cor *this, CoroutineFn map_fn);
+
+cor *cor_loop(cor *instance);

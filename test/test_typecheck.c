@@ -643,5 +643,19 @@ int main() {
     }
   });
 
+  ({
+    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor_type.is_coroutine_instance = true;
+
+    T(
+    "let l1 = [1, 2, 3];\n"
+    "let l2 = [6, 5, 4];\n"
+    "let co_void = fn () -> \n"
+    "  yield iter_of_list l1;\n"
+    "  yield iter_of_list l2\n"
+    ";;\n"
+    "let c = co_void ();\n", &cor_type);
+  });
+
   return status == true ? 0 : 1;
 }
