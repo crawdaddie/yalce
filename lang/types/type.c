@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+Type *create_option_type(Type *option_of);
+
 Type t_int = {T_INT};
 
 Type t_uint64 = {T_UINT64};
@@ -138,8 +140,15 @@ bool is_option_type(Type *t) {
                                (strcmp(t->data.T_CONS.name, "None") == 0));
 }
 
-Type t_option_of_var =
-    TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_option_var), &t_none);
+// Type t_option_of_var =
+//     TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_option_var), &t_none);
+
+Type *create_new_option_of_var() { return create_option_type(next_tvar()); }
+
+Type t_option_of_var = {T_CREATE_NEW_GENERIC,
+                        {.T_CREATE_NEW_GENERIC = create_new_option_of_var}};
+
+// TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_option_var), &t_none);
 
 Type *type_of_option(Type *option) {
   return option->data.T_CONS.args[0]->data.T_CONS.args[0];

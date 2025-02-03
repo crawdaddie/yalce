@@ -227,12 +227,15 @@ enum TypeKind {
   T_VAR,
   T_EMPTY_LIST,
   T_TYPECLASS_RESOLVE,
+  T_CREATE_NEW_GENERIC,
 };
 
 typedef struct TypeList {
   struct Type *type;
   struct TypeList *next;
 } TypeList;
+
+typedef struct Type *(*CreateNewGenericTypeFn)(void *);
 
 typedef struct Type {
   enum TypeKind kind;
@@ -259,6 +262,7 @@ typedef struct Type {
       struct Type *to;
       struct Type *state;
     } T_COROUTINE_FN;
+    CreateNewGenericTypeFn T_CREATE_NEW_GENERIC;
 
   } data;
 

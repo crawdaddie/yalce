@@ -154,7 +154,7 @@ void initialize_builtin_types() {
   t_option_of_var.alias = "Option";
   add_builtin("Option", &t_option_of_var);
   add_builtin("Some", &t_option_of_var);
-  add_builtin("None", &t_option_of_var);
+  add_builtin("None", &t_none);
   add_builtin(TYPE_NAME_INT, &t_int);
   add_builtin(TYPE_NAME_DOUBLE, &t_num);
   add_builtin(TYPE_NAME_UINT64, &t_uint64);
@@ -361,6 +361,11 @@ bool is_recursive_ref_id(const char *name, TICtx *ctx) {
 bool is_recursive_ref(Ast *ast, TICtx *ctx) {
   return (ast->tag == AST_IDENTIFIER &&
           is_recursive_ref_id(ast->data.AST_IDENTIFIER.value, ctx));
+}
+
+bool is_none_expr(Ast *none) {
+  return none->tag == AST_IDENTIFIER &&
+         (strcmp(none->data.AST_IDENTIFIER.value, "None") == 0);
 }
 
 void compare_args(Type *free_arg, Type *arg, TypeEnv **env) {
@@ -581,6 +586,14 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
 
   // Handle constructed types
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
+    if (is_option_type(t1) && t2->alias && (strcmp(t2->alias, "Option") == 0)) {
+      return true;
+    }
+
+    if (is_option_type(t2) && t1->alias && (strcmp(t1->alias, "Option") == 0)) {
+      return true;
+    }
+
     if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0 ||
         t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
       return false;
@@ -667,8 +680,8 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       // do nothing t1 is fine
     } else if (t1->kind != t2->kind) {
       fprintf(stderr, "Error: type mismatch in solve constraints\n");
-      print_type(t1);
-      print_type(t2);
+      print_type_err(t1);
+      print_type_err(t2);
 
       return NULL; // Type mismatch error
     }
@@ -1077,6 +1090,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     const char *name = ast->data.AST_IDENTIFIER.value;
     type = find_type_in_ctx(name, ctx);
+    if (type && type->kind == T_CREATE_NEW_GENERIC) {
+      type = type->data.T_CREATE_NEW_GENERIC(NULL);
+    }
 
     // if (type == NULL) {
     //   type = lookup_builtin_type(name);
@@ -1231,9 +1247,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
           if (!unify_in_ctx(arg_type, cons_arg, ctx)) {
             fprintf(stderr,
                     "Could not constrain type variable to function type x\n");
-
-            print_type_err(arg_type);
-            print_type_err(cons_arg);
 
             return NULL;
           }
@@ -1580,10 +1593,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
 
       // Add pattern <> expression constraint
-      if (!unify_in_ctx(expr_type, pattern_type, ctx)) {
+      if ((!is_none_expr(branch_pattern)) &&
+          !unify_in_ctx(expr_type, pattern_type, ctx)) {
         fprintf(stderr, "Pattern type doesn't match expression type\n");
         return NULL;
       }
+
+      // if (!unify_in_ctx(expr_type, pattern_type, ctx)) {
+      //   fprintf(stderr, "Pattern type doesn't match expression type\n");
+      //   return NULL;
+      // }
 
       // handle branch body
       TICtx branch_ctx = *ctx;
