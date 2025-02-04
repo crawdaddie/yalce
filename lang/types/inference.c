@@ -166,6 +166,8 @@ void initialize_builtin_types() {
   add_builtin(TYPE_NAME_CHAR, &t_char);
   add_builtin(TYPE_NAME_PTR, &t_ptr);
 
+  // add_builtin("Ref", &t_make_ref);
+
   static TypeClass tc_int[] = {{
                                    .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
                                    .rank = 0.0,
@@ -236,6 +238,7 @@ void initialize_builtin_types() {
   // eq_tc_registry = type_list_extend(eq_tc_registry, &t_bool);
   add_builtin("print", &t_builtin_print);
   add_builtin("array_at", &t_array_at_fn_sig);
+  add_builtin("array_set", &t_array_set_fn_sig);
   add_builtin("array_size", &t_array_size_fn_sig);
 
   add_builtin("||", &t_builtin_or);
@@ -253,6 +256,7 @@ Type *param_binding_type(Ast *ast) {
   case AST_IDENTIFIER: {
     return next_tvar();
   }
+
   case AST_TUPLE: {
     int len = ast->data.AST_LIST.len;
 
@@ -262,7 +266,9 @@ Type *param_binding_type(Ast *ast) {
       Ast *mem = ast->data.AST_LIST.items + i;
       tuple_mems[i] = param_binding_type(mem);
     }
+
     Type *tup = empty_type();
+
     *tup = (Type){T_CONS,
                   {.T_CONS = {.name = TYPE_NAME_TUPLE,
                               .args = tuple_mems,
@@ -431,21 +437,21 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   }
 
   int len = ast->data.AST_LIST.len;
-  Type *element_type = infer(ast->data.AST_LIST.items, ctx);
+  Type *el_type = infer(ast->data.AST_LIST.items, ctx);
 
-  Type *el_type;
   for (int i = 1; i < len; i++) {
     Ast *el = ast->data.AST_LIST.items + i;
-    el_type = infer(el, ctx);
+    Type *_el_type = infer(el, ctx);
 
-    if (!types_equal(element_type, el_type)) {
+    if (!types_equal(el_type, _el_type)) {
       fprintf(stderr, "Error typechecking list literal - all elements must "
                       "be of the same type\n");
-      print_type_err(element_type);
-      fprintf(stderr, " != ");
       print_type_err(el_type);
+      fprintf(stderr, " != ");
+      print_type_err(_el_type);
       return NULL;
     }
+    el_type = _el_type;
   }
   Type *type = talloc(sizeof(Type));
   Type **contained = talloc(sizeof(Type *));
@@ -698,6 +704,7 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       fprintf(stderr, "Error: type mismatch in solve constraints\n");
       print_type_err(t1);
       print_type_err(t2);
+      fprintf(stderr, "\n");
 
       return NULL; // Type mismatch error
     }
@@ -1137,12 +1144,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
     int len = ast->data.AST_LIST.len;
 
     Type **cons_args = talloc(sizeof(Type *) * len);
+    bool is_struct_of_coroutines = false;
 
     for (int i = 0; i < len; i++) {
 
       Ast *member = ast->data.AST_LIST.items + i;
       Type *mtype = infer(member, ctx);
       cons_args[i] = mtype;
+      if (is_coroutine_type(mtype)) {
+        is_struct_of_coroutines = true;
+      }
     }
 
     type = talloc(sizeof(Type));
@@ -1157,6 +1168,19 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
       type->data.T_CONS.names = names;
     }
+    if (is_struct_of_coroutines) {
+      for (int i = 0; i < len; i++) {
+        if (is_coroutine_type(type->data.T_CONS.args[i])) {
+          type->data.T_CONS.args[i] =
+              type_of_option(fn_return_type(type->data.T_CONS.args[i]));
+        }
+      }
+    }
+    if (is_struct_of_coroutines) {
+      type = type_fn(&t_void, create_option_type(type));
+      type->is_coroutine_instance = true;
+    }
+
     break;
   }
 
@@ -1308,7 +1332,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TICtx app_ctx = *ctx;
     // app_ctx.constraints = NULL;
-    // printf("infer application\n");
+    // printf("\n### infer application\n");
     // print_ast(ast);
     // print_type(fn_type);
 
@@ -1335,7 +1359,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       if (!unify_in_ctx(fn_type, fn_constraint, &app_ctx)) {
         fprintf(stderr, "Could not constrain type variable to function type\n");
-
         print_type_err(fn_type);
         print_type_err(fn_constraint);
         return NULL;
@@ -1347,9 +1370,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
 
     } else {
-
       for (int i = 0; i < app_len; i++) {
         Type *arg_type = arg_types[i];
+
         if (current_type->kind != T_FN) {
           fprintf(stderr, "Attempting to apply to non-function type\n");
           print_ast_err(ast);
@@ -1382,9 +1405,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
       if (!subst) {
         fprintf(stderr, "Could not solve type constraints in application\n");
         print_ast_err(ast);
-        print_type(fn_type);
+        print_type_err(fn_type);
         return NULL;
       }
+      // print_subst(subst);
 
       // Apply substitutions to get final type
       type = apply_substitution(subst, current_type);
@@ -1403,6 +1427,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
               ctx->current_fn_constraints, deep_copy_type(&inferred), after);
         }
       }
+
+      // print_subst(subst);
+      // printf("finish apply subst\n");
+      // print_type(fn_type);
 
     } else {
       type = current_type;
@@ -1437,6 +1465,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_LET: {
+    // printf("AST LET: ");
+    // print_ast(ast);
+
     // First infer definition type
     Type *def_type = infer(ast->data.AST_LET.expr, ctx);
     if (!def_type) {
@@ -1483,6 +1514,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
       ctx->env = bind_in_env(ctx->env, ast->data.AST_LET.binding, gen_type);
       type = gen_type;
     }
+
+    // print_type_env(ctx->env);
+    // print_type(gen_type);
 
     break;
   }
@@ -1582,6 +1616,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // Infer type of expression being matched
     Type *expr_type = infer(expr, ctx);
 
+
     if (!expr_type) {
       fprintf(stderr, "Could not infer match expression type\n");
       print_ast_err(expr);
@@ -1602,6 +1637,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Ast *branch_body = &ast->data.AST_MATCH.branches[2 * i + 1];
 
       Type *pattern_type = infer_pattern(branch_pattern, ctx);
+        printf("branch pattern\n");
+        print_ast(branch_pattern);
+        print_type(pattern_type);
 
       if (!pattern_type) {
         fprintf(stderr, "Could not infer pattern type in match branch\n");
@@ -1612,6 +1650,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
       if ((!is_none_expr(branch_pattern)) &&
           !unify_in_ctx(expr_type, pattern_type, ctx)) {
         fprintf(stderr, "Pattern type doesn't match expression type\n");
+        print_type_err(expr_type);
+        print_type_err(pattern_type);
         return NULL;
       }
 

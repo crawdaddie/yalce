@@ -1,0 +1,18 @@
+let x_ref = [|1|];
+
+let set_ref = fn arr v ->
+  array_set 0 arr v
+;;
+
+set_ref x_ref 21;
+print `set el 0: {array_at x_ref 0}\n`;
+
+let (@) = array_at;
+
+let (<-) = set_ref;
+
+x_ref <- 3000 ;
+
+print `get ref val: {x_ref @ 0}\n`;
+
+

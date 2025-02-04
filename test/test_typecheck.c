@@ -126,6 +126,8 @@ int main() {
 
   T("[|1,2,3|]", &TARRAY(&t_int));
   TFAIL("[|1,2.0,3|]");
+
+  T("[|1|]", &TARRAY(&t_int));
   T("(1,2,3.9)", &TTUPLE(3, &t_int, &t_int, &t_num, ));
 
   T("let x = 1", &t_int);
@@ -647,15 +649,36 @@ int main() {
     Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
     cor_type.is_coroutine_instance = true;
 
-    T(
-    "let l1 = [1, 2, 3];\n"
-    "let l2 = [6, 5, 4];\n"
-    "let co_void = fn () -> \n"
-    "  yield iter_of_list l1;\n"
-    "  yield iter_of_list l2\n"
-    ";;\n"
-    "let c = co_void ();\n", &cor_type);
+    T("let l1 = [1, 2, 3];\n"
+      "let l2 = [6, 5, 4];\n"
+      "let co_void = fn () -> \n"
+      "  yield iter_of_list l1;\n"
+      "  yield iter_of_list l2\n"
+      ";;\n"
+      "let c = co_void ();\n",
+      &cor_type);
   });
+
+  // ({
+  //   Type v = TVAR("t");
+  //   Type r = TVAR("r");
+  //   T("let array_fold = fn f s arr ->\n"
+  //     "  let len = array_size arr in\n"
+  //     "  let aux = (fn i su -> \n"
+  //     "    match i with\n"
+  //     "    | i if i == len -> su\n"
+  //     "    | i -> aux (i + 1) (f su (array_at arr i))\n"
+  //     "    ;) in\n"
+  //     "  aux 0 s\n"
+  //     ";;\n",
+  //     &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &v, &r), &r, &TARRAY(&v), &r));
+  // });
+
+  T("let set_ref = array_set 0;",
+    &MAKE_FN_TYPE_3(&t_array_var, &t_array_var_el, &t_array_var));
+
+  T("let x = [|1|]; let set_ref = array_set 0; set_ref x 3", &TARRAY(&t_int));
+  T("let (@) = array_at", &t_array_at_fn_sig);
 
   return status == true ? 0 : 1;
 }

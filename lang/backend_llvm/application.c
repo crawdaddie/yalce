@@ -223,11 +223,23 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
       LLVMValueRef callable;
       if (original_callable_sym->type == STYPE_FUNCTION) {
         callable = original_callable_sym->val;
-      } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION) {
+      } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION &&
+                 original_callable_sym->symbol_data.STYPE_GENERIC_FUNCTION
+                     .ast) {
         callable = get_specific_callable(
             original_callable_sym, full_expected_fn_type, ctx, module, builder);
+      } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION &&
+                 original_callable_sym->symbol_data.STYPE_GENERIC_FUNCTION
+                     .builtin_handler) {
+
+        printf("builtin handler: ");
+        print_ast(ast);
+        print_type(full_expected_fn_type);
+
+        return NULL;
       } else {
-        fprintf(stderr, "Error: currying failed");
+        fprintf(stderr, "Error: currying failed\n");
+        print_ast_err(ast);
         return NULL;
       }
 

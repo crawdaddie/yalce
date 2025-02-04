@@ -7,10 +7,7 @@
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
-#include "symbols.h"
-// #include "synths.h"
 #include "test_module.h"
-#include "types.h"
 #include "types/inference.h"
 #include "llvm-c/Transforms/Utils.h"
 #include <llvm-c/Core.h>

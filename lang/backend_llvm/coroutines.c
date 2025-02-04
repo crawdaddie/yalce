@@ -209,8 +209,8 @@ LLVMValueRef _cor_map(LLVMValueRef instance_ptr, LLVMValueRef map_fn,
                         "call_cor_map");
 }
 
-LLVMValueRef _cor_loop(LLVMValueRef instance_ptr,
-                       LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef _cor_loop(LLVMValueRef instance_ptr, LLVMModuleRef module,
+                       LLVMBuilderRef builder) {
 
   LLVMValueRef cor_loop_func = LLVMGetNamedFunction(module, "cor_loop");
   LLVMTypeRef inst_type = cor_inst_struct_type();
@@ -225,8 +225,7 @@ LLVMValueRef _cor_loop(LLVMValueRef instance_ptr,
   }
 
   return LLVMBuildCall2(builder, cor_loop_type, cor_loop_func,
-                        (LLVMValueRef[]){instance_ptr}, 1,
-                        "call_cor_loop");
+                        (LLVMValueRef[]){instance_ptr}, 1, "call_cor_loop");
 }
 
 LLVMValueRef null_cor_inst() {
@@ -1117,19 +1116,121 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
           ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
           : _cor_alloc(module, builder);
 
-
   LLVMBuildStore(builder, cor_struct, alloca);
   return alloca;
 }
 
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder) {
-  LLVMValueRef instance_ptr = codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+                            LLVMBuilderRef builder) {
+  LLVMValueRef instance_ptr =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   return _cor_loop(instance_ptr, module, builder);
 }
 
 LLVMValueRef CorPlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder) {
-  LLVMValueRef instance_ptr = codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+                            LLVMBuilderRef builder) {
+  LLVMValueRef instance_ptr =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   return _cor_loop(instance_ptr, module, builder);
+}
+
+LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
+                                          LLVMModuleRef module,
+                                          LLVMBuilderRef builder) {
+  Type *coroutine_type = ast->md;
+  Type *ret_opt_type = fn_return_type(coroutine_type);
+  Type *ret_type = type_of_option(ret_opt_type);
+
+  int len = ret_type->data.T_CONS.num_args;
+
+  LLVMTypeRef struct_member_types[len];
+  for (int i = 0; i < len; i++) {
+    struct_member_types[i] =
+        type_to_llvm_type(ast->data.AST_LIST.items[i].md, ctx->env, module);
+  }
+  LLVMTypeRef llvm_state_struct_type =
+      LLVMStructType(struct_member_types, len, 0);
+
+  LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx->env, module);
+
+  LLVMValueRef func = LLVMAddFunction(module, "struct_of_coroutines_fn",
+                                      cor_coroutine_fn_type());
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, block);
+
+  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+  LLVMValueRef counter = LLVMBuildLoad2(
+      builder, LLVMInt32Type(), get_instance_counter_gep(instance_ptr, builder),
+      "load_instance_counter");
+
+  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+  LLVMValueRef state_gep = get_instance_state_gep(instance_ptr, builder);
+  LLVMValueRef state_ptr = LLVMBuildLoad2(
+      builder, 
+      LLVMPointerType(llvm_state_struct_type, 0),
+      state_gep, 
+      "load_state_ptr"
+  );
+  LLVMValueRef state_struct = LLVMBuildLoad2(
+      builder,
+      llvm_state_struct_type,
+      state_ptr,
+      "struct_of_coroutines_state"
+  );
+
+
+  LLVMValueRef coroutine_not_complete = _TRUE;
+
+  for (int i = 0; i < len; i++) {
+    LLVMValueRef ret_val_gep = LLVMBuildGEP2(builder, llvm_ret_type, ret_val_ref, (LLVMValueRef[]){
+      LLVMConstInt(LLVMInt32Type(), 0, 0),
+      LLVMConstInt(LLVMInt32Type(), i, 0),
+    }, 2, "");
+
+    LLVMValueRef item = LLVMBuildExtractValue(builder, state_struct, i, "extract_struct_of_coroutines_member");
+    if (is_coroutine_type(ast->data.AST_LIST.items[i].md)) {
+      LLVMValueRef item_result = _cor_next(item, ret_val_gep, module, builder);
+      LLVMValueRef is_not_null = LLVMBuildICmp(builder, LLVMIntNE, instance_ptr, null_cor_inst(),
+                    "is_not_null");
+      coroutine_not_complete = LLVMBuildAnd(builder, coroutine_not_complete, is_not_null, "");
+    } else {
+      LLVMBuildStore(builder, item, ret_val_gep);
+    }
+  }
+
+  LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(func, "then");
+  LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(func, "else");
+
+  LLVMBuildCondBr(builder, coroutine_not_complete, then_block, else_block);
+  LLVMPositionBuilderAtEnd(builder, then_block);
+  LLVMBuildRet(builder, instance_ptr);
+  LLVMPositionBuilderAtEnd(builder, else_block);
+  LLVMBuildRet(builder, null_cor_inst());
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  LLVMValueRef outer_state_struct = LLVMGetUndef(llvm_state_struct_type);
+  for (int i = 0; i < len; i++) {
+    Ast *member_ast = ast->data.AST_LIST.items + i;
+    LLVMValueRef item = codegen(member_ast, ctx, module, builder);
+    outer_state_struct = LLVMBuildInsertValue(builder, outer_state_struct, item, i, "");
+  }
+
+  LLVMValueRef state_ptr_alloca =
+      LLVMBuildAlloca(builder, llvm_state_struct_type, "");
+
+  LLVMBuildStore(builder, outer_state_struct, state_ptr_alloca);
+
+  LLVMValueRef instance_struct = create_cor_inst_struct(builder, func, state_ptr_alloca);
+
+  LLVMTypeRef cor_struct_type = cor_inst_struct_type();
+  LLVMValueRef alloca =
+      ctx->stack_ptr > 0
+          ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
+          : LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_malloc");
+
+  LLVMBuildStore(builder,instance_struct, alloca);
+  return alloca;
 }

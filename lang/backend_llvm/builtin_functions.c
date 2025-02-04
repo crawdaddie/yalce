@@ -424,6 +424,20 @@ LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            type_to_llvm_type(ret_type, ctx->env, module));
 }
 
+LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder) {
+  Type *ret_type = ast->md;
+  Ast *idx_ast = ast->data.AST_APPLICATION.args;
+  Ast *array_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *val_ast = ast->data.AST_APPLICATION.args + 2;
+  LLVMValueRef array = codegen(array_ast, ctx, module, builder);
+  LLVMValueRef idx = codegen(idx_ast, ctx, module, builder);
+  LLVMValueRef val = codegen(val_ast, ctx, module, builder);
+
+  return set_array_element(builder, array, idx, val,
+                           type_to_llvm_type(ret_type, ctx->env, module));
+}
+
 LLVMValueRef SomeConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
   Ast *contained_ast = ast->data.AST_APPLICATION.args;
@@ -559,6 +573,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                           module));
 
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at_fn_sig, ArrayAtHandler);
+
+  GENERIC_FN_SYMBOL("array_set", &t_array_set_fn_sig, ArraySetHandler);
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SIZE, &t_array_size_fn_sig,
                     ArraySizeHandler);
 

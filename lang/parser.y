@@ -199,6 +199,13 @@ let_binding:
                                       add_custom_binop(id->data.AST_IDENTIFIER.value);
                                       $$ = ast_let(id, $6, NULL);
                                     }
+
+  | LET '(' IDENTIFIER ')' '=' expr
+                                    {
+                                      Ast *id = ast_identifier($3);
+                                      add_custom_binop(id->data.AST_IDENTIFIER.value);
+                                      $$ = ast_let(id, $6, NULL);
+                                    }
   ;
 
 extern_typed_signature:

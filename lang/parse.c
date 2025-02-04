@@ -522,7 +522,9 @@ Ast *ast_application(Ast *func, Ast *arg) {
   if (func->tag == AST_APPLICATION) {
 
     if (arg->tag == AST_IDENTIFIER &&
+
         is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
+
       Ast *app = Ast_new(AST_APPLICATION);
       app->data.AST_APPLICATION.function = arg;
       app->data.AST_APPLICATION.args = func;
@@ -536,6 +538,7 @@ Ast *ast_application(Ast *func, Ast *arg) {
 
     func->data.AST_APPLICATION.args = prealloc(args, sizeof(Ast) * len);
     func->data.AST_APPLICATION.args[len - 1] = *arg;
+
     return func;
   }
 

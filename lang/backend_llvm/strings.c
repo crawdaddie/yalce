@@ -217,6 +217,29 @@ LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
   return str;
 }
 
+LLVMValueRef tuple_to_string(LLVMValueRef val, Type *tuple_type,
+                             JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder) {
+
+  int len = tuple_type->data.T_CONS.num_args;
+  LLVMValueRef strings[1 + len + (len - 1)];
+
+  int tuple_type_name_len = strlen(tuple_type->data.T_CONS.name);
+  char n[tuple_type_name_len + 2];
+  sprintf(n, "%s ", tuple_type->data.T_CONS.name);
+  strings[0] =
+      _codegen_string(n, tuple_type_name_len + 1, ctx, module, builder);
+  for (int i = 0; i < len; i++) {
+    Type *mem_type = tuple_type->data.T_CONS.args[i];
+    LLVMValueRef v = LLVMBuildExtractValue(builder, val, i, "");
+    strings[1 + (2 * i)] =
+        llvm_string_serialize(v, mem_type, ctx, module, builder);
+
+    strings[1 + (2 * i) + 1] = _codegen_string(", ", 2, ctx, module, builder);
+  }
+  return stream_string_concat(strings, 1 + len + (len - 1), module, builder);
+}
+
 LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
@@ -255,6 +278,10 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 
   if (is_option_type(val_type)) {
     return opt_to_string(val, val_type, ctx, module, builder);
+  }
+
+  if (val_type->kind == T_CONS) {
+    return tuple_to_string(val, val_type, ctx, module, builder);
   }
 
   return char_to_string(LLVMConstInt(LLVMInt8Type(), 60, 0), module, builder);

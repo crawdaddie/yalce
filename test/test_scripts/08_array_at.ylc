@@ -6,6 +6,11 @@ let test_idx_1 = fn () -> array_at sim 1 == 1;;
 let test_idx_2 = fn () -> array_at sim 2 == 2;; 
 let test_array_size_sim = fn () -> (array_size sim == 3);;
 
+let test_idx_0_at = fn () -> sim @ 0 == 5;; 
+let test_idx_1_at = fn () -> sim @ 1 == 1;; 
+let test_idx_2_at = fn () -> sim @ 2 == 2;; 
+let test_array_size_sim_at = fn () -> (array_size sim == 3);;
+
 
 let x = [|
   [|1., 2.|],
@@ -19,12 +24,12 @@ let test_idx_1_0 = fn () -> array_at (array_at x 1) 0 == 3.;; # array[1][0] == 3
 let test_idx_1_1 = fn () -> array_at (array_at x 1) 1 == 4.;; # array[1][1] == 4.
 
 
-# let test_at_fn_0 = fn () -> (x @ 0 @ 0 == 1.);; # array[0][0] == 1. 
-# let test_at_fn_1 = fn () -> (x @ 0 @ 1 == 2.);; # array[0][1] == 2.
-# let test_at_fn_2 = fn () -> (x @ 1 @ 0 == 3.);; # array[1][0] == 3.
-# let test_at_fn_3 = fn () -> (x @ 1 @ 1 == 4.);; # array[1][1] == 4.
-# let test_at_fn_4 = fn () -> (x @ 2 @ 0 == 5.);; # array[2][0] == 5.
-# let test_at_fn_5 = fn () -> (x @ 2 @ 1 == 6.);; # array[2][1] == 6.
+let test_at_fn_0 = fn () -> (x @ 0 @ 0 == 1.);; # array[0][0] == 1. 
+let test_at_fn_1 = fn () -> (x @ 0 @ 1 == 2.);; # array[0][1] == 2.
+let test_at_fn_2 = fn () -> (x @ 1 @ 0 == 3.);; # array[1][0] == 3.
+let test_at_fn_3 = fn () -> (x @ 1 @ 1 == 4.);; # array[1][1] == 4.
+let test_at_fn_4 = fn () -> (x @ 2 @ 0 == 5.);; # array[2][0] == 5.
+let test_at_fn_5 = fn () -> (x @ 2 @ 1 == 6.);; # array[2][1] == 6.
 
 let test_array_size = fn () -> (array_size x == 3);;
 # len of array == 3

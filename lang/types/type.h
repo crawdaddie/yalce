@@ -68,9 +68,11 @@ extern Type t_array_size_fn_sig;
 extern Type t_array_incr_fn_sig;
 extern Type t_array_to_list_fn_sig;
 extern Type t_array_at_fn_sig;
+extern Type t_array_set_fn_sig;
 extern Type t_array_data_ptr_fn_sig;
 extern Type t_array_slice_fn_sig;
 extern Type t_array_new_fn_sig;
+extern Type t_make_ref;
 
 extern Type t_array_of_chars_fn_sig;
 
@@ -84,7 +86,6 @@ extern Type t_cor_loop_sig;
 extern Type t_iter_cor_sig;
 extern Type t_cor_map_iter_sig;
 extern Type t_coroutine_concat_sig;
-
 
 extern Type t_cor_iter_of_list_sig;
 

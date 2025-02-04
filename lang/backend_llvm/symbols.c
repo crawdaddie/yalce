@@ -238,6 +238,19 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                            : codegen(in_expr, inner_ctx, module, builder);
   }
 
+  if (binding->tag == AST_IDENTIFIER && expr->tag == AST_IDENTIFIER) {
+    JITSymbol *sym = lookup_id_ast(expr, outer_ctx);
+    if (sym) {
+      // create symbol alias - ie rebind symbol to another name
+      const char *chars = binding->data.AST_IDENTIFIER.value;
+      int len = binding->data.AST_IDENTIFIER.length;
+      ht_set_hash(inner_ctx->frame->table, chars, hash_string(chars, len), sym);
+
+      return in_expr == NULL ? sym->val
+                             : codegen(in_expr, inner_ctx, module, builder);
+    }
+  }
+
   if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {
 
     expr_val = create_coroutine_constructor_binding(binding, expr, inner_ctx,

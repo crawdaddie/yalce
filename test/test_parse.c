@@ -324,9 +324,15 @@ int main() {
   status &= test_parse("let f = (fn () ->\n"
                        "1\n"
                        ";) in f ();\n",
+
                        "(let f (f () -> \n"
                        "1)\n"
                        ") : (f ())");
+
+  // status &= test_parse("let (@) = array_at;\n"
+  //                      "x_ref @ 0;\n",
+  //                      "((let @ array_at)\n"
+  //                      "((@ x_ref) 0))");
   // extern funcs
   return status ? 0 : 1;
 }
