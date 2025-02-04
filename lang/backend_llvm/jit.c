@@ -392,9 +392,13 @@ void print_result(Type *type, LLVMGenericValueRef result) {
     break;
   }
 
+  case T_VOID: {
+    break;
+  }
+
   default:
     printf("%d", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
-  printf("\n");
+  // printf("\n");
 }

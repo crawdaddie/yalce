@@ -216,6 +216,29 @@ let loop_cor = fn () ->
   {c ()}
   {c ()}
   {c ()}
+`;
+  let d = iter_of_list [1,2,3] |> cor_loop in
+  print `## looped list
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+`;
+
+  let e = iter_of_array [|1,2,3|] |> cor_loop in
+  print `## looped array
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
 `
 ;;
 loop_cor ();

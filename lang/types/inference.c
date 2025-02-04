@@ -1707,7 +1707,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
     }
 
-
     if (ctx->yielded_type == NULL) {
       ctx->yielded_type = yield_expr_type;
 

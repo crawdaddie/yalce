@@ -1,0 +1,33 @@
+let list_sum = fn s l ->
+  match l with
+  | [] -> s
+  | x::rest -> list_sum (s + x) rest
+;;
+
+
+print `(list_sum 0. [1., 2., 3.] == 6.) --> {list_sum 0. [1., 2., 3.]}\n`;
+print `(list_sum 0 [1, 2, 3] == 6) --> {list_sum 0 [1, 2, 3]}\n`;
+
+let list_fold = fn f s l ->
+  match l with
+  | [] -> s
+  | x::rest -> list_fold f (f s x) rest
+;;
+
+
+let sum_int = fn a: (Int) b: (Int) -> a + b;;
+
+print `list fold: {[1,1,1] |> list_fold sum_int 0}\n`;
+
+let array_fold = fn f s a ->
+  let len = array_size a in
+  let aux = fn i su -> 
+    match i with
+    | i if i == len -> su
+    | i -> aux (i + 1) (f su (array_at a i))
+    ; in
+  aux 0 s
+;;
+
+print `array fold: {[|1,1,1|] |> array_fold sum_int 0}\n`;
+
