@@ -1237,6 +1237,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
       fn_type = deep_copy_type(fn_type);
     }
 
+
+
     const char *fn_name =
         ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
@@ -1456,10 +1458,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // for (int i = 0; i < app_len; i++) {
     //   print_type(ast->data.AST_APPLICATION.args[i].md);
     // }
-    if (strcmp(fn_name, "cor_map") == 0) {
-      // print_ast(ast);
-      // print_type(ast->data.AST_APPLICATION.args->md);
-    }
 
     break;
   }
@@ -1637,9 +1635,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Ast *branch_body = &ast->data.AST_MATCH.branches[2 * i + 1];
 
       Type *pattern_type = infer_pattern(branch_pattern, ctx);
-        printf("branch pattern\n");
-        print_ast(branch_pattern);
-        print_type(pattern_type);
 
       if (!pattern_type) {
         fprintf(stderr, "Could not infer pattern type in match branch\n");

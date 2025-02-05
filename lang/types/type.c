@@ -105,6 +105,8 @@ char *tc_list_to_string(Type *t, char *buffer) {
 }
 
 Type t_array_var_el = {T_VAR, {.T_VAR = "varray_el"}};
+
+
 Type t_array_var = {
     T_CONS,
     {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_array_var_el}, 1}},
@@ -773,6 +775,9 @@ Type *deep_copy_type(const Type *original) {
     for (int i = 0; i < copy->data.T_CONS.num_args; i++) {
       copy->data.T_CONS.args[i] = deep_copy_type(original->data.T_CONS.args[i]);
     }
+    copy->data.T_CONS.names = original->data.T_CONS.names;
+
+
     break;
   case T_FN:
     copy->data.T_FN.from = deep_copy_type(original->data.T_FN.from);

@@ -1193,7 +1193,8 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
     LLVMValueRef item = LLVMBuildExtractValue(builder, state_struct, i, "extract_struct_of_coroutines_member");
     if (is_coroutine_type(ast->data.AST_LIST.items[i].md)) {
       LLVMValueRef item_result = _cor_next(item, ret_val_gep, module, builder);
-      LLVMValueRef is_not_null = LLVMBuildICmp(builder, LLVMIntNE, instance_ptr, null_cor_inst(),
+
+      LLVMValueRef is_not_null = LLVMBuildICmp(builder, LLVMIntNE, item_result, null_cor_inst(),
                     "is_not_null");
       coroutine_not_complete = LLVMBuildAnd(builder, coroutine_not_complete, is_not_null, "");
     } else {

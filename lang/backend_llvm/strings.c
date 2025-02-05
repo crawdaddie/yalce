@@ -220,24 +220,50 @@ LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 LLVMValueRef tuple_to_string(LLVMValueRef val, Type *tuple_type,
                              JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
-
   int len = tuple_type->data.T_CONS.num_args;
-  LLVMValueRef strings[1 + len + (len - 1)];
+  int num_string_components = 1 + len + (len - 1);
+
+  bool has_names = false;
+  if (tuple_type->data.T_CONS.names != NULL) {
+    has_names = true;
+    num_string_components += len;
+  }
+  LLVMValueRef strings[num_string_components];
 
   int tuple_type_name_len = strlen(tuple_type->data.T_CONS.name);
+
   char n[tuple_type_name_len + 2];
+
   sprintf(n, "%s ", tuple_type->data.T_CONS.name);
+
   strings[0] =
       _codegen_string(n, tuple_type_name_len + 1, ctx, module, builder);
+
   for (int i = 0; i < len; i++) {
     Type *mem_type = tuple_type->data.T_CONS.args[i];
     LLVMValueRef v = LLVMBuildExtractValue(builder, val, i, "");
-    strings[1 + (2 * i)] =
-        llvm_string_serialize(v, mem_type, ctx, module, builder);
+    if (has_names) {
+      char *name = tuple_type->data.T_CONS.names[i];
+      int name_len = strlen(name);
+      char n[name_len + 3];
 
-    strings[1 + (2 * i) + 1] = _codegen_string(", ", 2, ctx, module, builder);
+      sprintf(n, "%s: ", name);
+
+      strings[1 + (3 * i)] =
+          _codegen_string(n, name_len + 2, ctx, module, builder);
+
+      strings[1 + (3 * i) + 1] =
+          llvm_string_serialize(v, mem_type, ctx, module, builder);
+
+      strings[1 + (3 * i) + 2] = _codegen_string(", ", 2, ctx, module, builder);
+    } else {
+      strings[1 + (2 * i)] =
+          llvm_string_serialize(v, mem_type, ctx, module, builder);
+
+      strings[1 + (2 * i) + 1] = _codegen_string(", ", 2, ctx, module, builder);
+    }
   }
-  return stream_string_concat(strings, 1 + len + (len - 1), module, builder);
+  return stream_string_concat(strings, num_string_components, module, builder);
 }
 
 LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
