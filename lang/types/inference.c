@@ -1052,6 +1052,21 @@ Type *infer_anonymous_lambda(Ast *ast, Type **param_types, int num_params,
   }
   return fn_type;
 }
+static void bind_lambda_args(TICtx *lambda_ctx, Ast *param, Type **param_types,
+                             int i) {
+  if (param->tag == AST_TUPLE) {
+    int len = param->data.AST_LIST.len;
+    Type **types = talloc(sizeof(Type *));
+    for (int i = 0; i < len; i++) {
+      types[i] = next_tvar();
+    }
+    param_types[i] = create_tuple_type(len, types);
+    param->md = param_types[i];
+    printf("bind lambda args\n");
+    print_type(param_types[i]);
+  }
+  lambda_ctx->env = bind_in_env(lambda_ctx->env, param, param_types[i]);
+}
 
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
@@ -1236,8 +1251,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     if (!fn_type->is_recursive_fn_ref) {
       fn_type = deep_copy_type(fn_type);
     }
-
-
 
     const char *fn_name =
         ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
@@ -1543,13 +1556,21 @@ Type *infer(Ast *ast, TICtx *ctx) {
         param_type = compute_type_expression(def, ctx->env);
       } else if (param->tag == AST_VOID) {
         param_type = &t_void;
+      } else if (param->tag == AST_TUPLE) {
+        int len = param->data.AST_LIST.len;
+        Type **contained = talloc(sizeof(Type *) * len);
+        for (int i = 0; i < len; i++) {
+          contained[i] = next_tvar();
+        }
+        param_type = create_tuple_type(len, contained);
+        printf("create var tuple type\n");
+        print_type(param_type);
       } else {
         param_type = next_tvar();
       }
 
       param_types[i] = param_type;
-
-      lambda_ctx.env = bind_in_env(lambda_ctx.env, param, param_type);
+      lambda_ctx.env = bind_in_env(lambda_ctx.env, param, param_types[i]);
     }
 
     // If this is a named function that can be recursive
@@ -1613,7 +1634,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     Ast *expr = ast->data.AST_MATCH.expr;
     // Infer type of expression being matched
     Type *expr_type = infer(expr, ctx);
-
 
     if (!expr_type) {
       fprintf(stderr, "Could not infer match expression type\n");

@@ -356,6 +356,22 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     return _TRUE;
   }
 
+  case AST_TUPLE: {
+    int len = binding->data.AST_LIST.len;
+    LLVMValueRef success = _TRUE;
+    LLVMTypeRef llvm_tuple_type = type_to_llvm_type(val_type, ctx->env, module);
+    for (int i = 0; i < len; i++) {
+      success = LLVMBuildAnd(
+          builder,
+          codegen_pattern_binding(
+              binding->data.AST_LIST.items + i,
+              codegen_tuple_access(i, val, llvm_tuple_type, builder),
+              val_type->data.T_CONS.args[i], ctx, module, builder),
+          success, "");
+    }
+    return success;
+  }
+
   case AST_LIST: {
     if (binding->data.AST_LIST.len == 0) {
       Type *list_el_type = val_type->data.T_CONS.args[0];
