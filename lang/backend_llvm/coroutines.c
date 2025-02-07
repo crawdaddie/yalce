@@ -796,7 +796,6 @@ LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
-
   Type *coroutine_type = ast->md;
   Type *ret_val_type = fn_return_type(coroutine_type);
 
@@ -808,7 +807,6 @@ LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
 
   Ast wrapper_arg = *ast->data.AST_APPLICATION.args;
   wrapper_arg.md = expected_wrapper_type;
-  
 
   // if (is_generic(wrapper_arg->md)) {
   //   Type *new_spec_type = type_fn(ret_val_type, &t_void);
@@ -1095,8 +1093,11 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
 
   LLVMTypeRef struct_member_types[len];
   for (int i = 0; i < len; i++) {
-    struct_member_types[i] =
+
+    Type *member_type =ast->data.AST_LIST.items[i].md;
+    struct_member_types[i] = member_type->kind == T_FN ? GENERIC_PTR :
         type_to_llvm_type(ast->data.AST_LIST.items[i].md, ctx->env, module);
+
   }
 
   LLVMTypeRef llvm_state_struct_type =
@@ -1153,8 +1154,12 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
       coroutine_not_complete =
           LLVMBuildAnd(builder, coroutine_not_complete, is_not_null, "");
     } else if (is_void_func(item_type)) {
-      printf("item type is void func???\n");
-      print_type(item_type);
+      LLVMTypeRef fn_type = type_to_llvm_type(item_type, ctx->env, module);
+      LLVMValueRef item_result = LLVMBuildCall2(builder, fn_type, item, (LLVMValueRef[]){}, 0, "");
+
+      LLVMBuildStore(builder, item_result, ret_val_gep);
+
+
     } else {
       // const state item - don't need to reset???
       LLVMBuildStore(builder, item, ret_val_gep);
@@ -1216,24 +1221,18 @@ LLVMValueRef create_scheduler_wrapper(LLVMTypeRef combo_ret_type,
   LLVMTypeRef fn_type = LLVMFunctionType(LLVMVoidType(), param_types, 2, false);
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
-  // Create function
   LLVMValueRef func = LLVMAddFunction(module, "scheduler_wrapper", fn_type);
 
-  // Create entry block
   LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
   LLVMPositionBuilderAtEnd(builder, entry);
 
-  // Get function parameters
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
-
   LLVMValueRef frame_offset = LLVMGetParam(func, 1);
 
-// Add printf debug statement
 #ifdef COMPILER_DEBUG
   INSERT_PRINTF(2, "wrapper func %p %d\n", instance_ptr, frame_offset);
 #endif
 
-  // Create ret struct
   LLVMValueRef ret_ref = LLVMBuildAlloca(builder, combo_ret_type, "ret");
 
   // Store frame_offset into ret.frame_offset
@@ -1261,7 +1260,6 @@ LLVMValueRef create_scheduler_wrapper(LLVMTypeRef combo_ret_type,
   // Then block
   LLVMPositionBuilderAtEnd(builder, then_block);
 
-  // Load ret.dur
   LLVMValueRef dur_ptr =
       LLVMBuildStructGEP2(builder, combo_ret_type, ret_ref, 0, "dur_ptr");
   LLVMValueRef dur = LLVMBuildLoad2(builder, LLVMDoubleType(), dur_ptr, "dur");
@@ -1277,7 +1275,6 @@ LLVMValueRef create_scheduler_wrapper(LLVMTypeRef combo_ret_type,
 
   LLVMBuildBr(builder, end_block);
 
-  // End block
   LLVMPositionBuilderAtEnd(builder, end_block);
   LLVMBuildRetVoid(builder);
   LLVMPositionBuilderAtEnd(builder, prev_block);

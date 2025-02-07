@@ -699,5 +699,31 @@ int main() {
   T("let x = [|1|]; let set_ref = array_set 0; set_ref x 3", &TARRAY(&t_int));
   T("let (@) = array_at", &t_array_at_fn_sig);
 
+  T("let rand_int = extern fn Int -> Int;\n"
+    "let array_choose = fn arr ->\n"
+    "  let idx = rand_int (array_size arr);\n"
+    "  array_at arr idx \n"
+    ";;\n",
+    &MAKE_FN_TYPE_2(&t_array_var, &t_array_var_el));
+
+  T("let rand_int = extern fn Int -> Int;\n"
+    "let array_choose = fn arr ->\n"
+    "  let idx = rand_int (array_size arr);\n"
+    "  array_at arr idx \n"
+    ";;\n"
+    "array_choose [|1,2,3|]",
+    &t_int);
+
+  T("let rand_int = extern fn Int -> Int;\n"
+    "let array_choose = fn arr ->\n"
+    "  let idx = rand_int (array_size arr);\n"
+    "  array_at arr idx \n"
+    ";;\n"
+    "\\array_choose [|1,2,3|]",
+    &MAKE_FN_TYPE_2(&t_void, &t_int));
+
+  // print_ast(b->data.AST_BODY.stmts[0]);
+  // print_type(b->data.AST_BODY.stmts[0]->md);
+
   return status == true ? 0 : 1;
 }

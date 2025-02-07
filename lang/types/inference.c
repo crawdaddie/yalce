@@ -1186,7 +1186,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, cons_args, len}}};
 
     if (ast->data.AST_LIST.items[0].tag == AST_LET) {
-      char **names = talloc(sizeof(char *) * len);
+      const char **names = talloc(sizeof(char *) * len);
       for (int i = 0; i < len; i++) {
         Ast *member = ast->data.AST_LIST.items + i;
         names[i] = member->data.AST_LET.binding->data.AST_IDENTIFIER.value;
@@ -1311,7 +1311,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
           Type *cons_arg = cons->data.T_CONS.args[i];
           Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
 
-
           if (!arg_type) {
             fprintf(stderr,
                     "Could not infer argument type in cons %s application\n",
@@ -1378,7 +1377,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // Process each argument
     for (int i = 0; i < app_len; i++) {
       Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, &app_ctx);
-// print_type(ast->data.AST_APPLICATION.args[i].md);
+      // print_type(ast->data.AST_APPLICATION.args[i].md);
 
       if (!arg_type) {
         fprintf(stderr, "Could not infer argument type in application\n");
@@ -1460,7 +1459,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
         Type *after = ast->data.AST_APPLICATION.args[i].md;
 
 
-        if (inferred.kind == T_VAR && !is_generic(after)) {
+        // if (inferred.kind == T_VAR && !is_generic(after)) {
+        //   ctx->current_fn_constraints = constraints_extend(
+        //       ctx->current_fn_constraints, deep_copy_type(&inferred), after);
+        // }
+        //
+        if (inferred.kind == T_VAR) {
           ctx->current_fn_constraints = constraints_extend(
               ctx->current_fn_constraints, deep_copy_type(&inferred), after);
         }
@@ -1482,18 +1486,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
         // TODO: special handling for recursive ref??
       }
     }
-
-    // print_constraints(app_ctx.constraints);
-
-    // if (!is_generic(spec_fn)) {
-    // printf("spec fn: \n");
-    // print_type(spec_fn);
-    // printf("FN HASH: %llu\n", hash_spec_fn(spec_fn));
-    // }
-
-    // for (int i = 0; i < app_len; i++) {
-    //   print_type(ast->data.AST_APPLICATION.args[i].md);
-    // }
 
     break;
   }
@@ -1590,8 +1582,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
         param_type = next_tvar();
       }
 
-
       param_types[i] = param_type;
+      param_type[i].is_fn_param = true;
       lambda_ctx.env = bind_in_env(lambda_ctx.env, param, param_types[i]);
     }
 
@@ -1649,7 +1641,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
         type = apply_substitution(subst, type);
       }
     }
-
 
     break;
   }

@@ -255,7 +255,7 @@ typedef struct Type {
       const char *name;
       struct Type **args;
       int num_args;
-      char **names;
+      const char **names;
     } T_CONS;
 
     struct {
@@ -280,6 +280,7 @@ typedef struct Type {
   bool is_recursive_fn_ref;
   bool is_coroutine_instance;
   bool is_coroutine_constructor;
+  bool is_fn_param;
   void *meta;
 } Type;
 

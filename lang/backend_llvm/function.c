@@ -114,17 +114,8 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
   LLVMValueRef body;
 
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
-    Ast *_stmt = ast->data.AST_LAMBDA.body;
-    Ast stmt = *_stmt;
-    
-    // if (stmt.tag == AST_APPLICATION) {
-    //   print_type(stmt.md);
-    //   print_type(stmt.data.AST_APPLICATION.function->md);
-    //   stmt.md = fn_return_type(ast->md);
-    //   // stmt.data.AST_APPLICATION.function->md = ast->md;
-    // }
-
-    body = codegen(&stmt, fn_ctx, module, builder);
+    Ast *stmt = ast->data.AST_LAMBDA.body;
+    body = codegen(stmt, fn_ctx, module, builder);
 
   } else {
     for (int i = 0; i < ast->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
