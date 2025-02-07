@@ -1020,12 +1020,6 @@ bool unify_in_ctx(Type *arg_type, Type *constraint_type, TICtx *ctx) {
   }
   ctx->constraints = constraints;
 
-  // if (constraint_type->is_fn_param) {
-  //   printf("found param type to unify\n");
-  //   print_type(constraint_type);
-  //   print_type(arg_type);
-  //   ctx->current_fn_constraints = constraints_extend(ctx->current_fn_constraints, arg_type, constraint_type);
-  // }
   return true;
 }
 
@@ -1048,8 +1042,6 @@ Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
 
 Type *infer_anonymous_lambda(Ast *ast, Type **param_types, int num_params,
                              TICtx *lambda_ctx) {
-  // printf("infer anonymous lambda\n");
-  // print_ast(ast);
   Type *body_type = infer(ast->data.AST_LAMBDA.body, lambda_ctx);
   if (!body_type)
     return NULL;
@@ -1070,9 +1062,6 @@ Type *infer_anonymous_lambda(Ast *ast, Type **param_types, int num_params,
       return NULL;
     fn_type = apply_substitution(subst, fn_type);
   }
-  printf("anonymous lambda\n");
-  print_ast(ast);
-  print_type(fn_type);
   return fn_type;
 }
 static void bind_lambda_args(TICtx *lambda_ctx, Ast *param, Type **param_types,
@@ -1389,8 +1378,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // Process each argument
     for (int i = 0; i < app_len; i++) {
       Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, &app_ctx);
-      printf("arg type in app: ");
-      print_type(arg_type);
 // print_type(ast->data.AST_APPLICATION.args[i].md);
 
       if (!arg_type) {
@@ -1604,7 +1591,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
 
 
-      param_type->is_fn_param = true;
       param_types[i] = param_type;
       lambda_ctx.env = bind_in_env(lambda_ctx.env, param, param_types[i]);
     }
@@ -1664,10 +1650,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
     }
 
-    if (!is_named) {
-      printf("anon: ");
-      print_type(type);
-    }
 
     break;
   }

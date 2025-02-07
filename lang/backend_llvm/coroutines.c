@@ -190,6 +190,7 @@ LLVMValueRef _cor_wrap_effect(LLVMValueRef instance_ptr,
   //
   LLVMValueRef cor_wrap_effect_func =
       LLVMGetNamedFunction(module, "cor_wrap_effect");
+
   LLVMTypeRef inst_type = cor_inst_struct_type();
 
   LLVMTypeRef cor_wrap_effect_type = LLVMFunctionType(
@@ -205,6 +206,7 @@ LLVMValueRef _cor_wrap_effect(LLVMValueRef instance_ptr,
                         (LLVMValueRef[]){instance_ptr, effect_handler}, 2,
                         "call_cor_wrap_effect");
 }
+
 LLVMValueRef _cor_map(LLVMValueRef instance_ptr, LLVMValueRef map_fn,
                       LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -503,7 +505,6 @@ LLVMValueRef create_coroutine_instance_from_generic_constructor(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
     compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
 
-
     compilation_ctx.env = create_env_for_generic_fn(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
         expected_type);
@@ -627,11 +628,9 @@ static LLVMValueRef codegen_yield_nested_coroutine(
 
     if (args_len == 1) {
 
-
       LLVMValueRef yield_val = codegen(args, ctx, module, builder);
 
-      LLVMBuildStore(builder, yield_val,
-                     new_state_ptr);
+      LLVMBuildStore(builder, yield_val, new_state_ptr);
 
     } else {
 
@@ -794,21 +793,29 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
                                             LLVMModuleRef module,
                                             LLVMBuilderRef builder) {
+
+  Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+
+
   Type *coroutine_type = ast->md;
   Type *ret_val_type = fn_return_type(coroutine_type);
+
   ret_val_type = type_of_option(ret_val_type);
+  Type *expected_wrapper_type = type_fn(ret_val_type, &t_void);
 
   Ast *instance_ptr_arg = ast->data.AST_APPLICATION.args + 1;
   LLVMValueRef instance_ptr = codegen(instance_ptr_arg, ctx, module, builder);
 
-  Ast *wrapper_arg = ast->data.AST_APPLICATION.args;
+  Ast wrapper_arg = *ast->data.AST_APPLICATION.args;
+  wrapper_arg.md = expected_wrapper_type;
+  
 
-  if (is_generic(wrapper_arg->md)) {
-    Type *new_spec_type = type_fn(ret_val_type, &t_void);
-    wrapper_arg->md = new_spec_type;
-  }
+  // if (is_generic(wrapper_arg->md)) {
+  //   Type *new_spec_type = type_fn(ret_val_type, &t_void);
+  //   wrapper_arg->md = new_spec_type;
+  // }
 
-  LLVMValueRef wrapper_func = codegen(wrapper_arg, ctx, module, builder);
+  LLVMValueRef wrapper_func = codegen(&wrapper_arg, ctx, module, builder);
 
   LLVMTypeRef llvm_ret_val_type =
       type_to_llvm_type(ret_val_type, ctx->env, module);
@@ -846,20 +853,12 @@ LLVMValueRef MapCoroutineHandler(Ast *ast, JITLangCtx *ctx,
   Type *from = map_func_type->data.T_FN.from;
   Type *to = map_func_type->data.T_FN.to;
 
-  Ast *map_func_arg = ast->data.AST_APPLICATION.args;
-  printf("Cor Map Handler\n");
-  print_ast(map_func_arg);
-  print_type(map_func_type);
-  print_type(map_func_arg->md);
+  Ast map_func_arg = *ast->data.AST_APPLICATION.args;
 
-  map_func_arg->md = map_func_type;
+  map_func_arg.md = map_func_type;
 
+  LLVMValueRef map_func = codegen(&map_func_arg, ctx, module, builder);
 
-  LLVMValueRef map_func = codegen(map_func_arg, ctx, module, builder);
-  LLVMDumpValue(map_func);
-
-
-  // printf("Map Func %p\n", map_func);
   LLVMValueRef original_coroutine =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
@@ -1313,9 +1312,9 @@ LLVMValueRef CorPlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Call schedule_event(scheduler_wrapper, dur, c)
   LLVMValueRef schedule_args[] = {
-      scheduler_wrapper,                   // scheduler_wrapper function ptr
+      scheduler_wrapper,                    // scheduler_wrapper function ptr
       LLVMConstReal(LLVMDoubleType(), 0.0), // duration
-      instance_ptr                         // coroutine pointer
+      instance_ptr                          // coroutine pointer
   };
   LLVMBuildCall2(builder, LLVMGlobalGetValueType(schedule_event_fn),
                  schedule_event_fn, schedule_args, 3, "");

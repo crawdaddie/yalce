@@ -202,11 +202,11 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     fn_type = fn_type->data.T_FN.to;
   }
 
-  if (is_anon) {
-    printf("anon fn type: ");
-    print_type(ast->md);
-  }
-
+  // if (is_anon) {
+  //   printf("anon fn type: ");
+  //   print_type(ast->md);
+  // }
+  //
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
   LLVMBuildRet(builder, body);
