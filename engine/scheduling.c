@@ -132,9 +132,21 @@ ScheduledEvent pop_event(EventHeap *heap) {
 }
 
 EventHeap *queue;
+// static __thread int tl_offset;
 static __thread int tl_offset;
 
 int get_tl_frame_offset(void) { return tl_offset; }
+
+struct seq_object {
+  void *dur;
+  int32_t frame_offset;
+};
+struct coroutine {
+  int c;
+  void *fn_ptr;
+  void *next;
+  struct seq_object *argv;
+};
 
 void *timer(void *arg) {
   EventHeap *queue = (EventHeap *)arg;
@@ -151,6 +163,11 @@ void *timer(void *arg) {
         ScheduledEvent ev = pop_event(queue);
         double now_d = ((double)(now - start) / S_TO_NS);
         tl_offset = get_frame_offset();
+
+        // printf("popped event from queue: cb: %p coroutine: %p\n",
+        // ev.callback,
+        //        ev.userdata);
+
         ev.callback(ev.userdata, tl_offset);
       }
 
@@ -186,6 +203,14 @@ int scheduler_event_loop() {
 void schedule_event(void (*callback)(void *, int), double delay_seconds,
                     void *userdata) {
 
+  // printf("sched event coroutine: %p callback: %p time: %f\n", userdata,
+  //        callback, delay_seconds);
+
+  if (delay_seconds == 0.0) {
+    int frame_offset = get_frame_offset();
+    return callback(userdata, frame_offset);
+  }
+
   now = get_time_ns(); // Update 'now' before scheduling
   return _schedule_event(queue, callback, delay_seconds, userdata, now);
 }
@@ -198,12 +223,4 @@ void schedule_event_quant(void (*callback)(void *, int), double quantization,
 
   return _schedule_event(queue, callback, fmod(now_s, quantization), userdata,
                          now);
-}
-
-typedef struct Timer {
-} Timer;
-
-void schedule_coroutine_driver(CoroutineSchedulerCallback callback,
-                               double quantization) {
-  printf("sched coroutine driver\n");
 }

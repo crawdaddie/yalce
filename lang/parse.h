@@ -134,6 +134,7 @@ typedef enum ast_tag {
   AST_MATCH_GUARD_CLAUSE,
   AST_YIELD,
   AST_SPREAD_OP,
+  AST_IMPLEMENTS,
 } ast_tag;
 
 struct Ast {
@@ -258,6 +259,11 @@ struct Ast {
     struct AST_SPREAD_OP {
       Ast *expr;
     } AST_SPREAD_OP;
+
+    struct AST_IMPLEMENTS {
+      ObjString type_id;
+      ObjString trait_id;
+    } AST_IMPLEMENTS;
   } data;
 
   void *md;
@@ -344,5 +350,8 @@ Ast *ast_yield(Ast *expr);
 
 Ast *ast_thunk_expr(Ast *expr);
 Ast *ast_spread_operator(Ast *expr);
+Ast *ast_fn_signature_of_list(Ast *l);
+
+Ast *ast_implements(ObjString, ObjString);
 
 #endif

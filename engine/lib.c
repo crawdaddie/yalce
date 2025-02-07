@@ -249,10 +249,10 @@ SignalRef inlet(double default_val) {
   if (_chain == NULL) {
     _chain = group_new(1);
     sig = _chain->ins;
-    // printf("created sig %p %p\n", sig, sig->buf);
+    printf("created sig %p %p\n", sig, sig->buf);
   } else {
     sig = group_add_input(_chain);
-    // printf("created sig %p %p in existing group\n", sig, sig->buf);
+    printf("created sig %p %p in existing group\n", sig, sig->buf);
   }
 
   for (int i = 0; i < sig->size; i++) {

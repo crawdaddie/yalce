@@ -276,10 +276,11 @@ typedef struct Type {
   TypeClass *implements;
 
   void *constructor;
-  size_t constructor_size;
+  // size_t constructor_size;
   bool is_recursive_fn_ref;
   bool is_coroutine_instance;
   bool is_coroutine_constructor;
+  bool is_fn_param;
   void *meta;
 } Type;
 
@@ -404,4 +405,6 @@ bool is_coroutine_type(Type *fn_type);
 bool is_coroutine_constructor_type(Type *fn_type);
 
 Type *create_coroutine_instance_type(Type *ret_type);
+
+bool is_void_func(Type *f);
 #endif

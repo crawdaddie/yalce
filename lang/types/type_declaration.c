@@ -145,6 +145,15 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
           return cor;
         }
+
+        // if ((strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+        //             "Ptr") == 0) &&
+        //     (strcmp(expr->data.AST_BINOP.right->data.AST_IDENTIFIER.value,
+        //             "_") == 0)) {
+        //   Type *cons = deep_copy_type(&t_ptr);
+        //   cons->data.T_CONS.args[0] = &t_char;
+        //   return cons;
+        // }
       }
 
       Type *contained_type =
@@ -184,11 +193,23 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   const char *name = binding->data.AST_IDENTIFIER.value;
 
   Ast *type_expr_ast = ast->data.AST_LET.expr;
-  Type *type = compute_type_expression(type_expr_ast, *env);
+  Type *type;
+  if (type_expr_ast != NULL) {
+    type = compute_type_expression(type_expr_ast, *env);
+  } else {
+    Type **cont = talloc(sizeof(Type *));
+    *cont = &t_char;
+    type = create_cons_type(name, 1, cont);
+  }
+
   if (!type) {
     fprintf(stderr, "Error computing type declaration");
     return NULL;
   }
+
+  // if (is_pointer_type(type)) {
+  //   type->data.T_CONS.name = name;
+  // }
 
   type->alias = name;
 

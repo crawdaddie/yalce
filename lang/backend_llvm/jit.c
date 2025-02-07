@@ -7,6 +7,7 @@
 #include "input.h"
 #include "parse.h"
 #include "serde.h"
+#include "synths.h"
 #include "test_module.h"
 #include "types/inference.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -205,6 +206,7 @@ int jit(int argc, char **argv) {
                     .frame = &initial_stack_frame};
 
   initialize_builtin_funcs(&ctx, module, builder);
+  initialize_synth_types(&ctx, module, builder);
   bool repl = false;
   // print_type_env(env);
 
@@ -397,5 +399,5 @@ void print_result(Type *type, LLVMGenericValueRef result) {
     printf("%d", (int)LLVMGenericValueToInt(result, 0));
     break;
   }
-  // printf("\n");
+  printf("\n");
 }

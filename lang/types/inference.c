@@ -608,6 +608,9 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
 
   // Handle constructed types
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
+    if (is_pointer_type(t1)) {
+      return true;
+    }
     if (is_option_type(t1) && t2->alias && (strcmp(t2->alias, "Option") == 0)) {
       return true;
     }
@@ -634,6 +637,10 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
   }
 
   if ((t1->kind != t2->kind) && is_pointer_type(t1) && (t2->kind == T_FN)) {
+    return true;
+  }
+
+  if ((t1->kind != t2->kind) && is_pointer_type(t1)) {
     return true;
   }
 
@@ -805,6 +812,11 @@ void apply_substitution_to_nodes_rec(Substitution *subst, Ast *ast) {
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
       apply_substitution_to_nodes_rec(subst, ast->data.AST_BODY.stmts[i]);
     }
+    break;
+  }
+
+  case AST_LAMBDA: {
+    apply_substitution_to_nodes_rec(subst, ast->data.AST_LAMBDA.body);
     break;
   }
 
@@ -1007,6 +1019,13 @@ bool unify_in_ctx(Type *arg_type, Type *constraint_type, TICtx *ctx) {
     return false;
   }
   ctx->constraints = constraints;
+
+  // if (constraint_type->is_fn_param) {
+  //   printf("found param type to unify\n");
+  //   print_type(constraint_type);
+  //   print_type(arg_type);
+  //   ctx->current_fn_constraints = constraints_extend(ctx->current_fn_constraints, arg_type, constraint_type);
+  // }
   return true;
 }
 
@@ -1029,7 +1048,8 @@ Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
 
 Type *infer_anonymous_lambda(Ast *ast, Type **param_types, int num_params,
                              TICtx *lambda_ctx) {
-
+  // printf("infer anonymous lambda\n");
+  // print_ast(ast);
   Type *body_type = infer(ast->data.AST_LAMBDA.body, lambda_ctx);
   if (!body_type)
     return NULL;
@@ -1050,6 +1070,9 @@ Type *infer_anonymous_lambda(Ast *ast, Type **param_types, int num_params,
       return NULL;
     fn_type = apply_substitution(subst, fn_type);
   }
+  printf("anonymous lambda\n");
+  print_ast(ast);
+  print_type(fn_type);
   return fn_type;
 }
 static void bind_lambda_args(TICtx *lambda_ctx, Ast *param, Type **param_types,
@@ -1062,8 +1085,6 @@ static void bind_lambda_args(TICtx *lambda_ctx, Ast *param, Type **param_types,
     }
     param_types[i] = create_tuple_type(len, types);
     param->md = param_types[i];
-    printf("bind lambda args\n");
-    print_type(param_types[i]);
   }
   lambda_ctx->env = bind_in_env(lambda_ctx->env, param, param_types[i]);
 }
@@ -1211,17 +1232,26 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_EXTERN_FN: {
     Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
-    if (sig->tag == AST_FN_SIGNATURE) {
-      Type *f = compute_type_expression(
-          sig->data.AST_LIST.items + sig->data.AST_LIST.len - 1, ctx->env);
+    int params_count = sig->data.AST_LIST.len - 1;
 
-      for (int i = sig->data.AST_LIST.len - 2; i >= 0; i--) {
+    if (sig->tag == AST_FN_SIGNATURE) {
+      Type *f = compute_type_expression(sig->data.AST_LIST.items + params_count,
+                                        ctx->env);
+      sig->data.AST_LIST.items[params_count].md = f;
+
+      for (int i = params_count - 1; i >= 0; i--) {
         Type *p =
             compute_type_expression(sig->data.AST_LIST.items + i, ctx->env);
+
+        sig->data.AST_LIST.items[i].md = p;
+
         f = type_fn(p, f);
       }
       type = f;
     }
+
+    Type *f = compute_type_expression(sig->data.AST_LIST.items + params_count,
+                                      ctx->env);
     break;
   }
 
@@ -1292,6 +1322,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
           Type *cons_arg = cons->data.T_CONS.args[i];
           Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
 
+
           if (!arg_type) {
             fprintf(stderr,
                     "Could not infer argument type in cons %s application\n",
@@ -1358,6 +1389,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // Process each argument
     for (int i = 0; i < app_len; i++) {
       Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, &app_ctx);
+      printf("arg type in app: ");
+      print_type(arg_type);
+// print_type(ast->data.AST_APPLICATION.args[i].md);
 
       if (!arg_type) {
         fprintf(stderr, "Could not infer argument type in application\n");
@@ -1437,6 +1471,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
                                         ast->data.AST_APPLICATION.args + i);
 
         Type *after = ast->data.AST_APPLICATION.args[i].md;
+
+
         if (inferred.kind == T_VAR && !is_generic(after)) {
           ctx->current_fn_constraints = constraints_extend(
               ctx->current_fn_constraints, deep_copy_type(&inferred), after);
@@ -1563,19 +1599,20 @@ Type *infer(Ast *ast, TICtx *ctx) {
           contained[i] = next_tvar();
         }
         param_type = create_tuple_type(len, contained);
-        printf("create var tuple type\n");
-        print_type(param_type);
       } else {
         param_type = next_tvar();
       }
 
+
+      param_type->is_fn_param = true;
       param_types[i] = param_type;
       lambda_ctx.env = bind_in_env(lambda_ctx.env, param, param_types[i]);
     }
 
+    bool is_named = ast->data.AST_LAMBDA.fn_name.chars != NULL;
     // If this is a named function that can be recursive
     Type *fn_type_var = NULL;
-    if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
+    if (is_named) {
       // Create a type variable for the recursive function
       fn_type_var = next_tvar();
       fn_type_var->is_recursive_fn_ref = true; // Mark as recursive
@@ -1625,6 +1662,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
       if (subst) {
         type = apply_substitution(subst, type);
       }
+    }
+
+    if (!is_named) {
+      printf("anon: ");
+      print_type(type);
     }
 
     break;
@@ -1774,6 +1816,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fprintf(stderr, " != ");
         print_type_err(yield_expr_type);
         return NULL;
+      }
+
+      if (is_generic(yield_expr_type) && is_generic(prev_yield_type)) {
+        ctx->current_fn_constraints = constraints_extend(
+            ctx->current_fn_constraints, yield_expr_type, prev_yield_type);
       }
 
       ctx->yielded_type = yield_expr_type;

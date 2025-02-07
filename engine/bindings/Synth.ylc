@@ -54,9 +54,9 @@ let lag_node = extern fn Double -> Signal -> Synth;
 let tanh_node = extern fn Double -> Signal -> Synth;
 let grain_delay_node = extern fn Double -> Double -> Double -> Double -> Double -> Signal -> Synth;
 
-let chain_wrap = fn def -> 
+let chain_wrap = fn def: (() -> Synth) -> 
   reset_chain ();
-  let x = def ();
+  let x = def () in
   end_chain x
 ;;
 

@@ -57,6 +57,7 @@ Ast* ast_root = NULL;
 %token DOUBLE_AT
 %token THUNK
 %token IMPORT
+%token IMPLEMENTS
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -147,6 +148,7 @@ expr:
   | type_decl                         { $$ = $1; }
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
   | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
+  | IDENTIFIER IMPLEMENTS IDENTIFIER  { $$ = ast_implements($1, $3); }
   ;
 
 simple_expr:
@@ -175,7 +177,8 @@ let_binding:
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' EXTERN FN fn_signature  
                                     { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
-  | LET expr_list '=' expr          {$$ = ast_let(ast_tuple($2), $4, NULL);}
+
+  | LET expr_list '=' expr          { $$ = ast_let(ast_tuple($2), $4, NULL);}
 
 
   | LET IDENTIFIER '=' '(' extern_variants ')'  
@@ -321,6 +324,12 @@ type_decl:
                                     $$ = type_decl;
                                   }
 
+  | 'type' IDENTIFIER              {
+                                      Ast *type_decl = ast_let(ast_identifier($2), NULL, NULL);
+                                      type_decl->tag = AST_TYPE_DECL;
+                                      $$ = type_decl;
+                                   }
+
   | 'type' type_args '=' type_expr {
                                     Ast *args = $2;
                                     Ast *name = args->data.AST_LAMBDA.params;
@@ -338,8 +347,8 @@ type_args:
   | type_args IDENTIFIER    { $$ = ast_arg_list_push($1, ast_identifier($2), NULL); }
 
 fn_signature:
-    type_expr ARROW               { $$ = ast_fn_sig($1, NULL); }
-  | fn_signature type_expr        { $$ = ast_fn_sig_push($1, $2); }
+    type_expr ARROW type_expr           { $$ = ast_fn_sig($1, $3); }
+  | fn_signature ARROW type_expr        { $$ = ast_fn_sig_push($1, $3); }
   ;
 
 tuple_type:
@@ -351,7 +360,7 @@ type_expr:
     type_atom                 { $$ = $1; }
   | '|' type_atom             { $$ = ast_list($2); }
   | type_expr '|' type_atom   { $$ = ast_list_push($1, $3); } 
-  | fn_signature              { $$ = $1; }
+  | fn_signature              { $$ = ast_fn_signature_of_list($1); }
   | tuple_type                { $$ = $1; }
   ;
 

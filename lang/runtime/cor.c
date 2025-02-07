@@ -10,6 +10,10 @@ cor *cor_init(cor *cor, CoroutineFn fn) {
 cor *cor_alloc() { return malloc(sizeof(cor)); }
 
 cor *cor_next(cor *coroutine, void *ret_val) {
+  if (!coroutine) {
+    fprintf(stderr, "Error - coroutine is null\n");
+    return NULL;
+  }
 
   cor *res = coroutine->fn_ptr(coroutine, ret_val);
 
@@ -23,7 +27,6 @@ cor *cor_next(cor *coroutine, void *ret_val) {
   }
 
   res->counter++;
-  // *coroutine = *res;
   return res;
 }
 

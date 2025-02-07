@@ -299,7 +299,8 @@ node_perform sum_perform_(Node *node, int nframes, double spf) {
     double *out = node->out.buf;                                               \
     Signal *input_sigs = node->ins;                                            \
     double *in0 = input_sigs[0].buf;                                           \
-    int i, j;                                                                  \
+    int i = 0;                                                                 \
+    int j = 0;                                                                 \
                                                                                \
     if (num_ins == 1) {                                                        \
       memcpy(out, in0, nframes * sizeof(double));                              \
@@ -438,6 +439,8 @@ int num_inputs(Node *n) { return n->num_ins; }
 
 Signal *signal_of_double(double val) {
   Signal *signal = get_sig_default(1, val);
+
+  printf("const signal %p of double %f\n", signal, val);
   return signal;
 }
 

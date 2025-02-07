@@ -106,7 +106,6 @@ char *tc_list_to_string(Type *t, char *buffer) {
 
 Type t_array_var_el = {T_VAR, {.T_VAR = "varray_el"}};
 
-
 Type t_array_var = {
     T_CONS,
     {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_array_var_el}, 1}},
@@ -207,9 +206,8 @@ Type t_cor_loop_var = {
 
 Type t_cor_loop_sig = MAKE_FN_TYPE_2(&t_cor_loop_var, &t_cor_loop_var);
 
-Type t_cor_play_sig =
-    MAKE_FN_TYPE_3(&MAKE_FN_TYPE_3(&t_cor_map_from_type, &t_int, &t_void),
-                   &t_cor_loop_var, &t_void);
+Type t_cor_play_sig = MAKE_FN_TYPE_3(&t_ptr, // schedule event injected func
+                                     &t_cor_loop_var, &t_void);
 
 Type t_list_cor = {T_FN,
                    {.T_FN = {.from = &t_void, .to = &TOPT(&t_list_var_el)}},
@@ -639,12 +637,8 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
 }
 
 Type *env_lookup(TypeEnv *env, const char *name) {
-  // if (env == NULL) {
-  //   return NULL;
-  // }
-  //
   while (env) {
-    if (strcmp(env->name, name) == 0) {
+    if (env->name && strcmp(env->name, name) == 0) {
       return env->type;
     }
 
@@ -750,7 +744,6 @@ Type *deep_copy_type(const Type *original) {
   copy->kind = original->kind;
   copy->alias = original->alias;
   copy->constructor = original->constructor;
-  copy->constructor_size = original->constructor_size;
   copy->implements = original->implements;
   copy->is_recursive_fn_ref = original->is_recursive_fn_ref;
   copy->is_coroutine_constructor = original->is_coroutine_constructor;
@@ -776,7 +769,6 @@ Type *deep_copy_type(const Type *original) {
       copy->data.T_CONS.args[i] = deep_copy_type(original->data.T_CONS.args[i]);
     }
     copy->data.T_CONS.names = original->data.T_CONS.names;
-
 
     break;
   case T_FN:
@@ -1292,4 +1284,8 @@ bool is_coroutine_type(Type *fn_type) {
 
 bool is_coroutine_constructor_type(Type *fn_type) {
   return fn_type->kind == T_FN && fn_type->is_coroutine_constructor;
+}
+
+bool is_void_func(Type *f) {
+  return (f->kind == T_FN) && (f->data.T_FN.from->kind == T_VOID);
 }

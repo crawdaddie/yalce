@@ -211,6 +211,16 @@ int main() {
   });
 
   ({
+    Type t0 = TVAR("`0");
+    Type t1 = TVAR("`1");
+    Type t2 = TVAR("`2");
+
+    T("let f = fn (x, y, z) frame_offset: (Int) -> (z, y, x);",
+      &MAKE_FN_TYPE_3(&TTUPLE(3, &t0, &t1, &t2), &t_int,
+                      &TTUPLE(3, &t2, &t1, &t0)));
+  });
+
+  ({
     Type t0 = arithmetic_var("`0");
     Type t1 = arithmetic_var("`1");
     Type t2 = arithmetic_var("`2");

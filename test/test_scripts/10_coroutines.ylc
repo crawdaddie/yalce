@@ -69,6 +69,21 @@ let test_fib_cor = fn () ->
   && co () == Some 8
 ;;
 
+# let test_geo = fn () ->
+#
+#   let geo = fn a ->
+#     yield a;
+#     yield geo (a * 2.0)
+#   ;;
+#
+#   let co = geo 1. in
+#      co () == Some 1.
+#   && co () == Some 2.
+#   && co () == Some 4.
+#   && co () == Some 8.
+#   && co () == Some 16.
+# ;;
+
 # let test_iter_all_arg = fn () ->
 #
 #   let co_void_arg = fn a ->

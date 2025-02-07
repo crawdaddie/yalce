@@ -241,4 +241,49 @@ let loop_cor = fn () ->
   {e ()}
 `
 ;;
+
 loop_cor ();
+
+let arithmetic_series = fn () -> 
+  let arithmetic = fn s ->
+    yield s;
+    yield arithmetic (s + 1)
+  ;;
+  let c = arithmetic 1 in
+
+  print `## arithmetic series:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+arithmetic_series ();
+
+let geometric = fn () -> 
+  let geo = fn s ->
+    yield s;
+    yield geo (s * 1.1)
+  ;;
+  let g = geo 1.0 in
+
+  print `## geometric series:
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+`
+;;
+geometric ()

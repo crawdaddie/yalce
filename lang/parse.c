@@ -272,6 +272,9 @@ Ast *ast_identifier(ObjString id) {
 Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.binding = name;
+  if (expr == NULL) {
+    return node;
+  }
 
   if (expr->tag == AST_LAMBDA) {
     if (!top_level_tests &&
@@ -846,9 +849,34 @@ Ast *ast_meta(ObjString meta_id, Ast *next) {
 }
 
 Ast *ast_extern_fn(ObjString name, Ast *signature) {
+
   Ast *extern_fn = Ast_new(AST_EXTERN_FN);
   extern_fn->data.AST_EXTERN_FN.signature_types = signature;
   extern_fn->data.AST_EXTERN_FN.fn_name = name;
+
+  Ast *l = signature;
+  int len = 0;
+  while (l->tag == AST_LIST || l->tag == AST_FN_SIGNATURE) {
+    l = l->data.AST_LIST.items + 1;
+    len++;
+  }
+  len++;
+
+  Ast *items = palloc(sizeof(Ast) * len);
+  int i = 0;
+  l = signature;
+  while (l->tag == AST_LIST || l->tag == AST_FN_SIGNATURE) {
+    *(items + i) = *l->data.AST_LIST.items;
+    l = l->data.AST_LIST.items + 1;
+    i++;
+  }
+  *(items + i) = *l;
+  Ast *sig_list = Ast_new(AST_LIST);
+  sig_list->data.AST_LIST.items = items;
+  sig_list->data.AST_LIST.len = len;
+  sig_list->tag = AST_FN_SIGNATURE;
+  extern_fn->data.AST_EXTERN_FN.signature_types = sig_list;
+
   return extern_fn;
 }
 Ast *ast_assoc(Ast *l, Ast *r) { return ast_let(l, r, NULL); }
@@ -955,16 +983,16 @@ Ast *ast_await(Ast *awaitable) {
   return awaitable;
 }
 
-Ast *ast_fn_sig(Ast *arg, Ast *arg2) {
-  Ast *a = ast_list(arg);
-  a->tag = AST_FN_SIGNATURE;
+Ast *ast_fn_sig(Ast *a, Ast *b) {
+  a = ast_list(a);
+  ast_list_push(a, b);
+  // a->tag = AST_FN_SIGNATURE;
   return a;
 }
+Ast *ast_fn_sig_push(Ast *tuple, Ast *mem) {
 
-Ast *ast_fn_sig_push(Ast *l, Ast *a) {
-  Ast *sig = ast_list_push(l, a);
-  a->tag = AST_FN_SIGNATURE;
-  return sig;
+  Ast *tup = ast_list_push(tuple, mem);
+  return tup;
 }
 
 Ast *ast_tuple_type(Ast *a, Ast *b) {
@@ -973,17 +1001,16 @@ Ast *ast_tuple_type(Ast *a, Ast *b) {
   a->tag = AST_TUPLE;
   return a;
 }
+Ast *ast_tuple_type_push(Ast *tuple, Ast *mem) {
+  Ast *tup = ast_list_push(tuple, mem);
+  tup->tag = AST_TUPLE;
+  return tup;
+}
 
 Ast *ast_tuple_type_single(Ast *a) {
   a = ast_list(a);
   a->tag = AST_TUPLE;
   return a;
-}
-
-Ast *ast_tuple_type_push(Ast *tuple, Ast *mem) {
-  Ast *tup = ast_list_push(tuple, mem);
-  tup->tag = AST_TUPLE;
-  return tup;
 }
 
 Ast *ast_cons_decl(token_type op, Ast *left, Ast *right) {
@@ -1050,4 +1077,15 @@ Ast *ast_spread_operator(Ast *expr) {
   Ast *spread = Ast_new(AST_SPREAD_OP);
   spread->data.AST_SPREAD_OP.expr = expr;
   return spread;
+}
+Ast *ast_fn_signature_of_list(Ast *l) {
+  l->tag = AST_FN_SIGNATURE;
+  return l;
+}
+
+Ast *ast_implements(ObjString type, ObjString trait) {
+  Ast *impl_expr = Ast_new(AST_IMPLEMENTS);
+  impl_expr->data.AST_IMPLEMENTS.type_id = type;
+  impl_expr->data.AST_IMPLEMENTS.trait_id = trait;
+  return impl_expr;
 }

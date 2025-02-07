@@ -16,6 +16,7 @@ LLVMTypeRef cor_inst_struct_type();
 
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
                             LLVMModuleRef module) {
+
   if (is_coroutine_type(fn_type)) {
     return LLVMPointerType(cor_inst_struct_type(), 0);
   }
@@ -29,21 +30,24 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
         type_to_llvm_type(fn_type->data.T_FN.to, env, module);
     llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
   } else {
-    for (int i = 0; i < fn_len; i++) {
-      Type *t = fn_type->data.T_FN.from;
-      llvm_param_types[i] = type_to_llvm_type(t, env, module);
 
+    for (int i = 0; i < fn_len; i++) {
+
+      Type *t = fn_type->data.T_FN.from;
       if (t->kind == T_FN) {
-        llvm_param_types[i] = LLVMPointerType(llvm_param_types[i], 0);
+        llvm_param_types[i] = GENERIC_PTR;
       } else if (is_pointer_type(t) && t->data.T_CONS.num_args == 0) {
-        llvm_param_types[i] = LLVMPointerType(LLVMInt8Type(), 0);
+        llvm_param_types[i] = GENERIC_PTR;
       } else if (is_pointer_type(t)) {
         llvm_param_types[i] = LLVMPointerType(
             type_to_llvm_type(t->data.T_CONS.args[0], env, module), 0);
+      } else {
+        llvm_param_types[i] = type_to_llvm_type(t, env, module);
       }
 
       fn_type = fn_type->data.T_FN.to;
     }
+
     Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
     LLVMTypeRef llvm_return_type_ref =
         type_to_llvm_type(return_type, env, module);
@@ -57,6 +61,7 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+
   const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
   int name_len = strlen(name);
 
@@ -64,11 +69,32 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.len - 1;
 
   LLVMTypeRef llvm_param_types[params_count];
-
   Type *fn_type = ast->md;
 
+  if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
+
+    LLVMTypeRef ret_type =
+        type_to_llvm_type(fn_type->data.T_FN.to, ctx->env, module);
+    LLVMTypeRef llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
+    return get_extern_fn(name, llvm_fn_type, module);
+  }
+
+  for (int i = 0; i < params_count; i++) {
+    Type *param_type =
+        ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[i].md;
+
+    llvm_param_types[i] = param_type->kind == T_FN
+                              ? GENERIC_PTR
+                              : type_to_llvm_type(param_type, ctx->env, module);
+  }
+  LLVMTypeRef ret_type = type_to_llvm_type(
+      ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[params_count]
+          .md,
+      ctx->env, module);
+
   LLVMTypeRef llvm_fn_type =
-      codegen_fn_type(fn_type, params_count, ctx->env, module);
+      LLVMFunctionType(ret_type, llvm_param_types, params_count, 0);
+
   return get_extern_fn(name, llvm_fn_type, module);
 }
 
@@ -84,9 +110,22 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
 LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
 
+
   LLVMValueRef body;
+
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
-    body = codegen(ast->data.AST_LAMBDA.body, fn_ctx, module, builder);
+    Ast *_stmt = ast->data.AST_LAMBDA.body;
+    Ast stmt = *_stmt;
+    
+    // if (stmt.tag == AST_APPLICATION) {
+    //   print_type(stmt.md);
+    //   print_type(stmt.data.AST_APPLICATION.function->md);
+    //   stmt.md = fn_return_type(ast->md);
+    //   // stmt.data.AST_APPLICATION.function->md = ast->md;
+    // }
+
+    body = codegen(&stmt, fn_ctx, module, builder);
+
   } else {
     for (int i = 0; i < ast->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
 
@@ -107,6 +146,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
+
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
   if (fn_name.chars == NULL) {
@@ -126,6 +166,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     fprintf(stderr, "Error: could not create function\n");
     return NULL;
   }
+
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
 
@@ -159,6 +200,11 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               builder);
     }
     fn_type = fn_type->data.T_FN.to;
+  }
+
+  if (is_anon) {
+    printf("anon fn type: ");
+    print_type(ast->md);
   }
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);

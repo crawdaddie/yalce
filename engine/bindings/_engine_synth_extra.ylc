@@ -1,6 +1,6 @@
-let chain_wrap = fn def -> 
+let chain_wrap = fn def: (() -> Synth) -> 
   reset_chain ();
-  let x = def ();
+  let x = def () in
   end_chain x
 ;;
 

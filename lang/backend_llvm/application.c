@@ -61,17 +61,23 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
 
     Ast *app_arg = ast->data.AST_APPLICATION.args + i;
 
+    Type *app_arg_type = app_arg->md;
+
     LLVMValueRef app_val;
     if (is_generic(app_arg->md) && expected_type->kind == T_FN) {
       Ast _app_arg = *app_arg;
       _app_arg.md = expected_type;
       app_val = codegen(&_app_arg, ctx, module, builder);
+    } else if (!types_equal(app_arg_type, expected_type) &&
+               expected_type->alias != NULL) {
+
+      app_val = codegen(app_arg, ctx, module, builder);
+      app_val = handle_type_conversions(app_val, app_arg_type, expected_type,
+                                        module, builder);
+
     } else {
       app_val = codegen(app_arg, ctx, module, builder);
     }
-    // printf("convert types??");
-    // print_type(expected_type);
-    // print_type(app_arg->md);
 
     callable_type = callable_type->data.T_FN.to;
 
@@ -109,6 +115,7 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (ast->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
@@ -231,11 +238,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
       } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION &&
                  original_callable_sym->symbol_data.STYPE_GENERIC_FUNCTION
                      .builtin_handler) {
-
-        printf("builtin handler: ");
-        print_ast(ast);
-        print_type(full_expected_fn_type);
-
         return NULL;
       } else {
         fprintf(stderr, "Error: currying failed\n");
