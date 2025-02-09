@@ -1,0 +1,21 @@
+%include Ref
+let pop_left = fn q ->
+  let h, t = get_ref q in
+  match h with
+  | x::rest -> (
+    q <- (rest, t);
+    Some x
+    ) 
+  | [] -> None
+;; 
+
+let enqueue = fn q item ->
+  let _, t = get_ref q in
+  let last = [item] in
+  let h = list_concat t last in
+  q <- (h, last) 
+;;  
+let l = Int[];
+let q_ref = Ref (l, l);
+enqueue q 1
+

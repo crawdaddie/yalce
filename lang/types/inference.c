@@ -1731,7 +1731,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
       // handle branch body
       TICtx branch_ctx = *ctx;
       branch_ctx.scope++;
-      branch_ctx.constraints = NULL; // Start with fresh constraints for branch
+      branch_ctx.constraints = NULL; // Start with fresh constraints for
+      // branch
       branch_ctx.env =
           bind_in_env(branch_ctx.env, branch_pattern, pattern_type);
 

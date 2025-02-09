@@ -1,2 +1,6 @@
 let (@) = array_at;
 
+let array_choose = fn arr ->
+  let idx = rand_int (array_size arr);
+  arr @ idx 
+;;
