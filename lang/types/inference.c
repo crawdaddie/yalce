@@ -249,6 +249,8 @@ void initialize_builtin_types() {
   add_builtin("iter_of_array", &t_iter_of_array_sig);
   add_builtin("cor_loop", &t_cor_loop_sig);
   add_builtin("cor_play", &t_cor_play_sig);
+  add_builtin("list_concat", &t_list_concat);
+  add_builtin("::", &t_list_prepend);
 }
 
 Type *param_binding_type(Ast *ast) {
@@ -431,9 +433,10 @@ void typeclasses_extend(Type *t, TypeClass *tc) {
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
 
   if (ast->data.AST_LIST.len == 0) {
-    Type *t = talloc(sizeof(Type));
-    *t = t_empty_list;
-    return t;
+    // Type *t = talloc(sizeof(Type));
+    // *t = t_empty_list;
+    // return t;
+    return &t_empty_list;
   }
 
   int len = ast->data.AST_LIST.len;
@@ -554,9 +557,35 @@ bool unify_option(Type *t1, Type *t2, TypeConstraint **constraints) {
   return false;
 }
 
+bool is_none_variant_member_type(Type *t) {
+  return (t->kind == T_CONS) && (strcmp(t->data.T_CONS.name, "None") == 0);
+}
+
+Type *find_option_in_constraints(Type *var, TypeConstraint *constraints) {
+  while (constraints) {
+    Type *t1 = constraints->t1;
+    Type *t2 = constraints->t2;
+    if (types_equal(t1, var) && t2->kind == T_CONS &&
+        strcmp(t2->data.T_CONS.name, "variant")) {
+      return t2;
+    }
+    constraints = constraints->next;
+  }
+  return NULL;
+}
+
 bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
-  // Handle type variables
+
+  if (t2->kind == T_EMPTY_LIST) {
+    return true;
+  }
+
   if (t1->kind == T_VAR) {
+    if (is_none_variant_member_type(t2) &&
+        find_option_in_constraints(t1, *constraints)) {
+      return true;
+    }
+
     if (t2->kind == T_VAR && strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0) {
       return true; // Same type variable
     }
@@ -611,7 +640,14 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
     if (is_pointer_type(t1)) {
       return true;
     }
+
+    // if (is_list_type(t1) && is_list_type(t2)) {
+    //   return unify(t1->data.T_CONS.args[0], t2->data.T_CONS.args[0],
+    //   constraints);
+    // }
+
     if (is_option_type(t1) && t2->alias && (strcmp(t2->alias, "Option") == 0)) {
+      // TODO: unify contained types here as well?
       return true;
     }
 
@@ -680,7 +716,9 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     Type *t1 = apply_substitution(subst, constraints->t1);
     Type *t2 = apply_substitution(subst, constraints->t2);
 
-    if (t1->kind == T_VAR) {
+    if (is_none_variant_member_type(t1) && is_option_type(t2)) {
+      subst = substitutions_extend(subst, constraints->t1, t2);
+    } else if (t1->kind == T_VAR) {
       // Check for recursive types
       if (occurs_check(t1, t2)) {
         return NULL; // Infinite type error
@@ -896,40 +934,44 @@ Type *generalize_type(TypeEnv *env, Type *t) {
   if (t->kind == T_FN && is_generic(t)) {
     return t;
   }
-  // Collect variables from type
-  const char *type_vars[100]; // Arbitrary limit
-  int type_var_count = 0;
-  collect_type_vars(t, type_vars, &type_var_count);
+  return t;
+  /*
+    // Collect variables from type
+    const char *type_vars[100]; // Arbitrary limit
+    int type_var_count = 0;
+    collect_type_vars(t, type_vars, &type_var_count);
 
-  // Collect variables from environment
-  char *env_vars[100];
-  int env_var_count = 0;
-  collect_env_vars(env, env_vars, &env_var_count);
+    // Collect variables from environment
+    char *env_vars[100];
+    int env_var_count = 0;
+    collect_env_vars(env, env_vars, &env_var_count);
 
-  // Find variables to quantify (in type but not in env)
-  const char *quantified_vars[100];
-  int quantified_count = 0;
+    // Find variables to quantify (in type but not in env)
+    const char *quantified_vars[100];
+    int quantified_count = 0;
 
-  for (int i = 0; i < type_var_count; i++) {
-    bool in_env = false;
-    for (int j = 0; j < env_var_count; j++) {
-      if (strcmp(type_vars[i], env_vars[j]) == 0) {
-        in_env = true;
-        break;
+    for (int i = 0; i < type_var_count; i++) {
+      bool in_env = false;
+      for (int j = 0; j < env_var_count; j++) {
+        if (strcmp(type_vars[i], env_vars[j]) == 0) {
+          in_env = true;
+          break;
+        }
+      }
+      if (!in_env) {
+        quantified_vars[quantified_count++] = type_vars[i];
       }
     }
-    if (!in_env) {
-      quantified_vars[quantified_count++] = type_vars[i];
+
+    // If no variables to quantify, return type as is
+    if (quantified_count == 0) {
+      return t;
     }
-  }
 
-  // If no variables to quantify, return type as is
-  if (quantified_count == 0) {
-    return t;
-  }
-  Type *forall = create_forall_type(quantified_count, quantified_vars, t);
+    Type *forall = create_forall_type(quantified_count, quantified_vars, t);
 
-  return forall;
+    return forall;
+    */
 }
 bool is_list_cons_pattern(Ast *pattern) {
   Ast *fn = pattern->data.AST_APPLICATION.function;
@@ -971,6 +1013,9 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
     // Handle cons pattern (x::xs)
     if (is_list_cons_pattern(pattern)) {
       Type *elem_type = infer_pattern(pattern->data.AST_APPLICATION.args, ctx);
+      Type *rest_type =
+          infer_pattern(pattern->data.AST_APPLICATION.args + 1, ctx);
+
       if (!elem_type)
         return NULL;
 
@@ -1267,6 +1312,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // First infer the function type
     Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
 
+    if (ast->data.AST_APPLICATION.args->tag == AST_LIST &&
+        (ast->data.AST_APPLICATION.args->data.AST_LIST.len == 0)) {
+      ast->data.AST_APPLICATION.args->md = &t_empty_list;
+      Type **cont = talloc(sizeof(Type *));
+      cont[0] = fn_type;
+      Type *ltype = create_cons_type(TYPE_NAME_LIST, 1, cont);
+      type = ltype;
+      break;
+    }
+
     if (!fn_type->is_recursive_fn_ref) {
       fn_type = deep_copy_type(fn_type);
     }
@@ -1280,10 +1335,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     if (fn_type->kind == T_CONS) {
-      if (is_pointer_type(fn_type) &&
-          ast->data.AST_APPLICATION.args->tag == AST_VOID) {
-        return create_option_type(&t_num);
-      }
+
+      // if (is_pointer_type(fn_type) &&
+      //     ast->data.AST_APPLICATION.args->tag == AST_VOID) {
+      //
+      //   return create_option_type(&t_num);
+      // }
 
       // cons application
       Ast *fn_id = ast->data.AST_APPLICATION.function;
@@ -1318,16 +1375,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
             return NULL;
           }
 
-          if (!unify_in_ctx(arg_type, cons_arg, ctx)) {
+          if (!unify_in_ctx(cons_arg, arg_type, ctx)) {
             fprintf(stderr,
-                    "Could not constrain type variable to function type x\n");
-
+                    "Could not constrain type variable to function type\n");
+            print_type_err(arg_type);
+            print_type_err(cons_arg);
             return NULL;
           }
         }
 
         Substitution *subst = solve_constraints(ctx->constraints);
-
         type = apply_substitution(subst, fn_type);
 
       } else {
@@ -1349,10 +1406,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
             return NULL;
           }
 
-          if (!unify_in_ctx(arg_type, cons_arg, ctx)) {
+          if (!unify_in_ctx(cons_arg, arg_type, ctx)) {
             fprintf(stderr,
-                    "Could not constrain type variable to function type y\n");
-
+                    "Could not constrain type variable to function type\n");
             print_type_err(arg_type);
             print_type_err(cons_arg);
             return NULL;
@@ -1365,20 +1421,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     TICtx app_ctx = *ctx;
-    // app_ctx.constraints = NULL;
-    // printf("\n### infer application\n");
-    // print_ast(ast);
-    // print_type(fn_type);
 
     Type *current_type = fn_type;
 
     int app_len = ast->data.AST_APPLICATION.len;
     Type *arg_types[app_len];
-    // Process each argument
+
     for (int i = 0; i < app_len; i++) {
       Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, &app_ctx);
-      // print_type(ast->data.AST_APPLICATION.args[i].md);
-
       if (!arg_type) {
         fprintf(stderr, "Could not infer argument type in application\n");
         return NULL;
@@ -1407,10 +1457,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
     } else {
       for (int i = 0; i < app_len; i++) {
         Type *arg_type = arg_types[i];
-
         if (current_type->kind != T_FN) {
           fprintf(stderr, "Attempting to apply to non-function type\n");
           print_ast_err(ast);
+          print_type(current_type);
+          print_type(arg_type);
           return NULL;
         } else {
 
@@ -1443,7 +1494,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
         print_type_err(fn_type);
         return NULL;
       }
-      // print_subst(subst);
 
       // Apply substitutions to get final type
       type = apply_substitution(subst, current_type);
@@ -1458,21 +1508,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
         Type *after = ast->data.AST_APPLICATION.args[i].md;
 
-
-        // if (inferred.kind == T_VAR && !is_generic(after)) {
-        //   ctx->current_fn_constraints = constraints_extend(
-        //       ctx->current_fn_constraints, deep_copy_type(&inferred), after);
-        // }
-        //
         if (inferred.kind == T_VAR) {
           ctx->current_fn_constraints = constraints_extend(
               ctx->current_fn_constraints, deep_copy_type(&inferred), after);
         }
       }
-
-      // print_subst(subst);
-      // printf("finish apply subst\n");
-      // print_type(fn_type);
 
     } else {
       type = current_type;
@@ -1482,8 +1522,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
         is_recursive_ref(ast->data.AST_APPLICATION.function, ctx)) {
+      // TODO: special handling for recursive ref??
       if (ctx->yielded_type != NULL) {
-        // TODO: special handling for recursive ref??
       }
     }
 
@@ -1675,27 +1715,23 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fprintf(stderr, "Could not infer pattern type in match branch\n");
         return NULL;
       }
+      // print_type(pattern_type);
+      // print_type(expr_type);
 
       // Add pattern <> expression constraint
       if ((!is_none_expr(branch_pattern)) &&
           !unify_in_ctx(expr_type, pattern_type, ctx)) {
         fprintf(stderr, "Pattern type doesn't match expression type\n");
         print_type_err(expr_type);
+        fprintf(stderr, " != ");
         print_type_err(pattern_type);
         return NULL;
       }
-
-      // if (!unify_in_ctx(expr_type, pattern_type, ctx)) {
-      //   fprintf(stderr, "Pattern type doesn't match expression type\n");
-      //   return NULL;
-      // }
 
       // handle branch body
       TICtx branch_ctx = *ctx;
       branch_ctx.scope++;
       branch_ctx.constraints = NULL; // Start with fresh constraints for branch
-      // print_constraints(ctx->current_fn_constraints);
-      //
       branch_ctx.env =
           bind_in_env(branch_ctx.env, branch_pattern, pattern_type);
 
@@ -1725,6 +1761,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     type = apply_substitution(subst, result);
+
     apply_substitution_to_nodes_rec(subst, expr);
 
     for (int i = 0; i < len; i++) {

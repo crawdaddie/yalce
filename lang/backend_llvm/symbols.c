@@ -216,6 +216,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   Type *expr_type = expr->md;
 
   if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
+
     if (is_coroutine_type(expr_type)) {
       expr_val = codegen(expr, outer_ctx, module, builder);
       LLVMValueRef match_result = codegen_pattern_binding(

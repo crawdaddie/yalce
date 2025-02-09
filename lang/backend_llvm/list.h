@@ -30,4 +30,12 @@ LLVMValueRef codegen_list_prepend(LLVMValueRef l, LLVMValueRef list,
                                   JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef);
 
+LLVMValueRef codegen_list_to_string(LLVMValueRef val, Type *val_type,
+                                    JITLangCtx *ctx, LLVMModuleRef module,
+                                    LLVMBuilderRef builder);
+LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
+
+LLVMValueRef ListPrependHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder);
 #endif

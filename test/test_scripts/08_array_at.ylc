@@ -1,5 +1,6 @@
+let (@) = array_at;
 %test
-%include ../../examples/Array
+
 let sim = [|5,1,2|];
 let test_idx_0 = fn () -> array_at sim 0 == 5;; 
 let test_idx_1 = fn () -> array_at sim 1 == 1;; 

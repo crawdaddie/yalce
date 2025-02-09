@@ -1,4 +1,5 @@
 #include "backend_llvm/tuple.h"
+#include "backend_llvm/strings.h"
 #include "backend_llvm/types.h"
 #include "serde.h"
 #include "llvm-c/Core.h"
@@ -70,4 +71,29 @@ LLVMValueRef codegen_tuple_access(int n, LLVMValueRef tuple,
 
   return LLVMBuildLoad2(builder, element_type, element_ptr,
                         "tuple_element_load");
+}
+LLVMValueRef codegen_struct_with_names_to_string(LLVMValueRef value,
+                                                 Type *val_type,
+                                                 JITLangCtx *ctx,
+                                                 LLVMModuleRef module,
+                                                 LLVMBuilderRef builder) {
+
+  int len = 2 * val_type->data.T_CONS.num_args;
+  LLVMValueRef strings[len];
+  for (int i = 0; i < len; i++) {
+  }
+}
+
+LLVMValueRef codegen_tuple_to_string(LLVMValueRef value, Type *val_type,
+                                     JITLangCtx *ctx, LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+
+  if (val_type->data.T_CONS.names) {
+    return codegen_struct_with_names_to_string(value, val_type, ctx, module,
+                                               builder);
+  }
+  int len = val_type->data.T_CONS.num_args;
+  LLVMValueRef strings[len];
+  for (int i = 0; i < len; i++) {
+  }
 }

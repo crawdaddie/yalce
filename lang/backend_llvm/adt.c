@@ -186,3 +186,33 @@ LLVMValueRef codegen_option_is_some(LLVMValueRef opt, LLVMBuilderRef builder) {
   return LLVMBuildICmp(builder, LLVMIntEQ, tag,
                        LLVMConstInt(OPTION_TAG_TYPE, 0, 0), "");
 }
+
+LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
+                             LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
+                                  LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
+                                   JITLangCtx *ctx, LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
+LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
+                           JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  LLVMValueRef result = LLVMBuildSelect(
+      builder, codegen_option_is_none(opt_value, builder),
+
+      _codegen_string("None", 4, ctx, module, builder),
+
+      stream_string_concat(
+          (LLVMValueRef[]){
+              _codegen_string("Some ", 5, ctx, module, builder),
+
+              llvm_string_serialize(
+                  LLVMBuildExtractValue(builder, opt_value, 1, ""),
+                  type_of_option(val_type), ctx, module, builder),
+          },
+          2, module, builder),
+      "select");
+  return result;
+}

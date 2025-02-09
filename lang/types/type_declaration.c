@@ -197,9 +197,9 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   if (type_expr_ast != NULL) {
     type = compute_type_expression(type_expr_ast, *env);
   } else {
-    Type **cont = talloc(sizeof(Type *));
-    *cont = &t_char;
-    type = create_cons_type(name, 1, cont);
+    // Type **cont = talloc(sizeof(Type *));
+    // *cont = &t_char;
+    type = create_cons_type(name, 0, NULL);
   }
 
   if (!type) {

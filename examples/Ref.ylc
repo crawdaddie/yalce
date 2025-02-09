@@ -1,0 +1,11 @@
+%include Array
+
+let Ref = fn item -> [|item|];;
+
+let set_ref = fn arr v ->
+  array_set 0 arr v
+;;
+
+let (<-) = set_ref;
+  
+let get_ref = fn arr -> arr @ 0;;

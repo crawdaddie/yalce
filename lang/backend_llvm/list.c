@@ -134,3 +134,86 @@ LLVMValueRef codegen_list_prepend(LLVMValueRef l, LLVMValueRef list,
   struct_ptr_set(1, node, node_type, list, builder);
   return node;
 }
+
+LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  LLVMValueRef list =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  Type *list_type = ast->md;
+  LLVMTypeRef llvm_list_node_type = llnode_type(
+      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx->env, module));
+
+  LLVMValueRef append_list =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  // Create basic blocks for the loop
+  LLVMBasicBlockRef entry = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(entry);
+  LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(function, "loop");
+  LLVMBasicBlockRef after_loop = LLVMAppendBasicBlock(function, "after_loop");
+
+  // Store the initial list pointer
+  LLVMValueRef current = list;
+
+  // Branch to loop
+  LLVMBuildBr(builder, loop_block);
+  LLVMPositionBuilderAtEnd(builder, loop_block);
+
+  // Create PHI node for the current pointer
+  LLVMValueRef phi = LLVMBuildPhi(
+      builder, LLVMPointerType(llvm_list_node_type, 0), "current_phi");
+  LLVMValueRef incoming_values[] = {list};
+  LLVMBasicBlockRef incoming_blocks[] = {entry};
+  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 1);
+
+  // Load the next pointer from the current node
+  LLVMValueRef next_ptr_ptr =
+      LLVMBuildStructGEP2(builder, llvm_list_node_type, phi, 1, "next_ptr_ptr");
+
+  LLVMValueRef next_ptr =
+      LLVMBuildLoad2(builder, LLVMPointerType(llvm_list_node_type, 0),
+                     next_ptr_ptr, "next_ptr");
+
+  // Check if next pointer is null
+  LLVMValueRef is_null = LLVMBuildIsNull(builder, next_ptr, "is_null");
+
+  // Create the loop condition
+  LLVMBuildCondBr(builder, is_null, after_loop, loop_block);
+
+  // Update PHI node with the next pointer
+  incoming_values[0] = next_ptr;
+  incoming_blocks[0] = loop_block;
+  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 1);
+
+  // Position builder at the end of loop for final node update
+  LLVMPositionBuilderAtEnd(builder, after_loop);
+
+  // Set the next pointer of the last node to append_list
+  next_ptr_ptr = LLVMBuildStructGEP2(builder, llvm_list_node_type, phi, 1,
+                                     "final_next_ptr_ptr");
+  LLVMBuildStore(builder, append_list, next_ptr_ptr);
+
+  // Return the original list
+  return list;
+}
+
+LLVMValueRef ListPrependHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  LLVMValueRef list =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+  Type *list_type = ast->md;
+  LLVMTypeRef llvm_list_node_type = llnode_type(
+      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx->env, module));
+
+  LLVMValueRef val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  return codegen_list_prepend(val, list, ctx, module, builder);
+}
+
+LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
+                             LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef codegen_list_to_string(LLVMValueRef val, Type *val_type,
+                                    JITLangCtx *ctx, LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  return _codegen_string("[]", 2, ctx, module, builder);
+}

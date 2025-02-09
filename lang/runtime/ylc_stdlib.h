@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+
 typedef struct String {
   int length;
   char *chars;
@@ -57,4 +58,19 @@ typedef struct _opt_int_t {
   int32_t val;
 } _opt_int_t;
 void print_opt_int(_opt_int_t o);
+
+typedef struct _ByteArray {
+  int32_t size;
+  char *bytes;
+};
+
+struct _OptFile {
+  char status;
+  FILE *fd;
+};
+
+struct _ByteArray read_bytes(FILE *f);
+
+struct _OptFile open_file(String path, String mode);
+
 #endif

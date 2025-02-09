@@ -1,5 +1,7 @@
 #include "backend_llvm/strings.h"
+#include "adt.h"
 #include "backend_llvm/array.h"
+#include "list.h"
 #include "types.h"
 #include "types/type.h"
 #include "util.h"
@@ -149,27 +151,6 @@ LLVMValueRef char_to_string(LLVMValueRef char_value, LLVMModuleRef module,
   return str;
 }
 
-LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
-                           JITLangCtx *ctx, LLVMModuleRef module,
-                           LLVMBuilderRef builder) {
-  LLVMValueRef result = LLVMBuildSelect(
-      builder, codegen_option_is_none(opt_value, builder),
-
-      _codegen_string("None", 4, ctx, module, builder),
-
-      stream_string_concat(
-          (LLVMValueRef[]){
-              _codegen_string("Some ", 5, ctx, module, builder),
-
-              llvm_string_serialize(
-                  LLVMBuildExtractValue(builder, opt_value, 1, ""),
-                  type_of_option(val_type), ctx, module, builder),
-          },
-          2, module, builder),
-      "select");
-  return result;
-}
-
 LLVMValueRef _num_to_string(LLVMValueRef double_value, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
@@ -306,8 +287,16 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
     return opt_to_string(val, val_type, ctx, module, builder);
   }
 
+  if (is_pointer_type(val_type)) {
+    return _codegen_string("Ptr", 3, ctx, module, builder);
+  }
+
+  if (is_list_type(val_type)) {
+    return codegen_list_to_string(val, val_type, ctx, module, builder);
+  }
+
   if (val_type->kind == T_CONS) {
-    return tuple_to_string(val, val_type, ctx, module, builder);
+    return _codegen_string("Tuple", 5, ctx, module, builder);
   }
 
   return char_to_string(LLVMConstInt(LLVMInt8Type(), 60, 0), module, builder);

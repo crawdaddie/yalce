@@ -1,22 +1,2 @@
-# %include Math
-
-# let choose = fn arr ->
-#   let idx = rand_int (array_size arr);
-#   array_at arr idx 
-# ;;
-
-# pre-cache (Array of Double -> Double) & (Array of Int -> Int) versions of choose
-# - not ideal but needed for now while we
-# don't have proper tree-based scope management :(
-# choose [|0., 0.|];
-# choose [|0, 0|];
-
-let array_is_empty = fn arr -> array_size arr == 0;;
-
 let (@) = array_at;
-
-type Array2d t = Int * Int * Array of t;
-type Array3d t = Int * Int * Int * Array of t;
-
-
 

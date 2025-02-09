@@ -75,6 +75,7 @@ Type t_list_var = {
 };
 
 Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var, &t_list_var);
+Type t_list_concat = MAKE_FN_TYPE_3(&t_list_var, &t_list_var, &t_list_var);
 
 _binop_map binop_map[_NUM_BINOPS] = {
     {TYPE_NAME_OP_ADD, &t_add}, {TYPE_NAME_OP_SUB, &t_sub},
@@ -212,14 +213,10 @@ Type t_cor_play_sig = MAKE_FN_TYPE_3(&t_ptr, // schedule event injected func
 Type t_list_cor = {T_FN,
                    {.T_FN = {.from = &t_void, .to = &TOPT(&t_list_var_el)}},
                    .is_coroutine_instance = true};
-
-Type t_iter_of_list_sig = ((Type){
-    T_FN,
-    {.T_FN = {.from = &((Type){
-                  T_CONS,
-                  {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_list_var_el}, 1}}}),
-              .to = &t_list_cor}},
-    .is_coroutine_constructor = true});
+Type t_iter_of_list_sig =
+    ((Type){T_FN,
+            {.T_FN = {.from = &TLIST(&t_list_var_el), .to = &t_list_cor}},
+            .is_coroutine_constructor = true});
 
 Type t_iter_of_array_sig = ((Type){
     T_FN,
@@ -598,6 +595,9 @@ bool is_generic(Type *t) {
 
   case T_TYPECLASS_RESOLVE:
   case T_CONS: {
+    if (t->data.T_CONS.num_args == 0) {
+      return false;
+    }
     if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         Type *arg = t->data.T_CONS.args[i];
@@ -1271,9 +1271,15 @@ bool fn_types_match(Type *t1, Type *t2) {
   }
   return true;
 }
+
 bool application_is_partial(Ast *app) {
+  if (((Type *)app->data.AST_APPLICATION.function->md)->kind != T_FN) {
+    return false;
+  }
+
   int expected_args_len =
       fn_type_args_len(app->data.AST_APPLICATION.function->md);
+
   int actual_args_len = app->data.AST_APPLICATION.len;
   return actual_args_len < expected_args_len;
 }

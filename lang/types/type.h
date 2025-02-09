@@ -46,6 +46,10 @@ extern Type t_void;
 extern Type t_char;
 extern Type t_ptr;
 extern Type t_empty_list;
+extern Type t_list_var;
+
+extern Type t_list_prepend;
+extern Type t_list_concat;
 
 // builtin binop types
 extern Type t_add;

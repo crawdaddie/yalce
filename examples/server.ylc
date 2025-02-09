@@ -1,0 +1,48 @@
+#! env ylc
+
+let AF_INET = 2;
+let SOCK_STREAM = 1;
+let INADDR_ANY = 0; 
+
+type SockAddr = Char * Char * Int ; 
+let socket = extern fn Int -> Int -> Int -> Int;
+let create_server_addr = extern fn Int -> Int -> Int -> SockAddr; 
+let bind = extern fn Int -> SockAddr -> Int -> Int;
+
+let _socket = fn domain t protocol ->  
+  match socket AF_INET SOCK_STREAM 0 with
+  | fd if fd >= 0 -> Some fd
+  | _ -> None
+
+let _bind = fn server_addr: (SockAddr) server_fd: (Int) ->
+  match (bind server_fd server_addr 10) with
+  | 0 -> Some server_fd
+  | _ -> None 
+;;
+
+let opt_map = fn map_func opt ->
+  match opt with
+  | Some x -> map_func x
+  | None -> None
+;;
+
+let listen = extern fn Int -> Int -> Int;
+let _listen = fn server_fd: (Int) ->
+  match (listen server_fd 10) with
+  | 0 -> Some server_fd
+  | _ -> None
+;;
+
+let init_server = fn port: (Int) ->
+  let server_addr = create_server_addr AF_INET INADDR_ANY port in
+  _socket AF_INET SOCK_STREAM 0
+    |> opt_map (_bind server_addr)
+    |> opt_map _listen
+;;
+
+init_server 8000
+
+
+
+
+

@@ -1,6 +1,7 @@
 #include "backend_llvm/application.h"
 #include "coroutines.h"
 #include "function.h"
+#include "list.h"
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
@@ -115,6 +116,13 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  if ((ast->data.AST_APPLICATION.len == 1) &&
+      (((Type *)ast->data.AST_APPLICATION.args->md)->kind == T_EMPTY_LIST)) {
+    Type *t = ast->md;
+    return null_node(llnode_type(
+        type_to_llvm_type(t->data.T_CONS.args[0], ctx->env, module)));
+  }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 

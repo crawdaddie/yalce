@@ -722,6 +722,46 @@ int main() {
     "\\array_choose [|1,2,3|]",
     &MAKE_FN_TYPE_2(&t_void, &t_int));
 
+  T("let bind = extern fn Int -> Int -> Int -> Int;\n"
+    "let _bind = fn server_fd: (Int) server_addr: (Int) ->\n"
+    "  match (bind server_fd server_addr 10) with\n"
+    "  | 0 -> Some server_fd\n"
+    "  | _ -> None \n"
+    ";;\n",
+    &MAKE_FN_TYPE_3(&t_int, &t_int, &TOPT(&t_int)));
+
+  ({
+    Type ltype = TLIST(&TVAR("`3"));
+    T("let print_list = fn l ->\n"
+      "  match l with\n"
+      "  | x::rest -> (print `{x}, `; print_list rest)\n"
+      "  | [] -> ()\n"
+      ";;\n",
+      &MAKE_FN_TYPE_2(&ltype, &t_void));
+  });
+
+  ({
+    T("let print_list = fn l ->\n"
+      "  match l with\n"
+      "  | x::rest -> (print `{x}, `; print_list rest)\n"
+      "  | [] -> ()\n"
+      ";;\n"
+      "print_list [1,2,3]",
+      &t_void);
+  });
+
+  T("let pop_left = fn l ->\n"
+    "  match l with\n"
+    "  | x::rest -> Some x \n"
+    "  | [] -> None\n"
+    ";; \n",
+    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`3")), &TOPT(&TVAR("`3"))));
+  T("let l = Int[]", &TLIST(&t_int));
+  // ({
+  //   Ast *b = T("let get_ref = fn arr -> array_at arr 0;; get_ref q", &t_int);
+  //   print_type(b->data.AST_BODY.stmts[1]->data.AST_APPLICATION.function->md);
+  // });
+
   // print_ast(b->data.AST_BODY.stmts[0]);
   // print_type(b->data.AST_BODY.stmts[0]->md);
 

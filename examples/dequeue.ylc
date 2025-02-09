@@ -1,0 +1,13 @@
+#! env ylc
+
+let x = [1,2,3];
+
+let print_list = fn l ->
+  match l with
+  | _x::rest -> (print `{_x}, `; print_list rest; ())
+  | [] -> ()
+;;
+
+
+print_list x;
+

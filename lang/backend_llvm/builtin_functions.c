@@ -5,6 +5,7 @@
 #include "backend_llvm/common.h"
 #include "backend_llvm/coroutines.h"
 #include "function.h"
+#include "list.h"
 #include "serde.h"
 #include "symbols.h"
 #include "tuple.h"
@@ -612,6 +613,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig, IterOfArrayHandler);
   GENERIC_FN_SYMBOL("cor_loop", &t_cor_loop_sig, CorLoopHandler);
   GENERIC_FN_SYMBOL("cor_play", &t_cor_play_sig, CorPlayHandler);
+  GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);
+  GENERIC_FN_SYMBOL("::", &t_list_prepend, ListPrependHandler);
 
   // GENERIC_FN_SYMBOL("Char", &t_builtin_char_of, CharHandler);
   // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_DATA_PTR, &t_array_data_ptr_fn_sig);

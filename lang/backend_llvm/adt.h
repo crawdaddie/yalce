@@ -17,4 +17,8 @@ LLVMValueRef extract_tag(LLVMValueRef val, LLVMBuilderRef builder);
 LLVMValueRef codegen_some(LLVMValueRef val, LLVMBuilderRef builder);
 LLVMValueRef codegen_none(LLVMBuilderRef builder);
 LLVMValueRef codegen_none_typed(LLVMBuilderRef builder, LLVMTypeRef type);
+
+LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
+                           JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder);
 #endif

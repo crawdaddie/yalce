@@ -147,3 +147,65 @@ struct _DoubleArray double_array(int32_t size, double val) {
   double *data = double_array_init(size, val);
   return (struct _DoubleArray){size, data};
 }
+
+struct _ByteArray read_bytes(FILE *f) {
+  struct _ByteArray result = {0, NULL};
+  const size_t CHUNK_SIZE = 4096; // Read in 4KB chunks
+  char *buffer = NULL;
+  size_t total_size = 0;
+
+  if (!f) {
+    return result;
+  }
+
+  // Get current position to restore later
+  long current_pos = ftell(f);
+  if (current_pos < 0) {
+    return result;
+  }
+
+  // Seek to end to get file size
+  if (fseek(f, 0, SEEK_END) != 0) {
+    return result;
+  }
+
+  long file_size = ftell(f);
+  if (file_size < 0) {
+    fseek(f, current_pos, SEEK_SET); // Try to restore position
+    return result;
+  }
+
+  // Restore original position
+  if (fseek(f, current_pos, SEEK_SET) != 0) {
+    return result;
+  }
+
+  // Allocate buffer for entire file
+  buffer = (char *)malloc(file_size);
+  if (!buffer) {
+    return result;
+  }
+
+  // Read file contents
+  total_size = fread(buffer, 1, file_size, f);
+  if (total_size == 0 || ferror(f)) {
+    free(buffer);
+    return result;
+  }
+
+  // Set result values
+  result.bytes = buffer;
+  result.size = (int32_t)total_size;
+
+  return result;
+}
+
+struct _OptFile open_file(String path, String mode) {
+  FILE *f = fopen(path.chars, mode.chars);
+  if (f) {
+    // printf("read file\n");
+    return (struct _OptFile){0, f};
+  }
+  return (struct _OptFile){1, NULL};
+}
+
