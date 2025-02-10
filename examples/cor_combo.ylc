@@ -14,7 +14,7 @@ let synth = fn () ->
     + sq_node (f * 2.)
 ;;
 
-let WrapWith = cor_wrap_effect;
+let Wrap = cor_wrap_effect;
 let Map = cor_map;
 let Play = cor_play;
 
@@ -33,7 +33,7 @@ let co = (
 
   target: synth |> chain_wrap |> play,
 )
-|> WrapWith (fn (dur, frame_offset, freq, target) ->
+|> Wrap (fn (dur, frame_offset, freq, target) ->
   set_input_scalar_offset target 0 frame_offset freq;
   ()
 ;)
