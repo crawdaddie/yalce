@@ -51,6 +51,10 @@ extern Type t_list_var;
 extern Type t_list_prepend;
 extern Type t_list_concat;
 
+extern Type t_queue_of_list;
+extern Type t_queue_pop_left;
+extern Type t_queue_append_right;
+
 // builtin binop types
 extern Type t_add;
 extern Type t_sub;
@@ -118,6 +122,7 @@ extern Type t_cor_play_sig;
 #define TYPE_NAME_VARIANT "Variant"
 #define TYPE_NAME_SOME    "Some"
 #define TYPE_NAME_NONE    "None"
+#define TYPE_NAME_QUEUE   "Queue"
 
 #define TYPE_NAME_OP_ADD  "+"
 #define TYPE_NAME_OP_SUB  "-"
@@ -193,7 +198,9 @@ extern _binop_map binop_map[];
 //
 #define eq_var(n)                                                              \
   (Type) {                                                                     \
-    T_VAR, { .T_VAR = n }                                                      \
+    T_VAR, {.T_VAR = n},                                                       \
+        .implements =                                                          \
+            &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
   }
 
 #define TCONS(name, num, ...)                                                  \

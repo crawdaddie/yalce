@@ -1,21 +1,59 @@
-%include Ref
-let pop_left = fn q ->
-  let h, t = get_ref q in
-  match h with
-  | x::rest -> (
-    q <- (rest, t);
-    Some x
-    ) 
-  | [] -> None
-;; 
+# %include Ref
+#
+# let enqueue = fn q: (Array of ((List of Int) * (List of Int))) item: (Int) ->
+#   let _, t = array_at q 0 in
+#   let last = [item] in
+#   let h = list_concat t last in
+#   array_set 0 q (h, last) 
+# ;;  
+#
+# let pop_left = fn q: (Array of ((List of Int) * (List of Int)))  ->
+#   let h, t = array_at q 0 in
+#   match h with
+#   | x::rest -> (
+#     array_set 0 q (rest, t);
+#     Some x
+#     ) 
+#   | [] -> None
+# ;; 
+#
+# let l = Int[];
+# let q_ref = Ref (l, l);
+#
+# enqueue q_ref 1;
+#
+# print `{pop_left q_ref}`;
+#
 
-let enqueue = fn q item ->
-  let _, t = get_ref q in
+
+# let q = queue_of_list (Int []) ;
+# let g = queue_append_right q 2;
+#
+# print `{queue_pop_left g}`;
+
+
+let head = Int[];
+let tail = head;
+
+let enqueue = fn head tail item ->
   let last = [item] in
-  let h = list_concat t last in
-  q <- (h, last) 
-;;  
-let l = Int[];
-let q_ref = Ref (l, l);
-enqueue q 1
+  let _ = list_concat tail last in
+  (head, last)
+;;
+
+let pop_left = fn head tail ->
+  match head with
+  | x::rest -> (rest, tail, Some x)  
+  | [] -> ([], [], None)
+;;
+
+
+let h, t = enqueue head tail 1;
+print `{h}`;
+
+# let (hh, tt, j) = pop_left (h, t)
+
+
+
+
 

@@ -38,4 +38,14 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ListPrependHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
+
+LLVMValueRef QueueOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder);
+
+LLVMValueRef QueueAppendRightHandler(Ast *ast, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder);
+
+LLVMValueRef QueuePopLeftHandler(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

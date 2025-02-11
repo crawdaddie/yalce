@@ -110,7 +110,6 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
 LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
 
-
   LLVMValueRef body;
 
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
@@ -157,7 +156,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     fprintf(stderr, "Error: could not create function\n");
     return NULL;
   }
-
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
 

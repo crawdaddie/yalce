@@ -756,14 +756,38 @@ int main() {
     "  | [] -> None\n"
     ";; \n",
     &MAKE_FN_TYPE_2(&TLIST(&TVAR("`3")), &TOPT(&TVAR("`3"))));
-  T("let l = Int[]", &TLIST(&t_int));
-  // ({
-  //   Ast *b = T("let get_ref = fn arr -> array_at arr 0;; get_ref q", &t_int);
-  //   print_type(b->data.AST_BODY.stmts[1]->data.AST_APPLICATION.function->md);
-  // });
 
-  // print_ast(b->data.AST_BODY.stmts[0]);
-  // print_type(b->data.AST_BODY.stmts[0]->md);
+  T("let l = Int[]", &TLIST(&t_int));
+
+  T("let enqueue = fn q item ->\n"
+    "  let _, t = array_at q 0 in\n"
+    "  let last = [item] in\n"
+    "  let h = list_concat t last in\n"
+    "  array_set 0 q (h, last) \n"
+    ";;  \n",
+    &MAKE_FN_TYPE_3(
+        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1")))),
+        &TVAR("`1"),
+        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1"))))));
+
+  T("let _enqueue = fn q: (Array of ((List of l) * (List of l))) item: (List "
+    "of l "
+    "* List of l)->\n"
+    "  let _, t = array_at q 0 in\n"
+    "  let last = [item] in\n"
+    "  let h = list_concat t last in\n"
+    "  array_set 0 q (h, last) \n"
+    ";;  \n",
+    &MAKE_FN_TYPE_3(
+        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1")))),
+        &TVAR("`1"),
+        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1"))))));
+  //
+  T("let _enqueue = fn q item ->\n"
+    "  let h = array_at q 0 in\n"
+    "  h == item\n"
+    ";;  \n",
+    &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`1")), &TVAR("`1"), &t_bool));
 
   return status == true ? 0 : 1;
 }

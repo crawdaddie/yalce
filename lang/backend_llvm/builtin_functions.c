@@ -615,6 +615,13 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_play", &t_cor_play_sig, CorPlayHandler);
   GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);
   GENERIC_FN_SYMBOL("::", &t_list_prepend, ListPrependHandler);
+  GENERIC_FN_SYMBOL("queue_of_list", &t_queue_of_list, QueueOfListHandler);
+  GENERIC_FN_SYMBOL("queue_pop_left", &t_queue_pop_left, QueuePopLeftHandler);
+  GENERIC_FN_SYMBOL("queue_append_right", &t_queue_append_right,
+                    QueueAppendRightHandler);
+
+  // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
+  // ListPrependHandler);
 
   // GENERIC_FN_SYMBOL("Char", &t_builtin_char_of, CharHandler);
   // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_DATA_PTR, &t_array_data_ptr_fn_sig);

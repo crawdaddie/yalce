@@ -82,6 +82,11 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
         return NULL;
       }
 
+      if (lu->kind == T_VAR && types_equal(lu, type)) {
+        fprintf(stderr, "Error: type %s not found in env! %s:%d\n",
+                type->data.T_VAR, __FILE__, __LINE__);
+        return NULL;
+      }
       return type_to_llvm_type(lu, env, module);
     }
     return LLVMInt32Type();
@@ -109,8 +114,9 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     }
 
     if (is_array_type(type)) {
-      return codegen_array_type(
-          type_to_llvm_type(type->data.T_CONS.args[0], env, module));
+      LLVMTypeRef el_type =
+          type_to_llvm_type(type->data.T_CONS.args[0], env, module);
+      return el_type ? codegen_array_type(el_type) : NULL;
     }
 
     if (is_pointer_type(type)) {

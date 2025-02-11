@@ -75,6 +75,18 @@ Type t_list_var = {
 };
 
 Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var, &t_list_var);
+
+Type t_queue_var = {
+    T_CONS,
+    {.T_CONS = {TYPE_NAME_QUEUE, (Type *[]){&t_list_var_el}, 1}},
+};
+
+Type t_queue_of_list = MAKE_FN_TYPE_2(&t_list_var, &t_queue_var);
+
+Type t_queue_pop_left = MAKE_FN_TYPE_2(&t_queue_var, &TOPT(&t_list_var_el));
+Type t_queue_append_right =
+    MAKE_FN_TYPE_3(&t_queue_var, &t_list_var_el, &t_queue_var);
+
 Type t_list_concat = MAKE_FN_TYPE_3(&t_list_var, &t_list_var, &t_list_var);
 
 _binop_map binop_map[_NUM_BINOPS] = {
@@ -127,7 +139,19 @@ Type t_array_to_list_fn_sig =
 // , &(Type){
 //   T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_array_var_el}}});
 
+Type *create_new_array_at_sig(void *i) {
+  Type *t = next_tvar();
+  Type *f = t;
+  f = type_fn(&t_int, f);
+  f = type_fn(create_array_type(t, 0), f);
+  return f;
+}
+
+// Type t_array_at_fn_sig = {T_CREATE_NEW_GENERIC,
+//                           {.T_CREATE_NEW_GENERIC = create_new_array_at_sig}};
+
 Type t_array_at_fn_sig = MAKE_FN_TYPE_3(&t_array_var, &t_int, &t_array_var_el);
+
 Type t_array_set_fn_sig =
     MAKE_FN_TYPE_4(&t_int, &t_array_var, &t_array_var_el, &t_array_var);
 
@@ -1119,10 +1143,6 @@ Type *create_array_type(Type *of, int size) {
   gen_array->data.T_CONS.args = talloc(sizeof(Type *));
   gen_array->data.T_CONS.num_args = 1;
   gen_array->data.T_CONS.args[0] = of;
-  gen_array->meta = talloc(sizeof(int));
-  *((int *)gen_array->meta) = size;
-  // int *size_ptr = array_type_size_ptr(gen_array);
-  // *size_ptr = size;
   return gen_array;
 }
 
