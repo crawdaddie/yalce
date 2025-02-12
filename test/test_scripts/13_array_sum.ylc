@@ -1,10 +1,10 @@
+%include ../../examples/Array
 let arr_sum = fn s a ->
   let len = array_size a in
-
-  let aux = fn i: (Int) su: (Int) -> 
+  let aux = fn i su -> 
     match i with
     | i if i == len -> su
-    | i -> aux (i + 1) (su + array_at a i)
+    | i -> aux (i + 1) (su + (a @ i))
     ;;
 
   aux 0 s

@@ -759,35 +759,28 @@ int main() {
 
   T("let l = Int[]", &TLIST(&t_int));
 
-  T("let enqueue = fn q item ->\n"
-    "  let _, t = array_at q 0 in\n"
+  T("let enqueue = fn (head, tail) item ->\n"
     "  let last = [item] in\n"
-    "  let h = list_concat t last in\n"
-    "  array_set 0 q (h, last) \n"
-    ";;  \n",
-    &MAKE_FN_TYPE_3(
-        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1")))),
-        &TVAR("`1"),
-        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1"))))));
+    "  match head with\n"
+    "  | [] -> (last, last)\n"
+    "  | _ -> (\n"
+    "    let _ = list_concat tail last in\n"
+    "    (head, last)\n"
+    "  )\n"
+    ";;\n",
+    &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2"))),
+                    &TVAR("`2"),
+                    &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2")))));
 
-  T("let _enqueue = fn q: (Array of ((List of l) * (List of l))) item: (List "
-    "of l "
-    "* List of l)->\n"
-    "  let _, t = array_at q 0 in\n"
-    "  let last = [item] in\n"
-    "  let h = list_concat t last in\n"
-    "  array_set 0 q (h, last) \n"
-    ";;  \n",
-    &MAKE_FN_TYPE_3(
-        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1")))),
-        &TVAR("`1"),
-        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1"))))));
-  //
-  T("let _enqueue = fn q item ->\n"
-    "  let h = array_at q 0 in\n"
-    "  h == item\n"
-    ";;  \n",
-    &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`1")), &TVAR("`1"), &t_bool));
+  T("let pop_left = fn (head, tail) ->\n"
+    "  match head with\n"
+    "  | [] -> ((head, tail), None)\n"
+    "  | x::rest -> ((rest, tail), Some x)  \n"
+    ";;\n",
+    &MAKE_FN_TYPE_2(
+        &TTUPLE(2, &TLIST(&TVAR("`4")), &TLIST(&TVAR("`1"))),
+        &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`4")), &TLIST(&TVAR("`1"))),
+                &TOPT("`4"))));
 
   T(
       "let enqueue = fn (head, tail) item ->\n"

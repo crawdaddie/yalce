@@ -623,7 +623,6 @@ static LLVMValueRef codegen_yield_nested_coroutine(
   if (args_len == 1 && state_type->kind == T_VOID) {
     new_state_ptr = NULL;
   } else {
-
     if (is_recursive_ref == true) {
       new_state_ptr = get_instance_state_gep(instance_ptr, builder);
       new_state_ptr = LLVMBuildLoad2(
@@ -639,6 +638,11 @@ static LLVMValueRef codegen_yield_nested_coroutine(
       print_type(args->data.AST_APPLICATION.args->md);
 
       LLVMValueRef yield_val = codegen(args, ctx, module, builder);
+      if (!yield_val) {
+        fprintf(stderr, "Error, could not yield nested coroutine %s:%d\n",
+                __FILE__, __LINE__);
+        return NULL;
+      }
 
       LLVMBuildStore(builder, yield_val, new_state_ptr);
 

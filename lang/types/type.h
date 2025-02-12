@@ -196,11 +196,16 @@ extern _binop_map binop_map[];
 //             &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
 //   }
 //
+// #define eq_var(n)                                                              \
+//   (Type) {                                                                     \
+//     T_VAR, {.T_VAR = n},                                                       \
+//         .implements =                                                          \
+//             &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
+//   }
+//
 #define eq_var(n)                                                              \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
-        .implements =                                                          \
-            &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
   }
 
 #define TCONS(name, num, ...)                                                  \
