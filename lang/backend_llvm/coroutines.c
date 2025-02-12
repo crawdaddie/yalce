@@ -616,7 +616,6 @@ static LLVMValueRef codegen_yield_nested_coroutine(
   if (args_len == 1 && state_type->kind == T_VOID) {
     new_state_ptr = NULL;
   } else {
-
     if (is_recursive_ref == true) {
       new_state_ptr = get_instance_state_gep(instance_ptr, builder);
       new_state_ptr = LLVMBuildLoad2(
@@ -629,6 +628,11 @@ static LLVMValueRef codegen_yield_nested_coroutine(
     if (args_len == 1) {
 
       LLVMValueRef yield_val = codegen(args, ctx, module, builder);
+      if (!yield_val) {
+        fprintf(stderr, "Error, could not yield nested coroutine %s:%d\n",
+                __FILE__, __LINE__);
+        return NULL;
+      }
 
       LLVMBuildStore(builder, yield_val, new_state_ptr);
 
@@ -1094,10 +1098,12 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
   LLVMTypeRef struct_member_types[len];
   for (int i = 0; i < len; i++) {
 
-    Type *member_type =ast->data.AST_LIST.items[i].md;
-    struct_member_types[i] = member_type->kind == T_FN ? GENERIC_PTR :
-        type_to_llvm_type(ast->data.AST_LIST.items[i].md, ctx->env, module);
-
+    Type *member_type = ast->data.AST_LIST.items[i].md;
+    struct_member_types[i] =
+        member_type->kind == T_FN
+            ? GENERIC_PTR
+            : type_to_llvm_type(ast->data.AST_LIST.items[i].md, ctx->env,
+                                module);
   }
 
   LLVMTypeRef llvm_state_struct_type =
@@ -1155,10 +1161,10 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
           LLVMBuildAnd(builder, coroutine_not_complete, is_not_null, "");
     } else if (is_void_func(item_type)) {
       LLVMTypeRef fn_type = type_to_llvm_type(item_type, ctx->env, module);
-      LLVMValueRef item_result = LLVMBuildCall2(builder, fn_type, item, (LLVMValueRef[]){}, 0, "");
+      LLVMValueRef item_result =
+          LLVMBuildCall2(builder, fn_type, item, (LLVMValueRef[]){}, 0, "");
 
       LLVMBuildStore(builder, item_result, ret_val_gep);
-
 
     } else {
       // const state item - don't need to reset???

@@ -1733,9 +1733,12 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
           return NULL;
         }
-        ctx->current_fn_constraints = constraints_extend(
-            ctx->current_fn_constraints,
-            deep_copy_type(current_type->data.T_FN.from), arg_type);
+
+        if (!types_equal(current_type->data.T_FN.from, arg_type)) {
+          ctx->current_fn_constraints = constraints_extend(
+              ctx->current_fn_constraints,
+              deep_copy_type(current_type->data.T_FN.from), arg_type);
+        }
 
         current_type = current_type->data.T_FN.to;
       }
@@ -1768,7 +1771,7 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
       Type *after = ast->data.AST_APPLICATION.args[i].md;
 
-      if (inferred.kind == T_VAR) {
+      if ((inferred.kind == T_VAR) && (!types_equal(&inferred, after))) {
         ctx->current_fn_constraints = constraints_extend(
             ctx->current_fn_constraints, deep_copy_type(&inferred), after);
       }
