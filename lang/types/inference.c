@@ -715,89 +715,6 @@ double sum_tc_ranks(Type *t1, Type *t2) {
   return sum;
 }
 
-Substitution *__solve_constraints(TypeConstraint *constraints) {
-
-  Substitution *subst = NULL;
-
-  while (constraints) {
-    Type *t1 = apply_substitution(subst, constraints->t1);
-    Type *t2 = apply_substitution(subst, constraints->t2);
-
-    if (is_none_variant_member_type(t1) && is_option_type(t2)) {
-      subst = substitutions_extend(subst, t1, t2);
-
-    } else if (t1->kind == T_VAR) {
-      // Check for recursive types
-      if (occurs_check(t1, t2)) {
-        return NULL; // Infinite type error
-      }
-
-      subst = substitutions_extend(subst, t1, t2);
-
-    } else if (t2->kind == T_VAR) {
-      if (occurs_check(t2, t1)) {
-        return NULL; // Infinite type error
-      }
-
-      subst = substitutions_extend(subst, t2, t1);
-    } else if (t1->kind == T_EMPTY_LIST) {
-      // Handle empty list constraint
-      // *t1 = *t2;
-      // return subst;
-      subst = substitutions_extend(subst, t1, t2);
-    } else if (t1->kind == T_TYPECLASS_RESOLVE && !is_generic(t2)) {
-      for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-        subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
-      }
-    } else if (is_list_type(t1) && t2->kind == T_EMPTY_LIST) {
-    } else if (t1->kind == T_CONS && t2->kind == T_CONS) {
-    } else if (t1->kind != t2->kind) {
-      fprintf(stderr, "Error: type mismatch in solve constraints\n");
-      print_type_err(t1);
-      print_type_err(t2);
-      fprintf(stderr, "\n");
-
-      return NULL; // Type mismatch error
-    }
-
-    constraints = constraints->next;
-  }
-
-  return subst;
-}
-Substitution *copy_substitution(Substitution *s) {
-  Substitution *c = talloc(sizeof(Substitution));
-  *c = *s;
-  return c;
-}
-
-// // Substitution map for type variables
-// typedef struct Substitution {
-//   Type *from; // Type variable
-//   Type *to;   // Replacement type
-//   struct Substitution *next;
-// } Substitution;
-
-Substitution *compose_substitutions(Substitution *s1, Substitution *s2) {
-  if (!s1)
-    return s2;
-  if (!s2)
-    return s1;
-
-  // Start with a copy of s2
-  Substitution *result = copy_substitution(s2);
-
-  // For each mapping in s1
-  for (Substitution *subst = s1; subst != NULL; subst = subst->next) {
-    // Apply s2 to the type in s1's mapping
-    Type *mapped_type = apply_substitution(s2, subst->to);
-
-    // Add this new mapping to result
-    result = substitutions_extend(result, subst->from, mapped_type);
-  }
-
-  return result;
-}
 Substitution *solve_constraints(TypeConstraint *constraints) {
   Substitution *subst = NULL;
 
@@ -1962,17 +1879,15 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
   infer(yield_expr, ctx);
   Type *yield_expr_type = yield_expr->md;
 
-
-  if (yield_expr->tag == AST_APPLICATION
-    &&
-    strcmp(yield_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value, "arithmetic") == 0)
-   {
+  if (yield_expr->tag == AST_APPLICATION &&
+      strcmp(
+          yield_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+          "arithmetic") == 0) {
     print_ast(yield_expr);
     print_type(yield_expr->data.AST_APPLICATION.args->md);
     print_type_env(ctx->env);
     print_constraints(ctx->constraints);
-  } 
-
+  }
 
   if (is_coroutine_type(yield_expr_type)) {
     yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
