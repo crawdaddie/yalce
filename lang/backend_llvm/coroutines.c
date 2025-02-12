@@ -396,9 +396,10 @@ LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *fn_ast,
   int id_len = binding->data.AST_IDENTIFIER.length;
 
   if (is_generic(constructor_type)) {
-    // TODO: compile generic coroutine functions
     JITSymbol *sym =
         new_symbol(STYPE_GENERIC_FUNCTION, constructor_type, NULL, NULL);
+    printf("create gen constructor: ");
+    print_type(constructor_type);
     sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
     sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
     sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env = ctx->env;
@@ -513,6 +514,10 @@ LLVMValueRef create_coroutine_instance_from_generic_constructor(
 
     fn_ast.md = expected_type;
 
+    printf("create gen instance: ");
+    print_type(expected_type);
+    print_ast(&fn_ast);
+
     LLVMValueRef specific_fn = compile_coroutine_fn(
         expected_type, &fn_ast, &compilation_ctx, module, builder);
 
@@ -609,6 +614,8 @@ static LLVMValueRef codegen_yield_nested_coroutine(
     Type *state_type, Ast *args, int args_len, LLVMValueRef ret_val_ref,
     JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  printf("yield nested coroutine\n");
+
   LLVMTypeRef llvm_state_type = type_to_llvm_type(state_type, ctx->env, module);
 
   LLVMValueRef new_state_ptr;
@@ -627,6 +634,9 @@ static LLVMValueRef codegen_yield_nested_coroutine(
     }
 
     if (args_len == 1) {
+      printf("args len 1\n");
+      print_ast(args);
+      print_type(args->data.AST_APPLICATION.args->md);
 
       LLVMValueRef yield_val = codegen(args, ctx, module, builder);
 
@@ -1094,10 +1104,12 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
   LLVMTypeRef struct_member_types[len];
   for (int i = 0; i < len; i++) {
 
-    Type *member_type =ast->data.AST_LIST.items[i].md;
-    struct_member_types[i] = member_type->kind == T_FN ? GENERIC_PTR :
-        type_to_llvm_type(ast->data.AST_LIST.items[i].md, ctx->env, module);
-
+    Type *member_type = ast->data.AST_LIST.items[i].md;
+    struct_member_types[i] =
+        member_type->kind == T_FN
+            ? GENERIC_PTR
+            : type_to_llvm_type(ast->data.AST_LIST.items[i].md, ctx->env,
+                                module);
   }
 
   LLVMTypeRef llvm_state_struct_type =
@@ -1155,10 +1167,10 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
           LLVMBuildAnd(builder, coroutine_not_complete, is_not_null, "");
     } else if (is_void_func(item_type)) {
       LLVMTypeRef fn_type = type_to_llvm_type(item_type, ctx->env, module);
-      LLVMValueRef item_result = LLVMBuildCall2(builder, fn_type, item, (LLVMValueRef[]){}, 0, "");
+      LLVMValueRef item_result =
+          LLVMBuildCall2(builder, fn_type, item, (LLVMValueRef[]){}, 0, "");
 
       LLVMBuildStore(builder, item_result, ret_val_gep);
-
 
     } else {
       // const state item - don't need to reset???

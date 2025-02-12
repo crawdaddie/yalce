@@ -8,6 +8,7 @@
 Type *infer_fn_application(Ast *ast, TICtx *ctx);
 Type *infer_cons_application(Ast *ast, TICtx *ctx);
 Type *infer_lambda(Ast *ast, TICtx *ctx);
+Type *infer_yield_expr(Ast *ast, TICtx *ctx);
 
 uint64_t hash_type(Type *type); // Forward declaration
 
@@ -157,7 +158,7 @@ void initialize_builtin_types() {
   t_option_of_var.alias = "Option";
   add_builtin("Option", &t_option_of_var);
   add_builtin("Some", &t_option_of_var);
-  add_builtin("None", &t_none);
+  add_builtin("None", &t_option_of_var);
   add_builtin(TYPE_NAME_INT, &t_int);
   add_builtin(TYPE_NAME_DOUBLE, &t_num);
   add_builtin(TYPE_NAME_UINT64, &t_uint64);
@@ -577,6 +578,10 @@ Type *find_option_in_constraints(Type *var, TypeConstraint *constraints) {
 
 bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
 
+  // printf("unify conses??\n");
+  // print_type(t1);
+  // print_type(t2);
+
   if (t2->kind == T_EMPTY_LIST) {
     return true;
   }
@@ -653,6 +658,7 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
     }
 
     if (is_option_type(t2) && t1->alias && (strcmp(t1->alias, "Option") == 0)) {
+
       return true;
     }
 
@@ -709,7 +715,7 @@ double sum_tc_ranks(Type *t1, Type *t2) {
   return sum;
 }
 
-Substitution *solve_constraints(TypeConstraint *constraints) {
+Substitution *__solve_constraints(TypeConstraint *constraints) {
 
   Substitution *subst = NULL;
 
@@ -718,7 +724,8 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     Type *t2 = apply_substitution(subst, constraints->t2);
 
     if (is_none_variant_member_type(t1) && is_option_type(t2)) {
-      subst = substitutions_extend(subst, constraints->t1, t2);
+      subst = substitutions_extend(subst, t1, t2);
+
     } else if (t1->kind == T_VAR) {
       // Check for recursive types
       if (occurs_check(t1, t2)) {
@@ -739,13 +746,11 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       // return subst;
       subst = substitutions_extend(subst, t1, t2);
     } else if (t1->kind == T_TYPECLASS_RESOLVE && !is_generic(t2)) {
-
       for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
         subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
       }
-
     } else if (is_list_type(t1) && t2->kind == T_EMPTY_LIST) {
-      // do nothing t1 is fine
+    } else if (t1->kind == T_CONS && t2->kind == T_CONS) {
     } else if (t1->kind != t2->kind) {
       fprintf(stderr, "Error: type mismatch in solve constraints\n");
       print_type_err(t1);
@@ -753,6 +758,105 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       fprintf(stderr, "\n");
 
       return NULL; // Type mismatch error
+    }
+
+    constraints = constraints->next;
+  }
+
+  return subst;
+}
+Substitution *copy_substitution(Substitution *s) {
+  Substitution *c = talloc(sizeof(Substitution));
+  *c = *s;
+  return c;
+}
+
+// // Substitution map for type variables
+// typedef struct Substitution {
+//   Type *from; // Type variable
+//   Type *to;   // Replacement type
+//   struct Substitution *next;
+// } Substitution;
+
+Substitution *compose_substitutions(Substitution *s1, Substitution *s2) {
+  if (!s1)
+    return s2;
+  if (!s2)
+    return s1;
+
+  // Start with a copy of s2
+  Substitution *result = copy_substitution(s2);
+
+  // For each mapping in s1
+  for (Substitution *subst = s1; subst != NULL; subst = subst->next) {
+    // Apply s2 to the type in s1's mapping
+    Type *mapped_type = apply_substitution(s2, subst->to);
+
+    // Add this new mapping to result
+    result = substitutions_extend(result, subst->from, mapped_type);
+  }
+
+  return result;
+}
+Substitution *solve_constraints(TypeConstraint *constraints) {
+  Substitution *subst = NULL;
+
+  while (constraints) {
+    Type *t1 = apply_substitution(subst, constraints->t1);
+    Type *t2 = apply_substitution(subst, constraints->t2);
+
+    if (is_none_variant_member_type(t1) && is_option_type(t2)) {
+      subst = substitutions_extend(subst, t1, t2);
+    } else if (t1->kind == T_VAR) {
+      if (occurs_check(t1, t2)) {
+        return NULL; // Infinite type error
+      }
+      subst = substitutions_extend(subst, t1, t2);
+    } else if (t2->kind == T_VAR) {
+      if (occurs_check(t2, t1)) {
+        return NULL; // Infinite type error
+      }
+      subst = substitutions_extend(subst, t2, t1);
+    } else if (t1->kind == T_EMPTY_LIST) {
+      subst = substitutions_extend(subst, t1, t2);
+    } else if (t1->kind == T_TYPECLASS_RESOLVE && !is_generic(t2)) {
+      for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+        subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
+      }
+    } else if (is_list_type(t1) && t2->kind == T_EMPTY_LIST) {
+      // Lists are compatible - continue
+    } else if (t1->kind == T_CONS && t2->kind == T_CONS) {
+
+      // Add this implementation for constructor types
+      if ((strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0) ||
+          t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+        return NULL; // Constructor mismatch
+      }
+
+      // Unify all constructor arguments
+      for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+        Type *cons_arg1 = t1->data.T_CONS.args[i];
+        Type *cons_arg2 = t2->data.T_CONS.args[i];
+
+        if (is_none_variant_member_type(cons_arg1) &&
+            is_none_variant_member_type(cons_arg2)) {
+          continue;
+        }
+
+        if ((cons_arg1->alias && strcmp(cons_arg1->alias, "Option") == 0) &&
+            (cons_arg2->alias && strcmp(cons_arg2->alias, "Option") == 0)) {
+          Type *v = cons_arg2->data.T_CONS.args[0]->data.T_CONS.args[0];
+          Type *v1 = cons_arg1->data.T_CONS.args[0]->data.T_CONS.args[0];
+          subst = substitutions_extend(subst, v, v1);
+          // *v = *v1;
+        }
+      }
+    } else if (t1->kind != t2->kind) {
+      fprintf(stderr, "Error: type mismatch in solve constraints\n");
+      print_type_err(t1);
+      print_type_err(t2);
+      fprintf(stderr, "\n");
+      return NULL;
     }
 
     constraints = constraints->next;
@@ -1086,6 +1190,8 @@ Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
 
   *ff = *coroutine_fn;
   f->is_coroutine_constructor = true;
+  // printf("coroutine type: ");
+  // print_type(f);
 
   return f;
 }
@@ -1445,6 +1551,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       // Add pattern <> expression constraint
       if ((!is_none_expr(branch_pattern)) &&
           !unify_in_ctx(expr_type, pattern_type, ctx)) {
+
         fprintf(stderr, "Pattern type doesn't match expression type\n");
         print_type_err(expr_type);
         fprintf(stderr, " != ");
@@ -1530,39 +1637,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
   case AST_YIELD: {
-    Ast *yield_expr = ast->data.AST_YIELD.expr;
-
-    type = infer(yield_expr, ctx);
-    Type *yield_expr_type = yield_expr->md;
-
-    if (is_coroutine_type(yield_expr_type)) {
-      yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
-    }
-
-    if (ctx->yielded_type == NULL) {
-      ctx->yielded_type = yield_expr_type;
-
-    } else {
-      Type *prev_yield_type = ctx->yielded_type;
-
-      if (!unify_in_ctx(prev_yield_type, yield_expr_type, ctx)) {
-        fprintf(stderr, "Error: yielded values must be of the same type!");
-        print_type_err(prev_yield_type);
-        fprintf(stderr, " != ");
-        print_type_err(yield_expr_type);
-        return NULL;
-      }
-
-      if (is_generic(yield_expr_type) && is_generic(prev_yield_type)) {
-        ctx->current_fn_constraints = constraints_extend(
-            ctx->current_fn_constraints, yield_expr_type, prev_yield_type);
-      }
-
-      ctx->yielded_type = yield_expr_type;
-    }
-    ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
-    type = yield_expr_type;
-
+    type = infer_yield_expr(ast, ctx);
     break;
   }
   }
@@ -1878,4 +1953,52 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   return type;
+}
+
+Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
+
+  Ast *yield_expr = ast->data.AST_YIELD.expr;
+
+  infer(yield_expr, ctx);
+  Type *yield_expr_type = yield_expr->md;
+
+
+  if (yield_expr->tag == AST_APPLICATION
+    &&
+    strcmp(yield_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value, "arithmetic") == 0)
+   {
+    print_ast(yield_expr);
+    print_type(yield_expr->data.AST_APPLICATION.args->md);
+    print_type_env(ctx->env);
+    print_constraints(ctx->constraints);
+  } 
+
+
+  if (is_coroutine_type(yield_expr_type)) {
+    yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
+  }
+
+  if (ctx->yielded_type == NULL) {
+    ctx->yielded_type = yield_expr_type;
+
+  } else {
+    Type *prev_yield_type = ctx->yielded_type;
+
+    if (!unify_in_ctx(prev_yield_type, yield_expr_type, ctx)) {
+      fprintf(stderr, "Error: yielded values must be of the same type!");
+      print_type_err(prev_yield_type);
+      fprintf(stderr, " != ");
+      print_type_err(yield_expr_type);
+      return NULL;
+    }
+
+    if (is_generic(yield_expr_type) && is_generic(prev_yield_type)) {
+      ctx->current_fn_constraints = constraints_extend(
+          ctx->current_fn_constraints, yield_expr_type, prev_yield_type);
+    }
+
+    ctx->yielded_type = yield_expr_type;
+  }
+  ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
+  return yield_expr_type;
 }

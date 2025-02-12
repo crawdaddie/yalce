@@ -38,7 +38,7 @@ let rec = fn () ->
 ;;
 
 rec ();
-
+#
 let seq = fn () ->
 
   let ne = fn () ->
@@ -64,8 +64,8 @@ let seq = fn () ->
 `
 ;;
 seq ();
-
-
+#
+#
 let iter_all_arg = fn () ->
   let co_void = fn a b ->
     yield 1.;
@@ -85,7 +85,7 @@ let iter_all_arg = fn () ->
 `
 ;; 
 iter_all_arg ();
-
+#
 let wrapped_cor = fn () ->
   let wrapper = fn x -> print `specially wrapped: {x}\n`
   ;;
@@ -110,7 +110,7 @@ let wrapped_cor = fn () ->
 `
 ;;
 wrapped_cor ();
-
+#
 let map_cor = fn () ->
   "map each value of a coroutine Int -> String";
   let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`
@@ -137,7 +137,7 @@ let map_cor = fn () ->
 `
 ;;
 map_cor ();
-
+#
 let fib_cor = fn () ->
   let fib = fn a: (Int) b: (Int) ->
     yield a;
@@ -168,7 +168,7 @@ let fib_cor = fn () ->
 `
 ;;
 fib_cor();
-
+#
 let cor_list = fn () -> 
   let l = [1, 2, 3] in
   let c = iter_of_list l in
@@ -181,8 +181,8 @@ let cor_list = fn () ->
 `
 ;;
 cor_list ();
-
-
+#
+#
 let cor_array = fn () -> 
   let l = [|1, 2, 3|] in
   let c = iter_of_array l in
@@ -195,7 +195,7 @@ let cor_array = fn () ->
 `
 ;;
 cor_array ();
-
+#
 let loop_cor = fn () ->  
   let co_void = fn () -> 
     yield 1;
@@ -243,7 +243,7 @@ let loop_cor = fn () ->
 ;;
 
 loop_cor ();
-
+#
 let arithmetic_series = fn () -> 
   let arithmetic = fn s ->
     yield s;
@@ -266,24 +266,24 @@ let arithmetic_series = fn () ->
 ;;
 arithmetic_series ();
 
-let geometric = fn () -> 
-  let geo = fn s ->
-    yield s;
-    yield geo (s * 1.1)
-  ;;
-  let g = geo 1.0 in
-
-  print `## geometric series:
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-`
-;;
-geometric ()
+# let geometric = fn () -> 
+#   let geo = fn s ->
+#     yield s;
+#     yield geo (s * 1.1)
+#   ;;
+#   let g = geo 1.0 in
+#
+#   print `## geometric series:
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+# `
+# ;;
+# geometric ()

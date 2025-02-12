@@ -48,6 +48,9 @@ LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
       break;
     }
   }
+
+  printf("codegen NONE?? %s\n", mem_name);
+
   return LLVMConstInt(LLVMInt8Type(), vidx, 0);
 }
 
@@ -133,8 +136,9 @@ LLVMValueRef codegen_none(LLVMBuilderRef builder) {
   none = LLVMBuildInsertValue(
       builder, none, LLVMConstInt(OPTION_TAG_TYPE, 1, 0), 0, "insert None tag");
 
-  none = LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt8Type(), 0, 0),
-                              1, "insert None dummy val");
+  none =
+      LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt32Type(), 0, 0),
+                           1, "insert None dummy val");
 
   return none;
 }

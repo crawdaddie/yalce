@@ -143,6 +143,7 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   Type *list_type = ast->md;
   LLVMTypeRef llvm_list_node_type = llnode_type(
       type_to_llvm_type(list_type->data.T_CONS.args[0], ctx->env, module));

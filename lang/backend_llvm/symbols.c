@@ -7,6 +7,7 @@
 #include "ht.h"
 #include "match.h"
 #include "serde.h"
+#include "types.h"
 #include "types/type.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -41,7 +42,9 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
 
 LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
+
   const char *chars = ast->data.AST_IDENTIFIER.value;
+
   int length = ast->data.AST_IDENTIFIER.length;
 
   JITSymbol *sym = lookup_id_ast(ast, ctx);
@@ -59,6 +62,12 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (is_simple_enum(enum_type)) {
       return codegen_simple_enum_member(enum_type, chars, ctx, module, builder);
+    } else if (strcmp(chars, "None") == 0) {
+      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
+      LLVMValueRef v = LLVMGetUndef(llvm_type);
+      v = LLVMBuildInsertValue(builder, v, LLVMConstInt(LLVMInt8Type(), 1, 0), 0, "insert None tag");
+      return v;
+
     } else {
       return codegen_adt_member(enum_type, chars, ctx, module, builder);
     }

@@ -750,12 +750,12 @@ int main() {
       &t_void);
   });
 
-  T("let pop_left = fn l ->\n"
+  T("let list_pop_left = fn l ->\n"
     "  match l with\n"
-    "  | x::rest -> Some x \n"
     "  | [] -> None\n"
+    "  | x::rest -> Some x \n"
     ";; \n",
-    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`3")), &TOPT(&TVAR("`3"))));
+    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`4")), &TOPT(&TVAR("`4"))));
 
   T("let l = Int[]", &TLIST(&t_int));
 
@@ -789,5 +789,34 @@ int main() {
     ";;  \n",
     &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`1")), &TVAR("`1"), &t_bool));
 
+  T(
+      "let enqueue = fn (head, tail) item ->\n"
+      "  let last = [item] in\n"
+      "  match head with\n"
+      "  | [] -> (last, last)\n"
+      "  | _ -> (\n"
+      "    let _ = list_concat tail last in\n"
+      "    (head, last)\n"
+      "  )\n"
+      ";;\n",
+      &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
+                      &TVAR("`0"),
+                      &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0")))));
+  ({
+    Ast *b = T(
+        "let pop_left = fn (head, tail) ->\n"
+        "  match head with\n"
+        "  | [] -> ((head, tail), None)\n"
+        "  | x::rest -> ((rest, tail), Some x)  \n"
+        ";;\n",
+        &MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&TVAR("`5")), &TVAR("`1")),
+                        &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`5")), &TVAR("`1")),
+                                &TOPT(&TVAR("`5")))));
+    Ast none = b->data.AST_BODY.stmts[0]
+                   ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH
+                   .branches[1]
+                   .data.AST_LIST.items[1];
+    print_type(none.md);
+  });
   return status == true ? 0 : 1;
 }
