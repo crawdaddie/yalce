@@ -185,23 +185,12 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                  ast->data.AST_MATCH.branches, ctx, module,
                                  builder);
     }
-
     if ((ast->data.AST_MATCH.branches[0].tag != AST_MATCH_GUARD_CLAUSE) &&
         (ast->data.AST_MATCH.branches[2].tag != AST_MATCH_GUARD_CLAUSE)) {
       if (ast_is_placeholder_id(ast->data.AST_MATCH.branches + 2)) {
         return simple_binary_match(ast->data.AST_MATCH.branches, test_val,
                                    test_val_type, ctx, module, builder);
       }
-
-      // if (ast->data.AST_MATCH.branches[0].tag == AST_LIST &&
-      //     ast->data.AST_MATCH.branches[0].data.AST_LIST.len == 0) {
-      //   return simple_binary_empty_list_match();
-      // }
-      //
-      // if (ast->data.AST_MATCH.branches[1].tag == AST_LIST &&
-      //     ast->data.AST_MATCH.branches[1].data.AST_LIST.len == 0) {
-      //   return simple_binary_empty_list_match();
-      // }
     }
   }
 
@@ -279,6 +268,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, end_block);
   return phi;
 }
+
+LLVMValueRef chained_ands() {}
 LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
                                 Type *list_type, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -330,8 +321,6 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
 
   return phi;
 }
-
-LLVMValueRef chained_ands() {}
 
 LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
                                      Type *val_type, JITLangCtx *ctx,
@@ -387,7 +376,6 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     if (strcmp(
             binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
             "::") == 0) {
-
       return match_list_prepend(binding, val, val_type, ctx, module, builder);
     }
 
