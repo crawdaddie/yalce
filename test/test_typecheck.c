@@ -772,7 +772,8 @@ int main() {
                     &TVAR("`2"),
                     &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2")))));
 
-  T("let enqueue = fn (head, tail) item ->\n"
+  T("let enqueue = fn (head, tail): (List of Int * List of Int) item: (Int) "
+    "->\n"
     "  let last = [item] in\n"
     "  match head with\n"
     "  | [] -> (last, last)\n"
@@ -781,9 +782,12 @@ int main() {
     "    (head, last)\n"
     "  )\n"
     ";;\n",
-    &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
-                    &TVAR("`0"),
-                    &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0")))));
+    // &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
+    //                 &TVAR("`0"),
+    //                 &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))))
+    //
+    &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int)), &t_int,
+                    &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))));
   ({
     Ast *b = T(
         "let pop_left = fn (head, tail) ->\n"
@@ -798,7 +802,21 @@ int main() {
                    ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH
                    .branches[1]
                    .data.AST_LIST.items[1];
+
     print_type(none.md);
+    bool res = types_equal(none.md, &TOPT(&TVAR("`5")));
+    const char *msg = "None return val";
+    if (res) {
+      printf("✅ %s\n", msg);
+      print_type(none.md);
+      status &= true;
+    } else {
+      status &= false;
+      printf("❌ %s\nexpected:\n", msg);
+      print_type(&TOPT(&TVAR("`5")));
+      printf("got:\n");
+      print_type(none.md);
+    }
   });
   return status == true ? 0 : 1;
 }
