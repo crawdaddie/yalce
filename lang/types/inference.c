@@ -253,6 +253,7 @@ void initialize_builtin_types() {
   add_builtin("queue_of_list", &t_queue_of_list);
   add_builtin("queue_pop_left", &t_queue_pop_left);
   add_builtin("queue_append_right", &t_queue_append_right);
+  add_builtin("opt_map", &t_opt_map_sig);
 }
 
 Type *param_binding_type(Ast *ast) {
@@ -658,7 +659,6 @@ bool unify(Type *t1, Type *t2, TypeConstraint **constraints) {
     }
 
     if (is_option_type(t2) && t1->alias && (strcmp(t1->alias, "Option") == 0)) {
-
       return true;
     }
 
@@ -715,7 +715,7 @@ double sum_tc_ranks(Type *t1, Type *t2) {
   return sum;
 }
 
-Substitution *solve_constraints(TypeConstraint *constraints) {
+Substitution *__solve_constraints(TypeConstraint *constraints) {
   Substitution *subst = NULL;
 
   while (constraints) {
@@ -769,6 +769,89 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
           Type *v1 = cons_arg1->data.T_CONS.args[0]->data.T_CONS.args[0];
           subst = substitutions_extend(subst, v, v1);
         }
+      }
+    } else if (t1->kind != t2->kind) {
+      fprintf(stderr, "Error: type mismatch in solve constraints\n");
+      print_type_err(t1);
+      print_type_err(t2);
+      fprintf(stderr, "\n");
+      return NULL;
+    }
+
+    constraints = constraints->next;
+  }
+
+  return subst;
+}
+bool _is_option_type(Type *t) {
+  return t->alias && (strcmp(t->alias, "Option") == 0);
+}
+Substitution *solve_constraints(TypeConstraint *constraints) {
+  Substitution *subst = NULL;
+
+  while (constraints) {
+    Type *t1 = apply_substitution(subst, constraints->t1);
+    Type *t2 = apply_substitution(subst, constraints->t2);
+
+    if (is_none_variant_member_type(t1) && is_option_type(t2)) {
+      subst = substitutions_extend(subst, t1, t2);
+    } else if (t1->kind == T_VAR) {
+      if (occurs_check(t1, t2)) {
+        return NULL; // Infinite type error
+      }
+      subst = substitutions_extend(subst, t1, t2);
+    } else if (t2->kind == T_VAR) {
+      if (occurs_check(t2, t1)) {
+        return NULL; // Infinite type error
+      }
+      subst = substitutions_extend(subst, t2, t1);
+    } else if (t1->kind == T_EMPTY_LIST) {
+      subst = substitutions_extend(subst, t1, t2);
+    } else if (t1->kind == T_TYPECLASS_RESOLVE && !is_generic(t2)) {
+      for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+        subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
+      }
+    } else if (is_list_type(t1) && t2->kind == T_EMPTY_LIST) {
+      // Lists are compatible - continue
+    } else if (t1->kind == T_CONS && t2->kind == T_CONS) {
+
+      // Handle variant types with same constructor differently
+      if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0 &&
+          t1->data.T_CONS.num_args == t2->data.T_CONS.num_args) {
+
+        // If these are option types, unify their contained types
+        if (_is_option_type(t1) && _is_option_type(t2)) {
+          Type *contained1 = t1->data.T_CONS.args[0]->data.T_CONS.args[0];
+          Type *contained2 = t2->data.T_CONS.args[0]->data.T_CONS.args[0];
+
+          // Create substitution between contained types if either is a type
+          // variable
+          if (contained1->kind == T_VAR) {
+            subst = substitutions_extend(subst, contained1, contained2);
+          } else if (contained2->kind == T_VAR) {
+            subst = substitutions_extend(subst, contained2, contained1);
+          }
+        }
+
+        // For all constructor types, unify their arguments
+        for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+          Type *cons_arg1 = t1->data.T_CONS.args[i];
+          Type *cons_arg2 = t2->data.T_CONS.args[i];
+
+          if (is_none_variant_member_type(cons_arg1) &&
+              is_none_variant_member_type(cons_arg2)) {
+            continue;
+          }
+
+          // If either argument is a type variable, create substitution
+          if (cons_arg1->kind == T_VAR) {
+            subst = substitutions_extend(subst, cons_arg1, cons_arg2);
+          } else if (cons_arg2->kind == T_VAR) {
+            subst = substitutions_extend(subst, cons_arg2, cons_arg1);
+          }
+        }
+      } else {
+        return NULL; // Constructor mismatch
       }
     } else if (t1->kind != t2->kind) {
       fprintf(stderr, "Error: type mismatch in solve constraints\n");
@@ -1438,8 +1521,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     Ast *expr = ast->data.AST_MATCH.expr;
     // Infer type of expression being matched
     Type *expr_type = infer(expr, ctx);
-    printf("AST MATCH EXPR test expr\n");
-    print_type(expr_type);
 
     if (!expr_type) {
       fprintf(stderr, "Could not infer match expression type\n");
@@ -1591,9 +1672,6 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
 
     Type *cons_arg = cons->data.T_CONS.args[i];
     Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
-    printf("cons app %d: \n", i);
-    print_type(arg_type);
-    print_type(cons_arg);
 
     if (!arg_type) {
       fprintf(stderr, "Could not infer argument type in cons %s application\n",
@@ -1881,13 +1959,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
       type = apply_substitution(subst, type);
     }
   }
-
-  printf("## LAMBDA\n");
-  print_type(type);
-  printf("current fn constraints:\n");
-  print_constraints(lambda_ctx.current_fn_constraints);
-  printf("constraints:\n");
-  print_constraints(lambda_ctx.constraints);
 
   return type;
 }

@@ -398,8 +398,6 @@ LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *fn_ast,
   if (is_generic(constructor_type)) {
     JITSymbol *sym =
         new_symbol(STYPE_GENERIC_FUNCTION, constructor_type, NULL, NULL);
-    printf("create gen constructor: ");
-    print_type(constructor_type);
     sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
     sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
     sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env = ctx->env;
@@ -514,10 +512,6 @@ LLVMValueRef create_coroutine_instance_from_generic_constructor(
 
     fn_ast.md = expected_type;
 
-    printf("create gen instance: ");
-    print_type(expected_type);
-    print_ast(&fn_ast);
-
     LLVMValueRef specific_fn = compile_coroutine_fn(
         expected_type, &fn_ast, &compilation_ctx, module, builder);
 
@@ -614,8 +608,6 @@ static LLVMValueRef codegen_yield_nested_coroutine(
     Type *state_type, Ast *args, int args_len, LLVMValueRef ret_val_ref,
     JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  printf("yield nested coroutine\n");
-
   LLVMTypeRef llvm_state_type = type_to_llvm_type(state_type, ctx->env, module);
 
   LLVMValueRef new_state_ptr;
@@ -633,9 +625,6 @@ static LLVMValueRef codegen_yield_nested_coroutine(
     }
 
     if (args_len == 1) {
-      printf("args len 1\n");
-      print_ast(args);
-      print_type(args->data.AST_APPLICATION.args->md);
 
       LLVMValueRef yield_val = codegen(args, ctx, module, builder);
       if (!yield_val) {

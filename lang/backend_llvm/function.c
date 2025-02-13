@@ -204,7 +204,14 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   //
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
+  // if (fn_type->kind == T_VOID) {
+  //   LLVMBuildRetVoid(builder);
+  // } else {
+  //   LLVMBuildRet(builder, body);
+  // }
+  //
   LLVMBuildRet(builder, body);
+
   LLVMPositionBuilderAtEnd(builder, prev_block);
   destroy_ctx(&fn_ctx);
   return func;

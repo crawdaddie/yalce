@@ -5,6 +5,8 @@
 #include "llvm-c/Types.h"
 #include <string.h>
 
+LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                     LLVMBuilderRef builder);
 LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
@@ -219,4 +221,58 @@ LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
           2, module, builder),
       "select");
   return result;
+}
+
+LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  LLVMValueRef func =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  Type *mapper_type = ast->data.AST_APPLICATION.args->md;
+
+  LLVMTypeRef llvm_mapper_type =
+      type_to_llvm_type(mapper_type, ctx->env, module);
+
+  Type *mapped_type = mapper_type->data.T_FN.to;
+  LLVMTypeRef llvm_mapped_type =
+      type_to_llvm_type(mapped_type, ctx->env, module);
+
+  LLVMValueRef opt_val =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  // Create basic blocks for the if-then-else structure
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+
+  LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(function, "then");
+  LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(function, "else");
+  LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge");
+
+  // Check if option is Some
+  LLVMValueRef is_some = codegen_option_is_some(opt_val, builder);
+  LLVMBuildCondBr(builder, is_some, then_block, else_block);
+
+  // Build then block - extract value and call func
+  LLVMPositionBuilderAtEnd(builder, then_block);
+  LLVMValueRef value_field =
+      LLVMBuildExtractValue(builder, opt_val, 1, "value");
+  LLVMValueRef mapped_value = LLVMBuildCall2(builder, llvm_mapper_type, func,
+                                             &value_field, 1, "mapped");
+  LLVMBuildBr(builder, merge_block);
+
+  // Build else block
+  LLVMPositionBuilderAtEnd(builder, else_block);
+  LLVMBuildBr(builder, merge_block);
+
+  // Build merge block
+  LLVMPositionBuilderAtEnd(builder, merge_block);
+  LLVMValueRef phi = LLVMBuildPhi(builder, llvm_mapped_type, "result");
+
+  // Set up PHI node values
+  LLVMValueRef incoming_values[2] = {mapped_value,
+                                     LLVMGetUndef(llvm_mapped_type)};
+  LLVMBasicBlockRef incoming_blocks[2] = {then_block, else_block};
+  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
+
+  return phi;
 }

@@ -107,6 +107,8 @@ extern Type t_cor_map_fn_sig;
 extern Type t_cor_loop_sig;
 extern Type t_cor_play_sig;
 
+extern Type t_opt_map_sig;
+
 // clang-format off
 #define TYPE_NAME_LIST    "List"
 #define TYPE_NAME_ARRAY   "Array"
@@ -196,17 +198,15 @@ extern _binop_map binop_map[];
 //             &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
 //   }
 //
-// #define eq_var(n)                                                              \
-//   (Type) {                                                                     \
-//     T_VAR, {.T_VAR = n},                                                       \
-//         .implements =                                                          \
-//             &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.},       \
+// #define eq_var(n) \
+//   (Type) { \
+//     T_VAR, {.T_VAR = n}, \
+//         .implements = \
+//             &(TypeClass){.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.}, \
 //   }
 //
 #define eq_var(n)                                                              \
-  (Type) {                                                                     \
-    T_VAR, {.T_VAR = n},                                                       \
-  }
+  (Type) { T_VAR, {.T_VAR = n}, }
 
 #define TCONS(name, num, ...)                                                  \
   ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})

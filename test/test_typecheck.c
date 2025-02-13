@@ -755,7 +755,7 @@ int main() {
     "  | [] -> None\n"
     "  | x::rest -> Some x \n"
     ";; \n",
-    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`4")), &TOPT(&TVAR("`4"))));
+    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`3")), &TOPT(&TVAR("`3"))));
 
   T("let l = Int[]", &TLIST(&t_int));
 

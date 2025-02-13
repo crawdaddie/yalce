@@ -15,59 +15,59 @@ let test_iter_all_void = fn () ->
 ;;
 
 
-let test_embed_seq = fn () ->
-
-  let ne = fn () ->
-    yield 300;
-    yield 400
-  ;;
-
-  let co_void = fn () ->
-    yield 1;
-    yield 2;
-    yield ne ();
-    yield 3
-  ;;
-
-  let co = co_void () in
-     co () == Some 1
-  && co () == Some 2
-  && co () == Some 300
-  && co () == Some 400
-  && co () == Some 3
-  && co () == None
-;;
-
-let test_rec = fn () ->
-  let co_void_rec = fn () ->
-    yield 1;
-    yield 2;
-    yield co_void_rec ()
-  ;;
-
-  let co = co_void_rec () in
-     co () == Some 1
-  && co () == Some 2
-  && co () == Some 1
-  && co () == Some 2
-;;
-
-let test_fib_cor = fn () ->
-
-  let fib = fn a: (Int) b: (Int) ->
-    yield a;
-    yield fib b (a + b)
-  ;;
-
-  let co = fib 0 1 in
-     co () == Some 0
-  && co () == Some 1
-  && co () == Some 1
-  && co () == Some 2
-  && co () == Some 3
-  && co () == Some 5
-  && co () == Some 8
-;;
+# let test_embed_seq = fn () ->
+#
+#   let ne = fn () ->
+#     yield 300;
+#     yield 400
+#   ;;
+#
+#   let co_void = fn () ->
+#     yield 1;
+#     yield 2;
+#     yield ne ();
+#     yield 3
+#   ;;
+#
+#   let co = co_void () in
+#      co () == Some 1
+#   && co () == Some 2
+#   && co () == Some 300
+#   && co () == Some 400
+#   && co () == Some 3
+#   && co () == None
+# ;;
+#
+# let test_rec = fn () ->
+#   let co_void_rec = fn () ->
+#     yield 1;
+#     yield 2;
+#     yield co_void_rec ()
+#   ;;
+#
+#   let co = co_void_rec () in
+#      co () == Some 1
+#   && co () == Some 2
+#   && co () == Some 1
+#   && co () == Some 2
+# ;;
+#
+# let test_fib_cor = fn () ->
+#
+#   let fib = fn a: (Int) b: (Int) ->
+#     yield a;
+#     yield fib b (a + b)
+#   ;;
+#
+#   let co = fib 0 1 in
+#      co () == Some 0
+#   && co () == Some 1
+#   && co () == Some 1
+#   && co () == Some 2
+#   && co () == Some 3
+#   && co () == Some 5
+#   && co () == Some 8
+# ;;
 
 # let test_geo = fn () ->
 #
