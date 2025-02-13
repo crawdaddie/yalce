@@ -723,7 +723,7 @@ int main() {
     &MAKE_FN_TYPE_2(&t_void, &t_int));
 
   T("let bind = extern fn Int -> Int -> Int -> Int;\n"
-    "let _bind = fn server_fd: (Int) server_addr: (Int) ->\n"
+    "let _bind = fn server_fd server_addr ->\n"
     "  match (bind server_fd server_addr 10) with\n"
     "  | 0 -> Some server_fd\n"
     "  | _ -> None \n"
@@ -772,29 +772,18 @@ int main() {
                     &TVAR("`2"),
                     &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2")))));
 
-  T("let pop_left = fn (head, tail) ->\n"
+  T("let enqueue = fn (head, tail) item ->\n"
+    "  let last = [item] in\n"
     "  match head with\n"
-    "  | [] -> ((head, tail), None)\n"
-    "  | x::rest -> ((rest, tail), Some x)  \n"
+    "  | [] -> (last, last)\n"
+    "  | _ -> (\n"
+    "    let _ = list_concat tail last in\n"
+    "    (head, last)\n"
+    "  )\n"
     ";;\n",
-    &MAKE_FN_TYPE_2(
-        &TTUPLE(2, &TLIST(&TVAR("`4")), &TLIST(&TVAR("`1"))),
-        &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`4")), &TLIST(&TVAR("`1"))),
-                &TOPT("`4"))));
-
-  T(
-      "let enqueue = fn (head, tail) item ->\n"
-      "  let last = [item] in\n"
-      "  match head with\n"
-      "  | [] -> (last, last)\n"
-      "  | _ -> (\n"
-      "    let _ = list_concat tail last in\n"
-      "    (head, last)\n"
-      "  )\n"
-      ";;\n",
-      &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
-                      &TVAR("`0"),
-                      &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0")))));
+    &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
+                    &TVAR("`0"),
+                    &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0")))));
   ({
     Ast *b = T(
         "let pop_left = fn (head, tail) ->\n"

@@ -743,6 +743,9 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else if (is_list_type(t1) && t2->kind == T_EMPTY_LIST) {
       // Lists are compatible - continue
     } else if (t1->kind == T_CONS && t2->kind == T_CONS) {
+      printf("UNIFY All constructor args\n");
+      print_type(t1);
+      print_type(t2);
 
       // Add this implementation for constructor types
       if ((strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0) ||
@@ -765,7 +768,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
           Type *v = cons_arg2->data.T_CONS.args[0]->data.T_CONS.args[0];
           Type *v1 = cons_arg1->data.T_CONS.args[0]->data.T_CONS.args[0];
           subst = substitutions_extend(subst, v, v1);
-          // *v = *v1;
         }
       }
     } else if (t1->kind != t2->kind) {
@@ -1436,6 +1438,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
     Ast *expr = ast->data.AST_MATCH.expr;
     // Infer type of expression being matched
     Type *expr_type = infer(expr, ctx);
+    printf("AST MATCH EXPR test expr\n");
+    print_type(expr_type);
 
     if (!expr_type) {
       fprintf(stderr, "Could not infer match expression type\n");
@@ -1499,7 +1503,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
         fprintf(stderr, "Inconsistent types in match branches\n");
         return NULL;
       }
-      ctx->current_fn_constraints = branch_ctx.current_fn_constraints;
+
+      if (branch_ctx.current_fn_constraints) {
+        ctx->current_fn_constraints = branch_ctx.current_fn_constraints;
+      }
     }
 
     Substitution *subst = solve_constraints(ctx->constraints);
@@ -1584,6 +1591,9 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
 
     Type *cons_arg = cons->data.T_CONS.args[i];
     Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
+    printf("cons app %d: \n", i);
+    print_type(arg_type);
+    print_type(cons_arg);
 
     if (!arg_type) {
       fprintf(stderr, "Could not infer argument type in cons %s application\n",
@@ -1872,6 +1882,13 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     }
   }
 
+  printf("## LAMBDA\n");
+  print_type(type);
+  printf("current fn constraints:\n");
+  print_constraints(lambda_ctx.current_fn_constraints);
+  printf("constraints:\n");
+  print_constraints(lambda_ctx.constraints);
+
   return type;
 }
 
@@ -1886,10 +1903,6 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
       strcmp(
           yield_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
           "arithmetic") == 0) {
-    print_ast(yield_expr);
-    print_type(yield_expr->data.AST_APPLICATION.args->md);
-    print_type_env(ctx->env);
-    print_constraints(ctx->constraints);
   }
 
   if (is_coroutine_type(yield_expr_type)) {

@@ -266,24 +266,24 @@ let arithmetic_series = fn () ->
 ;;
 arithmetic_series ();
 
-# let geometric = fn () -> 
-#   let geo = fn s ->
-#     yield s;
-#     yield geo (s * 1.1)
-#   ;;
-#   let g = geo 1.0 in
-#
-#   print `## geometric series:
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-# `
-# ;;
-# geometric ()
+let geometric = fn () -> 
+  let geo = fn s ->
+    yield s;
+    yield geo (s * 1.1)
+  ;;
+  let g = geo 1.0 in
+
+  print `## geometric series:
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+`
+;;
+geometric ()
