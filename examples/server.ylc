@@ -1,10 +1,11 @@
 #! env ylc
+%include Ref
 
 let AF_INET = 2;
 let SOCK_STREAM = 1;
 let INADDR_ANY = 0; 
 
-# type SockAddr = Char * Char * Int ; 
+# type SockAddr = Char * Char * Int ???; 
 
 	# __uint8_t       sa_len;         /* total length */
 	# sa_family_t     sa_family;      /* [XSI] address family */
@@ -12,15 +13,15 @@ let INADDR_ANY = 0;
 
 let socket = extern fn Int -> Int -> Int -> Int;
 let create_server_addr = extern fn Int -> Int -> Int -> Ptr; 
-let bind = extern fn Int -> SockAddr -> Int -> Int;
+let bind = extern fn Int -> Ptr -> Int -> Int;
 let listen = extern fn Int -> Int -> Int;
 let listen = extern fn Int -> Int -> Int;
 let accept = extern fn Int -> Ptr -> Ptr -> Int;
 
-type Routine = Ptr;
+type Routine = Coroutine of Int;
 type RoutineList = List of Routine;
+
 let enqueue = fn (head, tail): (RoutineList * RoutineList) item: (Routine) ->
-# let enqueue = fn (head, tail) item ->
   let last = [item] in
   match head with
   | [] -> (last, last)
@@ -47,11 +48,36 @@ let run = fn server_fd ->
   let client_addr = create_server_addr 0 0 0;
   match accept server_fd client_addr [1] with
   | client_fd if client_fd > 0 -> (
-  print "accepted client connection\n";
-  ()
+    print "accepted client connection\n";
+    ()
   )
   | _ -> ()
 ;;
+
+let accept_connections = fn server_fd ->
+  print "before accept\n";
+  let client_addr = create_server_addr 0 0 0;
+  yield (accept server_fd client_addr [1]);
+  # accept connnection, save client_fd to state and yield control
+  # next yield actually process the client request using client_fd
+;
+
+
+let run = fn tasks server_fd ->
+  match (tasks_empty tasks) with
+  | true -> (
+    let _tasks = enqueue tasks (accept_connections server_fd) in
+    run _tasks server_fd
+    )
+  | false -> (
+    let (_tasks, task_opt) = pop_left tasks in
+    match task_opt with
+    | Some task -> match task () with 
+      # | None -> u  
+  )
+;;
+
+
 
 
 
@@ -63,8 +89,9 @@ let init_server = fn port ->
 
   let head = Routine[] ;
   let tail = Routine[] ;
-  let tasks = Ref (head, tail);
-  run server_fd;
+  # let tasks = Ref (head, tail);
+  let tasks = enqueue (head, tail) (accept_connections server_fd);
+  run tasks server_fd ;
 
 
 

@@ -856,7 +856,12 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       } else {
         return NULL; // Constructor mismatch
       }
-    } else if (t1->kind != t2->kind) {
+    }
+    // else if (is_pointer_type(t1) && is_coroutine_type(t2)) {
+    //   printf("pointer type vs coroutine inst\n");
+    // }
+    else if (t1->kind != t2->kind) {
+
       fprintf(stderr, "Error: type mismatch in solve constraints\n");
       print_type_err(t1);
       print_type_err(t2);
@@ -1378,7 +1383,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_EMPTY_LIST: {
     Type *ltype = talloc(sizeof(Type));
     Type **contained = talloc(sizeof(Type *));
-    contained[0] = find_type_in_ctx(ast->data.AST_EMPTY_LIST.type_id.chars, ctx);
+    contained[0] =
+        find_type_in_ctx(ast->data.AST_EMPTY_LIST.type_id.chars, ctx);
     *ltype = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, contained, 1}}};
     type = ltype;
 
@@ -1493,6 +1499,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
     if (!unify_in_ctx(def_type, binding_type, ctx)) {
       fprintf(stderr, "Definition type doesn't match binding pattern\n");
+      print_type_err(def_type);
+      fprintf(stderr, " != ");
+      print_type_err(binding_type);
       return NULL;
     }
 

@@ -52,6 +52,7 @@ let handle_client = fn client_fd ->
       close client_fd  # Client disconnected
     ;;
   in
+  
   handle
 ;;
 
@@ -61,6 +62,7 @@ let run_server = fn port ->
   let addr = make_sockaddr_in () in
   
   set_sockaddr addr AF_INET INADDR_ANY port;
+  
   bind server_fd addr;
   listen server_fd 10;
   
