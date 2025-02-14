@@ -772,6 +772,12 @@ Ast *ast_empty_list() {
   return l;
 }
 
+Ast *ast_typed_empty_list(ObjString id) {
+  Ast *l = Ast_new(AST_EMPTY_LIST);
+  l->data.AST_EMPTY_LIST.type_id = id;
+  return l;
+}
+
 Ast *ast_empty_array() {
   Ast *l = Ast_new(AST_ARRAY);
   l->data.AST_LIST.len = 0;

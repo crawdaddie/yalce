@@ -120,6 +120,7 @@ typedef enum ast_tag {
   AST_VOID,
   AST_EXTERN_FN,
   AST_LIST,
+  AST_EMPTY_LIST,
   AST_ARRAY,
   AST_MATCH,
   AST_PLACEHOLDER_ID,
@@ -232,6 +233,9 @@ struct Ast {
       size_t len;
     } AST_LIST;
 
+    struct AST_EMPTY_LIST {
+      ObjString type_id;
+    } AST_EMPTY_LIST;
     struct AST_MATCH {
       Ast *expr;
       Ast *branches;
@@ -295,6 +299,7 @@ Ast *ast_string(ObjString lex_string);
 
 Ast *parse_fstring_expr(Ast *list);
 Ast *ast_empty_list();
+Ast *ast_typed_empty_list(ObjString id);
 Ast *ast_empty_array();
 Ast *ast_list_to_array(Ast *list);
 

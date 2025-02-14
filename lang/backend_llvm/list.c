@@ -143,6 +143,7 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   Type *list_type = ast->md;
   LLVMTypeRef llvm_list_node_type = llnode_type(
       type_to_llvm_type(list_type->data.T_CONS.args[0], ctx->env, module));
@@ -391,7 +392,6 @@ LLVMValueRef QueuePopLeftHandler(Ast *ast, JITLangCtx *ctx,
   // Load head pointer
   LLVMValueRef head_ptr =
       LLVMBuildStructGEP2(builder, llvm_list_node_type, queue, 0, "head_ptr");
-
   LLVMValueRef head = LLVMBuildLoad2(
       builder, LLVMPointerType(llvm_list_node_type, 0), head_ptr, "head");
 
@@ -419,16 +419,29 @@ LLVMValueRef QueuePopLeftHandler(Ast *ast, JITLangCtx *ctx,
   // Update head pointer
   LLVMBuildStore(builder, next, head_ptr);
 
-  // If next is null, also update tail to null (queue becomes empty)
+  // Update tail if queue becomes empty
   LLVMValueRef tail_ptr =
       LLVMBuildStructGEP2(builder, llvm_list_node_type, queue, 1, "tail_ptr");
   LLVMValueRef next_is_null = LLVMBuildIsNull(builder, next, "next_is_null");
 
-  // Create Some wrapper for element before any branching
-  LLVMValueRef some_result = codegen_some(element, builder);
+  // Create conditional block for tail update
+  LLVMBasicBlockRef update_tail_block =
+      LLVMAppendBasicBlock(function, "update_tail");
+  LLVMBasicBlockRef after_update_block =
+      LLVMAppendBasicBlock(function, "after_update");
 
-  // Branch after creating Some
-  LLVMBuildCondBr(builder, next_is_null, empty_block, merge_block);
+  LLVMBuildCondBr(builder, next_is_null, update_tail_block, after_update_block);
+
+  // Update tail pointer if needed
+  LLVMPositionBuilderAtEnd(builder, update_tail_block);
+  LLVMBuildStore(builder,
+                 LLVMConstNull(LLVMPointerType(llvm_list_node_type, 0)),
+                 tail_ptr);
+  LLVMBuildBr(builder, after_update_block);
+
+  // After update, create Some value
+  LLVMPositionBuilderAtEnd(builder, after_update_block);
+  LLVMValueRef some_result = codegen_some(element, builder);
   LLVMBuildBr(builder, merge_block);
 
   // Merge block
@@ -438,7 +451,7 @@ LLVMValueRef QueuePopLeftHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef result_phi =
       LLVMBuildPhi(builder, LLVMTypeOf(some_result), "result");
   LLVMValueRef incoming_values[] = {none_result, some_result};
-  LLVMBasicBlockRef incoming_blocks[] = {empty_block, non_empty_block};
+  LLVMBasicBlockRef incoming_blocks[] = {empty_block, after_update_block};
   LLVMAddIncoming(result_phi, incoming_values, incoming_blocks, 2);
 
   return result_phi;

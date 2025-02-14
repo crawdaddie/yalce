@@ -396,7 +396,6 @@ LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *fn_ast,
   int id_len = binding->data.AST_IDENTIFIER.length;
 
   if (is_generic(constructor_type)) {
-    // TODO: compile generic coroutine functions
     JITSymbol *sym =
         new_symbol(STYPE_GENERIC_FUNCTION, constructor_type, NULL, NULL);
     sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;

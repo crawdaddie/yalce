@@ -186,6 +186,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_YIELD: {
     return codegen_yield(ast, ctx, module, builder);
   }
+  case AST_EMPTY_LIST: {
+    Type *t = ast->md;
+    return null_node(llnode_type(
+        type_to_llvm_type(t->data.T_CONS.args[0], ctx->env, module)));
+  }
   }
 
   return NULL;

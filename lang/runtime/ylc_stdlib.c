@@ -1,9 +1,12 @@
 #include "ylc_stdlib.h"
 #include <ctype.h>
 #include <math.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 void str_copy(char *dest, char *src, int len) {
   // printf("calling str copy %s %s %d\n", dest, src, len);
@@ -209,3 +212,20 @@ struct _OptFile open_file(String path, String mode) {
   return (struct _OptFile){1, NULL};
 }
 
+struct sockaddr *create_server_addr(int af_inet, int inaddr_any, int port) {
+
+  struct sockaddr_in *_server_addr = malloc(sizeof(struct sockaddr_in));
+
+  struct sockaddr_in servaddr;
+  bzero(&servaddr, sizeof(servaddr));
+
+  printf("%d %d %d\n", af_inet, inaddr_any, port);
+
+  // assign IP, PORT
+  servaddr.sin_family = af_inet;
+  servaddr.sin_addr.s_addr = htonl(inaddr_any);
+  servaddr.sin_port = htons(port);
+  *_server_addr = servaddr;
+  // printf("sizeof sockaddr_in %lu\n", sizeof(struct sockaddr_in));
+  return (struct sockaddr *)_server_addr;
+}
