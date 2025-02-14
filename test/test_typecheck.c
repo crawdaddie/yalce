@@ -723,7 +723,7 @@ int main() {
     &MAKE_FN_TYPE_2(&t_void, &t_int));
 
   T("let bind = extern fn Int -> Int -> Int -> Int;\n"
-    "let _bind = fn server_fd: (Int) server_addr: (Int) ->\n"
+    "let _bind = fn server_fd server_addr ->\n"
     "  match (bind server_fd server_addr 10) with\n"
     "  | 0 -> Some server_fd\n"
     "  | _ -> None \n"
@@ -750,44 +750,79 @@ int main() {
       &t_void);
   });
 
-  T("let pop_left = fn l ->\n"
+  T("let list_pop_left = fn l ->\n"
     "  match l with\n"
-    "  | x::rest -> Some x \n"
     "  | [] -> None\n"
+    "  | x::rest -> Some x \n"
     ";; \n",
     &MAKE_FN_TYPE_2(&TLIST(&TVAR("`3")), &TOPT(&TVAR("`3"))));
 
   T("let l = Int[]", &TLIST(&t_int));
 
-  T("let enqueue = fn q item ->\n"
-    "  let _, t = array_at q 0 in\n"
+  T("let enqueue = fn (head, tail) item ->\n"
     "  let last = [item] in\n"
-    "  let h = list_concat t last in\n"
-    "  array_set 0 q (h, last) \n"
-    ";;  \n",
-    &MAKE_FN_TYPE_3(
-        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1")))),
-        &TVAR("`1"),
-        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1"))))));
+    "  match head with\n"
+    "  | [] -> (last, last)\n"
+    "  | _ -> (\n"
+    "    let _ = list_concat tail last in\n"
+    "    (head, last)\n"
+    "  )\n"
+    ";;\n",
+    &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2"))),
+                    &TVAR("`2"),
+                    &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2")))));
 
-  T("let _enqueue = fn q: (Array of ((List of l) * (List of l))) item: (List "
-    "of l "
-    "* List of l)->\n"
-    "  let _, t = array_at q 0 in\n"
+  T("let enqueue = fn (head, tail): (List of Int * List of Int) item: (Int) "
+    "->\n"
     "  let last = [item] in\n"
-    "  let h = list_concat t last in\n"
-    "  array_set 0 q (h, last) \n"
-    ";;  \n",
-    &MAKE_FN_TYPE_3(
-        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1")))),
-        &TVAR("`1"),
-        &TARRAY(&TTUPLE(2, &TLIST(&TVAR("`1")), &TLIST(&TVAR("`1"))))));
-  //
-  T("let _enqueue = fn q item ->\n"
-    "  let h = array_at q 0 in\n"
-    "  h == item\n"
-    ";;  \n",
-    &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`1")), &TVAR("`1"), &t_bool));
+    "  match head with\n"
+    "  | [] -> (last, last)\n"
+    "  | _ -> (\n"
+    "    let _ = list_concat tail last in\n"
+    "    (head, last)\n"
+    "  )\n"
+    ";;\n",
+    // &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
+    //                 &TVAR("`0"),
+    //                 &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))))
+    //
+    &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int)), &t_int,
+                    &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))));
+  ({
+    Ast *b = T(
+        "let pop_left = fn (head, tail) ->\n"
+        "  match head with\n"
+        "  | [] -> ((head, tail), None)\n"
+        "  | x::rest -> ((rest, tail), Some x)  \n"
+        ";;\n",
+        &MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&TVAR("`5")), &TVAR("`1")),
+                        &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`5")), &TVAR("`1")),
+                                &TOPT(&TVAR("`5")))));
+    Ast none = b->data.AST_BODY.stmts[0]
+                   ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH
+                   .branches[1]
+                   .data.AST_LIST.items[1];
 
+    print_type(none.md);
+    bool res = types_equal(none.md, &TOPT(&TVAR("`5")));
+    const char *msg = "None return val";
+    if (res) {
+      printf("✅ %s\n", msg);
+      print_type(none.md);
+      status &= true;
+    } else {
+      status &= false;
+      printf("❌ %s\nexpected:\n", msg);
+      print_type(&TOPT(&TVAR("`5")));
+      printf("got:\n");
+      print_type(none.md);
+    }
+  });
+  T(
+
+"let loop = fn () ->\n"
+"  loop ();\n"
+"  ()\n"
+";;\n", &MAKE_FN_TYPE_2(&t_void, &t_void));
   return status == true ? 0 : 1;
 }

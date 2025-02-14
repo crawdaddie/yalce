@@ -87,6 +87,10 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
 
   LLVMValueRef res = LLVMBuildCall2(builder, llvm_callable_type, callable,
                                     app_vals, args_len, "call_func");
+  // if (types_equal(callable_type, &t_void)) {
+  //
+  //   res = LLVMGetUndef(LLVMVoidType());
+  // }
   return res;
 }
 

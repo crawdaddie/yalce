@@ -620,6 +620,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("queue_append_right", &t_queue_append_right,
                     QueueAppendRightHandler);
 
+  GENERIC_FN_SYMBOL("opt_map", &t_opt_map_sig, OptMapHandler);
+
   // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
   // ListPrependHandler);
 

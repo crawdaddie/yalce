@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 typedef struct {
-  const char *chars;
+  char *chars;
   int length;
   uint64_t hash;
 } ObjString;

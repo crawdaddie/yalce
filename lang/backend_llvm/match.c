@@ -111,6 +111,59 @@ static LLVMValueRef simple_option_match(LLVMValueRef test_val,
 
   return phi;
 }
+LLVMValueRef simple_binary_match(Ast *branches, LLVMValueRef val,
+                                 Type *val_type, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  JITLangCtx then_ctx = *ctx;
+  ht table;
+  ht_init(&table);
+  StackFrame sf = {.table = &table, .next = then_ctx.frame};
+  then_ctx.frame = &sf;
+  then_ctx.stack_ptr = ctx->stack_ptr + 1;
+  JITLangCtx branch_ctx = then_ctx;
+
+  LLVMValueRef condition = codegen_pattern_binding(
+      branches, val, val_type, &branch_ctx, module, builder);
+
+  // Create basic blocks for then/else branches and merge point
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+  LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(function, "then");
+  LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(function, "else");
+  LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge");
+
+  // Create conditional branch
+  LLVMBuildCondBr(builder, condition, then_block, else_block);
+
+  // Build THEN block
+  LLVMPositionBuilderAtEnd(builder, then_block);
+  LLVMValueRef then_result =
+      codegen(branches + 1, &branch_ctx, module, builder);
+  LLVMBuildBr(builder, merge_block);
+  LLVMBasicBlockRef then_end_block = LLVMGetInsertBlock(builder);
+
+  // Build ELSE block
+  LLVMPositionBuilderAtEnd(builder, else_block);
+  JITLangCtx else_ctx = *ctx;
+  ht _table;
+  ht_init(&_table);
+  StackFrame _sf = {.table = &_table, .next = else_ctx.frame};
+  else_ctx.frame = &_sf;
+  else_ctx.stack_ptr = ctx->stack_ptr + 1;
+  LLVMValueRef else_result = codegen(branches + 3, &else_ctx, module, builder);
+  LLVMBuildBr(builder, merge_block);
+  LLVMBasicBlockRef else_end_block = LLVMGetInsertBlock(builder);
+
+  // Build merge block with PHI node
+  LLVMPositionBuilderAtEnd(builder, merge_block);
+  LLVMValueRef phi = LLVMBuildPhi(builder, LLVMTypeOf(then_result), "merge");
+  LLVMValueRef incoming_values[] = {then_result, else_result};
+  LLVMBasicBlockRef incoming_blocks[] = {then_end_block, else_end_block};
+  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
+
+  return phi;
+}
 
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
@@ -131,6 +184,13 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return simple_option_match(test_val, test_val_type, ast->md,
                                  ast->data.AST_MATCH.branches, ctx, module,
                                  builder);
+    }
+    if ((ast->data.AST_MATCH.branches[0].tag != AST_MATCH_GUARD_CLAUSE) &&
+        (ast->data.AST_MATCH.branches[2].tag != AST_MATCH_GUARD_CLAUSE)) {
+      if (ast_is_placeholder_id(ast->data.AST_MATCH.branches + 2)) {
+        return simple_binary_match(ast->data.AST_MATCH.branches, test_val,
+                                   test_val_type, ctx, module, builder);
+      }
     }
   }
 
@@ -210,6 +270,57 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 
 LLVMValueRef chained_ands() {}
+LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
+                                Type *list_type, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
+  Ast *head_expr = binding->data.AST_APPLICATION.args;
+  Ast *tail_expr = binding->data.AST_APPLICATION.args + 1;
+
+  Type *list_el_type = list_type->data.T_CONS.args[0];
+
+  LLVMTypeRef llvm_list_el_type =
+      type_to_llvm_type(list_el_type, ctx->env, module);
+  LLVMValueRef list_empty = ll_is_null(list, llvm_list_el_type, builder);
+
+  // Create blocks for the branch
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+  LLVMBasicBlockRef match_block = LLVMAppendBasicBlock(function, "match.list");
+  LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge.list");
+
+  // Branch based on list_empty
+  LLVMBuildCondBr(builder, list_empty, merge_block, match_block);
+
+  // Build the match block for non-empty list
+  LLVMPositionBuilderAtEnd(builder, match_block);
+
+  // Match head and tail
+  LLVMValueRef head_match = codegen_pattern_binding(
+      head_expr, ll_get_head_val(list, llvm_list_el_type, builder),
+      list_el_type, ctx, module, builder);
+
+  LLVMValueRef tail_match = codegen_pattern_binding(
+      tail_expr, ll_get_next(list, llvm_list_el_type, builder), list_type, ctx,
+      module, builder);
+
+  // Combine the results
+  LLVMValueRef match_result =
+      LLVMBuildAnd(builder, head_match, tail_match, "match.result");
+  LLVMBuildBr(builder, merge_block);
+  LLVMBasicBlockRef match_end_block = LLVMGetInsertBlock(builder);
+
+  // Build merge block with phi node
+  LLVMPositionBuilderAtEnd(builder, merge_block);
+  LLVMValueRef phi = LLVMBuildPhi(builder, LLVMInt1Type(), "result");
+
+  // Set up phi node inputs
+  LLVMValueRef false_const = LLVMConstInt(LLVMInt1Type(), 0, 0);
+  LLVMValueRef incoming_values[] = {match_result, false_const};
+  LLVMBasicBlockRef incoming_blocks[] = {match_end_block, current_block};
+  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
+
+  return phi;
+}
 
 LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
                                      Type *val_type, JITLangCtx *ctx,
@@ -265,30 +376,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     if (strcmp(
             binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
             "::") == 0) {
-
-      Ast *head_expr = binding->data.AST_APPLICATION.args;
-      Ast *tail_expr = binding->data.AST_APPLICATION.args + 1;
-
-      Type *list_el_type = val_type->data.T_CONS.args[0];
-
-      LLVMTypeRef llvm_list_el_type =
-          type_to_llvm_type(list_el_type, ctx->env, module);
-
-      LLVMValueRef res = LLVM_IF_ELSE(
-          builder, ll_is_not_null(val, llvm_list_el_type, builder),
-
-          LLVM_IF_ELSE(
-              builder,
-              (codegen_pattern_binding(
-                  head_expr, ll_get_head_val(val, llvm_list_el_type, builder),
-                  list_el_type, ctx, module, builder)),
-              codegen_pattern_binding(
-                  tail_expr, ll_get_next(val, llvm_list_el_type, builder),
-                  val_type, ctx, module, builder),
-              _FALSE),
-          _FALSE);
-
-      return res;
+      return match_list_prepend(binding, val, val_type, ctx, module, builder);
     }
 
     const char *chars =
