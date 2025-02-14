@@ -818,5 +818,11 @@ int main() {
       print_type(none.md);
     }
   });
+  T(
+
+"let loop = fn () ->\n"
+"  loop ();\n"
+"  ()\n"
+";;\n", &MAKE_FN_TYPE_2(&t_void, &t_void));
   return status == true ? 0 : 1;
 }

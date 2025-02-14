@@ -81,6 +81,17 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return IDENTIFIER;
                         }
 
+[a-zA-Z_][a-zA-Z0-9_]*\[\]  {
+
+                          int len = yyleng;
+                          yylval.vident.chars = strdup(yytext); 
+                          yylval.vident.chars[yyleng-1] = 0;
+                          yylval.vident.chars[yyleng-2] = 0;
+                          yylval.vident.length = len;
+                          yylval.vident.hash = hash_string(yylval.vident.chars, len);
+                          return IDENTIFIER_LIST;
+                        }
+
 "_"                     return *yytext;
 
 

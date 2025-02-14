@@ -39,6 +39,7 @@ Ast* ast_root = NULL;
 %token <vint>   INTEGER
 %token <vdouble>DOUBLE 
 %token <vident> IDENTIFIER
+%token <vident> IDENTIFIER_LIST
 %token <vstr>   TOK_STRING
 %token <vchar>  TOK_CHAR
 %token TRUE FALSE
@@ -149,6 +150,7 @@ expr:
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
   | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER IMPLEMENTS IDENTIFIER  { $$ = ast_implements($1, $3); }
+  | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
   ;
 
 simple_expr:

@@ -14,15 +14,61 @@ let socket = extern fn Int -> Int -> Int -> Int;
 let create_server_addr = extern fn Int -> Int -> Int -> Ptr; 
 let bind = extern fn Int -> SockAddr -> Int -> Int;
 let listen = extern fn Int -> Int -> Int;
+let listen = extern fn Int -> Int -> Int;
+let accept = extern fn Int -> Ptr -> Ptr -> Int;
+
+type Routine = Ptr;
+type RoutineList = List of Routine;
+let enqueue = fn (head, tail): (RoutineList * RoutineList) item: (Routine) ->
+# let enqueue = fn (head, tail) item ->
+  let last = [item] in
+  match head with
+  | [] -> (last, last)
+  | _ -> (
+    let _ = list_concat tail last in
+    (head, last)
+  )
+;;
+
+let pop_left = fn (head, tail) ->
+  match head with
+  | [] -> ((head, tail), None)
+  | x::rest -> ((rest, tail), Some x)  
+;;
+
+let tasks_empty = fn (head, tail) ->
+  match head with
+  | [] -> true
+  | _ -> false
+;;
 
 
-let init_server = fn port: (Int) ->
+let run = fn server_fd ->
+  let client_addr = create_server_addr 0 0 0;
+  match accept server_fd client_addr [1] with
+  | client_fd if client_fd > 0 -> (
+  print "accepted client connection\n";
+  ()
+  )
+  | _ -> ()
+;;
+
+
+
+let init_server = fn port ->
   let server_addr = create_server_addr AF_INET INADDR_ANY port;
   let server_fd = socket AF_INET SOCK_STREAM 0;
-  print `fd: {server_fd}\n`;
   bind server_fd server_addr 16;
-  listen server_fd 5
-;;
+  listen server_fd 5;
+
+  let head = Routine[] ;
+  let tail = Routine[] ;
+  let tasks = Ref (head, tail);
+  run server_fd;
+
+
+
+;
 
 init_server 8000
 

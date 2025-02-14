@@ -784,7 +784,7 @@ Substitution *__solve_constraints(TypeConstraint *constraints) {
   return subst;
 }
 bool _is_option_type(Type *t) {
-  return t->alias && (strcmp(t->alias, "Option") == 0);
+  return (t->alias != NULL) && (strcmp(t->alias, "Option") == 0);
 }
 Substitution *solve_constraints(TypeConstraint *constraints) {
   Substitution *subst = NULL;
@@ -814,7 +814,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else if (is_list_type(t1) && t2->kind == T_EMPTY_LIST) {
       // Lists are compatible - continue
     } else if (t1->kind == T_CONS && t2->kind == T_CONS) {
-
       // Handle variant types with same constructor differently
       if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0 &&
           t1->data.T_CONS.num_args == t2->data.T_CONS.num_args) {
@@ -848,6 +847,10 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
             subst = substitutions_extend(subst, cons_arg1, cons_arg2);
           } else if (cons_arg2->kind == T_VAR) {
             subst = substitutions_extend(subst, cons_arg2, cons_arg1);
+          } else if (_is_option_type(cons_arg2) && _is_option_type(cons_arg1)) {
+            subst = substitutions_extend(
+                subst, cons_arg2->data.T_CONS.args[0]->data.T_CONS.args[0],
+                cons_arg1->data.T_CONS.args[0]->data.T_CONS.args[0]);
           }
         }
       } else {
@@ -1372,6 +1375,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
+  case AST_EMPTY_LIST: {
+    Type *ltype = talloc(sizeof(Type));
+    Type **contained = talloc(sizeof(Type *));
+    contained[0] = find_type_in_ctx(ast->data.AST_EMPTY_LIST.type_id.chars, ctx);
+    *ltype = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, contained, 1}}};
+    type = ltype;
+
+    break;
+  }
+
   case AST_ARRAY: {
     type = create_list_type(ast, TYPE_NAME_ARRAY, ctx);
     break;
@@ -1474,6 +1487,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     // Unify definition type with binding pattern type
+    if (ast->data.AST_LET.binding->tag == AST_TUPLE) {
+      print_type(def_type);
+      print_type(binding_type);
+    }
     if (!unify_in_ctx(def_type, binding_type, ctx)) {
       fprintf(stderr, "Definition type doesn't match binding pattern\n");
       return NULL;
@@ -1938,8 +1955,10 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     // Solve constraints to get concrete types
     if (lambda_ctx.constraints) {
       Substitution *subst = solve_constraints(lambda_ctx.constraints);
-      if (!subst)
+      if (!subst) {
         return NULL;
+      }
+      // print_subst(subst);
       actual_fn_type = apply_substitution(subst, actual_fn_type);
     }
 
@@ -1959,6 +1978,12 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
       type = apply_substitution(subst, type);
     }
   }
+  // printf("LAMBDA\n");
+  // print_type(type);
+  // printf("normal constraints: \n");
+  // print_constraints(lambda_ctx.constraints);
+  // printf("current fn constraints: \n");
+  // print_constraints(lambda_ctx.current_fn_constraints);
 
   return type;
 }

@@ -404,6 +404,11 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, ")");
     break;
   }
+  case AST_EMPTY_LIST: {
+    buffer = strcat(buffer, ast->data.AST_EMPTY_LIST.type_id.chars);
+    buffer = strcat(buffer, "[]");
+    break;
+  }
 
   default: {
     // Handle unsupported node types or other errors

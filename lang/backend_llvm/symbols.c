@@ -65,7 +65,8 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     } else if (strcmp(chars, "None") == 0) {
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
       LLVMValueRef v = LLVMGetUndef(llvm_type);
-      v = LLVMBuildInsertValue(builder, v, LLVMConstInt(LLVMInt8Type(), 1, 0), 0, "insert None tag");
+      v = LLVMBuildInsertValue(builder, v, LLVMConstInt(LLVMInt8Type(), 1, 0),
+                               0, "insert None tag");
       return v;
 
     } else {

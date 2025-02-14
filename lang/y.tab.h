@@ -42,89 +42,91 @@
      INTEGER = 258,
      DOUBLE = 259,
      IDENTIFIER = 260,
-     TOK_STRING = 261,
-     TOK_CHAR = 262,
-     TRUE = 263,
-     FALSE = 264,
-     PIPE = 265,
-     EXTERN = 266,
-     TRIPLE_DOT = 267,
-     LET = 268,
-     FN = 269,
-     MATCH = 270,
-     WITH = 271,
-     ARROW = 272,
-     DOUBLE_COLON = 273,
-     TOK_VOID = 274,
-     IN = 275,
-     AND = 276,
-     ASYNC = 277,
-     DOUBLE_AT = 278,
-     THUNK = 279,
-     IMPORT = 280,
-     IMPLEMENTS = 281,
-     FSTRING_START = 282,
-     FSTRING_END = 283,
-     FSTRING_INTERP_START = 284,
-     FSTRING_INTERP_END = 285,
-     FSTRING_TEXT = 286,
-     APPLICATION = 287,
-     DOUBLE_PIPE = 288,
-     DOUBLE_AMP = 289,
-     NE = 290,
-     EQ = 291,
-     LE = 292,
-     GE = 293,
-     MODULO = 294,
-     UMINUS = 295
+     IDENTIFIER_LIST = 261,
+     TOK_STRING = 262,
+     TOK_CHAR = 263,
+     TRUE = 264,
+     FALSE = 265,
+     PIPE = 266,
+     EXTERN = 267,
+     TRIPLE_DOT = 268,
+     LET = 269,
+     FN = 270,
+     MATCH = 271,
+     WITH = 272,
+     ARROW = 273,
+     DOUBLE_COLON = 274,
+     TOK_VOID = 275,
+     IN = 276,
+     AND = 277,
+     ASYNC = 278,
+     DOUBLE_AT = 279,
+     THUNK = 280,
+     IMPORT = 281,
+     IMPLEMENTS = 282,
+     FSTRING_START = 283,
+     FSTRING_END = 284,
+     FSTRING_INTERP_START = 285,
+     FSTRING_INTERP_END = 286,
+     FSTRING_TEXT = 287,
+     APPLICATION = 288,
+     DOUBLE_PIPE = 289,
+     DOUBLE_AMP = 290,
+     NE = 291,
+     EQ = 292,
+     LE = 293,
+     GE = 294,
+     MODULO = 295,
+     UMINUS = 296
    };
 #endif
 /* Tokens.  */
 #define INTEGER 258
 #define DOUBLE 259
 #define IDENTIFIER 260
-#define TOK_STRING 261
-#define TOK_CHAR 262
-#define TRUE 263
-#define FALSE 264
-#define PIPE 265
-#define EXTERN 266
-#define TRIPLE_DOT 267
-#define LET 268
-#define FN 269
-#define MATCH 270
-#define WITH 271
-#define ARROW 272
-#define DOUBLE_COLON 273
-#define TOK_VOID 274
-#define IN 275
-#define AND 276
-#define ASYNC 277
-#define DOUBLE_AT 278
-#define THUNK 279
-#define IMPORT 280
-#define IMPLEMENTS 281
-#define FSTRING_START 282
-#define FSTRING_END 283
-#define FSTRING_INTERP_START 284
-#define FSTRING_INTERP_END 285
-#define FSTRING_TEXT 286
-#define APPLICATION 287
-#define DOUBLE_PIPE 288
-#define DOUBLE_AMP 289
-#define NE 290
-#define EQ 291
-#define LE 292
-#define GE 293
-#define MODULO 294
-#define UMINUS 295
+#define IDENTIFIER_LIST 261
+#define TOK_STRING 262
+#define TOK_CHAR 263
+#define TRUE 264
+#define FALSE 265
+#define PIPE 266
+#define EXTERN 267
+#define TRIPLE_DOT 268
+#define LET 269
+#define FN 270
+#define MATCH 271
+#define WITH 272
+#define ARROW 273
+#define DOUBLE_COLON 274
+#define TOK_VOID 275
+#define IN 276
+#define AND 277
+#define ASYNC 278
+#define DOUBLE_AT 279
+#define THUNK 280
+#define IMPORT 281
+#define IMPLEMENTS 282
+#define FSTRING_START 283
+#define FSTRING_END 284
+#define FSTRING_INTERP_START 285
+#define FSTRING_INTERP_END 286
+#define FSTRING_TEXT 287
+#define APPLICATION 288
+#define DOUBLE_PIPE 289
+#define DOUBLE_AMP 290
+#define NE 291
+#define EQ 292
+#define LE 293
+#define GE 294
+#define MODULO 295
+#define UMINUS 296
 
 
 
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 30 "../lang/parser.y"
+#line 30 "lang/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
     ObjString vident;           /* identifier */
@@ -134,7 +136,7 @@ typedef union YYSTYPE
     char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 138 "../lang/y.tab.h"
+#line 140 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
