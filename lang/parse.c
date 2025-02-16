@@ -1035,6 +1035,7 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
   node->data.AST_MATCH_GUARD_CLAUSE.guard_expr = guard;
   return node;
 }
+
 void print_location(Ast *ast) {
   loc_info *loc = ast->loc_info;
   if (!loc || !loc->src || !loc->src_content) {
@@ -1050,6 +1051,7 @@ void print_location(Ast *ast) {
   while (offset > start && *offset != '\n') {
     offset--;
   }
+
   if (offset > start) {
     offset++; // Move past the newline if we found one
   }
@@ -1061,13 +1063,11 @@ void print_location(Ast *ast) {
   }
   fprintf(stderr, "\n");
 
-  // Print the caret
-  if (loc->col_end - loc->col > 2) {
-    fprintf(stderr, "%*c", loc->col - 1, ' ');
-    fprintf(stderr, "^");
-  }
+  fprintf(stderr, "%*c", loc->col - 1, ' ');
+  fprintf(stderr, "^");
   fprintf(stderr, "\n");
 }
+
 Ast *ast_yield(Ast *expr) {
   Ast *y = Ast_new(AST_YIELD);
   y->data.AST_YIELD.expr = expr;

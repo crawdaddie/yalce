@@ -2,6 +2,7 @@
 #include "adt.h"
 #include "backend_llvm/array.h"
 #include "list.h"
+#include "types/inference.h"
 #include "types/type.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>

@@ -1,9 +1,12 @@
 #include "type.h"
-#include "types/inference.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+Type *next_tvar();
+
+Type *env_lookup(TypeEnv *env, const char *name);
+void reset_type_var_counter();
 Type *create_option_type(Type *option_of);
 
 Type t_int = {T_INT};
@@ -152,7 +155,8 @@ Type *create_new_array_at_sig(void *i) {
 }
 
 // Type t_array_at_fn_sig = {T_CREATE_NEW_GENERIC,
-//                           {.T_CREATE_NEW_GENERIC = create_new_array_at_sig}};
+//                           {.T_CREATE_NEW_GENERIC =
+//                           create_new_array_at_sig}};
 
 Type t_array_at_fn_sig = MAKE_FN_TYPE_3(&t_array_var, &t_int, &t_array_var_el);
 
@@ -664,24 +668,12 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
   return new_env;
 }
 
-Type *env_lookup(TypeEnv *env, const char *name) {
-  while (env) {
-    if (env->name && strcmp(env->name, name) == 0) {
-      return env->type;
-    }
-
-    env = env->next;
-  }
-
-  return lookup_builtin_type(name);
-}
-
-Type *rec_env_lookup(TypeEnv *env, Type *var) {
-  while (var && var->kind == T_VAR) {
-    var = env_lookup(env, var->data.T_VAR);
-  }
-  return var;
-}
+// Type *rec_env_lookup(TypeEnv *env, Type *var) {
+//   while (var && var->kind == T_VAR) {
+//     var = env_lookup(env, var->data.T_VAR);
+//   }
+//   return var;
+// }
 
 Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
                             char **variant_name) {
@@ -888,9 +880,11 @@ Type *create_typeclass_resolve_type(const char *comparison_tc, int num,
 }
 
 Type *resolve_tc_rank(Type *type) {
+
   if (type->kind != T_TYPECLASS_RESOLVE) {
     return type;
   }
+
   bool all_generic = true;
 
   for (int i = 0; i < type->data.T_CONS.num_args; i++) {
@@ -906,6 +900,7 @@ Type *resolve_tc_rank(Type *type) {
   double max_rank;
   for (int i = 0; i < type->data.T_CONS.num_args; i++) {
     Type *arg = type->data.T_CONS.args[i];
+
     if (max_ranked == NULL) {
       max_ranked = arg;
       max_rank = get_typeclass_rank(arg, comparison_tc);
@@ -1240,6 +1235,10 @@ TypeClass *get_typeclass_by_name(Type *t, const char *name) {
 }
 
 bool type_implements(Type *t, TypeClass *constraint_tc) {
+  if (t->kind == T_TYPECLASS_RESOLVE &&
+      (strcmp(t->data.T_CONS.name, constraint_tc->name) == 0)) {
+    return true;
+  }
   for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
 
     if (strcmp(tc->name, constraint_tc->name) == 0) {
@@ -1318,4 +1317,33 @@ bool is_coroutine_constructor_type(Type *fn_type) {
 
 bool is_void_func(Type *f) {
   return (f->kind == T_FN) && (f->data.T_FN.from->kind == T_VOID);
+}
+
+TypeClass *impls_extend(TypeClass *impls, TypeClass *tc) {
+  tc->next = impls;
+  return tc;
+}
+void typeclasses_extend(Type *t, TypeClass *tc) {
+  if (!type_implements(t, tc)) {
+    t->implements = impls_extend(t->implements, tc);
+  }
+}
+
+Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
+  Type *ret = fn_return_type(fn_type);
+  Type *coroutine_fn = create_coroutine_instance_type(ret);
+
+  Type *f = deep_copy_type(fn_type);
+  Type *ff = f;
+
+  while (ff->kind == T_FN) {
+    ff = ff->data.T_FN.to;
+  }
+
+  *ff = *coroutine_fn;
+  f->is_coroutine_constructor = true;
+  // printf("coroutine type: ");
+  // print_type(f);
+
+  return f;
 }

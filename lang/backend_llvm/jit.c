@@ -84,7 +84,15 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   TICtx ti_ctx = {.env = *env, .scope = 0};
-  infer(*prog, &ti_ctx);
+
+  // Open memory stream, passing pointers to buffer and length
+  ti_ctx.err_stream = stderr;
+  if (!infer(*prog, &ti_ctx)) {
+    return NULL;
+  }
+  if (!solve_program_constraints(*prog, &ti_ctx)) {
+    return NULL;
+  }
 
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;

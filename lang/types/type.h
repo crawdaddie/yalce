@@ -11,6 +11,7 @@ typedef struct TypeConstraint {
   Type *t1;
   Type *t2;
   struct TypeConstraint *next;
+  Ast *src;
 } TypeConstraint;
 
 typedef struct Method {
@@ -236,14 +237,15 @@ typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
       {.T_VAR = n},                                                            \
   })
 
+typedef struct Type *(*CreateNewGenericTypeFn)(void *);
 enum TypeKind {
-  T_INT,
-  T_UINT64,
-  T_NUM,
-  T_CHAR,
-  T_BOOL,
-  T_VOID,
-  T_STRING,
+  T_INT = 0,    // Will give 1 << 0
+  T_UINT64 = 1, // Will give 1 << 1
+  T_NUM = 2,    // Will give 1 << 2
+  T_CHAR = 3,
+  T_BOOL = 4,
+  T_VOID = 5,
+  T_STRING = 6,
   T_FN,
   T_CONS,
   T_VAR,
@@ -251,13 +253,7 @@ enum TypeKind {
   T_TYPECLASS_RESOLVE,
   T_CREATE_NEW_GENERIC,
 };
-
-typedef struct TypeList {
-  struct Type *type;
-  struct TypeList *next;
-} TypeList;
-
-typedef struct Type *(*CreateNewGenericTypeFn)(void *);
+#define TYPE_FLAGS_PRIMITIVE ((1 << T_STRING) | ((1 << T_STRING) - 1))
 
 typedef struct Type {
   enum TypeKind kind;
@@ -308,7 +304,6 @@ typedef struct TypeEnv {
 } TypeEnv;
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
-Type *env_lookup(TypeEnv *env, const char *name);
 Type *rec_env_lookup(TypeEnv *env, Type *var);
 
 Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
@@ -423,4 +418,8 @@ bool is_coroutine_constructor_type(Type *fn_type);
 Type *create_coroutine_instance_type(Type *ret_type);
 
 bool is_void_func(Type *f);
+
+void typeclasses_extend(Type *t, TypeClass *tc);
+
+Type *coroutine_constructor_type_from_fn_type(Type *fn_type);
 #endif

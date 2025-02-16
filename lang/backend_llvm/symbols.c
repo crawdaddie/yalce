@@ -8,6 +8,7 @@
 #include "match.h"
 #include "serde.h"
 #include "types.h"
+#include "types/inference.h"
 #include "types/type.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>

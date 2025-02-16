@@ -8,11 +8,10 @@ typedef struct TICtx {
   TypeEnv *env;
   TypeConstraint *constraints;
   Ast *current_fn_ast;
-
-  TypeConstraint *current_fn_constraints;
-  // Ast *yielded_expr;
   Type *yielded_type;
   int scope;
+  const char *err;
+  FILE *err_stream; // Replace const char *err
 } TICtx;
 
 // Substitution map for type variables
@@ -35,9 +34,8 @@ void add_builtin(char *name, Type *t);
 
 void print_builtin_types();
 
-Type *lookup_builtin_type(const char *name);
+Type *env_lookup(TypeEnv *env, const char *name);
 
-Type *coroutine_constructor_type_from_fn_type(Type *fn_type);
+Type *solve_program_constraints(Ast *prog, TICtx *ctx);
 
-void typeclasses_extend(Type *t, TypeClass *tc);
 #endif

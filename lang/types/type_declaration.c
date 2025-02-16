@@ -2,6 +2,7 @@
 #include "types/type.h"
 #include <string.h>
 
+Type *env_lookup(TypeEnv *env, const char *name);
 Type *compute_type_expression(Ast *expr, TypeEnv *env);
 
 Type *type_var_of_id(Ast *expr) {

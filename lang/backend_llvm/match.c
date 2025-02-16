@@ -8,6 +8,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "tuple.h"
+#include "types/inference.h"
 #include "llvm-c/Core.h"
 #include <stdint.h>
 #include <stdlib.h>

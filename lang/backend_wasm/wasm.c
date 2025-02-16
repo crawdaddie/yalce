@@ -389,7 +389,6 @@ void *jit(char *input) {
     print_type(typecheck_result);
     printf("\n");
   } else {
-    fprintf(stderr, "Error: typecheck failed\n");
     return NULL;
   }
 

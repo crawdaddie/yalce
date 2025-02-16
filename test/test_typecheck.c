@@ -1,7 +1,9 @@
 #include "../lang/parse.h"
+#include "../lang/types/builtins.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
 #include "serde.h"
+#include <stdlib.h>
 
 // #define xT(input, type)
 
@@ -10,8 +12,9 @@
     reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
-    TICtx ctx = {.env = NULL};                                                 \
+    TICtx ctx = {.env = NULL, .err_stream = stderr};                           \
     stat &= (infer(ast, &ctx) != NULL);                                        \
+    stat &= (solve_program_constraints(ast, &ctx) != NULL);                    \
     stat &= (types_equal(ast->md, type));                                      \
     char buf[200] = {};                                                        \
     if (stat) {                                                                \
@@ -59,6 +62,7 @@
     Ast *ast = parse_input(input, NULL);                                       \
     TICtx ctx = {.env = NULL};                                                 \
     stat &= (infer(ast, &ctx) == NULL);                                        \
+    stat |= (solve_program_constraints(ast, &ctx) == NULL);                    \
     char buf[100] = {};                                                        \
     if (stat) {                                                                \
       fprintf(stderr, "✅ " input " fails typecheck\n");                       \
@@ -93,21 +97,21 @@ int main() {
   TFAIL("1 + \"hello\"");
   //
   ({
-    Type tvar = arithmetic_var("`0");
+    Type tvar = arithmetic_var("`2");
     T("x + 1", &tvar);
   });
   ({
-    Type tvar = arithmetic_var("`0");
+    Type tvar = arithmetic_var("`2");
     T("1 + x", &tvar);
   });
   //
   ({
-    Type tvar = arithmetic_var("`0");
+    Type tvar = arithmetic_var("`6");
     T("(1 + 2) * 8 - x", &tvar);
   });
   //
   ({
-    Type tvar = arithmetic_var("`0");
+    Type tvar = arithmetic_var("`2");
     T("x - 8", &tvar);
   });
   //
@@ -140,7 +144,7 @@ int main() {
   T("let z = [1, 2] in let x::_ = z in x", &t_int);
   TFAIL("let z = 1 in let x::_ = z in x");
 
-  T("let f = fn a b -> 2;;", &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`1"), &t_int));
+  T("let f = fn a b -> 2;;", &MAKE_FN_TYPE_3(&TVAR("`4"), &TVAR("`5"), &t_int));
   T("let f = fn a: (Int) b: (Int) -> 2;;",
     &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int));
 
@@ -160,6 +164,7 @@ int main() {
       "  ;;\n",
       &MAKE_FN_TYPE_2(&opt_int, &t_int));
   });
+  exit(status);
 
   ({
     Type opt_int = TOPT(&t_int);
