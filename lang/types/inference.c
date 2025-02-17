@@ -17,6 +17,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx);
 Type *infer_let_binding(Ast *ast, TICtx *ctx);
 Type *infer_match_expr(Ast *ast, TICtx *ctx);
 
+Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node);
+
 Type *next_tvar() {
   Type *tvar = talloc(sizeof(Type));
   char *tname = talloc(sizeof(char) * 3);
@@ -243,9 +245,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     const char *name = ast->data.AST_IDENTIFIER.value;
     type = env_lookup(ctx->env, name);
+
     if (type && type->kind == T_CREATE_NEW_GENERIC) {
       type = type->data.T_CREATE_NEW_GENERIC(NULL);
     }
+
     if (type == NULL) {
       type = next_tvar();
     }
@@ -268,14 +272,42 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
   case AST_MATCH: {
+    // static int match = 0;
+    // printf("infer match %d\n", match);
+    // match++;
     type = infer_match_expr(ast, ctx);
+    break;
+  }
+  case AST_EXTERN_FN: {
+    Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
+    int params_count = sig->data.AST_LIST.len - 1;
+
+    if (sig->tag == AST_FN_SIGNATURE) {
+      Type *f = compute_type_expression(sig->data.AST_LIST.items + params_count,
+                                        ctx->env);
+      sig->data.AST_LIST.items[params_count].md = f;
+
+      for (int i = params_count - 1; i >= 0; i--) {
+        Type *p =
+            compute_type_expression(sig->data.AST_LIST.items + i, ctx->env);
+
+        sig->data.AST_LIST.items[i].md = p;
+
+        f = type_fn(p, f);
+      }
+      type = f;
+    }
+
+    // Type *f = compute_type_expression(sig->data.AST_LIST.items +
+    // params_count,
+    //                                   ctx->env);
+
     break;
   }
 
   default: {
     return type_error(
         ctx, ast, "Typecheck Error: inference not implemented for AST Node\n");
-    break;
   }
   }
 
@@ -285,11 +317,34 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
+
   if (!fn_type) {
     return NULL;
   }
   switch (fn_type->kind) {
+
   case T_VAR: {
+    int app_len = ast->data.AST_APPLICATION.len;
+    Type *arg_types[app_len];
+
+    for (int i = 0; i < app_len; i++) {
+      Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
+      if (!arg_type) {
+        fprintf(stderr, "Could not infer argument type in application\n");
+        return NULL;
+      }
+      arg_types[i] = arg_type;
+    }
+
+    Type *ret_type = next_tvar();
+
+    Type *fn_constraint =
+        create_type_multi_param_fn(app_len, arg_types, ret_type);
+
+    unify_in_ctx(fn_constraint, fn_type, ctx, ast);
+
+    print_type(fn_constraint);
+    return ret_type;
     break;
   }
   case T_CONS: {
@@ -325,7 +380,7 @@ void print_constraints(TypeConstraint *c) {
       print_type(con->t2);
     }
     // if (con->src) {
-    //   print_location(con->src);
+    //   print_ast(con->src);
     // };
   }
 }
@@ -378,6 +433,7 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     return unify_in_ctx(t2, t1, ctx, node);
   } else {
     ctx->constraints = constraints_extend(ctx->constraints, t1, t2);
+    // ctx->constraints->src = node;
   }
 
   return t1;
@@ -479,6 +535,11 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
     Type *lookup = env_lookup(ctx->env, name);
     Type *type;
 
+    if (lookup && lookup->kind == T_CREATE_NEW_GENERIC) {
+      lookup = lookup->data.T_CREATE_NEW_GENERIC(NULL);
+      return lookup;
+    }
+
     if (lookup != NULL && is_variant_type(lookup) &&
         strcmp(lookup->data.T_CONS.name, name) != 0) {
       return deep_copy_type(type);
@@ -515,22 +576,24 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
       return type;
     }
 
-    Type *app_type;
-    if ((app_type = infer(pattern, ctx))) {
-      return app_type;
-    }
+    Type *t = infer(pattern, ctx);
+    return t;
+    break;
   }
   default: {
     return infer(pattern, ctx);
   }
   }
 }
+#define CHARS_EQ(a, b) (strcmp(a, b) == 0)
+
 TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type) {
+
   switch (binding->tag) {
   case AST_IDENTIFIER: {
 
     const char *name = binding->data.AST_IDENTIFIER.value;
-    if (strcmp(name, "_") == 0) {
+    if (CHARS_EQ(name, "_")) {
       break;
     }
     env = env_extend(env, name, expr_type);
@@ -552,6 +615,25 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type) {
       break;
     }
 
+    Ast *fn_id = binding->data.AST_APPLICATION.function;
+    const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
+    Type *cons = expr_type;
+
+    if (is_variant_type(expr_type)) {
+
+      cons = find_variant_member(expr_type, fn_name);
+
+      if (!cons) {
+        fprintf(stderr, "Error: %s not found in variant %s\n", fn_name,
+                cons->data.T_CONS.name);
+        return NULL;
+      }
+    }
+
+    for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+      env = bind_in_env(env, binding->data.AST_APPLICATION.args + i,
+                        cons->data.T_CONS.args[i]);
+    }
     break;
   }
   }
@@ -596,8 +678,7 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   }
 
   ctx->env = bind_in_env(ctx->env, ast->data.AST_LET.binding, binding_type);
-  Type *res_type = infer(ast->data.AST_LET.expr, ctx);
-  return res_type;
+  return expr_type;
 }
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
@@ -672,6 +753,7 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
         ctx, expr, "Typecheck Error: Could not infer match expression type\n");
   }
   int len = ast->data.AST_MATCH.len;
+  Type *last_branch_type = NULL;
   for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
 
     Ast *branch_pattern = &ast->data.AST_MATCH.branches[2 * i];
@@ -682,18 +764,20 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
       branch_pattern = branch_pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
     }
 
-    Ast *branch_body = &ast->data.AST_MATCH.branches[2 * i + 1];
+    Ast *branch_body = &ast->data.AST_MATCH.branches[1 + (2 * i)];
 
     Type *pattern_type;
     if (!(pattern_type = infer_pattern(branch_pattern, ctx))) {
       return type_error(ctx, branch_pattern,
                         "Typecheck Error: Could not infer pattern type\n");
     }
+
     if (!unify_in_ctx(expr_type, pattern_type, ctx, branch_pattern)) {
       return type_error(ctx, branch_pattern,
                         "Typecheck Error: Could not unify pattern type with "
                         "matched value type\n");
     }
+
     TICtx branch_ctx = *ctx;
     branch_ctx.env = bind_in_env(branch_ctx.env, branch_pattern, pattern_type);
 
@@ -714,6 +798,17 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
       return type_error(ctx, branch_body,
                         "Inconsistent types in match branches\n");
     }
+
+    if (last_branch_type != NULL) {
+
+      if (!unify_in_ctx(last_branch_type, branch_type, &branch_ctx,
+                        branch_body)) {
+        return type_error(ctx, branch_body,
+                          "Inconsistent types in match branches\n");
+      }
+    }
+
+    last_branch_type = branch_type;
     ctx->constraints = branch_ctx.constraints;
   }
   return result;
@@ -793,13 +888,21 @@ Type *apply_substitution(Substitution *subst, Type *t) {
   }
 
   case T_CONS: {
-    // printf("apply subst cons\n");
-    // print_type(t);
-    // print_subst(subst);
-    break;
+    Type *new_t = talloc(sizeof(Type));
+    *new_t = *t;
+    new_t->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      new_t->data.T_CONS.args[i] =
+          apply_substitution(subst, t->data.T_CONS.args[i]);
+    }
+    return new_t;
   }
   case T_FN: {
-    break;
+    Type *new_t = talloc(sizeof(Type));
+    *new_t = *t;
+    new_t->data.T_FN.from = apply_substitution(subst, t->data.T_FN.from);
+    new_t->data.T_FN.to = apply_substitution(subst, t->data.T_FN.to);
+    return new_t;
   }
   default: {
     // printf("apply subst\n");
@@ -824,6 +927,10 @@ bool cons_types_match(Type *t1, Type *t2) {
          (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0);
 }
 
+bool is_primitive_type(Type *t) {
+  return ((1 << t->kind) & TYPE_FLAGS_PRIMITIVE);
+}
+
 Substitution *solve_constraints(TypeConstraint *constraints) {
   Substitution *subst = NULL;
 
@@ -839,12 +946,17 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       constraints = constraints->next;
       continue;
     }
+
     if (t1->kind == T_CONS && ((1 << t2->kind) & TYPE_FLAGS_PRIMITIVE)) {
-      return NULL;
+
+      TICtx _ctx = {.err_stream = NULL};
+      return type_error(
+          &_ctx, constraints->src,
+          "Cannot constrain cons type to primitive simple type\n");
     }
 
     // If both types are same primitives, no new substitution needed
-    if (t1->kind == t2->kind && ((1 << t1->kind) & TYPE_FLAGS_PRIMITIVE)) {
+    if (t1->kind == t2->kind && is_primitive_type(t1)) {
       constraints = constraints->next;
       continue;
     }
@@ -864,14 +976,50 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       }
 
       subst = substitutions_extend(subst, t2, t1);
-    } else if (is_generic(t1) && (!is_generic(t2)) &&
-               cons_types_match(t1, t2)) {
+
+    } else if (is_primitive_type(t1) && t2->kind == T_TYPECLASS_RESOLVE) {
+      for (int i = 0; i < t2->data.T_CONS.num_args; i++) {
+        subst = substitutions_extend(subst, t2->data.T_CONS.args[i], t1);
+      }
+    } else if (is_primitive_type(t2) && t1->kind == T_TYPECLASS_RESOLVE) {
+
       for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-        subst = substitutions_extend(subst, t1->data.T_CONS.args[i],
-                                     t2->data.T_CONS.args[i]);
+        subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
+      }
+    } else if (cons_types_match(t1, t2)) {
+      if (is_variant_type(t1) && is_variant_type(t2)) {
+        for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+          Type *mem1 = t1->data.T_CONS.args[i];
+          Type *mem2 = t2->data.T_CONS.args[i];
+
+          if (mem1->kind == T_CONS && mem1->data.T_CONS.num_args > 0) {
+            TypeConstraint *next = talloc(sizeof(TypeConstraint));
+            next->next = constraints->next;
+            next->t1 = mem1;
+            next->t2 = mem2;
+            next->src = constraints->src;
+            constraints->next = next;
+            continue;
+          }
+        }
+      } else if (is_generic(t1) && (!is_generic(t2))) {
+        for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+          subst = substitutions_extend(subst, t1->data.T_CONS.args[i],
+                                       t2->data.T_CONS.args[i]);
+        }
+      } else {
+        for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+          subst = substitutions_extend(subst, t1->data.T_CONS.args[i],
+                                       t2->data.T_CONS.args[i]);
+        }
       }
     } else {
-      return NULL; // Type mismatch
+      TICtx _ctx = {.err_stream = NULL};
+      char buf1[100] = {};
+      char buf2[100] = {};
+      return type_error(&_ctx, constraints->src,
+                        "Constraint solving type mismatch %s != %s\n",
+                        type_to_string(t1, buf1), type_to_string(t2, buf2));
     }
 
     constraints = constraints->next;
@@ -884,6 +1032,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
   if (!ast) {
     return;
   }
+
   Type *override = NULL;
 
   switch (ast->tag) {
@@ -908,22 +1057,24 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
   }
 
   case AST_BODY: {
-    Ast *stmt;
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      stmt = ast->data.AST_BODY.stmts[i];
       apply_substitutions_rec(ast->data.AST_BODY.stmts[i], subst);
+      override = ast->data.AST_BODY.stmts[i]->md;
     }
-    override = stmt->md;
     break;
   }
 
   case AST_APPLICATION: {
+
     apply_substitutions_rec(ast->data.AST_APPLICATION.function, subst);
+
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       apply_substitutions_rec(ast->data.AST_APPLICATION.args + i, subst);
     }
+
     break;
   }
+
   case AST_LET: {
     apply_substitutions_rec(ast->data.AST_LET.expr, subst);
     override = ast->data.AST_LET.expr->md;
@@ -942,7 +1093,6 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
       apply_substitutions_rec(ast->data.AST_MATCH.branches + (2 * i) + 1,
                               subst);
     }
-    // apply_substitutions_rec(ast->data.AST_MATCH.expr, subst);
     break;
   }
 
@@ -955,7 +1105,12 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     break;
   }
   }
-  ast->md = override ? override : apply_substitution(subst, ast->md);
+
+  if (override) {
+    ast->md = override;
+  } else {
+    ast->md = apply_substitution(subst, ast->md);
+  }
 }
 
 Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
@@ -964,6 +1119,8 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
   if (ctx->constraints && !subst) {
     return NULL;
   }
+
+  // print_subst();
   apply_substitutions_rec(prog, subst);
 
   return prog->md;
