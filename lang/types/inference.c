@@ -17,6 +17,12 @@ Type *infer_lambda(Ast *ast, TICtx *ctx);
 Type *infer_let_binding(Ast *ast, TICtx *ctx);
 Type *infer_match_expr(Ast *ast, TICtx *ctx);
 
+void apply_substitutions_rec(Ast *ast, Substitution *subst);
+Substitution *solve_constraints(TypeConstraint *constraints);
+
+#define IS_PRIMITIVE_TYPE(t) ((1 << t->kind) & TYPE_FLAGS_PRIMITIVE)
+#define CHARS_EQ(a, b) (strcmp(a, b) == 0)
+
 Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node);
 
 Type *next_tvar() {
@@ -200,8 +206,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
               type_of_option(fn_return_type(type->data.T_CONS.args[i]));
         }
       }
-    }
-    if (is_struct_of_coroutines) {
       type = type_fn(&t_void, create_option_type(type));
       type->is_coroutine_instance = true;
     }
@@ -404,6 +408,10 @@ void print_subst(Substitution *c) {
 }
 
 Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
+  if (types_equal(t1, t2)) {
+    return t1;
+  }
+
   if (!is_generic(t2)) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       if (!type_implements(t2, tc)) {
@@ -414,6 +422,7 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
       }
     }
   }
+
   if (t2->kind == T_VAR) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       typeclasses_extend(t2, tc);
@@ -429,6 +438,8 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
         return NULL;
       }
     }
+  } else if (t1->kind == T_CONS && IS_PRIMITIVE_TYPE(t2)) {
+    return NULL;
   } else if (t2->kind == T_VAR && t1->kind != T_VAR) {
     return unify_in_ctx(t2, t1, ctx, node);
   } else {
@@ -440,7 +451,11 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 }
 
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
+
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
+  if (fn_type->is_recursive_fn_ref) {
+    fn_type = deep_copy_type(fn_type);
+  }
 
   // Infer types for all arguments
   int len = ast->data.AST_APPLICATION.len;
@@ -468,7 +483,15 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
       fn_type = fn_type->data.T_FN.to;
     }
   }
-
+  if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "f")) {
+    printf("infer fn app\n");
+    print_ast(ast);
+    print_type(fn_type);
+  }
+  for (int i = 0; i < len; i++) {
+    print_type(arg_types[i]);
+  }
   return fn_type->data.T_FN.to;
 }
 
@@ -585,7 +608,6 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
   }
   }
 }
-#define CHARS_EQ(a, b) (strcmp(a, b) == 0)
 
 TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type) {
 
@@ -670,14 +692,15 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
     TICtx body_ctx = *ctx;
     body_ctx.scope++;
     body_ctx.env =
-        bind_in_env(body_ctx.env, ast->data.AST_LET.binding, binding_type);
+        bind_in_env(body_ctx.env, ast->data.AST_LET.binding, expr_type);
 
     Type *res_type = infer(ast->data.AST_LET.in_expr, &body_ctx);
     ctx->constraints = body_ctx.constraints;
     return res_type;
   }
 
-  ctx->env = bind_in_env(ctx->env, ast->data.AST_LET.binding, binding_type);
+  ctx->env = bind_in_env(ctx->env, ast->data.AST_LET.binding, expr_type);
+  // ctx->env = bind_in_env(ctx->env, ast->data.AST_LET.binding, expr_type);
   return expr_type;
 }
 
@@ -737,9 +760,12 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     new_fn->data.T_FN.to = actual_fn_type;
     actual_fn_type = new_fn;
   }
-  ctx->constraints = body_ctx.constraints;
 
-  return actual_fn_type;
+  ast->md = actual_fn_type;
+  ctx->constraints = body_ctx.constraints;
+  Substitution *subst = solve_constraints(ctx->constraints);
+  apply_substitutions_rec(ast, subst);
+  return ast->md;
 }
 
 Type *infer_match_expr(Ast *ast, TICtx *ctx) {
@@ -915,6 +941,10 @@ Type *apply_substitution(Substitution *subst, Type *t) {
 }
 
 Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
+  if (types_equal(t1, t2)) {
+    return subst;
+  }
+
   Substitution *new_subst = talloc(sizeof(Substitution));
   new_subst->from = t1;
   new_subst->to = t2;
@@ -925,10 +955,6 @@ Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
 bool cons_types_match(Type *t1, Type *t2) {
   return (t1->kind == T_CONS) && (t2->kind == T_CONS) &&
          (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0);
-}
-
-bool is_primitive_type(Type *t) {
-  return ((1 << t->kind) & TYPE_FLAGS_PRIMITIVE);
 }
 
 Substitution *solve_constraints(TypeConstraint *constraints) {
@@ -956,7 +982,7 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     }
 
     // If both types are same primitives, no new substitution needed
-    if (t1->kind == t2->kind && is_primitive_type(t1)) {
+    if (t1->kind == t2->kind && IS_PRIMITIVE_TYPE(t1)) {
       constraints = constraints->next;
       continue;
     }
@@ -977,11 +1003,11 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
 
       subst = substitutions_extend(subst, t2, t1);
 
-    } else if (is_primitive_type(t1) && t2->kind == T_TYPECLASS_RESOLVE) {
+    } else if (IS_PRIMITIVE_TYPE(t1) && t2->kind == T_TYPECLASS_RESOLVE) {
       for (int i = 0; i < t2->data.T_CONS.num_args; i++) {
         subst = substitutions_extend(subst, t2->data.T_CONS.args[i], t1);
       }
-    } else if (is_primitive_type(t2) && t1->kind == T_TYPECLASS_RESOLVE) {
+    } else if (IS_PRIMITIVE_TYPE(t2) && t1->kind == T_TYPECLASS_RESOLVE) {
 
       for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
         subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
