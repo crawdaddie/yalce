@@ -768,6 +768,7 @@ Type *deep_copy_type(const Type *original) {
   copy->is_recursive_fn_ref = original->is_recursive_fn_ref;
   copy->is_coroutine_constructor = original->is_coroutine_constructor;
   copy->is_coroutine_instance = original->is_coroutine_instance;
+  copy->scope = original->scope;
 
   // for (int i = 0; i < original->num_implements; i++) {
   //   add_typeclass(copy, original->implements[i]);

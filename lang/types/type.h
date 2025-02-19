@@ -293,6 +293,7 @@ typedef struct Type {
   bool is_coroutine_instance;
   bool is_coroutine_constructor;
   bool is_fn_param;
+  int scope;
   void *meta;
 } Type;
 

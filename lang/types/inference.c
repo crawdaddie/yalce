@@ -453,14 +453,18 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
+
   if (fn_type->is_recursive_fn_ref) {
     fn_type = deep_copy_type(fn_type);
   }
+  Type *_fn_type;
 
   // Infer types for all arguments
   int len = ast->data.AST_APPLICATION.len;
   Type *arg_types[len];
+  // printf("scope [%d]\n", ctx->scope);
 
+  TypeConstraint *app_constraints = NULL;
   // Get type for each argument and add constraints
   for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
     arg_types[i] = infer(ast->data.AST_APPLICATION.args + i, ctx);
@@ -468,31 +472,34 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     // For each argument, add a constraint that the function's parameter type
     // must match the argument type
     Type *param_type = fn_type->data.T_FN.from;
+    // printf("unify\n");
+    // print_type(param_type);
+    // print_type(arg_types[i]);
+    //
     if (!unify_in_ctx(param_type, arg_types[i], ctx,
                       ast->data.AST_APPLICATION.args + i)) {
       return NULL;
     }
-    ctx->constraints->src = ast;
+    app_constraints =
+        constraints_extend(app_constraints, param_type, arg_types[i]);
 
-    // Move to next parameter type if there is one
     if (i < ast->data.AST_APPLICATION.len - 1) {
       if (fn_type->data.T_FN.to->kind != T_FN) {
-        ctx->err = "Too many arguments provided to function";
-        return NULL;
+        return type_error(ctx, ast, "Too many arguments provided to function");
       }
       fn_type = fn_type->data.T_FN.to;
     }
   }
-  if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-               "f")) {
-    printf("infer fn app\n");
-    print_ast(ast);
-    print_type(fn_type);
-  }
+
+  Substitution *subst = solve_constraints(app_constraints);
+  _fn_type = apply_substitution(subst, _fn_type);
+  ast->data.AST_APPLICATION.function->md = _fn_type;
+  Type *res_type = _fn_type;
   for (int i = 0; i < len; i++) {
-    print_type(arg_types[i]);
+    res_type = res_type->data.T_FN.to;
   }
-  return fn_type->data.T_FN.to;
+
+  return res_type;
 }
 
 Type *find_variant_member(Type *variant, const char *name) {
@@ -609,7 +616,7 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
   }
 }
 
-TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type) {
+TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope) {
 
   switch (binding->tag) {
   case AST_IDENTIFIER: {
@@ -618,6 +625,7 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type) {
     if (CHARS_EQ(name, "_")) {
       break;
     }
+    expr_type->scope = scope;
     env = env_extend(env, name, expr_type);
     break;
   }
@@ -625,15 +633,17 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type) {
   case AST_TUPLE: {
     for (int i = 0; i < binding->data.AST_LIST.len; i++) {
       Ast *b = binding->data.AST_LIST.items + i;
-      env = bind_in_env(env, b, expr_type->data.T_CONS.args[i]);
+      env = bind_in_env(env, b, expr_type->data.T_CONS.args[i], scope);
     }
     break;
   }
   case AST_APPLICATION: {
     if (is_list_cons_operator(binding->data.AST_APPLICATION.function)) {
       Type *el_type = expr_type->data.T_CONS.args[0];
-      env = bind_in_env(env, binding->data.AST_APPLICATION.args, el_type);
-      env = bind_in_env(env, binding->data.AST_APPLICATION.args + 1, expr_type);
+      env =
+          bind_in_env(env, binding->data.AST_APPLICATION.args, el_type, scope);
+      env = bind_in_env(env, binding->data.AST_APPLICATION.args + 1, expr_type,
+                        scope);
       break;
     }
 
@@ -654,12 +664,16 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type) {
 
     for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
       env = bind_in_env(env, binding->data.AST_APPLICATION.args + i,
-                        cons->data.T_CONS.args[i]);
+                        cons->data.T_CONS.args[i], scope);
     }
     break;
   }
   }
   return env;
+}
+
+void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type) {
+  ctx->env = bind_in_env(ctx->env, binding, expr_type, ctx->scope);
 }
 
 Type *infer_let_binding(Ast *ast, TICtx *ctx) {
@@ -691,16 +705,14 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   if (in_expr != NULL) {
     TICtx body_ctx = *ctx;
     body_ctx.scope++;
-    body_ctx.env =
-        bind_in_env(body_ctx.env, ast->data.AST_LET.binding, expr_type);
+    bind_in_ctx(&body_ctx, ast->data.AST_LET.binding, expr_type);
 
     Type *res_type = infer(ast->data.AST_LET.in_expr, &body_ctx);
     ctx->constraints = body_ctx.constraints;
     return res_type;
   }
 
-  ctx->env = bind_in_env(ctx->env, ast->data.AST_LET.binding, expr_type);
-  // ctx->env = bind_in_env(ctx->env, ast->data.AST_LET.binding, expr_type);
+  bind_in_ctx(ctx, ast->data.AST_LET.binding, expr_type);
   return expr_type;
 }
 
@@ -727,7 +739,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
     param_type->is_fn_param = true;
     param_types[i] = param_type;
-    body_ctx.env = bind_in_env(body_ctx.env, param, param_types[i]);
+    bind_in_ctx(&body_ctx, param, param_types[i]);
   }
 
   bool is_named = ast->data.AST_LAMBDA.fn_name.chars != NULL;
@@ -741,7 +753,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
         AST_IDENTIFIER,
         {.AST_IDENTIFIER = {.value = ast->data.AST_LAMBDA.fn_name.chars,
                             .length = ast->data.AST_LAMBDA.fn_name.length}}};
-    body_ctx.env = bind_in_env(body_ctx.env, &rec_fn_name_binding, fn_type_var);
+
+    bind_in_ctx(&body_ctx, &rec_fn_name_binding, fn_type_var);
   }
 
   Type *body_type = infer(ast->data.AST_LAMBDA.body, &body_ctx);
@@ -762,9 +775,23 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   ast->md = actual_fn_type;
-  ctx->constraints = body_ctx.constraints;
-  Substitution *subst = solve_constraints(ctx->constraints);
+  // ctx->constraints = body_ctx.constraints;
+  Substitution *subst = solve_constraints(body_ctx.constraints);
+  // printf("LAMBDA CONSTRAINTS\n");
+  // print_constraints(body_ctx.constraints);
+  // print_subst(subst);
+
   apply_substitutions_rec(ast, subst);
+  // printf("final lambda\n");
+  // print_type(ast->md);
+  for (TypeConstraint *c = body_ctx.constraints; c; c = c->next) {
+    Type *t1 = c->t1;
+    Type *t2 = c->t2;
+    if (t1->scope <= ctx->scope) {
+      ctx->constraints = constraints_extend(ctx->constraints, t1, t2);
+    }
+  }
+
   return ast->md;
 }
 
@@ -805,7 +832,8 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
     }
 
     TICtx branch_ctx = *ctx;
-    branch_ctx.env = bind_in_env(branch_ctx.env, branch_pattern, pattern_type);
+    branch_ctx.scope++;
+    bind_in_ctx(&branch_ctx, branch_pattern, pattern_type);
 
     if (guard_clause && !(infer(guard_clause, &branch_ctx))) {
       return type_error(
@@ -1069,6 +1097,8 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     for (int i = 0; i < ast->data.AST_LIST.len; i++) {
       apply_substitutions_rec(ast->data.AST_LIST.items + i, subst);
     }
+
+    ast->md = apply_substitution(subst, ast->md);
     break;
   }
 
@@ -1079,24 +1109,30 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
       Ast *member = ast->data.AST_LIST.items + i;
       apply_substitutions_rec(member, subst);
     }
+
+    ast->md = apply_substitution(subst, ast->md);
     break;
   }
 
   case AST_BODY: {
+    Type *fin;
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
       apply_substitutions_rec(ast->data.AST_BODY.stmts[i], subst);
-      override = ast->data.AST_BODY.stmts[i]->md;
+      fin = ast->data.AST_BODY.stmts[i]->md;
     }
+    ast->md = fin;
     break;
   }
 
   case AST_APPLICATION: {
 
-    apply_substitutions_rec(ast->data.AST_APPLICATION.function, subst);
-
-    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-      apply_substitutions_rec(ast->data.AST_APPLICATION.args + i, subst);
-    }
+    // apply_substitutions_rec(ast->data.AST_APPLICATION.function, subst);
+    //
+    // for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+    //   apply_substitutions_rec(ast->data.AST_APPLICATION.args + i, subst);
+    // }
+    //
+    // ast->md = apply_substitution(subst, ast->md);
 
     break;
   }
@@ -1109,6 +1145,8 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
       apply_substitutions_rec(ast->data.AST_LET.in_expr, subst);
       override = ast->data.AST_LET.in_expr->md;
     }
+
+    ast->md = override;
     break;
   }
 
@@ -1119,23 +1157,15 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
       apply_substitutions_rec(ast->data.AST_MATCH.branches + (2 * i) + 1,
                               subst);
     }
-    break;
-  }
 
-  case AST_LAMBDA: {
-    apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
+    ast->md = apply_substitution(subst, ast->md);
     break;
   }
 
   default: {
+    ast->md = apply_substitution(subst, ast->md);
     break;
   }
-  }
-
-  if (override) {
-    ast->md = override;
-  } else {
-    ast->md = apply_substitution(subst, ast->md);
   }
 }
 
@@ -1146,7 +1176,7 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
     return NULL;
   }
 
-  // print_subst();
+  print_subst(subst);
   apply_substitutions_rec(prog, subst);
 
   return prog->md;
