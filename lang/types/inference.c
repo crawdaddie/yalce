@@ -321,6 +321,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
+  // print_ast(ast);
+  // print_type(fn_type);
 
   if (!fn_type) {
     return NULL;
@@ -328,14 +330,16 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   switch (fn_type->kind) {
 
   case T_VAR: {
+
     int app_len = ast->data.AST_APPLICATION.len;
     Type *arg_types[app_len];
 
     for (int i = 0; i < app_len; i++) {
-      Type *arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx);
+      Ast *arg = ast->data.AST_APPLICATION.args + i;
+      Type *arg_type = infer(arg, ctx);
       if (!arg_type) {
-        fprintf(stderr, "Could not infer argument type in application\n");
-        return NULL;
+        return type_error(ctx, arg,
+                          "Could not infer argument type in var application\n");
       }
       arg_types[i] = arg_type;
     }
@@ -347,7 +351,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
     unify_in_ctx(fn_constraint, fn_type, ctx, ast);
 
-    print_type(fn_constraint);
     return ret_type;
     break;
   }
@@ -408,17 +411,25 @@ void print_subst(Substitution *c) {
 }
 
 Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
+
   if (types_equal(t1, t2)) {
+    return t1;
+  }
+
+  if (IS_PRIMITIVE_TYPE(t1)) {
+    ctx->constraints = constraints_extend(ctx->constraints, t2, t1);
     return t1;
   }
 
   if (!is_generic(t2)) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       if (!type_implements(t2, tc)) {
-        type_error(ctx, node,
-                   "Typecheck error type does not implement typeclass %s",
-                   tc->name);
-        return NULL;
+
+        char buf[20];
+        return type_error(
+            ctx, node,
+            "Typecheck error type %s does not implement typeclass '%s' \n",
+            type_to_string(t2, buf), tc->name);
       }
     }
   }
@@ -438,6 +449,15 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
         return NULL;
       }
     }
+  } else if (t1->kind == T_FN && t2->kind == T_FN) {
+    printf("fn unify\n");
+    print_type(t1);
+    print_type(t2);
+    ctx->constraints = constraints_extend(ctx->constraints, t1->data.T_FN.from,
+                                          t2->data.T_FN.from);
+
+    return unify_in_ctx(t1->data.T_FN.to, t2->data.T_FN.to, ctx, node);
+
   } else if (t1->kind == T_CONS && IS_PRIMITIVE_TYPE(t2)) {
     return NULL;
   } else if (t2->kind == T_VAR && t1->kind != T_VAR) {
@@ -462,9 +482,12 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   // Infer types for all arguments
   int len = ast->data.AST_APPLICATION.len;
   Type *arg_types[len];
+
   // printf("scope [%d]\n", ctx->scope);
 
-  TypeConstraint *app_constraints = NULL;
+  // TypeConstraint *app_constraints = NULL;
+  TICtx app_ctx = {};
+
   // Get type for each argument and add constraints
   for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
     arg_types[i] = infer(ast->data.AST_APPLICATION.args + i, ctx);
@@ -472,16 +495,13 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     // For each argument, add a constraint that the function's parameter type
     // must match the argument type
     Type *param_type = fn_type->data.T_FN.from;
-    // printf("unify\n");
-    // print_type(param_type);
-    // print_type(arg_types[i]);
-    //
-    if (!unify_in_ctx(param_type, arg_types[i], ctx,
+    if (!unify_in_ctx(param_type, arg_types[i], &app_ctx,
                       ast->data.AST_APPLICATION.args + i)) {
       return NULL;
     }
-    app_constraints =
-        constraints_extend(app_constraints, param_type, arg_types[i]);
+
+    // app_ctx.constraints =
+    //     constraints_extend(app_constraints, param_type, arg_types[i]);
 
     if (i < ast->data.AST_APPLICATION.len - 1) {
       if (fn_type->data.T_FN.to->kind != T_FN) {
@@ -491,10 +511,12 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     }
   }
 
-  Substitution *subst = solve_constraints(app_constraints);
+  Substitution *subst = solve_constraints(app_ctx.constraints);
   _fn_type = apply_substitution(subst, _fn_type);
   ast->data.AST_APPLICATION.function->md = _fn_type;
+
   Type *res_type = _fn_type;
+
   for (int i = 0; i < len; i++) {
     res_type = res_type->data.T_FN.to;
   }
@@ -777,9 +799,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   ast->md = actual_fn_type;
   // ctx->constraints = body_ctx.constraints;
   Substitution *subst = solve_constraints(body_ctx.constraints);
-  // printf("LAMBDA CONSTRAINTS\n");
-  // print_constraints(body_ctx.constraints);
-  // print_subst(subst);
 
   apply_substitutions_rec(ast, subst);
   // printf("final lambda\n");
@@ -911,7 +930,9 @@ Type *apply_substitution(Substitution *subst, Type *t) {
   case T_BOOL:
   case T_VOID:
   case T_STRING: {
-    break;
+    // print_type(t);
+    // print_subst(subst);
+    return t;
   }
   case T_VAR: {
     Substitution *s = subst;
@@ -1067,6 +1088,18 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
                                        t2->data.T_CONS.args[i]);
         }
       }
+    } else if (t1->kind == T_FN && t2->kind == T_FN) {
+      Type *f1 = t1;
+      Type *f2 = t2;
+      while (f1->kind == T_FN && f2->kind == T_FN) {
+        subst =
+            substitutions_extend(subst, f1->data.T_FN.from, f2->data.T_FN.from);
+
+        f1 = f1->data.T_FN.to;
+        f2 = f2->data.T_FN.to;
+      }
+
+      subst = substitutions_extend(subst, f1, f2);
     } else {
       TICtx _ctx = {.err_stream = NULL};
       char buf1[100] = {};
@@ -1086,8 +1119,6 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
   if (!ast) {
     return;
   }
-
-  Type *override = NULL;
 
   switch (ast->tag) {
 
@@ -1139,7 +1170,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
   case AST_LET: {
     apply_substitutions_rec(ast->data.AST_LET.expr, subst);
-    override = ast->data.AST_LET.expr->md;
+    Type *override = ast->data.AST_LET.expr->md;
 
     if (ast->data.AST_LET.in_expr) {
       apply_substitutions_rec(ast->data.AST_LET.in_expr, subst);
@@ -1170,13 +1201,11 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 }
 
 Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
-  print_constraints(ctx->constraints);
   Substitution *subst = solve_constraints(ctx->constraints);
   if (ctx->constraints && !subst) {
     return NULL;
   }
 
-  print_subst(subst);
   apply_substitutions_rec(prog, subst);
 
   return prog->md;

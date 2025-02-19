@@ -1326,6 +1326,7 @@ TypeClass *impls_extend(TypeClass *impls, TypeClass *tc) {
 }
 void typeclasses_extend(Type *t, TypeClass *tc) {
   if (!type_implements(t, tc)) {
+
     t->implements = impls_extend(t->implements, tc);
   }
 }

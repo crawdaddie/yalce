@@ -185,6 +185,16 @@ int main() {
       &MAKE_FN_TYPE_2(&opt_int, &t_int));
   });
 
+  ({
+    Type opt_int = TOPT(&t_int);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some y -> y * 2\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+      &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
   T("let f = fn x ->\n"
     "match x with\n"
     "  | (1, 2) -> 1\n"
@@ -207,17 +217,13 @@ int main() {
     Ast *body = T("let f = fn x -> 1 + x;;\n"
                   "f 1;\n"
                   "f 1.;\n",
-
-                  // &MAKE_FN_TYPE_2(&tvar, &tvar)
-                  // &t_int
                   &t_num);
 
-    // TASSERT(body->data.AST_BODY.stmts[0]->md, &MAKE_FN_TYPE_2(&tvar, &tvar),
-    //         "f == `0 [arithmetic] -> `0 [arithmetic]");
-    // TASSERT(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
-    // TASSERT(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
+    TASSERT(body->data.AST_BODY.stmts[0]->md, &MAKE_FN_TYPE_2(&tvar, &tvar),
+            "f == `0 [arithmetic] -> `0 [arithmetic]");
+    TASSERT(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
+    TASSERT(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
   });
-  exit(status);
 
   ({
     Type t0 = TVAR("`0");
@@ -250,12 +256,14 @@ int main() {
                              &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1), &t2)));
   });
 
-  T("let count_10 = fn x ->\n"
-    "  match x with\n"
-    "  | 10 -> 10\n"
-    "  | _ -> count_10 (x + 1)\n"
-    ";;\n",
-    &MAKE_FN_TYPE_2(&t_int, &t_int));
+  ({
+    T("let count_10 = fn x ->\n"
+      "  match x with\n"
+      "  | 10 -> 10\n"
+      "  | _ -> count_10 (x + 1)\n"
+      ";;\n",
+      &MAKE_FN_TYPE_2(&t_int, &t_int));
+  });
 
   T("let fib = fn x ->\n"
     "  match x with\n"
@@ -265,27 +273,36 @@ int main() {
     ";;\n",
     &MAKE_FN_TYPE_2(&t_int, &t_int));
 
+  T("let fib = fn x ->\n"
+    "  match x with\n"
+    "  | 0 -> 0\n"
+    "  | 1 -> 1\n"
+    "  | _x -> (fib (_x - 1)) + (fib (_x - 2))\n"
+    ";;\n",
+    &MAKE_FN_TYPE_2(&t_int, &t_int));
+
   T("let f = fn x: (Int) (y, z): (Int * Double) -> x + y + z;;",
     &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
 
   // first-class functions
   ({
-    Type t0 = {T_VAR, .data = {.T_VAR = "`5"}};
-    Type t1 = {T_VAR, .data = {.T_VAR = "`6"}};
-    Type t2 = {T_VAR, .data = {.T_VAR = "`8"}};
+    Type t0 = TVAR("`7");
+    Type t1 = TVAR("`8");
+    Type t2 = TVAR("`10");
     Ast *b = T("let sum = fn a b -> a + b;;\n"
                "let proc = fn f a b -> f a b;;\n"
                "proc sum 1 2;\n",
                &t_int);
+    print_type(b->data.AST_BODY.stmts[1]->md);
     TASSERT(b->data.AST_BODY.stmts[1]->md,
             &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2),
-            "proc == (`5 -> `6 -> `8) -> `5 -> `6 -> `8");
+            "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
   });
 
   ({
-    Type t0 = {T_VAR, .data = {.T_VAR = "`5"}};
-    Type t1 = {T_VAR, .data = {.T_VAR = "`6"}};
-    Type t2 = {T_VAR, .data = {.T_VAR = "`8"}};
+    Type t0 = TVAR("`7");
+    Type t1 = TVAR("`8");
+    Type t2 = TVAR("`10");
     Ast *b = T("let sum = fn a b -> a + b;;\n"
                "let proc = fn f a b -> f a b;;\n"
                "proc sum 1.0 2.0;\n"
@@ -319,6 +336,8 @@ int main() {
       ";;\n",
       &MAKE_FN_TYPE_2(&tenum, &t_int));
   });
+
+  exit(status);
 
   // // LIST PROCESSING FUNCTIONS
   T("let f = fn l->\n"
