@@ -293,7 +293,6 @@ int main() {
                "let proc = fn f a b -> f a b;;\n"
                "proc sum 1 2;\n",
                &t_int);
-    print_type(b->data.AST_BODY.stmts[1]->md);
     TASSERT(b->data.AST_BODY.stmts[1]->md,
             &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2),
             "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
@@ -308,11 +307,10 @@ int main() {
                "proc sum 1.0 2.0;\n"
                "proc sum 1 2;\n",
                &t_int);
-
     TASSERT(b->data.AST_BODY.stmts[2]->md, &t_num, "proc sum 1. 2. == Double");
     TASSERT(b->data.AST_BODY.stmts[1]->md,
             &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2),
-            "proc == (`5 -> `6 -> `8) -> `5 -> `6 -> `8");
+            "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
   });
 
   T("type Cb = Double -> (Int * Int) -> ();",
@@ -344,7 +342,6 @@ int main() {
     "    | [] -> 0\n"
     ";;",
     &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
-  exit(status);
 
   T("let f = fn l->\n"
     "  match l with\n"
@@ -362,7 +359,7 @@ int main() {
 
   ({
     Type s = arithmetic_var("`4");
-    Type t = arithmetic_var("`0");
+    Type t = arithmetic_var("`8");
     T("let list_sum = fn s l ->\n"
       "  match l with\n"
       "  | [] -> s\n"
@@ -370,6 +367,7 @@ int main() {
       ";;\n",
       &MAKE_FN_TYPE_3(&t, &TLIST(&s), &t));
   });
+  exit(status);
 
   ({
     Type opt_int = TOPT(&t_int);

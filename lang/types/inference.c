@@ -105,10 +105,12 @@ void print_subst(Substitution *c);
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
 
   if (ast->data.AST_LIST.len == 0) {
-    // Type *t = talloc(sizeof(Type));
-    // *t = t_empty_list;
+    Type *t = talloc(sizeof(Type));
+    Type **el = talloc(sizeof(Type *));
+    el[0] = next_tvar();
+    *t = (Type){T_CONS, {.T_CONS = {cons_name, el, 1}}};
     // return t;
-    return &t_empty_list;
+    return t;
   }
 
   int len = ast->data.AST_LIST.len;
@@ -801,8 +803,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   Substitution *subst = solve_constraints(body_ctx.constraints);
 
   apply_substitutions_rec(ast, subst);
-  // printf("final lambda\n");
-  // print_type(ast->md);
   for (TypeConstraint *c = body_ctx.constraints; c; c = c->next) {
     Type *t1 = c->t1;
     Type *t2 = c->t2;
@@ -851,6 +851,7 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
     }
 
     TICtx branch_ctx = *ctx;
+
     branch_ctx.scope++;
     bind_in_ctx(&branch_ctx, branch_pattern, pattern_type);
 
@@ -998,6 +999,7 @@ Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
   new_subst->from = t1;
   new_subst->to = t2;
   new_subst->next = subst;
+
   return new_subst;
 }
 
@@ -1039,15 +1041,17 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     // Handle type variable in t1
     if (t1->kind == T_VAR) {
       if (occurs_check(t1, t2)) {
-        return NULL; // Infinite type
+        constraints = constraints->next;
+        continue;
       }
+
       // Add new substitution to chain
       subst = substitutions_extend(subst, t1, t2);
-    }
-    // Handle type variable in t2
-    else if (t2->kind == T_VAR) {
+    } else if (t2->kind == T_VAR) {
+      // Handle type variable in t2
       if (occurs_check(t2, t1)) {
-        return NULL; // Infinite type
+        constraints = constraints->next;
+        continue;
       }
 
       subst = substitutions_extend(subst, t2, t1);
@@ -1100,10 +1104,13 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       }
 
       subst = substitutions_extend(subst, f1, f2);
+    } else if (t1->kind == T_EMPTY_LIST && is_list_type(t2)) {
+      *t1 = *t2;
     } else {
       TICtx _ctx = {.err_stream = NULL};
       char buf1[100] = {};
       char buf2[100] = {};
+
       return type_error(&_ctx, constraints->src,
                         "Constraint solving type mismatch %s != %s\n",
                         type_to_string(t1, buf1), type_to_string(t2, buf2));
@@ -1202,6 +1209,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
 Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
   Substitution *subst = solve_constraints(ctx->constraints);
+
   if (ctx->constraints && !subst) {
     return NULL;
   }
