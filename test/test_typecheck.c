@@ -337,8 +337,6 @@ int main() {
       &MAKE_FN_TYPE_2(&tenum, &t_int));
   });
 
-  exit(status);
-
   // // LIST PROCESSING FUNCTIONS
   T("let f = fn l->\n"
     "  match l with\n"
@@ -346,6 +344,7 @@ int main() {
     "    | [] -> 0\n"
     ";;",
     &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+  exit(status);
 
   T("let f = fn l->\n"
     "  match l with\n"

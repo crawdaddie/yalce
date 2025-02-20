@@ -594,7 +594,7 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
 
     if (lookup != NULL && is_variant_type(lookup) &&
         strcmp(lookup->data.T_CONS.name, name) != 0) {
-      return deep_copy_type(type);
+      return deep_copy_type(lookup);
     }
     return next_tvar();
   }
