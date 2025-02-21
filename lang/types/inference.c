@@ -12,7 +12,7 @@ void reset_type_var_counter() { type_var_counter = 0; }
 Type *infer_application(Ast *ast, TICtx *ctx);
 Type *infer_fn_application(Ast *ast, TICtx *ctx);
 Type *infer_cons_application(Ast *ast, TICtx *ctx);
-Type *infer_yield_expr(Ast *ast, TICtx *ctx);
+Type *infer_yield_stmt(Ast *ast, TICtx *ctx);
 Type *infer_lambda(Ast *ast, TICtx *ctx);
 Type *infer_let_binding(Ast *ast, TICtx *ctx);
 Type *infer_match_expr(Ast *ast, TICtx *ctx);
@@ -311,6 +311,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
+  case AST_YIELD: {
+    type = infer_yield_stmt(ast, ctx);
+    break;
+  }
   default: {
     return type_error(
         ctx, ast, "Typecheck Error: inference not implemented for AST Node\n");
@@ -319,6 +323,40 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   ast->md = type;
   return type;
+}
+
+Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
+
+  Ast *yield_expr = ast->data.AST_YIELD.expr;
+
+  infer(yield_expr, ctx);
+  Type *yield_expr_type = yield_expr->md;
+
+  if (yield_expr->tag == AST_APPLICATION &&
+      strcmp(
+          yield_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+          "arithmetic") == 0) {
+  }
+
+  if (is_coroutine_type(yield_expr_type)) {
+    yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
+  }
+
+  if (ctx->yielded_type == NULL) {
+    ctx->yielded_type = yield_expr_type;
+
+  } else {
+    Type *prev_yield_type = ctx->yielded_type;
+
+    if (!unify_in_ctx(prev_yield_type, yield_expr_type, ctx, yield_expr)) {
+      return type_error(ctx, ast,
+                        "Error: yielded values must be of the same type!");
+    }
+
+    ctx->yielded_type = yield_expr_type;
+  }
+  ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
+  return yield_expr_type;
 }
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
@@ -452,9 +490,6 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
       }
     }
   } else if (t1->kind == T_FN && t2->kind == T_FN) {
-    printf("fn unify\n");
-    print_type(t1);
-    print_type(t2);
     ctx->constraints = constraints_extend(ctx->constraints, t1->data.T_FN.from,
                                           t2->data.T_FN.from);
 
@@ -501,6 +536,11 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
                       ast->data.AST_APPLICATION.args + i)) {
       return NULL;
     }
+
+    // if (arg_types[i]->scope == ctx->scope) {
+    //   unify_in_ctx(param_type, arg_types[i], ctx,
+    //                ast->data.AST_APPLICATION.args + i);
+    // }
 
     // app_ctx.constraints =
     //     constraints_extend(app_constraints, param_type, arg_types[i]);
@@ -555,6 +595,7 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
     }
   }
 
+  TICtx app_ctx = {};
   for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
 
     Type *cons_arg = cons->data.T_CONS.args[i];
@@ -566,13 +607,14 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
           cons->data.T_CONS.name);
     }
 
-    if (!unify_in_ctx(cons_arg, arg_type, ctx, ast)) {
+    if (!unify_in_ctx(cons_arg, arg_type, &app_ctx, ast)) {
       return type_error(ctx, ast,
                         "Could not constrain type variable to function type\n");
     }
   }
 
-  return fn_type;
+  Substitution *subst = solve_constraints(app_ctx.constraints);
+  return apply_substitution(subst, fn_type);
 }
 
 #define LIST_CONS_OPERATOR "::"
@@ -743,6 +785,7 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
   TICtx body_ctx = *ctx;
   body_ctx.scope++;
+  body_ctx.current_fn_ast = ast;
 
   int num_params = ast->data.AST_LAMBDA.len;
 
@@ -799,16 +842,23 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   ast->md = actual_fn_type;
-  // ctx->constraints = body_ctx.constraints;
-  Substitution *subst = solve_constraints(body_ctx.constraints);
 
-  apply_substitutions_rec(ast, subst);
   for (TypeConstraint *c = body_ctx.constraints; c; c = c->next) {
     Type *t1 = c->t1;
     Type *t2 = c->t2;
     if (t1->scope <= ctx->scope) {
       ctx->constraints = constraints_extend(ctx->constraints, t1, t2);
     }
+  }
+
+  Substitution *subst = solve_constraints(body_ctx.constraints);
+  ast->md = apply_substitution(subst, ast->md);
+  apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
+
+  if (body_ctx.yielded_type != NULL) {
+    printf("convert lambda to coroutine constructor fn\n");
+    print_type(ast->md);
+    ast->md = coroutine_constructor_type_from_fn_type(ast->md);
   }
 
   return ast->md;
@@ -855,7 +905,9 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
     branch_ctx.scope++;
     bind_in_ctx(&branch_ctx, branch_pattern, pattern_type);
 
-    if (guard_clause && !(infer(guard_clause, &branch_ctx))) {
+    Type *guard_clause_type;
+    if (guard_clause &&
+        !(guard_clause_type = infer(guard_clause, &branch_ctx))) {
       return type_error(
           ctx, guard_clause,
           "Typecheck Error: Could not guard clause in match branch\n");
@@ -1164,14 +1216,12 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
   case AST_APPLICATION: {
 
-    // apply_substitutions_rec(ast->data.AST_APPLICATION.function, subst);
+    apply_substitutions_rec(ast->data.AST_APPLICATION.function, subst);
     //
-    // for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-    //   apply_substitutions_rec(ast->data.AST_APPLICATION.args + i, subst);
-    // }
-    //
-    // ast->md = apply_substitution(subst, ast->md);
-
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      apply_substitutions_rec(ast->data.AST_APPLICATION.args + i, subst);
+    }
+    ast->md = apply_substitution(subst, ast->md);
     break;
   }
 
@@ -1199,6 +1249,10 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     ast->md = apply_substitution(subst, ast->md);
     break;
   }
+  case AST_MATCH_GUARD_CLAUSE: {
+    apply_substitutions_rec(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, subst);
+    break;
+  }
 
   default: {
     ast->md = apply_substitution(subst, ast->md);
@@ -1209,6 +1263,9 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
 Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
   Substitution *subst = solve_constraints(ctx->constraints);
+
+  // print_constraints(ctx->constraints);
+  // print_subst(subst);
 
   if (ctx->constraints && !subst) {
     return NULL;

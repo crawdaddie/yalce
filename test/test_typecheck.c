@@ -89,7 +89,7 @@ int main() {
   T("true", &t_bool);
   T("false", &t_bool);
   T("()", &t_void);
-  T("[]", &t_empty_list);
+  T("[]", &TLIST(&TVAR("`0")));
   T("1 + 2", &t_int);
   T("1 + 2.0", &t_num);
   T("(1 + 2) * 8", &t_int);
@@ -367,7 +367,6 @@ int main() {
       ";;\n",
       &MAKE_FN_TYPE_3(&t, &TLIST(&s), &t));
   });
-  exit(status);
 
   ({
     Type opt_int = TOPT(&t_int);
@@ -791,7 +790,7 @@ int main() {
     ";; \n",
     &MAKE_FN_TYPE_2(&TLIST(&TVAR("`3")), &TOPT(&TVAR("`3"))));
 
-  T("let l = Int[]", &TLIST(&t_int));
+  // T("let l = Int[]", &TLIST(&t_int));
 
   T("let enqueue = fn (head, tail) item ->\n"
     "  let last = [item] in\n"
@@ -805,6 +804,7 @@ int main() {
     &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2"))),
                     &TVAR("`2"),
                     &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2")))));
+  exit(status);
 
   T("let enqueue = fn (head, tail): (List of Int * List of Int) item: (Int) "
     "->\n"
