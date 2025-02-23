@@ -569,6 +569,7 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
     if (!((Type *)arg->md)->is_fn_param) {
       arg->md = apply_substitution(subst, arg->md);
+      print_type(arg->md);
     }
 
     res_type = res_type->data.T_FN.to;
