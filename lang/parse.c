@@ -1095,3 +1095,108 @@ Ast *ast_implements(ObjString type, ObjString trait) {
   impl_expr->data.AST_IMPLEMENTS.trait_id = trait;
   return impl_expr;
 }
+
+AstVisitor *ast_visit(Ast *ast, AstVisitor *visitor) {
+  switch (ast->tag) {
+  case AST_INT: {
+    visitor->visit_int ? visitor->visit_int(ast, visitor)
+                       : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_DOUBLE: {
+    visitor->visit_double ? visitor->visit_double(ast, visitor)
+                          : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_STRING: {
+    visitor->visit_string ? visitor->visit_string(ast, visitor)
+                          : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_CHAR: {
+    visitor->visit_char ? visitor->visit_char(ast, visitor)
+                        : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_BOOL: {
+    visitor->visit_bool ? visitor->visit_bool(ast, visitor)
+                        : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_VOID: {
+    visitor->visit_void ? visitor->visit_void(ast, visitor)
+                        : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_ARRAY: {
+    visitor->visit_array ? visitor->visit_array(ast, visitor)
+                         : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_LIST: {
+    visitor->visit_list ? visitor->visit_list(ast, visitor)
+                        : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_TUPLE: {
+    visitor->visit_tuple ? visitor->visit_tuple(ast, visitor)
+                         : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_TYPE_DECL: {
+    visitor->visit_type_decl ? visitor->visit_type_decl(ast, visitor)
+                             : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_FMT_STRING: {
+    visitor->visit_fmt_string ? visitor->visit_fmt_string(ast, visitor)
+                              : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_BODY: {
+    visitor->visit_body ? visitor->visit_body(ast, visitor)
+                        : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_IDENTIFIER: {
+    visitor->visit_identifier ? visitor->visit_identifier(ast, visitor)
+                              : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_APPLICATION: {
+    visitor->visit_application ? visitor->visit_application(ast, visitor)
+                               : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_LET: {
+    visitor->visit_let ? visitor->visit_let(ast, visitor)
+                       : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_LAMBDA: {
+    visitor->visit_lambda ? visitor->visit_lambda(ast, visitor)
+                          : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_MATCH: {
+    visitor->visit_match ? visitor->visit_match(ast, visitor)
+                         : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_EXTERN_FN: {
+    visitor->visit_extern_fn ? visitor->visit_extern_fn(ast, visitor)
+                             : visitor->visit_default(ast, visitor);
+    break;
+  }
+  case AST_YIELD: {
+    visitor->visit_yield ? visitor->visit_yield(ast, visitor)
+                         : visitor->visit_default(ast, visitor);
+    break;
+  }
+  default: {
+    visitor->visit_default(ast, visitor);
+  }
+  }
+
+  return visitor;
+}

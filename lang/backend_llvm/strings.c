@@ -251,6 +251,9 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
+  if (val_type == NULL) {
+    return _codegen_string("", 0, ctx, module, builder);
+  }
   if (val_type->kind == T_STRING) {
     return val;
   }

@@ -359,4 +359,36 @@ Ast *ast_fn_signature_of_list(Ast *l);
 
 Ast *ast_implements(ObjString, ObjString);
 
+typedef struct AstVisitor {
+  // Basic types
+  void (*visit_int)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_double)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_string)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_char)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_bool)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_void)(Ast *ast, struct AstVisitor *visitor);
+
+  // Collection types
+  void (*visit_array)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_list)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_tuple)(Ast *ast, struct AstVisitor *visitor);
+
+  // Language constructs
+  void (*visit_type_decl)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_fmt_string)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_body)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_identifier)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_application)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_let)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_lambda)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_match)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_extern_fn)(Ast *ast, struct AstVisitor *visitor);
+  void (*visit_yield)(Ast *ast, struct AstVisitor *visitor);
+
+  // Default handler
+  void (*visit_default)(Ast *ast, struct AstVisitor *visitor);
+
+  // Optional: visitor-specific data
+  void *data; // Generic pointer for visitor-specific state
+} AstVisitor;
 #endif

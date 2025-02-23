@@ -25,7 +25,7 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   } else if (is_generic(t)) {
     ret = LLVMVoidType();
   } else {
-    ret = type_to_llvm_type(t, ctx->env, module);
+    ret = FIND_TYPE(t, ctx->env, module, ast);
   }
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
@@ -86,14 +86,20 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_FMT_STRING: {
     int len = ast->data.AST_LIST.len;
     LLVMValueRef strings_to_concat[len];
+
     for (int i = 0; i < len; i++) {
       Ast *item = ast->data.AST_LIST.items + i;
 
       LLVMValueRef val = codegen(item, ctx, module, builder);
       Type *t = item->md;
+
       if (t->kind == T_VAR) {
+        printf("fmt string component: ");
+        print_ast(item);
+        print_type(t);
         t = env_lookup(ctx->env, t->data.T_VAR);
       }
+
       LLVMValueRef str_val =
           llvm_string_serialize(val, t, ctx, module, builder);
 
@@ -189,8 +195,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   case AST_EMPTY_LIST: {
     Type *t = ast->md;
-    return null_node(llnode_type(
-        type_to_llvm_type(t->data.T_CONS.args[0], ctx->env, module)));
+    LLVMTypeRef lt = FIND_TYPE(t->data.T_CONS.args[0], ctx->env, module, ast);
+    return null_node(llnode_type(lt));
   }
   }
 

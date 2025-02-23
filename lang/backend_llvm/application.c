@@ -46,6 +46,10 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
 
   LLVMTypeRef llvm_callable_type =
       type_to_llvm_type(callable_type, ctx->env, module);
+  if (!llvm_callable_type) {
+    print_ast(ast);
+    return NULL;
+  }
 
   if (callable_type->kind == T_FN &&
       callable_type->data.T_FN.from->kind == T_VOID) {
@@ -105,6 +109,9 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
   LLVMTypeRef llvm_callable_type =
       type_to_llvm_type(callable_type, ctx->env, module);
+  if (!llvm_callable_type) {
+    return NULL;
+  }
 
   if (callable_type->kind == T_FN &&
       callable_type->data.T_FN.from->kind == T_VOID) {

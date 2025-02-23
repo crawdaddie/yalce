@@ -11,4 +11,4 @@ let arr_sum = fn s a ->
   ;;
 
 %test
-let test_sum_doubles = fn () -> (arr_sum 0. [|1., 2., 3.|] == 6.);;
+let test_sum_doubles = arr_sum 0. [|1., 2., 3.|] == 6.;

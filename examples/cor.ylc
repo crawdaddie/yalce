@@ -16,9 +16,9 @@ let iter_all_void = fn () ->
   {inst ()}
   {inst ()}
 `
-
 ;;
 iter_all_void ();
+
 let rec = fn () ->
   let co_void_rec = fn () ->
     yield 1.;
@@ -38,7 +38,7 @@ let rec = fn () ->
 ;;
 
 rec ();
-#
+# #
 let seq = fn () ->
 
   let ne = fn () ->
@@ -64,8 +64,8 @@ let seq = fn () ->
 `
 ;;
 seq ();
-#
-#
+# #
+# #
 let iter_all_arg = fn () ->
   let co_void = fn a b ->
     yield 1.;
@@ -85,7 +85,7 @@ let iter_all_arg = fn () ->
 `
 ;; 
 iter_all_arg ();
-#
+
 let wrapped_cor = fn () ->
   let wrapper = fn x -> print `specially wrapped: {x}\n`
   ;;
@@ -124,7 +124,6 @@ let map_cor = fn () ->
     yield 6;
     yield 7 
   ;;
-
   let co = co_void () |> cor_map str_map;
 
   print `{ANSI_MAGENTA}{ANSI_BOLD}## coroutine mapped 1 -> 2 -> 3 -> done{ANSI_RESET}
@@ -137,7 +136,7 @@ let map_cor = fn () ->
 `
 ;;
 map_cor ();
-#
+
 let fib_cor = fn () ->
   let fib = fn a: (Int) b: (Int) ->
     yield a;
@@ -168,7 +167,6 @@ let fib_cor = fn () ->
 `
 ;;
 fib_cor();
-#
 let cor_list = fn () -> 
   let l = [1, 2, 3] in
   let c = iter_of_list l in
@@ -181,8 +179,7 @@ let cor_list = fn () ->
 `
 ;;
 cor_list ();
-#
-#
+
 let cor_array = fn () -> 
   let l = [|1, 2, 3|] in
   let c = iter_of_array l in
@@ -195,7 +192,6 @@ let cor_array = fn () ->
 `
 ;;
 cor_array ();
-#
 let loop_cor = fn () ->  
   let co_void = fn () -> 
     yield 1;
@@ -204,7 +200,6 @@ let loop_cor = fn () ->
   ;;
 
   let c = co_void () |> cor_loop in
-
   print `## looped coroutine:
   {c ()}
   {c ()}
@@ -228,7 +223,6 @@ let loop_cor = fn () ->
   {d ()}
   {d ()}
 `;
-
   let e = iter_of_array [|1,2,3|] |> cor_loop in
   print `## looped array
   {e ()}
@@ -243,47 +237,46 @@ let loop_cor = fn () ->
 ;;
 
 loop_cor ();
+
+# let arithmetic_series = fn () -> 
+#   let arithmetic = fn s ->
+#     yield s;
+#     yield arithmetic (s + 1)
+#   ;;
+#   let c = arithmetic 1 in
+#   print `## arithmetic series:
+#   {c ()}
+#   {c ()}
+#   {c ()}
+#   {c ()}
+#   {c ()}
+#   {c ()}
+#   {c ()}
+#   {c ()}
+#   {c ()}
+#   {c ()}
+# `
+# ;;
+# arithmetic_series ();
 #
-let arithmetic_series = fn () -> 
-  let arithmetic = fn s ->
-    yield s;
-    yield arithmetic (s + 1)
-  ;;
-  let c = arithmetic 1 in
-
-  print `## arithmetic series:
-  {c ()}
-  {c ()}
-  {c ()}
-  {c ()}
-  {c ()}
-  {c ()}
-  {c ()}
-  {c ()}
-  {c ()}
-  {c ()}
-`
-;;
-arithmetic_series ();
-
-let geometric = fn () -> 
-  let geo = fn s ->
-    yield s;
-    yield geo (s * 1.1)
-  ;;
-  let g = geo 1.0 in
-
-  print `## geometric series:
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-`
-;;
-geometric ()
+# let geometric = fn () -> 
+#   let geo = fn s ->
+#     yield s;
+#     yield geo (s * 1.1)
+#   ;;
+#   let g = geo 1.0 in
+#
+#   print `## geometric series:
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+#   {g ()}
+# `
+# ;;
+# geometric ()

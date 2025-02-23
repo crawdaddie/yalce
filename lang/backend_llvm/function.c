@@ -292,8 +292,8 @@ static TypeEnv *subst_fn_arg(TypeEnv *env, Substitution *subst, Type *arg) {
   return env;
 }
 
-TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
-                                   Type *specific_type) {
+TypeEnv *_create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
+                                    Type *specific_type) {
   Substitution *subst = NULL;
 
   Type *gen;
@@ -316,6 +316,33 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
 
   Type *f = _gen;
   env = subst_fn_arg(env, subst, f);
+
+  return env;
+}
+
+TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
+                                   Type *specific_type) {
+  Substitution *subst = NULL;
+
+  TypeConstraint *constraints = NULL;
+  while (generic_type->kind == T_FN) {
+    Type *gen = generic_type->data.T_FN.from;
+    Type *spec = specific_type->data.T_FN.from;
+    constraints = constraints_extend(constraints, gen, spec);
+
+    specific_type = specific_type->data.T_FN.to;
+    generic_type = generic_type->data.T_FN.to;
+  }
+
+  Type *gen = generic_type->data.T_FN.from;
+  Type *spec = specific_type->data.T_FN.from;
+  constraints = constraints_extend(constraints, gen, spec);
+  subst = solve_constraints(constraints);
+  for (Substitution *s = subst; s; s = s->next) {
+    if (s->from->kind == T_VAR) {
+      env = env_extend(env, s->from->data.T_VAR, s->to);
+    }
+  }
 
   return env;
 }

@@ -2,6 +2,7 @@
 #include "adt.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
+#include "serde.h"
 #include "tuple.h"
 #include "llvm-c/Core.h"
 
@@ -23,6 +24,9 @@ LLVMTypeRef create_llvm_list_type(Type *list_el_type, TypeEnv *env,
                                   LLVMModuleRef module) {
   // Convert the custom Type to LLVMTypeRef
   LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, env, module);
+  if (!llvm_el_type) {
+    return NULL;
+  }
   LLVMTypeRef node_type = llnode_type(llvm_el_type);
 
   // The list type is a pointer to the node type
@@ -88,6 +92,11 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *list_el_type = *((Type *)ast->md)->data.T_CONS.args;
   LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, ctx->env, module);
+
+  if (!llvm_el_type) {
+    print_ast(ast);
+    return NULL;
+  }
   LLVMTypeRef node_type = llnode_type(llvm_el_type);
   int len = ast->data.AST_LIST.len;
 
@@ -147,6 +156,10 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *list_type = ast->md;
   LLVMTypeRef llvm_list_node_type = llnode_type(
       type_to_llvm_type(list_type->data.T_CONS.args[0], ctx->env, module));
+  if (!llvm_list_node_type) {
+    print_ast(ast);
+    return NULL;
+  }
 
   LLVMValueRef append_list =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
@@ -234,6 +247,11 @@ LLVMValueRef QueueOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type list_type = TLIST(el_type);
 
   LLVMTypeRef llvm_list_el_type = type_to_llvm_type(el_type, ctx->env, module);
+  if (!llvm_list_el_type) {
+    print_ast(ast);
+    return NULL;
+  }
+
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_list_el_type);
 
   // Create queue struct type with head and tail pointers
@@ -317,6 +335,10 @@ LLVMValueRef QueueAppendRightHandler(Ast *ast, JITLangCtx *ctx,
 
   LLVMTypeRef llvm_list_node_type =
       llnode_type(type_to_llvm_type(element_type, ctx->env, module));
+  if (!llvm_list_node_type) {
+    print_ast(ast);
+    return NULL;
+  }
 
   // Create new node
   LLVMValueRef new_node = ll_create_list_node(NULL, llvm_list_node_type,
@@ -379,6 +401,10 @@ LLVMValueRef QueuePopLeftHandler(Ast *ast, JITLangCtx *ctx,
   Type *element_type = type_of_option(ret_type);
 
   LLVMTypeRef eltype = type_to_llvm_type(element_type, ctx->env, module);
+  if (!eltype) {
+    print_ast(ast);
+    return NULL;
+  }
   LLVMTypeRef llvm_list_node_type = llnode_type(eltype);
 
   // Create basic blocks

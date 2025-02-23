@@ -84,36 +84,69 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
   int len = ast->data.AST_BODY.len;
   Ast **stmts = ast->data.AST_BODY.stmts;
+
   for (int i = 0; i < len; i++) {
     Ast *stmt = *(stmts + i);
 
-    const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-    if (stmt->tag == AST_LET && strncmp(key, "test_", 5) == 0) {
+    if (stmt->tag == AST_LET &&
+        strncmp(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value, "test_",
+                5) == 0) {
 
-      JITSymbol *sym = find_in_ctx(key, strlen(key), ctx);
+      if (stmt->data.AST_LET.expr->tag == AST_LAMBDA) {
+        const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
-      // Increment num_tests
-      num_tests = LLVMBuildAdd(
-          builder, num_tests, LLVMConstInt(LLVMInt32Type(), 1, 0), "num_tests");
+        JITSymbol *sym = find_in_ctx(key, strlen(key), ctx);
 
-      // Call the test function
-      LLVMValueRef test_call = LLVMBuildCall2(builder, test_func_type, sym->val,
-                                              NULL, 0, "test_call");
+        // Increment num_tests
+        num_tests =
+            LLVMBuildAdd(builder, num_tests,
+                         LLVMConstInt(LLVMInt32Type(), 1, 0), "num_tests");
 
-      // Increment num_passes if test passed
-      LLVMValueRef should_increment = LLVMBuildZExt(
-          builder, test_call, LLVMInt32Type(), "should_increment");
-      num_passes =
-          LLVMBuildAdd(builder, num_passes, should_increment, "num_passes");
+        // Call the test function
+        LLVMValueRef test_call = LLVMBuildCall2(builder, test_func_type,
+                                                sym->val, NULL, 0, "test_call");
 
-      LLVMValueRef name_str = create_string_constant(builder, module, key);
+        // Increment num_passes if test passed
+        LLVMValueRef should_increment = LLVMBuildZExt(
+            builder, test_call, LLVMInt32Type(), "should_increment");
 
-      LLVMValueRef report_args[] = {name_str, test_call};
-      LLVMBuildCall2(builder, LLVMGlobalGetValueType(report_func), report_func,
-                     report_args, 2, "");
+        num_passes =
+            LLVMBuildAdd(builder, num_passes, should_increment, "num_passes");
 
-      test_result =
-          LLVMBuildAnd(builder, test_result, test_call, "test_result");
+        LLVMValueRef name_str = create_string_constant(builder, module, key);
+
+        LLVMValueRef report_args[] = {name_str, test_call};
+        LLVMBuildCall2(builder, LLVMGlobalGetValueType(report_func),
+                       report_func, report_args, 2, "");
+
+        test_result =
+            LLVMBuildAnd(builder, test_result, test_call, "test_result");
+      } else if (types_equal(stmt->data.AST_LET.expr->md, &t_bool)) {
+        const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
+        JITSymbol *sym = find_in_ctx(key, strlen(key), ctx);
+
+        // Increment num_tests
+        num_tests =
+            LLVMBuildAdd(builder, num_tests,
+                         LLVMConstInt(LLVMInt32Type(), 1, 0), "num_tests");
+
+        // Call the test function
+        LLVMValueRef val = sym->val;
+
+        // Increment num_passes if test passed
+        LLVMValueRef should_increment =
+            LLVMBuildZExt(builder, val, LLVMInt32Type(), "should_increment");
+
+        num_passes =
+            LLVMBuildAdd(builder, num_passes, should_increment, "num_passes");
+
+        LLVMValueRef name_str = create_string_constant(builder, module, key);
+
+        LLVMValueRef report_args[] = {name_str, val};
+        LLVMBuildCall2(builder, LLVMGlobalGetValueType(report_func),
+                       report_func, report_args, 2, "");
+      }
     }
   }
 
@@ -126,6 +159,7 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
 int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                 LLVMBuilderRef builder) {
+
   LLVMValueRef exec_tests = codegen_test_module(ast, ctx, module, builder);
 
   if (!exec_tests) {
@@ -136,7 +170,6 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (prepare_ex_engine(ctx, &engine, module) != 0) {
     return 0;
   }
-  // LLVMDumpModule(module);
 
   LLVMGenericValueRef result = LLVMRunFunction(engine, exec_tests, 0, NULL);
   int int_res = (int)LLVMGenericValueToInt(result, 0);

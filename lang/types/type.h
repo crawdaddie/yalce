@@ -7,6 +7,9 @@
 
 typedef struct Type Type;
 
+void reset_type_var_counter();
+Type *next_tvar();
+
 typedef struct TypeConstraint {
   Type *t1;
   Type *t2;
@@ -86,7 +89,6 @@ extern Type t_make_ref;
 extern Type t_array_of_chars_fn_sig;
 
 extern Type t_ptr_deref_sig;
-extern Type t_option_of_var;
 extern Type t_none;
 
 extern Type t_iter_of_list_sig;
@@ -104,7 +106,6 @@ extern Type t_builtin_and;
 extern Type t_builtin_char_of;
 
 extern Type t_cor_wrap_effect_fn_sig;
-extern Type t_cor_map_fn_sig;
 extern Type t_cor_loop_sig;
 extern Type t_cor_play_sig;
 
@@ -377,7 +378,9 @@ Type *ptr_of_type(Type *);
 
 int *array_type_size_ptr(Type *t);
 
-Type *create_array_type(Type *of, int size);
+Type *create_array_type(Type *of);
+
+Type *create_list_type_of_type(Type *of);
 
 Type *create_tuple_type(int len, Type **contained_types);
 

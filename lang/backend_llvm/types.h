@@ -4,6 +4,19 @@
 #include "types/type.h"
 #include "llvm-c/Types.h"
 // LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env);
+//
+#define FIND_TYPE(type, env, module, ast)                                      \
+  ({                                                                           \
+    LLVMTypeRef _t = type_to_llvm_type(type, env, module);                     \
+    if (_t == NULL) {                                                          \
+      print_ast_err(ast);                                                      \
+      print_location(ast);                                                     \
+      print_type_err(type);                                                    \
+      fprintf(stderr, "Could not find type in env");                           \
+      return NULL;                                                             \
+    }                                                                          \
+    _t;                                                                        \
+  })
 
 LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module);
 

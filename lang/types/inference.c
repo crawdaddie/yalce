@@ -6,8 +6,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-static int type_var_counter = 0;
-void reset_type_var_counter() { type_var_counter = 0; }
 
 Type *infer_application(Ast *ast, TICtx *ctx);
 Type *infer_fn_application(Ast *ast, TICtx *ctx);
@@ -24,20 +22,6 @@ Substitution *solve_constraints(TypeConstraint *constraints);
 #define CHARS_EQ(a, b) (strcmp(a, b) == 0)
 
 Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node);
-
-Type *next_tvar() {
-  Type *tvar = talloc(sizeof(Type));
-  char *tname = talloc(sizeof(char) * 3);
-  for (int i = 0; i < 3; i++) {
-    tname[i] = 0;
-  }
-  sprintf(tname, "`%d", type_var_counter);
-  // *tname = (char)type_var_counter;
-
-  *tvar = (Type){T_VAR, {.T_VAR = tname}};
-  type_var_counter++;
-  return tvar;
-}
 
 void _print_location(Ast *ast, FILE *fstream) {
   loc_info *loc = ast->loc_info;
@@ -403,8 +387,23 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
 }
 
+bool constraints_match(TypeConstraint *constraints, Type *t1, Type *t2) {
+  for (TypeConstraint *c = constraints; c; c = c->next) {
+    Type *_t1 = c->t1;
+    Type *_t2 = c->t2;
+    if (types_equal(t1, _t1) && types_equal(t2, _t2)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
                                    Type *t2) {
+  if (constraints_match(constraints, t1, t2)) {
+    return constraints;
+  }
+
   TypeConstraint *c = talloc(sizeof(TypeConstraint));
   c->t1 = t1;
   c->t2 = t2;
@@ -520,9 +519,6 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   int len = ast->data.AST_APPLICATION.len;
   Type *arg_types[len];
 
-  // printf("scope [%d]\n", ctx->scope);
-
-  // TypeConstraint *app_constraints = NULL;
   TICtx app_ctx = {};
 
   // Get type for each argument and add constraints
@@ -537,13 +533,21 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
       return NULL;
     }
 
-    // if (arg_types[i]->scope == ctx->scope) {
-    //   unify_in_ctx(param_type, arg_types[i], ctx,
-    //                ast->data.AST_APPLICATION.args + i);
-    // }
+    if (is_generic(arg_types[i])) {
 
-    // app_ctx.constraints =
-    //     constraints_extend(app_constraints, param_type, arg_types[i]);
+      ctx->constraints =
+          constraints_extend(ctx->constraints, arg_types[i], param_type);
+      // if (!is_generic(param_type)) {
+      //   print_type(arg_types[i]);
+      //   print_type(param_type);
+      //   // ctx->constraints =
+      //   //     constraints_extend(ctx->constraints, arg_types[i],
+      //   param_type);
+      // } else {
+      //   ctx->constraints =
+      //       constraints_extend(ctx->constraints, arg_types[i], param_type);
+      // }
+    }
 
     if (i < ast->data.AST_APPLICATION.len - 1) {
       if (fn_type->data.T_FN.to->kind != T_FN) {
@@ -554,12 +558,19 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   }
 
   Substitution *subst = solve_constraints(app_ctx.constraints);
+
   _fn_type = apply_substitution(subst, _fn_type);
   ast->data.AST_APPLICATION.function->md = _fn_type;
 
   Type *res_type = _fn_type;
 
   for (int i = 0; i < len; i++) {
+    Ast *arg = ast->data.AST_APPLICATION.args + i;
+
+    if (!((Type *)arg->md)->is_fn_param) {
+      arg->md = apply_substitution(subst, arg->md);
+    }
+
     res_type = res_type->data.T_FN.to;
   }
 
@@ -805,11 +816,13 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     }
 
     param_type->is_fn_param = true;
+    param_type->scope = body_ctx.scope;
     param_types[i] = param_type;
     bind_in_ctx(&body_ctx, param, param_types[i]);
   }
 
   bool is_named = ast->data.AST_LAMBDA.fn_name.chars != NULL;
+  const char *name = ast->data.AST_LAMBDA.fn_name.chars;
   Type *fn_type_var = NULL;
   if (is_named) {
     // Create a type variable for the recursive function
@@ -818,7 +831,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
     Ast rec_fn_name_binding = {
         AST_IDENTIFIER,
-        {.AST_IDENTIFIER = {.value = ast->data.AST_LAMBDA.fn_name.chars,
+        {.AST_IDENTIFIER = {.value = name,
                             .length = ast->data.AST_LAMBDA.fn_name.length}}};
 
     bind_in_ctx(&body_ctx, &rec_fn_name_binding, fn_type_var);
@@ -852,13 +865,26 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   Substitution *subst = solve_constraints(body_ctx.constraints);
+
+  // printf("LAMBDA\n");
+  // print_constraints(body_ctx.constraints);
+  // print_subst(subst);
   ast->md = apply_substitution(subst, ast->md);
-  apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
+
+  if (is_named) {
+    apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
+  }
 
   if (body_ctx.yielded_type != NULL) {
-    printf("convert lambda to coroutine constructor fn\n");
-    print_type(ast->md);
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
+  }
+  if (CHARS_EQ(name, "str_map")) {
+    // print_type(ast->md);
+    // print_ast(ast);
+    // Ast *id = ast->data.AST_LAMBDA.body->data.AST_LIST.items + 2;
+    // print_ast(id);
+    // print_type(id->md);
+    // print_constraints(ctx->constraints);
   }
 
   return ast->md;
@@ -983,8 +1009,6 @@ Type *apply_substitution(Substitution *subst, Type *t) {
   case T_BOOL:
   case T_VOID:
   case T_STRING: {
-    // print_type(t);
-    // print_subst(subst);
     return t;
   }
   case T_VAR: {
@@ -1026,6 +1050,7 @@ Type *apply_substitution(Substitution *subst, Type *t) {
     return new_t;
   }
   case T_FN: {
+    // print_type(t);
     Type *new_t = talloc(sizeof(Type));
     *new_t = *t;
     new_t->data.T_FN.from = apply_substitution(subst, t->data.T_FN.from);
@@ -1180,7 +1205,6 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
   }
 
   switch (ast->tag) {
-
   case AST_TUPLE:
   case AST_ARRAY:
   case AST_LIST: {
@@ -1192,15 +1216,30 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     break;
   }
 
+  case AST_INT:
+  case AST_DOUBLE:
+  case AST_CHAR:
+  case AST_BOOL:
+  case AST_STRING: {
+    break;
+  }
+
   case AST_FMT_STRING: {
+    // print_type(ast->md);
 
-    int arity = ast->data.AST_LIST.len;
-    for (int i = 0; i < arity; i++) {
-      Ast *member = ast->data.AST_LIST.items + i;
-      apply_substitutions_rec(member, subst);
-    }
+    // int arity = ast->data.AST_LIST.len;
+    // for (int i = 0; i < arity; i++) {
+    // Ast *member = ast->data.AST_LIST.items + i;
+    // if (member->tag == AST_IDENTIFIER &&
+    //     CHARS_EQ(member->data.AST_IDENTIFIER.value, "x")) {
+    //   print_ast(member);
+    //   print_type(member->md);
+    //   print_type(member->md);
+    // }
+    // apply_substitutions_rec(member, subst);
+    // }
 
-    ast->md = apply_substitution(subst, ast->md);
+    // ast->md = apply_substitution(subst, ast->md);
     break;
   }
 
@@ -1219,6 +1258,8 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     apply_substitutions_rec(ast->data.AST_APPLICATION.function, subst);
     //
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      // print_ast(ast->data.AST_APPLICATION.args + i);
+      // print_type((ast->data.AST_APPLICATION.args + i)->md);
       apply_substitutions_rec(ast->data.AST_APPLICATION.args + i, subst);
     }
     ast->md = apply_substitution(subst, ast->md);
@@ -1249,8 +1290,14 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     ast->md = apply_substitution(subst, ast->md);
     break;
   }
+
   case AST_MATCH_GUARD_CLAUSE: {
     apply_substitutions_rec(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, subst);
+    break;
+  }
+
+  case AST_LAMBDA: {
+    apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
     break;
   }
 

@@ -3,7 +3,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-Type *next_tvar();
+static int type_var_counter = 0;
+void reset_type_var_counter() { type_var_counter = 0; }
+Type *next_tvar() {
+  Type *tvar = talloc(sizeof(Type));
+  char *tname = talloc(sizeof(char) * 3);
+  for (int i = 0; i < 3; i++) {
+    tname[i] = 0;
+  }
+  sprintf(tname, "`%d", type_var_counter);
+  // *tname = (char)type_var_counter;
+
+  *tvar = (Type){T_VAR, {.T_VAR = tname}};
+  type_var_counter++;
+  return tvar;
+}
 
 Type *env_lookup(TypeEnv *env, const char *name);
 void reset_type_var_counter();
@@ -94,8 +108,6 @@ Type t_opt_map_sig =
     MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&TVAR("opt_var"), &TVAR("opt_var_next")),
                    &TOPT(&TVAR("opt_var")), &TVAR("opt_var_next"));
 
-Type t_list_concat = MAKE_FN_TYPE_3(&t_list_var, &t_list_var, &t_list_var);
-
 _binop_map binop_map[_NUM_BINOPS] = {
     {TYPE_NAME_OP_ADD, &t_add}, {TYPE_NAME_OP_SUB, &t_sub},
     {TYPE_NAME_OP_MUL, &t_mul}, {TYPE_NAME_OP_DIV, &t_div},
@@ -146,14 +158,6 @@ Type t_array_to_list_fn_sig =
 // , &(Type){
 //   T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){&t_array_var_el}}});
 
-Type *create_new_array_at_sig(void *i) {
-  Type *t = next_tvar();
-  Type *f = t;
-  f = type_fn(&t_int, f);
-  f = type_fn(create_array_type(t, 0), f);
-  return f;
-}
-
 // Type t_array_at_fn_sig = {T_CREATE_NEW_GENERIC,
 //                           {.T_CREATE_NEW_GENERIC =
 //                           create_new_array_at_sig}};
@@ -182,38 +186,26 @@ bool is_option_type(Type *t) {
 // Type t_option_of_var =
 //     TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_option_var), &t_none);
 
-Type *create_new_option_of_var() { return create_option_type(next_tvar()); }
-
-Type t_option_of_var = {T_CREATE_NEW_GENERIC,
-                        {.T_CREATE_NEW_GENERIC = create_new_option_of_var}};
-
 // TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_option_var), &t_none);
 
 Type *type_of_option(Type *option) {
   return option->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
 
-Type t_cor_wrap_ret_type = {T_VAR, {.T_VAR = "tt"}};
-Type t_cor_wrap_state_type = {T_VAR, {.T_VAR = "xx"}};
-
-// Type t_cor_wrap = {
-//     T_CONS,
-//     {.T_CONS = {
-//          "coroutine",
-//          (Type *[]){&t_cor_wrap_state_type,
-//                     &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_cor_wrap_ret_type))},
-//          2}}};
+// Type t_cor_wrap_ret_type = {T_VAR, {.T_VAR = "tt"}};
+// Type t_cor_wrap_state_type = {T_VAR, {.T_VAR = "xx"}};
 //
-Type t_cor_wrap = {T_FN,
-                   {.T_FN =
-                        {
-                            .from = &t_void,
-                            .to = &TOPT(&t_cor_wrap_ret_type),
-                        }},
-                   .is_coroutine_instance = true};
-
-Type t_cor_wrap_effect_fn_sig = MAKE_FN_TYPE_3(
-    &MAKE_FN_TYPE_2(&t_cor_wrap_ret_type, &t_void), &t_cor_wrap, &t_cor_wrap);
+// Type t_cor_wrap = {T_FN,
+//                    {.T_FN =
+//                         {
+//                             .from = &t_void,
+//                             .to = &TOPT(&t_cor_wrap_ret_type),
+//                         }},
+//                    .is_coroutine_instance = true};
+//
+// Type t_cor_wrap_effect_fn_sig = MAKE_FN_TYPE_3(
+//     &MAKE_FN_TYPE_2(&t_cor_wrap_ret_type, &t_void), &t_cor_wrap,
+//     &t_cor_wrap);
 
 Type t_cor_map_from_type = {T_VAR, {.T_VAR = "map_from"}};
 
@@ -228,9 +220,9 @@ Type t_cor_to = {T_FN,
                  {.T_FN = {.from = &t_void, .to = &TOPT(&t_cor_map_to_type)}},
                  .is_coroutine_instance = true};
 
-Type t_cor_map_fn_sig =
-    MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_cor_map_from_type, &t_cor_map_to_type),
-                   &t_cor_from, &t_cor_to);
+// Type t_cor_map_fn_sig =
+//     MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_cor_map_from_type, &t_cor_map_to_type),
+//                    &t_cor_from, &t_cor_to);
 
 Type t_cor_loop_var = {
     T_FN,
@@ -566,7 +558,11 @@ static void *_tstorage_data[_TSTORAGE_SIZE_DEFAULT];
 static struct TStorage _tstorage = {_tstorage_data, 0, _TSTORAGE_SIZE_DEFAULT};
 
 void *talloc(size_t size) {
-  // printf("alloc size %zu\n", size);
+
+  if (size == 0) {
+    return NULL;
+  }
+
   // malloc
   // void *mem = malloc(size);
   // if (!mem) {
@@ -574,7 +570,8 @@ void *talloc(size_t size) {
   // }
   // return mem;
   if (_tstorage.size + size > _tstorage.capacity) {
-    fprintf(stderr, "OOM Error allocating memory for type");
+    fprintf(stderr, "OOM Error allocating memory for type (up to %d\n)",
+            type_var_counter);
     return NULL;
   }
   void *mem = _tstorage.data + _tstorage.size;
@@ -803,7 +800,7 @@ Type *deep_copy_type(const Type *original) {
 Type *copy_array_type(Type *t) {
   int *size = array_type_size_ptr(t);
 
-  Type *copy = create_array_type(deep_copy_type(t->data.T_CONS.args[0]), *size);
+  Type *copy = create_array_type(deep_copy_type(t->data.T_CONS.args[0]));
   copy->kind = t->kind;
   return copy;
 }
@@ -1102,6 +1099,7 @@ Type *create_cons_type(const char *name, int len, Type **unified_args) {
   return cons;
 }
 
+TypeClass _GenericEq = {.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.};
 Type *create_option_type(Type *option_of) {
   Type **variant_members = talloc(sizeof(Type *) * 2);
 
@@ -1112,6 +1110,7 @@ Type *create_option_type(Type *option_of) {
   variant_members[1] = create_cons_type(TYPE_NAME_NONE, 0, NULL);
   Type *cons = create_cons_type(TYPE_NAME_VARIANT, 2, variant_members);
   cons->alias = "Option";
+  typeclasses_extend(cons, &_GenericEq);
   return cons;
 }
 
@@ -1135,15 +1134,24 @@ int *array_type_size_ptr(Type *t) {
   return size;
 }
 
-Type *create_array_type(Type *of, int size) {
+Type *create_array_type(Type *of) {
   Type *gen_array = empty_type();
   gen_array->kind = T_CONS;
   gen_array->data.T_CONS.name = TYPE_NAME_ARRAY;
-  // gen_array->data.T_CONS.args = talloc(sizeof(Type *) + sizeof(int));
   gen_array->data.T_CONS.args = talloc(sizeof(Type *));
   gen_array->data.T_CONS.num_args = 1;
   gen_array->data.T_CONS.args[0] = of;
   return gen_array;
+}
+
+Type *create_list_type_of_type(Type *of) {
+  Type *gen_list = empty_type();
+  gen_list->kind = T_CONS;
+  gen_list->data.T_CONS.name = TYPE_NAME_LIST;
+  gen_list->data.T_CONS.args = talloc(sizeof(Type *));
+  gen_list->data.T_CONS.num_args = 1;
+  gen_list->data.T_CONS.args[0] = of;
+  return gen_list;
 }
 
 int get_struct_member_idx(const char *member_name, Type *type) {
