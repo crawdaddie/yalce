@@ -68,9 +68,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
-  printf("sum handler\n");
-  print_ast(ast);
-  print_type_env(ctx->env);
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
 
@@ -80,8 +77,6 @@ LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *lt = resolve_type_in_env(fn_type->data.T_FN.from, ctx->env);
   Type *rt =
       resolve_type_in_env((fn_type->data.T_FN.to)->data.T_FN.from, ctx->env);
-  print_type(lt);
-  print_type(rt);
 
   ARITHMETIC_BINOP("+", LLVMFAdd, LLVMAdd);
 

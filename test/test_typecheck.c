@@ -305,6 +305,9 @@ int main() {
     Type *got = b->data.AST_BODY.stmts[1]->md;
     print_type(got);
     TASSERT(got, EX, "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
+
+    print_ast(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args);
+    print_type(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args->md);
   });
 
   ({

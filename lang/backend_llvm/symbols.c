@@ -95,11 +95,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_GENERIC_FUNCTION: {
-    printf("get specific for\n");
-    print_ast(ast);
-    print_type(ast->md);
     LLVMValueRef f = get_specific_callable(sym, ast->md, ctx, module, builder);
-    LLVMDumpValue(f);
     return f;
   }
 

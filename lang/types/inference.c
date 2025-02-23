@@ -374,7 +374,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
     unify_in_ctx(fn_constraint, fn_type, ctx, ast);
 
-    print_type(ret_type);
     return ret_type;
     break;
   }
@@ -519,11 +518,12 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   int len = ast->data.AST_APPLICATION.len;
   Type *arg_types[len];
 
-  TICtx app_ctx = {};
+  TICtx app_ctx = {.scope = ctx->scope + 1};
 
   // Get type for each argument and add constraints
   for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-    arg_types[i] = infer(ast->data.AST_APPLICATION.args + i, ctx);
+    Ast *arg = ast->data.AST_APPLICATION.args + i;
+    arg_types[i] = infer(arg, ctx);
 
     // For each argument, add a constraint that the function's parameter type
     // must match the argument type
@@ -532,8 +532,11 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
                       ast->data.AST_APPLICATION.args + i)) {
       return NULL;
     }
-
-    if (is_generic(arg_types[i])) {
+    if (arg_types[i]->kind == T_FN) {
+      // printf("constraining fn types\n");
+      // print_type(arg_types[i]);
+      // print_type(param_type);
+    } else if (is_generic(arg_types[i])) {
 
       ctx->constraints =
           constraints_extend(ctx->constraints, arg_types[i], param_type);
@@ -569,7 +572,6 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
     if (!((Type *)arg->md)->is_fn_param) {
       arg->md = apply_substitution(subst, arg->md);
-      print_type(arg->md);
     }
 
     res_type = res_type->data.T_FN.to;
@@ -1236,6 +1238,11 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     break;
   }
 
+  case AST_LAMBDA: {
+    apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
+    break;
+  }
+
   case AST_BODY: {
     Type *fin;
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
@@ -1289,11 +1296,6 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     break;
   }
 
-  case AST_LAMBDA: {
-    apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
-    break;
-  }
-
   default: {
     ast->md = apply_substitution(subst, ast->md);
     break;
@@ -1303,7 +1305,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
 Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
   Substitution *subst = solve_constraints(ctx->constraints);
-
+  //
   // print_constraints(ctx->constraints);
   // print_subst(subst);
 

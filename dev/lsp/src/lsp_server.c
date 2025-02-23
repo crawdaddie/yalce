@@ -112,6 +112,7 @@ int lsp_server_run(LSPServer *server) {
 
       server->initialized = 1;
     }
+
     /*
     // Handle formatting request
     if (strcmp(msg->method, "textDocument/formatting") == 0) {
