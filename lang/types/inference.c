@@ -354,7 +354,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   switch (fn_type->kind) {
 
   case T_VAR: {
-
     int app_len = ast->data.AST_APPLICATION.len;
     Type *arg_types[app_len];
 
@@ -375,6 +374,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
     unify_in_ctx(fn_constraint, fn_type, ctx, ast);
 
+    print_type(ret_type);
     return ret_type;
     break;
   }
@@ -877,14 +877,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   if (body_ctx.yielded_type != NULL) {
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
-  }
-  if (CHARS_EQ(name, "str_map")) {
-    // print_type(ast->md);
-    // print_ast(ast);
-    // Ast *id = ast->data.AST_LAMBDA.body->data.AST_LIST.items + 2;
-    // print_ast(id);
-    // print_type(id->md);
-    // print_constraints(ctx->constraints);
   }
 
   return ast->md;

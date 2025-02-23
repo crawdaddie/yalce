@@ -115,6 +115,8 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
 }
 LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+  printf("codegen lambda body\n");
+  print_ast(ast);
 
   LLVMValueRef body;
 
@@ -133,6 +135,7 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
       body = codegen(stmt, fn_ctx, module, builder);
     }
   }
+  printf("body val %p\n", body);
   return body;
 }
 
@@ -338,11 +341,14 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
   Type *spec = specific_type->data.T_FN.from;
   constraints = constraints_extend(constraints, gen, spec);
   subst = solve_constraints(constraints);
+  printf("create env for generic\n");
+  print_subst(subst);
   for (Substitution *s = subst; s; s = s->next) {
     if (s->from->kind == T_VAR) {
       env = env_extend(env, s->from->data.T_VAR, s->to);
     }
   }
+  print_type_env(env);
 
   return env;
 }
@@ -362,7 +368,10 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
   fn_ast.md = specific_type;
+
+  printf("\n------------------\nspecific fn compile\n");
   LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
+  printf("\n------------------\nfin specific fn compile\n");
 
   return func;
 }

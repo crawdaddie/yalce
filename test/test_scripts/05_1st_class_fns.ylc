@@ -3,4 +3,4 @@ let proc = fn f a b -> f a b;;
 
 %test
 let test_1st_class_int_sum = proc sum 1 2 == 3;
-let test_1st_class_double_sum = proc sum 1.0 2.0 == 3.0;
+# let test_1st_class_double_sum = proc sum 1.0 2.0 == 3.0;

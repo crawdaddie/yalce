@@ -294,13 +294,17 @@ int main() {
                "proc sum 1 2;\n",
                &t_int);
 
+    Type *EX = &t2;
+    EX = type_fn(&t1, EX);
+    EX = type_fn(&t0, EX);
+    EX = type_fn(&MAKE_FN_TYPE_3(&t0, &t1, &t2), EX);
+
     printf("expected: ");
-    print_type(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2));
+    print_type(EX);
     printf("ast md:   ");
-    print_type(b->data.AST_BODY.stmts[1]->md);
-    // TASSERT(b->data.AST_BODY.stmts[1]->md,
-    //         &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2),
-    // "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
+    Type *got = b->data.AST_BODY.stmts[1]->md;
+    print_type(got);
+    TASSERT(got, EX, "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
   });
 
   ({
@@ -468,10 +472,10 @@ int main() {
     */
 
   ({
-    Type t = TVAR("`8");
     T("let f = fn a b c d -> a == b && c == d;;\n"
+      "f 1. 2. 3.;\n"
       "f 1 2 3\n",
-      &MAKE_FN_TYPE_2(&t, &t_bool));
+      &MAKE_FN_TYPE_2(&t_int, &t_bool));
   });
 
   ({
@@ -988,5 +992,11 @@ int main() {
          1)
             ->md);
   });
+
+  // T("let sum = fn a b -> a + b;;\n"
+  //   "let proc = fn f a b -> f a b;;\n"
+  //   "let test_1st_class_int_sum = proc sum 1 2 == 3;\n"
+  //   "let test_1st_class_double_sum = proc sum 1.0 2.0 == 3.0;\n",
+  //   &t_bool);
   return status == true ? 0 : 1;
 }
