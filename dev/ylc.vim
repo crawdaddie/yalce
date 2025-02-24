@@ -5,9 +5,15 @@
 if exists("b:current_syntax")
   finish
 endif
+" Struct region - define the context for struct keys
+syn region ylcStructRegion start="(" end=")" transparent contains=TOP,ylcStructKey
+
+" Struct Keys - match only inside parentheses
+syn match ylcStructKey "\v([a-zA-Z_][a-zA-Z0-9_]*)\ze\s*\:" contained containedin=ylcStructRegion
 
 " Keywords
-syn keyword ylcKeyword fn let in and extern true false match with import type of if include contained
+" Keywords
+syn keyword ylcKeyword fn let in and extern true false match with import type of if include
 syn match ylcKeywordMatch "\<\(fn\|let\|in\|and\|extern\|true\|false\|match\|with\|import\|type\|of\|if\|include\)\>" contains=ylcKeyword
 
 " Types
@@ -53,7 +59,7 @@ syn match ylcComment "#.*$"
 hi def link ylcKeyword Keyword
 hi def link ylcType Type
 hi def link ylcOperator Operator
-hi def link ylcIdentifier Function
+hi def link ylcIdentifier Identifier
 hi def link ylcMetaIdentifier PreProc
 hi def link ylcNumber Number
 hi def link ylcFloat Float
@@ -65,5 +71,6 @@ hi def link ylcFStringInterp Special
 hi def link ylcChar Character
 hi def link ylcComment Comment
 hi def link ylcEscape Special
+hi def link ylcStructKey Structure
 setlocal commentstring=#\ %s
 let b:current_syntax = "ylc"

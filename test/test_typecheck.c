@@ -97,21 +97,21 @@ int main() {
   TFAIL("1 + \"hello\"");
   //
   ({
-    Type tvar = arithmetic_var("`0");
+    Type tvar = arithmetic_var("`2");
     T("x + 1", &tvar);
   });
   ({
-    Type tvar = arithmetic_var("`1");
+    Type tvar = arithmetic_var("`2");
     T("1 + x", &tvar);
   });
   //
   ({
-    Type tvar = arithmetic_var("`1");
+    Type tvar = arithmetic_var("`6");
     T("(1 + 2) * 8 - x", &tvar);
   });
   //
   ({
-    Type tvar = arithmetic_var("`0");
+    Type tvar = arithmetic_var("`2");
     T("x - 8", &tvar);
   });
   //
@@ -213,7 +213,7 @@ int main() {
     &MAKE_FN_TYPE_3(&t_int, &t_num, &t_int));
 
   ({
-    Type tvar = {T_VAR, .data = {.T_VAR = "`3"}};
+    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
     Ast *body = T("let f = fn x -> 1 + x;;\n"
                   "f 1;\n"
                   "f 1.;\n",
@@ -245,9 +245,9 @@ int main() {
   });
 
   ({
-    Type t0 = arithmetic_var("`6");
-    Type t1 = arithmetic_var("`7");
-    Type t2 = arithmetic_var("`5");
+    Type t0 = arithmetic_var("`0");
+    Type t1 = arithmetic_var("`1");
+    Type t2 = arithmetic_var("`2");
 
     T("let f = fn x y z -> x + y + z;",
       &MAKE_FN_TYPE_4(
@@ -376,7 +376,7 @@ int main() {
 
   ({
     Type s = arithmetic_var("`4");
-    Type t = arithmetic_var("`6");
+    Type t = arithmetic_var("`8");
     T("let list_sum = fn s l ->\n"
       "  match l with\n"
       "  | [] -> s\n"
@@ -482,7 +482,7 @@ int main() {
   });
 
   ({
-    Type t = arithmetic_var("`5");
+    Type t = arithmetic_var("`2");
     Ast *b = T("let f = fn a b c -> a + b + c;;\n"
                "f 1 2\n",
                &MAKE_FN_TYPE_2(&t, &t));
@@ -529,7 +529,7 @@ int main() {
   });
 
   ({
-    Type t = arithmetic_var("`5");
+    Type t = arithmetic_var("`2");
     T("let f = fn a b c -> a + b + c;;\n"
       "f 1. 2.\n",
       &MAKE_FN_TYPE_2(&t, &t));
@@ -540,8 +540,8 @@ int main() {
     &MAKE_FN_TYPE_2(&t_int, &t_bool));
 
   ({
-    Type t0 = arithmetic_var("`2");
-    Type t1 = arithmetic_var("`3");
+    Type t0 = arithmetic_var("`0");
+    Type t1 = arithmetic_var("`1");
     T("(1, 2, fn a b -> a + b;);\n",
       &TTUPLE(3, &t_int, &t_int,
               &MAKE_FN_TYPE_3(&t0, &t1,
@@ -549,8 +549,8 @@ int main() {
   });
 
   ({
-    Type t0 = arithmetic_var("`5");
-    Type t1 = arithmetic_var("`6");
+    Type t0 = arithmetic_var("`2");
+    Type t1 = arithmetic_var("`3");
     Type tuple = TTUPLE(
         3, &t_int, &t_int,
         &MAKE_FN_TYPE_3(&t0, &t1, &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1)));
@@ -994,6 +994,16 @@ int main() {
              ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
          1)
             ->md);
+  });
+
+  ({
+    Type inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    inst.is_coroutine_instance = true;
+    T("let fib = fn a b ->\n"
+      "  yield a;\n"
+      "  yield fib b (a + b)\n"
+      ";;\n",
+      &inst);
   });
 
   // T("let sum = fn a b -> a + b;;\n"

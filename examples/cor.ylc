@@ -139,6 +139,7 @@ map_cor ();
 
 let fib_cor = fn () ->
   let fib = fn a: (Int) b: (Int) ->
+    # TODO: don't like that I need to annotate the type here
     yield a;
     yield fib b (a + b)
   ;;
@@ -237,46 +238,46 @@ let loop_cor = fn () ->
 ;;
 
 loop_cor ();
+let arithmetic_series = fn () -> 
+  let arithmetic = fn s: (Int) ->
+    # TODO: don't like that I need to annotate the type here
+    yield s;
+    yield arithmetic (s + 1)
+  ;;
+  let c = arithmetic 1 in
+  print `## arithmetic series:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+arithmetic_series ();
 
-# let arithmetic_series = fn () -> 
-#   let arithmetic = fn s ->
-#     yield s;
-#     yield arithmetic (s + 1)
-#   ;;
-#   let c = arithmetic 1 in
-#   print `## arithmetic series:
-#   {c ()}
-#   {c ()}
-#   {c ()}
-#   {c ()}
-#   {c ()}
-#   {c ()}
-#   {c ()}
-#   {c ()}
-#   {c ()}
-#   {c ()}
-# `
-# ;;
-# arithmetic_series ();
-#
-# let geometric = fn () -> 
-#   let geo = fn s ->
-#     yield s;
-#     yield geo (s * 1.1)
-#   ;;
-#   let g = geo 1.0 in
-#
-#   print `## geometric series:
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-#   {g ()}
-# `
-# ;;
-# geometric ()
+let geometric = fn () -> 
+  let geo = fn s: (Double) ->
+    yield s;
+    yield geo (s * 1.1)
+  ;;
+  let g = geo 1.0 in
+
+  print `## geometric series:
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+`
+;;
+geometric ()

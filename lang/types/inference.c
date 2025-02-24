@@ -316,12 +316,6 @@ Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
   infer(yield_expr, ctx);
   Type *yield_expr_type = yield_expr->md;
 
-  if (yield_expr->tag == AST_APPLICATION &&
-      strcmp(
-          yield_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-          "arithmetic") == 0) {
-  }
-
   if (is_coroutine_type(yield_expr_type)) {
     yield_expr_type = type_of_option(fn_return_type(yield_expr_type));
   }
@@ -340,6 +334,14 @@ Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
     ctx->yielded_type = yield_expr_type;
   }
   ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
+
+  // if (yield_expr->tag == AST_APPLICATION &&
+  //     strcmp(
+  //         yield_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+  //         "arithmetic") == 0) {
+  //   printf("???\n");
+  //   print_type(yield_expr_type);
+  // }
   return yield_expr_type;
 }
 
@@ -532,25 +534,6 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
                       ast->data.AST_APPLICATION.args + i)) {
       return NULL;
     }
-    if (arg_types[i]->kind == T_FN) {
-      // printf("constraining fn types\n");
-      // print_type(arg_types[i]);
-      // print_type(param_type);
-    } else if (is_generic(arg_types[i])) {
-
-      ctx->constraints =
-          constraints_extend(ctx->constraints, arg_types[i], param_type);
-      // if (!is_generic(param_type)) {
-      //   print_type(arg_types[i]);
-      //   print_type(param_type);
-      //   // ctx->constraints =
-      //   //     constraints_extend(ctx->constraints, arg_types[i],
-      //   param_type);
-      // } else {
-      //   ctx->constraints =
-      //       constraints_extend(ctx->constraints, arg_types[i], param_type);
-      // }
-    }
 
     if (i < ast->data.AST_APPLICATION.len - 1) {
       if (fn_type->data.T_FN.to->kind != T_FN) {
@@ -568,10 +551,20 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   Type *res_type = _fn_type;
 
   for (int i = 0; i < len; i++) {
+
     Ast *arg = ast->data.AST_APPLICATION.args + i;
 
     if (!((Type *)arg->md)->is_fn_param) {
       arg->md = apply_substitution(subst, arg->md);
+    }
+
+    // print_type(arg->md);
+    // print_type(res_type->data.T_FN.from);
+
+    if (is_generic(arg->md) &&
+        !types_equal(arg->md, res_type->data.T_FN.from)) {
+      ctx->constraints = constraints_extend(ctx->constraints, arg->md,
+                                            res_type->data.T_FN.from);
     }
 
     res_type = res_type->data.T_FN.to;
@@ -1293,6 +1286,12 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
   case AST_MATCH_GUARD_CLAUSE: {
     apply_substitutions_rec(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, subst);
+    break;
+  }
+
+  case AST_YIELD: {
+    apply_substitutions_rec(ast->data.AST_YIELD.expr, subst);
+    ast->md = apply_substitution(subst, ast);
     break;
   }
 

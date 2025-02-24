@@ -1,9 +1,8 @@
 #! env ylc
 let list_sum = fn s l ->
-  (match l with
+  match l with
   | [] -> s
   | x::rest -> list_sum (s + x) rest
-  )
 ;;
 
 let sum = list_sum 0;

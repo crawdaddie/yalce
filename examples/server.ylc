@@ -42,13 +42,6 @@ let proc_tasks = fn tasks server_fd ->
 ;;
 
 
-
-  
-
-
-
-
-
 let init_server = fn port ->
   let server_addr = create_server_addr AF_INET INADDR_ANY port;
   let server_fd = socket AF_INET SOCK_STREAM 0;
@@ -57,9 +50,6 @@ let init_server = fn port ->
   let q = queue_of_list [ (accept_connections server_fd) ];
   proc_tasks q server_fd ;
   1
-
-
-
 ;;
 
 init_server 8000
