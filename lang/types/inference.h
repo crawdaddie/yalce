@@ -43,4 +43,5 @@ TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
 
 Substitution *solve_constraints(TypeConstraint *constraints);
 
+void print_constraints(TypeConstraint *c);
 #endif

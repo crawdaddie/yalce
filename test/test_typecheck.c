@@ -997,16 +997,28 @@ int main() {
   });
 
   ({
-    Type t = arithmetic_var("`1");
+    Type t = arithmetic_var("`5");
+    Type t2 = arithmetic_var("`1");
     Type inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t));
     inst.is_coroutine_instance = true;
-    Type cons = MAKE_FN_TYPE_3(&t, &t, &inst);
+    Type cons = MAKE_FN_TYPE_3(&t, &t2, &inst);
     cons.is_coroutine_constructor = true;
-    T("let fib = fn a b ->\n"
-      "  yield a;\n"
-      "  yield fib b (a + b)\n"
-      ";;\n",
-      &cons);
+    Ast *b = T("let fib = fn a b ->\n"
+               "  yield a;\n"
+               "  yield fib b (a + b)\n"
+               ";;\n",
+               &cons);
+
+    // Ast *yield =
+    //
+    //     b->data.AST_BODY.stmts[0]
+    //         ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts[1]
+    //         ->data.AST_YIELD.expr;
+    // print_ast(yield);
+    // print_type(yield->md);
+    // print_type(yield->data.AST_APPLICATION.function->md);
+    // print_type(yield->data.AST_APPLICATION.args->md);
+    // print_type((yield->data.AST_APPLICATION.args + 1)->md);
   });
 
   // T("let sum = fn a b -> a + b;;\n"

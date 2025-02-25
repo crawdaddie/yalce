@@ -357,6 +357,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
   case T_VAR: {
     int app_len = ast->data.AST_APPLICATION.len;
+
     Type *arg_types[app_len];
 
     for (int i = 0; i < app_len; i++) {
@@ -558,14 +559,12 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
       arg->md = apply_substitution(subst, arg->md);
     }
 
-    // print_type(arg->md);
-    // print_type(res_type->data.T_FN.from);
-
     if (is_generic(arg->md) &&
         !types_equal(arg->md, res_type->data.T_FN.from)) {
       ctx->constraints = constraints_extend(ctx->constraints, arg->md,
                                             res_type->data.T_FN.from);
     }
+    // When unifying argument types with function parameters
 
     res_type = res_type->data.T_FN.to;
   }
@@ -862,9 +861,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   Substitution *subst = solve_constraints(body_ctx.constraints);
 
-  // printf("LAMBDA\n");
-  // print_constraints(body_ctx.constraints);
-  // print_subst(subst);
   ast->md = apply_substitution(subst, ast->md);
 
   if (is_named) {
@@ -1081,8 +1077,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     // Apply current substitution chain to both types in constraint
     Type *t1 = apply_substitution(subst, constraints->t1);
     Type *t2 = apply_substitution(subst, constraints->t2);
-    // Type *t1 = constraints->t1;
-    // Type *t2 = constraints->t2;
 
     if (!t1 || !t2) {
       constraints = constraints->next;
@@ -1172,6 +1166,7 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else if (t1->kind == T_EMPTY_LIST && is_list_type(t2)) {
       *t1 = *t2;
     } else {
+
       TICtx _ctx = {.err_stream = NULL};
       char buf1[100] = {};
       char buf2[100] = {};
@@ -1307,7 +1302,7 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
   //
   // print_constraints(ctx->constraints);
   // print_subst(subst);
-
+  //
   if (ctx->constraints && !subst) {
     return NULL;
   }

@@ -4,6 +4,7 @@
 #include "symbols.h"
 #include "types.h"
 #include "types/inference.h"
+#include "types/type.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -334,9 +335,6 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
     generic_type = generic_type->data.T_FN.to;
   }
 
-  Type *gen = generic_type->data.T_FN.from;
-  Type *spec = specific_type->data.T_FN.from;
-  constraints = constraints_extend(constraints, gen, spec);
   subst = solve_constraints(constraints);
   for (Substitution *s = subst; s; s = s->next) {
     if (s->from->kind == T_VAR) {
