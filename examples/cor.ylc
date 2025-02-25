@@ -86,56 +86,56 @@ let iter_all_arg = fn () ->
 ;; 
 iter_all_arg ();
 
-let wrapped_cor = fn () ->
-  let wrapper = fn x -> print `specially wrapped: {x}\n`
-  ;;
-
-  let co_void = fn () ->
-    yield 1;
-    yield 2;
-    yield 3;
-    yield 200
-  ;;
-
-  let inst = (co_void () |> cor_wrap_effect wrapper);
-
-  print `#{ANSI_MAGENTA}{ANSI_BOLD}# coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
-## (effects printed above ^^){ANSI_RESET}
-  {inst ()}
-  {inst ()}
-  {inst ()}
-  {inst ()}
-  {inst ()}
-  {inst ()}
-`
-;;
-wrapped_cor ();
+# let wrapped_cor = fn () ->
+#   let wrapper = fn x -> print `specially wrapped: {x}\n`
+#   ;;
 #
-let map_cor = fn () ->
-  "map each value of a coroutine Int -> String";
-  let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`
-  ;;
-  let co_void = fn () ->
-    yield 1;
-    yield 2;
-    yield 3;
-    yield 4;
-    yield 5;
-    yield 6;
-    yield 7 
-  ;;
-  let co = co_void () |> cor_map str_map;
-
-  print `{ANSI_MAGENTA}{ANSI_BOLD}## coroutine mapped 1 -> 2 -> 3 -> done{ANSI_RESET}
-  {co ()}
-  {co ()}
-  {co ()}
-  {co ()}
-  {co ()}
-  {co ()}
-`
-;;
-map_cor ();
+#   let co_void = fn () ->
+#     yield 1;
+#     yield 2;
+#     yield 3;
+#     yield 200
+#   ;;
+#
+#   let inst = (co_void () |> cor_wrap_effect wrapper);
+#
+#   print `#{ANSI_MAGENTA}{ANSI_BOLD}# coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
+# ## (effects printed above ^^){ANSI_RESET}
+#   {inst ()}
+#   {inst ()}
+#   {inst ()}
+#   {inst ()}
+#   {inst ()}
+#   {inst ()}
+# `
+# ;;
+# wrapped_cor ();
+#
+# let map_cor = fn () ->
+#   "map each value of a coroutine Int -> String";
+#   let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`
+#   ;;
+#   let co_void = fn () ->
+#     yield 1;
+#     yield 2;
+#     yield 3;
+#     yield 4;
+#     yield 5;
+#     yield 6;
+#     yield 7 
+#   ;;
+#   let co = co_void () |> cor_map str_map;
+#
+#   print `{ANSI_MAGENTA}{ANSI_BOLD}## coroutine mapped 1 -> 2 -> 3 -> done{ANSI_RESET}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+# `
+# ;;
+# map_cor ();
 
 let fib_cor = fn () ->
   let fib = fn a: (Int) b: (Int) ->
@@ -236,7 +236,6 @@ let loop_cor = fn () ->
   {e ()}
 `
 ;;
-
 loop_cor ();
 let arithmetic_series = fn () -> 
   let arithmetic = fn s: (Int) ->
@@ -280,4 +279,28 @@ let geometric = fn () ->
   {g ()}
 `
 ;;
-geometric ()
+geometric ();
+
+let fib_ser = fn () ->
+  let fib = fn a b ->
+    yield a;
+    yield fib b (a + b)
+  ;;
+
+  let c = fib 0 1 in
+  print `## fib series:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+
+
+fib_ser ()

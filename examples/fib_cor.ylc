@@ -1,0 +1,21 @@
+let fib_ser = fn () ->
+  let fib = fn a b ->
+    yield a;
+    yield fib b (a + b)
+  ;;
+
+  let c = fib 0 1 in
+  print `## fib series:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+fib_ser ()
