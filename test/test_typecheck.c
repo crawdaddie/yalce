@@ -997,13 +997,16 @@ int main() {
   });
 
   ({
-    Type inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    Type t = arithmetic_var("`1");
+    Type inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t));
     inst.is_coroutine_instance = true;
+    Type cons = MAKE_FN_TYPE_3(&t, &t, &inst);
+    cons.is_coroutine_constructor = true;
     T("let fib = fn a b ->\n"
       "  yield a;\n"
       "  yield fib b (a + b)\n"
       ";;\n",
-      &inst);
+      &cons);
   });
 
   // T("let sum = fn a b -> a + b;;\n"
