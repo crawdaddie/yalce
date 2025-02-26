@@ -221,6 +221,13 @@ void schedule_event_quant(void (*callback)(void *, int), double quantization,
   now = get_time_ns(); // Update 'now' before scheduling
   double now_s = ((double)now) / S_TO_NS;
 
+  double dur;
+  if (quantization == 0.0) {
+    dur = now_s;
+  } else {
+    dur = fmod(now_s, quantization);
+  }
+
   return _schedule_event(queue, callback, fmod(now_s, quantization), userdata,
                          now);
 }

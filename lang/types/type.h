@@ -91,24 +91,13 @@ extern Type t_array_of_chars_fn_sig;
 extern Type t_ptr_deref_sig;
 extern Type t_none;
 
-extern Type t_iter_of_list_sig;
-extern Type t_iter_of_array_sig;
-extern Type t_cor_loop_sig;
 extern Type t_iter_cor_sig;
 extern Type t_cor_map_iter_sig;
 extern Type t_coroutine_concat_sig;
-
 extern Type t_cor_iter_of_list_sig;
-
 extern Type t_builtin_or;
 extern Type t_builtin_and;
-
 extern Type t_builtin_char_of;
-
-extern Type t_cor_wrap_effect_fn_sig;
-extern Type t_cor_loop_sig;
-extern Type t_cor_play_sig;
-
 extern Type t_opt_map_sig;
 
 // clang-format off

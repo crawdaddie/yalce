@@ -614,6 +614,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig, IterOfArrayHandler);
   GENERIC_FN_SYMBOL("cor_loop", &t_cor_loop_sig, CorLoopHandler);
   GENERIC_FN_SYMBOL("cor_play", &t_cor_play_sig, CorPlayHandler);
+  // GENERIC_FN_SYMBOL("cor_play_quant", &t_cor_play_quant_sig,
+  //                   CorPlayQuantHandler);
   GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);
   GENERIC_FN_SYMBOL("::", &t_list_prepend, ListPrependHandler);
   GENERIC_FN_SYMBOL("queue_of_list", &t_queue_of_list, QueueOfListHandler);

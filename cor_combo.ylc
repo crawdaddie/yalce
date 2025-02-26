@@ -4,6 +4,23 @@
 %include engine/bindings/Synth
 %include examples/Math
 
+let cstr = extern fn String -> Ptr;
+
+let kick_buf = read_buf (cstr "/Users/adam/Desktop/STRANJAH-FREE-SAMPLE-PACK-VOL-1/kicks/STRANJAH_1_KICK_08.wav");
+let sn_buf = read_buf (cstr "/Users/adam/Desktop/STRANJAH-FREE-SAMPLE-PACK-VOL-1/snares/STRANJAH_1_SNARE_15.wav");
+
+
+let drum_machine = fn () ->
+  let kt = inlet 0.0;
+  let st = inlet 0.0;
+  let k = bufplayer_1shot_node kick_buf (inlet 1.) (inlet 0.0) kt;
+  let s = bufplayer_1shot_node sn_buf (inlet 1.5) (inlet 0.0) st;
+  2. * (
+    (k |> tanh_node 2.) 
+  + (s |> comb_node 0.05 0.2 0.6)
+  )
+;;
+
 
 let synth = fn () -> 
   let f = inlet 58.
@@ -20,10 +37,9 @@ let synth = fn () ->
   |> comb_node 0.75 0.75 0.2
 ;;
 
+
+
 let times = [| 0.125, 0.125, 0.25, 0.5 |];
-let freqs = [|55., 330., 220., 110., 44., 33., 55., 110., 220., 660.|];
-
-
 
 let co_void = fn () -> yield 1;;
 let co = (
@@ -33,12 +49,19 @@ let co = (
   target: synth |> chain_wrap |> play,
 );
 
-let co2 = (
-  dur: iter_of_list [0.125, 0.125, 0.125] |> cor_loop,
-  frame_offset: 0,
-  freq: iter_of_list [330., 660., 550.] |> cor_loop,
-  target: synth |> chain_wrap |> play,
-);
+# let co2 = (
+#   dur: iter_of_list [0.125, 0.125, 0.125] |> cor_loop,
+#   frame_offset: 0,
+#   freq: iter_of_list [330., 660., 550.] |> cor_loop,
+#   target: synth |> chain_wrap |> play,
+# );
+
+#
+# co2 |> cor_wrap_effect (fn (dur, frame_offset, freq, target) ->
+#   set_input_scalar_offset target 0 frame_offset freq;
+#   set_input_trig_offset target 1 frame_offset;
+#   ()
+# ;)|> cor_play schedule_event;
 
 co |> cor_wrap_effect (fn (dur, frame_offset, freq, target) ->
   set_input_scalar_offset target 0 frame_offset freq;
@@ -46,8 +69,16 @@ co |> cor_wrap_effect (fn (dur, frame_offset, freq, target) ->
   ()
 ;) |> cor_play schedule_event;
 
-co2 |> cor_wrap_effect (fn (dur, frame_offset, freq, target) ->
-  set_input_scalar_offset target 0 frame_offset freq;
-  set_input_trig_offset target 1 frame_offset;
+let cod = (
+  dur: iter_of_list [0.25] |> cor_loop,
+  frame_offset: 0,
+  target: drum_machine |> chain_wrap |> play,
+);
+
+cod |> cor_wrap_effect (fn (dur, frame_offset, target) ->
+  match rand_int 8 with
+  | 0 -> set_input_trig_offset target 1 frame_offset
+  | _ -> set_input_trig_offset target 0 frame_offset
+  ;
   ()
-;)|> cor_play schedule_event;
+;) |> cor_play schedule_event;

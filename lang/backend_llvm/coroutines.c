@@ -1323,3 +1323,40 @@ LLVMValueRef CorPlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return LLVMGetUndef(LLVMVoidType());
 }
+
+LLVMValueRef CorPlayQuantHandler(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMValueRef schedule_event_fn =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMTypeRef scheduler_func_type = LLVMFunctionType(
+      LLVMVoidType(),
+      (LLVMTypeRef[]){GENERIC_PTR, LLVMDoubleType(),
+                      LLVMPointerType(cor_inst_struct_type(), 0)},
+      3, 0);
+
+  Type *coroutine_type = ast->data.AST_APPLICATION.args[1].md;
+  Type *ret_opt_type = fn_return_type(coroutine_type);
+  Type *ret_type = type_of_option(ret_opt_type);
+
+  LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx->env, module);
+
+  LLVMValueRef scheduler_wrapper =
+      create_scheduler_wrapper(llvm_ret_type, get_cor_next_fn(module),
+                               schedule_event_fn, module, builder);
+
+  LLVMValueRef instance_ptr =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  // Call schedule_event(scheduler_wrapper, dur, c)
+  LLVMValueRef schedule_args[] = {
+      scheduler_wrapper,                    // scheduler_wrapper function ptr
+      LLVMConstReal(LLVMDoubleType(), 0.0), // duration
+      instance_ptr                          // coroutine pointer
+  };
+  LLVMBuildCall2(builder, LLVMGlobalGetValueType(schedule_event_fn),
+                 schedule_event_fn, schedule_args, 3, "");
+
+  return LLVMGetUndef(LLVMVoidType());
+}

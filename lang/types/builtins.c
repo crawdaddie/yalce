@@ -159,10 +159,6 @@ Type *_cor_wrap_effect_fn_sig() {
 
 Type t_cor_wrap_effect_fn_sig = GENERIC_TYPE(_cor_wrap_effect_fn_sig);
 
-// Type t_cor_from = {
-//     T_FN,
-//     {.T_FN = {.from = &t_void, .to = &TOPT(&t_cor_map_from_type)}},
-//     .is_coroutine_instance = true};
 Type *_cor_map_fn_sig() {
   Type *map_from = next_tvar();
   Type *map_to = next_tvar();
@@ -177,53 +173,82 @@ Type *_cor_map_fn_sig() {
   return f;
 }
 
-// MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_cor_map_from_type, &t_cor_map_to_type),
-//                &t_cor_from, &t_cor_to);
-
 Type t_cor_map_fn_sig = GENERIC_TYPE(_cor_map_fn_sig);
 
-// Type t_cor_map_from_type = {T_VAR, {.T_VAR = "map_from"}};
-//
-// Type t_cor_map_to_type = {T_VAR, {.T_VAR = "map_to"}};
-//
-// Type t_cor_from = {
-//     T_FN,
-//     {.T_FN = {.from = &t_void, .to = &TOPT(&t_cor_map_from_type)}},
-//     .is_coroutine_instance = true};
-//
-// Type t_cor_to = {T_FN,
-//                  {.T_FN = {.from = &t_void, .to =
-//                  &TOPT(&t_cor_map_to_type)}}, .is_coroutine_instance = true};
-//
-// Type t_cor_map_fn_sig =
-//     MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_cor_map_from_type, &t_cor_map_to_type),
-//                    &t_cor_from, &t_cor_to);
-//
-// Type t_cor_loop_var = {
-//     T_FN,
-//     {.T_FN = {.from = &t_void, .to = &TOPT(&t_cor_map_from_type)}},
-//     .is_coroutine_instance = true};
-//
-// Type t_cor_loop_sig = MAKE_FN_TYPE_2(&t_cor_loop_var, &t_cor_loop_var);
-//
-// Type t_cor_play_sig = MAKE_FN_TYPE_3(&t_ptr, // schedule event injected func
-//                                      &t_cor_loop_var, &t_void);
-//
-// Type t_list_cor = {T_FN,
-//                    {.T_FN = {.from = &t_void, .to = &TOPT(&t_list_var_el)}},
-//                    .is_coroutine_instance = true};
-// Type t_iter_of_list_sig =
-//     ((Type){T_FN,
-//             {.T_FN = {.from = &TLIST(&t_list_var_el), .to = &t_list_cor}},
-//             .is_coroutine_constructor = true});
-//
-// Type t_iter_of_array_sig = ((Type){
-//     T_FN,
-//     {.T_FN = {.from = &((Type){T_CONS,
-//                                {.T_CONS = {TYPE_NAME_ARRAY,
-//                                            (Type *[]){&t_list_var_el}, 1}}}),
-//               .to = &t_list_cor}},
-//     .is_coroutine_constructor = true});
+Type *_cor_loop_sig() {
+  Type *cor_loop_var = next_tvar();
+  // Create the coroutine type (mimicking t_cor_loop_var)
+  Type *t_cor_loop_var = create_coroutine_instance_type(cor_loop_var);
+
+  // Create function type: t_cor_loop_var -> t_cor_loop_var
+  Type *f = t_cor_loop_var;
+  f = type_fn(t_cor_loop_var, f);
+
+  return f;
+}
+
+Type t_cor_loop_sig = GENERIC_TYPE(_cor_loop_sig);
+
+Type *_cor_play_sig() {
+  Type *cor_var = next_tvar();
+  // Create the coroutine type
+  Type *t_cor_loop_var = create_coroutine_instance_type(cor_var);
+
+  // Create function type: ptr -> t_cor_loop_var -> void
+  Type *f = &t_void;
+  f = type_fn(t_cor_loop_var, f);
+  f = type_fn(&t_ptr, f);
+
+  return f;
+}
+
+Type t_cor_play_sig = GENERIC_TYPE(_cor_play_sig);
+
+Type *_iter_of_list_sig() {
+  Type *el_type = next_tvar();
+
+  // Create list type containing el_type
+  Type *list_type = create_list_type_of_type(el_type);
+
+  // Create coroutine return type (Option<el_type>)
+  Type *cor_return = create_option_type(el_type);
+
+  // Create coroutine type
+  Type *cor_type = type_fn(&t_void, cor_return);
+  cor_type->is_coroutine_instance = true;
+
+  // Create function: List<el_type> -> coroutine
+  Type *f = cor_type;
+  f = type_fn(list_type, f);
+  f->is_coroutine_constructor = true;
+
+  return f;
+}
+
+Type t_iter_of_list_sig = GENERIC_TYPE(_iter_of_list_sig);
+
+Type *_iter_of_array_sig() {
+  Type *el_type = next_tvar();
+
+  // Create array type containing el_type
+  Type *array_type = create_array_type(el_type);
+
+  // Create coroutine return type (Option<el_type>)
+  Type *cor_return = create_option_type(el_type);
+
+  // Create coroutine type
+  Type *cor_type = type_fn(&t_void, cor_return);
+  cor_type->is_coroutine_instance = true;
+
+  // Create function: Array<el_type> -> coroutine
+  Type *f = cor_type;
+  f = type_fn(array_type, f);
+  f->is_coroutine_constructor = true;
+
+  return f;
+}
+
+Type t_iter_of_array_sig = GENERIC_TYPE(_iter_of_array_sig);
 
 void initialize_builtin_types() {
 
