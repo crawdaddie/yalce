@@ -66,8 +66,9 @@ void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...) {
   // Add location info
   if (node && node->loc_info) {
     _print_location(node, err_stream);
+  } else if (node) {
+    print_ast_err(node);
   }
-
   va_end(args);
   return NULL;
 }
@@ -459,6 +460,7 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 
   if (IS_PRIMITIVE_TYPE(t1)) {
     ctx->constraints = constraints_extend(ctx->constraints, t2, t1);
+    ctx->constraints->src = node;
     return t1;
   }
 
@@ -502,7 +504,7 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     return unify_in_ctx(t2, t1, ctx, node);
   } else {
     ctx->constraints = constraints_extend(ctx->constraints, t1, t2);
-    // ctx->constraints->src = node;
+    ctx->constraints->src = node;
   }
 
   return t1;
@@ -563,6 +565,7 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
         !types_equal(arg->md, res_type->data.T_FN.from)) {
       ctx->constraints = constraints_extend(ctx->constraints, arg->md,
                                             res_type->data.T_FN.from);
+      ctx->constraints->src = arg;
     }
     // When unifying argument types with function parameters
 
@@ -1172,9 +1175,10 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       char buf1[100] = {};
       char buf2[100] = {};
 
-      return type_error(&_ctx, constraints->src,
-                        "Constraint solving type mismatch %s != %s\n",
-                        type_to_string(t1, buf1), type_to_string(t2, buf2));
+      type_error(&_ctx, constraints->src,
+                 "Constraint solving type mismatch %s != %s\n",
+                 t1->alias ? t1->alias : type_to_string(t1, buf1),
+                 t2->alias ? t2->alias : type_to_string(t2, buf2));
     }
 
     constraints = constraints->next;

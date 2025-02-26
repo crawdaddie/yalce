@@ -1021,10 +1021,26 @@ int main() {
     // print_type((yield->data.AST_APPLICATION.args + 1)->md);
   });
 
-  // T("let sum = fn a b -> a + b;;\n"
-  //   "let proc = fn f a b -> f a b;;\n"
-  //   "let test_1st_class_int_sum = proc sum 1 2 == 3;\n"
-  //   "let test_1st_class_double_sum = proc sum 1.0 2.0 == 3.0;\n",
-  //   &t_bool);
+  // T("let sq_node = extern fn Signal -> Synth;\n"
+  //   "let synth = fn () -> sq_node 100.;;\n"
+  //   "let cof = fn () ->\n"
+  //   "  let co_void = fn () -> yield 1;;\n"
+  //   "  let co = (\n"
+  //   "    dur: \array_choose times,\n"
+  //   "    frame_offset: 0,\n"
+  //   "    freq: iter_of_list [55., 330., 220., 110., 44., 33., 55., 110., "
+  //   "220., 660.] |> cor_loop,\n"
+  //   "    target: synth |> chain_wrap |> play,\n"
+  //   "    x: co_void () |> cor_loop\n"
+  //   "  )\n"
+  //   "  |> cor_wrap_effect (fn (dur, frame_offset, freq, target, _) ->\n"
+  //   "    set_input_scalar_offset target 0 frame_offset freq;\n"
+  //   "    set_input_trig_offset target 1 frame_offset;\n"
+  //   "    ()\n"
+  //   "  ;)\n"
+  //   "  in co |> cor_play schedule_event\n"
+  //   ";;\n"
+  //   "cof ();\n",
+  //   &t_void);
   return status == true ? 0 : 1;
 }

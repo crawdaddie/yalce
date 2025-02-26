@@ -94,9 +94,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       Type *t = item->md;
 
       if (t->kind == T_VAR) {
-        printf("fmt string component: ");
-        print_ast(item);
-        print_type(t);
         t = env_lookup(ctx->env, t->data.T_VAR);
       }
 
