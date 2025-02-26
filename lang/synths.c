@@ -1,8 +1,8 @@
 #include "synths.h";
-#include "serde.h"
 #include "application.h"
 #include "codegen.h"
 #include "ht.h"
+#include "serde.h"
 #include "symbols.h"
 #include "types/inference.h"
 #include "util.h"
@@ -196,7 +196,7 @@ LLVMValueRef SynthModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return call;
 }
 
-#define SIGNAL_ARITHMETIC(_native_fn_name, _ast, _ctx, _module, _builder)       \
+#define SIGNAL_ARITHMETIC(_native_fn_name, _ast, _ctx, _module, _builder)      \
   ({                                                                           \
     Type *ltype = _ast->data.AST_APPLICATION.args->md;                         \
     Type *rtype = (_ast->data.AST_APPLICATION.args + 1)->md;                   \
@@ -214,20 +214,20 @@ LLVMValueRef SynthModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   })
 
 LLVMValueRef SignalSumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                             LLVMBuilderRef builder) {
+                              LLVMBuilderRef builder) {
   LLVMValueRef call = SIGNAL_ARITHMETIC("sum2_sigs", ast, ctx, module, builder);
   return call;
 }
 
 LLVMValueRef SignalSubHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                             LLVMBuilderRef builder) {
+                              LLVMBuilderRef builder) {
 
   LLVMValueRef call = SIGNAL_ARITHMETIC("sub2_sigs", ast, ctx, module, builder);
   return call;
 }
 
 LLVMValueRef SignalMulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                             LLVMBuilderRef builder) {
+                              LLVMBuilderRef builder) {
 
   // printf("signal mul handler\n");
   // print_ast(ast);
@@ -236,14 +236,14 @@ LLVMValueRef SignalMulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 
 LLVMValueRef SignalDivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                             LLVMBuilderRef builder) {
+                              LLVMBuilderRef builder) {
 
   LLVMValueRef call = SIGNAL_ARITHMETIC("div2_sigs", ast, ctx, module, builder);
   return call;
 }
 
 LLVMValueRef SignalModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                             LLVMBuilderRef builder) {
+                              LLVMBuilderRef builder) {
   LLVMValueRef call = SIGNAL_ARITHMETIC("mod2_sigs", ast, ctx, module, builder);
   return call;
 }
@@ -283,6 +283,7 @@ void initialize_synth_types(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("Synth.%", &t_synth_arithmetic_sig, SynthModHandler);
 
   add_builtin("Signal", &t_signal);
+
   static TypeClass tc_signal[] = {{
                                       .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
                                       .rank = 4.9,
@@ -295,6 +296,7 @@ void initialize_synth_types(JITLangCtx *ctx, LLVMModuleRef module,
                                       .name = TYPE_NAME_TYPECLASS_EQ,
                                       .rank = 4.9,
                                   }};
+
   typeclasses_extend(&t_signal, tc_signal);
   typeclasses_extend(&t_signal, tc_signal + 1);
   typeclasses_extend(&t_signal, tc_signal + 2);

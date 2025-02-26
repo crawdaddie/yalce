@@ -274,9 +274,6 @@ void initialize_builtin_types() {
   typeclasses_extend(&t_int, tc_int);
   typeclasses_extend(&t_int, tc_int + 1);
   typeclasses_extend(&t_int, tc_int + 2);
-  // arithmetic_tc_registry = type_list_extend(arithmetic_tc_registry,
-  // &t_int); ord_tc_registry = type_list_extend(ord_tc_registry, &t_int);
-  // eq_tc_registry = type_list_extend(eq_tc_registry, &t_int);
 
   static TypeClass tc_uint64[] = {{
                                       .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
@@ -294,10 +291,6 @@ void initialize_builtin_types() {
   typeclasses_extend(&t_uint64, tc_uint64);
   typeclasses_extend(&t_uint64, tc_uint64 + 1);
   typeclasses_extend(&t_uint64, tc_uint64 + 2);
-  // arithmetic_tc_registry = type_list_extend(arithmetic_tc_registry,
-  // &t_uint64); ord_tc_registry = type_list_extend(ord_tc_registry,
-  // &t_uint64); eq_tc_registry = type_list_extend(eq_tc_registry,
-  // &t_uint64);
 
   static TypeClass tc_num[] = {{
 

@@ -1,0 +1,42 @@
+#! env ylc
+%include examples/Array
+%include engine/bindings/Sched
+%include engine/bindings/Synth
+%include examples/Math
+
+
+let synth = fn () -> 
+  let f = inlet 58.
+  |> lag_node 0.01;
+  let trig = inlet 0.0; 
+  let chirp_decay = inlet 0.3;
+  let ff = chirp_node 3000. 200. chirp_decay trig; 
+  (
+    sq_node f
+  + sq_node (f * 1.01)
+  + sq_node (f * 2)
+  )
+  |> biquad_lp_node ff (inlet 1.)
+  |> comb_node 0.75 0.75 0.2
+;;
+
+let times = [| 0.125, 0.125, 0.25, 0.5 |];
+let freqs = [|55., 330., 220., 110., 44., 33., 55., 110., 220., 660.|];
+
+let co_void = fn () -> yield 1;;
+let co = (
+  dur: \array_choose times,
+  frame_offset: 0,
+  # freq: iter_of_list [55., 330., 220., 110., 44., 33., 55., 110., 220., 660.] |> cor_loop,
+  
+  freq: \array_choose freqs,
+  target: synth |> chain_wrap |> play,
+  x: co_void () |> cor_loop
+)
+|> cor_wrap_effect (fn (dur, frame_offset, freq, s, _) ->
+  set_input_scalar_offset s 0 frame_offset freq;
+  set_input_trig_offset s 1 frame_offset;
+  ()
+;)
+in co |> cor_play schedule_event;
+
