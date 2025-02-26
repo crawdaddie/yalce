@@ -46,10 +46,9 @@ let node_state_ptr = extern fn Synth -> Ptr;
 
 # filters.h
 let biquad_node = extern fn Signal -> Synth;
-let biquad_lp_node = extern fn Signal -> Signal -> Synth;
-let biquad_hp_node = extern fn Signal -> Signal -> Synth;
-let biquad_bp_node = extern fn Signal -> Signal -> Synth;
-
+let biquad_lp_node = extern fn Signal -> Signal -> Signal -> Synth;
+let biquad_hp_node = extern fn Signal -> Signal -> Signal -> Synth;
+let biquad_bp_node = extern fn Signal -> Signal -> Signal -> Synth;
 let comb_node = extern fn Double -> Double -> Double -> Signal -> Synth;
 let lag_node = extern fn Double -> Signal -> Synth;
 let tanh_node = extern fn Double -> Signal -> Synth;
