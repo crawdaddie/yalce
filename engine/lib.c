@@ -1,7 +1,6 @@
 #include "lib.h"
 #include "audio_loop.h"
 #include "ctx.h"
-#include "oscillators.h"
 #include <sndfile.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,28 +35,6 @@
 //   }
 // }
 //
-Node *play_test_synth() {
-  double freq = 100.;
-  double cutoff = 500.;
-  Node *group = group_new(0);
-
-  Node *sq1 = sq_node(get_sig_default(1, freq));
-  group_add_tail(group, sq1);
-
-  Node *sq2 = sq_node(get_sig_default(1, freq * 1.01));
-  group_add_tail(group, sq2);
-
-  Node *summed = sum2_node(sq1, sq2);
-  group_add_tail(group, summed);
-  add_to_dac(summed);
-
-  // return group;
-
-  add_to_dac(group);
-  audio_ctx_add(group);
-  return group;
-}
-
 int get_frame_offset() {
   struct timespec t;
   struct timespec btime = get_block_time();

@@ -262,13 +262,24 @@ LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
   LLVMDumpValue(synth_def);
-  LLVMValueRef new_blob_template_fn =
-      get_extern_fn("create_new_blob_template",
-                    LLVMFunctionType(GENERIC_PTR, NULL, 0, 0), module);
+  LLVMValueRef start_blob_fn = get_extern_fn(
+      "start_blob",
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0),
+      module);
 
-  LLVMValueRef blob_template =
-      LLVMBuildCall2(builder, LLVMFunctionType(GENERIC_PTR, NULL, 0, 0),
-                     new_blob_template_fn, NULL, 0, "create_new_blob_template");
+  LLVMValueRef temp_mem = LLVMBuildArrayAlloca(
+      builder, LLVMInt8Type(), LLVMConstInt(LLVMInt32Type(), 1 << 12, 0),
+      "temporary_memory_for_blob_data");
+
+  LLVMValueRef blob_template = LLVMBuildCall2(
+      builder,
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0),
+      start_blob_fn, (LLVMValueRef[]){temp_mem}, 1, "create_new_blob_template");
+
+  // We need temporary memory for compilation
+  // char temp_mem[1 << 12];
+  // void *mem_ptr = temp_mem;
+
   return blob_template;
 }
 

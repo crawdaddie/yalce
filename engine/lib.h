@@ -54,5 +54,4 @@ SignalRef signal_of_ptr(int size, double *ptr);
 SignalRef node_output_sig(NodeRef node);
 void *node_state_ptr(NodeRef node);
 
-void *create_new_blob_template();
 #endif
