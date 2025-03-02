@@ -1,8 +1,8 @@
 #! env ylc
-%include examples/Array
-%include engine/bindings/Sched
-%include engine/bindings/Synth
-%include examples/Math
+%include Array
+%include ../engine/bindings/Sched
+%include ../engine/bindings/Synth
+%include Math
 
 
 let synth = fn () -> 

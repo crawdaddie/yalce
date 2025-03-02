@@ -85,4 +85,17 @@ NodeRef node_of_sig(SignalRef val);
 
 Signal *group_add_input(Node *group);
 
+#define MAX_INPUTS 16
+// Definition for a blob template
+typedef struct {
+  int total_size;  // Total size of all nodes in the blob
+  int num_inputs;  // Number of inputs the blob expects
+  void *blob_data; // The actual compiled blob data
+  int first_node_offset;
+  int last_node_offset;
+  int input_slot_offsets[MAX_INPUTS]; // Offsets for where inputs should connect
+  double default_vals[MAX_INPUTS];    // Offsets for where inputs should connect
+} BlobTemplate;
+
+void *create_new_blob_template();
 #endif

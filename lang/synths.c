@@ -248,6 +248,30 @@ LLVMValueRef SignalModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return call;
 }
 
+Type t_compile_synth_blob_sig =
+    MAKE_FN_TYPE_2(&MAKE_FN_TYPE_2(&t_void, &t_synth), &t_ptr);
+
+LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+
+  printf("compile blob template for: ");
+  print_ast(ast->data.AST_APPLICATION.args);
+
+  LLVMValueRef synth_def =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMDumpValue(synth_def);
+  LLVMValueRef new_blob_template_fn =
+      get_extern_fn("create_new_blob_template",
+                    LLVMFunctionType(GENERIC_PTR, NULL, 0, 0), module);
+
+  LLVMValueRef blob_template =
+      LLVMBuildCall2(builder, LLVMFunctionType(GENERIC_PTR, NULL, 0, 0),
+                     new_blob_template_fn, NULL, 0, "create_new_blob_template");
+  return blob_template;
+}
+
 void initialize_synth_types(JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
@@ -305,4 +329,7 @@ void initialize_synth_types(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("Signal.*", &t_signal_arithmetic_sig, SignalMulHandler);
   GENERIC_FN_SYMBOL("Signal./", &t_signal_arithmetic_sig, SignalDivHandler);
   GENERIC_FN_SYMBOL("Signal.%", &t_signal_arithmetic_sig, SignalModHandler);
+  add_builtin("compile_blob_template", &t_compile_synth_blob_sig);
+  GENERIC_FN_SYMBOL("compile_blob_template", &t_compile_synth_blob_sig,
+                    CompileBlobTemplateHandler);
 }

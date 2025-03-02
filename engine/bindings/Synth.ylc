@@ -43,6 +43,7 @@ let signal_size = extern fn Signal -> Int;
 let signal_of_ptr = extern fn Int -> Ptr -> Signal;
 let node_output_sig = extern fn Synth -> Signal;
 let node_state_ptr = extern fn Synth -> Ptr;
+let create_new_blob_template = extern fn () -> Ptr;
 
 # filters.h
 let biquad_node = extern fn Signal -> Synth;

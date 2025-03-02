@@ -466,3 +466,10 @@ Node *mul_sig(Signal *a, Signal *b) {
   op_node->ins[1].buf = b->buf;
   return op_node;
 }
+
+void *create_new_blob_template() {
+  // Allocate memory for the template
+  BlobTemplate *template = malloc(sizeof(BlobTemplate));
+  *template = (BlobTemplate){0};
+  return template;
+}

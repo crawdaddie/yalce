@@ -1,0 +1,7 @@
+%include ../engine/bindings/Synth
+
+let synth_template = (fn () ->
+  let f = inlet 100.;
+  sin_node f |> tanh_node 20. 
+  ;) |> compile_blob_template;
+

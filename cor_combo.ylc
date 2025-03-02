@@ -7,10 +7,10 @@
 
 let synth = fn () -> 
   let f = inlet 58.
-  |> lag_node 0.03;
+  |> lag_node 0.02;
   let trig = inlet 0.0; 
-  let chirp_decay = inlet 0.2;
-  let ff = chirp_node 3000. 200. chirp_decay trig; 
+  let chirp_decay = inlet 0.3;
+  let ff = chirp_node 2000. 200. chirp_decay trig; 
   (
     sq_node f
   + sq_node (f * 1.01)
@@ -33,12 +33,12 @@ let co = (
   target: synth |> chain_wrap |> play,
 );
 
-let co2 = (
-  dur: iter_of_list [0.125, 0.125, 0.125] |> cor_loop,
-  frame_offset: 0,
-  freq: iter_of_list [330., 660., 550.] |> cor_loop,
-  target: synth |> chain_wrap |> play,
-);
+# let co2 = (
+#   dur: iter_of_list [0.125, 0.125, 0.125] |> cor_loop,
+#   frame_offset: 0,
+#   freq: iter_of_list [330., 660., 550.] |> cor_loop,
+#   target: synth |> chain_wrap |> play,
+# );
 
 co |> cor_wrap_effect (fn (dur, frame_offset, freq, target) ->
   set_input_scalar_offset target 0 frame_offset freq;
@@ -46,8 +46,8 @@ co |> cor_wrap_effect (fn (dur, frame_offset, freq, target) ->
   ()
 ;) |> cor_play schedule_event;
 
-co2 |> cor_wrap_effect (fn (dur, frame_offset, freq, target) ->
-  set_input_scalar_offset target 0 frame_offset freq;
-  set_input_trig_offset target 1 frame_offset;
-  ()
-;)|> cor_play schedule_event;
+# co2 |> cor_wrap_effect (fn (dur, frame_offset, freq, target) ->
+#   set_input_scalar_offset target 0 frame_offset freq;
+#   set_input_trig_offset target 1 frame_offset;
+#   ()
+# ;)|> cor_play schedule_event;
