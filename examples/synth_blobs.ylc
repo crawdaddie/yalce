@@ -5,3 +5,6 @@ let synth_template = (fn () ->
   sin_node f |> tanh_node 20. 
   ;) |> compile_blob_template;
 
+
+let x  = 1
+

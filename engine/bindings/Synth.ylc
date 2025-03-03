@@ -1,11 +1,12 @@
 # oscillators.h
-let tanh_node = extern fn Signal -> Synth;
+let tanh_node = extern fn Double -> Signal -> Synth;
 let sin_node = extern fn Signal -> Synth;
 let maketable_sq = extern fn () -> ();
 let maketable_sin = extern fn () -> ();
 
 # signals.h
 let inlet = extern fn Double -> Signal;
+let out_sig = extern fn Synth -> Signal;
 
 let chain_wrap = fn def: (() -> Synth) -> 
   reset_chain ();

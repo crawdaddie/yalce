@@ -3,4 +3,6 @@
 #include "node.h"
 
 SignalRef inlet(double default_val);
+
+SignalRef out_sig(NodeRef);
 #endif

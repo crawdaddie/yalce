@@ -34,3 +34,5 @@ SignalRef inlet(double default_val) {
   sig->size = 1;
   return sig;
 }
+
+Signal *out_sig(Node *n) { return &n->out; }

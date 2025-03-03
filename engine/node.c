@@ -46,6 +46,7 @@ void *create_new_blob_template() {
 }
 
 BlobTemplate *start_blob(char *base_memory) {
+  printf("started blob\n");
 
   BlobTemplate *template = malloc(sizeof(BlobTemplate));
   *template = (BlobTemplate){
@@ -216,7 +217,7 @@ void *tanh_perform(Node *node, int nframes, double spf) {
   return (char *)node + node->node_size;
 }
 
-Node *tanh_node(Signal *input) {
+Node *tanh_node(double gain, Signal *input) {
   // Allocate memory for node
   Node *node = node_new();
   tanh_state *state = (tanh_state *)state_new(sizeof(tanh_state));
@@ -236,7 +237,7 @@ Node *tanh_node(Signal *input) {
       .next = NULL};
 
   // Allocate and initialize state
-  *state = (tanh_state){5.};
+  *state = (tanh_state){gain};
   return node;
 }
 

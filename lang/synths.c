@@ -255,9 +255,6 @@ LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
 
-  printf("compile blob template for: ");
-  print_ast(ast->data.AST_APPLICATION.args);
-
   LLVMValueRef synth_def =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
@@ -276,11 +273,22 @@ LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
       LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0),
       start_blob_fn, (LLVMValueRef[]){temp_mem}, 1, "create_new_blob_template");
 
-  // We need temporary memory for compilation
-  // char temp_mem[1 << 12];
-  // void *mem_ptr = temp_mem;
+  LLVMValueRef run_synthdef_fn =
+      LLVMBuildCall2(builder, LLVMFunctionType(GENERIC_PTR, NULL, 0, false),
+                     synth_def, NULL, 0, "run_synth_def_fn_in_blob_ctx");
 
-  return blob_template;
+  LLVMValueRef end_blob_fn = get_extern_fn(
+      "end_blob",
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0),
+      module);
+
+  LLVMValueRef final_blob = LLVMBuildCall2(
+      builder,
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0),
+      end_blob_fn, (LLVMValueRef[]){run_synthdef_fn}, 1,
+      "end_blob_w_final_node");
+
+  return final_blob;
 }
 
 void initialize_synth_types(JITLangCtx *ctx, LLVMModuleRef module,

@@ -225,6 +225,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Type *t = infer(stmt, ctx);
 
       if (!t) {
+        print_ast_err(stmt);
         return NULL;
       }
       type = t;
@@ -499,7 +500,15 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     return unify_in_ctx(t1->data.T_FN.to, t2->data.T_FN.to, ctx, node);
 
   } else if (t1->kind == T_CONS && IS_PRIMITIVE_TYPE(t2)) {
-    return NULL;
+    if (t1->alias && CHARS_EQ(t1->alias, "Signal")) {
+      // TODO: fix whatever this is
+      return t2;
+    } else {
+      printf("unify fail\n");
+      print_type(t1);
+      print_type(t2);
+      return NULL;
+    }
   } else if (t2->kind == T_VAR && t1->kind != T_VAR) {
     return unify_in_ctx(t2, t1, ctx, node);
   } else {
@@ -511,7 +520,8 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 }
 
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
-
+  printf("fn app\n");
+  print_ast(ast);
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (fn_type->is_recursive_fn_ref) {
@@ -535,6 +545,12 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     Type *param_type = fn_type->data.T_FN.from;
     if (!unify_in_ctx(param_type, arg_types[i], &app_ctx,
                       ast->data.AST_APPLICATION.args + i)) {
+
+      // printf("%s\n", param_type->alias);
+      // print_type(param_type);
+      // print_type(arg_types[i]);
+      //
+      // printf("param type unify fail\n");
       return NULL;
     }
 
@@ -792,6 +808,8 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
 }
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
+  printf("infer lambda\n");
+  print_ast(ast);
   TICtx body_ctx = *ctx;
   body_ctx.scope++;
   body_ctx.current_fn_ast = ast;
