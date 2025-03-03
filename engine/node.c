@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static BlobTemplate *_current_blob = NULL;
+BlobTemplate *_current_blob = NULL;
 
 void *node_alloc(void **mem, size_t size) {
   if (!mem) {
@@ -37,18 +37,6 @@ double *get_val(Signal *in) {
   return ptr;
 }
 
-#define ADD_NODE_TO_CURRENT_BLOB(create_func, ...)                             \
-  if (!_current_blob) {                                                        \
-    return create_func(NULL, __VA_ARGS__);                                     \
-  } else {                                                                     \
-    Node *s = create_func(((void **)(&_current_blob->_mem_ptr)), __VA_ARGS__); \
-    if (_current_blob->first_node_offset == -1) {                              \
-      _current_blob->first_node_offset =                                       \
-          (char *)s - (char *)_current_blob->blob_data;                        \
-    }                                                                          \
-    return s;                                                                  \
-  }
-
 void *create_new_blob_template() {
   // Allocate memory for the template
   BlobTemplate *template = malloc(sizeof(BlobTemplate));
@@ -63,7 +51,10 @@ BlobTemplate *start_blob(char *base_memory) {
   *template = (BlobTemplate){
       .blob_data = base_memory,
       ._mem_ptr = base_memory,
-      .first_node_offset = -1 /*sentinel value before any nodes get added */};
+      .first_node_offset = -1 // sentinel value before any nodes get added
+      // a node within the blob will always have a positive offset and anything
+      // else (eg Signal) is always larger than a byte
+  };
   _current_blob = template;
 
   return template;
@@ -83,55 +74,6 @@ BlobTemplate *end_blob(Node *end) {
 
   _current_blob = NULL;
   return template;
-}
-// -- real node instances
-typedef struct sin_state {
-  double phase;
-} sin_state;
-
-#define SIN_TABSIZE (1 << 11)
-static double sin_table[SIN_TABSIZE];
-
-void maketable_sin(void) {
-  double phase = 0.0;
-  double phsinc = (2. * PI) / SIN_TABSIZE;
-
-  for (int i = 0; i < SIN_TABSIZE; i++) {
-    double val = sin(phase);
-    sin_table[i] = val;
-    phase += phsinc;
-  }
-}
-
-void *sin_perform(Node *node, int nframes, double spf) {
-  sin_state *state = get_node_state(node);
-  Signal in = *get_node_input(node, 0);
-
-  double d_index;
-  int index = 0;
-
-  double frac, a, b, sample;
-  double *freq;
-
-  int out_layout = node->out.layout;
-  double *out = node->out.buf;
-  while (nframes--) {
-    freq = get_val(&in);
-    d_index = state->phase * SIN_TABSIZE;
-    index = (int)d_index;
-    frac = d_index - index;
-
-    a = sin_table[index % SIN_TABSIZE];
-    b = sin_table[(index + 1) % SIN_TABSIZE];
-
-    sample = (1.0 - frac) * a + (frac * b);
-    for (int i = 0; i < out_layout; i++) {
-      *out = sample;
-      out++;
-    }
-    state->phase = fmod((*freq) * spf + (state->phase), 1.0);
-  }
-  return (char *)node + node->node_size;
 }
 
 Node *group_new(int ins) {
@@ -187,6 +129,56 @@ char *state_new(size_t size) {
   char *state = _current_blob->_mem_ptr;
   _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + size;
   return state;
+}
+
+// -- real node instances
+typedef struct sin_state {
+  double phase;
+} sin_state;
+
+#define SIN_TABSIZE (1 << 11)
+static double sin_table[SIN_TABSIZE];
+
+void maketable_sin(void) {
+  double phase = 0.0;
+  double phsinc = (2. * PI) / SIN_TABSIZE;
+
+  for (int i = 0; i < SIN_TABSIZE; i++) {
+    double val = sin(phase);
+    sin_table[i] = val;
+    phase += phsinc;
+  }
+}
+
+void *sin_perform(Node *node, int nframes, double spf) {
+  sin_state *state = get_node_state(node);
+  Signal in = *get_node_input(node, 0);
+
+  double d_index;
+  int index = 0;
+
+  double frac, a, b, sample;
+  double *freq;
+
+  int out_layout = node->out.layout;
+  double *out = node->out.buf;
+  while (nframes--) {
+    freq = get_val(&in);
+    d_index = state->phase * SIN_TABSIZE;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    a = sin_table[index % SIN_TABSIZE];
+    b = sin_table[(index + 1) % SIN_TABSIZE];
+
+    sample = (1.0 - frac) * a + (frac * b);
+    for (int i = 0; i < out_layout; i++) {
+      *out = sample;
+      out++;
+    }
+    state->phase = fmod((*freq) * spf + (state->phase), 1.0);
+  }
+  return (char *)node + node->node_size;
 }
 
 Node *sin_node(Signal *input) {
@@ -246,4 +238,22 @@ Node *tanh_node(Signal *input) {
   // Allocate and initialize state
   *state = (tanh_state){5.};
   return node;
+}
+
+#define SQ_TABSIZE (1 << 11)
+static double sq_table[SQ_TABSIZE] = {0};
+void maketable_sq(void) {
+  double phase = 0.0;
+  double phsinc = (2. * PI) / SQ_TABSIZE;
+  for (int i = 0; i < SQ_TABSIZE; i++) {
+
+    for (int harm = 1; harm < SQ_TABSIZE / 2;
+         harm += 2) { // summing odd frequencies
+
+      // for (int harm = 1; harm < 100; harm += 2) { // summing odd frequencies
+      double val = sin(phase * harm) / harm; // sinewave of different frequency
+      sq_table[i] += val;
+    }
+    phase += phsinc;
+  }
 }

@@ -17,6 +17,7 @@ int get_frame_offset() {
   return frame_offset;
 }
 
+void reset_chain() { _chain = NULL; }
 Node *end_chain(Node *s) {
   Node *group = _chain;
   reset_chain();

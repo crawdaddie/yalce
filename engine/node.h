@@ -43,11 +43,9 @@ typedef struct {
   char *_mem_ptr;
 } BlobTemplate;
 
+extern BlobTemplate *_current_blob;
 void *create_new_blob_template();
 BlobTemplate *start_blob(char *base_memory);
 BlobTemplate *end_blob(Node *end);
-
-Node *tanh_node(Signal *input);
-Node *sin_node(Signal *input);
 
 #endif

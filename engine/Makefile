@@ -30,13 +30,13 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	$(CC) $(COMPILER_OPTIONS) -c -o $@ $<
 
 ylc_bindings:
-	# $(MAKE) -C ../tools
-	# ../build/tools/ffi_gen oscillators.h lib.h filters.h > bindings/Synth.ylc
+	$(MAKE) -C ../tools
+	../build/tools/ffi_gen oscillators.h signals.h > bindings/Synth.ylc
 	cat bindings/_engine_synth_extra.ylc >> bindings/Synth.ylc
 	../build/tools/ffi_gen scheduling.h > bindings/Sched.ylc
 	../build/tools/ffi_gen midi.h > bindings/MIDI.ylc
 	cat bindings/_engine_midi_extra.ylc >> bindings/MIDI.ylc
-	../build/tools/ffi_gen clap_node.h > bindings/ClapPlugin.ylc
+	# ../build/tools/ffi_gen clap_node.h > bindings/ClapPlugin.ylc
 
 # Build the shared library
 $(SHARED_LIB_TARGET): $(filter-out $(BUILD_DIR)/main.o, $(OBJS))

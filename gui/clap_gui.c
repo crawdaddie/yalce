@@ -3,6 +3,68 @@
 #include <SDL2/SDL_syswm.h>
 #include <clap/ext/gui.h>
 
+clap_plugin_specs *get_specs(void *_state) {
+  // clap_plugin_state *state = _state;
+  // uint32_t pc = state->param_count;
+  // const clap_plugin_t *plugin = state->plugin;
+  //
+  // const clap_plugin_params_t *inst_params =
+  //     plugin->get_extension(plugin, "clap.params");
+  // double *param_vals = malloc(sizeof(double) * pc);
+  // double *min_vals = malloc(sizeof(double) * pc);
+  //
+  // double *max_vals = malloc(sizeof(double) * pc);
+  //
+  // char **labels = malloc(sizeof(char *) * pc);
+  //
+  // for (uint32_t i = 0; i < pc; i++) {
+  //   clap_param_info_t inf;
+  //   inst_params->get_info(plugin, i, &inf);
+  //   double d;
+  //   inst_params->get_value(plugin, inf.id, &d);
+  //   param_vals[i] = d;
+  //   min_vals[i] = inf.min_value;
+  //   max_vals[i] = inf.max_value;
+  //   labels[i] = strdup(inf.name);
+  // }
+  // clap_plugin_specs *specs = malloc(sizeof(clap_plugin_specs));
+  // specs->param_vals = param_vals;
+  // specs->min_vals = min_vals;
+  // specs->max_vals = max_vals;
+  // specs->labels = labels;
+  // specs->num_params = pc;
+  // specs->name = state->name;
+  return NULL;
+}
+
+bool set_param_idx_with_event(void *_state, int idx, double value) {
+  // clap_plugin_state *state = _state;
+  // const clap_plugin_params_t *params =
+  //     state->plugin->get_extension(state->plugin, CLAP_EXT_PARAMS);
+  //
+  // if (!params)
+  //   return false;
+  //
+  // uint32_t param_count = params->count(state->plugin);
+  // clap_param_info_t param_info;
+  // if (!params->get_info(state->plugin, idx, &param_info)) {
+  //   return false;
+  // }
+  //
+  // // Clamp value to parameter range
+  // if (value < param_info.min_value)
+  //   value = param_info.min_value;
+  // if (value > param_info.max_value)
+  //   value = param_info.max_value;
+  //
+  // printf("setting %s %f [%f %f]\n", param_info.name, value,
+  //        param_info.min_value, param_info.max_value);
+  //
+  // // Queue the parameter change event
+  // return queue_parameter_change(state, param_info.id, value);
+  return false;
+}
+
 //
 int push_create_window_event(WindowType type, void *data);
 
