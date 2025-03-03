@@ -35,16 +35,17 @@ Node *play(Node *group) {
 }
 
 Node *play_node(Node *s) {
-  Node *group = _chain;
-  reset_chain();
+  // printf("play node %p\n", s);
+  // Node *group = _chain;
+  // reset_chain();
   add_to_dac(s);
-  add_to_dac(group);
+  // add_to_dac(group);
 
-  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_ADD,
-                                           get_frame_offset(),
-                                           {.NODE_ADD = {.target = group}}});
-  // audio_ctx_add(group);
-  return group;
+  // push_msg(&ctx.msg_queue, (scheduler_msg){NODE_ADD,
+  //                                          get_frame_offset(),
+  //                                          {.NODE_ADD = {.target = group}}});
+  audio_ctx_add(s);
+  return s;
 }
 
 Node *set_input_scalar(Node *node, int input, double value) {
@@ -214,6 +215,7 @@ Signal *read_buf_mono(const char *filename) {
 
 double *raw_signal_data(SignalRef sig) { return sig->buf; }
 int signal_size(SignalRef sig) { return sig->size; }
+
 SignalRef signal_of_ptr(int size, double *ptr) {
   Signal *sig = malloc(sizeof(Signal));
   sig->buf = ptr;

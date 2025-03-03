@@ -1,6 +1,5 @@
 #include "./node.h"
 #include "./common.h"
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,15 +25,6 @@ void *get_node_state(void *node) { return (char *)node + sizeof(Node); }
 
 Signal *get_node_input(Node *node, int input) {
   return (void *)((char *)node + (node->input_offsets[input]));
-}
-
-double *get_val(Signal *in) {
-  if (in->size == 1) {
-    return in->buf;
-  }
-  double *ptr = in->buf;
-  in->buf += in->layout;
-  return ptr;
 }
 
 void *create_new_blob_template() {
@@ -105,12 +95,7 @@ void group_add_tail(Node *chain, Node *node) {}
 Node *node_new() {
   if (!_current_blob) {
     Node *node = malloc(sizeof(Node));
-    if (_chain == NULL) {
-      _chain = group_new(0);
-    } else {
-      group_add_tail(_chain, node);
-    }
-
+    printf("new node %p\n", node);
     return node;
   }
 
@@ -210,137 +195,11 @@ Node *instantiate_blob_template(BlobTemplate *template) {
   for (int i = 0; i < state->num_ins; i++) {
     state->input_slot_offsets[i] = template->input_slot_offsets[i];
     Signal *sig = (Signal *)((char *)blob_data + state->input_slot_offsets[i]);
+    *sig = (Signal){.size = BUF_SIZE, .layout = 1};
     sig->buf = malloc(sizeof(double) * sig->size * sig->layout);
     for (int j = 0; j < sig->size * sig->layout; j++) {
       sig->buf[j] = template->default_vals[i];
     }
   }
   return blob_node;
-}
-
-// -- real node instances
-typedef struct sin_state {
-  double phase;
-} sin_state;
-
-#define SIN_TABSIZE (1 << 11)
-static double sin_table[SIN_TABSIZE];
-
-void maketable_sin(void) {
-  double phase = 0.0;
-  double phsinc = (2. * PI) / SIN_TABSIZE;
-
-  for (int i = 0; i < SIN_TABSIZE; i++) {
-    double val = sin(phase);
-    sin_table[i] = val;
-    phase += phsinc;
-  }
-}
-
-void *sin_perform(Node *node, int nframes, double spf) {
-  sin_state *state = get_node_state(node);
-  Signal in = *get_node_input(node, 0);
-
-  double d_index;
-  int index = 0;
-
-  double frac, a, b, sample;
-  double *freq;
-
-  int out_layout = node->out.layout;
-  double *out = node->out.buf;
-  while (nframes--) {
-    freq = get_val(&in);
-    d_index = state->phase * SIN_TABSIZE;
-    index = (int)d_index;
-    frac = d_index - index;
-
-    a = sin_table[index % SIN_TABSIZE];
-    b = sin_table[(index + 1) % SIN_TABSIZE];
-
-    sample = (1.0 - frac) * a + (frac * b);
-    for (int i = 0; i < out_layout; i++) {
-      *out = sample;
-      out++;
-    }
-    state->phase = fmod((*freq) * spf + (state->phase), 1.0);
-  }
-  return (char *)node + node->node_size;
-}
-
-Node *sin_node(Signal *input) {
-  Node *node = node_new();
-  sin_state *state = (sin_state *)state_new(sizeof(sin_state));
-
-  int in_offset = (char *)input - (char *)node;
-  *node = (Node){.num_ins = 1,
-                 .input_offsets = {in_offset},
-                 .node_size = sizeof(Node) + sizeof(sin_state),
-                 .out = {.size = BUF_SIZE,
-                         .layout = 1,
-                         .buf = malloc(sizeof(double) * BUF_SIZE)},
-                 .node_perform = (perform_func_t)sin_perform,
-                 .next = NULL};
-
-  // sin_state *state = node_alloc(mem, sizeof(sin_state));
-  *state = (sin_state){0.};
-
-  return node;
-}
-
-typedef struct {
-  double gain;
-} tanh_state;
-
-void *tanh_perform(Node *node, int nframes, double spf) {
-  tanh_state *state = get_node_state(node);
-  double *out = node->out.buf;
-  Signal in = *get_node_input(node, 0);
-  while (nframes--) {
-    *out = tanh(*get_val(&in) * state->gain);
-    out++;
-  }
-  return (char *)node + node->node_size;
-}
-
-Node *tanh_node(double gain, Signal *input) {
-  // Allocate memory for node
-  Node *node = node_new();
-  tanh_state *state = (tanh_state *)state_new(sizeof(tanh_state));
-
-  // Calculate offset from node to input
-  int in_offset = (char *)input - (char *)node;
-
-  // Initialize node
-  *node = (Node){
-      .num_ins = 1,
-      .input_offsets = {in_offset},
-      .node_size = sizeof(Node) + sizeof(tanh_state),
-      .out = {.size = input->size,
-              .layout = input->layout,
-              .buf = malloc(sizeof(double) * input->size * input->layout)},
-      .node_perform = (perform_func_t)tanh_perform,
-      .next = NULL};
-
-  // Allocate and initialize state
-  *state = (tanh_state){gain};
-  return node;
-}
-
-#define SQ_TABSIZE (1 << 11)
-static double sq_table[SQ_TABSIZE] = {0};
-void maketable_sq(void) {
-  double phase = 0.0;
-  double phsinc = (2. * PI) / SQ_TABSIZE;
-  for (int i = 0; i < SQ_TABSIZE; i++) {
-
-    for (int harm = 1; harm < SQ_TABSIZE / 2;
-         harm += 2) { // summing odd frequencies
-
-      // for (int harm = 1; harm < 100; harm += 2) { // summing odd frequencies
-      double val = sin(phase * harm) / harm; // sinewave of different frequency
-      sq_table[i] += val;
-    }
-    phase += phsinc;
-  }
 }

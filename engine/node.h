@@ -1,5 +1,7 @@
 #ifndef _ENGINE_NODE_H
 #define _ENGINE_NODE_H
+#include <stdbool.h>
+#include <stddef.h>
 
 typedef struct Signal {
   int layout;
@@ -15,6 +17,7 @@ typedef struct {
   int node_size;
   int num_ins;
   int input_offsets[MAX_INPUTS];
+  bool write_to_dac;
   Signal out;
   perform_func_t node_perform;
   struct Node *next;
@@ -49,4 +52,10 @@ BlobTemplate *start_blob(char *base_memory);
 BlobTemplate *end_blob(Node *end);
 
 NodeRef instantiate_blob_template(BlobTemplate *template);
+
+Signal *get_node_input(Node *node, int input);
+
+Node *node_new();
+
+char *state_new(size_t size);
 #endif

@@ -23,15 +23,16 @@ void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
     }
   }
 }
-bool should_write_to_dac(Node *node) { return true; }
+
+bool should_write_to_dac(Node *node) { return node->write_to_dac; }
 
 void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
                    int layout, int output_num) {
-
   if (!head) {
     printf("Error: NULL head\n");
     return;
   }
+
   void *blob = head->node_perform(head, frame_count, spf);
 
   if (should_write_to_dac(head)) {

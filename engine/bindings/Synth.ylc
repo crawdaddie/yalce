@@ -1,12 +1,17 @@
 # oscillators.h
-let tanh_node = extern fn Double -> Signal -> Synth;
 let sin_node = extern fn Signal -> Synth;
 let maketable_sq = extern fn () -> ();
 let maketable_sin = extern fn () -> ();
 
+# filters.h
+let tanh_node = extern fn Double -> Signal -> Synth;
+
 # signals.h
 let inlet = extern fn Double -> Signal;
 let out_sig = extern fn Synth -> Signal;
+let get_val = extern fn Signal -> Ptr;
+let get_sig_default = extern fn Int -> Double -> Signal;
+let signal_of_double = extern fn Double -> Signal;
 
 let chain_wrap = fn def: (() -> Synth) -> 
   reset_chain ();
@@ -19,6 +24,7 @@ type SynthInput =
   | Trig of Int
   ;
 
+let play_node = extern fn Synth -> Synth;
 let instantiate_blob_template = extern fn Ptr -> Synth;
 let init_audio = extern fn () -> () in
   init_audio ()

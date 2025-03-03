@@ -1,4 +1,6 @@
 #include "./signals.h"
+#include "./common.h"
+#include <stdio.h>
 #include <stdlib.h>
 SignalRef signal_new() {
   if (!_current_blob) {
@@ -36,3 +38,30 @@ SignalRef inlet(double default_val) {
 }
 
 Signal *out_sig(Node *n) { return &n->out; }
+
+double *get_val(SignalRef in) {
+  if (in->size == 1) {
+    return in->buf;
+  }
+  double *ptr = in->buf;
+  in->buf += in->layout;
+  return ptr;
+}
+
+SignalRef get_sig_default(int layout, double value) {
+  Signal *sig = signal_new();
+  *sig = (Signal){.layout = layout,
+                  .size = BUF_SIZE,
+                  .buf = malloc(sizeof(double) * BUF_SIZE * layout)};
+  for (int i = 0; i < BUF_SIZE * layout; i++) {
+    sig->buf[i] = value;
+  }
+  return sig;
+}
+
+SignalRef signal_of_double(double val) {
+  Signal *signal = get_sig_default(1, val);
+
+  printf("const signal %p of double %f\n", signal, val);
+  return signal;
+}

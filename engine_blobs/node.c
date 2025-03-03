@@ -466,37 +466,3 @@ Node *mul_sig(Signal *a, Signal *b) {
   op_node->ins[1].buf = b->buf;
   return op_node;
 }
-
-void *create_new_blob_template() {
-  // Allocate memory for the template
-  BlobTemplate *template = malloc(sizeof(BlobTemplate));
-  *template = (BlobTemplate){0};
-  printf("create new blob template %p\n", template);
-  return template;
-}
-
-static BlobTemplate *_current_blob = NULL;
-BlobTemplate *start_blob(char *base_memory) {
-
-  BlobTemplate *template = malloc(sizeof(BlobTemplate));
-  *template = (BlobTemplate){.blob_data = base_memory, ._mem_ptr = base_memory};
-  _current_blob = template;
-
-  return template;
-}
-
-BlobTemplate *end_blob(Node *end) {
-  BlobTemplate *template = _current_blob;
-  char *mem = template->blob_data;
-
-  // Calculate the total size of the blob
-  template->total_size = (char *)template->_mem_ptr - (char *)mem;
-
-  // Allocate memory for the blob data
-  template->blob_data = malloc(template->total_size);
-  template->last_node_offset = (char *)end - (char *)mem;
-  memcpy(template->blob_data, mem, template->total_size);
-
-  _current_blob = NULL;
-  return template;
-}

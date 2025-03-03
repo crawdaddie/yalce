@@ -2,7 +2,6 @@
 #define _ENGINE_OSCILLATORS_H
 #include "node.h"
 
-NodeRef tanh_node(double gain, SignalRef input);
 NodeRef sin_node(SignalRef input);
 void maketable_sq();
 void maketable_sin();

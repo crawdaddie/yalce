@@ -520,8 +520,6 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 }
 
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
-  printf("fn app\n");
-  print_ast(ast);
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (fn_type->is_recursive_fn_ref) {
@@ -808,8 +806,6 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
 }
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
-  printf("infer lambda\n");
-  print_ast(ast);
   TICtx body_ctx = *ctx;
   body_ctx.scope++;
   body_ctx.current_fn_ast = ast;

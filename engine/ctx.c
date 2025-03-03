@@ -1,4 +1,5 @@
 #include "ctx.h"
+#include "./perform.h"
 #include "node.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -144,7 +145,7 @@ void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
   }
 
-  // perform_graph(ctx->head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
+  perform_graph(ctx->head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
 
   process_msg_queue_post(&ctx->msg_queue, consumed);
 }
@@ -165,6 +166,7 @@ Node *audio_ctx_add(Node *node) {
 Node *add_to_dac(Node *node) {
   // return NULL;
   // node->type = OUTPUT;
+  node->write_to_dac = true;
   return node;
 }
 
