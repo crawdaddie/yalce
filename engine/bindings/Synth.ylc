@@ -19,5 +19,7 @@ type SynthInput =
   | Trig of Int
   ;
 
+let instantiate_blob_template = extern fn Ptr -> Synth;
 let init_audio = extern fn () -> () in
   init_audio ()
+

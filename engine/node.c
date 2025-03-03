@@ -132,6 +132,92 @@ char *state_new(size_t size) {
   return state;
 }
 
+typedef struct {
+  int total_size;
+  int num_ins;
+  void *blob_start;
+  void *blob_end;
+  int input_slot_offsets[MAX_INPUTS];
+} blob_state;
+
+void *blob_perform(Node *node, int nframes, double spf) {
+  blob_state *state = (blob_state *)((char *)node + sizeof(Node));
+
+  // Get the start and end pointers
+  void *current = state->blob_start;
+  void *end = state->blob_end;
+
+  // Make sure we have valid pointers
+  if (!current || !end) {
+    printf("Error: Invalid blob start or end pointer\n");
+    return (char *)node + node->node_size;
+  }
+
+  // Process all nodes in the blob
+  while (current <= end) {
+    // Get the node's perform function
+    perform_func_t perform = ((Node *)current)->node_perform;
+
+    // Check for null function pointer
+    if (!perform) {
+      printf("Error: NULL perform function at %p\n", current);
+      break;
+    }
+
+    // Execute the node's perform function
+    current = perform(current, nframes, spf);
+
+    // Check if we've gone past the end
+    if (current > end) {
+      break;
+    }
+  }
+
+  // Copy the output from the last node (blob_end)
+  if (end) {
+    node->out = ((Node *)end)->out;
+  }
+
+  return (char *)node + node->node_size;
+}
+// Instantiate a blob from a template
+Node *instantiate_blob_template(BlobTemplate *template) {
+  char *_mem = malloc(sizeof(Node) + sizeof(blob_state) + template->total_size);
+
+  // Allocate memory for node
+  Node *blob_node = (Node *)_mem;
+  _mem += sizeof(Node);
+
+  // Initialize node
+  *blob_node = (Node){.num_ins = 0,
+                      .node_size = sizeof(Node) + sizeof(blob_state) +
+                                   template->total_size,
+                      .node_perform = (perform_func_t)blob_perform,
+                      .next = NULL};
+
+  // Allocate and initialize state
+  blob_state *state = (blob_state *)_mem;
+  _mem += sizeof(blob_state);
+
+  char *blob_data = _mem;
+
+  memcpy(blob_data, template->blob_data, template->total_size);
+
+  state->blob_start = blob_data + template->first_node_offset;
+  state->blob_end = blob_data + template->last_node_offset;
+  state->total_size = template->total_size;
+  state->num_ins = template->num_inputs;
+  for (int i = 0; i < state->num_ins; i++) {
+    state->input_slot_offsets[i] = template->input_slot_offsets[i];
+    Signal *sig = (Signal *)((char *)blob_data + state->input_slot_offsets[i]);
+    sig->buf = malloc(sizeof(double) * sig->size * sig->layout);
+    for (int j = 0; j < sig->size * sig->layout; j++) {
+      sig->buf[j] = template->default_vals[i];
+    }
+  }
+  return blob_node;
+}
+
 // -- real node instances
 typedef struct sin_state {
   double phase;

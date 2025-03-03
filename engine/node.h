@@ -48,4 +48,5 @@ void *create_new_blob_template();
 BlobTemplate *start_blob(char *base_memory);
 BlobTemplate *end_blob(Node *end);
 
+NodeRef instantiate_blob_template(BlobTemplate *template);
 #endif
