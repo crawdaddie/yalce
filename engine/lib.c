@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 
+Node *_chain;
 int get_frame_offset() {
   struct timespec t;
   struct timespec btime = get_block_time();

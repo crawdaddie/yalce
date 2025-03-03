@@ -134,8 +134,64 @@ void *sin_perform(Node *node, int nframes, double spf) {
   return (char *)node + node->node_size;
 }
 
-Node *create_sin_node(void **mem, Signal *input) {
-  Node *node = node_alloc(mem, sizeof(Node));
+Node *group_new(int ins) {
+  // group_state *graph = malloc(sizeof(group_state));
+  //
+  // Node *node = malloc(sizeof(Node));
+  // node->state = graph;
+  // node->num_ins = ins;
+  // node->ins = ins == 0 ? NULL : malloc(sizeof(Signal) * ins);
+  //
+  // for (int i = 0; i < ins; i++) {
+  //   node->ins[i].buf = calloc(BUF_SIZE, sizeof(double));
+  //   node->ins[i].size = BUF_SIZE;
+  //   node->ins[i].layout = 1;
+  // }
+  //
+  // node->out.layout = 1;
+  // node->out.size = BUF_SIZE;
+  // node->out.buf = calloc(BUF_SIZE, sizeof(double));
+  // node->perform = (node_perform)group_perform;
+  // node->frame_offset = 0;
+
+  Node *node = malloc(sizeof(Node));
+  return node;
+}
+void group_add_tail(Node *chain, Node *node) {}
+
+Node *node_new() {
+  if (!_current_blob) {
+    Node *node = malloc(sizeof(Node));
+    if (_chain == NULL) {
+      _chain = group_new(0);
+    } else {
+      group_add_tail(_chain, node);
+    }
+
+    return node;
+  }
+
+  Node *n = (Node *)(_current_blob->_mem_ptr);
+  _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + sizeof(Node);
+  if (_current_blob->first_node_offset == -1) {
+    _current_blob->first_node_offset =
+        (char *)n - (char *)_current_blob->blob_data;
+  }
+  return n;
+}
+
+char *state_new(size_t size) {
+  if (!_current_blob) {
+    return malloc(size);
+  }
+  char *state = _current_blob->_mem_ptr;
+  _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + size;
+  return state;
+}
+
+Node *sin_node(Signal *input) {
+  Node *node = node_new();
+  sin_state *state = (sin_state *)state_new(sizeof(sin_state));
 
   int in_offset = (char *)input - (char *)node;
   *node = (Node){.num_ins = 1,
@@ -147,15 +203,10 @@ Node *create_sin_node(void **mem, Signal *input) {
                  .node_perform = (perform_func_t)sin_perform,
                  .next = NULL};
 
-  // Allocate and initialize state
-  sin_state *state = node_alloc(mem, sizeof(sin_state));
+  // sin_state *state = node_alloc(mem, sizeof(sin_state));
   *state = (sin_state){0.};
 
   return node;
-}
-
-Node *sin_node(Signal *input) {
-  ADD_NODE_TO_CURRENT_BLOB(create_sin_node, input)
 }
 
 typedef struct {
@@ -173,9 +224,10 @@ void *tanh_perform(Node *node, int nframes, double spf) {
   return (char *)node + node->node_size;
 }
 
-Node *create_tanh_node(void **mem, Signal *input) {
+Node *tanh_node(Signal *input) {
   // Allocate memory for node
-  Node *node = node_alloc(mem, sizeof(Node));
+  Node *node = node_new();
+  tanh_state *state = (tanh_state *)state_new(sizeof(tanh_state));
 
   // Calculate offset from node to input
   int in_offset = (char *)input - (char *)node;
@@ -192,10 +244,6 @@ Node *create_tanh_node(void **mem, Signal *input) {
       .next = NULL};
 
   // Allocate and initialize state
-  tanh_state *state = node_alloc(mem, sizeof(tanh_state));
   *state = (tanh_state){5.};
   return node;
-}
-Node *tanh_node(Signal *input) {
-  ADD_NODE_TO_CURRENT_BLOB(create_tanh_node, input)
 }
