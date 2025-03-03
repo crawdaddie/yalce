@@ -6,35 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-// Node *sq_node(double freq) { return NULL; }
-// Node *sin_node(double freq) { return NULL; }
 
-// node_perform _sum_perform(Node *node, int nframes, double spf) {
-//
-//   double *out = node->out.buf;
-//   int num_ins = node->num_ins;
-//   Signal *input_sigs = node->ins;
-//   for (int i = 0; i < nframes; i++) {
-//     out[i] = 0.;
-//     for (int j = 0; j < num_ins; j++) {
-//       out[i] += input_sigs[j].buf[i];
-//     }
-//   }
-// }
-//
-// node_perform mul_perform(Node *node, int nframes, double spf) {
-//   double *out = node->out.buf;
-//   int num_ins = node->num_ins;
-//   Signal *input_sigs = node->ins;
-//
-//   for (int i = 0; i < nframes; i++) {
-//     out[i] = input_sigs[0].buf[i];
-//     for (int j = 1; j < num_ins; j++) {
-//       out[i] *= input_sigs[j].buf[i];
-//     }
-//   }
-// }
-//
 int get_frame_offset() {
   struct timespec t;
   struct timespec btime = get_block_time();
@@ -221,22 +193,22 @@ Signal *read_buf_mono(const char *filename) {
   return sig;
 }
 
-SignalRef inlet(double default_val) {
-  Signal *sig;
-  if (_chain == NULL) {
-    _chain = group_new(1);
-    sig = _chain->ins;
-  } else {
-    sig = group_add_input(_chain);
-  }
-
-  for (int i = 0; i < sig->size; i++) {
-    sig->buf[i] = default_val;
-    // printf("sig val %f\n", sig->buf[i]);
-  }
-
-  return sig;
-}
+// SignalRef inlet(double default_val) {
+//   Signal *sig;
+//   if (_chain == NULL) {
+//     _chain = group_new(1);
+//     sig = _chain->ins;
+//   } else {
+//     sig = group_add_input(_chain);
+//   }
+//
+//   for (int i = 0; i < sig->size; i++) {
+//     sig->buf[i] = default_val;
+//     // printf("sig val %f\n", sig->buf[i]);
+//   }
+//
+//   return sig;
+// }
 
 double *raw_signal_data(SignalRef sig) { return sig->buf; }
 int signal_size(SignalRef sig) { return sig->size; }
@@ -249,5 +221,3 @@ SignalRef signal_of_ptr(int size, double *ptr) {
 }
 
 SignalRef node_output_sig(NodeRef node) { return &node->out; }
-
-void *node_state_ptr(NodeRef node) { return node->state; }
