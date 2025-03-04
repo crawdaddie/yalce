@@ -23,10 +23,6 @@ perform_func_t get_node_perform(void *node) {
 
 void *get_node_state(void *node) { return (char *)node + sizeof(Node); }
 
-Signal *get_node_input(Node *node, int input) {
-  return (void *)((char *)node + (node->input_offsets[input]));
-}
-
 void *create_new_blob_template() {
   // Allocate memory for the template
   BlobTemplate *template = malloc(sizeof(BlobTemplate));
@@ -102,8 +98,11 @@ Node *node_new() {
   Node *n = (Node *)(_current_blob->_mem_ptr);
   _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + sizeof(Node);
   if (_current_blob->first_node_offset == -1) {
+
     _current_blob->first_node_offset =
         (char *)n - (char *)_current_blob->blob_data;
+    printf("_current_blob first node offset %d\n",
+           _current_blob->first_node_offset);
   }
   return n;
 }
@@ -138,24 +137,21 @@ void *blob_perform(Node *node, int nframes, double spf) {
     return (char *)node + node->node_size;
   }
 
+  int node_idx = 0;
   // Process all nodes in the blob
   while (current <= end) {
-    // Get the node's perform function
-    perform_func_t perform = ((Node *)current)->node_perform;
+    Node *node = current;
+    // perform_func_t perform = node->node_perform;
 
     // Check for null function pointer
-    if (!perform) {
+    if (!node->node_perform) {
       printf("Error: NULL perform function at %p\n", current);
       break;
     }
 
-    // Execute the node's perform function
-    current = perform(current, nframes, spf);
+    current = node->node_perform(node, nframes, spf);
 
-    // Check if we've gone past the end
-    if (current > end) {
-      break;
-    }
+    node_idx++;
   }
 
   // Copy the output from the last node (blob_end)
@@ -200,6 +196,54 @@ Node *instantiate_blob_template(BlobTemplate *template) {
     for (int j = 0; j < sig->size * sig->layout; j++) {
       sig->buf[j] = template->default_vals[i];
     }
+
+    blob_node->input_offsets[i] = (char *)sig - (char *)blob_node;
+  }
+  return blob_node;
+}
+struct double_list {
+  double val;
+  struct double_list *next;
+};
+
+NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
+  char *_mem = malloc(sizeof(Node) + sizeof(blob_state) + template->total_size);
+
+  // Allocate memory for node
+  Node *blob_node = (Node *)_mem;
+  _mem += sizeof(Node);
+
+  // Initialize node
+  *blob_node = (Node){.num_ins = 0,
+                      .node_size = sizeof(Node) + sizeof(blob_state) +
+                                   template->total_size,
+                      .node_perform = (perform_func_t)blob_perform,
+                      .next = NULL};
+
+  // Allocate and initialize state
+  blob_state *state = (blob_state *)_mem;
+  _mem += sizeof(blob_state);
+
+  char *blob_data = _mem;
+
+  memcpy(blob_data, template->blob_data, template->total_size);
+
+  state->blob_start = blob_data + template->first_node_offset;
+  state->blob_end = blob_data + template->last_node_offset;
+  state->total_size = template->total_size;
+  state->num_ins = template->num_inputs;
+
+  struct double_list *l = args;
+  for (int i = 0; i < state->num_ins; i++) {
+    state->input_slot_offsets[i] = template->input_slot_offsets[i];
+    Signal *sig = (Signal *)((char *)blob_data + state->input_slot_offsets[i]);
+    *sig = (Signal){.size = BUF_SIZE, .layout = 1};
+    sig->buf = malloc(sizeof(double) * sig->size * sig->layout);
+    for (int j = 0; j < sig->size * sig->layout; j++) {
+      sig->buf[j] = l->val;
+    }
+    blob_node->input_offsets[i] = (char *)sig - (char *)blob_node;
+    l = l->next;
   }
   return blob_node;
 }

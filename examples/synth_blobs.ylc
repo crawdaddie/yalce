@@ -1,13 +1,20 @@
 %include ../engine/bindings/Synth
 
 let synth_template = (fn () ->
-  inlet 100.
-  |> sin_node
-  |> tanh_node 20. 
-  ;)
+  # inlet 100.
+  # |> sin_node
+  # |> tanh_node 20.
+  simple_gate_env_node 1.
+  ;
+  )
   |> compile_blob_template;
 
-synth_template |> instantiate_blob_template |> play_node;
+let off = get_frame_offset () ;
+# let x = synth_template |> instantiate_blob_template_w_args [150.] |> play_node_offset off;
+let x = synth_template |> instantiate_blob_template |> play_node_offset off;
+
+
+
 
 
 

@@ -1,6 +1,7 @@
 #include "./filters.h"
 #include "signals.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 typedef struct {
@@ -8,6 +9,7 @@ typedef struct {
 } tanh_state;
 
 void *tanh_perform(Node *node, int nframes, double spf) {
+  printf("tanh perform\n");
   tanh_state *state = get_node_state(node);
   double *out = node->out.buf;
   Signal in = *get_node_input(node, 0);

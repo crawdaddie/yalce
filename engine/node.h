@@ -17,6 +17,7 @@ typedef struct {
   int node_size;
   int num_ins;
   int input_offsets[MAX_INPUTS];
+  int frame_offset;
   bool write_to_dac;
   Signal out;
   perform_func_t node_perform;
@@ -52,8 +53,7 @@ BlobTemplate *start_blob(char *base_memory);
 BlobTemplate *end_blob(Node *end);
 
 NodeRef instantiate_blob_template(BlobTemplate *template);
-
-Signal *get_node_input(Node *node, int input);
+NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template);
 
 Node *node_new();
 

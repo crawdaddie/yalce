@@ -1,5 +1,6 @@
 # oscillators.h
 let sin_node = extern fn Signal -> Synth;
+let simple_gate_env_node = extern fn Double -> Synth;
 let maketable_sq = extern fn () -> ();
 let maketable_sin = extern fn () -> ();
 
@@ -12,6 +13,16 @@ let out_sig = extern fn Synth -> Signal;
 let get_val = extern fn Signal -> Ptr;
 let get_sig_default = extern fn Int -> Double -> Signal;
 let signal_of_double = extern fn Double -> Signal;
+let get_node_input = extern fn Synth -> Int -> Signal;
+
+# node_exports.h
+let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
+let set_input_trig = extern fn Synth -> Int -> Synth;
+let set_input_scalar_offset = extern fn Synth -> Int -> Int -> Double -> Synth;
+let set_input_trig_offset = extern fn Synth -> Int -> Int -> Synth;
+
+# node_utils.h
+let mul2_node = extern fn Signal -> Signal -> Synth;
 
 let chain_wrap = fn def: (() -> Synth) -> 
   reset_chain ();
@@ -25,7 +36,11 @@ type SynthInput =
   ;
 
 let play_node = extern fn Synth -> Synth;
+let play_node_offset = extern fn Int -> Synth -> Synth;
+
+let get_frame_offset = extern fn () -> Int;
 let instantiate_blob_template = extern fn Ptr -> Synth;
+let instantiate_blob_template_w_args = extern fn List of Double -> Ptr -> Synth;
 let init_audio = extern fn () -> () in
   init_audio ()
 

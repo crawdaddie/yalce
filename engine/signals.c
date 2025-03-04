@@ -39,6 +39,10 @@ SignalRef inlet(double default_val) {
 
 Signal *out_sig(Node *n) { return &n->out; }
 
+SignalRef get_node_input(NodeRef node, int input) {
+  return (void *)((char *)node + (node->input_offsets[input]));
+}
+
 double *get_val(SignalRef in) {
   if (in->size == 1) {
     return in->buf;

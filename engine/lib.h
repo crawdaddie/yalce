@@ -15,6 +15,8 @@ NodeRef play_test_synth();
 
 NodeRef play_node(NodeRef s);
 
+NodeRef play_node_offset(int offset, NodeRef s);
+
 // void accept_callback(int (*callback)(int, int));
 
 SignalRef read_buf(const char *filename);
@@ -33,13 +35,6 @@ int num_inputs(NodeRef n);
 SignalRef signal_of_double(double val);
 SignalRef signal_of_int(int val);
 
-NodeRef set_input_scalar(NodeRef node, int input, double value);
-
-NodeRef set_input_trig(NodeRef node, int input);
-
-NodeRef set_input_scalar_offset(NodeRef node, int input, int frame_offset,
-                                double value);
-NodeRef set_input_trig_offset(NodeRef node, int input, int frame_offset);
 NodeRef end_chain(NodeRef s);
 
 NodeRef play(NodeRef group);

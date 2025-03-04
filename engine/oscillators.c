@@ -1,5 +1,6 @@
 #include "./oscillators.h"
 #include "./common.h"
+#include "./ctx.h"
 #include "signals.h"
 #include <math.h>
 #include <stdio.h>
@@ -89,5 +90,47 @@ Node *sin_node(Signal *input) {
   // sin_state *state = node_alloc(mem, sizeof(sin_state));
   *state = (sin_state){0.};
 
+  return node;
+}
+
+typedef struct simple_gate_env_state {
+  int phase;
+  int end_phase;
+} simple_gate_env_state;
+
+void *simple_gate_env_perform(Node *node, int nframes, double spf) {
+
+  simple_gate_env_state *state = get_node_state(node);
+
+  int out_layout = node->out.layout;
+  double *out = node->out.buf;
+  while (nframes--) {
+    if (state->phase < state->end_phase) {
+      *out = 1.;
+    } else {
+      *out = 0.;
+    }
+    out++;
+    printf("%f\n", *out);
+    state->phase++;
+  }
+  return (char *)node + node->node_size;
+}
+
+NodeRef simple_gate_env_node(double len) {
+  Node *node = node_new();
+  simple_gate_env_state *state =
+      (simple_gate_env_state *)state_new(sizeof(simple_gate_env_state));
+
+  *node = (Node){.num_ins = 0,
+                 .input_offsets = {0},
+                 .node_size = sizeof(Node) + sizeof(simple_gate_env_state),
+                 .out = {.size = BUF_SIZE,
+                         .layout = 1,
+                         .buf = malloc(sizeof(double) * BUF_SIZE)},
+                 .node_perform = (perform_func_t)simple_gate_env_perform,
+                 .next = NULL};
+
+  *state = (simple_gate_env_state){0., len * ctx_sample_rate()};
   return node;
 }

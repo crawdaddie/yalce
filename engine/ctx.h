@@ -58,6 +58,7 @@ typedef struct {
 extern Ctx ctx;
 
 Ctx *get_audio_ctx();
+
 void init_ctx();
 
 void user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame);

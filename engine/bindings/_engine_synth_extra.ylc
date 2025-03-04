@@ -10,7 +10,11 @@ type SynthInput =
   ;
 
 let play_node = extern fn Synth -> Synth;
+let play_node_offset = extern fn Int -> Synth -> Synth;
+
+let get_frame_offset = extern fn () -> Int;
 let instantiate_blob_template = extern fn Ptr -> Synth;
+let instantiate_blob_template_w_args = extern fn List of Double -> Ptr -> Synth;
 let init_audio = extern fn () -> () in
   init_audio ()
 

@@ -38,13 +38,25 @@ Node *play_node(Node *s) {
   // printf("play node %p\n", s);
   // Node *group = _chain;
   // reset_chain();
-  add_to_dac(s);
+  // add_to_dac(s);
   // add_to_dac(group);
 
-  // push_msg(&ctx.msg_queue, (scheduler_msg){NODE_ADD,
-  //                                          get_frame_offset(),
-  //                                          {.NODE_ADD = {.target = group}}});
-  audio_ctx_add(s);
+  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_ADD,
+                                           get_frame_offset(),
+                                           {.NODE_ADD = {.target = s}}});
+  // audio_ctx_add(s);
+  return s;
+}
+
+Node *play_node_offset(int offset, Node *s) {
+  printf("play node %p at offset %d\n", s, offset);
+  // Node *group = _chain;
+  // reset_chain();
+  // add_to_dac(s);
+  // add_to_dac(group);
+
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_ADD, offset, {.NODE_ADD = {.target = s}}});
   return s;
 }
 
