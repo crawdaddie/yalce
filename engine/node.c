@@ -27,12 +27,10 @@ void *create_new_blob_template() {
   // Allocate memory for the template
   BlobTemplate *template = malloc(sizeof(BlobTemplate));
   *template = (BlobTemplate){0};
-  printf("create new blob template %p\n", template);
   return template;
 }
 
 BlobTemplate *start_blob(char *base_memory) {
-  printf("started blob\n");
 
   BlobTemplate *template = malloc(sizeof(BlobTemplate));
   *template = (BlobTemplate){
@@ -46,6 +44,49 @@ BlobTemplate *start_blob(char *base_memory) {
 
   return template;
 }
+void debug_blob(unsigned char *b, int size) {
+
+  // Debug output in hex format
+  printf("Debug blob (total size: %d bytes)\n", size);
+
+  // Print header for hex dump
+  printf(
+      "Offset     | 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F | ASCII\n");
+  printf(
+      "-----------|-------------------------------------------------|--------"
+      "--------\n");
+
+  for (int i = 0; i < size; i += 16) {
+    // Print offset
+    printf("0x%08x | ", i);
+
+    // Print hex values
+    for (int j = 0; j < 16; j++) {
+      if (i + j < size) {
+        printf("%02x ", b[i + j]);
+      } else {
+        printf("   "); // Padding for incomplete line
+      }
+    }
+
+    // Print ASCII representation
+    printf("| ");
+    for (int j = 0; j < 16; j++) {
+      if (i + j < size) {
+        // Print printable ASCII characters, otherwise print a dot
+        if (b[i + j] >= 32 && b[i + j] <= 126) {
+          printf("%c", b[i + j]);
+        } else {
+          printf(".");
+        }
+      } else {
+        printf(" "); // Padding for incomplete line
+      }
+    }
+
+    printf("\n");
+  }
+}
 
 BlobTemplate *end_blob(Node *end) {
   BlobTemplate *template = _current_blob;
@@ -58,7 +99,12 @@ BlobTemplate *end_blob(Node *end) {
   template->blob_data = malloc(template->total_size);
   template->last_node_offset = (char *)end - (char *)mem;
   memcpy(template->blob_data, mem, template->total_size);
+  debug_blob(template->blob_data, template->total_size);
 
+  printf("Created aligned blob of size %d bytes, first node offset: %d, last "
+         "node offset: %d\n",
+         template->total_size, template->first_node_offset,
+         template->last_node_offset);
   _current_blob = NULL;
   return template;
 }
@@ -88,7 +134,7 @@ Node *group_new(int ins) {
 }
 void group_add_tail(Node *chain, Node *node) {}
 
-Node *node_new() {
+Node *__node_new() {
   if (!_current_blob) {
     Node *node = malloc(sizeof(Node));
     printf("new node %p\n", node);
@@ -107,7 +153,7 @@ Node *node_new() {
   return n;
 }
 
-char *state_new(size_t size) {
+char *__state_new(size_t size) {
   if (!_current_blob) {
     return malloc(size);
   }
@@ -115,54 +161,61 @@ char *state_new(size_t size) {
   _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + size;
   return state;
 }
+#define MEMORY_ALIGNMENT 8
 
-typedef struct {
-  int total_size;
-  int num_ins;
-  void *blob_start;
-  void *blob_end;
-  int input_slot_offsets[MAX_INPUTS];
-} blob_state;
-
-void *blob_perform(Node *node, int nframes, double spf) {
-  blob_state *state = (blob_state *)((char *)node + sizeof(Node));
-
-  // Get the start and end pointers
-  void *current = state->blob_start;
-  void *end = state->blob_end;
-
-  // Make sure we have valid pointers
-  if (!current || !end) {
-    printf("Error: Invalid blob start or end pointer\n");
-    return (char *)node + node->node_size;
-  }
-
-  int node_idx = 0;
-  // Process all nodes in the blob
-  while (current <= end) {
-    Node *node = current;
-    // perform_func_t perform = node->node_perform;
-
-    // Check for null function pointer
-    if (!node->node_perform) {
-      printf("Error: NULL perform function at %p\n", current);
-      break;
-    }
-
-    current = node->node_perform(node, nframes, spf);
-
-    node_idx++;
-  }
-
-  // Copy the output from the last node (blob_end)
-  if (end) {
-    node->out = ((Node *)end)->out;
-  }
-
-  return (char *)node + node->node_size;
+// Helper function to align a pointer to the specified boundary
+static inline void *align_pointer(void *ptr, size_t alignment) {
+  uintptr_t addr = (uintptr_t)ptr;
+  uintptr_t aligned = (addr + alignment - 1) & ~(alignment - 1);
+  return (void *)aligned;
 }
+
+// Function to calculate size with alignment padding
+size_t aligned_size(size_t size) {
+  return (size + MEMORY_ALIGNMENT - 1) & ~(MEMORY_ALIGNMENT - 1);
+}
+
+Node *node_new() {
+  if (!_current_blob) {
+
+    Node *node = malloc(sizeof(Node));
+    printf("new node %p\n", node);
+    return node;
+  }
+
+  // Inside blob: align the memory pointer before allocation
+  _current_blob->_mem_ptr =
+      align_pointer(_current_blob->_mem_ptr, MEMORY_ALIGNMENT);
+
+  Node *n = (Node *)(_current_blob->_mem_ptr);
+  _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + sizeof(Node);
+
+  if (_current_blob->first_node_offset == -1) {
+    _current_blob->first_node_offset =
+        (char *)n - (char *)_current_blob->blob_data;
+    printf("_current_blob first node offset %d\n",
+           _current_blob->first_node_offset);
+  }
+  return n;
+}
+
+char *state_new(size_t size) {
+  if (!_current_blob) {
+    // When allocating outside the blob, use aligned_alloc if available
+    return malloc(size);
+  }
+
+  // Inside blob: align the memory pointer before allocation
+  _current_blob->_mem_ptr =
+      align_pointer(_current_blob->_mem_ptr, MEMORY_ALIGNMENT);
+
+  char *state = _current_blob->_mem_ptr;
+  _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + size;
+  return state;
+}
+
 // Instantiate a blob from a template
-Node *instantiate_blob_template(BlobTemplate *template) {
+Node *_instantiate_blob_template(BlobTemplate *template) {
   char *_mem = malloc(sizeof(Node) + sizeof(blob_state) + template->total_size);
 
   // Allocate memory for node
@@ -173,7 +226,7 @@ Node *instantiate_blob_template(BlobTemplate *template) {
   *blob_node = (Node){.num_ins = 0,
                       .node_size = sizeof(Node) + sizeof(blob_state) +
                                    template->total_size,
-                      .node_perform = (perform_func_t)blob_perform,
+                      // .node_perform = (perform_func_t)blob_perform,
                       .next = NULL};
 
   // Allocate and initialize state
@@ -206,7 +259,7 @@ struct double_list {
   struct double_list *next;
 };
 
-NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
+NodeRef _instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
   char *_mem = malloc(sizeof(Node) + sizeof(blob_state) + template->total_size);
 
   // Allocate memory for node
@@ -217,7 +270,7 @@ NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
   *blob_node = (Node){.num_ins = 0,
                       .node_size = sizeof(Node) + sizeof(blob_state) +
                                    template->total_size,
-                      .node_perform = (perform_func_t)blob_perform,
+                      // .node_perform = (perform_func_t)blob_perform,
                       .next = NULL};
 
   // Allocate and initialize state
@@ -245,5 +298,184 @@ NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
     blob_node->input_offsets[i] = (char *)sig - (char *)blob_node;
     l = l->next;
   }
+  return blob_node;
+}
+
+void *blob_perform(Node *node, int nframes, double spf) {
+
+  // printf("blob perform %p\n", node);
+  blob_state *state = (blob_state *)((char *)node + sizeof(Node));
+
+  // Get the start and end pointers
+  char *current = state->blob_start;
+  char *end = state->blob_end;
+
+  // Make sure we have valid pointers
+  if (!current || !end) {
+    printf("Error: Invalid blob start or end pointer\n");
+    return (char *)node + node->node_size;
+  }
+
+  int node_idx = 0;
+  // Process all nodes in the blob
+  while (current <= end) {
+    Node *cb = current;
+    // printf("blob node> %d offset %ld\n", node_idx,
+    //        ((char *)current - (char *)(state->blob_start)));
+
+    // Check for null function pointer
+    if (!cb->node_perform) {
+      printf("Error: NULL perform function at %p\n", current);
+      break;
+    }
+
+    current = cb->node_perform(cb, nframes, spf);
+
+    // Verify alignment of returned pointer
+    if ((uintptr_t)current % MEMORY_ALIGNMENT != 0) {
+      printf("Warning: Node perform returned unaligned pointer: %p\n", current);
+      // Fix alignment if needed
+      current = align_pointer(current, MEMORY_ALIGNMENT);
+    }
+
+    node_idx++;
+  }
+
+  // Copy the output from the last node (blob_end)
+  if (end) {
+    node->out = ((Node *)end)->out;
+  }
+
+  return (char *)node + node->node_size;
+}
+
+// Instantiate a blob from a template
+Node *instantiate_blob_template(BlobTemplate *template) {
+  // Calculate aligned sizes for proper memory layout
+  size_t node_size = aligned_size(sizeof(Node));
+  size_t blob_state_size = aligned_size(sizeof(blob_state));
+  size_t total_required_size =
+      node_size + blob_state_size + template->total_size;
+
+  // Allocate aligned memory for the entire structure
+  char *_mem = malloc(total_required_size);
+  if ((uintptr_t)_mem % MEMORY_ALIGNMENT != 0) {
+    printf("Warning: malloc returned unaligned pointer: %p\n", _mem);
+  }
+
+  // Allocate memory for node
+  Node *blob_node = (Node *)_mem;
+  _mem += node_size; // Use aligned size for offset
+
+  // Initialize node
+  *blob_node = (Node){.num_ins = 0,
+                      .node_size = total_required_size,
+                      .node_perform = (perform_func_t)blob_perform,
+                      .next = NULL};
+
+  // Allocate and initialize state
+  blob_state *state = (blob_state *)_mem;
+  _mem += blob_state_size; // Use aligned size for offset
+
+  // Ensure blob data pointer is aligned
+  _mem = align_pointer(_mem, MEMORY_ALIGNMENT);
+  char *blob_data = _mem;
+
+  memcpy(blob_data, template->blob_data, template->total_size);
+
+  state->blob_start = blob_data + template->first_node_offset;
+  state->blob_end = blob_data + template->last_node_offset;
+  state->total_size = template->total_size;
+  state->num_ins = template->num_inputs;
+
+  for (int i = 0; i < state->num_ins; i++) {
+    state->input_slot_offsets[i] = template->input_slot_offsets[i];
+    Signal *sig = (Signal *)((char *)blob_data + state->input_slot_offsets[i]);
+
+    // Verify signal is aligned
+    if ((uintptr_t)sig % MEMORY_ALIGNMENT != 0) {
+      printf("Warning: Signal pointer is not aligned: %p\n", sig);
+    }
+
+    *sig = (Signal){.size = BUF_SIZE, .layout = 1};
+
+    // Allocate aligned memory for signal buffer
+    sig->buf = malloc(sizeof(double) * sig->size * sig->layout);
+
+    for (int j = 0; j < sig->size * sig->layout; j++) {
+      sig->buf[j] = template->default_vals[i];
+    }
+
+    blob_node->input_offsets[i] = (char *)sig - (char *)blob_node;
+  }
+
+  printf("Instantiated blob: node=%p, state=%p, blob_data=%p (aligned=%d)\n",
+         blob_node, state, blob_data,
+         ((uintptr_t)blob_data % MEMORY_ALIGNMENT == 0));
+
+  return blob_node;
+}
+
+NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
+  // Calculate aligned sizes for proper memory layout
+  size_t node_size = aligned_size(sizeof(Node));
+  size_t blob_state_size = aligned_size(sizeof(blob_state));
+  size_t total_required_size =
+      node_size + blob_state_size + template->total_size;
+
+  // Allocate aligned memory for the entire structure
+  char *_mem = malloc(total_required_size);
+
+  // Allocate memory for node
+  Node *blob_node = (Node *)_mem;
+  _mem += node_size; // Use aligned size for offset
+
+  // Initialize node
+  *blob_node = (Node){.num_ins = 0,
+                      .node_size = total_required_size,
+                      .node_perform = (perform_func_t)blob_perform,
+                      .next = NULL};
+
+  // Allocate and initialize state
+  blob_state *state = (blob_state *)_mem;
+  _mem += blob_state_size; // Use aligned size for offset
+
+  printf("node start to blob_data is %ld %ld\n",
+         (char *)_mem - (char *)blob_node,
+         aligned_size(sizeof(Node) + sizeof(blob_state)));
+  // Ensure blob data pointer is aligned
+  _mem = align_pointer(_mem, MEMORY_ALIGNMENT);
+  char *blob_data = _mem;
+
+  memcpy(blob_data, template->blob_data, template->total_size);
+
+  state->blob_start = blob_data + template->first_node_offset;
+  state->blob_end = blob_data + template->last_node_offset;
+  state->total_size = template->total_size;
+  state->num_ins = template->num_inputs;
+
+  struct double_list *l = args;
+  for (int i = 0; i < state->num_ins; i++) {
+    state->input_slot_offsets[i] = template->input_slot_offsets[i];
+    Signal *sig = (Signal *)((char *)blob_data + state->input_slot_offsets[i]);
+
+    // Verify signal is aligned
+    if ((uintptr_t)sig % MEMORY_ALIGNMENT != 0) {
+      printf("Warning: Signal pointer is not aligned: %p\n", sig);
+    }
+
+    *sig = (Signal){.size = BUF_SIZE, .layout = 1};
+
+    // Allocate aligned memory for signal buffer
+    sig->buf = malloc(sizeof(double) * sig->size * sig->layout);
+
+    for (int j = 0; j < sig->size * sig->layout; j++) {
+      sig->buf[j] = l->val;
+    }
+
+    blob_node->input_offsets[i] = (char *)sig - (char *)blob_node;
+    l = l->next;
+  }
+
   return blob_node;
 }

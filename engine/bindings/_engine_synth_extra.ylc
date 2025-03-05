@@ -11,6 +11,7 @@ type SynthInput =
 
 let play_node = extern fn Synth -> Synth;
 let play_node_offset = extern fn Int -> Synth -> Synth;
+let play_node_offset_w_kill = extern fn Int -> Double -> Int -> Synth -> Synth;
 
 let get_frame_offset = extern fn () -> Int;
 let instantiate_blob_template = extern fn Ptr -> Synth;

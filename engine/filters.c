@@ -9,7 +9,6 @@ typedef struct {
 } tanh_state;
 
 void *tanh_perform(Node *node, int nframes, double spf) {
-  printf("tanh perform\n");
   tanh_state *state = get_node_state(node);
   double *out = node->out.buf;
   Signal in = *get_node_input(node, 0);
@@ -32,7 +31,7 @@ Node *tanh_node(double gain, Signal *input) {
   *node = (Node){
       .num_ins = 1,
       .input_offsets = {in_offset},
-      .node_size = sizeof(Node) + sizeof(tanh_state),
+      .node_size = aligned_size(sizeof(Node) + sizeof(tanh_state)),
       .out = {.size = input->size,
               .layout = input->layout,
               .buf = malloc(sizeof(double) * input->size * input->layout)},

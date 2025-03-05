@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 void *mul_perform(Node *node, int nframes, double spf) {
-  printf("mul perform %p\n", node);
+  // printf("mul perform %p\n", node);
 
   int num_ins = node->num_ins;
   double *out = node->out.buf;
@@ -59,11 +59,12 @@ NodeRef mul2_node(SignalRef a, SignalRef b) {
   int in_offset_b = (char *)b - (char *)node;
   *node = (Node){.num_ins = 2,
                  .input_offsets = {in_offset_a, in_offset_b},
-                 .node_size = sizeof(Node),
+                 .node_size = aligned_size(sizeof(Node)),
                  .out = {.size = BUF_SIZE,
                          .layout = 1,
                          .buf = malloc(sizeof(double) * BUF_SIZE)},
                  .node_perform = (perform_func_t)mul_perform,
                  .next = NULL};
+  // printf("mul2 node %p size %d\n", node, node->node_size);
   return node;
 }

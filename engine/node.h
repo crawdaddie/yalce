@@ -19,6 +19,7 @@ typedef struct {
   int input_offsets[MAX_INPUTS];
   int frame_offset;
   bool write_to_dac;
+  bool can_free;
   Signal out;
   perform_func_t node_perform;
   struct Node *next;
@@ -57,5 +58,14 @@ NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template);
 
 Node *node_new();
 
+size_t aligned_size(size_t size);
 char *state_new(size_t size);
+
+typedef struct {
+  int total_size;
+  int num_ins;
+  void *blob_start;
+  void *blob_end;
+  int input_slot_offsets[MAX_INPUTS];
+} blob_state;
 #endif

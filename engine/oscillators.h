@@ -5,6 +5,10 @@
 NodeRef sin_node(SignalRef input);
 
 NodeRef simple_gate_env_node(double len);
+
+NodeRef adsr_env_node(double attack_time, double decay_time,
+                      double sustain_level, double release_time,
+                      SignalRef gate);
 void maketable_sq();
 void maketable_sin();
 

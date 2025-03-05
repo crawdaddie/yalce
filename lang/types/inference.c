@@ -104,8 +104,11 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   for (int i = 1; i < len; i++) {
     Ast *el = ast->data.AST_LIST.items + i;
     Type *_el_type = infer(el, ctx);
+    if (_el_type->kind == T_VAR) {
+      unify_in_ctx(_el_type, el_type, ctx, ast);
+    } else if
 
-    if (!types_equal(el_type, _el_type)) {
+        (!types_equal(el_type, _el_type)) {
       return type_error(
           ctx, ast,
           "Typecheck Error: typechecking list literal - all elements must "
@@ -1101,6 +1104,8 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     }
 
     if (t1->kind == T_CONS && ((1 << t2->kind) & TYPE_FLAGS_PRIMITIVE)) {
+      print_type(t2);
+      print_type(t1);
 
       TICtx _ctx = {.err_stream = NULL};
       return type_error(

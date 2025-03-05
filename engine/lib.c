@@ -1,6 +1,7 @@
 #include "lib.h"
 #include "audio_loop.h"
 #include "ctx.h"
+#include "scheduling.h"
 #include <sndfile.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,6 +58,41 @@ Node *play_node_offset(int offset, Node *s) {
 
   push_msg(&ctx.msg_queue,
            (scheduler_msg){NODE_ADD, offset, {.NODE_ADD = {.target = s}}});
+  return s;
+}
+typedef struct close_payload {
+  NodeRef target;
+  int gate_input;
+} close_payload;
+
+void close_gate(close_payload *p, int offset) {
+  NodeRef target = p->target;
+  int input = p->gate_input;
+
+  push_msg(
+      &ctx.msg_queue,
+      (scheduler_msg){NODE_SET_SCALAR,
+                      offset,
+                      {.NODE_SET_SCALAR = {
+                           .target = target, .input = input, .value = 0.}}});
+}
+
+NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
+                                NodeRef s) {
+  printf("play node %p at offset %d %f %d\n", s, offset, dur, gate_in);
+  // Node *group = _chain;
+  // reset_chain();
+  // add_to_dac(s);
+  // add_to_dac(group);
+
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_ADD, offset, {.NODE_ADD = {.target = s}}});
+  close_payload *cp = malloc(sizeof(close_payload));
+  *cp = (close_payload){
+      .target = s,
+      .gate_input = gate_in,
+  };
+  schedule_event((SchedulerCallback)close_gate, dur, cp);
   return s;
 }
 

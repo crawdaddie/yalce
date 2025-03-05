@@ -1,6 +1,7 @@
 # oscillators.h
 let sin_node = extern fn Signal -> Synth;
 let simple_gate_env_node = extern fn Double -> Synth;
+let adsr_env_node = extern fn Double -> Double -> Double -> Double -> Signal -> Synth;
 let maketable_sq = extern fn () -> ();
 let maketable_sin = extern fn () -> ();
 
@@ -37,6 +38,7 @@ type SynthInput =
 
 let play_node = extern fn Synth -> Synth;
 let play_node_offset = extern fn Int -> Synth -> Synth;
+let play_node_offset_w_kill = extern fn Int -> Double -> Int -> Synth -> Synth;
 
 let get_frame_offset = extern fn () -> Int;
 let instantiate_blob_template = extern fn Ptr -> Synth;

@@ -4,7 +4,13 @@
 #include "node.h"
 
 typedef struct scheduler_msg {
-  enum { NODE_ADD, GROUP_ADD, NODE_SET_SCALAR, NODE_SET_TRIG } type;
+  enum {
+    NODE_ADD,
+    GROUP_ADD,
+    NODE_SET_SCALAR,
+    NODE_SET_TRIG,
+    NODE_REMOVE
+  } type;
   int frame_offset;
   union {
     struct NODE_ADD {
@@ -26,6 +32,9 @@ typedef struct scheduler_msg {
       Node *target;
       int input;
     } NODE_SET_TRIG;
+    struct NODE_REMOVE {
+      Node *target;
+    } NODE_REMOVE;
   } payload;
 } scheduler_msg;
 

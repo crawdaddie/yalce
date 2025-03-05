@@ -139,7 +139,7 @@ let trig_func = fn line: (String) idx: (Int) offset: (Int) ->
 ;; 
 
 
-let drum_runner = fn
+let drum_runner = n
   args: (Ptr of (Double * Double * Int))
   frame_offset: (Int)
   ->

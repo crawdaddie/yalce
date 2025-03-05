@@ -65,7 +65,9 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
 
   offset_node_bufs(head, frame_offset);
 
-  void *blob = head->node_perform(head, frame_count, spf);
+  if (!head->can_free) {
+    void *blob = head->node_perform(head, frame_count, spf);
+  }
 
   if (should_write_to_dac(head)) {
     write_to_dac(layout, dac_buf, head->out.layout, head->out.buf, output_num,
