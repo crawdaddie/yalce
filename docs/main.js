@@ -185,7 +185,6 @@ async function onTextChange(event) {
     const {jit, module_size, module_data, memory } = instance.exports;
 
     try {
-      // Allocate memory for the input string
       const inputPtr = allocateString(instance, lastInput);
       const modulePtr  = jit(inputPtr);
       const size = module_size(modulePtr);

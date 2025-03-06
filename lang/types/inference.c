@@ -36,16 +36,14 @@ void _print_location(Ast *ast, FILE *fstream) {
   const char *start = loc->src_content;
   const char *offset = start + loc->absolute_offset;
 
-  // Guard against going before the start of the string
   while (offset > start && *offset != '\n') {
     offset--;
   }
 
   if (offset > start) {
-    offset++; // Move past the newline if we found one
+    offset++;
   }
 
-  // Print the line
   while (*offset && *offset != '\n') {
     fputc(*offset, fstream);
     offset++;
@@ -63,7 +61,6 @@ void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...) {
   va_start(args, fmt);
 
   vfprintf(err_stream, fmt, args);
-  // Add location info
   if (node && node->loc_info) {
     _print_location(node, err_stream);
   } else if (node) {
@@ -94,7 +91,6 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
     Type **el = talloc(sizeof(Type *));
     el[0] = next_tvar();
     *t = (Type){T_CONS, {.T_CONS = {cons_name, el, 1}}};
-    // return t;
     return t;
   }
 
@@ -519,13 +515,11 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   }
   Type *_fn_type;
 
-  // Infer types for all arguments
   int len = ast->data.AST_APPLICATION.len;
   Type *arg_types[len];
 
   TICtx app_ctx = {.scope = ctx->scope + 1};
 
-  // Get type for each argument and add constraints
   for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
     Ast *arg = ast->data.AST_APPLICATION.args + i;
     arg_types[i] = infer(arg, ctx);
@@ -567,7 +561,6 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
                                             res_type->data.T_FN.from);
       ctx->constraints->src = arg;
     }
-    // When unifying argument types with function parameters
 
     res_type = res_type->data.T_FN.to;
   }
@@ -588,7 +581,6 @@ Type *find_variant_member(Type *variant, const char *name) {
 Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
-  // cons application
   Ast *fn_id = ast->data.AST_APPLICATION.function;
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
   Type *cons = fn_type;
@@ -653,7 +645,6 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
   }
 
   case AST_TUPLE: {
-    // Tuple pattern (x, y)
     int len = pattern->data.AST_LIST.len;
     Type **member_types = talloc(sizeof(Type *) * len);
 
@@ -756,7 +747,6 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
 
-  // First infer definition type
   Type *expr_type;
   if (!(expr_type = infer(expr, ctx))) {
     return type_error(ctx, ast->data.AST_LET.expr,
@@ -798,7 +788,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   int num_params = ast->data.AST_LAMBDA.len;
 
-  // Get type for each parameter and extend environment
   Type **param_types = talloc(sizeof(Type *) * num_params);
 
   for (int i = 0; i < num_params; i++) {
@@ -823,9 +812,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   const char *name = ast->data.AST_LAMBDA.fn_name.chars;
   Type *fn_type_var = NULL;
   if (is_named) {
-    // Create a type variable for the recursive function
     fn_type_var = next_tvar();
-    fn_type_var->is_recursive_fn_ref = true; // Mark as recursive
+    fn_type_var->is_recursive_fn_ref = true;
 
     Ast rec_fn_name_binding = {
         AST_IDENTIFIER,
@@ -843,7 +831,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   Type *actual_fn_type = body_type;
-  // work backwards and construct fn type
   for (int i = num_params - 1; i >= 0; i--) {
     Type *new_fn = talloc(sizeof(Type));
     new_fn->kind = T_FN;
@@ -881,7 +868,6 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
 
   Type *result = next_tvar();
   Ast *expr = ast->data.AST_MATCH.expr;
-  // Infer type of expression being matched
   Type *expr_type;
   if (!(expr_type = infer(expr, ctx))) {
     return type_error(
@@ -1037,7 +1023,6 @@ Type *apply_substitution(Substitution *subst, Type *t) {
     return new_t;
   }
   case T_FN: {
-    // print_type(t);
     Type *new_t = talloc(sizeof(Type));
     *new_t = *t;
     new_t->data.T_FN.from = apply_substitution(subst, t->data.T_FN.from);
@@ -1077,7 +1062,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
 
   while (constraints) {
 
-    // Apply current substitution chain to both types in constraint
     Type *t1 = apply_substitution(subst, constraints->t1);
     Type *t2 = apply_substitution(subst, constraints->t2);
 
@@ -1094,23 +1078,19 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
           "Cannot constrain cons type to primitive simple type\n");
     }
 
-    // If both types are same primitives, no new substitution needed
     if (t1->kind == t2->kind && IS_PRIMITIVE_TYPE(t1)) {
       constraints = constraints->next;
       continue;
     }
 
-    // Handle type variable in t1
     if (t1->kind == T_VAR) {
       if (occurs_check(t1, t2)) {
         constraints = constraints->next;
         continue;
       }
 
-      // Add new substitution to chain
       subst = substitutions_extend(subst, t1, t2);
     } else if (t2->kind == T_VAR) {
-      // Handle type variable in t2
       if (occurs_check(t2, t1)) {
         constraints = constraints->next;
         continue;
@@ -1213,7 +1193,6 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
   }
 
   case AST_FMT_STRING: {
-    // print_type(ast->md);
 
     // int arity = ast->data.AST_LIST.len;
     // for (int i = 0; i < arity; i++) {
