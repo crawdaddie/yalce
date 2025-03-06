@@ -357,7 +357,6 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
     }
   }
 
-  // set up default block, ie coroutine end -> returns NULL
   LLVMBasicBlockRef switch_default_block =
       LLVMAppendBasicBlock(func, "coroutine_iter_end");
   LLVMPositionBuilderAtEnd(builder, switch_default_block);
@@ -365,16 +364,12 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
   LLVMBuildRet(builder, null_cor_inst());
   LLVMPositionBuilderAtEnd(builder, block);
 
-  // construct switch which takes the coroutine instance counter as the value
-  // to switch on
   LLVMValueRef switch_ref = LLVMBuildSwitch(
       builder, counter, switch_default_block, ast->data.AST_LAMBDA.num_yields);
   fn_ctx.yield_switch_ref = switch_ref;
   LLVMBasicBlockRef case_0 = LLVMAppendBasicBlock(func, "coroutine_iter_0");
   LLVMPositionBuilderAtEnd(builder, case_0);
 
-  // add first case for initial 0th yield - all computations up to the first
-  // yield occur in this block
   LLVMAddCase(switch_ref, LLVMConstInt(LLVMInt32Type(), 0, 0), case_0);
   LLVMPositionBuilderAtEnd(builder, case_0);
 
@@ -435,7 +430,6 @@ LLVMValueRef create_cor_inst_struct(LLVMBuilderRef builder, LLVMValueRef fn,
       builder, cor_struct,
       state ? state : LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)), 3,
       "insert_state_ptr");
-  // LLVMConstStruct();
   return cor_struct;
 }
 
@@ -526,7 +520,6 @@ LLVMValueRef create_coroutine_instance_from_generic_constructor(
   LLVMValueRef state_struct_ptr =
       create_coroutine_state_ptr(constructor_type, args, ctx, module, builder);
 
-  // Create and initialize the cor struct
   LLVMValueRef cor_struct =
       create_cor_inst_struct(builder, func, state_struct_ptr);
 
@@ -549,7 +542,6 @@ LLVMValueRef create_coroutine_instance_from_constructor(
   LLVMValueRef state_struct_ptr =
       create_coroutine_state_ptr(constructor_type, args, ctx, module, builder);
 
-  // Create and initialize the cor struct
   LLVMValueRef cor_struct =
       create_cor_inst_struct(builder, sym->val, state_struct_ptr);
 
@@ -558,7 +550,6 @@ LLVMValueRef create_coroutine_instance_from_constructor(
       ctx->stack_ptr > 0
           ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
           : _cor_alloc(module, builder);
-  // LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_malloc");
 
   LLVMBuildStore(builder, cor_struct, alloca);
   return alloca;
@@ -594,10 +585,6 @@ LLVMValueRef yield_from_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
       LLVMBuildAlloca(builder, llvm_ret_type, "ret_val_ref");
 
   instance_ptr = _cor_next(instance_ptr, ret_val_ref, module, builder);
-
-  // LLVMValueRef instance_struct =
-  //     LLVMBuildLoad2(builder, cor_inst_struct_type(), instance_ptr, "");
-  // LLVMBuildStore(builder, instance_struct, sym->val);
 
   return wrap_yield_result_in_option(instance_ptr, ret_val_ref, llvm_ret_type,
                                      builder);
@@ -1218,7 +1205,6 @@ LLVMValueRef create_scheduler_wrapper(LLVMTypeRef combo_ret_type,
                                       LLVMValueRef schedule_event_fn,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
-  // Create function type: void(cor*, int)
   LLVMTypeRef param_types[] = {
       LLVMPointerType(cor_inst_struct_type(), 0), // cor*
       LLVMInt32Type()                             // int frame_offset
@@ -1240,36 +1226,30 @@ LLVMValueRef create_scheduler_wrapper(LLVMTypeRef combo_ret_type,
 
   LLVMValueRef ret_ref = LLVMBuildAlloca(builder, combo_ret_type, "ret");
 
-  // Store frame_offset into ret.frame_offset
   LLVMValueRef frame_offset_ptr = LLVMBuildStructGEP2(
       builder, combo_ret_type, ret_ref, 1, "frame_offset_ptr");
 
   LLVMBuildStore(builder, frame_offset, frame_offset_ptr);
 
-  // Call cor_next(c, &ret)
   LLVMValueRef cor_next_args[] = {LLVMGetParam(func, 0), ret_ref};
   LLVMValueRef not_done =
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(cor_next_fn), cor_next_fn,
                      cor_next_args, 2, "not_done");
 
-  // Create if blocks
   LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(func, "then");
   LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(func, "end");
 
-  // if (not_done)
   LLVMValueRef cond =
       LLVMBuildICmp(builder, LLVMIntNE, not_done,
                     LLVMConstNull(LLVMTypeOf(not_done)), "if_cond");
   LLVMBuildCondBr(builder, cond, then_block, end_block);
 
-  // Then block
   LLVMPositionBuilderAtEnd(builder, then_block);
 
   LLVMValueRef dur_ptr =
       LLVMBuildStructGEP2(builder, combo_ret_type, ret_ref, 0, "dur_ptr");
   LLVMValueRef dur = LLVMBuildLoad2(builder, LLVMDoubleType(), dur_ptr, "dur");
 
-  // Call schedule_event(scheduler_wrapper, dur, c)
   LLVMValueRef schedule_args[] = {
       func,        // scheduler_wrapper function ptr
       dur,         // duration
@@ -1312,7 +1292,6 @@ LLVMValueRef CorPlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef instance_ptr =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  // Call schedule_event(scheduler_wrapper, dur, c)
   LLVMValueRef schedule_args[] = {
       scheduler_wrapper,                    // scheduler_wrapper function ptr
       LLVMConstReal(LLVMDoubleType(), 0.0), // duration
