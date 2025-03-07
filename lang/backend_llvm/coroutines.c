@@ -10,6 +10,7 @@
 #include "util.h"
 #include "llvm-c/Core.h"
 
+#define COMPILER_DEBUG
 LLVMTypeRef cor_coroutine_fn_type() {
   // typedef void *(*CoroutineFn)(void *coroutine, void *ret_val);
   return LLVMFunctionType(GENERIC_PTR,
@@ -1225,6 +1226,11 @@ LLVMValueRef create_scheduler_wrapper(LLVMTypeRef combo_ret_type,
 #endif
 
   LLVMValueRef ret_ref = LLVMBuildAlloca(builder, combo_ret_type, "ret");
+
+  // LLVMValueRef _frame_offset_ptr = LLVMBuildStructGEP2(
+  //     builder, combo_ret_type, instance_ptr, 1, "frame_offset_ptr");
+  //
+  // LLVMBuildStore(builder, frame_offset, _frame_offset_ptr);
 
   LLVMValueRef frame_offset_ptr = LLVMBuildStructGEP2(
       builder, combo_ret_type, ret_ref, 1, "frame_offset_ptr");

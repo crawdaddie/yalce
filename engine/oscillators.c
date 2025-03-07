@@ -94,6 +94,72 @@ Node *sin_node(Signal *input) {
   return node;
 }
 
+double sq_sample(double phase) {
+  phase = fmod(phase, 1.0);
+
+  double d_index;
+  int index;
+  double frac, a, b;
+  double sample;
+
+  d_index = phase * SQ_TABSIZE;
+  index = (int)d_index;
+  frac = d_index - index;
+
+  a = sq_table[index];
+  b = sq_table[(index + 1) % SQ_TABSIZE];
+
+  sample = (1.0 - frac) * a + (frac * b);
+  return sample;
+  // *out = sample;
+}
+
+typedef struct sq_state {
+  double phase;
+} sq_state;
+
+char *sq_perform(Node *node, int nframes, double spf) {
+
+  sq_state *state = get_node_state(node);
+  Signal in = *get_node_input(node, 0);
+
+
+  int out_layout = node->out.layout;
+  double *out = node->out.buf;
+
+  double *freq;
+  while (nframes--) {
+
+    freq = get_val(&in);
+    *out = sq_sample(state->phase);
+    // *out += sq_sample(state->phase * 1.5, *input);
+    // *out /= 2.;
+    // printf("sq perform *out %f\n", *out);
+    state->phase = fmod(*freq * spf + (state->phase), 1.0);
+    out++;
+  }
+}
+
+NodeRef sq_node(SignalRef input) {
+  Node *node = node_new();
+  sq_state *state = (sin_state *)state_new(sizeof(sq_state));
+
+  int in_offset = (char *)input - (char *)node;
+  *node = (Node){.num_ins = 1,
+                 .input_offsets = {in_offset},
+                 .node_size = aligned_size(sizeof(Node) + sizeof(sq_state)),
+                 .out = {.size = BUF_SIZE,
+                         .layout = 1,
+                         .buf = malloc(sizeof(double) * BUF_SIZE)},
+                 .node_perform = (perform_func_t)sq_perform,
+                 .next = NULL};
+
+  // sin_state *state = node_alloc(mem, sizeof(sin_state));
+  *state = (sq_state){0.};
+
+  return node;
+}
+
 typedef struct simple_gate_env_state {
   int phase;
   int end_phase;
@@ -147,7 +213,13 @@ typedef struct adsr_env_state {
   int release_samples;
 
   // State tracking
-  enum { IDLE, ATTACK, DECAY, SUSTAIN, RELEASE } current_state;
+  enum {
+    ADSR_IDLE,
+    ADSR_ATTACK,
+    ADSR_DECAY,
+    ADSR_SUSTAIN,
+    ADSR_RELEASE
+  } current_state;
   int parent_node_offset;
   bool should_free_parent;
 } adsr_env_state;
@@ -165,32 +237,32 @@ void *adsr_env_perform(Node *node, int nframes, double spf) {
 
     // Detect 0->1 transition (note on)
     if (current_input >= 0.5 && state->prev_input < 0.5) {
-      state->current_state = ATTACK;
+      state->current_state = ADSR_ATTACK;
       state->phase = 0;
     }
     // Detect 1->0 transition (note off)
     else if (current_input < 0.5 && state->prev_input >= 0.5) {
-      state->current_state = RELEASE;
+      state->current_state = ADSR_RELEASE;
       state->phase = 0;
     }
 
     // Process based on current state
     switch (state->current_state) {
-    case IDLE:
+    case ADSR_IDLE:
       state->output = 0.0;
       break;
 
-    case ATTACK:
+    case ADSR_ATTACK:
       // Linear attack from 0 to 1
       state->output = (double)state->phase / state->attack_samples;
       if (state->output >= 1.0) {
         state->output = 1.0;
-        state->current_state = DECAY;
+        state->current_state = ADSR_DECAY;
         state->phase = 0;
       }
       break;
 
-    case DECAY:
+    case ADSR_DECAY:
       // Exponential decay from 1 to sustain_level
       {
         double decay_progress = (double)state->phase / state->decay_samples;
@@ -198,17 +270,17 @@ void *adsr_env_perform(Node *node, int nframes, double spf) {
                                   (1.0 - exp(-5.0 * decay_progress)) /
                                   (1.0 - exp(-5.0));
         if (state->phase >= state->decay_samples) {
-          state->current_state = SUSTAIN;
+          state->current_state = ADSR_SUSTAIN;
           state->output = state->sustain_level;
         }
       }
       break;
 
-    case SUSTAIN:
+    case ADSR_SUSTAIN:
       state->output = state->sustain_level;
       break;
 
-    case RELEASE:
+    case ADSR_RELEASE:
       // Exponential release from current level to 0
       {
         double start_level =
@@ -223,7 +295,7 @@ void *adsr_env_perform(Node *node, int nframes, double spf) {
             target->write_to_dac = false;
           }
 
-          state->current_state = IDLE;
+          state->current_state = ADSR_IDLE;
           state->output = 0.0;
         }
       }
@@ -272,8 +344,146 @@ NodeRef adsr_env_node(double attack_time, double decay_time,
                             .decay_samples = (int)(decay_time * sr),
                             .sustain_level = sustain_level,
                             .release_samples = (int)(release_time * sr),
-                            .current_state = ATTACK,
+                            .current_state = ADSR_ATTACK,
                             .should_free_parent = true};
+
+  if (_current_blob && _current_blob->first_node_offset != -1) {
+    state->parent_node_offset =
+        ((char *)node - (char *)_current_blob->blob_data) +
+        aligned_size(sizeof(Node) + sizeof(blob_state));
+  }
+
+  return node;
+}
+
+typedef struct asr_env_state {
+  int phase;         // Current phase counter
+  double output;     // Current output value
+  double prev_input; // Previous input value to detect transitions
+
+  // asr parameters (in samples)
+  int attack_samples;
+  int release_samples;
+
+  // State tracking
+  enum {
+    ASR_IDLE,
+    ASR_ATTACK,
+    ASR_DECAY,
+    ASR_SUSTAIN,
+    ASR_RELEASE
+  } current_state;
+  int parent_node_offset;
+  bool should_free_parent;
+} asr_env_state;
+
+void *asr_env_perform(Node *node, int nframes, double spf) {
+  asr_env_state *state = get_node_state(node);
+  Signal in = *get_node_input(node, 0);
+
+  int out_layout = node->out.layout;
+  double *out = node->out.buf;
+
+  while (nframes--) {
+    double *input = get_val(&in);
+    double current_input = *input;
+
+    // Detect 0->1 transition (note on)
+    if (current_input >= 0.5 && state->prev_input < 0.5) {
+      state->current_state = ASR_ATTACK;
+      state->phase = 0;
+    }
+    // Detect 1->0 transition (note off)
+    else if (current_input < 0.5 && state->prev_input >= 0.5) {
+      state->current_state = ASR_RELEASE;
+      state->phase = 0;
+    }
+
+    // Process based on current state
+    switch (state->current_state) {
+    case ASR_IDLE:
+      state->output = 0.0;
+      break;
+
+    case ASR_ATTACK:
+      // Linear attack from 0 to 1
+      state->output = (double)state->phase / state->attack_samples;
+      if (state->output >= 1.0) {
+        state->output = 1.0;
+        state->current_state = ASR_SUSTAIN;
+        state->phase = 0;
+      }
+      break;
+
+    case ASR_SUSTAIN:
+      state->output = 1.0;
+      break;
+
+    case ASR_RELEASE:
+      // Exponential release from current level to 0
+      {
+        double start_level = (state->phase == 0) ? state->output : 1.0;
+
+        double release_progress = (double)state->phase / state->release_samples;
+        state->output = start_level * exp(-5.0 * release_progress);
+
+        if (state->phase >= state->release_samples) {
+          if (state->parent_node_offset && state->should_free_parent) {
+            Node *target = (char *)node - state->parent_node_offset;
+            target->can_free = true;
+            target->write_to_dac = false;
+          }
+
+          state->current_state = ASR_IDLE;
+          state->output = 0.0;
+        }
+      }
+      break;
+    }
+
+    // Output the envelope value
+    for (int i = 0; i < out_layout; i++) {
+      *out = state->output;
+      out++;
+    }
+
+    // Update state
+    state->prev_input = current_input;
+    state->phase++;
+  }
+
+  char *ret = (char *)node + node->node_size;
+  return ret;
+}
+
+NodeRef asr_env_node(double attack_time, double release_time, Signal *gate) {
+
+  Node *node = node_new();
+  asr_env_state *state = (asr_env_state *)state_new(sizeof(asr_env_state));
+
+  // Set the input signal offset correctly
+  int in_offset = (char *)gate - (char *)node;
+  *node =
+      (Node){.num_ins = 1,
+             .input_offsets = {in_offset}, // Will be set in the function call
+             .node_size = aligned_size(sizeof(Node) + sizeof(asr_env_state)),
+             .out =
+                 {
+                     .size = BUF_SIZE, .layout = 1,
+                     // .buf = malloc(sizeof(double) * BUF_SIZE)
+                 },
+             .node_perform = (perform_func_t)asr_env_perform,
+             .next = NULL};
+
+  // Convert time parameters to samples
+  int sr = ctx_sample_rate();
+  *state = (asr_env_state){.phase = 0,
+                           .output = 0.0,
+                           .prev_input = 0.0,
+                           .attack_samples = (int)(attack_time * sr),
+                           .release_samples = (int)(release_time * sr),
+                           .current_state = ASR_ATTACK,
+                           .should_free_parent = true};
 
   if (_current_blob && _current_blob->first_node_offset != -1) {
     state->parent_node_offset =

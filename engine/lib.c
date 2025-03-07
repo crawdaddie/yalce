@@ -264,12 +264,12 @@ Signal *read_buf_mono(const char *filename) {
 double *raw_signal_data(SignalRef sig) { return sig->buf; }
 int signal_size(SignalRef sig) { return sig->size; }
 
-SignalRef signal_of_ptr(int size, double *ptr) {
-  Signal *sig = malloc(sizeof(Signal));
-  sig->buf = ptr;
-  sig->size = size;
-  sig->layout = 1;
-  return sig;
-}
+// SignalRef signal_of_ptr(int size, double *ptr) {
+//   Signal *sig = malloc(sizeof(Signal));
+//   sig->buf = ptr;
+//   sig->size = size;
+//   sig->layout = 1;
+//   return sig;
+// }
 
 SignalRef node_output_sig(NodeRef node) { return &node->out; }

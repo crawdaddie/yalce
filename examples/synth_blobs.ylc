@@ -8,9 +8,8 @@ let synth_template = (fn () ->
   let s = 
   inlet 100.
   |> sin_node
-  |> tanh_node 10.
   in
-  mul2_node (adsr_env_node 0.0 0.1 0.2 0.5 gate) s
+  mul2_node (asr_env_node 0.001 0.5 gate) s
   ;
   )
   |> compile_blob_template;
@@ -25,17 +24,16 @@ let s = fn freq dur offset ->
 # s 200. 0.1 @@ get_frame_offset (); 
 
 let co_void = fn () -> yield 1;;
-let times = [| 0.125, 0.125, 0.25, 0.5 |];
+let times = [| 0.125 |];
 let freqs = [| 55., 330., 220., 110., 44., 33., 55., 110., 220., 660. |];
-let co = (
+
+(
   dur: \array_choose times,
   frame_offset: 0,
   freq: iter_of_list [55., 330., 220., 110., 44., 33., 55. ] |> cor_loop,
-);
-
-co |> cor_wrap_effect (fn (dur, _frame_offset, freq) ->
+) |> cor_wrap_effect (fn (dur, _frame_offset, freq) ->
   let frame_offset = get_frame_offset ();
-  s freq 0.2 frame_offset;
+  s freq 0.01 frame_offset;
   ()
 ;) |> cor_play schedule_event;
 

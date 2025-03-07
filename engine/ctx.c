@@ -146,6 +146,7 @@ void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
 
   int consumed = process_msg_queue_pre(&ctx->msg_queue);
 
+  reset_buf_ptr();
   if (ctx->head == NULL) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
   }

@@ -1,6 +1,7 @@
 #include "./perform.h"
 #include "./node.h"
 #include "./signals.h"
+#include "common.h"
 #include <stdbool.h>
 #include <stdio.h>
 void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
@@ -25,8 +26,20 @@ void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
   }
 }
 
+static double _BUFS[BUF_SIZE * (1 << 10)] = {0.};
+static double *_buf_ptr = _BUFS;
+
+void reset_buf_ptr() { _buf_ptr = _BUFS; }
+
+void set_out_buf(NodeRef node) {
+  node->out.buf = _buf_ptr;
+  int size = node->out.size;
+  int layout = node->out.layout;
+  _buf_ptr += (size * layout);
+}
+
 bool should_write_to_dac(Node *node) { return node->write_to_dac; }
-static void offset_node_bufs(Node *node, int frame_offset) {
+void offset_node_bufs(Node *node, int frame_offset) {
 
   if (frame_offset == 0) {
     return;
@@ -37,20 +50,20 @@ static void offset_node_bufs(Node *node, int frame_offset) {
   }
 
   node->out.buf += frame_offset;
-  for (int i = 0; i < node->num_ins; i++) {
-    get_node_input(node, i)->buf += frame_offset;
-  }
+  // for (int i = 0; i < node->num_ins; i++) {
+  //   get_node_input(node, i)->buf += frame_offset;
+  // }
 }
 
-static void unoffset_node_bufs(Node *node, int frame_offset) {
+void unoffset_node_bufs(Node *node, int frame_offset) {
   if (frame_offset == 0) {
     return;
   }
 
   node->out.buf -= frame_offset;
-  for (int i = 0; i < node->num_ins; i++) {
-    get_node_input(node, i)->buf -= frame_offset;
-  }
+  // for (int i = 0; i < node->num_ins; i++) {
+  //   get_node_input(node, i)->buf -= frame_offset;
+  // }
   node->frame_offset = 0;
 }
 
@@ -63,6 +76,7 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
 
   int frame_offset = head->frame_offset;
 
+  set_out_buf(head);
   offset_node_bufs(head, frame_offset);
 
   if (!head->can_free) {

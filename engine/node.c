@@ -1,5 +1,6 @@
 #include "./node.h"
 #include "./common.h"
+#include "perform.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,9 @@ perform_func_t get_node_perform(void *node) {
 }
 
 void *get_node_state(void *node) { return (char *)node + sizeof(Node); }
+char *get_node_out_sig(void *node, size_t state_size) {
+  return (char *)node + sizeof(Node) + state_size;
+}
 
 void *create_new_blob_template() {
   // Allocate memory for the template
@@ -214,6 +218,22 @@ char *state_new(size_t size) {
   return state;
 }
 
+char *node_out_buf_new(size_t len, int layout) {
+  size_t size = sizeof(double) * len * layout;
+  if (!_current_blob) {
+    // When allocating outside the blob, use aligned_alloc if available
+    return malloc(size);
+  }
+
+  // Inside blob: align the memory pointer before allocation
+  _current_blob->_mem_ptr =
+      align_pointer(_current_blob->_mem_ptr, MEMORY_ALIGNMENT);
+
+  char *buf = _current_blob->_mem_ptr;
+  _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + size;
+  return buf;
+}
+
 // Instantiate a blob from a template
 Node *_instantiate_blob_template(BlobTemplate *template) {
   char *_mem = malloc(sizeof(Node) + sizeof(blob_state) + template->total_size);
@@ -316,6 +336,7 @@ void *blob_perform(Node *node, int nframes, double spf) {
     return (char *)node + node->node_size;
   }
 
+  int frame_offset = node->frame_offset;
   int node_idx = 0;
   // Process all nodes in the blob
   while (current <= end) {
@@ -329,7 +350,11 @@ void *blob_perform(Node *node, int nframes, double spf) {
       break;
     }
 
+    set_out_buf(cb);
+    cb->frame_offset = frame_offset;
+    offset_node_bufs(cb, frame_offset);
     current = cb->node_perform(cb, nframes, spf);
+    unoffset_node_bufs(cb, frame_offset);
 
     // Verify alignment of returned pointer
     if ((uintptr_t)current % MEMORY_ALIGNMENT != 0) {
@@ -440,9 +465,6 @@ NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
   blob_state *state = (blob_state *)_mem;
   _mem += blob_state_size; // Use aligned size for offset
 
-  printf("node start to blob_data is %ld %ld\n",
-         (char *)_mem - (char *)blob_node,
-         aligned_size(sizeof(Node) + sizeof(blob_state)));
   // Ensure blob data pointer is aligned
   _mem = align_pointer(_mem, MEMORY_ALIGNMENT);
   char *blob_data = _mem;

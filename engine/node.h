@@ -61,6 +61,8 @@ Node *node_new();
 size_t aligned_size(size_t size);
 char *state_new(size_t size);
 
+char *node_out_buf_new(size_t len, int layout);
+
 typedef struct {
   int total_size;
   int num_ins;
@@ -68,4 +70,5 @@ typedef struct {
   void *blob_end;
   int input_slot_offsets[MAX_INPUTS];
 } blob_state;
+
 #endif
