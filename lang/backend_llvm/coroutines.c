@@ -10,7 +10,8 @@
 #include "util.h"
 #include "llvm-c/Core.h"
 
-#define COMPILER_DEBUG
+// #define COMPILER_DEBUG
+
 LLVMTypeRef cor_coroutine_fn_type() {
   // typedef void *(*CoroutineFn)(void *coroutine, void *ret_val);
   return LLVMFunctionType(GENERIC_PTR,
@@ -1078,9 +1079,9 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
                                           LLVMBuilderRef builder) {
   Type *coroutine_type = ast->md;
   Type *ret_opt_type = fn_return_type(coroutine_type);
-  Type *ret_type = type_of_option(ret_opt_type);
-
-  int len = ret_type->data.T_CONS.num_args;
+  Type *_ret_type = type_of_option(ret_opt_type);
+  int len = _ret_type->data.T_CONS.num_args;
+  Type *ret_types[len];
 
   LLVMTypeRef struct_member_types[len];
   for (int i = 0; i < len; i++) {
@@ -1091,12 +1092,20 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
             ? GENERIC_PTR
             : type_to_llvm_type(ast->data.AST_LIST.items[i].md, ctx->env,
                                 module);
+    Type *r = _ret_type->data.T_CONS.args[i];
+    ret_types[i] = r->kind == T_FN ? fn_return_type(r) : r;
   }
+  Type *ret_type = create_tuple_type(len, ret_types);
 
   LLVMTypeRef llvm_state_struct_type =
       LLVMStructType(struct_member_types, len, 0);
 
   LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx->env, module);
+
+  // printf("struct of couroutines ret val type\n");
+  // print_type(ret_type);
+  // LLVMDumpType(llvm_ret_type);
+  // printf("\n");
 
   LLVMValueRef func = LLVMAddFunction(module, "struct_of_coroutines_fn",
                                       cor_coroutine_fn_type());
@@ -1136,11 +1145,6 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
     Type *item_type = ast->data.AST_LIST.items[i].md;
     if (is_coroutine_type(item_type)) {
 
-#ifdef COMPILER_DEBUG
-      INSERT_PRINTF(2, "sub cor %d func %p\n",
-                    LLVMConstInt(LLVMInt32Type(), i, 0), item);
-#endif
-
       LLVMValueRef item_result = _cor_next(item, ret_val_gep, module, builder);
       LLVMValueRef is_not_null = LLVMBuildICmp(builder, LLVMIntNE, item_result,
                                                null_cor_inst(), "is_not_null");
@@ -1154,6 +1158,10 @@ LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
       LLVMBuildStore(builder, item_result, ret_val_gep);
 
     } else {
+#ifdef COMPILER_DEBUG
+      INSERT_PRINTF(2, "coroutine item %d %d\n",
+                    LLVMConstInt(LLVMInt32Type(), i, 0), item);
+#endif
       // const state item - don't need to reset???
       LLVMBuildStore(builder, item, ret_val_gep);
     }
@@ -1232,12 +1240,17 @@ LLVMValueRef create_scheduler_wrapper(LLVMTypeRef combo_ret_type,
   //
   // LLVMBuildStore(builder, frame_offset, _frame_offset_ptr);
 
-  LLVMValueRef frame_offset_ptr = LLVMBuildStructGEP2(
-      builder, combo_ret_type, ret_ref, 1, "frame_offset_ptr");
-
-  LLVMBuildStore(builder, frame_offset, frame_offset_ptr);
+  // LLVMValueRef frame_offset_ptr = LLVMBuildStructGEP2(
+  //     builder, combo_ret_type, ret_ref, 1, "frame_offset_ptr");
+  //
+  // LLVMBuildStore(builder, frame_offset, frame_offset_ptr);
+  // LLVMValueRef frame_offset_ptr = LLVMBuildStructGEP2(
+  //     builder, combo_ret_type, ret_ref, 1, "frame_offset_ptr");
+  //
+  // LLVMBuildStore(builder, frame_offset, frame_offset_ptr);
 
   LLVMValueRef cor_next_args[] = {LLVMGetParam(func, 0), ret_ref};
+
   LLVMValueRef not_done =
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(cor_next_fn), cor_next_fn,
                      cor_next_args, 2, "not_done");

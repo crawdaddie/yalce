@@ -106,6 +106,7 @@ Node *set_input_scalar(Node *node, int input, double value) {
 
 Node *set_input_scalar_offset(Node *node, int input, int frame_offset,
                               double value) {
+  printf("scalar set frame offset %d\n", frame_offset);
   push_msg(&ctx.msg_queue,
            (scheduler_msg){NODE_SET_SCALAR,
                            frame_offset,
