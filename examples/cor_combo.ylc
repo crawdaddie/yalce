@@ -6,26 +6,24 @@
 
 
 let synth = fn () -> 
-  let f = inlet 58.
-  |> lag_node 0.01
-  in (
+  let f = inlet 58. |> lag_node 0.01;
+  (
     sq_node f
   + sq_node (f * 1.01)
-  + sq_node (f * 2)
-  + sq_node (f * 4)
   )
+  |> comb_node 0.125 0.2 0.6
 ;;
 
 let times = [| 0.125, 0.125, 0.25, 0.5 |];
 # let times = [| 0.125, 0.125, |];
 
-let co = (
+(
 
   # dur must be first field of struct
   dur: \array_choose times,
 
   # frame_offset must be second field of struct
-  frame_offset: 0,
+  frame_offset: get_frame_offset,
 
   freq: iter_of_list [55., 330., 220., 110., 44., 33., 55., 110., 220., 660.] |> cor_loop,
 
@@ -38,5 +36,5 @@ let co = (
   set_input_scalar_offset s 0 frame_offset freq;
   ()
 ;)
-in co |> cor_play schedule_event;
+|> cor_play schedule_event;
 
