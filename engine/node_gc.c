@@ -28,9 +28,14 @@ void remove_and_free_node(Ctx *ctx, NodeRef prev, NodeRef to_free) {
   }
 
   // free(to_free->out.buf);
+  //
+  for (int i = 0; i < to_free->num_ins; i++) {
+    SignalRef in = ((char *)to_free + to_free->input_offsets[i]);
+    free(in->buf);
+  }
   // Free the node
   printf("freeing %p\n", to_free);
-  // free(to_free);
+  free(to_free);
 }
 
 // The garbage collection thread function

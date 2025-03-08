@@ -234,92 +234,10 @@ char *node_out_buf_new(size_t len, int layout) {
   return buf;
 }
 
-// Instantiate a blob from a template
-Node *_instantiate_blob_template(BlobTemplate *template) {
-  char *_mem = malloc(sizeof(Node) + sizeof(blob_state) + template->total_size);
-
-  // Allocate memory for node
-  Node *blob_node = (Node *)_mem;
-  _mem += sizeof(Node);
-
-  // Initialize node
-  *blob_node = (Node){.num_ins = 0,
-                      .node_size = sizeof(Node) + sizeof(blob_state) +
-                                   template->total_size,
-                      // .node_perform = (perform_func_t)blob_perform,
-                      .next = NULL};
-
-  // Allocate and initialize state
-  blob_state *state = (blob_state *)_mem;
-  _mem += sizeof(blob_state);
-
-  char *blob_data = _mem;
-
-  memcpy(blob_data, template->blob_data, template->total_size);
-
-  state->blob_start = blob_data + template->first_node_offset;
-  state->blob_end = blob_data + template->last_node_offset;
-  state->total_size = template->total_size;
-  state->num_ins = template->num_inputs;
-  for (int i = 0; i < state->num_ins; i++) {
-    state->input_slot_offsets[i] = template->input_slot_offsets[i];
-    Signal *sig = (Signal *)((char *)blob_data + state->input_slot_offsets[i]);
-    *sig = (Signal){.size = BUF_SIZE, .layout = 1};
-    sig->buf = malloc(sizeof(double) * sig->size * sig->layout);
-    for (int j = 0; j < sig->size * sig->layout; j++) {
-      sig->buf[j] = template->default_vals[i];
-    }
-
-    blob_node->input_offsets[i] = (char *)sig - (char *)blob_node;
-  }
-  return blob_node;
-}
 struct double_list {
   double val;
   struct double_list *next;
 };
-
-NodeRef _instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
-  char *_mem = malloc(sizeof(Node) + sizeof(blob_state) + template->total_size);
-
-  // Allocate memory for node
-  Node *blob_node = (Node *)_mem;
-  _mem += sizeof(Node);
-
-  // Initialize node
-  *blob_node = (Node){.num_ins = 0,
-                      .node_size = sizeof(Node) + sizeof(blob_state) +
-                                   template->total_size,
-                      // .node_perform = (perform_func_t)blob_perform,
-                      .next = NULL};
-
-  // Allocate and initialize state
-  blob_state *state = (blob_state *)_mem;
-  _mem += sizeof(blob_state);
-
-  char *blob_data = _mem;
-
-  memcpy(blob_data, template->blob_data, template->total_size);
-
-  state->blob_start = blob_data + template->first_node_offset;
-  state->blob_end = blob_data + template->last_node_offset;
-  state->total_size = template->total_size;
-  state->num_ins = template->num_inputs;
-
-  struct double_list *l = args;
-  for (int i = 0; i < state->num_ins; i++) {
-    state->input_slot_offsets[i] = template->input_slot_offsets[i];
-    Signal *sig = (Signal *)((char *)blob_data + state->input_slot_offsets[i]);
-    *sig = (Signal){.size = BUF_SIZE, .layout = 1};
-    sig->buf = malloc(sizeof(double) * sig->size * sig->layout);
-    for (int j = 0; j < sig->size * sig->layout; j++) {
-      sig->buf[j] = l->val;
-    }
-    blob_node->input_offsets[i] = (char *)sig - (char *)blob_node;
-    l = l->next;
-  }
-  return blob_node;
-}
 
 void *blob_perform(Node *node, int nframes, double spf) {
 
@@ -353,7 +271,7 @@ void *blob_perform(Node *node, int nframes, double spf) {
     set_out_buf(cb);
     cb->frame_offset = frame_offset;
     offset_node_bufs(cb, frame_offset);
-    current = cb->node_perform(cb, nframes, spf);
+    current = cb->node_perform(cb, nframes - frame_offset, spf);
     unoffset_node_bufs(cb, frame_offset);
 
     // Verify alignment of returned pointer
@@ -445,8 +363,11 @@ NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
   // Calculate aligned sizes for proper memory layout
   size_t node_size = aligned_size(sizeof(Node));
   size_t blob_state_size = aligned_size(sizeof(blob_state));
+  // size_t input_buf_sizes = aligned_size(sizeof(double) * template->num_inputs * BUF_SIZE);  
+  size_t input_buf_sizes = 0;
+
   size_t total_required_size =
-      node_size + blob_state_size + template->total_size;
+      node_size + blob_state_size + template->total_size + input_buf_sizes;
 
   // Allocate aligned memory for the entire structure
   char *_mem = malloc(total_required_size);
@@ -489,7 +410,8 @@ NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template) {
     *sig = (Signal){.size = BUF_SIZE, .layout = 1};
 
     // Allocate aligned memory for signal buffer
-    sig->buf = malloc(sizeof(double) * sig->size * sig->layout);
+    sig->buf = (double *)malloc(sizeof(double) * sig->size * sig->layout);
+    // _mem = (char* )_mem + (sizeof(double) * sig->size * sig->layout);
 
     for (int j = 0; j < sig->size * sig->layout; j++) {
       sig->buf[j] = l->val;

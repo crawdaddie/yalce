@@ -9,45 +9,54 @@ void *mul_perform(Node *node, int nframes, double spf) {
   // printf("mul perform %p\n", node);
 
   int num_ins = node->num_ins;
+
   double *out = node->out.buf;
 
-  Signal input_sigs[num_ins];
-  for (int ii = 0; ii < num_ins; ii++) {
-    input_sigs[ii] = *get_node_input(node, ii);
+  Signal *input_sigs[num_ins];
+  for (int i = 0; i < num_ins; i++) {
+    input_sigs[i] = get_node_input(node, i);
   }
 
-  double *in0 = input_sigs[0].buf;
-  int i = 0;
-  int j = 0;
-  if (num_ins == 1) {
-    __builtin___memcpy_chk(out, in0, nframes * sizeof(double),
-                           __builtin_object_size(out, 0));
-  } else {
-    for (i = 0; i < nframes; i += 4) {
-      double sum0 = in0[i];
-      double sum1 = in0[i + 1];
-      double sum2 = in0[i + 2];
-      double sum3 = in0[i + 3];
-      for (j = 1; j < num_ins; j++) {
-        double *in = input_sigs[j].buf + i;
-        sum0 *= in[0];
-        sum1 *= in[1];
-        sum2 *= in[2];
-        sum3 *= in[3];
-      }
-      out[i] = sum0;
-      out[i + 1] = sum1;
-      out[i + 2] = sum2;
-      out[i + 3] = sum3;
+  while (nframes--) {
+    *out = *get_val(input_sigs[0]);
+    for (int i = 1; i < num_ins; i++) {
+      *out *= *get_val(input_sigs[i]);
     }
-    for (; i < nframes; i++) {
-      double sum = in0[i];
-      for (j = 1; j < num_ins; j++) {
-        sum *= input_sigs[j].buf[i];
-      }
-      out[i] = sum;
-    }
+    out++;
   }
+
+  // double *in0 = input_sigs[0].buf;
+  // int i = 0;
+  // int j = 0;
+  // if (num_ins == 1) {
+  //   __builtin___memcpy_chk(out, in0, nframes * sizeof(double),
+  //                          __builtin_object_size(out, 0));
+  // } else {
+  //   for (i = 0; i < nframes; i += 4) {
+  //     double sum0 = in0[i];
+  //     double sum1 = in0[i + 1];
+  //     double sum2 = in0[i + 2];
+  //     double sum3 = in0[i + 3];
+  //     for (j = 1; j < num_ins; j++) {
+  //       double *in = input_sigs[j].buf + i;
+  //       sum0 *= in[0];
+  //       sum1 *= in[1];
+  //       sum2 *= in[2];
+  //       sum3 *= in[3];
+  //     }
+  //     out[i] = sum0;
+  //     out[i + 1] = sum1;
+  //     out[i + 2] = sum2;
+  //     out[i + 3] = sum3;
+  //   }
+  //   for (; i < nframes; i++) {
+  //     double sum = in0[i];
+  //     for (j = 1; j < num_ins; j++) {
+  //       sum *= input_sigs[j].buf[i];
+  //     }
+  //     out[i] = sum;
+  //   }
+  // }
   return (char *)node + sizeof(Node);
 }
 

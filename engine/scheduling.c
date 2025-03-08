@@ -164,8 +164,8 @@ void *timer(void *arg) {
         double now_d = ((double)(now - start) / S_TO_NS);
         tl_offset = get_frame_offset();
 
-        printf("popped event from queue: cb: %p coroutine: %p %d\n",
-               ev.callback, ev.userdata, tl_offset);
+        // printf("popped event from queue: cb: %p coroutine: %p %d\n",
+        //        ev.callback, ev.userdata, tl_offset);
 
         ev.callback(ev.userdata, tl_offset);
       }

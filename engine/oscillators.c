@@ -142,7 +142,7 @@ char *sq_perform(Node *node, int nframes, double spf) {
 
 NodeRef sq_node(SignalRef input) {
   Node *node = node_new();
-  sq_state *state = (sin_state *)state_new(sizeof(sq_state));
+  sq_state *state = (sq_state *)state_new(sizeof(sq_state));
 
   int in_offset = (char *)input - (char *)node;
   *node = (Node){.num_ins = 1,

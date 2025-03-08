@@ -1,15 +1,14 @@
 %include ../engine/bindings/Synth
 %include ../engine/bindings/Sched
+# %include Gui
 %include Array
 %include Math
 
 let synth_template = (fn () ->
-  let gate = inlet 1. in
-  let s = 
-  inlet 100.
-  |> sin_node
-  in
-  mul2_node (asr_env_node 0.001 0.5 gate) s
+  let gate = inlet 1.;
+  let f = inlet 100.;
+  let s = sin_node f;
+  mul2_node gate s
   ;
   )
   |> compile_blob_template;
@@ -20,21 +19,20 @@ let s = fn freq dur offset ->
   |> instantiate_blob_template_w_args [1., freq]
   |> play_node_offset_w_kill offset dur 0 
 ;;
+# create_main_scope ()
 
-# s 200. 0.1 @@ get_frame_offset (); 
-
-let co_void = fn () -> yield 1;;
+# s 200. 0.5 @@ get_frame_offset (); 
+# let co_void = fn () -> yield 1;;
 let times = [| 0.125 |];
 let freqs = [| 55., 330., 220., 110., 44., 33., 55., 110., 220., 660. |];
 
 (
-  dur: \array_choose times,
-  frame_offset: 0,
+  dur: iter_of_list [0.5, 0.5, 1., 0.5],
+  frame_offset: get_frame_offset,
   freq: iter_of_list [55., 330., 220., 110., 44., 33., 55. ] |> cor_loop,
-) |> cor_wrap_effect (fn (dur, _frame_offset, freq) ->
-  let frame_offset = get_frame_offset ();
-  s freq 0.01 frame_offset;
+) |> cor_wrap_effect (fn (dur, frame_offset, freq) ->
+  s freq 0.1 frame_offset;
   ()
 ;) |> cor_play schedule_event;
-
-
+#
+#
