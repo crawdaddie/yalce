@@ -80,16 +80,22 @@ char *__node_get_state(Node *node, AudioGraph *graph) {
 }
 void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
                          int nframes, double spf) {
+
+  // int frame_offset = _node->frame_offset;
   // printf("perform audio graph %p\n", _node);
   int node_count = graph->node_count;
   Node *node = graph->nodes;
   Node *inputs[MAX_INPUTS];
   while (node_count--) {
+    // node->frame_offset = frame_offset;
+    // offset_node_bufs(node, frame_offset);
+
     if (node->perform) {
       __node_get_inputs(node, graph, inputs);
       char *state = __node_get_state(node, graph);
       node->perform(node, state, inputs, nframes, spf);
     }
+    // unoffset_node_bufs(node, frame_offset);
 
     node++;
   }

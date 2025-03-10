@@ -37,4 +37,7 @@ typedef struct {
 typedef Node *NodeRef;
 typedef Signal *SignalRef;
 typedef Node *Synth;
+
+void offset_node_bufs(Node *node, int frame_offset);
+void unoffset_node_bufs(Node *node, int frame_offset);
 #endif
