@@ -9,14 +9,14 @@
 #include <time.h>
 
 Node *_chain;
-int get_frame_offset() {
-  struct timespec t;
-  struct timespec btime = get_block_time();
-  set_block_time(&t);
-  int frame_offset = get_block_frame_offset(btime, t, 48000);
-  // printf("frame offset %d\n", frame_offset);
-  return frame_offset;
-}
+// int get_frame_offset() {
+//   struct timespec t;
+//   struct timespec btime = get_block_time();
+//   set_block_time(&t);
+//   int frame_offset = get_block_frame_offset(btime, t, 48000);
+//   // printf("frame offset %d\n", frame_offset);
+//   return frame_offset;
+// }
 
 void reset_chain() { _chain = NULL; }
 Node *end_chain(Node *s) {

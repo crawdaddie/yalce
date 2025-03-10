@@ -21,7 +21,8 @@ typedef struct {
 } Connection;
 
 typedef struct {
-  perform_func_t perform;             // Node processing function
+  perform_func_t perform; // Node processing function
+  int frame_offset;
   int node_index;                     // Position in the graph array
   int num_inputs;                     // Number of inputs this node has
   Connection connections[MAX_INPUTS]; // Input connections

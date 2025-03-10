@@ -2,69 +2,13 @@
 #include "./ctx.h"
 #include "./node.h"
 #include "./osc.h"
+#include "./scheduling.h"
+#include "audio_graph.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-// Graph container
-typedef struct {
-  Node *nodes;          // Array of all nodes
-  int node_count;       // Number of nodes in the graph
-  int capacity;         // Maximum nodes in the graph
-  double *buffer_pool;  // Pool of audio buffer memory
-  int buffer_pool_size; // Size of buffer pool in doubles
-  int buffer_pool_capacity;
-  char *nodes_state_memory; // Pool of node state memory
-  int state_memory_size;    // Size of state memory pool
-  int state_memory_capacity;
-  int inlets[MAX_INPUTS]; // index of nodes which are 'inlet' nodes
-  int num_inlets;
-} AudioGraph;
-
-double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
-  // Ensure we have enough space
-  if (graph->buffer_pool_size + size > graph->buffer_pool_capacity) {
-    graph->buffer_pool_capacity *= 2;
-    graph->buffer_pool =
-        realloc(graph->buffer_pool, graph->buffer_pool_capacity);
-
-    // Realloc buffer pool if needed
-    // ...
-  }
-
-  double *buffer = &graph->buffer_pool[graph->buffer_pool_size];
-  graph->buffer_pool_size += size;
-  return buffer;
-}
-
-int allocate_state_memory(AudioGraph *graph, int size) {
-  size = (size + 7) & ~7; // 8-byte alignment
-
-  int offset = graph->state_memory_size;
-  if (graph->state_memory_size + size > graph->state_memory_capacity) {
-    graph->state_memory_capacity *= 2;
-    graph->nodes_state_memory =
-        realloc(graph->nodes_state_memory, graph->state_memory_capacity);
-  }
-
-  graph->state_memory_size += size;
-
-  return offset;
-}
-Node *allocate_node_in_graph(AudioGraph *graph) {
-  int idx = graph->node_count++;
-  // printf("idx %d graph->node_count %d\n", idx, graph->node_count);
-
-  if (graph->node_count >= graph->capacity) {
-    graph->capacity *= 2;
-    graph->nodes = realloc(graph->nodes, graph->capacity * sizeof(Node));
-  }
-
-  Node *node = &graph->nodes[idx];
-  node->node_index = idx;
-  return node;
-}
 static AudioGraph *_graph = NULL;
 
 typedef struct sin_state {
@@ -354,23 +298,6 @@ Node *asr_node(Node *trigger, double attack_time, double sustain_level,
   return node;
 }
 
-void print_graph(AudioGraph *g) {
-  int node_count = g->node_count;
-
-  for (int i = 0; i < node_count; i++) {
-    Node *n = g->nodes + i;
-
-    printf("[%d] node (%s) \n\t[", i, n->meta);
-
-    for (int j = 0; j < n->num_inputs; j++) {
-      printf("%d, ", n->connections[j].source_node_index);
-    }
-    printf("]\n");
-  }
-  printf("buffer pool: %d\n", g->buffer_pool_size);
-  printf("state size: %d\n", g->state_memory_size);
-}
-
 void node_get_inputs(Node *node, AudioGraph *graph, Node *inputs[]) {
   int num_inputs = node->num_inputs;
   for (int i = 0; i < num_inputs; i++) {
@@ -385,22 +312,6 @@ char *node_get_state(Node *node, AudioGraph *graph) {
   }
   char *state = (char *)graph->nodes_state_memory + node->state_offset;
   return state;
-}
-
-void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
-                         int nframes, double spf) {
-  int node_count = graph->node_count;
-  Node *node = graph->nodes;
-  Node *inputs[MAX_INPUTS];
-  while (node_count--) {
-    if (node->perform) {
-      node_get_inputs(node, graph, inputs);
-      char *state = node_get_state(node, graph);
-      node->perform(node, state, inputs, nframes, spf);
-    }
-
-    node++;
-  }
 }
 
 void write_to_dac(int dac_layout, double *dac_buf, int _layout, double *buf,
@@ -460,11 +371,14 @@ static void write_null_to_output_buf(double *out, int nframes, int layout) {
 
 void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
   // reset_buf_ptr();
+  //
+  int consumed = process_msg_queue_pre(&ctx->msg_queue);
   if (ctx->head == NULL) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
   } else {
     perform_graph(ctx->head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
   }
+  process_msg_queue_post(&ctx->msg_queue, consumed);
 }
 
 Node *audio_graph_inlet(AudioGraph *g, int inlet_idx) {
@@ -475,6 +389,7 @@ Node *audio_graph_inlet(AudioGraph *g, int inlet_idx) {
 Node *inlet(double default_val) {
   Node *f = const_sig(default_val);
   _graph->inlets[_graph->num_inlets] = f->node_index;
+  _graph->inlet_defaults[_graph->num_inlets] = default_val;
   _graph->num_inlets++;
   return f;
 }
@@ -495,7 +410,7 @@ AudioGraph *sin_ensemble() {
   Node *f = inlet(150.);
   Node *g = inlet(1.);
   Node *s = sin_node(f);
-  Node *env = asr_node(g, 0.01, 0.8, 3.0);
+  Node *env = asr_node(g, 0.01, 0.8, 1.0);
   Node *m = mul_node(env, s);
 
   graph->capacity = graph->node_count;
@@ -512,7 +427,15 @@ AudioGraph *sin_ensemble() {
   return _graph;
 }
 
-Node *instantiate_template(AudioGraph *g) {
+typedef struct {
+  struct {
+    int idx;
+    double val;
+  } pair;
+  struct InValList *next;
+} InValList;
+
+Node *instantiate_template(AudioGraph *g, InValList *input_vals) {
   // Allocate all required memory in one contiguous block
   char *mem =
       malloc(sizeof(Node) + sizeof(AudioGraph) + sizeof(Node) * g->capacity +
@@ -562,26 +485,23 @@ Node *instantiate_template(AudioGraph *g) {
                      .write_to_output = true,
                      .meta = "sin_ensemble",
                      .next = NULL};
+  while (input_vals) {
+    int idx = input_vals->pair.idx;
+    double val = input_vals->pair.val;
+    int inlet_node_idx = graph_state->inlets[idx];
+    Node *inlet_node = graph_state->nodes + inlet_node_idx;
+    // printf("set inlet node %d to %f\n", inlet_node_idx, val);
+    for (int i = 0; i < inlet_node->output.layout * inlet_node->output.capacity;
+         i++) {
+      inlet_node->output.data[i] = val;
+    }
+
+    input_vals = input_vals->next;
+  }
 
   return ensemble;
 }
 // Function to add ensemble to audio context (assuming this exists)
-void audio_ctx_add(Node *ensemble) {
-  Ctx *ctx = get_audio_ctx();
-
-  // Add to existing chain
-  if (ctx->head == NULL) {
-    ctx->head = ensemble;
-  } else {
-    // Find the end of the chain
-    Node *current = ctx->head;
-    while (current->next != NULL) {
-      current = current->next;
-    }
-    // Append to the end
-    current->next = ensemble;
-  }
-}
 int main(int argc, char **argv) {
   AudioGraph *template = sin_ensemble();
 
@@ -596,29 +516,29 @@ int main(int argc, char **argv) {
 
   while (1) {
 
-    Node *ensemble = instantiate_template(template);
+    double freq = freqs[rand() % S];
+    printf("%f\n", freq);
+    InValList v = {{0, freq}, NULL};
+    Node *ensemble = instantiate_template(template, &v);
+    push_msg(&ctx->msg_queue, (scheduler_msg){
+                                  NODE_ADD,
+                                  get_frame_offset(),
+                                  {.NODE_ADD = {.target = ensemble}},
+                              });
+
     AudioGraph *gr = (char *)ensemble + (sizeof(Node));
-    double *freq_buf = audio_graph_inlet(gr, 0)->output.data;
-    double *trig_buf = audio_graph_inlet(gr, 1)->output.data;
 
-    double freq = freqs[current_freq_idx];
-    for (int i = 0; i < BUF_SIZE; i++) {
-      freq_buf[i] = freq;
-    }
+    // double *trig_buf = audio_graph_inlet(gr, 1)->output.data;
 
-    for (int i = 0; i < BUF_SIZE; i++) {
-      trig_buf[i] = 1.0;
-    }
-    audio_ctx_add(ensemble);
+    // audio_ctx_add(ensemble);
 
-    useconds_t tt = 1 << 17;
-    sleep(1);
-
-    // Set trigger LOW (release phase)
-    for (int i = 0; i < BUF_SIZE; i++) {
-      trig_buf[i] = 0.0;
-    }
-    sleep(1);
+    useconds_t tt = 1 << 18;
+    usleep(1 << 15); // Set trigger LOW (release phase)
+    push_msg(&ctx->msg_queue,
+             (scheduler_msg){NODE_SET_SCALAR,
+                             get_frame_offset(),
+                             {.NODE_SET_SCALAR = {.target = ensemble, 1, 0.}}});
+    usleep(tt);
   }
 
   return 0;

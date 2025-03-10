@@ -1,6 +1,6 @@
 #include "./ctx.h"
 #include "./node.h"
-#include "./perform.h"
+#include "audio_graph.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -29,14 +29,30 @@ void init_ctx() {}
 //   }
 // }
 
+void audio_ctx_add(Node *ensemble) {
+  Ctx *ctx = get_audio_ctx();
+
+  // Add to existing chain
+  if (ctx->head == NULL) {
+    ctx->head = ensemble;
+  } else {
+    // Find the end of the chain
+    Node *current = ctx->head;
+    while (current->next != NULL) {
+      current = current->next;
+    }
+    // Append to the end
+    current->next = ensemble;
+  }
+}
 static void process_msg_pre(scheduler_msg msg) {
 
   switch (msg.type) {
   case NODE_ADD: {
     struct NODE_ADD payload = msg.payload.NODE_ADD;
     int frame_offset = msg.frame_offset;
-    // payload.target->frame_offset = frame_offset;
-    _audio_ctx_add(payload.target);
+    payload.target->frame_offset = frame_offset;
+    audio_ctx_add(payload.target);
     //
     // payload.target->write_to_dac = true;
     break;
@@ -57,6 +73,14 @@ static void process_msg_pre(scheduler_msg msg) {
   case NODE_SET_SCALAR: {
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     Node *node = payload.target;
+    if ((char *)node->perform == (char *)perform_audio_graph) {
+      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      Node *inlet_node = g->nodes + g->inlets[payload.input];
+      Signal inlet_data = inlet_node->output;
+      for (int i = msg.frame_offset; i < BUF_SIZE; i++) {
+        inlet_data.data[i] = payload.value;
+      }
+    }
 
     // double *target_input_buf = get_node_input_buf(node, payload.input);
     // int target_input_size = get_node_input_size(node, payload.input);
@@ -99,14 +123,17 @@ static void process_msg_post(scheduler_msg msg) {
   }
 
   case NODE_SET_SCALAR: {
-    // struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
-    // Node *node = payload.target;
-    //
-    // double *target_input_buf = get_node_input_buf(node, payload.input);
-    //
-    // for (int i = 0; i < msg.frame_offset; i++) {
-    //   *(target_input_buf + i) = payload.value;
-    // }
+
+    struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
+    Node *node = payload.target;
+    if ((char *)node->perform == (char *)perform_audio_graph) {
+      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      Node *inlet_node = g->nodes + g->inlets[payload.input];
+      Signal inlet_data = inlet_node->output;
+      for (int i = 0; i < msg.frame_offset; i++) {
+        inlet_data.data[i] = payload.value;
+      }
+    }
     break;
   }
 
