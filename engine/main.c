@@ -346,10 +346,26 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     return;
   }
   if (head->perform) {
-    head->perform(head, head + 1, NULL, frame_count, spf);
+    int fc = frame_count;
+
+    // if (head->frame_offset > 0) {
+    //   // head->output.data =
+    //   //     head->output.data + (head->frame_offset * head->output.layout);
+    //   // _fc = frame_count - head->frame_offset;
+    // }
+    head->perform(head, head + 1, NULL, fc, spf);
+
     if (head->write_to_output) {
-      write_to_dac(layout, dac_buf, head->output.layout, head->output.data,
-                   output_num, frame_count);
+      write_to_dac(layout,
+                   dac_buf
+                   // + (head->frame_offset * layout)
+                   ,
+                   head->output.layout, head->output.data, output_num, fc);
+    }
+
+    if (head->frame_offset > 0) {
+      // head->output.data = head->output.data - head->frame_offset;
+      head->frame_offset = 0;
     }
   }
 
