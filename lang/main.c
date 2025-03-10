@@ -2,6 +2,7 @@
 #include "../gui/gui.h"
 #include "backend_llvm/jit.h"
 #include "format_utils.h"
+#include "signals.h"
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -20,8 +21,9 @@ int plot_sig(SignalRef sig) {
 }
 
 int scope_node(NodeRef node) {
-  SignalRef out_sig = &node->out;
-  return create_scope(out_sig->buf, out_sig->layout, out_sig->size);
+  Signal sig;
+  out_sig(node, &sig);
+  return create_scope(sig.buf, sig.layout, sig.size);
 }
 
 // Global variables for thread synchronization

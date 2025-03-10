@@ -1,7 +1,6 @@
-#include "ctx.h"
+#include "./ctx.h"
+#include "./node.h"
 #include "./perform.h"
-#include "./signals.h"
-#include "node.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,15 +8,15 @@ Ctx ctx;
 
 void init_ctx() {}
 
-static void write_null_to_output_buf(double *out, int nframes, int layout) {
-  double *dest = out;
-  while (nframes--) {
-    for (int ch = 0; ch < layout; ch++) {
-      *dest = 0.0;
-      dest++;
-    }
-  }
-}
+// static void write_null_to_output_buf(double *out, int nframes, int layout) {
+//   double *dest = out;
+//   while (nframes--) {
+//     for (int ch = 0; ch < layout; ch++) {
+//       *dest = 0.0;
+//       dest++;
+//     }
+//   }
+// }
 
 // void print_graph(Node *node) {
 //   Node *n = node;
@@ -36,10 +35,10 @@ static void process_msg_pre(scheduler_msg msg) {
   case NODE_ADD: {
     struct NODE_ADD payload = msg.payload.NODE_ADD;
     int frame_offset = msg.frame_offset;
-    payload.target->frame_offset = frame_offset;
-    audio_ctx_add(payload.target);
-
-    payload.target->write_to_dac = true;
+    // payload.target->frame_offset = frame_offset;
+    _audio_ctx_add(payload.target);
+    //
+    // payload.target->write_to_dac = true;
     break;
   }
 
@@ -59,18 +58,19 @@ static void process_msg_pre(scheduler_msg msg) {
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     Node *node = payload.target;
 
-    Signal *target_input = get_node_input(node, payload.input);
-    for (int i = msg.frame_offset; i < target_input->size; i++) {
-      *(target_input->buf + i) = payload.value;
-    }
+    // double *target_input_buf = get_node_input_buf(node, payload.input);
+    // int target_input_size = get_node_input_size(node, payload.input);
+    // for (int i = msg.frame_offset; i < target_input_size; i++) {
+    //   *(target_input_buf + i) = payload.value;
+    // }
     break;
   }
 
   case NODE_SET_TRIG: {
-    struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
-    Node *node = payload.target;
-    Signal *target_input = get_node_input(node, payload.input);
-    *(target_input->buf + msg.frame_offset) = 1.0;
+    // struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
+    // Node *node = payload.target;
+    // double *target_input_buf = get_node_input_buf(node, payload.input);
+    // *(target_input_buf + msg.frame_offset) = 1.0;
     break;
   }
   default:
@@ -99,22 +99,24 @@ static void process_msg_post(scheduler_msg msg) {
   }
 
   case NODE_SET_SCALAR: {
-    struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
-    Node *node = payload.target;
-
-    Signal *target_input = get_node_input(node, payload.input);
-    for (int i = 0; i < msg.frame_offset; i++) {
-      *(target_input->buf + i) = payload.value;
-    }
+    // struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
+    // Node *node = payload.target;
+    //
+    // double *target_input_buf = get_node_input_buf(node, payload.input);
+    //
+    // for (int i = 0; i < msg.frame_offset; i++) {
+    //   *(target_input_buf + i) = payload.value;
+    // }
     break;
   }
 
   case NODE_SET_TRIG: {
-    struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
-    Node *node = payload.target;
-
-    Signal *target_input = get_node_input(node, payload.input);
-    *(target_input->buf + msg.frame_offset) = 0.0;
+    // struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
+    // Node *node = payload.target;
+    //
+    // double *target_input_buf = get_node_input_buf(node, payload.input);
+    // *(target_input_buf + msg.frame_offset) = 0.0;
+    //
     break;
   }
   default:
@@ -142,21 +144,8 @@ void process_msg_queue_post(msg_queue *queue, int consumed) {
     process_msg_post(msg);
   }
 }
-void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
 
-  int consumed = process_msg_queue_pre(&ctx->msg_queue);
-
-  reset_buf_ptr();
-  if (ctx->head == NULL) {
-    write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
-  }
-
-  perform_graph(ctx->head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
-
-  process_msg_queue_post(&ctx->msg_queue, consumed);
-}
-
-Node *audio_ctx_add(Node *node) {
+Node *_audio_ctx_add(Node *node) {
   // printf("audio ctx add %p\n", node);
   if (ctx.head == NULL) {
     ctx.head = node;
@@ -172,7 +161,7 @@ Node *audio_ctx_add(Node *node) {
 Node *add_to_dac(Node *node) {
   // return NULL;
   // node->type = OUTPUT;
-  node->write_to_dac = true;
+  // node->write_to_dac = true;
   return node;
 }
 

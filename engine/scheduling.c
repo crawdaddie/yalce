@@ -1,11 +1,21 @@
 #include "scheduling.h"
-#include "lib.h"
+#include "audio_loop.h"
+// #include "lib.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+int get_frame_offset() {
+  struct timespec t;
+  struct timespec btime = get_block_time();
+  set_block_time(&t);
+  int frame_offset = get_block_frame_offset(btime, t, 48000);
+  // printf("frame offset %d\n", frame_offset);
+  return frame_offset;
+}
 
 #define S_TO_NS 1000000000ULL
 #define TIMER_INTERVAL_NS 100000ULL // 0.1 milliseconds

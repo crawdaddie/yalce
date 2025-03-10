@@ -1,6 +1,7 @@
 #include "./oscillators.h"
 #include "./common.h"
 #include "./ctx.h"
+#include "alloc.h"
 #include "node.h"
 #include "signals.h"
 #include <math.h>
@@ -45,18 +46,19 @@ void maketable_sin(void) {
 
 void *sin_perform(Node *node, int nframes, double spf) {
   sin_state *state = get_node_state(node);
-  Signal in = *get_node_input(node, 0);
 
   double d_index;
   int index = 0;
 
   double frac, a, b, sample;
-  double *freq;
+  double *in = get_node_input_buf(node, 0);
 
-  int out_layout = node->out.layout;
-  double *out = node->out.buf;
+  int out_layout = node->output_layout;
+  double *out = get_node_out_buf(node);
+  double freq;
   while (nframes--) {
-    freq = get_val(&in);
+    freq = *in;
+    in++;
     d_index = state->phase * SIN_TABSIZE;
     index = (int)d_index;
     frac = d_index - index;
@@ -69,26 +71,32 @@ void *sin_perform(Node *node, int nframes, double spf) {
       *out = sample;
       out++;
     }
-    state->phase = fmod((*freq) * spf + (state->phase), 1.0);
+    state->phase = fmod(freq * spf + (state->phase), 1.0);
   }
   return (char *)node + node->node_size;
 }
 
 Node *sin_node(Signal *input) {
-  Node *node = node_new();
-  sin_state *state = (sin_state *)state_new(sizeof(sin_state));
+  Node *node = (Node *)engine_alloc(sizeof(Node));
+  blob_register_node(node);
+  sin_state *state = (sin_state *)engine_alloc(sizeof(sin_state));
+  double *out = (double *)engine_alloc(sizeof(double) * BUF_SIZE * 1);
 
-  int in_offset = (char *)input - (char *)node;
-  *node = (Node){.num_ins = 1,
+  size_t total_size =
+      sizeof(Node) + sizeof(sin_state) + sizeof(double) * BUF_SIZE;
+
+  int in_offset = (char *)(input->buf) - (char *)node;
+  *node = (Node){.output_buf_offset = (char *)out - (char *)node,
+                 .output_size = BUF_SIZE,
+                 .output_layout = 1,
+                 .num_ins = 1,
                  .input_offsets = {in_offset},
-                 .node_size = aligned_size(sizeof(Node) + sizeof(sin_state)),
-                 .out = {.size = BUF_SIZE,
-                         .layout = 1,
-                         .buf = malloc(sizeof(double) * BUF_SIZE)},
+                 .input_sizes = {input->size},
+                 .input_layouts = {input->layout},
                  .node_perform = (perform_func_t)sin_perform,
+                 .node_size = total_size,
                  .next = NULL};
 
-  // sin_state *state = node_alloc(mem, sizeof(sin_state));
   *state = (sin_state){0.};
 
   return node;
@@ -121,40 +129,46 @@ typedef struct sq_state {
 char *sq_perform(Node *node, int nframes, double spf) {
 
   sq_state *state = get_node_state(node);
-  Signal in = *get_node_input(node, 0);
+  double *in = get_node_input_buf(node, 0);
 
+  int out_layout = node->output_layout;
+  double *out = get_node_out_buf(node);
 
-  int out_layout = node->out.layout;
-  double *out = node->out.buf;
-
-  double *freq;
+  double freq;
   while (nframes--) {
 
-    freq = get_val(&in);
+    freq = *in;
+    in++;
     *out = sq_sample(state->phase);
     // *out += sq_sample(state->phase * 1.5, *input);
     // *out /= 2.;
     // printf("sq perform *out %f\n", *out);
-    state->phase = fmod(*freq * spf + (state->phase), 1.0);
+    state->phase = fmod(freq * spf + (state->phase), 1.0);
     out++;
   }
 }
 
 NodeRef sq_node(SignalRef input) {
-  Node *node = node_new();
-  sq_state *state = (sq_state *)state_new(sizeof(sq_state));
+  Node *node = engine_alloc(sizeof(Node));
+  blob_register_node(node);
+  sq_state *state = (sq_state *)engine_alloc(sizeof(sq_state));
+  double *out = (double *)engine_alloc(sizeof(double) * BUF_SIZE * 1);
 
-  int in_offset = (char *)input - (char *)node;
+  size_t total_size =
+      sizeof(Node) + sizeof(sq_state) + sizeof(double) * BUF_SIZE;
+
+  int in_offset = (char *)(input->buf) - (char *)node;
   *node = (Node){.num_ins = 1,
+                 .output_buf_offset = (char *)out - (char *)node,
+                 .output_size = BUF_SIZE,
+                 .output_layout = 1,
                  .input_offsets = {in_offset},
-                 .node_size = aligned_size(sizeof(Node) + sizeof(sq_state)),
-                 .out = {.size = BUF_SIZE,
-                         .layout = 1,
-                         .buf = malloc(sizeof(double) * BUF_SIZE)},
+                 .input_sizes = {input->size},
+                 .input_layouts = {input->layout},
                  .node_perform = (perform_func_t)sq_perform,
+                 .node_size = total_size,
                  .next = NULL};
 
-  // sin_state *state = node_alloc(mem, sizeof(sin_state));
   *state = (sq_state){0.};
 
   return node;
@@ -169,8 +183,8 @@ void *simple_gate_env_perform(Node *node, int nframes, double spf) {
 
   simple_gate_env_state *state = get_node_state(node);
 
-  int out_layout = node->out.layout;
-  double *out = node->out.buf;
+  int out_layout = node->output_layout;
+  double *out = get_node_out_buf(node);
   while (nframes--) {
     if (state->phase < state->end_phase) {
       *out = 1.;
@@ -185,16 +199,16 @@ void *simple_gate_env_perform(Node *node, int nframes, double spf) {
 }
 
 NodeRef simple_gate_env_node(double len) {
-  Node *node = node_new();
+  Node *node = engine_alloc(sizeof(Node));
   simple_gate_env_state *state =
-      (simple_gate_env_state *)state_new(sizeof(simple_gate_env_state));
+      (simple_gate_env_state *)engine_alloc(sizeof(simple_gate_env_state));
 
   *node = (Node){.num_ins = 0,
                  .input_offsets = {0},
                  .node_size = sizeof(Node) + sizeof(simple_gate_env_state),
-                 .out = {.size = BUF_SIZE,
-                         .layout = 1,
-                         .buf = malloc(sizeof(double) * BUF_SIZE)},
+                 // .out = {.size = BUF_SIZE,
+                 //         .layout = 1,
+                 //         .buf = malloc(sizeof(double) * BUF_SIZE)},
                  .node_perform = (perform_func_t)simple_gate_env_perform,
                  .next = NULL};
 
@@ -225,94 +239,95 @@ typedef struct adsr_env_state {
 } adsr_env_state;
 
 void *adsr_env_perform(Node *node, int nframes, double spf) {
-  adsr_env_state *state = get_node_state(node);
-  Signal in = *get_node_input(node, 0);
-
-  int out_layout = node->out.layout;
-  double *out = node->out.buf;
-
-  while (nframes--) {
-    double *input = get_val(&in);
-    double current_input = *input;
-
-    // Detect 0->1 transition (note on)
-    if (current_input >= 0.5 && state->prev_input < 0.5) {
-      state->current_state = ADSR_ATTACK;
-      state->phase = 0;
-    }
-    // Detect 1->0 transition (note off)
-    else if (current_input < 0.5 && state->prev_input >= 0.5) {
-      state->current_state = ADSR_RELEASE;
-      state->phase = 0;
-    }
-
-    // Process based on current state
-    switch (state->current_state) {
-    case ADSR_IDLE:
-      state->output = 0.0;
-      break;
-
-    case ADSR_ATTACK:
-      // Linear attack from 0 to 1
-      state->output = (double)state->phase / state->attack_samples;
-      if (state->output >= 1.0) {
-        state->output = 1.0;
-        state->current_state = ADSR_DECAY;
-        state->phase = 0;
-      }
-      break;
-
-    case ADSR_DECAY:
-      // Exponential decay from 1 to sustain_level
-      {
-        double decay_progress = (double)state->phase / state->decay_samples;
-        state->output = 1.0 + (state->sustain_level - 1.0) *
-                                  (1.0 - exp(-5.0 * decay_progress)) /
-                                  (1.0 - exp(-5.0));
-        if (state->phase >= state->decay_samples) {
-          state->current_state = ADSR_SUSTAIN;
-          state->output = state->sustain_level;
-        }
-      }
-      break;
-
-    case ADSR_SUSTAIN:
-      state->output = state->sustain_level;
-      break;
-
-    case ADSR_RELEASE:
-      // Exponential release from current level to 0
-      {
-        double start_level =
-            (state->phase == 0) ? state->output : state->sustain_level;
-        double release_progress = (double)state->phase / state->release_samples;
-        state->output = start_level * exp(-5.0 * release_progress);
-
-        if (state->phase >= state->release_samples) {
-          if (state->parent_node_offset && state->should_free_parent) {
-            Node *target = (char *)node - state->parent_node_offset;
-            target->can_free = true;
-            target->write_to_dac = false;
-          }
-
-          state->current_state = ADSR_IDLE;
-          state->output = 0.0;
-        }
-      }
-      break;
-    }
-
-    // Output the envelope value
-    for (int i = 0; i < out_layout; i++) {
-      *out = state->output;
-      out++;
-    }
-
-    // Update state
-    state->prev_input = current_input;
-    state->phase++;
-  }
-
+  // adsr_env_state *state = get_node_state(node);
+  // Signal in = *get_node_input(node, 0);
+  //
+  // int out_layout = node->out.layout;
+  // double *out = node->out.buf;
+  //
+  // while (nframes--) {
+  //   double *input = get_val(&in);
+  //   double current_input = *input;
+  //
+  //   // Detect 0->1 transition (note on)
+  //   if (current_input >= 0.5 && state->prev_input < 0.5) {
+  //     state->current_state = ADSR_ATTACK;
+  //     state->phase = 0;
+  //   }
+  //   // Detect 1->0 transition (note off)
+  //   else if (current_input < 0.5 && state->prev_input >= 0.5) {
+  //     state->current_state = ADSR_RELEASE;
+  //     state->phase = 0;
+  //   }
+  //
+  //   // Process based on current state
+  //   switch (state->current_state) {
+  //   case ADSR_IDLE:
+  //     state->output = 0.0;
+  //     break;
+  //
+  //   case ADSR_ATTACK:
+  //     // Linear attack from 0 to 1
+  //     state->output = (double)state->phase / state->attack_samples;
+  //     if (state->output >= 1.0) {
+  //       state->output = 1.0;
+  //       state->current_state = ADSR_DECAY;
+  //       state->phase = 0;
+  //     }
+  //     break;
+  //
+  //   case ADSR_DECAY:
+  //     // Exponential decay from 1 to sustain_level
+  //     {
+  //       double decay_progress = (double)state->phase / state->decay_samples;
+  //       state->output = 1.0 + (state->sustain_level - 1.0) *
+  //                                 (1.0 - exp(-5.0 * decay_progress)) /
+  //                                 (1.0 - exp(-5.0));
+  //       if (state->phase >= state->decay_samples) {
+  //         state->current_state = ADSR_SUSTAIN;
+  //         state->output = state->sustain_level;
+  //       }
+  //     }
+  //     break;
+  //
+  //   case ADSR_SUSTAIN:
+  //     state->output = state->sustain_level;
+  //     break;
+  //
+  //   case ADSR_RELEASE:
+  //     // Exponential release from current level to 0
+  //     {
+  //       double start_level =
+  //           (state->phase == 0) ? state->output : state->sustain_level;
+  //       double release_progress = (double)state->phase /
+  //       state->release_samples; state->output = start_level * exp(-5.0 *
+  //       release_progress);
+  //
+  //       if (state->phase >= state->release_samples) {
+  //         if (state->parent_node_offset && state->should_free_parent) {
+  //           Node *target = (char *)node - state->parent_node_offset;
+  //           target->can_free = true;
+  //           target->write_to_dac = false;
+  //         }
+  //
+  //         state->current_state = ADSR_IDLE;
+  //         state->output = 0.0;
+  //       }
+  //     }
+  //     break;
+  //   }
+  //
+  //   // Output the envelope value
+  //   for (int i = 0; i < out_layout; i++) {
+  //     *out = state->output;
+  //     out++;
+  //   }
+  //
+  //   // Update state
+  //   state->prev_input = current_input;
+  //   state->phase++;
+  // }
+  //
   char *ret = (char *)node + node->node_size;
   return ret;
 }
@@ -320,40 +335,43 @@ void *adsr_env_perform(Node *node, int nframes, double spf) {
 NodeRef adsr_env_node(double attack_time, double decay_time,
                       double sustain_level, double release_time, Signal *gate) {
 
-  Node *node = node_new();
-  adsr_env_state *state = (adsr_env_state *)state_new(sizeof(adsr_env_state));
-
-  // Set the input signal offset correctly
-  int in_offset = (char *)gate - (char *)node;
-  *node =
-      (Node){.num_ins = 1,
-             .input_offsets = {in_offset}, // Will be set in the function call
-             .node_size = aligned_size(sizeof(Node) + sizeof(adsr_env_state)),
-             .out = {.size = BUF_SIZE,
-                     .layout = 1,
-                     .buf = malloc(sizeof(double) * BUF_SIZE)},
-             .node_perform = (perform_func_t)adsr_env_perform,
-             .next = NULL};
-
-  // Convert time parameters to samples
-  int sr = ctx_sample_rate();
-  *state = (adsr_env_state){.phase = 0,
-                            .output = 0.0,
-                            .prev_input = 0.0,
-                            .attack_samples = (int)(attack_time * sr),
-                            .decay_samples = (int)(decay_time * sr),
-                            .sustain_level = sustain_level,
-                            .release_samples = (int)(release_time * sr),
-                            .current_state = ADSR_ATTACK,
-                            .should_free_parent = true};
-
-  if (_current_blob && _current_blob->first_node_offset != -1) {
-    state->parent_node_offset =
-        ((char *)node - (char *)_current_blob->blob_data) +
-        aligned_size(sizeof(Node) + sizeof(blob_state));
-  }
-
-  return node;
+  // Node *node = engine_alloc(sizeof(Node));
+  //
+  // blob_register_node(node);
+  // adsr_env_state *state =
+  //     (adsr_env_state *)engine_alloc(sizeof(adsr_env_state));
+  //
+  // // Set the input signal offset correctly
+  // int in_offset = (char *)gate - (char *)node;
+  // *node =
+  //     (Node){.num_ins = 1,
+  //            .input_offsets = {in_offset}, // Will be set in the function
+  //            call .node_size = aligned_size(sizeof(Node) +
+  //            sizeof(adsr_env_state)), .out = {.size = BUF_SIZE,
+  //                    .layout = 1,
+  //                    .buf = malloc(sizeof(double) * BUF_SIZE)},
+  //            .node_perform = (perform_func_t)adsr_env_perform,
+  //            .next = NULL};
+  //
+  // // Convert time parameters to samples
+  // int sr = ctx_sample_rate();
+  // *state = (adsr_env_state){.phase = 0,
+  //                           .output = 0.0,
+  //                           .prev_input = 0.0,
+  //                           .attack_samples = (int)(attack_time * sr),
+  //                           .decay_samples = (int)(decay_time * sr),
+  //                           .sustain_level = sustain_level,
+  //                           .release_samples = (int)(release_time * sr),
+  //                           .current_state = ADSR_ATTACK,
+  //                           .should_free_parent = true};
+  //
+  // if (_current_blob && _current_blob->first_node_offset != -1) {
+  //   state->parent_node_offset =
+  //       ((char *)node - (char *)_current_blob->blob_data) +
+  //       aligned_size(sizeof(Node) + sizeof(blob_state));
+  // }
+  //
+  // return node;
 }
 
 typedef struct asr_env_state {
@@ -379,14 +397,15 @@ typedef struct asr_env_state {
 
 void *asr_env_perform(Node *node, int nframes, double spf) {
   asr_env_state *state = get_node_state(node);
-  Signal in = *get_node_input(node, 0);
+  double *in = get_node_input_buf(node, 0);
 
-  int out_layout = node->out.layout;
-  double *out = node->out.buf;
+  int out_layout = node->output_layout;
+  double *out = get_node_out_buf(node);
 
   while (nframes--) {
-    double *input = get_val(&in);
-    double current_input = *input;
+    double input = *in;
+    in++;
+    double current_input = input;
 
     // Detect 0->1 transition (note on)
     if (current_input >= 0.5 && state->prev_input < 0.5) {
@@ -458,22 +477,28 @@ void *asr_env_perform(Node *node, int nframes, double spf) {
 
 NodeRef asr_env_node(double attack_time, double release_time, Signal *gate) {
 
-  Node *node = node_new();
-  asr_env_state *state = (asr_env_state *)state_new(sizeof(asr_env_state));
+  Node *node = engine_alloc(sizeof(Node));
+  blob_register_node(node);
+  asr_env_state *state = (asr_env_state *)engine_alloc(sizeof(asr_env_state));
+  double *out = (double *)engine_alloc(sizeof(double) * BUF_SIZE * 1);
+
+  size_t total_size =
+      sizeof(Node) + sizeof(asr_env_state) + sizeof(double) * BUF_SIZE;
 
   // Set the input signal offset correctly
-  int in_offset = (char *)gate - (char *)node;
-  *node =
-      (Node){.num_ins = 1,
-             .input_offsets = {in_offset}, // Will be set in the function call
-             .node_size = aligned_size(sizeof(Node) + sizeof(asr_env_state)),
-             .out =
-                 {
-                     .size = BUF_SIZE, .layout = 1,
-                     // .buf = malloc(sizeof(double) * BUF_SIZE)
-                 },
-             .node_perform = (perform_func_t)asr_env_perform,
-             .next = NULL};
+  int in_offset = (char *)gate->buf - (char *)node;
+  *node = (Node){
+
+      .output_buf_offset = (char *)out - (char *)node,
+      .output_size = BUF_SIZE,
+      .output_layout = 1,
+      .num_ins = 1,
+      .input_offsets = {in_offset},
+      .input_sizes = {gate->size},
+      .input_layouts = {gate->layout},
+      .node_size = total_size,
+      .node_perform = (perform_func_t)asr_env_perform,
+      .next = NULL};
 
   // Convert time parameters to samples
   int sr = ctx_sample_rate();

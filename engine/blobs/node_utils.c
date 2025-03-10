@@ -1,5 +1,6 @@
 #include "./node_utils.h"
 #include "./node.h"
+#include "alloc.h"
 #include "common.h"
 #include "signals.h"
 #include <stdio.h>
@@ -10,17 +11,19 @@ void *mul_perform(Node *node, int nframes, double spf) {
 
   int num_ins = node->num_ins;
 
-  double *out = node->out.buf;
+  double *out = get_node_out_buf(node);
 
-  Signal *input_sigs[num_ins];
+  double *input_sigs[num_ins];
   for (int i = 0; i < num_ins; i++) {
-    input_sigs[i] = get_node_input(node, i);
+    input_sigs[i] = get_node_input_buf(node, i);
   }
 
   while (nframes--) {
-    *out = *get_val(input_sigs[0]);
+    *out = *input_sigs[0];
+    input_sigs[0] = input_sigs[0]++;
     for (int i = 1; i < num_ins; i++) {
-      *out *= *get_val(input_sigs[i]);
+      *out *= *input_sigs[i];
+      input_sigs[i] = input_sigs[i]++;
     }
     out++;
   }
@@ -62,16 +65,22 @@ void *mul_perform(Node *node, int nframes, double spf) {
 
 NodeRef mul2_node(SignalRef a, SignalRef b) {
 
-  Node *node = node_new();
+  Node *node = engine_alloc(sizeof(Node));
+  blob_register_node(node);
+  double *out = (double *)engine_alloc(sizeof(double) * BUF_SIZE * 1);
 
-  int in_offset_a = (char *)a - (char *)node;
-  int in_offset_b = (char *)b - (char *)node;
-  *node = (Node){.num_ins = 2,
+  size_t total_size = sizeof(Node) + sizeof(double) * BUF_SIZE;
+
+  int in_offset_a = (char *)a->buf - (char *)node;
+  int in_offset_b = (char *)b->buf - (char *)node;
+  *node = (Node){.output_buf_offset = (char *)out - (char *)node,
+                 .output_size = BUF_SIZE,
+                 .output_layout = 1,
+                 .num_ins = 2,
                  .input_offsets = {in_offset_a, in_offset_b},
-                 .node_size = aligned_size(sizeof(Node)),
-                 .out = {.size = BUF_SIZE,
-                         .layout = 1,
-                         .buf = malloc(sizeof(double) * BUF_SIZE)},
+                 .input_sizes = {a->size, b->size},
+                 .input_layouts = {a->layout, b->layout},
+                 .node_size = total_size,
                  .node_perform = (perform_func_t)mul_perform,
                  .next = NULL};
   // printf("mul2 node %p size %d\n", node, node->node_size);

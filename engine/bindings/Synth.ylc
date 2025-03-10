@@ -12,11 +12,15 @@ let tanh_node = extern fn Double -> Signal -> Synth;
 
 # signals.h
 let inlet = extern fn Double -> Signal;
-let out_sig = extern fn Synth -> Signal;
+let out_sig = extern fn Synth -> Signal -> ();
 let get_val = extern fn Signal -> Ptr;
 let get_sig_default = extern fn Int -> Double -> Signal;
 let signal_of_double = extern fn Double -> Signal;
-let get_node_input = extern fn Synth -> Int -> Signal;
+let get_node_input_buf = extern fn Synth -> Int -> Ptr;
+let get_node_input_size = extern fn Synth -> Int -> Int;
+let get_node_input_layout = extern fn Synth -> Int -> Int;
+let get_node_out_buf = extern fn Synth -> Ptr;
+let get_node_out_layout = extern fn Synth -> Int;
 
 # node_exports.h
 let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;

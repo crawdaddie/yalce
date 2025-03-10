@@ -272,5 +272,3 @@ int signal_size(SignalRef sig) { return sig->size; }
 //   sig->layout = 1;
 //   return sig;
 // }
-
-SignalRef node_output_sig(NodeRef node) { return &node->out; }

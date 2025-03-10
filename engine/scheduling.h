@@ -18,4 +18,6 @@ void schedule_event_quant(SchedulerCallback callback, double quantization,
 
 int get_tl_frame_offset(void);
 
+int get_frame_offset();
+
 #endif

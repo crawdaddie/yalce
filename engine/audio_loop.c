@@ -3,8 +3,7 @@
 #include "audio_loop.h"
 #include "ctx.h"
 #include "midi.h"
-#include "node_gc.h"
-#include "oscillators.h"
+#include "osc.h"
 #include "scheduling.h"
 #include <errno.h>
 #include <pthread.h>
@@ -330,7 +329,7 @@ int init_audio() {
   maketable_sin();
   start_audio();
   scheduler_event_loop();
-  gc_loop(get_audio_ctx());
+  // gc_loop(get_audio_ctx());
   midi_setup();
 
   return 0;

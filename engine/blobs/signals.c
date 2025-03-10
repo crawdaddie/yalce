@@ -1,47 +1,55 @@
 #include "./signals.h"
 #include "./common.h"
+#include "alloc.h"
 #include <stdio.h>
 #include <stdlib.h>
-SignalRef signal_new() {
-  if (!_current_blob) {
-    SignalRef sig = malloc(sizeof(Signal));
 
-    // if (_chain == NULL) {
-    //   _chain = group_new(0);
-    // } else {
-    //   group_add_tail(_chain, node);
-    // }
-
-    return sig;
-  }
-
-  SignalRef sig = (SignalRef)(_current_blob->_mem_ptr);
-  _current_blob->_mem_ptr = (char *)_current_blob->_mem_ptr + sizeof(Signal);
-
-  return sig;
+void out_sig(NodeRef node, Signal *sig) {
+  sig->buf = (char *)node + node->output_buf_offset;
+  sig->layout = node->output_layout;
+  sig->size = node->output_size;
 }
 
 SignalRef inlet(double default_val) {
-  Signal *sig = signal_new();
+
+  SignalRef sig = engine_alloc(sizeof(Signal) * BUF_SIZE);
+
   if (_current_blob != NULL) {
     BlobTemplate *tpl = _current_blob;
 
     int idx = tpl->num_inputs;
+    if (idx == MAX_INPUTS) {
+      fprintf(stderr, "Too many inputs for node\n");
+      return NULL;
+    }
     tpl->default_vals[idx] = default_val;
     tpl->input_slot_offsets[idx] = (char *)sig - (char *)tpl->blob_data;
     tpl->num_inputs++;
   }
-
   sig->layout = 1;
-  sig->size = 1;
+  sig->size = BUF_SIZE;
+
   return sig;
 }
 
-Signal *out_sig(Node *n) { return &n->out; }
-
-SignalRef get_node_input(NodeRef node, int input) {
-  return (void *)((char *)node + (node->input_offsets[input]));
+double *get_node_input_buf(NodeRef node, int input) {
+  Signal *sig = (Signal *)((char *)node + (node->input_offsets[input]));
+  return sig->buf;
 }
+
+int get_node_input_size(NodeRef node, int input) {
+  return node->input_sizes[input];
+}
+
+int get_node_input_layout(NodeRef node, int input) {
+  return node->input_layouts[input];
+}
+
+double *get_node_out_buf(NodeRef node) {
+  return (double *)((char *)node + (node->output_buf_offset));
+}
+
+int get_node_out_layout(NodeRef node) { return node->output_layout; }
 
 double *get_val(SignalRef in) {
   if (in->size == 1) {
@@ -53,7 +61,7 @@ double *get_val(SignalRef in) {
 }
 
 SignalRef get_sig_default(int layout, double value) {
-  Signal *sig = signal_new();
+  Signal *sig = engine_alloc(sizeof(Signal));
   *sig = (Signal){.layout = layout,
                   .size = BUF_SIZE,
                   .buf = malloc(sizeof(double) * BUF_SIZE * layout)};

@@ -104,14 +104,22 @@ LLVMValueRef ConsSignal(LLVMValueRef input, Type *input_type,
   }
   case T_CONS: {
     if (is_synth_type(input_type)) {
-      LLVMTypeRef fn_type =
-          LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
-                           (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
+      LLVMTypeRef fn_type = LLVMFunctionType(
+          LLVMVoidType(), (LLVMTypeRef[]){LLVMDoubleType(), GENERIC_PTR}, 2, 0);
 
       LLVMValueRef f = get_extern_fn("out_sig", fn_type, module);
 
-      return LLVMBuildCall2(builder, fn_type, f, (LLVMValueRef[]){input}, 1,
-                            "get_out_signal_of_node");
+      LLVMValueRef sig_alloca = LLVMBuildAlloca(
+          builder,
+          LLVMStructType((LLVMTypeRef[]){LLVMPointerType(LLVMDoubleType(), 0),
+                                         LLVMInt32Type(), LLVMInt32Type()},
+                         3, 0),
+          "sig_alloc");
+
+      LLVMBuildCall2(builder, fn_type, f, (LLVMValueRef[]){input, sig_alloca},
+                     1, "get_out_signal_of_node");
+
+      return sig_alloca;
     }
 
     if (is_signal_type(input_type)) {
@@ -265,7 +273,7 @@ LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
       module);
 
   LLVMValueRef temp_mem = LLVMBuildArrayAlloca(
-      builder, LLVMInt8Type(), LLVMConstInt(LLVMInt32Type(), 1 << 12, 0),
+      builder, LLVMInt8Type(), LLVMConstInt(LLVMInt32Type(), 1 << 14, 0),
       "temporary_memory_for_blob_data");
 
   LLVMValueRef blob_template = LLVMBuildCall2(

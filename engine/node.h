@@ -1,74 +1,39 @@
 #ifndef _ENGINE_NODE_H
 #define _ENGINE_NODE_H
+
+#include "common.h"
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef struct Signal {
-  int layout;
-  int size;
-  double *buf;
+typedef void *(*perform_func_t)(void *ptr, void *state, void *inputs,
+                                int nframes, double spf);
+
+// Buffer / Signal information
+typedef struct {
+  int layout;   // Number of channels in the buffer
+  int capacity; // Buffer capacity in frames
+  double *data; // Pointer to actual buffer data
 } Signal;
 
-typedef void *(*perform_func_t)(void *ptr, int nframes, double spf);
-
-#define MAX_INPUTS 16
+typedef struct {
+  int source_node_index; // Index of source node in graph
+  int input_index;       // Which input slot this connects to
+} Connection;
 
 typedef struct {
-  int node_size;
-  int num_ins;
-  int input_offsets[MAX_INPUTS];
-  int frame_offset;
-  bool write_to_dac;
-  bool can_free;
-  Signal out;
-  perform_func_t node_perform;
-  struct Node *next;
+  perform_func_t perform;             // Node processing function
+  int node_index;                     // Position in the graph array
+  int num_inputs;                     // Number of inputs this node has
+  Connection connections[MAX_INPUTS]; // Input connections
+  Signal output;                      // Output buffer
+  int state_size;                     // Size of node-specific state
+  int state_offset;                   // Offset to state in state memory pool
+  int write_to_output;
+  struct Node *next; // For execution ordering
+  char *meta;
 } Node;
 
 typedef Node *NodeRef;
 typedef Signal *SignalRef;
 typedef Node *Synth;
-
-perform_func_t get_node_perform(void *node);
-void *get_node_state(void *node);
-extern NodeRef _chain_head;
-extern NodeRef _chain_tail;
-extern NodeRef _chain;
-
-#define MAX_INPUTS 16
-// Definition for a blob template
-typedef struct {
-  int total_size;  // Total size of all nodes in the blob
-  int num_inputs;  // Number of inputs the blob expects
-  char *blob_data; // The actual compiled blob data
-  int first_node_offset;
-  int last_node_offset;
-  int input_slot_offsets[MAX_INPUTS]; // Offsets for where inputs should connect
-  double default_vals[MAX_INPUTS];    // Offsets for where inputs should connect
-  char *_mem_ptr;
-} BlobTemplate;
-
-extern BlobTemplate *_current_blob;
-void *create_new_blob_template();
-BlobTemplate *start_blob(char *base_memory);
-BlobTemplate *end_blob(Node *end);
-
-NodeRef instantiate_blob_template(BlobTemplate *template);
-NodeRef instantiate_blob_template_w_args(void *args, BlobTemplate *template);
-
-Node *node_new();
-
-size_t aligned_size(size_t size);
-char *state_new(size_t size);
-
-char *node_out_buf_new(size_t len, int layout);
-
-typedef struct {
-  int total_size;
-  int num_ins;
-  void *blob_start;
-  void *blob_end;
-  int input_slot_offsets[MAX_INPUTS];
-} blob_state;
-
 #endif

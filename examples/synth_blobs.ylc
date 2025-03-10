@@ -4,35 +4,34 @@
 %include Array
 %include Math
 
-let synth_template = (fn () ->
-  let gate = inlet 1.;
+let synth_tpl = (fn () ->
   let f = inlet 100.;
-  let s = sin_node f;
-  mul2_node gate s
+  sin_node f
   ;
   )
   |> compile_blob_template;
 
+synth_tpl |> instantiate_blob_template_w_args [100.] |> play_node_offset (get_frame_offset ())
 
-let s = fn freq dur offset ->
-  synth_template
-  |> instantiate_blob_template_w_args [1., freq]
-  |> play_node_offset_w_kill offset dur 0 
-;;
-# create_main_scope ()
-
-# s 200. 0.5 @@ get_frame_offset (); 
-# let co_void = fn () -> yield 1;;
-let times = [| 0.125 |];
-let freqs = [| 55., 330., 220., 110., 44., 33., 55., 110., 220., 660. |];
-
-(
-  dur: iter_of_list [0.5, 0.5, 1., 0.5],
-  frame_offset: get_frame_offset,
-  freq: iter_of_list [55., 330., 220., 110., 44., 33., 55. ] |> cor_loop,
-) |> cor_wrap_effect (fn (dur, frame_offset, freq) ->
-  s freq 0.1 frame_offset;
-  ()
-;) |> cor_play schedule_event;
+# let s = fn freq dur offset ->
+#   synth_template
+#   |> instantiate_blob_template_w_args [1., freq]
+#   |> play_node_offset_w_kill offset dur 0 
+# ;;
+# # create_main_scope ()
+#
+# # s 200. 0.5 @@ get_frame_offset (); 
+# # let co_void = fn () -> yield 1;;
+# let times = [| 0.125 |];
+# let freqs = [| 55., 330., 220., 110., 44., 33., 55., 110., 220., 660. |];
+#
+# (
+#   dur: iter_of_list [0.5, 0.5, 1., 0.5],
+#   frame_offset: get_frame_offset,
+#   freq: iter_of_list [55., 330., 220., 110., 44., 33., 55. ] |> cor_loop,
+# ) |> cor_wrap_effect (fn (dur, frame_offset, freq) ->
+#   s freq 0.1 frame_offset;
+#   ()
+# ;) |> cor_play schedule_event;
 #
 #

@@ -46,7 +46,6 @@ int signal_size(SignalRef sig);
 
 SignalRef signal_of_ptr(int size, double *ptr);
 
-SignalRef node_output_sig(NodeRef node);
 void *node_state_ptr(NodeRef node);
 
 Node *instantiate_blob_template(BlobTemplate *template);

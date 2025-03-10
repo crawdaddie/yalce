@@ -74,10 +74,9 @@ void user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame);
 
 void write_to_output(double *src, double *dest, int nframes, int output_num);
 
-Node *audio_ctx_add(Node *node);
+Node *_audio_ctx_add(Node *node);
 Node *add_to_dac(Node *node);
 
-void print_graph(Node *node);
 int ctx_sample_rate();
 double ctx_spf();
 #endif
