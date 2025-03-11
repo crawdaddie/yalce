@@ -1,41 +1,21 @@
-# oscillators.h
-let sin_node = extern fn Signal -> Synth;
-let sq_node = extern fn Signal -> Synth;
-let simple_gate_env_node = extern fn Double -> Synth;
-let adsr_env_node = extern fn Double -> Double -> Double -> Double -> Signal -> Synth;
-let asr_env_node = extern fn Double -> Double -> Signal -> Synth;
-let maketable_sq = extern fn () -> ();
+# osc.h
 let maketable_sin = extern fn () -> ();
+let maketable_sq = extern fn () -> ();
+let sin_node = extern fn Synth -> Synth;
 
-# filters.h
-let tanh_node = extern fn Double -> Signal -> Synth;
+# ext_lib.h
+let start_blob = extern fn () -> ();
+let end_blob = extern fn () -> Ptr;
+let inlet = extern fn Double -> Synth;
 
-# signals.h
-let inlet = extern fn Double -> Signal;
-let out_sig = extern fn Synth -> Signal -> ();
-let get_val = extern fn Signal -> Ptr;
-let get_sig_default = extern fn Int -> Double -> Signal;
-let signal_of_double = extern fn Double -> Signal;
-let get_node_input_buf = extern fn Synth -> Int -> Ptr;
-let get_node_input_size = extern fn Synth -> Int -> Int;
-let get_node_input_layout = extern fn Synth -> Int -> Int;
-let get_node_out_buf = extern fn Synth -> Ptr;
-let get_node_out_layout = extern fn Synth -> Int;
+# envelope.h
+let asr_node = extern fn Double -> Double -> Double -> Synth -> Synth;
 
-# node_exports.h
-let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
-let set_input_trig = extern fn Synth -> Int -> Synth;
-let set_input_scalar_offset = extern fn Synth -> Int -> Int -> Double -> Synth;
-let set_input_trig_offset = extern fn Synth -> Int -> Int -> Synth;
-
-# node_utils.h
-let mul2_node = extern fn Signal -> Signal -> Synth;
-
-let chain_wrap = fn def: (() -> Synth) -> 
-  reset_chain ();
-  let x = def () in
-  end_chain x
-;;
+# let chain_wrap = fn def: (() -> Synth) -> 
+#   reset_chain ();
+#   let x = def () in
+#   end_chain x
+# ;;
 
 type SynthInput = 
   | Scalar of Int
@@ -47,8 +27,6 @@ let play_node_offset = extern fn Int -> Synth -> Synth;
 let play_node_offset_w_kill = extern fn Int -> Double -> Int -> Synth -> Synth;
 
 let get_frame_offset = extern fn () -> Int;
-let instantiate_blob_template = extern fn Ptr -> Synth;
-let instantiate_blob_template_w_args = extern fn List of Double -> Ptr -> Synth;
 let init_audio = extern fn () -> () in
   init_audio ()
 

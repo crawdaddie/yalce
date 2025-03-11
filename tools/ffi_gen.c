@@ -246,6 +246,7 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "const char *", "Ptr");
   lookups = lookups_extend(lookups, "void *", "Ptr");
   lookups = lookups_extend(lookups, "double *", "Ptr");
+  lookups = lookups_extend(lookups, "AudioGraph *", "Ptr");
 
   // engine lib -specific lookups
   lookups = lookups_extend(lookups, "SignalRef", "Signal");

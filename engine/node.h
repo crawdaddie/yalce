@@ -10,9 +10,9 @@ typedef void *(*perform_func_t)(void *ptr, void *state, void *inputs,
 
 // Buffer / Signal information
 typedef struct {
-  int layout;   // Number of channels in the buffer
-  int capacity; // Buffer capacity in frames
-  double *data; // Pointer to actual buffer data
+  int layout;  // Number of channels in the buffer
+  int size;    // Buffer capacity in frames
+  double *buf; // Pointer to actual buffer data
 } Signal;
 
 typedef struct {

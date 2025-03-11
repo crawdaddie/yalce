@@ -1,225 +1,20 @@
 #include "./lib.h"
-#include "./audio_loop.h"
 #include "./ctx.h"
+#include "./ext_lib.h"
 #include "./node.h"
 #include "./osc.h"
-#include "audio_graph.h"
+#include "./audio_graph.h"
+#include "./node_util.h"
+#include "envelope.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-AudioGraph *_graph = NULL;
 
-Node *const_sig(double val) {
-  AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
-
-  // Initialize node
-  *node = (Node){
-      .perform = NULL,
-      .node_index = node->node_index,
-      .num_inputs = 0,
-      // Allocate state memory
-      .state_size = 0,
-      .state_offset = graph->state_memory_size,
-      // Allocate output buffer
-      .output = (Signal){.layout = 1,
-                         .capacity = BUF_SIZE,
-                         .data = allocate_buffer_from_pool(graph, BUF_SIZE)},
-
-      .meta = "const",
-  };
-
-  for (int i = 0; i < BUF_SIZE; i++) {
-    node->output.data[i] = val;
-  }
-  return node;
-}
-// ------- Signal Multiplication Node -------
-void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.data;
-  int out_layout = node->output.layout;
-
-  // Get input buffers
-  double *in1 = inputs[0]->output.data;
-  double *in2 = inputs[1]->output.data;
-
-  // Multiply samples
-  double *out_ptr = out;
-  while (nframes--) {
-    double sample = (*in1++) * (*in2++);
-
-    // Write to all channels in output layout
-    for (int i = 0; i < out_layout; i++) {
-      *out_ptr++ = sample;
-    }
-  }
-
-  return node->output.data;
-}
-
-Node *mul_node(Node *input1, Node *input2) {
-  AudioGraph *graph = _graph;
-
-  Node *node = allocate_node_in_graph(graph);
-
-  // Initialize node
-  *node = (Node){
-      .perform = (perform_func_t)mul_perform,
-      .node_index = node->node_index,
-      .num_inputs = 2,
-      // No state needed
-      .state_size = 0,
-      .state_offset = graph->state_memory_size,
-      // Allocate output buffer
-      .output = (Signal){.layout = 1,
-                         .capacity = BUF_SIZE,
-                         .data = allocate_buffer_from_pool(graph, BUF_SIZE)},
-      .meta = "mul",
-  };
-
-  // Connect inputs
-  if (input1) {
-    node->connections[0].source_node_index = input1->node_index;
-  }
-  if (input2) {
-    node->connections[1].source_node_index = input2->node_index;
-  }
-
-  return node;
-}
 
 // ------- ASR Envelope Node -------
 
-typedef enum {
-  ASR_ENV_IDLE,
-  ASR_ENV_ATTACK,
-  ASR_ENV_SUSTAIN,
-  ASR_ENV_RELEASE
-} EnvPhase;
-
-typedef struct asr_state {
-  EnvPhase phase;
-  double value;         // Current envelope value
-  double attack_time;   // Attack time in seconds
-  double sustain_level; // Sustain level (0.0 to 1.0)
-  double release_time;  // Release time in seconds
-  double attack_rate;   // Precalculated rate of change during attack
-  double release_rate;  // Precalculated rate of change during release
-  double prev_trigger;  // Previous trigger value for edge detection
-  double threshold;     // Trigger threshold (default 0.5)
-} asr_state;
-
-void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.data;
-  int out_layout = node->output.layout;
-
-  double *trigger = inputs[0]->output.data;
-
-  while (nframes--) {
-    // Check for trigger events
-    double current_trigger = *trigger;
-    trigger++;
-
-    // Rising edge - start attack phase
-    if (current_trigger >= state->threshold &&
-        state->prev_trigger < state->threshold) {
-      state->phase = ASR_ENV_ATTACK;
-    }
-    // Falling edge - start release phase
-    else if (current_trigger < state->threshold &&
-             state->prev_trigger >= state->threshold) {
-      state->phase = ASR_ENV_RELEASE;
-    }
-
-    // Update envelope based on current phase
-    switch (state->phase) {
-    case ASR_ENV_ATTACK:
-      state->value += state->attack_rate * spf;
-      if (state->value >= 1.0) {
-        state->value = 1.0;
-        state->phase = ASR_ENV_SUSTAIN;
-      }
-      break;
-
-    case ASR_ENV_SUSTAIN:
-      state->value = state->sustain_level;
-      break;
-
-    case ASR_ENV_RELEASE:
-      state->value -= state->release_rate * spf;
-      if (state->value <= 0.0) {
-        state->value = 0.0;
-        state->phase = ASR_ENV_IDLE;
-      }
-      break;
-
-    case ASR_ENV_IDLE:
-      state->value = 0.0;
-      break;
-    }
-
-    // Write envelope value to output
-    for (int ch = 0; ch < out_layout; ch++) {
-      *out = state->value;
-      out++;
-    }
-    // printf("asr val %f trig %f phase %d\n", state->value, *trigger,
-    //        state->phase);
-
-    // Store current trigger for next iteration
-    state->prev_trigger = current_trigger;
-  }
-
-  return node->output.data;
-}
-
-Node *asr_node(Node *trigger, double attack_time, double sustain_level,
-               double release_time) {
-
-  AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
-
-  // Initialize node
-  *node = (Node){
-      .perform = (perform_func_t)asr_perform,
-      .node_index = node->node_index,
-      .num_inputs = 1,
-      // Allocate state memory
-      .state_size = sizeof(asr_state),
-      .state_offset = allocate_state_memory(graph, sizeof(asr_state)),
-      // Allocate output buffer
-      .output = (Signal){.layout = 1,
-                         .capacity = BUF_SIZE,
-                         .data = allocate_buffer_from_pool(graph, BUF_SIZE)},
-      .meta = "asr",
-  };
-
-  asr_state *state =
-      (asr_state *)(graph->nodes_state_memory + node->state_offset);
-
-  *state = (asr_state){
-      .phase = ASR_ENV_ATTACK,
-      .value = 0.0,
-      .attack_time = attack_time,
-      .sustain_level = sustain_level,
-      .release_time = release_time,
-      .attack_rate = (attack_time > 0.0) ? (1.0 / attack_time) : 1000.0,
-      .release_rate =
-          (release_time > 0.0) ? (sustain_level / release_time) : 1000.0,
-      .prev_trigger = 0.0,
-      .threshold = 0.5};
-
-  // Connect trigger input
-  if (trigger) {
-    node->connections[0].source_node_index = trigger->node_index;
-  }
-
-  return node;
-}
 
 void node_get_inputs(Node *node, AudioGraph *graph, Node *inputs[]) {
   int num_inputs = node->num_inputs;
@@ -276,7 +71,7 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
 
     if (head->write_to_output) {
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
-                   head->output.layout, head->output.data, output_num,
+                   head->output.layout, head->output.buf, output_num,
                    frame_count - head->frame_offset);
     }
   }
@@ -323,6 +118,37 @@ Node *inlet(double default_val) {
   return f;
 }
 
+void start_blob() {
+  AudioGraph *graph = malloc(sizeof(AudioGraph));
+
+  *graph = (AudioGraph){
+      .nodes = malloc(16 * sizeof(Node)),
+      .capacity = 16,
+      .buffer_pool = malloc(sizeof(double) * (1 << 12)),
+      .buffer_pool_capacity = 1 << 12,
+      .nodes_state_memory = malloc(sizeof(char) * (1 << 6)),
+      .state_memory_capacity = 1 << 6,
+  };
+  _graph = graph;
+}
+
+AudioGraph *end_blob() {
+  AudioGraph *graph = _graph;
+
+  graph->capacity = graph->node_count;
+  graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
+  graph->buffer_pool_capacity = graph->buffer_pool_size;
+  graph->buffer_pool = realloc(graph->buffer_pool,
+                               (sizeof(double) * graph->buffer_pool_capacity));
+
+  graph->state_memory_capacity = graph->state_memory_size;
+  graph->nodes_state_memory =
+      realloc(graph->nodes_state_memory, graph->state_memory_capacity);
+  print_graph(graph);
+  _graph = NULL;
+  return graph;
+}
+
 AudioGraph *sin_ensemble() {
   AudioGraph *graph = malloc(sizeof(AudioGraph));
 
@@ -339,8 +165,8 @@ AudioGraph *sin_ensemble() {
   Node *f = inlet(150.);
   Node *g = inlet(1.);
   Node *s = sin_node(f);
-  Node *env = asr_node(g, 0.001, 0.8, 1.0);
-  Node *m = mul_node(env, s);
+  Node *env = asr_node(0.001, 0.8, 1.0, g);
+  Node *m = mul2_node(env, s);
 
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
@@ -352,7 +178,6 @@ AudioGraph *sin_ensemble() {
   graph->nodes_state_memory =
       realloc(graph->nodes_state_memory, graph->state_memory_capacity);
 
-  print_graph(_graph);
   return _graph;
 }
 
@@ -385,9 +210,9 @@ Node *instantiate_template(AudioGraph *g, InValList *input_vals) {
 
   double *buf_mem = graph_state->buffer_pool;
   for (int i = 0; i < graph_state->node_count; i++) {
-    graph_state->nodes[i].output.data = buf_mem;
-    buf_mem += graph_state->nodes[i].output.layout *
-               graph_state->nodes[i].output.capacity;
+    graph_state->nodes[i].output.buf = buf_mem;
+    buf_mem +=
+        graph_state->nodes[i].output.layout * graph_state->nodes[i].output.size;
   }
 
   // Set up the state memory
@@ -412,9 +237,9 @@ Node *instantiate_template(AudioGraph *g, InValList *input_vals) {
     int inlet_node_idx = graph_state->inlets[idx];
     Node *inlet_node = graph_state->nodes + inlet_node_idx;
     // printf("set inlet node %d to %f\n", inlet_node_idx, val);
-    for (int i = 0; i < inlet_node->output.layout * inlet_node->output.capacity;
+    for (int i = 0; i < inlet_node->output.layout * inlet_node->output.size;
          i++) {
-      inlet_node->output.data[i] = val;
+      inlet_node->output.buf[i] = val;
     }
 
     input_vals = input_vals->next;

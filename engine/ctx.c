@@ -78,7 +78,7 @@ static void process_msg_pre(scheduler_msg msg) {
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       for (int i = msg.frame_offset; i < BUF_SIZE; i++) {
-        inlet_data.data[i] = payload.value;
+        inlet_data.buf[i] = payload.value;
       }
     }
 
@@ -131,7 +131,7 @@ static void process_msg_post(scheduler_msg msg) {
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       for (int i = 0; i < msg.frame_offset; i++) {
-        inlet_data.data[i] = payload.value;
+        inlet_data.buf[i] = payload.value;
       }
     }
     break;

@@ -2,7 +2,6 @@
 #include "../gui/gui.h"
 #include "backend_llvm/jit.h"
 #include "format_utils.h"
-#include "signals.h"
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -15,16 +14,16 @@ int create_main_scope() {
   return 1;
 }
 
-int plot_sig(SignalRef sig) {
-  _create_plot_array_window(sig->size, sig->buf);
-  return 1;
-}
-
-int scope_node(NodeRef node) {
-  Signal sig;
-  out_sig(node, &sig);
-  return create_scope(sig.buf, sig.layout, sig.size);
-}
+// int plot_sig(SignalRef sig) {
+//   _create_plot_array_window(sig->size, sig->buf);
+//   return 1;
+// }
+//
+// int scope_node(NodeRef node) {
+//   Signal sig;
+//   out_sig(node, &sig);
+//   return create_scope(sig.buf, sig.layout, sig.size);
+// }
 
 // Global variables for thread synchronization
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;

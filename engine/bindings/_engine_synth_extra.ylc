@@ -1,8 +1,8 @@
-let chain_wrap = fn def: (() -> Synth) -> 
-  reset_chain ();
-  let x = def () in
-  end_chain x
-;;
+# let chain_wrap = fn def: (() -> Synth) -> 
+#   reset_chain ();
+#   let x = def () in
+#   end_chain x
+# ;;
 
 type SynthInput = 
   | Scalar of Int
@@ -14,8 +14,6 @@ let play_node_offset = extern fn Int -> Synth -> Synth;
 let play_node_offset_w_kill = extern fn Int -> Double -> Int -> Synth -> Synth;
 
 let get_frame_offset = extern fn () -> Int;
-let instantiate_blob_template = extern fn Ptr -> Synth;
-let instantiate_blob_template_w_args = extern fn List of Double -> Ptr -> Synth;
 let init_audio = extern fn () -> () in
   init_audio ()
 

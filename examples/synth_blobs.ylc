@@ -6,12 +6,13 @@
 
 let synth_tpl = (fn () ->
   let f = inlet 100.;
-  sin_node f
+  let g = inlet 1.;
+  (sin_node f) * (asr_node 0.001 0.8 0.2 g)
   ;
   )
   |> compile_blob_template;
 
-synth_tpl |> instantiate_blob_template_w_args [100.] |> play_node_offset (get_frame_offset ())
+# synth_tpl |> instantiate_blob_template_w_args [100.] |> play_node_offset (get_frame_offset ())
 
 # let s = fn freq dur offset ->
 #   synth_template

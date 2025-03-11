@@ -14,9 +14,10 @@ typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
 LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
                                      Type *to_type, LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
-  // printf("handle type conversions\n");
-  // print_type(from_type);
-  // print_type(to_type);
+
+  printf("handle type conversions %s %s\n", from_type->alias, to_type->alias);
+  print_type(from_type);
+  print_type(to_type);
 
   if (types_equal(from_type, to_type)) {
     return val;
@@ -37,6 +38,8 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
                                   LLVMValueRef callable, JITLangCtx *ctx,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
+  printf("CALL CALLABLE\n");
+  print_ast(ast);
 
   if (!callable) {
     return NULL;

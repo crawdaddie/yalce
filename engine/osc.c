@@ -3,6 +3,7 @@
 #include "./node.h"
 #include "audio_graph.h"
 #include "lib.h"
+#include <stdio.h>
 
 #define SQ_TABSIZE (1 << 11)
 #define SIN_TABSIZE (1 << 11)
@@ -43,11 +44,11 @@ typedef struct sin_state {
 void *sin_perform(Node *node, sin_state *state, Node *inputs[], int nframes,
                   double spf) {
 
-  double *out = node->output.data;
+  double *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Get input buffer (frequency control) if connected
-  double *in = inputs[0]->output.data;
+  double *in = inputs[0]->output.buf;
   double d_index;
   int index = 0;
   double frac, a, b, sample;
@@ -74,10 +75,11 @@ void *sin_perform(Node *node, sin_state *state, Node *inputs[], int nframes,
     state->phase = fmod(state->phase + freq * spf, 1.0);
   }
 
-  return node->output.data;
+  return node->output.buf;
 }
 
 Node *sin_node(Node *input) {
+  printf("create sin node in: %p\n", input);
   AudioGraph *graph = _graph;
   // Find next available slot in nodes array
   Node *node = allocate_node_in_graph(graph);
@@ -92,8 +94,8 @@ Node *sin_node(Node *input) {
       .state_offset = allocate_state_memory(graph, sizeof(sin_state)),
       // Allocate output buffer
       .output = (Signal){.layout = 1,
-                         .capacity = BUF_SIZE,
-                         .data = allocate_buffer_from_pool(graph, BUF_SIZE)},
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
       .meta = "sin",
   };
 

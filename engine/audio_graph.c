@@ -1,6 +1,9 @@
 #include "./audio_graph.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+AudioGraph *_graph = NULL;
+
 double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
   // Ensure we have enough space
   if (graph->buffer_pool_size + size > graph->buffer_pool_capacity) {
