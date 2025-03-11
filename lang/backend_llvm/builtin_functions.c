@@ -11,7 +11,7 @@
 #include "tuple.h"
 #include "types.h"
 #include "types/builtins.h"
-#include "util.h"
+#include "util.h" #include "llvm-c/Core.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 
@@ -37,18 +37,24 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 #define ARITHMETIC_BINOP(_name, _flop, _iop)                                   \
   ({                                                                           \
     Type *ret = fn_return_type(fn_type);                                       \
-    LLVMValueRef l =                                                           \
-        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);         \
-    l = handle_type_conversions(l, lt, ret, module, builder);                  \
-    LLVMValueRef r =                                                           \
-        codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);     \
-    r = handle_type_conversions(r, rt, ret, module, builder);                  \
     switch (ret->kind) {                                                       \
     case T_INT:                                                                \
     case T_UINT64: {                                                           \
+      LLVMValueRef l =                                                         \
+          codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);       \
+      l = handle_type_conversions(l, lt, ret, module, builder);                \
+      LLVMValueRef r =                                                         \
+          codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);   \
+      r = handle_type_conversions(r, rt, ret, module, builder);                \
       return LLVMBuildBinOp(builder, _iop, l, r, _name "_int");                \
     }                                                                          \
     case T_NUM: {                                                              \
+      LLVMValueRef l =                                                         \
+          codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);       \
+      l = handle_type_conversions(l, lt, ret, module, builder);                \
+      LLVMValueRef r =                                                         \
+          codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);   \
+      r = handle_type_conversions(r, rt, ret, module, builder);                \
       return LLVMBuildBinOp(builder, _flop, l, r, _name "_num");               \
     }                                                                          \
     default: {                                                                 \

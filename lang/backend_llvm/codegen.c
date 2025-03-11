@@ -54,6 +54,9 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
+  // printf("\n\nCODEGEN FOR:\n");
+  // print_ast(ast);
+  // printf("\n\n");
 
   switch (ast->tag) {
 

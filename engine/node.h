@@ -30,6 +30,7 @@ typedef struct {
   int state_size;                     // Size of node-specific state
   int state_offset;                   // Offset to state in state memory pool
   int write_to_output;
+  bool trig_end;
   struct Node *next; // For execution ordering
   char *meta;
 } Node;

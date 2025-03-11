@@ -6,4 +6,5 @@ void start_blob();
 AudioGraph *end_blob();
 
 NodeRef inlet(double default_val);
+
 #endif

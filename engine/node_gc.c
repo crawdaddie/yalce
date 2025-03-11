@@ -56,7 +56,7 @@ void *gc_thread_func(void *arg) {
       Node *next =
           current->next; // Save next pointer before potentially freeing
 
-      if (current->can_free) {
+      if (current->trig_end) {
         remove_and_free_node(ctx, prev, current);
         current = next;
         // Don't update prev since we removed a node

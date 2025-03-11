@@ -22,11 +22,13 @@ type SynthInput =
   | Trig of Int
   ;
 
+let instantiate_template = extern fn List of (Int * Double) -> Ptr -> Synth;
+
+
 let play_node = extern fn Synth -> Synth;
 let play_node_offset = extern fn Int -> Synth -> Synth;
 let play_node_offset_w_kill = extern fn Int -> Double -> Int -> Synth -> Synth;
 
-let get_frame_offset = extern fn () -> Int;
 let init_audio = extern fn () -> () in
   init_audio ()
 

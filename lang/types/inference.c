@@ -453,6 +453,9 @@ void print_subst(Substitution *c) {
 }
 
 Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
+  // printf("unify in ctx\n");
+  // print_type(t1);
+  // print_type(t2);
 
   if (types_equal(t1, t2)) {
     return t1;
@@ -499,15 +502,10 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     return unify_in_ctx(t1->data.T_FN.to, t2->data.T_FN.to, ctx, node);
 
   } else if (t1->kind == T_CONS && IS_PRIMITIVE_TYPE(t2)) {
-    if (t1->alias && CHARS_EQ(t1->alias, "Signal")) {
-      // TODO: fix whatever this is
-      return t2;
-    } else {
-      printf("unify fail\n");
-      print_type(t1);
-      print_type(t2);
-      return NULL;
-    }
+    printf("unify fail\n");
+    print_type(t1);
+    print_type(t2);
+    return NULL;
   } else if (t2->kind == T_VAR && t1->kind != T_VAR) {
     return unify_in_ctx(t2, t1, ctx, node);
   } else {
@@ -538,6 +536,9 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     // For each argument, add a constraint that the function's parameter type
     // must match the argument type
     Type *param_type = fn_type->data.T_FN.from;
+    // printf("fn app arg\n");
+    // print_type(param_type);
+    // print_type(arg_types[i]);
     if (!unify_in_ctx(param_type, arg_types[i], &app_ctx,
                       ast->data.AST_APPLICATION.args + i)) {
 
@@ -577,6 +578,18 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
       ctx->constraints = constraints_extend(ctx->constraints, arg->md,
                                             res_type->data.T_FN.from);
       ctx->constraints->src = arg;
+    }
+
+    if (is_generic(arg_types[i]) && !types_equal(arg_types[i], arg->md)) {
+      unify_in_ctx(arg_types[i], arg->md, ctx, arg);
+
+      printf("unify args:\n");
+      print_ast(arg);
+      print_type(arg_types[i]);
+      print_type(arg->md);
+      // ctx->constraints =
+      //     constraints_extend(ctx->constraints, arg_types[i], arg->md);
+      // ctx->constraints->src = arg;
     }
 
     res_type = res_type->data.T_FN.to;
@@ -865,8 +878,11 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
       ctx->constraints = constraints_extend(ctx->constraints, t1, t2);
     }
   }
+  // print_constraints(body_ctx.constraints);
 
   Substitution *subst = solve_constraints(body_ctx.constraints);
+  // printf("lambda subs\n");
+  // print_subst(subst);
 
   ast->md = apply_substitution(subst, ast->md);
 

@@ -127,6 +127,7 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
     for (int i = 0; i < ast->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
 
       Ast *stmt = ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+
       if (i == 0 && stmt->tag == AST_STRING) {
         continue;
       }
@@ -198,11 +199,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     fn_type = fn_type->data.T_FN.to;
   }
 
-  // if (is_anon) {
-  //   printf("anon fn type: ");
-  //   print_type(ast->md);
-  // }
-  //
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
   // if (fn_type->kind == T_VOID) {

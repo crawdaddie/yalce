@@ -1019,8 +1019,38 @@ int main() {
     // print_type(yield->data.AST_APPLICATION.function->md);
     // print_type(yield->data.AST_APPLICATION.args->md);
     // print_type((yield->data.AST_APPLICATION.args + 1)->md);
+    //
+  });
+  ({
+    T("let instantiate_template = extern fn List of (Int * Double) -> Ptr -> "
+      "Ptr;\n"
+      "let f = fn freq ->\n"
+      "  instantiate_template [(0, freq)]\n"
+      ";;\n",
+      &MAKE_FN_TYPE_3(&t_num, &t_ptr, &t_ptr));
   });
 
+  ({
+    T("let instantiate_template = extern fn List of (Int * Double) -> Ptr -> "
+      "Ptr;\n"
+      "let f = fn (idx, freq) ->\n"
+      "  instantiate_template [(idx, freq)]\n"
+      ";;\n",
+      &MAKE_FN_TYPE_3(&TTUPLE(2, &t_int, &t_num), &t_ptr, &t_ptr));
+  });
+
+  // T("let get_frame_offset = extern fn () -> Int);\n"
+  //   "(\n"
+  //   "  dur: iter_of_list [ 0.125, 0.125, 0.125, 0.25, ] |> cor_loop,\n"
+  //   "  frame_offset: get_frame_offset,\n"
+  //   "  freq: iter_of_list [ 55., 330., 220., 110., 44., 33., 55. ] |> "
+  //   "cor_loop,\n"
+  //   ") |> cor_wrap_effect (fn (dur, frame_offset, freq) ->\n"
+  //   "  synth_tpl |> instantiate_template [(0, freq)] |> "
+  //   "play_node_offset_w_kill frame_offset (0.5 * dur) 1;\n"
+  //   "  ()\n"
+  //   ";) |> cor_play schedule_event;\n",
+  //   &MAKE_FN_TYPE_2(&t_void, &t_int));
   // T("let sq_node = extern fn Signal -> Synth;\n"
   //   "let synth = fn () -> sq_node 100.;;\n"
   //   "let cof = fn () ->\n"

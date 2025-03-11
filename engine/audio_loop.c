@@ -1,10 +1,11 @@
 #ifndef _ENGINE_AUDIO_LOOP_H
 #define _ENGINE_AUDIO_LOOP_H
-#include "audio_loop.h"
-#include "ctx.h"
-#include "midi.h"
-#include "osc.h"
-#include "scheduling.h"
+#include "./audio_loop.h"
+#include "./ctx.h"
+#include "./midi.h"
+#include "./node_gc.h"
+#include "./osc.h"
+#include "./scheduling.h"
 #include <errno.h>
 #include <pthread.h>
 #include <soundio/soundio.h>
@@ -329,7 +330,7 @@ int init_audio() {
   maketable_sin();
   start_audio();
   scheduler_event_loop();
-  // gc_loop(get_audio_ctx());
+  gc_loop(get_audio_ctx());
   midi_setup();
 
   return 0;

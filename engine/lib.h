@@ -12,6 +12,8 @@ typedef struct {
   struct InValList *next;
 } InValList;
 
-Node *instantiate_template(AudioGraph *g, InValList *input_vals);
+Node *instantiate_template(InValList *input_vals, AudioGraph *g);
+
+NodeRef play_node_offset(int offset, NodeRef s);
 extern AudioGraph *_graph;
 #endif

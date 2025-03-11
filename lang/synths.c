@@ -17,7 +17,6 @@ bool is_synth_type(Type *t) {
   return t->alias && (strcmp(t->alias, "Synth") == 0);
 }
 
-
 Type t_synth = {T_CONS,
                 {.T_CONS =
                      {
@@ -29,7 +28,6 @@ Type t_synth = {T_CONS,
 
                 .constructor = ConsSynth};
 
-
 LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   LLVMTypeRef fn_type;
@@ -37,8 +35,7 @@ LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
   fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
                              (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
 
-  LLVMValueRef node_of_double_func =
-      get_extern_fn("cons_sig", fn_type, module);
+  LLVMValueRef node_of_double_func = get_extern_fn("cons_sig", fn_type, module);
 
   LLVMValueRef double_val =
       LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
@@ -66,14 +63,11 @@ LLVMValueRef ConsSynth(LLVMValueRef input, Type *input_type,
   }
 }
 
-
-
 Type t_synth_arithmetic_sig = {
     T_FN,
     {.T_FN = {
          .from = &t_synth,
          .to = &(Type){T_FN, {.T_FN = {.from = &t_synth, .to = &t_synth}}}}}};
-
 
 #define SYNTH_ARITHMETIC(_native_fn_name, _ast, _ctx, _module, _builder)       \
   ({                                                                           \
@@ -107,30 +101,20 @@ LLVMValueRef SynthSubHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef SynthMulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
-  printf("synth mul handler\n");
-  print_ast(ast);
 
   Type *ltype = ast->data.AST_APPLICATION.args->md;
   Type *rtype = (ast->data.AST_APPLICATION.args + 1)->md;
-  print_type(ltype);
-  print_type(rtype);
 
-  print_ast(ast->data.AST_APPLICATION.args);
   LLVMValueRef l =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
   l = handle_type_conversions(l, ltype, &t_synth, module, builder);
-  LLVMDumpValue(l);
-  printf("\n");
 
-  print_ast(ast->data.AST_APPLICATION.args + 1);
   LLVMValueRef r =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
   r = handle_type_conversions(r, rtype, &t_synth, module, builder);
 
-  LLVMDumpValue(r);
-  printf("\n");
   LLVMTypeRef fn_type =
       LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
                        (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
@@ -138,7 +122,7 @@ LLVMValueRef SynthMulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        2, 0);
   LLVMValueRef fn = get_extern_fn("mul2_node", fn_type, module);
   return LLVMBuildCall2(builder, fn_type, fn, (LLVMValueRef[]){l, r}, 2,
-                 "mul2_node");
+                        "mul2_node");
 }
 
 LLVMValueRef SynthDivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -160,18 +144,13 @@ Type t_compile_synth_blob_sig =
 LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
-  printf("compile blob template\n");
 
-  print_ast(ast->data.AST_APPLICATION.args);
-  LLVMValueRef synth_def =
+  LLVMValueRef synth_def_fn =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  LLVMDumpValue(synth_def);
   LLVMValueRef start_blob_fn = get_extern_fn(
-      "start_blob",
-      LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){}, 0, 0),
+      "start_blob", LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){}, 0, 0),
       module);
-
 
   LLVMBuildCall2(
       builder,
@@ -180,7 +159,7 @@ LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
 
   LLVMValueRef run_synthdef_fn =
       LLVMBuildCall2(builder, LLVMFunctionType(GENERIC_PTR, NULL, 0, false),
-                     synth_def, NULL, 0, "run_synth_def_fn_in_blob_ctx");
+                     synth_def_fn, NULL, 0, "run_synth_def_fn_in_blob_ctx");
 
   LLVMValueRef end_blob_fn = get_extern_fn(
       "end_blob",
@@ -188,10 +167,8 @@ LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
       module);
 
   LLVMValueRef final_blob = LLVMBuildCall2(
-      builder,
-      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){}, 0, 0),
-      end_blob_fn, NULL, 0,
-      "end_blob_w_final_node");
+      builder, LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){}, 0, 0),
+      end_blob_fn, NULL, 0, "end_blob_w_final_node");
 
   return final_blob;
 }

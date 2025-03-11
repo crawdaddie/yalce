@@ -26,6 +26,7 @@ typedef struct {
   int output_buf_offset;
   int output_size;
   int output_layout;
+  bool trig_end;
   perform_func_t node_perform;
   struct Node *next;
 } Node;
