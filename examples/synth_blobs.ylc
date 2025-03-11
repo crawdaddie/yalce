@@ -22,8 +22,10 @@ let s = fn freq dur offset ->
   dur: iter_of_list [ 0.125, 0.125, 0.125, 0.25, ] |> cor_loop,
   frame_offset: get_frame_offset,
   freq: iter_of_list [ 55., 330., 220., 110., 44., 33., 55. ] |> cor_loop,
-) |> cor_wrap_effect (fn (dur, frame_offset, freq) ->
-  s freq dur frame_offset;
-  ()
-;) |> cor_play schedule_event;
+) |> cor_wrap_effect
+  (fn (dur, frame_offset, freq) ->
+    s freq dur frame_offset;
+    ()
+  ;)
+  |> cor_play schedule_event;
 

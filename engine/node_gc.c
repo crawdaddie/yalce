@@ -34,7 +34,6 @@ void remove_and_free_node(Ctx *ctx, NodeRef prev, NodeRef to_free) {
   //   free(in->buf);
   // }
   // Free the node
-  printf("freeing %p\n", to_free);
   free(to_free);
 }
 

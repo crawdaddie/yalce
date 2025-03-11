@@ -63,7 +63,6 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
       if (state->value <= 0.0) {
         state->value = 0.0;
         state->phase = ASR_ENV_IDLE;
-        printf("finished release\n");
         node->trig_end = true;
         // printf("finish node containing node addr: %p %p\n", node,
         //        (Node *)((char *)node - (sizeof(Node) * node->node_index) -

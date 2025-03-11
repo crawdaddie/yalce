@@ -286,7 +286,7 @@ void close_gate(close_payload *p, int offset) {
 }
 NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
                                 NodeRef s) {
-  printf("play node %p at offset %d %f %d\n", s, offset, dur, gate_in);
+  // printf("play node %p at offset %d %f %d\n", s, offset, dur, gate_in);
   // Node *group = _chain;
   // reset_chain();
   // add_to_dac(s);

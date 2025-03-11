@@ -583,10 +583,10 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     if (is_generic(arg_types[i]) && !types_equal(arg_types[i], arg->md)) {
       unify_in_ctx(arg_types[i], arg->md, ctx, arg);
 
-      printf("unify args:\n");
-      print_ast(arg);
-      print_type(arg_types[i]);
-      print_type(arg->md);
+      // printf("unify args:\n");
+      // print_ast(arg);
+      // print_type(arg_types[i]);
+      // print_type(arg->md);
       // ctx->constraints =
       //     constraints_extend(ctx->constraints, arg_types[i], arg->md);
       // ctx->constraints->src = arg;
