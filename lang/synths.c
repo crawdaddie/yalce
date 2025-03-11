@@ -35,13 +35,13 @@ LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
   fn_type = LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
                              (LLVMTypeRef[]){LLVMDoubleType()}, 1, 0);
 
-  LLVMValueRef node_of_double_func = get_extern_fn("cons_sig", fn_type, module);
+  LLVMValueRef node_of_double_func = get_extern_fn("const_sig", fn_type, module);
 
   LLVMValueRef double_val =
       LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "cast_to_double");
 
   LLVMValueRef const_node = LLVMBuildCall2(
-      builder, fn_type, node_of_double_func, &double_val, 1, "const_node");
+      builder, fn_type, node_of_double_func, (LLVMValueRef[]){double_val}, 1, "const_node");
   return const_node;
 }
 
@@ -102,6 +102,7 @@ LLVMValueRef SynthSubHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef SynthMulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
 
+
   Type *ltype = ast->data.AST_APPLICATION.args->md;
   Type *rtype = (ast->data.AST_APPLICATION.args + 1)->md;
 
@@ -113,13 +114,17 @@ LLVMValueRef SynthMulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef r =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
+
   r = handle_type_conversions(r, rtype, &t_synth, module, builder);
+
+
 
   LLVMTypeRef fn_type =
       LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
                        (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
                                        LLVMPointerType(LLVMInt8Type(), 0)},
                        2, 0);
+
   LLVMValueRef fn = get_extern_fn("mul2_node", fn_type, module);
   return LLVMBuildCall2(builder, fn_type, fn, (LLVMValueRef[]){l, r}, 2,
                         "mul2_node");

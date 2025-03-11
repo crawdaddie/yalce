@@ -1,6 +1,7 @@
 #include "./audio_graph.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 AudioGraph *_graph = NULL;
 
@@ -17,6 +18,9 @@ double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
 
   double *buffer = &graph->buffer_pool[graph->buffer_pool_size];
   graph->buffer_pool_size += size;
+  // while (size--) {
+  //   *(buffer + size) = 0.0;
+  // }
   return buffer;
 }
 
@@ -55,7 +59,12 @@ void print_graph(AudioGraph *g) {
   for (int i = 0; i < node_count; i++) {
     Node *n = g->nodes + i;
 
-    printf("[%d] node (%s) \n\t[", i, n->meta);
+    printf("[%d] node (%s) ", i, n->meta);
+    
+    if (strcmp(n->meta, "const") == 0) {
+      printf("%f", n->output.buf[0]);
+    }
+    printf("\n\t[");
 
     for (int j = 0; j < n->num_inputs; j++) {
       printf("%d, ", n->connections[j].source_node_index);

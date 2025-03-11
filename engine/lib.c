@@ -118,7 +118,9 @@ Node *audio_graph_inlet(AudioGraph *g, int inlet_idx) {
 }
 
 Node *inlet(double default_val) {
+
   Node *f = const_sig(default_val);
+  f->meta = "inlet";
   _graph->inlets[_graph->num_inlets] = f->node_index;
   _graph->inlet_defaults[_graph->num_inlets] = default_val;
   _graph->num_inlets++;
@@ -145,13 +147,17 @@ AudioGraph *end_blob() {
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
   graph->buffer_pool_capacity = graph->buffer_pool_size;
-  graph->buffer_pool = realloc(graph->buffer_pool,
-                               (sizeof(double) * graph->buffer_pool_capacity));
+  double *b = graph->buffer_pool;
+  graph->buffer_pool = malloc(sizeof(double) * graph->buffer_pool_capacity);
+  for (int i = 0; i < graph->buffer_pool_capacity; i++) {
+    graph->buffer_pool[i] = b[i];
+  }
+
 
   graph->state_memory_capacity = graph->state_memory_size;
   graph->nodes_state_memory =
       realloc(graph->nodes_state_memory, graph->state_memory_capacity);
-  print_graph(graph);
+
   _graph = NULL;
   return graph;
 }
@@ -214,6 +220,9 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   graph_state->buffer_pool = (double *)mem;
   memcpy(graph_state->buffer_pool, g->buffer_pool,
          sizeof(double) * g->buffer_pool_capacity);
+  // for (int i= 0; i < 4096; i++) {
+  //   printf("preset buffer val %d: %f\n", i, graph_state->buffer_pool[i]);
+  // }
   mem += sizeof(double) * g->buffer_pool_capacity;
 
   double *buf_mem = graph_state->buffer_pool;
@@ -228,6 +237,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   memcpy(graph_state->nodes_state_memory, g->nodes_state_memory,
          g->state_memory_capacity);
 
+  // print_graph(graph_state);
   // Assume the output node is the last node (the multiplier)
   Node *output_node = &graph_state->nodes[graph_state->node_count - 1];
 
@@ -239,6 +249,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
                      .write_to_output = true,
                      .meta = "sin_ensemble",
                      .next = NULL};
+
   while (input_vals) {
     int idx = input_vals->pair.idx;
     double val = input_vals->pair.val;

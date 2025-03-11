@@ -318,7 +318,8 @@ int main() {
   status &= test_parse("fn x: (Int) (y, z): (Int * Double) -> x + y + z;",
                        "(x (y, z) -> \n((+ ((+ x) y)) z))\n");
 
-  status &= test_parse("*x;", "(deref x)");
+  // status &= test_parse("*x;", "(deref x)");
+  status &= test_parse("(*) x;", "(* x)");
 
   status &= test_parse("f @@ x y;", "(f (x y))");
   status &= test_parse("let f = (fn () ->\n"

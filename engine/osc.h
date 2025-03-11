@@ -5,4 +5,24 @@ void maketable_sin(void);
 void maketable_sq(void);
 
 NodeRef sin_node(NodeRef input);
+
+NodeRef sq_node(NodeRef input);
+NodeRef phasor_node(NodeRef input);
+
+NodeRef raw_osc_node(NodeRef table, NodeRef freq);
+
+NodeRef osc_bank_node(NodeRef amps, NodeRef freq);
+NodeRef bufplayer_node(NodeRef buf, NodeRef rate);
+NodeRef bufplayer_trig_node(NodeRef buf, NodeRef rate, NodeRef start_pos, NodeRef trig);
+NodeRef white_noise_node();
+
+NodeRef brown_noise_node();
+NodeRef chirp_node(double start_freq, double end_freq, NodeRef lag_time, NodeRef trig);
+NodeRef impulse_node(NodeRef freq);
+NodeRef ramp_node(NodeRef freq);
+
+NodeRef trig_rand_node(NodeRef trig);
+
+NodeRef trig_sel_node(NodeRef trig, NodeRef sels);
+NodeRef granulator_node(int max_grains, NodeRef buf, NodeRef trig, NodeRef pos, NodeRef rate);
 #endif

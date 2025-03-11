@@ -93,8 +93,6 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
 Node *asr_node(double attack_time, double sustain_level, double release_time,
                Node *trigger) {
 
-  printf("create asr node\n");
-
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph);
 

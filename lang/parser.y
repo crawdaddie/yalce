@@ -126,7 +126,10 @@ expr:
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
   | '&' simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_AMPERSAND, $2); }
-  | '*' simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_STAR, $2); }
+  | '(' '*' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"*", 1}), $4); }
+  | '(' '/' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"/", 1}), $4); }
+  | '(' '+' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"+", 1}), $4); }
+  | '(' '-' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"-", 1}), $4); }
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr                     { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
   | expr '*' expr                     { $$ = ast_binop(TOKEN_STAR, $1, $3); }

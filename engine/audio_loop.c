@@ -145,7 +145,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
         sample_idx = LAYOUT * frame + channel;
         sample = ctx->output_buf[sample_idx];
 
-        write_sample(areas[channel].ptr, 0.125 * sample);
+        write_sample(areas[channel].ptr, 0.0625 * sample);
         areas[channel].ptr += areas[channel].step;
       }
     }
