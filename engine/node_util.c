@@ -6,13 +6,13 @@
 #define NODE_BINOP(name, _meta, _perform)                                      \
   NodeRef name(NodeRef input1, NodeRef input2) {                               \
     AudioGraph *graph = _graph;                                                \
-    Node *node = allocate_node_in_graph(graph);                                \
+    Node *node = allocate_node_in_graph(graph, 0);                             \
     *node = (Node){                                                            \
         .perform = (perform_func_t)_perform,                                   \
         .node_index = node->node_index,                                        \
         .num_inputs = 2,                                                       \
         .state_size = 0,                                                       \
-        .state_offset = graph->state_memory_size,                              \
+        .state_offset = graph ? graph->state_memory_size : 0,                  \
         .output = (Signal){.layout = 1,                                        \
                            .size = BUF_SIZE,                                   \
                            .buf = allocate_buffer_from_pool(graph, BUF_SIZE)}, \
@@ -72,7 +72,7 @@ void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
 
 NodeRef mul2_node(NodeRef input1, NodeRef input2) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, 0);
 
   *node = (Node){
       .perform = (perform_func_t)mul_perform,
@@ -116,7 +116,7 @@ void *sum_perform(Node *node, void *state, Node *inputs[], int nframes,
 
 NodeRef sum2_node(NodeRef input1, NodeRef input2) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, 0);
   *node = (Node){
       .perform = (perform_func_t)sum_perform,
       .node_index = node->node_index,
@@ -188,7 +188,7 @@ NODE_BINOP(mod2_node, "mod", mod_perform)
 Node *const_sig(double val) {
   // printf("const sig node %f\n", val);
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, 0);
 
   // Initialize node
   *node = (Node){
@@ -197,7 +197,7 @@ Node *const_sig(double val) {
       .num_inputs = 0,
       // Allocate state memory
       .state_size = 0,
-      .state_offset = graph->state_memory_size,
+      .state_offset = graph ? graph->state_memory_size : 0,
       // Allocate output buffer
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,

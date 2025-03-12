@@ -349,7 +349,7 @@ void *butterworth_hp_dyn_perform(Node *node, biquad_state *state,
 // Create a biquad low-pass filter node
 Node *biquad_lp_node(Node *freq, Node *res, Node *input) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(biquad_state));
 
   // Initialize node
   *node = (Node){
@@ -357,7 +357,7 @@ Node *biquad_lp_node(Node *freq, Node *res, Node *input) {
       .node_index = node->node_index,
       .num_inputs = 3,
       .state_size = sizeof(biquad_state),
-      .state_offset = allocate_state_memory(graph, sizeof(biquad_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(biquad_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -388,7 +388,7 @@ Node *biquad_lp_node(Node *freq, Node *res, Node *input) {
 // Create a biquad band-pass filter node
 Node *biquad_bp_node(Node *freq, Node *res, Node *input) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(biquad_state));
 
   // Initialize node
   *node = (Node){
@@ -396,7 +396,7 @@ Node *biquad_bp_node(Node *freq, Node *res, Node *input) {
       .node_index = node->node_index,
       .num_inputs = 3,
       .state_size = sizeof(biquad_state),
-      .state_offset = allocate_state_memory(graph, sizeof(biquad_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(biquad_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -427,7 +427,7 @@ Node *biquad_bp_node(Node *freq, Node *res, Node *input) {
 // Create a biquad high-pass filter node
 Node *biquad_hp_node(Node *freq, Node *res, Node *input) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(biquad_state));
 
   // Initialize node
   *node = (Node){
@@ -435,7 +435,7 @@ Node *biquad_hp_node(Node *freq, Node *res, Node *input) {
       .node_index = node->node_index,
       .num_inputs = 3,
       .state_size = sizeof(biquad_state),
-      .state_offset = allocate_state_memory(graph, sizeof(biquad_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(biquad_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -466,7 +466,7 @@ Node *biquad_hp_node(Node *freq, Node *res, Node *input) {
 // Create a butterworth high-pass filter node
 Node *butterworth_hp_node(Node *freq, Node *input) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(biquad_state));
 
   // Initialize node
   *node = (Node){
@@ -474,7 +474,7 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = sizeof(biquad_state),
-      .state_offset = allocate_state_memory(graph, sizeof(biquad_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(biquad_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -540,11 +540,11 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
   int bufsize = (int)(max_delay_time * sample_rate);
 
   // Allocate node
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
 
   // Allocate state
   node->state_size = sizeof(comb_state) + (bufsize * sizeof(double));
-  node->state_offset = allocate_state_memory(graph, node->state_size);
+  node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
 
   // Get state pointer and buffer pointer
   comb_state *state =
@@ -623,7 +623,7 @@ void *lag_perform(Node *node, lag_state *state, Node *inputs[], int nframes,
 
 Node *lag_node(double lag_time, Node *input) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(lag_state));
 
   // Initialize node
   *node = (Node){
@@ -631,7 +631,7 @@ Node *lag_node(double lag_time, Node *input) {
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = sizeof(lag_state),
-      .state_offset = allocate_state_memory(graph, sizeof(lag_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(lag_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -679,7 +679,7 @@ void *tanh_perform(Node *node, tanh_state *state, Node *inputs[], int nframes,
 
 Node *tanh_node(double gain, Node *input) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(tanh_state));
 
   // Initialize node
   *node = (Node){
@@ -687,7 +687,7 @@ Node *tanh_node(double gain, Node *input) {
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = sizeof(tanh_state),
-      .state_offset = allocate_state_memory(graph, sizeof(tanh_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(tanh_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},

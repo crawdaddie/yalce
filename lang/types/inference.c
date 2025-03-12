@@ -502,10 +502,10 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     return unify_in_ctx(t1->data.T_FN.to, t2->data.T_FN.to, ctx, node);
 
   } else if (t1->kind == T_CONS && IS_PRIMITIVE_TYPE(t2)) {
-    printf("unify fail\n");
-    print_type(t1);
-    print_type(t2);
-    return NULL;
+    // printf("unify fail\n");
+    // print_type(t1);
+    // print_type(t2);
+    return t2;
   } else if (t2->kind == T_VAR && t1->kind != T_VAR) {
     return unify_in_ctx(t2, t1, ctx, node);
   } else {

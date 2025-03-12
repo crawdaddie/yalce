@@ -146,12 +146,14 @@ AudioGraph *end_blob() {
 
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
-  graph->buffer_pool_capacity = graph->buffer_pool_size;
+
   double *b = graph->buffer_pool;
+  graph->buffer_pool_capacity = graph->buffer_pool_size;
   graph->buffer_pool = malloc(sizeof(double) * graph->buffer_pool_capacity);
   for (int i = 0; i < graph->buffer_pool_capacity; i++) {
     graph->buffer_pool[i] = b[i];
   }
+  free(b);
 
 
   graph->state_memory_capacity = graph->state_memory_size;
@@ -312,4 +314,21 @@ NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
   };
   schedule_event((SchedulerCallback)close_gate, dur, cp);
   return s;
+}
+
+NodeRef play_node(NodeRef s) {
+  return play_node_offset(get_frame_offset(), s);
+}
+
+
+NodeRef load_soundfile() {
+}
+
+void set_input_scalar_offset(NodeRef target, int input, int offset, double val) {
+  push_msg(
+      &ctx.msg_queue,
+      (scheduler_msg){NODE_SET_SCALAR,
+                      offset,
+                      {.NODE_SET_SCALAR = {
+                           .target = target, .input = input, .value = val}}});
 }

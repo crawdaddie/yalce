@@ -94,7 +94,7 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
                Node *trigger) {
 
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(asr_state));
 
   // Initialize node
   *node = (Node){
@@ -103,7 +103,7 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
       .num_inputs = 1,
       // Allocate state memory
       .state_size = sizeof(asr_state),
-      .state_offset = allocate_state_memory(graph, sizeof(asr_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(asr_state)),
       // Allocate output buffer
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,

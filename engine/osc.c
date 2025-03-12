@@ -81,7 +81,7 @@ void *sin_perform(Node *node, sin_state *state, Node *inputs[], int nframes,
 Node *sin_node(Node *input) {
   AudioGraph *graph = _graph;
   // Find next available slot in nodes array
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(sin_state));
 
   // Initialize node
   *node = (Node){
@@ -90,7 +90,7 @@ Node *sin_node(Node *input) {
       .num_inputs = 1,
       // Allocate state memory
       .state_size = sizeof(sin_state),
-      .state_offset = allocate_state_memory(graph, sizeof(sin_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(sin_state)),
       // Allocate output buffer
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
@@ -100,7 +100,7 @@ Node *sin_node(Node *input) {
 
   // Initialize state
   sin_state *state =
-      (sin_state *)(graph->nodes_state_memory + node->state_offset);
+      (sin_state *)(state_ptr(graph, node));
 
   *state = (sin_state){.phase = 0.0};
 
@@ -154,7 +154,7 @@ void *sq_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
 
 Node *sq_node(Node *input) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(sq_state));
 
   // Initialize node
   *node = (Node){
@@ -162,7 +162,7 @@ Node *sq_node(Node *input) {
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = sizeof(sq_state),
-      .state_offset = allocate_state_memory(graph, sizeof(sq_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(sq_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -211,7 +211,7 @@ void *phasor_perform(Node *node, phasor_state *state, Node *inputs[], int nframe
 
 Node *phasor_node(Node *input) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(phasor_state));
 
   // Initialize node
   *node = (Node){
@@ -219,7 +219,7 @@ Node *phasor_node(Node *input) {
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = sizeof(phasor_state),
-      .state_offset = allocate_state_memory(graph, sizeof(phasor_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(phasor_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -282,7 +282,7 @@ void *raw_osc_perform(Node *node, raw_osc_state *state, Node *inputs[], int nfra
 
 Node *raw_osc_node(Node *table, Node *freq) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(raw_osc_state));
 
   // Initialize node
   *node = (Node){
@@ -290,7 +290,7 @@ Node *raw_osc_node(Node *table, Node *freq) {
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = sizeof(raw_osc_state),
-      .state_offset = allocate_state_memory(graph, sizeof(raw_osc_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(raw_osc_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -368,7 +368,7 @@ void *osc_bank_perform(Node *node, osc_bank_state *state, Node *inputs[], int nf
 
 Node *osc_bank_node(Node *amps, Node *freq) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(osc_bank_state));
 
   // Initialize node
   *node = (Node){
@@ -376,7 +376,7 @@ Node *osc_bank_node(Node *amps, Node *freq) {
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = sizeof(osc_bank_state),
-      .state_offset = allocate_state_memory(graph, sizeof(osc_bank_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(osc_bank_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -438,7 +438,7 @@ void *bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[], int 
 
 Node *bufplayer_node(Node *buf, Node *rate) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
 
   // Initialize node
   *node = (Node){
@@ -446,7 +446,7 @@ Node *bufplayer_node(Node *buf, Node *rate) {
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = sizeof(bufplayer_state),
-      .state_offset = allocate_state_memory(graph, sizeof(bufplayer_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(bufplayer_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -513,7 +513,7 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
 
 Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
 
   // Initialize node
   *node = (Node){
@@ -521,7 +521,7 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
       .node_index = node->node_index,
       .num_inputs = 4,
       .state_size = sizeof(bufplayer_state),
-      .state_offset = allocate_state_memory(graph, sizeof(bufplayer_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(bufplayer_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -576,7 +576,7 @@ void *white_noise_perform(Node *node, void *state, Node *inputs[], int nframes,
 
 Node *white_noise_node() {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, 0);
 
   // Initialize node
   *node = (Node){
@@ -625,7 +625,7 @@ void *brown_noise_perform(Node *node, brown_noise_state *state, Node *inputs[], 
 
 Node *brown_noise_node() {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(brown_noise_state));
 
   // Initialize node
   *node = (Node){
@@ -633,7 +633,7 @@ Node *brown_noise_node() {
       .node_index = node->node_index,
       .num_inputs = 0,
       .state_size = sizeof(brown_noise_state),
-      .state_offset = allocate_state_memory(graph, sizeof(brown_noise_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(brown_noise_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -706,7 +706,7 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
 
 Node *chirp_node(double start_freq, double end_freq, Node *lag_time, Node *trig) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(chirp_state));
 
   // Initialize node
   *node = (Node){
@@ -714,7 +714,7 @@ Node *chirp_node(double start_freq, double end_freq, Node *lag_time, Node *trig)
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = sizeof(chirp_state),
-      .state_offset = allocate_state_memory(graph, sizeof(chirp_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(chirp_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -782,7 +782,7 @@ void *impulse_perform(Node *node, impulse_state *state, Node *inputs[], int nfra
 
 Node *impulse_node(Node *freq) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(impulse_state));
 
   // Initialize node
   *node = (Node){
@@ -790,7 +790,7 @@ Node *impulse_node(Node *freq) {
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = sizeof(impulse_state),
-      .state_offset = allocate_state_memory(graph, sizeof(impulse_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(impulse_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -842,7 +842,7 @@ void *ramp_perform(Node *node, ramp_state *state, Node *inputs[], int nframes,
 
 Node *ramp_node(Node *freq) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(ramp_state));
 
   // Initialize node
   *node = (Node){
@@ -850,7 +850,7 @@ Node *ramp_node(Node *freq) {
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = sizeof(ramp_state),
-      .state_offset = allocate_state_memory(graph, sizeof(ramp_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(ramp_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -898,7 +898,7 @@ void *trig_rand_perform(Node *node, trig_rand_state *state, Node *inputs[], int 
 
 Node *trig_rand_node(Node *trig) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(trig_rand_state));
 
   // Initialize node
   *node = (Node){
@@ -906,7 +906,7 @@ Node *trig_rand_node(Node *trig) {
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = sizeof(trig_rand_state),
-      .state_offset = allocate_state_memory(graph, sizeof(trig_rand_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(trig_rand_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -956,7 +956,7 @@ void *trig_sel_perform(Node *node, trig_sel_state *state, Node *inputs[], int nf
 
 Node *trig_sel_node(Node *trig, Node *sels) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(trig_sel_state));
 
   // Initialize node
   *node = (Node){
@@ -964,7 +964,7 @@ Node *trig_sel_node(Node *trig, Node *sels) {
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = sizeof(trig_sel_state),
-      .state_offset = allocate_state_memory(graph, sizeof(trig_sel_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(trig_sel_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -1107,7 +1107,7 @@ void *granulator_perform(Node *node, granulator_state *state, Node *inputs[], in
 
 Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos, Node *rate) {
   AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph);
+  Node *node = allocate_node_in_graph(graph, sizeof(granulator_state));
   
   // Limit max grains to reasonable size
   if (max_grains <= 0) max_grains = 8;
@@ -1122,7 +1122,7 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos, Node *ra
       .node_index = node->node_index,
       .num_inputs = 4,
       .state_size = state_size,
-      .state_offset = allocate_state_memory(graph, state_size),
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},

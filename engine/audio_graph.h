@@ -18,8 +18,9 @@ typedef struct {
 } AudioGraph;
 
 double *allocate_buffer_from_pool(AudioGraph *graph, int size);
-int allocate_state_memory(AudioGraph *graph, int size);
-Node *allocate_node_in_graph(AudioGraph *graph);
+int state_offset_ptr_in_graph(AudioGraph *graph, int size);
+char *state_ptr(AudioGraph *graph, NodeRef node);
+Node *allocate_node_in_graph(AudioGraph *graph, int state_size);
 
 void print_graph(AudioGraph *g);
 

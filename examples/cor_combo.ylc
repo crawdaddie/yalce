@@ -6,14 +6,14 @@
 
 
 let st = (fn () -> 
-  let f = inlet 58.;
-  sin_node f
+  let f = inlet 58. |> lag_node 0.01;
+  (sin_node f |> tanh_node 20.) + (sin_node (f * 1.01) |> tanh_node 20.)
 ;) |> compile_blob_template;
 
 
 let s = fn freq offset ->
   st
-  |> instantiate_blob_template_w_args [freq]
+  |> instantiate_template [(0, freq)]
   |> play_node_offset offset
 ;;
 
@@ -30,7 +30,7 @@ let co = (
 
   freq: iter_of_list [55., 330., 220., 110., 44., 33., 55., 110., 220., 660.] |> cor_loop,
 
-  target: s 0
+  target: s 55. 0
     # synth |> chain_wrap |> play
   # ),
 )
