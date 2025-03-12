@@ -22,8 +22,12 @@ let start_blob = extern fn () -> ();
 let end_blob = extern fn () -> Ptr;
 let inlet = extern fn Double -> Synth;
 let play_node = extern fn Synth -> Synth;
-let set_input_scalar_offset = extern fn Synth -> Int -> Int -> Double -> ();
+let set_input_scalar_offset = extern fn Synth -> Int -> Int -> Double -> Synth;
+let set_input_trig_offset = extern fn Synth -> Int -> Int -> Synth;
+let set_input_buf = extern fn Int -> Synth -> Synth -> Synth;
 let play_node_offset = extern fn Int -> Synth -> Synth;
+let set_input_buf_immediate = extern fn Int -> Synth -> Synth -> Synth;
+let load_soundfile = extern fn Ptr -> Synth;
 
 # envelope.h
 let asr_node = extern fn Double -> Double -> Double -> Synth -> Synth;

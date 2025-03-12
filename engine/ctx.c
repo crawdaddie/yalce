@@ -82,19 +82,41 @@ static void process_msg_pre(scheduler_msg msg) {
       }
     }
 
-    // double *target_input_buf = get_node_input_buf(node, payload.input);
-    // int target_input_size = get_node_input_size(node, payload.input);
-    // for (int i = msg.frame_offset; i < target_input_size; i++) {
-    //   *(target_input_buf + i) = payload.value;
-    // }
+    break;
+  }
+
+  case NODE_SET_INPUT: {
+    struct NODE_SET_INPUT payload = msg.payload.NODE_SET_INPUT;
+    Node *node = payload.target;
+    Node *buf = payload.value;
+
+    if ((char *)node->perform == (char *)perform_audio_graph) {
+      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      Node *inlet_node = g->nodes + g->inlets[payload.input];
+      Signal inlet_data = inlet_node->output;
+      inlet_node->output.layout = buf->output.layout;  
+      inlet_node->output.size = buf->output.size;  
+      inlet_node->output.buf = buf->output.buf;  
+      // printf("setting input data\n");
+        // for (int i= 0; i < inlet_node->output.size * inlet_node->output.layout; i++) {
+          // printf("buf data inlet: %f\n", inlet_node->output.buf[i]);
+        // }
+    }
+
     break;
   }
 
   case NODE_SET_TRIG: {
-    // struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
-    // Node *node = payload.target;
-    // double *target_input_buf = get_node_input_buf(node, payload.input);
-    // *(target_input_buf + msg.frame_offset) = 1.0;
+    struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
+      Node *node = payload.target;
+
+    if ((char *)node->perform == (char *)perform_audio_graph) {
+      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      Node *inlet_node = g->nodes + g->inlets[payload.input];
+      Signal inlet_data = inlet_node->output;
+      inlet_data.buf[msg.frame_offset] = 1.0;
+    }
+
     break;
   }
   default:
@@ -138,8 +160,15 @@ static void process_msg_post(scheduler_msg msg) {
   }
 
   case NODE_SET_TRIG: {
-    // struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
-    // Node *node = payload.target;
+    struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
+    Node *node = payload.target;
+
+    if ((char *)node->perform == (char *)perform_audio_graph) {
+      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      Node *inlet_node = g->nodes + g->inlets[payload.input];
+      Signal inlet_data = inlet_node->output;
+      inlet_data.buf[msg.frame_offset] = 0.0;
+    }
     //
     // double *target_input_buf = get_node_input_buf(node, payload.input);
     // *(target_input_buf + msg.frame_offset) = 0.0;

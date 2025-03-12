@@ -224,6 +224,7 @@ Type t_cor_map_fn_sig = GENERIC_TYPE(_cor_map_fn_sig);
 //                                            (Type *[]){&t_list_var_el}, 1}}}),
 //               .to = &t_list_cor}},
 //     .is_coroutine_constructor = true});
+Type t_builtin_cstr = MAKE_FN_TYPE_2(&t_string, &t_ptr);
 
 void initialize_builtin_types() {
 
@@ -336,6 +337,7 @@ void initialize_builtin_types() {
   add_builtin("queue_pop_left", &t_queue_pop_left);
   add_builtin("queue_append_right", &t_queue_append_right);
   add_builtin("opt_map", &t_opt_map_sig);
+  add_builtin("cstr", &t_builtin_cstr);
 }
 
 Type *lookup_builtin_type(const char *name) {

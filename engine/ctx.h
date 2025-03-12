@@ -9,7 +9,8 @@ typedef struct scheduler_msg {
     GROUP_ADD,
     NODE_SET_SCALAR,
     NODE_SET_TRIG,
-    NODE_REMOVE
+    NODE_REMOVE,
+    NODE_SET_INPUT,
   } type;
   int frame_offset;
   union {
@@ -27,6 +28,13 @@ typedef struct scheduler_msg {
       int input;
       double value;
     } NODE_SET_SCALAR;
+
+
+    struct NODE_SET_INPUT {
+      Node *target;
+      int input;
+      Node *value;
+    } NODE_SET_INPUT;
 
     struct NODE_SET_TRIG {
       Node *target;

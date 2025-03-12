@@ -12,6 +12,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sndfile.h>
+
 // ------- ASR Envelope Node -------
 
 void node_get_inputs(Node *node, AudioGraph *graph, Node *inputs[]) {
@@ -154,7 +156,6 @@ AudioGraph *end_blob() {
     graph->buffer_pool[i] = b[i];
   }
   free(b);
-
 
   graph->state_memory_capacity = graph->state_memory_size;
   graph->nodes_state_memory =
@@ -316,19 +317,130 @@ NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
   return s;
 }
 
-NodeRef play_node(NodeRef s) {
-  return play_node_offset(get_frame_offset(), s);
+NodeRef play_node(NodeRef s) { return play_node_offset(get_frame_offset(), s); }
+
+int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
+  SNDFILE *infile;
+  SF_INFO sfinfo;
+  int readcount;
+  memset(&sfinfo, 0, sizeof(sfinfo));
+
+  if (!(infile =
+            sf_open(filename, SFM_READ,
+                    &sfinfo))) { /* Open failed so print an error message. */
+    printf("Not able to open input file %s.\n", filename);
+    /* Print the error message from libsndfile. */
+    puts(sf_strerror(NULL));
+    return 1;
+  };
+
+  if (sfinfo.channels > MAX_SF_CHANNELS) {
+    printf("Not able to process more than %d channels\n", MAX_SF_CHANNELS);
+    sf_close(infile);
+    return 1;
+  };
+
+  size_t total_size = sfinfo.channels * sfinfo.frames;
+
+  double *buf = calloc((int)total_size, sizeof(double));
+  // double *buf = signal->buf;
+
+  // reads channels in interleaved
+  int read = sf_read_double(infile, buf, total_size);
+  if (read != total_size) {
+    printf("warning read failure, read %d != total size) %zu", read,
+           total_size);
+  }
+
+  sf_close(infile);
+  signal->size = sfinfo.frames;
+  signal->layout = sfinfo.channels;
+  signal->buf = buf;
+  *sf_sample_rate = sfinfo.samplerate;
+  fprintf(stderr,
+          "read %d frames from '%s' buf %p [channels: %d samplerate: %d]\n",
+          read, filename, buf, sfinfo.channels, sfinfo.samplerate);
+  return 0;
+};
+
+typedef struct {
+  int sample_rate;
+} sf_meta;
+NodeRef load_soundfile(const char *path) {
+  Node *sf = malloc(sizeof(Node) + sizeof(sf_meta));
+  sf_meta *meta = (sf_meta *)((Node *)sf + 1);
+  if (_read_file(path, &sf->output, &meta->sample_rate) != 0) {
+    return NULL;
+  }
+  // printf("created sf node %d %d (%d)\n", sf->output.layout, sf->output.size,
+  // meta->sample_rate);
+
+  return sf;
 }
 
-
-NodeRef load_soundfile() {
+// void set_input_scalar_offset(NodeRef target, int input, int offset, double
+// val) {
+//   push_msg(
+//       &ctx.msg_queue,
+//       (scheduler_msg){NODE_SET_SCALAR,
+//                       offset,
+//                       {.NODE_SET_SCALAR = {
+//                            .target = target, .input = input, .value =
+//                            val}}});
+// }
+//
+NodeRef set_input_scalar(NodeRef node, int input, double value) {
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_SET_SCALAR,
+                           get_frame_offset(),
+                           {.NODE_SET_SCALAR = {node, input, value}}});
+  return node;
 }
 
-void set_input_scalar_offset(NodeRef target, int input, int offset, double val) {
-  push_msg(
-      &ctx.msg_queue,
-      (scheduler_msg){NODE_SET_SCALAR,
-                      offset,
-                      {.NODE_SET_SCALAR = {
-                           .target = target, .input = input, .value = val}}});
+NodeRef set_input_buf(int input, NodeRef buf, NodeRef node) {
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_SET_INPUT,
+                           get_frame_offset(),
+                           {.NODE_SET_INPUT = {node, input, buf}}});
+  return node;
+}
+
+NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node) {
+
+  if ((char *)node->perform == (char *)perform_audio_graph) {
+    AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+    Node *inlet_node = g->nodes + g->inlets[input];
+    Signal inlet_data = inlet_node->output;
+    inlet_node->output.layout = buf->output.layout;
+    inlet_node->output.size = buf->output.size;
+    inlet_node->output.buf = buf->output.buf;
+    // printf("setting input data\n");
+    // for (int i= 0; i < inlet_node->output.size * inlet_node->output.layout;
+    // i++) { printf("buf data inlet: %f\n", inlet_node->output.buf[i]);
+    // }
+  }
+  return node;
+}
+
+NodeRef set_input_scalar_offset(NodeRef node, int input, int frame_offset,
+                                double value) {
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_SET_SCALAR,
+                           frame_offset,
+                           {.NODE_SET_SCALAR = {node, input, value}}});
+  return node;
+}
+
+NodeRef set_input_trig(NodeRef node, int input) {
+  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
+                                           get_frame_offset(),
+                                           {.NODE_SET_TRIG = {node, input}}});
+  return node;
+}
+
+NodeRef set_input_trig_offset(NodeRef node, int input, int frame_offset) {
+  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
+                                           frame_offset,
+                                           {.NODE_SET_TRIG = {node, input}}});
+  return node;
 }
