@@ -168,9 +168,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Ast *member = ast->data.AST_LIST.items + i;
       Type *mtype = infer(member, ctx);
       cons_args[i] = mtype;
-      if (is_coroutine_type(mtype)) {
-        is_struct_of_coroutines = true;
-      }
+      // if (is_coroutine_type(mtype)) {
+      //   is_struct_of_coroutines = true;
+      // }
     }
 
     type = talloc(sizeof(Type));
@@ -185,16 +185,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
       type->data.T_CONS.names = names;
     }
-    if (is_struct_of_coroutines) {
-      for (int i = 0; i < len; i++) {
-        if (is_coroutine_type(type->data.T_CONS.args[i])) {
-          type->data.T_CONS.args[i] =
-              type_of_option(fn_return_type(type->data.T_CONS.args[i]));
-        }
-      }
-      type = type_fn(&t_void, create_option_type(type));
-      type->is_coroutine_instance = true;
-    }
+    // if (is_struct_of_coroutines) {
+    //   for (int i = 0; i < len; i++) {
+    //     if (is_coroutine_type(type->data.T_CONS.args[i])) {
+    //       type->data.T_CONS.args[i] =
+    //           type_of_option(fn_return_type(type->data.T_CONS.args[i]));
+    //     }
+    //   }
+    //   type = type_fn(&t_void, create_option_type(type));
+    //   type->is_coroutine_instance = true;
+    // }
 
     break;
   }
@@ -346,10 +346,84 @@ Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
   return yield_expr_type;
 }
 
+Type *struct_of_fns_to_return(Type *cons) {
+  Type **results = talloc(sizeof(Type *) * cons->data.T_CONS.num_args);
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    Type *t = cons->data.T_CONS.args[i];
+    if (t->kind == T_FN) {
+
+      results[i] = fn_return_type(t);
+
+      if (results[i]->alias && CHARS_EQ(results[i]->alias, "Option")) {
+        results[i] = type_of_option(results[i]);
+      }
+    } else {
+      results[i] = t;
+    }
+  }
+  return create_tuple_type(cons->data.T_CONS.num_args, results);
+}
+
+bool is_struct_of_void_fns(Type *cons) {
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    Type *t = cons->data.T_CONS.args[i];
+    if (t->kind == T_FN) {
+      if (!is_void_func(t)) {
+        // if member is fn, it must be () -> xx
+        return false;
+      }
+    }
+    // if member is not fn, that's ok
+  }
+  return true;
+}
+
+Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
+  if (ast->data.AST_APPLICATION.len != 3) {
+    return type_error(ctx, ast, "run_in_scheduler must have 3 args\n");
+  }
+
+  infer(ast->data.AST_APPLICATION.args,
+        ctx); // first arg is concrete schedule fn impl
+  Type *val_generator_type = infer(ast->data.AST_APPLICATION.args + 2, ctx);
+  if (!is_struct_of_void_fns(val_generator_type)) {
+    return type_error(
+        ctx, ast->data.AST_APPLICATION.args + 2,
+        "value generator must consist of constants or () -> xx void funcs");
+  }
+  Type *sink_fn = infer(ast->data.AST_APPLICATION.args + 1, ctx);
+  Type *val_struct = sink_fn->data.T_FN.from;
+  if (sink_fn->data.T_FN.to->kind != T_FN) {
+    return type_error(ctx, ast->data.AST_APPLICATION.args + 1,
+                      "not enough args in sink fn");
+  }
+  Type *frame_offset_arg = sink_fn->data.T_FN.to->data.T_FN.from;
+
+  TICtx _ctx = {};
+  unify_in_ctx(frame_offset_arg, &t_int, &_ctx,
+               (ast->data.AST_APPLICATION.args + 1)->data.AST_LAMBDA.params +
+                   1);
+  Type *concrete_val_struct = struct_of_fns_to_return(val_generator_type);
+
+  unify_in_ctx(val_struct, concrete_val_struct, &_ctx,
+               (ast->data.AST_APPLICATION.args + 1)->data.AST_LAMBDA.params);
+
+  Substitution *subst = solve_constraints(_ctx.constraints);
+
+  apply_substitutions_rec(ast, subst);
+  (ast->data.AST_APPLICATION.args + 1)->md =
+      apply_substitution(subst, (ast->data.AST_APPLICATION.args + 1)->md);
+}
+
 Type *infer_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
-  // print_ast(ast);
-  // print_type(fn_type);
+
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               TYPE_NAME_RUN_IN_SCHEDULER)) {
+    infer_schedule_event_callback(ast, ctx);
+    return &t_void;
+  }
 
   if (!fn_type) {
     return NULL;
@@ -488,10 +562,14 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 
   if (t1->kind == T_CONS && t2->kind == T_CONS &&
       (strcmp(t1->data.T_CONS.name, t1->data.T_CONS.name) == 0)) {
-    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-      t1 = t1->data.T_CONS.args[i];
-      t2 = t2->data.T_CONS.args[i];
-      if (!unify_in_ctx(t1, t2, ctx, node)) {
+    int num_args = t1->data.T_CONS.num_args;
+
+    for (int i = 0; i < num_args; i++) {
+
+      Type *_t1 = t1->data.T_CONS.args[i];
+      Type *_t2 = t2->data.T_CONS.args[i];
+
+      if (!unify_in_ctx(_t1, _t2, ctx, node)) {
         return NULL;
       }
     }

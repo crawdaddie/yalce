@@ -11,8 +11,7 @@ void print_builtin_types();
 Type *lookup_builtin_type(const char *name);
 
 extern Type t_option_of_var;
-
 extern Type t_cor_map_fn_sig;
-
 extern Type t_builtin_cstr;
+extern Type t_run_in_scheduler_sig;
 #endif

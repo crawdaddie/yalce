@@ -146,6 +146,7 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_TYPECLASS_ARITHMETIC "arithmetic"
 #define TYPE_NAME_TYPECLASS_EQ "eq"
 #define TYPE_NAME_TYPECLASS_ORD "ord"
+#define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
 
 typedef struct _binop_map {
   const char *name;

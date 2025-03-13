@@ -834,7 +834,6 @@ LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
 
   return _cor_wrap_effect(instance_ptr, func, module, builder);
 }
-
 LLVMValueRef MapCoroutineHandler(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
@@ -1320,4 +1319,39 @@ LLVMValueRef CorPlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                  schedule_event_fn, schedule_args, 3, "");
 
   return LLVMGetUndef(LLVMVoidType());
+}
+
+LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  Type *scheduler_type = ast->data.AST_APPLICATION.args[0].md;
+  Type *effect_type = ast->data.AST_APPLICATION.args[1].md;
+  Type *value_generator_type = ast->data.AST_APPLICATION.args[2].md;
+  Type *value_struct_type = effect_type->data.T_FN.from;
+
+  printf("value struct type: ");
+  print_type(value_struct_type);
+
+  LLVMTypeRef generator_type =
+      type_to_llvm_type(value_generator_type, ctx->env, module);
+
+  LLVMValueRef generator_alloca = LLVMBuildAlloca(builder, generator_type, "");
+
+  LLVMValueRef generator =
+      codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
+  LLVMBuildStore(builder, generator, generator_alloca);
+
+  printf("\n");
+
+  // compile value generator (args[2]) to struct 'U
+  // create wrapper function 'U -> Int -> ()
+  // in wrapper function, get 1st arg 'U, & Int frame_offset
+  // for each member of 'U, call member and construct
+  // struct 'V with values
+  // call sink function args[1] with 'V & frame_offset
+  // later take first value from 'V (Float - dur) and
+  // call schedule_event (args[0]) with wrapper function, dur & 'U
+
+  return NULL;
 }
