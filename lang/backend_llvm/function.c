@@ -42,9 +42,6 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
       } else if (is_pointer_type(t)) {
         llvm_param_types[i] = LLVMPointerType(
             type_to_llvm_type(t->data.T_CONS.args[0], env, module), 0);
-      } else if (is_tuple_type(t)) {
-        llvm_param_types[i] =
-            LLVMPointerType(type_to_llvm_type(t, env, module), 0);
       } else {
         llvm_param_types[i] = type_to_llvm_type(t, env, module);
       }

@@ -48,7 +48,13 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   }
 
   *ret_type = LLVMTypeOf(body);
-  LLVMBuildRet(builder, body);
+  if (types_equal(ast->md, &t_void)) {
+    *ret_type = LLVMVoidType();
+    LLVMBuildRetVoid(builder);
+  } else {
+    LLVMBuildRet(builder, body);
+  }
+
   return func;
 }
 
@@ -97,6 +103,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       Type *t = item->md;
 
       if (t->kind == T_VAR) {
+        // print_type(t);
+        // print_type_env(ctx->env);
         t = env_lookup(ctx->env, t->data.T_VAR);
       }
 

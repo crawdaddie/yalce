@@ -174,8 +174,9 @@ void *timer(void *arg) {
         double now_d = ((double)(now - start) / S_TO_NS);
         tl_offset = get_frame_offset();
 
-        // printf("popped event from queue: cb: %p coroutine: %p %d\n",
-        //        ev.callback, ev.userdata, tl_offset);
+        // printf("popped event from queue: cb: %p userdata: %p %d\n",
+        // ev.callback,
+        //        ev.userdata, tl_offset);
 
         ev.callback(ev.userdata, tl_offset);
       }
@@ -212,8 +213,8 @@ int scheduler_event_loop() {
 void schedule_event(void (*callback)(void *, int), double delay_seconds,
                     void *userdata) {
 
-  printf("sched event coroutine: %p callback: %p time: %f\n", userdata,
-         callback, delay_seconds);
+  // printf("sched event coroutine: %p callback: %p time: %f\n", userdata,
+  //        callback, delay_seconds);
 
   if (delay_seconds == 0.0) {
     int frame_offset = get_frame_offset();

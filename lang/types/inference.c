@@ -1307,17 +1307,17 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
   case AST_FMT_STRING: {
 
-    // int arity = ast->data.AST_LIST.len;
-    // for (int i = 0; i < arity; i++) {
-    // Ast *member = ast->data.AST_LIST.items + i;
-    // if (member->tag == AST_IDENTIFIER &&
-    //     CHARS_EQ(member->data.AST_IDENTIFIER.value, "x")) {
-    //   print_ast(member);
-    //   print_type(member->md);
-    //   print_type(member->md);
-    // }
-    // apply_substitutions_rec(member, subst);
-    // }
+    int arity = ast->data.AST_LIST.len;
+    for (int i = 0; i < arity; i++) {
+      Ast *member = ast->data.AST_LIST.items + i;
+      if (member->tag == AST_IDENTIFIER &&
+          CHARS_EQ(member->data.AST_IDENTIFIER.value, "x")) {
+        print_ast(member);
+        print_type(member->md);
+        print_type(member->md);
+      }
+      apply_substitutions_rec(member, subst);
+    }
 
     // ast->md = apply_substitution(subst, ast->md);
     break;
