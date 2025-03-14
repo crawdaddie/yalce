@@ -27,7 +27,7 @@ let s = fn freq offset ->
   |> play_node_offset offset
 ;;
 
-let times = [| 0.125, 0.125, |];
+let times = [| 0.125, 0.125, 0.5|];
 
 
 

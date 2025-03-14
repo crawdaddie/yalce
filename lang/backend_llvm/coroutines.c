@@ -6,6 +6,7 @@
 #include "match.h"
 #include "serde.h"
 #include "symbols.h"
+#include "tuple.h"
 #include "types.h"
 #include "util.h"
 #include "llvm-c/Core.h"
@@ -1321,28 +1322,122 @@ LLVMValueRef CorPlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return LLVMGetUndef(LLVMVoidType());
 }
 
+LLVMValueRef _build_wrapper_for_scheduled_fn(
+    Type *generator_type, LLVMTypeRef llvm_generator_type,
+    Type *value_struct_type, LLVMValueRef scheduler, LLVMValueRef effect_fn,
+    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+  LLVMTypeRef wrapper_fn_type =
+      LLVMFunctionType(LLVMVoidType(),
+                       (LLVMTypeRef[]){
+                           LLVMPointerType(llvm_generator_type, 0),
+                           LLVMInt32Type(),
+                       },
+                       2, 0);
+
+  START_FUNC(module, "scheduler_wrapper", wrapper_fn_type)
+
+  LLVMValueRef generator_ptr = LLVMGetParam(func, 0);
+  LLVMValueRef frame_offset = LLVMGetParam(func, 1);
+
+  LLVMTypeRef val_type = type_to_llvm_type(value_struct_type, ctx->env, module);
+  // TODO: alloca or malloc?
+  LLVMValueRef val_ptr = LLVMBuildMalloc(builder, val_type, "");
+
+  LLVMValueRef should_continue =
+      _TRUE; // sentinel value for in case item is coroutine instance
+  // that has ended. If coroutine instance has ended, then do not continue
+  // sequence
+  for (int i = 0; i < generator_type->data.T_CONS.num_args; i++) {
+    Type *item_type = generator_type->data.T_CONS.args[i];
+
+    LLVMValueRef callable_item =
+        codegen_tuple_access(i, generator_ptr, llvm_generator_type, builder);
+    LLVMValueRef val_gep =
+        codegen_tuple_gep(i, generator_ptr, val_type, builder);
+
+    if (is_coroutine_type(item_type)) {
+      Type *ret_opt_type = fn_return_type(item_type);
+      Type *ret_type = type_of_option(ret_opt_type);
+      LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx->env, module);
+      LLVMValueRef instance_ptr = callable_item;
+      LLVMValueRef ret_val_ref = val_gep;
+      instance_ptr = _cor_next(instance_ptr, ret_val_ref, module, builder);
+      should_continue =
+          LLVMBuildAnd(builder, should_continue,
+                       LLVMBuildICmp(builder, LLVMIntEQ, instance_ptr,
+                                     null_cor_inst(), "is_null"),
+                       "should_continue");
+
+    } else if (is_void_func(item_type)) {
+      LLVMValueRef val_from_callable = LLVMBuildCall2(
+          builder, type_to_llvm_type(item_type, ctx->env, module),
+          callable_item, NULL, 0, "call_void_item");
+      LLVMBuildStore(builder, val_from_callable, val_gep);
+    } else {
+      LLVMBuildStore(builder, callable_item, val_gep);
+    }
+  }
+  // Branch based on should_continue value
+  LLVMBasicBlockRef continue_block =
+      LLVMAppendBasicBlock(func, "continue_block");
+  LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(func, "end_block");
+
+  LLVMBuildCondBr(builder, should_continue, continue_block, end_block);
+
+  // Continue block - executed when should_continue is true
+  LLVMPositionBuilderAtEnd(builder, continue_block);
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(effect_fn), effect_fn,
+      (LLVMValueRef[]){// TODO: should I call fn with val struct or pointer?
+                       val_ptr, frame_offset},
+      2, "");
+
+  LLVMValueRef dur = codegen_tuple_access(0, val_ptr, val_type, builder);
+  LLVMValueRef scheduler_call = LLVMBuildCall2(
+      builder,
+      LLVMFunctionType(
+          LLVMVoidType(),
+          (LLVMTypeRef[]){GENERIC_PTR, LLVMDoubleType(), GENERIC_PTR}, 3, 0),
+      scheduler, (LLVMValueRef[]){func, dur, generator_ptr}, 3,
+      "schedule_next");
+  LLVMBuildBr(builder, end_block);
+
+  // End block - common end point
+  LLVMPositionBuilderAtEnd(builder, end_block);
+  LLVMBuildRetVoid(builder);
+
+  END_FUNC
+  return func;
+}
+
 LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
   Type *scheduler_type = ast->data.AST_APPLICATION.args[0].md;
+  LLVMValueRef scheduler =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   Type *effect_type = ast->data.AST_APPLICATION.args[1].md;
-  Type *value_generator_type = ast->data.AST_APPLICATION.args[2].md;
+  Type *generator_type = ast->data.AST_APPLICATION.args[2].md;
   Type *value_struct_type = effect_type->data.T_FN.from;
 
-  printf("value struct type: ");
-  print_type(value_struct_type);
+  LLVMTypeRef llvm_generator_type =
+      type_to_llvm_type(generator_type, ctx->env, module);
 
-  LLVMTypeRef generator_type =
-      type_to_llvm_type(value_generator_type, ctx->env, module);
-
-  LLVMValueRef generator_alloca = LLVMBuildAlloca(builder, generator_type, "");
+  LLVMValueRef generator_alloca =
+      LLVMBuildAlloca(builder, llvm_generator_type, "");
 
   LLVMValueRef generator =
       codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
   LLVMBuildStore(builder, generator, generator_alloca);
 
-  printf("\n");
+  LLVMValueRef effect_fn =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMValueRef wrapper_fn = _build_wrapper_for_scheduled_fn(
+      generator_type, llvm_generator_type, value_struct_type, scheduler,
+      effect_fn, ctx, module, builder);
 
   // compile value generator (args[2]) to struct 'U
   // create wrapper function 'U -> Int -> ()
@@ -1353,5 +1448,9 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
   // later take first value from 'V (Float - dur) and
   // call schedule_event (args[0]) with wrapper function, dur & 'U
 
-  return NULL;
+  return LLVMBuildCall2(
+      builder, type_to_llvm_type(scheduler_type, ctx->env, module), scheduler,
+      (LLVMValueRef[]){wrapper_fn, LLVMConstReal(LLVMDoubleType(), 0.),
+                       generator_alloca},
+      3, "");
 }

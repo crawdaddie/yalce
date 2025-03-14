@@ -5,6 +5,19 @@
 #include "types/type.h"
 #include "llvm-c/Types.h"
 
+#define START_FUNC(_module, _name, _type)                                      \
+  LLVMValueRef func = LLVMAddFunction(_module, _name, _type);                  \
+  if (func == NULL) {                                                          \
+    fprintf(stderr, "Error: could not create function\n");                     \
+    return NULL;                                                               \
+  }                                                                            \
+  LLVMSetLinkage(func, LLVMExternalLinkage);                                   \
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");               \
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);                  \
+  LLVMPositionBuilderAtEnd(builder, block);
+
+#define END_FUNC LLVMPositionBuilderAtEnd(builder, prev_block);
+
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 

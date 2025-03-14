@@ -72,6 +72,21 @@ LLVMValueRef codegen_tuple_access(int n, LLVMValueRef tuple,
   return LLVMBuildLoad2(builder, element_type, element_ptr,
                         "tuple_element_load");
 }
+
+// Function to get nth value out of an LLVM tuple value
+LLVMValueRef codegen_tuple_gep(int n, LLVMValueRef tuple_ptr,
+                               LLVMTypeRef tuple_type, LLVMBuilderRef builder) {
+
+  LLVMValueRef element_ptr =
+      LLVMBuildGEP2(builder, tuple_type, tuple_ptr,
+                    (LLVMValueRef[]){
+                        LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
+                        LLVMConstInt(LLVMInt32Type(), n, 0)  // Get nth element
+                    },
+                    2, "tuple_element_ptr");
+
+  return element_ptr;
+}
 LLVMValueRef codegen_struct_with_names_to_string(LLVMValueRef value,
                                                  Type *val_type,
                                                  JITLangCtx *ctx,

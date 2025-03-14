@@ -212,8 +212,8 @@ int scheduler_event_loop() {
 void schedule_event(void (*callback)(void *, int), double delay_seconds,
                     void *userdata) {
 
-  // printf("sched event coroutine: %p callback: %p time: %f\n", userdata,
-  //        callback, delay_seconds);
+  printf("sched event coroutine: %p callback: %p time: %f\n", userdata,
+         callback, delay_seconds);
 
   if (delay_seconds == 0.0) {
     int frame_offset = get_frame_offset();

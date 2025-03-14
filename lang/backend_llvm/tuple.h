@@ -20,4 +20,7 @@ LLVMTypeRef codegen_tuple_field_type(int n, LLVMValueRef tuple,
 LLVMValueRef codegen_tuple_to_string(LLVMValueRef opt_value, Type *val_type,
                                      JITLangCtx *ctx, LLVMModuleRef module,
                                      LLVMBuilderRef builder);
+
+LLVMValueRef codegen_tuple_gep(int n, LLVMValueRef tuple_ptr,
+                               LLVMTypeRef tuple_type, LLVMBuilderRef builder);
 #endif

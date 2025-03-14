@@ -42,6 +42,9 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
       } else if (is_pointer_type(t)) {
         llvm_param_types[i] = LLVMPointerType(
             type_to_llvm_type(t->data.T_CONS.args[0], env, module), 0);
+      } else if (is_tuple_type(t)) {
+        llvm_param_types[i] =
+            LLVMPointerType(type_to_llvm_type(t, env, module), 0);
       } else {
         llvm_param_types[i] = type_to_llvm_type(t, env, module);
       }
@@ -155,21 +158,9 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int fn_len = ast->data.AST_LAMBDA.len;
 
   LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx->env, module);
-
-  LLVMValueRef func = LLVMAddFunction(
-      module, is_anon ? "anonymous_func" : fn_name.chars, prototype);
-  LLVMSetLinkage(func, LLVMExternalLinkage);
-
-  if (func == NULL) {
-    fprintf(stderr, "Error: could not create function\n");
-    return NULL;
-  }
+  START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
-
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
-  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
-  LLVMPositionBuilderAtEnd(builder, block);
 
   if (!is_anon) {
     add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
@@ -209,7 +200,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   //
   LLVMBuildRet(builder, body);
 
-  LLVMPositionBuilderAtEnd(builder, prev_block);
+  END_FUNC
   destroy_ctx(&fn_ctx);
   return func;
 }
