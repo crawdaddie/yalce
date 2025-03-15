@@ -128,6 +128,26 @@ LLVMValueRef _cor_next(LLVMValueRef instance_ptr, LLVMValueRef ret_val_ref,
                         "call_cor_next");
 }
 
+LLVMValueRef _cor_finished(LLVMValueRef instance_ptr, LLVMValueRef ret_val_ref,
+                           LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMValueRef cor_finished_func = LLVMGetNamedFunction(module, "cor_finished");
+  LLVMTypeRef inst_type = cor_inst_struct_type();
+
+  LLVMTypeRef cor_fin_type = LLVMFunctionType(
+      LLVMInt1Type(), (LLVMTypeRef[]){LLVMPointerType(inst_type, 0)}, 1, false);
+
+  if (!cor_finished_func) {
+    cor_finished_func = LLVMAddFunction(module, "cor_finished", cor_fin_type);
+  }
+
+  return LLVMBuildCall2(builder, cor_fin_type, cor_finished_func,
+                        (LLVMValueRef[]){
+                            instance_ptr,
+                        },
+                        1, "call_cor_finished");
+}
+
 LLVMValueRef _cor_init(LLVMValueRef instance_ptr, LLVMValueRef new_fn,
                        LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -459,8 +479,14 @@ LLVMValueRef create_coroutine_state_ptr(Type *constructor_type, Ast *args,
   }
 
   if (args_len == 1) {
+
+    // LLVMValueRef state_ptr_alloca =
+    //     LLVMBuildAlloca(builder, llvm_state_arg_types[0], "");
+    // ATTENTION ?? need to create an arena for the coroutine, so when it
+    // finishes state & instance can be freed together
     LLVMValueRef state_ptr_alloca =
-        LLVMBuildAlloca(builder, llvm_state_arg_types[0], "");
+        LLVMBuildMalloc(builder, llvm_state_arg_types[0], "");
+
     LLVMBuildStore(builder, codegen(args, ctx, module, builder),
                    state_ptr_alloca);
     return state_ptr_alloca;
@@ -480,7 +506,7 @@ LLVMValueRef create_coroutine_state_ptr(Type *constructor_type, Ast *args,
   }
 
   LLVMValueRef state_ptr_alloca =
-      LLVMBuildAlloca(builder, instance_state_struct_type, "");
+      LLVMBuildMalloc(builder, instance_state_struct_type, "");
 
   LLVMBuildStore(builder, inst_state_struct, state_ptr_alloca);
   return state_ptr_alloca;
@@ -1343,17 +1369,8 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
 
   LLVMTypeRef val_type = type_to_llvm_type(value_struct_type, ctx->env, module);
 
-  // TODO: alloca or malloc?
   LLVMValueRef val_ptr = LLVMBuildAlloca(builder, val_type, "val_struct_alloc");
 
-  LLVMValueRef should_continue =
-      _TRUE; // sentinel value for in case item is coroutine instance
-  // that has ended. If coroutine instance has ended, then do not continue
-  // sequence
-  //
-  LLVMValueRef has_val = LLVMConstInt(LLVMInt1Type(), 1, 0);
-
-  INSERT_PRINTF(0, "?? has val?? %d\n", has_val);
   for (int i = 0; i < generator_type->data.T_CONS.num_args; i++) {
     Type *item_type = generator_type->data.T_CONS.args[i];
 
@@ -1368,38 +1385,35 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
       Type *ret_opt_type = fn_return_type(item_type);
       Type *ret_type = type_of_option(ret_opt_type);
 
-      LLVMValueRef instance_ptr_is_not_null = LLVMBuildICmp(
-          builder, LLVMIntNE, instance_ptr, null_cor_inst(), "is_not_null");
-
-      has_val =
-          LLVMBuildAnd(builder, has_val, instance_ptr_is_not_null, "has_val");
-
-      LLVMValueRef has_val_i32 =
-          LLVMBuildZExt(builder, has_val, LLVMInt32Type(), "has_val_i32");
-      INSERT_PRINTF(0, "?? has val?? %d\n", has_val_i32);
-
-      instance_ptr = _cor_next(instance_ptr, val_gep, module, builder);
-
-      LLVMValueRef _instance_ptr_is_not_null = LLVMBuildICmp(
-          builder, LLVMIntNE, instance_ptr, null_cor_inst(), "is_not_null");
-
-      should_continue =
-          LLVMBuildAnd(builder, should_continue, _instance_ptr_is_not_null,
-                       "should_continue");
+      LLVMValueRef _instance_ptr =
+          _cor_next(instance_ptr, val_gep, module, builder);
 
       LLVMBuildStore(
-          builder, instance_ptr,
+          builder, _instance_ptr,
           codegen_tuple_gep(i, generator_ptr, llvm_generator_type, builder));
 
+      LLVMValueRef instance_ptr_is_null = LLVMBuildICmp(
+          builder, LLVMIntEQ, _instance_ptr, null_cor_inst(), "is_null");
+
+      LLVMBasicBlockRef continue_block =
+          LLVMAppendBasicBlock(func, "continue_execution");
+      LLVMBasicBlockRef return_block =
+          LLVMAppendBasicBlock(func, "early_return");
+
+      LLVMBuildCondBr(builder, instance_ptr_is_null, return_block,
+                      continue_block);
+
+      LLVMPositionBuilderAtEnd(builder, return_block);
+      LLVMBuildRetVoid(builder);
+
+      LLVMPositionBuilderAtEnd(builder, continue_block);
+
     } else if (is_void_func(item_type)) {
-      // INSERT_PRINTF(1, "before val from callable %d\n",
-      //               LLVMConstInt(LLVMInt32Type(), i, 0));
 
       LLVMValueRef val_from_callable = LLVMBuildCall2(
           builder, type_to_llvm_type(item_type, ctx->env, module),
           callable_item, NULL, 0, "call_void_item");
 
-      // INSERT_PRINTF(1, "got val %f\n", val_from_callable);
       LLVMBuildStore(builder, val_from_callable, val_gep);
     } else {
 
@@ -1409,36 +1423,15 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
   }
   LLVMValueRef val = LLVMBuildLoad2(builder, val_type, val_ptr, "");
 
-  LLVMValueRef dur = codegen_tuple_access(0, val, val_type, builder);
-  LLVMValueRef dur_gt_zero =
-      LLVMBuildFCmp(builder, LLVMRealOGT, dur,
-                    LLVMConstReal(LLVMDoubleType(), 0.0), "dur_gt_zero");
-
-  has_val = LLVMBuildAnd(builder, has_val, dur_gt_zero, "compare_dur");
-  INSERT_PRINTF(0, "dur gt zero %d\n", has_val);
-
-  // Branch based on has_val and should_continue values
-  LLVMBasicBlockRef has_val_block = LLVMAppendBasicBlock(func, "has_val_block");
-  LLVMBasicBlockRef continue_block =
-      LLVMAppendBasicBlock(func, "continue_block");
-  LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(func, "end_block");
-
-  // First, branch based on has_val
-  LLVMBuildCondBr(builder, has_val, has_val_block, end_block);
-
-  // has_val block - executed when has_val is true (call effect_fn)
-  LLVMPositionBuilderAtEnd(builder, has_val_block);
+  LLVMValueRef dur =
+      LLVMBuildSIToFP(builder, codegen_tuple_access(0, val, val_type, builder),
+                      LLVMDoubleType(), "");
 
   LLVMTypeRef llvm_effect_type =
       type_to_llvm_type(effect_fn_type, ctx->env, module);
 
   LLVMBuildCall2(builder, llvm_effect_type, effect_fn,
                  (LLVMValueRef[]){val, frame_offset}, 2, "");
-  // Then check should_continue to determine if we continue or go to end
-  LLVMBuildCondBr(builder, should_continue, continue_block, end_block);
-
-  // Continue block - executed when should_continue is true (schedule next call)
-  LLVMPositionBuilderAtEnd(builder, continue_block);
 
   LLVMValueRef scheduler_call = LLVMBuildCall2(
       builder,
@@ -1447,12 +1440,8 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
           (LLVMTypeRef[]){GENERIC_PTR, LLVMDoubleType(), GENERIC_PTR}, 3, 0),
       scheduler, (LLVMValueRef[]){func, dur, generator_ptr}, 3,
       "schedule_next");
-  LLVMBuildRetVoid(builder);
-
-  LLVMBuildBr(builder, end_block);
 
   // End block - common end point
-  LLVMPositionBuilderAtEnd(builder, end_block);
   LLVMBuildRetVoid(builder);
 
   END_FUNC

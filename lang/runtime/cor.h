@@ -1,3 +1,4 @@
+#include <stdbool.h>
 typedef void *(*CoroutineFn)(void *coroutine, void *ret_val);
 
 typedef struct cor {

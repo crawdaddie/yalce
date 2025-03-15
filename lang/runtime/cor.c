@@ -1,4 +1,5 @@
 #include "cor.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -10,6 +11,7 @@ cor *cor_init(cor *cor, CoroutineFn fn) {
 cor *cor_alloc() { return malloc(sizeof(cor)); }
 
 cor *cor_next(cor *coroutine, void *ret_val) {
+
   if (!coroutine) {
     fprintf(stderr, "Error - coroutine is null\n");
     return NULL;
@@ -18,7 +20,9 @@ cor *cor_next(cor *coroutine, void *ret_val) {
   cor *res = coroutine->fn_ptr(coroutine, ret_val);
 
   if (res == NULL && coroutine->next != NULL) {
-    coroutine = coroutine->next;
+    cor *next = coroutine->next;
+    *coroutine = *next;
+
     return cor_next(coroutine, ret_val);
   }
 
@@ -27,6 +31,7 @@ cor *cor_next(cor *coroutine, void *ret_val) {
   }
 
   res->counter++;
+  *coroutine = *res;
   return res;
 }
 

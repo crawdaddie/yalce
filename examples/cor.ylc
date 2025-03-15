@@ -38,7 +38,6 @@ let rec = fn () ->
 ;;
 
 rec ();
-# #
 let seq = fn () ->
 
   let ne = fn () ->
@@ -64,8 +63,7 @@ let seq = fn () ->
 `
 ;;
 seq ();
-# #
-# #
+
 let iter_all_arg = fn () ->
   let co_void = fn a b ->
     yield 1.;
@@ -198,7 +196,6 @@ let loop_cor = fn () ->
     yield 2;
     yield 3
   ;;
-
   let c = co_void () |> cor_loop in
   print `## looped coroutine:
   {c ()}
@@ -236,6 +233,7 @@ let loop_cor = fn () ->
 `
 ;;
 loop_cor ();
+
 let arithmetic_series = fn () -> 
   let arithmetic = fn s ->
     # TODO: don't like that I need to annotate the type here
