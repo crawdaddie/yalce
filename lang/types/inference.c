@@ -1182,8 +1182,8 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     }
 
     if (t1->kind == T_CONS && ((1 << t2->kind) & TYPE_FLAGS_PRIMITIVE)) {
-      print_type(t2);
-      print_type(t1);
+      // print_type(t2);
+      // print_type(t1);
 
       TICtx _ctx = {.err_stream = NULL};
       return type_error(
@@ -1312,9 +1312,9 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
       Ast *member = ast->data.AST_LIST.items + i;
       if (member->tag == AST_IDENTIFIER &&
           CHARS_EQ(member->data.AST_IDENTIFIER.value, "x")) {
-        print_ast(member);
-        print_type(member->md);
-        print_type(member->md);
+        // print_ast(member);
+        // print_type(member->md);
+        // print_type(member->md);
       }
       apply_substitutions_rec(member, subst);
     }
