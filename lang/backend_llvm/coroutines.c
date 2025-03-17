@@ -554,9 +554,15 @@ LLVMValueRef create_coroutine_instance_from_generic_constructor(
       create_cor_inst_struct(builder, func, state_struct_ptr);
 
   LLVMTypeRef cor_struct_type = cor_inst_struct_type();
+
+  // LLVMValueRef alloca =
+  //     ctx->stack_ptr > 0
+  //         ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
+  //         : LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_malloc");
+
   LLVMValueRef alloca =
       ctx->stack_ptr > 0
-          ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
+          ? LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_alloca")
           : LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_malloc");
 
   LLVMBuildStore(builder, cor_struct, alloca);
@@ -576,10 +582,14 @@ LLVMValueRef create_coroutine_instance_from_constructor(
       create_cor_inst_struct(builder, sym->val, state_struct_ptr);
 
   LLVMTypeRef cor_struct_type = cor_inst_struct_type();
-  LLVMValueRef alloca =
-      ctx->stack_ptr > 0
-          ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
-          : _cor_alloc(module, builder);
+
+  // LLVMValueRef alloca =
+  //     ctx->stack_ptr > 0
+  //         ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
+  //         : _cor_alloc(module, builder);
+  //
+  LLVMValueRef alloca = ctx->stack_ptr > 0 ? _cor_alloc(module, builder)
+                                           : _cor_alloc(module, builder);
 
   LLVMBuildStore(builder, cor_struct, alloca);
   return alloca;
@@ -982,9 +992,15 @@ LLVMValueRef IterOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   cor_struct =
       LLVMBuildInsertValue(builder, cor_struct, func, 1, "insert_next_null");
 
+  // LLVMValueRef alloca =
+  //     ctx->stack_ptr > 0
+  //         ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
+  //         : _cor_alloc(module, builder);
+
   LLVMValueRef alloca =
       ctx->stack_ptr > 0
-          ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
+          // ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
+          ? _cor_alloc(module, builder)
           : _cor_alloc(module, builder);
 
   // LLVMValueRef alloca =
@@ -1070,10 +1086,13 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   cor_struct =
       LLVMBuildInsertValue(builder, cor_struct, func, 1, "insert_next_null");
 
-  LLVMValueRef alloca =
-      ctx->stack_ptr > 0
-          ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
-          : _cor_alloc(module, builder);
+  // LLVMValueRef alloca =
+  //     ctx->stack_ptr > 0
+  //         ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
+  //         : _cor_alloc(module, builder);
+
+  LLVMValueRef alloca = ctx->stack_ptr > 0 ? _cor_alloc(module, builder)
+                                           : _cor_alloc(module, builder);
 
   LLVMBuildStore(builder, cor_struct, alloca);
   return alloca;
@@ -1101,259 +1120,12 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                    "");                                                        \
   })
 
-LLVMValueRef codegen_struct_of_coroutines(Ast *ast, JITLangCtx *ctx,
-                                          LLVMModuleRef module,
-                                          LLVMBuilderRef builder) {
-  Type *coroutine_type = ast->md;
-  Type *ret_opt_type = fn_return_type(coroutine_type);
-  Type *_ret_type = type_of_option(ret_opt_type);
-  int len = _ret_type->data.T_CONS.num_args;
-  Type *ret_types[len];
-
-  LLVMTypeRef struct_member_types[len];
-  for (int i = 0; i < len; i++) {
-
-    Type *member_type = ast->data.AST_LIST.items[i].md;
-    struct_member_types[i] =
-        member_type->kind == T_FN
-            ? GENERIC_PTR
-            : type_to_llvm_type(ast->data.AST_LIST.items[i].md, ctx->env,
-                                module);
-    Type *r = _ret_type->data.T_CONS.args[i];
-    ret_types[i] = r->kind == T_FN ? fn_return_type(r) : r;
-  }
-  Type *ret_type = create_tuple_type(len, ret_types);
-
-  LLVMTypeRef llvm_state_struct_type =
-      LLVMStructType(struct_member_types, len, 0);
-
-  LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx->env, module);
-
-  // printf("struct of couroutines ret val type\n");
-  // print_type(ret_type);
-  // LLVMDumpType(llvm_ret_type);
-  // printf("\n");
-
-  LLVMValueRef func = LLVMAddFunction(module, "struct_of_coroutines_fn",
-                                      cor_coroutine_fn_type());
-  LLVMSetLinkage(func, LLVMExternalLinkage);
-
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
-  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
-  LLVMPositionBuilderAtEnd(builder, block);
-
-  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
-  LLVMValueRef counter = LLVMBuildLoad2(
-      builder, LLVMInt32Type(), get_instance_counter_gep(instance_ptr, builder),
-      "load_instance_counter");
-
-  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
-  LLVMValueRef state_gep = get_instance_state_gep(instance_ptr, builder);
-  LLVMValueRef state_ptr =
-      LLVMBuildLoad2(builder, LLVMPointerType(llvm_state_struct_type, 0),
-                     state_gep, "load_state_ptr");
-
-  LLVMValueRef state_struct = LLVMBuildLoad2(
-      builder, llvm_state_struct_type, state_ptr, "struct_of_coroutines_state");
-
-  LLVMValueRef coroutine_not_complete = _TRUE;
-
-  for (int i = 0; i < len; i++) {
-    LLVMValueRef ret_val_gep =
-        LLVMBuildGEP2(builder, llvm_ret_type, ret_val_ref,
-                      (LLVMValueRef[]){
-                          LLVMConstInt(LLVMInt32Type(), 0, 0),
-                          LLVMConstInt(LLVMInt32Type(), i, 0),
-                      },
-                      2, "");
-
-    LLVMValueRef item = LLVMBuildExtractValue(
-        builder, state_struct, i, "extract_struct_of_coroutines_member");
-    Type *item_type = ast->data.AST_LIST.items[i].md;
-    if (is_coroutine_type(item_type)) {
-
-      LLVMValueRef item_result = _cor_next(item, ret_val_gep, module, builder);
-      LLVMValueRef is_not_null = LLVMBuildICmp(builder, LLVMIntNE, item_result,
-                                               null_cor_inst(), "is_not_null");
-      coroutine_not_complete =
-          LLVMBuildAnd(builder, coroutine_not_complete, is_not_null, "");
-    } else if (is_void_func(item_type)) {
-      LLVMTypeRef fn_type = type_to_llvm_type(item_type, ctx->env, module);
-      LLVMValueRef item_result =
-          LLVMBuildCall2(builder, fn_type, item, (LLVMValueRef[]){}, 0, "");
-
-      LLVMBuildStore(builder, item_result, ret_val_gep);
-
-    } else {
-#ifdef COMPILER_DEBUG
-      INSERT_PRINTF(2, "coroutine item %d %d\n",
-                    LLVMConstInt(LLVMInt32Type(), i, 0), item);
-#endif
-      // const state item - don't need to reset???
-      LLVMBuildStore(builder, item, ret_val_gep);
-    }
-  }
-
-  LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(func, "then");
-  LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(func, "else");
-
-  LLVMBuildCondBr(builder, coroutine_not_complete, then_block, else_block);
-  LLVMPositionBuilderAtEnd(builder, then_block);
-  LLVMBuildRet(builder, instance_ptr);
-  LLVMPositionBuilderAtEnd(builder, else_block);
-  LLVMBuildRet(builder, null_cor_inst());
-  LLVMPositionBuilderAtEnd(builder, prev_block);
-
-  LLVMValueRef outer_state_struct = LLVMGetUndef(llvm_state_struct_type);
-
-  for (int i = 0; i < len; i++) {
-    Ast *member_ast = ast->data.AST_LIST.items + i;
-    LLVMValueRef item = codegen(member_ast, ctx, module, builder);
-    // printf("struct item %d\n", i);
-    // print_type(member_ast->md);
-    // LLVMDumpValue(item);
-    // printf("\n");
-
-    outer_state_struct =
-        LLVMBuildInsertValue(builder, outer_state_struct, item, i, "");
-  }
-
-  LLVMValueRef state_ptr_alloca =
-      LLVMBuildMalloc(builder, llvm_state_struct_type, "");
-
-  LLVMBuildStore(builder, outer_state_struct, state_ptr_alloca);
-
-  LLVMValueRef instance_struct =
-      create_cor_inst_struct(builder, func, state_ptr_alloca);
-
-  LLVMTypeRef cor_struct_type = cor_inst_struct_type();
-  LLVMValueRef alloca =
-      ctx->stack_ptr > 0
-          ? LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca")
-          : LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_malloc");
-
-  LLVMBuildStore(builder, instance_struct, alloca);
-  return alloca;
-}
-
-LLVMValueRef create_scheduler_wrapper(LLVMTypeRef combo_ret_type,
-                                      LLVMValueRef cor_next_fn,
-                                      LLVMValueRef schedule_event_fn,
-                                      LLVMModuleRef module,
-                                      LLVMBuilderRef builder) {
-  LLVMTypeRef param_types[] = {
-      LLVMPointerType(cor_inst_struct_type(), 0), // cor*
-      LLVMInt32Type()                             // int frame_offset
-  };
-  LLVMTypeRef fn_type = LLVMFunctionType(LLVMVoidType(), param_types, 2, false);
-
-  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
-  LLVMValueRef func = LLVMAddFunction(module, "scheduler_wrapper", fn_type);
-
-  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
-  LLVMPositionBuilderAtEnd(builder, entry);
-
-  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
-  LLVMValueRef frame_offset = LLVMGetParam(func, 1);
-
-#ifdef COMPILER_DEBUG
-  INSERT_PRINTF(2, "wrapper func %p %d\n", instance_ptr, frame_offset);
-#endif
-
-  LLVMValueRef ret_ref = LLVMBuildAlloca(builder, combo_ret_type, "ret");
-
-  // LLVMValueRef _frame_offset_ptr = LLVMBuildStructGEP2(
-  //     builder, combo_ret_type, instance_ptr, 1, "frame_offset_ptr");
-  //
-  // LLVMBuildStore(builder, frame_offset, _frame_offset_ptr);
-
-  // LLVMValueRef frame_offset_ptr = LLVMBuildStructGEP2(
-  //     builder, combo_ret_type, ret_ref, 1, "frame_offset_ptr");
-  //
-  // LLVMBuildStore(builder, frame_offset, frame_offset_ptr);
-  // LLVMValueRef frame_offset_ptr = LLVMBuildStructGEP2(
-  //     builder, combo_ret_type, ret_ref, 1, "frame_offset_ptr");
-  //
-  // LLVMBuildStore(builder, frame_offset, frame_offset_ptr);
-
-  LLVMValueRef cor_next_args[] = {LLVMGetParam(func, 0), ret_ref};
-
-  LLVMValueRef not_done =
-      LLVMBuildCall2(builder, LLVMGlobalGetValueType(cor_next_fn), cor_next_fn,
-                     cor_next_args, 2, "not_done");
-
-  LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(func, "then");
-  LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(func, "end");
-
-  LLVMValueRef cond =
-      LLVMBuildICmp(builder, LLVMIntNE, not_done,
-                    LLVMConstNull(LLVMTypeOf(not_done)), "if_cond");
-  LLVMBuildCondBr(builder, cond, then_block, end_block);
-
-  LLVMPositionBuilderAtEnd(builder, then_block);
-
-  LLVMValueRef dur_ptr =
-      LLVMBuildStructGEP2(builder, combo_ret_type, ret_ref, 0, "dur_ptr");
-  LLVMValueRef dur = LLVMBuildLoad2(builder, LLVMDoubleType(), dur_ptr, "dur");
-
-  LLVMValueRef schedule_args[] = {
-      func,        // scheduler_wrapper function ptr
-      dur,         // duration
-      instance_ptr // coroutine pointer
-  };
-  LLVMBuildCall2(builder, LLVMGlobalGetValueType(schedule_event_fn),
-                 schedule_event_fn, schedule_args, 3, "");
-
-  LLVMBuildBr(builder, end_block);
-
-  LLVMPositionBuilderAtEnd(builder, end_block);
-  LLVMBuildRetVoid(builder);
-  LLVMPositionBuilderAtEnd(builder, prev_block);
-
-  return func;
-}
-
-LLVMValueRef CorPlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
-
-  LLVMValueRef schedule_event_fn =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-  LLVMTypeRef scheduler_func_type = LLVMFunctionType(
-      LLVMVoidType(),
-      (LLVMTypeRef[]){GENERIC_PTR, LLVMDoubleType(),
-                      LLVMPointerType(cor_inst_struct_type(), 0)},
-      3, 0);
-
-  Type *coroutine_type = ast->data.AST_APPLICATION.args[1].md;
-  Type *ret_opt_type = fn_return_type(coroutine_type);
-  Type *ret_type = type_of_option(ret_opt_type);
-
-  LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx->env, module);
-
-  LLVMValueRef scheduler_wrapper =
-      create_scheduler_wrapper(llvm_ret_type, get_cor_next_fn(module),
-                               schedule_event_fn, module, builder);
-
-  LLVMValueRef instance_ptr =
-      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-
-  LLVMValueRef schedule_args[] = {
-      scheduler_wrapper,                    // scheduler_wrapper function ptr
-      LLVMConstReal(LLVMDoubleType(), 0.0), // duration
-      instance_ptr                          // coroutine pointer
-  };
-  LLVMBuildCall2(builder, LLVMGlobalGetValueType(schedule_event_fn),
-                 schedule_event_fn, schedule_args, 3, "");
-
-  return LLVMGetUndef(LLVMVoidType());
-}
-
 LLVMValueRef _build_wrapper_for_scheduled_fn(
     Type *generator_type, LLVMTypeRef llvm_generator_type,
-    Type *value_struct_type, LLVMValueRef scheduler, LLVMValueRef effect_fn,
-    Type *effect_fn_type, JITLangCtx *ctx, LLVMModuleRef module,
-    LLVMBuilderRef builder) {
+    Type *value_struct_type, LLVMValueRef scheduler, LLVMTypeRef scheduler_type,
+    LLVMValueRef effect_fn, Type *effect_fn_type, JITLangCtx *ctx,
+    LLVMModuleRef module, LLVMBuilderRef builder) {
+
   LLVMTypeRef wrapper_fn_type =
       LLVMFunctionType(LLVMVoidType(),
                        (LLVMTypeRef[]){
@@ -1388,12 +1160,13 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
       LLVMValueRef _instance_ptr =
           _cor_next(instance_ptr, val_gep, module, builder);
 
+      // Check if the returned instance pointer is null
+      LLVMValueRef instance_ptr_is_null = LLVMBuildICmp(
+          builder, LLVMIntEQ, _instance_ptr, null_cor_inst(), "is_null");
+
       LLVMBuildStore(
           builder, _instance_ptr,
           codegen_tuple_gep(i, generator_ptr, llvm_generator_type, builder));
-
-      LLVMValueRef instance_ptr_is_null = LLVMBuildICmp(
-          builder, LLVMIntEQ, _instance_ptr, null_cor_inst(), "is_null");
 
       LLVMBasicBlockRef continue_block =
           LLVMAppendBasicBlock(func, "continue_execution");
@@ -1407,7 +1180,6 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
       LLVMBuildRetVoid(builder);
 
       LLVMPositionBuilderAtEnd(builder, continue_block);
-
     } else if (is_void_func(item_type)) {
 
       LLVMValueRef val_from_callable = LLVMBuildCall2(
@@ -1420,25 +1192,24 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
       LLVMBuildStore(builder, callable_item, val_gep);
     }
   }
-  LLVMValueRef val = LLVMBuildLoad2(builder, val_type, val_ptr, "");
 
-  LLVMValueRef dur =
-      LLVMBuildSIToFP(builder, codegen_tuple_access(0, val, val_type, builder),
-                      LLVMDoubleType(), "");
+  LLVMValueRef dur = codegen_tuple_access(0, val_ptr, val_type, builder);
 
   LLVMTypeRef llvm_effect_type =
       type_to_llvm_type(effect_fn_type, ctx->env, module);
 
+  LLVMValueRef val = LLVMBuildLoad2(builder, val_type, val_ptr, "");
   LLVMBuildCall2(builder, llvm_effect_type, effect_fn,
                  (LLVMValueRef[]){val, frame_offset}, 2, "");
 
-  LLVMValueRef scheduler_call = LLVMBuildCall2(
-      builder,
-      LLVMFunctionType(
-          LLVMVoidType(),
-          (LLVMTypeRef[]){GENERIC_PTR, LLVMDoubleType(), GENERIC_PTR}, 3, 0),
-      scheduler, (LLVMValueRef[]){func, dur, generator_ptr}, 3,
-      "schedule_next");
+  LLVMValueRef scheduler_call =
+      LLVMBuildCall2(builder, scheduler_type, scheduler,
+                     (LLVMValueRef[]){
+                         func,
+                         generator_ptr,
+                         dur,
+                     },
+                     3, "schedule_next");
 
   LLVMBuildRetVoid(builder);
 
@@ -1454,6 +1225,7 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
   Type *scheduler_type = scheduler_ast->md;
 
   Ast *effect_ast = ast->data.AST_APPLICATION.args + 1;
+
   Type *effect_type = effect_ast->md;
 
   Ast *generator_ast = ast->data.AST_APPLICATION.args + 2;
@@ -1475,9 +1247,11 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
 
   LLVMValueRef effect_fn = codegen(effect_ast, ctx, module, builder);
 
+  LLVMTypeRef llvm_scheduler_type =
+      type_to_llvm_type(scheduler_type, ctx->env, module);
   LLVMValueRef wrapper_fn = _build_wrapper_for_scheduled_fn(
       generator_type, llvm_generator_type, value_struct_type, scheduler,
-      effect_fn, effect_type, ctx, module, builder);
+      llvm_scheduler_type, effect_fn, effect_type, ctx, module, builder);
 
   // compile value generator (args[2]) to struct 'U
   // create wrapper function 'U -> Int -> ()
@@ -1487,10 +1261,11 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
   // call sink function args[1] with 'V & frame_offset
   // later take first value from 'V (Float - dur) and
   // call schedule_event (args[0]) with wrapper function, dur & 'U
-
-  return LLVMBuildCall2(
-      builder, type_to_llvm_type(scheduler_type, ctx->env, module), scheduler,
-      (LLVMValueRef[]){wrapper_fn, LLVMConstReal(LLVMDoubleType(), 0.),
-                       generator_alloca},
-      3, "");
+  return LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
+                        (LLVMValueRef[]){
+                            wrapper_fn,
+                            generator_alloca,
+                            LLVMConstReal(LLVMDoubleType(), 0.),
+                        },
+                        3, "");
 }

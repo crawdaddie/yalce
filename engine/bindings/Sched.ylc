@@ -1,9 +1,10 @@
 # scheduling.h
 type SchedulerCallback = Ptr -> Int -> ();
+type DeferQuantCallback = Int -> ();
 type CoroutineSchedulerCallback = () -> ();
 let scheduler_event_loop = extern fn () -> Int;
-let schedule_event = extern fn SchedulerCallback -> Double -> Ptr -> ();
-let schedule_event_quant = extern fn SchedulerCallback -> Double -> Ptr -> ();
+let schedule_event = extern fn SchedulerCallback -> Ptr -> Double -> ();
 let get_tl_frame_offset = extern fn () -> Int;
 let get_frame_offset = extern fn () -> Int;
+let defer_quant = extern fn Double -> DeferQuantCallback -> ();
 

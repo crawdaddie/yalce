@@ -231,9 +231,6 @@ Type t_cor_loop_var = {
 
 Type t_cor_loop_sig = MAKE_FN_TYPE_2(&t_cor_loop_var, &t_cor_loop_var);
 
-Type t_cor_play_sig = MAKE_FN_TYPE_3(&t_ptr, // schedule event injected func
-                                     &t_cor_loop_var, &t_void);
-
 Type t_list_cor = {T_FN,
                    {.T_FN = {.from = &t_void, .to = &TOPT(&t_list_var_el)}},
                    .is_coroutine_instance = true};

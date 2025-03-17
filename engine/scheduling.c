@@ -178,7 +178,14 @@ void *timer(void *arg) {
         // ev.callback,
         //        ev.userdata, tl_offset);
 
-        ev.callback(ev.userdata, tl_offset);
+        if (ev.userdata == NULL) {
+          // Cast the callback to the single-argument function type
+          void (*cb)(int) = (void (*)(int))ev.callback;
+          cb(tl_offset);
+        } else {
+          // Call the regular two-argument callback
+          ev.callback(ev.userdata, tl_offset);
+        }
       }
 
       // Calculate next tick
@@ -210,11 +217,11 @@ int scheduler_event_loop() {
   return 0;
 }
 
-void schedule_event(void (*callback)(void *, int), double delay_seconds,
-                    void *userdata) {
+void schedule_event(void (*callback)(void *, int), void *userdata,
+                    double delay_seconds) {
 
-  printf("sched event coroutine: %p callback: %p time: %f\n", userdata,
-         callback, delay_seconds);
+  // printf("sched event coroutine: %p callback: %p time: %f\n", userdata,
+  //        callback, delay_seconds);
 
   if (delay_seconds == 0.0) {
     int frame_offset = get_frame_offset();
@@ -224,13 +231,15 @@ void schedule_event(void (*callback)(void *, int), double delay_seconds,
   now = get_time_ns(); // Update 'now' before scheduling
   return _schedule_event(queue, callback, delay_seconds, userdata, now);
 }
-
-void schedule_event_quant(void (*callback)(void *, int), double quantization,
-                          void *userdata) {
-
+void defer_quant(double quantization, void (*callback)(int)) {
   now = get_time_ns(); // Update 'now' before scheduling
   double now_s = ((double)now) / S_TO_NS;
 
-  return _schedule_event(queue, callback, fmod(now_s, quantization), userdata,
-                         now);
+  return _schedule_event(queue, (void *)callback, fmod(now_s, quantization),
+                         NULL, now);
 }
+
+// void schedule_event_quant(void (*callback)(void *, int), double quantization,
+//                           void *userdata) {
+//
+// }

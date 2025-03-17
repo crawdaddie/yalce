@@ -137,9 +137,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_TUPLE: {
     Type *tuple_type = ast->md;
-    if (is_coroutine_type(tuple_type)) {
-      return codegen_struct_of_coroutines(ast, ctx, module, builder);
-    }
     return codegen_tuple(ast, ctx, module, builder);
   }
 

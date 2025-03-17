@@ -313,7 +313,7 @@ NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
       .target = s,
       .gate_input = gate_in,
   };
-  schedule_event((SchedulerCallback)close_gate, dur, cp);
+  schedule_event((SchedulerCallback)close_gate, cp, dur);
   return s;
 }
 

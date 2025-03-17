@@ -348,10 +348,15 @@ Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
 
 Type *struct_of_fns_to_return(Type *cons) {
   Type **results = talloc(sizeof(Type *) * cons->data.T_CONS.num_args);
-  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
-    Type *t = cons->data.T_CONS.args[i];
-    if (t->kind == T_FN) {
 
+  results[0] = &t_num;
+
+  for (int i = 1; i < cons->data.T_CONS.num_args; i++) {
+    Type *t = cons->data.T_CONS.args[i];
+    if (is_coroutine_type(t)) {
+      results[i] = fn_return_type(t);
+      results[i] = type_of_option(results[i]);
+    } else if (t->kind == T_FN) {
       results[i] = fn_return_type(t);
 
       if (results[i]->alias && CHARS_EQ(results[i]->alias, "Option")) {
@@ -395,8 +400,16 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
         ctx, ast->data.AST_APPLICATION.args + 2,
         "value generator must consist of constants or () -> xx void funcs");
   }
+
   Type *effect_fn_type = infer(effect_ast, ctx);
+
   Type *val_struct = effect_fn_type->data.T_FN.from;
+  Type *t = val_struct->data.T_CONS.args[0];
+  val_struct->data.T_CONS.args[0] = &t_num;
+  if (is_generic(t)) {
+    unify_in_ctx(t, &t_num, ctx, effect_ast->data.AST_LAMBDA.params);
+  }
+
   if (effect_fn_type->data.T_FN.to->kind != T_FN) {
     return type_error(ctx, effect_ast, "not enough args in sink fn");
   }
@@ -412,7 +425,6 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
                (effect_ast)->data.AST_LAMBDA.params + 1);
 
   Substitution *subst = solve_constraints(_ctx.constraints);
-
   apply_substitutions_rec(ast, subst);
   (effect_ast)->md = apply_substitution(subst, (effect_ast)->md);
 }
@@ -1188,6 +1200,8 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       // print_type(t1);
 
       TICtx _ctx = {.err_stream = NULL};
+      // print_type(t1);
+      // print_type(t2);
       return type_error(
           &_ctx, constraints->src,
           "Cannot constrain cons type to primitive simple type\n");
