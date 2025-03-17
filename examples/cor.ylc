@@ -278,6 +278,28 @@ let geometric = fn () ->
 ;;
 geometric ();
 
+let _geo = fn s ->
+  yield s;
+  yield _geo (s * 1.1)
+;;
+let geometric2 = fn () -> 
+  let g = _geo 1.0 in
+
+  print `## geometric series:
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+`
+;;
+geometric2 ();
+
 let fib_ser = fn () ->
   let fib = fn a b ->
     yield a;

@@ -27,6 +27,7 @@ cor *cor_next(cor *coroutine, void *ret_val) {
   }
 
   if (res == NULL) {
+    free(coroutine->argv);
     return NULL;
   }
 

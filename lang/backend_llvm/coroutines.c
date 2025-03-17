@@ -1417,7 +1417,6 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
       LLVMBuildStore(builder, val_from_callable, val_gep);
     } else {
 
-      // INSERT_PRINTF(1, "got val %d\n", callable_item);
       LLVMBuildStore(builder, callable_item, val_gep);
     }
   }
@@ -1441,7 +1440,6 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
       scheduler, (LLVMValueRef[]){func, dur, generator_ptr}, 3,
       "schedule_next");
 
-  // End block - common end point
   LLVMBuildRetVoid(builder);
 
   END_FUNC
@@ -1452,12 +1450,18 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
-  Type *scheduler_type = ast->data.AST_APPLICATION.args[0].md;
+  Ast *scheduler_ast = ast->data.AST_APPLICATION.args;
+  Type *scheduler_type = scheduler_ast->md;
+
+  Ast *effect_ast = ast->data.AST_APPLICATION.args + 1;
+  Type *effect_type = effect_ast->md;
+
+  Ast *generator_ast = ast->data.AST_APPLICATION.args + 2;
+  Type *generator_type = generator_ast->md;
+
   LLVMValueRef scheduler =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  Type *effect_type = ast->data.AST_APPLICATION.args[1].md;
-  Type *generator_type = ast->data.AST_APPLICATION.args[2].md;
   Type *value_struct_type = effect_type->data.T_FN.from;
 
   LLVMTypeRef llvm_generator_type =
@@ -1466,12 +1470,10 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef generator_alloca =
       LLVMBuildMalloc(builder, llvm_generator_type, "");
 
-  LLVMValueRef generator =
-      codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
+  LLVMValueRef generator = codegen(generator_ast, ctx, module, builder);
   LLVMBuildStore(builder, generator, generator_alloca);
 
-  LLVMValueRef effect_fn =
-      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+  LLVMValueRef effect_fn = codegen(effect_ast, ctx, module, builder);
 
   LLVMValueRef wrapper_fn = _build_wrapper_for_scheduled_fn(
       generator_type, llvm_generator_type, value_struct_type, scheduler,

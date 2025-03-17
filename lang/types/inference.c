@@ -383,36 +383,38 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
     return type_error(ctx, ast, "run_in_scheduler must have 3 args\n");
   }
 
-  infer(ast->data.AST_APPLICATION.args,
+  Ast *scheduler_ast = ast->data.AST_APPLICATION.args;
+  Ast *effect_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *generator_ast = ast->data.AST_APPLICATION.args + 2;
+
+  infer(scheduler_ast,
         ctx); // first arg is concrete schedule fn impl
-  Type *val_generator_type = infer(ast->data.AST_APPLICATION.args + 2, ctx);
+  Type *val_generator_type = infer(generator_ast, ctx);
   if (!is_struct_of_void_fns(val_generator_type)) {
     return type_error(
         ctx, ast->data.AST_APPLICATION.args + 2,
         "value generator must consist of constants or () -> xx void funcs");
   }
-  Type *sink_fn = infer(ast->data.AST_APPLICATION.args + 1, ctx);
-  Type *val_struct = sink_fn->data.T_FN.from;
-  if (sink_fn->data.T_FN.to->kind != T_FN) {
-    return type_error(ctx, ast->data.AST_APPLICATION.args + 1,
-                      "not enough args in sink fn");
+  Type *effect_fn_type = infer(effect_ast, ctx);
+  Type *val_struct = effect_fn_type->data.T_FN.from;
+  if (effect_fn_type->data.T_FN.to->kind != T_FN) {
+    return type_error(ctx, effect_ast, "not enough args in sink fn");
   }
-  Type *frame_offset_arg = sink_fn->data.T_FN.to->data.T_FN.from;
+  Type *frame_offset_arg = effect_fn_type->data.T_FN.to->data.T_FN.from;
 
   TICtx _ctx = {};
-  unify_in_ctx(frame_offset_arg, &t_int, &_ctx,
-               (ast->data.AST_APPLICATION.args + 1)->data.AST_LAMBDA.params +
-                   1);
   Type *concrete_val_struct = struct_of_fns_to_return(val_generator_type);
 
   unify_in_ctx(val_struct, concrete_val_struct, &_ctx,
-               (ast->data.AST_APPLICATION.args + 1)->data.AST_LAMBDA.params);
+               (effect_ast)->data.AST_LAMBDA.params);
+
+  unify_in_ctx(frame_offset_arg, &t_int, &_ctx,
+               (effect_ast)->data.AST_LAMBDA.params + 1);
 
   Substitution *subst = solve_constraints(_ctx.constraints);
 
   apply_substitutions_rec(ast, subst);
-  (ast->data.AST_APPLICATION.args + 1)->md =
-      apply_substitution(subst, (ast->data.AST_APPLICATION.args + 1)->md);
+  (effect_ast)->md = apply_substitution(subst, (effect_ast)->md);
 }
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
