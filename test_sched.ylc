@@ -1,0 +1,66 @@
+%include examples/Math
+%include examples/Array
+%include engine/bindings/Synth
+%include engine/bindings/Sched
+
+let st = (fn () -> 
+  let f = inlet 58. |> lag_node 0.01;
+  let trig = inlet 0.0;
+  let chirp_decay = inlet 0.08;
+  let ff = chirp_node 3000. 300. chirp_decay trig; 
+
+  (sq_node f)
+  + (sq_node (f * 1.01))
+  + (sq_node (f * 1.02))
+  + (sq_node (f * 2.))
+  |> biquad_lp_node ff (inlet 4.)
+  # |> comb_node 0.15 0.15 0.7
+  ;)
+  |> compile_blob_template;
+
+
+let syn = fn freq offset ->
+  st
+  |> instantiate_template [(0, freq)]
+  |> play_node_offset offset
+;;
+
+
+
+
+
+let geo = fn s ->
+  yield s;
+  yield geo (s * 1.1)
+;;
+
+let f = fn frame_offset ->
+  (
+    dur: 0.25,
+    target: syn 55. frame_offset,
+    freqs: iter_of_list [300., 200., 300., 100.,] |> cor_loop,
+  ) |> run_in_scheduler schedule_event
+    (fn (dur, synth, fr) frame_offset -> 
+    set_input_scalar_offset synth 0 frame_offset fr;
+    set_input_trig_offset synth 1 frame_offset;
+    ();
+  )
+  ;;
+defer_quant 1. f;
+
+
+let h = fn frame_offset ->
+  (
+    \array_choose [|0.25, 0.25, 0.25, 0.25, 0.125 |],
+    syn 55. frame_offset,
+    iter_of_list [600., 300., 150.] |> cor_loop,
+  ) |> run_in_scheduler schedule_event
+    (fn (dur, synth, fr) frame_offset -> 
+    set_input_scalar_offset synth 0 frame_offset fr;
+    set_input_trig_offset synth 1 frame_offset;
+    ();
+  )
+  ;;
+
+defer_quant 1. h;
+

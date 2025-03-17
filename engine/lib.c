@@ -14,8 +14,6 @@
 
 #include <sndfile.h>
 
-// ------- ASR Envelope Node -------
-
 void node_get_inputs(Node *node, AudioGraph *graph, Node *inputs[]) {
   int num_inputs = node->num_inputs;
   for (int i = 0; i < num_inputs; i++) {
@@ -145,6 +143,7 @@ void start_blob() {
 
 AudioGraph *end_blob() {
   AudioGraph *graph = _graph;
+  print_graph(graph);
 
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
@@ -298,6 +297,7 @@ void close_gate(close_payload *p, int offset) {
                       {.NODE_SET_SCALAR = {
                            .target = target, .input = input, .value = 0.}}});
 }
+
 NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
                                 NodeRef s) {
   // printf("play node %p at offset %d %f %d\n", s, offset, dur, gate_in);
@@ -307,6 +307,28 @@ NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
   // add_to_dac(group);
 
   play_node_offset(offset, s);
+
+  close_payload *cp = malloc(sizeof(close_payload));
+  *cp = (close_payload){
+      .target = s,
+      .gate_input = gate_in,
+  };
+  schedule_event((SchedulerCallback)close_gate, cp, dur);
+  return s;
+}
+
+NodeRef trigger_gate(int offset, double dur, int gate_in, NodeRef s) {
+  // printf("play node %p at offset %d %f %d\n", s, offset, dur, gate_in);
+  // Node *group = _chain;
+  // reset_chain();
+  // add_to_dac(s);
+  // add_to_dac(group);
+
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_SET_SCALAR,
+                           offset,
+                           {.NODE_SET_SCALAR = {
+                                .target = s, .input = gate_in, .value = 1.}}});
 
   close_payload *cp = malloc(sizeof(close_payload));
   *cp = (close_payload){

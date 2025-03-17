@@ -768,13 +768,110 @@ Node *brown_noise_node() {
 }
 
 // Exponential chirp generator
+// typedef struct chirp_state {
+//   double current_freq;
+//   double target_freq;
+//   double elapsed_time;
+//   int trigger_active;
+//   double start_freq;
+//   double end_freq;
+// } chirp_state;
+//
+// void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int
+// nframes,
+//                     double spf) {
+//   double *out = node->output.buf;
+//   int out_layout = node->output.layout;
+//   double *trig = inputs[0]->output.buf;
+//   double *lag = inputs[1]->output.buf;
+//
+//   while (nframes--) {
+//     double lag_time = *lag;
+//
+//     if (*trig == 1.0) {
+//       state->trigger_active = 1;
+//       state->current_freq = state->start_freq;
+//       state->elapsed_time = 0.0;
+//     }
+//
+//     if (state->trigger_active) {
+//       // Calculate progress (0 to 1)
+//       double progress = state->elapsed_time / lag_time;
+//       if (progress > 1.0)
+//         progress = 1.0;
+//
+//       // Use exponential interpolation for frequency
+//       state->current_freq = state->start_freq *
+//                             pow(state->end_freq / state->start_freq,
+//                             progress);
+//
+//       // Update elapsed time
+//       state->elapsed_time += spf;
+//
+//       // Check if we've reached the end of the chirp
+//       if (state->elapsed_time >= lag_time) {
+//         state->trigger_active = 0;
+//         state->current_freq = state->end_freq;
+//       }
+//     }
+//
+//     for (int i = 0; i < out_layout; i++) {
+//       *out = state->current_freq;
+//       out++;
+//     }
+//
+//     lag++;
+//     trig++;
+//   }
+//
+//   return node->output.buf;
+// }
+//
+// Node *chirp_node(double start_freq, double end_freq, Node *lag_time,
+//                  Node *trig) {
+//   AudioGraph *graph = _graph;
+//   Node *node = allocate_node_in_graph(graph, sizeof(chirp_state));
+//
+//   // Initialize node
+//   *node = (Node){
+//       .perform = (perform_func_t)chirp_perform,
+//       .node_index = node->node_index,
+//       .num_inputs = 2,
+//       .state_size = sizeof(chirp_state),
+//       .state_offset = state_offset_ptr_in_graph(graph, sizeof(chirp_state)),
+//       .output = (Signal){.layout = 1,
+//                          .size = BUF_SIZE,
+//                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+//       .meta = "chirp",
+//   };
+//
+//   // Initialize state
+//   chirp_state *state =
+//       (chirp_state *)(graph->nodes_state_memory + node->state_offset);
+//   *state = (chirp_state){.current_freq = start_freq,
+//                          .target_freq = end_freq,
+//                          .trigger_active = 0,
+//                          .start_freq = start_freq,
+//                          .end_freq = end_freq,
+//                          .elapsed_time = 0.0};
+//
+//   // Connect inputs
+//   if (trig) {
+//     node->connections[0].source_node_index = trig->node_index;
+//   }
+//   if (lag_time) {
+//     node->connections[1].source_node_index = lag_time->node_index;
+//   }
+//
+//   return node;
+// }
 typedef struct chirp_state {
-  double current_freq;
-  double target_freq;
-  double elapsed_time;
-  int trigger_active;
   double start_freq;
   double end_freq;
+  double current_freq;
+  double elapsed_time;
+  int trigger_active;
+  double prev_trig_value; // Added to track previous trigger value
 } chirp_state;
 
 void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
@@ -784,14 +881,21 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
   double *trig = inputs[0]->output.buf;
   double *lag = inputs[1]->output.buf;
 
-  while (nframes--) {
-    double lag_time = *lag;
+  for (int i = 0; i < nframes; i++) {
+    double trig_value = trig[i];
+    double lag_time = lag[i];
 
-    if (*trig == 1.0) {
+    // Detect both impulses (value == 1.0) and rising edges (prev <= 0 &&
+    // current > 0)
+    if (trig_value == 1.0 ||
+        (state->prev_trig_value <= 0.5 && trig_value > 0.5)) {
       state->trigger_active = 1;
       state->current_freq = state->start_freq;
       state->elapsed_time = 0.0;
     }
+
+    // Store current trigger value for next iteration
+    state->prev_trig_value = trig_value;
 
     if (state->trigger_active) {
       // Calculate progress (0 to 1)
@@ -813,20 +917,17 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
       }
     }
 
-    for (int i = 0; i < out_layout; i++) {
-      *out = state->current_freq;
-      out++;
+    // Write to all output channels
+    for (int ch = 0; ch < out_layout; ch++) {
+      out[i * out_layout + ch] = state->current_freq;
     }
-
-    lag++;
-    trig++;
   }
 
   return node->output.buf;
 }
 
-Node *chirp_node(double start_freq, double end_freq, Node *lag_time,
-                 Node *trig) {
+Node *chirp_node(double start_freq, double end_freq, Node *lag_input,
+                 Node *trig_input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(chirp_state));
 
@@ -846,19 +947,21 @@ Node *chirp_node(double start_freq, double end_freq, Node *lag_time,
   // Initialize state
   chirp_state *state =
       (chirp_state *)(graph->nodes_state_memory + node->state_offset);
-  *state = (chirp_state){.current_freq = start_freq,
-                         .target_freq = end_freq,
-                         .trigger_active = 0,
-                         .start_freq = start_freq,
-                         .end_freq = end_freq,
-                         .elapsed_time = 0.0};
+  *state = (chirp_state){
+      .start_freq = start_freq,
+      .end_freq = end_freq,
+      .current_freq = start_freq,
+      .elapsed_time = 0.0,
+      .trigger_active = 0,
+      .prev_trig_value = 0.0 // Initialize the previous trigger value
+  };
 
   // Connect inputs
-  if (trig) {
-    node->connections[0].source_node_index = trig->node_index;
+  if (trig_input) {
+    node->connections[0].source_node_index = trig_input->node_index;
   }
-  if (lag_time) {
-    node->connections[1].source_node_index = lag_time->node_index;
+  if (lag_input) {
+    node->connections[1].source_node_index = lag_input->node_index;
   }
 
   return node;
