@@ -19,10 +19,10 @@ typedef enum {
   WINDOW_TYPE_PLOT_ARRAY,
   WINDOW_TYPE_CLAP_NATIVE
 } WindowType;
-extern TTF_Font *DEFAULT_FONT;
+
 typedef struct Window Window;
 
-typedef void (*EventHandler)(Window *window, SDL_Event *event);
+typedef void (*EventHandler)(Window *window, SDL_Event event);
 typedef void (*WindowRenderFn)(Window *window);
 
 typedef struct Window {
@@ -56,9 +56,10 @@ typedef struct _array_plot_win_data {
   double max;
 } _array_plot_win_data;
 
-void render_text(const char *text, int x, int y, SDL_Color color,
-                 SDL_Renderer *renderer, TTF_Font *font);
+void _render_text(const char *text, int x, int y, SDL_Color color,
+                  SDL_Renderer *renderer, TTF_Font *font);
 
+void render_text(Window *w, const char *text);
 typedef struct {
   double *values;
   double *mins;

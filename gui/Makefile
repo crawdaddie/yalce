@@ -15,7 +15,7 @@ LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 
 BUILD_DIR := ../build/gui
 
-SRCS := gui.c edit_graph.c common.c slider_window.c clap_gui.c
+SRCS := gui.c common.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean
@@ -31,7 +31,12 @@ $(BUILD_DIR)/%.o: %.c gui.h | $(BUILD_DIR)
 
 $(BUILD_DIR)/libgui.a: $(OBJS)
 	ar rcs $@ $(OBJS)
+	$(MAKE) -C . ylc_bindings
 
+ylc_bindings:
+	$(MAKE) -C ../tools
+	../build/tools/ffi_gen ext_lib.h > bindings/GuiBindings.ylc
+	# ../build/tools/ffi_gen clap_node.h > bindings/ClapPlugin.ylc
 # $(BUILD_DIR)/libgui.so: $(OBJS)
 # 	$(CC) -shared -o $@ $(OBJS) $(LDFLAGS)
 

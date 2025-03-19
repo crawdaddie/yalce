@@ -5,7 +5,6 @@
 int init_gui();
 int gui_loop();
 
-int push_create_window_event(WindowType, void *data);
 int _create_scope(double *output, int layout, int size);
 int create_array_editor(int32_t size, double *data_ptr);
 int _create_plot_array_window(int32_t size, double *data_ptr);

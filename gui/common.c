@@ -2,8 +2,9 @@
 
 TTF_Font *DEFAULT_FONT;
 
-void render_text(const char *text, int x, int y, SDL_Color color,
-                 SDL_Renderer *renderer, TTF_Font *font) {
+void _render_text(const char *text, int x, int y, SDL_Color color,
+                  SDL_Renderer *renderer, TTF_Font *font) {
+
   SDL_Surface *surface = TTF_RenderText_Blended(font, text, color);
   SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
 
