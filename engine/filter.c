@@ -3,7 +3,9 @@
 #include "./ctx.h"
 #include "./node.h"
 #include "audio_graph.h"
+#include "node_util.h"
 #include <math.h>
+#include <stdio.h>
 
 // Biquad filter state
 typedef struct biquad_state {
@@ -501,8 +503,6 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
 // ---------------------- Comb Filter ---------------------------
 
 typedef struct {
-  double *buf;
-  int buf_size;
   int read_pos;
   int write_pos;
   double fb;
@@ -513,18 +513,25 @@ void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
   double *out = node->output.buf;
   double *in = inputs[0]->output.buf;
 
+  double *buf = inputs[1]->output.buf;
+  int bufsize = inputs[1]->output.size;
+
+  double *_read_ptr = buf + state->read_pos;
   while (nframes--) {
     // Get write and read pointers
-    double *write_ptr = state->buf + state->write_pos;
-    double *read_ptr = state->buf + state->read_pos;
+    double *write_ptr = buf + state->write_pos;
+    double *read_ptr = buf + state->read_pos;
 
     // Calculate output and write to buffer
     *out = *in + *read_ptr;
     *write_ptr = state->fb * (*out);
+    if (*_read_ptr == 0.0) {
+      // printf("out %f write_ptr %f fb %f\n", *out, *write_ptr, state->fb);
+    }
 
     // Update positions
-    state->read_pos = (state->read_pos + 1) % state->buf_size;
-    state->write_pos = (state->write_pos + 1) % state->buf_size;
+    state->read_pos = (state->read_pos + 1) % bufsize;
+    state->write_pos = (state->write_pos + 1) % bufsize;
 
     in++;
     out++;
@@ -535,39 +542,43 @@ void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
 
 Node *comb_node(double delay_time, double max_delay_time, double fb,
                 Node *input) {
-  AudioGraph *graph = _graph;
   int sample_rate = ctx_sample_rate();
   int bufsize = (int)(max_delay_time * sample_rate);
+  Node *delay_buf = const_buf(0.0, 1, bufsize);
+
+  AudioGraph *graph = _graph;
 
   // Allocate node
   Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
 
   // Allocate state
-  node->state_size = sizeof(comb_state) + (bufsize * sizeof(double));
+  node->state_size = sizeof(comb_state);
   node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
 
   // Get state pointer and buffer pointer
   comb_state *state =
       (comb_state *)(graph->nodes_state_memory + node->state_offset);
-  double *buf = (double *)((char *)state + sizeof(comb_state));
 
-  // Initialize buffer
-  for (int i = 0; i < bufsize; i++) {
-    buf[i] = 0.0;
-  }
+  // TODO: need to create an implicit extra input to hold the buffer state
+  // double *buf = (double *)((char *)state + sizeof(comb_state));
+  //
+  // // Initialize buffer
+  // for (int i = 0; i < bufsize; i++) {
+  //   buf[i] = 0.0;
+  // }
 
   // Initialize state
-  state->buf = buf;
-  state->buf_size = bufsize;
+  // state->buf = buf;
   state->fb = fb;
   state->write_pos = 0;
-  state->read_pos = state->buf_size - (int)(delay_time * sample_rate);
+  state->read_pos = bufsize - (int)(delay_time * sample_rate);
+  printf("state fb %f\n", state->fb);
 
   // Initialize node
   *node = (Node){
       .perform = (perform_func_t)comb_perform,
       .node_index = node->node_index,
-      .num_inputs = 1,
+      .num_inputs = 2,
       .state_size = node->state_size,
       .state_offset = node->state_offset,
       .output = (Signal){.layout = 1,
@@ -576,13 +587,98 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
       .meta = "comb",
   };
 
-  // Connect input
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
-
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = delay_buf->node_index;
   return node;
 }
+//
+// ---------------------- Comb Filter ---------------------------
+
+// typedef struct {
+//   int buf_size;
+//   int read_pos;
+//   int write_pos;
+//   double fb;
+//   double buf[];
+// } comb_state;
+//
+// void *comb_perform(Node *node, comb_state *state, Node *inputs[], int
+// nframes,
+//                    double spf) {
+//   double *out = node->output.buf;
+//   double *in = inputs[0]->output.buf;
+//
+//   double *_read_ptr = state->buf + state->read_pos;
+//   printf("_read_pr %f buf %p %p\n", *_read_ptr, state->buf, inputs[0]);
+//   while (nframes--) {
+//     // Get write and read pointers
+//     double *write_ptr = state->buf + state->write_pos;
+//     double *read_ptr = state->buf + state->read_pos;
+//
+//     // Calculate output and write to buffer
+//     *out = *in + *read_ptr;
+//     *write_ptr = state->fb * (*out);
+//
+//     // Update positions
+//     state->read_pos = (state->read_pos + 1) % state->buf_size;
+//     state->write_pos = (state->write_pos + 1) % state->buf_size;
+//
+//     in++;
+//     out++;
+//   }
+//
+//   return node->output.buf;
+// }
+//
+// Node *comb_node(double delay_time, double max_delay_time, double fb,
+//                 Node *input) {
+//   AudioGraph *graph = _graph;
+//   int sample_rate = ctx_sample_rate();
+//   int bufsize = (int)(max_delay_time * sample_rate);
+//
+//   // Allocate node
+//   Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
+//
+//   // Allocate state
+//   node->state_size = sizeof(comb_state) + (bufsize * sizeof(double));
+//   node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
+//
+//   // Get state pointer and buffer pointer
+//   comb_state *state =
+//       (comb_state *)(graph->nodes_state_memory + node->state_offset);
+//   double *buf = (double *)((char *)state + sizeof(comb_state));
+//
+//   // Initialize buffer
+//   for (int i = 0; i < bufsize; i++) {
+//     buf[i] = 0.0;
+//   }
+//
+//   // Initialize state
+//   state->buf_size = bufsize;
+//   state->fb = fb;
+//   state->write_pos = 0;
+//   state->read_pos = state->buf_size - (int)(delay_time * sample_rate);
+//
+//   // Initialize node
+//   *node = (Node){
+//       .perform = (perform_func_t)comb_perform,
+//       .node_index = node->node_index,
+//       .num_inputs = 1,
+//       .state_size = node->state_size,
+//       .state_offset = node->state_offset,
+//       .output = (Signal){.layout = 1,
+//                          .size = BUF_SIZE,
+//                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+//       .meta = "comb",
+//   };
+//
+//   // Connect input
+//   if (input) {
+//     node->connections[0].source_node_index = input->node_index;
+//   }
+//
+//   return node;
+// }
 
 // ---------------------- Lag Filter ---------------------------
 

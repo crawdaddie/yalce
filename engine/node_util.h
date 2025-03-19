@@ -8,4 +8,6 @@ NodeRef sub2_node(NodeRef input1, NodeRef input2);
 NodeRef mod2_node(NodeRef input1, NodeRef input2);
 
 NodeRef const_sig(double val);
+
+NodeRef const_buf(double val, int layout, int size);
 #endif

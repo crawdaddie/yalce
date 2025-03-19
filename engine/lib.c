@@ -133,8 +133,8 @@ void start_blob() {
   *graph = (AudioGraph){
       .nodes = malloc(16 * sizeof(Node)),
       .capacity = 16,
-      .buffer_pool = malloc(sizeof(double) * (1 << 12)),
-      .buffer_pool_capacity = 1 << 12,
+      .buffer_pool = malloc(sizeof(double) * (1 << 16)),
+      .buffer_pool_capacity = 1 << 16,
       .nodes_state_memory = malloc(sizeof(char) * (1 << 6)),
       .state_memory_capacity = 1 << 6,
   };
@@ -157,6 +157,7 @@ AudioGraph *end_blob() {
   free(b);
 
   graph->state_memory_capacity = graph->state_memory_size;
+
   graph->nodes_state_memory =
       realloc(graph->nodes_state_memory, graph->state_memory_capacity);
 

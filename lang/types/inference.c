@@ -1200,8 +1200,8 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       // print_type(t1);
 
       TICtx _ctx = {.err_stream = NULL};
-      // print_type(t1);
-      // print_type(t2);
+      print_type(t1);
+      print_type(t2);
       return type_error(
           &_ctx, constraints->src,
           "Cannot constrain cons type to primitive simple type\n");

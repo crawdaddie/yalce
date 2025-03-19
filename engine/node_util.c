@@ -2,6 +2,7 @@
 #include "audio_graph.h"
 #include "lib.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 #define NODE_BINOP(name, _meta, _perform)                                      \
   NodeRef name(NodeRef input1, NodeRef input2) {                               \
@@ -209,6 +210,35 @@ Node *const_sig(double val) {
   for (int i = 0; i < BUF_SIZE; i++) {
     node->output.buf[i] = val;
     // printf("const node val %f\n", node->output.buf[i]);
+  }
+  return node;
+}
+
+Node *const_buf(double val, int layout, int size) {
+  // printf("const sig node %f\n", val);
+  AudioGraph *graph = _graph;
+
+  Node *node = allocate_node_in_graph(graph, 0);
+
+  // Initialize node
+  *node = (Node){
+      .perform = NULL,
+      .node_index = node->node_index,
+      .num_inputs = 0,
+      // Allocate state memory
+      .state_size = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
+      // Allocate output buffer
+      .output =
+          (Signal){.layout = layout,
+                   .size = size,
+                   .buf = allocate_buffer_from_pool(graph, size * layout)},
+
+      .meta = "const_buf",
+  };
+
+  for (int i = 0; i < size * layout; i++) {
+    node->output.buf[i] = val;
   }
   return node;
 }
