@@ -37,6 +37,7 @@ let asr_node = extern fn Double -> Double -> Double -> Synth -> Synth;
 let tanh_node = extern fn Double -> Synth -> Synth;
 let lag_node = extern fn Double -> Synth -> Synth;
 let comb_node = extern fn Double -> Double -> Double -> Synth -> Synth;
+let dyn_comb_node = extern fn Synth -> Double -> Double -> Synth -> Synth;
 let butterworth_hp_node = extern fn Synth -> Synth -> Synth;
 let biquad_hp_node = extern fn Synth -> Synth -> Synth -> Synth;
 let biquad_bp_node = extern fn Synth -> Synth -> Synth -> Synth;

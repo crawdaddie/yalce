@@ -516,7 +516,6 @@ void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
   double *buf = inputs[1]->output.buf;
   int bufsize = inputs[1]->output.size;
 
-  double *_read_ptr = buf + state->read_pos;
   while (nframes--) {
     // Get write and read pointers
     double *write_ptr = buf + state->write_pos;
@@ -525,9 +524,6 @@ void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
     // Calculate output and write to buffer
     *out = *in + *read_ptr;
     *write_ptr = state->fb * (*out);
-    if (*_read_ptr == 0.0) {
-      // printf("out %f write_ptr %f fb %f\n", *out, *write_ptr, state->fb);
-    }
 
     // Update positions
     state->read_pos = (state->read_pos + 1) % bufsize;
@@ -559,20 +555,9 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
   comb_state *state =
       (comb_state *)(graph->nodes_state_memory + node->state_offset);
 
-  // TODO: need to create an implicit extra input to hold the buffer state
-  // double *buf = (double *)((char *)state + sizeof(comb_state));
-  //
-  // // Initialize buffer
-  // for (int i = 0; i < bufsize; i++) {
-  //   buf[i] = 0.0;
-  // }
-
-  // Initialize state
-  // state->buf = buf;
   state->fb = fb;
   state->write_pos = 0;
   state->read_pos = bufsize - (int)(delay_time * sample_rate);
-  printf("state fb %f\n", state->fb);
 
   // Initialize node
   *node = (Node){
@@ -591,94 +576,90 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
   node->connections[1].source_node_index = delay_buf->node_index;
   return node;
 }
-//
-// ---------------------- Comb Filter ---------------------------
 
-// typedef struct {
-//   int buf_size;
-//   int read_pos;
-//   int write_pos;
-//   double fb;
-//   double buf[];
-// } comb_state;
-//
-// void *comb_perform(Node *node, comb_state *state, Node *inputs[], int
-// nframes,
-//                    double spf) {
-//   double *out = node->output.buf;
-//   double *in = inputs[0]->output.buf;
-//
-//   double *_read_ptr = state->buf + state->read_pos;
-//   printf("_read_pr %f buf %p %p\n", *_read_ptr, state->buf, inputs[0]);
-//   while (nframes--) {
-//     // Get write and read pointers
-//     double *write_ptr = state->buf + state->write_pos;
-//     double *read_ptr = state->buf + state->read_pos;
-//
-//     // Calculate output and write to buffer
-//     *out = *in + *read_ptr;
-//     *write_ptr = state->fb * (*out);
-//
-//     // Update positions
-//     state->read_pos = (state->read_pos + 1) % state->buf_size;
-//     state->write_pos = (state->write_pos + 1) % state->buf_size;
-//
-//     in++;
-//     out++;
-//   }
-//
-//   return node->output.buf;
-// }
-//
-// Node *comb_node(double delay_time, double max_delay_time, double fb,
-//                 Node *input) {
-//   AudioGraph *graph = _graph;
-//   int sample_rate = ctx_sample_rate();
-//   int bufsize = (int)(max_delay_time * sample_rate);
-//
-//   // Allocate node
-//   Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
-//
-//   // Allocate state
-//   node->state_size = sizeof(comb_state) + (bufsize * sizeof(double));
-//   node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
-//
-//   // Get state pointer and buffer pointer
-//   comb_state *state =
-//       (comb_state *)(graph->nodes_state_memory + node->state_offset);
-//   double *buf = (double *)((char *)state + sizeof(comb_state));
-//
-//   // Initialize buffer
-//   for (int i = 0; i < bufsize; i++) {
-//     buf[i] = 0.0;
-//   }
-//
-//   // Initialize state
-//   state->buf_size = bufsize;
-//   state->fb = fb;
-//   state->write_pos = 0;
-//   state->read_pos = state->buf_size - (int)(delay_time * sample_rate);
-//
-//   // Initialize node
-//   *node = (Node){
-//       .perform = (perform_func_t)comb_perform,
-//       .node_index = node->node_index,
-//       .num_inputs = 1,
-//       .state_size = node->state_size,
-//       .state_offset = node->state_offset,
-//       .output = (Signal){.layout = 1,
-//                          .size = BUF_SIZE,
-//                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
-//       .meta = "comb",
-//   };
-//
-//   // Connect input
-//   if (input) {
-//     node->connections[0].source_node_index = input->node_index;
-//   }
-//
-//   return node;
-// }
+// ---------------------- Dyn Comb Filter ---------------------------
+
+void *dyn_comb_perform(Node *node, comb_state *state, Node *inputs[],
+                       int nframes, double spf) {
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  double *delay_buf = inputs[1]->output.buf;
+  int buf_size = inputs[1]->output.size;
+  double *delay_time = inputs[2]->output.buf;
+  double sample_rate =
+      1.0 / spf; // Calculate sample rate from seconds per frame
+
+  while (nframes--) {
+    int write_pos = state->write_pos;
+
+    delay_buf[write_pos] = *in + (state->fb * delay_buf[state->read_pos]);
+
+    double delay_samples = *delay_time * sample_rate;
+    int read_offset = (int)delay_samples;
+    double frac =
+        delay_samples - read_offset; // Fractional part for interpolation
+
+    // Ensure read position stays within buffer bounds with proper modulo
+    int read_pos = (write_pos - read_offset + buf_size) % buf_size;
+    int read_pos_next = (read_pos + 1) % buf_size;
+
+    // Linear interpolation for smoother delay time changes
+    double sample =
+        delay_buf[read_pos] * (1.0 - frac) + delay_buf[read_pos_next] * frac;
+
+    *out = sample;
+
+    state->read_pos = read_pos;
+    state->write_pos = (write_pos + 1) % buf_size;
+
+    in++;
+    out++;
+    delay_time++;
+  }
+
+  return node->output.buf;
+}
+
+Node *dyn_comb_node(Node *delay_time, double max_delay_time, double fb,
+                    Node *input) {
+  int sample_rate = ctx_sample_rate();
+  int bufsize = (int)(max_delay_time * sample_rate);
+  Node *delay_buf = const_buf(0.0, 1, bufsize);
+
+  AudioGraph *graph = _graph;
+
+  // Allocate node
+  Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
+
+  // Allocate state
+  node->state_size = sizeof(comb_state);
+  node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
+
+  // Get state pointer and buffer pointer
+  comb_state *state =
+      (comb_state *)(graph->nodes_state_memory + node->state_offset);
+
+  state->fb = fb;
+  state->write_pos = 0;
+
+  // Initialize node
+  *node = (Node){
+      .perform = (perform_func_t)dyn_comb_perform,
+      .node_index = node->node_index,
+      .num_inputs = 3,
+      .state_size = node->state_size,
+      .state_offset = node->state_offset,
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "comb",
+  };
+
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = delay_buf->node_index;
+  node->connections[2].source_node_index = delay_time->node_index;
+  return node;
+}
 
 // ---------------------- Lag Filter ---------------------------
 
