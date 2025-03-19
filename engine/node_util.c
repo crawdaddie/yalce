@@ -242,3 +242,11 @@ Node *const_buf(double val, int layout, int size) {
   }
   return node;
 }
+
+typedef struct {
+  double phase;
+} xfade_state;
+
+void *xfade_perform(Node *node, xfade_state *state, Node *inputs[], int nframes,
+                    double spf) {}
+NodeRef replace_node(double xfade_time, NodeRef a, NodeRef b) {}

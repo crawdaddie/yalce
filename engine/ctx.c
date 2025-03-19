@@ -148,6 +148,7 @@ static void process_msg_post(scheduler_msg msg) {
 
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     Node *node = payload.target;
+
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       Node *inlet_node = g->nodes + g->inlets[payload.input];
@@ -156,6 +157,7 @@ static void process_msg_post(scheduler_msg msg) {
         inlet_data.buf[i] = payload.value;
       }
     }
+
     break;
   }
 

@@ -297,6 +297,7 @@ void close_gate(close_payload *p, int offset) {
                       offset,
                       {.NODE_SET_SCALAR = {
                            .target = target, .input = input, .value = 0.}}});
+  free(p);
 }
 
 NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
@@ -319,7 +320,6 @@ NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
 }
 
 NodeRef trigger_gate(int offset, double dur, int gate_in, NodeRef s) {
-  // printf("play node %p at offset %d %f %d\n", s, offset, dur, gate_in);
   // Node *group = _chain;
   // reset_chain();
   // add_to_dac(s);

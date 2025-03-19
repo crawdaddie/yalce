@@ -887,8 +887,9 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
 
     // Detect both impulses (value == 1.0) and rising edges (prev <= 0 &&
     // current > 0)
-    if (trig_value == 1.0 ||
+    if (((trig_value == 1.0) && (state->prev_trig_value != 1.0)) ||
         (state->prev_trig_value <= 0.5 && trig_value > 0.5)) {
+
       state->trigger_active = 1;
       state->current_freq = state->start_freq;
       state->elapsed_time = 0.0;

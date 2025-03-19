@@ -19,6 +19,7 @@ typedef struct asr_state {
   double release_rate;  // Precalculated rate of change during release
   double prev_trigger;  // Previous trigger value for edge detection
   double threshold;     // Trigger threshold (default 0.5)
+  bool should_kill;
 } asr_state;
 
 void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
@@ -63,7 +64,10 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
       if (state->value <= 0.0) {
         state->value = 0.0;
         state->phase = ASR_ENV_IDLE;
-        node->trig_end = true;
+        if (state->should_kill) {
+          node->trig_end = true;
+          node->perform = NULL;
+        }
         // printf("finish node containing node addr: %p %p\n", node,
         //        (Node *)((char *)node - (sizeof(Node) * node->node_index) -
         // sizeof(Node) - 0xf8));
@@ -88,6 +92,51 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
   }
 
   return node->output.buf;
+}
+
+Node *asr_kill_node(double attack_time, double sustain_level,
+                    double release_time, Node *trigger) {
+
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(asr_state));
+
+  // Initialize node
+  *node = (Node){
+      .perform = (perform_func_t)asr_perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      // Allocate state memory
+      .state_size = sizeof(asr_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(asr_state)),
+      // Allocate output buffer
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "asr",
+  };
+
+  asr_state *state =
+      (asr_state *)(graph->nodes_state_memory + node->state_offset);
+
+  *state = (asr_state){
+      .phase = ASR_ENV_ATTACK,
+      .value = 0.0,
+      .attack_time = attack_time,
+      .sustain_level = sustain_level,
+      .release_time = release_time,
+      .attack_rate = (attack_time > 0.0) ? (1.0 / attack_time) : 1000.0,
+      .release_rate =
+          (release_time > 0.0) ? (sustain_level / release_time) : 1000.0,
+      .prev_trigger = 0.0,
+      .threshold = 0.5,
+      .should_kill = true};
+
+  // Connect trigger input
+  if (trigger) {
+    node->connections[0].source_node_index = trigger->node_index;
+  }
+
+  return node;
 }
 
 Node *asr_node(double attack_time, double sustain_level, double release_time,
@@ -124,7 +173,8 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
       .release_rate =
           (release_time > 0.0) ? (sustain_level / release_time) : 1000.0,
       .prev_trigger = 0.0,
-      .threshold = 0.5};
+      .threshold = 0.5,
+      .should_kill = false};
 
   // Connect trigger input
   if (trigger) {
