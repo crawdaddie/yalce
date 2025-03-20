@@ -1,4 +1,5 @@
 #include "backend_llvm/array.h"
+#include "types.h"
 #include "llvm-c/Core.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -136,4 +137,69 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder, LLVMValueRef array,
   LLVMValueRef size =
       LLVMBuildExtractValue(builder, array_struct, 0, "get_array_size");
   return size;
+}
+
+LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+
+  Type *_array_type = ast->md;
+  Type *el_type = _array_type->data.T_CONS.args[0];
+
+  LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx->env, module);
+
+  LLVMTypeRef array_type = codegen_array_type(element_type);
+  LLVMValueRef size_const =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  LLVMValueRef array_struct = LLVMGetUndef(array_type);
+
+  LLVMValueRef data_ptr =
+      LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
+
+  array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
+                                      "insert_array_size");
+
+  LLVMValueRef fill_func =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(entry_block);
+  LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(function, "loop");
+  LLVMBasicBlockRef after_block = LLVMAppendBasicBlock(function, "after_loop");
+
+  LLVMValueRef counter = LLVMBuildAlloca(builder, LLVMInt32Type(), "counter");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter);
+
+  LLVMBuildBr(builder, loop_block);
+
+  LLVMPositionBuilderAtEnd(builder, loop_block);
+
+  LLVMValueRef current_idx =
+      LLVMBuildLoad2(builder, LLVMInt32Type(), counter, "current_idx");
+
+  LLVMValueRef idx_args[] = {current_idx};
+
+  LLVMValueRef element = LLVMBuildCall2(
+      builder,
+      LLVMFunctionType(element_type, (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0),
+      fill_func, idx_args, 1, "fill_element");
+
+  LLVMValueRef element_ptr =
+      LLVMBuildGEP2(builder, element_type, data_ptr,
+                    (LLVMValueRef[]){current_idx}, 1, "element_ptr");
+  LLVMBuildStore(builder, element, element_ptr);
+
+  LLVMValueRef next_idx = LLVMBuildAdd(
+      builder, current_idx, LLVMConstInt(LLVMInt32Type(), 1, 0), "next_idx");
+  LLVMBuildStore(builder, next_idx, counter);
+
+  LLVMValueRef end_cond =
+      LLVMBuildICmp(builder, LLVMIntSLT, next_idx, size_const, "end_cond");
+
+  LLVMBuildCondBr(builder, end_cond, loop_block, after_block);
+
+  LLVMPositionBuilderAtEnd(builder, after_block);
+
+  array_struct = LLVMBuildInsertValue(builder, array_struct, data_ptr, 1,
+                                      "insert_array_data");
+  return array_struct;
 }

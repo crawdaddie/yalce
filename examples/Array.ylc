@@ -4,3 +4,18 @@ let array_choose = fn arr ->
   let idx = rand_int (array_size arr);
   arr @ idx 
 ;;
+
+# let array_fill = fn n: (Int) f: (Int -> t) -> 
+#   let arr = array_empty<t> n in
+#   let cons = fn arr i ->
+#     match i with
+#     | _i if _i == n -> arr
+#     | i -> (
+#       array_set i @@ f i;
+#       cons arr (i + 1)
+#     )
+#     ;
+#   in cons arr 0 
+# ;;
+#
+

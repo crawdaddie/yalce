@@ -415,6 +415,15 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
   }
 }
 
+LLVMValueRef double_constructor_handler(Ast *ast, JITLangCtx *ctx,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+  print_ast(ast);
+  return double_constructor(
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder), &t_int,
+      module, builder);
+}
+
 LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (from_type->kind) {
@@ -634,6 +643,9 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("opt_map", &t_opt_map_sig, OptMapHandler);
   GENERIC_FN_SYMBOL("run_in_scheduler", &t_run_in_scheduler_sig,
                     RunInSchedulerHandler);
+
+  GENERIC_FN_SYMBOL("array_fill", &t_array_fill_sig, ArrayFillHandler);
+  GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);
 
   // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
   // ListPrependHandler);

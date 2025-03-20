@@ -28,39 +28,29 @@
     return node;                                                               \
   }
 
-void *__mul_perform(Node *node, void *state, Node *inputs[], int nframes,
-                    double spf) {
-  double *out = node->output.buf;
-  int out_layout = node->output.layout;
-
-  // Get input buffers
-  double *in1 = inputs[0]->output.buf;
-  double *in2 = inputs[1]->output.buf;
-
-  // Multiply samples
-  double *out_ptr = out;
-  while (nframes--) {
-    double sample = (*in1++) * (*in2++);
-    // Write to all channels in output layout
-    for (int i = 0; i < out_layout; i++) {
-      *out_ptr++ = sample;
-    }
-  }
-
-  return node->output.buf;
-}
+#define INVAL(_sig)                                                            \
+  ({                                                                           \
+    double *val;                                                               \
+    if (_sig.size == 1 && _sig.layout == 1) {                                  \
+      val = _sig.buf;                                                          \
+    } else {                                                                   \
+      val = _sig.buf;                                                          \
+      _sig.buf += _sig.layout;                                                 \
+    }                                                                          \
+    val;                                                                       \
+  })
 void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
                   double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Get input buffers
-  double *in1 = inputs[0]->output.buf;
-  double *in2 = inputs[1]->output.buf;
+  Signal in1 = inputs[0]->output;
+  Signal in2 = inputs[1]->output;
 
   // Multiply samples
   for (int i = 0; i < nframes; i++) {
-    double sample = in1[i] * in2[i];
+    double sample = *INVAL(in1) * *INVAL(in2);
 
     // Write to all channels in output layout
     for (int j = 0; j < out_layout; j++) {
@@ -99,12 +89,12 @@ void *sum_perform(Node *node, void *state, Node *inputs[], int nframes,
   int out_layout = node->output.layout;
 
   // Get input buffers
-  double *in1 = inputs[0]->output.buf;
-  double *in2 = inputs[1]->output.buf;
+  Signal in1 = inputs[0]->output;
+  Signal in2 = inputs[1]->output;
 
   double *out_ptr = out;
   while (nframes--) {
-    double sample = (*in1++) + (*in2++);
+    double sample = *INVAL(in1) + *INVAL(in2);
 
     // Write to all channels in output layout
     for (int i = 0; i < out_layout; i++) {
@@ -144,12 +134,13 @@ void *sub_perform(Node *node, void *state, Node *inputs[], int nframes,
   int out_layout = node->output.layout;
 
   // Get input buffers
-  double *in1 = inputs[0]->output.buf;
-  double *in2 = inputs[1]->output.buf;
+  Signal in1 = inputs[0]->output;
+  Signal in2 = inputs[1]->output;
 
   double *out_ptr = out;
   while (nframes--) {
-    double sample = (*in1++) - (*in2++);
+
+    double sample = *INVAL(in1) - *INVAL(in2);
 
     // Write to all channels in output layout
     for (int i = 0; i < out_layout; i++) {
@@ -166,14 +157,13 @@ void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
                   double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
-
   // Get input buffers
-  double *in1 = inputs[0]->output.buf;
-  double *in2 = inputs[1]->output.buf;
+  Signal in1 = inputs[0]->output;
+  Signal in2 = inputs[1]->output;
 
   double *out_ptr = out;
   while (nframes--) {
-    double sample = fmod((*in1++), (*in2++));
+    double sample = fmod(*INVAL(in1), *INVAL(in2));
 
     // Write to all channels in output layout
     for (int i = 0; i < out_layout; i++) {

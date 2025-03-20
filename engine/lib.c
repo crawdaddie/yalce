@@ -119,7 +119,30 @@ Node *audio_graph_inlet(AudioGraph *g, int inlet_idx) {
 
 Node *inlet(double default_val) {
 
-  Node *f = const_sig(default_val);
+  AudioGraph *graph = _graph;
+  Node *f = allocate_node_in_graph(graph, 0);
+
+  // Initialize node
+  *f = (Node){
+      .perform = NULL,
+      .node_index = f->node_index,
+      .num_inputs = 0,
+      // Allocate state memory
+      .state_size = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
+      // Allocate output buffer
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+
+      .meta = "const",
+  };
+
+  for (int i = 0; i < BUF_SIZE; i++) {
+    f->output.buf[i] = default_val;
+    // printf("const node val %f\n", node->output.buf[i]);
+  }
+
   f->meta = "inlet";
   _graph->inlets[_graph->num_inlets] = f->node_index;
   _graph->inlet_defaults[_graph->num_inlets] = default_val;

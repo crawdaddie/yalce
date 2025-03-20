@@ -177,10 +177,18 @@ Type *_cor_map_fn_sig() {
   return f;
 }
 
-// MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_cor_map_from_type, &t_cor_map_to_type),
-//                &t_cor_from, &t_cor_to);
-
 Type t_cor_map_fn_sig = GENERIC_TYPE(_cor_map_fn_sig);
+
+Type *_array_fill_sig() {
+  Type *eltype = next_tvar();
+  Type *f = create_array_type(eltype);
+  Type *m = type_fn(&t_int, eltype);
+  f = type_fn(m, f);
+  f = type_fn(&t_int, f);
+  return f;
+}
+
+Type t_array_fill_sig = GENERIC_TYPE(_array_fill_sig);
 
 // Type t_cor_map_from_type = {T_VAR, {.T_VAR = "map_from"}};
 //
@@ -349,6 +357,7 @@ void initialize_builtin_types() {
   add_builtin("opt_map", &t_opt_map_sig);
   add_builtin("cstr", &t_builtin_cstr);
   add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
+  add_builtin("array_fill", &t_array_fill_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

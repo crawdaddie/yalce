@@ -430,7 +430,11 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
 }
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
+  printf("application\n");
+  print_ast(ast);
+
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
+  print_type(fn_type);
 
   if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
       CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
@@ -474,6 +478,20 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
   case T_FN: {
     return infer_fn_application(ast, ctx);
+  }
+  default: {
+    if (IS_PRIMITIVE_TYPE(fn_type)) {
+      Type *f = fn_type;
+      for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+        Type *t = infer(ast->data.AST_APPLICATION.args + i, ctx);
+        f = type_fn(t, f);
+      }
+      print_type(f);
+      ast->data.AST_APPLICATION.function->md = f;
+      return fn_type;
+    }
+    fprintf(stderr, "Error: constructor not implemented\n");
+    return NULL;
   }
   }
 }
