@@ -16,6 +16,7 @@ let ramp_node = extern fn Synth -> Synth;
 let trig_rand_node = extern fn Synth -> Synth;
 let trig_sel_node = extern fn Synth -> Synth -> Synth;
 let granulator_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth;
+let pm_node = extern fn Synth -> Synth -> Synth -> Synth;
 
 # ext_lib.h
 let start_blob = extern fn () -> ();

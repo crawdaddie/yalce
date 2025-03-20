@@ -1406,14 +1406,12 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
   return node;
 }
 
-typedef struct fm_state {
+typedef struct pm_state {
   double carrier_phase;
   double modulator_phase;
-  double modulator_to_carrier_ratio;
-  double modulation_index;
-} fm_state;
+} pm_state;
 
-void *fm_perform_optimized(Node *node, fm_state *state, Node **inputs,
+void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
                            int nframes, double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
@@ -1422,98 +1420,132 @@ void *fm_perform_optimized(Node *node, fm_state *state, Node **inputs,
   double *freq_in = inputs[0]->output.buf;
 
   // Get modulation inputs if connected
-  double *mod_index_in = inputs[1] ? inputs[1]->output.buf : NULL;
-  double *mod_ratio_in = inputs[2] ? inputs[2]->output.buf : NULL;
+  double *mod_index_in = inputs[1]->output.buf;
+  double *mod_ratio_in = inputs[2]->output.buf;
 
   // Precompute table size constants
   const double table_size = (double)SIN_TABSIZE;
   const int table_mask = SIN_TABSIZE - 1; // Assuming SIN_TABSIZE is power of 2
 
+  double carrier_freq, modulator_freq;
+  double mod_index, mod_ratio;
+  double mod_phase_scaled, carrier_phase_scaled;
+  int mod_index_int, carrier_index_int;
+  double mod_frac, carrier_frac;
+  double modulator_value, carrier_value;
+  double modulated_phase;
+
   while (nframes--) {
     // Get parameters
-    double carrier_freq = *freq_in++;
-    double mod_index = mod_index_in ? *mod_index_in++ : state->modulation_index;
-    double mod_ratio =
-        mod_ratio_in ? *mod_ratio_in++ : state->modulator_to_carrier_ratio;
+    carrier_freq = *freq_in++;
+    mod_index = *mod_index_in++;
+    mod_ratio = *mod_ratio_in++;
 
     // Calculate modulator frequency
-    double modulator_freq = carrier_freq * mod_ratio;
+    modulator_freq = carrier_freq * mod_ratio;
 
-    // Get modulator sample with interpolation
-    double mod_phase_scaled = state->modulator_phase * table_size;
-    int mod_index_int = (int)mod_phase_scaled;
-    double mod_frac = mod_phase_scaled - mod_index_int;
+    // Get modulator sample with cubic interpolation
+    mod_phase_scaled = state->modulator_phase * table_size;
+    mod_index_int = (int)mod_phase_scaled;
+    mod_frac = mod_phase_scaled - mod_index_int;
 
-    mod_index_int &= table_mask; // Fast modulo for power of 2
-    int mod_index_next = (mod_index_int + 1) & table_mask;
+    mod_index_int &= table_mask;
 
-    double mod_a = sin_table[mod_index_int];
-    double mod_b = sin_table[mod_index_next];
-    double modulator_value =
-        ((1.0 - mod_frac) * mod_a + mod_frac * mod_b) * mod_index;
+    // 4-point cubic interpolation for modulator
+    int mod_idx_0 = (mod_index_int - 1) & table_mask;
+    int mod_idx_1 = mod_index_int;
+    int mod_idx_2 = (mod_index_int + 1) & table_mask;
+    int mod_idx_3 = (mod_index_int + 2) & table_mask;
 
-    // Calculate carrier phase with modulation
-    double modulated_phase = state->carrier_phase + modulator_value;
-    modulated_phase =
-        modulated_phase - floor(modulated_phase); // Wrap to 0-1 range
+    double mod_y0 = sin_table[mod_idx_0];
+    double mod_y1 = sin_table[mod_idx_1];
+    double mod_y2 = sin_table[mod_idx_2];
+    double mod_y3 = sin_table[mod_idx_3];
 
-    // Get carrier sample with interpolation
-    double carrier_phase_scaled = modulated_phase * table_size;
-    int carrier_index_int = (int)carrier_phase_scaled;
-    double carrier_frac = carrier_phase_scaled - carrier_index_int;
+    // Cubic interpolation formula (Catmull-Rom spline)
+    double mod_c0 = mod_y1;
+    double mod_c1 = 0.5 * (mod_y2 - mod_y0);
+    double mod_c2 = mod_y0 - 2.5 * mod_y1 + 2.0 * mod_y2 - 0.5 * mod_y3;
+    double mod_c3 = 0.5 * (mod_y3 - mod_y0) + 1.5 * (mod_y1 - mod_y2);
 
-    carrier_index_int &= table_mask; // Fast modulo for power of 2
-    int carrier_index_next = (carrier_index_int + 1) & table_mask;
+    modulator_value =
+        ((mod_c3 * mod_frac + mod_c2) * mod_frac + mod_c1) * mod_frac + mod_c0;
 
-    double carrier_a = sin_table[carrier_index_int];
-    double carrier_b = sin_table[carrier_index_next];
-    double carrier_value =
-        (1.0 - carrier_frac) * carrier_a + carrier_frac * carrier_b;
+    // Apply modulation index
+    modulator_value *= mod_index;
 
-    // Output carrier value
+    // Calculate phase modulation (add modulator to carrier phase)
+    modulated_phase = state->carrier_phase + modulator_value;
+    modulated_phase -= floor(modulated_phase); // Wrap to 0-1 range
+
+    // Get carrier sample with cubic interpolation
+    carrier_phase_scaled = modulated_phase * table_size;
+    carrier_index_int = (int)carrier_phase_scaled;
+    carrier_frac = carrier_phase_scaled - carrier_index_int;
+
+    carrier_index_int &= table_mask;
+
+    // 4-point cubic interpolation for carrier
+    int carr_idx_0 = (carrier_index_int - 1) & table_mask;
+    int carr_idx_1 = carrier_index_int;
+    int carr_idx_2 = (carrier_index_int + 1) & table_mask;
+    int carr_idx_3 = (carrier_index_int + 2) & table_mask;
+
+    double carr_y0 = sin_table[carr_idx_0];
+    double carr_y1 = sin_table[carr_idx_1];
+    double carr_y2 = sin_table[carr_idx_2];
+    double carr_y3 = sin_table[carr_idx_3];
+
+    // Cubic interpolation formula (Catmull-Rom spline)
+    double carr_c0 = carr_y1;
+    double carr_c1 = 0.5 * (carr_y2 - carr_y0);
+    double carr_c2 = carr_y0 - 2.5 * carr_y1 + 2.0 * carr_y2 - 0.5 * carr_y3;
+    double carr_c3 = 0.5 * (carr_y3 - carr_y0) + 1.5 * (carr_y1 - carr_y2);
+
+    carrier_value =
+        ((carr_c3 * carrier_frac + carr_c2) * carrier_frac + carr_c1) *
+            carrier_frac +
+        carr_c0;
+
     for (int i = 0; i < out_layout; i++) {
       *out++ = carrier_value;
     }
 
-    // Update phases
-    state->modulator_phase =
-        fmod(state->modulator_phase + modulator_freq * spf, 1.0);
-    state->carrier_phase = fmod(state->carrier_phase + carrier_freq * spf, 1.0);
+    // Update phases with precise floating-point accumulation
+    state->modulator_phase += modulator_freq * spf;
+    state->modulator_phase -=
+        floor(state->modulator_phase); // Keep in 0-1 range
+
+    state->carrier_phase += carrier_freq * spf;
+    state->carrier_phase -= floor(state->carrier_phase); // Keep in 0-1 range
   }
 
   return node->output.buf;
 }
-Node *fm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
+Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
   AudioGraph *graph = _graph;
-  // Find next available slot in nodes array
-  Node *node = allocate_node_in_graph(graph, sizeof(fm_state));
+  Node *node = allocate_node_in_graph(graph, sizeof(pm_state));
 
-  // Initialize node
   *node = (Node){
-      .perform = (perform_func_t)fm_perform_optimized,
+      .perform = (perform_func_t)pm_perform_optimized,
       .node_index = node->node_index,
       .num_inputs = 3, // frequency, mod index, mod ratio
       // Allocate state memory
-      .state_size = sizeof(fm_state),
-      .state_offset = state_offset_ptr_in_graph(graph, sizeof(fm_state)),
-      // Allocate output buffer
+      .state_size = sizeof(pm_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(pm_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
       .meta = "fm",
   };
 
-  // Initialize state
-  fm_state *state = (fm_state *)(state_ptr(graph, node));
+  pm_state *state = (pm_state *)(state_ptr(graph, node));
 
-  *state = (fm_state){
+  *state = (pm_state){
       .carrier_phase = 0.0,
       .modulator_phase = 0.0,
-      .modulator_to_carrier_ratio = 1.0, // Default 1:1 ratio
-      .modulation_index = 5.0,           // Default modulation index
   };
 
-  // Connect inputs if provided
   if (freq_input) {
     node->connections[0].source_node_index = freq_input->node_index;
   }

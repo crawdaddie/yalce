@@ -51,8 +51,6 @@ LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
     }
   }
 
-  printf("codegen NONE?? %s\n", mem_name);
-
   return LLVMConstInt(LLVMInt8Type(), vidx, 0);
 }
 
