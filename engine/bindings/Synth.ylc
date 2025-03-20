@@ -29,6 +29,7 @@ let play_node_offset = extern fn Int -> Synth -> Synth;
 let set_input_buf_immediate = extern fn Int -> Synth -> Synth -> Synth;
 let load_soundfile = extern fn Ptr -> Synth;
 let trigger_gate = extern fn Int -> Double -> Int -> Synth -> Synth;
+let midi_to_freq = extern fn Int -> Double;
 
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;

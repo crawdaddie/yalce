@@ -14,5 +14,6 @@ typedef struct {
 
 Node *instantiate_template(InValList *input_vals, AudioGraph *g);
 
+double midi_to_freq(int midi_note);
 extern AudioGraph *_graph;
 #endif

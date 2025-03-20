@@ -164,7 +164,7 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
       (asr_state *)(graph->nodes_state_memory + node->state_offset);
 
   *state = (asr_state){
-      .phase = ASR_ENV_ATTACK,
+      .phase = ASR_ENV_IDLE,
       .value = 0.0,
       .attack_time = attack_time,
       .sustain_level = sustain_level,

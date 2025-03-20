@@ -222,27 +222,22 @@ AudioGraph *sin_ensemble() {
 
 Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
 
-  // Allocate all required memory in one contiguous block
   char *mem =
       malloc(sizeof(Node) + sizeof(AudioGraph) + sizeof(Node) * g->capacity +
              sizeof(double) * g->buffer_pool_capacity +
              sizeof(char) * g->state_memory_capacity);
 
-  // Set up the ensemble node at the start of memory
   Node *ensemble = (Node *)mem;
   mem += sizeof(Node);
 
-  // Copy the AudioGraph structure next
   AudioGraph *graph_state = (AudioGraph *)mem;
   *graph_state = *g;
   mem += sizeof(AudioGraph);
 
-  // Set up the nodes array
   graph_state->nodes = (Node *)mem;
   memcpy(graph_state->nodes, g->nodes, sizeof(Node) * g->capacity);
   mem += sizeof(Node) * g->capacity;
 
-  // Set up the buffer pool
   graph_state->buffer_pool = (double *)mem;
   memcpy(graph_state->buffer_pool, g->buffer_pool,
          sizeof(double) * g->buffer_pool_capacity);
@@ -258,16 +253,12 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
         graph_state->nodes[i].output.layout * graph_state->nodes[i].output.size;
   }
 
-  // Set up the state memory
   graph_state->nodes_state_memory = mem;
   memcpy(graph_state->nodes_state_memory, g->nodes_state_memory,
          g->state_memory_capacity);
 
-  // print_graph(graph_state);
-  // Assume the output node is the last node (the multiplier)
   Node *output_node = &graph_state->nodes[graph_state->node_count - 1];
 
-  // Initialize the ensemble node
   *ensemble = (Node){.perform = (perform_func_t)perform_audio_graph,
                      .node_index = -1, // Special index for ensemble nodes
                      .num_inputs = 0,
@@ -276,12 +267,23 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
                      .meta = "sin_ensemble",
                      .next = NULL};
 
+  // for (int idx = 0; idx < g->num_inlets; idx++) {
+  //   double val = g->inlet_defaults[idx];
+  //   int inlet_node_idx = graph_state->inlets[idx];
+  //   Node *inlet_node = graph_state->nodes + inlet_node_idx;
+  //
+  //   // printf("inlet %d val %f\n", idx, val);
+  //   for (int i = 0; i < inlet_node->output.layout * inlet_node->output.size;
+  //        i++) {
+  //     inlet_node->output.buf[i] = val;
+  //   }
+  // }
+
   while (input_vals) {
     int idx = input_vals->pair.idx;
     double val = input_vals->pair.val;
     int inlet_node_idx = graph_state->inlets[idx];
     Node *inlet_node = graph_state->nodes + inlet_node_idx;
-    // printf("set inlet node %d to %f\n", inlet_node_idx, val);
     for (int i = 0; i < inlet_node->output.layout * inlet_node->output.size;
          i++) {
       inlet_node->output.buf[i] = val;
@@ -489,4 +491,10 @@ NodeRef set_input_trig_offset(NodeRef node, int input, int frame_offset) {
                                            frame_offset,
                                            {.NODE_SET_TRIG = {node, input}}});
   return node;
+}
+
+double midi_to_freq(int midi_note) {
+  // A4 (MIDI note 69) has a frequency of 440 Hz
+  // Each semitone is a factor of 2^(1/12)
+  return 440.0 * pow(2.0, (midi_note - 69) / 12.0);
 }

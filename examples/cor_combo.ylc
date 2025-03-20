@@ -13,7 +13,6 @@ let st = (fn () ->
 
   (sq_node f) +
   (sq_node (f * 1.01)) +
-  (sq_node (f * 1.02)) + 
   (sq_node (f * 2))
   |> biquad_lp_node ff (inlet 4.)
   # |> comb_node 0.75 0.75 0.2

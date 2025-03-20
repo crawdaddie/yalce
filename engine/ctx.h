@@ -46,7 +46,7 @@ typedef struct scheduler_msg {
   } payload;
 } scheduler_msg;
 
-#define MSG_QUEUE_MAX_SIZE 100
+#define MSG_QUEUE_MAX_SIZE 256
 // single reader-single writer lockfree FIFO queue
 //
 // implemented as a ringbuffer of scheduler_msg s
