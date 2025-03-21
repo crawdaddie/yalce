@@ -1,6 +1,6 @@
 # midi.h
 type CCCallback = (Double -> ());
-type NoteCallback = Int -> Double -> ();
+type NoteCallback = (Int -> Double -> ());
 let midi_setup = extern fn () -> ();
 let register_cc_handler = extern fn CCCallback -> Int -> Int -> ();
 let register_note_on_handler = extern fn NoteCallback -> Int -> ();

@@ -75,6 +75,17 @@
     ast;                                                                       \
   })
 
+#define EXTRA_CONDITION(_cond, _msg)                                           \
+  ({                                                                           \
+    bool res = (_cond);                                                        \
+    if (res) {                                                                 \
+      fprintf(stderr, "✅ " _msg "\n");                                        \
+    } else {                                                                   \
+      fprintf(stderr, "❌ " _msg "\n");                                        \
+    }                                                                          \
+    res;                                                                       \
+  })
+
 int main() {
 
   initialize_builtin_types();
@@ -1038,12 +1049,26 @@ int main() {
       ";;\n",
       &MAKE_FN_TYPE_3(&TTUPLE(2, &t_int, &t_num), &t_ptr, &t_ptr));
   });
+  ({
+    Ast *b = T(
+        "type NoteCallback = Int -> Double -> ();\n"
+        "let register_note_on_handler = extern fn NoteCallback -> Int -> ();\n"
+        "register_note_on_handler (fn n vel -> vel + 0.0; ();) 0\n",
+        &t_void);
+
+    Ast *plus_app = b->data.AST_BODY.stmts[2]
+                        ->data.AST_APPLICATION.args->data.AST_LAMBDA.body->data
+                        .AST_BODY.stmts[0];
+
+    status &= EXTRA_CONDITION(types_equal(plus_app->md, &t_num),
+                              "callback constraint passed down to lambda");
+  });
 
   // T("let get_frame_offset = extern fn () -> Int);\n"
   //   "(\n"
-  //   "  dur: iter_of_list [ 0.125, 0.125, 0.125, 0.25, ] |> cor_loop,\n"
-  //   "  frame_offset: get_frame_offset,\n"
-  //   "  freq: iter_of_list [ 55., 330., 220., 110., 44., 33., 55. ] |> "
+  //   "  dur: iter_of_list [ 0.125, 0.125, 0.125, 0.25, ] |>
+  //   cor_loop,\n" "  frame_offset: get_frame_offset,\n" "  freq:
+  //   iter_of_list [ 55., 330., 220., 110., 44., 33., 55. ] |> "
   //   "cor_loop,\n"
   //   ") |> cor_wrap_effect (fn (dur, frame_offset, freq) ->\n"
   //   "  synth_tpl |> instantiate_template [(0, freq)] |> "
@@ -1058,13 +1083,11 @@ int main() {
   //   "  let co = (\n"
   //   "    dur: \array_choose times,\n"
   //   "    frame_offset: 0,\n"
-  //   "    freq: iter_of_list [55., 330., 220., 110., 44., 33., 55., 110., "
-  //   "220., 660.] |> cor_loop,\n"
-  //   "    target: synth |> chain_wrap |> play,\n"
-  //   "    x: co_void () |> cor_loop\n"
-  //   "  )\n"
-  //   "  |> cor_wrap_effect (fn (dur, frame_offset, freq, target, _) ->\n"
-  //   "    set_input_scalar_offset target 0 frame_offset freq;\n"
+  //   "    freq: iter_of_list [55., 330., 220., 110., 44., 33., 55.,
+  //   110., " "220., 660.] |> cor_loop,\n" "    target: synth |>
+  //   chain_wrap |> play,\n" "    x: co_void () |> cor_loop\n" "  )\n"
+  //   "  |> cor_wrap_effect (fn (dur, frame_offset, freq, target, _)
+  //   ->\n" "    set_input_scalar_offset target 0 frame_offset freq;\n"
   //   "    set_input_trig_offset target 1 frame_offset;\n"
   //   "    ()\n"
   //   "  ;)\n"
