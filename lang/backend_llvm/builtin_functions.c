@@ -76,6 +76,9 @@ LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  // printf("sum handler\n");
+  // print_ast(ast);
+  // print_type(fn_type);
 
   Type *ret = fn_return_type(fn_type);
   fn_type->data.T_FN.to->data.T_FN.to = resolve_type_in_env(ret, ctx->env);
