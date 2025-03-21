@@ -684,7 +684,6 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
     if (is_generic(arg->md)) {
       apply_substitutions_rec(arg, subst);
-      // arg->md = apply_substitution(subst, arg->md);
     }
 
     if (is_generic(arg->md) &&

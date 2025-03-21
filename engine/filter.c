@@ -608,6 +608,7 @@ void *dyn_comb_perform(Node *node, comb_state *state, Node *inputs[],
         delay_buf[read_pos] * (1.0 - frac) + delay_buf[read_pos_next] * frac;
 
     *out = sample;
+    *out += *in;
 
     state->read_pos = read_pos;
     state->write_pos = (write_pos + 1) % buf_size;

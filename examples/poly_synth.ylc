@@ -1,25 +1,23 @@
 #! env ylc -i
 
-%include examples/Array
-%include engine/bindings/Sched
-%include engine/bindings/MIDI
-%include engine/bindings/Synth
-%include examples/Math
+%include ../engine/bindings/Sched
+%include ../engine/bindings/MIDI
+%include ../engine/bindings/Synth
+%include Array
+%include Math
 
 let st = (fn () -> 
   let f = inlet 58.;
   let trig = inlet 0.0;
   let chirp_decay = inlet 0.3;
   let ff = chirp_node 5. 0.2 chirp_decay trig; 
-  let ff2 = chirp_node 7. 1. chirp_decay trig; 
 
-  let x =( (pm_node f ff 4.) 
+  let x =
+      (pm_node f ff 4.) 
     + (pm_node (f * 1.01) ff 4.)
-    )
-  ;
+  in
 
   x * asr_node 0.001 1. 0.5 trig
-  # |> comb_node 0.75 0.75 0.2
   ;)
   |> compile_blob_template;
 

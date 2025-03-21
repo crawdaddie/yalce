@@ -9,6 +9,8 @@ NodeRef inlet(double default_val);
 NodeRef play_node(NodeRef s);
 NodeRef set_input_scalar_offset(NodeRef target, int input, int offset,
                                 double val);
+
+NodeRef set_input_scalar(NodeRef node, int input, double value);
 NodeRef set_input_trig_offset(NodeRef target, int input, int frame_offset);
 NodeRef set_input_buf(int input, NodeRef buf, NodeRef node);
 NodeRef play_node_offset(int offset, NodeRef s);
@@ -19,4 +21,3 @@ NodeRef trigger_gate(int offset, double dur, int gate_in, NodeRef s);
 
 double midi_to_freq(int midi_note);
 #endif
-
