@@ -1064,6 +1064,91 @@ int main() {
                               "callback constraint passed down to lambda");
   });
 
+  ({
+    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor.is_coroutine_instance = true;
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
+    cor_cons.is_coroutine_constructor = true;
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  yield x + 2\n"
+               "  ;;\n",
+               &cor_cons);
+
+    AstList *boundary_crossers =
+        l->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+    Ast *b = boundary_crossers->ast;
+    printf("boundary crosser (implicit state param): \n");
+    print_ast(b);
+  });
+
+  ({
+    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor.is_coroutine_instance = true;
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
+    cor_cons.is_coroutine_constructor = true;
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  yield x + 2;\n"
+               "  let y = 200;\n"
+               "  yield x + y;\n"
+               "  yield y\n"
+               "  ;;\n",
+               &cor_cons);
+
+    AstList *bx =
+        l->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+    int num_xs = 0;
+    Ast *b1 = bx->ast;
+    Ast *b2 = bx->next->ast;
+
+    while (bx) {
+      num_xs++;
+      bx = bx->next;
+    }
+
+    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
+    printf("boundary crossers (implicit state params): \n", num_xs);
+    print_ast(b1);
+    print_ast(b2);
+  });
+
+  ({
+    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor.is_coroutine_instance = true;
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
+    cor_cons.is_coroutine_constructor = true;
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  let y = 200;\n"
+               "  yield x + 2 + y;\n"
+               "  yield y\n"
+               "  ;;\n",
+               &cor_cons);
+
+    AstList *bx =
+        l->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+    int num_xs = 0;
+    // Ast *b1 = bx->ast;
+    // Ast *b2 = bx->next->ast;
+
+    while (bx) {
+      num_xs++;
+      bx = bx->next;
+    }
+
+    printf("implicit state params %d\n", num_xs);
+    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
+    // print_ast(b1);
+    // print_ast(b2);
+  });
+
   // T("let get_frame_offset = extern fn () -> Int);\n"
   //   "(\n"
   //   "  dur: iter_of_list [ 0.125, 0.125, 0.125, 0.25, ] |>

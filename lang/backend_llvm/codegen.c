@@ -8,9 +8,7 @@
 #include "backend_llvm/symbols.h"
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
-#include "backend_llvm/util.h"
 #include "coroutines.h"
-#include "serde.h"
 #include "types/inference.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>

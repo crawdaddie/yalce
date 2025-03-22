@@ -40,6 +40,7 @@ let h = fn frame_offset ->
       [55., 330., 220., 110., 44., 33., 55., 110., 220., 660.]
       |> cor_loop,
 
+
     mf: \array_choose [|330., 110., 220., 440., 660.,|],
 
   )
@@ -78,7 +79,7 @@ let kick_setter = fn (dur, synth) frame_offset ->
 ;;
 let k = fn frame_offset -> 
   (
-    \array_choose [|0.5, 0.25|],
+    \array_choose [|0.5,|],
     # \array_choose times,
     kick_syn frame_offset,
   ) |> run_in_scheduler schedule_event kick_setter

@@ -571,7 +571,7 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
     lambda = Ast_new(AST_LAMBDA);
     lambda->data.AST_LAMBDA.params = NULL;
     lambda->data.AST_LAMBDA.len = 0;
-    lambda->data.AST_LAMBDA.defaults = NULL;
+    lambda->data.AST_LAMBDA.type_annotations = NULL;
   }
   lambda->data.AST_LAMBDA.body = body;
   return lambda;
@@ -581,7 +581,7 @@ Ast *ast_void_lambda(Ast *body) {
   Ast *lambda = Ast_new(AST_LAMBDA);
   lambda->data.AST_LAMBDA.params = ast_void();
   lambda->data.AST_LAMBDA.len = 1;
-  lambda->data.AST_LAMBDA.defaults = NULL;
+  lambda->data.AST_LAMBDA.type_annotations = NULL;
   lambda->data.AST_LAMBDA.body = body;
   return lambda;
 }
@@ -592,10 +592,10 @@ Ast *ast_arg_list(Ast *arg_id, Ast *def) {
   lambda->data.AST_LAMBDA.params = palloc(sizeof(Ast));
   lambda->data.AST_LAMBDA.len = 1;
   lambda->data.AST_LAMBDA.params[0] = *arg_id;
-  lambda->data.AST_LAMBDA.defaults = palloc(sizeof(Ast *));
+  lambda->data.AST_LAMBDA.type_annotations = palloc(sizeof(Ast *));
 
   if (def) {
-    lambda->data.AST_LAMBDA.defaults[0] = def;
+    lambda->data.AST_LAMBDA.type_annotations[0] = def;
   }
 
   return lambda;
@@ -609,12 +609,12 @@ Ast *ast_arg_list_push(Ast *lambda, Ast *arg_id, Ast *def) {
   size_t len = lambda->data.AST_LAMBDA.len;
 
   lambda->data.AST_LAMBDA.params = prealloc(params, sizeof(Ast) * len);
-  lambda->data.AST_LAMBDA.defaults =
-      prealloc(lambda->data.AST_LAMBDA.defaults, sizeof(Ast *) * len);
+  lambda->data.AST_LAMBDA.type_annotations =
+      prealloc(lambda->data.AST_LAMBDA.type_annotations, sizeof(Ast *) * len);
   lambda->data.AST_LAMBDA.params[len - 1] = *arg_id;
 
   if (def) {
-    lambda->data.AST_LAMBDA.defaults[len - 1] = def;
+    lambda->data.AST_LAMBDA.type_annotations[len - 1] = def;
   }
 
   return lambda;

@@ -82,6 +82,18 @@ Type *env_lookup(TypeEnv *env, const char *name) {
   return lookup_builtin_type(name);
 }
 
+TypeEnv *env_lookup_ref(TypeEnv *env, const char *name) {
+  while (env) {
+    if (env->name && strcmp(env->name, name) == 0) {
+      return env;
+    }
+
+    env = env->next;
+  }
+
+  return NULL;
+}
+
 void print_subst(Substitution *c);
 
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
@@ -161,16 +173,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
     int len = ast->data.AST_LIST.len;
 
     Type **cons_args = talloc(sizeof(Type *) * len);
-    bool is_struct_of_coroutines = false;
 
     for (int i = 0; i < len; i++) {
 
       Ast *member = ast->data.AST_LIST.items + i;
       Type *mtype = infer(member, ctx);
       cons_args[i] = mtype;
-      // if (is_coroutine_type(mtype)) {
-      //   is_struct_of_coroutines = true;
-      // }
     }
 
     type = talloc(sizeof(Type));
@@ -185,16 +193,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
       type->data.T_CONS.names = names;
     }
-    // if (is_struct_of_coroutines) {
-    //   for (int i = 0; i < len; i++) {
-    //     if (is_coroutine_type(type->data.T_CONS.args[i])) {
-    //       type->data.T_CONS.args[i] =
-    //           type_of_option(fn_return_type(type->data.T_CONS.args[i]));
-    //     }
-    //   }
-    //   type = type_fn(&t_void, create_option_type(type));
-    //   type->is_coroutine_instance = true;
-    // }
 
     break;
   }
@@ -235,20 +233,47 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_IDENTIFIER: {
 
     const char *name = ast->data.AST_IDENTIFIER.value;
-    type = env_lookup(ctx->env, name);
 
-    if (type && type->kind == T_CREATE_NEW_GENERIC) {
-      type = type->data.T_CREATE_NEW_GENERIC(NULL);
+    TypeEnv *ref = env_lookup_ref(ctx->env, name);
+    if (ref) {
+      ref->ref_count++;
+
+      if (ctx->current_fn_ast &&
+          ctx->current_fn_ast->data.AST_LAMBDA.num_yields >
+              ref->type->yield_boundary) {
+
+        // scan boundary crosser list
+        bool ref_already_listed = false;
+        for (AstList *bx =
+                 ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
+             bx; bx = bx->next) {
+          if (CHARS_EQ(bx->ast->data.AST_IDENTIFIER.value, name)) {
+            ref_already_listed = true;
+            break;
+          }
+        }
+        if (!ref_already_listed) {
+          AstList *next = malloc(sizeof(AstList));
+          next->ast = ast;
+          next->next =
+              ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
+          ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers = next;
+        }
+      }
+      type = ref->type;
     }
 
-    if (type == NULL) {
-      type = next_tvar();
-    }
+    if (!ref) {
+      Type *t = lookup_builtin_type(name);
 
-    // if (CHARS_EQ(name, "vel")) {
-    //   printf("vel type\n");
-    //   print_type(type);
-    // }
+      if (t && t->kind == T_CREATE_NEW_GENERIC) {
+        type = t->data.T_CREATE_NEW_GENERIC(NULL);
+      } else if (t) {
+        type = t;
+      } else {
+        type = next_tvar();
+      }
+    }
 
     break;
   }
@@ -317,6 +342,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
 Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
 
+  ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
   Ast *yield_expr = ast->data.AST_YIELD.expr;
 
   infer(yield_expr, ctx);
@@ -339,7 +365,6 @@ Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
 
     ctx->yielded_type = yield_expr_type;
   }
-  ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
 
   // if (yield_expr->tag == AST_APPLICATION &&
   //     strcmp(
@@ -584,6 +609,10 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       if (!type_implements(t2, tc)) {
 
+        print_type(t1);
+        print_type(t2);
+        print_ast(node);
+
         char buf[20];
         return type_error(
             ctx, node,
@@ -817,7 +846,8 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
   }
 }
 
-TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope) {
+TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope,
+                     Ast *current_fn) {
 
   switch (binding->tag) {
   case AST_IDENTIFIER: {
@@ -827,6 +857,8 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope) {
       break;
     }
     expr_type->scope = scope;
+    expr_type->yield_boundary =
+        current_fn ? current_fn->data.AST_LAMBDA.num_yields : 0;
     env = env_extend(env, name, expr_type);
     break;
   }
@@ -834,17 +866,18 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope) {
   case AST_TUPLE: {
     for (int i = 0; i < binding->data.AST_LIST.len; i++) {
       Ast *b = binding->data.AST_LIST.items + i;
-      env = bind_in_env(env, b, expr_type->data.T_CONS.args[i], scope);
+      env = bind_in_env(env, b, expr_type->data.T_CONS.args[i], scope,
+                        current_fn);
     }
     break;
   }
   case AST_APPLICATION: {
     if (is_list_cons_operator(binding->data.AST_APPLICATION.function)) {
       Type *el_type = expr_type->data.T_CONS.args[0];
-      env =
-          bind_in_env(env, binding->data.AST_APPLICATION.args, el_type, scope);
+      env = bind_in_env(env, binding->data.AST_APPLICATION.args, el_type, scope,
+                        current_fn);
       env = bind_in_env(env, binding->data.AST_APPLICATION.args + 1, expr_type,
-                        scope);
+                        scope, current_fn);
       break;
     }
 
@@ -865,7 +898,7 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope) {
 
     for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
       env = bind_in_env(env, binding->data.AST_APPLICATION.args + i,
-                        cons->data.T_CONS.args[i], scope);
+                        cons->data.T_CONS.args[i], scope, current_fn);
     }
     break;
   }
@@ -874,7 +907,8 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope) {
 }
 
 void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type) {
-  ctx->env = bind_in_env(ctx->env, binding, expr_type, ctx->scope);
+  ctx->env = bind_in_env(ctx->env, binding, expr_type, ctx->scope,
+                         ctx->current_fn_ast);
 }
 
 Type *infer_let_binding(Ast *ast, TICtx *ctx) {
@@ -928,8 +962,9 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   for (int i = 0; i < num_params; i++) {
     Ast *param = &ast->data.AST_LAMBDA.params[i];
-    Ast *def =
-        ast->data.AST_LAMBDA.defaults ? ast->data.AST_LAMBDA.defaults[i] : NULL;
+    Ast *def = ast->data.AST_LAMBDA.type_annotations
+                   ? ast->data.AST_LAMBDA.type_annotations[i]
+                   : NULL;
 
     Type *param_type;
     if (def != NULL) {
@@ -1211,12 +1246,8 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     }
 
     if (t1->kind == T_CONS && ((1 << t2->kind) & TYPE_FLAGS_PRIMITIVE)) {
-      // print_type(t2);
-      // print_type(t1);
 
       TICtx _ctx = {.err_stream = NULL};
-      print_type(t1);
-      print_type(t2);
       return type_error(
           &_ctx, constraints->src,
           "Cannot constrain cons type to primitive simple type\n");

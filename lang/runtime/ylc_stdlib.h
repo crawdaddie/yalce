@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-
 typedef struct String {
   int length;
   char *chars;

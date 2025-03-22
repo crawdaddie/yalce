@@ -34,6 +34,11 @@ typedef struct loc_info {
   long long absolute_offset;
 } loc_info;
 
+typedef struct AstList {
+  Ast *ast;
+  struct AstList *next;
+} AstList;
+
 typedef enum token_type {
   TOKEN_START, // dummy token
   TOKEN_LP,    // parens
@@ -172,6 +177,7 @@ struct Ast {
     struct AST_IDENTIFIER {
       const char *value;
       size_t length;
+      bool crosses_yield_boundary;
     } AST_IDENTIFIER;
 
     struct AST_META {
@@ -212,9 +218,10 @@ struct Ast {
       Ast *params;
       ObjString fn_name;
       Ast *body;
-      Ast **defaults;
+      Ast **type_annotations;
       bool is_coroutine;
       int num_yields;
+      AstList *yield_boundary_crossers;
     } AST_LAMBDA;
 
     struct AST_EXTERN_FN {
