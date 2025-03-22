@@ -358,6 +358,7 @@ void initialize_builtin_types() {
   add_builtin("cstr", &t_builtin_cstr);
   add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
   add_builtin("array_fill", &t_array_fill_sig);
+  add_builtin("array_new", &t_array_fill_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

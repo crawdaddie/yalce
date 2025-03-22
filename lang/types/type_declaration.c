@@ -1,12 +1,12 @@
 #include "type_declaration.h"
+#include "serde.h"
 #include "types/type.h"
 #include <string.h>
 
 Type *env_lookup(TypeEnv *env, const char *name);
 Type *compute_type_expression(Ast *expr, TypeEnv *env);
 
-Type *type_var_of_id(Ast *expr) {
-  const char *id_chars = expr->data.AST_IDENTIFIER.value;
+Type *type_var_of_id(const char *id_chars) {
   Type *type = talloc(sizeof(Type));
   type->kind = T_VAR;
   type->data.T_VAR = id_chars;
@@ -27,6 +27,7 @@ Type *compute_concrete_type(Type *generic, Type *contained) {
   TypeEnv *env = env_extend(NULL, "t", contained);
   return resolve_generic_type(generic, env);
 }
+
 Type *option_of(Ast *expr) {}
 
 Type *next_tvar();
@@ -68,7 +69,10 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   case AST_IDENTIFIER: {
     Type *type = env_lookup(env, expr->data.AST_IDENTIFIER.value);
     if (!type) {
-      return type_var_of_id(expr);
+
+      const char *id_chars = expr->data.AST_IDENTIFIER.value;
+      Type *new_var_type = type_var_of_id(id_chars);
+      return new_var_type;
     }
     return type;
   }
@@ -195,6 +199,7 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
 
   Ast *type_expr_ast = ast->data.AST_LET.expr;
   Type *type;
+  TypeEnv *generics = NULL;
   if (type_expr_ast != NULL) {
     type = compute_type_expression(type_expr_ast, *env);
   } else {
@@ -221,5 +226,6 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
       *env = env_extend(*env, member->data.T_CONS.name, type);
     }
   }
+
   return type;
 }

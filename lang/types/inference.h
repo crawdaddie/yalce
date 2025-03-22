@@ -36,6 +36,8 @@ void print_builtin_types();
 
 Type *env_lookup(TypeEnv *env, const char *name);
 
+TypeEnv *env_lookup_ref(TypeEnv *env, const char *name);
+
 Type *solve_program_constraints(Ast *prog, TICtx *ctx);
 
 TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,

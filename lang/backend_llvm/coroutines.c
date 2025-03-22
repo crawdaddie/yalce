@@ -37,32 +37,57 @@ LLVMTypeRef cor_inst_struct_type() {
   return instance_struct_type;
 }
 
-LLVMTypeRef create_coroutine_state_type(Type *constructor_type, JITLangCtx *ctx,
-                                        LLVMModuleRef module) {
+LLVMTypeRef create_coroutine_state_type(Type *constructor_type, Ast *ast,
+                                        JITLangCtx *ctx, LLVMModuleRef module) {
 
-  int args_len = fn_type_args_len(constructor_type);
+  int outer_args_len = fn_type_args_len(constructor_type);
+  AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
 
-  Type *state_arg_types[args_len];
+  AstList *_bxs = boundary_xs;
 
-  if (args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
-    args_len = 0;
+  int inner_args_len = 0;
+  while (_bxs) {
+    inner_args_len++;
+    _bxs = _bxs->next;
+  }
+
+  if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID &&
+      inner_args_len == 0) {
     return NULL;
   }
 
+  if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
+    outer_args_len = 0;
+  }
+
+  int total_state_args = outer_args_len + inner_args_len;
+  Type *state_arg_types[total_state_args];
+
   Type *f = constructor_type;
-  LLVMTypeRef llvm_state_arg_types[args_len];
-  for (int i = 0; i < args_len; i++) {
+  LLVMTypeRef llvm_state_arg_types[total_state_args];
+
+  for (int i = 0; i < outer_args_len; i++) {
     Type *arg_type = f->data.T_FN.from;
     state_arg_types[i] = arg_type;
     llvm_state_arg_types[i] = type_to_llvm_type(arg_type, ctx->env, module);
     f = f->data.T_FN.to;
   }
-  if (args_len == 1) {
+
+  for (int i = 0; i < inner_args_len; i++) {
+    Type *t = boundary_xs->ast->md;
+    state_arg_types[outer_args_len + i] = t;
+    llvm_state_arg_types[outer_args_len + i] =
+        type_to_llvm_type(t, ctx->env, module);
+    boundary_xs = boundary_xs->next;
+  }
+
+  if (total_state_args == 1) {
+
     return llvm_state_arg_types[0];
   }
 
   LLVMTypeRef instance_state_struct_type =
-      LLVMStructType(llvm_state_arg_types, args_len, 0);
+      LLVMStructType(llvm_state_arg_types, total_state_args, 0);
 
   return instance_state_struct_type;
 }
@@ -339,7 +364,7 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
   }
 
   LLVMTypeRef state_struct_type =
-      create_coroutine_state_type(constructor_type, ctx, module);
+      create_coroutine_state_type(constructor_type, ast, ctx, module);
 
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
 

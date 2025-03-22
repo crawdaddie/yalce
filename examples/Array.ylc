@@ -5,6 +5,13 @@ let array_choose = fn arr ->
   arr @ idx 
 ;;
 
+type Tensor = (Array of t) * (Array of Int) * (Array of Int);
+
+let tensor_ndims = fn (_, sizes, _): (Tensor) ->
+  array_size sizes
+;;
+
+
 # let array_fill = fn n: (Int) f: (Int -> t) -> 
 #   let arr = array_empty<t> n in
 #   let cons = fn arr i ->

@@ -296,6 +296,7 @@ typedef struct Type {
   bool is_coroutine_constructor;
   bool is_fn_param;
   int scope;
+  int yield_boundary;
   void *meta;
 } Type;
 
@@ -303,6 +304,7 @@ typedef struct Type {
 typedef struct TypeEnv {
   const char *name;
   Type *type;
+  int ref_count;
   struct TypeEnv *next;
 } TypeEnv;
 

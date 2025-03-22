@@ -659,6 +659,7 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
   new_env->name = name;
   new_env->type = type;
   new_env->next = env;
+  new_env->ref_count = 0;
   return new_env;
 }
 
@@ -755,6 +756,7 @@ Type *create_coroutine_instance_type(Type *ret_type) {
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
   Type *copy = talloc(sizeof(Type));
+  // *copy = *original;
   copy->kind = original->kind;
   copy->alias = original->alias;
   copy->constructor = original->constructor;
@@ -763,6 +765,7 @@ Type *deep_copy_type(const Type *original) {
   copy->is_coroutine_constructor = original->is_coroutine_constructor;
   copy->is_coroutine_instance = original->is_coroutine_instance;
   copy->scope = original->scope;
+  copy->yield_boundary = original->yield_boundary;
 
   // for (int i = 0; i < original->num_implements; i++) {
   //   add_typeclass(copy, original->implements[i]);

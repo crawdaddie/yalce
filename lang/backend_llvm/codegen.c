@@ -8,12 +8,26 @@
 #include "backend_llvm/symbols.h"
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
-#include "backend_llvm/util.h"
 #include "coroutines.h"
-#include "serde.h"
 #include "types/inference.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
+#include <string.h>
+LLVMValueRef GenericConsConstructorHandler(Ast *ast, JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+  Type *expected_type = ast->md;
+  LLVMTypeRef struct_type = type_to_llvm_type(expected_type, ctx->env, module);
+
+  LLVMValueRef tuple = LLVMGetUndef(struct_type);
+  for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+    Ast *arg = ast->data.AST_APPLICATION.args + i;
+    LLVMValueRef item_val = codegen(arg, ctx, module, builder);
+    tuple = LLVMBuildInsertValue(builder, tuple, item_val, i, "");
+  }
+
+  return tuple;
+}
 
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -202,6 +216,21 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *t = ast->md;
     LLVMTypeRef lt = FIND_TYPE(t->data.T_CONS.args[0], ctx->env, module, ast);
     return null_node(llnode_type(lt));
+  }
+  case AST_TYPE_DECL: {
+    Type *t = ast->md;
+    if (is_generic(t) && t->kind == T_CONS) {
+      const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
+      JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
+
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
+          GenericConsConstructorHandler;
+
+      ht *stack = (ctx->frame->table);
+      ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
+    }
+    break;
   }
   }
 

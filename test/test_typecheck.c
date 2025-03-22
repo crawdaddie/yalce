@@ -1064,36 +1064,100 @@ int main() {
                               "callback constraint passed down to lambda");
   });
 
-  // T("let get_frame_offset = extern fn () -> Int);\n"
-  //   "(\n"
-  //   "  dur: iter_of_list [ 0.125, 0.125, 0.125, 0.25, ] |>
-  //   cor_loop,\n" "  frame_offset: get_frame_offset,\n" "  freq:
-  //   iter_of_list [ 55., 330., 220., 110., 44., 33., 55. ] |> "
-  //   "cor_loop,\n"
-  //   ") |> cor_wrap_effect (fn (dur, frame_offset, freq) ->\n"
-  //   "  synth_tpl |> instantiate_template [(0, freq)] |> "
-  //   "play_node_offset_w_kill frame_offset (0.5 * dur) 1;\n"
-  //   "  ()\n"
-  //   ";) |> cor_play schedule_event;\n",
-  //   &MAKE_FN_TYPE_2(&t_void, &t_int));
-  // T("let sq_node = extern fn Signal -> Synth;\n"
-  //   "let synth = fn () -> sq_node 100.;;\n"
-  //   "let cof = fn () ->\n"
-  //   "  let co_void = fn () -> yield 1;;\n"
-  //   "  let co = (\n"
-  //   "    dur: \array_choose times,\n"
-  //   "    frame_offset: 0,\n"
-  //   "    freq: iter_of_list [55., 330., 220., 110., 44., 33., 55.,
-  //   110., " "220., 660.] |> cor_loop,\n" "    target: synth |>
-  //   chain_wrap |> play,\n" "    x: co_void () |> cor_loop\n" "  )\n"
-  //   "  |> cor_wrap_effect (fn (dur, frame_offset, freq, target, _)
-  //   ->\n" "    set_input_scalar_offset target 0 frame_offset freq;\n"
-  //   "    set_input_trig_offset target 1 frame_offset;\n"
-  //   "    ()\n"
-  //   "  ;)\n"
-  //   "  in co |> cor_play schedule_event\n"
-  //   ";;\n"
-  //   "cof ();\n",
-  //   &t_void);
+  ({
+    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor.is_coroutine_instance = true;
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
+    cor_cons.is_coroutine_constructor = true;
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  yield x + 2\n"
+               "  ;;\n",
+               &cor_cons);
+
+    AstList *boundary_crossers =
+        l->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+    Ast *b = boundary_crossers->ast;
+    printf("boundary crosser (implicit state param): \n");
+    print_ast(b);
+  });
+
+  ({
+    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor.is_coroutine_instance = true;
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
+    cor_cons.is_coroutine_constructor = true;
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  yield x + 2;\n"
+               "  let y = 200;\n"
+               "  yield x + y;\n"
+               "  yield y\n"
+               "  ;;\n",
+               &cor_cons);
+
+    AstList *bx =
+        l->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+    int num_xs = 0;
+    Ast *b1 = bx->ast;
+    Ast *b2 = bx->next->ast;
+
+    while (bx) {
+      num_xs++;
+      bx = bx->next;
+    }
+
+    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
+    printf("boundary crossers (implicit state params): \n", num_xs);
+    print_ast(b1);
+    print_ast(b2);
+  });
+
+  ({
+    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor.is_coroutine_instance = true;
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
+    cor_cons.is_coroutine_constructor = true;
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  let y = 200;\n"
+               "  yield x + 2 + y;\n"
+               "  yield y\n"
+               "  ;;\n",
+               &cor_cons);
+
+    AstList *bx =
+        l->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+    int num_xs = 0;
+    // Ast *b1 = bx->ast;
+    // Ast *b2 = bx->next->ast;
+
+    while (bx) {
+      num_xs++;
+      bx = bx->next;
+    }
+
+    printf("implicit state params %d\n", num_xs);
+    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
+    // print_ast(b1);
+    // print_ast(b2);
+  });
+
+  T("type Tensor t = (Array of t) * (Array of Int) * (Array of Int);\n"
+    "let tensor = fn arr: (Array of t) sizes: (Array of Int) strides: (Array "
+    "of Int) -> \n"
+    "  (arr, sizes, strides) \n"
+    ";; \n"
+    "let tensor_ndims = fn (_, sizes, _) -> \n"
+    "  array_size sizes \n"
+    ";; \n",
+    &t_void);
+
   return status == true ? 0 : 1;
 }

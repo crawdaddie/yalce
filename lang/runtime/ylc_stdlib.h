@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-
 typedef struct String {
   int length;
   char *chars;
@@ -57,6 +56,7 @@ typedef struct _opt_int_t {
   int8_t tag;
   int32_t val;
 } _opt_int_t;
+
 void print_opt_int(_opt_int_t o);
 
 typedef struct _ByteArray {
@@ -72,5 +72,17 @@ struct _OptFile {
 struct _ByteArray read_bytes(FILE *f);
 
 struct _OptFile open_file(String path, String mode);
+
+struct _size_stride_pair {
+  int size;
+  int stride;
+};
+
+typedef struct Tensor {
+  size_t dtype_size;
+  void *storage;
+  int ndim;
+  int sizes_strides[] // ndim * 2 [size, stride, size, stride ...]
+} Tensor;
 
 #endif
