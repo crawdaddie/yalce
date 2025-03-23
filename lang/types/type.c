@@ -391,6 +391,10 @@ char *type_to_string(Type *t, char *buffer) {
     if (t->data.T_CONS.num_args > 0) {
       buffer = strncat(buffer, " of ", 4);
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        if (t->data.T_CONS.names) {
+          buffer = strcat(buffer, t->data.T_CONS.names[i]);
+          buffer = strcat(buffer, ": ");
+        }
         buffer = type_to_string(t->data.T_CONS.args[i], buffer);
         if (i < t->data.T_CONS.num_args - 1) {
           buffer = strcat(buffer, ", ");

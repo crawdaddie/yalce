@@ -1,0 +1,9 @@
+let M = module 
+  let x = 1;
+  let y = 2;
+  let z = fn (x, y): (Int * Int) -> 
+    x + y
+  ;;
+;
+
+M.z (1, 2)

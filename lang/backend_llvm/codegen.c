@@ -9,6 +9,7 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "coroutines.h"
+#include "module.h"
 #include "types/inference.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -197,7 +198,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
-    int member_idx = get_struct_member_idx(member_name, record_type);
+    int member_idx = ast->data.AST_RECORD_ACCESS.index;
 
     if (member_idx < 0) {
       fprintf(stderr, "Error: no member %s in obj\n", member_name);
@@ -217,6 +218,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMTypeRef lt = FIND_TYPE(t->data.T_CONS.args[0], ctx->env, module, ast);
     return null_node(llnode_type(lt));
   }
+
   case AST_TYPE_DECL: {
     Type *t = ast->md;
     if (is_generic(t) && t->kind == T_CONS) {
@@ -232,6 +234,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
     break;
   }
+    case AST_MODULE: {
+      return codegen_module(ast, ctx, module, builder);
+    }
   }
 
   return NULL;

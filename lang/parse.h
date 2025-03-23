@@ -141,6 +141,7 @@ typedef enum ast_tag {
   AST_YIELD,
   AST_SPREAD_OP,
   AST_IMPLEMENTS,
+  AST_MODULE,
 } ast_tag;
 
 struct Ast {
@@ -256,6 +257,7 @@ struct Ast {
     struct AST_RECORD_ACCESS {
       Ast *record;
       Ast *member;
+      int index;
     } AST_RECORD_ACCESS;
 
     struct AST_MATCH_GUARD_CLAUSE {
@@ -398,4 +400,5 @@ typedef struct AstVisitor {
   // Optional: visitor-specific data
   void *data; // Generic pointer for visitor-specific state
 } AstVisitor;
+Ast *ast_module(Ast *lambda);
 #endif

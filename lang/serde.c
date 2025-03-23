@@ -221,6 +221,31 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_MODULE: {
+    buffer = strcat(buffer, "Module (");
+    if (ast->data.AST_LAMBDA.is_coroutine) {
+      buffer = strcat(buffer, "[coroutine] ");
+    }
+    if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
+      buffer = strcat(buffer, ast->data.AST_LAMBDA.fn_name.chars);
+      buffer = strcat(buffer, " ");
+    }
+    if (ast->data.AST_LAMBDA.len == 0) {
+      buffer = strcat(buffer, "() ");
+    } else {
+      for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+        buffer = ast_to_sexpr(ast->data.AST_LAMBDA.params + i, buffer);
+        buffer = strcat(buffer, " ");
+      }
+    }
+
+    buffer = strcat(buffer, "-> \n");
+    buffer = ast_to_sexpr(ast->data.AST_LAMBDA.body, buffer);
+    buffer = strcat(buffer, ")\n");
+
+    break;
+  }
+
   case AST_LAMBDA: {
     buffer = strcat(buffer, "(");
     if (ast->data.AST_LAMBDA.is_coroutine) {

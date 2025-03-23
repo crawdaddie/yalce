@@ -6,6 +6,7 @@
 #include "globals.h"
 #include "ht.h"
 #include "match.h"
+#include "module.h"
 #include "serde.h"
 #include "types.h"
 #include "types/inference.h"
@@ -284,6 +285,16 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   if (expr_type->kind == T_FN && !is_coroutine_type(expr_type)) {
     expr_val = create_fn_binding(binding, expr_type,
                                  codegen_fn(expr, outer_ctx, module, builder),
+                                 inner_ctx, module, builder);
+
+    return in_expr == NULL ? expr_val
+                           : codegen(in_expr, inner_ctx, module, builder);
+  }
+
+  if (expr->tag == AST_MODULE) {
+
+    expr_val = bind_module(binding, expr_type,
+                                 codegen_module(expr, outer_ctx, module, builder),
                                  inner_ctx, module, builder);
 
     return in_expr == NULL ? expr_val

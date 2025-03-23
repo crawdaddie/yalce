@@ -57,6 +57,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "&"                     return *yytext;
 "*"                     return *yytext;
 "\\"                    return THUNK;
+"module"                return *yytext;
 
 0x[0-9a-fA-F]{1,2}c     { 
                           char temp[3] = {0}; // Max 2 hex digits + null terminator
@@ -187,7 +188,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 
 ^%.*            {
                   // printf("possible macro %s\n", yytext + 1);
-                  //return *(yytext + 1);
+                  // return *(yytext + 1);
                 };       
 "%"             return MODULO;
 ">="            return GE;

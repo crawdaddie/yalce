@@ -14,6 +14,8 @@ Type *infer_yield_stmt(Ast *ast, TICtx *ctx);
 Type *infer_lambda(Ast *ast, TICtx *ctx);
 Type *infer_let_binding(Ast *ast, TICtx *ctx);
 Type *infer_match_expr(Ast *ast, TICtx *ctx);
+Type *infer_module(Ast *ast, TICtx *ctx);
+Type *infer(Ast *ast, TICtx *ctx);
 
 void apply_substitutions_rec(Ast *ast, Substitution *subst);
 Substitution *solve_constraints(TypeConstraint *constraints);
@@ -330,6 +332,29 @@ Type *infer(Ast *ast, TICtx *ctx) {
     type = infer_yield_stmt(ast, ctx);
     break;
   }
+  case AST_MODULE: {
+    type = infer_module(ast, ctx);
+    break;
+  }
+  case AST_RECORD_ACCESS: {
+      Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx); 
+      if (rec_type->kind != T_CONS) {
+        return NULL;
+      }
+      if (rec_type->data.T_CONS.names == NULL) {
+        return NULL;
+      }
+      const char *member_name = ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+
+      for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+        if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
+          type = rec_type->data.T_CONS.args[i];
+          ast->data.AST_RECORD_ACCESS.index = i;
+          break;
+        }
+      }
+      break;
+    }
   default: {
     return type_error(
         ctx, ast, "Typecheck Error: inference not implemented for AST Node\n");
@@ -924,6 +949,11 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
                       "Typecheck Error: Could not infer expr type in let\n");
   }
 
+  if (expr->tag == AST_MODULE) {
+    expr_type->data.T_CONS.name = binding->data.AST_IDENTIFIER.value;
+  }
+
+
   Type *binding_type;
   if (!(binding_type = infer_pattern(binding, ctx))) {
     return type_error(ctx, ast->data.AST_LET.binding,
@@ -1473,4 +1503,52 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
   apply_substitutions_rec(prog, subst);
 
   return prog->md;
+}
+
+Type *infer_module(Ast*ast, TICtx *ctx) {
+  Ast *body = ast->data.AST_LAMBDA.body;
+  TICtx module_ctx = *ctx;
+  TypeEnv *env_start = module_ctx.env;
+
+  Ast *stmt;
+  int len = body->data.AST_BODY.len;
+  Type **member_types = talloc(sizeof(Type *) * len);
+  const char **names = talloc(sizeof(char *) * len);
+ 
+  for (int i = 0; i < len; i++) {
+    stmt = body->data.AST_BODY.stmts[i];
+    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL))) {
+      return type_error(ctx, stmt,
+      "Please only have let statements and type declarations in a module\n");
+      return NULL;
+    }
+
+    if ((stmt->tag == AST_LET) && (stmt->data.AST_LET.in_expr != NULL)) {
+      return type_error(ctx, stmt,
+      "Please don't use in-continuation in a module\n");
+      return NULL;
+    }
+
+    Type *t = infer(stmt, &module_ctx);
+    member_types[i] = t;
+
+    if (stmt->tag == AST_TYPE_DECL) {
+      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+    } else {
+      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+    }
+
+    if (!t) {
+      print_ast_err(stmt);
+      return NULL;
+    }
+  }
+
+  TypeEnv *env = module_ctx.env;
+
+  Type *module_struct_type = create_cons_type(NULL, len, member_types);
+  module_struct_type->data.T_CONS.names = names;
+
+
+  return module_struct_type;
 }

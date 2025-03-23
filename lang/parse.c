@@ -960,6 +960,7 @@ Ast *ast_record_access(Ast *record, Ast *member) {
   Ast *rec_access = Ast_new(AST_RECORD_ACCESS);
   rec_access->data.AST_RECORD_ACCESS.record = record;
   rec_access->data.AST_RECORD_ACCESS.member = member;
+  rec_access->data.AST_RECORD_ACCESS.index = -1;
   return rec_access;
 }
 
@@ -1199,4 +1200,9 @@ AstVisitor *ast_visit(Ast *ast, AstVisitor *visitor) {
   }
 
   return visitor;
+}
+
+Ast *ast_module(Ast *lambda) {
+  lambda->tag = AST_MODULE;
+  return lambda;
 }

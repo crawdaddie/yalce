@@ -1149,15 +1149,21 @@ int main() {
     // print_ast(b2);
   });
 
-  T("type Tensor t = (Array of t) * (Array of Int) * (Array of Int);\n"
-    "let tensor = fn arr: (Array of t) sizes: (Array of Int) strides: (Array "
-    "of Int) -> \n"
-    "  (arr, sizes, strides) \n"
-    ";; \n"
+  T("type Tensor = (Array of t) * (Array of Int) * (Array of Int);\n"
     "let tensor_ndims = fn (_, sizes, _) -> \n"
     "  array_size sizes \n"
-    ";; \n",
-    &t_void);
+    ";; \n"
+    "let x = Tensor [|1,2,3,4|] [|2,2|] [|2,1|];\n"
+    "tensor_ndims x;\n"
+    ,
+    &t_int);
+
+  T("let Array = module\n"
+    "  let x = 1;\n" 
+    "  let size = fn arr -> \n"
+    "    array_size arr \n"
+    "  ;; \n"
+    "; \n", &t_void);
 
   return status == true ? 0 : 1;
 }
