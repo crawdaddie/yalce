@@ -5,6 +5,7 @@
 #include "builtin_functions.h"
 #include "format_utils.h"
 #include "input.h"
+#include "modules.h"
 #include "parse.h"
 #include "serde.h"
 #include "synths.h"
@@ -64,11 +65,15 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
   LLVMAddGlobalMapping(*engine, size_global, ctx->global_storage_capacity);
 }
 
+ht module_registry;
+
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder,
                                        LLVMContextRef llvm_ctx, TypeEnv **env,
                                        Ast **prog) {
+
+  __import_current_dir = get_dirname(filename);
 
   if (top_level_tests) {
     printf("\n# Test %s\n"
@@ -185,6 +190,8 @@ int jit(int argc, char **argv) {
   int global_storage_capacity = GLOBAL_STORAGE_CAPACITY;
   int num_globals = 0;
 
+  init_module_registry();
+
   setup_global_storage(module, builder);
 
   // ht stack[STACK_MAX];
@@ -215,6 +222,7 @@ int jit(int argc, char **argv) {
 
   initialize_builtin_funcs(&ctx, module, builder);
   initialize_synth_types(&ctx, module, builder);
+
   bool repl = false;
   // print_type_env(env);
 
@@ -243,6 +251,7 @@ int jit(int argc, char **argv) {
 
     char dirname[100];
     getcwd(dirname, 100);
+    __import_current_dir = ".";
 
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
@@ -276,12 +285,11 @@ int jit(int argc, char **argv) {
       } else if (strncmp("%quit", input, 5) == 0) {
         break;
       }
-
       Ast *prog;
       if (strncmp("%include", input, 8) == 0) {
         prog = parse_repl_include(input);
         // print_ast(prog);
-      } else {
+      }  else {
         prog = parse_input(input, dirname);
       }
 

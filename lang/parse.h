@@ -250,10 +250,6 @@ struct Ast {
       size_t len;
     } AST_MATCH;
 
-    struct AST_IMPORT {
-      const char *module_name;
-    } AST_IMPORT;
-
     struct AST_RECORD_ACCESS {
       Ast *record;
       Ast *member;
@@ -277,6 +273,11 @@ struct Ast {
       ObjString type_id;
       ObjString trait_id;
     } AST_IMPLEMENTS;
+
+    struct AST_IMPORT {
+      const char *identifier;
+      const char *fully_qualified_name;
+    } AST_IMPORT;
   } data;
 
   void *md;
@@ -303,6 +304,7 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input, const char *dirname);
 Ast *parse_input_script(const char *filename);
 Ast *parse_repl_include(const char *fcontent);
+Ast *parse_repl_import(const char *fcontent);
 Ast *ast_void();
 Ast *ast_string(ObjString lex_string);
 
@@ -401,4 +403,7 @@ typedef struct AstVisitor {
   void *data; // Generic pointer for visitor-specific state
 } AstVisitor;
 Ast *ast_module(Ast *lambda);
+extern char *__import_current_dir;
+Ast *ast_import_stmt(ObjString path_identifier);
 #endif
+

@@ -7,8 +7,9 @@
 #include "types.h"
 #include "util.h"
 #include "llvm-c/Core.h"
-LLVMValueRef codegen_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
+#include <string.h>
+LLVMValueRef codegen_module(Ast *ast, JITLangCtx *ctx, ht *generic_storage,
+                            LLVMModuleRef module, LLVMBuilderRef builder) {
 
   Type *module_type = ast->md;
   LLVMTypeRef llvm_module_type =
@@ -23,6 +24,22 @@ LLVMValueRef codegen_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   for (int i = 0; i < len; i++) {
     Ast *stmt = stmts[i];
     if (stmt->tag == AST_LET) {
+      Type *member_type = module_type->data.T_CONS.args[i];
+      if (member_type->kind == T_FN && is_generic(member_type)) {
+        JITLangCtx _mod_generic_ctx = *ctx;
+        if (generic_storage) {
+          _mod_generic_ctx.frame->table = generic_storage;
+        }
+        create_generic_fn_binding(stmt->data.AST_LET.binding,
+                                  stmt->data.AST_LET.expr, &_mod_generic_ctx);
+
+        // JITSymbol *symbol =
+        //     create_generic_fn_symbol(stmt->data.AST_LET.expr, &module_ctx);
+        // bind_
+        //
+        continue;
+      }
+
       LLVMValueRef member_val = codegen(stmt, &module_ctx, module, builder);
       // LLVMValueRef module_member_gep =
       //     codegen_tuple_gep(i, module_alloca, llvm_module_type, builder);
@@ -35,12 +52,12 @@ LLVMValueRef codegen_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return module_struct;
 }
 
-LLVMValueRef bind_module(Ast *binding, Type *module_type,
-                         LLVMValueRef module_val, JITLangCtx *ctx,
-                         LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef bind_module_chars(const char *chars, int chars_len,
+                               Type *module_type, LLVMValueRef module_val,
+                               JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
 
-  const char *chars = binding->data.AST_IDENTIFIER.value;
-  uint64_t id_hash = hash_string(chars, binding->data.AST_IDENTIFIER.length);
+  uint64_t id_hash = hash_string(chars, chars_len);
 
   LLVMTypeRef llvm_module_type =
       type_to_llvm_type(module_type, ctx->env, module);
@@ -63,6 +80,15 @@ LLVMValueRef bind_module(Ast *binding, Type *module_type,
   }
 
   return module_val;
+}
+LLVMValueRef bind_module(Ast *binding, Type *module_type,
+                         LLVMValueRef module_val, JITLangCtx *ctx,
+                         LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  const char *chars = binding->data.AST_IDENTIFIER.value;
+  int chars_len = binding->data.AST_IDENTIFIER.length;
+  return bind_module_chars(chars, chars_len, module_type, module_val, ctx,
+                           module, builder);
 }
 
 LLVMValueRef bind_parametrized_module(Ast *binding, Ast *module_ast,

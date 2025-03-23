@@ -10,6 +10,7 @@
 #include "backend_llvm/types.h"
 #include "coroutines.h"
 #include "module.h"
+#include "modules.h"
 #include "types/inference.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -234,9 +235,41 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
     break;
   }
-    case AST_MODULE: {
-      return codegen_module(ast, ctx, module, builder);
+
+  case AST_MODULE: {
+    return codegen_module(ast, ctx, NULL, module, builder);
+  }
+
+  case AST_IMPORT: {
+    Ast *module_ast = NULL;
+    LLVMValueRef ref;
+    YLCModule *mod = get_imported_module(ast);
+
+    if (!mod) {
+      fprintf(stderr, "Error: could not get ref or AST for module\n");
+      return NULL;
     }
+
+
+    if (mod->ast) {
+
+      const char *chars = ast->data.AST_IMPORT.identifier;
+      int chars_len = strlen(chars);
+
+      LLVMValueRef module_val =
+          codegen_module(mod->ast, ctx, &mod->generics, module, builder);
+
+      LLVMValueRef expr_val = bind_module_chars(
+          chars, chars_len, ast->md, module_val, ctx, module, builder);
+
+      set_import_ref(ast, expr_val);
+
+
+    } else if (mod->ref) {
+      return mod->ref;
+    }
+    break;
+  }
   }
 
   return NULL;

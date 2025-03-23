@@ -39,6 +39,7 @@ Ast* ast_root = NULL;
 %token <vint>   INTEGER
 %token <vdouble>DOUBLE 
 %token <vident> IDENTIFIER
+%token <vident> PATH_IDENTIFIER
 %token <vident> IDENTIFIER_LIST
 %token <vstr>   TOK_STRING
 %token <vchar>  TOK_CHAR
@@ -154,6 +155,7 @@ expr:
   | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER IMPLEMENTS IDENTIFIER  { $$ = ast_implements($1, $3); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
+  | IMPORT PATH_IDENTIFIER            { $$ = ast_import_stmt($2); }
   ;
 
 simple_expr:

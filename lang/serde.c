@@ -245,6 +245,13 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
     break;
   }
+  case AST_IMPORT: {
+    buffer = strcat(buffer, "import ");
+    buffer = strcat(buffer, ast->data.AST_IMPORT.fully_qualified_name);
+    buffer = strcat(buffer, " as ");
+    buffer = strcat(buffer, ast->data.AST_IMPORT.identifier);
+    break;
+  }
 
   case AST_LAMBDA: {
     buffer = strcat(buffer, "(");
@@ -398,13 +405,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, ast->data.AST_META.value);
     buffer = strcat(buffer, " ");
     buffer = ast_to_sexpr(ast->data.AST_META.next, buffer);
-    buffer = strcat(buffer, ")");
-    break;
-  }
-
-  case AST_IMPORT: {
-    buffer = strcat(buffer, "(import ");
-    buffer = strcat(buffer, ast->data.AST_IMPORT.module_name);
     buffer = strcat(buffer, ")");
     break;
   }

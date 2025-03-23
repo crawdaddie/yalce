@@ -110,14 +110,19 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 }
 
-LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
-                                       JITLangCtx *ctx, LLVMModuleRef module,
-                                       LLVMBuilderRef builder) {
+JITSymbol *create_generic_fn_symbol(Ast *fn_ast,
+                                       JITLangCtx *ctx) {
   JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, fn_ast->md, NULL, NULL);
   sym->symbol_data.STYPE_GENERIC_FUNCTION.ast = fn_ast;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env = ctx->env;
+  return sym;
+}
+
+LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
+                                       JITLangCtx *ctx) {
+  JITSymbol *sym = create_generic_fn_symbol(fn_ast, ctx);
 
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
   int id_len = binding->data.AST_IDENTIFIER.length;
@@ -275,8 +280,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
+
     expr_val =
-        create_generic_fn_binding(binding, expr, inner_ctx, module, builder);
+        create_generic_fn_binding(binding, expr, inner_ctx);
 
     return in_expr == NULL ? expr_val
                            : codegen(in_expr, inner_ctx, module, builder);
@@ -294,7 +300,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   if (expr->tag == AST_MODULE) {
 
     expr_val = bind_module(binding, expr_type,
-                                 codegen_module(expr, outer_ctx, module, builder),
+                                 codegen_module(expr, outer_ctx, NULL, module, builder),
                                  inner_ctx, module, builder);
 
     return in_expr == NULL ? expr_val
@@ -303,7 +309,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
 
   expr_val = codegen(expr, outer_ctx, module, builder);
 
+
   if (!expr_val) {
+    fprintf(stderr, "Error - could not compile value for binding\n");
     return NULL;
   }
 

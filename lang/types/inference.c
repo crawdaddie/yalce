@@ -1,5 +1,6 @@
 #include "inference.h"
 #include "builtins.h"
+#include "modules.h"
 #include "serde.h"
 #include "types/type.h"
 #include "types/type_declaration.h"
@@ -17,6 +18,7 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx);
 Type *infer_module(Ast *ast, TICtx *ctx);
 Type *infer(Ast *ast, TICtx *ctx);
 
+void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type);
 void apply_substitutions_rec(Ast *ast, Substitution *subst);
 Substitution *solve_constraints(TypeConstraint *constraints);
 
@@ -334,6 +336,23 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_MODULE: {
     type = infer_module(ast, ctx);
+    break;
+  }
+
+  case AST_IMPORT: {
+    const char *name = ast->data.AST_IMPORT.identifier;
+    type = get_import_type(ast);
+      Ast binding = {
+        AST_IDENTIFIER,
+        .data = {
+          .AST_IDENTIFIER = {
+            .value = name,
+            .length = strlen(name),
+          }
+        }
+      };
+
+    bind_in_ctx(ctx, &binding, type);
     break;
   }
   case AST_RECORD_ACCESS: {
@@ -1546,7 +1565,7 @@ Type *infer_module(Ast*ast, TICtx *ctx) {
 
   TypeEnv *env = module_ctx.env;
 
-  Type *module_struct_type = create_cons_type(NULL, len, member_types);
+  Type *module_struct_type = create_cons_type("Module", len, member_types);
   module_struct_type->data.T_CONS.names = names;
 
 

@@ -12,4 +12,6 @@ char *normalize_path(const char *path);
 
 void init_readline();
 void add_completion_item(const char *item, int count);
+
+const char *get_mod_name_from_path_identifier(const char *str);
 #endif

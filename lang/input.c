@@ -260,6 +260,17 @@ char *get_dirname(const char *path) {
   dirname[len] = '\0';
   return dirname;
 }
+const char *get_mod_name_from_path_identifier(const char *str) {
+  if (!str)
+    return NULL;
+
+  const char *last_slash = strrchr(str, '/');
+  if (last_slash) {
+    return last_slash + 1;
+  } else {
+    return str;
+  }
+}
 
 char *resolve_relative_path(const char *base_path, const char *relative_path) {
   char *result = malloc(strlen(base_path) + strlen(relative_path) + 2);

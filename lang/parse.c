@@ -59,7 +59,9 @@ struct string_list {
 
 typedef struct inputs_list {
   const char *data;
+  const char *mod_name;
   const char *qualified_path;
+  enum { SRC_INPUT_INCLUDE, SRC_INPUT_IMPORT } input_type;
   struct inputs_list *next;
 } inputs_list;
 
@@ -83,11 +85,13 @@ const char *string_list_find(struct string_list *list, const char *data) {
 }
 
 struct inputs_list *inputs_list_push_left(struct inputs_list *list,
+                                          const char *mod_name,
                                           const char *qualified_path,
                                           const char *data) {
   struct inputs_list *new = palloc(sizeof(struct inputs_list));
   new->next = list;
   new->data = data;
+  new->mod_name = mod_name;
   new->qualified_path = qualified_path;
   return new;
 }
@@ -328,6 +332,14 @@ char *prepend_current_directory(const char *filename) {
     return new_filename;
   }
 }
+
+bool is_include_stmt(const char *input) {
+  return strncmp("%include ", input, 9) == 0;
+}
+bool is_import_stmt(const char *input) {
+  return strncmp("%import ", input, 8) == 0;
+}
+
 inputs_list *preprocess_includes(char *current_dir, const char *_input,
                                  inputs_list *stack) {
   int total_len = strlen(_input);
@@ -335,7 +347,7 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
   // process includes backwards so they're on the stack in the correct order
   while (total_len >= 0) {
     input = _input + total_len;
-    if ((strncmp("%include ", input, 9) == 0) &&
+    if (is_include_stmt(input) &&
         (*(input - 2) != '#')    // ignore if preceded by comment
         && (*(input - 1) != '#') // ignore if preceded by comment
     ) {
@@ -345,6 +357,7 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
         line_len++;
         line++;
       }
+
       char *include_line = strndup(input, line_len);
       char *mod_name = include_line + 9;
       int mod_name_len = strlen(current_dir) + 1 + strlen(mod_name) + 4;
@@ -365,8 +378,8 @@ inputs_list *preprocess_includes(char *current_dir, const char *_input,
         if (!import_content) {
           return NULL;
         }
-        stack =
-            inputs_list_push_left(stack, fully_qualified_name, import_content);
+        stack = inputs_list_push_left(stack, mod_name, fully_qualified_name,
+                                      import_content);
 
         char *_current_dir = get_dirname(stack->qualified_path);
 
@@ -409,7 +422,7 @@ Ast *parse_repl_include(const char *fcontent) {
   char *dir = get_dirname(filename);
 
   inputs_list *stack = _stack;
-  stack = inputs_list_push_left(stack, filename, fcontent);
+  stack = inputs_list_push_left(stack, filename, filename, fcontent);
   char *current_dir = get_dirname(stack->qualified_path);
   stack = preprocess_includes(current_dir, fcontent, stack);
 
@@ -446,9 +459,14 @@ Ast *parse_repl_include(const char *fcontent) {
 
   // ugly hack - includes that only contain extern declarations
   // and don't emit any instructions crash the jit
-  Ast *dummy = Ast_new(AST_INT);
-  dummy->data.AST_INT.value = 1;
-  ast_body_push(res, dummy);
+  if (res->tag == AST_BODY &&
+      res->data.AST_BODY.stmts[res->data.AST_BODY.len - 1]->tag == AST_LET &&
+      res->data.AST_BODY.stmts[res->data.AST_BODY.len - 1]
+              ->data.AST_LET.expr->tag == AST_EXTERN_FN) {
+    Ast *dummy = Ast_new(AST_INT);
+    dummy->data.AST_INT.value = 1;
+    ast_body_push(res, dummy);
+  }
   return res;
 }
 
@@ -460,7 +478,7 @@ Ast *parse_input_script(const char *filename) {
     return NULL;
   }
   inputs_list *stack = _stack;
-  stack = inputs_list_push_left(stack, filename, fcontent);
+  stack = inputs_list_push_left(stack, filename, filename, fcontent);
   char *current_dir = get_dirname(stack->qualified_path);
   stack = preprocess_includes(current_dir, fcontent, stack);
 
@@ -473,11 +491,13 @@ Ast *parse_input_script(const char *filename) {
   while (__stack != _stack) {
     _cur_script = __stack->qualified_path;
     const char *input = __stack->data;
+
     _cur_script_content = input;
     yylineno = 1;
     yyabsoluteoffset = 0;
     yy_scan_string(input);
     yyparse();
+
     __stack = __stack->next;
   }
   _stack = stack;
@@ -950,12 +970,6 @@ Ast *ast_placeholder() {
   return ast_identifier((ObjString){.chars = c, .length = 1});
 }
 
-Ast *ast_bare_import(ObjString name) {
-  Ast *import = Ast_new(AST_IMPORT);
-  import->data.AST_IMPORT.module_name = name.chars;
-  return import;
-}
-
 Ast *ast_record_access(Ast *record, Ast *member) {
   Ast *rec_access = Ast_new(AST_RECORD_ACCESS);
   rec_access->data.AST_RECORD_ACCESS.record = record;
@@ -1205,4 +1219,27 @@ AstVisitor *ast_visit(Ast *ast, AstVisitor *visitor) {
 Ast *ast_module(Ast *lambda) {
   lambda->tag = AST_MODULE;
   return lambda;
+}
+char *__import_current_dir;
+
+Ast *ast_import_stmt(ObjString path_identifier) {
+
+  char *mod_name = path_identifier.chars;
+  const char *mod_id_chars = get_mod_name_from_path_identifier(mod_name);
+
+  int mod_name_len = strlen(__import_current_dir) + 1 + strlen(mod_name) + 4;
+  char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
+
+  snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc",
+           __import_current_dir, mod_name);
+  fully_qualified_name = normalize_path(fully_qualified_name);
+  fully_qualified_name = prepend_current_directory(fully_qualified_name);
+
+  // Ast *mod_id = ast_identifier((ObjString){mod_id_chars,
+  // strlen(mod_id_chars)});
+  Ast *import_ast = Ast_new(AST_IMPORT);
+  import_ast->data.AST_IMPORT.identifier = mod_id_chars;
+  import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;
+
+  return import_ast;
 }

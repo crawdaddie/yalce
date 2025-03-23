@@ -37,6 +37,10 @@ JITSymbol *lookup_id_ast(Ast *id, JITLangCtx *ctx);
 JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type);
 
+JITSymbol *create_generic_fn_symbol(Ast *fn_ast, JITLangCtx *ctx);
+
+LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
+                                       JITLangCtx *ctx);
 // TODO: use gperf for better builtin func lookups
 #define SYM_NAME_ARRAY_AT "array_at"
 #define SYM_NAME_ARRAY_SIZE "array_size"
