@@ -1,0 +1,15 @@
+let X = module
+  let t = 2;
+  let z = fn (a, b): (Int * Int) ->
+    a * b
+  ;;
+
+  let zg = fn (a, b) ->
+    a * b
+  ;;
+;
+
+X.zg (3, 2)
+
+
+
