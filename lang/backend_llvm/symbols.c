@@ -110,8 +110,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 }
 
-JITSymbol *create_generic_fn_symbol(Ast *fn_ast,
-                                       JITLangCtx *ctx) {
+JITSymbol *create_generic_fn_symbol(Ast *fn_ast, JITLangCtx *ctx) {
   JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, fn_ast->md, NULL, NULL);
   sym->symbol_data.STYPE_GENERIC_FUNCTION.ast = fn_ast;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
@@ -281,8 +280,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
 
-    expr_val =
-        create_generic_fn_binding(binding, expr, inner_ctx);
+    expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
 
     return in_expr == NULL ? expr_val
                            : codegen(in_expr, inner_ctx, module, builder);
@@ -298,17 +296,10 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (expr->tag == AST_MODULE) {
-
-    expr_val = bind_module(binding, expr_type,
-                                 codegen_module(expr, outer_ctx, NULL, module, builder),
-                                 inner_ctx, module, builder);
-
-    return in_expr == NULL ? expr_val
-                           : codegen(in_expr, inner_ctx, module, builder);
+    return codegen_inline_module(binding, expr, outer_ctx, module, builder);
   }
 
   expr_val = codegen(expr, outer_ctx, module, builder);
-
 
   if (!expr_val) {
     fprintf(stderr, "Error - could not compile value for binding\n");

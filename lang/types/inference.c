@@ -342,38 +342,34 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_IMPORT: {
     const char *name = ast->data.AST_IMPORT.identifier;
     type = get_import_type(ast);
-      Ast binding = {
-        AST_IDENTIFIER,
-        .data = {
-          .AST_IDENTIFIER = {
-            .value = name,
-            .length = strlen(name),
-          }
-        }
-      };
+    Ast binding = {AST_IDENTIFIER, .data = {.AST_IDENTIFIER = {
+                                                .value = name,
+                                                .length = strlen(name),
+                                            }}};
 
     bind_in_ctx(ctx, &binding, type);
     break;
   }
   case AST_RECORD_ACCESS: {
-      Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx); 
-      if (rec_type->kind != T_CONS) {
-        return NULL;
-      }
-      if (rec_type->data.T_CONS.names == NULL) {
-        return NULL;
-      }
-      const char *member_name = ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
-
-      for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
-        if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
-          type = rec_type->data.T_CONS.args[i];
-          ast->data.AST_RECORD_ACCESS.index = i;
-          break;
-        }
-      }
-      break;
+    Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
+    if (rec_type->kind != T_CONS) {
+      return NULL;
     }
+    if (rec_type->data.T_CONS.names == NULL) {
+      return NULL;
+    }
+    const char *member_name =
+        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+
+    for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+      if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
+        type = rec_type->data.T_CONS.args[i];
+        ast->data.AST_RECORD_ACCESS.index = i;
+        break;
+      }
+    }
+    break;
+  }
   default: {
     return type_error(
         ctx, ast, "Typecheck Error: inference not implemented for AST Node\n");
@@ -969,9 +965,8 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   }
 
   if (expr->tag == AST_MODULE) {
-    expr_type->data.T_CONS.name = binding->data.AST_IDENTIFIER.value;
+    // expr_type->data.T_CONS.name = binding->data.AST_IDENTIFIER.value;
   }
-
 
   Type *binding_type;
   if (!(binding_type = infer_pattern(binding, ctx))) {
@@ -1524,7 +1519,7 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
   return prog->md;
 }
 
-Type *infer_module(Ast*ast, TICtx *ctx) {
+Type *infer_module(Ast *ast, TICtx *ctx) {
   Ast *body = ast->data.AST_LAMBDA.body;
   TICtx module_ctx = *ctx;
   TypeEnv *env_start = module_ctx.env;
@@ -1533,18 +1528,19 @@ Type *infer_module(Ast*ast, TICtx *ctx) {
   int len = body->data.AST_BODY.len;
   Type **member_types = talloc(sizeof(Type *) * len);
   const char **names = talloc(sizeof(char *) * len);
- 
+
   for (int i = 0; i < len; i++) {
     stmt = body->data.AST_BODY.stmts[i];
     if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL))) {
       return type_error(ctx, stmt,
-      "Please only have let statements and type declarations in a module\n");
+                        "Please only have let statements and type declarations "
+                        "in a module\n");
       return NULL;
     }
 
     if ((stmt->tag == AST_LET) && (stmt->data.AST_LET.in_expr != NULL)) {
       return type_error(ctx, stmt,
-      "Please don't use in-continuation in a module\n");
+                        "Please don't use in-continuation in a module\n");
       return NULL;
     }
 
@@ -1567,7 +1563,6 @@ Type *infer_module(Ast*ast, TICtx *ctx) {
 
   Type *module_struct_type = create_cons_type("Module", len, member_types);
   module_struct_type->data.T_CONS.names = names;
-
 
   return module_struct_type;
 }

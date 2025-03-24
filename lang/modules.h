@@ -10,7 +10,6 @@ typedef struct {
   Type *type;
   Ast *ast;
   void *ref;
-  ht generics;
 } YLCModule;
 Type *get_import_type(Ast *ast);
 

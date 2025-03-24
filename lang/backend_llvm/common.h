@@ -64,6 +64,7 @@ typedef enum symbol_type {
   STYPE_COROUTINE_GENERATOR,
   STYPE_COROUTINE_INSTANCE,
   STYPE_PARTIAL_EVAL_CLOSURE,
+  STYPE_MODULE,
 } symbol_type;
 
 typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
@@ -118,6 +119,11 @@ typedef struct {
       int original_args_len;
       Type *original_callable_type;
     } STYPE_PARTIAL_EVAL_CLOSURE;
+
+    struct {
+      ht generics;
+      JITLangCtx *ctx;
+    } STYPE_MODULE;
 
   } symbol_data;
   Type *symbol_type;

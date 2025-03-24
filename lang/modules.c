@@ -74,24 +74,24 @@ YLCModule *get_imported_module(Ast *ast) {
   return mod;
 }
 
-int get_import_ref(Ast *ast, void **ref, Ast **module_ast) {
-  const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;
-
-  YLCModule *mod = ht_get(&module_registry, file_path);
-  if (!mod) {
-    return 0;
-  }
-
-  if (mod->ref) {
-    *ref = mod->ref;
-    *module_ast = NULL;
-  }
-
-  *ref = NULL;
-  *module_ast = mod->ast;
-
-  return 1;
-}
+// int get_import_ref(Ast *ast, void **ref, Ast **module_ast) {
+//   const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;
+//
+//   YLCModule *mod = ht_get(&module_registry, file_path);
+//   if (!mod) {
+//     return 0;
+//   }
+//
+//   if (mod->ref) {
+//     *ref = mod->ref;
+//     *module_ast = NULL;
+//   }
+//
+//   *ref = NULL;
+//   *module_ast = mod->ast;
+//
+//   return 1;
+// }
 
 void set_import_ref(Ast *ast, void *ref) {
   const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;

@@ -1,6 +1,5 @@
 #include "backend_llvm/function.h"
 #include "match.h"
-#include "serde.h"
 #include "symbols.h"
 #include "types.h"
 #include "types/inference.h"
@@ -9,7 +8,6 @@
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
-
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
@@ -140,8 +138,6 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
-  printf("codegen fn\n");
-  print_ast(ast);
 
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);

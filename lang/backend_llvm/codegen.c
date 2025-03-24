@@ -192,10 +192,16 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_RECORD_ACCESS: {
-    LLVMValueRef rec =
-        codegen(ast->data.AST_RECORD_ACCESS.record, ctx, module, builder);
+    Ast *record = ast->data.AST_RECORD_ACCESS.record;
+    Type *record_type = record->md;
+    if (record_type->kind == T_CONS &&
+        strcmp(record_type->data.T_CONS.name, "Module") == 0) {
+      return codegen_module_access(
+          record, record_type, ast->data.AST_RECORD_ACCESS.index,
+          ast->data.AST_RECORD_ACCESS.member, ast->md, ctx, module, builder);
+    }
 
-    Type *record_type = ast->data.AST_RECORD_ACCESS.record->md;
+    LLVMValueRef rec = codegen(record, ctx, module, builder);
 
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
@@ -237,38 +243,12 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_MODULE: {
-    return codegen_module(ast, ctx, NULL, module, builder);
+    // inline module
+    return codegen_module(ast, ctx, module, builder);
   }
 
   case AST_IMPORT: {
-    Ast *module_ast = NULL;
-    LLVMValueRef ref;
-    YLCModule *mod = get_imported_module(ast);
-
-    if (!mod) {
-      fprintf(stderr, "Error: could not get ref or AST for module\n");
-      return NULL;
-    }
-
-
-    if (mod->ast) {
-
-      const char *chars = ast->data.AST_IMPORT.identifier;
-      int chars_len = strlen(chars);
-
-      LLVMValueRef module_val =
-          codegen_module(mod->ast, ctx, &mod->generics, module, builder);
-
-      LLVMValueRef expr_val = bind_module_chars(
-          chars, chars_len, ast->md, module_val, ctx, module, builder);
-
-      set_import_ref(ast, expr_val);
-
-
-    } else if (mod->ref) {
-      return mod->ref;
-    }
-    break;
+    return codegen_import(ast, ctx, module, builder);
   }
   }
 
