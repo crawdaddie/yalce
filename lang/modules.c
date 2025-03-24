@@ -60,7 +60,7 @@ Type *get_import_type(Ast *ast) {
   *registered_module =
       (YLCModule){.type = deep_copy_type(module_ast->md), .ast = module_ast};
 
-  ht_init(&registered_module->generics);
+  // ht_init(&registered_module->generics);
 
   ht_set(&module_registry, file_path, registered_module);
 

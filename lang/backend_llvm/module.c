@@ -136,6 +136,22 @@ LLVMValueRef _codegen_module(Ast *module_ast, LLVMTypeRef llvm_module_type,
   return mod_struct_val;
 }
 
+JITLangCtx *heap_alloc_ctx(JITLangCtx *ctx) {
+  char *mem = malloc(sizeof(JITLangCtx) + sizeof(ht) + sizeof(StackFrame));
+  JITLangCtx *module_ctx = (JITLangCtx *)mem;
+  mem += sizeof(JITLangCtx);
+  *module_ctx = *ctx;
+  ht *table = (ht *)mem;
+  mem += sizeof(ht);
+  ht_init(table);
+  StackFrame *sf = (StackFrame *)mem;
+  mem += sizeof(StackFrame);
+  *sf = (StackFrame){.table = table, .next = module_ctx->frame};
+  module_ctx->frame = sf;
+  module_ctx->stack_ptr = ctx->stack_ptr + 1;
+  return module_ctx;
+}
+
 LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
                                    JITLangCtx *ctx,
                                    LLVMModuleRef llvm_module_ref,
@@ -163,13 +179,7 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
 
     LLVMValueRef module_struct = LLVMGetUndef(llvm_module_type);
 
-    JITLangCtx *module_ctx = malloc(sizeof(JITLangCtx));
-    *module_ctx = *ctx;
-    ht table;
-    ht_init(&table);
-    StackFrame sf = {.table = &table, .next = module_ctx->frame};
-    module_ctx->frame = &sf;
-    module_ctx->stack_ptr = ctx->stack_ptr + 1;
+    JITLangCtx *module_ctx = heap_alloc_ctx(ctx);
 
     LLVMValueRef mod_struct_val =
         _codegen_module(module_ast, llvm_module_type, module_ctx,
@@ -226,14 +236,7 @@ LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
 
     LLVMValueRef module_struct = LLVMGetUndef(llvm_module_type);
 
-    JITLangCtx *module_ctx = malloc(sizeof(JITLangCtx));
-    *module_ctx = *ctx;
-    ht table;
-    ht_init(&table);
-    StackFrame sf = {.table = &table, .next = module_ctx->frame};
-    module_ctx->frame = &sf;
-    module_ctx->stack_ptr = ctx->stack_ptr + 1;
-
+    JITLangCtx *module_ctx = heap_alloc_ctx(ctx);
     LLVMValueRef mod_struct_val =
         _codegen_module(module_ast, llvm_module_type, module_ctx,
                         generic_storage, llvm_module_ref, builder);
