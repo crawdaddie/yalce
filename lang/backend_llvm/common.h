@@ -79,6 +79,11 @@ struct {
 } CurriedFunction;
 
 typedef struct {
+  int num_exports;
+  int val_map[];
+} ModuleTypeMap;
+
+typedef struct {
   symbol_type type;
   LLVMTypeRef llvm_type;
   LLVMValueRef val;
@@ -123,6 +128,7 @@ typedef struct {
     struct {
       ht generics;
       JITLangCtx *ctx;
+      ModuleTypeMap map;
     } STYPE_MODULE;
 
   } symbol_data;

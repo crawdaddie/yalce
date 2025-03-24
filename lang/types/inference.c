@@ -1538,11 +1538,11 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
       return NULL;
     }
 
-    if ((stmt->tag == AST_LET) && (stmt->data.AST_LET.in_expr != NULL)) {
-      return type_error(ctx, stmt,
-                        "Please don't use in-continuation in a module\n");
-      return NULL;
-    }
+    // if ((stmt->tag == AST_LET) && (stmt->data.AST_LET.in_expr != NULL)) {
+    //   return type_error(ctx, stmt,
+    //                     "Please don't use in-continuation in a module\n");
+    //   return NULL;
+    // }
 
     Type *t = infer(stmt, &module_ctx);
     member_types[i] = t;
