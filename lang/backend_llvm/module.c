@@ -245,16 +245,6 @@ LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
     module_symbol->symbol_data.STYPE_MODULE.generics = *generic_storage;
     module_symbol->symbol_data.STYPE_MODULE.ctx = module_ctx;
 
-    // hti it = ht_iterator(generic_storage);
-    // bool cont = ht_next(&it);
-    // printf("generic members in mod:\n");
-    // for (; cont; cont = ht_next(&it)) {
-    //   const char *key = it.key;
-    //   JITSymbol *t = it.value;
-    //   printf("%s: ", key);
-    //   print_type(t->symbol_type);
-    // }
-
     const char *mod_binding = ast->data.AST_IMPORT.identifier;
     int mod_binding_len = strlen(mod_binding);
     ht_set_hash(ctx->frame->table, mod_binding,
