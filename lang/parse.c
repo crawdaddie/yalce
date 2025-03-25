@@ -477,30 +477,40 @@ Ast *parse_input_script(const char *filename) {
   if (!fcontent) {
     return NULL;
   }
-  inputs_list *stack = _stack;
-  stack = inputs_list_push_left(stack, filename, filename, fcontent);
-  char *current_dir = get_dirname(stack->qualified_path);
-  stack = preprocess_includes(current_dir, fcontent, stack);
+  // inputs_list *stack = _stack;
+  // stack = inputs_list_push_left(stack, filename, filename, fcontent);
+  char *current_dir = get_dirname(filename);
+  // stack = preprocess_includes(current_dir, fcontent, stack);
 
   ast_root = Ast_new(AST_BODY);
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
 
-  // dbg_input_stack(stack);
-  inputs_list *__stack = stack;
-  while (__stack != _stack) {
-    _cur_script = __stack->qualified_path;
-    const char *input = __stack->data;
+  _cur_script = filename;
+  const char *input = fcontent;
+  printf("%s input: `%s`\n", filename, input);
 
-    _cur_script_content = input;
-    yylineno = 1;
-    yyabsoluteoffset = 0;
-    yy_scan_string(input);
-    yyparse();
+  _cur_script_content = input;
+  yylineno = 1;
+  yyabsoluteoffset = 0;
+  yy_scan_string(input);
+  yyparse();
 
-    __stack = __stack->next;
-  }
-  _stack = stack;
+  // // dbg_input_stack(stack);
+  // inputs_list *__stack = stack;
+  // while (__stack != _stack) {
+  //   _cur_script = __stack->qualified_path;
+  //   const char *input = __stack->data;
+  //
+  //   _cur_script_content = input;
+  //   yylineno = 1;
+  //   yyabsoluteoffset = 0;
+  //   yy_scan_string(input);
+  //   yyparse();
+  //
+  //   __stack = __stack->next;
+  // }
+  // _stack = stack;
 
   return ast_root;
 }
@@ -1222,10 +1232,10 @@ Ast *ast_module(Ast *lambda) {
 }
 char *__import_current_dir;
 
-Ast *ast_import_stmt(ObjString path_identifier) {
+Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   char *mod_name = path_identifier.chars;
-  const char *mod_id_chars = get_mod_name_from_path_identifier(mod_name);
+  char *mod_id_chars = get_mod_name_from_path_identifier(mod_name);
 
   int mod_name_len = strlen(__import_current_dir) + 1 + strlen(mod_name) + 4;
   char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
@@ -1240,6 +1250,6 @@ Ast *ast_import_stmt(ObjString path_identifier) {
   Ast *import_ast = Ast_new(AST_IMPORT);
   import_ast->data.AST_IMPORT.identifier = mod_id_chars;
   import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;
-
+  import_ast->data.AST_IMPORT.import_all = import_all;
   return import_ast;
 }

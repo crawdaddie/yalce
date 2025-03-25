@@ -47,6 +47,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "["                     return *yytext;
 "]"                     return *yytext;
 "import"                return IMPORT;
+"open"                  return OPEN;
 "."                     return *yytext;
 "type"                  return *yytext;
 "of"                    return *yytext;

@@ -39,6 +39,24 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
     return find_in_ctx(chars, chars_len, ctx);
   }
 
+  if (ast->tag == AST_RECORD_ACCESS) {
+    JITSymbol *record_symbol =
+        lookup_id_ast(ast->data.AST_RECORD_ACCESS.record, ctx);
+
+    if (!record_symbol) {
+      fprintf(stderr, "Error: record %s not found in scope %d",
+              ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value,
+              ctx->stack_ptr);
+      return NULL;
+    }
+    if (record_symbol->type == STYPE_MODULE) {
+      JITSymbol *member_symbol =
+          lookup_id_ast(ast->data.AST_RECORD_ACCESS.member,
+                        record_symbol->symbol_data.STYPE_MODULE.ctx);
+      return member_symbol;
+    }
+  }
+
   return NULL;
 }
 

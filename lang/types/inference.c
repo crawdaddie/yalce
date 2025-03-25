@@ -341,7 +341,21 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_IMPORT: {
     const char *name = ast->data.AST_IMPORT.identifier;
+
     type = get_import_type(ast);
+    if (ast->data.AST_IMPORT.import_all) {
+
+      for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+        char *name = type->data.T_CONS.names[i];
+        Ast binding = {AST_IDENTIFIER, .data = {.AST_IDENTIFIER = {
+                                                    .value = name,
+                                                    .length = strlen(name),
+                                                }}};
+        bind_in_ctx(ctx, &binding, type->data.T_CONS.args[i]);
+      }
+      break;
+    }
+
     Ast binding = {AST_IDENTIFIER, .data = {.AST_IDENTIFIER = {
                                                 .value = name,
                                                 .length = strlen(name),

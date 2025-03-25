@@ -247,6 +247,11 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
   }
   case AST_IMPORT: {
     buffer = strcat(buffer, "import ");
+    if (ast->data.AST_IMPORT.import_all) {
+
+      buffer = strcat(buffer, " * ");
+    }
+
     buffer = strcat(buffer, ast->data.AST_IMPORT.fully_qualified_name);
     buffer = strcat(buffer, " as ");
     buffer = strcat(buffer, ast->data.AST_IMPORT.identifier);

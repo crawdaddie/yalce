@@ -277,6 +277,7 @@ struct Ast {
     struct AST_IMPORT {
       const char *identifier;
       const char *fully_qualified_name;
+      bool import_all;
     } AST_IMPORT;
   } data;
 
@@ -404,6 +405,5 @@ typedef struct AstVisitor {
 } AstVisitor;
 Ast *ast_module(Ast *lambda);
 extern char *__import_current_dir;
-Ast *ast_import_stmt(ObjString path_identifier);
+Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
 #endif
-

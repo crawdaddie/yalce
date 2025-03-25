@@ -59,6 +59,7 @@ Ast* ast_root = NULL;
 %token DOUBLE_AT
 %token THUNK
 %token IMPORT
+%token OPEN 
 %token IMPLEMENTS
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
@@ -155,7 +156,8 @@ expr:
   | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER IMPLEMENTS IDENTIFIER  { $$ = ast_implements($1, $3); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
-  | IMPORT PATH_IDENTIFIER            { $$ = ast_import_stmt($2); }
+  | IMPORT PATH_IDENTIFIER            { $$ = ast_import_stmt($2, false); }
+  | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); }
   ;
 
 simple_expr:

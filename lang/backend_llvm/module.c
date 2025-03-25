@@ -75,53 +75,7 @@ JITLangCtx *heap_alloc_ctx(JITLangCtx *ctx) {
   return module_ctx;
 }
 
-LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
-                                   JITLangCtx *ctx,
-                                   LLVMModuleRef llvm_module_ref,
-                                   LLVMBuilderRef builder) {
-
-  // YLCModule _module = {
-  //     .type = module_ast->md,
-  //     .ast = module_ast,
-  // };
-  // YLCModule *module = &_module;
-  // JITSymbol *module_symbol;
-  //
-  // if (module->ast) {
-  //   Type *module_type = module->type;
-  //   Ast *module_ast = module->ast;
-  //
-  //   module_symbol = malloc(sizeof(JITSymbol));
-  //   module_symbol->type = STYPE_MODULE;
-  //   module_symbol->symbol_type = module_type;
-  //   ht_init(&module_symbol->symbol_data.STYPE_MODULE.generics);
-  //   ht *generic_storage = &module_symbol->symbol_data.STYPE_MODULE.generics;
-  //
-  //   LLVMTypeRef llvm_module_type =
-  //       type_to_llvm_type(module_type, ctx->env, llvm_module_ref);
-  //
-  //   LLVMValueRef module_struct = LLVMGetUndef(llvm_module_type);
-  //
-  //   JITLangCtx *module_ctx = heap_alloc_ctx(ctx);
-  //
-  //   LLVMValueRef mod_struct_val =
-  //       _codegen_module(module_ast, llvm_module_type, module_ctx,
-  //                       generic_storage, llvm_module_ref, builder);
-  //   module_symbol->val = mod_struct_val;
-  //   module_symbol->llvm_type = llvm_module_type;
-  //   module_symbol->symbol_data.STYPE_MODULE.generics = *generic_storage;
-  //   module_symbol->symbol_data.STYPE_MODULE.ctx = module_ctx;
-  //
-  //   const char *mod_binding = binding->data.AST_IDENTIFIER.value;
-  //   int mod_binding_len = strlen(mod_binding);
-  //   ht_set_hash(ctx->frame->table, mod_binding,
-  //               hash_string(mod_binding, mod_binding_len), module_symbol);
-  //   module->ref = module_symbol;
-  // }
-  //
-  // return module_symbol->val;
-  return NULL;
-}
+#define PRINT_MODULE_AT_IMPORT
 
 LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
                             LLVMModuleRef llvm_module_ref,
@@ -131,6 +85,7 @@ LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
 
   hti it = ht_iterator(ctx->frame->table);
   bool cont = ht_next(&it);
+#ifdef PRINT_MODULE_AT_IMPORT
   printf("module top-level:\n");
   for (; cont; cont = ht_next(&it)) {
     const char *key = it.key;
@@ -138,6 +93,7 @@ LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
     printf("%s: ", key);
     print_type(t->symbol_type);
   }
+#endif
 }
 
 JITSymbol *create_module_symbol(Type *module_type, Ast *module_ast,
@@ -161,6 +117,39 @@ JITSymbol *create_module_symbol(Type *module_type, Ast *module_ast,
   return module_symbol;
 }
 
+LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
+                                   JITLangCtx *ctx,
+                                   LLVMModuleRef llvm_module_ref,
+                                   LLVMBuilderRef builder) {
+
+  YLCModule _module = {
+      .type = module_ast->md,
+      .ast = module_ast,
+  };
+  YLCModule *module = &_module;
+  JITSymbol *module_symbol;
+
+  if (module->ast) {
+    Type *module_type = module->type;
+    int mod_len = module_type->data.T_CONS.num_args;
+    Ast *module_ast = module->ast;
+
+    module_symbol =
+        create_module_symbol(module_type, module_ast, ctx, llvm_module_ref);
+    compile_module(module_symbol, module_ast, llvm_module_ref, builder);
+
+    const char *mod_binding = binding->data.AST_IDENTIFIER.value;
+    int mod_binding_len = binding->data.AST_IDENTIFIER.length;
+
+    ht_set_hash(ctx->frame->table, mod_binding,
+                hash_string(mod_binding, mod_binding_len), module_symbol);
+
+    module->ref = module_symbol;
+  }
+
+  return module_symbol->val;
+}
+
 LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
                             LLVMModuleRef llvm_module_ref,
                             LLVMBuilderRef builder) {
@@ -182,12 +171,6 @@ LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
     module_symbol =
         create_module_symbol(module_type, module_ast, ctx, llvm_module_ref);
     compile_module(module_symbol, module_ast, llvm_module_ref, builder);
-
-    // LLVMValueRef mod_struct_val =
-    //     _codegen_module(module_ast, module_symbol->llvm_type,
-    //                     module_symbol->symbol_data.STYPE_MODULE.ctx,
-    //                     &module_symbol->symbol_data.STYPE_MODULE.generics,
-    //                     llvm_module_ref, builder);
 
     const char *mod_binding = ast->data.AST_IMPORT.identifier;
     int mod_binding_len = strlen(mod_binding);
@@ -214,27 +197,8 @@ LLVMValueRef codegen_module_access(Ast *record_ast, Type *record_type,
     return NULL;
   }
 
-  Type *member_type = record_type->data.T_CONS.args[member_idx];
-  bool member_is_generic = is_generic(member_type);
+  JITSymbol *member_symbol =
+      lookup_id_ast(member, module_symbol->symbol_data.STYPE_MODULE.ctx);
 
-  if (!member_is_generic) {
-    LLVMValueRef val = codegen_tuple_access(member_idx, module_symbol->val,
-                                            module_symbol->llvm_type, builder);
-    return val;
-  }
-
-  if (member_is_generic && expected_member_type->kind == T_FN) {
-    const char *member_name = member->data.AST_IDENTIFIER.value;
-    int member_name_len = member->data.AST_IDENTIFIER.length;
-    JITSymbol *generic_fn =
-        ht_get_hash(&module_symbol->symbol_data.STYPE_MODULE.generics,
-                    member_name, hash_string(member_name, member_name_len));
-
-    LLVMValueRef specific_callable = get_specific_callable(
-        generic_fn, expected_member_type, ctx, llvm_module_ref, builder);
-
-    return specific_callable;
-  }
-
-  return NULL;
+  return member_symbol->val;
 }
