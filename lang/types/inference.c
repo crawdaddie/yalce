@@ -971,15 +971,19 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
 
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
+  Ast *in_expr = ast->data.AST_LET.in_expr;
+
+  if (binding == NULL && expr->tag == AST_IMPORT && in_expr) {
+    TICtx body_ctx = *ctx;
+    body_ctx.scope++;
+    infer(expr, &body_ctx);
+    return infer(in_expr, &body_ctx);
+  }
 
   Type *expr_type;
   if (!(expr_type = infer(expr, ctx))) {
     return type_error(ctx, ast->data.AST_LET.expr,
                       "Typecheck Error: Could not infer expr type in let\n");
-  }
-
-  if (expr->tag == AST_MODULE) {
-    // expr_type->data.T_CONS.name = binding->data.AST_IDENTIFIER.value;
   }
 
   Type *binding_type;
@@ -995,7 +999,6 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
     return NULL;
   }
 
-  Ast *in_expr = ast->data.AST_LET.in_expr;
   if (in_expr != NULL) {
     TICtx body_ctx = *ctx;
     body_ctx.scope++;

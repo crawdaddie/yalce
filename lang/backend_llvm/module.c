@@ -149,9 +149,9 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
   return module_symbol->val;
 }
 
-LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
-                            LLVMModuleRef llvm_module_ref,
-                            LLVMBuilderRef builder) {
+JITSymbol *codegen_import(Ast *ast, Ast *binding, JITLangCtx *ctx,
+                          LLVMModuleRef llvm_module_ref,
+                          LLVMBuilderRef builder) {
 
   YLCModule *module = get_imported_module(ast);
   JITSymbol *module_symbol;
@@ -167,14 +167,6 @@ LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
     module_symbol =
         create_module_symbol(module_type, module_ast, ctx, llvm_module_ref);
     compile_module(module_symbol, module_ast, llvm_module_ref, builder);
-
-    const char *mod_binding = ast->data.AST_IMPORT.identifier;
-    int mod_binding_len = strlen(mod_binding);
-
-    ht_set_hash(ctx->frame->table, mod_binding,
-                hash_string(mod_binding, mod_binding_len), module_symbol);
-
-    module->ref = module_symbol;
   }
 
   if (ast->data.AST_IMPORT.import_all) {
@@ -188,9 +180,25 @@ LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
       int len = strlen(key);
       ht_set_hash(ctx->frame->table, key, hash_string(key, len), sym);
     }
+  } else {
+    const char *mod_binding;
+    int mod_binding_len;
+    if (binding) {
+      mod_binding = binding->data.AST_IDENTIFIER.value;
+      mod_binding_len = strlen(mod_binding);
+
+    } else {
+      mod_binding = ast->data.AST_IMPORT.identifier;
+      mod_binding_len = strlen(mod_binding);
+    }
+
+    ht_set_hash(ctx->frame->table, mod_binding,
+                hash_string(mod_binding, mod_binding_len), module_symbol);
+
+    module->ref = module_symbol;
   }
 
-  return module_symbol->val;
+  return module_symbol;
 }
 
 LLVMValueRef codegen_module_access(Ast *record_ast, Type *record_type,

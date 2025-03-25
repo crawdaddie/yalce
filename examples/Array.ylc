@@ -11,18 +11,6 @@ let tensor_ndims = fn (_, sizes, _): (Tensor) ->
   array_size sizes
 ;;
 
-%module
-let Tensor = fn t -> 
-  type Tensor = (Array of t) * (Array of Int) * (Array of Int);
-
-  let ndims = fn (_, sizes, _): (Tensor) ->
-    array_size sizes
-  ;;
-
-  let size = fn (arr, _, _): (Tensor) ->
-    array_size arr
-  ;;
-;;
 
 
 # let array_fill = fn n: (Int) f: (Int -> t) -> 

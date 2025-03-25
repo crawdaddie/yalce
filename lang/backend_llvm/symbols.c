@@ -250,6 +250,14 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   LLVMValueRef expr_val;
   Type *expr_type = expr->md;
 
+  if (binding == NULL && expr->tag == AST_IMPORT && in_expr) {
+
+    JITSymbol *module_symbol =
+        codegen_import(expr, NULL, inner_ctx, module, builder);
+
+    return codegen(in_expr, inner_ctx, module, builder);
+  }
+
   if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
 
     if (is_coroutine_type(expr_type)) {
@@ -317,10 +325,25 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     return codegen_inline_module(binding, expr, outer_ctx, module, builder);
   }
 
+  if (expr->tag == AST_IMPORT) {
+    if (in_expr != NULL && !expr->data.AST_IMPORT.import_all) {
+      JITSymbol *module_symbol =
+          codegen_import(expr, binding, inner_ctx, module, builder);
+
+      return codegen(in_expr, inner_ctx, module, builder);
+    }
+
+    JITSymbol *module_symbol =
+        codegen_import(expr, binding, outer_ctx, module, builder);
+
+    return NULL;
+  }
+
   expr_val = codegen(expr, outer_ctx, module, builder);
 
   if (!expr_val) {
-    fprintf(stderr, "Error - could not compile value for binding\n");
+    fprintf(stderr, "Error - could not compile value for binding to %s\n",
+            binding->data.AST_IDENTIFIER.value);
     return NULL;
   }
 

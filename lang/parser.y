@@ -222,7 +222,7 @@ let_binding:
   | IMPORT PATH_IDENTIFIER IN expr  { $$ = ast_let(NULL, ast_import_stmt($2, false), $4); }
   | OPEN PATH_IDENTIFIER IN expr    { $$ = ast_let(NULL, ast_import_stmt($2, true), $4); }
   */
-
+  | OPEN PATH_IDENTIFIER IN expr     { $$ = ast_let(NULL, ast_import_stmt($2, true), $4); }
   ;
 
 extern_typed_signature:

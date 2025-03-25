@@ -77,6 +77,7 @@ let kick_setter = fn (dur, synth) frame_offset ->
   set_input_trig_offset synth 0 frame_offset;
   ()
 ;;
+
 let k = fn frame_offset -> 
   (
     \array_choose [|0.5,|],

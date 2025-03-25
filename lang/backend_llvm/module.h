@@ -8,9 +8,9 @@
 LLVMValueRef codegen_module(Ast *ast, JITLangCtx *ctx,
                             LLVMModuleRef llvm_module_ref,
                             LLVMBuilderRef builder);
-LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
-                            LLVMModuleRef llvm_module_ref,
-                            LLVMBuilderRef builder);
+JITSymbol *codegen_import(Ast *ast, Ast *binding, JITLangCtx *ctx,
+                          LLVMModuleRef llvm_module_ref,
+                          LLVMBuilderRef builder);
 
 LLVMValueRef codegen_module_access(Ast *record_ast, Type *record_type, int idx,
                                    Ast *member, Type *member_type,

@@ -242,9 +242,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     break;
   }
 
-  
   case AST_IMPORT: {
-    return codegen_import(ast, ctx, module, builder);
+    codegen_import(ast, NULL, ctx, module, builder);
+    return NULL;
   }
   }
 

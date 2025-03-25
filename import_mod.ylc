@@ -12,8 +12,8 @@
 # print `{X.zg (3, 2)}\n`;
 # print `{X.z (3, 2)}\n`;
 
-let Mod = import examples/Mod in
-Mod.z 1 2
+open examples/Mod in
+z 1 2
 
 
 
