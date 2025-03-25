@@ -314,7 +314,6 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (expr->tag == AST_MODULE) {
-
     return codegen_inline_module(binding, expr, outer_ctx, module, builder);
   }
 

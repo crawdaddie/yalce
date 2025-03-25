@@ -218,6 +218,11 @@ let_binding:
                                       add_custom_binop(id->data.AST_IDENTIFIER.value);
                                       $$ = ast_let(id, $6, NULL);
                                     }
+/*
+  | IMPORT PATH_IDENTIFIER IN expr  { $$ = ast_let(NULL, ast_import_stmt($2, false), $4); }
+  | OPEN PATH_IDENTIFIER IN expr    { $$ = ast_let(NULL, ast_import_stmt($2, true), $4); }
+  */
+
   ;
 
 extern_typed_signature:

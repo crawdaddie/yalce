@@ -17,7 +17,6 @@ void add_module_generic(Ast *stmt, JITLangCtx *ctx, ht *generic_storage) {
   Ast *binding = stmt->data.AST_LET.binding;
 
   JITSymbol *sym = create_generic_fn_symbol(fn_ast, ctx);
-
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
   int id_len = binding->data.AST_IDENTIFIER.length;
 
