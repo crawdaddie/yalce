@@ -121,29 +121,31 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
 
   return module_symbol->val;
 }
+JITSymbol *create_module_symbol(Type *module_type, Ast *module_ast,
+                                JITLangCtx *ctx,
+                                LLVMModuleRef llvm_module_ref) {
+  int mod_len = module_type->data.T_CONS.num_args;
 
-// LLVMTypeRef llvm_type_of_module_struct(Type *module_type) {}
-//
-//
-//
-// JITSymbol *create_module_symbol(Ast *module_ast, Type *module_type) {
-//
-//   print_type(module_type);
-//   int mod_len = module_type->data.T_CONS.num_args;
-//
-//   JITSymbol *module_symbol = malloc(sizeof(JITSymbol) + mod_len *
-//   sizeof(int)); module_symbol->type = STYPE_MODULE;
-//   module_symbol->symbol_type = module_type;
-//   ht_init(&module_symbol->symbol_data.STYPE_MODULE.generics);
-//   ht *generic_storage = &module_symbol->symbol_data.STYPE_MODULE.generics;
-//
-//   LLVMTypeRef llvm_module_type =
-//       type_to_llvm_type(module_type, ctx->env, llvm_module_ref);
-//
-//   LLVMValueRef module_struct = LLVMGetUndef(module_symbol->llvm_type);
-//   module_symbol->val = module_struct;
-//   return module_symbol;
-// }
+  JITSymbol *module_symbol = malloc(sizeof(JITSymbol) + mod_len * sizeof(int));
+
+  for (int i = 0; i < mod_len; i++) {
+    module_symbol->symbol_data.STYPE_MODULE.map.val_map[i] = -1;
+    printf("mod val map %d: %d\n", i,
+           module_symbol->symbol_data.STYPE_MODULE.map.val_map[i]);
+  }
+
+  module_symbol->type = STYPE_MODULE;
+  module_symbol->symbol_type = module_type;
+  ht_init(&module_symbol->symbol_data.STYPE_MODULE.generics);
+  ht *generic_storage = &module_symbol->symbol_data.STYPE_MODULE.generics;
+  module_symbol->llvm_type =
+      type_to_llvm_type(module_type, ctx->env, llvm_module_ref);
+
+  JITLangCtx *module_ctx = heap_alloc_ctx(ctx);
+  module_symbol->symbol_data.STYPE_MODULE.generics = *generic_storage;
+  module_symbol->symbol_data.STYPE_MODULE.ctx = module_ctx;
+  return module_symbol;
+}
 
 LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
                             LLVMModuleRef llvm_module_ref,
@@ -160,30 +162,19 @@ LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
 
   if (module->ast) {
     Type *module_type = module->type;
-    print_type(module_type);
     int mod_len = module_type->data.T_CONS.num_args;
     Ast *module_ast = module->ast;
 
-    module_symbol = malloc(sizeof(JITSymbol) + mod_len * sizeof(int));
-    module_symbol->type = STYPE_MODULE;
-    module_symbol->symbol_type = module_type;
-    ht_init(&module_symbol->symbol_data.STYPE_MODULE.generics);
-    ht *generic_storage = &module_symbol->symbol_data.STYPE_MODULE.generics;
+    module_symbol =
+        create_module_symbol(module_type, module_ast, ctx, llvm_module_ref);
 
-    module_symbol->llvm_type =
-        type_to_llvm_type(module_type, ctx->env, llvm_module_ref);
-
-    LLVMValueRef module_struct = LLVMGetUndef(module_symbol->llvm_type);
-
-    JITLangCtx *module_ctx = heap_alloc_ctx(ctx);
     LLVMValueRef mod_struct_val =
-        _codegen_module(module_ast, module_symbol->llvm_type, module_ctx,
-                        generic_storage, llvm_module_ref, builder);
+        _codegen_module(module_ast, module_symbol->llvm_type,
+                        module_symbol->symbol_data.STYPE_MODULE.ctx,
+                        &module_symbol->symbol_data.STYPE_MODULE.generics,
+                        llvm_module_ref, builder);
 
     module_symbol->val = mod_struct_val;
-    module_symbol->symbol_data.STYPE_MODULE.generics = *generic_storage;
-    module_symbol->symbol_data.STYPE_MODULE.ctx = module_ctx;
-
     const char *mod_binding = ast->data.AST_IMPORT.identifier;
     int mod_binding_len = strlen(mod_binding);
 
