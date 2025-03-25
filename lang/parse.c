@@ -488,7 +488,6 @@ Ast *parse_input_script(const char *filename) {
 
   _cur_script = filename;
   const char *input = fcontent;
-  printf("%s input: `%s`\n", filename, input);
 
   _cur_script_content = input;
   yylineno = 1;

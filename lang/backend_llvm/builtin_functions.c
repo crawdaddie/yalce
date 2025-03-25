@@ -421,7 +421,6 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
 LLVMValueRef double_constructor_handler(Ast *ast, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
-  print_ast(ast);
   return double_constructor(
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder), &t_int,
       module, builder);

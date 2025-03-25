@@ -83,9 +83,9 @@ LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
   JITLangCtx *ctx = module_symbol->symbol_data.STYPE_MODULE.ctx;
   codegen_lambda_body(module_ast, ctx, llvm_module_ref, builder);
 
+#ifdef PRINT_MODULE_AT_IMPORT
   hti it = ht_iterator(ctx->frame->table);
   bool cont = ht_next(&it);
-#ifdef PRINT_MODULE_AT_IMPORT
   printf("module top-level:\n");
   for (; cont; cont = ht_next(&it)) {
     const char *key = it.key;
@@ -160,10 +160,7 @@ LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
   if (module->ref) {
     // TODO: if we have an alias eg import X as Y then rebind symbol
     module_symbol = module->ref;
-    return module_symbol->val;
-  }
-
-  if (module->ast) {
+  } else if (module->ast) {
     Type *module_type = module->type;
     int mod_len = module_type->data.T_CONS.num_args;
     Ast *module_ast = module->ast;
@@ -179,6 +176,19 @@ LLVMValueRef codegen_import(Ast *ast, JITLangCtx *ctx,
                 hash_string(mod_binding, mod_binding_len), module_symbol);
 
     module->ref = module_symbol;
+  }
+
+  if (ast->data.AST_IMPORT.import_all) {
+    JITLangCtx *module_ctx = module_symbol->symbol_data.STYPE_MODULE.ctx;
+
+    hti it = ht_iterator(module_ctx->frame->table);
+    bool cont = ht_next(&it);
+    for (; cont; cont = ht_next(&it)) {
+      const char *key = it.key;
+      JITSymbol *sym = it.value;
+      int len = strlen(key);
+      ht_set_hash(ctx->frame->table, key, hash_string(key, len), sym);
+    }
   }
 
   return module_symbol->val;
