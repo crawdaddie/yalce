@@ -16,5 +16,6 @@
 #
 #
 import examples/Mod;
+import engine/bindings/Synth
 
 
