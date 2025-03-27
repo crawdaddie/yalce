@@ -54,4 +54,7 @@ LLVMValueRef codegen_option_is_some(LLVMValueRef opt, LLVMBuilderRef builder);
 
 LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r,
                             LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMTypeRef named_struct_type(const char *name, Type *tuple_type, TypeEnv *env,
+                              LLVMModuleRef module);
 #endif

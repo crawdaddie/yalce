@@ -22,6 +22,9 @@ LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
 // Function to create an LLVM list type
 LLVMTypeRef create_llvm_list_type(Type *list_el_type, TypeEnv *env,
                                   LLVMModuleRef module) {
+  if (list_el_type->kind == T_VAR) {
+    return GENERIC_PTR;
+  }
   // Convert the custom Type to LLVMTypeRef
   LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, env, module);
   if (!llvm_el_type) {

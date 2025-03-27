@@ -1154,16 +1154,41 @@ int main() {
     "  array_size sizes \n"
     ";; \n"
     "let x = Tensor [|1,2,3,4|] [|2,2|] [|2,1|];\n"
-    "tensor_ndims x;\n"
-    ,
+    "tensor_ndims x;\n",
     &t_int);
 
-  T("let Array = module\n"
-    "  let x = 1;\n" 
-    "  let size = fn arr -> \n"
-    "    array_size arr \n"
-    "  ;; \n"
-    "; \n", &t_void);
+  ({
+    Type mod_type = TCONS("Module", 2, &t_int,
+                          &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`3")), &t_int));
+    const char *names[2] = {"x", "size"};
+    mod_type.data.T_CONS.names = names;
+    T("let Mod = module\n"
+      "  let x = 1;\n"
+      "  let size = fn arr -> \n"
+      "    array_size arr \n"
+      "  ;; \n"
+      "; \n",
+      &mod_type);
+  });
 
+  T("type Op =\n"
+    "  | Add\n"
+    "  | Sub\n"
+    "  | Mul\n"
+    "  | Div\n"
+    "  | Pow\n"
+    "  | Noop\n"
+    "  ;\n"
+    "type Value = (data: Double * children: List of Value * op: Op * grad: "
+    "Double);\n"
+    "let add = fn a: (Value) b: (Value) ->\n"
+    "  (\n"
+    "    data: a.data + b.data,\n"
+    "    children: [a, b],\n"
+    "    op: Add,\n"
+    "    grad: 0.,\n"
+    "  ) \n"
+    ";;\n",
+    &t_void);
   return status == true ? 0 : 1;
 }

@@ -1,8 +1,25 @@
 #include "type_declaration.h"
 #include "serde.h"
+#include "types/common.h"
+#include "types/inference.h"
 #include "types/type.h"
+#include <stdarg.h>
 #include <string.h>
 
+void *_type_error(Ast *node, const char *fmt, ...) {
+  FILE *err_stream = stderr;
+  va_list args;
+  va_start(args, fmt);
+
+  vfprintf(err_stream, fmt, args);
+  if (node && node->loc_info) {
+    _print_location(node, err_stream);
+  } else if (node) {
+    print_ast_err(node);
+  }
+  va_end(args);
+  return NULL;
+}
 Type *env_lookup(TypeEnv *env, const char *name);
 Type *compute_type_expression(Ast *expr, TypeEnv *env);
 
@@ -31,24 +48,38 @@ Type *compute_concrete_type(Type *generic, Type *contained) {
 Type *option_of(Ast *expr) {}
 
 Type *next_tvar();
+const char *binding_name;
+const char *last_ptr_type;
+bool can_hold_recursive_ref(const char *container_type_name) {
+  if (CHARS_EQ(container_type_name, "List")) {
+    return true;
+  }
+
+  if (CHARS_EQ(container_type_name, "Array")) {
+    return true;
+  }
+  return false;
+}
+
 Type *compute_type_expression(Ast *expr, TypeEnv *env) {
+
   switch (expr->tag) {
   case AST_LIST: {
     int len = expr->data.AST_LIST.len;
     if (len == 1) {
       return compute_type_expression(expr->data.AST_LIST.items, env);
     }
-
     Type *variant = empty_type();
     variant->kind = T_CONS;
     variant->data.T_CONS.name = TYPE_NAME_VARIANT;
     variant->data.T_CONS.args = talloc(sizeof(Type *) * len);
     variant->data.T_CONS.num_args = len;
+    last_ptr_type = "Variant";
 
     for (int i = 0; i < len; i++) {
       Ast *item = expr->data.AST_LIST.items + i;
-
       Type *member;
+
       if (item->tag == AST_IDENTIFIER) {
         member = empty_type();
         member->kind = T_CONS;
@@ -67,9 +98,17 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   }
 
   case AST_IDENTIFIER: {
+    if (CHARS_EQ(expr->data.AST_IDENTIFIER.value, binding_name)) {
+      if (!can_hold_recursive_ref(last_ptr_type)) {
+        return _type_error(
+            expr,
+            "Type %s cannot have a direct recursive reference to itself "
+            "- try wrapping in a container type like List or Array",
+            binding_name);
+      }
+    }
     Type *type = env_lookup(env, expr->data.AST_IDENTIFIER.value);
     if (!type) {
-
       const char *id_chars = expr->data.AST_IDENTIFIER.value;
       Type *new_var_type = type_var_of_id(id_chars);
       return new_var_type;
@@ -120,6 +159,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     if (has_names) {
       t->data.T_CONS.names = names;
     }
+
     return t;
   }
   case AST_FN_SIGNATURE: {
@@ -129,6 +169,18 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
   case AST_BINOP: {
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
+
+      if (expr->data.AST_BINOP.left->tag != AST_IDENTIFIER) {
+        fprintf(stderr, "Error - wrong lhs of Of binop\n");
+        return NULL;
+      }
+
+      Type *cons = empty_type();
+      cons->kind = T_CONS;
+      cons->data.T_CONS.name =
+          strdup(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value);
+      const char *_prev_last_ptr_type = last_ptr_type;
+      last_ptr_type = cons->data.T_CONS.name;
 
       if (expr->data.AST_BINOP.left->tag == AST_IDENTIFIER) {
         if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
@@ -173,10 +225,6 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
         return t;
       }
 
-      Type *cons = empty_type();
-      cons->kind = T_CONS;
-      cons->data.T_CONS.name =
-          strdup(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value);
       cons->data.T_CONS.num_args = 1;
       cons->data.T_CONS.args = talloc(sizeof(Type *));
       cons->data.T_CONS.args[0] = contained_type;
@@ -185,6 +233,8 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
       expr->data.AST_BINOP.left->md = type_fn(contained_type, cons);
       expr->md = cons;
+
+      last_ptr_type = _prev_last_ptr_type;
       return cons;
     }
   }
@@ -196,12 +246,18 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
 
   Ast *binding = ast->data.AST_LET.binding;
   const char *name = binding->data.AST_IDENTIFIER.value;
+  binding_name = name;
 
   Ast *type_expr_ast = ast->data.AST_LET.expr;
   Type *type;
-  TypeEnv *generics = NULL;
+
   if (type_expr_ast != NULL) {
-    type = compute_type_expression(type_expr_ast, *env);
+    Type *var = empty_type();
+    var->kind = T_VAR;
+    var->data.T_VAR = name;
+    TypeEnv *_env = env_extend(*env, name, var);
+    type = compute_type_expression(type_expr_ast, _env);
+
   } else {
     // Type **cont = talloc(sizeof(Type *));
     // *cont = &t_char;

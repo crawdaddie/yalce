@@ -55,8 +55,6 @@ Type *get_import_type(Ast *ast) {
   Ast *module_ast = parse_module(file_path);
   ast_root = prev_root;
   Type *module_type = module_ast->md;
-  print_ast(module_ast);
-  print_type(module_ast->md);
 
   YLCModule *registered_module = malloc(sizeof(YLCModule));
   *registered_module =

@@ -2,6 +2,7 @@
 #include "builtins.h"
 #include "modules.h"
 #include "serde.h"
+#include "types/common.h"
 #include "types/type.h"
 #include "types/type_declaration.h"
 #include <stdarg.h>
@@ -26,38 +27,6 @@ Substitution *solve_constraints(TypeConstraint *constraints);
 #define CHARS_EQ(a, b) (strcmp(a, b) == 0)
 
 Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node);
-
-void _print_location(Ast *ast, FILE *fstream) {
-  loc_info *loc = ast->loc_info;
-
-  if (!loc || !loc->src || !loc->src_content) {
-    print_ast_err(ast);
-    return;
-  }
-
-  fprintf(fstream, " %s %d:%d\n", loc->src, loc->line, loc->col);
-
-  const char *start = loc->src_content;
-  const char *offset = start + loc->absolute_offset;
-
-  while (offset > start && *offset != '\n') {
-    offset--;
-  }
-
-  if (offset > start) {
-    offset++;
-  }
-
-  while (*offset && *offset != '\n') {
-    fputc(*offset, fstream);
-    offset++;
-  }
-
-  fprintf(fstream, "\n");
-  fprintf(fstream, "%*c", loc->col - 1, ' ');
-  fprintf(fstream, "^");
-  fprintf(fstream, "\n");
-}
 
 void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...) {
   FILE *err_stream = ctx->err_stream ? ctx->err_stream : stderr;
@@ -671,9 +640,19 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
         return type_error(
             ctx, node,
             "Typecheck error type %s does not implement typeclass '%s' \n",
-            type_to_string(t2, buf), tc->name);
+            t2->alias, tc->name);
       }
     }
+  }
+  if (is_list_type(t2) && t2->data.T_CONS.args[0]->kind == T_VAR &&
+      is_list_type(t1)) {
+    // print_type(t1);
+    // print_type(t2);
+
+    ctx->constraints = constraints_extend(
+        ctx->constraints, t2->data.T_CONS.args[0], t1->data.T_CONS.args[0]);
+    ctx->constraints->src = node;
+    return t1;
   }
 
   if (t2->kind == T_VAR) {
@@ -683,7 +662,7 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
   }
 
   if (t1->kind == T_CONS && t2->kind == T_CONS &&
-      (strcmp(t1->data.T_CONS.name, t1->data.T_CONS.name) == 0)) {
+      (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0)) {
     int num_args = t1->data.T_CONS.num_args;
 
     for (int i = 0; i < num_args; i++) {
@@ -804,9 +783,7 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   Type *cons = fn_type;
 
   if (is_variant_type(fn_type)) {
-
     cons = find_variant_member(fn_type, fn_name);
-
     if (!cons) {
       fprintf(stderr, "Error: %s not found in variant %s\n", fn_name,
               cons->data.T_CONS.name);
@@ -834,7 +811,9 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
 
   Substitution *subst = solve_constraints(app_ctx.constraints);
   Type *resolved_type = apply_substitution(subst, fn_type);
+  apply_substitutions_rec(ast, subst);
   ast->data.AST_APPLICATION.function->md = resolved_type;
+  print_type(resolved_type);
   return resolved_type;
 }
 
@@ -1181,6 +1160,10 @@ bool _is_option_type(Type *t) {
 }
 
 bool occurs_check(Type *var, Type *t) {
+  if (!t) {
+    return false;
+  }
+
   if (t->kind == T_VAR) {
     return strcmp(var->data.T_VAR, t->data.T_VAR) == 0;
   }
@@ -1291,6 +1274,7 @@ Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
 }
 
 bool cons_types_match(Type *t1, Type *t2) {
+
   return (t1->kind == T_CONS) && (t2->kind == T_CONS) &&
          (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0);
 }
@@ -1390,13 +1374,10 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else {
 
       TICtx _ctx = {.err_stream = NULL};
-      char buf1[100] = {};
-      char buf2[100] = {};
-
-      type_error(&_ctx, constraints->src,
-                 "Constraint solving type mismatch %s != %s\n",
-                 t1->alias ? t1->alias : type_to_string(t1, buf1),
-                 t2->alias ? t2->alias : type_to_string(t2, buf2));
+      type_error(&_ctx, constraints->src, "Constraint solving type mismatch\n");
+      print_type_err(t1);
+      fprintf(stderr, " != ");
+      print_type_err(t2);
     }
 
     constraints = constraints->next;

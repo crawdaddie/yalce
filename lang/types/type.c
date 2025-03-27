@@ -444,6 +444,181 @@ char *type_to_string(Type *t, char *buffer) {
   return buffer;
 }
 
+void print_tc_list_to_stream(Type *t, FILE *stream) {
+  if (t->implements == NULL) {
+    return;
+  }
+
+  fprintf(stream, " with ");
+
+  TypeClass *implements = t->implements;
+  int first = 1;
+
+  while (implements != NULL) {
+    if (!first) {
+      fprintf(stream, ", ");
+    }
+
+    // Print typeclass name
+    fprintf(stream, "%s", implements->name);
+
+    // // Print typeclass arguments if any
+    // if (implements->num_args > 0) {
+    //   fprintf(stream, " ");
+    //   for (int i = 0; i < implements->num_args; i++) {
+    //     print_type_to_stream(implements->args[i], stream);
+    //     if (i < implements->num_args - 1) {
+    //       fprintf(stream, " ");
+    //     }
+    //   }
+    // }
+
+    first = 0;
+    implements = implements->next;
+  }
+}
+void print_type_to_stream(Type *t, FILE *stream) {
+  if (t == NULL) {
+    fprintf(stream, "null");
+    return;
+  }
+
+  // if (t->alias != NULL) {
+  //   fprintf(stream, "%s", t->alias);
+  //   return;
+  // }
+
+  switch (t->kind) {
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_BOOL:
+  case T_VOID:
+  case T_CHAR: {
+    char *m = type_name_mapping[t->kind];
+    fprintf(stream, "%s", m);
+    break;
+  }
+  case T_EMPTY_LIST: {
+    fprintf(stream, "[]");
+    break;
+  }
+
+  case T_TYPECLASS_RESOLVE: {
+    fprintf(stream, "tc resolve %s [ ", t->data.T_CONS.name);
+
+    int len = t->data.T_CONS.num_args;
+    for (int i = 0; i < len - 1; i++) {
+      print_type_to_stream(t->data.T_CONS.args[i], stream);
+    }
+
+    fprintf(stream, " : ");
+    print_type_to_stream(t->data.T_CONS.args[len - 1], stream);
+
+    fprintf(stream, "]");
+    break;
+  }
+  case T_CONS: {
+    if (is_forall_type(t)) {
+      fprintf(stream, "forall ");
+      int len = t->data.T_CONS.num_args;
+      for (int i = 0; i < len - 1; i++) {
+        print_type_to_stream(t->data.T_CONS.args[i], stream);
+      }
+
+      fprintf(stream, " : ");
+      print_type_to_stream(t->data.T_CONS.args[len - 1], stream);
+      break;
+    }
+
+    if (is_list_type(t)) {
+      print_type_to_stream(t->data.T_CONS.args[0], stream);
+      fprintf(stream, "[]");
+      break;
+    }
+
+    if (is_tuple_type(t)) {
+      fprintf(stream, "(");
+      int is_named = t->data.T_CONS.names != NULL;
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        if (is_named) {
+          fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
+        }
+        print_type_to_stream(t->data.T_CONS.args[i], stream);
+        if (i < t->data.T_CONS.num_args - 1) {
+          fprintf(stream, " * ");
+        }
+      }
+
+      fprintf(stream, " )");
+      break;
+    }
+
+    if (is_variant_type(t)) {
+      fprintf(stream, "%s ", t->data.T_CONS.name);
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        print_type_to_stream(t->data.T_CONS.args[i], stream);
+        if (i < t->data.T_CONS.num_args - 1) {
+          fprintf(stream, " | ");
+        }
+      }
+      break;
+    }
+
+    fprintf(stream, "%s", t->data.T_CONS.name);
+    if (t->data.T_CONS.num_args > 0) {
+      fprintf(stream, " of ");
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        if (t->data.T_CONS.names) {
+          fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
+        }
+        print_type_to_stream(t->data.T_CONS.args[i], stream);
+        if (i < t->data.T_CONS.num_args - 1) {
+          fprintf(stream, ", ");
+        }
+      }
+    }
+    print_tc_list_to_stream(t, stream);
+    break;
+  }
+  case T_VAR: {
+    uint64_t vname = (uint64_t)t->data.T_VAR;
+    if (vname < 65) {
+      vname += 65;
+      fprintf(stream, "%c", (char)vname);
+    } else {
+      fprintf(stream, "%s", t->data.T_VAR);
+    }
+
+    print_tc_list_to_stream(t, stream);
+    break;
+  }
+
+  case T_FN: {
+    Type *fn = t;
+
+    fprintf(stream, "(");
+    if (fn->is_coroutine_constructor) {
+      fprintf(stream, "[coroutine constructor]");
+    }
+
+    while (fn->kind == T_FN) {
+      if (fn->is_coroutine_instance) {
+        fprintf(stream, "[coroutine instance]");
+      }
+      print_type_to_stream(fn->data.T_FN.from, stream);
+      fprintf(stream, " -> ");
+      fn = fn->data.T_FN.to;
+    }
+    // If it's not a function type, it's the return type itself
+    print_type_to_stream(fn, stream);
+    fprintf(stream, ")");
+    break;
+  }
+  }
+}
+
+// Updated print functions that use the stream-based approach
 void print_type(Type *t) {
   if (!t) {
     printf("null\n");
@@ -455,8 +630,10 @@ void print_type(Type *t) {
   //   return;
   // }
 
-  char buf[400] = {};
-  printf("%s\n", type_to_string(t, buf));
+  fflush(stdout);
+  print_type_to_stream(t, stdout);
+  fflush(stdout);
+  printf("\n");
 }
 
 void print_type_err(Type *t) {
@@ -464,8 +641,9 @@ void print_type_err(Type *t) {
     fprintf(stderr, "null\n");
     return;
   }
-  char buf[200] = {};
-  fprintf(stderr, "%s", type_to_string(t, buf));
+
+  print_type_to_stream(t, stderr);
+  fprintf(stderr, "\n");
 }
 
 bool variant_contains_type(Type *variant, Type *member, int *idx) {

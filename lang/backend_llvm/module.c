@@ -33,31 +33,6 @@ bool is_exportable(Ast *stmt) {
   return true;
 }
 
-LLVMValueRef __codegen_module(Ast *module_ast, LLVMTypeRef llvm_module_type,
-                              JITLangCtx *ctx, ht *generic_storage,
-                              LLVMModuleRef llvm_module_ref,
-                              LLVMBuilderRef builder) {
-  Type *module_type = module_ast->md;
-  int len = module_ast->data.AST_LAMBDA.body->data.AST_BODY.len;
-  Ast **stmts = module_ast->data.AST_LAMBDA.body->data.AST_BODY.stmts;
-
-  LLVMValueRef mod_struct_val = LLVMGetUndef(llvm_module_type);
-
-  for (int i = 0; i < len; i++) {
-    Type *t = module_type->data.T_CONS.args[i];
-    Ast *stmt = stmts[i];
-    if (t->kind == T_FN && is_generic(t)) {
-      add_module_generic(stmt, ctx, generic_storage);
-
-      continue;
-    }
-
-    LLVMValueRef val = codegen(stmt, ctx, llvm_module_ref, builder);
-    mod_struct_val = LLVMBuildInsertValue(builder, mod_struct_val, val, i, "");
-  }
-  return mod_struct_val;
-}
-
 JITLangCtx *heap_alloc_ctx(JITLangCtx *ctx) {
   char *mem = malloc(sizeof(JITLangCtx) + sizeof(ht) + sizeof(StackFrame));
   JITLangCtx *module_ctx = (JITLangCtx *)mem;
@@ -74,7 +49,7 @@ JITLangCtx *heap_alloc_ctx(JITLangCtx *ctx) {
   return module_ctx;
 }
 
-#define PRINT_MODULE_AT_IMPORT
+// #define PRINT_MODULE_AT_IMPORT
 
 LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
                             LLVMModuleRef llvm_module_ref,

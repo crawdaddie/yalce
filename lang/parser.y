@@ -368,8 +368,8 @@ fn_signature:
   ;
 
 tuple_type:
-    type_atom '*' type_atom         { $$ = ast_tuple_type($1, $3); }
-  | tuple_type '*' type_atom        { $$ = ast_tuple_type_push($1, $3); }
+    type_atom ',' type_atom         { $$ = ast_tuple_type($1, $3); }
+  | tuple_type ',' type_atom        { $$ = ast_tuple_type_push($1, $3); }
   ;
 
 type_expr:
@@ -384,7 +384,7 @@ type_atom:
     IDENTIFIER                { $$ = ast_identifier($1); }
   | IDENTIFIER '=' INTEGER    { $$ = ast_let(ast_identifier($1), AST_CONST(AST_INT, $3), NULL); } 
   | IDENTIFIER 'of' type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); } 
-  | IDENTIFIER ':' type_atom  { $$ = ast_tuple_type_single(ast_assoc(ast_identifier($1), $3)); } 
+  | IDENTIFIER ':' type_atom  { $$ = ast_assoc(ast_identifier($1), $3); } 
   | '(' type_expr ')'         { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }
   ;

@@ -42,6 +42,24 @@ LLVMTypeRef tuple_type(Type *tuple_type, TypeEnv *env, LLVMModuleRef module) {
   return llvm_tuple_type;
 }
 
+LLVMTypeRef named_struct_type(const char *name, Type *tuple_type, TypeEnv *env,
+                              LLVMModuleRef module) {
+  int len = tuple_type->data.T_CONS.num_args;
+  LLVMTypeRef element_types[len];
+  for (int i = 0; i < len; i++) {
+
+    if (tuple_type->data.T_CONS.args[i]->kind == T_FN) {
+      element_types[i] = GENERIC_PTR;
+    } else {
+      element_types[i] =
+          type_to_llvm_type(tuple_type->data.T_CONS.args[i], env, module);
+    }
+  }
+  LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
+
+  return llvm_tuple_type;
+}
+
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env);
 
 // Function to create an LLVM list type forward decl

@@ -1,19 +1,9 @@
-# let X = module
-#   let t = 2;
-#   let z = fn (a, b): (Int * Int) ->
-#     a * b
-#   ;;
-#
-#   let zg = fn (a, b) ->
-#     a * b
-#   ;;
-# ;
-#
-# print `{X.zg (3, 2)}\n`;
-# print `{X.z (3, 2)}\n`;
+let Value = module
+  let z = fn (a, b): (Int * Int) ->
+    a * b
+  ;;
 
-open examples/Mod in
-z 1 2
+;
 
 
 

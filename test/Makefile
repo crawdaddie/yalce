@@ -22,6 +22,7 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
              $(LANG_SRC_DIR)/input.c \
              $(LANG_SRC_DIR)/string_proc.c \
              $(LANG_SRC_DIR)/serde.c \
+             $(LANG_SRC_DIR)/modules.c \
              $(LEX_OUTPUT) \
              $(YACC_OUTPUT)
 

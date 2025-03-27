@@ -159,8 +159,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
 
-  int args_len = ast->data.AST_APPLICATION.len;
-  int expected_args_len = fn_type_args_len(sym->symbol_type);
   Type *symbol_type = sym->symbol_type;
 
   if (sym->type == STYPE_GENERIC_FUNCTION &&
@@ -169,6 +167,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
         ast, ctx, module, builder);
   }
+
+  int args_len = ast->data.AST_APPLICATION.len;
+  int expected_args_len = fn_type_args_len(sym->symbol_type);
 
   if (is_coroutine_constructor_type(symbol_type)) {
 

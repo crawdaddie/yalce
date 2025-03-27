@@ -65,7 +65,6 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
   LLVMAddGlobalMapping(*engine, size_global, ctx->global_storage_capacity);
 }
 
-
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder,
@@ -141,7 +140,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  // LLVMDumpModule(module);
+  LLVMDumpModule(module);
   printf("> ");
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
@@ -288,7 +287,7 @@ int jit(int argc, char **argv) {
       if (strncmp("%include", input, 8) == 0) {
         prog = parse_repl_include(input);
         // print_ast(prog);
-      }  else {
+      } else {
         prog = parse_input(input, dirname);
       }
 
