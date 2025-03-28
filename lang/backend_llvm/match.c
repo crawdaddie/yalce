@@ -462,16 +462,29 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
   }
 
   case AST_LIST: {
-    if (binding->data.AST_LIST.len == 0) {
-      Type *list_el_type = val_type->data.T_CONS.args[0];
-      LLVMTypeRef llvm_list_el_type =
-          type_to_llvm_type(list_el_type, ctx->env, module);
+    Type *list_el_type = val_type->data.T_CONS.args[0];
+    LLVMTypeRef llvm_list_el_type =
+        type_to_llvm_type(list_el_type, ctx->env, module);
 
+    if (binding->data.AST_LIST.len == 0) {
       return ll_is_null(val, llvm_list_el_type, builder);
     }
 
-    fprintf(stderr, "Error - not implemented literal list??\n");
-    break;
+    LLVMValueRef l = val;
+    LLVMValueRef res = _TRUE;
+    for (int i = 0; i < binding->data.AST_LIST.len; i++) {
+      Ast *b = binding->data.AST_LIST.items + i;
+      LLVMValueRef head = ll_get_head_val(l, llvm_list_el_type, builder);
+      res = LLVMBuildAnd(
+          builder, res,
+          codegen_pattern_binding(b, head, list_el_type, ctx, module, builder),
+          "");
+      l = ll_get_next(l, llvm_list_el_type, builder);
+    }
+    return res;
+    //
+    // fprintf(stderr, "Error - not implemented literal list??\n");
+    // break;
   }
   case AST_MATCH_GUARD_CLAUSE: {
     LLVMValueRef test_val =

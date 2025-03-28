@@ -1,0 +1,23 @@
+%test
+
+let test_match_list_literals = fn () ->
+  let x = [1, 2] in
+  match x with
+  | [1, 2] -> true
+  | _ -> false
+;;
+
+
+let test_match_list_to_vars = fn () ->
+  let x = [1, 2] in
+  match x with
+  | [a, b] -> a == 1 && b == 2 
+  | _ -> false
+;;
+
+let test_match_list_to_vars = fn () ->
+  let x = [1, 2, 3] in
+  match x with
+  | [a, b, c] -> a == 1 && b == 2 && c == 3 
+  | _ -> false
+;;

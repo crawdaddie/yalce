@@ -1,21 +1,13 @@
 %test
 
-let test_and = fn () ->
-  (true && false) == false
-;;
+let test_and = (true && false) == false;
 
-let test_or = fn () ->
-  (true || false) == true
-;;
+let test_or = (true || false) == true;
 
-let test_or1 = fn () ->
-  (true || true) == true
-;;
+let test_or1 = (true || true) == true;
 
-let test_and1 = fn () ->
-  (true && true) == true
-;;
+let test_and1 = (true && true) == true;
 
-let test_and2 = fn () ->
+let test_and2 =
   false == (false && false)
-;;
+;
