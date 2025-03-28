@@ -1236,6 +1236,7 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   char *mod_name = path_identifier.chars;
   char *mod_id_chars = get_mod_name_from_path_identifier(mod_name);
+  // printf("import %s", mod_name);
 
   int mod_name_len = strlen(__import_current_dir) + 1 + strlen(mod_name) + 4;
   char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);

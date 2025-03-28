@@ -67,7 +67,7 @@ Ast* ast_root = NULL;
 
 
 
-%right '.' 
+%left '.' 
 %left '|'
 %left PIPE
 %left DOUBLE_AT
@@ -127,7 +127,7 @@ expr:
   | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
-  | '&' simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_AMPERSAND, $2); }
+  /*| '&' simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_AMPERSAND, $2); } */
   | '(' '*' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"*", 1}), $4); }
   | '(' '/' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"/", 1}), $4); }
   | '(' '+' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"+", 1}), $4); }
@@ -147,7 +147,7 @@ expr:
   | expr EQ expr                      { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
-  | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
+  | expr '.' expr                     { $$ = ast_record_access($1, $3); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
@@ -158,6 +158,8 @@ expr:
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
   | IMPORT PATH_IDENTIFIER            { $$ = ast_import_stmt($2, false); }
   | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); }
+  | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); }
+  | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); }
   ;
 
 simple_expr:
@@ -222,7 +224,7 @@ let_binding:
   | IMPORT PATH_IDENTIFIER IN expr  { $$ = ast_let(NULL, ast_import_stmt($2, false), $4); }
   | OPEN PATH_IDENTIFIER IN expr    { $$ = ast_let(NULL, ast_import_stmt($2, true), $4); }
   */
-  | OPEN PATH_IDENTIFIER IN expr     { $$ = ast_let(NULL, ast_import_stmt($2, true), $4); }
+
   ;
 
 extern_typed_signature:
@@ -384,7 +386,7 @@ type_atom:
     IDENTIFIER                { $$ = ast_identifier($1); }
   | IDENTIFIER '=' INTEGER    { $$ = ast_let(ast_identifier($1), AST_CONST(AST_INT, $3), NULL); } 
   | IDENTIFIER 'of' type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); } 
-  | IDENTIFIER ':' type_atom  { $$ = ast_assoc(ast_identifier($1), $3); } 
+  | IDENTIFIER ':' type_atom  { $$ = ast_tuple_type_single(ast_assoc(ast_identifier($1), $3)); } 
   | '(' type_expr ')'         { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }
   ;

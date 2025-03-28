@@ -229,6 +229,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                     return IDENTIFIER;
                 }
 
+
 .               { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 %%
 int yywrap(void) {

@@ -1,8 +1,7 @@
-#! env ylc
-%include Array
-%include ../engine/bindings/Sched
-%include ../engine/bindings/Synth
-%include Math
+open Array;
+open ../engine/bindings/Sched;
+open ../engine/bindings/Synth;
+open Math;
 
 
 let st = (fn () -> 
@@ -53,40 +52,40 @@ let h = fn frame_offset ->
   )
 ;;
 
-let ksamp = load_soundfile @@ cstr "/Users/adam/Desktop/STRANJAH-FREE-SAMPLE-PACK-VOL-1/kicks/STRANJAH_1_KICK_04.wav";
-
-let kick_tpl = (
-  fn () -> 
-    let trig = inlet 0.0;
-    bufplayer_trig_node (inlet 1.) 2. 0. trig
-    |> tanh_node 1.5
-    |> mul2_node 8.
-    ;
-)
-|> compile_blob_template ;
-
-let kick_syn = fn offset ->
-  kick_tpl
-  |> instantiate_template [(0, 0.)]
-  |> set_input_buf_immediate 1 ksamp
-  |> play_node_offset offset
-;;
-
-
-let kick_setter = fn (dur, synth) frame_offset -> 
-  set_input_trig_offset synth 0 frame_offset;
-  ()
-;;
-
-let k = fn frame_offset -> 
-  (
-    \array_choose [|0.5,|],
-    # \array_choose times,
-    kick_syn frame_offset,
-  ) |> run_in_scheduler schedule_event kick_setter
-;;
+# let ksamp = load_soundfile @@ cstr "/Users/adam/Desktop/STRANJAH-FREE-SAMPLE-PACK-VOL-1/kicks/STRANJAH_1_KICK_04.wav";
+#
+# let kick_tpl = (
+#   fn () -> 
+#     let trig = inlet 0.0;
+#     bufplayer_trig_node (inlet 1.) 2. 0. trig
+#     |> tanh_node 1.5
+#     |> mul2_node 8.
+#     ;
+# )
+# |> compile_blob_template ;
+#
+# let kick_syn = fn offset ->
+#   kick_tpl
+#   |> instantiate_template [(0, 0.)]
+#   |> set_input_buf_immediate 1 ksamp
+#   |> play_node_offset offset
+# ;;
+#
+#
+# let kick_setter = fn (dur, synth) frame_offset -> 
+#   set_input_trig_offset synth 0 frame_offset;
+#   ()
+# ;;
+#
+# let k = fn frame_offset -> 
+#   (
+#     \array_choose [|0.5,|],
+#     # \array_choose times,
+#     kick_syn frame_offset,
+#   ) |> run_in_scheduler schedule_event kick_setter
+# ;;
 
 
 defer_quant 1. h;
-defer_quant 1. k;
+# defer_quant 1. k;
   

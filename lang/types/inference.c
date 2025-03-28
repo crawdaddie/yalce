@@ -332,18 +332,22 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_RECORD_ACCESS: {
     Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
-    // print_type(rec_type);
     if (rec_type->kind != T_CONS) {
       return NULL;
     }
+
     if (rec_type->data.T_CONS.names == NULL) {
       return NULL;
     }
+
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
 
     for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+      printf("compare  %s : %s", rec_type->data.T_CONS.names[i], member_name);
+
       if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
+
         type = rec_type->data.T_CONS.args[i];
         ast->data.AST_RECORD_ACCESS.index = i;
         break;

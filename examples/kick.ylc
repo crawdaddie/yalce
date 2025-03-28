@@ -1,7 +1,7 @@
-%include Math
-%include Array
-%include ../engine/bindings/Synth
-%include ../engine/bindings/Sched
+open Math;
+open Array;
+open engine/bindings/Synth;
+open engine/bindings/Sched;
 
 let ksamp = load_soundfile @@ cstr "/Users/adam/Desktop/STRANJAH-FREE-SAMPLE-PACK-VOL-1/kicks/STRANJAH_1_KICK_04.wav";
 
