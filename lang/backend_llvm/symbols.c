@@ -1,6 +1,7 @@
 #include "backend_llvm/symbols.h"
 
 #include "adt.h"
+#include "codegen.h"
 #include "coroutines.h"
 #include "function.h"
 #include "globals.h"
@@ -47,6 +48,7 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
       fprintf(stderr, "Error: record %s not found in scope %d",
               ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value,
               ctx->stack_ptr);
+      print_location(__current_ast);
       return NULL;
     }
     if (record_symbol->type == STYPE_MODULE) {
@@ -77,6 +79,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
           stderr,
           "codegen identifier failed enum '%s' not found in scope %d %s:%d\n",
           chars, ctx->stack_ptr, __FILE__, __LINE__);
+      print_codegen_location();
       return NULL;
     }
 
@@ -97,6 +100,8 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         stderr,
         "codegen identifier failed symbol '%s' not found in scope %d %s:%d\n",
         chars, ctx->stack_ptr, __FILE__, __LINE__);
+
+    print_codegen_location();
     return NULL;
   }
   switch (sym->type) {
@@ -271,6 +276,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                 "failed\n");
         print_ast_err(binding);
         print_ast_err(expr);
+        print_codegen_location();
         return NULL;
       }
     } else {
@@ -344,6 +350,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   if (!expr_val) {
     fprintf(stderr, "Error - could not compile value for binding to %s\n",
             binding->data.AST_IDENTIFIER.value);
+    print_codegen_location();
     return NULL;
   }
 
@@ -356,6 +363,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                     "failed\n");
     print_ast_err(binding);
     print_ast_err(expr);
+    print_codegen_location();
     return NULL;
   }
 

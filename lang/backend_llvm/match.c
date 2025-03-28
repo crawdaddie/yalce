@@ -469,6 +469,9 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 
       return ll_is_null(val, llvm_list_el_type, builder);
     }
+
+    fprintf(stderr, "Error - not implemented literal list??\n");
+    break;
   }
   case AST_MATCH_GUARD_CLAUSE: {
     LLVMValueRef test_val =

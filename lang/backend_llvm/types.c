@@ -1,6 +1,7 @@
 #include "backend_llvm/types.h"
 #include "adt.h"
 #include "backend_llvm/array.h"
+#include "codegen.h"
 #include "list.h"
 #include "types/inference.h"
 #include "types/type.h"
@@ -96,14 +97,20 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
       Type *lu = env_lookup(env, type->data.T_VAR);
 
       if (!lu) {
-        fprintf(stderr, "Error type var %s not found in environment! %s:%d\n",
+        fprintf(stderr,
+                "Error type var %s not found in environment! [compiler source: "
+                "%s:%d]\n",
                 type->data.T_VAR, __FILE__, __LINE__);
+        print_location(__current_ast);
         return NULL;
       }
 
       if (lu->kind == T_VAR && types_equal(lu, type)) {
-        fprintf(stderr, "Error: type %s not found in env! %s:%d\n",
+        fprintf(stderr,
+                "Error: type %s not found in env! [compiler source: [%s:%d]\n",
                 type->data.T_VAR, __FILE__, __LINE__);
+
+        print_location(__current_ast);
         return NULL;
       }
       return type_to_llvm_type(lu, env, module);

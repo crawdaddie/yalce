@@ -80,9 +80,13 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
   return func;
 }
+Ast *__current_ast;
 
+void print_codegen_location() { print_location(__current_ast); }
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
+
+  __current_ast = ast;
   // printf("\n\nCODEGEN FOR:\n");
   // print_ast(ast);
   // printf("\n\n");
