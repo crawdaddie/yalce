@@ -1158,7 +1158,7 @@ int main() {
     &t_int);
 
   ({
-    Type mod_type = TCONS("Module", 2, &t_int,
+    Type mod_type = TCONS(TYPE_NAME_MODULE, 2, &t_int,
                           &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`3")), &t_int));
     const char *names[2] = {"x", "size"};
     mod_type.data.T_CONS.names = names;

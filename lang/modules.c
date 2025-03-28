@@ -1,10 +1,12 @@
 #include "./modules.h"
+#include "./types/common.h"
 #include "ht.h"
 #include "input.h"
 #include "serde.h"
 #include "types/inference.h"
 #include "types/type.h"
 #include <stdlib.h>
+#include <string.h>
 
 ht module_registry;
 
@@ -15,6 +17,15 @@ Ast *create_module_from_root(Ast *ast_root) {
   ast_root = ast_lambda(NULL, ast_root);
   ast_root->tag = AST_MODULE;
   return ast_root;
+}
+
+bool is_module_record_ast(Ast *ast) {
+  Type *rec_type = ast->data.AST_RECORD_ACCESS.record->md;
+  if (rec_type->kind == T_CONS &&
+      CHARS_EQ(rec_type->data.T_CONS.name, TYPE_NAME_MODULE)) {
+    return true;
+  }
+  return false;
 }
 
 Ast *parse_module(const char *filename) {

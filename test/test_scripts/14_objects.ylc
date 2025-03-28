@@ -5,5 +5,5 @@ let test_record_access = fn () ->
     b: 2,
     f: (fn s: (Int) t: (Int) -> s + t)
   ) in
-  x.f 1 2 == 3
+  (x.f) 1 2 == 3
 ;;

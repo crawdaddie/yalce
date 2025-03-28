@@ -127,6 +127,7 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_SOME    "Some"
 #define TYPE_NAME_NONE    "None"
 #define TYPE_NAME_QUEUE   "Queue"
+#define TYPE_NAME_MODULE   "Module"
 
 #define TYPE_NAME_OP_ADD  "+"
 #define TYPE_NAME_OP_SUB  "-"

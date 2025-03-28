@@ -1,10 +1,13 @@
 #include "backend_llvm/application.h"
+#include "../modules.h"
+#include "codegen.h"
 #include "coroutines.h"
 #include "function.h"
 #include "list.h"
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/type.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 
@@ -89,7 +92,6 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
   LLVMValueRef res = LLVMBuildCall2(builder, llvm_callable_type, callable,
                                     app_vals, args_len, "call_func");
   // if (types_equal(callable_type, &t_void)) {
-  //
   //   res = LLVMGetUndef(LLVMVoidType());
   // }
   return res;
@@ -134,19 +136,24 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
-  // if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
-  //
-  //   LLVMValueRef callable =
-  //       codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
-  //
-  //   if (!callable) {
-  //     fprintf(stderr, "Error: could not access record\n");
-  //     return NULL;
-  //   }
-  //
-  //   return call_callable(ast, expected_fn_type, callable, ctx, module,
-  //   builder);
-  // }
+  if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
+      !is_module_record_ast(ast->data.AST_APPLICATION.function)) {
+
+    Ast *record_ast =
+        ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record;
+    Type *record_type = record_ast->md;
+
+    LLVMValueRef callable =
+        codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
+
+    if (!callable) {
+      fprintf(stderr, "Error: could not access record\n");
+      print_codegen_location();
+      return NULL;
+    }
+
+    return call_callable(ast, expected_fn_type, callable, ctx, module, builder);
+  }
 
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
@@ -156,6 +163,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   if (!sym) {
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);
+    print_codegen_location();
     return NULL;
   }
 
@@ -163,7 +171,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (sym->type == STYPE_GENERIC_FUNCTION &&
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
-
     return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
         ast, ctx, module, builder);
   }
@@ -172,7 +179,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   int expected_args_len = fn_type_args_len(sym->symbol_type);
 
   if (is_coroutine_constructor_type(symbol_type)) {
-
     ast->md = fn_return_type(symbol_type);
 
     if (sym->type == STYPE_GENERIC_FUNCTION) {
@@ -194,7 +200,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
-
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);
 

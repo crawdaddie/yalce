@@ -1562,7 +1562,8 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
 
   TypeEnv *env = module_ctx.env;
 
-  Type *module_struct_type = create_cons_type("Module", len, member_types);
+  Type *module_struct_type =
+      create_cons_type(TYPE_NAME_MODULE, len, member_types);
   module_struct_type->data.T_CONS.names = names;
   return module_struct_type;
 }

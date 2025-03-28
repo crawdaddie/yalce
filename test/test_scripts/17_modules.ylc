@@ -1,0 +1,15 @@
+%test
+let M = module
+  let x = 1;
+  let z = fn a: (Int) b: (Int) -> 
+    a + b
+  ;;
+
+  let zg = fn a b ->
+    a + b
+  ;;
+;
+
+let test_module_member_fn = (M.z 1 2) == 3 ;
+let test_module_member = M.x == 1 ;
+let test_module_generic_member = (M.zg 1 2) == 3 
