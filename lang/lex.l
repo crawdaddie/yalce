@@ -83,8 +83,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return IDENTIFIER;
                         }
 
-[a-zA-Z_][a-zA-Z0-9_\/]*  {
-
+(\.\.\/)*[a-zA-Z_][a-zA-Z0-9_\/]*  {
                           int len = yyleng;
                           yylval.vident.chars = strdup(yytext); 
                           yylval.vident.length = len;

@@ -229,3 +229,5 @@ struct sockaddr *create_server_addr(int af_inet, int inaddr_any, int port) {
   // printf("sizeof sockaddr_in %lu\n", sizeof(struct sockaddr_in));
   return (struct sockaddr *)_server_addr;
 }
+
+double relu_d(double i) { return i < 0. ? 0. : i; }

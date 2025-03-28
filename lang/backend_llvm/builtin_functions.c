@@ -448,8 +448,6 @@ LLVMValueRef ArraySizeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
 
   Ast *array_ast = ast->data.AST_APPLICATION.args;
-  print_ast(array_ast);
-  print_type(array_ast->md);
 
   Type *arr_type = array_ast->md;
   Type *el_type = arr_type->data.T_CONS.args[0];

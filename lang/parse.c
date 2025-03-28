@@ -1226,6 +1226,7 @@ AstVisitor *ast_visit(Ast *ast, AstVisitor *visitor) {
 }
 
 Ast *ast_module(Ast *lambda) {
+
   lambda->tag = AST_MODULE;
   return lambda;
 }

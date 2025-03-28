@@ -18,10 +18,7 @@
 LLVMValueRef GenericConsConstructorHandler(Ast *ast, JITLangCtx *ctx,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder) {
-  printf("generic constructor handler\n");
-  print_ast(ast);
   Type *expected_type = ast->md;
-  print_type(expected_type);
   if (expected_type->kind == T_CONS) {
     LLVMTypeRef struct_type = named_struct_type(
         expected_type->data.T_CONS.name, expected_type, ctx->env, module);
@@ -239,8 +236,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_TYPE_DECL: {
     Type *t = ast->md;
     if (is_generic(t) && t->kind == T_CONS) {
-      printf("constructor symbol for: ");
-      print_type(t);
       const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
@@ -250,7 +245,14 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
+    } else {
+      fprintf(stderr,
+              "Warning - constructor not implemented for type declaration ");
+      print_ast_err(ast);
+      print_type_err(ast->md);
+      return NULL;
     }
+
     break;
   }
 

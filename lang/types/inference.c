@@ -23,9 +23,6 @@ void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type);
 void apply_substitutions_rec(Ast *ast, Substitution *subst);
 Substitution *solve_constraints(TypeConstraint *constraints);
 
-#define IS_PRIMITIVE_TYPE(t) ((1 << t->kind) & TYPE_FLAGS_PRIMITIVE)
-#define CHARS_EQ(a, b) (strcmp(a, b) == 0)
-
 Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node);
 
 void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...) {
@@ -335,6 +332,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_RECORD_ACCESS: {
     Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
+    // print_type(rec_type);
     if (rec_type->kind != T_CONS) {
       return NULL;
     }
@@ -813,7 +811,6 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   Type *resolved_type = apply_substitution(subst, fn_type);
   apply_substitutions_rec(ast, subst);
   ast->data.AST_APPLICATION.function->md = resolved_type;
-  print_type(resolved_type);
   return resolved_type;
 }
 
@@ -1518,35 +1515,41 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
 }
 
 Type *infer_module(Ast *ast, TICtx *ctx) {
-  Ast *body = ast->data.AST_LAMBDA.body;
+  Ast body;
+  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+    body = (Ast){
+        AST_BODY,
+        .data = {.AST_BODY = {.len = 1, .stmts = &ast->data.AST_LAMBDA.body}}};
+  } else {
+    body = *ast->data.AST_LAMBDA.body;
+  }
+
   TICtx module_ctx = *ctx;
   TypeEnv *env_start = module_ctx.env;
 
   Ast *stmt;
-  int len = body->data.AST_BODY.len;
+  int len = body.data.AST_BODY.len;
   Type **member_types = talloc(sizeof(Type *) * len);
   const char **names = talloc(sizeof(char *) * len);
 
   for (int i = 0; i < len; i++) {
-    stmt = body->data.AST_BODY.stmts[i];
-    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL))) {
+    stmt = body.data.AST_BODY.stmts[i];
+    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
+          (stmt->tag == AST_IMPORT))) {
       return type_error(ctx, stmt,
                         "Please only have let statements and type declarations "
                         "in a module\n");
       return NULL;
     }
 
-    // if ((stmt->tag == AST_LET) && (stmt->data.AST_LET.in_expr != NULL)) {
-    //   return type_error(ctx, stmt,
-    //                     "Please don't use in-continuation in a module\n");
-    //   return NULL;
-    // }
-
     Type *t = infer(stmt, &module_ctx);
     member_types[i] = t;
 
     if (stmt->tag == AST_TYPE_DECL) {
       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+    } else if (stmt->tag == AST_IMPORT) {
+
+      names[i] = stmt->data.AST_IMPORT.identifier;
     } else {
       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
     }
@@ -1561,6 +1564,5 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
 
   Type *module_struct_type = create_cons_type("Module", len, member_types);
   module_struct_type->data.T_CONS.names = names;
-
   return module_struct_type;
 }

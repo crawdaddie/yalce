@@ -11,6 +11,7 @@ ht module_registry;
 void init_module_registry() { ht_init(&module_registry); }
 
 Ast *create_module_from_root(Ast *ast_root) {
+
   ast_root = ast_lambda(NULL, ast_root);
   ast_root->tag = AST_MODULE;
   return ast_root;

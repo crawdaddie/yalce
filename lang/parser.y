@@ -67,7 +67,7 @@ Ast* ast_root = NULL;
 
 
 
-%left '.' 
+%right '.' 
 %left '|'
 %left PIPE
 %left DOUBLE_AT
@@ -147,7 +147,7 @@ expr:
   | expr EQ expr                      { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
-  | expr '.' expr                     { $$ = ast_record_access($1, $3); }
+  | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }

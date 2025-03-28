@@ -98,7 +98,9 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   }
 
   case AST_IDENTIFIER: {
-    if (CHARS_EQ(expr->data.AST_IDENTIFIER.value, binding_name)) {
+
+    if (binding_name &&
+        CHARS_EQ(expr->data.AST_IDENTIFIER.value, binding_name)) {
       if (!can_hold_recursive_ref(last_ptr_type)) {
         return _type_error(
             expr,
@@ -282,6 +284,6 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
       *env = env_extend(*env, member->data.T_CONS.name, type);
     }
   }
-
+  binding_name = NULL;
   return type;
 }
