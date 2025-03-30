@@ -1149,7 +1149,7 @@ int main() {
     // print_ast(b2);
   });
 
-  T("type Tensor = (Array of t) * (Array of Int) * (Array of Int);\n"
+  T("type Tensor = (Array of t, Array of Int, Array of Int);\n"
     "let tensor_ndims = fn (_, sizes, _) -> \n"
     "  array_size sizes \n"
     ";; \n"
@@ -1179,7 +1179,7 @@ int main() {
     "  | Pow\n"
     "  | Noop\n"
     "  ;\n"
-    "type Value = (data: Double * children: List of Value * op: Op * grad: "
+    "type Value = (data: Double, children: List of Value, op: Op, grad: "
     "Double);\n"
     "let add = fn a: (Value) b: (Value) ->\n"
     "  (\n"
