@@ -896,7 +896,19 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope,
   }
 
   case AST_TUPLE: {
-    for (int i = 0; i < binding->data.AST_LIST.len; i++) {
+
+    int len = binding->data.AST_LIST.len;
+    if (expr_type->kind == T_VAR) {
+      Type **cons_els = talloc(sizeof(Type *) * len);
+      for (int i = 0; i < len; i++) {
+        cons_els[i] = next_tvar();
+      }
+      *expr_type = (Type){T_CONS, .data = {.T_CONS = {.name = TYPE_NAME_TUPLE,
+                                                      .args = cons_els,
+                                                      .num_args = len}}};
+    }
+
+    for (int i = 0; i < len; i++) {
       Ast *b = binding->data.AST_LIST.items + i;
       env = bind_in_env(env, b, expr_type->data.T_CONS.args[i], scope,
                         current_fn);
@@ -944,6 +956,8 @@ void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type) {
 }
 
 Type *infer_let_binding(Ast *ast, TICtx *ctx) {
+  // printf("infer let\n");
+  // print_ast(ast);
 
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
@@ -1058,11 +1072,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
       ctx->constraints = constraints_extend(ctx->constraints, t1, t2);
     }
   }
-  // print_constraints(body_ctx.constraints);
 
   Substitution *subst = solve_constraints(body_ctx.constraints);
-  // printf("lambda subs\n");
-  // print_subst(subst);
 
   ast->md = apply_substitution(subst, ast->md);
 
@@ -1202,11 +1213,19 @@ Type *apply_substitution(Substitution *subst, Type *t) {
     return t;
   }
   case T_VAR: {
-
+    if (t->is_recursive_type_ref) {
+      return t;
+    }
     Substitution *s = subst;
+
     while (s) {
       if (types_equal(s->from, t)) {
         Type *to = s->to;
+        // if (to->kind == T_CONS &&
+        //     CHARS_EQ(t->data.T_VAR, to->data.T_CONS.name)) {
+        //   return to;
+        // }
+
         if (is_generic(to)) {
           return apply_substitution(subst, to);
         } else {
@@ -1562,7 +1581,8 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
 
   TypeEnv *env = module_ctx.env;
 
-  Type *module_struct_type = create_cons_type("Module", len, member_types);
+  Type *module_struct_type =
+      create_cons_type(TYPE_NAME_MODULE, len, member_types);
   module_struct_type->data.T_CONS.names = names;
   return module_struct_type;
 }

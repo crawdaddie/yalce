@@ -1,10 +1,12 @@
 #include "./modules.h"
+#include "./types/common.h"
 #include "ht.h"
 #include "input.h"
 #include "serde.h"
 #include "types/inference.h"
 #include "types/type.h"
 #include <stdlib.h>
+#include <string.h>
 
 ht module_registry;
 
@@ -17,6 +19,10 @@ Ast *create_module_from_root(Ast *ast_root) {
   return ast_root;
 }
 
+bool is_module_ast(Ast *ast) {
+  Type *t = ast->md;
+  return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
+}
 Ast *parse_module(const char *filename) {
 
   __import_current_dir = get_dirname(filename);

@@ -18,4 +18,6 @@ int get_import_ref(Ast *ast, void **ref, Ast **module_ast);
 void set_import_ref(Ast *ast, void *ref);
 
 YLCModule *get_imported_module(Ast *ast);
+
+bool is_module_ast(Ast *ast);
 #endif

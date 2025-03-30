@@ -8,9 +8,7 @@ void reset_type_var_counter() { type_var_counter = 0; }
 Type *next_tvar() {
   Type *tvar = talloc(sizeof(Type));
   char *tname = talloc(sizeof(char) * 3);
-  for (int i = 0; i < 3; i++) {
-    tname[i] = 0;
-  }
+
   sprintf(tname, "`%d", type_var_counter);
   // *tname = (char)type_var_counter;
 
@@ -754,6 +752,9 @@ void *talloc(size_t size) {
     return NULL;
   }
   void *mem = _tstorage.data + _tstorage.size;
+  for (int i = 0; i < size; i++) {
+    *(char *)(mem + i) = 0;
+  }
   _tstorage.size += size;
   return mem;
 }
@@ -938,16 +939,20 @@ Type *create_coroutine_instance_type(Type *ret_type) {
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
   Type *copy = talloc(sizeof(Type));
-  // *copy = *original;
-  copy->kind = original->kind;
-  copy->alias = original->alias;
-  copy->constructor = original->constructor;
-  copy->implements = original->implements;
-  copy->is_recursive_fn_ref = original->is_recursive_fn_ref;
-  copy->is_coroutine_constructor = original->is_coroutine_constructor;
-  copy->is_coroutine_instance = original->is_coroutine_instance;
-  copy->scope = original->scope;
-  copy->yield_boundary = original->yield_boundary;
+  *copy = *original;
+
+  // copy->kind = original->kind;
+  // copy->alias = original->alias;
+  // copy->constructor = original->constructor;
+  // copy->implements = original->implements;
+  //
+  // copy->is_recursive_fn_ref = original->is_recursive_fn_ref;
+  // copy->is_coroutine_constructor = original->is_coroutine_constructor;
+  // copy->is_coroutine_instance = original->is_coroutine_instance;
+  // copy->is_recursive_type_ref = original->is_recursive_type_ref;
+  //
+  // copy->scope = original->scope;
+  // copy->yield_boundary = original->yield_boundary;
 
   // for (int i = 0; i < original->num_implements; i++) {
   //   add_typeclass(copy, original->implements[i]);

@@ -1,4 +1,3 @@
-%include ansi_fmt
 let iter_all_void = fn () ->
   let co_void = fn () ->
     yield 1.;
@@ -8,7 +7,7 @@ let iter_all_void = fn () ->
 
   let inst = co_void () in
 
-  print `{ANSI_MAGENTA}{ANSI_BOLD}## simple coroutine 1. -> 2. -> 3. -> done{ANSI_RESET}
+  print `## simple coroutine 1. -> 2. -> 3. -> done
   {inst ()}
   {inst ()}
   {inst ()}
@@ -27,7 +26,7 @@ let rec = fn () ->
   ;;
 
   let inst = co_void_rec () in
-  print `{ANSI_MAGENTA}{ANSI_BOLD}## recursive coroutine 1. -> 2. -> 1. -> 2. ...{ANSI_RESET}
+  print `## recursive coroutine 1. -> 2. -> 1. -> 2. ...
   {inst ()}
   {inst ()}
   {inst ()}
@@ -38,6 +37,7 @@ let rec = fn () ->
 ;;
 
 rec ();
+# #
 let seq = fn () ->
 
   let ne = fn () ->
@@ -53,7 +53,7 @@ let seq = fn () ->
   ;;
 
   let inst = co_void () in
-  print `{ANSI_MAGENTA}{ANSI_BOLD}## embed coroutine in another 1. -> 2. -> 300. -> 400. -> 3. -> done{ANSI_RESET}
+  print `## embed coroutine in another 1. -> 2. -> 300. -> 400. -> 3. -> done
   {inst ()}
   {inst ()}
   {inst ()}
@@ -97,8 +97,8 @@ let wrapped_cor = fn () ->
 
   let inst = (co_void () |> cor_wrap_effect wrapper);
 
-  print `#{ANSI_MAGENTA}{ANSI_BOLD}# coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
-## (effects printed above ^^){ANSI_RESET}
+  print `## coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
+## (effects printed above ^^)
   {inst ()}
   {inst ()}
   {inst ()}
@@ -110,7 +110,7 @@ let wrapped_cor = fn () ->
 wrapped_cor ();
 let map_cor = fn () ->
   "map each value of a coroutine Int -> String";
-  let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`
+  let str_map = fn x -> `[str {x}]`
   ;;
   let co_void = fn () ->
     yield 1;
@@ -123,7 +123,7 @@ let map_cor = fn () ->
   ;;
   let co = co_void () |> cor_map str_map;
 
-  print `{ANSI_MAGENTA}{ANSI_BOLD}## coroutine mapped 1 -> 2 -> 3 -> done{ANSI_RESET}
+  print `## coroutine mapped 1 -> 2 -> 3 -> done
   {co ()}
   {co ()}
   {co ()}
@@ -142,7 +142,7 @@ let fib_cor = fn () ->
   ;;
 
   let coi = fib 0 1 in
-  print `{ANSI_MAGENTA}{ANSI_BOLD}# fibonnaci coroutine{ANSI_RESET}
+  print `# fibonnaci coroutine
   {coi ()}
   {coi ()}
   {coi ()}
@@ -196,6 +196,7 @@ let loop_cor = fn () ->
     yield 2;
     yield 3
   ;;
+
   let c = co_void () |> cor_loop in
   print `## looped coroutine:
   {c ()}
@@ -233,7 +234,6 @@ let loop_cor = fn () ->
 `
 ;;
 loop_cor ();
-
 let arithmetic_series = fn () -> 
   let arithmetic = fn s ->
     # TODO: don't like that I need to annotate the type here
@@ -277,28 +277,6 @@ let geometric = fn () ->
 `
 ;;
 geometric ();
-
-let _geo = fn s ->
-  yield s;
-  yield _geo (s * 1.1)
-;;
-let geometric2 = fn () -> 
-  let g = _geo 1.0 in
-
-  print `## geometric series:
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-  {g ()}
-`
-;;
-geometric2 ();
 
 let fib_ser = fn () ->
   let fib = fn a b ->

@@ -572,6 +572,35 @@ LLVMValueRef LogicalOrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return phi;
 }
 
+LLVMValueRef StructSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  LLVMValueRef idx =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMValueRef record =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMValueRef value =
+      codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
+  LLVMDumpValue(idx);
+  printf("\n");
+  LLVMDumpValue(record);
+  printf("\n");
+  LLVMDumpValue(value);
+  printf("\n");
+
+  print_ast(ast);
+  print_type(ast->md);
+  return NULL;
+}
+
+LLVMValueRef AddrOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  print_ast(ast);
+  if (ast->data.AST_APPLICATION.args->tag == AST_IDENTIFIER) {
+  }
+  return NULL;
+}
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
   ht *stack = (ctx->frame->table);
@@ -648,6 +677,9 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("array_fill", &t_array_fill_sig, ArrayFillHandler);
   GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);
+
+  GENERIC_FN_SYMBOL("struct_set", &t_struct_set_sig, StructSetHandler);
+  GENERIC_FN_SYMBOL("addrof", NULL, AddrOfHandler);
 
   // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
   // ListPrependHandler);

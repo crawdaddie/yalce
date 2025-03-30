@@ -54,8 +54,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "if"                    return *yytext;
 "yield"                 return *yytext;
 "&&"                    return DOUBLE_AMP;
+"&"                     return AMPERSAND;
 "||"                    return DOUBLE_PIPE;
-"&"                     return *yytext;
 "*"                     return *yytext;
 "\\"                    return THUNK;
 "module"                return *yytext;
@@ -220,7 +220,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                     return TOK_CHAR;
                 }
 
-[&$*+\-/=>@^|%<]([&$*+\-/=>@^|%<!.:\?~]*)       {
+[$*+\-/=>@^|%<]([&$*+\-/=>@^|%<!.:\?~]*)       {
                     // special identifiers for declaring binops
                     int len = yyleng;
                     yylval.vident.chars = strdup(yytext); 

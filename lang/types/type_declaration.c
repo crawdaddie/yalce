@@ -20,6 +20,7 @@ void *_type_error(Ast *node, const char *fmt, ...) {
   va_end(args);
   return NULL;
 }
+
 Type *env_lookup(TypeEnv *env, const char *name);
 Type *compute_type_expression(Ast *expr, TypeEnv *env);
 
@@ -50,12 +51,13 @@ Type *option_of(Ast *expr) {}
 Type *next_tvar();
 const char *binding_name;
 const char *last_ptr_type;
+
 bool can_hold_recursive_ref(const char *container_type_name) {
-  if (CHARS_EQ(container_type_name, "List")) {
+  if (CHARS_EQ(container_type_name, TYPE_NAME_LIST)) {
     return true;
   }
 
-  if (CHARS_EQ(container_type_name, "Array")) {
+  if (CHARS_EQ(container_type_name, TYPE_NAME_ARRAY)) {
     return true;
   }
   return false;
@@ -74,7 +76,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     variant->data.T_CONS.name = TYPE_NAME_VARIANT;
     variant->data.T_CONS.args = talloc(sizeof(Type *) * len);
     variant->data.T_CONS.num_args = len;
-    last_ptr_type = "Variant";
+    last_ptr_type = TYPE_NAME_VARIANT;
 
     for (int i = 0; i < len; i++) {
       Ast *item = expr->data.AST_LIST.items + i;
@@ -101,6 +103,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
     if (binding_name &&
         CHARS_EQ(expr->data.AST_IDENTIFIER.value, binding_name)) {
+
       if (!can_hold_recursive_ref(last_ptr_type)) {
         return _type_error(
             expr,
@@ -108,7 +111,16 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
             "- try wrapping in a container type like List or Array",
             binding_name);
       }
+
+      const char *id_chars = expr->data.AST_IDENTIFIER.value;
+      Type *new_var_type = type_var_of_id(id_chars);
+      new_var_type->is_recursive_type_ref = true;
+      return new_var_type;
+      // Type *rec = empty_type();
+      // rec->kind = T_RECURSIVE_TYPE_REF;
+      // return rec;
     }
+
     Type *type = env_lookup(env, expr->data.AST_IDENTIFIER.value);
     if (!type) {
       const char *id_chars = expr->data.AST_IDENTIFIER.value;

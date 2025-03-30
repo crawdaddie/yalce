@@ -206,7 +206,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Ast *record = ast->data.AST_RECORD_ACCESS.record;
     Type *record_type = record->md;
     if (record_type->kind == T_CONS &&
-        strcmp(record_type->data.T_CONS.name, "Module") == 0) {
+        strcmp(record_type->data.T_CONS.name, TYPE_NAME_MODULE) == 0) {
       return codegen_module_access(
           record, record_type, ast->data.AST_RECORD_ACCESS.index,
           ast->data.AST_RECORD_ACCESS.member, ast->md, ctx, module, builder);
@@ -249,7 +249,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
-    } else {
+    } else if (!is_variant_type(t)) {
       fprintf(stderr,
               "Warning - constructor not implemented for type declaration ");
       print_ast_err(ast);

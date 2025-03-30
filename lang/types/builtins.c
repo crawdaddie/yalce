@@ -190,6 +190,16 @@ Type *_array_fill_sig() {
 
 Type t_array_fill_sig = GENERIC_TYPE(_array_fill_sig);
 
+Type *_struct_set_sig() {
+  Type *eltype = next_tvar();
+  Type *rectype = next_tvar();
+  Type *f = type_fn(eltype, &t_void);
+  f = type_fn(rectype, f);
+  f = type_fn(&t_int, f);
+  return f;
+}
+Type t_struct_set_sig = GENERIC_TYPE(_struct_set_sig);
+
 // Type t_cor_map_from_type = {T_VAR, {.T_VAR = "map_from"}};
 //
 // Type t_cor_map_to_type = {T_VAR, {.T_VAR = "map_to"}};
@@ -359,6 +369,7 @@ void initialize_builtin_types() {
   add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
   add_builtin("array_fill", &t_array_fill_sig);
   add_builtin("array_new", &t_array_fill_sig);
+  add_builtin("struct_set", &t_struct_set_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

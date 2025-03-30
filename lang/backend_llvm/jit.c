@@ -283,13 +283,8 @@ int jit(int argc, char **argv) {
       } else if (strncmp("%quit", input, 5) == 0) {
         break;
       }
-      Ast *prog;
-      if (strncmp("%include", input, 8) == 0) {
-        prog = parse_repl_include(input);
-        // print_ast(prog);
-      } else {
-        prog = parse_input(input, dirname);
-      }
+
+      Ast *prog = parse_input(input, dirname);
 
       TICtx ti_ctx = {.env = ctx.env, .scope = 0};
 

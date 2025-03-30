@@ -61,6 +61,7 @@ Ast* ast_root = NULL;
 %token IMPORT
 %token OPEN 
 %token IMPLEMENTS
+%token AMPERSAND
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -127,7 +128,7 @@ expr:
   | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
-  | '&' simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_AMPERSAND, $2); }
+  | AMPERSAND simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_AMPERSAND, $2); }
   | '(' '*' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"*", 1}), $4); }
   | '(' '/' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"/", 1}), $4); }
   | '(' '+' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"+", 1}), $4); }
@@ -156,8 +157,6 @@ expr:
   | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER IMPLEMENTS IDENTIFIER  { $$ = ast_implements($1, $3); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
-  | IMPORT PATH_IDENTIFIER            { $$ = ast_import_stmt($2, false); }
-  | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); }
   ;
 
 simple_expr:
@@ -222,7 +221,10 @@ let_binding:
   | IMPORT PATH_IDENTIFIER IN expr  { $$ = ast_let(NULL, ast_import_stmt($2, false), $4); }
   | OPEN PATH_IDENTIFIER IN expr    { $$ = ast_let(NULL, ast_import_stmt($2, true), $4); }
   */
-  | OPEN PATH_IDENTIFIER IN expr     { $$ = ast_let(NULL, ast_import_stmt($2, true), $4); }
+  | IMPORT PATH_IDENTIFIER            { $$ = ast_import_stmt($2, false); }
+  | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); }
+  | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); }
+  | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); }
   ;
 
 extern_typed_signature:

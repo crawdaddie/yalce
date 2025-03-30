@@ -57,14 +57,6 @@ struct string_list {
   struct string_list *next;
 };
 
-typedef struct inputs_list {
-  const char *data;
-  const char *mod_name;
-  const char *qualified_path;
-  enum { SRC_INPUT_INCLUDE, SRC_INPUT_IMPORT } input_type;
-  struct inputs_list *next;
-} inputs_list;
-
 struct string_list *string_list_push_left(struct string_list *list,
                                           const char *data) {
   struct string_list *new = palloc(sizeof(struct string_list));
@@ -83,32 +75,6 @@ const char *string_list_find(struct string_list *list, const char *data) {
   }
   return NULL;
 }
-
-struct inputs_list *inputs_list_push_left(struct inputs_list *list,
-                                          const char *mod_name,
-                                          const char *qualified_path,
-                                          const char *data) {
-  struct inputs_list *new = palloc(sizeof(struct inputs_list));
-  new->next = list;
-  new->data = data;
-  new->mod_name = mod_name;
-  new->qualified_path = qualified_path;
-  return new;
-}
-
-const char *inputs_lookup_by_path(struct inputs_list *list, const char *path) {
-
-  for (struct inputs_list *inc = list; inc != NULL; inc = inc->next) {
-    if (strcmp(inc->qualified_path, path) == 0) {
-      // module already included
-      return inc->qualified_path;
-    }
-  }
-  return NULL;
-}
-
-static struct string_list *_included = NULL;
-static struct inputs_List *included = NULL;
 
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = palloc(sizeof(Ast));
@@ -333,142 +299,7 @@ char *prepend_current_directory(const char *filename) {
   }
 }
 
-bool is_include_stmt(const char *input) {
-  return strncmp("%include ", input, 9) == 0;
-}
-bool is_import_stmt(const char *input) {
-  return strncmp("%import ", input, 8) == 0;
-}
-
-inputs_list *preprocess_includes(char *current_dir, const char *_input,
-                                 inputs_list *stack) {
-  int total_len = strlen(_input);
-  const char *input;
-  // process includes backwards so they're on the stack in the correct order
-  while (total_len >= 0) {
-    input = _input + total_len;
-    if (is_include_stmt(input) &&
-        (*(input - 2) != '#')    // ignore if preceded by comment
-        && (*(input - 1) != '#') // ignore if preceded by comment
-    ) {
-      int line_len = 0;
-      const char *line = input;
-      while (*line != '\n') {
-        line_len++;
-        line++;
-      }
-
-      char *include_line = strndup(input, line_len);
-      char *mod_name = include_line + 9;
-      int mod_name_len = strlen(current_dir) + 1 + strlen(mod_name) + 4;
-      char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
-
-      snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc", current_dir,
-               mod_name);
-      fully_qualified_name = normalize_path(fully_qualified_name);
-      fully_qualified_name = prepend_current_directory(fully_qualified_name);
-
-      const char *previously_imported =
-          inputs_lookup_by_path(stack, fully_qualified_name);
-
-      if (previously_imported == NULL) {
-        const char *import_content =
-            read_script(fully_qualified_name,
-                        false); // never include tests in imported code
-        if (!import_content) {
-          return NULL;
-        }
-        stack = inputs_list_push_left(stack, mod_name, fully_qualified_name,
-                                      import_content);
-
-        char *_current_dir = get_dirname(stack->qualified_path);
-
-        stack = preprocess_includes(_current_dir, import_content, stack);
-      }
-    }
-    total_len--;
-  }
-  return stack;
-}
-
-void dbg_input_stack(struct inputs_list *stack) {
-  int i = 0;
-  while (stack) {
-    printf("%d %s: \n%s", i, stack->qualified_path, stack->data);
-    stack = stack->next;
-    i++;
-  }
-}
-
 static struct inputs_list *_stack = NULL;
-//
-// void parse_stack(inputs_list *current, inputs_list **last_processed) {
-//
-//   inputs_list *__stack = current;
-//   while (__stack != _stack) {
-//     const char *input = __stack->data;
-//     yy_scan_string(input);
-//     yyparse();
-//
-//     __stack = __stack->next;
-//   }
-//
-//   *last_processed = current;
-// }
-
-Ast *parse_repl_include(const char *fcontent) {
-  char *filename = strdup("./");
-  filename = prepend_current_directory(filename);
-  char *dir = get_dirname(filename);
-
-  inputs_list *stack = _stack;
-  stack = inputs_list_push_left(stack, filename, filename, fcontent);
-  char *current_dir = get_dirname(stack->qualified_path);
-  stack = preprocess_includes(current_dir, fcontent, stack);
-
-  Ast *prev = NULL;
-
-  if (ast_root != NULL && ast_root->data.AST_BODY.len > 0) {
-    prev = ast_root;
-  }
-
-  ast_root = Ast_new(AST_BODY);
-  ast_root->data.AST_BODY.len = 0;
-  ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
-
-  inputs_list *__stack = stack;
-  while (__stack != _stack) {
-    const char *input = __stack->data;
-    _cur_script = __stack->qualified_path;
-    _cur_script_content = input;
-    yylineno = 1;
-    yyabsoluteoffset = 0;
-
-    yy_scan_string(input);
-    yyparse();
-
-    __stack = __stack->next;
-  }
-
-  _stack = stack;
-
-  Ast *res = ast_root;
-  if (prev != NULL) {
-    ast_root = prev;
-  }
-
-  // ugly hack - includes that only contain extern declarations
-  // and don't emit any instructions crash the jit
-  if (res->tag == AST_BODY &&
-      res->data.AST_BODY.stmts[res->data.AST_BODY.len - 1]->tag == AST_LET &&
-      res->data.AST_BODY.stmts[res->data.AST_BODY.len - 1]
-              ->data.AST_LET.expr->tag == AST_EXTERN_FN) {
-    Ast *dummy = Ast_new(AST_INT);
-    dummy->data.AST_INT.value = 1;
-    ast_body_push(res, dummy);
-  }
-  return res;
-}
 
 Ast *parse_input_script(const char *filename) {
   filename = prepend_current_directory(filename);
@@ -477,10 +308,7 @@ Ast *parse_input_script(const char *filename) {
   if (!fcontent) {
     return NULL;
   }
-  // inputs_list *stack = _stack;
-  // stack = inputs_list_push_left(stack, filename, filename, fcontent);
   char *current_dir = get_dirname(filename);
-  // stack = preprocess_includes(current_dir, fcontent, stack);
 
   ast_root = Ast_new(AST_BODY);
   ast_root->data.AST_BODY.len = 0;
@@ -495,26 +323,9 @@ Ast *parse_input_script(const char *filename) {
   yy_scan_string(input);
   yyparse();
 
-  // // dbg_input_stack(stack);
-  // inputs_list *__stack = stack;
-  // while (__stack != _stack) {
-  //   _cur_script = __stack->qualified_path;
-  //   const char *input = __stack->data;
-  //
-  //   _cur_script_content = input;
-  //   yylineno = 1;
-  //   yyabsoluteoffset = 0;
-  //   yy_scan_string(input);
-  //   yyparse();
-  //
-  //   __stack = __stack->next;
-  // }
-  // _stack = stack;
-
   return ast_root;
 }
 
-/* Define the parsing function */
 Ast *parse_input(char *input, const char *dirname) {
   current_dir = dirname;
 

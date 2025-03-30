@@ -2,6 +2,7 @@
 #include "coroutines.h"
 #include "function.h"
 #include "list.h"
+#include "modules.h"
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
@@ -134,19 +135,20 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
-  // if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
-  //
-  //   LLVMValueRef callable =
-  //       codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
-  //
-  //   if (!callable) {
-  //     fprintf(stderr, "Error: could not access record\n");
-  //     return NULL;
-  //   }
-  //
-  //   return call_callable(ast, expected_fn_type, callable, ctx, module,
-  //   builder);
-  // }
+  if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
+      !is_module_ast(
+          ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record)) {
+
+    LLVMValueRef callable =
+        codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
+
+    if (!callable) {
+      fprintf(stderr, "Error: could not access record\n");
+      return NULL;
+    }
+
+    return call_callable(ast, expected_fn_type, callable, ctx, module, builder);
+  }
 
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;

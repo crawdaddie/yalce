@@ -209,11 +209,6 @@ struct Ast {
       // size_t num_args;
     } AST_APPLICATION;
 
-    struct AST_TUPLE {
-      size_t len;
-      Ast **members;
-    } AST_TUPLE;
-
     struct AST_LAMBDA {
       size_t len;
       Ast *params;
@@ -304,8 +299,6 @@ Ast *ast_arg_list_push(Ast *arg_list, Ast *arg_id, Ast *def);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input, const char *dirname);
 Ast *parse_input_script(const char *filename);
-Ast *parse_repl_include(const char *fcontent);
-Ast *parse_repl_import(const char *fcontent);
 Ast *ast_void();
 Ast *ast_string(ObjString lex_string);
 
