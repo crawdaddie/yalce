@@ -1,7 +1,7 @@
-%test
+let test = module
 let test_int_plus_double = fn () -> 
   "Int + Double = Double";
   let x = 100 + 101.;
   (x == 201.)
   ;;
-
+;

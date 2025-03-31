@@ -1,4 +1,5 @@
 let add = fn a b -> a + b;;
 
-%test 
+let test = module 
 let test_ints = fn () -> add 1 2 == 3;;
+;

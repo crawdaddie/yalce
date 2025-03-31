@@ -4,6 +4,7 @@ let list_sum = fn s l ->
   | x::rest -> list_sum (s + x) rest
 ;;
 
-%test
+let test = module
 let test_sum_doubles = list_sum 0. [1., 2., 3.] == 6.;
 let test_sum_ints = list_sum 0 [1, 2, 3] == 6;
+;

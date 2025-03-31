@@ -119,6 +119,11 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
     Ast *stmt = test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
 
     if (stmt->tag == AST_LET) {
+      Ast *binding = stmt->data.AST_LET.binding;
+      if (!((binding->tag == AST_IDENTIFIER) &&
+            (strncmp(binding->data.AST_IDENTIFIER.value, "test", 4) == 0))) {
+        continue;
+      }
 
       if (stmt->data.AST_LET.expr->tag == AST_LAMBDA) {
         const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;

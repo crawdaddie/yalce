@@ -5,9 +5,10 @@ let fib = fn x ->
   | _ -> (fib (x - 1)) + (fib (x - 2))
 ;;
 
-%test
-let test_fib2 = fib 2 == 1;
-let test_fib3 = fib 3 == 2;
-let test_fib4 = fib 4 == 3;
-let test_fib5 = fib 5 == 5;
-let test_fib20 = fib 20 == 6765;
+let test = module 
+  let test_fib2 = fib 2 == 1;
+  let test_fib3 = fib 3 == 2;
+  let test_fib4 = fib 4 == 3;
+  let test_fib5 = fib 5 == 5;
+  let test_fib20 = fib 20 == 6765;
+;

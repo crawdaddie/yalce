@@ -1,4 +1,4 @@
-%test
+let test = module
 
 let test_iter_all_void = 
   let co_void = (fn () ->
@@ -97,3 +97,4 @@ let test_fib_cor = fn () ->
 #   && (co () == Some 3)
 #   && (co () == None)
 # ;;
+;

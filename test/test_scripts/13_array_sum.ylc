@@ -10,5 +10,6 @@ let arr_sum = fn s a ->
   aux 0 s
   ;;
 
-%test
+let test = module
 let test_sum_doubles = arr_sum 0. [|1., 2., 3.|] == 6.;
+;

@@ -1,7 +1,7 @@
 let sum3 = fn a b c -> a + b + c;;
 let sum4 = fn a b c d -> a + b + c + d;;
 
-%test
+let test = module
 let c = sum3 1 2;
 let test_curry = c 3 == 6;
 let test_curry2 = c 2 == 5;
@@ -10,4 +10,4 @@ let test_curry2 = c 2 == 5;
 # let ccc = cc 3;
 # let test_curry_second_order = ccc 4 == 10;
 
-
+;

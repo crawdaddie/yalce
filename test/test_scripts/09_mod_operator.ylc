@@ -6,7 +6,7 @@
 #     | x if (x % 4.) > 0. -> 0 
 # ;;
 
-%test
+let test = module
 let test_float_modulo = fn () -> 
   200. % 150. == 50.
 ;;
@@ -27,3 +27,4 @@ let test_float_add = fn () ->
 # let test_quantize_0_5 = fn () -> (quantize_mod 0.5) == 0;; # "0.5 -> 0";
 # let test_quantize_4_5 = fn () -> (quantize_mod 4.5) == 0;; # "4.5 -> 0";
 #
+;

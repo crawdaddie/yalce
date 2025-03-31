@@ -1,4 +1,4 @@
-%test
+let test = module
 
 let test_and = fn () ->
   (true && false) == false
@@ -19,3 +19,4 @@ let test_and1 = fn () ->
 let test_and2 = fn () ->
   false == (false && false)
 ;;
+;

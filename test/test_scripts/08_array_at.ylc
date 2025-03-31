@@ -1,5 +1,5 @@
 let (@) = array_at;
-%test
+let test = module
 
 let sim = [|5,1,2|];
 let test_idx_0 = array_at sim 0 == 5; 
@@ -34,4 +34,4 @@ let test_at_fn_5 = (x @ 2 @ 1 == 6.); # array[2][1] == 6.
 
 let test_array_size = array_size x == 3;
 # len of array == 3
-
+;
