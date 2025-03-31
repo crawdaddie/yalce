@@ -76,6 +76,7 @@ Ast *get_test_module_ast(Ast *ast) {
 
   return NULL;
 }
+
 LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   Ast *test_module_ast = get_test_module_ast(ast);
@@ -114,9 +115,18 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
   JITSymbol *test_module =
       ht_get_hash(ctx->frame->table, "test", hash_string("test", 4));
 
-  for (int i = 0; i < test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.len;
-       i++) {
-    Ast *stmt = test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+  Ast **stmts;
+  int len = 0;
+  if (test_module_ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+    len = 1;
+    stmts = &test_module_ast->data.AST_LAMBDA.body;
+  } else {
+    len = test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.len;
+    stmts = test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.stmts;
+  }
+
+  for (int i = 0; i < len; i++) {
+    Ast *stmt = stmts[i];
 
     if (stmt->tag == AST_LET) {
       Ast *binding = stmt->data.AST_LET.binding;

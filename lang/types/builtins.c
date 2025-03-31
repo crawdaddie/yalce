@@ -190,6 +190,14 @@ Type *_array_fill_sig() {
 
 Type t_array_fill_sig = GENERIC_TYPE(_array_fill_sig);
 
+Type *_array_succ_sig() {
+  Type *eltype = next_tvar();
+  Type *f = create_array_type(eltype);
+  return type_fn(f, f);
+}
+
+Type t_array_succ_sig = GENERIC_TYPE(_array_succ_sig);
+
 Type *_struct_set_sig() {
   Type *eltype = next_tvar();
   Type *rectype = next_tvar();
@@ -370,6 +378,7 @@ void initialize_builtin_types() {
   add_builtin("array_fill", &t_array_fill_sig);
   add_builtin("array_new", &t_array_fill_sig);
   add_builtin("struct_set", &t_struct_set_sig);
+  add_builtin("array_succ", &t_array_succ_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

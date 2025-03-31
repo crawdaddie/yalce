@@ -167,6 +167,56 @@ void module_passes(LLVMModuleRef module) {
 }
 
 #define GLOBAL_STORAGE_CAPACITY 1024
+
+int start_jit(JITLangCtx *kernel_ctx, ht *kernel_table,
+              LLVMContextRef *context_ref, LLVMModuleRef *module_ref,
+              LLVMBuilderRef *builder_ref) {
+  LLVMInitializeCore(LLVMGetGlobalPassRegistry());
+  LLVMInitializeNativeTarget();
+  LLVMInitializeNativeAsmPrinter();
+  LLVMInitializeNativeAsmParser();
+  LLVMLinkInMCJIT();
+
+  LLVMContextRef context = LLVMContextCreate();
+  *context_ref = context;
+  LLVMModuleRef module =
+      LLVMModuleCreateWithNameInContext("ylc.top-level", context);
+  *module_ref = module;
+
+  LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
+  *builder_ref = builder;
+  module_passes(module);
+
+  // void **global_storage_array = calloc(GLOBAL_STORAGE_CAPACITY, sizeof(void
+  // *));
+  void *global_storage_array[GLOBAL_STORAGE_CAPACITY];
+  int global_storage_capacity = GLOBAL_STORAGE_CAPACITY;
+  int num_globals = 0;
+
+  init_module_registry();
+
+  setup_global_storage(module, builder);
+
+  TypeEnv *env = NULL;
+  initialize_builtin_types();
+
+  ht_init(kernel_table);
+  StackFrame initial_stack_frame = {.table = kernel_table, .next = NULL};
+
+  JITLangCtx ctx = {.stack_ptr = 0,
+                    .env = env,
+                    .num_globals = &num_globals,
+                    .global_storage_array = global_storage_array,
+                    .global_storage_capacity = &global_storage_capacity,
+                    .frame = &initial_stack_frame};
+
+  initialize_builtin_funcs(&ctx, module, builder);
+  initialize_synth_types(&ctx, module, builder);
+
+  *kernel_ctx = ctx;
+  return 0;
+}
+
 int jit(int argc, char **argv) {
 
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());

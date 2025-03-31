@@ -1172,6 +1172,18 @@ int main() {
       &mod_type);
   });
 
+  // T("let arr_fold = fn f: (r -> t -> r) res: (r) a: (Array of t) ->\n"
+  T("let arr_fold = fn f res a ->\n"
+    "  let len = array_size a in\n"
+    "  let aux = fn i f su -> \n"
+    "    match i with\n"
+    "    | i if i == len -> su\n"
+    "    | i -> aux (i + 1) f (f su (array_at a i))\n"
+    "    ;;\n"
+    "  aux 0 f res\n"
+    ";;\n",
+    &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&TVAR("`5"), &TVAR("`4"), &TVAR("`5")),
+                    &TVAR("`5"), &TARRAY(&TVAR("`4")), &TVAR("`5")));
   // ({
   //   // Type valtype = TCONS("Value", 4, &t_num, &TLIST(&TVAR("Value")), );
   //   T("type Op =\n"

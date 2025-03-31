@@ -368,3 +368,96 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                       "insert_array_data");
   return array_struct;
 }
+
+LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  // Get the array argument
+  LLVMValueRef array =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  // Get the type information from the AST metadata
+  Type *_array_type = ast->md;
+  Type *el_type = _array_type->data.T_CONS.args[0];
+
+  // Get the LLVM type of array elements
+  LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx->env, module);
+
+  // Get the array type (struct with size and data pointer)
+  LLVMTypeRef array_type = codegen_array_type(element_type);
+
+  // Load the array struct if it's a pointer
+  LLVMValueRef array_struct;
+  if (LLVMGetTypeKind(LLVMTypeOf(array)) == LLVMPointerTypeKind) {
+    array_struct =
+        LLVMBuildLoad2(builder, array_type, array, "load_array_struct");
+  } else {
+    array_struct = array;
+  }
+
+  // Create a new array struct
+  LLVMValueRef new_array_struct = LLVMGetUndef(array_type);
+
+  // Extract the current size from the array
+  LLVMValueRef current_size =
+      LLVMBuildExtractValue(builder, array_struct, 0, "current_size");
+
+  // Calculate the new size (current_size - 1)
+  LLVMValueRef new_size = LLVMBuildSub(
+      builder, current_size, LLVMConstInt(LLVMInt32Type(), 1, 0), "new_size");
+
+  // Extract the data pointer from the array
+  LLVMValueRef data_ptr =
+      LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+
+  // Calculate the new data pointer (data_ptr + 1)
+  LLVMValueRef new_data_ptr = LLVMBuildGEP2(
+      builder, element_type, data_ptr,
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), 1, 0)}, 1, "new_data_ptr");
+
+  // Insert the new size into the new array struct
+  new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_size,
+                                          0, "insert_new_size");
+
+  // Insert the new data pointer into the new array struct
+  new_array_struct = LLVMBuildInsertValue(
+      builder, new_array_struct, new_data_ptr, 1, "insert_new_data_ptr");
+
+  // Add a check to ensure we don't create an array with negative size
+  // Create basic blocks for the check
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+  LLVMBasicBlockRef valid_block = LLVMAppendBasicBlock(function, "valid_array");
+  LLVMBasicBlockRef error_block =
+      LLVMAppendBasicBlock(function, "empty_array_error");
+  LLVMBasicBlockRef after_block = LLVMAppendBasicBlock(function, "after_check");
+
+  // Check if the original array size is greater than 0
+  LLVMValueRef valid_size =
+      LLVMBuildICmp(builder, LLVMIntSGT, current_size,
+                    LLVMConstInt(LLVMInt32Type(), 0, 0), "valid_size");
+  LLVMBuildCondBr(builder, valid_size, valid_block, error_block);
+
+  // Valid case - return the new array
+  LLVMPositionBuilderAtEnd(builder, valid_block);
+  LLVMBuildBr(builder, after_block);
+
+  // Error case - could print an error message or trigger a runtime error
+  LLVMPositionBuilderAtEnd(builder, error_block);
+  // For now, just return a null/empty array
+  LLVMValueRef error_array = LLVMGetUndef(array_type);
+  error_array =
+      LLVMBuildInsertValue(builder, error_array,
+                           LLVMConstInt(LLVMInt32Type(), 0, 0), 0, "zero_size");
+  error_array =
+      LLVMBuildInsertValue(builder, error_array, data_ptr, 1, "same_data_ptr");
+  LLVMBuildBr(builder, after_block);
+
+  // After block to merge the two paths
+  LLVMPositionBuilderAtEnd(builder, after_block);
+  LLVMValueRef result = LLVMBuildPhi(builder, array_type, "result");
+  LLVMValueRef values[] = {new_array_struct, error_array};
+  LLVMBasicBlockRef blocks[] = {valid_block, error_block};
+  LLVMAddIncoming(result, values, blocks, 2);
+
+  return result;
+}

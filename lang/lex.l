@@ -106,7 +106,6 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "_"                     return *yytext;
 
 
-
 "`"                     { BEGIN(FSTRING); return FSTRING_START; }
 <FSTRING>"`"            { BEGIN(INITIAL); return FSTRING_END; }
 <FSTRING>"{"            { BEGIN(INITIAL); return FSTRING_INTERP_START; }

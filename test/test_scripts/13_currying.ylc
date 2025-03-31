@@ -2,12 +2,11 @@ let sum3 = fn a b c -> a + b + c;;
 let sum4 = fn a b c d -> a + b + c + d;;
 
 let test = module
-let c = sum3 1 2;
-let test_curry = c 3 == 6;
-let test_curry2 = c 2 == 5;
+  let c = sum3 1 2;
+  let test_curry = c 3 == 6;
+  let test_curry2 = c 2 == 5;
 
-# let cc = sum4 1 2;
-# let ccc = cc 3;
-# let test_curry_second_order = ccc 4 == 10;
-
+  # let cc = sum4 1 2;
+  # let ccc = cc 3;
+  # let test_curry_second_order = ccc 4 == 10;
 ;

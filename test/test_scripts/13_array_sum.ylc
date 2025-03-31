@@ -1,15 +1,17 @@
-%include ../../examples/Array
-let arr_sum = fn s a ->
+open ../../examples/Array;
+
+
+let arr_fold = fn f res a ->
   let len = array_size a in
-  let aux = fn i su -> 
+  let aux = fn i f su -> 
     match i with
     | i if i == len -> su
-    | i -> aux (i + 1) (su + (a @ i))
+    | i -> aux (i + 1) f (f su (a @ i))
     ;;
 
   aux 0 s
-  ;;
+;;
 
 let test = module
-let test_sum_doubles = arr_sum 0. [|1., 2., 3.|] == 6.;
+  let test_sum_doubles = arr_fold (fn su x -> su + x;) 0. [|1., 2., 3.|] == 6.;
 ;

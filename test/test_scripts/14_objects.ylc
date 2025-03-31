@@ -1,11 +1,11 @@
-let x = (
-  a: 1,
-  b: 2,
-  f: (fn s: (Int) t: (Int) -> s + t)
-);
-
 let test = module
+
   let test_record_access = fn () ->
+    let x = (
+      a: 1,
+      b: 2,
+      f: (fn s: (Int) t: (Int) -> s + t)
+    );
     x.f 1 2 == 3
   ;;
 ;

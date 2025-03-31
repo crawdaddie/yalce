@@ -12,7 +12,7 @@ let f = fn x ->
 ;;
 
 let test = module
-let test_enum_C = fn () -> (f C) == 3;; 
-let test_enum_A = fn () -> (f A) == 1;; 
-let test_enum_B = fn () -> (f B) == 2;; 
+  let test_enum_C = fn () -> (f C) == 3;; 
+  let test_enum_A = fn () -> (f A) == 1;; 
+  let test_enum_B = fn () -> (f B) == 2;; 
 ;
