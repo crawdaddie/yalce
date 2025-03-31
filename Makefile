@@ -132,3 +132,39 @@ serve_docs:
 audio_test:
 	$(MAKE) -C engine audio_test
 
+# Jupyter kernel specifics
+JUPYTER_DIR := dev/jupyter_kernel
+JUPYTER_SRC := $(JUPYTER_DIR)/kernel.c
+JUPYTER_OBJ := $(BUILD_DIR)/jupyter_kernel/kernel.o
+JUPYTER_TARGET := $(BUILD_DIR)/ylc_kernel
+
+# Jupyter kernel libraries (with macOS specific paths)
+JUPYTER_LIBS := -lzmq -ljson-c -luuid -lpthread
+
+# For Apple Silicon Macs (M1/M2)
+JUPYTER_LIBS += -L/opt/homebrew/lib -I/opt/homebrew/include
+
+# Jupyter kernel installation directories
+KERNEL_SPEC_DIR := $(HOME)/Library/jupyter/kernels/ylc
+
+# Jupyter kernel build
+$(JUPYTER_OBJ): $(JUPYTER_SRC) | $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)/jupyter_kernel
+	$(LANG_CC) -c -o $@ $< 
+
+# The Jupyter kernel needs to link to all the same object files as the main executable
+# except we don't link to the main.o file if it exists
+$(JUPYTER_TARGET): $(JUPYTER_OBJ) $(LANG_OBJS) | engine gui cor
+	$(LANG_CC) -o $@ $(JUPYTER_OBJ) $(filter-out $(BUILD_DIR)/main.o, $(LANG_OBJS)) $(JUPYTER_LIBS) $(LANG_LD_FLAGS)
+	# $(LANG_CC) -o $@ $(JUPYTER_OBJ) $(filter-out $(BUILD_DIR)/main.o, $(LANG_OBJS)) $(JUPYTER_LIBS) $(LANG_LD_FLAGS) -Wl,-rpath,$(shell pwd)/$(BUILD_DIR)/engine
+
+jupyter: $(JUPYTER_TARGET)
+
+install-jupyter: jupyter
+	@echo "Installing Jupyter kernel specification..."
+	@mkdir -p $(KERNEL_SPEC_DIR)
+	@cp $(JUPYTER_TARGET) $(KERNEL_SPEC_DIR)/
+	@echo "{\n  \"argv\": [\"$(KERNEL_SPEC_DIR)/ylc_kernel\", \"-f\", \"{connection_file}\"],\n  \"display_name\": \"YLC Language\",\n  \"language\": \"ylc\"\n}" > $(KERNEL_SPEC_DIR)/kernel.json
+	@echo "Kernel specification installed in $(KERNEL_SPEC_DIR)"
+	mkdir -p ~/Library/Jupyter/kernels/ylc/engine/
+	cp build/engine/libyalce_synth.so ~/Library/Jupyter/kernels/ylc/engine/

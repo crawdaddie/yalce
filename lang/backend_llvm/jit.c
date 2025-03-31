@@ -140,7 +140,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  // LLVMDumpModule(module);
+  LLVMDumpModule(module);
   printf("> ");
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
@@ -168,55 +168,6 @@ void module_passes(LLVMModuleRef module) {
 
 #define GLOBAL_STORAGE_CAPACITY 1024
 
-int start_jit(JITLangCtx *kernel_ctx, ht *kernel_table,
-              LLVMContextRef *context_ref, LLVMModuleRef *module_ref,
-              LLVMBuilderRef *builder_ref) {
-  LLVMInitializeCore(LLVMGetGlobalPassRegistry());
-  LLVMInitializeNativeTarget();
-  LLVMInitializeNativeAsmPrinter();
-  LLVMInitializeNativeAsmParser();
-  LLVMLinkInMCJIT();
-
-  LLVMContextRef context = LLVMContextCreate();
-  *context_ref = context;
-  LLVMModuleRef module =
-      LLVMModuleCreateWithNameInContext("ylc.top-level", context);
-  *module_ref = module;
-
-  LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
-  *builder_ref = builder;
-  module_passes(module);
-
-  // void **global_storage_array = calloc(GLOBAL_STORAGE_CAPACITY, sizeof(void
-  // *));
-  void *global_storage_array[GLOBAL_STORAGE_CAPACITY];
-  int global_storage_capacity = GLOBAL_STORAGE_CAPACITY;
-  int num_globals = 0;
-
-  init_module_registry();
-
-  setup_global_storage(module, builder);
-
-  TypeEnv *env = NULL;
-  initialize_builtin_types();
-
-  ht_init(kernel_table);
-  StackFrame initial_stack_frame = {.table = kernel_table, .next = NULL};
-
-  JITLangCtx ctx = {.stack_ptr = 0,
-                    .env = env,
-                    .num_globals = &num_globals,
-                    .global_storage_array = global_storage_array,
-                    .global_storage_capacity = &global_storage_capacity,
-                    .frame = &initial_stack_frame};
-
-  initialize_builtin_funcs(&ctx, module, builder);
-  initialize_synth_types(&ctx, module, builder);
-
-  *kernel_ctx = ctx;
-  return 0;
-}
-
 int jit(int argc, char **argv) {
 
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
@@ -232,8 +183,6 @@ int jit(int argc, char **argv) {
   LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
   module_passes(module);
 
-  // void **global_storage_array = calloc(GLOBAL_STORAGE_CAPACITY, sizeof(void
-  // *));
   void *global_storage_array[GLOBAL_STORAGE_CAPACITY];
   int global_storage_capacity = GLOBAL_STORAGE_CAPACITY;
   int num_globals = 0;
@@ -242,20 +191,8 @@ int jit(int argc, char **argv) {
 
   setup_global_storage(module, builder);
 
-  // ht stack[STACK_MAX];
-  //
-  // for (int i = 0; i < STACK_MAX; i++) {
-  //   ht_init(&stack[i]);
-  // }
-
   TypeEnv *env = NULL;
-  // initialize_builtin_numeric_types(env);
-  // env = initialize_types(env);
-  // env = initialize_type_env_synth(env);
   initialize_builtin_types();
-
-  // t_option_of_var.alias = "Option";
-  // env = env_extend(env, "Option", &t_option_of_var);
 
   ht table;
   ht_init(&table);
@@ -272,7 +209,6 @@ int jit(int argc, char **argv) {
   initialize_synth_types(&ctx, module, builder);
 
   bool repl = false;
-  // print_type_env(env);
 
   int arg_counter = 1;
   while (arg_counter < argc) {
@@ -295,10 +231,6 @@ int jit(int argc, char **argv) {
   }
 
   if (repl) {
-    // printf("start repl: ## SYNTH??: ");
-    // print_type(&t_synth);
-
-    // print_type_env(env);
 
     char dirname[100];
     getcwd(dirname, 100);
@@ -366,6 +298,7 @@ int jit(int argc, char **argv) {
 
       if (top_level_func == NULL) {
         print_result(top_type, NULL);
+
         continue;
       } else {
         LLVMExecutionEngineRef engine;

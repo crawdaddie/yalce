@@ -48,14 +48,9 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
     }
 
     Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
-    // printf("FN RETURN TYPE\n");
-    // print_type(return_type);
 
     LLVMTypeRef llvm_return_type_ref =
         type_to_llvm_type(return_type, env, module);
-
-    // LLVMDumpType(llvm_return_type_ref);
-    // printf("\n");
 
     llvm_fn_type =
         LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
@@ -119,10 +114,13 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     Ast *stmt = ast->data.AST_LAMBDA.body;
+
+    stmt->is_body_tail = true;
     body = codegen(stmt, fn_ctx, module, builder);
 
   } else {
-    for (int i = 0; i < ast->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
+    int len = ast->data.AST_LAMBDA.body->data.AST_BODY.len;
+    for (int i = 0; i < len; i++) {
 
       Ast *stmt = ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
 
@@ -130,6 +128,9 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
         continue;
       }
 
+      if (i == len - 1) {
+        stmt->is_body_tail = true;
+      }
       body = codegen(stmt, fn_ctx, module, builder);
     }
   }
@@ -187,12 +188,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
-  // if (fn_type->kind == T_VOID) {
-  //   LLVMBuildRetVoid(builder);
-  // } else {
-  //   LLVMBuildRet(builder, body);
-  // }
-  //
   LLVMBuildRet(builder, body);
 
   END_FUNC

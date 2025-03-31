@@ -676,6 +676,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                     RunInSchedulerHandler);
 
   GENERIC_FN_SYMBOL("array_fill", &t_array_fill_sig, ArrayFillHandler);
+  GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
+                    ArrayFillConstHandler);
   GENERIC_FN_SYMBOL("array_succ", &t_array_succ_sig, ArraySuccHandler);
   GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);
 

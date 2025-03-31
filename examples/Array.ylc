@@ -11,3 +11,14 @@ let tensor_ndims = fn (_, sizes, _): (Tensor) ->
   array_size sizes
 ;;
 
+let fold = fn f a res ->
+  let len = array_size a in
+  match len with
+  | 0 -> res
+  | _ -> fold f (array_succ a) (f res (a @ 0))
+;;
+
+let sum = fn a ->
+  fold (fn acc v -> acc + v;) a 0
+;;
+  

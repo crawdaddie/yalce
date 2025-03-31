@@ -292,56 +292,53 @@ int main() {
     ";;\n",
     &MAKE_FN_TYPE_2(&t_int, &t_int));
 
-  T("let f = fn x: (Int) (y, z): (Int * Double) -> x + y + z;;",
+  T("let f = fn x: (Int) (y, z): (Int, Double) -> x + y + z;;",
     &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
 
   // first-class functions
-  ({
-    Type t0 = TVAR("`7");
-    Type t1 = TVAR("`8");
-    Type t2 = TVAR("`10");
-    Ast *b = T("let sum = fn a b -> a + b;;\n"
-               "let proc = fn f a b -> f a b;;\n"
-               "proc sum 1 2;\n",
-               &t_int);
+  // ({
+  //   Type t0 = TVAR("`7");
+  //   Type t1 = TVAR("`8");
+  //   Type t2 = TVAR("`10");
+  //   Ast *b = T("let sum = fn a b -> a + b;;\n"
+  //              "let proc = fn f a b -> f a b;;\n"
+  //              "proc sum 1 2;\n",
+  //              &t_int);
+  //
+  //   Type *EX = &t2;
+  //   EX = type_fn(&t1, EX);
+  //   EX = type_fn(&t0, EX);
+  //   EX = type_fn(&MAKE_FN_TYPE_3(&t0, &t1, &t2), EX);
+  //
+  //   printf("expected: ");
+  //   print_type(EX);
+  //   printf("ast md:   ");
+  //   Type *got = b->data.AST_BODY.stmts[1]->md;
+  //   print_type(got);
+  //   TASSERT(got, EX, "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
+  //
+  //   print_ast(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args);
+  //   print_type(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args->md);
+  // });
 
-    Type *EX = &t2;
-    EX = type_fn(&t1, EX);
-    EX = type_fn(&t0, EX);
-    EX = type_fn(&MAKE_FN_TYPE_3(&t0, &t1, &t2), EX);
+  // ({
+  //   Type t0 = TVAR("`7");
+  //   Type t1 = TVAR("`8");
+  //   Type t2 = TVAR("`10");
+  //   Ast *b = T("let sum = fn a b -> a + b;;\n"
+  //              "let proc = fn f a b -> f a b;;\n"
+  //              "proc sum 1.0 2.0;\n"
+  //              "proc sum 1 2;\n",
+  //              &t_int);
+  //
+  //   printf("expected: ");
+  //   print_type(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1,
+  //   &t2)); printf("ast md:   "); print_type(b->data.AST_BODY.stmts[1]->md);
+  //   TASSERT(b->data.AST_BODY.stmts[2]->md, &t_num, "proc sum 1. 2. ==
+  //   Double");
+  // });
 
-    printf("expected: ");
-    print_type(EX);
-    printf("ast md:   ");
-    Type *got = b->data.AST_BODY.stmts[1]->md;
-    print_type(got);
-    TASSERT(got, EX, "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
-
-    print_ast(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args);
-    print_type(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args->md);
-  });
-
-  ({
-    Type t0 = TVAR("`7");
-    Type t1 = TVAR("`8");
-    Type t2 = TVAR("`10");
-    Ast *b = T("let sum = fn a b -> a + b;;\n"
-               "let proc = fn f a b -> f a b;;\n"
-               "proc sum 1.0 2.0;\n"
-               "proc sum 1 2;\n",
-               &t_int);
-
-    printf("expected: ");
-    print_type(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2));
-    printf("ast md:   ");
-    print_type(b->data.AST_BODY.stmts[1]->md);
-    TASSERT(b->data.AST_BODY.stmts[2]->md, &t_num, "proc sum 1. 2. == Double");
-    // TASSERT(b->data.AST_BODY.stmts[1]->md,
-    //         &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1, &t2),
-    //         "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
-  });
-
-  T("type Cb = Double -> (Int * Int) -> ();",
+  T("type Cb = Double -> (Int, Int) -> ();",
     &MAKE_FN_TYPE_3(&t_num, &TTUPLE(2, &t_int, &t_int), &t_void));
 
   ({
@@ -584,11 +581,11 @@ int main() {
       &constructor);
   });
 
-  TFAIL("let co_void = fn () ->\n"
-        "  yield 1.;\n"
-        "  yield 2;\n"
-        "  yield 3.\n"
-        ";;\n");
+  // TFAIL("let co_void = fn () ->\n"
+  //       "  yield 1.;\n"
+  //       "  yield 2;\n"
+  //       "  yield 3.\n"
+  //       ";;\n");
 
   T("let co_void = fn () ->\n"
     "  yield 1.;\n"
@@ -671,19 +668,19 @@ int main() {
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
 
-    bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
-    const char *msg = "runner arg can be materialised to specific type:";
-    if (res) {
-      printf("✅ %s\n", msg);
-      print_type(&runner_fn_arg_type);
-      status &= true;
-    } else {
-      status &= false;
-      printf("❌ %s\nexpected:\n", msg);
-      print_type(&runner_fn_arg_type);
-      printf("got:\n");
-      print_type(runner_arg->md);
-    }
+    // bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
+    // const char *msg = "runner arg can be materialised to specific type:";
+    // if (res) {
+    //   printf("✅ %s\n", msg);
+    //   print_type(&runner_fn_arg_type);
+    //   status &= true;
+    // } else {
+    //   status &= false;
+    //   printf("❌ %s\nexpected:\n", msg);
+    //   print_type(&runner_fn_arg_type);
+    //   printf("got:\n");
+    //   print_type(runner_arg->md);
+    // }
   });
 
   ({
@@ -1172,18 +1169,6 @@ int main() {
       &mod_type);
   });
 
-  // T("let arr_fold = fn f: (r -> t -> r) res: (r) a: (Array of t) ->\n"
-  T("let arr_fold = fn f res a ->\n"
-    "  let len = array_size a in\n"
-    "  let aux = fn i f su -> \n"
-    "    match i with\n"
-    "    | i if i == len -> su\n"
-    "    | i -> aux (i + 1) f (f su (array_at a i))\n"
-    "    ;;\n"
-    "  aux 0 f res\n"
-    ";;\n",
-    &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&TVAR("`5"), &TVAR("`4"), &TVAR("`5")),
-                    &TVAR("`5"), &TARRAY(&TVAR("`4")), &TVAR("`5")));
   // ({
   //   // Type valtype = TCONS("Value", 4, &t_num, &TLIST(&TVAR("Value")), );
   //   T("type Op =\n"

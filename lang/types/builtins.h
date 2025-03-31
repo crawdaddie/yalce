@@ -15,6 +15,7 @@ extern Type t_cor_map_fn_sig;
 extern Type t_builtin_cstr;
 extern Type t_run_in_scheduler_sig;
 extern Type t_array_fill_sig;
+extern Type t_array_fill_const_sig;
 extern Type t_array_succ_sig;
 extern Type t_struct_set_sig;
 #endif

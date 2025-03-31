@@ -279,6 +279,7 @@ struct Ast {
 
   void *md;
   void *loc_info;
+  bool is_body_tail;
 };
 
 Ast *Ast_new(enum ast_tag tag);

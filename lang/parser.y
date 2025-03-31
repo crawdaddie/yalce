@@ -123,7 +123,6 @@ program:
   ;
 
 
-
 expr:
     simple_expr
   | 'yield' expr                      { $$ = ast_yield($2); }
@@ -131,14 +130,13 @@ expr:
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
   | AMPERSAND simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_AMPERSAND, $2); }
-  | '(' '*' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"*", 1}), $4); }
-  | '(' '/' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"/", 1}), $4); }
-  | '(' '+' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"+", 1}), $4); }
-  | '(' '-' ')' simple_expr %prec APPLICATION { $$ = ast_application(ast_identifier((ObjString){"-", 1}), $4); }
+
+
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr                     { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
   | expr '*' expr                     { $$ = ast_binop(TOKEN_STAR, $1, $3); }
   | expr '/' expr                     { $$ = ast_binop(TOKEN_SLASH, $1, $3); }
+
   | expr MODULO expr                  { $$ = ast_binop(TOKEN_MODULO, $1, $3); }
   | expr '<' expr                     { $$ = ast_binop(TOKEN_LT, $1, $3); }
   | expr '>' expr                     { $$ = ast_binop(TOKEN_GT, $1, $3); }
@@ -175,6 +173,10 @@ simple_expr:
   | fstring               { $$ = parse_fstring_expr($1); }
   | TOK_CHAR              { $$ = ast_char($1); }
   | '(' expr_sequence ')' { $$ = $2; }
+  | '(' '+' ')'           { $$ = ast_identifier((ObjString){"+", 1}); }
+  | '(' '*' ')'           { $$ = ast_identifier((ObjString){"*", 1}); }
+  | '(' '/' ')'           { $$ = ast_identifier((ObjString){"/", 1}); }
+  | '(' '-' ')'           { $$ = ast_identifier((ObjString){"-", 1}); }
   ;
 
 expr_sequence:

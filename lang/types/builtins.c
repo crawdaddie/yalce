@@ -190,6 +190,17 @@ Type *_array_fill_sig() {
 
 Type t_array_fill_sig = GENERIC_TYPE(_array_fill_sig);
 
+Type *_array_fill_const_sig() {
+  Type *eltype = next_tvar();
+  Type *f = create_array_type(eltype);
+  Type *m = eltype;
+  f = type_fn(m, f);
+  f = type_fn(&t_int, f);
+  return f;
+}
+
+Type t_array_fill_const_sig = GENERIC_TYPE(_array_fill_const_sig);
+
 Type *_array_succ_sig() {
   Type *eltype = next_tvar();
   Type *f = create_array_type(eltype);
@@ -376,6 +387,7 @@ void initialize_builtin_types() {
   add_builtin("cstr", &t_builtin_cstr);
   add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
   add_builtin("array_fill", &t_array_fill_sig);
+  add_builtin("array_fill_const", &t_array_fill_const_sig);
   add_builtin("array_new", &t_array_fill_sig);
   add_builtin("struct_set", &t_struct_set_sig);
   add_builtin("array_succ", &t_array_succ_sig);

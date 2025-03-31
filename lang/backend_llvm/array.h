@@ -25,6 +25,10 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder);
 
+LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
+
 LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder);
 #endif

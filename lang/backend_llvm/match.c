@@ -112,6 +112,7 @@ static LLVMValueRef simple_option_match(LLVMValueRef test_val,
 
   return phi;
 }
+
 LLVMValueRef simple_binary_match(Ast *branches, LLVMValueRef val,
                                  Type *val_type, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -369,6 +370,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 
     return _FALSE;
   }
+
   case AST_APPLICATION: {
     if (binding->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
       return NULL;

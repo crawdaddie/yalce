@@ -1,35 +1,30 @@
+#
+# let list_fold = fn f s l ->
+#   match l with
+#   | [] -> s
+#   | x::rest -> list_fold f (f s x) rest
+# ;;
+#
+# let sum_int = fn a b -> a + b;;
+#
+# print `list fold: {[1,1,1] |> list_fold sum_int 0}\n`;
+# print `list fold: {[1,2,3] |> list_fold sum_int 0}\n`;
+#
+# let arr_iter = fn a ->
+#   let len = array_size a in
+#   match len with
+#   | 0 -> ()
+#   | i -> (
+#     let v = array_at a 0;
+#     print `i: {i} {v}\n`;
+#     arr_iter (array_succ a)
+#   )
+# ;;
+#
+# arr_iter [|1,2,3|];
+import Array;
 
-let list_fold = fn f s l ->
-  match l with
-  | [] -> s
-  | x::rest -> list_fold f (f s x) rest
-;;
 
-let sum_int = fn a b -> a + b;;
+Array.fold (+) [|1.,2.,3.|] 0.;
 
-print `list fold: {[1,1,1] |> list_fold sum_int 0}\n`;
-print `list fold: {[1,2,3] |> list_fold sum_int 0}\n`;
-
-let arr_iter = fn a ->
-  let len = array_size a in
-  match len with
-  | 0 -> ()
-  | i -> (
-    let v = array_at a 0;
-    print `i: {i} {v}\n`;
-    arr_iter (array_succ a)
-  )
-;;
-
-arr_iter [|1,2,3|];
-
-
-let arr_fold = fn f a res ->
-  let len = array_size a in
-  match len with
-  | 0 -> res
-  | _ -> arr_fold f (array_succ a) (f res (array_at a 0))
-;;
-
-arr_fold (fn acc v -> acc + v;) [|1,2,3|] 0
-
+                   
