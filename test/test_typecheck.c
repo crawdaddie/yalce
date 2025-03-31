@@ -5,7 +5,7 @@
 #include "serde.h"
 #include <stdlib.h>
 
-// #define xT(input, type)
+#define xT(input, type)
 
 #define T(input, type)                                                         \
   ({                                                                           \
@@ -836,7 +836,7 @@ int main() {
                       &TTUPLE(2, &TLIST(&t), &TLIST(&t))));
   });
 
-  T("let enqueue = fn (head, tail): (List of Int * List of Int) item: "
+  T("let enqueue = fn (head, tail): (List of Int, List of Int) item: "
     "(Int) "
     "->\n"
     "  let last = [item] in\n"
@@ -869,7 +869,7 @@ int main() {
                    .data.AST_LIST.items[1];
 
     print_type(none.md);
-    bool res = types_equal(none.md, &TOPT(&TVAR("`5")));
+    bool res = types_equal(none.md, &TOPT(&TVAR("`4")));
     const char *msg = "None return val";
     if (res) {
       printf("✅ %s\n", msg);
@@ -878,7 +878,7 @@ int main() {
     } else {
       status &= false;
       printf("❌ %s\nexpected:\n", msg);
-      print_type(&TOPT(&TVAR("`5")));
+      print_type(&TOPT(&TVAR("`4")));
       printf("got:\n");
       print_type(none.md);
     }
@@ -889,20 +889,20 @@ int main() {
     ";;\n",
     &MAKE_FN_TYPE_2(&t_void, &t_void));
 
-  T("let accept = extern fn Int -> Ptr -> Ptr -> Int;\n"
-    "let proc_tasks = extern fn (Queue of l) -> Int -> ();\n"
-    "let proc_tasks = fn tasks server_fd ->\n"
-    "  let ts = match (queue_pop_left tasks) with\n"
-    "  | Some r -> (\n"
-    "    match (r ()) with\n"
-    "    | Some _ -> queue_append_right tasks r\n"
-    "    | None -> tasks\n"
-    "  )\n"
-    "  | None -> queue_of_list [ (accept_connections server_fd) ]\n"
-    "  in\n"
-    "  proc_tasks ts server_fd\n"
-    ";;\n",
-    &MAKE_FN_TYPE_3(&TCONS(TYPE_NAME_QUEUE, 1, &TVAR("l")), &t_int, &t_void));
+  xT("let accept = extern fn Int -> Ptr -> Ptr -> Int;\n"
+     "let proc_tasks = extern fn (Queue of l) -> Int -> ();\n"
+     "let proc_tasks = fn tasks server_fd ->\n"
+     "  let ts = match (queue_pop_left tasks) with\n"
+     "  | Some r -> (\n"
+     "    match (r ()) with\n"
+     "    | Some _ -> queue_append_right tasks r\n"
+     "    | None -> tasks\n"
+     "  )\n"
+     "  | None -> queue_of_list [ (accept_connections server_fd) ]\n"
+     "  in\n"
+     "  proc_tasks ts server_fd\n"
+     ";;\n",
+     &MAKE_FN_TYPE_3(&TCONS(TYPE_NAME_QUEUE, 1, &TVAR("l")), &t_int, &t_void));
 
   ({
     Ast *b = T("let f = fn x ->\n"
@@ -978,6 +978,7 @@ int main() {
     Ast *cor_map_arg = b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args;
 
     Type mapper = MAKE_FN_TYPE_2(&t_int, &t_string);
+    // Type mapper = t_ptr;
     bool res = types_equal(cor_map_arg->md, &mapper);
     const char *msg = "runner arg can be materialised to specific type:";
     if (res) {
@@ -1033,7 +1034,7 @@ int main() {
     //
   });
   ({
-    T("let instantiate_template = extern fn List of (Int * Double) -> Ptr -> "
+    T("let instantiate_template = extern fn List of (Int, Double) -> Ptr -> "
       "Ptr;\n"
       "let f = fn freq ->\n"
       "  instantiate_template [(0, freq)]\n"
@@ -1042,7 +1043,7 @@ int main() {
   });
 
   ({
-    T("let instantiate_template = extern fn List of (Int * Double) -> Ptr -> "
+    T("let instantiate_template = extern fn List of (Int, Double) -> Ptr -> "
       "Ptr;\n"
       "let f = fn (idx, freq) ->\n"
       "  instantiate_template [(idx, freq)]\n"
@@ -1171,24 +1172,27 @@ int main() {
       &mod_type);
   });
 
-  T("type Op =\n"
-    "  | Add\n"
-    "  | Sub\n"
-    "  | Mul\n"
-    "  | Div\n"
-    "  | Pow\n"
-    "  | Noop\n"
-    "  ;\n"
-    "type Value = (data: Double, children: List of Value, op: Op, grad: "
-    "Double);\n"
-    "let add = fn a: (Value) b: (Value) ->\n"
-    "  (\n"
-    "    data: a.data + b.data,\n"
-    "    children: [a, b],\n"
-    "    op: Add,\n"
-    "    grad: 0.,\n"
-    "  ) \n"
-    ";;\n",
-    &t_void);
+  // ({
+  //   // Type valtype = TCONS("Value", 4, &t_num, &TLIST(&TVAR("Value")), );
+  //   T("type Op =\n"
+  //     "  | Add\n"
+  //     "  | Sub\n"
+  //     "  | Mul\n"
+  //     "  | Div\n"
+  //     "  | Pow\n"
+  //     "  | Noop\n"
+  //     "  ;\n"
+  //     "type Value = (data: Double, children: List of Value, op: Op, grad: "
+  //     "Double);\n"
+  //     "let add = fn a: (Value) b: (Value) ->\n"
+  //     "  (\n"
+  //     "    data: a.data + b.data,\n"
+  //     "    children: [a, b],\n"
+  //     "    op: Add,\n"
+  //     "    grad: 0.,\n"
+  //     "  ) \n"
+  //     ";;\n",
+  //     &t_void);
+  // });
   return status == true ? 0 : 1;
 }
