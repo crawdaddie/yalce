@@ -6,6 +6,7 @@
 typedef struct Ast Ast;
 
 extern bool top_level_tests;
+extern const char *__module_to_test;
 
 // parser prototypes
 extern FILE *yyin;
@@ -291,6 +292,7 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right);
 Ast *ast_unop(token_type op, Ast *right);
 Ast *ast_identifier(ObjString id);
 Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation);
+Ast *ast_test_module(Ast *expr);
 Ast *ast_application(Ast *func, Ast *arg);
 Ast *ast_lambda(Ast *args, Ast *body);
 Ast *ast_void_lambda(Ast *body);

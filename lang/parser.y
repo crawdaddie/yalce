@@ -62,6 +62,8 @@ Ast* ast_root = NULL;
 %token OPEN 
 %token IMPLEMENTS
 %token AMPERSAND
+%token TYPE
+%token TEST_ID
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -181,7 +183,8 @@ expr_sequence:
   ;
 
 let_binding:
-    LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
+    LET TEST_ID '=' expr             { $$ = ast_test_module($4);}
+  | LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' EXTERN FN fn_signature  
                                     { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
@@ -336,19 +339,19 @@ fstring_part:
   ;
 
 type_decl:
-    'type' IDENTIFIER '=' type_expr {
+    TYPE IDENTIFIER '=' type_expr {
                                     Ast *type_decl = ast_let(ast_identifier($2), $4, NULL);
                                     type_decl->tag = AST_TYPE_DECL;
                                     $$ = type_decl;
                                   }
 
-  | 'type' IDENTIFIER              {
+  | TYPE IDENTIFIER              {
                                       Ast *type_decl = ast_let(ast_identifier($2), NULL, NULL);
                                       type_decl->tag = AST_TYPE_DECL;
                                       $$ = type_decl;
                                    }
 
-  | 'type' type_args '=' type_expr {
+  | TYPE type_args '=' type_expr {
                                     Ast *args = $2;
                                     Ast *name = args->data.AST_LAMBDA.params;
                                     args->data.AST_LAMBDA.params = args->data.AST_LAMBDA.params + 1;

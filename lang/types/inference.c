@@ -257,7 +257,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     type = infer_let_binding(ast, ctx);
     break;
   }
-
   case AST_LAMBDA: {
     type = infer_lambda(ast, ctx);
     break;

@@ -9,7 +9,7 @@
 #include "parse.h"
 #include "serde.h"
 #include "synths.h"
-#include "test_module.h"
+#include "testing.h"
 #include "types/inference.h"
 #include "llvm-c/Transforms/Utils.h"
 #include <llvm-c/Core.h>
@@ -235,6 +235,9 @@ int jit(int argc, char **argv) {
       arg_counter++;
     } else {
       Ast *script_prog;
+      if (top_level_tests) {
+        __module_to_test = argv[arg_counter];
+      }
       eval_script(argv[arg_counter], &ctx, module, builder, context, &env,
                   &script_prog);
       arg_counter++;

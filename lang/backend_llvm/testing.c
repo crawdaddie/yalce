@@ -1,7 +1,8 @@
-#include "./test_module.h"
+#include "./testing.h"
 #include "codegen.h"
 #include "jit.h"
 #include "serde.h"
+#include "symbols.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/ExecutionEngine.h"
 #include <string.h>
@@ -54,8 +55,36 @@ static LLVMValueRef create_totals_function(LLVMModuleRef module) {
   return LLVMAddFunction(module, "_report_test_totals", report_func_type);
 }
 
+Ast *get_test_module_ast(Ast *ast) {
+  if (ast->tag == AST_LET && ast->data.AST_LET.binding->tag == AST_IDENTIFIER &&
+      strcmp(ast->data.AST_LET.binding->data.AST_IDENTIFIER.value, "test") ==
+          0) {
+    return ast->data.AST_LET.expr;
+  }
+  if (ast->tag == AST_BODY) {
+    for (int i = 0; i < ast->data.AST_BODY.len; i++) {
+      Ast *stmt = ast->data.AST_BODY.stmts[i];
+
+      if (stmt->tag == AST_LET &&
+          stmt->data.AST_LET.binding->tag == AST_IDENTIFIER &&
+          strcmp(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value,
+                 "test") == 0) {
+        return stmt->data.AST_LET.expr;
+      }
+    }
+  }
+
+  return NULL;
+}
 LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+  Ast *test_module_ast = get_test_module_ast(ast);
+  if (!test_module_ast) {
+    fprintf(stderr,
+            "Error: could not find test module of module under test %s\n",
+            ctx->module_name);
+  }
+
   LLVMTypeRef ret_type = LLVMInt1Type();
   LLVMTypeRef funcType = LLVMFunctionType(ret_type, NULL, 0, 0);
   LLVMValueRef func = LLVMAddFunction(module, "top", funcType);
@@ -82,20 +111,20 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef num_tests = LLVMConstInt(LLVMInt32Type(), 0, 0);
   LLVMValueRef num_passes = LLVMConstInt(LLVMInt32Type(), 0, 0);
 
-  int len = ast->data.AST_BODY.len;
-  Ast **stmts = ast->data.AST_BODY.stmts;
+  JITSymbol *test_module =
+      ht_get_hash(ctx->frame->table, "test", hash_string("test", 4));
 
-  for (int i = 0; i < len; i++) {
-    Ast *stmt = *(stmts + i);
+  for (int i = 0; i < test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.len;
+       i++) {
+    Ast *stmt = test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
 
-    if (stmt->tag == AST_LET &&
-        strncmp(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value, "test_",
-                5) == 0) {
+    if (stmt->tag == AST_LET) {
 
       if (stmt->data.AST_LET.expr->tag == AST_LAMBDA) {
         const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
-        JITSymbol *sym = find_in_ctx(key, strlen(key), ctx);
+        JITSymbol *sym = find_in_ctx(key, strlen(key),
+                                     test_module->symbol_data.STYPE_MODULE.ctx);
 
         // Increment num_tests
         num_tests =
@@ -124,7 +153,8 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
       } else if (types_equal(stmt->data.AST_LET.expr->md, &t_bool)) {
         const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
-        JITSymbol *sym = find_in_ctx(key, strlen(key), ctx);
+        JITSymbol *sym = find_in_ctx(key, strlen(key),
+                                     test_module->symbol_data.STYPE_MODULE.ctx);
 
         // Increment num_tests
         num_tests =

@@ -7,6 +7,8 @@
 #include <string.h>
 
 bool top_level_tests = false;
+const char *__module_to_test;
+const char *__filename;
 
 char *_cur_script;
 const char *_cur_script_content;
@@ -240,6 +242,7 @@ Ast *ast_identifier(ObjString id) {
 }
 
 Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
+
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.binding = name;
   if (expr == NULL) {
@@ -265,6 +268,15 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
   node->data.AST_LET.expr = expr;
   node->data.AST_LET.in_expr = in_continuation;
   // print_ast(node);
+  return node;
+}
+
+Ast *ast_test_module(Ast *expr) {
+
+  Ast *node = Ast_new(AST_LET);
+  Ast *id = ast_identifier((ObjString){"test", 4});
+  node->data.AST_LET.binding = id;
+  node->data.AST_LET.expr = expr;
   return node;
 }
 
@@ -302,6 +314,7 @@ char *prepend_current_directory(const char *filename) {
 static struct inputs_list *_stack = NULL;
 
 Ast *parse_input_script(const char *filename) {
+  __filename = filename;
   filename = prepend_current_directory(filename);
   char *dir = get_dirname(filename);
   char *fcontent = read_script(filename, top_level_tests);
@@ -1037,7 +1050,6 @@ AstVisitor *ast_visit(Ast *ast, AstVisitor *visitor) {
 }
 
 Ast *ast_module(Ast *lambda) {
-
   lambda->tag = AST_MODULE;
   return lambda;
 }
