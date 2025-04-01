@@ -25,6 +25,6 @@
 import Array;
 
 
-Array.fold (+) [|1.,2.,3.|] 0.;
+Array.fold (fn acc v -> acc + v;) 0. [|1.,2.,3.|];
 
                    

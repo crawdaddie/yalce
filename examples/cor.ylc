@@ -108,6 +108,7 @@ let wrapped_cor = fn () ->
 `
 ;;
 wrapped_cor ();
+
 let map_cor = fn () ->
   "map each value of a coroutine Int -> String";
   let str_map = fn x -> `[str {x}]`

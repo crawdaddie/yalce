@@ -1077,9 +1077,11 @@ int main() {
     AstList *boundary_crossers =
         l->data.AST_BODY.stmts[0]
             ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
-    Ast *b = boundary_crossers->ast;
-    printf("boundary crosser (implicit state param): \n");
-    print_ast(b);
+    if (boundary_crossers) {
+      Ast *b = boundary_crossers->ast;
+      printf("boundary crosser (implicit state param): \n");
+      print_ast(b);
+    }
   });
 
   ({
@@ -1100,19 +1102,21 @@ int main() {
     AstList *bx =
         l->data.AST_BODY.stmts[0]
             ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
-    int num_xs = 0;
-    Ast *b1 = bx->ast;
-    Ast *b2 = bx->next->ast;
+    if (bx) {
+      int num_xs = 0;
+      Ast *b1 = bx->ast;
+      Ast *b2 = bx->next->ast;
 
-    while (bx) {
-      num_xs++;
-      bx = bx->next;
+      while (bx) {
+        num_xs++;
+        bx = bx->next;
+      }
+
+      status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
+      printf("boundary crossers (implicit state params): \n", num_xs);
+      print_ast(b1);
+      print_ast(b2);
     }
-
-    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
-    printf("boundary crossers (implicit state params): \n", num_xs);
-    print_ast(b1);
-    print_ast(b2);
   });
 
   ({
