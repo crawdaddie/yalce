@@ -41,8 +41,8 @@ LLVMTypeRef create_coroutine_state_type(Type *constructor_type, Ast *ast,
                                         JITLangCtx *ctx, LLVMModuleRef module) {
 
   int outer_args_len = fn_type_args_len(constructor_type);
-  AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
 
+  AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
   AstList *_bxs = boundary_xs;
 
   int inner_args_len = 0;

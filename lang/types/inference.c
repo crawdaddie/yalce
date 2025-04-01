@@ -214,6 +214,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
         // scan boundary crosser list
         bool ref_already_listed = false;
+
         for (AstList *bx =
                  ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
              bx; bx = bx->next) {
@@ -222,7 +223,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
             break;
           }
         }
-        if (!ref_already_listed) {
+
+        Type *t = ref->type;
+        if (!ref_already_listed &&
+            !(t->is_fn_param || t->is_recursive_fn_ref)) {
+
           AstList *next = malloc(sizeof(AstList));
           next->ast = ast;
           next->next =
