@@ -37,7 +37,7 @@ let rec = fn () ->
 ;;
 
 rec ();
-# #
+
 let seq = fn () ->
 
   let ne = fn () ->
@@ -84,30 +84,31 @@ let iter_all_arg = fn () ->
 ;; 
 iter_all_arg ();
 
-let wrapped_cor = fn () ->
-  let wrapper = fn x -> print `specially wrapped: {x}\n`
-  ;;
-
-  let co_void = fn () ->
-    yield 1;
-    yield 2;
-    yield 3;
-    yield 200
-  ;;
-
-  let inst = (co_void () |> cor_wrap_effect wrapper);
-
-  print `## coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
-## (effects printed above ^^)
-  {inst ()}
-  {inst ()}
-  {inst ()}
-  {inst ()}
-  {inst ()}
-  {inst ()}
-`
-;;
-wrapped_cor ();
+# FIXME:
+# let wrapped_cor = fn () ->
+#   let wrapper = fn x -> print `specially wrapped: {x}\n`
+#   ;;
+#
+#   let co_void = fn () ->
+#     yield 1;
+#     yield 2;
+#     yield 3;
+#     yield 200
+#   ;;
+#
+#   let inst = (co_void () |> cor_wrap_effect wrapper);
+#
+#   print `## coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
+# ## (effects printed above ^^)
+#   {inst ()}
+#   {inst ()}
+#   {inst ()}
+#   {inst ()}
+#   {inst ()}
+#   {inst ()}
+# `
+# ;;
+# wrapped_cor ();
 
 let map_cor = fn () ->
   "map each value of a coroutine Int -> String";
