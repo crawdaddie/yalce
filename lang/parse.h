@@ -180,6 +180,8 @@ struct Ast {
       const char *value;
       size_t length;
       bool crosses_yield_boundary;
+      bool is_recursive_fn_ref;
+      bool is_fn_param;
     } AST_IDENTIFIER;
 
     struct AST_META {

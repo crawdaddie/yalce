@@ -106,6 +106,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   switch (ast->tag) {
   case AST_INT: {
     type = &t_int;
+
     break;
   }
   case AST_DOUBLE: {
@@ -208,9 +209,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
     if (ref) {
       ref->ref_count++;
 
+      ast->data.AST_IDENTIFIER.is_fn_param = ref->is_fn_param;
+      ast->data.AST_IDENTIFIER.is_recursive_fn_ref = ref->is_recursive_fn_ref;
+
       if (ctx->current_fn_ast &&
           ctx->current_fn_ast->data.AST_LAMBDA.num_yields >
               ref->type->yield_boundary) {
+
+        Type *t = ref->type;
 
         // scan boundary crosser list
         bool ref_already_listed = false;
@@ -224,9 +230,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
           }
         }
 
-        Type *t = ref->type;
         if (!ref_already_listed &&
-            !(t->is_fn_param || t->is_recursive_fn_ref)) {
+            !(ast->data.AST_IDENTIFIER.is_fn_param ||
+              ast->data.AST_IDENTIFIER.is_recursive_fn_ref)) {
 
           AstList *next = malloc(sizeof(AstList));
           next->ast = ast;
@@ -391,13 +397,6 @@ Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
     ctx->yielded_type = yield_expr_type;
   }
 
-  // if (yield_expr->tag == AST_APPLICATION &&
-  //     strcmp(
-  //         yield_expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-  //         "arithmetic") == 0) {
-  //   printf("???\n");
-  //   print_type(yield_expr_type);
-  // }
   return yield_expr_type;
 }
 
@@ -699,7 +698,7 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
-  if (fn_type->is_recursive_fn_ref) {
+  if (ast->data.AST_IDENTIFIER.is_recursive_fn_ref) {
     fn_type = deep_copy_type(fn_type);
   }
   Type *_fn_type;
@@ -742,7 +741,7 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   for (int i = 0; i < len; i++) {
     Ast *arg = ast->data.AST_APPLICATION.args + i;
 
-    if (!((Type *)arg->md)->is_fn_param) {
+    if (arg->tag == AST_IDENTIFIER && arg->data.AST_IDENTIFIER.is_fn_param) {
       arg->md = apply_substitution(subst, arg->md);
     }
 
@@ -960,8 +959,6 @@ void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type) {
 }
 
 Type *infer_let_binding(Ast *ast, TICtx *ctx) {
-  // printf("infer let\n");
-  // print_ast(ast);
 
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
@@ -1030,18 +1027,20 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
       param_type = infer_pattern(param, &body_ctx);
     }
 
-    param_type->is_fn_param = true;
     param_type->scope = body_ctx.scope;
     param_types[i] = param_type;
     bind_in_ctx(&body_ctx, param, param_types[i]);
+    if (body_ctx.env) {
+      body_ctx.env->is_fn_param = true;
+    }
   }
 
   bool is_named = ast->data.AST_LAMBDA.fn_name.chars != NULL;
   const char *name = ast->data.AST_LAMBDA.fn_name.chars;
   Type *fn_type_var = NULL;
+
   if (is_named) {
     fn_type_var = next_tvar();
-    fn_type_var->is_recursive_fn_ref = true;
 
     Ast rec_fn_name_binding = {
         AST_IDENTIFIER,
@@ -1049,6 +1048,9 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
                             .length = ast->data.AST_LAMBDA.fn_name.length}}};
 
     bind_in_ctx(&body_ctx, &rec_fn_name_binding, fn_type_var);
+    if (body_ctx.env) {
+      body_ctx.env->is_recursive_fn_ref = true;
+    }
   }
 
   Type *body_type = infer(ast->data.AST_LAMBDA.body, &body_ctx);
@@ -1438,20 +1440,15 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
       Ast *member = ast->data.AST_LIST.items + i;
       if (member->tag == AST_IDENTIFIER &&
           CHARS_EQ(member->data.AST_IDENTIFIER.value, "x")) {
-        // print_ast(member);
-        // print_type(member->md);
-        // print_type(member->md);
       }
       apply_substitutions_rec(member, subst);
     }
 
-    // ast->md = apply_substitution(subst, ast->md);
     break;
   }
 
   case AST_LAMBDA: {
     apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
-    // ast->md = apply_substitution(subst, ast->md);
     break;
   }
 
@@ -1469,10 +1466,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
     apply_substitutions_rec(ast->data.AST_APPLICATION.function, subst);
 
-    //
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-      // print_ast(ast->data.AST_APPLICATION.args + i);
-      // print_type((ast->data.AST_APPLICATION.args + i)->md);
       apply_substitutions_rec(ast->data.AST_APPLICATION.args + i, subst);
     }
     ast->md = apply_substitution(subst, ast->md);
@@ -1526,8 +1520,6 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
   Substitution *subst = solve_constraints(ctx->constraints);
 
-  // print_constraints(ctx->constraints);
-  // print_subst(subst);
   if (ctx->constraints && !subst) {
     return NULL;
   }

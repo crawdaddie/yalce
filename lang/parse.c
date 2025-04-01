@@ -2,7 +2,6 @@
 #include "input.h"
 #include "serde.h"
 #include "y.tab.h"
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 

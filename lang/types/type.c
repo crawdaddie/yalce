@@ -907,7 +907,6 @@ Type *type_fn(Type *from, Type *to) {
   fn->kind = T_FN;
   fn->data.T_FN.from = from;
   fn->data.T_FN.to = to;
-  fn->is_recursive_fn_ref = false;
   return fn;
 }
 

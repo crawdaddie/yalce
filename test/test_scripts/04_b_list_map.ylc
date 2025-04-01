@@ -8,6 +8,5 @@ let list_map = fn f l ->
 ;;
 
 let test = module
-let plus1 = fn x: (Int) -> x + 1;;
-let test_map_plus = (list_map plus1 [0,1,2,3]) == [1,2,3,4];
+  let test_map_plus = (list_map ((+) 1) [0,1,2,3]) == [1,2,3,4];
 ;
