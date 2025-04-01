@@ -276,10 +276,11 @@ int main() {
                        "\t_ -> 3\n"
                        ")");
 
-  status &=
-      test_parse("let printf2 = extern fn string -> string -> Int -> Int -> ()",
-                 "(let printf2 (extern printf2 (string -> (string -> (Int -> "
-                 "(Int -> ()))))))");
+  status &= test_parse(
+      "let printf2 = extern fn string -> string -> Int -> Int -> ()",
+      "(let printf2 (extern printf2 (string -> string -> Int -> Int -> ())))"
+
+  );
 
   status &= test_parse("let voidf = extern fn () -> ()",
                        "(let voidf (extern voidf (() -> ())))");
@@ -295,7 +296,7 @@ int main() {
                  "str(\"here's a printed version of \", ((+ 1) 2000), \" and "
                  "\", ((y 1) 2))");
 
-  status &= test_parse("type Timer = Double * Int * Uint64;",
+  status &= test_parse("type Timer = (Double, Int, Uint64);",
                        "(let Timer (Double, Int, Uint64))");
 
   status &= test_parse("type Cb = Double -> Int -> ();",
@@ -315,7 +316,7 @@ int main() {
                        "	_ -> 3\n"
                        ")");
 
-  status &= test_parse("fn x: (Int) (y, z): (Int * Double) -> x + y + z;",
+  status &= test_parse("fn x: (Int) (y, z): (Int, Double) -> x + y + z;",
                        "(x (y, z) -> \n((+ ((+ x) y)) z))\n");
 
   // status &= test_parse("*x;", "(deref x)");
@@ -329,6 +330,9 @@ int main() {
                        "(let f (f () -> \n"
                        "1)\n"
                        ") : (f ())");
+
+  status &= test_parse("(+)", "+");
+  status &= test_parse("(+) 1 2", "((+ 1) 2)");
 
   // status &= test_parse("let (@) = array_at;\n"
   //                      "x_ref @ 0;\n",

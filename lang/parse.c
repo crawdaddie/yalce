@@ -12,33 +12,8 @@ const char *__filename;
 
 char *_cur_script;
 const char *_cur_script_content;
-// static struct PStorage {
-//   void *data;
-//   size_t size;
-//   size_t capacity;
-// } PStorage;
-// #define _PSTORAGE_SIZE 200000
-// static void *_tstorage_data[_PSTORAGE_SIZE];
-//
-// static struct PStorage _pstorage = {_tstorage_data, 0, _PSTORAGE_SIZE};
-
-// parser-specific allocation
-static void *palloc(size_t size) {
-  // if (_pstorage.size + size > _pstorage.capacity) {
-  //   fprintf(stderr, "Error allocating memory for type");
-  //   return NULL;
-  // }
-  // void *mem = _pstorage.data + _pstorage.size;
-  // _pstorage.size += size;
-  // return mem;
-  return malloc(size);
-}
-static void *prealloc(void *p, size_t size) {
-  // void *n = palloc(size);
-  // memcpy(n, p, size);
-  // return n;
-  return realloc(p, size);
-}
+static void *palloc(size_t size) { return malloc(size); }
+static void *prealloc(void *p, size_t size) { return realloc(p, size); }
 
 typedef struct __custom_binops_t {
   const char *binop;
@@ -115,11 +90,6 @@ void ast_body_push(Ast *body, Ast *stmt) {
 }
 
 Ast *ast_binop(token_type op, Ast *left, Ast *right) {
-  // Ast *node = Ast_new(AST_BINOP);
-  // node->data.AST_BINOP.op = op;
-  // node->data.AST_BINOP.left = left;
-  // node->data.AST_BINOP.right = right;
-  // return node;
   Ast *node = Ast_new(AST_APPLICATION);
 
   Ast *function;

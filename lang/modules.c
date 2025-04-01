@@ -2,7 +2,6 @@
 #include "./types/common.h"
 #include "ht.h"
 #include "input.h"
-#include "serde.h"
 #include "types/inference.h"
 #include "types/type.h"
 #include <stdlib.h>

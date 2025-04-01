@@ -46,7 +46,13 @@ $(LEX_OUTPUT): $(LEX_FILE) $(YACC_HEADER)
 	flex -o $(LEX_OUTPUT) $(LEX_FILE)
 
 test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
-	$(CC) $(CFLAGS) test_parse.c $(LANG_SRCS) -o $(BUILD_DIR)/test_parse $(LDFLAGS)
+	$(CC) $(CFLAGS) test_parse.c $(LANG_SRCS) \
+		$(LANG_SRC_DIR)/types/inference.c \
+		$(LANG_SRC_DIR)/types/type.c \
+		$(LANG_SRC_DIR)/types/builtins.c \
+		$(LANG_SRC_DIR)/types/type_declaration.c \
+		$(LANG_SRC_DIR)/types/common.c \
+		-o $(BUILD_DIR)/test_parse $(LDFLAGS)
 	$(BUILD_DIR)/test_parse
 
 test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
