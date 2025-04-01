@@ -696,6 +696,8 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 }
 
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
+  printf("infer application\n");
+  print_ast(ast);
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (ast->data.AST_IDENTIFIER.is_recursive_fn_ref) {

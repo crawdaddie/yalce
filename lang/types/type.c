@@ -9,8 +9,8 @@ Type *next_tvar() {
   Type *tvar = talloc(sizeof(Type));
   char *tname = talloc(sizeof(char) * 3);
 
-  sprintf(tname, "`%d", type_var_counter);
-  // *tname = (char)type_var_counter;
+  // sprintf(tname, "`%d", type_var_counter);
+  *tname = (char)type_var_counter;
 
   *tvar = (Type){T_VAR, {.T_VAR = tname}};
   type_var_counter++;

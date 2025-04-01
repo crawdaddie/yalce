@@ -1,11 +1,11 @@
 #! env ylc
-%include Array
-%include ../engine/bindings/Sched
-%include ../engine/bindings/Synth
-%include Math
+open Array;
+open ../engine/bindings/Sched;
+open ../engine/bindings/Synth;
+open Math;
 
 
-let st = (fn () -> 
+let synth_tpl = (fn () -> 
   let f = inlet 58. |> lag_node 0.01;
   let trig = inlet 0.0;
   let chirp_decay = inlet 0.3;
@@ -21,11 +21,12 @@ let st = (fn () ->
   |> compile_blob_template;
 
 
-let s = fn freq offset ->
-  st
-  |> instantiate_template [(0, freq)]
+let synth = fn freq offset ->
+  synth_tpl
+  |> instantiate_template [(0, freq), (3, freq)]
   |> play_node_offset offset
 ;;
+
 
 let times = [| 0.125, 0.125, 0.125, 0.125, 0.5, 0.75|];
 # let times = [| 0.25, |];
@@ -35,7 +36,7 @@ let times = [| 0.125, 0.125, 0.125, 0.125, 0.5, 0.75|];
 let h = fn frame_offset ->
   (
     dur: \array_choose times,
-    target: s 55. 0,
+    target: synth 55. 0,
     freq: iter_of_list
       [55., 330., 220., 110., 44., 33., 55., 110., 220., 660.]
       |> cor_loop,
@@ -45,10 +46,10 @@ let h = fn frame_offset ->
 
   )
   |> run_in_scheduler schedule_event
-  (fn (dur, s, freq, m) frame_offset ->
-    set_input_scalar_offset s 0 frame_offset freq;
-    set_input_scalar_offset s 3 frame_offset m;
-    set_input_trig_offset s 1 frame_offset;
+  (fn (dur, s, freq, m) fo ->
+    set_input_scalar_offset s 0 fo freq;
+    set_input_scalar_offset s 3 fo m;
+    set_input_trig_offset s 1 fo;
     ();
   )
 ;;
@@ -89,4 +90,3 @@ let k = fn frame_offset ->
 
 defer_quant 1. h;
 defer_quant 1. k;
-  

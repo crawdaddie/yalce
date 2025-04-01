@@ -1151,6 +1151,12 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
     LLVMValueRef effect_fn, Type *effect_fn_type, JITLangCtx *ctx,
     LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  print_type(generator_type);
+  LLVMDumpType(llvm_generator_type);
+  printf("\n");
+
+  print_type(value_struct_type);
+
   LLVMTypeRef wrapper_fn_type =
       LLVMFunctionType(LLVMVoidType(),
                        (LLVMTypeRef[]){
@@ -1206,14 +1212,11 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
 
       LLVMPositionBuilderAtEnd(builder, continue_block);
     } else if (is_void_func(item_type)) {
-
       LLVMValueRef val_from_callable = LLVMBuildCall2(
           builder, type_to_llvm_type(item_type, ctx->env, module),
           callable_item, NULL, 0, "call_void_item");
-
       LLVMBuildStore(builder, val_from_callable, val_gep);
     } else {
-
       LLVMBuildStore(builder, callable_item, val_gep);
     }
   }

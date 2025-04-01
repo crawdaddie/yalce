@@ -307,6 +307,7 @@ typedef struct TypeEnv {
   int ref_count;
   int is_fn_param;
   int is_recursive_fn_ref;
+  int yield_boundary;
   struct TypeEnv *next;
 } TypeEnv;
 
