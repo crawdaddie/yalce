@@ -7,10 +7,10 @@ static int type_var_counter = 0;
 void reset_type_var_counter() { type_var_counter = 0; }
 Type *next_tvar() {
   Type *tvar = talloc(sizeof(Type));
-  char *tname = talloc(sizeof(char) * 3);
+  char *tname = talloc(sizeof(char) * 5);
 
-  // sprintf(tname, "`%d", type_var_counter);
-  *tname = (char)type_var_counter;
+  sprintf(tname, "`%d", type_var_counter);
+  // *tname = (char)type_var_counter;
 
   *tvar = (Type){T_VAR, {.T_VAR = tname}};
   type_var_counter++;
