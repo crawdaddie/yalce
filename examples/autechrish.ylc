@@ -4,25 +4,25 @@ open ../engine/bindings/Sched;
 open ../engine/bindings/Synth;
 open Math;
 
+let tpl = (
+  fn () -> 
+    let f = inlet 58. |> lag_node 0.01;
+    let trig = inlet 0.0;
+    let chirp_decay = inlet 0.3;
+    let ff = chirp_node 3000. 200. chirp_decay trig; 
+    let mod_freq = inlet 58. |> lag_node 0.02; 
 
-let synth_tpl = (fn () -> 
-  let f = inlet 58. |> lag_node 0.01;
-  let trig = inlet 0.0;
-  let chirp_decay = inlet 0.3;
-  let ff = chirp_node 3000. 200. chirp_decay trig; 
-  let mod_freq = inlet 58. |> lag_node 0.02; 
-
-  (sq_node f) +
-  (sq_node (f * 1.01)) +
-  (sq_node (f * 2))
-  |> biquad_lp_node ff (inlet 4.)
-  |> dyn_comb_node (0.125 + 0.008 * sin_node mod_freq) 0.8 0.3
-  ;)
-  |> compile_blob_template;
+    (sq_node f) +
+    (sq_node (f * 1.01)) +
+    (sq_node (f * 2))
+    |> biquad_lp_node ff (inlet 4.)
+    |> dyn_comb_node (0.125 + 0.008 * sin_node mod_freq) 0.8 0.3
+    ;
+) |> compile_blob_template;
 
 
 let synth = fn freq offset ->
-  synth_tpl
+  tpl
   |> instantiate_template [(0, freq), (3, freq)]
   |> play_node_offset offset
 ;;

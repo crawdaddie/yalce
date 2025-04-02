@@ -121,8 +121,7 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
     module->ref = module_symbol;
   }
 
-  // return module_symbol->val;
-  return LLVMConstInt(LLVMInt32Type(), 1, 0);
+  return module_symbol->val;
 }
 
 JITSymbol *codegen_import(Ast *ast, Ast *binding, JITLangCtx *ctx,

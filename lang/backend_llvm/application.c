@@ -156,6 +156,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
   if (!sym) {
+    print_ast(ast);
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);
     return NULL;

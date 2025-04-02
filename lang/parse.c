@@ -8,24 +8,23 @@
 bool top_level_tests = false;
 const char *__module_to_test;
 const char *__filename;
-
 char *_cur_script;
 const char *_cur_script_content;
 static void *palloc(size_t size) { return malloc(size); }
 static void *prealloc(void *p, size_t size) { return realloc(p, size); }
 
-typedef struct __custom_binops_t {
+typedef struct custom_binops_t {
   const char *binop;
-  struct __custom_binops_t *next;
-} __custom_binops_t;
+  struct custom_binops_t *next;
+} custom_binops_t;
 
-__custom_binops_t *_custom_binops = NULL;
+custom_binops_t *__custom_binops = NULL;
 
 void add_custom_binop(const char *binop_name) {
-  __custom_binops_t *new_custom_binops = malloc(sizeof(__custom_binops_t));
+  custom_binops_t *new_custom_binops = malloc(sizeof(custom_binops_t));
   new_custom_binops->binop = binop_name;
-  new_custom_binops->next = _custom_binops;
-  _custom_binops = new_custom_binops;
+  new_custom_binops->next = __custom_binops;
+  __custom_binops = new_custom_binops;
 }
 
 struct string_list {
@@ -332,7 +331,7 @@ Ast *parse_input(char *input, const char *dirname) {
 }
 
 bool is_custom_binop(const char *id) {
-  __custom_binops_t *bb = _custom_binops;
+  custom_binops_t *bb = __custom_binops;
   while (bb) {
     if (strcmp(id, bb->binop) == 0) {
       return true;
@@ -1022,8 +1021,8 @@ Ast *ast_module(Ast *lambda) {
   lambda->tag = AST_MODULE;
   return lambda;
 }
-char *__import_current_dir;
 
+char *__import_current_dir;
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   char *mod_name = path_identifier.chars;

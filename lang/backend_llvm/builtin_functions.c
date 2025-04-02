@@ -675,6 +675,9 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("run_in_scheduler", &t_run_in_scheduler_sig,
                     RunInSchedulerHandler);
 
+  GENERIC_FN_SYMBOL("play_routine", &t_run_in_scheduler_sig,
+                    PlayRoutineHandler);
+
   GENERIC_FN_SYMBOL("array_fill", &t_array_fill_sig, ArrayFillHandler);
   GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
                     ArrayFillConstHandler);

@@ -107,7 +107,7 @@ let Grad = module
       match children with
       | [] -> str
       | x::rest -> (
-        let str_val = string_add str @@  val_to_str x;
+        let str_val = string_add str @@ val_to_str x;
         iter_children rest str_val
       )
     ;;
@@ -148,5 +148,6 @@ let a = Grad.add
   (Grad.pow (Grad.vnew 2.) (Grad.vnew 3.))
   ;
 
-let z = Grad.backward a;
-print (Grad.val_to_str z);
+# let z = Grad.backward a;
+# print (Grad.val_to_str z);
+print (Grad.val_to_str a)

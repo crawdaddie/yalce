@@ -133,19 +133,20 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   LLVMGenericValueRef exec_args[] = {};
 
-  if (result_type->kind == T_FN) {
-    printf("> ");
-    print_type(result_type);
-    printf("\n");
-    return NULL;
-  }
+  // if (result_type->kind == T_FN) {
+  //   printf("> ");
+  //   print_type(result_type);
+  //   printf("\n");
+  //   return NULL;
+  // }
 
-  // LLVMDumpModule(module);
-  printf("> ");
+  LLVMDumpModule(module);
+  // printf("> ");
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
-  print_result(result_type, result);
+  // fflush(stdout);
+  // print_result(result_type, result);
   return result; // Return success
 }
 
@@ -298,7 +299,6 @@ int jit(int argc, char **argv) {
 
       if (top_level_func == NULL) {
         print_result(top_type, NULL);
-
         continue;
       } else {
         LLVMExecutionEngineRef engine;
