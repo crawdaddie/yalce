@@ -221,16 +221,24 @@ Type *infer(Ast *ast, TICtx *ctx) {
         // scan boundary crosser list
         bool ref_already_listed = false;
 
+        int i = 0;
         for (AstList *bx =
                  ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
              bx; bx = bx->next) {
+
           if (CHARS_EQ(bx->ast->data.AST_IDENTIFIER.value, name)) {
             ref_already_listed = true;
+
+            ast->data.AST_IDENTIFIER._slot =
+                ctx->current_fn_ast->data.AST_LAMBDA
+                    .num_yield_boundary_crossers -
+                i - 1;
             break;
           }
+          i++;
         }
 
-        if (!ref_already_listed &&
+        if ((t->scope == ctx->scope) && !ref_already_listed &&
             !(ast->data.AST_IDENTIFIER.is_fn_param ||
               ast->data.AST_IDENTIFIER.is_recursive_fn_ref)) {
 
@@ -239,6 +247,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
           next->next =
               ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
           ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers = next;
+          ast->data.AST_IDENTIFIER._slot =
+              ctx->current_fn_ast->data.AST_LAMBDA.num_yield_boundary_crossers;
+          ctx->current_fn_ast->data.AST_LAMBDA.num_yield_boundary_crossers++;
         }
       }
       type = ref->type;
@@ -1085,6 +1096,16 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   if (is_named) {
     apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
+  }
+  AstList *l = ast->data.AST_LAMBDA.yield_boundary_crossers;
+
+  int li = 0;
+  while (l) {
+    printf("boundary crosser %d\n",
+           ast->data.AST_LAMBDA.num_yield_boundary_crossers - (li++) - 1);
+    print_ast(l->ast);
+    printf(" -- _slot %d\n", l->ast->data.AST_IDENTIFIER._slot);
+    l = l->next;
   }
 
   if (body_ctx.yielded_type != NULL) {

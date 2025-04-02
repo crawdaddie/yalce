@@ -104,10 +104,12 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     print_codegen_location();
     return NULL;
   }
+
   switch (sym->type) {
   case STYPE_TOP_LEVEL_VAR: {
     return codegen_get_global(sym, module, builder);
   }
+
   case STYPE_FN_PARAM: {
     int idx = sym->symbol_data.STYPE_FN_PARAM;
     // return LLVMGetParam(current_func(builder), idx);

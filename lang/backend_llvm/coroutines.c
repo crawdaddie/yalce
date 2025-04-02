@@ -326,9 +326,23 @@ LLVMValueRef _cor_reset(LLVMValueRef instance_ptr, LLVMValueRef next_struct,
       "call_cor_reset");
 }
 
+static Ast *current_fn;
 static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
                                          JITLangCtx *ctx, LLVMModuleRef module,
                                          LLVMBuilderRef builder) {
+  current_fn = ast;
+  printf("compile coroutine\n");
+  print_ast(ast);
+
+  int li = 0;
+  AstList *l = ast->data.AST_LAMBDA.yield_boundary_crossers;
+  while (l) {
+    printf("boundary crosser %d\n",
+           ast->data.AST_LAMBDA.num_yield_boundary_crossers - (li++) - 1);
+    print_ast(l->ast);
+    printf(" -- _slot %d\n", l->ast->data.AST_IDENTIFIER._slot);
+    l = l->next;
+  }
 
   Type *ret_opt_type = fn_return_type(constructor_type);
 
