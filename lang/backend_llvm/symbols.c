@@ -110,12 +110,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return codegen_get_global(sym, module, builder);
   }
 
-  case STYPE_FN_PARAM: {
-    int idx = sym->symbol_data.STYPE_FN_PARAM;
-    // return LLVMGetParam(current_func(builder), idx);
-    return sym->val;
-  }
-
   case STYPE_FUNCTION: {
     return sym->val;
   }
@@ -126,6 +120,13 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_LOCAL_VAR: {
+
+    int inner_state_slot = get_inner_state_slot(ast);
+
+    LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
+    if (inner_state_slot >= 0) {
+      return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
+    }
     return sym->val;
   }
 

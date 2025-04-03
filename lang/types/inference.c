@@ -216,6 +216,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
           ctx->current_fn_ast->data.AST_LAMBDA.num_yields >
               ref->type->yield_boundary) {
 
+        ast->data.AST_IDENTIFIER.crosses_yield_boundary = true;
         Type *t = ref->type;
 
         // scan boundary crosser list
@@ -229,10 +230,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
           if (CHARS_EQ(bx->ast->data.AST_IDENTIFIER.value, name)) {
             ref_already_listed = true;
 
-            ast->data.AST_IDENTIFIER._slot =
-                ctx->current_fn_ast->data.AST_LAMBDA
-                    .num_yield_boundary_crossers -
-                i - 1;
+            ast->data.AST_IDENTIFIER._slot = i;
             break;
           }
           i++;
@@ -1096,16 +1094,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   if (is_named) {
     apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
-  }
-  AstList *l = ast->data.AST_LAMBDA.yield_boundary_crossers;
-
-  int li = 0;
-  while (l) {
-    printf("boundary crosser %d\n",
-           ast->data.AST_LAMBDA.num_yield_boundary_crossers - (li++) - 1);
-    print_ast(l->ast);
-    printf(" -- _slot %d\n", l->ast->data.AST_IDENTIFIER._slot);
-    l = l->next;
   }
 
   if (body_ctx.yielded_type != NULL) {

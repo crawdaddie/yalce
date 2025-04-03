@@ -4,6 +4,7 @@
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
 #include "builtin_functions.h"
+#include "coroutines.h"
 #include "list.h"
 #include "serde.h"
 #include "symbols.h"
@@ -331,6 +332,16 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
   switch (binding->tag) {
   case AST_IDENTIFIER: {
     if (ast_is_placeholder_id(binding)) {
+      return _TRUE;
+    }
+
+    int inner_state_slot = get_inner_state_slot(binding);
+    if (inner_state_slot >= 0) {
+
+      JITSymbol *sym = lookup_id_ast(binding, ctx);
+      LLVMValueRef storage = sym->storage;
+      LLVMBuildStore(builder, val, storage);
+      sym->val = val;
       return _TRUE;
     }
 

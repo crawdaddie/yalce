@@ -8,9 +8,11 @@
 #include "symbols.h"
 #include "tuple.h"
 #include "types.h"
+#include "types/common.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
+#include <string.h>
 
 // #define COMPILER_DEBUG
 
@@ -42,14 +44,7 @@ LLVMTypeRef create_coroutine_state_type(Type *constructor_type, Ast *ast,
 
   int outer_args_len = fn_type_args_len(constructor_type);
 
-  AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
-  AstList *_bxs = boundary_xs;
-
-  int inner_args_len = 0;
-  while (_bxs) {
-    inner_args_len++;
-    _bxs = _bxs->next;
-  }
+  int inner_args_len = ast->data.AST_LAMBDA.num_yield_boundary_crossers;
 
   if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID &&
       inner_args_len == 0) {
@@ -73,9 +68,12 @@ LLVMTypeRef create_coroutine_state_type(Type *constructor_type, Ast *ast,
     f = f->data.T_FN.to;
   }
 
-  for (int i = 0; i < inner_args_len; i++) {
+  AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
+  for (int i = inner_args_len - 1; i >= 0; i--) {
     Type *t = boundary_xs->ast->md;
     state_arg_types[outer_args_len + i] = t;
+    print_ast(boundary_xs->ast);
+    printf("goes in slot %d\n", outer_args_len + i);
     llvm_state_arg_types[outer_args_len + i] =
         type_to_llvm_type(t, ctx->env, module);
     boundary_xs = boundary_xs->next;
@@ -110,9 +108,34 @@ LLVMValueRef get_instance_state_gep(LLVMValueRef instance_ptr,
       LLVMBuildGEP2(builder, cor_inst_struct_type(), instance_ptr,
                     (LLVMValueRef[]){
                         LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
-                        LLVMConstInt(LLVMInt32Type(), 3, 0)  // Get counter
+                        LLVMConstInt(LLVMInt32Type(), 3, 0)  // Get state gep
                     },
                     2, "instance_state_gep");
+  return element_ptr;
+}
+
+LLVMValueRef get_instance_state_element_gep(int index,
+                                            LLVMValueRef instance_ptr,
+                                            LLVMTypeRef state_struct_type,
+                                            LLVMBuilderRef builder) {
+  // First get the pointer to the state field (index 3) in the instance struct
+  LLVMValueRef state_ptr =
+      LLVMBuildGEP2(builder, cor_inst_struct_type(), instance_ptr,
+                    (LLVMValueRef[]){
+                        LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
+                        LLVMConstInt(LLVMInt32Type(), 3, 0)  // Get state field
+                    },
+                    2, "instance_state_ptr");
+
+  // Now get a pointer to the specific element within the state struct
+  LLVMValueRef element_ptr = LLVMBuildGEP2(
+      builder, state_struct_type, state_ptr,
+      (LLVMValueRef[]){
+          LLVMConstInt(LLVMInt32Type(), 0, 0),    // Deref pointer
+          LLVMConstInt(LLVMInt32Type(), index, 0) // Get specific element
+      },
+      2, "state_element_ptr");
+
   return element_ptr;
 }
 LLVMValueRef get_cor_next_fn(LLVMModuleRef module) {
@@ -326,26 +349,62 @@ LLVMValueRef _cor_reset(LLVMValueRef instance_ptr, LLVMValueRef next_struct,
       "call_cor_reset");
 }
 
-static Ast *current_fn;
+static Ast *__current_coroutine_fn;
+
+int get_inner_state_slot(Ast *ast) {
+  if (!__current_coroutine_fn) {
+    return -1;
+  }
+  Type *constructor_type = __current_coroutine_fn->md;
+
+  int outer_args_len = fn_type_args_len(constructor_type);
+
+  int inner_args_len =
+      __current_coroutine_fn->data.AST_LAMBDA.num_yield_boundary_crossers;
+
+  if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID &&
+      inner_args_len == 0) {
+    return -1;
+  }
+
+  if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
+    outer_args_len = 0;
+  }
+
+  AstList *l = __current_coroutine_fn->data.AST_LAMBDA.yield_boundary_crossers;
+  int li =
+      __current_coroutine_fn->data.AST_LAMBDA.num_yield_boundary_crossers - 1;
+
+  while (l) {
+    if (CHARS_EQ(ast->data.AST_IDENTIFIER.value,
+                 l->ast->data.AST_IDENTIFIER.value)) {
+
+      return outer_args_len + li;
+    }
+
+    l = l->next;
+    li--;
+  }
+  return -1;
+}
+
+LLVMValueRef get_inner_state_slot_gep(int slot, Ast *ast,
+                                      LLVMBuilderRef builder) {
+
+  // Create basic blocks for the if-then-else structure
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+  LLVMValueRef instance_ptr = LLVMGetParam(function, 0);
+  // LLVMValueRef state_gep =
+  return NULL;
+}
+
 static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
                                          JITLangCtx *ctx, LLVMModuleRef module,
                                          LLVMBuilderRef builder) {
-  current_fn = ast;
-  printf("compile coroutine\n");
-  print_ast(ast);
-
-  int li = 0;
-  AstList *l = ast->data.AST_LAMBDA.yield_boundary_crossers;
-  while (l) {
-    printf("boundary crosser %d\n",
-           ast->data.AST_LAMBDA.num_yield_boundary_crossers - (li++) - 1);
-    print_ast(l->ast);
-    printf(" -- _slot %d\n", l->ast->data.AST_IDENTIFIER._slot);
-    l = l->next;
-  }
+  __current_coroutine_fn = ast;
 
   Type *ret_opt_type = fn_return_type(constructor_type);
-
   Type *ret_type = type_of_option(ret_opt_type);
 
   LLVMTypeRef fn_type = cor_coroutine_fn_type();
@@ -415,8 +474,37 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
             param_ast,
             LLVMBuildExtractValue(builder, state_struct, i, "get_state_param"),
             param_type, &fn_ctx, module, builder);
+
         f = f->data.T_FN.to;
       }
+    }
+  }
+
+  if (ast->data.AST_LAMBDA.num_yield_boundary_crossers > 0) {
+    int outer_args_len = fn_len;
+    if (fn_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
+      outer_args_len = 0;
+    }
+    int inner_args_len = ast->data.AST_LAMBDA.num_yield_boundary_crossers;
+
+    AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
+    for (int i = inner_args_len - 1; i >= 0; i--) {
+      Ast *binding = boundary_xs->ast;
+
+      Type *t = binding->md;
+
+      LLVMTypeRef llvm_type = type_to_llvm_type(t, fn_ctx.env, module);
+      JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, t, NULL, llvm_type);
+      const char *chars = binding->data.AST_IDENTIFIER.value;
+      uint64_t id_hash =
+          hash_string(chars, binding->data.AST_IDENTIFIER.length);
+
+      LLVMValueRef state_gep = get_instance_state_element_gep(
+          outer_args_len + i, instance_ptr, state_struct_type, builder);
+      sym->storage = state_gep;
+
+      ht_set_hash(fn_ctx.frame->table, chars, id_hash, sym);
+      boundary_xs = boundary_xs->next; // gets boundary crossers backwards
     }
   }
 
@@ -442,6 +530,8 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
   destroy_ctx(&fn_ctx);
+
+  __current_coroutine_fn = NULL;
   return func;
 }
 

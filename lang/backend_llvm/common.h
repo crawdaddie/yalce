@@ -56,7 +56,6 @@ typedef struct coroutine_generator_symbol_data_t {
 } coroutine_generator_symbol_data_t;
 
 typedef enum symbol_type {
-  STYPE_FN_PARAM,
   STYPE_TOP_LEVEL_VAR,
   STYPE_LOCAL_VAR,
   STYPE_FUNCTION,
@@ -87,6 +86,7 @@ typedef struct {
   symbol_type type;
   LLVMTypeRef llvm_type;
   LLVMValueRef val;
+  LLVMValueRef storage;
   union {
     int STYPE_TOP_LEVEL_VAR;
     int STYPE_FN_PARAM;
