@@ -123,8 +123,8 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     int inner_state_slot = get_inner_state_slot(ast);
 
-    LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
     if (inner_state_slot >= 0) {
+      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
     }
     return sym->val;

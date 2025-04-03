@@ -236,7 +236,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
           i++;
         }
 
-        if ((t->scope == ctx->scope) && !ref_already_listed &&
+        if ((t->scope >= ctx->current_fn_scope) && !ref_already_listed &&
             !(ast->data.AST_IDENTIFIER.is_fn_param ||
               ast->data.AST_IDENTIFIER.is_recursive_fn_ref)) {
 
@@ -1018,6 +1018,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   TICtx body_ctx = *ctx;
   body_ctx.scope++;
   body_ctx.current_fn_ast = ast;
+  body_ctx.current_fn_scope = body_ctx.scope;
 
   int num_params = ast->data.AST_LAMBDA.len;
 

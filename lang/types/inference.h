@@ -10,6 +10,7 @@ typedef struct TICtx {
   Ast *current_fn_ast;
   Type *yielded_type;
   int scope;
+  int current_fn_scope;
   const char *err;
   FILE *err_stream; // Replace const char *err
 } TICtx;
