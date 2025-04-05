@@ -107,7 +107,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
       if (lu->kind == T_VAR && types_equal(lu, type)) {
         fprintf(stderr,
-                "Error: type %s not found in env! [compiler source: [%s:%d]\n",
+                "Error: (circular ref??) type %s not found in env! [compiler "
+                "source: [%s:%d]\n",
                 type->data.T_VAR, __FILE__, __LINE__);
 
         print_location(__current_ast);

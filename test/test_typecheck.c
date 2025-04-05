@@ -1186,5 +1186,21 @@ int main() {
 
     status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
   });
+  ({
+    Ast *b = T(
+        "let pop_left = fn (head, tail) ->\n"
+        "  match head with\n"
+        "  | x::rest -> ((rest, tail), Some x)  \n"
+        "  | [] -> ((head, tail), None)\n"
+        ";;\n",
+        &MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&TVAR("`7")), &TVAR("`1")),
+                        &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`7")), &TVAR("`1")),
+                                &TOPT(&TVAR("`7")))));
+    Ast *match_subj =
+        b->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
+    print_ast(match_subj);
+    print_type(match_subj->md);
+  });
   return status == true ? 0 : 1;
 }

@@ -182,7 +182,6 @@ struct Ast {
       bool crosses_yield_boundary;
       bool is_recursive_fn_ref;
       bool is_fn_param;
-      int _slot;
     } AST_IDENTIFIER;
 
     struct AST_META {

@@ -91,17 +91,6 @@ Type t_list_var = {
 
 Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var, &t_list_var);
 
-Type t_queue_var = {
-    T_CONS,
-    {.T_CONS = {TYPE_NAME_QUEUE, (Type *[]){&t_list_var_el}, 1}},
-};
-
-Type t_queue_of_list = MAKE_FN_TYPE_2(&t_list_var, &t_queue_var);
-
-Type t_queue_pop_left = MAKE_FN_TYPE_2(&t_queue_var, &TOPT(&t_list_var_el));
-Type t_queue_append_right =
-    MAKE_FN_TYPE_3(&t_queue_var, &t_list_var_el, &t_queue_var);
-
 Type t_opt_map_sig =
     MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&TVAR("opt_var"), &TVAR("opt_var_next")),
                    &TOPT(&TVAR("opt_var")), &TVAR("opt_var_next"));

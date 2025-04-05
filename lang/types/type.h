@@ -55,10 +55,6 @@ extern Type t_list_var;
 extern Type t_list_prepend;
 extern Type t_list_concat;
 
-extern Type t_queue_of_list;
-extern Type t_queue_pop_left;
-extern Type t_queue_append_right;
-
 // builtin binop types
 extern Type t_add;
 extern Type t_sub;

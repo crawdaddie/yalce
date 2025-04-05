@@ -222,18 +222,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
         // scan boundary crosser list
         bool ref_already_listed = false;
 
-        int i = 0;
         for (AstList *bx =
                  ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
              bx; bx = bx->next) {
 
           if (CHARS_EQ(bx->ast->data.AST_IDENTIFIER.value, name)) {
             ref_already_listed = true;
-
-            ast->data.AST_IDENTIFIER._slot = i;
             break;
           }
-          i++;
         }
 
         if ((t->scope >= ctx->current_fn_scope) && !ref_already_listed &&
@@ -245,8 +241,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
           next->next =
               ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
           ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers = next;
-          ast->data.AST_IDENTIFIER._slot =
-              ctx->current_fn_ast->data.AST_LAMBDA.num_yield_boundary_crossers;
           ctx->current_fn_ast->data.AST_LAMBDA.num_yield_boundary_crossers++;
         }
       }
@@ -495,15 +489,20 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
 Type *infer_application(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
-  // printf("app:");
-  // print_ast(ast);
-  // print_type(fn_type);
 
   if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
       CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
                TYPE_NAME_RUN_IN_SCHEDULER)) {
     infer_schedule_event_callback(ast, ctx);
     return &t_void;
+  }
+
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "addrof")) {
+
+    Type *arg_type = infer(ast->data.AST_APPLICATION.args, ctx);
+    return arg_type;
   }
 
   if (!fn_type) {
@@ -543,7 +542,13 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     return infer_fn_application(ast, ctx);
   }
   default: {
+
     if (IS_PRIMITIVE_TYPE(fn_type)) {
+      if (ast->data.AST_APPLICATION.args->tag == AST_LIST &&
+          ast->data.AST_APPLICATION.args->data.AST_LIST.len == 0) {
+        return create_list_type_of_type(fn_type);
+      }
+
       Type *f = fn_type;
       for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
         Type *t = infer(ast->data.AST_APPLICATION.args + i, ctx);
@@ -1540,6 +1545,16 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
 }
 
 Type *infer_module(Ast *ast, TICtx *ctx) {
+  if (ast->data.AST_LAMBDA.len > 0) {
+    printf("infer parametrized module\n");
+    for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+      Ast *param = ast->data.AST_LAMBDA.params + i;
+      printf("module params\n");
+      print_ast(param);
+    }
+    return type_error(ctx, ast, "Error: parametrized modules not implemented");
+  }
+
   Ast body;
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     body = (Ast){
@@ -1572,6 +1587,7 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
 
     if (stmt->tag == AST_TYPE_DECL) {
       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
     } else if (stmt->tag == AST_IMPORT) {
 
       names[i] = stmt->data.AST_IMPORT.identifier;

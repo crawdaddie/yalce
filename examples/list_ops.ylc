@@ -1,7 +1,6 @@
 
 # let enqueue = fn (head, tail) item ->
 
-type IntList = List of Int;
 let enqueue = fn (head, tail): (IntList * IntList) item: (Int) ->
 # let enqueue = fn (head, tail) item ->
   let last = [item] in

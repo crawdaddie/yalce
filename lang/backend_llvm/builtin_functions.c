@@ -11,6 +11,7 @@
 #include "tuple.h"
 #include "types.h"
 #include "types/builtins.h"
+#include "types/inference.h"
 #include "util.h" #include "llvm-c/Core.h"
 #include "llvm-c/Core.h"
 #include <string.h>
@@ -593,13 +594,26 @@ LLVMValueRef StructSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   print_type(ast->md);
   return NULL;
 }
+Type *lookup_var_in_env(TypeEnv *env, Type *tvar) {
+  if (tvar->kind == T_VAR) {
+    while (tvar->kind == T_VAR) {
+      tvar = env_lookup(env, tvar->data.T_VAR);
+    }
+  }
+  return tvar;
+}
 
 LLVMValueRef AddrOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  print_ast(ast);
-  if (ast->data.AST_APPLICATION.args->tag == AST_IDENTIFIER) {
-  }
-  return NULL;
+  Type *t = ast->md;
+  LLVMTypeRef llvm_type = type_to_llvm_type(t, ctx->env, module);
+  LLVMDumpType(llvm_type);
+  printf("\n");
+
+  LLVMValueRef val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  return val;
 }
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
@@ -666,10 +680,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_loop", &t_cor_loop_sig, CorLoopHandler);
   GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);
   GENERIC_FN_SYMBOL("::", &t_list_prepend, ListPrependHandler);
-  GENERIC_FN_SYMBOL("queue_of_list", &t_queue_of_list, QueueOfListHandler);
-  GENERIC_FN_SYMBOL("queue_pop_left", &t_queue_pop_left, QueuePopLeftHandler);
-  GENERIC_FN_SYMBOL("queue_append_right", &t_queue_append_right,
-                    QueueAppendRightHandler);
+  GENERIC_FN_SYMBOL("list_tail", &t_list_tail_sig, ListTailHandler);
+  GENERIC_FN_SYMBOL("list_ref_set", &t_list_ref_set_sig, ListRefSetHandler);
 
   GENERIC_FN_SYMBOL("opt_map", &t_opt_map_sig, OptMapHandler);
   GENERIC_FN_SYMBOL("run_in_scheduler", &t_run_in_scheduler_sig,

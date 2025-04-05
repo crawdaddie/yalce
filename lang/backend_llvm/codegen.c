@@ -87,9 +87,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
 
   __current_ast = ast;
-  // printf("\n\nCODEGEN FOR:\n");
-  // print_ast(ast);
-  // printf("\n\n");
 
   switch (ast->tag) {
 
@@ -253,7 +250,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       fprintf(stderr,
               "Warning - constructor not implemented for type declaration ");
       print_ast_err(ast);
-      print_type_err(ast->md);
+      // print_type_err(ast->md);
       return NULL;
     }
 

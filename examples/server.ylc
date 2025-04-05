@@ -1,5 +1,5 @@
 #! env ylc
-%include Ref
+open Ref;
 
 let AF_INET = 2;
 let SOCK_STREAM = 1;

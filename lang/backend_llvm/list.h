@@ -36,6 +36,9 @@ LLVMValueRef codegen_list_to_string(LLVMValueRef val, Type *val_type,
 LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
 
+LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder);
+
 LLVMValueRef ListPrependHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
 
@@ -48,4 +51,8 @@ LLVMValueRef QueueAppendRightHandler(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef QueuePopLeftHandler(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder);
 #endif
+

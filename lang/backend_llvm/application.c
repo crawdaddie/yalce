@@ -126,11 +126,9 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  if ((ast->data.AST_APPLICATION.len == 1) &&
-      (((Type *)ast->data.AST_APPLICATION.args->md)->kind == T_EMPTY_LIST)) {
-    Type *t = ast->md;
-    return null_node(llnode_type(
-        type_to_llvm_type(t->data.T_CONS.args[0], ctx->env, module)));
+  if (ast->data.AST_APPLICATION.args->tag == AST_LIST &&
+      ast->data.AST_APPLICATION.args->data.AST_LIST.len == 0) {
+    return codegen_list(ast->data.AST_APPLICATION.args, ctx, module, builder);
   }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;

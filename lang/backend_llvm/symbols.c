@@ -21,11 +21,13 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type) {
+
   JITSymbol *sym = malloc(sizeof(JITSymbol));
   sym->type = type_tag;
   sym->symbol_type = symbol_type;
   sym->val = val;
   sym->llvm_type = llvm_type;
+  // TODO: if it's a symbol do I need to create a storage class???
 
   return sym;
 }
@@ -295,6 +297,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     JITSymbol *sym = lookup_id_ast(expr, outer_ctx);
     if (sym) {
       // create symbol alias - ie rebind symbol to another name
+      // printf("create symbol alias - ie rebind symbol to another name\n");
       const char *chars = binding->data.AST_IDENTIFIER.value;
       int len = binding->data.AST_IDENTIFIER.length;
       ht_set_hash(inner_ctx->frame->table, chars, hash_string(chars, len), sym);

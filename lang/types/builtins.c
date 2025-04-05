@@ -274,6 +274,24 @@ Type *_new_sched_run_sig() { return next_tvar(); }
 
 Type t_run_in_scheduler_sig = GENERIC_TYPE(_new_sched_run_sig);
 
+Type *_list_tail_sig() {
+  Type *list_el = next_tvar();
+  Type *list = create_list_type_of_type(list_el);
+  return type_fn(list, list);
+}
+Type t_list_tail_sig = GENERIC_TYPE(_list_tail_sig);
+
+Type *_list_ref_set_sig() {
+  Type *list_el = next_tvar();
+  Type *list = create_list_type_of_type(list_el);
+  Type *f = &t_void;
+  f = type_fn(list, f);
+  f = type_fn(list, f);
+  return f;
+}
+
+Type t_list_ref_set_sig = GENERIC_TYPE(_list_ref_set_sig);
+
 void initialize_builtin_types() {
 
   ht_init(&builtin_types);
@@ -371,18 +389,19 @@ void initialize_builtin_types() {
   add_builtin("array_size", &t_array_size);
 
   add_builtin("list_concat", &t_list_concat);
+  add_builtin("list_tail", &t_list_tail_sig);
   add_builtin("::", &t_list_prepend);
+  add_builtin("list_ref_set", &t_list_ref_set_sig);
 
   add_builtin("||", &t_builtin_or);
   add_builtin("&&", &t_builtin_and);
+
   add_builtin("cor_wrap_effect", &t_cor_wrap_effect_fn_sig);
   add_builtin("cor_map", &t_cor_map_fn_sig);
   add_builtin("iter_of_list", &t_iter_of_list_sig);
   add_builtin("iter_of_array", &t_iter_of_array_sig);
   add_builtin("cor_loop", &t_cor_loop_sig);
-  add_builtin("queue_of_list", &t_queue_of_list);
-  add_builtin("queue_pop_left", &t_queue_pop_left);
-  add_builtin("queue_append_right", &t_queue_append_right);
+
   add_builtin("opt_map", &t_opt_map_sig);
   add_builtin("cstr", &t_builtin_cstr);
   add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);

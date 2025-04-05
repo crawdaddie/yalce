@@ -18,4 +18,8 @@ extern Type t_array_fill_sig;
 extern Type t_array_fill_const_sig;
 extern Type t_array_succ_sig;
 extern Type t_struct_set_sig;
+
+extern Type t_list_tail_sig;
+
+extern Type t_list_ref_set_sig;
 #endif

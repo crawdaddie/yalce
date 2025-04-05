@@ -185,7 +185,7 @@ expr_sequence:
   ;
 
 let_binding:
-    LET TEST_ID '=' expr             { $$ = ast_test_module($4);}
+    LET TEST_ID '=' expr            { $$ = ast_test_module($4);}
   | LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' EXTERN FN fn_signature  

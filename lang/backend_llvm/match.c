@@ -367,12 +367,26 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     if (ctx->stack_ptr == 0) {
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
 
-      JITSymbol *sym =
-          new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
-      codegen_set_global(sym, val, val_type, llvm_type, ctx, module, builder);
+      JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
+
+      JITSymbol *sym;
+      if (ex_sym != NULL) {
+        // printf("restore existing symbol\n");
+        // print_ast(binding);
+        ex_sym->val = val;
+        ex_sym->llvm_type = llvm_type;
+        ex_sym->symbol_type = val_type;
+        LLVMBuildStore(builder, val, ex_sym->storage);
+        sym = ex_sym;
+      } else {
+        sym = new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
+        codegen_set_global(sym, val, val_type, llvm_type, ctx, module, builder);
+      }
+
       ht_set_hash(ctx->frame->table, chars, id_hash, sym);
       return _TRUE;
     } else {
+
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
       JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
       ht_set_hash(ctx->frame->table, chars, id_hash, sym);
