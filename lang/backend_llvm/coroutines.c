@@ -532,9 +532,6 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type, Ast *ast,
   LLVMTypeRef state_struct_type = create_coroutine_state_type(
       constructor_type, &state_struct, ast, ctx, module);
 
-  printf("STATE STRUCT\n");
-  print_type(&state_struct);
-
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
 
   LLVMValueRef counter = LLVMBuildLoad2(
