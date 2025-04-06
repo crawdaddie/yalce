@@ -274,6 +274,20 @@ Type *_new_sched_run_sig() { return next_tvar(); }
 
 Type t_run_in_scheduler_sig = GENERIC_TYPE(_new_sched_run_sig);
 
+Type *_play_routine_sig() {
+  Type *v = next_tvar();
+  Type *cor_from = create_coroutine_instance_type(v);
+  // Type *sched_cb_type = &t_void;
+  // sched_cb_type = type_fn(&t_int, sched_cb_type);
+  // sched_cb_type = type_fn(&t_ptr, sched_cb_type);
+
+  Type *f = &t_void;
+  f = type_fn(cor_from, f);
+  f = type_fn(&t_ptr, f);
+  return f;
+}
+Type t_play_routine_sig = GENERIC_TYPE(_play_routine_sig);
+
 Type *_list_tail_sig() {
   Type *list_el = next_tvar();
   Type *list = create_list_type_of_type(list_el);
@@ -405,7 +419,7 @@ void initialize_builtin_types() {
   add_builtin("opt_map", &t_opt_map_sig);
   add_builtin("cstr", &t_builtin_cstr);
   add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
-  add_builtin("play_routine", &t_run_in_scheduler_sig);
+  add_builtin("play_routine", &t_play_routine_sig);
   add_builtin("array_fill", &t_array_fill_sig);
   add_builtin("array_fill_const", &t_array_fill_const_sig);
   add_builtin("array_new", &t_array_fill_sig);

@@ -291,12 +291,11 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
 
     input_vals = input_vals->next;
   }
-
   return ensemble;
 }
 
 Node *play_node_offset(int offset, Node *s) {
-  // printf("play node %p at offset %d\n", s, offset);
+  printf("play node %p at offset %d\n", s, offset);
   // Node *group = _chain;
   // reset_chain();
   // add_to_dac(s);

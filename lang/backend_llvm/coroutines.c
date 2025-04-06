@@ -72,8 +72,7 @@ LLVMTypeRef create_coroutine_state_type(Type *constructor_type, Ast *ast,
   for (int i = inner_args_len - 1; i >= 0; i--) {
     Type *t = boundary_xs->ast->md;
     state_arg_types[outer_args_len + i] = t;
-    print_ast(boundary_xs->ast);
-    printf("goes in slot %d\n", outer_args_len + i);
+
     llvm_state_arg_types[outer_args_len + i] =
         type_to_llvm_type(t, ctx->env, module);
     boundary_xs = boundary_xs->next;

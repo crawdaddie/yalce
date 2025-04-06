@@ -71,6 +71,7 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   }
 
   *ret_type = LLVMTypeOf(body);
+  print_type(ast->md);
   if (types_equal(ast->md, &t_void)) {
     *ret_type = LLVMVoidType();
     LLVMBuildRetVoid(builder);

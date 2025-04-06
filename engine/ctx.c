@@ -34,6 +34,7 @@ void audio_ctx_add(Node *ensemble) {
 
   // Add to existing chain
   if (ctx->head == NULL) {
+    printf("audio ctx add %p\n");
     ctx->head = ensemble;
   } else {
     // Find the end of the chain
@@ -53,6 +54,7 @@ static void process_msg_pre(scheduler_msg msg) {
     int frame_offset = msg.frame_offset;
     payload.target->frame_offset = frame_offset;
     audio_ctx_add(payload.target);
+    printf("payload node add target %p\n", payload.target);
     //
     // payload.target->write_to_dac = true;
     break;
@@ -94,13 +96,13 @@ static void process_msg_pre(scheduler_msg msg) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
-      inlet_node->output.layout = buf->output.layout;  
-      inlet_node->output.size = buf->output.size;  
-      inlet_node->output.buf = buf->output.buf;  
+      inlet_node->output.layout = buf->output.layout;
+      inlet_node->output.size = buf->output.size;
+      inlet_node->output.buf = buf->output.buf;
       // printf("setting input data\n");
-        // for (int i= 0; i < inlet_node->output.size * inlet_node->output.layout; i++) {
-          // printf("buf data inlet: %f\n", inlet_node->output.buf[i]);
-        // }
+      // for (int i= 0; i < inlet_node->output.size * inlet_node->output.layout;
+      // i++) { printf("buf data inlet: %f\n", inlet_node->output.buf[i]);
+      // }
     }
 
     break;
@@ -108,7 +110,7 @@ static void process_msg_pre(scheduler_msg msg) {
 
   case NODE_SET_TRIG: {
     struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
-      Node *node = payload.target;
+    Node *node = payload.target;
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);

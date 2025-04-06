@@ -20,7 +20,7 @@ void codegen_set_global(JITSymbol *sym, LLVMValueRef value, Type *ttype,
 
   // Store the value in the malloced space
   LLVMBuildStore(builder, value, malloced_space);
-  sym->storage = malloced_space;
+  // sym->storage = malloced_space;
 
   // Cast the malloced space to a generic void ptr for storage in global array
   LLVMValueRef generic_ptr = LLVMBuildBitCast(
