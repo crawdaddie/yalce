@@ -22,4 +22,5 @@ extern Type t_struct_set_sig;
 extern Type t_list_tail_sig;
 
 extern Type t_list_ref_set_sig;
+extern Type t_set_ref_sig;
 #endif

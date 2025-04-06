@@ -389,6 +389,10 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 
       LLVMTypeRef llvm_type = LLVMTypeOf(val);
       JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
+      LLVMValueRef sym_alloca =
+          LLVMBuildAlloca(builder, llvm_type, "local_var_alloca");
+      LLVMBuildStore(builder, val, sym_alloca);
+      sym->storage = sym_alloca;
       ht_set_hash(ctx->frame->table, chars, id_hash, sym);
       return _TRUE;
     }

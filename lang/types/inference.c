@@ -18,6 +18,7 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx);
 Type *infer_match_expr(Ast *ast, TICtx *ctx);
 Type *infer_module(Ast *ast, TICtx *ctx);
 Type *infer(Ast *ast, TICtx *ctx);
+Type *infer_set_ref(Ast *ast, TICtx *ctx);
 
 void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type);
 void apply_substitutions_rec(Ast *ast, Substitution *subst);
@@ -210,6 +211,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       ref->ref_count++;
 
       ast->data.AST_IDENTIFIER.is_fn_param = ref->is_fn_param;
+      ast->data.AST_IDENTIFIER.fn_param_idx = ref->fn_param_idx;
       ast->data.AST_IDENTIFIER.is_recursive_fn_ref = ref->is_recursive_fn_ref;
 
       if (ctx->current_fn_ast &&
@@ -503,6 +505,12 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
     Type *arg_type = infer(ast->data.AST_APPLICATION.args, ctx);
     return arg_type;
+  }
+
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "<-")) {
+    return infer_set_ref(ast, ctx);
   }
 
   if (!fn_type) {
@@ -1047,6 +1055,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     bind_in_ctx(&body_ctx, param, param_types[i]);
     if (body_ctx.env) {
       body_ctx.env->is_fn_param = true;
+      body_ctx.env->fn_param_idx = i;
     }
   }
 
@@ -1105,7 +1114,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (body_ctx.yielded_type != NULL) {
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
   }
-
+  printf("%s\n", name);
+  print_type(ast->md);
   return ast->md;
 }
 
@@ -1607,4 +1617,23 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
       create_cons_type(TYPE_NAME_MODULE, len, member_types);
   module_struct_type->data.T_CONS.names = names;
   return module_struct_type;
+}
+
+Type *infer_set_ref(Ast *ast, TICtx *ctx) {
+  if (ast->data.AST_APPLICATION.args->tag != AST_IDENTIFIER) {
+    return type_error(ctx, ast,
+                      "set ref should only be used with an identifier\n");
+  }
+
+  infer(ast->data.AST_APPLICATION.args, ctx);
+  infer(ast->data.AST_APPLICATION.args + 1, ctx);
+
+  Ast *id = ast->data.AST_APPLICATION.args;
+  if (id->data.AST_IDENTIFIER.is_fn_param) {
+    Ast *param = ctx->current_fn_ast->data.AST_LAMBDA.params +
+                 id->data.AST_IDENTIFIER.fn_param_idx;
+    param->data.AST_IDENTIFIER.is_mutable = true;
+  }
+
+  return &t_void;
 }

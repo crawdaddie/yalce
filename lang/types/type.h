@@ -291,6 +291,7 @@ typedef struct Type {
   bool is_coroutine_instance;
   bool is_coroutine_constructor;
   bool is_recursive_type_ref;
+  bool is_mutable;
   int scope;
   int yield_boundary;
   void *meta;
@@ -302,6 +303,7 @@ typedef struct TypeEnv {
   Type *type;
   int ref_count;
   int is_fn_param;
+  int fn_param_idx;
   int is_recursive_fn_ref;
   int yield_boundary;
   struct TypeEnv *next;

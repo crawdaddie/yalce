@@ -181,7 +181,9 @@ struct Ast {
       size_t length;
       bool crosses_yield_boundary;
       bool is_recursive_fn_ref;
+      bool is_mutable;
       bool is_fn_param;
+      int fn_param_idx;
     } AST_IDENTIFIER;
 
     struct AST_META {

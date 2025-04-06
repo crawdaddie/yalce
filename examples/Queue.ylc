@@ -6,7 +6,6 @@ let pop_left = fn (head, tail) ->
   match head with
   | x::rest -> ((rest, tail), Some x)  
   | [] -> ((head, tail), None)
-
 ;;
 
 let enqueue = fn (head, tail) item ->
