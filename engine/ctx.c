@@ -34,7 +34,6 @@ void audio_ctx_add(Node *ensemble) {
 
   // Add to existing chain
   if (ctx->head == NULL) {
-    printf("audio ctx add %p\n");
     ctx->head = ensemble;
   } else {
     // Find the end of the chain
@@ -54,9 +53,6 @@ static void process_msg_pre(scheduler_msg msg) {
     int frame_offset = msg.frame_offset;
     payload.target->frame_offset = frame_offset;
     audio_ctx_add(payload.target);
-    printf("payload node add target %p\n", payload.target);
-    //
-    // payload.target->write_to_dac = true;
     break;
   }
 

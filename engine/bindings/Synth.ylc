@@ -3,6 +3,7 @@ let maketable_sin = extern fn () -> ();
 let maketable_sq = extern fn () -> ();
 let sin_node = extern fn Synth -> Synth;
 let sq_node = extern fn Synth -> Synth;
+let sq_pwm_node = extern fn Synth -> Synth -> Synth;
 let phasor_node = extern fn Synth -> Synth;
 let raw_osc_node = extern fn Synth -> Synth -> Synth;
 let osc_bank_node = extern fn Synth -> Synth -> Synth;
@@ -17,6 +18,7 @@ let trig_rand_node = extern fn Synth -> Synth;
 let trig_sel_node = extern fn Synth -> Synth -> Synth;
 let granulator_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth;
 let pm_node = extern fn Synth -> Synth -> Synth -> Synth;
+let lfnoise_node = extern fn Synth -> Synth -> Synth -> Synth;
 
 # ext_lib.h
 let start_blob = extern fn () -> ();

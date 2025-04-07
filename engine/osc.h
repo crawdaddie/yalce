@@ -7,6 +7,7 @@ void maketable_sq(void);
 NodeRef sin_node(NodeRef input);
 
 NodeRef sq_node(NodeRef input);
+NodeRef sq_pwm_node(NodeRef freq_input, NodeRef pw_input);
 NodeRef phasor_node(NodeRef input);
 
 NodeRef raw_osc_node(NodeRef table, NodeRef freq);
@@ -31,4 +32,6 @@ NodeRef granulator_node(int max_grains, NodeRef buf, NodeRef trig, NodeRef pos,
 
 NodeRef pm_node(NodeRef freq_input, NodeRef mod_index_input,
                 NodeRef mod_ratio_input);
+
+NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input);
 #endif

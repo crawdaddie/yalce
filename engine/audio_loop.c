@@ -296,8 +296,8 @@ int start_audio() {
   }
   printf("Software latency:  %f\n", outstream->software_latency);
   printf("Sample rate:       %d\n", outstream->sample_rate);
-  ctx.sample_rate = outstream->sample_rate;
-  ctx.spf = 1.0 / outstream->sample_rate;
+  ctx.sample_rate = ctx.sample_rate;
+  ctx.spf = 1.0 / ctx.sample_rate;
 
   printf("------------------\n");
 

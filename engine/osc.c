@@ -19,7 +19,7 @@ int save_table_to_file(double *table, int size, const char *filename,
   }
 
   fprintf(file, "// Generated table with %d entries\n", size);
-  fprintf(file, "#define %s %d\n", TAB_SIZE_NAME, size);
+  fprintf(file, "#define %s %d\n// clang-format off\n", TAB_SIZE_NAME, size);
   fprintf(file, "static const double %s[%d] = {\n", tab_name, size);
 
   for (int i = 0; i < size; i++) {
@@ -42,14 +42,15 @@ void maketable_sq(void) {
     for (int harm = 1; harm < SQ_TABSIZE / 2;
          harm += 2) { // summing odd frequencies
 
-      // for (int harm = 1; harm < 100; harm += 2) { // summing odd frequencies
-      double val = sin(phase * harm) / harm; // sinewave of different frequency
+      double val = sin(phase * harm) / harm;
       sq_table[i] += val;
     }
     phase += phsinc;
   }
+#ifdef SAVE_WTABLES
   save_table_to_file(sq_table, SQ_TABSIZE, "sq_table.h", "SQ_TABSIZE",
                      "sq_table");
+#endif
 }
 
 double sin_table[SIN_TABSIZE];
@@ -64,8 +65,10 @@ void maketable_sin(void) {
     phase += phsinc;
   }
 
+#ifdef SAVE_WTABLES
   save_table_to_file(sq_table, SQ_TABSIZE, "sin_table.h", "SIN_TABSIZE",
                      "sin_table");
+#endif
 }
 
 typedef struct sin_state {
@@ -167,7 +170,6 @@ void *sq_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
     d_index = state->phase * SQ_TABSIZE;
     index = (int)d_index;
     frac = d_index - index;
-
     a = sq_table[index & table_mask];
     b = sq_table[(index + 1) & table_mask];
 
@@ -188,7 +190,6 @@ Node *sq_node(Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(sq_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)sq_perform,
       .node_index = node->node_index,
@@ -201,14 +202,93 @@ Node *sq_node(Node *input) {
       .meta = "sq",
   };
 
-  // Initialize state
   sq_state *state =
       (sq_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (sq_state){.phase = 0.0};
 
-  // Connect input
   if (input) {
     node->connections[0].source_node_index = input->node_index;
+  }
+
+  return node;
+}
+static inline double clamp_range(double input, double a, double b) {
+  return input < a ? a : (input > b ? b : input);
+}
+
+// Square wave oscillator with PWM
+void *sq_pwm_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
+                     double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *freq_in = inputs[0]->output.buf;
+  double *pw_in = inputs[1]->output.buf;
+
+  double d_index;
+  int index;
+  double frac, a, b, sample;
+  double freq, pw;
+
+  const int table_mask = SQ_TABSIZE - 1;
+
+  while (nframes--) {
+    freq = *freq_in++;
+    pw = *pw_in++;
+
+    pw = clamp_range(pw, 0.01, 0.99);
+
+    double adjusted_phase;
+    if (state->phase < pw) {
+      adjusted_phase = 0.5 * state->phase / pw;
+    } else {
+      adjusted_phase = 0.5 + 0.5 * (state->phase - pw) / (1.0 - pw);
+    }
+
+    d_index = adjusted_phase * SQ_TABSIZE;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    a = sq_table[index & table_mask];
+    b = sq_table[(index + 1) & table_mask];
+
+    sample = (1.0 - frac) * a + (frac * b);
+
+    for (int i = 0; i < out_layout; i++) {
+      *out++ = sample;
+    }
+
+    state->phase = fmod(state->phase + freq * spf, 1.0);
+  }
+
+  return node->output.buf;
+}
+
+Node *sq_pwm_node(Node *freq_input, Node *pw_input) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(sq_state));
+
+  // Initialize node
+  *node = (Node){
+      .perform = (perform_func_t)sq_pwm_perform,
+      .node_index = node->node_index,
+      .num_inputs = 2,
+      .state_size = sizeof(sq_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(sq_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "sq_pwm",
+  };
+
+  sq_state *state =
+      (sq_state *)(graph->nodes_state_memory + node->state_offset);
+  *state = (sq_state){.phase = 0.0};
+
+  if (freq_input) {
+    node->connections[0].source_node_index = freq_input->node_index;
+  }
+  if (pw_input) {
+    node->connections[1].source_node_index = pw_input->node_index;
   }
 
   return node;
@@ -230,7 +310,6 @@ void *phasor_perform(Node *node, phasor_state *state, Node *inputs[],
     freq = *in;
     in++;
 
-    // Output the current phase directly
     for (int i = 0; i < out_layout; i++) {
       *out = state->phase;
       out++;
@@ -246,7 +325,6 @@ Node *phasor_node(Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(phasor_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)phasor_perform,
       .node_index = node->node_index,
@@ -259,12 +337,10 @@ Node *phasor_node(Node *input) {
       .meta = "phasor",
   };
 
-  // Initialize state
   phasor_state *state =
       (phasor_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (phasor_state){.phase = 0.0};
 
-  // Connect input
   if (input) {
     node->connections[0].source_node_index = input->node_index;
   }
@@ -318,7 +394,6 @@ Node *raw_osc_node(Node *table, Node *freq) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(raw_osc_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)raw_osc_perform,
       .node_index = node->node_index,
@@ -331,12 +406,10 @@ Node *raw_osc_node(Node *table, Node *freq) {
       .meta = "raw_osc",
   };
 
-  // Initialize state
   raw_osc_state *state =
       (raw_osc_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (raw_osc_state){.phase = 0.0};
 
-  // Connect inputs
   if (freq) {
     node->connections[0].source_node_index = freq->node_index;
   }
@@ -389,7 +462,7 @@ void *osc_bank_perform(Node *node, osc_bank_state *state, Node *inputs[],
       output += sample;
     }
 
-    output /= norm; // Normalize output based on amplitudes
+    output /= norm;
 
     for (int i = 0; i < out_layout; i++) {
       *out = output;
@@ -406,7 +479,6 @@ Node *osc_bank_node(Node *amps, Node *freq) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(osc_bank_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)osc_bank_perform,
       .node_index = node->node_index,
@@ -419,12 +491,10 @@ Node *osc_bank_node(Node *amps, Node *freq) {
       .meta = "osc_bank",
   };
 
-  // Initialize state
   osc_bank_state *state =
       (osc_bank_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (osc_bank_state){.phase = 0.0};
 
-  // Connect inputs
   if (freq) {
     node->connections[0].source_node_index = freq->node_index;
   }
@@ -477,7 +547,6 @@ Node *__bufplayer_node(Node *buf, Node *rate) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)__bufplayer_perform,
       .node_index = node->node_index,
@@ -491,12 +560,10 @@ Node *__bufplayer_node(Node *buf, Node *rate) {
       .meta = "bufplayer",
   };
 
-  // Initialize state
   bufplayer_state *state =
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  // Connect inputs
   if (buf) {
     node->connections[0].source_node_index = buf->node_index;
   }
@@ -520,34 +587,25 @@ void *bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
   double *rate = inputs[1]->output.buf;
 
   for (int frame = 0; frame < nframes; frame++) {
-    // Calculate buffer position
-    int buf_frames = buf_size; // Number of frames in buffer
+    int buf_frames = buf_size;
     double d_index = state->phase * buf_frames;
     int index = (int)d_index;
     double frac = d_index - index;
 
-    // Get base positions for the current frame in buffer (accounting for
-    // layout)
     int pos_a = (index % buf_frames) * buf_layout;
     int pos_b = ((index + 1) % buf_frames) * buf_layout;
 
-    // Process each channel
     for (int ch = 0; ch < out_layout; ch++) {
-      // Get the channel value from the buffer
-      // If output has more channels than input, repeat the last input channel
       int buf_ch = (ch < buf_layout) ? ch : (buf_layout - 1);
 
       double a = buf[pos_a + buf_ch];
       double b = buf[pos_b + buf_ch];
 
-      // Linear interpolation
       double sample = (1.0 - frac) * a + (frac * b);
 
-      // Write to output
       out[frame * out_layout + ch] = sample;
     }
 
-    // Advance phase
     state->phase = fmod(state->phase + rate[frame] / buf_frames, 1.0);
   }
 
@@ -558,7 +616,6 @@ Node *bufplayer_node(Node *buf, Node *rate) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)bufplayer_perform,
       .node_index = node->node_index,
@@ -572,12 +629,10 @@ Node *bufplayer_node(Node *buf, Node *rate) {
       .meta = "bufplayer",
   };
 
-  // Initialize state
   bufplayer_state *state =
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  // Connect inputs
   if (buf) {
     node->connections[0].source_node_index = buf->node_index;
   }
@@ -603,7 +658,6 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
   int index;
 
   while (nframes--) {
-    // Reset phase on trigger
     if (*trig == 1.0) {
       state->phase = 0;
     }
@@ -635,7 +689,6 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)bufplayer_trig_perform,
       .node_index = node->node_index,
@@ -648,12 +701,10 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
       .meta = "bufplayer_trig",
   };
 
-  // Initialize state
   bufplayer_state *state =
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  // Connect inputs
   if (buf) {
     node->connections[0].source_node_index = buf->node_index;
   }
@@ -699,12 +750,11 @@ Node *white_noise_node() {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, 0);
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)white_noise_perform,
       .node_index = node->node_index,
       .num_inputs = 0,
-      .state_size = 0, // No state needed
+      .state_size = 0,
       .state_offset = 0,
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
@@ -730,7 +780,6 @@ void *brown_noise_perform(Node *node, brown_noise_state *state, Node *inputs[],
     double add = scale * _random_double_range(-1.0, 1.0);
     state->last += add;
 
-    // Prevent unbounded drift
     if (state->last > 1.0 || state->last < -1.0) {
       state->last = state->last * 0.999;
     }
@@ -748,7 +797,6 @@ Node *brown_noise_node() {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(brown_noise_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)brown_noise_perform,
       .node_index = node->node_index,
@@ -762,7 +810,6 @@ Node *brown_noise_node() {
       .meta = "brown_noise",
   };
 
-  // Initialize state
   brown_noise_state *state =
       (brown_noise_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (brown_noise_state){.last = 0.0};
@@ -770,111 +817,110 @@ Node *brown_noise_node() {
   return node;
 }
 
-// Exponential chirp generator
-// typedef struct chirp_state {
-//   double current_freq;
-//   double target_freq;
-//   double elapsed_time;
-//   int trigger_active;
-//   double start_freq;
-//   double end_freq;
-// } chirp_state;
-//
-// void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int
-// nframes,
-//                     double spf) {
-//   double *out = node->output.buf;
-//   int out_layout = node->output.layout;
-//   double *trig = inputs[0]->output.buf;
-//   double *lag = inputs[1]->output.buf;
-//
-//   while (nframes--) {
-//     double lag_time = *lag;
-//
-//     if (*trig == 1.0) {
-//       state->trigger_active = 1;
-//       state->current_freq = state->start_freq;
-//       state->elapsed_time = 0.0;
-//     }
-//
-//     if (state->trigger_active) {
-//       // Calculate progress (0 to 1)
-//       double progress = state->elapsed_time / lag_time;
-//       if (progress > 1.0)
-//         progress = 1.0;
-//
-//       // Use exponential interpolation for frequency
-//       state->current_freq = state->start_freq *
-//                             pow(state->end_freq / state->start_freq,
-//                             progress);
-//
-//       // Update elapsed time
-//       state->elapsed_time += spf;
-//
-//       // Check if we've reached the end of the chirp
-//       if (state->elapsed_time >= lag_time) {
-//         state->trigger_active = 0;
-//         state->current_freq = state->end_freq;
-//       }
-//     }
-//
-//     for (int i = 0; i < out_layout; i++) {
-//       *out = state->current_freq;
-//       out++;
-//     }
-//
-//     lag++;
-//     trig++;
-//   }
-//
-//   return node->output.buf;
-// }
-//
-// Node *chirp_node(double start_freq, double end_freq, Node *lag_time,
-//                  Node *trig) {
-//   AudioGraph *graph = _graph;
-//   Node *node = allocate_node_in_graph(graph, sizeof(chirp_state));
-//
-//   // Initialize node
-//   *node = (Node){
-//       .perform = (perform_func_t)chirp_perform,
-//       .node_index = node->node_index,
-//       .num_inputs = 2,
-//       .state_size = sizeof(chirp_state),
-//       .state_offset = state_offset_ptr_in_graph(graph, sizeof(chirp_state)),
-//       .output = (Signal){.layout = 1,
-//                          .size = BUF_SIZE,
-//                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
-//       .meta = "chirp",
-//   };
-//
-//   // Initialize state
-//   chirp_state *state =
-//       (chirp_state *)(graph->nodes_state_memory + node->state_offset);
-//   *state = (chirp_state){.current_freq = start_freq,
-//                          .target_freq = end_freq,
-//                          .trigger_active = 0,
-//                          .start_freq = start_freq,
-//                          .end_freq = end_freq,
-//                          .elapsed_time = 0.0};
-//
-//   // Connect inputs
-//   if (trig) {
-//     node->connections[0].source_node_index = trig->node_index;
-//   }
-//   if (lag_time) {
-//     node->connections[1].source_node_index = lag_time->node_index;
-//   }
-//
-//   return node;
-// }
+// lf White noise generator
+// LF Noise node with frequency and range inputs
+typedef struct lfnoise_state {
+  double current_value; // Current output value
+  double target_value;  // Target value to ramp to
+  double samples_left;  // Samples remaining until next random value
+} lfnoise_state;
+
+void *lfnoise_perform(Node *node, lfnoise_state *state, Node *inputs[],
+                      int nframes, double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+
+  // Input signals
+  double *freq_in = inputs[0]->output.buf; // Frequency in Hz
+  double *min_in = inputs[1]->output.buf;  // Minimum value
+  double *max_in = inputs[2]->output.buf;  // Maximum value
+
+  double freq, min_range, max_range;
+  double sample, increment;
+
+  while (nframes--) {
+    freq = *freq_in++;
+    min_range = *min_in++;
+    max_range = *max_in++;
+
+    // If we need a new random value
+    if (state->samples_left <= 0) {
+      // Generate new target value
+      state->target_value = _random_double_range(min_range, max_range);
+
+      // Calculate samples until next change (based on frequency)
+      double samples_per_cycle = 1.0 / (freq * spf);
+      state->samples_left = samples_per_cycle;
+
+      // Calculate increment per sample to reach target value
+      increment =
+          (state->target_value - state->current_value) / samples_per_cycle;
+    } else {
+      // Continue ramping to target
+      increment =
+          (state->target_value - state->current_value) / state->samples_left;
+    }
+
+    // Update current value with increment
+    state->current_value += increment;
+
+    // Decrement samples counter
+    state->samples_left--;
+
+    // Output current value
+    for (int i = 0; i < out_layout; i++) {
+      *out++ = state->current_value;
+    }
+  }
+
+  return node->output.buf;
+}
+
+NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(lfnoise_state));
+
+  *node = (Node){
+      .perform = (perform_func_t)lfnoise_perform,
+      .node_index = node->node_index,
+      .num_inputs = 3, // frequency, min range, max range
+      .state_size = sizeof(lfnoise_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(lfnoise_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "lfnoise",
+  };
+
+  // Initialize state
+  lfnoise_state *state =
+      (lfnoise_state *)(graph->nodes_state_memory + node->state_offset);
+  *state = (lfnoise_state){
+      .current_value = 0.0,
+      .target_value = 0.0,
+      .samples_left = 0 // This will trigger immediate generation of a new value
+  };
+
+  // Connect inputs
+  if (freq_input) {
+    node->connections[0].source_node_index = freq_input->node_index;
+  }
+  if (min_input) {
+    node->connections[1].source_node_index = min_input->node_index;
+  }
+  if (max_input) {
+    node->connections[2].source_node_index = max_input->node_index;
+  }
+
+  return node;
+}
 typedef struct chirp_state {
   double start_freq;
   double end_freq;
   double current_freq;
   double elapsed_time;
   int trigger_active;
-  double prev_trig_value; // Added to track previous trigger value
+  double prev_trig_value;
 } chirp_state;
 
 void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
@@ -888,8 +934,6 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
     double trig_value = trig[i];
     double lag_time = lag[i];
 
-    // Detect both impulses (value == 1.0) and rising edges (prev <= 0 &&
-    // current > 0)
     if (((trig_value == 1.0) && (state->prev_trig_value != 1.0)) ||
         (state->prev_trig_value <= 0.5 && trig_value > 0.5)) {
 
@@ -898,30 +942,24 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
       state->elapsed_time = 0.0;
     }
 
-    // Store current trigger value for next iteration
     state->prev_trig_value = trig_value;
 
     if (state->trigger_active) {
-      // Calculate progress (0 to 1)
       double progress = state->elapsed_time / lag_time;
       if (progress > 1.0)
         progress = 1.0;
 
-      // Use exponential interpolation for frequency
       state->current_freq = state->start_freq *
                             pow(state->end_freq / state->start_freq, progress);
 
-      // Update elapsed time
       state->elapsed_time += spf;
 
-      // Check if we've reached the end of the chirp
       if (state->elapsed_time >= lag_time) {
         state->trigger_active = 0;
         state->current_freq = state->end_freq;
       }
     }
 
-    // Write to all output channels
     for (int ch = 0; ch < out_layout; ch++) {
       out[i * out_layout + ch] = state->current_freq;
     }
@@ -935,7 +973,6 @@ Node *chirp_node(double start_freq, double end_freq, Node *lag_input,
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(chirp_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)chirp_perform,
       .node_index = node->node_index,
@@ -948,19 +985,15 @@ Node *chirp_node(double start_freq, double end_freq, Node *lag_input,
       .meta = "chirp",
   };
 
-  // Initialize state
   chirp_state *state =
       (chirp_state *)(graph->nodes_state_memory + node->state_offset);
-  *state = (chirp_state){
-      .start_freq = start_freq,
-      .end_freq = end_freq,
-      .current_freq = start_freq,
-      .elapsed_time = 0.0,
-      .trigger_active = 0,
-      .prev_trig_value = 0.0 // Initialize the previous trigger value
-  };
+  *state = (chirp_state){.start_freq = start_freq,
+                         .end_freq = end_freq,
+                         .current_freq = start_freq,
+                         .elapsed_time = 0.0,
+                         .trigger_active = 0,
+                         .prev_trig_value = 0.0};
 
-  // Connect inputs
   if (trig_input) {
     node->connections[0].source_node_index = trig_input->node_index;
   }
@@ -989,7 +1022,6 @@ void *impulse_perform(Node *node, impulse_state *state, Node *inputs[],
     freq = *freq_in;
     freq_in++;
 
-    // Generate impulse when phase is exactly 1.0
     if (state->phase >= 1.0) {
       sample = 1.0;
       state->phase = state->phase - 1.0;
@@ -1012,7 +1044,6 @@ Node *impulse_node(Node *freq) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(impulse_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)impulse_perform,
       .node_index = node->node_index,
@@ -1025,13 +1056,10 @@ Node *impulse_node(Node *freq) {
       .meta = "impulse",
   };
 
-  // Initialize state
   impulse_state *state =
       (impulse_state *)(graph->nodes_state_memory + node->state_offset);
-  *state =
-      (impulse_state){.phase = 1.0}; // Start at 1.0 to get immediate impulse
+  *state = (impulse_state){.phase = 1.0};
 
-  // Connect input
   if (freq) {
     node->connections[0].source_node_index = freq->node_index;
   }
@@ -1074,7 +1102,6 @@ Node *ramp_node(Node *freq) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(ramp_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)ramp_perform,
       .node_index = node->node_index,
@@ -1087,12 +1114,10 @@ Node *ramp_node(Node *freq) {
       .meta = "ramp",
   };
 
-  // Initialize state
   ramp_state *state =
       (ramp_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (ramp_state){.phase = 0.0};
 
-  // Connect input
   if (freq) {
     node->connections[0].source_node_index = freq->node_index;
   }
@@ -1131,7 +1156,6 @@ Node *trig_rand_node(Node *trig) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(trig_rand_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)trig_rand_perform,
       .node_index = node->node_index,
@@ -1144,12 +1168,10 @@ Node *trig_rand_node(Node *trig) {
       .meta = "trig_rand",
   };
 
-  // Initialize state
   trig_rand_state *state =
       (trig_rand_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (trig_rand_state){.value = _random_double_range(0.0, 1.0)};
 
-  // Connect input
   if (trig) {
     node->connections[0].source_node_index = trig->node_index;
   }
@@ -1203,17 +1225,14 @@ Node *trig_sel_node(Node *trig, Node *sels) {
       .meta = "trig_sel",
   };
 
-  // Initialize state
   trig_sel_state *state =
       (trig_sel_state *)(graph->nodes_state_memory + node->state_offset);
 
-  // Connect inputs
   if (trig) {
     node->connections[0].source_node_index = trig->node_index;
   }
   if (sels) {
     node->connections[1].source_node_index = sels->node_index;
-    // Initialize value with a random selection
     double *sels_buf = sels->output.buf;
     int sels_size = sels->output.size;
     state->value = sels_buf[rand() % sels_size];
@@ -1252,7 +1271,6 @@ static void init_grain(granulator_state *state, int index, double pos,
 
 static void process_grain(granulator_state *state, int i, double *out,
                           double *buf, int buf_size) {
-  // Linear interpolation
   double d_index = state->starts[i] + state->positions[i] * state->rates[i];
   int index = (int)d_index;
   double frac = d_index - index;
@@ -1271,7 +1289,6 @@ static void process_grain(granulator_state *state, int i, double *out,
       state->next_free_grain = i;
     }
   } else {
-    // Apply envelope
     double env_pos = (double)state->positions[i] / state->lengths[i];
     if (env_pos < state->overlap) {
       state->amps[i] = env_pos / state->overlap;
@@ -1294,21 +1311,17 @@ void *granulator_perform(Node *node, granulator_state *state, Node *inputs[],
   double *rate = inputs[3]->output.buf;
 
   while (nframes--) {
-    // Reset the output for this sample
     double sample = 0.0;
 
-    // Check for new grain trigger
     if (*trig == 1.0 && state->active_grains < state->max_concurrent_grains) {
       double p = fabs(*pos);
       int start_pos = (int)(p * buf_size);
       int length = state->min_grain_length +
                    rand() % (state->max_grain_length - state->min_grain_length);
 
-      // Initialize new grain
       int index = state->next_free_grain;
       init_grain(state, index, start_pos, length, *rate);
 
-      // Find next free grain slot
       do {
         state->next_free_grain =
             (state->next_free_grain + 1) % state->max_concurrent_grains;
@@ -1316,14 +1329,12 @@ void *granulator_perform(Node *node, granulator_state *state, Node *inputs[],
                state->next_free_grain != index);
     }
 
-    // Process all active grains
     for (int i = 0; i < state->max_concurrent_grains; i++) {
       if (state->lengths[i] > 0) {
         process_grain(state, i, &sample, buf, buf_size);
       }
     }
 
-    // Normalize output
     if (state->active_grains > 0) {
       sample /= state->active_grains;
     }
@@ -1346,16 +1357,13 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(granulator_state));
 
-  // Limit max grains to reasonable size
   if (max_grains <= 0)
     max_grains = 8;
   if (max_grains > 32)
     max_grains = 32;
 
-  // Calculate state size (fixed)
   size_t state_size = sizeof(granulator_state);
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)granulator_perform,
       .node_index = node->node_index,
@@ -1368,11 +1376,9 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
       .meta = "granulator",
   };
 
-  // Initialize state
   granulator_state *state =
       (granulator_state *)(graph->nodes_state_memory + node->state_offset);
 
-  // Initialize grain parameters
   state->max_concurrent_grains = max_grains;
   state->active_grains = 0;
   state->min_grain_length = 7000;
@@ -1380,7 +1386,6 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
   state->overlap = 0.3;
   state->next_free_grain = 0;
 
-  // Clear grain arrays
   for (int i = 0; i < max_grains; i++) {
     state->starts[i] = 0;
     state->lengths[i] = 0;
@@ -1389,7 +1394,6 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
     state->amps[i] = 0.0;
   }
 
-  // Connect inputs
   if (buf) {
     node->connections[0].source_node_index = buf->node_index;
   }
@@ -1416,16 +1420,13 @@ void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
   double *out = node->output.buf;
   int out_layout = node->output.layout;
 
-  // Get frequency input
   double *freq_in = inputs[0]->output.buf;
 
-  // Get modulation inputs if connected
   double *mod_index_in = inputs[1]->output.buf;
   double *mod_ratio_in = inputs[2]->output.buf;
 
-  // Precompute table size constants
   const double table_size = (double)SIN_TABSIZE;
-  const int table_mask = SIN_TABSIZE - 1; // Assuming SIN_TABSIZE is power of 2
+  const int table_mask = SIN_TABSIZE - 1;
 
   double carrier_freq, modulator_freq;
   double mod_index, mod_ratio;
@@ -1436,22 +1437,18 @@ void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
   double modulated_phase;
 
   while (nframes--) {
-    // Get parameters
     carrier_freq = *freq_in++;
     mod_index = *mod_index_in++;
     mod_ratio = *mod_ratio_in++;
 
-    // Calculate modulator frequency
     modulator_freq = carrier_freq * mod_ratio;
 
-    // Get modulator sample with cubic interpolation
     mod_phase_scaled = state->modulator_phase * table_size;
     mod_index_int = (int)mod_phase_scaled;
     mod_frac = mod_phase_scaled - mod_index_int;
 
     mod_index_int &= table_mask;
 
-    // 4-point cubic interpolation for modulator
     int mod_idx_0 = (mod_index_int - 1) & table_mask;
     int mod_idx_1 = mod_index_int;
     int mod_idx_2 = (mod_index_int + 1) & table_mask;
@@ -1462,7 +1459,6 @@ void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
     double mod_y2 = sin_table[mod_idx_2];
     double mod_y3 = sin_table[mod_idx_3];
 
-    // Cubic interpolation formula (Catmull-Rom spline)
     double mod_c0 = mod_y1;
     double mod_c1 = 0.5 * (mod_y2 - mod_y0);
     double mod_c2 = mod_y0 - 2.5 * mod_y1 + 2.0 * mod_y2 - 0.5 * mod_y3;
@@ -1471,21 +1467,17 @@ void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
     modulator_value =
         ((mod_c3 * mod_frac + mod_c2) * mod_frac + mod_c1) * mod_frac + mod_c0;
 
-    // Apply modulation index
     modulator_value *= mod_index;
 
-    // Calculate phase modulation (add modulator to carrier phase)
     modulated_phase = state->carrier_phase + modulator_value;
-    modulated_phase -= floor(modulated_phase); // Wrap to 0-1 range
+    modulated_phase -= floor(modulated_phase);
 
-    // Get carrier sample with cubic interpolation
     carrier_phase_scaled = modulated_phase * table_size;
     carrier_index_int = (int)carrier_phase_scaled;
     carrier_frac = carrier_phase_scaled - carrier_index_int;
 
     carrier_index_int &= table_mask;
 
-    // 4-point cubic interpolation for carrier
     int carr_idx_0 = (carrier_index_int - 1) & table_mask;
     int carr_idx_1 = carrier_index_int;
     int carr_idx_2 = (carrier_index_int + 1) & table_mask;
@@ -1496,7 +1488,6 @@ void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
     double carr_y2 = sin_table[carr_idx_2];
     double carr_y3 = sin_table[carr_idx_3];
 
-    // Cubic interpolation formula (Catmull-Rom spline)
     double carr_c0 = carr_y1;
     double carr_c1 = 0.5 * (carr_y2 - carr_y0);
     double carr_c2 = carr_y0 - 2.5 * carr_y1 + 2.0 * carr_y2 - 0.5 * carr_y3;
@@ -1511,13 +1502,11 @@ void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
       *out++ = carrier_value;
     }
 
-    // Update phases with precise floating-point accumulation
     state->modulator_phase += modulator_freq * spf;
-    state->modulator_phase -=
-        floor(state->modulator_phase); // Keep in 0-1 range
+    state->modulator_phase -= floor(state->modulator_phase);
 
     state->carrier_phase += carrier_freq * spf;
-    state->carrier_phase -= floor(state->carrier_phase); // Keep in 0-1 range
+    state->carrier_phase -= floor(state->carrier_phase);
   }
 
   return node->output.buf;
@@ -1529,8 +1518,7 @@ Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
   *node = (Node){
       .perform = (perform_func_t)pm_perform_optimized,
       .node_index = node->node_index,
-      .num_inputs = 3, // frequency, mod index, mod ratio
-      // Allocate state memory
+      .num_inputs = 3,
       .state_size = sizeof(pm_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(pm_state)),
       .output = (Signal){.layout = 1,
