@@ -1408,6 +1408,7 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else if (t1->kind == T_EMPTY_LIST && is_list_type(t2)) {
       *t1 = *t2;
     } else if (is_pointer_type(t1) && t2->kind == T_FN) {
+    } else if (is_pointer_type(t1) && t2->kind == T_CONS) {
     } else {
 
       TICtx _ctx = {.err_stream = NULL};

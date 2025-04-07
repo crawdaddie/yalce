@@ -7,12 +7,12 @@
 #include <stdio.h>
 #include <string.h>
 
-int create_main_scope() {
-  Ctx *audio_ctx = get_audio_ctx();
-  double *output = audio_ctx->output_buf;
-  create_scope(output, 2, 512);
-  return 1;
-}
+// int create_main_scope() {
+//   Ctx *audio_ctx = get_audio_ctx();
+//   double *output = audio_ctx->output_buf;
+//   create_scope(output, 2, 512);
+//   return 1;
+// }
 
 // int plot_sig(SignalRef sig) {
 //   _create_plot_array_window(sig->size, sig->buf);
