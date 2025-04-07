@@ -34,6 +34,7 @@ let set_input_buf_immediate = extern fn Int -> Synth -> Synth -> Synth;
 let load_soundfile = extern fn Ptr -> Synth;
 let trigger_gate = extern fn Int -> Double -> Int -> Synth -> Synth;
 let midi_to_freq = extern fn Int -> Double;
+let ctx_main_out = extern fn () -> Ptr;
 
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;

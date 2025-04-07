@@ -29,7 +29,6 @@ typedef struct scheduler_msg {
       double value;
     } NODE_SET_SCALAR;
 
-
     struct NODE_SET_INPUT {
       Node *target;
       int input;

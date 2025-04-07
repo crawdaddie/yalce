@@ -544,14 +544,11 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
 
   AudioGraph *graph = _graph;
 
-  // Allocate node
   Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
 
-  // Allocate state
   node->state_size = sizeof(comb_state);
   node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
 
-  // Get state pointer and buffer pointer
   comb_state *state =
       (comb_state *)(graph->nodes_state_memory + node->state_offset);
 

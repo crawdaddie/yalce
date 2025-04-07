@@ -20,4 +20,7 @@ NodeRef load_soundfile(const char *path);
 NodeRef trigger_gate(int offset, double dur, int gate_in, NodeRef s);
 
 double midi_to_freq(int midi_note);
+
+double *ctx_main_out();
+
 #endif

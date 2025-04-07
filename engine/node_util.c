@@ -177,19 +177,15 @@ void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
 NODE_BINOP(mod2_node, "mod", mod_perform)
 
 Node *const_sig(double val) {
-  // printf("const sig node %f\n", val);
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, 0);
 
-  // Initialize node
   *node = (Node){
       .perform = NULL,
       .node_index = node->node_index,
       .num_inputs = 0,
-      // Allocate state memory
       .state_size = 0,
       .state_offset = graph ? graph->state_memory_size : 0,
-      // Allocate output buffer
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -205,12 +201,10 @@ Node *const_sig(double val) {
 }
 
 Node *const_buf(double val, int layout, int size) {
-  // printf("const sig node %f\n", val);
   AudioGraph *graph = _graph;
 
   Node *node = allocate_node_in_graph(graph, 0);
 
-  // Initialize node
   *node = (Node){
       .perform = NULL,
       .node_index = node->node_index,
