@@ -246,12 +246,10 @@ void append_to_ring_buffer(scope_state *state) {
     state->ring_buffer[ring_idx] = state->buf[i];
   }
 
-  // Update the ring buffer position (in frames)
   state->ring_buffer_pos =
       (state->ring_buffer_pos + state->size) % state->ring_buffer_size;
 }
 
-// Find a trigger point for stable waveform display
 bool find_trigger_point(scope_state *state, int *trigger_index) {
   if (!state || !state->ring_buffer ||
       state->trigger_channel >= state->layout) {
@@ -259,19 +257,15 @@ bool find_trigger_point(scope_state *state, int *trigger_index) {
     return false;
   }
 
-  // Use the first channel for triggering by default, unless specified
   int channel = state->trigger_channel;
   if (channel < 0 || channel >= state->layout)
     channel = 0;
 
-  // Look for a rising edge crossing the trigger level
-  // Need to scan through the ring buffer looking at only the trigger channel
   for (int i = state->size; i < state->ring_buffer_size - 1; i++) {
     int frame_idx = (state->ring_buffer_pos - i + state->ring_buffer_size) %
                     state->ring_buffer_size;
     int next_frame_idx = (frame_idx + 1) % state->ring_buffer_size;
 
-    // Get the sample values for this channel at this frame and next frame
     double current = state->ring_buffer[frame_idx * state->layout + channel];
     double next = state->ring_buffer[next_frame_idx * state->layout + channel];
 
@@ -290,53 +284,41 @@ bool find_trigger_point(scope_state *state, int *trigger_index) {
   return false;
 }
 
-// Draw the oscilloscope grid
 void draw_grid(SDL_Renderer *renderer, int width, int height) {
-  // Set grid color (dark gray)
   SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
 
-  // Draw horizontal lines
   for (int i = 0; i <= 8; i++) {
     int y = (height * i) / 8;
     SDL_RenderDrawLine(renderer, 0, y, width, y);
   }
 
-  // Draw vertical lines
   for (int i = 0; i <= 10; i++) {
     int x = (width * i) / 10;
     SDL_RenderDrawLine(renderer, x, 0, x, height);
   }
 
-  // Draw center lines with slightly brighter color
   SDL_SetRenderDrawColor(renderer, 75, 75, 75, 255);
-  SDL_RenderDrawLine(renderer, 0, height / 2, width,
-                     height / 2); // Horizontal center
-  SDL_RenderDrawLine(renderer, width / 2, 0, width / 2,
-                     height); // Vertical center
+  SDL_RenderDrawLine(renderer, 0, height / 2, width, height / 2);
+  SDL_RenderDrawLine(renderer, width / 2, 0, width / 2, height);
 }
 
 SDL_Renderer *scope_renderer(scope_state *state, SDL_Renderer *renderer) {
   if (!state || !renderer || !state->ring_buffer)
     return renderer;
 
-  // Get window dimensions
   int width, height;
   SDL_GetRendererOutputSize(renderer, &width, &height);
 
-  // Handle window resize if needed
   if (width != state->last_width || height != state->last_height) {
     state->last_width = width;
     state->last_height = height;
   }
 
-  // Clear the renderer with a dark background
   SDL_SetRenderDrawColor(renderer, 10, 10, 20, 255);
   SDL_RenderClear(renderer);
 
-  // Append the new data to the ring buffer
   append_to_ring_buffer(state);
 
-  // Draw grid if enabled
   if (state->draw_grid) {
     draw_grid(renderer, width, height);
   }
@@ -345,33 +327,24 @@ SDL_Renderer *scope_renderer(scope_state *state, SDL_Renderer *renderer) {
   int trigger_frame = 0;
   bool triggered = find_trigger_point(state, &trigger_frame);
 
-  // If we couldn't find a trigger point and we're not in auto mode, don't
-  // update
   if (!triggered && state->trigger_mode != 0) {
     return renderer;
   }
 
-  // Calculate the height for each channel
   int channel_height = height / state->layout;
 
-  // Draw each channel
   for (int ch = 0; ch < state->layout && ch < MAX_CHANNELS; ch++) {
-    // Calculate the vertical center for this channel
     int center_y = (ch * channel_height) + (channel_height / 2);
     int half_height = channel_height / 2;
 
-    // Set the color for this channel
     SDL_Color color = CHANNEL_COLORS[ch % MAX_CHANNELS];
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 
-    // Draw the channel label
     char label[20];
     sprintf(label, "CH%d", ch + 1);
     render_text(label, 10, center_y - half_height + 5, renderer);
 
-    // Draw the waveform with the specified thickness
     for (int thickness = 0; thickness < LINE_THICKNESS; thickness++) {
-      // Get the first sample
       double sample = state->ring_buffer[trigger_frame * state->layout + ch];
 
       int prev_x = 0;
@@ -379,27 +352,19 @@ SDL_Renderer *scope_renderer(scope_state *state, SDL_Renderer *renderer) {
           center_y - (int)(sample * half_height * 0.8 * state->vertical_scale);
 
       for (int x = 1; x < width; x++) {
-        // Calculate frame index in the ring buffer based on x position and
-        // scaling
         int frame_idx = (trigger_frame + (int)(x / state->horizontal_scale)) %
                         state->ring_buffer_size;
 
-        // Get the sample for this channel at this frame
         sample = state->ring_buffer[frame_idx * state->layout + ch];
 
-        // Calculate y position based on the sample value (normalized to -1.0
-        // to 1.0) Scale by 80% of half the channel height and flip (negative is
-        // up in SDL)
         int y = center_y -
                 (int)(sample * half_height * 0.8 * state->vertical_scale);
 
-        // Clip to channel boundaries
         if (y < ch * channel_height)
           y = ch * channel_height;
         if (y > (ch + 1) * channel_height)
           y = (ch + 1) * channel_height;
 
-        // Draw line segment
         SDL_RenderDrawLine(renderer, prev_x, prev_y + thickness, x,
                            y + thickness);
         prev_x = x;
@@ -407,15 +372,12 @@ SDL_Renderer *scope_renderer(scope_state *state, SDL_Renderer *renderer) {
       }
     }
 
-    // Draw horizontal dividing lines between channels
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
     SDL_RenderDrawLine(renderer, 0, (ch + 1) * channel_height, width,
                        (ch + 1) * channel_height);
   }
 
-  // Draw trigger information
   if (state->trigger_mode != 0) {
-    // Draw trigger level indicator on the trigger channel
     int ch = state->trigger_channel;
     if (ch >= 0 && ch < state->layout) {
       int center_y = (ch * channel_height) + (channel_height / 2);
@@ -427,7 +389,6 @@ SDL_Renderer *scope_renderer(scope_state *state, SDL_Renderer *renderer) {
     }
   }
 
-  // Draw scale information
   char info[50];
   sprintf(info, "V: %.1fx  H: %.1fx  Trig: %s", state->vertical_scale,
           state->horizontal_scale,
@@ -521,13 +482,7 @@ int create_scope(double *signal, int layout, int size) {
     state->layout = MAX_CHANNELS;
   }
 
-  // Size in samples: buffer_size (frames) * layout (channels per frame)
   state->ring_buffer = (double *)(state + 1);
-  if (!state->ring_buffer) {
-    fprintf(stderr, "Failed to allocate ring buffer\n");
-    free(state);
-    return -1;
-  }
 
   state->vertical_scale = 1.0;
   state->horizontal_scale = 1.0;
