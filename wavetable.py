@@ -14,12 +14,19 @@ import numpy as np
 from matplotlib.widgets import Slider
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python script.py <saw_wave_file.csv>")
-        return
+def plot(argv):
+    with open(argv[0], "r") as f:
+        cleaned_data = [float(line.strip().rstrip(",")) for line in f]
+    data = np.array(cleaned_data)
 
-    with open(sys.argv[1], "r") as f:
+    plt.plot(data)
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.2)  # Adjust again after tight_layout
+    plt.show()
+
+
+def saw_sum():
+    with open("engine/assets/saw_table.csv", "r") as f:
         cleaned_data = [float(line.strip().rstrip(",")) for line in f]
     saw_data = np.array(cleaned_data)
 
@@ -80,12 +87,15 @@ def create_square_wave(saw_data, duty_cycle=0.5):
 
     offset_flipped = np.roll(flipped_saw, offset_samples)
 
-    dc = duty_cycle if duty_cycle < 0.5 else -1.0 * (0.5 - duty_cycle)
-    # square_wave = (0.5 + dc) * (saw_data + offset_flipped)
     square_wave = saw_data + offset_flipped
 
     return square_wave
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1] == "plot":
+        plot(sys.argv[2:])
+    elif sys.argv[1] == "sum_saws":
+        saw_sum()
+    else:
+        print("Usage: python script.py <wavetable_file.csv>")

@@ -29,6 +29,7 @@ LLVMValueRef __get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
 
 LLVMValueRef get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
                                LLVMValueRef index, LLVMTypeRef element_type) {
+
   LLVMTypeRef array_type = codegen_array_type(element_type);
 
   LLVMValueRef array_struct;

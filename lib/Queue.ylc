@@ -1,0 +1,77 @@
+open Ref;
+let of_list = fn l: (List of t) ->
+  Ref (l, list_tail l)
+;;
+
+let _pop_left = fn (head, tail): (List of t, List of t) ->
+  match head with
+  | x::rest -> ((rest, tail), Some x)  
+  | [] -> ((head, tail), None)
+;;
+let pop_left = fn q: (Array of (List of t, List of t)) ->
+  let x = unref q in
+  let _q, v = _pop_left x in 
+  (
+    set_ref q _q;
+    v
+  )
+;;
+
+
+let _enqueue = fn (head, tail) item ->
+  let last = [item] in
+  let _ = list_concat tail last in
+  (head, last)
+;;
+
+let test = module
+  let test_int_queue = fn () -> 
+    let q = of_list [1];
+    let q = enqueue q 2; 
+    let q = enqueue q 3; 
+    let q = enqueue q 4;  
+
+    let (q, v) = pop_left q;
+    let res = v == Some 1;
+
+    let (q, v) = pop_left q;
+    let res = res && (v == Some 2);
+
+    let q = enqueue q 5; 
+
+    let (q, v) = pop_left q;
+    let res = res && (v == Some 3);
+
+    let (q, v) = pop_left q;
+    let res = res && (v == Some 4);
+
+    let (q, v) = pop_left q;
+    let res = res && (v == Some 5);
+
+    let (q, v) = pop_left q;
+    let res = res && (v == None);
+    res
+  ;;
+
+  let test_int_queue_2 = fn () -> 
+    let q = of_list [1,2,3,4];
+
+    let (q, v) = pop_left q;
+    let res = v == Some 1;
+
+    let (q, v) = pop_left q;
+    let res = res && (v == Some 2);
+
+    let (q, v) = pop_left q;
+    let res = res && (v == Some 3);
+
+    let (q, v) = pop_left q;
+    let res = res && (v == Some 4);
+
+
+    let (q, v) = pop_left q;
+    let res = res && (v == None);
+    res
+  ;;
+
+;

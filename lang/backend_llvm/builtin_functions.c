@@ -466,6 +466,11 @@ LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Ast *idx_ast = ast->data.AST_APPLICATION.args + 1;
   LLVMValueRef array = codegen(array_ast, ctx, module, builder);
   LLVMValueRef idx = codegen(idx_ast, ctx, module, builder);
+
+  printf("get array el\n");
+  print_type(ret_type);
+  print_type_env(ctx->env);
+
   return get_array_element(builder, array, idx,
                            type_to_llvm_type(ret_type, ctx->env, module));
 }

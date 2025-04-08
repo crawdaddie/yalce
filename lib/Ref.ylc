@@ -8,8 +8,5 @@ let set_ref = fn arr v ->
 
 let (<-) = set_ref;
 
-let get_ref = fn arr -> arr @ 0;;
+let unref = fn arr -> array_at arr 0;;
 
-let test = module
-
-;;

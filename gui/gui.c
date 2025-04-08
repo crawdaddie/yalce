@@ -521,6 +521,7 @@ typedef struct plot_state {
   // Plot settings
   double vertical_scale;
   double horizontal_scale;
+  double horizontal_offset;
   double y_min;
   double y_max;
   bool draw_grid;
@@ -572,6 +573,7 @@ int create_static_plot(int layout, int size, double *signal) {
   state->size = size;
   state->vertical_scale = 1.0;
   state->horizontal_scale = 1.0;
+  state->horizontal_offset = 0.0;
   state->draw_grid = true;
   state->draw_axis = true;
   state->window_width = WINDOW_WIDTH;
@@ -733,6 +735,22 @@ static void create_plot_texture_overlapped(plot_state *state,
 
   state->needs_redraw = false;
 }
+/**
+ * Render a frame (just copies the texture to the screen)
+ */
+SDL_Renderer *plot_renderer(plot_state *state, SDL_Renderer *renderer) {
+  if (state->needs_redraw) {
+    create_plot_texture_stacked(state, renderer);
+  }
+
+  if (state->plot_texture) {
+    SDL_RenderCopy(renderer, state->plot_texture, NULL, NULL);
+  }
+
+  return renderer;
+}
+
+
 static void create_plot_texture_stacked(plot_state *state,
                                         SDL_Renderer *renderer) {
   SDL_GetRendererOutputSize(renderer, &state->window_width,
@@ -832,7 +850,29 @@ static void create_plot_texture_stacked(plot_state *state,
       SDL_SetRenderDrawColor(renderer, (color >> 16) & 0xFF,
                              (color >> 8) & 0xFF, color & 0xFF, 255);
 
-      for (int i = 0; i < state->size - 1; i++) {
+      // Calculate the visible sample range based on horizontal scale and offset
+      double visible_range = 1.0 / state->horizontal_scale;
+      double center_offset = state->horizontal_offset;
+      
+      // Position in normalized coordinate space (0.0 to 1.0)
+      double start_pos = center_offset - (visible_range / 2.0);
+      double end_pos = center_offset + (visible_range / 2.0);
+      
+      // Clamp to valid range
+      if (start_pos < 0.0) start_pos = 0.0;
+      if (end_pos > 1.0) end_pos = 1.0;
+      
+      // Convert to sample indices
+      int start_sample = (int)(start_pos * (state->size - 1));
+      int end_sample = (int)(end_pos * (state->size - 1));
+      
+      // Ensure we have at least one sample to display
+      if (start_sample == end_sample && start_sample < state->size - 1) end_sample++;
+      if (start_sample == end_sample && start_sample > 0) start_sample--;
+      
+      // Draw only the visible samples
+      for (int i = start_sample; i < end_sample; i++) {
+        // Get sample values
         double val1 = state->buf[i * state->layout + ch];
         double val2 = state->buf[(i + 1) * state->layout + ch];
 
@@ -854,24 +894,29 @@ static void create_plot_texture_stacked(plot_state *state,
         }
 
         // Clamp to visible range
-        normalized1 =
-            normalized1 < -1.0 ? -1.0 : (normalized1 > 1.0 ? 1.0 : normalized1);
-        normalized2 =
-            normalized2 < -1.0 ? -1.0 : (normalized2 > 1.0 ? 1.0 : normalized2);
+        normalized1 = normalized1 < -1.0 ? -1.0 : (normalized1 > 1.0 ? 1.0 : normalized1);
+        normalized2 = normalized2 < -1.0 ? -1.0 : (normalized2 > 1.0 ? 1.0 : normalized2);
 
-        // Apply horizontal scale (adjust the spacing)
-        int effective_width = (int)(plot_width * state->horizontal_scale);
-        int offset_x = (plot_width - effective_width) / 2;
-
+        // Map from sample indices to pixels
+        double sample_pos1 = (double)i / (state->size - 1);
+        double sample_pos2 = (double)(i + 1) / (state->size - 1);
+        
+        // Normalize to visible range
+        double normalized_pos1 = (sample_pos1 - start_pos) / (end_pos - start_pos);
+        double normalized_pos2 = (sample_pos2 - start_pos) / (end_pos - start_pos);
+        
         // Calculate point positions
-        int x1 = plot_x + offset_x + (i * effective_width) / (state->size - 1);
+        int x1 = plot_x + (int)(normalized_pos1 * plot_width);
         int y1 = row_y + row_height / 2 - (int)(normalized1 * row_height / 2);
 
-        int x2 =
-            plot_x + offset_x + ((i + 1) * effective_width) / (state->size - 1);
+        int x2 = plot_x + (int)(normalized_pos2 * plot_width);
         int y2 = row_y + row_height / 2 - (int)(normalized2 * row_height / 2);
 
-        SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+        // Draw the line segment if both points are within the plot area
+        if (x1 >= plot_x && x1 <= plot_x + plot_width &&
+            x2 >= plot_x && x2 <= plot_x + plot_width) {
+          SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+        }
       }
 
       // Use the channel's color for the indicator
@@ -900,24 +945,6 @@ static void create_plot_texture_stacked(plot_state *state,
   SDL_SetRenderTarget(renderer, NULL);
   state->needs_redraw = false;
 }
-/**
- * Render a frame (just copies the texture to the screen)
- */
-SDL_Renderer *plot_renderer(plot_state *state, SDL_Renderer *renderer) {
-  if (state->needs_redraw) {
-    create_plot_texture_stacked(state, renderer);
-  }
-
-  if (state->plot_texture) {
-    SDL_RenderCopy(renderer, state->plot_texture, NULL, NULL);
-  }
-
-  return renderer;
-}
-
-/**
- * Handle SDL events
- */
 static int plot_event_handler(void *userdata, SDL_Event *event) {
   plot_state *state = (plot_state *)userdata;
 
@@ -943,34 +970,65 @@ static int plot_event_handler(void *userdata, SDL_Event *event) {
       break;
 
     case SDLK_PLUS:
-    case SDLK_EQUALS:
-      // Increase vertical scale
-      state->vertical_scale *= 1.1;
-      state->needs_redraw = true;
-      break;
-
-    case SDLK_MINUS:
-      // Decrease vertical scale
-      state->vertical_scale /= 1.1;
-      state->needs_redraw = true;
-      break;
-
-    case SDLK_RIGHT:
-      // Increase horizontal scale
+    case SDLK_EQUALS: {
+      // Zoom in - center stays the same
+      double old_scale = state->horizontal_scale;
       state->horizontal_scale *= 1.1;
+      
+      // Adjust offset to maintain center point
+      double center_point = state->horizontal_offset;
+      state->horizontal_offset = center_point;
+      
       state->needs_redraw = true;
       break;
+    }
 
-    case SDLK_LEFT:
-      // Decrease horizontal scale
+    case SDLK_MINUS: {
+      // Zoom out - center stays the same
+      double old_scale = state->horizontal_scale;
       state->horizontal_scale /= 1.1;
+      
+      // Adjust offset to maintain center point
+      double center_point = state->horizontal_offset;
+      state->horizontal_offset = center_point;
+      
       state->needs_redraw = true;
       break;
+    }
 
-    case SDLK_s:
-      // Example of saving a screenshot (would require additional code)
-      printf("Save screenshot functionality (not implemented)\n");
+    case SDLK_RIGHT: {
+      // Move right - pan the view by a percentage of the visible range
+      // The step size is constant in screen space but varies in data space based on zoom
+      // When zoomed in (large horizontal_scale), we move by a smaller amount in data space
+      double visible_range = 1.0 / state->horizontal_scale;
+      double step = visible_range * 0.05; // Move 5% of the visible range
+      
+      state->horizontal_offset += step;
+      
+      // Clamp to valid range (0.0 to 1.0)
+      if (state->horizontal_offset > 1.0) {
+        state->horizontal_offset = 1.0;
+      }
+      
+      state->needs_redraw = true;
       break;
+    }
+
+    case SDLK_LEFT: {
+      // Move left - pan the view by a percentage of the visible range
+      double visible_range = 1.0 / state->horizontal_scale;
+      double step = visible_range * 0.05; // Move 5% of the visible range
+      
+      state->horizontal_offset -= step;
+      
+      // Clamp to valid range (0.0 to 1.0)
+      if (state->horizontal_offset < 0.0) {
+        state->horizontal_offset = 0.0;
+      }
+      
+      state->needs_redraw = true;
+      break;
+    }
     }
     break;
 
