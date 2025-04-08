@@ -91,3 +91,6 @@ let k = fn frame_offset ->
 defer_quant 1. h;
 defer_quant 1. k;
 
+open ../gui/bindings/Gui;
+create_scope (ctx_main_out ()) 2 512;
+

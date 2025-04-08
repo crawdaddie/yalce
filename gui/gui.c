@@ -468,36 +468,30 @@ void scope_event_handler(scope_state *state, SDL_Event *event) {
       break;
 
     case SDLK_RIGHT:
-      // Increase horizontal scale (zoom out)
       state->horizontal_scale *= 1.2;
       if (state->horizontal_scale > 10.0)
         state->horizontal_scale = 10.0;
       break;
 
     case SDLK_g:
-      // Toggle grid
       state->draw_grid = !state->draw_grid;
       break;
 
     case SDLK_t:
-      // Cycle trigger modes (auto, normal, single)
       state->trigger_mode = (state->trigger_mode + 1) % 3;
       break;
 
     case SDLK_c:
-      // Cycle trigger channel
       state->trigger_channel = (state->trigger_channel + 1) % state->layout;
       break;
 
     case SDLK_PAGEUP:
-      // Increase trigger level
       state->trigger_level += 0.05;
       if (state->trigger_level > 1.0)
         state->trigger_level = 1.0;
       break;
 
     case SDLK_PAGEDOWN:
-      // Decrease trigger level
       state->trigger_level -= 0.05;
       if (state->trigger_level < -1.0)
         state->trigger_level = -1.0;
@@ -507,38 +501,34 @@ void scope_event_handler(scope_state *state, SDL_Event *event) {
 }
 
 int create_scope(double *signal, int layout, int size) {
-  // Allocate and initialize scope state
-  scope_state *state = malloc(sizeof(scope_state));
+  scope_state *state =
+      malloc(sizeof(scope_state) + BUFFER_SIZE * layout * sizeof(double));
+
   if (!state) {
     fprintf(stderr, "Failed to allocate scope state\n");
     return -1;
   }
 
-  // Initialize basic parameters
-  state->layout = layout; // Number of channels (1=mono, 2=stereo, etc)
-  state->size = size;     // Number of frames (not samples) in the buffer
-  state->buf = signal;    // Pointer to the interleaved audio data
+  state->layout = layout;
+  state->size = size;
+  state->buf = signal;
   state->ring_buffer_size = BUFFER_SIZE;
   state->ring_buffer_pos = 0;
 
-  // Clamp layout to maximum supported channels
   if (state->layout > MAX_CHANNELS) {
     fprintf(stderr, "Warning: Clamping channels from %d to %d\n", state->layout,
             MAX_CHANNELS);
     state->layout = MAX_CHANNELS;
   }
 
-  // Allocate single interleaved ring buffer
   // Size in samples: buffer_size (frames) * layout (channels per frame)
-  state->ring_buffer =
-      (double *)calloc(state->ring_buffer_size * state->layout, sizeof(double));
+  state->ring_buffer = (double *)(state + 1);
   if (!state->ring_buffer) {
     fprintf(stderr, "Failed to allocate ring buffer\n");
     free(state);
     return -1;
   }
 
-  // Initialize display settings
   state->vertical_scale = 1.0;
   state->horizontal_scale = 1.0;
   state->trigger_level = 0.0;
@@ -548,6 +538,5 @@ int create_scope(double *signal, int layout, int size) {
   state->last_width = 0;
   state->last_height = 0;
 
-  // Create the window
   return create_window(state, scope_renderer, scope_event_handler);
 }
