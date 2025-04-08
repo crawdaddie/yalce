@@ -83,6 +83,9 @@ void handle_events() {
       for (int i = 0; i < window_count; i++) {
         if (SDL_GetWindowID(windows[i].window) == event.window.windowID &&
             windows[i].handle_event) {
+          // switch (event.type) {
+          // }
+          // TODO: handle standard events like resize / close
           windows[i].handle_event(windows[i].data, &event);
         }
       }
@@ -172,14 +175,12 @@ SDL_Renderer *render_text(const char *text, int x, int y,
 
   SDL_Surface *surface = TTF_RenderText_Blended(DEFAULT_FONT, text, text_color);
 
-  // Create a texture from the surface
   SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
 
   SDL_Rect rect = {x, y, surface->w, surface->h};
 
   SDL_RenderCopy(renderer, texture, NULL, &rect);
 
-  // Clean up
   SDL_FreeSurface(surface);
   SDL_DestroyTexture(texture);
   return renderer;
