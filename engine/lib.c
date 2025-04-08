@@ -497,3 +497,8 @@ double midi_to_freq(int midi_note) {
   // Each semitone is a factor of 2^(1/12)
   return 440.0 * pow(2.0, (midi_note - 69) / 12.0);
 }
+
+Signal *node_out(NodeRef node) { return &(node->output); }
+double *sig_raw(Signal *sig) { return sig->buf; }
+int sig_size(Signal *sig) { return sig->size; }
+int sig_layout(Signal *sig) { return sig->layout; }

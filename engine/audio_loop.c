@@ -330,6 +330,7 @@ int init_audio() {
   printf("init audio\n");
   maketable_sq();
   maketable_sin();
+  maketable_saw();
   start_audio();
   scheduler_event_loop();
   gc_loop(get_audio_ctx());

@@ -80,13 +80,24 @@ void handle_events() {
       //
       _create_window(event.user.data1);
     } else {
+
       for (int i = 0; i < window_count; i++) {
         if (SDL_GetWindowID(windows[i].window) == event.window.windowID &&
             windows[i].handle_event) {
-          // switch (event.type) {
-          // }
-          // TODO: handle standard events like resize / close
-          windows[i].handle_event(windows[i].data, &event);
+          if (event.type == SDL_WINDOWEVENT &&
+              event.window.event == SDL_WINDOWEVENT_CLOSE) {
+
+            SDL_DestroyRenderer(windows[i].renderer);
+            SDL_DestroyWindow(windows[i].window);
+            free(windows[i].data);
+            for (int j = i; j < window_count - 1; j++) {
+              windows[j] = windows[j + 1];
+            }
+            window_count--;
+
+          } else {
+            windows[i].handle_event(windows[i].data, &event);
+          }
         }
       }
     }
@@ -495,4 +506,482 @@ int create_scope(double *signal, int layout, int size) {
   state->last_height = 0;
 
   return create_window(state, scope_renderer, scope_event_handler);
+}
+
+#define PLOT_PADDING 40
+#define AXIS_COLOR 0xFFAAAAAA
+#define GRID_COLOR 0xFF666666
+#define BACKGROUND_COLOR 0xFF000000
+
+typedef struct plot_state {
+  double *buf; // Input signal buffer
+  int layout;  // Number of channels (1=mono, 2=stereo, etc.)
+  int size;    // Size of the input buffer (in frames)
+
+  // Plot settings
+  double vertical_scale;
+  double horizontal_scale;
+  double y_min;
+  double y_max;
+  bool draw_grid;
+  bool draw_axis;
+  const char *title;
+
+  // Colors for each channel (up to 8 channels supported)
+  uint32_t channel_colors[8];
+
+  // SDL related
+  SDL_Window *window;
+  SDL_Renderer *renderer;
+  SDL_Texture *plot_texture;
+  int window_width;
+  int window_height;
+  bool needs_redraw;
+} plot_state;
+
+// Forward declarations
+static int plot_event_handler(void *state, SDL_Event *event);
+static void create_plot_texture_stacked(plot_state *state,
+                                        SDL_Renderer *renderer);
+SDL_Renderer *plot_renderer(plot_state *state, SDL_Renderer *renderer);
+
+/**
+ * Create a static plot of an array of doubles
+ *
+ * @param signal Pointer to the signal data (array of doubles)
+ * @param layout Number of channels in the signal (1=mono, 2=stereo, etc.)
+ * @param size Number of samples per channel
+ * @param title Title of the plot (optional, can be NULL)
+ * @return 0 on success, -1 on failure
+ */
+int create_static_plot(int layout, int size, double *signal) {
+
+  printf("create static plot %d %d\n", layout, size);
+  // Allocate plot state
+  plot_state *state = malloc(sizeof(plot_state));
+
+  if (!state) {
+    fprintf(stderr, "Failed to allocate plot state\n");
+    SDL_Quit();
+    return -1;
+  }
+
+  // Initialize state
+  state->buf = signal;
+  state->layout = layout;
+  state->size = size;
+  state->vertical_scale = 1.0;
+  state->horizontal_scale = 1.0;
+  state->draw_grid = true;
+  state->draw_axis = true;
+  state->window_width = WINDOW_WIDTH;
+  state->window_height = WINDOW_HEIGHT;
+  state->plot_texture = NULL;
+  state->needs_redraw = true;
+
+  state->title = "plot";
+  // Set default title if none provided
+
+  // Analyze signal to set y_min and y_max
+  state->y_min = 0.0;
+  state->y_max = 0.0;
+
+  if (signal != NULL && size > 0) {
+    state->y_min = signal[0];
+    state->y_max = signal[0];
+
+    for (int i = 0; i < size * layout; i++) {
+      if (signal[i] < state->y_min)
+        state->y_min = signal[i];
+      if (signal[i] > state->y_max)
+        state->y_max = signal[i];
+    }
+  }
+
+  // Add 10% padding to y range
+  double range = state->y_max - state->y_min;
+  if (range <= 0.0) {
+    // If signal is flat or empty, create some range
+    state->y_min = -1.0;
+    state->y_max = 1.0;
+  } else {
+    state->y_min -= range * 0.1;
+    state->y_max += range * 0.1;
+  }
+
+  // Set default colors for each channel
+  uint32_t default_colors[8] = {
+      0xFF0000FF, // Red
+      0xFF00FF00, // Green
+      0xFFFF0000, // Blue
+      0xFFFF00FF, // Magenta
+      0xFFFFFF00, // Yellow
+      0xFF00FFFF, // Cyan
+      0xFFFF8000, // Orange
+      0xFF8000FF  // Purple
+  };
+
+  for (int i = 0; i < 8; i++) {
+    state->channel_colors[i] = default_colors[i];
+  }
+
+  return create_window(state, plot_renderer, plot_event_handler);
+}
+
+/**
+ * Create the plot texture (only called when plot needs to be redrawn)
+ */
+static void create_plot_texture_overlapped(plot_state *state,
+                                           SDL_Renderer *renderer) {
+  SDL_GetRendererOutputSize(renderer, &state->window_width,
+                            &state->window_height);
+
+  if (state->plot_texture) {
+    SDL_DestroyTexture(state->plot_texture);
+  }
+
+  state->plot_texture = SDL_CreateTexture(
+      renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+      state->window_width, state->window_height);
+
+  if (!state->plot_texture) {
+    fprintf(stderr, "Failed to create plot texture: %s\n", SDL_GetError());
+    return;
+  }
+
+  SDL_SetRenderTarget(renderer, state->plot_texture);
+
+  SDL_SetRenderDrawColor(renderer, (BACKGROUND_COLOR >> 16) & 0xFF,
+                         (BACKGROUND_COLOR >> 8) & 0xFF,
+                         BACKGROUND_COLOR & 0xFF, 255);
+  SDL_RenderClear(renderer);
+
+  int plot_x = PLOT_PADDING;
+  int plot_y = PLOT_PADDING;
+  int plot_width = state->window_width - 2 * PLOT_PADDING;
+  int plot_height = state->window_height - 2 * PLOT_PADDING;
+
+  if (state->draw_grid) {
+    SDL_SetRenderDrawColor(renderer, (GRID_COLOR >> 16) & 0xFF,
+                           (GRID_COLOR >> 8) & 0xFF, GRID_COLOR & 0xFF, 255);
+
+    for (int i = 0; i <= 10; i++) {
+      int x = plot_x + (i * plot_width) / 10;
+      SDL_RenderDrawLine(renderer, x, plot_y, x, plot_y + plot_height);
+    }
+
+    for (int i = 0; i <= 10; i++) {
+      int y = plot_y + (i * plot_height) / 10;
+      SDL_RenderDrawLine(renderer, plot_x, y, plot_x + plot_width, y);
+    }
+  }
+
+  // Draw axes if enabled
+  if (state->draw_axis) {
+    SDL_SetRenderDrawColor(renderer, (AXIS_COLOR >> 16) & 0xFF,
+                           (AXIS_COLOR >> 8) & 0xFF, AXIS_COLOR & 0xFF, 255);
+
+    // X-axis
+    SDL_RenderDrawLine(renderer, plot_x, plot_y + plot_height,
+                       plot_x + plot_width, plot_y + plot_height);
+
+    // Y-axis
+    SDL_RenderDrawLine(renderer, plot_x, plot_y, plot_x, plot_y + plot_height);
+  }
+
+  if (state->buf && state->size > 0) {
+    for (int ch = 0; ch < state->layout; ch++) {
+      uint32_t color = state->channel_colors[ch % 8];
+      SDL_SetRenderDrawColor(renderer, (color >> 16) & 0xFF,
+                             (color >> 8) & 0xFF, color & 0xFF, 100);
+
+      for (int i = 0; i < state->size - 1; i++) {
+        double val1 = state->buf[i * state->layout + ch];
+        double val2 = state->buf[(i + 1) * state->layout + ch];
+
+        val1 *= state->vertical_scale;
+        val2 *= state->vertical_scale;
+
+        // Scale to fit plot area
+        double range = state->y_max - state->y_min;
+        double normalized1 = (val1 - state->y_min) / range;
+        double normalized2 = (val2 - state->y_min) / range;
+
+        // Apply horizontal scale (adjust the spacing)
+        int effective_width = (int)(plot_width * state->horizontal_scale);
+        int offset_x = (plot_width - effective_width) / 2;
+
+        int x1 = plot_x + offset_x + (i * effective_width) / (state->size - 1);
+        int y1 = plot_y + plot_height - (int)(normalized1 * plot_height);
+
+        int x2 =
+            plot_x + offset_x + ((i + 1) * effective_width) / (state->size - 1);
+        int y2 = plot_y + plot_height - (int)(normalized2 * plot_height);
+
+        // Ensure points are in bounds
+        if (x1 >= plot_x && x1 < plot_x + plot_width && x2 >= plot_x &&
+            x2 < plot_x + plot_width && y1 >= plot_y &&
+            y1 < plot_y + plot_height && y2 >= plot_y &&
+            y2 < plot_y + plot_height) {
+          SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+        }
+      }
+    }
+  }
+
+  SDL_SetRenderTarget(renderer, NULL);
+
+  state->needs_redraw = false;
+}
+static void create_plot_texture_stacked(plot_state *state,
+                                        SDL_Renderer *renderer) {
+  SDL_GetRendererOutputSize(renderer, &state->window_width,
+                            &state->window_height);
+
+  if (state->plot_texture) {
+    SDL_DestroyTexture(state->plot_texture);
+  }
+
+  state->plot_texture = SDL_CreateTexture(
+      renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+      state->window_width, state->window_height);
+
+  if (!state->plot_texture) {
+    fprintf(stderr, "Failed to create plot texture: %s\n", SDL_GetError());
+    return;
+  }
+
+  SDL_SetRenderTarget(renderer, state->plot_texture);
+
+  SDL_SetRenderDrawColor(renderer, (BACKGROUND_COLOR >> 16) & 0xFF,
+                         (BACKGROUND_COLOR >> 8) & 0xFF,
+                         BACKGROUND_COLOR & 0xFF, 255);
+  SDL_RenderClear(renderer);
+
+  // Overall plot area
+  int plot_x = PLOT_PADDING;
+  int plot_y = PLOT_PADDING;
+  int plot_width = state->window_width - 2 * PLOT_PADDING;
+  int plot_height = state->window_height - 2 * PLOT_PADDING;
+
+  // Calculate individual channel row height
+  int channel_count = state->layout > 0 ? state->layout : 1;
+  int row_gap = 10; // Gap between channel rows
+  int total_gaps = channel_count - 1;
+  int row_height = (plot_height - (total_gaps * row_gap)) / channel_count;
+
+  // Ensure minimum row height
+  if (row_height < 30) {
+    row_height = 30;
+    // We could adjust padding here if needed
+  }
+
+  // Draw each channel in its own row
+  for (int ch = 0; ch < state->layout; ch++) {
+    // Calculate this channel's row position
+    int row_y = plot_y + ch * (row_height + row_gap);
+
+    // Draw channel background/border
+    SDL_Rect row_rect = {
+        plot_x - 5,      // Left edge with slight padding
+        row_y - 5,       // Top edge with slight padding
+        plot_width + 10, // Width with slight extension
+        row_height + 10  // Height with slight extension
+    };
+
+    // Draw slightly darker background for this row
+    SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+    SDL_RenderFillRect(renderer, &row_rect);
+
+    // Draw row border
+    SDL_SetRenderDrawColor(renderer, (GRID_COLOR >> 16) & 0xFF,
+                           (GRID_COLOR >> 8) & 0xFF, GRID_COLOR & 0xFF, 255);
+    SDL_RenderDrawRect(renderer, &row_rect);
+
+    // Draw grid for this row if enabled
+    if (state->draw_grid) {
+      SDL_SetRenderDrawColor(renderer, (GRID_COLOR >> 16) & 0xFF,
+                             (GRID_COLOR >> 8) & 0xFF, GRID_COLOR & 0xFF, 128);
+
+      // Vertical grid lines
+      for (int i = 1; i < 10; i++) {
+        int x = plot_x + (i * plot_width) / 10;
+        SDL_RenderDrawLine(renderer, x, row_y, x, row_y + row_height);
+      }
+
+      // Horizontal center line
+      int center_y = row_y + row_height / 2;
+      SDL_RenderDrawLine(renderer, plot_x, center_y, plot_x + plot_width,
+                         center_y);
+
+      // Quarter lines (optional, for taller rows)
+      if (row_height > 60) {
+        int quarter_y1 = row_y + row_height / 4;
+        int quarter_y2 = row_y + 3 * row_height / 4;
+        SDL_RenderDrawLine(renderer, plot_x, quarter_y1, plot_x + plot_width,
+                           quarter_y1);
+        SDL_RenderDrawLine(renderer, plot_x, quarter_y2, plot_x + plot_width,
+                           quarter_y2);
+      }
+    }
+
+    // Draw channel data if available
+    if (state->buf && state->size > 0) {
+      uint32_t color = state->channel_colors[ch % 8];
+
+      SDL_SetRenderDrawColor(renderer, (color >> 16) & 0xFF,
+                             (color >> 8) & 0xFF, color & 0xFF, 255);
+
+      for (int i = 0; i < state->size - 1; i++) {
+        double val1 = state->buf[i * state->layout + ch];
+        double val2 = state->buf[(i + 1) * state->layout + ch];
+
+        // Apply vertical scale
+        val1 *= state->vertical_scale;
+        val2 *= state->vertical_scale;
+
+        // Scale to fit this row's height
+        double range = state->y_max - state->y_min;
+
+        // Calculate normalized position (-1 to 1 range)
+        double normalized1, normalized2;
+        if (range > 0) {
+          normalized1 = 2.0 * (val1 - state->y_min) / range - 1.0;
+          normalized2 = 2.0 * (val2 - state->y_min) / range - 1.0;
+        } else {
+          normalized1 = 0;
+          normalized2 = 0;
+        }
+
+        // Clamp to visible range
+        normalized1 =
+            normalized1 < -1.0 ? -1.0 : (normalized1 > 1.0 ? 1.0 : normalized1);
+        normalized2 =
+            normalized2 < -1.0 ? -1.0 : (normalized2 > 1.0 ? 1.0 : normalized2);
+
+        // Apply horizontal scale (adjust the spacing)
+        int effective_width = (int)(plot_width * state->horizontal_scale);
+        int offset_x = (plot_width - effective_width) / 2;
+
+        // Calculate point positions
+        int x1 = plot_x + offset_x + (i * effective_width) / (state->size - 1);
+        int y1 = row_y + row_height / 2 - (int)(normalized1 * row_height / 2);
+
+        int x2 =
+            plot_x + offset_x + ((i + 1) * effective_width) / (state->size - 1);
+        int y2 = row_y + row_height / 2 - (int)(normalized2 * row_height / 2);
+
+        SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+      }
+
+      // Use the channel's color for the indicator
+      SDL_SetRenderDrawColor(renderer, (color >> 16) & 0xFF,
+                             (color >> 8) & 0xFF, color & 0xFF, 255);
+
+      SDL_Color text_color = {(color >> 16) & 0xFF, (color >> 8) & 0xFF,
+                              color & 0xFF, 255};
+
+      char label[20];
+      sprintf(label, "CH%d", ch);
+
+      SDL_Surface *surface =
+          TTF_RenderText_Blended(DEFAULT_FONT, label, text_color);
+
+      SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+      // Draw channel indicator/label
+      SDL_Rect label_rect = {plot_x - 15, // Left of the plot area
+                             row_y + 5,   // Near top of row
+                             surface->w, surface->h};
+
+      SDL_RenderCopy(renderer, texture, NULL, &label_rect);
+    }
+  }
+
+  SDL_SetRenderTarget(renderer, NULL);
+  state->needs_redraw = false;
+}
+/**
+ * Render a frame (just copies the texture to the screen)
+ */
+SDL_Renderer *plot_renderer(plot_state *state, SDL_Renderer *renderer) {
+  if (state->needs_redraw) {
+    create_plot_texture_stacked(state, renderer);
+  }
+
+  if (state->plot_texture) {
+    SDL_RenderCopy(renderer, state->plot_texture, NULL, NULL);
+  }
+
+  return renderer;
+}
+
+/**
+ * Handle SDL events
+ */
+static int plot_event_handler(void *userdata, SDL_Event *event) {
+  plot_state *state = (plot_state *)userdata;
+
+  switch (event->type) {
+  case SDL_QUIT:
+    return 1; // Exit
+
+  case SDL_KEYDOWN:
+    switch (event->key.keysym.sym) {
+    case SDLK_ESCAPE:
+      return 1; // Exit
+
+    case SDLK_g:
+      // Toggle grid
+      state->draw_grid = !state->draw_grid;
+      state->needs_redraw = true;
+      break;
+
+    case SDLK_a:
+      // Toggle axes
+      state->draw_axis = !state->draw_axis;
+      state->needs_redraw = true;
+      break;
+
+    case SDLK_PLUS:
+    case SDLK_EQUALS:
+      // Increase vertical scale
+      state->vertical_scale *= 1.1;
+      state->needs_redraw = true;
+      break;
+
+    case SDLK_MINUS:
+      // Decrease vertical scale
+      state->vertical_scale /= 1.1;
+      state->needs_redraw = true;
+      break;
+
+    case SDLK_RIGHT:
+      // Increase horizontal scale
+      state->horizontal_scale *= 1.1;
+      state->needs_redraw = true;
+      break;
+
+    case SDLK_LEFT:
+      // Decrease horizontal scale
+      state->horizontal_scale /= 1.1;
+      state->needs_redraw = true;
+      break;
+
+    case SDLK_s:
+      // Example of saving a screenshot (would require additional code)
+      printf("Save screenshot functionality (not implemented)\n");
+      break;
+    }
+    break;
+
+  case SDL_WINDOWEVENT:
+    if (event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+        event->window.event == SDL_WINDOWEVENT_RESIZED) {
+      // Window size changed, need to recreate texture
+      state->needs_redraw = true;
+    }
+    break;
+  }
+
+  return 0; // Continue running
 }

@@ -252,7 +252,7 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "struct __color", "(Int, Int, Int, Int)");
 
   // engine lib -specific lookups
-  lookups = lookups_extend(lookups, "SignalRef", "Signal");
+  lookups = lookups_extend(lookups, "SignalRef", "Ptr");
   lookups = lookups_extend(lookups, "NodeRef", "Synth");
 
   for (int i = 1; i < argc; i++) {

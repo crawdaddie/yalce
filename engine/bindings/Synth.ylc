@@ -1,6 +1,7 @@
 # osc.h
 let maketable_sin = extern fn () -> ();
 let maketable_sq = extern fn () -> ();
+let maketable_saw = extern fn () -> ();
 let sin_node = extern fn Synth -> Synth;
 let sq_node = extern fn Synth -> Synth;
 let sq_pwm_node = extern fn Synth -> Synth -> Synth;
@@ -19,6 +20,7 @@ let trig_sel_node = extern fn Synth -> Synth -> Synth;
 let granulator_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth;
 let pm_node = extern fn Synth -> Synth -> Synth -> Synth;
 let lfnoise_node = extern fn Synth -> Synth -> Synth -> Synth;
+let saw_node = extern fn Synth -> Synth;
 
 # ext_lib.h
 let start_blob = extern fn () -> ();
@@ -35,6 +37,10 @@ let load_soundfile = extern fn Ptr -> Synth;
 let trigger_gate = extern fn Int -> Double -> Int -> Synth -> Synth;
 let midi_to_freq = extern fn Int -> Double;
 let ctx_main_out = extern fn () -> Ptr;
+let node_out = extern fn Synth -> Ptr;
+let sig_raw = extern fn Ptr -> Ptr;
+let sig_size = extern fn Ptr -> Int;
+let sig_layout = extern fn Ptr -> Int;
 
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;

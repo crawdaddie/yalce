@@ -5,5 +5,6 @@ let create_window = extern fn Ptr -> Ptr -> Ptr -> Int;
 let render_text = extern fn Ptr -> Int -> Int -> Ptr -> Ptr;
 let render_scope = extern fn Ptr -> Int -> Int -> Ptr -> Ptr;
 let create_scope = extern fn Ptr -> Int -> Int -> Int;
+let create_static_plot = extern fn Int -> Int -> Ptr -> Int;
 
 

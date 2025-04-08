@@ -3,6 +3,7 @@
 #include "./node.h"
 void maketable_sin(void);
 void maketable_sq(void);
+void maketable_saw(void);
 
 NodeRef sin_node(NodeRef input);
 
@@ -34,4 +35,6 @@ NodeRef pm_node(NodeRef freq_input, NodeRef mod_index_input,
                 NodeRef mod_ratio_input);
 
 NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input);
+
+NodeRef saw_node(NodeRef input);
 #endif

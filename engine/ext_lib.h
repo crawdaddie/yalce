@@ -23,4 +23,8 @@ double midi_to_freq(int midi_note);
 
 double *ctx_main_out();
 
+SignalRef node_out(NodeRef node);
+double *sig_raw(SignalRef sig);
+int sig_size(SignalRef sig);
+int sig_layout(SignalRef sig);
 #endif

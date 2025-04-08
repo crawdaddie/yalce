@@ -5,36 +5,38 @@
 #include "lib.h"
 #include <stdio.h>
 #include <stdlib.h>
+int save_table_to_file(double *table, int size, const char *filename) {
 
-#define SQ_TABSIZE (1 << 11)
-#define SIN_TABSIZE (1 << 11)
-double sq_table[SQ_TABSIZE];
-
-// Function to save sq_table to a file
-int save_table_to_file(double *table, int size, const char *filename,
-                       const char *TAB_SIZE_NAME, const char *tab_name) {
   FILE *file = fopen(filename, "w");
   if (!file) {
     return -1; // Error opening file
   }
 
-  fprintf(file, "// Generated table with %d entries\n", size);
-  fprintf(file, "#define %s %d\n// clang-format off\n", TAB_SIZE_NAME, size);
-  fprintf(file, "static const double %s[%d] = {\n", tab_name, size);
-
   for (int i = 0; i < size; i++) {
-    fprintf(file, "    %.16f", table[i]);
+    fprintf(file, "%.16f", table[i]);
     if (i < size - 1) {
       fprintf(file, ",");
     }
     fprintf(file, "\n");
   }
 
-  fprintf(file, "};\n");
   fclose(file);
   return 0;
 }
+
+// #define READ_WTABLES
+
+#define SQ_TABSIZE (1 << 11)
+#ifdef READ_WTABLES
+static double sq_table[SQ_TABSIZE] = {
+#include "./assets/sq_table.csv"
+};
+#else
+static double sq_table[SQ_TABSIZE];
+#endif
+
 void maketable_sq(void) {
+#ifndef READ_WTABLES
   double phase = 0.0;
   double phsinc = (2. * PI) / SQ_TABSIZE;
   for (int i = 0; i < SQ_TABSIZE; i++) {
@@ -43,19 +45,26 @@ void maketable_sq(void) {
          harm += 2) { // summing odd frequencies
 
       double val = sin(phase * harm) / harm;
-      sq_table[i] += val;
+      sq_table[i] += 4. * val / PI;
     }
     phase += phsinc;
   }
-#ifdef SAVE_WTABLES
-  save_table_to_file(sq_table, SQ_TABSIZE, "sq_table.h", "SQ_TABSIZE",
-                     "sq_table");
+  save_table_to_file(sq_table, SQ_TABSIZE, "engine/assets/sq_table.csv");
 #endif
 }
 
-double sin_table[SIN_TABSIZE];
+#define SIN_TABSIZE (1 << 11)
+#ifdef READ_WTABLES
+static double sin_table[SIN_TABSIZE] = {
+#include "./assets/sin_table.csv"
+};
+#else
+static double sin_table[SIN_TABSIZE];
+#endif
 
 void maketable_sin(void) {
+#ifndef READ_WTABLES
+
   double phase = 0.0;
   double phsinc = (2. * PI) / SIN_TABSIZE;
 
@@ -64,10 +73,7 @@ void maketable_sin(void) {
     sin_table[i] = val;
     phase += phsinc;
   }
-
-#ifdef SAVE_WTABLES
-  save_table_to_file(sq_table, SQ_TABSIZE, "sin_table.h", "SIN_TABSIZE",
-                     "sin_table");
+  save_table_to_file(sin_table, SIN_TABSIZE, "engine/assets/sin_table.csv");
 #endif
 }
 
@@ -1544,6 +1550,98 @@ Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
 
   if (mod_ratio_input) {
     node->connections[2].source_node_index = mod_ratio_input->node_index;
+  }
+
+  return node;
+}
+#define SAW_TABSIZE (1 << 11)
+#ifdef READ_WTABLES
+static double saw_table[SAW_TABSIZE] = {
+#include "./assets/saw_table.csv"
+};
+#else
+static double saw_table[SQ_TABSIZE];
+#endif
+
+void maketable_saw(void) {
+#ifndef READ_WTABLES
+  double phase = 0.0;
+  double phsinc = (2. * PI) / SAW_TABSIZE;
+  for (int i = 0; i < SAW_TABSIZE; i++) {
+
+    for (int harm = 1; harm < SAW_TABSIZE / 2;
+         harm += 1) { // summing n frequencies
+
+      double val = sin(phase * harm) / harm;
+      saw_table[i] += (-2. * val) / PI;
+    }
+    phase += phsinc;
+  }
+  save_table_to_file(saw_table, SAW_TABSIZE, "engine/assets/saw_table.csv");
+#endif
+}
+
+typedef struct saw_state {
+  double phase;
+} saw_state;
+void *saw_perform(Node *node, saw_state *state, Node *inputs[], int nframes,
+                  double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *in = inputs[0]->output.buf;
+
+  double d_index;
+  int index;
+  double frac, a, b, sample;
+  double freq;
+
+  const int table_mask = SAW_TABSIZE - 1; // Assuming SIN_TABSIZE is power of 2
+
+  while (nframes--) {
+    freq = *in;
+    in++;
+
+    d_index = state->phase * SAW_TABSIZE;
+    index = (int)d_index;
+    frac = d_index - index;
+    a = saw_table[index & table_mask];
+    b = saw_table[(index + 1) & table_mask];
+
+    sample = (1.0 - frac) * a + (frac * b);
+
+    for (int i = 0; i < out_layout; i++) {
+      *out = sample;
+      out++;
+    }
+
+    state->phase = fmod(state->phase + freq * spf, 1.0);
+  }
+
+  return node->output.buf;
+}
+
+Node *saw_node(Node *input) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(saw_state));
+
+  *node = (Node){
+      .perform = (perform_func_t)saw_perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      .state_size = sizeof(sq_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(saw_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "saw",
+  };
+
+  saw_state *state =
+      (saw_state *)(graph->nodes_state_memory + node->state_offset);
+  *state = (saw_state){.phase = 0.0};
+
+  if (input) {
+    node->connections[0].source_node_index = input->node_index;
   }
 
   return node;

@@ -61,7 +61,7 @@ let routine = fn scale ->
   yield scale * 1.;
   yield seq x y
 ;;
-play_routine schedule_event (routine 0.25);
+# play_routine schedule_event (routine 0.25);
 
-open gui/bindings/Gui;
-create_scope (ctx_main_out ()) 2 512;
+# open gui/bindings/Gui;
+# create_scope (ctx_main_out ()) 2 512;
