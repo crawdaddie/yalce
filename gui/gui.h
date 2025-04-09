@@ -14,7 +14,7 @@ int create_window(void *data, void *renderer, void *event_handler
 //                  SDL_Renderer *renderer);
 
 SDL_Renderer *render_text(const char *text, int x, int y,
-                          SDL_Renderer *renderer);
+                          SDL_Renderer *renderer, SDL_Color text_color);
 
 SDL_Renderer *render_scope(char *text, int x, int y, SDL_Renderer *renderer);
 

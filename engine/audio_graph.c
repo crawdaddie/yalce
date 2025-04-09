@@ -12,7 +12,8 @@ double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
 
   // Ensure we have enough space
   if (graph->buffer_pool_size + size > graph->buffer_pool_capacity) {
-    printf("realloc buffer pool?? %d %d\n", graph->buffer_pool_size + size, graph->buffer_pool_capacity);
+    printf("realloc buffer pool?? %d %d\n", graph->buffer_pool_size + size,
+           graph->buffer_pool_capacity);
     graph->buffer_pool_capacity *= 2;
     graph->buffer_pool =
         realloc(graph->buffer_pool, graph->buffer_pool_capacity);
@@ -33,7 +34,7 @@ int state_offset_ptr_in_graph(AudioGraph *graph, int size) {
   if (!graph) {
     return 0;
   }
-  // TODO: if graph is NULL, return offset from node, which is just sizeof(Node) 
+  // TODO: if graph is NULL, return offset from node, which is just sizeof(Node)
   size = (size + 7) & ~7; // 8-byte alignment
 
   int offset = graph->state_memory_size;
@@ -53,7 +54,6 @@ char *state_ptr(AudioGraph *graph, NodeRef node) {
     return (char *)((Node *)node + 1);
   }
   return graph->nodes_state_memory + node->state_offset;
-
 }
 
 Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
@@ -83,7 +83,7 @@ void print_graph(AudioGraph *g) {
     Node *n = g->nodes + i;
 
     printf("[%d] node (%s) ", i, n->meta);
-    
+
     if (strcmp(n->meta, "const") == 0) {
       printf("%f", n->output.buf[0]);
     }

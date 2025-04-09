@@ -181,8 +181,7 @@ int create_window(void *data, void *renderer, void *event_handler
 }
 
 SDL_Renderer *render_text(const char *text, int x, int y,
-                          SDL_Renderer *renderer) {
-  SDL_Color text_color = {0, 0, 0, 255}; // black
+                          SDL_Renderer *renderer, SDL_Color text_color) {
 
   SDL_Surface *surface = TTF_RenderText_Blended(DEFAULT_FONT, text, text_color);
 
@@ -354,7 +353,7 @@ SDL_Renderer *scope_renderer(scope_state *state, SDL_Renderer *renderer) {
 
     char label[20];
     sprintf(label, "CH%d", ch + 1);
-    render_text(label, 10, center_y - half_height + 5, renderer);
+    render_text(label, 10, center_y - half_height + 5, renderer, color);
 
     for (int thickness = 0; thickness < LINE_THICKNESS; thickness++) {
       double sample = state->ring_buffer[trigger_frame * state->layout + ch];
@@ -407,7 +406,7 @@ SDL_Renderer *scope_renderer(scope_state *state, SDL_Renderer *renderer) {
           state->trigger_mode == 0   ? "Auto"
           : state->trigger_mode == 1 ? "Normal"
                                      : "Single");
-  render_text(info, width - 200, 10, renderer);
+  render_text(info, width - 200, 10, renderer, (SDL_Color){255, 255, 255, 255});
 
   return renderer;
 }
@@ -750,7 +749,6 @@ SDL_Renderer *plot_renderer(plot_state *state, SDL_Renderer *renderer) {
   return renderer;
 }
 
-
 static void create_plot_texture_stacked(plot_state *state,
                                         SDL_Renderer *renderer) {
   SDL_GetRendererOutputSize(renderer, &state->window_width,
@@ -853,23 +851,27 @@ static void create_plot_texture_stacked(plot_state *state,
       // Calculate the visible sample range based on horizontal scale and offset
       double visible_range = 1.0 / state->horizontal_scale;
       double center_offset = state->horizontal_offset;
-      
+
       // Position in normalized coordinate space (0.0 to 1.0)
       double start_pos = center_offset - (visible_range / 2.0);
       double end_pos = center_offset + (visible_range / 2.0);
-      
+
       // Clamp to valid range
-      if (start_pos < 0.0) start_pos = 0.0;
-      if (end_pos > 1.0) end_pos = 1.0;
-      
+      if (start_pos < 0.0)
+        start_pos = 0.0;
+      if (end_pos > 1.0)
+        end_pos = 1.0;
+
       // Convert to sample indices
       int start_sample = (int)(start_pos * (state->size - 1));
       int end_sample = (int)(end_pos * (state->size - 1));
-      
+
       // Ensure we have at least one sample to display
-      if (start_sample == end_sample && start_sample < state->size - 1) end_sample++;
-      if (start_sample == end_sample && start_sample > 0) start_sample--;
-      
+      if (start_sample == end_sample && start_sample < state->size - 1)
+        end_sample++;
+      if (start_sample == end_sample && start_sample > 0)
+        start_sample--;
+
       // Draw only the visible samples
       for (int i = start_sample; i < end_sample; i++) {
         // Get sample values
@@ -894,17 +896,21 @@ static void create_plot_texture_stacked(plot_state *state,
         }
 
         // Clamp to visible range
-        normalized1 = normalized1 < -1.0 ? -1.0 : (normalized1 > 1.0 ? 1.0 : normalized1);
-        normalized2 = normalized2 < -1.0 ? -1.0 : (normalized2 > 1.0 ? 1.0 : normalized2);
+        normalized1 =
+            normalized1 < -1.0 ? -1.0 : (normalized1 > 1.0 ? 1.0 : normalized1);
+        normalized2 =
+            normalized2 < -1.0 ? -1.0 : (normalized2 > 1.0 ? 1.0 : normalized2);
 
         // Map from sample indices to pixels
         double sample_pos1 = (double)i / (state->size - 1);
         double sample_pos2 = (double)(i + 1) / (state->size - 1);
-        
+
         // Normalize to visible range
-        double normalized_pos1 = (sample_pos1 - start_pos) / (end_pos - start_pos);
-        double normalized_pos2 = (sample_pos2 - start_pos) / (end_pos - start_pos);
-        
+        double normalized_pos1 =
+            (sample_pos1 - start_pos) / (end_pos - start_pos);
+        double normalized_pos2 =
+            (sample_pos2 - start_pos) / (end_pos - start_pos);
+
         // Calculate point positions
         int x1 = plot_x + (int)(normalized_pos1 * plot_width);
         int y1 = row_y + row_height / 2 - (int)(normalized1 * row_height / 2);
@@ -913,8 +919,8 @@ static void create_plot_texture_stacked(plot_state *state,
         int y2 = row_y + row_height / 2 - (int)(normalized2 * row_height / 2);
 
         // Draw the line segment if both points are within the plot area
-        if (x1 >= plot_x && x1 <= plot_x + plot_width &&
-            x2 >= plot_x && x2 <= plot_x + plot_width) {
+        if (x1 >= plot_x && x1 <= plot_x + plot_width && x2 >= plot_x &&
+            x2 <= plot_x + plot_width) {
           SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
         }
       }
@@ -974,11 +980,11 @@ static int plot_event_handler(void *userdata, SDL_Event *event) {
       // Zoom in - center stays the same
       double old_scale = state->horizontal_scale;
       state->horizontal_scale *= 1.1;
-      
+
       // Adjust offset to maintain center point
       double center_point = state->horizontal_offset;
       state->horizontal_offset = center_point;
-      
+
       state->needs_redraw = true;
       break;
     }
@@ -987,29 +993,30 @@ static int plot_event_handler(void *userdata, SDL_Event *event) {
       // Zoom out - center stays the same
       double old_scale = state->horizontal_scale;
       state->horizontal_scale /= 1.1;
-      
+
       // Adjust offset to maintain center point
       double center_point = state->horizontal_offset;
       state->horizontal_offset = center_point;
-      
+
       state->needs_redraw = true;
       break;
     }
 
     case SDLK_RIGHT: {
       // Move right - pan the view by a percentage of the visible range
-      // The step size is constant in screen space but varies in data space based on zoom
-      // When zoomed in (large horizontal_scale), we move by a smaller amount in data space
+      // The step size is constant in screen space but varies in data space
+      // based on zoom When zoomed in (large horizontal_scale), we move by a
+      // smaller amount in data space
       double visible_range = 1.0 / state->horizontal_scale;
       double step = visible_range * 0.05; // Move 5% of the visible range
-      
+
       state->horizontal_offset += step;
-      
+
       // Clamp to valid range (0.0 to 1.0)
       if (state->horizontal_offset > 1.0) {
         state->horizontal_offset = 1.0;
       }
-      
+
       state->needs_redraw = true;
       break;
     }
@@ -1018,14 +1025,14 @@ static int plot_event_handler(void *userdata, SDL_Event *event) {
       // Move left - pan the view by a percentage of the visible range
       double visible_range = 1.0 / state->horizontal_scale;
       double step = visible_range * 0.05; // Move 5% of the visible range
-      
+
       state->horizontal_offset -= step;
-      
+
       // Clamp to valid range (0.0 to 1.0)
       if (state->horizontal_offset < 0.0) {
         state->horizontal_offset = 0.0;
       }
-      
+
       state->needs_redraw = true;
       break;
     }

@@ -1,4 +1,3 @@
-#include "../engine/ctx.h"
 #include "../gui/gui.h"
 #include "backend_llvm/jit.h"
 #include "format_utils.h"
@@ -7,27 +6,6 @@
 #include <stdio.h>
 #include <string.h>
 
-// int create_main_scope() {
-//   Ctx *audio_ctx = get_audio_ctx();
-//   double *output = audio_ctx->output_buf;
-//   create_scope(output, 2, 512);
-//   return 1;
-// }
-
-// int plot_sig(SignalRef sig) {
-//   _create_plot_array_window(sig->size, sig->buf);
-//   return 1;
-// }
-//
-// int scope_node(NodeRef node) {
-//   Signal sig;
-//   out_sig(node, &sig);
-//   return create_scope(sig.buf, sig.layout, sig.size);
-// }
-
-// Global variables for thread synchronization
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 bool jit_completed = false;
 
 struct thread_args {

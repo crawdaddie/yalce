@@ -41,11 +41,15 @@ let kick_syn = fn offset ->
 # kick_syn 0
 
 let trig_rand = (fn () ->
-  let trig = impulse_node (inlet 100.) in
-  rand_trig_node trig 0. 1.
+  let trig = impulse_node (inlet 10.);
+  let pos = lfnoise_node 1. 0. 1.;
+  let rate = rand_trig_node trig 0.5 1.5;
+  grain_osc_node 32 (inlet 1.) trig pos rate
+
   ;) 
   |> compile_blob_template
-  |> instantiate_template [(0, 100.)]
+  |> instantiate_template [(0, 20.)]
+  |> set_input_buf_immediate 1 chirp_buf 
   |> play_node_offset 0;
 
 

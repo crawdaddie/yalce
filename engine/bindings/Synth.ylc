@@ -22,6 +22,7 @@ let pm_node = extern fn Synth -> Synth -> Synth -> Synth;
 let lfnoise_node = extern fn Synth -> Synth -> Synth -> Synth;
 let saw_node = extern fn Synth -> Synth;
 let rand_trig_node = extern fn Synth -> Synth -> Synth -> Synth;
+let grain_osc_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth;
 
 # ext_lib.h
 let start_blob = extern fn () -> ();
