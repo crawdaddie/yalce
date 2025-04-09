@@ -41,5 +41,8 @@ NodeRef saw_node(NodeRef input);
 NodeRef rand_trig_node(NodeRef trig_input, NodeRef low, NodeRef high);
 
 NodeRef grain_osc_node(int max_grains, NodeRef buf, NodeRef trig, NodeRef pos,
-                       NodeRef rate, NodeRef envelope);
+                       NodeRef rate, NodeRef width
+                       );
+
+void maketable_grain_window();
 #endif

@@ -34,7 +34,7 @@ int state_offset_ptr_in_graph(AudioGraph *graph, int size) {
   if (!graph) {
     return 0;
   }
-  // TODO: if graph is NULL, return offset from node, which is just sizeof(Node)
+
   size = (size + 7) & ~7; // 8-byte alignment
 
   int offset = graph->state_memory_size;
@@ -61,10 +61,7 @@ Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
     return malloc(sizeof(Node) + state_size);
   }
 
-  // TODO: accept size of state struct as well
-  // if graph is NULL, return malloc(sizeof(Node) + sizeof(state_struct))
   int idx = graph->node_count++;
-  // printf("idx %d graph->node_count %d\n", idx, graph->node_count);
 
   if (graph->node_count >= graph->capacity) {
     graph->capacity *= 2;
@@ -74,6 +71,20 @@ Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
   Node *node = &graph->nodes[idx];
   node->node_index = idx;
   return node;
+}
+
+void print_node(NodeRef n) {
+  printf("node (%s) ", n->meta);
+
+  if (strcmp(n->meta, "const") == 0) {
+    printf("%f", n->output.buf[0]);
+  }
+  printf("\n\t[");
+
+  for (int j = 0; j < n->num_inputs; j++) {
+    printf("%d, ", n->connections[j].source_node_index);
+  }
+  printf("]\n");
 }
 
 void print_graph(AudioGraph *g) {

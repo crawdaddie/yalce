@@ -150,6 +150,29 @@ Node *inlet(double default_val) {
   return f;
 }
 
+NodeRef buf_ref(NodeRef buf) {
+
+  AudioGraph *graph = _graph;
+  Node *f = allocate_node_in_graph(graph, 0);
+
+  // Initialize node
+  *f = (Node){
+      .perform = NULL,
+      .node_index = f->node_index,
+      .num_inputs = 0,
+      // Allocate state memory
+      .state_size = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
+      .meta = "buf_ref",
+  };
+
+  f->output.buf = buf->output.buf;
+  f->output.layout = buf->output.layout;
+  f->output.size = buf->output.size;
+
+  return f;
+}
+
 void start_blob() {
   AudioGraph *graph = malloc(sizeof(AudioGraph));
 
@@ -248,9 +271,14 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
 
   double *buf_mem = graph_state->buffer_pool;
   for (int i = 0; i < graph_state->node_count; i++) {
-    graph_state->nodes[i].output.buf = buf_mem;
-    buf_mem +=
-        graph_state->nodes[i].output.layout * graph_state->nodes[i].output.size;
+    Node *n = graph_state->nodes + i;
+    if (strcmp(n->meta, "buf_ref") == 0) {
+      continue;
+    } else {
+      graph_state->nodes[i].output.buf = buf_mem;
+      buf_mem += graph_state->nodes[i].output.layout *
+                 graph_state->nodes[i].output.size;
+    }
   }
 
   graph_state->nodes_state_memory = mem;
@@ -267,20 +295,10 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
                      .meta = "sin_ensemble",
                      .next = NULL};
 
-  // for (int idx = 0; idx < g->num_inlets; idx++) {
-  //   double val = g->inlet_defaults[idx];
-  //   int inlet_node_idx = graph_state->inlets[idx];
-  //   Node *inlet_node = graph_state->nodes + inlet_node_idx;
-  //
-  //   // printf("inlet %d val %f\n", idx, val);
-  //   for (int i = 0; i < inlet_node->output.layout * inlet_node->output.size;
-  //        i++) {
-  //     inlet_node->output.buf[i] = val;
-  //   }
-  // }
-
+  uint32_t inputs_mask;
   while (input_vals) {
     int idx = input_vals->pair.idx;
+    inputs_mask |= (1U << idx);
     double val = input_vals->pair.val;
     int inlet_node_idx = graph_state->inlets[idx];
     Node *inlet_node = graph_state->nodes + inlet_node_idx;
@@ -290,6 +308,21 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
     }
 
     input_vals = input_vals->next;
+  }
+  for (int idx = 0; idx < g->num_inlets; idx++) {
+
+    // Skip this inlet if its bit is already set in the mask
+    if (inputs_mask & (1U << idx)) {
+      continue; // Skip to the next iteration
+    }
+    double val = g->inlet_defaults[idx];
+    int inlet_node_idx = graph_state->inlets[idx];
+    printf("setting default %f for inlet %d\n", val, idx);
+    Node *inlet_node = graph_state->nodes + inlet_node_idx;
+    for (int i = 0; i < inlet_node->output.layout * inlet_node->output.size;
+         i++) {
+      inlet_node->output.buf[i] = val;
+    }
   }
 
   return ensemble;

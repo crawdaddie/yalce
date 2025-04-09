@@ -1,7 +1,5 @@
 open engine/bindings/Synth;
 
-
-
 let chirp_buf = 
   (fn () ->
     let trig = inlet 1.;
@@ -13,43 +11,45 @@ let chirp_buf =
   |> render_to_buf (512 * 11);
 
 
-# (
-#   import gui/bindings/Gui;
-#   let sig = node_out chirp_buf;
-#
-#   Gui.create_static_plot
-#     (sig_layout sig)
-#     (sig_size sig)
-#     (sig_raw sig)
-# );
+(
+  import gui/bindings/Gui;
+  let sig = node_out chirp_buf;
+
+  Gui.create_static_plot
+    (sig_layout sig)
+    (sig_size sig)
+    (sig_raw sig)
+);
 
 
 let kick_tpl = (fn () -> 
-  let trig = inlet 0.0;
-  bufplayer_trig_node (inlet 1.) 1. 0. trig
+  bufplayer_trig_node (buf_ref chirp_buf) 1. 1. (inlet 0.)
   ;)
   |> compile_blob_template;
 
 let kick_syn = fn offset ->
   kick_tpl
-  |> instantiate_template [(0, 0.)]
-  |> set_input_buf_immediate 1 chirp_buf 
+  |> instantiate_template []
   |> play_node_offset offset
 ;;
 
 
-# kick_syn 0
+# kick_syn 0;
 
+let amen_samp = load_soundfile @@ cstr "fat_amen_mono_48000.wav";
 let trig_rand = (fn () ->
-  let trig = impulse_node (inlet 10.);
-  let pos = lfnoise_node 1. 0. 1.;
-  let rate = rand_trig_node trig 0.5 1.5;
-  grain_osc_node 32 (inlet 1.) trig pos rate
+  let freq = inlet 40.; 
+  let trig = impulse_node freq;
+  let pos = lfnoise_node 2. 0. 1.;
+  let r = rand_trig_node trig 0.8 1.5;
 
+  grain_osc_node 32 (buf_ref amen_samp) trig pos 
+  (lfnoise_node 3. 0.5 2.)
+  0.06  
+  |> biquad_lp_node (lfnoise_node 1. 9000. 100.) 2.
   ;) 
   |> compile_blob_template
-  |> instantiate_template [(0, 20.)]
-  |> set_input_buf_immediate 1 chirp_buf 
+  |> instantiate_template []
   |> play_node_offset 0;
 
 

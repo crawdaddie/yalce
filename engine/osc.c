@@ -121,25 +121,20 @@ void *sin_perform(Node *node, sin_state *state, Node *inputs[], int nframes,
 
 Node *sin_node(Node *input) {
   AudioGraph *graph = _graph;
-  // Find next available slot in nodes array
   Node *node = allocate_node_in_graph(graph, sizeof(sin_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)sin_perform,
       .node_index = node->node_index,
       .num_inputs = 1,
-      // Allocate state memory
       .state_size = sizeof(sin_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(sin_state)),
-      // Allocate output buffer
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
       .meta = "sin",
   };
 
-  // Initialize state
   sin_state *state = (sin_state *)(state_ptr(graph, node));
 
   *state = (sin_state){.phase = 0.0};
@@ -273,7 +268,6 @@ Node *sq_pwm_node(Node *freq_input, Node *pw_input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(sq_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)sq_pwm_perform,
       .node_index = node->node_index,
@@ -695,6 +689,9 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
 
+  printf("[%f,%f,%f,%f]", buf->output.buf[0], buf->output.buf[1],
+         buf->output.buf[2], buf->output.buf[3]);
+
   *node = (Node){
       .perform = (perform_func_t)bufplayer_trig_perform,
       .node_index = node->node_index,
@@ -898,7 +895,6 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
       .meta = "lfnoise",
   };
 
-  // Initialize state
   lfnoise_state *state =
       (lfnoise_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (lfnoise_state){
@@ -1218,7 +1214,6 @@ Node *trig_sel_node(Node *trig, Node *sels) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(trig_sel_state));
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)trig_sel_perform,
       .node_index = node->node_index,
@@ -1713,67 +1708,147 @@ Node *rand_trig_node(Node *trig_input, Node *low, Node *high) {
   return node;
 }
 
-void *__grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
-                          int nframes, double spf) {
+/**
+ * Creates a wavetable containing a Gaussian curve for granular synthesis.
+ *
+ * @param size The size of the wavetable (typically a power of 2 like 512)
+ * @param sigma Controls the width of the Gaussian bell (between 0.1 and 0.5
+ * works well)
+ * @return Pointer to the allocated wavetable, or NULL if allocation fails
+ */
+double *create_gaussian_wavetable(double *wavetable, int size, double sigma) {
+  double center = (size - 1) / 2.0;
 
-  double *out = node->output.buf;
-  int out_layout = node->output.layout;
+  double scaling = 1.0 / (sigma * sqrt(2.0 * M_PI));
 
-  double *buf = inputs[0]->output.buf;
-  int buf_size = inputs[0]->output.size;
+  double variance = sigma * sigma * size * size;
 
-  double *trig = inputs[1]->output.buf;
-  double *pos = inputs[2]->output.buf;
-  double *rate = inputs[3]->output.buf;
+  double max_value = 0.0;
+  for (int i = 0; i < size; i++) {
+    double x = i - center;
+    double exponent = -(x * x) / (2.0 * variance);
+    wavetable[i] = scaling * exp(exponent);
 
-  double sample = 0.;
-  int max_grains = state->max_grains;
-
-  double *rates = (double *)((grain_osc_state *)state + 1);
-  double *phases = rates + max_grains;
-  double *widths = phases + max_grains;
-
-  while (nframes--) {
-    for (int i = 0; i < max_grains; i++) {
-      double r = rates[i];
-      double p = phases[i];
-      double w = widths[i];
+    if (wavetable[i] > max_value) {
+      max_value = wavetable[i];
     }
-
-    for (int i = 0; i < out_layout; i++) {
-      *out = sample;
-      out++;
-    }
-    trig++;
-    rate++;
-    pos++;
   }
+
+  for (int i = 0; i < size; i++) {
+    wavetable[i] /= max_value;
+  }
+
+  return wavetable;
 }
 
-// double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
-//   if (!graph) {
-//     return malloc(sizeof(double) * size);
-//   }
-//
-//   // Ensure we have enough space
-//   if (graph->buffer_pool_size + size > graph->buffer_pool_capacity) {
-//     printf("realloc buffer pool?? %d %d\n", graph->buffer_pool_size + size,
-//     graph->buffer_pool_capacity); graph->buffer_pool_capacity *= 2;
-//     graph->buffer_pool =
-//         realloc(graph->buffer_pool, graph->buffer_pool_capacity);
-//
-//     // Realloc buffer pool if needed
-//     // ...
-//   }
-//
-//   double *buffer = &graph->buffer_pool[graph->buffer_pool_size];
-//   graph->buffer_pool_size += size;
-//   return buffer;
-// }
+/**
+ * Alternative version that creates a Gaussian curve with specified attack and
+ * decay times This is useful for asymmetric grain envelopes
+ *
+ * @param size The size of the wavetable (typically a power of 2 like 512)
+ * @param attack_ratio Ratio of attack time to total time (0.0-1.0)
+ * @param sigma_attack Sigma parameter for attack portion
+ * @param sigma_decay Sigma parameter for decay portion
+ * @return Pointer to the allocated wavetable, or NULL if allocation fails
+ */
+double *create_asymmetric_gaussian_wavetable(double *wavetable, int size,
+                                             double attack_ratio,
+                                             double sigma_attack,
+                                             double sigma_decay) {
+  // Validate parameters
+  if (attack_ratio < 0.0 || attack_ratio > 1.0) {
+    attack_ratio = 0.5; // Default to symmetric
+  }
+
+  int attack_samples = (int)(size * attack_ratio);
+  int decay_samples = size - attack_samples;
+
+  double max_value = 0.0;
+
+  for (int i = 0; i < attack_samples; i++) {
+    double x = i - attack_samples; // Negative values for left side
+    double normalized_x = x / (double)attack_samples; // Normalize to -1 to 0
+    double exponent =
+        -(normalized_x * normalized_x) / (2.0 * sigma_attack * sigma_attack);
+    wavetable[i] = exp(exponent);
+
+    if (wavetable[i] > max_value) {
+      max_value = wavetable[i];
+    }
+  }
+
+  for (int i = attack_samples; i < size; i++) {
+    double x = i - attack_samples; // 0 to positive values for right side
+    double normalized_x = x / (double)decay_samples; // Normalize to 0 to 1
+    double exponent =
+        -(normalized_x * normalized_x) / (2.0 * sigma_decay * sigma_decay);
+    wavetable[i] = exp(exponent);
+
+    if (wavetable[i] > max_value) {
+      max_value = wavetable[i];
+    }
+  }
+
+  for (int i = 0; i < size; i++) {
+    wavetable[i] /= max_value;
+  }
+
+  return wavetable;
+}
+
+/**
+ * Creates a variant of the Gaussian wavetable suitable for high-quality
+ * granular synthesis. This is a "window" function optimized to prevent spectral
+ * leakage and artifacts.
+ *
+ * @param size The size of the wavetable (typically a power of 2 like 512)
+ * @param alpha Parameter controlling the shape (typically between 2-4)
+ * @return Pointer to the allocated wavetable, or NULL if allocation fails
+ */
+double *create_grain_window_wavetable(double *wavetable, int size,
+                                      double alpha) {
+  for (int i = 0; i < size; i++) {
+    double x = (i / (double)(size - 1)) * 2.0 - 1.0; // -1 to 1
+    double exponent = -alpha * x * x;
+    wavetable[i] = exp(exponent);
+  }
+
+  return wavetable;
+}
+
+#define GRAIN_WINDOW_TABSIZE (1 << 9)
+#ifdef READ_WTABLES
+static double gaussian_win[SQ_TABSIZE] = {
+#include "./assets/gaussian_win.csv"
+};
+#else
+static double gaussian_win[GRAIN_WINDOW_TABSIZE];
+#endif
+
+#ifdef READ_WTABLES
+static double grain_win[SQ_TABSIZE] = {
+#include "./assets/grain_win.csv"
+};
+#else
+static double grain_win[GRAIN_WINDOW_TABSIZE];
+#endif
+void maketable_grain_window() {
+
+#ifndef READ_WTABLES
+  create_gaussian_wavetable(gaussian_win, GRAIN_WINDOW_TABSIZE, 0.5);
+  save_table_to_file(gaussian_win, GRAIN_WINDOW_TABSIZE,
+                     "engine/assets/gaussian_win.csv");
+  create_grain_window_wavetable(grain_win, GRAIN_WINDOW_TABSIZE, 2.);
+  save_table_to_file(grain_win, GRAIN_WINDOW_TABSIZE,
+                     "engine/assets/grain_win.csv");
+#endif
+}
+
 typedef struct grain_osc_state {
   const int max_grains;
   int active_grains;
 } grain_osc_state;
+
 void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
                         int nframes, double spf) {
 
@@ -1786,122 +1861,136 @@ void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
   double *trig = inputs[1]->output.buf;
   double *pos = inputs[2]->output.buf;
   double *rate = inputs[3]->output.buf;
-  double *envelope = inputs[4]->output.buf;
+  double *width = inputs[4]->output.buf;
 
-  double sample = 0.;
   int max_grains = state->max_grains;
-  int active_grains = state->active_grains;
 
-  // Arrays to track grain parameters
-  double *rates = (double *)((grain_osc_state *)state + 1);
-  double *phases = rates + max_grains;
-  double *widths = phases + max_grains;
+  char *mem = (char *)((grain_osc_state *)state + 1);
+  double *rates = (double *)mem;
+  mem += sizeof(double) * max_grains;
 
-  // Array to track active state of each grain (0 = inactive, 1 = active)
-  int *active = (int *)(widths + max_grains);
+  double *phases = (double *)mem;
+  mem += sizeof(double) * max_grains;
 
+  double *widths = (double *)mem;
+  mem += sizeof(double) * max_grains;
+
+  double *starts = (double *)mem;
+  mem += sizeof(double) * max_grains;
+
+  int *active = (int *)mem;
+
+  double d_index;
+  int index;
+  double frac;
+  double a, b;
+  double sample = 0.;
   while (nframes--) {
-    sample = 0.0; // Reset sample accumulator for this frame
+    sample = 0.;
+    int trig_new = 0;
+    if (*trig > 0.9) {
+      if (state->active_grains < max_grains) {
+        trig_new = 1;
+      }
+    }
 
-    // Check for new grain trigger
-    if (*trig > 0.9) { // Trigger threshold at 0.9 to account for floating point
-                       // imprecision
-      // Find a free grain slot if not at max active grains
-      if (active_grains < max_grains) {
-        for (int i = 0; i < max_grains; i++) {
-          if (active[i] == 0) {
-            // Initialize the new grain
-            rates[i] = *rate; // Set rate from input
-            phases[i] =
-                *pos * buf_size; // Set starting phase based on position input
-            widths[i] = 0.0;     // Start at beginning of envelope
-            active[i] = 1;       // Mark as active
-            active_grains++;
-            break; // Found and initialized a slot, exit loop
-          }
+    if (trig_new) {
+      for (int i = 0; i < max_grains; i++) {
+        if (active[i] == 0) {
+          rates[i] = *rate;
+          phases[i] = 0;
+          starts[i] = *pos * buf_size;
+          widths[i] = *width;
+          active[i] = 1;
+          state->active_grains++;
+          break;
         }
       }
     }
 
-    // Process all active grains
     for (int i = 0; i < max_grains; i++) {
+
       if (active[i]) {
         double r = rates[i];
         double p = phases[i];
+        double s = starts[i];
         double w = widths[i];
 
-        // Calculate grain envelope (simple triangular envelope)
-        double env = 0.0;
-        if (w < 0.5) {
-          env = w * 2.0; // Rising part (0.0 to 1.0)
+        d_index = s + (p * buf_size);
+
+        index = (int)d_index;
+        frac = d_index - index;
+
+        a = buf[index % buf_size];
+        b = buf[(index + 1) % buf_size];
+        // Calculate envelope position - normalize the grain lifetime from 0 to
+        // 1
+        double grain_elapsed = 1.0 - (w / *width);
+        if (grain_elapsed < 0.0)
+          grain_elapsed = 0.0;
+        if (grain_elapsed > 1.0)
+          grain_elapsed = 1.0;
+
+        // Look up envelope value in wavetable using interpolation
+        double env_pos = grain_elapsed * (GRAIN_WINDOW_TABSIZE - 1);
+        int env_idx = (int)env_pos;
+        double env_frac = env_pos - env_idx;
+
+        // Interpolate between envelope table values
+        double env_val;
+        if (env_idx < GRAIN_WINDOW_TABSIZE - 1) {
+          env_val = grain_win[env_idx] * (1.0 - env_frac) +
+                    grain_win[env_idx + 1] * env_frac;
         } else {
-          env = 2.0 - w * 2.0; // Falling part (1.0 to 0.0)
+          env_val = grain_win[env_idx];
         }
 
-        // Read buffer with interpolation (simple linear interpolation)
-        int idx = (int)p;
-        double frac = p - idx;
-        idx = idx % buf_size; // Wrap buffer position
-        int idx_next = (idx + 1) % buf_size;
+        sample += env_val * ((1.0 - frac) * a + (frac * b));
+        phases[i] += (r / buf_size);
 
-        double sample_val = buf[idx] * (1.0 - frac) + buf[idx_next] * frac;
+        // Wrap phase if needed
+        // if (phases[i] >= 1.0) {
+        //   phases[i] -= 1.0;
+        // }
 
-        // Apply envelope and accumulate
-        sample += sample_val * env;
-
-        // Update phase for next frame
-        phases[i] = p + r;
-        if (phases[i] >= buf_size) {
-          phases[i] = fmod(phases[i], buf_size); // Wrap phase within buffer
-        }
-
-        // Update width (envelope position)
-        widths[i] =
-            w + (1.0 / (state->grain_duration * spf)); // Advance envelope
-
-        // Check if grain finished
-        if (widths[i] >= 1.0) {
-          active[i] = 0; // Mark grain as inactive
-          active_grains--;
+        widths[i] -= spf;
+        if (widths[i] <= 0) {
+          active[i] = 0; // Deactivate the grain
+          state->active_grains--;
         }
       }
     }
 
-    // Output accumulated sample to all channels
     for (int i = 0; i < out_layout; i++) {
       *out = sample;
       out++;
     }
-
-    // Advance input pointers
     trig++;
     rate++;
     pos++;
+    width++;
   }
-
-  // Update state with new active grain count
-  state->active_grains = active_grains;
-
-  return NULL;
 }
 
 NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
-                       Node *rate, Node *env) {
+                       Node *rate, Node *width) {
 
   AudioGraph *graph = _graph;
   int state_size = sizeof(grain_osc_state) +
                    (max_grains * sizeof(double))   // rates
                    + (max_grains * sizeof(double)) // phases
                    + (max_grains * sizeof(double)) // widths
+                   + (max_grains * sizeof(double)) // starts
+                   + (max_grains * sizeof(int))    // active grains
       ;
   Node *node = allocate_node_in_graph(graph, state_size);
 
   *node = (Node){
       .perform = (perform_func_t)grain_osc_perform,
       .node_index = node->node_index,
-      .num_inputs = 4,
+      .num_inputs = 5,
       .state_size = state_size,
-      .state_offset = state_offset_ptr_in_graph(graph, sizeof(grain_osc_state)),
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -1910,12 +1999,14 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
 
   grain_osc_state *state =
       (grain_osc_state *)(graph->nodes_state_memory + node->state_offset);
+  *((int *)&state->max_grains) = max_grains; // Cast away const to initialize
+  state->active_grains = 0;
 
   node->connections[0].source_node_index = buf->node_index;
   node->connections[1].source_node_index = trig->node_index;
   node->connections[2].source_node_index = pos->node_index;
   node->connections[3].source_node_index = rate->node_index;
-  node->connections[4].source_node_index = env->node_index;
+  node->connections[4].source_node_index = width->node_index;
 
   return node;
 }

@@ -6,6 +6,7 @@ void start_blob();
 AudioGraph *end_blob();
 
 NodeRef inlet(double default_val);
+NodeRef buf_ref(NodeRef buf);
 NodeRef play_node(NodeRef s);
 NodeRef set_input_scalar_offset(NodeRef target, int input, int offset,
                                 double val);

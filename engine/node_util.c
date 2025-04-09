@@ -175,6 +175,29 @@ void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
 }
 
 NODE_BINOP(mod2_node, "mod", mod_perform)
+static inline double __min(double a, double b) { return a <= b ? a : b; }
+void *div_perform(Node *node, void *state, Node *inputs[], int nframes,
+                  double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  // Get input buffers
+  Signal in1 = inputs[0]->output;
+  Signal in2 = inputs[1]->output;
+
+  double *out_ptr = out;
+  while (nframes--) {
+    double sample = (*INVAL(in1) / __min(*INVAL(in2), 0.0001));
+
+    // Write to all channels in output layout
+    for (int i = 0; i < out_layout; i++) {
+      *out_ptr++ = sample;
+    }
+  }
+
+  return node->output.buf;
+}
+
+NODE_BINOP(div2_node, "div", div_perform)
 
 Node *const_sig(double val) {
   AudioGraph *graph = _graph;

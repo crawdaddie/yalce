@@ -126,10 +126,29 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  if (ast->data.AST_APPLICATION.args->tag == AST_LIST &&
-      ast->data.AST_APPLICATION.args->data.AST_LIST.len == 0) {
-    return codegen_list(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  }
+  // if (ast->data.AST_APPLICATION.args->tag == AST_LIST &&
+  //     ast->data.AST_APPLICATION.args->data.AST_LIST.len == 0 &&
+  //     ast->data.AST_APPLICATION.len == 1) {
+  //
+  //   LLVMValueRef list_val =
+  //       codegen_list(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  //
+  //   if (((Type *)ast->data.AST_APPLICATION.function->md)->kind == T_FN) {
+  //
+  //     LLVMValueRef callable =
+  //         codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
+  //
+  //     if (!callable) {
+  //       fprintf(stderr, "Error: could not access record\n");
+  //       return NULL;
+  //     }
+  //
+  //     Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+  //     return call_callable(ast, expected_fn_type, callable, ctx, module,
+  //                          builder);
+  //   }
+  //   return list_val;
+  // }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 

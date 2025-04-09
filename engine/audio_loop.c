@@ -331,6 +331,9 @@ int init_audio() {
   maketable_sq();
   maketable_sin();
   maketable_saw();
+  maketable_saw();
+  maketable_grain_window();
+
   start_audio();
   scheduler_event_loop();
   gc_loop(get_audio_ctx());
