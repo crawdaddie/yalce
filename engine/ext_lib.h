@@ -27,4 +27,7 @@ SignalRef node_out(NodeRef node);
 double *sig_raw(SignalRef sig);
 int sig_size(SignalRef sig);
 int sig_layout(SignalRef sig);
+
+NodeRef render_to_buf(int frames, NodeRef node);
+
 #endif

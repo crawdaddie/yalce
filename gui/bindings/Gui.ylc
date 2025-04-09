@@ -2,7 +2,7 @@
 let init_gui = extern fn () -> Int;
 let gui_loop = extern fn () -> Int;
 let create_window = extern fn Ptr -> Ptr -> Ptr -> Int;
-let render_text = extern fn Ptr -> Int -> Int -> Ptr -> Ptr;
+let render_text = extern fn Ptr -> Int -> Int -> Ptr -> (Int, Int, Int, Int) -> Ptr;
 let render_scope = extern fn Ptr -> Int -> Int -> Ptr -> Ptr;
 let create_scope = extern fn Ptr -> Int -> Int -> Int;
 let create_static_plot = extern fn Int -> Int -> Ptr -> Int;

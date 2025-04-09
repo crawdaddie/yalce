@@ -37,4 +37,9 @@ NodeRef pm_node(NodeRef freq_input, NodeRef mod_index_input,
 NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input);
 
 NodeRef saw_node(NodeRef input);
+
+NodeRef rand_trig_node(NodeRef trig_input, NodeRef low, NodeRef high);
+
+NodeRef grain_osc_node(int max_grains, NodeRef buf, NodeRef trig, NodeRef pos,
+                       NodeRef rate, NodeRef envelope);
 #endif

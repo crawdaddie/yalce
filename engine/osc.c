@@ -1249,173 +1249,6 @@ Node *trig_sel_node(Node *trig, Node *sels) {
   return node;
 }
 
-// Granulator processor
-typedef struct {
-  int starts[32];    // Start positions for each grain
-  int lengths[32];   // Length of each grain
-  int positions[32]; // Current position in each grain
-  double rates[32];  // Playback rate for each grain
-  double amps[32];   // Amplitude of each grain
-
-  int max_concurrent_grains;
-  int active_grains;
-  int min_grain_length;
-  int max_grain_length;
-  double overlap;
-  int next_free_grain;
-} granulator_state;
-
-static void init_grain(granulator_state *state, int index, double pos,
-                       int length, double rate) {
-  state->starts[index] = (int)pos;
-  state->lengths[index] = length;
-  state->positions[index] = 0;
-  state->rates[index] = rate;
-  state->amps[index] = 0.0;
-  state->active_grains++;
-}
-
-static void process_grain(granulator_state *state, int i, double *out,
-                          double *buf, int buf_size) {
-  double d_index = state->starts[i] + state->positions[i] * state->rates[i];
-  int index = (int)d_index;
-  double frac = d_index - index;
-
-  double a = buf[index % buf_size];
-  double b = buf[(index + 1) % buf_size];
-
-  double sample = ((1.0 - frac) * a + (frac * b)) * state->amps[i];
-  *out += sample;
-
-  state->positions[i]++;
-  if (state->positions[i] >= state->lengths[i]) {
-    state->lengths[i] = 0;
-    state->active_grains--;
-    if (i < state->next_free_grain) {
-      state->next_free_grain = i;
-    }
-  } else {
-    double env_pos = (double)state->positions[i] / state->lengths[i];
-    if (env_pos < state->overlap) {
-      state->amps[i] = env_pos / state->overlap;
-    } else if (env_pos > (1.0 - state->overlap)) {
-      state->amps[i] = (1.0 - env_pos) / state->overlap;
-    } else {
-      state->amps[i] = 1.0;
-    }
-  }
-}
-
-void *granulator_perform(Node *node, granulator_state *state, Node *inputs[],
-                         int nframes, double spf) {
-  double *out = node->output.buf;
-  int out_layout = node->output.layout;
-  double *buf = inputs[0]->output.buf;
-  int buf_size = inputs[0]->output.size;
-  double *trig = inputs[1]->output.buf;
-  double *pos = inputs[2]->output.buf;
-  double *rate = inputs[3]->output.buf;
-
-  while (nframes--) {
-    double sample = 0.0;
-
-    if (*trig == 1.0 && state->active_grains < state->max_concurrent_grains) {
-      double p = fabs(*pos);
-      int start_pos = (int)(p * buf_size);
-      int length = state->min_grain_length +
-                   rand() % (state->max_grain_length - state->min_grain_length);
-
-      int index = state->next_free_grain;
-      init_grain(state, index, start_pos, length, *rate);
-
-      do {
-        state->next_free_grain =
-            (state->next_free_grain + 1) % state->max_concurrent_grains;
-      } while (state->lengths[state->next_free_grain] != 0 &&
-               state->next_free_grain != index);
-    }
-
-    for (int i = 0; i < state->max_concurrent_grains; i++) {
-      if (state->lengths[i] > 0) {
-        process_grain(state, i, &sample, buf, buf_size);
-      }
-    }
-
-    if (state->active_grains > 0) {
-      sample /= state->active_grains;
-    }
-
-    for (int i = 0; i < out_layout; i++) {
-      *out = sample;
-      out++;
-    }
-
-    trig++;
-    pos++;
-    rate++;
-  }
-
-  return node->output.buf;
-}
-
-Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
-                      Node *rate) {
-  AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph, sizeof(granulator_state));
-
-  if (max_grains <= 0)
-    max_grains = 8;
-  if (max_grains > 32)
-    max_grains = 32;
-
-  size_t state_size = sizeof(granulator_state);
-
-  *node = (Node){
-      .perform = (perform_func_t)granulator_perform,
-      .node_index = node->node_index,
-      .num_inputs = 4,
-      .state_size = state_size,
-      .state_offset = state_offset_ptr_in_graph(graph, state_size),
-      .output = (Signal){.layout = 1,
-                         .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
-      .meta = "granulator",
-  };
-
-  granulator_state *state =
-      (granulator_state *)(graph->nodes_state_memory + node->state_offset);
-
-  state->max_concurrent_grains = max_grains;
-  state->active_grains = 0;
-  state->min_grain_length = 7000;
-  state->max_grain_length = 7001;
-  state->overlap = 0.3;
-  state->next_free_grain = 0;
-
-  for (int i = 0; i < max_grains; i++) {
-    state->starts[i] = 0;
-    state->lengths[i] = 0;
-    state->positions[i] = 0;
-    state->rates[i] = 1.0;
-    state->amps[i] = 0.0;
-  }
-
-  if (buf) {
-    node->connections[0].source_node_index = buf->node_index;
-  }
-  if (trig) {
-    node->connections[1].source_node_index = trig->node_index;
-  }
-  if (pos) {
-    node->connections[2].source_node_index = pos->node_index;
-  }
-  if (rate) {
-    node->connections[3].source_node_index = rate->node_index;
-  }
-
-  return node;
-}
-
 typedef struct pm_state {
   double carrier_phase;
   double modulator_phase;
@@ -1628,7 +1461,7 @@ Node *saw_node(Node *input) {
       .perform = (perform_func_t)saw_perform,
       .node_index = node->node_index,
       .num_inputs = 1,
-      .state_size = sizeof(sq_state),
+      .state_size = sizeof(saw_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(saw_state)),
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
@@ -1643,6 +1476,446 @@ Node *saw_node(Node *input) {
   if (input) {
     node->connections[0].source_node_index = input->node_index;
   }
+
+  return node;
+}
+
+// Granulator processor
+typedef struct {
+  int starts[32];    // Start positions for each grain
+  int lengths[32];   // Length of each grain
+  int positions[32]; // Current position in each grain
+  double rates[32];  // Playback rate for each grain
+  double amps[32];   // Amplitude of each grain
+
+  int max_concurrent_grains;
+  int active_grains;
+  int min_grain_length;
+  int max_grain_length;
+  double overlap;
+  int next_free_grain;
+} granulator_state;
+
+static void init_grain(granulator_state *state, int index, double pos,
+                       int length, double rate) {
+  state->starts[index] = (int)pos;
+  state->lengths[index] = length;
+  state->positions[index] = 0;
+  state->rates[index] = rate;
+  state->amps[index] = 0.0;
+  state->active_grains++;
+}
+
+static void process_grain(granulator_state *state, int i, double *out,
+                          double *buf, int buf_size) {
+  double d_index = state->starts[i] + state->positions[i] * state->rates[i];
+  int index = (int)d_index;
+  double frac = d_index - index;
+
+  double a = buf[index % buf_size];
+  double b = buf[(index + 1) % buf_size];
+
+  double sample = ((1.0 - frac) * a + (frac * b)) * state->amps[i];
+  *out += sample;
+
+  state->positions[i]++;
+  if (state->positions[i] >= state->lengths[i]) {
+    state->lengths[i] = 0;
+    state->active_grains--;
+    if (i < state->next_free_grain) {
+      state->next_free_grain = i;
+    }
+  } else {
+    double env_pos = (double)state->positions[i] / state->lengths[i];
+    if (env_pos < state->overlap) {
+      state->amps[i] = env_pos / state->overlap;
+    } else if (env_pos > (1.0 - state->overlap)) {
+      state->amps[i] = (1.0 - env_pos) / state->overlap;
+    } else {
+      state->amps[i] = 1.0;
+    }
+  }
+}
+
+void *granulator_perform(Node *node, granulator_state *state, Node *inputs[],
+                         int nframes, double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *buf = inputs[0]->output.buf;
+  int buf_size = inputs[0]->output.size;
+  double *trig = inputs[1]->output.buf;
+  double *pos = inputs[2]->output.buf;
+  double *rate = inputs[3]->output.buf;
+
+  while (nframes--) {
+    double sample = 0.0;
+
+    if (*trig == 1.0 && state->active_grains < state->max_concurrent_grains) {
+      double p = fabs(*pos);
+      int start_pos = (int)(p * buf_size);
+      int length = state->min_grain_length +
+                   rand() % (state->max_grain_length - state->min_grain_length);
+
+      int index = state->next_free_grain;
+      init_grain(state, index, start_pos, length, *rate);
+
+      do {
+        state->next_free_grain =
+            (state->next_free_grain + 1) % state->max_concurrent_grains;
+      } while (state->lengths[state->next_free_grain] != 0 &&
+               state->next_free_grain != index);
+    }
+
+    for (int i = 0; i < state->max_concurrent_grains; i++) {
+      if (state->lengths[i] > 0) {
+        process_grain(state, i, &sample, buf, buf_size);
+      }
+    }
+
+    if (state->active_grains > 0) {
+      sample /= state->active_grains;
+    }
+
+    for (int i = 0; i < out_layout; i++) {
+      *out = sample;
+      out++;
+    }
+
+    trig++;
+    pos++;
+    rate++;
+  }
+
+  return node->output.buf;
+}
+
+Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
+                      Node *rate) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(granulator_state));
+
+  if (max_grains <= 0)
+    max_grains = 8;
+  if (max_grains > 32)
+    max_grains = 32;
+
+  size_t state_size = sizeof(granulator_state);
+
+  *node = (Node){
+      .perform = (perform_func_t)granulator_perform,
+      .node_index = node->node_index,
+      .num_inputs = 4,
+      .state_size = state_size,
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "granulator",
+  };
+
+  granulator_state *state =
+      (granulator_state *)(graph->nodes_state_memory + node->state_offset);
+
+  state->max_concurrent_grains = max_grains;
+  state->active_grains = 0;
+  state->min_grain_length = 7000;
+  state->max_grain_length = 7001;
+  state->overlap = 0.3;
+  state->next_free_grain = 0;
+
+  for (int i = 0; i < max_grains; i++) {
+    state->starts[i] = 0;
+    state->lengths[i] = 0;
+    state->positions[i] = 0;
+    state->rates[i] = 1.0;
+    state->amps[i] = 0.0;
+  }
+
+  if (buf) {
+    node->connections[0].source_node_index = buf->node_index;
+  }
+  if (trig) {
+    node->connections[1].source_node_index = trig->node_index;
+  }
+  if (pos) {
+    node->connections[2].source_node_index = pos->node_index;
+  }
+  if (rate) {
+    node->connections[3].source_node_index = rate->node_index;
+  }
+
+  return node;
+}
+
+typedef struct rand_trig_state {
+  double val;
+} rand_trig_state;
+
+double __rand_double_range(double min, double max) {
+  int rand_int = rand();
+  double rand_double = (double)rand_int / RAND_MAX;
+  rand_double = rand_double * (max - min) + min;
+  return rand_double;
+}
+
+void *rand_trig_perform(Node *node, rand_trig_state *state, Node *inputs[],
+                        int nframes, double spf) {
+
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *in = inputs[0]->output.buf;
+  double *low = inputs[1]->output.buf;
+  double *high = inputs[2]->output.buf;
+
+  while (nframes--) {
+
+    double lowv = *low;
+    low++;
+
+    double highv = *high;
+    high++;
+
+    if (*in == 1.0) {
+      state->val = __rand_double_range(lowv, highv);
+      // printf("trig: %f\n", state->val);
+    }
+    *out = state->val;
+    out++;
+    in++;
+  }
+
+  return node->output.buf;
+}
+
+Node *rand_trig_node(Node *trig_input, Node *low, Node *high) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(rand_trig_state));
+
+  *node = (Node){
+      .perform = (perform_func_t)rand_trig_perform,
+      .node_index = node->node_index,
+      .num_inputs = 3,
+      .state_size = sizeof(rand_trig_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(rand_trig_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "rand_trig",
+  };
+
+  rand_trig_state *state =
+      (rand_trig_state *)(graph->nodes_state_memory + node->state_offset);
+
+  node->connections[0].source_node_index = trig_input->node_index;
+  node->connections[1].source_node_index = low->node_index;
+  node->connections[2].source_node_index = high->node_index;
+
+  return node;
+}
+
+void *__grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
+                          int nframes, double spf) {
+
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+
+  double *buf = inputs[0]->output.buf;
+  int buf_size = inputs[0]->output.size;
+
+  double *trig = inputs[1]->output.buf;
+  double *pos = inputs[2]->output.buf;
+  double *rate = inputs[3]->output.buf;
+
+  double sample = 0.;
+  int max_grains = state->max_grains;
+
+  double *rates = (double *)((grain_osc_state *)state + 1);
+  double *phases = rates + max_grains;
+  double *widths = phases + max_grains;
+
+  while (nframes--) {
+    for (int i = 0; i < max_grains; i++) {
+      double r = rates[i];
+      double p = phases[i];
+      double w = widths[i];
+    }
+
+    for (int i = 0; i < out_layout; i++) {
+      *out = sample;
+      out++;
+    }
+    trig++;
+    rate++;
+    pos++;
+  }
+}
+
+// double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
+//   if (!graph) {
+//     return malloc(sizeof(double) * size);
+//   }
+//
+//   // Ensure we have enough space
+//   if (graph->buffer_pool_size + size > graph->buffer_pool_capacity) {
+//     printf("realloc buffer pool?? %d %d\n", graph->buffer_pool_size + size,
+//     graph->buffer_pool_capacity); graph->buffer_pool_capacity *= 2;
+//     graph->buffer_pool =
+//         realloc(graph->buffer_pool, graph->buffer_pool_capacity);
+//
+//     // Realloc buffer pool if needed
+//     // ...
+//   }
+//
+//   double *buffer = &graph->buffer_pool[graph->buffer_pool_size];
+//   graph->buffer_pool_size += size;
+//   return buffer;
+// }
+typedef struct grain_osc_state {
+  const int max_grains;
+  int active_grains;
+} grain_osc_state;
+void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
+                        int nframes, double spf) {
+
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+
+  double *buf = inputs[0]->output.buf;
+  int buf_size = inputs[0]->output.size;
+
+  double *trig = inputs[1]->output.buf;
+  double *pos = inputs[2]->output.buf;
+  double *rate = inputs[3]->output.buf;
+  double *envelope = inputs[4]->output.buf;
+
+  double sample = 0.;
+  int max_grains = state->max_grains;
+  int active_grains = state->active_grains;
+
+  // Arrays to track grain parameters
+  double *rates = (double *)((grain_osc_state *)state + 1);
+  double *phases = rates + max_grains;
+  double *widths = phases + max_grains;
+
+  // Array to track active state of each grain (0 = inactive, 1 = active)
+  int *active = (int *)(widths + max_grains);
+
+  while (nframes--) {
+    sample = 0.0; // Reset sample accumulator for this frame
+
+    // Check for new grain trigger
+    if (*trig > 0.9) { // Trigger threshold at 0.9 to account for floating point
+                       // imprecision
+      // Find a free grain slot if not at max active grains
+      if (active_grains < max_grains) {
+        for (int i = 0; i < max_grains; i++) {
+          if (active[i] == 0) {
+            // Initialize the new grain
+            rates[i] = *rate; // Set rate from input
+            phases[i] =
+                *pos * buf_size; // Set starting phase based on position input
+            widths[i] = 0.0;     // Start at beginning of envelope
+            active[i] = 1;       // Mark as active
+            active_grains++;
+            break; // Found and initialized a slot, exit loop
+          }
+        }
+      }
+    }
+
+    // Process all active grains
+    for (int i = 0; i < max_grains; i++) {
+      if (active[i]) {
+        double r = rates[i];
+        double p = phases[i];
+        double w = widths[i];
+
+        // Calculate grain envelope (simple triangular envelope)
+        double env = 0.0;
+        if (w < 0.5) {
+          env = w * 2.0; // Rising part (0.0 to 1.0)
+        } else {
+          env = 2.0 - w * 2.0; // Falling part (1.0 to 0.0)
+        }
+
+        // Read buffer with interpolation (simple linear interpolation)
+        int idx = (int)p;
+        double frac = p - idx;
+        idx = idx % buf_size; // Wrap buffer position
+        int idx_next = (idx + 1) % buf_size;
+
+        double sample_val = buf[idx] * (1.0 - frac) + buf[idx_next] * frac;
+
+        // Apply envelope and accumulate
+        sample += sample_val * env;
+
+        // Update phase for next frame
+        phases[i] = p + r;
+        if (phases[i] >= buf_size) {
+          phases[i] = fmod(phases[i], buf_size); // Wrap phase within buffer
+        }
+
+        // Update width (envelope position)
+        widths[i] =
+            w + (1.0 / (state->grain_duration * spf)); // Advance envelope
+
+        // Check if grain finished
+        if (widths[i] >= 1.0) {
+          active[i] = 0; // Mark grain as inactive
+          active_grains--;
+        }
+      }
+    }
+
+    // Output accumulated sample to all channels
+    for (int i = 0; i < out_layout; i++) {
+      *out = sample;
+      out++;
+    }
+
+    // Advance input pointers
+    trig++;
+    rate++;
+    pos++;
+  }
+
+  // Update state with new active grain count
+  state->active_grains = active_grains;
+
+  return NULL;
+}
+
+NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
+                       Node *rate, Node *env) {
+
+  AudioGraph *graph = _graph;
+  int state_size = sizeof(grain_osc_state) +
+                   (max_grains * sizeof(double))   // rates
+                   + (max_grains * sizeof(double)) // phases
+                   + (max_grains * sizeof(double)) // widths
+      ;
+  Node *node = allocate_node_in_graph(graph, state_size);
+
+  *node = (Node){
+      .perform = (perform_func_t)grain_osc_perform,
+      .node_index = node->node_index,
+      .num_inputs = 4,
+      .state_size = state_size,
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(grain_osc_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "grain_osc",
+  };
+
+  grain_osc_state *state =
+      (grain_osc_state *)(graph->nodes_state_memory + node->state_offset);
+
+  node->connections[0].source_node_index = buf->node_index;
+  node->connections[1].source_node_index = trig->node_index;
+  node->connections[2].source_node_index = pos->node_index;
+  node->connections[3].source_node_index = rate->node_index;
+  node->connections[4].source_node_index = env->node_index;
 
   return node;
 }
