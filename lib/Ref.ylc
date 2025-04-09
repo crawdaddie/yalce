@@ -1,12 +1,34 @@
-open Array;
+open Arrays;
 
 let Ref = fn item -> [|item|];;
 
-let set_ref = fn arr v ->
+let setref = fn arr v ->
   array_set 0 arr v
 ;;
 
-let (<-) = set_ref;
+let (<-) = setref;
 
-let unref = fn arr -> array_at arr 0;;
+let deref = fn arr -> array_at arr 0;;
+
+let test = module
+  let test_a = fn () ->
+    let x = Ref 1;
+    let res = deref x == 1;
+
+    x <- 2;
+    let res = res && deref x == 2
+  ;;
+  let test_ref_func = fn () ->
+    let incr_ref = fn _x ->
+      let x = deref _x;
+      let inc = x + 1;
+      _x <- inc;
+      inc
+    ;;
+
+    let x = Ref 1;
+    incr_ref x == 2 && deref x == 2 
+
+  ;;
+;
 

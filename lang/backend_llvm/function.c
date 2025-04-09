@@ -194,7 +194,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMBuildRet(builder, body);
   }
 
-
   END_FUNC
   destroy_ctx(&fn_ctx);
   return func;
@@ -325,6 +324,11 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
   //   } else if (s->from->kind == T_CONS && s->to->kind == T_CONS) {
   //   }
   // }
+  //
+  printf("compile specific fn\n");
+  print_type(generic_type);
+  print_type(specific_type);
+  print_subst(subst);
 
   return env;
 }
@@ -340,6 +344,8 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   compilation_ctx.stack_ptr = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
   compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
 
+  printf("\n\n\n----\n");
+  print_ast(&fn_ast);
   compilation_ctx.env = create_env_for_generic_fn(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
       specific_type);

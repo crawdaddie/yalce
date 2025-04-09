@@ -3,13 +3,30 @@ open engine/bindings/Synth;
 open examples/Math;
 open examples/Array;
 
+# let tpl = (
+#   fn () -> 
+#     let f = inlet 58. |> lag_node 0.02;
+#     let pwm = lfnoise_node 4. 0. 1.;
+#     (sq_pwm_node f pwm)
+#     + (sq_pwm_node (f * (1.0 + (lfnoise_node 0.2 -0.03 0.03))) pwm)
+#     + (sq_pwm_node (f * (1.0 + (lfnoise_node 0.2 -0.03 0.03))) pwm)
+#     # + (sq_pwm_node (f * 2. * (1.0 + (lfnoise_node 0.2 -0.05 0.05))) pwm)
+#     |> biquad_lp_node (lfnoise_node 4. 100. 8000.) 5.  
+#     # + (sq_node (f * 2 + (f * 0.05 * sin_node 0.2)))
+#     ;
+# ) |> compile_blob_template;
+#
 let tpl = (
   fn () -> 
     let f = inlet 58. |> lag_node 0.02;
-    let pwm = lfnoise_node 2. 0. 1.;
-    (sq_pwm_node f pwm)
-    + (sq_pwm_node (f * (1.01 + (lfnoise_node 0.2 0. 0.05))) pwm)
-    + (sq_pwm_node (f * 2. * (1.0 + (lfnoise_node 0.2 0. 0.05))) pwm)
+    # let pwm = lfnoise_node 4. 0. 1.;
+    (saw_node f)
+    + (saw_node (f * (1.0 + (lfnoise_node 0.4 -0.03 0.03))))
+    + (saw_node (f * (1.0 + (lfnoise_node 0.4 -0.03 0.03))))
+    + (saw_node (f * (1.0 + (lfnoise_node 0.4 -0.03 0.03))))
+    + (saw_node (f * (1.0 + (lfnoise_node 0.4 -0.03 0.03))))
+    # + (sq_pwm_node (f * 2. * (1.0 + (lfnoise_node 0.2 -0.05 0.05))) pwm)
+    |> biquad_lp_node (lfnoise_node 4. 100. 8000.) 4.  
     # + (sq_node (f * 2 + (f * 0.05 * sin_node 0.2)))
     ;
 ) |> compile_blob_template;
@@ -61,7 +78,7 @@ let routine = fn scale ->
   yield scale * 1.;
   yield seq x y
 ;;
-# play_routine schedule_event (routine 0.25);
+play_routine schedule_event (routine 0.25);
 
-# open gui/bindings/Gui;
-# create_scope (ctx_main_out ()) 2 512;
+open gui/bindings/Gui;
+create_scope (ctx_main_out ()) 2 512;
