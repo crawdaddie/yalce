@@ -1,0 +1,57 @@
+open engine/bindings/Synth;
+
+
+
+let chirp_buf = 
+  (fn () ->
+    let trig = inlet 1.;
+    let ff = chirp_node 8000. 55. 0.2 1.; 
+    sin_node ff 
+  ;)
+  |> compile_blob_template
+  |> instantiate_template [(0, 1.)]
+  |> render_to_buf (512 * 11);
+
+
+# (
+#   import gui/bindings/Gui;
+#   let sig = node_out chirp_buf;
+#
+#   Gui.create_static_plot
+#     (sig_layout sig)
+#     (sig_size sig)
+#     (sig_raw sig)
+# );
+
+
+let kick_tpl = (fn () -> 
+  let trig = inlet 0.0;
+  bufplayer_trig_node (inlet 1.) 1. 0. trig
+  ;)
+  |> compile_blob_template;
+
+let kick_syn = fn offset ->
+  kick_tpl
+  |> instantiate_template [(0, 0.)]
+  |> set_input_buf_immediate 1 chirp_buf 
+  |> play_node_offset offset
+;;
+
+
+# kick_syn 0
+
+let trig_rand = (fn () ->
+  let trig = impulse_node (inlet 100.) in
+  rand_trig_node trig 0. 1.
+  ;) 
+  |> compile_blob_template
+  |> instantiate_template [(0, 100.)]
+  |> play_node_offset 0;
+
+
+
+(
+  open gui/bindings/Gui;
+  create_scope (ctx_main_out ()) 2 512
+)
+

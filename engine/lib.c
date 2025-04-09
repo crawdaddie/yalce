@@ -291,6 +291,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
 
     input_vals = input_vals->next;
   }
+
   return ensemble;
 }
 
@@ -413,6 +414,7 @@ int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
 typedef struct {
   int sample_rate;
 } sf_meta;
+
 NodeRef load_soundfile(const char *path) {
   Node *sf = malloc(sizeof(Node) + sizeof(sf_meta));
   sf_meta *meta = (sf_meta *)((Node *)sf + 1);
@@ -502,3 +504,26 @@ Signal *node_out(NodeRef node) { return &(node->output); }
 double *sig_raw(Signal *sig) { return sig->buf; }
 int sig_size(Signal *sig) { return sig->size; }
 int sig_layout(Signal *sig) { return sig->layout; }
+
+NodeRef render_to_buf(int frames, NodeRef node) {
+  int layout = node->output.layout;
+
+  Node *out = malloc(sizeof(Node) + (sizeof(double) * frames * layout));
+  out->output.layout = layout;
+  out->output.size = frames;
+  out->output.buf = (double *)((Node *)out + 1);
+  double *buf = out->output.buf;
+  node->write_to_output = true;
+  double *b = buf;
+  int rendered_frames = 0;
+  for (int i = 0; i < (frames / BUF_SIZE); i++) {
+    perform_graph(node, BUF_SIZE, ctx.spf, b, layout, 0);
+    b += (BUF_SIZE * layout);
+    rendered_frames += BUF_SIZE;
+  }
+
+  perform_graph(node, frames - rendered_frames, ctx.spf, b, layout, 0);
+
+  node->write_to_output = false;
+  return out;
+}

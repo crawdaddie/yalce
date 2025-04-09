@@ -157,7 +157,7 @@ bool _create_window(window_creation_data *data) {
   windows[win_idx].renderer =
       SDL_CreateRenderer(windows[win_idx].window, -1, SDL_RENDERER_ACCELERATED);
 
-  free(data);
+  // free(data);
   return true;
 }
 

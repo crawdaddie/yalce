@@ -1,5 +1,3 @@
-open Arrays;
-
 let Ref = fn item -> [|item|];;
 
 let setref = fn arr v ->

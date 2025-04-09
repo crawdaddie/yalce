@@ -21,6 +21,7 @@ let granulator_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth
 let pm_node = extern fn Synth -> Synth -> Synth -> Synth;
 let lfnoise_node = extern fn Synth -> Synth -> Synth -> Synth;
 let saw_node = extern fn Synth -> Synth;
+let rand_trig_node = extern fn Synth -> Synth -> Synth -> Synth;
 
 # ext_lib.h
 let start_blob = extern fn () -> ();
@@ -41,6 +42,7 @@ let node_out = extern fn Synth -> Ptr;
 let sig_raw = extern fn Ptr -> Ptr;
 let sig_size = extern fn Ptr -> Int;
 let sig_layout = extern fn Ptr -> Int;
+let render_to_buf = extern fn Int -> Synth -> Synth;
 
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;
