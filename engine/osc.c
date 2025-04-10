@@ -689,9 +689,6 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
 
-  printf("[%f,%f,%f,%f]", buf->output.buf[0], buf->output.buf[1],
-         buf->output.buf[2], buf->output.buf[3]);
-
   *node = (Node){
       .perform = (perform_func_t)bufplayer_trig_perform,
       .node_index = node->node_index,

@@ -21,17 +21,19 @@ let chirp_buf =
     (sig_raw sig)
 );
 
+# (
+# let kick_tpl = (fn () -> 
+#   bufplayer_trig_node (buf_ref chirp_buf) 1. 1. (inlet 0.)
+#   ;)
+#   |> compile_blob_template;
+#
+# let kick_syn = fn offset ->
+#   kick_tpl
+#   |> instantiate_template []
+#   |> play_node_offset offset
+# ;
+# );
 
-let kick_tpl = (fn () -> 
-  bufplayer_trig_node (buf_ref chirp_buf) 1. 1. (inlet 0.)
-  ;)
-  |> compile_blob_template;
-
-let kick_syn = fn offset ->
-  kick_tpl
-  |> instantiate_template []
-  |> play_node_offset offset
-;;
 
 
 # kick_syn 0;
@@ -57,7 +59,7 @@ let trig_rand = (fn () ->
 (
   open gui/bindings/Gui;
   create_scope (ctx_main_out ()) 2 512
-)
+);
 
 
 

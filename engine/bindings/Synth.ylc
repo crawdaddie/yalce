@@ -46,6 +46,7 @@ let sig_raw = extern fn Ptr -> Ptr;
 let sig_size = extern fn Ptr -> Int;
 let sig_layout = extern fn Ptr -> Int;
 let render_to_buf = extern fn Int -> Synth -> Synth;
+let node_replace = extern fn Synth -> Synth -> ();
 
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;

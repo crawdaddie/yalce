@@ -31,4 +31,6 @@ int sig_layout(SignalRef sig);
 
 NodeRef render_to_buf(int frames, NodeRef node);
 
+void node_replace(NodeRef a, NodeRef b);
+
 #endif

@@ -293,6 +293,14 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                            : codegen(in_expr, inner_ctx, module, builder);
   }
 
+  // JITSymbol *existing_sym = lookup_id_ast(binding, outer_ctx);
+  // if (existing_sym && existing_sym->storage) {
+  //
+  //   printf("existing sym -> is it mutable???\n");
+  //
+  //   return NULL;
+  // }
+
   if (binding->tag == AST_IDENTIFIER && expr->tag == AST_IDENTIFIER) {
     JITSymbol *sym = lookup_id_ast(expr, outer_ctx);
     if (sym) {

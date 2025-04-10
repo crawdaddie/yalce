@@ -33,6 +33,7 @@ typedef struct {
   bool trig_end;
   struct Node *next; // For execution ordering
   char *meta;
+  void *state_ptr;
 } Node;
 
 typedef Node *NodeRef;

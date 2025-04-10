@@ -73,8 +73,12 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
   offset_node_bufs(head, head->frame_offset);
 
   if (head->perform) {
+    void *state = head + 1;
+    if (head->state_ptr) {
+      state = head->state_ptr;
+    }
 
-    head->perform(head, head + 1, NULL, frame_count, spf);
+    head->perform(head, state, NULL, frame_count, spf);
 
     if (head->write_to_output) {
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
@@ -245,13 +249,13 @@ AudioGraph *sin_ensemble() {
 
 Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
 
-  char *mem =
-      malloc(sizeof(Node) + sizeof(AudioGraph) + sizeof(Node) * g->capacity +
-             sizeof(double) * g->buffer_pool_capacity +
-             sizeof(char) * g->state_memory_capacity);
+  char *node_mem = malloc(sizeof(Node));
 
-  Node *ensemble = (Node *)mem;
-  mem += sizeof(Node);
+  char *mem = malloc(sizeof(AudioGraph) + sizeof(Node) * g->capacity +
+                     sizeof(double) * g->buffer_pool_capacity +
+                     sizeof(char) * g->state_memory_capacity);
+
+  Node *ensemble = (Node *)node_mem;
 
   AudioGraph *graph_state = (AudioGraph *)mem;
   *graph_state = *g;
@@ -264,9 +268,6 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   graph_state->buffer_pool = (double *)mem;
   memcpy(graph_state->buffer_pool, g->buffer_pool,
          sizeof(double) * g->buffer_pool_capacity);
-  // for (int i= 0; i < 4096; i++) {
-  //   printf("preset buffer val %d: %f\n", i, graph_state->buffer_pool[i]);
-  // }
   mem += sizeof(double) * g->buffer_pool_capacity;
 
   double *buf_mem = graph_state->buffer_pool;
@@ -287,13 +288,16 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
 
   Node *output_node = &graph_state->nodes[graph_state->node_count - 1];
 
-  *ensemble = (Node){.perform = (perform_func_t)perform_audio_graph,
-                     .node_index = -1, // Special index for ensemble nodes
-                     .num_inputs = 0,
-                     .output = output_node->output,
-                     .write_to_output = true,
-                     .meta = "sin_ensemble",
-                     .next = NULL};
+  *ensemble = (Node){
+      .perform = (perform_func_t)perform_audio_graph,
+      .node_index = -1, // Special index for ensemble nodes
+      .num_inputs = 0,
+      .output = output_node->output,
+      .write_to_output = true,
+      .meta = "ensemble",
+      .next = NULL,
+      .state_ptr = graph_state,
+  };
 
   uint32_t inputs_mask;
   while (input_vals) {
@@ -317,7 +321,6 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
     }
     double val = g->inlet_defaults[idx];
     int inlet_node_idx = graph_state->inlets[idx];
-    printf("setting default %f for inlet %d\n", val, idx);
     Node *inlet_node = graph_state->nodes + inlet_node_idx;
     for (int i = 0; i < inlet_node->output.layout * inlet_node->output.size;
          i++) {
@@ -559,4 +562,21 @@ NodeRef render_to_buf(int frames, NodeRef node) {
 
   node->write_to_output = false;
   return out;
+}
+
+void node_replace(NodeRef a, NodeRef b) {
+  if (!((strcmp(a->meta, "ensemble") == 0) &&
+        (strcmp(b->meta, "ensemble") == 0))) {
+    // TODO: replace other types of nodes too
+    return;
+  }
+
+  Node a_specs = *a;
+  *a = *b;
+  a->next = a_specs.next;
+  a->frame_offset = a_specs.frame_offset;
+  a->write_to_output = a_specs.write_to_output;
+  if (a_specs.state_ptr) {
+    free(a_specs.state_ptr);
+  }
 }

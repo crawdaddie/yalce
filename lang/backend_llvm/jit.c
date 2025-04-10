@@ -270,9 +270,11 @@ int jit(int argc, char **argv) {
       } else if (strncmp("%builtins", input, 8) == 0) {
         print_builtin_types();
         continue;
+      } else if (strncmp("%plot", input, 5) == 0) {
+        continue;
       } else if (strcmp("\n", input) == 0) {
         continue;
-      } else if (strncmp("%quit", input, 5) == 0) {
+      } else if (strcmp("%quit", input) == 0) {
         break;
       }
 
@@ -305,6 +307,7 @@ int jit(int argc, char **argv) {
       Type *top_type = prog->md;
 
       if (top_level_func == NULL) {
+        print_result(top_type, NULL);
         continue;
       } else {
         LLVMExecutionEngineRef engine;

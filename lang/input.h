@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #define INPUT_BUFSIZE 2048
 char *repl_input(const char *prompt);
-char *repl_input_stdin();
 char *read_script(const char *filename, bool include_tests);
 
 char *get_dirname(const char *path);
