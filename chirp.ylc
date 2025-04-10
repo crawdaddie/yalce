@@ -1,6 +1,5 @@
 open engine/bindings/Synth;
 
-
 let chirp_buf = 
   (fn () ->
     let trig = inlet 1.;
@@ -61,6 +60,5 @@ let trig_rand = (fn () ->
 )
 
 
-let x = 1
 
 

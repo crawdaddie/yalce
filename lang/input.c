@@ -49,25 +49,23 @@ char **custom_completion(const char *text, int start, int end) {
   return rl_completion_matches(text, completion_generator);
 }
 
+#define HISTORY_FILE ".repl_history"
+#define MAX_HISTORY_LEN 1000
 void init_readline() {
   rl_attempted_completion_function = custom_completion;
   rl_completion_entry_function = completion_generator;
   rl_read_init_file(NULL); // read .initrc
 }
-
 char *repl_input(const char *prompt) {
   char *line = readline(prompt);
   if (line == NULL) {
-    // Handle EOF
     return NULL;
   }
 
-  // Add input to history if non-empty
   if (*line) {
     add_history(line);
   }
 
-  // Handle line continuation
   while (strlen(line) > 0 && line[strlen(line) - 1] == '\\') {
     char *continuation = readline("  ");
     if (continuation == NULL) {
@@ -75,21 +73,17 @@ char *repl_input(const char *prompt) {
       break;
     }
 
-    // Replace '\' with '\n'
     line[strlen(line) - 1] = '\n';
 
-    // Reallocate line buffer to accommodate continuation
     size_t new_len = strlen(line) + strlen(continuation) + 1;
     char *new_line = realloc(line, new_len);
     if (new_line == NULL) {
-      // Handle memory allocation failure
       free(line);
       free(continuation);
       return NULL;
     }
     line = new_line;
 
-    // Append continuation
     strcat(line, continuation);
 
     if (*continuation) {
@@ -99,7 +93,6 @@ char *repl_input(const char *prompt) {
     free(continuation);
   }
 
-  // Ensure the input ends with a newline
   size_t len = strlen(line);
   if (len == 0 || line[len - 1] != '\n') {
     char *new_line = realloc(line, len + 2);
@@ -123,7 +116,6 @@ char *read_script(const char *filename, bool include_tests) {
     return NULL;
   }
 
-  // Determine the size of the file
   fseek(fp, 0, SEEK_END); // Move the file pointer to the end of the file
   long fsize = ftell(fp); // Get the position, which is the file size
   rewind(fp);
@@ -136,21 +128,11 @@ char *read_script(const char *filename, bool include_tests) {
   if (bytes_read != fsize) {
     fprintf(stderr, "Error reading file: %s\n", filename);
     fclose(fp);
-    free(fcontent); // Don't forget to free the allocated memory
+    free(fcontent);
     return NULL;
   }
 
-  // Null-terminate the string
   fcontent[fsize] = '\0';
-
-  // If we don't want tests, search for the test marker and terminate the string
-  // there
-  if (!include_tests) {
-    char *test_marker = strstr(fcontent, "\n%test");
-    if (test_marker != NULL) {
-      *test_marker = '\0'; // Terminate the string at the marker
-    }
-  }
 
   return fcontent;
 }

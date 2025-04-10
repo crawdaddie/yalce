@@ -47,6 +47,8 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
     ret = LLVMVoidType();
   } else if (is_generic(t)) {
     ret = LLVMVoidType();
+  } else if (is_module(t)) {
+    ret = LLVMInt32Type();
   } else {
     ret = FIND_TYPE(t, ctx->env, module, ast);
   }
@@ -71,7 +73,6 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   }
 
   *ret_type = LLVMTypeOf(body);
-  print_type(ast->md);
   if (types_equal(ast->md, &t_void)) {
     *ret_type = LLVMVoidType();
     LLVMBuildRetVoid(builder);
@@ -260,7 +261,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_IMPORT: {
     codegen_import(ast, NULL, ctx, module, builder);
-    return NULL;
+    return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
   }
 

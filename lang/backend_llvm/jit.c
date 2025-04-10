@@ -220,11 +220,14 @@ int jit(int argc, char **argv) {
       // run top-level tests for input module
       top_level_tests = true;
       arg_counter++;
+
     } else {
       Ast *script_prog;
+
       if (top_level_tests) {
         __module_to_test = argv[arg_counter];
       }
+
       eval_script(argv[arg_counter], &ctx, module, builder, context, &env,
                   &script_prog);
       arg_counter++;
@@ -235,10 +238,10 @@ int jit(int argc, char **argv) {
 
     char dirname[100];
     getcwd(dirname, 100);
-    // printf("repl dirname %s\n", dirname);
-    __import_current_dir = ".";
-    // __import_current_dir = dirname;
-    // ".";
+    char filename[20];
+    time_t current_time = time(NULL);
+    snprintf(filename, 20, "tmp_%ld.ylc", current_time);
+    __import_current_dir = dirname;
 
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
@@ -273,6 +276,7 @@ int jit(int argc, char **argv) {
         break;
       }
 
+      LLVMSetSourceFileName(module, filename, strlen(filename));
       Ast *prog = parse_input(input, dirname);
 
       TICtx ti_ctx = {.env = ctx.env, .scope = 0};
@@ -301,7 +305,6 @@ int jit(int argc, char **argv) {
       Type *top_type = prog->md;
 
       if (top_level_func == NULL) {
-        print_result(top_type, NULL);
         continue;
       } else {
         LLVMExecutionEngineRef engine;

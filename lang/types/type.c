@@ -523,6 +523,23 @@ void print_type_to_stream(Type *t, FILE *stream) {
       fprintf(stream, "[]");
       break;
     }
+    if (strcmp(t->data.T_CONS.name, "Module") == 0) {
+
+      // print_type_to_stream(t->data.T_CONS.args[0], stream);
+      // fprintf(stream, "[]");
+
+      fprintf(stream, "%s", t->data.T_CONS.name);
+      if (t->data.T_CONS.num_args > 0) {
+        fprintf(stream, " of \n");
+        for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+
+          fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
+          print_type_to_stream(t->data.T_CONS.args[i], stream);
+          fprintf(stream, "\n");
+        }
+      }
+      break;
+    }
 
     if (is_tuple_type(t)) {
       fprintf(stream, "(");
@@ -1531,4 +1548,9 @@ Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
   // print_type(f);
 
   return f;
+}
+
+bool is_module(Type *t) {
+  return t->kind == T_CONS &&
+         (strcmp(t->data.T_CONS.name, TYPE_NAME_MODULE) == 0);
 }

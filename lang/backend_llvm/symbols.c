@@ -348,7 +348,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     JITSymbol *module_symbol =
         codegen_import(expr, binding, outer_ctx, module, builder);
 
-    return NULL;
+    printf("import module - returning int\n");
+
+    return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
 
   expr_val = codegen(expr, outer_ctx, module, builder);
@@ -396,10 +398,5 @@ LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
   if (ast->data.AST_LET.in_expr != NULL) {
     destroy_ctx(&cont_ctx);
   }
-  // if (!is_top_level_frame(cont_ctx.frame)) {
-  //   // clear function stack frame
-  //   ht_destroy(cont_ctx.frame->table);
-  //   free(cont_ctx.frame);
-  // }
   return res;
 }

@@ -78,8 +78,9 @@ class YLCKernel(Kernel):
 
     def _process_output(self, stdout, stderr):
         """Process output and detect special display data"""
+        print("PROCESS OUTPUT", stdout)
 
-        if stdout.startswith("%display_plot:"):
+        if stdout.startswith("\n\n%display_plot:"):
             plot_data = stdout.replace("%display_plot:", "").strip()
 
             if plot_data.startswith("<svg"):
@@ -116,7 +117,6 @@ class YLCKernel(Kernel):
 
             if not silent:
                 if not self._process_output(stdout, stderr):
-                    # Regular text output handling
                     if stdout:
                         stream_content = {"name": "stdout", "text": stdout}
                         self.send_response(self.iopub_socket, "stream", stream_content)
@@ -124,6 +124,14 @@ class YLCKernel(Kernel):
                     if stderr:
                         stream_content = {"name": "stderr", "text": stderr}
                         self.send_response(self.iopub_socket, "stream", stream_content)
+            else:
+                if stdout:
+                    stream_content = {"name": "stdout", "text": stdout}
+                    self.send_response(self.iopub_socket, "stream", stream_content)
+
+                if stderr:
+                    stream_content = {"name": "stderr", "text": stderr}
+                    self.send_response(self.iopub_socket, "stream", stream_content)
 
             return {
                 "status": "ok",

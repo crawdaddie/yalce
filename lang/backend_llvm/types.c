@@ -120,8 +120,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
   }
 
   case T_TYPECLASS_RESOLVE: {
-    printf("codegen tc resolve: \n");
-    print_type(type);
     type = resolve_tc_rank_in_env(type, env);
     return type_to_llvm_type(type, env, module);
   }

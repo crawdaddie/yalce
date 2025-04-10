@@ -255,14 +255,12 @@ int yy_scan_string(char *);
 
 static char *current_dir;
 static int current_buf;
-static struct inputs_list *input_stack = NULL;
 
 char *prepend_current_directory(const char *filename) {
   if (filename == NULL) {
     return NULL;
   }
 
-  // Check if the filename already starts with "./"
   if (strncmp(filename, "./", 2) == 0) {
     // If it does, just return a copy of the original string
     return strdup(filename);
@@ -282,11 +280,9 @@ char *prepend_current_directory(const char *filename) {
   }
 }
 
-static struct inputs_list *_stack = NULL;
-
 Ast *parse_input_script(const char *filename) {
   __filename = filename;
-  filename = prepend_current_directory(filename);
+  // filename = prepend_current_directory(filename);
   char *dir = get_dirname(filename);
   char *fcontent = read_script(filename, top_level_tests);
   if (!fcontent) {
@@ -311,7 +307,6 @@ Ast *parse_input_script(const char *filename) {
 }
 
 Ast *parse_input(char *input, const char *dirname) {
-  current_dir = dirname;
 
   Ast *prev = NULL;
 
@@ -1033,12 +1028,13 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   int mod_name_len = strlen(__import_current_dir) + 1 + strlen(mod_name) + 4;
   char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
-  printf("import: %s -- %s\n", __import_current_dir, mod_name);
 
   snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc",
            __import_current_dir, mod_name);
+
   fully_qualified_name = normalize_path(fully_qualified_name);
-  fully_qualified_name = prepend_current_directory(fully_qualified_name);
+
+  // fully_qualified_name = prepend_current_directory(fully_qualified_name);
 
   // Ast *mod_id = ast_identifier((ObjString){mod_id_chars,
   // strlen(mod_id_chars)});

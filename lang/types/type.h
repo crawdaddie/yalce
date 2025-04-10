@@ -428,4 +428,6 @@ bool is_void_func(Type *f);
 void typeclasses_extend(Type *t, TypeClass *tc);
 
 Type *coroutine_constructor_type_from_fn_type(Type *fn_type);
+
+bool is_module(Type *t);
 #endif

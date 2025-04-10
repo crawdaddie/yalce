@@ -22,8 +22,10 @@ bool is_module_ast(Ast *ast) {
   Type *t = ast->md;
   return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
 }
+
 Ast *parse_module(const char *filename) {
 
+  char *old_import_current_dir = __import_current_dir;
   __import_current_dir = get_dirname(filename);
 
   Ast *prog = parse_input_script(filename);
@@ -46,6 +48,7 @@ Ast *parse_module(const char *filename) {
     return NULL;
   }
 
+  __import_current_dir = old_import_current_dir;
   return prog;
 }
 

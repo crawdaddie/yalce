@@ -68,6 +68,8 @@ LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
     print_type(t->symbol_type);
   }
 #endif
+
+  return LLVMConstInt(LLVMInt32Type(), 0, 0);
 }
 
 JITSymbol *create_module_symbol(Type *module_type, Ast *module_ast,
@@ -142,6 +144,7 @@ JITSymbol *codegen_import(Ast *ast, Ast *binding, JITLangCtx *ctx,
 
     module_symbol =
         create_module_symbol(module_type, module_ast, ctx, llvm_module_ref);
+
     compile_module(module_symbol, module_ast, llvm_module_ref, builder);
   }
 
