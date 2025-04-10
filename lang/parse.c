@@ -1033,6 +1033,7 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   int mod_name_len = strlen(__import_current_dir) + 1 + strlen(mod_name) + 4;
   char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
+  printf("import: %s -- %s\n", __import_current_dir, mod_name);
 
   snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc",
            __import_current_dir, mod_name);

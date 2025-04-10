@@ -66,6 +66,7 @@ let sum2_node = extern fn Synth -> Synth -> Synth;
 let mul2_node = extern fn Synth -> Synth -> Synth;
 let sub2_node = extern fn Synth -> Synth -> Synth;
 let mod2_node = extern fn Synth -> Synth -> Synth;
+let div2_node = extern fn Synth -> Synth -> Synth;
 let const_sig = extern fn Double -> Synth;
 let const_buf = extern fn Double -> Int -> Int -> Synth;
 

@@ -1849,6 +1849,19 @@ typedef struct grain_osc_state {
   int active_grains;
 } grain_osc_state;
 
+static inline double pow2table_read(double pos, int tabsize, double *table) {
+  int mask = tabsize - 1;
+
+  double env_pos = pos * (mask);
+  int env_idx = (int)env_pos;
+  double env_frac = env_pos - env_idx;
+
+  // Interpolate between envelope table values
+  double env_val = table[env_idx & mask] * (1.0 - env_frac) +
+                   table[(env_idx + 1) & mask] * env_frac;
+  return env_val;
+}
+
 void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
                         int nframes, double spf) {
 
@@ -1875,6 +1888,9 @@ void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
   double *widths = (double *)mem;
   mem += sizeof(double) * max_grains;
 
+  double *remaining_secs = (double *)mem;
+  mem += sizeof(double) * max_grains;
+
   double *starts = (double *)mem;
   mem += sizeof(double) * max_grains;
 
@@ -1885,22 +1901,17 @@ void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
   double frac;
   double a, b;
   double sample = 0.;
+  const int table_mask = GRAIN_WINDOW_TABSIZE - 1;
   while (nframes--) {
     sample = 0.;
-    int trig_new = 0;
-    if (*trig > 0.9) {
-      if (state->active_grains < max_grains) {
-        trig_new = 1;
-      }
-    }
-
-    if (trig_new) {
+    if (*trig > 0.9 && state->active_grains < max_grains) {
       for (int i = 0; i < max_grains; i++) {
         if (active[i] == 0) {
           rates[i] = *rate;
           phases[i] = 0;
           starts[i] = *pos * buf_size;
           widths[i] = *width;
+          remaining_secs[i] = *width;
           active[i] = 1;
           state->active_grains++;
           break;
@@ -1915,6 +1926,7 @@ void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
         double p = phases[i];
         double s = starts[i];
         double w = widths[i];
+        double rem = remaining_secs[i];
 
         d_index = s + (p * buf_size);
 
@@ -1923,38 +1935,16 @@ void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
 
         a = buf[index % buf_size];
         b = buf[(index + 1) % buf_size];
-        // Calculate envelope position - normalize the grain lifetime from 0 to
-        // 1
-        double grain_elapsed = 1.0 - (w / *width);
-        if (grain_elapsed < 0.0)
-          grain_elapsed = 0.0;
-        if (grain_elapsed > 1.0)
-          grain_elapsed = 1.0;
 
-        // Look up envelope value in wavetable using interpolation
-        double env_pos = grain_elapsed * (GRAIN_WINDOW_TABSIZE - 1);
-        int env_idx = (int)env_pos;
-        double env_frac = env_pos - env_idx;
-
-        // Interpolate between envelope table values
-        double env_val;
-        if (env_idx < GRAIN_WINDOW_TABSIZE - 1) {
-          env_val = grain_win[env_idx] * (1.0 - env_frac) +
-                    grain_win[env_idx + 1] * env_frac;
-        } else {
-          env_val = grain_win[env_idx];
-        }
+        double grain_elapsed = 1.0 - (rem / w);
+        double env_val =
+            pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
 
         sample += env_val * ((1.0 - frac) * a + (frac * b));
         phases[i] += (r / buf_size);
 
-        // Wrap phase if needed
-        // if (phases[i] >= 1.0) {
-        //   phases[i] -= 1.0;
-        // }
-
-        widths[i] -= spf;
-        if (widths[i] <= 0) {
+        remaining_secs[i] -= spf;
+        if (remaining_secs[i] <= 0) {
           active[i] = 0; // Deactivate the grain
           state->active_grains--;
         }
@@ -1980,6 +1970,7 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
                    (max_grains * sizeof(double))   // rates
                    + (max_grains * sizeof(double)) // phases
                    + (max_grains * sizeof(double)) // widths
+                   + (max_grains * sizeof(double)) // elapsed
                    + (max_grains * sizeof(double)) // starts
                    + (max_grains * sizeof(int))    // active grains
       ;

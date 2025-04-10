@@ -235,7 +235,10 @@ int jit(int argc, char **argv) {
 
     char dirname[100];
     getcwd(dirname, 100);
+    // printf("repl dirname %s\n", dirname);
     __import_current_dir = ".";
+    // __import_current_dir = dirname;
+    // ".";
 
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"

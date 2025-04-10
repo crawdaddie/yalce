@@ -1,10 +1,10 @@
 #! env ylc -i
 
-%include ../engine/bindings/Sched
-%include ../engine/bindings/MIDI
-%include ../engine/bindings/Synth
-%include Array
-%include Math
+open ../engine/bindings/Sched;
+open ../engine/bindings/MIDI;
+open ../engine/bindings/Synth;
+open Array;
+open Math;
 
 let st = (fn () -> 
   let f = inlet 58.;
@@ -32,10 +32,10 @@ let s = fn freq offset ->
 let x = array_fill 128 (fn i -> s (midi_to_freq i) 0;);
 
 register_note_on_handler (fn midi_note vel ->
-  let fo = get_frame_offset ();
-  set_input_scalar_offset (x @ midi_note) 1 fo 1.;
-  set_input_scalar_offset (x @ midi_note) 2 fo (vel + 0.01);
-  ();
+  let fo = get_frame_offset () in (
+    set_input_scalar_offset (x @ midi_note) 1 fo 1.;
+    set_input_scalar_offset (x @ midi_note) 2 fo (vel + 0.01)
+  );
 ) 0;
 
 register_note_off_handler (fn midi_note vel ->

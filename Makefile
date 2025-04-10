@@ -166,5 +166,4 @@ install-jupyter: jupyter
 	@cp $(JUPYTER_TARGET) $(KERNEL_SPEC_DIR)/
 	@echo "{\n  \"argv\": [\"$(KERNEL_SPEC_DIR)/ylc_kernel\", \"-f\", \"{connection_file}\"],\n  \"display_name\": \"YLC Language\",\n  \"language\": \"ylc\"\n}" > $(KERNEL_SPEC_DIR)/kernel.json
 	@echo "Kernel specification installed in $(KERNEL_SPEC_DIR)"
-	mkdir -p ~/Library/Jupyter/kernels/ylc/engine/
-	cp build/engine/libyalce_synth.so ~/Library/Jupyter/kernels/ylc/engine/
+

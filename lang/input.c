@@ -55,63 +55,6 @@ void init_readline() {
   rl_read_init_file(NULL); // read .initrc
 }
 
-void repl_input_(char *input, int bufsize, const char *prompt) {
-  char *line = readline(prompt);
-  if (line == NULL) {
-    // Handle EOF
-    input[0] = '\0';
-    return;
-  }
-
-  // Add input to history if non-empty
-  if (*line) {
-    add_history(line);
-  }
-
-  // Copy line to input buffer, ensuring we don't exceed bufsize
-  strncpy(input, line, bufsize - 1);
-  input[bufsize - 1] = '\0'; // Ensure null-termination
-
-  // Handle line continuation
-  while (strlen(input) > 0 && input[strlen(input) - 1] == '\\') {
-    char *continuation = readline("  ");
-    if (continuation == NULL) {
-      // Handle EOF in continuation
-      break;
-    }
-
-    // Replace '\' with '\n'
-    input[strlen(input) - 1] = '\n';
-
-    // Append continuation, ensuring we don't exceed bufsize
-    int remaining = bufsize - strlen(input) - 1;
-    if (remaining > 0) {
-      strncat(input, continuation, remaining);
-    }
-
-    if (*continuation) {
-      add_history(continuation);
-    }
-
-    free(continuation);
-
-    // If we've filled the buffer, stop reading more
-    if (strlen(input) >= bufsize - 1) {
-      break;
-    }
-  }
-
-  free(line);
-
-  // Ensure the input ends with a newline and null terminator
-  int len = strlen(input);
-  if (len < bufsize - 1 && (len == 0 || input[len - 1] != '\n')) {
-    input[len] = '\n';
-    input[len + 1] = '\0';
-  }
-  // printf("%s", COLOR_RESET);
-}
-
 char *repl_input(const char *prompt) {
   char *line = readline(prompt);
   if (line == NULL) {

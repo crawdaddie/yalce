@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ylc_kernel"
+version = "0.1.0"
+description = "YLC Language Jupyter Kernel"
+authors = [
+    {name = "Adam Juraszek", email = "adam.a.juraszek.@googlemail.com"}
+]
+requires-python = ">=3.7"
+license = {text = "MIT"}
+dependencies = [
+    "jupyter_client",
+    "ipykernel",
+    "ipython"
+]
+
+[project.scripts]
+install_ylc_kernel = "ylc_kernel.install:main"
+
+[tool.setuptools]
+packages = ["ylc_kernel"]
+
