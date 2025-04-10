@@ -75,6 +75,40 @@ class YLCKernel(Kernel):
             
         return "".join(stdout_content), "".join(stderr_content)
 
+    # Add this to your YLCKernel class in kernel.py
+    def _process_output(self, stdout, stderr):
+        """Process output and detect special display data"""
+        
+        # Check for special output formats (example for plot data)
+        if stdout.startswith("%display_plot:"):
+            # Parse the plot data - this is just an example
+            # Your actual implementation will depend on how YLC generates plots
+            plot_data = stdout.replace("%display_plot:", "").strip()
+            
+            # For SVG output
+            if plot_data.startswith("<svg"):
+                self.send_response(self.iopub_socket, "display_data", {
+                    "data": {
+                        "image/svg+xml": plot_data
+                    },
+                    "metadata": {}
+                })
+                return True
+                
+            # For PNG output (base64 encoded)
+            elif plot_data.startswith("data:image/png;base64,"):
+                png_data = plot_data.replace("data:image/png;base64,", "")
+                self.send_response(self.iopub_socket, "display_data", {
+                    "data": {
+                        "image/png": png_data
+                    },
+                    "metadata": {}
+                })
+                return True
+        
+        # Regular output handling
+        return False
+
     def do_execute(
         self, code, silent, store_history=True, user_expressions=None, allow_stdin=False
     ):
@@ -88,13 +122,16 @@ class YLCKernel(Kernel):
             stdout, stderr = self._read_output()
             
             if not silent:
-                if stdout:
-                    stream_content = {"name": "stdout", "text": stdout}
-                    self.send_response(self.iopub_socket, "stream", stream_content)
-                
-                if stderr:
-                    stream_content = {"name": "stderr", "text": stderr}
-                    self.send_response(self.iopub_socket, "stream", stream_content)
+
+                if not self._process_output(stdout, stderr):
+                    # Regular text output handling
+                    if stdout:
+                        stream_content = {"name": "stdout", "text": stdout}
+                        self.send_response(self.iopub_socket, "stream", stream_content)
+                    
+                    if stderr:
+                        stream_content = {"name": "stderr", "text": stderr}
+                        self.send_response(self.iopub_socket, "stream", stream_content)
             
             return {
                 "status": "ok",

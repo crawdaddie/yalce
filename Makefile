@@ -132,38 +132,39 @@ serve_docs:
 audio_test:
 	$(MAKE) -C engine audio_test
 
-# Jupyter kernel specifics
-JUPYTER_DIR := dev/jupyter_kernel
-JUPYTER_SRC := $(JUPYTER_DIR)/kernel.c
-JUPYTER_OBJ := $(BUILD_DIR)/jupyter_kernel/kernel.o
-JUPYTER_TARGET := $(BUILD_DIR)/ylc_kernel
+# Jupyter kernel setup and installation
+KERNEL_DIR := dev/kernel
+VENV_DIR := $(KERNEL_DIR)/.venv
 
-# Jupyter kernel libraries (with macOS specific paths)
-JUPYTER_LIBS := -lzmq -ljson-c -luuid -lpthread
+.PHONY: kernel-venv kernel-install kernel-uninstall kernel-clean
 
-# For Apple Silicon Macs (M1/M2)
-JUPYTER_LIBS += -L/opt/homebrew/lib -I/opt/homebrew/include
+# Create a Python virtual environment for the kernel
+kernel-venv:
+	@echo "Creating virtual environment for YLC kernel..."
+	cd $(KERNEL_DIR) && python -m venv .venv
+	@echo "Installing kernel dependencies..."
+	cd $(KERNEL_DIR) && . .venv/bin/activate && pip install -e .
 
-# Jupyter kernel installation directories
-KERNEL_SPEC_DIR := $(HOME)/Library/jupyter/kernels/ylc
+kernel-install: kernel-venv
+	@echo "Installing YLC kernel in Jupyter..."
+	cd $(KERNEL_DIR) && . .venv/bin/activate && python -m ylc_kernel.install install --ylc-path $(shell pwd)/$(BUILD_DIR)/ylc --user
+	@echo "YLC kernel installed successfully. Use 'jupyter lab' to start Jupyter."
 
-# Jupyter kernel build
-$(JUPYTER_OBJ): $(JUPYTER_SRC) | $(BUILD_DIR)
-	mkdir -p $(BUILD_DIR)/jupyter_kernel
-	$(LANG_CC) -c -o $@ $< 
+# Uninstall the YLC kernel from Jupyter
+kernel-uninstall:
+	@echo "Uninstalling YLC kernel from Jupyter..."
+	cd $(KERNEL_DIR) && . .venv/bin/activate && python -m ylc_kernel.install uninstall
 
-# The Jupyter kernel needs to link to all the same object files as the main executable
-# except we don't link to the main.o file if it exists
-$(JUPYTER_TARGET): $(JUPYTER_OBJ) $(LANG_OBJS) | engine gui cor
-	$(LANG_CC) -o $@ $(JUPYTER_OBJ) $(filter-out $(BUILD_DIR)/main.o, $(LANG_OBJS)) $(JUPYTER_LIBS) $(LANG_LD_FLAGS)
-	# $(LANG_CC) -o $@ $(JUPYTER_OBJ) $(filter-out $(BUILD_DIR)/main.o, $(LANG_OBJS)) $(JUPYTER_LIBS) $(LANG_LD_FLAGS) -Wl,-rpath,$(shell pwd)/$(BUILD_DIR)/engine
+# Clean up kernel installation files
+kernel-clean: kernel-uninstall
+	@echo "Cleaning up kernel files..."
+	rm -rf $(VENV_DIR)
+	rm -rf $(KERNEL_DIR)/*.egg-info
+	rm -rf $(KERNEL_DIR)/build
+	rm -rf $(KERNEL_DIR)/dist
+	rm -rf $(KERNEL_DIR)/__pycache__
+	rm -rf $(KERNEL_DIR)/ylc_kernel/__pycache__
 
-jupyter: $(JUPYTER_TARGET)
-
-install-jupyter: jupyter
-	@echo "Installing Jupyter kernel specification..."
-	@mkdir -p $(KERNEL_SPEC_DIR)
-	@cp $(JUPYTER_TARGET) $(KERNEL_SPEC_DIR)/
-	@echo "{\n  \"argv\": [\"$(KERNEL_SPEC_DIR)/ylc_kernel\", \"-f\", \"{connection_file}\"],\n  \"display_name\": \"YLC Language\",\n  \"language\": \"ylc\"\n}" > $(KERNEL_SPEC_DIR)/kernel.json
-	@echo "Kernel specification installed in $(KERNEL_SPEC_DIR)"
-
+# Combined target to build YLC and install the kernel
+jupyter: $(BUILD_DIR)/ylc kernel-install
+	@echo "YLC and Jupyter kernel setup complete."

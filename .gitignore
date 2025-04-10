@@ -1,5 +1,48 @@
+# Build artifacts
 .cache
 build
 test/*.o
 lang/*.o
 *.h.gch
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Python-specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints
+dev/kernel/.ipynb*
+dev/kernel/*.ipynb
+.jupyter/
+.ipython/
+
+# macOS
+.DS_Store
+

@@ -7,7 +7,7 @@ name = "ylc_kernel"
 version = "0.1.0"
 description = "YLC Language Jupyter Kernel"
 authors = [
-    {name = "Adam Juraszek", email = "adam.a.juraszek.@googlemail.com"}
+    {name = "Adam Juraszek", email = "your.email@example.com"}
 ]
 requires-python = ">=3.7"
 license = {text = "MIT"}
@@ -22,4 +22,3 @@ install_ylc_kernel = "ylc_kernel.install:main"
 
 [tool.setuptools]
 packages = ["ylc_kernel"]
-

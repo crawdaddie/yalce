@@ -1,4 +1,3 @@
-
 #include "lsp_server.h"
 #include "protocol.h"
 #include <limits.h>
@@ -23,7 +22,6 @@ void lsp_server_destroy(LSPServer *server) {
 }
 
 static char *read_message() {
-  // Read Content-Length header
   char header[256];
   if (!fgets(header, sizeof(header), stdin)) {
     return NULL;
@@ -34,12 +32,10 @@ static char *read_message() {
     return NULL;
   }
 
-  // Skip empty line
   if (!fgets(header, sizeof(header), stdin)) {
     return NULL;
   }
 
-  // Read message content
   char *content = (char *)malloc(content_length + 1);
   if (!content) {
     return NULL;
@@ -63,11 +59,9 @@ static struct json_object *create_full_range() {
   struct json_object *start = json_object_new_object();
   struct json_object *end = json_object_new_object();
 
-  // Start position (0,0)
   json_object_object_add(start, "line", json_object_new_int(0));
   json_object_object_add(start, "character", json_object_new_int(0));
 
-  // End position (max,max) - you might want to calculate actual document end
   json_object_object_add(end, "line", json_object_new_int(INT_MAX));
   json_object_object_add(end, "character", json_object_new_int(INT_MAX));
 
@@ -76,11 +70,7 @@ static struct json_object *create_full_range() {
 
   return range;
 }
-static char *format_text(const char *input) {
-  // Implement your actual formatting logic here
-  // For now, just return a copy of the input
-  return strdup(input);
-}
+static char *format_text(const char *input) { return strdup(input); }
 int lsp_server_run(LSPServer *server) {
   while (1) {
     char *content = read_message();
@@ -103,7 +93,6 @@ int lsp_server_run(LSPServer *server) {
       json_object_object_add(capabilities, "documentFormattingProvider",
                              json_object_new_boolean(1));
 
-      // Add capabilities to result object
       json_object_object_add(result, "capabilities", capabilities);
 
       char *response = create_response(msg->id, result);
