@@ -1036,8 +1036,6 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   // fully_qualified_name = prepend_current_directory(fully_qualified_name);
 
-  // Ast *mod_id = ast_identifier((ObjString){mod_id_chars,
-  // strlen(mod_id_chars)});
   Ast *import_ast = Ast_new(AST_IMPORT);
   import_ast->data.AST_IMPORT.identifier = mod_id_chars;
   import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;

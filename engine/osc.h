@@ -8,7 +8,7 @@ void maketable_saw(void);
 NodeRef sin_node(NodeRef input);
 
 NodeRef sq_node(NodeRef input);
-NodeRef sq_pwm_node(NodeRef freq_input, NodeRef pw_input);
+NodeRef sq_pwm_node(NodeRef pw_input, NodeRef freq_input);
 NodeRef phasor_node(NodeRef input);
 
 NodeRef raw_osc_node(NodeRef table, NodeRef freq);
@@ -41,8 +41,9 @@ NodeRef saw_node(NodeRef input);
 NodeRef rand_trig_node(NodeRef trig_input, NodeRef low, NodeRef high);
 
 NodeRef grain_osc_node(int max_grains, NodeRef buf, NodeRef trig, NodeRef pos,
-                       NodeRef rate, NodeRef width
-                       );
+                       NodeRef rate, NodeRef width);
 
 void maketable_grain_window();
+
+NodeRef array_choose_trig_node(int arr_size, double *arr_data, NodeRef trig);
 #endif
