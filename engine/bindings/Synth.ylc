@@ -24,6 +24,7 @@ let saw_node = extern fn Synth -> Synth;
 let rand_trig_node = extern fn Synth -> Synth -> Synth -> Synth;
 let grain_osc_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth -> Synth;
 let maketable_grain_window = extern fn () -> ();
+let array_choose_trig_node = extern fn Int -> Ptr -> Synth -> Synth;
 
 # ext_lib.h
 let start_blob = extern fn () -> ();
@@ -60,6 +61,7 @@ let butterworth_hp_node = extern fn Synth -> Synth -> Synth;
 let biquad_hp_node = extern fn Synth -> Synth -> Synth -> Synth;
 let biquad_bp_node = extern fn Synth -> Synth -> Synth -> Synth;
 let biquad_lp_node = extern fn Synth -> Synth -> Synth -> Synth;
+let gverb_node = extern fn Synth -> Synth;
 
 # node_util.h
 let sum2_node = extern fn Synth -> Synth -> Synth;

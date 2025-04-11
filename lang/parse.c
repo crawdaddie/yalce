@@ -1033,15 +1033,12 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   int mod_name_len = strlen(__import_current_dir) + 1 + strlen(mod_name) + 4;
   char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
-  printf("import: %s -- %s\n", __import_current_dir, mod_name);
 
   snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc",
            __import_current_dir, mod_name);
   fully_qualified_name = normalize_path(fully_qualified_name);
   fully_qualified_name = prepend_current_directory(fully_qualified_name);
 
-  // Ast *mod_id = ast_identifier((ObjString){mod_id_chars,
-  // strlen(mod_id_chars)});
   Ast *import_ast = Ast_new(AST_IMPORT);
   import_ast->data.AST_IMPORT.identifier = mod_id_chars;
   import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;

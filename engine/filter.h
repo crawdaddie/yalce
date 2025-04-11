@@ -14,5 +14,6 @@ NodeRef butterworth_hp_node(NodeRef freq, NodeRef input);
 NodeRef biquad_hp_node(NodeRef freq, NodeRef res, NodeRef input);
 NodeRef biquad_bp_node(NodeRef freq, NodeRef res, NodeRef input);
 NodeRef biquad_lp_node(NodeRef freq, NodeRef res, NodeRef input);
+NodeRef gverb_node(NodeRef input);
 
 #endif

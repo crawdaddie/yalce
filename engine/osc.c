@@ -264,7 +264,7 @@ void *sq_pwm_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *sq_pwm_node(Node *freq_input, Node *pw_input) {
+Node *sq_pwm_node(Node *pw_input, Node *freq_input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(sq_state));
 
@@ -1960,6 +1960,7 @@ void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
     pos++;
     width++;
   }
+  return node->output.buf;
 }
 
 NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
@@ -1999,5 +2000,61 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
   node->connections[3].source_node_index = rate->node_index;
   node->connections[4].source_node_index = width->node_index;
 
+  return node;
+}
+
+typedef struct array_choose_trig_state {
+  int size;
+  double *data;
+  double sample;
+} array_choose_trig_state;
+
+void *array_choose_trig_perform(Node *node, array_choose_trig_state *state,
+                                Node *inputs[], int nframes, double spf) {
+
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *trig = inputs[0]->output.buf;
+  double sample;
+  while (nframes--) {
+
+    if (*trig > 0.9) {
+      state->sample = state->data[rand() % state->size];
+      printf("got samp %f\n", state->sample);
+    }
+
+    *out = state->sample;
+    trig++;
+    out++;
+  }
+}
+
+NodeRef array_choose_trig_node(int arr_size, double *arr_data, Node *trig) {
+
+  AudioGraph *graph = _graph;
+
+  Node *node = allocate_node_in_graph(graph, sizeof(array_choose_trig_state));
+
+  *node = (Node){
+      .perform = (perform_func_t)array_choose_trig_perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      .state_size = sizeof(array_choose_trig_state),
+      .state_offset =
+          state_offset_ptr_in_graph(graph, sizeof(array_choose_trig_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "array_choose_trig",
+  };
+
+  array_choose_trig_state *state =
+      (array_choose_trig_state *)(graph->nodes_state_memory +
+                                  node->state_offset);
+  state->size = arr_size;
+  state->data = arr_data;
+  state->sample = state->data[rand() % state->size];
+
+  node->connections[0].source_node_index = trig->node_index;
   return node;
 }
