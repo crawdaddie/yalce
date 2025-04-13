@@ -30,6 +30,20 @@
       (n) = 0;                                                                 \
     }                                                                          \
   }
+struct ReverbComb {
+  double fb;
+  double filter_state;
+  double damp1;
+  double damp2;
+  int length;
+  int pos;
+} ReverbComb;
+
+struct ReverbAllPass {
+  double fb;
+  int length;
+  int pos;
+} ReverbAllPass;
 
 typedef struct Reverb {
   /* User parameters */
@@ -49,35 +63,11 @@ typedef struct Reverb {
   double wet2;
 
   /* Processing elements */
-  struct {
-    double fb;
-    double filter_state;
-    double damp1;
-    double damp2;
-    int length;
-    int pos;
-  } combs_left[FREEVERB_NUM_COMBS];
+  struct ReverbComb combs_left[FREEVERB_NUM_COMBS];
+  struct ReverbComb combs_right[FREEVERB_NUM_COMBS];
 
-  struct {
-    double fb;
-    double filter_state;
-    double damp1;
-    double damp2;
-    int length;
-    int pos;
-  } combs_right[FREEVERB_NUM_COMBS];
-
-  struct {
-    double fb;
-    int length;
-    int pos;
-  } allpasses_left[FREEVERB_NUM_ALLPASSES];
-
-  struct {
-    double fb;
-    int length;
-    int pos;
-  } allpasses_right[FREEVERB_NUM_ALLPASSES];
+  struct ReverbAllPass allpasses_left[FREEVERB_NUM_ALLPASSES];
+  struct ReverbAllPass allpasses_right[FREEVERB_NUM_ALLPASSES];
 } Reverb;
 
 void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
@@ -266,44 +256,37 @@ Node *reverb_node(double room_size, double wet, double dry, double width,
   reverb.wet1 = reverb.wet * FREEVERB_SCALE_WET * (reverb.width * 0.5 + 0.5);
   reverb.wet2 = reverb.wet * FREEVERB_SCALE_WET * ((1.0 - reverb.width) * 0.5);
 
-  /* Calculate buffer sizes and initialize filter states */
   int total_buffer_size = 0;
-
-  /* Set up comb filters */
+  struct ReverbComb base_comb = {
+      .pos = 0,
+      .fb = reverb.room_size_scaled,
+      .damp1 = reverb.damp_scaled,
+      .damp2 = 1.0 - reverb.damp_scaled,
+      .filter_state = 0.0,
+  };
   for (int i = 0; i < FREEVERB_NUM_COMBS; i++) {
-    /* Left channel */
+    *(reverb.combs_left + i) = base_comb;
     reverb.combs_left[i].length = (int)(comb_tunings[i] * rate_scale);
-    reverb.combs_left[i].pos = 0;
-    reverb.combs_left[i].fb = reverb.room_size_scaled;
-    reverb.combs_left[i].damp1 = reverb.damp_scaled;
-    reverb.combs_left[i].damp2 = 1.0 - reverb.damp_scaled;
-    reverb.combs_left[i].filter_state = 0.0;
     total_buffer_size += reverb.combs_left[i].length * sizeof(double);
 
-    /* Right channel (with stereo spread) */
+    *(reverb.combs_right + i) = base_comb;
     reverb.combs_right[i].length =
         (int)((comb_tunings[i] + FREEVERB_STEREO_SPREAD) * rate_scale);
-    reverb.combs_right[i].pos = 0;
-    reverb.combs_right[i].fb = reverb.room_size_scaled;
-    reverb.combs_right[i].damp1 = reverb.damp_scaled;
-    reverb.combs_right[i].damp2 = 1.0 - reverb.damp_scaled;
-    reverb.combs_right[i].filter_state = 0.0;
     total_buffer_size += reverb.combs_right[i].length * sizeof(double);
   }
 
-  /* Set up allpass filters */
+  struct ReverbAllPass base_allpass = {
+      .pos = 0,
+      .fb = 0.5,
+  };
   for (int i = 0; i < FREEVERB_NUM_ALLPASSES; i++) {
-    /* Left channel */
+    *(reverb.allpasses_left + i) = base_allpass;
     reverb.allpasses_left[i].length = (int)(allpass_tunings[i] * rate_scale);
-    reverb.allpasses_left[i].pos = 0;
-    reverb.allpasses_left[i].fb = 0.5; /* Fixed allpass feedback */
     total_buffer_size += reverb.allpasses_left[i].length * sizeof(double);
 
-    /* Right channel (with stereo spread) */
+    *(reverb.allpasses_right + i) = base_allpass;
     reverb.allpasses_right[i].length =
         (int)((allpass_tunings[i] + FREEVERB_STEREO_SPREAD) * rate_scale);
-    reverb.allpasses_right[i].pos = 0;
-    reverb.allpasses_right[i].fb = 0.5; /* Fixed allpass feedback */
     total_buffer_size += reverb.allpasses_right[i].length * sizeof(double);
   }
 

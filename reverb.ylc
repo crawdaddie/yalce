@@ -2,7 +2,6 @@ open engine/bindings/Synth;
 open engine/bindings/Sched;
 
 let freqs = [|
-
   (midi_to_freq 36), 
   (midi_to_freq 39), 
   (midi_to_freq 41), 
@@ -43,7 +42,7 @@ let rev_node = (fn () ->
 
   (sig1 + sig2)
   |> mul2_node (exp_env (rand_trig_node trig 0.1 1.) trig)
-  |> reverb_node 0.9 1. 1. 1.
+  |> reverb_node 0.8 1. 1. 1.
   
   ;
 )
