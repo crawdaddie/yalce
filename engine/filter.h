@@ -16,4 +16,8 @@ NodeRef biquad_bp_node(NodeRef freq, NodeRef res, NodeRef input);
 NodeRef biquad_lp_node(NodeRef freq, NodeRef res, NodeRef input);
 NodeRef gverb_node(NodeRef input);
 
+NodeRef allpass_node(double time, double coeff, NodeRef input);
+
+NodeRef reverb_node(double room_size, double wet, double dry, double width,
+                    NodeRef input);
 #endif

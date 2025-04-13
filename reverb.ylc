@@ -2,13 +2,21 @@ open engine/bindings/Synth;
 open engine/bindings/Sched;
 
 let freqs = [|
+
+  (midi_to_freq 36), 
+  (midi_to_freq 39), 
+  (midi_to_freq 41), 
   (midi_to_freq 48), 
-  (midi_to_freq 50), 
-  (midi_to_freq 51), 
+  (midi_to_freq 62), 
   (midi_to_freq 53), 
-  (midi_to_freq 55), 
-  (midi_to_freq 56), 
-  (midi_to_freq 58), 
+  (midi_to_freq 65), 
+  (midi_to_freq 68), 
+  (midi_to_freq 70), 
+  (midi_to_freq 72), 
+  (midi_to_freq 75), 
+  (midi_to_freq 77), 
+  (midi_to_freq 79), 
+  (midi_to_freq 84), 
 |];
 
 
@@ -17,20 +25,36 @@ let exp_env = fn dec: (Synth) trig: (Synth) ->
 ;;
 
 let rev_node = (fn () ->
-  let trig = impulse_node 2.;
-  trig
-  |> array_choose_trig_node (array_size freqs) (cstr freqs)
-  |> lag_node 0.05
-  |> sq_pwm_node 0.3 
-  |> mul2_node (exp_env 0.5 trig)
-  |> gverb_node
 
-  # x * (asr_node 0.3 1. 0.9 trig)
+  let sig1 = (
+  let trig = impulse_node (lfnoise_node 8. 0.5 10.);
+  let f = trig
+    |> array_choose_trig_node (array_size freqs) (cstr freqs);
+  (sq_node f) + (sq_node (f * 1.01))
+  );
+
+  let sig2 = (
+  let trig = impulse_node (lfnoise_node 8. 1. 10.);
+  let f = trig
+    |> array_choose_trig_node (array_size freqs) (cstr freqs);
+  (sq_node f) + (sq_node (f * 1.01))
+  );
+
+
+  (sig1 + sig2)
+  |> mul2_node (exp_env (rand_trig_node trig 0.1 1.) trig)
+  |> reverb_node 0.9 1. 1. 1.
+  
   ;
 )
   |> compile_blob_template
   |> instantiate_template []
-  |> play_node_offset (get_frame_offset ())
+  |> play_node_offset (get_frame_offset ());
 
+
+(
+  open gui/bindings/Gui;
+  create_scope (ctx_main_out ()) 2 512
+);
 
 

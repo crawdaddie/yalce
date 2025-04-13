@@ -63,6 +63,8 @@ let biquad_hp_node = extern fn Synth -> Synth -> Synth -> Synth;
 let biquad_bp_node = extern fn Synth -> Synth -> Synth -> Synth;
 let biquad_lp_node = extern fn Synth -> Synth -> Synth -> Synth;
 let gverb_node = extern fn Synth -> Synth;
+let allpass_node = extern fn Double -> Double -> Synth -> Synth;
+let reverb_node = extern fn Double -> Double -> Double -> Double -> Synth -> Synth;
 
 # node_util.h
 let sum2_node = extern fn Synth -> Synth -> Synth;

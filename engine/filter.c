@@ -2,10 +2,11 @@
 #include "./common.h"
 #include "./ctx.h"
 #include "./node.h"
+#include "./primes.h"
 #include "audio_graph.h"
 #include "node_util.h"
 #include <math.h>
-#include <stdio.h>
+#include <string.h>
 
 // Biquad filter state
 typedef struct biquad_state {
@@ -779,5 +780,347 @@ Node *tanh_node(double gain, Node *input) {
     node->connections[0].source_node_index = input->node_index;
   }
 
+  return node;
+}
+
+typedef struct {
+  int length;
+  int pos;
+  double coeff;
+} allpass_state;
+
+double process_allpass_frame(double *buf, int length, int *pos, double coeff,
+                             double in) {
+  int bufsize = length;
+  double delayed = buf[*pos];
+  buf[*pos] = in;
+  *pos = (*pos + 1) % bufsize;
+  return delayed - coeff * in;
+}
+
+void *allpass_perform(Node *node, allpass_state *state, Node *inputs[],
+                      int nframes, double spf) {
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  char *mem = state + 1;
+  double *buf = mem;
+
+  while (nframes--) {
+    *out = process_allpass_frame(buf, state->length, &state->pos, state->coeff,
+                                 *in);
+    in++;
+    out++;
+  }
+
+  return node->output.buf;
+}
+
+static int compute_allpass_delay_length(double sample_rate, double delay_sec) {
+  int delay_samples = (int)(delay_sec * sample_rate);
+  return delay_samples;
+}
+
+Node *allpass_node(double time, double coeff, Node *input) {
+  AudioGraph *graph = _graph;
+  int state_size = sizeof(allpass_state);
+  allpass_state ap = {
+      .length = compute_allpass_delay_length(ctx_sample_rate(), time),
+      .pos = 0,
+      .coeff = coeff,
+  };
+
+  state_size += (sizeof(double) * ap.length); // leave space for buffer
+
+  Node *node = allocate_node_in_graph(graph, sizeof(allpass_state));
+
+  // Initialize node
+  *node = (Node){
+      .perform = (perform_func_t)allpass_perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      .state_size = state_size,
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "ap",
+  };
+
+  // Initialize state
+  allpass_state *state =
+      (allpass_state *)(graph->nodes_state_memory + node->state_offset);
+  *state = ap;
+
+  // Connect input
+  if (input) {
+    node->connections[0].source_node_index = input->node_index;
+  }
+
+  return node;
+}
+
+#define MAX_DELAY_LENGTH 20000
+#define NUM_EARLY_REFLECTIONS 8
+#define NUM_ALLPASS 4
+
+static double early_gains[NUM_EARLY_REFLECTIONS] = {1.0, 0.9, 0.8, 0.7,
+                                                    0.6, 0.5, 0.4, 0.3};
+static double early_scaling_factors[NUM_EARLY_REFLECTIONS] = {
+    1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7};
+static double early_gain_factors[NUM_EARLY_REFLECTIONS] = {1.0, 0.9, 0.8, 0.7,
+                                                           0.6, 0.5, 0.4, 0.3};
+
+static double delay_scaling_factors[4] = {1.0, 0.9, 0.8, 0.7};
+static double allpass_scaling_factors[NUM_ALLPASS] = {0.15, 0.12, 0.10, 0.08};
+
+static int next_prime(int n) {
+  int i = 0;
+  while (PRIMES[i] <= n && i < NUM_PRIMES) {
+    i++;
+  }
+  return PRIMES[i];
+}
+
+static int compute_delay_length(double room_size, double sample_rate,
+                                double scaling_factor) {
+  double delay_sec = (room_size * scaling_factor) / 343.0f;
+  int delay_samples = (int)(delay_sec * sample_rate);
+  return next_prime(delay_samples);
+}
+
+typedef struct GVerb {
+  double room_size;
+  double reverb_time;
+  double damping;
+  double input_bandwidth;
+  double dry;
+  double wet;
+  double early_level;
+  double tail_level;
+  double sample_rate;
+
+  double input_lp_state;
+  double input_lp_coeff;
+  int early_lengths[NUM_EARLY_REFLECTIONS];
+  int early_pos[NUM_EARLY_REFLECTIONS];
+  double early_gains[NUM_EARLY_REFLECTIONS];
+  int fb_delay_lengths[4];
+  int fb_delay_pos[4];
+  double damping_coeff;
+  double damping_state[4];
+  int allpass_lengths[NUM_ALLPASS];
+  int allpass_pos[NUM_ALLPASS];
+  double allpass_feedback;
+} GVerb;
+
+static double lowpass_filter(double input, double *state, double coeff) {
+  double output = input * (1.0f - coeff) + (*state * coeff);
+  *state = output;
+  return output;
+}
+
+static double process_early_reflections(GVerb *refl, double **delays,
+                                        double input) {
+
+  double early_out = 0.;
+  for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
+    int bufsize = refl->early_lengths[i];
+    double *buf = delays[i];
+    int write_pos = refl->early_pos[i] % bufsize;
+    early_out += process_allpass_frame(delays[i], bufsize, &refl->early_pos[i],
+                                       -1., input);
+  }
+  return early_out;
+}
+
+static double series_allpass_process(GVerb *gverb, double **allpass_delays,
+                                     double input) {
+
+  for (int i = 0; i < NUM_ALLPASS; i++) {
+    double *delay_line = allpass_delays[i];
+    int pos = gverb->allpass_pos[i];
+    int length = gverb->allpass_lengths[i];
+    input = process_allpass_frame(delay_line, length,
+                                  &gverb->allpass_lengths[i], 0.0, input);
+  }
+  return input;
+}
+
+double feedback_delay_network(GVerb *gverb, double **delay_lines, double mix) {
+  double delay_out[4];
+  for (int i = 0; i < 4; i++) {
+    int fb_pos = gverb->fb_delay_pos[i];
+    delay_out[i] = delay_lines[i][fb_pos];
+  }
+
+  for (int i = 0; i < 4; i++) {
+    delay_out[i] = lowpass_filter(delay_out[i], &gverb->damping_state[i],
+                                  gverb->damping_coeff);
+  }
+
+  double feedback[4];
+  feedback[0] = delay_out[0] + delay_out[1] + delay_out[2] + delay_out[3];
+  feedback[1] = delay_out[0] + delay_out[1] - delay_out[2] - delay_out[3];
+  feedback[2] = delay_out[0] - delay_out[1] + delay_out[2] - delay_out[3];
+  feedback[3] = delay_out[0] - delay_out[1] - delay_out[2] + delay_out[3];
+
+  double rt_gain = pow(10.0, -3.0 * (1.0 / gverb->reverb_time));
+
+  for (int i = 0; i < 4; i++) {
+    feedback[i] *= 0.25 * rt_gain; /* 0.25 for Hadamard normalization */
+  }
+
+  feedback[0] += mix;
+
+  for (int i = 0; i < 4; i++) {
+    int pos = gverb->fb_delay_pos[i];
+    int len = gverb->fb_delay_lengths[i];
+    delay_lines[i][pos] = feedback[i];
+    gverb->fb_delay_pos[i] = (pos + 1) % len;
+  }
+  return delay_out[0] + delay_out[1] + delay_out[2] + delay_out[3];
+}
+
+static double allpass_process(double input, double *delay_line, int *pos,
+                              int length, double feedback) {
+  double delayed = delay_line[*pos];
+  double new_input = input + feedback * delayed;
+  delay_line[*pos] = new_input;
+  *pos = (*pos + 1) % length;
+  return delayed - feedback * new_input;
+}
+
+void *gverb_perform(Node *node, GVerb *gverb, Node *inputs[], int nframes,
+                    double spf) {
+
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  char *mem = ((GVerb *)gverb + 1);
+
+  double *early_delays[NUM_EARLY_REFLECTIONS];
+  for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
+    early_delays[i] = mem;
+    mem += (sizeof(double) * gverb->early_lengths[i]);
+  }
+
+  double *delay_lines[4];
+  for (int i = 0; i < 4; i++) {
+    delay_lines[i] = mem;
+    mem += (sizeof(double) * gverb->fb_delay_lengths[i]);
+  }
+
+  double *allpass_delays[NUM_ALLPASS];
+  for (int i = 0; i < NUM_ALLPASS; i++) {
+    allpass_delays[i] = mem;
+    mem += (sizeof(double) * gverb->allpass_lengths[i]);
+  }
+
+  while (nframes--) {
+    double filt =
+        lowpass_filter(*in, &gverb->input_lp_state, gverb->input_lp_coeff);
+
+    double early_out = process_early_reflections(gverb, early_delays, filt);
+
+    double mix = filt * 0.5 + early_out * 0.5;
+
+    double diffuse_signal = feedback_delay_network(gverb, delay_lines, mix);
+
+    diffuse_signal *= 0.25;
+
+    for (int i = 0; i < NUM_ALLPASS; i++) {
+      double *delay_line = allpass_delays[i];
+      int pos = gverb->allpass_pos[i];
+      int length = gverb->allpass_lengths[i];
+
+      diffuse_signal = allpass_process(diffuse_signal, delay_line, &pos, length,
+                                       gverb->allpass_feedback);
+      gverb->allpass_pos[i] = pos;
+    }
+
+    *out = *in * gverb->dry + early_out * gverb->early_level * gverb->wet +
+           diffuse_signal * gverb->tail_level * gverb->wet;
+    in++;
+    out++;
+  }
+}
+
+Node *gverb_node(Node *input) {
+  double sr = (double)ctx_sample_rate();
+  double room_size = 10.;
+  GVerb gverb = {
+      .room_size = room_size,
+      .reverb_time = 10.,
+      .damping_coeff = 0.4,
+      .input_lp_coeff = 0.4,
+      .dry = 0.5,
+      .wet = 0.5,
+      .early_level = 0.5,
+      .tail_level = 0.9,
+      .sample_rate = sr,
+      .early_pos = {0, 0, 0, 0, 0, 0, 0, 0},
+      .early_gains = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3},
+      .early_lengths =
+          {
+              compute_delay_length(room_size, sr, 1.0),
+              compute_delay_length(room_size, sr, 1.1),
+              compute_delay_length(room_size, sr, 1.2),
+              compute_delay_length(room_size, sr, 1.3),
+              compute_delay_length(room_size, sr, 1.4),
+              compute_delay_length(room_size, sr, 1.5),
+              compute_delay_length(room_size, sr, 1.6),
+              compute_delay_length(room_size, sr, 1.7),
+          },
+      .fb_delay_pos = {0, 0, 0, 0},
+      .fb_delay_lengths =
+          {
+              compute_delay_length(room_size, sr, delay_scaling_factors[0]),
+              compute_delay_length(room_size, sr, delay_scaling_factors[1]),
+              compute_delay_length(room_size, sr, delay_scaling_factors[2]),
+              compute_delay_length(room_size, sr, delay_scaling_factors[3]),
+          },
+      .allpass_pos = {0, 0, 0, 0},
+      .allpass_lengths =
+          {
+              compute_delay_length(room_size, sr, allpass_scaling_factors[0]),
+              compute_delay_length(room_size, sr, allpass_scaling_factors[1]),
+              compute_delay_length(room_size, sr, allpass_scaling_factors[2]),
+              compute_delay_length(room_size, sr, allpass_scaling_factors[3]),
+          },
+
+  };
+
+  AudioGraph *graph = _graph;
+  int state_size = sizeof(GVerb);
+  for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
+    state_size += (gverb.early_lengths[i] * sizeof(double));
+  }
+
+  for (int i = 0; i < 4; i++) {
+    state_size += (gverb.fb_delay_lengths[i] * sizeof(double));
+  }
+
+  for (int i = 0; i < NUM_ALLPASS; i++) {
+    state_size += (gverb.allpass_lengths[i] * sizeof(double));
+  }
+
+  state_size = (state_size + 7) & ~7;
+  Node *node = allocate_node_in_graph(graph, state_size);
+  *node = (Node){
+      .perform = (perform_func_t)gverb_perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      .state_size = state_size,
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "gverb_lp",
+  };
+
+  char *mem = graph->nodes_state_memory + node->state_offset;
+  memset(mem, 0, state_size);
+  GVerb *state = (GVerb *)(mem);
+  *state = gverb;
+  node->connections[0].source_node_index = input->node_index;
   return node;
 }

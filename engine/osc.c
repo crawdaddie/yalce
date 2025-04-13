@@ -2017,7 +2017,6 @@ void *array_choose_trig_perform(Node *node, array_choose_trig_state *state,
 
     if (*trig > 0.9) {
       state->sample = state->data[rand() % state->size];
-      printf("got samp %f\n", state->sample);
     }
 
     *out = state->sample;

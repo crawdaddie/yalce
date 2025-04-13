@@ -32,7 +32,8 @@ char *node_get_state(Node *node, AudioGraph *graph) {
 
 void write_to_dac(int dac_layout, double *dac_buf, int _layout, double *buf,
                   int output_num, int nframes) {
-  int layout = 1;
+
+  int layout = _layout;
 
   if (output_num > 0) {
 
@@ -185,8 +186,8 @@ void start_blob() {
       .capacity = 16,
       .buffer_pool = malloc(sizeof(double) * (1 << 16)),
       .buffer_pool_capacity = 1 << 16,
-      .nodes_state_memory = malloc(sizeof(char) * (1 << 6)),
-      .state_memory_capacity = 1 << 6,
+      .nodes_state_memory = malloc(sizeof(char) * (1 << 16)),
+      .state_memory_capacity = 1 << 16,
   };
   _graph = graph;
 }
@@ -200,7 +201,7 @@ AudioGraph *end_blob() {
 
   double *b = graph->buffer_pool;
   graph->buffer_pool_capacity = graph->buffer_pool_size;
-  graph->buffer_pool = malloc(sizeof(double) * graph->buffer_pool_capacity);
+  graph->buffer_pool = calloc(graph->buffer_pool_capacity, sizeof(double));
   for (int i = 0; i < graph->buffer_pool_capacity; i++) {
     graph->buffer_pool[i] = b[i];
   }
@@ -251,9 +252,11 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
 
   char *node_mem = malloc(sizeof(Node));
 
-  char *mem = malloc(sizeof(AudioGraph) + sizeof(Node) * g->capacity +
-                     sizeof(double) * g->buffer_pool_capacity +
-                     sizeof(char) * g->state_memory_capacity);
+  int memsize = sizeof(AudioGraph) + sizeof(Node) * g->capacity +
+                sizeof(double) * g->buffer_pool_capacity +
+                sizeof(char) * g->state_memory_capacity;
+  char *mem = malloc(memsize);
+  // memset(mem, 0, memsize);
 
   Node *ensemble = (Node *)node_mem;
 
