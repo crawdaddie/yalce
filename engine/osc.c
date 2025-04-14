@@ -1813,7 +1813,6 @@ double *create_grain_window_wavetable(double *wavetable, int size,
   return wavetable;
 }
 
-#define GRAIN_WINDOW_TABSIZE (1 << 9)
 #ifdef READ_WTABLES
 static double gaussian_win[SQ_TABSIZE] = {
 #include "./assets/gaussian_win.csv"
@@ -1823,11 +1822,11 @@ static double gaussian_win[GRAIN_WINDOW_TABSIZE];
 #endif
 
 #ifdef READ_WTABLES
-static double grain_win[SQ_TABSIZE] = {
+double grain_win[SQ_TABSIZE] = {
 #include "./assets/grain_win.csv"
 };
 #else
-static double grain_win[GRAIN_WINDOW_TABSIZE];
+double grain_win[GRAIN_WINDOW_TABSIZE];
 #endif
 void maketable_grain_window() {
 
@@ -1846,7 +1845,7 @@ typedef struct grain_osc_state {
   int active_grains;
 } grain_osc_state;
 
-static inline double pow2table_read(double pos, int tabsize, double *table) {
+double pow2table_read(double pos, int tabsize, double *table) {
   int mask = tabsize - 1;
 
   double env_pos = pos * (mask);

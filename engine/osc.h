@@ -46,4 +46,8 @@ NodeRef grain_osc_node(int max_grains, NodeRef buf, NodeRef trig, NodeRef pos,
 void maketable_grain_window();
 
 NodeRef array_choose_trig_node(int arr_size, double *arr_data, NodeRef trig);
+
+double pow2table_read(double pos, int tabsize, double *table);
+#define GRAIN_WINDOW_TABSIZE (1 << 9)
+extern double grain_win[GRAIN_WINDOW_TABSIZE];
 #endif

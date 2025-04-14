@@ -25,6 +25,7 @@ let rand_trig_node = extern fn Synth -> Synth -> Synth -> Synth;
 let grain_osc_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth -> Synth;
 let maketable_grain_window = extern fn () -> ();
 let array_choose_trig_node = extern fn Int -> Ptr -> Synth -> Synth;
+let pow2table_read = extern fn Double -> Int -> Ptr -> Double;
 
 # ext_lib.h
 let start_blob = extern fn () -> ();
@@ -48,6 +49,7 @@ let sig_size = extern fn Ptr -> Int;
 let sig_layout = extern fn Ptr -> Int;
 let render_to_buf = extern fn Int -> Synth -> Synth;
 let node_replace = extern fn Synth -> Synth -> ();
+let null_synth_node = extern fn () -> Synth;
 
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;
@@ -65,6 +67,7 @@ let biquad_lp_node = extern fn Synth -> Synth -> Synth -> Synth;
 let gverb_node = extern fn Synth -> Synth;
 let allpass_node = extern fn Double -> Double -> Synth -> Synth;
 let reverb_node = extern fn Double -> Double -> Double -> Double -> Synth -> Synth;
+let grain_pitchshift_node = extern fn Double -> Double -> Synth -> Synth;
 
 # node_util.h
 let sum2_node = extern fn Synth -> Synth -> Synth;
@@ -95,4 +98,7 @@ let play_node_offset_w_kill = extern fn Int -> Double -> Int -> Synth -> Synth;
 
 let init_audio = extern fn () -> () in
   init_audio ()
+;
 
+let play_tpl = fn f ->
+  f |> compile_blob_template |> instantiate_template [] |> play_node;

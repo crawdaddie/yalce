@@ -1,21 +1,10 @@
-open engine/bindings/Synth;
 open engine/bindings/Sched;
+open engine/bindings/Synth;
 
 let freqs = [|
-  (midi_to_freq 36), 
-  (midi_to_freq 39), 
-  (midi_to_freq 41), 
-  (midi_to_freq 48), 
-  (midi_to_freq 62), 
-  (midi_to_freq 53), 
-  (midi_to_freq 65), 
-  (midi_to_freq 68), 
-  (midi_to_freq 70), 
-  (midi_to_freq 72), 
-  (midi_to_freq 75), 
-  (midi_to_freq 77), 
-  (midi_to_freq 79), 
   (midi_to_freq 84), 
+  (midi_to_freq 89), 
+  (midi_to_freq 92) 
 |];
 
 
@@ -23,37 +12,50 @@ let exp_env = fn dec: (Synth) trig: (Synth) ->
   (chirp_node 1.01 0.01 dec trig) - 0.01
 ;;
 
-let rev_node = (fn () ->
+let rev_node_tpl = (fn () ->
 
-  let sig1 = (
-  let trig = impulse_node (lfnoise_node 8. 0.5 10.);
-  let f = trig
-    |> array_choose_trig_node (array_size freqs) (cstr freqs);
-  (sq_node f) + (sq_node (f * 1.01))
-  );
-
-  let sig2 = (
-  let trig = impulse_node (lfnoise_node 8. 1. 10.);
-  let f = trig
-    |> array_choose_trig_node (array_size freqs) (cstr freqs);
-  (sq_node f) + (sq_node (f * 1.01))
-  );
-
-
-  (sig1 + sig2)
+  let trig = impulse_node 8.;
+  trig 
+  |> array_choose_trig_node (array_size freqs) (cstr freqs)
+  |> sin_node
   |> mul2_node (exp_env (rand_trig_node trig 0.1 1.) trig)
-  |> reverb_node 0.8 1. 1. 1.
-  
+  # |> reverb_node 0.8 1. 1. 1.
+  |> grain_pitchshift_node 0.5 0.2
   ;
 )
   |> compile_blob_template
-  |> instantiate_template []
-  |> play_node_offset (get_frame_offset ());
+  ;
 
 
-(
-  open gui/bindings/Gui;
-  create_scope (ctx_main_out ()) 2 512
-);
+let seq = fn () ->
+  array_set 0 freqs (midi_to_freq 43); 
+  array_set 1 freqs (midi_to_freq 41); 
+  array_set 2 freqs (midi_to_freq 91); 
+  yield 2.;
+  array_set 0 freqs (midi_to_freq 43); 
+  array_set 1 freqs (midi_to_freq 84); 
+  array_set 2 freqs (midi_to_freq 38); 
+  yield 4.;
+  array_set 0 freqs (midi_to_freq 43); 
+  array_set 1 freqs (midi_to_freq 89); 
+  array_set 2 freqs (midi_to_freq 91); 
+  yield 2.;
+  array_set 0 freqs (midi_to_freq 84);
+  array_set 1 freqs (midi_to_freq 89);
+  array_set 2 freqs (midi_to_freq 92) ;
+  yield 4.;
+  yield seq ()
+;;
 
 
+let routine = fn () ->
+  (instantiate_template [] rev_node_tpl)
+    |> play_node_offset (get_frame_offset ());
+
+  yield 2.;
+  yield seq ()
+;;
+
+
+
+play_routine schedule_event (routine ())

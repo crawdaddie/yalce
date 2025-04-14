@@ -20,4 +20,6 @@ NodeRef allpass_node(double time, double coeff, NodeRef input);
 
 NodeRef reverb_node(double room_size, double wet, double dry, double width,
                     NodeRef input);
+
+NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input);
 #endif

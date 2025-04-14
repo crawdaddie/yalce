@@ -8,8 +8,6 @@ let st = (fn () ->
   let chirp_decay = inlet 0.05;
   let ff = chirp_node 1000. 55. chirp_decay trig; 
 
-  # let dt = 0.0101 + (0.002 * sin_node (10. + 5. * sin_node 0.5));
-
   let dt = 0.0301 + (0.1 * sin_node 0.5);
 
 
@@ -18,8 +16,6 @@ let st = (fn () ->
     |> tanh_node 4.;
 
   (dyn_comb_node dt 0.5 0.999 x)
-
-
   ;)
   |> compile_blob_template;
 

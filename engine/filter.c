@@ -5,6 +5,7 @@
 #include "./primes.h"
 #include "audio_graph.h"
 #include "node_util.h"
+#include "osc.h"
 #include <math.h>
 #include <string.h>
 
@@ -1121,6 +1122,175 @@ Node *gverb_node(Node *input) {
   memset(mem, 0, state_size);
   GVerb *state = (GVerb *)(mem);
   *state = gverb;
+  node->connections[0].source_node_index = input->node_index;
+  return node;
+}
+typedef struct grain_pitchshift_state {
+  int length;
+  int pos;
+  int max_grains;
+  int active_grains;
+  int next_trig;
+  int trig_gap_in_frames;
+  double width;
+  double rate;
+  double fb;
+} grain_pitchshift_state;
+
+double __pow2table_read(double pos, int tabsize, double *table) {
+  int mask = tabsize - 1;
+
+  double env_pos = pos * (mask);
+  int env_idx = (int)env_pos;
+  double env_frac = env_pos - env_idx;
+
+  // Interpolate between envelope table values
+  double env_val = table[env_idx & mask] * (1.0 - env_frac) +
+                   table[(env_idx + 1) & mask] * env_frac;
+  return env_val;
+}
+
+void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
+                                  Node *inputs[], int nframes, double spf) {
+
+  int out_layout = node->output.layout;
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  char *mem = state + 1;
+  double *buf = mem;
+  int buf_size = state->length;
+  mem += buf_size * sizeof(double);
+
+  int max_grains = state->max_grains;
+
+  double *phases = (double *)mem;
+  mem += sizeof(double) * max_grains;
+
+  double *widths = (double *)mem;
+  mem += sizeof(double) * max_grains;
+
+  double *remaining_secs = (double *)mem;
+  mem += sizeof(double) * max_grains;
+
+  double *starts = (double *)mem;
+  mem += sizeof(double) * max_grains;
+
+  int *active = (int *)mem;
+
+  double d_index;
+  int index;
+  double frac;
+  double a, b;
+  double sample = 0.;
+  double r = state->rate;
+  const int table_mask = GRAIN_WINDOW_TABSIZE - 1;
+  while (nframes--) {
+    sample = 0.;
+    if ((state->next_trig <= 0) && state->active_grains < max_grains) {
+      state->next_trig = state->trig_gap_in_frames;
+      for (int i = 0; i < max_grains; i++) {
+        if (active[i] == 0) {
+          phases[i] = 0;
+          starts[i] = state->pos * buf_size;
+          widths[i] = state->width;
+          remaining_secs[i] = state->width;
+          active[i] = 1;
+          state->active_grains++;
+          break;
+        }
+      }
+    }
+
+    for (int i = 0; i < max_grains; i++) {
+
+      if (active[i]) {
+        double p = phases[i];
+        double s = starts[i];
+        double w = widths[i];
+        double rem = remaining_secs[i];
+
+        d_index = s + (p * buf_size);
+
+        index = (int)d_index;
+        frac = d_index - index;
+
+        a = buf[index % buf_size];
+        b = buf[(index + 1) % buf_size];
+
+        double grain_elapsed = 1.0 - (rem / w);
+        double env_val =
+            __pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
+
+        sample += env_val * ((1.0 - frac) * a + (frac * b));
+        phases[i] += (r / buf_size);
+
+        remaining_secs[i] -= spf;
+        if (remaining_secs[i] <= 0) {
+          active[i] = 0; // Deactivate the grain
+          state->active_grains--;
+        }
+      }
+    }
+
+    for (int i = 0; i < out_layout; i++) {
+      *out = sample + *in;
+      out++;
+    }
+    buf[state->pos] = *in + state->fb * *out;
+    in++;
+    state->next_trig--;
+    state->pos = (state->pos + 1) % buf_size;
+  }
+}
+
+NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
+  AudioGraph *graph = _graph;
+
+  int max_grains = 32;
+  int state_size = sizeof(grain_pitchshift_state) +
+                   (1024 * sizeof(double))         // delay buffer
+                   + (max_grains * sizeof(double)) // phases
+                   + (max_grains * sizeof(double)) // widths
+                   + (max_grains * sizeof(double)) // elapsed
+                   + (max_grains * sizeof(double)) // starts
+                   + (max_grains * sizeof(int))    // active grains
+      ;
+
+  grain_pitchshift_state pshift = {
+
+      .length = 1024,
+      .pos = 0,
+      .max_grains = max_grains,
+      .active_grains = 0,
+      .next_trig = ((double)1024) / shift,
+      .trig_gap_in_frames = ((double)1024) / shift,
+      .width = 0.01,
+      .rate = shift,
+      .fb = fb};
+
+  Node *node = allocate_node_in_graph(graph, state_size);
+
+  *node = (Node){
+      .perform = (perform_func_t)granular_pitchshift_perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      .state_size = state_size,
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "grain_pitchshift",
+  };
+
+  /* Initialize state memory */
+  char *mem = (graph != NULL)
+                  ? (char *)(graph->nodes_state_memory + node->state_offset)
+                  : (char *)((Node *)node + 1);
+
+  memset(mem, 0, state_size);
+  grain_pitchshift_state *state = mem;
+  *state = pshift;
+
   node->connections[0].source_node_index = input->node_index;
   return node;
 }

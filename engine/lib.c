@@ -583,3 +583,7 @@ void node_replace(NodeRef a, NodeRef b) {
     free(a_specs.state_ptr);
   }
 }
+
+// NodeRef node_in(int idx, NodeRef a) {
+//   return a->connections[idx]
+// }

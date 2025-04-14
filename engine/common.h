@@ -9,4 +9,6 @@
 #define MAX_INPUTS 16
 #define MAX_SF_CHANNELS 16
 
+inline double pow2table_read(double pos, int tabsize, double *table);
+
 #endif

@@ -33,4 +33,5 @@ NodeRef render_to_buf(int frames, NodeRef node);
 
 void node_replace(NodeRef a, NodeRef b);
 
+NodeRef null_synth_node();
 #endif

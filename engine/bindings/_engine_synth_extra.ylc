@@ -18,4 +18,7 @@ let play_node_offset_w_kill = extern fn Int -> Double -> Int -> Synth -> Synth;
 
 let init_audio = extern fn () -> () in
   init_audio ()
+;
 
+let play_tpl = fn f ->
+  f |> compile_blob_template |> instantiate_template [] |> play_node;
