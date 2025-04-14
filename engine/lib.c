@@ -136,6 +136,7 @@ Node *inlet(double default_val) {
       .state_size = 0,
       .state_offset = graph ? graph->state_memory_size : 0,
       // Allocate output buffer
+      // TODO: allocate const bufs as just .size = 1
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -309,6 +310,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
     double val = input_vals->pair.val;
     int inlet_node_idx = graph_state->inlets[idx];
     Node *inlet_node = graph_state->nodes + inlet_node_idx;
+
     for (int i = 0; i < inlet_node->output.layout * inlet_node->output.size;
          i++) {
       inlet_node->output.buf[i] = val;

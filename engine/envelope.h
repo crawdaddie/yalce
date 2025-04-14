@@ -6,4 +6,7 @@ NodeRef asr_kill_node(double attack_time, double sustain_level,
 
 NodeRef asr_node(double attack_time, double sustain_level, double release_time,
                  NodeRef trigger);
+
+NodeRef aslr_node(double attack_time, double sustain_level, double sustain_time,
+                  double release_time, NodeRef trigger);
 #endif

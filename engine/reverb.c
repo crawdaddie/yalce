@@ -3,6 +3,7 @@
 #include "./filter.h"
 #include "./node.h"
 #include "audio_graph.h"
+#include "node_util.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -76,8 +77,9 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
   if (!inputs) {
     return NULL;
   }
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+
+  Signal _out = node->output;
+  Signal _in = inputs[0]->output;
 
   char *mem = (char *)(reverb + 1);
 
@@ -103,7 +105,8 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
   }
 
   for (int frame = 0; frame < nframes; frame++) {
-    double input_sample = in[frame];
+    double input_sample = *READ(_in);
+
     double output_left = 0.0;
     double output_right = 0.0;
 
@@ -171,7 +174,6 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
       double *buffer_right = allpass_buffers_right[i];
       int pos_right = reverb->allpasses_right[i].pos;
       int size_right = reverb->allpasses_right[i].length;
-
       double delayed_right = buffer_right[pos_right];
       undenormalize(delayed_right);
 
@@ -187,11 +189,12 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
 
     double l = output_left * reverb->wet1 + output_right * reverb->wet2 +
                input_sample * reverb->dry;
+
     double r = output_right * reverb->wet1 + output_left * reverb->wet2 +
                input_sample * reverb->dry;
 
-    out[frame * 2] = l;
-    out[frame * 2 + 1] = r;
+    WRITEV(_out, l);
+    WRITEV(_out, r);
   }
 
   return node->output.buf;

@@ -54,6 +54,7 @@ let null_synth_node = extern fn () -> Synth;
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;
 let asr_node = extern fn Double -> Double -> Double -> Synth -> Synth;
+let aslr_node = extern fn Double -> Double -> Double -> Double -> Synth -> Synth;
 
 # filter.h
 let tanh_node = extern fn Double -> Synth -> Synth;
@@ -68,6 +69,7 @@ let gverb_node = extern fn Synth -> Synth;
 let allpass_node = extern fn Double -> Double -> Synth -> Synth;
 let reverb_node = extern fn Double -> Double -> Double -> Double -> Synth -> Synth;
 let grain_pitchshift_node = extern fn Double -> Double -> Synth -> Synth;
+let dyn_tanh_node = extern fn Synth -> Synth -> Synth;
 
 # node_util.h
 let sum2_node = extern fn Synth -> Synth -> Synth;

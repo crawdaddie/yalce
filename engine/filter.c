@@ -7,6 +7,7 @@
 #include "node_util.h"
 #include "osc.h"
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 // Biquad filter state
@@ -784,6 +785,52 @@ Node *tanh_node(double gain, Node *input) {
   return node;
 }
 
+void *dyn_tanh_perform(Node *node, tanh_state *state, Node *inputs[],
+                       int nframes, double spf) {
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  double *gain = inputs[1]->output.buf;
+
+  while (nframes--) {
+
+    *out = tanh(*in * *gain);
+    gain++;
+    in++;
+    out++;
+  }
+
+  return node->output.buf;
+}
+
+Node *dyn_tanh_node(NodeRef gain, Node *input) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, 0);
+
+  // Initialize node
+  *node = (Node){
+      .perform = (perform_func_t)dyn_tanh_perform,
+      .node_index = node->node_index,
+      .num_inputs = 2,
+      .state_size = 0,
+      .state_offset = state_offset_ptr_in_graph(graph, 0),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "tanh",
+  };
+
+  // Connect input
+  if (input) {
+    node->connections[0].source_node_index = input->node_index;
+  }
+
+  if (gain) {
+    node->connections[1].source_node_index = gain->node_index;
+  }
+
+  return node;
+}
+
 typedef struct {
   int length;
   int pos;
@@ -1237,7 +1284,6 @@ void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
       out++;
     }
     buf[state->pos] = *in + state->fb * *out;
-    in++;
     state->next_trig--;
     state->pos = (state->pos + 1) % buf_size;
   }

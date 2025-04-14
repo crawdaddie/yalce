@@ -1,55 +1,24 @@
-%include examples/Math
-%include examples/Array
-%include engine/bindings/Synth
-%include engine/bindings/Sched
+open engine/bindings/Synth;
 
 let st = (fn () -> 
-  let trig = inlet 0.0;
-  let chirp_decay = inlet 0.05;
-  let ff = chirp_node 1000. 55. chirp_decay trig; 
+  let trig = impulse_node 2.;
+  let ff = chirp_node 5000. 55. 0.03 trig; 
 
-  let dt = 0.0301 + (0.1 * sin_node 0.5);
-
-
-  
-  let x = sin_node ff
-    |> tanh_node 4.;
-
-  (dyn_comb_node dt 0.5 0.999 x)
+  let sig = white_noise_node ()
+    |> mul2_node (aslr_node 0. 0.2 0.001 0.05 trig ) in
+  let sig = sig + (aslr_node 0.0001 1. 0.1 0.5 trig) * (sin_node ff)  in
+  sig + (dyn_tanh_node (chirp_node 10. 0.01 0.3 trig) sig) 
   ;)
-  |> compile_blob_template;
-
-let setter = fn (dur, synth) frame_offset -> 
-  set_input_trig_offset synth 0 frame_offset;
-  set_input_scalar_offset synth 1 frame_offset (rand_double_range 0.05 0.2);
-  # set_input_scalar_offset synth 2 frame_offset (rand_double_range 0.05 0.1);
-  # trigger_gate frame_offset 0.23 0 synth;
-  ()
-;;
-
-
-let durs = fn () -> 
-  let choices = [|
-      [|0.5|],
-      [|0.75, 0.75, 0.75, 0.5, 0.75, 0.5|],
-      [|0.25, 0.25|],
-      [|0.125, 0.125, 0.125, 0.125|],
-      [|0.0625, 0.0625, 0.0625, 0.0625|]
-      |];
-  yield iter_of_array (array_choose choices);
-  yield durs ()
-  ;;
-
-let syn = fn offset ->
-  st
-  |> instantiate_template [(0, 0.)]
-  |> play_node_offset offset
-;;
-
+  |> compile_blob_template |> instantiate_template [] |> play_node
+;
 
 (
-  durs (),
-  syn @@ get_frame_offset (),
-) |> run_in_scheduler schedule_event setter
+open gui/bindings/Gui;
+create_scope (ctx_main_out ()) 2 512
+)
+
+
+
+
   
 
