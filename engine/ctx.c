@@ -110,6 +110,9 @@ static void process_msg_pre(scheduler_msg msg) {
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      if (node->state_ptr) {
+        g = node->state_ptr;
+      }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       inlet_data.buf[msg.frame_offset] = 1.0;
@@ -165,6 +168,10 @@ static void process_msg_post(scheduler_msg msg) {
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+
+      if (node->state_ptr) {
+        g = node->state_ptr;
+      }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       inlet_data.buf[msg.frame_offset] = 0.0;

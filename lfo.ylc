@@ -1,0 +1,21 @@
+open engine/bindings/Synth;
+# let env_vals_buf = array_to_buf 1 (array_size env_vals) (cstr env_vals);
+# let test_lfo = (fn () -> 
+#   lfo_node () (inlet 1.)
+# ;) |> play_tpl
+#
+
+let env_vals = [|
+  0.,   1.,  0.,
+  1.,   1.,  0.,
+  0.5,  1.,  0.,
+  0.,
+|];
+
+(
+  import gui/bindings/Gui;
+
+  Gui.create_envelope_edit_view
+    (array_size env_vals)
+    (cstr env_vals)
+);

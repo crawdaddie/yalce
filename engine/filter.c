@@ -1340,3 +1340,56 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
   node->connections[0].source_node_index = input->node_index;
   return node;
 }
+
+typedef double (*node_math_func_t)(double samp);
+typedef struct math_node_state {
+  node_math_func_t math_fn;
+} math_node_state;
+
+void *math_perform(Node *node, math_node_state *state, Node *inputs[],
+                   int nframes, double spf) {
+  double *out = node->output.buf;
+  Signal in = inputs[0]->output;
+
+  for (int i = 0; i < in.size * in.layout; i++) {
+    out[i] = state->math_fn(in.buf[i]);
+  }
+
+  return node->output.buf;
+}
+
+NodeRef math_node(void *math_fn, NodeRef input) {
+
+  AudioGraph *graph = _graph;
+
+  int state_size = sizeof(math_node_state);
+
+  math_node_state m = {.math_fn = math_fn};
+
+  Node *node = allocate_node_in_graph(graph, state_size);
+
+  *node = (Node){
+      .perform = (perform_func_t)granular_pitchshift_perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      .state_size = state_size,
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
+      .output = (Signal){.layout = input->output.layout,
+                         .size = input->output.size,
+                         .buf = allocate_buffer_from_pool(
+                             graph, input->output.layout * input->output.size)},
+      .meta = "node_math",
+  };
+
+  /* Initialize state memory */
+  char *mem = (graph != NULL)
+                  ? (char *)(graph->nodes_state_memory + node->state_offset)
+                  : (char *)((Node *)node + 1);
+
+  memset(mem, 0, state_size);
+  math_node_state *state = mem;
+  *state = m;
+
+  node->connections[0].source_node_index = input->node_index;
+  return node;
+}

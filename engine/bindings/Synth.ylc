@@ -12,7 +12,8 @@ let bufplayer_node = extern fn Synth -> Synth -> Synth;
 let bufplayer_trig_node = extern fn Synth -> Synth -> Synth -> Synth -> Synth;
 let white_noise_node = extern fn () -> Synth;
 let brown_noise_node = extern fn () -> Synth;
-let chirp_node = extern fn Double -> Double -> Synth -> Synth -> Synth;
+let static_chirp_node = extern fn Double -> Double -> Synth -> Synth -> Synth;
+let chirp_node = extern fn Synth -> Synth -> Synth -> Synth -> Synth;
 let impulse_node = extern fn Synth -> Synth;
 let ramp_node = extern fn Synth -> Synth;
 let trig_rand_node = extern fn Synth -> Synth;
@@ -50,6 +51,7 @@ let sig_layout = extern fn Ptr -> Int;
 let render_to_buf = extern fn Int -> Synth -> Synth;
 let node_replace = extern fn Synth -> Synth -> ();
 let null_synth_node = extern fn () -> Synth;
+let array_to_buf = extern fn Int -> Int -> Ptr -> Synth;
 
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;
@@ -79,6 +81,8 @@ let mod2_node = extern fn Synth -> Synth -> Synth;
 let div2_node = extern fn Synth -> Synth -> Synth;
 let const_sig = extern fn Double -> Synth;
 let const_buf = extern fn Double -> Int -> Int -> Synth;
+
+# lfo.h
 
 # let chain_wrap = fn def: (() -> Synth) -> 
 #   reset_chain ();

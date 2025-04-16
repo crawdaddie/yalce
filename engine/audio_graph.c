@@ -138,6 +138,12 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
       char *state = __node_get_state(node, graph);
       node->perform(node, state, inputs, nframes, spf);
 
+      // if (node->node_math) {
+      //   for (int i = 0; i < node->output.size * node->output.layout; i++) {
+      //     node->output.buf[i] = node->node_math(node->output.buf[i]);
+      //   }
+      // }
+      //
       if (node->trig_end == true) {
         _node->trig_end = true;
       }

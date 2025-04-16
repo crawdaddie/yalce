@@ -21,4 +21,7 @@ SDL_Renderer *render_scope(char *text, int x, int y, SDL_Renderer *renderer);
 int create_scope(double *signal, int layout, int size);
 
 int create_static_plot(int layout, int size, double *signal);
+
+int create_envelope_edit_view(int size, double *data);
+
 #endif

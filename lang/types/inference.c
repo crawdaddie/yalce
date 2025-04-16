@@ -647,10 +647,6 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       if (!type_implements(t2, tc)) {
 
-        print_type(t1);
-        print_type(t2);
-        print_ast(node);
-
         char buf[20];
         return type_error(
             ctx, node,

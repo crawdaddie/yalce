@@ -922,8 +922,8 @@ typedef struct chirp_state {
   double prev_trig_value;
 } chirp_state;
 
-void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
-                    double spf) {
+void *static_chirp_perform(Node *node, chirp_state *state, Node *inputs[],
+                           int nframes, double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
   double *trig = inputs[0]->output.buf;
@@ -967,13 +967,13 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *chirp_node(double start_freq, double end_freq, Node *lag_input,
-                 Node *trig_input) {
+Node *static_chirp_node(double start_freq, double end_freq, Node *lag_input,
+                        Node *trig_input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(chirp_state));
 
   *node = (Node){
-      .perform = (perform_func_t)chirp_perform,
+      .perform = (perform_func_t)static_chirp_perform,
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = sizeof(chirp_state),
@@ -999,6 +999,89 @@ Node *chirp_node(double start_freq, double end_freq, Node *lag_input,
   if (lag_input) {
     node->connections[1].source_node_index = lag_input->node_index;
   }
+
+  return node;
+}
+
+void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
+                    double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *trig = inputs[0]->output.buf;
+  double *lag = inputs[1]->output.buf;
+  double *_hi = inputs[2]->output.buf;
+  double *_lo = inputs[3]->output.buf;
+
+  for (int i = 0; i < nframes; i++) {
+    double trig_value = trig[i];
+    double lag_time = lag[i];
+    double hi = _hi[i];
+    double lo = _lo[i];
+
+    if (((trig_value == 1.0) && (state->prev_trig_value != 1.0)) ||
+        (state->prev_trig_value <= 0.5 && trig_value > 0.5)) {
+
+      state->trigger_active = 1;
+      state->start_freq = hi;
+      state->current_freq = hi;
+      state->end_freq = lo;
+      state->elapsed_time = 0.0;
+    }
+
+    state->prev_trig_value = trig_value;
+
+    if (state->trigger_active) {
+      double progress = state->elapsed_time / lag_time;
+      if (progress > 1.0)
+        progress = 1.0;
+
+      state->current_freq = state->start_freq *
+                            pow(state->end_freq / state->start_freq, progress);
+
+      state->elapsed_time += spf;
+
+      if (state->elapsed_time >= lag_time) {
+        state->trigger_active = 0;
+        state->current_freq = state->end_freq;
+      }
+    }
+
+    for (int ch = 0; ch < out_layout; ch++) {
+      out[i * out_layout + ch] = state->current_freq;
+    }
+  }
+
+  return node->output.buf;
+}
+
+Node *chirp_node(NodeRef start_freq, NodeRef end_freq, Node *lag_input,
+                 Node *trig_input) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(chirp_state));
+
+  *node = (Node){
+      .perform = (perform_func_t)chirp_perform,
+      .node_index = node->node_index,
+      .num_inputs = 4,
+      .state_size = sizeof(chirp_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(chirp_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "chirp",
+  };
+
+  chirp_state *state =
+      (chirp_state *)(graph->nodes_state_memory + node->state_offset);
+  *state = (chirp_state){.current_freq = 0.,
+                         .elapsed_time = 0.0,
+                         .trigger_active = 0,
+                         .prev_trig_value = 0.0};
+
+  node->connections[0].source_node_index = trig_input->node_index;
+  node->connections[1].source_node_index = lag_input->node_index;
+  node->connections[2].source_node_index = start_freq->node_index;
+  node->connections[3].source_node_index = end_freq->node_index;
 
   return node;
 }

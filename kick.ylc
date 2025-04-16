@@ -1,24 +1,69 @@
 open engine/bindings/Synth;
+open engine/bindings/Sched;
 
-let st = (fn () -> 
-  let trig = impulse_node 2.;
-  let ff = chirp_node 5000. 55. 0.03 trig; 
-
-  let sig = white_noise_node ()
-    |> mul2_node (aslr_node 0. 0.2 0.001 0.05 trig ) in
-  let sig = sig + (aslr_node 0.0001 1. 0.1 0.5 trig) * (sin_node ff)  in
-  sig + (dyn_tanh_node (chirp_node 10. 0.01 0.3 trig) sig) 
-  ;)
-  |> compile_blob_template |> instantiate_template [] |> play_node
+let snare_syn = (fn () -> 
+  let trig = inlet 0.;
+  let sin = (chirp_node 1. 0.01 0.2 trig) * ((sin_node 220.) + (sin_node 357.));
+  let sig = (sin + white_noise_node ()) |> tanh_node 5.;
+  sig * (aslr_node 0. 1. 0.1 0.1 trig)
+  ;) |> compile_blob_template |> instantiate_template [] |> play_node_offset 0
 ;
 
-(
-open gui/bindings/Gui;
-create_scope (ctx_main_out ()) 2 512
-)
+let kick_syn = (fn () -> 
+  let trig = inlet 0.;
+  let ff = chirp_node 1000. (inlet 55.) 0.03 trig; 
+
+  let sig = white_noise_node ()
+    |> mul2_node (aslr_node 0. 0.2 0.001 0.05 trig) in
+
+  let sig = sig + (aslr_node 0.0001 1. 0.1 1. trig) * (sin_node ff) in
+
+  sig + (dyn_tanh_node (chirp_node 10. 0.4 0.2 trig) sig) 
+  ;) |> compile_blob_template |> instantiate_template [] |> play_node_offset 0
+;
+
+let trig_kick = fn k ->
+  let fo = get_frame_offset () in
+  set_input_trig_offset k 0 fo
+;;
 
 
 
 
-  
+let trig_snare = fn k ->
+  let fo = get_frame_offset () in
+  set_input_trig_offset k 0 fo
+;;
+
+
+
+
+let routine = fn scale ->
+
+  trig_kick kick_syn;
+  yield (scale *1.75);
+  trig_kick kick_syn;
+  yield (scale * 0.75);
+  trig_kick kick_syn;
+  yield (scale * 0.75);
+  trig_kick kick_syn;
+  yield (scale * 0.75);
+  yield (routine scale)
+;;
+
+
+let snare_routine = fn scale->
+  yield (scale *1.);
+  trig_snare snare_syn;
+  yield (scale *2.);
+  trig_snare snare_syn;
+  yield (scale *1.);
+  yield (snare_routine scale)
+;;
+
+defer_quant 0.5 (fn fo ->
+  play_routine schedule_event (routine 0.5);
+  play_routine schedule_event (snare_routine 0.5);
+);
+
 

@@ -80,6 +80,11 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     }
 
     head->perform(head, state, NULL, frame_count, spf);
+    // if (head->node_math) {
+    //   for (int i = 0; i < head->output.size * head->output.layout; i++) {
+    //     head->output.buf[i] = head->node_math(head->output.buf[i]);
+    //   }
+    // }
 
     if (head->write_to_output) {
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
@@ -257,11 +262,11 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
                 sizeof(double) * g->buffer_pool_capacity +
                 sizeof(char) * g->state_memory_capacity;
   char *mem = malloc(memsize);
-  // memset(mem, 0, memsize);
 
   Node *ensemble = (Node *)node_mem;
 
   AudioGraph *graph_state = (AudioGraph *)mem;
+
   *graph_state = *g;
   mem += sizeof(AudioGraph);
 
@@ -304,8 +309,11 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   };
 
   uint32_t inputs_mask;
+
   while (input_vals) {
+
     int idx = input_vals->pair.idx;
+
     inputs_mask |= (1U << idx);
     double val = input_vals->pair.val;
     int inlet_node_idx = graph_state->inlets[idx];
@@ -566,6 +574,18 @@ NodeRef render_to_buf(int frames, NodeRef node) {
   perform_graph(node, frames - rendered_frames, ctx.spf, b, layout, 0);
 
   node->write_to_output = false;
+  return out;
+}
+
+NodeRef array_to_buf(int layout, int size, double *data) {
+
+  Node *out = malloc(sizeof(Node) + (sizeof(double) * size * layout));
+  out->output.layout = layout;
+  out->output.size = size;
+  out->output.buf = (double *)((Node *)out + 1);
+  double *buf = out->output.buf;
+  double *b = buf;
+  int rendered_frames = 0;
   return out;
 }
 

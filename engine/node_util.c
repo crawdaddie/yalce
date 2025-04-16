@@ -257,3 +257,8 @@ typedef struct {
 void *xfade_perform(Node *node, xfade_state *state, Node *inputs[], int nframes,
                     double spf) {}
 NodeRef replace_node(double xfade_time, NodeRef a, NodeRef b) {}
+
+// NodeRef set_math(void *math_fn, NodeRef n) {
+//   n->node_math = math_fn;
+//   return n;
+// }

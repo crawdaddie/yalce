@@ -3,8 +3,11 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
+#include <limits.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define MAX_WINDOWS 10
 #define WINDOW_WIDTH 640
@@ -71,7 +74,15 @@ int init_gui() {
 
   return 0;
 }
+Window *get_window(SDL_Event event) {
 
+  for (int i = 0; i < window_count; i++) {
+    if (SDL_GetWindowID(windows[i].window) == event.window.windowID) {
+      return windows + i;
+    }
+  }
+  return NULL;
+}
 void handle_events() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
@@ -162,10 +173,7 @@ bool _create_window(window_creation_data *data) {
 }
 
 // Function to push a create window event to the SDL event queue
-int create_window(void *data, void *renderer, void *event_handler
-                  // ,
-                  // int num_children, void *children
-) {
+int create_window(void *data, void *renderer, void *event_handler) {
 
   SDL_Event event;
   SDL_zero(event);
@@ -1049,4 +1057,410 @@ static int plot_event_handler(void *userdata, SDL_Event *event) {
   }
 
   return 0; // Continue running
+}
+
+typedef struct env_edit_state {
+  int size;
+  double *data;
+  int selected_point;
+  bool dragging;
+  SDL_Point drag_start;
+  double view_min_y;
+  double view_max_y;
+  double view_min_x;
+  double view_max_x;
+  double scale_x;
+  double scale_y;
+  int num_points;
+} env_edit_state;
+
+// Define margins
+#define ENV_MARGIN 30
+const int margin_left = ENV_MARGIN;
+const int margin_right = ENV_MARGIN;
+const int margin_top = ENV_MARGIN;
+const int margin_bottom = ENV_MARGIN;
+
+void print_env(env_edit_state *state) {
+  int i;
+  double t;
+
+  printf("\n-----\nEnv:\n");
+  for (i = 0; i < state->num_points - 1; i++) {
+    printf("%d: %f @ %f\n", i, state->data[i * 3], t);
+    t += state->data[(i * 3) + 1];
+  }
+
+  printf("%d: %f @ %f\n", i, state->data[i * 3], t);
+}
+
+static SDL_Point data_to_screen(env_edit_state *state, double x, double y,
+                                int width, int height) {
+  SDL_Point point;
+
+  // Calculate the actual plotting area dimensions
+  const int plot_width = width - margin_left - margin_right;
+  const int plot_height = height - margin_top - margin_bottom;
+
+  double normalized_x =
+      (x - state->view_min_x) / (state->view_max_x - state->view_min_x);
+  double normalized_y =
+      1.0 - (y - state->view_min_y) / (state->view_max_y - state->view_min_y);
+
+  point.x = margin_left + (int)(normalized_x * plot_width);
+  point.y = margin_top + (int)(normalized_y * plot_height);
+
+  return point;
+}
+
+// Convert screen coordinates to data coordinates
+static void screen_to_data(env_edit_state *state, int screen_x, int screen_y,
+                           int width, int height, double *data_x,
+                           double *data_y) {
+
+  const int plot_width = width - margin_left - margin_right;
+  const int plot_height = height - margin_top - margin_bottom;
+
+  double normalized_x = (double)(screen_x - margin_left) / plot_width;
+  double normalized_y = (double)(screen_y - margin_top) / plot_height;
+
+  normalized_y = 1.0 - normalized_y;
+
+  *data_x = state->view_min_x +
+            normalized_x * (state->view_max_x - state->view_min_x);
+  *data_y = state->view_min_y +
+            normalized_y * (state->view_max_y - state->view_min_y);
+}
+
+double *get_env_val(env_edit_state *state, int point_idx) {
+  return state->data + (point_idx * 3);
+}
+
+double *get_tdelta(env_edit_state *state, int point_idx) {
+  if (point_idx == 0) {
+    return NULL;
+  }
+  return state->data + (point_idx - 1) * 3 + 1;
+}
+
+static int find_closest_point(env_edit_state *state, int mouse_x, int mouse_y,
+                              int width, int height) {
+  int closest_point = -1;
+  int min_distance = INT_MAX;
+
+  int num_points = state->num_points;
+
+  double t = 0.;
+  for (int i = 0; i < num_points; i++) {
+    // Get the x and y coordinates of the point
+    double point_x;
+    double point_y;
+
+    if (i == 0) {
+      point_x = 0.0;
+      point_y = state->data[0];
+    } else if (i == (num_points - 1)) {
+      point_x = t + *get_tdelta(state, i);
+      point_y = *get_env_val(state, i);
+      t = point_x;
+    } else {
+      // For subsequent points, calculate x by summing all time intervals
+      point_x = t + *get_tdelta(state, i);
+      point_y = *get_env_val(state, i);
+      t = point_x;
+    }
+
+    // Convert to screen coordinates
+    SDL_Point screen_point =
+        data_to_screen(state, point_x, point_y, width, height);
+
+    // Calculate distance (squared) to mouse position
+    int dx = screen_point.x - mouse_x;
+    int dy = screen_point.y - mouse_y;
+    int distance = dx * dx + dy * dy;
+
+    if (distance < min_distance) {
+      min_distance = distance;
+      closest_point = i;
+    }
+  }
+
+  const int MAX_DISTANCE_THRESHOLD = 400; // 20 pixels squared
+  if (min_distance > MAX_DISTANCE_THRESHOLD) {
+    return -1; // No point is close enough
+  }
+
+  return closest_point;
+}
+
+// Helper function to calculate x position for a specific point index
+static double get_point_x(env_edit_state *state, int point_index) {
+  if (point_index == 0) {
+    return 0.0; // First point is at x=0
+  }
+
+  double x = 0.0;
+  // Sum up all the time intervals before this point
+  for (int i = 0; i < point_index; i++) {
+    // Time value is at index 3*i + 1 (except for the last point)
+    x += *get_tdelta(state, i + 1);
+  }
+
+  return x;
+}
+static int env_edit_event_handler(void *userdata, SDL_Event *event) {
+  SDL_Window *win = get_window(*event)->window;
+  env_edit_state *state = (env_edit_state *)userdata;
+  int width, height;
+  SDL_GetRendererOutputSize(SDL_GetRenderer(win), &width, &height);
+
+  int window_w, window_h, drawable_w, drawable_h;
+  SDL_GetWindowSize(win, &window_w, &window_h);
+  SDL_GL_GetDrawableSize(win, &drawable_w, &drawable_h);
+
+  double scale_x = (double)drawable_w / window_w;
+  double scale_y = (double)drawable_h / window_h;
+
+  switch (event->type) {
+  case SDL_MOUSEBUTTONDOWN:
+    if (event->button.button == SDL_BUTTON_LEFT) {
+      int distance = 200;
+      int point_index =
+          find_closest_point(state, scale_x * event->button.x,
+                             scale_x * event->button.y, width, height);
+
+      if (point_index >= 0) {
+        state->selected_point = point_index;
+        state->dragging = true;
+        state->drag_start.x = scale_x * event->button.x;
+        state->drag_start.y = scale_y * event->button.y;
+      }
+    }
+    break;
+
+  case SDL_MOUSEBUTTONUP:
+    if (event->button.button == SDL_BUTTON_LEFT && state->dragging) {
+      state->dragging = false;
+      return 1; // Event handled
+    }
+    break;
+
+  case SDL_MOUSEMOTION: {
+    if (state->dragging && state->selected_point >= 0) {
+      double x = scale_x * event->motion.x;
+      double y = scale_y * event->motion.y;
+      double data_x = 0.;
+      double data_y = 0.;
+
+      screen_to_data(state, x, y, width, height, &data_x, &data_y);
+
+      printf("dragging to (%f,%f) -> (%f,%f) (dx: %f)\n", x, y, data_x, data_y,
+             data_x - get_point_x(state, state->selected_point));
+      *get_env_val(state, state->selected_point) = fmax(0., fmin(1., data_y));
+      if (state->selected_point > 0 &&
+          state->selected_point < (state->num_points - 1)) {
+        // Get pointers to the time intervals before and after this point
+        double *prev_dt = state->data + (1 + (state->selected_point - 1) * 3);
+        double *next_dt = state->data + (1 + state->selected_point * 3);
+
+        // Get current X position of the point
+        double current_x = get_point_x(state, state->selected_point);
+
+        // Calculate delta movement in X
+        double delta_x = data_x - current_x;
+
+        // Calculate new time intervals
+        double new_prev_dt = *prev_dt + delta_x;
+        double new_next_dt = *next_dt - delta_x;
+
+        // Define minimum time interval (to prevent points from collapsing)
+        const double MIN_TIME_INTERVAL = 0.0;
+
+        // Check if new intervals are valid (greater than minimum)
+        if (new_prev_dt >= MIN_TIME_INTERVAL &&
+            new_next_dt >= MIN_TIME_INTERVAL) {
+          // Update time intervals
+          *prev_dt = new_prev_dt;
+          *next_dt = new_next_dt;
+        } else {
+          // If one interval would become too small, adjust delta_x to prevent
+          // it
+          if (new_prev_dt < MIN_TIME_INTERVAL) {
+            // Limit delta_x so that prev_dt becomes MIN_TIME_INTERVAL
+            delta_x = MIN_TIME_INTERVAL - *prev_dt;
+
+            // Update intervals with adjusted delta
+            *prev_dt = MIN_TIME_INTERVAL;
+            *next_dt = *next_dt - delta_x;
+          } else {
+            // Limit delta_x so that next_dt becomes MIN_TIME_INTERVAL
+            delta_x = *next_dt - MIN_TIME_INTERVAL;
+
+            // Update intervals with adjusted delta
+            *prev_dt = *prev_dt + delta_x;
+            *next_dt = MIN_TIME_INTERVAL;
+          }
+        }
+
+        printf("Time intervals updated: prev=%.3f, next=%.3f\n", *prev_dt,
+               *next_dt);
+      }
+
+      print_env(state);
+
+      return 1; // Event handled
+    }
+    break;
+  }
+
+  case SDL_KEYDOWN:
+    // Adjust the curve shape with arrow keys when a point is selected
+    if (state->selected_point > 0 &&
+        state->selected_point < state->num_points) {
+      int curve_index = 3 * (state->selected_point - 1) + 2;
+
+      if (event->key.keysym.sym == SDLK_UP) {
+        state->data[curve_index] += 0.1;
+        return 1;
+      } else if (event->key.keysym.sym == SDLK_DOWN) {
+        state->data[curve_index] -= 0.1;
+        return 1;
+      } else if (event->key.keysym.sym == SDLK_0) {
+        state->data[curve_index] = 0.0; // Reset to linear
+        return 1;
+      }
+    }
+    break;
+  }
+
+  return 0; // Event not handled
+}
+
+#define SET_RED SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+#define SET_GREY SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255)
+static SDL_Renderer *draw_points(env_edit_state *state,
+                                 SDL_Renderer *renderer) {
+
+  int width, height;
+  SDL_GetRendererOutputSize(renderer, &width, &height);
+
+  int i;
+  double t;
+  double x;
+  const int radius = 6;
+  for (i = 0; i < state->num_points - 1; i++) {
+    double val = *get_env_val(state, i);
+    x = t;
+    SDL_Point p = data_to_screen(state, x, val, width, height);
+    state->selected_point == i ? SET_RED : SET_GREY;
+
+    SDL_RenderFillRect(
+        renderer,
+        &(SDL_Rect){p.x - (radius / 2), p.y - (radius / 2), radius, radius});
+
+    t += *get_tdelta(state, i + 1);
+  }
+
+  double val = *get_env_val(state, i);
+  x = t;
+  SDL_Point p = data_to_screen(state, x, val, width, height);
+
+  state->selected_point == i ? SET_RED : SET_GREY;
+
+  SDL_RenderFillRect(renderer, &(SDL_Rect){p.x - (radius / 2),
+                                           p.y - (radius / 2), radius, radius});
+
+  SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+  return renderer;
+}
+
+static SDL_Renderer *draw_curves(env_edit_state *state,
+                                 SDL_Renderer *renderer) {
+  int width, height;
+  SDL_GetRendererOutputSize(renderer, &width, &height);
+
+  int num_points = state->num_points;
+
+  double prev_x = 0.0;
+  double prev_y = state->data[0];
+  SDL_Point prev_point = data_to_screen(state, prev_x, prev_y, width, height);
+
+  for (int i = 1; i < state->num_points; i++) {
+    double x = get_point_x(state, i);
+    double y = *get_env_val(state, i);
+    SDL_Point point = data_to_screen(state, x, y, width, height);
+    SDL_RenderDrawLine(renderer, prev_point.x, prev_point.y, point.x, point.y);
+
+    prev_point = point;
+  }
+
+  return renderer;
+}
+
+static SDL_Renderer *env_edit_renderer(plot_state *plot,
+                                       SDL_Renderer *renderer) {
+  env_edit_state *state = (env_edit_state *)plot;
+
+  int width, height;
+  SDL_GetRendererOutputSize(renderer, &width, &height);
+  const int plot_width = width - margin_left - margin_right;
+  const int plot_height = height - margin_top - margin_bottom;
+
+  SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255);
+  SDL_RenderClear(renderer);
+
+  SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+  SDL_Rect margin_rect = {0, 0, width, height};
+  SDL_RenderFillRect(renderer, &margin_rect);
+
+  SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255);
+  SDL_Rect plot_rect = {margin_left, margin_top, plot_width, plot_height};
+  SDL_RenderFillRect(renderer, &plot_rect);
+
+  draw_points(state, renderer);
+  draw_curves(state, renderer);
+
+  return renderer;
+}
+
+int create_envelope_edit_view(int size, double *data) {
+  env_edit_state *state = malloc(sizeof(env_edit_state));
+
+  if (!state) {
+    fprintf(stderr, "Failed to allocate env edit state\n");
+    return -1;
+  }
+
+  state->size = size;
+  state->data = data;
+  state->selected_point = -1;
+  state->dragging = false;
+  state->num_points = (size + 2) / 3;
+
+  // Find the data bounds for initial view
+  state->view_min_y = 0.0;
+  state->view_max_y = 1.0;
+
+  // For x-axis, use the total duration of the envelope
+  state->view_min_x = 0.0;
+  state->view_max_x =
+      get_point_x(state, state->num_points - 1) * 1.05; // Add 5% margin
+
+  // If the view is empty or invalid, set default view
+  if (state->view_max_x <= state->view_min_x) {
+    state->view_min_x = 0.0;
+    state->view_max_x = 1.0;
+  }
+
+  if (state->view_max_y <= state->view_min_y) {
+    state->view_min_y = 0.0;
+    state->view_max_y = 1.0;
+  }
+
+  // Calculate scaling factors
+  state->scale_x = 1.0 / (state->view_max_x - state->view_min_x);
+  state->scale_y = 1.0 / (state->view_max_y - state->view_min_y);
+
+  print_env(state);
+  return create_window(state, env_edit_renderer, env_edit_event_handler);
 }

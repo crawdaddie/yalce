@@ -20,7 +20,10 @@ NodeRef bufplayer_trig_node(NodeRef buf, NodeRef rate, NodeRef start_pos,
 NodeRef white_noise_node();
 
 NodeRef brown_noise_node();
-NodeRef chirp_node(double start_freq, double end_freq, NodeRef lag_time,
+NodeRef static_chirp_node(double start_freq, double end_freq, NodeRef lag_time,
+                          NodeRef trig);
+
+NodeRef chirp_node(NodeRef start_freq, NodeRef end_freq, NodeRef lag_time,
                    NodeRef trig);
 NodeRef impulse_node(NodeRef freq);
 NodeRef ramp_node(NodeRef freq);
