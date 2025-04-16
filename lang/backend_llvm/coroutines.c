@@ -30,11 +30,12 @@ LLVMTypeRef cor_inst_struct_type() {
   //   struct cor *next;
   //   void *argv;
   // } cor;
-  LLVMTypeRef types[4] = {
+  LLVMTypeRef types[] = {
       LLVMInt32Type(), // counter @ 0
       GENERIC_PTR,     // fn ptr @ 1
       GENERIC_PTR,     // next ptr
       GENERIC_PTR,     // void *argv - state
+                       // GENERIC_PTR,     // meta ptr
   };
   LLVMTypeRef instance_struct_type = LLVMStructType(types, 4, 0);
   return instance_struct_type;

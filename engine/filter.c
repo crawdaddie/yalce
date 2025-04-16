@@ -1358,7 +1358,7 @@ void *math_perform(Node *node, math_node_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-NodeRef math_node(void *math_fn, NodeRef input) {
+NodeRef math_node(MathNodeFn math_fn, NodeRef input) {
 
   AudioGraph *graph = _graph;
 

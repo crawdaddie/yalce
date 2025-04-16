@@ -94,6 +94,7 @@ cor *cor_loop(cor *instance) {
       .counter = 0,
       .fn_ptr = (CoroutineFn)loop_cor_fn,
       .next = NULL,
+      .meta = instance->meta,
       .argv = state // Store our loop state
   };
 
@@ -131,6 +132,7 @@ cor *cor_wrap_effect(cor *this, EffectWrapper effect_fn) {
   cor wrapped = (cor){.counter = 0,
                       .fn_ptr = (CoroutineFn)effect_wrap,
                       .next = NULL,
+                      .meta = this->meta,
                       .argv = st_ptr};
 
   // TODO: do I really want to mutate rather than return new copy

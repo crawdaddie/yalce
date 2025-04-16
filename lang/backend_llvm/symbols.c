@@ -356,8 +356,6 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     JITSymbol *module_symbol =
         codegen_import(expr, binding, outer_ctx, module, builder);
 
-    printf("import module - returning int\n");
-
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
 

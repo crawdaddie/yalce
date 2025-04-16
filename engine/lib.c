@@ -506,7 +506,12 @@ NodeRef set_input_buf(int input, NodeRef buf, NodeRef node) {
 NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node) {
 
   if ((char *)node->perform == (char *)perform_audio_graph) {
+
     AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+    if (node->state_ptr) {
+      g = node->state_ptr;
+    }
+
     Node *inlet_node = g->nodes + g->inlets[input];
     Signal inlet_data = inlet_node->output;
     inlet_node->output.layout = buf->output.layout;
@@ -577,17 +582,18 @@ NodeRef render_to_buf(int frames, NodeRef node) {
   return out;
 }
 
-NodeRef array_to_buf(int layout, int size, double *data) {
+NodeRef __array_to_buf(int layout, int size, double *data) {
 
-  Node *out = malloc(sizeof(Node) + (sizeof(double) * size * layout));
+  Node *out = malloc(sizeof(Node));
   out->output.layout = layout;
   out->output.size = size;
-  out->output.buf = (double *)((Node *)out + 1);
-  double *buf = out->output.buf;
-  double *b = buf;
-  int rendered_frames = 0;
+  out->output.buf = data;
+  out->write_to_output = false;
+
   return out;
 }
+
+NodeRef array_to_buf(struct arr a) { return __array_to_buf(1, a.size, a.data); }
 
 void node_replace(NodeRef a, NodeRef b) {
   if (!((strcmp(a->meta, "ensemble") == 0) &&

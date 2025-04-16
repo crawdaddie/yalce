@@ -11,6 +11,7 @@ type SynthInput =
 
 let instantiate_template = extern fn List of (Int, Double) -> Ptr -> Synth;
 
+let array_to_buf = extern fn Array of Double -> Synth;
 
 # let play_node = extern fn Synth -> Synth;
 # let play_node_offset = extern fn Int -> Synth -> Synth;
@@ -22,3 +23,4 @@ let init_audio = extern fn () -> () in
 
 let play_tpl = fn f ->
   f |> compile_blob_template |> instantiate_template [] |> play_node;
+

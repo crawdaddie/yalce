@@ -17,7 +17,7 @@ void schedule_event(SchedulerCallback callback, void *userdata,
 // void schedule_event_quant(SchedulerCallback callback, double quantization,
 //                           void *userdata);
 
-int get_tl_frame_offset(void);
+int get_tl_frame_offset();
 
 int get_frame_offset();
 

@@ -142,8 +142,8 @@ ScheduledEvent pop_event(EventHeap *heap) {
 }
 
 EventHeap *queue;
-// static __thread int tl_offset;
 static __thread int tl_offset;
+static __thread uint64_t tl_timestamp;
 
 int get_tl_frame_offset(void) { return tl_offset; }
 
@@ -169,10 +169,10 @@ void *timer(void *arg) {
     now = get_time_ns();
 
     if (now >= nextTick) {
+      tl_offset = get_frame_offset();
       while (queue->size && queue->events[0].timestamp <= now) {
         ScheduledEvent ev = pop_event(queue);
         double now_d = ((double)(now - start) / S_TO_NS);
-        tl_offset = get_frame_offset();
 
         // printf("popped event from queue: cb: %p userdata: %p %d\n",
         // ev.callback,

@@ -95,7 +95,8 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_fn_type =
       LLVMFunctionType(ret_type, llvm_param_types, params_count, 0);
 
-  return get_extern_fn(name, llvm_fn_type, module);
+  LLVMValueRef val = get_extern_fn(name, llvm_fn_type, module);
+  return val;
 }
 
 void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,

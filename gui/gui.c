@@ -1083,15 +1083,17 @@ const int margin_bottom = ENV_MARGIN;
 
 void print_env(env_edit_state *state) {
   int i;
-  double t;
 
-  printf("\n-----\nEnv:\n");
+  printf("\n#-----\n#Env:\n");
+  printf("[|\n");
   for (i = 0; i < state->num_points - 1; i++) {
-    printf("%d: %f @ %f\n", i, state->data[i * 3], t);
-    t += state->data[(i * 3) + 1];
+    printf("  %f, %f, %f,\n", state->data[i * 3], state->data[i * 3 + 1],
+           state->data[i * 3 + 2]);
   }
 
-  printf("%d: %f @ %f\n", i, state->data[i * 3], t);
+  printf("  %f\n", state->data[i * 3]);
+
+  printf("|];\n");
 }
 
 static SDL_Point data_to_screen(env_edit_state *state, double x, double y,
@@ -1323,7 +1325,7 @@ static int env_edit_event_handler(void *userdata, SDL_Event *event) {
   }
   case SDL_MOUSEWHEEL: {
     if (state->selected_point > 0) {
-      printf("mouse wheel %d %d\n",state->selected_point, event->wheel.y);
+      // printf("mouse wheel %d %d\n",state->selected_point, event->wheel.y);
       double *curve_ptr = env_curve_ptr(state, state->selected_point - 1);
       if (event->wheel.y > 0) {
         *curve_ptr -= 0.1;
@@ -1375,28 +1377,6 @@ static SDL_Renderer *draw_points(env_edit_state *state,
   return renderer;
 }
 
-static SDL_Renderer *__draw_curves(env_edit_state *state,
-                                 SDL_Renderer *renderer) {
-  int width, height;
-  SDL_GetRendererOutputSize(renderer, &width, &height);
-
-  int num_points = state->num_points;
-
-  double prev_x = 0.0;
-  double prev_y = state->data[0];
-  SDL_Point prev_point = data_to_screen(state, prev_x, prev_y, width, height);
-
-  for (int i = 1; i < state->num_points; i++) {
-    double x = get_point_x(state, i);
-    double y = *env_val_ptr(state, i);
-    SDL_Point point = data_to_screen(state, x, y, width, height);
-    SDL_RenderDrawLine(renderer, prev_point.x, prev_point.y, point.x, point.y);
-
-    prev_point = point;
-  }
-
-  return renderer;
-}
 // Helper function to interpolate between two points based on curve parameter
 static double interpolate_value(double t, double y1, double y2, double curve) {
   // Linear interpolation if curve is close to zero
@@ -1417,7 +1397,7 @@ static SDL_Renderer *draw_curves(env_edit_state *state,
   SDL_GetRendererOutputSize(renderer, &width, &height);
 
   int num_points = state->num_points;
-  
+
   // Set line color
   SDL_SetRenderDrawColor(renderer, 255, 200, 50, 255); // Yellow-orange
 
@@ -1428,14 +1408,14 @@ static SDL_Renderer *draw_curves(env_edit_state *state,
     // Get start point
     double x1 = get_point_x(state, i);
     double y1 = *env_val_ptr(state, i);
-    
+
     // Get end point
     double x2 = get_point_x(state, i + 1);
     double y2 = *env_val_ptr(state, i + 1);
-    
+
     // Get curve parameter
     double curve = *env_curve_ptr(state, i);
-    
+
     // Draw a straight line if curve is near zero, otherwise draw a curved line
     if (fabs(curve) < 0.001) {
       // Straight line - just draw from point to point
@@ -1445,44 +1425,45 @@ static SDL_Renderer *draw_curves(env_edit_state *state,
     } else {
       // Curved line - sample points along the curve
       SDL_Point prev_point = data_to_screen(state, x1, y1, width, height);
-      
+
       for (int j = 1; j <= CURVE_SEGMENTS; j++) {
         // Calculate parameter t in [0,1]
         double t = (double)j / CURVE_SEGMENTS;
-        
+
         // Calculate x position (linear interpolation)
         double x = x1 + t * (x2 - x1);
-        
+
         // Calculate y position (using curve parameter)
         double y = interpolate_value(t, y1, y2, curve);
-        
+
         // Convert to screen coordinates
         SDL_Point point = data_to_screen(state, x, y, width, height);
-        
+
         // Draw line segment
-        SDL_RenderDrawLine(renderer, prev_point.x, prev_point.y, point.x, point.y);
-        
+        SDL_RenderDrawLine(renderer, prev_point.x, prev_point.y, point.x,
+                           point.y);
+
         // Update previous point
         prev_point = point;
       }
     }
-    
+
     // Optionally, indicate the curve type with a small marker
     // double mid_x = (x1 + x2) / 2.0;
     // double mid_y;
-    
+
     // Calculate the actual mid-point y value based on the curve
     // mid_y = interpolate_value(0.5, y1, y2, curve);
-    
+
     // SDL_Point mid_point = data_to_screen(state, mid_x, mid_y, width, height);
-    
+
     // SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255); // Linear - gray
-    
+
     // // Draw a small square to indicate curve type
     // const int size = 3;
-    // SDL_Rect rect = {mid_point.x - size, mid_point.y - size, size * 2, size * 2};
-    // SDL_RenderFillRect(renderer, &rect);
-    // 
+    // SDL_Rect rect = {mid_point.x - size, mid_point.y - size, size * 2, size *
+    // 2}; SDL_RenderFillRect(renderer, &rect);
+    //
     // // Reset line color for next segment
     // SDL_SetRenderDrawColor(renderer, 255, 200, 50, 255);
   }

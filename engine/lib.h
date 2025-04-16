@@ -14,6 +14,11 @@ typedef struct {
 
 Node *instantiate_template(InValList *input_vals, AudioGraph *g);
 
+struct arr {
+  int size;
+  void *data
+};
+NodeRef array_to_buf(struct arr a);
 double midi_to_freq(int midi_note);
 extern AudioGraph *_graph;
 #endif

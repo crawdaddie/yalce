@@ -35,5 +35,4 @@ void node_replace(NodeRef a, NodeRef b);
 
 NodeRef null_synth_node();
 
-NodeRef array_to_buf(int layout, int size, double *data);
 #endif

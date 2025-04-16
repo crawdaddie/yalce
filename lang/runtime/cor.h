@@ -6,6 +6,7 @@ typedef struct cor {
   CoroutineFn fn_ptr;
   struct cor *next;
   void *argv;
+  void *meta;
 } cor;
 
 #define MAPSIZE

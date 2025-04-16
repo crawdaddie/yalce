@@ -24,4 +24,7 @@ NodeRef reverb_node(double room_size, double wet, double dry, double width,
 NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input);
 
 NodeRef dyn_tanh_node(NodeRef gain, NodeRef input);
+
+typedef double (*MathNodeFn)(double);
+NodeRef math_node(MathNodeFn math_fn, NodeRef input);
 #endif

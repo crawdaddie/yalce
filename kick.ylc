@@ -1,29 +1,66 @@
 open engine/bindings/Synth;
 open engine/bindings/Sched;
 
+
 let snare_syn = (fn () -> 
   let trig = inlet 0.;
-  let sin = (chirp_node 1. 0.01 0.2 trig) * ((sin_node 220.) + (sin_node 357.));
+  let sin = (perc_env_node 2. trig) * ((sin_node 220.) + (sin_node 357.));
   let sig = (sin + white_noise_node ()) |> tanh_node 5.;
   sig * (aslr_node 0. 1. 0.1 0.1 trig)
   ;) |> compile_blob_template |> instantiate_template [] |> play_node_offset 0
 ;
 
+let hh_syn = (fn () -> 
+  let trig = inlet 0.;
+  let sig = (white_noise_node ()) |> biquad_hp_node 2000. 10.;
+  # let chirp = sin_node (200. + 8000. * perc_env_node 0.5 trig);
+  (sig) * (perc_env_node 0.5 trig)
+  # |> comb_node 0.07 0.1 0.2
+  ;) |> compile_blob_template |> instantiate_template [] |> play_node_offset 0
+;
+
+
+#Env:
+let kick_penv = 
+[|
+  0.000000, 0.000000, 2.400000,
+  1., 0.185902, -2.300000,
+  0.011111, 2.814099, 1.300000,
+  0.000000
+|]
+|> array_to_buf;
+
+
+let kick_ampenv = 
+[|
+  0.000000, 0.000000, 2.400000,
+  1.000000, 2.210165, -2.000000,
+  1.000000, 0.789836, 1.300000,
+  0.000000
+|]
+|> array_to_buf;
+
+
 let kick_syn = (fn () -> 
   let trig = inlet 0.;
-  let ff = chirp_node 1000. (inlet 55.) 0.03 trig; 
 
-  let sig = white_noise_node ()
-    |> mul2_node (aslr_node 0. 0.2 0.001 0.05 trig) in
+  let ff = 55. + 200. *(buf_env_node 1. (buf_ref kick_penv) trig); 
 
-  let sig = sig + (aslr_node 0.0001 1. 0.1 1. trig) * (sin_node ff) in
+  let sig = (perc_env_node 0.2 trig) * white_noise_node ();
 
-  sig + (dyn_tanh_node (chirp_node 10. 0.4 0.2 trig) sig) 
+  let sig = sig + (sin_node ff);
+
+  let full = (sig + (dyn_tanh_node (5 * buf_env_node 0.03 (buf_ref kick_ampenv) trig) sig));
+    
+
+  # full + ( full |> biquad_hp_node 400. 1. |> reverb_node 0.2 1. 0. 1.)
+  full |> mul2_node (buf_env_node 0.12 (buf_ref kick_ampenv) trig)
+
   ;) |> compile_blob_template |> instantiate_template [] |> play_node_offset 0
 ;
 
 let trig_kick = fn k ->
-  let fo = get_frame_offset () in
+  let fo = get_tl_frame_offset () in
   set_input_trig_offset k 0 fo
 ;;
 
@@ -31,24 +68,27 @@ let trig_kick = fn k ->
 
 
 let trig_snare = fn k ->
-  let fo = get_frame_offset () in
+  let fo = get_tl_frame_offset () in
+  set_input_trig_offset k 0 fo
+;;
+
+let trig_hh = fn k ->
+  let fo = get_tl_frame_offset () in
   set_input_trig_offset k 0 fo
 ;;
 
 
 
 
-let routine = fn scale ->
+let kroutine = fn scale ->
 
   trig_kick kick_syn;
   yield (scale *1.75);
   trig_kick kick_syn;
   yield (scale * 0.75);
   trig_kick kick_syn;
-  yield (scale * 0.75);
-  trig_kick kick_syn;
-  yield (scale * 0.75);
-  yield (routine scale)
+  yield (scale * 1.5);
+  yield (kroutine scale)
 ;;
 
 
@@ -61,9 +101,38 @@ let snare_routine = fn scale->
   yield (snare_routine scale)
 ;;
 
-defer_quant 0.5 (fn fo ->
-  play_routine schedule_event (routine 0.5);
-  play_routine schedule_event (snare_routine 0.5);
+let hh_routine = fn scale->
+
+  trig_hh hh_syn;
+  yield (scale *1.75);
+  trig_hh hh_syn;
+  yield (scale * 0.75);
+  trig_hh hh_syn;
+  yield (scale * 1.5);
+  yield (hh_routine scale)
+;;
+
+
+let q = 60. / 130.;
+defer_quant q (fn fo ->
+  play_routine schedule_event (kroutine q);
+  # play_routine schedule_event (snare_routine q);
+  play_routine schedule_event (hh_routine q);
 );
 
 
+(
+  import gui/bindings/Gui;
+
+  Gui.create_envelope_edit_view
+    (sig_size (node_out kick_penv))
+    (sig_raw (node_out kick_penv));
+
+  Gui.create_envelope_edit_view
+    (sig_size (node_out kick_ampenv))
+    (sig_raw (node_out kick_ampenv));
+
+  Gui.create_scope (ctx_main_out ()) 2 512
+
+);
+ 
