@@ -24,9 +24,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module);
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       Type *type_to, LLVMModuleRef module,
                                       LLVMBuilderRef builder);
-void initialize_ptr_constructor();
-
-void initialize_double_constructor();
 
 // Define the function pointer type
 LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,

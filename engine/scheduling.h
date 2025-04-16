@@ -12,6 +12,7 @@ typedef void (*CoroutineSchedulerCallback)(void);
 int scheduler_event_loop();
 
 void schedule_event(SchedulerCallback callback, void *userdata,
+                    // uint64_t now,
                     double delay_seconds);
 
 // void schedule_event_quant(SchedulerCallback callback, double quantization,

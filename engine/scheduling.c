@@ -218,6 +218,7 @@ int scheduler_event_loop() {
 }
 
 void schedule_event(void (*callback)(void *, int), void *userdata,
+                    // uint64_t now,
                     double delay_seconds) {
 
   // printf("sched event coroutine: %p callback: %p time: %f\n", userdata,

@@ -616,6 +616,11 @@ LLVMValueRef AddrOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return val;
 }
+LLVMValueRef uint64_constructor_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  LLVMValueRef in = codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  return uint64_constructor(in, ast->data.AST_APPLICATION.args->md, module, builder);
+}
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
   ht *stack = (ctx->frame->table);
@@ -663,6 +668,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                           type_to_llvm_type(&t_builtin_cstr, ctx->env, module),
                           module));
 
+
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at_fn_sig, ArrayAtHandler);
 
   GENERIC_FN_SYMBOL("array_set", &t_array_set_fn_sig, ArraySetHandler);
@@ -695,6 +701,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                     ArrayFillConstHandler);
   GENERIC_FN_SYMBOL("array_succ", &t_array_succ_sig, ArraySuccHandler);
   GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);
+  GENERIC_FN_SYMBOL(TYPE_NAME_UINT64, next_tvar(), uint64_constructor_handler);
 
   GENERIC_FN_SYMBOL("struct_set", &t_struct_set_sig, StructSetHandler);
   GENERIC_FN_SYMBOL("addrof", NULL, AddrOfHandler);
