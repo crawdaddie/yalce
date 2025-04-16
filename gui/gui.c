@@ -1132,15 +1132,16 @@ static void screen_to_data(env_edit_state *state, int screen_x, int screen_y,
             normalized_y * (state->view_max_y - state->view_min_y);
 }
 
-double *get_env_val(env_edit_state *state, int point_idx) {
+double *env_val_ptr(env_edit_state *state, int point_idx) {
   return state->data + (point_idx * 3);
 }
 
-double *get_tdelta(env_edit_state *state, int point_idx) {
-  if (point_idx == 0) {
-    return NULL;
-  }
-  return state->data + (point_idx - 1) * 3 + 1;
+double *env_time_ptr(env_edit_state *state, int point_idx) {
+  return state->data + (point_idx * 3) + 1;
+}
+
+double *env_curve_ptr(env_edit_state *state, int point_idx) {
+  return state->data + (point_idx * 3) + 2;
 }
 
 static int find_closest_point(env_edit_state *state, int mouse_x, int mouse_y,
@@ -1160,13 +1161,13 @@ static int find_closest_point(env_edit_state *state, int mouse_x, int mouse_y,
       point_x = 0.0;
       point_y = state->data[0];
     } else if (i == (num_points - 1)) {
-      point_x = t + *get_tdelta(state, i);
-      point_y = *get_env_val(state, i);
+      point_x = t + *env_time_ptr(state, i - 1);
+      point_y = *env_val_ptr(state, i);
       t = point_x;
     } else {
       // For subsequent points, calculate x by summing all time intervals
-      point_x = t + *get_tdelta(state, i);
-      point_y = *get_env_val(state, i);
+      point_x = t + *env_time_ptr(state, i - 1);
+      point_y = *env_val_ptr(state, i);
       t = point_x;
     }
 
@@ -1203,7 +1204,7 @@ static double get_point_x(env_edit_state *state, int point_index) {
   // Sum up all the time intervals before this point
   for (int i = 0; i < point_index; i++) {
     // Time value is at index 3*i + 1 (except for the last point)
-    x += *get_tdelta(state, i + 1);
+    x += *env_time_ptr(state, i);
   }
 
   return x;
@@ -1256,47 +1257,35 @@ static int env_edit_event_handler(void *userdata, SDL_Event *event) {
 
       printf("dragging to (%f,%f) -> (%f,%f) (dx: %f)\n", x, y, data_x, data_y,
              data_x - get_point_x(state, state->selected_point));
-      *get_env_val(state, state->selected_point) = fmax(0., fmin(1., data_y));
+      *env_val_ptr(state, state->selected_point) = fmax(0., fmin(1., data_y));
       if (state->selected_point > 0 &&
           state->selected_point < (state->num_points - 1)) {
-        // Get pointers to the time intervals before and after this point
-        double *prev_dt = state->data + (1 + (state->selected_point - 1) * 3);
-        double *next_dt = state->data + (1 + state->selected_point * 3);
+        double *prev_dt = env_time_ptr(state, state->selected_point - 1);
+        double *next_dt = env_time_ptr(state, state->selected_point);
 
-        // Get current X position of the point
         double current_x = get_point_x(state, state->selected_point);
 
-        // Calculate delta movement in X
         double delta_x = data_x - current_x;
 
-        // Calculate new time intervals
         double new_prev_dt = *prev_dt + delta_x;
         double new_next_dt = *next_dt - delta_x;
 
-        // Define minimum time interval (to prevent points from collapsing)
         const double MIN_TIME_INTERVAL = 0.0;
 
-        // Check if new intervals are valid (greater than minimum)
         if (new_prev_dt >= MIN_TIME_INTERVAL &&
             new_next_dt >= MIN_TIME_INTERVAL) {
-          // Update time intervals
           *prev_dt = new_prev_dt;
           *next_dt = new_next_dt;
         } else {
-          // If one interval would become too small, adjust delta_x to prevent
-          // it
           if (new_prev_dt < MIN_TIME_INTERVAL) {
-            // Limit delta_x so that prev_dt becomes MIN_TIME_INTERVAL
             delta_x = MIN_TIME_INTERVAL - *prev_dt;
 
             // Update intervals with adjusted delta
             *prev_dt = MIN_TIME_INTERVAL;
             *next_dt = *next_dt - delta_x;
           } else {
-            // Limit delta_x so that next_dt becomes MIN_TIME_INTERVAL
             delta_x = *next_dt - MIN_TIME_INTERVAL;
 
-            // Update intervals with adjusted delta
             *prev_dt = *prev_dt + delta_x;
             *next_dt = MIN_TIME_INTERVAL;
           }
@@ -1313,7 +1302,7 @@ static int env_edit_event_handler(void *userdata, SDL_Event *event) {
     break;
   }
 
-  case SDL_KEYDOWN:
+  case SDL_KEYDOWN: {
     // Adjust the curve shape with arrow keys when a point is selected
     if (state->selected_point > 0 &&
         state->selected_point < state->num_points) {
@@ -1332,6 +1321,18 @@ static int env_edit_event_handler(void *userdata, SDL_Event *event) {
     }
     break;
   }
+  case SDL_MOUSEWHEEL: {
+    if (state->selected_point > 0) {
+      printf("mouse wheel %d %d\n",state->selected_point, event->wheel.y);
+      double *curve_ptr = env_curve_ptr(state, state->selected_point - 1);
+      if (event->wheel.y > 0) {
+        *curve_ptr -= 0.1;
+      } else {
+        *curve_ptr += 0.1;
+      }
+    }
+  } break;
+  }
 
   return 0; // Event not handled
 }
@@ -1349,7 +1350,7 @@ static SDL_Renderer *draw_points(env_edit_state *state,
   double x;
   const int radius = 6;
   for (i = 0; i < state->num_points - 1; i++) {
-    double val = *get_env_val(state, i);
+    double val = *env_val_ptr(state, i);
     x = t;
     SDL_Point p = data_to_screen(state, x, val, width, height);
     state->selected_point == i ? SET_RED : SET_GREY;
@@ -1358,10 +1359,10 @@ static SDL_Renderer *draw_points(env_edit_state *state,
         renderer,
         &(SDL_Rect){p.x - (radius / 2), p.y - (radius / 2), radius, radius});
 
-    t += *get_tdelta(state, i + 1);
+    t += *env_time_ptr(state, i);
   }
 
-  double val = *get_env_val(state, i);
+  double val = *env_val_ptr(state, i);
   x = t;
   SDL_Point p = data_to_screen(state, x, val, width, height);
 
@@ -1374,7 +1375,7 @@ static SDL_Renderer *draw_points(env_edit_state *state,
   return renderer;
 }
 
-static SDL_Renderer *draw_curves(env_edit_state *state,
+static SDL_Renderer *__draw_curves(env_edit_state *state,
                                  SDL_Renderer *renderer) {
   int width, height;
   SDL_GetRendererOutputSize(renderer, &width, &height);
@@ -1387,11 +1388,103 @@ static SDL_Renderer *draw_curves(env_edit_state *state,
 
   for (int i = 1; i < state->num_points; i++) {
     double x = get_point_x(state, i);
-    double y = *get_env_val(state, i);
+    double y = *env_val_ptr(state, i);
     SDL_Point point = data_to_screen(state, x, y, width, height);
     SDL_RenderDrawLine(renderer, prev_point.x, prev_point.y, point.x, point.y);
 
     prev_point = point;
+  }
+
+  return renderer;
+}
+// Helper function to interpolate between two points based on curve parameter
+static double interpolate_value(double t, double y1, double y2, double curve) {
+  // Linear interpolation if curve is close to zero
+  if (fabs(curve) < 0.001) {
+    return y1 + t * (y2 - y1);
+  } else {
+    // Exponential curve
+    double sign = curve > 0 ? 1.0 : -1.0;
+    double k = exp(sign * fabs(curve) * 3.0); // Scale the curve effect
+    double curve_t = (exp(sign * fabs(curve) * 3.0 * t) - 1) / (k - 1);
+    return y1 + curve_t * (y2 - y1);
+  }
+}
+
+static SDL_Renderer *draw_curves(env_edit_state *state,
+                                 SDL_Renderer *renderer) {
+  int width, height;
+  SDL_GetRendererOutputSize(renderer, &width, &height);
+
+  int num_points = state->num_points;
+  
+  // Set line color
+  SDL_SetRenderDrawColor(renderer, 255, 200, 50, 255); // Yellow-orange
+
+  // Number of segments to sample for each curve
+  const int CURVE_SEGMENTS = 30;
+
+  for (int i = 0; i < state->num_points - 1; i++) {
+    // Get start point
+    double x1 = get_point_x(state, i);
+    double y1 = *env_val_ptr(state, i);
+    
+    // Get end point
+    double x2 = get_point_x(state, i + 1);
+    double y2 = *env_val_ptr(state, i + 1);
+    
+    // Get curve parameter
+    double curve = *env_curve_ptr(state, i);
+    
+    // Draw a straight line if curve is near zero, otherwise draw a curved line
+    if (fabs(curve) < 0.001) {
+      // Straight line - just draw from point to point
+      SDL_Point p1 = data_to_screen(state, x1, y1, width, height);
+      SDL_Point p2 = data_to_screen(state, x2, y2, width, height);
+      SDL_RenderDrawLine(renderer, p1.x, p1.y, p2.x, p2.y);
+    } else {
+      // Curved line - sample points along the curve
+      SDL_Point prev_point = data_to_screen(state, x1, y1, width, height);
+      
+      for (int j = 1; j <= CURVE_SEGMENTS; j++) {
+        // Calculate parameter t in [0,1]
+        double t = (double)j / CURVE_SEGMENTS;
+        
+        // Calculate x position (linear interpolation)
+        double x = x1 + t * (x2 - x1);
+        
+        // Calculate y position (using curve parameter)
+        double y = interpolate_value(t, y1, y2, curve);
+        
+        // Convert to screen coordinates
+        SDL_Point point = data_to_screen(state, x, y, width, height);
+        
+        // Draw line segment
+        SDL_RenderDrawLine(renderer, prev_point.x, prev_point.y, point.x, point.y);
+        
+        // Update previous point
+        prev_point = point;
+      }
+    }
+    
+    // Optionally, indicate the curve type with a small marker
+    // double mid_x = (x1 + x2) / 2.0;
+    // double mid_y;
+    
+    // Calculate the actual mid-point y value based on the curve
+    // mid_y = interpolate_value(0.5, y1, y2, curve);
+    
+    // SDL_Point mid_point = data_to_screen(state, mid_x, mid_y, width, height);
+    
+    // SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255); // Linear - gray
+    
+    // // Draw a small square to indicate curve type
+    // const int size = 3;
+    // SDL_Rect rect = {mid_point.x - size, mid_point.y - size, size * 2, size * 2};
+    // SDL_RenderFillRect(renderer, &rect);
+    // 
+    // // Reset line color for next segment
+    // SDL_SetRenderDrawColor(renderer, 255, 200, 50, 255);
   }
 
   return renderer;
