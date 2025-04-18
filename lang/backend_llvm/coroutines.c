@@ -35,7 +35,6 @@ LLVMTypeRef cor_inst_struct_type() {
       GENERIC_PTR,     // fn ptr @ 1
       GENERIC_PTR,     // next ptr
       GENERIC_PTR,     // void *argv - state
-                       // GENERIC_PTR,     // meta ptr
   };
   LLVMTypeRef instance_struct_type = LLVMStructType(types, 4, 0);
   return instance_struct_type;
@@ -1460,8 +1459,7 @@ LLVMValueRef _build_wrapper_for_scheduled_routine(
 
   LLVMValueRef generator_ptr = LLVMGetParam(func, 0);
 
-  LLVMValueRef frame_offset = LLVMGetParam(func, 1);
-  LLVMValueRef timestamp = LLVMGetParam(func, 2);
+  LLVMValueRef timestamp = LLVMGetParam(func, 1);
   LLVMTypeRef val_type = type_to_llvm_type(&t_num, ctx->env, module);
   LLVMValueRef val_ptr = LLVMBuildAlloca(builder, val_type, "val_struct_alloc");
 
@@ -1473,10 +1471,10 @@ LLVMValueRef _build_wrapper_for_scheduled_routine(
   LLVMValueRef scheduler_call =
       LLVMBuildCall2(builder, scheduler_type, scheduler,
                      (LLVMValueRef[]){
-                         func,
-                         generator_ptr,
                          timestamp,
                          val,
+                         func,
+                         generator_ptr,
                      },
                      4, "schedule_next");
 
@@ -1521,10 +1519,10 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // call schedule_event (args[0]) with wrapper function, dur & 'U
   return LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
                         (LLVMValueRef[]){
-                            wrapper_fn,
-                            generator,
                             ts_val,
                             LLVMConstReal(LLVMDoubleType(), 0.),
+                            wrapper_fn,
+                            generator,
                         },
                         4, "");
 }

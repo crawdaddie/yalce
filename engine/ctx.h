@@ -2,6 +2,7 @@
 #define _ENGINE_CTX_H
 #include "common.h"
 #include "node.h"
+#include <stdint.h>
 
 typedef struct scheduler_msg {
   enum {
@@ -12,7 +13,9 @@ typedef struct scheduler_msg {
     NODE_REMOVE,
     NODE_SET_INPUT,
   } type;
-  int frame_offset;
+  // int frame_offset;
+  uint64_t tick;
+
   union {
     struct NODE_ADD {
       Node *target;
@@ -47,7 +50,6 @@ typedef struct scheduler_msg {
 
 #define MSG_QUEUE_MAX_SIZE 256
 // single reader-single writer lockfree FIFO queue
-//
 // implemented as a ringbuffer of scheduler_msg s
 typedef struct {
   scheduler_msg buffer[MSG_QUEUE_MAX_SIZE];
@@ -56,7 +58,7 @@ typedef struct {
   int num_msgs;
 } msg_queue;
 
-void push_msg(msg_queue *queue, scheduler_msg msg);
+void push_msg(msg_queue *queue, scheduler_msg msg, int buffer_offset);
 
 scheduler_msg pop_msg(msg_queue *queue);
 int get_write_ptr();
@@ -69,6 +71,7 @@ typedef struct {
   int sample_rate;
   double spf;
   msg_queue msg_queue;
+  msg_queue overflow_queue;
 } Ctx;
 
 extern Ctx ctx;
@@ -77,7 +80,8 @@ Ctx *get_audio_ctx();
 
 void init_ctx();
 
-void user_ctx_callback(Ctx *ctx, int nframes, double seconds_per_frame);
+void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int nframes,
+                       double seconds_per_frame);
 
 void write_to_output(double *src, double *dest, int nframes, int output_num);
 
@@ -87,10 +91,12 @@ Node *add_to_dac(Node *node);
 int ctx_sample_rate();
 double ctx_spf();
 
-int process_msg_queue_pre(msg_queue *queue);
+int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue);
 
-void process_msg_queue_post(msg_queue *queue, int consumed);
+void process_msg_queue_post(uint64_t current_tick, msg_queue *queue,
+                            int consumed);
 
 void audio_ctx_add(Node *ensemble);
 
+void move_overflow();
 #endif

@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
@@ -58,13 +60,14 @@ void write_sample_float64ne(char *ptr, double sample) {
   *buf = sample;
 }
 
-int get_frame_offset() {
+uint64_t get_frame_offset() {
   struct timespec t;
   struct timespec btime = get_block_time();
+  uint64_t frame = get_current_sample();
   set_block_time(&t);
   int frame_offset = get_block_frame_offset(btime, t, 48000);
   // printf("frame offset %d\n", frame_offset);
-  return frame_offset;
+  return frame + frame_offset;
 }
 
 // static long block_time;
@@ -140,7 +143,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
     set_block_time(&block_time);
 
-    user_ctx_callback(ctx, frame_count, seconds_per_frame);
+    user_ctx_callback(ctx, buffer_start_sample, frame_count, seconds_per_frame);
 
     int sample_idx;
     double sample;
@@ -305,6 +308,7 @@ int start_audio() {
   }
   printf("Software latency:  %f\n", outstream->software_latency);
   printf("Sample rate:       %d\n", outstream->sample_rate);
+  // printf("queue %p overflow %p\n", &ctx.msg_queue, &ctx.overflow_queue);
   // ctx.sample_rate = ctx.sample_rate;
   // ctx.spf = 1.0 / ctx.sample_rate;
   ctx.sample_rate = outstream->sample_rate;

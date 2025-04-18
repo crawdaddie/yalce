@@ -132,26 +132,35 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
 
   pthread_mutex_unlock(&scheduler_mutex);
 }
-
+static uint64_t cur_tick = 0;
+uint64_t get_tl_tick() {
+  return cur_tick == 0 ? get_current_sample() : cur_tick;
+}
 void process_scheduler_events(uint64_t current_sample) {
 
   SchedulerEvent events[32];
-  int num_evs = 0;
   while (scheduler_queue.size > 0 &&
          scheduler_queue.events[0].tick <= current_sample) {
 
     SchedulerEvent event = pop_event(&scheduler_queue);
-    event.callback(event.userdata, event.tick);
+    if (event.userdata == NULL) {
+
+      void (*cb)(uint64_t) = (void (*)(uint64_t))event.callback;
+      cb(event.tick);
+    } else {
+      event.callback(event.userdata, cur_tick = event.tick);
+    }
   }
 }
+
 uint64_t get_current_sample() { return atomic_load(&global_sample_position); }
 
 void *scheduler_thread_fn(void *arg) {
   while (1) {
-    uint64_t current_sample = atomic_load(&global_sample_position);
+    move_overflow();
 
+    uint64_t current_sample = get_current_sample();
     process_scheduler_events(current_sample);
-
     usleep(5000); // 5ms
   }
   return NULL;
@@ -172,9 +181,47 @@ int scheduler_event_loop() {
 
 void schedule_event(uint64_t now, double delay_seconds,
                     SchedulerCallback callback, void *userdata) {
-  printf("schedule userdata %p\n", userdata);
   int delay_samps = delay_seconds * ctx_sample_rate();
   push_event(callback, userdata, delay_samps, now);
 
   // callback(userdata, now);
+  //
+}
+void defer_quant(double quant, DeferQuantCallback callback) {
+  uint64_t quant_samps = quant * ctx_sample_rate();
+  uint64_t current_sample = get_current_sample();
+
+  // Calculate remainder to next quantization boundary
+  uint64_t offset_in_cycle = current_sample % quant_samps;
+  uint64_t remainder;
+
+  // If we're exactly on a boundary, schedule at the next boundary
+  if (offset_in_cycle == 0) {
+    remainder = quant_samps;
+  } else {
+    // Otherwise calculate samples until next boundary
+    remainder = quant_samps - offset_in_cycle;
+  }
+
+  EventHeap *queue = &scheduler_queue;
+  pthread_mutex_lock(&scheduler_mutex);
+
+  if (queue->size >= queue->capacity) {
+    queue->capacity *= 2;
+    queue->events =
+        realloc(queue->events, sizeof(SchedulerEvent) * queue->capacity);
+  }
+
+  // Calculate absolute timestamp for next event
+  uint64_t target_time = current_sample + remainder;
+
+  SchedulerEvent event = {
+      .callback = (void *)callback, .userdata = NULL, .tick = target_time};
+
+  queue->events[queue->size] = event;
+
+  heapify_up(queue, queue->size);
+  queue->size++;
+
+  pthread_mutex_unlock(&scheduler_mutex);
 }

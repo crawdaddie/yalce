@@ -11,5 +11,5 @@ uint64_t us_offset(struct timespec start, struct timespec end);
 int get_block_frame_offset(struct timespec start, struct timespec end,
                            int sample_rate);
 
-int get_frame_offset();
+uint64_t get_frame_offset();
 #endif

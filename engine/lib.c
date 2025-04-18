@@ -1,8 +1,7 @@
 #include "./lib.h"
 #include "./audio_graph.h"
 #include "./ctx.h"
-#include "./ext_lib.h"
-#include "./node.h"
+#include "./ext_lib.h" #include "./node.h"
 #include "./node_util.h"
 #include "./osc.h"
 #include "audio_loop.h"
@@ -81,11 +80,6 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     }
 
     head->perform(head, state, NULL, frame_count, spf);
-    // if (head->node_math) {
-    //   for (int i = 0; i < head->output.size * head->output.layout; i++) {
-    //     head->output.buf[i] = head->node_math(head->output.buf[i]);
-    //   }
-    // }
 
     if (head->write_to_output) {
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
@@ -111,16 +105,17 @@ static void write_null_to_output_buf(double *out, int nframes, int layout) {
   }
 }
 
-void user_ctx_callback(Ctx *ctx, int frame_count, double spf) {
-  // reset_buf_ptr();
-  //
-  int consumed = process_msg_queue_pre(&ctx->msg_queue);
+void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
+                       double spf) {
+
+  int consumed = process_msg_queue_pre(current_tick, &ctx->msg_queue);
+
   if (ctx->head == NULL) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
   } else {
     perform_graph(ctx->head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
   }
-  process_msg_queue_post(&ctx->msg_queue, consumed);
+  process_msg_queue_post(current_tick, &ctx->msg_queue, consumed);
 }
 
 Node *audio_graph_inlet(AudioGraph *g, int inlet_idx) {
@@ -138,7 +133,6 @@ Node *inlet(double default_val) {
       .perform = NULL,
       .node_index = f->node_index,
       .num_inputs = 0,
-      // Allocate state memory
       .state_size = 0,
       .state_offset = graph ? graph->state_memory_size : 0,
       // Allocate output buffer
@@ -345,7 +339,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   return ensemble;
 }
 
-Node *play_node_offset(int offset, Node *s) {
+Node *play_node_offset(uint64_t tick, Node *s) {
   // printf("play node %p at offset %d\n", s, offset);
   // Node *group = _chain;
   // reset_chain();
@@ -353,7 +347,7 @@ Node *play_node_offset(int offset, Node *s) {
   // add_to_dac(group);
 
   push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_ADD, offset, {.NODE_ADD = {.target = s}}});
+           (scheduler_msg){NODE_ADD, tick, {.NODE_ADD = {.target = s}}}, 512);
   return s;
 }
 
@@ -368,10 +362,11 @@ void close_gate(close_payload *p, int offset) {
 
   push_msg(
       &ctx.msg_queue,
-      (scheduler_msg){NODE_SET_SCALAR,
-                      offset,
-                      {.NODE_SET_SCALAR = {
-                           .target = target, .input = input, .value = 0.}}});
+      (scheduler_msg){
+          NODE_SET_SCALAR,
+          offset,
+          {.NODE_SET_SCALAR = {.target = target, .input = input, .value = 0.}}},
+      512);
   free(p);
 }
 
@@ -394,17 +389,19 @@ NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
   return s;
 }
 
-NodeRef trigger_gate(int offset, double dur, int gate_in, NodeRef s) {
+NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s) {
   // Node *group = _chain;
   // reset_chain();
   // add_to_dac(s);
   // add_to_dac(group);
 
-  push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_SET_SCALAR,
-                           offset,
-                           {.NODE_SET_SCALAR = {
-                                .target = s, .input = gate_in, .value = 1.}}});
+  push_msg(
+      &ctx.msg_queue,
+      (scheduler_msg){
+          NODE_SET_SCALAR,
+          tick,
+          {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 1.}}},
+      512);
 
   close_payload *cp = malloc(sizeof(close_payload));
   *cp = (close_payload){
@@ -492,7 +489,8 @@ NodeRef set_input_scalar(NodeRef node, int input, double value) {
   push_msg(&ctx.msg_queue,
            (scheduler_msg){NODE_SET_SCALAR,
                            get_frame_offset(),
-                           {.NODE_SET_SCALAR = {node, input, value}}});
+                           {.NODE_SET_SCALAR = {node, input, value}}},
+           512);
   return node;
 }
 
@@ -500,7 +498,8 @@ NodeRef set_input_buf(int input, NodeRef buf, NodeRef node) {
   push_msg(&ctx.msg_queue,
            (scheduler_msg){NODE_SET_INPUT,
                            get_frame_offset(),
-                           {.NODE_SET_INPUT = {node, input, buf}}});
+                           {.NODE_SET_INPUT = {node, input, buf}}},
+           512);
   return node;
 }
 
@@ -526,26 +525,29 @@ NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node) {
   return node;
 }
 
-NodeRef set_input_scalar_offset(NodeRef node, int input, int frame_offset,
+NodeRef set_input_scalar_offset(NodeRef node, int input, uint64_t tick,
                                 double value) {
   push_msg(&ctx.msg_queue,
            (scheduler_msg){NODE_SET_SCALAR,
-                           frame_offset,
-                           {.NODE_SET_SCALAR = {node, input, value}}});
+                           tick,
+                           {.NODE_SET_SCALAR = {node, input, value}}},
+           512);
   return node;
 }
 
 NodeRef set_input_trig(NodeRef node, int input) {
-  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
-                                           get_frame_offset(),
-                                           {.NODE_SET_TRIG = {node, input}}});
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){
+               NODE_SET_TRIG, get_tl_tick(), {.NODE_SET_TRIG = {node, input}}},
+           512);
   return node;
 }
 
-NodeRef set_input_trig_offset(NodeRef node, int input, int frame_offset) {
-  push_msg(&ctx.msg_queue, (scheduler_msg){NODE_SET_TRIG,
-                                           frame_offset,
-                                           {.NODE_SET_TRIG = {node, input}}});
+NodeRef set_input_trig_offset(NodeRef node, int input, uint64_t tick) {
+  push_msg(
+      &ctx.msg_queue,
+      (scheduler_msg){NODE_SET_TRIG, tick, {.NODE_SET_TRIG = {node, input}}},
+      512);
   return node;
 }
 

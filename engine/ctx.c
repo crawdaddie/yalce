@@ -8,27 +8,6 @@ Ctx ctx;
 
 void init_ctx() {}
 
-// static void write_null_to_output_buf(double *out, int nframes, int layout) {
-//   double *dest = out;
-//   while (nframes--) {
-//     for (int ch = 0; ch < layout; ch++) {
-//       *dest = 0.0;
-//       dest++;
-//     }
-//   }
-// }
-
-// void print_graph(Node *node) {
-//   Node *n = node;
-//
-//   while (n != NULL) {
-//     if (n->node_perform == group_perform) {
-//       print_graph(((group_state *)n->state)->head);
-//     }
-//     n = n->next;
-//   }
-// }
-
 void audio_ctx_add(Node *ensemble) {
   Ctx *ctx = get_audio_ctx();
 
@@ -45,28 +24,16 @@ void audio_ctx_add(Node *ensemble) {
     current->next = ensemble;
   }
 }
-static void process_msg_pre(scheduler_msg msg) {
+static void process_msg_pre(int frame_offset, scheduler_msg msg) {
 
   switch (msg.type) {
   case NODE_ADD: {
     struct NODE_ADD payload = msg.payload.NODE_ADD;
-    int frame_offset = msg.frame_offset;
     payload.target->frame_offset = frame_offset;
+
     audio_ctx_add(payload.target);
     break;
   }
-
-    // case GROUP_ADD: {
-    //   struct GROUP_ADD payload = msg.payload.GROUP_ADD;
-    //   int frame_offset = msg.frame_offset;
-    //   Node *g = payload.group;
-    //   g->frame_offset = frame_offset;
-    //   g->type = OUTPUT;
-    //   g->next = NULL;
-    //   audio_ctx_add(g);
-    //
-    //   break;
-    // }
 
   case NODE_SET_SCALAR: {
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
@@ -75,7 +42,7 @@ static void process_msg_pre(scheduler_msg msg) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
-      for (int i = msg.frame_offset; i < BUF_SIZE; i++) {
+      for (int i = frame_offset; i < BUF_SIZE; i++) {
         inlet_data.buf[i] = payload.value;
       }
     }
@@ -95,10 +62,6 @@ static void process_msg_pre(scheduler_msg msg) {
       inlet_node->output.layout = buf->output.layout;
       inlet_node->output.size = buf->output.size;
       inlet_node->output.buf = buf->output.buf;
-      // printf("setting input data\n");
-      // for (int i= 0; i < inlet_node->output.size * inlet_node->output.layout;
-      // i++) { printf("buf data inlet: %f\n", inlet_node->output.buf[i]);
-      // }
     }
 
     break;
@@ -115,7 +78,7 @@ static void process_msg_pre(scheduler_msg msg) {
       }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
-      inlet_data.buf[msg.frame_offset] = 1.0;
+      inlet_data.buf[frame_offset] = 1.0;
     }
 
     break;
@@ -125,23 +88,13 @@ static void process_msg_pre(scheduler_msg msg) {
   }
 }
 
-static void process_msg_post(scheduler_msg msg) {
+static void process_msg_post(int frame_offset, scheduler_msg msg) {
   switch (msg.type) {
   case NODE_ADD: {
-    // struct NODE_ADD payload = msg.body.NODE_ADD;
-    // int frame_offset = msg.frame_offset;
-    // printf("node add %d\n", frame_offset);
-    // unoffset_node_bufs(payload.target, frame_offset);
-    // payload.target->frame_offset = 0;
     break;
   }
 
   case GROUP_ADD: {
-    // struct NODE_ADD payload = msg.body.NODE_ADD;
-    // int frame_offset = msg.frame_offset;
-    // printf("node add %d\n", frame_offset);
-    // unoffset_node_bufs(payload.target, frame_offset);
-    // payload.target->frame_offset = 0;
     break;
   }
 
@@ -154,7 +107,7 @@ static void process_msg_post(scheduler_msg msg) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
-      for (int i = 0; i < msg.frame_offset; i++) {
+      for (int i = 0; i < frame_offset; i++) {
         inlet_data.buf[i] = payload.value;
       }
     }
@@ -174,12 +127,8 @@ static void process_msg_post(scheduler_msg msg) {
       }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
-      inlet_data.buf[msg.frame_offset] = 0.0;
+      inlet_data.buf[frame_offset] = 0.0;
     }
-    //
-    // double *target_input_buf = get_node_input_buf(node, payload.input);
-    // *(target_input_buf + msg.frame_offset) = 0.0;
-    //
     break;
   }
   default:
@@ -187,24 +136,48 @@ static void process_msg_post(scheduler_msg msg) {
   }
 }
 
-int process_msg_queue_pre(msg_queue *queue) {
+int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue) {
   int read_ptr = queue->read_ptr;
   scheduler_msg *msg;
   int consumed = 0;
+  int write_ptr = queue->write_ptr;
+  int num_moved = 0;
   while (read_ptr != queue->write_ptr) {
     msg = queue->buffer + read_ptr;
-    process_msg_pre(*msg);
+    if (msg->tick - current_tick >= 512) {
+      // TODO: if msg->tick - current_tick > 512 - push message to write_ptr
+      // printf("overflow message @ %llu %d %llu %llu\n", current_tick,
+      // msg->type,
+      //        msg->tick, msg->tick - current_tick);
+      push_msg(&ctx.overflow_queue, *msg, 0);
+      num_moved++;
+    } else if (msg->tick - current_tick < 0) {
+      printf("too late for msg\n");
+    } else {
+      // printf("handle message %llu %llu offset %llu\n", current_tick,
+      // msg->tick,
+      //        msg->tick - current_tick);
+      process_msg_pre(msg->tick - current_tick, *msg);
+    }
+
     read_ptr = (read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
     consumed++;
   }
+
   return consumed;
 }
 
-void process_msg_queue_post(msg_queue *queue, int consumed) {
+void process_msg_queue_post(uint64_t current_tick, msg_queue *queue,
+                            int consumed) {
   scheduler_msg msg;
   while (consumed--) {
     msg = pop_msg(queue);
-    process_msg_post(msg);
+    if (msg.tick - current_tick >= 512) {
+      // skip
+    } else {
+      int frame_offset = msg.tick - current_tick;
+      process_msg_post(frame_offset, msg);
+    }
   }
 }
 
@@ -230,9 +203,12 @@ Node *add_to_dac(Node *node) {
 
 Ctx *get_audio_ctx() { return &ctx; }
 
-void push_msg(msg_queue *queue, scheduler_msg msg) {
+void push_msg(msg_queue *queue, scheduler_msg msg, int buffer_offset) {
+  msg.tick += buffer_offset;
+
   if (queue->num_msgs == MSG_QUEUE_MAX_SIZE) {
-    printf("Error: Command FIFO full\n");
+    // printf("Error: Command FIFO full overflow ? %d\n",
+    //        queue == &ctx.overflow_queue);
     return;
   }
 
@@ -261,3 +237,12 @@ int ctx_sample_rate() { return ctx.sample_rate; }
 double ctx_spf() { return ctx.spf; }
 
 double *ctx_main_out() { return ctx.output_buf; }
+
+void move_overflow() {
+  msg_queue *queue = &ctx.overflow_queue;
+  scheduler_msg msg;
+  while (queue->num_msgs) {
+    msg = pop_msg(queue);
+    push_msg(&(ctx.msg_queue), msg, 0);
+  }
+}
