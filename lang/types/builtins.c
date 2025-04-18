@@ -305,6 +305,20 @@ Type *_list_ref_set_sig() {
   return f;
 }
 
+Type *_cor_replace_fn_sig() {
+  Type *map_from = next_tvar();
+  Type *map_to = next_tvar();
+
+  Type *cor_from = create_coroutine_instance_type(map_from);
+  Type *cor_to = create_coroutine_instance_type(map_to);
+  Type *f = cor_to;
+  f = type_fn(cor_to, f);
+  f = type_fn(cor_from, f);
+  return f;
+}
+
+Type t_cor_replace_fn_sig = GENERIC_TYPE(_cor_replace_fn_sig);
+
 Type t_list_ref_set_sig = GENERIC_TYPE(_list_ref_set_sig);
 
 void initialize_builtin_types() {
@@ -426,6 +440,7 @@ void initialize_builtin_types() {
   add_builtin("array_new", &t_array_fill_sig);
   add_builtin("struct_set", &t_struct_set_sig);
   add_builtin("array_succ", &t_array_succ_sig);
+  add_builtin("cor_replace", &t_cor_replace_fn_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

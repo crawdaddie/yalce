@@ -15,8 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// #define COMPILER_DEBUG
-
 LLVMTypeRef cor_coroutine_fn_type() {
   // typedef void *(*CoroutineFn)(void *coroutine, void *ret_val);
   return LLVMFunctionType(GENERIC_PTR,
@@ -328,6 +326,24 @@ LLVMValueRef _cor_loop(LLVMValueRef instance_ptr, LLVMModuleRef module,
 
   return LLVMBuildCall2(builder, cor_loop_type, cor_loop_func,
                         (LLVMValueRef[]){instance_ptr}, 1, "call_cor_loop");
+}
+
+LLVMValueRef _cor_replace(LLVMValueRef this, LLVMValueRef other,
+                          LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMValueRef cor_replace_func = LLVMGetNamedFunction(module, "cor_replace");
+
+  LLVMTypeRef inst_type = cor_inst_struct_type();
+  LLVMTypeRef inst_ptr_type = LLVMPointerType(inst_type, 0);
+  LLVMTypeRef cor_replace_type = LLVMFunctionType(
+      inst_ptr_type, (LLVMTypeRef[]){inst_ptr_type, inst_ptr_type}, 2, false);
+
+  if (!cor_replace_func) {
+    cor_replace_func = LLVMAddFunction(module, "cor_replace", cor_replace_type);
+  }
+
+  return LLVMBuildCall2(builder, cor_replace_type, cor_replace_func,
+                        (LLVMValueRef[]){this, other}, 2, "");
 }
 
 LLVMValueRef null_cor_inst() {
@@ -1293,24 +1309,18 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
     LLVMValueRef effect_fn, Type *effect_fn_type, JITLangCtx *ctx,
     LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  print_type(generator_type);
-  LLVMDumpType(llvm_generator_type);
-  printf("\n");
-
-  print_type(value_struct_type);
-
   LLVMTypeRef wrapper_fn_type =
       LLVMFunctionType(LLVMVoidType(),
                        (LLVMTypeRef[]){
                            LLVMPointerType(llvm_generator_type, 0),
-                           LLVMInt32Type(),
+                           LLVMInt64Type(),
                        },
                        2, 0);
 
   START_FUNC(module, "scheduler_wrapper", wrapper_fn_type)
 
   LLVMValueRef generator_ptr = LLVMGetParam(func, 0);
-  LLVMValueRef frame_offset = LLVMGetParam(func, 1);
+  LLVMValueRef time = LLVMGetParam(func, 1);
 
   LLVMTypeRef val_type = type_to_llvm_type(value_struct_type, ctx->env, module);
 
@@ -1370,16 +1380,17 @@ LLVMValueRef _build_wrapper_for_scheduled_fn(
 
   LLVMValueRef val = LLVMBuildLoad2(builder, val_type, val_ptr, "");
   LLVMBuildCall2(builder, llvm_effect_type, effect_fn,
-                 (LLVMValueRef[]){val, frame_offset}, 2, "");
+                 (LLVMValueRef[]){val, time}, 2, "");
 
   LLVMValueRef scheduler_call =
       LLVMBuildCall2(builder, scheduler_type, scheduler,
                      (LLVMValueRef[]){
+                         time,
+                         dur,
                          func,
                          generator_ptr,
-                         dur,
                      },
-                     3, "schedule_next");
+                     4, "schedule_next");
 
   LLVMBuildRetVoid(builder);
 
@@ -1391,14 +1402,16 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
-  Ast *scheduler_ast = ast->data.AST_APPLICATION.args;
+  Ast *fo_ast = ast->data.AST_APPLICATION.args;
+  LLVMValueRef base_time = codegen(fo_ast, ctx, module, builder);
+
+  Ast *scheduler_ast = ast->data.AST_APPLICATION.args + 1;
   Type *scheduler_type = scheduler_ast->md;
 
-  Ast *effect_ast = ast->data.AST_APPLICATION.args + 1;
-
+  Ast *effect_ast = ast->data.AST_APPLICATION.args + 2;
   Type *effect_type = effect_ast->md;
 
-  Ast *generator_ast = ast->data.AST_APPLICATION.args + 2;
+  Ast *generator_ast = ast->data.AST_APPLICATION.args + 3;
   Type *generator_type = generator_ast->md;
 
   LLVMValueRef scheduler =
@@ -1434,11 +1447,12 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
   // call schedule_event (args[0]) with wrapper function, dur & 'U
   return LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
                         (LLVMValueRef[]){
+                            base_time,
+                            LLVMConstReal(LLVMDoubleType(), 0.),
                             wrapper_fn,
                             generator_alloca,
-                            LLVMConstReal(LLVMDoubleType(), 0.),
                         },
-                        3, "");
+                        4, "");
 }
 
 LLVMValueRef _build_wrapper_for_scheduled_routine(
@@ -1450,10 +1464,9 @@ LLVMValueRef _build_wrapper_for_scheduled_routine(
       LLVMFunctionType(LLVMVoidType(),
                        (LLVMTypeRef[]){
                            LLVMPointerType(llvm_generator_type, 0),
-                           LLVMInt32Type(),
                            LLVMInt64Type(),
                        },
-                       3, 0);
+                       2, 0);
 
   START_FUNC(module, "scheduler_wrapper", wrapper_fn_type)
 
@@ -1525,4 +1538,14 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             generator,
                         },
                         4, "");
+}
+LLVMValueRef CorReplaceHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  LLVMValueRef other_cor =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMValueRef this_cor =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  return _cor_replace(this_cor, other_cor, module, builder);
 }

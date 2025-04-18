@@ -181,6 +181,7 @@ int scheduler_event_loop() {
 
 void schedule_event(uint64_t now, double delay_seconds,
                     SchedulerCallback callback, void *userdata) {
+
   int delay_samps = delay_seconds * ctx_sample_rate();
   push_event(callback, userdata, delay_samps, now);
 

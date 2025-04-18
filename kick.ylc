@@ -86,6 +86,11 @@ let k_routine = fn s ->
   yield (k_routine s)
 ;;
 
+let k_routine_other = fn s ->
+  yield (kick (s * 1.));
+  yield (k_routine_other s)
+;;
+
 let sn = fn t: (Double) ->
   let fo = get_tl_tick () in
   set_input_trig_offset snare_syn 0 fo;
@@ -111,10 +116,10 @@ let hh_routine = fn scale ->
   yield (hh_routine scale)
 ;;
 
+let k = k_routine 0.5;
 defer_quant 0.5 (fn t ->
-  play_routine t schedule_event (k_routine 0.5);
+  play_routine t schedule_event k;
   play_routine t schedule_event (hh_routine 0.5);
   play_routine t schedule_event (sn_routine 0.5)
 ;)
-
 

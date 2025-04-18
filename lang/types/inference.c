@@ -441,13 +441,15 @@ bool is_struct_of_void_fns(Type *cons) {
 }
 
 Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
-  if (ast->data.AST_APPLICATION.len != 3) {
+  if (ast->data.AST_APPLICATION.len != 4) {
     return type_error(ctx, ast, "run_in_scheduler must have 3 args\n");
   }
 
-  Ast *scheduler_ast = ast->data.AST_APPLICATION.args;
-  Ast *effect_ast = ast->data.AST_APPLICATION.args + 1;
-  Ast *generator_ast = ast->data.AST_APPLICATION.args + 2;
+  Ast *fo_ast = ast->data.AST_APPLICATION.args;
+  infer(fo_ast, ctx);
+  Ast *scheduler_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *effect_ast = ast->data.AST_APPLICATION.args + 2;
+  Ast *generator_ast = ast->data.AST_APPLICATION.args + 3;
 
   infer(scheduler_ast,
         ctx); // first arg is concrete schedule fn impl
@@ -475,10 +477,12 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
   TICtx _ctx = {};
   Type *concrete_val_struct = struct_of_fns_to_return(val_generator_type);
 
+  unify_in_ctx(fo_ast->md, &t_uint64, &_ctx, fo_ast);
+
   unify_in_ctx(val_struct, concrete_val_struct, &_ctx,
                (effect_ast)->data.AST_LAMBDA.params);
 
-  unify_in_ctx(frame_offset_arg, &t_int, &_ctx,
+  unify_in_ctx(frame_offset_arg, &t_uint64, &_ctx,
                (effect_ast)->data.AST_LAMBDA.params + 1);
 
   Substitution *subst = solve_constraints(_ctx.constraints);

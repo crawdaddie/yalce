@@ -149,3 +149,9 @@ cor *cor_map(cor *this, CoroutineFn map_fn) {
 
   return mapped;
 }
+
+cor *cor_replace(cor *this, cor *other_cor) {
+  printf("cor replace???\n");
+  *this = *other_cor;
+  return this;
+}

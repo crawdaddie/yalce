@@ -52,4 +52,7 @@ int get_inner_state_slot(Ast *ast);
 
 LLVMValueRef get_inner_state_slot_gep(int slot, Ast *ast,
                                       LLVMBuilderRef builder);
+
+LLVMValueRef CorReplaceHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
 #endif

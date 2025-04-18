@@ -69,3 +69,5 @@ struct cor_map_state {
 cor *cor_map(cor *this, CoroutineFn map_fn);
 
 cor *cor_loop(cor *instance);
+
+cor *cor_replace(cor *this, cor *other_cor);
