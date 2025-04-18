@@ -1452,17 +1452,17 @@ LLVMValueRef _build_wrapper_for_scheduled_routine(
                        (LLVMTypeRef[]){
                            LLVMPointerType(llvm_generator_type, 0),
                            LLVMInt32Type(),
+                           LLVMInt64Type(),
                        },
-                       2, 0);
+                       3, 0);
 
   START_FUNC(module, "scheduler_wrapper", wrapper_fn_type)
 
   LLVMValueRef generator_ptr = LLVMGetParam(func, 0);
 
   LLVMValueRef frame_offset = LLVMGetParam(func, 1);
-
+  LLVMValueRef timestamp = LLVMGetParam(func, 2);
   LLVMTypeRef val_type = type_to_llvm_type(&t_num, ctx->env, module);
-
   LLVMValueRef val_ptr = LLVMBuildAlloca(builder, val_type, "val_struct_alloc");
 
   LLVMValueRef instance_ptr =
@@ -1475,9 +1475,10 @@ LLVMValueRef _build_wrapper_for_scheduled_routine(
                      (LLVMValueRef[]){
                          func,
                          generator_ptr,
+                         timestamp,
                          val,
                      },
-                     3, "schedule_next");
+                     4, "schedule_next");
 
   LLVMBuildRetVoid(builder);
 
@@ -1487,14 +1488,16 @@ LLVMValueRef _build_wrapper_for_scheduled_routine(
 LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 
-  Ast *scheduler_ast = ast->data.AST_APPLICATION.args;
+  Ast *timestamp_ast = ast->data.AST_APPLICATION.args;
+  LLVMValueRef ts_val = codegen(timestamp_ast, ctx, module, builder);
+
+  Ast *scheduler_ast = ast->data.AST_APPLICATION.args + 1;
   Type *scheduler_type = scheduler_ast->md;
 
-  Ast *generator_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *generator_ast = ast->data.AST_APPLICATION.args + 2;
   Type *generator_type = generator_ast->md;
 
-  LLVMValueRef scheduler =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  LLVMValueRef scheduler = codegen(scheduler_ast, ctx, module, builder);
 
   LLVMTypeRef llvm_generator_type =
       type_to_llvm_type(generator_type, ctx->env, module);
@@ -1520,7 +1523,8 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         (LLVMValueRef[]){
                             wrapper_fn,
                             generator,
+                            ts_val,
                             LLVMConstReal(LLVMDoubleType(), 0.),
                         },
-                        3, "");
+                        4, "");
 }

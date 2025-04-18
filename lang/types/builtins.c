@@ -284,6 +284,7 @@ Type *_play_routine_sig() {
   Type *f = &t_void;
   f = type_fn(cor_from, f);
   f = type_fn(&t_ptr, f);
+  f = type_fn(&t_uint64, f);
   return f;
 }
 Type t_play_routine_sig = GENERIC_TYPE(_play_routine_sig);

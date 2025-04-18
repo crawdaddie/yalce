@@ -16,7 +16,7 @@ let hh_syn = (fn () ->
   # let chirp = sin_node (200. + 8000. * perc_env_node 0.5 trig);
   (sig) * (perc_env_node 0.5 trig)
   # |> comb_node 0.07 0.1 0.2
-  ;) |> compile_blob_template |> instantiate_template [] |> play_node_offset 0
+  ;) |> play_tpl
 ;
 
 
@@ -53,10 +53,12 @@ let kick_syn = (fn () ->
   let full = (sig + (dyn_tanh_node (5 * buf_env_node 0.03 (buf_ref kick_ampenv) trig) sig));
     
 
-  # full + ( full |> biquad_hp_node 400. 1. |> reverb_node 0.2 1. 0. 1.)
-  full |> mul2_node (buf_env_node 0.12 (buf_ref kick_ampenv) trig)
+  full + ( full |> biquad_hp_node 400. 1. |> reverb_node 0.2 1. 0. 1.)
 
-  ;) |> compile_blob_template |> instantiate_template [] |> play_node_offset 0
+  |> mul2_node (buf_env_node 0.12 (buf_ref kick_ampenv) trig)
+
+  ;)
+  |> play_tpl
 ;
 
 let trig_kick = fn k ->
@@ -79,60 +81,66 @@ let trig_hh = fn k ->
 
 
 
-
-let kroutine = fn scale ->
-
-  trig_kick kick_syn;
-  yield (scale *1.75);
-  trig_kick kick_syn;
-  yield (scale * 0.75);
+let k_routine = fn scale ->
   trig_kick kick_syn;
   yield (scale * 1.5);
-  yield (kroutine scale)
+  trig_kick kick_syn;
+  yield (scale * 1.75);
+  trig_kick kick_syn;
+  yield (scale * 0.75);
+  yield (k_routine scale)
 ;;
 
 
-let snare_routine = fn scale->
-  yield (scale *1.);
+let sn_routine = fn scale->
+
+  yield (scale * 1.);
+  yield (scale * 1.);
   trig_snare snare_syn;
-  yield (scale *2.);
+  yield (scale * 2.);
   trig_snare snare_syn;
-  yield (scale *1.);
-  yield (snare_routine scale)
+  yield (scale * 1.);
+  yield (scale * 1.);
+  trig_snare snare_syn;
+  yield (sn_routine scale)
 ;;
 
-let hh_routine = fn scale->
-
-  trig_hh hh_syn;
-  yield (scale *1.75);
-  trig_hh hh_syn;
-  yield (scale * 0.75);
-  trig_hh hh_syn;
-  yield (scale * 1.5);
+let hh_routine = fn scale ->
+  trig_kick hh_syn;
+  yield (scale *0.25);
   yield (hh_routine scale)
 ;;
 
 
-let q = 60. / 130.;
-defer_quant q (fn fo ->
-  play_routine schedule_event (kroutine q);
-  # play_routine schedule_event (snare_routine q);
-  play_routine schedule_event (hh_routine q);
-);
+# iter_of_list [0.25] |> cor_loop |> 
+# loop 0.25 |> trig_hh |> play
 
 
-(
-  import gui/bindings/Gui;
+# defer_quant q (fn fo ts ->
+#   play_routine ts schedule_event (k_routine q);
+#   play_routine ts schedule_event (sn_routine q);
+#   play_routine ts schedule_event (hh_routine q);
+# );
 
-  Gui.create_envelope_edit_view
-    (sig_size (node_out kick_penv))
-    (sig_raw (node_out kick_penv));
 
-  Gui.create_envelope_edit_view
-    (sig_size (node_out kick_ampenv))
-    (sig_raw (node_out kick_ampenv));
-
-  Gui.create_scope (ctx_main_out ()) 2 512
-
-);
- 
+# (
+#   import gui/bindings/Gui;
+#
+#   Gui.create_envelope_edit_view
+#     (sig_size (node_out kick_penv))
+#     (sig_raw (node_out kick_penv));
+#
+#   Gui.create_envelope_edit_view
+#     (sig_size (node_out kick_ampenv))
+#     (sig_raw (node_out kick_ampenv));
+#
+#   Gui.create_scope (ctx_main_out ()) 2 512
+#
+# );
+#  
+# let test_func = fn fo: (Int) ts: (Uint64) -> 
+#   print "scheduled\n";
+#   ()
+# ;;
+#
+# schedule_event (test_func) (1, 2) (Uint64 0) 1.;

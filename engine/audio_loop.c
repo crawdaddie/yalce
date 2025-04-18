@@ -1,5 +1,3 @@
-#ifndef _ENGINE_AUDIO_LOOP_H
-#define _ENGINE_AUDIO_LOOP_H
 #include "./audio_loop.h"
 #include "./ctx.h"
 #include "./midi.h"
@@ -7,14 +5,12 @@
 #include "./osc.h"
 #include "./scheduling.h"
 #include <errno.h>
-#include <pthread.h>
 #include <soundio/soundio.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <unistd.h>
 
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
@@ -24,14 +20,14 @@
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_RESET "\x1b[0m"
 
-#define INDENT(indent) write_log("%.*s", indent, "  ")
-
 static struct SoundIo *soundio = NULL;
 static struct SoundIoDevice *device = NULL;
 static struct SoundIoOutStream *outstream = NULL;
 
 static void (*write_sample)(char *ptr, double sample);
 static volatile bool want_pause = false;
+
+int scheduler_event_loop();
 
 void write_sample_s16ne(char *ptr, double sample) {
   int16_t *buf = (int16_t *)ptr;
@@ -60,6 +56,15 @@ void add_sample_float32ne_w_offset(char *ptr, int offset, double sample) {
 void write_sample_float64ne(char *ptr, double sample) {
   double *buf = (double *)ptr;
   *buf = sample;
+}
+
+int get_frame_offset() {
+  struct timespec t;
+  struct timespec btime = get_block_time();
+  set_block_time(&t);
+  int frame_offset = get_block_frame_offset(btime, t, 48000);
+  // printf("frame offset %d\n", frame_offset);
+  return frame_offset;
 }
 
 // static long block_time;
@@ -94,6 +99,7 @@ struct timespec get_start_time() { return start_time; }
 
 static void _write_callback(struct SoundIoOutStream *outstream,
                             int frame_count_min, int frame_count_max) {
+
   // printf("frame count %d %d\n", frame_count_min, frame_count_max);
 
   double float_sample_rate = outstream->sample_rate;
@@ -107,6 +113,7 @@ static void _write_callback(struct SoundIoOutStream *outstream,
 
   for (;;) {
     int frame_count = frames_left;
+    uint64_t buffer_start_sample = atomic_load(&global_sample_position);
     if ((err =
              soundio_outstream_begin_write(outstream, &areas, &frame_count))) {
       printf("unrecoverable stream error: %s\n", soundio_strerror(err));
@@ -160,6 +167,8 @@ static void _write_callback(struct SoundIoOutStream *outstream,
     }
 
     frames_left -= frame_count;
+
+    atomic_fetch_add(&global_sample_position, frame_count);
     if (frames_left <= 0)
       break;
   }
@@ -327,7 +336,7 @@ static int msleep(long msec) {
 }
 
 int init_audio() {
-  printf("init audio\n");
+  // printf("init audio\n");
   maketable_sq();
   maketable_sin();
   maketable_saw();
@@ -341,5 +350,3 @@ int init_audio() {
 
   return 0;
 }
-
-#endif

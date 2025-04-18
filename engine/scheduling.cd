@@ -1,0 +1,315 @@
+#include "scheduling.h"
+#include "audio_loop.h"
+#include "scheduling.h"
+#include <pthread.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+void *timer(void *arg);
+int get_frame_offset() {
+  struct timespec t;
+  struct timespec btime = get_block_time();
+  set_block_time(&t);
+  int frame_offset = get_block_frame_offset(btime, t, 48000);
+  // printf("frame offset %d\n", frame_offset);
+  return frame_offset;
+}
+
+#define S_TO_NS 1000000000ULL
+#define TIMER_INTERVAL_NS 100000ULL // 1 milliseconds
+
+pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+#define SECONDS_TO_RUN 5
+
+#define INITIAL_CAPACITY 16
+
+typedef struct {
+  void (*callback)(void *userdata, int frame_offset, uint64_t now);
+  void *userdata;
+  uint64_t tick;
+} SchedulerEvent;
+
+typedef struct {
+  SchedulerEvent *events;
+  size_t capacity;
+  size_t size;
+} EventHeap;
+EventHeap *create_event_heap() {
+  EventHeap *heap = malloc(sizeof(EventHeap));
+  heap->events = malloc(sizeof(SchedulerEvent) * INITIAL_CAPACITY);
+  heap->capacity = INITIAL_CAPACITY;
+  heap->size = 0;
+  return heap;
+}
+void heap_swap_events(SchedulerEvent *a, SchedulerEvent *b) {
+  SchedulerEvent temp = *a;
+  *a = *b;
+  *b = temp;
+}
+
+void heapify_up(EventHeap *heap, size_t index) {
+  while (index > 0) {
+    size_t parent = (index - 1) / 2;
+    if (heap->events[index].tick < heap->events[parent].tick) {
+      heap_swap_events(&heap->events[index], &heap->events[parent]);
+      index = parent;
+    } else {
+      break;
+    }
+  }
+}
+
+void heapify_down(EventHeap *heap, size_t index) {
+  while (1) {
+    size_t left_child = 2 * index + 1;
+    size_t right_child = 2 * index + 2;
+    size_t smallest = index;
+
+    if (left_child < heap->size &&
+        heap->events[left_child].tick < heap->events[smallest].tick) {
+      smallest = left_child;
+    }
+
+    if (right_child < heap->size &&
+        heap->events[right_child].tick < heap->events[smallest].tick) {
+      smallest = right_child;
+    }
+
+    if (smallest != index) {
+      heap_swap_events(&heap->events[index], &heap->events[smallest]);
+      index = smallest;
+    } else {
+      break;
+    }
+  }
+}
+
+EventHeap *queue;
+static __thread int tl_offset;
+
+uint64_t tick;
+int get_tl_frame_offset(void) { return tl_offset; }
+
+static inline uint64_t get_tick() { return tick; }
+uint64_t seconds_to_ticks(double secs) {
+  return (uint64_t)(secs * S_TO_NS) / TIMER_INTERVAL_NS;
+}
+
+void _schedule_event(EventHeap *heap, void (*callback)(void *, int, uint64_t),
+                     uint64_t delay_ticks, void *userdata, uint64_t now) {
+
+  pthread_mutex_lock(&queue_mutex);
+
+  if (heap->size >= heap->capacity) {
+    heap->capacity *= 2;
+    heap->events =
+        realloc(heap->events, sizeof(SchedulerEvent) * heap->capacity);
+  }
+
+  SchedulerEvent event = {callback, userdata, now + delay_ticks};
+  heap->events[heap->size] = event;
+
+  heapify_up(heap, heap->size);
+  heap->size++;
+
+  pthread_mutex_unlock(&queue_mutex);
+}
+
+void defer_quant(double quantization, void (*callback)(int, uint64_t)) {
+  uint64_t now = get_tick();
+
+  uint64_t quant_ticks = (uint64_t)(quantization * S_TO_NS) / TIMER_INTERVAL_NS;
+  if (quant_ticks == 0)
+    quant_ticks = 1; // Avoid division by zero
+
+  printf("DEFER at [%llu]\n", now);
+  printf("quantization in ticks %llu\n", quant_ticks);
+
+  // Calculate remainder to next boundary
+  uint64_t remainder = quant_ticks - (now % quant_ticks);
+  if (remainder == quant_ticks)
+    remainder = 0; // If we're exactly on a boundary
+
+  printf("remainder ticks from now %llu\n", remainder);
+  printf("Target tick for execution: %llu\n", (now + remainder));
+
+  return _schedule_event(queue, (void *)callback, remainder, NULL, now);
+}
+
+void schedule_event(void (*callback)(void *, int, uint64_t), void *userdata,
+                    uint64_t now, double delay_seconds) {
+
+  if (now == 0) {
+    now = get_tick();
+  }
+
+  if (delay_seconds == 0.0) {
+    int frame_offset = get_frame_offset();
+    return callback(userdata, frame_offset, now);
+  }
+
+  uint64_t delay_ticks = seconds_to_ticks(delay_seconds);
+
+  return _schedule_event(queue, callback, delay_ticks, userdata, now);
+}
+
+SchedulerEvent pop_event(EventHeap *heap) {
+  // Note: The caller should already hold the mutex
+  if (heap->size == 0) {
+    SchedulerEvent empty = {NULL, NULL, 0, 0}; // Initialize all fields
+    return empty;
+  }
+
+  SchedulerEvent earliest = heap->events[0];
+  heap->size--;
+
+  if (heap->size > 0) {
+    heap->events[0] = heap->events[heap->size];
+    heapify_down(heap, 0);
+  }
+
+  return earliest;
+}
+
+void *timer(void *arg) {
+  EventHeap *queue = (EventHeap *)arg;
+  struct timespec sleep_time = {0, TIMER_INTERVAL_NS};
+  tick = 0;
+  // Get starting time
+  struct timespec next_tick_time;
+  clock_gettime(CLOCK_MONOTONIC_RAW, &next_tick_time);
+
+  // nanosleep(&sleep_time, NULL);
+  // tick++;
+
+  while (1) {
+    tl_offset = get_frame_offset();
+    uint64_t current_tick = tick;
+
+    pthread_mutex_lock(&queue_mutex);
+
+    // Debug output to diagnose the issue
+    if (queue->size > 0) {
+      // printf("Debug: Queue size: %zu, First event tick: %llu, Current tick: "
+      //        "%llu\n",
+      //        queue->size, queue->events[0].tick, current_tick);
+    }
+
+// Process all events that are due for this tick
+#define MAX_EVENTS_PER_TICK 32
+    SchedulerEvent events_to_process[MAX_EVENTS_PER_TICK];
+    int event_count = 0;
+
+    // Include events scheduled for the current tick
+    while (queue->size && queue->events[0].tick <= current_tick &&
+           event_count < MAX_EVENTS_PER_TICK) {
+      SchedulerEvent ev = pop_event(queue);
+      events_to_process[event_count++] = ev;
+      // if (ev.tick >= current_tick - 1) {
+      // }
+    }
+
+    pthread_mutex_unlock(&queue_mutex);
+
+    // Process the events
+    for (int i = 0; i < event_count; i++) {
+      // printf("fo %d tick %llu ev %d\n", tl_offset, current_tick, i);
+      if (events_to_process[i].userdata == NULL) {
+        void (*cb)(int, uint64_t) =
+            (void (*)(int, uint64_t))events_to_process[i].callback;
+        cb(tl_offset, current_tick);
+      } else {
+        events_to_process[i].callback(events_to_process[i].userdata, tl_offset,
+                                      current_tick);
+      }
+    }
+
+    if (event_count > 0) {
+      printf("\n%d events together @%llu\n-----\n", event_count, current_tick);
+    }
+
+    // Increment tick AFTER processing events
+    tick++;
+    // Calculate next tick time (exactly TIMER_INTERVAL_NS after the previous
+    // one)
+    next_tick_time.tv_nsec += TIMER_INTERVAL_NS;
+    if (next_tick_time.tv_nsec >= S_TO_NS) {
+      next_tick_time.tv_nsec -= S_TO_NS;
+      next_tick_time.tv_sec++;
+    }
+
+    // Get current time after processing
+    struct timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
+
+    // Calculate how much time is left until the next tick
+    struct timespec time_to_sleep;
+    if (next_tick_time.tv_sec > current_time.tv_sec ||
+        (next_tick_time.tv_sec == current_time.tv_sec &&
+         next_tick_time.tv_nsec > current_time.tv_nsec)) {
+
+      if (next_tick_time.tv_nsec >= current_time.tv_nsec) {
+        time_to_sleep.tv_sec = next_tick_time.tv_sec - current_time.tv_sec;
+        time_to_sleep.tv_nsec = next_tick_time.tv_nsec - current_time.tv_nsec;
+      } else {
+        time_to_sleep.tv_sec = next_tick_time.tv_sec - current_time.tv_sec - 1;
+        time_to_sleep.tv_nsec =
+            S_TO_NS + next_tick_time.tv_nsec - current_time.tv_nsec;
+      }
+
+      // Log timing info if desired (uncomment for debugging)
+      // printf("Tick %llu: Processing took %ld.%09ld sec, sleeping for
+      // %ld.%09ld sec\n",
+      //        current_tick,
+      //        current_time.tv_sec - processing_start_time.tv_sec,
+      //        current_time.tv_nsec - processing_start_time.tv_nsec,
+      //        time_to_sleep.tv_sec, time_to_sleep.tv_nsec);
+
+      // Sleep until the next tick
+      nanosleep(&time_to_sleep, NULL);
+    } else {
+      // We overran the tick interval
+      printf("Warning: Tick %llu processing took longer than interval!\n",
+             tick);
+
+      // Recalibrate the next tick time to maintain the grid
+      // This counts the missed tick as having happened and schedules the next
+      // one
+      clock_gettime(CLOCK_MONOTONIC_RAW, &next_tick_time);
+      next_tick_time.tv_nsec += TIMER_INTERVAL_NS;
+      if (next_tick_time.tv_nsec >= S_TO_NS) {
+        next_tick_time.tv_nsec -= S_TO_NS;
+        next_tick_time.tv_sec++;
+      }
+    }
+
+    // nanosleep(&sleep_time, NULL);
+  }
+
+  return NULL;
+}
+
+int scheduler_event_loop() {
+  queue = create_event_heap();
+
+  pthread_t thread;
+
+  if (pthread_create(&thread, NULL, timer, queue) != 0) {
+    fprintf(stderr, "Failed to create timer thread\n");
+    return 1;
+  }
+  // Set thread to high priority
+  struct sched_param param;
+  param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+  pthread_setschedparam(thread, SCHED_FIFO, &param);
+
+  struct timespec time_to_sleep = {.tv_sec = 0, .tv_nsec = 0.5 * S_TO_NS};
+
+  nanosleep(&time_to_sleep, NULL);
+
+  return 0;
+}

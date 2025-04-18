@@ -616,10 +616,13 @@ LLVMValueRef AddrOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return val;
 }
-LLVMValueRef uint64_constructor_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                           LLVMBuilderRef builder) {
-  LLVMValueRef in = codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  return uint64_constructor(in, ast->data.AST_APPLICATION.args->md, module, builder);
+LLVMValueRef uint64_constructor_handler(Ast *ast, JITLangCtx *ctx,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+  LLVMValueRef in =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  return uint64_constructor(in, ast->data.AST_APPLICATION.args->md, module,
+                            builder);
 }
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
@@ -667,7 +670,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
             get_extern_fn("cstr",
                           type_to_llvm_type(&t_builtin_cstr, ctx->env, module),
                           module));
-
 
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at_fn_sig, ArrayAtHandler);
 

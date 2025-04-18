@@ -5,6 +5,7 @@
 #include "./node.h"
 #include "./node_util.h"
 #include "./osc.h"
+#include "audio_loop.h"
 #include "envelope.h"
 #include "scheduling.h"
 #include <stdio.h>
@@ -200,7 +201,7 @@ void start_blob() {
 
 AudioGraph *end_blob() {
   AudioGraph *graph = _graph;
-  print_graph(graph);
+  // print_graph(graph);
 
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
@@ -389,7 +390,7 @@ NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
       .target = s,
       .gate_input = gate_in,
   };
-  schedule_event((SchedulerCallback)close_gate, cp, dur);
+  schedule_event(get_current_sample(), dur, (SchedulerCallback)close_gate, cp);
   return s;
 }
 
@@ -410,7 +411,7 @@ NodeRef trigger_gate(int offset, double dur, int gate_in, NodeRef s) {
       .target = s,
       .gate_input = gate_in,
   };
-  schedule_event((SchedulerCallback)close_gate, cp, dur);
+  schedule_event(get_current_sample(), dur, (SchedulerCallback)close_gate, cp);
   return s;
 }
 

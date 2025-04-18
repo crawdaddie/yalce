@@ -326,10 +326,10 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
   //   }
   // }
   //
-  printf("compile specific fn\n");
-  print_type(generic_type);
-  print_type(specific_type);
-  print_subst(subst);
+  // printf("compile specific fn\n");
+  // print_type(generic_type);
+  // print_type(specific_type);
+  // print_subst(subst);
 
   return env;
 }

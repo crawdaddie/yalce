@@ -80,6 +80,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
     return LLVM_TYPE_int;
   }
 
+  case T_UINT64: {
+    return LLVMInt64Type();
+  }
+
   case T_NUM: {
     return LLVM_TYPE_double;
   }
