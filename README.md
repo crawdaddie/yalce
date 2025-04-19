@@ -14,9 +14,8 @@ highly unsafe
 Sets up a loop in a realtime thread (handled by libsoundio) that traverses a
 graph of audio nodes, computes their summed outputs and writes the result to the audio card
 
-the graph can be updated directly with new nodes but updates can be handled in
-a more orderly way that allows for precisely synchronized updates by writing
-messages to a ring buffer shared by the RT thread (read-only) and the main
+new nodes are created outside the loop, but the graph can be updated precisely by writing
+messages to a ring buffer shared by the RT thread audio-loop thread (read-only) and the main
 thread (write-only)
 
 an audio node is an object that holds 
@@ -25,11 +24,6 @@ an audio node is an object that holds
 - references to input buffers
 - a pointer to a `node_perform` function that reads from the input buffers, and writes to the output buffers
 - a reference to the next node in the chain to compute
-
-the flow of a signal between nodes A and B is represented by
-node B containing an input buffer reference that points to the output of node A
-therefore node A must appear earlier in the graph than node B.
-
 
 ## build
 ```
