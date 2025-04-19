@@ -33,8 +33,9 @@ LLVMTypeRef cor_inst_struct_type() {
       GENERIC_PTR,     // fn ptr @ 1
       GENERIC_PTR,     // next ptr
       GENERIC_PTR,     // void *argv - state
+      LLVMInt8Type(),  // SIGNAL enum
   };
-  LLVMTypeRef instance_struct_type = LLVMStructType(types, 4, 0);
+  LLVMTypeRef instance_struct_type = LLVMStructType(types, 5, 0);
   return instance_struct_type;
 }
 
@@ -344,6 +345,27 @@ LLVMValueRef _cor_replace(LLVMValueRef this, LLVMValueRef other,
 
   return LLVMBuildCall2(builder, cor_replace_type, cor_replace_func,
                         (LLVMValueRef[]){this, other}, 2, "");
+}
+
+LLVMValueRef _cor_stop(LLVMValueRef this, LLVMModuleRef module,
+                       LLVMBuilderRef builder) {
+
+  LLVMValueRef cor_stop_func = LLVMGetNamedFunction(module, "cor_stop");
+
+  LLVMTypeRef inst_type = cor_inst_struct_type();
+  LLVMTypeRef inst_ptr_type = LLVMPointerType(inst_type, 0);
+  LLVMTypeRef cor_stop_type =
+      LLVMFunctionType(inst_ptr_type, (LLVMTypeRef[]){inst_ptr_type}, 1, false);
+
+  if (!cor_stop_func) {
+    cor_stop_func = LLVMAddFunction(module, "cor_stop", cor_stop_type);
+  }
+
+  return LLVMBuildCall2(builder, cor_stop_type, cor_stop_func,
+                        (LLVMValueRef[]){
+                            this,
+                        },
+                        1, "");
 }
 
 LLVMValueRef null_cor_inst() {
@@ -1530,14 +1552,15 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // call sink function args[1] with 'V & frame_offset
   // later take first value from 'V (Float - dur) and
   // call schedule_event (args[0]) with wrapper function, dur & 'U
-  return LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
-                        (LLVMValueRef[]){
-                            ts_val,
-                            LLVMConstReal(LLVMDoubleType(), 0.),
-                            wrapper_fn,
-                            generator,
-                        },
-                        4, "");
+  LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
+                 (LLVMValueRef[]){
+                     ts_val,
+                     LLVMConstReal(LLVMDoubleType(), 0.),
+                     wrapper_fn,
+                     generator,
+                 },
+                 4, "");
+  return generator;
 }
 LLVMValueRef CorReplaceHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
@@ -1548,4 +1571,12 @@ LLVMValueRef CorReplaceHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
   return _cor_replace(this_cor, other_cor, module, builder);
+}
+
+LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+  LLVMValueRef cor =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  return _cor_stop(cor, module, builder);
 }

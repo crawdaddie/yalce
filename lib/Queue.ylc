@@ -8,8 +8,9 @@ let _pop_left = fn (head, tail): (List of t, List of t) ->
   | x::rest -> ((rest, tail), Some x)  
   | [] -> ((head, tail), None)
 ;;
+
 let pop_left = fn q: (Array of (List of t, List of t)) ->
-  let x = unref q in
+  let x = deref q in
   let _q, v = _pop_left x in 
   (
     set_ref q _q;

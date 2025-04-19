@@ -1409,6 +1409,7 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
       *t1 = *t2;
     } else if (is_pointer_type(t1) && t2->kind == T_FN) {
     } else if (is_pointer_type(t1) && t2->kind == T_CONS) {
+    } else if (is_coroutine_type(t1) && t2->kind == T_VOID) {
     } else {
 
       TICtx _ctx = {.err_stream = NULL};

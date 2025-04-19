@@ -345,8 +345,6 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   compilation_ctx.stack_ptr = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
   compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
 
-  printf("\n\n\n----\n");
-  print_ast(&fn_ast);
   compilation_ctx.env = create_env_for_generic_fn(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
       specific_type);

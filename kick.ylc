@@ -6,7 +6,7 @@ let snare_syn = (fn () ->
   let trig = inlet 0.;
   let sin = (perc_env_node 2. trig) * ((sin_node 220.) + (sin_node 357.));
   let sig = (sin + white_noise_node ()) |> tanh_node 5.;
-  sig * (aslr_node 0. 1. 0.1 0.1 trig)
+  sig * (aslr_node 0. 1. 0.05 0.1 trig)
   ;) |> play_tpl
 ;
 
@@ -104,6 +104,9 @@ let sn_routine = fn s ->
   yield (sn (s * 2.));
   yield (sn (s * 2.));
   yield (sn (s * 2.));
+  yield (sn (s * 2.));
+  yield (sn (s * 2.));
+  yield (sn (s * 2.));
   yield (sn (s * 0.25));
   yield (sn (s * 0.5));
   yield (sn (s * 0.25));
@@ -116,10 +119,17 @@ let hh_routine = fn scale ->
   yield (hh_routine scale)
 ;;
 
-let k = k_routine 0.5;
+
+
 defer_quant 0.5 (fn t ->
-  play_routine t schedule_event k;
   play_routine t schedule_event (hh_routine 0.5);
-  play_routine t schedule_event (sn_routine 0.5)
-;)
+  play_routine t schedule_event (k_routine 0.5)
+;);
+
+# let sn = sn_routine 0.5;
+#
+# defer_quant 2. (fn t ->
+#   play_routine t schedule_event (sn_routine 0.5)
+# ;);
+#
 

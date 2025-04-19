@@ -26,4 +26,5 @@ extern Type t_list_ref_set_sig;
 extern Type t_play_routine_sig;
 
 extern Type t_cor_replace_fn_sig;
+extern Type t_cor_stop_fn_sig;
 #endif

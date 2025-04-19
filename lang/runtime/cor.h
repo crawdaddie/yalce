@@ -1,12 +1,15 @@
 #include <stdbool.h>
 typedef void *(*CoroutineFn)(void *coroutine, void *ret_val);
 
+typedef enum { COR_SIG_CONTINUE, COR_SIG_STOP } coroutine_sig;
+
 typedef struct cor {
   int counter;
   CoroutineFn fn_ptr;
   struct cor *next;
   void *argv;
   void *meta;
+  coroutine_sig sig;
 } cor;
 
 #define MAPSIZE
@@ -71,3 +74,5 @@ cor *cor_map(cor *this, CoroutineFn map_fn);
 cor *cor_loop(cor *instance);
 
 cor *cor_replace(cor *this, cor *other_cor);
+
+cor *cor_stop(cor *this);

@@ -281,8 +281,7 @@ Type *_play_routine_sig() {
   // sched_cb_type = type_fn(&t_int, sched_cb_type);
   // sched_cb_type = type_fn(&t_ptr, sched_cb_type);
 
-  Type *f = &t_void;
-  f = type_fn(cor_from, f);
+  Type *f = cor_from;
   f = type_fn(&t_ptr, f);
   f = type_fn(&t_uint64, f);
   return f;
@@ -318,6 +317,14 @@ Type *_cor_replace_fn_sig() {
 }
 
 Type t_cor_replace_fn_sig = GENERIC_TYPE(_cor_replace_fn_sig);
+
+Type *_cor_stop_fn_sig() {
+  Type *map_from = next_tvar();
+  Type *cor_from = create_coroutine_instance_type(map_from);
+  return type_fn(cor_from, cor_from);
+}
+
+Type t_cor_stop_fn_sig = GENERIC_TYPE(_cor_stop_fn_sig);
 
 Type t_list_ref_set_sig = GENERIC_TYPE(_list_ref_set_sig);
 
@@ -441,6 +448,7 @@ void initialize_builtin_types() {
   add_builtin("struct_set", &t_struct_set_sig);
   add_builtin("array_succ", &t_array_succ_sig);
   add_builtin("cor_replace", &t_cor_replace_fn_sig);
+  add_builtin("cor_stop", &t_cor_stop_fn_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {
