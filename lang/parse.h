@@ -8,6 +8,12 @@ typedef struct Ast Ast;
 extern bool top_level_tests;
 extern const char *__module_to_test;
 
+typedef struct custom_binops_t {
+  const char *binop;
+  struct custom_binops_t *next;
+} custom_binops_t;
+extern custom_binops_t *__custom_binops;
+
 // parser prototypes
 extern FILE *yyin;
 extern char *yytext;

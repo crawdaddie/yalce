@@ -26,35 +26,39 @@ let test_embed_seq = fn () ->
   let co_void = fn () ->
     yield 1;
     yield 2;
-    yield ne ();
+    yield (ne ());
     yield 3
   ;;
-
-  let co = co_void () in
+  let co = co_void ();
      co () == Some 1
   && co () == Some 2
   && co () == Some 300
   && co () == Some 400
   && co () == Some 3
   && co () == None
+
+  # && co () == None
 ;;
 
 let test_rec = fn () ->
   let co_void_rec = fn () ->
     yield 1;
     yield 2;
-    yield co_void_rec ()
+    yield (co_void_rec ())
   ;;
 
-  let co = co_void_rec () in
-     co () == Some 1
+  let co = co_void_rec ();
+  let res = co () == Some 1
   && co () == Some 2
   && co () == Some 1
   && co () == Some 2
+  
+  # print `test rec result? {co ()} {res}\n`
 ;;
+
 let test_fib_cor = fn () ->
 
-  let fib = fn a: (Int) b: (Int) ->
+  let fib = fn a b ->
     yield a;
     yield fib b (a + b)
   ;;
@@ -69,19 +73,19 @@ let test_fib_cor = fn () ->
   && co () == Some 8
 ;;
 
-# let test_geo = fn () ->
-#   let geo = fn a ->
-#     yield a;
-#     yield geo (a * 2.0)
-#   ;;
-#
-#   let co = geo 1. in
-#      co () == Some 1.
-#   && co () == Some 2.
-#   && co () == Some 4.
-#   && co () == Some 8.
-#   && co () == Some 16.
-# ;;
+let test_geo = fn () ->
+  let geo = fn a ->
+    yield a;
+    yield geo (a * 2.0)
+  ;;
+
+  let co = geo 1. in
+     co () == Some 1.
+  && co () == Some 2.
+  && co () == Some 4.
+  && co () == Some 8.
+  && co () == Some 16.
+;;
 
 # let test_iter_all_arg = fn () ->
 #

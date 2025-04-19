@@ -12,7 +12,7 @@
 #include "types.h"
 #include "types/builtins.h"
 #include "types/inference.h"
-#include "util.h" #include "llvm-c/Core.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 

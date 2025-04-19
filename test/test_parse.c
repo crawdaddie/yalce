@@ -66,6 +66,66 @@ bool test_parse(char input[], char *expected_sexpr) {
   return res;
 }
 
+bool test_parse_last(char input[], char *expected_sexpr) {
+
+  Ast *prog;
+  // printf("test input: %s\n", input);
+  prog = parse_input(input, "");
+
+  // char *sexpr = malloc(sizeof(char) * 300);
+  char *sexpr = big_sexpr_buf;
+  if (prog == NULL && expected_sexpr != NULL) {
+
+    printf("❌ %s\n", input);
+    printf("expected %s\n"
+           "     got syntax error\n",
+           expected_sexpr);
+
+    for (int i = 0; i < 400; i++) {
+      sexpr[i] = 0;
+    }
+    // free(sexpr);
+    free(prog);
+    yylineno = 1;
+    yyrestart(NULL);
+    // extern Ast *ast_root;
+    ast_root = NULL;
+    return false;
+  }
+  bool res;
+  if (expected_sexpr == NULL && prog == NULL) {
+    printf("✅ %s :: parse error\n", input);
+    res = true;
+  } else {
+    sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts[prog->data.AST_BODY.len - 1],
+                         sexpr);
+    if (strncmp(sexpr, expected_sexpr, strlen(expected_sexpr)) != 0) {
+      printf("❌ %s\n", input);
+      printf("expected %s\n"
+             "     got %s\n",
+             expected_sexpr, sexpr);
+
+      res = false;
+    } else {
+
+      printf("✅ %s => %s\n", input, sexpr);
+      res = true;
+    }
+  }
+
+  for (int i = 0; i < 400; i++) {
+    sexpr[i] = 0;
+  }
+  // free(sexpr);
+  free(prog);
+
+  yylineno = 1;
+  yyrestart(NULL);
+  // extern Ast *ast_root;
+  ast_root = NULL;
+  return res;
+}
+
 bool test_parse_body(char *input, char *expected_sexpr) {
 
   Ast *prog;
@@ -333,7 +393,17 @@ int main() {
 
   status &= test_parse("(+)", "+");
   status &= test_parse("(+) 1 2", "((+ 1) 2)");
+  status &= test_parse("1 |> (*) 2", "((* 2) 1)");
 
+  status &= test_parse("let ($~) = fn a b -> a + b;;", "(let $~ ($~ a b -> \n"
+                                                       "((+ a) b))\n"
+                                                       ")");
+
+  status &=
+      test_parse_last("let ($~) = fn a b -> a + b;; x $~ y", "(($~ x) y)");
+
+  status &=
+      test_parse_last("let ($~) = fn a b -> a + b;; 1 |> ($~) 2", "(($~ 2) 1)");
   // status &= test_parse("let (@) = array_at;\n"
   //                      "x_ref @ 0;\n",
   //                      "((let @ array_at)\n"

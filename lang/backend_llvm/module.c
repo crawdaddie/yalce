@@ -102,6 +102,7 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
       .type = module_ast->md,
       .ast = module_ast,
   };
+
   YLCModule *module = &_module;
   JITSymbol *module_symbol;
 

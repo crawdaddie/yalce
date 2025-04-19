@@ -13,11 +13,6 @@ const char *_cur_script_content;
 static void *palloc(size_t size) { return malloc(size); }
 static void *prealloc(void *p, size_t size) { return realloc(p, size); }
 
-typedef struct custom_binops_t {
-  const char *binop;
-  struct custom_binops_t *next;
-} custom_binops_t;
-
 custom_binops_t *__custom_binops = NULL;
 
 void add_custom_binop(const char *binop_name) {

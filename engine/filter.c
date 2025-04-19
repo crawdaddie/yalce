@@ -1369,7 +1369,7 @@ NodeRef math_node(MathNodeFn math_fn, NodeRef input) {
   Node *node = allocate_node_in_graph(graph, state_size);
 
   *node = (Node){
-      .perform = (perform_func_t)granular_pitchshift_perform,
+      .perform = (perform_func_t)math_perform,
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = state_size,

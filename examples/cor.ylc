@@ -41,19 +41,19 @@ rec ();
 let seq = fn () ->
 
   let ne = fn () ->
-    yield 300.;
-    yield 400.
+    yield 300;
+    yield 400
   ;;
 
   let co_void = fn () ->
-    yield 1.;
-    yield 2.;
+    yield 1;
+    yield 2;
     yield ne ();
-    yield 3.
+    yield 3
   ;;
 
   let inst = co_void () in
-  print `## embed coroutine in another 1. -> 2. -> 300. -> 400. -> 3. -> done
+  print `## embed coroutine in another 1 -> 2 -> 300 -> 400 -> 3 -> done
   {inst ()}
   {inst ()}
   {inst ()}

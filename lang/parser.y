@@ -7,6 +7,7 @@
 #include "parse.h"
 #include "serde.h"
 #include "common.h"
+#include <string.h>
 
 /* prototypes */
 extern void yyerror(const char *s);
@@ -101,6 +102,7 @@ Ast* ast_root = NULL;
   match_branches
   list_match_expr
   simple_expr
+  custom_binop
   let_binding
   fstring
   fstring_parts
@@ -174,9 +176,45 @@ simple_expr:
   | TOK_CHAR              { $$ = ast_char($1); }
   | '(' expr_sequence ')' { $$ = $2; }
   | '(' '+' ')'           { $$ = ast_identifier((ObjString){"+", 1}); }
+  | '(' '-' ')'           { $$ = ast_identifier((ObjString){"-", 1}); }
   | '(' '*' ')'           { $$ = ast_identifier((ObjString){"*", 1}); }
   | '(' '/' ')'           { $$ = ast_identifier((ObjString){"/", 1}); }
-  | '(' '-' ')'           { $$ = ast_identifier((ObjString){"-", 1}); }
+  | '(' MODULO ')'        { $$ = ast_identifier((ObjString){"%", 1}); }
+  | '(' '<' ')'           { $$ = ast_identifier((ObjString){"<", 1}); }
+  | '(' '>' ')'           { $$ = ast_identifier((ObjString){">", 1}); }
+  | '(' DOUBLE_AMP ')'    { $$ = ast_identifier((ObjString){"&&", 2}); }
+  | '(' DOUBLE_PIPE ')'   { $$ = ast_identifier((ObjString){"||", 2}); }
+  | '(' GE ')'            { $$ = ast_identifier((ObjString){">=", 2}); }
+  | '(' LE ')'            { $$ = ast_identifier((ObjString){"<=", 2}); }
+  | '(' NE ')'            { $$ = ast_identifier((ObjString){"!=", 2}); }
+  | '(' EQ ')'            { $$ = ast_identifier((ObjString){"==", 2}); }
+  | '(' PIPE ')'          { $$ = ast_identifier((ObjString){"|", 1}); }
+  | '(' ':' ')'           { $$ = ast_identifier((ObjString){":", 1}); }
+  | '(' DOUBLE_COLON ')'  { $$ = ast_identifier((ObjString){"::", 2}); }
+  | '(' custom_binop ')'  { $$ = $2; }
+  ;
+
+custom_binop:
+    IDENTIFIER 
+    {
+      // Check if the identifier is in the custom_binops list
+      bool found = false;
+      custom_binops_t* current = __custom_binops;
+      while (current != NULL) {
+        if (strcmp(current->binop, $1.chars) == 0) {
+          found = true;
+          break;
+        }
+        current = current->next;
+      }
+      
+      if (!found) {
+        yyerror("Invalid operator in section syntax");
+        YYERROR;
+      }
+      
+      $$ = ast_identifier($1);
+    }
   ;
 
 expr_sequence:

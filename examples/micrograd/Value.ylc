@@ -1,3 +1,4 @@
+open ../../lib/Ref;
 let string_add = extern fn String -> String -> String;
 
 type Op =
@@ -10,7 +11,7 @@ type Op =
   | Noop
   ;
 
-type Value = (data: Double , children: (List of Value) , op: Op , grad: Double);
+type Value = (data: Double , children: (List of Value) , op: Op, grad: Double);
 
 let list_rev = fn l: (List of Value) ->
   let rev = fn l res -> 
@@ -30,10 +31,10 @@ let list_map = fn f l: (List of Value) ->
   aux f l []
 ;;
 
-let Grad = module
+let Val = module
   import ../Math;
-  let vnew = fn d ->
-    (Value d [] Noop 0.)
+  let new = fn d ->
+    Ref (Value d [] Noop 0.)
   ;;
 
   let add = fn a: (Value) b: (Value) ->
@@ -75,7 +76,8 @@ let Grad = module
     | Noop -> ""
   ;;
 
-  let backward = fn v: (Value) ->
+  let backward = fn rv: (Array of Value) ->
+    let v = array_at rv 0; 
     
     let (grad, children) = match (v.op, v.children) with
     | (Add, [a, b]) -> (1., [backward a, backward b])
@@ -89,10 +91,12 @@ let Grad = module
     ;
 
 
-    Value (v.data) children (v.op) grad
+    array_set 0 rv (Value (v.data) children (v.op) grad)
   ;;
 
-  let val_to_str = fn a: (Value) ->
+  let to_str = fn ra: (Array of Value) ->
+    let a = array_at ra 0; 
+
     let op_str = match a.op with
     | Add -> "Add"
     | Sub -> "Sub"
@@ -107,7 +111,7 @@ let Grad = module
       match children with
       | [] -> str
       | x::rest -> (
-        let str_val = string_add str @@ val_to_str x;
+        let str_val = string_add str @@ to_str x;
         iter_children rest str_val
       )
     ;;
@@ -143,11 +147,11 @@ let Grad = module
 #   relu: (...),
 #   val_to_str: (Value -> Array of Char)
 
-let a = Grad.add
-  (Grad.vnew 1.)
-  (Grad.pow (Grad.vnew 2.) (Grad.vnew 3.))
+let a = Val.add
+  (Val.new 1.)
+  (Val.pow (Val.new 2.) (Val.new 3.))
   ;
 
 # let z = Grad.backward a;
 # print (Grad.val_to_str z);
-print (Grad.val_to_str a)
+print (Val.to_str a)

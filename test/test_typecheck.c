@@ -1202,5 +1202,23 @@ int main() {
     print_ast(match_subj);
     print_type(match_subj->md);
   });
+
+  ({
+    Type v = arithmetic_var("`11");
+    T("let Ref = fn item -> [|item|];;\n"
+      "let setref = fn arr v ->\n"
+      "  array_set 0 arr v\n"
+      ";;\n"
+      "let (<-) = setref;\n"
+      "let deref = fn arr -> array_at arr 0;;\n"
+      "let incr_ref = fn rx ->\n"
+      "  let x = deref rx;\n"
+      "  let inc = x + 1;\n"
+      "  rx <- inc;\n"
+      "  inc\n"
+      ";;\n",
+      &MAKE_FN_TYPE_2(&TARRAY(&v), &v));
+  });
+
   return status == true ? 0 : 1;
 }
