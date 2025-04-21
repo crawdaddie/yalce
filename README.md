@@ -21,16 +21,11 @@ thread (write-only)
 an audio node is an object that holds 
 - a pointer to some internal state (eg oscillator phase)
 - an output buffer
-- references to input buffers
-- a pointer to a `node_perform` function that reads from the input buffers, and writes to the output buffers
+- 
+- a `node_perform` function pointer that reads from the input buffers, and writes to the output buffers
 - a reference to the next node in the chain to compute
 
 ## build
-```
-make audio_test
-```
-builds & runs a standalone audio engine [test program](engine/main.c) that plays a square wave
-
 ```
 make build/libyalce_synth.so
 ```
@@ -38,38 +33,42 @@ builds the audio engine as a shared-object library
 
 
 # Lang
+[full language reference](./docs/ylc-ref.md)
+
 ## Requirements in order of importance
-- [ ] REPL - want to be able to iteratively modify the running audio graph  
-- [ ] easy C interop  
+- [x] REPL - want to be able to iteratively modify the running audio graph  
+- [x] easy C interop  
+
 
 ## features / syntax
-the DSL is a language loosely based on ocaml syntax for creating and linking audio node objects
+the language has syntax superficially similar to ocaml for creating and linking audio node objects
 
 ## Build lang executable
 ```
 make
 ```
-builds the executable `lang` in build/ using the LLVM JIT-compiler as a backend
-
-### build flags:
-`GUI_MODE=1` -- builds the executable with gui enabled 
-`DUMP_AST=1` -- displays the program's AST
+builds the executable `ylc` in build/ using the LLVM JIT-compiler as a backend
 
 ## Usage
 ```
-build/lang -i
+ylc -i
 ```
-run the lang interpreter / JIT compiler as a repl
+run the lang JIT compiler as a repl
 
 ```
-build/lang filename.ylc
+ylc filename.ylc
 ```
 compile and run the file filename.ylc
 
 ```
-build/lang filename.ylc -i
+ylc filename.ylc -i
 ```
 compile and run the file filename.ylc and continue to accept interactive repl input
+
+```
+ylc --test filename.ylc
+```
+compile and run the tests from the module filename.ylc
 
 
 
@@ -83,3 +82,8 @@ test the parser
 make test_typecheck
 ```
 test the lang's type inference
+
+```
+make test_scripts
+```
+run a set of .ylc test scripts 
