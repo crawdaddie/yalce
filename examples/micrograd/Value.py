@@ -75,7 +75,9 @@ class Value:
 
         # go one variable at a time and apply the chain rule to get its gradient
         self.grad = 1
-        for v in reversed(topo):
+        topo = list(reversed(topo))
+        print(topo)
+        for v in topo:
             v._backward()
 
     def __neg__(self):  # -self
@@ -100,7 +102,7 @@ class Value:
         return other * self**-1
 
     def __repr__(self):
-        return f"Value(data={self.data}, grad={self.grad})"
+        return f"Value(data={self.data}, grad={self.grad},op={self._op})"
 
 
 class Module:
@@ -162,3 +164,18 @@ class MLP(Module):
 
     def __repr__(self):
         return f"MLP of [{', '.join(str(layer) for layer in self.layers)}]"
+
+
+if __name__ == "__main__":
+    print(Value)
+    v = Value(1.0) + (Value(2.0) * Value(5.0))
+    v.backward()
+
+    def search(v):
+        for child in v._prev:
+            search(child)
+        print(v)
+
+    search(v)
+
+    print(v)

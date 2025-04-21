@@ -148,7 +148,11 @@ void process_scheduler_events(uint64_t current_sample) {
       void (*cb)(uint64_t) = (void (*)(uint64_t))event.callback;
       cb(event.tick);
     } else {
-      event.callback(event.userdata, cur_tick = event.tick);
+      // fprintf(stderr, "event callback %llu\n", event.tick);
+      void *udata = event.userdata;
+      cur_tick = event.tick;
+      // printf("ev callback %p %llu\n", udata, cur_tick);
+      event.callback(udata, cur_tick);
     }
   }
 }
@@ -182,6 +186,11 @@ int scheduler_event_loop() {
 void schedule_event(uint64_t now, double delay_seconds,
                     SchedulerCallback callback, void *userdata) {
 
+  if (userdata == NULL) {
+    return;
+  }
+
+  // printf("scheduling event %f %p\n", delay_seconds, userdata);
   int delay_samps = delay_seconds * ctx_sample_rate();
   push_event(callback, userdata, delay_samps, now);
 

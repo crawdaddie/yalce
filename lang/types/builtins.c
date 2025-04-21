@@ -281,9 +281,11 @@ Type *_play_routine_sig() {
   // sched_cb_type = type_fn(&t_int, sched_cb_type);
   // sched_cb_type = type_fn(&t_ptr, sched_cb_type);
 
-  Type *f = cor_from;
+  Type *f = &t_void;
+  f = type_fn(cor_from, f);
   f = type_fn(&t_ptr, f);
   f = type_fn(&t_uint64, f);
+  // f = type_fn(&t_num, f);
   return f;
 }
 Type t_play_routine_sig = GENERIC_TYPE(_play_routine_sig);
@@ -327,6 +329,29 @@ Type *_cor_stop_fn_sig() {
 Type t_cor_stop_fn_sig = GENERIC_TYPE(_cor_stop_fn_sig);
 
 Type t_list_ref_set_sig = GENERIC_TYPE(_list_ref_set_sig);
+
+Type *_iter_of_list_sig() {
+  Type *el_type = next_tvar();
+  Type *list = create_list_type_of_type(el_type);
+  Type *cor = create_coroutine_instance_type(el_type);
+  return type_fn(list, cor);
+}
+
+Type *_iter_of_array_sig() {
+  Type *el_type = next_tvar();
+  Type *arr = create_array_type(el_type);
+  Type *cor = create_coroutine_instance_type(el_type);
+  return type_fn(arr, cor);
+}
+Type t_iter_of_list_sig = GENERIC_TYPE(_iter_of_list_sig);
+Type t_iter_of_array_sig = GENERIC_TYPE(_iter_of_array_sig);
+
+Type *_cor_loop_sig() {
+  Type *el_type = next_tvar();
+  Type *cor = create_coroutine_instance_type(el_type);
+  return type_fn(cor, cor);
+}
+Type t_cor_loop_sig = GENERIC_TYPE(_cor_loop_sig);
 
 void initialize_builtin_types() {
 

@@ -1220,5 +1220,14 @@ int main() {
       &MAKE_FN_TYPE_2(&TARRAY(&v), &v));
   });
 
+  ({
+    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor.is_coroutine_instance = true;
+    T("let f = iter_of_list [1,2,3]\n"
+      "  |> cor_map (fn x -> x * 2.;)\n"
+      "  |> cor_loop\n",
+      &cor);
+  });
+
   return status == true ? 0 : 1;
 }

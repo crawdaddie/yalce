@@ -3,6 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+void *empty_cor_fn(cor *this, void *ret_val) { return NULL; }
+
+cor *empty_coroutine() {
+  cor *routine = cor_alloc();
+  cor_init(routine, (CoroutineFn)empty_cor_fn);
+  return routine;
+}
+
 cor *cor_init(cor *cor, CoroutineFn fn) {
   cor->counter = 0;
   cor->fn_ptr = fn;
@@ -11,6 +19,7 @@ cor *cor_init(cor *cor, CoroutineFn fn) {
 cor *cor_alloc() { return malloc(sizeof(cor)); }
 
 cor *cor_next(cor *coroutine, void *ret_val) {
+  // printf("cor_next %p\n", coroutine);
 
   if (!coroutine) {
     fprintf(stderr, "Error - coroutine is null\n");
@@ -32,6 +41,7 @@ cor *cor_next(cor *coroutine, void *ret_val) {
 
   if (res == NULL) {
     // free(coroutine->argv);
+    coroutine->next = NULL;
     return NULL;
   }
 
@@ -161,5 +171,6 @@ cor *cor_replace(cor *this, cor *other_cor) {
 
 cor *cor_stop(cor *this) {
   this->sig = COR_SIG_STOP;
+  this->next = NULL;
   return this;
 }

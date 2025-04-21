@@ -67,6 +67,9 @@ LLVMTypeRef create_coroutine_state_type(Type *constructor_type,
     Type *arg_type = f->data.T_FN.from;
     state_arg_types[i] = arg_type;
     llvm_state_arg_types[i] = type_to_llvm_type(arg_type, ctx->env, module);
+    if (arg_type->kind == T_FN) {
+      llvm_state_arg_types[i] = GENERIC_PTR;
+    }
     f = f->data.T_FN.to;
   }
 
@@ -78,6 +81,10 @@ LLVMTypeRef create_coroutine_state_type(Type *constructor_type,
 
     llvm_state_arg_types[outer_args_len + i] =
         type_to_llvm_type(t, ctx->env, module);
+
+    if (t->kind == T_FN) {
+      llvm_state_arg_types[i] = GENERIC_PTR;
+    }
     boundary_xs = boundary_xs->next;
   }
 
@@ -252,8 +259,8 @@ LLVMValueRef _cor_defer(LLVMValueRef instance_ptr, LLVMValueRef next_struct,
       LLVMPointerType(inst_type, 0),
       (LLVMTypeRef[]){
           LLVMPointerType(inst_type, 0),
-          LLVMPointerType(
-              inst_type, 0), // LLVM Implicitly converts struct args to pointers
+          LLVMPointerType(inst_type, 0), // LLVM Implicitly converts struct args
+                                         // to pointers when calling C funcs
           GENERIC_PTR},
       3, false);
 
@@ -513,8 +520,15 @@ void bind_coroutine_state_vars(Type *state_type, LLVMTypeRef llvm_state_type,
       LLVMValueRef state_element_gep = LLVMBuildStructGEP2(
           builder, llvm_state_type, state_ptr, i, "state_element_ptr");
 
-      LLVMValueRef val =
-          LLVMBuildLoad2(builder, llvm_type, state_element_gep, "");
+      LLVMValueRef val;
+
+      // val = state_element_gep;
+      if (t->kind == T_FN) {
+        val = state_element_gep;
+      } else {
+        val = LLVMBuildLoad2(builder, llvm_type, state_element_gep, "");
+      }
+
       codegen_pattern_binding(param, val, t, ctx, module, builder);
 
     } else {
@@ -679,6 +693,10 @@ LLVMValueRef create_coroutine_state_ptr(Type *constructor_type, Ast *args,
     Type *arg_type = f->data.T_FN.from;
     state_arg_types[i] = arg_type;
     llvm_state_arg_types[i] = type_to_llvm_type(arg_type, ctx->env, module);
+    if (arg_type->kind == T_FN) {
+      llvm_state_arg_types[i] = GENERIC_PTR;
+    }
+
     f = f->data.T_FN.to;
   }
 
@@ -698,12 +716,19 @@ LLVMValueRef create_coroutine_state_ptr(Type *constructor_type, Ast *args,
 
   LLVMTypeRef instance_state_struct_type =
       LLVMStructType(llvm_state_arg_types, args_len, 0);
+  LLVMDumpType(instance_state_struct_type);
 
   LLVMValueRef inst_state_struct = LLVMGetUndef(instance_state_struct_type);
 
   for (int i = 0; i < args_len; i++) {
     Ast *arg_ast = args + i;
     LLVMValueRef state_arg_val = codegen(arg_ast, ctx, module, builder);
+    if (state_arg_types[i]->kind == T_FN) {
+      // Make sure it's stored as a pointer
+      state_arg_val =
+          LLVMBuildBitCast(builder, state_arg_val, GENERIC_PTR, "fn_ptr_cast");
+    }
+
     inst_state_struct =
         LLVMBuildInsertValue(builder, inst_state_struct, state_arg_val, i,
                              "initial_instance_state_arg");
@@ -711,6 +736,7 @@ LLVMValueRef create_coroutine_state_ptr(Type *constructor_type, Ast *args,
 
   LLVMValueRef state_ptr_alloca =
       LLVMBuildMalloc(builder, instance_state_struct_type, "");
+  printf("state ptr alloca b4 build store\n");
 
   LLVMBuildStore(builder, inst_state_struct, state_ptr_alloca);
   return state_ptr_alloca;
@@ -1509,7 +1535,7 @@ LLVMValueRef _build_wrapper_for_scheduled_routine(
                          timestamp,
                          val,
                          func,
-                         generator_ptr,
+                         instance_ptr,
                      },
                      4, "schedule_next");
 

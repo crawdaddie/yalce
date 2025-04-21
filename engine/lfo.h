@@ -6,4 +6,5 @@ NodeRef buf_env_node(NodeRef time_scale, NodeRef input, NodeRef trig);
 NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig);
 
 NodeRef perc_env_node(NodeRef decay, NodeRef trig);
+NodeRef gated_buf_env_node(NodeRef input, NodeRef trig);
 #endif

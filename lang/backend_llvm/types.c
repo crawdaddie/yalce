@@ -101,7 +101,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
       Type *lu = env_lookup(env, type->data.T_VAR);
 
       if (!lu) {
-        print_type_env(env);
+        // print_type_env(env);
         fprintf(stderr,
                 "Error type var %s not found in environment! [compiler source: "
                 "%s:%d]\n",

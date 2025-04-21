@@ -41,12 +41,43 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
   }
 
   int args_len = ast->data.AST_APPLICATION.len;
+  int exp_args_len = fn_type_args_len(callable_type);
 
   LLVMTypeRef llvm_callable_type =
       type_to_llvm_type(callable_type, ctx->env, module);
+
   if (!llvm_callable_type) {
     print_ast_err(ast);
     return NULL;
+  }
+  if (args_len < exp_args_len) {
+    // return anonymous func
+    int len = exp_args_len - args_len;
+    LLVMTypeRef arg_types[exp_args_len];
+    LLVMTypeRef llvm_return_type_ref;
+    codegen_fn_type_arg_types(callable_type, exp_args_len, arg_types,
+                              &llvm_return_type_ref, ctx->env, module);
+
+    LLVMTypeRef curried_fn_type =
+        LLVMFunctionType(llvm_return_type_ref, arg_types + args_len, len, 0);
+    START_FUNC(module, "anon_curried_value", curried_fn_type);
+    LLVMValueRef arg_vals[exp_args_len];
+    int i = 0;
+    for (i = 0; i < args_len; i++) {
+      arg_vals[i] =
+          codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
+    }
+    for (; i < exp_args_len; i++) {
+      arg_vals[i] = LLVMGetParam(func, i - args_len);
+    }
+    LLVMValueRef call = LLVMBuildCall2(
+        builder,
+        LLVMFunctionType(llvm_return_type_ref, arg_types, exp_args_len, 0),
+        callable, arg_vals, exp_args_len, "inner_call");
+    LLVMBuildRet(builder, call);
+
+    END_FUNC
+    return func;
   }
 
   if (callable_type->kind == T_FN &&
@@ -126,30 +157,6 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  // if (ast->data.AST_APPLICATION.args->tag == AST_LIST &&
-  //     ast->data.AST_APPLICATION.args->data.AST_LIST.len == 0 &&
-  //     ast->data.AST_APPLICATION.len == 1) {
-  //
-  //   LLVMValueRef list_val =
-  //       codegen_list(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  //
-  //   if (((Type *)ast->data.AST_APPLICATION.function->md)->kind == T_FN) {
-  //
-  //     LLVMValueRef callable =
-  //         codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
-  //
-  //     if (!callable) {
-  //       fprintf(stderr, "Error: could not access record\n");
-  //       return NULL;
-  //     }
-  //
-  //     Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
-  //     return call_callable(ast, expected_fn_type, callable, ctx, module,
-  //                          builder);
-  //   }
-  //   return list_val;
-  // }
-
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
@@ -180,7 +187,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *symbol_type = sym->symbol_type;
-
   if (sym->type == STYPE_GENERIC_FUNCTION &&
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
 
@@ -223,11 +229,20 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (sym->type == STYPE_FUNCTION) {
     Type *callable_type = sym->symbol_type;
-    // if (strcmp(sym_name, "sin") == 0) {
-    //   printf("call callable\n");
+
+    LLVMValueRef res =
+        call_callable(ast, callable_type, sym->val, ctx, module, builder);
+    return res;
+  }
+
+  if (sym->type == STYPE_LOCAL_VAR && sym->symbol_type->kind == T_FN) {
+    Type *callable_type = sym->symbol_type;
+
+    // if (strcmp(sym_name, "trig_fn") == 0) {
+    //   printf("call callable arg???\n");
     //   print_type(callable_type);
     // }
-
+    //
     LLVMValueRef res =
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
     return res;

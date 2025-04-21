@@ -216,23 +216,9 @@ Type t_cor_loop_var = {
     {.T_FN = {.from = &t_void, .to = &TOPT(&t_cor_map_from_type)}},
     .is_coroutine_instance = true};
 
-Type t_cor_loop_sig = MAKE_FN_TYPE_2(&t_cor_loop_var, &t_cor_loop_var);
-
 Type t_list_cor = {T_FN,
                    {.T_FN = {.from = &t_void, .to = &TOPT(&t_list_var_el)}},
                    .is_coroutine_instance = true};
-Type t_iter_of_list_sig =
-    ((Type){T_FN,
-            {.T_FN = {.from = &TLIST(&t_list_var_el), .to = &t_list_cor}},
-            .is_coroutine_constructor = true});
-
-Type t_iter_of_array_sig = ((Type){
-    T_FN,
-    {.T_FN = {.from = &((Type){T_CONS,
-                               {.T_CONS = {TYPE_NAME_ARRAY,
-                                           (Type *[]){&t_list_var_el}, 1}}}),
-              .to = &t_list_cor}},
-    .is_coroutine_constructor = true});
 
 /*
 Type t_cor_params = TVAR("cor_params");
@@ -1303,6 +1289,9 @@ Type *create_option_type(Type *option_of) {
   Type *cons = create_cons_type(TYPE_NAME_VARIANT, 2, variant_members);
   cons->alias = "Option";
   typeclasses_extend(cons, &_GenericEq);
+  // printf("created option of \n");
+  // print_type(option_of);
+  // print_type(cons);
   return cons;
 }
 

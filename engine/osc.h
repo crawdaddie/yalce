@@ -29,6 +29,7 @@ NodeRef impulse_node(NodeRef freq);
 NodeRef ramp_node(NodeRef freq);
 
 NodeRef trig_rand_node(NodeRef trig);
+NodeRef trig_range_node(NodeRef low, NodeRef high, NodeRef trig);
 
 NodeRef trig_sel_node(NodeRef trig, NodeRef sels);
 NodeRef granulator_node(int max_grains, NodeRef buf, NodeRef trig, NodeRef pos,

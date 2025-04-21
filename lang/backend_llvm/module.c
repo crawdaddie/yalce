@@ -1,13 +1,8 @@
 #include "./module.h"
-#include "codegen.h"
 #include "function.h"
-#include "globals.h"
 #include "modules.h"
 #include "serde.h"
 #include "symbols.h"
-#include "tuple.h"
-#include "types.h"
-#include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -45,7 +40,10 @@ JITLangCtx *heap_alloc_ctx(JITLangCtx *ctx) {
   mem += sizeof(StackFrame);
   *sf = (StackFrame){.table = table, .next = module_ctx->frame};
   module_ctx->frame = sf;
-  module_ctx->stack_ptr = ctx->stack_ptr + 1;
+  // TODO: is this legit - incrementing stack ptr means non-function module
+  // values get stack alloced and forgotten? module_ctx->stack_ptr =
+  // ctx->stack_ptr + 1;
+  module_ctx->stack_ptr = ctx->stack_ptr;
   return module_ctx;
 }
 
@@ -60,7 +58,7 @@ LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
 #ifdef PRINT_MODULE_AT_IMPORT
   hti it = ht_iterator(ctx->frame->table);
   bool cont = ht_next(&it);
-  printf("module top-level:\n");
+  printf("\nmodule top-level\n");
   for (; cont; cont = ht_next(&it)) {
     const char *key = it.key;
     JITSymbol *t = it.value;
@@ -78,12 +76,6 @@ JITSymbol *create_module_symbol(Type *module_type, Ast *module_ast,
   int mod_len = module_type->data.T_CONS.num_args;
 
   JITSymbol *module_symbol = malloc(sizeof(JITSymbol) + mod_len * sizeof(int));
-
-  // for (int i = 0; i < mod_len; i++) {
-  //   module_symbol->symbol_data.STYPE_MODULE.map.val_map[i] = -1;
-  //   printf("mod val map %d: %d\n", i,
-  //          module_symbol->symbol_data.STYPE_MODULE.map.val_map[i]);
-  // }
 
   module_symbol->type = STYPE_MODULE;
   module_symbol->symbol_type = module_type;
@@ -196,6 +188,7 @@ LLVMValueRef codegen_module_access(Ast *record_ast, Type *record_type,
 
   JITSymbol *member_symbol =
       lookup_id_ast(member, module_symbol->symbol_data.STYPE_MODULE.ctx);
+  // LLVMDumpValue(member_symbol->val);
 
   return member_symbol->val;
 }

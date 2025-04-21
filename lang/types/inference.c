@@ -492,6 +492,12 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
 
+  // print_ast(ast);
+  // if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+  //   printf("APPLICATION\n");
+  //   print_ast(ast);
+  // }
+
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
 
   if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
@@ -512,6 +518,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   if (!fn_type) {
     return NULL;
   }
+
   switch (fn_type->kind) {
 
   case T_VAR: {
@@ -540,6 +547,8 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     break;
   }
   case T_CONS: {
+    printf("infer cons app\n");
+    print_ast(ast);
     return infer_cons_application(ast, ctx);
   }
   case T_FN: {
@@ -650,8 +659,9 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
   if (!is_generic(t2)) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       if (!type_implements(t2, tc)) {
-
         char buf[20];
+        // print_type(t1);
+        // print_type(t2);
         return type_error(
             ctx, node,
             "Typecheck error type %s does not implement typeclass '%s' \n",
@@ -710,6 +720,7 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 }
 
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
+
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (ast->data.AST_IDENTIFIER.is_recursive_fn_ref) {
@@ -1410,6 +1421,7 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else if (is_pointer_type(t1) && t2->kind == T_FN) {
     } else if (is_pointer_type(t1) && t2->kind == T_CONS) {
     } else if (is_coroutine_type(t1) && t2->kind == T_VOID) {
+    } else if (is_coroutine_type(t1) && is_pointer_type(t2)) {
     } else {
 
       TICtx _ctx = {.err_stream = NULL};

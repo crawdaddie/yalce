@@ -76,3 +76,5 @@ cor *cor_loop(cor *instance);
 cor *cor_replace(cor *this, cor *other_cor);
 
 cor *cor_stop(cor *this);
+
+cor *empty_coroutine();

@@ -17,6 +17,7 @@ let chirp_node = extern fn Synth -> Synth -> Synth -> Synth -> Synth;
 let impulse_node = extern fn Synth -> Synth;
 let ramp_node = extern fn Synth -> Synth;
 let trig_rand_node = extern fn Synth -> Synth;
+let trig_range_node = extern fn Synth -> Synth -> Synth -> Synth;
 let trig_sel_node = extern fn Synth -> Synth -> Synth;
 let granulator_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth;
 let pm_node = extern fn Synth -> Synth -> Synth -> Synth;
@@ -88,6 +89,7 @@ let lfo_node = extern fn Synth -> Synth -> Synth;
 let buf_env_node = extern fn Synth -> Synth -> Synth -> Synth;
 let lfpulse_node = extern fn Synth -> Synth -> Synth -> Synth;
 let perc_env_node = extern fn Synth -> Synth -> Synth;
+let gated_buf_env_node = extern fn Synth -> Synth -> Synth;
 
 # let chain_wrap = fn def: (() -> Synth) -> 
 #   reset_chain ();

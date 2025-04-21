@@ -34,7 +34,7 @@ let list_map = fn f l: (List of Value) ->
 let Val = module
   import ../Math;
   let new = fn d ->
-    Ref (Value d [] Noop 0.)
+    Value d [] Noop 0.
   ;;
 
   let add = fn a: (Value) b: (Value) ->
@@ -76,26 +76,28 @@ let Val = module
     | Noop -> ""
   ;;
 
-  let backward = fn rv: (Array of Value) ->
-    let v = array_at rv 0; 
+  let backward = fn v: (Value) ->
     
     let (grad, children) = match (v.op, v.children) with
-    | (Add, [a, b]) -> (1., [backward a, backward b])
+    | (Add, [a, b]) -> 
+      # a.grad += v.grad
+      # b.grad += v.grad
+
+      (1., [backward a, backward b])
     | (Sub, [a, b]) -> (1., [backward a, backward b])
     | (Mul, [a, b]) -> (1., [backward a, backward b])
     | (Div, [a, b]) -> (1., [backward a, backward b])
     | (Pow, [a, b]) -> (1., [backward a, backward b])
     | (Relu,[a]) -> (1., [backward a])
-    | (Noop, []) -> (1., [])
-    | _ -> (1., [])
+    # | (Noop, []) -> (1., [])
+    # | _ -> (1., [])
     ;
 
 
-    array_set 0 rv (Value (v.data) children (v.op) grad)
+    Value (v.data) children (v.op) grad
   ;;
 
-  let to_str = fn ra: (Array of Value) ->
-    let a = array_at ra 0; 
+  let to_str = fn a: (Value) ->
 
     let op_str = match a.op with
     | Add -> "Add"
@@ -149,9 +151,11 @@ let Val = module
 
 let a = Val.add
   (Val.new 1.)
-  (Val.pow (Val.new 2.) (Val.new 3.))
+  (Val.mul (Val.new 2.) (Val.new 3.))
   ;
 
 # let z = Grad.backward a;
 # print (Grad.val_to_str z);
+Val.backward a;
 print (Val.to_str a)
+

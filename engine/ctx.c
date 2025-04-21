@@ -40,6 +40,9 @@ static void process_msg_pre(int frame_offset, scheduler_msg msg) {
     Node *node = payload.target;
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      if (node->state_ptr) {
+        g = node->state_ptr;
+      }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       for (int i = frame_offset; i < BUF_SIZE; i++) {
@@ -57,6 +60,9 @@ static void process_msg_pre(int frame_offset, scheduler_msg msg) {
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      if (node->state_ptr) {
+        g = node->state_ptr;
+      }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       inlet_node->output.layout = buf->output.layout;
@@ -105,6 +111,9 @@ static void process_msg_post(int frame_offset, scheduler_msg msg) {
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
+      if (node->state_ptr) {
+        g = node->state_ptr;
+      }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       for (int i = 0; i < frame_offset; i++) {

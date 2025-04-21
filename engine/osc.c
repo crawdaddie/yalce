@@ -1261,6 +1261,57 @@ Node *trig_rand_node(Node *trig) {
   return node;
 }
 
+void *trig_range_perform(Node *node, trig_rand_state *state, Node *inputs[],
+                         int nframes, double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *trig = inputs[0]->output.buf;
+  double *low = inputs[1]->output.buf;
+  double *high = inputs[2]->output.buf;
+
+  while (nframes--) {
+
+    if (*trig == 1.0) {
+      state->value = _random_double_range(*low, *high);
+    }
+    low++;
+    high++;
+
+    *out = state->value;
+    out++;
+
+    trig++;
+  }
+
+  return node->output.buf;
+}
+Node *trig_range_node(Node *low, Node *high, Node *trig) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(trig_rand_state));
+
+  *node = (Node){
+      .perform = (perform_func_t)trig_range_perform,
+      .node_index = node->node_index,
+      .num_inputs = 3,
+      .state_size = sizeof(trig_rand_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(trig_rand_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "trig_range",
+  };
+
+  trig_rand_state *state =
+      (trig_rand_state *)(graph->nodes_state_memory + node->state_offset);
+  *state = (trig_rand_state){.value = _random_double_range(0.0, 1.0)};
+
+  node->connections[0].source_node_index = trig->node_index;
+  node->connections[1].source_node_index = low->node_index;
+  node->connections[2].source_node_index = high->node_index;
+
+  return node;
+}
+
 // Triggered selector
 typedef struct trig_sel_state {
   double value;

@@ -18,7 +18,7 @@ let rev_node_tpl = (fn () ->
   trig 
   |> array_choose_trig_node (array_size freqs) (cstr freqs)
   |> sin_node
-  |> mul2_node (exp_env (rand_trig_node trig 0.1 1.) trig)
+  |> (*) (exp_env (rand_trig_node trig 0.1 1.) trig)
   |> reverb_node 0.8 1. 1. 1.
   # |> grain_pitchshift_node 0.5 0.2
   ;
@@ -92,7 +92,7 @@ let st = (fn () ->
   let ff = chirp_node 5000. 55. 0.03 trig; 
 
   let sig = white_noise_node ()
-    |> mul2_node (aslr_node 0. 0.2 0.001 0.05 trig ) in
+    |> (*) (aslr_node 0. 0.2 0.001 0.05 trig ) in
   let sig = sig + (aslr_node 0.0001 1. 0.1 0.5 trig) * (sin_node ff)  in
   sig + (dyn_tanh_node (chirp_node 10. 0.01 0.3 trig) sig) 
   ;)

@@ -223,6 +223,22 @@ let loop_cor = fn () ->
   {d ()}
   {d ()}
 `;
+
+  let f = iter_of_list [1,2,3]
+  |> cor_map (fn x -> x * 0.5;)
+  |> cor_loop
+  in
+  print `## looped mapped list
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+`;
+
   let e = iter_of_array [|1,2,3|] |> cor_loop in
   print `## looped array
   {e ()}

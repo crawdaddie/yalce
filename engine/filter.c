@@ -1359,7 +1359,6 @@ void *math_perform(Node *node, math_node_state *state, Node *inputs[],
 }
 
 NodeRef math_node(MathNodeFn math_fn, NodeRef input) {
-
   AudioGraph *graph = _graph;
 
   int state_size = sizeof(math_node_state);

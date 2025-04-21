@@ -31,14 +31,14 @@ let s = fn freq offset ->
 let x = array_fill 128 (fn i -> s (midi_to_freq i) 0;);
 
 register_note_on_handler (fn midi_note vel ->
-  let fo = get_frame_offset () in (
+  let fo = get_current_sample () in (
     set_input_scalar_offset (array_at x midi_note) 1 fo 1.;
     set_input_scalar_offset (array_at x midi_note) 2 fo (vel + 0.01)
   );
 ) 0;
 
 register_note_off_handler (fn midi_note vel ->
-  let fo = get_frame_offset () in 
+  let fo = get_current_sample () in 
     set_input_scalar_offset (array_at x midi_note) 1 fo 0.
   ;
 ) 0;

@@ -1,42 +1,50 @@
-open engine/bindings/Synth;
-open engine/bindings/Sched;
+open ../engine/bindings/Synth;
+open ../engine/bindings/Sched;
+import ../lib/Math;
 
 
 let snare_syn = (fn () -> 
-  let trig = inlet 0.;
-  let sin = (perc_env_node 2. trig) * ((sin_node 220.) + (sin_node 357.));
-  let sig = (sin + white_noise_node ()) |> tanh_node 5.;
-  sig * (aslr_node 0. 1. 0.05 0.1 trig)
+  let trig = inlet 0. in
+  sin_node 220. + sin_node 357.
+    |> (*) (aslr_node 0. 1. 0.08 0.1 trig)
+    |> (+) (white_noise_node ())
+    |> tanh_node 5.
+    |> (*) (aslr_node 0. 1. 0.05 0.1 trig)
+
   ;) |> play_tpl
 ;
 
 let hh_syn = (fn () -> 
-  let trig = inlet 0.;
-  let sig = (white_noise_node ()) |> biquad_hp_node 2000. 10.;
-  let env = perc_env_node (lfnoise_node 2. 0.5 1.) trig;
-  let chirp = sin_node (200. + 8000. * env);
-  (chirp + sig) * env
-  |> comb_node 0.02 0.1 0.5
+  let trig = inlet 0. in
+  let env = perc_env_node (trig_range_node 0.2 2. trig) trig in
+  env
+    |> math_node (Math.unipolar_scale 100. 5000.)
+    |> sin_node
+    |> (+) (white_noise_node ())
+    |> biquad_hp_node (trig_range_node 1000. 8000. trig) 4.
+    |> comb_node 0.02 0.1 0.7
+    |> (*) env
+
   ;) |> play_tpl
 ;
 
-#Env:
+# #Env:
 let kick_penv = 
 [|
-  0.000000, 0.000000, 2.400000,
-  1., 0.185902, -2.300000,
-  0.011111, 2.814099, 1.300000,
-  0.000000
+  0., 0., 2.4,
+  1., 0.185902, -2.3,
+  0.011111, 2.814099, 1.3,
+  0.
 |]
 |> array_to_buf;
 
 
 let kick_ampenv = 
 [|
-  0.000000, 0.000000, 2.400000,
-  1.000000, 2.210165, -2.000000,
-  1.000000, 0.789836, 1.300000,
-  0.000000
+  0., 0., 2.4,
+  1., 2.210165, -2.,
+  1., 0.789836, 1.3,
+  0.
 |]
 |> array_to_buf;
 
@@ -49,7 +57,7 @@ let kick_syn = (fn () ->
 
   let sig = (
     let ff = (buf_env_node 1. (buf_ref kick_penv) trig)
-      |> math_node (fn x -> 55. + 200. * x;)
+      |> math_node (Math.unipolar_scale 55. 200.)
     in
     (perc_env_node 0.2 trig)
     |> (*) (white_noise_node ())
@@ -57,9 +65,11 @@ let kick_syn = (fn () ->
   );
 
   let full = (sig + (dyn_tanh_node (5 * buf_env_node 0.03 (buf_ref kick_ampenv) trig) sig));
-
-  full + ( full |> biquad_hp_node 400. 1. |> reverb_node 0.2 1. 0. 1.)
-
+  full + (
+    full
+    |> biquad_hp_node 100 1
+    |> reverb_node 0.2 1. 0. 1.
+  )
   |> (*) (buf_env_node 0.12 (buf_ref kick_ampenv) trig)
 
   ;)
@@ -71,28 +81,30 @@ let kick = fn t: (Double) ->
   set_input_trig_offset kick_syn 0 fo;
   t
 ;;
-
-
-
-
-let trig_snare = fn k ->
-  let fo = get_tl_tick () in
-  set_input_trig_offset k 0 fo
-;;
-
+#
+#
+#
+#
+# let trig_snare = fn k ->
+#   let fo = get_tl_tick () in
+#   set_input_trig_offset k 0 fo
+# ;;
+#
 let trig_hh = fn k ->
   let fo = get_tl_tick () in
   set_input_trig_offset k 0 fo
 ;;
-
-
-
-
+#
+#
+#
+#
 let k_routine_other = fn s ->
-  yield (kick (s * 1.));
+  yield (kick (s * 1.5));
+  yield (kick (s * 1.75));
+  yield (kick (s * .75));
   yield (k_routine_other s)
 ;;
-
+#
 let sn = fn t: (Double) ->
   let fo = get_tl_tick () in
   set_input_trig_offset snare_syn 0 fo;
@@ -113,29 +125,25 @@ let sn_routine = fn s ->
   yield (sn (s * 0.25));
   yield (sn_routine s)
 ;;
-
+#
 let hh_routine = fn scale ->
   trig_hh hh_syn;
   yield (scale * 0.25);
   yield (hh_routine scale)
 ;;
-
-
-let k_routine = fn s ->
-  yield (kick (s));
-  yield (k_routine (s * 1.1))
-;;
-
+#
+#
 let q = 60./130. in
 defer_quant q (fn t ->
-  # play_routine t schedule_event (hh_routine q);
-  # play_routine t schedule_event (sn_routine q); 
-  play_routine t schedule_event (k_routine 0.05);
+  play_routine t schedule_event (hh_routine q);
+  play_routine t schedule_event (sn_routine q); 
+  play_routine t schedule_event (k_routine_other q kick)
+  ;
 );
-
-# let sn = sn_routine 0.5;
 #
-# defer_quant 2. (fn t ->
-# ;);
+# # let sn = sn_routine 0.5;
+# #
+# # defer_quant 2. (fn t ->
+# # ;);
+# #
 #
-

@@ -13,6 +13,33 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMTypeRef cor_inst_struct_type();
 
+void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
+                               LLVMTypeRef *llvm_param_types,
+                               LLVMTypeRef *llvm_return_type_ref, TypeEnv *env,
+                               LLVMModuleRef module) {
+
+  for (int i = 0; i < fn_len; i++) {
+
+    Type *t = fn_type->data.T_FN.from;
+    if (t->kind == T_FN) {
+      llvm_param_types[i] = GENERIC_PTR;
+    } else if (is_pointer_type(t) && t->data.T_CONS.num_args == 0) {
+      llvm_param_types[i] = GENERIC_PTR;
+    } else if (is_pointer_type(t)) {
+      llvm_param_types[i] = LLVMPointerType(
+          type_to_llvm_type(t->data.T_CONS.args[0], env, module), 0);
+    } else {
+      llvm_param_types[i] = type_to_llvm_type(t, env, module);
+    }
+
+    fn_type = fn_type->data.T_FN.to;
+  }
+
+  Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
+
+  *llvm_return_type_ref = type_to_llvm_type(return_type, env, module);
+}
+
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
                             LLVMModuleRef module) {
 
@@ -30,28 +57,9 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
     llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
   } else {
 
-    for (int i = 0; i < fn_len; i++) {
-
-      Type *t = fn_type->data.T_FN.from;
-      if (t->kind == T_FN) {
-        llvm_param_types[i] = GENERIC_PTR;
-      } else if (is_pointer_type(t) && t->data.T_CONS.num_args == 0) {
-        llvm_param_types[i] = GENERIC_PTR;
-      } else if (is_pointer_type(t)) {
-        llvm_param_types[i] = LLVMPointerType(
-            type_to_llvm_type(t->data.T_CONS.args[0], env, module), 0);
-      } else {
-        llvm_param_types[i] = type_to_llvm_type(t, env, module);
-      }
-
-      fn_type = fn_type->data.T_FN.to;
-    }
-
-    Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
-
-    LLVMTypeRef llvm_return_type_ref =
-        type_to_llvm_type(return_type, env, module);
-
+    LLVMTypeRef llvm_return_type_ref;
+    codegen_fn_type_arg_types(fn_type, fn_len, llvm_param_types,
+                              &llvm_return_type_ref, env, module);
     llvm_fn_type =
         LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
   }

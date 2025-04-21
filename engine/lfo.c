@@ -14,6 +14,7 @@ typedef struct lfo_state {
   double time;
   double curve;
   int active;
+  int sustaining;
 } lfo_state;
 
 // Helper function to interpolate between two points based on curve parameter
@@ -232,6 +233,7 @@ NodeRef buf_env_node(NodeRef time_scale, NodeRef input, NodeRef trig) {
 
 typedef struct lfpulse_state {
   double phase;
+  double prev_trig;
 } lfpulse_state;
 
 void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
@@ -255,7 +257,11 @@ void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
     trig_in++;
 
     pw = *pw_in;
-    pw++;
+    pw_in++;
+
+    if (trig >= 0.5 && state->prev_trig < 0.5) {
+      state->phase = 0.;
+    }
 
     if (state->phase >= 1.0) {
       state->phase = 0.;
@@ -269,8 +275,8 @@ void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
 
     *out = sample;
     out++;
-
     state->phase += freq * spf;
+    state->prev_trig = trig;
   }
 
   return node->output.buf;
@@ -280,8 +286,8 @@ NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig) {
 
   AudioGraph *graph = _graph;
 
-  int state_size = sizeof(lfo_state);
-  lfo_state lfo = {.phase = 0., .prev_trig = 0.};
+  int state_size = sizeof(lfpulse_state);
+  lfpulse_state lfo = {.phase = 0., .prev_trig = 0.};
 
   Node *node = allocate_node_in_graph(graph, state_size);
 
@@ -302,7 +308,7 @@ NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig) {
                   : (char *)((Node *)node + 1);
 
   memset(mem, 0, state_size);
-  lfo_state *state = mem;
+  lfpulse_state *state = mem;
   *state = lfo;
 
   node->connections[0].source_node_index = freq->node_index;
@@ -310,10 +316,13 @@ NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig) {
   node->connections[2].source_node_index = pw->node_index;
   return node;
 }
-static double perc_env[10] = {0.000000, 0.000000,  2.400000, 1.,
-                              0.185902, -2.300000, 0.011111, 2.814099,
-                              1.300000, 0.000000};
-
+// clang-format off
+static double perc_env[10] = {0.000000, 0.000000,  2.400000,
+                              1.,       0.185902, -2.300000,
+                              0.011111, 0.1, 1.300000,
+                              0.000000
+};
+// clang-format on
 void *perc_env_perform(Node *node, lfo_state *state, Node *inputs[],
                        int nframes, double spf) {
 
@@ -401,5 +410,141 @@ NodeRef perc_env_node(NodeRef decay, NodeRef trig) {
 
   node->connections[0].source_node_index = trig->node_index;
   node->connections[1].source_node_index = decay->node_index;
+  return node;
+}
+
+void *gated_buf_env_perform(Node *node, lfo_state *state, Node *inputs[],
+                            int nframes, double spf) {
+
+  double *out = node->output.buf;
+  double *_trig = inputs[0]->output.buf;
+  double *data = inputs[1]->output.buf;
+  int size = inputs[1]->output.size;
+  int num_points = (size + 2) / 3;
+
+  while (nframes--) {
+    double trig = *_trig;
+    _trig++;
+
+    if (trig >= 0.5 && state->prev_trig < 0.5) {
+      // Attack - gate opened
+      state->active = 1;
+      state->sustaining = 0;
+      reset_lfo(state, num_points, data);
+      state->prev_trig = trig;
+    }
+
+    if (state->prev_trig >= 0.5 && trig < 0.5) {
+      // Release - gate closed
+
+      if (state->sustaining) {
+        // If we were in sustain, move to release phase (second-to-last to last
+        // point)
+        state->current_segment = num_points - 2;
+        state->phase = 0.0;
+
+        // Set up the segment from second-to-last to last point
+        int curr = state->current_segment;
+        set_segment(state, num_points, curr, data);
+
+        // No longer sustaining
+        state->sustaining = 0;
+      }
+    }
+
+    double value;
+
+    if (state->sustaining) {
+      // If in sustain mode, hold at the second-to-last point's value
+      value = state->start;
+    } else {
+      // Normal envelope traversal
+      double norm_phase;
+      if (state->time > 0.0) {
+        norm_phase = state->phase / state->time; // Normalized phase [0,1]
+        norm_phase = fmin(1.0, norm_phase);      // Clamp to [0,1]
+      } else {
+        norm_phase = 1.0; // At end of segment
+      }
+
+      value = interpolate_value(norm_phase, state->start, state->target,
+                                state->curve);
+
+      // Only advance phase if not sustaining
+      if (state->active) {
+        state->phase += spf;
+      }
+    }
+
+    // Output the value
+    if (state->active) {
+      *out = value;
+    } else {
+      *out = 0.;
+    }
+    out++;
+
+    // Check if we need to advance to the next segment
+    if (!state->sustaining && state->phase >= state->time) {
+      state->current_segment++;
+
+      if (state->current_segment == num_points - 2) {
+        // Reached second-to-last point - enter sustain mode if gate is still
+        // open
+        if (trig >= 0.5) {
+          state->sustaining = 1;
+          // printf("sustaining at value: %f\n", state->target);
+        } else {
+          // Gate already closed, continue to release phase
+          int curr = state->current_segment;
+          set_segment(state, num_points, curr, data);
+        }
+      } else if (state->current_segment >= num_points - 1) {
+        // Reached the end of the envelope
+        state->active = 0; // Envelope completed
+        // printf("envelope completed\n");
+      } else {
+        // Normal segment transition
+        int curr = state->current_segment;
+        set_segment(state, num_points, curr, data);
+      }
+    }
+
+    state->prev_trig = trig;
+  }
+
+  return node->output.buf;
+}
+NodeRef gated_buf_env_node(NodeRef input, NodeRef trig) {
+
+  AudioGraph *graph = _graph;
+
+  int state_size = sizeof(lfo_state);
+  lfo_state lfo = {.phase = 0., .prev_trig = 0.};
+
+  Node *node = allocate_node_in_graph(graph, state_size);
+
+  *node = (Node){
+      .perform = (perform_func_t)gated_buf_env_perform,
+      .node_index = node->node_index,
+      .num_inputs = 2,
+      .state_size = state_size,
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "gated_buf_env",
+  };
+
+  char *mem = (graph != NULL)
+                  ? (char *)(graph->nodes_state_memory + node->state_offset)
+                  : (char *)((Node *)node + 1);
+
+  memset(mem, 0, state_size);
+  lfo_state *state = mem;
+  *state = lfo;
+
+  node->connections[0].source_node_index = trig->node_index;
+  node->connections[1].source_node_index = input->node_index;
   return node;
 }

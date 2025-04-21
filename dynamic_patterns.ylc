@@ -1,0 +1,162 @@
+open engine/bindings/Synth;
+open engine/bindings/Sched;
+open engine/bindings/MIDI;
+import lib/Math;
+let empty_coroutine = extern fn () -> Ptr;
+
+let Snare = module
+  let synth = (fn () -> 
+    let trig = inlet 0. in
+    sin_node 220. + sin_node 357.
+      |> (*) (aslr_node 0. 1. 0.08 0.1 trig)
+      |> (+) (white_noise_node ())
+      |> tanh_node 5. |> (*) (aslr_node 0. 1. 0.05 0.1 trig)
+
+    ;) |> play_tpl
+  ;
+
+  let trig = fn () ->
+    let fo = get_tl_tick () in
+    set_input_trig_offset synth 0 fo
+  ;;
+;
+
+let Hihat = module
+  let synth = (fn () -> 
+    let trig = inlet 0. in
+    let env = perc_env_node (trig_range_node 0.2 2. trig) trig in
+    env
+      |> math_node (Math.unipolar_scale 100. 5000.)
+      |> sin_node
+      |> (+) (white_noise_node ())
+      |> biquad_hp_node (trig_range_node 1000. 8000. trig) 4.
+      |> comb_node 0.02 0.1 0.7
+      |> (*) env
+
+    ;) |> play_tpl
+  ;
+
+  let trig = fn () ->
+    let fo = get_tl_tick () in
+    set_input_trig_offset synth 0 fo
+  ;;
+
+  let input = fn q t cor ->
+    print "hihat input\n";
+    cor 
+    |> cor_map (fn d -> trig (); d * q;)
+    |> play_routine t schedule_event
+  ;;
+;
+
+let Kick = module
+  #Envs:
+  let penv = [|
+    0.000000, 0.000000, 2.400000,
+    1., 0.185902, -2.300000,
+    0.011111, 2.814099, 1.300000,
+    0.000000
+  |]
+  |> array_to_buf;
+
+
+  let ampenv = [|
+    0.000000, 0.000000, 2.400000,
+    1.000000, 2.210165, -2.000000,
+    1.000000, 0.789836, 1.300000,
+    0.000000
+  |]
+  |> array_to_buf;
+
+  let synth = (fn () -> 
+    let trig = inlet 0.;
+    let noise = (perc_env_node 0.2 trig) * (white_noise_node ()) ;
+
+    let sig = buf_env_node 1. (buf_ref penv) trig
+    |> math_node (Math.unipolar_scale 55. 200.)
+    |> sin_node 
+    |> (+) noise
+    ;
+
+    let sig = (sig + (dyn_tanh_node (5 * buf_env_node 0.03 (buf_ref ampenv) trig) sig));
+
+    sig + (
+      sig
+      |> biquad_hp_node 100 1
+      |> reverb_node 0.2 1. 0. 1.
+    )
+    |> (*) (buf_env_node 0.12 (buf_ref ampenv) trig)
+
+    ;)
+    |> play_tpl
+  ;
+
+  let trig = fn () -> 
+    let fo = get_tl_tick () in
+    set_input_trig_offset synth 0 fo
+  ;;
+
+  let input_ref = empty_coroutine ();
+  let set_input = fn t cor ->
+    cor_stop input_ref;
+    cor_replace input_ref cor; 
+
+    let new_cor = 
+      cor |> cor_map (fn d: (Double) ->
+      trig ();
+      d * (60. / 130.)
+    ;);
+
+    cor_replace input_ref new_cor;
+
+    input_ref |> play_routine t schedule_event
+  ;;
+;
+
+
+let q = 60./130. in
+defer_quant q (fn t ->
+  iter_of_list [0.25]
+  |> cor_loop
+  |> cor_map (fn d ->
+    Hihat.trig ();
+    d * q
+  ;)
+  |> play_routine t schedule_event
+  ;
+
+  # iter_of_list [
+  # 1.5, 1.75, 0.25, 0.5,
+  # 1.5, 1.,   1.5,
+  # 1.5, 1.75, 0.25, 0.5,
+  # 1.5, 1.,   1.5,
+  # ]
+  #
+  iter_of_list [
+    1.5,
+    1.5,
+    1.5,
+    .75,
+    1.25,
+    .5,
+  ]
+  |> cor_loop
+  |> (Kick.set_input) t
+;)
+
+# let q_ = 60./130. in
+# defer_quant q_ (fn t ->
+#   iter_of_list [
+#     1.5,
+#     1.5,
+#     1.5,
+#     .75,
+#     1.25,
+#     .5,
+#   ]
+#   |> cor_map (fn d ->
+#     Kick.trig ();
+#     d * q_
+#   ;)
+#   |> play_routine t schedule_event
+# ;)

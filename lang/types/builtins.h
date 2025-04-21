@@ -27,4 +27,9 @@ extern Type t_play_routine_sig;
 
 extern Type t_cor_replace_fn_sig;
 extern Type t_cor_stop_fn_sig;
+extern Type t_cor_loop_sig;
+
+extern Type t_iter_of_list_sig;
+extern Type t_iter_of_array_sig;
+extern Type t_cor_loop_sig;
 #endif
