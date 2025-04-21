@@ -13,11 +13,12 @@
 static CCCallback cc_handlers[128];
 static NoteCallback note_on_handlers[128];
 static NoteCallback note_off_handlers[128];
+static MIDIPortRef output_port;
+static MIDIClientRef client;
 
 int debug;
 void toggle_midi_debug() { debug = !debug; }
 
-// Register handler functions
 void register_cc_handler(CCCallback handler, int ch, int cc) {
   cc_handlers[cc] = handler;
 }
@@ -30,7 +31,6 @@ void register_note_off_handler(NoteCallback handler, int ch) {
   note_off_handlers[ch] = handler;
 }
 
-// Handler implementations
 static void handle_cc(MIDIPacket *packet) {
   uint8_t ch = *packet->data & 0x0F;
   uint8_t cc = *(packet->data + 1) & 0xFF;
@@ -42,8 +42,6 @@ static void handle_cc(MIDIPacket *packet) {
   if (handler != NULL) {
     handler((double)(val * REC_127));
   }
-
-  // printf("%d %d %d\n", ch, cc, val);
 }
 
 static void handle_note_on(MIDIPacket *packet) {
@@ -105,7 +103,7 @@ void midi_setup() {
     note_off_handlers[i] = NULL;
   }
 
-  MIDIClientRef client;
+  // MIDIClientRef client;
   MIDIClientCreate(CFSTR("MIDI client"), NULL, NULL, &client);
 
   MIDIPortRef inputPort;
@@ -133,6 +131,150 @@ void midi_setup() {
       printf("MIDI Source %lu: %s\n", (unsigned long)i, name);
     } else {
       printf("MIDI Source %lu: Unable to get name\n", (unsigned long)i);
+    }
+  }
+}
+void midi_out_setup() {
+  MIDIOutputPortCreate(client, CFSTR("Output port"), &output_port);
+}
+
+int send_note_on(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
+                 uint8_t velocity) {
+  if (channel > 15) {
+    if (debug) {
+      printf("Error: Invalid MIDI channel %d (must be 0-15)\n", channel);
+    }
+    return -1;
+  }
+
+  if (note > 127) {
+    if (debug) {
+      printf("Error: Invalid MIDI note %d (must be 0-127)\n", note);
+    }
+    return -1;
+  }
+
+  if (velocity > 127) {
+    if (debug) {
+      printf("Error: Invalid MIDI velocity %d (must be 0-127)\n", velocity);
+    }
+    return -1;
+  }
+
+  Byte buffer[1024];
+  MIDIPacketList *packetList = (MIDIPacketList *)buffer;
+  MIDIPacket *currentPacket = MIDIPacketListInit(packetList);
+
+  Byte midiData[3];
+  midiData[0] = NOTE_ON | (channel & CHAN_MASK);
+  midiData[1] = note;
+  midiData[2] = velocity;
+
+  currentPacket = MIDIPacketListAdd(packetList, sizeof(buffer), currentPacket,
+                                    0, 3, midiData);
+
+  if (debug) {
+    printf("Sending note on: ch=%d note=%d vel=%d\n", channel, note, velocity);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packetList);
+  return result == noErr ? 0 : -1;
+}
+
+int send_note_off(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
+                  uint8_t velocity) {
+  if (channel > 15) {
+    if (debug) {
+      printf("Error: Invalid MIDI channel %d (must be 0-15)\n", channel);
+    }
+    return -1;
+  }
+
+  if (note > 127) {
+    if (debug) {
+      printf("Error: Invalid MIDI note %d (must be 0-127)\n", note);
+    }
+    return -1;
+  }
+
+  if (velocity > 127) {
+    if (debug) {
+      printf("Error: Invalid MIDI velocity %d (must be 0-127)\n", velocity);
+    }
+    return -1;
+  }
+
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  Byte midi_data[3];
+  midi_data[0] = NOTE_OFF | (channel & CHAN_MASK);
+  midi_data[1] = note;
+  midi_data[2] = velocity;
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, 0, 3, midi_data);
+
+  if (debug) {
+    printf("Sending note off: ch=%d note=%d vel=%d\n", channel, note, velocity);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
+}
+
+MIDIEndpointRef get_destination(ItemCount index) {
+  if (index >= MIDIGetNumberOfDestinations()) {
+    return 0;
+  }
+  return MIDIGetDestination(index);
+}
+
+MIDIEndpointRef get_destination_by_name(const char *name) {
+  printf("name: %s\n", name);
+  ItemCount destCount = MIDIGetNumberOfDestinations();
+
+  for (ItemCount i = 0; i < destCount; i++) {
+    MIDIEndpointRef dest = MIDIGetDestination(i);
+
+    CFStringRef nameCF;
+    char destName[128];
+
+    OSStatus result =
+        MIDIObjectGetStringProperty(dest, kMIDIPropertyName, &nameCF);
+    if (result == noErr) {
+      CFStringGetCString(nameCF, destName, sizeof(destName),
+                         kCFStringEncodingUTF8);
+      CFRelease(nameCF);
+
+      if (strcmp(destName, name) == 0) {
+        return dest;
+      }
+    }
+  }
+  return 0; // Not found
+}
+
+void list_destinations() {
+  ItemCount destCount = MIDIGetNumberOfDestinations();
+  printf("Found %lu MIDI destination%s\n", destCount, destCount > 1 ? "s" : "");
+
+  for (ItemCount i = 0; i < destCount; i++) {
+    MIDIEndpointRef dest = MIDIGetDestination(i);
+
+    CFStringRef nameCF;
+    char name[128];
+
+    OSStatus result =
+        MIDIObjectGetStringProperty(dest, kMIDIPropertyName, &nameCF);
+    if (result == noErr) {
+      CFStringGetCString(nameCF, name, sizeof(name), kCFStringEncodingUTF8);
+      CFRelease(nameCF);
+
+      printf("MIDI Destination %lu: %s\n", (unsigned long)i, name);
+    } else {
+      printf("MIDI Destination %lu: Unable to get name\n", (unsigned long)i);
     }
   }
 }

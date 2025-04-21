@@ -720,6 +720,8 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 }
 
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
+  // printf("APPLICATION\n");
+  // print_ast(ast);
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 

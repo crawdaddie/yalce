@@ -239,6 +239,7 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "void", "()");
   lookups = lookups_extend(lookups, "uint64_t", "Uint64");
   lookups = lookups_extend(lookups, "uint32_t", "Int");
+  lookups = lookups_extend(lookups, "uint8_t", "Int");
   lookups = lookups_extend(lookups, "int", "Int");
   lookups = lookups_extend(lookups, "bool", "Bool");
   lookups = lookups_extend(lookups, "char", "Char");
@@ -250,6 +251,8 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "SDL_Renderer *", "Ptr");
   lookups = lookups_extend(lookups, "SDL_Color", "(Int, Int, Int, Int)");
   lookups = lookups_extend(lookups, "struct __color", "(Int, Int, Int, Int)");
+  lookups = lookups_extend(lookups, "MIDIEndpointRef", "Int");
+  lookups = lookups_extend(lookups, "ItemCount", "Int");
 
   // engine lib -specific lookups
   lookups = lookups_extend(lookups, "SignalRef", "Ptr");

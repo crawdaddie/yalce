@@ -1,8 +1,7 @@
 #include "backend_llvm/builtin_functions.h"
 #include "adt.h"
 #include "application.h"
-#include "backend_llvm/array.h"
-#include "backend_llvm/common.h"
+#include "backend_llvm/array.h" #include "backend_llvm/common.h"
 #include "backend_llvm/coroutines.h"
 #include "function.h"
 #include "list.h"
@@ -73,8 +72,64 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }                                                                          \
   })
 
+LLVMValueRef curried_binop(Ast *saved_arg_ast, LLVMOpcode fop, LLVMOpcode iop,
+                           Type *type, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+
+  Type *ret = type->data.T_FN.to;
+  LLVMTypeRef llvm_return_type_ref = type_to_llvm_type(ret, ctx->env, module);
+
+  LLVMTypeRef llvm_from_type_ref =
+      type_to_llvm_type(type->data.T_FN.from, ctx->env, module);
+
+  LLVMTypeRef curried_fn_type = LLVMFunctionType(
+      llvm_return_type_ref, (LLVMTypeRef[]){llvm_from_type_ref}, 1, 0);
+
+  START_FUNC(module, "anon_curried_value", curried_fn_type);
+
+  LLVMValueRef saved_arg = codegen(saved_arg_ast, ctx, module, builder);
+  LLVMValueRef free_arg = LLVMGetParam(func, 0);
+  LLVMValueRef binop_res;
+
+  switch (ret->kind) {
+  case T_INT:
+  case T_UINT64: {
+    binop_res =
+        LLVMBuildBinOp(builder, iop, saved_arg, free_arg, "curried_binop");
+    break;
+  }
+  case T_NUM: {
+    binop_res =
+        LLVMBuildBinOp(builder, fop, saved_arg, free_arg, "curried_binop");
+    break;
+  }
+  default: {
+    // if (ret->alias) {
+    //   JITSymbol *sym = get_typeclass_method(ret->alias, _name, ctx);
+    //   if (!sym) {
+    //     return NULL;
+    //   }
+    //   if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler)
+    //     return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
+    //         ast, ctx, module, builder);
+    // }
+    return NULL;
+  }
+  }
+
+  LLVMBuildRet(builder, binop_res);
+
+  END_FUNC
+  return func;
+}
+
 LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
+
+
+  if (ast->data.AST_APPLICATION.len < 2) {
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFAdd, LLVMAdd, ast->md, ctx, module, builder);
+  }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   // printf("sum handler\n");
@@ -96,6 +151,11 @@ LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef MinusHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
 
+
+  if (ast->data.AST_APPLICATION.len < 2) {
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFSub, LLVMSub, ast->md, ctx, module, builder);
+  }
+
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
 
   Type *ret = fn_return_type(fn_type);
@@ -109,8 +169,15 @@ LLVMValueRef MinusHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return NULL;
 }
 
+
 LLVMValueRef MulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
+
+  if (ast->data.AST_APPLICATION.len < 2) {
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFMul, LLVMMul, ast->md, ctx, module, builder);
+
+  }
+
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
 
   Type *ret = fn_return_type(fn_type);
@@ -127,6 +194,10 @@ LLVMValueRef MulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
+
+  if (ast->data.AST_APPLICATION.len < 2) {
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFDiv, LLVMSDiv, ast->md, ctx, module, builder);
+  }
   // LLVMSDiv,
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
@@ -138,6 +209,10 @@ LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
+
+  if (ast->data.AST_APPLICATION.len < 2) {
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFRem, LLVMSRem, ast->md, ctx, module, builder);
+  }
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
 
   Type *ret = fn_return_type(fn_type);
@@ -183,6 +258,11 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
+  if (ast->data.AST_APPLICATION.len < 2) {
+    fprintf(stderr, "Not Implemented error: currying > binop - eg ((>) 1)\n%s:%d\n", __FILE__, __LINE__);
+    return NULL;
+  }
+
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   Type *lt = resolve_type_in_env(fn_type->data.T_FN.from, ctx->env);
   Type *rt =
@@ -191,6 +271,11 @@ LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
+
+  if (ast->data.AST_APPLICATION.len < 2) {
+    fprintf(stderr, "Not Implemented error: currying > binop - eg ((>=) 1)\n%s:%d\n", __FILE__, __LINE__);
+    return NULL;
+  }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   Type *lt = resolve_type_in_env(fn_type->data.T_FN.from, ctx->env);
@@ -202,6 +287,11 @@ LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
+  if (ast->data.AST_APPLICATION.len < 2) {
+    fprintf(stderr, "Not Implemented error: currying < binop - eg ((<) 1)\n%s:%d\n", __FILE__, __LINE__);
+    return NULL;
+  }
+
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   Type *lt = resolve_type_in_env(fn_type->data.T_FN.from, ctx->env);
   Type *rt =
@@ -212,6 +302,10 @@ LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
+  if (ast->data.AST_APPLICATION.len < 2) {
+    fprintf(stderr, "Not Implemented error: currying <= binop - eg ((<=) 1)\n%s:%d\n", __FILE__, __LINE__);
+    return NULL;
+  }
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   Type *lt = resolve_type_in_env(fn_type->data.T_FN.from, ctx->env);
   Type *rt =
@@ -308,6 +402,7 @@ LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+
 
   switch (type->kind) {
   case T_BOOL:

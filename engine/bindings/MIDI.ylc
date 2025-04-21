@@ -6,5 +6,11 @@ let register_cc_handler = extern fn CCCallback -> Int -> Int -> ();
 let register_note_on_handler = extern fn NoteCallback -> Int -> ();
 let register_note_off_handler = extern fn NoteCallback -> Int -> ();
 let toggle_midi_debug = extern fn () -> ();
+let send_note_on = extern fn Int -> Int -> Int -> Int -> Int;
+let send_note_off = extern fn Int -> Int -> Int -> Int -> Int;
+let get_destination = extern fn Int -> Int;
+let get_destination_by_name = extern fn Ptr -> Int;
+let list_destinations = extern fn () -> ();
+let midi_out_setup = extern fn () -> ();
 
 let REC_127 = 0.007874015748031496;

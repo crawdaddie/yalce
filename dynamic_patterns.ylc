@@ -13,10 +13,11 @@ let Snare = module
   let synth = (fn () -> 
     let trig = inlet 0. in
              sin_node 220.
-      |> (+) @@ sin_node 357.
+      |> (+) (sin_node 357.)
       |> (*) (aslr_node 0. 1. 0.05 0.1 trig)
       |> (+) (white_noise_node ())
-      |> tanh_node 5. |> (*) (aslr_node 0. 1. 0.01 0.1 trig)
+      |> tanh_node 5. 
+      |> (*) (aslr_node 0. 1. 0.01 0.2 trig)
 
     ;) |> play_tpl
   ;
@@ -138,8 +139,7 @@ let Kick = module
 
 
 
-
-defer_quant (q * 4.) (fn t ->
+defer_quant (q * 1.) (fn t ->
   iter_of_list [
     1.5,
     1.75,
@@ -149,7 +149,7 @@ defer_quant (q * 4.) (fn t ->
     1.5
   ]
   |> cor_loop
-  |> cor_map (fn d -> d * q;)
+  |> cor_map ((*) q)
   |> (Kick.set_pattern) t;
 
   iter_of_list [
@@ -171,16 +171,17 @@ defer_quant (q * 4.) (fn t ->
 ;
 
 
-
-defer_quant (q * 2.) (fn t ->
-  iter_of_list [
-    1.5,
-    1.75,
-    1.25,
-    0.25,
-    1.75,
-    1.5
-  ]
-  |> cor_loop
-  |> cor_map (fn d -> d * q;)
-  |> (Kick.set_pattern) t;
+#
+# defer_quant (q * 2.) (fn t ->
+#   iter_of_list [
+#     1.5,
+#     1.75,
+#     1.25,
+#     0.25,
+#     1.75,
+#     1.5
+#   ]
+#   |> cor_loop
+#   |> cor_map ((*) q)
+#   |> (Kick.set_pattern) t;
+#   )
