@@ -313,6 +313,8 @@ Ast *parse_input(char *input, const char *dirname) {
   ast_root->data.AST_BODY.len = 0;
   ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
 
+  _cur_script = "tmp.ylc";
+  _cur_script_content = input;
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
 

@@ -2,15 +2,21 @@ open engine/bindings/Synth;
 open engine/bindings/Sched;
 open engine/bindings/MIDI;
 import lib/Math;
-let empty_coroutine = extern fn () -> Ptr;
+
+toggle_midi_debug ();
+
+let q = 60./130.;
+
+let empty_coroutine = extern fn () -> Ptr; 
 
 let Snare = module
   let synth = (fn () -> 
     let trig = inlet 0. in
-    sin_node 220. + sin_node 357.
-      |> (*) (aslr_node 0. 1. 0.08 0.1 trig)
+             sin_node 220.
+      |> (+) @@ sin_node 357.
+      |> (*) (aslr_node 0. 1. 0.05 0.1 trig)
       |> (+) (white_noise_node ())
-      |> tanh_node 5. |> (*) (aslr_node 0. 1. 0.05 0.1 trig)
+      |> tanh_node 5. |> (*) (aslr_node 0. 1. 0.01 0.1 trig)
 
     ;) |> play_tpl
   ;
@@ -18,6 +24,22 @@ let Snare = module
   let trig = fn () ->
     let fo = get_tl_tick () in
     set_input_trig_offset synth 0 fo
+  ;;
+
+  let snare_pattern_ref = [|empty_coroutine ()|] ;
+  let set_pattern = fn t cor ->
+    let pref = snare_pattern_ref;
+    cor_stop (array_at pref 0);
+    cor
+    |> cor_map (fn (p, d): (Int, Double) ->
+      match p with 
+      | 0 -> ()
+      | 1 -> (trig (); ())
+      ;
+      d
+    ;)
+    |> play_routine t schedule_event
+    |> array_set 0 pref 
   ;;
 ;
 
@@ -41,11 +63,18 @@ let Hihat = module
     set_input_trig_offset synth 0 fo
   ;;
 
-  let input = fn q t cor ->
-    print "hihat input\n";
-    cor 
-    |> cor_map (fn d -> trig (); d * q;)
+
+  let hh_pattern_ref = [|empty_coroutine ()|] ;
+  let set_pattern = fn t cor ->
+    let pref = hh_pattern_ref;
+    cor_stop (array_at pref 0);
+    cor
+    |> cor_map (fn d ->
+      trig ();
+      d
+    ;)
     |> play_routine t schedule_event
+    |> array_set 0 pref 
   ;;
 ;
 
@@ -96,67 +125,62 @@ let Kick = module
     set_input_trig_offset synth 0 fo
   ;;
 
-  let input_ref = empty_coroutine ();
-  let set_input = fn t cor ->
-    cor_stop input_ref;
-    cor_replace input_ref cor; 
-
-    let new_cor = 
-      cor |> cor_map (fn d: (Double) ->
-      trig ();
-      d * (60. / 130.)
-    ;);
-
-    cor_replace input_ref new_cor;
-
-    input_ref |> play_routine t schedule_event
+  let kick_pattern_ref = [|empty_coroutine ()|];
+  let set_pattern = fn t cor ->
+    let pref = kick_pattern_ref;
+    cor_stop (array_at pref 0);
+    cor
+    |> cor_map (fn d -> trig (); d;)
+    |> play_routine t schedule_event
+    |> array_set 0 pref
   ;;
 ;
 
 
-let q = 60./130. in
-defer_quant q (fn t ->
-  iter_of_list [0.25]
-  |> cor_loop
-  |> cor_map (fn d ->
-    Hihat.trig ();
-    d * q
-  ;)
-  |> play_routine t schedule_event
-  ;
 
-  # iter_of_list [
-  # 1.5, 1.75, 0.25, 0.5,
-  # 1.5, 1.,   1.5,
-  # 1.5, 1.75, 0.25, 0.5,
-  # 1.5, 1.,   1.5,
-  # ]
-  #
+
+defer_quant (q * 4.) (fn t ->
   iter_of_list [
     1.5,
-    1.5,
-    1.5,
-    .75,
+    1.75,
     1.25,
-    .5,
+    0.25,
+    1.75,
+    1.5
   ]
   |> cor_loop
-  |> (Kick.set_input) t
-;)
+  |> cor_map (fn d -> d * q;)
+  |> (Kick.set_pattern) t;
 
-# let q_ = 60./130. in
-# defer_quant q_ (fn t ->
-#   iter_of_list [
-#     1.5,
-#     1.5,
-#     1.5,
-#     .75,
-#     1.25,
-#     .5,
-#   ]
-#   |> cor_map (fn d ->
-#     Kick.trig ();
-#     d * q_
-#   ;)
-#   |> play_routine t schedule_event
-# ;)
+  iter_of_list [
+  (0, 1.), (1, 1.), (0, 1.), (1, 0.75), (1, 0.25),
+  (0, 1.), (1, 1.), (0, 1.), (1, 0.75), (1, 0.25),
+  (0, 1.), (1, 1.), (0, 1.), (1, 0.75), (1, 0.25),
+  (0, 1.), (1, 1.), (0, 1.), (1, 0.25), (1, 0.5), (1, 0.25)
+  ]
+  |> cor_loop
+  |> cor_map (fn (p, d) -> (p, d * q);)
+  |> (Snare.set_pattern) t;
+
+  iter_of_list [0.25]
+  |> cor_loop
+  |> cor_map (fn d -> d * q;)
+  |> (Hihat.set_pattern) t
+ 
+;)
+;
+
+
+
+defer_quant (q * 2.) (fn t ->
+  iter_of_list [
+    1.5,
+    1.75,
+    1.25,
+    0.25,
+    1.75,
+    1.5
+  ]
+  |> cor_loop
+  |> cor_map (fn d -> d * q;)
+  |> (Kick.set_pattern) t;

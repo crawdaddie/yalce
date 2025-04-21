@@ -12,4 +12,6 @@ void register_cc_handler(CCCallback handler, int ch, int cc);
 void register_note_on_handler(NoteCallback handler, int ch);
 void register_note_off_handler(NoteCallback handler, int ch);
 
+void toggle_midi_debug();
+
 #endif

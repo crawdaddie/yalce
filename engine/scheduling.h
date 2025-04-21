@@ -10,8 +10,8 @@ typedef void (*CoroutineSchedulerCallback)(void);
 
 int scheduler_event_loop();
 
-void schedule_event(uint64_t now, double delay_seconds,
-                    SchedulerCallback callback, void *userdata);
+void *schedule_event(uint64_t now, double delay_seconds,
+                     SchedulerCallback callback, void *userdata);
 int get_tl_frame_offset();
 extern atomic_ullong global_sample_position;
 

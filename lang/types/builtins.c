@@ -281,7 +281,7 @@ Type *_play_routine_sig() {
   // sched_cb_type = type_fn(&t_int, sched_cb_type);
   // sched_cb_type = type_fn(&t_ptr, sched_cb_type);
 
-  Type *f = &t_void;
+  Type *f = cor_from;
   f = type_fn(cor_from, f);
   f = type_fn(&t_ptr, f);
   f = type_fn(&t_uint64, f);

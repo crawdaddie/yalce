@@ -1578,15 +1578,15 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // call sink function args[1] with 'V & frame_offset
   // later take first value from 'V (Float - dur) and
   // call schedule_event (args[0]) with wrapper function, dur & 'U
-  LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
-                 (LLVMValueRef[]){
-                     ts_val,
-                     LLVMConstReal(LLVMDoubleType(), 0.),
-                     wrapper_fn,
-                     generator,
-                 },
-                 4, "");
-  return generator;
+  return LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
+                        (LLVMValueRef[]){
+                            ts_val,
+                            LLVMConstReal(LLVMDoubleType(), 0.),
+                            wrapper_fn,
+                            generator,
+                        },
+                        4, "");
+  // return generator;
 }
 LLVMValueRef CorReplaceHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {

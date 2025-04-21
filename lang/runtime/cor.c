@@ -30,6 +30,10 @@ cor *cor_next(cor *coroutine, void *ret_val) {
     return NULL;
   }
 
+  if (coroutine->fn_ptr == NULL) {
+    return NULL;
+  }
+
   cor *res = coroutine->fn_ptr(coroutine, ret_val);
 
   if (res == NULL && coroutine->next != NULL) {
@@ -165,12 +169,16 @@ cor *cor_map(cor *this, CoroutineFn map_fn) {
 }
 
 cor *cor_replace(cor *this, cor *other_cor) {
+  this->sig = COR_SIG_STOP;
+  this->next = NULL;
+  this->argv = NULL;
   *this = *other_cor;
   return this;
 }
 
 cor *cor_stop(cor *this) {
   this->sig = COR_SIG_STOP;
+  this->fn_ptr = NULL;
   this->next = NULL;
   return this;
 }

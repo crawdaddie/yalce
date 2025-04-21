@@ -42,16 +42,16 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
   Type *t = ast->md;
-  LLVMTypeRef ret;
-  if (t->kind == T_FN && is_generic(t)) {
-    ret = LLVMVoidType();
-  } else if (is_generic(t)) {
-    ret = LLVMVoidType();
-  } else if (is_module(t)) {
-    ret = LLVMInt32Type();
-  } else {
-    ret = FIND_TYPE(t, ctx->env, module, ast);
-  }
+  LLVMTypeRef ret = LLVMVoidType();
+  // if (t->kind == T_FN && is_generic(t)) {
+  //   ret = LLVMVoidType();
+  // } else if (is_generic(t)) {
+  //   ret = LLVMVoidType();
+  // } else if (is_module(t)) {
+  //   ret = LLVMInt32Type();
+  // } else {
+  //   ret = FIND_TYPE(t, ctx->env, module, ast);
+  // }
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
@@ -72,13 +72,15 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
     return NULL;
   }
 
-  *ret_type = LLVMTypeOf(body);
-  if (types_equal(ast->md, &t_void)) {
-    *ret_type = LLVMVoidType();
-    LLVMBuildRetVoid(builder);
-  } else {
-    LLVMBuildRet(builder, body);
-  }
+  // *ret_type = LLVMTypeOf(body);
+  // if (types_equal(ast->md, &t_void)) {
+  //   *ret_type = LLVMVoidType();
+  //   LLVMBuildRetVoid(builder);
+  // } else {
+  //   LLVMBuildRet(builder, body);
+  // }
+  //
+  LLVMBuildRetVoid(builder);
 
   return func;
 }

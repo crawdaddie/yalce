@@ -126,8 +126,8 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   prepare_ex_engine(ctx, &engine, module);
 
   if (top_level_func == NULL) {
-    printf("> ");
-    print_result(result_type, NULL);
+    // printf("> ");
+    // print_result(result_type, NULL);
     return NULL;
   }
 
@@ -141,11 +141,11 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   // }
   //
   // LLVMDumpModule(module);
-  // printf("> ");
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
   // fflush(stdout);
+  // printf("> ");
   // print_result(result_type, result);
   return result; // Return success
 }

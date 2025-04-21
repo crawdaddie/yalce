@@ -14,6 +14,9 @@ static CCCallback cc_handlers[128];
 static NoteCallback note_on_handlers[128];
 static NoteCallback note_off_handlers[128];
 
+int debug;
+void toggle_midi_debug() { debug = !debug; }
+
 // Register handler functions
 void register_cc_handler(CCCallback handler, int ch, int cc) {
   cc_handlers[cc] = handler;
@@ -33,6 +36,9 @@ static void handle_cc(MIDIPacket *packet) {
   uint8_t cc = *(packet->data + 1) & 0xFF;
   uint8_t val = *(packet->data + 2);
   CCCallback handler = cc_handlers[cc];
+  if (debug) {
+    printf("midi cc ch: %d cc: %d val: %d\n", ch, cc, val);
+  }
   if (handler != NULL) {
     handler((double)(val * REC_127));
   }
@@ -45,6 +51,10 @@ static void handle_note_on(MIDIPacket *packet) {
   uint8_t note = *(packet->data + 1) & 0xFF;
   uint8_t velocity = *(packet->data + 2);
   NoteCallback handler = note_on_handlers[ch];
+
+  if (debug) {
+    printf("midi note on ch: %d note: %d vel: %d\n", ch, note, velocity);
+  }
   if (handler != NULL) {
     handler(note, (double)(velocity * REC_127));
   }
@@ -55,6 +65,9 @@ static void handle_note_off(MIDIPacket *packet) {
   uint8_t note = *(packet->data + 1) & 0xFF;
   uint8_t velocity = *(packet->data + 2);
   NoteCallback handler = note_off_handlers[ch];
+  if (debug) {
+    printf("midi note off ch: %d note: %d vel: %d\n", ch, note, velocity);
+  }
   if (handler != NULL) {
     handler(note, (double)(velocity * REC_127));
   }

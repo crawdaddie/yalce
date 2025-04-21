@@ -183,11 +183,12 @@ int scheduler_event_loop() {
   return 0;
 }
 
-void schedule_event(uint64_t now, double delay_seconds,
-                    SchedulerCallback callback, void *userdata) {
+void *schedule_event(uint64_t now, double delay_seconds,
+                     SchedulerCallback callback, void *userdata) {
+  // printf("schedule event %llu %f %p\n", now, delay_seconds, userdata);
 
   if (userdata == NULL) {
-    return;
+    return userdata;
   }
 
   // printf("scheduling event %f %p\n", delay_seconds, userdata);
@@ -196,20 +197,19 @@ void schedule_event(uint64_t now, double delay_seconds,
 
   // callback(userdata, now);
   //
+  return userdata;
 }
+
 void defer_quant(double quant, DeferQuantCallback callback) {
   uint64_t quant_samps = quant * ctx_sample_rate();
   uint64_t current_sample = get_current_sample();
 
-  // Calculate remainder to next quantization boundary
   uint64_t offset_in_cycle = current_sample % quant_samps;
   uint64_t remainder;
 
-  // If we're exactly on a boundary, schedule at the next boundary
   if (offset_in_cycle == 0) {
     remainder = quant_samps;
   } else {
-    // Otherwise calculate samples until next boundary
     remainder = quant_samps - offset_in_cycle;
   }
 
@@ -222,7 +222,6 @@ void defer_quant(double quant, DeferQuantCallback callback) {
         realloc(queue->events, sizeof(SchedulerEvent) * queue->capacity);
   }
 
-  // Calculate absolute timestamp for next event
   uint64_t target_time = current_sample + remainder;
 
   SchedulerEvent event = {
