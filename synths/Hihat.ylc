@@ -1,0 +1,21 @@
+open ../engine/bindings/Synth;
+import ../lib/Math;
+
+let synth = (fn () -> 
+  let trig = inlet 0. in
+  let env = perc_env_node (trig_range_node 0.2 2. trig) trig in
+  env
+    |> math_node (Math.unipolar_scale 100. 5000.)
+    |> sin_node
+    |> (+) (white_noise_node ())
+    |> biquad_hp_node (trig_range_node 1000. 8000. trig) 4.
+    |> comb_node 0.02 0.1 0.7
+    |> (*) env
+
+  ;) |> play_tpl
+;
+
+let trig = fn () ->
+  let fo = get_tl_tick () in
+  set_input_trig_offset synth 0 fo
+;;

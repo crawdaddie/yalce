@@ -1,0 +1,15 @@
+import synths/Kick;
+open engine/bindings/Sched;
+
+let q = 60./130.;
+defer_quant (q * 2.) (fn t ->
+  iter_of_list [
+    1.5,
+    1.5,
+    0.5,
+    0.5
+  ]
+  |> cor_loop
+  |> cor_map ((*) q)
+  |> (Kick.set_pattern) t;
+)

@@ -1,0 +1,60 @@
+open ../engine/bindings/Synth;
+open ../engine/bindings/Sched;
+import ../lib/Math;
+
+let empty_coroutine = extern fn () -> Ptr; 
+#Envs:
+let penv = [|
+  0.000000, 0.000000, 2.400000,
+  1., 0.185902, -2.300000,
+  0.011111, 2.814099, 1.300000,
+  0.000000
+|]
+|> array_to_buf;
+
+
+let ampenv = [|
+  0.000000, 0.000000, 2.400000,
+  1.000000, 2.210165, -2.000000,
+  1.000000, 0.789836, 1.300000,
+  0.000000
+|]
+|> array_to_buf;
+
+let synth = (fn () -> 
+  let trig = inlet 0.;
+  let noise = (perc_env_node 0.2 trig) * (white_noise_node ()) ;
+
+  let sig = buf_env_node 1. (buf_ref penv) trig
+  |> math_node (Math.unipolar_scale 55. 200.)
+  |> sin_node 
+  |> (+) noise
+  ;
+
+  let sig = (sig + (dyn_tanh_node (5 * buf_env_node 0.03 (buf_ref ampenv) trig) sig));
+
+  sig + (
+    sig
+    |> biquad_hp_node 100 1
+    |> reverb_node 0.2 1. 0. 1.
+  )
+  |> (*) (buf_env_node 0.12 (buf_ref ampenv) trig)
+
+  ;)
+  |> play_tpl
+;
+
+let trig = fn () -> 
+  let fo = get_tl_tick () in
+  set_input_trig_offset synth 0 fo
+;;
+
+let kick_pattern_ref = [|empty_coroutine ()|];
+let set_pattern = fn t cor ->
+  let pref = kick_pattern_ref;
+  cor_stop (array_at pref 0);
+  cor
+  |> cor_map (fn d -> trig (); d;)
+  |> play_routine t schedule_event
+  |> array_set 0 pref
+;;
