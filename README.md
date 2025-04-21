@@ -43,6 +43,23 @@ builds the audio engine as a shared-object library
 ## features / syntax
 the language has syntax superficially similar to ocaml for creating and linking audio node objects
 
+```ocaml
+# fns
+let f = fn a b ->
+    a + b
+;;
+```
+
+```ocaml
+#recursive fns and match expressions
+let fib = fn x ->
+  match x with
+  | 0 -> 0
+  | 1 -> 1
+  | _ -> (fib (x - 1)) + (fib (x - 2))
+;;
+```
+
 ## Build lang executable
 ```
 make
