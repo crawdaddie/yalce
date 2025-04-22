@@ -1,5 +1,6 @@
 local term_buf
 local term_win
+local repl_id
 
 
 vim.cmd([[
@@ -31,6 +32,10 @@ function OpenYlcRepl()
   local repl_buf = vim.api.nvim_get_current_buf()
   local repl_win = vim.api.nvim_get_current_win()
 
+  -- Kill existing terminal process if it exists
+  if repl_id and vim.api.nvim_chan_is_valid(repl_id) then
+    vim.fn.jobstop(repl_id)
+  end
   if term_win and vim.api.nvim_win_is_valid(term_win) then
     vim.api.nvim_win_close(term_win, true)
   end
@@ -39,11 +44,11 @@ function OpenYlcRepl()
   vim.cmd('wincmd L')
   term_win = vim.api.nvim_get_current_win()
 
-  local cmd = vim.fn.input("=> ", "ylc -i")
 
-  term_buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_win_set_buf(term_win, term_buf)
-  repl_id = vim.fn.termopen(cmd)
+  local current_file = vim.fn.expand('%:p')
+  local cmd = vim.fn.input("=> ", "ylc " .. current_file .. " -i")
+
+  -- Start the terminal in the new window
   term_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(term_win, term_buf)
   repl_id = vim.fn.termopen(cmd, {
