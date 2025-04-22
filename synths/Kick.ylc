@@ -24,7 +24,7 @@ let synth = (fn () ->
   let trig = inlet 0.;
   let noise = (perc_env_node 0.2 trig) * (white_noise_node ()) ;
 
-  let sig = buf_env_node 1. (buf_ref penv) trig
+  let sig = buf_env_node 2. (buf_ref penv) trig
   |> math_node (Math.unipolar_scale 55. 200.)
   |> sin_node 
   |> (+) noise

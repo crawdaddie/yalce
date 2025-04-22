@@ -29,12 +29,12 @@ let synth = (fn () ->
 ;
 
 
-let trig = fn dur ->
-  let fo = get_tl_tick () in 
-    trigger_gate fo 1. 0 synth
-  ;
-  dur
-;;
+# let trig = fn dur ->
+#   let fo = get_tl_tick () in 
+#     trigger_gate fo 1. 0 synth
+#   ;
+#   dur
+# ;;
 
 let pattern_ref = [|empty_coroutine ()|] ;
 let set_pattern = fn t cor ->
@@ -45,52 +45,32 @@ let set_pattern = fn t cor ->
     let fo = get_tl_tick () in ( 
       set_input_scalar_offset synth 3 fo s; 
       trigger_gate fo d 2 synth; 
-      set_input_trig_offset synth 0 fo 
+      set_input_trig_offset synth 0 fo;
+      set_input_scalar_offset synth 1 fo (Math.rand_double_range 0. 20.)
     );
     d
   ;)
   |> play_routine t schedule_event
-  |> array_set 0 pattern_ref 
+  |> array_set 0 pattern_ref;
+  ()
+
 ;;
 
-let trig_rep4 = fn d: (Double) s: (Double) ->
-  yield (d, s);
-  yield (d, s);
-  yield (d, s);
-  yield (d, s)
-;;
 
-defer_quant (q * 1.) (fn t ->
+defer_quant q (fn t ->
   let rout = fn () ->
-    yield (0.5, 0.0);
-    yield (0.5, 0.125);
-    yield (0.5, 0.25);
-    yield (0.5, 0.375);
-    yield (0.5, 0.5);
-    yield (0.5, 0.625);
-    yield (0.5, 0.75);
-    yield (0.5, 0.875);
-    # yield (trig_rep4 0.0625 ((Math.rand_int 8) / 8.));
-    # yield (trig_rep4 0.0625 ((Math.rand_int 8) / 8.));
-    # yield (trig_rep4 0.125 ((Math.rand_int 8) / 8.));
-    # yield (0.25, 0.75);
-    # yield (0.5, 0.875);
-    # yield (0.5, 0.0);
-    # yield (0.5, 0.125);
-    # yield (0.5, 0.25);
-    # yield (0.5, 0.375);
-    # yield (0.5, 0.5);
-    # yield (0.5, 0.625);
-    # let x = (0.25, 
-    # yield x; 
-    # yield x; 
-    # yield x; 
-    # ield x 
+    yield (0.5, 0.0    );
+    yield (0.5, 0.125  );
+    yield (0.5, 0.25   );
+    yield (0.5, 0.375  );
+    yield (0.5, 0.5    );
+    yield (0.5, 0.625  );
+    yield (0.5, 0.75   );
+    yield (0.5, 0.875  );
     yield rout ()
   ;;
   rout ()
-  # |> cor_loop
-  |> cor_map (fn (d, s) -> (d * q, s);)
+  |> cor_map (fn (d, s) -> ((d * q), s);)
   |> set_pattern t
   ;
 );
