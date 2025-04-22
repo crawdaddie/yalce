@@ -1,0 +1,97 @@
+open ../engine/bindings/Synth;
+open ../engine/bindings/Sched;
+import ../lib/Math;
+
+
+let ampenv = [|
+  0.000000, 0.000000, 0.,
+  1.000000, 1., 0.000000,
+  1.000000, 0., 0.00000,
+  0.000000
+|]
+|> array_to_buf;
+
+let original_tempo = 170.;
+let tempo = 140.;
+let q = 60./tempo;
+
+
+let amen = load_soundfile @@ cstr "fat_amen_mono_48000.wav";
+
+let synth = (fn () ->
+  let trig = inlet 0.; # 0
+  let imp = lfpulse_node 0. (inlet 0.) trig; # 1
+  let gate = inlet 0.; # 2
+  bufplayer_trig_node (buf_ref amen) (tempo / original_tempo) (inlet 0.) imp # 3 
+  |> (*) (gated_buf_env_node (buf_ref ampenv) gate)
+;)
+|> play_tpl
+;
+
+
+let trig = fn dur ->
+  let fo = get_tl_tick () in 
+    trigger_gate fo 1. 0 synth
+  ;
+  dur
+;;
+
+let pattern_ref = [|empty_coroutine ()|] ;
+let set_pattern = fn t cor ->
+  cor_stop (array_at pattern_ref 0);
+  cor
+  |> cor_map (fn (d, s): (Double, Double) ->
+
+    let fo = get_tl_tick () in ( 
+      set_input_scalar_offset synth 3 fo s; 
+      trigger_gate fo d 2 synth; 
+      set_input_trig_offset synth 0 fo 
+    );
+    d
+  ;)
+  |> play_routine t schedule_event
+  |> array_set 0 pattern_ref 
+;;
+
+let trig_rep4 = fn d: (Double) s: (Double) ->
+  yield (d, s);
+  yield (d, s);
+  yield (d, s);
+  yield (d, s)
+;;
+
+defer_quant (q * 1.) (fn t ->
+  let rout = fn () ->
+    yield (0.5, 0.0);
+    yield (0.5, 0.125);
+    yield (0.5, 0.25);
+    yield (0.5, 0.375);
+    yield (0.5, 0.5);
+    yield (0.5, 0.625);
+    yield (0.5, 0.75);
+    yield (0.5, 0.875);
+    # yield (trig_rep4 0.0625 ((Math.rand_int 8) / 8.));
+    # yield (trig_rep4 0.0625 ((Math.rand_int 8) / 8.));
+    # yield (trig_rep4 0.125 ((Math.rand_int 8) / 8.));
+    # yield (0.25, 0.75);
+    # yield (0.5, 0.875);
+    # yield (0.5, 0.0);
+    # yield (0.5, 0.125);
+    # yield (0.5, 0.25);
+    # yield (0.5, 0.375);
+    # yield (0.5, 0.5);
+    # yield (0.5, 0.625);
+    # let x = (0.25, 
+    # yield x; 
+    # yield x; 
+    # yield x; 
+    # ield x 
+    yield rout ()
+  ;;
+  rout ()
+  # |> cor_loop
+  |> cor_map (fn (d, s) -> (d * q, s);)
+  |> set_pattern t
+  ;
+);
+

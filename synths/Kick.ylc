@@ -2,7 +2,6 @@ open ../engine/bindings/Synth;
 open ../engine/bindings/Sched;
 import ../lib/Math;
 
-# let empty_coroutine = extern fn () -> Ptr; 
 #Envs:
 let penv = [|
   0.000000, 0.000000, 2.400000,
@@ -39,7 +38,6 @@ let synth = (fn () ->
     |> reverb_node 0.2 1. 0. 1.
   )
   |> (*) (buf_env_node 0.12 (buf_ref ampenv) trig)
-
   ;)
   |> play_tpl
 ;

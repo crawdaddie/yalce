@@ -508,6 +508,7 @@ Node *osc_bank_node(Node *amps, Node *freq) {
 // Buffer player
 typedef struct bufplayer_state {
   double phase;
+  double prev_trig;
 } bufplayer_state;
 
 void *__bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
@@ -658,7 +659,7 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
   int index;
 
   while (nframes--) {
-    if (*trig == 1.0) {
+    if (*trig > 0.5 && state->prev_trig < 0.5) {
       state->phase = 0;
     }
 
@@ -677,6 +678,7 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
       out++;
     }
 
+    state->prev_trig = *trig;
     rate++;
     trig++;
     start_pos++;
