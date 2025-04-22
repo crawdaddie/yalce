@@ -22,5 +22,8 @@ let init_audio = extern fn () -> () in
 ;
 
 let play_tpl = fn f ->
-  f |> compile_blob_template |> instantiate_template [] |> play_node;
+  f |> compile_blob_template |> instantiate_template [] |> play_node;;
+
+
+let sin = sin_node;
 

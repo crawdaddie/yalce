@@ -126,9 +126,9 @@ LLVMValueRef curried_binop(Ast *saved_arg_ast, LLVMOpcode fop, LLVMOpcode iop,
 LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
-
   if (ast->data.AST_APPLICATION.len < 2) {
-    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFAdd, LLVMAdd, ast->md, ctx, module, builder);
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFAdd, LLVMAdd,
+                         ast->md, ctx, module, builder);
   }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
@@ -151,9 +151,9 @@ LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef MinusHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
 
-
   if (ast->data.AST_APPLICATION.len < 2) {
-    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFSub, LLVMSub, ast->md, ctx, module, builder);
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFSub, LLVMSub,
+                         ast->md, ctx, module, builder);
   }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
@@ -169,13 +169,12 @@ LLVMValueRef MinusHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return NULL;
 }
 
-
 LLVMValueRef MulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFMul, LLVMMul, ast->md, ctx, module, builder);
-
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFMul, LLVMMul,
+                         ast->md, ctx, module, builder);
   }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
@@ -194,9 +193,9 @@ LLVMValueRef MulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
-
   if (ast->data.AST_APPLICATION.len < 2) {
-    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFDiv, LLVMSDiv, ast->md, ctx, module, builder);
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFDiv, LLVMSDiv,
+                         ast->md, ctx, module, builder);
   }
   // LLVMSDiv,
 
@@ -211,7 +210,8 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFRem, LLVMSRem, ast->md, ctx, module, builder);
+    return curried_binop(ast->data.AST_APPLICATION.args, LLVMFRem, LLVMSRem,
+                         ast->md, ctx, module, builder);
   }
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
 
@@ -259,7 +259,9 @@ LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    fprintf(stderr, "Not Implemented error: currying > binop - eg ((>) 1)\n%s:%d\n", __FILE__, __LINE__);
+    fprintf(stderr,
+            "Not Implemented error: currying > binop - eg ((>) 1)\n%s:%d\n",
+            __FILE__, __LINE__);
     return NULL;
   }
 
@@ -273,7 +275,9 @@ LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    fprintf(stderr, "Not Implemented error: currying > binop - eg ((>=) 1)\n%s:%d\n", __FILE__, __LINE__);
+    fprintf(stderr,
+            "Not Implemented error: currying > binop - eg ((>=) 1)\n%s:%d\n",
+            __FILE__, __LINE__);
     return NULL;
   }
 
@@ -288,7 +292,9 @@ LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    fprintf(stderr, "Not Implemented error: currying < binop - eg ((<) 1)\n%s:%d\n", __FILE__, __LINE__);
+    fprintf(stderr,
+            "Not Implemented error: currying < binop - eg ((<) 1)\n%s:%d\n",
+            __FILE__, __LINE__);
     return NULL;
   }
 
@@ -303,7 +309,9 @@ LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    fprintf(stderr, "Not Implemented error: currying <= binop - eg ((<=) 1)\n%s:%d\n", __FILE__, __LINE__);
+    fprintf(stderr,
+            "Not Implemented error: currying <= binop - eg ((<=) 1)\n%s:%d\n",
+            __FILE__, __LINE__);
     return NULL;
   }
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
@@ -402,7 +410,6 @@ LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-
 
   switch (type->kind) {
   case T_BOOL:
@@ -764,6 +771,11 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   FN_SYMBOL("cstr", &t_builtin_cstr,
             get_extern_fn("cstr",
                           type_to_llvm_type(&t_builtin_cstr, ctx->env, module),
+                          module));
+
+  FN_SYMBOL("empty_coroutine", &t_empty_cor,
+            get_extern_fn("empty_coroutine",
+                          type_to_llvm_type(&t_empty_cor, ctx->env, module),
                           module));
 
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at_fn_sig, ArrayAtHandler);

@@ -6,8 +6,7 @@ import lib/Math;
 toggle_midi_debug ();
 
 let q = 60./130.;
-
-let empty_coroutine = extern fn () -> Ptr; 
+# let empty_coroutine = extern fn () -> Ptr; 
 
 let Snare = module
   let synth = (fn () -> 

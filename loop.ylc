@@ -1,7 +1,10 @@
+import synths/Hihat;
 import synths/Kick;
+import synths/Snare;
 open engine/bindings/Sched;
 
 let q = 60./130.;
+
 defer_quant (q * 2.) (fn t ->
   iter_of_list [
     1.5,
@@ -11,5 +14,28 @@ defer_quant (q * 2.) (fn t ->
   ]
   |> cor_loop
   |> cor_map ((*) q)
-  |> (Kick.set_pattern) t;
-)
+  |> (Kick.set_pattern) t
+  ;
+
+  iter_of_list [
+    0.25
+  ]
+  |> cor_loop
+  |> cor_map ((*) q)
+  |> (Hihat.set_pattern) t
+  ;
+
+  iter_of_list [
+  (0, 1.), (1, 1.), (0, 1.), (1, 0.75), (1, 0.25),
+  (0, 1.), (1, 1.), (0, 1.), (1, 0.75), (1, 0.25),
+  (0, 1.), (1, 1.), (0, 1.), (1, 0.75), (1, 0.25),
+  (0, 1.), (1, 1.), (0, 1.), (1, 0.25), (1, 0.5), (1, 0.25)
+  ]
+  |> cor_loop
+  |> cor_map (fn (p, d) -> (p, d * q);)
+  |> (Snare.set_pattern) t;
+);
+
+
+
+

@@ -2,7 +2,7 @@ open ../engine/bindings/Synth;
 open ../engine/bindings/Sched;
 import ../lib/Math;
 
-let empty_coroutine = extern fn () -> Ptr; 
+# let empty_coroutine = extern fn () -> Ptr; 
 #Envs:
 let penv = [|
   0.000000, 0.000000, 2.400000,
