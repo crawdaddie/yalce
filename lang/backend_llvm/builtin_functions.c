@@ -583,6 +583,10 @@ LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef array = codegen(array_ast, ctx, module, builder);
   LLVMValueRef idx = codegen(idx_ast, ctx, module, builder);
 
+  if (ret_type->kind == T_FN) {
+    return get_array_element(builder, array, idx, GENERIC_PTR);
+  }
+
   return get_array_element(builder, array, idx,
                            type_to_llvm_type(ret_type, ctx->env, module));
 }
@@ -599,10 +603,12 @@ LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // printf("array set find el type\n");
   // print_ast(val_ast);
   // print_type(ret_type->data.T_CONS.args[0]);
+  Type *el_type = ret_type->data.T_CONS.args[0];
 
-  return set_array_element(
-      builder, array, idx, val,
-      type_to_llvm_type(ret_type->data.T_CONS.args[0], ctx->env, module));
+  return set_array_element(builder, array, idx, val,
+                           el_type->kind == T_FN
+                               ? GENERIC_PTR
+                               : type_to_llvm_type(el_type, ctx->env, module));
 }
 
 LLVMValueRef SomeConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -736,6 +742,22 @@ LLVMValueRef AddrOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return val;
 }
+
+LLVMValueRef FstHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                        LLVMBuilderRef builder) {
+  // Type *t = ast->md;
+  // print_ast()
+  // LLVMTypeRef llvm_type = type_to_llvm_type(t, ctx->env, module);
+  // LLVMDumpType(llvm_type);
+  // printf("\n");
+  //
+  // LLVMValueRef val =
+  //     codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  //
+  // return val;
+  return NULL;
+}
+
 LLVMValueRef uint64_constructor_handler(Ast *ast, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
@@ -855,6 +877,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("struct_set", &t_struct_set_sig, StructSetHandler);
   GENERIC_FN_SYMBOL("addrof", NULL, AddrOfHandler);
+  GENERIC_FN_SYMBOL("fst", &t_fst_sig, FstHandler);
 
   // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
   // ListPrependHandler);

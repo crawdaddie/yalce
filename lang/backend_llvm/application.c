@@ -163,6 +163,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   // print_type(ast->data.AST_APPLICATION.function->md);
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+  // print_type(expected_fn_type);
 
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
@@ -224,6 +225,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return yield_from_coroutine_instance(sym, ctx, module, builder);
   }
 
+  // printf("callable sym type: %d\n", sym->type);
   if (sym->type == STYPE_GENERIC_FUNCTION) {
 
     LLVMValueRef callable =
@@ -254,6 +256,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
+
     LLVMValueRef *provided_args =
         sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args;
     int provided_args_len =

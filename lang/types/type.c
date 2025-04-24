@@ -1486,6 +1486,7 @@ bool fn_types_match(Type *t1, Type *t2) {
 }
 
 bool application_is_partial(Ast *app) {
+
   if (((Type *)app->data.AST_APPLICATION.function->md)->kind != T_FN) {
     return false;
   }

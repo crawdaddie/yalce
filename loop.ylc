@@ -73,7 +73,7 @@ defer_quant (q * 2.) (fn t ->
   let sig = node_out (pumpenv);
   Gui.create_envelope_edit_view
     (sig_size sig)
-    (sig_raw sig);
-  Gui.create_scope (ctx_main_out ()) 2 512
+    (sig_raw sig)
+  # Gui.create_scope (ctx_main_out ()) 2 512
 
 );

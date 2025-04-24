@@ -34,4 +34,6 @@ extern Type t_iter_of_array_sig;
 extern Type t_cor_loop_sig;
 
 extern Type t_empty_cor;
+
+extern Type t_fst_sig;
 #endif

@@ -16,12 +16,12 @@ void codegen_set_global(char *sym_name, JITSymbol *sym, LLVMValueRef value,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
 
   char buf[32];
-  sprintf(buf, "%s_malloc", sym_name);
+  snprintf(buf, 32, "%s_malloc", sym_name);
   LLVMValueRef malloced_space = LLVMBuildMalloc(builder, llvm_type, buf);
 
   LLVMBuildStore(builder, value, malloced_space);
 
-  sprintf(buf, "%s_generic_ptr", sym_name);
+  snprintf(buf, 32, "%s_generic_ptr", sym_name);
   LLVMValueRef generic_ptr =
       LLVMBuildBitCast(builder, malloced_space, _VOID_PTR_T, buf);
   int slot = *ctx->num_globals;
@@ -30,7 +30,7 @@ void codegen_set_global(char *sym_name, JITSymbol *sym, LLVMValueRef value,
 
   LLVMValueRef indices[] = {ZERO, slot_index};
 
-  sprintf(buf, "%s_slot_ptr", sym_name);
+  snprintf(buf, 32, "%s_slot_ptr", sym_name);
   LLVMValueRef slot_ptr =
       LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE, global_storage_array_llvm,
                     indices, 2, buf);
@@ -49,7 +49,7 @@ LLVMValueRef codegen_get_global(char *sym_name, JITSymbol *sym,
   LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
 
   LLVMValueRef indices[] = {ZERO, slot_index};
-  sprintf(buf, "%s_slot_ptr", sym_name);
+  snprintf(buf, 32, "%s_slot_ptr", sym_name);
   LLVMValueRef slot_ptr =
       LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE, global_storage_array_llvm,
                     indices, 2, buf);
@@ -60,7 +60,7 @@ LLVMValueRef codegen_get_global(char *sym_name, JITSymbol *sym,
   LLVMValueRef typed_ptr = LLVMBuildBitCast(
       builder, generic_ptr, LLVMPointerType(llvm_type, 0), "typed_ptr");
 
-  sprintf(buf, "%s_load", sym_name);
+  snprintf(buf, 32, "%s_load", sym_name);
   return LLVMBuildLoad2(builder, llvm_type, typed_ptr, buf);
 }
 

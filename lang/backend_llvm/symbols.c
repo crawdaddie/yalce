@@ -252,6 +252,25 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
   }
   return NULL;
 }
+bool is_array_at(Ast *expr) {
+  if (expr->tag == AST_APPLICATION) {
+    if (expr->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+      if (strcmp("array_at", expr->data.AST_APPLICATION.function->data
+                                 .AST_IDENTIFIER.value) == 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+Type *array_type(Ast *expr) {
+  Type *arr = expr->data.AST_APPLICATION.args->md;
+  if (arr->kind == T_CONS && is_array_type(arr) &&
+      arr->data.T_CONS.args[0]->kind == T_FN) {
+    return arr->data.T_CONS.args[0];
+  }
+  return NULL;
+}
 
 LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                                JITLangCtx *outer_ctx, JITLangCtx *inner_ctx,
@@ -266,6 +285,33 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
         codegen_import(expr, NULL, inner_ctx, module, builder);
 
     return codegen(in_expr, inner_ctx, module, builder);
+  }
+
+  if (expr->tag == AST_APPLICATION && is_array_at(expr)) {
+    Type *fn_type = array_type(expr);
+    if (fn_type && !is_generic(fn_type)) {
+      print_ast(binding);
+      print_ast(expr);
+
+      expr_val = create_fn_binding(binding, expr_type,
+                                   codegen(expr, outer_ctx, module, builder),
+                                   inner_ctx, module, builder);
+
+      return in_expr == NULL ? expr_val
+                             : codegen(in_expr, inner_ctx, module, builder);
+    }
+
+    if (fn_type && is_generic(fn_type)) {
+
+      expr_val = create_fn_binding(binding, expr_type,
+                                   codegen(expr, outer_ctx, module, builder),
+                                   inner_ctx, module, builder);
+
+      expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
+
+      return in_expr == NULL ? expr_val
+                             : codegen(in_expr, inner_ctx, module, builder);
+    }
   }
 
   if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
@@ -359,9 +405,11 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
 
+  // print_ast(expr);
   expr_val = codegen(expr, outer_ctx, module, builder);
 
   if (!expr_val) {
+    print_type(expr->md);
     fprintf(stderr, "Error - could not compile value for binding to %s\n",
             binding->data.AST_IDENTIFIER.value);
     print_codegen_location();

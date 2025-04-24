@@ -4,7 +4,7 @@ import lib/Math;
 open lib/Ref;
 
 # MIDI.toggle_midi_debug ();
-let _ = MIDI.midi_out_setup ();
+MIDI.midi_out_setup ();
 
 let LAUNCHPAD_DEST = MIDI.get_destination_by_name (cstr "Launchpad Mini");
 let note_ons = [|
@@ -81,92 +81,96 @@ let note_ons = [|
   0x0, 0x77, 0x50,
 |]; 
 
-# MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
+MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
 
-let state_ref = Ref (
-  horz_offset: 0,
-  grid_is_set: (fn i: (Int) -> false;), 
-  grid_press_handler: (fn i: (Int) -> ();),
-  max_cols: 0
-);
+# let pattern = [|
+#   0, 0, 0, 0, 0, 0, 0, 0,
+#   0, 0, 0, 0, 0, 0, 0, 0,
+#   0, 0, 0, 0, 0, 0, 0, 0,
+#   0, 0, 0, 0, 0, 0, 0, 0,
+#   0, 0, 0, 0, 0, 0, 0, 0,
+#   1, 1, 1, 1, 1, 1, 1, 1,
+#   0, 0, 0, 0, 1, 0, 0, 0,
+#   1, 0, 0, 0, 0, 0, 1, 0,
+# |];
 
-let display_grid = fn () ->
-  let (horz_offset, gis, _, max_cols) = deref state_ref;
 
+let horz_offset = Ref 0;
+let max_cols = 16;
+
+let long_pattern = array_fill 128 (fn i: (Int) -> (0, 0.););
+
+let set_grid = fn pattern ->
   let grid_total = 8 * 8;
 
-  let aux = fn i gis mc ho ->
+  let aux = fn i p ->
     match i with
     | i if i < grid_total -> (
       let row = i / 8;
-      let col = (ho) + i % 8;
-      let is_set = gis @@ (row * mc) + col;
+      let col = (deref horz_offset) + i % 8;
+      let (is_set, val) = array_at p @@ (row * max_cols) + col;  
       match is_set with
-      | true -> (
+      | 1 -> (
         let n = array_at note_ons @@ i * 3 + 1;
         MIDI.send_note_on LAUNCHPAD_DEST 0x0 n 0x7F;
         ()
         )
-      | false -> ()
+      | 0 -> ()
       ;
-      aux (i + 1) gis mc ho
+      aux (i + 1) p
     )
     | _ -> ()
   ;;
-  aux 0 gis max_cols horz_offset
+  aux 0 pattern
 ;;
 
-let _ = MIDI.register_note_on_handler 0 (fn midi_note: (Int) vel: (Double) ->
-  let (ho, _, gph, mc) = deref state_ref;
+
+let not = fn i ->
+  match i with
+  | 0 -> 1 
+  | 1 -> 0
+;;
+
+let not_pat_val = fn (i, v) ->
+  (not (array_at long_pattern i), v)
+;;
+
+MIDI.register_note_on_handler 0 (fn midi_note: (Int) vel: (Double) ->
   let col = midi_note % 16; # 16 is grid const
   let row = midi_note / 16; # 16 is grid const
-  let pattern_idx = (row * mc) + ho + col;
-  # print `pattern idx (col {col} row {row} mc {mc} ho {ho})\n`;
+  let pattern_idx = (row * max_cols) + (deref horz_offset) + col;
 
-  gph pattern_idx;
+  array_set (pattern_idx) long_pattern (not_pat_val pattern_idx);
   MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
-  display_grid ();
+  set_grid long_pattern;
   ()
 ;)
 ;
 
-# # left
-let _ = MIDI.register_cc_handler 0 106 (fn val ->  
-
-  let (ho, gis, gph, mc) = deref state_ref;
-
+# left
+MIDI.register_cc_handler 0 106 (fn val ->  
   match val with
   | val if val > 0 -> (
-    array_set 0 state_ref ((Math.max_int (ho - 1) 0), gis, gph, mc);
+    let off = deref horz_offset;
+    array_set 0 horz_offset (Math.max_int (off - 1) 0);
+
     MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
-    display_grid ();
+    set_grid long_pattern;
     ()
   )
   | _ -> ()
 ;);
 
 # right 
-let _ = MIDI.register_cc_handler 0 107 (fn val ->
-  let (ho, gis, gph, mc) = deref state_ref;
+MIDI.register_cc_handler 0 107 (fn val ->
   match val with 
   | val if val > 0 -> (
-    array_set 0 state_ref ((Math.min_int (ho + 1) (mc - 8)), gis, gph, mc);
+    let off = deref horz_offset;
+    array_set 0 horz_offset (Math.min_int (off + 1) (max_cols - 8));
     MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
-    display_grid ();
+    set_grid long_pattern;
     ()
   )
   | _ -> ()
+
 ;);
-#
-
-let setup = fn max_cols: (Int) grid_press_handler: (Int -> ()) grid_is_set: (Int -> Bool) ->
-  array_set 0 state_ref (
-    0,
-    grid_is_set,
-    grid_press_handler,
-    max_cols,
-  );
-  display_grid ();
-  ()
-
-;

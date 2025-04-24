@@ -79,6 +79,7 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   int array_size = ast->data.AST_LIST.len;
 
   LLVMValueRef first_element = NULL;
+
   if (array_size > 0) {
     first_element = codegen(ast->data.AST_LIST.items, ctx, module, builder);
   } else {

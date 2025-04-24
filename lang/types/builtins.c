@@ -354,6 +354,10 @@ Type *_cor_loop_sig() {
 Type t_cor_loop_sig = GENERIC_TYPE(_cor_loop_sig);
 Type t_empty_cor = MAKE_FN_TYPE_2(&t_void, &t_ptr);
 
+Type *_fst_sig() { return type_fn(next_tvar(), next_tvar()); }
+
+Type t_fst_sig = GENERIC_TYPE(_fst_sig);
+
 void initialize_builtin_types() {
 
   ht_init(&builtin_types);
@@ -476,6 +480,7 @@ void initialize_builtin_types() {
   add_builtin("cor_replace", &t_cor_replace_fn_sig);
   add_builtin("cor_stop", &t_cor_stop_fn_sig);
   add_builtin("empty_coroutine", &t_empty_cor);
+  add_builtin("fst", &t_fst_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {
