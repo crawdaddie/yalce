@@ -381,7 +381,6 @@ Node *biquad_lp_node(Node *freq, Node *res, Node *input) {
   node->connections[1].source_node_index = freq->node_index;
   node->connections[2].source_node_index = res->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -415,7 +414,6 @@ Node *biquad_bp_node(Node *freq, Node *res, Node *input) {
   node->connections[1].source_node_index = freq->node_index;
   node->connections[2].source_node_index = res->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -449,7 +447,6 @@ Node *biquad_hp_node(Node *freq, Node *res, Node *input) {
   node->connections[1].source_node_index = freq->node_index;
   node->connections[2].source_node_index = res->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -481,7 +478,6 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
   node->connections[0].source_node_index = input->node_index;
   node->connections[1].source_node_index = freq->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -557,7 +553,6 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
   node->connections[0].source_node_index = input->node_index;
   node->connections[1].source_node_index = delay_buf->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -644,7 +639,6 @@ Node *dyn_comb_node(Node *delay_time, double max_delay_time, double fb,
   node->connections[1].source_node_index = delay_buf->node_index;
   node->connections[2].source_node_index = delay_time->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -714,7 +708,6 @@ Node *lag_node(double lag_time, Node *input) {
   // Connect input
   node->connections[0].source_node_index = input->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -765,7 +758,6 @@ Node *tanh_node(double gain, Node *input) {
   // Connect input
   node->connections[0].source_node_index = input->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -808,7 +800,7 @@ Node *dyn_tanh_node(NodeRef gain, Node *input) {
 
   node->connections[1].source_node_index = gain->node_index;
 
-  // node->state_ptr = state;
+  //
   return node;
 }
 
@@ -883,7 +875,6 @@ Node *allpass_node(double time, double coeff, Node *input) {
   // Connect input
   node->connections[0].source_node_index = input->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -1151,7 +1142,6 @@ Node *gverb_node(Node *input) {
   *state = gverb;
   node->connections[0].source_node_index = input->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 typedef struct grain_pitchshift_state {
@@ -1321,7 +1311,6 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
 
   node->connections[0].source_node_index = input->node_index;
 
-  node->state_ptr = state;
   return node;
 }
 
@@ -1374,6 +1363,6 @@ NodeRef math_node(MathNodeFn math_fn, NodeRef input) {
   *state = m;
 
   node->connections[0].source_node_index = input->node_index;
-  node->state_ptr = state;
+  //
   return node;
 }

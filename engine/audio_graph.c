@@ -121,6 +121,9 @@ char *__node_get_state(Node *node, AudioGraph *graph) {
     // no graph context, node + state probably allocated together
     return (char *)node + sizeof(Node);
   }
+  if (node->state_ptr) {
+    return node->state_ptr;
+  }
   char *state = (char *)graph->nodes_state_memory + node->state_offset;
   return state;
 }

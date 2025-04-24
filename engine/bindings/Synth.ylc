@@ -91,6 +91,13 @@ let lfpulse_node = extern fn Synth -> Synth -> Synth -> Synth;
 let perc_env_node = extern fn Synth -> Synth -> Synth;
 let gated_buf_env_node = extern fn Synth -> Synth -> Synth;
 
+# bus.h
+let pipe_into = extern fn Synth -> Int -> Synth -> Synth;
+let bus = extern fn Int -> Synth;
+
+# glue.h
+let glue_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
+
 # let chain_wrap = fn def: (() -> Synth) -> 
 #   reset_chain ();
 #   let x = def () in

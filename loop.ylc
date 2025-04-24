@@ -6,6 +6,15 @@ open engine/bindings/Synth;
 
 let q = 60./130.;
 
+let fx_chain = (fn () ->
+  let input = inlet 0.;
+ # reverb_node 0.9 0.9 0.9 1. input
+  glue_node -12.0 4.0 10.0 100. 15.0 6.0 input
+;) |> play_tpl;
+
+Kick.synth |> pipe_into fx_chain 0;
+Snare.synth |> ripe_into fx_chain 0;
+
 defer_quant (q * 2.) (fn t ->
   iter_of_list [
     1.5,
