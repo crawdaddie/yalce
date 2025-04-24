@@ -81,8 +81,14 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     }
 
     head->perform(head, state, NULL, frame_count, spf);
-
-    if (head->write_to_output) {
+    if (head->bus) {
+      NodeRef bus = head->bus;
+      double *bus_buf = bus->output.buf;
+      int layout = bus->output.layout;
+      write_to_dac(layout, bus_buf + (head->frame_offset * layout),
+                   head->output.layout, head->output.buf, 1,
+                   frame_count - head->frame_offset);
+    } else if (head->write_to_output) {
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
                    head->output.layout, head->output.buf, output_num,
                    frame_count - head->frame_offset);

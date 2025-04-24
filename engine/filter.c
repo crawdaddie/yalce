@@ -377,16 +377,11 @@ Node *biquad_lp_node(Node *freq, Node *res, Node *input) {
   state->prev_res = 0.0;
 
   // Connect inputs
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
-  if (freq) {
-    node->connections[1].source_node_index = freq->node_index;
-  }
-  if (res) {
-    node->connections[2].source_node_index = res->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = freq->node_index;
+  node->connections[2].source_node_index = res->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -416,16 +411,11 @@ Node *biquad_bp_node(Node *freq, Node *res, Node *input) {
   state->prev_res = 0.0;
 
   // Connect inputs
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
-  if (freq) {
-    node->connections[1].source_node_index = freq->node_index;
-  }
-  if (res) {
-    node->connections[2].source_node_index = res->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = freq->node_index;
+  node->connections[2].source_node_index = res->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -455,16 +445,11 @@ Node *biquad_hp_node(Node *freq, Node *res, Node *input) {
   state->prev_res = 0.0;
 
   // Connect inputs
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
-  if (freq) {
-    node->connections[1].source_node_index = freq->node_index;
-  }
-  if (res) {
-    node->connections[2].source_node_index = res->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = freq->node_index;
+  node->connections[2].source_node_index = res->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -493,13 +478,10 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
   state->prev_freq = 0.0;
 
   // Connect inputs
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
-  if (freq) {
-    node->connections[1].source_node_index = freq->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = freq->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -574,6 +556,8 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
 
   node->connections[0].source_node_index = input->node_index;
   node->connections[1].source_node_index = delay_buf->node_index;
+
+  node->state_ptr = state;
   return node;
 }
 
@@ -659,6 +643,8 @@ Node *dyn_comb_node(Node *delay_time, double max_delay_time, double fb,
   node->connections[0].source_node_index = input->node_index;
   node->connections[1].source_node_index = delay_buf->node_index;
   node->connections[2].source_node_index = delay_time->node_index;
+
+  node->state_ptr = state;
   return node;
 }
 
@@ -726,10 +712,9 @@ Node *lag_node(double lag_time, Node *input) {
   state->coeff = exp(-1.0 / (lag_time * (1.0 / spf)));
 
   // Connect input
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -778,10 +763,9 @@ Node *tanh_node(double gain, Node *input) {
   state->gain = gain;
 
   // Connect input
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -820,14 +804,11 @@ Node *dyn_tanh_node(NodeRef gain, Node *input) {
   };
 
   // Connect input
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
 
-  if (gain) {
-    node->connections[1].source_node_index = gain->node_index;
-  }
+  node->connections[1].source_node_index = gain->node_index;
 
+  // node->state_ptr = state;
   return node;
 }
 
@@ -900,10 +881,9 @@ Node *allpass_node(double time, double coeff, Node *input) {
   *state = ap;
 
   // Connect input
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -1170,6 +1150,8 @@ Node *gverb_node(Node *input) {
   GVerb *state = (GVerb *)(mem);
   *state = gverb;
   node->connections[0].source_node_index = input->node_index;
+
+  node->state_ptr = state;
   return node;
 }
 typedef struct grain_pitchshift_state {
@@ -1338,6 +1320,8 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
   *state = pshift;
 
   node->connections[0].source_node_index = input->node_index;
+
+  node->state_ptr = state;
   return node;
 }
 
@@ -1390,5 +1374,6 @@ NodeRef math_node(MathNodeFn math_fn, NodeRef input) {
   *state = m;
 
   node->connections[0].source_node_index = input->node_index;
+  node->state_ptr = state;
   return node;
 }
