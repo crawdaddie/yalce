@@ -34,6 +34,7 @@ typedef struct {
   struct Node *next; // For execution ordering
   char *meta;
   void *state_ptr;
+  struct Node *bus;
 } Node;
 
 typedef Node *NodeRef;

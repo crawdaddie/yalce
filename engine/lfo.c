@@ -236,8 +236,8 @@ typedef struct lfpulse_state {
   double prev_trig;
 } lfpulse_state;
 
-void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
-                      int nframes, double spf) {
+void *__lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
+                        int nframes, double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
   double *freq_in = inputs[0]->output.buf;
@@ -261,27 +261,108 @@ void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
 
     if (trig >= 0.5 && state->prev_trig < 0.5) {
       state->phase = 0.;
+
+      if (pw == 0. && freq == 0.) {
+        sample = 1.;
+      }
+      printf("trig smaple %f\n", sample);
     }
 
     if (state->phase >= 1.0) {
       state->phase = 0.;
     }
 
-    if (pw == 0.) {
-      sample = (state->phase == 0.0) ? 1.0 : 0.;
-    } else {
+    if (pw != 0.) {
       sample = (state->phase <= pw) ? 1.0 : 0.;
     }
 
     *out = sample;
     out++;
-    state->phase += freq * spf;
+    double incr = (freq * spf);
+    state->phase += incr;
     state->prev_trig = trig;
   }
 
   return node->output.buf;
 }
+void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
+                      int nframes, double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *freq_in = inputs[0]->output.buf;
+  double *trig_in = inputs[1]->output.buf;
+  double *pw_in = inputs[2]->output.buf;
 
+  double freq;
+  double trig;
+  double pw;
+  double sample;
+
+  while (nframes--) {
+    freq = *freq_in;
+    freq_in++;
+    pw = *pw_in;
+    pw_in++;
+    trig = *trig_in;
+    trig_in++;
+
+    if (freq == 0.0) {
+      *out = trig;
+      out++;
+    } else if (pw == 0.0) {
+
+      sample = 0.;
+      if (trig >= 0.5 && state->prev_trig < 0.5) {
+        state->phase = 0.;
+        sample = 1.;
+      }
+
+      if (state->phase >= 1.0) {
+        state->phase = 0.;
+        sample = 1.;
+      }
+
+      double incr = (freq * spf);
+      state->phase += incr;
+      state->prev_trig = trig;
+
+      *out = sample;
+      out++;
+
+    } else {
+
+      trig = *trig_in;
+      trig_in++;
+
+      // Initialize sample to 0 for each iteration
+      sample = 0.0;
+
+      if (trig >= 0.5 && state->prev_trig < 0.5) {
+        state->phase = 0.;
+
+        if (pw == 0. && freq == 0.) {
+          sample = 1.;
+        }
+      }
+
+      if (state->phase >= 1.0) {
+        state->phase = 0.;
+      }
+
+      // Only set sample based on pw if it's non-zero AND we haven't already set
+      // it to 1
+      sample = (state->phase <= pw) ? 1.0 : 0.;
+
+      *out = sample;
+      out++;
+      double incr = (freq * spf);
+      state->phase += incr;
+      state->prev_trig = trig;
+    }
+  }
+
+  return node->output.buf;
+}
 NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig) {
 
   AudioGraph *graph = _graph;

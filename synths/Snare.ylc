@@ -1,11 +1,12 @@
 open ../engine/bindings/Synth;
+open ../engine/bindings/Sched;
 
 let synth = (fn () -> 
   let trig = inlet 0. in
   sin_node 220. + sin_node 357.
     |> (*) (aslr_node 0. 1. 0.08 0.1 trig)
     |> (+) (white_noise_node ())
-    |> tanh_node 5.
+    # |> tanh_node 5.
     |> (*) (aslr_node 0. 1. 0.05 0.1 trig)
 
   ;) |> play_tpl
@@ -15,3 +16,20 @@ let trig = fn () ->
   let fo = get_tl_tick () in
   set_input_trig_offset synth 0 fo
 ;;
+
+let snare_pattern_ref = [|empty_coroutine ()|] ;
+let set_pattern = fn t cor ->
+  let pref = snare_pattern_ref;
+  cor_stop (array_at pref 0);
+  cor
+  |> cor_map (fn (p, d): (Int, Double) ->
+    match p with 
+    | 0 -> ()
+    | 1 -> (trig (); ())
+    ;
+    d
+  ;)
+  |> play_routine t schedule_event
+  |> array_set 0 pref 
+;;
+

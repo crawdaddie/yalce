@@ -811,6 +811,11 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                           type_to_llvm_type(&t_builtin_cstr, ctx->env, module),
                           module));
 
+  FN_SYMBOL("empty_coroutine", &t_empty_cor,
+            get_extern_fn("empty_coroutine",
+                          type_to_llvm_type(&t_empty_cor, ctx->env, module),
+                          module));
+
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at_fn_sig, ArrayAtHandler);
 
   GENERIC_FN_SYMBOL("array_set", &t_array_set_fn_sig, ArraySetHandler);

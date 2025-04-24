@@ -657,7 +657,6 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
   if (!is_generic(t2)) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       if (!type_implements(t2, tc)) {
-        char buf[20];
         // print_type(t1);
         // print_type(t2);
         return type_error(
@@ -669,8 +668,6 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
   }
   if (is_list_type(t2) && t2->data.T_CONS.args[0]->kind == T_VAR &&
       is_list_type(t1)) {
-    // print_type(t1);
-    // print_type(t2);
 
     ctx->constraints = constraints_extend(
         ctx->constraints, t2->data.T_CONS.args[0], t1->data.T_CONS.args[0]);

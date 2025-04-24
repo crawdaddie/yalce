@@ -139,10 +139,9 @@ Node *sin_node(Node *input) {
 
   *state = (sin_state){.phase = 0.0};
 
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -207,10 +206,8 @@ Node *sq_node(Node *input) {
       (sq_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (sq_state){.phase = 0.0};
 
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
-
+  node->connections[0].source_node_index = input->node_index;
+  node->state_ptr = state;
   return node;
 }
 static inline double clamp_range(double input, double a, double b) {
@@ -284,13 +281,10 @@ Node *sq_pwm_node(Node *pw_input, Node *freq_input) {
       (sq_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (sq_state){.phase = 0.0};
 
-  if (freq_input) {
-    node->connections[0].source_node_index = freq_input->node_index;
-  }
-  if (pw_input) {
-    node->connections[1].source_node_index = pw_input->node_index;
-  }
+  node->connections[0].source_node_index = freq_input->node_index;
+  node->connections[1].source_node_index = pw_input->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -341,10 +335,9 @@ Node *phasor_node(Node *input) {
       (phasor_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (phasor_state){.phase = 0.0};
 
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -410,13 +403,10 @@ Node *raw_osc_node(Node *table, Node *freq) {
       (raw_osc_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (raw_osc_state){.phase = 0.0};
 
-  if (freq) {
-    node->connections[0].source_node_index = freq->node_index;
-  }
-  if (table) {
-    node->connections[1].source_node_index = table->node_index;
-  }
+  node->connections[0].source_node_index = freq->node_index;
+  node->connections[1].source_node_index = table->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -495,12 +485,10 @@ Node *osc_bank_node(Node *amps, Node *freq) {
       (osc_bank_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (osc_bank_state){.phase = 0.0};
 
-  if (freq) {
-    node->connections[0].source_node_index = freq->node_index;
-  }
-  if (amps) {
-    node->connections[1].source_node_index = amps->node_index;
-  }
+  node->connections[0].source_node_index = freq->node_index;
+  node->connections[1].source_node_index = amps->node_index;
+
+  node->state_ptr = state;
 
   return node;
 }
@@ -508,6 +496,7 @@ Node *osc_bank_node(Node *amps, Node *freq) {
 // Buffer player
 typedef struct bufplayer_state {
   double phase;
+  double prev_trig;
 } bufplayer_state;
 
 void *__bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
@@ -564,13 +553,10 @@ Node *__bufplayer_node(Node *buf, Node *rate) {
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  if (buf) {
-    node->connections[0].source_node_index = buf->node_index;
-  }
-  if (rate) {
-    node->connections[1].source_node_index = rate->node_index;
-  }
+  node->connections[0].source_node_index = buf->node_index;
+  node->connections[1].source_node_index = rate->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 // Buffer player with multi-channel support
@@ -633,13 +619,10 @@ Node *bufplayer_node(Node *buf, Node *rate) {
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  if (buf) {
-    node->connections[0].source_node_index = buf->node_index;
-  }
-  if (rate) {
-    node->connections[1].source_node_index = rate->node_index;
-  }
+  node->connections[0].source_node_index = buf->node_index;
+  node->connections[1].source_node_index = rate->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -658,7 +641,7 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
   int index;
 
   while (nframes--) {
-    if (*trig == 1.0) {
+    if (*trig > 0.5 && state->prev_trig < 0.5) {
       state->phase = 0;
     }
 
@@ -677,6 +660,7 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
       out++;
     }
 
+    state->prev_trig = *trig;
     rate++;
     trig++;
     start_pos++;
@@ -705,19 +689,12 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  if (buf) {
-    node->connections[0].source_node_index = buf->node_index;
-  }
-  if (rate) {
-    node->connections[1].source_node_index = rate->node_index;
-  }
-  if (trig) {
-    node->connections[2].source_node_index = trig->node_index;
-  }
-  if (start_pos) {
-    node->connections[3].source_node_index = start_pos->node_index;
-  }
+  node->connections[0].source_node_index = buf->node_index;
+  node->connections[1].source_node_index = rate->node_index;
+  node->connections[2].source_node_index = trig->node_index;
+  node->connections[3].source_node_index = start_pos->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -814,6 +791,7 @@ Node *brown_noise_node() {
       (brown_noise_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (brown_noise_state){.last = 0.0};
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -901,16 +879,11 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
   };
 
   // Connect inputs
-  if (freq_input) {
-    node->connections[0].source_node_index = freq_input->node_index;
-  }
-  if (min_input) {
-    node->connections[1].source_node_index = min_input->node_index;
-  }
-  if (max_input) {
-    node->connections[2].source_node_index = max_input->node_index;
-  }
+  node->connections[0].source_node_index = freq_input->node_index;
+  node->connections[1].source_node_index = min_input->node_index;
+  node->connections[2].source_node_index = max_input->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 typedef struct chirp_state {
@@ -993,12 +966,9 @@ Node *static_chirp_node(double start_freq, double end_freq, Node *lag_input,
                          .trigger_active = 0,
                          .prev_trig_value = 0.0};
 
-  if (trig_input) {
-    node->connections[0].source_node_index = trig_input->node_index;
-  }
-  if (lag_input) {
-    node->connections[1].source_node_index = lag_input->node_index;
-  }
+  node->connections[0].source_node_index = trig_input->node_index;
+  node->connections[1].source_node_index = lag_input->node_index;
+  node->state_ptr = state;
 
   return node;
 }
@@ -1083,6 +1053,8 @@ Node *chirp_node(NodeRef start_freq, NodeRef end_freq, Node *lag_input,
   node->connections[2].source_node_index = start_freq->node_index;
   node->connections[3].source_node_index = end_freq->node_index;
 
+  node->state_ptr = state;
+
   return node;
 }
 
@@ -1142,10 +1114,8 @@ Node *impulse_node(Node *freq) {
       (impulse_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (impulse_state){.phase = 1.0};
 
-  if (freq) {
-    node->connections[0].source_node_index = freq->node_index;
-  }
-
+  node->connections[0].source_node_index = freq->node_index;
+  node->state_ptr = state;
   return node;
 }
 
@@ -1200,10 +1170,9 @@ Node *ramp_node(Node *freq) {
       (ramp_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (ramp_state){.phase = 0.0};
 
-  if (freq) {
-    node->connections[0].source_node_index = freq->node_index;
-  }
+  node->connections[0].source_node_index = freq->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -1254,9 +1223,8 @@ Node *trig_rand_node(Node *trig) {
       (trig_rand_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (trig_rand_state){.value = _random_double_range(0.0, 1.0)};
 
-  if (trig) {
-    node->connections[0].source_node_index = trig->node_index;
-  }
+  node->connections[0].source_node_index = trig->node_index;
+  node->state_ptr = state;
 
   return node;
 }
@@ -1309,6 +1277,7 @@ Node *trig_range_node(Node *low, Node *high, Node *trig) {
   node->connections[1].source_node_index = low->node_index;
   node->connections[2].source_node_index = high->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -1372,6 +1341,7 @@ Node *trig_sel_node(Node *trig, Node *sels) {
     state->value = 0.0;
   }
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -1499,18 +1469,10 @@ Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
       .modulator_phase = 0.0,
   };
 
-  if (freq_input) {
-    node->connections[0].source_node_index = freq_input->node_index;
-  }
-
-  if (mod_index_input) {
-    node->connections[1].source_node_index = mod_index_input->node_index;
-  }
-
-  if (mod_ratio_input) {
-    node->connections[2].source_node_index = mod_ratio_input->node_index;
-  }
-
+  node->connections[0].source_node_index = freq_input->node_index;
+  node->connections[1].source_node_index = mod_index_input->node_index;
+  node->connections[2].source_node_index = mod_ratio_input->node_index;
+  node->state_ptr = state;
   return node;
 }
 #define SAW_TABSIZE (1 << 11)
@@ -1599,10 +1561,9 @@ Node *saw_node(Node *input) {
       (saw_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (saw_state){.phase = 0.0};
 
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-  }
+  node->connections[0].source_node_index = input->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -1757,19 +1718,12 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
     state->amps[i] = 0.0;
   }
 
-  if (buf) {
-    node->connections[0].source_node_index = buf->node_index;
-  }
-  if (trig) {
-    node->connections[1].source_node_index = trig->node_index;
-  }
-  if (pos) {
-    node->connections[2].source_node_index = pos->node_index;
-  }
-  if (rate) {
-    node->connections[3].source_node_index = rate->node_index;
-  }
+  node->connections[0].source_node_index = buf->node_index;
+  node->connections[1].source_node_index = trig->node_index;
+  node->connections[2].source_node_index = pos->node_index;
+  node->connections[3].source_node_index = rate->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -1836,6 +1790,7 @@ Node *rand_trig_node(Node *trig_input, Node *low, Node *high) {
   node->connections[1].source_node_index = low->node_index;
   node->connections[2].source_node_index = high->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -2130,6 +2085,7 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
   node->connections[3].source_node_index = rate->node_index;
   node->connections[4].source_node_index = width->node_index;
 
+  node->state_ptr = state;
   return node;
 }
 
@@ -2185,5 +2141,6 @@ NodeRef array_choose_trig_node(int arr_size, double *arr_data, Node *trig) {
   state->sample = state->data[rand() % state->size];
 
   node->connections[0].source_node_index = trig->node_index;
+  node->state_ptr = state;
   return node;
 }

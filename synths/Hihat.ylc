@@ -1,4 +1,5 @@
 open ../engine/bindings/Synth;
+open ../engine/bindings/Sched;
 import ../lib/Math;
 
 let synth = (fn () -> 
@@ -18,4 +19,14 @@ let synth = (fn () ->
 let trig = fn () ->
   let fo = get_tl_tick () in
   set_input_trig_offset synth 0 fo
+;;
+
+
+let pattern_ref = [|empty_coroutine ()|];
+let set_pattern = fn t cor ->
+  cor_stop (array_at pattern_ref 0);
+  cor
+  |> cor_map (fn d -> trig (); d;)
+  |> play_routine t schedule_event
+  |> array_set 0 pattern_ref 
 ;;

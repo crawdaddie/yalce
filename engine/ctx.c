@@ -24,6 +24,7 @@ void audio_ctx_add(Node *ensemble) {
     current->next = ensemble;
   }
 }
+
 static void process_msg_pre(int frame_offset, scheduler_msg msg) {
 
   switch (msg.type) {

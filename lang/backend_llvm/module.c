@@ -137,11 +137,9 @@ JITSymbol *codegen_import(Ast *ast, Ast *binding, JITLangCtx *ctx,
 
     module_symbol =
         create_module_symbol(module_type, module_ast, ctx, llvm_module_ref);
-    // printf("codegen import + compile\n");
-    // print_ast(ast);
 
     compile_module(module_symbol, module_ast, llvm_module_ref, builder);
-    // LLVMDumpModule(llvm_module_ref);
+    module->ref = module_symbol;
   }
 
   if (ast->data.AST_IMPORT.import_all) {
