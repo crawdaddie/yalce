@@ -6,34 +6,49 @@ open engine/bindings/Synth;
 
 let q = 60./130.;
 
+let pumpenv = [|
+  1.000000, 0.000000, 0.000000,
+  0.257778, 2.328935, -0.400000,
+  1.000000, 0.671066, 1.300000,
+  1.000000
+|]
+|> array_to_buf;
+
 let fx_chain = (fn () ->
   let input = inlet 0.;
- # reverb_node 0.9 0.9 0.9 1. input
-  glue_node -12.0 4.0 10.0 100. 15.0 6.0 input
+  let trig = inlet 0.;
+  let lfo = buf_env_node 1. (buf_ref pumpenv) trig;
+  input * lfo
 ;) |> play_tpl;
 
-Kick.synth |> pipe_into fx_chain 0;
-Snare.synth |> ripe_into fx_chain 0;
+
+let sq_synth = (fn () ->
+  let f = inlet 100.;
+  (sq_node f) + sq_node (f * 1.01)
+;) |> play_tpl;
+
+sq_synth |> pipe_into fx_chain 0;
 
 defer_quant (q * 2.) (fn t ->
   iter_of_list [
     1.5,
     1.5,
-    0.75,
     1.5,
-    0.25,
-    0.5,
     1.5,
-    0.5,
+    1.,
+    1.
   ]
   |> cor_loop
   |> cor_map ((*) q)
+  |> cor_map (fn x ->
+    let f = get_tl_tick (); 
+    set_input_trig_offset fx_chain 1 f;
+    x;
+    )
   |> (Kick.set_pattern) t
   ;
 
-  iter_of_list [
-    0.25
-  ]
+  iter_of_list [0.25]
   |> cor_loop
   |> cor_map ((*) q)
   |> (Hihat.set_pattern) t
@@ -55,7 +70,7 @@ defer_quant (q * 2.) (fn t ->
 (
   import gui/bindings/Gui;
 
-  let sig = node_out (Kick.ampenv);
+  let sig = node_out (pumpenv);
   Gui.create_envelope_edit_view
     (sig_size sig)
     (sig_raw sig);

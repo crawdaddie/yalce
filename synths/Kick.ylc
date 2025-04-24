@@ -55,4 +55,5 @@ let set_pattern = fn t cor ->
   |> cor_map (fn d -> trig (); d;)
   |> play_routine t schedule_event
   |> array_set 0 pref
+
 ;;
