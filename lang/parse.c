@@ -775,6 +775,7 @@ Ast *ast_record_access(Ast *record, Ast *member) {
 }
 
 Ast *ast_char(char ch) {
+  // printf("create ast char %c\n", ch);
   Ast *a = Ast_new(AST_CHAR);
   a->data.AST_CHAR.value = ch;
   return a;

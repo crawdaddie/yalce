@@ -20,3 +20,16 @@ let unipolar_scale = extern fn Double -> Double -> Double -> Double;
 let double_array_init = extern fn Int -> Double -> Ptr;
 let double_array = extern fn Int -> Double -> Array of Double;
 let pow = extern fn Double -> Double -> Double;
+
+let max_int = fn a: (Int) b: (Int) ->
+  match a with 
+  | a if a > b -> a 
+  | _ -> b
+;;
+
+let min_int = fn a: (Int) b: (Int) ->
+  match a with 
+  | a if a < b -> a 
+  | _ -> b
+;;
+

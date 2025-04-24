@@ -716,7 +716,6 @@ LLVMValueRef create_coroutine_state_ptr(Type *constructor_type, Ast *args,
 
   LLVMTypeRef instance_state_struct_type =
       LLVMStructType(llvm_state_arg_types, args_len, 0);
-  LLVMDumpType(instance_state_struct_type);
 
   LLVMValueRef inst_state_struct = LLVMGetUndef(instance_state_struct_type);
 

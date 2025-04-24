@@ -18,4 +18,6 @@ let fold = fn f res a ->
   | _ -> fold f (f res (a @ 0)) (array_succ a) 
 ;;
 
+# let map = fn f res a ->
+
   

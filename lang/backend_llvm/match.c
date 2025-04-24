@@ -35,25 +35,19 @@ static LLVMValueRef simple_option_match(LLVMValueRef test_val,
                                         Ast *branches, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
-  // Get the current function we're building in
   LLVMValueRef current_function =
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
 
-  // Create basic blocks for the branches and merge point
   LLVMBasicBlockRef some_block = LLVMAppendBasicBlock(current_function, "some");
   LLVMBasicBlockRef none_block = LLVMAppendBasicBlock(current_function, "none");
   LLVMBasicBlockRef merge_block =
       LLVMAppendBasicBlock(current_function, "merge");
 
-  // Generate the Some/None condition
   LLVMValueRef is_some = codegen_option_is_some(test_val, builder);
 
-  // Create the conditional branch
   LLVMBuildCondBr(builder, is_some, some_block, none_block);
 
-  // Some branch
   LLVMPositionBuilderAtEnd(builder, some_block);
-  // Space for custom Some branch code here
   LLVMValueRef some_result = ({
     LLVMValueRef some_val = LLVMBuildExtractValue(builder, test_val, 1, "");
     Ast *binding = branches->data.AST_APPLICATION.args;
@@ -74,10 +68,8 @@ static LLVMValueRef simple_option_match(LLVMValueRef test_val,
 
   LLVMBuildBr(builder, merge_block);
 
-  // Save the Some block's last value for phi
   LLVMBasicBlockRef some_end_block = LLVMGetInsertBlock(builder);
 
-  // None branch
   LLVMPositionBuilderAtEnd(builder, none_block);
 
   LLVMValueRef none_result = ({
@@ -96,17 +88,13 @@ static LLVMValueRef simple_option_match(LLVMValueRef test_val,
   });
   LLVMBuildBr(builder, merge_block);
 
-  // Save the None block's last value for phi
   LLVMBasicBlockRef none_end_block = LLVMGetInsertBlock(builder);
 
-  // Merge block
   LLVMPositionBuilderAtEnd(builder, merge_block);
 
-  // Create PHI node if we need to merge values
   LLVMValueRef phi =
       LLVMBuildPhi(builder, LLVMTypeOf(some_result), "match.result");
 
-  // Add the incoming values to the PHI node
   LLVMValueRef incoming_values[] = {some_result, none_result};
   LLVMBasicBlockRef incoming_blocks[] = {some_end_block, none_end_block};
   LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
@@ -129,24 +117,20 @@ LLVMValueRef simple_binary_match(Ast *branches, LLVMValueRef val,
   LLVMValueRef condition = codegen_pattern_binding(
       branches, val, val_type, &branch_ctx, module, builder);
 
-  // Create basic blocks for then/else branches and merge point
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
   LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(function, "then");
   LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(function, "else");
   LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge");
 
-  // Create conditional branch
   LLVMBuildCondBr(builder, condition, then_block, else_block);
 
-  // Build THEN block
   LLVMPositionBuilderAtEnd(builder, then_block);
   LLVMValueRef then_result =
       codegen(branches + 1, &branch_ctx, module, builder);
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef then_end_block = LLVMGetInsertBlock(builder);
 
-  // Build ELSE block
   LLVMPositionBuilderAtEnd(builder, else_block);
   JITLangCtx else_ctx = *ctx;
   ht _table;
@@ -158,7 +142,6 @@ LLVMValueRef simple_binary_match(Ast *branches, LLVMValueRef val,
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef else_end_block = LLVMGetInsertBlock(builder);
 
-  // Build merge block with PHI node
   LLVMPositionBuilderAtEnd(builder, merge_block);
   LLVMValueRef phi = LLVMBuildPhi(builder, LLVMTypeOf(then_result), "merge");
   LLVMValueRef incoming_values[] = {then_result, else_result};
@@ -380,7 +363,8 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
         sym = ex_sym;
       } else {
         sym = new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
-        codegen_set_global(sym, val, val_type, llvm_type, ctx, module, builder);
+        codegen_set_global(chars, sym, val, val_type, llvm_type, ctx, module,
+                           builder);
       }
 
       ht_set_hash(ctx->frame->table, chars, id_hash, sym);

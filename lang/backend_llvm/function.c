@@ -116,6 +116,7 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
   ht *scope = fn_ctx->frame->table;
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
+
 LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -141,6 +142,11 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
         stmt->is_body_tail = true;
       }
       body = codegen(stmt, fn_ctx, module, builder);
+      if (body == NULL && i == 1 && stmt->tag == AST_APPLICATION) {
+        // print_ast(stmt);
+        // print_type(stmt->data.AST_APPLICATION.args[0].md);
+        // print_type(stmt->data.AST_APPLICATION.args[1].md);
+      }
     }
   }
   return body;
@@ -196,8 +202,9 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
-  if (fn_type->kind == T_VOID) {
 
+  if (fn_type->kind == T_VOID) {
+    // printf("build ret for some reason???\n");
     LLVMBuildRetVoid(builder);
   } else {
     LLVMBuildRet(builder, body);
@@ -312,6 +319,7 @@ TypeEnv *create_env_from_subst(TypeEnv *env, Substitution *subst) {
 
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type) {
+
   Substitution *subst = NULL;
 
   TypeConstraint *constraints = NULL;

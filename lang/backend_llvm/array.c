@@ -23,7 +23,6 @@ LLVMValueRef __get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
       LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
                     "element_ptr");
 
-  // Load and return element
   return LLVMBuildLoad2(builder, element_type, element_ptr, "element");
 }
 
@@ -40,15 +39,12 @@ LLVMValueRef get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
     array_struct = array;
   }
 
-  // Extract the data pointer from the struct
   LLVMValueRef data_ptr =
       LLVMBuildExtractValue(builder, array_struct, 1, "get_array_data_ptr");
 
-  // Get element pointer using the index
   LLVMValueRef element_ptr =
       LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
                     "element_ptr");
-  // Load and return element
   return LLVMBuildLoad2(builder, element_type, element_ptr, "element");
 }
 
@@ -66,16 +62,13 @@ LLVMValueRef set_array_element(LLVMBuilderRef builder, LLVMValueRef array,
     array_struct = array;
   }
 
-  // Extract the data pointer from the struct
   LLVMValueRef data_ptr =
       LLVMBuildExtractValue(builder, array_struct, 1, "get_array_data_ptr");
 
-  // Get element pointer using the index
   LLVMValueRef element_ptr =
       LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
                     "element_ptr");
 
-  // Load and return element
   return LLVMBuildStore(builder, value, element_ptr);
 }
 
@@ -85,7 +78,6 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
 
   int array_size = ast->data.AST_LIST.len;
 
-  // First generate the first element to get its type
   LLVMValueRef first_element = NULL;
   if (array_size > 0) {
     first_element = codegen(ast->data.AST_LIST.items, ctx, module, builder);
@@ -98,14 +90,12 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef size_const = LLVMConstInt(LLVMInt32Type(), array_size, 0);
   LLVMValueRef array_struct = LLVMGetUndef(array_type);
 
-  // Allocate the data array
   LLVMValueRef data_ptr =
       LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
 
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                       "insert_array_size");
 
-  // Generate and store remaining elements
   for (int i = 0; i < array_size; i++) {
     LLVMValueRef element =
         codegen(ast->data.AST_LIST.items + i, ctx, module, builder);

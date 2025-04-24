@@ -350,7 +350,7 @@ int init_audio() {
   start_audio();
   scheduler_event_loop();
   gc_loop(get_audio_ctx());
-  midi_setup();
+  // midi_setup();
 
   return 0;
 }

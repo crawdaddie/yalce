@@ -19,15 +19,15 @@ static MIDIClientRef client;
 int debug;
 void toggle_midi_debug() { debug = !debug; }
 
-void register_cc_handler(CCCallback handler, int ch, int cc) {
+void register_cc_handler(int ch, int cc, CCCallback handler) {
   cc_handlers[cc] = handler;
 }
 
-void register_note_on_handler(NoteCallback handler, int ch) {
+void register_note_on_handler(int ch, NoteCallback handler) {
   note_on_handlers[ch] = handler;
 }
 
-void register_note_off_handler(NoteCallback handler, int ch) {
+void register_note_off_handler(int ch, NoteCallback handler) {
   note_off_handlers[ch] = handler;
 }
 
@@ -54,7 +54,9 @@ static void handle_note_on(MIDIPacket *packet) {
     printf("midi note on ch: %d note: %d vel: %d\n", ch, note, velocity);
   }
   if (handler != NULL) {
-    handler(note, (double)(velocity * REC_127));
+    if (velocity > 0) {
+      handler(note, (double)(velocity * REC_127));
+    }
   }
 }
 
@@ -138,43 +140,43 @@ void midi_out_setup() {
   MIDIOutputPortCreate(client, CFSTR("Output port"), &output_port);
 }
 
-int send_note_on(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
-                 uint8_t velocity) {
-  if (channel > 15) {
-    if (debug) {
-      printf("Error: Invalid MIDI channel %d (must be 0-15)\n", channel);
-    }
-    return -1;
-  }
-
-  if (note > 127) {
-    if (debug) {
-      printf("Error: Invalid MIDI note %d (must be 0-127)\n", note);
-    }
-    return -1;
-  }
-
-  if (velocity > 127) {
-    if (debug) {
-      printf("Error: Invalid MIDI velocity %d (must be 0-127)\n", velocity);
-    }
-    return -1;
-  }
+int send_note_on(MIDIEndpointRef destination, char channel, char note,
+                 char velocity) {
+  // if (channel > 15) {
+  //   if (debug) {
+  //     printf("Error: Invalid MIDI channel %d (must be 0-15)\n", channel);
+  //   }
+  //   return -1;
+  // }
+  //
+  // if (note > 127) {
+  //   if (debug) {
+  //     printf("Error: Invalid MIDI note %d (must be 0-127)\n", note);
+  //   }
+  //   return -1;
+  // }
+  //
+  // if (velocity > 127) {
+  //   if (debug) {
+  //     printf("Error: Invalid MIDI velocity %d (must be 0-127)\n", velocity);
+  //   }
+  //   return -1;
+  // }
 
   Byte buffer[1024];
   MIDIPacketList *packetList = (MIDIPacketList *)buffer;
   MIDIPacket *currentPacket = MIDIPacketListInit(packetList);
 
-  Byte midiData[3];
-  midiData[0] = NOTE_ON | (channel & CHAN_MASK);
-  midiData[1] = note;
-  midiData[2] = velocity;
+  Byte midi_data[3];
+  midi_data[0] = NOTE_ON | (channel & CHAN_MASK);
+  midi_data[1] = note;
+  midi_data[2] = velocity;
 
   currentPacket = MIDIPacketListAdd(packetList, sizeof(buffer), currentPacket,
-                                    0, 3, midiData);
+                                    0, 3, midi_data);
 
   if (debug) {
-    printf("Sending note on: ch=%d note=%d vel=%d\n", channel, note, velocity);
+    printf("Sending note on: ch=%u note=%u vel=%u\n", channel, note, velocity);
   }
 
   OSStatus result = MIDISend(output_port, destination, packetList);
@@ -183,26 +185,6 @@ int send_note_on(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
 
 int send_note_off(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
                   uint8_t velocity) {
-  if (channel > 15) {
-    if (debug) {
-      printf("Error: Invalid MIDI channel %d (must be 0-15)\n", channel);
-    }
-    return -1;
-  }
-
-  if (note > 127) {
-    if (debug) {
-      printf("Error: Invalid MIDI note %d (must be 0-127)\n", note);
-    }
-    return -1;
-  }
-
-  if (velocity > 127) {
-    if (debug) {
-      printf("Error: Invalid MIDI velocity %d (must be 0-127)\n", velocity);
-    }
-    return -1;
-  }
 
   Byte buffer[1024];
   MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
@@ -216,11 +198,61 @@ int send_note_off(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
   current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
                                      current_packet, 0, 3, midi_data);
 
-  if (debug) {
-    printf("Sending note off: ch=%d note=%d vel=%d\n", channel, note, velocity);
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
+}
+
+typedef struct _note_data {
+  uint8_t channel;
+  uint8_t note;
+  uint8_t velocity;
+} _note_data;
+
+int send_note_ons(MIDIEndpointRef destination, int size, char *note_data_ptr) {
+  Byte buffer[1024];
+  MIDIPacketList *packetList = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packetList);
+
+  for (int i = 0; i < size / 3; i++) {
+    uint8_t channel, note, velocity;
+    channel = *(note_data_ptr + (i * 3));
+    note = *(note_data_ptr + (i * 3) + 1);
+    velocity = *(note_data_ptr + (i * 3) + 2);
+
+    Byte midi_data[3];
+    midi_data[0] = NOTE_ON | (channel & CHAN_MASK);
+    midi_data[1] = note;
+    midi_data[2] = velocity;
+
+    current_packet = MIDIPacketListAdd(packetList, sizeof(buffer),
+                                       current_packet, 0, 3, midi_data);
   }
 
-  OSStatus result = MIDISend(output_port, destination, packet_list);
+  OSStatus result = MIDISend(output_port, destination, packetList);
+  return result == noErr ? 0 : -1;
+}
+
+int send_note_offs(MIDIEndpointRef destination, int size, char *note_data_ptr) {
+  Byte buffer[1024];
+  MIDIPacketList *packetList = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packetList);
+
+  for (int i = 0; i < size / 3; i++) {
+    uint8_t channel, note, velocity;
+    channel = *(note_data_ptr + (i * 3));
+    note = *(note_data_ptr + (i * 3) + 1);
+    velocity = *(note_data_ptr + (i * 3) + 2);
+
+    Byte midi_data[3];
+    midi_data[0] = NOTE_OFF | (channel & CHAN_MASK);
+    midi_data[1] = note;
+    midi_data[2] = velocity;
+
+    current_packet = MIDIPacketListAdd(packetList, sizeof(buffer),
+                                       current_packet, 0, 3, midi_data);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packetList);
   return result == noErr ? 0 : -1;
 }
 

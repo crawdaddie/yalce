@@ -73,7 +73,6 @@ extern Type t_array_var_el;
 extern Type t_array_var;
 
 extern Type t_array_size_fn_sig;
-extern Type t_array_incr_fn_sig;
 extern Type t_array_to_list_fn_sig;
 extern Type t_array_at_fn_sig;
 extern Type t_array_set_fn_sig;

@@ -109,7 +109,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   switch (sym->type) {
   case STYPE_TOP_LEVEL_VAR: {
-    return codegen_get_global(sym, module, builder);
+    return codegen_get_global(chars, sym, module, builder);
   }
 
   case STYPE_FUNCTION: {

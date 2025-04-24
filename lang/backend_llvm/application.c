@@ -25,6 +25,7 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
   }
 
   ConsMethod constructor = to_type->constructor;
+
   return constructor(val, from_type, module, builder);
 }
 
@@ -99,11 +100,13 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
 
     LLVMValueRef app_val;
     if (is_generic(app_arg->md) && expected_type->kind == T_FN) {
+
       Ast _app_arg = *app_arg;
       _app_arg.md = expected_type;
       app_val = codegen(&_app_arg, ctx, module, builder);
     } else if (!types_equal(app_arg_type, expected_type) &&
                expected_type->alias != NULL) {
+      // printf("should handle conversions???\n");
 
       app_val = codegen(app_arg, ctx, module, builder);
       app_val = handle_type_conversions(app_val, app_arg_type, expected_type,
@@ -118,13 +121,8 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
     app_vals[i] = app_val;
   }
 
-  LLVMValueRef res = LLVMBuildCall2(builder, llvm_callable_type, callable,
-                                    app_vals, args_len, "call_func");
-  // if (types_equal(callable_type, &t_void)) {
-  //
-  //   res = LLVMGetUndef(LLVMVoidType());
-  // }
-  return res;
+  return LLVMBuildCall2(builder, llvm_callable_type, callable, app_vals,
+                        args_len, "call_func");
 }
 
 static LLVMValueRef
@@ -156,6 +154,13 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+  // printf("APPLICATION\n");
+  // print_ast(ast);
+  // print_ast(ast->data.AST_APPLICATION.args);
+  // print_type(ast->data.AST_APPLICATION.args->md);
+  // printf("::");
+  // print_type(ast->md);
+  // print_type(ast->data.AST_APPLICATION.function->md);
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 

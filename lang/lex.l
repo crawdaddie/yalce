@@ -14,6 +14,21 @@ long long int yyabsoluteoffset = 0;
 long long int yyprevoffset = 0; 
 
 
+// 0x[0-9a-fA-F]{1,2}c     { 
+//                           char temp[3] = {0}; // Max 2 hex digits + null terminator
+//                           strncpy(temp, yytext + 2, yyleng - 3); // Skip "0x" and 'c'
+//                           
+//                           int value = (int)strtol(temp, NULL, 16);
+//                           
+//                           if(value > 255) {
+//                               yyerror("Byte literal too large");
+//                               fprintf(stderr, "Byte literal too large");
+//                           }
+// 
+//                           yylval.vchar = (char)value;
+//                           return TOK_CHAR;
+//                         }
+
 // This macro is called at the beginning of each rule's action
 #define YY_USER_ACTION \
     yyprevlineno = yylineno; \
@@ -60,21 +75,6 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "*"                     return *yytext;
 "\\"                    return THUNK;
 "module"                return *yytext;
-
-0x[0-9a-fA-F]{1,2}c     { 
-                          char temp[3] = {0}; // Max 2 hex digits + null terminator
-                          strncpy(temp, yytext + 2, yyleng - 3); // Skip "0x" and 'c'
-                          
-                          int value = (int)strtol(temp, NULL, 16);
-                          
-                          if(value > 255) {
-                              yyerror("Byte literal too large");
-                              fprintf(stderr, "Byte literal too large");
-                          }
-
-                          yylval.vchar = (char)value;
-                          return TOK_CHAR;
-                        }
 [a-zA-Z_][a-zA-Z0-9_]*  {
 
                           int len = yyleng;
@@ -179,7 +179,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 0x[0-9a-fA-F]+          { 
                           // hexadecimal int
                           yylval.vint = (int)strtol(yytext, NULL, 16);
-                          return INTEGER;
+                          return TOK_CHAR;
                         }
 
 -?[0-9]*\.([0-9]*[1-9]|[0-9][0-9]*)? {

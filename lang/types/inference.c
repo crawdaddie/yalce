@@ -547,8 +547,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     break;
   }
   case T_CONS: {
-    printf("infer cons app\n");
-    print_ast(ast);
     return infer_cons_application(ast, ctx);
   }
   case T_FN: {
@@ -739,13 +737,25 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     Ast *arg = ast->data.AST_APPLICATION.args + i;
     arg_types[i] = infer(arg, ctx);
 
+    if (arg_types[i]->kind == T_FN) {
+      if ((!is_generic(fn_return_type(arg_types[i]))) &&
+          (arg->tag == AST_LAMBDA) &&
+          is_generic(arg->data.AST_LAMBDA.body->md)) {
+        // TODO: this is a really fiddly and complex edge-case
+        // when you have an anonymous function callback passed to a function
+        // with type information constraints generated within the callback
+        // aren't pushed back up to the app_ctx (???)
+        unify_in_ctx(fn_return_type(arg_types[i]),
+                     arg->data.AST_LAMBDA.body->md, &app_ctx, arg);
+      }
+    }
+
     // For each argument, add a constraint that the function's parameter type
     // must match the argument type
     Type *param_type = fn_type->data.T_FN.from;
 
     if (!unify_in_ctx(param_type, arg_types[i], &app_ctx,
                       ast->data.AST_APPLICATION.args + i)) {
-
       return NULL;
     }
 
@@ -756,6 +766,7 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
       fn_type = fn_type->data.T_FN.to;
     }
   }
+  // print_ast(ast);
   // print_constraints(app_ctx.constraints);
 
   Substitution *subst = solve_constraints(app_ctx.constraints);
@@ -770,6 +781,14 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
     if (arg->tag == AST_IDENTIFIER && arg->data.AST_IDENTIFIER.is_fn_param) {
       arg->md = apply_substitution(subst, arg->md);
+    }
+
+    if (((Type *)arg->md)->kind == T_FN) {
+
+      if ((!is_generic(fn_return_type(arg->md))) && (arg->tag == AST_LAMBDA) &&
+          is_generic(arg->data.AST_LAMBDA.body->md)) {
+        apply_substitutions_rec(arg, subst);
+      }
     }
 
     if (is_generic(arg->md)) {

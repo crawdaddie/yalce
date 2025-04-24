@@ -2,15 +2,28 @@
 type CCCallback = (Double -> ());
 type NoteCallback = Int -> Double -> ();
 let midi_setup = extern fn () -> ();
-let register_cc_handler = extern fn CCCallback -> Int -> Int -> ();
-let register_note_on_handler = extern fn NoteCallback -> Int -> ();
-let register_note_off_handler = extern fn NoteCallback -> Int -> ();
+let register_cc_handler = extern fn Int -> Int -> CCCallback -> ();
+let register_note_on_handler = extern fn Int -> NoteCallback -> ();
+let register_note_off_handler = extern fn Int -> NoteCallback -> ();
 let toggle_midi_debug = extern fn () -> ();
-let send_note_on = extern fn Int -> Int -> Int -> Int -> Int;
-let send_note_off = extern fn Int -> Int -> Int -> Int -> Int;
+let send_note_on = extern fn Int -> Char -> Char -> Char -> Int;
+let send_note_off = extern fn Int -> Char -> Char -> Char -> Int;
+let send_note_ons = extern fn Int -> Int -> Ptr -> Int;
+let send_note_offs = extern fn Int -> Int -> Ptr -> Int;
 let get_destination = extern fn Int -> Int;
 let get_destination_by_name = extern fn Ptr -> Int;
 let list_destinations = extern fn () -> ();
 let midi_out_setup = extern fn () -> ();
 
 let REC_127 = 0.007874015748031496;
+
+#define CC 0xB0
+#define NOTE_ON 0x90
+#define NOTE_OFF 0x80
+#define CHAN_MASK 0x0F
+
+#define REC_127 0.007874015748031496
+
+let midi_setup = extern fn () -> () in
+  midi_setup ()
+;

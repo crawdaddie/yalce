@@ -239,7 +239,7 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "void", "()");
   lookups = lookups_extend(lookups, "uint64_t", "Uint64");
   lookups = lookups_extend(lookups, "uint32_t", "Int");
-  lookups = lookups_extend(lookups, "uint8_t", "Int");
+  lookups = lookups_extend(lookups, "uint8_t", "Char");
   lookups = lookups_extend(lookups, "int", "Int");
   lookups = lookups_extend(lookups, "bool", "Bool");
   lookups = lookups_extend(lookups, "char", "Char");
