@@ -31,9 +31,46 @@ let grid_is_set = fn i: (Int) ->
   | (1, _) -> true
   | (0, _) -> false
 ;;
+
 Launchpad.setup 16 grid_press_handler grid_is_set;
 
-# launchpad_mod.setup 8 grid_press_handler grid_is_set;
+let arithmetic = fn s ->
+  yield array_fill 8 (fn i -> array_at pattern ((i * 16) + s););
+  yield arithmetic ((s + 1) % 16)
+;;
+
+
+# let c = arithmetic 0 in
+# print `## arithmetic series:
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# `
+
+
+array_stride 16 1 pattern;
 
 
 

@@ -207,7 +207,18 @@ Type *_array_succ_sig() {
   return type_fn(f, f);
 }
 
-Type t_array_succ_sig = GENERIC_TYPE(_array_succ_sig);
+Type t_array_identity_sig = GENERIC_TYPE(_array_succ_sig);
+
+Type *_array_stride_sig() {
+  Type *eltype = next_tvar();
+  Type *f = create_array_type(eltype);
+  Type *func = type_fn(f, f);
+  func = type_fn(&t_int, func);
+  func = type_fn(&t_int, func);
+  return func;
+}
+
+Type t_array_stride_sig = GENERIC_TYPE(_array_stride_sig);
 
 Type *_struct_set_sig() {
   Type *eltype = next_tvar();
@@ -476,7 +487,8 @@ void initialize_builtin_types() {
   add_builtin("array_fill_const", &t_array_fill_const_sig);
   add_builtin("array_new", &t_array_fill_sig);
   add_builtin("struct_set", &t_struct_set_sig);
-  add_builtin("array_succ", &t_array_succ_sig);
+  add_builtin("array_succ", &t_array_identity_sig);
+  add_builtin("array_stride", &t_array_stride_sig);
   add_builtin("cor_replace", &t_cor_replace_fn_sig);
   add_builtin("cor_stop", &t_cor_stop_fn_sig);
   add_builtin("empty_coroutine", &t_empty_cor);

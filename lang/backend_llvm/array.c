@@ -477,3 +477,12 @@ LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return new_array_struct;
 }
+
+LLVMValueRef ArrayStrideHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  LLVMValueRef array =
+      codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
+
+  Type *_array_type = ast->md;
+  return NULL;
+}

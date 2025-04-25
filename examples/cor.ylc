@@ -251,10 +251,10 @@ let loop_cor = fn () ->
   {e ()}
 `
 ;;
+
 loop_cor ();
 let arithmetic_series = fn () -> 
   let arithmetic = fn s ->
-    # TODO: don't like that I need to annotate the type here
     yield s;
     yield arithmetic (s + 1)
   ;;
