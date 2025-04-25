@@ -8,8 +8,8 @@ let synth = (fn () ->
     |> (+) (white_noise_node ())
     # |> tanh_node 5.
     |> (*) (aslr_node 0. 1. 0.05 0.1 trig)
-
-  ;) |> play_tpl
+  )
+  |> play_tpl
 ;
 
 let trig = fn () ->
@@ -28,7 +28,7 @@ let set_pattern = fn t cor ->
     | 1 -> (trig (); ())
     ;
     d
-  ;)
+  )
   |> play_routine t schedule_event
   |> array_set 0 pref 
 ;;

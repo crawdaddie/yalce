@@ -871,7 +871,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
                     ArrayFillConstHandler);
   GENERIC_FN_SYMBOL("array_succ", &t_array_identity_sig, ArraySuccHandler);
-  GENERIC_FN_SYMBOL("array_stride", &t_array_stride_sig, ArrayStrideHandler);
+  // GENERIC_FN_SYMBOL("array_view", &t_array_view_sig, ArrayViewHandler);
   GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);
   GENERIC_FN_SYMBOL(TYPE_NAME_UINT64, next_tvar(), uint64_constructor_handler);
   GENERIC_FN_SYMBOL(TYPE_NAME_CHAR, next_tvar(), char_cons_handler);

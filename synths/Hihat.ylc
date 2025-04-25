@@ -13,7 +13,7 @@ let synth = (fn () ->
     |> comb_node 0.02 0.1 0.7
     |> (*) env
 
-  ;) |> play_tpl
+  ) |> play_tpl
 ;
 
 let trig = fn () ->

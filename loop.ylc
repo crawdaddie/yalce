@@ -19,13 +19,13 @@ let fx_chain = (fn () ->
   let trig = inlet 0.;
   let lfo = buf_env_node 1. (buf_ref pumpenv) trig;
   input * lfo
-;) |> play_tpl;
+) |> play_tpl;
 
 
 let sq_synth = (fn () ->
   let f = inlet 100.;
   (sq_node f) + sq_node (f * 1.01)
-;) |> play_tpl;
+) |> play_tpl;
 
 sq_synth |> pipe_into fx_chain 0;
 
@@ -43,7 +43,7 @@ defer_quant (q * 2.) (fn t ->
   |> cor_map (fn x ->
     let f = get_tl_tick (); 
     set_input_trig_offset fx_chain 1 f;
-    x;
+    x
     )
   |> (Kick.set_pattern) t
   ;
@@ -61,8 +61,8 @@ defer_quant (q * 2.) (fn t ->
   (0, 1.), (1, 1.), (0, 1.), (1, 0.25), (1, 0.5), (1, 0.25)
   ]
   |> cor_loop
-  |> cor_map (fn (p, d) -> (p, d * q);)
-  |> (Snare.set_pattern) t;
+  |> cor_map (fn (p, d) -> (p, d * q))
+  |> (Snare.set_pattern) t
 );
 
 

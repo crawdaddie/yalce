@@ -209,7 +209,7 @@ Type *_array_succ_sig() {
 
 Type t_array_identity_sig = GENERIC_TYPE(_array_succ_sig);
 
-Type *_array_stride_sig() {
+Type *_array_view_sig() {
   Type *eltype = next_tvar();
   Type *f = create_array_type(eltype);
   Type *func = type_fn(f, f);
@@ -218,7 +218,7 @@ Type *_array_stride_sig() {
   return func;
 }
 
-Type t_array_stride_sig = GENERIC_TYPE(_array_stride_sig);
+Type t_array_view_sig = GENERIC_TYPE(_array_view_sig);
 
 Type *_struct_set_sig() {
   Type *eltype = next_tvar();
@@ -273,6 +273,18 @@ Type t_struct_set_sig = GENERIC_TYPE(_struct_set_sig);
 //               .to = &t_list_cor}},
 //     .is_coroutine_constructor = true});
 //
+//
+Type *_cstr_sig() {
+  Type *el = next_tvar();
+  Type *t_arr = create_array_type(el);
+
+  // Type *container = empty_type();
+  // container->kind = T_CONS;
+  // container-> = T_CONS;
+  // (list_el);
+  // return type_fn(list, list);
+}
+// Type t_list_tail_sig = GENERIC_TYPE(_list_tail_sig);
 Type t_builtin_cstr = MAKE_FN_TYPE_2(&t_string, &t_ptr);
 
 // Type t_sched_callback
@@ -488,7 +500,7 @@ void initialize_builtin_types() {
   add_builtin("array_new", &t_array_fill_sig);
   add_builtin("struct_set", &t_struct_set_sig);
   add_builtin("array_succ", &t_array_identity_sig);
-  add_builtin("array_stride", &t_array_stride_sig);
+  add_builtin("array_view", &t_array_view_sig);
   add_builtin("cor_replace", &t_cor_replace_fn_sig);
   add_builtin("cor_stop", &t_cor_stop_fn_sig);
   add_builtin("empty_coroutine", &t_empty_cor);

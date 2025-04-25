@@ -38,7 +38,7 @@ let synth = (fn () ->
     |> reverb_node 0.2 1. 0. 1.
   )
   |> (*) (buf_env_node 0.12 (buf_ref ampenv) trig)
-  ;)
+  )
   |> play_tpl
 ;
 
@@ -52,7 +52,7 @@ let set_pattern = fn t cor ->
   let pref = kick_pattern_ref;
   cor_stop (array_at pref 0);
   cor
-  |> cor_map (fn d -> trig (); d;)
+  |> cor_map (fn d -> trig (); d)
   |> play_routine t schedule_event
   |> array_set 0 pref
 

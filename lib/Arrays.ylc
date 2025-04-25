@@ -5,7 +5,9 @@ let (@) = array_at;
 #   arr @ idx 
 # ;;
 
-type Tensor = (Array of t, Array of Int, Array of Int);
+type Tensor = (data: Array of t, rank: Array of Int, Array of Int);
+
+type StridedArray = (size: Int, stride: Int, data: Ptr of t);
 
 let tensor_ndims = fn (_, sizes, _): (Tensor) ->
   array_size sizes
@@ -16,6 +18,13 @@ let fold = fn f res a ->
   match len with
   | 0 -> res
   | _ -> fold f (f res (a @ 0)) (array_succ a) 
+;;
+
+let iter = fn f a ->
+  fold (fn i v -> 
+    f v;
+    i + 1
+  ) 0 a
 ;;
 
 # let map = fn f res a ->

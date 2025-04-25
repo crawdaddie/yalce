@@ -1,6 +1,6 @@
-#line 1 "lang/lex.yy.c"
+#line 1 "../lang/lex.yy.c"
 
-#line 3 "lang/lex.yy.c"
+#line 3 "../lang/lex.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -667,8 +667,8 @@ int yy_flex_debug = 0;
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
 char *yytext;
-#line 1 "lang/lex.l"
-#line 2 "lang/lex.l"
+#line 1 "../lang/lex.l"
+#line 2 "../lang/lex.l"
 #ifndef _LEX_YY_C
 #define _LEX_YY_C
 #include <stdlib.h>
@@ -709,9 +709,9 @@ long long int yyprevoffset = 0;
     yycolumn += yyleng; \
     yyprevoffset = yyabsoluteoffset; \
     yyabsoluteoffset += yyleng;
-#line 712 "lang/lex.yy.c"
+#line 712 "../lang/lex.yy.c"
 
-#line 714 "lang/lex.yy.c"
+#line 714 "../lang/lex.yy.c"
 
 #define INITIAL 0
 #define FSTRING 1
@@ -933,9 +933,9 @@ YY_DECL
 		}
 
 	{
-#line 50 "lang/lex.l"
+#line 50 "../lang/lex.l"
 
-#line 938 "lang/lex.yy.c"
+#line 938 "../lang/lex.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1005,142 +1005,142 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 51 "lang/lex.l"
+#line 51 "../lang/lex.l"
 return FN;
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 52 "lang/lex.l"
+#line 52 "../lang/lex.l"
 return LET;
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 53 "lang/lex.l"
+#line 53 "../lang/lex.l"
 return IN;
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 54 "lang/lex.l"
+#line 54 "../lang/lex.l"
 return AND;
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 55 "lang/lex.l"
+#line 55 "../lang/lex.l"
 return TOK_VOID;
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 56 "lang/lex.l"
+#line 56 "../lang/lex.l"
 return EXTERN;
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 57 "lang/lex.l"
+#line 57 "../lang/lex.l"
 return TRUE;
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 58 "lang/lex.l"
+#line 58 "../lang/lex.l"
 return FALSE;
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 59 "lang/lex.l"
+#line 59 "../lang/lex.l"
 return TRIPLE_DOT;
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 60 "lang/lex.l"
+#line 60 "../lang/lex.l"
 return MATCH;
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 61 "lang/lex.l"
+#line 61 "../lang/lex.l"
 return WITH;
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 62 "lang/lex.l"
+#line 62 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 63 "lang/lex.l"
+#line 63 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 64 "lang/lex.l"
+#line 64 "../lang/lex.l"
 return IMPORT;
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 65 "lang/lex.l"
+#line 65 "../lang/lex.l"
 return OPEN;
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 66 "lang/lex.l"
+#line 66 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 67 "lang/lex.l"
+#line 67 "../lang/lex.l"
 return TYPE;
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 68 "lang/lex.l"
+#line 68 "../lang/lex.l"
 return TEST_ID;
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 69 "lang/lex.l"
+#line 69 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 70 "lang/lex.l"
+#line 70 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 71 "lang/lex.l"
+#line 71 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 72 "lang/lex.l"
+#line 72 "../lang/lex.l"
 return DOUBLE_AMP;
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 73 "lang/lex.l"
+#line 73 "../lang/lex.l"
 return AMPERSAND;
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 74 "lang/lex.l"
+#line 74 "../lang/lex.l"
 return DOUBLE_PIPE;
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 75 "lang/lex.l"
+#line 75 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 76 "lang/lex.l"
+#line 76 "../lang/lex.l"
 return THUNK;
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 77 "lang/lex.l"
+#line 77 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 78 "lang/lex.l"
+#line 78 "../lang/lex.l"
 {
 
                           int len = yyleng;
@@ -1152,7 +1152,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 87 "lang/lex.l"
+#line 87 "../lang/lex.l"
 {
                           int len = yyleng;
                           yylval.vident.chars = strdup(yytext); 
@@ -1163,7 +1163,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 95 "lang/lex.l"
+#line 95 "../lang/lex.l"
 {
 
                           int len = yyleng;
@@ -1177,28 +1177,28 @@ YY_RULE_SETUP
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 106 "lang/lex.l"
+#line 106 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 109 "lang/lex.l"
+#line 109 "../lang/lex.l"
 { BEGIN(FSTRING); return FSTRING_START; }
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 110 "lang/lex.l"
+#line 110 "../lang/lex.l"
 { BEGIN(INITIAL); return FSTRING_END; }
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 111 "lang/lex.l"
+#line 111 "../lang/lex.l"
 { BEGIN(INITIAL); return FSTRING_INTERP_START; }
 	YY_BREAK
 case 35:
 /* rule 35 can match eol */
 YY_RULE_SETUP
-#line 112 "lang/lex.l"
+#line 112 "../lang/lex.l"
 { 
                           int len = yyleng;
                           char *raw_str = strndup(yytext, len); // remove surrounding " chars
@@ -1212,23 +1212,23 @@ YY_RULE_SETUP
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 122 "lang/lex.l"
+#line 122 "../lang/lex.l"
 { BEGIN(TRIPLE_FSTRING); return FSTRING_START; }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 123 "lang/lex.l"
+#line 123 "../lang/lex.l"
 { BEGIN(INITIAL); return FSTRING_END; }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 124 "lang/lex.l"
+#line 124 "../lang/lex.l"
 { BEGIN(INITIAL); return FSTRING_INTERP_START; }
 	YY_BREAK
 case 39:
 /* rule 39 can match eol */
 YY_RULE_SETUP
-#line 125 "lang/lex.l"
+#line 125 "../lang/lex.l"
 { 
                           int len = yyleng;
                           char *raw_str = strndup(yytext, len);
@@ -1251,7 +1251,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 144 "lang/lex.l"
+#line 144 "../lang/lex.l"
 { 
                           if (YYSTATE == FSTRING) {
                             return FSTRING_INTERP_END;
@@ -1263,7 +1263,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 153 "lang/lex.l"
+#line 153 "../lang/lex.l"
 {
                           int len = yyleng - 2;
                           char *raw_str = strndup(yytext + 1, len); // remove surrounding " chars
@@ -1277,7 +1277,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 165 "lang/lex.l"
+#line 165 "../lang/lex.l"
 { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
@@ -1285,7 +1285,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 170 "lang/lex.l"
+#line 170 "../lang/lex.l"
 { 
                           yylval.vdouble = atof(yytext);
                           return DOUBLE;
@@ -1293,7 +1293,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 174 "lang/lex.l"
+#line 174 "../lang/lex.l"
 { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
@@ -1301,7 +1301,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 179 "lang/lex.l"
+#line 179 "../lang/lex.l"
 { 
                           // hexadecimal int
                           yylval.vint = (int)strtol(yytext, NULL, 16);
@@ -1310,7 +1310,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 185 "lang/lex.l"
+#line 185 "../lang/lex.l"
 {
                         yylval.vdouble = atof(yytext);
                         return DOUBLE;
@@ -1318,17 +1318,17 @@ YY_RULE_SETUP
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 190 "lang/lex.l"
+#line 190 "../lang/lex.l"
 return PIPE;
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 191 "lang/lex.l"
+#line 191 "../lang/lex.l"
 return DOUBLE_AT;
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 193 "lang/lex.l"
+#line 193 "../lang/lex.l"
 {
                           /*printf("operator '%s'", yytext);*/
                           return *yytext;
@@ -1336,7 +1336,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 198 "lang/lex.l"
+#line 198 "../lang/lex.l"
 {
                   // printf("possible macro %s\n", yytext + 1);
                   // return *(yytext + 1);
@@ -1344,68 +1344,68 @@ YY_RULE_SETUP
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 202 "lang/lex.l"
+#line 202 "../lang/lex.l"
 return MODULO;
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 203 "lang/lex.l"
+#line 203 "../lang/lex.l"
 return GE;
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 204 "lang/lex.l"
+#line 204 "../lang/lex.l"
 return LE;
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 205 "lang/lex.l"
+#line 205 "../lang/lex.l"
 return EQ;
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 206 "lang/lex.l"
+#line 206 "../lang/lex.l"
 return NE;
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 207 "lang/lex.l"
+#line 207 "../lang/lex.l"
 return DOUBLE_COLON;
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 208 "lang/lex.l"
+#line 208 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 209 "lang/lex.l"
+#line 209 "../lang/lex.l"
 return ARROW;
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 210 "lang/lex.l"
+#line 210 "../lang/lex.l"
 return *yytext;
 	YY_BREAK
 case 60:
 YY_RULE_SETUP
-#line 211 "lang/lex.l"
+#line 211 "../lang/lex.l"
 ;       /* ignore comments starting with # */
 	YY_BREAK
 case 61:
 YY_RULE_SETUP
-#line 214 "lang/lex.l"
+#line 214 "../lang/lex.l"
 ;       /* ignore whitespace */
 	YY_BREAK
 case 62:
 /* rule 62 can match eol */
 YY_RULE_SETUP
-#line 215 "lang/lex.l"
+#line 215 "../lang/lex.l"
 { yycolumn = 1; }      
 	YY_BREAK
 case 63:
 YY_RULE_SETUP
-#line 216 "lang/lex.l"
+#line 216 "../lang/lex.l"
 { 
                     /* Matched a character literal */
                     /* You might want to return a token here, e.g., return CHAR_LITERAL; */
@@ -1415,7 +1415,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 64:
 YY_RULE_SETUP
-#line 223 "lang/lex.l"
+#line 223 "../lang/lex.l"
 {
                     // special identifiers for declaring binops
                     int len = yyleng;
@@ -1427,15 +1427,15 @@ YY_RULE_SETUP
 	YY_BREAK
 case 65:
 YY_RULE_SETUP
-#line 232 "lang/lex.l"
+#line 232 "../lang/lex.l"
 { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 	YY_BREAK
 case 66:
 YY_RULE_SETUP
-#line 233 "lang/lex.l"
+#line 233 "../lang/lex.l"
 ECHO;
 	YY_BREAK
-#line 1438 "lang/lex.yy.c"
+#line 1438 "../lang/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(FSTRING):
 case YY_STATE_EOF(TRIPLE_FSTRING):
@@ -2456,7 +2456,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 233 "lang/lex.l"
+#line 233 "../lang/lex.l"
 
 int yywrap(void) {
     return 1;
