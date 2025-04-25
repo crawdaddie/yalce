@@ -17,8 +17,8 @@ let Snare = module
       |> (+) (white_noise_node ())
       |> tanh_node 5. 
       |> (*) (aslr_node 0. 1. 0.01 0.2 trig)
-
-    ;) |> play_tpl
+    ) 
+    |> play_tpl
   ;
 
   let trig = fn () ->
@@ -37,7 +37,7 @@ let Snare = module
       | 1 -> (trig (); ())
       ;
       d
-    ;)
+    )
     |> play_routine t schedule_event
     |> array_set 0 pref 
   ;;
@@ -55,7 +55,7 @@ let Hihat = module
       |> comb_node 0.02 0.1 0.7
       |> (*) env
 
-    ;) |> play_tpl
+    ) |> play_tpl
   ;
 
   let trig = fn () ->
@@ -72,7 +72,7 @@ let Hihat = module
     |> cor_map (fn d ->
       trig ();
       d
-    ;)
+    )
     |> play_routine t schedule_event
     |> array_set 0 pref 
   ;;
@@ -115,8 +115,7 @@ let Kick = module
       |> reverb_node 0.2 1. 0. 1.
     )
     |> (*) (buf_env_node 0.12 (buf_ref ampenv) trig)
-
-    ;)
+    )
     |> play_tpl
   ;
 
@@ -130,7 +129,7 @@ let Kick = module
     let pref = kick_pattern_ref;
     cor_stop (array_at pref 0);
     cor
-    |> cor_map (fn d -> trig (); d;)
+    |> cor_map (fn d -> trig (); d)
     |> play_routine t schedule_event
     |> array_set 0 pref
   ;;
@@ -158,15 +157,14 @@ defer_quant (q * 1.) (fn t ->
   (0, 1.), (1, 1.), (0, 1.), (1, 0.25), (1, 0.5), (1, 0.25)
   ]
   |> cor_loop
-  |> cor_map (fn (p, d) -> (p, d * q);)
+  |> cor_map (fn (p, d) -> (p, d * q))
   |> (Snare.set_pattern) t;
 
   iter_of_list [0.25]
   |> cor_loop
-  |> cor_map (fn d -> d * q;)
+  |> cor_map (fn d -> d * q)
   |> (Hihat.set_pattern) t
- 
-;)
+)
 ;
 
 

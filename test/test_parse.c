@@ -382,7 +382,7 @@ int main() {
   // status &= test_parse("*x;", "(deref x)");
   status &= test_parse("(*) x;", "(* x)");
 
-  status &= test_parse("f @@ x y;", "(f (x y))");
+  status &= test_parse("f @@ x y", "(f (x y))");
   status &= test_parse("let f = (fn () ->\n"
                        "1\n"
                        ";) in f ();\n",
@@ -404,6 +404,15 @@ int main() {
 
   status &=
       test_parse_last("let ($~) = fn a b -> a + b;; 1 |> ($~) 2", "(($~ 2) 1)");
+
+  status &= test_parse("f (fn a b -> a + b)", "(f (a b -> \n"
+                                              "((+ a) b))\n"
+                                              ")");
+
+  status &= test_parse("f (fn a b -> a + b; ())", "(f (a b -> \n"
+                                                  "((+ a) b)\n"
+                                                  "())\n"
+                                                  ")");
   // status &= test_parse("let (@) = array_at;\n"
   //                      "x_ref @ 0;\n",
   //                      "((let @ array_at)\n"

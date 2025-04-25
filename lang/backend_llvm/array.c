@@ -4,6 +4,7 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
+
 // Creates an array type: { i32, T* }
 LLVMTypeRef codegen_array_type(LLVMTypeRef element_type) {
   return LLVMStructType(
@@ -14,11 +15,36 @@ LLVMTypeRef codegen_array_type(LLVMTypeRef element_type) {
       2, 0); // 2 elements, not packed
 }
 
+LLVMTypeRef codegen_matrix_type(LLVMTypeRef element_type) {
+  return LLVMStructType(
+      (LLVMTypeRef[]){
+          LLVMInt32Type(),                 // total_size
+          LLVMInt32Type(),                 // rows
+          LLVMInt32Type(),                 // cols
+          LLVMPointerType(element_type, 0) // data pointer
+      },
+      4, 0); // 2 elements, not packed
+}
+
+LLVMValueRef get_array_struct(LLVMValueRef array, LLVMTypeRef array_type,
+                              LLVMBuilderRef builder) {
+
+  LLVMValueRef array_struct;
+  if (LLVMGetTypeKind(LLVMTypeOf(array)) == LLVMPointerTypeKind) {
+    array_struct =
+        LLVMBuildLoad2(builder, array_type, array, "load_array_struct");
+  } else {
+    array_struct = array;
+  }
+  return array_struct;
+}
 LLVMValueRef __get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
                                  LLVMValueRef index, LLVMTypeRef element_type) {
   LLVMTypeRef array_type = codegen_array_type(element_type);
+
   LLVMValueRef data_ptr =
       LLVMBuildExtractValue(builder, array, 1, "get_array_data_ptr");
+
   LLVMValueRef element_ptr =
       LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
                     "element_ptr");
@@ -31,13 +57,7 @@ LLVMValueRef get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
 
   LLVMTypeRef array_type = codegen_array_type(element_type);
 
-  LLVMValueRef array_struct;
-  if (LLVMGetTypeKind(LLVMTypeOf(array)) == LLVMPointerTypeKind) {
-    array_struct =
-        LLVMBuildLoad2(builder, array_type, array, "load_array_struct");
-  } else {
-    array_struct = array;
-  }
+  LLVMValueRef array_struct = get_array_struct(array, array_type, builder);
 
   LLVMValueRef data_ptr =
       LLVMBuildExtractValue(builder, array_struct, 1, "get_array_data_ptr");
@@ -53,14 +73,7 @@ LLVMValueRef set_array_element(LLVMBuilderRef builder, LLVMValueRef array,
                                LLVMTypeRef element_type) {
 
   LLVMTypeRef array_type = codegen_array_type(element_type);
-
-  LLVMValueRef array_struct;
-  if (LLVMGetTypeKind(LLVMTypeOf(array)) == LLVMPointerTypeKind) {
-    array_struct =
-        LLVMBuildLoad2(builder, array_type, array, "load_array_struct");
-  } else {
-    array_struct = array;
-  }
+  LLVMValueRef array_struct = get_array_struct(array, array_type, builder);
 
   LLVMValueRef data_ptr =
       LLVMBuildExtractValue(builder, array_struct, 1, "get_array_data_ptr");
@@ -117,13 +130,7 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder, LLVMValueRef array,
                                     LLVMTypeRef element_type) {
 
   LLVMTypeRef array_type = codegen_array_type(element_type);
-  LLVMValueRef array_struct;
-  if (LLVMGetTypeKind(LLVMTypeOf(array)) == LLVMPointerTypeKind) {
-    array_struct =
-        LLVMBuildLoad2(builder, array_type, array, "load_array_struct");
-  } else {
-    array_struct = array;
-  }
+  LLVMValueRef array_struct = get_array_struct(array, array_type, builder);
 
   LLVMValueRef size =
       LLVMBuildExtractValue(builder, array_struct, 0, "get_array_size");
@@ -296,6 +303,7 @@ LLVMValueRef create_array_mapi_function(JITLangCtx *ctx, LLVMModuleRef module,
 
   return mapi_func;
 }
+
 LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
 
@@ -365,8 +373,6 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
-  printf("Array Fill with const\n");
-  print_ast(ast);
   Type *_array_type = ast->md;
   Type *el_type = _array_type->data.T_CONS.args[0];
 

@@ -175,6 +175,8 @@ simple_expr:
   | fstring               { $$ = parse_fstring_expr($1); }
   | TOK_CHAR              { $$ = ast_char($1); }
   | '(' expr_sequence ')' { $$ = $2; }
+  | '(' FN lambda_args ARROW expr_sequence ')' { $$ = ast_lambda($3, $5); }
+  | '(' FN TOK_VOID ARROW expr_sequence ')'    { $$ = ast_void_lambda($5); }
   | '(' '+' ')'           { $$ = ast_identifier((ObjString){"+", 1}); }
   | '(' '-' ')'           { $$ = ast_identifier((ObjString){"-", 1}); }
   | '(' '*' ')'           { $$ = ast_identifier((ObjString){"*", 1}); }
