@@ -63,14 +63,15 @@ let fst = fn (a, b) -> a;;
 
 
 let q = 60. / 130.;
-let seqr = fn s ->
-  yield (set_col 0 s 8 pattern col);
-  yield seqr ((s + 1) % 16)
-;;
 
 defer_quant (q * 4.) (fn t ->
   Launchpad.zero_tick ();
-  let seq = seqr 0
+
+  let seqd = fn s ->
+    yield (set_col 0 s 8 pattern col);
+    yield seqr ((s + 1) % 16)
+  ;;
+  seqd 0
     |> cor_map (fn c: (Array of (Int, Double)) ->
       fold (fn i (st, v): (Int, Double) ->
         match (i, st) with

@@ -627,8 +627,8 @@ Node *bufplayer_node(Node *buf, Node *rate) {
 }
 
 // Buffer player with trigger
-void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
-                             int nframes, double spf) {
+void *_bufplayer_trig_perform(Node *node, bufplayer_state *state,
+                              Node *inputs[], int nframes, double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
   double *buf = inputs[0]->output.buf;
@@ -669,6 +669,89 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
   return node->output.buf;
 }
 
+Node *_bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
+
+  *node = (Node){
+      .perform = (perform_func_t)_bufplayer_trig_perform,
+      .node_index = node->node_index,
+      .num_inputs = 4,
+      .state_size = sizeof(bufplayer_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(bufplayer_state)),
+      .output = (Signal){.layout = buf->output.layout,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(
+                             graph, buf->output.layout * BUF_SIZE)},
+      .meta = "bufplayer_trig",
+  };
+
+  bufplayer_state *state =
+      (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
+  *state = (bufplayer_state){.phase = 0.0};
+
+  node->connections[0].source_node_index = buf->node_index;
+  node->connections[1].source_node_index = rate->node_index;
+  node->connections[2].source_node_index = trig->node_index;
+  node->connections[3].source_node_index = start_pos->node_index;
+
+  node->state_ptr = state;
+  return node;
+}
+void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
+                             int nframes, double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *buf = inputs[0]->output.buf;
+  int buf_size = inputs[0]->output.size;
+  int buf_channels = inputs[0]->output.layout;
+  double *rate = inputs[1]->output.buf;
+  double *trig = inputs[2]->output.buf;
+  double *start_pos = inputs[3]->output.buf;
+
+  double d_index, frac, a, b, sample;
+  int index;
+
+  while (nframes--) {
+    if (*trig > 0.5 && state->prev_trig < 0.5) {
+      state->phase = 0;
+    }
+
+    d_index = (fmod(state->phase + *start_pos, 1.0)) * buf_size;
+    index = (int)d_index;
+    frac = d_index - index;
+
+    for (int i = 0; i < out_layout; i++) {
+      int channel = i % buf_channels;
+
+      // Calculate buffer indices for the current channel, accounting for
+      // interleaving
+      int current_index = (index * buf_channels) + channel;
+      int next_index = ((index + 1) * buf_channels) + channel;
+
+      // Make sure we don't go out of bounds
+      current_index = current_index % (buf_size * buf_channels);
+      next_index = next_index % (buf_size * buf_channels);
+
+      // Get samples from the interleaved buffer
+      a = buf[current_index];
+      b = buf[next_index];
+
+      // Linear interpolation
+      sample = (1.0 - frac) * a + (frac * b);
+      *out++ = sample;
+    }
+
+    state->phase = fmod(state->phase + *rate / buf_size, 1.0);
+    state->prev_trig = *trig;
+    rate++;
+    trig++;
+    start_pos++;
+  }
+
+  return node->output.buf;
+}
+
 Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
@@ -679,9 +762,10 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
       .num_inputs = 4,
       .state_size = sizeof(bufplayer_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(bufplayer_state)),
-      .output = (Signal){.layout = 1,
+      .output = (Signal){.layout = buf->output.layout,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+                         .buf = allocate_buffer_from_pool(
+                             graph, buf->output.layout * BUF_SIZE)},
       .meta = "bufplayer_trig",
   };
 

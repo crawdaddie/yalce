@@ -16,9 +16,12 @@ let pumpenv = [|
 
 let fx_chain = (fn () ->
   let input = inlet 0.;
-  let trig = inlet 0.;
-  let lfo = buf_env_node 1. (buf_ref pumpenv) trig;
-  input * lfo
+  # let trig = inlet 0.;
+
+  # let lfo = buf_env_node 1. (buf_ref pumpenv) trig;
+  # input * lfo
+
+  reverb_node 0.8 0.8 0.8 1. input
 ) |> play_tpl;
 
 

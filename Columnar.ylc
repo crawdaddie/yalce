@@ -6,28 +6,6 @@ import lib/Math;
 open lib/Ref;
 
 
-let seq = (
-  note:  array_fill_const 8 -1,
-  dur:   array_fill_const 8 0.1,
-  res:   array_fill_const 8 0.5,
-  slide: array_fill_const 8 0.1,
-  chirp: array_fill_const 8 0.5
-);
-
-type SeqType = (note: Array of Int, dur: Array of Double, res: Array of Double, slide: Array of Double, chirp: Array of Double);  
-
-let cols_to_row = fn idx cols: (SeqType) ->
-  (
-    cols.note @ idx, 
-    cols.dur @ idx, 
-    cols.res @ idx, 
-    cols.slide @ idx, 
-    cols.chirp @ idx, 
-  )
-;;
-
-let q = 60. / 130.;
-
 let filtenv = [|
   0.000000, 0.000000, 2.400000,
   1., 0.185902, -2.300000,
@@ -57,8 +35,10 @@ let synth = (fn () ->
   let f = inlet 50. |> lag_node (inlet 0.0); # 4 3
 
   (sq_node f + (sq_node @@ f * 1.01) + (sq_node @@ f * 2.))
+  |> (*) 0.2
   |> biquad_lp_node ff res 
   |> (*) (gated_buf_env_node (buf_ref ampenv) gate)
+  |> reverb_node 0.8 0.8 0.8 1.
 )
 |> play_tpl
 ;
@@ -67,6 +47,18 @@ let dur_macro = Math.unipolar_scale 0.01 1.;
 let slide_macro = Math.unipolar_scale 0.01 0.2;
 let res_macro = Math.unipolar_scale 2. 10.;
 let chirp_macro = Math.unipolar_scale 0.1 2.;
+type SeqType = (note: Array of Int, dur: Array of Double, res: Array of Double, slide: Array of Double, chirp: Array of Double);  
+let cols_to_row = fn idx cols: (SeqType) ->
+  (
+    cols.note @ idx, 
+    cols.dur @ idx, 
+    cols.res @ idx, 
+    cols.slide @ idx, 
+    cols.chirp @ idx, 
+  )
+;;
+
+
 
 
 let trig = fn dur (note, dur_scale, res, slide, chirp) ->
@@ -81,82 +73,12 @@ let trig = fn dur (note, dur_scale, res, slide, chirp) ->
   ()
 ;; 
 
-let cur_tick_ref = Ref 0;
-
-let grid_press_handler = fn i -> 
-  let tick = i % (array_size seq.note);
-  array_set 0 cur_tick_ref tick;
-  let note = 7 - i / (array_size seq.note);
-  let status = array_at seq.note tick in (
-  match status with
-  | -1 -> array_set tick seq.note note
-  | n if n == note -> array_set tick seq.note -1
-  | _ -> array_set tick seq.note note
-  );
-  ()
-;;
-
-let grid_is_set = fn i -> 
-  let tick = i % (array_size seq.note);
-  let note = 7 - i / (array_size seq.note);
-  let status = array_at seq.note tick;
-  match status with
-  | -1 -> false
-  | n if n == note -> true
-  | _ -> false
-;;
-
-import Launchpad;
-
-let send_to_midi_ctrls = fn () ->
-  Launchpad.setup (array_size seq.note) grid_press_handler grid_is_set;
-  MIDI.register_cc_handler 2 0 (fn v: (Double) -> 
-    let tick = deref cur_tick_ref; 
-    array_set tick seq.dur v;
-    ()
-  );
-
-  MIDI.register_cc_handler 2 1 (fn v: (Double) -> 
-    let tick = deref cur_tick_ref; 
-    array_set tick seq.res v;
-    ()
-  );
-
-  MIDI.register_cc_handler 2 2 (fn v: (Double) -> 
-    let tick = deref cur_tick_ref; 
-    array_set tick seq.slide v;
-    ()
-  );
-
-  MIDI.register_cc_handler 2 3 (fn v: (Double) -> 
-    let tick = deref cur_tick_ref; 
-    array_set tick seq.chirp v;
+let trig_from_seq = fn d i seq: (SeqType) ->
+  match (array_at seq.note i) with
+  | -1 -> ()
+  | n -> (
+    trig d (cols_to_row i seq);
     ()
   )
 ;;
-
-
-let seqr = fn s ->
-  yield s;
-  yield seqr ((s + 1) % (array_size seq.note))
-;;
-
-defer_quant (2. * q) (fn t ->
-  let seq = seqr 0
-  |> cor_map (fn i ->
-    let d = 0.25 * q;
-    match array_at seq.note i with
-    | -1 -> ()
-    | n -> (
-      trig d (cols_to_row i seq);
-      ()
-    )
-    ;
-    d
-  )
-  |> play_routine t schedule_event
-);
-
-array_set 0 Launchpad.slots send_to_midi_ctrls
-
 

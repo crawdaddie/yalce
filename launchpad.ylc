@@ -94,6 +94,8 @@ let state_ref = Ref (
 );
 
 let display_grid = fn () ->
+  
+  MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
   let (horz_offset, gis, _, max_cols) = deref state_ref;
 
   let grid_total = 8 * 8;

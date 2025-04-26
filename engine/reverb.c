@@ -80,6 +80,8 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
 
   Signal _out = node->output;
   Signal _in = inputs[0]->output;
+  double *in_buf = inputs[0]->output.buf;
+  int in_layout = inputs[0]->output.layout;
 
   char *mem = (char *)(reverb + 1);
 
@@ -105,7 +107,11 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
   }
 
   for (int frame = 0; frame < nframes; frame++) {
-    double input_sample = *READ(_in);
+    double input_sample = 0.;
+    for (int i = 0; i < in_layout; i++) {
+      input_sample += *in_buf;
+      in_buf++;
+    }
 
     double output_left = 0.0;
     double output_right = 0.0;
