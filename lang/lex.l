@@ -84,6 +84,15 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return IDENTIFIER;
                         }
 
+(%)[a-zA-Z_][a-zA-Z0-9_]*  {
+
+                          int len = yyleng;
+                          yylval.vident.chars = strdup(yytext); 
+                          yylval.vident.length = len;
+                          yylval.vident.hash = hash_string(yylval.vident.chars, len);
+                          return MACRO_IDENTIFIER;
+                        }
+
 (\.\.\/)*[a-zA-Z_][a-zA-Z0-9_\/]*  {
                           int len = yyleng;
                           yylval.vident.chars = strdup(yytext); 
@@ -195,10 +204,6 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return *yytext;
                         }
 
-^%.*            {
-                  // printf("possible macro %s\n", yytext + 1);
-                  // return *(yytext + 1);
-                };       
 "%"             return MODULO;
 ">="            return GE;
 "<="            return LE;

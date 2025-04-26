@@ -163,7 +163,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   // print_type(ast->data.AST_APPLICATION.function->md);
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
-  // print_type(expected_fn_type);
 
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(

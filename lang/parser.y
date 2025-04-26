@@ -37,13 +37,14 @@ Ast* ast_root = NULL;
     char vchar;
 };
 
-%token <vint>   INTEGER
-%token <vdouble>DOUBLE 
-%token <vident> IDENTIFIER
-%token <vident> PATH_IDENTIFIER
-%token <vident> IDENTIFIER_LIST
-%token <vstr>   TOK_STRING
-%token <vchar>  TOK_CHAR
+%token <vint>    INTEGER
+%token <vdouble> DOUBLE 
+%token <vident>  IDENTIFIER
+%token <vident>  MACRO_IDENTIFIER
+%token <vident>  PATH_IDENTIFIER
+%token <vident>  IDENTIFIER_LIST
+%token <vstr>    TOK_STRING
+%token <vchar>   TOK_CHAR
 %token TRUE FALSE
 %token PIPE
 %token EXTERN
@@ -71,7 +72,6 @@ Ast* ast_root = NULL;
 
 
 
-%right '.' 
 %left '|'
 %left PIPE
 %left DOUBLE_AT
@@ -83,6 +83,7 @@ Ast* ast_root = NULL;
 %left MODULO
 %left ':'
 %left MATCH
+%right '.' 
 
 %nonassoc UMINUS
 
@@ -128,17 +129,12 @@ program:
 expr:
     simple_expr
   | 'yield' expr                      { $$ = ast_yield($2); }
-  | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
-  | AMPERSAND simple_expr %prec APPLICATION { $$ = ast_unop(TOKEN_AMPERSAND, $2); }
-
-
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr                     { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
   | expr '*' expr                     { $$ = ast_binop(TOKEN_STAR, $1, $3); }
   | expr '/' expr                     { $$ = ast_binop(TOKEN_SLASH, $1, $3); }
-
   | expr MODULO expr                  { $$ = ast_binop(TOKEN_MODULO, $1, $3); }
   | expr '<' expr                     { $$ = ast_binop(TOKEN_LT, $1, $3); }
   | expr '>' expr                     { $$ = ast_binop(TOKEN_GT, $1, $3); }
@@ -150,7 +146,6 @@ expr:
   | expr EQ expr                      { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
-  | expr '.' IDENTIFIER               { $$ = ast_record_access($1, ast_identifier($3)); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
@@ -159,6 +154,11 @@ expr:
   | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER IMPLEMENTS IDENTIFIER  { $$ = ast_implements($1, $3); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
+  | MACRO_IDENTIFIER expr             {
+                                        // TODO: not doing anything with macros yet - do we want to??
+                                        printf("macro '%s'\n", $1.chars);
+                                        $$ = $2;
+                                      }
   ;
 
 simple_expr:
@@ -194,6 +194,7 @@ simple_expr:
   | '(' ':' ')'           { $$ = ast_identifier((ObjString){":", 1}); }
   | '(' DOUBLE_COLON ')'  { $$ = ast_identifier((ObjString){"::", 2}); }
   | '(' custom_binop ')'  { $$ = $2; }
+  | IDENTIFIER '.' IDENTIFIER { $$ = ast_record_access(ast_identifier($1), ast_identifier($3)); }
   ;
 
 custom_binop:

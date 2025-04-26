@@ -277,15 +277,11 @@ Type t_struct_set_sig = GENERIC_TYPE(_struct_set_sig);
 Type *_cstr_sig() {
   Type *el = next_tvar();
   Type *t_arr = create_array_type(el);
-
-  // Type *container = empty_type();
-  // container->kind = T_CONS;
-  // container-> = T_CONS;
-  // (list_el);
-  // return type_fn(list, list);
+  return type_fn(t_arr, ptr_of_type(el));
 }
 // Type t_list_tail_sig = GENERIC_TYPE(_list_tail_sig);
-Type t_builtin_cstr = MAKE_FN_TYPE_2(&t_string, &t_ptr);
+// Type t_builtin_cstr = MAKE_FN_TYPE_2(&t_string, &t_ptr);
+Type t_builtin_cstr = GENERIC_TYPE(_cstr_sig);
 
 // Type t_sched_callback
 // Type t_run_in_scheduler_sig = MAKE_FN_TYPE_4(

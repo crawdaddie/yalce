@@ -492,3 +492,15 @@ LLVMValueRef ArrayStrideHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *_array_type = ast->md;
   return NULL;
 }
+
+LLVMValueRef CStrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
+
+  Type *arr_type = ast->data.AST_APPLICATION.args->md;
+  LLVMTypeRef llvm_arr_type = type_to_llvm_type(arr_type, ctx->env, module);
+  LLVMValueRef arr =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  arr = get_array_struct(arr, llvm_arr_type, builder);
+
+  return LLVMBuildExtractValue(builder, arr, 1, "get_array_data_ptr");
+}

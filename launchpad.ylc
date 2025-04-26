@@ -3,10 +3,12 @@ open lib/Arrays;
 import lib/Math;
 open lib/Ref;
 
-# MIDI.toggle_midi_debug ();
+# let _ = MIDI.toggle_midi_debug ();
 let _ = MIDI.midi_out_setup ();
 
 let LAUNCHPAD_DEST = MIDI.get_destination_by_name (cstr "Launchpad Mini");
+
+
 let note_ons = [|
   0x0, 0x0, 0x60,
   0x0, 0x1, 0x60,
@@ -81,7 +83,8 @@ let note_ons = [|
   0x0, 0x77, 0x50,
 |]; 
 
-# MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
+let _ = MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
+
 
 let state_ref = Ref (
   horz_offset: 0,
@@ -116,6 +119,7 @@ let display_grid = fn () ->
   aux 0 gis max_cols horz_offset
 ;;
 
+
 let _ = MIDI.register_note_on_handler 0 (fn midi_note: (Int) vel: (Double) ->
   let (ho, _, gph, mc) = deref state_ref;
   let col = midi_note % 16; # 16 is grid const
@@ -127,8 +131,7 @@ let _ = MIDI.register_note_on_handler 0 (fn midi_note: (Int) vel: (Double) ->
   MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
   display_grid ();
   ()
-;)
-;
+);
 
 # # left
 let _ = MIDI.register_cc_handler 0 106 (fn val ->  
@@ -137,29 +140,74 @@ let _ = MIDI.register_cc_handler 0 106 (fn val ->
 
   match val with
   | val if val > 0 -> (
-    array_set 0 state_ref ((Math.max_int (ho - 1) 0), gis, gph, mc);
+    array_set 0 state_ref ((Math.max_int (ho - 8) 0), gis, gph, mc);
     MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
     display_grid ();
     ()
   )
   | _ -> ()
-;);
+);
 
 # right 
 let _ = MIDI.register_cc_handler 0 107 (fn val ->
   let (ho, gis, gph, mc) = deref state_ref;
   match val with 
   | val if val > 0 -> (
-    array_set 0 state_ref ((Math.min_int (ho + 1) (mc - 8)), gis, gph, mc);
+    array_set 0 state_ref ((Math.min_int (ho + 8) (mc - 8)), gis, gph, mc);
     MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
     display_grid ();
     ()
   )
   | _ -> ()
-;);
-#
+);
+
+let top_row_addrs = [|
+  0x68,
+  0x69,
+  0x6a,
+  0x6b,
+  0x6c,
+  0x6d,
+  0x6e,
+  0x6f,
+|];
+
+let clear_top_row = fn () ->
+  MIDI.send_ccs LAUNCHPAD_DEST 24 @@ cstr [|
+    0x0, 0x68, 0x0,
+    0x0, 0x69, 0x0,
+    0x0, 0x6a, 0x0,
+    0x0, 0x6b, 0x0,   
+    0x0, 0x6c, 0x0,   
+    0x0, 0x6d, 0x0,   
+    0x0, 0x6e, 0x0,   
+    0x0, 0x6f, 0x0,   
+ |]
+;;
+
+let tick_ref = Ref 0;
+
+let tick = fn () ->
+  let (ho, _, _, mc) = deref state_ref;
+  let t = deref tick_ref;
+  clear_top_row ();
+  match (t - ho) with
+  | t if t < 8 -> (
+    MIDI.send_cc LAUNCHPAD_DEST 0x0 (array_at top_row_addrs t) 0x66;
+    ()
+  )
+  | _ -> ()
+  ;
+  array_set 0 tick_ref ((t + 1) % mc)
+;;
+
+let zero_tick = fn () ->
+  let t = deref tick_ref;
+  array_set 0 tick_ref 0
+;;
 
 let setup = fn max_cols: (Int) grid_press_handler: (Int -> ()) grid_is_set: (Int -> Bool) ->
+  zero_tick ();
   array_set 0 state_ref (
     0,
     grid_is_set,

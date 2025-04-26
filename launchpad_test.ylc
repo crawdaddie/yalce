@@ -1,10 +1,12 @@
 #! env ylc
 import engine/bindings/MIDI;
 open engine/bindings/Sched;
+open engine/bindings/Synth;
 open lib/Arrays;
 import lib/Math;
 open lib/Ref;
 
+# %save_obj # TODO: want this macro to save a serialized version of this file to disk
 let pattern = [|
   (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), 
   (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), 
@@ -13,7 +15,7 @@ let pattern = [|
   (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), 
   (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), (1, 0.), 
   (0, 0.), (0, 0.), (0, 0.), (0, 0.), (1, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (1, 0.), (0, 0.), (0, 0.), (0, 0.), 
-  (1, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (1, 0.), (0, 0.), (1, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), 
+  (1, 0.), (0, 0.), (0, 0.), (1, 0.), (0, 0.), (0, 0.), (1, 0.), (0, 0.), (1, 0.), (0, 0.), (1, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), (0, 0.), 
 |];
 
 let col = array_fill 8 (fn i: (Int) -> (0, 0.));
@@ -36,22 +38,21 @@ let set_col = fn
 
 
 
-# import Launchpad;
-# let grid_press_handler = fn i: (Int) -> 
-#   let (status, val) = array_at pattern i;
-#   match status with 
-#   | 1 -> array_set i pattern (0, val)
-#   | 0 -> array_set i pattern (1, val)
-# ;;
-#
-# let grid_is_set = fn i: (Int) -> 
-#   match (pattern @ i) with
-#   | (1, _) -> true
-#   | (0, _) -> false
-# ;;
-#
-# Launchpad.setup 16 grid_press_handler grid_is_set;
-#
+import Launchpad;
+let grid_press_handler = fn i: (Int) -> 
+  let (status, val) = array_at pattern i;
+  match status with 
+  | 1 -> array_set i pattern (0, val)
+  | 0 -> array_set i pattern (1, val)
+;;
+
+let grid_is_set = fn i: (Int) -> 
+  match (array_at pattern i) with
+  | (1, _) -> true
+  | (0, _) -> false
+;;
+
+Launchpad.setup 16 grid_press_handler grid_is_set;
 
 
 import synths/Hihat;
@@ -67,26 +68,30 @@ let seqr = fn s ->
   yield seqr ((s + 1) % 16)
 ;;
 
-# defer_quant (q * 2.) (fn t ->
-#   let seq = seqr 0
-#     |> cor_map (fn c: (Array of (Int, Double)) ->
-#       fold (fn i (st, v): (Int, Double) ->
-#         match (i, st) with
-#         # | (0, 1) -> () 
-#         # | (1, 1) -> ()
-#         # | (2, 1) -> ()
-#         # | (3, 1) -> ()
-#         # | (4, 1) -> ()
-#         | (5, 1) -> (Hihat.trig (); ())
-#         | (6, 1) -> (Snare.trig (); ())
-#         | (7, 1) -> (Kick.trig (); ())
-#         | _ -> ()
-#         ;
-#         i + 1
-#       ) 0 c;  
-#       0.25 * q
-#     )
-#   |> play_routine t schedule_event
-# );
-let x = [|0,1,2,3|];
-iter (fn v -> print `{v}, `) x;
+defer_quant (q * 4.) (fn t ->
+  Launchpad.zero_tick ();
+  let seq = seqr 0
+    |> cor_map (fn c: (Array of (Int, Double)) ->
+      fold (fn i (st, v): (Int, Double) ->
+        match (i, st) with
+        # | (0, 1) -> () 
+        # | (1, 1) -> ()
+        # | (2, 1) -> ()
+        # | (3, 1) -> ()
+        # | (4, 1) -> ()
+        | (5, 1) -> (Hihat.trig (); ())
+        | (6, 1) -> (Snare.trig (); ())
+        | (7, 1) -> (Kick.trig (); ())
+        | _ -> ()
+        ;
+        i + 1
+      ) 0 c;  
+      0.25 * q
+    )
+  |> cor_map (fn d -> Launchpad.tick (); d)
+  |> play_routine t schedule_event
+);
+
+
+
+

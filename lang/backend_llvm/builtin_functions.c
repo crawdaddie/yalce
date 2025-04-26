@@ -786,6 +786,17 @@ LLVMValueRef char_cons_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 }
+
+LLVMValueRef SerializeBlobHandler(Ast *ast, JITLangCtx *ctx,
+                                  LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  // print_ast(ast);
+  printf("path %s\n", ast->data.AST_APPLICATION.args->data.AST_STRING.value);
+  print_type(ast->data.AST_APPLICATION.args[1].md);
+
+  return NULL;
+}
+
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
   ht *stack = (ctx->frame->table);
@@ -828,10 +839,11 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                           type_to_llvm_type(&t_builtin_print, ctx->env, module),
                           module));
 
-  FN_SYMBOL("cstr", &t_builtin_cstr,
-            get_extern_fn("cstr",
-                          type_to_llvm_type(&t_builtin_cstr, ctx->env, module),
-                          module));
+  GENERIC_FN_SYMBOL("cstr", &t_builtin_cstr, CStrHandler
+                    // get_extern_fn("cstr",
+                    //               type_to_llvm_type(&t_builtin_cstr,
+                    //               ctx->env, module), module)
+  );
 
   FN_SYMBOL("empty_coroutine", &t_empty_cor,
             get_extern_fn("empty_coroutine",
@@ -879,6 +891,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("struct_set", &t_struct_set_sig, StructSetHandler);
   GENERIC_FN_SYMBOL("addrof", NULL, AddrOfHandler);
   GENERIC_FN_SYMBOL("fst", &t_fst_sig, FstHandler);
+  GENERIC_FN_SYMBOL("save_pattern_to_file", next_tvar(), SerializeBlobHandler);
 
   // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
   // ListPrependHandler);

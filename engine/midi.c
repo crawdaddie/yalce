@@ -142,26 +142,6 @@ void midi_out_setup() {
 
 int send_note_on(MIDIEndpointRef destination, char channel, char note,
                  char velocity) {
-  // if (channel > 15) {
-  //   if (debug) {
-  //     printf("Error: Invalid MIDI channel %d (must be 0-15)\n", channel);
-  //   }
-  //   return -1;
-  // }
-  //
-  // if (note > 127) {
-  //   if (debug) {
-  //     printf("Error: Invalid MIDI note %d (must be 0-127)\n", note);
-  //   }
-  //   return -1;
-  // }
-  //
-  // if (velocity > 127) {
-  //   if (debug) {
-  //     printf("Error: Invalid MIDI velocity %d (must be 0-127)\n", velocity);
-  //   }
-  //   return -1;
-  // }
 
   Byte buffer[1024];
   MIDIPacketList *packetList = (MIDIPacketList *)buffer;
@@ -253,6 +233,61 @@ int send_note_offs(MIDIEndpointRef destination, int size, char *note_data_ptr) {
   }
 
   OSStatus result = MIDISend(output_port, destination, packetList);
+  return result == noErr ? 0 : -1;
+}
+// Define Control Change command (0xB0)
+#define CONTROL_CHANGE 0xB0
+
+int send_cc(MIDIEndpointRef destination, char channel, char control_number,
+            char value) {
+
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  Byte midi_data[3];
+  midi_data[0] = CONTROL_CHANGE | (channel & CHAN_MASK);
+  midi_data[1] = control_number;
+  midi_data[2] = value;
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, 0, 3, midi_data);
+
+  if (debug) {
+    printf("Sending CC: ch=%u cc=%u val=%u\n", channel, control_number, value);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
+}
+
+typedef struct _cc_data {
+  uint8_t channel;
+  uint8_t control_number;
+  uint8_t value;
+} _cc_data;
+
+int send_ccs(MIDIEndpointRef destination, int size, char *cc_data_ptr) {
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  for (int i = 0; i < size / 3; i++) {
+    uint8_t channel, control_number, value;
+    channel = *(cc_data_ptr + (i * 3));
+    control_number = *(cc_data_ptr + (i * 3) + 1);
+    value = *(cc_data_ptr + (i * 3) + 2);
+
+    Byte midi_data[3];
+    midi_data[0] = CONTROL_CHANGE | (channel & CHAN_MASK);
+    midi_data[1] = control_number;
+    midi_data[2] = value;
+
+    current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                       current_packet, 0, 3, midi_data);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
   return result == noErr ? 0 : -1;
 }
 

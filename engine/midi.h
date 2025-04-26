@@ -24,8 +24,13 @@ int send_note_off(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
 int send_note_ons(MIDIEndpointRef destination, int size, char *note_data_ptr);
 int send_note_offs(MIDIEndpointRef destination, int size, char *note_data_ptr);
 
+int send_cc(MIDIEndpointRef destination, char channel, char control_number,
+            char value);
+
+int send_ccs(MIDIEndpointRef destination, int size, char *cc_data_ptr);
 MIDIEndpointRef get_destination(ItemCount index);
 MIDIEndpointRef get_destination_by_name(const char *name);
+
 void list_destinations();
 
 void midi_out_setup();

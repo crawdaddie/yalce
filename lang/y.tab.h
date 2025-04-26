@@ -42,101 +42,103 @@
      INTEGER = 258,
      DOUBLE = 259,
      IDENTIFIER = 260,
-     PATH_IDENTIFIER = 261,
-     IDENTIFIER_LIST = 262,
-     TOK_STRING = 263,
-     TOK_CHAR = 264,
-     TRUE = 265,
-     FALSE = 266,
-     PIPE = 267,
-     EXTERN = 268,
-     TRIPLE_DOT = 269,
-     LET = 270,
-     FN = 271,
-     MATCH = 272,
-     WITH = 273,
-     ARROW = 274,
-     DOUBLE_COLON = 275,
-     TOK_VOID = 276,
-     IN = 277,
-     AND = 278,
-     ASYNC = 279,
-     DOUBLE_AT = 280,
-     THUNK = 281,
-     IMPORT = 282,
-     OPEN = 283,
-     IMPLEMENTS = 284,
-     AMPERSAND = 285,
-     TYPE = 286,
-     TEST_ID = 287,
-     FSTRING_START = 288,
-     FSTRING_END = 289,
-     FSTRING_INTERP_START = 290,
-     FSTRING_INTERP_END = 291,
-     FSTRING_TEXT = 292,
-     APPLICATION = 293,
-     DOUBLE_PIPE = 294,
-     DOUBLE_AMP = 295,
-     NE = 296,
-     EQ = 297,
-     LE = 298,
-     GE = 299,
-     MODULO = 300,
-     UMINUS = 301
+     MACRO_IDENTIFIER = 261,
+     PATH_IDENTIFIER = 262,
+     IDENTIFIER_LIST = 263,
+     TOK_STRING = 264,
+     TOK_CHAR = 265,
+     TRUE = 266,
+     FALSE = 267,
+     PIPE = 268,
+     EXTERN = 269,
+     TRIPLE_DOT = 270,
+     LET = 271,
+     FN = 272,
+     MATCH = 273,
+     WITH = 274,
+     ARROW = 275,
+     DOUBLE_COLON = 276,
+     TOK_VOID = 277,
+     IN = 278,
+     AND = 279,
+     ASYNC = 280,
+     DOUBLE_AT = 281,
+     THUNK = 282,
+     IMPORT = 283,
+     OPEN = 284,
+     IMPLEMENTS = 285,
+     AMPERSAND = 286,
+     TYPE = 287,
+     TEST_ID = 288,
+     FSTRING_START = 289,
+     FSTRING_END = 290,
+     FSTRING_INTERP_START = 291,
+     FSTRING_INTERP_END = 292,
+     FSTRING_TEXT = 293,
+     APPLICATION = 294,
+     DOUBLE_PIPE = 295,
+     DOUBLE_AMP = 296,
+     NE = 297,
+     EQ = 298,
+     LE = 299,
+     GE = 300,
+     MODULO = 301,
+     UMINUS = 302
    };
 #endif
 /* Tokens.  */
 #define INTEGER 258
 #define DOUBLE 259
 #define IDENTIFIER 260
-#define PATH_IDENTIFIER 261
-#define IDENTIFIER_LIST 262
-#define TOK_STRING 263
-#define TOK_CHAR 264
-#define TRUE 265
-#define FALSE 266
-#define PIPE 267
-#define EXTERN 268
-#define TRIPLE_DOT 269
-#define LET 270
-#define FN 271
-#define MATCH 272
-#define WITH 273
-#define ARROW 274
-#define DOUBLE_COLON 275
-#define TOK_VOID 276
-#define IN 277
-#define AND 278
-#define ASYNC 279
-#define DOUBLE_AT 280
-#define THUNK 281
-#define IMPORT 282
-#define OPEN 283
-#define IMPLEMENTS 284
-#define AMPERSAND 285
-#define TYPE 286
-#define TEST_ID 287
-#define FSTRING_START 288
-#define FSTRING_END 289
-#define FSTRING_INTERP_START 290
-#define FSTRING_INTERP_END 291
-#define FSTRING_TEXT 292
-#define APPLICATION 293
-#define DOUBLE_PIPE 294
-#define DOUBLE_AMP 295
-#define NE 296
-#define EQ 297
-#define LE 298
-#define GE 299
-#define MODULO 300
-#define UMINUS 301
+#define MACRO_IDENTIFIER 261
+#define PATH_IDENTIFIER 262
+#define IDENTIFIER_LIST 263
+#define TOK_STRING 264
+#define TOK_CHAR 265
+#define TRUE 266
+#define FALSE 267
+#define PIPE 268
+#define EXTERN 269
+#define TRIPLE_DOT 270
+#define LET 271
+#define FN 272
+#define MATCH 273
+#define WITH 274
+#define ARROW 275
+#define DOUBLE_COLON 276
+#define TOK_VOID 277
+#define IN 278
+#define AND 279
+#define ASYNC 280
+#define DOUBLE_AT 281
+#define THUNK 282
+#define IMPORT 283
+#define OPEN 284
+#define IMPLEMENTS 285
+#define AMPERSAND 286
+#define TYPE 287
+#define TEST_ID 288
+#define FSTRING_START 289
+#define FSTRING_END 290
+#define FSTRING_INTERP_START 291
+#define FSTRING_INTERP_END 292
+#define FSTRING_TEXT 293
+#define APPLICATION 294
+#define DOUBLE_PIPE 295
+#define DOUBLE_AMP 296
+#define NE 297
+#define EQ 298
+#define LE 299
+#define GE 300
+#define MODULO 301
+#define UMINUS 302
 
 
 
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 31 "lang/parser.y"
+#line 31 "../lang/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
     ObjString vident;           /* identifier */
@@ -146,7 +148,7 @@ typedef union YYSTYPE
     char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 150 "lang/y.tab.h"
+#line 152 "../lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
