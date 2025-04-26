@@ -119,18 +119,38 @@ let display_grid = fn () ->
   aux 0 gis max_cols horz_offset
 ;;
 
+let slots = [|
+  (fn () -> print "slot 0\n"; ()),
+  (fn () -> print "slot 1\n"; ()),
+  (fn () -> print "slot 2\n"; ()),
+  (fn () -> print "slot 3\n"; ()),
+  (fn () -> print "slot 4\n"; ()),
+  (fn () -> print "slot 5\n"; ()),
+  (fn () -> print "slot 6\n"; ()),
+  (fn () -> print "slot 7\n"; ()),
+|]; 
 
 let _ = MIDI.register_note_on_handler 0 (fn midi_note: (Int) vel: (Double) ->
-  let (ho, _, gph, mc) = deref state_ref;
-  let col = midi_note % 16; # 16 is grid const
-  let row = midi_note / 16; # 16 is grid const
-  let pattern_idx = (row * mc) + ho + col;
-  # print `pattern idx (col {col} row {row} mc {mc} ho {ho})\n`;
+  match midi_note with
+  | 8 -> (let f = array_at slots 0 in f ())
+  | 24 -> (let f = array_at slots 1 in f ())
+  | 40 -> (let f = array_at slots 2 in f ())
+  | 56 -> (let f = array_at slots 3 in f ())
+  | 72 -> (let f = array_at slots 4 in f ())
+  | 88 -> (let f = array_at slots 5 in f ())
+  | 104 -> (let f = array_at slots 6 in f ())
+  | 120 -> (let f = array_at slots 7 in f ())
+  | _ -> (
+    let (ho, _, gph, mc) = deref state_ref;
+    let col = midi_note % 16; # 16 is grid const
+    let row = midi_note / 16; # 16 is grid const
+    let pattern_idx = (row * mc) + ho + col;
+    gph pattern_idx;
+    MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
+    display_grid ();
+    ()
+  ) 
 
-  gph pattern_idx;
-  MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
-  display_grid ();
-  ()
 );
 
 # # left
@@ -187,7 +207,7 @@ let clear_top_row = fn () ->
 
 let tick_ref = Ref 0;
 
-let tick = fn () ->
+let display_tick = fn () ->
   let (ho, _, _, mc) = deref state_ref;
   let t = deref tick_ref;
   clear_top_row ();
@@ -197,17 +217,15 @@ let tick = fn () ->
     ()
   )
   | _ -> ()
-  ;
-  array_set 0 tick_ref ((t + 1) % mc)
 ;;
 
-let zero_tick = fn () ->
-  let t = deref tick_ref;
-  array_set 0 tick_ref 0
+let set_tick_ref = fn t ->
+  array_set 0 tick_ref t;
+  display_tick ()
 ;;
+
 
 let setup = fn max_cols: (Int) grid_press_handler: (Int -> ()) grid_is_set: (Int -> Bool) ->
-  zero_tick ();
   array_set 0 state_ref (
     0,
     grid_is_set,

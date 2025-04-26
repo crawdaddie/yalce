@@ -1,0 +1,13 @@
+import engine/bindings/MIDI;
+open engine/bindings/Sched; 
+
+# let _ = MIDI.toggle_midi_debug ();
+
+import Columnar;
+
+
+let q = 60. / 130.;
+
+defer_quant (2. * q) (fn t ->
+  Columnar.set_pattern t q
+) ;

@@ -4,7 +4,7 @@
 #include "./node.h"
 NodeRef tanh_node(double gain, NodeRef input);
 
-NodeRef lag_node(double lag_time, NodeRef input);
+NodeRef lag_node(NodeRef lag_time, NodeRef input);
 
 NodeRef comb_node(double delay_time, double max_delay_time, double fb,
                   NodeRef input);

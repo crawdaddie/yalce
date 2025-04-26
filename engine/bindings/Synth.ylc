@@ -60,7 +60,7 @@ let aslr_node = extern fn Double -> Double -> Double -> Double -> Synth -> Synth
 
 # filter.h
 let tanh_node = extern fn Double -> Synth -> Synth;
-let lag_node = extern fn Double -> Synth -> Synth;
+let lag_node = extern fn Synth -> Synth -> Synth;
 let comb_node = extern fn Double -> Double -> Double -> Synth -> Synth;
 let dyn_comb_node = extern fn Synth -> Double -> Double -> Synth -> Synth;
 let butterworth_hp_node = extern fn Synth -> Synth -> Synth;

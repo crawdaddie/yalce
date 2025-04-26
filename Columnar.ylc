@@ -1,0 +1,162 @@
+let (@) = array_at;
+open engine/bindings/Synth;
+open engine/bindings/Sched;
+import engine/bindings/MIDI;
+import lib/Math;
+open lib/Ref;
+
+
+let seq = (
+  note:  array_fill_const 8 -1,
+  dur:   array_fill_const 8 0.1,
+  res:   array_fill_const 8 0.5,
+  slide: array_fill_const 8 0.1,
+  chirp: array_fill_const 8 0.5
+);
+
+type SeqType = (note: Array of Int, dur: Array of Double, res: Array of Double, slide: Array of Double, chirp: Array of Double);  
+
+let cols_to_row = fn idx cols: (SeqType) ->
+  (
+    cols.note @ idx, 
+    cols.dur @ idx, 
+    cols.res @ idx, 
+    cols.slide @ idx, 
+    cols.chirp @ idx, 
+  )
+;;
+
+let q = 60. / 130.;
+
+let filtenv = [|
+  0.000000, 0.000000, 2.400000,
+  1., 0.185902, -2.300000,
+  0.011111, 2.814099, 1.300000,
+  0.000000
+|]
+|> array_to_buf;
+
+let ampenv =
+[|
+  0.000000, 0.000000, 2.400000,
+  1.000000, 0.2, -2.300000,
+  0.971429, 0.1, -1.200000,
+  0.000000
+|]
+|> array_to_buf;
+
+let synth = (fn () -> 
+  let gate = inlet 0.; # 0
+  let chirp_decay = inlet 2.; # 1
+
+  let ff = buf_env_node chirp_decay (buf_ref filtenv) gate 
+    |> math_node (Math.unipolar_scale 200. 3000.);
+
+  let res = inlet 8.; # 2 
+
+  let f = inlet 50. |> lag_node (inlet 0.0); # 4 3
+
+  (sq_node f + (sq_node @@ f * 1.01) + (sq_node @@ f * 2.))
+  |> biquad_lp_node ff res 
+  |> (*) (gated_buf_env_node (buf_ref ampenv) gate)
+)
+|> play_tpl
+;
+
+let dur_macro = Math.unipolar_scale 0.01 1.;
+let slide_macro = Math.unipolar_scale 0.01 0.2;
+let res_macro = Math.unipolar_scale 2. 10.;
+let chirp_macro = Math.unipolar_scale 0.1 2.;
+
+
+let trig = fn dur (note, dur_scale, res, slide, chirp) ->
+  let fo = get_tl_tick () in (
+    trigger_gate fo (dur * (dur_macro dur_scale)) 0 synth;
+    set_input_scalar_offset synth 4 fo (midi_to_freq (32 + note));
+    set_input_scalar_offset synth 3 fo (slide_macro slide);
+    set_input_scalar_offset synth 2 fo (res_macro res);
+    set_input_scalar_offset synth 1 fo (chirp_macro chirp)
+  );
+
+  ()
+;; 
+
+let cur_tick_ref = Ref 0;
+
+let grid_press_handler = fn i -> 
+  let tick = i % (array_size seq.note);
+  array_set 0 cur_tick_ref tick;
+  let note = 7 - i / (array_size seq.note);
+  let status = array_at seq.note tick in (
+  match status with
+  | -1 -> array_set tick seq.note note
+  | n if n == note -> array_set tick seq.note -1
+  | _ -> array_set tick seq.note note
+  );
+  ()
+;;
+
+let grid_is_set = fn i -> 
+  let tick = i % (array_size seq.note);
+  let note = 7 - i / (array_size seq.note);
+  let status = array_at seq.note tick;
+  match status with
+  | -1 -> false
+  | n if n == note -> true
+  | _ -> false
+;;
+
+import Launchpad;
+
+let send_to_midi_ctrls = fn () ->
+  Launchpad.setup (array_size seq.note) grid_press_handler grid_is_set;
+  MIDI.register_cc_handler 2 0 (fn v: (Double) -> 
+    let tick = deref cur_tick_ref; 
+    array_set tick seq.dur v;
+    ()
+  );
+
+  MIDI.register_cc_handler 2 1 (fn v: (Double) -> 
+    let tick = deref cur_tick_ref; 
+    array_set tick seq.res v;
+    ()
+  );
+
+  MIDI.register_cc_handler 2 2 (fn v: (Double) -> 
+    let tick = deref cur_tick_ref; 
+    array_set tick seq.slide v;
+    ()
+  );
+
+  MIDI.register_cc_handler 2 3 (fn v: (Double) -> 
+    let tick = deref cur_tick_ref; 
+    array_set tick seq.chirp v;
+    ()
+  )
+;;
+
+
+let seqr = fn s ->
+  yield s;
+  yield seqr ((s + 1) % (array_size seq.note))
+;;
+
+defer_quant (2. * q) (fn t ->
+  let seq = seqr 0
+  |> cor_map (fn i ->
+    let d = 0.25 * q;
+    match array_at seq.note i with
+    | -1 -> ()
+    | n -> (
+      trig d (cols_to_row i seq);
+      ()
+    )
+    ;
+    d
+  )
+  |> play_routine t schedule_event
+);
+
+array_set 0 Launchpad.slots send_to_midi_ctrls
+
+

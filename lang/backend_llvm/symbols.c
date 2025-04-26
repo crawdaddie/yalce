@@ -290,8 +290,8 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   if (expr->tag == AST_APPLICATION && is_array_at(expr)) {
     Type *fn_type = array_type(expr);
     if (fn_type && !is_generic(fn_type)) {
-      print_ast(binding);
-      print_ast(expr);
+      // print_ast(binding);
+      // print_ast(expr);
 
       expr_val = create_fn_binding(binding, expr_type,
                                    codegen(expr, outer_ctx, module, builder),

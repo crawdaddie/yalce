@@ -651,23 +651,67 @@ typedef struct {
   double lag_time;
 } lag_state;
 
+// Node *static_lag_node(double lag_time, Node *input) {
+//   AudioGraph *graph = _graph;
+//   Node *node = allocate_node_in_graph(graph, sizeof(lag_state));
+//
+//   // Initialize node
+//   *node = (Node){
+//       .perform = (perform_func_t)lag_perform,
+//       .node_index = node->node_index,
+//       .num_inputs = 1,
+//       .state_size = sizeof(lag_state),
+//       .state_offset = state_offset_ptr_in_graph(graph, sizeof(lag_state)),
+//       .output = (Signal){.layout = 1,
+//                          .size = BUF_SIZE,
+//                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+//       .meta = "lag",
+//   };
+//
+//   // Initialize state
+//   lag_state *state =
+//       (lag_state *)(graph->nodes_state_memory + node->state_offset);
+//   state->current_value = 0.0;
+//   state->target_value = 0.0;
+//   state->lag_time = lag_time;
+//   double spf = 1.0 / ctx_sample_rate();
+//   state->coeff = exp(-1.0 / (lag_time * (1.0 / spf)));
+//
+//   // Connect input
+//   node->connections[0].source_node_index = input->node_index;
+//
+//   return node;
+// }
 void *lag_perform(Node *node, lag_state *state, Node *inputs[], int nframes,
                   double spf) {
   double *out = node->output.buf;
   double *in = inputs[0]->output.buf;
-
-  // Check if lag time changed
-  if (fabs(state->lag_time - state->coeff) > 1e-6) {
-    state->coeff = exp(-1.0 / (state->lag_time * (1.0 / spf)));
-  }
+  double *lag_time = inputs[1]->output.buf;
 
   while (nframes--) {
-    state->target_value = *in;
+    double lt = *lag_time;
+    lag_time++;
 
-    // Update current value with lag
-    state->current_value =
-        state->current_value +
-        (state->target_value - state->current_value) * (1.0 - state->coeff);
+    // Special case: when lag_time is 0, immediately jump to target value
+    if (lt <= 0.0) {
+      state->current_value = *in;
+      state->coeff = 0.0; // Set coefficient to 0 to indicate immediate response
+    } else {
+      if (fabs(lt - state->lag_time) > 1e-6) {
+        // state->lag_time = lt;
+        state->coeff = exp(-1.0 / (lt * (1.0 / spf)));
+      }
+
+      // Store target value
+      state->target_value = *in;
+
+      if (lt > 0.0) {
+        // Normal lag behavior: update current value with interpolation
+        state->current_value =
+            state->current_value +
+            (state->target_value - state->current_value) * (1.0 - state->coeff);
+      }
+    }
 
     // Write output
     *out = state->current_value;
@@ -679,7 +723,7 @@ void *lag_perform(Node *node, lag_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *lag_node(double lag_time, Node *input) {
+Node *lag_node(NodeRef lag_time, Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(lag_state));
 
@@ -687,7 +731,7 @@ Node *lag_node(double lag_time, Node *input) {
   *node = (Node){
       .perform = (perform_func_t)lag_perform,
       .node_index = node->node_index,
-      .num_inputs = 1,
+      .num_inputs = 2,
       .state_size = sizeof(lag_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(lag_state)),
       .output = (Signal){.layout = 1,
@@ -701,12 +745,12 @@ Node *lag_node(double lag_time, Node *input) {
       (lag_state *)(graph->nodes_state_memory + node->state_offset);
   state->current_value = 0.0;
   state->target_value = 0.0;
-  state->lag_time = lag_time;
-  double spf = 1.0 / ctx_sample_rate();
-  state->coeff = exp(-1.0 / (lag_time * (1.0 / spf)));
+  // state->lag_time = 0.0;
+  state->coeff = 0.0; // Initialize coefficient to 0
 
   // Connect input
   node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = lag_time->node_index;
 
   return node;
 }

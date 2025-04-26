@@ -376,7 +376,9 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
   Type *_array_type = ast->md;
   Type *el_type = _array_type->data.T_CONS.args[0];
 
-  LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx->env, module);
+  LLVMTypeRef element_type = el_type->kind == T_FN
+                                 ? GENERIC_PTR
+                                 : type_to_llvm_type(el_type, ctx->env, module);
 
   LLVMTypeRef array_type = codegen_array_type(element_type);
   LLVMValueRef size_const =
