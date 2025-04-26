@@ -743,6 +743,9 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
     }
 
     state->phase = fmod(state->phase + *rate / buf_size, 1.0);
+    if (state->phase < 0.) {
+      state->phase = 1.;
+    }
     state->prev_trig = *trig;
     rate++;
     trig++;
