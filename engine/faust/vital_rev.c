@@ -2430,54 +2430,6 @@ static void update_vital_rev_parameters(vital_rev_state *state) {
   state->dsp.fHslider11 = (FAUSTFLOAT)state->mix;          // Mix
 }
 
-// The vital_rev_perform function that will be called by the audio graph
-void *__vital_rev_perform(Node *node, vital_rev_state *state, Node *inputs[],
-                        int nframes, double spf) {
-  double *out = node->output.buf;
-
-  int is_stereo_input = inputs[0]->output.layout > 1;
-  double *in = inputs[0]->output.buf;
-
-  // Setup temporary buffers for FAUST processing
-  FAUSTFLOAT *faust_input[2];
-  FAUSTFLOAT *faust_output[2];
-
-  FAUSTFLOAT in_buffer_left[nframes];
-  FAUSTFLOAT in_buffer_right[nframes];
-  FAUSTFLOAT out_buffer_left[nframes];
-  FAUSTFLOAT out_buffer_right[nframes];
-
-  // Copy input to FAUST format buffer and convert to float
-  if (is_stereo_input) {
-    for (int i = 0; i < nframes; i++) {
-      in_buffer_left[i] = (FAUSTFLOAT)in[2 * i];
-      in_buffer_right[i] = (FAUSTFLOAT)in[2 * i + 1];
-    }
-  } else {
-    for (int i = 0; i < nframes; i++) {
-      in_buffer_left[i] = (FAUSTFLOAT)in[i];
-      in_buffer_right[i] = (FAUSTFLOAT)in[i];
-    }
-  }
-
-  faust_input[0] = in_buffer_left;
-  faust_input[1] = in_buffer_right;
-  faust_output[0] = out_buffer_left;
-  faust_output[1] = out_buffer_right;
-
-  // Update parameters
-  update_vital_rev_parameters(state);
-
-  // Process the audio
-  computemydsp(&state->dsp, nframes, faust_input, faust_output);
-
-  for (int i = 0; i < nframes; i++) {
-    out[2 * i] = (double)out_buffer_left[i];
-    out[2 * i + 1] = (double)out_buffer_right[i];
-  }
-
-  return node->output.buf;
-}
 
 // The vital_rev_perform function that will be called by the audio graph
 void *vital_rev_perform(Node *node, vital_rev_state *state, Node *inputs[],

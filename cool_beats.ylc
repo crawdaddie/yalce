@@ -14,20 +14,11 @@ let Kick = module
     let gate = inlet 0.; # 2
     bufplayer_trig_node (buf_ref buf) (44100./ 48000.) (inlet 0.) imp # 3 
     |> (*) (aslr_node 0. 4. 0.2 0.1 trig)
-    # |> temper_node 
-    #     1.0      # saturation (0.0 to 1.0)
-    #     -24.0   # feedback (-60.0 to -24.0 dB)
-    #     1000.0  # cutoff (100.0 to 20000.0 Hz)
-    #     8.     # resonance (1.0 to 8.0)
-    #     10.0     # drive (-10.0 to 10.0)
-    #     3.5     # curve (0.1 to 4.0)
-    #     0.0     # level (-24.0 to 24.0 dB)
   )
   |> play_tpl
   ;
 
   let trig = fn () -> 
-    # Kick.trig ();
     let fo = get_tl_tick ();
     set_input_trig_offset synth 0 fo
   ;;
@@ -54,6 +45,11 @@ let Snare = module
   )
   |> play_tpl
   ;
+
+  let trig = fn () -> 
+    let fo = get_tl_tick ();
+    set_input_trig_offset synth 0 fo
+  ;;
 
   let trig = fn () -> 
     let fo = get_tl_tick ();
@@ -90,8 +86,6 @@ let Hihat = module
   let _ = MIDI.register_cc_handler 2 0 (fn val ->
     set_input_scalar_offset synth 1 (get_current_sample ()) (Math.unipolar_scale 0. (8. / q) val)  
   );
-
-
 
   let openh = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Openhat02.wav";
   let openh_synth = (fn () ->
@@ -144,22 +138,6 @@ let Hihat = module
 ;
 
 
-
-let krout = fn () ->
-  Kick.trig ();
-  yield 0.75;
-  Kick.trig ();
-  yield 0.75;
-  Kick.trig ();
-  yield 0.75;
-  Kick.trig ();
-  yield 1.;
-  Kick.trig ();
-  yield 0.75;
-  yield krout ()
-;;
-
-
 let snrout = fn () ->
   yield 3.;
   Snare.trig ();
@@ -178,8 +156,10 @@ defer_quant (q * 2.) (fn t ->
   |> Hihat.set_pattern t
   ;
 
-  krout ()
-  |> cor_map ((*) q)
+  iter_of_list [3., 3., 3., 4., 3.]  
+  |> cor_loop
+  |> cor_map (fn d -> Kick.trig (); d)
+  |> cor_map ((*) (q * 0.25))
   |> Kick.set_pattern t
   ;
 
@@ -191,19 +171,22 @@ defer_quant (q * 2.) (fn t ->
 
 let fx_chain = (fn () ->
   let input = multi_chan_inlet 2 0.;
-  input |> vital_rev_node
-	0.9
-	0.9
-	0.1
-	0.62184876
-	0.0
-	1.0
-	0.8333333
-	0.5
-	0.789916
-	0.0
-	0.0
-	1.
+  input
+  |> vital_rev_node
+    0.9
+    1.
+    0.5
+    0.62184876
+    0.0
+    1.0
+    0.8333333
+    0.5
+    0.789916
+    0.0
+    0.0
+    1.
+  # input |> zita_rev_hall
+
 
 ) |> play_tpl;
 

@@ -102,6 +102,10 @@ let glue_node = extern fn Double -> Double -> Double -> Double -> Double -> Doub
 # faust.h
 let temper_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
 let vital_rev_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
+let zita_rev_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
+let zita_rev_preset = extern fn Synth -> Synth;
+let zita_rev_plate = extern fn Synth -> Synth;
+let zita_rev_hall = extern fn Synth -> Synth;
 
 # let chain_wrap = fn def: (() -> Synth) -> 
 #   reset_chain ();
