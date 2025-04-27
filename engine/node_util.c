@@ -4,19 +4,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define max(a, b) a > b ? a : b
+
 #define NODE_BINOP(name, _meta, _perform)                                      \
   NodeRef name(NodeRef input1, NodeRef input2) {                               \
     AudioGraph *graph = _graph;                                                \
     Node *node = allocate_node_in_graph(graph, 0);                             \
+    int max_layout = max(input1->output.layout, input2->output.layout);        \
     *node = (Node){                                                            \
         .perform = (perform_func_t)_perform,                                   \
         .node_index = node->node_index,                                        \
         .num_inputs = 2,                                                       \
         .state_size = 0,                                                       \
         .state_offset = graph ? graph->state_memory_size : 0,                  \
-        .output = (Signal){.layout = 1,                                        \
+        .output = (Signal){.layout = max_layout,                               \
                            .size = BUF_SIZE,                                   \
-                           .buf = allocate_buffer_from_pool(graph, BUF_SIZE)}, \
+                           .buf = allocate_buffer_from_pool(                   \
+                               graph, max_layout * BUF_SIZE)},                 \
         .meta = _meta,                                                         \
     };                                                                         \
     if (input1) {                                                              \
@@ -39,6 +43,27 @@
     }                                                                          \
     val;                                                                       \
   })
+// void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
+//                   double spf) {
+//   double *out = node->output.buf;
+//   int out_layout = node->output.layout;
+//
+//   // Get input buffers
+//   Signal in1 = inputs[0]->output;
+//   Signal in2 = inputs[1]->output;
+//
+//   // Multiply samples
+//   for (int i = 0; i < nframes; i++) {
+//     double sample = *INVAL(in1) * *INVAL(in2);
+//
+//     // Write to all channels in output layout
+//     for (int j = 0; j < out_layout; j++) {
+//       out[i * out_layout + j] = sample;
+//     }
+//   }
+//
+//   return node->output.buf;
+// }
 void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
                   double spf) {
   double *out = node->output.buf;
@@ -48,13 +73,19 @@ void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
   Signal in1 = inputs[0]->output;
   Signal in2 = inputs[1]->output;
 
-  // Multiply samples
-  for (int i = 0; i < nframes; i++) {
-    double sample = *INVAL(in1) * *INVAL(in2);
+  int in1_layout = in1.layout;
+  int in2_layout = in2.layout;
 
-    // Write to all channels in output layout
+  // Process each sample
+  for (int i = 0; i < nframes; i++) {
+    // Process each channel in the output layout
     for (int j = 0; j < out_layout; j++) {
-      out[i * out_layout + j] = sample;
+      // Get appropriate input samples based on their layouts
+      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+
+      // Multiply and store result
+      out[i * out_layout + j] = in1_sample * in2_sample;
     }
   }
 
@@ -64,6 +95,7 @@ void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
 NodeRef mul2_node(NodeRef input1, NodeRef input2) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, 0);
+  int max_layout = max(input1->output.layout, input2->output.layout);
 
   *node = (Node){
       .perform = (perform_func_t)mul_perform,
@@ -71,9 +103,10 @@ NodeRef mul2_node(NodeRef input1, NodeRef input2) {
       .num_inputs = 2,
       .state_size = 0,
       .state_offset = graph->state_memory_size,
-      .output = (Signal){.layout = 1,
+      .output = (Signal){.layout = max_layout,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+                         .buf = allocate_buffer_from_pool(graph, max_layout *
+                                                                     BUF_SIZE)},
       .meta = "mul",
   };
 
@@ -92,13 +125,19 @@ void *sum_perform(Node *node, void *state, Node *inputs[], int nframes,
   Signal in1 = inputs[0]->output;
   Signal in2 = inputs[1]->output;
 
-  double *out_ptr = out;
-  while (nframes--) {
-    double sample = *INVAL(in1) + *INVAL(in2);
+  int in1_layout = in1.layout;
+  int in2_layout = in2.layout;
 
-    // Write to all channels in output layout
-    for (int i = 0; i < out_layout; i++) {
-      *out_ptr++ = sample;
+  // Process each sample
+  for (int i = 0; i < nframes; i++) {
+    // Process each channel in the output layout
+    for (int j = 0; j < out_layout; j++) {
+      // Get appropriate input samples based on their layouts
+      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+
+      // Multiply and store result
+      out[i * out_layout + j] = in1_sample + in2_sample;
     }
   }
 
@@ -108,15 +147,18 @@ void *sum_perform(Node *node, void *state, Node *inputs[], int nframes,
 NodeRef sum2_node(NodeRef input1, NodeRef input2) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, 0);
+
+  int max_layout = max(input1->output.layout, input2->output.layout);
   *node = (Node){
       .perform = (perform_func_t)sum_perform,
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = 0,
       .state_offset = 0,
-      .output = (Signal){.layout = 1,
+      .output = (Signal){.layout = max_layout,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+                         .buf = allocate_buffer_from_pool(graph, max_layout *
+                                                                     BUF_SIZE)},
       .meta = "sum",
   };
   if (input1) {
@@ -137,14 +179,19 @@ void *sub_perform(Node *node, void *state, Node *inputs[], int nframes,
   Signal in1 = inputs[0]->output;
   Signal in2 = inputs[1]->output;
 
-  double *out_ptr = out;
-  while (nframes--) {
+  int in1_layout = in1.layout;
+  int in2_layout = in2.layout;
 
-    double sample = *INVAL(in1) - *INVAL(in2);
+  // Process each sample
+  for (int i = 0; i < nframes; i++) {
+    // Process each channel in the output layout
+    for (int j = 0; j < out_layout; j++) {
+      // Get appropriate input samples based on their layouts
+      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
 
-    // Write to all channels in output layout
-    for (int i = 0; i < out_layout; i++) {
-      *out_ptr++ = sample;
+      // Multiply and store result
+      out[i * out_layout + j] = in1_sample - in2_sample;
     }
   }
 
@@ -153,21 +200,49 @@ void *sub_perform(Node *node, void *state, Node *inputs[], int nframes,
 
 NODE_BINOP(sub2_node, "sub", sub_perform)
 
+// void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
+//                   double spf) {
+//   double *out = node->output.buf;
+//   int out_layout = node->output.layout;
+//   // Get input buffers
+//   Signal in1 = inputs[0]->output;
+//   Signal in2 = inputs[1]->output;
+//
+//   double *out_ptr = out;
+//   while (nframes--) {
+//     double sample = fmod(*INVAL(in1), *INVAL(in2));
+//
+//     // Write to all channels in output layout
+//     for (int i = 0; i < out_layout; i++) {
+//       *out_ptr++ = sample;
+//     }
+//   }
+//
+//   return node->output.buf;
+// }
+//
 void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
                   double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
+
   // Get input buffers
   Signal in1 = inputs[0]->output;
   Signal in2 = inputs[1]->output;
 
-  double *out_ptr = out;
-  while (nframes--) {
-    double sample = fmod(*INVAL(in1), *INVAL(in2));
+  int in1_layout = in1.layout;
+  int in2_layout = in2.layout;
 
-    // Write to all channels in output layout
-    for (int i = 0; i < out_layout; i++) {
-      *out_ptr++ = sample;
+  // Process each sample
+  for (int i = 0; i < nframes; i++) {
+    // Process each channel in the output layout
+    for (int j = 0; j < out_layout; j++) {
+      // Get appropriate input samples based on their layouts
+      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+
+      // Multiply and store result
+      out[i * out_layout + j] = fmod(in1_sample, in2_sample);
     }
   }
 
@@ -176,21 +251,50 @@ void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
 
 NODE_BINOP(mod2_node, "mod", mod_perform)
 static inline double __min(double a, double b) { return a <= b ? a : b; }
+
+// void *div_perform(Node *node, void *state, Node *inputs[], int nframes,
+//                   double spf) {
+//   double *out = node->output.buf;
+//   int out_layout = node->output.layout;
+//   // Get input buffers
+//   Signal in1 = inputs[0]->output;
+//   Signal in2 = inputs[1]->output;
+//
+//   double *out_ptr = out;
+//   while (nframes--) {
+//     double sample = (*INVAL(in1) / __min(*INVAL(in2), 0.0001));
+//
+//     // Write to all channels in output layout
+//     for (int i = 0; i < out_layout; i++) {
+//       *out_ptr++ = sample;
+//     }
+//   }
+//
+//   return node->output.buf;
+// }
+//
 void *div_perform(Node *node, void *state, Node *inputs[], int nframes,
                   double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
+
   // Get input buffers
   Signal in1 = inputs[0]->output;
   Signal in2 = inputs[1]->output;
 
-  double *out_ptr = out;
-  while (nframes--) {
-    double sample = (*INVAL(in1) / __min(*INVAL(in2), 0.0001));
+  int in1_layout = in1.layout;
+  int in2_layout = in2.layout;
 
-    // Write to all channels in output layout
-    for (int i = 0; i < out_layout; i++) {
-      *out_ptr++ = sample;
+  // Process each sample
+  for (int i = 0; i < nframes; i++) {
+    // Process each channel in the output layout
+    for (int j = 0; j < out_layout; j++) {
+      // Get appropriate input samples based on their layouts
+      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+
+      // Multiply and store result
+      out[i * out_layout + j] = in1_sample / in2_sample;
     }
   }
 

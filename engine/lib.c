@@ -167,6 +167,39 @@ Node *inlet(double default_val) {
   return f;
 }
 
+Node *multi_chan_inlet(int layout, double default_val) {
+
+  AudioGraph *graph = _graph;
+  Node *f = allocate_node_in_graph(graph, 0);
+
+  // Initialize node
+  *f = (Node){
+      .perform = NULL,
+      .node_index = f->node_index,
+      .num_inputs = 0,
+      .state_size = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
+      // Allocate output buffer
+      // TODO: allocate const bufs as just .size = 1
+      .output =
+          (Signal){.layout = layout,
+                   .size = BUF_SIZE,
+                   .buf = allocate_buffer_from_pool(graph, layout * BUF_SIZE)},
+
+      .meta = "const",
+  };
+
+  for (int i = 0; i < layout * BUF_SIZE; i++) {
+    f->output.buf[i] = default_val;
+    // printf("const node val %f\n", node->output.buf[i]);
+  }
+
+  f->meta = "inlet";
+  _graph->inlets[_graph->num_inlets] = f->node_index;
+  _graph->inlet_defaults[_graph->num_inlets] = default_val;
+  _graph->num_inlets++;
+  return f;
+}
 NodeRef buf_ref(NodeRef buf) {
 
   AudioGraph *graph = _graph;
@@ -303,6 +336,8 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
          g->state_memory_capacity);
 
   Node *output_node = &graph_state->nodes[graph_state->node_count - 1];
+  // printf("instantiate node with %d layout output\n",
+  //        output_node->output.layout);
 
   *ensemble = (Node){
       .perform = (perform_func_t)perform_audio_graph,

@@ -74,34 +74,6 @@ void print_function_type(CXType type, name_lookup *lookups) {
   clang_disposeString(return_type);
 }
 
-void __print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
-  printf("typedef decl\n");
-  CXType underlying_type = clang_getTypedefDeclUnderlyingType(cursor);
-  CXString type_name = clang_getCursorSpelling(cursor);
-
-  printf("type %s = ", clang_getCString(type_name));
-
-  if (underlying_type.kind == CXType_Pointer) {
-    CXType pointee_type = clang_getPointeeType(underlying_type);
-    if (pointee_type.kind == CXType_FunctionProto) {
-      print_function_type(pointee_type, lookups);
-    } else {
-      CXString type_spelling = clang_getTypeSpelling(underlying_type);
-      printf("%s", yalce_name(lookups, clang_getCString(type_spelling)));
-      clang_disposeString(type_spelling);
-    }
-  } else if (underlying_type.kind == CXType_FunctionProto) {
-    print_function_type(underlying_type, lookups);
-  } else {
-    CXString type_spelling = clang_getTypeSpelling(underlying_type);
-    printf("%s", yalce_name(lookups, clang_getCString(type_spelling)));
-    clang_disposeString(type_spelling);
-  }
-
-  printf(";\n");
-  clang_disposeString(type_name);
-}
-
 void print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
   CXType underlying_type = clang_getTypedefDeclUnderlyingType(cursor);
   CXString type_name = clang_getCursorSpelling(cursor);
@@ -168,9 +140,12 @@ void print_function_decl(CXCursor cursor, name_lookup *lookups) {
     }
   }
 
+  // printf("%s RETURN TYPE %s\n", clang_getCString(func_name),
+  //        clang_getCString(return_type));
   printf("%s", yalce_name(lookups, clang_getCString(return_type)));
 
   printf(";\n");
+  // printf("# return type %s\n", clang_getCString(return_type));
 
   clang_disposeString(func_name);
   clang_disposeString(return_type);

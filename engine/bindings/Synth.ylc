@@ -33,6 +33,7 @@ let pow2table_read = extern fn Double -> Int -> Ptr -> Double;
 let start_blob = extern fn () -> ();
 let end_blob = extern fn () -> Ptr;
 let inlet = extern fn Double -> Synth;
+let multi_chan_inlet = extern fn Int -> Double -> Synth;
 let buf_ref = extern fn Synth -> Synth;
 let play_node = extern fn Synth -> Synth;
 let set_input_scalar_offset = extern fn Synth -> Int -> Uint64 -> Double -> Synth;
@@ -97,6 +98,10 @@ let bus = extern fn Int -> Synth;
 
 # glue.h
 let glue_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
+
+# faust.h
+let temper_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
+let vital_rev_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
 
 # let chain_wrap = fn def: (() -> Synth) -> 
 #   reset_chain ();

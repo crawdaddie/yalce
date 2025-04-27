@@ -56,7 +56,7 @@ char *state_ptr(AudioGraph *graph, NodeRef node) {
   return graph->nodes_state_memory + node->state_offset;
 }
 
-Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
+Node *__allocate_node_in_graph(AudioGraph *graph, int state_size) {
   if (!graph) {
     return malloc(sizeof(Node) + state_size);
   }
@@ -70,6 +70,42 @@ Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
 
   Node *node = &graph->nodes[idx];
   node->node_index = idx;
+  return node;
+}
+
+Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
+  if (!graph) {
+    return malloc(sizeof(Node) + state_size);
+  }
+
+  int idx = graph->node_count++;
+
+  // Resize nodes array if needed
+  if (graph->node_count >= graph->capacity) {
+    graph->capacity *= 2;
+    graph->nodes = realloc(graph->nodes, graph->capacity * sizeof(Node));
+  }
+
+  // Check if we need more state memory and reallocate if necessary
+  if (graph->state_memory_size + state_size > graph->state_memory_capacity) {
+    // Double the state memory capacity or increase by what we need, whichever
+    // is larger
+    int new_capacity = graph->state_memory_capacity * 2;
+    if (graph->state_memory_size + state_size > new_capacity) {
+      new_capacity =
+          graph->state_memory_size + state_size + 1024; // Add extra padding
+    }
+
+    // Reallocate the state memory
+    graph->nodes_state_memory =
+        realloc(graph->nodes_state_memory, new_capacity);
+    graph->state_memory_capacity = new_capacity;
+  }
+
+  // Initialize node and return
+  Node *node = &graph->nodes[idx];
+  node->node_index = idx;
+
   return node;
 }
 

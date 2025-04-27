@@ -40,6 +40,7 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
   NodeRef inlet_node = g->nodes + inlet_idx;
   int layout = inlet_node->output.layout;
   int _layout = node->output.layout;
+
   if (_layout > layout) {
     inlet_node->output = (Signal){
         .layout = _layout,

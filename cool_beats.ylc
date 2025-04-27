@@ -14,7 +14,14 @@ let Kick = module
     let gate = inlet 0.; # 2
     bufplayer_trig_node (buf_ref buf) (44100./ 48000.) (inlet 0.) imp # 3 
     |> (*) (aslr_node 0. 4. 0.2 0.1 trig)
-    # |> tanh_node 2.
+    # |> temper_node 
+    #     1.0      # saturation (0.0 to 1.0)
+    #     -24.0   # feedback (-60.0 to -24.0 dB)
+    #     1000.0  # cutoff (100.0 to 20000.0 Hz)
+    #     8.     # resonance (1.0 to 8.0)
+    #     10.0     # drive (-10.0 to 10.0)
+    #     3.5     # curve (0.1 to 4.0)
+    #     0.0     # level (-24.0 to 24.0 dB)
   )
   |> play_tpl
   ;
@@ -122,20 +129,21 @@ let Hihat = module
     |> play_routine t schedule_event
     |> array_set 0 pref 
   ;;
+
+  let tts_pat = fn () ->
+    trig ();
+    yield 0.25;
+    trig ();
+    yield 0.25;
+    trig_open ();
+    yield 0.25;
+    Math.chance 0.125 (trig);
+    yield 0.25;
+    yield tts_pat ()
+  ;;
 ;
 
 
-let hh_rout = fn () ->
-  Hihat.trig ();
-  yield 0.25;
-  Hihat.trig ();
-  yield 0.25;
-  Hihat.trig_open ();
-  yield 0.25;
-  Math.chance 0.125 (Hihat.trig);
-  yield 0.25;
-  yield hh_rout ()
-;;
 
 let krout = fn () ->
   Kick.trig ();
@@ -155,14 +163,17 @@ let krout = fn () ->
 let snrout = fn () ->
   yield 3.;
   Snare.trig ();
+  yield 1.;
+  yield 3.;
+  Snare.trig ();
   yield 0.75;
-  Math.chance 0.1 (Snare.trig);
+  Snare.trig ();
   yield 0.25;
   yield snrout ()
 ;;
 
 defer_quant (q * 2.) (fn t ->
-  hh_rout ()
+  Hihat.tts_pat ()
   |> cor_map ((*) q)
   |> Hihat.set_pattern t
   ;
@@ -179,8 +190,21 @@ defer_quant (q * 2.) (fn t ->
 
 
 let fx_chain = (fn () ->
-  let input = inlet 0.;
-  reverb_node 0.5 0.5 0.8 1. input
+  let input = multi_chan_inlet 2 0.;
+  input |> vital_rev_node
+	0.9
+	0.9
+	0.1
+	0.62184876
+	0.0
+	1.0
+	0.8333333
+	0.5
+	0.789916
+	0.0
+	0.0
+	1.
+
 ) |> play_tpl;
 
 Snare.synth |> pipe_into fx_chain 0;

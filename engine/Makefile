@@ -3,6 +3,8 @@ include ../.env
 
 BUILD_DIR := ../build/engine
 SRCS := $(wildcard *.c)
+SRCS += faust/temper.c
+SRCS += faust/vital_rev.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 CLAP_SDK_PATH := ${CLAP_PATH}
 LDFLAGS = -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2
@@ -24,6 +26,7 @@ all: $(SHARED_LIB_TARGET)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)/faust
 
 # Build engine object files
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
@@ -31,7 +34,7 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 
 ylc_bindings:
 	$(MAKE) -C ../tools
-	../build/tools/ffi_gen osc.h ext_lib.h envelope.h filter.h node_util.h lfo.h bus.h glue.h > bindings/Synth.ylc
+	../build/tools/ffi_gen osc.h ext_lib.h envelope.h filter.h node_util.h lfo.h bus.h glue.h faust.h > bindings/Synth.ylc
 	cat bindings/_engine_synth_extra.ylc >> bindings/Synth.ylc
 	../build/tools/ffi_gen scheduling.h > bindings/Sched.ylc
 	../build/tools/ffi_gen midi.h > bindings/MIDI.ylc
