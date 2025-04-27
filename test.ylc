@@ -1,0 +1,24 @@
+open engine/bindings/Synth;
+
+let dist_sin = fn f: (Synth) ->
+  ((white_noise_node ()) * (sin_node (f * 0.125)) * (sin_node 0.3))
+  |> comb_node 0.02 0.2 0.8
+  |> (+) (sin_node f)
+  |> (+) (sin_node (f * 2.))
+  |> temper_node
+    0.7
+    -0.2
+    1000.
+    2.0
+    10.0
+    4.0
+    .0
+;;
+
+let s = (fn () -> 
+  let f = inlet 40.;
+  (dist_sin f)
+  + dist_sin (f * 1.01)
+) |> play_tpl
+;
+

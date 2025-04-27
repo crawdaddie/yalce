@@ -106,6 +106,7 @@ let zita_rev_node = extern fn Double -> Double -> Double -> Double -> Double -> 
 let zita_rev_preset = extern fn Synth -> Synth;
 let zita_rev_plate = extern fn Synth -> Synth;
 let zita_rev_hall = extern fn Synth -> Synth;
+let imp_train_node = extern fn Synth -> Synth;
 
 # let chain_wrap = fn def: (() -> Synth) -> 
 #   reset_chain ();

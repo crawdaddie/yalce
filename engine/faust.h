@@ -23,3 +23,5 @@ NodeRef zita_rev_preset(NodeRef input);
 NodeRef zita_rev_plate(NodeRef input);
 // Create a zita_rev with "hall" like characteristics
 NodeRef zita_rev_hall(NodeRef input);
+
+NodeRef imp_train_node(NodeRef freq);

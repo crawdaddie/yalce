@@ -6,6 +6,7 @@ SRCS := $(wildcard *.c)
 SRCS += faust/temper.c
 SRCS += faust/vital_rev.c
 SRCS += faust/zita_rev.c
+SRCS += faust/imp_train.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 CLAP_SDK_PATH := ${CLAP_PATH}
 LDFLAGS = -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2
