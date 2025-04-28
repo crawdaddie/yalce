@@ -1199,8 +1199,8 @@ int main() {
     Ast *match_subj =
         b->data.AST_BODY.stmts[0]
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
-    print_ast(match_subj);
-    print_type(match_subj->md);
+    // print_ast(match_subj);
+    // print_type(match_subj->md);
   });
 
   ({
@@ -1227,6 +1227,21 @@ int main() {
       "  |> cor_map (fn x -> x * 2.;)\n"
       "  |> cor_loop\n",
       &cor);
+  });
+
+  ({
+    Type vtype = TCONS(
+        "Value", 1,
+        &TCONS(TYPE_NAME_TUPLE, 3, &t_num, &TARRAY(tvar("Value")), &t_num));
+
+    vtype.data.T_CONS.names = (char *[]){"data", "children", "grad"};
+    print_type(&vtype);
+    T("type Value = (data: Double, children: (Array of Value), grad: "
+      "Double);\n"
+      "let const = fn i ->\n"
+      "  Value i [| |] 0.\n"
+      ";;\n",
+      &MAKE_FN_TYPE_2(&t_num, &vtype));
   });
 
   return status == true ? 0 : 1;

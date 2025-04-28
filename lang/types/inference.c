@@ -820,6 +820,8 @@ Type *find_variant_member(Type *variant, const char *name) {
 }
 
 Type *infer_cons_application(Ast *ast, TICtx *ctx) {
+  printf("infer cons\n");
+  print_ast(ast);
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
   Ast *fn_id = ast->data.AST_APPLICATION.function;
@@ -851,13 +853,24 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
       return type_error(ctx, ast,
                         "Could not constrain type variable to function type\n");
     }
+
+    if (is_generic(arg_type) && !(types_equal(arg_type, cons_arg))) {
+      ctx->constraints =
+          constraints_extend(ctx->constraints, arg_type, cons_arg);
+    }
   }
 
   Substitution *subst = solve_constraints(app_ctx.constraints);
   Type *resolved_type = apply_substitution(subst, fn_type);
   apply_substitutions_rec(ast, subst);
   ast->data.AST_APPLICATION.function->md = resolved_type;
+  // if (strcmp(resolved_type->data.T_CONS.name, cons->data.T_CONS.name) != 0) {
+  //   resolved_type->data.T_CONS.name = cons->data.T_CONS.name;
+  // }
+  // print_type(resolved_type);
+  // print_type(cons);
   return resolved_type;
+  // return cons;
 }
 
 #define LIST_CONS_OPERATOR "::"
@@ -1008,6 +1021,14 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   Ast *in_expr = ast->data.AST_LET.in_expr;
 
   if (binding == NULL && expr->tag == AST_IMPORT && in_expr) {
+    TICtx body_ctx = *ctx;
+    body_ctx.scope++;
+    infer(expr, &body_ctx);
+    return infer(in_expr, &body_ctx);
+  }
+
+  if (binding != NULL && expr->tag == AST_IMPORT) {
+    print_ast(ast);
     TICtx body_ctx = *ctx;
     body_ctx.scope++;
     infer(expr, &body_ctx);

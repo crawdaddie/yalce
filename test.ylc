@@ -1,24 +1,58 @@
 open engine/bindings/Synth;
+open engine/bindings/Sched;
+open lib/Math;
 
-let dist_sin = fn f: (Synth) ->
-  ((white_noise_node ()) * (sin_node (f * 0.125)) * (sin_node 0.3))
-  |> comb_node 0.02 0.2 0.8
+let (@) = array_at;
+
+let array_choose = fn arr ->
+  let idx = rand_int (array_size arr);
+  arr @ idx 
+;;
+
+let ampenv = [|
+  0.000000, 0.000000, 2.400000,
+  1.000000, 0.5, -2.000000,
+  1.000000, 0.5, -1.,
+  0.000000
+|]
+|> array_to_buf;
+let dist_sin = fn f: (Synth) hp: (Synth) ->
+  let i = ((white_noise_node ()) * (0.5 * sin_node .01));
+  i + (dyn_comb_node (1. / (f)) 0.2 0.99 i)
+  |> (*) (sin_node (f * 0.25))
   |> (+) (sin_node f)
-  |> (+) (sin_node (f * 2.))
   |> temper_node
-    0.7
+    1.
     -0.2
     1000.
     2.0
     10.0
-    4.0
+    3.0
     .0
+  |> biquad_hp_node hp 1.
 ;;
 
-let s = (fn () -> 
-  let f = inlet 40.;
-  (dist_sin f)
-  + dist_sin (f * 1.01)
+let synth = (fn () -> 
+  let f = inlet 40. |> lag_node 0.01;
+  let trig = inlet 0.;
+  let ff = lfnoise_node 1. 101. 1000.;
+  (sin_node f |> tanh_node 2.) + (dist_sin f ff)
+  + (dist_sin (f * 1.02) ff)
+  |> (*) (buf_env_node 0.125 (buf_ref ampenv) trig)
 ) |> play_tpl
 ;
+
+let rout = fn () ->
+  let fo = get_tl_tick () in (
+    set_input_trig_offset synth 1 fo;
+    set_input_scalar_offset synth 0 fo (midi_to_freq @@ 40 + (array_choose [|0,12,24,7,8,-5|]))
+    )
+  ;
+  yield 0.125;
+  yield rout () 
+;;
+
+
+
+rout () |> play_routine (get_current_sample ()) schedule_event
 
