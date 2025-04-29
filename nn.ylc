@@ -1,9 +1,5 @@
-open examples/micrograd/micro;
-import examples/micrograd/neuron;
 import lib/Math;
-#
-#
-#
+import lib/Arrays;
 let open_file = extern fn String -> String -> Option of Ptr;
 let fclose = extern fn Ptr -> ();
 let read_bytes = extern fn Ptr -> Array of Char;
@@ -49,86 +45,81 @@ let df = format_dataset content len;
 
 let (@) = array_at;
 
-print `3: {df.x1 @ 0},{df.x2 @ 0},{df.label}\n`
+print `3: {df.x1 @ 0}, {df.x2 @ 0}, {df.label @ 0}\n`
 ;
 
+type Matrix = (
+  rows: Int,
+  cols: Int,
+  data: Array of Double
+);
 
+type Layer = (
+  weights: Matrix,
+  biases: Array of Double,
+  activation: ((Array of Double) -> (Array of Double))
+);
 
-
-let a = const -4.0;
-let b = const 2.0;
-let c = add a (mul b (sub a (pow b (const 3.))));
-let bc = backward (Value c.data c.children c.op 1.);
-
-let _ = print `
-{bc.data}
-{to_str bc}
-`;
-
-
-let n = neuron.relu
-  (array_fill 10 (fn i: (Int) -> Math.rand_double_range -1. 1.))
-  (const 0.);
-
-let n0 = neuron.zero_grad n;
-
-# type Layer = Array of neuron.TNeuron;
-# let l = array_fill 10 (fn i -> );
-
-# MLP of [
-#   Layer of [
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2),
-#     ReLUNeuron(2)], # 16 
-#
-#   Layer of [
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16),
-#     ReLUNeuron(16)
-#   ], 
-#
-#   Layer of [
-#     LinearNeuron(16)
-#   ]
-# ]
-let layer_relu = fn nweights: (Int) size: (Int) ->
-  array_fill size (fn i: (Int) -> neuron.relu (array_fill nweights (fn i: (Int) -> Math.rand_double_range -1. 1.)) (const 0.))
+let matrix_zeroes = fn c r ->
+  Matrix r c (array_fill_const (r * c) 0.)
 ;;
 
-let layer_lin = fn nweights: (Int) size: (Int) ->
-  array_fill size (fn i: (Int) -> neuron.lin (array_fill nweights (fn i: (Int) -> Math.rand_double_range -1. 1.)) (const 0.))
+# let matrix_fill = fn r c f ->
+#   Matrix r c (array_fill (r * c) f)
+# ;;
+#
+let matrix_to_str = fn m: (Matrix) ->
+  ""
 ;;
 
 
+type Network = (
+  layers: Array of Layer,
+  loss: ((Array of Double) -> (Array of Double) -> Double)
+);
 
-let MLP = [|
-  layer_relu 2 16,
-  layer_relu 16 16,
-  layer_lin 16 1
-|];
+let loss = fn a: (Array of Double) b: (Array of Double) -> 0.;;
+
+# let z = matrix_zeroes 256 256;
+
+let max_in = array_fill_const 16 0.; # allocate an input array which is as large as the maximum layer width
+# array operations will be done in place 
+
+let MLP = Network [|
+  Layer (matrix_zeroes 2 16) (array_fill_const 16 0.) (fn i: (Array of Double) -> i),
+  Layer (matrix_zeroes 16 16) (array_fill_const 16 0.) (fn i: (Array of Double) -> i),
+  Layer (matrix_zeroes 16 1) (array_fill_const 1 0.) (fn i: (Array of Double) -> i),
+  |] loss
+;
+
+# let matrix_vec_mul = fn m: (Matrix) v: (Array of Double) ->
+#   [|1., 2.|]
+# ;;
+
+let vec_add = fn u: (Array of Double) v: (Array of Double) ->
+  [|1., 2.|]
+;;
+
+let _matrix_vec_mul = extern fn Int -> Int -> Ptr of Double -> Ptr of Double -> ();
+let matrix_vec_mul = fn m: (Matrix) v: (Array of Double) ->
+  _matrix_vec_mul m.rows m.cols (cstr m.data) (cstr v);
+  v
+;;
+
+let vec_add = fn a: (Array of Double) b: (Array of Double) -> [|1., 2.|];
+
+# Forward pass
+let forward = fn input: (Array of Double) network: (Network) ->
+  let layers = network.layers;
+
+  Arrays.fold (fn current: (Array of Double) layer: (Layer) ->
+    current
+    |> matrix_vec_mul layer.weights
+    |> vec_add layer.biases
+    |> layer.activation
+
+  ) input layers
+;;
+
+forward max_in MLP;
+

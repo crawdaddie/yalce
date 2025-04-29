@@ -69,10 +69,10 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
 
-  if (body == NULL) {
-    LLVMDeleteFunction(func);
-    return NULL;
-  }
+  // if (body == NULL) {
+  //   LLVMDeleteFunction(func);
+  //   return NULL;
+  // }
 
   // *ret_type = LLVMTypeOf(body);
   // if (types_equal(ast->md, &t_void)) {

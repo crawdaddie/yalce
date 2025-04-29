@@ -787,7 +787,9 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
     if (i < ast->data.AST_APPLICATION.len - 1) {
       if (fn_type->data.T_FN.to->kind != T_FN) {
-        return type_error(ctx, ast, "Too many arguments provided to function");
+        return type_error(
+            ctx, ast, "Too many arguments provided to function %s",
+            ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value);
       }
       fn_type = fn_type->data.T_FN.to;
     }

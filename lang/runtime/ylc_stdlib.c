@@ -323,4 +323,83 @@ struct sockaddr *create_server_addr(int af_inet, int inaddr_any, int port) {
 double relu_d(double i) { return i < 0. ? 0. : i; }
 
 void _scanf(const char *fmt_string, const char *input_string, int size,
-            void **pointers);
+            void **pointers) {
+  // The correct order of parameters for sscanf is:
+  // sscanf(input_string, fmt_string, arg1, arg2, ...)
+
+  // We have pointers[0], pointers[1], etc. but sscanf needs them as separate
+  // arguments Unfortunately, there's no standard way in C to convert an array
+  // of pointers to varargs
+
+  // We'll use a switch statement based on 'size' to handle a fixed number of
+  // cases
+  switch (size) {
+  case 0:
+    // No arguments to parse
+    break;
+  case 1:
+    sscanf(input_string, fmt_string, pointers[0]);
+    break;
+  case 2:
+    sscanf(input_string, fmt_string, pointers[0], pointers[1]);
+    break;
+  case 3:
+    sscanf(input_string, fmt_string, pointers[0], pointers[1], pointers[2]);
+    break;
+  case 4:
+    sscanf(input_string, fmt_string, pointers[0], pointers[1], pointers[2],
+           pointers[3]);
+    break;
+  case 5:
+    sscanf(input_string, fmt_string, pointers[0], pointers[1], pointers[2],
+           pointers[3], pointers[4]);
+    break;
+  case 6:
+    sscanf(input_string, fmt_string, pointers[0], pointers[1], pointers[2],
+           pointers[3], pointers[4], pointers[5]);
+    break;
+  case 7:
+    sscanf(input_string, fmt_string, pointers[0], pointers[1], pointers[2],
+           pointers[3], pointers[4], pointers[5], pointers[6]);
+    break;
+  case 8:
+    sscanf(input_string, fmt_string, pointers[0], pointers[1], pointers[2],
+           pointers[3], pointers[4], pointers[5], pointers[6], pointers[7]);
+    break;
+  default:
+    fprintf(stderr, "Error: _scanf supports max 8 arguments\n");
+    break;
+  }
+}
+
+// In-place matrix-vector multiplication
+void _matrix_vec_mul(int rows, int cols, double *matrix_data,
+                     double *vec_data) {
+  // Perform multiplication
+  for (int i = 0; i < rows; i++) {
+    vec_data[i] = 0.0;
+    for (int j = 0; j < cols; j++) {
+      vec_data[i] += matrix_data[i * cols + j] * vec_data[j];
+    }
+  }
+  return;
+}
+
+// In-place vector addition
+DArr vec_add(DArr vec1, DArr vec2) {
+  DArr result = vec2;
+
+  // Check if dimensions match
+  if (vec1.size != vec2.size || vec1.size != result.size) {
+    fprintf(
+        stderr,
+        "Error: All vectors must have the same size for in-place addition\n");
+    return (DArr){};
+  }
+
+  // Perform element-wise addition
+  for (int i = 0; i < result.size; i++) {
+    result.data[i] = vec1.data[i] + vec2.data[i];
+  }
+  return result;
+}

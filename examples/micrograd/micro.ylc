@@ -10,31 +10,31 @@ type Op =
   | Noop
   ;
 
-type Value = (data: Double , children: (Array of Value), op: Op, grad: Double);
+type Value = (data: Double, grad: Double, children: (Array of Value), op: Op);
 
 let const = fn i ->
-  Value i [| |] Noop 0.
+  Value i 0. [| |] Noop
 ;;
 
 let mul = fn a: (Value) b: (Value) ->
-  Value (a.data * b.data) [| a, b |] Mul 0.
+  Value (a.data * b.data) 0. [| a, b |] Mul
 ;;
 
 let pow = fn a: (Value) b: (Value) ->
-  Value (Math.pow a.data b.data) [| a, b |] Pow 0.
+  Value (Math.pow a.data b.data) 0. [| a, b |] Pow
 ;;
 
 let div = fn a: (Value) b: (Value) ->
-  Value (a.data / b.data) [| a, pow b (const -1.) |] Mul 0.
+  Value (a.data / b.data) 0. [| a, pow b (const -1.) |] Mul
 ;;
 
 let add = fn a: (Value) b: (Value) ->
-  Value ( a.data + b.data) [| a, b |] Add 0.
+  Value (a.data + b.data) 0. [| a, b |] Add
 ;;
 
 let sub = fn a: (Value) b: (Value) ->
   let bb = mul b (const -1.); 
-  Value (a.data + bb.data) [| a, bb |] Add 0.
+  Value (a.data + bb.data) 0. [| a, bb |] Add
   # Value (a.data - b.data) [| a, b|] Sub 0.
 ;;
 
@@ -44,7 +44,7 @@ let relu = fn a: (Value) ->
     | x if v < 0. -> 0.
     | x -> x
   in
-  Value v [| a |] Relu 0.
+  Value v 0. [| a |] Relu
 ;;
 
 let (@) = array_at;
@@ -77,7 +77,7 @@ let to_str = fn a: (Value) ->
 ;;
 
 let set_grad = fn v: (Value) g: (Double) ->
-  Value v.data v.children v.op g
+  Value v.data g v.children v.op
 ;;
 
 let backward = fn (data, children, op, grad): (Value) ->
@@ -86,16 +86,16 @@ let backward = fn (data, children, op, grad): (Value) ->
     (
       let l = children @ 0;
       let r = children @ 1;
-      array_set 0 children @@ (set_grad l (l.grad + grad)) |> backward;
-      array_set 1 children @@ (set_grad r (r.grad + grad)) |> backward;
+      array_set 0 children (backward (set_grad l (l.grad + grad)));
+      array_set 1 children (backward (set_grad r (r.grad + grad)));
       children
     )
   | Sub -> 
     (
       let l = children @ 0;
       let r = children @ 1;
-      array_set 0 children @@ (set_grad l (l.grad - grad)) |> backward;
-      array_set 1 children @@ (set_grad r (r.grad - grad)) |> backward;
+      array_set 0 children (backward (set_grad l (l.grad - grad)) );
+      array_set 1 children (backward (set_grad r (r.grad - grad)) );
       children
     )
 
@@ -103,23 +103,23 @@ let backward = fn (data, children, op, grad): (Value) ->
     (
       let l = children @ 0;
       let r = children @ 1;
-      array_set 0 children @@ (set_grad l (l.grad + r.data * grad)) |> backward;
-      array_set 1 children @@ (set_grad r (r.grad + l.data * grad)) |> backward;
+      array_set 0 children (backward (set_grad l (l.grad + r.data * grad)));
+      array_set 1 children (backward (set_grad r (r.grad + l.data * grad)));
       children
     )
   | Div ->
     (
       let l = children @ 0;
       let r = children @ 1;
-      array_set 0 children @@ (set_grad l (l.grad + r.data / grad)) |> backward;
-      array_set 1 children @@ (set_grad r (r.grad + l.data / grad)) |> backward;
+      array_set 0 children (backward (set_grad l (l.grad + r.data / grad)));
+      array_set 1 children (backward (set_grad r (r.grad + l.data / grad)));
       children
     )
   | Pow -> 
     (
       let l = children @ 0;
       let r = children @ 1;
-      array_set 0 children @@ set_grad l (l.grad + (r.data * (Math.pow l.data (r.data - 1))) * grad ) |> backward;
+      array_set 0 children (backward (set_grad l (l.grad + (r.data * (Math.pow l.data (r.data - 1))) * grad )));
       children
     )
   | Relu ->
@@ -129,7 +129,7 @@ let backward = fn (data, children, op, grad): (Value) ->
       | d if d > 0. -> grad
       | _ -> 0.
       ;
-      array_set 0 children @@ set_grad l (l.grad + new_grad_add) |> backward l;
+      array_set 0 children (backward (set_grad l (l.grad + new_grad_add)));
       children
     )
   | Noop -> children
