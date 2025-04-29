@@ -70,8 +70,8 @@ LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
   return LLVMConstInt(LLVMInt32Type(), 0, 0);
 }
 
-JITSymbol *create_module_symbol(Type *module_type, Ast *module_ast,
-                                JITLangCtx *ctx,
+JITSymbol *create_module_symbol(Type *module_type, TypeEnv *module_type_env,
+                                Ast *module_ast, JITLangCtx *ctx,
                                 LLVMModuleRef llvm_module_ref) {
   int mod_len = module_type->data.T_CONS.num_args;
 
@@ -81,6 +81,7 @@ JITSymbol *create_module_symbol(Type *module_type, Ast *module_ast,
   module_symbol->symbol_type = module_type;
 
   JITLangCtx *module_ctx = heap_alloc_ctx(ctx);
+  module_ctx->env = module_type_env;
   module_symbol->symbol_data.STYPE_MODULE.ctx = module_ctx;
   return module_symbol;
 }
@@ -103,8 +104,9 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
     int mod_len = module_type->data.T_CONS.num_args;
     Ast *module_ast = module->ast;
 
-    module_symbol =
-        create_module_symbol(module_type, module_ast, ctx, llvm_module_ref);
+    module_symbol = create_module_symbol(module_type, NULL, module_ast, ctx,
+                                         llvm_module_ref);
+
     compile_module(module_symbol, module_ast, llvm_module_ref, builder);
 
     const char *mod_binding = binding->data.AST_IDENTIFIER.value;
@@ -135,8 +137,9 @@ JITSymbol *codegen_import(Ast *ast, Ast *binding, JITLangCtx *ctx,
     int mod_len = module_type->data.T_CONS.num_args;
     Ast *module_ast = module->ast;
 
-    module_symbol =
-        create_module_symbol(module_type, module_ast, ctx, llvm_module_ref);
+    TypeEnv *module_type_env = module->env;
+    module_symbol = create_module_symbol(module_type, module_type_env,
+                                         module_ast, ctx, llvm_module_ref);
 
     compile_module(module_symbol, module_ast, llvm_module_ref, builder);
     module->ref = module_symbol;

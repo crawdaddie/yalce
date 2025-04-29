@@ -76,9 +76,9 @@ class Value:
         # go one variable at a time and apply the chain rule to get its gradient
         self.grad = 1
         topo = list(reversed(topo))
-        print(topo)
         for v in topo:
             v._backward()
+        print(topo)
 
     def __neg__(self):  # -self
         return self * -1
@@ -167,15 +167,17 @@ class MLP(Module):
 
 
 if __name__ == "__main__":
-    print(Value)
-    v = Value(1.0) + (Value(2.0) * Value(5.0))
-    v.backward()
+    a = Value(-4.0)
+    b = Value(2.0)
+    c = a + (b * (a - (b**3)))
+
+    print(c)
+
+    c.backward()
 
     def search(v):
         for child in v._prev:
             search(child)
         print(v)
 
-    search(v)
-
-    print(v)
+    search(c)

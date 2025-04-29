@@ -10,7 +10,9 @@ typedef struct {
   Type *type;
   Ast *ast;
   void *ref;
+  TypeEnv *env;
 } YLCModule;
+
 Type *get_import_type(Ast *ast);
 
 int get_import_ref(Ast *ast, void **ref, Ast **module_ast);

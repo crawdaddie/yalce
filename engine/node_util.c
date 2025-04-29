@@ -362,6 +362,44 @@ void *xfade_perform(Node *node, xfade_state *state, Node *inputs[], int nframes,
                     double spf) {}
 NodeRef replace_node(double xfade_time, NodeRef a, NodeRef b) {}
 
+void *stereo_perform(Node *node, void *state, Node *inputs[], int nframes,
+                     double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+
+  double *in = inputs[0]->output.buf;
+
+  // Process each sample
+  for (int i = 0; i < nframes; i++) {
+    *out = *in;
+    out++;
+    *out = *in;
+    out++;
+    in++;
+  }
+
+  return node->output.buf;
+}
+NodeRef stereo_node(NodeRef input) {
+
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, 0);
+
+  *node = (Node){
+      .perform = (perform_func_t)stereo_perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      .state_size = 0,
+      .state_offset = 0,
+      .output = (Signal){.layout = 2,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, 2 * BUF_SIZE)},
+      .meta = "stereo",
+  };
+  node->connections[0].source_node_index = input->node_index;
+  return node;
+}
+
 // NodeRef set_math(void *math_fn, NodeRef n) {
 //   n->node_math = math_fn;
 //   return n;

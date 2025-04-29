@@ -154,14 +154,6 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
-  // printf("APPLICATION\n");
-  // print_ast(ast);
-  // print_ast(ast->data.AST_APPLICATION.args);
-  // print_type(ast->data.AST_APPLICATION.args->md);
-  // printf("::");
-  // print_type(ast->md);
-  // print_type(ast->data.AST_APPLICATION.function->md);
-
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&

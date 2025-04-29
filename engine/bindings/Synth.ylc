@@ -84,6 +84,7 @@ let mod2_node = extern fn Synth -> Synth -> Synth;
 let div2_node = extern fn Synth -> Synth -> Synth;
 let const_sig = extern fn Double -> Synth;
 let const_buf = extern fn Double -> Int -> Int -> Synth;
+let stereo_node = extern fn Synth -> Synth;
 
 # lfo.h
 let lfo_node = extern fn Synth -> Synth -> Synth;
@@ -101,6 +102,7 @@ let glue_node = extern fn Double -> Double -> Double -> Double -> Double -> Doub
 
 # faust.h
 let temper_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
+let dyn_temper_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth -> Synth;
 let vital_rev_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
 let zita_rev_node = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Synth -> Synth;
 let zita_rev_preset = extern fn Synth -> Synth;

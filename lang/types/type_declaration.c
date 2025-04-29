@@ -271,6 +271,10 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
     var->data.T_VAR = name;
     TypeEnv *_env = env_extend(*env, name, var);
     type = compute_type_expression(type_expr_ast, _env);
+    if (type->kind == T_CONS &&
+        CHARS_EQ(type->data.T_CONS.name, TYPE_NAME_TUPLE)) {
+      type->data.T_CONS.name = name;
+    }
 
   } else {
     // Type **cont = talloc(sizeof(Type *));
@@ -290,11 +294,15 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   type->alias = name;
 
   *env = env_extend(*env, name, type);
+
   if (is_variant_type(type)) {
+    // print_ast(ast);
+    // printf("adding variant type members to env\n");
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
       Type *member = type->data.T_CONS.args[i];
       *env = env_extend(*env, member->data.T_CONS.name, type);
     }
+    // print_type_env(*env);
   }
   binding_name = NULL;
   return type;

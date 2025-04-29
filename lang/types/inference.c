@@ -19,6 +19,8 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx);
 Type *infer_module(Ast *ast, TICtx *ctx);
 Type *infer(Ast *ast, TICtx *ctx);
 
+bool occurs_check(Type *var, Type *t);
+
 void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type);
 void apply_substitutions_rec(Ast *ast, Substitution *subst);
 Substitution *solve_constraints(TypeConstraint *constraints);
@@ -169,7 +171,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_TYPE_DECL: {
-    type = type_declaration(ast, &ctx->env);
+    TypeEnv *env = ctx->env;
+    type = type_declaration(ast, &env);
+    ctx->env = env;
     break;
   }
 
@@ -345,13 +349,22 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_RECORD_ACCESS: {
     Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
-    // print_type(rec_type);
+
+    if (rec_type->kind == T_VAR && rec_type->is_recursive_type_ref) {
+      const char *rec_type_name = rec_type->data.T_VAR;
+      Type *record_type = env_lookup(ctx->env, rec_type_name);
+      if (record_type) {
+        rec_type = record_type;
+      }
+    }
     if (rec_type->kind != T_CONS) {
       return NULL;
     }
+
     if (rec_type->data.T_CONS.names == NULL) {
       return NULL;
     }
+
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
 
@@ -362,6 +375,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         break;
       }
     }
+
     break;
   }
   default: {
@@ -820,9 +834,8 @@ Type *find_variant_member(Type *variant, const char *name) {
 }
 
 Type *infer_cons_application(Ast *ast, TICtx *ctx) {
-  printf("infer cons\n");
-  print_ast(ast);
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
+  // print_type(fn_type);
 
   Ast *fn_id = ast->data.AST_APPLICATION.function;
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
@@ -864,13 +877,7 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   Type *resolved_type = apply_substitution(subst, fn_type);
   apply_substitutions_rec(ast, subst);
   ast->data.AST_APPLICATION.function->md = resolved_type;
-  // if (strcmp(resolved_type->data.T_CONS.name, cons->data.T_CONS.name) != 0) {
-  //   resolved_type->data.T_CONS.name = cons->data.T_CONS.name;
-  // }
-  // print_type(resolved_type);
-  // print_type(cons);
   return resolved_type;
-  // return cons;
 }
 
 #define LIST_CONS_OPERATOR "::"
@@ -1599,11 +1606,9 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
 
 Type *infer_module(Ast *ast, TICtx *ctx) {
   if (ast->data.AST_LAMBDA.len > 0) {
-    printf("infer parametrized module\n");
+    // printf("infer parametrized module\n");
     for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
       Ast *param = ast->data.AST_LAMBDA.params + i;
-      printf("module params\n");
-      print_ast(param);
     }
     return type_error(ctx, ast, "Error: parametrized modules not implemented");
   }
@@ -1659,5 +1664,6 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
   Type *module_struct_type =
       create_cons_type(TYPE_NAME_MODULE, len, member_types);
   module_struct_type->data.T_CONS.names = names;
+  ctx->env = env;
   return module_struct_type;
 }

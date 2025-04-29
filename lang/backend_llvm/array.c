@@ -15,6 +15,16 @@ LLVMTypeRef codegen_array_type(LLVMTypeRef element_type) {
       2, 0); // 2 elements, not packed
 }
 
+// Creates an array type: { i32, T* }
+LLVMTypeRef tmp_generic_codegen_array_type() {
+  return LLVMStructType(
+      (LLVMTypeRef[]){
+          LLVMInt32Type(), // size
+          GENERIC_PTR,     // data pointer
+      },
+      2, 0); // 2 elements, not packed
+}
+
 LLVMTypeRef codegen_matrix_type(LLVMTypeRef element_type) {
   return LLVMStructType(
       (LLVMTypeRef[]){
@@ -96,7 +106,14 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   if (array_size > 0) {
     first_element = codegen(ast->data.AST_LIST.items, ctx, module, builder);
   } else {
-    return NULL;
+    LLVMTypeRef empty_type = type_to_llvm_type(ast->md, ctx->env, module);
+
+    LLVMValueRef size_const = LLVMConstInt(LLVMInt32Type(), 0, 0);
+    LLVMValueRef array_struct = LLVMGetUndef(empty_type);
+    array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
+                                        "insert_array_size");
+
+    return array_struct;
   }
 
   LLVMTypeRef element_type = LLVMTypeOf(first_element);

@@ -37,4 +37,6 @@ LLVMValueRef ArrayStrideHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef CStrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder);
+
+LLVMTypeRef tmp_generic_codegen_array_type();
 #endif

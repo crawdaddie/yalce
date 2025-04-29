@@ -1,0 +1,158 @@
+import lib/Math;
+let string_add = extern fn String -> String -> String;
+type Op =
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Pow
+  | Relu
+  | Noop
+  ;
+
+type Value = (data: Double , children: (Array of Value), op: Op, grad: Double);
+
+let const = fn i ->
+  Value i [| |] Noop 0.
+;;
+
+let mul = fn a: (Value) b: (Value) ->
+  Value (a.data * b.data) [| a, b |] Mul 0.
+;;
+
+let div = fn a: (Value) b: (Value) ->
+  Value (a.data / b.data) [| a, b |] Div 0.
+;;
+
+let add = fn a: (Value) b: (Value) ->
+  Value ( a.data + b.data) [| a, b |] Add 0.
+;;
+
+let sub = fn a: (Value) b: (Value) ->
+  let bb = mul b (const -1.); 
+  Value (a.data + bb.data) [| a, bb |] Add 0.
+  # Value (a.data - b.data) [| a, b|] Sub 0.
+;;
+
+let pow = fn a: (Value) b: (Value) ->
+  Value (Math.pow a.data b.data) [| a, b |] Pow 0.
+;;
+
+let relu = fn a: (Value) ->
+  let v = match (a.data) with
+    | x if v < 0. -> 0.
+    | x -> x
+  in
+  Value v [| a |] Relu 0.
+;;
+
+let (@) = array_at;
+let to_str = fn a: (Value) ->
+  let op_str = match a.op with
+  | Add -> "Add"
+  | Sub -> "Sub"
+  | Mul -> "Mul"
+  | Div -> "Div"
+  | Pow -> "Pow"
+  | Relu -> "Relu"
+  | Noop -> "None"
+  ;
+
+  let iter_children = fn children: (Array of Value) str ->
+    match (array_size children) with
+    | 0 -> str
+    | _ -> (
+      let str_val = string_add str @@ to_str (children @ 0);
+      iter_children (array_succ children) str_val
+    )
+  ;;
+
+  match array_size a.children with
+  | 0 -> `Value(data={a.data}, grad={a.grad} op={op_str}), `
+  | _ -> (
+    let children_str = iter_children (a.children) "";
+    `Value(data={a.data}, grad={a.grad} op={op_str} children=[\n  {children_str}\n]), `
+  )
+;;
+
+let set_grad = fn v: (Value) g: (Double) ->
+  Value v.data v.children v.op g
+;;
+
+let backward = fn (data, children, op, grad): (Value) ->
+  let bc = match op with
+  | Add -> 
+    (
+      let l = children @ 0;
+      let r = children @ 1;
+      array_set 0 children @@ (set_grad l (l.grad + grad)) |> backward;
+      array_set 1 children @@ (set_grad r (r.grad + grad)) |> backward;
+      children
+    )
+  | Sub -> 
+    (
+      let l = children @ 0;
+      let r = children @ 1;
+      array_set 0 children @@ (set_grad l (l.grad - grad)) |> backward;
+      array_set 1 children @@ (set_grad r (r.grad - grad)) |> backward;
+      children
+    )
+
+  | Mul -> 
+    (
+      let l = children @ 0;
+      let r = children @ 1;
+      array_set 0 children @@ (set_grad l (l.grad + r.data * grad)) |> backward;
+      array_set 1 children @@ (set_grad r (r.grad + l.data * grad)) |> backward;
+      children
+    )
+  | Div ->
+    (
+      let l = children @ 0;
+      let r = children @ 1;
+      array_set 0 children @@ (set_grad l (l.grad + r.data / grad)) |> backward;
+      array_set 1 children @@ (set_grad r (r.grad + l.data / grad)) |> backward;
+      children
+    )
+  | Pow -> 
+    (
+      let l = children @ 0;
+      let r = children @ 1;
+      array_set 0 children @@ set_grad l (l.grad + (r.data * (Math.pow l.data (r.data - 1))) * grad ) |> backward;
+      children
+    )
+  | Relu ->
+    (
+      let l = children @ 0;
+      let new_grad_add = match data with
+      | d if d > 0. -> grad
+      | _ -> 0.
+      ;
+      array_set 0 children @@ set_grad l (l.grad + new_grad_add) |> backward l;
+      children
+    )
+  | Noop -> children
+  ;
+
+  Value data bc op grad
+;;
+
+
+# let temp_mod = module
+#   let a = const -4.0;
+#   let b = const 2.0;
+#   let c = add a (mul b (sub a (pow b (const 3.))));
+#   let bc = backward (Value c.data c.children c.op 1.);
+#
+#   let _ = print `
+#   {bc.data}
+#
+#   {to_str bc}
+#   `;
+#
+# ;
+#
+
+
+
+

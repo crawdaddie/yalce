@@ -23,7 +23,7 @@ bool is_module_ast(Ast *ast) {
   return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
 }
 
-Ast *parse_module(const char *filename) {
+Ast *parse_module(const char *filename, TypeEnv *env) {
 
   char *old_import_current_dir = __import_current_dir;
   __import_current_dir = get_dirname(filename);
@@ -49,6 +49,7 @@ Ast *parse_module(const char *filename) {
   }
 
   __import_current_dir = old_import_current_dir;
+  *env = *ti_ctx.env;
   return prog;
 }
 
@@ -61,13 +62,14 @@ Type *get_import_type(Ast *ast) {
 
   Ast *prev_root = ast_root;
   ast_root = NULL;
-  Ast *module_ast = parse_module(file_path);
+  TypeEnv *env = malloc(sizeof(TypeEnv));
+  Ast *module_ast = parse_module(file_path, env);
   ast_root = prev_root;
   Type *module_type = module_ast->md;
 
   YLCModule *registered_module = malloc(sizeof(YLCModule));
-  *registered_module =
-      (YLCModule){.type = deep_copy_type(module_ast->md), .ast = module_ast};
+  *registered_module = (YLCModule){
+      .type = deep_copy_type(module_ast->md), .ast = module_ast, .env = env};
 
   // ht_init(&registered_module->generics);
 

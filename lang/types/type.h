@@ -286,6 +286,7 @@ typedef struct Type {
   bool is_coroutine_instance;
   bool is_coroutine_constructor;
   bool is_recursive_type_ref;
+  // bool is_recursive_placeholder;
   int scope;
   int yield_boundary;
   void *meta;

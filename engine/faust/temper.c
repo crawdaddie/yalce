@@ -512,7 +512,107 @@ void *temper_perform(Node *node, temper_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-// Create a static (fixed parameter) temper node
+// The temper_perform function that will be called by the audio graph
+void *dyn_temper_perform(Node *node, temper_state *state, Node *inputs[],
+                     int nframes, double spf) {
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  double *drive = inputs[1]->output.buf;
+
+  // Setup temporary buffers for FAUST processing
+  FAUSTFLOAT *faust_input[1];
+  FAUSTFLOAT *faust_output[1];
+
+  FAUSTFLOAT in_buffer[nframes];
+  FAUSTFLOAT out_buffer[nframes];
+
+  // Copy input to FAUST format buffer and convert to float
+  if (inputs[0]->output.layout > 1) {
+    int lo = inputs[0]->output.layout;
+    for (int i = 0; i < nframes; i++) {
+      in_buffer[i] = 0.;
+      for (int j = 0; j < lo; j++) {
+        in_buffer[i] += (FAUSTFLOAT)in[j + lo * i];
+      }
+    }
+  } else {
+    for (int i = 0; i < nframes; i++) {
+      in_buffer[i] = (FAUSTFLOAT)in[i];
+    }
+  }
+
+  faust_input[0] = in_buffer;
+  faust_output[0] = out_buffer;
+
+  // Update parameters
+  update_temper_parameters(state);
+
+  // Process the audio
+  // computemydsp(&state->dsp, nframes, faust_input, faust_output);
+  mydsp *dsp = &state->dsp;
+
+	FAUSTFLOAT* input0 = faust_input[0];
+	FAUSTFLOAT* output0 = faust_output[0];
+	float fSlow0 = 0.005f * (float)(dsp->fHslider0);
+	float fSlow1 = 0.005f * powf(1e+01f, 0.05f * (float)(dsp->fHslider1));
+	float fSlow2 = 0.005f / tanf(dsp->fConst1 * (float)(dsp->fHslider2));
+	float fSlow3 = 0.005f * (float)(dsp->fHslider3);
+	float fSlow5 = 0.005f * (float)(dsp->fHslider5);
+	float fSlow6 = 0.005f * powf(1e+01f, 0.05f * (float)(dsp->fHslider6));
+	/* C99 loop */
+  int i0;
+  for (i0 = 0; i0 < nframes; i0 = i0 + 1) {
+    float fSlow4 = 0.005f * (float)(*drive);
+    drive++;
+    dsp->fRec3[0] = fSlow0 + 0.995f * dsp->fRec3[1];
+    dsp->fRec4[0] = fSlow1 + 0.995f * dsp->fRec4[1];
+    dsp->fRec6[0] = fSlow2 + 0.995f * dsp->fRec6[1];
+    dsp->fRec7[0] = fSlow3 + 0.995f * dsp->fRec7[1];
+    float fTemp0 = 1.0f / dsp->fRec7[0];
+    float fTemp1 = dsp->fRec6[0] * (dsp->fRec6[0] + fTemp0) + 1.0f;
+    dsp->fRec5[0] = (float)(input0[i0]) - (dsp->fRec5[2] * (dsp->fRec6[0] * (dsp->fRec6[0] - fTemp0) + 1.0f) + 2.0f * dsp->fRec5[1] * (1.0f - mydsp_faustpower2_f(dsp->fRec6[0]))) / fTemp1;
+    float fTemp2 = dsp->fRec4[0] * dsp->fRec0[1] + (dsp->fRec5[2] + dsp->fRec5[0] + 2.0f * dsp->fRec5[1]) / fTemp1;
+    float fTemp3 = fabsf(fTemp2);
+    dsp->fRec8[0] = fmaxf(fTemp3, dsp->fConst2 * dsp->fRec8[1] + dsp->fConst3 * fTemp3);
+    dsp->fRec9[0] = fSlow4 + 0.995f * dsp->fRec9[1];
+    float fTemp4 = fminf(3.0f, fmaxf(-3.0f, dsp->fRec8[0] + dsp->fRec9[0] * fTemp2));
+    dsp->fRec10[0] = fSlow5 + 0.995f * dsp->fRec10[1];
+    float fTemp5 = mydsp_faustpower2_f(dsp->fRec10[0]);
+    float fTemp6 = fTemp5 * mydsp_faustpower2_f(fTemp4);
+    float fTemp7 = fTemp6 + 27.0f;
+    float fTemp8 = 9.0f * fTemp5 + 27.0f;
+    float fTemp9 = (9.0f * fTemp6 + 27.0f) * (fTemp5 + 27.0f);
+    float fTemp10 = (1.0f - dsp->fRec3[0]) * fTemp2 + 0.24f * (dsp->fRec3[0] * fTemp4 * fTemp7 * fTemp8 / fTemp9);
+    dsp->fVec0[0] = fTemp10;
+    dsp->fRec2[0] = dsp->fVec0[1] - 0.24f * (fTemp4 * fTemp7 * fTemp8 * (dsp->fRec2[1] - fTemp10) / fTemp9);
+    dsp->fRec1[0] = dsp->fRec2[0] + 0.995f * dsp->fRec1[1] - dsp->fRec2[1];
+    dsp->fRec0[0] = dsp->fRec1[0];
+    dsp->fRec11[0] = fSlow6 + 0.995f * dsp->fRec11[1];
+    output0[i0] = (FAUSTFLOAT)(4.0f * dsp->fRec0[0] * dsp->fRec11[0]);
+    dsp->fRec3[1] = dsp->fRec3[0];
+    dsp->fRec4[1] = dsp->fRec4[0];
+    dsp->fRec6[1] = dsp->fRec6[0];
+    dsp->fRec7[1] = dsp->fRec7[0];
+    dsp->fRec5[2] = dsp->fRec5[1];
+    dsp->fRec5[1] = dsp->fRec5[0];
+    dsp->fRec8[1] = dsp->fRec8[0];
+    dsp->fRec9[1] = dsp->fRec9[0];
+    dsp->fRec10[1] = dsp->fRec10[0];
+    dsp->fVec0[1] = dsp->fVec0[0];
+    dsp->fRec2[1] = dsp->fRec2[0];
+    dsp->fRec1[1] = dsp->fRec1[0];
+    dsp->fRec0[1] = dsp->fRec0[0];
+    dsp->fRec11[1] = dsp->fRec11[0];
+  }
+
+  // Copy the output back
+  for (int i = 0; i < nframes; i++) {
+    out[i] = (double)out_buffer[i];
+  }
+
+  return node->output.buf;
+}
+
 NodeRef temper_node(double saturation, double feedback, double cutoff,
                   double resonance, double drive, double curve, double level,
                   NodeRef input) {
@@ -526,11 +626,6 @@ NodeRef temper_node(double saturation, double feedback, double cutoff,
       .num_inputs = 1,
       .state_size = sizeof(temper_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(temper_state)),
-      // .output = (Signal){.layout = input->output.layout,
-      //                    .size = BUF_SIZE,
-      //                    .buf = allocate_buffer_from_pool(graph,
-      //                    input->output.layout * BUF_SIZE)},
-
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -541,7 +636,6 @@ NodeRef temper_node(double saturation, double feedback, double cutoff,
   temper_state *state =
       (temper_state *)(graph->nodes_state_memory + node->state_offset);
 
-  // Set initial parameter values
   state->saturation = saturation; // 0.0 to 1.0
   state->feedback = feedback;     // -60.0 to -24.0 dB
   state->cutoff = cutoff;         // 100.0 to 20000.0 Hz
@@ -556,8 +650,52 @@ NodeRef temper_node(double saturation, double feedback, double cutoff,
   instanceResetUserInterfacemydsp(&state->dsp);
   instanceClearmydsp(&state->dsp);
 
-  // Connect input
   node->connections[0].source_node_index = input->node_index;
+
+  return node;
+}
+
+
+NodeRef dyn_temper_node(double saturation, double feedback, double cutoff,
+                  double resonance, double curve, double level,
+                  NodeRef drive, 
+                  NodeRef input) {
+  AudioGraph *graph = _graph;
+  NodeRef node = allocate_node_in_graph(graph, sizeof(temper_state));
+
+  // Initialize node
+  *node = (Node){
+      .perform = (perform_func_t)dyn_temper_perform,
+      .node_index = node->node_index,
+      .num_inputs = 2,
+      .state_size = sizeof(temper_state),
+      .state_offset = state_offset_ptr_in_graph(graph, sizeof(temper_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "dyn_temper",
+  };
+
+  // Initialize state
+  temper_state *state =
+      (temper_state *)(graph->nodes_state_memory + node->state_offset);
+
+  state->saturation = saturation; // 0.0 to 1.0
+  state->feedback = feedback;     // -60.0 to -24.0 dB
+  state->cutoff = cutoff;         // 100.0 to 20000.0 Hz
+  state->resonance = resonance;   // 1.0 to 8.0
+  // state->drive = drive;           // -10.0 to 10.0
+  state->curve = curve;           // 0.1 to 4.0
+  state->level = level;           // -24.0 to 24.0 dB
+
+  double spf = ctx_spf();
+  // Initialize the Faust DSP
+  instanceConstantsmydsp(&state->dsp, (int)(1.0 / spf));
+  instanceResetUserInterfacemydsp(&state->dsp);
+  instanceClearmydsp(&state->dsp);
+
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = drive->node_index;
 
   return node;
 }

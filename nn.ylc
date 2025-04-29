@@ -1,0 +1,14 @@
+open micro;
+
+let a = const -4.0;
+let b = const 2.0;
+let c = add a (mul b (sub a (pow b (const 3.))));
+let bc = backward (Value c.data c.children c.op 1.);
+
+let _ = print `
+{bc.data}
+
+{to_str bc}
+`;
+
+

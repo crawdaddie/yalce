@@ -2,6 +2,7 @@
 #include "adt.h"
 #include "backend_llvm/array.h"
 #include "codegen.h"
+#include "common.h"
 #include "list.h"
 #include "types/inference.h"
 #include "types/type.h"
@@ -131,6 +132,15 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
 
   case T_CONS: {
 
+    if (is_array_type(type)) {
+      if (type->data.T_CONS.args[0]->kind == T_VAR) {
+        return tmp_generic_codegen_array_type();
+      }
+      LLVMTypeRef el_type;
+      el_type = type_to_llvm_type(type->data.T_CONS.args[0], env, module);
+
+      return el_type ? codegen_array_type(el_type) : NULL;
+    }
     if (is_tuple_type(type)) {
       return tuple_type(type, env, module);
     }
@@ -141,12 +151,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
       // }
 
       return create_llvm_list_type(type->data.T_CONS.args[0], env, module);
-    }
-
-    if (is_array_type(type)) {
-      LLVMTypeRef el_type =
-          type_to_llvm_type(type->data.T_CONS.args[0], env, module);
-      return el_type ? codegen_array_type(el_type) : NULL;
     }
 
     if (is_pointer_type(type)) {

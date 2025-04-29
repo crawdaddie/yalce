@@ -132,14 +132,12 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   LLVMGenericValueRef exec_args[] = {};
-
   // if (result_type->kind == T_FN) {
   //   printf("> ");
   //   print_type(result_type);
   //   printf("\n");
   //   return NULL;
   // }
-  //
   // LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);

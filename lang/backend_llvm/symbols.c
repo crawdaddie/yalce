@@ -75,6 +75,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (!sym) {
     Type *enum_type = env_lookup(ctx->env, chars);
+    // print_type_env(ctx->env);
 
     if (!enum_type) {
       fprintf(
