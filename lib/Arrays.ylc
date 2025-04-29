@@ -20,6 +20,7 @@ let fold = fn f res a ->
   | _ -> fold f (f res (a @ 0)) (array_succ a) 
 ;;
 
+# let (@) = array_at;
 # let iter = fn f a ->
 #   fold (fn i v -> 
 #     f v;
@@ -28,5 +29,6 @@ let fold = fn f res a ->
 # ;;
 
 # let map = fn f res a ->
+
 
   

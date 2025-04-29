@@ -277,7 +277,9 @@ Type t_struct_set_sig = GENERIC_TYPE(_struct_set_sig);
 Type *_cstr_sig() {
   Type *el = next_tvar();
   Type *t_arr = create_array_type(el);
-  return type_fn(t_arr, ptr_of_type(el));
+  return type_fn(t_arr, &t_ptr
+                 // ptr_of_type(el)
+  );
 }
 // Type t_list_tail_sig = GENERIC_TYPE(_list_tail_sig);
 // Type t_builtin_cstr = MAKE_FN_TYPE_2(&t_string, &t_ptr);
@@ -376,6 +378,23 @@ Type t_empty_cor = MAKE_FN_TYPE_2(&t_void, &t_ptr);
 Type *_fst_sig() { return type_fn(next_tvar(), next_tvar()); }
 
 Type t_fst_sig = GENERIC_TYPE(_fst_sig);
+
+Type *_df_offset_sig() {
+  Type *t = next_tvar();
+  Type *f = t;
+  f = type_fn(&t_int, f);
+  f = type_fn(t, f);
+  return f;
+}
+
+Type t_df_offset_sig = GENERIC_TYPE(_df_offset_sig);
+
+Type *_df_raw_fields_sig() {
+  Type *t = next_tvar();
+  return type_fn(t, &t_ptr);
+}
+
+Type t_df_raw_fields_sig = GENERIC_TYPE(_df_raw_fields_sig);
 
 void initialize_builtin_types() {
 
@@ -501,6 +520,8 @@ void initialize_builtin_types() {
   add_builtin("cor_stop", &t_cor_stop_fn_sig);
   add_builtin("empty_coroutine", &t_empty_cor);
   add_builtin("fst", &t_fst_sig);
+  add_builtin("df_offset", &t_df_offset_sig);
+  add_builtin("df_raw_fields", &t_df_raw_fields_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

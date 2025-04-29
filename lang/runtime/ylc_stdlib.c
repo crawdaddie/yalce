@@ -1,5 +1,6 @@
 #include "ylc_stdlib.h"
 #include <ctype.h>
+#include <fcntl.h>
 #include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -7,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 void str_copy(char *dest, char *src, int len) {
   // printf("calling str copy %s %s %d\n", dest, src, len);
@@ -151,56 +153,144 @@ struct _DoubleArray double_array(int32_t size, double val) {
   return (struct _DoubleArray){size, data};
 }
 
-struct _ByteArray read_bytes(FILE *f) {
-  struct _ByteArray result = {0, NULL};
-  const size_t CHUNK_SIZE = 4096; // Read in 4KB chunks
-  char *buffer = NULL;
-  size_t total_size = 0;
+ByteArray read_bytes(FILE *f) {
+  ByteArray result = {NULL, 0};
 
-  if (!f) {
+  long original_pos = ftell(f);
+  if (original_pos == -1) {
+    perror("Error getting current file position");
     return result;
   }
 
-  // Get current position to restore later
-  long current_pos = ftell(f);
-  if (current_pos < 0) {
-    return result;
-  }
-
-  // Seek to end to get file size
   if (fseek(f, 0, SEEK_END) != 0) {
+    perror("Error seeking to end of file");
     return result;
   }
 
   long file_size = ftell(f);
-  if (file_size < 0) {
-    fseek(f, current_pos, SEEK_SET); // Try to restore position
+  if (file_size == -1) {
+    perror("Error getting file size");
     return result;
   }
 
-  // Restore original position
-  if (fseek(f, current_pos, SEEK_SET) != 0) {
+  if (fseek(f, 0, SEEK_SET) != 0) {
+    perror("Error seeking to beginning of file");
     return result;
   }
 
-  // Allocate buffer for entire file
-  buffer = (char *)malloc(file_size);
-  if (!buffer) {
+  result.bytes = (char *)malloc(file_size + 1); // +1 for null terminator
+  if (result.bytes == NULL) {
+    perror("Memory allocation failed");
     return result;
   }
 
-  // Read file contents
-  total_size = fread(buffer, 1, file_size, f);
-  if (total_size == 0 || ferror(f)) {
-    free(buffer);
+  size_t bytes_read = fread(result.bytes, 1, file_size, f);
+  if (bytes_read < file_size && !feof(f)) {
+    perror("Error reading file");
+    free(result.bytes);
+    result.bytes = NULL;
     return result;
   }
 
-  // Set result values
-  result.bytes = buffer;
-  result.size = (int32_t)total_size;
+  result.bytes[bytes_read] = '\0';
+  result.size = bytes_read;
+
+  if (fseek(f, original_pos, SEEK_SET) != 0) {
+    perror("Error restoring file position");
+  }
 
   return result;
+}
+
+/*
+ * Free the memory used by a StrList
+ */
+void free_str_list(StrList *list) {
+  while (list != NULL) {
+    StrList *next = list->next;
+    // Note: We don't free data.chars because it points into the original buffer
+    free(list);
+    list = next;
+  }
+}
+
+/*
+ * Read all lines from a FILE pointer and return them as a linked list
+ *
+ * Note: This implementation does not copy line data but instead points
+ * into the original buffer. The returned lines will be invalid if the
+ * original buffer is freed.
+ */
+ReadLinesResult read_lines(FILE *f) {
+  if (f == NULL) {
+    fprintf(stderr, "Error: NULL file pointer\n");
+    return (ReadLinesResult){NULL, 0};
+  }
+
+  // Read the entire file into memory
+  ByteArray file_bytes = read_bytes(f);
+  if (file_bytes.bytes == NULL || file_bytes.size == 0) {
+    // Return empty list for empty file
+    return (ReadLinesResult){NULL, 0};
+  }
+
+  // Create the first node as a sentinel (will be head of our list)
+  StrList *head = (StrList *)malloc(sizeof(StrList));
+  if (head == NULL) {
+    free(file_bytes.bytes);
+
+    return (ReadLinesResult){NULL, 0};
+  }
+
+  // Initialize head node
+  head->data.chars = NULL;
+  head->data.length = 0;
+  head->next = NULL;
+
+  StrList *current = head;
+  char *buffer = file_bytes.bytes;
+  char *line_start = buffer;
+  size_t line_length = 0;
+
+  int num_lines = 0;
+  for (size_t i = 0; i < file_bytes.size; i++) {
+    if (buffer[i] == '\n' || i == file_bytes.size - 1) {
+      if (i == file_bytes.size - 1 && buffer[i] != '\n') {
+        line_length++;
+      }
+
+      StrList *new_node = (StrList *)malloc(sizeof(StrList));
+      if (new_node == NULL) {
+        // Memory allocation failed
+        free(file_bytes.bytes);
+        free_str_list(head);
+        return (ReadLinesResult){NULL, 0};
+      }
+
+      // Store the line data
+      new_node->data.chars = line_start;
+      new_node->data.length = line_length;
+      new_node->next = NULL;
+
+      // Add to the list
+      current->next = new_node;
+      current = new_node;
+
+      // Prepare for the next line
+      line_start = buffer + i + 1;
+      line_length = 0;
+      num_lines++;
+    } else {
+      line_length++;
+    }
+  }
+
+  head->data.chars = file_bytes.bytes;
+
+  StrList *result = head->next;
+  free(head);
+
+  return (ReadLinesResult){result, num_lines};
 }
 
 struct _OptFile open_file(String path, String mode) {
@@ -231,3 +321,6 @@ struct sockaddr *create_server_addr(int af_inet, int inaddr_any, int port) {
 }
 
 double relu_d(double i) { return i < 0. ? 0. : i; }
+
+void _scanf(const char *fmt_string, const char *input_string, int size,
+            void **pointers);

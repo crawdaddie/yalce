@@ -176,6 +176,10 @@ LLVMValueRef _num_to_string(LLVMValueRef double_value, LLVMModuleRef module,
   LLVMValueRef buffer =
       LLVMBuildAlloca(builder, LLVMArrayType(LLVMInt8Type(), 20), "str_buffer");
 
+  // TODO: allow specifying precision
+  // LLVMValueRef format_string =
+  //     LLVMBuildGlobalStringPtr(builder, "%.16f", "format_string");
+
   LLVMValueRef format_string =
       LLVMBuildGlobalStringPtr(builder, "%f", "format_string");
 

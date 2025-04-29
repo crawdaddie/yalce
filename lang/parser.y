@@ -435,6 +435,7 @@ type_atom:
   | IDENTIFIER ':' type_atom  { $$ = ast_assoc(ast_identifier($1), $3); } 
   | '(' type_expr ')'         { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }
+  | IDENTIFIER '.' IDENTIFIER { $$ = ast_record_access(ast_identifier($1), ast_identifier($3)); }
   ;
 %%
 

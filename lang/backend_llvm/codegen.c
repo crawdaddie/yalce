@@ -25,6 +25,7 @@ LLVMValueRef GenericConsConstructorHandler(Ast *ast, JITLangCtx *ctx,
         expected_type->data.T_CONS.name, expected_type, ctx->env, module);
 
     LLVMValueRef tuple = LLVMGetUndef(struct_type);
+    // LLVMConstNull(struct_type);
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       Ast *arg = ast->data.AST_APPLICATION.args + i;
       LLVMValueRef item_val = codegen(arg, ctx, module, builder);
@@ -244,6 +245,16 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_TYPE_DECL: {
     Type *t = ast->md;
     if (is_generic(t) && t->kind == T_CONS) {
+      const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
+      JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
+
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
+          GenericConsConstructorHandler;
+
+      ht *stack = (ctx->frame->table);
+      ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
+    } else if (!is_generic(t) && t->kind == T_CONS) {
       const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);

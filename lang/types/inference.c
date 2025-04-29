@@ -357,6 +357,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
         rec_type = record_type;
       }
     }
+
     if (rec_type->kind != T_CONS) {
       return NULL;
     }
@@ -372,6 +373,20 @@ Type *infer(Ast *ast, TICtx *ctx) {
       if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
         type = rec_type->data.T_CONS.args[i];
         ast->data.AST_RECORD_ACCESS.index = i;
+        int array = is_array_type(type);
+        int li = is_list_type(type);
+        if (array || li) {
+          Type *el_type = type->data.T_CONS.args[0];
+          if (el_type->kind == T_VAR && el_type->is_recursive_type_ref &&
+              CHARS_EQ(el_type->data.T_VAR, rec_type->data.T_CONS.name)) {
+            if (array) {
+              type = create_array_type(rec_type);
+            } else {
+              type = create_list_type_of_type(rec_type);
+            }
+          }
+        }
+
         break;
       }
     }

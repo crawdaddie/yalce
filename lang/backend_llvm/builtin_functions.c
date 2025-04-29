@@ -797,6 +797,161 @@ LLVMValueRef SerializeBlobHandler(Ast *ast, JITLangCtx *ctx,
   return NULL;
 }
 
+// LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef
+// module,
+//                                LLVMBuilderRef builder) {
+//   printf("df at offse!!! \n");
+//   print_ast(ast);
+//   print_type(ast->data.AST_APPLICATION.args->md);
+//   print_type(ast->md);
+//   Type *t = ast->md;
+//   if (t->kind != T_CONS) {
+//
+//     fprintf(stderr,
+//             "Error: value passed to df function must be struct (of
+//             arrays)\n");
+//     return NULL;
+//   }
+//   for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+//     if (!is_array_type(t->data.T_CONS.args[i])) {
+//       fprintf(stderr,
+//               "Error: value passed to df function must be struct of
+//               arrays\n");
+//       return NULL;
+//     }
+//   }
+//   LLVMTypeRef df_type = type_to_llvm_type(t, ctx->env, module);
+//   LLVMValueRef df_val =
+//       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+//
+//   LLVMValueRef offset_val =
+//       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+//   LLVMDumpValue(df_val);
+//   printf("\n");
+//
+//   return NULL;
+// }
+LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  Type *t = ast->md;
+  if (t->kind != T_CONS) {
+    fprintf(stderr,
+            "Error: value passed to df function must be struct (of arrays)\n");
+    return NULL;
+  }
+  for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+    if (!is_array_type(t->data.T_CONS.args[i])) {
+      fprintf(stderr,
+              "Error: value passed to df function must be struct of arrays\n");
+      return NULL;
+    }
+  }
+  LLVMTypeRef df_type = type_to_llvm_type(t, ctx->env, module);
+  LLVMValueRef df_val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMValueRef offset_val =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMValueRef result = LLVMGetUndef(df_type);
+
+  unsigned num_fields = LLVMCountStructElementTypes(df_type);
+
+  for (unsigned i = 0; i < num_fields; i++) {
+    LLVMValueRef array_struct =
+        LLVMBuildExtractValue(builder, df_val, i, "array_struct");
+
+    Type *array_type = t->data.T_CONS.args[i];
+    Type *el_type = array_type->data.T_CONS.args[0];
+    LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx->env, module);
+
+    LLVMTypeRef llvm_array_type = codegen_array_type(element_type);
+    LLVMValueRef new_array_struct = LLVMGetUndef(llvm_array_type);
+
+    LLVMValueRef current_size =
+        LLVMBuildExtractValue(builder, array_struct, 0, "current_size");
+
+    LLVMValueRef is_valid_offset = LLVMBuildICmp(
+        builder, LLVMIntSLT, offset_val, current_size, "is_valid_offset");
+    LLVMValueRef offset_mask =
+        LLVMBuildZExt(builder, is_valid_offset, LLVMInt32Type(), "offset_mask");
+
+    LLVMValueRef effective_offset =
+        LLVMBuildMul(builder, offset_val, offset_mask, "effective_offset");
+
+    LLVMValueRef new_size =
+        LLVMBuildSub(builder, current_size, effective_offset, "new_size");
+
+    LLVMValueRef data_ptr =
+        LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+
+    LLVMValueRef new_data_ptr =
+        LLVMBuildGEP2(builder, element_type, data_ptr,
+                      (LLVMValueRef[]){effective_offset}, 1, "new_data_ptr");
+
+    new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_size,
+                                            0, "insert_new_size");
+    new_array_struct = LLVMBuildInsertValue(
+        builder, new_array_struct, new_data_ptr, 1, "insert_new_data_ptr");
+
+    result = LLVMBuildInsertValue(builder, result, new_array_struct, i,
+                                  "result_field");
+  }
+
+  return result;
+}
+
+LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  Type *t = ast->data.AST_APPLICATION.args->md;
+  if (t->kind != T_CONS) {
+    fprintf(stderr,
+            "Error: value passed to df function must be struct (of arrays)\n");
+    return NULL;
+  }
+  for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+    if (!is_array_type(t->data.T_CONS.args[i])) {
+      fprintf(stderr,
+              "Error: value passed to df function must be struct of arrays\n");
+      return NULL;
+    }
+  }
+  LLVMTypeRef df_type = type_to_llvm_type(t, ctx->env, module);
+
+  LLVMValueRef df_val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  // Get number of fields in the dataframe struct
+  unsigned num_fields = t->data.T_CONS.num_args;
+
+  // Create a void pointer type (i8*)
+  LLVMTypeRef void_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
+
+  LLVMValueRef size_const = LLVMConstInt(LLVMInt32Type(), num_fields, 0);
+  LLVMValueRef result_array = LLVMBuildArrayAlloca(
+      builder, void_ptr_type, size_const, "raw_fields_array");
+
+  for (unsigned i = 0; i < num_fields; i++) {
+    LLVMValueRef array_struct =
+        LLVMBuildExtractValue(builder, df_val, i, "array_struct");
+
+    LLVMValueRef data_ptr =
+        LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+
+    LLVMValueRef void_data_ptr =
+        LLVMBuildBitCast(builder, data_ptr, void_ptr_type, "void_data_ptr");
+
+    LLVMValueRef ptr_slot =
+        LLVMBuildGEP2(builder, void_ptr_type, result_array,
+                      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), i, 0)}, 1,
+                      "element_ptr");
+
+    LLVMBuildStore(builder, void_data_ptr, ptr_slot);
+  }
+
+  return result_array;
+}
+
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
   ht *stack = (ctx->frame->table);
@@ -892,6 +1047,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("addrof", NULL, AddrOfHandler);
   GENERIC_FN_SYMBOL("fst", &t_fst_sig, FstHandler);
   GENERIC_FN_SYMBOL("save_pattern_to_file", next_tvar(), SerializeBlobHandler);
+  GENERIC_FN_SYMBOL("df_offset", &t_df_offset_sig, DFAtOffsetHandler);
+  GENERIC_FN_SYMBOL("df_raw_fields", &t_df_raw_fields_sig, DFRawFieldsHandler);
 
   // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
   // ListPrependHandler);

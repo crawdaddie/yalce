@@ -98,6 +98,28 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   case AST_VOID: {
     return &t_void;
   }
+  case AST_RECORD_ACCESS: {
+    Ast *rec = expr->data.AST_RECORD_ACCESS.record;
+    Ast *mem = expr->data.AST_RECORD_ACCESS.member;
+    Type *rec_type = env_lookup(env, rec->data.AST_IDENTIFIER.value);
+
+    if (!rec_type) {
+      fprintf(stderr, "Error - no record with name %s\n",
+              rec->data.AST_IDENTIFIER.value);
+      return NULL;
+    }
+    for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+      Type *m = rec_type->data.T_CONS.args[i];
+      if (m->kind == T_CONS &&
+          CHARS_EQ(m->data.T_CONS.name, mem->data.AST_IDENTIFIER.value)) {
+        return m;
+      }
+    }
+
+    // Type *t = infer(expr, ctx)
+
+    break;
+  }
 
   case AST_IDENTIFIER: {
 
@@ -157,8 +179,10 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       Ast *item = expr->data.AST_LIST.items + i;
       if (item->tag == AST_LET) {
         has_names = true;
+
         contained_types[i] =
             compute_type_expression(item->data.AST_LET.expr, env);
+
         names[i] = item->data.AST_LET.binding->data.AST_IDENTIFIER.value;
       } else {
         contained_types[i] = compute_type_expression(item, env);
@@ -183,7 +207,6 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
   case AST_BINOP: {
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
-
       if (expr->data.AST_BINOP.left->tag != AST_IDENTIFIER) {
         fprintf(stderr, "Error - wrong lhs of Of binop\n");
         return NULL;
@@ -274,6 +297,9 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
     if (type->kind == T_CONS &&
         CHARS_EQ(type->data.T_CONS.name, TYPE_NAME_TUPLE)) {
       type->data.T_CONS.name = name;
+      // printf("make named struct cons\n");
+      // print_ast(ast);
+      // print_type(type);
     }
 
   } else {

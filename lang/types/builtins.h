@@ -37,4 +37,7 @@ extern Type t_cor_loop_sig;
 extern Type t_empty_cor;
 
 extern Type t_fst_sig;
+extern Type t_df_offset_sig;
+
+extern Type t_df_raw_fields_sig;
 #endif
