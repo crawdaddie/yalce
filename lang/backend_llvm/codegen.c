@@ -279,6 +279,16 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     codegen_import(ast, NULL, ctx, module, builder);
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
+  case AST_LOOP: {
+    printf("codegen loop ????\n");
+    print_ast(ast);
+    return NULL;
+  }
+  case AST_RANGE_EXPRESSION: {
+    print_ast(ast);
+    printf("codegen range expression\n");
+    return NULL;
+  }
   }
 
   return NULL;

@@ -75,6 +75,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "*"                     return *yytext;
 "\\"                    return THUNK;
 "module"                return *yytext;
+"for"                   return *yytext;
+"to"                    return *yytext;
 [a-zA-Z_][a-zA-Z0-9_]*  {
 
                           int len = yyleng;

@@ -83,6 +83,12 @@ void ast_body_push(Ast *body, Ast *stmt) {
 }
 
 Ast *ast_binop(token_type op, Ast *left, Ast *right) {
+  if (op == TOKEN_RANGE_TO) {
+    Ast *range = Ast_new(AST_RANGE_EXPRESSION);
+    range->data.AST_RANGE_EXPRESSION.from = left;
+    range->data.AST_RANGE_EXPRESSION.to = right;
+    return range;
+  }
   Ast *node = Ast_new(AST_APPLICATION);
 
   Ast *function;
@@ -703,10 +709,6 @@ Ast *ast_extern_fn(ObjString name, Ast *signature) {
 }
 Ast *ast_assoc(Ast *l, Ast *r) { return ast_let(l, r, NULL); }
 
-Ast *ast_assoc_extern(Ast *l, ObjString name) {
-  Ast *assoc = ast_binop(TOKEN_COLON, l, ast_identifier(name));
-  return assoc;
-}
 Ast *ast_list_prepend(Ast *item, Ast *rest) {
   return ast_binop(TOKEN_DOUBLE_COLON, item, rest);
 }
@@ -1039,4 +1041,12 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
   import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;
   import_ast->data.AST_IMPORT.import_all = import_all;
   return import_ast;
+}
+
+Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body) {
+  Ast *loop = Ast_new(AST_LOOP);
+  loop->data.AST_LET.binding = binding;
+  loop->data.AST_LET.expr = iter_expr;
+  loop->data.AST_LET.in_expr = body;
+  return loop;
 }

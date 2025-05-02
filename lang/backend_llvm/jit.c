@@ -313,7 +313,7 @@ int jit(int argc, char **argv) {
         LLVMGenericValueRef exec_args[] = {};
         LLVMGenericValueRef result =
             LLVMRunFunction(engine, top_level_func, 0, exec_args);
-        print_result(top_type, result);
+        print_result(top_type, NULL);
       }
       printf(COLOR_RESET);
     }

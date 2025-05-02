@@ -112,6 +112,7 @@ typedef enum token_type {
   TOKEN_OF,
   TOKEN_DOUBLE_AMP,
   TOKEN_DOUBLE_PIPE,
+  TOKEN_RANGE_TO,
 } token_type;
 
 typedef enum ast_tag {
@@ -149,6 +150,8 @@ typedef enum ast_tag {
   AST_SPREAD_OP,
   AST_IMPLEMENTS,
   AST_MODULE,
+  AST_RANGE_EXPRESSION,
+  AST_LOOP,
 } ast_tag;
 
 struct Ast {
@@ -284,6 +287,18 @@ struct Ast {
       const char *fully_qualified_name;
       bool import_all;
     } AST_IMPORT;
+
+    struct AST_RANGE_EXPRESSION {
+      Ast *from;
+      Ast *to;
+    } AST_RANGE_EXPRESSION;
+
+    // AST_LOOP has the same structure as a let binding - let binding to items
+    // of the iterator and then an in expression as the body struct AST_LOOP {
+    //   Ast *binding;
+    //   Ast *expr;
+    //   Ast *body;
+    // } AST_LOOP;
   } data;
 
   void *md;
@@ -348,7 +363,6 @@ Ast *ast_char(char ch);
 
 Ast *ast_sequence(Ast *seq, Ast *new_);
 
-Ast *ast_assoc_extern(Ast *l, ObjString name);
 // Ast *macro(Ast *expr);
 
 Ast *ast_await(Ast *awaitable);
@@ -411,4 +425,5 @@ typedef struct AstVisitor {
 Ast *ast_module(Ast *lambda);
 extern char *__import_current_dir;
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
+Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body);
 #endif

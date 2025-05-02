@@ -395,6 +395,27 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     break;
   }
+  case AST_RANGE_EXPRESSION: {
+    Type *from = infer(ast->data.AST_RANGE_EXPRESSION.from, ctx);
+    Type *to = infer(ast->data.AST_RANGE_EXPRESSION.to, ctx);
+    unify_in_ctx(from, &t_int, ctx, ast->data.AST_RANGE_EXPRESSION.from);
+    unify_in_ctx(to, &t_int, ctx, ast->data.AST_RANGE_EXPRESSION.to);
+    type = &t_int;
+    break;
+  }
+
+  case AST_LOOP: {
+    Ast let = *ast;
+    let.tag = AST_LET;
+    Type *t = infer(&let, ctx);
+    type = t;
+    // Type * = infer(ast->data.AST_RANGE_EXPRESSION.from, ctx);
+    // Type *to = infer(ast->data.AST_RANGE_EXPRESSION.to, ctx);
+    // unify_in_ctx(from, &t_int, ctx, ast->data.AST_RANGE_EXPRESSION.from);
+    // unify_in_ctx(to, &t_int, ctx, ast->data.AST_RANGE_EXPRESSION.to);
+    // type = &t_int;
+    break;
+  }
   default: {
     return type_error(
         ctx, ast, "Typecheck Error: inference not implemented for AST Node\n");

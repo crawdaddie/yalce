@@ -440,6 +440,24 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_RANGE_EXPRESSION: {
+    buffer = strcat(buffer, "(range ");
+    buffer = ast_to_sexpr(ast->data.AST_RANGE_EXPRESSION.from, buffer);
+    buffer = strcat(buffer, " ");
+    buffer = ast_to_sexpr(ast->data.AST_RANGE_EXPRESSION.to, buffer);
+    buffer = strcat(buffer, ")");
+    break;
+  }
+
+  case AST_LOOP: {
+    buffer = strcat(buffer, "(for ");
+    buffer = ast_to_sexpr(ast->data.AST_LET.binding, buffer);
+    buffer = ast_to_sexpr(ast->data.AST_LET.expr, buffer);
+    buffer = ast_to_sexpr(ast->data.AST_LET.in_expr, buffer);
+    buffer = strcat(buffer, ")");
+    break;
+  }
+
   default: {
     // Handle unsupported node types or other errors
     break;

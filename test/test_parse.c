@@ -414,6 +414,8 @@ int main() {
                                                   "())\n"
                                                   ")");
   status &= test_parse("f x.y", "(f (. x y))");
+  status &= test_parse("f x.y.z", "(f (. (. x y) z)");
+  status &= test_parse("x.y.z", "(. (. x y) z)");
   // status &= test_parse("let (@) = array_at;\n"
   //                      "x_ref @ 0;\n",
   //                      "((let @ array_at)\n"

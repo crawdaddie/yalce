@@ -159,6 +159,7 @@ expr:
                                         printf("macro '%s'\n", $1.chars);
                                         $$ = $2;
                                       }
+
   ;
 
 simple_expr:
@@ -194,7 +195,7 @@ simple_expr:
   | '(' ':' ')'           { $$ = ast_identifier((ObjString){":", 1}); }
   | '(' DOUBLE_COLON ')'  { $$ = ast_identifier((ObjString){"::", 2}); }
   | '(' custom_binop ')'  { $$ = $2; }
-  | IDENTIFIER '.' IDENTIFIER { $$ = ast_record_access(ast_identifier($1), ast_identifier($3)); }
+  | simple_expr '.' IDENTIFIER        { $$ = ast_record_access($1, ast_identifier($3)); }
   ;
 
 custom_binop:
