@@ -1,9 +1,0 @@
-let Value = module
-  let z = fn (a, b): (Int * Int) ->
-    a * b
-  ;;
-
-;
-
-
-

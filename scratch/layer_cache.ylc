@@ -1,0 +1,171 @@
+let (@) = array_at;
+
+import ../lib/Math;
+import ../lib/Arrays;
+
+let (@) = array_at;
+
+type Matrix = (
+  rows: Int,
+  cols: Int,
+  data: Array of Double
+);
+
+type Layer = (
+  weights: Matrix,
+  biases: Array of Double,
+  activation: ((Array of Double) -> (Array of Double))
+);
+
+
+let relu = fn x: (Array of Double) -> 
+  let loop = fn x: (Array of Double) ->
+    match (array_size x) with
+    | 0 -> x
+    | _ -> (
+      let v = x @ 0;
+      let relu_v = match v with
+      | v if v > 0. -> v
+      | _ -> 0.
+      ;
+      array_set 0 x relu_v;
+      loop (array_succ x)
+    )
+  ;;
+  loop x;
+  x 
+
+;;
+let identity = fn x: (Array of Double) -> x;;
+
+let mse_loss = fn predictions: (Array of Double) targets: (Array of Double) ->
+  let loop = fn sum: (Double) p: (Array of Double) t: (Array of Double) ->
+    match (array_size p) with
+    | 0 -> sum
+    | _ -> (
+
+      let pv = p @ 0;
+      let tv = t @ 0;
+      let loss = Math.pow (pv - tv) 2.;
+      loop (sum + loss) (array_succ p) (array_succ t)
+    )
+  ;;
+  let sum = loop 0. predictions targets;
+  sum / (array_size predictions)
+;;
+
+
+let matrix_random = fn c r ->
+  Matrix r c (array_fill (r * c) (fn i: (Int) -> Math.rand_double_range -1. 1.))
+;;
+
+
+
+let max_in = array_fill_const 16 0.; # allocate an input array which is as large as the maximum layer width
+
+type Network = (
+  layers: Array of Layer,
+  loss: ((Array of Double) -> (Array of Double) -> Double)
+);
+let MLP = Network [|
+  Layer (matrix_random 2 16) (array_fill_const 16 0.01) relu,
+  Layer (matrix_random 16 16) (array_fill_const 16 0.01) relu,
+  Layer (matrix_random 16 1) (array_fill_const 1 1.01) identity,
+  |] mse_loss
+;
+
+let print_arr = fn arr: (Array of Int) ->
+  match (array_size arr) with
+  | 0 -> ()
+  | _ -> (print `arr: {arr @ 0}\n`; print_arr (array_succ arr); ())
+;;
+
+let LayerCache = module
+
+  type LCache = (
+    pre_activations: (Array of Array of Double),
+    activations: (Array of Array of Double)
+  );
+
+  let from_network = fn network: (Network) ->
+    let num_layers = array_size network.layers;
+    let pre_act_sizes = array_fill_const num_layers 0;
+    let act_sizes = array_fill_const (num_layers + 1) 0;
+
+    let layer = network.layers @ 0;
+    let weights = layer.weights;
+    let cols = weights.cols;
+    array_set 0 act_sizes cols;
+    let first_act_size = cols;
+
+    let loop_layers = fn
+      i
+      layers: (Array of Layer)
+      pre_act_sizes: (Array of Int)
+      act_sizes: (Array of Int)
+      total
+      ->
+      match (array_size layers) with
+      | 0 -> total
+      | _ -> (
+        let layer = layers @ 0;
+
+        let pre = array_size (layer.biases);
+        let act = array_size (layer.biases);
+        array_set i pre_act_sizes pre;
+        array_set (i + 1) act_sizes act;
+
+        loop_layers
+          (i + 1)
+          (array_succ layers)
+          pre_act_sizes
+          act_sizes
+          (total + pre + act) 
+      )
+    ;;
+
+    let total = loop_layers 0 network.layers pre_act_sizes act_sizes first_act_size;
+
+    let alloc = array_fill_const total 0.;
+
+    # LCache 
+
+    print_arr pre_act_sizes;
+    print_arr act_sizes;
+    print `total: {total}\n`
+  ;;
+
+
+# // Function to create a properly sized LayerCache for any network
+# let create_layer_cache = fn network: (Network) ->
+#   let layers = network.layers;
+#   let num_layers = array_length layers;
+#   
+#   // Create pre_activations array with the correct output sizes
+#   let pre_activations = array_fill_const num_layers [| |];
+#   
+#   // Create activations array (input + outputs)
+#   let activations = array_fill_const (num_layers + 1) [| |];
+#   
+#   // Initialize activations[0] with the input size (from first layer's weights)
+#   let first_layer = layers[0];
+#   let input_size = first_layer.weights.cols; // Number of columns = input dimension
+#   activations[0] := array_fill_const input_size 0.;
+#   
+#   // Fill in the sizes for each layer
+#   for i = 0 to num_layers - 1 do
+#     let layer = layers[i];
+#     let output_size = layer.weights.rows; // Number of rows = output dimension
+#     
+#     // Pre-activation size equals the layer's output size
+#     pre_activations[i] := array_fill_const output_size 0.;
+#     
+#     // Activation size equals the layer's output size
+#     activations[i+1] := array_fill_const output_size 0.;
+#   done;
+#   
+#   LayerCache pre_activations activations
+# ;;
+;
+
+LayerCache.from_network MLP

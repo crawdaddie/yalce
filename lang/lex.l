@@ -225,7 +225,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                     return TOK_CHAR;
                 }
 
-[$*+\-/=>@^|%<]([&$*+\-/=>@^|%<!.:\?~]*)       {
+[$*+\-/=>@^|%<~]([&$*+\-/=>@^|%<!.:\?~]*)       {
                     // special identifiers for declaring binops
                     int len = yyleng;
                     yylval.vident.chars = strdup(yytext); 

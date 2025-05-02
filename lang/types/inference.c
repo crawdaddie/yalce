@@ -211,6 +211,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TypeEnv *ref = env_lookup_ref(ctx->env, name);
     if (ref) {
+      printf("ast identifier %s scope: %d this scope: %d (is fn param %d)\n",
+             name, ref->type->scope, ctx->scope, ref->is_fn_param);
       ref->ref_count++;
 
       ast->data.AST_IDENTIFIER.is_fn_param = ref->is_fn_param;
@@ -710,10 +712,14 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     }
   }
 
+  if (is_pointer_type(t1) && is_pointer_type(t2)) {
+    return t1;
+  }
+
   if (t1->kind == T_CONS && t2->kind == T_CONS &&
       (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0)) {
-    int num_args = t1->data.T_CONS.num_args;
 
+    int num_args = t1->data.T_CONS.num_args;
     for (int i = 0; i < num_args; i++) {
 
       Type *_t1 = t1->data.T_CONS.args[i];

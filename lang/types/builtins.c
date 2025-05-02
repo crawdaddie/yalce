@@ -209,6 +209,17 @@ Type *_array_succ_sig() {
 
 Type t_array_identity_sig = GENERIC_TYPE(_array_succ_sig);
 
+Type *_array_offset_sig() {
+  Type *eltype = next_tvar();
+  Type *f = create_array_type(eltype);
+  f = type_fn(f, f);
+  f = type_fn(&t_int, f);
+  f = type_fn(&t_int, f);
+
+  return f;
+}
+Type t_array_offset_sig = GENERIC_TYPE(_array_offset_sig);
+
 Type *_array_view_sig() {
   Type *eltype = next_tvar();
   Type *f = create_array_type(eltype);
@@ -515,6 +526,7 @@ void initialize_builtin_types() {
   add_builtin("array_new", &t_array_fill_sig);
   add_builtin("struct_set", &t_struct_set_sig);
   add_builtin("array_succ", &t_array_identity_sig);
+  add_builtin("array_offset", &t_array_offset_sig);
   add_builtin("array_view", &t_array_view_sig);
   add_builtin("cor_replace", &t_cor_replace_fn_sig);
   add_builtin("cor_stop", &t_cor_stop_fn_sig);

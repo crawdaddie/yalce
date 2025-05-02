@@ -214,7 +214,46 @@ LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = (fn_type->data.T_FN.to)->data.T_FN.from;
-  ARITHMETIC_BINOP("/", LLVMFDiv, LLVMSDiv);
+  ({
+    Type *ret = fn_return_type(fn_type);
+    switch (ret->kind) {
+    case T_INT:
+    case T_UINT64: {
+      LLVMValueRef l =
+          codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+      l = handle_type_conversions(l, lt, ret, module, builder);
+      LLVMValueRef r =
+          codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+      r = handle_type_conversions(r, rt, ret, module, builder);
+      return LLVMBuildBinOp(builder, LLVMSDiv, l, r,
+                            "/"
+                            "_int");
+    }
+    case T_NUM: {
+      LLVMValueRef l =
+          codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+      l = handle_type_conversions(l, lt, ret, module, builder);
+      LLVMValueRef r =
+          codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+      r = handle_type_conversions(r, rt, ret, module, builder);
+      return LLVMBuildBinOp(builder, LLVMFDiv, l, r,
+                            "/"
+                            "_num");
+    }
+    default: {
+      if (ret->alias) {
+        JITSymbol *sym = get_typeclass_method(ret->alias, "/", ctx);
+        if (!sym) {
+          return ((void *)0);
+        }
+        if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler)
+          return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
+              ast, ctx, module, builder);
+      }
+      return ((void *)0);
+    }
+    }
+  });
   return NULL;
 }
 
@@ -1038,6 +1077,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
                     ArrayFillConstHandler);
   GENERIC_FN_SYMBOL("array_succ", &t_array_identity_sig, ArraySuccHandler);
+  GENERIC_FN_SYMBOL("array_offset", &t_array_offset_sig, ArrayOffsetHandler);
+
   // GENERIC_FN_SYMBOL("array_view", &t_array_view_sig, ArrayViewHandler);
   GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);
   GENERIC_FN_SYMBOL(TYPE_NAME_UINT64, next_tvar(), uint64_constructor_handler);

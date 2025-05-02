@@ -1,0 +1,60 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/clang",
+      "-I./lang",
+      "-I./engine",
+      "-I./gui",
+      "-I/opt/homebrew/opt/sdl2/include",
+      "-I/opt/homebrew/opt/sdl2/include/SDL2",
+      "-I/opt/homebrew/opt/sdl2_ttf/include",
+      "-I/opt/homebrew/opt/readline/include",
+      "-I./lang/backend_llvm",
+      "-I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include",
+      "-D__STDC_CONSTANT_MACROS",
+      "-D__STDC_FORMAT_MACROS",
+      "-D__STDC_LIMIT_MACROS",
+      "-I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include",
+      "-g",
+      "-DLLVM_BACKEND",
+      "-c",
+      "-I",
+      "/opt/homebrew/include",
+      "-o",
+      "build/backend_llvm/codegen.o",
+      "lang/backend_llvm/codegen.c"
+    ],
+    "directory": "/Users/adam/projects/sound/yalce",
+    "file": "/Users/adam/projects/sound/yalce/lang/backend_llvm/codegen.c",
+    "output": "/Users/adam/projects/sound/yalce/build/backend_llvm/codegen.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/clang",
+      "-I./lang",
+      "-I./engine",
+      "-I./gui",
+      "-I/opt/homebrew/opt/sdl2/include",
+      "-I/opt/homebrew/opt/sdl2/include/SDL2",
+      "-I/opt/homebrew/opt/sdl2_ttf/include",
+      "-I/opt/homebrew/opt/readline/include",
+      "-I./lang/backend_llvm",
+      "-I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include",
+      "-D__STDC_CONSTANT_MACROS",
+      "-D__STDC_FORMAT_MACROS",
+      "-D__STDC_LIMIT_MACROS",
+      "-I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include",
+      "-g",
+      "-DLLVM_BACKEND",
+      "-c",
+      "-I",
+      "/opt/homebrew/include",
+      "-o",
+      "build/backend_llvm/list.o",
+      "lang/backend_llvm/list.c"
+    ],
+    "directory": "/Users/adam/projects/sound/yalce",
+    "file": "/Users/adam/projects/sound/yalce/lang/backend_llvm/list.c",
+    "output": "/Users/adam/projects/sound/yalce/build/backend_llvm/list.o"
+  }
+]

@@ -1,0 +1,1 @@
+{"runInTerminal": true, "cwd": "${workspaceFolder}", "args": ["examples/cor.ylc"], "stopOnEntry": false, "program": "/Users/adam/projects/sound/yalce/build/ylc", "type": "lldb", "request": "launch", "name": "Launch"}

@@ -1,0 +1,234 @@
+import ../../lib/Math;
+import ../../lib/Arrays;
+import dataset;
+
+let (@) = array_at;
+
+type Matrix = (
+  rows: Int,
+  cols: Int,
+  data: Array of Double
+);
+
+type Layer = (
+  weights: Matrix,
+  biases: Array of Double,
+  activation: ((Array of Double) -> (Array of Double))
+);
+
+let matrix_zeroes = fn c r ->
+  Matrix r c (array_fill_const (r * c) 0.)
+;;
+
+let matrix_to_str = fn m: (Matrix) ->
+  ""
+;;
+
+
+let relu = fn x: (Array of Double) -> 
+  let loop = fn x: (Array of Double) ->
+    match (array_size x) with
+    | 0 -> x
+    | _ -> (
+      let v = x @ 0;
+      let relu_v = match v with
+      | v if v > 0. -> v
+      | _ -> 0.
+      ;
+      array_set 0 x relu_v;
+      loop (array_succ x)
+    )
+  ;;
+  loop x;
+  x 
+
+;;
+let identity = fn x: (Array of Double) -> x;;
+
+let mse_loss = fn predictions: (Array of Double) targets: (Array of Double) ->
+  let loop = fn sum: (Double) p: (Array of Double) t: (Array of Double) ->
+    match (array_size p) with
+    | 0 -> sum
+    | _ -> (
+
+      let pv = p @ 0;
+      let tv = t @ 0;
+      let loss = Math.pow (pv - tv) 2.;
+      loop (sum + loss) (array_succ p) (array_succ t)
+    )
+  ;;
+  let sum = loop 0. predictions targets;
+  sum / (array_size predictions)
+;;
+
+
+let matrix_random = fn c r ->
+  Matrix r c (array_fill (r * c) (fn i: (Int) -> Math.rand_double_range -1. 1.))
+;;
+
+
+
+let max_in = array_fill_const 16 0.; # allocate an input array which is as large as the maximum layer width
+
+type Network = (
+  layers: Array of Layer,
+  loss: ((Array of Double) -> (Array of Double) -> Double)
+);
+let MLP = Network [|
+  Layer (matrix_random 2 16) (array_fill_const 16 0.01) relu,
+  Layer (matrix_random 16 16) (array_fill_const 16 0.01) relu,
+  Layer (matrix_random 16 1) (array_fill_const 1 1.01) identity,
+  |] mse_loss
+;
+let LayerCache = module
+
+  type LCache = (
+    pre_activations: (Array of Array of Double),
+    activations: (Array of Array of Double)
+  );
+
+  let from_network = fn network: (Network) ->
+    let num_layers = array_size network.layers;
+
+
+    print `num layers: {num_layers}`;
+    ()
+  ;;
+# // Function to create a properly sized LayerCache for any network
+# let create_layer_cache = fn network: (Network) ->
+#   let layers = network.layers;
+#   let num_layers = array_length layers;
+#   
+#   // Create pre_activations array with the correct output sizes
+#   let pre_activations = array_fill_const num_layers [| |];
+#   
+#   // Create activations array (input + outputs)
+#   let activations = array_fill_const (num_layers + 1) [| |];
+#   
+#   // Initialize activations[0] with the input size (from first layer's weights)
+#   let first_layer = layers[0];
+#   let input_size = first_layer.weights.cols; // Number of columns = input dimension
+#   activations[0] := array_fill_const input_size 0.;
+#   
+#   // Fill in the sizes for each layer
+#   for i = 0 to num_layers - 1 do
+#     let layer = layers[i];
+#     let output_size = layer.weights.rows; // Number of rows = output dimension
+#     
+#     // Pre-activation size equals the layer's output size
+#     pre_activations[i] := array_fill_const output_size 0.;
+#     
+#     // Activation size equals the layer's output size
+#     activations[i+1] := array_fill_const output_size 0.;
+#   done;
+#   
+#   LayerCache pre_activations activations
+# ;;
+;
+type LayerCache = (
+  pre_activations: (Array of Array of Double),
+  activations: (Array of Array of Double)
+);
+
+
+let forward_cache_storage = array_fill_const (16 + 16 + 1 + 2 + 16 + 16 + 1) 0.
+;
+
+
+let forward_cache = LayerCache
+  [|
+    array_offset 0 16 forward_cache_storage,
+    array_offset 16 16 forward_cache_storage,
+    array_offset 32 1 forward_cache_storage,
+  |]
+
+  [|
+    array_offset 33 2 forward_cache_storage,
+    array_offset 35 16 forward_cache_storage,
+    array_offset 51 16 forward_cache_storage,
+    array_offset 67 1 forward_cache_storage,
+  |]
+;
+
+let print_arr = fn arr: (Array of Double) ->
+  match (array_size arr) with
+  | 0 -> ()
+  | _ -> (print `arr: {arr @ 0}\n`; print_arr (array_succ arr); ())
+;;
+
+# let print_matrix = fn arr: (Matrix) ->
+#   let rows = arr.rows;
+#   match rows with
+#   | 0 -> ()
+#   | _ -> (print `arr: {arr @ 0}\n`; print_arr (array_succ arr); ())
+# ;;
+
+let debug_cache = fn cache: (LayerCache) ->
+
+  print "pre activations:\n";
+  print "\nlayer 0:\n"; print_arr (cache.pre_activations @ 0) ;
+  print "\nlayer 1:\n"; print_arr (cache.pre_activations @ 1) ;
+  print "\noutput:\n"; print_arr  (cache.pre_activations @ 2) ;
+
+  print "activations:\n";
+  print "\nlayer 0:\n"; print_arr (cache.activations @ 0) ;
+  print "\nlayer 1:\n"; print_arr (cache.activations @ 1) ;
+  print "\nlayer 2:\n"; print_arr (cache.activations @ 2) ;
+  print "\noutput:\n"; print_arr  (cache.activations @ 3) 
+;;
+
+
+let _matrix_vec_mul = extern fn Int -> Int -> Ptr of Double -> Ptr of Double -> ();
+let matrix_vec_mul = fn m: (Matrix) v: (Array of Double) ->
+  _matrix_vec_mul m.rows m.cols (cstr m.data) (cstr v);
+  v
+;;
+
+let _vec_add = extern fn Int -> Ptr of Double -> Ptr of Double -> ();
+let vec_add = fn a: (Array of Double) b: (Array of Double) -> 
+  _vec_add (array_size a) (cstr a) (cstr b)
+;;
+
+
+
+
+let write_to = fn from: (Array of Double) to: (Array of Double) ->
+  Arrays.fold (fn t: (Array of Double) v ->
+    array_set 0 t v;
+    array_succ t
+  ) to from
+;;
+
+
+
+# vector / matrix operations
+let (@>) = write_to ;
+let (@+) = vec_add;
+let (@.) = matrix_vec_mul;
+
+let forward = fn network: (Network) cache: (LayerCache) input ->
+  let layers = network.layers;
+  input @> (cache.pre_activations @ 0);
+  let _, out, cache = Arrays.fold (
+  fn (i, current, cache): (Int, Array of Double, LayerCache)
+     layer: (Layer) ->
+
+    let z = layer.weights @. current;
+    layer.biases @+ z;
+    z @> (cache.pre_activations @ i);
+
+    layer.activation z;
+    z @> (cache.activations @ (i + 1));
+
+    (i + 1, z, cache)
+  ) (0, input, cache) layers
+  ;
+  (out, cache)
+;;
+
+let (out, cache) = max_in |> forward MLP forward_cache;
+print `{out @ 0}\n`;
+
+debug_cache forward_cache;
+
+# print `{(array_offset 1 2 forward_cache_storage) @ 0}\n`;

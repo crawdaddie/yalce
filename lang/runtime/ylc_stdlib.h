@@ -115,6 +115,10 @@ DArr matrix_vec_mul(DM *matrix, DArr vector);
 
 void _matrix_vec_mul(int rows, int cols, double *matrix_data, double *vec_data);
 
+void _vec_add(int size, double *vec1, double *vec2);
+
 // In-place vector addition
 DArr vec_add(DArr vec1, DArr vec2);
+
+void _arr_copy(int size, double *from, double *to);
 #endif

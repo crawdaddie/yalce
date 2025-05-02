@@ -371,35 +371,50 @@ void _scanf(const char *fmt_string, const char *input_string, int size,
     break;
   }
 }
-
-// In-place matrix-vector multiplication
+// Correctly defined _matrix_vec_mul implementation
 void _matrix_vec_mul(int rows, int cols, double *matrix_data,
-                     double *vec_data) {
-  // Perform multiplication
+                     double *vector_data) {
+  // Create a temporary array to store results
+  double temp[rows];
   for (int i = 0; i < rows; i++) {
-    vec_data[i] = 0.0;
+    temp[i] = 0.0;
     for (int j = 0; j < cols; j++) {
-      vec_data[i] += matrix_data[i * cols + j] * vec_data[j];
+      temp[i] += matrix_data[i * cols + j] * vector_data[j];
     }
   }
-  return;
+
+  // Copy results back to the vector
+  for (int i = 0; i < rows; i++) {
+    vector_data[i] = temp[i];
+  }
 }
 
-// In-place vector addition
-DArr vec_add(DArr vec1, DArr vec2) {
-  DArr result = vec2;
-
-  // Check if dimensions match
-  if (vec1.size != vec2.size || vec1.size != result.size) {
-    fprintf(
-        stderr,
-        "Error: All vectors must have the same size for in-place addition\n");
-    return (DArr){};
+// Define vec_add to properly add vectors
+void _vec_add(int size, double *vec1, double *vec2) {
+  for (int i = 0; i < size; i++) {
+    vec2[i] += vec1[i];
   }
-
-  // Perform element-wise addition
-  for (int i = 0; i < result.size; i++) {
-    result.data[i] = vec1.data[i] + vec2.data[i];
-  }
-  return result;
 }
+
+void _arr_copy(int size, double *from, double *to) {
+  printf("copy arr %d\n", size);
+  int idx = 0;
+  while (size--) {
+    // printf("%d to %d\n", idx, idx);
+    *to = *from;
+    to++;
+    from++;
+    idx++;
+  }
+}
+// # let loss = fn a: (Array of Double) b: (Array of Double) -> 0.;;
+// # Mean Squared Error loss function
+// double mse_loss(int size, double * predictions: (Array of Double) targets:
+// (Array of Double) ->
+//   let mut sum = 0.
+//   for i = 0 to array_length predictions - 1 do
+//     let diff = predictions[i] - targets[i]
+//     sum := sum + diff * diff
+//   done
+//   sum / (array_length predictions |> to_double)
+// ;;

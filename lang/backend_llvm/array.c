@@ -503,6 +503,57 @@ LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return new_array_struct;
 }
 
+LLVMValueRef ArrayOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  // print_ast(ast);
+  // printf("array offset\n");
+  // print_type(ast->md);
+  LLVMValueRef offset_val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMValueRef size_val =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  LLVMValueRef array =
+      codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
+
+  Type *_array_type = ast->md;
+  Type *el_type = _array_type->data.T_CONS.args[0];
+
+  LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx->env, module);
+
+  LLVMTypeRef array_type = codegen_array_type(element_type);
+
+  LLVMValueRef array_struct;
+  if (LLVMGetTypeKind(LLVMTypeOf(array)) == LLVMPointerTypeKind) {
+    array_struct =
+        LLVMBuildLoad2(builder, array_type, array, "load_array_struct");
+  } else {
+    array_struct = array;
+  }
+
+  LLVMValueRef new_array_struct = LLVMGetUndef(array_type);
+
+  LLVMValueRef new_size = size_val;
+
+  LLVMValueRef data_ptr =
+      LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+
+  // Calculate the pointer offset in the same way (0 or 1 based on original
+  // size) This ensures we don't move the pointer if the size was 0
+  LLVMValueRef new_data_ptr =
+      LLVMBuildGEP2(builder, element_type, data_ptr,
+                    (LLVMValueRef[]){offset_val}, 1, "new_data_ptr");
+
+  // Build the new array struct
+  new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_size,
+                                          0, "insert_new_size");
+  new_array_struct = LLVMBuildInsertValue(
+      builder, new_array_struct, new_data_ptr, 1, "insert_new_data_ptr");
+
+  return new_array_struct;
+}
+
 LLVMValueRef ArrayStrideHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   LLVMValueRef array =

@@ -1,3 +1,0 @@
-open engine/bindings/Synth;
-
-let x = (fn () -> reverb_node 0.8 1. 1. 1. (inlet 0.);) |> play_tpl;
