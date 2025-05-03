@@ -735,7 +735,6 @@ LLVMValueRef create_coroutine_state_ptr(Type *constructor_type, Ast *args,
 
   LLVMValueRef state_ptr_alloca =
       LLVMBuildMalloc(builder, instance_state_struct_type, "");
-  printf("state ptr alloca b4 build store\n");
 
   LLVMBuildStore(builder, inst_state_struct, state_ptr_alloca);
   return state_ptr_alloca;

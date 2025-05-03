@@ -112,8 +112,6 @@ iter_all_arg ();
 
 let map_cor = fn () ->
   "map each value of a coroutine Int -> String";
-  let str_map = fn x -> `[str {x}]`
-  ;;
   let co_void = fn () ->
     yield 1;
     yield 2;
@@ -123,7 +121,8 @@ let map_cor = fn () ->
     yield 6;
     yield 7 
   ;;
-  let co = co_void () |> cor_map str_map;
+  let co = co_void () |> cor_map (fn x -> `[str {x}]`)
+  ;
 
   print `## coroutine mapped 1 -> 2 -> 3 -> done
   {co ()}
@@ -225,8 +224,8 @@ let loop_cor = fn () ->
 `;
 
   let f = iter_of_list [1,2,3]
-  |> cor_map (fn x -> x * 0.5;)
   |> cor_loop
+  |> cor_map (fn x -> x * 8)
   in
   print `## looped mapped list
   {f ()}
