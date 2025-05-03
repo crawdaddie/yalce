@@ -1328,6 +1328,19 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return alloca;
 }
 
+LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
+  Type *arg_type = ast->data.AST_APPLICATION.args->md;
+  if (is_list_type(arg_type)) {
+    return IterOfListHandler(ast, ctx, module, builder);
+  }
+
+  if (is_array_type(arg_type)) {
+    return IterOfArrayHandler(ast, ctx, module, builder);
+  }
+  return NULL;
+}
+
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
   LLVMValueRef instance_ptr =

@@ -19,6 +19,7 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx);
 Type *infer_module(Ast *ast, TICtx *ctx);
 Type *infer(Ast *ast, TICtx *ctx);
 
+Type *for_loop_binding(Ast *binding, Ast *expr, Ast *body, TICtx *ctx);
 bool occurs_check(Type *var, Type *t);
 
 void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type);
@@ -211,7 +212,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TypeEnv *ref = env_lookup_ref(ctx->env, name);
     if (ref) {
-      // printf("ast identifier %s scope: %d this scope: %d (is fn param %d)\n",
+      // printf("ast identifier %s scope: %d this scope: %d (is fn param
+      // %d)\n",
       //        name, ref->type->scope, ctx->scope, ref->is_fn_param);
       ref->ref_count++;
 
@@ -406,6 +408,13 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_LOOP: {
     Ast let = *ast;
+    if (is_loop_of_iterable(ast)) {
+      type = for_loop_binding(let.data.AST_LET.binding, let.data.AST_LET.expr,
+                              let.data.AST_LET.in_expr, ctx);
+      print_type(type);
+
+      break;
+    }
     let.tag = AST_LET;
     type = infer(&let, ctx);
     break;
@@ -536,6 +545,35 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
   (effect_ast)->md = apply_substitution(subst, (effect_ast)->md);
 }
 
+Type *infer_iter(Ast *ast, TICtx *ctx) {
+  Type *t = infer(ast->data.AST_APPLICATION.args, ctx);
+  Type *ret_type;
+  switch (t->kind) {
+  case T_CONS: {
+    if (is_list_type(t)) {
+      ret_type = t->data.T_CONS.args[0];
+      break;
+    }
+
+    if (is_array_type(t)) {
+      ret_type = t->data.T_CONS.args[0];
+      break;
+    }
+  }
+  default: {
+    fprintf(stderr, "Type ");
+    print_type_err(t);
+    fprintf(stderr, "does not implement the iterable typeclass\n");
+    return NULL;
+  }
+  }
+  Type *coroutine_fn = create_coroutine_instance_type(ret_type);
+  Type *coroutine_constructor = type_fn(t, coroutine_fn);
+  coroutine_constructor->is_coroutine_constructor = true;
+  ast->data.AST_APPLICATION.function->md = coroutine_constructor;
+  return coroutine_fn;
+}
+
 Type *infer_application(Ast *ast, TICtx *ctx) {
 
   // print_ast(ast);
@@ -559,6 +597,12 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
     Type *arg_type = infer(ast->data.AST_APPLICATION.args, ctx);
     return arg_type;
+  }
+
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "iter")) {
+    return infer_iter(ast, ctx);
   }
 
   if (!fn_type) {
@@ -1116,6 +1160,40 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   return expr_type;
 }
 
+Type *for_loop_binding(Ast *binding, Ast *expr, Ast *body, TICtx *ctx) {
+
+  Type *expr_type;
+  if (!(expr_type = infer(expr, ctx))) {
+    return type_error(ctx, expr,
+                      "Typecheck Error: Could not infer expr type in loop\n");
+  }
+  if (is_coroutine_type(expr_type)) {
+    expr_type = type_of_option(fn_return_type(expr_type));
+  }
+
+  TICtx body_ctx = *ctx;
+  body_ctx.scope++;
+  Type *binding_type;
+  if (!(binding_type = infer_pattern(binding, &body_ctx))) {
+    return type_error(
+        ctx, binding,
+        "Typecheck Error: Could not infer binding type in loop\n");
+  }
+
+  if (!unify_in_ctx(binding_type, expr_type, &body_ctx, binding)) {
+    return type_error(ctx, binding,
+                      "Typecheck Error: Could not unify binding type with "
+                      "expression type in let\n");
+    return NULL;
+  }
+
+  bind_in_ctx(&body_ctx, binding, expr_type);
+  binding->md = expr_type;
+  Type *res_type = infer(body, &body_ctx);
+  ctx->constraints = body_ctx.constraints;
+  return res_type;
+}
+
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   TICtx body_ctx = *ctx;
@@ -1649,6 +1727,14 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     break;
   }
   }
+}
+bool is_loop_of_iterable(Ast *let) {
+  return let->data.AST_LET.expr->tag == AST_APPLICATION &&
+         let->data.AST_LET.expr->data.AST_APPLICATION.function->tag ==
+             AST_IDENTIFIER &&
+         CHARS_EQ(let->data.AST_LET.expr->data.AST_APPLICATION.function->data
+                      .AST_IDENTIFIER.value,
+                  "iter");
 }
 
 Type *solve_program_constraints(Ast *prog, TICtx *ctx) {

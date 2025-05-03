@@ -25,6 +25,13 @@ LLVMTypeRef create_llvm_list_type(Type *list_el_type, TypeEnv *env,
   if (list_el_type->kind == T_VAR) {
     return GENERIC_PTR;
   }
+  if (list_el_type->kind == T_FN) {
+
+    LLVMTypeRef llvm_el_type = GENERIC_PTR;
+    LLVMTypeRef node_type = llnode_type(llvm_el_type);
+
+    return LLVMPointerType(node_type, 0);
+  }
 
   LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, env, module);
   if (!llvm_el_type) {

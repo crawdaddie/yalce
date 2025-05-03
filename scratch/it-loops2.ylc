@@ -1,0 +1,10 @@
+let x = [|1,2,3,4|];
+let arr_size_func = fn x -> 
+  let max = (array_size x) - 1 in
+  let b = max in (
+    let v = array_at x b in
+    print `t: {v}??\n`
+  )
+;;
+
+arr_size_func x;
