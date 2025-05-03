@@ -626,8 +626,12 @@ LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return get_array_element(builder, array, idx, GENERIC_PTR);
   }
 
-  return get_array_element(builder, array, idx,
-                           type_to_llvm_type(ret_type, ctx->env, module));
+  LLVMTypeRef el_type = type_to_llvm_type(ret_type, ctx->env, module);
+
+  if (!el_type) {
+    return NULL;
+  }
+  return get_array_element(builder, array, idx, el_type);
 }
 
 LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -756,7 +760,7 @@ LLVMValueRef StructSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMDumpValue(value);
   printf("\n");
 
-  print_ast(ast);
+  // print_ast(ast);
   print_type(ast->md);
   return NULL;
 }
@@ -1077,6 +1081,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
                     ArrayFillConstHandler);
   GENERIC_FN_SYMBOL("array_succ", &t_array_identity_sig, ArraySuccHandler);
+  GENERIC_FN_SYMBOL("array_range", &t_array_range_sig, ArrayRangeHandler);
   GENERIC_FN_SYMBOL("array_offset", &t_array_offset_sig, ArrayOffsetHandler);
 
   // GENERIC_FN_SYMBOL("array_view", &t_array_view_sig, ArrayViewHandler);

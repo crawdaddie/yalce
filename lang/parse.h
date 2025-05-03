@@ -426,4 +426,6 @@ Ast *ast_module(Ast *lambda);
 extern char *__import_current_dir;
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
 Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body);
+
+Ast *ast_range_expression(Ast *from, Ast *to);
 #endif

@@ -118,6 +118,7 @@ Type *create_new_array_size_sig(void *_) {
 }
 Type t_array_size = {T_CREATE_NEW_GENERIC,
                      {.T_CREATE_NEW_GENERIC = create_new_array_size_sig}};
+
 Type *create_new_list_concat_sig(void *_) {
   Type *el = next_tvar();
   Type *l = create_list_type_of_type(el);
@@ -209,11 +210,21 @@ Type *_array_succ_sig() {
 
 Type t_array_identity_sig = GENERIC_TYPE(_array_succ_sig);
 
-Type *_array_offset_sig() {
+Type *_array_range_sig() {
   Type *eltype = next_tvar();
   Type *f = create_array_type(eltype);
   f = type_fn(f, f);
   f = type_fn(&t_int, f);
+  f = type_fn(&t_int, f);
+
+  return f;
+}
+Type t_array_range_sig = GENERIC_TYPE(_array_range_sig);
+
+Type *_array_offset_sig() {
+  Type *eltype = next_tvar();
+  Type *f = create_array_type(eltype);
+  f = type_fn(f, f);
   f = type_fn(&t_int, f);
 
   return f;
@@ -526,6 +537,7 @@ void initialize_builtin_types() {
   add_builtin("array_new", &t_array_fill_sig);
   add_builtin("struct_set", &t_struct_set_sig);
   add_builtin("array_succ", &t_array_identity_sig);
+  add_builtin("array_range", &t_array_range_sig);
   add_builtin("array_offset", &t_array_offset_sig);
   add_builtin("array_view", &t_array_view_sig);
   add_builtin("cor_replace", &t_cor_replace_fn_sig);

@@ -69,13 +69,6 @@ typedef enum symbol_type {
 typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);
-struct {
-  struct JITSymbol *callable_sym;
-  LLVMValueRef *args;
-  int provided_args_len;
-  int original_args_len;
-  Type *original_callable_type;
-} CurriedFunction;
 
 typedef struct {
   int num_exports;

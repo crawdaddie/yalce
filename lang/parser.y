@@ -146,6 +146,7 @@ expr:
   | expr EQ expr                      { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
+  | expr 'to' expr                    { $$ = ast_range_expression($1, $3); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
@@ -158,8 +159,13 @@ expr:
                                         // TODO: not doing anything with macros yet - do we want to??
                                         printf("macro '%s'\n", $1.chars);
                                         $$ = $2;
-                                      }
+                                      } 
+  | 'for' IDENTIFIER '=' expr IN expr   {
+                                          Ast *let = ast_let(ast_identifier($2), $4, $6);
+                                          let->tag = AST_LOOP;
+                                          $$ = let;
 
+                                      }
   ;
 
 simple_expr:

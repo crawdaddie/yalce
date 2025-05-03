@@ -333,6 +333,8 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
   }
 
   subst = solve_constraints(constraints);
+  // print_constraints(constraints);
+  // print_subst(subst);
   env = create_env_from_subst(env, subst);
   //
   // for (Substitution *s = subst; s; s = s->next) {

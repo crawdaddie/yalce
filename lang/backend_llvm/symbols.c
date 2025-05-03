@@ -130,6 +130,10 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
     }
+    if (sym->storage != NULL) {
+      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
+      return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
+    }
     return sym->val;
   }
 

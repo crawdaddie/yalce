@@ -9,6 +9,7 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "coroutines.h"
+#include "loop.h"
 #include "module.h"
 #include "modules.h"
 #include "types/inference.h"
@@ -279,15 +280,14 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     codegen_import(ast, NULL, ctx, module, builder);
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
+  // case AST_LOOP: {
+  //   printf("codegen loop ????\n");
+  //   print_ast(ast);
+  //   print_type(ast->md);
+  //   return NULL;
+  // }
   case AST_LOOP: {
-    printf("codegen loop ????\n");
-    print_ast(ast);
-    return NULL;
-  }
-  case AST_RANGE_EXPRESSION: {
-    print_ast(ast);
-    printf("codegen range expression\n");
-    return NULL;
+    return codegen_loop(ast, ctx, module, builder);
   }
   }
 

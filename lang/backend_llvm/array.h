@@ -42,4 +42,7 @@ LLVMTypeRef tmp_generic_codegen_array_type();
 
 LLVMValueRef ArrayOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
+LLVMValueRef ArrayRangeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+
+                               LLVMBuilderRef builder);
 #endif

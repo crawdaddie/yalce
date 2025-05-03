@@ -1187,15 +1187,16 @@ int main() {
     status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
   });
   ({
-    Ast *b = T(
-        "let pop_left = fn (head, tail) ->\n"
-        "  match head with\n"
-        "  | x::rest -> ((rest, tail), Some x)  \n"
-        "  | [] -> ((head, tail), None)\n"
-        ";;\n",
-        &MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&TVAR("`7")), &TVAR("`1")),
-                        &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`7")), &TVAR("`1")),
-                                &TOPT(&TVAR("`7")))));
+    Type free_var = TVAR("`5");
+    Ast *b =
+        T("let pop_left = fn (head, tail) ->\n"
+          "  match head with\n"
+          "  | x::rest -> ((rest, tail), Some x)  \n"
+          "  | [] -> ((head, tail), None)\n"
+          ";;\n",
+          &MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&free_var), &TVAR("`1")),
+                          &TTUPLE(2, &TTUPLE(2, &TLIST(&free_var), &TVAR("`1")),
+                                  &TOPT(&free_var))));
     Ast *match_subj =
         b->data.AST_BODY.stmts[0]
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
@@ -1230,11 +1231,9 @@ int main() {
   });
 
   ({
-    Type vtype = TCONS(
-        "Value", 1,
-        &TCONS(TYPE_NAME_TUPLE, 3, &t_num, &TARRAY(tvar("Value")), &t_num));
+    Type vtype = TCONS("Value", 3, &t_num, &TARRAY(tvar("Value")), &t_num);
 
-    vtype.data.T_CONS.names = (char *[]){"data", "children", "grad"};
+    vtype.data.T_CONS.names = (const char *[3]){"data", "children", "grad"};
     print_type(&vtype);
     T("type Value = (data: Double, children: (Array of Value), grad: "
       "Double);\n"

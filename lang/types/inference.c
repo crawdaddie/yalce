@@ -211,8 +211,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TypeEnv *ref = env_lookup_ref(ctx->env, name);
     if (ref) {
-      printf("ast identifier %s scope: %d this scope: %d (is fn param %d)\n",
-             name, ref->type->scope, ctx->scope, ref->is_fn_param);
+      // printf("ast identifier %s scope: %d this scope: %d (is fn param %d)\n",
+      //        name, ref->type->scope, ctx->scope, ref->is_fn_param);
       ref->ref_count++;
 
       ast->data.AST_IDENTIFIER.is_fn_param = ref->is_fn_param;
@@ -407,13 +407,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_LOOP: {
     Ast let = *ast;
     let.tag = AST_LET;
-    Type *t = infer(&let, ctx);
-    type = t;
-    // Type * = infer(ast->data.AST_RANGE_EXPRESSION.from, ctx);
-    // Type *to = infer(ast->data.AST_RANGE_EXPRESSION.to, ctx);
-    // unify_in_ctx(from, &t_int, ctx, ast->data.AST_RANGE_EXPRESSION.from);
-    // unify_in_ctx(to, &t_int, ctx, ast->data.AST_RANGE_EXPRESSION.to);
-    // type = &t_int;
+    type = infer(&let, ctx);
     break;
   }
   default: {
@@ -773,12 +767,14 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   // printf("APPLICATION\n");
   // print_ast(ast);
+  //
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (ast->data.AST_IDENTIFIER.is_recursive_fn_ref) {
     fn_type = deep_copy_type(fn_type);
   }
+
   Type *_fn_type;
 
   int len = ast->data.AST_APPLICATION.len;
@@ -852,6 +848,7 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
     if (is_generic(arg->md) &&
         !types_equal(arg->md, res_type->data.T_FN.from)) {
+
       ctx->constraints = constraints_extend(ctx->constraints, arg->md,
                                             res_type->data.T_FN.from);
       ctx->constraints->src = arg;
@@ -1196,12 +1193,18 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   Substitution *subst = solve_constraints(body_ctx.constraints);
+#ifdef DEBUG_LAMBDA_CONSTRAINTS
+  printf("## LAMBDA: %s\n", name);
+  printf("constraints throughout lambda\n");
+  print_constraints(body_ctx.constraints);
+  print_subst(subst);
+#endif
 
   ast->md = apply_substitution(subst, ast->md);
 
-  if (is_named) {
-    apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
-  }
+  // if (is_named) {
+  apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
+  // }
 
   if (body_ctx.yielded_type != NULL) {
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
@@ -1342,6 +1345,12 @@ Type *apply_substitution(Substitution *subst, Type *t) {
 
     while (s) {
       if (types_equal(s->from, t)) {
+        // printf("\n\n");
+        // print_type(t);
+        // printf("apply subst\n");
+        // print_type(subst->from);
+        // printf(" -> ");
+        // print_type(subst->to);
         Type *to = s->to;
         // if (to->kind == T_CONS &&
         //     CHARS_EQ(t->data.T_VAR, to->data.T_CONS.name)) {
@@ -1349,7 +1358,10 @@ Type *apply_substitution(Substitution *subst, Type *t) {
         // }
 
         if (is_generic(to)) {
-          return apply_substitution(subst, to);
+          Type *t = apply_substitution(subst, to);
+          // printf("returning t\n");
+          // print_type(t);
+          return t;
         } else {
           return to;
         }
@@ -1401,6 +1413,9 @@ Type *apply_substitution(Substitution *subst, Type *t) {
 Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
   if (types_equal(t1, t2)) {
     return subst;
+  }
+  if (IS_PRIMITIVE_TYPE(t1) && !IS_PRIMITIVE_TYPE(t2)) {
+    return substitutions_extend(subst, t2, t1);
   }
 
   Substitution *new_subst = talloc(sizeof(Substitution));
@@ -1592,7 +1607,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
     break;
   }
-
+  case AST_LOOP:
   case AST_LET: {
     apply_substitutions_rec(ast->data.AST_LET.expr, subst);
     Type *override = ast->data.AST_LET.expr->md;

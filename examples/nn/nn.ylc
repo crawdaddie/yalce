@@ -137,16 +137,16 @@ let forward_cache_storage = array_fill_const (16 + 16 + 1 + 2 + 16 + 16 + 1) 0.
 
 let forward_cache = LayerCache
   [|
-    array_offset 0 16 forward_cache_storage,
-    array_offset 16 16 forward_cache_storage,
-    array_offset 32 1 forward_cache_storage,
+    array_range 0 16 forward_cache_storage,
+    array_range 16 16 forward_cache_storage,
+    array_range 32 1 forward_cache_storage,
   |]
 
   [|
-    array_offset 33 2 forward_cache_storage,
-    array_offset 35 16 forward_cache_storage,
-    array_offset 51 16 forward_cache_storage,
-    array_offset 67 1 forward_cache_storage,
+    array_range 33 2 forward_cache_storage,
+    array_range 35 16 forward_cache_storage,
+    array_range 51 16 forward_cache_storage,
+    array_range 67 1 forward_cache_storage,
   |]
 ;
 
@@ -231,4 +231,4 @@ print `{out @ 0}\n`;
 
 debug_cache forward_cache;
 
-# print `{(array_offset 1 2 forward_cache_storage) @ 0}\n`;
+# print `{(array_range 1 2 forward_cache_storage) @ 0}\n`;
