@@ -305,7 +305,7 @@ int jit(int argc, char **argv) {
       Type *top_type = prog->md;
 
       if (top_level_func == NULL) {
-        print_result(top_type, NULL);
+        // print_result(top_type, NULL);
         continue;
       } else {
         LLVMExecutionEngineRef engine;
@@ -313,7 +313,7 @@ int jit(int argc, char **argv) {
         LLVMGenericValueRef exec_args[] = {};
         LLVMGenericValueRef result =
             LLVMRunFunction(engine, top_level_func, 0, exec_args);
-        print_result(top_type, NULL);
+        // print_result(top_type, NULL);
       }
       printf(COLOR_RESET);
     }

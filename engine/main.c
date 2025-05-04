@@ -21,32 +21,5 @@ int main(int argc, char **argv) {
   int note_count = 0;
   int current_freq_idx = 0;
 
-  while (1) {
-
-    double freq = freqs[rand() % S];
-    printf("%f\n", freq);
-    InValList v = {{0, freq}, NULL};
-    Node *ensemble = instantiate_template(template, &v);
-    push_msg(&ctx->msg_queue, (scheduler_msg){
-                                  NODE_ADD,
-                                  get_frame_offset(),
-                                  {.NODE_ADD = {.target = ensemble}},
-                              });
-
-    AudioGraph *gr = (char *)ensemble + (sizeof(Node));
-
-    // double *trig_buf = audio_graph_inlet(gr, 1)->output.data;
-
-    // audio_ctx_add(ensemble);
-
-    useconds_t tt = 1 << 17;
-    usleep(1 << 12); // Set trigger LOW (release phase)
-    push_msg(&ctx->msg_queue,
-             (scheduler_msg){NODE_SET_SCALAR,
-                             get_frame_offset(),
-                             {.NODE_SET_SCALAR = {.target = ensemble, 1, 0.}}});
-    usleep(tt);
-  }
-
   return 0;
 }

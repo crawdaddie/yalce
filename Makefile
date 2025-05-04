@@ -33,12 +33,42 @@ CFLAGS += -I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include
 LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
 
+# Original dynamic linking flags
 LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm -framework Accelerate
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
-LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
+LANG_LD_FLAGS += -Wl
 
 LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx
+
+# Static linking flags - used for the static target (macOS compatible)
+# Use linking flags that force inclusion of all symbols from the library
+STATIC_LD_FLAGS := -Wl,-force_load,$(BUILD_DIR)/engine/libyalce_synth.a -lm -framework Accelerate
+
+# Add all dependencies needed by libyalce_synth.a
+STATIC_LD_FLAGS += -L/opt/homebrew/lib -lsoundio -lsndfile -lfftw3 -ldl -lxml2
+STATIC_LD_FLAGS += -framework OpenGL -framework CoreMIDI -framework Cocoa 
+
+# For readline, use the static version + necessary termcap functions from ncurses
+STATIC_LD_FLAGS += $(READLINE_PREFIX)/lib/libreadline.a -lncurses
+STATIC_LD_FLAGS += -static-libstdc++
+
+# For GUI libraries - use static versions and link dynamically to Apple frameworks
+STATIC_LD_FLAGS += $(BUILD_DIR)/gui/libgui.a
+STATIC_LD_FLAGS += ${SDL2_PATH}/lib/libSDL2.a
+STATIC_LD_FLAGS += ${SDL2_TTF_PATH}/lib/libSDL2_ttf.a
+STATIC_LD_FLAGS += ${SDL2_GFX_PATH}/lib/libSDL2_gfx.a
+
+# Add all frameworks needed by SDL2 on macOS
+STATIC_LD_FLAGS += -framework CoreFoundation -framework CoreAudio -framework AudioToolbox 
+STATIC_LD_FLAGS += -framework CoreVideo -framework CoreGraphics -framework CoreHaptics
+STATIC_LD_FLAGS += -framework GameController -framework Metal -framework MetalKit
+STATIC_LD_FLAGS += -framework AppKit -framework Carbon -framework IOKit
+STATIC_LD_FLAGS += -framework ForceFeedback -framework CoreServices
+STATIC_LD_FLAGS += -framework AudioUnit -framework OpenGL -framework Cocoa
+STATIC_LD_FLAGS += -framework Foundation -framework QuartzCore
+# Additional libraries that might be needed
+STATIC_LD_FLAGS += -liconv -lobjc
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 # Add cor source to LANG_SRCS
@@ -54,10 +84,20 @@ endif
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/runtime/*.c)
 LANG_CC += -DLLVM_BACKEND
+
+# Dynamic LLVM flags
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
+
+# Static LLVM flags - use dynamic LLVM library to avoid symbol conflicts
+STATIC_LD_FLAGS += `$(LLVM_CONFIG) --ldflags --libs`
+
+# Additional dependencies that might be needed (handle FreeType from SDL2_ttf)
+STATIC_LD_FLAGS += -L/opt/homebrew/opt/freetype/lib -lfreetype
+STATIC_LD_FLAGS += -L/opt/homebrew/opt/harfbuzz/lib -lharfbuzz
 
 ifeq ($(MAKECMDGOALS),debug)
   LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
+  STATIC_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses
 endif
 
 LEX_FILE := $(LANG_SRC_DIR)/lex.l
@@ -68,18 +108,25 @@ YACC_OUTPUT := $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/y.tab.h
 # Ensure y.tab.c and lex.yy.c are built before any object files that depend on them
 $(LANG_OBJS): $(YACC_OUTPUT) $(LEX_OUTPUT)
 
+LANG_SRCS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(LANG_SRC_DIR)/%.c)
 LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 # Explicitly add y.tab.o and lex.yy.o to LANG_OBJS
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 
-.PHONY: all clean engine test wasm serve_docs engine_bindings gui cor
+.PHONY: all clean engine engine_static test wasm serve_docs engine_bindings gui cor static
 
 all: $(BUILD_DIR)/ylc
 debug: all
+static: $(BUILD_DIR)/ylc.static
 
 engine:
-	$(MAKE) -C engine
+	@echo "Building engine libraries (shared and static)..."
+	$(MAKE) -C engine all
+
+engine_static:
+	@echo "Building engine static library only..."
+	$(MAKE) -C engine static
 
 gui:
 	@echo "######### MAKE GUI------------"
@@ -103,9 +150,22 @@ $(LEX_OUTPUT): $(LEX_FILE)
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
-# Build the final executable
+# Build the regular executable
 $(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui cor
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
+
+# Build the mostly-static executable (macOS compatible)
+$(BUILD_DIR)/ylc.static: $(LANG_OBJS) | engine_static gui cor
+	@echo "Building static version of YLC..."
+	@echo "Using static libraries where possible with dynamic frameworks"
+	# Link with static libraries where possible, dynamic for system frameworks
+	$(LANG_CC) -o $@ $(LANG_OBJS) $(STATIC_LD_FLAGS)
+	# Make the binary smaller
+	strip -x $@
+	# Print information about the linked libraries
+	@echo "Library dependencies for $(BUILD_DIR)/ylc.static:"
+	@otool -L $@
+	@echo "Static build complete!"
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -136,7 +196,7 @@ audio_test:
 KERNEL_DIR := dev/kernel
 VENV_DIR := $(KERNEL_DIR)/.venv
 
-.PHONY: kernel-venv kernel-install kernel-uninstall kernel-clean
+.PHONY: kernel-venv kernel-install kernel-uninstall kernel-clean static
 
 # Create a Python virtual environment for the kernel
 kernel-venv:
