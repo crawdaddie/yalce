@@ -411,7 +411,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     if (is_loop_of_iterable(ast)) {
       type = for_loop_binding(let.data.AST_LET.binding, let.data.AST_LET.expr,
                               let.data.AST_LET.in_expr, ctx);
-      print_type(type);
 
       break;
     }

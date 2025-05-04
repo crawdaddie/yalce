@@ -8,5 +8,6 @@ let arr_func = fn x ->
     print `iter: {i} '{v}'\n`
   )
 ;;
+arr_func x
 
 
