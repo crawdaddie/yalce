@@ -1243,5 +1243,8 @@ int main() {
       &MAKE_FN_TYPE_2(&t_num, &vtype));
   });
 
+  // ({
+  //   T("let f = fn network -> network.layers;", &MAKE_FN_TYPE_2(&));
+  // });
   return status == true ? 0 : 1;
 }

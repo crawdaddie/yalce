@@ -13,26 +13,28 @@ let tensor_ndims = fn (_, sizes, _): (Tensor) ->
   array_size sizes
 ;;
 
-let fold = fn f: (U -> T -> U) res: (U) a: (Array of T) ->
-  let len = array_size a in
-  match len with
-  | 0 -> res
-  | _ -> fold f (f res (a @ 0)) (array_succ a) 
+let fold = fn f res a ->
+  let res_ref = [| res |];
+  let max = (array_size a) - 1;
+  for i = 0 to max in (
+    let r = res_ref @ 0;
+    let v = a @ i;
+    array_set 0 res_ref (f r v)  
+  );
+  res_ref @ 0
 ;;
 
-# let foldi = fn f: (Int -> U -> T -> U) res: (U) a: (Array of T) ->
-#   fold (fn (i, res) v -> ((i + 1), f i res v)) (0, res) a
-# ;;
+let foldi = fn f res a ->
+  let res_ref = [| res |];
+  let max = (array_size a) - 1;
+  for i = 0 to max in (
+    let r = res_ref @ 0;
+    let v = a @ i;
+    array_set 0 res_ref (f i r v)  
+  );
+  res_ref @ 0
+;;
 
-# let (@) = array_at;
-# let iter = fn f a ->
-#   fold (fn i v -> 
-#     f v;
-#     i + 1
-#   ) 0 a
-# ;;
-
-# let map = fn f res a ->
 
 
   

@@ -1,0 +1,40 @@
+import ../lib/Arrays;
+
+let (@) = array_at;
+
+let layers = [|
+  [|1, 2, 3|], 
+  [|1, 2, 3|], 
+  [|1, 2, 3|], 
+|];
+
+let input = [|0, 0, 0|];
+let t = [|0, 2, 3|];
+#
+# let out = Arrays.foldi (fn i current layer ->
+#   array_set i current (layer @ i); 
+#   current
+# ) input layers
+# ;
+
+let out2, _ = Arrays.foldi (fn i (current, t) layer ->
+  array_set i current (layer @ i); 
+  (current, t)
+) (input, t) layers
+;
+
+let print_arr = fn arr ->
+  match (array_size arr) with
+  | 0 -> ()
+  | _ -> (
+    print `arr: {arr @ 0}\n`;
+    print_arr (array_succ arr);
+    ()
+  )
+;;
+#
+#
+#
+#
+# print_arr out;
+print_arr out2

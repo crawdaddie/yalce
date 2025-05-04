@@ -1,0 +1,373 @@
+#include "serde.h"
+#include "types/common.h"
+#include "types/type.h"
+#include <string.h>
+
+// forward decls
+Type *infer(Ast *ast, TICtx *ctx);
+Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node);
+void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...);
+Substitution *solve_constraints(TypeConstraint *constraints);
+Type *apply_substitution(Substitution *subst, Type *t);
+void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type);
+void apply_substitutions_rec(Ast *ast, Substitution *subst);
+TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
+                                   Type *t2);
+
+Type *infer_fn_application(Ast *ast, TICtx *ctx) {
+
+  Type *fn_type = ast->data.AST_APPLICATION.function->md;
+
+  if (ast->data.AST_IDENTIFIER.is_recursive_fn_ref) {
+    fn_type = deep_copy_type(fn_type);
+  }
+
+  Type *_fn_type;
+
+  int len = ast->data.AST_APPLICATION.len;
+  Type *arg_types[len];
+
+  TICtx app_ctx = {.scope = ctx->scope + 1};
+
+  for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+    Ast *arg = ast->data.AST_APPLICATION.args + i;
+    arg_types[i] = infer(arg, ctx);
+    if (arg_types[i] == NULL) {
+      fprintf(stderr, "Error could not infer argument %zu of ", i);
+      print_ast_err(ast);
+      print_ast_err(arg);
+      return NULL;
+    }
+
+    if (arg_types[i]->kind == T_FN) {
+
+      if ((!is_generic(fn_return_type(arg_types[i]))) &&
+          (arg->tag == AST_LAMBDA) &&
+          is_generic(arg->data.AST_LAMBDA.body->md)) {
+        // TODO: this is a really fiddly and complex edge-case
+        // when you have an anonymous function callback passed to a function
+        // with type information constraints generated within the callback
+        // aren't pushed back up to the app_ctx (???)
+        unify_in_ctx(fn_return_type(arg_types[i]),
+                     arg->data.AST_LAMBDA.body->md, &app_ctx, arg);
+      }
+    }
+
+    // For each argument, add a constraint that the function's parameter type
+    // must match the argument type
+    Type *param_type = fn_type->data.T_FN.from;
+
+    if (!unify_in_ctx(param_type, arg_types[i], &app_ctx,
+                      ast->data.AST_APPLICATION.args + i)) {
+      return NULL;
+    }
+
+    if (i < ast->data.AST_APPLICATION.len - 1) {
+      if (fn_type->data.T_FN.to->kind != T_FN) {
+        return type_error(
+            ctx, ast, "Too many arguments provided to function %s",
+            ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value);
+      }
+      fn_type = fn_type->data.T_FN.to;
+    }
+  }
+
+  Substitution *subst = solve_constraints(app_ctx.constraints);
+  // print_subst(subst);
+
+  _fn_type = apply_substitution(subst, _fn_type);
+  ast->data.AST_APPLICATION.function->md = _fn_type;
+
+  Type *res_type = _fn_type;
+
+  for (int i = 0; i < len; i++) {
+    Ast *arg = ast->data.AST_APPLICATION.args + i;
+
+    if (arg->tag == AST_IDENTIFIER && arg->data.AST_IDENTIFIER.is_fn_param) {
+      arg->md = apply_substitution(subst, arg->md);
+    }
+
+    if (((Type *)arg->md)->kind == T_FN) {
+
+      if ((!is_generic(fn_return_type(arg->md))) && (arg->tag == AST_LAMBDA) &&
+          is_generic(arg->data.AST_LAMBDA.body->md)) {
+        apply_substitutions_rec(arg, subst);
+      }
+    }
+
+    if (is_generic(arg->md)) {
+      apply_substitutions_rec(arg, subst);
+    }
+
+    if (is_generic(arg->md) &&
+        !types_equal(arg->md, res_type->data.T_FN.from)) {
+
+      ctx->constraints = constraints_extend(ctx->constraints, arg->md,
+                                            res_type->data.T_FN.from);
+      ctx->constraints->src = arg;
+    }
+
+    if (is_generic(arg_types[i]) && !types_equal(arg_types[i], arg->md)) {
+      unify_in_ctx(arg_types[i], arg->md, ctx, arg);
+    }
+
+    res_type = res_type->data.T_FN.to;
+  }
+
+  return res_type;
+}
+
+bool is_struct_of_void_fns(Type *cons) {
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    Type *t = cons->data.T_CONS.args[i];
+    if (t->kind == T_FN) {
+      if (!is_void_func(t)) {
+        // if member is fn, it must be () -> xx
+        return false;
+      }
+    }
+    // if member is not fn, that's ok
+  }
+  return true;
+}
+
+Type *struct_of_fns_to_return(Type *cons) {
+  Type **results = talloc(sizeof(Type *) * cons->data.T_CONS.num_args);
+
+  results[0] = &t_num;
+
+  for (int i = 1; i < cons->data.T_CONS.num_args; i++) {
+    Type *t = cons->data.T_CONS.args[i];
+    if (is_coroutine_type(t)) {
+      results[i] = fn_return_type(t);
+      results[i] = type_of_option(results[i]);
+    } else if (t->kind == T_FN) {
+      results[i] = fn_return_type(t);
+
+      if (results[i]->alias && CHARS_EQ(results[i]->alias, "Option")) {
+        results[i] = type_of_option(results[i]);
+      }
+    } else {
+      results[i] = t;
+    }
+  }
+  return create_tuple_type(cons->data.T_CONS.num_args, results);
+}
+
+Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
+  if (ast->data.AST_APPLICATION.len != 4) {
+    return type_error(ctx, ast, "run_in_scheduler must have 3 args\n");
+  }
+
+  Ast *fo_ast = ast->data.AST_APPLICATION.args;
+  infer(fo_ast, ctx);
+  Ast *scheduler_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *effect_ast = ast->data.AST_APPLICATION.args + 2;
+  Ast *generator_ast = ast->data.AST_APPLICATION.args + 3;
+
+  infer(scheduler_ast,
+        ctx); // first arg is concrete schedule fn impl
+  Type *val_generator_type = infer(generator_ast, ctx);
+  if (!is_struct_of_void_fns(val_generator_type)) {
+    return type_error(
+        ctx, ast->data.AST_APPLICATION.args + 2,
+        "value generator must consist of constants or () -> xx void funcs");
+  }
+
+  Type *effect_fn_type = infer(effect_ast, ctx);
+
+  Type *val_struct = effect_fn_type->data.T_FN.from;
+  Type *t = val_struct->data.T_CONS.args[0];
+  val_struct->data.T_CONS.args[0] = &t_num;
+  if (is_generic(t)) {
+    unify_in_ctx(t, &t_num, ctx, effect_ast->data.AST_LAMBDA.params);
+  }
+
+  if (effect_fn_type->data.T_FN.to->kind != T_FN) {
+    return type_error(ctx, effect_ast, "not enough args in sink fn");
+  }
+  Type *frame_offset_arg = effect_fn_type->data.T_FN.to->data.T_FN.from;
+
+  TICtx _ctx = {};
+  Type *concrete_val_struct = struct_of_fns_to_return(val_generator_type);
+
+  unify_in_ctx(fo_ast->md, &t_uint64, &_ctx, fo_ast);
+
+  unify_in_ctx(val_struct, concrete_val_struct, &_ctx,
+               (effect_ast)->data.AST_LAMBDA.params);
+
+  unify_in_ctx(frame_offset_arg, &t_uint64, &_ctx,
+               (effect_ast)->data.AST_LAMBDA.params + 1);
+
+  Substitution *subst = solve_constraints(_ctx.constraints);
+  apply_substitutions_rec(ast, subst);
+  (effect_ast)->md = apply_substitution(subst, (effect_ast)->md);
+}
+
+Type *infer_iter(Ast *ast, TICtx *ctx) {
+  Type *t = infer(ast->data.AST_APPLICATION.args, ctx);
+  Type *ret_type;
+  switch (t->kind) {
+  case T_CONS: {
+    if (is_list_type(t)) {
+      ret_type = t->data.T_CONS.args[0];
+      break;
+    }
+
+    if (is_array_type(t)) {
+      ret_type = t->data.T_CONS.args[0];
+      break;
+    }
+  }
+  default: {
+    fprintf(stderr, "Type ");
+    print_type_err(t);
+    fprintf(stderr, "does not implement the iterable typeclass\n");
+    return NULL;
+  }
+  }
+  Type *coroutine_fn = create_coroutine_instance_type(ret_type);
+  Type *coroutine_constructor = type_fn(t, coroutine_fn);
+  coroutine_constructor->is_coroutine_constructor = true;
+  ast->data.AST_APPLICATION.function->md = coroutine_constructor;
+  return coroutine_fn;
+}
+
+Type *find_variant_member(Type *variant, const char *name);
+Type *infer_cons_application(Ast *ast, TICtx *ctx) {
+  Type *fn_type = ast->data.AST_APPLICATION.function->md;
+  // print_type(fn_type);
+
+  Ast *fn_id = ast->data.AST_APPLICATION.function;
+  const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
+  Type *cons = fn_type;
+
+  if (is_variant_type(fn_type)) {
+    cons = find_variant_member(fn_type, fn_name);
+    if (!cons) {
+      fprintf(stderr, "Error: %s not found in variant %s\n", fn_name,
+              cons->data.T_CONS.name);
+      return NULL;
+    }
+  }
+
+  TICtx app_ctx = {};
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+
+    Type *cons_arg = cons->data.T_CONS.args[i];
+
+    Type *arg_type;
+    if (!(arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx))) {
+      return type_error(
+          ctx, ast, "Could not infer argument type in cons %s application\n",
+          cons->data.T_CONS.name);
+    }
+
+    if (!unify_in_ctx(cons_arg, arg_type, &app_ctx, ast)) {
+      return type_error(ctx, ast,
+                        "Could not constrain type variable to function type\n");
+    }
+
+    if (is_generic(arg_type) && !(types_equal(arg_type, cons_arg))) {
+      ctx->constraints =
+          constraints_extend(ctx->constraints, arg_type, cons_arg);
+    }
+  }
+
+  Substitution *subst = solve_constraints(app_ctx.constraints);
+  Type *resolved_type = apply_substitution(subst, fn_type);
+  apply_substitutions_rec(ast, subst);
+  ast->data.AST_APPLICATION.function->md = resolved_type;
+  return resolved_type;
+}
+
+Type *infer_application(Ast *ast, TICtx *ctx) {
+
+  // print_ast(ast);
+  // if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+  //   printf("APPLICATION\n");
+  //   print_ast(ast);
+  // }
+
+  Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
+
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               TYPE_NAME_RUN_IN_SCHEDULER)) {
+    infer_schedule_event_callback(ast, ctx);
+    return &t_void;
+  }
+
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "addrof")) {
+
+    Type *arg_type = infer(ast->data.AST_APPLICATION.args, ctx);
+    return arg_type;
+  }
+
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "iter")) {
+    return infer_iter(ast, ctx);
+  }
+
+  if (!fn_type) {
+    return NULL;
+  }
+
+  switch (fn_type->kind) {
+
+  case T_VAR: {
+    int app_len = ast->data.AST_APPLICATION.len;
+
+    Type *arg_types[app_len];
+
+    for (int i = 0; i < app_len; i++) {
+      Ast *arg = ast->data.AST_APPLICATION.args + i;
+      Type *arg_type = infer(arg, ctx);
+      if (!arg_type) {
+        return type_error(ctx, arg,
+                          "Could not infer argument type in var application\n");
+      }
+      arg_types[i] = arg_type;
+    }
+
+    Type *ret_type = next_tvar();
+
+    Type *fn_constraint =
+        create_type_multi_param_fn(app_len, arg_types, ret_type);
+
+    unify_in_ctx(fn_constraint, fn_type, ctx, ast);
+
+    return ret_type;
+    break;
+  }
+  case T_CONS: {
+    return infer_cons_application(ast, ctx);
+  }
+  case T_FN: {
+    return infer_fn_application(ast, ctx);
+  }
+  default: {
+
+    if (IS_PRIMITIVE_TYPE(fn_type)) {
+      if (ast->data.AST_APPLICATION.args->tag == AST_LIST &&
+          ast->data.AST_APPLICATION.args->data.AST_LIST.len == 0) {
+        return create_list_type_of_type(fn_type);
+      }
+
+      Type *f = fn_type;
+      for (int i = ast->data.AST_APPLICATION.len - 1; i >= 0; i--) {
+        Type *t = infer(ast->data.AST_APPLICATION.args + i, ctx);
+        f = type_fn(t, f);
+      }
+      // print_type(f);
+      ast->data.AST_APPLICATION.function->md = f;
+      return fn_type;
+    }
+    fprintf(stderr, "Error: constructor not implemented\n");
+    return NULL;
+  }
+  }
+}

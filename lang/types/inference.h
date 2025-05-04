@@ -4,24 +4,6 @@
 #include "type.h"
 void reset_type_var_counter();
 
-typedef struct TICtx {
-  TypeEnv *env;
-  TypeConstraint *constraints;
-  Ast *current_fn_ast;
-  Type *yielded_type;
-  int scope;
-  int current_fn_scope;
-  const char *err;
-  FILE *err_stream; // Replace const char *err
-} TICtx;
-
-// Substitution map for type variables
-typedef struct Substitution {
-  Type *from; // Type variable
-  Type *to;   // Replacement type
-  struct Substitution *next;
-} Substitution;
-
 Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2);
 
 Type *apply_substitution(Substitution *subst, Type *t);

@@ -109,16 +109,21 @@ let LayerCache = module
     );
     LCache pre_acts acts
   ;;
+
+  let debug_cache = fn cache: (LCache) ->
+    print "pre activations:\n";
+    print "\nlayer 0:\n"; print_arr (cache.pre_activations @ 0) ;
+    print "\nlayer 1:\n"; print_arr (cache.pre_activations @ 1) ;
+    print "\noutput:\n"; print_arr  (cache.pre_activations @ 2) ;
+
+    print "\nactivations:\n";
+    print "\nlayer 0:\n"; print_arr (cache.activations @ 0) ;
+    print "\nlayer 1:\n"; print_arr (cache.activations @ 1) ;
+    print "\nlayer 2:\n"; print_arr (cache.activations @ 2) ;
+    print "\noutput:\n"; print_arr  (cache.activations @ 3) 
+  ;;
 ;
 
 let lc = LayerCache.from_network MLP;
 
-print_arr (lc.pre_activations @ 0);
-print_arr (lc.pre_activations @ 1);
-print_arr (lc.pre_activations @ 2);
-
-print_arr (lc.activations @ 0);
-print_arr (lc.activations @ 1);
-print_arr (lc.activations @ 2);
-print_arr (lc.activations @ 3);
-
+LayerCache.debug_cache lc;

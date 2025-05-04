@@ -426,4 +426,22 @@ void typeclasses_extend(Type *t, TypeClass *tc);
 Type *coroutine_constructor_type_from_fn_type(Type *fn_type);
 
 bool is_module(Type *t);
+
+typedef struct TICtx {
+  TypeEnv *env;
+  TypeConstraint *constraints;
+  Ast *current_fn_ast;
+  Type *yielded_type;
+  int scope;
+  int current_fn_scope;
+  const char *err;
+  FILE *err_stream; // Replace const char *err
+} TICtx;
+
+// Substitution map for type variables
+typedef struct Substitution {
+  Type *from; // Type variable
+  Type *to;   // Replacement type
+  struct Substitution *next;
+} Substitution;
 #endif
