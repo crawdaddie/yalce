@@ -44,9 +44,15 @@ LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/
 # Static linking flags - used for the static target (macOS compatible)
 # Use linking flags that force inclusion of all symbols from the library
 STATIC_LD_FLAGS := -Wl,-force_load,$(BUILD_DIR)/engine/libyalce_synth.a -lm -framework Accelerate
-
+# Define SOUNDIO_STATIC_LIBRARY for static linking with libsoundio
+STATIC_LD_FLAGS += -DSOUNDIO_STATIC_LIBRARY
+STATIC_LD_FLAGS += /opt/homebrew/lib/libsoundio.a
+STATIC_LD_FLAGS += /opt/homebrew/lib/libsndfile.a
+STATIC_LD_FLAGS += /opt/homebrew/lib/libfftw3.a
+# STATIC_LD_FLAGS += /opt/homebrew/lib/libxml2.a
+#
 # Add all dependencies needed by libyalce_synth.a
-STATIC_LD_FLAGS += -L/opt/homebrew/lib -lsoundio -lsndfile -lfftw3 -ldl -lxml2
+# STATIC_LD_FLAGS += -L/opt/homebrew/lib -lsoundio -lsndfile -lfftw3 -ldl -lxml2
 STATIC_LD_FLAGS += -framework OpenGL -framework CoreMIDI -framework Cocoa 
 
 # For readline, use the static version + necessary termcap functions from ncurses
