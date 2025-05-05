@@ -175,18 +175,18 @@ defer_quant (q * 2) (fn t ->
   |> Hihat.set_pattern t
   ;
 
-  # iter [|3., 3., 3., 4., 3.|]  
-  # |> cor_loop
-  # |> cor_map ((*) (q * 0.25))
-  # |> cor_map (fn d -> Kick.trig (); d)
-  # |> Kick.set_pattern t
-  # ;
-  iter (euclid 64 13)
+  iter [|3., 3., 3., 4., 3.|]  
   |> cor_loop
-  |> cor_map (bin_pat (q * 0.25) (Kick.trig))
+  |> cor_map ((*) (q * 0.25))
+  |> cor_map (fn d -> Kick.trig (); d)
   |> Kick.set_pattern t
   ;
-
+  # iter (euclid 64 10)
+  # |> cor_loop
+  # |> cor_map (bin_pat (q * 0.25) (Kick.trig))
+  # |> Kick.set_pattern t
+  # ;
+  #
   snrout ()
   |> cor_map ((*) q)
   |> Snare.set_pattern t
