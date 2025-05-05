@@ -24,7 +24,10 @@ an audio node is an object that holds
 - 
 - a `node_perform` function pointer that reads from the input buffers, and writes to the output buffers
 - a reference to the next node in the chain to compute
-
+## install
+```
+brew install crawdaddie/yalce/yalce
+```
 ## build
 ```
 make build/libyalce_synth.so
