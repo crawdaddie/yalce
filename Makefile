@@ -27,7 +27,7 @@ CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm
 CFLAGS += -I./lang/runtime
 CFLAGS += `$(LLVM_CONFIG) --cflags`
-CFLAGS += -I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include
+CFLAGS += -I`$(LLVM_CONFIG) --includedir`
 
 
 LANG_CC := clang $(CFLAGS)
