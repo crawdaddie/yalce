@@ -26,7 +26,7 @@ jobs:
         run: |
           brew update
           # Install main dependencies
-          brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16 libsoundio libsndfile
+          brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16 libsoundio libsndfile fftw3
           # Install dependencies of libsndfile
           brew install libogg libvorbis flac opus mpg123 lame
           echo "LLVM_DIR=$(brew --prefix llvm@16)" >> $GITHUB_ENV
@@ -66,6 +66,7 @@ jobs:
           cp $(brew --prefix opus)/lib/libopus*.dylib dist/lib/
           cp $(brew --prefix mpg123)/lib/libmpg123*.dylib dist/lib/
           cp $(brew --prefix lame)/lib/libmp3lame*.dylib dist/lib/
+          cp $(brew --prefix fftw)/lib/libfftw3*.dylib dist/lib/
       
       - name: Update library paths
         run: |
