@@ -20,8 +20,9 @@ OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean
 
-all: $(BUILD_DIR)/libgui.a
-	# $(BUILD_DIR)/libgui.so
+# all: $(BUILD_DIR)/libgui.a
+
+all: $(BUILD_DIR)/libgui.so
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -31,6 +32,12 @@ $(BUILD_DIR)/%.o: %.c gui.h | $(BUILD_DIR)
 
 $(BUILD_DIR)/libgui.a: $(OBJS)
 	ar rcs $@ $(OBJS)
+	$(MAKE) -C . ylc_bindings
+
+# Build the shared library
+$(BUILD_DIR)/libgui.so: $(OBJS)
+	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
+	install_name_tool -id @rpath/libgui.so $@
 	$(MAKE) -C . ylc_bindings
 
 # $(BUILD_DIR)/libgui.so: $(OBJS)

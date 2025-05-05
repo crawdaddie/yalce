@@ -1,0 +1,156 @@
+name: Build macOS Packages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  build-macos:
+    name: Build macOS Package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+            arch: "x86_64"
+            label: "Intel"
+          - os: macos-14
+            arch: "arm64"
+            label: "Apple Silicon"
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up environment
+        run: |
+          brew update
+          brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16
+          echo "LLVM_DIR=$(brew --prefix llvm@16)" >> $GITHUB_ENV
+      
+      - name: Build for ${{ matrix.label }}
+        run: |
+          # Run your normal build process
+          # This will be on x86_64 when running on macos-13 and arm64 on macos-14
+          make
+      
+      - name: Create distribution directory
+        run: |
+          mkdir -p dist/bin
+          mkdir -p dist/lib/engine
+          mkdir -p dist/lib/gui
+          
+          # Copy executable
+          cp build/ylc dist/bin/
+          
+          # Copy custom libraries
+          cp build/engine/libyalce_synth.so dist/lib/engine/
+          cp build/gui/libgui.so dist/lib/gui/
+          
+          # Copy Homebrew libraries
+          cp $(brew --prefix readline)/lib/libreadline.*.dylib dist/lib/
+          cp $(brew --prefix sdl2)/lib/libSDL2*.dylib dist/lib/
+          cp $(brew --prefix sdl2_ttf)/lib/libSDL2_ttf*.dylib dist/lib/
+          cp $(brew --prefix sdl2_gfx)/lib/libSDL2_gfx*.dylib dist/lib/
+          cp $(brew --prefix llvm@16)/lib/libLLVM.dylib dist/lib/
+      
+      - name: Update library paths
+        run: |
+          # Update executable
+          install_name_tool -change @rpath/libyalce_synth.so @executable_path/../lib/engine/libyalce_synth.so dist/bin/ylc
+          install_name_tool -change @rpath/libgui.so @executable_path/../lib/gui/libgui.so dist/bin/ylc
+          
+          # Get paths to update
+          READLINE_PATH=$(otool -L dist/bin/ylc | grep readline | awk '{print $1}')
+          SDL2_PATH=$(otool -L dist/bin/ylc | grep libSDL2-2 | awk '{print $1}')
+          SDL2_TTF_PATH=$(otool -L dist/bin/ylc | grep SDL2_ttf | awk '{print $1}')
+          SDL2_GFX_PATH=$(otool -L dist/bin/ylc | grep SDL2_gfx | awk '{print $1}')
+          LLVM_PATH=$(otool -L dist/bin/ylc | grep libLLVM | awk '{print $1}')
+          
+          # Update library paths in executable
+          install_name_tool -change "$READLINE_PATH" @executable_path/../lib/$(basename "$READLINE_PATH") dist/bin/ylc
+          install_name_tool -change "$SDL2_PATH" @executable_path/../lib/$(basename "$SDL2_PATH") dist/bin/ylc
+          install_name_tool -change "$SDL2_TTF_PATH" @executable_path/../lib/$(basename "$SDL2_TTF_PATH") dist/bin/ylc
+          install_name_tool -change "$SDL2_GFX_PATH" @executable_path/../lib/$(basename "$SDL2_GFX_PATH") dist/bin/ylc
+          install_name_tool -change "$LLVM_PATH" @executable_path/../lib/$(basename "$LLVM_PATH") dist/bin/ylc
+          
+          # Update library paths in libgui.so
+          SDL2_PATH=$(otool -L dist/lib/gui/libgui.so | grep libSDL2-2 | awk '{print $1}')
+          SDL2_TTF_PATH=$(otool -L dist/lib/gui/libgui.so | grep SDL2_ttf | awk '{print $1}')
+          SDL2_GFX_PATH=$(otool -L dist/lib/gui/libgui.so | grep SDL2_gfx | awk '{print $1}')
+          
+          if [ -n "$SDL2_PATH" ]; then
+            install_name_tool -change "$SDL2_PATH" @loader_path/../$(basename "$SDL2_PATH") dist/lib/gui/libgui.so
+          fi
+          if [ -n "$SDL2_TTF_PATH" ]; then
+            install_name_tool -change "$SDL2_TTF_PATH" @loader_path/../$(basename "$SDL2_TTF_PATH") dist/lib/gui/libgui.so
+          fi
+          if [ -n "$SDL2_GFX_PATH" ]; then
+            install_name_tool -change "$SDL2_GFX_PATH" @loader_path/../$(basename "$SDL2_GFX_PATH") dist/lib/gui/libgui.so
+          fi
+          
+          # Check libyalce_synth.so dependencies and update if needed
+          DEPS=$(otool -L dist/lib/engine/libyalce_synth.so | grep "/opt/homebrew" | awk '{print $1}')
+          for DEP in $DEPS; do
+            install_name_tool -change "$DEP" @loader_path/../$(basename "$DEP") dist/lib/engine/libyalce_synth.so
+          done
+      
+      - name: Create wrapper script
+        run: |
+          cat > dist/ylc << 'EOF'
+          #!/bin/bash
+          DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+          "$DIR/bin/ylc" "$@"
+          EOF
+          chmod +x dist/ylc
+          
+          # Create README
+          cat > dist/README.md << EOF
+          # YLC CLI Tool (${{ matrix.label }} version)
+          
+          ## Installation
+          1. Extract this archive to a location of your choice
+          2. Run the \`ylc\` script in the root directory
+          
+          ## Requirements
+          - macOS 11.0 or later on ${{ matrix.label }}
+          EOF
+      
+      - name: Create archive
+        run: |
+          cd dist
+          tar -czf ../ylc-${{ matrix.arch }}.tar.gz .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ylc-${{ matrix.arch }}
+          path: ylc-${{ matrix.arch }}.tar.gz
+  
+  create-release:
+    name: Create GitHub Release
+    needs: build-macos
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download Intel build
+        uses: actions/download-artifact@v3
+        with:
+          name: ylc-x86_64
+          path: .
+      
+      - name: Download Apple Silicon build
+        uses: actions/download-artifact@v3
+        with:
+          name: ylc-arm64
+          path: .
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ylc-x86_64.tar.gz
+            ylc-arm64.tar.gz

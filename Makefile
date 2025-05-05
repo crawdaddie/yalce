@@ -36,7 +36,7 @@ LANG_CC += -g
 LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm -framework Accelerate
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
-LANG_LD_FLAGS += -Wl,-rpath,@executable_path/engine
+LANG_LD_FLAGS += -Wl,-rpath,@executable_path/../build/engine -Wl,-rpath,@executable_path/../build/gui
 
 LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx
 
@@ -76,6 +76,7 @@ LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 .PHONY: all clean engine test wasm serve_docs engine_bindings gui cor
 
 all: $(BUILD_DIR)/ylc
+
 debug: all
 
 engine:
@@ -104,8 +105,9 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 	$(LANG_CC) -c -o $@ $<
 
 # Build the final executable
-$(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui cor
+$(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
+	otool -L $(BUILD_DIR)/ylc
 
 clean:
 	rm -rf $(BUILD_DIR)
