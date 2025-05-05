@@ -3,10 +3,22 @@ open engine/bindings/Sched;
 open engine/bindings/Synth; 
 open lib/Ref;
 import lib/Math;
+open lib/Euclid;
+
+
+let (@) = array_at;
+let print_arr = fn arr: (Array of Int) ->
+  print "[| ";
+  let arr_len = array_size arr in
+  for i = 0 to (arr_len - 1) in (
+    print `{arr @ i}, `
+  );
+  print "|]\n";
+  arr
+;;
 
 let q = 60. / 130.;
 let Kick = module
-  # import synths/Kick;
   let buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Kick11.wav";
   let synth = (fn () ->
     let trig = inlet 0.; # 0
@@ -25,11 +37,10 @@ let Kick = module
 
   let pattern_ref = [|empty_coroutine ()|] ;
   let set_pattern = fn t cor ->
-    let pref =pattern_ref;
-    cor_stop (array_at pref 0);
+    cor_stop (array_at pattern_ref 0);
     cor
     |> play_routine t schedule_event
-    |> array_set 0 pref 
+    |> array_set 0 pattern_ref 
   ;;
 ;
 
@@ -72,27 +83,27 @@ let Snare = module
 
 let Hihat = module
 
-  let buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Closedhat12.wav";
-  let synth = (fn () ->
+  let closed_hh_buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Closedhat12.wav";
+  let closed_hh = (fn () ->
     let trig = inlet 0.; # 0
     let imp = lfpulse_node 0. (inlet 0.) trig; # 1
     let gate = inlet 0.; # 2
-    bufplayer_trig_node (buf_ref buf) ((44100. / 48000.) * (inlet 1.)) (inlet 0.) imp # 3 
+    bufplayer_trig_node (buf_ref closed_hh_buf) ((44100. / 48000.) * (inlet 1.)) (inlet 0.) imp # 3 
     |> (*) (aslr_node 0. 3. 0.2 0.1 trig)
   )
   |> play_tpl
   ;
 
   let _ = MIDI.register_cc_handler 2 0 (fn val ->
-    set_input_scalar_offset synth 1 (get_current_sample ()) (Math.unipolar_scale 0. (8. / q) val)  
+    set_input_scalar_offset closed_hh 1 (get_current_sample ()) (Math.unipolar_scale 0. (8. / q) val)  
   );
 
-  let openh = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Openhat02.wav";
-  let openh_synth = (fn () ->
+  let open_hh_buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Openhat02.wav";
+  let open_hh = (fn () ->
     let trig = inlet 0.; # 0
     let imp = lfpulse_node 0. (inlet 0.) trig; # 1
     let gate = inlet 0.; # 2
-    bufplayer_trig_node (buf_ref openh) (44100. * 1.1 / 48000.) (inlet 0.) imp # 3 
+    bufplayer_trig_node (buf_ref open_hh_buf) (44100. * 1.1 / 48000.) (inlet 0.) imp # 3 
     |> (*) (aslr_node 0. 3. 0.2 0.1 trig)
   )
   |> play_tpl
@@ -100,24 +111,24 @@ let Hihat = module
 
   let trig = fn () -> 
     let fo = get_tl_tick ();
-    set_input_trig_offset synth 0 fo;
-    set_input_scalar_offset synth 3 fo 1.  
+    set_input_trig_offset closed_hh 0 fo;
+    set_input_scalar_offset closed_hh 3 fo 1.  
   ;;
 
 
   let trig_rev = fn () -> 
     let fo = get_tl_tick ();
-    set_input_scalar_offset synth 3 fo -1.  
+    set_input_scalar_offset closed_hh 3 fo -1.  
   ;;
 
   let trig_open = fn () -> 
     let fo = get_tl_tick ();
-    set_input_trig_offset openh_synth 0 fo
+    set_input_trig_offset open_hh 0 fo
   ;;
 
   let pattern_ref = [|empty_coroutine ()|] ;
   let set_pattern = fn t cor ->
-    let pref =pattern_ref;
+    let pref = pattern_ref;
     cor_stop (array_at pref 0);
     cor
     |> play_routine t schedule_event
@@ -150,16 +161,29 @@ let snrout = fn () ->
   yield snrout ()
 ;;
 
-defer_quant (q * 2.) (fn t ->
+let bin_pat = fn q: (Double) f d ->
+  match d with
+  | 1 -> f () 
+  | 0 -> ()
+  ;
+  q
+;;
+
+defer_quant (q * 2) (fn t ->
   Hihat.tts_pat ()
   |> cor_map ((*) q)
   |> Hihat.set_pattern t
   ;
 
-  iter_of_list [3., 3., 3., 4., 3.]  
+  # iter [|3., 3., 3., 4., 3.|]  
+  # |> cor_loop
+  # |> cor_map ((*) (q * 0.25))
+  # |> cor_map (fn d -> Kick.trig (); d)
+  # |> Kick.set_pattern t
+  # ;
+  iter (euclid 64 13)
   |> cor_loop
-  |> cor_map (fn d -> Kick.trig (); d)
-  |> cor_map ((*) (q * 0.25))
+  |> cor_map (bin_pat (q * 0.25) (Kick.trig))
   |> Kick.set_pattern t
   ;
 
@@ -202,3 +226,9 @@ Snare.synth |> pipe_into fx_chain 0;
 # |> compile_blob_template
 # |> instantiate_template []
 # |> node_replace (Kick.synth)
+  # iter [3., 3., 3., 4., 3.]  
+  # |> cor_loop
+  # |> cor_map ((*) (q * 0.25))
+  # |> cor_map (fn d -> Kick.trig (); d)
+  # |> Kick.set_pattern t
+  # ;

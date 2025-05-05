@@ -1186,8 +1186,10 @@ LLVMValueRef IterOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef state_gep = get_instance_state_gep(instance_ptr, builder);
   LLVMValueRef list_ptr =
       LLVMBuildLoad2(builder, llvm_list_type, state_gep, "get_single_cor_arg");
+
   LLVMTypeRef llvm_list_el_type =
       type_to_llvm_type(list_el_type, ctx->env, module);
+
   LLVMValueRef is_null = ll_is_null(list_ptr, llvm_list_el_type, builder);
 
   LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(func, "then");
@@ -1244,12 +1246,17 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *array_type = ast->data.AST_APPLICATION.args->md;
   Type *array_el_type = array_type->data.T_CONS.args[0];
-  LLVMTypeRef llvm_array_type = type_to_llvm_type(array_type, ctx->env, module);
+  print_type(array_type);
+  print_type(array_el_type);
+
   LLVMTypeRef llvm_array_el_type =
       type_to_llvm_type(array_el_type, ctx->env, module);
 
-  LLVMValueRef func = LLVMAddFunction(module, "iter_of_list_array_func",
-                                      cor_coroutine_fn_type());
+  LLVMTypeRef llvm_array_type = codegen_array_type(llvm_array_el_type);
+
+  LLVMValueRef func =
+      LLVMAddFunction(module, "iter_of_array_func", cor_coroutine_fn_type());
+
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
@@ -1257,11 +1264,13 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, block);
 
   LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
   LLVMValueRef counter = LLVMBuildLoad2(
       builder, LLVMInt32Type(), get_instance_counter_gep(instance_ptr, builder),
       "load_instance_counter");
-  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+
   LLVMValueRef state_gep = get_instance_state_gep(instance_ptr, builder);
+
   LLVMValueRef array_ptr =
       LLVMBuildLoad2(builder, LLVMPointerType(llvm_array_type, 0), state_gep,
                      "get_single_cor_arg");
@@ -1294,10 +1303,13 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef _array =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
+  // LLVMValueRef array_alloca =
+  //     ctx->stack_ptr > 0
+  //         ? LLVMBuildAlloca(builder, llvm_array_type, "array_struct_alloca")
+  //         : LLVMBuildMalloc(builder, llvm_array_type, "array_struct_malloc");
+  //
   LLVMValueRef array_alloca =
-      ctx->stack_ptr > 0
-          ? LLVMBuildAlloca(builder, llvm_array_type, "array_struct_alloca")
-          : LLVMBuildMalloc(builder, llvm_array_type, "array_struct_malloc");
+      LLVMBuildMalloc(builder, llvm_array_type, "array_struct_malloc");
 
   LLVMBuildStore(builder, _array, array_alloca);
 
@@ -1307,11 +1319,13 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   cor_struct = LLVMBuildInsertValue(builder, cor_struct,
                                     LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
                                     "insert_counter");
+
   cor_struct = LLVMBuildInsertValue(builder, cor_struct, null_cor_inst(), 2,
                                     "insert_next_null");
 
   cor_struct =
       LLVMBuildInsertValue(builder, cor_struct, array_alloca, 3, "insert_data");
+
   cor_struct =
       LLVMBuildInsertValue(builder, cor_struct, func, 1, "insert_next_null");
 
@@ -1327,6 +1341,106 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return alloca;
 }
 
+LLVMValueRef __IterOfArrayHandler(Ast *ast, JITLangCtx *ctx,
+                                  LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+
+  Type *array_type = ast->data.AST_APPLICATION.args->md;
+  Type *array_el_type = array_type->data.T_CONS.args[0];
+
+  LLVMTypeRef llvm_array_el_type =
+      type_to_llvm_type(array_el_type, ctx->env, module);
+
+  LLVMTypeRef llvm_array_type = codegen_array_type(llvm_array_el_type);
+
+  LLVMValueRef func =
+      LLVMAddFunction(module, "iter_of_array_func", cor_coroutine_fn_type());
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, block);
+
+  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+
+  LLVMValueRef counter_ptr = get_instance_counter_gep(instance_ptr, builder);
+
+  LLVMValueRef counter = LLVMBuildLoad2(builder, LLVMInt32Type(), counter_ptr,
+                                        "load_instance_counter");
+
+  LLVMValueRef state_gep = get_instance_state_gep(instance_ptr, builder);
+
+  LLVMValueRef array_ptr =
+      LLVMBuildLoad2(builder, LLVMPointerType(llvm_array_type, 0), state_gep,
+                     "get_single_cor_arg");
+
+  LLVMValueRef array =
+      LLVMBuildLoad2(builder, llvm_array_type, array_ptr, "get_single_cor_arg");
+
+  LLVMValueRef array_size =
+      codegen_get_array_size(builder, array, llvm_array_el_type);
+
+  LLVMValueRef is_null = LLVMBuildICmp(builder, LLVMIntULT, counter, array_size,
+                                       "counter_in_bounds");
+
+  LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(func, "then");
+  LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(func, "else");
+
+  LLVMBuildCondBr(builder, is_null, then_block, else_block);
+
+  LLVMPositionBuilderAtEnd(builder, then_block);
+
+  LLVMValueRef array_val =
+      get_array_element(builder, array, counter, llvm_array_el_type);
+
+  LLVMBuildStore(builder, array_val, ret_val_ref);
+
+  LLVMValueRef next_counter = LLVMBuildAdd(
+      builder, counter, LLVMConstInt(LLVMInt32Type(), 1, 0), "next_counter");
+
+  LLVMBuildStore(builder, next_counter, counter_ptr);
+
+  LLVMBuildRet(builder, instance_ptr);
+
+  LLVMPositionBuilderAtEnd(builder, else_block);
+  LLVMBuildRet(builder, null_cor_inst());
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  LLVMValueRef _array =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMValueRef array_alloca =
+      ctx->stack_ptr > 0
+          ? LLVMBuildAlloca(builder, llvm_array_type, "array_struct_alloca")
+          : LLVMBuildMalloc(builder, llvm_array_type, "array_struct_malloc");
+
+  LLVMBuildStore(builder, _array, array_alloca);
+
+  LLVMTypeRef cor_struct_type = cor_inst_struct_type();
+  LLVMValueRef cor_struct = LLVMGetUndef(cor_struct_type);
+
+  cor_struct = LLVMBuildInsertValue(builder, cor_struct,
+                                    LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
+                                    "insert_counter");
+
+  cor_struct = LLVMBuildInsertValue(builder, cor_struct, null_cor_inst(), 2,
+                                    "insert_next_null");
+
+  cor_struct =
+      LLVMBuildInsertValue(builder, cor_struct, array_alloca, 3, "insert_data");
+
+  cor_struct =
+      LLVMBuildInsertValue(builder, cor_struct, func, 1, "insert_func");
+
+  // Always allocate coroutine instances on the heap to ensure they persist
+  LLVMValueRef alloca = _cor_alloc(module, builder);
+
+  LLVMBuildStore(builder, cor_struct, alloca);
+  return alloca;
+}
 LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
   Type *arg_type = ast->data.AST_APPLICATION.args->md;
@@ -1555,6 +1669,7 @@ LLVMValueRef _build_wrapper_for_scheduled_routine(
   END_FUNC
   return func;
 }
+
 LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 

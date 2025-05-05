@@ -127,7 +127,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   if (top_level_func == NULL) {
     // printf("> ");
-    // print_result(result_type, NULL);
+    print_result(result_type, NULL);
     return NULL;
   }
 
@@ -144,7 +144,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   // fflush(stdout);
   // printf("> ");
-  // print_result(result_type, result);
+  print_result(result_type, result);
   return result; // Return success
 }
 

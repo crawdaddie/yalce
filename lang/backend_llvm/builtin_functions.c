@@ -45,10 +45,23 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     //   }                                                                        \
     // };                                                                         \
 
+Type *find_in_env_if_generic(Type *t, TypeEnv *env) {
+  if (t->kind == T_VAR) {
+    Type *l = env_lookup(env, t->data.T_VAR);
+    if (l && t->kind != T_VAR) {
+      return l;
+    }
+    if (l && t->kind == T_VAR) {
+      return find_in_env_if_generic(l, env);
+    }
+  }
+  return t;
+}
 
 #define ARITHMETIC_BINOP(_name, _flop, _iop)                                   \
   ({                                                                           \
     Type *ret = fn_return_type(fn_type);                                       \
+    ret = find_in_env_if_generic(ret, ctx->env);                               \
     switch (ret->kind) {                                                       \
     case T_INT:                                                                \
     case T_UINT64: {                                                           \
@@ -209,52 +222,54 @@ LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return curried_binop(ast->data.AST_APPLICATION.args, LLVMFDiv, LLVMSDiv,
                          ast->md, ctx, module, builder);
   }
-  // LLVMSDiv,
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = (fn_type->data.T_FN.to)->data.T_FN.from;
-  ({
-    Type *ret = fn_return_type(fn_type);
-    switch (ret->kind) {
-    case T_INT:
-    case T_UINT64: {
-      LLVMValueRef l =
-          codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-      l = handle_type_conversions(l, lt, ret, module, builder);
-      LLVMValueRef r =
-          codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-      r = handle_type_conversions(r, rt, ret, module, builder);
-      return LLVMBuildBinOp(builder, LLVMSDiv, l, r,
-                            "/"
-                            "_int");
-    }
-    case T_NUM: {
-      LLVMValueRef l =
-          codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-      l = handle_type_conversions(l, lt, ret, module, builder);
-      LLVMValueRef r =
-          codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-      r = handle_type_conversions(r, rt, ret, module, builder);
-      return LLVMBuildBinOp(builder, LLVMFDiv, l, r,
-                            "/"
-                            "_num");
-    }
-    default: {
-      if (ret->alias) {
-        JITSymbol *sym = get_typeclass_method(ret->alias, "/", ctx);
-        if (!sym) {
-          return ((void *)0);
-        }
-        if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler)
-          return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
-              ast, ctx, module, builder);
-      }
-      return ((void *)0);
-    }
-    }
-  });
+
+  ARITHMETIC_BINOP("/", LLVMFDiv, LLVMSDiv);
   return NULL;
+  // ({
+  //   Type *ret = fn_return_type(fn_type);
+  //   switch (ret->kind) {
+  //   case T_INT:
+  //   case T_UINT64: {
+  //     LLVMValueRef l =
+  //         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  //     l = handle_type_conversions(l, lt, ret, module, builder);
+  //     LLVMValueRef r =
+  //         codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+  //     r = handle_type_conversions(r, rt, ret, module, builder);
+  //     return LLVMBuildBinOp(builder, LLVMSDiv, l, r,
+  //                           "/"
+  //                           "_int");
+  //   }
+  //   case T_NUM: {
+  //     LLVMValueRef l =
+  //         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  //     l = handle_type_conversions(l, lt, ret, module, builder);
+  //     LLVMValueRef r =
+  //         codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+  //     r = handle_type_conversions(r, rt, ret, module, builder);
+  //     return LLVMBuildBinOp(builder, LLVMFDiv, l, r,
+  //                           "/"
+  //                           "_num");
+  //   }
+  //   default: {
+  //     if (ret->alias) {
+  //       JITSymbol *sym = get_typeclass_method(ret->alias, "/", ctx);
+  //       if (!sym) {
+  //         return ((void *)0);
+  //       }
+  //       if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler)
+  //         return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
+  //             ast, ctx, module, builder);
+  //     }
+  //     return ((void *)0);
+  //   }
+  //   }
+  // });
+  // return NULL;
 }
 
 LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

@@ -185,6 +185,7 @@ int scheduler_event_loop() {
 
 void *schedule_event(uint64_t now, double delay_seconds,
                      SchedulerCallback callback, void *userdata) {
+
   // printf("schedule event %llu %f %p\n", now, delay_seconds, userdata);
 
   if (userdata == NULL) {

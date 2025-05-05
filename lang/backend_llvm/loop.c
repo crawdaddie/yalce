@@ -98,13 +98,13 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
   LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
   LLVMBasicBlockRef cond_block =
       LLVMAppendBasicBlock(current_function, "loop.cond");
+
   LLVMBasicBlockRef body_block =
       LLVMAppendBasicBlock(current_function, "loop.body");
   LLVMBasicBlockRef inc_block =
       LLVMAppendBasicBlock(current_function, "loop.inc");
   LLVMBasicBlockRef after_block =
       LLVMAppendBasicBlock(current_function, "loop.after");
-
 
   Type *arr_type = iter_array_expr->data.AST_APPLICATION.args->md;
   Type *_type = arr_type->data.T_CONS.args[0];
@@ -136,7 +136,8 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
   LLVMValueRef end_val =
       array_size; // loop is equivalent to for (int i = 0; i < size; i++) {...
 
-  // TODO: need to use codegen_pattern_binding to properly set up complex bindings like (i, x)
+  // TODO: need to use codegen_pattern_binding to properly set up complex
+  // bindings like (i, x)
   JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, _type, start_val, loop_var_type);
   sym->storage = loop_var_alloca;
 
@@ -205,36 +206,39 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
       codegen(iter_expr->data.AST_APPLICATION.args, ctx, module, builder);
 
   Type *list_el_type = ltype->data.T_CONS.args[0];
-  LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx->env, module);
+  LLVMTypeRef llvm_list_el_type =
+      type_to_llvm_type(list_el_type, ctx->env, module);
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_list_el_type);
-  
-  LLVMValueRef loop_var_alloca = LLVMBuildAlloca(builder, llvm_list_el_type, loop_var_name);
 
-  
+  LLVMValueRef loop_var_alloca =
+      LLVMBuildAlloca(builder, llvm_list_el_type, loop_var_name);
+
   LLVMValueRef iterator = LLVMBuildAlloca(
       builder, LLVMPointerType(llvm_list_node_type, 0), "iterator");
-  
+
   LLVMBuildStore(builder, list_val, iterator);
-  
+
   LLVMValueRef is_null = LLVMBuildIsNull(builder, list_val, "is_null_check");
-  
-  LLVMBasicBlockRef init_var_block = 
+
+  LLVMBasicBlockRef init_var_block =
       LLVMAppendBasicBlock(current_function, "init_var");
-  
+
   LLVMBuildCondBr(builder, is_null, after_block, init_var_block);
-  
+
   LLVMPositionBuilderAtEnd(builder, init_var_block);
-  
+
   LLVMValueRef first_node = LLVMBuildLoad2(
       builder, LLVMPointerType(llvm_list_node_type, 0), iterator, "first_node");
 
   LLVMValueRef first_data_ptr = LLVMBuildStructGEP2(
       builder, llvm_list_node_type, first_node, 0, "first_data_ptr");
-  LLVMValueRef first_data = LLVMBuildLoad2(
-      builder, llvm_list_el_type, first_data_ptr, "first_data");
+  LLVMValueRef first_data =
+      LLVMBuildLoad2(builder, llvm_list_el_type, first_data_ptr, "first_data");
 
-  // TODO: need to use codegen_pattern_binding to properly set up bindings like (i, x)
-  JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, list_el_type, first_data, llvm_list_el_type);
+  // TODO: need to use codegen_pattern_binding to properly set up bindings like
+  // (i, x)
+  JITSymbol *sym =
+      new_symbol(STYPE_LOCAL_VAR, list_el_type, first_data, llvm_list_el_type);
   sym->storage = loop_var_alloca;
 
   LLVMBuildStore(builder, first_data, loop_var_alloca);
@@ -242,60 +246,59 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
   uint64_t id_hash = hash_string(chars, binding->data.AST_IDENTIFIER.length);
   ht_set_hash(ctx->frame->table, chars, id_hash, sym);
 
-
-
-  
   LLVMBuildBr(builder, cond_block);
-  
+
   LLVMPositionBuilderAtEnd(builder, cond_block);
-  
-  LLVMValueRef current_node = LLVMBuildLoad2(
-      builder, LLVMPointerType(llvm_list_node_type, 0), iterator, "current_node");
+
+  LLVMValueRef current_node =
+      LLVMBuildLoad2(builder, LLVMPointerType(llvm_list_node_type, 0), iterator,
+                     "current_node");
   LLVMValueRef cond = LLVMBuildIsNotNull(builder, current_node, "loop_cond");
-  
+
   LLVMBuildCondBr(builder, cond, body_block, after_block);
-  
+
   LLVMPositionBuilderAtEnd(builder, body_block);
-  
+
   codegen(body, ctx, module, builder);
-  
+
   LLVMBuildBr(builder, inc_block);
-  
+
   LLVMPositionBuilderAtEnd(builder, inc_block);
-  
-  LLVMValueRef next_ptr = LLVMBuildStructGEP2(
-      builder, llvm_list_node_type, current_node, 1, "next_ptr");
+
+  LLVMValueRef next_ptr = LLVMBuildStructGEP2(builder, llvm_list_node_type,
+                                              current_node, 1, "next_ptr");
   LLVMValueRef next_node = LLVMBuildLoad2(
       builder, LLVMPointerType(llvm_list_node_type, 0), next_ptr, "next_node");
-  
+
   LLVMBuildStore(builder, next_node, iterator);
-  
-  LLVMValueRef is_next_null = LLVMBuildIsNull(builder, next_node, "is_next_null");
-  
-  LLVMBasicBlockRef update_var_block = 
+
+  LLVMValueRef is_next_null =
+      LLVMBuildIsNull(builder, next_node, "is_next_null");
+
+  LLVMBasicBlockRef update_var_block =
       LLVMAppendBasicBlock(current_function, "update_var");
-  LLVMBasicBlockRef continue_block = 
+  LLVMBasicBlockRef continue_block =
       LLVMAppendBasicBlock(current_function, "continue");
-  
+
   LLVMBuildCondBr(builder, is_next_null, continue_block, update_var_block);
-  
+
   LLVMPositionBuilderAtEnd(builder, update_var_block);
-  
+
   LLVMValueRef next_data_ptr = LLVMBuildStructGEP2(
       builder, llvm_list_node_type, next_node, 0, "next_data_ptr");
-  LLVMValueRef next_data = LLVMBuildLoad2(
-      builder, llvm_list_el_type, next_data_ptr, "next_data");
+  LLVMValueRef next_data =
+      LLVMBuildLoad2(builder, llvm_list_el_type, next_data_ptr, "next_data");
   LLVMBuildStore(builder, next_data, loop_var_alloca);
-  
+
   LLVMBuildBr(builder, continue_block);
-  
+
   LLVMPositionBuilderAtEnd(builder, continue_block);
-  
+
   LLVMBuildBr(builder, cond_block);
-  
+
   LLVMPositionBuilderAtEnd(builder, after_block);
-  
-  return NULL;  // Return void for loops
+
+  return NULL; // Return void for loops
 }
 
 LLVMValueRef codegen_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

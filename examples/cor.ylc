@@ -181,7 +181,7 @@ cor_list ();
 
 let cor_array = fn () -> 
   let l = [|1, 2, 3|] in
-  let c = iter_of_array l in
+  let c = iter l in
 
   print `## array yield:
   {c ()}
@@ -191,6 +191,25 @@ let cor_array = fn () ->
 `
 ;;
 cor_array ();
+let cor_array2 = fn () -> 
+  let l = [|1, 0, 0, 0, 1, 1, 0, 0, 1|] in
+  let c = iter l in
+
+  print `## array yield:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+cor_array2 ();
 let loop_cor = fn () ->  
   let co_void = fn () -> 
     yield 1;
