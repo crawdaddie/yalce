@@ -38,10 +38,13 @@ jobs:
       
       - name: Create distribution directory
         run: |
+          # Create directories with explicit permissions
           mkdir -p dist/bin
           mkdir -p dist/lib/engine
           mkdir -p dist/lib/gui
-          chmod -R o+rwx dist
+          
+          # Ensure the directories are writable
+          chmod -R 755 dist
           
           # Copy executable
           cp build/ylc dist/bin/
@@ -50,24 +53,31 @@ jobs:
           cp build/engine/libyalce_synth.so dist/lib/engine/
           cp build/gui/libgui.so dist/lib/gui/
           
-          # Copy primary Homebrew libraries
-          cp $(brew --prefix readline)/lib/libreadline.*.dylib dist/lib/
-          cp $(brew --prefix sdl2)/lib/libSDL2*.dylib dist/lib/
-          cp $(brew --prefix sdl2_ttf)/lib/libSDL2_ttf*.dylib dist/lib/
-          cp $(brew --prefix sdl2_gfx)/lib/libSDL2_gfx*.dylib dist/lib/
-          cp $(brew --prefix llvm@16)/lib/libLLVM.dylib dist/lib/
-          cp $(brew --prefix libsoundio)/lib/libsoundio*.dylib dist/lib/
-          cp $(brew --prefix libsndfile)/lib/libsndfile*.dylib dist/lib/
+          # Copy primary Homebrew libraries with sudo if needed
+          sudo cp $(brew --prefix readline)/lib/libreadline.*.dylib dist/lib/
+          sudo cp $(brew --prefix sdl2)/lib/libSDL2*.dylib dist/lib/
+          sudo cp $(brew --prefix sdl2_ttf)/lib/libSDL2_ttf*.dylib dist/lib/
+          sudo cp $(brew --prefix sdl2_gfx)/lib/libSDL2_gfx*.dylib dist/lib/
+          sudo cp $(brew --prefix llvm@16)/lib/libLLVM.dylib dist/lib/
+          sudo cp $(brew --prefix libsoundio)/lib/libsoundio*.dylib dist/lib/
+          sudo cp $(brew --prefix libsndfile)/lib/libsndfile*.dylib dist/lib/
           
-          # Copy secondary dependencies for libsndfile
-          cp $(brew --prefix libogg)/lib/libogg*.dylib dist/lib/
-          cp $(brew --prefix libvorbis)/lib/libvorbis*.dylib dist/lib/
-          cp $(brew --prefix libvorbis)/lib/libvorbisenc*.dylib dist/lib/
-          cp $(brew --prefix flac)/lib/libFLAC*.dylib dist/lib/
-          cp $(brew --prefix opus)/lib/libopus*.dylib dist/lib/
-          cp $(brew --prefix mpg123)/lib/libmpg123*.dylib dist/lib/
-          cp $(brew --prefix lame)/lib/libmp3lame*.dylib dist/lib/
-          cp $(brew --prefix fftw)/lib/libfftw3*.dylib dist/lib/
+          # Copy secondary dependencies for libsndfile with sudo
+          sudo cp $(brew --prefix libogg)/lib/libogg*.dylib dist/lib/
+          sudo cp $(brew --prefix libvorbis)/lib/libvorbis*.dylib dist/lib/
+          sudo cp $(brew --prefix libvorbis)/lib/libvorbisenc*.dylib dist/lib/
+          sudo cp $(brew --prefix flac)/lib/libFLAC*.dylib dist/lib/
+          sudo cp $(brew --prefix opus)/lib/libopus*.dylib dist/lib/
+          sudo cp $(brew --prefix mpg123)/lib/libmpg123*.dylib dist/lib/
+          sudo cp $(brew --prefix lame)/lib/libmp3lame*.dylib dist/lib/
+          sudo cp $(brew --prefix fftw)/lib/libfftw3*.dylib dist/lib/
+          
+          # Fix ownership of files
+          sudo chown -R $(whoami) dist/
+          
+          # List all copied libraries for debugging
+          echo "Libraries in dist/lib:"
+          ls -la dist/lib/
       
       - name: Update library paths
         run: |
