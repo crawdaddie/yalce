@@ -138,37 +138,16 @@ jobs:
           echo "Verifying libyalce_synth.so dependencies..."
           otool -L dist/lib/engine/libyalce_synth.so
       
-      - name: Create wrapper script
-        run: |
-          cat > dist/ylc << 'EOF'
-          #!/bin/bash
-          DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          "$DIR/bin/ylc" "$@"
-          EOF
-          chmod +x dist/ylc
-          
-          # Create README
-          cat > dist/README.md << EOF
-          # YLC CLI Tool (${{ matrix.label }} version)
-          
-          ## Installation
-          1. Extract this archive to a location of your choice
-          2. Run the \`ylc\` script in the root directory
-          
-          ## Requirements
-          - macOS 11.0 or later on ${{ matrix.label }}
-          EOF
-      
-      - name: Create archive
-        run: |
-          cd dist
-          tar -czf ../ylc-${{ matrix.arch }}.tar.gz .
+      # - name: Create archive
+      #   run: |
+      #     cd dist
+      #     tar -czf ../ylc-${{ matrix.arch }}.tar.gz .
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ylc-${{ matrix.arch }}
-          path: ylc-${{ matrix.arch }}.tar.gz
+          path: ylc-${{ matrix.arch }}/dist
   
   create-release:
     name: Create GitHub Release
