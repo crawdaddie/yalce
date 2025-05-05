@@ -23,12 +23,22 @@ bool is_module_ast(Ast *ast) {
   return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
 }
 
+const char *__base_dir = NULL;
+void set_base_dir(const char *dir) { __base_dir = dir; }
+
 Ast *parse_module(const char *filename, TypeEnv *env) {
 
   char *old_import_current_dir = __import_current_dir;
   __import_current_dir = get_dirname(filename);
 
+  if (access(filename, F_OK) != 0 && (__base_dir != NULL)) {
+    char *new_filename = malloc(strlen(filename) + strlen(__base_dir) + 1);
+    sprintf(new_filename, "%s/%s", __base_dir, filename);
+    filename = new_filename;
+  }
+
   Ast *prog = parse_input_script(filename);
+
   prog = create_module_from_root(prog);
 
   if (!prog) {

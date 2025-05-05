@@ -284,11 +284,13 @@ char *prepend_current_directory(const char *filename) {
 Ast *parse_input_script(const char *filename) {
   __filename = filename;
   // filename = prepend_current_directory(filename);
-  char *dir = get_dirname(filename);
   char *fcontent = read_script(filename, top_level_tests);
   if (!fcontent) {
     return NULL;
   }
+
+  char *dir = get_dirname(filename);
+
   char *current_dir = get_dirname(filename);
 
   ast_root = Ast_new(AST_BODY);

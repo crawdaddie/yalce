@@ -208,8 +208,8 @@ int jit(int argc, char **argv) {
   initialize_synth_types(&ctx, module, builder);
 
   bool repl = false;
-
   int arg_counter = 1;
+  set_base_dir(getenv("YLC_BASE_DIR"));
   while (arg_counter < argc) {
     if (strcmp(argv[arg_counter], "-i") == 0) {
       repl = true;
@@ -218,8 +218,12 @@ int jit(int argc, char **argv) {
       // run top-level tests for input module
       top_level_tests = true;
       arg_counter++;
-
+    } else if (strcmp(argv[arg_counter], "--base") == 0) {
+      arg_counter++;
+      set_base_dir(argv[arg_counter]);
+      arg_counter++;
     } else {
+
       Ast *script_prog;
 
       if (top_level_tests) {
@@ -243,7 +247,9 @@ int jit(int argc, char **argv) {
 
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
-                         "version 0.0.0     \n" STYLE_RESET_ALL);
+                         "version 0.0.0     \n"
+                         "module base directory: %s\n" STYLE_RESET_ALL,
+           __base_dir == NULL ? "./" : __base_dir);
 
     init_readline();
 

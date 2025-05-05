@@ -22,4 +22,7 @@ void set_import_ref(Ast *ast, void *ref);
 YLCModule *get_imported_module(Ast *ast);
 
 bool is_module_ast(Ast *ast);
+void set_base_dir(const char *);
+
+extern const char *__base_dir;
 #endif
