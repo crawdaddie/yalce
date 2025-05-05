@@ -1,9 +1,5 @@
+open Math;
 let (@) = array_at;
-let max = fn a b ->
-  match b - a with
-  | x if x > 0 -> b
-  | _ -> a
-;;
 
 let euclid = fn steps pulses: (Int) ->
 
@@ -13,7 +9,7 @@ let euclid = fn steps pulses: (Int) ->
   let rem = steps % pulses;
   let pos = [| 0 |];
 
-  for _ = 0 to (pulses - 1) in (
+  for _ = 0 to pulses in (
     let p = pos @ 0;
     array_set p pattern 1; 
     array_set 0 pos ((p + quot) % steps)
@@ -21,7 +17,7 @@ let euclid = fn steps pulses: (Int) ->
 
   array_set 0 pos 0;
 
-  for _ = 0 to (max (rem - 1) 0) in (
+  for _ = 0 to rem in (
     let p = pos @ 0;
     array_set p pattern 1;
     array_set 0 pos ((p + quot + 1) % steps)

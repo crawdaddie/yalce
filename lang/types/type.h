@@ -24,7 +24,7 @@ typedef struct Method {
   Type *signature;
 } Method;
 
-enum TypeClassType { FN, STRUCTURAL };
+enum TypeClassType { TC_FN, TC_STRUCTURAL };
 
 typedef struct TypeClass {
   const char *name;

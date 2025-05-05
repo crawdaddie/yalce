@@ -64,7 +64,7 @@ LLVMValueRef codegen_loop_range(Ast *binding, Ast *range, Ast *body,
       LLVMBuildLoad2(builder, LLVMInt32Type(), loop_var_alloca, "current");
 
   LLVMValueRef cond =
-      LLVMBuildICmp(builder, LLVMIntULE, current_val, end_val, "loopcond");
+      LLVMBuildICmp(builder, LLVMIntULT, current_val, end_val, "loopcond");
 
   LLVMBuildCondBr(builder, cond, body_block, after_block);
 

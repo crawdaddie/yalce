@@ -15,8 +15,7 @@ let tensor_ndims = fn (_, sizes, _): (Tensor) ->
 
 let fold = fn f res a ->
   let res_ref = [| res |];
-  let max = (array_size a) - 1;
-  for i = 0 to max in (
+  for i = 0 to (array_size a) in (
     let r = res_ref @ 0;
     let v = a @ i;
     array_set 0 res_ref (f r v)  
@@ -26,8 +25,7 @@ let fold = fn f res a ->
 
 let foldi = fn f res a ->
   let res_ref = [| res |];
-  let max = (array_size a) - 1;
-  for i = 0 to max in (
+  for i = 0 to (array_size a) in (
     let r = res_ref @ 0;
     let v = a @ i;
     array_set 0 res_ref (f i r v)  
@@ -36,5 +34,8 @@ let foldi = fn f res a ->
 ;;
 
 
-
+let last = fn x ->
+  let len = array_size x in
+  x @ (len - 1)
+;;
   

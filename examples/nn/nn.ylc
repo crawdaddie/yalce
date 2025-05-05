@@ -2,17 +2,17 @@ import ../../lib/Math;
 import ../../lib/Arrays;
 import dataset;
 
-let print_arr = fn arr: (Array of Double) ->
-  match (array_size arr) with
-  | 0 -> ()
-  | _ -> (
-    print `arr: {arr @ 0}\n`;
-    print_arr (array_succ arr);
-    ()
-  )
-;;
 
 let (@) = array_at;
+let print_arr = fn arr: (Array of Double) -> 
+  print "[| ";
+  for i = 0 to (array_size arr) in (
+    print `{arr @ i}, `
+  );
+  print "|]\n"
+  
+;;
+
 
 type Matrix = (
   rows: Int,
@@ -21,8 +21,8 @@ type Matrix = (
 );
 
 let print_matrix = fn m: (Matrix) ->
-  for i = 0 to (m.rows - 1) in (
-    for j = 0 to (m.cols - 1) in (
+  for i = 0 to m.rows in (
+    for j = 0 to m.cols in (
       print `{m.data @ (i * m.cols + j)}, `
     );
     print "\n"
@@ -45,23 +45,25 @@ let matrix_to_str = fn m: (Matrix) ->
 
 
 let relu = fn x: (Array of Double) -> 
-  let loop = fn x: (Array of Double) ->
-    match (array_size x) with
-    | 0 -> x
-    | _ -> (
-      let v = x @ 0;
-      let relu_v = match v with
-      | v if v > 0. -> v
-      | _ -> 0.
-      ;
-      array_set 0 x relu_v;
-      loop (array_succ x)
-    )
-  ;;
-  loop x;
+  for i = 0 to (array_size x) in (
+    let v = x @ i in
+    array_set i x (match v with
+    | v if v > 0. -> v
+    | _ -> 0.)
+  );
   x 
-
 ;;
+
+# let relu_derivative = fn x: (Array of Double) -> 
+#   for i = 0 to (array_size x) in (
+#     let v = x @ i in
+#     array_set i x (match v with
+#     | v if v > 0. -> v
+#     | _ -> 0.)
+#   );
+#   x 
+# ;;
+
 let identity = fn x: (Array of Double) -> x;;
 
 let mse_loss = fn predictions: (Array of Double) targets: (Array of Double) ->
@@ -144,53 +146,64 @@ let LayerCache = module
 let forward_cache = LayerCache.from_network MLP;
 
 
+let Vec = module
+  let _matrix_vec_mul = extern fn Int -> Int -> Ptr of Double -> Ptr of Double -> ();
+  let matrix_vec_mul = fn m: (Matrix) v: (Array of Double) ->
+    _matrix_vec_mul m.rows m.cols (cstr m.data) (cstr v);
+    v
+  ;;
 
-let _matrix_vec_mul = extern fn Int -> Int -> Ptr of Double -> Ptr of Double -> ();
-let matrix_vec_mul = fn m: (Matrix) v: (Array of Double) ->
-  _matrix_vec_mul m.rows m.cols (cstr m.data) (cstr v);
-  v
-;;
+  let _vec_add = extern fn Int -> Ptr of Double -> Ptr of Double -> ();
 
-let _vec_add = extern fn Int -> Ptr of Double -> Ptr of Double -> ();
-let vec_add = fn a: (Array of Double) b: (Array of Double) -> 
-  _vec_add (array_size a) (cstr a) (cstr b);
-  b
-;;
+  let add = fn a: (Array of Double) b: (Array of Double) -> 
+    _vec_add (array_size a) (cstr a) (cstr b);
+    b
+  ;;
+
+  let sub = fn a: (Array of Double) b: (Array of Double) ->
+    for i = 0 to (array_size a) in (
+      let av = a @ i;
+      let bv = b @ i;
+      array_set i b (av - bv)
+    );
+    b
+  ;;
+
+  let copy = fn a: (Array of Double) ->
+
+    let b = array_fill_const (array_size a) 0.;
+
+    for i = 0 to (array_size b) in (
+      let av = a @ i;
+      array_set i b av
+    );
+    b
+  ;;
+
+  let write_to = fn to_: (Array of Double) from: (Array of Double) ->
+    Arrays.fold (fn t v ->
+      array_set 0 t v;
+      array_succ t
+    ) to_ from;
+    from
+  ;;
+;
 
 
-
-
-# let write_to = fn from: (Array of Double) to_: (Array of Double) ->
-#   Arrays.fold (fn t v ->
-#     array_set 0 t v;
-#     array_succ t
-#   ) to_ from
-# ;;
-
-let write_to = fn to_: (Array of Double) from: (Array of Double) ->
-  Arrays.fold (fn t v ->
-    array_set 0 t v;
-    array_succ t
-  ) to_ from;
-  from
-;;
-
-let (@+) = vec_add;
-let (@*) = matrix_vec_mul;
 
 let forward = fn network: (Network) cache: (LayerCache.LCache) input ->
   let layers = network.layers;
 
-  input |> write_to (cache.pre_activations @ 0);
+  input |> Vec.write_to (cache.pre_activations @ 0);
 
   # TODO: I have to specify the structural types for now - should be possible to fix one day
   Arrays.foldi (fn i (current, cache): (Array of Double, LayerCache.LCache) layer: (Layer) ->
     let z = current
-      |> (@*) layer.weights
-      |> (@+) layer.biases
-      |> write_to (cache.pre_activations @ i)
+      |> Vec.matrix_vec_mul layer.weights
+      |> Vec.add layer.biases
+      |> Vec.write_to (cache.pre_activations @ i)
       |> layer.activation
-      |> write_to (cache.activations @ (i + 1))
+      |> Vec.write_to (cache.activations @ (i + 1))
       ;
 
     (z, cache)
@@ -200,8 +213,42 @@ let forward = fn network: (Network) cache: (LayerCache.LCache) input ->
 
 let (out, cache) = max_in |> forward MLP forward_cache;
 print `{out @ 0}\n`;
-
 print `forward_cache {forward_cache.pre_activations @ 0 @ 4}\n`;
+
+let backward = fn network: (Network) cache: (LayerCache.LCache) x y delta ->
+  let layers = network.layers; 
+  let num_layers = array_size layers;
+  
+  Vec.write_to delta y;
+  let delta = Vec.sub (Arrays.last cache.activations) delta;
+
+
+  for i_ = 0 to (num_layers) in (
+    let i = num_layers - 1 - i_; # reverse i
+    let dW = vec_dot (transpose (cache.activations @ i)) delta;
+    let db = vec_sum delta;
+
+    print `rev: {i}, \n`
+  ) 
+
+;;
+
+backward MLP forward_cache out [|1.|] (array_fill_const 16 0.);
+
+# let train = fn
+#   network: (Network)
+#   epochs
+#   learning_rate ->  
+#   for epoch = 0 to epochs in (
+#     let loss = 0.01;
+#     match epoch % 10 with
+#     | 0 -> (print `Epoch {epoch} Loss: {loss}\n`; ())
+#     | _ -> ()
+#   )
+# ;;
+
+# train MLP 1000 0.01 
+
 
 # print_matrix (matrix_random 16 16);
 

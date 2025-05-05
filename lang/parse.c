@@ -1,5 +1,6 @@
 #include "parse.h"
 #include "input.h"
+#include "modules.h"
 #include "serde.h"
 #include "y.tab.h"
 #include <stdlib.h>
@@ -1030,13 +1031,25 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   int mod_name_len = strlen(__import_current_dir) + 1 + strlen(mod_name) + 4;
   char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
+  char *rel_path = palloc(sizeof(char) * (strlen(mod_name) + 4));
+  sprintf(rel_path, "%s.ylc", mod_name);
 
   snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc",
            __import_current_dir, mod_name);
 
   fully_qualified_name = normalize_path(fully_qualified_name);
 
-  // fully_qualified_name = prepend_current_directory(fully_qualified_name);
+  if (access(fully_qualified_name, F_OK) != 0 && (__base_dir != NULL)) {
+    char *new_filename = malloc(strlen(rel_path) + strlen(__base_dir) + 1);
+    sprintf(new_filename, "%s/%s", __base_dir, rel_path);
+    fully_qualified_name = new_filename;
+
+    if (access(fully_qualified_name, F_OK) != 0) {
+      fprintf(stderr, "Error module %s not found in path\n",
+              fully_qualified_name);
+      return NULL;
+    }
+  }
 
   Ast *import_ast = Ast_new(AST_IMPORT);
   import_ast->data.AST_IMPORT.identifier = mod_id_chars;

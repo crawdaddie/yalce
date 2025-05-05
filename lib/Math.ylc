@@ -33,9 +33,17 @@ let min_int = fn a: (Int) b: (Int) ->
   | _ -> b
 ;;
 
+let max = fn a b ->
+  match a with 
+  | a if a > b -> a 
+  | _ -> b
+;;
+
 let chance = fn thresh f -> 
   let x = rand_double () in
   match (x <= thresh) with
   | true -> (f (); ())
   | _ -> ()
 ;;
+
+

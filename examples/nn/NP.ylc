@@ -1,0 +1,10 @@
+# open ../../lib/Math;
+#
+# # return np.maximum(0, x)
+# # return np.where(x > 0, 1, 0)
+# # return np.ones_like(x)
+#
+# let maximum = fn x ->
+#   
+#   
+# ;;
