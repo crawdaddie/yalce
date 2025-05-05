@@ -26,7 +26,7 @@ jobs:
         run: |
           brew update
           # Install main dependencies
-          brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16 libsoundio libsndfile fftw3
+          brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16 libsoundio libsndfile fftw
           # Install dependencies of libsndfile
           brew install libogg libvorbis flac opus mpg123 lame
           echo "LLVM_DIR=$(brew --prefix llvm@16)" >> $GITHUB_ENV
