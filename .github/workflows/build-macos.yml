@@ -2,9 +2,7 @@ name: Build macOS Packages
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches: [ main, build-macos ]
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
