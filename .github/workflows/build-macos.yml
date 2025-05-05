@@ -41,6 +41,7 @@ jobs:
           mkdir -p dist/bin
           mkdir -p dist/lib/engine
           mkdir -p dist/lib/gui
+          chmod -R o+rwx dist
           
           # Copy executable
           cp build/ylc dist/bin/
