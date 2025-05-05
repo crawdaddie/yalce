@@ -25,13 +25,15 @@ jobs:
       - name: Set up environment
         run: |
           brew update
-          brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16
+          # Install main dependencies
+          brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16 libsoundio libsndfile
+          # Install dependencies of libsndfile
+          brew install libogg libvorbis flac opus mpg123 lame
           echo "LLVM_DIR=$(brew --prefix llvm@16)" >> $GITHUB_ENV
       
       - name: Build for ${{ matrix.label }}
         run: |
           # Run your normal build process
-          # This will be on x86_64 when running on macos-13 and arm64 on macos-14
           make
       
       - name: Create distribution directory
@@ -47,53 +49,82 @@ jobs:
           cp build/engine/libyalce_synth.so dist/lib/engine/
           cp build/gui/libgui.so dist/lib/gui/
           
-          # Copy Homebrew libraries
+          # Copy primary Homebrew libraries
           cp $(brew --prefix readline)/lib/libreadline.*.dylib dist/lib/
           cp $(brew --prefix sdl2)/lib/libSDL2*.dylib dist/lib/
           cp $(brew --prefix sdl2_ttf)/lib/libSDL2_ttf*.dylib dist/lib/
           cp $(brew --prefix sdl2_gfx)/lib/libSDL2_gfx*.dylib dist/lib/
           cp $(brew --prefix llvm@16)/lib/libLLVM.dylib dist/lib/
+          cp $(brew --prefix libsoundio)/lib/libsoundio*.dylib dist/lib/
+          cp $(brew --prefix libsndfile)/lib/libsndfile*.dylib dist/lib/
+          
+          # Copy secondary dependencies for libsndfile
+          cp $(brew --prefix libogg)/lib/libogg*.dylib dist/lib/
+          cp $(brew --prefix libvorbis)/lib/libvorbis*.dylib dist/lib/
+          cp $(brew --prefix libvorbis)/lib/libvorbisenc*.dylib dist/lib/
+          cp $(brew --prefix flac)/lib/libFLAC*.dylib dist/lib/
+          cp $(brew --prefix opus)/lib/libopus*.dylib dist/lib/
+          cp $(brew --prefix mpg123)/lib/libmpg123*.dylib dist/lib/
+          cp $(brew --prefix lame)/lib/libmp3lame*.dylib dist/lib/
       
       - name: Update library paths
         run: |
-          # Update executable
-          install_name_tool -change @rpath/libyalce_synth.so @executable_path/../lib/engine/libyalce_synth.so dist/bin/ylc
-          install_name_tool -change @rpath/libgui.so @executable_path/../lib/gui/libgui.so dist/bin/ylc
+          # Helper function to update a library path
+          update_lib_path() {
+            local binary=$1
+            local lib_pattern=$2
+            local path_prefix=$3
+            
+            local lib_path=$(otool -L "$binary" | grep "$lib_pattern" | awk '{print $1}')
+            if [ -n "$lib_path" ]; then
+              install_name_tool -change "$lib_path" "$path_prefix/$(basename "$lib_path")" "$binary"
+              echo "Updated $lib_pattern in $binary"
+            fi
+          }
           
-          # Get paths to update
-          READLINE_PATH=$(otool -L dist/bin/ylc | grep readline | awk '{print $1}')
-          SDL2_PATH=$(otool -L dist/bin/ylc | grep libSDL2-2 | awk '{print $1}')
-          SDL2_TTF_PATH=$(otool -L dist/bin/ylc | grep SDL2_ttf | awk '{print $1}')
-          SDL2_GFX_PATH=$(otool -L dist/bin/ylc | grep SDL2_gfx | awk '{print $1}')
-          LLVM_PATH=$(otool -L dist/bin/ylc | grep libLLVM | awk '{print $1}')
+          # Update primary dependencies in executable
+          update_lib_path "dist/bin/ylc" "@rpath/libyalce_synth.so" "@executable_path/../lib/engine"
+          update_lib_path "dist/bin/ylc" "@rpath/libgui.so" "@executable_path/../lib/gui"
+          update_lib_path "dist/bin/ylc" "libreadline" "@executable_path/../lib"
+          update_lib_path "dist/bin/ylc" "libSDL2-2" "@executable_path/../lib"
+          update_lib_path "dist/bin/ylc" "libSDL2_ttf" "@executable_path/../lib"
+          update_lib_path "dist/bin/ylc" "libSDL2_gfx" "@executable_path/../lib"
+          update_lib_path "dist/bin/ylc" "libLLVM" "@executable_path/../lib"
+          update_lib_path "dist/bin/ylc" "libsoundio" "@executable_path/../lib"
+          update_lib_path "dist/bin/ylc" "libsndfile" "@executable_path/../lib"
           
-          # Update library paths in executable
-          install_name_tool -change "$READLINE_PATH" @executable_path/../lib/$(basename "$READLINE_PATH") dist/bin/ylc
-          install_name_tool -change "$SDL2_PATH" @executable_path/../lib/$(basename "$SDL2_PATH") dist/bin/ylc
-          install_name_tool -change "$SDL2_TTF_PATH" @executable_path/../lib/$(basename "$SDL2_TTF_PATH") dist/bin/ylc
-          install_name_tool -change "$SDL2_GFX_PATH" @executable_path/../lib/$(basename "$SDL2_GFX_PATH") dist/bin/ylc
-          install_name_tool -change "$LLVM_PATH" @executable_path/../lib/$(basename "$LLVM_PATH") dist/bin/ylc
+          # Update dependencies in libgui.so
+          update_lib_path "dist/lib/gui/libgui.so" "libSDL2-2" "@loader_path/.."
+          update_lib_path "dist/lib/gui/libgui.so" "libSDL2_ttf" "@loader_path/.."
+          update_lib_path "dist/lib/gui/libgui.so" "libSDL2_gfx" "@loader_path/.."
           
-          # Update library paths in libgui.so
-          SDL2_PATH=$(otool -L dist/lib/gui/libgui.so | grep libSDL2-2 | awk '{print $1}')
-          SDL2_TTF_PATH=$(otool -L dist/lib/gui/libgui.so | grep SDL2_ttf | awk '{print $1}')
-          SDL2_GFX_PATH=$(otool -L dist/lib/gui/libgui.so | grep SDL2_gfx | awk '{print $1}')
-          
-          if [ -n "$SDL2_PATH" ]; then
-            install_name_tool -change "$SDL2_PATH" @loader_path/../$(basename "$SDL2_PATH") dist/lib/gui/libgui.so
-          fi
-          if [ -n "$SDL2_TTF_PATH" ]; then
-            install_name_tool -change "$SDL2_TTF_PATH" @loader_path/../$(basename "$SDL2_TTF_PATH") dist/lib/gui/libgui.so
-          fi
-          if [ -n "$SDL2_GFX_PATH" ]; then
-            install_name_tool -change "$SDL2_GFX_PATH" @loader_path/../$(basename "$SDL2_GFX_PATH") dist/lib/gui/libgui.so
-          fi
-          
-          # Check libyalce_synth.so dependencies and update if needed
+          # Update dependencies in libyalce_synth.so
           DEPS=$(otool -L dist/lib/engine/libyalce_synth.so | grep "/opt/homebrew" | awk '{print $1}')
           for DEP in $DEPS; do
-            install_name_tool -change "$DEP" @loader_path/../$(basename "$DEP") dist/lib/engine/libyalce_synth.so
+            install_name_tool -change "$DEP" "@loader_path/../$(basename "$DEP")" dist/lib/engine/libyalce_synth.so
+            echo "Updated $(basename "$DEP") in libyalce_synth.so"
           done
+          
+          # Fix all secondary dependencies in all libraries
+          for LIB in dist/lib/*.dylib; do
+            if [ -f "$LIB" ]; then
+              SEC_DEPS=$(otool -L "$LIB" | grep "/opt/homebrew" | awk '{print $1}')
+              for SEC_DEP in $SEC_DEPS; do
+                install_name_tool -change "$SEC_DEP" "@loader_path/$(basename "$SEC_DEP")" "$LIB"
+                echo "Updated $(basename "$SEC_DEP") in $(basename "$LIB")"
+              done
+            fi
+          done
+          
+          # Verify all libraries have proper paths
+          echo "Verifying executable dependencies..."
+          otool -L dist/bin/ylc
+          
+          echo "Verifying libgui.so dependencies..."
+          otool -L dist/lib/gui/libgui.so
+          
+          echo "Verifying libyalce_synth.so dependencies..."
+          otool -L dist/lib/engine/libyalce_synth.so
       
       - name: Create wrapper script
         run: |
@@ -122,7 +153,7 @@ jobs:
           tar -czf ../ylc-${{ matrix.arch }}.tar.gz .
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: ylc-${{ matrix.arch }}
           path: ylc-${{ matrix.arch }}.tar.gz
