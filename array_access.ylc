@@ -1,0 +1,27 @@
+import lib/Arrays;
+
+type Matrix = (
+  rows: Int,
+  cols: Int,
+  data: Array of Double
+);
+
+type Matrix.index_access = fn m: (Matrix) idx_expr: (List of Int) ->
+  match idx_expr with
+  | [r, c] -> (m.data [r * (m.cols) + c])
+  | _      -> (m.data [0])
+;;
+
+let x = 1;
+print `x: {x}\n`;
+
+# let matrix_zeroes = fn c r ->
+#   Matrix r c (array_fill_const (r * c) 0.)
+# ;;
+#
+# let a = [|1, 2, 3, 4, 5, 6|];
+# let m = a[0];
+# print `array access: {a[0]}\n`;
+# print `array access: {a[1]}\n`;
+# print `array access: {a[2]}\n`;
+# print `array access: {a[4]}\n`;

@@ -429,7 +429,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     typeclasses_extend(t->type, tc);
     print_type(t->type);
 
-    // type = infer(ast->data.AST_TYPE_TRAIT_IMPL.lambda, ctx);
+    type = infer(ast->data.AST_TYPE_TRAIT_IMPL.lambda, ctx);
     break;
   }
   default: {
@@ -868,9 +868,12 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
     }
 
     if (last_branch_type != NULL) {
+      print_ast(branch_body);
 
       if (!unify_in_ctx(last_branch_type, branch_type, &branch_ctx,
                         branch_body)) {
+        print_type_err(last_branch_type);
+        print_type_err(branch_type);
         return type_error(ctx, branch_body,
                           "Inconsistent types in match branches\n");
       }
