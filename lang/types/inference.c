@@ -99,6 +99,9 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   Type **contained = talloc(sizeof(Type *));
   contained[0] = el_type;
   *type = (Type){T_CONS, {.T_CONS = {cons_name, contained, 1}}};
+  if (CHARS_EQ(cons_name, TYPE_NAME_ARRAY)) {
+    typeclasses_extend(type, &IndexAccess);
+  }
   return type;
 }
 
@@ -414,6 +417,19 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
     let.tag = AST_LET;
     type = infer(&let, ctx);
+    break;
+  }
+  case AST_TYPE_TRAIT_IMPL: {
+    char *type_name = ast->data.AST_TYPE_TRAIT_IMPL.type_name;
+    char *trait_name = ast->data.AST_TYPE_TRAIT_IMPL.trait_name;
+
+    TypeEnv *t = env_lookup_ref(ctx->env, type_name);
+    TypeClass *tc = talloc(sizeof(TypeClass));
+    tc->name = trait_name;
+    typeclasses_extend(t->type, tc);
+    print_type(t->type);
+
+    // type = infer(ast->data.AST_TYPE_TRAIT_IMPL.lambda, ctx);
     break;
   }
   default: {

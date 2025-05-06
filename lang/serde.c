@@ -460,6 +460,17 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, ")");
     break;
   }
+  case AST_TYPE_TRAIT_IMPL: {
+    buffer = strcat(buffer, "(let ");
+    buffer = strcat(buffer, ast->data.AST_TYPE_TRAIT_IMPL.trait_name);
+    buffer = strcat(buffer, " for ");
+    buffer = strcat(buffer, ast->data.AST_TYPE_TRAIT_IMPL.type_name);
+    buffer = strcat(buffer, " ");
+    buffer = ast_to_sexpr(ast->data.AST_TYPE_TRAIT_IMPL.lambda, buffer);
+    buffer = strcat(buffer, ")");
+
+    break;
+  }
 
   default: {
     // Handle unsupported node types or other errors

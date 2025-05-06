@@ -152,6 +152,7 @@ typedef enum ast_tag {
   AST_MODULE,
   AST_RANGE_EXPRESSION,
   AST_LOOP,
+  AST_TYPE_TRAIT_IMPL,
 } ast_tag;
 
 struct Ast {
@@ -299,6 +300,11 @@ struct Ast {
     //   Ast *expr;
     //   Ast *body;
     // } AST_LOOP;
+    struct AST_TYPE_TRAIT_IMPL {
+      char *type_name;
+      char *trait_name;
+      Ast *lambda;
+    } AST_TYPE_TRAIT_IMPL;
   } data;
 
   void *md;
@@ -428,4 +434,5 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
 Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body);
 
 Ast *ast_range_expression(Ast *from, Ast *to);
+Ast *ast_typeclass_impl(char *type_name, char *tc_name, Ast *lambda);
 #endif

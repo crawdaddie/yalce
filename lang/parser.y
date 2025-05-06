@@ -411,7 +411,9 @@ type_decl:
                                     type_decl->tag = AST_TYPE_DECL;
                                     $$ = type_decl;
                                   }
+  | TYPE IDENTIFIER '.' IDENTIFIER '=' lambda_expr { $$ = ast_typeclass_impl($2.chars, $4.chars, $6); }
   ;
+
 
 type_args:
     IDENTIFIER              { $$ = ast_arg_list(ast_identifier($1), NULL); }

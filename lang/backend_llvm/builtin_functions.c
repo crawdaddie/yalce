@@ -1010,6 +1010,22 @@ LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return result_array;
 }
 
+LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  Ast *array_like_ast = ast->data.AST_APPLICATION.function;
+  Ast *index_ast = ast->data.AST_APPLICATION.args;
+  Type *array_type = array_like_ast->md;
+  if (is_array_type(array_type)) {
+    LLVMValueRef arr = codegen(array_like_ast, ctx, module, builder);
+    LLVMValueRef idx =
+        codegen(index_ast->data.AST_LIST.items, ctx, module, builder);
+    Type *_el_type = array_type->data.T_CONS.args[0];
+    LLVMTypeRef el_type = type_to_llvm_type(_el_type, ctx->env, module);
+
+    return get_array_element(builder, arr, idx, el_type);
+  }
+}
+
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
   ht *stack = (ctx->frame->table);
@@ -1066,8 +1082,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at_fn_sig, ArrayAtHandler);
 
   GENERIC_FN_SYMBOL("array_set", &t_array_set_fn_sig, ArraySetHandler);
-  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SIZE, &t_array_size_fn_sig,
-                    ArraySizeHandler);
+  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SIZE, &t_array_size, ArraySizeHandler);
 
   GENERIC_FN_SYMBOL("||", &t_builtin_or, LogicalOrHandler);
   GENERIC_FN_SYMBOL("&&", &t_builtin_and, LogicalAndHandler);

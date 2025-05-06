@@ -130,8 +130,6 @@ Type t_array_var = {
     {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_array_var_el}, 1}},
 };
 
-Type t_array_size_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_int);
-
 Type t_array_data_ptr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_ptr);
 
 Type t_array_incr_fn_sig = MAKE_FN_TYPE_2(&t_array_var, &t_array_var);
@@ -1315,6 +1313,8 @@ int *array_type_size_ptr(Type *t) {
   return size;
 }
 
+TypeClass IndexAccess = {.name = TYPE_NAME_TYPECLASS_IDX_ACCESS};
+
 Type *create_array_type(Type *of) {
   Type *gen_array = empty_type();
   gen_array->kind = T_CONS;
@@ -1322,6 +1322,7 @@ Type *create_array_type(Type *of) {
   gen_array->data.T_CONS.args = talloc(sizeof(Type *));
   gen_array->data.T_CONS.num_args = 1;
   gen_array->data.T_CONS.args[0] = of;
+  typeclasses_extend(gen_array, &IndexAccess);
   return gen_array;
 }
 

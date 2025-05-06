@@ -1072,3 +1072,11 @@ Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body) {
   loop->data.AST_LET.in_expr = body;
   return loop;
 }
+
+Ast *ast_typeclass_impl(char *type_name, char *tc_name, Ast *lambda) {
+  Ast *ast = Ast_new(AST_TYPE_TRAIT_IMPL);
+  ast->data.AST_TYPE_TRAIT_IMPL.lambda = lambda;
+  ast->data.AST_TYPE_TRAIT_IMPL.type_name = type_name;
+  ast->data.AST_TYPE_TRAIT_IMPL.trait_name = tc_name;
+  return ast;
+}

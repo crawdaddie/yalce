@@ -216,6 +216,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       cons->kind = T_CONS;
       cons->data.T_CONS.name =
           strdup(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value);
+
       const char *_prev_last_ptr_type = last_ptr_type;
       last_ptr_type = cons->data.T_CONS.name;
 
@@ -228,6 +229,16 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
           Type *opt = create_option_type(contained);
 
           return opt;
+        }
+
+        if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+                   "Array") == 0) {
+          Type *contained =
+              compute_type_expression(expr->data.AST_BINOP.right, env);
+
+          Type *arr_type = create_array_type(contained);
+
+          return arr_type;
         }
 
         if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,

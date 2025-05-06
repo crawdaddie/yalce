@@ -1,7 +1,6 @@
 import ../../lib/Arrays;
 import ../../lib/Math;
 import ../../lib/Ref;
-let (@) = array_at;
 type Matrix = (
   rows: Int,
   cols: Int,
@@ -15,14 +14,14 @@ let matrix_zeroes = fn c r ->
 let print_matrix = fn m: (Matrix) ->
   for i = 0 to m.rows in (
     for j = 0 to m.cols in (
-      print `{m.data @ (i * m.cols + j)}, `
+      print `{m.data[i * m.cols + j]}, `
     );
     print "\n"
   )
 ;;
 
 let matrix_at = fn m: (Matrix) (r, c): (Int, Int) ->
-  array_at m.data (r * m.cols + c)
+  m.data[r * m.cols + c]
 ;;
 
 let matrix_size = fn m: (Matrix) -> 
@@ -32,7 +31,7 @@ let matrix_size = fn m: (Matrix) ->
 let print_arr = fn arr: (Array of Double) -> 
   print "[| ";
   for i = 0 to (array_size arr) in (
-    print `{arr @ i}, `
+    print `{arr[i]}, `
   );
   print "|]\n"
   
@@ -85,8 +84,8 @@ let Vec = module
 
   let sub = fn a: (Matrix) b: (Matrix) ->
     for i = 0 to (array_size a.data) in (
-      let av = a.data @ i;
-      let bv = b.data @ i;
+      let av = a.data[i];
+      let bv = b.data[i];
       array_set i b.data (av - bv)
     );
     b
@@ -97,17 +96,17 @@ let Vec = module
     let b = array_fill_const (array_size a) 0.;
 
     for i = 0 to (array_size b) in (
-      let av = a @ i;
+      let av = a[i];
       array_set i b av
     );
     b
   ;;
 
   let write_to = fn to_: (Array of Double) from: (Array of Double) ->
-    Arrays.fold (fn t v ->
-      array_set 0 t v;
-      array_succ t
-    ) to_ from;
+    for i = 0 to (array_size from) in (
+      let v = from[i];
+      array_set i to_ v
+    );
     from
   ;;
 ;

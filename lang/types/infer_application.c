@@ -232,11 +232,22 @@ Type *infer_iter(Ast *ast, TICtx *ctx) {
   ast->data.AST_APPLICATION.function->md = coroutine_constructor;
   return coroutine_fn;
 }
+bool has_index_access_typeclass(Type *t) {
+  return type_implements(t, &IndexAccess);
+}
+bool is_index_access_ast(Ast *application) {
+  Ast *arg_ast = application->data.AST_APPLICATION.args;
+  Type *arg_type = arg_ast->md;
+  Type *cons = application->data.AST_APPLICATION.function->md;
+  return is_list_type(arg_type) && arg_ast->tag == AST_LIST &&
+         types_equal(arg_type->data.T_CONS.args[0], &t_int) &&
+         application->data.AST_APPLICATION.len == 1 &&
+         has_index_access_typeclass(cons);
+}
 
 Type *find_variant_member(Type *variant, const char *name);
 Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
-  // print_type(fn_type);
 
   Ast *fn_id = ast->data.AST_APPLICATION.function;
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
@@ -252,15 +263,21 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   }
 
   TICtx app_ctx = {};
-  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+  int i;
+  for (i = 0; i < ast->data.AST_APPLICATION.len; i++) {
 
     Type *cons_arg = cons->data.T_CONS.args[i];
 
     Type *arg_type;
+
     if (!(arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx))) {
       return type_error(
           ctx, ast, "Could not infer argument type in cons %s application\n",
           cons->data.T_CONS.name);
+    }
+
+    if (is_index_access_ast(ast)) {
+      return cons->data.T_CONS.args[0];
     }
 
     if (!unify_in_ctx(cons_arg, arg_type, &app_ctx, ast)) {

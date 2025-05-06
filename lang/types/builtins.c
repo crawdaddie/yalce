@@ -546,6 +546,8 @@ void initialize_builtin_types() {
   add_builtin("fst", &t_fst_sig);
   add_builtin("df_offset", &t_df_offset_sig);
   add_builtin("df_raw_fields", &t_df_raw_fields_sig);
+
+  typeclasses_extend(&t_string, &IndexAccess);
 }
 
 Type *lookup_builtin_type(const char *name) {

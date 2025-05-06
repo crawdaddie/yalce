@@ -1,4 +1,5 @@
 #include "./unification.h"
+#include "serde.h"
 #include "types/common.h"
 #include "types/type.h"
 #include <string.h>
@@ -67,8 +68,6 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
   if (!is_generic(t2)) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       if (!type_implements(t2, tc)) {
-        // print_type(t1);
-        // print_type(t2);
         return type_error(
             ctx, node,
             "Typecheck error type %s does not implement typeclass '%s' \n",
@@ -386,7 +385,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else if (is_coroutine_type(t1) && t2->kind == T_VOID) {
     } else if (is_coroutine_type(t1) && is_pointer_type(t2)) {
     } else {
-
       TICtx _ctx = {.err_stream = NULL};
       type_error(&_ctx, constraints->src, "Constraint solving type mismatch\n");
       print_type_err(t1);
