@@ -1,0 +1,113 @@
+import ../../lib/Arrays;
+import ../../lib/Math;
+import ../../lib/Ref;
+let (@) = array_at;
+type Matrix = (
+  rows: Int,
+  cols: Int,
+  data: Array of Double
+);
+
+let matrix_zeroes = fn c r ->
+  Matrix r c (array_fill_const (r * c) 0.)
+;;
+
+let print_matrix = fn m: (Matrix) ->
+  for i = 0 to m.rows in (
+    for j = 0 to m.cols in (
+      print `{m.data @ (i * m.cols + j)}, `
+    );
+    print "\n"
+  )
+;;
+
+let matrix_at = fn m: (Matrix) (r, c): (Int, Int) ->
+  array_at m.data (r * m.cols + c)
+;;
+
+let matrix_size = fn m: (Matrix) -> 
+  m.rows * m.cols
+;;
+
+let print_arr = fn arr: (Array of Double) -> 
+  print "[| ";
+  for i = 0 to (array_size arr) in (
+    print `{arr @ i}, `
+  );
+  print "|]\n"
+  
+;;
+
+let matrix_random = fn c r ->
+  Matrix r c (array_fill (r * c) (fn i: (Int) -> Math.rand_double_range -1. 1.))
+;;
+
+let matrix_1d = fn a: (Array of Double) ->
+  Matrix 1 (array_size a) a
+;;
+
+
+# let dot = fn a: (Matrix) b: (Matrix) ->
+#   match a.cols == b.rows with 
+#   | false -> matrix_zeroes 0 0
+#   | _ -> (
+#     let result = matrix_zeroes b.cols a.rows;
+#     
+#     for i = 0 to a.rows in (
+#       for j = 0 to b.cols in (
+#         let sum = Ref 0.;
+#         
+#         for k = 0 to a.cols in (
+#           array_set 0 sum ((deref sum) + (matrix_get a (i, k)) * (matrix_get b (k, j)))
+#         );
+#         
+#         array_set (j * b.cols + i) result.data (deref sum)
+#       )
+#     );
+#     
+#     result
+#   )
+# ;;
+
+
+let Vec = module
+  let _matrix_vec_mul = extern fn Int -> Int -> Ptr of Double -> Ptr of Double -> ();
+  let matrix_vec_mul = fn m: (Matrix) v: (Matrix) ->
+    _matrix_vec_mul m.rows m.cols (cstr m.data) (cstr v.data);
+    Matrix m.rows v.cols v.data
+  ;;
+
+  let _vec_add = extern fn Int -> Ptr of Double -> Ptr of Double -> ();
+  let add = fn a: (Matrix) b: (Matrix) -> 
+    _vec_add (matrix_size a) (cstr a.data) (cstr b.data);
+    b
+  ;;
+
+  let sub = fn a: (Matrix) b: (Matrix) ->
+    for i = 0 to (array_size a.data) in (
+      let av = a.data @ i;
+      let bv = b.data @ i;
+      array_set i b.data (av - bv)
+    );
+    b
+  ;;
+
+  let copy = fn a: (Array of Double) ->
+
+    let b = array_fill_const (array_size a) 0.;
+
+    for i = 0 to (array_size b) in (
+      let av = a @ i;
+      array_set i b av
+    );
+    b
+  ;;
+
+  let write_to = fn to_: (Array of Double) from: (Array of Double) ->
+    Arrays.fold (fn t v ->
+      array_set 0 t v;
+      array_succ t
+    ) to_ from;
+    from
+  ;;
+;

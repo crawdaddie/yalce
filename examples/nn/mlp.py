@@ -111,14 +111,19 @@ class MLP:
         # Compute the output error gradient (for MSE loss)
         # delta_L = (y_pred - y_true) for MSE with identity activation
         delta = cache["activations"][-1] - y
+        print("backward delta 1:", delta.shape)
 
         # Backpropagate through layers
         for i in reversed(range(len(self.layers))):
             # Compute gradients for current layer
             # dW_l = a_{l-1}^T @ delta_l
             dW = np.dot(cache["activations"][i].T, delta)
+
+            print("backward layer dw ", i, dW.shape)
             # db_l = sum(delta_l)
             db = np.sum(delta, axis=0)
+
+            print("backward layer db ", i, db.shape)
 
             # Update weights and biases immediately
             self.layers[i]["weights"] -= learning_rate * dW
@@ -162,4 +167,4 @@ X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
 y = np.array([[0], [1], [1], [0]])
 
 # Train the network
-mlp.train(X, y, epochs=1000, learning_rate=0.01)
+mlp.train(X, y, epochs=100, learning_rate=0.01)
