@@ -1,0 +1,40 @@
+open engine/bindings/Synth;
+open engine/bindings/Sched;
+
+let synth = (fn () -> 
+  let freq = inlet 55. in
+  let trig = inlet 0. in
+
+  saw_node (freq * 1.01) + saw_node freq 
+  |> (+) (white_noise_node ())
+  |> biquad_hp_node freq 10.
+  |> biquad_lp_node (freq * 4.) 4.
+  |> dyn_temper_node 0.1 0.5 2000. 2. 4. -6. (lfnoise_node 4. 0. 10.)
+) |> play_tpl
+;
+
+let pattern_ref = [|empty_coroutine ()|] ;
+
+let set_pattern = fn t cor ->
+  cor_stop (array_at pattern_ref 0);
+  cor
+  |> play_routine t schedule_event
+  |> array_set 0 pattern_ref 
+;;
+
+let trig = fn m -> 
+  let fo = get_tl_tick ();
+  let v = midi_to_freq (18 + m);
+  set_input_scalar_offset synth 0 fo v
+;;
+
+let q = 130. / 60.; 
+
+defer_quant (2 * q) (fn t ->
+  iter [|(3., 10), (3.,15), (3.,18), (4.,17), (3.,22)|]  
+  |> cor_loop
+  |> cor_map (fn (d, m) -> trig m; d * q)
+  |> set_pattern t
+)
+
+
