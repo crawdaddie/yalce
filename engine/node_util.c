@@ -78,6 +78,7 @@ void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
 
   // Process each sample
   for (int i = 0; i < nframes; i++) {
+
     // Process each channel in the output layout
     for (int j = 0; j < out_layout; j++) {
       // Get appropriate input samples based on their layouts

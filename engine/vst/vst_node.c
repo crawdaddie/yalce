@@ -88,28 +88,18 @@ void vstfx_cleanup(vst_state *state) {
 
 // Create a VST plugin node
 NodeRef vstfx_node(const char *path, NodeRef input) {
-  printf("vstfx node!! %s\n", path);
-  // Initialize VST library if needed (you may want to do this once at startup)
   static int vst_initialized = 0;
   if (!vst_initialized) {
     vst_initialize();
     vst_initialized = 1;
   }
-
-  // Get the AudioGraph
   AudioGraph *graph = _graph;
-  if (!graph)
-    return NULL;
 
-  // Allocate node
   NodeRef node = allocate_node_in_graph(graph, sizeof(vst_state));
-  if (!node)
-    return NULL;
 
   // Get node index before we overwrite node
   int node_index = node->node_index;
 
-  // Initialize node
   *node = (Node){
       .perform = (perform_func_t)vstfx_perform,
       .node_index = node_index,
@@ -122,7 +112,6 @@ NodeRef vstfx_node(const char *path, NodeRef input) {
       .meta = "vst_plugin",
   };
 
-  // Get samples per frame
   double spf = ctx_spf();
 
   // Connect input
@@ -147,6 +136,7 @@ NodeRef vstfx_node(const char *path, NodeRef input) {
     printf("Failed to load VST plugin: %d\n", err);
     return node; // Return node anyway, it will output silence
   }
+  printf("plugin handle is at %p\n", state->plugin);
 
   // Get plugin info
   char plugin_name[128];
@@ -188,7 +178,9 @@ NodeRef vstfx_load_preset(const char *preset_path, NodeRef vst_node) {
   return vst_node;
 }
 
-char *get_handle(NodeRef vst_node) {
-  VSTPluginHandle handle = ((vst_state *)((Node *)vst_node + 1))->plugin;
+char *vst_get_handle(NodeRef vst_node) {
+  vst_state *state = vst_node->state_ptr;
+  VSTPluginHandle handle = state->plugin;
+  printf("got handle to return %p\n", handle);
   return handle;
 }

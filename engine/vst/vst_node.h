@@ -12,5 +12,6 @@
  */
 NodeRef vstfx_node(const char *path, NodeRef input);
 NodeRef vstfx_load_preset(const char *preset_path, NodeRef vst_node);
+char *vst_get_handle(NodeRef vst_node);
 
 #endif /* VST_NODE_H */

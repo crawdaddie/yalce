@@ -1,0 +1,373 @@
+---
+#######################################################################
+### based on .git-ci/gitlab-iem.yml for Pd externals: v1.2
+#######################################################################
+
+variables:
+  PROJECT: vstplugin
+  JOBS:
+    value: "all"
+    description: "Specify jobs (all, windows, macos, linux, wine)"
+  CMAKE_BUILD_TYPE:
+    value: "Release"
+    description: "Set CMake build type"
+  LOGLEVEL:
+    value: 2
+    description: "Set log level"
+  PDVERSION: 0.54-1
+  VST2DIR: /tmp/vst2sdk
+  VST3DIR: /tmp/vst3sdk
+  PD_PATH: /tmp/pd
+  PD_URL: http://msp.ucsd.edu/Software/pd-${PDVERSION}.src.tar.gz
+  SC_PATH: /tmp/supercollider
+  PDLIBNAME: vstplugin~
+  SCLIBNAME: VSTPlugin
+
+### script snippets
+
+# download VST SDK files
+.script:vst: &script_vst
+  - .git-ci/get_vst2.sh "${VST2DIR}"
+  - .git-ci/get_vst3.sh "${VST3DIR}"
+
+# clone SC repository
+.script:sc: &script_sc
+  - git clone https://github.com/supercollider/supercollider.git "${SC_PATH}"
+  - pushd "${SC_PATH}"
+  - git submodule update --init
+  - popd
+
+# download Pd sources
+.script:pd: &script_pd
+  - wget -q -O Pd.tgz ${PD_URL}
+  - rm -rf ${PD_PATH}; mkdir -p ${PD_PATH}
+  - tar -xf Pd.tgz -C ${PD_PATH}
+  - rm -f Pd.tgz
+  - mv "${PD_PATH}"/*/* "${PD_PATH}"
+
+# download Pd application (with sources)
+.script:pd_app: &script_pd_app
+  - wget -q -O Pd.zip ${PD_URL}
+  - rm -rf "${PD_PATH}"; mkdir -p "${PD_PATH}"
+  - unzip -q Pd.zip -d "${PD_PATH}"
+  - rm -f Pd.zip
+  - mv "${PD_PATH}"/*/* "${PD_PATH}"
+
+# NOTE: we have to use absolute paths for PD_INSTALLDIR and SC_INSTALLDIR.
+# For some reason, relative paths (including '.') are not appended to CMAKE_INSTALL_PREFIX
+# as they should be, instead they are resolved to the source directory *before* getting passed to CMake.
+.script:cmake: &script_cmake
+  - prefix="$(pwd)/${CI_JOB_NAME}"
+  - cmake -H. -Bbuild -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="${prefix}"
+   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_OSX_ARCHITECTURES="${OSX_ARCHITECTURES}"
+   -DLOGLEVEL=${LOGLEVEL} -DVST2DIR="${VST2DIR}" -DVST3DIR="${VST3DIR}" -DWINE=${WINE}
+   -DBUILD_WINE=${BUILD_WINE} -DBUILD_HOST32=${BUILD_HOST32} -DBUILD_HOST_AMD64=${BUILD_HOST_AMD64}
+   -DPD_INCLUDEDIR="${PD_PATH}/src" -DPD_BINDIR="${PD_PATH}/bin" -DPD_INSTALLDIR="${prefix}" -DPD_EXTENSION=${PD_EXTENSION}
+   -DSC_INCLUDEDIR="${SC_PATH}" -DSC_INSTALLDIR="${prefix}" -DSUPERNOVA=${SUPERNOVA}
+   -DSTATIC_LIBS=${STATIC_LIBS} -DCMAKE_DEPENDS_USE_COMPILER=OFF
+  # NOTE: by default, CMake 3.21+ uses the compiler to obtain dependencies for makefiles ('compiler_depends.make').
+  # For some reason, on the 'Hopper' runner that file would contain bogus file paths such as 'vst/C:/msys64/mingw32/include/c++/10.2.0/vector'
+  # which will cause the following invocation of 'cmake --build ./build --target install/strip' to fail with 'multiple target patterns'.
+  # As a workaround, we force the legacy behavior with -DCMAKE_DEPENDS_USE_COMPILER=OFF.
+
+### build snippets
+.script:make: &script_make
+  - cmake --build ./build --config Release -j -- VERBOSE=1
+.script:make_install: &script_make_install
+  - cmake --build ./build --config Release --target install/strip -- VERBOSE=1
+
+#######################################################################
+### configuration templates (to be used for snapshot and release builds)
+.build:script:
+  stage: build
+  script:
+    - *script_make
+    - *script_make_install
+  artifacts:
+    name: ${CI_PROJECT_NAME}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}
+    paths:
+      - "${CI_JOB_NAME}/${PDLIBNAME}"
+      - "${CI_JOB_NAME}/${SCLIBNAME}"
+    # we only need the job artifacts to create the packages
+    expire_in: 1h
+
+
+.build:linux: &build_linux
+  extends: .build:script
+  image: registry.git.iem.at/devtools/docker/debiancross:amd64
+  variables:
+    SUPERNOVA: 1
+    STATIC_LIBS: 1
+    WINE: 1
+  only:
+    variables:
+      - $JOBS == "all" || $JOBS == "linux"
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends
+      make cmake wget git libx11-dev${TARGETDEBARCH:+:}${TARGETDEBARCH}
+    - test "x${TARGETDEBARCH}" != "x" && { export CXX=${TARGETARCH}-g++; }
+    - *script_vst
+    - *script_pd
+    - *script_sc
+    - *script_cmake
+
+.build:linux_i386: &build_linux_i386
+  extends: .build:linux
+  image: registry.git.iem.at/devtools/docker/debiancross:i386
+  variables:
+    PD_EXTENSION: l_i386
+
+.build:linux_armhf: &build_linux_armhf
+  extends: .build:linux
+  image: registry.git.iem.at/devtools/docker/debiancross:armhf
+  variables:
+    PD_EXTENSION: l_arm
+
+.build:linux_arm64: &build_linux_arm64
+  extends: .build:linux
+  image: registry.git.iem.at/devtools/docker/debiancross:arm64
+  variables:
+    PD_EXTENSION: l_arm64
+
+.build:linux_wine: &build_linux_wine
+  extends: .build:script
+  image: registry.git.iem.at/devtools/docker/debiancross:amd64
+  variables:
+    STATIC_LIBS: 1
+    BUILD_WINE: 1
+  only:
+    variables:
+      - $JOBS == "all" || $JOBS == "wine"
+  before_script:
+    - DEB_TARGET_ARCH_BITS=$(dpkg-architecture ${TARGETDEBARCH:+-A} ${TARGETDEBARCH} -q DEB_TARGET_ARCH_BITS)
+    - apt-get update
+    - test "x${DEB_TARGET_ARCH_BITS}" = "x32" &&
+      { export CXXFLAGS="-m32"; apt-get install gcc-multilib g++-multilib; }
+    - apt-get install make cmake wget git libx11-dev wine${DEB_TARGET_ARCH_BITS}-tools wine
+    - *script_vst
+    - *script_cmake
+
+.build:linux_wine32: &build_linux_wine32
+  extends: .build:linux_wine
+  image: registry.git.iem.at/devtools/docker/debiancross:i386
+
+.build:macos: &build_macos
+  extends: .build:script
+  tags:
+     - bigsur
+  variables:
+    OSX_ARCHITECTURES: "arm64;x86_64"
+    SUPERNOVA: 1
+    BUILD_HOST_AMD64: 0
+    PD_EXTENSION: d_fat
+  only:
+    variables:
+      - $JOBS == "all" || $JOBS == "macos"
+  before_script:
+    - *script_vst
+    - *script_pd
+    - *script_sc
+    - *script_cmake
+  after_script:
+    - IEM_SIGN_SRCDIR="$(pwd)/${CI_JOB_NAME}"
+    - CODESIGNFLAGS="--strict --force --verbose --timestamp"
+    - !reference [.script:codesign:macos]
+
+.build:win32: &build_win32
+  extends: .build:script
+  tags:
+    - windows
+  variables:
+    IEMCI_CONFIGURATIONS: mingw32
+    SUPERNOVA: 1
+    STATIC_LIBS: 1
+    PD_URL: http://msp.ucsd.edu/Software/pd-${PDVERSION}-i386.msw.zip
+    CMAKE: mingw-w64-i686-cmake
+  only:
+    variables:
+      - $JOBS == "all" || $JOBS == "windows"
+  before_script:
+    - pacman --noconfirm -S ${CMAKE}
+    - *script_vst
+    - *script_pd_app
+    - *script_sc
+    - *script_cmake
+
+.build:win64: &build_win64
+  extends: .build:win32
+  variables:
+    IEMCI_CONFIGURATIONS: mingw64
+    PD_EXTENSION: m_amd64
+    PD_URL: http://msp.ucsd.edu/Software/pd-${PDVERSION}.msw.zip
+    CMAKE: mingw-w64-x86_64-cmake
+
+#######################################################################
+### create deken packages and (optionally) upload them;
+### if you want to automatically upload a package, you need to
+### set DEKEN_USERNAME/DEKEN_PASSWORD in the CI-project settings.
+### (https://git.iem.at/help/ci/variables/README#variables)
+.package:deps: &package_deps
+  - apt-get update && apt-get --no-install-recommends -y install deken git zip
+
+.package:script:
+  stage: deploy
+  image: debian:buster
+  variables:
+    DEKEN_ROOT: "yes"
+  artifacts:
+    name: ${CI_PROJECT_NAME}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}
+    paths:
+      - ./pd*
+      - ./sc*
+    expire_in: 1d
+  script:
+# create zip files for platform (e.g. vstplugin_v0.6.0_win64.zip)
+# with the following structure:
+# - pd/vstplugin~
+# - pd/vstplugin~[v0.6.0](Windows-amd64-32).dek
+# - sc/VSTPlugin
+    - rm -rf ./pd
+    - rm -rf ./sc
+    - mkdir pd
+    - mkdir sc
+    - mv ${JOBNAME}/${PDLIBNAME} ./pd
+    - mv ${JOBNAME}/${SCLIBNAME} ./sc
+# create binary deken package
+# --output-dir is apparently not supported on older Deken version...
+    - pushd ./pd; deken package --version="${CI_COMMIT_TAG#v}" ./${PDLIBNAME}; popd
+# upload deken package (optional)
+    - test -z "${CI_COMMIT_TAG}" || test -z "${DEKEN_USERNAME}" || test -z "${DEKEN_PASSWORD}" || deken upload --no-source-error ./pd/*.dek
+  after_script:
+    - du -ch ./pd/* ./sc/*
+
+.package:linux_base: &package_linux_base
+  extends: .package:script
+  variables:
+    JOBNAME: Linux
+  only:
+    variables:
+      - $JOBS == "all" || $JOBS == "linux"
+  before_script:
+    - *package_deps
+
+.package:linux: &package_linux
+  extends: .package:linux_base
+  variables:
+    JOBNAME: Linux
+  before_script:
+    - *package_deps
+# copy Wine hosts to Linux package
+    - for x in ${PDLIBNAME} ${SCLIBNAME}/plugins; do
+        [ -e ./Linux_wine ] && cp -r ./Linux_wine/$x/. ./$JOBNAME/$x;
+        [ -e ./Linux_wine32 ] && cp -r ./Linux_wine32/$x/. ./$JOBNAME/$x
+      ; done
+
+.package:linux_i386: &package_linux_i386
+  extends: .package:linux_base
+  variables:
+    JOBNAME: Linux_i386
+  before_script:
+    - *package_deps
+# copy Wine host to Linux package
+    - for x in ${PDLIBNAME} ${SCLIBNAME}/plugins; do
+        [ -e ./Linux_wine32 ] && cp -r ./Linux_wine32/$x/. ./$JOBNAME/$x
+      ; done
+
+.package:linux_armhf: &package_linux_armhf
+  extends: .package:linux_base
+  variables:
+    JOBNAME: Linux_ARMhf
+
+.package:linux_arm64: &package_linux_arm64
+  extends: .package:linux_base
+  variables:
+    JOBNAME: Linux_ARM64
+
+.package:macos: &package_macos
+  extends: .package:script
+  variables:
+    JOBNAME: macOS
+  only:
+    variables:
+      - $JOBS == "all" || $JOBS == "macos"
+  before_script:
+    - *package_deps
+
+.package:win64: &package_win64
+  extends: .package:script
+  variables:
+    JOBNAME: win64
+  only:
+    variables:
+      - $JOBS == "all" || $JOBS == "windows"
+  before_script:
+    - *package_deps
+# copy 32-bit host to package
+    - for x in ${PDLIBNAME} ${SCLIBNAME}/plugins; do
+        cp ./win32/$x/host.exe ./$JOBNAME/$x/host_i386.exe
+      ; done
+
+.package:win32: &package_win32
+  extends: .package:script
+  variables:
+    JOBNAME: win32
+  only:
+    variables:
+      - $JOBS == "all" || $JOBS == "windows"
+  before_script:
+    - *package_deps
+# copy 64-bit host to package
+    - for x in ${PDLIBNAME} ${SCLIBNAME}/plugins; do
+        cp ./win64/$x/host.exe ./$JOBNAME/$x/host_amd64.exe
+      ; done
+
+#######################################################################
+
+### the actual jobs:
+Linux:
+  <<: *build_linux
+Linux_i386:
+  allow_failure: true
+  <<: *build_linux_i386
+Linux_ARMhf:
+  allow_failure: true
+  <<: *build_linux_armhf
+Linux_ARM64:
+  allow_failure: true
+  <<: *build_linux_arm64
+Linux_wine:
+  allow_failure: true
+  <<: *build_linux_wine
+Linux_wine32:
+  allow_failure: true
+  <<: *build_linux_wine32
+macOS:
+  <<: *build_macos
+win32:
+  <<: *build_win32
+win64:
+  <<: *build_win64
+
+## release packages
+Linux_package:
+  <<: *package_linux
+Linux_i386_package:
+  allow_failure: true
+  <<: *package_linux_i386
+Linux_ARMhf_package:
+  allow_failure: true
+  <<: *package_linux_armhf
+Linux_ARM64_package:
+  allow_failure: true
+  <<: *package_linux_arm64
+macOS_package:
+  <<: *package_macos
+win32_package:
+  <<: *package_win32
+win64_package:
+  <<: *package_win64
+
+
+include:
+  # for the codesign templates
+  - https://git.iem.at/pd/iem-ci/-/raw/main/pd-lib-builder/codesign.yml

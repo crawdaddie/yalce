@@ -1,19 +1,29 @@
 include ../.env
 # gui/Makefile
-CLAP_SDK_PATH := ${CLAP_PATH}
+
+# VST Library path
+VST_LIB_PATH := ${VST_LIB_PATH}
+VST_BUILD_PATH := $(VST_LIB_PATH)/build
+
 CC := clang -g
 CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_PATH}/include \
 					-I${SDL2_PATH}/include/SDL2 \
 					-I${SDL2_TTF_PATH}/include \
 					-I${SDL2_GFX_PATH}/include \
-					-I$(CLAP_SDK_PATH)/include
+					-I$(VST_LIB_PATH)/src
 
 LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
-					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx
+					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
+					 -L$(VST_BUILD_PATH) -lylcvst
+# Add frameworks for macOS - THIS IS CRITICAL
+FRAMEWORKS := -framework Cocoa -framework Foundation
 
 BUILD_DIR := ../build/gui
+# Add Objective-C file for macOS VST support
+# OBJC_SRCS := CocoaVSTHelper.m
+# OBJC_OBJS := $(OBJC_SRCS:%.m=$(BUILD_DIR)/%.o)
 
 SRCS := gui.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
@@ -29,6 +39,10 @@ $(BUILD_DIR):
 
 $(BUILD_DIR)/%.o: %.c gui.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# Special rule for Objective-C files
+# $(BUILD_DIR)/%.o: %.m | $(BUILD_DIR)
+# 	$(CC) $(CFLAGS) -ObjC -c $< -o $@ $(FRAMEWORKS)
 
 $(BUILD_DIR)/libgui.a: $(OBJS)
 	ar rcs $@ $(OBJS)

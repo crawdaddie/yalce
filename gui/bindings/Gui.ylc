@@ -7,5 +7,6 @@ let render_scope = extern fn Ptr -> Int -> Int -> Ptr -> Ptr;
 let create_scope = extern fn Ptr -> Int -> Int -> Int;
 let create_static_plot = extern fn Int -> Int -> Ptr -> Int;
 let create_envelope_edit_view = extern fn Int -> Ptr -> Int;
+let create_vst_view = extern fn Ptr -> Int;
 
 

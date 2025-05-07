@@ -7,17 +7,6 @@ import lib/Math;
 # open lib/Euclid;
 
 
-let (@) = array_at;
-let print_arr = fn arr: (Array of Int) ->
-  print "[| ";
-  let arr_len = array_size arr in
-  for i = 0 to (arr_len - 1) in (
-    print `{arr @ i}, `
-  );
-  print "|]\n";
-  arr
-;;
-
 let q = 60. / 130.;
 let Kick = module
   let buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Kick11.wav";
@@ -38,7 +27,7 @@ let Kick = module
 
   let pattern_ref = [|empty_coroutine ()|] ;
   let set_pattern = fn t cor ->
-    cor_stop (array_at pattern_ref 0);
+    cor_stop ( pattern_ref[0]);
     cor
     |> play_routine t schedule_event
     |> array_set pattern_ref 0
@@ -71,7 +60,7 @@ let Snare = module
   let pattern_ref = [|empty_coroutine ()|] ;
   let set_pattern = fn t cor ->
     let pref =pattern_ref;
-    cor_stop (array_at pref 0);
+    cor_stop (pref[0]);
     cor
     |> play_routine t schedule_event
     |> array_set pref 0 
@@ -130,7 +119,7 @@ let Hihat = module
   let pattern_ref = [|empty_coroutine ()|] ;
   let set_pattern = fn t cor ->
     let pref = pattern_ref;
-    cor_stop (array_at pref 0);
+    cor_stop (pref[0]);
     cor
     |> play_routine t schedule_event
     |> array_set pref 0
@@ -193,31 +182,32 @@ defer_quant (q * 2) (fn t ->
   |> Snare.set_pattern t
 ); 
 
-
+let handle = [| cstr "" |];
 let fx_chain = (fn () ->
   let input = multi_chan_inlet 2 0.;
-  input
 
-  # |> vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/ValhallaSupermassive.vst/Contents/MacOS/ValhallaSupermassive")
-  # |> vstfx_load_preset (cstr "/Library/Application Support/Valhalla DSP, LLC/ValhallaSupermassive/Presets/Factory/LATE 2024/Pleiades Hall 1985.vpreset")
-  # |> vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/Temper.vst/Contents/MacOS/Temper")
-  |> vital_rev_node
-    0.99
-    1.
-    0.5
-    0.62184876
-    0.0
-    1.0
-    0.8333333
-    0.6
-    0.789916
-    0.0
-    0.0
-    1.
+  # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/TAL-Reverb-2.vst/Contents/MacOS/TAL-Reverb-2") input;
+
+  let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/OTT.vst/Contents/MacOS/OTT") input;
+  # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/ValhallaSupermassive.vst/Contents/MacOS/ValhallaSupermassive") input;
+  handle[0] := (vst_get_handle vst); # do something with this handle??
+  # |> vital_rev_node
+  #   0.99
+  #   1.
+  #   0.5
+  #   0.62184876
+  #   0.0
+  #   1.0
+  #   0.8333333
+  #   0.6
+  #   0.789916
+  #   0.0
+  #   0.0
+  #   1.
+  vst
 ) |> play_tpl;
 
 Snare.synth |> pipe_into fx_chain 0;
-
 
 #
 # (fn () -> 
@@ -237,3 +227,7 @@ Snare.synth |> pipe_into fx_chain 0;
   # |> cor_map (fn d -> Kick.trig (); d)
   # |> Kick.set_pattern t
   # ;
+(
+  open gui/bindings/Gui;
+  create_vst_view (handle[0])
+);

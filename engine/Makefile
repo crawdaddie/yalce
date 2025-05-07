@@ -11,9 +11,8 @@ SRCS += vst/vst_node.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 # VST Library path
-VST_LIB_PATH := /Users/adam/projects/sound/ylc-vst
+VST_LIB_PATH := ${VST_LIB_PATH}
 VST_BUILD_PATH := $(VST_LIB_PATH)/build
-VST_LIB := $(VST_BUILD_PATH)/libylcvst.a
 
 LDFLAGS = -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -L$(VST_BUILD_PATH) -lylcvst -lstdc++
 FRAMEWORKS = -framework opengl \

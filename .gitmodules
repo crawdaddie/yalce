@@ -1,3 +1,6 @@
 [submodule "libs/clap"]
 	path = libs/clap
 	url = https://github.com/free-audio/clap
+[submodule "libs/ylc-vst/libs/VST3_SDK/pluginterfaces"]
+	path = libs/ylc-vst/libs/VST3_SDK/pluginterfaces
+	url = https://github.com/steinbergmedia/vst3_pluginterfaces
