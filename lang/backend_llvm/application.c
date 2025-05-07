@@ -1,4 +1,5 @@
 #include "backend_llvm/application.h"
+#include "builtin_functions.h"
 #include "coroutines.h"
 #include "function.h"
 #include "list.h"
@@ -6,6 +7,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/infer_application.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 
@@ -155,6 +157,9 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+  if (is_index_access_ast(ast)) {
+    return IndexAccessHandler(ast, ctx, module, builder);
+  }
 
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
@@ -177,7 +182,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
   if (!sym) {
-    print_ast(ast);
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);
     return NULL;

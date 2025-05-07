@@ -13,8 +13,8 @@ let identity = fn x: (Matrix) -> x;;
 
 let relu = fn x: (Matrix) -> 
   for i = 0 to (matrix_size x) in (
-    let v = array_at x.data i in
-    array_set i x.data (match v with
+    let v = x.data[i] in
+    array_set x.data i (match v with
     | v if v > 0. -> v
     | _ -> 0.)
   );
@@ -27,8 +27,8 @@ let mse_loss = fn predictions: (Matrix) targets: (Matrix) ->
     | 0 -> sum
     | _ -> (
 
-      let pv = array_at p 0;
-      let tv = array_at t 0;
+      let pv = p[0];
+      let tv = t[0];
       let loss = Math.pow (pv - tv) 2.;
       loop (sum + loss) (array_succ p) (array_succ t)
     )
@@ -57,17 +57,17 @@ let LayerCache = module
 
     let pre_acts = array_fill_const num_layers [| 0. |];
     let acts = array_fill_const (num_layers + 1) [| 0. |];
-    let layer = array_at network.layers 0;
+    let layer = network.layers[0];
     let weights = layer.weights;
-    array_set 0 acts (array_fill_const weights.cols 0.) ;
+    acts[0] := (array_fill_const weights.cols 0.) ;
 
     for i = 0 to num_layers in (
-      let layer = array_at network.layers i;
+      let layer = network.layers[i];
 
       let pre_size = matrix_size (layer.biases);
       let act_size = matrix_size (layer.biases);
-      array_set (i + 1) acts (array_fill_const act_size 0.); 
-      array_set i pre_acts (array_fill_const pre_size 0.)
+      acts[i + 1] := (array_fill_const act_size 0.); 
+      pre_acts[i] := (array_fill_const pre_size 0.)
       
     );
 
@@ -92,7 +92,7 @@ let LayerCache = module
   let save = fn d: (Array of Double) m: (Matrix) ->
     let raw = m.data;
     for i = 0 to (array_size raw) in (
-       array_set i d (array_at raw i)
+       d[i] := raw[i]
     );
 
     m
@@ -112,15 +112,15 @@ let MLP = Network [|
 
 let forward = fn network: (Network) cache: (LayerCache.LCache) input ->
   let layers = network.layers;
-  LayerCache.save (array_at cache.pre_activations 0) input;
+  LayerCache.save (cache.pre_activations[0]) input;
 
   foldi (fn i (current, cache): (Matrix, LayerCache.LCache) layer: (Layer) ->
     let z = current
       |> Vec.matrix_vec_mul layer.weights
       |> Vec.add layer.biases
-      |> LayerCache.save (array_at cache.pre_activations i) 
+      |> LayerCache.save (cache.pre_activations[i]) 
       |> layer.activation
-      |> LayerCache.save (array_at cache.activations (i + 1))
+      |> LayerCache.save (cache.activations[i + 1])
     ;
     (z, cache)
   ) (input, cache) layers
@@ -134,14 +134,13 @@ let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y 
 
   print `0: backward delta: {delta.rows} {delta.cols}\n`;
   let len = array_size network.layers in
-  for i_ = 0 to len in (
-    let i = len - 1 - i_; # reverse
-    print `layer {i}\n`;
-    let act_array = array_at cache.activations i;
+  for _i = 0 to len in (
+    let i = len - 1 - _i; # reverse
+    let act_array = cache.activations[i];
     let activation = Matrix (array_size act_array) 1 act_array; 
-    print `act {i} {activation.rows} {activation.cols}\n`;
     Vec.matrix_vec_mul activation delta;
     print_matrix delta;
+
     match i > 0 with
     | true -> ()
     | false -> ()

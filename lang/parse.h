@@ -73,10 +73,10 @@ typedef enum token_type {
   // finish operators
 
   TOKEN_BANG,
-  TOKEN_ASSIGNMENT,
-  TOKEN_NL,    // statement terminator
-  TOKEN_PIPE,  // special pipe operator |>
-  TOKEN_ARROW, // special fn arrow operator |>
+  // TOKEN_NL,         // statement terminator ???
+  TOKEN_ASSIGNMENT, // :=
+  TOKEN_PIPE,       // special pipe operator |>
+  TOKEN_ARROW,      // special fn arrow operator |>
   TOKEN_IDENTIFIER,
   TOKEN_STRING, // literal
   TOKEN_NUMBER,
@@ -428,4 +428,6 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
 Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body);
 
 Ast *ast_range_expression(Ast *from, Ast *to);
+
+Ast *ast_assignment(Ast *var, Ast *val);
 #endif

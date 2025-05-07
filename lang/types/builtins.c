@@ -102,8 +102,8 @@ Type *create_new_array_set_sig(void *_) {
   Type *arr = create_array_type(el);
   Type *f = arr;
   f = type_fn(el, f);
-  f = type_fn(arr, f);
   f = type_fn(&t_int, f);
+  f = type_fn(arr, f);
   return f;
 }
 

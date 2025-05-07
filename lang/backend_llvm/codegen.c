@@ -289,6 +289,12 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_LOOP: {
     return codegen_loop(ast, ctx, module, builder);
   }
+
+  case AST_BINOP: {
+    printf("binop maybe assignment???\n");
+    print_ast(ast);
+    return NULL;
+  }
   }
 
   return NULL;

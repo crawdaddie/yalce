@@ -1,9 +1,10 @@
 import engine/bindings/MIDI;
 open engine/bindings/Sched; 
 open engine/bindings/Synth; 
+open engine/bindings/VST; 
 open lib/Ref;
 import lib/Math;
-open lib/Euclid;
+# open lib/Euclid;
 
 
 let (@) = array_at;
@@ -40,7 +41,7 @@ let Kick = module
     cor_stop (array_at pattern_ref 0);
     cor
     |> play_routine t schedule_event
-    |> array_set 0 pattern_ref 
+    |> array_set pattern_ref 0
   ;;
 ;
 
@@ -73,7 +74,7 @@ let Snare = module
     cor_stop (array_at pref 0);
     cor
     |> play_routine t schedule_event
-    |> array_set 0 pref 
+    |> array_set pref 0 
   ;;
 
   let _ = MIDI.register_cc_handler 2 1 (fn val ->
@@ -132,7 +133,7 @@ let Hihat = module
     cor_stop (array_at pref 0);
     cor
     |> play_routine t schedule_event
-    |> array_set 0 pref 
+    |> array_set pref 0
   ;;
 
   let tts_pat = fn () ->
@@ -196,6 +197,10 @@ defer_quant (q * 2) (fn t ->
 let fx_chain = (fn () ->
   let input = multi_chan_inlet 2 0.;
   input
+
+  # |> vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/ValhallaSupermassive.vst/Contents/MacOS/ValhallaSupermassive")
+  # |> vstfx_load_preset (cstr "/Library/Application Support/Valhalla DSP, LLC/ValhallaSupermassive/Presets/Factory/LATE 2024/Pleiades Hall 1985.vpreset")
+  # |> vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/Temper.vst/Contents/MacOS/Temper")
   |> vital_rev_node
     0.99
     1.

@@ -652,8 +652,8 @@ LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
   Type *ret_type = ast->md;
-  Ast *idx_ast = ast->data.AST_APPLICATION.args;
-  Ast *array_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *idx_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *array_ast = ast->data.AST_APPLICATION.args;
   Ast *val_ast = ast->data.AST_APPLICATION.args + 2;
   LLVMValueRef array = codegen(array_ast, ctx, module, builder);
   LLVMValueRef idx = codegen(idx_ast, ctx, module, builder);
@@ -1009,6 +1009,21 @@ LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return result_array;
 }
+LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  Ast *array_like_ast = ast->data.AST_APPLICATION.function;
+  Ast *index_ast = ast->data.AST_APPLICATION.args;
+  Type *array_type = array_like_ast->md;
+  if (is_array_type(array_type)) {
+    LLVMValueRef arr = codegen(array_like_ast, ctx, module, builder);
+    LLVMValueRef idx =
+        codegen(index_ast->data.AST_LIST.items, ctx, module, builder);
+    Type *_el_type = array_type->data.T_CONS.args[0];
+    LLVMTypeRef el_type = type_to_llvm_type(_el_type, ctx->env, module);
+
+    return get_array_element(builder, arr, idx, el_type);
+  }
+}
 
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
@@ -1063,7 +1078,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                           type_to_llvm_type(&t_empty_cor, ctx->env, module),
                           module));
 
-  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at_fn_sig, ArrayAtHandler);
+  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at, ArrayAtHandler);
 
   GENERIC_FN_SYMBOL("array_set", &t_array_set_fn_sig, ArraySetHandler);
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SIZE, &t_array_size_fn_sig,

@@ -6,4 +6,5 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx);
 Type *infer_application(Ast *ast, TICtx *ctx);
 Type *infer_cons_application(Ast *ast, TICtx *ctx);
 
+bool is_index_access_ast(Ast *application);
 #endif

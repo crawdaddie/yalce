@@ -94,6 +94,26 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
 
   Ast *function;
   switch (op) {
+  case TOKEN_ASSIGNMENT: {
+
+    if (left->tag == AST_APPLICATION &&
+        (left->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) &&
+        (strcmp(left->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+                "array_at") == 0)) {
+
+      Ast *app = ast_application(ast_identifier((ObjString){"array_set", 9}),
+                                 left->data.AST_APPLICATION.args);
+      app = ast_application(app, left->data.AST_APPLICATION.args + 1);
+      app = ast_application(app, right);
+      return app;
+    }
+
+    Ast *b = Ast_new(AST_BINOP);
+    b->data.AST_BINOP.left = left;
+    b->data.AST_BINOP.right = right;
+    b->data.AST_BINOP.op = op;
+    return b;
+  }
   case TOKEN_PLUS: {
     function = ast_identifier((ObjString){"+", 1});
     break;
@@ -1071,4 +1091,7 @@ Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body) {
   loop->data.AST_LET.expr = iter_expr;
   loop->data.AST_LET.in_expr = body;
   return loop;
+}
+Ast *ast_assignment(Ast *var, Ast *val) {
+  return ast_binop(TOKEN_ASSIGNMENT, var, val);
 }

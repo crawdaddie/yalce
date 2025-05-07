@@ -149,8 +149,6 @@ Type t_array_to_list_fn_sig =
 //                           {.T_CREATE_NEW_GENERIC =
 //                           create_new_array_at_sig}};
 
-Type t_array_at_fn_sig = MAKE_FN_TYPE_3(&t_array_var, &t_int, &t_array_var_el);
-
 Type t_array_set_fn_sig =
     MAKE_FN_TYPE_4(&t_int, &t_array_var, &t_array_var_el, &t_array_var);
 

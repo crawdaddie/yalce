@@ -626,9 +626,9 @@ NodeRef temper_node(double saturation, double feedback, double cutoff,
       .num_inputs = 1,
       .state_size = sizeof(temper_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(temper_state)),
-      .output = (Signal){.layout = 1,
+      .output = (Signal){.layout = 2,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+                         .buf = allocate_buffer_from_pool(graph, 2 * BUF_SIZE)},
       .meta = "temper",
   };
 
@@ -667,12 +667,12 @@ NodeRef dyn_temper_node(double saturation, double feedback, double cutoff,
   *node = (Node){
       .perform = (perform_func_t)dyn_temper_perform,
       .node_index = node->node_index,
-      .num_inputs = 2,
+      .num_inputs = 1,
       .state_size = sizeof(temper_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(temper_state)),
-      .output = (Signal){.layout = 1,
+      .output = (Signal){.layout = 2,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+                         .buf = allocate_buffer_from_pool(graph, 2 * BUF_SIZE)},
       .meta = "dyn_temper",
   };
 

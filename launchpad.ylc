@@ -162,7 +162,7 @@ let _ = MIDI.register_cc_handler 0 106 (fn val ->
 
   match val with
   | val if val > 0 -> (
-    array_set 0 state_ref ((Math.max_int (ho - 8) 0), gis, gph, mc);
+    array_set state_ref 0 ((Math.max_int (ho - 8) 0), gis, gph, mc);
     MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
     display_grid ();
     ()
@@ -175,7 +175,7 @@ let _ = MIDI.register_cc_handler 0 107 (fn val ->
   let (ho, gis, gph, mc) = deref state_ref;
   match val with 
   | val if val > 0 -> (
-    array_set 0 state_ref ((Math.min_int (ho + 8) (mc - 8)), gis, gph, mc);
+    array_set state_ref 0 ((Math.min_int (ho + 8) (mc - 8)), gis, gph, mc);
     MIDI.send_note_offs LAUNCHPAD_DEST (array_size note_ons) (cstr note_ons);
     display_grid ();
     ()
@@ -222,13 +222,13 @@ let display_tick = fn () ->
 ;;
 
 let set_tick_ref = fn t ->
-  array_set 0 tick_ref t;
+  array_set tick_ref 0 t;
   display_tick ()
 ;;
 
 
 let setup = fn max_cols: (Int) grid_press_handler: (Int -> ()) grid_is_set: (Int -> Bool) ->
-  array_set 0 state_ref (
+  array_set state_ref 0 (
     0,
     grid_is_set,
     grid_press_handler,

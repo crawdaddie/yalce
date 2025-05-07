@@ -1,41 +1,30 @@
-let (@) = array_at;
-
 # let array_choose = fn arr ->
-#   let idx = rand_int (array_size arr);
-#   arr @ idx 
+#   let idx = rand_int (array_size arr); arr @ idx 
 # ;;
-
-type Tensor = (data: Array of t, rank: Array of Int, Array of Int);
-
-type StridedArray = (size: Int, stride: Int, data: Ptr of t);
-
-let tensor_ndims = fn (_, sizes, _): (Tensor) ->
-  array_size sizes
-;;
 
 let fold = fn f res a ->
   let res_ref = [| res |];
   for i = 0 to (array_size a) in (
-    let r = res_ref @ 0;
-    let v = a @ i;
-    array_set 0 res_ref (f r v)  
+    let r = res_ref[0];
+    let v = a[i];
+    array_set res_ref 0 (f r v)  
   );
-  res_ref @ 0
+  res_ref[0]
 ;;
 
 let foldi = fn f res a ->
   let res_ref = [| res |];
   for i = 0 to (array_size a) in (
-    let r = res_ref @ 0;
-    let v = a @ i;
-    array_set 0 res_ref (f i r v)  
+    let r = res_ref [0];
+    let v = a [i];
+    array_set res_ref 0 (f i r v)  
   );
-  res_ref @ 0
+  res_ref[0]
 ;;
 
 
 let last = fn x ->
   let len = array_size x in
-  x @ (len - 1)
+  x [len - 1]
 ;;
   

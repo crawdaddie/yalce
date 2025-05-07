@@ -1,7 +1,7 @@
 let Ref = fn item -> [|item|];;
 
 let setref = fn arr v ->
-  array_set 0 arr v
+  array_set arr 0 v
 ;;
 
 let (<-) = setref;
@@ -20,7 +20,7 @@ let test = module
     let incr_ref = fn rx ->
       let y = array_at rx 0;
       let inc = y + 1;
-      array_set 0 rx inc;
+      array_set rx 0 inc;
       inc
     ;;
 

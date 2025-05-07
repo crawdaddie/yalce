@@ -16,6 +16,7 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx);
 Type *infer_match_expr(Ast *ast, TICtx *ctx);
 Type *infer_module(Ast *ast, TICtx *ctx);
 Type *infer(Ast *ast, TICtx *ctx);
+Type *infer_assignment(Ast *ast, TICtx *ctx);
 
 Type *for_loop_binding(Ast *binding, Ast *expr, Ast *body, TICtx *ctx);
 bool occurs_check(Type *var, Type *t);
@@ -414,6 +415,15 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
     let.tag = AST_LET;
     type = infer(&let, ctx);
+    break;
+  }
+  case AST_BINOP: {
+    printf("binop inf\n");
+    print_ast(ast);
+    if (ast->data.AST_BINOP.op == TOKEN_ASSIGNMENT) {
+      type = infer_assignment(ast, ctx);
+      break;
+    }
     break;
   }
   default: {
@@ -1061,4 +1071,12 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
   module_struct_type->data.T_CONS.names = names;
   ctx->env = env;
   return module_struct_type;
+}
+
+Type *infer_assignment(Ast *ast, TICtx *ctx) {
+  Type *val_type = infer(ast->data.AST_BINOP.right, ctx);
+  Type *var_type = infer(ast->data.AST_BINOP.left, ctx);
+  print_type(val_type);
+  print_type(var_type);
+  return &t_void;
 }

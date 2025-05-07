@@ -14,6 +14,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst);
 TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
                                    Type *t2);
 
+Type *infer_application(Ast *ast, TICtx *ctx);
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
@@ -234,6 +235,15 @@ Type *infer_iter(Ast *ast, TICtx *ctx) {
 }
 
 Type *find_variant_member(Type *variant, const char *name);
+
+bool is_index_access_ast(Ast *application) {
+  Ast *arg_ast = application->data.AST_APPLICATION.args;
+  Type *arg_type = arg_ast->md;
+  Type *cons = application->data.AST_APPLICATION.function->md;
+  return is_list_type(arg_type) && arg_ast->tag == AST_LIST &&
+         types_equal(arg_type->data.T_CONS.args[0], &t_int) &&
+         application->data.AST_APPLICATION.len == 1 && is_array_type(cons);
+}
 Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
   // print_type(fn_type);
@@ -252,7 +262,7 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   }
 
   TICtx app_ctx = {};
-  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+  for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
 
     Type *cons_arg = cons->data.T_CONS.args[i];
 
@@ -262,6 +272,12 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
           ctx, ast, "Could not infer argument type in cons %s application\n",
           cons->data.T_CONS.name);
     }
+    // if (is_index_access_ast(ast)) {
+    //   Ast access = (Ast){AST_APPLICATION, .data = {.AST_APPLICATION =
+    //   {.function = }}}; return infer_application(&access, ctx);
+    //
+    //   // return cons->data.T_CONS.args[0];
+    // }
 
     if (!unify_in_ctx(cons_arg, arg_type, &app_ctx, ast)) {
       return type_error(ctx, ast,
