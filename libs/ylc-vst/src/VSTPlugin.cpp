@@ -1,4 +1,5 @@
 #include "VSTPlugin.h"
+#include "CocoaBridge.h"
 
 #include <dlfcn.h>
 #include <stdio.h>
@@ -84,7 +85,13 @@ static VstIntPtr VSTCALLBACK vst2HostCallback(AEffect *effect, VstInt32 opcode,
   }
 }
 
-VSTError vst_initialize(void) { return VST_ERR_OK; }
+VSTError vst_initialize(void) {
+#ifdef __APPLE__
+  initCocoaApplication();
+#endif
+
+  return VST_ERR_OK;
+}
 
 void vst_terminate(void) {}
 
@@ -761,37 +768,99 @@ VSTError vst_get_editor_size(VSTPluginHandle handle, int *width, int *height) {
   return VST_ERR_FAILED;
 }
 
-VSTError vst_open_editor(VSTPluginHandle handle, void *parent) {
-  printf("vst open editor %p win parent: %p\n", handle, parent);
-  if (!handle || !parent) {
-    return VST_ERR_INVALID_ARG;
+// VSTError vst_open_editor(VSTPluginHandle handle, void *parent) {
+//   printf("vst open editor %p win parent: %p\n", handle, parent);
+//   if (!handle || !parent) {
+//     return VST_ERR_INVALID_ARG;
+//   }
+//
+//   printf("vst open editor %p win parent: %p\n", handle, parent);
+//
+//   VSTPluginInstance_t *instance = (VSTPluginInstance_t *)handle;
+//
+//   if (!instance->isInitialized) {
+//     printf("vst open editor %p win parent: %p not init\n", handle, parent);
+//     return VST_ERR_NOT_INITIALIZED;
+//   }
+//
+//   if (instance->type == VST_PLUGIN_TYPE_VST2) {
+//
+//     printf("vst open editor %p win parent: %p vst2\n", handle, parent);
+//     if (instance->vst2Effect->flags & effFlagsHasEditor) {
+//
+//       printf("vst dispatch %p win parent: %p not init\n", handle, parent);
+//       instance->vst2Effect->dispatcher(instance->vst2Effect, effEditOpen, 0,
+//       0,
+//                                        parent, 0);
+//       printf("open editor %p\n", instance);
+//       return VST_ERR_OK;
+//     }
+//   }
+//
+//   printf("open editor %p FAIL\n", instance);
+//
+//   return VST_ERR_FAILED;
+// }
+/**
+ * Opens the editor GUI for a VST plugin
+ * @param plugin The plugin handle
+ * @return VST_ERR_OK on success, error code otherwise
+ */
+VSTError vst_open_editor(VSTPluginHandle plugin) {
+  if (!plugin) {
+    return VST_ERR_INVALID_PLUGIN;
   }
 
-  printf("vst open editor %p win parent: %p\n", handle, parent);
+  VSTPluginInternal *pluginInternal = (VSTPluginInternal *)plugin;
 
-  VSTPluginInstance_t *instance = (VSTPluginInstance_t *)handle;
-
-  if (!instance->isInitialized) {
-    printf("vst open editor %p win parent: %p not init\n", handle, parent);
-    return VST_ERR_NOT_INITIALIZED;
+  // Check if the plugin has an editor
+  if (!vst_has_editor(plugin)) {
+    return VST_ERR_NO_EDITOR;
   }
 
-  if (instance->type == VST_PLUGIN_TYPE_VST2) {
+  // If editor is already open, return success
+  if (pluginInternal->editorOpen) {
+    return VST_ERR_OK;
+  }
 
-    printf("vst open editor %p win parent: %p vst2\n", handle, parent);
-    if (instance->vst2Effect->flags & effFlagsHasEditor) {
-
-      printf("vst dispatch %p win parent: %p not init\n", handle, parent);
-      instance->vst2Effect->dispatcher(instance->vst2Effect, effEditOpen, 0, 0,
-                                       parent, 0);
-      printf("open editor %p\n", instance);
-      return VST_ERR_OK;
+  // Handle based on plugin type
+  if (pluginInternal->type == VST_PLUGIN_TYPE_VST2) {
+    // macOS implementation using our Cocoa bridge
+    CocoaWindow *window = createCocoaWindow("VST Plugin GUI", 800, 600);
+    if (!window) {
+      return VST_ERR_GUI_FAILED;
     }
+
+    pluginInternal->cocoaWindow = window;
+    void *nsView = getNSViewFromWindow(window);
   }
 
-  printf("open editor %p FAIL\n", instance);
+  if (pluginInternal->type == VST_PLUGIN_TYPE_VST2) {
+    // For VST2
+    pluginInternal->vst2->dispatcher(pluginInternal->vst2, effEditOpen, 0, 0,
+                                     nsView, 0);
 
-  return VST_ERR_FAILED;
+    // Get editor size
+    ERect *rect = NULL;
+    pluginInternal->vst2->dispatcher(pluginInternal->vst2, effEditGetRect, 0, 0,
+                                     &rect, 0);
+
+    if (rect) {
+      resizeCocoaWindow(window, rect->right - rect->left,
+                        rect->bottom - rect->top);
+    }
+    // VST2 implementation
+    // macOS implementation using Cocoa
+    // This is a simplified outline - actual implementation would use
+    // Objective-C
+  } else {
+    return VST_ERR_UNKNOWN_PLUGIN_TYPE;
+  }
+
+  // Mark editor as open
+  pluginInternal->editorOpen = true;
+
+  return VST_ERR_OK;
 }
 
 VSTError vst_close_editor(VSTPluginHandle handle) {

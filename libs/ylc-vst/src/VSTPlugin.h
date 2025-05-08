@@ -197,7 +197,7 @@ VSTError vst_load_preset(VSTPluginHandle handle, const char *path);
 // Add these to your VSTPlugin.h header
 VSTError vst_has_editor(VSTPluginHandle handle, int *hasEditor);
 VSTError vst_get_editor_size(VSTPluginHandle handle, int *width, int *height);
-VSTError vst_open_editor(VSTPluginHandle handle, void *parent);
+VSTError vst_open_editor(VSTPluginHandle handle);
 VSTError vst_close_editor(VSTPluginHandle handle);
 VSTError vst_process_editor_idle(VSTPluginHandle handle);
 
