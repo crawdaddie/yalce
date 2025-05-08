@@ -427,10 +427,17 @@ Type *coroutine_constructor_type_from_fn_type(Type *fn_type);
 
 bool is_module(Type *t);
 
+typedef struct ClosureVarList {
+  Ast *param;
+  Type *type;
+  struct ClosureVarList *next;
+} ClosureVarList;
+
 typedef struct TICtx {
   TypeEnv *env;
   TypeConstraint *constraints;
   Ast *current_fn_ast;
+  AstList *closure_vars;
   Type *yielded_type;
   int scope;
   int current_fn_scope;

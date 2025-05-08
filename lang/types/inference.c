@@ -103,6 +103,13 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   return type;
 }
 
+void add_closure_variable(TICtx *ctx, Ast *p) {
+  AstList *list = malloc(sizeof(AstList));
+  list->ast = p;
+  list->next = ctx->closure_vars;
+  ctx->closure_vars = list;
+}
+
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
   switch (ast->tag) {
@@ -211,9 +218,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TypeEnv *ref = env_lookup_ref(ctx->env, name);
     if (ref) {
-      // printf("ast identifier %s scope: %d this scope: %d (is fn param
-      // %d)\n",
-      //        name, ref->type->scope, ctx->scope, ref->is_fn_param);
+      int this_scope = ctx->current_fn_scope;
+      int symbol_scope = ref->type->scope;
+
+      if (this_scope > symbol_scope && symbol_scope > 0 && !ref->is_fn_param) {
+        Ast *p = Ast_new(AST_IDENTIFIER);
+        *p = *ast;
+        p->md = ref->type;
+        add_closure_variable(ctx, p);
+      }
+
       ref->ref_count++;
 
       ast->data.AST_IDENTIFIER.is_fn_param = ref->is_fn_param;
@@ -794,6 +808,26 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   if (body_ctx.yielded_type != NULL) {
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
+  }
+  int num = 0;
+
+  if (body_ctx.closure_vars) {
+    for (AstList *l = body_ctx.closure_vars; l != NULL; l = l->next) {
+      num++;
+    }
+
+    ast->data.AST_LAMBDA.num_closures = num;
+    Ast *new_params = malloc(sizeof(Ast) * ast->data.AST_LAMBDA.len + num);
+    AstList *l = body_ctx.closure_vars;
+    for (int i = 0; i < num; i++) {
+      new_params[i] = *l->ast;
+      l = l->next;
+    }
+    for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+      new_params[num + i] = ast->data.AST_LAMBDA.params[i];
+    }
+    ast->data.AST_LAMBDA.params = new_params;
+    ast->data.AST_LAMBDA.len += num;
   }
 
   return ast->md;

@@ -53,6 +53,7 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
     print_ast_err(ast);
     return NULL;
   }
+
   if (args_len < exp_args_len) {
     // return anonymous func
     int len = exp_args_len - args_len;
@@ -156,6 +157,10 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  printf("application\n");
+  print_ast(ast);
+
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
   if (is_index_access_ast(ast)) {
     return IndexAccessHandler(ast, ctx, module, builder);

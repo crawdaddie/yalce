@@ -166,9 +166,26 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   Type *fn_type = ast->md;
 
+  if (ast->data.AST_LAMBDA.num_closures > 0) {
+    print_ast(ast);
+  }
+  int num_closures = ast->data.AST_LAMBDA.num_closures;
   int fn_len = ast->data.AST_LAMBDA.len;
 
+  if (num_closures > 0) {
+    for (int i = num_closures; i > 0; i--) {
+      fn_type = type_fn(ast->data.AST_LAMBDA.params[i - 1].md, fn_type);
+    }
+  }
+
   LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx->env, module);
+
+  // if (num_closures > 0) {
+  //   printf("fn with closure vals\n");
+  //   LLVMDumpType(prototype);
+  //   print_ast(ast);
+  // }
+
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)

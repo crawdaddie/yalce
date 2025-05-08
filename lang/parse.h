@@ -227,7 +227,9 @@ struct Ast {
       ObjString fn_name;
       Ast *body;
       Ast **type_annotations;
+      // void *fn_meta;
       bool is_coroutine;
+      int num_closures;
       int num_yields;
       AstList *yield_boundary_crossers;
       int num_yield_boundary_crossers;
@@ -252,6 +254,7 @@ struct Ast {
     struct AST_EMPTY_LIST {
       ObjString type_id;
     } AST_EMPTY_LIST;
+
     struct AST_MATCH {
       Ast *expr;
       Ast *branches;

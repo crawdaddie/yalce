@@ -257,6 +257,20 @@ LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
   }
   return NULL;
 }
+
+LLVMValueRef create_curried_fn_binding_from_closure(Ast *binding, Ast *lambda,
+                                                    JITLangCtx *ctx,
+                                                    LLVMModuleRef module,
+                                                    LLVMBuilderRef builder) {
+
+  printf("create partial func for closure\n");
+  printf("wtf do I do now???\n");
+  print_ast(binding);
+  print_ast(lambda);
+
+  return NULL;
+}
+
 bool is_array_at(Ast *expr) {
   if (expr->tag == AST_APPLICATION) {
     if (expr->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
@@ -308,9 +322,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
 
     if (fn_type && is_generic(fn_type)) {
 
-      expr_val = create_fn_binding(binding, expr_type,
-                                   codegen(expr, outer_ctx, module, builder),
-                                   inner_ctx, module, builder);
+      // expr_val = create_fn_binding(binding, expr_type,
+      //                              codegen(expr, outer_ctx, module, builder),
+      //                              inner_ctx, module, builder);
 
       expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
 
@@ -364,6 +378,14 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
       return in_expr == NULL ? sym->val
                              : codegen(in_expr, inner_ctx, module, builder);
     }
+  }
+  if (expr_type->kind == T_FN && expr->tag == AST_LAMBDA &&
+      expr->data.AST_LAMBDA.num_closures > 0) {
+
+    LLVMValueRef expr_val = create_curried_fn_binding_from_closure(
+        binding, expr, outer_ctx, module, builder);
+    return in_expr == NULL ? expr_val
+                           : codegen(in_expr, inner_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {

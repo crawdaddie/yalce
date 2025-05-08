@@ -87,6 +87,7 @@ typedef struct {
     struct {
       Type *fn_type;
       bool recursive_ref;
+      Ast *ast;
     } STYPE_FUNCTION;
 
     struct {
