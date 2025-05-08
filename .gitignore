@@ -33,6 +33,7 @@ wheels/
 *.egg
 .venv/
 venv/
+*.idea
 
 # Jupyter
 .ipynb_checkpoints
