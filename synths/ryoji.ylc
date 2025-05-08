@@ -1,0 +1,221 @@
+#! ylc -i
+import ../lib/Math;
+open ../engine/bindings/Sched; 
+open ../engine/bindings/Synth; 
+open ../engine/bindings/VST; 
+
+let array_choose = fn arr ->
+  let idx = Math.rand_int (array_size arr) in
+  array_at arr idx 
+;;
+
+
+let tempo = 155.;
+
+let Clicks = module
+
+  let synth = (fn () ->
+    let freq = inlet (tempo * 4. / 60.); 
+    let repeat_time = inlet (60. * 0.25 / tempo);
+    let stutter_gate = inlet 0.;
+
+    let start = inlet 0.;
+
+    let click = lfpulse_node 0.0 freq start;
+
+    click
+    |> biquad_hp_node (rand_trig_node click 1000 3000.) 1.
+    |> (*) 16.
+    |> pan_node (rand_trig_node click -1. 1.)
+    |> stutter_node (60. * 4. / tempo) repeat_time stutter_gate
+    |> (*) (asr_node 0.001 1. 0.1 start)
+   )
+   |> play_tpl;
+
+
+  let set_gate = fn d ->
+    let t = get_tl_tick ();
+    set_input_scalar_offset synth 2 t d;
+    set_input_scalar_offset synth 3 t 1. 
+
+  ;;
+
+  let set_time = fn d ->
+    let f = get_tl_tick ();
+    set_input_scalar_offset synth 1 f d 
+  ;;
+  let start = fn t ->
+    set_input_scalar_offset synth 3 t 1.
+  ;;
+;
+
+
+
+let Tones = module
+
+  let group = group_node () |> play_node_offset (get_current_sample ());
+
+  let reverb = (fn () ->
+    let input = multi_chan_inlet 2 0.;
+    input |> vital_rev_node
+      0.99
+      0.5
+      0.0
+      0.62184876
+      0.0
+      1.0
+      0.8333333
+      0.7
+      0.789916
+      0.0
+      0.1
+      0.5
+  ) |> play_tpl
+  ;
+
+  let _ = group |> pipe_into reverb 0;
+
+  let beep_tpl = (fn () ->
+    let trig = inlet 1.;
+    let f = inlet 1000.;
+    let pan = inlet 0.;
+    sin_node f
+    |> (*) (asr_kill_node 0.01 1. 0.01 trig)
+    |> pan_node pan 
+  ) |> compile_blob_template
+  ;
+  
+  let beep = fn dur f: (Double) ->
+    let pan = Math.rand_double_range -1. 1. in
+    match dur > 0. with
+    | true -> (
+      let t = get_tl_tick ();
+      beep_tpl |> instantiate_template [(1, f), (2, pan)] |> play_node_offset_w_kill t dur 0;
+      ()
+    )
+    | _ -> ()
+  ;;
+
+  let beep_rev = fn dur f: (Double) ->
+    match dur > 0. with
+    | true -> (
+      let t = get_tl_tick ();
+      beep_tpl |> instantiate_template [(1, f), (2, 0.)] |> node_add_dur t dur 0 group;
+      ()
+    )
+    | _ -> ()
+  ;;
+
+  let pattern_ref = [|empty_coroutine ()|] ;
+  let set_pattern = fn t cor ->
+    cor_stop ( pattern_ref[0]);
+    cor
+    |> play_routine t schedule_event
+    |> array_set pattern_ref 0
+  ;;
+
+  let beep_bass_tpl = (fn () ->
+    let trig = inlet 1.;
+    sin_node (inlet 62.5) 
+    |> (+) (0.05 * white_noise_node ())
+    |> tanh_node 2.
+    |> (*) (asr_kill_node 0.01 1. 0.01 trig)
+  ) |> compile_blob_template
+  ;
+
+  let beep_bass = fn dur f: (Double) ->
+    match dur > 0. with
+    | true -> (
+      let t = get_tl_tick ();
+      beep_bass_tpl |> instantiate_template [(1, f)] |> play_node_offset_w_kill t dur 0;
+      ()
+    )
+    | _ -> ()
+  ;;
+;
+
+let q = (60. / tempo);
+
+
+let times = [| 1., 0.5, 0.5, 0.75 |];
+
+let routine = fn () ->
+
+
+  Math.chance2
+    0.08
+    (fn () -> Clicks.set_gate 1.; Clicks.set_time (q * (array_choose times)))
+    (fn () -> Clicks.set_gate 0.);
+  yield 0.25 * q
+
+
+;;
+
+defer_quant (2 * q) (fn t -> 
+  let rout = fn () ->
+    yield (16., 1., 3000.);
+    yield (1., 0.9, 3000.);
+    yield (1., 1., 3000.);
+    yield (14., 0., 0.);
+
+    yield (32., 0., 0.);
+    yield (4., 1., 3000.);
+    yield (12., 3., 10000.);
+
+    yield (1., 0.9, 3000.);
+    yield (1., 1., 3000.);
+    yield (14., 0., 0.);
+
+    yield (32., 0., 0.)
+  ;;
+
+  rout ()
+  |> cor_loop
+  |> cor_map (fn (dur, d, f) -> (q * 0.25 * dur, q * 0.24 * d, f))
+  |> cor_map (fn (dur, d, f) -> Tones.beep d f; dur)
+  |> Tones.set_pattern t
+  ;
+
+  iter [|
+    (32., 0., 0.),
+    (16., 2., 1000.),
+    (16., 0., 0.),
+  |]
+  |> cor_loop
+  |> cor_map (fn (dur, d, f) -> (q * 0.25 * dur, q * 0.24 * d, f))
+  |> cor_map (fn (dur, d, f) -> Tones.beep_rev d f; dur)
+  |> play_routine t schedule_event
+  ;
+
+  iter [|
+    (34., 0., 0.),
+    (6., 5.6, 40.),
+    (8., 3.6, 40.),
+    (4., 12., 40.),
+    (12., 0., 0.),
+  |]
+  |> cor_loop
+  |> cor_map (fn (dur, d, f) -> (q * 0.25 * dur, q * 0.24 * d, f))
+  |> cor_map (fn (dur, d, f) -> Tones.beep_bass d f; dur)
+  |> play_routine t schedule_event
+  ;
+
+  Clicks.start t;
+
+  routine ()
+  |> cor_loop
+  |> play_routine t schedule_event
+);
+
+
+
+
+
+# (
+# open gui/bindings/Gui;
+# # create_scope (node_out Tones.fx_chain |> sig_raw) 2 512
+# create_scope (node_out Clicks.synth |> sig_raw) 2 512
+# )
+#
+
+
