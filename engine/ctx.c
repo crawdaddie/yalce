@@ -1,6 +1,7 @@
 #include "./ctx.h"
 #include "./node.h"
 #include "audio_graph.h"
+#include "ext_lib.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -8,12 +9,12 @@ Ctx ctx;
 
 void init_ctx() {}
 
-void audio_ctx_add(Node *ensemble) {
-  Ctx *ctx = get_audio_ctx();
+void audio_ctx_add(Node *node) {
+  ensemble_state *ctx = &get_audio_ctx()->graph;
 
   // Add to existing chain
   if (ctx->head == NULL) {
-    ctx->head = ensemble;
+    ctx->head = node;
   } else {
     // Find the end of the chain
     Node *current = ctx->head;
@@ -21,7 +22,7 @@ void audio_ctx_add(Node *ensemble) {
       current = current->next;
     }
     // Append to the end
-    current->next = ensemble;
+    current->next = node;
   }
 }
 
@@ -31,8 +32,12 @@ static void process_msg_pre(int frame_offset, scheduler_msg msg) {
   case NODE_ADD: {
     struct NODE_ADD payload = msg.payload.NODE_ADD;
     payload.target->frame_offset = frame_offset;
+    if (payload.group) {
+      group_add(payload.target, payload.group);
+    } else {
+      audio_ctx_add(payload.target);
+    }
 
-    audio_ctx_add(payload.target);
     break;
   }
 
@@ -189,19 +194,6 @@ void process_msg_queue_post(uint64_t current_tick, msg_queue *queue,
       process_msg_post(frame_offset, msg);
     }
   }
-}
-
-Node *_audio_ctx_add(Node *node) {
-  // printf("audio ctx add %p\n", node);
-  if (ctx.head == NULL) {
-    ctx.head = node;
-    ctx.tail = node;
-    return node;
-  }
-
-  ctx.tail->next = node;
-  ctx.tail = node;
-  return node;
 }
 
 Node *add_to_dac(Node *node) {

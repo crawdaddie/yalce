@@ -418,8 +418,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
   case AST_BINOP: {
-    printf("binop inf\n");
-    print_ast(ast);
     if (ast->data.AST_BINOP.op == TOKEN_ASSIGNMENT) {
       type = infer_assignment(ast, ctx);
       break;

@@ -15,7 +15,7 @@ let array_to_buf = extern fn Array of Double -> Synth;
 
 # let play_node = extern fn Synth -> Synth;
 # let play_node_offset = extern fn Int -> Synth -> Synth;
-let play_node_offset_w_kill = extern fn Int -> Double -> Int -> Synth -> Synth;
+let play_node_offset_w_kill = extern fn Uint64 -> Double -> Int -> Synth -> Synth;
 
 let init_audio = extern fn () -> () in
   init_audio ()

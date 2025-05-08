@@ -59,5 +59,10 @@ NodeRef const_sig(double val);
 NodeRef const_buf(double val, int layout, int size);
 
 NodeRef stereo_node(NodeRef input);
+
+NodeRef pan_node(NodeRef pan, NodeRef input);
+NodeRef empty_synth();
+
+NodeRef sah_node(NodeRef trig, NodeRef input);
 // NodeRef set_math(void *math_fn, NodeRef n);
 #endif

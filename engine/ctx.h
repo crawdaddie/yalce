@@ -19,6 +19,7 @@ typedef struct scheduler_msg {
   union {
     struct NODE_ADD {
       Node *target;
+      Node *group;
     } NODE_ADD;
 
     struct GROUP_ADD {
@@ -42,9 +43,11 @@ typedef struct scheduler_msg {
       Node *target;
       int input;
     } NODE_SET_TRIG;
+
     struct NODE_REMOVE {
       Node *target;
     } NODE_REMOVE;
+
   } payload;
 } scheduler_msg;
 
@@ -64,10 +67,14 @@ scheduler_msg pop_msg(msg_queue *queue);
 int get_write_ptr();
 void update_bundle(int write_ptr);
 
-typedef struct {
-  double output_buf[BUF_SIZE * LAYOUT];
+typedef struct ensemble_state {
   Node *head;
   Node *tail;
+} ensemble_state;
+
+typedef struct {
+  double output_buf[BUF_SIZE * LAYOUT];
+  ensemble_state graph;
   int sample_rate;
   double spf;
   msg_queue msg_queue;

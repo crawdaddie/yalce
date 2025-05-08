@@ -34,24 +34,22 @@ char *node_get_state(Node *node, AudioGraph *graph) {
   return state;
 }
 
-void write_to_dac(int dac_layout, double *dac_buf, int _layout, double *buf,
+void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
                   int output_num, int nframes) {
-
-  int layout = _layout;
 
   if (output_num > 0) {
 
     while (nframes--) {
-      for (int i = 0; i < dac_layout; i++) {
-        *(dac_buf + i) += *(buf + (i < layout ? i : 0));
+      for (int c = 0; c < dac_layout; c++) {
+        *(dac_buf + c) += *(buf + (c < layout ? c : 0));
       }
       buf += layout;
       dac_buf += dac_layout;
     }
   } else {
     while (nframes--) {
-      for (int i = 0; i < dac_layout; i++) {
-        *(dac_buf + i) = *(buf + (i < layout ? i : 0));
+      for (int c = 0; c < dac_layout; c++) {
+        *(dac_buf + c) = *(buf + (c < layout ? c : 0));
       }
       buf += layout;
       dac_buf += dac_layout;
@@ -120,11 +118,12 @@ void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
                        double spf) {
 
   int consumed = process_msg_queue_pre(current_tick, &ctx->msg_queue);
+  ensemble_state graph = ctx->graph;
 
-  if (ctx->head == NULL) {
+  if (graph.head == NULL) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
   } else {
-    perform_graph(ctx->head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
+    perform_graph(graph.head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
   }
   process_msg_queue_post(current_tick, &ctx->msg_queue, consumed);
 }
@@ -180,7 +179,6 @@ Node *multi_chan_inlet(int layout, double default_val) {
       .state_size = 0,
       .state_offset = graph ? graph->state_memory_size : 0,
       // Allocate output buffer
-      // TODO: allocate const bufs as just .size = 1
       .output =
           (Signal){.layout = layout,
                    .size = BUF_SIZE,
@@ -383,6 +381,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
     }
   }
 
+  ensemble->next = NULL;
   return ensemble;
 }
 
@@ -395,14 +394,23 @@ Node *play_node_offset(uint64_t tick, Node *s) {
 
   push_msg(&ctx.msg_queue,
            (scheduler_msg){NODE_ADD, tick, {.NODE_ADD = {.target = s}}}, 512);
+
   return s;
+}
+
+NodeRef node_add(uint64_t tick, NodeRef group, NodeRef target) {
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_ADD,
+                           tick,
+                           {.NODE_ADD = {.target = target, .group = group}}},
+           512);
+  return target;
 }
 
 typedef struct close_payload {
   NodeRef target;
   int gate_input;
 } close_payload;
-
 void close_gate(close_payload *p, int offset) {
   NodeRef target = p->target;
   int input = p->gate_input;
@@ -417,7 +425,25 @@ void close_gate(close_payload *p, int offset) {
   free(p);
 }
 
-NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
+NodeRef node_add_dur(uint64_t tick, double dur, int gate, NodeRef group,
+                     NodeRef target) {
+
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){NODE_ADD,
+                           tick,
+                           {.NODE_ADD = {.target = target, .group = group}}},
+           512);
+
+  close_payload *cp = malloc(sizeof(close_payload));
+  *cp = (close_payload){
+      .target = target,
+      .gate_input = gate,
+  };
+  schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
+  return target;
+}
+
+NodeRef play_node_offset_w_kill(uint64_t offset, double dur, int gate_in,
                                 NodeRef s) {
   // printf("play node %p at offset %d %f %d\n", s, offset, dur, gate_in);
   // Node *group = _chain;
@@ -433,6 +459,19 @@ NodeRef play_node_offset_w_kill(int offset, double dur, int gate_in,
       .gate_input = gate_in,
   };
   schedule_event(get_current_sample(), dur, (SchedulerCallback)close_gate, cp);
+  return s;
+}
+
+NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s) {
+  // printf("play node %p dur: %f\n", s, dur);
+  play_node_offset(tick, s);
+
+  close_payload *cp = malloc(sizeof(close_payload));
+  *cp = (close_payload){
+      .target = s,
+      .gate_input = gate_in,
+  };
+  schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
   return s;
 }
 

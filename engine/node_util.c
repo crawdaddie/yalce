@@ -401,7 +401,101 @@ NodeRef stereo_node(NodeRef input) {
   return node;
 }
 
+void *panner_perform(Node *node, void *state, Node *inputs[], int nframes,
+                     double spf) {
+
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+
+  double *in = inputs[0]->output.buf;
+  double *pan_ = inputs[1]->output.buf;
+
+  // Process each sample
+  for (int i = 0; i < nframes; i++) {
+    double pan = *pan_;
+    pan_++;
+    *out = *in * (1. - (pan * 0.5 + 0.5));
+    out++;
+    *out = *in * (pan * 0.5 + 0.5);
+    out++;
+    in++;
+  }
+
+  return node->output.buf;
+}
+NodeRef pan_node(NodeRef pan, NodeRef input) {
+
+
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, 0);
+
+  *node = (Node){
+      .perform = (perform_func_t)panner_perform,
+      .node_index = node->node_index,
+      .num_inputs = 2,
+      .state_size = 0,
+      .state_offset = 0,
+      .output = (Signal){.layout = 2,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, 2 * BUF_SIZE)},
+      .meta = "stereo",
+  };
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = pan->node_index;
+  return node;
+}
+typedef struct sah_state {
+  double current_val;
+  double prev_trig;
+} sah_state;
+void *sah_perform(Node *node, sah_state *state, Node *inputs[], int nframes,
+                     double spf) {
+
+  double *out = node->output.buf;
+  double *input_ = inputs[0]->output.buf;
+  double *trig_ = inputs[1]->output.buf;
+  while (nframes--) {
+    double in = *input_;
+    input_++;
+    double trig = *trig_;
+    trig_++;
+
+    if (trig > 0.5 && state->prev_trig <= 0.5) {
+      state->current_val = in;
+    }
+
+    *out = state->current_val;
+    out++;
+    state->prev_trig = trig;
+  }
+}
+
+NodeRef sah_node(NodeRef trig, NodeRef input) {
+
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, 0);
+
+  *node = (Node){
+      .perform = (perform_func_t)sah_perform,
+      .node_index = node->node_index,
+      .num_inputs = 2,
+      .state_size = 0,
+      .state_offset = 0,
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "stereo",
+  };
+  node->connections[0].source_node_index = input->node_index;
+  node->connections[1].source_node_index = trig->node_index;
+  return node;
+}
+
 // NodeRef set_math(void *math_fn, NodeRef n) {
 //   n->node_math = math_fn;
 //   return n;
 // }
+//
+NodeRef empty_synth() {
+  return NULL;
+}

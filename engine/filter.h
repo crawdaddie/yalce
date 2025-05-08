@@ -27,4 +27,6 @@ NodeRef dyn_tanh_node(NodeRef gain, NodeRef input);
 
 typedef double (*MathNodeFn)(double);
 NodeRef math_node(MathNodeFn math_fn, NodeRef input);
+
+NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate, NodeRef input);
 #endif

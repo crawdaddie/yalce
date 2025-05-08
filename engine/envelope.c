@@ -72,6 +72,7 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
         if (state->should_kill) {
           node->trig_end = true;
           node->perform = NULL;
+          state->value = 0.;
         }
         // printf("finish node containing node addr: %p %p\n", node,
         //        (Node *)((char *)node - (sizeof(Node) * node->node_index) -

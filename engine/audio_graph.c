@@ -7,7 +7,7 @@ AudioGraph *_graph = NULL;
 
 double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
   if (!graph) {
-    return malloc(sizeof(double) * size);
+    return calloc(size, sizeof(double));
   }
 
   // Ensure we have enough space
@@ -185,6 +185,8 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
       //
       if (node->trig_end == true) {
         _node->trig_end = true;
+        memset(_node->output.buf, 0,
+               _node->output.size * _node->output.layout * sizeof(double));
       }
     }
 

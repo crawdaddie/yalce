@@ -240,6 +240,7 @@ bool is_index_access_ast(Ast *application) {
   Ast *arg_ast = application->data.AST_APPLICATION.args;
   Type *arg_type = arg_ast->md;
   Type *cons = application->data.AST_APPLICATION.function->md;
+
   return is_list_type(arg_type) && arg_ast->tag == AST_LIST &&
          types_equal(arg_type->data.T_CONS.args[0], &t_int) &&
          application->data.AST_APPLICATION.len == 1 && is_array_type(cons);
@@ -265,19 +266,22 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
 
     Type *cons_arg = cons->data.T_CONS.args[i];
-
     Type *arg_type;
+
     if (!(arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx))) {
       return type_error(
           ctx, ast, "Could not infer argument type in cons %s application\n",
           cons->data.T_CONS.name);
     }
-    // if (is_index_access_ast(ast)) {
-    //   Ast access = (Ast){AST_APPLICATION, .data = {.AST_APPLICATION =
-    //   {.function = }}}; return infer_application(&access, ctx);
-    //
-    //   // return cons->data.T_CONS.args[0];
-    // }
+
+    if (is_index_access_ast(ast)) {
+
+      Ast *arg_ast = ast->data.AST_APPLICATION.args;
+      Type *arg_type = arg_ast->md;
+      unify_in_ctx(create_list_type_of_type(&t_int), arg_type, ctx, ast);
+
+      return cons->data.T_CONS.args[0];
+    }
 
     if (!unify_in_ctx(cons_arg, arg_type, &app_ctx, ast)) {
       return type_error(ctx, ast,

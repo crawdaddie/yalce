@@ -285,8 +285,8 @@ void *__lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
 
   return node->output.buf;
 }
-void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
-                      int nframes, double spf) {
+void *___lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
+                         int nframes, double spf) {
   double *out = node->output.buf;
   int out_layout = node->output.layout;
   double *freq_in = inputs[0]->output.buf;
@@ -334,7 +334,6 @@ void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
       trig = *trig_in;
       trig_in++;
 
-      // Initialize sample to 0 for each iteration
       sample = 0.0;
 
       if (trig >= 0.5 && state->prev_trig < 0.5) {
@@ -363,6 +362,133 @@ void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
 
   return node->output.buf;
 }
+void *fpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
+                     int nframes, double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *freq_in = inputs[0]->output.buf;
+  double *trig_in = inputs[1]->output.buf;
+  double *pw_in = inputs[2]->output.buf;
+
+  double freq;
+  double trig;
+  double pw;
+  double sample;
+
+  for (int i = 0; i < nframes; i++) {
+    freq = *freq_in++;
+    trig = *trig_in++;
+    pw = *pw_in++;
+
+    // Initialize sample to 0 by default
+    sample = 0.0;
+
+    // Handle trigger (sync) - always reset phase on trigger regardless of other
+    // settings
+    if (trig >= 0.5 && state->prev_trig < 0.5) {
+      state->phase = 0.0;
+      sample = 1.0;
+    }
+
+    // Special case: if frequency is zero, just pass through the trigger
+    if (freq == 0.0) {
+      sample = trig;
+    }
+    // Normal oscillator operation
+    else {
+      // Calculate new phase value for this sample
+      double incr = (freq * spf);
+      printf("incr %f\n", incr);
+
+      // Check if we've completed a cycle
+      if (state->phase >= 1.0) {
+        // Reset phase to fractional part
+        state->phase = state->phase - 1.0;
+
+        // For zero pulsewidth, emit a pulse exactly when phase wraps
+        if (pw == 0.0 &&
+            sample == 0.0) { // Don't override a trigger-induced pulse
+          sample = 1.0;
+        }
+      }
+
+      // For non-zero pulsewidth, standard variable-width pulse behavior
+      if (pw > 0.0) {
+        // Generate pulse based on pulsewidth
+        sample = (state->phase < pw) ? 1.0 : 0.0;
+      }
+
+      // Advance phase
+      state->phase += incr;
+    }
+
+    // Store output and update previous trigger
+    *out++ = sample;
+    state->prev_trig = trig;
+  }
+
+  return node->output.buf;
+}
+void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
+                      int nframes, double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *freq_in = inputs[0]->output.buf;
+  double *trig_in = inputs[1]->output.buf;
+  double *pw_in = inputs[2]->output.buf;
+
+  for (int i = 0; i < nframes; i++) {
+    double freq = *freq_in++;
+    double trig = *trig_in++;
+    double pw = *pw_in++;
+
+    // Initialize sample to 0 by default
+    double sample = 0.0;
+
+    // Track if phase wrapped this sample
+    bool phase_wrapped = false;
+
+    // Check if we've completed a cycle BEFORE incrementing the phase
+    if (state->phase >= 1.0) {
+      state->phase = fmod(state->phase, 1.0);
+      phase_wrapped = true;
+    }
+
+    // Handle trigger (sync)
+    bool triggered = false;
+    if (trig >= 0.5 && state->prev_trig < 0.5) {
+      state->phase = 0.0;
+      triggered = true;
+    }
+
+    // Special case: if frequency is zero, just pass through the trigger
+    if (freq == 0.0) {
+      sample = trig;
+    }
+    // Normal oscillator operation
+    else {
+      // For zero pulsewidth, emit a pulse ONLY on phase wrap or trigger
+      if (pw <= 0.00001) {
+        if (phase_wrapped || triggered) {
+          sample = 1.0;
+        } else {
+          sample = 0.0;
+        }
+      } else {
+        sample = (state->phase < pw) ? 1.0 : 0.0;
+      }
+
+      double incr = freq * spf;
+      state->phase += incr;
+    }
+
+    *out++ = sample;
+    state->prev_trig = trig;
+  }
+
+  return node->output.buf;
+}
+
 NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig) {
 
   AudioGraph *graph = _graph;
@@ -596,6 +722,7 @@ void *gated_buf_env_perform(Node *node, lfo_state *state, Node *inputs[],
 
   return node->output.buf;
 }
+
 NodeRef gated_buf_env_node(NodeRef input, NodeRef trig) {
 
   AudioGraph *graph = _graph;

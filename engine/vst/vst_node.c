@@ -17,18 +17,25 @@ typedef struct {
   int num_input_channels;
   int num_output_channels;
   int initialized;
+  Node *input;
   // Fixed-size buffer storage
   float input_buffers[2 * MAX_VST_CHANNELS * BUF_SIZE];
 } vst_state;
 
 void *vstfx_perform(Node *node, vst_state *state, Node **inputs, int nframes,
                     double spf) {
+
   if (!state || !state->plugin || !node)
     return NULL;
 
   float *channel_ptrs[MAX_VST_CHANNELS * 2];
   float **input_channel_ptrs = channel_ptrs;
   float **output_channel_ptrs = channel_ptrs + MAX_VST_CHANNELS;
+
+  // if (state->input) {
+  //   inputs = &state->input;
+  //   printf("perform vst state input = %p\n", *inputs);
+  // }
 
   float *buffer_memory = state->input_buffers;
 
@@ -114,41 +121,33 @@ NodeRef vstfx_node(const char *path, NodeRef input) {
 
   double spf = ctx_spf();
 
-  // Connect input
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-    node->connections[0].input_index = 0;
+  vst_state *state;
+  if (_graph) {
+    state = (vst_state *)(_graph->nodes_state_memory + node->state_offset);
+  } else {
+    state = (vst_state *)(node + 1);
   }
-
-  // Initialize state
-  vst_state *state =
-      (vst_state *)(_graph->nodes_state_memory + node->state_offset);
   memset(state, 0, sizeof(vst_state));
 
-  // Set up the input/output channel count
-  state->num_input_channels = 2;  // Stereo
-  state->num_output_channels = 2; // Stereo
+  state->num_input_channels = 2;
+  state->num_output_channels = 2;
 
-  // Load the VST plugin
   VSTError err = vst_load_plugin(path, &state->plugin);
   if (err != VST_ERR_OK) {
-    // Failed to load plugin
     printf("Failed to load VST plugin: %d\n", err);
-    return node; // Return node anyway, it will output silence
+    return node;
   }
   printf("plugin handle is at %p\n", state->plugin);
 
-  // Get plugin info
   char plugin_name[128];
   vst_get_plugin_name(state->plugin, plugin_name, sizeof(plugin_name));
   printf("Loaded VST plugin: %s\n", plugin_name);
+  printf("Plugin input: %p\n", input);
 
-  // Setup processing
   uint32_t param_count = 0;
   vst_get_parameter_count(state->plugin, &param_count);
   printf("Plugin has %d parameters\n", param_count);
 
-  // Setup channels
   VSTProcessSetup setup = {
       .sampleRate = (float)(1.0 / spf),
       .maxBlockSize = BUF_SIZE,
@@ -158,16 +157,17 @@ NodeRef vstfx_node(const char *path, NodeRef input) {
 
   vst_setup_processing(state->plugin, &setup);
 
-  // Allocate input/output buffers
   state->num_input_channels = setup.numInputChannels;
   state->num_output_channels = setup.numOutputChannels;
 
-  // Set node output to match plugin output channels
   node->output.layout = state->num_output_channels;
 
-  node->connections[0].source_node_index = input->node_index;
   node->state_ptr = state;
 
+  if (input) {
+    node->connections[0].source_node_index = input->node_index;
+    node->connections[0].input_index = 0;
+  }
   return node;
 }
 

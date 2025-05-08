@@ -1,16 +1,14 @@
 #include "./node_gc.h"
 #include "ctx.h"
+#include "group.h"
 #include <pthread.h>
-#include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-// Assuming you have a mutex to protect the node list
 pthread_mutex_t node_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Function to remove and free a node from the linked list
-void remove_and_free_node(Ctx *ctx, NodeRef prev, NodeRef to_free) {
+void remove_and_free_node(ensemble_state *ctx, NodeRef prev, NodeRef to_free) {
   if (prev == NULL) {
     // Node to remove is the head
     ctx->head = to_free->next;
@@ -27,14 +25,29 @@ void remove_and_free_node(Ctx *ctx, NodeRef prev, NodeRef to_free) {
     }
   }
 
-  // free(to_free->out.buf);
-  //
-  // for (int i = 0; i < to_free->num_ins; i++) {
-  //   SignalRef in = ((char *)to_free + to_free->input_offsets[i]);
-  //   free(in->buf);
-  // }
-  // Free the node
   free(to_free);
+}
+void iter_gc(ensemble_state *ctx) {
+  Node *current = ctx->head;
+
+  Node *prev = NULL;
+
+  while (current != NULL) {
+    if (current->perform == (perform_func_t)perform_ensemble) {
+      iter_gc(current->state_ptr);
+    }
+
+    Node *next = current->next; // Save next pointer before potentially freeing
+
+    if (current->trig_end) {
+      remove_and_free_node(ctx, prev, current);
+      current = next;
+      // Don't update prev since we removed a node
+    } else {
+      prev = current;
+      current = next;
+    }
+  }
 }
 
 // The garbage collection thread function
@@ -47,31 +60,12 @@ void *gc_thread_func(void *arg) {
     usleep(100000); // 100ms
 
     // pthread_mutex_lock(&node_mutex);
-
-    Node *current = ctx->head;
-    Node *prev = NULL;
-
-    while (current != NULL) {
-      Node *next =
-          current->next; // Save next pointer before potentially freeing
-
-      if (current->trig_end) {
-        remove_and_free_node(ctx, prev, current);
-        current = next;
-        // Don't update prev since we removed a node
-      } else {
-        prev = current;
-        current = next;
-      }
-    }
+    iter_gc(&ctx->graph);
 
     // pthread_mutex_unlock(&node_mutex);
   }
-
-  return NULL; // Thread will never actually return
 }
 
-// The main function to create and start the GC thread
 void gc_loop(Ctx *ctx) {
   pthread_t gc_thread;
   pthread_create(&gc_thread, NULL, gc_thread_func, ctx);

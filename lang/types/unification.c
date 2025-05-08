@@ -363,8 +363,10 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
         }
       } else {
         for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-          subst = substitutions_extend(subst, t1->data.T_CONS.args[i],
-                                       t2->data.T_CONS.args[i]);
+          if (!is_pointer_type(t2)) {
+            subst = substitutions_extend(subst, t1->data.T_CONS.args[i],
+                                         t2->data.T_CONS.args[i]);
+          }
         }
       }
     } else if (t1->kind == T_FN && t2->kind == T_FN) {

@@ -15,6 +15,9 @@ void *summed_inlet_perform(Node *node, summed_inlet_state *state,
   int output_num = 0;
 
   Signal out = node->output;
+  for (int i = 0; i < out.layout * out.size; i++) {
+    out.buf[i] = 0.;
+  }
 
   // printf("%p state\n", state);
   while (state) {
@@ -39,7 +42,9 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
   int inlet_idx = g->inlets[idx];
   NodeRef inlet_node = g->nodes + inlet_idx;
   int layout = inlet_node->output.layout;
+
   int _layout = node->output.layout;
+  // printf("pipe %d node into %d input\n", _layout, layout);
 
   if (_layout > layout) {
     inlet_node->output = (Signal){
@@ -55,6 +60,7 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
     summed_inlet_state *st = inlet_node->state_ptr;
     *st = (summed_inlet_state){.sig = node, .next = NULL};
     inlet_node->state_ptr = st;
+    printf("add to inlet #1st\n");
 
   } else if (((char *)inlet_node->perform) == (char *)summed_inlet_perform) {
 
@@ -70,25 +76,9 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
 }
 
 void *bus_perform(Node *node, void *state, Node *inputs[], int nframes,
+
                   double spf) {
   double *out = node->output.buf;
   int layout = node->output.layout;
   memset(out, 0, layout * node->output.size * sizeof(double));
-}
-
-NodeRef bus(int layout) {
-  Node *node = allocate_node_in_graph(NULL, 0 /* sizeof(bus_state) */);
-  *node = (Node){
-      .perform = (perform_func_t)bus_perform,
-      .node_index = node->node_index,
-      .num_inputs = 1,
-      .state_size = 0,
-      .state_offset = state_offset_ptr_in_graph(NULL, 0),
-      .output =
-          (Signal){.layout = layout,
-                   .size = BUF_SIZE,
-                   .buf = allocate_buffer_from_pool(NULL, BUF_SIZE * layout)},
-      .meta = "bus",
-  };
-  return node;
 }

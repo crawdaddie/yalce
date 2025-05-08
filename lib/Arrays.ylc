@@ -2,7 +2,7 @@
 #   let idx = rand_int (array_size arr); arr @ idx 
 # ;;
 
-let fold = fn f res a ->
+let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
   let res_ref = [| res |];
   for i = 0 to (array_size a) in (
     let r = res_ref[0];
@@ -12,7 +12,7 @@ let fold = fn f res a ->
   res_ref[0]
 ;;
 
-let foldi = fn f res a ->
+let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
   let res_ref = [| res |];
   for i = 0 to (array_size a) in (
     let r = res_ref [0];
@@ -23,7 +23,7 @@ let foldi = fn f res a ->
 ;;
 
 
-let last = fn x ->
+let last = fn x: (Array of T) ->
   let len = array_size x in
   x [len - 1]
 ;;

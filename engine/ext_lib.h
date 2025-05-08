@@ -10,6 +10,7 @@ NodeRef inlet(double default_val);
 NodeRef multi_chan_inlet(int layout, double default_val);
 NodeRef buf_ref(NodeRef buf);
 NodeRef play_node(NodeRef s);
+NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s);
 NodeRef set_input_scalar_offset(NodeRef target, int input, uint64_t tick,
                                 double val);
 
@@ -37,4 +38,12 @@ void node_replace(NodeRef a, NodeRef b);
 
 NodeRef null_synth_node();
 
+NodeRef node_add(uint64_t tick, NodeRef group, NodeRef target);
+
+NodeRef node_add_dur(uint64_t tick, double dur, int gate, NodeRef group,
+                     NodeRef target);
+
+NodeRef group_node();
+
+NodeRef group_add(NodeRef node, NodeRef group);
 #endif

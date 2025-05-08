@@ -1,3 +1,4 @@
+#! ylc -i
 import engine/bindings/MIDI;
 open engine/bindings/Sched; 
 open engine/bindings/Synth; 
@@ -47,15 +48,19 @@ let Snare = module
   |> play_tpl
   ;
 
-  let trig = fn () -> 
-    let fo = get_tl_tick ();
-    set_input_trig_offset synth 0 fo
-  ;;
+  # let synth = (fn () ->
+  #   let trig = inlet 0.;
+  #   sin_node (inlet 800.) 
+  #   |> (*) (aslr_node 0.01 1. 0.1 0.01 trig)
+  # ) |> play_tpl
+  # ;
+
 
   let trig = fn () -> 
     let fo = get_tl_tick ();
     set_input_trig_offset synth 0 fo
   ;;
+
 
   let pattern_ref = [|empty_coroutine ()|] ;
   let set_pattern = fn t cor ->
@@ -186,9 +191,9 @@ let handle = [| cstr "" |];
 let fx_chain = (fn () ->
   let input = multi_chan_inlet 2 0.;
 
-  # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/TAL-Reverb-2.vst/Contents/MacOS/TAL-Reverb-2") input;
+  let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/TAL-Reverb-2.vst/Contents/MacOS/TAL-Reverb-2") input;
 
-  let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/OTT.vst/Contents/MacOS/OTT") input;
+  # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/OTT.vst/Contents/MacOS/OTT") input;
   # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/ValhallaSupermassive.vst/Contents/MacOS/ValhallaSupermassive") input;
   handle[0] := (vst_get_handle vst); # do something with this handle??
   # |> vital_rev_node

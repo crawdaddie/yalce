@@ -10,7 +10,7 @@
 #define REC_127 0.007874015748031496
 
 // Arrays to store handlers
-static CCCallback cc_handlers[128];
+static CCCallback cc_handlers[128 * 16];
 static NoteCallback note_on_handlers[128];
 static NoteCallback note_off_handlers[128];
 static MIDIPortRef output_port;
@@ -20,7 +20,7 @@ int debug;
 void toggle_midi_debug() { debug = !debug; }
 
 void register_cc_handler(int ch, int cc, CCCallback handler) {
-  cc_handlers[cc] = handler;
+  cc_handlers[cc * 16 + ch] = handler;
 }
 
 void register_note_on_handler(int ch, NoteCallback handler) {
@@ -35,7 +35,8 @@ static void handle_cc(MIDIPacket *packet) {
   uint8_t ch = *packet->data & 0x0F;
   uint8_t cc = *(packet->data + 1) & 0xFF;
   uint8_t val = *(packet->data + 2);
-  CCCallback handler = cc_handlers[cc];
+  CCCallback handler = cc_handlers[cc * 16 + ch];
+
   if (debug) {
     printf("midi cc ch: %d cc: %d val: %d\n", ch, cc, val);
   }

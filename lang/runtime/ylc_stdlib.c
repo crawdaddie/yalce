@@ -51,7 +51,7 @@ int rand_int(int range) {
 double rand_double() {
   int rand_int = rand();
   double rand_double = (double)rand_int / RAND_MAX;
-  rand_double = rand_double * 2 - 1;
+  // rand_double = rand_double * 2 - 1;
   return rand_double;
 }
 

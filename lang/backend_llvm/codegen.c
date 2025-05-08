@@ -291,8 +291,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_BINOP: {
-    printf("binop maybe assignment???\n");
-    print_ast(ast);
     return NULL;
   }
   }

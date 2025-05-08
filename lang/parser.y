@@ -166,7 +166,9 @@ expr:
                                           $$ = let;
 
                                       }
+                                      /*
   | expr '[' expr ']'                 { $$ = ast_application(ast_application(ast_identifier((ObjString){.chars = "array_at", 8}), $1), $3); }
+  */
   | expr ':' '=' expr                 { $$ = ast_assignment($1, $4); }
   ;
 
@@ -452,4 +454,4 @@ type_atom:
 void yyerror(const char *s) {
   fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, _cur_script);
 }
-#endif _LANG_TAB_H
+#endif _LANG_TAB_Hparse
