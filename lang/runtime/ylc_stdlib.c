@@ -7,7 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 void str_copy(char *dest, char *src, int len) {
@@ -407,14 +409,66 @@ void _arr_copy(int size, double *from, double *to) {
     idx++;
   }
 }
-// # let loss = fn a: (Array of Double) b: (Array of Double) -> 0.;;
-// # Mean Squared Error loss function
-// double mse_loss(int size, double * predictions: (Array of Double) targets:
-// (Array of Double) ->
-//   let mut sum = 0.
-//   for i = 0 to array_length predictions - 1 do
-//     let diff = predictions[i] - targets[i]
-//     sum := sum + diff * diff
-//   done
-//   sum / (array_length predictions |> to_double)
-// ;;
+
+double *mmap_double_array(int32_t data_size, double *data,
+                          const char *filename) {
+
+  struct stat file_stat;
+  int file_exists = (stat(filename, &file_stat) == 0);
+
+  if (!file_exists) {
+    int fd = open(filename, O_RDWR | O_CREAT, (mode_t)0600);
+    if (fd == -1) {
+      printf("%s: \n", filename);
+      perror("Error opening file for writing");
+      return NULL;
+    }
+
+    if (write(fd, data, data_size * sizeof(double)) !=
+        data_size * sizeof(double)) {
+
+      printf("%s: \n", filename);
+      perror("Error writing data to file");
+      close(fd);
+      return NULL;
+    }
+
+    close(fd);
+  }
+
+  int fd = open(filename, O_RDWR, (mode_t)0600);
+  if (fd == -1) {
+
+    printf("%s: \n", filename);
+    perror("Error opening file for mapping");
+    return NULL;
+  }
+
+  struct stat sb;
+  if (fstat(fd, &sb) == -1) {
+    perror("Error getting file size");
+    close(fd);
+    return NULL;
+  }
+
+  double *mapped_data = (double *)mmap(NULL, sb.st_size, PROT_READ | PROT_WRITE,
+                                       MAP_SHARED, fd, 0);
+  if (mapped_data == MAP_FAILED) {
+    perror("Error mmapping the file");
+    close(fd);
+    return NULL;
+  }
+
+  close(fd);
+  free(data);
+
+  return mapped_data;
+}
+
+struct _DoubleArray double_array_from_raw(int32_t size, double *data) {
+  return (struct _DoubleArray){size, data};
+}
+
+void mmap_sync_array(int32_t size, double *data) {
+  msync(data, size, MS_ASYNC);
+}

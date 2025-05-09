@@ -1,0 +1,17 @@
+open ../engine/bindings/Synth;
+
+#Envs:
+let penv = fn name -> 
+
+  let arr = [|
+    0.000000, 0.000000, 2.400000,
+    1., 0.185902, -2.300000,
+    0.011111, 2.814099, 1.300000,
+    0.000000
+  |];
+
+  arr |> array_to_buf
+;;
+
+let env = fn p trig -> buf_env_node 1. (buf_ref p) trig
+

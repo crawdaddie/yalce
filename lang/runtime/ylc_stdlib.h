@@ -121,4 +121,9 @@ void _vec_add(int size, double *vec1, double *vec2);
 DArr vec_add(DArr vec1, DArr vec2);
 
 void _arr_copy(int size, double *from, double *to);
+
+double *mmap_double_array(int32_t data_size, double *data,
+                          const char *filename);
+
+struct _DoubleArray double_array_from_raw(int32_t size, double *data);
 #endif

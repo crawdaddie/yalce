@@ -1,4 +1,4 @@
-#! ylc -i
+#! /usr/bin/env ylc -i
 import ../lib/Math;
 open ../engine/bindings/Sched; 
 open ../engine/bindings/Synth; 
@@ -57,6 +57,10 @@ let Tones = module
 
   let reverb = (fn () ->
     let input = multi_chan_inlet 2 0.;
+
+    # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/TAL-Reverb-2.vst/Contents/MacOS/TAL-Reverb-2") input
+    # vst
+    # handle[0] := (vst_get_handle vst); # do something with this handle??
     input |> vital_rev_node
       0.99
       0.5
@@ -70,6 +74,7 @@ let Tones = module
       0.0
       0.1
       0.5
+
   ) |> play_tpl
   ;
 
@@ -140,36 +145,27 @@ let q = (60. / tempo);
 let times = [| 1., 0.5, 0.5, 0.75 |];
 
 let routine = fn () ->
-
-
   Math.chance2
     0.08
     (fn () -> Clicks.set_gate 1.; Clicks.set_time (q * (array_choose times)))
     (fn () -> Clicks.set_gate 0.);
   yield 0.25 * q
-
-
 ;;
 
 defer_quant (2 * q) (fn t -> 
-  let rout = fn () ->
-    yield (16., 1., 3000.);
-    yield (1., 0.9, 3000.);
-    yield (1., 1., 3000.);
-    yield (14., 0., 0.);
-
-    yield (32., 0., 0.);
-    yield (4., 1., 3000.);
-    yield (12., 3., 10000.);
-
-    yield (1., 0.9, 3000.);
-    yield (1., 1., 3000.);
-    yield (14., 0., 0.);
-
-    yield (32., 0., 0.)
-  ;;
-
-  rout ()
+  iter [| 
+    (16., 1., 3000.), 
+    (1., 0.8, 3000.), 
+    (1., 1., 3000.), 
+    (14., 0., 0.), 
+    (32., 0., 0.), 
+    (4., 1., 3000.), 
+    (12., 3., 10000.), 
+    (1., 0.9, 3000.), 
+    (1., 1., 3000.), 
+    (14., 0., 0.), 
+    (32., 0., 0.), 
+  |]
   |> cor_loop
   |> cor_map (fn (dur, d, f) -> (q * 0.25 * dur, q * 0.24 * d, f))
   |> cor_map (fn (dur, d, f) -> Tones.beep d f; dur)
@@ -217,5 +213,9 @@ defer_quant (2 * q) (fn t ->
 # create_scope (node_out Clicks.synth |> sig_raw) 2 512
 # )
 #
-
+#
+# (
+#   open gui/bindings/Gui;
+#   create_vst_view (Tones.handle[0])
+# );
 

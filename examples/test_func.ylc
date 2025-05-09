@@ -1,5 +1,4 @@
 #! env ylc
-%include ../engine/bindings/Sched
 
 let x = 1;
 

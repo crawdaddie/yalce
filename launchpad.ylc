@@ -215,7 +215,7 @@ let display_tick = fn () ->
   clear_top_row ();
   match (t - ho) with
   | t if t < 8 -> (
-    MIDI.send_cc LAUNCHPAD_DEST 0x0 (array_at top_row_addrs t) 0x66;
+    MIDI.send_cc LAUNCHPAD_DEST 0x0 (top_row_addrs[t]) 0x66;
     ()
   )
   | _ -> ()

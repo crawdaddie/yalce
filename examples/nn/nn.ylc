@@ -13,10 +13,13 @@ let identity = fn x: (Matrix) -> x;;
 
 let relu = fn x: (Matrix) -> 
   for i = 0 to (matrix_size x) in (
+
     let v = x.data[i] in
-    array_set x.data i (match v with
-    | v if v > 0. -> v
-    | _ -> 0.)
+
+    x.data[i] := (match v with
+      | v if v > 0. -> v
+      | _ -> 0.
+    )
   );
   x 
 ;;
@@ -151,15 +154,15 @@ let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y 
 
 
   )
-
-
 ;;
 # XOR problem
 let X = Matrix 4 2 [|
   0., 0.,
   0., 1.,
   1., 0.,
-  1., 1. |];
+  1., 1.
+|];
+
 let y = Matrix 4 2 [| 0., 1., 1., 0. |];
 
 # let input = matrix_zeroes 16 1; # allocate an input array which is as large as the maximum layer width

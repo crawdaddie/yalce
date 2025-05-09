@@ -29,8 +29,7 @@ let set_col = fn
 
   match i with
   | i if i < size -> (
-    array_set i dest (array_at arr ((i * 16) + j)) ;
-    
+    array_set dest i arr[((i * 16) + j)] ;
     set_col (i + 1) j size arr dest
   ) 
   | _ -> dest
@@ -42,12 +41,12 @@ import Launchpad;
 let grid_press_handler = fn i: (Int) -> 
   let (status, val) = array_at pattern i;
   match status with 
-  | 1 -> array_set i pattern (0, val)
-  | 0 -> array_set i pattern (1, val)
+  | 1 -> array_set pattern i (0, val)
+  | 0 -> array_set pattern i (1, val)
 ;;
 
 let grid_is_set = fn i: (Int) -> 
-  match (array_at pattern i) with
+  match (pattern[i]) with
   | (1, _) -> true
   | (0, _) -> false
 ;;
