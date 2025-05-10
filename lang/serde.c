@@ -233,10 +233,11 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     if (ast->data.AST_LAMBDA.len == 0) {
       buffer = strcat(buffer, "() ");
     } else {
-      for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-        buffer = ast_to_sexpr(ast->data.AST_LAMBDA.params + i, buffer);
-        buffer = strcat(buffer, " ");
-      }
+
+      AST_LIST_ITER(ast->data.AST_LAMBDA.params, ({
+                      buffer = ast_to_sexpr(l->ast, buffer);
+                      buffer = strcat(buffer, " ");
+                    }));
     }
 
     buffer = strcat(buffer, "-> \n");
@@ -270,10 +271,10 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     if (ast->data.AST_LAMBDA.len == 0) {
       buffer = strcat(buffer, "() ");
     } else {
-      for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-        buffer = ast_to_sexpr(ast->data.AST_LAMBDA.params + i, buffer);
-        buffer = strcat(buffer, " ");
-      }
+      AST_LIST_ITER(ast->data.AST_LAMBDA.params, ({
+                      buffer = ast_to_sexpr(l->ast, buffer);
+                      buffer = strcat(buffer, " ");
+                    }));
     }
 
     buffer = strcat(buffer, "-> \n");

@@ -18,38 +18,41 @@ let q = 60./tempo;
 
 let amen = load_soundfile @@ cstr "fat_amen_mono_48000.wav";
 
+
+let stutter_rates = [|
+  q * 4 * 0.125,
+  q * 4 * 0.5, 
+  q * 4 * 0.33333,
+  q * 4 * 0.25,
+  q * 4 * 0.0625,
+  # q * 4 * 0.75
+|]
+|> array_to_buf;
+
 let synth = (fn () ->
   let trig = inlet 0.; # 0
-  let imp = lfpulse_node 0. (inlet 0.) trig; # 1
-  let gate = inlet 0.; # 2
-  bufplayer_trig_node (buf_ref amen) (tempo / original_tempo) (inlet 0.) imp # 3 
-  |> (*) (gated_buf_env_node (buf_ref ampenv) gate)
-;)
+  # let gate = inlet 0.; # 2
+  bufplayer_trig_node (buf_ref amen) (tempo / original_tempo) (inlet 0.) trig # 3 
+  |> stutter_node (60. * 4. / tempo) (trig_sel_node trig (buf_ref stutter_rates)) (rand_trig_node trig -1. 1.)
+  # |> (*) (gated_buf_env_node (buf_ref ampenv) gate)
+)
 |> play_tpl
 ;
 
+let trig = fn d: (Double) s: (Double) -> 
+  print `trig {d}: {s}\n`;
+  let fo = get_tl_tick ();
+  set_input_scalar_offset synth 1 fo s; 
+  # trigger_gate fo d 1 synth; 
+  set_input_trig_offset synth 0 fo
+  # set_input_scalar_offset synth 1 fo (Math.rand_double_range 0. 20.)
+;;
 
-# let trig = fn dur ->
-#   let fo = get_tl_tick () in 
-#     trigger_gate fo 1. 0 synth
-#   ;
-#   dur
-# ;;
 
 let pattern_ref = [|empty_coroutine ()|] ;
 let set_pattern = fn t cor ->
-  cor_stop (array_at pattern_ref 0);
+  cor_stop (pattern_ref[0]);
   cor
-  |> cor_map (fn (d, s): (Double, Double) ->
-
-    let fo = get_tl_tick () in ( 
-      set_input_scalar_offset synth 3 fo s; 
-      trigger_gate fo d 2 synth; 
-      set_input_trig_offset synth 0 fo;
-      set_input_scalar_offset synth 1 fo (Math.rand_double_range 0. 20.)
-    );
-    d
-  ;)
   |> play_routine t schedule_event
   |> array_set 0 pattern_ref;
   ()
@@ -70,8 +73,12 @@ defer_quant q (fn t ->
     yield rout ()
   ;;
   rout ()
-  |> cor_map (fn (d, s) -> ((d * q), s);)
-  |> set_pattern t
-  ;
+  |> cor_map (fn (d, s) -> ((d * q), s))
+  |> cor_map (fn (d, s): (Double, Double) ->
+    trig d s;
+    d
+  )
+  |> play_routine t schedule_event
+ 
 );
 

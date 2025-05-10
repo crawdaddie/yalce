@@ -23,9 +23,6 @@ bool is_module_ast(Ast *ast) {
   return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
 }
 
-const char *__base_dir = NULL;
-void set_base_dir(const char *dir) { __base_dir = dir; }
-
 Ast *parse_module(const char *filename, TypeEnv *env) {
 
   char *old_import_current_dir = __import_current_dir;

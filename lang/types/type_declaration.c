@@ -156,12 +156,13 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     TypeEnv *_env = env;
     int len = expr->data.AST_LAMBDA.len;
     Type **param_types = talloc(sizeof(Type *) * len);
-    for (int i = 0; i < len; i++) {
-      Ast *param = expr->data.AST_LAMBDA.params + i;
-      Type *param_type = compute_type_expression(param, env);
-      param_types[i] = param_type;
-      _env = env_extend(_env, param_type->data.T_VAR, param_type);
-    }
+
+    AST_LIST_ITER(expr->data.AST_LAMBDA.params, ({
+                    Ast *param = l->ast;
+                    Type *param_type = compute_type_expression(param, env);
+                    param_types[i] = param_type;
+                    _env = env_extend(_env, param_type->data.T_VAR, param_type);
+                  }));
 
     Type *t = compute_type_expression(expr->data.AST_LAMBDA.body, _env);
 

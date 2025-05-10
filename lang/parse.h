@@ -5,6 +5,10 @@
 #include <stdio.h>
 typedef struct Ast Ast;
 
+void set_base_dir(const char *);
+
+extern const char *__base_dir;
+
 extern bool top_level_tests;
 extern const char *__module_to_test;
 
@@ -45,6 +49,15 @@ typedef struct AstList {
   Ast *ast;
   struct AstList *next;
 } AstList;
+
+#define AST_LIST_ITER(list, body)                                              \
+  ({                                                                           \
+    int i = 0;                                                                 \
+    for (AstList *l = list; l != NULL; l = l->next) {                          \
+      (body);                                                                  \
+      i++;                                                                     \
+    }                                                                          \
+  })
 
 typedef enum token_type {
   TOKEN_START, // dummy token
@@ -223,10 +236,11 @@ struct Ast {
 
     struct AST_LAMBDA {
       size_t len;
-      Ast *params;
+      // Ast *params;
+      AstList *params;
       ObjString fn_name;
       Ast *body;
-      Ast **type_annotations;
+      AstList *type_annotations;
       bool is_coroutine;
       int num_yields;
       AstList *yield_boundary_crossers;

@@ -177,29 +177,30 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
   }
 
-  for (int i = 0; i < fn_len; i++) {
-    Ast *param_ast = ast->data.AST_LAMBDA.params + i;
-    Type *param_type = fn_type->data.T_FN.from;
+  AST_LIST_ITER(ast->data.AST_LAMBDA.params, ({
+                  Ast *param_ast = l->ast;
+                  Type *param_type = fn_type->data.T_FN.from;
 
-    LLVMValueRef param_val = LLVMGetParam(func, i);
+                  LLVMValueRef param_val = LLVMGetParam(func, i);
 
-    if (param_type->kind == T_FN) {
-      const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
-      int id_len = param_ast->data.AST_IDENTIFIER.length;
-      LLVMTypeRef llvm_type = type_to_llvm_type(param_type, ctx->env, module);
+                  if (param_type->kind == T_FN) {
+                    const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+                    int id_len = param_ast->data.AST_IDENTIFIER.length;
+                    LLVMTypeRef llvm_type =
+                        type_to_llvm_type(param_type, ctx->env, module);
 
-      JITSymbol *sym =
-          new_symbol(STYPE_FUNCTION, param_type, param_val, llvm_type);
+                    JITSymbol *sym = new_symbol(STYPE_FUNCTION, param_type,
+                                                param_val, llvm_type);
 
-      ht_set_hash(fn_ctx.frame->table, id_chars, hash_string(id_chars, id_len),
-                  sym);
+                    ht_set_hash(fn_ctx.frame->table, id_chars,
+                                hash_string(id_chars, id_len), sym);
 
-    } else {
-      codegen_pattern_binding(param_ast, param_val, param_type, &fn_ctx, module,
-                              builder);
-    }
-    fn_type = fn_type->data.T_FN.to;
-  }
+                  } else {
+                    codegen_pattern_binding(param_ast, param_val, param_type,
+                                            &fn_ctx, module, builder);
+                  }
+                  fn_type = fn_type->data.T_FN.to;
+                }));
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 

@@ -472,7 +472,7 @@ void bind_coroutine_state_vars(Type *state_type, LLVMTypeRef llvm_state_type,
     }
     Ast *param;
     if (fn_len == 1) {
-      param = coroutine_ast->data.AST_LAMBDA.params;
+      param = coroutine_ast->data.AST_LAMBDA.params->ast;
     } else {
       param = coroutine_ast->data.AST_LAMBDA.yield_boundary_crossers->ast;
     }
@@ -490,11 +490,13 @@ void bind_coroutine_state_vars(Type *state_type, LLVMTypeRef llvm_state_type,
   }
 
   AstList *boundary_xs = coroutine_ast->data.AST_LAMBDA.yield_boundary_crossers;
+  int len = state_type->data.T_CONS.num_args;
+  AstList *params = coroutine_ast->data.AST_LAMBDA.params;
   for (int i = 0; i < state_type->data.T_CONS.num_args; i++) {
     Type *t = state_type->data.T_CONS.args[i];
     Ast *param;
     if (i < fn_len) {
-      param = coroutine_ast->data.AST_LAMBDA.params + i;
+      param = params->ast;
     } else {
       param = boundary_xs->ast;
       boundary_xs = boundary_xs->next;
@@ -539,6 +541,7 @@ void bind_coroutine_state_vars(Type *state_type, LLVMTypeRef llvm_state_type,
       sym->storage = state_gep;
       ht_set_hash(ctx->frame->table, chars, id_hash, sym);
     }
+    params = params->next;
   }
   return;
 }

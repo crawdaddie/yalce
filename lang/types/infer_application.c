@@ -180,8 +180,10 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
   Type *val_struct = effect_fn_type->data.T_FN.from;
   Type *t = val_struct->data.T_CONS.args[0];
   val_struct->data.T_CONS.args[0] = &t_num;
+  AstList *lambda_params = effect_ast->data.AST_LAMBDA.params;
+
   if (is_generic(t)) {
-    unify_in_ctx(t, &t_num, ctx, effect_ast->data.AST_LAMBDA.params);
+    unify_in_ctx(t, &t_num, ctx, lambda_params ? lambda_params->ast : NULL);
   }
 
   if (effect_fn_type->data.T_FN.to->kind != T_FN) {
@@ -195,10 +197,10 @@ Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
   unify_in_ctx(fo_ast->md, &t_uint64, &_ctx, fo_ast);
 
   unify_in_ctx(val_struct, concrete_val_struct, &_ctx,
-               (effect_ast)->data.AST_LAMBDA.params);
+               (effect_ast)->data.AST_LAMBDA.params->ast);
 
   unify_in_ctx(frame_offset_arg, &t_uint64, &_ctx,
-               (effect_ast)->data.AST_LAMBDA.params + 1);
+               (effect_ast)->data.AST_LAMBDA.params->next->ast);
 
   Substitution *subst = solve_constraints(_ctx.constraints);
   apply_substitutions_rec(ast, subst);

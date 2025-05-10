@@ -22,7 +22,6 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
              $(LANG_SRC_DIR)/input.c \
              $(LANG_SRC_DIR)/string_proc.c \
              $(LANG_SRC_DIR)/serde.c \
-             $(LANG_SRC_DIR)/modules.c \
              $(LEX_OUTPUT) \
              $(YACC_OUTPUT)
 
@@ -47,16 +46,17 @@ $(LEX_OUTPUT): $(LEX_FILE) $(YACC_HEADER)
 
 test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_parse.c $(LANG_SRCS) \
-		$(LANG_SRC_DIR)/types/inference.c \
-		$(LANG_SRC_DIR)/types/type.c \
-		$(LANG_SRC_DIR)/types/builtins.c \
-		$(LANG_SRC_DIR)/types/type_declaration.c \
 		$(LANG_SRC_DIR)/types/common.c \
 		-o $(BUILD_DIR)/test_parse $(LDFLAGS)
 	$(BUILD_DIR)/test_parse
 
 test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
-	$(CC) $(CFLAGS) test_typecheck.c $(LANG_SRCS) $(LANG_SRC_DIR)/types/*.c -o $(BUILD_DIR)/test_typecheck $(LDFLAGS)
+	$(CC) $(CFLAGS) test_typecheck.c \
+		$(LANG_SRCS) \
+		$(LANG_SRC_DIR)/modules.c
+		$(LANG_SRC_DIR)/types/*.c \
+		-o $(BUILD_DIR)/test_typecheck \
+		$(LDFLAGS)
 	$(BUILD_DIR)/test_typecheck
 
 

@@ -1,10 +1,13 @@
 #include "parse.h"
 #include "input.h"
-#include "modules.h"
 #include "serde.h"
 #include "y.tab.h"
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+const char *__base_dir = NULL;
+void set_base_dir(const char *dir) { __base_dir = dir; }
 
 bool top_level_tests = false;
 const char *__module_to_test;
@@ -422,9 +425,35 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   return lambda;
 }
 
+AstList *ast_list_extend(AstList *l, Ast *n) {
+  AstList *ps = palloc(sizeof(AstList));
+  *ps = (AstList){n, l};
+  return ps;
+}
+
+AstList *ast_list_extend_right(AstList *_l, Ast *n) {
+  if (_l == NULL) {
+    AstList *ps = palloc(sizeof(AstList));
+    *ps = (AstList){n, NULL};
+    return ps;
+  }
+
+  AstList *l = _l;
+
+  while (l->next != NULL) {
+    l = l->next;
+  }
+
+  AstList *ps = palloc(sizeof(AstList));
+  *ps = (AstList){n, NULL};
+  l->next = ps;
+
+  return _l;
+}
+
 Ast *ast_void_lambda(Ast *body) {
   Ast *lambda = Ast_new(AST_LAMBDA);
-  lambda->data.AST_LAMBDA.params = ast_void();
+  lambda->data.AST_LAMBDA.params = ast_list_extend(NULL, ast_void());
   lambda->data.AST_LAMBDA.len = 1;
   lambda->data.AST_LAMBDA.type_annotations = NULL;
   lambda->data.AST_LAMBDA.body = body;
@@ -434,34 +463,21 @@ Ast *ast_void_lambda(Ast *body) {
 Ast *ast_arg_list(Ast *arg_id, Ast *def) {
   Ast *lambda = Ast_new(AST_LAMBDA);
 
-  lambda->data.AST_LAMBDA.params = palloc(sizeof(Ast));
   lambda->data.AST_LAMBDA.len = 1;
-  lambda->data.AST_LAMBDA.params[0] = *arg_id;
-  lambda->data.AST_LAMBDA.type_annotations = palloc(sizeof(Ast *));
-
-  if (def) {
-    lambda->data.AST_LAMBDA.type_annotations[0] = def;
-  }
+  lambda->data.AST_LAMBDA.params = ast_list_extend_right(NULL, arg_id);
+  lambda->data.AST_LAMBDA.type_annotations = ast_list_extend_right(NULL, def);
 
   return lambda;
 }
 
 Ast *ast_arg_list_push(Ast *lambda, Ast *arg_id, Ast *def) {
 
-  Ast *params = lambda->data.AST_LAMBDA.params;
-
   lambda->data.AST_LAMBDA.len++;
-  size_t len = lambda->data.AST_LAMBDA.len;
+  lambda->data.AST_LAMBDA.params =
+      ast_list_extend_right(lambda->data.AST_LAMBDA.params, arg_id);
 
-  lambda->data.AST_LAMBDA.params = prealloc(params, sizeof(Ast) * len);
-  lambda->data.AST_LAMBDA.type_annotations =
-      prealloc(lambda->data.AST_LAMBDA.type_annotations, sizeof(Ast *) * len);
-  lambda->data.AST_LAMBDA.params[len - 1] = *arg_id;
-
-  if (def) {
-    lambda->data.AST_LAMBDA.type_annotations[len - 1] = def;
-  }
-
+  lambda->data.AST_LAMBDA.type_annotations = ast_list_extend_right(
+      lambda->data.AST_LAMBDA.type_annotations, def ? def : NULL);
   return lambda;
 }
 

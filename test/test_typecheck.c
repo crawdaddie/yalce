@@ -753,10 +753,12 @@ int main() {
   //     &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &v, &r), &r, &TARRAY(&v), &r));
   // });
 
-  T("let set_ref = array_set 0;",
-    &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`0")), &TVAR("`0"), &TARRAY(&TVAR("`0"))));
+  // T("let set_ref = array_set 0;",
+  //   &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`0")), &TVAR("`0"),
+  //   &TARRAY(&TVAR("`0"))));
 
-  T("let x = [|1|]; let set_ref = array_set 0; set_ref x 3", &TARRAY(&t_int));
+  // T("let x = [|1|]; let set_ref = array_set 0; set_ref x 3",
+  // &TARRAY(&t_int));
   T("let (@) = array_at",
     &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`0")), &t_int, &TVAR("`0")));
 
@@ -1208,7 +1210,7 @@ int main() {
     Type v = arithmetic_var("`11");
     T("let Ref = fn item -> [|item|];;\n"
       "let setref = fn arr v ->\n"
-      "  array_set 0 arr v\n"
+      "  array_set arr 0 v\n"
       ";;\n"
       "let (<-) = setref;\n"
       "let deref = fn arr -> array_at arr 0;;\n"

@@ -72,14 +72,12 @@ LLVMTypeRef get_largest_type(LLVMContextRef context, LLVMTypeRef *types,
 
   LLVMTypeRef largest_type = types[0];
   unsigned largest_size = LLVMStoreSizeOfType(target_data, largest_type);
-  // unsigned largest_align = LLVMABIAlignmentOfType(target_data, largest_type);
   unsigned largest_align = 256;
 
   for (size_t i = 1; i < count; i++) {
     unsigned current_size = LLVMStoreSizeOfType(target_data, types[i]);
     unsigned current_align = LLVMABIAlignmentOfType(target_data, types[i]);
 
-    // Compare size first, then alignment as a tiebreaker
     if (current_size > largest_size ||
         (current_size == largest_size && current_align > largest_align)) {
       largest_type = types[i];
@@ -238,7 +236,6 @@ LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef opt_val =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  // Create basic blocks for the if-then-else structure
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
 
@@ -246,11 +243,9 @@ LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(function, "else");
   LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge");
 
-  // Check if option is Some
   LLVMValueRef is_some = codegen_option_is_some(opt_val, builder);
   LLVMBuildCondBr(builder, is_some, then_block, else_block);
 
-  // Build then block - extract value and call func
   LLVMPositionBuilderAtEnd(builder, then_block);
   LLVMValueRef value_field =
       LLVMBuildExtractValue(builder, opt_val, 1, "value");
@@ -258,15 +253,12 @@ LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                              &value_field, 1, "mapped");
   LLVMBuildBr(builder, merge_block);
 
-  // Build else block
   LLVMPositionBuilderAtEnd(builder, else_block);
   LLVMBuildBr(builder, merge_block);
 
-  // Build merge block
   LLVMPositionBuilderAtEnd(builder, merge_block);
   LLVMValueRef phi = LLVMBuildPhi(builder, llvm_mapped_type, "result");
 
-  // Set up PHI node values
   LLVMValueRef incoming_values[2] = {mapped_value,
                                      LLVMGetUndef(llvm_mapped_type)};
   LLVMBasicBlockRef incoming_blocks[2] = {then_block, else_block};

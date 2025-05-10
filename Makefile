@@ -38,7 +38,7 @@ LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 
 # VST Library path
-VST_LIB_PATH := /Users/adam/projects/sound/ylc-vst
+VST_LIB_PATH := ${VST_LIB_PATH}
 VST_BUILD_PATH := $(VST_LIB_PATH)/build
 LANG_LD_FLAGS += -L$(VST_BUILD_PATH) -lylcvst
 

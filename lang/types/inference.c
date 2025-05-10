@@ -713,11 +713,11 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   Type **param_types = talloc(sizeof(Type *) * num_params);
 
+  AstList *params_list = ast->data.AST_LAMBDA.params;
+  AstList *defs_list = ast->data.AST_LAMBDA.type_annotations;
   for (int i = 0; i < num_params; i++) {
-    Ast *param = &ast->data.AST_LAMBDA.params[i];
-    Ast *def = ast->data.AST_LAMBDA.type_annotations
-                   ? ast->data.AST_LAMBDA.type_annotations[i]
-                   : NULL;
+    Ast *param = params_list->ast;
+    Ast *def = defs_list ? defs_list->ast : NULL;
 
     Type *param_type;
     if (def != NULL) {
@@ -732,6 +732,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     if (body_ctx.env) {
       body_ctx.env->is_fn_param = true;
     }
+    params_list = params_list->next;
+    defs_list = defs_list ? defs_list->next : NULL;
   }
 
   bool is_named = ast->data.AST_LAMBDA.fn_name.chars != NULL;
@@ -1010,9 +1012,9 @@ Type *solve_program_constraints(Ast *prog, TICtx *ctx) {
 Type *infer_module(Ast *ast, TICtx *ctx) {
   if (ast->data.AST_LAMBDA.len > 0) {
     // printf("infer parametrized module\n");
-    for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
-      Ast *param = ast->data.AST_LAMBDA.params + i;
-    }
+    // for (int i = 0; i < ast->data.AST_LAMBDA.len; i++) {
+    //   Ast *param = ast->data.AST_LAMBDA.params + i;
+    // }
     return type_error(ctx, ast, "Error: parametrized modules not implemented");
   }
 
