@@ -24,8 +24,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
-#include <vecLib/vecLib.h>
 
 #define STACK_MAX 256
 

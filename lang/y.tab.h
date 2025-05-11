@@ -1,14 +1,14 @@
-/* A Bison parser, made by GNU Bison 2.3.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
-/* Skeleton interface for Bison's Yacc-like parsers in C
+/* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989, 1990, 2000, 2001, 2002, 2003, 2004, 2005, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2021 Free Software Foundation,
+   Inc.
 
-   This program is free software; you can redistribute it and/or modify
+   This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2, or (at your option)
-   any later version.
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -33,60 +31,83 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-/* Tokens.  */
+/* DO NOT RELY ON FEATURES THAT ARE NOT DOCUMENTED in the manual,
+   especially those whose name start with YY_ or yy_.  They are
+   private implementation details that can be changed or removed.  */
+
+#ifndef YY_YY_LANG_Y_TAB_H_INCLUDED
+# define YY_YY_LANG_Y_TAB_H_INCLUDED
+/* Debug traces.  */
+#ifndef YYDEBUG
+# define YYDEBUG 0
+#endif
+#if YYDEBUG
+extern int yydebug;
+#endif
+
+/* Token kinds.  */
 #ifndef YYTOKENTYPE
 # define YYTOKENTYPE
-   /* Put the tokens into the symbol table, so that GDB and other debuggers
-      know about them.  */
-   enum yytokentype {
-     INTEGER = 258,
-     DOUBLE = 259,
-     IDENTIFIER = 260,
-     MACRO_IDENTIFIER = 261,
-     PATH_IDENTIFIER = 262,
-     IDENTIFIER_LIST = 263,
-     TOK_STRING = 264,
-     TOK_CHAR = 265,
-     TRUE = 266,
-     FALSE = 267,
-     PIPE = 268,
-     EXTERN = 269,
-     TRIPLE_DOT = 270,
-     LET = 271,
-     FN = 272,
-     MATCH = 273,
-     WITH = 274,
-     ARROW = 275,
-     DOUBLE_COLON = 276,
-     TOK_VOID = 277,
-     IN = 278,
-     AND = 279,
-     ASYNC = 280,
-     DOUBLE_AT = 281,
-     THUNK = 282,
-     IMPORT = 283,
-     OPEN = 284,
-     IMPLEMENTS = 285,
-     AMPERSAND = 286,
-     TYPE = 287,
-     TEST_ID = 288,
-     FSTRING_START = 289,
-     FSTRING_END = 290,
-     FSTRING_INTERP_START = 291,
-     FSTRING_INTERP_END = 292,
-     FSTRING_TEXT = 293,
-     APPLICATION = 294,
-     DOUBLE_PIPE = 295,
-     DOUBLE_AMP = 296,
-     NE = 297,
-     EQ = 298,
-     LE = 299,
-     GE = 300,
-     MODULO = 301,
-     UMINUS = 302
-   };
+  enum yytokentype
+  {
+    YYEMPTY = -2,
+    YYEOF = 0,                     /* "end of file"  */
+    YYerror = 256,                 /* error  */
+    YYUNDEF = 257,                 /* "invalid token"  */
+    INTEGER = 258,                 /* INTEGER  */
+    DOUBLE = 259,                  /* DOUBLE  */
+    IDENTIFIER = 260,              /* IDENTIFIER  */
+    MACRO_IDENTIFIER = 261,        /* MACRO_IDENTIFIER  */
+    PATH_IDENTIFIER = 262,         /* PATH_IDENTIFIER  */
+    IDENTIFIER_LIST = 263,         /* IDENTIFIER_LIST  */
+    TOK_STRING = 264,              /* TOK_STRING  */
+    TOK_CHAR = 265,                /* TOK_CHAR  */
+    TRUE = 266,                    /* TRUE  */
+    FALSE = 267,                   /* FALSE  */
+    PIPE = 268,                    /* PIPE  */
+    EXTERN = 269,                  /* EXTERN  */
+    TRIPLE_DOT = 270,              /* TRIPLE_DOT  */
+    LET = 271,                     /* LET  */
+    FN = 272,                      /* FN  */
+    MATCH = 273,                   /* MATCH  */
+    WITH = 274,                    /* WITH  */
+    ARROW = 275,                   /* ARROW  */
+    DOUBLE_COLON = 276,            /* DOUBLE_COLON  */
+    TOK_VOID = 277,                /* TOK_VOID  */
+    IN = 278,                      /* IN  */
+    AND = 279,                     /* AND  */
+    ASYNC = 280,                   /* ASYNC  */
+    DOUBLE_AT = 281,               /* DOUBLE_AT  */
+    THUNK = 282,                   /* THUNK  */
+    IMPORT = 283,                  /* IMPORT  */
+    OPEN = 284,                    /* OPEN  */
+    IMPLEMENTS = 285,              /* IMPLEMENTS  */
+    AMPERSAND = 286,               /* AMPERSAND  */
+    TYPE = 287,                    /* TYPE  */
+    TEST_ID = 288,                 /* TEST_ID  */
+    MUT = 289,                     /* MUT  */
+    FSTRING_START = 290,           /* FSTRING_START  */
+    FSTRING_END = 291,             /* FSTRING_END  */
+    FSTRING_INTERP_START = 292,    /* FSTRING_INTERP_START  */
+    FSTRING_INTERP_END = 293,      /* FSTRING_INTERP_END  */
+    FSTRING_TEXT = 294,            /* FSTRING_TEXT  */
+    APPLICATION = 295,             /* APPLICATION  */
+    DOUBLE_AMP = 296,              /* DOUBLE_AMP  */
+    DOUBLE_PIPE = 297,             /* DOUBLE_PIPE  */
+    GE = 298,                      /* GE  */
+    LE = 299,                      /* LE  */
+    EQ = 300,                      /* EQ  */
+    NE = 301,                      /* NE  */
+    MODULO = 302,                  /* MODULO  */
+    UMINUS = 303                   /* UMINUS  */
+  };
+  typedef enum yytokentype yytoken_kind_t;
 #endif
-/* Tokens.  */
+/* Token kinds.  */
+#define YYEMPTY -2
+#define YYEOF 0
+#define YYerror 256
+#define YYUNDEF 257
 #define INTEGER 258
 #define DOUBLE 259
 #define IDENTIFIER 260
@@ -118,56 +139,62 @@
 #define AMPERSAND 286
 #define TYPE 287
 #define TEST_ID 288
-#define FSTRING_START 289
-#define FSTRING_END 290
-#define FSTRING_INTERP_START 291
-#define FSTRING_INTERP_END 292
-#define FSTRING_TEXT 293
-#define APPLICATION 294
-#define DOUBLE_PIPE 295
+#define MUT 289
+#define FSTRING_START 290
+#define FSTRING_END 291
+#define FSTRING_INTERP_START 292
+#define FSTRING_INTERP_END 293
+#define FSTRING_TEXT 294
+#define APPLICATION 295
 #define DOUBLE_AMP 296
-#define NE 297
-#define EQ 298
+#define DOUBLE_PIPE 297
+#define GE 298
 #define LE 299
-#define GE 300
-#define MODULO 301
-#define UMINUS 302
+#define EQ 300
+#define NE 301
+#define MODULO 302
+#define UMINUS 303
 
-
-
-
+/* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-typedef union YYSTYPE
-#line 31 "lang/parser.y"
+union YYSTYPE
 {
+#line 31 "lang/parser.y"
+
     Ast *ast_node_ptr;          /* node pointer */
     ObjString vident;           /* identifier */
     ObjString vstr;             /* string */
     int vint;                   /* int val */
     double vdouble;
     char vchar;
-}
-/* Line 1529 of yacc.c.  */
-#line 152 "lang/y.tab.h"
-	YYSTYPE;
-# define yystype YYSTYPE /* obsolescent; will be withdrawn */
-# define YYSTYPE_IS_DECLARED 1
+
+#line 172 "lang/y.tab.h"
+
+};
+typedef union YYSTYPE YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
+# define YYSTYPE_IS_DECLARED 1
 #endif
 
-extern YYSTYPE yylval;
-
+/* Location type.  */
 #if ! defined YYLTYPE && ! defined YYLTYPE_IS_DECLARED
-typedef struct YYLTYPE
+typedef struct YYLTYPE YYLTYPE;
+struct YYLTYPE
 {
   int first_line;
   int first_column;
   int last_line;
   int last_column;
-} YYLTYPE;
-# define yyltype YYLTYPE /* obsolescent; will be withdrawn */
+};
 # define YYLTYPE_IS_DECLARED 1
 # define YYLTYPE_IS_TRIVIAL 1
 #endif
 
+
+extern YYSTYPE yylval;
 extern YYLTYPE yylloc;
+
+int yyparse (void);
+
+
+#endif /* !YY_YY_LANG_Y_TAB_H_INCLUDED  */

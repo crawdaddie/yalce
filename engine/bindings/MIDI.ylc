@@ -1,21 +1,22 @@
 # midi.h
+type MIDIEndpointRef = struct MIDIEndpoint *;
 type CCCallback = (Double -> ());
 type NoteCallback = Int -> Double -> ();
 let midi_setup = extern fn () -> ();
+let midi_out_setup = extern fn () -> ();
 let register_cc_handler = extern fn Int -> Int -> CCCallback -> ();
 let register_note_on_handler = extern fn Int -> NoteCallback -> ();
 let register_note_off_handler = extern fn Int -> NoteCallback -> ();
 let toggle_midi_debug = extern fn () -> ();
 let send_note_on = extern fn Int -> Char -> Char -> Char -> Int;
 let send_note_off = extern fn Int -> Char -> Char -> Char -> Int;
-let send_note_ons = extern fn Int -> Int -> Ptr -> Int;
-let send_note_offs = extern fn Int -> Int -> Ptr -> Int;
+let send_note_ons = extern fn Int -> Int -> uint8_t * -> Int;
+let send_note_offs = extern fn Int -> Int -> uint8_t * -> Int;
 let send_cc = extern fn Int -> Char -> Char -> Char -> Int;
-let send_ccs = extern fn Int -> Int -> Ptr -> Int;
+let send_ccs = extern fn Int -> Int -> uint8_t * -> Int;
 let get_destination = extern fn Int -> Int;
 let get_destination_by_name = extern fn Ptr -> Int;
 let list_destinations = extern fn () -> ();
-let midi_out_setup = extern fn () -> ();
 
 let REC_127 = 0.007874015748031496;
 

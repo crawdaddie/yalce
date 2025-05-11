@@ -1,37 +1,47 @@
 #ifndef _ENGINE_MIDI_H
 #define _ENGINE_MIDI_H
 
-#include <CoreMIDI/CoreMIDI.h>
 #include <stdint.h>
 
+/* Platform-agnostic MIDI endpoint handle */
+typedef struct MIDIEndpoint *MIDIEndpointRef;
+
+/* Callback types */
 typedef void (*CCCallback)(double);
-typedef void (*NoteCallback)(int, double); // note number, velocity
+typedef void (*NoteCallback)(int, double); /* note number, velocity */
 
-void midi_setup();
+/* Core MIDI setup functions */
+void midi_setup(void);
+void midi_out_setup(void);
 
+/* Callback registration */
 void register_cc_handler(int ch, int cc, CCCallback handler);
 void register_note_on_handler(int ch, NoteCallback handler);
 void register_note_off_handler(int ch, NoteCallback handler);
 
-void toggle_midi_debug();
+/* Debug control */
+void toggle_midi_debug(void);
 
-int send_note_on(MIDIEndpointRef destination, char channel, char note,
-                 char velocity);
+/* MIDI message sending functions */
+int send_note_on(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
+                 uint8_t velocity);
 
 int send_note_off(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
                   uint8_t velocity);
 
-int send_note_ons(MIDIEndpointRef destination, int size, char *note_data_ptr);
-int send_note_offs(MIDIEndpointRef destination, int size, char *note_data_ptr);
+int send_note_ons(MIDIEndpointRef destination, int size,
+                  uint8_t *note_data_ptr);
+int send_note_offs(MIDIEndpointRef destination, int size,
+                   uint8_t *note_data_ptr);
 
-int send_cc(MIDIEndpointRef destination, char channel, char control_number,
-            char value);
+int send_cc(MIDIEndpointRef destination, uint8_t channel,
+            uint8_t control_number, uint8_t value);
 
-int send_ccs(MIDIEndpointRef destination, int size, char *cc_data_ptr);
-MIDIEndpointRef get_destination(ItemCount index);
+int send_ccs(MIDIEndpointRef destination, int size, uint8_t *cc_data_ptr);
+
+/* Destination management */
+MIDIEndpointRef get_destination(uint32_t index);
 MIDIEndpointRef get_destination_by_name(const char *name);
+void list_destinations(void);
 
-void list_destinations();
-
-void midi_out_setup();
-#endif
+#endif /* _ENGINE_MIDI_H */

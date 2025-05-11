@@ -309,7 +309,7 @@ struct sockaddr *create_server_addr(int af_inet, int inaddr_any, int port) {
   struct sockaddr_in *_server_addr = malloc(sizeof(struct sockaddr_in));
 
   struct sockaddr_in servaddr;
-  bzero(&servaddr, sizeof(servaddr));
+  explicit_bzero(&servaddr, sizeof(servaddr));
 
   printf("%d %d %d\n", af_inet, inaddr_any, port);
 
