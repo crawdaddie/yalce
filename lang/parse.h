@@ -235,8 +235,8 @@ struct Ast {
     } AST_APPLICATION;
 
     struct AST_LAMBDA {
+      int num_closure_free_vars;
       size_t len;
-      // Ast *params;
       AstList *params;
       ObjString fn_name;
       Ast *body;
@@ -444,4 +444,6 @@ Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body);
 Ast *ast_range_expression(Ast *from, Ast *to);
 
 Ast *ast_assignment(Ast *var, Ast *val);
+
+AstList *ast_list_extend_left(AstList *l, Ast *n);
 #endif

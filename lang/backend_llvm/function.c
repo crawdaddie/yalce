@@ -56,7 +56,6 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
         type_to_llvm_type(fn_type->data.T_FN.to, env, module);
     llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
   } else {
-
     LLVMTypeRef llvm_return_type_ref;
     codegen_fn_type_arg_types(fn_type, fn_len, llvm_param_types,
                               &llvm_return_type_ref, env, module);
@@ -167,8 +166,23 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = ast->md;
 
   int fn_len = ast->data.AST_LAMBDA.len;
+  int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
-  LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx->env, module);
+  // if (num_closure_vars > 0) {
+  //   printf("codegen fn\n");
+  //   print_type(fn_type);
+  //   // fn_type = get_full_fn_type_of_closure(ast);
+  // }
+
+  LLVMTypeRef prototype =
+      codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx->env, module);
+  if (num_closure_vars > 0) {
+    // printf("closure?? full len: [%d]\n", fn_len + num_closure_vars);
+    print_type(fn_type);
+    LLVMDumpType(prototype);
+    printf("\n\n");
+  }
+
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
@@ -180,6 +194,10 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   AST_LIST_ITER(ast->data.AST_LAMBDA.params, ({
                   Ast *param_ast = l->ast;
                   Type *param_type = fn_type->data.T_FN.from;
+
+                  if (param_type->kind == T_VAR) {
+                    param_type = resolve_type_in_env(param_type, ctx->env);
+                  }
 
                   LLVMValueRef param_val = LLVMGetParam(func, i);
 
@@ -206,13 +224,14 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (fn_type->kind == T_VOID) {
     // printf("build ret for some reason???\n");
-    LLVMBuildRetVoid(builder);
+    // LLVMBuildRetVoid(builder);
   } else {
     LLVMBuildRet(builder, body);
   }
 
   END_FUNC
   destroy_ctx(&fn_ctx);
+  // LLVMDumpValue(func);
   return func;
 }
 

@@ -103,6 +103,27 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   return type;
 }
 
+void extend_closure_free_vars(Ast *fn, Ast *ref, Type *ref_type) {
+  AstList *l = fn->data.AST_LAMBDA.params;
+  int i = 0;
+  while (l && i < fn->data.AST_LAMBDA.num_closure_free_vars) {
+    if (CHARS_EQ(ref->data.AST_IDENTIFIER.value,
+                 l->ast->data.AST_IDENTIFIER.value)) {
+      // avoid adding closure variable twice
+      return;
+    }
+    l = l->next;
+    i++;
+  }
+  ref->md = ref_type;
+  fn->data.AST_LAMBDA.params =
+      ast_list_extend_left(fn->data.AST_LAMBDA.params, ref);
+
+  fn->data.AST_LAMBDA.type_annotations =
+      ast_list_extend_left(fn->data.AST_LAMBDA.type_annotations, NULL);
+  fn->data.AST_LAMBDA.num_closure_free_vars++;
+}
+
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
   switch (ast->tag) {
@@ -211,9 +232,13 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TypeEnv *ref = env_lookup_ref(ctx->env, name);
     if (ref) {
-      // printf("ast identifier %s scope: %d this scope: %d (is fn param
-      // %d)\n",
-      //        name, ref->type->scope, ctx->scope, ref->is_fn_param);
+      int this_scope = ctx->scope;
+      int ref_scope = ref->type->scope;
+      int is_fn_param = ref->is_fn_param;
+      if (!is_fn_param && ref_scope > 0 && this_scope > ref_scope) {
+        extend_closure_free_vars(ctx->current_fn_ast, ast, ref->type);
+      }
+
       ref->ref_count++;
 
       ast->data.AST_IDENTIFIER.is_fn_param = ref->is_fn_param;
@@ -797,7 +822,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (body_ctx.yielded_type != NULL) {
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
   }
-
   return ast->md;
 }
 
@@ -1076,7 +1100,21 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
 Type *infer_assignment(Ast *ast, TICtx *ctx) {
   Type *val_type = infer(ast->data.AST_BINOP.right, ctx);
   Type *var_type = infer(ast->data.AST_BINOP.left, ctx);
-  print_type(val_type);
-  print_type(var_type);
+  // print_type(val_type);
+  // print_type(var_type);
   return &t_void;
+}
+Type *_get_full_closure_type(int num, Type *f, AstList *cl) {
+  if (num == 0) {
+    return f;
+  }
+  return type_fn(cl->ast->md, _get_full_closure_type(num - 1, f, cl->next));
+}
+Type *get_full_fn_type_of_closure(Ast *closure) {
+
+  Type *fn_type = closure->md;
+  Type *t =
+      _get_full_closure_type(closure->data.AST_LAMBDA.num_closure_free_vars,
+                             fn_type, closure->data.AST_LAMBDA.params);
+  return t;
 }

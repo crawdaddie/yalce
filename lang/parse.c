@@ -425,35 +425,35 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   return lambda;
 }
 
-AstList *ast_list_extend(AstList *l, Ast *n) {
-  AstList *ps = palloc(sizeof(AstList));
-  *ps = (AstList){n, l};
-  return ps;
+AstList *ast_list_extend_left(AstList *list, Ast *n) {
+  AstList *new_list = palloc(sizeof(AstList));
+  *new_list = (AstList){n, list};
+  return new_list;
 }
 
-AstList *ast_list_extend_right(AstList *_l, Ast *n) {
-  if (_l == NULL) {
-    AstList *ps = palloc(sizeof(AstList));
-    *ps = (AstList){n, NULL};
-    return ps;
+AstList *ast_list_extend_right(AstList *list, Ast *n) {
+  if (list == NULL) {
+    AstList *list = palloc(sizeof(AstList));
+    *list = (AstList){n, NULL};
+    return list;
   }
 
-  AstList *l = _l;
+  AstList *l = list;
 
   while (l->next != NULL) {
     l = l->next;
   }
 
-  AstList *ps = palloc(sizeof(AstList));
-  *ps = (AstList){n, NULL};
-  l->next = ps;
+  AstList *tail = palloc(sizeof(AstList));
+  *tail = (AstList){n, NULL};
+  l->next = tail;
 
-  return _l;
+  return list;
 }
 
 Ast *ast_void_lambda(Ast *body) {
   Ast *lambda = Ast_new(AST_LAMBDA);
-  lambda->data.AST_LAMBDA.params = ast_list_extend(NULL, ast_void());
+  lambda->data.AST_LAMBDA.params = ast_list_extend_left(NULL, ast_void());
   lambda->data.AST_LAMBDA.len = 1;
   lambda->data.AST_LAMBDA.type_annotations = NULL;
   lambda->data.AST_LAMBDA.body = body;

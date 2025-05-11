@@ -264,6 +264,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     JITSymbol *original_callable_sym =
         (JITSymbol *)sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym;
 
+    if (!original_callable_sym) {
+    }
+
     if (args_len + provided_args_len == total_len) {
 
       LLVMValueRef full_args[total_len];
@@ -285,7 +288,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
       }
 
       LLVMValueRef callable;
-      if (original_callable_sym->type == STYPE_FUNCTION) {
+      if (!original_callable_sym) {
+        callable = sym->val;
+      } else if (original_callable_sym->type == STYPE_FUNCTION) {
         callable = original_callable_sym->val;
       } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION &&
                  original_callable_sym->symbol_data.STYPE_GENERIC_FUNCTION

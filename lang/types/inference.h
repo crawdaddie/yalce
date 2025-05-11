@@ -31,4 +31,6 @@ Substitution *solve_constraints(TypeConstraint *constraints);
 void print_constraints(TypeConstraint *c);
 
 bool is_loop_of_iterable(Ast *let);
+
+Type *get_full_fn_type_of_closure(Ast *closure);
 #endif

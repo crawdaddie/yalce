@@ -167,6 +167,7 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
 LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, fn, NULL);
 
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
@@ -175,6 +176,86 @@ LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
   ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len), sym);
 
   return fn;
+}
+
+LLVMValueRef create_curried_generic_closure_binding(
+    Ast *binding, Type *closure_type, Ast *closure, JITLangCtx *ctx,
+    LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  JITSymbol *curried_sym =
+      new_symbol(STYPE_PARTIAL_EVAL_CLOSURE, closure_type, NULL, NULL);
+
+  int len = closure->data.AST_LAMBDA.num_closure_free_vars;
+
+  // closure->md = full_type;
+
+  JITSymbol *original_sym = create_generic_fn_symbol(closure, ctx);
+
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym =
+      original_sym;
+
+  LLVMValueRef *app_args = malloc(sizeof(LLVMValueRef) * len);
+  AstList *l = closure->data.AST_LAMBDA.params;
+  for (int i = 0; i < len; i++) {
+    app_args[i] = codegen(l->ast, ctx, module, builder);
+    l = l->next;
+  }
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args = app_args;
+
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len = len;
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len =
+      len + closure->data.AST_LAMBDA.len;
+
+  Type *full_type = get_full_fn_type_of_closure(closure);
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type =
+      full_type;
+
+  const char *id_chars = binding->data.AST_IDENTIFIER.value;
+  int id_len = binding->data.AST_IDENTIFIER.length;
+
+  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
+              curried_sym);
+  return NULL;
+}
+
+LLVMValueRef create_curried_closure_binding(Ast *binding, Type *closure_type,
+                                            Ast *closure, JITLangCtx *ctx,
+                                            LLVMModuleRef module,
+                                            LLVMBuilderRef builder) {
+  JITSymbol *curried_sym =
+      new_symbol(STYPE_PARTIAL_EVAL_CLOSURE, closure_type, NULL, NULL);
+
+  int len = closure->data.AST_LAMBDA.num_closure_free_vars;
+  LLVMValueRef *app_args = malloc(sizeof(LLVMValueRef) * len);
+
+  AstList *l = closure->data.AST_LAMBDA.params;
+  for (int i = 0; i < len; i++) {
+    app_args[i] = codegen(l->ast, ctx, module, builder);
+    l = l->next;
+  }
+
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym =
+      NULL; // <- this will be NULL, instead we compile the original lambda &
+            // add it to the symbol
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args = app_args;
+
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len = len;
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len =
+      len + closure->data.AST_LAMBDA.len;
+
+  curried_sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type =
+      get_full_fn_type_of_closure(closure);
+
+  LLVMValueRef func = codegen(closure, ctx, module, builder);
+  curried_sym->val = func;
+
+  const char *id_chars = binding->data.AST_IDENTIFIER.value;
+  printf("bind closure to %s\n", id_chars);
+  int id_len = binding->data.AST_IDENTIFIER.length;
+
+  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
+              curried_sym);
+  return func;
 }
 
 LLVMValueRef create_curried_fn_binding(Ast *binding, Ast *app, JITLangCtx *ctx,
@@ -277,6 +358,11 @@ Type *array_type(Ast *expr) {
   return NULL;
 }
 
+bool is_lambda_with_closures(Ast *ast) {
+  return ast->tag == AST_LAMBDA &&
+         (ast->data.AST_LAMBDA.num_closure_free_vars > 0);
+}
+
 LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                                JITLangCtx *outer_ctx, JITLangCtx *inner_ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -295,8 +381,6 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   if (expr->tag == AST_APPLICATION && is_array_at(expr)) {
     Type *fn_type = array_type(expr);
     if (fn_type && !is_generic(fn_type)) {
-      // print_ast(binding);
-      // print_ast(expr);
 
       expr_val = create_fn_binding(binding, expr_type,
                                    codegen(expr, outer_ctx, module, builder),
@@ -307,10 +391,6 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     }
 
     if (fn_type && is_generic(fn_type)) {
-
-      expr_val = create_fn_binding(binding, expr_type,
-                                   codegen(expr, outer_ctx, module, builder),
-                                   inner_ctx, module, builder);
 
       expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
 
@@ -376,17 +456,26 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
-
-    expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
+    if (is_lambda_with_closures(expr)) {
+      expr_val = create_curried_generic_closure_binding(
+          binding, expr_type, expr, inner_ctx, module, builder);
+    } else {
+      expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
+    }
 
     return in_expr == NULL ? expr_val
                            : codegen(in_expr, inner_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN && !is_coroutine_type(expr_type)) {
-    expr_val = create_fn_binding(binding, expr_type,
-                                 codegen_fn(expr, outer_ctx, module, builder),
-                                 inner_ctx, module, builder);
+    if (is_lambda_with_closures(expr)) {
+      expr_val = create_curried_closure_binding(binding, expr_type, expr,
+                                                inner_ctx, module, builder);
+    } else {
+      expr_val = create_fn_binding(binding, expr_type,
+                                   codegen_fn(expr, outer_ctx, module, builder),
+                                   inner_ctx, module, builder);
+    }
 
     return in_expr == NULL ? expr_val
                            : codegen(in_expr, inner_ctx, module, builder);
