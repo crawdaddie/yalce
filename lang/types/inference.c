@@ -907,9 +907,6 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     int arity = ast->data.AST_LIST.len;
     for (int i = 0; i < arity; i++) {
       Ast *member = ast->data.AST_LIST.items + i;
-      if (member->tag == AST_IDENTIFIER &&
-          CHARS_EQ(member->data.AST_IDENTIFIER.value, "x")) {
-      }
       apply_substitutions_rec(member, subst);
     }
 

@@ -1,4 +1,5 @@
 #include "backend_llvm/jit.h"
+#include "../escape_analysis.h"
 #include "backend_llvm/codegen.h"
 #include "backend_llvm/common.h"
 #include "backend_llvm/globals.h"
@@ -96,6 +97,9 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   if (!solve_program_constraints(*prog, &ti_ctx)) {
     return NULL;
   }
+
+  AECtx ae_ctx = {};
+  escape_analysis(*prog, &ae_ctx);
 
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
@@ -288,6 +292,10 @@ int jit(int argc, char **argv) {
       TICtx ti_ctx = {.env = ctx.env, .scope = 0};
 
       Type *typecheck_result = infer(prog, &ti_ctx);
+
+      AECtx ae_ctx = {};
+      escape_analysis(prog, &ae_ctx);
+
       ctx.env = ti_ctx.env;
 
       if (typecheck_result == NULL) {
