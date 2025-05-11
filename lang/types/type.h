@@ -140,6 +140,8 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_TYPECLASS_ORD "ord"
 #define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
 
+#define TYPE_NAME_REF "Ref"
+
 typedef struct _binop_map {
   const char *name;
   Type *binop_fn_type;

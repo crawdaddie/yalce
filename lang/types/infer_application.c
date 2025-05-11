@@ -310,6 +310,16 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   //   printf("APPLICATION\n");
   //   print_ast(ast);
   // }
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               TYPE_NAME_REF)) {
+    printf("create ref\n");
+    print_ast(ast);
+    //
+    Type *ref_type = infer(ast->data.AST_APPLICATION.args, ctx);
+    ast->data.AST_APPLICATION.function->md = type_fn(ref_type, ref_type);
+    return ref_type;
+  }
 
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
 
@@ -323,7 +333,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
       CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
                "addrof")) {
-
     Type *arg_type = infer(ast->data.AST_APPLICATION.args, ctx);
     return arg_type;
   }
@@ -339,7 +348,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
 
   switch (fn_type->kind) {
-
   case T_VAR: {
     int app_len = ast->data.AST_APPLICATION.len;
 

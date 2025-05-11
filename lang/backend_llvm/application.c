@@ -251,6 +251,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
+    // TODO: refactor this into the currying module
 
     LLVMValueRef *provided_args =
         sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args;
@@ -263,9 +264,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
     JITSymbol *original_callable_sym =
         (JITSymbol *)sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym;
-
-    if (!original_callable_sym) {
-    }
 
     if (args_len + provided_args_len == total_len) {
 

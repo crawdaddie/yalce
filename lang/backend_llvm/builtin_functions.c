@@ -844,6 +844,8 @@ LLVMValueRef char_cons_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 }
+LLVMValueRef RefHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                        LLVMBuilderRef builder) {}
 
 LLVMValueRef SerializeBlobHandler(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module,
@@ -1128,6 +1130,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("save_pattern_to_file", next_tvar(), SerializeBlobHandler);
   GENERIC_FN_SYMBOL("df_offset", &t_df_offset_sig, DFAtOffsetHandler);
   GENERIC_FN_SYMBOL("df_raw_fields", &t_df_raw_fields_sig, DFRawFieldsHandler);
+  // GENERIC_FN_SYMBOL(TYPE_NAME_REF, NULL, RefHandler);
 
   // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
   // ListPrependHandler);

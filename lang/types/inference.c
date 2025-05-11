@@ -3,6 +3,7 @@
 #include "builtins.h"
 #include "modules.h"
 #include "serde.h"
+#include "types/closures.h"
 #include "types/common.h"
 #include "types/type.h"
 #include "types/type_declaration.h"
@@ -101,27 +102,6 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   contained[0] = el_type;
   *type = (Type){T_CONS, {.T_CONS = {cons_name, contained, 1}}};
   return type;
-}
-
-void extend_closure_free_vars(Ast *fn, Ast *ref, Type *ref_type) {
-  AstList *l = fn->data.AST_LAMBDA.params;
-  int i = 0;
-  while (l && i < fn->data.AST_LAMBDA.num_closure_free_vars) {
-    if (CHARS_EQ(ref->data.AST_IDENTIFIER.value,
-                 l->ast->data.AST_IDENTIFIER.value)) {
-      // avoid adding closure variable twice
-      return;
-    }
-    l = l->next;
-    i++;
-  }
-  ref->md = ref_type;
-  fn->data.AST_LAMBDA.params =
-      ast_list_extend_left(fn->data.AST_LAMBDA.params, ref);
-
-  fn->data.AST_LAMBDA.type_annotations =
-      ast_list_extend_left(fn->data.AST_LAMBDA.type_annotations, NULL);
-  fn->data.AST_LAMBDA.num_closure_free_vars++;
 }
 
 Type *infer(Ast *ast, TICtx *ctx) {
@@ -232,20 +212,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TypeEnv *ref = env_lookup_ref(ctx->env, name);
     if (ref) {
-      int this_scope = ctx->current_fn_scope;
-      int ref_scope = ref->type->scope;
-      int is_fn_param = ref->is_fn_param;
-      int is_rec_fn_ref = ref->is_recursive_fn_ref;
-      if (!is_fn_param && (!is_rec_fn_ref) && (ref_scope > 0) &&
-          (this_scope > ref_scope)) {
-        printf("closure stufff???? this scope %d ref_scope %d is_fn_param %d "
-               "is_rec fn ref %d\n",
-               this_scope, ref_scope, is_fn_param, ref->is_recursive_fn_ref);
-        print_ast(ctx->current_fn_ast);
-        print_ast(ast);
-        extend_closure_free_vars(ctx->current_fn_ast, ast, ref->type);
-      }
-
+      handle_closed_over_ref(ast, ref, ctx);
       ref->ref_count++;
 
       ast->data.AST_IDENTIFIER.is_fn_param = ref->is_fn_param;
@@ -1110,18 +1077,4 @@ Type *infer_assignment(Ast *ast, TICtx *ctx) {
   // print_type(val_type);
   // print_type(var_type);
   return &t_void;
-}
-Type *_get_full_closure_type(int num, Type *f, AstList *cl) {
-  if (num == 0) {
-    return f;
-  }
-  return type_fn(cl->ast->md, _get_full_closure_type(num - 1, f, cl->next));
-}
-Type *get_full_fn_type_of_closure(Ast *closure) {
-
-  Type *fn_type = closure->md;
-  Type *t =
-      _get_full_closure_type(closure->data.AST_LAMBDA.num_closure_free_vars,
-                             fn_type, closure->data.AST_LAMBDA.params);
-  return t;
 }
