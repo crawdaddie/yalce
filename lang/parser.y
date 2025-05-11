@@ -389,7 +389,7 @@ match_expr:
 
 match_test_clause:
     expr {$$ = $1;}
-  | expr 'if' expr { $$ = ast_match_guard_clause($1, $3);}
+  | expr "if" expr { $$ = ast_match_guard_clause($1, $3);}
 
 match_branches:
     '|' match_test_clause ARROW expr                 {$$ = ast_match_branches(NULL, $2, $4);}
@@ -460,7 +460,7 @@ type_expr:
 type_atom:
     IDENTIFIER                { $$ = ast_identifier($1); }
   | IDENTIFIER '=' INTEGER    { $$ = ast_let(ast_identifier($1), AST_CONST(AST_INT, $3), NULL); } 
-  | IDENTIFIER 'of' type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); } 
+  | IDENTIFIER "of" type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); } 
   | IDENTIFIER ':' type_atom  { $$ = ast_assoc(ast_identifier($1), $3); } 
   | '(' type_expr ')'         { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }
