@@ -232,10 +232,17 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TypeEnv *ref = env_lookup_ref(ctx->env, name);
     if (ref) {
-      int this_scope = ctx->scope;
+      int this_scope = ctx->current_fn_scope;
       int ref_scope = ref->type->scope;
       int is_fn_param = ref->is_fn_param;
-      if (!is_fn_param && ref_scope > 0 && this_scope > ref_scope) {
+      int is_rec_fn_ref = ref->is_recursive_fn_ref;
+      if (!is_fn_param && (!is_rec_fn_ref) && (ref_scope > 0) &&
+          (this_scope > ref_scope)) {
+        printf("closure stufff???? this scope %d ref_scope %d is_fn_param %d "
+               "is_rec fn ref %d\n",
+               this_scope, ref_scope, is_fn_param, ref->is_recursive_fn_ref);
+        print_ast(ctx->current_fn_ast);
+        print_ast(ast);
         extend_closure_free_vars(ctx->current_fn_ast, ast, ref->type);
       }
 

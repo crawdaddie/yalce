@@ -1090,7 +1090,7 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
   switch (r->kind) {
   case T_VAR: {
     Type *rr = env_lookup(env, r->data.T_VAR);
-    if (rr->kind == T_VAR) {
+    if (rr && rr->kind == T_VAR) {
       return resolve_type_in_env(rr, env);
     }
 
