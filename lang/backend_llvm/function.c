@@ -176,12 +176,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTypeRef prototype =
       codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx->env, module);
-  if (num_closure_vars > 0) {
-    // printf("closure?? full len: [%d]\n", fn_len + num_closure_vars);
-    print_type(fn_type);
-    LLVMDumpType(prototype);
-    printf("\n\n");
-  }
 
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 
@@ -224,7 +218,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (fn_type->kind == T_VOID) {
     // printf("build ret for some reason???\n");
-    // LLVMBuildRetVoid(builder);
+    LLVMBuildRetVoid(builder);
   } else {
     LLVMBuildRet(builder, body);
   }

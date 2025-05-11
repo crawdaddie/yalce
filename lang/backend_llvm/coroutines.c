@@ -1249,8 +1249,6 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *array_type = ast->data.AST_APPLICATION.args->md;
   Type *array_el_type = array_type->data.T_CONS.args[0];
-  print_type(array_type);
-  print_type(array_el_type);
 
   LLVMTypeRef llvm_array_el_type =
       type_to_llvm_type(array_el_type, ctx->env, module);
