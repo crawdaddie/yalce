@@ -66,6 +66,7 @@ Ast* ast_root = NULL;
 %token AMPERSAND
 %token TYPE
 %token TEST_ID
+%token MUT
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -128,7 +129,7 @@ program:
 
 expr:
     simple_expr
-  | 'yield' expr                      { $$ = ast_yield($2); }
+  | "yield" expr                      { $$ = ast_yield($2); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
@@ -146,7 +147,7 @@ expr:
   | expr EQ expr                      { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
-  | expr 'to' expr                    { $$ = ast_range_expression($1, $3); }
+  | expr "to" expr                    { $$ = ast_range_expression($1, $3); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
@@ -160,7 +161,7 @@ expr:
                                         printf("macro '%s'\n", $1.chars);
                                         $$ = $2;
                                       } 
-  | 'for' IDENTIFIER '=' expr IN expr   {
+  | "for" IDENTIFIER '=' expr IN expr   {
                                           Ast *let = ast_let(ast_identifier($2), $4, $6);
                                           let->tag = AST_LOOP;
                                           $$ = let;
@@ -239,14 +240,36 @@ expr_sequence:
 let_binding:
     LET TEST_ID '=' expr            { $$ = ast_test_module($4);}
   | LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
+  | LET MUT IDENTIFIER '=' expr     { Ast *let = ast_let(ast_identifier($3), $5, NULL);
+                                      let->data.AST_LET.is_mut = true;
+                                      $$ = let;
+                                    }
   | LET IDENTIFIER '=' EXTERN FN fn_signature  
                                     { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
 
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
+
+  | LET MUT lambda_arg '=' expr     { Ast *let = ast_let($3, $5, NULL);
+                                      let->data.AST_LET.is_mut = true;
+                                      $$ = let;
+                                    }
   | LET expr_list '=' expr          { $$ = ast_let(ast_tuple($2), $4, NULL);}
 
+  | LET MUT expr_list '=' expr      { Ast *let = ast_let(ast_tuple($3), $5, NULL);
+                                      let->data.AST_LET.is_mut = true;
+                                      $$ = let;
+                                    }
 
 
+
+/*
+  | LET IDENTIFIER '=' '(' extern_variants ')'  
+                                    {
+                                      Ast *variants = $5;
+                                      variants->tag = AST_EXTERN_VARIANTS;
+                                      $$ = ast_let(ast_identifier($2), variants, NULL);
+                                    }
+                                    */
 
   | LET TOK_VOID '=' expr           { $$ = $4; }
   | let_binding IN expr             {
@@ -301,8 +324,8 @@ lambda_expr:
   | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_void_lambda($4); }
   | '(' FN lambda_args ARROW expr_sequence ')'  { $$ = ast_lambda($3, $5); }
   | '(' FN TOK_VOID ARROW expr_sequence ')'     { $$ = ast_void_lambda($5); }
-  | 'module' lambda_args ARROW expr_sequence ';'{ $$ = ast_module(ast_lambda($2, $4)); }
-  | 'module' expr_sequence ';'{ $$ = ast_module(ast_lambda(NULL, $2)); }
+  | "module" lambda_args ARROW expr_sequence ';'{ $$ = ast_module(ast_lambda($2, $4)); }
+  | "module" expr_sequence ';'{ $$ = ast_module(ast_lambda(NULL, $2)); }
   ;
 
 
@@ -366,7 +389,7 @@ match_expr:
 
 match_test_clause:
     expr {$$ = $1;}
-  | expr 'if' expr { $$ = ast_match_guard_clause($1, $3);}
+  | expr "if" expr { $$ = ast_match_guard_clause($1, $3);}
 
 match_branches:
     '|' match_test_clause ARROW expr                 {$$ = ast_match_branches(NULL, $2, $4);}
@@ -437,7 +460,7 @@ type_expr:
 type_atom:
     IDENTIFIER                { $$ = ast_identifier($1); }
   | IDENTIFIER '=' INTEGER    { $$ = ast_let(ast_identifier($1), AST_CONST(AST_INT, $3), NULL); } 
-  | IDENTIFIER 'of' type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); } 
+  | IDENTIFIER "of" type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); } 
   | IDENTIFIER ':' type_atom  { $$ = ast_assoc(ast_identifier($1), $3); } 
   | '(' type_expr ')'         { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }

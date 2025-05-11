@@ -102,6 +102,12 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)/types
 	mkdir -p $(BUILD_DIR)/runtime
 
+# Define Linux-specific YACC flags
+ifeq ($(shell uname -s),Linux)
+    LINUX_YACC_FLAGS = -Wno-yacc
+else
+    LINUX_YACC_FLAGS =
+endif
 # Build lex and yacc output files
 $(YACC_OUTPUT): $(YACC_FILE)
 	bison --locations -yd $(YACC_FILE) -o $(LANG_SRC_DIR)/y.tab.c
