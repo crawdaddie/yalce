@@ -179,6 +179,7 @@ struct Ast {
       Ast *binding;
       Ast *expr;
       Ast *in_expr;
+      bool is_mut;
     } AST_LET;
 
     struct AST_INT {

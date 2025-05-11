@@ -239,19 +239,14 @@ expr_sequence:
 let_binding:
     LET TEST_ID '=' expr            { $$ = ast_test_module($4);}
   | LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
-  | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
   | LET IDENTIFIER '=' EXTERN FN fn_signature  
                                     { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
 
+  | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
   | LET expr_list '=' expr          { $$ = ast_let(ast_tuple($2), $4, NULL);}
 
 
-  | LET IDENTIFIER '=' '(' extern_variants ')'  
-                                    {
-                                      Ast *variants = $5;
-                                      variants->tag = AST_EXTERN_VARIANTS;
-                                      $$ = ast_let(ast_identifier($2), variants, NULL);
-                                    }
+
 
   | LET TOK_VOID '=' expr           { $$ = $4; }
   | let_binding IN expr             {

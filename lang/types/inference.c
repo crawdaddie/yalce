@@ -618,7 +618,6 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
   Ast *in_expr = ast->data.AST_LET.in_expr;
-
   if (binding == NULL && expr->tag == AST_IMPORT && in_expr) {
     TICtx body_ctx = *ctx;
     body_ctx.scope++;
@@ -627,7 +626,6 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   }
 
   if (binding != NULL && expr->tag == AST_IMPORT) {
-    print_ast(ast);
     TICtx body_ctx = *ctx;
     body_ctx.scope++;
     infer(expr, &body_ctx);
@@ -639,6 +637,7 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
     return type_error(ctx, ast->data.AST_LET.expr,
                       "Typecheck Error: Could not infer expr type in let\n");
   }
+  bool is_mutable = ast->data.AST_LET.is_mut;
 
   Type *binding_type;
   if (!(binding_type = infer_pattern(binding, ctx))) {

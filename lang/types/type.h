@@ -140,7 +140,7 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_TYPECLASS_ORD "ord"
 #define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
 
-#define TYPE_NAME_REF "Ref"
+#define TYPE_NAME_REF "mut"
 
 typedef struct _binop_map {
   const char *name;
@@ -288,6 +288,7 @@ typedef struct Type {
   bool is_coroutine_instance;
   bool is_coroutine_constructor;
   bool is_recursive_type_ref;
+  bool is_ref;
   // bool is_recursive_placeholder;
   int scope;
   int yield_boundary;
