@@ -170,7 +170,8 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
 
     Type *t = ast->data.AST_LET.expr->md;
     if (type_needs_alloc(t) &&
-        ast->data.AST_LET.binding->tag == AST_IDENTIFIER) {
+        ast->data.AST_LET.binding->tag == AST_IDENTIFIER && expr_ids) {
+
       ctx->env = escapes_add(
           ctx->env, ast->data.AST_LET.binding->data.AST_IDENTIFIER.value,
           ast->data.AST_LET.expr,
