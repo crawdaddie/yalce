@@ -70,20 +70,21 @@
      AMPERSAND = 286,
      TYPE = 287,
      TEST_ID = 288,
-     FSTRING_START = 289,
-     FSTRING_END = 290,
-     FSTRING_INTERP_START = 291,
-     FSTRING_INTERP_END = 292,
-     FSTRING_TEXT = 293,
-     APPLICATION = 294,
-     DOUBLE_PIPE = 295,
-     DOUBLE_AMP = 296,
-     NE = 297,
-     EQ = 298,
-     LE = 299,
-     GE = 300,
-     MODULO = 301,
-     UMINUS = 302
+     MUT = 289,
+     FSTRING_START = 290,
+     FSTRING_END = 291,
+     FSTRING_INTERP_START = 292,
+     FSTRING_INTERP_END = 293,
+     FSTRING_TEXT = 294,
+     APPLICATION = 295,
+     DOUBLE_PIPE = 296,
+     DOUBLE_AMP = 297,
+     NE = 298,
+     EQ = 299,
+     LE = 300,
+     GE = 301,
+     MODULO = 302,
+     UMINUS = 303
    };
 #endif
 /* Tokens.  */
@@ -118,20 +119,21 @@
 #define AMPERSAND 286
 #define TYPE 287
 #define TEST_ID 288
-#define FSTRING_START 289
-#define FSTRING_END 290
-#define FSTRING_INTERP_START 291
-#define FSTRING_INTERP_END 292
-#define FSTRING_TEXT 293
-#define APPLICATION 294
-#define DOUBLE_PIPE 295
-#define DOUBLE_AMP 296
-#define NE 297
-#define EQ 298
-#define LE 299
-#define GE 300
-#define MODULO 301
-#define UMINUS 302
+#define MUT 289
+#define FSTRING_START 290
+#define FSTRING_END 291
+#define FSTRING_INTERP_START 292
+#define FSTRING_INTERP_END 293
+#define FSTRING_TEXT 294
+#define APPLICATION 295
+#define DOUBLE_PIPE 296
+#define DOUBLE_AMP 297
+#define NE 298
+#define EQ 299
+#define LE 300
+#define GE 301
+#define MODULO 302
+#define UMINUS 303
 
 
 
@@ -148,7 +150,7 @@ typedef union YYSTYPE
     char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 152 "lang/y.tab.h"
+#line 154 "lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

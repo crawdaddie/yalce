@@ -316,6 +316,7 @@ struct Ast {
     // } AST_LOOP;
   } data;
 
+  void *ea_md;
   void *md;
   void *loc_info;
   bool is_body_tail;

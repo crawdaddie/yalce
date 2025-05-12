@@ -98,7 +98,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  AECtx ae_ctx = {};
+  AECtx ae_ctx = {.env = NULL};
   escape_analysis(*prog, &ae_ctx);
 
   ctx->env = ti_ctx.env;
@@ -293,7 +293,7 @@ int jit(int argc, char **argv) {
 
       Type *typecheck_result = infer(prog, &ti_ctx);
 
-      AECtx ae_ctx = {};
+      AECtx ae_ctx = {.env = NULL};
       escape_analysis(prog, &ae_ctx);
 
       ctx.env = ti_ctx.env;
