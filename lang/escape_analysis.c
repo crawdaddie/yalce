@@ -138,7 +138,7 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
       uint32_t mem_id = esc->id;
       EscapesEnv *env = escapes_find_by_id(lambda_ctx.env, mem_id);
       if (env) {
-        printf("this expression escapes the function, therefore must be "
+        printf("this expression escapes its scope\ntherefore must be "
                "allocated on the heap: ");
         print_ast(env->expr);
         // env->expr->ea_md
