@@ -17,8 +17,8 @@ typedef struct EscapesEnv {
 } EscapesEnv;
 
 typedef struct AECtx {
+  int scope;
   EscapesEnv *env;
-  bool is_in_implicit_return;
 
 } AECtx;
 

@@ -129,15 +129,19 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
   }
 
   case AST_LAMBDA: {
-    MemoryUseList *escapees = ea(ast->data.AST_LAMBDA.body, ctx);
+    AECtx lambda_ctx = *ctx;
+    lambda_ctx.scope++;
+
+    MemoryUseList *escapees = ea(ast->data.AST_LAMBDA.body, &lambda_ctx);
 
     for (MemoryUseList *esc = escapees; esc != NULL; esc = esc->next) {
       uint32_t mem_id = esc->id;
-      EscapesEnv *env = escapes_find_by_id(ctx->env, mem_id);
+      EscapesEnv *env = escapes_find_by_id(lambda_ctx.env, mem_id);
       if (env) {
         printf("this expression escapes the function, therefore must be "
                "allocated on the heap: ");
         print_ast(env->expr);
+        // env->expr->ea_md
       }
     }
     break;
@@ -145,14 +149,8 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
 
   case AST_BODY: {
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      if (i == ast->data.AST_BODY.len - 1) {
-        ctx->is_in_implicit_return = true;
-        mem_ids = ea(ast->data.AST_BODY.stmts[i], ctx);
-      } else {
-        ea(ast->data.AST_BODY.stmts[i], ctx);
-      }
+      mem_ids = ea(ast->data.AST_BODY.stmts[i], ctx);
     }
-    ctx->is_in_implicit_return = false;
     break;
   }
 
@@ -182,7 +180,7 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
     mem_ids = expr_ids;
 
     if (ast->data.AST_LET.in_expr) {
-      ea(ast->data.AST_LET.in_expr, ctx);
+      mem_ids = ea(ast->data.AST_LET.in_expr, ctx);
     }
 
     break;
@@ -192,7 +190,8 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
     ea(ast->data.AST_MATCH.expr, ctx);
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
       ea(ast->data.AST_MATCH.branches + (2 * i), ctx);
-      ea(ast->data.AST_MATCH.branches + (2 * i) + 1, ctx);
+      mem_ids = list_extend_left(
+          mem_ids, ea(ast->data.AST_MATCH.branches + (2 * i) + 1, ctx));
     }
 
     break;
