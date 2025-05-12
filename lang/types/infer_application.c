@@ -244,12 +244,10 @@ bool is_index_access_ast(Ast *application) {
   Type *cons = application->data.AST_APPLICATION.function->md;
 
   return is_list_type(arg_type) && arg_ast->tag == AST_LIST &&
-         types_equal(arg_type->data.T_CONS.args[0], &t_int) &&
          application->data.AST_APPLICATION.len == 1 && is_array_type(cons);
 }
 Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
-  // print_type(fn_type);
 
   Ast *fn_id = ast->data.AST_APPLICATION.function;
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
@@ -277,8 +275,7 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
     }
 
     if (is_index_access_ast(ast)) {
-
-      Ast *arg_ast = ast->data.AST_APPLICATION.args;
+      Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
       Type *arg_type = arg_ast->md;
       unify_in_ctx(create_list_type_of_type(&t_int), arg_type, ctx, ast);
 
