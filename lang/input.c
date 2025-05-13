@@ -109,7 +109,7 @@ char *repl_input(const char *prompt) {
   return line;
 }
 
-char *read_script(const char *filename, bool include_tests) {
+char *read_script(const char *filename) {
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
     fprintf(stderr, "Error opening file: %s\n", filename);

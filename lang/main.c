@@ -1,5 +1,6 @@
 #include "../gui/gui.h"
 #include "backend_llvm/jit.h"
+#include "config.h"
 #include "format_utils.h"
 #include <pthread.h>
 #include <stdbool.h>
@@ -28,6 +29,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--gui") == 0) {
       run_gui = true;
+      config.gui_mode = true;
       break;
     }
   }

@@ -3,6 +3,7 @@
 #include "backend_llvm/common.h"
 #include "backend_llvm/globals.h"
 #include "builtin_functions.h"
+#include "config.h"
 #include "format_utils.h"
 #include "input.h"
 #include "modules.h"
@@ -73,7 +74,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   __import_current_dir = get_dirname(filename);
 
-  if (top_level_tests) {
+  if (config.test_mode) {
     printf("\n# Test %s\n"
            "-----------------------------------------\n",
            filename);
@@ -100,7 +101,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
 
-  if (top_level_tests) {
+  if (config.test_mode) {
     ctx->module_name = filename;
     int res = test_module(*prog, ctx, module, builder);
     if (!res) {
@@ -207,28 +208,23 @@ int jit(int argc, char **argv) {
   initialize_builtin_funcs(&ctx, module, builder);
   initialize_synth_types(&ctx, module, builder);
 
-  bool repl = false;
   int arg_counter = 1;
-  set_base_dir(getenv("YLC_BASE_DIR"));
+  config.base_libs_dir = getenv("YLC_BASE_DIR");
   while (arg_counter < argc) {
     if (strcmp(argv[arg_counter], "-i") == 0) {
-      repl = true;
+      config.interactive_mode = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module
-      top_level_tests = true;
+      config.test_mode = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--base") == 0) {
       arg_counter++;
-      set_base_dir(argv[arg_counter]);
+      config.base_libs_dir = argv[arg_counter];
       arg_counter++;
     } else {
 
       Ast *script_prog;
-
-      if (top_level_tests) {
-        __module_to_test = argv[arg_counter];
-      }
 
       eval_script(argv[arg_counter], &ctx, module, builder, context, &env,
                   &script_prog);
@@ -236,7 +232,7 @@ int jit(int argc, char **argv) {
     }
   }
 
-  if (repl) {
+  if (config.interactive_mode) {
 
     char dirname[100];
     getcwd(dirname, 100);
@@ -249,7 +245,7 @@ int jit(int argc, char **argv) {
                          "------------------\n"
                          "version 0.0.0     \n"
                          "module base directory: %s\n" STYLE_RESET_ALL,
-           __base_dir == NULL ? "./" : __base_dir);
+           config.base_libs_dir == NULL ? "./" : config.base_libs_dir);
 
     init_readline();
 

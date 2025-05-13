@@ -7,11 +7,6 @@ typedef struct Ast Ast;
 
 void set_base_dir(const char *);
 
-extern const char *__base_dir;
-
-extern bool top_level_tests;
-extern const char *__module_to_test;
-
 typedef struct custom_binops_t {
   const char *binop;
   struct custom_binops_t *next;
