@@ -1112,8 +1112,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("list_ref_set", &t_list_ref_set_sig, ListRefSetHandler);
 
   GENERIC_FN_SYMBOL("opt_map", &t_opt_map_sig, OptMapHandler);
-  GENERIC_FN_SYMBOL("run_in_scheduler", &t_run_in_scheduler_sig,
-                    RunInSchedulerHandler);
+  // GENERIC_FN_SYMBOL("run_in_scheduler", &t_run_in_scheduler_sig,
+  //                   RunInSchedulerHandler);
 
   GENERIC_FN_SYMBOL("play_routine", &t_play_routine_sig, PlayRoutineHandler);
 

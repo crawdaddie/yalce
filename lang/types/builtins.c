@@ -313,9 +313,9 @@ Type t_builtin_cstr = GENERIC_TYPE(_cstr_sig);
 // );
 //
 //
-Type *_new_sched_run_sig() { return next_tvar(); }
-
-Type t_run_in_scheduler_sig = GENERIC_TYPE(_new_sched_run_sig);
+// Type *_new_sched_run_sig() { return next_tvar(); }
+//
+// Type t_run_in_scheduler_sig = GENERIC_TYPE(_new_sched_run_sig);
 
 Type *_play_routine_sig() {
   Type *v = next_tvar();
@@ -540,7 +540,7 @@ void initialize_builtin_types() {
 
   add_builtin("opt_map", &t_opt_map_sig);
   add_builtin("cstr", &t_builtin_cstr);
-  add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
+  // add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
   add_builtin("play_routine", &t_play_routine_sig);
   add_builtin("array_fill", &t_array_fill_sig);
   add_builtin("array_fill_const", &t_array_fill_const_sig);

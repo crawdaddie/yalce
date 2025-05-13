@@ -6,17 +6,13 @@ let double_array_from_raw = extern fn Int -> Ptr of Double -> Array of Double;
 # let arr = array_fill_const 128 1.;
 # let arr_node = arr |> array_to_buf;
 #
-let table = double_array_from_raw (get_saw_tabsize ()) (get_saw_table ()) |> array_to_buf;
+let table = double_array_from_raw (get_sq_tabsize ()) (get_sq_table ()) |> array_to_buf;
 
 (fn () ->
-  unison_osc_node 4 0.004 0.9 (buf_ref table) 100.
+  let trig = impulse_node 1.;
+  let freq = rand_trig_node
+  # (lfnoise_node 1. 0. 1.);
+  unison_osc_node 5 0.005 (lfnoise_node 1. 0.01 1.) (buf_ref table) 50.
+
 ) |> play_tpl;
-
-(
-  import gui/bindings/Gui;
-  # Gui.create_static_plot 1 (get_saw_tabsize ()) (get_saw_table ())
-  # Gui.create_array_editor 128 (cstr arr)
-
-  Gui.create_scope (ctx_main_out ()) 2 512
-)
 

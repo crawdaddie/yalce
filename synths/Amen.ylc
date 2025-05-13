@@ -22,12 +22,15 @@ let amen = load_soundfile @@ cstr "fat_amen_mono_48000.wav";
 let stutter_rates = [|
   q * 4 * 0.125,
   q * 4 * 0.5, 
+  q * 4 * 0.5, 
+  q * 4 * 1., 
   q * 4 * 0.33333,
   q * 4 * 0.25,
   q * 4 * 0.0625,
   # q * 4 * 0.75
 |]
 |> array_to_buf;
+
 
 let synth = (fn () ->
   let trig = inlet 0.; # 0
@@ -40,7 +43,7 @@ let synth = (fn () ->
 ;
 
 let trig = fn d: (Double) s: (Double) -> 
-  print `trig {d}: {s}\n`;
+  # print `trig {d}: {s}\n`;
   let fo = get_tl_tick ();
   set_input_scalar_offset synth 1 fo s; 
   # trigger_gate fo d 1 synth; 
@@ -62,21 +65,29 @@ let set_pattern = fn t cor ->
 
 defer_quant q (fn t ->
   let rout = fn () ->
-    yield (0.5, 0.0    );
-    yield (0.5, 0.125  );
-    yield (0.5, 0.25   );
+    yield (0.5, 0.0     );
+    yield (0.5, 0.125   );
+    yield (0.75, 0.25   );
+    yield (0.75, 0.25   );
+    yield (0.75, 0.25   );
+    yield (0.75, 0.25   );
+
     yield (0.5, 0.375  );
     yield (0.5, 0.5    );
     yield (0.5, 0.625  );
     yield (0.5, 0.75   );
-    yield (0.5, 0.875  );
+    yield (0.75, 0.625  );
+    yield (0.25, 0.75   );
+    yield (1., 0.875  );
+    # yield (0.5, 0.0  );
+    # yield (0.5, 0.875  );
     yield rout ()
   ;;
+
   rout ()
-  |> cor_map (fn (d, s) -> ((d * q), s))
   |> cor_map (fn (d, s): (Double, Double) ->
-    trig d s;
-    d
+    trig (d * q) s;
+    d * q
   )
   |> play_routine t schedule_event
  

@@ -119,6 +119,20 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return sym->val;
   }
 
+  case STYPE_LAZY_EXTERN_FUNCTION: {
+    if (sym->val) {
+      return sym->val;
+    }
+
+    Type *callable_type = sym->symbol_type;
+
+    LLVMValueRef val = codegen_extern_fn(
+        sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast, ctx, module, builder);
+    sym->val = val;
+
+    return sym->val;
+  }
+
   case STYPE_GENERIC_FUNCTION: {
     LLVMValueRef f = get_specific_callable(sym, ast->md, ctx, module, builder);
     return f;

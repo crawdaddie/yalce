@@ -1090,9 +1090,11 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
 
   lfnoise_state *state =
       (lfnoise_state *)(graph->nodes_state_memory + node->state_offset);
+  double rand_val =
+      _random_double_range(min_input->output.buf[0], max_input->output.buf[0]);
   *state = (lfnoise_state){
-      .current_value = 0.0,
-      .target_value = 0.0,
+      .current_value = rand_val,
+      .target_value = rand_val,
       .samples_left = 0 // This will trigger immediate generation of a new value
   };
 
