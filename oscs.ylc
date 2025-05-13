@@ -4,7 +4,11 @@ open engine/bindings/Synth;
 # let double_array_from_raw = extern fn Int -> Ptr of Double -> Array of Double;
 
 let arr = array_fill_const 128 1.;
+let arr_node = arr |> array_to_buf;
 
+
+
+(fn () -> osc_bank_node (buf_ref arr_node) 100.) |> play_tpl;
 
 (
   import gui/bindings/Gui;

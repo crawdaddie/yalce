@@ -486,8 +486,7 @@ Node *osc_bank_node(Node *amps, Node *freq) {
       .meta = "osc_bank",
   };
 
-  osc_bank_state *state =
-      (osc_bank_state *)(graph->nodes_state_memory + node->state_offset);
+  osc_bank_state *state = (osc_bank_state *)(state_ptr(graph, node));
   *state = (osc_bank_state){.phase = 0.0};
 
   node->connections[0].source_node_index = freq->node_index;
