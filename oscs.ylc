@@ -1,0 +1,10 @@
+open engine/bindings/Synth;
+
+let double_array_from_raw = extern fn Int -> Ptr of Double -> Array of Double;
+
+# let sq_table =  double_array_from_raw (get_sq_tabsize ()) (get_sq_table ());
+(
+import gui/bindings/Gui;
+Gui.create_static_plot 1 (get_sq_tabsize ()) (get_sq_table ())
+
+)

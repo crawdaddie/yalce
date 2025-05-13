@@ -52,6 +52,8 @@ void maketable_sq(void) {
   save_table_to_file(sq_table, SQ_TABSIZE, "engine/assets/sq_table.csv");
 #endif
 }
+double *get_sq_table() { return sq_table; }
+uint32_t get_sq_tabsize() { return SQ_TABSIZE; }
 
 #define SIN_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
@@ -76,6 +78,9 @@ void maketable_sin(void) {
   save_table_to_file(sin_table, SIN_TABSIZE, "engine/assets/sin_table.csv");
 #endif
 }
+
+double *get_sin_table() { return sin_table; }
+uint32_t get_sin_tabsize() { return SIN_TABSIZE; }
 
 typedef struct sin_state {
   double phase;
@@ -1588,6 +1593,9 @@ void maketable_saw(void) {
   save_table_to_file(saw_table, SAW_TABSIZE, "engine/assets/saw_table.csv");
 #endif
 }
+
+double *get_saw_table() { return saw_table; }
+uint32_t get_saw_tabsize() { return SAW_TABSIZE; }
 
 typedef struct saw_state {
   double phase;

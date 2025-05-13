@@ -633,3 +633,10 @@ LLVMValueRef CStrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return LLVMBuildExtractValue(builder, arr, 1, "get_array_data_ptr");
 }
+
+LLVMValueRef ArrayConstructor(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  print_ast(ast);
+  print_type(ast->md);
+  return NULL;
+}

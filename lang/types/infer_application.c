@@ -19,6 +19,9 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
+  // print_type(fn_type);
+  // print_ast(ast);
+
   if (ast->data.AST_IDENTIFIER.is_recursive_fn_ref) {
     fn_type = deep_copy_type(fn_type);
   }

@@ -418,6 +418,16 @@ Type *_df_raw_fields_sig() {
 
 Type t_df_raw_fields_sig = GENERIC_TYPE(_df_raw_fields_sig);
 
+Type *_array_cons_sig() {
+  Type *t = next_tvar();
+  Type *ptr = ptr_of_type(t);
+  Type *f = type_fn(ptr, create_array_type(t));
+  Type *res = type_fn(&t_int, f);
+  return res;
+}
+
+Type t_array_cons_sig = GENERIC_TYPE(_array_cons_sig);
+
 void initialize_builtin_types() {
 
   ht_init(&builtin_types);
@@ -546,6 +556,7 @@ void initialize_builtin_types() {
   add_builtin("fst", &t_fst_sig);
   add_builtin("df_offset", &t_df_offset_sig);
   add_builtin("df_raw_fields", &t_df_raw_fields_sig);
+  add_builtin(TYPE_NAME_ARRAY, &t_array_cons_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

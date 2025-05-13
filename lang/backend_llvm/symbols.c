@@ -180,6 +180,27 @@ LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
   return fn;
 }
 
+LLVMValueRef create_lazy_extern_fn_binding(Ast *binding, Ast *expr,
+                                           Type *fn_type, LLVMValueRef fn,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+
+  JITSymbol *sym = malloc(sizeof(JITSymbol));
+  sym->type = STYPE_LAZY_EXTERN_FUNCTION;
+  sym->symbol_type = fn_type;
+  sym->val = NULL;
+  sym->llvm_type = NULL;
+  sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast = expr;
+
+  const char *id_chars = binding->data.AST_IDENTIFIER.value;
+  int id_len = binding->data.AST_IDENTIFIER.length;
+
+  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len), sym);
+
+  return fn;
+}
+
 bool is_array_at(Ast *expr) {
   if (expr->tag == AST_APPLICATION) {
     if (expr->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
@@ -308,6 +329,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     if (is_lambda_with_closures(expr)) {
       expr_val = create_curried_closure_binding(binding, expr_type, expr,
                                                 inner_ctx, module, builder);
+    } else if (expr->tag == AST_EXTERN_FN) {
+      expr_val = create_lazy_extern_fn_binding(binding, expr, expr_type, NULL,
+                                               inner_ctx, module, builder);
     } else {
       expr_val = create_fn_binding(binding, expr_type,
                                    codegen_fn(expr, outer_ctx, module, builder),

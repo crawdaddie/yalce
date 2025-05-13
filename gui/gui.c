@@ -564,7 +564,7 @@ SDL_Renderer *plot_renderer(plot_state *state, SDL_Renderer *renderer);
  */
 int create_static_plot(int layout, int size, double *signal) {
 
-  printf("create static plot %d %d\n", layout, size);
+  // printf("create static plot %d %d\n", layout, size);
   // Allocate plot state
   plot_state *state = malloc(sizeof(plot_state));
 
@@ -858,6 +858,11 @@ static void create_plot_texture_stacked(plot_state *state,
 
       // Calculate the visible sample range based on horizontal scale and offset
       double visible_range = 1.0 / state->horizontal_scale;
+
+      if (state->layout == 1) {
+        visible_range *= 2; // Show twice as many samples when layout is 1 TODO:
+                            // this is stupid, please fix
+      }
       double center_offset = state->horizontal_offset;
 
       // Position in normalized coordinate space (0.0 to 1.0)
@@ -883,8 +888,8 @@ static void create_plot_texture_stacked(plot_state *state,
       // Draw only the visible samples
       for (int i = start_sample; i < end_sample; i++) {
         // Get sample values
-        double val1 = state->buf[i * state->layout + ch];
-        double val2 = state->buf[(i + 1) * state->layout + ch];
+        double val1 = state->buf[ch + i * state->layout];
+        double val2 = state->buf[ch + (i + 1) * state->layout];
 
         // Apply vertical scale
         val1 *= state->vertical_scale;
@@ -1015,7 +1020,9 @@ static int plot_event_handler(void *userdata, SDL_Event *event) {
       // The step size is constant in screen space but varies in data space
       // based on zoom When zoomed in (large horizontal_scale), we move by a
       // smaller amount in data space
+      //
       double visible_range = 1.0 / state->horizontal_scale;
+
       double step = visible_range * 0.05; // Move 5% of the visible range
 
       state->horizontal_offset += step;

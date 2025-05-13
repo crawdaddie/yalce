@@ -1,6 +1,7 @@
 #ifndef _ENGINE_OSC_H
 #define _ENGINE_OSC_H
 #include "./node.h"
+#include <stdint.h>
 void maketable_sin(void);
 void maketable_sq(void);
 void maketable_saw(void);
@@ -54,4 +55,14 @@ NodeRef array_choose_trig_node(int arr_size, double *arr_data, NodeRef trig);
 double pow2table_read(double pos, int tabsize, double *table);
 #define GRAIN_WINDOW_TABSIZE (1 << 9)
 extern double grain_win[GRAIN_WINDOW_TABSIZE];
+
+// double *get_sq_table();
+// uint32_t get_sq_tabsize();
+//
+// double *get_sin_table();
+// uint32_t get_sin_tabsize();
+//
+// double *get_saw_table();
+// uint32_t get_saw_tabsize();
+
 #endif

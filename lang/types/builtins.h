@@ -43,4 +43,5 @@ extern Type t_df_raw_fields_sig;
 extern Type t_array_range_sig;
 extern Type t_array_offset_sig;
 extern Type t_array_at;
+extern Type t_array_cons_sig;
 #endif

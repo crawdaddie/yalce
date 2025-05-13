@@ -236,6 +236,20 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
     return res;
   }
+  if (sym->type == STYPE_LAZY_EXTERN_FUNCTION) {
+    Type *callable_type = sym->symbol_type;
+    if (sym->val == NULL) {
+
+      LLVMValueRef val =
+          codegen_extern_fn(sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast,
+                            ctx, module, builder);
+      sym->val = val;
+    }
+
+    LLVMValueRef res =
+        call_callable(ast, callable_type, sym->val, ctx, module, builder);
+    return res;
+  }
 
   if (sym->type == STYPE_LOCAL_VAR && sym->symbol_type->kind == T_FN) {
     Type *callable_type = sym->symbol_type;
