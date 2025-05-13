@@ -25,5 +25,6 @@ int create_static_plot(int layout, int size, double *signal);
 int create_envelope_edit_view(int size, double *data);
 int create_envelope_edit_view_cb(int size, double *data, void *cb);
 int create_vst_view(char *handle);
+int create_array_editor(int size, double *array);
 
 #endif
