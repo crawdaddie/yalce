@@ -13,6 +13,8 @@ NodeRef sq_pwm_node(NodeRef pw_input, NodeRef freq_input);
 NodeRef phasor_node(NodeRef input);
 
 NodeRef raw_osc_node(NodeRef table, NodeRef freq);
+NodeRef unison_osc_node(int num, NodeRef spread, NodeRef mix, NodeRef table,
+                        NodeRef freq);
 
 NodeRef osc_bank_node(NodeRef amps, NodeRef freq);
 NodeRef bufplayer_node(NodeRef buf, NodeRef rate);

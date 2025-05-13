@@ -7,6 +7,7 @@ let sq_node = extern fn Synth -> Synth;
 let sq_pwm_node = extern fn Synth -> Synth -> Synth;
 let phasor_node = extern fn Synth -> Synth;
 let raw_osc_node = extern fn Synth -> Synth -> Synth;
+let unison_osc_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth;
 let osc_bank_node = extern fn Synth -> Synth -> Synth;
 let bufplayer_node = extern fn Synth -> Synth -> Synth;
 let bufplayer_trig_node = extern fn Synth -> Synth -> Synth -> Synth -> Synth;
