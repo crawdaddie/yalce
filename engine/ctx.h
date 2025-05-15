@@ -74,6 +74,10 @@ typedef struct ensemble_state {
 
 typedef struct {
   double output_buf[BUF_SIZE * LAYOUT];
+  int num_input_signals;
+  int total_input_channels;
+  Signal *input_signals;
+
   ensemble_state graph;
   int sample_rate;
   double spf;

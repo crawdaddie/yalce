@@ -1,6 +1,7 @@
 open ../engine/bindings/Synth;
 open ../engine/bindings/Sched;
 import ../lib/Math;
+init_audio (cstr [|1,0,1|]);
 
 
 let ampenv = [|
@@ -12,7 +13,7 @@ let ampenv = [|
 |> array_to_buf;
 
 let original_tempo = 170.;
-let tempo = 140.;
+let tempo = 160.;
 let q = 60./tempo;
 
 
