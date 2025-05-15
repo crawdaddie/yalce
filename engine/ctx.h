@@ -75,7 +75,7 @@ typedef struct ensemble_state {
 typedef struct {
   double output_buf[BUF_SIZE * LAYOUT];
   int num_input_signals;
-  int total_input_channels;
+  int num_hardware_inputs;
   Signal *input_signals;
 
   ensemble_state graph;
@@ -89,7 +89,7 @@ extern Ctx ctx;
 
 Ctx *get_audio_ctx();
 
-void init_ctx();
+void init_ctx(int num_chans, int nhw_ins, int *in_layouts);
 
 void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int nframes,
                        double seconds_per_frame);

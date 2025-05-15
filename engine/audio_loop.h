@@ -11,7 +11,11 @@
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_RESET "\x1b[0m"
 
-int init_audio(int *inconf);
+struct IntArray {
+  int32_t size;
+  int *data;
+};
+int _init_audio(int32_t size, int *conf);
 
 void set_block_time(struct timespec *to_set);
 struct timespec get_block_time();

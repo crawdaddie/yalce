@@ -1,5 +1,6 @@
 
 #include "audio_loop.h"
+#include "audio_loop_utils.h"
 #include "ctx.h"
 #include "node_gc.h"
 #include "osc.h"
@@ -12,6 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 
+static void (*write_sample)(char *ptr, double sample);
 int scheduler_event_loop();
 
 uint64_t get_frame_offset() {
@@ -20,13 +22,9 @@ uint64_t get_frame_offset() {
   uint64_t frame = get_current_sample();
   set_block_time(&t);
   int frame_offset = get_block_frame_offset(btime, t, 48000);
-  // printf("frame offset %d\n", frame_offset);
   return frame + frame_offset;
 }
 
-// static long block_time;
-
-// static time_t loc_time;
 static struct timespec start_time;
 static struct timespec block_time;
 
@@ -36,8 +34,6 @@ void set_block_time(struct timespec *to_set) {
 
 uint64_t us_offset(struct timespec start, struct timespec end) {
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-  // uint64_t delta_us = (end.tv_sec - start.tv_sec) * 1000000 +
-  //                     (end.tv_nsec - start.tv_nsec) / 1000.0;
   uint64_t delta_us = (end.tv_sec - start.tv_sec) * 1000 +
                       (end.tv_nsec - start.tv_nsec) / 1000000;
   return delta_us;
@@ -56,20 +52,10 @@ struct timespec get_start_time() { return start_time; }
 
 struct SoundIoRingBuffer *ring_buffer = NULL;
 
-typedef struct InputRoutingConfig {
-  int num_input_channels;
-  int hardware_inputs[8];
-  int input_channel_layouts[8];
-} InputRoutingConfig;
-
-typedef struct OutputRoutingConfig {
-  int num_output_channels;
-  int hardware_outputs[8];
-} OutputRoutingConfig;
-
 static int num_hardware_inputs = 3;
-static int input_channels[8] = {0, 2, 3, 0, 0, 0, 0, 0};
+static int requested_input_channels[8] = {0, 2, 3, 0, 0, 0, 0, 0};
 static int input_layouts[8] = {1, 2};
+static int *input_map;
 
 static int num_hardware_outputs = 2;
 static int output_channels[8] = {0, 1};
@@ -139,7 +125,7 @@ static void read_callback(struct SoundIoInStream *instream, int frame_count_min,
       for (int frame = 0; frame < frame_count; frame += 1) {
         // Only copy the selected input channels, not all of them
         for (int i = 0; i < num_hardware_inputs; i++) {
-          int ch = input_channels[i];
+          int ch = requested_input_channels[i];
           if (ch < instream->layout.channel_count) {
             memcpy(write_ptr, areas[ch].ptr, instream->bytes_per_sample);
             write_ptr += instream->bytes_per_sample;
@@ -163,7 +149,12 @@ static void read_callback(struct SoundIoInStream *instream, int frame_count_min,
 
 static void write_callback(struct SoundIoOutStream *outstream,
                            int frame_count_min, int frame_count_max) {
+
   struct SoundIoChannelArea *areas;
+  Ctx *ctx = outstream->userdata;
+
+  double float_sample_rate = outstream->sample_rate;
+  double seconds_per_frame = 1.0 / float_sample_rate;
   int frames_left;
   int frame_count;
   int err;
@@ -187,54 +178,100 @@ static void write_callback(struct SoundIoOutStream *outstream,
 
   while (frames_left > 0) {
     int frame_count = frames_left;
-
-    if ((err = soundio_outstream_begin_write(outstream, &areas, &frame_count)))
-      panic("begin write error: %s", soundio_strerror(err));
-
-    if (frame_count <= 0)
-      break;
     if (!read_ptr) {
     } else {
 
       for (int frame = 0; frame < frame_count; frame += 1) {
         // First, clear all output channels
-        for (int ch = 0; ch < outstream->layout.channel_count; ch++) {
-          memset(areas[ch].ptr, 0, outstream->bytes_per_sample);
-        }
+        // for (int ch = 0; ch < outstream->layout.channel_count; ch++) {
+        //   memset(areas[ch].ptr, 0, outstream->bytes_per_sample);
+        // }
 
         // Then, write selected input channels to selected output channels
         for (int i = 0; i < num_hardware_inputs; i++) {
-          int out_ch =
-              output_channels[i % num_hardware_outputs]; // Cycle through output
-                                                         // channels
-          if (out_ch < outstream->layout.channel_count) {
-            memcpy(areas[out_ch].ptr, read_ptr, outstream->bytes_per_sample);
-            read_ptr += outstream->bytes_per_sample;
-          }
-          areas[out_ch].ptr += areas[out_ch].step;
+          // int out_ch =
+          //     output_channels[i % num_hardware_outputs]; // Cycle through
+          //     output
+          //                                                // channels
+          // //
+          // if (out_ch < outstream->layout.channel_count) {
+          //   memcpy(areas[out_ch].ptr, read_ptr, outstream->bytes_per_sample);
+          //   read_ptr += outstream->bytes_per_sample;
+          // }
+          // areas[out_ch].ptr += areas[out_ch].step;
         }
 
         // Advance the remaining channel pointers
-        for (int ch = 0; ch < outstream->layout.channel_count; ch++) {
-          bool is_used = false;
-          for (int i = 0; i < num_hardware_inputs && i < num_hardware_outputs;
-               i++) {
-            if (output_channels[i] == ch) {
-              is_used = true;
-              break;
-            }
-          }
-          if (!is_used) {
-            areas[ch].ptr += areas[ch].step;
-          }
-        }
+        // for (int ch = 0; ch < outstream->layout.channel_count; ch++) {
+        //   bool is_used = false;
+        //   for (int i = 0; i < num_hardware_inputs && i <
+        //   num_hardware_outputs;
+        //        i++) {
+        //     if (output_channels[i] == ch) {
+        //       is_used = true;
+        //       break;
+        //     }
+        //   }
+        //   if (!is_used) {
+        //     areas[ch].ptr += areas[ch].step;
+        //   }
+        // }
       }
     }
 
-    if ((err = soundio_outstream_end_write(outstream)))
-      panic("end write error: %s", soundio_strerror(err));
+    frames_left -= frame_count;
+  }
+
+  frames_left = frame_count_max;
+
+  for (;;) {
+
+    int frame_count = frames_left;
+    uint64_t buffer_start_sample = atomic_load(&global_sample_position);
+    if ((err =
+             soundio_outstream_begin_write(outstream, &areas, &frame_count))) {
+      printf("unrecoverable stream error: %s\n", soundio_strerror(err));
+      exit(1);
+    }
+
+    if (!frame_count)
+      break;
+
+    const struct SoundIoChannelLayout *layout = &outstream->layout;
+
+    set_block_time(&block_time);
+
+    user_ctx_callback(ctx, buffer_start_sample, frame_count, seconds_per_frame);
+
+    int sample_idx;
+    double sample;
+    // Signal DAC = ctx->dac_buffer;
+
+    for (int channel = 0; channel < layout->channel_count; channel += 1) {
+      for (int frame = 0; frame < frame_count; frame += 1) {
+
+        sample_idx = LAYOUT * frame + channel;
+        sample = ctx->output_buf[sample_idx];
+
+        write_sample(areas[channel].ptr, 0.0625 * sample);
+        areas[channel].ptr += areas[channel].step;
+      }
+    }
+
+    // ctx->block_time = get_time();
+
+    if ((err = soundio_outstream_end_write(outstream))) {
+      if (err == SoundIoErrorUnderflow)
+        return;
+      printf("unrecoverable stream error: %s\n", soundio_strerror(err));
+      exit(1);
+    }
 
     frames_left -= frame_count;
+
+    atomic_fetch_add(&global_sample_position, frame_count);
+    if (frames_left <= 0)
+      break;
   }
 
   if (ring_buffer) {
@@ -354,7 +391,8 @@ void print_device_info(struct SoundIoDevice *in_device,
 }
 void print_routing_setup(struct SoundIoOutStream *outstream,
                          struct SoundIoInStream *instream,
-                         struct SoundIoRingBuffer *ring_buffer) {
+                         struct SoundIoRingBuffer *ring_buffer, int num_chans,
+                         int *input_map) {
 
   fprintf(stderr, ANSI_COLOR_BLUE);
 
@@ -370,8 +408,14 @@ void print_routing_setup(struct SoundIoOutStream *outstream,
 
   fprintf(stderr, "Channel configuration:\n");
   fprintf(stderr, "  Input channels: ");
-  for (int i = 0; i < num_hardware_inputs; i++) {
-    fprintf(stderr, "%d ", input_channels[i] + 1);
+  for (int i = 0; i < num_chans; i++) {
+    int layout = *input_map;
+    for (int j = 0; j < layout; j++) {
+      int req_hw_in = *(input_map + 1 + j);
+      fprintf(stderr, "%d ", req_hw_in + 1);
+    }
+
+    input_map += layout;
   }
 
   fprintf(stderr, "\n  Output channels: ");
@@ -409,20 +453,30 @@ void validate_out_layout(struct SoundIoDevice *out_device,
 }
 
 void validate_in_layout(struct SoundIoDevice *in_device,
-                        struct SoundIoChannelLayout *_in_layout) {
+                        struct SoundIoChannelLayout *_in_layout, int size,
+                        int *input_map, int *num_in_channels) {
 
   struct SoundIoChannelLayout *in_layout;
-  int n = num_hardware_inputs;
-  for (int i = 0; i < n; i++) {
-    if (input_channels[i] >= in_device->current_layout.channel_count) {
 
-      fprintf(stderr,
-              "Invalid input channel %d specified. Device only has %d channels "
-              "(0-%d).",
-              input_channels[i] + 1, in_device->current_layout.channel_count,
-              in_device->current_layout.channel_count - 1);
-      input_channels[i] = 0;
-      num_hardware_inputs--;
+  int *im = input_map;
+  int chans = 0;
+
+  while (size) {
+    int layout = *im;
+    int l = layout;
+    chans++;
+    im++;
+    size--;
+    while (l--) {
+      int req_hw_input = *im;
+      if (req_hw_input >= in_device->current_layout.channel_count) {
+
+        panic("Invalid hardware input channel %d specified. Device only has %d "
+              "channels\n",
+              req_hw_input + 1, in_device->current_layout.channel_count);
+      }
+      im++;
+      size--;
     }
   }
 
@@ -434,6 +488,7 @@ void validate_in_layout(struct SoundIoDevice *in_device,
   if (!in_layout)
     panic("input channel layouts not compatible");
   *_in_layout = *in_layout;
+  *num_in_channels = chans;
 }
 void get_sample_rate(struct SoundIoDevice *in_device,
                      struct SoundIoDevice *out_device, int *sr) {
@@ -490,20 +545,7 @@ void print_available_devices(struct SoundIo *soundio) {
   fprintf(stderr, ANSI_COLOR_RESET);
 }
 
-int start_audio(int num_hw_ins, int *in_channel_map, int *layouts) {
-  if (num_hw_ins > 0) {
-    num_hardware_inputs = num_hw_ins;
-    for (int i = 0; i < 8; i++) {
-      input_channels[i] = in_channel_map[i];
-      input_layouts[i] = layouts[i];
-    }
-  } else {
-    num_hardware_inputs = 0;
-    for (int i = 0; i < 8; i++) {
-      input_channels[i] = 0;
-      input_layouts[i] = 0;
-    }
-  }
+int start_audio(int config_size, int *input_map) {
 
   enum SoundIoBackend backend = SoundIoBackendNone;
   char *in_device_id = NULL;
@@ -530,7 +572,10 @@ int start_audio(int num_hw_ins, int *in_channel_map, int *layouts) {
 
   struct SoundIoChannelLayout out_layout;
   struct SoundIoChannelLayout in_layout;
-  validate_in_layout(in_device, &in_layout);
+
+  int num_chans;
+  validate_in_layout(in_device, &in_layout, config_size, input_map, &num_chans);
+
   validate_out_layout(out_device, &out_layout);
 
   int sample_rate;
@@ -543,11 +588,16 @@ int start_audio(int num_hw_ins, int *in_channel_map, int *layouts) {
   struct SoundIoOutStream *outstream = soundio_outstream_create(out_device);
   if (!outstream)
     panic("out of memory");
+
+  init_ctx(num_chans, config_size, input_map);
+  outstream->userdata = &ctx;
   outstream->format = fmt;
   outstream->sample_rate = sample_rate;
   outstream->layout = out_layout;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
+
+  set_out_format(out_device, outstream, &write_sample);
 
   if ((err = soundio_outstream_open(outstream))) {
     fprintf(stderr, "unable to open output stream: %s", soundio_strerror(err));
@@ -595,7 +645,7 @@ int start_audio(int num_hw_ins, int *in_channel_map, int *layouts) {
     soundio_ring_buffer_advance_write_ptr(ring_buffer, fill_count);
   }
 
-  print_routing_setup(outstream, instream, ring_buffer);
+  print_routing_setup(outstream, instream, ring_buffer, num_chans, input_map);
 
   fprintf(stderr, "\nStarting streams...\n");
 
@@ -605,8 +655,10 @@ int start_audio(int num_hw_ins, int *in_channel_map, int *layouts) {
   if ((err = soundio_outstream_start(outstream)))
     panic("unable to start output device: %s", soundio_strerror(err));
 
-  fprintf(stderr, "\nPress Ctrl+C to exit.\n");
+  ctx.sample_rate = outstream->sample_rate;
+  ctx.spf = 1.0 / outstream->sample_rate;
 
+  set_block_time(&start_time);
   return 0;
 }
 
@@ -625,24 +677,17 @@ static int parse_int_list(const char *str, int *list, int max_values) {
   return count;
 }
 
-int init_audio(int *config) {
+int _init_audio(int32_t size, int *input_config) {
   maketable_sq();
   maketable_sin();
   maketable_saw();
   maketable_saw();
   maketable_grain_window();
 
-  if (config) {
-    int numins = config[0];
-    config++;
-    int hw_ins[numins];
-    for (int i = 0; i < numins; i++) {
-      hw_ins[i] = *config;
-      config++;
-    }
-    start_audio(numins, hw_ins, config);
+  if (size) {
+    start_audio(size, input_config);
   } else {
-    start_audio(0, NULL, NULL);
+    start_audio(0, NULL);
   }
 
   scheduler_event_loop();

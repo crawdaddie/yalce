@@ -1,7 +1,8 @@
 open ../engine/bindings/Synth;
 open ../engine/bindings/Sched;
 import ../lib/Math;
-init_audio (cstr [|1,0,1|]);
+
+init_audio [|1,0|];
 
 
 let ampenv = [|

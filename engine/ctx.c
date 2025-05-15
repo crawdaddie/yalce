@@ -7,7 +7,21 @@
 
 Ctx ctx;
 
-void init_ctx() {}
+void init_ctx(int num_chans, int size, int *input_map) {
+  int *im = input_map;
+
+  ctx.num_input_signals = num_chans;
+  ctx.input_signals = malloc(sizeof(Signal) * num_chans);
+  for (int i = 0; i < num_chans; i++) {
+
+    int layout = *input_map;
+    input_map += layout;
+
+    ctx.input_signals[i].buf = malloc(sizeof(double) * BUF_SIZE * layout);
+    ctx.input_signals[i].layout = layout;
+    ctx.input_signals[i].size = BUF_SIZE;
+  }
+}
 
 void audio_ctx_add(Node *node) {
   ensemble_state *ctx = &get_audio_ctx()->graph;

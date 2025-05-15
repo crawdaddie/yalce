@@ -17,10 +17,10 @@ let array_to_buf = extern fn Array of Double -> Synth;
 # let play_node_offset = extern fn Int -> Synth -> Synth;
 let play_node_offset_w_kill = extern fn Uint64 -> Double -> Int -> Synth -> Synth;
 
-let init_audio = extern fn Ptr of Int -> ();
-# in
-#   init_audio ()
-# ;
+let _init_audio = extern fn Int -> Ptr -> ();
+let init_audio = fn input_map: (Array of Int) ->
+  _init_audio (array_size input_map) (cstr input_map)
+;;
 
 let play_tpl = fn f ->
   f |> compile_blob_template |> instantiate_template [] |> play_node;;
