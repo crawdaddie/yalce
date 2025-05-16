@@ -19,6 +19,9 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
+  // print_type(fn_type);
+  // print_ast(ast);
+
   if (ast->data.AST_IDENTIFIER.is_recursive_fn_ref) {
     fn_type = deep_copy_type(fn_type);
   }
@@ -155,57 +158,57 @@ Type *struct_of_fns_to_return(Type *cons) {
   return create_tuple_type(cons->data.T_CONS.num_args, results);
 }
 
-Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
-  if (ast->data.AST_APPLICATION.len != 4) {
-    return type_error(ctx, ast, "run_in_scheduler must have 3 args\n");
-  }
-
-  Ast *fo_ast = ast->data.AST_APPLICATION.args;
-  infer(fo_ast, ctx);
-  Ast *scheduler_ast = ast->data.AST_APPLICATION.args + 1;
-  Ast *effect_ast = ast->data.AST_APPLICATION.args + 2;
-  Ast *generator_ast = ast->data.AST_APPLICATION.args + 3;
-
-  infer(scheduler_ast,
-        ctx); // first arg is concrete schedule fn impl
-  Type *val_generator_type = infer(generator_ast, ctx);
-  if (!is_struct_of_void_fns(val_generator_type)) {
-    return type_error(
-        ctx, ast->data.AST_APPLICATION.args + 2,
-        "value generator must consist of constants or () -> xx void funcs");
-  }
-
-  Type *effect_fn_type = infer(effect_ast, ctx);
-
-  Type *val_struct = effect_fn_type->data.T_FN.from;
-  Type *t = val_struct->data.T_CONS.args[0];
-  val_struct->data.T_CONS.args[0] = &t_num;
-  AstList *lambda_params = effect_ast->data.AST_LAMBDA.params;
-
-  if (is_generic(t)) {
-    unify_in_ctx(t, &t_num, ctx, lambda_params ? lambda_params->ast : NULL);
-  }
-
-  if (effect_fn_type->data.T_FN.to->kind != T_FN) {
-    return type_error(ctx, effect_ast, "not enough args in sink fn");
-  }
-  Type *frame_offset_arg = effect_fn_type->data.T_FN.to->data.T_FN.from;
-
-  TICtx _ctx = {};
-  Type *concrete_val_struct = struct_of_fns_to_return(val_generator_type);
-
-  unify_in_ctx(fo_ast->md, &t_uint64, &_ctx, fo_ast);
-
-  unify_in_ctx(val_struct, concrete_val_struct, &_ctx,
-               (effect_ast)->data.AST_LAMBDA.params->ast);
-
-  unify_in_ctx(frame_offset_arg, &t_uint64, &_ctx,
-               (effect_ast)->data.AST_LAMBDA.params->next->ast);
-
-  Substitution *subst = solve_constraints(_ctx.constraints);
-  apply_substitutions_rec(ast, subst);
-  (effect_ast)->md = apply_substitution(subst, (effect_ast)->md);
-}
+// Type *infer_schedule_event_callback(Ast *ast, TICtx *ctx) {
+//   if (ast->data.AST_APPLICATION.len != 4) {
+//     return type_error(ctx, ast, "run_in_scheduler must have 3 args\n");
+//   }
+//
+//   Ast *fo_ast = ast->data.AST_APPLICATION.args;
+//   infer(fo_ast, ctx);
+//   Ast *scheduler_ast = ast->data.AST_APPLICATION.args + 1;
+//   Ast *effect_ast = ast->data.AST_APPLICATION.args + 2;
+//   Ast *generator_ast = ast->data.AST_APPLICATION.args + 3;
+//
+//   infer(scheduler_ast,
+//         ctx); // first arg is concrete schedule fn impl
+//   Type *val_generator_type = infer(generator_ast, ctx);
+//   if (!is_struct_of_void_fns(val_generator_type)) {
+//     return type_error(
+//         ctx, ast->data.AST_APPLICATION.args + 2,
+//         "value generator must consist of constants or () -> xx void funcs");
+//   }
+//
+//   Type *effect_fn_type = infer(effect_ast, ctx);
+//
+//   Type *val_struct = effect_fn_type->data.T_FN.from;
+//   Type *t = val_struct->data.T_CONS.args[0];
+//   val_struct->data.T_CONS.args[0] = &t_num;
+//   AstList *lambda_params = effect_ast->data.AST_LAMBDA.params;
+//
+//   if (is_generic(t)) {
+//     unify_in_ctx(t, &t_num, ctx, lambda_params ? lambda_params->ast : NULL);
+//   }
+//
+//   if (effect_fn_type->data.T_FN.to->kind != T_FN) {
+//     return type_error(ctx, effect_ast, "not enough args in sink fn");
+//   }
+//   Type *frame_offset_arg = effect_fn_type->data.T_FN.to->data.T_FN.from;
+//
+//   TICtx _ctx = {};
+//   Type *concrete_val_struct = struct_of_fns_to_return(val_generator_type);
+//
+//   unify_in_ctx(fo_ast->md, &t_uint64, &_ctx, fo_ast);
+//
+//   unify_in_ctx(val_struct, concrete_val_struct, &_ctx,
+//                (effect_ast)->data.AST_LAMBDA.params->ast);
+//
+//   unify_in_ctx(frame_offset_arg, &t_uint64, &_ctx,
+//                (effect_ast)->data.AST_LAMBDA.params->next->ast);
+//
+//   Substitution *subst = solve_constraints(_ctx.constraints);
+//   apply_substitutions_rec(ast, subst);
+//   (effect_ast)->md = apply_substitution(subst, (effect_ast)->md);
+// }
 
 Type *infer_iter(Ast *ast, TICtx *ctx) {
   Type *t = infer(ast->data.AST_APPLICATION.args, ctx);
@@ -318,12 +321,12 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
 
-  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-               TYPE_NAME_RUN_IN_SCHEDULER)) {
-    infer_schedule_event_callback(ast, ctx);
-    return &t_void;
-  }
+  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+  //              TYPE_NAME_RUN_IN_SCHEDULER)) {
+  //   infer_schedule_event_callback(ast, ctx);
+  //   return &t_void;
+  // }
 
   if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
       CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,

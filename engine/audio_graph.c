@@ -192,4 +192,7 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
 
     node++;
   }
+  // for (int i = 0; i < _node->output.size; i++) {
+  //   printf("ensemble out %f %p\n", _node->output.buf[i], _node->output.buf);
+  // }
 }

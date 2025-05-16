@@ -1,0 +1,2 @@
+let set_input_conf = extern fn List of Int -> ();
+

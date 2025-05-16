@@ -241,6 +241,18 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
           return cor;
         }
 
+        if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
+                   TYPE_NAME_PTR) == 0) {
+
+          Type *r = compute_type_expression(expr->data.AST_BINOP.right, env);
+          Type **args = talloc(sizeof(Type *));
+          *args = r;
+
+          Type *ptr_of = create_cons_type(TYPE_NAME_PTR, 1, args);
+
+          return ptr_of;
+        }
+
         // if ((strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
         //             "Ptr") == 0) &&
         //     (strcmp(expr->data.AST_BINOP.right->data.AST_IDENTIFIER.value,

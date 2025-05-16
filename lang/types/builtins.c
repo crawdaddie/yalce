@@ -313,9 +313,9 @@ Type t_builtin_cstr = GENERIC_TYPE(_cstr_sig);
 // );
 //
 //
-Type *_new_sched_run_sig() { return next_tvar(); }
-
-Type t_run_in_scheduler_sig = GENERIC_TYPE(_new_sched_run_sig);
+// Type *_new_sched_run_sig() { return next_tvar(); }
+//
+// Type t_run_in_scheduler_sig = GENERIC_TYPE(_new_sched_run_sig);
 
 Type *_play_routine_sig() {
   Type *v = next_tvar();
@@ -417,6 +417,16 @@ Type *_df_raw_fields_sig() {
 }
 
 Type t_df_raw_fields_sig = GENERIC_TYPE(_df_raw_fields_sig);
+
+Type *_array_cons_sig() {
+  Type *t = next_tvar();
+  Type *ptr = ptr_of_type(t);
+  Type *f = type_fn(ptr, create_array_type(t));
+  Type *res = type_fn(&t_int, f);
+  return res;
+}
+
+Type t_array_cons_sig = GENERIC_TYPE(_array_cons_sig);
 
 void initialize_builtin_types() {
 
@@ -530,7 +540,7 @@ void initialize_builtin_types() {
 
   add_builtin("opt_map", &t_opt_map_sig);
   add_builtin("cstr", &t_builtin_cstr);
-  add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
+  // add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
   add_builtin("play_routine", &t_play_routine_sig);
   add_builtin("array_fill", &t_array_fill_sig);
   add_builtin("array_fill_const", &t_array_fill_const_sig);
@@ -546,6 +556,7 @@ void initialize_builtin_types() {
   add_builtin("fst", &t_fst_sig);
   add_builtin("df_offset", &t_df_offset_sig);
   add_builtin("df_raw_fields", &t_df_raw_fields_sig);
+  add_builtin(TYPE_NAME_ARRAY, &t_array_cons_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

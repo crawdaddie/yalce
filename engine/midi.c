@@ -1,4 +1,8 @@
 #include "midi.h"
+#include "audio_loop.h"
+#include "ctx.h"
+// Add these at the top of your file
+#include <mach/mach_time.h>
 
 #include <CoreMIDI/CoreMIDI.h>
 
@@ -98,6 +102,39 @@ static void MIDIInputCallback(const MIDIPacketList *pktlist,
   }
 }
 
+static double sample_to_ns_ratio;
+static mach_timebase_info_data_t timebase_info;
+static uint64_t audio_start_mach_time;
+
+// Convert timespec to mach absolute time
+uint64_t timespec_to_mach_time(struct timespec ts) {
+  // Convert timespec to nanoseconds
+  uint64_t nanoseconds =
+      (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+
+  // Convert nanoseconds to mach time units using the timebase info
+  return nanoseconds * timebase_info.denom / timebase_info.numer;
+}
+// Initialize with your timespec reference and sample rate
+void init_midi_timing(struct timespec audio_start_time) {
+  mach_timebase_info(&timebase_info);
+
+  sample_to_ns_ratio = 1000000000.0 / 48000;
+  audio_start_mach_time = timespec_to_mach_time(audio_start_time);
+}
+
+MIDITimeStamp sample_to_midi_timestamp(uint64_t sample_position) {
+  // Convert samples to nanoseconds
+  double nanoseconds = sample_position * sample_to_ns_ratio;
+
+  // Convert nanoseconds to mach time units
+  uint64_t sample_mach_offset =
+      (uint64_t)nanoseconds * timebase_info.denom / timebase_info.numer;
+
+  // Return audio start time plus sample offset
+  return audio_start_mach_time + sample_mach_offset;
+}
+
 void midi_setup() {
   // Initialize all handler arrays to NULL
   for (int i = 0; i < 128; i++) {
@@ -136,7 +173,24 @@ void midi_setup() {
       printf("MIDI Source %lu: Unable to get name\n", (unsigned long)i);
     }
   }
+  init_midi_timing(get_start_time());
 }
+
+void send_data(MIDIEndpointRef destination, size_t size, char *data) {
+
+  Byte buffer[1024];
+  MIDIPacketList *packetList = (MIDIPacketList *)buffer;
+  MIDIPacket *currentPacket = MIDIPacketListInit(packetList);
+  for (int i = 0; i < size / 3; i++) {
+    Byte midi_data[3] = {data[0], data[1], data[2]};
+    currentPacket = MIDIPacketListAdd(packetList, sizeof(buffer), currentPacket,
+                                      0, 3, midi_data);
+    data += 3;
+  }
+
+  MIDISend(output_port, destination, packetList);
+}
+
 void midi_out_setup() {
   MIDIOutputPortCreate(client, CFSTR("Output port"), &output_port);
 }
@@ -176,8 +230,81 @@ int send_note_off(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
   midi_data[1] = note;
   midi_data[2] = velocity;
 
+  printf("send note off %d %d %d\n", channel, note, velocity);
   current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
                                      current_packet, 0, 3, midi_data);
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
+}
+
+int send_note_on_ts(MIDIEndpointRef destination, char channel, char note,
+                    char velocity, uint64_t ts) {
+
+  MIDITimeStamp t = sample_to_midi_timestamp(ts);
+
+  Byte buffer[1024];
+  MIDIPacketList *packetList = (MIDIPacketList *)buffer;
+  MIDIPacket *currentPacket = MIDIPacketListInit(packetList);
+
+  Byte midi_data[3];
+  midi_data[0] = NOTE_ON | (channel & CHAN_MASK);
+  midi_data[1] = note;
+  midi_data[2] = velocity;
+
+  currentPacket = MIDIPacketListAdd(packetList, sizeof(buffer), currentPacket,
+                                    t, 3, midi_data);
+
+  if (debug) {
+    printf("Sending note on: ch=%u note=%u vel=%u %llu\n", channel, note,
+           velocity, t);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packetList);
+  return result == noErr ? 0 : -1;
+}
+
+int send_note_on_dur_ts(MIDIEndpointRef destination, char channel, char note,
+                        char velocity, double dur, uint64_t ts) {
+
+  MIDITimeStamp t = sample_to_midi_timestamp(ts - 512);
+
+  Byte buffer[1024];
+  MIDIPacketList *packetList = (MIDIPacketList *)buffer;
+  MIDIPacket *currentPacket = MIDIPacketListInit(packetList);
+
+  Byte midi_data[3];
+  midi_data[0] = NOTE_ON | (channel & CHAN_MASK);
+  midi_data[1] = note;
+  midi_data[2] = velocity;
+
+  currentPacket = MIDIPacketListAdd(packetList, sizeof(buffer), currentPacket,
+                                    t, 3, midi_data);
+
+  if (debug) {
+    printf("Sending note on: ch=%u note=%u vel=%u %llu\n", channel, note,
+           velocity, t);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packetList);
+  return result == noErr ? 0 : -1;
+}
+
+int send_note_off_ts(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
+                     uint8_t velocity, uint64_t ts) {
+
+  MIDITimeStamp t = sample_to_midi_timestamp(ts - 512);
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  Byte midi_data[3];
+  midi_data[0] = NOTE_OFF | (channel & CHAN_MASK);
+  midi_data[1] = note;
+  midi_data[2] = velocity;
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, t, 3, midi_data);
 
   OSStatus result = MIDISend(output_port, destination, packet_list);
   return result == noErr ? 0 : -1;
@@ -204,6 +331,11 @@ int send_note_ons(MIDIEndpointRef destination, int size, char *note_data_ptr) {
     midi_data[0] = NOTE_ON | (channel & CHAN_MASK);
     midi_data[1] = note;
     midi_data[2] = velocity;
+
+    if (debug) {
+      printf("midi packet midi_data[%d %d %d]\n", midi_data[0], midi_data[1],
+             midi_data[2]);
+    }
 
     current_packet = MIDIPacketListAdd(packetList, sizeof(buffer),
                                        current_packet, 0, 3, midi_data);

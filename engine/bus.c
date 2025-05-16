@@ -60,7 +60,6 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
     summed_inlet_state *st = inlet_node->state_ptr;
     *st = (summed_inlet_state){.sig = node, .next = NULL};
     inlet_node->state_ptr = st;
-    printf("add to inlet #1st\n");
 
   } else if (((char *)inlet_node->perform) == (char *)summed_inlet_perform) {
 

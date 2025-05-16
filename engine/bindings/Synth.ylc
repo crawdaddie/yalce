@@ -7,6 +7,7 @@ let sq_node = extern fn Synth -> Synth;
 let sq_pwm_node = extern fn Synth -> Synth -> Synth;
 let phasor_node = extern fn Synth -> Synth;
 let raw_osc_node = extern fn Synth -> Synth -> Synth;
+let unison_osc_node = extern fn Int -> Synth -> Synth -> Synth -> Synth -> Synth;
 let osc_bank_node = extern fn Synth -> Synth -> Synth;
 let bufplayer_node = extern fn Synth -> Synth -> Synth;
 let bufplayer_trig_node = extern fn Synth -> Synth -> Synth -> Synth -> Synth;
@@ -33,6 +34,7 @@ let pow2table_read = extern fn Double -> Int -> Ptr -> Double;
 let start_blob = extern fn () -> ();
 let end_blob = extern fn () -> Ptr;
 let inlet = extern fn Double -> Synth;
+let hw_inlet = extern fn Int -> Synth;
 let multi_chan_inlet = extern fn Int -> Double -> Synth;
 let buf_ref = extern fn Synth -> Synth;
 let play_node = extern fn Synth -> Synth;
@@ -137,7 +139,7 @@ let array_to_buf = extern fn Array of Double -> Synth;
 # let play_node_offset = extern fn Int -> Synth -> Synth;
 let play_node_offset_w_kill = extern fn Uint64 -> Double -> Int -> Synth -> Synth;
 
-let init_audio = extern fn () -> () in
+let init_audio = extern fn Ptr of Int -> () in
   init_audio ()
 ;
 
@@ -147,3 +149,10 @@ let play_tpl = fn f ->
 
 let sin = sin_node;
 
+
+let get_sq_table = extern fn () -> Ptr of Double;
+let get_sq_tabsize = extern fn () -> Int;
+let get_sin_table = extern fn () -> Ptr of Double;
+let get_sin_tabsize = extern fn () -> Int;
+let get_saw_table = extern fn () -> Ptr of Double;
+let get_saw_tabsize = extern fn () -> Int;

@@ -1,4 +1,5 @@
 #include "parse.h"
+#include "config.h"
 #include "input.h"
 #include "serde.h"
 #include "y.tab.h"
@@ -9,8 +10,6 @@
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
 
-bool top_level_tests = false;
-const char *__module_to_test;
 const char *__filename;
 char *_cur_script;
 const char *_cur_script_content;
@@ -243,7 +242,7 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
   }
 
   if (expr->tag == AST_LAMBDA) {
-    if (!top_level_tests &&
+    if (!config.test_mode &&
         strncmp(name->data.AST_IDENTIFIER.value, "test_", 5) == 0) {
       return NULL;
     }
@@ -265,7 +264,7 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
 }
 
 Ast *ast_test_module(Ast *expr) {
-  if (!top_level_tests) {
+  if (!config.test_mode) {
     // don't parse this unless in test context
     return NULL;
   }
@@ -307,8 +306,7 @@ char *prepend_current_directory(const char *filename) {
 
 Ast *parse_input_script(const char *filename) {
   __filename = filename;
-  // filename = prepend_current_directory(filename);
-  char *fcontent = read_script(filename, top_level_tests);
+  char *fcontent = read_script(filename);
   if (!fcontent) {
     return NULL;
   }
@@ -1075,9 +1073,11 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   fully_qualified_name = normalize_path(fully_qualified_name);
 
-  if (access(fully_qualified_name, F_OK) != 0 && (__base_dir != NULL)) {
-    char *new_filename = malloc(strlen(rel_path) + strlen(__base_dir) + 1);
-    sprintf(new_filename, "%s/%s", __base_dir, rel_path);
+  if (access(fully_qualified_name, F_OK) != 0 &&
+      (config.base_libs_dir != NULL)) {
+    char *new_filename =
+        malloc(strlen(rel_path) + strlen(config.base_libs_dir) + 1);
+    sprintf(new_filename, "%s/%s", config.base_libs_dir, rel_path);
     fully_qualified_name = new_filename;
 
     if (access(fully_qualified_name, F_OK) != 0) {

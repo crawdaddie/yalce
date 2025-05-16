@@ -1428,73 +1428,8 @@ typedef struct stutter_state {
   int stutter_counter;  // Counter for creating rhythmic stutters
 } stutter_state;
 
-void *__stutter_perform(Node *node, stutter_state *state, Node *inputs[],
-                   int nframes, double spf) {
-  double *buf_memory = (double *)((stutter_state *)state + 1);
-
-  Signal in = inputs[0]->output;
-  double *_gate = inputs[1]->output.buf;
-  double *_repeat_time = inputs[2]->output.buf;  // Fixed: was using inputs[1] twice
-  double *out = node->output.buf;
-
-  int chans = state->buf_chans;
-  int sample_rate = (int)(1.0 / spf);
-
-  for (int i = 0; i < nframes; i++) {
-    double gate = *_gate;
-    _gate++;
-    double repeat_time = *_repeat_time;
-    _repeat_time++;
-    
-    int repeat_frames = (int)(repeat_time * sample_rate);
-    if (repeat_frames > state->buf_size) repeat_frames = state->buf_size;
-    if (repeat_frames < 1) repeat_frames = 1;
-    
-    if (gate > 0.5 && !state->is_stuttering) {
-      state->is_stuttering = 1;
-      state->stutter_start = state->write_head - repeat_frames;
-      if (state->stutter_start < 0) state->stutter_start += state->buf_size;
-    } else if (gate <= 0.5 && state->is_stuttering) {
-      state->is_stuttering = 0;
-    }
-
-    for (int c = 0; c < chans; c++) {
-      buf_memory[chans * state->write_head + c] = in.buf[(i*chans) + c];
-    }
-
-    for (int j = 0; j < chans; j++) {
-      if (state->is_stuttering) {
-        out[i * chans + j] = buf_memory[chans * state->stutter_start + j];
-      } else {
-        out[i * chans + j] = in.buf[i * chans + j];
-      }
-    }
-
-    state->write_head++;
-    if (state->write_head >= state->buf_size) {
-      state->write_head = 0;
-    }
-    
-    if (state->is_stuttering) {
-      state->stutter_start++;
-      if (state->stutter_start >= state->buf_size) {
-        state->stutter_start = 0;
-      }
-      
-      int stutter_end = state->stutter_start;
-      int stutter_begin = state->stutter_start - repeat_frames;
-      if (stutter_begin < 0) stutter_begin += state->buf_size;
-      
-      if (stutter_end == stutter_begin) {
-        state->stutter_start = state->write_head - repeat_frames;
-        if (state->stutter_start < 0) state->stutter_start += state->buf_size;
-      }
-    }
-  }
-  return node->output.buf;
-}
 void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
-                   int nframes, double spf) {
+                      int nframes, double spf) {
   double *buf_memory = (double *)((stutter_state *)state + 1);
 
   Signal in = inputs[0]->output;
@@ -1510,23 +1445,28 @@ void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
     _gate++;
     double repeat_time = *_repeat_time;
     _repeat_time++;
-    
+
     // Calculate frames to repeat (smaller for more rapid stuttering)
     int repeat_frames = (int)(repeat_time * sample_rate);
-    if (repeat_frames > state->buf_size) repeat_frames = state->buf_size;
-    if (repeat_frames < 1) repeat_frames = 1;
-    
-    // Stutter division - divide repeat_time into smaller chunks for rapid stuttering
+    if (repeat_frames > state->buf_size)
+      repeat_frames = state->buf_size;
+    if (repeat_frames < 1)
+      repeat_frames = 1;
+
+    // Stutter division - divide repeat_time into smaller chunks for rapid
+    // stuttering
     int stutter_chunk_size = repeat_frames / 8; // Divide into 8 small chunks
-    if (stutter_chunk_size < 1) stutter_chunk_size = 1;
-    
+    if (stutter_chunk_size < 1)
+      stutter_chunk_size = 1;
+
     // Gate logic: detect gate changes
     if (gate > 0.5) {
       if (!state->is_stuttering) {
         // Start stuttering - capture current audio
         state->is_stuttering = 1;
         state->stutter_start = state->write_head - repeat_frames;
-        if (state->stutter_start < 0) state->stutter_start += state->buf_size;
+        if (state->stutter_start < 0)
+          state->stutter_start += state->buf_size;
         state->stutter_position = state->stutter_start;
         state->stutter_counter = 0;
       }
@@ -1536,7 +1476,7 @@ void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
 
     // Write input to buffer regardless of stutter state
     for (int c = 0; c < chans; c++) {
-      buf_memory[chans * state->write_head + c] = in.buf[(i*chans) + c];
+      buf_memory[chans * state->write_head + c] = in.buf[(i * chans) + c];
     }
 
     // Process output samples
@@ -1552,22 +1492,22 @@ void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
 
     // Update write head
     // if (!state->is_stuttering) {
-      state->write_head++;
-      if (state->write_head >= state->buf_size) {
-        state->write_head = 0;
-      }
+    state->write_head++;
+    if (state->write_head >= state->buf_size) {
+      state->write_head = 0;
+    }
     // }
-    
+
     // Update stutter playback position for rapid stutter effect
     if (state->is_stuttering) {
       state->stutter_counter++;
-      
+
       // Reset counter and jump to next chunk when we finish current chunk
       if (state->stutter_counter >= stutter_chunk_size) {
         state->stutter_counter = 0;
-        
+
         state->stutter_position = state->stutter_start;
-        
+
         // Ensure we're within buffer bounds
         if (state->stutter_position >= state->buf_size) {
           state->stutter_position -= state->buf_size;
@@ -1584,19 +1524,18 @@ void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate, NodeRef input) {
+NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
+                     NodeRef input) {
   AudioGraph *graph = _graph;
 
-  int state_size = sizeof(stutter_state);  // Fixed: was using math_node_state
+  int state_size = sizeof(stutter_state); // Fixed: was using math_node_state
   int sample_rate = ctx_sample_rate();
   int in_chans = input->output.layout;
-  stutter_state s = {
-    .buf_chans = in_chans,
-    .buf_size = sample_rate * max_time,
-    .write_head = 0,
-    .is_stuttering = 0,
-    .stutter_start = 0
-  };
+  stutter_state s = {.buf_chans = in_chans,
+                     .buf_size = sample_rate * max_time,
+                     .write_head = 0,
+                     .is_stuttering = 0,
+                     .stutter_start = 0};
 
   int required_buf_frames = s.buf_chans * s.buf_size;
   state_size += required_buf_frames * sizeof(double);

@@ -59,6 +59,7 @@ typedef enum symbol_type {
   STYPE_TOP_LEVEL_VAR,
   STYPE_LOCAL_VAR,
   STYPE_FUNCTION,
+  STYPE_LAZY_EXTERN_FUNCTION,
   STYPE_GENERIC_FUNCTION,
   STYPE_COROUTINE_GENERATOR,
   STYPE_COROUTINE_INSTANCE,
@@ -88,6 +89,10 @@ typedef struct {
       Type *fn_type;
       bool recursive_ref;
     } STYPE_FUNCTION;
+
+    struct {
+      Ast *ast;
+    } STYPE_LAZY_EXTERN_FUNCTION;
 
     struct {
       Ast *ast;

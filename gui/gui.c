@@ -518,7 +518,7 @@ int create_scope(double *signal, int layout, int size) {
 #define PLOT_PADDING 40
 #define AXIS_COLOR 0xFFAAAAAA
 #define GRID_COLOR 0xFF666666
-#define BACKGROUND_COLOR 0xFF000000
+#define BACKGROUND_COLOR 0xFFF0F0F0 // Light grey background
 
 typedef struct plot_state {
   double *buf; // Input signal buffer
@@ -564,7 +564,7 @@ SDL_Renderer *plot_renderer(plot_state *state, SDL_Renderer *renderer);
  */
 int create_static_plot(int layout, int size, double *signal) {
 
-  printf("create static plot %d %d\n", layout, size);
+  // printf("create static plot %d %d\n", layout, size);
   // Allocate plot state
   plot_state *state = malloc(sizeof(plot_state));
 
@@ -620,9 +620,9 @@ int create_static_plot(int layout, int size, double *signal) {
 
   // Set default colors for each channel
   uint32_t default_colors[8] = {
-      0xFF0000FF, // Red
+      0xFFFF0000, // red
       0xFF00FF00, // Green
-      0xFFFF0000, // Blue
+      0xFF0000FF, // blue
       0xFFFF00FF, // Magenta
       0xFFFFFF00, // Yellow
       0xFF00FFFF, // Cyan
@@ -638,114 +638,10 @@ int create_static_plot(int layout, int size, double *signal) {
 }
 
 /**
- * Create the plot texture (only called when plot needs to be redrawn)
- */
-static void create_plot_texture_overlapped(plot_state *state,
-                                           SDL_Renderer *renderer) {
-  SDL_GetRendererOutputSize(renderer, &state->window_width,
-                            &state->window_height);
-
-  if (state->plot_texture) {
-    SDL_DestroyTexture(state->plot_texture);
-  }
-
-  state->plot_texture = SDL_CreateTexture(
-      renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
-      state->window_width, state->window_height);
-
-  if (!state->plot_texture) {
-    fprintf(stderr, "Failed to create plot texture: %s\n", SDL_GetError());
-    return;
-  }
-
-  SDL_SetRenderTarget(renderer, state->plot_texture);
-
-  SDL_SetRenderDrawColor(renderer, (BACKGROUND_COLOR >> 16) & 0xFF,
-                         (BACKGROUND_COLOR >> 8) & 0xFF,
-                         BACKGROUND_COLOR & 0xFF, 255);
-  SDL_RenderClear(renderer);
-
-  int plot_x = PLOT_PADDING;
-  int plot_y = PLOT_PADDING;
-  int plot_width = state->window_width - 2 * PLOT_PADDING;
-  int plot_height = state->window_height - 2 * PLOT_PADDING;
-
-  if (state->draw_grid) {
-    SDL_SetRenderDrawColor(renderer, (GRID_COLOR >> 16) & 0xFF,
-                           (GRID_COLOR >> 8) & 0xFF, GRID_COLOR & 0xFF, 255);
-
-    for (int i = 0; i <= 10; i++) {
-      int x = plot_x + (i * plot_width) / 10;
-      SDL_RenderDrawLine(renderer, x, plot_y, x, plot_y + plot_height);
-    }
-
-    for (int i = 0; i <= 10; i++) {
-      int y = plot_y + (i * plot_height) / 10;
-      SDL_RenderDrawLine(renderer, plot_x, y, plot_x + plot_width, y);
-    }
-  }
-
-  // Draw axes if enabled
-  if (state->draw_axis) {
-    SDL_SetRenderDrawColor(renderer, (AXIS_COLOR >> 16) & 0xFF,
-                           (AXIS_COLOR >> 8) & 0xFF, AXIS_COLOR & 0xFF, 255);
-
-    // X-axis
-    SDL_RenderDrawLine(renderer, plot_x, plot_y + plot_height,
-                       plot_x + plot_width, plot_y + plot_height);
-
-    // Y-axis
-    SDL_RenderDrawLine(renderer, plot_x, plot_y, plot_x, plot_y + plot_height);
-  }
-
-  if (state->buf && state->size > 0) {
-    for (int ch = 0; ch < state->layout; ch++) {
-      uint32_t color = state->channel_colors[ch % 8];
-      SDL_SetRenderDrawColor(renderer, (color >> 16) & 0xFF,
-                             (color >> 8) & 0xFF, color & 0xFF, 100);
-
-      for (int i = 0; i < state->size - 1; i++) {
-        double val1 = state->buf[i * state->layout + ch];
-        double val2 = state->buf[(i + 1) * state->layout + ch];
-
-        val1 *= state->vertical_scale;
-        val2 *= state->vertical_scale;
-
-        // Scale to fit plot area
-        double range = state->y_max - state->y_min;
-        double normalized1 = (val1 - state->y_min) / range;
-        double normalized2 = (val2 - state->y_min) / range;
-
-        // Apply horizontal scale (adjust the spacing)
-        int effective_width = (int)(plot_width * state->horizontal_scale);
-        int offset_x = (plot_width - effective_width) / 2;
-
-        int x1 = plot_x + offset_x + (i * effective_width) / (state->size - 1);
-        int y1 = plot_y + plot_height - (int)(normalized1 * plot_height);
-
-        int x2 =
-            plot_x + offset_x + ((i + 1) * effective_width) / (state->size - 1);
-        int y2 = plot_y + plot_height - (int)(normalized2 * plot_height);
-
-        // Ensure points are in bounds
-        if (x1 >= plot_x && x1 < plot_x + plot_width && x2 >= plot_x &&
-            x2 < plot_x + plot_width && y1 >= plot_y &&
-            y1 < plot_y + plot_height && y2 >= plot_y &&
-            y2 < plot_y + plot_height) {
-          SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
-        }
-      }
-    }
-  }
-
-  SDL_SetRenderTarget(renderer, NULL);
-
-  state->needs_redraw = false;
-}
-/**
  * Render a frame (just copies the texture to the screen)
  */
 SDL_Renderer *plot_renderer(plot_state *state, SDL_Renderer *renderer) {
+
   if (state->needs_redraw) {
     create_plot_texture_stacked(state, renderer);
   }
@@ -815,6 +711,7 @@ static void create_plot_texture_stacked(plot_state *state,
 
     // Draw slightly darker background for this row
     SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+    SDL_SetRenderDrawColor(renderer, 240, 240, 240, 255); // Light grey (F0F0F0)
     SDL_RenderFillRect(renderer, &row_rect);
 
     // Draw row border
@@ -858,21 +755,26 @@ static void create_plot_texture_stacked(plot_state *state,
 
       // Calculate the visible sample range based on horizontal scale and offset
       double visible_range = 1.0 / state->horizontal_scale;
+
       double center_offset = state->horizontal_offset;
 
       // Position in normalized coordinate space (0.0 to 1.0)
-      double start_pos = center_offset - (visible_range / 2.0);
-      double end_pos = center_offset + (visible_range / 2.0);
+      double start_pos =
+          center_offset - (visible_range / (double)state->layout);
+      double end_pos = center_offset + (visible_range / (double)state->layout);
 
       // Clamp to valid range
       if (start_pos < 0.0)
         start_pos = 0.0;
+
       if (end_pos > 1.0)
         end_pos = 1.0;
 
       // Convert to sample indices
       int start_sample = (int)(start_pos * (state->size - 1));
       int end_sample = (int)(end_pos * (state->size - 1));
+      printf("start %d %f end %d %f\n", start_sample, start_pos, end_sample,
+             end_pos);
 
       // Ensure we have at least one sample to display
       if (start_sample == end_sample && start_sample < state->size - 1)
@@ -883,8 +785,8 @@ static void create_plot_texture_stacked(plot_state *state,
       // Draw only the visible samples
       for (int i = start_sample; i < end_sample; i++) {
         // Get sample values
-        double val1 = state->buf[i * state->layout + ch];
-        double val2 = state->buf[(i + 1) * state->layout + ch];
+        double val1 = state->buf[ch + i * state->layout];
+        double val2 = state->buf[ch + (i + 1) * state->layout];
 
         // Apply vertical scale
         val1 *= state->vertical_scale;
@@ -1015,7 +917,9 @@ static int plot_event_handler(void *userdata, SDL_Event *event) {
       // The step size is constant in screen space but varies in data space
       // based on zoom When zoomed in (large horizontal_scale), we move by a
       // smaller amount in data space
+      //
       double visible_range = 1.0 / state->horizontal_scale;
+
       double step = visible_range * 0.05; // Move 5% of the visible range
 
       state->horizontal_offset += step;
@@ -2004,4 +1908,431 @@ void cleanup_vst_editor(VSTEditorState *state) {
 
   // Free state
   free(state);
+}
+typedef struct array_edit_state {
+  double *data;       // Pointer to the array data
+  int size;           // Number of elements in the array
+  int selected_index; // Currently selected/active index
+  bool dragging;      // Whether the user is currently dragging
+  int last_width;     // Last known window width
+  int last_height;    // Last known window height
+  double value_min;   // Minimum value (typically 0.0)
+  double value_max;   // Maximum value (typically 1.0)
+  bool display_grid;  // Whether to display grid lines
+} array_edit_state;
+
+// Forward declarations
+static int array_edit_event_handler(void *state, SDL_Event *event);
+static SDL_Renderer *array_edit_renderer(array_edit_state *state,
+                                         SDL_Renderer *renderer);
+
+/**
+ * Create an interactive array editor
+ *
+ * @param data Pointer to the array of doubles (values between 0.0 and 1.0)
+ * @param size Number of elements in the array
+ * @return 0 on success, -1 on failure
+ */
+int create_array_editor(int size, double *data) {
+  // Allocate state
+  array_edit_state *state = malloc(sizeof(array_edit_state));
+
+  if (!state) {
+    fprintf(stderr, "Failed to allocate array editor state\n");
+    return -1;
+  }
+
+  // Initialize state
+  state->data = data;
+  state->size = size;
+  state->selected_index = -1;
+  state->dragging = false;
+  state->last_width = 0;
+  state->last_height = 0;
+  state->value_min = 0.0;
+  state->value_max = 1.0;
+  state->display_grid = true;
+
+  return create_window(state, array_edit_renderer, array_edit_event_handler);
+}
+
+// Convert array index and value to screen coordinates
+static SDL_Point array_point_to_screen(array_edit_state *state, int index,
+                                       double value, int width, int height) {
+  SDL_Point point;
+
+  // Calculate margins
+  const int margin = 40;
+  const int plot_width = width - 2 * margin;
+  const int plot_height = height - 2 * margin;
+
+  // Calculate x based on index
+  double x_ratio = (double)index / (state->size > 1 ? state->size - 1 : 1);
+  point.x = margin + (int)(x_ratio * plot_width);
+
+  // Calculate y based on value (flipped, as screen coordinates have y=0 at top)
+  double normalized_value =
+      (value - state->value_min) / (state->value_max - state->value_min);
+  point.y = height - margin - (int)(normalized_value * plot_height);
+
+  return point;
+}
+
+// Convert screen coordinates to array value
+static void screen_to_array_value(array_edit_state *state, int x, int y,
+                                  int width, int height, int *index,
+                                  double *value) {
+  // Calculate margins
+  const int margin = 40;
+  const int plot_width = width - 2 * margin;
+  const int plot_height = height - 2 * margin;
+
+  // Calculate nearest index
+  double x_ratio = (double)(x - margin) / plot_width;
+  *index = (int)(x_ratio * (state->size - 1) + 0.5);
+
+  // Clamp index to valid range
+  if (*index < 0)
+    *index = 0;
+  if (*index >= state->size)
+    *index = state->size - 1;
+
+  // Calculate value from y coordinate
+  double y_ratio = (double)(height - margin - y) / plot_height;
+  *value = state->value_min + y_ratio * (state->value_max - state->value_min);
+
+  // Clamp value to valid range
+  if (*value < state->value_min)
+    *value = state->value_min;
+  if (*value > state->value_max)
+    *value = state->value_max;
+}
+
+// Find the closest point to the given screen coordinates
+static int find_closest_array_point(array_edit_state *state, int mouse_x,
+                                    int mouse_y, int width, int height) {
+  int closest_index = -1;
+  int min_distance_squared = INT_MAX;
+
+  for (int i = 0; i < state->size; i++) {
+    SDL_Point point =
+        array_point_to_screen(state, i, state->data[i], width, height);
+
+    int dx = point.x - mouse_x;
+    int dy = point.y - mouse_y;
+    int distance_squared = dx * dx + dy * dy;
+
+    if (distance_squared < min_distance_squared) {
+      min_distance_squared = distance_squared;
+      closest_index = i;
+    }
+  }
+
+  // Use a threshold to determine if the mouse is close enough to any point
+  const int THRESHOLD_SQUARED = 100; // 10 pixels squared
+  if (min_distance_squared > THRESHOLD_SQUARED) {
+    return -1;
+  }
+
+  return closest_index;
+}
+
+// Renderer function for the array editor
+static SDL_Renderer *array_edit_renderer(array_edit_state *state,
+                                         SDL_Renderer *renderer) {
+  if (!state || !renderer)
+    return renderer;
+
+  int width, height;
+  SDL_GetRendererOutputSize(renderer, &width, &height);
+
+  // Check if window size has changed
+  if (width != state->last_width || height != state->last_height) {
+    state->last_width = width;
+    state->last_height = height;
+  }
+
+  // Clear background
+  SDL_SetRenderDrawColor(renderer, 240, 240, 240, 255); // Light grey background
+  SDL_RenderClear(renderer);
+
+  // Define margin and plot area
+  const int margin = 40;
+  const int plot_width = width - 2 * margin;
+  const int plot_height = height - 2 * margin;
+  SDL_Rect plot_area = {margin, margin, plot_width, plot_height};
+
+  // Draw plot background
+  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White
+  SDL_RenderFillRect(renderer, &plot_area);
+
+  // Draw grid if enabled
+  if (state->display_grid) {
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255); // Light grey grid
+
+    // Vertical grid lines
+    for (int i = 0; i <= 10; i++) {
+      int x = margin + (i * plot_width) / 10;
+      SDL_RenderDrawLine(renderer, x, margin, x, height - margin);
+    }
+
+    // Horizontal grid lines
+    for (int i = 0; i <= 10; i++) {
+      int y = margin + (i * plot_height) / 10;
+      SDL_RenderDrawLine(renderer, margin, y, width - margin, y);
+    }
+  }
+
+  // Draw border around plot area
+  SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255); // Darker grey border
+  SDL_RenderDrawRect(renderer, &plot_area);
+
+  // Draw array data as bars
+  for (int i = 0; i < state->size; i++) {
+    // Calculate bar position and dimensions
+    double bar_width = (double)plot_width / state->size;
+    int x = margin + (int)(i * bar_width);
+    int bar_width_pixels = (int)bar_width - 2; // Slight gap between bars
+    if (bar_width_pixels < 2)
+      bar_width_pixels = 2; // Minimum width
+
+    double value = state->data[i];
+    int bar_height = (int)((value - state->value_min) /
+                           (state->value_max - state->value_min) * plot_height);
+
+    SDL_Rect bar = {x + 1, // +1 to create slight separation
+                    height - margin - bar_height, bar_width_pixels, bar_height};
+
+    // Different color for selected bar
+    if (i == state->selected_index) {
+      SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Red for selected
+    } else {
+      SDL_SetRenderDrawColor(renderer, 0, 120, 200, 255); // Blue for others
+    }
+
+    SDL_RenderFillRect(renderer, &bar);
+
+    // Draw bar outline
+    SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+    SDL_RenderDrawRect(renderer, &bar);
+  }
+
+  // Draw array data as line
+  SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255); // Dark line
+
+  for (int i = 0; i < state->size - 1; i++) {
+    SDL_Point p1 =
+        array_point_to_screen(state, i, state->data[i], width, height);
+    SDL_Point p2 =
+        array_point_to_screen(state, i + 1, state->data[i + 1], width, height);
+    SDL_RenderDrawLine(renderer, p1.x, p1.y, p2.x, p2.y);
+  }
+
+  // Draw points at each array position
+  const int point_radius = 5;
+  for (int i = 0; i < state->size; i++) {
+    SDL_Point p =
+        array_point_to_screen(state, i, state->data[i], width, height);
+
+    // Draw filled circle for each point
+    if (i == state->selected_index) {
+      SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Red for selected
+    } else {
+      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black for others
+    }
+
+    // Simple filled rect for points
+    SDL_Rect point_rect = {p.x - point_radius / 2, p.y - point_radius / 2,
+                           point_radius, point_radius};
+    SDL_RenderFillRect(renderer, &point_rect);
+  }
+
+  // Display array index and value info for selected point
+  if (state->selected_index >= 0) {
+    char info[64];
+    sprintf(info, "Index: %d  Value: %.3f", state->selected_index,
+            state->data[state->selected_index]);
+
+    SDL_Color text_color = {0, 0, 0, 255}; // Black text
+    render_text(info, margin, 10, renderer, text_color);
+  }
+
+  // Display title
+  SDL_Color title_color = {0, 0, 0, 255}; // Black text
+  render_text("Array Editor", width / 2 - 40, 10, renderer, title_color);
+
+  return renderer;
+}
+static int array_edit_event_handler(void *userdata, SDL_Event *event) {
+  array_edit_state *state = (array_edit_state *)userdata;
+
+  if (!state)
+    return 0;
+
+  SDL_Window *win = get_window(*event)->window;
+  int width, height;
+  SDL_GetRendererOutputSize(SDL_GetRenderer(win), &width, &height);
+
+  // Handle display scaling factors (important for high-DPI displays)
+  int window_w, window_h, drawable_w, drawable_h;
+  SDL_GetWindowSize(win, &window_w, &window_h);
+  SDL_GL_GetDrawableSize(win, &drawable_w, &drawable_h);
+
+  double scale_x = (double)drawable_w / window_w;
+  double scale_y = (double)drawable_h / window_h;
+
+  switch (event->type) {
+  case SDL_QUIT:
+    return 1; // Exit
+
+  case SDL_MOUSEBUTTONDOWN:
+    if (event->button.button == SDL_BUTTON_LEFT) {
+      // Scale mouse coordinates
+      int mouse_x = (int)(scale_x * event->button.x);
+      int mouse_y = (int)(scale_y * event->button.y);
+
+      // Start dragging
+      state->dragging = true;
+
+      // Calculate which array index we're over and set the value
+      int index;
+      double value;
+      screen_to_array_value(state, mouse_x, mouse_y, width, height, &index,
+                            &value);
+
+      // Make sure index is valid
+      if (index >= 0 && index < state->size) {
+        state->selected_index = index;
+        state->data[index] = value;
+      }
+      return 1; // Event handled
+    }
+    break;
+
+  case SDL_MOUSEBUTTONUP:
+    if (event->button.button == SDL_BUTTON_LEFT && state->dragging) {
+      state->dragging = false;
+      return 1; // Event handled
+    }
+    break;
+
+  case SDL_MOUSEMOTION:
+    if (state->dragging) {
+      // Scale mouse coordinates
+      int mouse_x = (int)(scale_x * event->motion.x);
+      int mouse_y = (int)(scale_y * event->motion.y);
+
+      // Update whichever bar is currently under the mouse
+      int index;
+      double value;
+      screen_to_array_value(state, mouse_x, mouse_y, width, height, &index,
+                            &value);
+
+      // Make sure index is valid
+      if (index >= 0 && index < state->size) {
+        state->selected_index = index; // Update selection to follow mouse
+        state->data[index] = value;
+      }
+      return 1; // Event handled
+    }
+    break;
+
+  case SDL_KEYDOWN:
+    switch (event->key.keysym.sym) {
+    case SDLK_ESCAPE:
+      return 1; // Exit
+
+    case SDLK_g:
+      // Toggle grid
+      state->display_grid = !state->display_grid;
+      return 1; // Event handled
+      break;
+
+    case SDLK_LEFT:
+      // Select previous point
+      if (state->selected_index > 0) {
+        state->selected_index--;
+      }
+      return 1; // Event handled
+      break;
+
+    case SDLK_RIGHT:
+      // Select next point
+      if (state->selected_index < state->size - 1) {
+        state->selected_index++;
+      }
+      return 1; // Event handled
+      break;
+
+    case SDLK_UP:
+      // Increase selected point value
+      if (state->selected_index >= 0) {
+        state->data[state->selected_index] += 0.05;
+        if (state->data[state->selected_index] > state->value_max) {
+          state->data[state->selected_index] = state->value_max;
+        }
+      }
+      return 1; // Event handled
+      break;
+
+    case SDLK_DOWN:
+      // Decrease selected point value
+      if (state->selected_index >= 0) {
+        state->data[state->selected_index] -= 0.05;
+        if (state->data[state->selected_index] < state->value_min) {
+          state->data[state->selected_index] = state->value_min;
+        }
+      }
+      return 1; // Event handled
+      break;
+
+    case SDLK_r:
+      // Reset all values to 0.5
+      for (int i = 0; i < state->size; i++) {
+        state->data[i] = 0.5;
+      }
+      return 1; // Event handled
+      break;
+
+    case SDLK_i:
+      // Invert all values
+      for (int i = 0; i < state->size; i++) {
+        state->data[i] = state->value_max - (state->data[i] - state->value_min);
+      }
+      return 1; // Event handled
+      break;
+
+    case SDLK_s:
+      // Smooth the array values (simple 3-point moving average)
+      if (state->size > 2) {
+        // Create a temporary copy of the data
+        double *temp = malloc(state->size * sizeof(double));
+        if (temp) {
+          memcpy(temp, state->data, state->size * sizeof(double));
+
+          // Apply smoothing (skip first and last points)
+          for (int i = 1; i < state->size - 1; i++) {
+            state->data[i] = (temp[i - 1] + temp[i] + temp[i + 1]) / 3.0;
+          }
+
+          free(temp);
+        }
+      }
+      return 1; // Event handled
+      break;
+    }
+    break;
+
+  case SDL_WINDOWEVENT:
+    if (event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+        event->window.event == SDL_WINDOWEVENT_RESIZED) {
+      // Window size changed
+      state->last_width = width;
+      state->last_height = height;
+      return 1; // Event handled
+    }
+    break;
+  }
+
+  return 0; // Continue running
 }

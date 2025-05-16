@@ -5,6 +5,8 @@
 #include "lib.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+double _random_double_range(double min, double max);
 int save_table_to_file(double *table, int size, const char *filename) {
 
   FILE *file = fopen(filename, "w");
@@ -52,6 +54,8 @@ void maketable_sq(void) {
   save_table_to_file(sq_table, SQ_TABSIZE, "engine/assets/sq_table.csv");
 #endif
 }
+double *get_sq_table() { return sq_table; }
+uint32_t get_sq_tabsize() { return SQ_TABSIZE; }
 
 #define SIN_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
@@ -76,6 +80,9 @@ void maketable_sin(void) {
   save_table_to_file(sin_table, SIN_TABSIZE, "engine/assets/sin_table.csv");
 #endif
 }
+
+double *get_sin_table() { return sin_table; }
+uint32_t get_sin_tabsize() { return SIN_TABSIZE; }
 
 typedef struct sin_state {
   double phase;
@@ -399,8 +406,7 @@ Node *raw_osc_node(Node *table, Node *freq) {
       .meta = "raw_osc",
   };
 
-  raw_osc_state *state =
-      (raw_osc_state *)(graph->nodes_state_memory + node->state_offset);
+  raw_osc_state *state = (raw_osc_state *)(state_ptr(graph, node));
   *state = (raw_osc_state){.phase = 0.0};
 
   node->connections[0].source_node_index = freq->node_index;
@@ -421,8 +427,8 @@ static double get_freq_scaled_sample(double phase, double multiplier,
   int index = (int)d_index;
   double frac = d_index - index;
 
-  double a = sin_table[index % table_size];
-  double b = sin_table[(index + 1) % table_size];
+  double a = table[index % table_size];
+  double b = table[(index + 1) % table_size];
 
   return (1.0 - frac) * a + (frac * b);
 }
@@ -481,12 +487,137 @@ Node *osc_bank_node(Node *amps, Node *freq) {
       .meta = "osc_bank",
   };
 
-  osc_bank_state *state =
-      (osc_bank_state *)(graph->nodes_state_memory + node->state_offset);
+  osc_bank_state *state = (osc_bank_state *)(state_ptr(graph, node));
   *state = (osc_bank_state){.phase = 0.0};
 
   node->connections[0].source_node_index = freq->node_index;
   node->connections[1].source_node_index = amps->node_index;
+
+  node->state_ptr = state;
+
+  return node;
+}
+
+typedef struct unison_osc_state {
+  int num;
+} unison_osc_state;
+
+double get_unison_osc_sample(double phase, int table_size, double *table) {
+  double d_index = phase * table_size;
+  int index = (int)d_index;
+  double frac = d_index - index;
+
+  double a = table[index % table_size];
+  double b = table[(index + 1) % table_size];
+
+  return (1.0 - frac) * a + (frac * b);
+}
+
+void *unison_osc_perform(Node *node, unison_osc_state *state, Node *inputs[],
+                         int nframes, double spf) {
+  double *out = node->output.buf;
+  int out_layout = node->output.layout;
+  double *freq_in = inputs[0]->output.buf;
+  double *table = inputs[1]->output.buf;
+  int table_size = inputs[1]->output.size;
+
+  double *phases = (double *)(state + 1);
+
+  double *spread_in = inputs[2]->output.buf;
+  double *mix_in = inputs[3]->output.buf; // Mix controls only detuned voices
+
+  double d_index;
+  int index;
+  double frac, a, b, sample;
+  double freq;
+  double spread;
+  double mix;
+
+  while (nframes--) {
+
+    freq = *freq_in;
+    freq_in++;
+    spread = *spread_in;
+    spread_in++;
+    mix = *mix_in;
+    mix_in++;
+
+    double output = get_unison_osc_sample(phases[0], table_size, table);
+
+    phases[0] = fmod(phases[0] + freq * spf, 1.0);
+
+    // double output = 0.;
+    // Add detuned oscillators scaled by mix
+    if (mix > 0.0 && state->num > 0) {
+      double detuned_sum = 0.0;
+      for (int i = 1; i <= state->num; i++) {
+        // Higher frequency oscillator
+        detuned_sum += get_unison_osc_sample(phases[i], table_size, table);
+        // Higher frequency oscillator
+        phases[i] = fmod(phases[i] + freq * (1.0 + spread * i) * spf, 1.0);
+
+        // Lower frequency oscillator
+        detuned_sum +=
+            get_unison_osc_sample(phases[i + state->num], table_size, table);
+        // Lower frequency oscillator
+        phases[i + state->num] =
+            fmod(phases[i + state->num] + freq * (1.0 - spread * i) * spf, 1.0);
+      }
+
+      // Only apply mix parameter to detuned voices
+      output += mix * detuned_sum;
+    }
+
+    // Apply normalization only when detuned voices are added
+    if (mix > 0.0) {
+      // Dynamic normalization based on mix parameter:
+      // At mix=0: norm = 1 (just fundamental)
+      // At mix=1: norm = 1 + 2*num (all voices at full volume)
+      double norm = 1.0 + (2.0 * state->num * mix);
+      output /= norm;
+    }
+    // Write output to all channels
+    for (int i = 0; i < out_layout; i++) {
+      *out++ = output;
+    }
+  }
+
+  return node->output.buf;
+}
+
+NodeRef unison_osc_node(int num, NodeRef spread, NodeRef mix, NodeRef table,
+                        NodeRef freq) {
+
+  AudioGraph *graph = _graph;
+  int state_size = sizeof(unison_osc_state) + (1 + 2 * num) * sizeof(double);
+  state_size = (state_size + 7) & ~7; /* Align to 8-byte boundary */
+  Node *node = allocate_node_in_graph(graph, state_size);
+
+  *node = (Node){
+      .perform = (perform_func_t)unison_osc_perform,
+      .node_index = node->node_index,
+      .num_inputs = 4,
+      .state_size = sizeof(unison_osc_state),
+      .state_offset =
+          state_offset_ptr_in_graph(graph, sizeof(unison_osc_state)),
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = "unison_osc",
+  };
+
+  unison_osc_state *state = (unison_osc_state *)(state_ptr(graph, node));
+  *state = (unison_osc_state){.num = num};
+  double *phases = (double *)(state + 1);
+  int phases_size = num * 2 + 1;
+  for (int i = 1; i < phases_size; i++) {
+    phases[i] = (double)rand() / RAND_MAX; // randomize phases
+  }
+
+  node->connections[0].source_node_index = freq->node_index;
+  node->connections[1].source_node_index = table->node_index;
+  node->connections[2].source_node_index = spread->node_index;
+  node->connections[3].source_node_index = mix->node_index;
 
   node->state_ptr = state;
 
@@ -959,9 +1090,11 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
 
   lfnoise_state *state =
       (lfnoise_state *)(graph->nodes_state_memory + node->state_offset);
+  double rand_val =
+      _random_double_range(min_input->output.buf[0], max_input->output.buf[0]);
   *state = (lfnoise_state){
-      .current_value = 0.0,
-      .target_value = 0.0,
+      .current_value = rand_val,
+      .target_value = rand_val,
       .samples_left = 0 // This will trigger immediate generation of a new value
   };
 
@@ -1588,6 +1721,9 @@ void maketable_saw(void) {
   save_table_to_file(saw_table, SAW_TABSIZE, "engine/assets/saw_table.csv");
 #endif
 }
+
+double *get_saw_table() { return saw_table; }
+uint32_t get_saw_tabsize() { return SAW_TABSIZE; }
 
 typedef struct saw_state {
   double phase;
