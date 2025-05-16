@@ -15,7 +15,8 @@ struct IntArray {
   int32_t size;
   int *data;
 };
-int _init_audio(int32_t size, int *conf);
+
+int init_audio();
 
 void set_block_time(struct timespec *to_set);
 struct timespec get_block_time();
@@ -25,4 +26,6 @@ int get_block_frame_offset(struct timespec start, struct timespec end,
                            int sample_rate);
 
 uint64_t get_frame_offset();
+
+void set_input_conf(char *conf);
 #endif

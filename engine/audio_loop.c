@@ -674,15 +674,37 @@ static int parse_int_list(const char *str, int *list, int max_values) {
   return count;
 }
 
-int _init_audio(int32_t size, int *input_config) {
+static int config[16];
+static int32_t config_size = 0;
+typedef struct IntLL {
+  int32_t data;
+  struct IntLL *next;
+} IntLL;
+
+void set_input_conf(char *conf) {
+  printf("set input conf %p\n", conf);
+  IntLL *l = (IntLL *)conf;
+
+  config_size = 0;
+  while (l) {
+    config[config_size] = l->data;
+    printf("%d, ", l->data);
+    config_size++;
+    IntLL *prev = l;
+    l = l->next;
+    // free(l);
+  }
+}
+
+int init_audio() {
   maketable_sq();
   maketable_sin();
   maketable_saw();
   maketable_saw();
   maketable_grain_window();
 
-  if (size) {
-    start_audio(size, input_config);
+  if (config_size) {
+    start_audio(config_size, config);
   } else {
     start_audio(0, NULL);
   }

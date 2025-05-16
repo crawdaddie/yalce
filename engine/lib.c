@@ -266,7 +266,7 @@ void start_blob() {
 
 AudioGraph *end_blob() {
   AudioGraph *graph = _graph;
-  print_graph(graph);
+  // print_graph(graph);
 
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));

@@ -21,6 +21,12 @@ int send_note_on(MIDIEndpointRef destination, char channel, char note,
 int send_note_off(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
                   uint8_t velocity);
 
+int send_note_on_ts(MIDIEndpointRef destination, char channel, char note,
+                    char velocity, uint64_t ts);
+
+int send_note_off_ts(MIDIEndpointRef destination, uint8_t channel, uint8_t note,
+                     uint8_t velocity, uint64_t ts);
+
 int send_note_ons(MIDIEndpointRef destination, int size, char *note_data_ptr);
 int send_note_offs(MIDIEndpointRef destination, int size, char *note_data_ptr);
 
@@ -34,4 +40,6 @@ MIDIEndpointRef get_destination_by_name(const char *name);
 void list_destinations();
 
 void midi_out_setup();
+
+void send_data(MIDIEndpointRef destination, size_t size, char *data);
 #endif

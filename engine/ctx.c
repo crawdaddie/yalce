@@ -25,14 +25,6 @@ void init_ctx(int num_chans, int size, int *input_map) {
     ctx.sig_to_hw_in_map[i] = im;
     im += layout;
   }
-
-  for (int i = 0; i < num_chans; i++) {
-    printf("sig %d\n", i);
-    for (int j = 0; j < ctx.input_signals[i].layout; j++) {
-      printf("hw:%d\n", *(ctx.sig_to_hw_in_map[i] + j));
-    }
-    printf("\n");
-  }
 }
 
 void audio_ctx_add(Node *node) {
