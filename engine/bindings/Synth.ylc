@@ -34,6 +34,7 @@ let pow2table_read = extern fn Double -> Int -> Ptr -> Double;
 let start_blob = extern fn () -> ();
 let end_blob = extern fn () -> Ptr;
 let inlet = extern fn Double -> Synth;
+let hw_inlet = extern fn Int -> Synth;
 let multi_chan_inlet = extern fn Int -> Double -> Synth;
 let buf_ref = extern fn Synth -> Synth;
 let play_node = extern fn Synth -> Synth;

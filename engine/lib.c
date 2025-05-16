@@ -151,7 +151,7 @@ Node *inlet(double default_val) {
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
 
-      .meta = "const",
+      .meta = "inlet",
   };
 
   for (int i = 0; i < BUF_SIZE; i++) {
@@ -163,6 +163,35 @@ Node *inlet(double default_val) {
   _graph->inlets[_graph->num_inlets] = f->node_index;
   _graph->inlet_defaults[_graph->num_inlets] = default_val;
   _graph->num_inlets++;
+  return f;
+}
+
+Node *hw_inlet(int idx) {
+  Signal *sig = ctx.input_signals + idx;
+
+  AudioGraph *graph = _graph;
+  Node *f = allocate_node_in_graph(graph, 0);
+
+  // Initialize node
+  *f = (Node){
+      .perform = NULL,
+      .node_index = f->node_index,
+      .num_inputs = 0,
+      .state_size = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
+      // Allocate output buffer
+      // TODO: allocate const bufs as just .size = 1
+      .output =
+          (Signal){
+              .layout = sig->layout,
+              .size = sig->size,
+              .buf = sig->buf,
+          },
+
+  };
+
+  printf("hw inlet buf %p\n", f->output.buf);
+  f->meta = "hw_inlet";
   return f;
 }
 
@@ -237,7 +266,7 @@ void start_blob() {
 
 AudioGraph *end_blob() {
   AudioGraph *graph = _graph;
-  // print_graph(graph);
+  print_graph(graph);
 
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
@@ -322,6 +351,8 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
     Node *n = graph_state->nodes + i;
     if (strcmp(n->meta, "buf_ref") == 0) {
       continue;
+    } else if (strcmp(n->meta, "hw_inlet") == 0) {
+      continue;
     } else {
       graph_state->nodes[i].output.buf = buf_mem;
       buf_mem += graph_state->nodes[i].output.layout *
@@ -334,7 +365,11 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
          g->state_memory_capacity);
 
   Node *output_node = &graph_state->nodes[graph_state->node_count - 1];
-  // printf("instantiate node with %d layout output\n",
+
+  // printf("node count %d out %p %s\n", graph_state->node_count, output_node,
+  //        output_node->meta);
+
+  // printf("instantiate node with %d layout output %s\n", output_node->meta,
   //        output_node->output.layout);
 
   *ensemble = (Node){

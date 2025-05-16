@@ -12,14 +12,26 @@ void init_ctx(int num_chans, int size, int *input_map) {
 
   ctx.num_input_signals = num_chans;
   ctx.input_signals = malloc(sizeof(Signal) * num_chans);
+  ctx.sig_to_hw_in_map = malloc(sizeof(int *) * num_chans);
+
   for (int i = 0; i < num_chans; i++) {
 
-    int layout = *input_map;
-    input_map += layout;
+    int layout = *im;
+    im++;
 
     ctx.input_signals[i].buf = malloc(sizeof(double) * BUF_SIZE * layout);
     ctx.input_signals[i].layout = layout;
     ctx.input_signals[i].size = BUF_SIZE;
+    ctx.sig_to_hw_in_map[i] = im;
+    im += layout;
+  }
+
+  for (int i = 0; i < num_chans; i++) {
+    printf("sig %d\n", i);
+    for (int j = 0; j < ctx.input_signals[i].layout; j++) {
+      printf("hw:%d\n", *(ctx.sig_to_hw_in_map[i] + j));
+    }
+    printf("\n");
   }
 }
 

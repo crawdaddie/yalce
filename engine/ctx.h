@@ -75,7 +75,6 @@ typedef struct ensemble_state {
 typedef struct {
   double output_buf[BUF_SIZE * LAYOUT];
   int num_input_signals;
-  int num_hardware_inputs;
   Signal *input_signals;
 
   ensemble_state graph;
@@ -83,6 +82,7 @@ typedef struct {
   double spf;
   msg_queue msg_queue;
   msg_queue overflow_queue;
+  int **sig_to_hw_in_map;
 } Ctx;
 
 extern Ctx ctx;
