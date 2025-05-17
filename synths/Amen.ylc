@@ -1,8 +1,8 @@
+#! /usr/bin/env ylc -i
 open ../engine/bindings/Synth;
 open ../engine/bindings/Sched;
 import ../lib/Math;
 
-init_audio [|1,0|];
 
 
 let ampenv = [|
@@ -36,16 +36,13 @@ let stutter_rates = [|
 
 let synth = (fn () ->
   let trig = inlet 0.; # 0
-  # let gate = inlet 0.; # 2
   bufplayer_trig_node (buf_ref amen) (tempo / original_tempo) (inlet 0.) trig # 3 
   |> stutter_node (60. * 4. / tempo) (trig_sel_node trig (buf_ref stutter_rates)) (rand_trig_node trig -1. 1.)
-  # |> (*) (gated_buf_env_node (buf_ref ampenv) gate)
 )
 |> play_tpl
 ;
 
 let trig = fn d: (Double) s: (Double) -> 
-  # print `trig {d}: {s}\n`;
   let fo = get_tl_tick ();
   set_input_scalar_offset synth 1 fo s; 
   # trigger_gate fo d 1 synth; 
@@ -59,7 +56,7 @@ let set_pattern = fn t cor ->
   cor_stop (pattern_ref[0]);
   cor
   |> play_routine t schedule_event
-  |> array_set 0 pattern_ref;
+  |> array_set pattern_ref 0;
   ()
 
 ;;
@@ -67,22 +64,21 @@ let set_pattern = fn t cor ->
 
 defer_quant q (fn t ->
   let rout = fn () ->
-    yield (0.5, 0.0     );
-    yield (0.5, 0.125   );
+    yield (0.5,  0.0    );
+    yield (0.5,  0.125  );
     yield (0.75, 0.25   );
     yield (0.75, 0.25   );
     yield (0.75, 0.25   );
     yield (0.75, 0.25   );
 
-    yield (0.5, 0.375  );
-    yield (0.5, 0.5    );
-    yield (0.5, 0.625  );
-    yield (0.5, 0.75   );
+    yield (0.5,  0.375  );
+    yield (0.5,  0.5    );
+    yield (0.5,  0.625  );
+    yield (0.5,  0.75   );
     yield (0.75, 0.625  );
     yield (0.25, 0.75   );
-    yield (1., 0.875  );
-    # yield (0.5, 0.0  );
-    # yield (0.5, 0.875  );
+    yield (1.,   0.875  );
+
     yield rout ()
   ;;
 

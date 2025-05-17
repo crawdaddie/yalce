@@ -10,17 +10,17 @@ let euclid = fn steps pulses: (Int) ->
   let pos = [| 0 |];
 
   for _ = 0 to pulses in (
-    let p = pos[0];
-    array_set pattern p 1; 
-    array_set pos 0 ((p + quot) % steps)
+    let p        = pos[0];
+    pattern[1]  := p; 
+    pos[0]      := ((p + quot) % steps)
   );
 
   array_set 0 pos 0;
 
   for _ = 0 to rem in (
-    let p = pos[0];
-    array_set pattern p 1;
-    array_set pos 0 ((p + quot + 1) % steps)
+    let p        = pos[0];
+    pattern[1]  := p;
+    pos[0]      := ((p + quot + 1) % steps)
   );
   pattern
 
@@ -29,9 +29,11 @@ let euclid = fn steps pulses: (Int) ->
 let rot = fn rot: (Int) arr: (Array of Int) ->
   let arr_len = array_size arr;
   let temp = array_fill_const arr_len 0;
+
   for i = 0 to (arr_len) in (
-    array_set temp i (arr @ ((i + rot) % arr_len))
+    temp[i] := (arr[(i + rot) % arr_len])
   );
+
   temp
 ;;
 

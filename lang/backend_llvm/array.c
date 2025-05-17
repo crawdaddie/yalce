@@ -123,20 +123,18 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef array_struct = LLVMGetUndef(array_type);
 
   LLVMValueRef data_ptr;
-  if (ast->ea_md != NULL) {
-    EscapeMeta *ea_md = ast->ea_md;
-    if (ea_md->status == EA_STACK_ALLOC && ctx->stack_ptr != 0) {
-      data_ptr = LLVMBuildArrayAlloca(builder, element_type, size_const,
-                                      "element_ptr");
-    } else {
 
-      data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
-                                      "element_ptr");
-    }
+  // TODO: use proper allocation strategy
+  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
+    data_ptr =
+        LLVMBuildArrayAlloca(builder, element_type, size_const, "element_ptr");
   } else {
     data_ptr =
         LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
   }
+
+  data_ptr =
+      LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
 
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                       "insert_array_size");

@@ -116,15 +116,19 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef node_size = LLVMSizeOf(node_type);
   LLVMValueRef alloc_size =
       LLVMBuildMul(builder, total_size, node_size, "alloc_size");
-  LLVMValueRef memory_block;
 
-  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
-    memory_block = LLVMBuildAlloca(builder, LLVMArrayType(node_type, len),
-                                   "list_memory_block");
-  } else {
-    memory_block = LLVMBuildMalloc(builder, LLVMArrayType(node_type, len),
-                                   "list_memory_block");
-  }
+  LLVMValueRef memory_block;
+  // TODO: use proper allocation strategy
+  // if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
+  //   memory_block = LLVMBuildAlloca(builder, LLVMArrayType(node_type, len),
+  //                                  "list_memory_block");
+  // } else {
+  //   memory_block = LLVMBuildMalloc(builder, LLVMArrayType(node_type, len),
+  //                                  "list_memory_block");
+  // }
+  //
+  memory_block = LLVMBuildMalloc(builder, LLVMArrayType(node_type, len),
+                                 "list_memory_block");
 
   // Create and link all nodes
   LLVMValueRef current_node = NULL;

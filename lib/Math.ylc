@@ -1,4 +1,3 @@
-#! env ylc
 # uniformly distributed integer between 0 and range-1
 let rand_int = extern fn Int -> Int ;
 
@@ -34,8 +33,14 @@ let min_int = fn a: (Int) b: (Int) ->
 ;;
 
 let max = fn a b ->
-  match a with 
-  | a if a > b -> a 
+  match a > b with 
+  | true -> a 
+  | _ -> b
+;;
+
+let min = fn a b ->
+  match a < b with 
+  | true -> a 
   | _ -> b
 ;;
 

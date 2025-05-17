@@ -7,7 +7,7 @@ let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
   for i = 0 to (array_size a) in (
     let r = res_ref[0];
     let v = a[i];
-    array_set res_ref 0 (f r v)  
+    res_ref[0] := (f r v)  
   );
   res_ref[0]
 ;;
@@ -17,7 +17,7 @@ let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
   for i = 0 to (array_size a) in (
     let r = res_ref [0];
     let v = a [i];
-    array_set res_ref 0 (f i r v)  
+    res_ref[0] := (f i r v)  
   );
   res_ref[0]
 ;;

@@ -1171,11 +1171,17 @@ LLVMValueRef MapCoroutineHandler(Ast *ast, JITLangCtx *ctx,
 }
 LLVMValueRef IterOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+
   Type *ltype = ast->data.AST_APPLICATION.args->md;
   Type *list_el_type = ltype->data.T_CONS.args[0];
+
   LLVMTypeRef llvm_list_type = type_to_llvm_type(ltype, ctx->env, module);
+
+  EscapeMeta m = {.status = EA_HEAP_ALLOC};
+  ast->data.AST_APPLICATION.args->ea_md = &m;
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   LLVMValueRef func =
       LLVMAddFunction(module, "iter_of_list_cor_func", cor_coroutine_fn_type());
   LLVMSetLinkage(func, LLVMExternalLinkage);
@@ -1301,6 +1307,8 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
+  EscapeMeta m = {.status = EA_HEAP_ALLOC};
+  ast->data.AST_APPLICATION.args->ea_md = &m;
   LLVMValueRef _array =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 

@@ -150,11 +150,9 @@ let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y 
 
     # print_matrix activation
     # let dW = dot activation delta
-
-
-
   )
 ;;
+
 # XOR problem
 let X = Matrix 4 2 [|
   0., 0.,

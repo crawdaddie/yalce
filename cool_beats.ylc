@@ -4,13 +4,12 @@
 # Config.set_input_conf [1,0]
 # );
 
-open engine/bindings/Sched; 
 open engine/bindings/Synth; 
+open engine/bindings/Sched; 
 open engine/bindings/VST; 
 import engine/bindings/MIDI;
 open lib/Ref;
 import lib/Math;
-# open lib/Euclid;
 
 
 let q = 60. / 130.;
@@ -36,8 +35,7 @@ let Kick = module
     cor_stop ( pattern_ref[0]);
     cor
     |> play_routine t schedule_event
-    |> array_set pattern_ref 0;
-    ()
+    |> array_set pattern_ref 0
   ;;
 ;
 
@@ -74,8 +72,7 @@ let Snare = module
     cor_stop (pref[0]);
     cor
     |> play_routine t schedule_event
-    |> array_set pref 0 ;
-    ()
+    |> array_set pref 0
   ;;
 
   let _ = MIDI.register_cc_handler 2 1 (fn val ->
@@ -172,25 +169,6 @@ let bin_pat = fn q: (Double) f d ->
 ;;
 
 
-# let _ = MIDI.midi_out_setup ();
-# let TD3_DEST = MIDI.get_destination_by_name (cstr "TD-3-MO");
-# let td3_reset = [|
-#   0xB0, 0x7B, 0x0,
-#   0xB0, 0x79, 0x0,
-# |];
-#
-# let _ = MIDI.send_data TD3_DEST (array_size td3_reset) (cstr td3_reset);
-#
-#
-# let td3 = (fn () -> hw_inlet 0) |> play_tpl;
-#
-# let chars = [|0x18,0x28,0x38,0x3a|];
-#
-# let array_choose = fn arr ->
-#   let idx = Math.rand_int (array_size arr) in
-#   array_at arr idx 
-# ;;
-
 defer_quant (q * 2) (fn t ->
   Hihat.tts_pat ()
   |> cor_map ((*) q)
@@ -211,30 +189,11 @@ defer_quant (q * 2) (fn t ->
   #
   snrout ()
   |> cor_map ((*) q)
-  |> Snare.set_pattern t;
+  |> Snare.set_pattern t
+);
 
-  # iter [|3., 3., 3., 4., 3.|]  
-  # |> cor_loop
-  # |> cor_map ((*) (q * 0.25))
-  # |> cor_map (fn d -> 
-  #   # let t = get_tl_tick ();
-  #   MIDI.send_note_off TD3_DEST 0x0 0x30 0x0;
-  #   MIDI.send_note_on TD3_DEST 0x0 0x30 0x60;
-  #   d
-  #   )
-  # |> play_routine t schedule_event
-  #
-); 
-
-# let handle = [| cstr "" |];
 let fx_chain = (fn () ->
   let input = multi_chan_inlet 2 0.;
-
-  # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/TAL-Reverb-2.vst/Contents/MacOS/TAL-Reverb-2") input;
-
-  # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/OTT.vst/Contents/MacOS/OTT") input;
-  # let vst = vstfx_node (cstr "/Library/Audio/Plug-Ins/VST/ValhallaSupermassive.vst/Contents/MacOS/ValhallaSupermassive") input;
-  # handle[0] := (vst_get_handle vst); # do something with this handle??
   input |> vital_rev_node
     0.99
     1.
@@ -249,7 +208,6 @@ let fx_chain = (fn () ->
     0.0
     1.
 ) |> play_tpl;
-
 Snare.synth |> pipe_into fx_chain 0;
 
 #
