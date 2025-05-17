@@ -1,10 +1,10 @@
 #include "backend_llvm/jit.h"
-#include "../escape_analysis.h"
 #include "backend_llvm/codegen.h"
 #include "backend_llvm/common.h"
 #include "backend_llvm/globals.h"
 #include "builtin_functions.h"
 #include "config.h"
+#include "escape_analysis.h"
 #include "format_utils.h"
 #include "input.h"
 #include "modules.h"
@@ -137,13 +137,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   LLVMGenericValueRef exec_args[] = {};
-  // if (result_type->kind == T_FN) {
-  //   printf("> ");
-  //   print_type(result_type);
-  //   printf("\n");
-  //   return NULL;
-  // }
-  LLVMDumpModule(module);
+  // LLVMDumpModule(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 

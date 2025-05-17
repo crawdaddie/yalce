@@ -1,4 +1,5 @@
 #include "backend_llvm/array.h"
+#include "escape_analysis.h"
 #include "types.h"
 #include "llvm-c/Core.h"
 
@@ -121,8 +122,21 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef size_const = LLVMConstInt(LLVMInt32Type(), array_size, 0);
   LLVMValueRef array_struct = LLVMGetUndef(array_type);
 
-  LLVMValueRef data_ptr =
-      LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
+  LLVMValueRef data_ptr;
+  if (ast->ea_md != NULL) {
+    EscapeMeta *ea_md = ast->ea_md;
+    if (ea_md->status == EA_STACK_ALLOC && ctx->stack_ptr != 0) {
+      data_ptr = LLVMBuildArrayAlloca(builder, element_type, size_const,
+                                      "element_ptr");
+    } else {
+
+      data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
+                                      "element_ptr");
+    }
+  } else {
+    data_ptr =
+        LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
+  }
 
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                       "insert_array_size");

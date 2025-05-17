@@ -22,6 +22,10 @@ typedef struct AECtx {
 
 } AECtx;
 
+typedef enum { EA_STACK_ALLOC, EA_HEAP_ALLOC } EscapeStatus;
+typedef struct EscapeMeta {
+  EscapeStatus status;
+} EscapeMeta;
 void escape_analysis(Ast *prog, AECtx *ctx);
 
 #endif

@@ -1,6 +1,7 @@
 #ifndef _LANG_BACKEND_LLVM_COMMON_H
 #define _LANG_BACKEND_LLVM_COMMON_H
 
+#include "escape_analysis.h"
 #include "ht.h"
 #include "parse.h"
 #include "types/type.h"
@@ -153,4 +154,5 @@ void destroy_ctx(JITLangCtx *ctx);
   _ctx_name.frame = &sf;                                                       \
   _ctx_name.stack_ptr = _ctx->stack_ptr + 1;
 
+EscapeStatus find_allocation_strategy(Ast *expr, JITLangCtx *ctx);
 #endif

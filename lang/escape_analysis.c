@@ -138,10 +138,16 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
       uint32_t mem_id = esc->id;
       EscapesEnv *env = escapes_find_by_id(lambda_ctx.env, mem_id);
       if (env) {
-        printf("this expression escapes its scope\ntherefore must be "
-               "allocated on the heap: ");
-        print_ast(env->expr);
-        // env->expr->ea_md
+        // printf("this expression escapes its scope\ntherefore must be "
+        //        "allocated on the heap: ");
+
+        EscapeMeta *ea_md = malloc(sizeof(EscapeMeta));
+        *ea_md = (EscapeMeta){.status = EA_HEAP_ALLOC};
+        env->expr->ea_md = ea_md;
+      } else {
+        EscapeMeta *ea_md = malloc(sizeof(EscapeMeta));
+        *ea_md = (EscapeMeta){.status = EA_STACK_ALLOC};
+        env->expr->ea_md = ea_md;
       }
     }
     break;
