@@ -126,4 +126,9 @@ double *mmap_double_array(int32_t data_size, double *data,
                           const char *filename);
 
 struct _DoubleArray double_array_from_raw(int32_t size, double *data);
+
+void _linalg_pool_init(int32_t size);
+double *_double_arr_alloc(int32_t size);
+
+void _linalg_pool_reset();
 #endif

@@ -1,5 +1,0 @@
-open neuron;
-
-# type Layer = (
-#   neurons: Array of TNeuron
-# );

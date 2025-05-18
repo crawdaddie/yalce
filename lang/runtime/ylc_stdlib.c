@@ -472,3 +472,25 @@ struct _DoubleArray double_array_from_raw(int32_t size, double *data) {
 void mmap_sync_array(int32_t size, double *data) {
   msync(data, size, MS_ASYNC);
 }
+
+static double *_linalg_pool;
+static double *_linalg_pool_head;
+static double *_linalg_pool_tail;
+
+void _linalg_pool_init(int32_t size) {
+  _linalg_pool = malloc(sizeof(double) * size);
+  _linalg_pool_head = _linalg_pool;
+  _linalg_pool_tail = _linalg_pool;
+}
+
+double *_double_arr_alloc(int32_t size) {
+  double *mem = _linalg_pool_tail;
+  memset(mem, 0, sizeof(double) * size);
+  _linalg_pool_tail += size;
+  return mem;
+}
+
+void _linalg_pool_reset() {
+  _linalg_pool_head = _linalg_pool;
+  _linalg_pool_tail = _linalg_pool;
+}

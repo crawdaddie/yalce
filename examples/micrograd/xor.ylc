@@ -205,7 +205,6 @@ for epoch = 0 to 10000 in (
   | 0 -> (
     print `epoch {epoch} out loss {mse_loss out y}\n`;
     print_matrix out;
-    print_matrix y;
     ()
   )
   | _ -> ()

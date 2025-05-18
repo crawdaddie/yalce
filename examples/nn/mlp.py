@@ -66,47 +66,6 @@ class MLP:
 
         return current, cache
 
-    def backward(self, x, y, cache, learning_rate=0.01):
-        m = x.shape[0]  # Batch size
-
-        # Compute the output error gradient (for MSE loss)
-        # delta_L = (y_pred - y_true) for MSE with identity activation
-        delta = cache["activations"][-1] - y
-
-        # Initialize gradients
-        gradients = []
-
-        # Backpropagate through layers
-        for i in reversed(range(len(self.layers))):
-            # For the output layer, we already computed delta
-            if i < len(self.layers) - 1:
-                # Get activation derivative
-                activation_derivative = self.get_activation_derivative(
-                    self.activations[i]
-                )
-
-                # Compute error for current layer
-                # delta_l = (delta_{l+1} @ W_{l+1}^T) * f'(z_l)
-                delta = np.dot(
-                    delta, self.layers[i + 1]["weights"].T
-                ) * activation_derivative(cache["pre_activations"][i])
-
-            # Compute gradients for current layer
-            # dW_l = a_{l-1}^T @ delta_l
-            dW = np.dot(cache["activations"][i].T, delta)
-            # db_l = sum(delta_l)
-            db = np.sum(delta, axis=0)
-
-            # Store gradients (we prepend to maintain correct order)
-            gradients.insert(0, {"dW": dW, "db": db})
-
-        # Update weights and biases
-        for i, grad in enumerate(gradients):
-            self.layers[i]["weights"] -= learning_rate * grad["dW"]
-            self.layers[i]["biases"] -= learning_rate * grad["db"]
-
-        return gradients
-
     def __backward(self, x, y, cache, learning_rate=0.01):
         # Compute the output error gradient (for MSE loss)
         # delta_L = (y_pred - y_true) for MSE with identity activation
@@ -142,7 +101,7 @@ class MLP:
                     delta, self.layers[i]["weights"].T
                 ) * activation_derivative(cache["pre_activations"][i - 1])
 
-    def train(self, x, y, epochs=100, learning_rate=0.01):
+    def train(self, x, y, epochs=1000, learning_rate=0.01):
         for epoch in range(epochs):
             # Forward pass
             y_pred, cache = self.forward(x)
@@ -168,3 +127,16 @@ y = np.array([[0], [1], [1], [0]])
 
 # Train the network
 mlp.train(X, y, epochs=100, learning_rate=0.01)
+
+
+def test(input):
+
+    out, _ = mlp.forward(input)
+    print("final", input, out)
+
+
+test(np.array([[0, 0]]))
+
+test(np.array([[0, 1]]))
+test(np.array([[1, 0]]))
+test(np.array([[1, 1]]))
