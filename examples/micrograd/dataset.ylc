@@ -1,0 +1,47 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> Array of Char;
+let read_lines = extern fn Ptr -> (List of String, Int);
+let _scanf = extern fn Ptr -> Ptr -> Int -> Ptr -> ();
+
+
+
+type MoonsRow = (x1: Double, x2: Double, label: Int);
+type MoonsDataset = (x1: Array of Double, x2: Array of Double, label: Array of Int);
+
+let init_moons_df = fn size -> 
+  MoonsDataset (array_fill_const size 0.) (array_fill_const size 0.) (array_fill_const size 0)
+;;
+
+
+
+
+let format_dataset = fn l size -> 
+
+  let df = init_moons_df size;
+
+  let aux = fn idx lines x: (MoonsDataset) ->
+    match lines with
+
+    | [] -> ()
+    | row_str::rest -> (
+      _scanf (cstr "%lf,%lf,%d") (cstr row_str) 3 (df_raw_fields x);
+      aux (idx + 1) rest (df_offset x 1)
+    )
+  ;;
+
+  aux 0 l df;
+  df 
+;;
+
+let load = fn path ->
+  let (content, len) = match (open_file path "rb") with
+    | Some fd -> (
+      let c, l = read_lines fd;
+      fclose fd;
+      (c, l)
+    )
+    | None -> ([""], 0)
+  ;
+  format_dataset content len
+;;

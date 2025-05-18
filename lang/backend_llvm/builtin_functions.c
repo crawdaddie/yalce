@@ -912,6 +912,7 @@ LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
   }
   LLVMTypeRef df_type = type_to_llvm_type(t, ctx->env, module);
+
   LLVMValueRef df_val =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
@@ -968,6 +969,8 @@ LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
+  printf("df raw fields handler\n");
+  print_ast(ast);
   Type *t = ast->data.AST_APPLICATION.args->md;
   if (t->kind != T_CONS) {
     fprintf(stderr,

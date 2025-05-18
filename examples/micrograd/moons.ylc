@@ -1,0 +1,8 @@
+import dataset;
+
+let df = dataset.load "examples/micrograd/moons.csv";
+
+df.x2[1]
+
+
+
