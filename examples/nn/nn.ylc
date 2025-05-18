@@ -6,7 +6,8 @@ open linalg;
 type Layer = (
   weights: Matrix,
   biases: Matrix,
-  activation: (Matrix -> Matrix)
+  activation: (Matrix -> Matrix),
+  activation_derivative: (Matrix -> Matrix)
 );
 
 let identity = fn x: (Matrix) -> x;;
@@ -23,6 +24,24 @@ let relu = fn x: (Matrix) ->
   );
   x 
 ;;
+
+let relu_derivative = fn x: (Matrix) -> 
+  let x_ = matrix_zeroes x.rows x.cols;
+
+  for i = 0 to (matrix_size x) in (
+    let v = x.data[i] in
+    x_.data[i] := (match v with
+      | v if v > 0. -> 1.
+      | _ -> 0.
+    )
+  );
+  x_ 
+;;
+
+let identity_derivative = fn x: (Matrix) -> 
+  Matrix x.rows x.cols (array_fill_const (x.rows * x.cols) 1.)
+;;
+
 
 let mse_loss = fn predictions: (Matrix) targets: (Matrix) ->
   let loop = fn sum: (Double) p: (Array of Double) t: (Array of Double) ->
@@ -45,86 +64,63 @@ type Network = (
   loss: (Matrix -> Matrix -> Double)
 );
 
-
 let LayerCache = module
-
   type LCache = (
-    pre_activations: Array of Array of Double,
-    activations: Array of Array of Double 
+    pre_activations: Array of Matrix,  
+    activations: Array of Matrix       
   );
 
-  let from_network = fn network: (Network) ->
+  let from_network = fn network: (Network) batch_size: (Int) features: (Int)->
     let num_layers = array_size network.layers;
-    let pre_act_sizes = array_fill_const num_layers 0;
-    let act_sizes = array_fill_const (num_layers + 1) 0;
-
-    let pre_acts = array_fill_const num_layers [| 0. |];
-    let acts = array_fill_const (num_layers + 1) [| 0. |];
-    let layer = network.layers[0];
-    let weights = layer.weights;
-    acts[0] := (array_fill_const weights.cols 0.) ;
-
+    
+    let pre_acts = array_fill_const num_layers (matrix_zeroes 1 1);
+    let acts = array_fill_const (num_layers + 1) (matrix_zeroes 1 1);
+    
+    acts[0] := matrix_zeroes batch_size features; 
+    
     for i = 0 to num_layers in (
       let layer = network.layers[i];
-
-      let pre_size = matrix_size (layer.biases);
-      let act_size = matrix_size (layer.biases);
-      acts[i + 1] := (array_fill_const act_size 0.); 
-      pre_acts[i] := (array_fill_const pre_size 0.)
       
+      let output_dim = matrix_size layer.biases;
+      
+      pre_acts[i] := matrix_zeroes batch_size output_dim;
+      
+      acts[i + 1] := matrix_zeroes batch_size output_dim
     );
-
+    
     LCache pre_acts acts
-
-  ;;
-  let print_cache_shapes = fn cache: (LCache) ->
-    print `cache sizes: {array_size cache.pre_activations} {array_size cache.activations}\n`;
-    print "pre: ";
-
-    for p = (iter (cache.pre_activations)) in (
-      print `{array_size p},`
-    );
-    print `\n`;
-
-    print "acts: ";
-    for p = (iter cache.activations) in (
-      print `{array_size p},`
-    )
   ;;
 
-  let save = fn d: (Array of Double) m: (Matrix) ->
-    let raw = m.data;
-    for i = 0 to (array_size raw) in (
-       d[i] := raw[i]
+  let save = fn cache: (Matrix) target: (Matrix) ->
+    for i = 0 to array_size cache.data in (
+      cache.data[i] := target.data[i] 
     );
-
-    m
+    target
   ;;
 ;
 
 
 let MLP = Network [|
-  Layer (matrix_random 2 16) (array_fill_const 16 0.01 |> matrix_1d) relu,
-  Layer (matrix_random 16 16) (array_fill_const 16 0.01 |> matrix_1d) relu,
-  Layer (matrix_random 16 1) (array_fill_const 1 1.01 |> matrix_1d) identity,
+  Layer (matrix_random 16 2) (array_fill_const 16 0.01 |> matrix_1d) relu relu_derivative,
+  Layer (matrix_random 16 16) (array_fill_const 16 0.01 |> matrix_1d) relu relu_derivative,
+  Layer (matrix_random 1 16) (array_fill_const 1 1.01 |> matrix_1d) identity identity_derivative,
 |] mse_loss
 ;
 
 
-
-
 let forward = fn network: (Network) cache: (LayerCache.LCache) input ->
   let layers = network.layers;
-  LayerCache.save (cache.pre_activations[0]) input;
+  LayerCache.save (cache.activations[0]) input;
 
   foldi (fn i (current, cache): (Matrix, LayerCache.LCache) layer: (Layer) ->
     let z = current
-      |> Vec.matrix_vec_mul layer.weights
-      |> Vec.add layer.biases
+      |> matrix_mul layer.weights
+      |> matrix_add layer.biases
       |> LayerCache.save (cache.pre_activations[i]) 
       |> layer.activation
       |> LayerCache.save (cache.activations[i + 1])
     ;
+
     (z, cache)
   ) (input, cache) layers
 ;;
@@ -132,24 +128,39 @@ let forward = fn network: (Network) cache: (LayerCache.LCache) input ->
 
 let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y ->
   let last_activations = last cache.activations;
+  let d = matrix_sub last_activations y;
+  let delta_ref = [|d|];
 
-  let delta = Vec.sub (Matrix 1 16 last_activations) y;
+  let len = array_size network.layers;
 
-  print `0: backward delta: {delta.rows} {delta.cols}\n`;
-  let len = array_size network.layers in
   for _i = 0 to len in (
     let i = len - 1 - _i; # reverse
-    let act_array = cache.activations[i];
-    let activation = Matrix (array_size act_array) 1 act_array; 
-    Vec.matrix_vec_mul activation delta;
-    print_matrix delta;
+    let layer = network.layers[i];
+
+    let activation = cache.activations[i]; 
+    let dW = matrix_mul (delta_ref[0]) (matrix_transpose activation) ;
+    let db = matrix_sum_rows (delta_ref[0]);
+    matrix_sub layer.weights (matrix_scale learning_rate dW)
+    |> matrix_copy_to layer.weights;
+
+    matrix_sub layer.biases (matrix_scale learning_rate db)
+    |> matrix_copy_to layer.biases;
+
+    
+
 
     match i > 0 with
-    | true -> ()
-    | false -> ()
+    | true -> (
+      let pre_activation = cache.pre_activations[i - 1];
 
-    # print_matrix activation
-    # let dW = dot activation delta
+      let delta = delta_ref[0]
+        |> matrix_mul (matrix_transpose layer.weights)
+        |> matrix_mul_elwise (layer.activation_derivative pre_activation);
+
+      delta_ref[0] := delta;
+      ()
+    )
+    | _ -> ()
   )
 ;;
 
@@ -161,14 +172,24 @@ let X = Matrix 4 2 [|
   1., 1.
 |];
 
-let y = Matrix 4 2 [| 0., 1., 1., 0. |];
+let y = Matrix 4 1 [| 0., 1., 1., 0. |];
+let cache = LayerCache.from_network MLP 4 2;
 
-# let input = matrix_zeroes 16 1; # allocate an input array which is as large as the maximum layer width
-let (out, cache) = X |> forward MLP (LayerCache.from_network MLP);
+for epoch = 0 to 800 in (
+  let (out, cache) = X |> forward MLP cache;
+  backward 0.01 MLP cache y;
+  match (epoch % 10) with
+  | 0 -> (
+    print `epoch {epoch} out loss {mse_loss out y}`;
+    print_matrix out;
+    ()
+  )
+  | _ -> ()
 
-print `out: {matrix_at out (0,0)}\n`;
+)
 
-backward 0.01 MLP cache y
+
+
 
 
 

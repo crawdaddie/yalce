@@ -223,6 +223,7 @@ Type t_array_range_sig = GENERIC_TYPE(_array_range_sig);
 
 Type *_array_offset_sig() {
   Type *eltype = next_tvar();
+
   Type *f = create_array_type(eltype);
   f = type_fn(f, f);
   f = type_fn(&t_int, f);

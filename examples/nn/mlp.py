@@ -108,15 +108,13 @@ class MLP:
         return gradients
 
     def __backward(self, x, y, cache, learning_rate=0.01):
-        print("\n\nBACKWARD\n")
         # Compute the output error gradient (for MSE loss)
         # delta_L = (y_pred - y_true) for MSE with identity activation
         delta = cache["activations"][-1] - y
-        print("backward delta 0:", delta.shape)
+        print("backward delta 1:", delta.shape)
 
         # Backpropagate through layers
         for i in reversed(range(len(self.layers))):
-            print(i)
             # Compute gradients for current layer
             # dW_l = a_{l-1}^T @ delta_l
             dW = np.dot(cache["activations"][i].T, delta)

@@ -2,23 +2,53 @@ import ../../lib/Arrays;
 import ../../lib/Math;
 import ../../lib/Ref;
 
+
 type Matrix = (
   rows: Int,
   cols: Int,
   data: Array of Double
 );
 
-let matrix_zeroes = fn c r ->
+let MemPool = module  
+  type TMemPool = (head: Array of Double, tail: Array of Double);
+  type TMemPoolRef = Array of TMemPool ;
+  let get_mem = fn pool_: (TMemPoolRef) size: (Int) ->
+    let pool = pool_[0];
+    let arr = array_range pool.tail 0 size;
+    let tail = array_offset size pool.tail;
+    pool_[0] := TMemPool pool.head tail;
+    arr
+  ;;
+
+  let reset = fn pool_: (TMemPoolRef) ->
+    let pool = pool_[0];
+    pool_[0] := TMemPool pool.head pool.head
+  ;;
+;
+
+let matrix_zeroes = fn r c ->
   Matrix r c (array_fill_const (r * c) 0.)
 ;;
 
+let matrix_zeroes_p = fn pool: (MemPool.TMemPoolRef) r c ->
+  let size = r * c;
+  let arr = MemPool.get_mem pool size;
+  for i = 0 to size in (
+    arr[i] := 0.
+  );
+  Matrix r c arr
+;;
+
 let print_matrix = fn m: (Matrix) ->
+  print "[|\n";
   for i = 0 to m.rows in (
+    print "  [|";
     for j = 0 to m.cols in (
       print `{m.data[(i * m.cols + j)]}, `
     );
-    print "\n"
-  )
+    print "|],\n"
+  );
+  print "|]\n"
 ;;
 
 let matrix_at = fn m: (Matrix) (r, c): (Int, Int) ->
@@ -33,6 +63,14 @@ let matrix_access = fn m: (Matrix) i: (List of Int) ->
 
 let matrix_size = fn m: (Matrix) -> 
   m.rows * m.cols
+;;
+
+let matrix_copy = fn m: (Matrix) ->
+  let copy = matrix_zeroes m.rows m.cols; 
+  for i = 0 to (array_size m.data) in (
+    copy.data[i] := m.data[i]
+  );
+  copy
 ;;
 
 let print_arr = fn arr: (Array of Double) -> 
@@ -52,7 +90,118 @@ let matrix_1d = fn a: (Array of Double) ->
   Matrix 1 (array_size a) a
 ;;
 
+let matrix_transpose = fn m: (Matrix) ->
+  let t = matrix_zeroes m.cols m.rows ;
+  for i = 0 to m.rows in (
+    for j = 0 to m.cols in (
+      let v = m.data[(i * m.cols + j)];
+      t.data[j * t.cols + i] := v
+    )
+  );
+  t
+;;
 
+let matrix_get = fn m: (Matrix) (i, j): (Int, Int) ->
+  m.data[i * m.cols + j]
+;;
+let (@) = matrix_get;
+
+let matrix_mul = fn b: (Matrix) a: (Matrix) ->
+  
+  let c = matrix_zeroes a.rows b.cols;
+  # print `matrix mul out {c.rows} {c.cols}\n`;
+
+  for i = 0 to a.rows in (
+    for j = 0 to b.cols in (
+      for k = 0 to b.rows in (
+        let v = c @ (i, j);
+        c.data[i * c.cols + j] := v + (a @ (i,k)) * b @ (k, j) 
+        # a.data[i * a.cols + j] := v + (a @ (i,k)) * b @ (k, j) 
+      )
+    ) 
+  ); 
+  c
+;;
+
+let matrix_add = fn a: (Matrix) b: (Matrix) ->
+  "element-wise matrix add - mutates b";
+  for i = 0 to (matrix_size a) in (
+    let av = a.data[i];
+    let bv = b.data[i];
+    b.data[i] := (av + bv)
+  );
+  b
+;;
+
+let matrix_scale = fn s: (Double) a: (Matrix)->
+  for i = 0 to (matrix_size a) in (
+    let av = a.data[i];
+    a.data[i] := (av * s)
+  );
+  a
+;;
+
+let matrix_copy_to = fn b: (Matrix) a: (Matrix) ->
+  for i = 0 to (matrix_size a) in (
+    let av = a.data[i];
+    b.data[i] := av
+  );
+  b
+;;
+
+
+let matrix_sum_rows = fn m: (Matrix) ->
+  let s = matrix_zeroes m.cols 1; 
+  for c = 0 to m.cols - 1 in (
+    let sum = [|0.0|];
+    for r = 0 to m.rows - 1 in (
+      sum[0] := sum[0] + m.data[r * m.cols + c]
+    );
+
+    s.data[c] := sum[0]
+  );
+  
+  s
+;;
+
+let matrix_sub = fn a: (Matrix) b: (Matrix) ->
+  let c = matrix_zeroes a.rows b.cols;
+  for i = 0 to (array_size a.data) in (
+    let av = a.data[i];
+    let bv = b.data[i];
+    c.data[i] := (av - bv)
+  );
+  c
+;;
+
+let matrix_copy_to = fn target: (Matrix) source: (Matrix) ->
+  for i = 0 to (array_size source.data) in (
+    target.data[i] := source.data[i]
+  );
+  target
+;;
+
+
+let matrix_scale = fn s: (Double) a: (Matrix) ->
+  let c = matrix_zeroes a.rows a.cols;
+  for i = 0 to (array_size a.data) in (
+    let av = a.data[i];
+    c.data[i] := av * s
+  );
+  c
+  
+;;
+
+let matrix_mul_elwise = fn a: (Matrix) b: (Matrix) ->
+
+  let c = matrix_zeroes a.rows a.cols;
+  for i = 0 to (array_size a.data) in (
+    let av = a.data[i];
+    let bv = b.data[i];
+    c.data[i] := av * bv
+  );
+  c
+;;
 
 
 let Vec = module
@@ -69,6 +218,7 @@ let Vec = module
   ;;
 
   let sub = fn a: (Matrix) b: (Matrix) ->
+
     for i = 0 to (array_size a.data) in (
       let av = a.data[i];
       let bv = b.data[i];
