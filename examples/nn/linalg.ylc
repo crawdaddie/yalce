@@ -12,15 +12,23 @@ type Matrix = (
 let MemPool = module  
   type TMemPool = (head: Array of Double, tail: Array of Double);
   type TMemPoolRef = Array of TMemPool ;
-  let get_mem = fn pool_: (TMemPoolRef) size: (Int) ->
-    let pool = pool_[0];
-    let arr = array_range pool.tail 0 size;
-    let tail = array_offset size pool.tail;
-    pool_[0] := TMemPool pool.head tail;
-    arr
+
+  let create = fn size ->
+    let arr = array_fill_const size 0.;
+    [|TMemPool arr arr|]
   ;;
 
-  let reset = fn pool_: (TMemPoolRef) ->
+  let get_mem = fn pool_: (Array of TMemPool) size: (Int) ->
+    # let pool = pool_[0];
+    # let arr = array_range 0 size pool.tail;
+    # let tail = array_offset size pool.tail;
+    # pool_[0] := TMemPool pool.head tail;
+    # arr
+    #
+    let arr = array_fill_const size 0.
+  ;;
+
+  let reset = fn pool_: (Array of TMemPool) ->
     let pool = pool_[0];
     pool_[0] := TMemPool pool.head pool.head
   ;;
@@ -30,12 +38,15 @@ let matrix_zeroes = fn r c ->
   Matrix r c (array_fill_const (r * c) 0.)
 ;;
 
-let matrix_zeroes_p = fn pool: (MemPool.TMemPoolRef) r c ->
+let matrix_zeroes_p = fn pool: (Array of MemPool.TMemPool) r c ->
   let size = r * c;
-  let arr = MemPool.get_mem pool size;
-  for i = 0 to size in (
-    arr[i] := 0.
-  );
+  # let arr = MemPool.get_mem pool size;
+
+  # for i = 0 to size in (
+  #   arr[i] := 0.
+  # );
+  let arr = array_fill_const size 0.;
+
   Matrix r c arr
 ;;
 
@@ -65,8 +76,8 @@ let matrix_size = fn m: (Matrix) ->
   m.rows * m.cols
 ;;
 
-let matrix_copy = fn m: (Matrix) ->
-  let copy = matrix_zeroes m.rows m.cols; 
+let matrix_copy = fn p: (Array of MemPool.TMemPool) m: (Matrix) ->
+  let copy = matrix_zeroes_p p m.rows m.cols; 
   for i = 0 to (array_size m.data) in (
     copy.data[i] := m.data[i]
   );
@@ -90,8 +101,8 @@ let matrix_1d = fn a: (Array of Double) ->
   Matrix 1 (array_size a) a
 ;;
 
-let matrix_transpose = fn m: (Matrix) ->
-  let t = matrix_zeroes m.cols m.rows ;
+let matrix_transpose = fn p: (Array of MemPool.TMemPool) m: (Matrix) ->
+  let t = matrix_zeroes_p p m.cols m.rows ;
   for i = 0 to m.rows in (
     for j = 0 to m.cols in (
       let v = m.data[(i * m.cols + j)];
@@ -106,9 +117,9 @@ let matrix_get = fn m: (Matrix) (i, j): (Int, Int) ->
 ;;
 let (@) = matrix_get;
 
-let matrix_mul = fn b: (Matrix) a: (Matrix) ->
+let matrix_mul = fn p: (Array of MemPool.TMemPool) b: (Matrix) a: (Matrix) ->
   
-  let c = matrix_zeroes a.rows b.cols;
+  let c = matrix_zeroes_p p a.rows b.cols;
   # print `matrix mul out {c.rows} {c.cols}\n`;
 
   for i = 0 to a.rows in (
@@ -133,25 +144,11 @@ let matrix_add = fn a: (Matrix) b: (Matrix) ->
   b
 ;;
 
-let matrix_scale = fn s: (Double) a: (Matrix)->
-  for i = 0 to (matrix_size a) in (
-    let av = a.data[i];
-    a.data[i] := (av * s)
-  );
-  a
-;;
-
-let matrix_copy_to = fn b: (Matrix) a: (Matrix) ->
-  for i = 0 to (matrix_size a) in (
-    let av = a.data[i];
-    b.data[i] := av
-  );
-  b
-;;
 
 
-let matrix_sum_rows = fn m: (Matrix) ->
-  let s = matrix_zeroes m.cols 1; 
+
+let matrix_sum_rows = fn p: (Array of MemPool.TMemPool) m: (Matrix) ->
+  let s = matrix_zeroes_p p m.cols 1; 
   for c = 0 to m.cols - 1 in (
     let sum = [|0.0|];
     for r = 0 to m.rows - 1 in (
@@ -164,8 +161,8 @@ let matrix_sum_rows = fn m: (Matrix) ->
   s
 ;;
 
-let matrix_sub = fn a: (Matrix) b: (Matrix) ->
-  let c = matrix_zeroes a.rows b.cols;
+let matrix_sub = fn p: (Array of MemPool.TMemPool) a: (Matrix) b: (Matrix) ->
+  let c = matrix_zeroes_p p a.rows b.cols;
   for i = 0 to (array_size a.data) in (
     let av = a.data[i];
     let bv = b.data[i];
@@ -182,8 +179,8 @@ let matrix_copy_to = fn target: (Matrix) source: (Matrix) ->
 ;;
 
 
-let matrix_scale = fn s: (Double) a: (Matrix) ->
-  let c = matrix_zeroes a.rows a.cols;
+let matrix_scale = fn p: (Array of MemPool.TMemPool) s: (Double) a: (Matrix) ->
+  let c = matrix_zeroes_p p a.rows a.cols;
   for i = 0 to (array_size a.data) in (
     let av = a.data[i];
     c.data[i] := av * s
@@ -192,9 +189,9 @@ let matrix_scale = fn s: (Double) a: (Matrix) ->
   
 ;;
 
-let matrix_mul_elwise = fn a: (Matrix) b: (Matrix) ->
+let matrix_mul_elwise = fn p: (Array of MemPool.TMemPool) a: (Matrix) b: (Matrix) ->
 
-  let c = matrix_zeroes a.rows a.cols;
+  let c = matrix_zeroes_p p a.rows a.cols;
   for i = 0 to (array_size a.data) in (
     let av = a.data[i];
     let bv = b.data[i];

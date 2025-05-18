@@ -108,13 +108,13 @@ let MLP = Network [|
 ;
 
 
-let forward = fn network: (Network) cache: (LayerCache.LCache) input ->
+let forward = fn p: (Array of MemPool.TMemPool) network: (Network) cache: (LayerCache.LCache) input ->
   let layers = network.layers;
   LayerCache.save (cache.activations[0]) input;
 
-  foldi (fn i (current, cache): (Matrix, LayerCache.LCache) layer: (Layer) ->
+  let res = foldi (fn i (current, cache): (Matrix, LayerCache.LCache) layer: (Layer) ->
     let z = current
-      |> matrix_mul layer.weights
+      |> matrix_mul p layer.weights
       |> matrix_add layer.biases
       |> LayerCache.save (cache.pre_activations[i]) 
       |> layer.activation
@@ -123,12 +123,16 @@ let forward = fn network: (Network) cache: (LayerCache.LCache) input ->
 
     (z, cache)
   ) (input, cache) layers
+  ;
+
+  MemPool.reset p;
+  res
 ;;
 
 
-let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y ->
+let backward = fn p: (Array of MemPool.TMemPool) learning_rate network: (Network) cache: (LayerCache.LCache) y ->
   let last_activations = last cache.activations;
-  let d = matrix_sub last_activations y;
+  let d = matrix_sub p last_activations y;
   let delta_ref = [|d|];
 
   let len = array_size network.layers;
@@ -138,12 +142,12 @@ let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y 
     let layer = network.layers[i];
 
     let activation = cache.activations[i]; 
-    let dW = matrix_mul (delta_ref[0]) (matrix_transpose activation) ;
-    let db = matrix_sum_rows (delta_ref[0]);
-    matrix_sub layer.weights (matrix_scale learning_rate dW)
+    let dW = matrix_mul p (delta_ref[0]) (matrix_transpose p activation) ;
+    let db = matrix_sum_rows p (delta_ref[0]);
+    matrix_sub p layer.weights (matrix_scale p learning_rate dW)
     |> matrix_copy_to layer.weights;
 
-    matrix_sub layer.biases (matrix_scale learning_rate db)
+    matrix_sub p layer.biases (matrix_scale p learning_rate db)
     |> matrix_copy_to layer.biases;
 
     
@@ -154,14 +158,16 @@ let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y 
       let pre_activation = cache.pre_activations[i - 1];
 
       let delta = delta_ref[0]
-        |> matrix_mul (matrix_transpose layer.weights)
-        |> matrix_mul_elwise (layer.activation_derivative pre_activation);
+        |> matrix_mul p (matrix_transpose p layer.weights)
+        |> matrix_mul_elwise p (layer.activation_derivative pre_activation);
 
       delta_ref[0] := delta;
       ()
     )
     | _ -> ()
-  )
+  );
+
+  MemPool.reset p
 ;;
 
 # XOR problem
@@ -175,9 +181,11 @@ let X = Matrix 4 2 [|
 let y = Matrix 4 1 [| 0., 1., 1., 0. |];
 let cache = LayerCache.from_network MLP 4 2;
 
+let pool = MemPool.create 100000;
+
 for epoch = 0 to 800 in (
-  let (out, cache) = X |> forward MLP cache;
-  backward 0.01 MLP cache y;
+  let (out, cache) = X |> forward pool MLP cache;
+  backward pool 0.01 MLP cache y;
   match (epoch % 10) with
   | 0 -> (
     print `epoch {epoch} out loss {mse_loss out y}`;
