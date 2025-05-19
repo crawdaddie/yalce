@@ -68,6 +68,10 @@ let matrix_size = fn m: (Matrix) ->
   m.rows * m.cols
 ;;
 
+let matrix_row = fn m: (Matrix) i ->
+  Matrix 1 m.cols (array_range (i * m.cols) m.cols m.data)
+;;
+
 let matrix_copy = fn m: (Matrix) ->
   let copy = matrix_zeroes_tmp m.rows m.cols; 
   for i = 0 to (array_size m.data) in (

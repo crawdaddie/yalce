@@ -16,8 +16,8 @@ let relu = fn x: (Matrix) ->
 
     let v = x.data[i] in
 
-    x.data[i] := (match v with
-      | v if v > 0. -> v
+    x.data[i] := (match (v > 0.) with
+      | true -> v
       | _ -> 0.
     )
   );
@@ -29,8 +29,8 @@ let relu_derivative = fn x: (Matrix) ->
 
   for i = 0 to (matrix_size x) in (
     let v = x.data[i] in
-    x_.data[i] := (match v with
-      | v if v > 0. -> 1.
+    x_.data[i] := (match (v > 0.) with
+      | true -> 1.
       | _ -> 0.
     )
   );
@@ -155,6 +155,7 @@ let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y 
 
   for _i = 0 to len in (
     let i = len - 1 - _i; # reverse
+
     let layer = network.layers[i];
 
     let activation = cache.activations[i]; 
@@ -166,8 +167,6 @@ let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y 
 
     matrix_sub layer.biases (matrix_scale learning_rate db)
     |> matrix_copy_to layer.biases;
-
-
 
     match i > 0 with
     | true -> (
@@ -182,7 +181,6 @@ let backward = fn learning_rate network: (Network) cache: (LayerCache.LCache) y 
     )
     | _ -> ()
   )
-
 ;;
 
 # XOR problem
@@ -194,32 +192,42 @@ let X = Matrix 4 2 [|
 |];
 
 let y = Matrix 4 1 [| 0., 1., 1., 0. |];
-let cache = LayerCache.from_network MLP 4 2;
+let cache = LayerCache.from_network MLP 1 2;
 
 for epoch = 0 to 10000 in (
   
   pool_reset ();
-  let (out, cache) = X |> forward MLP cache;
-  backward 0.01 MLP cache y;
-  match (epoch % 10) with
-  | 0 -> (
-    print `epoch {epoch} out loss {mse_loss out y}\n`;
-    print_matrix out;
-    ()
+  for i = 0 to X.rows in (
+    let row = matrix_row X i;
+    let (out, cache) = row |> forward MLP cache;
+    backward 0.01 MLP cache y;
+    match (epoch % 10) with
+    | 0 -> (
+      print `epoch {epoch} out loss {mse_loss out y}\n`;
+      print_matrix row;
+      print_matrix out;
+      ()
+    )
+    | _ -> ()
   )
-  | _ -> ()
 );
 
-let input_test = fn x y ->
-  let input = Matrix 1 2 [| x, y, |];
-  let output = input |> infer MLP;
-  let v = output.data[0];
-  print `Input: [{x}, {y}] → Output: {v}\n`
+let input_test = fn () ->
+  let input = Matrix 4 2 [|
+    0., 0.,
+    0., 1.,
+    1., 0.,
+    1., 1.
+  |];
+
+  for i = 0 to input.rows in (
+    let row = matrix_row input i;
+    let out = row |> infer MLP;
+    print `TEST 1x2:\n`;
+    print_matrix row;
+    print_matrix out
+  )
 ;;
 
-input_test 0. 0.;
-input_test 0. 1.;
-input_test 1. 0.;
-input_test 1. 1.;
-
+input_test ()
 
