@@ -682,7 +682,7 @@ typedef struct IntLL {
 } IntLL;
 
 void set_input_conf(char *conf) {
-  printf("set input conf %p\n", conf);
+  // printf("set input conf %p\n", conf);
   IntLL *l = (IntLL *)conf;
 
   config_size = 0;

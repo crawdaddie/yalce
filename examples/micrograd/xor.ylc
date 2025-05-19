@@ -1,6 +1,5 @@
 import ../../lib/Math;
 open ../../lib/Arrays;
-import dataset;
 open linalg;
 
 type Layer = (
@@ -28,7 +27,9 @@ let relu_derivative = fn x: (Matrix) ->
   let x_ = matrix_zeroes x.rows x.cols;
 
   for i = 0 to (matrix_size x) in (
+
     let v = x.data[i] in
+
     x_.data[i] := (match (v > 0.) with
       | true -> 1.
       | _ -> 0.
@@ -202,11 +203,13 @@ for epoch = 0 to 10000 in (
     let (out, cache) = row |> forward MLP cache;
     let y = matrix_row Y i;
     backward 0.01 MLP cache y;
+
+
     match (epoch % 10) with
     | 0 -> (
       print `epoch {epoch} out loss {mse_loss out y}\n`;
-      print_matrix row;
-      print_matrix out;
+      # print_matrix row;
+      # print_matrix out;
       ()
     )
     | _ -> ()

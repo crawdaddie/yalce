@@ -138,7 +138,6 @@ uint64_t get_tl_tick() {
 }
 void process_scheduler_events(uint64_t current_sample) {
 
-  SchedulerEvent events[32];
   while (scheduler_queue.size > 0 &&
          scheduler_queue.events[0].tick <= current_sample) {
 
