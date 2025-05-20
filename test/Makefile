@@ -20,6 +20,7 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
              $(LANG_SRC_DIR)/ht.c \
              $(LANG_SRC_DIR)/common.c \
              $(LANG_SRC_DIR)/input.c \
+             $(LANG_SRC_DIR)/config.c \
              $(LANG_SRC_DIR)/string_proc.c \
              $(LANG_SRC_DIR)/serde.c \
              $(LEX_OUTPUT) \

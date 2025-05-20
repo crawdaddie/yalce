@@ -1245,6 +1245,20 @@ int main() {
       &MAKE_FN_TYPE_2(&t_num, &vtype));
   });
 
+  ({
+    Type matrix = TCONS("Matrix", 3, &t_int, &t_int, &TARRAY(&t_int));
+
+    matrix.data.T_CONS.names = (char *[]){"rows", "cols", "data"};
+
+    T("type Matrix = (\n"
+      "  rows: Int,\n"
+      "  cols: Int,\n"
+      "  data: Array of T\n"
+      ");\n"
+      "Matrix 2 2 [|1, 2, 3, 4|]\n",
+      &matrix);
+  });
+
   // ({
   //   T("let f = fn network -> network.layers;", &MAKE_FN_TYPE_2(&));
   // });

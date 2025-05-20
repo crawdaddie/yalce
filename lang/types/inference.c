@@ -251,13 +251,18 @@ Type *infer(Ast *ast, TICtx *ctx) {
         }
       }
       type = ref->type;
+      if (type->kind == T_CREATE_NEW_GENERIC) {
+        Type *tmpl = type->data.T_CREATE_NEW_GENERIC.template;
+        type = type->data.T_CREATE_NEW_GENERIC.fn(tmpl);
+      }
     }
 
     if (!ref) {
       Type *t = lookup_builtin_type(name);
 
       if (t && t->kind == T_CREATE_NEW_GENERIC) {
-        type = t->data.T_CREATE_NEW_GENERIC(NULL);
+        Type *template = t->data.T_CREATE_NEW_GENERIC.template;
+        type = t->data.T_CREATE_NEW_GENERIC.fn(template);
       } else if (t) {
         type = t;
       } else {
@@ -487,7 +492,8 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
     Type *type;
 
     if (lookup && lookup->kind == T_CREATE_NEW_GENERIC) {
-      lookup = lookup->data.T_CREATE_NEW_GENERIC(NULL);
+      Type *template = lookup->data.T_CREATE_NEW_GENERIC.template;
+      lookup = lookup->data.T_CREATE_NEW_GENERIC.fn(template);
       return lookup;
     }
 

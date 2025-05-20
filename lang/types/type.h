@@ -276,7 +276,11 @@ typedef struct Type {
       struct Type *to;
       struct Type *state;
     } T_COROUTINE_FN;
-    CreateNewGenericTypeFn T_CREATE_NEW_GENERIC;
+
+    struct {
+      CreateNewGenericTypeFn fn;
+      struct Type *template;
+    } T_CREATE_NEW_GENERIC;
 
   } data;
 

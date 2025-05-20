@@ -245,6 +245,14 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_TYPE_DECL: {
     Type *t = ast->md;
+    if (t->kind == T_CREATE_NEW_GENERIC) {
+      Type *tpl = t->data.T_CREATE_NEW_GENERIC.template;
+      Type *resolved = t->data.T_CREATE_NEW_GENERIC.fn(tpl);
+      if (resolved->kind == T_CONS) {
+        t = resolved;
+      }
+    }
+
     if (is_generic(t) && t->kind == T_CONS) {
       const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 

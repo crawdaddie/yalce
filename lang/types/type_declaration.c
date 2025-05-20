@@ -292,6 +292,42 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   return NULL;
 }
 
+Type *_rec_generic_cons(Type *t, TypeEnv *env) {
+  switch (t->kind) {
+  case T_CONS: {
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      t->data.T_CONS.args[i] = _rec_generic_cons(t->data.T_CONS.args[i], env);
+    }
+    break;
+  }
+  case T_VAR: {
+    Type *l = env_lookup(env, t->data.T_VAR);
+    if (l) {
+      *t = *l;
+    } else {
+      Type *n = next_tvar();
+      env = env_extend(env, t->data.T_VAR, next_tvar());
+      *t = *n;
+    }
+    break;
+  }
+  case T_FN: {
+    while (t->kind == T_FN) {
+      t->data.T_FN.from = _rec_generic_cons(t->data.T_FN.from, env);
+      t = t->data.T_FN.to;
+    }
+    *t = *_rec_generic_cons(t->data.T_FN.from, env);
+    break;
+  }
+  }
+  return t;
+}
+
+Type *create_generic_cons_from_declaration(Type *_t) {
+  Type *t = deep_copy_type(_t);
+  return _rec_generic_cons(t, NULL);
+}
+
 Type *type_declaration(Ast *ast, TypeEnv **env) {
 
   Ast *binding = ast->data.AST_LET.binding;
@@ -310,9 +346,6 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
     if (type->kind == T_CONS &&
         CHARS_EQ(type->data.T_CONS.name, TYPE_NAME_TUPLE)) {
       type->data.T_CONS.name = name;
-      // printf("make named struct cons\n");
-      // print_ast(ast);
-      // print_type(type);
     }
 
   } else {
@@ -331,6 +364,15 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   // }
 
   type->alias = name;
+  if (is_generic(type) && type->kind == T_CONS) {
+    Type *gen_tmpl = empty_type();
+    *gen_tmpl = (Type){T_CREATE_NEW_GENERIC,
+                       .data = {.T_CREATE_NEW_GENERIC = {
+                                    .fn = (CreateNewGenericTypeFn)
+                                        create_generic_cons_from_declaration,
+                                    .template = type}}};
+    type = gen_tmpl;
+  }
 
   *env = env_extend(*env, name, type);
 
@@ -343,6 +385,8 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
     }
     // print_type_env(*env);
   }
+
   binding_name = NULL;
+
   return type;
 }

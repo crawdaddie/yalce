@@ -160,7 +160,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   if (is_index_access_ast(ast)) {
     return IndexAccessHandler(ast, ctx, module, builder);
   }
-
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
           ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record)) {

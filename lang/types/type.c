@@ -603,6 +603,13 @@ void print_type_to_stream(Type *t, FILE *stream) {
     fprintf(stream, ")");
     break;
   }
+  case T_CREATE_NEW_GENERIC: {
+    if (t->data.T_CREATE_NEW_GENERIC.template) {
+      return print_type_to_stream(t->data.T_CREATE_NEW_GENERIC.template,
+                                  stream);
+      break;
+    }
+  }
   }
 }
 

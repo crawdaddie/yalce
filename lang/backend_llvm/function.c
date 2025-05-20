@@ -169,19 +169,12 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int fn_len = ast->data.AST_LAMBDA.len;
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
-  // if (num_closure_vars > 0) {
-  //   printf("codegen fn\n");
-  //   print_type(fn_type);
-  //   // fn_type = get_full_fn_type_of_closure(ast);
-  // }
-
   LLVMTypeRef prototype =
       codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx->env, module);
 
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
-  print_type_env(fn_ctx.env);
 
   if (!is_anon) {
     add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
@@ -367,28 +360,28 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   TypeEnv *env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env;
 
-  TypeConstraint *constraints = NULL;
-  Type *f;
-  for (f = generic_type; f->kind == T_FN; f = f->data.T_FN.to) {
-    Type *ff = f->data.T_FN.from;
-    if (is_generic(f->data.T_FN.from)) {
-      Type *r = resolve_type_in_env(ff, ctx->env);
-      if (r) {
-        constraints = constraints_extend(constraints, ff, r);
-      }
-    }
-  }
-
-  if (is_generic(f)) {
-    Type *r = resolve_type_in_env(f, ctx->env);
-    if (r) {
-      constraints = constraints_extend(constraints, f, r);
-    }
-  }
-
-  Substitution *subst = NULL;
-  subst = solve_constraints(constraints);
-  env = create_env_from_subst(env, subst);
+  // TypeConstraint *constraints = NULL;
+  // Type *f;
+  // for (f = generic_type; f->kind == T_FN; f = f->data.T_FN.to) {
+  //   Type *ff = f->data.T_FN.from;
+  //   if (is_generic(f->data.T_FN.from)) {
+  //     Type *r = resolve_type_in_env(ff, ctx->env);
+  //     if (r) {
+  //       constraints = constraints_extend(constraints, ff, r);
+  //     }
+  //   }
+  // }
+  //
+  // if (is_generic(f)) {
+  //   Type *r = resolve_type_in_env(f, ctx->env);
+  //   if (r) {
+  //     constraints = constraints_extend(constraints, f, r);
+  //   }
+  // }
+  //
+  // Substitution *subst = NULL;
+  // subst = solve_constraints(constraints);
+  // env = create_env_from_subst(env, subst);
 
   compilation_ctx.env =
       create_env_for_generic_fn(env, generic_type, specific_type);

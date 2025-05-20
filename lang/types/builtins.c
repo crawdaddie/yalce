@@ -26,6 +26,7 @@ TypeClass GenericOrd = {.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.};
 TypeClass GenericEq = {.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.};
 
 Type *create_new_arithmetic_sig(void *i) {
+  // printf("new arithmetic???\n");
   Type *a = next_tvar();
   typeclasses_extend(a, &GenericArithmetic);
   Type *b = next_tvar();
@@ -79,13 +80,14 @@ Type *create_new_eq_sig(void *i) {
 }
 
 Type t_arithmetic_fn_sig = {
-    T_CREATE_NEW_GENERIC, {.T_CREATE_NEW_GENERIC = create_new_arithmetic_sig}};
+    T_CREATE_NEW_GENERIC,
+    {.T_CREATE_NEW_GENERIC = {.fn = create_new_arithmetic_sig}}};
 
 Type t_ord_fn_sig = {T_CREATE_NEW_GENERIC,
-                     {.T_CREATE_NEW_GENERIC = create_new_ord_sig}};
+                     {.T_CREATE_NEW_GENERIC = {.fn = create_new_ord_sig}}};
 
 Type t_eq_fn_sig = {T_CREATE_NEW_GENERIC,
-                    {.T_CREATE_NEW_GENERIC = create_new_eq_sig}};
+                    {.T_CREATE_NEW_GENERIC = {.fn = create_new_eq_sig}}};
 
 Type *create_new_array_at_sig(void *_) {
   Type *el = next_tvar();
@@ -96,7 +98,7 @@ Type *create_new_array_at_sig(void *_) {
   return f;
 }
 Type t_array_at = {T_CREATE_NEW_GENERIC,
-                   {.T_CREATE_NEW_GENERIC = create_new_array_at_sig}};
+                   {.T_CREATE_NEW_GENERIC = {.fn = create_new_array_at_sig}}};
 
 Type *create_new_array_set_sig(void *_) {
   Type *el = next_tvar();
@@ -109,7 +111,7 @@ Type *create_new_array_set_sig(void *_) {
 }
 
 Type t_array_set = {T_CREATE_NEW_GENERIC,
-                    {.T_CREATE_NEW_GENERIC = create_new_array_set_sig}};
+                    {.T_CREATE_NEW_GENERIC = {.fn = create_new_array_set_sig}}};
 
 Type *create_new_array_size_sig(void *_) {
 
@@ -117,8 +119,9 @@ Type *create_new_array_size_sig(void *_) {
   Type *arr = create_array_type(el);
   return type_fn(arr, &t_int);
 }
-Type t_array_size = {T_CREATE_NEW_GENERIC,
-                     {.T_CREATE_NEW_GENERIC = create_new_array_size_sig}};
+Type t_array_size = {
+    T_CREATE_NEW_GENERIC,
+    {.T_CREATE_NEW_GENERIC = {.fn = create_new_array_size_sig}}};
 
 Type *create_new_list_concat_sig(void *_) {
   Type *el = next_tvar();
@@ -129,8 +132,9 @@ Type *create_new_list_concat_sig(void *_) {
   return f;
 }
 
-Type t_list_concat = {T_CREATE_NEW_GENERIC,
-                      {.T_CREATE_NEW_GENERIC = create_new_list_concat_sig}};
+Type t_list_concat = {
+    T_CREATE_NEW_GENERIC,
+    {.T_CREATE_NEW_GENERIC = {.fn = create_new_list_concat_sig}}};
 
 Type *create_next_option() {
   Type *t = create_option_type(next_tvar());
@@ -138,14 +142,16 @@ Type *create_next_option() {
 }
 
 Type t_option_of_var = {T_CREATE_NEW_GENERIC,
-                        {.T_CREATE_NEW_GENERIC = create_next_option}};
+                        {.T_CREATE_NEW_GENERIC = {.fn = create_next_option}}};
 
 Type t_cor_wrap_ret_type = {T_VAR, {.T_VAR = "tt"}};
 Type t_cor_wrap_state_type = {T_VAR, {.T_VAR = "xx"}};
 
 #define GENERIC_TYPE(_sig_fn)                                                  \
   {                                                                            \
-    T_CREATE_NEW_GENERIC, { .T_CREATE_NEW_GENERIC = _sig_fn }                  \
+    T_CREATE_NEW_GENERIC, {                                                    \
+      .T_CREATE_NEW_GENERIC = {.fn = _sig_fn }                                 \
+    }                                                                          \
   }
 
 Type *_cor_wrap_effect_fn_sig() {
