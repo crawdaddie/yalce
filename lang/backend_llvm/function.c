@@ -2,6 +2,7 @@
 #include "match.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/common.h"
 #include "types/inference.h"
 #include "types/type.h"
 #include "util.h"
@@ -180,6 +181,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
+  print_type_env(fn_ctx.env);
 
   if (!is_anon) {
     add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
@@ -347,22 +349,8 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
   }
 
   subst = solve_constraints(constraints);
-  // print_constraints(constraints);
-  // print_subst(subst);
-  env = create_env_from_subst(env, subst);
-  //
-  // for (Substitution *s = subst; s; s = s->next) {
-  //   if (s->from->kind == T_VAR) {
-  //     env = env_extend(env, s->from->data.T_VAR, s->to);
-  //   } else if (s->from->kind == T_CONS && s->to->kind == T_CONS) {
-  //   }
-  // }
-  //
-  // printf("compile specific fn\n");
-  // print_type(generic_type);
-  // print_type(specific_type);
-  // print_subst(subst);
 
+  env = create_env_from_subst(env, subst);
   return env;
 }
 
@@ -377,9 +365,33 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   compilation_ctx.stack_ptr = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
   compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
 
-  compilation_ctx.env = create_env_for_generic_fn(
-      sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
-      specific_type);
+  TypeEnv *env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env;
+
+  TypeConstraint *constraints = NULL;
+  Type *f;
+  for (f = generic_type; f->kind == T_FN; f = f->data.T_FN.to) {
+    Type *ff = f->data.T_FN.from;
+    if (is_generic(f->data.T_FN.from)) {
+      Type *r = resolve_type_in_env(ff, ctx->env);
+      if (r) {
+        constraints = constraints_extend(constraints, ff, r);
+      }
+    }
+  }
+
+  if (is_generic(f)) {
+    Type *r = resolve_type_in_env(f, ctx->env);
+    if (r) {
+      constraints = constraints_extend(constraints, f, r);
+    }
+  }
+
+  Substitution *subst = NULL;
+  subst = solve_constraints(constraints);
+  env = create_env_from_subst(env, subst);
+
+  compilation_ctx.env =
+      create_env_for_generic_fn(env, generic_type, specific_type);
 
   LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
 

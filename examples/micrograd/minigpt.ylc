@@ -1,0 +1,110 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+
+let read_bytes = extern fn Ptr -> String;
+let char_to_int = extern fn Char -> Int;
+
+
+let get_text = fn () ->
+  match (open_file "examples/micrograd/tiny_shakespeare.txt" "rb") with
+  | Some fd -> (
+    let c = read_bytes fd;
+    fclose fd;
+    c
+  )
+  | None -> ""
+;;
+let text = get_text ();
+
+let freqs = array_fill_const 256 0;
+let char_map = array_fill_const 256 0;
+
+for i = 0 to array_size text in (
+  let ch = char_to_int (text[i]);
+  freqs[ch] := freqs[ch] + 1
+);
+
+let distinct_chars = [|0|];
+for i = 0 to array_size freqs in (
+  match freqs[i] > 0 with
+  | true -> (
+    char_map[i] := distinct_chars[0];
+    distinct_chars[0] := distinct_chars[0] + 1;
+    ()
+  )
+  | _ -> ()
+);
+
+#  Create reverse mapping from index (0-64) back to original ASCII code
+let reverse_map = array_fill_const 65 0;
+for i = 0 to array_size freqs in (
+  match freqs[i] > 0 with
+  | true -> (
+    reverse_map[char_map[i]] := i;
+    ()
+  )
+  | _ -> ()
+);
+
+let encode = fn ch ->
+  char_map[char_to_int ch]
+;;
+
+let decode = fn i ->
+  Char (reverse_map[i])
+;;
+
+print `distinct chars: {distinct_chars[0]}\n`;
+
+let encoded_text = array_fill (array_size text) (fn i: (Int) -> encode (text[i])); 
+
+# print `encoded: 
+# {decode (encoded_text[0])}:{encoded_text[0]}
+# {decode (encoded_text[1])}:{encoded_text[1]}
+# {decode (encoded_text[2])}:{encoded_text[2]}
+# {decode (encoded_text[3])}:{encoded_text[3]}
+# {decode (encoded_text[4])}:{encoded_text[4]}
+# {decode (encoded_text[5])}:{encoded_text[5]}
+# `;
+
+let print_arr_int = fn a: (Array of Int) ->
+  print "[|"; 
+  for i = 0 to array_size a in (
+    print `{a[i]}, `
+  );
+  print "|]" 
+;;
+
+# let block_size = 8;
+# let train_chunk = array_range 0 (block_size + 1) encoded_text;
+
+# for i = 0 to block_size in (
+#   print "for input ";
+#   print_arr @@ array_range 0 (i + 1) train_chunk;
+#   print ` the expected target is {train_chunk[i + 1]}\n`
+# );
+let num_train_tokens = 9 * (array_size encoded_text) / 10;
+let train_data = array_range 0 num_train_tokens encoded_text;
+let val_data = array_range num_train_tokens ((array_size encoded_text) / 10) encoded_text;
+
+# def get_batch(split):
+#     # generate a small batch of data of inputs x and targets y
+#     data = train_data if split == 'train' else val_data
+#     ix = torch.randint(len(data) - block_size, (batch_size,))
+#     x = torch.stack([data[i:i+block_size] for i in ix])
+#     y = torch.stack([data[i+1:i+block_size+1] for i in ix])
+#     return x, y
+let block_size = 8;
+open linalg;
+import ../../lib/Math;
+let get_training_batch = fn () ->
+  let ix = array_fill 8 (fn i: (Int) -> Math.rand_int num_train_tokens);
+  print_arr_int ix;
+  ()
+;;
+
+get_training_batch ()
+
+
+
+

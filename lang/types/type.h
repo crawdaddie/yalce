@@ -343,9 +343,6 @@ bool is_pointer_type(Type *type);
 
 bool is_array_type(Type *type);
 
-Type *create_typeclass_resolve_type(const char *comparison_tc, int num_types,
-                                    Type **types);
-
 Type *resolve_tc_rank(Type *type);
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement);

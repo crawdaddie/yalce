@@ -1043,17 +1043,9 @@ bool is_variant_type(Type *type) {
          (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0);
 }
 
-Type *create_typeclass_resolve_type(const char *comparison_tc, int num,
-                                    Type **types) {
-  Type *tcr = empty_type();
-  tcr->kind = T_TYPECLASS_RESOLVE;
-  tcr->data.T_CONS.name = comparison_tc;
-  tcr->data.T_CONS.num_args = num;
-  tcr->data.T_CONS.args = types;
-  return tcr;
-}
-
 Type *resolve_tc_rank(Type *type) {
+  // printf
+  // print_type(type);
 
   if (type->kind != T_TYPECLASS_RESOLVE) {
     return type;
@@ -1517,9 +1509,9 @@ TypeClass *impls_extend(TypeClass *impls, TypeClass *tc) {
   tc->next = impls;
   return tc;
 }
+
 void typeclasses_extend(Type *t, TypeClass *tc) {
   if (!type_implements(t, tc)) {
-
     t->implements = impls_extend(t->implements, tc);
   }
 }

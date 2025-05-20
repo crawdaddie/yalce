@@ -54,15 +54,6 @@ let print_matrix = fn m: (Matrix) ->
   print "|]\n"
 ;;
 
-let matrix_at = fn m: (Matrix) (r, c): (Int, Int) ->
-  m.data[(r * m.cols + c)]
-;;
-
-let matrix_access = fn m: (Matrix) i: (List of Int) ->
-  match i with
-  | [r, c]  -> array_range (r * m.cols + c) 1 m.data
-  | [r]     -> array_range (r * m.cols) m.cols m.data
-;;
 
 let matrix_size = fn m: (Matrix) -> 
   m.rows * m.cols

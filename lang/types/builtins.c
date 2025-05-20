@@ -35,6 +35,7 @@ Type *create_new_arithmetic_sig(void *i) {
   Type **args = talloc(sizeof(Type *) * 2);
   args[0] = a;
   args[1] = b;
+
   *arith_res =
       ((Type){T_TYPECLASS_RESOLVE,
               {.T_CONS = {.name = "arithmetic", .num_args = 2, .args = args}}});

@@ -19,6 +19,7 @@ let unipolar_scale = extern fn Double -> Double -> Double -> Double;
 let double_array_init = extern fn Int -> Double -> Ptr;
 let double_array = extern fn Int -> Double -> Array of Double;
 let pow = extern fn Double -> Double -> Double;
+let tanh = extern fn Double -> Double;
 
 let max_int = fn a: (Int) b: (Int) ->
   match a with 
@@ -43,6 +44,11 @@ let min = fn a b ->
   | true -> a 
   | _ -> b
 ;;
+let abs = fn a ->
+  match a > 0 with
+  | true -> a
+  | _ -> a * -1
+;;
 
 let chance = fn thresh f -> 
   let x = rand_double () in
@@ -56,6 +62,25 @@ let chance2 = fn thresh f g ->
   match (x <= thresh) with
   | true -> (f (); ())
   | _ -> (g (); ())
+;;
+
+
+let shuffle = fn n -> 
+  `
+  Fisher-Yates shuffle
+  return an array of numbers 0 to n-1 shuffled in random order
+  https://dl.acm.org/doi/pdf/10.1145/364520.364540#.pdf
+  `;
+  let arr = array_fill n (fn i: (Int) -> i);
+
+  for _i = 0 to n in (
+    let i = n - 1 - _i; # reverse
+    let j = rand_int (i + 1);
+    let iv = arr[i];
+    arr[i] := arr[j];
+    arr[j] := iv
+  );
+  arr
 ;;
 
 

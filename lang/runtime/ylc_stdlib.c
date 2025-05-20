@@ -494,3 +494,5 @@ void _linalg_pool_reset() {
   _linalg_pool_head = _linalg_pool;
   _linalg_pool_tail = _linalg_pool;
 }
+
+int char_to_int(char c) { return (int)c; }

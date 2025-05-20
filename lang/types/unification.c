@@ -225,8 +225,12 @@ Type *apply_substitution(Substitution *subst, Type *t) {
     break;
   }
   case T_TYPECLASS_RESOLVE: {
+    // printf("apply subst tc resolve\n");
+    // print_type(t);
+    // print_subst(subst);
 
     Type *new_t = talloc(sizeof(Type));
+
     *new_t = *t;
 
     new_t->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
@@ -264,7 +268,17 @@ Type *apply_substitution(Substitution *subst, Type *t) {
   return t;
 }
 
+Type *tcr_make_non_degenerate(Type *t) {
+  if (t->kind == T_TYPECLASS_RESOLVE &&
+      types_equal(t->data.T_CONS.args[0], t->data.T_CONS.args[1])) {
+    return t->data.T_CONS.args[0];
+  }
+  return t;
+}
+
 Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
+  t2 = tcr_make_non_degenerate(t2);
+
   if (types_equal(t1, t2)) {
     return subst;
   }

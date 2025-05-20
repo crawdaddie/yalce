@@ -65,8 +65,8 @@ struct _OptFile {
 };
 
 typedef struct ByteArray {
-  char *bytes;
   size_t size;
+  char *bytes;
 } ByteArray;
 
 struct ByteArray read_bytes(FILE *f);
