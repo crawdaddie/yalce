@@ -58,15 +58,6 @@ print `distinct chars: {distinct_chars[0]}\n`;
 
 let encoded_text = array_fill (array_size text) (fn i: (Int) -> encode (text[i])); 
 
-# print `encoded: 
-# {decode (encoded_text[0])}:{encoded_text[0]}
-# {decode (encoded_text[1])}:{encoded_text[1]}
-# {decode (encoded_text[2])}:{encoded_text[2]}
-# {decode (encoded_text[3])}:{encoded_text[3]}
-# {decode (encoded_text[4])}:{encoded_text[4]}
-# {decode (encoded_text[5])}:{encoded_text[5]}
-# `;
-
 let print_arr_int = fn a: (Array of Int) ->
   print "[|"; 
   for i = 0 to array_size a in (
@@ -95,8 +86,8 @@ let val_data = array_range num_train_tokens ((array_size encoded_text) / 10) enc
 #     y = torch.stack([data[i+1:i+block_size+1] for i in ix])
 #     return x, y
 let block_size = 8;
-open linalg;
 import ../../lib/Math;
+
 let get_training_batch = fn () ->
   let ix = array_fill 8 (fn i: (Int) -> Math.rand_int num_train_tokens);
   print_arr_int ix;

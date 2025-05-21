@@ -344,6 +344,7 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
   subst = solve_constraints(constraints);
 
   env = create_env_from_subst(env, subst);
+
   return env;
 }
 
@@ -385,6 +386,18 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   compilation_ctx.env =
       create_env_for_generic_fn(env, generic_type, specific_type);
+
+  while (specific_type->kind == T_FN) {
+    Type *f = specific_type->data.T_FN.from;
+    if (is_generic(f)) {
+      Type *r = resolve_type_in_env(f, ctx->env);
+      if (r) {
+        compilation_ctx.env = _bind_in_env(compilation_ctx.env, f, r);
+      }
+    }
+
+    specific_type = specific_type->data.T_FN.to;
+  }
 
   LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
 

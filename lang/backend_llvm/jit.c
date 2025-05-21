@@ -1,6 +1,5 @@
 #include "backend_llvm/jit.h"
-#include "backend_llvm/codegen.h"
-#include "backend_llvm/common.h"
+#include "backend_llvm/codegen.h" #include "backend_llvm/common.h"
 #include "backend_llvm/globals.h"
 #include "builtin_functions.h"
 #include "config.h"

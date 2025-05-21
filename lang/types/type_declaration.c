@@ -22,7 +22,6 @@ void *_type_error(Ast *node, const char *fmt, ...) {
 }
 
 Type *env_lookup(TypeEnv *env, const char *name);
-Type *compute_type_expression(Ast *expr, TypeEnv *env);
 
 Type *type_var_of_id(const char *id_chars) {
   Type *type = talloc(sizeof(Type));
@@ -31,14 +30,14 @@ Type *type_var_of_id(const char *id_chars) {
   return type;
 }
 
-Type *fn_type_decl(Ast *sig, TypeEnv *env) {
+Type *fn_type_decl(Ast *sig, TypeEnv *env, TypeEnv **up) {
   if (sig->tag == AST_FN_SIGNATURE) {
     Ast *param_ast = sig->data.AST_LIST.items;
-    Type *fn = type_fn(compute_type_expression(param_ast, env),
-                       fn_type_decl(param_ast + 1, env));
+    Type *fn = type_fn(compute_type_expression(param_ast, env, up),
+                       fn_type_decl(param_ast + 1, env, up));
     return fn;
   }
-  return compute_type_expression(sig, env);
+  return compute_type_expression(sig, env, up);
 }
 
 Type *compute_concrete_type(Type *generic, Type *contained) {
@@ -63,13 +62,19 @@ bool can_hold_recursive_ref(const char *container_type_name) {
   return false;
 }
 
-Type *compute_type_expression(Ast *expr, TypeEnv *env) {
+Type *_rec_generic_cons(Type *t, TypeEnv **env);
+Type *compute_type_expression(Ast *expr, TypeEnv *env, TypeEnv **up) {
+  // TypeEnv _env;
+  // TypeEnv *__env = &_env;
+  // if (env == NULL) {
+  //   env = __env;
+  // }
 
   switch (expr->tag) {
   case AST_LIST: {
     int len = expr->data.AST_LIST.len;
     if (len == 1) {
-      return compute_type_expression(expr->data.AST_LIST.items, env);
+      return compute_type_expression(expr->data.AST_LIST.items, env, up);
     }
     Type *variant = empty_type();
     variant->kind = T_CONS;
@@ -89,7 +94,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
         member->data.T_CONS.num_args = 0;
         member->data.T_CONS.name = item->data.AST_IDENTIFIER.value;
       } else {
-        member = compute_type_expression(item, env);
+        member = compute_type_expression(item, env, up);
       }
       variant->data.T_CONS.args[i] = member;
     }
@@ -159,12 +164,12 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
 
     AST_LIST_ITER(expr->data.AST_LAMBDA.params, ({
                     Ast *param = l->ast;
-                    Type *param_type = compute_type_expression(param, env);
+                    Type *param_type = compute_type_expression(param, env, up);
                     param_types[i] = param_type;
                     _env = env_extend(_env, param_type->data.T_VAR, param_type);
                   }));
 
-    Type *t = compute_type_expression(expr->data.AST_LAMBDA.body, _env);
+    Type *t = compute_type_expression(expr->data.AST_LAMBDA.body, _env, up);
 
     expr->md = create_type_multi_param_fn(len, param_types, t);
     return t;
@@ -182,11 +187,11 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
         has_names = true;
 
         contained_types[i] =
-            compute_type_expression(item->data.AST_LET.expr, env);
+            compute_type_expression(item->data.AST_LET.expr, env, up);
 
         names[i] = item->data.AST_LET.binding->data.AST_IDENTIFIER.value;
       } else {
-        contained_types[i] = compute_type_expression(item, env);
+        contained_types[i] = compute_type_expression(item, env, up);
       }
     }
     Type *t = empty_type();
@@ -202,12 +207,13 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
     return t;
   }
   case AST_FN_SIGNATURE: {
-    Type *fn = fn_type_decl(expr, env);
+    Type *fn = fn_type_decl(expr, env, up);
     return fn;
   }
 
   case AST_BINOP: {
     if (expr->data.AST_BINOP.op == TOKEN_OF) {
+
       if (expr->data.AST_BINOP.left->tag != AST_IDENTIFIER) {
         fprintf(stderr, "Error - wrong lhs of Of binop\n");
         return NULL;
@@ -224,7 +230,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
         if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
                    "Option") == 0) {
           Type *contained =
-              compute_type_expression(expr->data.AST_BINOP.right, env);
+              compute_type_expression(expr->data.AST_BINOP.right, env, up);
 
           Type *opt = create_option_type(contained);
 
@@ -234,7 +240,8 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
         if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
                    "Coroutine") == 0) {
 
-          Type *r = compute_type_expression(expr->data.AST_BINOP.right, env);
+          Type *r =
+              compute_type_expression(expr->data.AST_BINOP.right, env, up);
 
           Type *cor = create_coroutine_instance_type(r);
 
@@ -244,7 +251,8 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
         if (strcmp(expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value,
                    TYPE_NAME_PTR) == 0) {
 
-          Type *r = compute_type_expression(expr->data.AST_BINOP.right, env);
+          Type *r =
+              compute_type_expression(expr->data.AST_BINOP.right, env, up);
           Type **args = talloc(sizeof(Type *));
           *args = r;
 
@@ -264,12 +272,37 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       }
 
       Type *contained_type =
-          compute_type_expression(expr->data.AST_BINOP.right, env);
+          compute_type_expression(expr->data.AST_BINOP.right, env, up);
 
       const char *name = expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
       Type *lookup = env_lookup(env, name);
 
-      if (lookup && is_generic(lookup)) {
+      if (lookup && lookup->kind == T_CREATE_NEW_GENERIC &&
+          lookup->data.T_CREATE_NEW_GENERIC.fn &&
+          lookup->data.T_CREATE_NEW_GENERIC.template) {
+
+        Type *tpl = lookup->data.T_CREATE_NEW_GENERIC.template;
+        tpl = deep_copy_type(tpl);
+
+        tpl = _rec_generic_cons(tpl, up);
+        return tpl;
+      }
+      // printf("do something special with %s ", name);
+      // print_type(lookup);
+      // print_type(gen);
+      // print_type(tpl);
+      // return gen;
+
+      // if (tpl->kind == T_CONS) {
+      //   for (int i = 0; i < tpl->data.T_CONS.num_args; i++) {
+      //     print_type(tpl->data.T_CONS.args[i]);
+      //   }
+      // }
+
+      // } else
+      if (lookup && is_generic(lookup) &&
+          lookup->kind != T_CREATE_NEW_GENERIC) {
+
         Type *t = deep_copy_type(lookup);
         t = compute_concrete_type(t, contained_type);
         return t;
@@ -278,9 +311,8 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
       cons->data.T_CONS.num_args = 1;
       cons->data.T_CONS.args = talloc(sizeof(Type *));
       cons->data.T_CONS.args[0] = contained_type;
-      expr->data.AST_BINOP.right->md = contained_type;
-      expr->data.AST_BINOP.right->md = contained_type;
 
+      expr->data.AST_BINOP.right->md = contained_type;
       expr->data.AST_BINOP.left->md = type_fn(contained_type, cons);
       expr->md = cons;
 
@@ -292,7 +324,7 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env) {
   return NULL;
 }
 
-Type *_rec_generic_cons(Type *t, TypeEnv *env) {
+Type *_rec_generic_cons(Type *t, TypeEnv **env) {
   switch (t->kind) {
   case T_CONS: {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
@@ -301,12 +333,12 @@ Type *_rec_generic_cons(Type *t, TypeEnv *env) {
     break;
   }
   case T_VAR: {
-    Type *l = env_lookup(env, t->data.T_VAR);
+    Type *l = env_lookup(*env, t->data.T_VAR);
     if (l) {
       *t = *l;
     } else {
       Type *n = next_tvar();
-      env = env_extend(env, t->data.T_VAR, next_tvar());
+      *env = env_extend(*env, t->data.T_VAR, n);
       *t = *n;
     }
     break;
@@ -325,7 +357,8 @@ Type *_rec_generic_cons(Type *t, TypeEnv *env) {
 
 Type *create_generic_cons_from_declaration(Type *_t) {
   Type *t = deep_copy_type(_t);
-  return _rec_generic_cons(t, NULL);
+  TypeEnv *env = NULL;
+  return _rec_generic_cons(t, &env);
 }
 
 Type *type_declaration(Ast *ast, TypeEnv **env) {
@@ -342,7 +375,7 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
     var->kind = T_VAR;
     var->data.T_VAR = name;
     TypeEnv *_env = env_extend(*env, name, var);
-    type = compute_type_expression(type_expr_ast, _env);
+    type = compute_type_expression(type_expr_ast, _env, NULL);
     if (type->kind == T_CONS &&
         CHARS_EQ(type->data.T_CONS.name, TYPE_NAME_TUPLE)) {
       type->data.T_CONS.name = name;

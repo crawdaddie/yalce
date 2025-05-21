@@ -829,6 +829,10 @@ bool is_generic(Type *t) {
     return is_generic(t->data.T_FN.from) || is_generic(t->data.T_FN.to);
   }
 
+  case T_CREATE_NEW_GENERIC: {
+    return true;
+  }
+
   default:
     return false;
   }

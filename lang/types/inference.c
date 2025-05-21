@@ -87,9 +87,7 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
     Type *_el_type = infer(el, ctx);
     if (_el_type->kind == T_VAR) {
       unify_in_ctx(_el_type, el_type, ctx, ast);
-    } else if
-
-        (!types_equal(el_type, _el_type)) {
+    } else if (!types_equal(el_type, _el_type)) {
       return type_error(
           ctx, ast,
           "Typecheck Error: typechecking list literal - all elements must "
@@ -299,12 +297,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     if (sig->tag == AST_FN_SIGNATURE) {
       Type *f = compute_type_expression(sig->data.AST_LIST.items + params_count,
-                                        ctx->env);
+                                        ctx->env, NULL);
       sig->data.AST_LIST.items[params_count].md = f;
 
       for (int i = params_count - 1; i >= 0; i--) {
-        Type *p =
-            compute_type_expression(sig->data.AST_LIST.items + i, ctx->env);
+        Type *p = compute_type_expression(sig->data.AST_LIST.items + i,
+                                          ctx->env, NULL);
 
         sig->data.AST_LIST.items[i].md = p;
 
@@ -725,7 +723,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
     Type *param_type;
     if (def != NULL) {
-      param_type = compute_type_expression(def, ctx->env);
+      param_type = compute_type_expression(def, body_ctx.env, &body_ctx.env);
     } else {
       param_type = infer_pattern(param, &body_ctx);
     }
