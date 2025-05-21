@@ -190,8 +190,8 @@ Type t_cor_map_fn_sig = GENERIC_TYPE(_cor_map_fn_sig);
 Type *_array_fill_sig() {
   Type *eltype = next_tvar();
   Type *f = create_array_type(eltype);
-  Type *m = type_fn(&t_int, eltype);
-  f = type_fn(m, f);
+  Type *filler_cb = type_fn(&t_int, eltype);
+  f = type_fn(filler_cb, f);
   f = type_fn(&t_int, f);
   return f;
 }

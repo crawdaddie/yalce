@@ -274,6 +274,4 @@ let input_test = fn () ->
 
 
 input_test ()
-int char_to_int(char c) {
-  return (int)c;
-}
+

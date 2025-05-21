@@ -419,6 +419,9 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
     lambda->data.AST_LAMBDA.len = 0;
     lambda->data.AST_LAMBDA.type_annotations = NULL;
   }
+  if (body->tag != AST_BODY) {
+    body->is_body_tail = true;
+  }
   lambda->data.AST_LAMBDA.body = body;
   return lambda;
 }

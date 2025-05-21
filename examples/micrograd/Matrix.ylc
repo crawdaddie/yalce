@@ -1,0 +1,55 @@
+import ../../lib/Math;
+import ../../lib/Arrays;
+
+type Matrix = (
+  rows: Int,
+  cols: Int,
+  data: Array of T
+);
+
+let mfill = fn r c v ->
+  let arr = array_fill_const (r * c) v;
+  Matrix r c arr
+;;
+
+let mget = fn m: (Matrix of T) (i, j): (Int, Int) ->
+  m.data[i * m.cols + j]
+;;
+
+let (@) = mget;
+
+let mmul = fn b: (Matrix of T) a: (Matrix of T) ->
+  
+  # let c = matrix_zeroes_tmp a.rows b.cols;
+  let c = mfill a.rows b.cols a @ (0, 0);
+  matrix_zeroes_tmp a.rows b.cols;
+  # print `matrix mul out {c.rows} {c.cols}\n`;
+
+  for i = 0 to a.rows in (
+    for j = 0 to b.cols in (
+      for k = 0 to b.rows in (
+        let v = c @ (i, j);
+        c.data[i * c.cols + j] := v + (a @ (i,k)) * b @ (k, j) 
+        # a.data[i * a.cols + j] := v + (a @ (i,k)) * b @ (k, j) 
+      )
+    ) 
+  ); 
+  c
+;;
+
+
+let msize = fn m: (Matrix of T) -> 
+  m.rows * m.cols
+;;
+
+let mprint = fn m: (Matrix of T) ->
+  print "[|\n";
+  for i = 0 to m.rows in (
+    print "  [|";
+    for j = 0 to m.cols in (
+      print `{m.data[(i * m.cols + j)]}, `
+    );
+    print "|],\n"
+  );
+  print "|]\n"
+;;

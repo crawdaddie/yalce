@@ -1,0 +1,40 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String;
+let read_lines = extern fn Ptr -> (List of String, Int);
+let char_to_int = extern fn Char -> Int;
+
+
+let get_lines = fn () ->
+  let (c, l) = match (open_file "examples/micrograd/names.txt" "rb") with
+  | Some fd -> (
+    let c, l = read_lines fd;
+    fclose fd;
+    (c, l)
+  )
+  | None -> ([], 0)
+  ;
+  (c, l)
+;;
+
+let find_min_max = fn minl maxl l ->
+  match l with
+  | [] -> (minl, maxl)
+  | x::rest -> (
+    let len = array_size x in
+    match len < minl with
+    | true -> find_min_max len maxl rest
+    | _ -> (
+      match len > maxl with
+      | true -> find_min_max minl len rest
+      | _ -> find_min_max minl maxl rest
+    )
+  )
+;;
+
+
+let lines, num = get_lines ();
+
+
+let min_len, max_len = find_min_max 0 2000000 lines;
+# print `min {min_len} max {max_len}\n`;

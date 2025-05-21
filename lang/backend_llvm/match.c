@@ -162,6 +162,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int len = ast->data.AST_MATCH.len;
   if (len == 2) {
     if (types_equal(test_val_type, &t_bool)) {
+      (ast->data.AST_MATCH.branches + 1)->is_body_tail = ast->is_body_tail;
+      (ast->data.AST_MATCH.branches + 3)->is_body_tail = ast->is_body_tail;
       return codegen_simple_if_else(test_val, ast->data.AST_MATCH.branches, ctx,
                                     module, builder);
     }

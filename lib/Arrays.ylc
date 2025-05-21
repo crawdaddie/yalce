@@ -2,6 +2,14 @@
 #   let idx = rand_int (array_size arr); arr @ idx 
 # ;;
 
+let print_arr = fn a: (Array of T) ->
+  print "[|"; 
+  for i = 0 to array_size a in (
+    print `{a[i]}, `
+  );
+  print "|]\n" 
+;;
+
 let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
   let res_ref = [| res |];
   for i = 0 to (array_size a) in (

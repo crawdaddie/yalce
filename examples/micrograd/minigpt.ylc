@@ -58,43 +58,45 @@ print `distinct chars: {distinct_chars[0]}\n`;
 
 let encoded_text = array_fill (array_size text) (fn i: (Int) -> encode (text[i])); 
 
-let print_arr_int = fn a: (Array of Int) ->
-  print "[|"; 
-  for i = 0 to array_size a in (
-    print `{a[i]}, `
-  );
-  print "|]" 
-;;
-
-# let block_size = 8;
-# let train_chunk = array_range 0 (block_size + 1) encoded_text;
-
-# for i = 0 to block_size in (
-#   print "for input ";
-#   print_arr @@ array_range 0 (i + 1) train_chunk;
-#   print ` the expected target is {train_chunk[i + 1]}\n`
-# );
 let num_train_tokens = 9 * (array_size encoded_text) / 10;
 let train_data = array_range 0 num_train_tokens encoded_text;
 let val_data = array_range num_train_tokens ((array_size encoded_text) / 10) encoded_text;
 
-# def get_batch(split):
-#     # generate a small batch of data of inputs x and targets y
-#     data = train_data if split == 'train' else val_data
-#     ix = torch.randint(len(data) - block_size, (batch_size,))
-#     x = torch.stack([data[i:i+block_size] for i in ix])
-#     y = torch.stack([data[i+1:i+block_size+1] for i in ix])
-#     return x, y
-let block_size = 8;
 import ../../lib/Math;
+import ../../lib/Arrays;
+open Matrix;
+
+
+let block_size = 8;
+let batch_size = 4;
 
 let get_training_batch = fn () ->
-  let ix = array_fill 8 (fn i: (Int) -> Math.rand_int num_train_tokens);
-  print_arr_int ix;
-  ()
+  let b_arr = array_fill_const (batch_size * block_size) 0;
+  let y_arr = array_fill_const (batch_size * block_size) 0;
+
+
+  for i = 0 to batch_size in (
+    let rand_idx = Math.rand_int ((array_size train_data) - block_size);
+    let x = array_range rand_idx block_size train_data; 
+    let y = array_range (rand_idx + 1) block_size train_data;
+    for j = 0 to block_size in (
+      b_arr[(i * block_size) + j] := x[j];
+      y_arr[(i * block_size) + j] := y[j]
+    )
+  );
+
+  (Matrix batch_size block_size b_arr, Matrix batch_size block_size y_arr) 
+
 ;;
 
-get_training_batch ()
+
+let x, y = get_training_batch ();
+
+Arrays.print_arr x.data;
+
+mprint x;
+mprint y;
+
 
 
 
