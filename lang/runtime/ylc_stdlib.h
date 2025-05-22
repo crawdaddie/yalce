@@ -131,4 +131,9 @@ void _linalg_pool_init(int32_t size);
 double *_double_arr_alloc(int32_t size);
 
 void _linalg_pool_reset();
+
+typedef struct DoublePair {
+  double z0;
+  double z1;
+} DoublePair;
 #endif

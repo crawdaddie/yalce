@@ -1,7 +1,6 @@
 let open_file = extern fn String -> String -> Option of Ptr;
 let fclose = extern fn Ptr -> ();
-let read_bytes = extern fn Ptr -> String;
-let read_lines = extern fn Ptr -> (List of String, Int);
+let read_bytes = extern fn Ptr -> String; let read_lines = extern fn Ptr -> (List of String, Int);
 let char_to_int = extern fn Char -> Int;
 
 
@@ -17,33 +16,7 @@ let get_lines = fn () ->
   (c, l)
 ;;
 
-let find_min_max = fn l: (List of String) ->
-  let minl = [| 200000 |];
-  let maxl = [| 0 |];
-  for el = iter l in (
-    # if () then () else ();
-    let len = array_size el;
-    match len < minl[0] with 
-    | true -> (
-      minl[0] := len;
-      ()
-    )
-    | _ -> ()
-    ;
-
-    match len > maxl[0] with 
-    | true -> (
-      maxl[0] := len;
-      ()
-    )
-    | _ -> ()
-  );
-  (minl[0], maxl[0])
-;;
-
 let lines, num = get_lines ();
-let min_len, max_len = find_min_max lines;
-# print `min {min_len} max {max_len}\n`;
 
 let string_concat = extern fn Ptr -> Int -> String;
 let start_char = '^';
@@ -72,6 +45,8 @@ let char_encode = fn ch ->
 ;;
 
 let bigram_freqs = Matrix 27 27 (array_fill_const (27 * 27) 0);
+# initialize with 1 or higher to do model-smoothing
+# without model-smoothing, the log probability of a bigram like j->q will be -inf because j-q has zero counts in this dataset
 # bigram_freqs is a matrix where F[i][j] means char for i is followed by char for j F[i][j] times 
 for word = iter lines in (
   for bgs = iter (bigrams word) in (
@@ -84,6 +59,8 @@ for word = iter lines in (
 );
 
 let bigram_dists = Matrix 27 27 (array_fill_const (27 * 27) 1.);
+
+# bigram_dist is a matrix where F[i][j] is the probability that char j follows char i 
 for i = 0 to 27 in (
   let r = mrow bigram_freqs i in
   let s = Arrays.fold (fn s v -> s + v) 0 r.data in
@@ -92,8 +69,8 @@ for i = 0 to 27 in (
   )
 );
 
-print "markov matrix:\n";
 
+print "## markov matrix:\n";
 mprint bigram_dists;
 
 let multinomial = fn weights ->
@@ -119,6 +96,7 @@ let rev_list_to_arr = fn len: (Int) list: (List of Int) ->
 ;;
 
 
+print "## random weird names:\n";
 for i = 0 to 50 in (
   let len = [|0|];
   let aux = fn len idx l -> 
@@ -130,5 +108,22 @@ for i = 0 to 50 in (
 
   let out = rev_list_to_arr len word;
   print `{out}\n`
-)
+);
 
+let log = extern fn Double -> Double;
+let log_sum = [|0.|];
+let num_bigrams = [| 0 |];
+for word = iter lines in (
+  for bgs = iter (bigrams word) in (
+    let a, b = bgs;
+    let i = char_encode a;
+    let j = char_encode b;
+    let p = mget bigram_dists (i, j);
+    # print `{a}:{b} - {p}  [logp {log p}]\n`;
+    log_sum[0] := log_sum[0] + (log p);
+    num_bigrams[0] := 1 + num_bigrams[0]
+  ) 
+);
+
+print `## negative log-likelihood {-1 * log_sum[0]}\n`;
+print `## average neg log-likelihood over {num_bigrams[0]} bigrams {-1 *log_sum[0] / num_bigrams[0]}\n`;

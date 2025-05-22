@@ -1,0 +1,245 @@
+
+import ../../lib/Math;
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String; let read_lines = extern fn Ptr -> (List of String, Int);
+let char_to_int = extern fn Char -> Int;
+
+
+let get_lines = fn () ->
+  let (c, l) = match (open_file "examples/micrograd/names.txt" "rb") with
+  | Some fd -> (
+    let c, l = read_lines fd;
+    fclose fd;
+    (c, l)
+  )
+  | None -> ([], 0)
+  ;
+  (c, l)
+;;
+
+let lines, num = get_lines ();
+
+let string_concat = extern fn Ptr -> Int -> String;
+let start_char = '^';
+let end_char = '$';
+
+let bigrams = fn word: (String) ->
+  let chars = `^{word}^`;
+  let bg = array_fill_const ((array_size chars) - 1) ('\0', '\0');
+  for i = 0 to (array_size chars - 1) in (
+    let a, b = (chars[i], chars[i + 1]);
+    # print `{i}: {a}:{b}\n`;
+    bg[i] := (a, b)
+  );
+  bg
+;;
+
+open Matrix;
+
+
+let char_to_int = extern fn Char -> Int;
+let char_encode = fn ch ->
+  match ch with
+  | '^' -> 0 
+  # | '$' -> 27
+  | _ -> (char_to_int ch) - 97 + 1
+;;
+
+
+let log = extern fn Double -> Double;
+let num_bigrams_ = [| 0 |];
+for word = iter lines in (
+  for bgs = iter (bigrams word) in (
+    num_bigrams_[0] := 1 + num_bigrams_[0]
+  ) 
+);
+let num_bigrams = num_bigrams_[0];
+print `num bigrams {num_bigrams}\n`;
+
+
+
+let one_hot = fn i n -> 
+  let arr = array_fill_const n 0;
+  arr[i] := 1;
+  arr
+;;
+
+
+let xencs = Matrix num_bigrams 27 @@ array_fill_const (27 * num_bigrams) 0.;
+let yencs = Matrix num_bigrams 27 @@ array_fill_const (27 * num_bigrams) 0.;
+let xs = array_fill_const num_bigrams 0;
+let ys = array_fill_const num_bigrams 0;
+
+# convert each bigram to one-hot encodings
+let bg_idx = [| 0 |];
+for word = iter lines in (
+  for bgs = iter (bigrams word) in (
+    let idx = bg_idx[0];
+    let a, b = bgs;
+    let i = char_encode a;
+    let j = char_encode b;
+
+    xencs.data[idx * 27 + i] := 1.; 
+    yencs.data[idx * 27 + j] := 1.; 
+    xs[idx] := i;
+    ys[idx] := j;
+
+    bg_idx[0] := idx + 1
+  ) 
+);
+
+
+
+# let _randn_pair = extern fn Double -> Double -> (Double, Double);
+# let randn = fn mu sig ->
+#   let a, _ = _randn_pair mu sig;
+#   a
+# ;;
+
+let Storage = module
+  let double_array_from_raw = extern fn Int -> Ptr -> Array of Double;
+  let _linalg_pool_init = extern fn Int -> ();
+  let _double_arr_alloc = extern fn Int -> Ptr;
+  let _linalg_pool_reset = extern fn () -> ();
+  let _ = _linalg_pool_init 100000000;
+
+  let arr_alloc = fn size ->
+    double_array_from_raw size (_double_arr_alloc size)
+  ;;
+
+  let reset = fn () ->
+    _linalg_pool_reset ();
+    ()
+  ;;
+;
+
+# let X = Matrix 5 27 (array_range 0 (5 * 27) xencs.data);
+# let X = Matrix num_bigrams 27 xencs
+# let W = Matrix 27 27 (array_fill (27 * 27) (fn i: (Int) -> Math.randn 0. 1.));
+
+let forward = fn x: (Matrix of Double) w: (Matrix of Double) ->
+  let tmp = Storage.arr_alloc (x.rows * w.cols);
+  let tmp2 = Storage.arr_alloc w.cols; 
+
+  let probs = 
+    mmul_tmp tmp x w # log-counts
+    |> mexp  # - counts equivalent to bigram_freqs in ./makemore_simple_markov.ylc
+    |> mrow_l2_norm tmp2; # counts normalized row-wise equivalent to bigram_dists in ./makemore_simple_markov.ylc
+
+  let nlls = [| 0. |];
+  for i = 0 to 5 in (
+    let x = xs[i]; # i-th bigram
+    let y = ys[i]; # i-th bigram
+    let nll = mget probs (i, y)
+      |> log
+      |> (*) -1.
+      |> (/) 5.;
+    nlls[0] := nlls[0] + nll
+  );
+  (probs, nlls[0])
+;;
+
+# let p, l = forward X W;
+#
+# print `loss: {l}\n`;
+# mprint p;
+
+# print `XW: {XW.rows},{XW.cols}\n`;
+# mprint XW;
+
+let backward = fn learning_rate: (Double) x: (Matrix of Double) w: (Matrix of Double) probs: (Matrix of Double) ->
+  
+  # Create gradient arrays
+  let dW_data = Storage.arr_alloc (w.rows * w.cols);
+  let dW = Matrix w.rows w.cols dW_data;
+  
+  # Initialize gradients to zero
+  for i = 0 to (msize dW) in (
+    dW.data[i] := 0.
+  );
+  
+  # Compute gradient of loss w.r.t. logits (before softmax)
+  # For softmax + cross-entropy, this simplifies to: (probs - targets) / batch_size
+  let dlogits_data = Storage.arr_alloc (probs.rows * probs.cols);
+  let dlogits = Matrix probs.rows probs.cols dlogits_data;
+  
+  # Copy probabilities to dlogits
+  for i = 0 to (msize probs) in (
+    dlogits.data[i] := probs.data[i]
+  );
+  
+  # Subtract 1 from the correct class positions (convert to: probs - targets)
+  for i = 0 to probs.rows in (
+    let correct_class = ys[i];
+    let idx = i * probs.cols + correct_class;
+    dlogits.data[idx] := dlogits.data[idx] - 1.
+  );
+  
+  # Scale by batch size (average the gradients)
+  for i = 0 to (msize dlogits) in (
+    dlogits.data[i] := dlogits.data[i] / probs.rows
+  );
+  
+  # Compute dW = X^T @ dlogits
+  # This is matrix multiplication: X^T * dlogits
+  for i = 0 to x.cols in (      # X^T rows (original X cols)
+    for j = 0 to dlogits.cols in (  # dlogits cols
+      let sum = [| 0. |];
+      for k = 0 to x.rows in (    # X^T cols (original X rows)
+        # X^T[i,k] = X[k,i]
+        let x_val = mget x (k, i);
+        let dlogits_val = mget dlogits (k, j);
+        sum[0] := sum[0] + (x_val * dlogits_val)
+      );
+      mset dW (i, j) (sum[0])
+    )
+  );
+  
+  # Update weights: W = W - learning_rate * dW
+  for i = 0 to (msize w) in (
+    w.data[i] := w.data[i] - (learning_rate * dW.data[i])
+  )
+;;
+let X = xencs;
+let W = Matrix 27 27 (array_fill (27 * 27) (fn i: (Int) -> Math.randn 0. 1.));
+
+for epoch = 0 to 1000 in (
+  Storage.reset ();
+  let probs, loss = forward X W
+  # backward 0.01 X W probs
+)
+
+# # Training loop with backward pass
+# let train = fn epochs: (Int) learning_rate: (Double) ->
+#   for epoch = 0 to epochs in (
+#     Storage.reset ();
+#     
+#     # Forward pass
+#     let probs, loss = forward X W;
+#     
+#     # Backward pass
+#     backward learning_rate X W probs;
+#     
+#     # Print loss every 100 epochs
+#     match (epoch % 100) with
+#     | 0 -> (
+#       print `Epoch {epoch}, Loss: {loss}\n`;
+#       ()
+#     )
+#     | _ -> ()
+#   )
+# ;;
+
+# Train the model
+# train 1000 0.1;
+
+# Test the trained model
+# let test_model = fn () ->
+#   let test_probs, test_loss = forward X W;
+#   print `Final Loss: {test_loss}\n`;
+#   print `Final Probabilities:\n`;
+#   mprint test_probs
+# ;;
+
+# test_model ();

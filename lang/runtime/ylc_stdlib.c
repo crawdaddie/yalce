@@ -508,3 +508,27 @@ int _multinomial(int size, double *weights) {
   }
   return size - 1;
 }
+
+static const double two_pi = 2.0 * M_PI;
+
+double nonzero_randu_double() {
+  double u1;
+  do {
+    u1 = rand_double();
+  } while (u1 == 0.);
+  return u1;
+}
+
+DoublePair _randn_pair(double mu, double sigma) {
+  // create two random numbers, make sure u1 is greater than zero
+  double u1, u2;
+  u1 = nonzero_randu_double();
+  u2 = rand_double();
+
+  // compute z0 and z1
+  double mag = sigma * sqrt(-2.0 * log(u1));
+  double z0 = mag * cos(two_pi * u2) + mu;
+  double z1 = mag * sin(two_pi * u2) + mu;
+
+  return (DoublePair){z0, z1};
+}

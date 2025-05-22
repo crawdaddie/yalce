@@ -1,4 +1,6 @@
 # uniformly distributed integer between 0 and range-1
+
+let PI = 3.14159265358979323846264338327950288;
 let rand_int = extern fn Int -> Int ;
 
 # uniformly distributed double between 0 and 1.0
@@ -83,4 +85,15 @@ let shuffle = fn n ->
   arr
 ;;
 
+let nonzero_randu_double = extern fn () -> Double;
+let log = extern fn Double -> Double;
+let exp = extern fn Double -> Double;
+
+
+let _randn_pair = extern fn Double -> Double -> (Double, Double);
+
+let randn = fn mu: (Double) sig: (Double) ->
+  let u1, _ = _randn_pair mu sig;
+  u1
+;;
 
