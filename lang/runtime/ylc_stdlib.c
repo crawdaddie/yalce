@@ -496,3 +496,15 @@ void _linalg_pool_reset() {
 }
 
 int char_to_int(char c) { return (int)c; }
+
+int _multinomial(int size, double *weights) {
+  double randd = rand_double();
+  double cum = 0.;
+  for (int i = 0; i < size; i++) {
+    cum += weights[i];
+    if (randd <= cum) {
+      return i;
+    }
+  }
+  return size - 1;
+}

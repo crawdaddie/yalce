@@ -53,3 +53,8 @@ let mprint = fn m: (Matrix of T) ->
   );
   print "|]\n"
 ;;
+
+let mrow = fn m: (Matrix of T) i ->
+  Matrix 1 m.cols (array_range (i * m.cols) m.cols m.data)
+;;
+
