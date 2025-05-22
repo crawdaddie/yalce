@@ -225,6 +225,10 @@ Type *infer_iter(Ast *ast, TICtx *ctx) {
       break;
     }
   }
+    // case T_VAR: {
+    // TODO: add typeclass 'with iter' and resolve later eg either list or array
+    // }
+
   default: {
     fprintf(stderr, "Type ");
     print_type_err(t);
