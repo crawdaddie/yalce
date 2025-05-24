@@ -20,15 +20,17 @@
 #include <llvm-c/Linker.h>
 #include <llvm-c/Support.h>
 #include <llvm-c/Target.h>
+#include <llvm-c/TargetMachine.h>
 #include <llvm-c/Transforms/InstCombine.h>
 #include <llvm-c/Transforms/Scalar.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
-#include <vecLib/vecLib.h>
 
+void dump_assembly(LLVMModuleRef module);
 #define STACK_MAX 256
 
 void print_result(Type *type, LLVMGenericValueRef result);
@@ -65,6 +67,7 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
 
   LLVMAddGlobalMapping(*engine, array_global, ctx->global_storage_array);
   LLVMAddGlobalMapping(*engine, size_global, ctx->global_storage_capacity);
+  return 0;
 }
 
 static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
@@ -137,7 +140,9 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   LLVMGenericValueRef exec_args[] = {};
-  // LLVMDumpModule(module);
+  LLVMDumpModule(module);
+  dump_assembly(module);
+
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
@@ -151,6 +156,47 @@ typedef struct ll_int_t {
   int32_t el;
   struct ll_int_t *next;
 } int_ll_t;
+
+void dump_assembly(LLVMModuleRef module) {
+  // Initialize targets
+  LLVMInitializeNativeTarget();
+  LLVMInitializeNativeAsmPrinter();
+
+  // Get the target triple
+  char *triple = LLVMGetDefaultTargetTriple();
+
+  // Get the target
+  LLVMTargetRef target;
+  char *error_msg;
+  if (LLVMGetTargetFromTriple(triple, &target, &error_msg)) {
+    fprintf(stderr, "Error getting target: %s\n", error_msg);
+    LLVMDisposeMessage(error_msg);
+    return;
+  }
+
+  // Create target machine
+  LLVMTargetMachineRef target_machine = LLVMCreateTargetMachine(
+      target, triple, "generic", "", LLVMCodeGenLevelDefault, LLVMRelocDefault,
+      LLVMCodeModelDefault);
+
+  // Generate assembly
+  LLVMMemoryBufferRef asm_buffer;
+  if (LLVMTargetMachineEmitToMemoryBuffer(
+          target_machine, module, LLVMAssemblyFile, &error_msg, &asm_buffer)) {
+    fprintf(stderr, "Error generating assembly: %s\n", error_msg);
+    LLVMDisposeMessage(error_msg);
+  } else {
+    // Print the assembly
+    printf("\n=== GENERATED ASSEMBLY ===\n");
+    printf("%s\n", LLVMGetBufferStart(asm_buffer));
+    printf("=== END ASSEMBLY ===\n\n");
+    LLVMDisposeMemoryBuffer(asm_buffer);
+  }
+
+  // Cleanup
+  LLVMDisposeTargetMachine(target_machine);
+  LLVMDisposeMessage(triple);
+}
 
 void module_passes(LLVMModuleRef module) {
   LLVMPassManagerRef pass_manager =

@@ -515,7 +515,10 @@ LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
   Type *lt = fn_type->data.T_FN.from;
+
+  lt = resolve_type_in_env(lt, ctx->env);
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
+  rt = resolve_type_in_env(rt, ctx->env);
   Type *target_type;
 
   if (types_equal(lt, rt)) {
@@ -548,7 +551,10 @@ LLVMValueRef NeqHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
   Type *lt = fn_type->data.T_FN.from;
+  lt = resolve_type_in_env(lt, ctx->env);
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
+  rt = resolve_type_in_env(rt, ctx->env);
+
   Type *target_type;
   if (get_typeclass_rank(lt, "eq") >= get_typeclass_rank(rt, "eq")) {
     target_type = lt;

@@ -31,8 +31,10 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
   // Create blocks for the branch
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
-  LLVMBasicBlockRef match_block = LLVMAppendBasicBlock(function, "match.list");
-  LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge.list");
+  LLVMBasicBlockRef match_block =
+      LLVMAppendBasicBlock(function, "binding.list.match");
+  LLVMBasicBlockRef merge_block =
+      LLVMAppendBasicBlock(function, "binding.list.merge");
 
   // Branch based on list_empty
   LLVMBuildCondBr(builder, list_empty, merge_block, match_block);
@@ -51,7 +53,8 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
 
   // Combine the results
   LLVMValueRef match_result =
-      LLVMBuildAnd(builder, head_match, tail_match, "match.result");
+      LLVMBuildAnd(builder, head_match, tail_match, "binding.list.result");
+
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef match_end_block = LLVMGetInsertBlock(builder);
 
