@@ -1,6 +1,7 @@
 #include "backend_llvm/symbols.h"
 
 #include "adt.h"
+#include "binding.h"
 #include "closures.h"
 #include "codegen.h"
 #include "coroutines.h"
@@ -8,7 +9,6 @@
 #include "function.h"
 #include "globals.h"
 #include "ht.h"
-#include "match.h"
 #include "module.h"
 #include "serde.h"
 #include "types.h"

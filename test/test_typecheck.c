@@ -1246,9 +1246,9 @@ int main() {
   });
 
   ({
-    Type matrix = TCONS("Matrix", 3, &t_int, &t_int, &TARRAY(&t_int));
+    Type imatrix = TCONS("Matrix", 3, &t_int, &t_int, &TARRAY(&t_int));
 
-    matrix.data.T_CONS.names = (char *[]){"rows", "cols", "data"};
+    imatrix.data.T_CONS.names = (char *[]){"rows", "cols", "data"};
 
     T("type Matrix = (\n"
       "  rows: Int,\n"
@@ -1256,7 +1256,7 @@ int main() {
       "  data: Array of T\n"
       ");\n"
       "Matrix 2 2 [|1, 2, 3, 4|]\n",
-      &matrix);
+      &imatrix);
   });
 
   T("if true then ()\n", &t_void);
