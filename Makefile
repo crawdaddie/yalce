@@ -69,6 +69,15 @@ ifeq ($(MAKECMDGOALS),debug)
   LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
 endif
 
+LANG_CC += -DUSE_BLAS
+LANG_LD_FLAGS += -L/opt/homebrew/opt/openblas/lib -lopenblas
+CFLAGS += -I/opt/homebrew/opt/openblas/include
+
+LANG_CC += -DUSE_OPENMP
+LANG_LD_FLAGS += -L/opt/homebrew/opt/libomp/lib -lomp
+CFLAGS +=-I/opt/homebrew/opt/libomp/include
+
+
 LEX_FILE := $(LANG_SRC_DIR)/lex.l
 YACC_FILE := $(LANG_SRC_DIR)/parser.y
 LEX_OUTPUT := $(LANG_SRC_DIR)/lex.yy.c

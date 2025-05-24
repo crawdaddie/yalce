@@ -13,9 +13,10 @@ let double_array_from_raw = extern fn Int -> Ptr -> Array of Double;
 let _linalg_pool_init = extern fn Int -> ();
 let _double_arr_alloc = extern fn Int -> Ptr;
 let _linalg_pool_reset = extern fn () -> ();
-let _ = _linalg_pool_init 10000000;
+let _ = _linalg_pool_init 10000000000;
 
 let arr_alloc = fn size ->
+  print `arr alloc {size}\n`;
   double_array_from_raw size (_double_arr_alloc size)
 ;;
 

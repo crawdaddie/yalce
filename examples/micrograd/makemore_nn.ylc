@@ -88,158 +88,128 @@ for word = iter lines in (
     bg_idx[0] := idx + 1
   ) 
 );
+let softmax_normalize = fn m: (Matrix of Double) ->
+  let result = Matrix m.rows m.cols (Storage.arr_alloc (m.rows * m.cols));
+  for i = 0 to m.rows in (
+    # // Numerical stability: subtract max
+    let max_val = [| m.data[i * m.cols] |];
+    for j = 1 to m.cols in (
+      let val = m.data[i * m.cols + j];
+      max_val[0] := Math.max val (max_val[0])
+    );
+    
+    # // Compute exp and sum
+    let sum_exp = [| 0. |];
+    for j = 0 to m.cols in (
+      let exp_val = Math.exp ((mget m (i, j)) - max_val[0]);
+      mset result (i, j) exp_val;
+      sum_exp[0] := sum_exp[0] + exp_val
+    );
+    
+    # // Normalize
+    for j = 0 to m.cols in (
+      let idx = i * m.cols + j;
+      result.data[idx] := result.data[idx] / sum_exp[0]
+    )
+  );
+  result
+;;
 
+let __forward = fn x: (Matrix of Double) w: (Matrix of Double) ->
 
-
-# let _randn_pair = extern fn Double -> Double -> (Double, Double);
-# let randn = fn mu sig ->
-#   let a, _ = _randn_pair mu sig;
-#   a
-# ;;
-
-let Storage = module
-  let double_array_from_raw = extern fn Int -> Ptr -> Array of Double;
-  let _linalg_pool_init = extern fn Int -> ();
-  let _double_arr_alloc = extern fn Int -> Ptr;
-  let _linalg_pool_reset = extern fn () -> ();
-  let _ = _linalg_pool_init 100000000;
-
-  let arr_alloc = fn size ->
-    double_array_from_raw size (_double_arr_alloc size)
-  ;;
-
-  let reset = fn () ->
-    _linalg_pool_reset ();
-    ()
-  ;;
-;
-
-# let X = Matrix 5 27 (array_range 0 (5 * 27) xencs.data);
-# let X = Matrix num_bigrams 27 xencs
-# let W = Matrix 27 27 (array_fill (27 * 27) (fn i: (Int) -> Math.randn 0. 1.));
-
-let forward = fn x: (Matrix of Double) w: (Matrix of Double) ->
-  let tmp = Storage.arr_alloc (x.rows * w.cols);
-  let tmp2 = Storage.arr_alloc w.cols; 
-
+  # print "get probs\n";
   let probs = 
-    mmul_tmp tmp x w # log-counts
+    mmul_tmp x w # log-counts
     |> mexp  # - counts equivalent to bigram_freqs in ./makemore_simple_markov.ylc
-    |> mrow_l2_norm tmp2; # counts normalized row-wise equivalent to bigram_dists in ./makemore_simple_markov.ylc
+    |> mrow_l2_norm; # counts normalized row-wise equivalent to bigram_dists in ./makemore_simple_markov.ylc
 
   let nlls = [| 0. |];
-  for i = 0 to 5 in (
+  let nrows = x.rows;
+  # print "get losses\n";
+
+  for i = 0 to nrows in (
     let x = xs[i]; # i-th bigram
     let y = ys[i]; # i-th bigram
+
     let nll = mget probs (i, y)
       |> log
       |> (*) -1.
-      |> (/) 5.;
+      |> (/) nrows;
+
     nlls[0] := nlls[0] + nll
   );
   (probs, nlls[0])
 ;;
+# // 1. One-hot encode input characters
+let forward = fn x: (Matrix of Double) w: (Matrix of Double) ->
+  # // x is one-hot encoded: each row has one 1.0 and rest 0.0
+  # // w is weight matrix [27 x 27]
+  
+  # let logits = mmul_tmp x w; # // Raw scores (log-counts)
+  
+  # // 2. Softmax normalization
+  # let probs = softmax_normalize logits;  # Convert to probabilities
 
-# let p, l = forward X W;
-#
-# print `loss: {l}\n`;
-# mprint p;
+  let probs = 
+    mmul_tmp x w # log-counts
+    |> mexp  # - counts equivalent to bigram_freqs in ./makemore_simple_markov.ylc
+    |> mrow_l2_norm; # counts normalized row-wise equivalent to bigram_dists in ./makemore_simple_markov.ylc
+  
+  # // 3. Cross-entropy loss
+  let loss = [| 0. |];
+  for i = 0 to x.rows in (
 
-# print `XW: {XW.rows},{XW.cols}\n`;
-# mprint XW;
+    let nll = (i, ys[i])
+      |> mget probs
+      |> log
+      |> (*) -1.;
+
+    loss[0] := loss[0] + nll
+  );
+  loss[0] := loss[0] / x.rows;  #// Average loss
+  
+  (probs, loss[0])
+;;
 
 let backward = fn learning_rate: (Double) x: (Matrix of Double) w: (Matrix of Double) probs: (Matrix of Double) ->
+  # Create gradient matrix: dL/dlogits = probs - targets
+  let dlogits = Matrix probs.rows probs.cols (Storage.arr_alloc (probs.rows * probs.cols));
   
-  # Create gradient arrays
-  let dW_data = Storage.arr_alloc (w.rows * w.cols);
-  let dW = Matrix w.rows w.cols dW_data;
-  
-  # Initialize gradients to zero
-  for i = 0 to (msize dW) in (
-    dW.data[i] := 0.
-  );
-  
-  # Compute gradient of loss w.r.t. logits (before softmax)
-  # For softmax + cross-entropy, this simplifies to: (probs - targets) / batch_size
-  let dlogits_data = Storage.arr_alloc (probs.rows * probs.cols);
-  let dlogits = Matrix probs.rows probs.cols dlogits_data;
-  
-  # Copy probabilities to dlogits
+  # Copy probabilities
   for i = 0 to (msize probs) in (
     dlogits.data[i] := probs.data[i]
   );
   
-  # Subtract 1 from the correct class positions (convert to: probs - targets)
+   # Subtract 1.0 from correct class positions  
   for i = 0 to probs.rows in (
     let correct_class = ys[i];
     let idx = i * probs.cols + correct_class;
-    dlogits.data[idx] := dlogits.data[idx] - 1.
+    dlogits.data[idx] := dlogits.data[idx] - 1.0
   );
   
-  # Scale by batch size (average the gradients)
+  # Average gradients across batch
   for i = 0 to (msize dlogits) in (
     dlogits.data[i] := dlogits.data[i] / probs.rows
   );
   
-  # Compute dW = X^T @ dlogits
-  # This is matrix multiplication: X^T * dlogits
-  for i = 0 to x.cols in (      # X^T rows (original X cols)
-    for j = 0 to dlogits.cols in (  # dlogits cols
-      let sum = [| 0. |];
-      for k = 0 to x.rows in (    # X^T cols (original X rows)
-        # X^T[i,k] = X[k,i]
-        let x_val = mget x (k, i);
-        let dlogits_val = mget dlogits (k, j);
-        sum[0] := sum[0] + (x_val * dlogits_val)
-      );
-      mset dW (i, j) (sum[0])
-    )
-  );
+  # Compute weight gradients: dW = X^T * dlogits
+  let XT = mtrans_tmp x;
+  let dW = mmul_tmp XT dlogits;
   
-  # Update weights: W = W - learning_rate * dW
+  # Update weights: W -= learning_rate * dW
   for i = 0 to (msize w) in (
     w.data[i] := w.data[i] - (learning_rate * dW.data[i])
   )
 ;;
-let X = xencs;
-let W = Matrix 27 27 (array_fill (27 * 27) (fn i: (Int) -> Math.randn 0. 1.));
 
-for epoch = 0 to 1000 in (
+let X = xencs;
+let W = Matrix 27 27 (array_fill (27 * 27) (fn i: (Int) -> Math.randn 0.1 0.2));
+
+for epoch = 0 to 50 in (
   Storage.reset ();
-  let probs, loss = forward X W
-  # backward 0.01 X W probs
+  let p, l = forward X W;
+  print `loss: {l}\n`;
+  backward 0.0001 xencs W p;
+  mprint W
 )
 
-# # Training loop with backward pass
-# let train = fn epochs: (Int) learning_rate: (Double) ->
-#   for epoch = 0 to epochs in (
-#     Storage.reset ();
-#     
-#     # Forward pass
-#     let probs, loss = forward X W;
-#     
-#     # Backward pass
-#     backward learning_rate X W probs;
-#     
-#     # Print loss every 100 epochs
-#     match (epoch % 100) with
-#     | 0 -> (
-#       print `Epoch {epoch}, Loss: {loss}\n`;
-#       ()
-#     )
-#     | _ -> ()
-#   )
-# ;;
-
-# Train the model
-# train 1000 0.1;
-
-# Test the trained model
-# let test_model = fn () ->
-#   let test_probs, test_loss = forward X W;
-#   print `Final Loss: {test_loss}\n`;
-#   print `Final Probabilities:\n`;
-#   mprint test_probs
-# ;;
-
-# test_model ();

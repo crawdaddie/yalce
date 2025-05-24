@@ -30,45 +30,84 @@ let mset = fn m: (Matrix of T) (i, j): (Int, Int) v: (T) ->
 ;;
 
 
+let Storage = module
+  let double_array_from_raw = extern fn Int -> Ptr -> Array of Double;
+  let _linalg_pool_init = extern fn Int -> ();
+  let _double_arr_alloc = extern fn Int -> Ptr;
+  let _linalg_pool_reset = extern fn () -> ();
+  let _ = _linalg_pool_init 10000000;
+                             # 6159942
+
+  let arr_alloc = fn size ->
+    double_array_from_raw size (_double_arr_alloc size)
+  ;;
+
+  let reset = fn () ->
+    _linalg_pool_reset ();
+    ()
+  ;;
+;
+
 let (@) = mget;
 
 let mmul = fn a: (Matrix of T) b: (Matrix of T) ->
   
-  # let c = matrix_zeroes_tmp a.rows b.cols;
   let c = Matrix a.rows b.cols (array_fill_const (a.rows * b.cols) (a @ (0, 0)));
-  # matrix_zeroes_tmp a.rows b.cols;
-  # print `matrix mul out {c.rows} {c.cols}\n`;
+  let vs = [|0.|]; 
 
   for i = 0 to a.rows in (
     for j = 0 to b.cols in (
+      vs[0] := 0.;
+      # print `fail? row {i}\n`;
       for k = 0 to b.rows in (
-        let v = c @ (i, j);
-        c.data[i * c.cols + j] := v + (a @ (i,k)) * b @ (k, j) 
-        # a.data[i * a.cols + j] := v + (a @ (i,k)) * b @ (k, j) 
-      )
+        vs[0] := vs[0] + (a @ (i,k)) * (b @ (k, j))
+      );
+      # print `{i * c.cols + j}\n`;
+      c.data[i * c.cols + j] := vs[0]
     ) 
   ); 
+  print `got result matrix\n`;
   c
 ;;
+let _transpose = extern fn Int -> Int -> Ptr of Double -> Array of Double; 
 
-let mmul_tmp = fn storage: (Array of Double) a: (Matrix of T) b: (Matrix of T) ->
+let mtrans_tmp = fn m: (Matrix of T) ->
+  # let t = Matrix m.cols m.rows ( Storage.arr_alloc (m.cols * m.rows));
+  # for i = 0 to m.rows in (
+  #   for j = 0 to m.cols in (
+  #     let v = m.data[(i * m.cols + j)];
+  #     t.data[j * t.cols + i] := v
+  #   )
+  # );
+  # t
+  Matrix m.cols m.rows ( _transpose m.rows m.cols (cstr m.data) )
+;;
+
+
+let _mmul_tmp = extern fn Int -> Int -> Ptr of Double -> Int -> Int -> Ptr of Double -> Array of Double;
+let _mmul_blas = extern fn Int -> Int -> Ptr of Double -> Int -> Int -> Ptr of Double -> Array of Double;
+
+let mmul_tmp = fn a: (Matrix of T) b: (Matrix of T) ->
+  let res_arr = _mmul_tmp a.rows a.cols (cstr a.data) b.rows b.cols (cstr b.data); 
+  Matrix a.rows b.cols res_arr
   
-  # let c = matrix_zeroes_tmp a.rows b.cols;
-  let c = Matrix a.rows b.cols storage;
-  # (array_fill_const (a.rows * b.cols) (a @ (0, 0)));
-  # matrix_zeroes_tmp a.rows b.cols;
-  # print `matrix mul out {c.rows} {c.cols}\n`;
+  # let res_size = (a.rows) * (b.cols);
+  # 
+  # let storage = Storage.arr_alloc res_size;
+  # let c = Matrix a.rows b.cols storage;
+  #
+  # for i = 0 to a.rows in (
+  #   for j = 0 to b.cols in (
+  #     storage[(i * c.cols) + j] := 0.;
+  #     for k = 0 to b.rows in (
+  #       let v = c @ (i, j);
+  #       storage[(i * c.cols) + j] := v + (a.data[i * a.cols +k]) * b.data[k * b.cols + j]
+  #     )
+  #   ) 
+  # ); 
 
-  for i = 0 to a.rows in (
-    for j = 0 to b.cols in (
-      for k = 0 to b.rows in (
-        let v = c @ (i, j);
-        c.data[i * c.cols + j] := v + (a @ (i,k)) * b @ (k, j) 
-        # a.data[i * a.cols + j] := v + (a @ (i,k)) * b @ (k, j) 
-      )
-    ) 
-  ); 
-  c
+  # print `mmul tmp finishes\n`;
+  # c
 ;;
 
 
@@ -112,8 +151,8 @@ let msum_rows = fn m: (Matrix of T) ->
   Matrix m.rows 1 arr
 ;;
 
-let msum_rows_tmp = fn arr m: (Matrix of T) ->
-  # let arr = array_fill_const m.rows (m @ (0,0));
+let msum_rows_tmp = fn m: (Matrix of T) ->
+  let arr = Storage.arr_alloc m.rows;
   for i = 0 to m.rows in (
     let row = mrow m i;
     arr[i] := (Arrays.fold (fn s v -> s + v) 0. (row.data))
@@ -121,8 +160,9 @@ let msum_rows_tmp = fn arr m: (Matrix of T) ->
   Matrix m.rows 1 arr
 ;;
 
-let mrow_l2_norm = fn tmp m: (Matrix of T) ->
-  let row_norms = msum_rows_tmp tmp m;
+let mrow_l2_norm = fn m: (Matrix of T) ->
+
+  let row_norms = msum_rows_tmp m;
   # TODO: cb to mfill is a closure - not working quite
   # mfill m.rows m.cols (fn i j -> (m @ (i, j)) / (row_norms @ (i, 0)) )
   for i = 0 to m.rows in (
@@ -133,5 +173,6 @@ let mrow_l2_norm = fn tmp m: (Matrix of T) ->
   );
   m
 ;;
+
 
 
