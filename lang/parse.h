@@ -443,4 +443,6 @@ Ast *ast_range_expression(Ast *from, Ast *to);
 Ast *ast_assignment(Ast *var, Ast *val);
 
 AstList *ast_list_extend_left(AstList *l, Ast *n);
+Ast *ast_if_else(Ast *cond, Ast *then, Ast *el);
+
 #endif

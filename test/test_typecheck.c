@@ -1259,6 +1259,9 @@ int main() {
       &matrix);
   });
 
+  T("if true then ()\n", &t_void);
+  T("if true then 1 else 2\n", &t_int);
+
   // ({
   //   T("let f = fn network -> network.layers;", &MAKE_FN_TYPE_2(&));
   // });

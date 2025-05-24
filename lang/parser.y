@@ -67,6 +67,7 @@ Ast* ast_root = NULL;
 %token TYPE
 %token TEST_ID
 %token MUT
+%token THEN ELSE
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -381,6 +382,8 @@ expr_list:
 
 match_expr:
     MATCH expr WITH match_branches { $$ = ast_match($2, $4); }
+  | 'if' expr THEN expr ELSE expr  { $$ = ast_if_else($2, $4 ,$6);} 
+  | 'if' expr THEN expr            { $$ = ast_if_else($2, $4, NULL);} 
   ;
 
 match_test_clause:

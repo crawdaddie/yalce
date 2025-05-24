@@ -624,17 +624,18 @@ struct _DoubleArray _mmul_parallel(int a_rows, int a_cols, double *a_data,
 #include <cblas.h>
 
 struct _DoubleArray _mmul_blas(int a_rows, int a_cols, double *a_data,
-                               int b_rows, int b_cols, double *b_data) {
+                               int b_rows, int b_cols, double *b_data,
+                               double *out_data) {
   int c_rows = a_rows;
   int c_cols = b_cols;
-  double *new = _double_arr_alloc(a_rows * b_cols);
+  double *new = out_data;
 
   // C = alpha * A * B + beta * C
   // alpha = 1.0, beta = 0.0
   cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, a_rows, b_cols, a_cols,
-              1.0, a_data, a_cols, b_data, b_cols, 0.0, new, c_cols);
+              1.0, a_data, a_cols, b_data, b_cols, 0.0, out_data, c_cols);
 
-  return (struct _DoubleArray){c_rows * c_cols, new};
+  return (struct _DoubleArray){c_rows * c_cols, out_data};
 }
 #endif
 

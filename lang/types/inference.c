@@ -291,6 +291,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     type = infer_match_expr(ast, ctx);
     break;
   }
+
   case AST_EXTERN_FN: {
     Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
     int params_count = sig->data.AST_LIST.len - 1;
@@ -856,8 +857,16 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
           ctx, branch_body,
           "Typecheck Error: Could not infer type of match branch body\n");
     }
-
-    if (!unify_in_ctx(result, branch_type, &branch_ctx, branch_body)) {
+    if (ast->data.AST_MATCH.len == 1) {
+      if (!unify_in_ctx(&t_void, branch_type, &branch_ctx, branch_body)) {
+        return type_error(
+            ctx, ast,
+            "Typecheck Error: if match has one branch - ie it is an if / then "
+            "expression with no "
+            "else, then it must have type ()\n");
+      };
+      result = &t_void;
+    } else if (!unify_in_ctx(result, branch_type, &branch_ctx, branch_body)) {
       return type_error(ctx, branch_body,
                         "Inconsistent types in match branches\n");
     }

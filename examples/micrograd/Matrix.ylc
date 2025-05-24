@@ -82,10 +82,11 @@ let mtrans_tmp = fn m: (Matrix of T) ->
 
 
 let _mmul_tmp = extern fn Int -> Int -> Ptr of Double -> Int -> Int -> Ptr of Double -> Array of Double;
-let _mmul_blas = extern fn Int -> Int -> Ptr of Double -> Int -> Int -> Ptr of Double -> Array of Double;
+let _mmul_blas = extern fn Int -> Int -> Ptr of Double -> Int -> Int -> Ptr of Double -> Ptr of Double -> Array of Double;
 
 let mmul_tmp = fn a: (Matrix of T) b: (Matrix of T) ->
-  let res_arr = _mmul_blas a.rows a.cols (cstr a.data) b.rows b.cols (cstr b.data); 
+  let out_data = Storage.arr_alloc (a.rows * b.cols);
+  let res_arr = _mmul_blas a.rows a.cols (cstr a.data) b.rows b.cols (cstr b.data) (cstr out_data); 
   Matrix a.rows b.cols res_arr
 ;;
 

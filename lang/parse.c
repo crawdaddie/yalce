@@ -693,6 +693,33 @@ Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result) {
   return match;
 }
 
+Ast *ast_if_else(Ast *cond, Ast *then, Ast *elze) {
+
+  if (elze == NULL) {
+    Ast *match = Ast_new(AST_MATCH);
+    match->data.AST_MATCH.branches = palloc(sizeof(Ast) * 2);
+    match->data.AST_MATCH.branches[0] =
+        (Ast){AST_BOOL, .data = {.AST_BOOL = {.value = true}}};
+    match->data.AST_MATCH.branches[1] = *then;
+    match->data.AST_MATCH.len = 1;
+    match->data.AST_MATCH.expr = cond;
+    return match;
+  }
+
+  Ast *match = Ast_new(AST_MATCH);
+  match->data.AST_MATCH.branches = palloc(sizeof(Ast) * 4);
+  match->data.AST_MATCH.branches[0] =
+      (Ast){AST_BOOL, .data = {.AST_BOOL = {.value = true}}};
+  match->data.AST_MATCH.branches[1] = *then;
+
+  match->data.AST_MATCH.branches[2] =
+      (Ast){AST_BOOL, .data = {.AST_BOOL = {.value = false}}};
+  match->data.AST_MATCH.branches[3] = *elze;
+  match->data.AST_MATCH.len = 2;
+  match->data.AST_MATCH.expr = cond;
+  return match;
+}
+
 Ast *ast_tuple(Ast *list) {
   // if (list->tag == AST_LIST && list->data.AST_LIST.len == 1) {
   //   return list->data.AST_LIST.items;

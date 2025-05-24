@@ -68,6 +68,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "test"                  return TEST_ID;
 "of"                    return *yytext;
 "if"                    return *yytext;
+"then"                  return THEN;
+"else"                  return ELSE;
 "yield"                 return *yytext;
 "&&"                    return DOUBLE_AMP;
 "&"                     return AMPERSAND;

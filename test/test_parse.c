@@ -418,6 +418,15 @@ int main() {
   status &= test_parse("x.y.z", "(. (. x y) z)");
   status &= test_parse("x[10]", "(x [10])");
   status &= test_parse("x[10] := 1", "(((array_set x) 10) 1)");
+
+  status &= test_parse("if x then 1 else 2", "(match x with\n"
+                                             "\ttrue -> 1\n"
+                                             "\tfalse -> 2\n"
+                                             ")");
+
+  status &= test_parse("if x then ()", "(match x with\n"
+                                       "\ttrue -> ()\n"
+                                       ")");
   // status &= test_parse("let (@) = array_at;\n"
   //                      "x_ref @ 0;\n",
   //                      "((let @ array_at)\n"
