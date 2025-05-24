@@ -593,44 +593,6 @@ struct _DoubleArray _mmul_basic_opt(int a_rows, int a_cols, double *a_data,
   return (struct _DoubleArray){c_rows * c_cols, new};
 }
 
-// Clean version: Initialize to zero as needed
-#define BLOCK_SIZE 64
-
-struct _DoubleArray ___mmul_tmp(int a_rows, int a_cols, double *a_data,
-                                int b_rows, int b_cols, double *b_data) {
-  int c_rows = a_rows;
-  int c_cols = b_cols;
-  double *new = _double_arr_alloc(a_rows * b_cols);
-
-  // Blocked multiplication
-  for (int ii = 0; ii < a_rows; ii += BLOCK_SIZE) {
-    for (int kk = 0; kk < a_cols; kk += BLOCK_SIZE) {
-      for (int jj = 0; jj < b_cols; jj += BLOCK_SIZE) {
-
-        // Compute block boundaries
-        int i_end = (ii + BLOCK_SIZE < a_rows) ? ii + BLOCK_SIZE : a_rows;
-        int k_end = (kk + BLOCK_SIZE < a_cols) ? kk + BLOCK_SIZE : a_cols;
-        int j_end = (jj + BLOCK_SIZE < b_cols) ? jj + BLOCK_SIZE : b_cols;
-
-        // Compute the block
-        for (int i = ii; i < i_end; i++) {
-          for (int k = kk; k < k_end; k++) {
-            double a_ik = a_data[i * a_cols + k];
-            for (int j = jj; j < j_end; j++) {
-              // Initialize to zero only on the very first k value
-              if (k == 0) {
-                new[i * c_cols + j] = 0.0;
-              }
-              new[i * c_cols + j] += a_ik *b_data[k * b_cols + j];
-            }
-          }
-        }
-      }
-    }
-  }
-  return (struct _DoubleArray){c_rows * c_cols, new};
-}
-
 // 4. PARALLEL: Using OpenMP
 #ifdef _OPENMP
 #include <omp.h>
@@ -658,7 +620,6 @@ struct _DoubleArray _mmul_parallel(int a_rows, int a_cols, double *a_data,
 
 // 6. FOR REALLY LARGE MATRICES: Use BLAS
 // Link with -lopenblas or -lmkl
-// #define USE_BLAS
 #ifdef _USE_BLAS
 #include <cblas.h>
 

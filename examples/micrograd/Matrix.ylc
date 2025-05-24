@@ -58,15 +58,12 @@ let mmul = fn a: (Matrix of T) b: (Matrix of T) ->
   for i = 0 to a.rows in (
     for j = 0 to b.cols in (
       vs[0] := 0.;
-      # print `fail? row {i}\n`;
       for k = 0 to b.rows in (
         vs[0] := vs[0] + (a @ (i,k)) * (b @ (k, j))
       );
-      # print `{i * c.cols + j}\n`;
       c.data[i * c.cols + j] := vs[0]
     ) 
   ); 
-  print `got result matrix\n`;
   c
 ;;
 let _transpose = extern fn Int -> Int -> Ptr of Double -> Array of Double; 
@@ -88,26 +85,8 @@ let _mmul_tmp = extern fn Int -> Int -> Ptr of Double -> Int -> Int -> Ptr of Do
 let _mmul_blas = extern fn Int -> Int -> Ptr of Double -> Int -> Int -> Ptr of Double -> Array of Double;
 
 let mmul_tmp = fn a: (Matrix of T) b: (Matrix of T) ->
-  let res_arr = _mmul_tmp a.rows a.cols (cstr a.data) b.rows b.cols (cstr b.data); 
+  let res_arr = _mmul_blas a.rows a.cols (cstr a.data) b.rows b.cols (cstr b.data); 
   Matrix a.rows b.cols res_arr
-  
-  # let res_size = (a.rows) * (b.cols);
-  # 
-  # let storage = Storage.arr_alloc res_size;
-  # let c = Matrix a.rows b.cols storage;
-  #
-  # for i = 0 to a.rows in (
-  #   for j = 0 to b.cols in (
-  #     storage[(i * c.cols) + j] := 0.;
-  #     for k = 0 to b.rows in (
-  #       let v = c @ (i, j);
-  #       storage[(i * c.cols) + j] := v + (a.data[i * a.cols +k]) * b.data[k * b.cols + j]
-  #     )
-  #   ) 
-  # ); 
-
-  # print `mmul tmp finishes\n`;
-  # c
 ;;
 
 

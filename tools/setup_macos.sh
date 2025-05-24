@@ -4,7 +4,7 @@
 brew update
 
 # Install main dependencies
-brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16 libsoundio libsndfile fftw
+brew install sdl2 sdl2_ttf sdl2_gfx readline llvm@16 libsoundio libsndfile fftw libomp openblas
 
 # Determine Homebrew prefix
 BREW_PREFIX=$(brew --prefix)
@@ -21,4 +21,7 @@ export READLINE_PREFIX=$BREW_PREFIX/opt/readline
 export LIBSOUNDIO_PATH=$BREW_PREFIX/opt/libsoundio
 export LIBSNDFILE_PATH=$BREW_PREFIX/opt/libsndfile
 export LIBFFTW3_PATH=$BREW_PREFIX/opt/fftw
+export OPENMP_PATH=$BREW_PREFIX/opt/libomp
+export OPENBLAS_PATH=$BREW_PREFIX/opt/openblas
+export VST_LIB_PATH=$PWD/libs/ylc-vst
 EOF

@@ -30,12 +30,21 @@ CFLAGS += `$(LLVM_CONFIG) --cflags`
 CFLAGS += -I`$(LLVM_CONFIG) --includedir`
 
 
+
 LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
 
 LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm -framework Accelerate
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
+
+LANG_CC += -D_USE_BLAS
+LANG_CC += -I${OPENBLAS_PATH}/include
+LANG_LD_FLAGS += -L${OPENBLAS_PATH}/lib -lopenblas
+
+LANG_CC += -D_USE_OPENMP
+LANG_CC += -I${OPENMP_PATH}/include
+LANG_LD_FLAGS += -L${OPENMP_PATH}/lib -lomp
 
 # VST Library path
 VST_LIB_PATH := ${VST_LIB_PATH}
@@ -69,13 +78,6 @@ ifeq ($(MAKECMDGOALS),debug)
   LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
 endif
 
-LANG_CC += -DUSE_BLAS
-LANG_LD_FLAGS += -L/opt/homebrew/opt/openblas/lib -lopenblas
-CFLAGS += -I/opt/homebrew/opt/openblas/include
-
-LANG_CC += -DUSE_OPENMP
-LANG_LD_FLAGS += -L/opt/homebrew/opt/libomp/lib -lomp
-CFLAGS +=-I/opt/homebrew/opt/libomp/include
 
 
 LEX_FILE := $(LANG_SRC_DIR)/lex.l

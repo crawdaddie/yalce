@@ -142,13 +142,8 @@ let __forward = fn x: (Matrix of Double) w: (Matrix of Double) ->
 ;;
 # // 1. One-hot encode input characters
 let forward = fn x: (Matrix of Double) w: (Matrix of Double) ->
-  # // x is one-hot encoded: each row has one 1.0 and rest 0.0
-  # // w is weight matrix [27 x 27]
-  
-  # let logits = mmul_tmp x w; # // Raw scores (log-counts)
-  
-  # // 2. Softmax normalization
-  # let probs = softmax_normalize logits;  # Convert to probabilities
+  # x is one-hot encoded: each row has one 1.0 and rest 0.0
+  # w is weight matrix [27 x 27]
 
   let probs = 
     mmul_tmp x w # log-counts
@@ -209,7 +204,8 @@ for epoch = 0 to 50 in (
   Storage.reset ();
   let p, l = forward X W;
   print `loss: {l}\n`;
-  backward 0.0001 xencs W p;
-  mprint W
+  backward 0.0001 xencs W p
+  # ;
+  # mprint W
 )
 
