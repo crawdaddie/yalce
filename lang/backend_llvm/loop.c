@@ -313,11 +313,13 @@ LLVMValueRef codegen_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return codegen_loop_range(binding, iter_expr, body, &loop_ctx, module,
                               builder);
   }
+
   if (is_loop_of_iterable(ast)) {
     Type *iterable_type =
         ast->data.AST_LET.expr->data.AST_APPLICATION.function->md;
     if (is_coroutine_constructor_type(iterable_type)) {
       iterable_type = iterable_type->data.T_FN.from;
+
       if (is_array_type(iterable_type)) {
         return codegen_loop_iter_array(binding, iter_expr, body, &loop_ctx,
                                        module, builder);

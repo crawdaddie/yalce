@@ -53,7 +53,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
 
   // Track which branches actually need to merge
-  bool *branch_returns = calloc(len, sizeof(bool));
+  bool branch_returns[len];
   bool any_branch_merges = false;
 
   // Pre-analyze branches to see if we need an end block at all
@@ -132,7 +132,6 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         codegen(result_expr, &branch_ctx, module, builder);
 
     if (!branch_result) {
-      free(branch_returns);
       destroy_ctx(&branch_ctx);
       return NULL;
     }
@@ -166,8 +165,6 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     destroy_ctx(&branch_ctx);
   }
-
-  free(branch_returns);
 
   // Position the builder at the end block and return the result
   if (end_block) {

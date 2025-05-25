@@ -1,5 +1,5 @@
 #! env ylc
-open Ref;
+open ../lib/Ref;
 
 let AF_INET = 2;
 let SOCK_STREAM = 1;
@@ -15,41 +15,80 @@ let socket = extern fn Int -> Int -> Int -> Int;
 let create_server_addr = extern fn Int -> Int -> Int -> Ptr; 
 let bind = extern fn Int -> Ptr -> Int -> Int;
 let listen = extern fn Int -> Int -> Int;
-let listen = extern fn Int -> Int -> Int;
 let accept = extern fn Int -> Ptr -> Ptr -> Int;
+let recv = extern fn Int -> Ptr -> Int -> Int -> Int;  # recv(fd, buffer, size, flags)
+let send = extern fn Int -> Ptr -> Int -> Int -> Int;  # send(fd, buffer, size, flags) 
+let close = extern fn Int -> Int;                      # close(fd)
 
 
 
-let accept_connections = fn server_fd ->
-  # accept connnection, save client_fd to state and yield control
-  # next yield actually process the client request using client_fd
+let Queue = module
+  let of_list = fn l: (List of T) ->
+    let t = l in 
+    let h = t in
+    (h, t)
+  ;;
+
+  let append = fn n (h, t) ->
+    let nt = [n] in
+    let tt = list_concat t nt in
+    (h, tt)
+  ;;
+
+  let prepend = fn n (h, t) ->
+    (n::h, t)
+  ;;
+
+  let print_deq = fn (h, t) ->
+    print_list h
+  ;;
+
+  let pop_left = fn (h, t) ->
+    match h with
+    | x::rest -> Some (x, (rest, t))  
+    | [] -> None
+  ;;
+;
+
+let accept_cb = fn server_fd ->
   let client_addr = create_server_addr 0 0 0;
-  yield (accept server_fd client_addr [1])
+  let client_fd = accept server_fd client_addr [1];
+
+  if client_fd >= 0 then (
+    # Immediately read and respond to client
+    let buffer = array_fill_const 1024 '\0';
+    let bytes_read = recv client_fd (cstr buffer) 1024 0;
+
+    if bytes_read > 0 then (
+      print `received request:\n--------------------\n{buffer}\n----------------------\n`;
+      let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
+      send client_fd (cstr response) (array_size response) 0
+    );
+    close client_fd
+  );
+  server_fd 
 ;;
 
-
-let proc_tasks = extern fn (Queue of l) -> Int -> ();
-let proc_tasks = fn tasks server_fd ->
-  let ts = match (queue_pop_left tasks) with
-  | Some r -> (
-    match (r ()) with
-    | Some _ -> queue_append_right tasks r
-    | None -> tasks
+let proc_tasks = fn server_fd tq: (List of ((Int -> Int), Int), List of ((Int->Int), Int)) ->
+  match Queue.pop_left tq with
+  | Some ((cb, sfd), d) -> (
+    let res = cb sfd;
+    proc_tasks server_fd d;
+    ()
   )
-  | None -> queue_of_list [ (accept_connections server_fd) ]
-  in
-  proc_tasks ts server_fd
+  | None -> (
+    proc_tasks server_fd (Queue.of_list [(accept_cb, server_fd)]) ;   
+    ()
+  )
 ;;
-
 
 let init_server = fn port ->
   let server_addr = create_server_addr AF_INET INADDR_ANY port;
   let server_fd = socket AF_INET SOCK_STREAM 0;
   bind server_fd server_addr 16;
   listen server_fd 5;
-  let q = queue_of_list [ (accept_connections server_fd) ];
-  proc_tasks q server_fd ;
-  1
+  proc_tasks server_fd (Queue.of_list [(accept_cb, server_fd)]);
+  ()
 ;;
 
 init_server 8000

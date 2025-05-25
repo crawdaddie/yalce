@@ -493,6 +493,7 @@ void bind_coroutine_state_vars(Type *state_type, LLVMTypeRef llvm_state_type,
   int len = state_type->data.T_CONS.num_args;
   AstList *params = coroutine_ast->data.AST_LAMBDA.params;
   for (int i = 0; i < state_type->data.T_CONS.num_args; i++) {
+
     Type *t = state_type->data.T_CONS.args[i];
     Ast *param;
     if (i < fn_len) {
@@ -541,7 +542,13 @@ void bind_coroutine_state_vars(Type *state_type, LLVMTypeRef llvm_state_type,
       sym->storage = state_gep;
       ht_set_hash(ctx->frame->table, chars, id_hash, sym);
     }
-    params = params->next;
+    printf("%d: ", i);
+    print_type(state_type);
+    printf("params??? %p\n", params);
+
+    if (params) {
+      params = params->next;
+    }
   }
   return;
 }

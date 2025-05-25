@@ -157,9 +157,11 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+
   if (is_index_access_ast(ast)) {
     return IndexAccessHandler(ast, ctx, module, builder);
   }
+
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
           ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record)) {

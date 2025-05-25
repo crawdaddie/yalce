@@ -16,7 +16,33 @@ let get_lines = fn () ->
   (c, l)
 ;;
 
+# let find_min_max = fn l: (List of String) ->
+#   let minl = [| 200000 |];
+#   let maxl = [| 0 |];
+#   for el = iter l in (
+#     # if () then () else ();
+#     let len = array_size el;
+#     match len < minl[0] with 
+#     | true -> (
+#       minl[0] := len;
+#       ()
+#     )
+#     | _ -> ()
+#     ;
+#
+#     match len > maxl[0] with 
+#     | true -> (
+#       maxl[0] := len;
+#       ()
+#     )
+#     | _ -> ()
+#   );
+#   (minl[0], maxl[0])
+# ;;
+#
+# let min_len, max_len = find_min_max lines;
 let lines, num = get_lines ();
+# print `min {min_len} max {max_len}\n`;
 
 let string_concat = extern fn Ptr -> Int -> String;
 let start_char = '^';
@@ -99,6 +125,7 @@ let rev_list_to_arr = fn len: (Int) list: (List of Int) ->
 print "## random weird names:\n";
 for i = 0 to 50 in (
   let len = [|0|];
+
   let aux = fn len idx l -> 
     match idx with
     | 0 -> (len, l)

@@ -2,7 +2,6 @@
 #include "binding.h"
 #include "symbols.h"
 #include "types.h"
-#include "types/common.h"
 #include "types/inference.h"
 #include "types/type.h"
 #include "util.h"
@@ -347,11 +346,56 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
 
   return env;
 }
+LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
+                                         JITLangCtx *ctx, LLVMModuleRef module,
+                                         LLVMBuilderRef builder) {
+
+  int args_len = fn_type_args_len(specific_type);
+  LLVMTypeRef fn_type =
+      codegen_fn_type(specific_type, args_len, ctx->env, module);
+
+  Type *ft = specific_type;
+  Ast args[args_len];
+  int i = 0;
+
+  while (i < args_len) {
+    args[i] = (Ast){AST_GET_ARG, .data = {.AST_GET_ARG = {.i = i}},
+                    .md = ft->data.T_FN.from};
+    ft = ft->data.T_FN.to;
+    i++;
+  }
+
+  Ast app = {
+      AST_APPLICATION,
+      .data = {.AST_APPLICATION = {.function = &(Ast){AST_IDENTIFIER,
+                                                      .md = specific_type},
+                                   .args = args,
+                                   .len = args_len}},
+      .md = fn_return_type(specific_type)};
+
+  START_FUNC(module, "anonymous_func", fn_type);
+  LLVMValueRef res = sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
+      &app, ctx, module, builder);
+  LLVMBuildRet(builder, res);
+
+  END_FUNC;
+
+  return func;
+}
 
 LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
                                  JITLangCtx *ctx, LLVMModuleRef module,
                                  LLVMBuilderRef builder) {
   JITLangCtx compilation_ctx = *ctx;
+  if (!sym->symbol_data.STYPE_GENERIC_FUNCTION.ast) {
+    if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
+      return create_builtin_func_wrapper(specific_type, sym, ctx, module,
+                                         builder);
+    }
+
+    return NULL;
+  }
+
   Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
   fn_ast.md = specific_type;
 

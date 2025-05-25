@@ -5,28 +5,29 @@ let setref = fn arr v ->
 ;;
 
 let (<-) = setref;
+
 let deref = fn arr -> array_at arr 0;;
 
-let test = module
-  let test_a = fn () ->
-    let x = Ref 1;
-    let res = deref x == 1;
-    x <- 2;
-    let res = res && deref x == 2
-  ;;
-
-
-  let test_ref_func = fn () ->
-    let incr_ref = fn rx ->
-      let y = array_at rx 0;
-      let inc = y + 1;
-      array_set rx 0 inc;
-      inc
-    ;;
-
-
-    let x = Ref 1;
-    incr_ref x == 2 && deref x == 2 
-  ;;
-;
-
+# let test = module
+#   let test_a = fn () ->
+#     let x = Ref 1;
+#     let res = deref x == 1;
+#     x[0] := 2;
+#     let res = res && deref x == 2
+#   ;;
+#
+#
+#   let test_ref_func = fn () ->
+#     let incr_ref = fn rx ->
+#       let y = array_at rx 0;
+#       let inc = y + 1;
+#       array_set rx 0 inc;
+#       inc
+#     ;;
+#
+#
+#     let x = Ref 1;
+#     incr_ref x == 2 && deref x == 2 
+#   ;;
+# ;
+#

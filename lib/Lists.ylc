@@ -1,0 +1,36 @@
+let print_list = fn a: (List of T) ->
+  print "["; 
+  for l = iter a in (
+    print `{l}, `
+  );
+  print "]\n" 
+;;
+
+let fold = fn f: (R -> T -> R) res: (R) a: (List of T) ->
+  let res_ref = [| res |];
+  for v = iter a in (
+    let r = res_ref[0];
+    res_ref[0] := (f r v)  
+  );
+  res_ref[0]
+;;
+
+let map = fn f l ->
+  let aux = fn f l res -> 
+    match l with
+    | [] -> res
+    | x :: rest -> aux f rest (f x :: res) 
+  ;;
+  aux f l []
+;;
+
+#
+# let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
+#   let res_ref = [| res |];
+#   for i = 0 to (array_size a) in (
+#     let r = res_ref [0];
+#     let v = a [i];
+#     res_ref[0] := (f i r v)  
+#   );
+#   res_ref[0]
+# ;;

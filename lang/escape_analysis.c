@@ -138,15 +138,16 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
       uint32_t mem_id = esc->id;
       EscapesEnv *env = escapes_find_by_id(lambda_ctx.env, mem_id);
       if (env) {
-
         EscapeMeta *ea_md = malloc(sizeof(EscapeMeta));
         *ea_md = (EscapeMeta){.status = EA_HEAP_ALLOC};
         env->expr->ea_md = ea_md;
       } else {
 
-        EscapeMeta *ea_md = malloc(sizeof(EscapeMeta));
-        *ea_md = (EscapeMeta){.status = EA_STACK_ALLOC};
-        env->expr->ea_md = ea_md;
+        // EscapeMeta *ea_md = malloc(sizeof(EscapeMeta));
+        // *ea_md = (EscapeMeta){.status = EA_STACK_ALLOC};
+        // lambda_ctx.env =
+        // ctx->env = escapes_add(ctx->env, );
+        // env->expr->ea_md = ea_md;
       }
     }
     break;
@@ -162,12 +163,16 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
   case AST_APPLICATION: {
 
     ea(ast->data.AST_APPLICATION.function, ctx);
+
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       ea(ast->data.AST_APPLICATION.args + i, ctx);
     }
 
-    // printf("esc an: ");
-    // print_ast(ast);
+    if (ast->md && type_needs_alloc(ast->md)) {
+      MemoryUseList *container_mem = _ealloc(sizeof(MemoryUseList));
+      *container_mem = (MemoryUseList){next_mem_id(), NULL};
+      mem_ids = list_extend_left(mem_ids, container_mem);
+    }
     break;
   }
   case AST_LOOP:
@@ -175,8 +180,13 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
     MemoryUseList *expr_ids = ea(ast->data.AST_LET.expr, ctx);
 
     Type *t = ast->data.AST_LET.expr->md;
+    // printf("ast let\n");
+    // print_type(t);
+    // printf("binding type needs alloc %d\n", type_needs_alloc(t));
+
     if (type_needs_alloc(t) &&
         ast->data.AST_LET.binding->tag == AST_IDENTIFIER && expr_ids) {
+      // printf("ast let type needs alloc\n");
 
       ctx->env = escapes_add(
           ctx->env, ast->data.AST_LET.binding->data.AST_IDENTIFIER.value,

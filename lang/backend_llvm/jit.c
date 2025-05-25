@@ -33,7 +33,6 @@
 void dump_assembly(LLVMModuleRef module);
 #define STACK_MAX 256
 
-void print_result(Type *type, LLVMGenericValueRef result);
 static Ast *top_level_ast(Ast *body) {
   size_t len = body->data.AST_BODY.len;
   Ast *last = body->data.AST_BODY.stmts[len - 1];
@@ -134,21 +133,18 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   prepare_ex_engine(ctx, &engine, module);
 
   if (top_level_func == NULL) {
-    // printf("> ");
-    print_result(result_type, NULL);
     return NULL;
   }
 
   LLVMGenericValueRef exec_args[] = {};
   LLVMDumpModule(module);
   dump_assembly(module);
-
+  //
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
   // fflush(stdout);
   // printf("> ");
-  print_result(result_type, result);
   return result; // Return success
 }
 
@@ -355,7 +351,7 @@ int jit(int argc, char **argv) {
       Type *top_type = prog->md;
 
       if (top_level_func == NULL) {
-        print_result(top_type, NULL);
+        print_type(top_type);
         continue;
       } else {
         LLVMExecutionEngineRef engine;
@@ -363,93 +359,11 @@ int jit(int argc, char **argv) {
         LLVMGenericValueRef exec_args[] = {};
         LLVMGenericValueRef result =
             LLVMRunFunction(engine, top_level_func, 0, exec_args);
-        print_result(top_type, NULL);
+        print_type(top_type);
       }
       printf(COLOR_RESET);
     }
   }
 
   return 0;
-}
-
-void print_result(Type *type, LLVMGenericValueRef result) {
-  printf("`");
-  if (type->alias != NULL) {
-    printf("%s\n", type->alias);
-  } else {
-    print_type(type);
-  }
-
-  if (result == NULL) {
-    printf("\n");
-    return;
-  }
-
-  switch (type->kind) {
-  case T_INT: {
-    printf("%d", (int)LLVMGenericValueToInt(result, 0));
-    break;
-  }
-
-  case T_BOOL: {
-    printf("%d", (int)LLVMGenericValueToInt(result, 0));
-    break;
-  }
-
-  case T_NUM: {
-    printf("%f", (double)LLVMGenericValueToFloat(LLVMDoubleType(), result));
-    break;
-  }
-
-  case T_STRING: {
-    printf("%s", (char *)LLVMGenericValueToPointer(result));
-    break;
-  }
-
-  case T_CHAR: {
-    printf("%c", (int)LLVMGenericValueToInt(result, 0));
-    break;
-  }
-
-  case T_CONS: {
-    if (is_string_type(type)) {
-      printf("%s", (char *)LLVMGenericValueToPointer(result));
-      break;
-    }
-    if (strcmp(type->data.T_CONS.name, "List") == 0 &&
-        type->data.T_CONS.args[0]->kind == T_INT) {
-
-      int_ll_t *current = (int_ll_t *)LLVMGenericValueToPointer(result);
-      int count = 0;
-      printf("[");
-      while (current != NULL && count < 10) { // Limit to prevent infinite loop
-        printf("%d, ", current->el);
-        current = current->next;
-        count++;
-      }
-      if (count == 10) {
-        printf("...");
-      }
-      printf("]");
-      break;
-    }
-
-    printf("%s %p", type->data.T_CONS.name, LLVMGenericValueToPointer(result));
-    break;
-  }
-
-  case T_FN: {
-    printf("%p", result);
-    break;
-  }
-
-  case T_VOID: {
-    break;
-  }
-
-  default:
-    printf("%d", (int)LLVMGenericValueToInt(result, 0));
-    break;
-  }
-  printf("\n");
 }

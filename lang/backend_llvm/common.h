@@ -33,7 +33,7 @@ typedef struct {
   int *num_globals;
   void **global_storage_array;
   int *global_storage_capacity;
-  char *module_name;
+  const char *module_name;
   int num_coroutine_yields;
   int current_yield;
   LLVMValueRef yield_switch_ref;

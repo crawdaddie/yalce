@@ -204,7 +204,7 @@ for epoch = 0 to 50 in (
   Storage.reset ();
   let p, l = forward X W;
   print `loss: {l}\n`;
-  backward 0.0001 xencs W p
+  backward 50. xencs W p
   # ;
   # mprint W
 )

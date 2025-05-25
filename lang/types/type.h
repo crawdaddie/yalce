@@ -293,6 +293,7 @@ typedef struct Type {
   bool is_coroutine_constructor;
   bool is_recursive_type_ref;
   bool is_ref;
+  bool alloced_in_func; // metadata if this type appears as a function return
   // bool is_recursive_placeholder;
   int scope;
   int yield_boundary;

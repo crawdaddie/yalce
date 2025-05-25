@@ -706,7 +706,6 @@ Type *for_loop_binding(Ast *binding, Ast *expr, Ast *body, TICtx *ctx) {
 }
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
-
   TICtx body_ctx = *ctx;
   body_ctx.scope++;
   body_ctx.current_fn_ast = ast;

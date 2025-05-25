@@ -160,6 +160,7 @@ typedef enum ast_tag {
   AST_MODULE,
   AST_RANGE_EXPRESSION,
   AST_LOOP,
+  AST_GET_ARG,
 } ast_tag;
 
 struct Ast {
@@ -309,6 +310,9 @@ struct Ast {
     //   Ast *expr;
     //   Ast *body;
     // } AST_LOOP;
+    struct AST_GET_ARG {
+      int i;
+    } AST_GET_ARG;
   } data;
 
   void *ea_md;

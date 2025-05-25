@@ -301,6 +301,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_BINOP: {
     return NULL;
   }
+
+  case AST_GET_ARG: {
+    LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+    return LLVMGetParam(func, ast->data.AST_GET_ARG.i);
+  }
   }
 
   return NULL;
