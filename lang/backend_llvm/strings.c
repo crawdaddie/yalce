@@ -411,10 +411,16 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
   LLVMValueRef str_const = LLVMConstString(chars, length, 0);
   LLVMTypeRef str_const_type = LLVMTypeOf(str_const);
 
+  LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+
   LLVMValueRef data_ptr =
       (ctx->stack_ptr == 0)
           ? LLVMBuildMalloc(builder, str_const_type, "heap_array")
           : LLVMBuildAlloca(builder, str_const_type, "stack_array");
+  //
+  //
+  // LLVMValueRef data_ptr =
+  //     LLVMBuildMalloc(builder, str_const_type, "heap_array");
 
   LLVMBuildStore(builder, str_const, data_ptr);
 

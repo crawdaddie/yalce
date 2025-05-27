@@ -49,19 +49,6 @@ LLVMValueRef get_array_struct(LLVMValueRef array, LLVMTypeRef array_type,
   }
   return array_struct;
 }
-LLVMValueRef __get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
-                                 LLVMValueRef index, LLVMTypeRef element_type) {
-  LLVMTypeRef array_type = codegen_array_type(element_type);
-
-  LLVMValueRef data_ptr =
-      LLVMBuildExtractValue(builder, array, 1, "get_array_data_ptr");
-
-  LLVMValueRef element_ptr =
-      LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
-                    "element_ptr");
-
-  return LLVMBuildLoad2(builder, element_type, element_ptr, "element");
-}
 
 LLVMValueRef get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
                                LLVMValueRef index, LLVMTypeRef element_type) {

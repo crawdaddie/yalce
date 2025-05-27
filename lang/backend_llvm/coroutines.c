@@ -616,12 +616,13 @@ Type *build_coroutine_state_type(Type *constructor_type, Ast *ast) {
   int t = total_args_len;
   Type *f = constructor_type;
 
-  while (t--) {
+  while (f->kind == T_FN) {
     if (f->data.T_FN.from->kind != T_VOID) {
       non_void_args++;
     }
     f = f->data.T_FN.to;
   }
+
   if (non_void_args == 0) {
     return NULL;
   }
@@ -669,6 +670,13 @@ LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *fn_ast,
     ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
                 sym);
     return NULL;
+  }
+  AstList *bxs = fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
+  while (bxs) {
+    printf("boundary crosser: ");
+    print_ast(bxs->ast);
+    print_type(bxs->ast->md);
+    bxs = bxs->next;
   }
 
   Type *state_type = build_coroutine_state_type(constructor_type, fn_ast);
@@ -773,6 +781,8 @@ LLVMValueRef create_coroutine_instance_from_generic_constructor(
     Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
 
     fn_ast.md = expected_type;
+
+    AstList *bxs = fn_ast.data.AST_LAMBDA.yield_boundary_crossers;
 
     state_type = build_coroutine_state_type(expected_type, &fn_ast);
 
@@ -950,6 +960,32 @@ JITSymbol *nested_coroutine_expr(Ast *ast, JITLangCtx *ctx) {
   return NULL;
 }
 
+bool is_yield_end(Ast *ast) {
+  return ast->data.AST_YIELD.expr->tag == AST_IDENTIFIER &&
+         CHARS_EQ(ast->data.AST_YIELD.expr->data.AST_IDENTIFIER.value, "end");
+}
+
+LLVMValueRef codegen_coroutine_short_circuit(JITLangCtx *ctx,
+                                             LLVMModuleRef module,
+                                             LLVMBuilderRef builder) {
+  // Get the current coroutine function parameters
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef func = LLVMGetBasicBlockParent(current_block);
+  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+
+  // Option 2: Return null directly to signal completion
+  // This is probably what you want - when cor_next gets null back,
+  // it knows the coroutine is finished
+  LLVMBuildRet(builder, null_cor_inst());
+
+  return NULL;
+}
+
+// if (is_yield_end(ast)) {
+//   return codegen_coroutine_short_circuit(ctx, module, builder);
+// }
+
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
@@ -972,6 +1008,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   Ast *yield_expr = ast->data.AST_YIELD.expr;
+
   JITSymbol *sym = nested_coroutine_expr(yield_expr, ctx);
 
   if (sym != NULL) {
@@ -1006,7 +1043,9 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
 
   } else {
+
     LLVMValueRef expr_val = codegen(yield_expr, ctx, module, builder);
+
     LLVMBuildStore(builder, expr_val, ret_val_ref);
     LLVMBuildRet(builder, instance_ptr);
   }

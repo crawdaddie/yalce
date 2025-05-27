@@ -451,7 +451,6 @@ Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
 
   if (ctx->yielded_type == NULL) {
     ctx->yielded_type = yield_expr_type;
-
   } else {
     Type *prev_yield_type = ctx->yielded_type;
 

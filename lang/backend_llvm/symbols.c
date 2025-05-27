@@ -89,6 +89,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (is_simple_enum(enum_type)) {
       return codegen_simple_enum_member(enum_type, chars, ctx, module, builder);
+
     } else if (strcmp(chars, "None") == 0) {
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
       LLVMValueRef v = LLVMGetUndef(llvm_type);
@@ -150,6 +151,9 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
     }
     return sym->val;
+  }
+  case STYPE_VARIANT_TYPE: {
+    return codegen_adt_member(ast->md, chars, ctx, module, builder);
   }
 
   default: {

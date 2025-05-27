@@ -42,6 +42,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
 
   if (!test_val) {
+
     fprintf(stderr, "could not compile test expression\n");
     return NULL;
   }
@@ -128,11 +129,14 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       set_as_tail(result_expr);
     }
 
+    print_ast(result_expr);
+    print_type(result_expr->md);
     LLVMValueRef branch_result =
         codegen(result_expr, &branch_ctx, module, builder);
 
     if (!branch_result) {
       destroy_ctx(&branch_ctx);
+      fprintf(stderr, "no branch result\n");
       return NULL;
     }
 
