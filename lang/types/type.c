@@ -1502,10 +1502,6 @@ bool application_is_partial(Ast *app) {
       fn_type_args_len(app->data.AST_APPLICATION.function->md);
 
   int actual_args_len = app->data.AST_APPLICATION.len;
-  print_ast(app);
-  printf("exp arg len %d actual arg len %d\n", expected_args_len,
-         actual_args_len);
-  print_type(app->data.AST_APPLICATION.function->md);
   return actual_args_len < expected_args_len;
 }
 

@@ -77,7 +77,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (!sym) {
     Type *enum_type = env_lookup(ctx->env, chars);
-    // print_type_env(ctx->env);
 
     if (!enum_type) {
       fprintf(
@@ -274,9 +273,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
 
     if (is_coroutine_type(expr_type)) {
-      printf("codegen coroutine instance\n");
       expr_val = codegen(expr, outer_ctx, module, builder);
-      print_type(expr_type);
 
       LLVMValueRef match_result = codegen_pattern_binding(
           binding, expr_val, expr_type, in_expr ? inner_ctx : outer_ctx, module,

@@ -445,17 +445,6 @@ int get_inner_state_slot(Ast *ast) {
   return -1;
 }
 
-LLVMValueRef get_inner_state_slot_gep(int slot, Ast *ast,
-                                      LLVMBuilderRef builder) {
-
-  // Create basic blocks for the if-then-else structure
-  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
-  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
-  LLVMValueRef instance_ptr = LLVMGetParam(function, 0);
-  // LLVMValueRef state_gep =
-  return NULL;
-}
-
 void bind_coroutine_state_vars(Type *state_type, LLVMTypeRef llvm_state_type,
                                LLVMValueRef instance_ptr, Ast *coroutine_ast,
                                JITLangCtx *ctx, LLVMModuleRef module,
@@ -614,7 +603,6 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type,
   destroy_ctx(&fn_ctx);
 
   __current_coroutine_fn = NULL;
-  LLVMDumpValue(func);
 
   return func;
 }

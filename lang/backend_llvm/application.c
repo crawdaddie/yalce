@@ -230,7 +230,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return yield_from_coroutine_instance(sym, ctx, module, builder);
   }
 
-  // printf("callable sym type: %d\n", sym->type);
   if (sym->type == STYPE_GENERIC_FUNCTION) {
 
     LLVMValueRef callable =

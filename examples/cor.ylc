@@ -134,38 +134,7 @@ let map_cor = fn () ->
 `
 ;;
 map_cor ();
-
-let fib_cor = fn () ->
-  let fib = fn a: (Int) b: (Int) ->
-    # TODO: don't like that I need to annotate the type here
-    yield a;
-    yield fib b (a + b)
-  ;;
-
-  let coi = fib 0 1 in
-  print `# fibonnaci coroutine
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-  {coi ()}
-`
-;;
-fib_cor();
+#
 let cor_list = fn () -> 
   let l = [1, 2, 3] in
   let c = iter_of_list l in
@@ -191,6 +160,7 @@ let cor_array = fn () ->
 `
 ;;
 cor_array ();
+
 let cor_array2 = fn () -> 
   let l = [|1, 0, 0, 0, 1, 1, 0, 0, 1|] in
   let c = iter l in
@@ -210,6 +180,7 @@ let cor_array2 = fn () ->
 `
 ;;
 cor_array2 ();
+
 let loop_cor = fn () ->  
   let co_void = fn () -> 
     yield 1;
@@ -229,7 +200,8 @@ let loop_cor = fn () ->
   {c ()}
   {c ()}
   {c ()}
-`;
+  `;
+
   let d = iter_of_list [1,2,3] |> cor_loop in
   print `## looped list
   {d ()}
@@ -271,6 +243,7 @@ let loop_cor = fn () ->
 ;;
 
 loop_cor ();
+
 let arithmetic_series = fn () -> 
   let arithmetic = fn s ->
     yield s;

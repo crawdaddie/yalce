@@ -160,9 +160,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       return LLVM_TYPE_ptr(char);
     }
 
-    if (type->data.T_CONS.num_args == 1) {
-      return type_to_llvm_type(type->data.T_CONS.args[0], ctx, module);
-    }
+    // if (type->data.T_CONS.num_args == 1) {
+    //   // this is maybe not legit???
+    //   return type_to_llvm_type(type->data.T_CONS.args[0], ctx, module);
+    // }
 
     if (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
       if (is_simple_enum(type)) {

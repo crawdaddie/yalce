@@ -124,10 +124,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
         LLVMBuildStore(builder, val, ex_sym->storage);
         sym = ex_sym;
       } else {
-        printf("set global %s\n", chars);
-        print_type(val_type);
         sym = new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
-        print_type(sym->symbol_type);
         codegen_set_global(chars, sym, val, val_type, llvm_type, ctx, module,
                            builder);
       }

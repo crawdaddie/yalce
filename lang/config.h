@@ -6,6 +6,7 @@ typedef struct RTConfig {
   bool interactive_mode;
   bool test_mode;
   bool gui_mode;
+  bool debug_codegen;
   const char *base_libs_dir;
   const char *import_current_dir;
 

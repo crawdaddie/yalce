@@ -137,8 +137,10 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   LLVMGenericValueRef exec_args[] = {};
-  LLVMDumpModule(module);
-  // dump_assembly(module);
+  if (config.debug_codegen) {
+    LLVMDumpModule(module);
+    dump_assembly(module);
+  }
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
@@ -252,6 +254,9 @@ int jit(int argc, char **argv) {
   while (arg_counter < argc) {
     if (strcmp(argv[arg_counter], "-i") == 0) {
       config.interactive_mode = true;
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "--debug-codegen") == 0) {
+      config.debug_codegen = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module
