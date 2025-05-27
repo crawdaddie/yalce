@@ -15,8 +15,8 @@ LLVMTypeRef cor_inst_struct_type();
 
 void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
                                LLVMTypeRef *llvm_param_types,
-                               LLVMTypeRef *llvm_return_type_ref, TypeEnv *env,
-                               LLVMModuleRef module) {
+                               LLVMTypeRef *llvm_return_type_ref,
+                               JITLangCtx *ctx, LLVMModuleRef module) {
 
   for (int i = 0; i < fn_len; i++) {
 
@@ -27,9 +27,9 @@ void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
       llvm_param_types[i] = GENERIC_PTR;
     } else if (is_pointer_type(t)) {
       llvm_param_types[i] = LLVMPointerType(
-          type_to_llvm_type(t->data.T_CONS.args[0], env, module), 0);
+          type_to_llvm_type(t->data.T_CONS.args[0], ctx, module), 0);
     } else {
-      llvm_param_types[i] = type_to_llvm_type(t, env, module);
+      llvm_param_types[i] = type_to_llvm_type(t, ctx, module);
     }
 
     fn_type = fn_type->data.T_FN.to;
@@ -37,10 +37,10 @@ void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
 
   Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
 
-  *llvm_return_type_ref = type_to_llvm_type(return_type, env, module);
+  *llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
 }
 
-LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
+LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module) {
 
   if (is_coroutine_type(fn_type)) {
@@ -53,12 +53,12 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
   if (fn_len == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
 
     LLVMTypeRef ret_type =
-        type_to_llvm_type(fn_type->data.T_FN.to, env, module);
+        type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
     llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
   } else {
     LLVMTypeRef llvm_return_type_ref;
     codegen_fn_type_arg_types(fn_type, fn_len, llvm_param_types,
-                              &llvm_return_type_ref, env, module);
+                              &llvm_return_type_ref, ctx, module);
     llvm_fn_type =
         LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
   }
@@ -81,7 +81,7 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
 
     LLVMTypeRef ret_type =
-        type_to_llvm_type(fn_type->data.T_FN.to, ctx->env, module);
+        type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
     LLVMTypeRef llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
     return get_extern_fn(name, llvm_fn_type, module);
   }
@@ -92,12 +92,12 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     llvm_param_types[i] = param_type->kind == T_FN
                               ? GENERIC_PTR
-                              : type_to_llvm_type(param_type, ctx->env, module);
+                              : type_to_llvm_type(param_type, ctx, module);
   }
   LLVMTypeRef ret_type = type_to_llvm_type(
       ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[params_count]
           .md,
-      ctx->env, module);
+      ctx, module);
 
   LLVMTypeRef llvm_fn_type =
       LLVMFunctionType(ret_type, llvm_param_types, params_count, 0);
@@ -169,7 +169,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
   LLVMTypeRef prototype =
-      codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx->env, module);
+      codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx, module);
 
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 
@@ -193,7 +193,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                     const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
                     int id_len = param_ast->data.AST_IDENTIFIER.length;
                     LLVMTypeRef llvm_type =
-                        type_to_llvm_type(param_type, ctx->env, module);
+                        type_to_llvm_type(param_type, ctx, module);
 
                     JITSymbol *sym = new_symbol(STYPE_FUNCTION, param_type,
                                                 param_val, llvm_type);
@@ -351,8 +351,7 @@ LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
                                          LLVMBuilderRef builder) {
 
   int args_len = fn_type_args_len(specific_type);
-  LLVMTypeRef fn_type =
-      codegen_fn_type(specific_type, args_len, ctx->env, module);
+  LLVMTypeRef fn_type = codegen_fn_type(specific_type, args_len, ctx, module);
 
   Type *ft = specific_type;
   Ast args[args_len];

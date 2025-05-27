@@ -21,11 +21,12 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, TypeEnv *env,
+LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module);
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
+
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder);
 
@@ -51,6 +52,6 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
 
 void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
                                LLVMTypeRef *llvm_param_types,
-                               LLVMTypeRef *llvm_return_type_ref, TypeEnv *env,
-                               LLVMModuleRef module);
+                               LLVMTypeRef *llvm_return_type_ref,
+                               JITLangCtx *ctx, LLVMModuleRef module);
 #endif

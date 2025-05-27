@@ -7,7 +7,7 @@
 LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder);
 
-LLVMTypeRef create_llvm_list_type(Type *list_el_type, TypeEnv *env,
+LLVMTypeRef create_llvm_list_type(Type *list_el_type, JITLangCtx *ctx,
                                   LLVMModuleRef module);
 
 LLVMValueRef ll_get_head_val(LLVMValueRef list, LLVMTypeRef list_el_type,
@@ -53,6 +53,5 @@ LLVMValueRef QueuePopLeftHandler(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                             LLVMBuilderRef builder);
+                               LLVMBuilderRef builder);
 #endif
-

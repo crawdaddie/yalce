@@ -1,5 +1,4 @@
 #! env ylc
-
 let AF_INET = 2;
 let SOCK_STREAM = 1;
 let INADDR_ANY = 0; 
@@ -49,34 +48,58 @@ let Queue = module
   ;;
 ;
 
-let accept_cb = fn server_fd ->
+let accept_cb = fn sfd ->
   let client_addr = create_server_addr 0 0 0;
-  let client_fd = accept server_fd client_addr [1];
-
-  if client_fd >= 0 then (
-    # Immediately read and respond to client
-    let buffer = array_fill_const 1024 (Char 0);
-    let bytes_read = recv client_fd (cstr buffer) 1024 0;
-
-    if bytes_read > 0 then (
-      print `received request:\n--------------------\n{buffer}\n----------------------\n`;
-      let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
-      send client_fd (cstr response) (array_size response) 0
-    );
-    close client_fd
-  );
-  server_fd 
+  let client_fd = accept sfd client_addr (cstr [|1|]);
+  ljrint `accepted client fd: {client_fd}\n`;
+  client_fd
 ;;
 
-let proc_tasks = fn server_fd tq: (List of ((Int -> Int), Int), List of ((Int->Int), Int)) ->
+let read_cb = fn cfd: (Int) ->
+
+  let buffer = array_fill_const 1024 0;
+  let bytes_read = recv cfd (cstr buffer) 1024 0;
+
+  if bytes_read > 0 then (
+    Some @@ Write (cfd, "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!")
+  ) else (
+    close cfd;
+    None
+  )
+;;
+
+type CallbackType = 
+  | Accept of Int           # server fd
+  | Read of Int             # client fd  
+  | Write of (Int, String)  # client fd + data to write
+;
+
+let proc_tasks = fn server_fd tq ->
   match Queue.pop_left tq with
-  | Some ((cb, sfd), d) -> (
-    let res = cb sfd;
-    proc_tasks server_fd d;
-    ()
+  | Some (cbt, d) -> (
+    match cbt with
+    | Accept sfd -> (
+      let cfd = accept_cb sfd;
+      match cfd >= 0 with
+      | true -> d |> Queue.append (Read cfd) |> proc_tasks server_fd 
+      | _ -> d |> proc_tasks server_fd 
+      ;
+      ()
+    )
+
+    | Read cf -> (
+      proc_tasks server_fd d;
+      ()
+    )
+    | Write (cfd, resp) -> (
+      send cfd (cstr resp) (array_size resp) 0;
+      close cfd;
+      proc_tasks server_fd d;
+      ()
+    )
   )
   | None -> (
-    proc_tasks server_fd (Queue.of_list [(accept_cb, server_fd)]) ;   
+    proc_tasks server_fd (Queue.of_list [Accept server_fd]) ;   
     ()
   )
 ;;
@@ -86,7 +109,7 @@ let init_server = fn port ->
   let server_fd = socket AF_INET SOCK_STREAM 0;
   bind server_fd server_addr 16;
   listen server_fd 5;
-  proc_tasks server_fd (Queue.of_list [(accept_cb, server_fd)]);
+  proc_tasks server_fd (Queue.of_list [Accept server_fd]);
   ()
 ;;
 

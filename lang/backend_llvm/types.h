@@ -19,7 +19,8 @@
     _t;                                                                        \
   })
 
-LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env, LLVMModuleRef module);
+LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
+                              LLVMModuleRef module);
 
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,
                                       Type *type_to, LLVMModuleRef module,
@@ -52,6 +53,6 @@ LLVMValueRef codegen_option_is_some(LLVMValueRef opt, LLVMBuilderRef builder);
 LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r,
                             LLVMModuleRef module, LLVMBuilderRef builder);
 
-LLVMTypeRef named_struct_type(const char *name, Type *tuple_type, TypeEnv *env,
-                              LLVMModuleRef module);
+LLVMTypeRef named_struct_type(const char *name, Type *tuple_type,
+                              JITLangCtx *ctx, LLVMModuleRef module);
 #endif

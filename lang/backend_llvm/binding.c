@@ -24,8 +24,7 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
 
   Type *list_el_type = list_type->data.T_CONS.args[0];
 
-  LLVMTypeRef llvm_list_el_type =
-      type_to_llvm_type(list_el_type, ctx->env, module);
+  LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx, module);
   LLVMValueRef list_empty = ll_is_null(list, llvm_list_el_type, builder);
 
   // Create blocks for the branch
@@ -70,6 +69,7 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
 
   return phi;
 }
+
 LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
                                      Type *val_type, JITLangCtx *ctx,
                                      LLVMModuleRef module,
@@ -124,7 +124,10 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
         LLVMBuildStore(builder, val, ex_sym->storage);
         sym = ex_sym;
       } else {
+        printf("set global %s\n", chars);
+        print_type(val_type);
         sym = new_symbol(STYPE_TOP_LEVEL_VAR, val_type, val, llvm_type);
+        print_type(sym->symbol_type);
         codegen_set_global(chars, sym, val, val_type, llvm_type, ctx, module,
                            builder);
       }
@@ -185,8 +188,10 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
         LLVMBuildCondBr(builder, tag_match, then_block, else_block);
 
         LLVMPositionBuilderAtEnd(builder, then_block);
+
         LLVMValueRef next_val = codegen_tuple_access(
-            1, val, type_to_llvm_type(cons_type, ctx->env, module), builder);
+            1, val, type_to_llvm_type(cons_type, ctx, module), builder);
+
         LLVMValueRef next_result = codegen_pattern_binding(
             binding->data.AST_APPLICATION.args, next_val,
             cons_type->data.T_CONS.args[vidx]->data.T_CONS.args[0], ctx, module,
@@ -221,7 +226,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
   case AST_TUPLE: {
     int len = binding->data.AST_LIST.len;
     LLVMValueRef success = _TRUE;
-    LLVMTypeRef llvm_tuple_type = type_to_llvm_type(val_type, ctx->env, module);
+    LLVMTypeRef llvm_tuple_type = type_to_llvm_type(val_type, ctx, module);
     for (int i = 0; i < len; i++) {
       success = LLVMBuildAnd(
           builder,
@@ -237,7 +242,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
   case AST_LIST: {
     Type *list_el_type = val_type->data.T_CONS.args[0];
     LLVMTypeRef llvm_list_el_type =
-        type_to_llvm_type(list_el_type, ctx->env, module);
+        type_to_llvm_type(list_el_type, ctx, module);
 
     if (binding->data.AST_LIST.len == 0) {
       return ll_is_null(val, llvm_list_el_type, builder);

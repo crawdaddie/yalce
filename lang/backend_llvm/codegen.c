@@ -1,4 +1,5 @@
 #include "backend_llvm/codegen.h"
+#include "adt.h"
 #include "backend_llvm/application.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/function.h"
@@ -22,8 +23,8 @@ LLVMValueRef GenericConsConstructorHandler(Ast *ast, JITLangCtx *ctx,
                                            LLVMBuilderRef builder) {
   Type *expected_type = ast->md;
   if (expected_type->kind == T_CONS) {
-    LLVMTypeRef struct_type = named_struct_type(
-        expected_type->data.T_CONS.name, expected_type, ctx->env, module);
+    LLVMTypeRef struct_type = named_struct_type(expected_type->data.T_CONS.name,
+                                                expected_type, ctx, module);
 
     LLVMValueRef tuple = LLVMGetUndef(struct_type);
     // LLVMConstNull(struct_type);
@@ -46,15 +47,6 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
   Type *t = ast->md;
   LLVMTypeRef ret = LLVMVoidType();
-  // if (t->kind == T_FN && is_generic(t)) {
-  //   ret = LLVMVoidType();
-  // } else if (is_generic(t)) {
-  //   ret = LLVMVoidType();
-  // } else if (is_module(t)) {
-  //   ret = LLVMInt32Type();
-  // } else {
-  //   ret = FIND_TYPE(t, ctx->env, module, ast);
-  // }
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
@@ -70,19 +62,6 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
 
-  // if (body == NULL) {
-  //   LLVMDeleteFunction(func);
-  //   return NULL;
-  // }
-
-  // *ret_type = LLVMTypeOf(body);
-  // if (types_equal(ast->md, &t_void)) {
-  //   *ret_type = LLVMVoidType();
-  //   LLVMBuildRetVoid(builder);
-  // } else {
-  //   LLVMBuildRet(builder, body);
-  // }
-  //
   LLVMBuildRetVoid(builder);
 
   return func;
@@ -134,8 +113,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       Type *t = item->md;
 
       if (t->kind == T_VAR) {
-        // print_type(t);
-        // print_type_env(ctx->env);
         t = env_lookup(ctx->env, t->data.T_VAR);
       }
 
@@ -230,8 +207,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
 
     return codegen_tuple_access(
-        member_idx, rec, type_to_llvm_type(record_type, ctx->env, module),
-        builder);
+        member_idx, rec, type_to_llvm_type(record_type, ctx, module), builder);
   }
 
   case AST_YIELD: {
@@ -239,18 +215,39 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   case AST_EMPTY_LIST: {
     Type *t = ast->md;
-    LLVMTypeRef lt = FIND_TYPE(t->data.T_CONS.args[0], ctx->env, module, ast);
+    LLVMTypeRef lt = FIND_TYPE(t->data.T_CONS.args[0], ctx, module, ast);
     return null_node(llnode_type(lt));
   }
 
   case AST_TYPE_DECL: {
     Type *t = ast->md;
+
     if (t->kind == T_CREATE_NEW_GENERIC) {
       Type *tpl = t->data.T_CREATE_NEW_GENERIC.template;
       Type *resolved = t->data.T_CREATE_NEW_GENERIC.fn(tpl);
       if (resolved->kind == T_CONS) {
         t = resolved;
       }
+    }
+    if (!is_generic(t) && is_variant_type(t)) {
+      LLVMTypeRef llvm_type = codegen_adt_type(t, ctx, module);
+      JITSymbol *sym = new_symbol(STYPE_VARIANT_TYPE, t, NULL, llvm_type);
+      Ast *binding = ast->data.AST_LET.binding;
+
+      const char *id_chars = binding->data.AST_IDENTIFIER.value;
+      int id_len = binding->data.AST_IDENTIFIER.length;
+
+      ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
+                  sym);
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        const char *member_name = t->data.T_CONS.args[i]->data.T_CONS.name;
+        int member_name_len = strlen(member_name);
+
+        ht_set_hash(ctx->frame->table, member_name,
+                    hash_string(member_name, member_name_len), sym);
+      }
+
+      return NULL;
     }
 
     if (is_generic(t) && t->kind == T_CONS) {
@@ -277,7 +274,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       fprintf(stderr,
               "Warning - constructor not implemented for type declaration ");
       print_ast_err(ast);
-      // print_type_err(ast->md);
       return NULL;
     }
 
@@ -288,12 +284,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     codegen_import(ast, NULL, ctx, module, builder);
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
-  // case AST_LOOP: {
-  //   printf("codegen loop ????\n");
-  //   print_ast(ast);
-  //   print_type(ast->md);
-  //   return NULL;
-  // }
   case AST_LOOP: {
     return codegen_loop(ast, ctx, module, builder);
   }

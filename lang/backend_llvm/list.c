@@ -1,10 +1,7 @@
 #include "backend_llvm/list.h"
-#include "adt.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
-#include "escape_analysis.h"
 #include "serde.h"
-#include "tuple.h"
 #include "types/inference.h"
 #include "llvm-c/Core.h"
 
@@ -21,7 +18,7 @@ LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
 }
 
 // Function to create an LLVM list type
-LLVMTypeRef create_llvm_list_type(Type *list_el_type, TypeEnv *env,
+LLVMTypeRef create_llvm_list_type(Type *list_el_type, JITLangCtx *ctx,
                                   LLVMModuleRef module) {
   if (list_el_type->kind == T_VAR) {
     return GENERIC_PTR;
@@ -34,7 +31,7 @@ LLVMTypeRef create_llvm_list_type(Type *list_el_type, TypeEnv *env,
     return LLVMPointerType(node_type, 0);
   }
 
-  LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, env, module);
+  LLVMTypeRef llvm_el_type = type_to_llvm_type(list_el_type, ctx, module);
   if (!llvm_el_type) {
     return NULL;
   }
@@ -100,7 +97,7 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (list_el_type->kind == T_FN) {
     llvm_el_type = GENERIC_PTR;
   } else {
-    llvm_el_type = type_to_llvm_type(list_el_type, ctx->env, module);
+    llvm_el_type = type_to_llvm_type(list_el_type, ctx, module);
   }
 
   LLVMTypeRef node_type = llnode_type(llvm_el_type);
@@ -111,12 +108,12 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return null_node(node_type);
   }
 
-  // Allocate memory for all nodes at once
   LLVMValueRef total_size = LLVMConstInt(LLVMInt32Type(), len, 0);
   LLVMValueRef node_size = LLVMSizeOf(node_type);
   LLVMValueRef alloc_size =
       LLVMBuildMul(builder, total_size, node_size, "alloc_size");
 
+  // Allocate memory for all nodes at once
   LLVMValueRef memory_block;
   // TODO: use proper allocation strategy
   // if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
@@ -209,7 +206,7 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *list_type = ast->md;
   LLVMTypeRef llvm_list_node_type = llnode_type(
-      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx->env, module));
+      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx, module));
   if (!llvm_list_node_type) {
     print_ast(ast);
     return NULL;
@@ -277,7 +274,7 @@ LLVMValueRef __ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *list_type = ast->md;
   LLVMTypeRef llvm_list_node_type = llnode_type(
-      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx->env, module));
+      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx, module));
   if (!llvm_list_node_type) {
     print_ast(ast);
     return NULL;
@@ -345,8 +342,7 @@ LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef next =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  LLVMTypeRef llvm_list_el_type =
-      type_to_llvm_type(list_el_type, ctx->env, module);
+  LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx, module);
 
   LLVMTypeRef node_type = llnode_type(llvm_list_el_type);
 
@@ -376,7 +372,7 @@ LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (list_el_type->kind == T_FN) {
     llvm_el_type = GENERIC_PTR;
   } else {
-    llvm_el_type = type_to_llvm_type(list_el_type, ctx->env, module);
+    llvm_el_type = type_to_llvm_type(list_el_type, ctx, module);
   }
 
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_el_type);
@@ -458,7 +454,7 @@ LLVMValueRef ListPrependHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
   Type *list_type = ast->md;
   LLVMTypeRef llvm_list_node_type = llnode_type(
-      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx->env, module));
+      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx, module));
 
   LLVMValueRef val =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);

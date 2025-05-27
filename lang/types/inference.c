@@ -705,6 +705,32 @@ Type *for_loop_binding(Ast *binding, Ast *expr, Ast *body, TICtx *ctx) {
   return res_type;
 }
 
+Type *coroutine_constructor_type_from_fn_type(Type *fn_type
+                                              // , Ast *ast
+) {
+  Type *ret = fn_return_type(fn_type);
+  Type *coroutine_fn = create_coroutine_instance_type(ret);
+
+  // int num_boundary_xs = ast->data.AST_LAMBDA.num_yield_boundary_crossers;
+  // AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
+
+  Type *f = deep_copy_type(fn_type);
+
+  Type *ff = f;
+
+  while (ff->kind == T_FN) {
+    ff = ff->data.T_FN.to;
+  }
+
+  *ff = *coroutine_fn;
+  f->is_coroutine_constructor = true;
+
+  // printf("coroutine type: ");
+  // print_type(f);
+
+  return f;
+}
+
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
   TICtx body_ctx = *ctx;
   body_ctx.scope++;
@@ -797,7 +823,9 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   // }
 
   if (body_ctx.yielded_type != NULL) {
-    ast->md = coroutine_constructor_type_from_fn_type(ast->md);
+    ast->md = coroutine_constructor_type_from_fn_type(ast->md
+                                                      // , ast
+    );
   }
   return ast->md;
 }

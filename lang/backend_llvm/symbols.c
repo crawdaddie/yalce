@@ -91,7 +91,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     if (is_simple_enum(enum_type)) {
       return codegen_simple_enum_member(enum_type, chars, ctx, module, builder);
     } else if (strcmp(chars, "None") == 0) {
-      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
+      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
       LLVMValueRef v = LLVMGetUndef(llvm_type);
       v = LLVMBuildInsertValue(builder, v, LLVMConstInt(LLVMInt8Type(), 1, 0),
                                0, "insert None tag");
@@ -143,11 +143,11 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     int inner_state_slot = get_inner_state_slot(ast);
 
     if (inner_state_slot >= 0) {
-      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
+      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
     }
     if (sym->storage != NULL) {
-      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx->env, module);
+      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
     }
     return sym->val;
@@ -274,10 +274,14 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
 
     if (is_coroutine_type(expr_type)) {
+      printf("codegen coroutine instance\n");
       expr_val = codegen(expr, outer_ctx, module, builder);
+      print_type(expr_type);
+
       LLVMValueRef match_result = codegen_pattern_binding(
           binding, expr_val, expr_type, in_expr ? inner_ctx : outer_ctx, module,
           builder);
+
       if (!match_result) {
         fprintf(stderr,
                 "Error: could not bind coroutine instance in let expression "
@@ -340,6 +344,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (expr_type->kind == T_FN && !is_coroutine_type(expr_type)) {
+
     if (is_lambda_with_closures(expr)) {
       expr_val = create_curried_closure_binding(binding, expr_type, expr,
                                                 inner_ctx, module, builder);
@@ -374,11 +379,10 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
 
-  // print_ast(expr);
   expr_val = codegen(expr, outer_ctx, module, builder);
 
   if (!expr_val) {
-    print_type(expr->md);
+    print_type_err(expr->md);
     fprintf(stderr, "Error - could not compile value for binding to %s\n",
             binding->data.AST_IDENTIFIER.value);
     print_codegen_location();

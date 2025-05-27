@@ -259,14 +259,6 @@ let_binding:
 
 
 
-/*
-  | LET IDENTIFIER '=' '(' extern_variants ')'  
-                                    {
-                                      Ast *variants = $5;
-                                      variants->tag = AST_EXTERN_VARIANTS;
-                                      $$ = ast_let(ast_identifier($2), variants, NULL);
-                                    }
-                                    */
 
   | LET TOK_VOID '=' expr           { $$ = $4; }
   | let_binding IN expr             {

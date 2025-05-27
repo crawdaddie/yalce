@@ -33,4 +33,8 @@ void print_constraints(TypeConstraint *c);
 bool is_loop_of_iterable(Ast *let);
 
 Type *get_full_fn_type_of_closure(Ast *closure);
+
+Type *coroutine_constructor_type_from_fn_type(Type *fn_type
+                                              // , Ast *ast
+);
 #endif

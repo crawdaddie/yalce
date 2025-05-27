@@ -138,8 +138,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   LLVMGenericValueRef exec_args[] = {};
   LLVMDumpModule(module);
-  dump_assembly(module);
-  //
+  // dump_assembly(module);
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
 

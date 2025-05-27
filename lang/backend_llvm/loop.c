@@ -109,7 +109,7 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
   Type *arr_type = iter_array_expr->data.AST_APPLICATION.args->md;
   Type *_type = arr_type->data.T_CONS.args[0];
 
-  LLVMTypeRef loop_var_type = type_to_llvm_type(_type, ctx->env, module);
+  LLVMTypeRef loop_var_type = type_to_llvm_type(_type, ctx, module);
 
   LLVMValueRef array_val =
       codegen(iter_array_expr->data.AST_APPLICATION.args, ctx, module, builder);
@@ -206,8 +206,7 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
       codegen(iter_expr->data.AST_APPLICATION.args, ctx, module, builder);
 
   Type *list_el_type = ltype->data.T_CONS.args[0];
-  LLVMTypeRef llvm_list_el_type =
-      type_to_llvm_type(list_el_type, ctx->env, module);
+  LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx, module);
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_list_el_type);
 
   LLVMValueRef loop_var_alloca =

@@ -1,4 +1,5 @@
 #include "type.h"
+#include "serde.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -993,15 +994,15 @@ Type *copy_array_type(Type *t) {
 }
 
 int fn_type_args_len(Type *fn_type) {
-  if (fn_type->is_coroutine_constructor) {
-    int args_len = 0;
-    Type *f = fn_type;
-    while (!(f->is_coroutine_instance)) {
-      args_len++;
-      f = f->data.T_FN.to;
-    }
-    return args_len;
-  }
+  // if (fn_type->is_coroutine_constructor) {
+  //   int args_len = 0;
+  //   Type *f = fn_type;
+  //   while (!(f->is_coroutine_instance)) {
+  //     args_len++;
+  //     f = f->data.T_FN.to;
+  //   }
+  //   return args_len;
+  // }
 
   if (fn_type->data.T_FN.from->kind == T_VOID) {
     return 1;
@@ -1501,6 +1502,10 @@ bool application_is_partial(Ast *app) {
       fn_type_args_len(app->data.AST_APPLICATION.function->md);
 
   int actual_args_len = app->data.AST_APPLICATION.len;
+  print_ast(app);
+  printf("exp arg len %d actual arg len %d\n", expected_args_len,
+         actual_args_len);
+  print_type(app->data.AST_APPLICATION.function->md);
   return actual_args_len < expected_args_len;
 }
 
@@ -1525,25 +1530,6 @@ void typeclasses_extend(Type *t, TypeClass *tc) {
   if (!type_implements(t, tc)) {
     t->implements = impls_extend(t->implements, tc);
   }
-}
-
-Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
-  Type *ret = fn_return_type(fn_type);
-  Type *coroutine_fn = create_coroutine_instance_type(ret);
-
-  Type *f = deep_copy_type(fn_type);
-  Type *ff = f;
-
-  while (ff->kind == T_FN) {
-    ff = ff->data.T_FN.to;
-  }
-
-  *ff = *coroutine_fn;
-  f->is_coroutine_constructor = true;
-  // printf("coroutine type: ");
-  // print_type(f);
-
-  return f;
 }
 
 bool is_module(Type *t) {

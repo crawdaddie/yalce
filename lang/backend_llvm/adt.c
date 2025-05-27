@@ -54,6 +54,42 @@ LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
   return LLVMConstInt(LLVMInt8Type(), vidx, 0);
 }
 
+LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
+                                          Ast *app, const char *mem_name,
+                                          JITLangCtx *ctx, LLVMModuleRef module,
+                                          LLVMBuilderRef builder) {
+
+  int i = 0;
+  while (strcmp(mem_name, enum_type->data.T_CONS.args[i]->data.T_CONS.name) !=
+         0) {
+    i++;
+  }
+
+  LLVMValueRef some = LLVMGetUndef(tu_type);
+  int num = 0;
+  some = LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), i, 0),
+                              0, "insert Some tag");
+
+  // Get the union field type (the second field of your struct)
+  LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
+  LLVMValueRef union_value = LLVMGetUndef(union_type);
+
+  // For "Accept of Int" - insert the integer into the first field of the union
+  // Codegen the integer argument
+  LLVMValueRef val =
+      codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
+
+  // Insert the integer into the first position of the union struct
+  union_value =
+      LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
+
+  // Insert the populated union into the main struct
+  some = LLVMBuildInsertValue(builder, some, union_value, 1,
+                              "insert variant data");
+
+  return some;
+}
+
 /**
  * Finds the type with the largest size from an array of LLVM types
  *
@@ -97,18 +133,20 @@ LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type) {
   return tu_type;
 }
 
-LLVMTypeRef codegen_adt_type(Type *type, TypeEnv *env, LLVMModuleRef module) {
+LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
+                             LLVMModuleRef module) {
   if (type->alias != NULL && strcmp(type->alias, "Option") == 0) {
     return codegen_option_struct_type(
-        type_to_llvm_type(type_of_option(type), env, module));
+        type_to_llvm_type(type_of_option(type), ctx, module));
   }
 
   int len = type->data.T_CONS.num_args;
   LLVMTypeRef contained_types[len];
   for (int i = 0; i < type->data.T_CONS.num_args; i++) {
     Type *mem = type->data.T_CONS.args[i];
-    contained_types[i] = type_to_llvm_type(mem, env, module);
+    contained_types[i] = type_to_llvm_type(mem, ctx, module);
   }
+
   LLVMTypeRef largest_type =
       get_largest_type(LLVMGetModuleContext(module), contained_types, len,
                        LLVMGetModuleDataLayout(module));
@@ -226,12 +264,10 @@ LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *mapper_type = ast->data.AST_APPLICATION.args->md;
 
-  LLVMTypeRef llvm_mapper_type =
-      type_to_llvm_type(mapper_type, ctx->env, module);
+  LLVMTypeRef llvm_mapper_type = type_to_llvm_type(mapper_type, ctx, module);
 
   Type *mapped_type = mapper_type->data.T_FN.to;
-  LLVMTypeRef llvm_mapped_type =
-      type_to_llvm_type(mapped_type, ctx->env, module);
+  LLVMTypeRef llvm_mapped_type = type_to_llvm_type(mapped_type, ctx, module);
 
   LLVMValueRef opt_val =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);

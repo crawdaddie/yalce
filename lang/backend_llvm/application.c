@@ -1,4 +1,5 @@
 #include "backend_llvm/application.h"
+#include "adt.h"
 #include "builtin_functions.h"
 #include "coroutines.h"
 #include "function.h"
@@ -47,7 +48,7 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
   int exp_args_len = fn_type_args_len(callable_type);
 
   LLVMTypeRef llvm_callable_type =
-      type_to_llvm_type(callable_type, ctx->env, module);
+      type_to_llvm_type(callable_type, ctx, module);
 
   if (!llvm_callable_type) {
     print_ast_err(ast);
@@ -59,7 +60,7 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
     LLVMTypeRef arg_types[exp_args_len];
     LLVMTypeRef llvm_return_type_ref;
     codegen_fn_type_arg_types(callable_type, exp_args_len, arg_types,
-                              &llvm_return_type_ref, ctx->env, module);
+                              &llvm_return_type_ref, ctx, module);
 
     LLVMTypeRef curried_fn_type =
         LLVMFunctionType(llvm_return_type_ref, arg_types + args_len, len, 0);
@@ -137,7 +138,7 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
   }
 
   LLVMTypeRef llvm_callable_type =
-      type_to_llvm_type(callable_type, ctx->env, module);
+      type_to_llvm_type(callable_type, ctx, module);
   if (!llvm_callable_type) {
     return NULL;
   }
@@ -156,6 +157,7 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (is_index_access_ast(ast)) {
@@ -182,6 +184,12 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
+  if (sym && is_variant_type(expected_fn_type) &&
+      sym->type == STYPE_VARIANT_TYPE) {
+    return codegen_adt_member_with_args(expected_fn_type, sym->llvm_type, ast,
+                                        sym_name, ctx, module, builder);
+  }
+
   if (!sym) {
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);
@@ -189,6 +197,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *symbol_type = sym->symbol_type;
+
   if (sym->type == STYPE_GENERIC_FUNCTION &&
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
 

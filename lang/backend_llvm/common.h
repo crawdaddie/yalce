@@ -62,10 +62,10 @@ typedef enum symbol_type {
   STYPE_FUNCTION,
   STYPE_LAZY_EXTERN_FUNCTION,
   STYPE_GENERIC_FUNCTION,
-  STYPE_COROUTINE_GENERATOR,
-  STYPE_COROUTINE_INSTANCE,
   STYPE_PARTIAL_EVAL_CLOSURE,
   STYPE_MODULE,
+  STYPE_VARIANT_TYPE,
+  STYPE_COROUTINE_CONSTRUCTOR,
 } symbol_type;
 
 typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
@@ -105,18 +105,6 @@ typedef struct {
     } STYPE_GENERIC_FUNCTION;
 
     struct {
-      Ast *ast;
-      int stack_ptr;
-      SpecificFns *specific_fns;
-    } STYPE_GENERIC_COROUTINE_GENERATOR;
-
-    coroutine_generator_symbol_data_t STYPE_COROUTINE_GENERATOR;
-
-    struct {
-      LLVMTypeRef def_fn_type;
-    } STYPE_COROUTINE_INSTANCE;
-
-    struct {
       struct JITSymbol *callable_sym;
       LLVMValueRef *args;
       int provided_args_len;
@@ -129,8 +117,13 @@ typedef struct {
       JITLangCtx *ctx;
       ModuleTypeMap map;
     } STYPE_MODULE;
-
+    struct {
+      LLVMTypeRef llvm_state_type;
+      Type *state_type;
+      bool recursive_ref;
+    } STYPE_COROUTINE_CONSTRUCTOR;
   } symbol_data;
+
   Type *symbol_type;
 } JITSymbol;
 

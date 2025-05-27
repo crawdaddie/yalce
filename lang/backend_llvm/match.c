@@ -47,7 +47,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   Type *test_val_type = ast->data.AST_MATCH.expr->md;
-  LLVMTypeRef res_type = type_to_llvm_type(ast->md, ctx->env, module);
+  LLVMTypeRef res_type = type_to_llvm_type(ast->md, ctx, module);
 
   int len = ast->data.AST_MATCH.len;
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
