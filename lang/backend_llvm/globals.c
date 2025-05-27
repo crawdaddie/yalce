@@ -11,9 +11,10 @@ LLVMValueRef global_storage_size_llvm;
 #define _GLOBAL_STORAGE_TYPE LLVMArrayType(_VOID_PTR_T, _GLOBAL_STORAGE_SIZE)
 #define ZERO LLVMConstInt(LLVMInt32Type(), 0, 0)
 
-void codegen_set_global(char *sym_name, JITSymbol *sym, LLVMValueRef value,
-                        Type *ttype, LLVMTypeRef llvm_type, JITLangCtx *ctx,
-                        LLVMModuleRef module, LLVMBuilderRef builder) {
+void codegen_set_global(const char *sym_name, JITSymbol *sym,
+                        LLVMValueRef value, Type *ttype, LLVMTypeRef llvm_type,
+                        JITLangCtx *ctx, LLVMModuleRef module,
+                        LLVMBuilderRef builder) {
 
   char buf[32];
   snprintf(buf, 32, "%s_malloc", sym_name);
