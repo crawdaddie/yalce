@@ -34,3 +34,9 @@ let get_sin_table = extern fn () -> Ptr of Double;
 let get_sin_tabsize = extern fn () -> Int;
 let get_saw_table = extern fn () -> Ptr of Double;
 let get_saw_tabsize = extern fn () -> Int;
+
+let compile_blob_template = fn sdef ->
+  start_blob ();
+  sdef ();
+  end_blob ()
+;;

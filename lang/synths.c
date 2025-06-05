@@ -24,7 +24,6 @@ Type t_synth = {T_CONS,
                          1,
                      }},
                 .alias = "Synth",
-
                 .constructor = ConsSynth};
 
 LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
@@ -140,41 +139,6 @@ LLVMValueRef SynthModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return call;
 }
 
-Type t_compile_synth_blob_sig =
-    MAKE_FN_TYPE_2(&MAKE_FN_TYPE_2(&t_void, &t_synth), &t_ptr);
-
-LLVMValueRef CompileBlobTemplateHandler(Ast *ast, JITLangCtx *ctx,
-                                        LLVMModuleRef module,
-                                        LLVMBuilderRef builder) {
-
-  LLVMValueRef synth_def_fn =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-  LLVMValueRef start_blob_fn = get_extern_fn(
-      "start_blob", LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){}, 0, 0),
-      module);
-
-  LLVMBuildCall2(
-      builder,
-      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0),
-      start_blob_fn, NULL, 0, "create_new_blob_template");
-
-  LLVMValueRef run_synthdef_fn =
-      LLVMBuildCall2(builder, LLVMFunctionType(GENERIC_PTR, NULL, 0, false),
-                     synth_def_fn, NULL, 0, "run_synth_def_fn_in_blob_ctx");
-
-  LLVMValueRef end_blob_fn = get_extern_fn(
-      "end_blob",
-      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0),
-      module);
-
-  LLVMValueRef final_blob = LLVMBuildCall2(
-      builder, LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){}, 0, 0),
-      end_blob_fn, NULL, 0, "end_blob_w_final_node");
-
-  return final_blob;
-}
-
 void initialize_synth_types(JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
@@ -208,8 +172,4 @@ void initialize_synth_types(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("Synth.*", &t_synth_arithmetic_sig, SynthMulHandler);
   GENERIC_FN_SYMBOL("Synth./", &t_synth_arithmetic_sig, SynthDivHandler);
   GENERIC_FN_SYMBOL("Synth.%", &t_synth_arithmetic_sig, SynthModHandler);
-
-  add_builtin("compile_blob_template", &t_compile_synth_blob_sig);
-  GENERIC_FN_SYMBOL("compile_blob_template", &t_compile_synth_blob_sig,
-                    CompileBlobTemplateHandler);
 }
