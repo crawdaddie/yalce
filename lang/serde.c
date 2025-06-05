@@ -246,6 +246,16 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
     break;
   }
+  case AST_TRAIT_IMPL: {
+    buffer = strcat(buffer, ast->data.AST_TRAIT_IMPL.trait_name.chars);
+    buffer = strcat(buffer, " for ");
+    buffer = strcat(buffer, ast->data.AST_TRAIT_IMPL.type.chars);
+
+    buffer = strcat(buffer, " ");
+    buffer = ast_to_sexpr(ast->data.AST_TRAIT_IMPL.impl, buffer);
+
+    break;
+  }
   case AST_IMPORT: {
     buffer = strcat(buffer, "import ");
     if (ast->data.AST_IMPORT.import_all) {

@@ -323,8 +323,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
     type = infer_yield_stmt(ast, ctx);
     break;
   }
+
   case AST_MODULE: {
     type = infer_module(ast, ctx);
+    break;
+  }
+
+  case AST_TRAIT_IMPL: {
+    type = infer(ast->data.AST_TRAIT_IMPL.impl, ctx);
     break;
   }
 
@@ -335,11 +341,17 @@ Type *infer(Ast *ast, TICtx *ctx) {
     if (ast->data.AST_IMPORT.import_all) {
 
       for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+        if (type->data.T_CONS.names[i] == NULL) {
+          continue;
+        }
+
         char *name = type->data.T_CONS.names[i];
+
         Ast binding = {AST_IDENTIFIER, .data = {.AST_IDENTIFIER = {
                                                     .value = name,
                                                     .length = strlen(name),
                                                 }}};
+
         bind_in_ctx(ctx, &binding, type->data.T_CONS.args[i]);
       }
       break;
@@ -1062,6 +1074,13 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
   TICtx module_ctx = *ctx;
   TypeEnv *env_start = module_ctx.env;
 
+  // module_ctx.scope++;
+
+  // TICtx body_ctx = *ctx;
+  // body_ctx.scope++;
+  // body_ctx.current_fn_ast = ast;
+  // body_ctx.current_fn_scope = body_ctx.scope;
+
   Ast *stmt;
   int len = body.data.AST_BODY.len;
   Type **member_types = talloc(sizeof(Type *) * len);
@@ -1070,7 +1089,7 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
   for (int i = 0; i < len; i++) {
     stmt = body.data.AST_BODY.stmts[i];
     if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
-          (stmt->tag == AST_IMPORT))) {
+          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
       return type_error(ctx, stmt,
                         "Please only have let statements and type declarations "
                         "in a module\n");
@@ -1101,7 +1120,10 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
   Type *module_struct_type =
       create_cons_type(TYPE_NAME_MODULE, len, member_types);
   module_struct_type->data.T_CONS.names = names;
+
+  // TODO: do we need to keep module env scope from being pushed up
   ctx->env = env;
+
   return module_struct_type;
 }
 

@@ -19,6 +19,39 @@
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
 
+LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+
+  // printf("create constructors\n");
+  // printf("trait %s for %s\n", trait->data.AST_TRAIT_IMPL.trait_name.chars,
+  //        trait->data.AST_TRAIT_IMPL.type.chars);
+  const char *name = trait->data.AST_TRAIT_IMPL.type.chars;
+
+  Type *out_type = env_lookup(ctx->env, name);
+  Type *constructor_type = type_fn(tvar("cons.Input"), out_type);
+  JITSymbol *constructor_sym =
+      new_symbol(STYPE_GENERIC_CONSTRUCTOR, constructor_type, NULL, NULL);
+
+  Ast *impl = trait->data.AST_TRAIT_IMPL.impl;
+  if (impl->tag == AST_MODULE) {
+    for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
+      Ast *expr = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+      LLVMValueRef func = codegen(expr, ctx, module, builder);
+      // LLVMDumpValue(func);
+      // printf("\n\n");
+      constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+          specific_fns_extend(
+              constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
+              expr->md, func);
+    }
+  }
+  uint64_t hash_id = trait->data.AST_TRAIT_IMPL.type.hash;
+  ht_set_hash(ctx->frame->table, name, hash_id, constructor_sym);
+
+  return NULL;
+}
+
 JITSymbol *get_typeclass_method(char *type_name, char *op, JITLangCtx *ctx) {
   int total_chars = strlen(type_name) + strlen(op) + 1;
   char chars[total_chars];
@@ -56,19 +89,19 @@ Type *find_in_env_if_generic(Type *t, TypeEnv *env) {
     case T_UINT64: {                                                           \
       LLVMValueRef l =                                                         \
           codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);       \
-      l = handle_type_conversions(l, lt, ret, module, builder);                \
+      l = handle_type_conversions(l, lt, ret, ctx, module, builder);           \
       LLVMValueRef r =                                                         \
           codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);   \
-      r = handle_type_conversions(r, rt, ret, module, builder);                \
+      r = handle_type_conversions(r, rt, ret, ctx, module, builder);           \
       return LLVMBuildBinOp(builder, _iop, l, r, _name "_int");                \
     }                                                                          \
     case T_NUM: {                                                              \
       LLVMValueRef l =                                                         \
           codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);       \
-      l = handle_type_conversions(l, lt, ret, module, builder);                \
+      l = handle_type_conversions(l, lt, ret, ctx, module, builder);           \
       LLVMValueRef r =                                                         \
           codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);   \
-      r = handle_type_conversions(r, rt, ret, module, builder);                \
+      r = handle_type_conversions(r, rt, ret, ctx, module, builder);           \
       return LLVMBuildBinOp(builder, _flop, l, r, _name "_num");               \
     }                                                                          \
     default: {                                                                 \
@@ -291,10 +324,10 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }                                                                          \
     LLVMValueRef l =                                                           \
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);         \
-    l = handle_type_conversions(l, lt, target_type, module, builder);          \
+    l = handle_type_conversions(l, lt, target_type, ctx, module, builder);     \
     LLVMValueRef r =                                                           \
         codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);     \
-    r = handle_type_conversions(r, rt, target_type, module, builder);          \
+    r = handle_type_conversions(r, rt, target_type, ctx, module, builder);     \
     switch (target_type->kind) {                                               \
     case T_INT:                                                                \
     case T_UINT64: {                                                           \
@@ -519,10 +552,10 @@ LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef l =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  l = handle_type_conversions(l, lt, target_type, module, builder);
+  l = handle_type_conversions(l, lt, target_type, ctx, module, builder);
   LLVMValueRef r =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-  r = handle_type_conversions(r, rt, target_type, module, builder);
+  r = handle_type_conversions(r, rt, target_type, ctx, module, builder);
 
   return _codegen_equality(target_type, l, r, ctx, module, builder);
 }
@@ -550,10 +583,10 @@ LLVMValueRef NeqHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   LLVMValueRef l =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  l = handle_type_conversions(l, lt, target_type, module, builder);
+  l = handle_type_conversions(l, lt, target_type, ctx, module, builder);
   LLVMValueRef r =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-  r = handle_type_conversions(r, rt, target_type, module, builder);
+  r = handle_type_conversions(r, rt, target_type, ctx, module, builder);
 
   return LLVMBuildNot(
       builder, _codegen_equality(target_type, l, r, ctx, module, builder),

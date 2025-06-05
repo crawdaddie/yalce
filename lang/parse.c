@@ -1141,3 +1141,12 @@ Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body) {
 Ast *ast_assignment(Ast *var, Ast *val) {
   return ast_binop(TOKEN_ASSIGNMENT, var, val);
 }
+
+Ast *ast_trait_impl(ObjString trait_name, ObjString type_name, Ast *module) {
+  module->data.AST_LAMBDA.fn_name = trait_name;
+  Ast *trait_impl = Ast_new(AST_TRAIT_IMPL);
+  trait_impl->data.AST_TRAIT_IMPL.trait_name = trait_name;
+  trait_impl->data.AST_TRAIT_IMPL.type = type_name;
+  trait_impl->data.AST_TRAIT_IMPL.impl = module;
+  return trait_impl;
+}

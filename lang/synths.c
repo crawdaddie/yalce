@@ -16,15 +16,17 @@ bool is_synth_type(Type *t) {
   return t->alias && (strcmp(t->alias, "Synth") == 0);
 }
 
-Type t_synth = {T_CONS,
-                {.T_CONS =
-                     {
-                         TYPE_NAME_PTR,
-                         (Type *[]){&t_char},
-                         1,
-                     }},
-                .alias = "Synth",
-                .constructor = ConsSynth};
+Type t_synth = {
+    T_CONS,
+    {.T_CONS =
+         {
+             TYPE_NAME_PTR,
+             (Type *[]){&t_char},
+             1,
+         }},
+    .alias = "Synth",
+    // .constructor = ConsSynth
+};
 
 LLVMValueRef const_node_of_val(LLVMValueRef val, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
@@ -75,10 +77,10 @@ Type t_synth_arithmetic_sig = {
     Type *rtype = (_ast->data.AST_APPLICATION.args + 1)->md;                   \
     LLVMValueRef l =                                                           \
         codegen(_ast->data.AST_APPLICATION.args, _ctx, _module, builder);      \
-    l = handle_type_conversions(l, ltype, &t_synth, _module, _builder);        \
+    l = handle_type_conversions(l, ltype, &t_synth, _ctx, _module, _builder);  \
     LLVMValueRef r =                                                           \
         codegen(ast->data.AST_APPLICATION.args + 1, _ctx, _module, _builder);  \
-    r = handle_type_conversions(r, rtype, &t_synth, _module, _builder);        \
+    r = handle_type_conversions(r, rtype, &t_synth, _ctx, _module, _builder);  \
     LLVMTypeRef fn_type = LLVMFunctionType(                                    \
         GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);         \
     LLVMValueRef fn = get_extern_fn(_native_fn_name, fn_type, _module);        \
@@ -108,12 +110,12 @@ LLVMValueRef SynthMulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef l =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  l = handle_type_conversions(l, ltype, &t_synth, module, builder);
+  l = handle_type_conversions(l, ltype, &t_synth, ctx, module, builder);
 
   LLVMValueRef r =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  r = handle_type_conversions(r, rtype, &t_synth, module, builder);
+  r = handle_type_conversions(r, rtype, &t_synth, ctx, module, builder);
 
   LLVMTypeRef fn_type =
       LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),

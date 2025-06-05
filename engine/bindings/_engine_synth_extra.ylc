@@ -35,9 +35,20 @@ let get_sin_tabsize = extern fn () -> Int;
 let get_saw_table = extern fn () -> Ptr of Double;
 let get_saw_tabsize = extern fn () -> Int;
 
+let Constructor : Synth = module
+  let of_int = fn a: (Int) ->
+    const_sig a
+  ;;
+
+  let of_num = fn a: (Double) ->
+    const_sig a
+  ;;
+;
 let compile_blob_template = fn sdef ->
   start_blob ();
   sdef ();
   end_blob ()
 ;;
+
+
 

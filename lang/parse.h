@@ -161,6 +161,7 @@ typedef enum ast_tag {
   AST_RANGE_EXPRESSION,
   AST_LOOP,
   AST_GET_ARG,
+  AST_TRAIT_IMPL,
 } ast_tag;
 
 struct Ast {
@@ -243,6 +244,12 @@ struct Ast {
       AstList *yield_boundary_crossers;
       int num_yield_boundary_crossers;
     } AST_LAMBDA;
+
+    struct AST_TRAIT_IMPL {
+      Ast *impl;
+      ObjString type;
+      ObjString trait_name;
+    } AST_TRAIT_IMPL;
 
     struct AST_EXTERN_FN {
       size_t len;
@@ -448,5 +455,6 @@ Ast *ast_assignment(Ast *var, Ast *val);
 
 AstList *ast_list_extend_left(AstList *l, Ast *n);
 Ast *ast_if_else(Ast *cond, Ast *then, Ast *el);
+Ast *ast_trait_impl(ObjString trait_name, ObjString type_name, Ast *module);
 
 #endif
