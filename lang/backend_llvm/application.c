@@ -24,10 +24,13 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
   }
 
   if (to_type->kind == T_CONS && to_type->alias) {
+
     Ast id = (Ast){
         AST_IDENTIFIER,
         .data = {.AST_IDENTIFIER = {to_type->alias, strlen(to_type->alias)}}};
 
+    // TODO: once all constructors are type symbol (ie first-class) we can add
+    // them directly to the type instead of looking them up in the env
     JITSymbol *constructor_sym = lookup_id_ast(&id, ctx);
 
     if (constructor_sym && constructor_sym->type == STYPE_GENERIC_CONSTRUCTOR) {
@@ -39,11 +42,6 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
           constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
           from_type);
 
-      // if (types_equal(to_type, &t_synth)) {
-      //   printf("handle type conversions???\n");
-      //   print_type(from_type);
-      //   print_type(to_type);
-      // }
       return LLVMBuildCall2(builder, fn_type, cons_val, (LLVMValueRef[]){val},
                             1, "constructor");
     }

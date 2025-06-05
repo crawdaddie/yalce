@@ -92,7 +92,6 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   TICtx ti_ctx = {.env = *env, .scope = 0};
 
-  // Open memory stream, passing pointers to buffer and length
   ti_ctx.err_stream = stderr;
   if (!infer(*prog, &ti_ctx)) {
     return NULL;
@@ -139,7 +138,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
   LLVMGenericValueRef exec_args[] = {};
   if (config.debug_codegen) {
     LLVMDumpModule(module);
-    // dump_assembly(module);
+    dump_assembly(module);
   }
   LLVMGenericValueRef result =
       LLVMRunFunction(engine, top_level_func, 0, exec_args);
@@ -155,14 +154,11 @@ typedef struct ll_int_t {
 } int_ll_t;
 
 void dump_assembly(LLVMModuleRef module) {
-  // Initialize targets
   LLVMInitializeNativeTarget();
   LLVMInitializeNativeAsmPrinter();
 
-  // Get the target triple
   char *triple = LLVMGetDefaultTargetTriple();
 
-  // Get the target
   LLVMTargetRef target;
   char *error_msg;
   if (LLVMGetTargetFromTriple(triple, &target, &error_msg)) {
@@ -171,26 +167,22 @@ void dump_assembly(LLVMModuleRef module) {
     return;
   }
 
-  // Create target machine
   LLVMTargetMachineRef target_machine = LLVMCreateTargetMachine(
       target, triple, "generic", "", LLVMCodeGenLevelDefault, LLVMRelocDefault,
       LLVMCodeModelDefault);
 
-  // Generate assembly
   LLVMMemoryBufferRef asm_buffer;
   if (LLVMTargetMachineEmitToMemoryBuffer(
           target_machine, module, LLVMAssemblyFile, &error_msg, &asm_buffer)) {
     fprintf(stderr, "Error generating assembly: %s\n", error_msg);
     LLVMDisposeMessage(error_msg);
   } else {
-    // Print the assembly
     printf("\n=== GENERATED ASSEMBLY ===\n");
     printf("%s\n", LLVMGetBufferStart(asm_buffer));
     printf("=== END ASSEMBLY ===\n\n");
     LLVMDisposeMemoryBuffer(asm_buffer);
   }
 
-  // Cleanup
   LLVMDisposeTargetMachine(target_machine);
   LLVMDisposeMessage(triple);
 }
