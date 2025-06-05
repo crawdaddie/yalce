@@ -23,8 +23,13 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
   Ast *tail_expr = binding->data.AST_APPLICATION.args + 1;
 
   Type *list_el_type = list_type->data.T_CONS.args[0];
+  if (is_generic(list_el_type)) {
+    list_el_type = resolve_type_in_env(list_el_type, ctx->env);
+  }
 
-  LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx, module);
+  LLVMTypeRef llvm_list_el_type =
+      list_el_type->kind == T_FN ? GENERIC_PTR
+                                 : type_to_llvm_type(list_el_type, ctx, module);
   LLVMValueRef list_empty = ll_is_null(list, llvm_list_el_type, builder);
 
   // Create blocks for the branch

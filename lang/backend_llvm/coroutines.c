@@ -673,9 +673,6 @@ LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *fn_ast,
   }
   AstList *bxs = fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
   while (bxs) {
-    printf("boundary crosser: ");
-    print_ast(bxs->ast);
-    print_type(bxs->ast->md);
     bxs = bxs->next;
   }
 

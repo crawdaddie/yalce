@@ -1,8 +1,7 @@
-#include "synths.h";
+#include "synths.h"
 #include "application.h"
 #include "codegen.h"
 #include "ht.h"
-#include "serde.h"
 #include "symbols.h"
 #include "types/inference.h"
 #include "util.h"

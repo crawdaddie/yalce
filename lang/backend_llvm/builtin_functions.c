@@ -289,8 +289,6 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       resolve_type_in_env((fn_type->data.T_FN.to)->data.T_FN.from, ctx->env);
 
   ARITHMETIC_BINOP("%", LLVMFRem, LLVMSRem);
-  printf("mod handler???\n");
-  print_ast(ast);
   return NULL;
 }
 
