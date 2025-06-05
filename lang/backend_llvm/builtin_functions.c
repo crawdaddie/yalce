@@ -19,8 +19,6 @@
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
 
-char *op_name(char *n, char *op) {}
-
 JITSymbol *get_typeclass_method(char *type_name, char *op, JITLangCtx *ctx) {
   int total_chars = strlen(type_name) + strlen(op) + 1;
   char chars[total_chars];
@@ -35,15 +33,6 @@ JITSymbol *get_typeclass_method(char *type_name, char *op, JITLangCtx *ctx) {
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
-
-// if (is_generic(ret)) {                                                     \
-    //   if (!is_generic(fn_type->data.T_FN.from)) {                              \
-    //     ret = fn_type->data.T_FN.from;                                         \
-    //   } else if (!is_generic(fn_type->data.T_FN.to)) {                         \
-    //     ret = fn_type->data.T_FN.to;                                           \
-    //     ast->data.AST_APPLICATION.args[0].md = ret;                            \
-    //   }                                                                        \
-    // };                                                                         \
 
 Type *find_in_env_if_generic(Type *t, TypeEnv *env) {
   if (t->kind == T_VAR) {

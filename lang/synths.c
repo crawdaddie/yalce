@@ -164,12 +164,18 @@ void initialize_synth_types(JITLangCtx *ctx, LLVMModuleRef module,
                                      .name = TYPE_NAME_TYPECLASS_EQ,
                                      .rank = 5.0,
                                  }};
+
   typeclasses_extend(&t_synth, tc_synth);
   typeclasses_extend(&t_synth, tc_synth + 1);
   typeclasses_extend(&t_synth, tc_synth + 2);
+
   GENERIC_FN_SYMBOL("Synth.+", &t_synth_arithmetic_sig, SynthSumHandler);
   GENERIC_FN_SYMBOL("Synth.-", &t_synth_arithmetic_sig, SynthSubHandler);
   GENERIC_FN_SYMBOL("Synth.*", &t_synth_arithmetic_sig, SynthMulHandler);
   GENERIC_FN_SYMBOL("Synth./", &t_synth_arithmetic_sig, SynthDivHandler);
   GENERIC_FN_SYMBOL("Synth.%", &t_synth_arithmetic_sig, SynthModHandler);
+
+  // add_builtin("compile_blob_template", &t_compile_synth_blob_sig);
+  // GENERIC_FN_SYMBOL("compile_blob_template", &t_compile_synth_blob_sig,
+  //                   CompileBlobTemplateHandler);
 }

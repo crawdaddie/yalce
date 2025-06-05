@@ -158,8 +158,8 @@ let get_saw_table = extern fn () -> Ptr of Double;
 let get_saw_tabsize = extern fn () -> Int;
 
 let compile_blob_template = fn sdef ->
-  print `special blob template func\n`;
   start_blob ();
   sdef ();
   end_blob ()
 ;;
+

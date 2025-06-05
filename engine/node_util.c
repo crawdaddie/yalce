@@ -1,8 +1,8 @@
 #include "./node_util.h"
 #include "audio_graph.h"
 #include "lib.h"
-#include <stdio.h>
-#include <stdlib.h>
+// #include <stdio.h>
+// #include <stdlib.h>
 
 #define max(a, b) a > b ? a : b
 
@@ -103,7 +103,8 @@ NodeRef mul2_node(NodeRef input1, NodeRef input2) {
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = 0,
-      .state_offset = graph->state_memory_size,
+      .state_offset = 0,
+      // graph->state_memory_size ? ,
       .output = (Signal){.layout = max_layout,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, max_layout *
@@ -391,7 +392,7 @@ NodeRef stereo_node(NodeRef input) {
       .node_index = node->node_index,
       .num_inputs = 1,
       .state_size = 0,
-      .state_offset = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
       .output = (Signal){.layout = 2,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, 2 * BUF_SIZE)},
@@ -425,7 +426,6 @@ void *panner_perform(Node *node, void *state, Node *inputs[], int nframes,
 }
 NodeRef pan_node(NodeRef pan, NodeRef input) {
 
-
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, 0);
 
@@ -434,7 +434,7 @@ NodeRef pan_node(NodeRef pan, NodeRef input) {
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = 0,
-      .state_offset = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
       .output = (Signal){.layout = 2,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, 2 * BUF_SIZE)},
@@ -449,7 +449,7 @@ typedef struct sah_state {
   double prev_trig;
 } sah_state;
 void *sah_perform(Node *node, sah_state *state, Node *inputs[], int nframes,
-                     double spf) {
+                  double spf) {
 
   double *out = node->output.buf;
   double *input_ = inputs[0]->output.buf;
@@ -480,7 +480,7 @@ NodeRef sah_node(NodeRef trig, NodeRef input) {
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = 0,
-      .state_offset = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
@@ -496,6 +496,4 @@ NodeRef sah_node(NodeRef trig, NodeRef input) {
 //   return n;
 // }
 //
-NodeRef empty_synth() {
-  return NULL;
-}
+NodeRef empty_synth() { return NULL; }
