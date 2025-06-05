@@ -135,9 +135,9 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_OP_AND  "&&"
 #define TYPE_NAME_OP_OR  "||"
 
-#define TYPE_NAME_TYPECLASS_ARITHMETIC "arithmetic"
-#define TYPE_NAME_TYPECLASS_EQ "eq"
-#define TYPE_NAME_TYPECLASS_ORD "ord"
+#define TYPE_NAME_TYPECLASS_ARITHMETIC "Arithmetic"
+#define TYPE_NAME_TYPECLASS_EQ "Eq"
+#define TYPE_NAME_TYPECLASS_ORD "Ord"
 #define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
 
 #define TYPE_NAME_REF "mut"

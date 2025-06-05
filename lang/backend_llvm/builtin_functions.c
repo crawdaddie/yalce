@@ -11,6 +11,7 @@
 #include "tuple.h"
 #include "types.h"
 #include "types/builtins.h"
+#include "types/common.h"
 #include "types/inference.h"
 #include "util.h"
 #include "llvm-c/Core.h"
@@ -23,18 +24,17 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
 
-  printf("create constructors %d\n", ctx->stack_ptr);
-  printf("trait %s for %s\n", trait->data.AST_TRAIT_IMPL.trait_name.chars,
-         trait->data.AST_TRAIT_IMPL.type.chars);
-
   const char *name = trait->data.AST_TRAIT_IMPL.type.chars;
 
   Type *out_type = env_lookup(ctx->env, name);
+
   Type *constructor_type = type_fn(tvar("cons.Input"), out_type);
+
   JITSymbol *constructor_sym =
       new_symbol(STYPE_GENERIC_CONSTRUCTOR, constructor_type, NULL, NULL);
 
   Ast *impl = trait->data.AST_TRAIT_IMPL.impl;
+
   if (impl->tag == AST_MODULE) {
     for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
       Ast *expr = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
@@ -47,7 +47,55 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
   }
   uint64_t hash_id = trait->data.AST_TRAIT_IMPL.type.hash;
   ht_set_hash(ctx->frame->table, name, hash_id, constructor_sym);
+  out_type->constructor = constructor_sym;
+  return NULL;
+}
 
+LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
+                                                 LLVMModuleRef module,
+                                                 LLVMBuilderRef builder) {
+  Ast *impl = trait->data.AST_TRAIT_IMPL.impl;
+
+  if (impl->tag != AST_MODULE) {
+    fprintf(stderr, "Arithmetic trait for %s not correctly implemented\n",
+            trait->data.AST_TRAIT_IMPL.type);
+    return NULL;
+  }
+
+  ObjString type = trait->data.AST_TRAIT_IMPL.type;
+
+  for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
+
+    Ast *stmt = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+    if (stmt->tag != AST_LET) {
+      continue;
+    }
+    Ast *expr = stmt->data.AST_LET.expr;
+    Ast *binding = stmt->data.AST_LET.binding;
+    const char *name = binding->data.AST_IDENTIFIER.value;
+    LLVMValueRef func = codegen(expr, ctx, module, builder);
+
+    int total_chars = strlen(type.chars) + 1 + 1;
+    char chars[total_chars];
+    if (CHARS_EQ(name, "add")) {
+      sprintf(chars, "%s.%s", type.chars, "+");
+    } else if (CHARS_EQ(name, "sub")) {
+      sprintf(chars, "%s.%s", type.chars, "-");
+    } else if (CHARS_EQ(name, "mul")) {
+      sprintf(chars, "%s.%s", type.chars, "*");
+    } else if (CHARS_EQ(name, "div")) {
+      sprintf(chars, "%s.%s", type.chars, "/");
+    } else if (CHARS_EQ(name, "mod")) {
+      sprintf(chars, "%s.%s", type.chars, "%");
+    }
+
+    JITSymbol *method_sym =
+        new_symbol(STYPE_FUNCTION, expr->md, func,
+                   type_to_llvm_type(expr->md, ctx, module));
+
+    ht_set_hash(ctx->frame->table, chars, hash_string(chars, total_chars),
+                method_sym);
+  }
   return NULL;
 }
 
@@ -109,9 +157,14 @@ Type *find_in_env_if_generic(Type *t, TypeEnv *env) {
         if (!sym) {                                                            \
           return NULL;                                                         \
         }                                                                      \
-        if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler)           \
+        if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {         \
           return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(      \
               ast, ctx, module, builder);                                      \
+        }                                                                      \
+        if (sym->type == STYPE_FUNCTION) {                                     \
+          return call_callable(ast, sym->symbol_type, sym->val, ctx, module,   \
+                               builder);                                       \
+        }                                                                      \
       }                                                                        \
       return NULL;                                                             \
     }                                                                          \
@@ -259,7 +312,8 @@ LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   //         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   //     l = handle_type_conversions(l, lt, ret, module, builder);
   //     LLVMValueRef r =
-  //         codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+  //         codegen(ast->data.AST_APPLICATION.args + 1, ctx, module,
+  //         builder);
   //     r = handle_type_conversions(r, rt, ret, module, builder);
   //     return LLVMBuildBinOp(builder, LLVMSDiv, l, r,
   //                           "/"
@@ -270,7 +324,8 @@ LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   //         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   //     l = handle_type_conversions(l, lt, ret, module, builder);
   //     LLVMValueRef r =
-  //         codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+  //         codegen(ast->data.AST_APPLICATION.args + 1, ctx, module,
+  //         builder);
   //     r = handle_type_conversions(r, rt, ret, module, builder);
   //     return LLVMBuildBinOp(builder, LLVMFDiv, l, r,
   //                           "/"

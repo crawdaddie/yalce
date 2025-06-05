@@ -102,6 +102,21 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   return type;
 }
 
+double tc_impl_rank(Ast *ast) {
+  Ast *impl = ast->data.AST_TRAIT_IMPL.impl;
+  for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
+    Ast *stmt = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+    if (stmt->tag == AST_LET &&
+        stmt->data.AST_LET.binding->tag == AST_IDENTIFIER &&
+        CHARS_EQ(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value,
+                 "rank") &&
+        stmt->data.AST_LET.expr->tag == AST_DOUBLE) {
+      return stmt->data.AST_LET.expr->data.AST_DOUBLE.value;
+    }
+  }
+  return 0.;
+}
+
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
   switch (ast->tag) {
@@ -331,6 +346,18 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_TRAIT_IMPL: {
     type = infer(ast->data.AST_TRAIT_IMPL.impl, ctx);
+    ObjString type_name = ast->data.AST_TRAIT_IMPL.type;
+    ObjString trait_name = ast->data.AST_TRAIT_IMPL.trait_name;
+
+    if (!CHARS_EQ(trait_name.chars, "Constructor")) {
+
+      Type *t = env_lookup(ctx->env, type_name.chars);
+      double rank = tc_impl_rank(ast);
+      TypeClass *tc = talloc(sizeof(TypeClass));
+      *tc = (TypeClass){.rank = rank, .name = trait_name.chars};
+      typeclasses_extend(t, tc);
+    }
+
     break;
   }
 

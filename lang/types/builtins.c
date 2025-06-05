@@ -26,7 +26,6 @@ TypeClass GenericOrd = {.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.};
 TypeClass GenericEq = {.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.};
 
 Type *create_new_arithmetic_sig(void *i) {
-  // printf("new arithmetic???\n");
   Type *a = next_tvar();
   typeclasses_extend(a, &GenericArithmetic);
   Type *b = next_tvar();
@@ -37,9 +36,10 @@ Type *create_new_arithmetic_sig(void *i) {
   args[0] = a;
   args[1] = b;
 
-  *arith_res =
-      ((Type){T_TYPECLASS_RESOLVE,
-              {.T_CONS = {.name = "arithmetic", .num_args = 2, .args = args}}});
+  *arith_res = ((Type){T_TYPECLASS_RESOLVE,
+                       {.T_CONS = {.name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                   .num_args = 2,
+                                   .args = args}}});
   Type *f = arith_res;
   f = type_fn(b, f);
   f = type_fn(a, f);

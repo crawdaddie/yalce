@@ -15,4 +15,8 @@ LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef create_constructor_methods(Ast *trait_impl, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder);
+
+LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
+                                                 LLVMModuleRef module,
+                                                 LLVMBuilderRef builder);
 #endif

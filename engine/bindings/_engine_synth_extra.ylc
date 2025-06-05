@@ -4,6 +4,26 @@
 #   end_chain x
 # ;;
 
+let Arithmetic : Synth = module 
+  let rank = 5.;
+  let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;
+  let sub = fn a: (Synth) b: (Synth) -> sub2_node a b;;
+  let mul = fn a: (Synth) b: (Synth) -> mul2_node a b;;
+  let div = fn a: (Synth) b: (Synth) -> div2_node a b;;
+  let mod = fn a: (Synth) b: (Synth) -> mod2_node a b;;
+;
+
+let Constructor : Synth = module
+  let of_int = fn a: (Int) ->
+    const_sig a
+  ;;
+
+  let of_num = fn a: (Double) ->
+    const_sig a
+  ;;
+;
+
+
 type SynthInput = 
   | Scalar of Int
   | Trig of Int
@@ -35,15 +55,7 @@ let get_sin_tabsize = extern fn () -> Int;
 let get_saw_table = extern fn () -> Ptr of Double;
 let get_saw_tabsize = extern fn () -> Int;
 
-let Constructor : Synth = module
-  let of_int = fn a: (Int) ->
-    const_sig a
-  ;;
 
-  let of_num = fn a: (Double) ->
-    const_sig a
-  ;;
-;
 let compile_blob_template = fn sdef ->
   start_blob ();
   sdef ();

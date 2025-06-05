@@ -306,9 +306,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
 
     if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Arithmetic")) {
-      printf("arithmetic impl\n");
-      print_ast(ast);
-      return NULL;
+      return create_arithmetic_typeclass_methods(ast, ctx, module, builder);
     }
     return NULL;
   }
