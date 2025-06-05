@@ -9,6 +9,11 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
-                                     Type *to_type, LLVMModuleRef module,
+                                     Type *to_type, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
                                      LLVMBuilderRef builder);
+
+LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
+                           JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder);
 #endif

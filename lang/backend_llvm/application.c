@@ -3,11 +3,12 @@
 #include "builtin_functions.h"
 #include "coroutines.h"
 #include "function.h"
-#include "list.h"
 #include "modules.h"
 #include "serde.h"
 #include "symbols.h"
+#include "synths.h"
 #include "types.h"
+#include "types/common.h"
 #include "types/infer_application.h"
 #include "llvm-c/Core.h"
 #include <string.h>
@@ -16,11 +17,38 @@ typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
 
 LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
-                                     Type *to_type, LLVMModuleRef module,
+                                     Type *to_type, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
 
   if (types_equal(from_type, to_type)) {
     return val;
+  }
+
+  if (to_type->kind == T_CONS && to_type->alias) {
+    Ast id = (Ast){
+        AST_IDENTIFIER,
+        .data = {.AST_IDENTIFIER = {to_type->alias, strlen(to_type->alias)}}};
+
+    JITSymbol *constructor_sym = lookup_id_ast(&id, ctx);
+
+    if (constructor_sym && constructor_sym->type == STYPE_GENERIC_CONSTRUCTOR) {
+      Type f =
+          (Type){T_FN, .data = {.T_FN = {.from = from_type, .to = to_type}}};
+
+      LLVMTypeRef fn_type = type_to_llvm_type(&f, ctx, module);
+      LLVMValueRef cons_val = specific_fns_lookup(
+          constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
+          from_type);
+
+      // if (types_equal(to_type, &t_synth)) {
+      //   printf("handle type conversions???\n");
+      //   print_type(from_type);
+      //   print_type(to_type);
+      // }
+      return LLVMBuildCall2(builder, fn_type, cons_val, (LLVMValueRef[]){val},
+                            1, "constructor");
+    }
   }
 
   if (!to_type->constructor) {
@@ -35,10 +63,9 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
-                                  LLVMValueRef callable, JITLangCtx *ctx,
-                                  LLVMModuleRef module,
-                                  LLVMBuilderRef builder) {
+LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
+                           JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
 
   if (!callable) {
     return NULL;
@@ -109,11 +136,11 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
       app_val = codegen(&_app_arg, ctx, module, builder);
     } else if (!types_equal(app_arg_type, expected_type) &&
                expected_type->alias != NULL) {
-      // printf("should handle conversions???\n");
 
       app_val = codegen(app_arg, ctx, module, builder);
+
       app_val = handle_type_conversions(app_val, app_arg_type, expected_type,
-                                        module, builder);
+                                        ctx, module, builder);
 
     } else {
       app_val = codegen(app_arg, ctx, module, builder);
@@ -238,6 +265,17 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return call_callable(ast, expected_fn_type, callable, ctx, module, builder);
   }
 
+  if (sym->type == STYPE_GENERIC_CONSTRUCTOR) {
+    Type *from_type = ast->data.AST_APPLICATION.args->md;
+    Type exp = (Type){
+        T_FN, .data = {.T_FN = {.from = from_type, .to = expected_fn_type}}};
+
+    LLVMValueRef callable =
+        get_specific_callable(sym, &exp, ctx, module, builder);
+
+    return call_callable(ast, &exp, callable, ctx, module, builder);
+  }
+
   if (sym->type == STYPE_FUNCTION) {
     Type *callable_type = sym->symbol_type;
 
@@ -257,17 +295,13 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
     LLVMValueRef res =
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
+
     return res;
   }
 
   if (sym->type == STYPE_LOCAL_VAR && sym->symbol_type->kind == T_FN) {
     Type *callable_type = sym->symbol_type;
 
-    // if (strcmp(sym_name, "trig_fn") == 0) {
-    //   printf("call callable arg???\n");
-    //   print_type(callable_type);
-    // }
-    //
     LLVMValueRef res =
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
     return res;

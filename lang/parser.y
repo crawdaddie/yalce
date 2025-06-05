@@ -96,7 +96,6 @@ Ast* ast_root = NULL;
   lambda_arg
   lambda_args
   extern_typed_signature
-  extern_variants
   list
   array
   tuple
@@ -155,7 +154,6 @@ expr:
   | type_decl                         { $$ = $1; }
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
   | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
-  | IDENTIFIER IMPLEMENTS IDENTIFIER  { $$ = ast_implements($1, $3); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
   | MACRO_IDENTIFIER expr             {
                                         // TODO: not doing anything with macros yet - do we want to??
@@ -289,6 +287,8 @@ let_binding:
   | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); }
   | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); }
   | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); }
+
+  | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($2, $4, $6); }
   ;
 
 extern_typed_signature:
@@ -297,15 +297,6 @@ extern_typed_signature:
                                     { $$ = extern_typed_signature_push($1, $3); }
   ;
 
-extern_variants:
-    extern_typed_signature ':' TOK_STRING 
-                                    { $$ = ast_list(ast_extern_fn($3, $1)); }
-
-  | extern_variants ',' extern_typed_signature ':' TOK_STRING 
-                                    { $$ = ast_list_push($1, ast_extern_fn($5, $3)); }
-
-  | extern_variants ','             { $$ = $1; } /* Allow trailing comma */
-  ;
 
 
 lambda_expr:
@@ -314,7 +305,7 @@ lambda_expr:
   | '(' FN lambda_args ARROW expr_sequence ')'  { $$ = ast_lambda($3, $5); }
   | '(' FN TOK_VOID ARROW expr_sequence ')'     { $$ = ast_void_lambda($5); }
   | 'module' lambda_args ARROW expr_sequence ';'{ $$ = ast_module(ast_lambda($2, $4)); }
-  | 'module' expr_sequence ';'{ $$ = ast_module(ast_lambda(NULL, $2)); }
+  | 'module' expr_sequence ';'                  { $$ = ast_module(ast_lambda(NULL, $2)); }
   ;
 
 

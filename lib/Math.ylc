@@ -68,11 +68,11 @@ let chance2 = fn thresh f g ->
 
 
 let shuffle = fn n -> 
-  `
-  Fisher-Yates shuffle
-  return an array of numbers 0 to n-1 shuffled in random order
-  https://dl.acm.org/doi/pdf/10.1145/364520.364540#.pdf
-  `;
+  # `
+  # Fisher-Yates shuffle
+  # return an array of numbers 0 to n-1 shuffled in random order
+  # https://dl.acm.org/doi/pdf/10.1145/364520.364540#.pdf
+  # `;
   let arr = array_fill n (fn i -> i);
 
   for _i = 0 to n in (
@@ -86,11 +86,11 @@ let shuffle = fn n ->
 ;;
 
 let shuffle_ip = fn arr: (Array of T) -> 
-  `
-  Fisher-Yates shuffle
-  return arr shuffled in-place in random order
-  https://dl.acm.org/doi/pdf/10.1145/364520.364540#.pdf
-  `;
+  # `
+  # Fisher-Yates shuffle
+  # return arr shuffled in-place in random order
+  # https://dl.acm.org/doi/pdf/10.1145/364520.364540#.pdf
+  # `;
 
   let n = array_size arr;
 

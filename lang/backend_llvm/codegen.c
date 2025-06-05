@@ -9,10 +9,12 @@
 #include "backend_llvm/symbols.h"
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
+#include "builtin_functions.h"
 #include "coroutines.h"
 #include "loop.h"
 #include "module.h"
 #include "modules.h"
+#include "types/common.h"
 #include "types/inference.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -295,6 +297,18 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_GET_ARG: {
     LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
     return LLVMGetParam(func, ast->data.AST_GET_ARG.i);
+  }
+
+  case AST_TRAIT_IMPL: {
+    if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Constructor")) {
+
+      return create_constructor_methods(ast, ctx, module, builder);
+    }
+
+    if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Arithmetic")) {
+      return create_arithmetic_typeclass_methods(ast, ctx, module, builder);
+    }
+    return NULL;
   }
   }
 
