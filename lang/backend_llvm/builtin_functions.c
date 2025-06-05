@@ -23,9 +23,10 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
 
-  // printf("create constructors\n");
-  // printf("trait %s for %s\n", trait->data.AST_TRAIT_IMPL.trait_name.chars,
-  //        trait->data.AST_TRAIT_IMPL.type.chars);
+  printf("create constructors %d\n", ctx->stack_ptr);
+  printf("trait %s for %s\n", trait->data.AST_TRAIT_IMPL.trait_name.chars,
+         trait->data.AST_TRAIT_IMPL.type.chars);
+
   const char *name = trait->data.AST_TRAIT_IMPL.type.chars;
 
   Type *out_type = env_lookup(ctx->env, name);
@@ -38,8 +39,6 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
     for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
       Ast *expr = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
       LLVMValueRef func = codegen(expr, ctx, module, builder);
-      // LLVMDumpValue(func);
-      // printf("\n\n");
       constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
           specific_fns_extend(
               constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,

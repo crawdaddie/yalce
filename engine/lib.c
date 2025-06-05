@@ -163,7 +163,6 @@ Node *inlet(double default_val) {
   _graph->inlets[_graph->num_inlets] = f->node_index;
   _graph->inlet_defaults[_graph->num_inlets] = default_val;
   _graph->num_inlets++;
-  printf("inlet default: %f %p\n", default_val, f);
   return f;
 }
 

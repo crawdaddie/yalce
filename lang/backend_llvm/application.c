@@ -8,6 +8,7 @@
 #include "symbols.h"
 #include "synths.h"
 #include "types.h"
+#include "types/common.h"
 #include "types/infer_application.h"
 #include "llvm-c/Core.h"
 #include <string.h>
@@ -32,10 +33,13 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
 
     JITSymbol *constructor_sym = lookup_id_ast(&id, ctx);
 
+    // printf("constructor from\n");
+    // print_type(from_type);
+    // print_type(to_type);
+    // printf("to %s\n", to_type->alias);
+    // printf("cons sym %p\n", constructor_sym);
+
     if (constructor_sym && constructor_sym->type == STYPE_GENERIC_CONSTRUCTOR) {
-      printf("constructor from\n");
-      print_type(from_type);
-      print_type(to_type);
       Type f =
           (Type){T_FN, .data = {.T_FN = {.from = from_type, .to = to_type}}};
 
@@ -140,7 +144,6 @@ static LLVMValueRef call_callable(Ast *ast, Type *callable_type,
       app_val = codegen(&_app_arg, ctx, module, builder);
     } else if (!types_equal(app_arg_type, expected_type) &&
                expected_type->alias != NULL) {
-      // printf("should handle conversions???\n");
 
       app_val = codegen(app_arg, ctx, module, builder);
       app_val = handle_type_conversions(app_val, app_arg_type, expected_type,
@@ -299,6 +302,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
     LLVMValueRef res =
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
+
     return res;
   }
 
