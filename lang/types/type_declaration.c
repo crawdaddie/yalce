@@ -376,6 +376,7 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
     var->data.T_VAR = name;
     TypeEnv *_env = env_extend(*env, name, var);
     type = compute_type_expression(type_expr_ast, _env, NULL);
+
     if (type->kind == T_CONS &&
         CHARS_EQ(type->data.T_CONS.name, TYPE_NAME_TUPLE)) {
       type->data.T_CONS.name = name;

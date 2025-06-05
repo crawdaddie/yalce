@@ -1,0 +1,6 @@
+type Synth = Ptr of Char;
+
+type SynthInput = 
+  | Scalar of Int
+  | Trig of Int
+  ;

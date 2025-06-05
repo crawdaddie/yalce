@@ -6,9 +6,7 @@
 #include "modules.h"
 #include "serde.h"
 #include "symbols.h"
-#include "synths.h"
 #include "types.h"
-#include "types/common.h"
 #include "types/infer_application.h"
 #include "llvm-c/Core.h"
 #include <string.h>

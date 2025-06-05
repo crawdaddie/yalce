@@ -10,7 +10,7 @@
 #include "modules.h"
 #include "parse.h"
 #include "serde.h"
-#include "synths.h"
+// #include "synths.h"
 #include "testing.h"
 #include "types/inference.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -247,7 +247,7 @@ int jit(int argc, char **argv) {
                     .frame = &initial_stack_frame};
 
   initialize_builtin_funcs(&ctx, module, builder);
-  initialize_synth_types(&ctx, module, builder);
+  // initialize_synth_types(&ctx, module, builder);
 
   int arg_counter = 1;
   config.base_libs_dir = getenv("YLC_BASE_DIR");

@@ -3,9 +3,10 @@
 #   let x = def () in
 #   end_chain x
 # ;;
-
+ 
+# TODO: add impls for Ord and Eq??
 let Arithmetic : Synth = module 
-  let rank = 5.;
+  let rank = 5.; # rank must be a literal
   let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;
   let sub = fn a: (Synth) b: (Synth) -> sub2_node a b;;
   let mul = fn a: (Synth) b: (Synth) -> mul2_node a b;;
@@ -23,11 +24,6 @@ let Constructor : Synth = module
   ;;
 ;
 
-
-type SynthInput = 
-  | Scalar of Int
-  | Trig of Int
-  ;
 
 let instantiate_template = extern fn List of (Int, Double) -> Ptr -> Synth;
 
