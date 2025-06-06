@@ -55,4 +55,9 @@ LLVMValueRef codegen_eq_num(LLVMValueRef l, LLVMValueRef r,
 
 LLVMTypeRef named_struct_type(const char *name, Type *tuple_type,
                               JITLangCtx *ctx, LLVMModuleRef module);
+
+LLVMTypeRef type_to_llvm_type_fn_to_gen_ptr(Type *type, JITLangCtx *ctx,
+                                            LLVMModuleRef module);
+
+LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type);
 #endif

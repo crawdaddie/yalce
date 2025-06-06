@@ -133,7 +133,6 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef prev_node = NULL;
 
   for (int i = 0; i < len; i++) {
-    // Get the current item value
     Ast *item_ast = &ast->data.AST_LIST.items[i];
     LLVMValueRef item_value = codegen(item_ast, ctx, module, builder);
 
@@ -163,12 +162,10 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         LLVMBuildStructGEP2(builder, node_type, node_ptr, 0, "data_ptr");
     LLVMBuildStore(builder, item_value, data_ptr);
 
-    // Save the head pointer if this is the first node
     if (i == 0) {
       head = current_node;
     }
 
-    // Link the previous node to the current one
     if (prev_node != NULL) {
       LLVMValueRef next_ptr =
           LLVMBuildStructGEP2(builder, node_type, prev_node, 1, "next_ptr");
@@ -178,7 +175,6 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     prev_node = current_node;
   }
 
-  // Ensure the last node's next pointer is NULL
   if (current_node != NULL) {
     LLVMValueRef next_ptr =
         LLVMBuildStructGEP2(builder, node_type, current_node, 1, "next_ptr");
@@ -215,27 +211,22 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef append_list =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  // Create basic blocks for the loop
   LLVMBasicBlockRef entry = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(entry);
   LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(function, "loop");
   LLVMBasicBlockRef after_loop = LLVMAppendBasicBlock(function, "after_loop");
 
-  // Store the initial list pointer
   LLVMValueRef current = list;
 
-  // Branch to loop
   LLVMBuildBr(builder, loop_block);
   LLVMPositionBuilderAtEnd(builder, loop_block);
 
-  // Create PHI node for the current pointer
   LLVMValueRef phi = LLVMBuildPhi(
       builder, LLVMPointerType(llvm_list_node_type, 0), "current_phi");
   LLVMValueRef incoming_values[] = {list};
   LLVMBasicBlockRef incoming_blocks[] = {entry};
   LLVMAddIncoming(phi, incoming_values, incoming_blocks, 1);
 
-  // Load the next pointer from the current node
   LLVMValueRef next_ptr_ptr =
       LLVMBuildStructGEP2(builder, llvm_list_node_type, phi, 1, "next_ptr_ptr");
 
@@ -243,86 +234,22 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildLoad2(builder, LLVMPointerType(llvm_list_node_type, 0),
                      next_ptr_ptr, "next_ptr");
 
-  // Check if next pointer is null
   LLVMValueRef is_null = LLVMBuildIsNull(builder, next_ptr, "is_null");
 
-  // Create the loop condition
   LLVMBuildCondBr(builder, is_null, after_loop, loop_block);
 
-  // Update PHI node with the next pointer
   incoming_values[0] = next_ptr;
   incoming_blocks[0] = loop_block;
   LLVMAddIncoming(phi, incoming_values, incoming_blocks, 1);
 
-  // Position builder at the end of loop for final node update
   LLVMPositionBuilderAtEnd(builder, after_loop);
 
-  // Set the next pointer of the last node to append_list
   next_ptr_ptr = LLVMBuildStructGEP2(builder, llvm_list_node_type, phi, 1,
                                      "final_next_ptr_ptr");
 
   LLVMBuildStore(builder, append_list, next_ptr_ptr);
 
-  // Return the original list
   return list;
-}
-
-LLVMValueRef __ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                               LLVMBuilderRef builder) {
-  LLVMValueRef list =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-  Type *list_type = ast->md;
-  LLVMTypeRef llvm_list_node_type = llnode_type(
-      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx, module));
-  if (!llvm_list_node_type) {
-    print_ast(ast);
-    return NULL;
-  }
-
-  // Create basic blocks for the loop
-  LLVMBasicBlockRef entry = LLVMGetInsertBlock(builder);
-  LLVMValueRef function = LLVMGetBasicBlockParent(entry);
-  LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(function, "loop");
-  LLVMBasicBlockRef after_loop = LLVMAppendBasicBlock(function, "after_loop");
-
-  // Store the initial list pointer
-  LLVMValueRef current = list;
-
-  // Branch to loop
-  LLVMBuildBr(builder, loop_block);
-  LLVMPositionBuilderAtEnd(builder, loop_block);
-
-  // Create PHI node for the current pointer
-  LLVMValueRef phi = LLVMBuildPhi(
-      builder, LLVMPointerType(llvm_list_node_type, 0), "current_phi");
-  LLVMValueRef incoming_values[] = {list};
-  LLVMBasicBlockRef incoming_blocks[] = {entry};
-  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 1);
-
-  // Load the next pointer from the current node
-  LLVMValueRef next_ptr_ptr =
-      LLVMBuildStructGEP2(builder, llvm_list_node_type, phi, 1, "next_ptr_ptr");
-
-  LLVMValueRef next_ptr =
-      LLVMBuildLoad2(builder, LLVMPointerType(llvm_list_node_type, 0),
-                     next_ptr_ptr, "next_ptr");
-
-  // Check if next pointer is null
-  LLVMValueRef is_null = LLVMBuildIsNull(builder, next_ptr, "is_null");
-
-  // Create the loop condition
-  LLVMBuildCondBr(builder, is_null, after_loop, loop_block);
-
-  // Update PHI node with the next pointer
-  incoming_values[0] = next_ptr;
-  incoming_blocks[0] = loop_block;
-  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 1);
-
-  // Position builder at the end of loop for final node update
-  LLVMPositionBuilderAtEnd(builder, after_loop);
-
-  return phi;
 }
 
 LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -377,7 +304,6 @@ LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_el_type);
 
-  // Handle null list case
   LLVMValueRef is_null_list = LLVMBuildIsNull(builder, list, "is_null_list");
   LLVMBasicBlockRef entry = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(entry);
@@ -385,26 +311,20 @@ LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef after_loop = LLVMAppendBasicBlock(function, "after_loop");
   LLVMBasicBlockRef null_case = LLVMAppendBasicBlock(function, "null_case");
 
-  // Branch based on whether the list is null
   LLVMBuildCondBr(builder, is_null_list, null_case, loop_block);
 
-  // Handle null list case
   LLVMPositionBuilderAtEnd(builder, null_case);
   LLVMBuildBr(builder, after_loop);
 
-  // Position at loop block
   LLVMPositionBuilderAtEnd(builder, loop_block);
 
-  // Create PHI node for the current pointer
   LLVMValueRef phi = LLVMBuildPhi(
       builder, LLVMPointerType(llvm_list_node_type, 0), "current_phi");
 
-  // Initial value is the list head
   LLVMValueRef incoming_values[] = {list};
   LLVMBasicBlockRef incoming_blocks[] = {entry};
   LLVMAddIncoming(phi, incoming_values, incoming_blocks, 1);
 
-  // Load the next pointer from the current node
   LLVMValueRef next_ptr_ptr =
       LLVMBuildStructGEP2(builder, llvm_list_node_type, phi, 1, "next_ptr_ptr");
 
@@ -412,35 +332,26 @@ LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildLoad2(builder, LLVMPointerType(llvm_list_node_type, 0),
                      next_ptr_ptr, "next_ptr");
 
-  // Check if next pointer is null
   LLVMValueRef is_null = LLVMBuildIsNull(builder, next_ptr, "is_null");
 
-  // Save the current node before potentially leaving the loop
   LLVMValueRef current_node = phi;
 
-  // Create the loop condition
   LLVMBuildCondBr(builder, is_null, after_loop, loop_block);
 
-  // IMPORTANT: This needs to be after the branch instruction
-  // Add a self-reference to the PHI node with the next pointer
   LLVMValueRef loop_values[] = {next_ptr};
   LLVMBasicBlockRef loop_blocks[] = {loop_block};
   LLVMAddIncoming(phi, loop_values, loop_blocks, 1);
 
-  // Position builder at the end of loop for final result
   LLVMPositionBuilderAtEnd(builder, after_loop);
 
-  // Create a PHI node to merge results from both paths
   LLVMValueRef result_phi =
       LLVMBuildPhi(builder, LLVMPointerType(llvm_list_node_type, 0), "result");
 
-  // From null case path: return null
   LLVMValueRef null_values[] = {
       LLVMConstNull(LLVMPointerType(llvm_list_node_type, 0))};
   LLVMBasicBlockRef null_blocks[] = {null_case};
   LLVMAddIncoming(result_phi, null_values, null_blocks, 1);
 
-  // From loop termination: return the current node (which is the tail)
   LLVMValueRef normal_values[] = {current_node};
   LLVMBasicBlockRef normal_blocks[] = {loop_block};
   LLVMAddIncoming(result_phi, normal_values, normal_blocks, 1);

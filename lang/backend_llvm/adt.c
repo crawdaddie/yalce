@@ -136,8 +136,19 @@ LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type) {
 LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
                              LLVMModuleRef module) {
   if (type->alias != NULL && strcmp(type->alias, "Option") == 0) {
-    return codegen_option_struct_type(
-        type_to_llvm_type(type_of_option(type), ctx, module));
+    Type *_underlying = type_of_option(type);
+    if (is_generic(_underlying)) {
+      _underlying = resolve_type_in_env(_underlying, ctx->env);
+    }
+    LLVMTypeRef underlying;
+
+    if (_underlying->kind == T_FN) {
+      underlying = GENERIC_PTR;
+    } else {
+      underlying = type_to_llvm_type(_underlying, ctx, module);
+    }
+
+    return codegen_option_struct_type(underlying);
   }
 
   int len = type->data.T_CONS.num_args;
@@ -209,7 +220,7 @@ LLVMValueRef extract_tag(LLVMValueRef val, LLVMBuilderRef builder) {
   LLVMValueRef tu_alloca = LLVMBuildAlloca(builder, union_type, "tu");
   LLVMBuildStore(builder, val, tu_alloca);
   LLVMValueRef tag_ptr =
-      LLVMBuildStructGEP2(builder, union_type, tu_alloca, 0, "tagPtr");
+      LLVMBuildStructGEP2(builder, union_type, tu_alloca, 0, "tag_ptr");
 
   LLVMValueRef tag = LLVMBuildLoad2(builder, TAG_TYPE, tag_ptr, "tag");
   return tag;

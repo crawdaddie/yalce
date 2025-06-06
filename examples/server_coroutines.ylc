@@ -49,8 +49,7 @@ let Queue = module
   ;;
 ;
 
-
-let accept_cor = fn server_fd ->
+let accept_cb = fn server_fd ->
   let client_addr = create_server_addr 0 0 0;
   let client_fd = accept server_fd client_addr [1];
 
@@ -69,14 +68,14 @@ let accept_cor = fn server_fd ->
   yield server_fd 
 ;;
 
-
-let proc_tasks = fn server_fd tq: (List of (() -> Option of Int), List of (() -> Option of Int)) ->
+let proc_tasks = fn server_fd tq: (List of (Coroutine of Int), List of (Coroutine of Int)) ->
   match Queue.pop_left tq with
-  | Some (cb, tasks) -> 
-    match cb () with
-    | Some _ -> proc_tasks server_fd (Queue.append cb tasks) 
-    | None -> proc_tasks server_fd tasks
-  | None -> (proc_tasks server_fd (Queue.of_list [accept_cor server_fd]); ())    
+  | Some (cb, d) -> (
+    cb ();
+    # | Some sfd -> 
+    proc_tasks server_fd d
+  )
+  | None -> (proc_tasks server_fd (Queue.of_list [accept_cb server_fd]); ())
 ;;
 
 let init_server = fn port ->
@@ -84,7 +83,7 @@ let init_server = fn port ->
   let server_fd = socket AF_INET SOCK_STREAM 0;
   bind server_fd server_addr 16;
   listen server_fd 5;
-  proc_tasks server_fd (Queue.of_list [(accept_cor server_fd)]);
+  proc_tasks server_fd (Queue.of_list [accept_cb server_fd]);
   ()
 ;;
 

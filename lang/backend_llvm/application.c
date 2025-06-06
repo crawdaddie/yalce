@@ -255,6 +255,8 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
 
+    // print_type(callable_type);
+
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);
 
@@ -296,10 +298,17 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_LOCAL_VAR && sym->symbol_type->kind == T_FN) {
+
+    // printf("call local var??\n");
+    // print_ast(ast);
+    // print_type(sym->symbol_type);
+    // print_type(expected_fn_type);
+
     Type *callable_type = sym->symbol_type;
 
     LLVMValueRef res =
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
+
     return res;
   }
 

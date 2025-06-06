@@ -51,7 +51,7 @@ let Storage = module
 let (@) = mget;
 
 let mmul = fn a: (Matrix of T) b: (Matrix of T) ->
-  
+  # Matrix multiplication
   let c = Matrix a.rows b.cols (array_fill_const (a.rows * b.cols) (a @ (0, 0)));
   let vs = [|0.|]; 
 
@@ -112,6 +112,7 @@ let mrow = fn m: (Matrix of T) i ->
 ;;
 
 let melwise_map_ip = fn f m: (Matrix of T) ->
+  # Matrix element-wise map in-place modification
   for i = 0 to (msize m) in (
     m.data[i] := f (m.data[i])
   );
