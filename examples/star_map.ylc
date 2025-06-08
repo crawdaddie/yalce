@@ -1,0 +1,80 @@
+#! /usr/bin/env ylc --gui -i
+open ../gui/bindings/Gui;
+import ../lib/Math;
+
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> Array of Char;
+let read_lines = extern fn Ptr -> (List of String, Int);
+let scanf_df = extern fn Ptr -> Ptr -> Int -> Ptr -> ();
+
+type StarsDataset = (x: Array of Double, y: Array of Double, z: Array of Double);
+
+# id: The database primary key.
+# hip: The star's ID in the Hipparcos catalog, if known.
+# hd: The star's ID in the Henry Draper catalog, if known.
+# hr: The star's ID in the Harvard Revised catalog, which is the same as its number in the Yale Bright Star Catalog.
+# gl: The star's ID in the third edition of the Gliese Catalog of Nearby Stars.
+# bf: The Bayer / Flamsteed designation, primarily from the Fifth Edition of the Yale Bright Star Catalog. This is a combination of the two designations. The Flamsteed number, if present, is given first; then a three-letter abbreviation for the Bayer Greek letter; the Bayer superscript number, if present; and finally, the three-letter constellation abbreviation. Thus Alpha Andromedae has the field value "21Alp And", and Kappa1 Sculptoris (no Flamsteed number) has "Kap1Scl".
+# ra, dec: The star's right ascension and declination, for epoch and equinox 2000.0.
+# proper: A common name for the star, such as "Barnard's Star" or "Sirius". These are taken from the International Astronomical Union (https://www.iau.org/public/themes/naming_stars/, specifically, I'm using a formatted version from https://github.com/mirandadam/iau-starnames)
+# dist: The star's distance in parsecs, the most common unit in astrometry. To convert parsecs to light years, multiply by 3.262. A value >= 100000 indicates missing or dubious (e.g., negative) parallax data in Hipparcos.
+# pmra, pmdec: The star's proper motion in right ascension and declination, in milliarcseconds per year.
+# rv: The star's radial velocity in km/sec, where known.
+# mag: The star's apparent visual magnitude.
+# absmag: The star's absolute visual magnitude (its apparent magnitude from a distance of 10 parsecs).
+# spect: The star's spectral type, if known.
+# ci: The star's color index (blue magnitude - visual magnitude), where known.
+# x,y,z: The Cartesian coordinates of the star, in a system based on the equatorial coordinates as seen from Earth. +X is in the direction of the vernal equinox (at epoch 2000), +Z towards the north celestial pole, and +Y in the direction of R.A. 6 hours, declination 0 degrees.
+# vx,vy,vz: The Cartesian velocity components of the star, in the same coordinate system described immediately above. They are determined from the proper motion and the radial velocity (when known). The velocity unit is parsecs per year; these are small values (around 1 millionth of a parsec per year), but they enormously simplify calculations using parsecs as base units for celestial mapping.
+# rarad, decrad, pmrarad, pmdecrad: The positions in radians, and proper motions in radians per year.
+# bayer: The Bayer designation as a distinct value
+# flam: The Flamsteed number as a distinct value
+# con: The standard constellation abbreviation
+# comp, comp_primary, base: Identifies a star in a multiple star system. comp = ID of companion star, comp_primary = ID of primary star for this component, and base = catalog ID or name for this multi-star system. Currently only used for Gliese stars.
+# lum: Star's luminosity as a multiple of Solar luminosity.
+# var: Star's standard variable star designation, when known.
+# var_min, var_max: Star's approximate magnitude range, for variables. This value is based on the Hp magnitudes for the range in the original Hipparcos catalog, adjusted to the V magnitude scale to match the "mag" field.
+
+let skip_commas = fn str: (String) num ->
+  match (num, str[0]) with
+  | (0, _) -> str
+  | (_, ',') -> skip_commas (array_offset 1 str) (num - 1)
+  | _ -> skip_commas (array_offset 1 str) num
+;;
+
+
+let parse_dataset = fn l: (List of String) size ->
+  let hd::c = l;
+  let df = array_fill_const (size * 3) 0.;
+
+  let aux = fn lines: (List of String) x: (Array of Double) ->
+    match lines with
+    | [] -> ()
+    | row::rest -> (
+      # print `row: {row}\n`;
+      scanf_df (cstr "%lf,%lf,%lf") (cstr (skip_commas row 16)) 3 (cstr [| cstr x, cstr (array_offset 1 x), cstr (array_offset 2 x) |]);
+      aux rest (array_offset 3 x)
+    )
+  ;;
+  aux c df;
+  df
+;;
+
+
+let load = fn path ->
+  let content, len = match (open_file path "rb") with
+    | Some fd -> (
+      let c, l = read_lines fd;
+      fclose fd;
+      (c, l)
+    )
+    | None -> ([""], 0)
+  ;
+  (parse_dataset content (len - 1), len - 1)
+;;
+
+let pc_data, size = load "/Users/adam/Desktop/hygdata_v41.csv";
+print `parsed {size} stars\n`;
+
+let w = create_pointcloud_window (cstr pc_data) size;

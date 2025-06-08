@@ -1,0 +1,16 @@
+#! /usr/bin/env ylc --gui -i
+open ../gui/bindings/Gui;
+import ../lib/Math;
+
+let pc_data = [|
+  0., 0., 0.,
+  1., 0., 0.,
+  0., 1., 0.,
+  0., 0., 1.,
+  1., 1., 0.,
+  0., 1., 1.,
+  1., 0., 1.,
+  1., 1., 1.,
+|];
+
+let w = create_pointcloud_window (cstr pc_data) 8;

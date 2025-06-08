@@ -2,7 +2,7 @@ let open_file = extern fn String -> String -> Option of Ptr;
 let fclose = extern fn Ptr -> ();
 let read_bytes = extern fn Ptr -> Array of Char;
 let read_lines = extern fn Ptr -> (List of String, Int);
-let _scanf = extern fn Ptr -> Ptr -> Int -> Ptr -> ();
+let scanf_df = extern fn Ptr -> Ptr -> Int -> Ptr -> ();
 
 
 
@@ -22,7 +22,7 @@ let format_dataset = fn l size ->
 
     | [] -> ()
     | row_str::rest -> (
-      _scanf (cstr "%lf,%lf,%d") (cstr row_str) 3 (df_raw_fields x);
+      scanf_df (cstr "%lf,%lf,%d") (cstr row_str) 3 (df_raw_fields x);
       aux (idx + 1) rest (MoonsDataset (array_succ x.x1) (array_succ x.x2) (array_succ x.label))
     )
   ;;
