@@ -27,4 +27,7 @@ int create_envelope_edit_view_cb(int size, double *data, void *cb);
 int create_vst_view(char *handle);
 int create_array_editor(int size, double *array);
 
+int create_custom_window(void *cb);
+
+int create_pointcloud_window(double *points, int size);
 #endif

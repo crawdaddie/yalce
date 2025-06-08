@@ -4,7 +4,6 @@ include ../.env
 # VST Library path
 VST_LIB_PATH := ${VST_LIB_PATH}
 VST_BUILD_PATH := $(VST_LIB_PATH)/build
-
 CC := clang -g
 CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_PATH}/include \
@@ -16,9 +15,10 @@ CFLAGS := -Wall -Wextra -fPIC -I. \
 LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
 					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
-					 -L$(VST_BUILD_PATH) -lylcvst
-# Add frameworks for macOS - THIS IS CRITICAL
-FRAMEWORKS := -framework Cocoa -framework Foundation
+					 -L$(VST_BUILD_PATH) -lylcvst \
+					 -lGLEW
+
+FRAMEWORKS := -framework Foundation -framework OpenGL 
 
 BUILD_DIR := ../build/gui
 # Add Objective-C file for macOS VST support

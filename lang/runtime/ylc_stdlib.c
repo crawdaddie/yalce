@@ -324,8 +324,13 @@ struct sockaddr *create_server_addr(int af_inet, int inaddr_any, int port) {
 
 double relu_d(double i) { return i < 0. ? 0. : i; }
 
-void _scanf(const char *fmt_string, const char *input_string, int size,
-            void **pointers) {
+void scanf_item(const char *fmt_string, const char *input_string, void *val) {
+  // printf("scanf item %s '%s'\n", fmt_string, input_string);
+  sscanf(input_string, fmt_string, val);
+}
+
+void scanf_df(const char *fmt_string, const char *input_string, int size,
+              void **pointers) {
   // The correct order of parameters for sscanf is:
   // sscanf(input_string, fmt_string, arg1, arg2, ...)
 
@@ -773,4 +778,7 @@ void matmulp(float *xout, float *x, float *w, int n, int d) {
     xout[i] = val;
   }
 }
+
+double double_from_bytes(char *bytes) { return *(double *)bytes; }
+
 #endif
