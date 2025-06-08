@@ -1,6 +1,4 @@
-#include "audio_graph.h"
-#include "ctx.h"
-#include "node.h"
+#include "../node.h"
 
 NodeRef temper_node(double saturation, double feedback, double cutoff,
                     double resonance, double drive, double curve, double level,

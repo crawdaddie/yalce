@@ -12,8 +12,10 @@ double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
 
   // Ensure we have enough space
   if (graph->buffer_pool_size + size > graph->buffer_pool_capacity) {
+
     // printf("realloc buffer pool?? %d %d\n", graph->buffer_pool_size + size,
     //        graph->buffer_pool_capacity);
+    //
     graph->buffer_pool_capacity *= 2;
     graph->buffer_pool =
         realloc(graph->buffer_pool, graph->buffer_pool_capacity);
@@ -54,6 +56,13 @@ char *state_ptr(AudioGraph *graph, NodeRef node) {
     return (char *)((Node *)node + 1);
   }
   return graph->nodes_state_memory + node->state_offset;
+}
+void plug_input_in_graph(int idx, NodeRef node, NodeRef input) {
+  if (_graph) {
+    node->connections[idx].source_node_index = input->node_index;
+    return;
+  }
+  node->connections[idx].source_node_index = (uint64_t)input;
 }
 
 Node *__allocate_node_in_graph(AudioGraph *graph, int state_size) {

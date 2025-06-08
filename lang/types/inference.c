@@ -897,9 +897,9 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
                         "Typecheck Error: Could not infer pattern type\n");
     }
 
-    printf("match expr pattern type\n");
-    print_type(pattern_type);
-    print_type_env(ctx->env);
+    // printf("match expr pattern type\n");
+    // print_type(pattern_type);
+    // print_type_env(ctx->env);
 
     if (!unify_in_ctx(expr_type, pattern_type, ctx, branch_pattern)) {
       return type_error(ctx, branch_pattern,

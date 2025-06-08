@@ -2,8 +2,6 @@
 #define _ENGINE_LIB_H
 #include "./audio_graph.h"
 
-AudioGraph *sin_ensemble();
-
 typedef struct {
   struct {
     int idx;
@@ -16,8 +14,9 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g);
 
 struct arr {
   int size;
-  void *data
+  void *data;
 };
+
 NodeRef array_to_buf(struct arr a);
 double midi_to_freq(int midi_note);
 
@@ -27,4 +26,7 @@ extern AudioGraph *_graph;
 
 void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
                    int layout, int output_num);
+
+typedef void (*SynthTemplateFunc)();
+AudioGraph *compile_blob_template(SynthTemplateFunc fn);
 #endif

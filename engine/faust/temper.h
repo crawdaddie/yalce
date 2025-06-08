@@ -5,11 +5,7 @@
 extern "C" {
 #endif
 
-#include "../audio_graph.h"
-#include "../ctx.h"
-#include "../faust.h"
-#include "../node.h"
-#include <stdlib.h>
+#include "./faust.h"
 
 #ifndef FAUSTFLOAT
 #define FAUSTFLOAT double

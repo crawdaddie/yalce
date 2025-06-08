@@ -36,6 +36,7 @@ let play_node_offset_w_kill = extern fn Uint64 -> Double -> Int -> Synth -> Synt
 let init_audio = extern fn Ptr of Int -> () in
   init_audio ()
 ;
+let compile_blob_template = extern fn (() -> Synth) -> Ptr;
 
 let play_tpl = fn f ->
   f |> compile_blob_template |> instantiate_template [] |> play_node;;
@@ -52,11 +53,6 @@ let get_saw_table = extern fn () -> Ptr of Double;
 let get_saw_tabsize = extern fn () -> Int;
 
 
-let compile_blob_template = fn sdef ->
-  start_blob ();
-  sdef ();
-  end_blob ()
-;;
 
 
 

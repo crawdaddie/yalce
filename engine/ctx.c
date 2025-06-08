@@ -37,7 +37,7 @@ void audio_ctx_add(Node *node) {
     // Find the end of the chain
     Node *current = ctx->head;
     while (current->next != NULL) {
-      current = current->next;
+      current = (Node *)current->next;
     }
     // Append to the end
     current->next = node;
@@ -179,17 +179,11 @@ int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue) {
     msg = queue->buffer + read_ptr;
     if (msg->tick - current_tick >= 512) {
       // TODO: if msg->tick - current_tick > 512 - push message to write_ptr
-      // printf("overflow message @ %llu %d %llu %llu\n", current_tick,
-      // msg->type,
-      //        msg->tick, msg->tick - current_tick);
       push_msg(&ctx.overflow_queue, *msg, 0);
       num_moved++;
     } else if (msg->tick - current_tick < 0) {
       printf("too late for msg\n");
     } else {
-      // printf("handle message %llu %llu offset %llu\n", current_tick,
-      // msg->tick,
-      //        msg->tick - current_tick);
       process_msg_pre(msg->tick - current_tick, *msg);
     }
 

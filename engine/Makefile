@@ -59,7 +59,7 @@ ylc_bindings:
 		lfo.h \
 		bus.h \
 		glue.h \
-		faust.h \
+		faust/faust.h \
 		>> bindings/Synth.ylc
 	cat bindings/_engine_synth_extra.ylc >> bindings/Synth.ylc
 	../build/tools/ffi_gen scheduling.h > bindings/Sched.ylc

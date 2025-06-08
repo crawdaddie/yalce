@@ -3,10 +3,7 @@
 #include "./ctx.h"
 #include "./ext_lib.h"
 #include "./node.h"
-#include "./node_util.h"
-#include "./osc.h"
 #include "audio_loop.h"
-#include "envelope.h"
 #include "scheduling.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,6 +54,13 @@ void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
   }
 }
 
+void __node_get_inputs_raw(Node *node, Node *inputs[]) {
+  int num_inputs = node->num_inputs;
+  for (int i = 0; i < num_inputs; i++) {
+    inputs[i] = (Node *)node->connections[i].source_node_index;
+  }
+}
+
 void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
                    int layout, int output_num) {
 
@@ -75,13 +79,16 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
 
   offset_node_bufs(head, head->frame_offset);
 
+  Node *inputs[MAX_INPUTS];
+
   if (head->perform) {
     void *state = head + 1;
     if (head->state_ptr) {
       state = head->state_ptr;
     }
 
-    head->perform(head, state, NULL, frame_count, spf);
+    __node_get_inputs_raw(head, inputs);
+    head->perform(head, state, inputs, frame_count, spf);
     // if (head->bus) {
     //   NodeRef bus = head->bus;
     //   double *bus_buf = bus->output.buf;
@@ -266,7 +273,6 @@ void start_blob() {
 
 AudioGraph *end_blob() {
   AudioGraph *graph = _graph;
-  // print_graph(graph);
 
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
@@ -288,36 +294,10 @@ AudioGraph *end_blob() {
   return graph;
 }
 
-AudioGraph *sin_ensemble() {
-  AudioGraph *graph = malloc(sizeof(AudioGraph));
-
-  *graph = (AudioGraph){
-      .nodes = malloc(16 * sizeof(Node)),
-      .capacity = 16,
-      .buffer_pool = malloc(sizeof(double) * (1 << 12)),
-      .buffer_pool_capacity = 1 << 12,
-      .nodes_state_memory = malloc(sizeof(char) * (1 << 6)),
-      .state_memory_capacity = 1 << 6,
-  };
-  _graph = graph;
-
-  Node *f = inlet(150.);
-  Node *g = inlet(1.);
-  Node *s = sin_node(f);
-  Node *env = asr_node(0.001, 0.8, 1.0, g);
-  Node *m = mul2_node(env, s);
-
-  graph->capacity = graph->node_count;
-  graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
-  graph->buffer_pool_capacity = graph->buffer_pool_size;
-  graph->buffer_pool = realloc(graph->buffer_pool,
-                               (sizeof(double) * graph->buffer_pool_capacity));
-
-  graph->state_memory_capacity = graph->state_memory_size;
-  graph->nodes_state_memory =
-      realloc(graph->nodes_state_memory, graph->state_memory_capacity);
-
-  return _graph;
+AudioGraph *compile_blob_template(void (*tpl_func)()) {
+  start_blob();
+  tpl_func();
+  return end_blob();
 }
 
 Node *instantiate_template(InValList *input_vals, AudioGraph *g) {

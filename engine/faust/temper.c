@@ -1,4 +1,6 @@
 #include "./temper.h"
+#include "../audio_graph.h"
+#include "../ctx.h"
 /* ------------------------------------------------------------
 name: "temper"
 Code generated with Faust 2.79.3 (https://faust.grame.fr)

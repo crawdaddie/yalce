@@ -1,4 +1,6 @@
 #include "./zita_rev.h"
+#include "../audio_graph.h"
+#include "../ctx.h"
 #include <string.h>
 /* ------------------------------------------------------------
 author: "JOS, Revised by RM"

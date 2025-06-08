@@ -4,6 +4,7 @@
 #include "common.h"
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef void *(*perform_func_t)(void *ptr, void *state, void *inputs,
                                 int nframes, double spf);
@@ -16,7 +17,8 @@ typedef struct {
 } Signal;
 
 typedef struct {
-  int source_node_index; // Index of source node in graph
+  uint64_t
+      source_node_index; // Index of source node in graph - can be a raw pointer
   int input_index;       // Which input slot this connects to
 } Connection;
 

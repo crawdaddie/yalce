@@ -5,11 +5,7 @@
 extern "C" {
 #endif
 
-#include <stdlib.h>
-#include "../audio_graph.h"
-#include "../node.h"
-#include "../ctx.h"
-#include "../faust.h"
+#include "./faust.h"
 
 #ifndef FAUSTFLOAT
 #define FAUSTFLOAT double
@@ -18,8 +14,8 @@ extern "C" {
 /* The DSP class */
 #define mydsp zita_rev
 #define newmydsp new_zita_rev
-#define deletemydsp delete_zita_rev 
-#define metadatamydsp metadata_zita_rev 
+#define deletemydsp delete_zita_rev
+#define metadatamydsp metadata_zita_rev
 #define getSampleRatemydsp getSampleRate_zita_rev
 #define getNumInputsmydsp getNumInputs_zita_rev
 #define getNumOutputsmydsp getNumOutputs_zita_rev

@@ -26,5 +26,7 @@ void print_graph(AudioGraph *g);
 
 void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
                          int nframes, double spf);
+
 extern AudioGraph *_graph;
+void plug_input_in_graph(int idx, NodeRef node, NodeRef input);
 #endif

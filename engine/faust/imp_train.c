@@ -1,4 +1,6 @@
 #include "./imp_train.h"
+#include "../audio_graph.h"
+#include "../ctx.h"
 #include <string.h>
 /* ------------------------------------------------------------
 author: ""
