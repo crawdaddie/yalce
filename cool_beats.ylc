@@ -20,7 +20,8 @@ let Kick = module
     let imp = lfpulse_node 0. (inlet 0.) trig; # 1
     let gate = inlet 0.; # 2
     bufplayer_trig_node (buf_ref buf) (44100./ 48000.) (inlet 0.) imp # 3 
-    |> (*) (aslr_node 0. 4. 0.2 0.1 trig)
+    |> (*) (aslr_node 0. 1. 0.2 0.1 trig)
+    |> math_node (fn x -> 0.5 * (x + Math.sin (10. * x)))
   )
   |> play_tpl
   ;
@@ -169,7 +170,7 @@ let bin_pat = fn q: (Double) f d ->
 ;;
 
 
-defer_quant (q * 2) (fn t ->
+defer_quant (q * 1) (fn t ->
   Hihat.tts_pat ()
   |> cor_map ((*) q)
   |> Hihat.set_pattern t
@@ -195,12 +196,12 @@ defer_quant (q * 2) (fn t ->
 let fx_chain = (fn () ->
   let input = multi_chan_inlet 2 0.;
   input |> vital_rev_node
-    0.99
+    0.8
     1.
     0.5
     0.62184876
     0.0
-    1.0
+    0.5
     0.8333333
     0.6
     0.789916
@@ -208,6 +209,7 @@ let fx_chain = (fn () ->
     0.0
     1.
 ) |> play_tpl;
+
 Snare.synth |> pipe_into fx_chain 0;
 
 #

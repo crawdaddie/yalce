@@ -146,7 +146,7 @@ Node *sin_node(Node *input) {
 
   *state = (sin_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   node->state_ptr = state;
   return node;
@@ -213,7 +213,7 @@ Node *sq_node(Node *input) {
       (sq_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (sq_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
   node->state_ptr = state;
   return node;
 }
@@ -288,8 +288,8 @@ Node *sq_pwm_node(Node *pw_input, Node *freq_input) {
       (sq_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (sq_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = freq_input->node_index;
-  node->connections[1].source_node_index = pw_input->node_index;
+  plug_input_in_graph(0, node, freq_input);
+  plug_input_in_graph(1, node, pw_input);
 
   node->state_ptr = state;
   return node;
@@ -342,7 +342,7 @@ Node *phasor_node(Node *input) {
       (phasor_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (phasor_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   node->state_ptr = state;
   return node;
@@ -409,8 +409,8 @@ Node *raw_osc_node(Node *table, Node *freq) {
   raw_osc_state *state = (raw_osc_state *)(state_ptr(graph, node));
   *state = (raw_osc_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = freq->node_index;
-  node->connections[1].source_node_index = table->node_index;
+  plug_input_in_graph(0, node, freq);
+  plug_input_in_graph(1, node, table);
 
   node->state_ptr = state;
   return node;
@@ -490,8 +490,8 @@ Node *osc_bank_node(Node *amps, Node *freq) {
   osc_bank_state *state = (osc_bank_state *)(state_ptr(graph, node));
   *state = (osc_bank_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = freq->node_index;
-  node->connections[1].source_node_index = amps->node_index;
+  plug_input_in_graph(0, node, freq);
+  plug_input_in_graph(1, node, amps);
 
   node->state_ptr = state;
 
@@ -614,10 +614,10 @@ NodeRef unison_osc_node(int num, NodeRef spread, NodeRef mix, NodeRef table,
     phases[i] = (double)rand() / RAND_MAX; // randomize phases
   }
 
-  node->connections[0].source_node_index = freq->node_index;
-  node->connections[1].source_node_index = table->node_index;
-  node->connections[2].source_node_index = spread->node_index;
-  node->connections[3].source_node_index = mix->node_index;
+  plug_input_in_graph(0, node, freq);
+  plug_input_in_graph(1, node, table);
+  plug_input_in_graph(2, node, spread);
+  plug_input_in_graph(3, node, mix);
 
   node->state_ptr = state;
 
@@ -684,8 +684,8 @@ Node *__bufplayer_node(Node *buf, Node *rate) {
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = buf->node_index;
-  node->connections[1].source_node_index = rate->node_index;
+  plug_input_in_graph(0, node, buf);
+  plug_input_in_graph(1, node, rate);
 
   node->state_ptr = state;
   return node;
@@ -750,8 +750,8 @@ Node *bufplayer_node(Node *buf, Node *rate) {
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = buf->node_index;
-  node->connections[1].source_node_index = rate->node_index;
+  plug_input_in_graph(0, node, buf);
+  plug_input_in_graph(1, node, rate);
 
   node->state_ptr = state;
   return node;
@@ -821,10 +821,10 @@ Node *_bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = buf->node_index;
-  node->connections[1].source_node_index = rate->node_index;
-  node->connections[2].source_node_index = trig->node_index;
-  node->connections[3].source_node_index = start_pos->node_index;
+  plug_input_in_graph(0, node, buf);
+  plug_input_in_graph(1, node, rate);
+  plug_input_in_graph(2, node, trig);
+  plug_input_in_graph(3, node, start_pos);
 
   node->state_ptr = state;
   return node;
@@ -907,10 +907,10 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
       (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
   *state = (bufplayer_state){.phase = 0.0};
 
-  node->connections[0].source_node_index = buf->node_index;
-  node->connections[1].source_node_index = rate->node_index;
-  node->connections[2].source_node_index = trig->node_index;
-  node->connections[3].source_node_index = start_pos->node_index;
+  plug_input_in_graph(0, node, buf);
+  plug_input_in_graph(1, node, rate);
+  plug_input_in_graph(2, node, trig);
+  plug_input_in_graph(3, node, start_pos);
 
   node->state_ptr = state;
   return node;
@@ -2325,15 +2325,10 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
   *((int *)&state->max_grains) = max_grains; // Cast away const to initialize
   state->active_grains = 0;
 
-  // node->connections[0].source_node_index = buf->node_index;
   plug_input_in_graph(0, node, buf);
-  // node->connections[1].source_node_index = trig->node_index;
   plug_input_in_graph(1, node, trig);
-  // node->connections[2].source_node_index = pos->node_index;
   plug_input_in_graph(2, node, pos);
-  // node->connections[3].source_node_index = rate->node_index;
   plug_input_in_graph(3, node, rate);
-  // node->connections[4].source_node_index = width->node_index;
   plug_input_in_graph(4, node, width);
 
   node->state_ptr = state;

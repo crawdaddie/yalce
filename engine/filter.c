@@ -377,9 +377,9 @@ Node *biquad_lp_node(Node *freq, Node *res, Node *input) {
   state->prev_res = 0.0;
 
   // Connect inputs
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = freq->node_index;
-  node->connections[2].source_node_index = res->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, freq);
+  plug_input_in_graph(2, node, res);
 
   return node;
 }
@@ -410,9 +410,9 @@ Node *biquad_bp_node(Node *freq, Node *res, Node *input) {
   state->prev_res = 0.0;
 
   // Connect inputs
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = freq->node_index;
-  node->connections[2].source_node_index = res->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, freq);
+  plug_input_in_graph(2, node, res);
 
   return node;
 }
@@ -443,9 +443,9 @@ Node *biquad_hp_node(Node *freq, Node *res, Node *input) {
   state->prev_res = 0.0;
 
   // Connect inputs
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = freq->node_index;
-  node->connections[2].source_node_index = res->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, freq);
+  plug_input_in_graph(2, node, res);
 
   return node;
 }
@@ -475,8 +475,8 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
   state->prev_freq = 0.0;
 
   // Connect inputs
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = freq->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, freq);
 
   return node;
 }
@@ -550,8 +550,8 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
       .meta = "comb",
   };
 
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = delay_buf->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, delay_buf);
 
   return node;
 }
@@ -635,9 +635,9 @@ Node *dyn_comb_node(Node *delay_time, double max_delay_time, double fb,
       .meta = "comb",
   };
 
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = delay_buf->node_index;
-  node->connections[2].source_node_index = delay_time->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, delay_buf);
+  plug_input_in_graph(2, node, delay_time);
 
   return node;
 }
@@ -749,8 +749,8 @@ Node *lag_node(NodeRef lag_time, Node *input) {
   state->coeff = 0.0; // Initialize coefficient to 0
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = lag_time->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, lag_time);
 
   return node;
 }
@@ -800,7 +800,7 @@ Node *tanh_node(double gain, Node *input) {
   state->gain = gain;
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   return node;
 }
@@ -840,9 +840,8 @@ Node *dyn_tanh_node(NodeRef gain, Node *input) {
   };
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
-
-  node->connections[1].source_node_index = gain->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, gain);
 
   //
   return node;
@@ -917,7 +916,7 @@ Node *allpass_node(double time, double coeff, Node *input) {
   *state = ap;
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   return node;
 }
@@ -1184,7 +1183,7 @@ Node *gverb_node(Node *input) {
   memset(mem, 0, state_size);
   GVerb *state = (GVerb *)(mem);
   *state = gverb;
-  node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   return node;
 }
@@ -1353,7 +1352,7 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
   grain_pitchshift_state *state = mem;
   *state = pshift;
 
-  node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   return node;
 }
@@ -1406,7 +1405,8 @@ NodeRef math_node(MathNodeFn math_fn, NodeRef input) {
   math_node_state *state = mem;
   *state = m;
 
-  node->connections[0].source_node_index = input->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
   //
   return node;
 }
@@ -1564,8 +1564,8 @@ NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
   stutter_state *state = mem;
   *state = s;
 
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = gate->node_index;
-  node->connections[2].source_node_index = repeat_time->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, gate);
+  plug_input_in_graph(2, node, repeat_time);
   return node;
 }

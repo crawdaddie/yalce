@@ -139,10 +139,7 @@ Node *asr_kill_node(double attack_time, double sustain_level,
       .threshold = 0.5,
       .should_kill = true};
 
-  // Connect trigger input
-  if (trigger) {
-    node->connections[0].source_node_index = trigger->node_index;
-  }
+  plug_input_in_graph(0, node, trigger);
 
   return node;
 }
@@ -184,10 +181,7 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
       .threshold = 0.5,
       .should_kill = false};
 
-  // Connect trigger input
-  if (trigger) {
-    node->connections[0].source_node_index = trigger->node_index;
-  }
+  plug_input_in_graph(0, node, trigger);
 
   return node;
 }
@@ -314,10 +308,7 @@ Node *aslr_node(double attack_time, double sustain_level, double sustain_time,
       .sustain_time_left = (int)(sustain_time * ctx_sample_rate()),
       .should_kill = false};
 
-  // Connect trigger input
-  if (trigger) {
-    node->connections[0].source_node_index = trigger->node_index;
-  }
+  plug_input_in_graph(0, node, trigger);
 
   return node;
 }
