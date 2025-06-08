@@ -652,7 +652,8 @@ NodeRef temper_node(double saturation, double feedback, double cutoff,
   instanceResetUserInterfacemydsp(&state->dsp);
   instanceClearmydsp(&state->dsp);
 
-  node->connections[0].source_node_index = input->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   return node;
 }
@@ -696,8 +697,10 @@ NodeRef dyn_temper_node(double saturation, double feedback, double cutoff,
   instanceResetUserInterfacemydsp(&state->dsp);
   instanceClearmydsp(&state->dsp);
 
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = drive->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
+  // node->connections[1].source_node_index = drive->node_index;
+  plug_input_in_graph(1, node, drive);
 
   return node;
 }

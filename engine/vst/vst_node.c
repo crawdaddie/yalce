@@ -164,10 +164,7 @@ NodeRef vstfx_node(const char *path, NodeRef input) {
 
   node->state_ptr = state;
 
-  if (input) {
-    node->connections[0].source_node_index = input->node_index;
-    node->connections[0].input_index = 0;
-  }
+  plug_input_in_graph(0, node, input);
   return node;
 }
 

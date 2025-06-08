@@ -2531,7 +2531,9 @@ NodeRef ___vital_rev_node(double size, double amount, double rate, double high_s
   // update_vital_rev_parameters(state);
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+
+  plug_input_in_graph(0, node, input);
 
   return node;
 }
@@ -2591,7 +2593,8 @@ NodeRef vital_rev_node(double size, double amount, double rate, double high_shel
   update_vital_rev_parameters(state);
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   return node;
 }

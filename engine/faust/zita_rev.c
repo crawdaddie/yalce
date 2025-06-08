@@ -1327,7 +1327,8 @@ NodeRef zita_rev_node(double in_delay, double lf_x, double low_rt60, double mid_
   update_zita_rev_parameters(state);
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   return node;
 }

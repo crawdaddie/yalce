@@ -23,12 +23,8 @@
                                graph, max_layout * BUF_SIZE)},                 \
         .meta = _meta,                                                         \
     };                                                                         \
-    if (input1) {                                                              \
-      node->connections[0].source_node_index = input1->node_index;             \
-    }                                                                          \
-    if (input2) {                                                              \
-      node->connections[1].source_node_index = input2->node_index;             \
-    }                                                                          \
+    plug_input_in_graph(0, node, input1);                                      \
+    plug_input_in_graph(1, node, input2);                                      \
     return node;                                                               \
   }
 
@@ -112,8 +108,9 @@ NodeRef mul2_node(NodeRef input1, NodeRef input2) {
       .meta = "mul",
   };
 
-  node->connections[0].source_node_index = input1->node_index;
-  node->connections[1].source_node_index = input2->node_index;
+  plug_input_in_graph(0, node, input1);
+
+  plug_input_in_graph(1, node, input2);
 
   return node;
 };
@@ -163,12 +160,10 @@ NodeRef sum2_node(NodeRef input1, NodeRef input2) {
                                                                      BUF_SIZE)},
       .meta = "sum",
   };
-  if (input1) {
-    node->connections[0].source_node_index = input1->node_index;
-  }
-  if (input2) {
-    node->connections[1].source_node_index = input2->node_index;
-  }
+  // node->connections[0].source_node_index = input1->node_index;
+  plug_input_in_graph(0, node, input1);
+  // node->connections[1].source_node_index = input2->node_index;
+  plug_input_in_graph(1, node, input2);
   return node;
 }
 
@@ -398,7 +393,7 @@ NodeRef stereo_node(NodeRef input) {
                          .buf = allocate_buffer_from_pool(graph, 2 * BUF_SIZE)},
       .meta = "stereo",
   };
-  node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
   return node;
 }
 
@@ -440,8 +435,9 @@ NodeRef pan_node(NodeRef pan, NodeRef input) {
                          .buf = allocate_buffer_from_pool(graph, 2 * BUF_SIZE)},
       .meta = "stereo",
   };
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = pan->node_index;
+
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, pan);
   return node;
 }
 typedef struct sah_state {
@@ -486,8 +482,8 @@ NodeRef sah_node(NodeRef trig, NodeRef input) {
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
       .meta = "stereo",
   };
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = trig->node_index;
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, trig);
   return node;
 }
 

@@ -351,7 +351,8 @@ NodeRef imp_train_node(NodeRef freq) {
   instanceClearmydsp(&state->dsp);
   
   // Connect frequency input
-  node->connections[0].source_node_index = freq->node_index;
+  // node->connections[0].source_node_index = freq->node_index;
+  plug_input_in_graph(0, node, freq);
   
   return node;
 }
