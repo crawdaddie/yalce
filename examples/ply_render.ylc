@@ -1,0 +1,67 @@
+#! /usr/bin/env ylc --gui -i
+open ../gui/bindings/Gui;
+
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> Array of Char;
+let read_lines = extern fn Ptr -> (List of String, Int);
+let scanf_item = extern fn Ptr -> Ptr -> Ptr -> ();
+
+let strncmp = extern fn Ptr -> Ptr -> Int -> Int;
+let double_from_bytes = extern fn Ptr -> Double;
+
+let streq = fn s1: (String) s2: (String) ->
+  # print `streq size {array_size s1}\n`;
+  (strncmp (cstr s1) (cstr s2) (array_size s1)) == 0
+;;
+
+
+let parse_ply_header = fn content ->
+  let aux = fn cont: (String) size: (Array of Int) ->
+    match cont with
+    | str if streq "end_header" cont -> ((array_offset 11 str), size)
+    | str if streq "element vertex " str -> (
+      let d = array_offset 15 str;
+      scanf_item (cstr "%d") (cstr d) (cstr size);  
+      aux d size
+    )
+    | _ -> aux (array_offset 1 cont) size
+  ;;
+  let data, size = aux content [|0|];
+  (data, size[0])
+;;
+
+let parse_binary_ply_data = fn content pc_data_arr idx size ->
+  match size with
+  | 0 -> pc_data_arr
+  | _ -> (
+    pc_data_arr[idx * 3] := double_from_bytes (cstr content);
+    pc_data_arr[idx * 3 + 1] := double_from_bytes (cstr (array_offset 8 content)); 
+    pc_data_arr[idx * 3 + 2] := double_from_bytes (cstr (array_offset 16 content));
+    # skip color info
+    parse_binary_ply_data (array_offset 27 content) pc_data_arr (idx + 1) (size - 1)
+  )
+;;
+
+
+let load = fn path ->
+
+  match (open_file path "rb") with
+    | Some fd -> (
+      let c = read_bytes fd;
+      fclose fd;
+      let data, size = parse_ply_header c;
+      print `size: {size}\n`;
+      (parse_binary_ply_data data (array_fill_const (size * 3) 0.) 0 size, size)
+      # for i = 0 to size in (
+        # pc_data[i * 3] := 
+      # )
+      # pc_data
+    )
+    | None -> ([|0.|], 0)
+;;
+
+
+let pc_data, size = load "/Users/adam/Desktop/homer_pointcloud.ply";
+
+let w = create_pointcloud_window (cstr pc_data) size;
