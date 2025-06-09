@@ -3083,41 +3083,69 @@ int create_pointcloud_window(double *points, int size) {
   return SDL_PushEvent(&event);
 }
 
+typedef struct {
+  const char *vertex_shader;
+  const char *fragment_shader;
+  // OpenGL resources
+  GLuint vao;
+  GLuint vbo;
+  GLuint shader_program;
+} CustomOpenGLState;
+
 // Initialize OpenGL resources
 static bool init_opengl_win(void *_state) {
+  CustomOpenGLState *state = _state;
 
-  // // Create shader program
-  // state->shader_program = glCreateProgram();
-  // glAttachShader(state->shader_program, vs);
-  // glAttachShader(state->shader_program, fs);
-  // glLinkProgram(state->shader_program);
+  GLuint vs = compile_shader(pointcloud_vertex_shader_src, GL_VERTEX_SHADER);
+  GLuint fs =
+      compile_shader(pointcloud_fragment_shader_src, GL_FRAGMENT_SHADER);
 
-  // Check linking
-  GLint success;
-  // glGetProgramiv(state->shader_program, GL_LINK_STATUS, &success);
-  if (!success) {
-    char info[512];
-    // glGetProgramInfoLog(state->shader_program, 512, NULL, info);
-    fprintf(stderr, "Shader linking failed: %s\n", info);
-    // glDeleteShader(vs);
-    // glDeleteShader(fs);
+  if (!vs || !fs) {
+    if (vs)
+      glDeleteShader(vs);
+    if (fs)
+      glDeleteShader(fs);
     return false;
   }
 
-  // glDeleteShader(vs);
-  // glDeleteShader(fs);
+  // Create shader program
+  state->shader_program = glCreateProgram();
+  glAttachShader(state->shader_program, vs);
+  glAttachShader(state->shader_program, fs);
+  glLinkProgram(state->shader_program);
+
+  // Check linking
+  GLint success;
+  glGetProgramiv(state->shader_program, GL_LINK_STATUS, &success);
+  if (!success) {
+    char info[512];
+    glGetProgramInfoLog(state->shader_program, 512, NULL, info);
+    fprintf(stderr, "Shader linking failed: %s\n", info);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    return false;
+  }
+
+  glDeleteShader(vs);
+  glDeleteShader(fs);
 
   // Create VAO and VBO
-  // glGenVertexArrays(1, &state->vao);
-  // glGenBuffers(1, &state->vbo);
+  glGenVertexArrays(1, &state->vao);
+  glGenBuffers(1, &state->vbo);
 
   return true;
 }
-int create_opengl_window() {
+int create_opengl_window(const char *vertex_shader,
+                         const char *fragment_shader) {
 
+  CustomOpenGLState *state = calloc(1, sizeof(CustomOpenGLState));
   // Create window creation data
   window_creation_data *data = malloc(sizeof(window_creation_data));
   data->init_gl = init_opengl_win;
+
+  // data->render_fn = pointcloud_renderer;
+  // data->handle_event = pointcloud_event_handler;
+  data->data = state;
 
   // Push an event to create the OpenGL window on the main thread
   SDL_Event event;
