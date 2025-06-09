@@ -27,11 +27,13 @@ typedef struct Window Window;
 
 typedef void (*EventHandler)(Window *window, SDL_Event *event);
 typedef void (*WindowRenderFn)(void *window, SDL_Renderer *renderer);
+typedef bool (*GLWindowInitFn)(void *state);
 
 typedef struct window_creation_data {
   void *handle_event;
   void *render_fn;
   void *data;
+  GLWindowInitFn init_gl;
 } window_creation_data;
 
 bool _create_window(window_creation_data *data);
@@ -2543,7 +2545,8 @@ static GLuint compile_shader(const char *source, GLenum type) {
 }
 
 // Initialize OpenGL resources
-static bool init_pointcloud_gl(PointCloudState *state) {
+static bool init_pointcloud_gl(void *_state) {
+  PointCloudState *state;
   // Create and compile shaders
   GLuint vs = compile_shader(pointcloud_vertex_shader_src, GL_VERTEX_SHADER);
   GLuint fs =
@@ -2732,7 +2735,8 @@ bool _create_opengl_window(window_creation_data *data) {
 
   // Initialize OpenGL resources for the point cloud
   PointCloudState *state = (PointCloudState *)data->data;
-  if (!init_pointcloud_gl(state)) {
+
+  if (!data->init_gl(state)) {
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(windows[win_idx].window);
     window_count--;
@@ -3057,6 +3061,7 @@ int create_pointcloud_window(double *points, int size) {
   data->render_fn = pointcloud_renderer;
   data->handle_event = pointcloud_event_handler;
   data->data = state;
+  data->init_gl = init_pointcloud_gl;
 
   // Push an event to create the OpenGL window on the main thread
   SDL_Event event;
@@ -3074,6 +3079,51 @@ int create_pointcloud_window(double *points, int size) {
   printf("  1/2/3: Change color mode\n");
   printf("  R: Reset camera\n");
   printf("  I: Print camera info\n");
+
+  return SDL_PushEvent(&event);
+}
+
+// Initialize OpenGL resources
+static bool init_opengl_win(void *_state) {
+
+  // // Create shader program
+  // state->shader_program = glCreateProgram();
+  // glAttachShader(state->shader_program, vs);
+  // glAttachShader(state->shader_program, fs);
+  // glLinkProgram(state->shader_program);
+
+  // Check linking
+  GLint success;
+  // glGetProgramiv(state->shader_program, GL_LINK_STATUS, &success);
+  if (!success) {
+    char info[512];
+    // glGetProgramInfoLog(state->shader_program, 512, NULL, info);
+    fprintf(stderr, "Shader linking failed: %s\n", info);
+    // glDeleteShader(vs);
+    // glDeleteShader(fs);
+    return false;
+  }
+
+  // glDeleteShader(vs);
+  // glDeleteShader(fs);
+
+  // Create VAO and VBO
+  // glGenVertexArrays(1, &state->vao);
+  // glGenBuffers(1, &state->vbo);
+
+  return true;
+}
+int create_opengl_window() {
+
+  // Create window creation data
+  window_creation_data *data = malloc(sizeof(window_creation_data));
+  data->init_gl = init_opengl_win;
+
+  // Push an event to create the OpenGL window on the main thread
+  SDL_Event event;
+  SDL_zero(event);
+  event.type = CREATE_OPENGL_WINDOW_EVENT;
+  event.user.data1 = data;
 
   return SDL_PushEvent(&event);
 }

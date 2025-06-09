@@ -13,4 +13,5 @@ let pc_data = [|
   1., 1., 1.,
 |];
 
-let w = create_pointcloud_window (cstr pc_data) 8;
+# let w = create_pointcloud_window (cstr pc_data) 8;
+let w = create_opengl_window ()

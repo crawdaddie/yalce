@@ -30,4 +30,5 @@ int create_array_editor(int size, double *array);
 int create_custom_window(void *cb);
 
 int create_pointcloud_window(double *points, int size);
+int create_opengl_window();
 #endif
