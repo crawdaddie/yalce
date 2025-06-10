@@ -25,7 +25,7 @@ BUILD_DIR := ../build/gui
 # OBJC_SRCS := CocoaVSTHelper.m
 # OBJC_OBJS := $(OBJC_SRCS:%.m=$(BUILD_DIR)/%.o)
 
-SRCS := gui.c
+SRCS := gui.c gl.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean

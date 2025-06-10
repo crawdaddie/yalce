@@ -12,6 +12,8 @@ let create_vst_view = extern fn Ptr -> Int;
 let create_array_editor = extern fn Int -> Ptr -> Int;
 let create_custom_window = extern fn Ptr -> Int;
 let create_pointcloud_window = extern fn Ptr -> Int -> Int;
-let create_opengl_window = extern fn () -> Int;
+let create_opengl_window = extern fn Ptr -> Ptr -> Ptr -> Int -> Ptr -> Int;
+let triangle_renderer = extern fn Ptr -> ();
+let create_decl_window = extern fn Ptr -> Int;
 
 

@@ -121,17 +121,44 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 
 "`"                     { BEGIN(FSTRING); return FSTRING_START; }
 <FSTRING>"`"            { BEGIN(INITIAL); return FSTRING_END; }
+<FSTRING>"\\{"          { 
+                          // Escaped opening brace - treat as literal text
+                          yylval.vstr.chars = strdup("{");
+                          yylval.vstr.length = 1;
+                          yylval.vstr.hash = hash_string("{", 1);
+                          return FSTRING_TEXT;
+                        }
+<FSTRING>"\\}"          { 
+                          // Escaped closing brace - treat as literal text
+                          yylval.vstr.chars = strdup("}");
+                          yylval.vstr.length = 1;
+                          yylval.vstr.hash = hash_string("}", 1);
+                          return FSTRING_TEXT;
+                        }
 <FSTRING>"{"            { BEGIN(INITIAL); return FSTRING_INTERP_START; }
-<FSTRING>[^`{]+         { 
+<FSTRING>[^`{\\]+       { 
                           int len = yyleng;
-                          char *raw_str = strndup(yytext, len); // remove surrounding " chars
-                          char *processed_str = process_escapes(raw_str, len); // process escape sequences
+                          char *raw_str = strndup(yytext, len);
+                          char *processed_str = process_escapes(raw_str, len);
                           free(raw_str);
                           yylval.vstr.chars = processed_str;
                           yylval.vstr.length = strlen(processed_str);
                           yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
                           return FSTRING_TEXT;
                         }
+<FSTRING>\\[^{}]        {
+                          // Handle other escape sequences in f-strings
+                          int len = yyleng;
+                          char *raw_str = strndup(yytext, len);
+                          char *processed_str = process_escapes(raw_str, len);
+                          free(raw_str);
+                          yylval.vstr.chars = processed_str;
+                          yylval.vstr.length = strlen(processed_str);
+                          yylval.vstr.hash = hash_string(processed_str, yylval.vstr.length);
+                          return FSTRING_TEXT;
+                        }
+
+
 "```"                   { BEGIN(TRIPLE_FSTRING); return FSTRING_START; }
 <TRIPLE_FSTRING>"```"   { BEGIN(INITIAL); return FSTRING_END; }
 <TRIPLE_FSTRING>"{"     { BEGIN(INITIAL); return FSTRING_INTERP_START; }

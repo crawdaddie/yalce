@@ -30,5 +30,10 @@ int create_array_editor(int size, double *array);
 int create_custom_window(void *cb);
 
 int create_pointcloud_window(double *points, int size);
-int create_opengl_window();
+int create_opengl_window(void *renderer, const char *vertex_shader,
+                         const char *fragment_shader, int num_vertices,
+                         double *vertices);
+
+void triangle_renderer(void *_state);
+int create_decl_window(void *decl_cb);
 #endif
