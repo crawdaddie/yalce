@@ -1,136 +1,10 @@
-# #! /usr/bin/env ylc --gui -i
-# open ../gui/bindings/Gui;
-# import ../lib/Math;
-#
-# # Component declarations
-# let VShader = extern fn String -> Ptr;
-# let FShader = extern fn String -> Ptr;
-# let TriangleData = extern fn Array of Double -> Ptr;
-# let Points = extern fn Array of Double -> Double -> Ptr;
-# let Polygon = extern fn Array of Double -> Ptr;
-# let Line = extern fn Array of Double -> Double -> Ptr;
-# let Lattice = extern fn Array of Double -> Double -> Ptr;
-# let Quad = extern fn Array of Double -> Ptr;
-# let Camera = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Ptr -> Ptr;
-# let OrbitCamera = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Ptr of Char -> Ptr;
-#
-# let mvp_cam_name = "mvp";
-# let w = create_decl_window (fn () ->
-#     let vs = VShader `#version 330 core
-# layout (location = 0) in vec3 aPos;
-# layout (location = 1) in vec3 aColor;
-# uniform mat4 mvp;
-# out vec3 vertexColor;
-# void main() \{
-#     gl_Position = mvp * vec4(aPos, 1.0);
-#     vertexColor = aColor;
-# \}`;
-#
-#
-#     let fs = FShader `#version 330 core
-# in vec3 vertexColor;
-# out vec4 FragColor;
-# void main() \{
-#     FragColor = vec4(vertexColor, 1.0);
-# \}`;
-#
-#   # Camera setup - position the camera to view 3D scene
-#   let camera = Camera 
-#     5.0 3.0 5.0        # camera position (x, y, z) - back and up
-#     0.0 0.0 0.0        # look at origin
-#     45.0               # field of view (degrees)
-#     (800.0/600.0)      # aspect ratio (width/height)
-#     0.1                # near clipping plane
-#     100.0              # far clipping plane
-#     "mvp"              # uniform name in shader
-#     ;
-#
-#
-#   # Points - scatter plot style
-#   let points = Points [|
-#     -0.9,  0.8,  0.0,   1.0, 0.0, 0.0,   # red point
-#     -0.7,  0.6,  0.0,   1.0, 0.5, 0.0,   # orange point
-#     -0.5,  0.4,  0.0,   1.0, 1.0, 0.0,   # yellow point
-#     -0.3,  0.2,  0.0,   0.5, 1.0, 0.0,   # light green point
-#     -0.1,  0.0,  0.0,   0.0, 1.0, 0.0,   # green point
-#   |] 2.0;  # point size
-#
-#   # Triangle
-#   let triangle = TriangleData [|
-#     0.2,  0.6,   0.0,   1.0, 0.0, 0.0,   # red
-#     0.0,  0.2,   0.0,   0.0, 1.0, 0.0,   # green  
-#     0.4,  0.2,   0.0,   0.0, 0.0, 1.0,   # blue
-#   |];
-#
-#   # # Pentagon (using triangle fan)
-#   let pentagon = Polygon [|
-#     # Center point
-#     0.7,   0.4,   0.0,   1.0, 1.0, 1.0,   # white center
-#     
-#     # Pentagon vertices (going around clockwise)
-#     0.7,   0.6,   0.0,   1.0, 0.0, 0.0,   # top
-#     0.85,  0.5,   0.0,   1.0, 0.5, 0.0,   # top-right
-#     0.8,   0.3,   0.0,   1.0, 1.0, 0.0,   # bottom-right
-#     0.6,   0.3,   0.0,   0.0, 1.0, 0.0,   # bottom-left
-#     0.55,  0.5,   0.0,   0.0, 0.0, 1.0,   # top-left
-#   |];
-#   #
-#   # Connected line (sine wave)
-#   let sine_wave = Line [|
-#     -0.8, -0.2,  0.0,   0.0, 1.0, 1.0,   # cyan
-#     -0.6, -0.1,  0.0,   0.0, 1.0, 1.0,
-#     -0.4,  0.0,  0.0,   0.0, 1.0, 1.0,
-#     -0.2,  0.1,  0.0,   0.0, 1.0, 1.0,
-#     0.0,   0.0,  0.0,   0.0, 1.0, 1.0,
-#     0.2,  -0.1,  0.0,   0.0, 1.0, 1.0,
-#     0.4,   0.0,  0.0,   0.0, 1.0, 1.0,
-#     0.6,   0.1,  0.0,   0.0, 1.0, 1.0,
-#   |] 2.0;  # line width
-#
-#   #
-#   # Individual lines (grid pattern)
-#   let grid_lines = Lattice [|
-#     # Horizontal lines
-#     -0.9, -0.4,  0.0,   0.5, 0.5, 0.5,
-#     -0.1, -0.4,  0.0,   0.5, 0.5, 0.5,
-#     
-#     -0.9, -0.6,  0.0,   0.5, 0.5, 0.5,
-#     -0.1, -0.6,  0.0,   0.5, 0.5, 0.5,
-#     
-#     -0.9, -0.8,  0.0,   0.5, 0.5, 0.5,
-#     -0.1, -0.8,  0.0,   0.5, 0.5, 0.5,
-#     
-#     # Vertical lines
-#     -0.7, -0.4,  0.0,   0.5, 0.5, 0.5,
-#     -0.7, -0.8,  0.0,   0.5, 0.5, 0.5,
-#     
-#     -0.5, -0.4,  0.0,   0.5, 0.5, 0.5,
-#     -0.5, -0.8,  0.0,   0.5, 0.5, 0.5,
-#     
-#     -0.3, -0.4,  0.0,   0.5, 0.5, 0.5,
-#     -0.3, -0.8,  0.0,   0.5, 0.5, 0.5,
-#   |] 1.0;  # line width
-#   #
-#   # # Quad (rectangle using indexed triangles)
-#   let quad = Quad [|
-#     # 4 vertices of the quad (bottom-left, bottom-right, top-right, top-left)
-#     0.3, -0.4,  0.0,   1.0, 0.0, 1.0,   # magenta
-#     0.7, -0.4,  0.0,   1.0, 1.0, 0.0,   # yellow
-#     0.7, -0.7,  0.0,   0.0, 1.0, 1.0,   # cyan  
-#     0.3, -0.7,  0.0,   1.0, 0.5, 0.0,   # orange
-#   |]
-# )
-#
-
 #! /usr/bin/env ylc --gui -i
-open ../gui/bindings/Gui;
-import ../lib/Math;
+open gui/bindings/Gui;
 
 # Component declarations
 let VShader = extern fn String -> Ptr;
 let FShader = extern fn String -> Ptr;
 let TriangleData = extern fn Array of Double -> Ptr;
-let Camera = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> String -> Ptr;
 
 let w = create_decl_window (fn () ->
     let vs = VShader `#version 330 core
@@ -149,20 +23,10 @@ void main() \{
     FragColor = vec4(vertexColor, 1.0);
 \}`;
 
-    # # Camera - start close and simple
-    # let camera = Camera 
-    #     2.0 2.0 2.0        # camera position (closer)
-    #     0.0 0.0 0.0        # look at origin
-    #     45.0               # field of view
-    #     (800.0/600.0)      # aspect ratio
-    #     0.1                # near clipping plane
-    #     100.0              # far clipping plane
-    #     "mvp";             # uniform name
-
-    # Just one big triangle for testing
+    # Simple triangle without MVP transformation
     let triangle = TriangleData [|
-        0.0,  1.0,   0.0,   1.0, 0.0, 0.0,   # red top
-        -1.0, -1.0,  0.0,   0.0, 1.0, 0.0,   # green bottom-left  
-        1.0,  -1.0,  0.0,   0.0, 0.0, 1.0,   # blue bottom-right
+        0.0,   0.3,  0.,   1.0, 0.0, 0.0,   # red top
+        -0.3, -0.3,  0.,   0.0, 1.0, 0.0,   # green bottom-left  
+        0.3,  -0.3,  0.,   0.0, 0.0, 1.0,   # blue bottom-right
     |]
 )
