@@ -5,28 +5,41 @@ open gui/bindings/Gui;
 let VShader = extern fn String -> Ptr;
 let FShader = extern fn String -> Ptr;
 let TriangleData = extern fn Array of Double -> Ptr;
+let MVPView = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Ptr;
 
 let w = create_decl_window (fn () ->
-    let vs = VShader `#version 330 core
+  let v = MVPView
+    2. 3. 8. # pos
+    0. 0. 0. # target
+  ;
+
+  let vs = VShader `#version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aColor;
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uProjection;
 out vec3 vertexColor;
-void main() \{
-    gl_Position = vec4(aPos, 1.0);
-    vertexColor = aColor;
+void main()
+\{
+  vec4 viewProj = uProjection * uView * uModel * vec4(aPos, 1.0);
+  gl_Position = viewProj;
+  vertexColor = aColor;
 \}`;
 
-    let fs = FShader `#version 330 core
+let fs = FShader `#version 330 core
 in vec3 vertexColor;
 out vec4 FragColor;
-void main() \{
+void main()
+\{
     FragColor = vec4(vertexColor, 1.0);
 \}`;
 
-    # Simple triangle without MVP transformation
-    let triangle = TriangleData [|
-        0.0,   0.3,  0.,   1.0, 0.0, 0.0,   # red top
-        -0.3, -0.3,  0.,   0.0, 1.0, 0.0,   # green bottom-left  
-        0.3,  -0.3,  0.,   0.0, 0.0, 1.0,   # blue bottom-right
-    |]
+
+  let triangle = TriangleData [|
+    0.0,   0.5,  0.,   1.0, 0.0, 0.0,   # red top (larger)
+    -0.5, -0.5,  0.,   0.0, 1.0, 0.0,   # green bottom-left  
+    0.5,  -0.5,  0.,   0.0, 0.0, 1.0,   # blue bottom-right
+  |];
+
 )
