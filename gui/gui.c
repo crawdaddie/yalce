@@ -2418,6 +2418,7 @@ bool _create_opengl_window(window_creation_data *data) {
 
   // Create OpenGL context
   SDL_GLContext gl_context = SDL_GL_CreateContext(windows[win_idx].window);
+
   if (!gl_context) {
     fprintf(stderr, "Failed to create OpenGL context: %s\n", SDL_GetError());
     SDL_DestroyWindow(windows[win_idx].window);

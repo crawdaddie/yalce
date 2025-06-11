@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <GLFW/glfw3.h>
+
 typedef struct {
   const char *vertex_shader;
   const char *fragment_shader;
@@ -32,16 +34,6 @@ GLuint compile_shader(const char *source, GLenum type) {
     return 0;
   }
   return shader;
-}
-
-void gl_clear(double r, double g, double b, double alpha) {
-  glClearColor(r, g, b, alpha);
-
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-}
-
-void gl_use_program(CustomOpenGLState *state) {
-  glUseProgram(state->shader_program);
 }
 
 typedef bool (*GLObjInitFn)(CustomOpenGLState *state, void *obj);
@@ -82,9 +74,11 @@ static bool init_opengl_decl_win(void *_state) {
 void open_gl_decl_renderer(void *_state) {
 
   CustomOpenGLState *state = _state;
-  gl_clear(0.2, 0.3, 0.3, 1.0);
 
-  gl_use_program(state);
+  glClearColor(0.1f, 0.1f, 0.1f, 1.0f); // Dark gray instead of black
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  glUseProgram(state->shader_program);
   GLObj *head = state->objs;
   while (head) {
     if (head->render_gl) {
@@ -207,6 +201,7 @@ bool init_tri_data(CustomOpenGLState *state, GLObj *obj) {
 
   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
                         (void *)(num_vertices * sizeof(float)));
+
   glEnableVertexAttribArray(1);
   glBindVertexArray(0);
   return true;
@@ -547,6 +542,152 @@ void *Quad(_DoubleArray _d) {
   GLObj obj = (GLObj){.data = d,
                       .init_gl = (GLObjInitFn)init_quad_data,
                       .render_gl = (GLObjRenderFn)render_quad_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+// Matrix math utilities
+typedef struct {
+  float m[16]; // Column-major order
+} Mat4;
+
+typedef struct {
+  float x, y, z;
+} Vec3;
+
+void mat4_identity(Mat4 *m) {
+  memset(m->m, 0, sizeof(float) * 16);
+  m->m[0] = m->m[5] = m->m[10] = m->m[15] = 1.0f;
+}
+
+void mat4_perspective(Mat4 *m, float fov, float aspect, float near, float far) {
+  mat4_identity(m);
+  float f = 1.0f / tanf(fov * 0.5f);
+  m->m[0] = f / aspect;
+  m->m[5] = f;
+  m->m[10] = (far + near) / (near - far);
+  m->m[11] = -1.0f;
+  m->m[14] = (2.0f * far * near) / (near - far);
+  m->m[15] = 0.0f;
+}
+
+void mat4_lookat(Mat4 *m, Vec3 eye, Vec3 center, Vec3 up) {
+  Vec3 f = {center.x - eye.x, center.y - eye.y, center.z - eye.z};
+  float len = sqrtf(f.x * f.x + f.y * f.y + f.z * f.z);
+  f.x /= len;
+  f.y /= len;
+  f.z /= len;
+
+  Vec3 s = {f.y * up.z - f.z * up.y, f.z * up.x - f.x * up.z,
+            f.x * up.y - f.y * up.x};
+  len = sqrtf(s.x * s.x + s.y * s.y + s.z * s.z);
+  s.x /= len;
+  s.y /= len;
+  s.z /= len;
+
+  Vec3 u = {s.y * f.z - s.z * f.y, s.z * f.x - s.x * f.z,
+            s.x * f.y - s.y * f.x};
+
+  mat4_identity(m);
+  m->m[0] = s.x;
+  m->m[4] = s.y;
+  m->m[8] = s.z;
+  m->m[12] = -(s.x * eye.x + s.y * eye.y + s.z * eye.z);
+  m->m[1] = u.x;
+  m->m[5] = u.y;
+  m->m[9] = u.z;
+  m->m[13] = -(u.x * eye.x + u.y * eye.y + u.z * eye.z);
+  m->m[2] = -f.x;
+  m->m[6] = -f.y;
+  m->m[10] = -f.z;
+  m->m[14] = f.x * eye.x + f.y * eye.y + f.z * eye.z;
+}
+
+void mat4_multiply(Mat4 *result, const Mat4 *a, const Mat4 *b) {
+  Mat4 temp;
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      temp.m[i * 4 + j] = 0.0f;
+      for (int k = 0; k < 4; k++) {
+        temp.m[i * 4 + j] += a->m[i * 4 + k] * b->m[k * 4 + j];
+      }
+    }
+  }
+  *result = temp;
+}
+
+// ===== MVP View COMPONENT =====
+typedef struct {
+  GLint model_loc;
+  GLint view_loc;
+  GLint projection_loc;
+  Vec3 pos;
+  Vec3 target;
+} MVPData;
+
+void render_mvp_view(CustomOpenGLState *state, GLObj *obj) {
+
+  MVPData *data = (MVPData *)obj->data;
+
+  // Create transformation matrices
+  Mat4 model, view, projection;
+
+  // 1. Model matrix - rotate triangle around Y-axis
+  // float time = (float)glfwGetTime();
+  mat4_identity(&model);
+
+  // 2. View matrix - camera positioned to look at the triangle
+  Vec3 camera_pos = data->pos;
+  Vec3 target = data->target;
+  Vec3 up = {0.0f, 1.0f, 0.0f};
+  mat4_lookat(&view, camera_pos, target, up);
+
+  // 3. Projection matrix - perspective projection
+  int width = 640, height = 480;
+  // glfwGetFramebufferSize(window, &width, &height);
+
+  float aspect = (float)width / (float)height;
+  mat4_perspective(&projection, 45.0f * M_PI / 180.0f, aspect, 0.1f, 100.0f);
+
+  if (data->model_loc == -1) {
+    data->model_loc = glGetUniformLocation(state->shader_program, "uModel");
+  }
+
+  if (data->view_loc == -1) {
+    data->view_loc = glGetUniformLocation(state->shader_program, "uView");
+  }
+
+  if (data->projection_loc == -1) {
+    data->projection_loc =
+        glGetUniformLocation(state->shader_program, "uProjection");
+  }
+
+  // // Send matrices to shader
+  glUniformMatrix4fv(data->model_loc, 1, GL_FALSE, model.m);
+  glUniformMatrix4fv(data->view_loc, 1, GL_FALSE, view.m);
+  glUniformMatrix4fv(data->projection_loc, 1, GL_FALSE, projection.m);
+}
+
+bool init_mvp_view(CustomOpenGLState *state, GLObj *obj) {
+  MVPData *data = (MVPData *)obj->data;
+
+  data->model_loc = glGetUniformLocation(state->shader_program, "uModel");
+  data->view_loc = glGetUniformLocation(state->shader_program, "uView");
+  data->projection_loc =
+      glGetUniformLocation(state->shader_program, "uProjection");
+
+  return true;
+}
+
+void *MVPView(double px, double py, double pz, double tx, double ty,
+              double tz) {
+  MVPData *data = malloc(sizeof(MVPData));
+  data->pos = (Vec3){px, py, pz};
+  data->target = (Vec3){tx, ty, tz};
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_mvp_view,
+                      .render_gl = (GLObjRenderFn)render_mvp_view,
                       .next = NULL};
   return append_obj(obj);
 }

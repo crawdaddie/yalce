@@ -16,7 +16,7 @@ LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
 					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
 					 -L$(VST_BUILD_PATH) -lylcvst \
-					 -lGLEW
+					 -lGLEW -lglfw
 
 FRAMEWORKS := -framework Foundation -framework OpenGL 
 
