@@ -2,6 +2,11 @@
 #include <SDL2/SDL_render.h>
 #include <stdbool.h>
 
+typedef struct {
+  int size;
+  double *data;
+} _DoubleArray;
+
 extern Uint32 CREATE_WINDOW_EVENT;
 extern Uint32 CREATE_OPENGL_WINDOW_EVENT;
 

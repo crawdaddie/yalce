@@ -44,10 +44,12 @@ void gl_use_program(CustomOpenGLState *state) {
 }
 
 typedef bool (*GLObjInitFn)(CustomOpenGLState *state, void *obj);
+typedef bool (*GLObjRenderFn)(CustomOpenGLState *state, void *obj);
+
 typedef struct GLObj {
   void *data;
   GLObjInitFn init_gl;
-  GLObjInitFn render_gl;
+  GLObjRenderFn render_gl;
   struct GLObj *next;
 } GLObj;
 
@@ -144,10 +146,30 @@ void *FShader(_String str) {
   return append_obj(obj);
 }
 
-typedef struct {
-  int size;
-  double *data;
-} _DoubleArray;
+int create_decl_window(void *_decl_cb) {
+  DeclGlFn init = _decl_cb;
+
+  _dcl_ctx_head = NULL;
+  _dcl_ctx_tail = NULL;
+  init();
+
+  CustomOpenGLState *state = calloc(1, sizeof(CustomOpenGLState));
+  state->objs = _dcl_ctx_head;
+
+  window_creation_data *data = malloc(sizeof(window_creation_data));
+  data->init_gl = init_opengl_decl_win;
+  data->render_fn = open_gl_decl_renderer;
+
+  data->data = state;
+
+  SDL_Event event;
+  SDL_zero(event);
+  event.type = CREATE_OPENGL_WINDOW_EVENT;
+  event.user.data1 = data;
+
+  return SDL_PushEvent(&event);
+}
+
 typedef struct {
   int num_vertices;
 
@@ -176,11 +198,10 @@ bool init_tri_data(CustomOpenGLState *state, GLObj *obj) {
   glBufferData(GL_ARRAY_BUFFER, sizeof(float) * num_vertices * 6,
                d->gl_vertices, GL_STATIC_DRAW);
 
-  glVertexAttribPointer(0, num_vertices, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                        (void *)0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
 
-  glVertexAttribPointer(1, num_vertices, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
                         (void *)(num_vertices * sizeof(float)));
   glEnableVertexAttribArray(1);
   glBindVertexArray(0);
@@ -200,30 +221,6 @@ void *TriangleData(_DoubleArray _d) {
                       .init_gl = (GLObjInitFn)init_tri_data,
                       .render_gl = (GLObjInitFn)render_tri_data};
   return append_obj(obj);
-}
-
-int create_decl_window(void *_decl_cb) {
-  DeclGlFn init = _decl_cb;
-
-  _dcl_ctx_head = NULL;
-  _dcl_ctx_tail = NULL;
-  init();
-
-  CustomOpenGLState *state = calloc(1, sizeof(CustomOpenGLState));
-  state->objs = _dcl_ctx_head;
-
-  window_creation_data *data = malloc(sizeof(window_creation_data));
-  data->init_gl = init_opengl_decl_win;
-  data->render_fn = open_gl_decl_renderer;
-
-  data->data = state;
-
-  SDL_Event event;
-  SDL_zero(event);
-  event.type = CREATE_OPENGL_WINDOW_EVENT;
-  event.user.data1 = data;
-
-  return SDL_PushEvent(&event);
 }
 // ===== POINTS COMPONENT =====
 typedef struct {
@@ -286,7 +283,7 @@ void *Points(_DoubleArray _d, double point_size) {
 
   GLObj obj = (GLObj){.data = d,
                       .init_gl = (GLObjInitFn)init_point_data,
-                      .render_gl = (GLObjInitFn)render_point_data,
+                      .render_gl = (GLObjRenderFn)render_point_data,
                       .next = NULL};
   return append_obj(obj);
 }
@@ -330,7 +327,7 @@ bool init_polygon_data(CustomOpenGLState *state, GLObj *obj) {
   return true;
 }
 
-void *Poly(_DoubleArray _d) {
+void *Polygon(_DoubleArray _d) {
   int num_vertices = _d.size / 6;
 
   PolygonData *d = malloc(sizeof(PolygonData) + (sizeof(float) * _d.size));
@@ -345,7 +342,7 @@ void *Poly(_DoubleArray _d) {
 
   GLObj obj = (GLObj){.data = d,
                       .init_gl = (GLObjInitFn)init_polygon_data,
-                      .render_gl = (GLObjInitFn)render_polygon_data,
+                      .render_gl = (GLObjRenderFn)render_polygon_data,
                       .next = NULL};
   return append_obj(obj);
 }
@@ -391,7 +388,7 @@ bool init_line_strip_data(CustomOpenGLState *state, GLObj *obj) {
   return true;
 }
 
-void *LineStrip(_DoubleArray _d, double line_width) {
+void *Line(_DoubleArray _d, double line_width) {
   int num_vertices = _d.size / 6;
 
   LineStripData *d = malloc(sizeof(LineStripData) + (sizeof(float) * _d.size));
@@ -407,7 +404,7 @@ void *LineStrip(_DoubleArray _d, double line_width) {
 
   GLObj obj = (GLObj){.data = d,
                       .init_gl = (GLObjInitFn)init_line_strip_data,
-                      .render_gl = (GLObjInitFn)render_line_strip_data,
+                      .render_gl = (GLObjRenderFn)render_line_strip_data,
                       .next = NULL};
   return append_obj(obj);
 }
@@ -454,7 +451,7 @@ bool init_lines_data(CustomOpenGLState *state, GLObj *obj) {
   return true;
 }
 
-void *Lines(_DoubleArray _d, double line_width) {
+void *Lattice(_DoubleArray _d, double line_width) {
   int num_lines =
       _d.size / 12; // 12 components per line (2 vertices * 6 components)
 
@@ -471,7 +468,7 @@ void *Lines(_DoubleArray _d, double line_width) {
 
   GLObj obj = (GLObj){.data = d,
                       .init_gl = (GLObjInitFn)init_lines_data,
-                      .render_gl = (GLObjInitFn)render_lines_data,
+                      .render_gl = (GLObjRenderFn)render_lines_data,
                       .next = NULL};
   return append_obj(obj);
 }
@@ -545,7 +542,395 @@ void *Quad(_DoubleArray _d) {
 
   GLObj obj = (GLObj){.data = d,
                       .init_gl = (GLObjInitFn)init_quad_data,
-                      .render_gl = (GLObjInitFn)render_quad_data,
+                      .render_gl = (GLObjRenderFn)render_quad_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+// ===== CAMERA COMPONENT =====
+typedef struct {
+  // Camera position and orientation
+  float position[3];
+  float target[3];
+  float up[3];
+
+  // Projection parameters
+  float fov;        // Field of view in degrees
+  float aspect;     // Aspect ratio (width/height)
+  float near_plane; // Near clipping plane
+  float far_plane;  // Far clipping plane
+
+  // Computed matrices (4x4, column-major for OpenGL)
+  float view_matrix[16];
+  float projection_matrix[16];
+  float mvp_matrix[16];
+
+  // Uniform names
+  char *view_uniform_name;
+  char *projection_uniform_name;
+  char *mvp_uniform_name;
+} CameraData;
+
+// Matrix math utilities
+void mat4_identity(float *matrix) {
+  for (int i = 0; i < 16; i++) {
+    matrix[i] = 0.0f;
+  }
+  matrix[0] = matrix[5] = matrix[10] = matrix[15] = 1.0f;
+}
+
+void mat4_multiply(float *result, const float *a, const float *b) {
+  float temp[16];
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      temp[i * 4 + j] = 0.0f;
+      for (int k = 0; k < 4; k++) {
+        temp[i * 4 + j] += a[i * 4 + k] * b[k * 4 + j];
+      }
+    }
+  }
+  memcpy(result, temp, sizeof(temp));
+}
+
+void vec3_normalize(float *vec) {
+  float length = sqrtf(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
+  if (length > 0.0f) {
+    vec[0] /= length;
+    vec[1] /= length;
+    vec[2] /= length;
+  }
+}
+
+void vec3_cross(float *result, const float *a, const float *b) {
+  result[0] = a[1] * b[2] - a[2] * b[1];
+  result[1] = a[2] * b[0] - a[0] * b[2];
+  result[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+void vec3_subtract(float *result, const float *a, const float *b) {
+  result[0] = a[0] - b[0];
+  result[1] = a[1] - b[1];
+  result[2] = a[2] - b[2];
+}
+
+// Create look-at view matrix
+void camera_look_at(float *view_matrix, const float *eye, const float *center,
+                    const float *up) {
+  float f[3], s[3], u[3];
+
+  // Forward vector (from eye to center)
+  vec3_subtract(f, center, eye);
+  vec3_normalize(f);
+
+  // Right vector
+  vec3_cross(s, f, up);
+  vec3_normalize(s);
+
+  // Up vector
+  vec3_cross(u, s, f);
+
+  mat4_identity(view_matrix);
+
+  view_matrix[0] = s[0];
+  view_matrix[4] = s[1];
+  view_matrix[8] = s[2];
+  view_matrix[12] = -(s[0] * eye[0] + s[1] * eye[1] + s[2] * eye[2]);
+
+  view_matrix[1] = u[0];
+  view_matrix[5] = u[1];
+  view_matrix[9] = u[2];
+  view_matrix[13] = -(u[0] * eye[0] + u[1] * eye[1] + u[2] * eye[2]);
+
+  view_matrix[2] = -f[0];
+  view_matrix[6] = -f[1];
+  view_matrix[10] = -f[2];
+  view_matrix[14] = f[0] * eye[0] + f[1] * eye[1] + f[2] * eye[2];
+
+  view_matrix[3] = 0.0f;
+  view_matrix[7] = 0.0f;
+  view_matrix[11] = 0.0f;
+  view_matrix[15] = 1.0f;
+}
+
+// Create perspective projection matrix
+void camera_perspective(float *proj_matrix, float fov_degrees, float aspect,
+                        float near_plane, float far_plane) {
+  float fov_rad = fov_degrees * M_PI / 180.0f;
+  float f = 1.0f / tanf(fov_rad / 2.0f);
+
+  mat4_identity(proj_matrix);
+
+  proj_matrix[0] = f / aspect;
+  proj_matrix[5] = f;
+  proj_matrix[10] = (far_plane + near_plane) / (near_plane - far_plane);
+  proj_matrix[11] = -1.0f;
+  proj_matrix[14] = (2.0f * far_plane * near_plane) / (near_plane - far_plane);
+  proj_matrix[15] = 0.0f;
+}
+
+// Update camera matrices
+void camera_update_matrices(CameraData *camera) {
+  // Update view matrix
+  camera_look_at(camera->view_matrix, camera->position, camera->target,
+                 camera->up);
+
+  // Update projection matrix
+  camera_perspective(camera->projection_matrix, camera->fov, camera->aspect,
+                     camera->near_plane, camera->far_plane);
+
+  // Combine into MVP matrix (MVP = Projection * View * Model)
+  // For now, Model matrix is identity
+  mat4_multiply(camera->mvp_matrix, camera->projection_matrix,
+                camera->view_matrix);
+}
+
+// Camera initialization (no GL resources needed)
+bool init_camera_data(CustomOpenGLState *state, GLObj *obj) {
+
+  CameraData *camera = (CameraData *)obj->data;
+
+  // Update matrices on initialization
+  camera_update_matrices(camera);
+
+  printf("Camera initialized: pos(%.2f,%.2f,%.2f) target(%.2f,%.2f,%.2f) "
+         "fov=%.1f '%s'\n",
+         camera->position[0], camera->position[1], camera->position[2],
+         camera->target[0], camera->target[1], camera->target[2], camera->fov,
+         camera->mvp_uniform_name);
+
+  return true;
+}
+
+// Camera render function - uploads matrices as uniforms
+bool render_camera_data(CustomOpenGLState *state, GLObj *obj) {
+  CameraData *camera = (CameraData *)obj->data;
+
+  // printf("Setting camera uniforms\n");
+
+  // Upload view matrix
+  if (camera->view_uniform_name) {
+    GLint view_location =
+        glGetUniformLocation(state->shader_program, camera->view_uniform_name);
+    if (view_location != -1) {
+      glUniformMatrix4fv(view_location, 1, GL_FALSE, camera->view_matrix);
+      printf("Set view matrix uniform '%s'\n", camera->view_uniform_name);
+    } else {
+      printf("Warning: view uniform '%s' not found\n",
+             camera->view_uniform_name);
+    }
+  }
+
+  // Upload projection matrix
+  if (camera->projection_uniform_name) {
+    GLint proj_location = glGetUniformLocation(state->shader_program,
+                                               camera->projection_uniform_name);
+    if (proj_location != -1) {
+      glUniformMatrix4fv(proj_location, 1, GL_FALSE, camera->projection_matrix);
+      printf("Set projection matrix uniform '%s'\n",
+             camera->projection_uniform_name);
+    } else {
+      printf("Warning: projection uniform '%s' not found\n",
+             camera->projection_uniform_name);
+    }
+  }
+
+  // Upload combined MVP matrix
+  if (camera->mvp_uniform_name) {
+    GLint mvp_location =
+        glGetUniformLocation(state->shader_program, camera->mvp_uniform_name);
+    if (mvp_location != -1) {
+      glUniformMatrix4fv(mvp_location, 1, GL_FALSE, camera->mvp_matrix);
+      // printf("Set MVP matrix uniform '%s'\n", camera->mvp_uniform_name);
+    } else {
+      // printf("Warning: MVP uniform '%s' not found\n",
+      // camera->mvp_uniform_name);
+    }
+  }
+
+  return true;
+}
+
+// Factory function for camera
+void *Camera(double pos_x, double pos_y, double pos_z, double target_x,
+             double target_y, double target_z, double fov, double aspect,
+             double near_plane, double far_plane, _String mvp_uniform_name) {
+
+  CameraData *data =
+      malloc(sizeof(CameraData) + ((mvp_uniform_name.size + 1) * sizeof(char)));
+
+  // Set position
+  data->position[0] = (float)pos_x;
+  data->position[1] = (float)pos_y;
+  data->position[2] = (float)pos_z;
+
+  // Set target
+  data->target[0] = (float)target_x;
+  data->target[1] = (float)target_y;
+  data->target[2] = (float)target_z;
+
+  // Set up vector (Y-up)
+  data->up[0] = 0.0f;
+  data->up[1] = 1.0f;
+  data->up[2] = 0.0f;
+
+  // Set projection parameters
+  data->fov = (float)fov;
+  data->aspect = (float)aspect;
+  data->near_plane = (float)near_plane;
+  data->far_plane = (float)far_plane;
+
+  // Set uniform names
+  data->view_uniform_name = NULL;
+  data->projection_uniform_name = NULL;
+  data->mvp_uniform_name = (char *)(data + 1);
+  memcpy(data->mvp_uniform_name, mvp_uniform_name.chars, mvp_uniform_name.size);
+  data->mvp_uniform_name[mvp_uniform_name.size] = '\0'; // ADD THIS LINE!
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_camera_data,
+                      .render_gl = (GLObjRenderFn)render_camera_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+// Alternative factory with separate view/projection uniforms
+void *CameraSeparate(double pos_x, double pos_y, double pos_z, double target_x,
+                     double target_y, double target_z, double fov,
+                     double aspect, double near_plane, double far_plane,
+                     _String view_uniform_name,
+                     _String projection_uniform_name) {
+
+  CameraData *data = malloc(sizeof(CameraData));
+
+  data->position[0] = (float)pos_x;
+  data->position[1] = (float)pos_y;
+  data->position[2] = (float)pos_z;
+
+  data->target[0] = (float)target_x;
+  data->target[1] = (float)target_y;
+  data->target[2] = (float)target_z;
+
+  data->up[0] = 0.0f;
+  data->up[1] = 1.0f;
+  data->up[2] = 0.0f;
+
+  data->fov = (float)fov;
+  data->aspect = (float)aspect;
+  data->near_plane = (float)near_plane;
+  data->far_plane = (float)far_plane;
+
+  data->view_uniform_name = view_uniform_name.chars;
+  data->projection_uniform_name = projection_uniform_name.chars;
+  data->mvp_uniform_name = NULL;
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_camera_data,
+                      .render_gl = (GLObjRenderFn)render_camera_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+// Simple orbital camera factory
+void *OrbitCamera(double radius, double angle_x, double angle_y,
+                  double target_x, double target_y, double target_z, double fov,
+                  double aspect, _String mvp_uniform_name) {
+
+  // Calculate position from spherical coordinates
+  double pos_x = target_x + radius * cos(angle_y) * sin(angle_x);
+  double pos_y = target_y + radius * sin(angle_y);
+  double pos_z = target_z + radius * cos(angle_y) * cos(angle_x);
+
+  return Camera(pos_x, pos_y, pos_z, target_x, target_y, target_z, fov, aspect,
+                0.1, 100.0, mvp_uniform_name);
+}
+// Add matrix uniform support to your existing uniform system
+typedef struct {
+  const char *name;
+  float value[16]; // Support 4x4 matrix
+  int components;  // 1=float, 2=vec2, 3=vec3, 4=vec4, 16=mat4
+} UniformData;
+
+bool init_uniform_data(CustomOpenGLState *state, GLObj *obj) {
+  // Uniforms don't need GL initialization
+  return true;
+}
+
+bool render_uniform_data(CustomOpenGLState *state, GLObj *obj) {
+  UniformData *uniform = (UniformData *)obj->data;
+
+  GLint location = glGetUniformLocation(state->shader_program, uniform->name);
+  if (location == -1) {
+    printf("Warning: uniform '%s' not found\n", uniform->name);
+    return true;
+  }
+
+  switch (uniform->components) {
+  case 1:
+    glUniform1f(location, uniform->value[0]);
+    break;
+  case 2:
+    glUniform2f(location, uniform->value[0], uniform->value[1]);
+    break;
+  case 3:
+    glUniform3f(location, uniform->value[0], uniform->value[1],
+                uniform->value[2]);
+    break;
+  case 4:
+    glUniform4f(location, uniform->value[0], uniform->value[1],
+                uniform->value[2], uniform->value[3]);
+    break;
+  case 16: // Matrix 4x4
+    glUniformMatrix4fv(location, 1, GL_FALSE, uniform->value);
+    // printf("Set matrix uniform '%s'\n", uniform->name);
+    break;
+  }
+
+  return true;
+}
+
+// Factory functions
+void *Uniform1f(_String name, double value) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->value[0] = (float)value;
+  data->components = 1;
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+void *Uniform3f(_String name, double x, double y, double z) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->value[0] = (float)x;
+  data->value[1] = (float)y;
+  data->value[2] = (float)z;
+  data->components = 3;
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+// NEW: Matrix uniform factory
+void *UniformMat4(_String name, _DoubleArray matrix_values) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->components = 16;
+
+  // Convert double array to float matrix
+  for (int i = 0; i < 16; i++) {
+    data->value[i] = (float)matrix_values.data[i];
+  }
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
                       .next = NULL};
   return append_obj(obj);
 }
