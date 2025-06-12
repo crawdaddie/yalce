@@ -46,7 +46,7 @@ void main()
   vec4 viewProj = uProjection * uView * worldPosition;
   gl_Position = viewProj;
   vertexColor = aColor;
-  gl_PointSize = 3.0; 
+  // gl_PointSize = 3.0; 
 \}`;
 
 let fs = FShader `#version 330 core
@@ -79,18 +79,18 @@ void main()
 
   let origin = Points [|
     0.0, 0.0, 0., 1.0, 0., 0.,
-  |] 8.;
+  |] 10.;
 
-  let points = Points (array_fill 5000 (fn i: (Int) -> 
+  let points = Points (array_fill 10000 (fn i: (Int) -> 
     match (i % 6) with 
-    | 0 -> Math.randn 0. 1.
-    | 1 -> Math.randn 0. 1.
-    | 2 -> Math.randn 0. 1.
+    | 0 -> Math.randn 0. 4.
+    | 1 -> Math.randn 0. 0.5
+    | 2 -> Math.randn 0. 4.
     | 3 -> 0.
     | 4 -> 0.9
     | 5 -> Math.randn .5 .7
     | _ -> 0.
 
-  )) 8.
+  )) 4.
 
 )

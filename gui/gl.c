@@ -249,7 +249,7 @@ void render_point_data(CustomOpenGLState *state, GLObj *obj) {
   glPointSize(point_data->point_size);
 
   // Enable point sprites (makes gl_PointCoord available in fragment shader)
-  glEnable(GL_PROGRAM_POINT_SIZE); // Allow shader to control point size
+  // glEnable(GL_PROGRAM_POINT_SIZE); // Allow shader to control point size
 
   glBindVertexArray(point_data->vao);
   glDrawArrays(GL_POINTS, 0, point_data->num_points);
