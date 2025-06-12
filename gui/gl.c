@@ -39,10 +39,13 @@ GLuint compile_shader(const char *source, GLenum type) {
 typedef bool (*GLObjInitFn)(CustomOpenGLState *state, void *obj);
 typedef bool (*GLObjRenderFn)(CustomOpenGLState *state, void *obj);
 
+typedef bool (*GLObjEventHandlerFn)(CustomOpenGLState *state, void *obj,
+                                    SDL_Event *event);
 typedef struct GLObj {
   void *data;
   GLObjInitFn init_gl;
   GLObjRenderFn render_gl;
+  GLObjEventHandlerFn handle_events;
   struct GLObj *next;
 } GLObj;
 
@@ -60,7 +63,6 @@ static bool init_opengl_decl_win(void *_state) {
 
   glLinkProgram(state->shader_program);
 
-  // Enable depth testing
   glEnable(GL_DEPTH_TEST);
 
   GLint success;
@@ -75,7 +77,7 @@ void open_gl_decl_renderer(void *_state) {
 
   CustomOpenGLState *state = _state;
 
-  glClearColor(0.1f, 0.1f, 0.1f, 1.0f); // Dark gray instead of black
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Dark gray instead of black
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   glUseProgram(state->shader_program);
@@ -144,6 +146,16 @@ void *FShader(_String str) {
   return append_obj(obj);
 }
 
+void opengl_win_event_handler(CustomOpenGLState *state, SDL_Event *event) {
+  GLObj *head = state->objs;
+  while (head) {
+    if (head->handle_events) {
+      head->handle_events(state, head, event);
+    }
+    head = head->next;
+  }
+}
+
 int create_decl_window(void *_decl_cb) {
   DeclGlFn init = _decl_cb;
 
@@ -157,6 +169,7 @@ int create_decl_window(void *_decl_cb) {
   window_creation_data *data = malloc(sizeof(window_creation_data));
   data->init_gl = init_opengl_decl_win;
   data->render_fn = open_gl_decl_renderer;
+  data->handle_event = opengl_win_event_handler;
 
   data->data = state;
 
@@ -234,6 +247,9 @@ void render_point_data(CustomOpenGLState *state, GLObj *obj) {
   PointData *point_data = (PointData *)obj->data;
 
   glPointSize(point_data->point_size);
+
+  // Enable point sprites (makes gl_PointCoord available in fragment shader)
+  glEnable(GL_PROGRAM_POINT_SIZE); // Allow shader to control point size
 
   glBindVertexArray(point_data->vao);
   glDrawArrays(GL_POINTS, 0, point_data->num_points);
@@ -629,21 +645,17 @@ void render_mvp_view(CustomOpenGLState *state, GLObj *obj) {
 
   MVPData *data = (MVPData *)obj->data;
 
-  // Create transformation matrices
   Mat4 model, view, projection;
 
-  // 1. Model matrix - rotate triangle around Y-axis
-  // float time = (float)glfwGetTime();
   mat4_identity(&model);
 
-  // 2. View matrix - camera positioned to look at the triangle
   Vec3 camera_pos = data->pos;
   Vec3 target = data->target;
   Vec3 up = {0.0f, 1.0f, 0.0f};
   mat4_lookat(&view, camera_pos, target, up);
 
-  // 3. Projection matrix - perspective projection
   int width = 640, height = 480;
+  // TODO: get from win bounds
   // glfwGetFramebufferSize(window, &width, &height);
 
   float aspect = (float)width / (float)height;
@@ -679,15 +691,197 @@ bool init_mvp_view(CustomOpenGLState *state, GLObj *obj) {
   return true;
 }
 
+void mvp_view_event_handler(CustomOpenGLState *state, GLObj *obj,
+                            SDL_Event *event) {
+
+  MVPData *data = obj->data;
+
+  if (event->type == SDL_KEYDOWN) {
+    float rotate_speed = 0.2f; // Adjust rotation speed
+    float move_speed = 0.5f;   // Adjust movement speed
+
+    switch (event->key.keysym.sym) {
+    case SDLK_UP:
+      // Move camera toward target (closer)
+      {
+        float dx = data->target.x - data->pos.x;
+        float dy = data->target.y - data->pos.y;
+        float dz = data->target.z - data->pos.z;
+
+        // Normalize the direction vector
+        float len = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (len > move_speed) { // Don't go past the target
+          dx /= len;
+          dy /= len;
+          dz /= len;
+
+          // Move along the vector toward target
+          data->pos.x += dx * move_speed;
+          data->pos.y += dy * move_speed;
+          data->pos.z += dz * move_speed;
+        }
+      }
+      break;
+
+    case SDLK_DOWN:
+      // Move camera away from target (farther)
+      {
+        float dx = data->target.x - data->pos.x;
+        float dy = data->target.y - data->pos.y;
+        float dz = data->target.z - data->pos.z;
+
+        // Normalize the direction vector
+        float len = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (len > 0.001f) { // Avoid division by zero
+          dx /= len;
+          dy /= len;
+          dz /= len;
+
+          // Move along the vector away from target
+          data->pos.x -= dx * move_speed;
+          data->pos.y -= dy * move_speed;
+          data->pos.z -= dz * move_speed;
+        }
+      }
+      break;
+
+    case SDLK_LEFT:
+      // Rotate camera left around target (counter-clockwise in XZ plane)
+      {
+        float dx = data->pos.x - data->target.x;
+        float dz = data->pos.z - data->target.z;
+
+        float dist = sqrtf(dx * dx + dz * dz);
+        float angle = atan2f(dz, dx);
+
+        angle += rotate_speed;
+
+        data->pos.x = data->target.x + dist * cosf(angle);
+        data->pos.z = data->target.z + dist * sinf(angle);
+      }
+      break;
+
+    case SDLK_RIGHT:
+      // Rotate camera right around target (clockwise in XZ plane)
+      {
+        float dx = data->pos.x - data->target.x;
+        float dz = data->pos.z - data->target.z;
+
+        float dist = sqrtf(dx * dx + dz * dz);
+        float angle = atan2f(dz, dx);
+
+        angle -= rotate_speed;
+
+        data->pos.x = data->target.x + dist * cosf(angle);
+        data->pos.z = data->target.z + dist * sinf(angle);
+      }
+      break;
+    }
+  }
+}
+
 void *MVPView(double px, double py, double pz, double tx, double ty,
               double tz) {
   MVPData *data = malloc(sizeof(MVPData));
   data->pos = (Vec3){px, py, pz};
   data->target = (Vec3){tx, ty, tz};
 
+  GLObj obj =
+      (GLObj){.data = data,
+              .init_gl = (GLObjInitFn)init_mvp_view,
+              .render_gl = (GLObjRenderFn)render_mvp_view,
+              .handle_events = (GLObjEventHandlerFn)mvp_view_event_handler,
+              .next = NULL};
+  return append_obj(obj);
+}
+
+// ===== Uniform Components =====
+typedef struct {
+  const char *name;
+  float value[16]; // Support 4x4 matrix
+  int components;  // 1=float, 2=vec2, 3=vec3, 4=vec4, 16=mat4
+} UniformData;
+
+bool init_uniform_data(CustomOpenGLState *state, GLObj *obj) {
+  // Uniforms don't need GL initialization
+  return true;
+}
+
+bool render_uniform_data(CustomOpenGLState *state, GLObj *obj) {
+  UniformData *uniform = (UniformData *)obj->data;
+
+  GLint location = glGetUniformLocation(state->shader_program, uniform->name);
+  if (location == -1) {
+    printf("Warning: uniform '%s' not found\n", uniform->name);
+    return true;
+  }
+
+  switch (uniform->components) {
+  case 1:
+    glUniform1f(location, uniform->value[0]);
+    break;
+  case 2:
+    glUniform2f(location, uniform->value[0], uniform->value[1]);
+    break;
+  case 3:
+    glUniform3f(location, uniform->value[0], uniform->value[1],
+                uniform->value[2]);
+    break;
+  case 4:
+    glUniform4f(location, uniform->value[0], uniform->value[1],
+                uniform->value[2], uniform->value[3]);
+    break;
+  case 16: // Matrix 4x4
+    glUniformMatrix4fv(location, 1, GL_FALSE, uniform->value);
+    printf("Set matrix uniform '%s'\n", uniform->name);
+    break;
+  }
+
+  return true;
+}
+
+// Factory functions
+void *Uniform1f(_String name, double value) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->value[0] = (float)value;
+  data->components = 1;
+
   GLObj obj = (GLObj){.data = data,
-                      .init_gl = (GLObjInitFn)init_mvp_view,
-                      .render_gl = (GLObjRenderFn)render_mvp_view,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+void *Uniform3f(_String name, double x, double y, double z) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->value[0] = (float)x;
+  data->value[1] = (float)y;
+  data->value[2] = (float)z;
+  data->components = 3;
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+void *UniformMat4(_String name, _DoubleArray matrix_values) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->components = 16;
+
+  // Convert double array to float matrix
+  for (int i = 0; i < 16; i++) {
+    data->value[i] = (float)matrix_values.data[i];
+  }
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
                       .next = NULL};
   return append_obj(obj);
 }

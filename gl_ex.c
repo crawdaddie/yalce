@@ -279,7 +279,9 @@ int main() {
     Mat4 model, view, projection;
 
     // 1. Model matrix - rotate triangle around Y-axis
-    float time = (float)glfwGetTime();
+    // float time = (float)glfwGetTime();
+    float time = 0.2;
+    // (float)glfwGetTime();
     mat4_identity(&model);
     // Simple Y-axis rotation
     float angle = time * 0.5f; // Slow rotation
@@ -289,7 +291,7 @@ int main() {
     model.m[10] = cosf(angle);
 
     // 2. View matrix - camera positioned to look at the triangle
-    Vec3 camera_pos = {3.0f, 2.0f, 3.0f};
+    Vec3 camera_pos = {3.0f, 2.0f, 8.0f};
     Vec3 target = {0.0f, 0.0f, 0.0f};
     Vec3 up = {0.0f, 1.0f, 0.0f};
     mat4_lookat(&view, camera_pos, target, up);

@@ -101,8 +101,6 @@ void handle_events() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     if (event.type == CREATE_WINDOW_EVENT) {
-      // handle window creation
-      //
       _create_window(event.user.data1);
     } else if (event.type == CREATE_OPENGL_WINDOW_EVENT) {
       // handle OpenGL window creation
@@ -2197,6 +2195,7 @@ static SDL_Renderer *array_edit_renderer(array_edit_state *state,
 
   return renderer;
 }
+
 static int array_edit_event_handler(void *userdata, SDL_Event *event) {
   array_edit_state *state = (array_edit_state *)userdata;
 
@@ -2371,8 +2370,6 @@ static int array_edit_event_handler(void *userdata, SDL_Event *event) {
   return 0; // Continue running
 }
 
-int create_custom_window(void *cb) { return create_window(NULL, cb, NULL); }
-
 Uint32 CREATE_OPENGL_WINDOW_EVENT;
 
 void init_opengl_events() {
@@ -2406,7 +2403,7 @@ bool _create_opengl_window(window_creation_data *data) {
 
   // Create OpenGL window
   windows[win_idx].window = SDL_CreateWindow(
-      "Point Cloud Viewer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+      NULL, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
       windows[win_idx].width, windows[win_idx].height,
       SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 
