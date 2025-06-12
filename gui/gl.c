@@ -64,6 +64,13 @@ static bool init_opengl_decl_win(void *_state) {
   glLinkProgram(state->shader_program);
 
   glEnable(GL_DEPTH_TEST);
+  // Set initial viewport
+  int width, height;
+  SDL_Window *window = SDL_GL_GetCurrentWindow();
+  if (window) {
+    SDL_GetWindowSize(window, &width, &height);
+    glViewport(0, 0, width, height);
+  }
 
   GLint success;
   glGetProgramiv(state->shader_program, GL_LINK_STATUS, &success);
@@ -147,6 +154,14 @@ void *FShader(_String str) {
 }
 
 void opengl_win_event_handler(CustomOpenGLState *state, SDL_Event *event) {
+  // Handle window resize
+  if (event->type == SDL_WINDOWEVENT &&
+      event->window.event == SDL_WINDOWEVENT_RESIZED) {
+    int width = event->window.data1;
+    int height = event->window.data2;
+    glViewport(0, 0, width, height);
+    printf("Window resized to %dx%d, viewport updated\n", width, height);
+  }
   GLObj *head = state->objs;
   while (head) {
     if (head->handle_events) {
@@ -654,9 +669,15 @@ void render_mvp_view(CustomOpenGLState *state, GLObj *obj) {
   Vec3 up = {0.0f, 1.0f, 0.0f};
   mat4_lookat(&view, camera_pos, target, up);
 
-  int width = 640, height = 480;
-  // TODO: get from win bounds
-  // glfwGetFramebufferSize(window, &width, &height);
+  int width, height;
+  SDL_Window *window = SDL_GL_GetCurrentWindow();
+  if (window) {
+    SDL_GetWindowSize(window, &width, &height);
+  } else {
+    // Fallback to default if we can't get the window
+    width = 640;
+    height = 480;
+  }
 
   float aspect = (float)width / (float)height;
   mat4_perspective(&projection, 45.0f * M_PI / 180.0f, aspect, 0.1f, 100.0f);

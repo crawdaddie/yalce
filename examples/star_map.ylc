@@ -4,7 +4,7 @@ import ../lib/Math;
 
 let open_file = extern fn String -> String -> Option of Ptr;
 let fclose = extern fn Ptr -> ();
-let read_bytes = extern fn Ptr -> Array of Char;
+let read_bytes = extern fn Ptr -> String;
 let read_lines = extern fn Ptr -> (List of String, Int);
 let scanf_df = extern fn Ptr -> Ptr -> Int -> Ptr -> ();
 

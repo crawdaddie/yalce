@@ -14,21 +14,6 @@ let w = create_decl_window (fn () ->
     2. 3. 8. # pos
     0. 0. 0. # target
   ;
-#
-#   let vs = VShader `#version 330 core
-# layout (location = 0) in vec3 aPos;
-# layout (location = 1) in vec3 aColor;
-# uniform mat4 uModel;
-# uniform mat4 uView;
-# uniform mat4 uProjection;
-# out vec3 vertexColor;
-# void main()
-# \{
-#   vec4 viewProj = uProjection * uView * uModel * vec4(aPos, 1.0);
-#   gl_Position = viewProj;
-#   vertexColor = aColor;
-#   gl_PointSize = 2.0; 
-# \}`;
 
   let vs = VShader `#version 330 core
 layout (location = 0) in vec3 aPos;
@@ -46,7 +31,6 @@ void main()
   vec4 viewProj = uProjection * uView * worldPosition;
   gl_Position = viewProj;
   vertexColor = aColor;
-  // gl_PointSize = 3.0; 
 \}`;
 
 let fs = FShader `#version 330 core
@@ -84,11 +68,11 @@ void main()
   let points = Points (array_fill 10000 (fn i: (Int) -> 
     match (i % 6) with 
     | 0 -> Math.randn 0. 4.
-    | 1 -> Math.randn 0. 0.5
+    | 1 -> Math.randn 0. 1.
     | 2 -> Math.randn 0. 4.
     | 3 -> 0.
     | 4 -> 0.9
-    | 5 -> Math.randn .5 .7
+    | 5 -> 1.
     | _ -> 0.
 
   )) 4.

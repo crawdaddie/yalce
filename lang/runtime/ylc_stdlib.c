@@ -779,6 +779,33 @@ void matmulp(float *xout, float *x, float *w, int n, int d) {
   }
 }
 
+#endif
+
 double double_from_bytes(char *bytes) { return *(double *)bytes; }
 
-#endif
+typedef struct {
+  double value;
+  int chars_consumed;
+} ParseDoubleResult;
+
+// Simple version using strtod (recommended)
+void parse_double_simple(const char *str, double *d, int *cons) {
+  ParseDoubleResult result = {0.0, 0};
+
+  if (!str) {
+    return;
+  }
+
+  char *endptr;
+
+  double value = strtod(str, &endptr);
+
+  if (endptr == str) {
+    return;
+  }
+
+  *d = value;
+  *cons = (int)(endptr - str);
+
+  return;
+}

@@ -249,6 +249,12 @@ CHAR            '([^'\\\n]|{ESCAPE})'
   
 [ \t]+          ;       /* ignore whitespace */
 \n              { yycolumn = 1; }      
+
+"'\\n'"         { yylval.vchar = '\n'; return TOK_CHAR; }
+"'\\t'"         { yylval.vchar = '\t'; return TOK_CHAR; }
+"'\\''"         { yylval.vchar = '\''; return TOK_CHAR; }
+"'\\0'"         { yylval.vchar = '\0'; return TOK_CHAR; }
+
 {CHAR}          { 
                     /* Matched a character literal */
                     /* You might want to return a token here, e.g., return CHAR_LITERAL; */
