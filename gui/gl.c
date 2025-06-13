@@ -720,7 +720,7 @@ void mvp_view_event_handler(CustomOpenGLState *state, GLObj *obj,
 
   if (event->type == SDL_KEYDOWN) {
     float rotate_speed = 0.2f; // Adjust rotation speed
-    float move_speed = 0.5f;   // Adjust movement speed
+    float move_speed = 200.f;  // Adjust movement speed
 
     switch (event->key.keysym.sym) {
     case SDLK_UP: {
