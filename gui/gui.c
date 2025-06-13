@@ -2455,3 +2455,18 @@ bool _create_opengl_window(window_creation_data *data) {
   free(data);
   return true;
 }
+
+typedef struct {
+  void *obj;
+  _DoubleArray data;
+} _PosShiftEvent;
+
+void gl_push_custom_event(Uint32 ev_type, _PosShiftEvent *payload) {
+
+  SDL_Event event;
+  SDL_zero(event);
+  event.type = ev_type;
+  event.user.data1 = payload;
+
+  SDL_PushEvent(&event);
+}

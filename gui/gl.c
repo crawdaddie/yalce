@@ -13,10 +13,12 @@
 
 #include <GLFW/glfw3.h>
 
+typedef void (*DeclGlFn)();
 typedef struct {
   const char *vertex_shader;
   const char *fragment_shader;
   GLuint shader_program;
+  DeclGlFn init_cb;
   void *objs;
 } CustomOpenGLState;
 
@@ -41,6 +43,7 @@ typedef bool (*GLObjRenderFn)(CustomOpenGLState *state, void *obj);
 
 typedef bool (*GLObjEventHandlerFn)(CustomOpenGLState *state, void *obj,
                                     SDL_Event *event);
+
 typedef struct GLObj {
   void *data;
   GLObjInitFn init_gl;
@@ -49,14 +52,37 @@ typedef struct GLObj {
   struct GLObj *next;
 } GLObj;
 
+GLObj *_dcl_ctx_head = NULL;
+GLObj *_dcl_ctx_tail = NULL;
+
+GLObj *append_obj(GLObj obj) {
+  if (_dcl_ctx_head == NULL) {
+    GLObj *head = malloc(sizeof(GLObj));
+    *head = obj;
+    _dcl_ctx_head = head;
+    _dcl_ctx_tail = head;
+    return head;
+  }
+
+  GLObj *tail = malloc(sizeof(GLObj));
+  *tail = obj;
+  _dcl_ctx_tail->next = tail;
+  _dcl_ctx_tail = tail;
+  return tail;
+}
 static bool init_opengl_decl_win(void *_state) {
 
   CustomOpenGLState *state = _state;
   state->shader_program = glCreateProgram();
 
+  _dcl_ctx_head = NULL;
+  _dcl_ctx_tail = NULL;
+  state->init_cb();
+
+  state->objs = _dcl_ctx_head;
+
   GLObj *head = state->objs;
   while (head) {
-
     head->init_gl(state, head);
     head = head->next;
   }
@@ -97,30 +123,10 @@ void open_gl_decl_renderer(void *_state) {
   }
 }
 
-typedef void (*DeclGlFn)();
 typedef struct {
   int size;
   const char *chars;
 } _String;
-
-GLObj *_dcl_ctx_head = NULL;
-GLObj *_dcl_ctx_tail = NULL;
-
-GLObj *append_obj(GLObj obj) {
-  if (_dcl_ctx_head == NULL) {
-    GLObj *head = malloc(sizeof(GLObj));
-    *head = obj;
-    _dcl_ctx_head = head;
-    _dcl_ctx_tail = head;
-    return head;
-  }
-
-  GLObj *tail = malloc(sizeof(GLObj));
-  *tail = obj;
-  _dcl_ctx_tail->next = tail;
-  _dcl_ctx_tail = tail;
-  return tail;
-}
 
 bool init_vshader(CustomOpenGLState *state, GLObj *obj) {
   GLuint vs = compile_shader(obj->data, GL_VERTEX_SHADER);
@@ -172,19 +178,13 @@ void opengl_win_event_handler(CustomOpenGLState *state, SDL_Event *event) {
 }
 
 int create_decl_window(void *_decl_cb) {
-  DeclGlFn init = _decl_cb;
-
-  _dcl_ctx_head = NULL;
-  _dcl_ctx_tail = NULL;
-  init();
-
   CustomOpenGLState *state = calloc(1, sizeof(CustomOpenGLState));
-  state->objs = _dcl_ctx_head;
 
   window_creation_data *data = malloc(sizeof(window_creation_data));
   data->init_gl = init_opengl_decl_win;
   data->render_fn = open_gl_decl_renderer;
   data->handle_event = opengl_win_event_handler;
+  state->init_cb = _decl_cb;
 
   data->data = state;
 
@@ -195,6 +195,203 @@ int create_decl_window(void *_decl_cb) {
 
   return SDL_PushEvent(&event);
 }
+
+// ===== Uniform Components =====
+typedef struct {
+  const char *name;
+  float value[16]; // Support 4x4 matrix
+  int components;  // 1=float, 2=vec2, 3=vec3, 4=vec4, 16=mat4
+  GLint loc;
+} UniformData;
+
+bool init_uniform_data(CustomOpenGLState *state, GLObj *obj) {
+  UniformData *data = obj->data;
+  data->loc = glGetUniformLocation(state->shader_program, data->name);
+  return true;
+}
+
+bool render_uniform_data(CustomOpenGLState *state, GLObj *obj) {
+  UniformData *uniform = (UniformData *)obj->data;
+
+  GLint location = uniform->loc;
+  if (location == -1) {
+    uniform->loc = glGetUniformLocation(state->shader_program, uniform->name);
+    location = uniform->loc;
+  }
+
+  switch (uniform->components) {
+  case 1:
+    glUniform1f(location, uniform->value[0]);
+    break;
+  case 2:
+    glUniform2f(location, uniform->value[0], uniform->value[1]);
+    break;
+  case 3:
+    glUniform3f(location, uniform->value[0], uniform->value[1],
+                uniform->value[2]);
+    break;
+  case 4:
+    glUniform4f(location, uniform->value[0], uniform->value[1],
+                uniform->value[2], uniform->value[3]);
+    break;
+  case 16: // Matrix 4x4
+    glUniformMatrix4fv(location, 1, GL_FALSE, uniform->value);
+    break;
+  }
+
+  return true;
+}
+
+// Factory functions
+void *Uniform1f(_String name, double value) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->value[0] = (float)value;
+  data->components = 1;
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+void *Uniform3f(_String name, double x, double y, double z) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->value[0] = (float)x;
+  data->value[1] = (float)y;
+  data->value[2] = (float)z;
+  data->components = 3;
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+void *UniformMat4(_String name, _DoubleArray matrix_values) {
+  UniformData *data = malloc(sizeof(UniformData));
+  data->name = name.chars;
+  data->components = 16;
+
+  // Convert double array to float matrix
+  for (int i = 0; i < 16; i++) {
+    data->value[i] = (float)matrix_values.data[i];
+  }
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_uniform_data,
+                      .render_gl = (GLObjRenderFn)render_uniform_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+void set_uniform(GLObj *obj, double *data) {
+  UniformData *udata = obj->data;
+
+  for (int i = 0; i < udata->components; i++) {
+    udata->value[i] = data[i];
+  }
+}
+
+typedef struct {
+  const char *name;
+  float value[16]; // Support 4x4 matrix
+  int components;  // 1=float, 2=vec2, 3=vec3, 4=vec4, 16=mat4
+  GLint loc;
+  GLObj *source_uniform;   // The uniform we're following
+  float lerp_factor;       // How fast we catch up (0.0 = never, 1.0 = instant)
+  Uint32 last_update_time; // For frame-rate independent smoothing
+} LaggedUniform3fData;
+
+bool init_lagged_uniform3f(CustomOpenGLState *state, GLObj *obj) {
+  LaggedUniform3fData *data = (LaggedUniform3fData *)obj->data;
+
+  // Initialize our output uniform
+  data->loc = glGetUniformLocation(state->shader_program, data->name);
+
+  // Initialize our position to match the source
+  UniformData *source_data = (UniformData *)data->source_uniform->data;
+  data->value[0] = source_data->value[0];
+  data->value[1] = source_data->value[1];
+  data->value[2] = source_data->value[2];
+
+  data->last_update_time = SDL_GetTicks();
+
+  return true;
+}
+
+bool render_lagged_uniform3f(CustomOpenGLState *state, GLObj *obj) {
+  LaggedUniform3fData *data = (LaggedUniform3fData *)obj->data;
+
+  // Get current time for frame-rate independent interpolation
+  Uint32 current_time = SDL_GetTicks();
+  float delta_time =
+      (current_time - data->last_update_time) / 1000.0f; // Convert to seconds
+  data->last_update_time = current_time;
+
+  // Get the source uniform's current values
+  UniformData *source_data = (UniformData *)data->source_uniform->data;
+
+  // Calculate frame-rate independent lerp factor
+  // This makes the lag consistent regardless of framerate
+  float frame_lerp_factor =
+      1.0f - powf(1.0f - data->lerp_factor,
+                  delta_time * 60.0f); // Assuming 60fps baseline
+
+  // Smoothly interpolate towards the source values
+  data->value[0] +=
+      (source_data->value[0] - data->value[0]) * frame_lerp_factor;
+  data->value[1] +=
+      (source_data->value[1] - data->value[1]) * frame_lerp_factor;
+  data->value[2] +=
+      (source_data->value[2] - data->value[2]) * frame_lerp_factor;
+
+  // Set the uniform in the shader
+  GLint location = data->loc;
+  if (location == -1) {
+    data->loc = glGetUniformLocation(state->shader_program, data->name);
+    location = data->loc;
+  }
+
+  if (location != -1) {
+    glUniform3f(location, data->value[0], data->value[1], data->value[2]);
+  }
+
+  return true;
+}
+
+void *LagUniform(const char *output_name, double lag_factor,
+                 GLObj *source_uniform) {
+  // printf("lag factor %s %f %p\n", output_name, lag_factor, source_uniform);
+  LaggedUniform3fData *data = malloc(sizeof(LaggedUniform3fData));
+
+  // Create our own uniform data for the output
+  data->name = output_name;
+  data->components = 3;
+  data->loc = -1;
+
+  // Set up the lag parameters
+  data->source_uniform = (GLObj *)source_uniform;
+  data->lerp_factor = (float)lag_factor; // 0.1 = slow lag, 0.9 = fast catch-up
+  data->last_update_time = SDL_GetTicks();
+
+  // Initialize our position to match the source
+  UniformData *source_data = (UniformData *)data->source_uniform->data;
+  data->value[0] = source_data->value[0];
+  data->value[1] = source_data->value[1];
+  data->value[2] = source_data->value[2];
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_lagged_uniform3f,
+                      .render_gl = (GLObjRenderFn)render_lagged_uniform3f,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+//=================================================
 
 typedef struct {
   int num_vertices;
@@ -652,6 +849,7 @@ typedef struct {
   GLint model_loc;
   GLint view_loc;
   GLint projection_loc;
+  GLint camera_pos_loc;
   Vec3 pos;
   Vec3 target;
 } MVPData;
@@ -695,11 +893,18 @@ void render_mvp_view(CustomOpenGLState *state, GLObj *obj) {
     data->projection_loc =
         glGetUniformLocation(state->shader_program, "uProjection");
   }
+  if (data->camera_pos_loc == -1) {
+    data->camera_pos_loc =
+        glGetUniformLocation(state->shader_program, "uCameraPos");
+  }
 
   // // Send matrices to shader
   glUniformMatrix4fv(data->model_loc, 1, GL_FALSE, model.m);
   glUniformMatrix4fv(data->view_loc, 1, GL_FALSE, view.m);
   glUniformMatrix4fv(data->projection_loc, 1, GL_FALSE, projection.m);
+  glUniform3f(data->camera_pos_loc, camera_pos.x, camera_pos.y, camera_pos.z);
+
+  // glUniformMatrix4fv(data->camera_pos_loc, 1, GL_FALSE, camera_pos);
 }
 
 bool init_mvp_view(CustomOpenGLState *state, GLObj *obj) {
@@ -709,6 +914,8 @@ bool init_mvp_view(CustomOpenGLState *state, GLObj *obj) {
   data->view_loc = glGetUniformLocation(state->shader_program, "uView");
   data->projection_loc =
       glGetUniformLocation(state->shader_program, "uProjection");
+  data->camera_pos_loc =
+      glGetUniformLocation(state->shader_program, "uCameraPos");
 
   return true;
 }
@@ -720,7 +927,7 @@ void mvp_view_event_handler(CustomOpenGLState *state, GLObj *obj,
 
   if (event->type == SDL_KEYDOWN) {
     float rotate_speed = 0.2f; // Adjust rotation speed
-    float move_speed = 200.f;  // Adjust movement speed
+    float move_speed = 100.f;  // Adjust movement speed
 
     switch (event->key.keysym.sym) {
     case SDLK_UP: {
@@ -810,92 +1017,103 @@ void *MVPView(double px, double py, double pz, double tx, double ty,
   return append_obj(obj);
 }
 
-// ===== Uniform Components =====
+// Complete CamView implementation for your C code:
+
 typedef struct {
-  const char *name;
-  float value[16]; // Support 4x4 matrix
-  int components;  // 1=float, 2=vec2, 3=vec3, 4=vec4, 16=mat4
-} UniformData;
+  GLint model_loc;
+  GLint view_loc;
+  GLint projection_loc;
+  GLObj *pos_uniform;    // Points to Uniform3f object for position
+  GLObj *target_uniform; // Points to Uniform3f object for target
+} CamData;
 
-bool init_uniform_data(CustomOpenGLState *state, GLObj *obj) {
-  // Uniforms don't need GL initialization
+void render_cam_view(CustomOpenGLState *state, GLObj *obj) {
+  CamData *data = (CamData *)obj->data;
+
+  // Get position from the uniform object
+  UniformData *pos_data = (UniformData *)data->pos_uniform->data;
+  Vec3 camera_pos = {pos_data->value[0], pos_data->value[1],
+                     pos_data->value[2]};
+
+  // printf("camera pos %f, %f, %f,\n", camera_pos.x, camera_pos.y,
+  // camera_pos.z);
+
+  // Get target from the uniform object
+  UniformData *target_data = (UniformData *)data->target_uniform->data;
+  Vec3 target = {target_data->value[0], target_data->value[1],
+                 target_data->value[2]};
+
+  Mat4 model, view, projection;
+
+  mat4_identity(&model);
+
+  Vec3 up = {0.0f, 1.0f, 0.0f};
+  mat4_lookat(&view, camera_pos, target, up);
+
+  int width, height;
+  SDL_Window *window = SDL_GL_GetCurrentWindow();
+  if (window) {
+    SDL_GetWindowSize(window, &width, &height);
+  } else {
+    width = 640;
+    height = 480;
+  }
+
+  float aspect = (float)width / (float)height;
+  mat4_perspective(&projection, 45.0f * M_PI / 180.0f, aspect, 0.01f,
+                   100000000.0f);
+
+  // Cache uniform locations
+  if (data->model_loc == -1) {
+    data->model_loc = glGetUniformLocation(state->shader_program, "uModel");
+  }
+  if (data->view_loc == -1) {
+    data->view_loc = glGetUniformLocation(state->shader_program, "uView");
+  }
+  if (data->projection_loc == -1) {
+    data->projection_loc =
+        glGetUniformLocation(state->shader_program, "uProjection");
+  }
+
+  // Send matrices to shader
+  glUniformMatrix4fv(data->model_loc, 1, GL_FALSE, model.m);
+  glUniformMatrix4fv(data->view_loc, 1, GL_FALSE, view.m);
+  glUniformMatrix4fv(data->projection_loc, 1, GL_FALSE, projection.m);
+
+  // The pos_uniform will handle setting the camera position uniform
+  // when its render_uniform_data function is called
+}
+
+bool init_cam_view(CustomOpenGLState *state, GLObj *obj) {
+  CamData *data = (CamData *)obj->data;
+
+  // Initialize uniform locations to -1 so they get looked up on first render
+  data->model_loc = -1;
+  data->view_loc = -1;
+  data->projection_loc = -1;
+
   return true;
 }
 
-bool render_uniform_data(CustomOpenGLState *state, GLObj *obj) {
-  UniformData *uniform = (UniformData *)obj->data;
+void *CamView(void *pos_uniform, void *target_uniform) {
+  CamData *data = malloc(sizeof(CamData));
+  data->pos_uniform = (GLObj *)pos_uniform;
+  data->target_uniform = (GLObj *)target_uniform;
 
-  GLint location = glGetUniformLocation(state->shader_program, uniform->name);
-  if (location == -1) {
-    printf("Warning: uniform '%s' not found\n", uniform->name);
-    return true;
-  }
-
-  switch (uniform->components) {
-  case 1:
-    glUniform1f(location, uniform->value[0]);
-    break;
-  case 2:
-    glUniform2f(location, uniform->value[0], uniform->value[1]);
-    break;
-  case 3:
-    glUniform3f(location, uniform->value[0], uniform->value[1],
-                uniform->value[2]);
-    break;
-  case 4:
-    glUniform4f(location, uniform->value[0], uniform->value[1],
-                uniform->value[2], uniform->value[3]);
-    break;
-  case 16: // Matrix 4x4
-    glUniformMatrix4fv(location, 1, GL_FALSE, uniform->value);
-    break;
-  }
-
-  return true;
-}
-
-// Factory functions
-void *Uniform1f(_String name, double value) {
-  UniformData *data = malloc(sizeof(UniformData));
-  data->name = name.chars;
-  data->value[0] = (float)value;
-  data->components = 1;
+  // Initialize uniform locations
+  data->model_loc = -1;
+  data->view_loc = -1;
+  data->projection_loc = -1;
 
   GLObj obj = (GLObj){.data = data,
-                      .init_gl = (GLObjInitFn)init_uniform_data,
-                      .render_gl = (GLObjRenderFn)render_uniform_data,
+                      .init_gl = (GLObjInitFn)init_cam_view,
+                      .render_gl = (GLObjRenderFn)render_cam_view,
                       .next = NULL};
   return append_obj(obj);
 }
 
-void *Uniform3f(_String name, double x, double y, double z) {
-  UniformData *data = malloc(sizeof(UniformData));
-  data->name = name.chars;
-  data->value[0] = (float)x;
-  data->value[1] = (float)y;
-  data->value[2] = (float)z;
-  data->components = 3;
-
-  GLObj obj = (GLObj){.data = data,
-                      .init_gl = (GLObjInitFn)init_uniform_data,
-                      .render_gl = (GLObjRenderFn)render_uniform_data,
-                      .next = NULL};
-  return append_obj(obj);
-}
-
-void *UniformMat4(_String name, _DoubleArray matrix_values) {
-  UniformData *data = malloc(sizeof(UniformData));
-  data->name = name.chars;
-  data->components = 16;
-
-  // Convert double array to float matrix
-  for (int i = 0; i < 16; i++) {
-    data->value[i] = (float)matrix_values.data[i];
-  }
-
-  GLObj obj = (GLObj){.data = data,
-                      .init_gl = (GLObjInitFn)init_uniform_data,
-                      .render_gl = (GLObjRenderFn)render_uniform_data,
-                      .next = NULL};
-  return append_obj(obj);
+GLObj *gl_obj_bind_handler(GLObjEventHandlerFn handler, GLObj *obj) {
+  printf("bind handler %p\n", obj);
+  obj->handle_events = handler;
+  return obj;
 }
