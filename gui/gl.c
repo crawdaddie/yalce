@@ -680,7 +680,8 @@ void render_mvp_view(CustomOpenGLState *state, GLObj *obj) {
   }
 
   float aspect = (float)width / (float)height;
-  mat4_perspective(&projection, 45.0f * M_PI / 180.0f, aspect, 0.1f, 100.0f);
+  mat4_perspective(&projection, 45.0f * M_PI / 180.0f, aspect, 0.01f,
+                   100000000.0f);
 
   if (data->model_loc == -1) {
     data->model_loc = glGetUniformLocation(state->shader_program, "uModel");
@@ -722,65 +723,58 @@ void mvp_view_event_handler(CustomOpenGLState *state, GLObj *obj,
     float move_speed = 0.5f;   // Adjust movement speed
 
     switch (event->key.keysym.sym) {
-    case SDLK_UP:
-      // Move camera toward target (closer)
-      {
-        float dx = data->target.x - data->pos.x;
-        float dy = data->target.y - data->pos.y;
-        float dz = data->target.z - data->pos.z;
+    case SDLK_UP: {
+      float dx = data->target.x - data->pos.x;
+      float dy = data->target.y - data->pos.y;
+      float dz = data->target.z - data->pos.z;
 
-        // Normalize the direction vector
-        float len = sqrtf(dx * dx + dy * dy + dz * dz);
-        if (len > move_speed) { // Don't go past the target
-          dx /= len;
-          dy /= len;
-          dz /= len;
+      // Normalize the direction vector
+      float len = sqrtf(dx * dx + dy * dy + dz * dz);
+      if (len > move_speed) { // Don't go past the target
+        dx /= len;
+        dy /= len;
+        dz /= len;
 
-          // Move along the vector toward target
-          data->pos.x += dx * move_speed;
-          data->pos.y += dy * move_speed;
-          data->pos.z += dz * move_speed;
-        }
+        // Move along the vector toward target
+        data->pos.x += dx * move_speed;
+        data->pos.y += dy * move_speed;
+        data->pos.z += dz * move_speed;
+      }
+
+      break;
+    }
+
+    case SDLK_DOWN: {
+      float dx = data->target.x - data->pos.x;
+      float dy = data->target.y - data->pos.y;
+      float dz = data->target.z - data->pos.z;
+
+      float len = sqrtf(dx * dx + dy * dy + dz * dz);
+      if (len > 0.001f) { // Avoid division by zero
+        dx /= len;
+        dy /= len;
+        dz /= len;
+
+        data->pos.x -= dx * move_speed;
+        data->pos.y -= dy * move_speed;
+        data->pos.z -= dz * move_speed;
       }
       break;
+    }
 
-    case SDLK_DOWN:
-      // Move camera away from target (farther)
-      {
-        float dx = data->target.x - data->pos.x;
-        float dy = data->target.y - data->pos.y;
-        float dz = data->target.z - data->pos.z;
+    case SDLK_LEFT: {
+      float dx = data->pos.x - data->target.x;
+      float dz = data->pos.z - data->target.z;
 
-        // Normalize the direction vector
-        float len = sqrtf(dx * dx + dy * dy + dz * dz);
-        if (len > 0.001f) { // Avoid division by zero
-          dx /= len;
-          dy /= len;
-          dz /= len;
+      float dist = sqrtf(dx * dx + dz * dz);
+      float angle = atan2f(dz, dx);
 
-          // Move along the vector away from target
-          data->pos.x -= dx * move_speed;
-          data->pos.y -= dy * move_speed;
-          data->pos.z -= dz * move_speed;
-        }
-      }
+      angle += rotate_speed;
+
+      data->pos.x = data->target.x + dist * cosf(angle);
+      data->pos.z = data->target.z + dist * sinf(angle);
       break;
-
-    case SDLK_LEFT:
-      // Rotate camera left around target (counter-clockwise in XZ plane)
-      {
-        float dx = data->pos.x - data->target.x;
-        float dz = data->pos.z - data->target.z;
-
-        float dist = sqrtf(dx * dx + dz * dz);
-        float angle = atan2f(dz, dx);
-
-        angle += rotate_speed;
-
-        data->pos.x = data->target.x + dist * cosf(angle);
-        data->pos.z = data->target.z + dist * sinf(angle);
-      }
-      break;
+    }
 
     case SDLK_RIGHT:
       // Rotate camera right around target (clockwise in XZ plane)
@@ -854,7 +848,6 @@ bool render_uniform_data(CustomOpenGLState *state, GLObj *obj) {
     break;
   case 16: // Matrix 4x4
     glUniformMatrix4fv(location, 1, GL_FALSE, uniform->value);
-    printf("Set matrix uniform '%s'\n", uniform->name);
     break;
   }
 
