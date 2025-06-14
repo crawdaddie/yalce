@@ -1,0 +1,144 @@
+#! /usr/bin/env ylc --gui -i
+
+open ../../gui/bindings/Gui;
+import ../../lib/Math;
+
+import examples/gl/Hyg41Dataset;
+
+let star_data = Hyg41Dataset.load ();
+
+
+let uniformref_set = fn data: (Array of Double) obj: (Ptr) ->
+  set_uniform obj (cstr data)
+;;
+
+let pos_ref = [|empty_coroutine ()|];
+
+# let w = create_decl_window (fn () ->
+#   # let bg = Clear 1. 1. 1.;
+#   let bg = Clear 0. 0. 0.;
+# #   let vs = VShader `#version 330 core
+# # layout (location = 0) in vec3 aPos;
+# # layout (location = 1) in vec3 aColor;
+# # uniform mat4 uModel;
+# # uniform mat4 uView;
+# # uniform mat4 uProjection;
+# # out vec3 vertexColor;
+# # out vec3 worldPos;
+# # void main() \{
+# #   vec4 worldPosition = uModel * vec4(aPos, 1.0);
+# #   worldPos = worldPosition.xyz;
+# #   
+# #   // Transform to view space to get distance from camera
+# #   vec4 viewPosition = uView * worldPosition;
+# #   
+# #   gl_Position = uProjection * viewPosition;
+# #   vertexColor = aColor;
+# # \}`;
+#   let vs = VShader `#version 330 core
+# layout (location = 0) in vec3 aPos;
+# layout (location = 1) in vec3 aColor;
+# uniform mat4 uModel;
+# uniform mat4 uView;
+# uniform mat4 uProjection;
+# out vec3 vertexColor;
+# out vec3 worldPos;
+# void main() \{
+#   vec4 worldPosition = uModel * vec4(aPos, 1.0);
+#   worldPos = worldPosition.xyz;
+#   
+#   vec4 viewPosition = uView * worldPosition;
+#   vec4 projectedPosition = uProjection * viewPosition;
+#   
+#   // Reflect along y-axis by flipping x
+#   projectedPosition.x = -projectedPosition.x;
+#   
+#   gl_Position = projectedPosition;
+#   vertexColor = aColor;
+# \}`;
+#
+#
+#   let fs = FShader `#version 330 core
+# in vec3 vertexColor;
+# in vec3 worldPos;
+# uniform vec3 uCameraPos;
+# uniform float uTime;
+# out vec4 FragColor;
+#
+# void main() \{
+#   // vec3 invertedColor = 1.0 - 40. * vertexColor;
+#   // FragColor = vec4(invertedColor, 1.);
+#   FragColor = vec4(vertexColor, 1.);
+# \}`;
+#
+#
+#   let pos = Uniform3f "pos" 2. 3. 8.; 
+#   let target  = Uniform3f "target" 0. 0. 0.;
+#   let view = CamView (pos |> LagUniform "uPosLag" 0.3) target;
+#
+#   let points = Points star_data 2.;
+#   pos_ref[0] := pos 
+#
+# );
+let w = create_decl_window (fn () ->
+  let bg = Clear 0. 0. 0.;
+  let vs = VShader `#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uProjection;
+uniform float uMirror; // 1.0 for normal, -1.0 for mirrored
+out vec3 vertexColor;
+out vec3 worldPos;
+void main() \{
+  vec4 worldPosition = uModel * vec4(aPos, 1.0);
+  worldPos = worldPosition.xyz;
+  
+  vec4 viewPosition = uView * worldPosition;
+  vec4 projectedPosition = uProjection * viewPosition;
+  
+  // Apply mirroring and shift to correct half of screen
+  projectedPosition.x *= uMirror;
+  
+  // Shift to correct half: left half for mirror, right half for normal
+  if (uMirror < 0.0) \{
+    // Mirror side: shift left and scale to fit left half
+    projectedPosition.x = (projectedPosition.x - 1.0) * 0.5;
+  \} else \{
+    // Normal side: shift right and scale to fit right half  
+    projectedPosition.x = (projectedPosition.x + 1.0) * 0.5;
+  \}
+  
+  gl_Position = projectedPosition;
+  vertexColor = aColor;
+\}`;
+
+  let fs = FShader `#version 330 core
+in vec3 vertexColor;
+in vec3 worldPos;
+uniform vec3 uCameraPos;
+uniform float uTime;
+out vec4 FragColor;
+void main() \{
+  FragColor = vec4(vertexColor, 1.);
+\}`;
+
+  let pos = Uniform3f "pos" 2. 3. 8.; 
+  let target = Uniform3f "target" 0. 0. 0.;
+  let view = CamView (pos |> LagUniform "uPosLag" 0.3) target;
+
+  # Render normal version (right side)
+  let mirror_uniform1 = Uniform1f "uMirror" 1.;
+  let points1 = Points star_data 2.;
+  
+  # Render mirrored version (left side)  
+  let mirror_uniform2 = Uniform1f "uMirror" (-1.);
+  let points2 = Points star_data 2.;
+  
+  pos_ref[0] := pos 
+);
+
+let upos = fn () ->
+  pos_ref[0]
+;;

@@ -16,4 +16,15 @@ let create_opengl_window = extern fn Ptr -> Ptr -> Ptr -> Int -> Ptr -> Int;
 let triangle_renderer = extern fn Ptr -> ();
 let create_decl_window = extern fn Ptr -> Int;
 
+let VShader = extern fn String -> Ptr;
+let FShader = extern fn String -> Ptr;
+let TriangleData = extern fn Array of Double -> Ptr;
+let MVPView = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Ptr;
+let Points = extern fn Array of Double -> Double -> Ptr;
+
+let CamView = extern fn Ptr -> Ptr -> Ptr;
+let Uniform3f = extern fn String -> Double -> Double -> Double -> Ptr;
+let LagUniform = extern fn String -> Double -> Ptr -> Ptr;
+let set_uniform = extern fn Ptr -> Ptr -> ();
+let Clear = extern fn Double -> Double -> Double -> Ptr;
 

@@ -83,14 +83,15 @@ static bool init_opengl_decl_win(void *_state) {
 
   GLObj *head = state->objs;
   while (head) {
-    head->init_gl(state, head);
+    if (head->init_gl) {
+      head->init_gl(state, head);
+    }
     head = head->next;
   }
 
   glLinkProgram(state->shader_program);
 
   glEnable(GL_DEPTH_TEST);
-  // Set initial viewport
   int width, height;
   SDL_Window *window = SDL_GL_GetCurrentWindow();
   if (window) {
@@ -110,10 +111,8 @@ void open_gl_decl_renderer(void *_state) {
 
   CustomOpenGLState *state = _state;
 
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Dark gray instead of black
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
   glUseProgram(state->shader_program);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   GLObj *head = state->objs;
   while (head) {
     if (head->render_gl) {
@@ -160,13 +159,11 @@ void *FShader(_String str) {
 }
 
 void opengl_win_event_handler(CustomOpenGLState *state, SDL_Event *event) {
-  // Handle window resize
   if (event->type == SDL_WINDOWEVENT &&
       event->window.event == SDL_WINDOWEVENT_RESIZED) {
     int width = event->window.data1;
     int height = event->window.data2;
     glViewport(0, 0, width, height);
-    printf("Window resized to %dx%d, viewport updated\n", width, height);
   }
   GLObj *head = state->objs;
   while (head) {
@@ -234,7 +231,7 @@ bool render_uniform_data(CustomOpenGLState *state, GLObj *obj) {
     glUniform4f(location, uniform->value[0], uniform->value[1],
                 uniform->value[2], uniform->value[3]);
     break;
-  case 16: // Matrix 4x4
+  case 16:
     glUniformMatrix4fv(location, 1, GL_FALSE, uniform->value);
     break;
   }
@@ -242,7 +239,7 @@ bool render_uniform_data(CustomOpenGLState *state, GLObj *obj) {
   return true;
 }
 
-// Factory functions
+// Uniform Factory functions
 void *Uniform1f(_String name, double value) {
   UniformData *data = malloc(sizeof(UniformData));
   data->name = name.chars;
@@ -268,6 +265,7 @@ void *Uniform3f(_String name, double x, double y, double z) {
                       .init_gl = (GLObjInitFn)init_uniform_data,
                       .render_gl = (GLObjRenderFn)render_uniform_data,
                       .next = NULL};
+
   return append_obj(obj);
 }
 
@@ -276,7 +274,6 @@ void *UniformMat4(_String name, _DoubleArray matrix_values) {
   data->name = name.chars;
   data->components = 16;
 
-  // Convert double array to float matrix
   for (int i = 0; i < 16; i++) {
     data->value[i] = (float)matrix_values.data[i];
   }
@@ -289,10 +286,12 @@ void *UniformMat4(_String name, _DoubleArray matrix_values) {
 }
 
 void set_uniform(GLObj *obj, double *data) {
-  UniformData *udata = obj->data;
+  if (obj != NULL) {
+    UniformData *udata = obj->data;
 
-  for (int i = 0; i < udata->components; i++) {
-    udata->value[i] = data[i];
+    for (int i = 0; i < udata->components; i++) {
+      udata->value[i] = data[i];
+    }
   }
 }
 
@@ -304,15 +303,13 @@ typedef struct {
   GLObj *source_uniform;   // The uniform we're following
   float lerp_factor;       // How fast we catch up (0.0 = never, 1.0 = instant)
   Uint32 last_update_time; // For frame-rate independent smoothing
-} LaggedUniform3fData;
+} LaggedUniformData;
 
 bool init_lagged_uniform3f(CustomOpenGLState *state, GLObj *obj) {
-  LaggedUniform3fData *data = (LaggedUniform3fData *)obj->data;
+  LaggedUniformData *data = (LaggedUniformData *)obj->data;
 
-  // Initialize our output uniform
   data->loc = glGetUniformLocation(state->shader_program, data->name);
 
-  // Initialize our position to match the source
   UniformData *source_data = (UniformData *)data->source_uniform->data;
   data->value[0] = source_data->value[0];
   data->value[1] = source_data->value[1];
@@ -324,24 +321,18 @@ bool init_lagged_uniform3f(CustomOpenGLState *state, GLObj *obj) {
 }
 
 bool render_lagged_uniform3f(CustomOpenGLState *state, GLObj *obj) {
-  LaggedUniform3fData *data = (LaggedUniform3fData *)obj->data;
+  LaggedUniformData *data = (LaggedUniformData *)obj->data;
 
-  // Get current time for frame-rate independent interpolation
   Uint32 current_time = SDL_GetTicks();
-  float delta_time =
-      (current_time - data->last_update_time) / 1000.0f; // Convert to seconds
+  float delta_time = (current_time - data->last_update_time) / 1000.0f;
   data->last_update_time = current_time;
 
-  // Get the source uniform's current values
   UniformData *source_data = (UniformData *)data->source_uniform->data;
 
-  // Calculate frame-rate independent lerp factor
-  // This makes the lag consistent regardless of framerate
   float frame_lerp_factor =
       1.0f - powf(1.0f - data->lerp_factor,
                   delta_time * 60.0f); // Assuming 60fps baseline
 
-  // Smoothly interpolate towards the source values
   data->value[0] +=
       (source_data->value[0] - data->value[0]) * frame_lerp_factor;
   data->value[1] +=
@@ -349,36 +340,29 @@ bool render_lagged_uniform3f(CustomOpenGLState *state, GLObj *obj) {
   data->value[2] +=
       (source_data->value[2] - data->value[2]) * frame_lerp_factor;
 
-  // Set the uniform in the shader
   GLint location = data->loc;
   if (location == -1) {
     data->loc = glGetUniformLocation(state->shader_program, data->name);
     location = data->loc;
   }
 
-  if (location != -1) {
-    glUniform3f(location, data->value[0], data->value[1], data->value[2]);
-  }
+  glUniform3f(location, data->value[0], data->value[1], data->value[2]);
 
   return true;
 }
 
-void *LagUniform(const char *output_name, double lag_factor,
+void *LagUniform(_String output_name, double lag_factor,
                  GLObj *source_uniform) {
-  // printf("lag factor %s %f %p\n", output_name, lag_factor, source_uniform);
-  LaggedUniform3fData *data = malloc(sizeof(LaggedUniform3fData));
+  LaggedUniformData *data = malloc(sizeof(LaggedUniformData));
 
-  // Create our own uniform data for the output
-  data->name = output_name;
+  data->name = output_name.chars;
   data->components = 3;
   data->loc = -1;
 
-  // Set up the lag parameters
   data->source_uniform = (GLObj *)source_uniform;
   data->lerp_factor = (float)lag_factor; // 0.1 = slow lag, 0.9 = fast catch-up
   data->last_update_time = SDL_GetTicks();
 
-  // Initialize our position to match the source
   UniformData *source_data = (UniformData *)data->source_uniform->data;
   data->value[0] = source_data->value[0];
   data->value[1] = source_data->value[1];
@@ -395,11 +379,9 @@ void *LagUniform(const char *output_name, double lag_factor,
 
 typedef struct {
   int num_vertices;
-
-  // Each triangle gets its own GL resources
   GLuint vao;
   GLuint vbo;
-  float *gl_vertices; // Converted float data
+  float *gl_vertices;
 } TriData;
 
 void render_tri_data(CustomOpenGLState *state, GLObj *obj) {
@@ -460,9 +442,6 @@ void render_point_data(CustomOpenGLState *state, GLObj *obj) {
 
   glPointSize(point_data->point_size);
 
-  // Enable point sprites (makes gl_PointCoord available in fragment shader)
-  // glEnable(GL_PROGRAM_POINT_SIZE); // Allow shader to control point size
-
   glBindVertexArray(point_data->vao);
   glDrawArrays(GL_POINTS, 0, point_data->num_points);
   glBindVertexArray(0);
@@ -481,11 +460,9 @@ bool init_point_data(CustomOpenGLState *state, GLObj *obj) {
   glBufferData(GL_ARRAY_BUFFER, sizeof(float) * total_floats, d->gl_vertices,
                GL_STATIC_DRAW);
 
-  // Position attribute
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
 
-  // Color attribute
   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
                         (void *)(3 * sizeof(float)));
   glEnableVertexAttribArray(1);
@@ -726,12 +703,10 @@ bool init_quad_data(CustomOpenGLState *state, GLObj *obj) {
 
   glBindVertexArray(d->vao);
 
-  // Upload vertex data
   glBindBuffer(GL_ARRAY_BUFFER, d->vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * 6, d->gl_vertices,
                GL_STATIC_DRAW);
 
-  // Upload index data
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, d->ebo);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * 6, d->indices,
                GL_STATIC_DRAW);
@@ -898,13 +873,10 @@ void render_mvp_view(CustomOpenGLState *state, GLObj *obj) {
         glGetUniformLocation(state->shader_program, "uCameraPos");
   }
 
-  // // Send matrices to shader
   glUniformMatrix4fv(data->model_loc, 1, GL_FALSE, model.m);
   glUniformMatrix4fv(data->view_loc, 1, GL_FALSE, view.m);
   glUniformMatrix4fv(data->projection_loc, 1, GL_FALSE, projection.m);
   glUniform3f(data->camera_pos_loc, camera_pos.x, camera_pos.y, camera_pos.z);
-
-  // glUniformMatrix4fv(data->camera_pos_loc, 1, GL_FALSE, camera_pos);
 }
 
 bool init_mvp_view(CustomOpenGLState *state, GLObj *obj) {
@@ -983,21 +955,18 @@ void mvp_view_event_handler(CustomOpenGLState *state, GLObj *obj,
       break;
     }
 
-    case SDLK_RIGHT:
-      // Rotate camera right around target (clockwise in XZ plane)
-      {
-        float dx = data->pos.x - data->target.x;
-        float dz = data->pos.z - data->target.z;
+    case SDLK_RIGHT: {
+      float dx = data->pos.x - data->target.x;
+      float dz = data->pos.z - data->target.z;
 
-        float dist = sqrtf(dx * dx + dz * dz);
-        float angle = atan2f(dz, dx);
+      float dist = sqrtf(dx * dx + dz * dz);
+      float angle = atan2f(dz, dx);
 
-        angle -= rotate_speed;
+      angle -= rotate_speed;
 
-        data->pos.x = data->target.x + dist * cosf(angle);
-        data->pos.z = data->target.z + dist * sinf(angle);
-      }
-      break;
+      data->pos.x = data->target.x + dist * cosf(angle);
+      data->pos.z = data->target.z + dist * sinf(angle);
+    } break;
     }
   }
 }
@@ -1017,8 +986,6 @@ void *MVPView(double px, double py, double pz, double tx, double ty,
   return append_obj(obj);
 }
 
-// Complete CamView implementation for your C code:
-
 typedef struct {
   GLint model_loc;
   GLint view_loc;
@@ -1030,15 +997,10 @@ typedef struct {
 void render_cam_view(CustomOpenGLState *state, GLObj *obj) {
   CamData *data = (CamData *)obj->data;
 
-  // Get position from the uniform object
   UniformData *pos_data = (UniformData *)data->pos_uniform->data;
   Vec3 camera_pos = {pos_data->value[0], pos_data->value[1],
                      pos_data->value[2]};
 
-  // printf("camera pos %f, %f, %f,\n", camera_pos.x, camera_pos.y,
-  // camera_pos.z);
-
-  // Get target from the uniform object
   UniformData *target_data = (UniformData *)data->target_uniform->data;
   Vec3 target = {target_data->value[0], target_data->value[1],
                  target_data->value[2]};
@@ -1063,7 +1025,6 @@ void render_cam_view(CustomOpenGLState *state, GLObj *obj) {
   mat4_perspective(&projection, 45.0f * M_PI / 180.0f, aspect, 0.01f,
                    100000000.0f);
 
-  // Cache uniform locations
   if (data->model_loc == -1) {
     data->model_loc = glGetUniformLocation(state->shader_program, "uModel");
   }
@@ -1079,15 +1040,11 @@ void render_cam_view(CustomOpenGLState *state, GLObj *obj) {
   glUniformMatrix4fv(data->model_loc, 1, GL_FALSE, model.m);
   glUniformMatrix4fv(data->view_loc, 1, GL_FALSE, view.m);
   glUniformMatrix4fv(data->projection_loc, 1, GL_FALSE, projection.m);
-
-  // The pos_uniform will handle setting the camera position uniform
-  // when its render_uniform_data function is called
 }
 
 bool init_cam_view(CustomOpenGLState *state, GLObj *obj) {
   CamData *data = (CamData *)obj->data;
 
-  // Initialize uniform locations to -1 so they get looked up on first render
   data->model_loc = -1;
   data->view_loc = -1;
   data->projection_loc = -1;
@@ -1100,7 +1057,6 @@ void *CamView(void *pos_uniform, void *target_uniform) {
   data->pos_uniform = (GLObj *)pos_uniform;
   data->target_uniform = (GLObj *)target_uniform;
 
-  // Initialize uniform locations
   data->model_loc = -1;
   data->view_loc = -1;
   data->projection_loc = -1;
@@ -1113,7 +1069,27 @@ void *CamView(void *pos_uniform, void *target_uniform) {
 }
 
 GLObj *gl_obj_bind_handler(GLObjEventHandlerFn handler, GLObj *obj) {
-  printf("bind handler %p\n", obj);
   obj->handle_events = handler;
   return obj;
+}
+
+typedef struct {
+  double r, g, b;
+} BackgroundData;
+
+void render_bg(CustomOpenGLState *state, GLObj *obj) {
+  BackgroundData *data = (BackgroundData *)obj->data;
+  glClearColor(data->r, data->g, data->b, 1.0f);
+}
+
+GLObj *Clear(double r, double g, double b) {
+
+  BackgroundData *data = malloc(sizeof(BackgroundData));
+  data->r = r;
+  data->g = g;
+  data->b = b;
+
+  GLObj obj = (GLObj){
+      .data = data, .render_gl = (GLObjRenderFn)render_bg, .next = NULL};
+  return append_obj(obj);
 }
