@@ -1,7 +1,9 @@
+#include "./gl.h"
 #include "./common.h"
 #include <GL/glew.h>
 #include <SDL.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL_opengl.h>
@@ -12,15 +14,6 @@
 #include <stdlib.h>
 
 #include <GLFW/glfw3.h>
-
-typedef void (*DeclGlFn)();
-typedef struct {
-  const char *vertex_shader;
-  const char *fragment_shader;
-  GLuint shader_program;
-  DeclGlFn init_cb;
-  void *objs;
-} CustomOpenGLState;
 
 GLuint compile_shader(const char *source, GLenum type) {
   GLuint shader = glCreateShader(type);
@@ -37,20 +30,6 @@ GLuint compile_shader(const char *source, GLenum type) {
   }
   return shader;
 }
-
-typedef bool (*GLObjInitFn)(CustomOpenGLState *state, void *obj);
-typedef bool (*GLObjRenderFn)(CustomOpenGLState *state, void *obj);
-
-typedef bool (*GLObjEventHandlerFn)(CustomOpenGLState *state, void *obj,
-                                    SDL_Event *event);
-
-typedef struct GLObj {
-  void *data;
-  GLObjInitFn init_gl;
-  GLObjRenderFn render_gl;
-  GLObjEventHandlerFn handle_events;
-  struct GLObj *next;
-} GLObj;
 
 GLObj *_dcl_ctx_head = NULL;
 GLObj *_dcl_ctx_tail = NULL;
@@ -121,11 +100,6 @@ void open_gl_decl_renderer(void *_state) {
     head = head->next;
   }
 }
-
-typedef struct {
-  int size;
-  const char *chars;
-} _String;
 
 bool init_vshader(CustomOpenGLState *state, GLObj *obj) {
   GLuint vs = compile_shader(obj->data, GL_VERTEX_SHADER);
@@ -285,6 +259,8 @@ void *UniformMat4(_String name, _DoubleArray matrix_values) {
   return append_obj(obj);
 }
 
+void *UniformTime(_String name) {}
+
 void set_uniform(GLObj *obj, double *data) {
   if (obj != NULL) {
     UniformData *udata = obj->data;
@@ -428,6 +404,7 @@ void *TriangleData(_DoubleArray _d) {
                       .render_gl = (GLObjInitFn)render_tri_data};
   return append_obj(obj);
 }
+
 // ===== POINTS COMPONENT =====
 typedef struct {
   int num_points;
@@ -683,6 +660,7 @@ typedef struct {
   GLuint vbo;
   GLuint ebo; // Element buffer for indices
   float *gl_vertices;
+  unsigned int num_quads;
   unsigned int *indices;
 } QuadData;
 
@@ -695,6 +673,156 @@ void render_quad_data(CustomOpenGLState *state, GLObj *obj) {
 }
 
 bool init_quad_data(CustomOpenGLState *state, GLObj *obj) {
+  QuadData *d = (QuadData *)obj->data;
+
+  glGenVertexArrays(1, &d->vao);
+  glGenBuffers(1, &d->vbo);
+  glGenBuffers(1, &d->ebo);
+
+  glBindVertexArray(d->vao);
+
+  glBindBuffer(GL_ARRAY_BUFFER, d->vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * 3, d->gl_vertices,
+               GL_STATIC_DRAW);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, d->ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * 6, d->indices,
+               GL_STATIC_DRAW);
+
+  // Only position attribute (location 0) - 3 components per vertex
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+
+  glBindVertexArray(0);
+  return true;
+}
+
+void *Quad(_DoubleArray _d) {
+  // Quad needs 4 vertices (12 components: 4 vertices * 3 floats each) + 6
+  // indices
+  QuadData *d = malloc(sizeof(QuadData) + (sizeof(float) * 12) +
+                       (sizeof(unsigned int) * 6));
+  d->gl_vertices = (float *)(d + 1);
+  d->indices = (unsigned int *)(d->gl_vertices + 12);
+  d->vao = 0;
+  d->vbo = 0;
+  d->ebo = 0;
+
+  for (int i = 0; i < 12; i++) {
+    d->gl_vertices[i] = (float)_d.data[i];
+  }
+
+  d->indices[0] = 0;
+  d->indices[1] = 1;
+  d->indices[2] = 2;
+  d->indices[3] = 2;
+  d->indices[4] = 3;
+  d->indices[5] = 0;
+
+  GLObj obj = (GLObj){.data = d,
+                      .init_gl = (GLObjInitFn)init_quad_data,
+                      .render_gl = (GLObjRenderFn)render_quad_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+void render_quads_data(CustomOpenGLState *state, GLObj *obj) {
+  QuadData *quads_data = (QuadData *)obj->data;
+
+  glBindVertexArray(quads_data->vao);
+  glDrawElements(GL_TRIANGLES, quads_data->num_quads * 6, GL_UNSIGNED_INT, 0);
+  glBindVertexArray(0);
+}
+
+bool init_quads_data(CustomOpenGLState *state, GLObj *obj) {
+  QuadData *d = (QuadData *)obj->data;
+
+  glGenVertexArrays(1, &d->vao);
+  glGenBuffers(1, &d->vbo);
+  glGenBuffers(1, &d->ebo);
+
+  glBindVertexArray(d->vao);
+
+  glBindBuffer(GL_ARRAY_BUFFER, d->vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(float) * d->num_quads * 4 * 3,
+               d->gl_vertices, GL_STATIC_DRAW);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, d->ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * d->num_quads * 6,
+               d->indices, GL_STATIC_DRAW);
+
+  // Only position attribute (location 0) - 3 components per vertex
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+
+  glBindVertexArray(0);
+  return true;
+}
+
+void *Quads(_DoubleArray _d) {
+  // Calculate number of quads: each quad needs 4 vertices * 3 components = 12
+  // floats
+  int num_quads = _d.size / 12;
+
+  if (_d.size % 12 != 0) {
+    fprintf(stderr,
+            "Warning: Quads data size (%d) is not divisible by 12. Some "
+            "vertices may be ignored.\n",
+            _d.size);
+  }
+
+  // Allocate space for QuadsData + vertices + indices
+  int vertex_floats =
+      num_quads * 4 * 3;           // 4 vertices per quad, 3 floats per vertex
+  int index_count = num_quads * 6; // 6 indices per quad (2 triangles)
+
+  QuadData *d = malloc(sizeof(QuadData) + (sizeof(float) * vertex_floats) +
+                       (sizeof(unsigned int) * index_count));
+
+  d->num_quads = num_quads;
+  d->gl_vertices = (float *)(d + 1);
+  d->indices = (unsigned int *)(d->gl_vertices + vertex_floats);
+  d->vao = 0;
+  d->vbo = 0;
+  d->ebo = 0;
+
+  // Copy vertex data
+  for (int i = 0; i < vertex_floats && i < _d.size; i++) {
+    d->gl_vertices[i] = (float)_d.data[i];
+  }
+
+  // Generate indices for all quads
+  for (int quad = 0; quad < num_quads; quad++) {
+    int base_vertex = quad * 4; // Each quad has 4 vertices
+    int base_index = quad * 6;  // Each quad has 6 indices
+
+    // First triangle: vertices 0, 1, 2
+    d->indices[base_index + 0] = base_vertex + 0;
+    d->indices[base_index + 1] = base_vertex + 1;
+    d->indices[base_index + 2] = base_vertex + 2;
+
+    // Second triangle: vertices 2, 3, 0
+    d->indices[base_index + 3] = base_vertex + 2;
+    d->indices[base_index + 4] = base_vertex + 3;
+    d->indices[base_index + 5] = base_vertex + 0;
+  }
+
+  GLObj obj = (GLObj){.data = d,
+                      .init_gl = (GLObjInitFn)init_quads_data,
+                      .render_gl = (GLObjRenderFn)render_quads_data,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+void render_quad_color_data(CustomOpenGLState *state, GLObj *obj) {
+  QuadData *quad_data = (QuadData *)obj->data;
+
+  glBindVertexArray(quad_data->vao);
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+  glBindVertexArray(0);
+}
+
+bool init_quad_color_data(CustomOpenGLState *state, GLObj *obj) {
   QuadData *d = (QuadData *)obj->data;
 
   glGenVertexArrays(1, &d->vao);
@@ -721,7 +849,7 @@ bool init_quad_data(CustomOpenGLState *state, GLObj *obj) {
   return true;
 }
 
-void *Quad(_DoubleArray _d) {
+void *QuadColor(_DoubleArray _d) {
   // Quad needs 4 vertices (24 components) + 6 indices
   QuadData *d = malloc(sizeof(QuadData) + (sizeof(float) * 24) +
                        (sizeof(unsigned int) * 6));
@@ -1091,5 +1219,276 @@ GLObj *Clear(double r, double g, double b) {
 
   GLObj obj = (GLObj){
       .data = data, .render_gl = (GLObjRenderFn)render_bg, .next = NULL};
+  return append_obj(obj);
+}
+// ===== FRAMEBUFFER COMPONENT =====
+typedef struct {
+  const char *tex_name;
+  DeclGlFn init_fb; // Function pointer type should match
+  CustomOpenGLState *state;
+
+  GLuint framebuffer;
+  GLuint color_texture;
+  GLuint depth_renderbuffer;
+  int width, height;
+} FrameBufferData;
+
+void render_fb(CustomOpenGLState *state, GLObj *obj) {
+  FrameBufferData *fb = (FrameBufferData *)obj->data;
+
+  // Save current render state
+  GLint prev_framebuffer;
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_framebuffer);
+  GLint prev_viewport[4];
+  glGetIntegerv(GL_VIEWPORT, prev_viewport);
+  GLint prev_program;
+  glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+
+  // Switch to framebuffer rendering
+  glBindFramebuffer(GL_FRAMEBUFFER, fb->framebuffer);
+  glViewport(0, 0, fb->width, fb->height);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  // Use internal shader program
+  glUseProgram(fb->state->shader_program);
+
+  // Render internal scene
+  GLObj *head = fb->state->objs;
+  while (head) {
+    if (head->render_gl) {
+      head->render_gl(fb->state, head);
+    }
+    head = head->next;
+  }
+
+  // Restore main render state
+  glBindFramebuffer(GL_FRAMEBUFFER, prev_framebuffer);
+  glViewport(prev_viewport[0], prev_viewport[1], prev_viewport[2],
+             prev_viewport[3]);
+  glUseProgram(prev_program);
+
+  // Bind the framebuffer texture to the specified texture unit
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, fb->color_texture);
+
+  // Set the texture uniform in the main shader
+  GLint texture_loc = glGetUniformLocation(state->shader_program, fb->tex_name);
+  if (texture_loc != -1) {
+    glUniform1i(texture_loc, 1); // Use texture unit 1
+  }
+
+  // Reset to texture unit 0
+  glActiveTexture(GL_TEXTURE0);
+}
+
+bool init_fb(CustomOpenGLState *outer_state, GLObj *obj) {
+  // Save global context
+  GLObj *tmp_dcl_ctx_head = _dcl_ctx_head;
+  GLObj *tmp_dcl_ctx_tail = _dcl_ctx_tail;
+  _dcl_ctx_head = NULL;
+  _dcl_ctx_tail = NULL;
+
+  FrameBufferData *fb = (FrameBufferData *)obj->data;
+
+  fb->width = 512;
+  fb->height = 512;
+
+  glGenFramebuffers(1, &fb->framebuffer);
+  glBindFramebuffer(GL_FRAMEBUFFER, fb->framebuffer);
+
+  // Create color texture
+  glGenTextures(1, &fb->color_texture);
+  glBindTexture(GL_TEXTURE_2D, fb->color_texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, fb->width, fb->height, 0, GL_RGBA,
+               GL_UNSIGNED_BYTE, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                         fb->color_texture, 0);
+
+  glGenRenderbuffers(1, &fb->depth_renderbuffer);
+  glBindRenderbuffer(GL_RENDERBUFFER, fb->depth_renderbuffer);
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, fb->width,
+                        fb->height);
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                            GL_RENDERBUFFER, fb->depth_renderbuffer);
+
+  // Check framebuffer completeness
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    printf("Framebuffer not complete!\n");
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return false;
+  }
+
+  // Initialize internal state
+  CustomOpenGLState *inner_state = fb->state;
+  inner_state->shader_program = glCreateProgram();
+
+  // Call the framebuffer's declarative function to build scene
+  inner_state->init_cb();
+  inner_state->objs = _dcl_ctx_head;
+
+  // Initialize all objects in the framebuffer scene
+  GLObj *head = inner_state->objs;
+  while (head) {
+    if (head->init_gl) {
+      head->init_gl(inner_state, head);
+    }
+    head = head->next;
+  }
+
+  // Link the framebuffer shader program
+  glLinkProgram(inner_state->shader_program);
+
+  GLint success;
+  glGetProgramiv(inner_state->shader_program, GL_LINK_STATUS, &success);
+  if (!success) {
+    char info[512];
+    glGetProgramInfoLog(inner_state->shader_program, 512, NULL, info);
+    printf("Framebuffer shader program linking failed: %s\n", info);
+    return false;
+  }
+
+  // Restore default framebuffer
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  // Restore global context
+  _dcl_ctx_head = tmp_dcl_ctx_head;
+  _dcl_ctx_tail = tmp_dcl_ctx_tail;
+
+  return true;
+}
+
+GLObj *FrameBuffer(_String texture_name, void *cb) {
+  // Allocate space for FrameBufferData + CustomOpenGLState
+  FrameBufferData *data =
+      malloc(sizeof(FrameBufferData) + sizeof(CustomOpenGLState));
+  data->tex_name = texture_name.chars;
+  data->state = (CustomOpenGLState *)(data + 1);
+  data->init_fb = (DeclGlFn)cb;
+  data->state->init_cb = (DeclGlFn)cb;
+
+  // Initialize OpenGL objects to 0
+  data->framebuffer = 0;
+  data->color_texture = 0;
+  data->depth_renderbuffer = 0;
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_fb,
+                      .render_gl = (GLObjRenderFn)render_fb,
+                      .next = NULL};
+  return append_obj(obj);
+}
+
+// apply_texture can remain simple since framebuffer handles binding
+GLObj *apply_texture(GLObj *tex, GLObj *shape) { return shape; }
+// Add these includes at the top of your file
+
+// ===== TEXTURE COMPONENT =====
+typedef struct {
+  const char *filename;
+  const char *uniform_name;
+  GLuint texture_id;
+  GLint uniform_location;
+  int texture_unit; // Which texture unit to bind to (0, 1, 2, etc.)
+} TextureData;
+
+bool init_texture(CustomOpenGLState *state, GLObj *obj) {
+  TextureData *tex = (TextureData *)obj->data;
+
+  // Load image using SDL_image
+  SDL_Surface *surface = IMG_Load(tex->filename);
+  if (!surface) {
+    fprintf(stderr, "Failed to load image %s: %s\n", tex->filename,
+            IMG_GetError());
+    return false;
+  }
+
+  // Convert to RGBA format if needed
+  SDL_Surface *rgba_surface = NULL;
+  if (surface->format->format != SDL_PIXELFORMAT_RGBA32) {
+    rgba_surface = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+    SDL_FreeSurface(surface);
+    surface = rgba_surface;
+  }
+
+  if (!surface) {
+    fprintf(stderr, "Failed to convert image to RGBA format\n");
+    return false;
+  }
+
+  // Generate OpenGL texture
+  glGenTextures(1, &tex->texture_id);
+  glActiveTexture(GL_TEXTURE0 + tex->texture_unit);
+  glBindTexture(GL_TEXTURE_2D, tex->texture_id);
+
+  // Upload image data to GPU
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_RGBA,
+               GL_UNSIGNED_BYTE, surface->pixels);
+
+  // Set texture parameters
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+  // Generate mipmaps for better quality at distance
+  glGenerateMipmap(GL_TEXTURE_2D);
+
+  // Get uniform location
+  tex->uniform_location =
+      glGetUniformLocation(state->shader_program, tex->uniform_name);
+
+  // Clean up
+  SDL_FreeSurface(surface);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glActiveTexture(GL_TEXTURE0);
+
+  printf("Loaded texture %s (ID: %d) to unit %d\n", tex->filename,
+         tex->texture_id, tex->texture_unit);
+  return true;
+}
+
+void render_texture(CustomOpenGLState *state, GLObj *obj) {
+  TextureData *tex = (TextureData *)obj->data;
+
+  // Bind texture to its assigned unit
+  glActiveTexture(GL_TEXTURE0 + tex->texture_unit);
+  glBindTexture(GL_TEXTURE_2D, tex->texture_id);
+
+  // Set the uniform to point to this texture unit
+  if (tex->uniform_location != -1) {
+    glUniform1i(tex->uniform_location, tex->texture_unit);
+  } else {
+    // Try to get the location again (in case shader wasn't ready during init)
+    tex->uniform_location =
+        glGetUniformLocation(state->shader_program, tex->uniform_name);
+    if (tex->uniform_location != -1) {
+      glUniform1i(tex->uniform_location, tex->texture_unit);
+    }
+  }
+}
+
+// Factory function to create a texture
+void *ImgTexture(_String filename, _String uniform_name, int texture_unit) {
+  TextureData *data = malloc(sizeof(TextureData));
+  data->filename = malloc(filename.size);
+  memcpy(data->filename, filename.chars, filename.size);
+  data->uniform_name = uniform_name.chars;
+
+  data->uniform_name = malloc(uniform_name.size);
+
+  memcpy(data->uniform_name, uniform_name.chars, filename.size);
+  data->texture_unit = texture_unit;
+
+  data->texture_id = 0;
+  data->uniform_location = -1;
+
+  GLObj obj = (GLObj){.data = data,
+                      .init_gl = (GLObjInitFn)init_texture,
+                      .render_gl = (GLObjRenderFn)render_texture,
+                      .next = NULL};
   return append_obj(obj);
 }

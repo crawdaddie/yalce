@@ -14,7 +14,7 @@ let uniformref_set = fn data: (Array of Double) obj: (Ptr) ->
 
 let pos_ref = [|empty_coroutine ()|];
 
-let w = create_decl_window (fn () ->
+let stars_fb = fn () ->
   let vs = VShader `#version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aColor;
@@ -54,8 +54,50 @@ void main() \{
   let points = Points star_data 2.;
   pos_ref[0] := pos 
 
-);
+;;
 
 let upos = fn () ->
   pos_ref[0]
 ;;
+
+let FrameBuffer = extern fn String -> Ptr -> Int;
+let w = create_decl_window (fn () ->
+  let bg = Clear 0. 0. 0.;
+  let fbt = FrameBuffer "uFrameBufferTexture" stars_fb;
+
+  let vs = VShader `#version 330 core
+layout (location = 0) in vec3 aPos;
+out vec2 texCoord;
+void main() \{
+  gl_Position = vec4(aPos, 1.0);
+  texCoord = aPos.xy * 0.5 + 0.5; // Convert from [-1,1] to [0,1]
+\}`;
+
+  let fs = FShader `#version 330 core
+in vec2 texCoord;
+uniform sampler2D uFrameBufferTexture;
+out vec4 FragColor;
+void main() \{
+  vec2 finalTexCoord = texCoord;
+  
+  // Check if we're on the right half of the screen
+  if (texCoord.x > 0.5) \{
+    // Mirror the X coordinate for the right half
+    // Map [0.5, 1.0] to [0.5, 0.0] (flipped)
+    finalTexCoord.x = 1.0 - texCoord.x;
+  \}
+  
+  vec4 texColor = texture(uFrameBufferTexture, finalTexCoord);
+  FragColor = texColor;
+\}`;
+
+  let full_screen_quad = Quad [|
+    -1., -1., 0., 
+     1., -1., 0.,  
+     1.,  1., 0., 
+    -1.,  1., 0., 
+  |]
+
+);
+
+

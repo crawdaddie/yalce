@@ -15,6 +15,7 @@ CFLAGS := -Wall -Wextra -fPIC -I. \
 LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
 					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
+					 -L$(shell brew --prefix sdl2_image)/lib -lSDL2_image \
 					 -L$(VST_BUILD_PATH) -lylcvst \
 					 -lGLEW -lglfw
 
@@ -37,7 +38,7 @@ all: $(BUILD_DIR)/libgui.so
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/%.o: %.c gui.h | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.c gui.h gl.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Special rule for Objective-C files

@@ -1,6 +1,7 @@
 #include "gui.h"
 #include "./common.h"
 #include "SDL2/SDL2_gfxPrimitives.h"
+#include "SDL2/SDL_image.h"
 #include <GL/glew.h>
 #include <SDL.h>
 #include <SDL2/SDL.h>
@@ -66,6 +67,10 @@ int init_gui() {
   if (TTF_Init() == -1) {
     fprintf(stderr, "TTF_Init failed: %s\n", TTF_GetError());
     return 1;
+  }
+  if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
+    fprintf(stderr, "Failed to initialize SDL_image: %s\n", IMG_GetError());
+    return -1;
   }
   DEFAULT_FONT = TTF_OpenFont("/System/Library/Fonts/Menlo.ttc", 16);
   if (!DEFAULT_FONT) {

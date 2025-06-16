@@ -27,10 +27,8 @@ let SDL_RegisterEvents = extern fn Int -> Int;
 
 let gl_push_custom_event = extern fn Int -> Ptr -> ();
 
-let pos = [|[]|];
 
-let w = create_decl_window (fn () ->
-
+let fbf = fn () ->
   let vs = VShader `#version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aColor;
@@ -66,30 +64,70 @@ void main() \{
 
   let view = CamView lag target;
 
-  let origin = Points [|
-    0.0, 0.0, 0., 1.,0.,0.,
-  |] 10.;
-
-  let points = Points [|
-    0.,0.,0., 1.,0.,1.,
-    0.,0.,1., 1.,0.,1.,
-    0.,1.,0., 1.,0.,1.,
-    1.,0.,0., 1.,0.,1.,
-    0.,1.,1., 1.,0.,1.,
-    1.,1.,0., 1.,0.,1.,
-    1.,0.,1., 1.,0.,1.,
-    1.,1.,1., 1.,0.,1.,
-  |] 3.;
+  let points = Points (array_fill 512 (fn i: (Int) -> 
+  match i % 6 with
+  | 0 -> Math.randn 0. 1.
+  | 1 -> Math.randn 0. 1.
+  | 2 -> Math.randn 0. 0.1
+  | 3 -> 1.
+  | 4 -> 0.
+  | 5 -> 1.
+  ))
+  2.
+  ;
 
   let rout = fn pos ->
     uniformref_set [|Math.rand_double_range -10. 10., Math.rand_double_range -10. 10., Math.rand_double_range -10. 10.|] pos;
     yield 0.25;
     yield rout pos
   ;;
-  #
-  #
+
   rout pos
     |> play_routine 0 schedule_event
+
+  # print `complete func\n`;
+
+;;
+
+let FrameBuffer = extern fn String -> Ptr -> Int;
+
+let w = create_decl_window (fn () ->
+  let bg = Clear 0. 0. 0.;
+  let fbt = FrameBuffer "uFrameBufferTexture" fbf;
+
+  let vs = VShader `#version 330 core
+layout (location = 0) in vec3 aPos;
+out vec2 texCoord;
+void main() \{
+  gl_Position = vec4(aPos, 1.0);
+  texCoord = aPos.xy * 0.5 + 0.5; // Convert from [-1,1] to [0,1]
+\}`;
+
+  let fs = FShader `#version 330 core
+in vec2 texCoord;
+uniform sampler2D uFrameBufferTexture;
+out vec4 FragColor;
+void main() \{
+  vec2 finalTexCoord = texCoord;
+  
+  // Check if we're on the right half of the screen
+  if (texCoord.x > 0.5) \{
+    // Mirror the X coordinate for the right half
+    // Map [0.5, 1.0] to [0.5, 0.0] (flipped)
+    finalTexCoord.x = 1.0 - texCoord.x;
+  \}
+  
+  vec4 texColor = texture(uFrameBufferTexture, finalTexCoord);
+  FragColor = texColor;
+\}`;
+
+  let full_screen_quad = Quad [|
+    -1., -1., 0., 
+     1., -1., 0.,  
+     1.,  1., 0., 
+    -1.,  1., 0., 
+  |]
+
 );
 
 

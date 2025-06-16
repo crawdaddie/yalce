@@ -10,3 +10,5 @@ let LagUniform = extern fn String -> Double -> Ptr -> Ptr;
 let set_uniform = extern fn Ptr -> Ptr -> ();
 let Clear = extern fn Double -> Double -> Double -> Ptr;
 
+let Quad = extern fn Array of Double -> Ptr;
+let Quads = extern fn Array of Double -> Ptr;

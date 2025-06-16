@@ -1,0 +1,78 @@
+#! /usr/bin/env ylc --gui -i
+open ../../gui/bindings/Gui;
+
+let FrameBuffer = extern fn String -> Ptr -> Int;
+let apply_texture = extern fn Ptr -> Ptr -> Ptr;
+let ImgTexture = extern fn String -> String -> Int -> Ptr;
+
+let w = create_decl_window (fn () ->
+  let bg = Clear 0. 0. 0.;
+  let fbt = FrameBuffer "uFrameBufferTexture" (fn () -> 
+    # Create a gradual sine-based pattern
+    let vs = VShader `#version 330 core
+layout (location = 0) in vec3 aPos;
+out vec2 screenPos;
+void main() \{
+  gl_Position = vec4(aPos, 1.0);
+  screenPos = aPos.xy * 0.5 + 0.5; // Convert from [-1,1] to [0,1]
+\}`;
+
+    let fs = FShader `#version 330 core
+in vec2 screenPos;
+out vec4 FragColor;
+
+void main() \{
+  vec2 pos = screenPos;
+  
+  // Create wave patterns with different frequencies
+  float wave1 = sin(pos.x * 10.0) * 0.5 + 0.5;
+  float wave2 = sin(pos.y * 8.0) * 0.5 + 0.5;
+  float wave3 = sin((pos.x + pos.y) * 6.0) * 0.5 + 0.5;
+  
+  // Combine waves for different color channels
+  float r = wave1 * wave3;
+  float g = wave2 * sin(pos.x * pos.y * 20.0) * 0.5 + 0.5;
+  float b = wave1 * wave2;
+  
+  // Add some radial component for more interest
+  float dist = distance(pos, vec2(0.5, 0.5));
+  float radial = sin(dist * 15.0) * 0.3 + 0.7;
+  
+  FragColor = vec4(r * radial, g * radial, b * radial, 1.0);
+\}`;
+
+    let quad = Quad [|
+      -1., -1., 0., 
+       1., -1., 0.,  
+       1.,  1., 0., 
+      -1.,  1., 0., 
+    |]
+    
+  );
+
+  let vs = VShader `#version 330 core
+layout (location = 0) in vec3 aPos;
+out vec2 texCoord;
+void main() \{
+  gl_Position = vec4(aPos, 1.0);
+  texCoord = aPos.xy * 0.5 + 0.5; // Convert from [-1,1] to [0,1] for proper texture sampling
+\}`;
+
+  let fs = FShader `#version 330 core
+in vec2 texCoord;
+uniform sampler2D uFrameBufferTexture;
+out vec4 FragColor;
+void main() \{
+  vec4 texColor = texture(uFrameBufferTexture, texCoord);
+  FragColor = texColor; // Use the framebuffer texture
+\}`;
+
+  # Centered quad that will display the framebuffer texture
+  let textured_quad = Quads [|
+    -1., -1., 0.,
+    -1.,  1., 0.,
+     0.,  1., 0.,
+     0., -1., 0.,
+  |];
+
+)

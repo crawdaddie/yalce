@@ -84,9 +84,9 @@ let get_stars_array = fn list: (List of StarData) idx arr ->
     arr[idx * 6] := x;
     arr[idx * 6 + 1] := y;
     arr[idx * 6 + 2] := z;
-    arr[idx * 6 + 3] := brightness * 0.;
-    arr[idx * 6 + 4] := brightness * 0.;
-    arr[idx * 6 + 5] := brightness * 3.; 
+    arr[idx * 6 + 3] := brightness * 0.5;
+    arr[idx * 6 + 4] := brightness * 0.75;
+    arr[idx * 6 + 5] := brightness * 1.; 
     get_stars_array rest (idx+1) arr
   )
 ;;
