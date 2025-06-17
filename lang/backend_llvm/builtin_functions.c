@@ -36,13 +36,24 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
   Ast *impl = trait->data.AST_TRAIT_IMPL.impl;
 
   if (impl->tag == AST_MODULE) {
-    for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
-      Ast *expr = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+    print_ast(impl);
+
+    if (impl->data.AST_LAMBDA.body->tag != AST_BODY) {
+      Ast *expr = impl->data.AST_LAMBDA.body;
       LLVMValueRef func = codegen(expr, ctx, module, builder);
       constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
           specific_fns_extend(
               constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
               expr->md, func);
+    } else {
+      for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
+        Ast *expr = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+        LLVMValueRef func = codegen(expr, ctx, module, builder);
+        constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+            specific_fns_extend(constructor_sym->symbol_data
+                                    .STYPE_GENERIC_FUNCTION.specific_fns,
+                                expr->md, func);
+      }
     }
   }
   uint64_t hash_id = trait->data.AST_TRAIT_IMPL.type.hash;

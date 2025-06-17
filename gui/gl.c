@@ -1290,8 +1290,8 @@ bool init_fb(CustomOpenGLState *outer_state, GLObj *obj) {
 
   FrameBufferData *fb = (FrameBufferData *)obj->data;
 
-  fb->width = 512;
-  fb->height = 512;
+  // fb->width = 512;
+  // fb->height = 512;
 
   glGenFramebuffers(1, &fb->framebuffer);
   glBindFramebuffer(GL_FRAMEBUFFER, fb->framebuffer);
@@ -1315,22 +1315,18 @@ bool init_fb(CustomOpenGLState *outer_state, GLObj *obj) {
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                             GL_RENDERBUFFER, fb->depth_renderbuffer);
 
-  // Check framebuffer completeness
   if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
     printf("Framebuffer not complete!\n");
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return false;
   }
 
-  // Initialize internal state
   CustomOpenGLState *inner_state = fb->state;
   inner_state->shader_program = glCreateProgram();
 
-  // Call the framebuffer's declarative function to build scene
   inner_state->init_cb();
   inner_state->objs = _dcl_ctx_head;
 
-  // Initialize all objects in the framebuffer scene
   GLObj *head = inner_state->objs;
   while (head) {
     if (head->init_gl) {
@@ -1361,7 +1357,7 @@ bool init_fb(CustomOpenGLState *outer_state, GLObj *obj) {
   return true;
 }
 
-GLObj *FrameBuffer(_String texture_name, void *cb) {
+GLObj *FrameBuffer(_String texture_name, int width, int height, void *cb) {
   // Allocate space for FrameBufferData + CustomOpenGLState
   FrameBufferData *data =
       malloc(sizeof(FrameBufferData) + sizeof(CustomOpenGLState));
@@ -1369,6 +1365,8 @@ GLObj *FrameBuffer(_String texture_name, void *cb) {
   data->state = (CustomOpenGLState *)(data + 1);
   data->init_fb = (DeclGlFn)cb;
   data->state->init_cb = (DeclGlFn)cb;
+  data->width = width;
+  data->height = height;
 
   // Initialize OpenGL objects to 0
   data->framebuffer = 0;
