@@ -31,7 +31,7 @@ char *node_get_state(Node *node, AudioGraph *graph) {
   return state;
 }
 
-void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
+void write_to_dac(int dac_layout, float *dac_buf, int layout, float *buf,
                   int output_num, int nframes) {
 
   if (output_num > 0) {
@@ -61,7 +61,7 @@ void __node_get_inputs_raw(Node *node, Node *inputs[]) {
   }
 }
 
-void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
+void perform_graph(Node *head, int frame_count, float spf, float *dac_buf,
                    int layout, int output_num) {
 
   if (!head) {
@@ -91,7 +91,7 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     head->perform(head, state, inputs, frame_count, spf);
     // if (head->bus) {
     //   NodeRef bus = head->bus;
-    //   double *bus_buf = bus->output.buf;
+    //   float *bus_buf = bus->output.buf;
     //   int layout = bus->output.layout;
     //   write_to_dac(layout, bus_buf + (head->frame_offset * layout),
     //                head->output.layout, head->output.buf, 1,
@@ -111,8 +111,8 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
   }
 }
 
-static void write_null_to_output_buf(double *out, int nframes, int layout) {
-  double *dest = out;
+static void write_null_to_output_buf(float *out, int nframes, int layout) {
+  float *dest = out;
   while (nframes--) {
     for (int ch = 0; ch < layout; ch++) {
       *dest = 0.0;
@@ -122,7 +122,7 @@ static void write_null_to_output_buf(double *out, int nframes, int layout) {
 }
 
 void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
-                       double spf) {
+                       float spf) {
 
   int consumed = process_msg_queue_pre(current_tick, &ctx->msg_queue);
   ensemble_state graph = ctx->graph;
@@ -162,7 +162,7 @@ Node *inlet(double default_val) {
   };
 
   for (int i = 0; i < BUF_SIZE; i++) {
-    f->output.buf[i] = default_val;
+    f->output.buf[i] = (float)default_val;
     // printf("const node val %f\n", node->output.buf[i]);
   }
 
@@ -263,7 +263,7 @@ void start_blob() {
   *graph = (AudioGraph){
       .nodes = malloc(16 * sizeof(Node)),
       .capacity = 16,
-      .buffer_pool = malloc(sizeof(double) * (1 << 16)),
+      .buffer_pool = malloc(sizeof(float) * (1 << 16)),
       .buffer_pool_capacity = 1 << 16,
       .nodes_state_memory = malloc(sizeof(char) * (1 << 16)),
       .state_memory_capacity = 1 << 16,
@@ -277,9 +277,9 @@ AudioGraph *end_blob() {
   graph->capacity = graph->node_count;
   graph->nodes = realloc(graph->nodes, (sizeof(Node) * graph->capacity));
 
-  double *b = graph->buffer_pool;
+  float *b = graph->buffer_pool;
   graph->buffer_pool_capacity = graph->buffer_pool_size;
-  graph->buffer_pool = calloc(graph->buffer_pool_capacity, sizeof(double));
+  graph->buffer_pool = calloc(graph->buffer_pool_capacity, sizeof(float));
   for (int i = 0; i < graph->buffer_pool_capacity; i++) {
     graph->buffer_pool[i] = b[i];
   }
@@ -305,7 +305,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   char *node_mem = malloc(sizeof(Node));
 
   int memsize = sizeof(AudioGraph) + sizeof(Node) * g->capacity +
-                sizeof(double) * g->buffer_pool_capacity +
+                sizeof(float) * g->buffer_pool_capacity +
                 sizeof(char) * g->state_memory_capacity;
 
   char *mem = malloc(memsize);
@@ -321,12 +321,12 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   memcpy(graph_state->nodes, g->nodes, sizeof(Node) * g->capacity);
   mem += sizeof(Node) * g->capacity;
 
-  graph_state->buffer_pool = (double *)mem;
+  graph_state->buffer_pool = (float *)mem;
   memcpy(graph_state->buffer_pool, g->buffer_pool,
-         sizeof(double) * g->buffer_pool_capacity);
-  mem += sizeof(double) * g->buffer_pool_capacity;
+         sizeof(float) * g->buffer_pool_capacity);
+  mem += sizeof(float) * g->buffer_pool_capacity;
 
-  double *buf_mem = graph_state->buffer_pool;
+  float *buf_mem = graph_state->buffer_pool;
   for (int i = 0; i < graph_state->node_count; i++) {
     Node *n = graph_state->nodes + i;
     if (strcmp(n->meta, "buf_ref") == 0) {
@@ -370,7 +370,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
     int idx = input_vals->pair.idx;
 
     inputs_mask |= (1U << idx);
-    double val = input_vals->pair.val;
+    float val = input_vals->pair.val;
     int inlet_node_idx = graph_state->inlets[idx];
     Node *inlet_node = graph_state->nodes + inlet_node_idx;
 
@@ -387,7 +387,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
     if (inputs_mask & (1U << idx)) {
       continue; // Skip to the next iteration
     }
-    double val = g->inlet_defaults[idx];
+    float val = g->inlet_defaults[idx];
     int inlet_node_idx = graph_state->inlets[idx];
     Node *inlet_node = graph_state->nodes + inlet_node_idx;
     for (int i = 0; i < inlet_node->output.layout * inlet_node->output.size;
@@ -538,11 +538,11 @@ int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
 
   size_t total_size = sfinfo.channels * sfinfo.frames;
 
-  double *buf = calloc((int)total_size, sizeof(double));
-  // double *buf = signal->buf;
+  float *buf = calloc((int)total_size, sizeof(float));
+  // float *buf = signal->buf;
 
   // reads channels in interleaved
-  int read = sf_read_double(infile, buf, total_size);
+  int read = sf_read_float(infile, buf, total_size);
   if (read != total_size) {
     printf("warning read failure, read %d != total size) %zu", read,
            total_size);
@@ -563,10 +563,10 @@ typedef struct {
   int sample_rate;
 } sf_meta;
 
-NodeRef load_soundfile(const char *path) {
+NodeRef load_soundfile(_YLC_String path) {
   Node *sf = malloc(sizeof(Node) + sizeof(sf_meta));
   sf_meta *meta = (sf_meta *)((Node *)sf + 1);
-  if (_read_file(path, &sf->output, &meta->sample_rate) != 0) {
+  if (_read_file(path.chars, &sf->output, &meta->sample_rate) != 0) {
     return NULL;
   }
   // printf("created sf node %d %d (%d)\n", sf->output.layout, sf->output.size,
@@ -575,7 +575,7 @@ NodeRef load_soundfile(const char *path) {
   return sf;
 }
 
-// void set_input_scalar_offset(NodeRef target, int input, int offset, double
+// void set_input_scalar_offset(NodeRef target, int input, int offset, float
 // val) {
 //   push_msg(
 //       &ctx.msg_queue,
@@ -659,20 +659,20 @@ double midi_to_freq(int midi_note) {
 }
 
 Signal *node_out(NodeRef node) { return &(node->output); }
-double *sig_raw(Signal *sig) { return sig->buf; }
+float *sig_raw(Signal *sig) { return sig->buf; }
 int sig_size(Signal *sig) { return sig->size; }
 int sig_layout(Signal *sig) { return sig->layout; }
 
 NodeRef render_to_buf(int frames, NodeRef node) {
   int layout = node->output.layout;
 
-  Node *out = malloc(sizeof(Node) + (sizeof(double) * frames * layout));
+  Node *out = malloc(sizeof(Node) + (sizeof(float) * frames * layout));
   out->output.layout = layout;
   out->output.size = frames;
-  out->output.buf = (double *)((Node *)out + 1);
-  double *buf = out->output.buf;
+  out->output.buf = (float *)((Node *)out + 1);
+  float *buf = out->output.buf;
   node->write_to_output = true;
-  double *b = buf;
+  float *b = buf;
   int rendered_frames = 0;
   for (int i = 0; i < (frames / BUF_SIZE); i++) {
     perform_graph(node, BUF_SIZE, ctx.spf, b, layout, 0);
@@ -686,7 +686,7 @@ NodeRef render_to_buf(int frames, NodeRef node) {
   return out;
 }
 
-NodeRef __array_to_buf(int layout, int size, double *data) {
+NodeRef __array_to_buf(int layout, int size, float *data) {
 
   Node *out = malloc(sizeof(Node));
   out->output.layout = layout;

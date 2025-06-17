@@ -54,17 +54,17 @@ void maketable_grain_window();
 
 NodeRef array_choose_trig_node(int arr_size, double *arr_data, NodeRef trig);
 
-double pow2table_read(double pos, int tabsize, double *table);
+float pow2table_read(float pos, int tabsize, float *table);
 #define GRAIN_WINDOW_TABSIZE (1 << 9)
-extern double grain_win[GRAIN_WINDOW_TABSIZE];
+extern float grain_win[GRAIN_WINDOW_TABSIZE];
 
-// double *get_sq_table();
+// float *get_sq_table();
 // uint32_t get_sq_tabsize();
 //
-// double *get_sin_table();
+// float *get_sin_table();
 // uint32_t get_sin_tabsize();
 //
-// double *get_saw_table();
+// float *get_saw_table();
 // uint32_t get_saw_tabsize();
 
 #endif

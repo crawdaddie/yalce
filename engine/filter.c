@@ -12,17 +12,17 @@
 
 // Biquad filter state
 typedef struct biquad_state {
-  double b0, b1, b2; // Feedforward coefficients
-  double a1, a2;     // Feedback coefficients
-  double x1, x2;     // Input delay elements
-  double y1, y2;     // Output delay elements
-  double prev_freq;  // Previous frequency value for coefficient updates
-  double prev_res;   // Previous resonance value
+  float b0, b1, b2; // Feedforward coefficients
+  float a1, a2;     // Feedback coefficients
+  float x1, x2;     // Input delay elements
+  float y1, y2;     // Output delay elements
+  float prev_freq;  // Previous frequency value for coefficient updates
+  float prev_res;   // Previous resonance value
 } biquad_state;
 
 // Initialize filter coefficients and state variables
-static void set_biquad_filter_state(biquad_state *filter, double b0, double b1,
-                                    double b2, double a1, double a2) {
+static void set_biquad_filter_state(biquad_state *filter, float b0, float b1,
+                                    float b2, float a1, float a2) {
   filter->b0 = b0;
   filter->b1 = b1;
   filter->b2 = b2;
@@ -39,83 +39,83 @@ static void zero_biquad_filter_state(biquad_state *filter) {
 }
 
 // Low-pass filter coefficient calculation
-static void set_biquad_lp_coefficients(double freq, double res, int fs,
+static void set_biquad_lp_coefficients(float freq, float res, int fs,
                                        biquad_state *state) {
-  double fc = freq; // Cutoff frequency (Hz)
-  double w0 = 2.0 * PI * fc / fs;
-  double Q = res; // Quality factor
+  float fc = freq; // Cutoff frequency (Hz)
+  float w0 = 2.0 * PI * fc / fs;
+  float Q = res; // Quality factor
 
   // Compute filter coefficients
-  double A = sin(w0) / (2 * Q);
-  double C = cos(w0);
-  double b0 = (1 - C) / 2;
-  double b1 = 1 - C;
-  double b2 = (1 - C) / 2;
-  double a0 = 1 + A;
-  double a1 = -2 * C;
-  double a2 = 1 - A;
+  float A = sin(w0) / (2 * Q);
+  float C = cos(w0);
+  float b0 = (1 - C) / 2;
+  float b1 = 1 - C;
+  float b2 = (1 - C) / 2;
+  float a0 = 1 + A;
+  float a1 = -2 * C;
+  float a2 = 1 - A;
 
   // Initialize filter
   set_biquad_filter_state(state, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
 }
 
 // Band-pass filter coefficient calculation
-static void set_biquad_bp_coefficients(double freq, double res, int fs,
+static void set_biquad_bp_coefficients(float freq, float res, int fs,
                                        biquad_state *state) {
-  double fc = freq; // Center frequency (Hz)
-  double w0 = 2.0 * PI * fc / fs;
-  double Q = res; // Q factor for resonance
+  float fc = freq; // Center frequency (Hz)
+  float w0 = 2.0 * PI * fc / fs;
+  float Q = res; // Q factor for resonance
 
   // Compute filter coefficients
-  double A = sin(w0) / (2 * Q);
-  double C = cos(w0);
-  double b0 = A;
-  double b1 = 0.0;
-  double b2 = -A;
-  double a0 = 1 + A;
-  double a1 = -2 * C;
-  double a2 = 1 - A;
+  float A = sin(w0) / (2 * Q);
+  float C = cos(w0);
+  float b0 = A;
+  float b1 = 0.0;
+  float b2 = -A;
+  float a0 = 1 + A;
+  float a1 = -2 * C;
+  float a2 = 1 - A;
 
   // Initialize filter
   set_biquad_filter_state(state, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
 }
 
 // High-pass filter coefficient calculation
-static void set_biquad_hp_coefficients(double freq, double res, int fs,
+static void set_biquad_hp_coefficients(float freq, float res, int fs,
                                        biquad_state *state) {
-  double fc = freq; // Cutoff frequency (Hz)
-  double w0 = 2.0 * PI * fc / fs;
-  double Q = res; // Quality factor
+  float fc = freq; // Cutoff frequency (Hz)
+  float w0 = 2.0 * PI * fc / fs;
+  float Q = res; // Quality factor
 
   // Compute filter coefficients
-  double A = sin(w0) / (2 * Q);
-  double C = cos(w0);
-  double b0 = (1 + C) / 2;
-  double b1 = -(1 + C);
-  double b2 = (1 + C) / 2;
-  double a0 = 1 + A;
-  double a1 = -2 * C;
-  double a2 = 1 - A;
+  float A = sin(w0) / (2 * Q);
+  float C = cos(w0);
+  float b0 = (1 + C) / 2;
+  float b1 = -(1 + C);
+  float b2 = (1 + C) / 2;
+  float a0 = 1 + A;
+  float a1 = -2 * C;
+  float a2 = 1 - A;
 
   // Initialize filter
   set_biquad_filter_state(state, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
 }
 
 // Butterworth high-pass filter coefficient calculation
-static void set_butterworth_hp_coefficients(double freq, int fs,
+static void set_butterworth_hp_coefficients(float freq, int fs,
                                             biquad_state *state) {
-  double fc = freq; // Cutoff frequency (Hz)
-  double w0 = 2.0 * PI * fc / fs;
-  double wc = tan(w0 / 2);
-  double k = wc * wc;
-  double sqrt2 = sqrt(2.0);
+  float fc = freq; // Cutoff frequency (Hz)
+  float w0 = 2.0 * PI * fc / fs;
+  float wc = tan(w0 / 2);
+  float k = wc * wc;
+  float sqrt2 = sqrt(2.0);
 
   // Compute filter coefficients
-  double b0 = 1 / (1 + sqrt2 * wc + k);
-  double b1 = -2 * b0;
-  double b2 = b0;
-  double a1 = 2 * (k - 1) * b0;
-  double a2 = (1 - sqrt2 * wc + k) * b0;
+  float b0 = 1 / (1 + sqrt2 * wc + k);
+  float b1 = -2 * b0;
+  float b2 = b0;
+  float a1 = 2 * (k - 1) * b0;
+  float a2 = (1 - sqrt2 * wc + k) * b0;
 
   // Initialize filter
   set_biquad_filter_state(state, b0, b1, b2, a1, a2);
@@ -123,15 +123,15 @@ static void set_butterworth_hp_coefficients(double freq, int fs,
 
 // Biquad filter perform function
 void *biquad_perform(Node *node, biquad_state *state, Node *inputs[],
-                     int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                     int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
 
   while (nframes--) {
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    float input = *in;
+    float output = state->b0 * input + state->b1 * state->x1 +
+                   state->b2 * state->x2 - state->a1 * state->y1 -
+                   state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -149,15 +149,15 @@ void *biquad_perform(Node *node, biquad_state *state, Node *inputs[],
 
 // Dynamic biquad low-pass filter perform function
 void *biquad_lp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
-                            int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *freq_in = inputs[1]->output.buf;
-  double *res_in = inputs[2]->output.buf;
+                            int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *freq_in = inputs[1]->output.buf;
+  float *res_in = inputs[2]->output.buf;
 
   // Initial check and coefficient update
-  double freq = *freq_in;
-  double res = *res_in;
+  float freq = *freq_in;
+  float res = *res_in;
 
   // Update coefficients if parameters changed
   if (freq != state->prev_freq || res != state->prev_res) {
@@ -177,10 +177,10 @@ void *biquad_lp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
       state->prev_res = res;
     }
 
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    float input = *in;
+    float output = state->b0 * input + state->b1 * state->x1 +
+                   state->b2 * state->x2 - state->a1 * state->y1 -
+                   state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -201,15 +201,15 @@ void *biquad_lp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
 
 // Dynamic biquad band-pass filter perform function
 void *biquad_bp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
-                            int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *freq_in = inputs[1]->output.buf;
-  double *res_in = inputs[2]->output.buf;
+                            int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *freq_in = inputs[1]->output.buf;
+  float *res_in = inputs[2]->output.buf;
 
   // Initial check and coefficient update
-  double freq = *freq_in;
-  double res = *res_in;
+  float freq = *freq_in;
+  float res = *res_in;
 
   // Update coefficients if parameters changed
   if (freq != state->prev_freq || res != state->prev_res) {
@@ -229,10 +229,10 @@ void *biquad_bp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
       state->prev_res = res;
     }
 
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    float input = *in;
+    float output = state->b0 * input + state->b1 * state->x1 +
+                   state->b2 * state->x2 - state->a1 * state->y1 -
+                   state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -253,15 +253,15 @@ void *biquad_bp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
 
 // Dynamic biquad high-pass filter perform function
 void *biquad_hp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
-                            int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *freq_in = inputs[1]->output.buf;
-  double *res_in = inputs[2]->output.buf;
+                            int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *freq_in = inputs[1]->output.buf;
+  float *res_in = inputs[2]->output.buf;
 
   // Initial check and coefficient update
-  double freq = *freq_in;
-  double res = *res_in;
+  float freq = *freq_in;
+  float res = *res_in;
 
   // Update coefficients if parameters changed
   if (freq != state->prev_freq || res != state->prev_res) {
@@ -281,10 +281,10 @@ void *biquad_hp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
       state->prev_res = res;
     }
 
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    float input = *in;
+    float output = state->b0 * input + state->b1 * state->x1 +
+                   state->b2 * state->x2 - state->a1 * state->y1 -
+                   state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -305,13 +305,13 @@ void *biquad_hp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
 
 // Butterworth high-pass filter perform function
 void *butterworth_hp_dyn_perform(Node *node, biquad_state *state,
-                                 Node *inputs[], int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *freq_in = inputs[1]->output.buf;
+                                 Node *inputs[], int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *freq_in = inputs[1]->output.buf;
 
   // Initial check and coefficient update
-  double freq = *freq_in;
+  float freq = *freq_in;
 
   // Update coefficients if frequency changed
   if (freq != state->prev_freq) {
@@ -328,10 +328,10 @@ void *butterworth_hp_dyn_perform(Node *node, biquad_state *state,
       state->prev_freq = freq;
     }
 
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    float input = *in;
+    float output = state->b0 * input + state->b1 * state->x1 +
+                   state->b2 * state->x2 - state->a1 * state->y1 -
+                   state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -486,21 +486,21 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
 typedef struct {
   int read_pos;
   int write_pos;
-  double fb;
+  float fb;
 } comb_state;
 
 void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
-                   double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                   float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
 
-  double *buf = inputs[1]->output.buf;
+  float *buf = inputs[1]->output.buf;
   int bufsize = inputs[1]->output.size;
 
   while (nframes--) {
     // Get write and read pointers
-    double *write_ptr = buf + state->write_pos;
-    double *read_ptr = buf + state->read_pos;
+    float *write_ptr = buf + state->write_pos;
+    float *read_ptr = buf + state->read_pos;
 
     // Calculate output and write to buffer
     *out = *in + *read_ptr;
@@ -559,23 +559,22 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
 // ---------------------- Dyn Comb Filter ---------------------------
 
 void *dyn_comb_perform(Node *node, comb_state *state, Node *inputs[],
-                       int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *delay_buf = inputs[1]->output.buf;
+                       int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *delay_buf = inputs[1]->output.buf;
   int buf_size = inputs[1]->output.size;
-  double *delay_time = inputs[2]->output.buf;
-  double sample_rate =
-      1.0 / spf; // Calculate sample rate from seconds per frame
+  float *delay_time = inputs[2]->output.buf;
+  float sample_rate = 1.0 / spf; // Calculate sample rate from seconds per frame
 
   while (nframes--) {
     int write_pos = state->write_pos;
 
     delay_buf[write_pos] = *in + (state->fb * delay_buf[state->read_pos]);
 
-    double delay_samples = *delay_time * sample_rate;
+    float delay_samples = *delay_time * sample_rate;
     int read_offset = (int)delay_samples;
-    double frac =
+    float frac =
         delay_samples - read_offset; // Fractional part for interpolation
 
     // Ensure read position stays within buffer bounds with proper modulo
@@ -583,7 +582,7 @@ void *dyn_comb_perform(Node *node, comb_state *state, Node *inputs[],
     int read_pos_next = (read_pos + 1) % buf_size;
 
     // Linear interpolation for smoother delay time changes
-    double sample =
+    float sample =
         delay_buf[read_pos] * (1.0 - frac) + delay_buf[read_pos_next] * frac;
 
     *out = sample;
@@ -645,13 +644,13 @@ Node *dyn_comb_node(Node *delay_time, double max_delay_time, double fb,
 // ---------------------- Lag Filter ---------------------------
 
 typedef struct {
-  double current_value;
-  double target_value;
-  double coeff;
-  double lag_time;
+  float current_value;
+  float target_value;
+  float coeff;
+  float lag_time;
 } lag_state;
 
-// Node *static_lag_node(double lag_time, Node *input) {
+// Node *static_lag_node(float lag_time, Node *input) {
 //   AudioGraph *graph = _graph;
 //   Node *node = allocate_node_in_graph(graph, sizeof(lag_state));
 //
@@ -674,7 +673,7 @@ typedef struct {
 //   state->current_value = 0.0;
 //   state->target_value = 0.0;
 //   state->lag_time = lag_time;
-//   double spf = 1.0 / ctx_sample_rate();
+//   float spf = 1.0 / ctx_sample_rate();
 //   state->coeff = exp(-1.0 / (lag_time * (1.0 / spf)));
 //
 //   // Connect input
@@ -683,13 +682,13 @@ typedef struct {
 //   return node;
 // }
 void *lag_perform(Node *node, lag_state *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *lag_time = inputs[1]->output.buf;
+                  float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *lag_time = inputs[1]->output.buf;
 
   while (nframes--) {
-    double lt = *lag_time;
+    float lt = *lag_time;
     lag_time++;
 
     // Special case: when lag_time is 0, immediately jump to target value
@@ -758,18 +757,19 @@ Node *lag_node(NodeRef lag_time, Node *input) {
 // ---------------------- Tanh Distortion ---------------------------
 
 typedef struct {
-  double gain;
+  float gain;
 } tanh_state;
 
 void *tanh_perform(Node *node, tanh_state *state, Node *inputs[], int nframes,
-                   double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                   float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
 
-  double gain = state->gain;
+  float gain = state->gain;
+  // printf("tanh perform %f\n", gain);
 
   while (nframes--) {
-    *out = tanh(*in * gain);
+    *out = tanhf(*in * gain);
     in++;
     out++;
   }
@@ -806,10 +806,10 @@ Node *tanh_node(double gain, Node *input) {
 }
 
 void *dyn_tanh_perform(Node *node, tanh_state *state, Node *inputs[],
-                       int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *gain = inputs[1]->output.buf;
+                       int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *gain = inputs[1]->output.buf;
 
   while (nframes--) {
 
@@ -850,24 +850,24 @@ Node *dyn_tanh_node(NodeRef gain, Node *input) {
 typedef struct {
   int length;
   int pos;
-  double coeff;
+  float coeff;
 } allpass_state;
 
-double process_allpass_frame(double *buf, int length, int *pos, double coeff,
-                             double in) {
+float process_allpass_frame(float *buf, int length, int *pos, float coeff,
+                            float in) {
   int bufsize = length;
-  double delayed = buf[*pos];
+  float delayed = buf[*pos];
   buf[*pos] = in;
   *pos = (*pos + 1) % bufsize;
   return delayed - coeff * in;
 }
 
 void *allpass_perform(Node *node, allpass_state *state, Node *inputs[],
-                      int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                      int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
   char *mem = state + 1;
-  double *buf = mem;
+  float *buf = mem;
 
   while (nframes--) {
     *out = process_allpass_frame(buf, state->length, &state->pos, state->coeff,
@@ -879,7 +879,7 @@ void *allpass_perform(Node *node, allpass_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-static int compute_allpass_delay_length(double sample_rate, double delay_sec) {
+static int compute_allpass_delay_length(float sample_rate, float delay_sec) {
   int delay_samples = (int)(delay_sec * sample_rate);
   return delay_samples;
 }
@@ -893,7 +893,7 @@ Node *allpass_node(double time, double coeff, Node *input) {
       .coeff = coeff,
   };
 
-  state_size += (sizeof(double) * ap.length); // leave space for buffer
+  state_size += (sizeof(float) * ap.length); // leave space for buffer
 
   Node *node = allocate_node_in_graph(graph, sizeof(allpass_state));
 
@@ -925,15 +925,15 @@ Node *allpass_node(double time, double coeff, Node *input) {
 #define NUM_EARLY_REFLECTIONS 8
 #define NUM_ALLPASS 4
 
-static double early_gains[NUM_EARLY_REFLECTIONS] = {1.0, 0.9, 0.8, 0.7,
-                                                    0.6, 0.5, 0.4, 0.3};
-static double early_scaling_factors[NUM_EARLY_REFLECTIONS] = {
+static float early_gains[NUM_EARLY_REFLECTIONS] = {1.0, 0.9, 0.8, 0.7,
+                                                   0.6, 0.5, 0.4, 0.3};
+static float early_scaling_factors[NUM_EARLY_REFLECTIONS] = {
     1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7};
-static double early_gain_factors[NUM_EARLY_REFLECTIONS] = {1.0, 0.9, 0.8, 0.7,
-                                                           0.6, 0.5, 0.4, 0.3};
+static float early_gain_factors[NUM_EARLY_REFLECTIONS] = {1.0, 0.9, 0.8, 0.7,
+                                                          0.6, 0.5, 0.4, 0.3};
 
-static double delay_scaling_factors[4] = {1.0, 0.9, 0.8, 0.7};
-static double allpass_scaling_factors[NUM_ALLPASS] = {0.15, 0.12, 0.10, 0.08};
+static float delay_scaling_factors[4] = {1.0, 0.9, 0.8, 0.7};
+static float allpass_scaling_factors[NUM_ALLPASS] = {0.15, 0.12, 0.10, 0.08};
 
 static int next_prime(int n) {
   int i = 0;
@@ -943,51 +943,51 @@ static int next_prime(int n) {
   return PRIMES[i];
 }
 
-static int compute_delay_length(double room_size, double sample_rate,
-                                double scaling_factor) {
-  double delay_sec = (room_size * scaling_factor) / 343.0f;
+static int compute_delay_length(float room_size, float sample_rate,
+                                float scaling_factor) {
+  float delay_sec = (room_size * scaling_factor) / 343.0f;
   int delay_samples = (int)(delay_sec * sample_rate);
   return next_prime(delay_samples);
 }
 
 typedef struct GVerb {
-  double room_size;
-  double reverb_time;
-  double damping;
-  double input_bandwidth;
-  double dry;
-  double wet;
-  double early_level;
-  double tail_level;
-  double sample_rate;
+  float room_size;
+  float reverb_time;
+  float damping;
+  float input_bandwidth;
+  float dry;
+  float wet;
+  float early_level;
+  float tail_level;
+  float sample_rate;
 
-  double input_lp_state;
-  double input_lp_coeff;
+  float input_lp_state;
+  float input_lp_coeff;
   int early_lengths[NUM_EARLY_REFLECTIONS];
   int early_pos[NUM_EARLY_REFLECTIONS];
-  double early_gains[NUM_EARLY_REFLECTIONS];
+  float early_gains[NUM_EARLY_REFLECTIONS];
   int fb_delay_lengths[4];
   int fb_delay_pos[4];
-  double damping_coeff;
-  double damping_state[4];
+  float damping_coeff;
+  float damping_state[4];
   int allpass_lengths[NUM_ALLPASS];
   int allpass_pos[NUM_ALLPASS];
-  double allpass_feedback;
+  float allpass_feedback;
 } GVerb;
 
-static double lowpass_filter(double input, double *state, double coeff) {
-  double output = input * (1.0f - coeff) + (*state * coeff);
+static float lowpass_filter(float input, float *state, float coeff) {
+  float output = input * (1.0f - coeff) + (*state * coeff);
   *state = output;
   return output;
 }
 
-static double process_early_reflections(GVerb *refl, double **delays,
-                                        double input) {
+static float process_early_reflections(GVerb *refl, float **delays,
+                                       float input) {
 
-  double early_out = 0.;
+  float early_out = 0.;
   for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
     int bufsize = refl->early_lengths[i];
-    double *buf = delays[i];
+    float *buf = delays[i];
     int write_pos = refl->early_pos[i] % bufsize;
     early_out += process_allpass_frame(delays[i], bufsize, &refl->early_pos[i],
                                        -1., input);
@@ -995,11 +995,11 @@ static double process_early_reflections(GVerb *refl, double **delays,
   return early_out;
 }
 
-static double series_allpass_process(GVerb *gverb, double **allpass_delays,
-                                     double input) {
+static float series_allpass_process(GVerb *gverb, float **allpass_delays,
+                                    float input) {
 
   for (int i = 0; i < NUM_ALLPASS; i++) {
-    double *delay_line = allpass_delays[i];
+    float *delay_line = allpass_delays[i];
     int pos = gverb->allpass_pos[i];
     int length = gverb->allpass_lengths[i];
     input = process_allpass_frame(delay_line, length,
@@ -1008,8 +1008,8 @@ static double series_allpass_process(GVerb *gverb, double **allpass_delays,
   return input;
 }
 
-double feedback_delay_network(GVerb *gverb, double **delay_lines, double mix) {
-  double delay_out[4];
+float feedback_delay_network(GVerb *gverb, float **delay_lines, float mix) {
+  float delay_out[4];
   for (int i = 0; i < 4; i++) {
     int fb_pos = gverb->fb_delay_pos[i];
     delay_out[i] = delay_lines[i][fb_pos];
@@ -1020,13 +1020,13 @@ double feedback_delay_network(GVerb *gverb, double **delay_lines, double mix) {
                                   gverb->damping_coeff);
   }
 
-  double feedback[4];
+  float feedback[4];
   feedback[0] = delay_out[0] + delay_out[1] + delay_out[2] + delay_out[3];
   feedback[1] = delay_out[0] + delay_out[1] - delay_out[2] - delay_out[3];
   feedback[2] = delay_out[0] - delay_out[1] + delay_out[2] - delay_out[3];
   feedback[3] = delay_out[0] - delay_out[1] - delay_out[2] + delay_out[3];
 
-  double rt_gain = pow(10.0, -3.0 * (1.0 / gverb->reverb_time));
+  float rt_gain = pow(10.0, -3.0 * (1.0 / gverb->reverb_time));
 
   for (int i = 0; i < 4; i++) {
     feedback[i] *= 0.25 * rt_gain; /* 0.25 for Hadamard normalization */
@@ -1043,54 +1043,54 @@ double feedback_delay_network(GVerb *gverb, double **delay_lines, double mix) {
   return delay_out[0] + delay_out[1] + delay_out[2] + delay_out[3];
 }
 
-static double allpass_process(double input, double *delay_line, int *pos,
-                              int length, double feedback) {
-  double delayed = delay_line[*pos];
-  double new_input = input + feedback * delayed;
+static float allpass_process(float input, float *delay_line, int *pos,
+                             int length, float feedback) {
+  float delayed = delay_line[*pos];
+  float new_input = input + feedback * delayed;
   delay_line[*pos] = new_input;
   *pos = (*pos + 1) % length;
   return delayed - feedback * new_input;
 }
 
 void *gverb_perform(Node *node, GVerb *gverb, Node *inputs[], int nframes,
-                    double spf) {
+                    float spf) {
 
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
   char *mem = ((GVerb *)gverb + 1);
 
-  double *early_delays[NUM_EARLY_REFLECTIONS];
+  float *early_delays[NUM_EARLY_REFLECTIONS];
   for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
     early_delays[i] = mem;
-    mem += (sizeof(double) * gverb->early_lengths[i]);
+    mem += (sizeof(float) * gverb->early_lengths[i]);
   }
 
-  double *delay_lines[4];
+  float *delay_lines[4];
   for (int i = 0; i < 4; i++) {
     delay_lines[i] = mem;
-    mem += (sizeof(double) * gverb->fb_delay_lengths[i]);
+    mem += (sizeof(float) * gverb->fb_delay_lengths[i]);
   }
 
-  double *allpass_delays[NUM_ALLPASS];
+  float *allpass_delays[NUM_ALLPASS];
   for (int i = 0; i < NUM_ALLPASS; i++) {
     allpass_delays[i] = mem;
-    mem += (sizeof(double) * gverb->allpass_lengths[i]);
+    mem += (sizeof(float) * gverb->allpass_lengths[i]);
   }
 
   while (nframes--) {
-    double filt =
+    float filt =
         lowpass_filter(*in, &gverb->input_lp_state, gverb->input_lp_coeff);
 
-    double early_out = process_early_reflections(gverb, early_delays, filt);
+    float early_out = process_early_reflections(gverb, early_delays, filt);
 
-    double mix = filt * 0.5 + early_out * 0.5;
+    float mix = filt * 0.5 + early_out * 0.5;
 
-    double diffuse_signal = feedback_delay_network(gverb, delay_lines, mix);
+    float diffuse_signal = feedback_delay_network(gverb, delay_lines, mix);
 
     diffuse_signal *= 0.25;
 
     for (int i = 0; i < NUM_ALLPASS; i++) {
-      double *delay_line = allpass_delays[i];
+      float *delay_line = allpass_delays[i];
       int pos = gverb->allpass_pos[i];
       int length = gverb->allpass_lengths[i];
 
@@ -1107,8 +1107,8 @@ void *gverb_perform(Node *node, GVerb *gverb, Node *inputs[], int nframes,
 }
 
 Node *gverb_node(Node *input) {
-  double sr = (double)ctx_sample_rate();
-  double room_size = 10.;
+  float sr = (float)ctx_sample_rate();
+  float room_size = 10.;
   GVerb gverb = {
       .room_size = room_size,
       .reverb_time = 10.,
@@ -1154,15 +1154,15 @@ Node *gverb_node(Node *input) {
   AudioGraph *graph = _graph;
   int state_size = sizeof(GVerb);
   for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
-    state_size += (gverb.early_lengths[i] * sizeof(double));
+    state_size += (gverb.early_lengths[i] * sizeof(float));
   }
 
   for (int i = 0; i < 4; i++) {
-    state_size += (gverb.fb_delay_lengths[i] * sizeof(double));
+    state_size += (gverb.fb_delay_lengths[i] * sizeof(float));
   }
 
   for (int i = 0; i < NUM_ALLPASS; i++) {
-    state_size += (gverb.allpass_lengths[i] * sizeof(double));
+    state_size += (gverb.allpass_lengths[i] * sizeof(float));
   }
 
   state_size = (state_size + 7) & ~7;
@@ -1194,57 +1194,57 @@ typedef struct grain_pitchshift_state {
   int active_grains;
   int next_trig;
   int trig_gap_in_frames;
-  double width;
-  double rate;
-  double fb;
+  float width;
+  float rate;
+  float fb;
 } grain_pitchshift_state;
 
-double __pow2table_read(double pos, int tabsize, double *table) {
+float __pow2table_read(float pos, int tabsize, float *table) {
   int mask = tabsize - 1;
 
-  double env_pos = pos * (mask);
+  float env_pos = pos * (mask);
   int env_idx = (int)env_pos;
-  double env_frac = env_pos - env_idx;
+  float env_frac = env_pos - env_idx;
 
   // Interpolate between envelope table values
-  double env_val = table[env_idx & mask] * (1.0 - env_frac) +
-                   table[(env_idx + 1) & mask] * env_frac;
+  float env_val = table[env_idx & mask] * (1.0 - env_frac) +
+                  table[(env_idx + 1) & mask] * env_frac;
   return env_val;
 }
 
 void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
-                                  Node *inputs[], int nframes, double spf) {
+                                  Node *inputs[], int nframes, float spf) {
 
   int out_layout = node->output.layout;
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
   char *mem = state + 1;
-  double *buf = mem;
+  float *buf = mem;
   int buf_size = state->length;
-  mem += buf_size * sizeof(double);
+  mem += buf_size * sizeof(float);
 
   int max_grains = state->max_grains;
 
-  double *phases = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  float *phases = (float *)mem;
+  mem += sizeof(float) * max_grains;
 
-  double *widths = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  float *widths = (float *)mem;
+  mem += sizeof(float) * max_grains;
 
-  double *remaining_secs = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  float *remaining_secs = (float *)mem;
+  mem += sizeof(float) * max_grains;
 
-  double *starts = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  float *starts = (float *)mem;
+  mem += sizeof(float) * max_grains;
 
   int *active = (int *)mem;
 
-  double d_index;
+  float d_index;
   int index;
-  double frac;
-  double a, b;
-  double sample = 0.;
-  double r = state->rate;
+  float frac;
+  float a, b;
+  float sample = 0.;
+  float r = state->rate;
   const int table_mask = GRAIN_WINDOW_TABSIZE - 1;
   while (nframes--) {
     sample = 0.;
@@ -1266,10 +1266,10 @@ void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
     for (int i = 0; i < max_grains; i++) {
 
       if (active[i]) {
-        double p = phases[i];
-        double s = starts[i];
-        double w = widths[i];
-        double rem = remaining_secs[i];
+        float p = phases[i];
+        float s = starts[i];
+        float w = widths[i];
+        float rem = remaining_secs[i];
 
         d_index = s + (p * buf_size);
 
@@ -1279,8 +1279,8 @@ void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
         a = buf[index % buf_size];
         b = buf[(index + 1) % buf_size];
 
-        double grain_elapsed = 1.0 - (rem / w);
-        double env_val =
+        float grain_elapsed = 1.0 - (rem / w);
+        float env_val =
             __pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
 
         sample += env_val * ((1.0 - frac) * a + (frac * b));
@@ -1309,12 +1309,12 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
 
   int max_grains = 32;
   int state_size = sizeof(grain_pitchshift_state) +
-                   (1024 * sizeof(double))         // delay buffer
-                   + (max_grains * sizeof(double)) // phases
-                   + (max_grains * sizeof(double)) // widths
-                   + (max_grains * sizeof(double)) // elapsed
-                   + (max_grains * sizeof(double)) // starts
-                   + (max_grains * sizeof(int))    // active grains
+                   (1024 * sizeof(float))         // delay buffer
+                   + (max_grains * sizeof(float)) // phases
+                   + (max_grains * sizeof(float)) // widths
+                   + (max_grains * sizeof(float)) // elapsed
+                   + (max_grains * sizeof(float)) // starts
+                   + (max_grains * sizeof(int))   // active grains
       ;
 
   grain_pitchshift_state pshift = {
@@ -1323,8 +1323,8 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
       .pos = 0,
       .max_grains = max_grains,
       .active_grains = 0,
-      .next_trig = ((double)1024) / shift,
-      .trig_gap_in_frames = ((double)1024) / shift,
+      .next_trig = ((float)1024) / shift,
+      .trig_gap_in_frames = ((float)1024) / shift,
       .width = 0.01,
       .rate = shift,
       .fb = fb};
@@ -1363,8 +1363,8 @@ typedef struct math_node_state {
 } math_node_state;
 
 void *math_perform(Node *node, math_node_state *state, Node *inputs[],
-                   int nframes, double spf) {
-  double *out = node->output.buf;
+                   int nframes, float spf) {
+  float *out = node->output.buf;
   Signal in = inputs[0]->output;
 
   for (int i = 0; i < in.size * in.layout; i++) {
@@ -1429,21 +1429,21 @@ typedef struct stutter_state {
 } stutter_state;
 
 void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
-                      int nframes, double spf) {
-  double *buf_memory = (double *)((stutter_state *)state + 1);
+                      int nframes, float spf) {
+  float *buf_memory = (float *)((stutter_state *)state + 1);
 
   Signal in = inputs[0]->output;
-  double *_gate = inputs[1]->output.buf;
-  double *_repeat_time = inputs[2]->output.buf;
-  double *out = node->output.buf;
+  float *_gate = inputs[1]->output.buf;
+  float *_repeat_time = inputs[2]->output.buf;
+  float *out = node->output.buf;
 
   int chans = state->buf_chans;
   int sample_rate = (int)(1.0 / spf);
 
   for (int i = 0; i < nframes; i++) {
-    double gate = *_gate;
+    float gate = *_gate;
     _gate++;
-    double repeat_time = *_repeat_time;
+    float repeat_time = *_repeat_time;
     _repeat_time++;
 
     // Calculate frames to repeat (smaller for more rapid stuttering)
@@ -1538,7 +1538,7 @@ NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
                      .stutter_start = 0};
 
   int required_buf_frames = s.buf_chans * s.buf_size;
-  state_size += required_buf_frames * sizeof(double);
+  state_size += required_buf_frames * sizeof(float);
 
   Node *node = allocate_node_in_graph(graph, state_size);
 

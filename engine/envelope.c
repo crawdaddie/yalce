@@ -12,27 +12,27 @@ typedef enum {
 
 typedef struct asr_state {
   EnvPhase phase;
-  double value;         // Current envelope value
-  double attack_time;   // Attack time in seconds
-  double sustain_level; // Sustain level (0.0 to 1.0)
-  double release_time;  // Release time in seconds
-  double attack_rate;   // Precalculated rate of change during attack
-  double release_rate;  // Precalculated rate of change during release
-  double prev_trigger;  // Previous trigger value for edge detection
-  double threshold;     // Trigger threshold (default 0.5)
+  float value;         // Current envelope value
+  float attack_time;   // Attack time in seconds
+  float sustain_level; // Sustain level (0.0 to 1.0)
+  float release_time;  // Release time in seconds
+  float attack_rate;   // Precalculated rate of change during attack
+  float release_rate;  // Precalculated rate of change during release
+  float prev_trigger;  // Previous trigger value for edge detection
+  float threshold;     // Trigger threshold (default 0.5)
   bool should_kill;
 } asr_state;
 
 void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  float spf) {
+  float *out = node->output.buf;
   int out_layout = node->output.layout;
 
-  double *trigger = inputs[0]->output.buf;
+  float *trigger = inputs[0]->output.buf;
 
   while (nframes--) {
     // Check for trigger events
-    double current_trigger = *trigger;
+    float current_trigger = *trigger;
     trigger++;
 
     // Rising edge - start attack phase
@@ -187,26 +187,26 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
 }
 typedef struct aslr_state {
   EnvPhase phase;
-  double value;         // Current envelope value
-  double attack_time;   // Attack time in seconds
-  double sustain_level; // Sustain level (0.0 to 1.0)
-  double release_time;  // Release time in seconds
-  double attack_rate;   // Precalculated rate of change during attack
-  double release_rate;  // Precalculated rate of change during release
-  double prev_trigger;  // Previous trigger value for edge detection
-  double threshold;     // Trigger threshold (default 0.5)
+  float value;         // Current envelope value
+  float attack_time;   // Attack time in seconds
+  float sustain_level; // Sustain level (0.0 to 1.0)
+  float release_time;  // Release time in seconds
+  float attack_rate;   // Precalculated rate of change during attack
+  float release_rate;  // Precalculated rate of change during release
+  float prev_trigger;  // Previous trigger value for edge detection
+  float threshold;     // Trigger threshold (default 0.5)
   bool should_kill;
   int sustain_time; // sustain time in seconds
   int sustain_time_left;
 } aslr_state;
 
 void *aslr_perform(Node *node, aslr_state *state, Node *inputs[], int nframes,
-                   double spf) {
-  double *out = node->output.buf;
-  double *trigger = inputs[0]->output.buf;
+                   float spf) {
+  float *out = node->output.buf;
+  float *trigger = inputs[0]->output.buf;
 
   while (nframes--) {
-    double current_trigger = *trigger;
+    float current_trigger = *trigger;
     trigger++;
 
     if (current_trigger >= state->threshold &&

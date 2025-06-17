@@ -30,7 +30,7 @@
 
 #define INVAL(_sig)                                                            \
   ({                                                                           \
-    double *val;                                                               \
+    float *val;                                                                \
     if (_sig.size == 1 && _sig.layout == 1) {                                  \
       val = _sig.buf;                                                          \
     } else {                                                                   \
@@ -40,8 +40,8 @@
     val;                                                                       \
   })
 // void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
-//                   double spf) {
-//   double *out = node->output.buf;
+//                   float spf) {
+//   float *out = node->output.buf;
 //   int out_layout = node->output.layout;
 //
 //   // Get input buffers
@@ -50,7 +50,7 @@
 //
 //   // Multiply samples
 //   for (int i = 0; i < nframes; i++) {
-//     double sample = *INVAL(in1) * *INVAL(in2);
+//     float sample = *INVAL(in1) * *INVAL(in2);
 //
 //     // Write to all channels in output layout
 //     for (int j = 0; j < out_layout; j++) {
@@ -61,8 +61,8 @@
 //   return node->output.buf;
 // }
 void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  float spf) {
+  float *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Get input buffers
@@ -78,8 +78,8 @@ void *mul_perform(Node *node, void *state, Node *inputs[], int nframes,
     // Process each channel in the output layout
     for (int j = 0; j < out_layout; j++) {
       // Get appropriate input samples based on their layouts
-      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
-      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+      float in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      float in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
 
       // Multiply and store result
       out[i * out_layout + j] = in1_sample * in2_sample;
@@ -116,8 +116,8 @@ NodeRef mul2_node(NodeRef input1, NodeRef input2) {
 };
 
 void *sum_perform(Node *node, void *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  float spf) {
+  float *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Get input buffers
@@ -132,8 +132,8 @@ void *sum_perform(Node *node, void *state, Node *inputs[], int nframes,
     // Process each channel in the output layout
     for (int j = 0; j < out_layout; j++) {
       // Get appropriate input samples based on their layouts
-      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
-      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+      float in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      float in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
 
       // Multiply and store result
       out[i * out_layout + j] = in1_sample + in2_sample;
@@ -168,8 +168,8 @@ NodeRef sum2_node(NodeRef input1, NodeRef input2) {
 }
 
 void *sub_perform(Node *node, void *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  float spf) {
+  float *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Get input buffers
@@ -184,8 +184,8 @@ void *sub_perform(Node *node, void *state, Node *inputs[], int nframes,
     // Process each channel in the output layout
     for (int j = 0; j < out_layout; j++) {
       // Get appropriate input samples based on their layouts
-      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
-      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+      float in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      float in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
 
       // Multiply and store result
       out[i * out_layout + j] = in1_sample - in2_sample;
@@ -198,16 +198,16 @@ void *sub_perform(Node *node, void *state, Node *inputs[], int nframes,
 NODE_BINOP(sub2_node, "sub", sub_perform)
 
 // void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
-//                   double spf) {
-//   double *out = node->output.buf;
+//                   float spf) {
+//   float *out = node->output.buf;
 //   int out_layout = node->output.layout;
 //   // Get input buffers
 //   Signal in1 = inputs[0]->output;
 //   Signal in2 = inputs[1]->output;
 //
-//   double *out_ptr = out;
+//   float *out_ptr = out;
 //   while (nframes--) {
-//     double sample = fmod(*INVAL(in1), *INVAL(in2));
+//     float sample = fmod(*INVAL(in1), *INVAL(in2));
 //
 //     // Write to all channels in output layout
 //     for (int i = 0; i < out_layout; i++) {
@@ -219,8 +219,8 @@ NODE_BINOP(sub2_node, "sub", sub_perform)
 // }
 //
 void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  float spf) {
+  float *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Get input buffers
@@ -235,8 +235,8 @@ void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
     // Process each channel in the output layout
     for (int j = 0; j < out_layout; j++) {
       // Get appropriate input samples based on their layouts
-      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
-      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+      float in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      float in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
 
       // Multiply and store result
       out[i * out_layout + j] = fmod(in1_sample, in2_sample);
@@ -247,19 +247,19 @@ void *mod_perform(Node *node, void *state, Node *inputs[], int nframes,
 }
 
 NODE_BINOP(mod2_node, "mod", mod_perform)
-static inline double __min(double a, double b) { return a <= b ? a : b; }
+static inline float __min(float a, float b) { return a <= b ? a : b; }
 
 // void *div_perform(Node *node, void *state, Node *inputs[], int nframes,
-//                   double spf) {
-//   double *out = node->output.buf;
+//                   float spf) {
+//   float *out = node->output.buf;
 //   int out_layout = node->output.layout;
 //   // Get input buffers
 //   Signal in1 = inputs[0]->output;
 //   Signal in2 = inputs[1]->output;
 //
-//   double *out_ptr = out;
+//   float *out_ptr = out;
 //   while (nframes--) {
-//     double sample = (*INVAL(in1) / __min(*INVAL(in2), 0.0001));
+//     float sample = (*INVAL(in1) / __min(*INVAL(in2), 0.0001));
 //
 //     // Write to all channels in output layout
 //     for (int i = 0; i < out_layout; i++) {
@@ -271,8 +271,8 @@ static inline double __min(double a, double b) { return a <= b ? a : b; }
 // }
 //
 void *div_perform(Node *node, void *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  float spf) {
+  float *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Get input buffers
@@ -287,8 +287,8 @@ void *div_perform(Node *node, void *state, Node *inputs[], int nframes,
     // Process each channel in the output layout
     for (int j = 0; j < out_layout; j++) {
       // Get appropriate input samples based on their layouts
-      double in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
-      double in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
+      float in1_sample = in1.buf[i * in1_layout + (j % in1_layout)];
+      float in2_sample = in2.buf[i * in2_layout + (j % in2_layout)];
 
       // Multiply and store result
       out[i * out_layout + j] = in1_sample / in2_sample;
@@ -352,19 +352,19 @@ Node *const_buf(double val, int layout, int size) {
 }
 
 typedef struct {
-  double phase;
+  float phase;
 } xfade_state;
 
 void *xfade_perform(Node *node, xfade_state *state, Node *inputs[], int nframes,
-                    double spf) {}
-NodeRef replace_node(double xfade_time, NodeRef a, NodeRef b) {}
+                    float spf) {}
+NodeRef replace_node(float xfade_time, NodeRef a, NodeRef b) {}
 
 void *stereo_perform(Node *node, void *state, Node *inputs[], int nframes,
-                     double spf) {
-  double *out = node->output.buf;
+                     float spf) {
+  float *out = node->output.buf;
   int out_layout = node->output.layout;
 
-  double *in = inputs[0]->output.buf;
+  float *in = inputs[0]->output.buf;
 
   // Process each sample
   for (int i = 0; i < nframes; i++) {
@@ -398,17 +398,17 @@ NodeRef stereo_node(NodeRef input) {
 }
 
 void *panner_perform(Node *node, void *state, Node *inputs[], int nframes,
-                     double spf) {
+                     float spf) {
 
-  double *out = node->output.buf;
+  float *out = node->output.buf;
   int out_layout = node->output.layout;
 
-  double *in = inputs[0]->output.buf;
-  double *pan_ = inputs[1]->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *pan_ = inputs[1]->output.buf;
 
   // Process each sample
   for (int i = 0; i < nframes; i++) {
-    double pan = *pan_;
+    float pan = *pan_;
     pan_++;
     *out = *in * (1. - (pan * 0.5 + 0.5));
     out++;
@@ -441,19 +441,19 @@ NodeRef pan_node(NodeRef pan, NodeRef input) {
   return node;
 }
 typedef struct sah_state {
-  double current_val;
-  double prev_trig;
+  float current_val;
+  float prev_trig;
 } sah_state;
 void *sah_perform(Node *node, sah_state *state, Node *inputs[], int nframes,
-                  double spf) {
+                  float spf) {
 
-  double *out = node->output.buf;
-  double *input_ = inputs[0]->output.buf;
-  double *trig_ = inputs[1]->output.buf;
+  float *out = node->output.buf;
+  float *input_ = inputs[0]->output.buf;
+  float *trig_ = inputs[1]->output.buf;
   while (nframes--) {
-    double in = *input_;
+    float in = *input_;
     input_++;
-    double trig = *trig_;
+    float trig = *trig_;
     trig_++;
 
     if (trig > 0.5 && state->prev_trig <= 0.5) {

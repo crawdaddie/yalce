@@ -4,7 +4,7 @@
 
 #define INVAL(_sig)                                                            \
   ({                                                                           \
-    double *val;                                                               \
+    float *val;                                                                \
     if (_sig.size == 1 && _sig.layout == 1) {                                  \
       val = _sig.buf;                                                          \
     } else {                                                                   \
@@ -16,7 +16,7 @@
 
 #define READ(_sig)                                                             \
   ({                                                                           \
-    double *val;                                                               \
+    float *val;                                                                \
     if (_sig.size == 1 && _sig.layout == 1) {                                  \
       val = _sig.buf;                                                          \
     } else {                                                                   \

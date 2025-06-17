@@ -19,7 +19,7 @@ void init_ctx(int num_chans, int size, int *input_map) {
     int layout = *im;
     im++;
 
-    ctx.input_signals[i].buf = malloc(sizeof(double) * BUF_SIZE * layout);
+    ctx.input_signals[i].buf = malloc(sizeof(float) * BUF_SIZE * layout);
     ctx.input_signals[i].layout = layout;
     ctx.input_signals[i].size = BUF_SIZE;
     ctx.sig_to_hw_in_map[i] = im;
@@ -70,7 +70,7 @@ static void process_msg_pre(int frame_offset, scheduler_msg msg) {
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       for (int i = frame_offset; i < BUF_SIZE; i++) {
-        inlet_data.buf[i] = payload.value;
+        inlet_data.buf[i] = (float)payload.value;
       }
     }
 
@@ -141,7 +141,7 @@ static void process_msg_post(int frame_offset, scheduler_msg msg) {
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       for (int i = 0; i < frame_offset; i++) {
-        inlet_data.buf[i] = payload.value;
+        inlet_data.buf[i] = (float)payload.value;
       }
     }
 
@@ -248,9 +248,9 @@ int get_write_ptr() {
 }
 
 int ctx_sample_rate() { return ctx.sample_rate; }
-double ctx_spf() { return ctx.spf; }
+float ctx_spf() { return ctx.spf; }
 
-double *ctx_main_out() { return ctx.output_buf; }
+float *ctx_main_out() { return ctx.output_buf; }
 
 void move_overflow() {
   msg_queue *queue = &ctx.overflow_queue;

@@ -2434,9 +2434,9 @@ static void update_vital_rev_parameters(vital_rev_state *state) {
 // The vital_rev_perform function that will be called by the audio graph
 void *vital_rev_perform(Node *node, vital_rev_state *state, Node *inputs[],
                         int nframes, double spf) {
-  double *out = node->output.buf;
+  float *out = node->output.buf;
   int is_stereo_input = inputs[0]->output.layout > 1;
-  double *in = inputs[0]->output.buf;
+  float *in = inputs[0]->output.buf;
 
   // Setup temporary buffers for FAUST processing
   FAUSTFLOAT *faust_input[2];
@@ -2451,8 +2451,8 @@ void *vital_rev_perform(Node *node, vital_rev_state *state, Node *inputs[],
   if (is_stereo_input) {
     // Extract left and right channels from interleaved stereo
     for (int i = 0; i < nframes; i++) {
-      in_buffer_left[i] = (FAUSTFLOAT)in[2 * i];
-      in_buffer_right[i] = (FAUSTFLOAT)in[2 * i + 1];
+      in_buffer_left[i] = (float)in[2 * i];
+      in_buffer_right[i] = (float)in[2 * i + 1];
     }
   } else {
 
@@ -2476,8 +2476,8 @@ void *vital_rev_perform(Node *node, vital_rev_state *state, Node *inputs[],
 
   // Write back to interleaved stereo output
   for (int i = 0; i < nframes; i++) {
-    out[2 * i] = (double)out_buffer_left[i];
-    out[2 * i + 1] = (double)out_buffer_right[i];
+    out[2 * i] = (float)out_buffer_left[i];
+    out[2 * i + 1] = (float)out_buffer_right[i];
   }
 
   return node->output.buf;

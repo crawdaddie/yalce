@@ -11,7 +11,7 @@ typedef struct summed_inlet_state {
 } summed_inlet_state;
 
 void *summed_inlet_perform(Node *node, summed_inlet_state *state,
-                           Node *inputs[], int nframes, double spf) {
+                           Node *inputs[], int nframes, float spf) {
   int output_num = 0;
 
   Signal out = node->output;
@@ -76,8 +76,8 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
 
 void *bus_perform(Node *node, void *state, Node *inputs[], int nframes,
 
-                  double spf) {
-  double *out = node->output.buf;
+                  float spf) {
+  float *out = node->output.buf;
   int layout = node->output.layout;
-  memset(out, 0, layout * node->output.size * sizeof(double));
+  memset(out, 0, layout * node->output.size * sizeof(float));
 }

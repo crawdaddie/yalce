@@ -211,6 +211,7 @@ int main(int argc, char *argv[]) {
 
   name_lookup *lookups = NULL;
   lookups = lookups_extend(lookups, "double", "Double");
+  lookups = lookups_extend(lookups, "float", "Double");
   lookups = lookups_extend(lookups, "void", "()");
   lookups = lookups_extend(lookups, "uint64_t", "Uint64");
   lookups = lookups_extend(lookups, "uint32_t", "Int");
@@ -222,13 +223,14 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "const char *", "Ptr");
   lookups = lookups_extend(lookups, "void *", "Ptr");
   lookups = lookups_extend(lookups, "double *", "Ptr");
+  lookups = lookups_extend(lookups, "float *", "Ptr");
   lookups = lookups_extend(lookups, "AudioGraph *", "Ptr");
   lookups = lookups_extend(lookups, "SDL_Renderer *", "Ptr");
   lookups = lookups_extend(lookups, "SDL_Color", "(Int, Int, Int, Int)");
   lookups = lookups_extend(lookups, "struct __color", "(Int, Int, Int, Int)");
   lookups = lookups_extend(lookups, "MIDIEndpointRef", "Int");
   lookups = lookups_extend(lookups, "ItemCount", "Int");
-  lookups = lookups_extend(lookups, "_YLCString", "String");
+  lookups = lookups_extend(lookups, "_YLC_String", "String");
 
   // engine lib -specific lookups
   lookups = lookups_extend(lookups, "SignalRef", "Ptr");

@@ -45,7 +45,7 @@ static void handle_cc(MIDIPacket *packet) {
     printf("midi cc ch: %d cc: %d val: %d\n", ch, cc, val);
   }
   if (handler != NULL) {
-    handler((double)(val * REC_127));
+    handler((float)(val * REC_127));
   }
 }
 
@@ -60,7 +60,7 @@ static void handle_note_on(MIDIPacket *packet) {
   }
   if (handler != NULL) {
     if (velocity > 0) {
-      handler(note, (double)(velocity * REC_127));
+      handler(note, (float)(velocity * REC_127));
     }
   }
 }
@@ -74,7 +74,7 @@ static void handle_note_off(MIDIPacket *packet) {
     printf("midi note off ch: %d note: %d vel: %d\n", ch, note, velocity);
   }
   if (handler != NULL) {
-    handler(note, (double)(velocity * REC_127));
+    handler(note, (float)(velocity * REC_127));
   }
 
   // printf("Note Off: %d %d %d\n", ch, note, velocity);
@@ -102,7 +102,7 @@ static void MIDIInputCallback(const MIDIPacketList *pktlist,
   }
 }
 
-static double sample_to_ns_ratio;
+static float sample_to_ns_ratio;
 static mach_timebase_info_data_t timebase_info;
 static uint64_t audio_start_mach_time;
 
@@ -125,7 +125,7 @@ void init_midi_timing(struct timespec audio_start_time) {
 
 MIDITimeStamp sample_to_midi_timestamp(uint64_t sample_position) {
   // Convert samples to nanoseconds
-  double nanoseconds = sample_position * sample_to_ns_ratio;
+  float nanoseconds = sample_position * sample_to_ns_ratio;
 
   // Convert nanoseconds to mach time units
   uint64_t sample_mach_offset =
@@ -265,7 +265,7 @@ int send_note_on_ts(MIDIEndpointRef destination, char channel, char note,
 }
 
 int send_note_on_dur_ts(MIDIEndpointRef destination, char channel, char note,
-                        char velocity, double dur, uint64_t ts) {
+                        char velocity, float dur, uint64_t ts) {
 
   MIDITimeStamp t = sample_to_midi_timestamp(ts - 512);
 

@@ -26,7 +26,7 @@ NodeRef group_add(NodeRef node, NodeRef group) {
 }
 
 void *perform_ensemble(Node *node, ensemble_state *state, Node *_inputs[],
-                       int nframes, double spf) {
+                       int nframes, float spf) {
 
   for (int i = 0; i < 2 * BUF_SIZE; i++) {
     node->output.buf[i] = 0.;
@@ -42,7 +42,7 @@ void *perform_ensemble(Node *node, ensemble_state *state, Node *_inputs[],
 
 NodeRef group_node() {
   int mem_size =
-      sizeof(Node) + sizeof(ensemble_state) + (sizeof(double) * BUF_SIZE * 2);
+      sizeof(Node) + sizeof(ensemble_state) + (sizeof(float) * BUF_SIZE * 2);
   char *mem = malloc(mem_size);
 
   Node *node = (Node *)mem;
@@ -52,7 +52,7 @@ NodeRef group_node() {
   mem += sizeof(ensemble_state);
   *state = (ensemble_state){NULL, NULL};
 
-  double *buf = (double *)mem;
+  float *buf = (float *)mem;
   for (int i = 0; i < 2 * BUF_SIZE; i++) {
     buf[i] = 0.;
   }

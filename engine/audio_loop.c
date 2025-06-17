@@ -12,7 +12,7 @@
 #include <time.h>
 #include <unistd.h>
 
-static void (*write_sample)(char *ptr, double sample);
+static void (*write_sample)(char *ptr, float sample);
 int scheduler_event_loop();
 
 uint64_t get_frame_offset() {
@@ -41,7 +41,7 @@ uint64_t us_offset(struct timespec start, struct timespec end) {
 int get_block_frame_offset(struct timespec start, struct timespec end,
                            int sample_rate) {
 
-  double ms_per_frame = 1000.0 / sample_rate;
+  float ms_per_frame = 1000.0 / sample_rate;
   uint64_t ms = us_offset(start, end);
   return ((int)(ms / ms_per_frame)) % BUF_SIZE;
 }
@@ -154,8 +154,8 @@ static void write_callback(struct SoundIoOutStream *outstream,
   struct SoundIoChannelArea *areas;
   Ctx *ctx = outstream->userdata;
 
-  double float_sample_rate = outstream->sample_rate;
-  double seconds_per_frame = 1.0 / float_sample_rate;
+  float float_sample_rate = outstream->sample_rate;
+  float seconds_per_frame = 1.0 / float_sample_rate;
   int frames_left;
   int frame_count;
   int err;
@@ -181,26 +181,54 @@ static void write_callback(struct SoundIoOutStream *outstream,
     if (!read_ptr) {
       break; // Exit the loop if read_ptr is NULL
     }
+    //
+    // // Direct memcpy approach - frame by frame
+    // for (int frame = 0; frame < frame_count; frame += 1) {
+    //   char *frame_start = read_ptr + (frame * num_hardware_inputs *
+    //                                   outstream->bytes_per_sample);
+    //
+    //   for (int i = 0; i < ctx->num_input_signals; i++) {
+    //     Signal *sig = ctx->input_signals + i;
+    //
+    //     for (int ch = 0; ch < sig->layout; ch++) {
+    //       int hardware_input = *(ctx->sig_to_hw_in_map[i] + ch);
+    //
+    //       // Bounds check
+    //       if (hardware_input < num_hardware_inputs) {
+    //         // Direct memcpy from ring buffer to signal buffer
+    //         char *source_ptr =
+    //             frame_start + (hardware_input * outstream->bytes_per_sample);
+    //         float *dest_ptr = &sig->buf[frame * sig->layout + ch];
+    //
+    //         memcpy(dest_ptr, source_ptr, sizeof(float));
+    //
+    //         // Apply your gain scaling
+    //         // *dest_ptr *= 16.0f;
+    //       } else {
+    //         // Zero if out of bounds
+    //         sig->buf[frame * sig->layout + ch] = 0.0f;
+    //       }
+    //     }
+    //   }
+    // }
+    //
+    // frames_left -= frame_count;
+    if (ctx->num_input_signals > 0 && frame_count > 0) {
+      Signal *sig = ctx->input_signals; // First signal
 
-    for (int frame = 0; frame < frame_count; frame += 1) {
-      for (int i = 0; i < ctx->num_input_signals; i++) {
-        Signal *sig = ctx->input_signals + i;
-        for (int ch = 0; ch < sig->layout; ch++) {
-          int hardware_input = *(ctx->sig_to_hw_in_map[i] + ch);
+      // Calculate total samples to copy
+      int total_samples = frame_count * num_hardware_inputs;
 
-          char *sample_ptr =
-              read_ptr + ((frame * num_hardware_inputs) + hardware_input) *
-                             outstream->bytes_per_sample;
-          float fsamp = *(float *)sample_ptr;
+      // Bulk memcpy the entire block
+      memcpy(sig->buf, read_ptr, total_samples * sizeof(float));
 
-          double sample = (double)fsamp;
+      // Apply gain scaling to the entire buffer
+      // for (int i = 0; i < total_samples; i++) {
+      //   sig->buf[i] *= 16.0f;
+      // }
 
-          sig->buf[frame * sig->layout + ch] = 16. * sample;
-        }
-      }
+      frames_left = 0; // We processed everything in one go
     }
-
-    frames_left -= frame_count;
   }
 
   frames_left = frame_count_max;
@@ -225,7 +253,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
     user_ctx_callback(ctx, buffer_start_sample, frame_count, seconds_per_frame);
 
     int sample_idx;
-    double sample;
+    float sample;
     // printf("layout channel count %d\n", layout->channel_count);
 
     // for (int channel = 0; channel < layout->channel_count; channel += 1) {
@@ -236,7 +264,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
         sample = ctx->output_buf[sample_idx];
         // printf("final out %d %f\n", channel, sample);
 
-        write_sample(areas[channel].ptr, 0.0625 * sample);
+        write_sample(areas[channel].ptr, sample);
         areas[channel].ptr += areas[channel].step;
       }
     }
@@ -383,7 +411,7 @@ void print_routing_setup(struct SoundIoOutStream *outstream,
   fprintf(stderr, "Sample rate: %d Hz\n", outstream->sample_rate);
   if (ring_buffer) {
     fprintf(stderr, "Buffer size: %.2f ms\n",
-            (double)soundio_ring_buffer_capacity(ring_buffer) /
+            (float)soundio_ring_buffer_capacity(ring_buffer) /
                 channel_bytes_per_frame / instream->sample_rate * 1000.0);
   }
 
@@ -602,7 +630,7 @@ int start_audio(int config_size, int *input_map) {
   }
 
   // The actual latency may be different from what we requested
-  double actual_latency = outstream->software_latency;
+  float actual_latency = outstream->software_latency;
   fprintf(stderr, ANSI_COLOR_RED "Actual output latency: %.4f sec\n",
           actual_latency);
 

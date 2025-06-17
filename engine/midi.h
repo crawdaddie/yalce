@@ -4,8 +4,8 @@
 #include <CoreMIDI/CoreMIDI.h>
 #include <stdint.h>
 
-typedef void (*CCCallback)(double);
-typedef void (*NoteCallback)(int, double); // note number, velocity
+typedef void (*CCCallback)(float);
+typedef void (*NoteCallback)(int, float); // note number, velocity
 
 void midi_setup();
 

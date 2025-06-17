@@ -20,11 +20,11 @@ struct arr {
 NodeRef array_to_buf(struct arr a);
 double midi_to_freq(int midi_note);
 
-void write_to_dac(int dac_layout, double *dac_buf, int _layout, double *buf,
+void write_to_dac(int dac_layout, float *dac_buf, int _layout, float *buf,
                   int output_num, int nframes);
 extern AudioGraph *_graph;
 
-void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
+void perform_graph(Node *head, int frame_count, float spf, float *dac_buf,
                    int layout, int output_num);
 
 typedef void (*SynthTemplateFunc)();

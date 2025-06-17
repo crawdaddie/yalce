@@ -5,45 +5,45 @@
 #include <math.h>
 // Glue compressor state structure
 typedef struct {
-  double threshold;    // Threshold in dB
-  double ratio;        // Compression ratio
-  double attack_time;  // Attack time in seconds
-  double release_time; // Release time in seconds
-  double makeup_gain;  // Makeup gain in dB
-  double knee_width;   // Knee width in dB (for soft knee)
+  float threshold;    // Threshold in dB
+  float ratio;        // Compression ratio
+  float attack_time;  // Attack time in seconds
+  float release_time; // Release time in seconds
+  float makeup_gain;  // Makeup gain in dB
+  float knee_width;   // Knee width in dB (for soft knee)
 
   // Internal state variables
-  double env;            // Envelope follower
-  double gain_reduction; // Current gain reduction amount
-  double attack_coeff;   // Attack coefficient
-  double release_coeff;  // Release coefficient
+  float env;            // Envelope follower
+  float gain_reduction; // Current gain reduction amount
+  float attack_coeff;   // Attack coefficient
+  float release_coeff;  // Release coefficient
 
   // Optional sidechain filtering
-  double sidechain_lp_state; // Sidechain low-pass filter state
-  double sidechain_lp_coeff; // Sidechain low-pass filter coefficient
+  float sidechain_lp_state; // Sidechain low-pass filter state
+  float sidechain_lp_coeff; // Sidechain low-pass filter coefficient
 } glue_compressor_state;
 
 // Initialize coefficients based on attack and release times
 static void update_glue_coefficients(glue_compressor_state *state,
-                                     double sample_rate) {
+                                     float sample_rate) {
   // Calculate time constants
   state->attack_coeff = exp(-1.0 / (state->attack_time * sample_rate));
   state->release_coeff = exp(-1.0 / (state->release_time * sample_rate));
 }
 
 // dB to linear conversion
-static double db_to_linear(double db) { return pow(10.0, db / 20.0); }
+static float db_to_linear(float db) { return pow(10.0, db / 20.0); }
 
 // Linear to dB conversion
-static double linear_to_db(double linear) {
+static float linear_to_db(float linear) {
   return 20.0 * log10(fmax(linear, 1e-6)); // Avoid log of zero
 }
 
 // Calculate gain reduction based on input level
-static double calculate_gain_reduction(double input_level_db,
-                                       glue_compressor_state *state) {
-  double knee_lower = state->threshold - (state->knee_width / 2.0);
-  double knee_upper = state->threshold + (state->knee_width / 2.0);
+static float calculate_gain_reduction(float input_level_db,
+                                      glue_compressor_state *state) {
+  float knee_lower = state->threshold - (state->knee_width / 2.0);
+  float knee_upper = state->threshold + (state->knee_width / 2.0);
 
   if (input_level_db < knee_lower) {
     // Below threshold, no compression
@@ -53,28 +53,28 @@ static double calculate_gain_reduction(double input_level_db,
     return (state->threshold - input_level_db) * (1.0 - 1.0 / state->ratio);
   } else {
     // In the knee region, gradual compression
-    double knee_factor = (input_level_db - knee_lower) / state->knee_width;
+    float knee_factor = (input_level_db - knee_lower) / state->knee_width;
     return (knee_lower - input_level_db) * (1.0 - 1.0 / state->ratio) *
            knee_factor * knee_factor;
   }
 }
 
 // Low-pass filter for sidechain signal
-static double sidechain_lowpass(double input, double *state, double coeff) {
-  double output = input * (1.0 - coeff) + (*state * coeff);
+static float sidechain_lowpass(float input, float *state, float coeff) {
+  float output = input * (1.0 - coeff) + (*state * coeff);
   *state = output;
   return output;
 }
 
 // Update compressor state and calculate gain reduction
-static double process_compressor_level(double input_level_db,
-                                       glue_compressor_state *state) {
+static float process_compressor_level(float input_level_db,
+                                      glue_compressor_state *state) {
   // Apply sidechain filtering if needed
-  double filtered_level_db = sidechain_lowpass(
+  float filtered_level_db = sidechain_lowpass(
       input_level_db, &state->sidechain_lp_state, state->sidechain_lp_coeff);
 
   // Calculate desired gain reduction
-  double target_gain_reduction =
+  float target_gain_reduction =
       calculate_gain_reduction(filtered_level_db, state);
 
   // Apply smoothing with attack/release
@@ -94,24 +94,24 @@ static double process_compressor_level(double input_level_db,
 }
 
 // Process a mono signal
-static double process_glue_frame(double input, glue_compressor_state *state) {
+static float process_glue_frame(float input, glue_compressor_state *state) {
   // Calculate input level in dB (abs for full-wave rectification)
-  double input_abs = fabs(input);
-  double input_level_db = linear_to_db(input_abs);
+  float input_abs = fabs(input);
+  float input_level_db = linear_to_db(input_abs);
 
   // Process level and get gain reduction
-  double gain_reduction = process_compressor_level(input_level_db, state);
+  float gain_reduction = process_compressor_level(input_level_db, state);
 
   // Apply gain reduction and makeup gain
-  double gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
+  float gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
   return input * gain_linear;
 }
 
 // Glue compressor perform function (supports mono and stereo)
 void *glue_compressor_perform(Node *node, glue_compressor_state *state,
-                              Node *inputs[], int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                              Node *inputs[], int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
   int channels = inputs[0]->output.layout;
 
   if (channels == 1) {
@@ -125,22 +125,22 @@ void *glue_compressor_perform(Node *node, glue_compressor_state *state,
     // Stereo processing
     while (nframes--) {
       // Get left and right channel values
-      double left = in[0];
-      double right = in[1];
+      float left = in[0];
+      float right = in[1];
 
       // Find the maximum absolute value between left and right for detection
-      double left_abs = fabs(left);
-      double right_abs = fabs(right);
-      double max_abs = (left_abs > right_abs) ? left_abs : right_abs;
+      float left_abs = fabs(left);
+      float right_abs = fabs(right);
+      float max_abs = (left_abs > right_abs) ? left_abs : right_abs;
 
       // Convert to dB for detection
-      double input_level_db = linear_to_db(max_abs);
+      float input_level_db = linear_to_db(max_abs);
 
       // Process the level through the compressor
-      double gain_reduction = process_compressor_level(input_level_db, state);
+      float gain_reduction = process_compressor_level(input_level_db, state);
 
       // Apply the same gain reduction to both channels
-      double gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
+      float gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
 
       out[0] = left * gain_linear;
       out[1] = right * gain_linear;
@@ -152,22 +152,22 @@ void *glue_compressor_perform(Node *node, glue_compressor_state *state,
     // Multi-channel processing (more than stereo)
     while (nframes--) {
       // Find maximum level across all channels
-      double max_abs = 0.0;
+      float max_abs = 0.0;
       for (int ch = 0; ch < channels; ch++) {
-        double abs_val = fabs(in[ch]);
+        float abs_val = fabs(in[ch]);
         if (abs_val > max_abs) {
           max_abs = abs_val;
         }
       }
 
       // Convert to dB for detection
-      double input_level_db = linear_to_db(max_abs);
+      float input_level_db = linear_to_db(max_abs);
 
       // Process the level through the compressor
-      double gain_reduction = process_compressor_level(input_level_db, state);
+      float gain_reduction = process_compressor_level(input_level_db, state);
 
       // Apply the same gain reduction to all channels
-      double gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
+      float gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
 
       for (int ch = 0; ch < channels; ch++) {
         out[ch] = in[ch] * gain_linear;
@@ -183,10 +183,10 @@ void *glue_compressor_perform(Node *node, glue_compressor_state *state,
 
 // Dynamic glue compressor (with controllable threshold)
 void *glue_compressor_dyn_perform(Node *node, glue_compressor_state *state,
-                                  Node *inputs[], int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *threshold_in = inputs[1]->output.buf;
+                                  Node *inputs[], int nframes, float spf) {
+  float *out = node->output.buf;
+  float *in = inputs[0]->output.buf;
+  float *threshold_in = inputs[1]->output.buf;
   int channels = inputs[0]->output.layout;
 
   if (channels == 1) {
@@ -209,22 +209,22 @@ void *glue_compressor_dyn_perform(Node *node, glue_compressor_state *state,
       state->threshold = *threshold_in;
 
       // Get left and right channel values
-      double left = in[0];
-      double right = in[1];
+      float left = in[0];
+      float right = in[1];
 
       // Find the maximum absolute value between left and right for detection
-      double left_abs = fabs(left);
-      double right_abs = fabs(right);
-      double max_abs = (left_abs > right_abs) ? left_abs : right_abs;
+      float left_abs = fabs(left);
+      float right_abs = fabs(right);
+      float max_abs = (left_abs > right_abs) ? left_abs : right_abs;
 
       // Convert to dB for detection
-      double input_level_db = linear_to_db(max_abs);
+      float input_level_db = linear_to_db(max_abs);
 
       // Process the level through the compressor
-      double gain_reduction = process_compressor_level(input_level_db, state);
+      float gain_reduction = process_compressor_level(input_level_db, state);
 
       // Apply the same gain reduction to both channels
-      double gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
+      float gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
 
       out[0] = left * gain_linear;
       out[1] = right * gain_linear;
@@ -240,22 +240,22 @@ void *glue_compressor_dyn_perform(Node *node, glue_compressor_state *state,
       state->threshold = *threshold_in;
 
       // Find maximum level across all channels
-      double max_abs = 0.0;
+      float max_abs = 0.0;
       for (int ch = 0; ch < channels; ch++) {
-        double abs_val = fabs(in[ch]);
+        float abs_val = fabs(in[ch]);
         if (abs_val > max_abs) {
           max_abs = abs_val;
         }
       }
 
       // Convert to dB for detection
-      double input_level_db = linear_to_db(max_abs);
+      float input_level_db = linear_to_db(max_abs);
 
       // Process the level through the compressor
-      double gain_reduction = process_compressor_level(input_level_db, state);
+      float gain_reduction = process_compressor_level(input_level_db, state);
 
       // Apply the same gain reduction to all channels
-      double gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
+      float gain_linear = db_to_linear(gain_reduction + state->makeup_gain);
 
       for (int ch = 0; ch < channels; ch++) {
         out[ch] = in[ch] * gain_linear;
@@ -271,9 +271,8 @@ void *glue_compressor_dyn_perform(Node *node, glue_compressor_state *state,
 }
 
 // Create a glue compressor node
-Node *glue_node(double threshold, double ratio, double attack_ms,
-                double release_ms, double makeup_gain, double knee_width,
-                Node *input) {
+Node *glue_node(float threshold, float ratio, float attack_ms, float release_ms,
+                float makeup_gain, float knee_width, Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(glue_compressor_state));
 
@@ -324,8 +323,8 @@ Node *glue_node(double threshold, double ratio, double attack_ms,
 }
 
 // Create a dynamic threshold glue compressor node
-Node *glue_node_dyn(Node *threshold, double ratio, double attack_ms,
-                    double release_ms, double makeup_gain, double knee_width,
+Node *glue_node_dyn(Node *threshold, float ratio, float attack_ms,
+                    float release_ms, float makeup_gain, float knee_width,
                     Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(glue_compressor_state));
@@ -379,9 +378,9 @@ Node *glue_node_dyn(Node *threshold, double ratio, double attack_ms,
 
 // Create a sidechain glue compressor with configurable sidechain low-pass
 // filter
-Node *glue_sc_node(double threshold, double ratio, double attack_ms,
-                   double release_ms, double makeup_gain, double knee_width,
-                   double sidechain_lp_freq, Node *input) {
+Node *glue_sc_node(float threshold, float ratio, float attack_ms,
+                   float release_ms, float makeup_gain, float knee_width,
+                   float sidechain_lp_freq, Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(glue_compressor_state));
 
@@ -416,7 +415,7 @@ Node *glue_sc_node(double threshold, double ratio, double attack_ms,
   state->knee_width = knee_width;
 
   // Calculate sidechain filter coefficient based on frequency
-  double sample_rate = ctx_sample_rate();
+  float sample_rate = ctx_sample_rate();
   state->sidechain_lp_coeff = exp(-2.0 * PI * sidechain_lp_freq / sample_rate);
   state->sidechain_lp_state = 0.0;
 

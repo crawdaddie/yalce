@@ -17,13 +17,13 @@ int main(int argc, char **argv) {
   Ctx *ctx = get_audio_ctx();
 
 #define S 5
-  double freqs[S] = {150., 300., 450, 200., 175.};
+  float freqs[S] = {150., 300., 450, 200., 175.};
   int note_count = 0;
   int current_freq_idx = 0;
 
   while (1) {
 
-    double freq = freqs[rand() % S];
+    float freq = freqs[rand() % S];
     printf("%f\n", freq);
     InValList v = {{0, freq}, NULL};
     Node *ensemble = instantiate_template(template, &v);
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
     AudioGraph *gr = (char *)ensemble + (sizeof(Node));
 
-    // double *trig_buf = audio_graph_inlet(gr, 1)->output.data;
+    // float *trig_buf = audio_graph_inlet(gr, 1)->output.data;
 
     // audio_ctx_add(ensemble);
 

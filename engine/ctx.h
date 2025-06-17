@@ -73,13 +73,13 @@ typedef struct ensemble_state {
 } ensemble_state;
 
 typedef struct {
-  double output_buf[BUF_SIZE * LAYOUT];
+  float output_buf[BUF_SIZE * LAYOUT];
   int num_input_signals;
   Signal *input_signals;
 
   ensemble_state graph;
   int sample_rate;
-  double spf;
+  float spf;
   msg_queue msg_queue;
   msg_queue overflow_queue;
   int **sig_to_hw_in_map;
@@ -92,15 +92,15 @@ Ctx *get_audio_ctx();
 void init_ctx(int num_chans, int nhw_ins, int *in_layouts);
 
 void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int nframes,
-                       double seconds_per_frame);
+                       float seconds_per_frame);
 
-void write_to_output(double *src, double *dest, int nframes, int output_num);
+void write_to_output(float *src, float *dest, int nframes, int output_num);
 
 Node *_audio_ctx_add(Node *node);
 Node *add_to_dac(Node *node);
 
 int ctx_sample_rate();
-double ctx_spf();
+float ctx_spf();
 
 int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue);
 
