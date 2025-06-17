@@ -60,10 +60,11 @@ let upos = fn () ->
   pos_ref[0]
 ;;
 
-let FrameBuffer = extern fn String -> Ptr -> Int;
+
+
 let w = create_decl_window (fn () ->
   let bg = Clear 0. 0. 0.;
-  let fbt = FrameBuffer "uFrameBufferTexture" stars_fb;
+  let fbt = FrameBuffer "uFrameBufferTexture" 3440 1440 stars_fb;
 
   let vs = VShader `#version 330 core
 layout (location = 0) in vec3 aPos;

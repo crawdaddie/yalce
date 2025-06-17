@@ -5,28 +5,9 @@ open engine/bindings/Sched;
 open ../../gui/bindings/Gui;
 import ../../lib/Math;
 
-
-let VShader = extern fn String -> Ptr;
-let FShader = extern fn String -> Ptr;
-let TriangleData = extern fn Array of Double -> Ptr;
-let Points = extern fn Array of Double -> Double -> Ptr;
-let Uniform3f = extern fn String -> Double -> Double -> Double -> Ptr;
-let LagUniform = extern fn Ptr -> Double -> Ptr -> Ptr;
-
-let set_uniform = extern fn Ptr -> Ptr -> ();
-
 let uniformref_set = fn data: (Array of Double) obj: (Ptr) ->
   set_uniform obj (cstr data)
 ;;
-
-let CamView = extern fn Ptr -> Ptr -> Ptr;
-
-let gl_obj_bind_handler = extern fn Ptr -> Ptr -> Ptr; 
-
-let SDL_RegisterEvents = extern fn Int -> Int;
-
-let gl_push_custom_event = extern fn Int -> Ptr -> ();
-
 
 let fbf = fn () ->
   let vs = VShader `#version 330 core
@@ -77,7 +58,12 @@ void main() \{
   ;
 
   let rout = fn pos ->
-    uniformref_set [|Math.rand_double_range -10. 10., Math.rand_double_range -10. 10., Math.rand_double_range -10. 10.|] pos;
+    uniformref_set [|
+      Math.rand_double_range -10. 10.,
+      Math.rand_double_range -10. 10.,
+      Math.rand_double_range -10. 10.
+    |] pos;
+
     yield 0.25;
     yield rout pos
   ;;
@@ -85,15 +71,12 @@ void main() \{
   rout pos
     |> play_routine 0 schedule_event
 
-  # print `complete func\n`;
-
 ;;
 
-let FrameBuffer = extern fn String -> Ptr -> Int;
 
 let w = create_decl_window (fn () ->
   let bg = Clear 0. 0. 0.;
-  let fbt = FrameBuffer "uFrameBufferTexture" fbf;
+  let fbt = FrameBuffer "uFrameBufferTexture" 1920 1080 fbf;
 
   let vs = VShader `#version 330 core
 layout (location = 0) in vec3 aPos;
