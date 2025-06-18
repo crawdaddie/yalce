@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "struct __color", "(Int, Int, Int, Int)");
   lookups = lookups_extend(lookups, "MIDIEndpointRef", "Int");
   lookups = lookups_extend(lookups, "ItemCount", "Int");
-  lookups = lookups_extend(lookups, "_YLCString", "String");
+  lookups = lookups_extend(lookups, "_YLC_String", "String");
 
   // engine lib -specific lookups
   lookups = lookups_extend(lookups, "SignalRef", "Ptr");

@@ -20,7 +20,7 @@ NodeRef set_input_trig_offset(NodeRef target, int input, uint64_t tick);
 NodeRef set_input_buf(int input, NodeRef buf, NodeRef node);
 NodeRef play_node_offset(uint64_t tick, NodeRef s);
 NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node);
-NodeRef load_soundfile(const char *path);
+NodeRef load_soundfile(_YLC_String path);
 
 NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s);
 

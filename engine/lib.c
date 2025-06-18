@@ -563,10 +563,10 @@ typedef struct {
   int sample_rate;
 } sf_meta;
 
-NodeRef load_soundfile(const char *path) {
+NodeRef load_soundfile(_YLC_String path) {
   Node *sf = malloc(sizeof(Node) + sizeof(sf_meta));
   sf_meta *meta = (sf_meta *)((Node *)sf + 1);
-  if (_read_file(path, &sf->output, &meta->sample_rate) != 0) {
+  if (_read_file(path.chars, &sf->output, &meta->sample_rate) != 0) {
     return NULL;
   }
   // printf("created sf node %d %d (%d)\n", sf->output.layout, sf->output.size,
