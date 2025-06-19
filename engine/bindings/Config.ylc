@@ -1,2 +1,4 @@
+let set_input_device = extern fn String -> ();
 let set_input_conf = extern fn List of Int -> ();
+
 

@@ -89,7 +89,7 @@ extern Ctx ctx;
 
 Ctx *get_audio_ctx();
 
-void init_ctx(int num_chans, int nhw_ins, int *in_layouts);
+void init_ctx();
 
 void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int nframes,
                        double seconds_per_frame);

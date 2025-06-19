@@ -51,3 +51,11 @@ void set_out_format(struct SoundIoDevice *device,
     fprintf(stderr, "No suitable device format available.\n");
   }
 }
+void validate_in_layout(struct SoundIoDevice *device,
+                        struct SoundIoChannelLayout *in_layout) {
+
+  soundio_device_sort_channel_layouts(device);
+  *in_layout = *soundio_best_matching_channel_layout(
+      device->layouts, device->layout_count, device->layouts,
+      device->layout_count);
+}

@@ -1,29 +1,24 @@
 #include "./ctx.h"
 #include "./node.h"
 #include "audio_graph.h"
+#include "audio_routing.h"
 #include "ext_lib.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 Ctx ctx;
 
-void init_ctx(int num_chans, int size, int *input_map) {
-  int *im = input_map;
+void init_ctx() {
 
-  ctx.num_input_signals = num_chans;
-  ctx.input_signals = malloc(sizeof(Signal) * num_chans);
-  ctx.sig_to_hw_in_map = malloc(sizeof(int *) * num_chans);
+  ctx.num_input_signals = num_signals;
+  ctx.input_signals = malloc(sizeof(Signal) * num_signals);
 
-  for (int i = 0; i < num_chans; i++) {
+  for (int i = 0; i < num_signals; i++) {
+    int layout = signal_info[i].num_channels;
 
-    int layout = *im;
-    im++;
-
-    ctx.input_signals[i].buf = malloc(sizeof(double) * BUF_SIZE * layout);
+    ctx.input_signals[i].buf = calloc(1, sizeof(double) * BUF_SIZE * layout);
     ctx.input_signals[i].layout = layout;
     ctx.input_signals[i].size = BUF_SIZE;
-    ctx.sig_to_hw_in_map[i] = im;
-    im += layout;
   }
 }
 
