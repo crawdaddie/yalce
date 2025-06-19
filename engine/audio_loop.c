@@ -12,6 +12,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#define RING_BUFFER_CAPACITY_SCALING 10
 
 static void (*write_sample)(char *ptr, double sample);
 int scheduler_event_loop();
@@ -135,7 +136,7 @@ static void read_callback(struct SoundIoInStream *instream, int frame_count_min,
 
           write_ptr += instream->bytes_per_sample;
         }
-        
+
         // Advance all area pointers after processing the frame
         for (int ch = 0; ch < instream->layout.channel_count; ch++) {
           areas[ch].ptr += areas[ch].step;
@@ -156,8 +157,9 @@ static void read_callback(struct SoundIoInStream *instream, int frame_count_min,
 
 // Removed redundant input_mapping function - integrated into write_callback
 
-// Removed redundant copy_ring_buffer_to_signals function - integrated into write_callback
-// Removed debug_input_signals function - debug prints removed from audio callbacks
+// Removed redundant copy_ring_buffer_to_signals function - integrated into
+// write_callback Removed debug_input_signals function - debug prints removed
+// from audio callbacks
 static void write_callback(struct SoundIoOutStream *outstream,
                            int frame_count_min, int frame_count_max) {
 
@@ -184,32 +186,33 @@ static void write_callback(struct SoundIoOutStream *outstream,
     int bytes_per_frame = total_hardware_inputs * outstream->bytes_per_sample;
     int available_frames = fill_bytes / bytes_per_frame;
     int read_frames = min_int(frame_count_max, available_frames);
-    
+
     // Copy data from ring buffer to signal buffers using input mappings
     for (int frame = 0; frame < read_frames; frame++) {
       for (int i = 0; i < num_input_mappings; i++) {
         InputMapping *mapping = &input_mappings[i];
-        
+
         // Calculate position in ring buffer for this hardware input
-        char *sample_ptr = read_ptr + (frame * total_hardware_inputs + i) * 
-                                         outstream->bytes_per_sample;
-        
+        char *sample_ptr = read_ptr + (frame * total_hardware_inputs + i) *
+                                          outstream->bytes_per_sample;
+
         // Get the sample value
         float fsample = *(float *)sample_ptr;
         double sample = (double)fsample;
-        
+
         // Store in the correct signal buffer
         Signal *sig = &ctx->input_signals[mapping->signal_index];
         int buffer_index = frame * sig->layout + mapping->signal_channel;
-        
+
         if (buffer_index < BUF_SIZE * sig->layout) {
           sig->buf[buffer_index] = sample;
         }
       }
     }
-    
+
     // Advance ring buffer read pointer
-    soundio_ring_buffer_advance_read_ptr(ring_buffer, read_frames * bytes_per_frame);
+    soundio_ring_buffer_advance_read_ptr(ring_buffer,
+                                         read_frames * bytes_per_frame);
   }
 
   frames_left = frame_count_max;
@@ -640,8 +643,8 @@ int start_audio() {
     int channel_bytes_per_frame =
         total_hardware_inputs * instream->bytes_per_sample;
 
-    int capacity =
-        actual_latency * 24 * instream->sample_rate * channel_bytes_per_frame;
+    int capacity = actual_latency * RING_BUFFER_CAPACITY_SCALING *
+                   instream->sample_rate * channel_bytes_per_frame;
 
     ring_buffer = soundio_ring_buffer_create(soundio, capacity);
     if (!ring_buffer)
@@ -694,7 +697,6 @@ void set_input_conf(char *conf) {
 
 void set_input_device(_YLC_String name) {
   preferred_input_device_name = name.chars;
-  // printf("set input conf %p\n", conf);
 }
 
 int init_audio() {

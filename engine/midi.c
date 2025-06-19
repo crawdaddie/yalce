@@ -85,6 +85,7 @@ static void MIDIInputCallback(const MIDIPacketList *pktlist,
 
   MIDIPacket *packet = (MIDIPacket *)pktlist->packet;
   for (int i = 0; i < pktlist->numPackets; i++) {
+    printf("any midi info\n");
     switch (*packet->data & 0xF0) {
     case CC:
       handle_cc(packet);

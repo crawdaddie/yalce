@@ -764,14 +764,17 @@ typedef struct {
 void *tanh_perform(Node *node, tanh_state *state, Node *inputs[], int nframes,
                    double spf) {
   double *out = node->output.buf;
+  int in_layout = inputs[0]->output.layout;
   double *in = inputs[0]->output.buf;
 
   double gain = state->gain;
 
   while (nframes--) {
-    *out = tanh(*in * gain);
-    in++;
-    out++;
+    for (int ch = 0; ch < in_layout; ch++) {
+      *out = tanh(*in * gain);
+      in++;
+      out++;
+    }
   }
 
   return node->output.buf;
@@ -788,9 +791,10 @@ Node *tanh_node(double gain, Node *input) {
       .num_inputs = 1,
       .state_size = sizeof(tanh_state),
       .state_offset = state_offset_ptr_in_graph(graph, sizeof(tanh_state)),
-      .output = (Signal){.layout = 1,
+      .output = (Signal){.layout = input->output.layout,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+                         .buf = allocate_buffer_from_pool(
+                             graph, BUF_SIZE * input->output.layout)},
       .meta = "tanh",
   };
 
