@@ -14,12 +14,10 @@ import lib/Math;
 
 let q = 60. / 130.;
 let Kick = module
-  let buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Kick11.wav";
+  let buf = load_soundfile "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Kick11.wav";
   let synth = (fn () ->
     let trig = inlet 0.; # 0
-    let imp = lfpulse_node 0. (inlet 0.) trig; # 1
-    let gate = inlet 0.; # 2
-    bufplayer_trig_node (buf_ref buf) (44100./ 48000.) (inlet 0.) imp # 3 
+    bufplayer_trig_node (buf_ref buf) (44100./ 48000.) (inlet 0.) trig # 3 
     |> (*) (aslr_node 0. 1. 0.2 0.1 trig)
     |> math_node (fn x -> 0.5 * (x + Math.sin (10. * x)))
   )
@@ -42,12 +40,10 @@ let Kick = module
 
 let Snare = module
 
-  let buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Snare03.wav";
+  let buf = load_soundfile  "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Snare03.wav";
   let synth = (fn () ->
     let trig = inlet 0.; # 0
-    let imp = lfpulse_node 0. (inlet 0.) trig; # 1
-    let gate = inlet 0.; # 2
-    bufplayer_trig_node (buf_ref buf) (44100. / 48000.) (inlet 0.) imp # 3 
+    bufplayer_trig_node (buf_ref buf) (44100. / 48000.) 0. trig # 3 
     |> (*) (aslr_node 0. 4. 0.2 0.1 trig)
   )
   |> play_tpl
@@ -83,11 +79,10 @@ let Snare = module
 
 let Hihat = module
 
-  let closed_hh_buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Closedhat12.wav";
+  let closed_hh_buf = load_soundfile "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Closedhat12.wav";
   let closed_hh = (fn () ->
     let trig = inlet 0.; # 0
     let imp = lfpulse_node 0. (inlet 0.) trig; # 1
-    let gate = inlet 0.; # 2
     bufplayer_trig_node (buf_ref closed_hh_buf) ((44100. / 48000.) * (inlet 1.)) (inlet 0.) imp # 3 
     |> (*) (aslr_node 0. 3. 0.2 0.1 trig)
   )
@@ -98,11 +93,10 @@ let Hihat = module
     set_input_scalar_offset closed_hh 1 (get_current_sample ()) (Math.unipolar_scale 0. (8. / q) val)  
   );
 
-  let open_hh_buf = load_soundfile @@ cstr "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Openhat02.wav";
+  let open_hh_buf = load_soundfile  "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Openhat02.wav";
   let open_hh = (fn () ->
     let trig = inlet 0.; # 0
     let imp = lfpulse_node 0. (inlet 0.) trig; # 1
-    let gate = inlet 0.; # 2
     bufplayer_trig_node (buf_ref open_hh_buf) (44100. * 1.1 / 48000.) (inlet 0.) imp # 3 
     |> (*) (aslr_node 0. 3. 0.2 0.1 trig)
   )
