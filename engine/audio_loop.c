@@ -55,9 +55,6 @@ struct SoundIoRingBuffer *ring_buffer = NULL;
 
 static char *preferred_input_device_name = NULL;
 
-static int num_hardware_outputs = 2;
-static int output_channels[8] = {0, 1};
-
 static enum SoundIoFormat prioritized_formats[] = {
     SoundIoFormatFloat32NE, SoundIoFormatFloat32FE, SoundIoFormatS32NE,
     SoundIoFormatS32FE,     SoundIoFormatS24NE,     SoundIoFormatS24FE,
@@ -96,7 +93,7 @@ static void read_callback(struct SoundIoInStream *instream, int frame_count_min,
 
   char *write_ptr = soundio_ring_buffer_write_ptr(ring_buffer);
   int free_bytes = soundio_ring_buffer_free_count(ring_buffer);
-  int bytes_per_frame = total_hardware_inputs * instream->bytes_per_sample;
+  int bytes_per_frame = req_hardware_inputs * instream->bytes_per_sample;
   int free_frames = free_bytes / bytes_per_frame;
 
   if (frame_count_min > free_frames) {
@@ -183,7 +180,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
 
   // Process input data from ring buffer using the new mapping system
   if (read_ptr && ring_buffer) {
-    int bytes_per_frame = total_hardware_inputs * outstream->bytes_per_sample;
+    int bytes_per_frame = req_hardware_inputs * outstream->bytes_per_sample;
     int available_frames = fill_bytes / bytes_per_frame;
     int read_frames = min_int(frame_count_max, available_frames);
 
@@ -193,7 +190,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
         InputMapping *mapping = &input_mappings[i];
 
         // Calculate position in ring buffer for this hardware input
-        char *sample_ptr = read_ptr + (frame * total_hardware_inputs + i) *
+        char *sample_ptr = read_ptr + (frame * req_hardware_inputs + i) *
                                           outstream->bytes_per_sample;
 
         // Get the sample value
@@ -390,112 +387,7 @@ void print_device_info(struct SoundIoDevice *in_device,
 
   fprintf(stderr, ANSI_COLOR_RESET);
 }
-void print_routing_setup(struct SoundIoOutStream *outstream,
-                         struct SoundIoInStream *instream,
-                         struct SoundIoRingBuffer *ring_buffer) {
 
-  fprintf(stderr, ANSI_COLOR_BLUE);
-
-  int channel_bytes_per_frame =
-      total_hardware_inputs * outstream->bytes_per_sample;
-  fprintf(stderr, "Format: %s\n", soundio_format_string(outstream->format));
-  fprintf(stderr, "Sample rate: %d Hz\n", outstream->sample_rate);
-  if (ring_buffer) {
-    fprintf(stderr, "Buffer size: %.2f ms\n",
-            (double)soundio_ring_buffer_capacity(ring_buffer) /
-                channel_bytes_per_frame / instream->sample_rate * 1000.0);
-  }
-
-  fprintf(stderr, "Channel configuration:\n");
-  print_input_mapping();
-
-  fprintf(stderr, "\n  Output channels: ");
-  for (int i = 0; i < num_hardware_outputs; i++) {
-    fprintf(stderr, "%d ", output_channels[i] + 1);
-  }
-
-  fprintf(stderr, "Press Ctrl+C to exit.\n");
-
-  fprintf(stderr, ANSI_COLOR_RESET);
-}
-void validate_out_layout(struct SoundIoDevice *out_device,
-                         struct SoundIoChannelLayout *_out_layout) {
-
-  struct SoundIoChannelLayout *out_layout;
-
-  // Check if requested output channels are valid
-  for (int i = 0; i < 2; i++) {
-    if (output_channels[i] >= out_device->current_layout.channel_count) {
-      panic("Invalid output channel %d specified. Device only has %d channels "
-            "(0-%d).",
-            output_channels[i] + 1, out_device->current_layout.channel_count,
-            out_device->current_layout.channel_count - 1);
-    }
-  }
-  // Get the built-in stereo layout
-  const struct SoundIoChannelLayout *stereo_layout =
-      soundio_channel_layout_get_builtin(SoundIoChannelLayoutIdStereo);
-
-  // soundio_device_sort_channel_layouts(out_device);
-  // // Define a stereo channel layout (Front Left, Front Right)
-  //
-  // out_layout = soundio_best_matching_channel_layout(
-  //     stereo_layout, 1, out_device->layouts, out_device->layout_count);
-  //
-  // if (!out_layout)
-  //   panic("output channel layouts not compatible");
-
-  // *_out_layout = *out_layout;
-  *_out_layout = *stereo_layout;
-}
-
-// void validate_in_layout(struct SoundIoDevice *in_device,
-//                         struct SoundIoChannelLayout *_in_layout, int size,
-//                         int *input_map, int *num_in_channels,
-//                         int *num_hardware_inputs, int
-//                         *requested_input_channels, int *hw_in_to_sig_map) {
-//
-//   struct SoundIoChannelLayout *in_layout;
-//
-//   int *im = input_map;
-//   int chans = 0;
-//   int req_in_counter = 0;
-//
-//   while (size) {
-//     int layout = *im;
-//     int l = layout;
-//     im++;
-//     size--;
-//     while (l--) {
-//       int req_hw_input = *im;
-//       if (req_hw_input >= in_device->current_layout.channel_count) {
-//
-//         panic("Invalid hardware input channel %d specified. Device only has
-//         %d "
-//               "channels\n",
-//               req_hw_input + 1, in_device->current_layout.channel_count);
-//       } else {
-//         *num_hardware_inputs = *num_hardware_inputs + 1;
-//         requested_input_channels[req_in_counter] = req_hw_input;
-//         hw_in_to_sig_map[req_in_counter] = chans;
-//         req_in_counter++;
-//       }
-//       im++;
-//       size--;
-//     }
-//     chans++;
-//   }
-//
-//   soundio_device_sort_channel_layouts(in_device);
-//   in_layout = soundio_best_matching_channel_layout(
-//       in_device->layouts, in_device->layout_count, in_device->layouts,
-//       in_device->layout_count);
-//
-//   if (!in_layout)
-//     panic("input channel layouts not compatible");
-//   *_in_layout = *in_layout;
-//   *num_in_channels = chans;
-// }
 void get_sample_rate(struct SoundIoDevice *in_device,
                      struct SoundIoDevice *out_device, int *sr) {
 
@@ -622,7 +514,7 @@ int start_audio() {
 
   struct SoundIoInStream *instream = NULL;
 
-  if (total_hardware_inputs > 0) {
+  if (req_hardware_inputs > 0) {
     // Now create input stream with the same latency as the output stream
     instream = soundio_instream_create(in_device);
     if (!instream) {
@@ -641,7 +533,7 @@ int start_audio() {
 
     // Create a ring buffer for our SELECTED channels, not all channels
     int channel_bytes_per_frame =
-        total_hardware_inputs * instream->bytes_per_sample;
+        req_hardware_inputs * instream->bytes_per_sample;
 
     int capacity = actual_latency * RING_BUFFER_CAPACITY_SCALING *
                    instream->sample_rate * channel_bytes_per_frame;
