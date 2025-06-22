@@ -8,7 +8,7 @@
 pthread_mutex_t node_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Function to remove and free a node from the linked list
-void remove_and_free_node(ensemble_state *ctx, NodeRef prev, NodeRef to_free) {
+void remove_and_free_node(node_group *ctx, NodeRef prev, NodeRef to_free) {
   if (prev == NULL) {
     // Node to remove is the head
     ctx->head = to_free->next;
@@ -27,7 +27,7 @@ void remove_and_free_node(ensemble_state *ctx, NodeRef prev, NodeRef to_free) {
 
   free(to_free);
 }
-void iter_gc(ensemble_state *ctx) {
+void iter_gc(node_group *ctx) {
   Node *current = ctx->head;
 
   Node *prev = NULL;

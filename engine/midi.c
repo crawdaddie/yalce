@@ -1,7 +1,9 @@
 #include "midi.h"
 #include "audio_loop.h"
 #include "ctx.h"
+#include "scheduling.h"
 // Add these at the top of your file
+#include <AudioToolbox/AudioToolbox.h>
 #include <mach/mach_time.h>
 
 #include <CoreMIDI/CoreMIDI.h>
@@ -10,8 +12,16 @@
 #define NOTE_ON 0x90
 #define NOTE_OFF 0x80
 #define CHAN_MASK 0x0F
+#define PROGRAM_CHANGE 0xC0
+#define MIDI_CLOCK 0xF8
+#define MIDI_START 0xFA
+#define MIDI_CONTINUE 0xFB
+#define MIDI_STOP 0xFC
 
 #define REC_127 0.007874015748031496
+
+int debug;
+void toggle_midi_debug() { debug = !debug; }
 
 // Arrays to store handlers
 static CCCallback cc_handlers[128 * 16];
@@ -20,8 +30,95 @@ static NoteCallback note_off_handlers[128];
 static MIDIPortRef output_port;
 static MIDIClientRef client;
 
-int debug;
-void toggle_midi_debug() { debug = !debug; }
+// Add these callback type definitions after the existing ones
+typedef void (*ProgramChangeCallback)(int channel, int program);
+typedef void (*TransportCallback)(void);
+
+// Add these arrays after the existing handler arrays
+static ProgramChangeCallback program_change_handlers[16];
+static TransportCallback midi_clock_handler;
+static TransportCallback midi_start_handler;
+static TransportCallback midi_continue_handler;
+static TransportCallback midi_stop_handler;
+
+// Add these registration functions after the existing ones
+void register_program_change_handler(int ch, ProgramChangeCallback handler) {
+  program_change_handlers[ch] = handler;
+}
+
+void register_midi_clock_handler(TransportCallback handler) {
+  midi_clock_handler = handler;
+}
+
+void register_midi_start_handler(TransportCallback handler) {
+  midi_start_handler = handler;
+}
+
+void register_midi_continue_handler(TransportCallback handler) {
+  midi_continue_handler = handler;
+}
+
+void register_midi_stop_handler(TransportCallback handler) {
+  midi_stop_handler = handler;
+}
+
+// Add these handler functions after the existing handle_* functions
+static void handle_program_change(MIDIPacket *packet) {
+  uint8_t ch = *packet->data & 0x0F;
+  uint8_t program = *(packet->data + 1) & 0x7F; // Program numbers are 0-127
+  ProgramChangeCallback handler = program_change_handlers[ch];
+
+  if (debug) {
+    printf("midi program change ch: %d program: %d\n", ch, program);
+  }
+  if (handler != NULL) {
+    handler(ch, program);
+  }
+}
+
+static void handle_transport(MIDIPacket *packet) {
+  uint8_t status = *packet->data;
+
+  if (debug) {
+    switch (status) {
+    case MIDI_CLOCK:
+      // ignore
+      break;
+    case MIDI_START:
+      printf("midi start\n");
+      break;
+    case MIDI_CONTINUE:
+      printf("midi continue\n");
+      break;
+    case MIDI_STOP:
+      printf("midi stop\n");
+      break;
+    }
+  }
+
+  switch (status) {
+  case MIDI_CLOCK:
+    if (midi_clock_handler != NULL) {
+      midi_clock_handler();
+    }
+    break;
+  case MIDI_START:
+    if (midi_start_handler != NULL) {
+      midi_start_handler();
+    }
+    break;
+  case MIDI_CONTINUE:
+    if (midi_continue_handler != NULL) {
+      midi_continue_handler();
+    }
+    break;
+  case MIDI_STOP:
+    if (midi_stop_handler != NULL) {
+      midi_stop_handler();
+    }
+    break;
+  }
+}
 
 void register_cc_handler(int ch, int cc, CCCallback handler) {
   cc_handlers[cc * 16 + ch] = handler;
@@ -85,23 +182,32 @@ static void MIDIInputCallback(const MIDIPacketList *pktlist,
 
   MIDIPacket *packet = (MIDIPacket *)pktlist->packet;
   for (int i = 0; i < pktlist->numPackets; i++) {
-    printf("any midi info\n");
-    switch (*packet->data & 0xF0) {
-    case CC:
-      handle_cc(packet);
-      break;
-    case NOTE_ON:
-      handle_note_on(packet);
-      break;
-    case NOTE_OFF:
-      handle_note_off(packet);
-      break;
-    default:
-      break;
+    uint8_t status = *packet->data;
+    if (status >= 0xF8) {
+      handle_transport(packet);
+    } else {
+      // Handle channel messages
+      switch (status & 0xF0) {
+      case CC:
+        handle_cc(packet);
+        break;
+      case NOTE_ON:
+        handle_note_on(packet);
+        break;
+      case NOTE_OFF:
+        handle_note_off(packet);
+        break;
+      case PROGRAM_CHANGE:
+        handle_program_change(packet);
+        break;
+      default:
+        break;
+      }
     }
     packet = MIDIPacketNext(packet);
   }
 }
+// Check for system real-time messages first (0xF8-0xFF)
 
 static double sample_to_ns_ratio;
 static mach_timebase_info_data_t timebase_info;
@@ -433,7 +539,6 @@ MIDIEndpointRef get_destination(ItemCount index) {
 }
 
 MIDIEndpointRef get_destination_by_name(const char *name) {
-  printf("name: %s\n", name);
   ItemCount destCount = MIDIGetNumberOfDestinations();
 
   for (ItemCount i = 0; i < destCount; i++) {
@@ -450,6 +555,7 @@ MIDIEndpointRef get_destination_by_name(const char *name) {
       CFRelease(nameCF);
 
       if (strcmp(destName, name) == 0) {
+        printf("found destination: %s\n", name);
         return dest;
       }
     }
@@ -478,4 +584,126 @@ void list_destinations() {
       printf("MIDI Destination %lu: Unable to get name\n", (unsigned long)i);
     }
   }
+}
+
+// Transport message sending functions
+int send_midi_start(MIDIEndpointRef destination) {
+  printf("sending midi start\n");
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  Byte midi_data[1] = {MIDI_START};
+  uint64_t t = get_current_sample();
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, 0, 1, midi_data);
+
+  if (debug) {
+    printf("Sending MIDI start\n");
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  if (result != noErr) {
+    printf("Error sending MIDI start: %d\n", (int)result);
+  }
+  // Send raw MIDI start byte
+  // Byte rawStart[1] = {0xFA};
+  // result = MIDISendSysex(output_port, rawStart, 1);
+  // printf("Raw MIDI start result: %d\n", (int)result);
+  return result == noErr ? 0 : -1;
+}
+
+int send_midi_stop(MIDIEndpointRef destination) {
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  Byte midi_data[1] = {MIDI_STOP};
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, 0, 1, midi_data);
+
+  if (debug) {
+    printf("Sending MIDI stop\n");
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
+}
+
+int send_midi_continue(MIDIEndpointRef destination) {
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  Byte midi_data[1] = {MIDI_CONTINUE};
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, 0, 1, midi_data);
+
+  if (debug) {
+    printf("Sending MIDI continue\n");
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
+}
+
+int send_midi_clock(MIDIEndpointRef destination) {
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  Byte midi_data[1] = {MIDI_CLOCK};
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, 0, 1, midi_data);
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
+}
+
+int send_program_change(MIDIEndpointRef destination, uint8_t channel,
+                        uint8_t program) {
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  Byte midi_data[2];
+  midi_data[0] = PROGRAM_CHANGE | (channel & CHAN_MASK);
+  midi_data[1] = program & 0x7F; // Ensure program is 0-127
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, 0, 2, midi_data);
+
+  if (debug) {
+    printf("Sending program change: ch=%u program=%u\n", channel, program);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
+}
+
+int send_program_change_ts(MIDIEndpointRef destination, uint8_t channel,
+                           uint8_t program, uint64_t ts) {
+  Byte buffer[1024];
+  MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
+  MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
+
+  MIDITimeStamp t = sample_to_midi_timestamp(ts);
+
+  Byte midi_data[2];
+  midi_data[0] = PROGRAM_CHANGE | (channel & CHAN_MASK);
+  midi_data[1] = program & 0x7F; // Ensure program is 0-127
+
+  current_packet = MIDIPacketListAdd(packet_list, sizeof(buffer),
+                                     current_packet, t, 2, midi_data);
+
+  if (debug) {
+    printf("Sending program change: ch=%u program=%u\n", channel, program);
+  }
+
+  OSStatus result = MIDISend(output_port, destination, packet_list);
+  return result == noErr ? 0 : -1;
 }

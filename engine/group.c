@@ -8,7 +8,7 @@
 
 NodeRef group_add(NodeRef node, NodeRef group) {
 
-  ensemble_state *ctx = group + 1;
+  node_group *ctx = group + 1;
 
   // Add to existing chain
   if (ctx->head == NULL) {
@@ -25,7 +25,7 @@ NodeRef group_add(NodeRef node, NodeRef group) {
   return node;
 }
 
-void *perform_ensemble(Node *node, ensemble_state *state, Node *_inputs[],
+void *perform_ensemble(Node *node, node_group *state, Node *_inputs[],
                        int nframes, double spf) {
 
   for (int i = 0; i < 2 * BUF_SIZE; i++) {
@@ -42,15 +42,15 @@ void *perform_ensemble(Node *node, ensemble_state *state, Node *_inputs[],
 
 NodeRef group_node() {
   int mem_size =
-      sizeof(Node) + sizeof(ensemble_state) + (sizeof(double) * BUF_SIZE * 2);
+      sizeof(Node) + sizeof(node_group) + (sizeof(double) * BUF_SIZE * 2);
   char *mem = malloc(mem_size);
 
   Node *node = (Node *)mem;
   mem += sizeof(Node);
 
-  ensemble_state *state = (ensemble_state *)mem;
-  mem += sizeof(ensemble_state);
-  *state = (ensemble_state){NULL, NULL};
+  node_group *state = (node_group *)mem;
+  mem += sizeof(node_group);
+  *state = (node_group){NULL, NULL};
 
   double *buf = (double *)mem;
   for (int i = 0; i < 2 * BUF_SIZE; i++) {

@@ -1,4 +1,5 @@
 #include "./audio_graph.h"
+#include "ctx.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,29 +63,16 @@ void plug_input_in_graph(int idx, NodeRef node, NodeRef input) {
     node->connections[idx].source_node_index = input->node_index;
     return;
   }
+
   node->connections[idx].source_node_index = (uint64_t)input;
 }
 
-Node *__allocate_node_in_graph(AudioGraph *graph, int state_size) {
-  if (!graph) {
-    return malloc(sizeof(Node) + state_size);
-  }
-
-  int idx = graph->node_count++;
-
-  if (graph->node_count >= graph->capacity) {
-    graph->capacity *= 2;
-    graph->nodes = realloc(graph->nodes, graph->capacity * sizeof(Node));
-  }
-
-  Node *node = &graph->nodes[idx];
-  node->node_index = idx;
-  return node;
-}
-
 Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
+
   if (!graph) {
-    return malloc(sizeof(Node) + state_size);
+    char *mem = malloc(sizeof(Node) + state_size);
+    // audio_ctx_add((Node *)mem);
+    return (NodeRef)mem;
   }
 
   int idx = graph->node_count++;

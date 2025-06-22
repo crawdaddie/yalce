@@ -12,9 +12,4 @@ void write_sample_float64ne(char *ptr, double sample);
 void set_out_format(struct SoundIoDevice *device,
                     struct SoundIoOutStream *outstream, void **write_sample);
 
-void validate_in_layout(struct SoundIoDevice *device,
-                        struct SoundIoChannelLayout *in_layout);
-
-void validate_out_layout(struct SoundIoDevice *out_device,
-                         struct SoundIoChannelLayout *_out_layout);
 #endif

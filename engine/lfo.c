@@ -217,12 +217,11 @@ NodeRef buf_env_node(NodeRef time_scale, NodeRef input, NodeRef trig) {
       .meta = "lfo_env",
   };
 
-  char *mem = (graph != NULL)
-                  ? (char *)(graph->nodes_state_memory + node->state_offset)
-                  : (char *)((Node *)node + 1);
+  // char *mem = (graph != NULL)
+  //                 ? (char *)(graph->nodes_state_memory + node->state_offset)
+  //                 : (char *)((Node *)node + 1);
 
-  memset(mem, 0, state_size);
-  lfo_state *state = mem;
+  lfo_state *state = state_ptr(graph, node);
   *state = lfo;
 
   node->connections[0].source_node_index = trig->node_index;

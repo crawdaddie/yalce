@@ -70,14 +70,14 @@ void update_bundle(int write_ptr);
 typedef struct ensemble_state {
   Node *head;
   Node *tail;
-} ensemble_state;
+} node_group;
 
 typedef struct {
   double output_buf[BUF_SIZE * LAYOUT];
   int num_input_signals;
   Signal *input_signals;
 
-  ensemble_state graph;
+  node_group graph;
   int sample_rate;
   double spf;
   msg_queue msg_queue;

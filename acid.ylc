@@ -1,0 +1,67 @@
+open engine/bindings/Synth;
+open engine/bindings/Sched; 
+
+let Acid = module
+  let ampenv = [|
+    0.000000, 0.000000, 2.400000,
+    1.000000, 2.210165, -2.000000,
+    1.000000, 0.789836, 1.300000,
+    0.000000
+  |]
+  |> array_to_buf;
+
+  let synth = (fn () -> 
+    let freq = inlet 100.;
+    let trig = inlet 0.;
+    ((sq_node freq) + (sq_node (freq * 1.01))) * (buf_env_node 1. (buf_ref ampenv) trig)
+  ) |> play_tpl;
+
+
+  let trig = fn () -> 
+    let fo = get_tl_tick ();
+    set_input_trig_offset synth 1 fo
+  ;;
+
+  let pattern_ref = [|empty_coroutine ()|] ;
+
+  let set_pattern = fn t cor ->
+    cor_stop ( pattern_ref[0] );
+    cor
+    |> play_routine t schedule_event
+    |> array_set pattern_ref 0
+  ;;
+;
+
+let q = 60. / 130.;
+defer_quant q (fn t -> 
+  iter [|1.|]
+  |> cor_loop
+  |> cor_map (fn x -> Acid.trig (); x)
+  |> cor_map ((*) q)
+  |> Acid.set_pattern t
+);
+
+
+# let SynthInst = module
+#   type TSynthInst = (pref: Array of Ptr, synth: Synth);
+#   let trig = fn s: (TSynthInst) ->  
+#     # print "trig synth!!!\n";
+#     ()
+#   ;;
+# ;
+#
+# let a = (
+#   pref: [|empty_coroutine ()|],
+#   synth: ((fn () -> 
+#     let freq = inlet 100.;
+#     (sq_node freq) + (sq_node (freq * 1.01))  
+#   ) |> play_tpl
+#   )
+# );
+#
+# SynthInst.trig a
+#
+#
+#
+#
+# # "1 " |> trig_pat |> " " |> Acid

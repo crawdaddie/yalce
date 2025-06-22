@@ -799,8 +799,7 @@ Node *tanh_node(double gain, Node *input) {
   };
 
   // Initialize state
-  tanh_state *state =
-      (tanh_state *)(graph->nodes_state_memory + node->state_offset);
+  tanh_state *state = state_ptr(graph, node);
   state->gain = gain;
 
   // Connect input

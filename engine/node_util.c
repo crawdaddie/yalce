@@ -109,7 +109,6 @@ NodeRef mul2_node(NodeRef input1, NodeRef input2) {
   };
 
   plug_input_in_graph(0, node, input1);
-
   plug_input_in_graph(1, node, input2);
 
   return node;

@@ -125,7 +125,7 @@ void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
                        double spf) {
 
   int consumed = process_msg_queue_pre(current_tick, &ctx->msg_queue);
-  ensemble_state graph = ctx->graph;
+  node_group graph = ctx->graph;
 
   if (graph.head == NULL) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
@@ -197,7 +197,6 @@ Node *hw_inlet(int idx) {
 
   };
 
-  printf("hw inlet buf %p\n", f->output.buf);
   f->meta = "hw_inlet";
   return f;
 }
