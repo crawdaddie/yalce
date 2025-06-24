@@ -15,11 +15,12 @@ let Acid = module
     let freq = inlet 55. in
     let trig = inlet 0. in
     # ( sq_node (1.01 * freq) + sq_node freq ) * (aslr_node 0.01 1. 0.01 0.1 trig)
-    ( sin_node (2. * freq) + sin_node freq ) * (aslr_node 0.01 1. 0.01 0.1 trig)
+    # ( sin_node (4. * freq) + sin_node freq ) * (aslr_node 0.01 1. 0.01 0.1 trig)
+    ( pm_node freq (4. * sin_node (0.0625 /0.2)) 1.5 ) * (aslr_node 0.001 1. 0.01 0.1 trig)
     # ( sin_node freq ) * (aslr_node 0.01 1. 0.01 0.1 trig)
     |> vital_rev_node
         0.5
-        1.
+        0.5
         0.5
         0.62184876
         0.0
@@ -29,7 +30,7 @@ let Acid = module
         0.789916
         0.0
         0.0
-        1.
+        0.8
 
   ) |> play_tpl;
 
@@ -67,14 +68,16 @@ let full_notes =	[|
 #   yield (iter arr)
 # ;;
 
-let note_seq = fn notes -> 
-  yield iter (array_range 0 5 notes);
-  yield iter (array_range 0 5 notes);
-  yield note_seq (array_offset 5 notes)
+let note_seq = fn idx notes -> 
+  yield iter (array_range (idx * 5 + 0) 5 notes);
+  yield iter (array_range (idx * 5 + 2) 3 notes);
+  yield iter (array_range (idx * 5 + 0) 5 notes);
+  yield iter (array_range (idx * 5 + 2) 3 notes);
+  yield note_seq ((idx + 1) % 32) notes
 ;;
 
 defer_quant q (fn t -> 
-  note_seq full_notes
+  note_seq 0 full_notes
   |> cor_loop
   |> cor_map (fn n ->
     Acid.trign n;
