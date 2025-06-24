@@ -955,6 +955,11 @@ Ast *ast_yield(Ast *expr) {
   return y;
 }
 
+Ast *ast_yield_end() {
+  Ast *y = Ast_new(AST_YIELD);
+  y->data.AST_YIELD.expr = NULL;
+  return y;
+}
 Ast *ast_thunk_expr(Ast *expr) {
   Ast *thunk = ast_lambda(ast_arg_list(ast_void(), NULL), expr);
   return thunk;

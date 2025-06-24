@@ -961,11 +961,6 @@ JITSymbol *nested_coroutine_expr(Ast *ast, JITLangCtx *ctx) {
   return NULL;
 }
 
-bool is_yield_end(Ast *ast) {
-  return ast->data.AST_YIELD.expr->tag == AST_IDENTIFIER &&
-         CHARS_EQ(ast->data.AST_YIELD.expr->data.AST_IDENTIFIER.value, "end");
-}
-
 LLVMValueRef codegen_coroutine_short_circuit(JITLangCtx *ctx,
                                              LLVMModuleRef module,
                                              LLVMBuilderRef builder) {
@@ -1009,6 +1004,10 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   Ast *yield_expr = ast->data.AST_YIELD.expr;
+  if (!yield_expr) {
+    LLVMBuildRet(builder, null_cor_inst());
+    return NULL;
+  }
 
   JITSymbol *sym = nested_coroutine_expr(yield_expr, ctx);
 

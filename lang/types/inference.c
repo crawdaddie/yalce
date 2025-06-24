@@ -475,11 +475,21 @@ Type *infer(Ast *ast, TICtx *ctx) {
   ast->md = type;
   return type;
 }
+Type *infer_yield_end(TICtx *ctx) {
+  Type *v = next_tvar();
+  // printf("yield end\n");
+  // print_type(v);
+  ctx->yielded_type = v;
+  return v;
+}
 
 Type *infer_yield_stmt(Ast *ast, TICtx *ctx) {
 
   ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
   Ast *yield_expr = ast->data.AST_YIELD.expr;
+  if (!yield_expr) {
+    return infer_yield_end(ctx);
+  }
 
   infer(yield_expr, ctx);
   Type *yield_expr_type = yield_expr->md;
@@ -1052,6 +1062,10 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
   }
 
   case AST_YIELD: {
+    // printf("SUBST\n");
+    // print_ast(ast);
+    // print_type(ast->md);
+    // print_subst(subst);
     apply_substitutions_rec(ast->data.AST_YIELD.expr, subst);
     ast->md = apply_substitution(subst, ast);
     break;

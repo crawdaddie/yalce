@@ -405,6 +405,7 @@ void add_custom_binop(const char *binop_name);
 void print_location(Ast *ast);
 
 Ast *ast_yield(Ast *expr);
+Ast *ast_yield_end();
 
 Ast *ast_thunk_expr(Ast *expr);
 Ast *ast_spread_operator(Ast *expr);

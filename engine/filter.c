@@ -780,7 +780,7 @@ void *tanh_perform(Node *node, tanh_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *tanh_node(double gain, Node *input) {
+Node *_tanh_node(double gain, Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(tanh_state));
 
@@ -807,6 +807,12 @@ Node *tanh_node(double gain, Node *input) {
 
   return node;
 }
+
+// Node *tanh_node(double gain, Node *input) {
+//   Node *t = _tanh_node(gain, input);
+//
+//   return t;
+// }
 
 void *dyn_tanh_perform(Node *node, tanh_state *state, Node *inputs[],
                        int nframes, double spf) {

@@ -72,6 +72,9 @@ void plug_input_in_graph(int idx, NodeRef node, NodeRef input) {
   node->connections[idx].source_node_index = (uint64_t)input;
 }
 
+Node *_chain_head = NULL;
+Node *_chain_tail = NULL;
+
 Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
 
   if (!graph) {
