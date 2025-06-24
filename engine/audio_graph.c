@@ -58,8 +58,13 @@ char *state_ptr(AudioGraph *graph, NodeRef node) {
   }
   return graph->nodes_state_memory + node->state_offset;
 }
+
 void plug_input_in_graph(int idx, NodeRef node, NodeRef input) {
+
   if (_graph) {
+    // printf("plug input in graph [%s](%d)->[%s]\n", input->meta,
+    //        input->node_index, node->meta);
+
     node->connections[idx].source_node_index = input->node_index;
     return;
   }
@@ -144,8 +149,11 @@ void print_graph(AudioGraph *g) {
 
 void __node_get_inputs(Node *node, AudioGraph *graph, Node *inputs[]) {
   int num_inputs = node->num_inputs;
+  // printf("get inputs for %s\n", node->meta);
   for (int i = 0; i < num_inputs; i++) {
+    // printf("%llu -\n ", node->connections[i].source_node_index);
     inputs[i] = graph->nodes + node->connections[i].source_node_index;
+    // printf("input %s\n", inputs[i]->meta);
   }
 }
 

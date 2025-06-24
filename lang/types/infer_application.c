@@ -156,7 +156,9 @@ Type *struct_of_fns_to_return(Type *cons) {
 }
 
 Type *infer_iter(Ast *ast, TICtx *ctx) {
+  printf("infer iter\n");
   Type *t = infer(ast->data.AST_APPLICATION.args, ctx);
+  print_type(t);
   Type *ret_type;
   switch (t->kind) {
   case T_CONS: {
@@ -170,9 +172,14 @@ Type *infer_iter(Ast *ast, TICtx *ctx) {
       break;
     }
   }
-    // case T_VAR: {
-    // TODO: add typeclass 'with iter' and resolve later eg either list or array
-    // }
+  case T_VAR: {
+    // TODO:
+    //   add typeclass 'with iter' and resolve later eg either list or array
+    fprintf(stderr, "Type ");
+    print_type_err(t);
+    fprintf(stderr, "does not implement the iterable typeclass\n");
+    break;
+  }
 
   default: {
     fprintf(stderr, "Type ");

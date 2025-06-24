@@ -1,5 +1,6 @@
 open engine/bindings/Synth;
 open engine/bindings/Sched; 
+import lib/Math;
 
 let Acid = module
   let ampenv = [|
@@ -11,15 +12,32 @@ let Acid = module
   |> array_to_buf;
 
   let synth = (fn () -> 
-    let freq = inlet 100.;
-    let trig = inlet 0.;
-    ((sq_node freq) + (sq_node (freq * 1.01))) * (buf_env_node 1. (buf_ref ampenv) trig)
+    let freq = inlet 55. in
+    let trig = inlet 0. in
+    # ( sq_node (1.01 * freq) + sq_node freq ) * (aslr_node 0.01 1. 0.01 0.1 trig)
+    ( sin_node (2. * freq) + sin_node freq ) * (aslr_node 0.01 1. 0.01 0.1 trig)
+    # ( sin_node freq ) * (aslr_node 0.01 1. 0.01 0.1 trig)
+    |> vital_rev_node
+        0.5
+        1.
+        0.5
+        0.62184876
+        0.0
+        0.5
+        0.8333333
+        0.6
+        0.789916
+        0.0
+        0.0
+        1.
+
   ) |> play_tpl;
 
 
-  let trig = fn () -> 
+  let trign = fn n -> 
     let fo = get_tl_tick ();
-    set_input_trig_offset synth 1 fo
+    set_input_trig_offset synth 1 fo;
+    set_input_scalar_offset synth 0 fo (midi_to_freq n)
   ;;
 
   let pattern_ref = [|empty_coroutine ()|] ;
@@ -33,35 +51,35 @@ let Acid = module
 ;
 
 let q = 60. / 130.;
+let full_notes =	[|
+   60, 64, 67, 72, 76, 60, 62, 69, 74, 77, 59, 62, 67, 74, 77, 60, 64, 67, 72, 76,
+	 60, 64, 69, 76, 81, 60, 62, 66, 69, 74, 59, 62, 67, 74, 79, 59, 60, 64, 67, 72,
+	 57, 60, 64, 67, 72, 50, 57, 62, 66, 72, 55, 59, 62, 67, 71, 55, 58, 64, 67, 73,
+	 53, 57, 62, 69, 74, 53, 56, 62, 65, 71, 52, 55, 60, 67, 72, 52, 53, 57, 60, 65,
+	 50, 53, 57, 60, 65, 43, 50, 55, 59, 65, 48, 52, 55, 60, 64, 48, 55, 58, 60, 64,
+	 41, 53, 57, 60, 64, 42, 48, 57, 60, 63, 44, 53, 59, 60, 62, 43, 53, 55, 59, 62,
+	 43, 52, 55, 60, 64, 43, 50, 55, 60, 65, 43, 50, 55, 59, 65, 43, 51, 57, 60, 66,
+	 43, 52, 55, 60, 67, 43, 50, 55, 60, 65, 43, 50, 55, 59, 65, 36, 48, 55, 58, 64,
+|];
+
+# let twice = fn arr: (Array of Int) ->
+#   yield (iter arr);
+#   yield (iter arr)
+# ;;
+
+let note_seq = fn notes -> 
+  yield iter (array_range 0 5 notes);
+  yield iter (array_range 0 5 notes);
+  yield note_seq (array_offset 5 notes)
+;;
+
 defer_quant q (fn t -> 
-  iter [|1.|]
+  note_seq full_notes
   |> cor_loop
-  |> cor_map (fn x -> Acid.trig (); x)
-  |> cor_map ((*) q)
+  |> cor_map (fn n ->
+    Acid.trign n;
+    0.2
+  )
   |> Acid.set_pattern t
 );
 
-
-# let SynthInst = module
-#   type TSynthInst = (pref: Array of Ptr, synth: Synth);
-#   let trig = fn s: (TSynthInst) ->  
-#     # print "trig synth!!!\n";
-#     ()
-#   ;;
-# ;
-#
-# let a = (
-#   pref: [|empty_coroutine ()|],
-#   synth: ((fn () -> 
-#     let freq = inlet 100.;
-#     (sq_node freq) + (sq_node (freq * 1.01))  
-#   ) |> play_tpl
-#   )
-# );
-#
-# SynthInst.trig a
-#
-#
-#
-#
-# # "1 " |> trig_pat |> " " |> Acid

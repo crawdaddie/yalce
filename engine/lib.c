@@ -288,6 +288,7 @@ AudioGraph *end_blob() {
 
   graph->nodes_state_memory =
       realloc(graph->nodes_state_memory, graph->state_memory_capacity);
+  print_graph(graph);
 
   _graph = NULL;
   return graph;

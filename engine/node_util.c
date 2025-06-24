@@ -479,7 +479,7 @@ NodeRef sah_node(NodeRef trig, NodeRef input) {
       .output = (Signal){.layout = 1,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
-      .meta = "stereo",
+      .meta = "sah",
   };
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, trig);

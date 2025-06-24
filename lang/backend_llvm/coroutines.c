@@ -949,6 +949,10 @@ JITSymbol *nested_coroutine_expr(Ast *ast, JITLangCtx *ctx) {
               sym_name);
       return NULL;
     }
+    if (sym->type == STYPE_GENERIC_FUNCTION &&
+        sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
+      return sym;
+    }
 
     if (is_coroutine_constructor_type(sym->symbol_type)) {
       return sym;
@@ -1037,6 +1041,10 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
           builder);
 
       LLVMBuildRet(builder, new_instance_ptr);
+    } else if (sym->type == STYPE_GENERIC_FUNCTION &&
+               sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
+      // printf("make nested version of iter\n");
+      return NULL;
     }
 
   } else {
@@ -1353,6 +1361,8 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
+  printf("iter handler\n");
+  print_ast(ast);
   Type *arg_type = ast->data.AST_APPLICATION.args->md;
   if (is_list_type(arg_type)) {
     return IterOfListHandler(ast, ctx, module, builder);
