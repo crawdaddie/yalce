@@ -67,17 +67,17 @@ scheduler_msg pop_msg(msg_queue *queue);
 int get_write_ptr();
 void update_bundle(int write_ptr);
 
-typedef struct ensemble_state {
+typedef struct {
   Node *head;
   Node *tail;
-} node_group;
+} node_group_state;
 
 typedef struct {
   double output_buf[BUF_SIZE * LAYOUT];
   int num_input_signals;
   Signal *input_signals;
 
-  node_group graph;
+  node_group_state graph;
   int sample_rate;
   double spf;
   msg_queue msg_queue;

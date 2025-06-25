@@ -125,7 +125,7 @@ void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
                        double spf) {
 
   int consumed = process_msg_queue_pre(current_tick, &ctx->msg_queue);
-  node_group graph = ctx->graph;
+  node_group_state graph = ctx->graph;
 
   if (graph.head == NULL) {
     write_null_to_output_buf(ctx->output_buf, frame_count, LAYOUT);
@@ -513,7 +513,25 @@ NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s) {
   return s;
 }
 
-NodeRef play_node(NodeRef s) { return play_node_offset(get_frame_offset(), s); }
+NodeRef chain(NodeRef _t) {
+  Node *group = group_node();
+  node_group_state *gstate = group + 1;
+  gstate->head = _chain_head;
+  gstate->tail = _chain_tail;
+  gstate->tail->write_to_output = true;
+
+  _chain_head = NULL;
+  _chain_tail = NULL;
+  return group;
+}
+
+NodeRef play_node(NodeRef s) {
+  if ((strcmp(s->meta, "ensemble") != 0) && (_chain_head != NULL)) {
+    return play_node_offset(get_frame_offset(), chain(s));
+  }
+
+  return play_node_offset(get_frame_offset(), s);
+}
 
 int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
   SNDFILE *infile;

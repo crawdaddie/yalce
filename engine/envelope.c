@@ -141,7 +141,7 @@ Node *asr_kill_node(double attack_time, double sustain_level,
 
   plug_input_in_graph(0, node, trigger);
 
-  return node;
+  return graph_embed(node);
 }
 
 Node *asr_node(double attack_time, double sustain_level, double release_time,
@@ -183,7 +183,7 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
 
   plug_input_in_graph(0, node, trigger);
 
-  return node;
+  return graph_embed(node);
 }
 typedef struct aslr_state {
   EnvPhase phase;
@@ -310,5 +310,5 @@ Node *aslr_node(double attack_time, double sustain_level, double sustain_time,
 
   plug_input_in_graph(0, node, trigger);
 
-  return node;
+  return graph_embed(node);
 }

@@ -317,10 +317,11 @@ Node *glue_node(double threshold, double ratio, double attack_ms,
   update_glue_coefficients(state, ctx_sample_rate());
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Create a dynamic threshold glue compressor node
@@ -370,11 +371,14 @@ Node *glue_node_dyn(Node *threshold, double ratio, double attack_ms,
   update_glue_coefficients(state, ctx_sample_rate());
 
   // Connect inputs
-  node->connections[0].source_node_index = input->node_index;
-  node->connections[1].source_node_index = threshold->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
+
+  // node->connections[1].source_node_index = threshold->node_index;
+  plug_input_in_graph(1, node, threshold);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Create a sidechain glue compressor with configurable sidechain low-pass
@@ -428,8 +432,9 @@ Node *glue_sc_node(double threshold, double ratio, double attack_ms,
   update_glue_coefficients(state, sample_rate);
 
   // Connect input
-  node->connections[0].source_node_index = input->node_index;
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }

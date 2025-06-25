@@ -290,6 +290,6 @@ Node *reverb_node(double room_size, double wet, double dry, double width,
   memset(mem, 0, state_size);
   Reverb *state = (Reverb *)(mem);
   *state = reverb;
-  node->connections[0].source_node_index = input->node_index;
-  return node;
+  plug_input_in_graph(0, node, input);
+  return graph_embed(node);
 }

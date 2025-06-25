@@ -1,5 +1,6 @@
 #include "./audio_graph.h"
 #include "ctx.h"
+#include "ext_lib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,6 +75,24 @@ void plug_input_in_graph(int idx, NodeRef node, NodeRef input) {
 
 Node *_chain_head = NULL;
 Node *_chain_tail = NULL;
+
+Node *graph_embed(Node *node) {
+  if (_graph) {
+    return node;
+  }
+  if (_chain_head == NULL) {
+    _chain_head = node;
+    _chain_tail = node;
+    return _chain_head;
+  }
+  if (_chain_head && _chain_tail) {
+    _chain_tail->next = node;
+    _chain_tail = node;
+    _chain_tail->next = NULL;
+  }
+
+  return node;
+}
 
 Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
 

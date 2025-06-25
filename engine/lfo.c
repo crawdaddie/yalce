@@ -136,9 +136,11 @@ NodeRef lfo_node(NodeRef input, NodeRef trig) {
   lfo_state *state = mem;
   *state = lfo;
 
-  node->connections[0].source_node_index = trig->node_index;
-  node->connections[1].source_node_index = input->node_index;
-  return node;
+  // node->connections[0].source_node_index = trig->node_index;
+  plug_input_in_graph(0, node, trig);
+  // node->connections[1].source_node_index = input->node_index;
+  plug_input_in_graph(1, node, input);
+  return graph_embed(node);
 }
 
 void *buf_env_perform(Node *node, lfo_state *state, Node *inputs[], int nframes,
@@ -224,10 +226,14 @@ NodeRef buf_env_node(NodeRef time_scale, NodeRef input, NodeRef trig) {
   lfo_state *state = state_ptr(graph, node);
   *state = lfo;
 
-  node->connections[0].source_node_index = trig->node_index;
-  node->connections[1].source_node_index = input->node_index;
-  node->connections[2].source_node_index = time_scale->node_index;
-  return node;
+  // node->connections[0].source_node_index = trig->node_index;
+  plug_input_in_graph(0, node, trig);
+
+  // node->connections[1].source_node_index = input->node_index;
+  plug_input_in_graph(1, node, input);
+  // node->connections[2].source_node_index = time_scale->node_index;
+  plug_input_in_graph(2, node, time_scale);
+  return graph_embed(node);
 }
 
 typedef struct lfpulse_state {
@@ -517,10 +523,13 @@ NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig) {
   lfpulse_state *state = mem;
   *state = lfo;
 
-  node->connections[0].source_node_index = freq->node_index;
-  node->connections[1].source_node_index = trig->node_index;
-  node->connections[2].source_node_index = pw->node_index;
-  return node;
+  // node->connections[0].source_node_index = freq->node_index;
+  plug_input_in_graph(0, node, freq);
+  // node->connections[1].source_node_index = trig->node_index;
+  plug_input_in_graph(1, node, trig);
+  // node->connections[2].source_node_index = pw->node_index;
+  plug_input_in_graph(2, node, pw);
+  return graph_embed(node);
 }
 // clang-format off
 static double perc_env[10] = {0.000000, 0.000000,  2.400000,
@@ -614,9 +623,9 @@ NodeRef perc_env_node(NodeRef decay, NodeRef trig) {
   lfo_state *state = mem;
   *state = lfo;
 
-  node->connections[0].source_node_index = trig->node_index;
-  node->connections[1].source_node_index = decay->node_index;
-  return node;
+  plug_input_in_graph(0, node, trig);
+  plug_input_in_graph(1, node, decay);
+  return graph_embed(node);
 }
 
 void *gated_buf_env_perform(Node *node, lfo_state *state, Node *inputs[],
@@ -751,7 +760,7 @@ NodeRef gated_buf_env_node(NodeRef input, NodeRef trig) {
   lfo_state *state = mem;
   *state = lfo;
 
-  node->connections[0].source_node_index = trig->node_index;
-  node->connections[1].source_node_index = input->node_index;
-  return node;
+  plug_input_in_graph(0, node, trig);
+  plug_input_in_graph(1, node, input);
+  return graph_embed(node);
 }

@@ -24,7 +24,7 @@ void init_ctx() {
 
 void audio_ctx_add(Node *node) {
   node->write_to_output = true;
-  node_group *ctx = &get_audio_ctx()->graph;
+  node_group_state *ctx = &get_audio_ctx()->graph;
 
   // Add to existing chain
   if (ctx->head == NULL) {

@@ -47,4 +47,5 @@ NodeRef node_add_dur(uint64_t tick, double dur, int gate, NodeRef group,
 NodeRef group_node();
 
 NodeRef group_add(NodeRef node, NodeRef group);
+NodeRef chain(NodeRef tail);
 #endif

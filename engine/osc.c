@@ -149,7 +149,7 @@ Node *sin_node(Node *input) {
   plug_input_in_graph(0, node, input);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Square wave oscillator
@@ -215,7 +215,7 @@ Node *sq_node(Node *input) {
 
   plug_input_in_graph(0, node, input);
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 static inline double clamp_range(double input, double a, double b) {
   return input < a ? a : (input > b ? b : input);
@@ -292,7 +292,7 @@ Node *sq_pwm_node(Node *pw_input, Node *freq_input) {
   plug_input_in_graph(1, node, pw_input);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Phasor oscillator
@@ -345,7 +345,7 @@ Node *phasor_node(Node *input) {
   plug_input_in_graph(0, node, input);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Raw oscillator (using custom wavetable)
@@ -413,7 +413,7 @@ Node *raw_osc_node(Node *table, Node *freq) {
   plug_input_in_graph(1, node, table);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Oscillator Bank
@@ -495,7 +495,7 @@ Node *osc_bank_node(Node *amps, Node *freq) {
 
   node->state_ptr = state;
 
-  return node;
+  return graph_embed(node);
 }
 
 typedef struct unison_osc_state {
@@ -621,7 +621,7 @@ NodeRef unison_osc_node(int num, NodeRef spread, NodeRef mix, NodeRef table,
 
   node->state_ptr = state;
 
-  return node;
+  return graph_embed(node);
 }
 
 // Buffer player
@@ -688,7 +688,7 @@ Node *__bufplayer_node(Node *buf, Node *rate) {
   plug_input_in_graph(1, node, rate);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 // Buffer player with multi-channel support
 
@@ -754,7 +754,7 @@ Node *bufplayer_node(Node *buf, Node *rate) {
   plug_input_in_graph(1, node, rate);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Buffer player with trigger
@@ -827,7 +827,7 @@ Node *_bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
   plug_input_in_graph(3, node, start_pos);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
                              int nframes, double spf) {
@@ -913,7 +913,7 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
   plug_input_in_graph(3, node, start_pos);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // White noise generator
@@ -957,7 +957,7 @@ Node *white_noise_node() {
       .meta = "white_noise",
   };
 
-  return node;
+  return graph_embed(node);
 }
 
 // Brown noise generator
@@ -1010,7 +1010,7 @@ Node *brown_noise_node() {
   *state = (brown_noise_state){.last = 0.0};
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // lf White noise generator
@@ -1107,7 +1107,7 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
   plug_input_in_graph(2, node, max_input);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 typedef struct chirp_state {
   double start_freq;
@@ -1195,7 +1195,7 @@ Node *static_chirp_node(double start_freq, double end_freq, Node *lag_input,
   plug_input_in_graph(1, node, lag_input);
   node->state_ptr = state;
 
-  return node;
+  return graph_embed(node);
 }
 
 void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
@@ -1284,7 +1284,7 @@ Node *chirp_node(NodeRef start_freq, NodeRef end_freq, Node *lag_input,
 
   node->state_ptr = state;
 
-  return node;
+  return graph_embed(node);
 }
 
 // Impulse generator (outputs a single sample of 1.0 per cycle)
@@ -1346,7 +1346,7 @@ Node *impulse_node(Node *freq) {
   // node->connections[0].source_node_index = freq->node_index;
   plug_input_in_graph(0, node, freq);
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Ramp generator
@@ -1404,7 +1404,7 @@ Node *ramp_node(Node *freq) {
   plug_input_in_graph(0, node, freq);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Triggered random generator
@@ -1458,7 +1458,7 @@ Node *trig_rand_node(Node *trig) {
   plug_input_in_graph(0, node, trig);
   node->state_ptr = state;
 
-  return node;
+  return graph_embed(node);
 }
 
 void *trig_range_perform(Node *node, trig_rand_state *state, Node *inputs[],
@@ -1513,7 +1513,7 @@ Node *trig_range_node(Node *low, Node *high, Node *trig) {
   plug_input_in_graph(2, node, high);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Triggered selector
@@ -1574,7 +1574,7 @@ Node *trig_sel_node(Node *trig, Node *sels) {
   state->value = sels_buf[rand() % sels_size];
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 typedef struct pm_state {
@@ -1708,7 +1708,7 @@ Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
   // node->connections[2].source_node_index = mod_ratio_input->node_index;
   plug_input_in_graph(2, node, mod_ratio_input);
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 #define SAW_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
@@ -1803,7 +1803,7 @@ Node *saw_node(Node *input) {
   plug_input_in_graph(0, node, input);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 // Granulator processor
@@ -1967,7 +1967,7 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
   plug_input_in_graph(3, node, rate);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 typedef struct rand_trig_state {
@@ -2029,15 +2029,12 @@ Node *rand_trig_node(Node *trig_input, Node *low, Node *high) {
   rand_trig_state *state =
       (rand_trig_state *)(graph->nodes_state_memory + node->state_offset);
 
-  // node->connections[0].source_node_index = trig_input->node_index;
   plug_input_in_graph(0, node, trig_input);
-  // node->connections[1].source_node_index = low->node_index;
   plug_input_in_graph(1, node, low);
-  // node->connections[2].source_node_index = high->node_index;
   plug_input_in_graph(2, node, high);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 /**
@@ -2332,7 +2329,7 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
   plug_input_in_graph(4, node, width);
 
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }
 
 typedef struct array_choose_trig_state {
@@ -2388,5 +2385,5 @@ NodeRef array_choose_trig_node(int arr_size, double *arr_data, Node *trig) {
 
   plug_input_in_graph(0, node, trig);
   node->state_ptr = state;
-  return node;
+  return graph_embed(node);
 }

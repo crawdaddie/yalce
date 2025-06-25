@@ -29,4 +29,9 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
 
 extern AudioGraph *_graph;
 void plug_input_in_graph(int idx, NodeRef node, NodeRef input);
+
+Node *graph_embed(Node *node);
+
+extern Node *_chain_head;
+extern Node *_chain_tail;
 #endif

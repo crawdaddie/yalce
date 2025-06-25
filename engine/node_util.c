@@ -25,7 +25,7 @@
     };                                                                         \
     plug_input_in_graph(0, node, input1);                                      \
     plug_input_in_graph(1, node, input2);                                      \
-    return node;                                                               \
+    return graph_embed(node);                                                  \
   }
 
 #define INVAL(_sig)                                                            \
@@ -111,7 +111,7 @@ NodeRef mul2_node(NodeRef input1, NodeRef input2) {
   plug_input_in_graph(0, node, input1);
   plug_input_in_graph(1, node, input2);
 
-  return node;
+  return graph_embed(node);
 };
 
 void *sum_perform(Node *node, void *state, Node *inputs[], int nframes,
@@ -163,7 +163,7 @@ NodeRef sum2_node(NodeRef input1, NodeRef input2) {
   plug_input_in_graph(0, node, input1);
   // node->connections[1].source_node_index = input2->node_index;
   plug_input_in_graph(1, node, input2);
-  return node;
+  return graph_embed(node);
 }
 
 void *sub_perform(Node *node, void *state, Node *inputs[], int nframes,
@@ -320,7 +320,7 @@ Node *const_sig(double val) {
     node->output.buf[i] = val;
     // printf("const node val %f\n", node->output.buf[i]);
   }
-  return node;
+  return graph_embed(node);
 }
 
 Node *const_buf(double val, int layout, int size) {
@@ -347,7 +347,7 @@ Node *const_buf(double val, int layout, int size) {
   for (int i = 0; i < size * layout; i++) {
     node->output.buf[i] = val;
   }
-  return node;
+  return graph_embed(node);
 }
 
 typedef struct {
@@ -393,7 +393,7 @@ NodeRef stereo_node(NodeRef input) {
       .meta = "stereo",
   };
   plug_input_in_graph(0, node, input);
-  return node;
+  return graph_embed(node);
 }
 
 void *panner_perform(Node *node, void *state, Node *inputs[], int nframes,
@@ -437,7 +437,7 @@ NodeRef pan_node(NodeRef pan, NodeRef input) {
 
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, pan);
-  return node;
+  return graph_embed(node);
 }
 typedef struct sah_state {
   double current_val;
@@ -483,7 +483,7 @@ NodeRef sah_node(NodeRef trig, NodeRef input) {
   };
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, trig);
-  return node;
+  return graph_embed(node);
 }
 
 // NodeRef set_math(void *math_fn, NodeRef n) {

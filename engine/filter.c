@@ -381,7 +381,7 @@ Node *biquad_lp_node(Node *freq, Node *res, Node *input) {
   plug_input_in_graph(1, node, freq);
   plug_input_in_graph(2, node, res);
 
-  return node;
+  return graph_embed(node);
 }
 
 // Create a biquad band-pass filter node
@@ -414,7 +414,7 @@ Node *biquad_bp_node(Node *freq, Node *res, Node *input) {
   plug_input_in_graph(1, node, freq);
   plug_input_in_graph(2, node, res);
 
-  return node;
+  return graph_embed(node);
 }
 
 // Create a biquad high-pass filter node
@@ -447,7 +447,7 @@ Node *biquad_hp_node(Node *freq, Node *res, Node *input) {
   plug_input_in_graph(1, node, freq);
   plug_input_in_graph(2, node, res);
 
-  return node;
+  return graph_embed(node);
 }
 
 // Create a butterworth high-pass filter node
@@ -478,7 +478,7 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, freq);
 
-  return node;
+  return graph_embed(node);
 }
 
 // ---------------------- Comb Filter ---------------------------
@@ -553,7 +553,7 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, delay_buf);
 
-  return node;
+  return graph_embed(node);
 }
 
 // ---------------------- Dyn Comb Filter ---------------------------
@@ -639,7 +639,7 @@ Node *dyn_comb_node(Node *delay_time, double max_delay_time, double fb,
   plug_input_in_graph(1, node, delay_buf);
   plug_input_in_graph(2, node, delay_time);
 
-  return node;
+  return graph_embed(node);
 }
 
 // ---------------------- Lag Filter ---------------------------
@@ -680,7 +680,7 @@ typedef struct {
 //   // Connect input
 //   node->connections[0].source_node_index = input->node_index;
 //
-//   return node;
+//   return graph_embed(node);
 // }
 void *lag_perform(Node *node, lag_state *state, Node *inputs[], int nframes,
                   double spf) {
@@ -752,7 +752,7 @@ Node *lag_node(NodeRef lag_time, Node *input) {
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, lag_time);
 
-  return node;
+  return graph_embed(node);
 }
 
 // ---------------------- Tanh Distortion ---------------------------
@@ -780,7 +780,7 @@ void *tanh_perform(Node *node, tanh_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *_tanh_node(double gain, Node *input) {
+Node *tanh_node(double gain, Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(tanh_state));
 
@@ -805,7 +805,7 @@ Node *_tanh_node(double gain, Node *input) {
   // Connect input
   plug_input_in_graph(0, node, input);
 
-  return node;
+  return graph_embed(node);
 }
 
 // Node *tanh_node(double gain, Node *input) {
@@ -853,7 +853,7 @@ Node *dyn_tanh_node(NodeRef gain, Node *input) {
   plug_input_in_graph(1, node, gain);
 
   //
-  return node;
+  return graph_embed(node);
 }
 
 typedef struct {
@@ -927,7 +927,7 @@ Node *allpass_node(double time, double coeff, Node *input) {
   // Connect input
   plug_input_in_graph(0, node, input);
 
-  return node;
+  return graph_embed(node);
 }
 
 #define MAX_DELAY_LENGTH 20000
@@ -1194,7 +1194,7 @@ Node *gverb_node(Node *input) {
   *state = gverb;
   plug_input_in_graph(0, node, input);
 
-  return node;
+  return graph_embed(node);
 }
 typedef struct grain_pitchshift_state {
   int length;
@@ -1363,7 +1363,7 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
 
   plug_input_in_graph(0, node, input);
 
-  return node;
+  return graph_embed(node);
 }
 
 typedef double (*node_math_func_t)(double samp);
@@ -1417,7 +1417,7 @@ NodeRef math_node(MathNodeFn math_fn, NodeRef input) {
   // node->connections[0].source_node_index = input->node_index;
   plug_input_in_graph(0, node, input);
   //
-  return node;
+  return graph_embed(node);
 }
 
 // typedef struct stutter_state {
@@ -1576,5 +1576,5 @@ NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, gate);
   plug_input_in_graph(2, node, repeat_time);
-  return node;
+  return graph_embed(node);
 }

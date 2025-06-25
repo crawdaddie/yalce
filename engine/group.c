@@ -1,14 +1,11 @@
 #include "group.h"
-#include "audio_graph.h"
 #include "ext_lib.h"
 #include "lib.h"
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 NodeRef group_add(NodeRef node, NodeRef group) {
 
-  node_group *ctx = group + 1;
+  node_group_state *ctx = group + 1;
 
   // Add to existing chain
   if (ctx->head == NULL) {
@@ -25,7 +22,7 @@ NodeRef group_add(NodeRef node, NodeRef group) {
   return node;
 }
 
-void *perform_ensemble(Node *node, node_group *state, Node *_inputs[],
+void *perform_ensemble(Node *node, node_group_state *state, Node *_inputs[],
                        int nframes, double spf) {
 
   for (int i = 0; i < 2 * BUF_SIZE; i++) {
@@ -35,22 +32,21 @@ void *perform_ensemble(Node *node, node_group *state, Node *_inputs[],
   if (!state->head) {
     return node->output.buf;
   }
-  // printf("perform group %p\n", node);
   perform_graph(state->head, nframes, spf, node->output.buf, 2, 0);
   return node->output.buf;
 }
 
 NodeRef group_node() {
   int mem_size =
-      sizeof(Node) + sizeof(node_group) + (sizeof(double) * BUF_SIZE * 2);
+      sizeof(Node) + sizeof(node_group_state) + (sizeof(double) * BUF_SIZE * 2);
   char *mem = malloc(mem_size);
 
   Node *node = (Node *)mem;
   mem += sizeof(Node);
 
-  node_group *state = (node_group *)mem;
-  mem += sizeof(node_group);
-  *state = (node_group){NULL, NULL};
+  node_group_state *state = (node_group_state *)mem;
+  mem += sizeof(node_group_state);
+  *state = (node_group_state){NULL, NULL};
 
   double *buf = (double *)mem;
   for (int i = 0; i < 2 * BUF_SIZE; i++) {
