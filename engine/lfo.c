@@ -128,10 +128,7 @@ NodeRef lfo_node(NodeRef input, NodeRef trig) {
       .meta = "lfo",
   };
 
-  char *mem = (graph != NULL)
-                  ? (char *)(graph->nodes_state_memory + node->state_offset)
-                  : (char *)((Node *)node + 1);
-
+  char *mem = state_ptr(graph, node);
   memset(mem, 0, state_size);
   lfo_state *state = mem;
   *state = lfo;
@@ -515,9 +512,7 @@ NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig) {
       .meta = "lfpulse",
   };
 
-  char *mem = (graph != NULL)
-                  ? (char *)(graph->nodes_state_memory + node->state_offset)
-                  : (char *)((Node *)node + 1);
+  char *mem = state_ptr(graph, node);
 
   memset(mem, 0, state_size);
   lfpulse_state *state = mem;
@@ -615,9 +610,7 @@ NodeRef perc_env_node(NodeRef decay, NodeRef trig) {
       .meta = "perc_env",
   };
 
-  char *mem = (graph != NULL)
-                  ? (char *)(graph->nodes_state_memory + node->state_offset)
-                  : (char *)((Node *)node + 1);
+  char *mem = state_ptr(graph, node);
 
   memset(mem, 0, state_size);
   lfo_state *state = mem;
@@ -752,9 +745,7 @@ NodeRef gated_buf_env_node(NodeRef input, NodeRef trig) {
       .meta = "gated_buf_env",
   };
 
-  char *mem = (graph != NULL)
-                  ? (char *)(graph->nodes_state_memory + node->state_offset)
-                  : (char *)((Node *)node + 1);
+  char *mem = state_ptr(graph, node);
 
   memset(mem, 0, state_size);
   lfo_state *state = mem;

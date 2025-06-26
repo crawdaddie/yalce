@@ -98,6 +98,8 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     //                frame_count - head->frame_offset);
     // } else
     if (head->write_to_output) {
+      printf("head write to out [%p][%p][%s]\n", head, head->output.buf,
+             head->meta);
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
                    head->output.layout, head->output.buf, output_num,
                    frame_count - head->frame_offset);
@@ -341,6 +343,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   }
 
   graph_state->nodes_state_memory = mem;
+
   memcpy(graph_state->nodes_state_memory, g->nodes_state_memory,
          g->state_memory_capacity);
 

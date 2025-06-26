@@ -70,8 +70,9 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
         state->value = 0.0;
         state->phase = ASR_ENV_IDLE;
         if (state->should_kill) {
+          // printf("kill node\n");
           node->trig_end = true;
-          node->perform = NULL;
+          // node->perform = NULL;
           state->value = 0.;
         }
       }
@@ -240,6 +241,7 @@ void *aslr_perform(Node *node, aslr_state *state, Node *inputs[], int nframes,
         state->value = 0.0;
         state->phase = ASR_ENV_IDLE;
         if (state->should_kill) {
+          printf("kill node \n");
           node->trig_end = true;
           node->perform = NULL;
         }
