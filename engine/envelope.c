@@ -74,9 +74,6 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
           node->perform = NULL;
           state->value = 0.;
         }
-        // printf("finish node containing node addr: %p %p\n", node,
-        //        (Node *)((char *)node - (sizeof(Node) * node->node_index) -
-        // sizeof(Node) - 0xf8));
       }
       break;
     }
@@ -123,8 +120,7 @@ Node *asr_kill_node(double attack_time, double sustain_level,
       .meta = "asr",
   };
 
-  asr_state *state =
-      (asr_state *)(graph->nodes_state_memory + node->state_offset);
+  asr_state *state = (asr_state *)state_ptr(graph, node);
 
   *state = (asr_state){
       .phase = ASR_ENV_ATTACK,
@@ -165,8 +161,7 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
       .meta = "asr",
   };
 
-  asr_state *state =
-      (asr_state *)(graph->nodes_state_memory + node->state_offset);
+  asr_state *state = state_ptr(graph, node);
 
   *state = (asr_state){
       .phase = ASR_ENV_IDLE,
@@ -289,8 +284,7 @@ Node *aslr_node(double attack_time, double sustain_level, double sustain_time,
       .meta = "aslr",
   };
 
-  aslr_state *state =
-      (aslr_state *)(graph->nodes_state_memory + node->state_offset);
+  aslr_state *state = state_ptr(graph, node);
 
   *state = (aslr_state){
       .phase = ASR_ENV_IDLE,

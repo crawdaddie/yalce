@@ -209,8 +209,7 @@ Node *sq_node(Node *input) {
       .meta = "sq",
   };
 
-  sq_state *state =
-      (sq_state *)(graph->nodes_state_memory + node->state_offset);
+  sq_state *state = (sq_state *)state_ptr(graph, node);
   *state = (sq_state){.phase = 0.0};
 
   plug_input_in_graph(0, node, input);
@@ -284,8 +283,7 @@ Node *sq_pwm_node(Node *pw_input, Node *freq_input) {
       .meta = "sq_pwm",
   };
 
-  sq_state *state =
-      (sq_state *)(graph->nodes_state_memory + node->state_offset);
+  sq_state *state = (sq_state *)state_ptr(graph, node);
   *state = (sq_state){.phase = 0.0};
 
   plug_input_in_graph(0, node, freq_input);
@@ -338,8 +336,7 @@ Node *phasor_node(Node *input) {
       .meta = "phasor",
   };
 
-  phasor_state *state =
-      (phasor_state *)(graph->nodes_state_memory + node->state_offset);
+  phasor_state *state = (phasor_state *)state_ptr(graph, node);
   *state = (phasor_state){.phase = 0.0};
 
   plug_input_in_graph(0, node, input);
@@ -663,33 +660,6 @@ void *__bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *__bufplayer_node(Node *buf, Node *rate) {
-  AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph, sizeof(bufplayer_state));
-
-  *node = (Node){
-      .perform = (perform_func_t)__bufplayer_perform,
-      .node_index = node->node_index,
-      .num_inputs = 2,
-      .state_size = sizeof(bufplayer_state),
-      .state_offset = state_offset_ptr_in_graph(graph, sizeof(bufplayer_state)),
-      .output = (Signal){.layout = buf->output.layout,
-                         .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(
-                             graph, BUF_SIZE * buf->output.layout)},
-      .meta = "bufplayer",
-  };
-
-  bufplayer_state *state =
-      (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
-  *state = (bufplayer_state){.phase = 0.0};
-
-  plug_input_in_graph(0, node, buf);
-  plug_input_in_graph(1, node, rate);
-
-  node->state_ptr = state;
-  return graph_embed(node);
-}
 // Buffer player with multi-channel support
 
 void *bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
@@ -746,8 +716,7 @@ Node *bufplayer_node(Node *buf, Node *rate) {
       .meta = "bufplayer",
   };
 
-  bufplayer_state *state =
-      (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
+  bufplayer_state *state = (bufplayer_state *)state_ptr(graph, node);
   *state = (bufplayer_state){.phase = 0.0};
 
   plug_input_in_graph(0, node, buf);
@@ -903,8 +872,7 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
       .meta = "bufplayer_trig",
   };
 
-  bufplayer_state *state =
-      (bufplayer_state *)(graph->nodes_state_memory + node->state_offset);
+  bufplayer_state *state = (bufplayer_state *)state_ptr(graph, node);
   *state = (bufplayer_state){.phase = 0.0};
 
   plug_input_in_graph(0, node, buf);
@@ -1088,8 +1056,7 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
       .meta = "lfnoise",
   };
 
-  lfnoise_state *state =
-      (lfnoise_state *)(graph->nodes_state_memory + node->state_offset);
+  lfnoise_state *state = (lfnoise_state *)state_ptr(graph, node);
   double rand_val =
       _random_double_range(min_input->output.buf[0], max_input->output.buf[0]);
   *state = (lfnoise_state){
@@ -1180,8 +1147,7 @@ Node *static_chirp_node(double start_freq, double end_freq, Node *lag_input,
       .meta = "chirp",
   };
 
-  chirp_state *state =
-      (chirp_state *)(graph->nodes_state_memory + node->state_offset);
+  chirp_state *state = (chirp_state *)state_ptr(graph, node);
   *state = (chirp_state){.start_freq = start_freq,
                          .end_freq = end_freq,
                          .current_freq = start_freq,
@@ -1266,8 +1232,7 @@ Node *chirp_node(NodeRef start_freq, NodeRef end_freq, Node *lag_input,
       .meta = "chirp",
   };
 
-  chirp_state *state =
-      (chirp_state *)(graph->nodes_state_memory + node->state_offset);
+  chirp_state *state = (chirp_state *)state_ptr(graph, node);
   *state = (chirp_state){.current_freq = 0.,
                          .elapsed_time = 0.0,
                          .trigger_active = 0,
@@ -1339,8 +1304,7 @@ Node *impulse_node(Node *freq) {
       .meta = "impulse",
   };
 
-  impulse_state *state =
-      (impulse_state *)(graph->nodes_state_memory + node->state_offset);
+  impulse_state *state = (impulse_state *)state_ptr(graph, node);
   *state = (impulse_state){.phase = 1.0};
 
   // node->connections[0].source_node_index = freq->node_index;
@@ -1396,8 +1360,7 @@ Node *ramp_node(Node *freq) {
       .meta = "ramp",
   };
 
-  ramp_state *state =
-      (ramp_state *)(graph->nodes_state_memory + node->state_offset);
+  ramp_state *state = (ramp_state *)state_ptr(graph, node);
   *state = (ramp_state){.phase = 0.0};
 
   // node->connections[0].source_node_index = freq->node_index;
@@ -1450,8 +1413,7 @@ Node *trig_rand_node(Node *trig) {
       .meta = "trig_rand",
   };
 
-  trig_rand_state *state =
-      (trig_rand_state *)(graph->nodes_state_memory + node->state_offset);
+  trig_rand_state *state = (trig_rand_state *)state_ptr(graph, node);
   *state = (trig_rand_state){.value = _random_double_range(0.0, 1.0)};
 
   // node->connections[0].source_node_index = trig->node_index;
@@ -1501,15 +1463,11 @@ Node *trig_range_node(Node *low, Node *high, Node *trig) {
       .meta = "trig_range",
   };
 
-  trig_rand_state *state =
-      (trig_rand_state *)(graph->nodes_state_memory + node->state_offset);
+  trig_rand_state *state = (trig_rand_state *)state_ptr(graph, node);
   *state = (trig_rand_state){.value = _random_double_range(0.0, 1.0)};
 
-  // node->connections[0].source_node_index = trig->node_index;
   plug_input_in_graph(0, node, trig);
-  // node->connections[1].source_node_index = low->node_index;
   plug_input_in_graph(1, node, low);
-  // node->connections[2].source_node_index = high->node_index;
   plug_input_in_graph(2, node, high);
 
   node->state_ptr = state;
@@ -1561,12 +1519,9 @@ Node *trig_sel_node(Node *trig, Node *sels) {
       .meta = "trig_sel",
   };
 
-  trig_sel_state *state =
-      (trig_sel_state *)(graph->nodes_state_memory + node->state_offset);
+  trig_sel_state *state = (trig_sel_state *)state_ptr(graph, node);
 
-  // node->connections[0].source_node_index = trig->node_index;
   plug_input_in_graph(0, node, trig);
-  // node->connections[1].source_node_index = sels->node_index;
   plug_input_in_graph(1, node, sels);
 
   double *sels_buf = sels->output.buf;
@@ -1701,11 +1656,8 @@ Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
       .modulator_phase = 0.0,
   };
 
-  // node->connections[0].source_node_index = freq_input->node_index;
   plug_input_in_graph(0, node, freq_input);
-  // node->connections[1].source_node_index = mod_index_input->node_index;
   plug_input_in_graph(1, node, mod_index_input);
-  // node->connections[2].source_node_index = mod_ratio_input->node_index;
   plug_input_in_graph(2, node, mod_ratio_input);
   node->state_ptr = state;
   return graph_embed(node);
@@ -1795,8 +1747,7 @@ Node *saw_node(Node *input) {
       .meta = "saw",
   };
 
-  saw_state *state =
-      (saw_state *)(graph->nodes_state_memory + node->state_offset);
+  saw_state *state = (saw_state *)state_ptr(graph, node);
   *state = (saw_state){.phase = 0.0};
 
   // node->connections[0].source_node_index = input->node_index;
@@ -1939,8 +1890,7 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
       .meta = "granulator",
   };
 
-  granulator_state *state =
-      (granulator_state *)(graph->nodes_state_memory + node->state_offset);
+  granulator_state *state = (granulator_state *)state_ptr(graph, node);
 
   state->max_concurrent_grains = max_grains;
   state->active_grains = 0;
@@ -1957,13 +1907,9 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
     state->amps[i] = 0.0;
   }
 
-  // node->connections[0].source_node_index = buf->node_index;
   plug_input_in_graph(0, node, buf);
-  // node->connections[1].source_node_index = trig->node_index;
   plug_input_in_graph(1, node, trig);
-  // node->connections[2].source_node_index = pos->node_index;
   plug_input_in_graph(2, node, pos);
-  // node->connections[3].source_node_index = rate->node_index;
   plug_input_in_graph(3, node, rate);
 
   node->state_ptr = state;
@@ -2026,8 +1972,7 @@ Node *rand_trig_node(Node *trig_input, Node *low, Node *high) {
       .meta = "rand_trig",
   };
 
-  rand_trig_state *state =
-      (rand_trig_state *)(graph->nodes_state_memory + node->state_offset);
+  rand_trig_state *state = (rand_trig_state *)state_ptr(graph, node);
 
   plug_input_in_graph(0, node, trig_input);
   plug_input_in_graph(1, node, low);
@@ -2317,9 +2262,8 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
       .meta = "grain_osc",
   };
 
-  grain_osc_state *state =
-      (grain_osc_state *)(graph->nodes_state_memory + node->state_offset);
-  *((int *)&state->max_grains) = max_grains; // Cast away const to initialize
+  grain_osc_state *state = (grain_osc_state *)state_ptr(graph, node);
+  *((int *)&state->max_grains) = max_grains;
   state->active_grains = 0;
 
   plug_input_in_graph(0, node, buf);
@@ -2377,8 +2321,7 @@ NodeRef array_choose_trig_node(int arr_size, double *arr_data, Node *trig) {
   };
 
   array_choose_trig_state *state =
-      (array_choose_trig_state *)(graph->nodes_state_memory +
-                                  node->state_offset);
+      (array_choose_trig_state *)state_ptr(graph, node);
   state->size = arr_size;
   state->data = arr_data;
   state->sample = state->data[rand() % state->size];

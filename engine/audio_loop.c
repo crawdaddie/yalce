@@ -82,7 +82,6 @@ panic(const char *format, ...) {
 
 static int min_int(int a, int b) { return (a < b) ? a : b; }
 
-// Removed old __read_callback - replaced by improved read_callback
 static void read_callback(struct SoundIoInStream *instream, int frame_count_min,
                           int frame_count_max) {
   struct SoundIoChannelArea *areas;
@@ -114,27 +113,22 @@ static void read_callback(struct SoundIoInStream *instream, int frame_count_min,
       break;
 
     if (!areas) {
-      // Fill with silence on overflow
       memset(write_ptr, 0, frame_count * bytes_per_frame);
       fprintf(stderr, "Dropped %d frames\n", frame_count);
     } else {
-      // Copy each frame
       for (int frame = 0; frame < frame_count; frame++) {
-        // Copy our selected hardware inputs in order
         for (int i = 0; i < num_input_mappings; i++) {
           int hw_ch = input_mappings[i].hardware_input;
 
           if (hw_ch < instream->layout.channel_count) {
             memcpy(write_ptr, areas[hw_ch].ptr, instream->bytes_per_sample);
           } else {
-            // Zero if hardware channel doesn't exist
             memset(write_ptr, 0, instream->bytes_per_sample);
           }
 
           write_ptr += instream->bytes_per_sample;
         }
 
-        // Advance all area pointers after processing the frame
         for (int ch = 0; ch < instream->layout.channel_count; ch++) {
           areas[ch].ptr += areas[ch].step;
         }
@@ -152,11 +146,6 @@ static void read_callback(struct SoundIoInStream *instream, int frame_count_min,
                                         write_frames * bytes_per_frame);
 }
 
-// Removed redundant input_mapping function - integrated into write_callback
-
-// Removed redundant copy_ring_buffer_to_signals function - integrated into
-// write_callback Removed debug_input_signals function - debug prints removed
-// from audio callbacks
 static void write_callback(struct SoundIoOutStream *outstream,
                            int frame_count_min, int frame_count_max) {
 
@@ -242,7 +231,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
         sample_idx = LAYOUT * frame + channel;
         sample = ctx->output_buf[sample_idx];
 
-        write_sample(areas[channel].ptr, 0.5 * sample);
+        write_sample(areas[channel].ptr, ctx->main_vol * sample);
         areas[channel].ptr += areas[channel].step;
       }
     }
@@ -323,7 +312,6 @@ struct SoundIoDevice *get_output_device(struct SoundIo *soundio,
   if (default_out_device_index < 0)
     panic("no output device found");
 
-  // Find the output device
   int out_device_index = default_out_device_index;
   if (out_device_id) {
     bool found = false;
@@ -355,7 +343,6 @@ void print_device_info(struct SoundIoDevice *in_device,
   fprintf(stderr, "Input device: %s\n", in_device->name);
   fprintf(stderr, "Output device: %s\n", out_device->name);
 
-  // Print input device channels
   fprintf(stderr, "Input device has %d channels: ",
           in_device->current_layout.channel_count);
   for (int i = 0; i < in_device->current_layout.channel_count; i++) {
@@ -364,7 +351,6 @@ void print_device_info(struct SoundIoDevice *in_device,
   }
   fprintf(stderr, "\n");
 
-  // Print output device channels
   fprintf(stderr, "Output device has %d channels: ",
           out_device->current_layout.channel_count);
   for (int i = 0; i < out_device->current_layout.channel_count; i++) {
@@ -373,7 +359,6 @@ void print_device_info(struct SoundIoDevice *in_device,
   }
   fprintf(stderr, "\n");
 
-  // Get device capabilities info
   fprintf(stderr,
           "Input device software latency - min: %.4f sec, max: %.4f sec, "
           "current: %.4f sec\n",
@@ -419,7 +404,6 @@ void get_format(struct SoundIoDevice *in_device,
 void print_available_devices(struct SoundIo *soundio) {
   fprintf(stderr, ANSI_COLOR_GREEN);
 
-  // Print available devices
   fprintf(stderr, "Input devices:\n");
   for (int i = 0; i < soundio_input_device_count(soundio); i++) {
     struct SoundIoDevice *device = soundio_get_input_device(soundio, i);
@@ -472,12 +456,6 @@ int start_audio() {
   struct SoundIoChannelLayout out_layout;
   struct SoundIoChannelLayout in_layout;
 
-  // int num_chans;
-  // validate_in_layout(in_device, &in_layout, config_size, input_map,
-  // &num_chans,
-  //                    &num_hardware_inputs, requested_input_channels,
-  //                    hw_in_to_sig_map);
-  //
   validate_in_layout(in_device, &in_layout);
   validate_out_layout(out_device, &out_layout);
 
@@ -487,7 +465,6 @@ int start_audio() {
   enum SoundIoFormat fmt;
   get_format(in_device, out_device, &fmt);
 
-  // Create output stream first, so we can get its actual latency
   struct SoundIoOutStream *outstream = soundio_outstream_create(out_device);
   if (!outstream)
     panic("out of memory");
@@ -507,7 +484,6 @@ int start_audio() {
     return 1;
   }
 
-  // The actual latency may be different from what we requested
   double actual_latency = outstream->software_latency;
   fprintf(stderr, ANSI_COLOR_RED "Actual output latency: %.4f sec\n",
           actual_latency);
@@ -515,7 +491,6 @@ int start_audio() {
   struct SoundIoInStream *instream = NULL;
 
   if (req_hardware_inputs > 0) {
-    // Now create input stream with the same latency as the output stream
     instream = soundio_instream_create(in_device);
     if (!instream) {
       panic("out of memory");
@@ -531,7 +506,6 @@ int start_audio() {
       return 1;
     }
 
-    // Create a ring buffer for our SELECTED channels, not all channels
     int channel_bytes_per_frame =
         req_hardware_inputs * instream->bytes_per_sample;
 
@@ -542,7 +516,6 @@ int start_audio() {
     if (!ring_buffer)
       panic("unable to create ring buffer: out of memory");
 
-    // Pre-fill the ring buffer with silence to avoid initial underflows
     char *buf = soundio_ring_buffer_write_ptr(ring_buffer);
     int fill_count =
         actual_latency * outstream->sample_rate * channel_bytes_per_frame;
@@ -575,7 +548,6 @@ typedef struct IntLL {
 } IntLL;
 
 void set_input_conf(char *conf) {
-  // printf("set input conf %p\n", conf);
   IntLL *l = (IntLL *)conf;
 
   config_size = 0;

@@ -198,7 +198,7 @@ Node *hw_inlet(int idx) {
   };
 
   f->meta = "hw_inlet";
-  return f;
+  return graph_embed(f);
 }
 
 Node *multi_chan_inlet(int layout, double default_val) {
@@ -231,7 +231,7 @@ Node *multi_chan_inlet(int layout, double default_val) {
   _graph->inlets[_graph->num_inlets] = f->node_index;
   _graph->inlet_defaults[_graph->num_inlets] = default_val;
   _graph->num_inlets++;
-  return f;
+  return graph_embed(f);
 }
 NodeRef buf_ref(NodeRef buf) {
 
@@ -253,7 +253,7 @@ NodeRef buf_ref(NodeRef buf) {
   f->output.layout = buf->output.layout;
   f->output.size = buf->output.size;
 
-  return f;
+  return graph_embed(f);
 }
 
 void start_blob() {
@@ -428,6 +428,7 @@ typedef struct close_payload {
 } close_payload;
 void close_gate(close_payload *p, int offset) {
   NodeRef target = p->target;
+  printf("close gate %p\n", target);
   int input = p->gate_input;
 
   push_msg(
@@ -480,6 +481,7 @@ NodeRef play_node_offset_w_kill(uint64_t offset, double dur, int gate_in,
 NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s) {
   // printf("play node %p dur: %f\n", s, dur);
   play_node_offset(tick, s);
+  printf("play dur %p [%f]\n", s, dur);
 
   close_payload *cp = malloc(sizeof(close_payload));
   *cp = (close_payload){

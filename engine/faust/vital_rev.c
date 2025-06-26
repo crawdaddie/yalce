@@ -2563,7 +2563,7 @@ NodeRef vital_rev_node(double size, double amount, double rate, double high_shel
 
   // Initialize state
   vital_rev_state *state =
-      (vital_rev_state *)(graph->nodes_state_memory + node->state_offset);
+      (vital_rev_state *)state_ptr(graph, node);
   
   // Initialize all memory to zero before setting parameters
   memset(state, 0, sizeof(vital_rev_state));
@@ -2596,5 +2596,5 @@ NodeRef vital_rev_node(double size, double amount, double rate, double high_shel
   // node->connections[0].source_node_index = input->node_index;
   plug_input_in_graph(0, node, input);
 
-  return node;
+  return graph_embed(node);
 }

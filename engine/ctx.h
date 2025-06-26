@@ -83,6 +83,7 @@ typedef struct {
   msg_queue msg_queue;
   msg_queue overflow_queue;
   int **sig_to_hw_in_map;
+  double main_vol;
 } Ctx;
 
 extern Ctx ctx;

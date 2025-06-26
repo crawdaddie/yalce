@@ -54,5 +54,6 @@ let get_saw_tabsize = extern fn () -> Int;
 
 
 
+let set_main_vol = extern fn Double -> ();
 
 

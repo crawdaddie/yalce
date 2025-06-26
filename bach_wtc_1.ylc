@@ -14,10 +14,12 @@ let Acid = module
   let synth = (fn () -> 
     let freq = inlet 55. in
     let trig = inlet 0. in
+
     let pm_amt = sin_node (0.0625 / 0.3)
       |> (*) (chirp_node 1. 0.001 0.1 trig)
       |> (*) 1.5
     in
+
     pm_node freq pm_amt 1.5
     |> (+) (pm_node freq pm_amt (1.5 + 0.5 * sin_node 0.05))
     |> (*) (aslr_node 0.001 1. 0.01 0.1 trig)

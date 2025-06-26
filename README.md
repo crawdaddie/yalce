@@ -3,11 +3,11 @@ simple C audio synthesis library & high-level language
 highly unsafe
 
 ## dependencies
-- [libsoundio](http://libsound.io/)
-- [raylib](https://www.raylib.com/)
-- [fftw3](https://www.fftw.org/)
 - [llvm](https://llvm.org/)
 - [readline](https://tiswww.case.edu/php/chet/readline/rltop.html)
+- [libsoundio](http://libsound.io/)
+- [fftw3](https://www.fftw.org/)
+- [sdl2](https://www.libsdl.org/)
 
 # Audio Engine:
 ## Architecture
@@ -21,9 +21,9 @@ thread (write-only)
 an audio node is an object that holds 
 - a pointer to some internal state (eg oscillator phase)
 - an output buffer
-- 
 - a `node_perform` function pointer that reads from the input buffers, and writes to the output buffers
 - a reference to the next node in the chain to compute
+
 ## install
 ```
 brew install crawdaddie/yalce/yalce

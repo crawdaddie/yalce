@@ -1,4 +1,25 @@
 open engine/bindings/Synth;
 
-sin_node 100. |> tanh_node 5. |> chain |> play_node
+let freq = midi_to_freq 51;
 
+sin_node freq
+  |> (+) (sin_node (freq * 4 + 8. * sin_node 0.1))
+  |> (+) (sin_node (freq * 4.005 + 8. * sin_node 0.1))
+  |> (+) (sin_node freq * 8)
+  |> tanh_node 4.
+  |> (*) (0.5 + (0.5 * sq_node 8.))
+  |> vital_rev_node
+    0.99
+    0.5
+    0.1
+    0.62184876
+    0.0
+    0.5
+    0.2
+    0.9
+    0.789916
+    0.0
+    0.0
+    0.8
+  |> chain
+  |> play_node

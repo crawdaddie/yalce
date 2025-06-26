@@ -20,6 +20,7 @@ void init_ctx() {
     ctx.input_signals[i].layout = layout;
     ctx.input_signals[i].size = BUF_SIZE;
   }
+  ctx.main_vol = 0.5;
 }
 
 void audio_ctx_add(Node *node) {
@@ -249,6 +250,7 @@ int ctx_sample_rate() { return ctx.sample_rate; }
 double ctx_spf() { return ctx.spf; }
 
 double *ctx_main_out() { return ctx.output_buf; }
+void set_main_vol(double vol) { ctx.main_vol = vol; }
 
 void move_overflow() {
   msg_queue *queue = &ctx.overflow_queue;

@@ -920,8 +920,7 @@ Node *allpass_node(double time, double coeff, Node *input) {
   };
 
   // Initialize state
-  allpass_state *state =
-      (allpass_state *)(graph->nodes_state_memory + node->state_offset);
+  allpass_state *state = state_ptr(graph, node);
   *state = ap;
 
   // Connect input
@@ -1188,7 +1187,7 @@ Node *gverb_node(Node *input) {
       .meta = "gverb_lp",
   };
 
-  char *mem = graph->nodes_state_memory + node->state_offset;
+  char *mem = state_ptr(graph, node);
   memset(mem, 0, state_size);
   GVerb *state = (GVerb *)(mem);
   *state = gverb;
@@ -1353,9 +1352,7 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
   };
 
   /* Initialize state memory */
-  char *mem = (graph != NULL)
-                  ? (char *)(graph->nodes_state_memory + node->state_offset)
-                  : (char *)((Node *)node + 1);
+  char *mem = state_ptr(graph, node);
 
   memset(mem, 0, state_size);
   grain_pitchshift_state *state = mem;
@@ -1406,9 +1403,7 @@ NodeRef math_node(MathNodeFn math_fn, NodeRef input) {
   };
 
   /* Initialize state memory */
-  char *mem = (graph != NULL)
-                  ? (char *)(graph->nodes_state_memory + node->state_offset)
-                  : (char *)((Node *)node + 1);
+  char *mem = state_ptr(graph, node);
 
   memset(mem, 0, state_size);
   math_node_state *state = mem;
@@ -1565,9 +1560,7 @@ NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
   };
 
   /* Initialize state memory */
-  char *mem = (graph != NULL)
-                  ? (char *)(graph->nodes_state_memory + node->state_offset)
-                  : (char *)((Node *)node + 1);
+  char *mem = state_ptr(graph, node);
 
   memset(mem, 0, state_size);
   stutter_state *state = mem;
