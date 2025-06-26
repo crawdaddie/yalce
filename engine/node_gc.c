@@ -2,7 +2,9 @@
 #include "ctx.h"
 #include "group.h"
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 pthread_mutex_t node_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -26,7 +28,16 @@ void remove_and_free_node(node_group_state *ctx, NodeRef prev,
     }
   }
 
-  free(to_free);
+  if (strcmp(to_free->meta, "ensemble") == 0) {
+    // printf("freeing %p\n", to_free);
+    free(to_free->state_ptr);
+    free(to_free);
+  } else if (to_free->state_ptr) {
+    free(to_free->state_ptr);
+    free(to_free);
+  } else {
+    free(to_free);
+  }
 }
 void iter_gc(node_group_state *ctx) {
   Node *current = ctx->head;

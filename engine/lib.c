@@ -83,6 +83,7 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
 
   if (head->perform) {
     void *state = head + 1;
+
     if (head->state_ptr) {
       state = head->state_ptr;
     }
@@ -98,8 +99,6 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     //                frame_count - head->frame_offset);
     // } else
     if (head->write_to_output) {
-      printf("head write to out [%p][%p][%s]\n", head, head->output.buf,
-             head->meta);
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
                    head->output.layout, head->output.buf, output_num,
                    frame_count - head->frame_offset);
@@ -340,6 +339,9 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
       buf_mem += graph_state->nodes[i].output.layout *
                  graph_state->nodes[i].output.size;
     }
+    if (n->state_ptr != NULL) {
+      n->state_ptr = graph_state->nodes_state_memory + n->state_offset;
+    }
   }
 
   graph_state->nodes_state_memory = mem;
@@ -431,7 +433,6 @@ typedef struct close_payload {
 } close_payload;
 void close_gate(close_payload *p, int offset) {
   NodeRef target = p->target;
-  printf("close gate %p\n", target);
   int input = p->gate_input;
 
   push_msg(
@@ -484,7 +485,6 @@ NodeRef play_node_offset_w_kill(uint64_t offset, double dur, int gate_in,
 NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s) {
   // printf("play node %p dur: %f\n", s, dur);
   play_node_offset(tick, s);
-  printf("play dur %p [%f]\n", s, dur);
 
   close_payload *cp = malloc(sizeof(close_payload));
   *cp = (close_payload){

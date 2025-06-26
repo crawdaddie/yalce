@@ -20,7 +20,7 @@ void init_ctx() {
     ctx.input_signals[i].layout = layout;
     ctx.input_signals[i].size = BUF_SIZE;
   }
-  ctx.main_vol = 0.5;
+  ctx.main_vol = 0.25;
 }
 
 void audio_ctx_add(Node *node) {

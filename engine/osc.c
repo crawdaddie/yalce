@@ -148,7 +148,7 @@ Node *sin_node(Node *input) {
 
   plug_input_in_graph(0, node, input);
 
-  node->state_ptr = state;
+  // node->state_ptr = state;
   return graph_embed(node);
 }
 
@@ -1247,7 +1247,7 @@ Node *chirp_node(NodeRef start_freq, NodeRef end_freq, Node *lag_input,
   // node->connections[3].source_node_index = end_freq->node_index;
   plug_input_in_graph(3, node, end_freq);
 
-  node->state_ptr = state;
+  // node->state_ptr = state;
 
   return graph_embed(node);
 }
@@ -1659,7 +1659,7 @@ Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
   plug_input_in_graph(0, node, freq_input);
   plug_input_in_graph(1, node, mod_index_input);
   plug_input_in_graph(2, node, mod_ratio_input);
-  node->state_ptr = state;
+  // node->state_ptr = state;
   return graph_embed(node);
 }
 #define SAW_TABSIZE (1 << 11)
