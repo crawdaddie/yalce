@@ -136,7 +136,6 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (!branch_result) {
       destroy_ctx(&branch_ctx);
-      fprintf(stderr, "no branch result\n");
       return NULL;
     }
 

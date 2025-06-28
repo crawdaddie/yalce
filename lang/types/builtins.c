@@ -436,6 +436,31 @@ Type *_array_cons_sig() {
 
 Type t_array_cons_sig = GENERIC_TYPE(_array_cons_sig);
 
+Type *create_promise_type(Type *promise_of) {
+  Type **variant_members = talloc(sizeof(Type *) * 3);
+
+  Type **contained = talloc(sizeof(Type *));
+  contained[0] = ptr_of_type(promise_of);
+  variant_members[0] = create_cons_type("Pending", 1, contained);
+  variant_members[1] = create_cons_type("Fulfilled", 1, contained);
+  variant_members[2] = create_cons_type("Error", 1, contained);
+  Type *cons = create_cons_type(TYPE_NAME_VARIANT, 3, variant_members);
+  cons->alias = "Promise";
+  // typeclasses_extend(cons, &_GenericEq);
+  // printf("created option of \n");
+  // print_type(option_of);
+  // print_type(cons);
+  return cons;
+}
+
+Type *_promise_cons_sig() {
+  Type *t = next_tvar();
+  Type *r = create_promise_type(t);
+  return r;
+}
+
+Type t_promise_cons_sig = GENERIC_TYPE(_promise_cons_sig);
+
 void initialize_builtin_types() {
 
   ht_init(&builtin_types);
@@ -565,6 +590,7 @@ void initialize_builtin_types() {
   add_builtin("df_offset", &t_df_offset_sig);
   add_builtin("df_raw_fields", &t_df_raw_fields_sig);
   add_builtin(TYPE_NAME_ARRAY, &t_array_cons_sig);
+  add_builtin("Promise", &t_promise_cons_sig);
 }
 
 Type *lookup_builtin_type(const char *name) {

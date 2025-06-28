@@ -44,4 +44,6 @@ extern Type t_array_range_sig;
 extern Type t_array_offset_sig;
 extern Type t_array_at;
 extern Type t_array_cons_sig;
+
+extern Type t_promise_cons_sig;
 #endif

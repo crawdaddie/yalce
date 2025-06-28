@@ -61,6 +61,13 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
   out_type->constructor = constructor_sym;
   return NULL;
 }
+LLVMValueRef PromiseConstructorHandler(Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  printf("promise constructor\n");
+  print_ast(ast);
+  return NULL;
+}
 
 LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
                                                  LLVMModuleRef module,
@@ -1217,6 +1224,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("array_succ", &t_array_identity_sig, ArraySuccHandler);
   GENERIC_FN_SYMBOL("array_range", &t_array_range_sig, ArrayRangeHandler);
   GENERIC_FN_SYMBOL("array_offset", &t_array_offset_sig, ArrayOffsetHandler);
+  GENERIC_FN_SYMBOL("Promise", &t_promise_cons_sig, PromiseConstructorHandler);
 
   // GENERIC_FN_SYMBOL("array_view", &t_array_view_sig, ArrayViewHandler);
   GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);

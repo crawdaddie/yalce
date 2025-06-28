@@ -208,6 +208,8 @@ bool is_index_access_ast(Ast *application) {
 Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
 
+  // print_type(fn_type);
+
   Ast *fn_id = ast->data.AST_APPLICATION.function;
   const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
   Type *cons = fn_type;
@@ -215,8 +217,7 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   if (is_variant_type(fn_type)) {
     cons = find_variant_member(fn_type, fn_name);
     if (!cons) {
-      fprintf(stderr, "Error: %s not found in variant %s\n", fn_name,
-              cons->data.T_CONS.name);
+      fprintf(stderr, "Error: %s not found in variant %s\n", fn_name, fn_name);
       return NULL;
     }
   }

@@ -984,6 +984,8 @@ LLVMValueRef codegen_coroutine_short_circuit(JITLangCtx *ctx,
 
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+  printf("codegen yield\n");
+  print_ast(ast);
 
   LLVMBasicBlockRef current_case_block = LLVMGetInsertBlock(builder);
   LLVMValueRef func = LLVMGetBasicBlockParent(current_case_block);
