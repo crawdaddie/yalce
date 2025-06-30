@@ -324,7 +324,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     }
 
     if (t1->kind == T_CONS && ((1 << t2->kind) & TYPE_FLAGS_PRIMITIVE)) {
-
       TICtx _ctx = {.err_stream = NULL};
       return type_error(
           &_ctx, constraints->src,
@@ -341,7 +340,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
         constraints = constraints->next;
         continue;
       }
-
       subst = substitutions_extend(subst, t1, t2);
     } else if (t2->kind == T_VAR) {
       if (occurs_check(t2, t1)) {
@@ -356,7 +354,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
         subst = substitutions_extend(subst, t2->data.T_CONS.args[i], t1);
       }
     } else if (IS_PRIMITIVE_TYPE(t2) && t1->kind == T_TYPECLASS_RESOLVE) {
-
       for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
         subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
       }
@@ -389,9 +386,25 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
           }
         }
       }
-    } else if (t1->kind == T_FN && t2->kind == T_FN) {
+    } else if (t1->kind == T_FN && t2->kind == T_FN &&
+               t2->is_coroutine_instance && !is_generic(t2)) {
+      for (Substitution *s = subst; s != NULL; s = s->next) {
+        if (types_equal(t1, s->to)) {
+          // printf("replace sub ");
+          // print_type(s->from);
+          // print_type(s->to);
+          s->to = t2;
+          break;
+        }
+      }
+      // *t1 = *t2;
+    }
+
+    else if (t1->kind == T_FN && t2->kind == T_FN) {
+
       Type *f1 = t1;
       Type *f2 = t2;
+
       while (f1->kind == T_FN && f2->kind == T_FN) {
         subst =
             substitutions_extend(subst, f1->data.T_FN.from, f2->data.T_FN.from);
@@ -408,7 +421,6 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else if (is_coroutine_type(t1) && t2->kind == T_VOID) {
     } else if (is_coroutine_type(t1) && is_pointer_type(t2)) {
     } else {
-
       TICtx _ctx = {.err_stream = NULL};
       type_error(&_ctx, constraints->src, "Constraint solving type mismatch\n");
       print_type_err(t1);

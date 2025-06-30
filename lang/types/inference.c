@@ -862,6 +862,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   printf("constraints throughout lambda\n");
   print_constraints(body_ctx.constraints);
   print_subst(subst);
+  printf("\n");
 #endif
 
   ast->md = apply_substitution(subst, ast->md);
@@ -921,12 +922,6 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
 
     branch_ctx.scope++;
     bind_in_ctx(&branch_ctx, branch_pattern, pattern_type);
-
-    // printf("match pattern\n");
-    // print_ast(branch_pattern);
-    // print_type(pattern_type);
-    // print_constraints(ctx->constraints);
-    // printf("\n\n");
 
     Type *guard_clause_type;
     if (guard_clause &&

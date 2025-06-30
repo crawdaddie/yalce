@@ -48,4 +48,5 @@ extern Type t_array_cons_sig;
 extern Type t_coroutine_end;
 
 extern Type t_use_or_finish;
+extern Type t_list_empty;
 #endif

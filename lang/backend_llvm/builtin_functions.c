@@ -1231,6 +1231,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("df_raw_fields", &t_df_raw_fields_sig, DFRawFieldsHandler);
   GENERIC_FN_SYMBOL(TYPE_NAME_ARRAY, &t_array_cons_sig, ArrayConstructor);
   GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
+  GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
   // GENERIC_FN_SYMBOL("coroutine_end", &t_coroutine_end, CoroutineEndHandler);
 
   // GENERIC_FN_SYMBOL(TYPE_NAME_REF, NULL, RefHandler);

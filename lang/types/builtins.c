@@ -445,6 +445,13 @@ Type *_use_or_finish() {
 }
 Type t_use_or_finish = GENERIC_TYPE(_use_or_finish);
 
+Type *_t_list_empty() {
+  Type *t = next_tvar();
+  Type *ltype = create_list_type_of_type(t);
+  return type_fn(ltype, &t_bool);
+}
+Type t_list_empty = GENERIC_TYPE(_t_list_empty);
+
 void initialize_builtin_types() {
 
   ht_init(&builtin_types);
@@ -576,6 +583,7 @@ void initialize_builtin_types() {
   add_builtin(TYPE_NAME_ARRAY, &t_array_cons_sig);
   add_builtin("coroutine_end", &t_coroutine_end);
   add_builtin("use_or_finish", &t_use_or_finish);
+  add_builtin("list_empty", &t_list_empty);
 }
 
 Type *lookup_builtin_type(const char *name) {

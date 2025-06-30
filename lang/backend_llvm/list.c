@@ -379,3 +379,12 @@ LLVMValueRef codegen_list_to_string(LLVMValueRef val, Type *val_type,
                                     LLVMBuilderRef builder) {
   return _codegen_string("[]", 2, ctx, module, builder);
 }
+
+LLVMValueRef ListEmptyHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  Type *ltype = ast->data.AST_APPLICATION.args->md;
+  Type *el_type = ltype->data.T_CONS.args[0];
+  LLVMValueRef l =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  return ll_is_null(l, type_to_llvm_type(el_type, ctx, module), builder);
+}

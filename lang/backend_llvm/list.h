@@ -54,4 +54,7 @@ LLVMValueRef QueuePopLeftHandler(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
+
+LLVMValueRef ListEmptyHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder);
 #endif
