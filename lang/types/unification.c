@@ -306,6 +306,12 @@ bool cons_types_match(Type *t1, Type *t2) {
 
 Substitution *solve_constraints(TypeConstraint *constraints) {
   Substitution *subst = NULL;
+  // if (constraints && constraints->t1->kind == T_VAR &&
+  //     CHARS_EQ(constraints->t1->data.T_VAR, "`44")) {
+  //   printf("solve constraints\n");
+  //   print_type(constraints->t1);
+  //   print_type(constraints->t2);
+  // }
 
   while (constraints) {
 

@@ -118,7 +118,9 @@ let proc_tasks = fn server_fd: (Int) tq: (List of (Coroutine of Int), List of (C
   match p with
   | Some (cb, rem) -> (
     print "grabbed coroutine from queue\n";
-    cb ()
+    print `{cb ()}\n`;
+    cb ();
+    ()
     # match (cb ()) with
     # | Some _ -> proc_tasks server_fd (Queue.append cb rem)
     # | _ -> proc_tasks server_fd rem
@@ -133,6 +135,6 @@ let init_server = fn port ->
   listen server_fd 5;
   proc_tasks server_fd (Queue.of_list [accept_reqs server_fd])
 ;;
-
+#
 init_server 8000
 

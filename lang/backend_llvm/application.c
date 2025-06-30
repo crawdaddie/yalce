@@ -182,6 +182,8 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+  print_ast(ast);
+  print_type(expected_fn_type);
 
   if (is_index_access_ast(ast)) {
     return IndexAccessHandler(ast, ctx, module, builder);

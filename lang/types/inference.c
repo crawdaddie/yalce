@@ -922,6 +922,12 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
     branch_ctx.scope++;
     bind_in_ctx(&branch_ctx, branch_pattern, pattern_type);
 
+    // printf("match pattern\n");
+    // print_ast(branch_pattern);
+    // print_type(pattern_type);
+    // print_constraints(ctx->constraints);
+    // printf("\n\n");
+
     Type *guard_clause_type;
     if (guard_clause &&
         !(guard_clause_type = infer(guard_clause, &branch_ctx))) {
@@ -1047,6 +1053,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
   case AST_MATCH: {
     apply_substitutions_rec(ast->data.AST_MATCH.expr, subst);
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+
       apply_substitutions_rec(ast->data.AST_MATCH.branches + (2 * i), subst);
       apply_substitutions_rec(ast->data.AST_MATCH.branches + (2 * i) + 1,
                               subst);
