@@ -156,9 +156,7 @@ Type *struct_of_fns_to_return(Type *cons) {
 }
 
 Type *infer_iter(Ast *ast, TICtx *ctx) {
-  printf("infer iter\n");
   Type *t = infer(ast->data.AST_APPLICATION.args, ctx);
-  print_type(t);
   Type *ret_type;
   switch (t->kind) {
   case T_CONS: {

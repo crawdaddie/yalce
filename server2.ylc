@@ -19,9 +19,8 @@ let recv = extern fn Int -> Ptr -> Int -> Int -> Int;  # recv(fd, buffer, size, 
 let send = extern fn Int -> Ptr -> Int -> Int -> Int;  # send(fd, buffer, size, flags) 
 let close = extern fn Int -> Int;                      # close(fd)
 
-
-
 let Queue = module
+
   let of_list = fn l ->
     let t = l in 
     let h = t in
@@ -38,10 +37,6 @@ let Queue = module
     (n::h, t)
   ;;
 
-  let print_deq = fn (h, t) ->
-    print_list h
-  ;;
-
   let pop_left = fn (h, t) ->
     match h with
     | x::rest -> Some (x, (rest, t))  
@@ -49,36 +44,58 @@ let Queue = module
   ;;
 ;
 
-let accept_connection = fn sock: (Int) ->
+
+let accept_reqs = fn server_fd ->
   let client_addr = create_server_addr 0 0 0;
-  let client_sock = accept sock client_addr [1];
-  (client_sock, client_addr)
+  let client_sock = accept server_fd client_addr [1];
+  yield 1
 ;;
+# let Server = module
+#
+#   let server_addr = create_server_addr AF_INET INADDR_ANY 8000;
+#
+#   let create_socket = fn () -> 
+#     let sock = socket AF_INET SOCK_STREAM 0;
+#     bind sock server_addr 16;
+#     listen sock 10;
+#     sock
+#   ;;
+#
+#   let create_server = fn sock ->
+#     print `create server {sock}\n`;
+#     sock
+#   ;;
+#
+#   let accept_connection = fn sock: (Int) ->
+#     let client_addr = create_server_addr 0 0 0;
+#     let client_sock = accept sock client_addr [1];
+#     (client_sock, client_addr)
+#   ;;
+#
+#   let accept_reqs = fn server_fd ->
+#     let client_sock, _addr = accept_connection server_fd;
+#     yield 1
+#   ;;
+#
+#   let proc_tasks = fn server_fd: (Int) tq: (List of Coroutine of Int, List of Coroutine of Int) ->
+#     match Queue.pop_left tq with
+#     | Some (req_cor, rest) -> (
+#       let _ = req_cor ();
+#       proc_tasks server_fd rest
+#     )
+#     | None -> (proc_tasks server_fd (Queue.of_list [ accept_reqs server_fd ]); ())
+#   ;;  
+# ;
 
-let accept_cb = fn server_fd ->
-  let client_sock, _addr = accept_connection server_fd;
 
-  if client_sock >= 0 then (
-    # Immediately read and respond to client
-    let buffer = array_fill_const 1024 (Char 0);
-    let bytes_read = recv client_sock (cstr buffer) 1024 0;
 
-    if bytes_read > 0 then (
-      print `received request:\n--------------------\n{buffer}\n----------------------\n`;
-      let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
-      send client_sock (cstr response) (array_size response) 0
-    );
-    close client_sock
-  )
-;;
-
-let proc_tasks = fn server_fd tq: (List of (Int -> Int), List of (Int -> Int)) ->
+let proc_tasks = fn server_fd: (Int) tq: (List of (Coroutine of Int), List of (Coroutine of Int)) ->
   match Queue.pop_left tq with
   | Some (cb, d) -> (
-    let _ = cb server_fd;
+    let _ = cb ();
     proc_tasks server_fd d
   )
-  | None -> (proc_tasks server_fd (Queue.of_list [accept_cb]); ())
+  | None -> (proc_tasks server_fd (Queue.of_list [accept_reqs server_fd]); ())
 ;;
 
 let init_server = fn port ->
@@ -86,10 +103,9 @@ let init_server = fn port ->
   let server_fd = socket AF_INET SOCK_STREAM 0;
   bind server_fd server_addr 16;
   listen server_fd 5;
-  proc_tasks server_fd (Queue.of_list [accept_cb]);
+  proc_tasks server_fd (Queue.of_list [accept_reqs server_fd]);
   ()
 ;;
 
 init_server 8000
-
 

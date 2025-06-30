@@ -81,11 +81,13 @@ struct loop_state {
 void *loop_cor_fn(cor *this, void *ret_val) {
   struct loop_state *state = (struct loop_state *)this->argv;
   cor *inner = state->original_cor;
+  // printf("loop cor fn %p inner %p [%d]\n", this, inner, inner->counter);
 
   // Try to advance the inner coroutine
   cor *res = cor_next(inner, ret_val);
 
   if (res == NULL) {
+    printf("reset inner cor???\n");
     // Inner coroutine completed, reset it
     inner->counter = 0; // Reset the counter
 
@@ -97,6 +99,9 @@ void *loop_cor_fn(cor *this, void *ret_val) {
     // Try advancing again with the reset coroutine
     res = cor_next(inner, ret_val);
   }
+  // } else {
+  //   printf("why not reset ? %p %p\n", res, ret_val);
+  // }
 
   return this; // Always return the wrapper to keep the loop going
 }
@@ -112,7 +117,6 @@ cor *cor_loop(cor *instance) {
       .counter = 0,
       .fn_ptr = (CoroutineFn)loop_cor_fn,
       .next = NULL,
-      .meta = instance->meta,
       .argv = state // Store our loop state
   };
 
@@ -150,7 +154,6 @@ cor *cor_wrap_effect(cor *this, EffectWrapper effect_fn) {
   cor wrapped = (cor){.counter = 0,
                       .fn_ptr = (CoroutineFn)effect_wrap,
                       .next = NULL,
-                      .meta = this->meta,
                       .argv = st_ptr};
 
   // TODO: do I really want to mutate rather than return new copy

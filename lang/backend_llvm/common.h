@@ -36,6 +36,7 @@ typedef struct {
   const char *module_name;
   int num_coroutine_yields;
   int current_yield;
+  LLVMBasicBlockRef switch_default;
   LLVMValueRef yield_switch_ref;
 } JITLangCtx;
 

@@ -70,6 +70,9 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 
   const char *chars = ast->data.AST_IDENTIFIER.value;
+  if (strcmp(chars, "coroutine_end") == 0) {
+    return CoroutineEndHandler(ast, ctx, module, builder);
+  }
 
   int length = ast->data.AST_IDENTIFIER.length;
 

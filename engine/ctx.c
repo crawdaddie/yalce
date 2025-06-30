@@ -31,7 +31,6 @@ void audio_ctx_add(Node *node) {
   if (ctx->head == NULL) {
     ctx->head = node;
     ctx->tail = ctx->head;
-
   } else {
     // Find the end of the chain
     Node *current = ctx->head;
@@ -68,7 +67,11 @@ static void process_msg_pre(int frame_offset, scheduler_msg msg) {
       }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
+      // if (payload.value == 0.) {
+      //   printf("setting gate off %llu\n", msg.tick);
+      // }
       for (int i = frame_offset; i < BUF_SIZE; i++) {
+
         inlet_data.buf[i] = payload.value;
       }
     }
@@ -167,6 +170,65 @@ static void process_msg_post(int frame_offset, scheduler_msg msg) {
     break;
   }
 }
+void print_msg(scheduler_msg *msg) {
+  printf("[%llu]", msg->tick);
+  switch (msg->type) {
+  case NODE_ADD: {
+    printf(" node_add %p", msg->payload.NODE_ADD.target);
+    break;
+  }
+  // case GROUP_ADD,
+  case NODE_SET_SCALAR: {
+
+    printf(" node_set_scalar %p[%d] %f\n", msg->payload.NODE_SET_SCALAR.target,
+           msg->payload.NODE_SET_SCALAR.input,
+           msg->payload.NODE_SET_SCALAR.value);
+    break;
+    // case NODE_REMOVE,
+    // case NODE_SET_INPUT,
+  }
+  case NODE_SET_TRIG: {
+
+    printf(" node_set_trig ");
+    break;
+  }
+  }
+}
+
+//   union {
+//     struct NODE_ADD {
+//       Node *target;
+//       Node *group;
+//     } NODE_ADD;
+//
+//     struct GROUP_ADD {
+//       Node *group;
+//       Node *tail;
+//     } GROUP_ADD;
+//
+//     struct NODE_SET_SCALAR {
+//       Node *target;
+//       int input;
+//       double value;
+//     } NODE_SET_SCALAR;
+//
+//     struct NODE_SET_INPUT {
+//       Node *target;
+//       int input;
+//       Node *value;
+//     } NODE_SET_INPUT;
+//
+//     struct NODE_SET_TRIG {
+//       Node *target;
+//       int input;
+//     } NODE_SET_TRIG;
+//
+//     struct NODE_REMOVE {
+//       Node *target;
+//     } NODE_REMOVE;
+//
+//   } payload;
+// }
 
 int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue) {
   int read_ptr = queue->read_ptr;
@@ -177,11 +239,16 @@ int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue) {
   while (read_ptr != queue->write_ptr) {
     msg = queue->buffer + read_ptr;
     if (msg->tick - current_tick >= 512) {
+      // msg is too early
       // TODO: if msg->tick - current_tick > 512 - push message to write_ptr
+      // printf("push msg to overflow queue\n");
+      // print_msg(msg);
       push_msg(&ctx.overflow_queue, *msg, 0);
       num_moved++;
     } else if (msg->tick - current_tick < 0) {
-      printf("too late for msg\n");
+      // msg is too late ???
+      printf("skip message\n");
+      print_msg(msg);
     } else {
       process_msg_pre(msg->tick - current_tick, *msg);
     }
@@ -199,6 +266,8 @@ void process_msg_queue_post(uint64_t current_tick, msg_queue *queue,
   while (consumed--) {
     msg = pop_msg(queue);
     if (msg.tick - current_tick >= 512) {
+      // printf("msg post skipped\n");
+      // print_msg(&msg);
       // skip
     } else {
       int frame_offset = msg.tick - current_tick;

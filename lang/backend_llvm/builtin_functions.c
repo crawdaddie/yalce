@@ -36,7 +36,7 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
   Ast *impl = trait->data.AST_TRAIT_IMPL.impl;
 
   if (impl->tag == AST_MODULE) {
-    print_ast(impl);
+    // print_ast(impl);
 
     if (impl->data.AST_LAMBDA.body->tag != AST_BODY) {
       Ast *expr = impl->data.AST_LAMBDA.body;
@@ -1230,6 +1230,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("df_offset", &t_df_offset_sig, DFAtOffsetHandler);
   GENERIC_FN_SYMBOL("df_raw_fields", &t_df_raw_fields_sig, DFRawFieldsHandler);
   GENERIC_FN_SYMBOL(TYPE_NAME_ARRAY, &t_array_cons_sig, ArrayConstructor);
+  GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
+  // GENERIC_FN_SYMBOL("coroutine_end", &t_coroutine_end, CoroutineEndHandler);
 
   // GENERIC_FN_SYMBOL(TYPE_NAME_REF, NULL, RefHandler);
 

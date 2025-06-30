@@ -435,6 +435,15 @@ Type *_array_cons_sig() {
 }
 
 Type t_array_cons_sig = GENERIC_TYPE(_array_cons_sig);
+Type t_coroutine_end = GENERIC_TYPE(next_tvar);
+
+Type *_use_or_finish() {
+  Type *t = next_tvar();
+  Type *opt = create_option_type(t);
+  Type *f = type_fn(opt, t);
+  return f;
+}
+Type t_use_or_finish = GENERIC_TYPE(_use_or_finish);
 
 void initialize_builtin_types() {
 
@@ -565,6 +574,8 @@ void initialize_builtin_types() {
   add_builtin("df_offset", &t_df_offset_sig);
   add_builtin("df_raw_fields", &t_df_raw_fields_sig);
   add_builtin(TYPE_NAME_ARRAY, &t_array_cons_sig);
+  add_builtin("coroutine_end", &t_coroutine_end);
+  add_builtin("use_or_finish", &t_use_or_finish);
 }
 
 Type *lookup_builtin_type(const char *name) {

@@ -289,7 +289,7 @@ AudioGraph *end_blob() {
 
   graph->nodes_state_memory =
       realloc(graph->nodes_state_memory, graph->state_memory_capacity);
-  print_graph(graph);
+  // print_graph(graph);
 
   _graph = NULL;
   return graph;
@@ -418,15 +418,6 @@ Node *play_node_offset(uint64_t tick, Node *s) {
   return s;
 }
 
-NodeRef node_add(uint64_t tick, NodeRef group, NodeRef target) {
-  push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_ADD,
-                           tick,
-                           {.NODE_ADD = {.target = target, .group = group}}},
-           512);
-  return target;
-}
-
 typedef struct close_payload {
   NodeRef target;
   int gate_input;
@@ -445,53 +436,26 @@ void close_gate(close_payload *p, int offset) {
   free(p);
 }
 
-NodeRef node_add_dur(uint64_t tick, double dur, int gate, NodeRef group,
-                     NodeRef target) {
-
-  push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_ADD,
-                           tick,
-                           {.NODE_ADD = {.target = target, .group = group}}},
-           512);
-
-  close_payload *cp = malloc(sizeof(close_payload));
-  *cp = (close_payload){
-      .target = target,
-      .gate_input = gate,
-  };
-  schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
-  return target;
-}
-
-NodeRef play_node_offset_w_kill(uint64_t offset, double dur, int gate_in,
-                                NodeRef s) {
-  // printf("play node %p at offset %d %f %d\n", s, offset, dur, gate_in);
-  // Node *group = _chain;
-  // reset_chain();
-  // add_to_dac(s);
-  // add_to_dac(group);
-
-  play_node_offset(offset, s);
-
-  close_payload *cp = malloc(sizeof(close_payload));
-  *cp = (close_payload){
-      .target = s,
-      .gate_input = gate_in,
-  };
-  schedule_event(get_current_sample(), dur, (SchedulerCallback)close_gate, cp);
-  return s;
-}
-
 NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s) {
   // printf("play node %p dur: %f\n", s, dur);
   play_node_offset(tick, s);
 
-  close_payload *cp = malloc(sizeof(close_payload));
-  *cp = (close_payload){
-      .target = s,
-      .gate_input = gate_in,
-  };
-  schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
+  push_msg(
+      &ctx.msg_queue,
+      (scheduler_msg){
+          NODE_SET_SCALAR,
+          tick + dur * ctx_sample_rate(),
+          {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 0.}}},
+      512);
+
+  // close_payload *cp = malloc(sizeof(close_payload));
+  // *cp = (close_payload){
+  //     .target = s,
+  //     .gate_input = gate_in,
+  // };
+  //
+  // schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
+
   return s;
 }
 

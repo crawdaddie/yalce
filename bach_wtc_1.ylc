@@ -3,13 +3,6 @@ open engine/bindings/Sched;
 import lib/Math;
 
 let Acid = module
-  let ampenv = [|
-    0.000000, 0.000000, 2.400000,
-    1.000000, 2.210165, -2.000000,
-    1.000000, 0.789836, 1.300000,
-    0.000000
-  |]
-  |> array_to_buf;
 
   let synth = (fn () -> 
     let freq = inlet 55. in

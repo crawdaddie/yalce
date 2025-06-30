@@ -581,6 +581,8 @@ static LLVMValueRef compile_coroutine_fn(Type *constructor_type,
 
   LLVMBasicBlockRef switch_default_block =
       LLVMAppendBasicBlock(func, "coroutine_iter_end");
+  fn_ctx.switch_default = switch_default_block;
+
   LLVMPositionBuilderAtEnd(builder, switch_default_block);
 
   LLVMBuildRet(builder, null_cor_inst());
@@ -1360,8 +1362,6 @@ LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
-  printf("iter handler\n");
-  print_ast(ast);
   Type *arg_type = ast->data.AST_APPLICATION.args->md;
   if (is_list_type(arg_type)) {
     return IterOfListHandler(ast, ctx, module, builder);
@@ -1649,4 +1649,65 @@ LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
   return _cor_stop(cor, module, builder);
+}
+
+LLVMValueRef CoroutineEndHandler(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMBasicBlockRef current_case_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef func = LLVMGetBasicBlockParent(current_case_block);
+  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+
+  // Store null in the return value to indicate end
+  LLVMBuildStore(builder, LLVMConstNull(GENERIC_PTR), ret_val_ref);
+
+  LLVMBasicBlockRef end_block = ctx->switch_default;
+
+  LLVMBuildBr(builder, end_block);
+  return LLVMConstNull(type_to_llvm_type(ast->md, ctx, module));
+}
+
+LLVMValueRef UseOrFinishHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  // Generate the option value from the first argument
+  LLVMValueRef result =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  // Check if the option is None
+  LLVMValueRef is_none = codegen_option_is_none(result, builder);
+
+  // Get the current function and find the coroutine_iter_end block
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef func = LLVMGetBasicBlockParent(current_block);
+  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+
+  // Find the coroutine_iter_end block
+  LLVMBasicBlockRef end_block = ctx->switch_default;
+
+  if (!end_block) {
+    fprintf(stderr, "Error: coroutine_iter_end block not found\n");
+    return NULL;
+  }
+
+  // Create blocks for the conditional branch
+  LLVMBasicBlockRef none_block = LLVMAppendBasicBlock(func, "option_is_none");
+  LLVMBasicBlockRef some_block = LLVMAppendBasicBlock(func, "option_has_value");
+
+  // Branch based on whether the option is None
+  LLVMBuildCondBr(builder, is_none, none_block, some_block);
+
+  // Handle the None case - branch to coroutine end
+  LLVMPositionBuilderAtEnd(builder, none_block);
+  LLVMBuildStore(builder, LLVMConstNull(GENERIC_PTR), ret_val_ref);
+  LLVMBuildBr(builder, end_block);
+
+  // Handle the Some case - extract and return the value
+  LLVMPositionBuilderAtEnd(builder, some_block);
+  LLVMValueRef value_field = LLVMBuildExtractValue(builder, result, 1, "value");
+
+  // Continue execution from the some_block
+  // The builder is now positioned to continue generating code after this point
+
+  return value_field;
 }

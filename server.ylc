@@ -49,47 +49,60 @@ let Queue = module
   ;;
 ;
 
-let accept_connection = fn sock: (Int) ->
-  let client_addr = create_server_addr 0 0 0;
-  let client_sock = accept sock client_addr [1];
-  (client_sock, client_addr)
-;;
-
 let accept_cb = fn server_fd ->
-  let client_sock, _addr = accept_connection server_fd;
+  print "before create server addr\n";
+  let client_addr = create_server_addr 0 0 0;
+  print "before accept\n";
+  let client_sock = accept server_fd client_addr (cstr [|1|]);
 
-  if client_sock >= 0 then (
-    # Immediately read and respond to client
-    let buffer = array_fill_const 1024 (Char 0);
-    let bytes_read = recv client_sock (cstr buffer) 1024 0;
+  print "after accept\n";
 
-    if bytes_read > 0 then (
-      print `received request:\n--------------------\n{buffer}\n----------------------\n`;
-      let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
-      send client_sock (cstr response) (array_size response) 0
-    );
-    close client_sock
-  )
+  # close client_sock;
+  yield 1;
+  yield 2
+
+  # if client_sock >= 0 then (
+  #   # Immediately read and respond to client
+  #   let buffer = array_fill_const 1024 (Char 0);
+  #   let bytes_read = recv client_sock (cstr buffer) 1024 0;
+  #
+  #   if bytes_read > 0 then (
+  #     print `received request:\n--------------------\n{buffer}\n----------------------\n`;
+  #     let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
+  #     send client_sock (cstr response) (array_size response) 0
+  #   );
+  #   close client_sock
+  # )
 ;;
 
-let proc_tasks = fn server_fd tq: (List of (Int -> Int), List of (Int -> Int)) ->
+let proc_tasks = fn server_fd: (Int) tq: (List of (() -> Int), List of (() -> Int)) ->
   match Queue.pop_left tq with
-  | Some (cb, d) -> (
-    let _ = cb server_fd;
-    proc_tasks server_fd d
+  | Some (cb, remaining_tasks) -> (
+    print "before call cor\n";
+    cb ();
+    proc_tasks server_fd remaining_tasks
   )
-  | None -> (proc_tasks server_fd (Queue.of_list [accept_cb]); ())
+  | None -> (proc_tasks server_fd (Queue.of_list [accept_cb server_fd]); ())
 ;;
-
+#
 let init_server = fn port ->
   let server_addr = create_server_addr AF_INET INADDR_ANY port;
   let server_fd = socket AF_INET SOCK_STREAM 0;
   bind server_fd server_addr 16;
   listen server_fd 5;
-  proc_tasks server_fd (Queue.of_list [accept_cb]);
+  let req = accept_cb server_fd;
+  proc_tasks server_fd (Queue.of_list [req]);
   ()
 ;;
-
+#
 init_server 8000
+#
+#
 
-
+# let server_addr = create_server_addr AF_INET INADDR_ANY 8000;
+# let server_fd = socket AF_INET SOCK_STREAM 0;
+# bind server_fd server_addr 16;
+# listen server_fd 5;
+# let x = accept_cb server_fd;
+# x ()
+# proc_tasks server_fd (Queue.of_list [accept_cb server_fd]);
