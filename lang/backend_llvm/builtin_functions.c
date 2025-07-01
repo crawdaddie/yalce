@@ -477,12 +477,72 @@ LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
+LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
+                      JITLangCtx *ctx, LLVMModuleRef module,
+                      LLVMBuilderRef builder) {
+
+  // Get the element type from the array type
+  LLVMTypeRef element_type = type_to_llvm_type(arr_type, ctx, module);
+
+  // Get sizes of both arrays
+  LLVMValueRef size1 = codegen_get_array_size(builder, arr1, element_type);
+  LLVMValueRef size2 = codegen_get_array_size(builder, arr2, element_type);
+
+  // Compare sizes
+  LLVMValueRef sizes_equal =
+      LLVMBuildICmp(builder, LLVMIntEQ, size1, size2, "sizes_equal");
+
+  // Get data pointers from both arrays
+  LLVMValueRef data1 =
+      LLVMBuildExtractValue(builder, arr1, 1, "get_array1_data_ptr");
+  LLVMValueRef data2 =
+      LLVMBuildExtractValue(builder, arr2, 1, "get_array2_data_ptr");
+
+  // Get or declare strncmp function
+  LLVMTypeRef strncmp_args[] = {
+      LLVMPointerType(LLVMInt8Type(), 0), // const char*
+      LLVMPointerType(LLVMInt8Type(), 0), // const char*
+      LLVMInt32Type()                     // size_t (using i32)
+  };
+  LLVMTypeRef strncmp_type =
+      LLVMFunctionType(LLVMInt32Type(), strncmp_args, 3, 0);
+  LLVMValueRef strncmp_func = LLVMGetNamedFunction(module, "strncmp");
+  if (!strncmp_func) {
+    strncmp_func = LLVMAddFunction(module, "strncmp", strncmp_type);
+  }
+
+  // Cast data pointers to i8* for strncmp
+  LLVMValueRef data1_i8 = LLVMBuildPointerCast(
+      builder, data1, LLVMPointerType(LLVMInt8Type(), 0), "data1_i8");
+  LLVMValueRef data2_i8 = LLVMBuildPointerCast(
+      builder, data2, LLVMPointerType(LLVMInt8Type(), 0), "data2_i8");
+
+  // Call strncmp(data1, data2, size1)
+  LLVMValueRef strncmp_args_vals[] = {data1_i8, data2_i8, size1};
+  LLVMValueRef strncmp_result =
+      LLVMBuildCall2(builder, strncmp_type, strncmp_func, strncmp_args_vals, 3,
+                     "strncmp_result");
+
+  // Check if strncmp returned 0 (strings are equal)
+  LLVMValueRef zero = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  LLVMValueRef contents_equal =
+      LLVMBuildICmp(builder, LLVMIntEQ, strncmp_result, zero, "contents_equal");
+
+  // AND the size equality with content equality
+  LLVMValueRef final_result =
+      LLVMBuildAnd(builder, sizes_equal, contents_equal, "arrays_equal");
+
+  return final_result;
+}
 
 LLVMValueRef cons_equality(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
   LLVMTypeRef tuple_type = type_to_llvm_type(type, ctx, module);
+  if (is_array_type(type)) {
+    return array_eq(tuple1, tuple2, type, ctx, module, builder);
+  }
 
   LLVMTypeRef type1 = LLVMTypeOf(tuple1);
   LLVMTypeRef type2 = LLVMTypeOf(tuple2);

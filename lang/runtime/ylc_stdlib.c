@@ -809,3 +809,15 @@ void parse_double_simple(const char *str, double *d, int *cons) {
 
   return;
 }
+int first_str_match(const char *str, const char *delim) {
+  int i = 0;
+  int delim_len = strlen(delim);
+  while (*str != '\0') {
+    if (strncmp(str, delim, delim_len) == 0) {
+      return i;
+    }
+    i++;
+    str++;
+  }
+  return -1;
+}

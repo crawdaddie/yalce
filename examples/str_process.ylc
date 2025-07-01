@@ -1,7 +1,7 @@
 #! env ylc
 
-let find_h = fn l -> 
-  let aux = fn i l ->
+let find_h = fn l: (String) -> 
+  let aux = fn i l: (String) ->
     match l with
     | "" -> -1
     | 'h'::_ -> i
