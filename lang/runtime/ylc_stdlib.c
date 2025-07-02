@@ -809,6 +809,7 @@ void parse_double_simple(const char *str, double *d, int *cons) {
 
   return;
 }
+
 int first_str_match(const char *str, const char *delim) {
   int i = 0;
   int delim_len = strlen(delim);
@@ -820,4 +821,68 @@ int first_str_match(const char *str, const char *delim) {
     str++;
   }
   return -1;
+}
+
+// StrList *string_split(String str, String delim) {
+//   printf("str split '%s' '%s'\n", str.chars, delim.chars);
+//   char *strc = str.chars;
+//   int strlen = str.length;
+//   StrList *head = malloc(sizeof(StrList));
+//   StrList *tail = head;
+//
+//   int offset = 0;
+//   while (offset < strlen) {
+//     if (strncmp(strc, delim.chars, delim.length)) {
+//     }
+//     strc++;
+//   }
+//
+//   return NULL;
+// }
+StrList *string_split(String str, String delim) {
+
+  if (str.length == 0) {
+    return NULL;
+  }
+
+  StrList *head = NULL;
+  StrList *tail = NULL;
+
+  int start = 0;
+  int i = 0;
+
+  while (i <= str.length - delim.length) {
+    if (strncmp(str.chars + i, delim.chars, delim.length) == 0) {
+      StrList *new_node = malloc(sizeof(StrList));
+      new_node->data.length = i - start;
+      new_node->data.chars = str.chars + start;
+      new_node->next = NULL;
+
+      if (head == NULL) {
+        head = tail = new_node;
+      } else {
+        tail->next = new_node;
+        tail = new_node;
+      }
+
+      i += delim.length;
+      start = i;
+    } else {
+      i++;
+    }
+  }
+
+  StrList *new_node = malloc(sizeof(StrList));
+  new_node->data.length = str.length - start;
+  new_node->data.chars = str.chars + start;
+  new_node->next = NULL;
+
+  if (head == NULL) {
+    head = tail = new_node;
+  } else {
+    tail->next = new_node;
+    tail = new_node;
+  }
+
+  return head;
 }

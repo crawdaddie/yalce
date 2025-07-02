@@ -14,6 +14,8 @@ let recv = extern fn Int -> Ptr -> Int -> Int -> Int;  # recv(fd, buffer, size, 
 let send = extern fn Int -> Ptr -> Int -> Int -> Int;  # send(fd, buffer, size, flags) 
 let close = extern fn Int -> Int;                      # close(fd)
 
+let string_split = extern fn String -> String -> List of String;
+
 let Queue = module
 
   let of_list = fn l ->
@@ -23,9 +25,9 @@ let Queue = module
   ;;
 
   let append = fn n (h, t) ->
-    if list_empty h then (
-      of_list [n]
-    ) else (
+    match list_empty h with
+    | true -> of_list [n]
+    | _ -> (
       let nt = [n] in
       let tt = list_concat t nt in
       (h, tt)
@@ -33,12 +35,7 @@ let Queue = module
   ;;
 
   let prepend = fn n (h, t) ->
-    if list_empty h then (
-      of_list [n]
-    )
-    else (
-      (n::h, t)
-    )
+    (n::h, t)
   ;;
 
   let pop_left = fn (h, t) ->
@@ -48,6 +45,8 @@ let Queue = module
   ;;
 ;
 
+
+
 let accept_conn = fn server_fd ->
   let client_addr = create_server_addr 0 0 0;
   let client_sock = accept server_fd client_addr (cstr [| 1 |]);
@@ -56,139 +55,55 @@ let accept_conn = fn server_fd ->
   | _ -> None
 ;;
 
-let read_bytes = fn client_sock ->
-  let buffer = array_fill_const 1024 (Char 0);
+let read_bytes = fn client_sock -> let buffer = array_fill_const 1024 (Char 0);
   let bytes_read = recv client_sock (cstr buffer) 1024 0;
   match (bytes_read > 0) with
   | true -> Some buffer
   | _ -> None
 ;;
 
-# HTTP Request parsing module
-let HttpRequest = module
-  
-  let parse_request_line = fn line ->
-    let parts = string_split line " ";
-    match parts with
-    | method::path::version::_ -> Some (method, path, version)
-    | _ -> None
-  ;;
-
-  let parse_header = fn line ->
-    match string_split line ": " with
-    | key::value::_ -> Some (key, value)
-    | _ -> None
-  ;;
-
-  let parse_headers = fn lines ->
-    let rec loop = fn acc lines ->
-      match lines with
-      | [] -> acc
-      | line::rest -> (
-        match parse_header line with
-        | Some (key, value) -> loop ((key, value)::acc) rest
-        | None -> loop acc rest
-      )
-    in
-    loop [] lines
-  ;;
-
-  let parse = fn request_str ->
-    let lines = string_split request_str "\r\n";
-    match lines with
-    | request_line::header_lines -> (
-      match parse_request_line request_line with
-      | Some (method, path, version) -> 
-        let headers = parse_headers header_lines;
-        Some (method, path, version, headers)
-      | None -> None
-    )
-    | _ -> None
-  ;;
+let parse_req = fn line ->
+  let parts = string_split line " ";
+  match parts with
+  | meth::path::version::_ -> Some (meth, path) 
+  | _ -> None
 ;;
 
-# HTTP Response module
-let HttpResponse = module
-  
-  let create = fn status_code status_text headers body ->
-    let status_line = `HTTP/1.1 {status_code} {status_text}\r\n`;
-    let header_lines = string_join (list_map (fn (k, v) -> `{k}: {v}\r\n`) headers) "";
-    let content_length = `Content-Length: {array_size body}\r\n`;
-    `{status_line}{content_length}{header_lines}\r\n{body}`
-  ;;
-
-  let ok = fn body ->
-    create 200 "OK" [] body
-  ;;
-
-  let not_found = fn ->
-    create 404 "Not Found" [] "404 - Not Found"
-  ;;
-
-  let internal_error = fn ->
-    create 500 "Internal Server Error" [] "500 - Internal Server Error"
-  ;;
+let http_parse = fn req_buf ->
+  let lines = string_split req_buf "\r\n";
+  match lines with
+  | req::header_lines -> (
+    parse_req req
+  )
+  | _ -> None
 ;;
 
-# Simple router module
-let Router = module
-  
-  let routes = [
-    ("GET", "/", fn _req -> HttpResponse.ok "Hello, World!");
-    ("GET", "/health", fn _req -> HttpResponse.ok "OK");
-    ("GET", "/time", fn _req -> 
-      # You'd need to implement time functions
-      HttpResponse.ok "Current time: 2025-06-30");
-    ("POST", "/echo", fn req ->
-      match req with
-      | (method, path, version, headers) ->
-        let body = `Method: {method}\nPath: {path}\nVersion: {version}`;
-        HttpResponse.ok body
-    );
-  ];
-
-  let find_route = fn method path ->
-    let rec loop = fn routes ->
-      match routes with
-      | [] -> None
-      | (route_method, route_path, handler)::rest -> (
-        match (route_method == method && route_path == path) with
-        | true -> Some handler
-        | _ -> loop rest
-      )
-    in
-    loop routes
-  ;;
-
-  let handle_request = fn req ->
-    match req with
-    | (method, path, version, headers) -> (
-      match find_route method path with
-      | Some handler -> handler req
-      | None -> HttpResponse.not_found ()
-    )
-  ;;
+let process_req = fn req client_sock ->
+  ()
 ;;
-
-
-let handle_req = fn buf ->
-  print `received request:\n--------------------\n{buf}\n----------------------\n`;
-  "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
-;;
-
 
 let accept_reqs = fn server_fd ->
   let (client_sock, _addr) = use_or_finish @@ accept_conn server_fd;
   yield 1;
 
-
   let buffer = use_or_finish @@ read_bytes client_sock;
   yield 1;
-  let response = handle_req buffer;
+
+  let req = http_parse buffer;
+  # process_req req client_sock;
+
+  # print `req {req}\n`;
+  # let _ = process_req req client_sock;
+
+
+  let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
   send client_sock (cstr response) (array_size response) 0;
+
   close client_sock;
-  yield 1 
+  yield 0 
 ;;
+
+
 
 let proc_tasks = fn server_fd: (Int) tq: (List of (Coroutine of Int), List of (Coroutine of Int)) ->
   let p = Queue.pop_left tq;
@@ -205,10 +120,8 @@ let init_server = fn port ->
   let server_addr = create_server_addr AF_INET INADDR_ANY port;
   let server_fd = socket AF_INET SOCK_STREAM 0;
   bind server_fd server_addr 16;
-  listen server_fd 5;
+  listen server_fd 10; 
   proc_tasks server_fd (Queue.of_list [accept_reqs server_fd])
 ;;
-
 init_server 8000
-
 
