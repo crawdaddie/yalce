@@ -19,7 +19,6 @@ cor *cor_init(cor *cor, CoroutineFn fn) {
 cor *cor_alloc() { return malloc(sizeof(cor)); }
 
 cor *cor_next(cor *coroutine, void *ret_val) {
-  // printf("cor_next %p\n", coroutine);
 
   if (!coroutine) {
     fprintf(stderr, "Error - coroutine is null\n");
@@ -44,7 +43,6 @@ cor *cor_next(cor *coroutine, void *ret_val) {
   }
 
   if (res == NULL) {
-    // free(coroutine->argv);
     coroutine->next = NULL;
     return NULL;
   }
@@ -71,54 +69,42 @@ cor *cor_reset(cor *this, cor next_struct, void *ret_val) {
   return this;
 }
 
-// Structure to store the original state
 struct loop_state {
   cor *original_cor;
   void *original_args;
 };
 
-// The function that handles the looping behavior
 void *loop_cor_fn(cor *this, void *ret_val) {
   struct loop_state *state = (struct loop_state *)this->argv;
   cor *inner = state->original_cor;
-  // printf("loop cor fn %p inner %p [%d]\n", this, inner, inner->counter);
 
-  // Try to advance the inner coroutine
   cor *res = cor_next(inner, ret_val);
 
   if (res == NULL) {
-    printf("reset inner cor???\n");
-    // Inner coroutine completed, reset it
-    inner->counter = 0; // Reset the counter
+    inner->counter = 0;
 
-    // If the original coroutine had arguments, restore them
     if (state->original_args != NULL) {
       inner->argv = state->original_args;
     }
 
-    // Try advancing again with the reset coroutine
     res = cor_next(inner, ret_val);
   }
   // } else {
   //   printf("why not reset ? %p %p\n", res, ret_val);
   // }
 
-  return this; // Always return the wrapper to keep the loop going
+  return this;
 }
 
 cor *cor_loop(cor *instance) {
-  // Allocate and initialize the state
   struct loop_state *state = malloc(sizeof(struct loop_state));
   state->original_cor = instance;
-  state->original_args = instance->argv; // Store original arguments if any
+  state->original_args = instance->argv;
 
-  // Create the wrapper coroutine
-  cor mapped_struct = (cor){
-      .counter = 0,
-      .fn_ptr = (CoroutineFn)loop_cor_fn,
-      .next = NULL,
-      .argv = state // Store our loop state
-  };
+  cor mapped_struct = (cor){.counter = 0,
+                            .fn_ptr = (CoroutineFn)loop_cor_fn,
+                            .next = NULL,
+                            .argv = state};
 
   cor *mapped = cor_alloc();
   *mapped = mapped_struct;
