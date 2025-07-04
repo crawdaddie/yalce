@@ -481,57 +481,67 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
   return graph_embed(node);
 }
 
-// ---------------------- Comb Filter ---------------------------
+// ---------------------- Delay Filter ---------------------------
 
 typedef struct {
   int read_pos;
   int write_pos;
   double fb;
-} comb_state;
+} delay_state;
 
-void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
-                   double spf) {
+void *delay_perform(Node *node, delay_state *state, Node *inputs[], int nframes,
+                    double spf) {
   double *out = node->output.buf;
   double *in = inputs[0]->output.buf;
+  int in_layout = inputs[0]->output.layout;
 
   double *buf = inputs[1]->output.buf;
   int bufsize = inputs[1]->output.size;
 
+  // Calculate delay buffer size per channel
+  int delay_per_channel = bufsize / in_layout;
+
   while (nframes--) {
-    // Get write and read pointers
-    double *write_ptr = buf + state->write_pos;
-    double *read_ptr = buf + state->read_pos;
+    for (int ch = 0; ch < in_layout; ch++) {
+      // Calculate buffer offset for this channel
+      int channel_offset = ch * delay_per_channel;
 
-    // Calculate output and write to buffer
-    *out = *in + *read_ptr;
-    *write_ptr = state->fb * (*out);
+      // Get write and read pointers for this channel
+      double *write_ptr = buf + channel_offset + state->write_pos;
+      double *read_ptr = buf + channel_offset + state->read_pos;
 
-    // Update positions
-    state->read_pos = (state->read_pos + 1) % bufsize;
-    state->write_pos = (state->write_pos + 1) % bufsize;
+      // Calculate output and write to buffer
+      *out = *in + *read_ptr;
+      *write_ptr = state->fb * (*out);
 
-    in++;
-    out++;
+      in++;
+      out++;
+    }
+
+    // Update positions once per frame (after processing all channels)
+    state->read_pos = (state->read_pos + 1) % delay_per_channel;
+    state->write_pos = (state->write_pos + 1) % delay_per_channel;
   }
 
   return node->output.buf;
 }
 
-Node *comb_node(double delay_time, double max_delay_time, double fb,
-                Node *input) {
+Node *delay_node(double delay_time, double max_delay_time, double fb,
+                 Node *input) {
+  int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
-  int bufsize = (int)(max_delay_time * sample_rate);
+  int bufsize = (int)(max_delay_time * sample_rate * in_layout);
   Node *delay_buf = const_buf(0.0, 1, bufsize);
 
   AudioGraph *graph = _graph;
 
-  Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
+  Node *node = allocate_node_in_graph(graph, sizeof(delay_state));
 
-  node->state_size = sizeof(comb_state);
+  node->state_size = sizeof(delay_state);
   node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
 
-  comb_state *state =
-      (comb_state *)(graph->nodes_state_memory + node->state_offset);
+  delay_state *state =
+      (delay_state *)(graph->nodes_state_memory + node->state_offset);
 
   state->fb = fb;
   state->write_pos = 0;
@@ -539,14 +549,15 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
 
   // Initialize node
   *node = (Node){
-      .perform = (perform_func_t)comb_perform,
+      .perform = (perform_func_t)delay_perform,
       .node_index = node->node_index,
       .num_inputs = 2,
       .state_size = node->state_size,
       .state_offset = node->state_offset,
-      .output = (Signal){.layout = 1,
+      .output = (Signal){.layout = input->output.layout,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+                         .buf = allocate_buffer_from_pool(
+                             graph, input->output.layout * BUF_SIZE)},
       .meta = "comb",
   };
 
@@ -556,10 +567,10 @@ Node *comb_node(double delay_time, double max_delay_time, double fb,
   return graph_embed(node);
 }
 
-// ---------------------- Dyn Comb Filter ---------------------------
+// ---------------------- Dyn delay Filter ---------------------------
 
-void *dyn_comb_perform(Node *node, comb_state *state, Node *inputs[],
-                       int nframes, double spf) {
+void *__dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
+                          int nframes, double spf) {
   double *out = node->output.buf;
   double *in = inputs[0]->output.buf;
   double *delay_buf = inputs[1]->output.buf;
@@ -600,44 +611,205 @@ void *dyn_comb_perform(Node *node, comb_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *dyn_comb_node(Node *delay_time, double max_delay_time, double fb,
-                    Node *input) {
+void *dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
+                        int nframes, double spf) {
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  int in_layout = inputs[0]->output.layout;
+
+  double *delay_buf = inputs[1]->output.buf;
+  int buf_size = inputs[1]->output.size;
+  double *delay_time = inputs[2]->output.buf;
+  double sample_rate =
+      1.0 / spf; // Calculate sample rate from seconds per frame
+
+  // Calculate delay buffer size per channel
+  int delay_per_channel = buf_size / in_layout;
+
+  while (nframes--) {
+    for (int ch = 0; ch < in_layout; ch++) {
+      // Calculate buffer offset for this channel
+      int channel_offset = ch * delay_per_channel;
+
+      int write_pos = state->write_pos;
+      int write_pos_abs = channel_offset + write_pos;
+
+      // Write input + feedback to delay buffer
+      delay_buf[write_pos_abs] =
+          *in + (state->fb * delay_buf[channel_offset + state->read_pos]);
+
+      // Calculate delay in samples and interpolation
+      double delay_samples = *delay_time * sample_rate;
+      int read_offset = (int)delay_samples;
+      double frac =
+          delay_samples - read_offset; // Fractional part for interpolation
+
+      // Ensure read position stays within buffer bounds with proper modulo
+      int read_pos =
+          (write_pos - read_offset + delay_per_channel) % delay_per_channel;
+      int read_pos_next = (read_pos + 1) % delay_per_channel;
+
+      // Add channel offset to get absolute positions
+      int read_pos_abs = channel_offset + read_pos;
+      int read_pos_next_abs = channel_offset + read_pos_next;
+
+      // Linear interpolation for smoother delay time changes
+      double sample = delay_buf[read_pos_abs] * (1.0 - frac) +
+                      delay_buf[read_pos_next_abs] * frac;
+
+      *out = sample + *in;
+
+      in++;
+      out++;
+    }
+
+    // Update positions once per frame (after processing all channels)
+    state->write_pos = (state->write_pos + 1) % delay_per_channel;
+    // Note: read_pos is calculated dynamically based on delay_time, so we don't
+    // update it here
+
+    delay_time++;
+  }
+
+  return node->output.buf;
+}
+
+Node *dyn_delay_node(Node *delay_time, double max_delay_time, double fb,
+                     Node *input) {
+  int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
-  int bufsize = (int)(max_delay_time * sample_rate);
+  int bufsize = (int)(max_delay_time * sample_rate * in_layout);
   Node *delay_buf = const_buf(0.0, 1, bufsize);
 
   AudioGraph *graph = _graph;
 
   // Allocate node
-  Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
+  Node *node = allocate_node_in_graph(graph, sizeof(delay_state));
 
   // Allocate state
-  node->state_size = sizeof(comb_state);
+  node->state_size = sizeof(delay_state);
   node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
 
   // Get state pointer and buffer pointer
-  comb_state *state =
-      (comb_state *)(graph->nodes_state_memory + node->state_offset);
+  delay_state *state =
+      (delay_state *)(graph->nodes_state_memory + node->state_offset);
 
   state->fb = fb;
   state->write_pos = 0;
 
   // Initialize node
   *node = (Node){
-      .perform = (perform_func_t)dyn_comb_perform,
+      .perform = (perform_func_t)dyn_delay_perform,
       .node_index = node->node_index,
       .num_inputs = 3,
       .state_size = node->state_size,
       .state_offset = node->state_offset,
-      .output = (Signal){.layout = 1,
+      .output = (Signal){.layout = in_layout,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
-      .meta = "comb",
+                         .buf = allocate_buffer_from_pool(graph, in_layout *
+                                                                     BUF_SIZE)},
+      .meta = "delay",
   };
 
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, delay_buf);
   plug_input_in_graph(2, node, delay_time);
+
+  return graph_embed(node);
+}
+
+typedef struct {
+  int read_pos;
+  int write_pos;
+  double fb;
+  double ff; // feedforward gain
+} comb_state;
+
+void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
+                   double spf) {
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  int in_layout = inputs[0]->output.layout;
+
+  double *buf = inputs[1]->output.buf;
+  int bufsize = inputs[1]->output.size;
+
+  // Calculate delay buffer size per channel
+  int delay_per_channel = bufsize / in_layout;
+
+  while (nframes--) {
+    for (int ch = 0; ch < in_layout; ch++) {
+      // Calculate buffer offset for this channel
+      int channel_offset = ch * delay_per_channel;
+
+      // Get write and read pointers for this channel
+      double *write_ptr = buf + channel_offset + state->write_pos;
+      double *read_ptr = buf + channel_offset + state->read_pos;
+
+      // True comb filter: y[n] = x[n] + ff * x[n-M] + fb * y[n-M]
+      // where read_ptr points to x[n-M] and y[n-M] from previous iterations
+      double delayed_signal = *read_ptr;
+
+      // Calculate output: input + feedforward*delayed_input +
+      // feedback*delayed_output
+      *out = *in + state->ff * delayed_signal;
+
+      // Write input to delay buffer for feedforward path
+      *write_ptr = *in + state->fb * delayed_signal;
+
+      in++;
+      out++;
+    }
+
+    // Update positions once per frame (after processing all channels)
+    state->read_pos = (state->read_pos + 1) % delay_per_channel;
+    state->write_pos = (state->write_pos + 1) % delay_per_channel;
+  }
+
+  return node->output.buf;
+}
+
+Node *comb_node(double delay_time, double max_delay_time, double fb, double ff,
+                Node *input) {
+  int in_layout = input->output.layout;
+  int sample_rate = ctx_sample_rate();
+  int bufsize = (int)(max_delay_time * sample_rate * in_layout);
+  Node *delay_buf = const_buf(0.0, 1, bufsize);
+
+  AudioGraph *graph = _graph;
+
+  Node *node = allocate_node_in_graph(graph, sizeof(comb_state));
+
+  node->state_size = sizeof(comb_state);
+  node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
+
+  comb_state *state =
+      (comb_state *)(graph->nodes_state_memory + node->state_offset);
+
+  state->fb = fb; // feedback gain
+  state->ff = ff; // feedforward gain
+  state->write_pos = 0;
+
+  // Calculate read position based on per-channel buffer size
+  int delay_per_channel = bufsize / in_layout;
+  state->read_pos = delay_per_channel - (int)(delay_time * sample_rate);
+
+  // Initialize node
+  *node = (Node){
+      .perform = (perform_func_t)comb_perform,
+      .node_index = node->node_index,
+      .num_inputs = 2,
+      .state_size = node->state_size,
+      .state_offset = node->state_offset,
+      .output = (Signal){.layout = input->output.layout,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(
+                             graph, input->output.layout * BUF_SIZE)},
+      .meta = "comb",
+  };
+
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, delay_buf);
 
   return graph_embed(node);
 }
@@ -855,343 +1027,198 @@ Node *dyn_tanh_node(NodeRef gain, Node *input) {
   //
   return graph_embed(node);
 }
-
 typedef struct {
-  int length;
-  int pos;
-  double coeff;
+  int read_pos;
+  int write_pos;
+  double g; // allpass gain coefficient
 } allpass_state;
-
-double process_allpass_frame(double *buf, int length, int *pos, double coeff,
-                             double in) {
-  int bufsize = length;
-  double delayed = buf[*pos];
-  buf[*pos] = in;
-  *pos = (*pos + 1) % bufsize;
-  return delayed - coeff * in;
-}
 
 void *allpass_perform(Node *node, allpass_state *state, Node *inputs[],
                       int nframes, double spf) {
   double *out = node->output.buf;
   double *in = inputs[0]->output.buf;
-  char *mem = state + 1;
-  double *buf = mem;
+  int in_layout = inputs[0]->output.layout;
+
+  double *buf = inputs[1]->output.buf;
+  int bufsize = inputs[1]->output.size;
+
+  // Calculate delay buffer size per channel
+  int delay_per_channel = bufsize / in_layout;
 
   while (nframes--) {
-    *out = process_allpass_frame(buf, state->length, &state->pos, state->coeff,
-                                 *in);
-    in++;
-    out++;
+    for (int ch = 0; ch < in_layout; ch++) {
+      // Calculate buffer offset for this channel
+      int channel_offset = ch * delay_per_channel;
+
+      // Get write and read pointers for this channel
+      double *write_ptr = buf + channel_offset + state->write_pos;
+      double *read_ptr = buf + channel_offset + state->read_pos;
+
+      // Allpass filter equation: y[n] = -g * x[n] + x[n-M] + g * y[n-M]
+      // where read_ptr contains the delayed input x[n-M] + g * y[n-M] from
+      // previous iterations
+      double delayed_signal = *read_ptr;
+
+      // Calculate output
+      *out = -state->g * (*in) + delayed_signal;
+
+      // Write to delay buffer: x[n] + g * y[n]
+      *write_ptr = *in + state->g * (*out);
+
+      in++;
+      out++;
+    }
+
+    // Update positions once per frame (after processing all channels)
+    state->read_pos = (state->read_pos + 1) % delay_per_channel;
+    state->write_pos = (state->write_pos + 1) % delay_per_channel;
   }
 
   return node->output.buf;
 }
 
-static int compute_allpass_delay_length(double sample_rate, double delay_sec) {
-  int delay_samples = (int)(delay_sec * sample_rate);
-  return delay_samples;
-}
+Node *allpass_node(double delay_time, double max_delay_time, double g,
+                   Node *input) {
+  int in_layout = input->output.layout;
+  int sample_rate = ctx_sample_rate();
+  int bufsize = (int)(max_delay_time * sample_rate * in_layout);
+  Node *delay_buf = const_buf(0.0, 1, bufsize);
 
-Node *allpass_node(double time, double coeff, Node *input) {
   AudioGraph *graph = _graph;
-  int state_size = sizeof(allpass_state);
-  allpass_state ap = {
-      .length = compute_allpass_delay_length(ctx_sample_rate(), time),
-      .pos = 0,
-      .coeff = coeff,
-  };
-
-  state_size += (sizeof(double) * ap.length); // leave space for buffer
 
   Node *node = allocate_node_in_graph(graph, sizeof(allpass_state));
+
+  node->state_size = sizeof(allpass_state);
+  node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
+
+  allpass_state *state =
+      (allpass_state *)(graph->nodes_state_memory + node->state_offset);
+
+  state->g = g; // allpass gain coefficient (typically 0.0 to 0.99)
+  state->write_pos = 0;
+
+  // Calculate read position based on per-channel buffer size
+  int delay_per_channel = bufsize / in_layout;
+  state->read_pos = delay_per_channel - (int)(delay_time * sample_rate);
 
   // Initialize node
   *node = (Node){
       .perform = (perform_func_t)allpass_perform,
       .node_index = node->node_index,
-      .num_inputs = 1,
-      .state_size = state_size,
-      .state_offset = state_offset_ptr_in_graph(graph, state_size),
-      .output = (Signal){.layout = 1,
+      .num_inputs = 2,
+      .state_size = node->state_size,
+      .state_offset = node->state_offset,
+      .output = (Signal){.layout = input->output.layout,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
-      .meta = "ap",
+                         .buf = allocate_buffer_from_pool(
+                             graph, input->output.layout * BUF_SIZE)},
+      .meta = "allpass",
   };
 
-  // Initialize state
-  allpass_state *state = state_ptr(graph, node);
-  *state = ap;
-
-  // Connect input
   plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, delay_buf);
 
   return graph_embed(node);
 }
 
-#define MAX_DELAY_LENGTH 20000
-#define NUM_EARLY_REFLECTIONS 8
-#define NUM_ALLPASS 4
+// ---------------------- Dynamic Allpass Filter ---------------------------
 
-static double early_gains[NUM_EARLY_REFLECTIONS] = {1.0, 0.9, 0.8, 0.7,
-                                                    0.6, 0.5, 0.4, 0.3};
-static double early_scaling_factors[NUM_EARLY_REFLECTIONS] = {
-    1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7};
-static double early_gain_factors[NUM_EARLY_REFLECTIONS] = {1.0, 0.9, 0.8, 0.7,
-                                                           0.6, 0.5, 0.4, 0.3};
-
-static double delay_scaling_factors[4] = {1.0, 0.9, 0.8, 0.7};
-static double allpass_scaling_factors[NUM_ALLPASS] = {0.15, 0.12, 0.10, 0.08};
-
-static int next_prime(int n) {
-  int i = 0;
-  while (PRIMES[i] <= n && i < NUM_PRIMES) {
-    i++;
-  }
-  return PRIMES[i];
-}
-
-static int compute_delay_length(double room_size, double sample_rate,
-                                double scaling_factor) {
-  double delay_sec = (room_size * scaling_factor) / 343.0f;
-  int delay_samples = (int)(delay_sec * sample_rate);
-  return next_prime(delay_samples);
-}
-
-typedef struct GVerb {
-  double room_size;
-  double reverb_time;
-  double damping;
-  double input_bandwidth;
-  double dry;
-  double wet;
-  double early_level;
-  double tail_level;
-  double sample_rate;
-
-  double input_lp_state;
-  double input_lp_coeff;
-  int early_lengths[NUM_EARLY_REFLECTIONS];
-  int early_pos[NUM_EARLY_REFLECTIONS];
-  double early_gains[NUM_EARLY_REFLECTIONS];
-  int fb_delay_lengths[4];
-  int fb_delay_pos[4];
-  double damping_coeff;
-  double damping_state[4];
-  int allpass_lengths[NUM_ALLPASS];
-  int allpass_pos[NUM_ALLPASS];
-  double allpass_feedback;
-} GVerb;
-
-static double lowpass_filter(double input, double *state, double coeff) {
-  double output = input * (1.0f - coeff) + (*state * coeff);
-  *state = output;
-  return output;
-}
-
-static double process_early_reflections(GVerb *refl, double **delays,
-                                        double input) {
-
-  double early_out = 0.;
-  for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
-    int bufsize = refl->early_lengths[i];
-    double *buf = delays[i];
-    int write_pos = refl->early_pos[i] % bufsize;
-    early_out += process_allpass_frame(delays[i], bufsize, &refl->early_pos[i],
-                                       -1., input);
-  }
-  return early_out;
-}
-
-static double series_allpass_process(GVerb *gverb, double **allpass_delays,
-                                     double input) {
-
-  for (int i = 0; i < NUM_ALLPASS; i++) {
-    double *delay_line = allpass_delays[i];
-    int pos = gverb->allpass_pos[i];
-    int length = gverb->allpass_lengths[i];
-    input = process_allpass_frame(delay_line, length,
-                                  &gverb->allpass_lengths[i], 0.0, input);
-  }
-  return input;
-}
-
-double feedback_delay_network(GVerb *gverb, double **delay_lines, double mix) {
-  double delay_out[4];
-  for (int i = 0; i < 4; i++) {
-    int fb_pos = gverb->fb_delay_pos[i];
-    delay_out[i] = delay_lines[i][fb_pos];
-  }
-
-  for (int i = 0; i < 4; i++) {
-    delay_out[i] = lowpass_filter(delay_out[i], &gverb->damping_state[i],
-                                  gverb->damping_coeff);
-  }
-
-  double feedback[4];
-  feedback[0] = delay_out[0] + delay_out[1] + delay_out[2] + delay_out[3];
-  feedback[1] = delay_out[0] + delay_out[1] - delay_out[2] - delay_out[3];
-  feedback[2] = delay_out[0] - delay_out[1] + delay_out[2] - delay_out[3];
-  feedback[3] = delay_out[0] - delay_out[1] - delay_out[2] + delay_out[3];
-
-  double rt_gain = pow(10.0, -3.0 * (1.0 / gverb->reverb_time));
-
-  for (int i = 0; i < 4; i++) {
-    feedback[i] *= 0.25 * rt_gain; /* 0.25 for Hadamard normalization */
-  }
-
-  feedback[0] += mix;
-
-  for (int i = 0; i < 4; i++) {
-    int pos = gverb->fb_delay_pos[i];
-    int len = gverb->fb_delay_lengths[i];
-    delay_lines[i][pos] = feedback[i];
-    gverb->fb_delay_pos[i] = (pos + 1) % len;
-  }
-  return delay_out[0] + delay_out[1] + delay_out[2] + delay_out[3];
-}
-
-static double allpass_process(double input, double *delay_line, int *pos,
-                              int length, double feedback) {
-  double delayed = delay_line[*pos];
-  double new_input = input + feedback * delayed;
-  delay_line[*pos] = new_input;
-  *pos = (*pos + 1) % length;
-  return delayed - feedback * new_input;
-}
-
-void *gverb_perform(Node *node, GVerb *gverb, Node *inputs[], int nframes,
-                    double spf) {
-
+void *dyn_allpass_perform(Node *node, allpass_state *state, Node *inputs[],
+                          int nframes, double spf) {
   double *out = node->output.buf;
   double *in = inputs[0]->output.buf;
-  char *mem = ((GVerb *)gverb + 1);
+  int in_layout = inputs[0]->output.layout;
 
-  double *early_delays[NUM_EARLY_REFLECTIONS];
-  for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
-    early_delays[i] = mem;
-    mem += (sizeof(double) * gverb->early_lengths[i]);
-  }
+  double *delay_buf = inputs[1]->output.buf;
+  int buf_size = inputs[1]->output.size;
+  double *delay_time = inputs[2]->output.buf;
+  double sample_rate = 1.0 / spf;
 
-  double *delay_lines[4];
-  for (int i = 0; i < 4; i++) {
-    delay_lines[i] = mem;
-    mem += (sizeof(double) * gverb->fb_delay_lengths[i]);
-  }
-
-  double *allpass_delays[NUM_ALLPASS];
-  for (int i = 0; i < NUM_ALLPASS; i++) {
-    allpass_delays[i] = mem;
-    mem += (sizeof(double) * gverb->allpass_lengths[i]);
-  }
+  // Calculate delay buffer size per channel
+  int delay_per_channel = buf_size / in_layout;
 
   while (nframes--) {
-    double filt =
-        lowpass_filter(*in, &gverb->input_lp_state, gverb->input_lp_coeff);
+    for (int ch = 0; ch < in_layout; ch++) {
+      // Calculate buffer offset for this channel
+      int channel_offset = ch * delay_per_channel;
 
-    double early_out = process_early_reflections(gverb, early_delays, filt);
+      int write_pos = state->write_pos;
+      int write_pos_abs = channel_offset + write_pos;
 
-    double mix = filt * 0.5 + early_out * 0.5;
+      // Calculate delay in samples and interpolation
+      double delay_samples = *delay_time * sample_rate;
+      int read_offset = (int)delay_samples;
+      double frac = delay_samples - read_offset;
 
-    double diffuse_signal = feedback_delay_network(gverb, delay_lines, mix);
+      // Calculate read positions with proper modulo
+      int read_pos =
+          (write_pos - read_offset + delay_per_channel) % delay_per_channel;
+      int read_pos_next = (read_pos + 1) % delay_per_channel;
 
-    diffuse_signal *= 0.25;
+      // Add channel offset to get absolute positions
+      int read_pos_abs = channel_offset + read_pos;
+      int read_pos_next_abs = channel_offset + read_pos_next;
 
-    for (int i = 0; i < NUM_ALLPASS; i++) {
-      double *delay_line = allpass_delays[i];
-      int pos = gverb->allpass_pos[i];
-      int length = gverb->allpass_lengths[i];
+      // Linear interpolation for delayed signal
+      double delayed_signal = delay_buf[read_pos_abs] * (1.0 - frac) +
+                              delay_buf[read_pos_next_abs] * frac;
 
-      diffuse_signal = allpass_process(diffuse_signal, delay_line, &pos, length,
-                                       gverb->allpass_feedback);
-      gverb->allpass_pos[i] = pos;
+      // Allpass filter equation: y[n] = -g * x[n] + x[n-M] + g * y[n-M]
+      *out = -state->g * (*in) + delayed_signal;
+
+      // Write to delay buffer: x[n] + g * y[n]
+      delay_buf[write_pos_abs] = *in + state->g * (*out);
+
+      in++;
+      out++;
     }
 
-    *out = *in * gverb->dry + early_out * gverb->early_level * gverb->wet +
-           diffuse_signal * gverb->tail_level * gverb->wet;
-    in++;
-    out++;
+    // Update positions once per frame
+    state->write_pos = (state->write_pos + 1) % delay_per_channel;
+
+    delay_time++;
   }
+
+  return node->output.buf;
 }
 
-Node *gverb_node(Node *input) {
-  double sr = (double)ctx_sample_rate();
-  double room_size = 10.;
-  GVerb gverb = {
-      .room_size = room_size,
-      .reverb_time = 10.,
-      .damping_coeff = 0.4,
-      .input_lp_coeff = 0.4,
-      .dry = 0.5,
-      .wet = 0.5,
-      .early_level = 0.5,
-      .tail_level = 0.9,
-      .sample_rate = sr,
-      .early_pos = {0, 0, 0, 0, 0, 0, 0, 0},
-      .early_gains = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3},
-      .early_lengths =
-          {
-              compute_delay_length(room_size, sr, 1.0),
-              compute_delay_length(room_size, sr, 1.1),
-              compute_delay_length(room_size, sr, 1.2),
-              compute_delay_length(room_size, sr, 1.3),
-              compute_delay_length(room_size, sr, 1.4),
-              compute_delay_length(room_size, sr, 1.5),
-              compute_delay_length(room_size, sr, 1.6),
-              compute_delay_length(room_size, sr, 1.7),
-          },
-      .fb_delay_pos = {0, 0, 0, 0},
-      .fb_delay_lengths =
-          {
-              compute_delay_length(room_size, sr, delay_scaling_factors[0]),
-              compute_delay_length(room_size, sr, delay_scaling_factors[1]),
-              compute_delay_length(room_size, sr, delay_scaling_factors[2]),
-              compute_delay_length(room_size, sr, delay_scaling_factors[3]),
-          },
-      .allpass_pos = {0, 0, 0, 0},
-      .allpass_lengths =
-          {
-              compute_delay_length(room_size, sr, allpass_scaling_factors[0]),
-              compute_delay_length(room_size, sr, allpass_scaling_factors[1]),
-              compute_delay_length(room_size, sr, allpass_scaling_factors[2]),
-              compute_delay_length(room_size, sr, allpass_scaling_factors[3]),
-          },
-
-  };
+Node *dyn_allpass_node(double max_delay_time, double g, Node *input,
+                       Node *delay_time) {
+  int in_layout = input->output.layout;
+  int sample_rate = ctx_sample_rate();
+  int bufsize = (int)(max_delay_time * sample_rate * in_layout);
+  Node *delay_buf = const_buf(0.0, 1, bufsize);
 
   AudioGraph *graph = _graph;
-  int state_size = sizeof(GVerb);
-  for (int i = 0; i < NUM_EARLY_REFLECTIONS; i++) {
-    state_size += (gverb.early_lengths[i] * sizeof(double));
-  }
 
-  for (int i = 0; i < 4; i++) {
-    state_size += (gverb.fb_delay_lengths[i] * sizeof(double));
-  }
+  Node *node = allocate_node_in_graph(graph, sizeof(allpass_state));
 
-  for (int i = 0; i < NUM_ALLPASS; i++) {
-    state_size += (gverb.allpass_lengths[i] * sizeof(double));
-  }
+  node->state_size = sizeof(allpass_state);
+  node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
 
-  state_size = (state_size + 7) & ~7;
-  Node *node = allocate_node_in_graph(graph, state_size);
+  allpass_state *state =
+      (allpass_state *)(graph->nodes_state_memory + node->state_offset);
+
+  state->g = g;
+  state->write_pos = 0;
+  state->read_pos = 0; // Dynamic read position
+
   *node = (Node){
-      .perform = (perform_func_t)gverb_perform,
+      .perform = (perform_func_t)dyn_allpass_perform,
       .node_index = node->node_index,
-      .num_inputs = 1,
-      .state_size = state_size,
-      .state_offset = state_offset_ptr_in_graph(graph, state_size),
-      .output = (Signal){.layout = 1,
+      .num_inputs = 3,
+      .state_size = node->state_size,
+      .state_offset = node->state_offset,
+      .output = (Signal){.layout = input->output.layout,
                          .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
-      .meta = "gverb_lp",
+                         .buf = allocate_buffer_from_pool(
+                             graph, input->output.layout * BUF_SIZE)},
+      .meta = "dyn_allpass",
   };
 
-  char *mem = state_ptr(graph, node);
-  memset(mem, 0, state_size);
-  GVerb *state = (GVerb *)(mem);
-  *state = gverb;
   plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, delay_buf);
+  plug_input_in_graph(2, node, delay_time);
 
   return graph_embed(node);
 }

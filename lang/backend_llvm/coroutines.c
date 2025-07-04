@@ -773,6 +773,9 @@ LLVMValueRef create_coroutine_instance_from_generic_constructor(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
     compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
 
+    printf("generic coroutine\n");
+    print_type(expected_type);
+    print_type(sym->symbol_type);
     compilation_ctx.env = create_env_for_generic_fn(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
         expected_type);
@@ -1670,19 +1673,15 @@ LLVMValueRef CoroutineEndHandler(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef UseOrFinishHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
-  // Generate the option value from the first argument
   LLVMValueRef result =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  // Check if the option is None
   LLVMValueRef is_none = codegen_option_is_none(result, builder);
 
-  // Get the current function and find the coroutine_iter_end block
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef func = LLVMGetBasicBlockParent(current_block);
   LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
 
-  // Find the coroutine_iter_end block
   LLVMBasicBlockRef end_block = ctx->switch_default;
 
   if (!end_block) {
@@ -1690,24 +1689,17 @@ LLVMValueRef UseOrFinishHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 
-  // Create blocks for the conditional branch
   LLVMBasicBlockRef none_block = LLVMAppendBasicBlock(func, "option_is_none");
   LLVMBasicBlockRef some_block = LLVMAppendBasicBlock(func, "option_has_value");
 
-  // Branch based on whether the option is None
   LLVMBuildCondBr(builder, is_none, none_block, some_block);
 
-  // Handle the None case - branch to coroutine end
   LLVMPositionBuilderAtEnd(builder, none_block);
   LLVMBuildStore(builder, LLVMConstNull(GENERIC_PTR), ret_val_ref);
   LLVMBuildBr(builder, end_block);
 
-  // Handle the Some case - extract and return the value
   LLVMPositionBuilderAtEnd(builder, some_block);
   LLVMValueRef value_field = LLVMBuildExtractValue(builder, result, 1, "value");
-
-  // Continue execution from the some_block
-  // The builder is now positioned to continue generating code after this point
 
   return value_field;
 }

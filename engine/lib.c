@@ -418,6 +418,21 @@ Node *play_node_offset(uint64_t tick, Node *s) {
   return s;
 }
 
+Node *play_node_offset_in_group(uint64_t tick, Node *s, Node *group) {
+  // printf("play node %p at offset %d\n", s, offset);
+  // Node *group = _chain;
+  // reset_chain();
+  // add_to_dac(s);
+  // add_to_dac(group);
+
+  push_msg(&ctx.msg_queue,
+           (scheduler_msg){
+               NODE_ADD, tick, {.NODE_ADD = {.target = s, .group = group}}},
+           512);
+
+  return s;
+}
+
 typedef struct close_payload {
   NodeRef target;
   int gate_input;
@@ -438,7 +453,31 @@ void close_gate(close_payload *p, int offset) {
 
 NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s) {
   // printf("play node %p dur: %f\n", s, dur);
-  play_node_offset(tick, s);
+  play_node_offset_in_group(tick, s, NULL);
+
+  push_msg(
+      &ctx.msg_queue,
+      (scheduler_msg){
+          NODE_SET_SCALAR,
+          tick + dur * ctx_sample_rate(),
+          {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 0.}}},
+      512);
+
+  // close_payload *cp = malloc(sizeof(close_payload));
+  // *cp = (close_payload){
+  //     .target = s,
+  //     .gate_input = gate_in,
+  // };
+  //
+  // schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
+
+  return s;
+}
+
+NodeRef play_node_dur_in_group(uint64_t tick, double dur, int gate_in,
+                               NodeRef group, NodeRef s) {
+  // printf("play node %p dur: %f\n", s, dur);
+  play_node_offset_in_group(tick, s, group);
 
   push_msg(
       &ctx.msg_queue,

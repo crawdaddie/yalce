@@ -51,10 +51,30 @@ char **custom_completion(const char *text, int start, int end) {
 
 #define HISTORY_FILE ".repl_history"
 #define MAX_HISTORY_LEN 1000
+void load_history() {
+  if (read_history(HISTORY_FILE) != 0) {
+    printf("No existing history file found, starting fresh.\n");
+  }
+  stifle_history(MAX_HISTORY_LEN);
+}
+
+void save_history() {
+  if (write_history(HISTORY_FILE) != 0) {
+    fprintf(stderr, "Warning: Could not save history to %s\n", HISTORY_FILE);
+  }
+}
+void sigint_handler(int sig) {
+  save_history();
+  exit(0);
+}
 void init_readline() {
   rl_attempted_completion_function = custom_completion;
   rl_completion_entry_function = completion_generator;
   rl_read_init_file(NULL); // read .initrc
+
+  load_history();
+
+  signal(SIGINT, sigint_handler);
 }
 char *repl_input(const char *prompt) {
   char *line = readline(prompt);

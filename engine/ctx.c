@@ -3,6 +3,7 @@
 #include "audio_graph.h"
 #include "audio_routing.h"
 #include "ext_lib.h"
+#include "group.h"
 #include <stdio.h>
 #include <stdlib.h>
 

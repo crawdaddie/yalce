@@ -358,6 +358,7 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
         subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
       }
     } else if (cons_types_match(t1, t2)) {
+
       if (is_variant_type(t1) && is_variant_type(t2)) {
         for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
           Type *mem1 = t1->data.T_CONS.args[i];
@@ -374,10 +375,22 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
           }
         }
       } else if (is_generic(t1) && (!is_generic(t2))) {
+
         for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-          subst = substitutions_extend(subst, t1->data.T_CONS.args[i],
-                                       t2->data.T_CONS.args[i]);
+          Type *x = t1->data.T_CONS.args[i];
+          Type *y = t2->data.T_CONS.args[i];
+          if (x->kind == T_FN) {
+            TypeConstraint *next = talloc(sizeof(TypeConstraint));
+            next->next = constraints->next;
+            next->t1 = x;
+            next->t2 = y;
+            next->src = constraints->src;
+            constraints->next = next;
+          } else {
+            subst = substitutions_extend(subst, x, y);
+          }
         }
+
       } else {
         for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
           if (!is_pointer_type(t2)) {

@@ -443,6 +443,7 @@ typedef struct sah_state {
   double current_val;
   double prev_trig;
 } sah_state;
+
 void *sah_perform(Node *node, sah_state *state, Node *inputs[], int nframes,
                   double spf) {
 

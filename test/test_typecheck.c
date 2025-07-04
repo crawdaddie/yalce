@@ -1261,36 +1261,16 @@ int main() {
 
   T("if true then ()\n", &t_void);
   T("if true then 1 else 2\n", &t_int);
-  T("let cb = fn () -> yield 1;;\n"
-    "let Queue = module\n"
-    "  let of_list = fn l ->\n"
-    "    let t = l in \n"
-    "    let h = t in\n"
-    "    (h, t)\n"
-    "  ;;\n"
-    "\n"
-    "  let append = fn n (h, t) ->\n"
-    "    let nt = [n] in\n"
-    "    let tt = list_concat t nt in\n"
-    "    (h, tt)\n"
-    "  ;;\n"
-    "\n"
-    "  let prepend = fn n (h, t) ->\n"
-    "    (n::h, t)\n"
-    "  ;;\n"
-    "\n"
-    "  let print_deq = fn (h, t) ->\n"
-    "    print_list h\n"
-    "  ;;\n"
-    "\n"
-    "  let pop_left = fn (h, t) ->\n"
-    "    match h with\n"
-    "    | x::rest -> Some (x, (rest, t))  \n"
-    "    | [] -> None\n"
-    "  ;;\n"
-    ";\n"
-    "let q = Queue.of_list [cb ()];\n"
-    "let x = Queue.pop_left q;\n",
+
+  T("let seq = fn (durs, notes) ->\n"
+    "let d = use_or_finish @@ durs ();\n"
+    "let n = use_or_finish @@ notes ();\n"
+    "yield d;\n"
+    "yield (seq (durs, notes));;\n"
+    "let vals = (\n"
+    "  dur: (fn () -> Some 0.2),\n"
+    "  note: iter [|39,    32, 41,   42,  35,    37,   41, 42, |]\n"
+    ");\n",
     &t_void);
 
   // &TOPT(&TTUPLE(2, )));

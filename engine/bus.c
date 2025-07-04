@@ -74,6 +74,18 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
   return filter;
 }
 
+NodeRef plug_node(NodeRef filter, int idx, NodeRef node) {
+  AudioGraph *g = filter + 1;
+  if (filter->state_ptr) {
+    g = filter->state_ptr;
+  }
+  int inlet_idx = g->inlets[idx];
+  NodeRef inlet_node = g->nodes + inlet_idx;
+  int layout = inlet_node->output.layout;
+
+  int _layout = node->output.layout;
+}
+
 void *bus_perform(Node *node, void *state, Node *inputs[], int nframes,
 
                   double spf) {

@@ -6,17 +6,20 @@ NodeRef tanh_node(double gain, NodeRef input);
 
 NodeRef lag_node(NodeRef lag_time, NodeRef input);
 
+NodeRef delay_node(double delay_time, double max_delay_time, double fb,
+                   NodeRef input);
+NodeRef dyn_delay_node(NodeRef delay_time, double max_delay_time, double fb,
+                       NodeRef input);
+
 NodeRef comb_node(double delay_time, double max_delay_time, double fb,
-                  NodeRef input);
-NodeRef dyn_comb_node(NodeRef delay_time, double max_delay_time, double fb,
-                      NodeRef input);
+                  double ff, NodeRef input);
 NodeRef butterworth_hp_node(NodeRef freq, NodeRef input);
 NodeRef biquad_hp_node(NodeRef freq, NodeRef res, NodeRef input);
 NodeRef biquad_bp_node(NodeRef freq, NodeRef res, NodeRef input);
 NodeRef biquad_lp_node(NodeRef freq, NodeRef res, NodeRef input);
-NodeRef gverb_node(NodeRef input);
 
-NodeRef allpass_node(double time, double coeff, NodeRef input);
+NodeRef allpass_node(double delay_time, double max_delay_time, double g,
+                     NodeRef input);
 
 NodeRef reverb_node(double room_size, double wet, double dry, double width,
                     NodeRef input);

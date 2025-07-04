@@ -753,9 +753,7 @@ Type *for_loop_binding(Ast *binding, Ast *expr, Ast *body, TICtx *ctx) {
   return res_type;
 }
 
-Type *coroutine_constructor_type_from_fn_type(Type *fn_type
-                                              // , Ast *ast
-) {
+Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
   Type *ret = fn_return_type(fn_type);
   Type *coroutine_fn = create_coroutine_instance_type(ret);
 
@@ -872,9 +870,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   // }
 
   if (body_ctx.yielded_type != NULL) {
-    ast->md = coroutine_constructor_type_from_fn_type(ast->md
-                                                      // , ast
-    );
+    ast->md = coroutine_constructor_type_from_fn_type(ast->md);
   }
   return ast->md;
 }

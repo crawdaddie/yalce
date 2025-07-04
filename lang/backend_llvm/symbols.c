@@ -146,7 +146,15 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     int inner_state_slot = get_inner_state_slot(ast);
 
     if (inner_state_slot >= 0) {
+      // Type *t = ast->md;
+      // if (t->kind == T_FN && !is_coroutine_type(t)) {
+      //   printf("sym storage raw\n");
+      //   return sym->storage;
+      // }
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
+      // print_ast(ast);
+      // LLVMDumpType(llvm_type);
+      // printf("\n\n");
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
     }
     if (sym->storage != NULL) {

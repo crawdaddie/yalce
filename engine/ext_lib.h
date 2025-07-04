@@ -41,6 +41,7 @@ NodeRef null_synth_node();
 
 NodeRef group_node();
 
-NodeRef group_add(NodeRef node, NodeRef group);
+NodeRef play_node_dur_in_group(uint64_t tick, double dur, int gate_in,
+                               NodeRef group, NodeRef s);
 NodeRef chain(NodeRef tail);
 #endif

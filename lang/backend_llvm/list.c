@@ -363,13 +363,34 @@ LLVMValueRef ListPrependHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-  Type *list_type = ast->md;
-  LLVMTypeRef llvm_list_node_type = llnode_type(
-      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx, module));
+
+  Type *list_type = (ast->data.AST_APPLICATION.args + 1)->md;
+
+  // Get the element type from the list type, not from the value
+  Type *el_type = list_type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
+  LLVMTypeRef llvm_list_node_type = llnode_type(llvm_el_type);
 
   LLVMValueRef val =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  return codegen_list_prepend(val, list, ctx, module, builder);
+
+  // Create new node with correct types
+  LLVMValueRef node =
+      ll_create_list_node(NULL, llvm_list_node_type, val, ctx, module, builder);
+
+  // Set the next pointer to point to the existing list
+  LLVMValueRef next_ptr =
+      LLVMBuildStructGEP2(builder, llvm_list_node_type, node, 1, "next_ptr");
+  LLVMBuildStore(builder, list, next_ptr);
+
+  return node;
+
+  // LLVMTypeRef llvm_list_node_type =
+  //     llnode_type(type_to_llvm_type(el_type, ctx, module));
+  //
+  // LLVMValueRef val =
+  //     codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  // return codegen_list_prepend(val, list, ctx, module, builder);
 }
 
 LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
