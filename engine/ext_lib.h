@@ -26,6 +26,8 @@ NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s);
 
 double midi_to_freq(int midi_note);
 
+double semi_to_ratio(int semitones);
+
 double *ctx_main_out();
 
 SignalRef node_out(NodeRef node);

@@ -48,7 +48,10 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
     } else {
       for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
         Ast *expr = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+        printf("creating func\n", expr);
+        print_ast(expr);
         LLVMValueRef func = codegen(expr, ctx, module, builder);
+        printf("func %p\n", func);
         constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
             specific_fns_extend(constructor_sym->symbol_data
                                     .STYPE_GENERIC_FUNCTION.specific_fns,

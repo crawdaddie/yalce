@@ -356,6 +356,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (expr_type->kind == T_FN && !is_coroutine_type(expr_type)) {
+    // printf("codegen function??\n");
+    // print_ast(binding);
+    // print_type(expr_type);
 
     if (is_lambda_with_closures(expr)) {
       expr_val = create_curried_closure_binding(binding, expr_type, expr,

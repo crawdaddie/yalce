@@ -558,13 +558,155 @@ Node *delay_node(double delay_time, double max_delay_time, double fb,
                          .size = BUF_SIZE,
                          .buf = allocate_buffer_from_pool(
                              graph, input->output.layout * BUF_SIZE)},
-      .meta = "comb",
+      .meta = "delay",
   };
 
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, delay_buf);
 
   return graph_embed(node);
+}
+typedef struct {
+  int read_pos_left;
+  int write_pos_left;
+  int read_pos_right;
+  int write_pos_right;
+  double fb;
+} delay2_state;
+
+void *delay2_perform(Node *node, delay2_state *state, Node *inputs[],
+                     int nframes, double spf) {
+  double *out = node->output.buf;
+  double *in = inputs[0]->output.buf;
+  int in_layout = inputs[0]->output.layout;
+
+  double *buf = inputs[1]->output.buf;
+  int bufsize = inputs[1]->output.size;
+
+  // Calculate delay buffer size per channel
+  int delay_per_channel = bufsize / in_layout;
+
+  while (nframes--) {
+    if (in_layout >= 1) {
+      // Left channel (channel 0)
+      int channel_offset = 0 * delay_per_channel;
+      double *write_ptr = buf + channel_offset + state->write_pos_left;
+      double *read_ptr = buf + channel_offset + state->read_pos_left;
+
+      *out = *in + *read_ptr;
+      *write_ptr = state->fb * (*out);
+
+      in++;
+      out++;
+    }
+
+    if (in_layout >= 2) {
+      // Right channel (channel 1)
+      int channel_offset = 1 * delay_per_channel;
+      double *write_ptr = buf + channel_offset + state->write_pos_right;
+      double *read_ptr = buf + channel_offset + state->read_pos_right;
+
+      *out = *in + *read_ptr;
+      *write_ptr = state->fb * (*out);
+
+      in++;
+      out++;
+    }
+
+    // Handle additional channels with right channel timing (if any)
+    for (int ch = 2; ch < in_layout; ch++) {
+      int channel_offset = ch * delay_per_channel;
+      double *write_ptr = buf + channel_offset + state->write_pos_right;
+      double *read_ptr = buf + channel_offset + state->read_pos_right;
+
+      *out = *in + *read_ptr;
+      *write_ptr = state->fb * (*out);
+
+      in++;
+      out++;
+    }
+
+    // Update positions once per frame - each channel has independent timing
+    state->read_pos_left = (state->read_pos_left + 1) % delay_per_channel;
+    state->write_pos_left = (state->write_pos_left + 1) % delay_per_channel;
+
+    state->read_pos_right = (state->read_pos_right + 1) % delay_per_channel;
+    state->write_pos_right = (state->write_pos_right + 1) % delay_per_channel;
+  }
+
+  return node->output.buf;
+}
+
+Node *delay2_node(double delay_time_left, double delay_time_right,
+                  double max_delay_time, double fb, Node *input) {
+
+  int in_layout = input->output.layout;
+  int sample_rate = ctx_sample_rate();
+  int bufsize = (int)(max_delay_time * sample_rate * in_layout);
+  Node *delay_buf = const_buf(0.0, 1, bufsize);
+
+  AudioGraph *graph = _graph;
+
+  Node *node = allocate_node_in_graph(graph, sizeof(delay2_state));
+
+  node->state_size = sizeof(delay2_state);
+  node->state_offset = state_offset_ptr_in_graph(graph, node->state_size);
+
+  delay2_state *state =
+      (delay2_state *)(graph->nodes_state_memory + node->state_offset);
+
+  state->fb = fb;
+
+  // Calculate delay buffer size per channel
+  int delay_per_channel = bufsize / in_layout;
+
+  // Initialize left channel positions
+  state->write_pos_left = 0;
+  state->read_pos_left =
+      delay_per_channel - (int)(delay_time_left * sample_rate);
+  if (state->read_pos_left < 0)
+    state->read_pos_left += delay_per_channel;
+
+  // Initialize right channel positions
+  state->write_pos_right = 0;
+  state->read_pos_right =
+      delay_per_channel - (int)(delay_time_right * sample_rate);
+  if (state->read_pos_right < 0)
+    state->read_pos_right += delay_per_channel;
+
+  // Initialize node
+  *node = (Node){
+      .perform = (perform_func_t)delay2_perform,
+      .node_index = node->node_index,
+      .num_inputs = 2,
+      .state_size = node->state_size,
+      .state_offset = node->state_offset,
+      .output = (Signal){.layout = input->output.layout,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(
+                             graph, input->output.layout * BUF_SIZE)},
+      .meta = "delay2",
+  };
+
+  plug_input_in_graph(0, node, input);
+  plug_input_in_graph(1, node, delay_buf);
+
+  return graph_embed(node);
+}
+
+// Convenience function for creating stereo delay with slight time differences
+Node *stereo_spread_delay_node(double delay_time, double spread_amount,
+                               double max_delay_time, double fb, Node *input) {
+  double delay_left = delay_time - spread_amount * 0.5;
+  double delay_right = delay_time + spread_amount * 0.5;
+
+  // Ensure delays are positive
+  if (delay_left < 0.0)
+    delay_left = 0.0;
+  if (delay_right < 0.0)
+    delay_right = 0.0;
+
+  return delay2_node(delay_left, delay_right, max_delay_time, fb, input);
 }
 
 // ---------------------- Dyn delay Filter ---------------------------

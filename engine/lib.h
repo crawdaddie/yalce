@@ -18,7 +18,6 @@ struct arr {
 };
 
 NodeRef array_to_buf(struct arr a);
-double midi_to_freq(int midi_note);
 
 void write_to_dac(int dac_layout, double *dac_buf, int _layout, double *buf,
                   int output_num, int nframes);

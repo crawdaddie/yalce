@@ -18,7 +18,6 @@ let tempo = 160.;
 let q = 60./tempo;
 
 
-let amen = load_soundfile "fat_amen_mono_48000.wav";
 
 
 let stutter_rates = [|
@@ -33,6 +32,7 @@ let stutter_rates = [|
 |]
 |> array_to_buf;
 
+let amen = load_soundfile "fat_amen_mono_48000.wav";
 
 let synth = (fn () ->
   let trig = inlet 0.; # 0

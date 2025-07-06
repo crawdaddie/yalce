@@ -103,6 +103,10 @@ let shuffle_ip = fn arr: (Array of T) ->
   );
   arr
 ;;
+let array_choose = fn arr: (Array of T) ->
+  let n = array_size arr;
+  arr[rand_int n]
+;;
 
 let nonzero_randu_double = extern fn () -> Double;
 let log = extern fn Double -> Double;

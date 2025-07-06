@@ -96,7 +96,8 @@ let accept_reqs = fn server_fd ->
   # let _ = process_req req client_sock;
 
 
-  let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
+  # let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
+  let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\nX-Clacks-Overhead: GNU Terry Pratchett\r\n\r\nHello, World!";
   send client_sock (cstr response) (array_size response) 0;
 
   close client_sock;

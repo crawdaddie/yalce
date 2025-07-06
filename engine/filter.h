@@ -8,6 +8,14 @@ NodeRef lag_node(NodeRef lag_time, NodeRef input);
 
 NodeRef delay_node(double delay_time, double max_delay_time, double fb,
                    NodeRef input);
+
+NodeRef delay2_node(double delay_time_left, double delay_time_right,
+                    double max_delay_time, double fb, NodeRef input);
+
+NodeRef stereo_spread_delay_node(double delay_time, double spread_amount,
+                                 double max_delay_time, double fb,
+                                 NodeRef input);
+
 NodeRef dyn_delay_node(NodeRef delay_time, double max_delay_time, double fb,
                        NodeRef input);
 
