@@ -405,6 +405,19 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
   return ensemble;
 }
 
+NodeRef plug_input_signal(int idx, NodeRef input, NodeRef node) {
+  if (strcmp("ensemble", node->meta) == 0) {
+  }
+  return NULL;
+}
+
+NodeRef plug_input_signals(InNodeList *input_sigs, NodeRef node) {
+  while (input_sigs) {
+    input_sigs = input_sigs->next;
+  }
+  return NULL;
+}
+
 Node *play_node_offset(uint64_t tick, Node *s) {
   // printf("play node %p at offset %d\n", s, offset);
   // Node *group = _chain;

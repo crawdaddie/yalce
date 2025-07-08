@@ -10,6 +10,14 @@ typedef struct {
   struct InValList *next;
 } InValList;
 
+typedef struct {
+  struct {
+    int idx;
+    NodeRef sig;
+  } pair;
+  struct InValList *next;
+} InNodeList;
+
 Node *instantiate_template(InValList *input_vals, AudioGraph *g);
 
 struct arr {
