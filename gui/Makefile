@@ -26,7 +26,7 @@ BUILD_DIR := ../build/gui
 # OBJC_SRCS := CocoaVSTHelper.m
 # OBJC_OBJS := $(OBJC_SRCS:%.m=$(BUILD_DIR)/%.o)
 
-SRCS := gui.c gl.c
+SRCS := gui.c gl.c array_edit.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean
@@ -64,5 +64,6 @@ clean:
 ylc_bindings:
 	$(MAKE) -C ../tools
 	../build/tools/ffi_gen gui.h > bindings/Gui.ylc
+	../build/tools/ffi_gen array_edit.h >> bindings/Gui.ylc
 
 	cat bindings/_gui_extra.ylc >> bindings/Gui.ylc

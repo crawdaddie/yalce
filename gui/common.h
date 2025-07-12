@@ -22,3 +22,20 @@ typedef struct window_creation_data {
   void *data;
   GLWindowInitFn init_gl;
 } window_creation_data;
+
+typedef struct Window {
+  SDL_Window *window;
+  SDL_Renderer *renderer;
+  void *data;
+  int width;
+  int height;
+  EventHandler handle_event; // Function pointer for event handling
+  WindowRenderFn render_fn;
+  int num_children;
+  struct Window *children;
+} Window;
+
+SDL_Renderer *render_text(const char *text, int x, int y,
+                          SDL_Renderer *renderer, SDL_Color text_color);
+
+Window *get_window(SDL_Event event);

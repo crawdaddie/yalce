@@ -25,6 +25,7 @@ NodeRef load_soundfile(_YLC_String path);
 NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s);
 
 double midi_to_freq(int midi_note);
+double dmidi_to_freq(double midi_note);
 
 double semi_to_ratio(int semitones);
 

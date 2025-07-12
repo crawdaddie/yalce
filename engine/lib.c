@@ -413,7 +413,6 @@ NodeRef plug_input_signal(int idx, NodeRef input, NodeRef node) {
 
 NodeRef plug_input_signals(InNodeList *input_sigs, NodeRef node) {
   while (input_sigs) {
-    input_sigs = input_sigs->next;
   }
   return NULL;
 }
@@ -692,6 +691,12 @@ NodeRef set_input_trig_offset(NodeRef node, int input, uint64_t tick) {
 }
 
 double midi_to_freq(int midi_note) {
+  // A4 (MIDI note 69) has a frequency of 440 Hz
+  // Each semitone is a factor of 2^(1/12)
+  return 440.0 * pow(2.0, (midi_note - 69) / 12.0);
+}
+
+double dmidi_to_freq(double midi_note) {
   // A4 (MIDI note 69) has a frequency of 440 Hz
   // Each semitone is a factor of 2^(1/12)
   return 440.0 * pow(2.0, (midi_note - 69) / 12.0);

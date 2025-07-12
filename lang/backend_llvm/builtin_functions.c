@@ -743,6 +743,35 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
   }
 }
 
+LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
+                             LLVMModuleRef module, LLVMBuilderRef builder) {
+  switch (from_type->kind) {
+  case T_NUM: {
+    return LLVMBuildFPToSI(builder, val, LLVMInt32Type(), "cast_double_to_int");
+  }
+
+  case T_INT: {
+    return val;
+  }
+
+  case T_UINT64: {
+    // return LLVMBuildUIToFP(builder, val, LLVMDoubleType(),
+    //                        "cast_uint64_to_double");
+    return NULL;
+  }
+
+  default:
+    return NULL;
+  }
+}
+
+LLVMValueRef int_constructor_handler(Ast *ast, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  return int_constructor(
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder), &t_int,
+      module, builder);
+}
 LLVMValueRef double_constructor_handler(Ast *ast, JITLangCtx *ctx,
                                         LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
@@ -1219,6 +1248,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   t_uint64.constructor = uint64_constructor;
   t_num.constructor = double_constructor;
+  t_int.constructor = int_constructor;
 
 #define FN_SYMBOL(id, type, val)                                               \
   ({                                                                           \
@@ -1283,6 +1313,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   // GENERIC_FN_SYMBOL("array_view", &t_array_view_sig, ArrayViewHandler);
   GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);
+  GENERIC_FN_SYMBOL("Int", next_tvar(), int_constructor_handler);
   GENERIC_FN_SYMBOL(TYPE_NAME_UINT64, next_tvar(), uint64_constructor_handler);
   GENERIC_FN_SYMBOL(TYPE_NAME_CHAR, next_tvar(), char_cons_handler);
 
