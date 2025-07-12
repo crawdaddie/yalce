@@ -122,11 +122,17 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
   return LLVMConstInt(LLVMInt32Type(), 0, 0);
 }
 
+const char *module_path = NULL;
+
 JITSymbol *codegen_import(Ast *ast, Ast *binding, JITLangCtx *ctx,
                           LLVMModuleRef llvm_module_ref,
                           LLVMBuilderRef builder) {
 
   YLCModule *module = get_imported_module(ast);
+
+  const char *prev_mod_path = module_path;
+  module_path = ast->data.AST_IMPORT.fully_qualified_name;
+
   JITSymbol *module_symbol;
 
   if (module->ref) {
@@ -174,6 +180,7 @@ JITSymbol *codegen_import(Ast *ast, Ast *binding, JITLangCtx *ctx,
     module->ref = module_symbol;
   }
 
+  module_path = prev_mod_path;
   return module_symbol;
 }
 

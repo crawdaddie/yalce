@@ -19,7 +19,7 @@ LANG_SRC_DIR := lang
 LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wildcard $(LANG_SRC_DIR)/*.c))
 
 # Separate CFLAGS for include paths
-CFLAGS := -I./lang -I./engine
+CFLAGS := -I./lang 
 
 CFLAGS += -I./gui -I${SDL2_PATH}/include -I${SDL2_PATH}/include/SDL2 -I${SDL2_TTF_PATH}/include
 
@@ -34,8 +34,7 @@ CFLAGS += -I`$(LLVM_CONFIG) --includedir`
 LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
 
-LANG_LD_FLAGS := -L$(BUILD_DIR)/engine -lyalce_synth -lm -framework Accelerate
-LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline -lSDL2
+LANG_LD_FLAGS := -lm -framework Accelerate
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 
 LANG_CC += -D_USE_BLAS
@@ -51,12 +50,13 @@ VST_LIB_PATH := ${VST_LIB_PATH}
 VST_BUILD_PATH := $(VST_LIB_PATH)/build
 LANG_LD_FLAGS += -L$(VST_BUILD_PATH) -lylcvst
 
-LANG_LD_FLAGS += -Wl,-rpath,@executable_path/../build/engine -Wl,-rpath,@executable_path/../build/gui
+LANG_LD_FLAGS +=-Wl,-rpath,@executable_path/../build/gui
+LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx -L$(VST_BUILD_PATH)
 
 # VST Library path
 VST_LIB_PATH := ${VST_LIB_PATH}
 VST_BUILD_PATH := $(VST_LIB_PATH)/build
-LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx -L$(VST_BUILD_PATH) -lylcvst
+LANG_LD_FLAGS += -lylcvst
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 # Add cor source to LANG_SRCS

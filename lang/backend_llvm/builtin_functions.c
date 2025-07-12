@@ -5,7 +5,9 @@
 #include "backend_llvm/common.h"
 #include "backend_llvm/coroutines.h"
 #include "function.h"
+#include "input.h"
 #include "list.h"
+#include "module.h"
 #include "serde.h"
 #include "symbols.h"
 #include "tuple.h"
@@ -14,8 +16,11 @@
 #include "types/common.h"
 #include "types/inference.h"
 #include "util.h"
-#include "llvm-c/Core.h"
+#include <llvm-c/Core.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include <dlfcn.h>
 
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
@@ -48,10 +53,7 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
     } else {
       for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
         Ast *expr = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
-        printf("creating func\n", expr);
-        print_ast(expr);
         LLVMValueRef func = codegen(expr, ctx, module, builder);
-        printf("func %p\n", func);
         constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
             specific_fns_extend(constructor_sym->symbol_data
                                     .STYPE_GENERIC_FUNCTION.specific_fns,
@@ -1045,6 +1047,36 @@ LLVMValueRef SerializeBlobHandler(Ast *ast, JITLangCtx *ctx,
   return NULL;
 }
 
+LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  const char *path = ast->data.AST_APPLICATION.args->data.AST_STRING.value;
+  const char *full_path;
+  if (module_path == NULL) {
+    full_path = path;
+  } else {
+    const char *_module_path = get_dirname(module_path);
+
+    while (strncmp(path, "../", 3) == 0) {
+      path = path + 3;
+      _module_path = get_dirname(_module_path);
+    }
+
+    full_path = malloc(strlen(path) + strlen(_module_path) + 1);
+    sprintf(full_path, "%s/%s", _module_path, path);
+  }
+
+  void *handle = dlopen(full_path, RTLD_GLOBAL | RTLD_LAZY);
+
+  if (!handle) {
+    fprintf(stderr, "Failed to load library globally: %s\n", dlerror());
+    free(full_path);
+    return LLVMConstInt(LLVMInt32Type(), 0, 0);
+  }
+
+  free(full_path);
+  return LLVMConstInt(LLVMInt32Type(), 1, 0);
+}
+
 // LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef
 // module,
 //                                LLVMBuilderRef builder) {
@@ -1326,6 +1358,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL(TYPE_NAME_ARRAY, &t_array_cons_sig, ArrayConstructor);
   GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
+  GENERIC_FN_SYMBOL("dlopen", NULL, DlOpenHandler);
   // GENERIC_FN_SYMBOL("coroutine_end", &t_coroutine_end, CoroutineEndHandler);
 
   // GENERIC_FN_SYMBOL(TYPE_NAME_REF, NULL, RefHandler);

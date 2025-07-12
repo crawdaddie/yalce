@@ -118,6 +118,7 @@ typedef struct {
       ht generics;
       JITLangCtx *ctx;
       ModuleTypeMap map;
+      const char *path;
     } STYPE_MODULE;
     struct {
       LLVMTypeRef llvm_state_type;

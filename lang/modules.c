@@ -83,6 +83,7 @@ YLCModule *get_imported_module(Ast *ast) {
   const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;
 
   YLCModule *mod = ht_get(&module_registry, file_path);
+  mod->ast->data.AST_IMPORT.fully_qualified_name = file_path;
   return mod;
 }
 

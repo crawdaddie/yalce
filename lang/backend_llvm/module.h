@@ -5,6 +5,7 @@
 #include "parse.h"
 #include "llvm-c/Types.h"
 
+extern const char *module_path;
 LLVMValueRef codegen_module(Ast *ast, JITLangCtx *ctx,
                             LLVMModuleRef llvm_module_ref,
                             LLVMBuilderRef builder);
