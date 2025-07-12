@@ -12,14 +12,27 @@ CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_GFX_PATH}/include \
 					-I$(VST_LIB_PATH)/src
 
+ifeq ($(shell uname -s),Darwin)
 LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
 					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
 					 -L$(shell brew --prefix sdl2_image)/lib -lSDL2_image \
 					 -L$(VST_BUILD_PATH) -lylcvst \
 					 -lGLEW -lglfw
+else
+LDFLAGS := -L${SDL2_PATH}/lib -lSDL2 \
+					 -L${SDL2_TTF_PATH}/lib -lSDL2_ttf \
+					 -L${SDL2_GFX_PATH}/lib -lSDL2_gfx \
+					 -L${SDL2_GFX_PATH}/lib -lSDL2_image \
+					 -L$(VST_BUILD_PATH) -lylcvst \
+					 -lGLEW -lglfw
+endif
 
-FRAMEWORKS := -framework Foundation -framework OpenGL 
+ifeq ($(shell uname -s),Darwin)
+FRAMEWORKS := -framework Foundation -framework OpenGL
+else
+FRAMEWORKS := -lGL
+endif 
 
 BUILD_DIR := ../build/gui
 # Add Objective-C file for macOS VST support
@@ -52,7 +65,9 @@ $(BUILD_DIR)/libgui.a: $(OBJS)
 # Build the shared library
 $(BUILD_DIR)/libgui.so: $(OBJS)
 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
+ifeq ($(shell uname -s),Darwin)
 	install_name_tool -id @rpath/libgui.so $@
+endif
 	$(MAKE) -C . ylc_bindings
 
 # $(BUILD_DIR)/libgui.so: $(OBJS)

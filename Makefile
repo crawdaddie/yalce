@@ -10,7 +10,13 @@ ifeq ($(MAKECMDGOALS),debug)
     LLVM := $(DEBUG_LLVM)
 endif
 
-LLVM_CONFIG := $(LLVM)/bin/llvm-config
+# Find the correct llvm-config binary
+ifeq ($(shell uname -s),Darwin)
+    LLVM_CONFIG := $(LLVM)/bin/llvm-config
+else
+    # On Linux, try different llvm-config variants
+    LLVM_CONFIG := $(shell which llvm-config 2>/dev/null || which llvm-config-16 2>/dev/null || which llvm-config-15 2>/dev/null || echo "$(LLVM)/bin/llvm-config")
+endif
 
 # macOS-specific settings
 READLINE_PREFIX := ${READLINE_PREFIX}
@@ -34,7 +40,11 @@ CFLAGS += -I`$(LLVM_CONFIG) --includedir`
 LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
 
+ifeq ($(shell uname -s),Darwin)
 LANG_LD_FLAGS := -lm -framework Accelerate
+else
+LANG_LD_FLAGS := -lm
+endif
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 
 LANG_CC += -D_USE_BLAS
@@ -50,7 +60,11 @@ VST_LIB_PATH := ${VST_LIB_PATH}
 VST_BUILD_PATH := $(VST_LIB_PATH)/build
 LANG_LD_FLAGS += -L$(VST_BUILD_PATH) -lylcvst
 
+ifeq ($(shell uname -s),Darwin)
 LANG_LD_FLAGS +=-Wl,-rpath,@executable_path/../build/gui
+else
+LANG_LD_FLAGS +=-Wl,-rpath,\$$ORIGIN/../build/gui
+endif
 LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx -L$(VST_BUILD_PATH)
 
 # VST Library path
@@ -75,7 +89,11 @@ LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
 
 ifeq ($(MAKECMDGOALS),debug)
+ifeq ($(shell uname -s),Darwin)
   LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
+else
+  LANG_LD_FLAGS += -lz -lzstd -lstdc++ -lncurses
+endif
 endif
 
 
@@ -133,7 +151,11 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 # Build the final executable
 $(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
+ifeq ($(shell uname -s),Darwin)
 	otool -L $(BUILD_DIR)/ylc
+else
+	ldd $(BUILD_DIR)/ylc
+endif
 
 clean:
 	rm -rf $(BUILD_DIR)

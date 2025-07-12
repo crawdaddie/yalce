@@ -55,6 +55,8 @@ declare -A arch_pkgs=(
     ["libsoundio"]="libsoundio"
     ["libsndfile"]="libsndfile"
     ["fftw"]="fftw"
+    ["openblas"]="openblas"
+    ["libomp"]="openmp"
 )
 
 declare -A ubuntu_pkgs=(
@@ -157,6 +159,8 @@ libs=(
     "libsoundio;LIBSOUNDIO_PATH"
     "libsndfile;LIBSNDFILE_PATH"
     "fftw;LIBFFTW3_PATH"
+    "openblas;OPENBLAS_PATH"
+    "libomp;OPENMP_PATH"
 )
 
 # Install and configure libraries
