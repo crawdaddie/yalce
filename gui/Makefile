@@ -10,7 +10,8 @@ CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_PATH}/include/SDL2 \
 					-I${SDL2_TTF_PATH}/include \
 					-I${SDL2_GFX_PATH}/include \
-					-I$(VST_LIB_PATH)/src
+					-I$(VST_LIB_PATH)/src \
+					-I../lang
 
 LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
@@ -21,13 +22,14 @@ LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 
 FRAMEWORKS := -framework Foundation -framework OpenGL 
 
-BUILD_DIR := ../build/gui
+BUILD_DIR := build/
 # Add Objective-C file for macOS VST support
 # OBJC_SRCS := CocoaVSTHelper.m
 # OBJC_OBJS := $(OBJC_SRCS:%.m=$(BUILD_DIR)/%.o)
 
 SRCS := gui.c gl.c array_edit.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
+OBJS += ../build/common.o
 
 .PHONY: all clean
 
@@ -63,7 +65,8 @@ clean:
 
 ylc_bindings:
 	$(MAKE) -C ../tools
-	../build/tools/ffi_gen gui.h > bindings/Gui.ylc
+	@echo "let _ = dlopen \"../build/libgui.so\";" > bindings/Gui.ylc
+	../build/tools/ffi_gen gui.h >> bindings/Gui.ylc
 	../build/tools/ffi_gen array_edit.h >> bindings/Gui.ylc
 
 	cat bindings/_gui_extra.ylc >> bindings/Gui.ylc

@@ -1,0 +1,8 @@
+let list_sum = fn s l ->
+  match l with
+  | [] -> s
+  | x::rest -> list_sum (s + x) rest
+;;
+
+let s = list_sum 0. [1., 2., 3.];
+print `sum: {s}\n`;

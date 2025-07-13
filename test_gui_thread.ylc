@@ -1,0 +1,6 @@
+open gui/bindings/Gui;
+init_gui ();
+
+
+let z = [|0., 1., 0.5|];
+create_array_editor (array_size z) (cstr z) 0. 1.;

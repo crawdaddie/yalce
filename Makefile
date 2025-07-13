@@ -51,12 +51,12 @@ VST_BUILD_PATH := $(VST_LIB_PATH)/build
 LANG_LD_FLAGS += -L$(VST_BUILD_PATH) -lylcvst
 
 LANG_LD_FLAGS +=-Wl,-rpath,@executable_path/../build/gui
-LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx -L$(VST_BUILD_PATH)
+# LANG_LD_FLAGS += -L$(BUILD_DIR)/gui -lgui -L${SDL2_PATH}/lib -L${SDL2_TTF_PATH}/lib -lSDL2 -lSDL2_ttf -L${SDL2_GFX_PATH}/lib -lSDL2_gfx -L$(VST_BUILD_PATH)
 
 # VST Library path
-VST_LIB_PATH := ${VST_LIB_PATH}
-VST_BUILD_PATH := $(VST_LIB_PATH)/build
-LANG_LD_FLAGS += -lylcvst
+# VST_LIB_PATH := ${VST_LIB_PATH}
+# VST_BUILD_PATH := $(VST_LIB_PATH)/build
+# LANG_LD_FLAGS += -lylcvst
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 # Add cor source to LANG_SRCS

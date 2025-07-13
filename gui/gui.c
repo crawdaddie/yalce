@@ -1,4 +1,5 @@
 #include "gui.h"
+#include "../lang/common.h"
 #include "./common.h"
 #include "SDL2/SDL_image.h"
 #include <GL/glew.h>
@@ -9,6 +10,7 @@
 #include <SDL_opengl.h>
 #include <SDL_syswm.h>
 #include <VSTPlugin.h>
+#include <dlfcn.h>
 #include <limits.h>
 #include <math.h>
 #include <stdbool.h>
@@ -39,6 +41,7 @@ Uint32 CREATE_WINDOW_EVENT;
 Uint32 CREATE_OPENGL_WINDOW_EVENT;
 
 int init_gui() {
+  printf("init gui\n");
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     printf("SDL initialization failed: %s\n", SDL_GetError());
     return 1;
@@ -75,6 +78,15 @@ int init_gui() {
   if (CREATE_OPENGL_WINDOW_EVENT == (Uint32)-1) {
     printf("Failed to register OpenGL window event\n");
     return 1;
+  }
+  // Get function pointers from main executable
+  void (*set_break_flag)(bool) = dlsym(RTLD_DEFAULT, "__set_break_repl_flag");
+  void (*set_break_cb)(int (*)(void)) =
+      dlsym(RTLD_DEFAULT, "__set_break_repl_cb");
+
+  if (set_break_flag && set_break_cb) {
+    set_break_flag(true);
+    set_break_cb(gui_loop);
   }
 
   return 0;
@@ -130,6 +142,7 @@ void handle_events() {
 }
 
 int gui_loop() {
+  printf("create gui loop\n");
   while (true) {
 
     handle_events();
@@ -167,6 +180,7 @@ int gui_loop() {
 }
 
 bool _create_window(window_creation_data *data) {
+  printf("create window\n");
   if (window_count >= MAX_WINDOWS) {
     fprintf(stderr, "Maximum number of windows reached.\n");
     return false;

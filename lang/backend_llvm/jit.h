@@ -11,6 +11,4 @@ int start_jit(JITLangCtx *kernel_ctx, ht *kernel_table,
               LLVMContextRef *context_ref, LLVMModuleRef *module_ref,
               LLVMBuilderRef *builder_ref);
 
-extern int __BREAK_REPL_FOR_GUI_LOOP;
-extern void (*break_repl_for_gui_loop_cb)(void);
 #endif

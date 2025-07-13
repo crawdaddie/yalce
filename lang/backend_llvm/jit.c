@@ -10,7 +10,6 @@
 #include "modules.h"
 #include "parse.h"
 #include "serde.h"
-// #include "synths.h"
 #include "testing.h"
 #include "types/inference.h"
 #include "llvm-c/Transforms/Utils.h"
@@ -23,6 +22,7 @@
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Transforms/InstCombine.h>
 #include <llvm-c/Transforms/Scalar.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,9 +30,23 @@
 #include <time.h>
 #include <unistd.h>
 
-int __BREAK_REPL_FOR_GUI_LOOP = false;
-void (*break_repl_for_gui_loop_cb)(void) = NULL;
+typedef struct {
+  LLVMModuleRef module;
+  const char *filename;
+  const char *dirname;
+  JITLangCtx *ctx;
+  LLVMBuilderRef builder;
+} repl_args;
 
+void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
+               JITLangCtx *ctx, LLVMBuilderRef builder);
+
+void *repl_loop_thread_fn(void *arg) {
+  repl_args *args = (repl_args *)arg;
+  repl_loop(args->module, args->filename, args->dirname, args->ctx,
+            args->builder);
+  return NULL;
+}
 void dump_assembly(LLVMModuleRef module);
 #define STACK_MAX 256
 
@@ -204,9 +218,6 @@ void module_passes(LLVMModuleRef module) {
 
 #define GLOBAL_STORAGE_CAPACITY 1024
 
-void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
-               JITLangCtx *ctx, LLVMBuilderRef builder);
-
 int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
   LLVMInitializeNativeTarget();
@@ -290,6 +301,21 @@ int jit(int argc, char **argv) {
 
     init_readline();
 
+    if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
+
+      printf("breaking repl loop in main thread\n");
+      repl_args thread_args = {module, filename, dirname, &ctx, builder};
+
+      pthread_t repl_thread;
+      __BREAK_REPL_FOR_GUI_LOOP = false;
+      if (pthread_create(&repl_thread, NULL, repl_loop_thread_fn,
+                         &thread_args) != 0) {
+        perror("Failed to create REPL thread");
+      }
+      break_repl_for_gui_loop_cb();
+      return 0;
+    }
+
     repl_loop(module, filename, dirname, &ctx, builder);
   }
 
@@ -298,8 +324,25 @@ int jit(int argc, char **argv) {
 
 void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
                JITLangCtx *ctx, LLVMBuilderRef builder) {
-  if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
-  }
+
+  // printf("starting repl loop\n");
+  // printf("%d %p\n", __BREAK_REPL_FOR_GUI_LOOP, __set_break_repl_cb);
+  //
+  // if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
+  //
+  //   printf("breaking repl loop in main thread\n");
+  //   repl_args thread_args = {module, filename, dirname, ctx, builder};
+  //
+  //   pthread_t repl_thread;
+  //   if (pthread_create(&repl_thread, NULL, repl_loop_thread_fn, &thread_args)
+  //   !=
+  //       0) {
+  //     perror("Failed to create REPL thread");
+  //   }
+  //   break_repl_for_gui_loop_cb();
+  //   return;
+  // }
+
   LLVMTypeRef top_level_ret_type;
   char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
 
@@ -372,8 +415,20 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
           LLVMRunFunction(engine, top_level_func, 0, exec_args);
     }
     printf(COLOR_RESET);
+
     if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
-      return repl_loop(module, filename, dirname, &ctx, builder);
+
+      printf("breaking repl loop in main thread\n");
+      repl_args thread_args = {module, filename, dirname, ctx, builder};
+
+      pthread_t repl_thread;
+      __BREAK_REPL_FOR_GUI_LOOP = false;
+      if (pthread_create(&repl_thread, NULL, repl_loop_thread_fn,
+                         &thread_args) != 0) {
+        perror("Failed to create REPL thread");
+      }
+      break_repl_for_gui_loop_cb();
+      return;
     }
   }
 }

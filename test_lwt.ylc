@@ -1,0 +1,12 @@
+# type Promise = 
+#   | Pending of t
+#   | Fulfilled of t
+#   | Error of t
+#   ;
+let p = Pending 1;
+
+# let Constructor : Promise = module
+#   let of_item = fn a ->
+#     (Pending a)
+#   ;;
+# ;
