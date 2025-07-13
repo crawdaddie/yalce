@@ -16,11 +16,10 @@
 #include "types/common.h"
 #include "types/inference.h"
 #include "util.h"
+#include <dlfcn.h>
 #include <llvm-c/Core.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <dlfcn.h>
 
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);

@@ -23,24 +23,19 @@ void *run_jit(void *arg) {
 int main(int argc, char **argv) {
   pthread_t jit_thread;
   int jit_result;
-  bool run_gui = false;
 
-  // Check for --gui argument
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--gui") == 0) {
-      run_gui = true;
       config.gui_mode = true;
       break;
     }
   }
 
-  if (run_gui) {
-    // printf("run gui\n");
+  if (config.gui_mode) {
     if (init_gui()) {
       return 1;
     }
 
-    // Start JIT thread
     struct thread_args thread_args = {argc, argv};
     if (pthread_create(&jit_thread, NULL, run_jit, &thread_args) != 0) {
       perror("Failed to create JIT thread");

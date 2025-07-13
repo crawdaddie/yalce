@@ -30,6 +30,9 @@
 #include <time.h>
 #include <unistd.h>
 
+int __BREAK_REPL_FOR_GUI_LOOP = false;
+void (*break_repl_for_gui_loop_cb)(void) = NULL;
+
 void dump_assembly(LLVMModuleRef module);
 #define STACK_MAX 256
 
@@ -201,8 +204,10 @@ void module_passes(LLVMModuleRef module) {
 
 #define GLOBAL_STORAGE_CAPACITY 1024
 
-int jit(int argc, char **argv) {
+void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
+               JITLangCtx *ctx, LLVMBuilderRef builder);
 
+int jit(int argc, char **argv) {
   LLVMInitializeCore(LLVMGetGlobalPassRegistry());
   LLVMInitializeNativeTarget();
   LLVMInitializeNativeAsmPrinter();
@@ -285,81 +290,90 @@ int jit(int argc, char **argv) {
 
     init_readline();
 
-    // char *input = malloc(sizeof(char) * INPUT_BUFSIZE);
-    LLVMTypeRef top_level_ret_type;
-    char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
-
-    while (true) {
-
-      char *input = repl_input(prompt);
-
-      if (strncmp("%dump_module", input, 12) == 0) {
-        printf(STYLE_RESET_ALL "\n");
-        LLVMDumpModule(module);
-        continue;
-      } else if (strncmp("%dump_type_env", input, 14) == 0) {
-        print_type_env(ctx.env);
-        continue;
-      } else if (strncmp("%dump_ast", input, 9) == 0) {
-        print_ast(ast_root);
-        continue;
-      } else if (strncmp("%builtins", input, 8) == 0) {
-        print_builtin_types();
-        continue;
-      } else if (strncmp("%plot", input, 5) == 0) {
-        continue;
-      } else if (strcmp("\n", input) == 0) {
-        continue;
-      } else if (strcmp("%quit", input) == 0) {
-        break;
-      }
-
-      LLVMSetSourceFileName(module, filename, strlen(filename));
-      Ast *prog = parse_input(input, dirname);
-
-      TICtx ti_ctx = {.env = ctx.env, .scope = 0};
-
-      Type *typecheck_result = infer(prog, &ti_ctx);
-
-      AECtx ae_ctx = {.env = NULL};
-      escape_analysis(prog, &ae_ctx);
-
-      ctx.env = ti_ctx.env;
-
-      if (typecheck_result == NULL) {
-        continue;
-      }
-
-      if (typecheck_result->kind == T_VAR) {
-        Ast *top = top_level_ast(prog);
-        fprintf(stderr, "value not found: ");
-        print_ast_err(top);
-        print_location(top);
-        continue;
-      }
-
-      // Generate node.
-      LLVMValueRef top_level_func =
-          codegen_top_level(prog, &top_level_ret_type, &ctx, module, builder);
-
-      printf(COLOR_GREEN "> ");
-
-      Type *top_type = prog->md;
-
-      if (top_level_func == NULL) {
-        print_type(top_type);
-        continue;
-      } else {
-        LLVMExecutionEngineRef engine;
-        prepare_ex_engine(&ctx, &engine, module);
-        LLVMGenericValueRef exec_args[] = {};
-        LLVMGenericValueRef result =
-            LLVMRunFunction(engine, top_level_func, 0, exec_args);
-        print_type(top_type);
-      }
-      printf(COLOR_RESET);
-    }
+    repl_loop(module, filename, dirname, &ctx, builder);
   }
 
   return 0;
+}
+
+void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
+               JITLangCtx *ctx, LLVMBuilderRef builder) {
+  if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
+  }
+  LLVMTypeRef top_level_ret_type;
+  char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
+
+  while (true) {
+
+    char *input = repl_input(prompt);
+
+    if (strncmp("%dump_module", input, 12) == 0) {
+      printf(STYLE_RESET_ALL "\n");
+      LLVMDumpModule(module);
+      continue;
+    } else if (strncmp("%dump_type_env", input, 14) == 0) {
+      print_type_env(ctx->env);
+      continue;
+    } else if (strncmp("%dump_ast", input, 9) == 0) {
+      print_ast(ast_root);
+      continue;
+    } else if (strncmp("%builtins", input, 8) == 0) {
+      print_builtin_types();
+      continue;
+    } else if (strncmp("%plot", input, 5) == 0) {
+      continue;
+    } else if (strcmp("\n", input) == 0) {
+      continue;
+    } else if (strcmp("%quit", input) == 0) {
+      break;
+    }
+
+    LLVMSetSourceFileName(module, filename, strlen(filename));
+    Ast *prog = parse_input(input, dirname);
+
+    TICtx ti_ctx = {.env = ctx->env, .scope = 0};
+
+    Type *typecheck_result = infer(prog, &ti_ctx);
+
+    AECtx ae_ctx = {.env = NULL};
+    escape_analysis(prog, &ae_ctx);
+
+    ctx->env = ti_ctx.env;
+
+    if (typecheck_result == NULL) {
+      continue;
+    }
+
+    if (typecheck_result->kind == T_VAR) {
+      Ast *top = top_level_ast(prog);
+      fprintf(stderr, "value not found: ");
+      print_ast_err(top);
+      print_location(top);
+      continue;
+    }
+
+    // Generate node.
+    LLVMValueRef top_level_func =
+        codegen_top_level(prog, &top_level_ret_type, ctx, module, builder);
+
+    printf(COLOR_GREEN "> ");
+
+    Type *top_type = prog->md;
+
+    if (top_level_func == NULL) {
+      print_type(top_type);
+      continue;
+    } else {
+      LLVMExecutionEngineRef engine;
+      prepare_ex_engine(ctx, &engine, module);
+      LLVMGenericValueRef exec_args[] = {};
+      print_type(top_type);
+      LLVMGenericValueRef result =
+          LLVMRunFunction(engine, top_level_func, 0, exec_args);
+    }
+    printf(COLOR_RESET);
+    if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
+      return repl_loop(module, filename, dirname, &ctx, builder);
+    }
+  }
 }
