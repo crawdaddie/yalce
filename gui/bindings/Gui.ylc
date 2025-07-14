@@ -38,3 +38,4 @@ let FrameBuffer = extern fn String -> Int -> Int -> Ptr -> Int;
 
 let SDL_RegisterEvents = extern fn Int -> Int;
 let gl_push_custom_event = extern fn Int -> Ptr -> ();
+let _ = init_gui ();

@@ -1,6 +1,6 @@
 #ifndef _LANG_TYPE_TYPE_H
 #define _LANG_TYPE_TYPE_H
-#include "parse.h"
+#include "../parse.h"
 #include <stdbool.h>
 #include <unistd.h>
 #define _TSTORAGE_SIZE_DEFAULT 2000000

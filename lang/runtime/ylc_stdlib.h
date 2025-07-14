@@ -45,6 +45,7 @@ int char_to_hex_int(char c);
 String transpose_string(int, int, int, int, String);
 
 double *double_array_init(int32_t size, double val);
+
 struct _DoubleArray {
   int32_t size;
   double *data;

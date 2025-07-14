@@ -5,6 +5,7 @@ include ../.env
 VST_LIB_PATH := ${VST_LIB_PATH}
 VST_BUILD_PATH := $(VST_LIB_PATH)/build
 CC := clang -g
+CC += -DYLC_LANG_DYN_LIB
 CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_PATH}/include \
 					-I${SDL2_PATH}/include/SDL2 \
@@ -22,17 +23,11 @@ LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 FRAMEWORKS := -framework Foundation -framework OpenGL 
 
 BUILD_DIR := build/
-# Add Objective-C file for macOS VST support
-# OBJC_SRCS := CocoaVSTHelper.m
-# OBJC_OBJS := $(OBJC_SRCS:%.m=$(BUILD_DIR)/%.o)
 
 SRCS := gui.c gl.c array_edit.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
-# OBJS += ../build/common.o
 
 .PHONY: all clean
-
-# all: $(BUILD_DIR)/libgui.a
 
 all: $(BUILD_DIR)/libgui.so
 
@@ -42,22 +37,15 @@ $(BUILD_DIR):
 $(BUILD_DIR)/%.o: %.c gui.h gl.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Special rule for Objective-C files
-# $(BUILD_DIR)/%.o: %.m | $(BUILD_DIR)
-# 	$(CC) $(CFLAGS) -ObjC -c $< -o $@ $(FRAMEWORKS)
 
 $(BUILD_DIR)/libgui.a: $(OBJS)
 	ar rcs $@ $(OBJS)
 	$(MAKE) -C . ylc_bindings
 
-# Build the shared library
 $(BUILD_DIR)/libgui.so: $(OBJS)
 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
 	install_name_tool -id @rpath/libgui.so $@
 	$(MAKE) -C . ylc_bindings
-
-# $(BUILD_DIR)/libgui.so: $(OBJS)
-# 	$(CC) -shared -o $@ $(OBJS) $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -67,5 +55,4 @@ ylc_bindings:
 	@echo "let _ = dlopen \"../build/libgui.so\";" > bindings/Gui.ylc
 	../build/tools/ffi_gen gui.h >> bindings/Gui.ylc
 	../build/tools/ffi_gen array_edit.h >> bindings/Gui.ylc
-
 	cat bindings/_gui_extra.ylc >> bindings/Gui.ylc
