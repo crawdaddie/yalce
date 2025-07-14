@@ -11,7 +11,6 @@ CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_TTF_PATH}/include \
 					-I${SDL2_GFX_PATH}/include \
 					-I$(VST_LIB_PATH)/src \
-					-I../lang
 
 LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
@@ -29,7 +28,7 @@ BUILD_DIR := build/
 
 SRCS := gui.c gl.c array_edit.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
-OBJS += ../build/common.o
+# OBJS += ../build/common.o
 
 .PHONY: all clean
 
