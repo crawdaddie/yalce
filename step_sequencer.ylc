@@ -1,5 +1,12 @@
-import Tempo;
-Tempo.set 130.;
+let Tempo = module
+  let bpm = [| 130. |];
+  let set = fn x ->
+    bpm[0] := x
+  ;;
+  let q = fn () ->
+    60. / bpm[0]
+  ;;
+;
 
 import lib/Math;
 import gui/bindings/Gui;
@@ -21,9 +28,7 @@ Gui.create_array_editor len (cstr data.vel) 0. 1.;
 Gui.create_array_editor len (cstr data.note) 30. 60.;
 Gui.create_array_editor len (cstr data.probability_mask) 0. 1.;
 
-# let seq = fn i d: (dur: Array of Double, note: Array of Double, vel: Array of Double, probability_mask: Array of Double) ->
 let seq = fn i d: (dur: Array of Double, note: Array of Double, vel: Array of Double, probability_mask: Array of Double) ->
-  # print `{i}: {d.dur[i]}, {d.note[i]}, {d.vel[i]}, {d.probability_mask[i]}\n`;
   yield (d.dur[i], d.note[i], d.vel[i], d.probability_mask[i]);
   yield seq ((i + 1) % len) d
 ;;
@@ -42,7 +47,6 @@ let Synth = module
 
   ) |> play_tpl;
 
-  # let trig = fn (dur, note, vel, prob_mask): (Double, Double, Double, Double) ->
   let trig = fn (dur, note, vel, prob_mask) ->
     match vel > 0. && (Math.rand_double () <= prob_mask) with
     | true -> (

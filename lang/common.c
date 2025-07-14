@@ -27,14 +27,6 @@ uint64_t hash_key(const char *key) {
 int __BREAK_REPL_FOR_GUI_LOOP = false;
 void (*break_repl_for_gui_loop_cb)(void) = NULL; // Changed from int to void
 
-void __set_break_repl_flag(bool f) {
-  printf("setting break repl flag %d\n", f);
-  __BREAK_REPL_FOR_GUI_LOOP = f;
-  printf("flag: %d, callback: %p\n", __BREAK_REPL_FOR_GUI_LOOP,
-         break_repl_for_gui_loop_cb);
-}
+void __set_break_repl_flag(bool f) { __BREAK_REPL_FOR_GUI_LOOP = f; }
 
-void __set_break_repl_cb(void (*cb)(void)) {
-  printf("setting break repl callback to %p\n", cb);
-  break_repl_for_gui_loop_cb = cb;
-}
+void __set_break_repl_cb(void (*cb)(void)) { break_repl_for_gui_loop_cb = cb; }
