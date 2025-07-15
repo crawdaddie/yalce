@@ -51,7 +51,7 @@ ylc_bindings:
 	@echo "# Regenerate with: make -C engine ylc_bindings" >> bindings/Synth.ylc
 	@echo "let _ = dlopen \"../build/libyalce_synth.so\";" >> bindings/Synth.ylc
 	cat bindings/_engine_synth_header.ylc >> bindings/Synth.ylc
-	../build/tools/ffi_gen osc.h \
+	../build/tools/ffi_gen -l bindings/engine_lookups osc.h \
 		ext_lib.h \
 		envelope.h \
 		filter.h \
@@ -63,7 +63,7 @@ ylc_bindings:
 		>> bindings/Synth.ylc
 	cat bindings/_engine_synth_extra.ylc >> bindings/Synth.ylc
 	../build/tools/ffi_gen scheduling.h > bindings/Sched.ylc
-	../build/tools/ffi_gen midi.h > bindings/MIDI.ylc
+	../build/tools/ffi_gen -l bindings/midi_lookups midi.h > bindings/MIDI.ylc
 	cat bindings/_engine_midi_extra.ylc >> bindings/MIDI.ylc
 
 # Build the shared library

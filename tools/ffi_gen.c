@@ -77,6 +77,7 @@ void print_function_type(CXType type, name_lookup *lookups) {
 void print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
   CXType underlying_type = clang_getTypedefDeclUnderlyingType(cursor);
   CXString type_name = clang_getCursorSpelling(cursor);
+
   const char *cursor_name = clang_getCString(type_name);
 
   // Special case for CCCallback
@@ -86,7 +87,9 @@ void print_typedef_decl(CXCursor cursor, name_lookup *lookups) {
     return;
   }
 
-  printf("type %s = ", cursor_name);
+  // fprintf(stderr, "name %s -> %s\n", cursor_name,
+  //         yalce_name(lookups, cursor_name));
+  printf("type %s = ", yalce_name(lookups, cursor_name));
 
   if (underlying_type.kind == CXType_Pointer) {
     CXType pointee_type = clang_getPointeeType(underlying_type);
@@ -202,61 +205,15 @@ enum CXChildVisitResult visitor(CXCursor cursor, CXCursor parent,
 
   return CXChildVisit_Recurse;
 }
+// Helper function to determine if a file is likely C++
+int is_cpp_file(const char *filename) {
+  const char *ext = strrchr(filename, '.');
+  if (!ext)
+    return 0;
 
-int __main(int argc, char *argv[]) {
-  // if (argc < 2) {
-  //   fprintf(stderr, "Usage: %s <header_files>\n", argv[0]);
-  //   return 1;
-  // }
-
-  name_lookup *lookups = NULL;
-  lookups = lookups_extend(lookups, "double", "Double");
-  lookups = lookups_extend(lookups, "void", "()");
-  lookups = lookups_extend(lookups, "uint64_t", "Uint64");
-  lookups = lookups_extend(lookups, "uint32_t", "Int");
-  lookups = lookups_extend(lookups, "uint8_t", "Char");
-  lookups = lookups_extend(lookups, "int", "Int");
-  lookups = lookups_extend(lookups, "bool", "Bool");
-  lookups = lookups_extend(lookups, "char", "Char");
-  lookups = lookups_extend(lookups, "char *", "Ptr");
-  lookups = lookups_extend(lookups, "const char *", "Ptr");
-  lookups = lookups_extend(lookups, "void *", "Ptr");
-  lookups = lookups_extend(lookups, "double *", "Ptr");
-  lookups = lookups_extend(lookups, "AudioGraph *", "Ptr");
-  lookups = lookups_extend(lookups, "SDL_Renderer *", "Ptr");
-  lookups = lookups_extend(lookups, "SDL_Color", "(Int, Int, Int, Int)");
-  lookups = lookups_extend(lookups, "struct __color", "(Int, Int, Int, Int)");
-  lookups = lookups_extend(lookups, "MIDIEndpointRef", "Int");
-  lookups = lookups_extend(lookups, "ItemCount", "Int");
-  lookups = lookups_extend(lookups, "_YLC_String", "String");
-
-  // engine lib -specific lookups
-  lookups = lookups_extend(lookups, "SignalRef", "Ptr");
-  lookups = lookups_extend(lookups, "NodeRef", "Synth");
-
-  for (int i = 1; i < argc; i++) {
-
-    char *input_header = argv[i];
-
-    printf("# %s\n", input_header);
-    CXIndex index = clang_createIndex(0, 0);
-    CXTranslationUnit unit = clang_parseTranslationUnit(
-        index, input_header, NULL, 0, NULL, 0, CXTranslationUnit_None);
-
-    if (unit == NULL) {
-      fprintf(stderr, "Unable to parse translation unit. Quitting.\n");
-      return 1;
-    }
-
-    CXCursor cursor = clang_getTranslationUnitCursor(unit);
-    clang_visitChildren(cursor, visitor, lookups);
-
-    clang_disposeTranslationUnit(unit);
-    clang_disposeIndex(index);
-    printf("\n");
-  }
-
-  return 0;
+  return (strcmp(ext, ".hpp") == 0 || strcmp(ext, ".hxx") == 0 ||
+          strcmp(ext, ".h++") == 0 || strcmp(ext, ".cpp") == 0 ||
+          strcmp(ext, ".cxx") == 0 || strcmp(ext, ".cc") == 0);
 }
 
 // Option 1: Accept lookups from a file
@@ -276,17 +233,8 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "const char *", "Ptr");
   lookups = lookups_extend(lookups, "void *", "Ptr");
   lookups = lookups_extend(lookups, "double *", "Ptr");
-  lookups = lookups_extend(lookups, "AudioGraph *", "Ptr");
-  lookups = lookups_extend(lookups, "SDL_Renderer *", "Ptr");
-  lookups = lookups_extend(lookups, "SDL_Color", "(Int, Int, Int, Int)");
-  lookups = lookups_extend(lookups, "struct __color", "(Int, Int, Int, Int)");
-  lookups = lookups_extend(lookups, "MIDIEndpointRef", "Int");
-  lookups = lookups_extend(lookups, "ItemCount", "Int");
-  lookups = lookups_extend(lookups, "_YLC_String", "String");
 
   // engine lib -specific lookups
-  lookups = lookups_extend(lookups, "SignalRef", "Ptr");
-  lookups = lookups_extend(lookups, "NodeRef", "Synth");
 
   // Parse command line arguments
   int header_start = 1;
@@ -318,30 +266,47 @@ int main(int argc, char *argv[]) {
       char *arrow = strstr(line, " -> ");
       if (arrow) {
         *arrow = '\0';
-        char *from_type = line;
-        char *to_type = arrow + 4;
+        char *from_name = line;
+        char *to_name = arrow + 4;
 
         // Trim whitespace
-        while (*from_type == ' ')
-          from_type++;
-        while (*to_type == ' ')
-          to_type++;
+        while (*from_name == ' ')
+          from_name++;
+        while (*to_name == ' ')
+          to_name++;
+        // fprintf(stderr, "from name [%s] to name [%s]\n", from_name, to_name);
 
-        lookups = lookups_extend(lookups, from_type, to_type);
+        lookups = lookups_extend(lookups, strdup(from_name), strdup(to_name));
       }
     }
     fclose(lookup_file);
     header_start = 3;
+    // name_lookup *l = lookups;
+    // fprintf(stderr, "LOOKUPS\n");
+    //   while (l) {
+    //     fprintf(stderr, "%s -> %s\n", l->key, l->val);
+    //     l = l->next;
+    //   }
   }
 
   // Process header files
   for (int i = header_start; i < argc; i++) {
     char *input_header = argv[i];
+    int is_cpp = is_cpp_file(input_header);
 
     printf("# %s\n", input_header);
     CXIndex index = clang_createIndex(0, 0);
-    CXTranslationUnit unit = clang_parseTranslationUnit(
-        index, input_header, NULL, 0, NULL, 0, CXTranslationUnit_None);
+
+    CXTranslationUnit unit;
+    if (is_cpp) {
+      const char *clang_args[] = {"-xc++", "-std=c++11"};
+      unit = clang_parseTranslationUnit(index, input_header, clang_args, 2,
+                                        NULL, 0, CXTranslationUnit_None);
+    } else {
+
+      unit = clang_parseTranslationUnit(index, input_header, NULL, 0, NULL, 0,
+                                        CXTranslationUnit_None);
+    }
 
     if (unit == NULL) {
       fprintf(stderr, "Unable to parse translation unit. Quitting.\n");

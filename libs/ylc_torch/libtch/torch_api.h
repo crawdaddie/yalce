@@ -101,18 +101,15 @@ void at_load_multi(tensor *tensors, char **tensor_names, int ntensors,
 void at_load_multi_(tensor *tensors, char **tensor_names, int ntensors,
                     char *filename);
 
-void at_loadz_callback(char *filename, void *data,
-                       void (*f)(void *, char *, tensor));
-void at_loadz_callback_with_device(char *filename, void *data,
-                                   void (*f)(void *, char *, tensor),
+typedef void (*TorchLoadCb)(void *, char *, tensor);
+
+void at_loadz_callback(char *filename, void *data, TorchLoadCb f);
+void at_loadz_callback_with_device(char *filename, void *data, TorchLoadCb f,
                                    int device_id);
-void at_load_callback(char *filename, void *data,
-                      void (*f)(void *, char *, tensor));
-void at_load_callback_with_device(char *filename, void *data,
-                                  void (*f)(void *, char *, tensor),
+void at_load_callback(char *filename, void *data, TorchLoadCb f);
+void at_load_callback_with_device(char *filename, void *data, TorchLoadCb f,
                                   int device_id);
-void at_load_from_stream_callback(void *stream_ptr, void *data,
-                                  void (*f)(void *, char *, tensor),
+void at_load_from_stream_callback(void *stream_ptr, void *data, TorchLoadCb f,
                                   bool enable_device_id, int device_id);
 
 int at_get_num_interop_threads();
@@ -213,8 +210,9 @@ int atm_get_profiling_mode();
 void atm_set_profiling_mode(int);
 void atm_fuser_cuda_set_enabled(bool);
 bool atm_fuser_cuda_is_enabled();
-void atm_named_parameters(module, void *data,
-                          void (*f)(void *, char *, tensor));
+
+typedef void (*TorchNamedParametersCb)(void *, char *, tensor);
+void atm_named_parameters(module, void *data, TorchNamedParametersCb f);
 
 // This function has to be followed by a call to atm_end_tracing.
 module atm_create_for_tracing(char *modl_name, tensor *inputs, int ninputs);

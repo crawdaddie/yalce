@@ -61,7 +61,9 @@ clean:
 
 ylc_bindings:
 	$(MAKE) -C ../../tools
-	../../build/tools/ffi_gen -l $(PWD)/type_lookups libtch/torch_api.h > bindings.ylc
+	@echo "let _ = dlopen \"./libtorch_c_api.dylib\";" > Torch.ylc
+	../../build/tools/ffi_gen -l type_lookups libtch/torch_api.h >> Torch.ylc
+	../../build/tools/ffi_gen -l type_lookups libtch/torch_api_generated.hpp >> Torch.ylc
 
 		
 		

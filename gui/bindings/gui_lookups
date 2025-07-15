@@ -1,0 +1,4 @@
+SDL_Renderer * -> Ptr
+SDL_Color -> (Int, Int, Int, Int)
+struct __color -> (Int, Int, Int, Int)
+_YLC_String -> String

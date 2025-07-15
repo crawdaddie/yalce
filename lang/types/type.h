@@ -3,7 +3,7 @@
 #include "../parse.h"
 #include <stdbool.h>
 #include <unistd.h>
-#define _TSTORAGE_SIZE_DEFAULT 2000000
+#define _TSTORAGE_SIZE_DEFAULT 20000000
 
 typedef struct Type Type;
 

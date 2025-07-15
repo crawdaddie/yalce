@@ -316,13 +316,18 @@ Type *infer(Ast *ast, TICtx *ctx) {
                                         ctx->env, NULL);
       sig->data.AST_LIST.items[params_count].md = f;
 
+      Type *mem = talloc(sizeof(Type) * params_count);
       for (int i = params_count - 1; i >= 0; i--) {
         Type *p = compute_type_expression(sig->data.AST_LIST.items + i,
                                           ctx->env, NULL);
-
         sig->data.AST_LIST.items[i].md = p;
+        Type *fn = mem;
 
-        f = type_fn(p, f);
+        fn->kind = T_FN;
+        fn->data.T_FN.from = p;
+        fn->data.T_FN.to = f;
+        f = fn;
+        mem++;
       }
       type = f;
     }
@@ -970,6 +975,8 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     return;
   }
 
+  // printf("apply substs rec\n");
+  // print_ast(ast);
   switch (ast->tag) {
   case AST_TUPLE:
   case AST_ARRAY:

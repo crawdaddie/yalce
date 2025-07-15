@@ -1,0 +1,18 @@
+tensor -> Tensor
+optimizer -> Optimizer
+scalar -> Scalar
+module -> TorchModule
+ivalue -> IValue
+int64_t -> Int
+int64_t * -> Ptr
+int * -> Ptr
+size_t -> Int
+size_t * -> Ptr
+tensor * -> Ptr
+char ** -> Ptr
+ivalue * -> Ptr
+const uint8_t * -> Ptr
+uint8_t * -> Ptr
+uint64_t -> Uint64
+uint64_t * -> Ptr
+unsigned char * -> Ptr

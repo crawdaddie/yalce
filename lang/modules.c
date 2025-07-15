@@ -69,8 +69,10 @@ Type *get_import_type(Ast *ast) {
   Type *module_type = module_ast->md;
 
   YLCModule *registered_module = malloc(sizeof(YLCModule));
-  *registered_module = (YLCModule){
-      .type = deep_copy_type(module_ast->md), .ast = module_ast, .env = env};
+  *registered_module = (YLCModule){// .type = deep_copy_type(module_ast->md),
+                                   .type = module_ast->md,
+                                   .ast = module_ast,
+                                   .env = env};
 
   // ht_init(&registered_module->generics);
 

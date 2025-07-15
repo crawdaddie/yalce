@@ -728,6 +728,7 @@ static struct TStorage {
   size_t size;
   size_t capacity;
 } TStorage;
+
 static void *_tstorage_data[_TSTORAGE_SIZE_DEFAULT];
 
 static struct TStorage _tstorage = {_tstorage_data, 0, _TSTORAGE_SIZE_DEFAULT};
@@ -747,6 +748,7 @@ void *talloc(size_t size) {
   if (_tstorage.size + size > _tstorage.capacity) {
     fprintf(stderr, "OOM Error allocating memory for type (up to %d\n)",
             type_var_counter);
+    abort();
     return NULL;
   }
   void *mem = _tstorage.data + _tstorage.size;
