@@ -1,7 +1,6 @@
 # tools/Makefile
 include ../.env
 
-ENGINE_DIR := ../engine
 BUILD_DIR := ../build/tools
 
 # LLVM configuration
@@ -16,7 +15,7 @@ SRCS := $(wildcard *.c)
 EXES := $(SRCS:%.c=$(BUILD_DIR)/%)
 
 # Default target
-.PHONY: all clean engine_bindings
+.PHONY: all clean
 all: $(EXES)
 
 # Build rules

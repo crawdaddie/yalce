@@ -203,11 +203,11 @@ enum CXChildVisitResult visitor(CXCursor cursor, CXCursor parent,
   return CXChildVisit_Recurse;
 }
 
-int main(int argc, char *argv[]) {
-  if (argc < 2) {
-    fprintf(stderr, "Usage: %s <header_files>\n", argv[0]);
-    return 1;
-  }
+int __main(int argc, char *argv[]) {
+  // if (argc < 2) {
+  //   fprintf(stderr, "Usage: %s <header_files>\n", argv[0]);
+  //   return 1;
+  // }
 
   name_lookup *lookups = NULL;
   lookups = lookups_extend(lookups, "double", "Double");
@@ -236,6 +236,106 @@ int main(int argc, char *argv[]) {
 
   for (int i = 1; i < argc; i++) {
 
+    char *input_header = argv[i];
+
+    printf("# %s\n", input_header);
+    CXIndex index = clang_createIndex(0, 0);
+    CXTranslationUnit unit = clang_parseTranslationUnit(
+        index, input_header, NULL, 0, NULL, 0, CXTranslationUnit_None);
+
+    if (unit == NULL) {
+      fprintf(stderr, "Unable to parse translation unit. Quitting.\n");
+      return 1;
+    }
+
+    CXCursor cursor = clang_getTranslationUnitCursor(unit);
+    clang_visitChildren(cursor, visitor, lookups);
+
+    clang_disposeTranslationUnit(unit);
+    clang_disposeIndex(index);
+    printf("\n");
+  }
+
+  return 0;
+}
+
+// Option 1: Accept lookups from a file
+int main(int argc, char *argv[]) {
+  name_lookup *lookups = NULL;
+
+  // Default lookups
+  lookups = lookups_extend(lookups, "double", "Double");
+  lookups = lookups_extend(lookups, "void", "()");
+  lookups = lookups_extend(lookups, "uint64_t", "Uint64");
+  lookups = lookups_extend(lookups, "uint32_t", "Int");
+  lookups = lookups_extend(lookups, "uint8_t", "Char");
+  lookups = lookups_extend(lookups, "int", "Int");
+  lookups = lookups_extend(lookups, "bool", "Bool");
+  lookups = lookups_extend(lookups, "char", "Char");
+  lookups = lookups_extend(lookups, "char *", "Ptr");
+  lookups = lookups_extend(lookups, "const char *", "Ptr");
+  lookups = lookups_extend(lookups, "void *", "Ptr");
+  lookups = lookups_extend(lookups, "double *", "Ptr");
+  lookups = lookups_extend(lookups, "AudioGraph *", "Ptr");
+  lookups = lookups_extend(lookups, "SDL_Renderer *", "Ptr");
+  lookups = lookups_extend(lookups, "SDL_Color", "(Int, Int, Int, Int)");
+  lookups = lookups_extend(lookups, "struct __color", "(Int, Int, Int, Int)");
+  lookups = lookups_extend(lookups, "MIDIEndpointRef", "Int");
+  lookups = lookups_extend(lookups, "ItemCount", "Int");
+  lookups = lookups_extend(lookups, "_YLC_String", "String");
+
+  // engine lib -specific lookups
+  lookups = lookups_extend(lookups, "SignalRef", "Ptr");
+  lookups = lookups_extend(lookups, "NodeRef", "Synth");
+
+  // Parse command line arguments
+  int header_start = 1;
+
+  // Check for -l flag for additional lookups file
+  if (argc > 2 && strcmp(argv[1], "-l") == 0) {
+    if (argc < 4) {
+      fprintf(stderr, "Usage: %s [-l lookup_file] <header_files>\n", argv[0]);
+      return 1;
+    }
+
+    // Load additional lookups from file
+    FILE *lookup_file = fopen(argv[2], "r");
+    if (lookup_file == NULL) {
+      fprintf(stderr, "Error: Unable to open lookup file %s\n", argv[2]);
+      return 1;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), lookup_file)) {
+      // Remove newline
+      line[strcspn(line, "\n")] = 0;
+
+      // Skip empty lines and comments
+      if (line[0] == '\0' || line[0] == '#')
+        continue;
+
+      // Parse "from_type -> to_type" format
+      char *arrow = strstr(line, " -> ");
+      if (arrow) {
+        *arrow = '\0';
+        char *from_type = line;
+        char *to_type = arrow + 4;
+
+        // Trim whitespace
+        while (*from_type == ' ')
+          from_type++;
+        while (*to_type == ' ')
+          to_type++;
+
+        lookups = lookups_extend(lookups, from_type, to_type);
+      }
+    }
+    fclose(lookup_file);
+    header_start = 3;
+  }
+
+  // Process header files
+  for (int i = header_start; i < argc; i++) {
     char *input_header = argv[i];
 
     printf("# %s\n", input_header);
