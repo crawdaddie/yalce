@@ -31,10 +31,10 @@ GLuint compile_shader(const char *source, GLenum type) {
   return shader;
 }
 
-GLObj *_dcl_ctx_head = NULL;
-GLObj *_dcl_ctx_tail = NULL;
+static GLObj *_dcl_ctx_head = NULL;
+static GLObj *_dcl_ctx_tail = NULL;
 
-GLObj *append_obj(GLObj obj) {
+static GLObj *append_obj(GLObj obj) {
   if (_dcl_ctx_head == NULL) {
     GLObj *head = malloc(sizeof(GLObj));
     *head = obj;

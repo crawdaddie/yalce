@@ -18,6 +18,16 @@ let create_decl_window = extern fn Ptr -> Int;
 
 # array_edit.h
 let create_array_editor = extern fn Int -> Ptr -> Double -> Double -> Int;
+let create_bool_array_editor = extern fn Int -> Ptr -> Int;
+
+# plt.h
+let create_decl_plt = extern fn Ptr -> Int;
+
+# decl_ui.h
+let create_decl_ui = extern fn Ptr -> Int;
+let Plt = extern fn Double -> Double -> Double -> Double -> Ptr;
+let Scatter = extern fn Ptr -> Int -> Ptr -> Ptr -> Ptr;
+let LinePlt = extern fn Ptr -> Int -> Ptr -> Ptr -> Ptr;
 
 let VShader = extern fn String -> Ptr;
 let FShader = extern fn String -> Ptr;

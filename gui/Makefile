@@ -24,7 +24,7 @@ FRAMEWORKS := -framework Foundation -framework OpenGL
 
 BUILD_DIR := build/
 
-SRCS := gui.c gl.c array_edit.c
+SRCS := gui.c gl.c plt.c array_edit.c decl_ui.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean
@@ -55,4 +55,6 @@ ylc_bindings:
 	@echo "let _ = dlopen \"../build/libgui.so\";" > bindings/Gui.ylc
 	../build/tools/ffi_gen gui.h >> bindings/Gui.ylc
 	../build/tools/ffi_gen array_edit.h >> bindings/Gui.ylc
+	../build/tools/ffi_gen plt.h >> bindings/Gui.ylc
+	../build/tools/ffi_gen decl_ui.h >> bindings/Gui.ylc
 	cat bindings/_gui_extra.ylc >> bindings/Gui.ylc
