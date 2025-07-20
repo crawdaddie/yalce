@@ -8,6 +8,7 @@ typedef struct {
   UIObjRendererFn render_cb;
   void *event_handler;
   struct UIObj *next;
+  double bounds[4];
 } UIObj;
 
 static UIObj *_dcl_ctx_head = NULL;
@@ -38,8 +39,27 @@ static UIObj *append_obj(DeclUIState *ctx, UIObj obj) {
 
 void decl_ui_render_fn(DeclUIState *state, SDL_Renderer *renderer) {
   UIObj *o = state->head;
+
+  SDL_Rect viewport_rect = {};
+
+  SDL_RenderGetViewport(renderer, &viewport_rect);
+  viewport_rect.x = 0;
+  viewport_rect.y = 0;
+  SDL_RenderSetViewport(renderer, &viewport_rect);
+
   while (o) {
+    int height = o->bounds[0];
+    int width = o->bounds[1];
+
+    // printf("initial vp x: %d y: %d w: %d h: %d\n", viewport_rect.x,
+    //        viewport_rect.y, viewport_rect.w, viewport_rect.h);
+
     o->render_cb(o->data, renderer);
+
+    viewport_rect.y += height + 10;
+    viewport_rect.w = width;
+    viewport_rect.h = height;
+    SDL_RenderSetViewport(renderer, &viewport_rect);
     o = (UIObj *)o->next;
   }
 }
@@ -248,6 +268,7 @@ typedef struct {
 
   int selected_point;
 } ScatterData;
+
 void render_scatter(void *state, SDL_Renderer *renderer) {
   ScatterData *scatter = (ScatterData *)state;
   PlotData *plot = get_current_plot();
@@ -370,4 +391,87 @@ void *LinePlt(void *_plt, int size, double *x, double *y) {
                .render_cb = (UIObjRendererFn)render_line_plt};
 
   return append_obj(plot_data->children, obj);
+}
+
+typedef struct {
+  bool *data; // Pointer to the array data
+  int size;   // Number of elements in the array
+} CheckBoxesData;
+
+static SDL_Rect get_checkbox_rect(CheckBoxesData *state, int index, int width,
+                                  int height) {
+  const int margin = 40;
+  const int checkbox_size = 30;
+  const int spacing = 10;
+
+  // Calculate total width needed for all checkboxes
+  int total_checkbox_width =
+      state->size * checkbox_size + (state->size - 1) * spacing;
+
+  // Center the checkboxes horizontally
+  int start_x = (width - total_checkbox_width) / 2;
+
+  // Position vertically in the middle
+  int y = (height - checkbox_size) / 2;
+
+  SDL_Rect rect;
+  rect.x = start_x + index * (checkbox_size + spacing);
+  rect.y = y;
+  rect.w = checkbox_size;
+  rect.h = checkbox_size;
+
+  return rect;
+}
+
+static SDL_Renderer *render_checkboxes(void *_state, SDL_Renderer *renderer) {
+  CheckBoxesData *state = _state;
+  if (!state || !state->data)
+    return renderer;
+
+  SDL_Rect viewport;
+  SDL_RenderGetViewport(renderer, &viewport);
+  int width = viewport.w;
+  int height = viewport.h;
+
+  const int checkbox_size = 20;
+  const int spacing = 5;
+  const int margin = 5;
+
+  for (int i = 0; i < state->size; i++) {
+    int x = margin + i * (checkbox_size + spacing);
+    int y = margin;
+
+    SDL_Rect checkbox = {x, y, checkbox_size, checkbox_size};
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White background
+    SDL_RenderFillRect(renderer, &checkbox);
+
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black border
+    SDL_RenderDrawRect(renderer, &checkbox);
+
+    if (state->data[i]) {
+      SDL_Color red_color = {255, 0, 0, 255}; // Red text
+      render_text("x", x + 4, y, renderer, red_color);
+    }
+
+    // if (state->data[i]) {
+    //   SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Red X
+    //
+    //   int pad = 3;
+    //   SDL_RenderDrawLine(renderer, x + pad, y + pad, x + checkbox_size - pad,
+    //                      y + checkbox_size - pad);
+    //
+    //   SDL_RenderDrawLine(renderer, x + checkbox_size - pad, y + pad, x + pad,
+    //                      y + checkbox_size - pad);
+    // }
+  }
+
+  return renderer;
+}
+void *CheckBoxes(int size, bool *data) {
+  CheckBoxesData *cb_data = malloc(sizeof(CheckBoxesData));
+  cb_data->data = data; // You were missing this!
+  cb_data->size = size; // And this!
+  UIObj obj = {
+      .data = cb_data, .render_cb = render_checkboxes, .bounds = {40, 440}};
+  return append_obj(_decl_ui_ctx, obj);
 }

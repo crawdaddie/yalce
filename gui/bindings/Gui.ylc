@@ -28,6 +28,7 @@ let create_decl_ui = extern fn Ptr -> Int;
 let Plt = extern fn Double -> Double -> Double -> Double -> Ptr;
 let Scatter = extern fn Ptr -> Int -> Ptr -> Ptr -> Ptr;
 let LinePlt = extern fn Ptr -> Int -> Ptr -> Ptr -> Ptr;
+let CheckBoxes = extern fn Int -> Ptr -> Ptr;
 
 let VShader = extern fn String -> Ptr;
 let FShader = extern fn String -> Ptr;
