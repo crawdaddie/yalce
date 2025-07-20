@@ -67,14 +67,12 @@ int create_decl_ui(void *cb) {
 
   return SDL_PushEvent(&event);
 }
-// Plot container data structure
+
 typedef struct {
-  // Plot bounds
   double x_min, x_max;
   double y_min, y_max;
   bool auto_bounds;
 
-  // Visual properties
   bool show_grid;
   int margin;
   SDL_Color background_color;
@@ -82,14 +80,11 @@ typedef struct {
   SDL_Color axis_color;
   SDL_Color border_color;
 
-  // Child objects (scatter plots, lines, etc.)
   DeclUIState *children;
 } PlotData;
 
-// Helper function to calculate bounds from all child data
 static void calculate_plot_bounds(PlotData *plot) {}
 
-// Convert data coordinates to screen coordinates (now uses plot bounds)
 static SDL_Point data_to_screen(PlotData *plot, double x, double y, int width,
                                 int height) {
   SDL_Point point;
@@ -101,50 +96,42 @@ static SDL_Point data_to_screen(PlotData *plot, double x, double y, int width,
   double x_norm = (x - plot->x_min) / (plot->x_max - plot->x_min);
   double y_norm = (y - plot->y_min) / (plot->y_max - plot->y_min);
 
-  // Convert to screen coordinates
   point.x = plot->margin + (int)(x_norm * plot_width);
   point.y = height - plot->margin - (int)(y_norm * plot_height); // Flip Y axis
 
   return point;
 }
 
-// Draw grid lines and axes (moved to Plt)
 static void draw_grid_and_axes(PlotData *plot, SDL_Renderer *renderer,
                                int width, int height) {
   if (!plot->show_grid)
     return;
 
-  // Grid lines
   SDL_SetRenderDrawColor(renderer, plot->grid_color.r, plot->grid_color.g,
                          plot->grid_color.b, plot->grid_color.a);
 
   int plot_width = width - 2 * plot->margin;
   int plot_height = height - 2 * plot->margin;
 
-  // Vertical grid lines
   for (int i = 0; i <= 10; i++) {
     int x = plot->margin + (i * plot_width) / 10;
     SDL_RenderDrawLine(renderer, x, plot->margin, x, height - plot->margin);
   }
 
-  // Horizontal grid lines
   for (int i = 0; i <= 10; i++) {
     int y = plot->margin + (i * plot_height) / 10;
     SDL_RenderDrawLine(renderer, plot->margin, y, width - plot->margin, y);
   }
 
-  // Draw axes (darker)
   SDL_SetRenderDrawColor(renderer, plot->axis_color.r, plot->axis_color.g,
                          plot->axis_color.b, plot->axis_color.a);
 
-  // X-axis (y = 0 if it's in range)
   if (plot->y_min <= 0 && plot->y_max >= 0) {
     SDL_Point zero_point = data_to_screen(plot, plot->x_min, 0, width, height);
     SDL_RenderDrawLine(renderer, plot->margin, zero_point.y,
                        width - plot->margin, zero_point.y);
   }
 
-  // Y-axis (x = 0 if it's in range)
   if (plot->x_min <= 0 && plot->x_max >= 0) {
     SDL_Point zero_point = data_to_screen(plot, 0, plot->y_min, width, height);
     SDL_RenderDrawLine(renderer, zero_point.x, plot->margin, zero_point.x,
@@ -152,13 +139,11 @@ static void draw_grid_and_axes(PlotData *plot, SDL_Renderer *renderer,
   }
 }
 
-// Draw axis labels
 static void draw_axis_labels(PlotData *plot, SDL_Renderer *renderer, int width,
                              int height) {
   char label[32];
   SDL_Color text_color = {0, 0, 0, 255}; // Black text
 
-  // X-axis labels
   for (int i = 0; i <= 5; i++) {
     double x_val = plot->x_min + i * (plot->x_max - plot->x_min) / 5;
     SDL_Point label_pos =
@@ -168,7 +153,6 @@ static void draw_axis_labels(PlotData *plot, SDL_Renderer *renderer, int width,
                 text_color);
   }
 
-  // Y-axis labels
   for (int i = 0; i <= 5; i++) {
     double y_val = plot->y_min + i * (plot->y_max - plot->y_min) / 5;
     SDL_Point label_pos =
@@ -253,18 +237,15 @@ void *Plt(double x_min, double x_max, double y_min, double y_max) {
   return append_obj(_decl_ui_ctx, obj);
 }
 
-// Scatter plot data structure (simplified - no bounds/grid)
 typedef struct {
   double *x_data;
   double *y_data;
   int size;
 
-  // Display properties
   int point_radius;
   SDL_Color point_color;
   SDL_Color selected_color;
 
-  // Interaction
   int selected_point;
 } ScatterData;
 void render_scatter(void *state, SDL_Renderer *renderer) {
@@ -276,12 +257,10 @@ void render_scatter(void *state, SDL_Renderer *renderer) {
   int width, height;
   SDL_GetRendererOutputSize(renderer, &width, &height);
 
-  // Draw data points only
   for (int i = 0; i < scatter->size; i++) {
     SDL_Point screen_point = data_to_screen(plot, scatter->x_data[i],
                                             scatter->y_data[i], width, height);
 
-    // Skip points outside plot area
     if (screen_point.x < plot->margin ||
         screen_point.x > width - plot->margin ||
         screen_point.y < plot->margin ||
@@ -289,7 +268,6 @@ void render_scatter(void *state, SDL_Renderer *renderer) {
       continue;
     }
 
-    // Choose color based on selection
     if (i == scatter->selected_point) {
       SDL_SetRenderDrawColor(
           renderer, scatter->selected_color.r, scatter->selected_color.g,
@@ -300,7 +278,6 @@ void render_scatter(void *state, SDL_Renderer *renderer) {
                              scatter->point_color.a);
     }
 
-    // Draw the point
     draw_filled_circle(renderer, screen_point.x, screen_point.y,
                        scatter->point_radius);
   }
@@ -309,7 +286,6 @@ void *Scatter(void *_plt, int size, double *x, double *y) {
   UIObj *plt = _plt;
   PlotData *plot_data = (PlotData *)plt->data;
 
-  // Create scatter data
   ScatterData *scatter_data = malloc(sizeof(ScatterData));
   *scatter_data = (ScatterData){
       .x_data = x,
@@ -332,17 +308,16 @@ typedef struct {
   double *y_data;
   int size;
 
-  // Display properties
   SDL_Color line_color;
   int line_thickness;
   bool show_points;      // Whether to draw points at vertices
   int point_radius;      // Size of vertex points if shown
   SDL_Color point_color; // Color of vertex points
 
-  // Interaction
   int selected_point; // Selected vertex point
   SDL_Color selected_color;
 } LineData;
+
 void render_line_plt(void *state, SDL_Renderer *renderer) {
   LineData *line = (LineData *)state;
   PlotData *plot = get_current_plot();
@@ -350,18 +325,15 @@ void render_line_plt(void *state, SDL_Renderer *renderer) {
   int width, height;
   SDL_GetRendererOutputSize(renderer, &width, &height);
 
-  // Set line color
   SDL_SetRenderDrawColor(renderer, line->line_color.r, line->line_color.g,
                          line->line_color.b, line->line_color.a);
 
-  // Draw connected lines between consecutive points
   for (int i = 0; i < line->size - 1; i++) {
     SDL_Point start_point =
         data_to_screen(plot, line->x_data[i], line->y_data[i], width, height);
     SDL_Point end_point = data_to_screen(plot, line->x_data[i + 1],
                                          line->y_data[i + 1], width, height);
 
-    // Skip line segments that are completely outside plot area
     if ((start_point.x < plot->margin && end_point.x < plot->margin) ||
         (start_point.x > width - plot->margin &&
          end_point.x > width - plot->margin) ||
@@ -371,18 +343,15 @@ void render_line_plt(void *state, SDL_Renderer *renderer) {
       continue;
     }
 
-    // Draw the line segment
     SDL_RenderDrawLine(renderer, start_point.x, start_point.y, end_point.x,
                        end_point.y);
   }
 }
 
-// LinePlt constructor
 void *LinePlt(void *_plt, int size, double *x, double *y) {
   UIObj *plt = _plt;
   PlotData *plot_data = (PlotData *)plt->data;
 
-  // Create line data
   LineData *line_data = malloc(sizeof(LineData));
   *line_data = (LineData){
       .x_data = x,

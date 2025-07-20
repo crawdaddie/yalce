@@ -1,3 +1,4 @@
+#! /usr/bin/env ylc -i
 let Tempo = module
   let bpm = [| 130. |];
   let set = fn x ->
@@ -19,16 +20,16 @@ let len = 32;
 let data = (
   dur: array_fill_const len 0.25,
   note: array_fill len (fn i -> (30 + Double (Math.rand_int 24))),
-  vel: array_fill_const len 1.,
+  vel: array_fill_const len false,
   probability_mask: array_fill_const len 1.,
 );
 
 
-Gui.create_array_editor len (cstr data.vel) 0. 1.;
+Gui.create_bool_array_editor len (cstr data.vel);
 Gui.create_array_editor len (cstr data.note) 30. 60.;
 Gui.create_array_editor len (cstr data.probability_mask) 0. 1.;
 
-let seq = fn i d: (dur: Array of Double, note: Array of Double, vel: Array of Double, probability_mask: Array of Double) ->
+let seq = fn i d: (dur: Array of Double, note: Array of Double, vel: Array of Bool, probability_mask: Array of Double) ->
   yield (d.dur[i], d.note[i], d.vel[i], d.probability_mask[i]);
   yield seq ((i + 1) % len) d
 ;;
@@ -48,7 +49,7 @@ let Synth = module
   ) |> play_tpl;
 
   let trig = fn (dur, note, vel, prob_mask) ->
-    match vel > 0. && (Math.rand_double () <= prob_mask) with
+    match vel && (Math.rand_double () <= prob_mask) with
     | true -> (
       let fo = get_tl_tick ();
       let freq = (dmidi_to_freq note);

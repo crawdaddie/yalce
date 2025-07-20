@@ -81,7 +81,7 @@ train model 100;
 import ../../gui/bindings/Gui;
 
 Gui.create_decl_ui (fn () ->
-  let p = Gui.Plt 0. 11. 0. 50.;
+  let p = Gui.Plt 0. 11. 0. 30.;
   let s = Gui.Scatter p (array_size X) (cstr X) (cstr Y);
-  let l = Gui.LinePlt p 2 (cstr [|0., 11.|]) (cstr (forward (model.weight, model.bias) [|0., 11.|]))
+  let l = Gui.LinePlt p 2 (cstr [|0., 11.|]) (cstr (forward (model.weight, model.bias) [|0., 11.|]));
 )
