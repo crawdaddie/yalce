@@ -3,11 +3,14 @@
 #include <stdlib.h>
 
 typedef SDL_Renderer *(*UIObjRendererFn)(void *state, SDL_Renderer *renderer);
+
+typedef int (*UIObjEventHandler)(void *userdata, SDL_Event *event);
 typedef struct {
   void *data;
   UIObjRendererFn render_cb;
-  void *event_handler;
+  UIObjEventHandler event_handler;
   struct UIObj *next;
+  SDL_Rect viewport_rect;
   double bounds[4];
 } UIObj;
 
@@ -56,14 +59,131 @@ void decl_ui_render_fn(DeclUIState *state, SDL_Renderer *renderer) {
 
     o->render_cb(o->data, renderer);
 
-    viewport_rect.y += height + 10;
     viewport_rect.w = width;
     viewport_rect.h = height;
+    o->viewport_rect = viewport_rect;
+    viewport_rect.y += height + 10;
     SDL_RenderSetViewport(renderer, &viewport_rect);
     o = (UIObj *)o->next;
   }
 }
-void decl_ui_event_handler(DeclUIState *state, SDL_Event *event) {}
+
+void __decl_ui_event_handler(DeclUIState *state, SDL_Event *event) {
+  if (!state || !event)
+    return;
+
+  // Only handle mouse events for now
+  if (event->type != SDL_MOUSEBUTTONDOWN && event->type != SDL_MOUSEBUTTONUP &&
+      event->type != SDL_MOUSEMOTION) {
+    return;
+  }
+
+  int mouse_x, mouse_y;
+  if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP) {
+    mouse_x = event->button.x;
+    mouse_y = event->button.y;
+  } else if (event->type == SDL_MOUSEMOTION) {
+    mouse_x = event->motion.x;
+    mouse_y = event->motion.y;
+  }
+
+  UIObj *o = state->head;
+  while (o) {
+    // Check if mouse is within this object's viewport
+    if (mouse_x >= o->viewport_rect.x &&
+        mouse_x < o->viewport_rect.x + o->viewport_rect.w &&
+        mouse_y >= o->viewport_rect.y &&
+        mouse_y < o->viewport_rect.y + o->viewport_rect.h) {
+
+      // If this object has an event handler, call it
+      if (o->event_handler) {
+        // Translate mouse coordinates to be relative to the viewport
+        SDL_Event local_event = *event;
+        if (event->type == SDL_MOUSEBUTTONDOWN ||
+            event->type == SDL_MOUSEBUTTONUP) {
+          local_event.button.x = mouse_x - o->viewport_rect.x;
+          local_event.button.y = mouse_y - o->viewport_rect.y;
+        } else if (event->type == SDL_MOUSEMOTION) {
+          local_event.motion.x = mouse_x - o->viewport_rect.x;
+          local_event.motion.y = mouse_y - o->viewport_rect.y;
+        }
+
+        // Call the object's event handler with local coordinates
+        int handled = o->event_handler(o->data, &local_event);
+        if (handled) {
+          return; // Event was handled, don't process further
+        }
+      }
+    }
+    o = o->next;
+  }
+}
+void handle_dpi_mouse_coords(SDL_Event *event, int *mouse_x, int *mouse_y) {
+
+  SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
+  if (window) {
+    int window_w, window_h, drawable_w, drawable_h;
+    SDL_GetWindowSize(window, &window_w, &window_h);
+    SDL_GL_GetDrawableSize(window, &drawable_w, &drawable_h);
+
+    double scale_x = (double)drawable_w / window_w;
+    double scale_y = (double)drawable_h / window_h;
+
+    *mouse_x = (int)(*mouse_x * scale_x);
+    *mouse_y = (int)(*mouse_y * scale_y);
+  }
+}
+void decl_ui_event_handler(DeclUIState *state, SDL_Event *event) {
+  if (!state || !event)
+    return;
+
+  if (event->type != SDL_MOUSEBUTTONDOWN && event->type != SDL_MOUSEBUTTONUP &&
+      event->type != SDL_MOUSEMOTION) {
+    return;
+  }
+
+  int mouse_x, mouse_y;
+  if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP) {
+    mouse_x = event->button.x;
+    mouse_y = event->button.y;
+  } else if (event->type == SDL_MOUSEMOTION) {
+    mouse_x = event->motion.x;
+    mouse_y = event->motion.y;
+  }
+
+  handle_dpi_mouse_coords(event, &mouse_x, &mouse_y);
+
+  UIObj *o = state->head;
+  while (o) {
+
+    if (mouse_x >= o->viewport_rect.x &&
+        mouse_x < o->viewport_rect.x + o->viewport_rect.w &&
+        mouse_y >= o->viewport_rect.y &&
+        mouse_y < o->viewport_rect.y + o->viewport_rect.h) {
+
+      if (o->event_handler) {
+        SDL_Event local_event = *event;
+        int local_x = mouse_x - o->viewport_rect.x;
+        int local_y = mouse_y - o->viewport_rect.y;
+
+        if (event->type == SDL_MOUSEBUTTONDOWN ||
+            event->type == SDL_MOUSEBUTTONUP) {
+          local_event.button.x = local_x;
+          local_event.button.y = local_y;
+        } else if (event->type == SDL_MOUSEMOTION) {
+          local_event.motion.x = local_x;
+          local_event.motion.y = local_y;
+        }
+
+        int handled = o->event_handler(o->data, &local_event);
+        if (handled) {
+          return;
+        }
+      }
+    }
+    o = o->next;
+  }
+}
 
 typedef void (*DeclUIInitFn)();
 
@@ -249,10 +369,9 @@ void *Plt(double x_min, double x_max, double y_min, double y_max) {
                  .border_color = {180, 180, 180, 255},     // Medium gray
                  .children = calloc(1, sizeof(DeclUIState))};
 
-  UIObj obj = {
-      .data = plot_data,
-      .render_cb = (UIObjRendererFn)render_plt,
-  };
+  UIObj obj = {.data = plot_data,
+               .render_cb = (UIObjRendererFn)render_plt,
+               .bounds = {1000, 2000}};
 
   return append_obj(_decl_ui_ctx, obj);
 }
@@ -398,31 +517,6 @@ typedef struct {
   int size;   // Number of elements in the array
 } CheckBoxesData;
 
-static SDL_Rect get_checkbox_rect(CheckBoxesData *state, int index, int width,
-                                  int height) {
-  const int margin = 40;
-  const int checkbox_size = 30;
-  const int spacing = 10;
-
-  // Calculate total width needed for all checkboxes
-  int total_checkbox_width =
-      state->size * checkbox_size + (state->size - 1) * spacing;
-
-  // Center the checkboxes horizontally
-  int start_x = (width - total_checkbox_width) / 2;
-
-  // Position vertically in the middle
-  int y = (height - checkbox_size) / 2;
-
-  SDL_Rect rect;
-  rect.x = start_x + index * (checkbox_size + spacing);
-  rect.y = y;
-  rect.w = checkbox_size;
-  rect.h = checkbox_size;
-
-  return rect;
-}
-
 static SDL_Renderer *render_checkboxes(void *_state, SDL_Renderer *renderer) {
   CheckBoxesData *state = _state;
   if (!state || !state->data)
@@ -452,26 +546,46 @@ static SDL_Renderer *render_checkboxes(void *_state, SDL_Renderer *renderer) {
       SDL_Color red_color = {255, 0, 0, 255}; // Red text
       render_text("x", x + 4, y, renderer, red_color);
     }
-
-    // if (state->data[i]) {
-    //   SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Red X
-    //
-    //   int pad = 3;
-    //   SDL_RenderDrawLine(renderer, x + pad, y + pad, x + checkbox_size - pad,
-    //                      y + checkbox_size - pad);
-    //
-    //   SDL_RenderDrawLine(renderer, x + checkbox_size - pad, y + pad, x + pad,
-    //                      y + checkbox_size - pad);
-    // }
   }
 
   return renderer;
 }
+static int checkbox_event_handler(void *state, SDL_Event *event) {
+  CheckBoxesData *cb_data = (CheckBoxesData *)state;
+  if (!cb_data || !event)
+    return 0;
+
+  if (event->type == SDL_MOUSEBUTTONDOWN &&
+      event->button.button == SDL_BUTTON_LEFT) {
+    int mouse_x = event->button.x;
+    int mouse_y = event->button.y;
+
+    const int checkbox_size = 20;
+    const int spacing = 5;
+    const int margin = 5;
+
+    for (int i = 0; i < cb_data->size; i++) {
+      int x = margin + i * (checkbox_size + spacing);
+      int y = margin;
+
+      if (mouse_x >= x && mouse_x < x + checkbox_size && mouse_y >= y &&
+          mouse_y < y + checkbox_size) {
+        cb_data->data[i] = !cb_data->data[i];
+        // printf("Checkbox %d toggled to %s\n", i,
+        //        cb_data->data[i] ? "true" : "false");
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
 void *CheckBoxes(int size, bool *data) {
   CheckBoxesData *cb_data = malloc(sizeof(CheckBoxesData));
-  cb_data->data = data; // You were missing this!
-  cb_data->size = size; // And this!
-  UIObj obj = {
-      .data = cb_data, .render_cb = render_checkboxes, .bounds = {40, 440}};
+  cb_data->data = data;
+  cb_data->size = size;
+  UIObj obj = {.data = cb_data,
+               .render_cb = render_checkboxes,
+               .event_handler = checkbox_event_handler,
+               .bounds = {40, 440}};
   return append_obj(_decl_ui_ctx, obj);
 }
