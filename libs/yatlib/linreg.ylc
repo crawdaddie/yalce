@@ -19,6 +19,7 @@ type TLinear = (
   weight: Array of Double,
   bias: Array of Double
 );
+
 let Linear = fn in_feat out_feat ->
   (
     weight: array_fill (in_feat * out_feat) Math.rand_double,

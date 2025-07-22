@@ -1,3 +1,5 @@
+#ifndef _GUI_COMMON_H
+#define _GUI_COMMON_H
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
 #include <stdbool.h>
@@ -5,7 +7,12 @@
 typedef struct {
   int size;
   double *data;
-} _DoubleArray;
+} _ArrDouble;
+
+typedef struct {
+  int32_t size;
+  bool *data;
+} _ArrBool;
 
 extern Uint32 CREATE_WINDOW_EVENT;
 extern Uint32 CREATE_OPENGL_WINDOW_EVENT;
@@ -39,3 +46,4 @@ SDL_Renderer *render_text(const char *text, int x, int y,
                           SDL_Renderer *renderer, SDL_Color text_color);
 
 Window *get_window(SDL_Event event);
+#endif

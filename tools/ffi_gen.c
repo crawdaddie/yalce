@@ -3,20 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// scans a list of header files and prints corresponding ylc extern declarations
-// to stdout
-//
-// struct lookup_t {
-//   char *c_name;
-//   char *ylc_name;
-// };
-//
-// static struct lookup_t LOOKUPS[] = {
-//     {"int", "Int"},         {"double", "Double"}, {"void", "()"},
-//     {"uint64_t", "Uint64"}, {"uint32_t", "Int"},  {"bool", "Bool"},
-//     {"char", "Char"},       {"char *", "Ptr"},    {"const char *", "Ptr"},
-//     {"void *", "Ptr"},      {"double *", "Ptr"},
-// };
+// scans a list of header files and outputs corresponding ylc extern
+// declarations to stdout
 
 typedef struct name_lookup {
   const char *key;
@@ -216,9 +204,9 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "uint32_t", "Int");
   lookups = lookups_extend(lookups, "uint8_t", "Char");
   lookups = lookups_extend(lookups, "int *", "Ptr");
+  lookups = lookups_extend(lookups, "bool *", "Ptr");
   lookups = lookups_extend(lookups, "int", "Int");
   lookups = lookups_extend(lookups, "bool", "Bool");
-  lookups = lookups_extend(lookups, "bool *", "Ptr");
   lookups = lookups_extend(lookups, "char", "Char");
   lookups = lookups_extend(lookups, "char *", "Ptr");
   lookups = lookups_extend(lookups, "const char *", "Ptr");
@@ -231,12 +219,19 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "MIDIEndpointRef", "Int");
   lookups = lookups_extend(lookups, "ItemCount", "Int");
   lookups = lookups_extend(lookups, "_YLC_String", "String");
+  lookups = lookups_extend(lookups, "_ArrBool", "Array of Bool");
 
   // engine lib -specific lookups
   lookups = lookups_extend(lookups, "SignalRef", "Ptr");
   lookups = lookups_extend(lookups, "NodeRef", "Synth");
+  int headers = 1;
+  if (strncmp(argv[1], "--lookups=", 10) == 0) {
+    const char *lookups_file = argv[1] + 10;
 
-  for (int i = 1; i < argc; i++) {
+    headers = 2;
+  }
+
+  for (int i = headers; i < argc; i++) {
 
     char *input_header = argv[i];
 

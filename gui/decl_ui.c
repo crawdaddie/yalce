@@ -579,7 +579,10 @@ static int checkbox_event_handler(void *state, SDL_Event *event) {
   }
   return 0;
 }
-void *CheckBoxes(int size, bool *data) {
+
+void *CheckBoxes(_ArrBool d) {
+  int size = d.size;
+  bool *data = d.data;
   CheckBoxesData *cb_data = malloc(sizeof(CheckBoxesData));
   cb_data->data = data;
   cb_data->size = size;

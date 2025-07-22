@@ -7,14 +7,17 @@ SRCS += faust/temper.c
 SRCS += faust/vital_rev.c
 SRCS += faust/zita_rev.c
 SRCS += faust/imp_train.c
-SRCS += vst/vst_node.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
+COMPILER_OPTIONS := -g
 
 # VST Library path
-VST_LIB_PATH := ${VST_LIB_PATH}
-VST_BUILD_PATH := $(VST_LIB_PATH)/build
+# VST_LIB_PATH := ${VST_LIB_PATH}
+# VST_BUILD_PATH := $(VST_LIB_PATH)/build
+# SRCS += vst/vst_node.c
 
-LDFLAGS = -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -L$(VST_BUILD_PATH) -lylcvst -lstdc++
+LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -lstdc++
+# LDFLAGS += -L$(VST_BUILD_PATH) -lylcvst 
+
 FRAMEWORKS = -framework opengl \
 						 -framework CoreMIDI \
 						 -framework cocoa \
@@ -22,19 +25,20 @@ FRAMEWORKS = -framework opengl \
 						 -framework AudioToolbox \
 						 -framework CoreFoundation
 
-COMPILER_OPTIONS = -g -I$(VST_LIB_PATH)/src
+COMPILER_OPTIONS += -I$(VST_LIB_PATH)/src
 CC = clang
 
 SHARED_LIB_TARGET := $(BUILD_DIR)/libyalce_synth.so
 
 .PHONY: all clean ylc_bindings vst_lib
 
-all: vst_lib $(SHARED_LIB_TARGET)
+all: $(SHARED_LIB_TARGET)
+	# vst_lib
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(BUILD_DIR)/faust
-	mkdir -p $(BUILD_DIR)/vst
+	# mkdir -p $(BUILD_DIR)/vst
 
 # Build the VST library
 vst_lib:
@@ -67,7 +71,8 @@ ylc_bindings:
 	cat bindings/_engine_midi_extra.ylc >> bindings/MIDI.ylc
 
 # Build the shared library
-$(SHARED_LIB_TARGET): $(filter-out $(BUILD_DIR)/main.o, $(OBJS)) | vst_lib
+$(SHARED_LIB_TARGET): $(filter-out $(BUILD_DIR)/main.o, $(OBJS))
+	# | vst_lib
 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
 	install_name_tool -id @rpath/libyalce_synth.so $@
 	$(MAKE) -C ../tools;
@@ -79,5 +84,5 @@ audio_test: $(OBJS)
 
 clean:
 	rm -rf $(BUILD_DIR)
-	@echo "Cleaning VST library..."
-	$(MAKE) -C $(VST_LIB_PATH) clean
+	# @echo "Cleaning VST library..."
+	# $(MAKE) -C $(VST_LIB_PATH) clean
