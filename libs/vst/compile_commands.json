@@ -1,0 +1,22 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/clang++",
+      "-std=c++11",
+      "-Wall",
+      "-Wextra",
+      "-O2",
+      "-I/Users/adam/projects/sound/ylc-vst/libs/VST2_SDK",
+      "-I/Users/adam/projects/sound/yalce/engine",
+      "-I../../lang/",
+      "-DVSTCALLBACK=",
+      "-c",
+      "-o",
+      "vst_loader.o",
+      "vst_loader.cpp"
+    ],
+    "directory": "/Users/adam/projects/sound/yalce/libs/vst",
+    "file": "/Users/adam/projects/sound/yalce/libs/vst/vst_loader.cpp",
+    "output": "/Users/adam/projects/sound/yalce/libs/vst/vst_loader.o"
+  }
+]

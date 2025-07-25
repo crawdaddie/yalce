@@ -37,8 +37,12 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input);
 NodeRef dyn_tanh_node(NodeRef gain, NodeRef input);
 
 typedef double (*MathNodeFn)(double);
+
 NodeRef math_node(MathNodeFn math_fn, NodeRef input);
 
 NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
                      NodeRef input);
+
+NodeRef wrap_opaque_ref_in_node(void *opaque_ref, void *perform, int out_chans,
+                                NodeRef input);
 #endif

@@ -25,8 +25,4 @@ typedef struct GLObj {
   struct GLObj *next;
 } GLObj;
 
-typedef struct {
-  int size;
-  const char *chars;
-} _String;
 #endif

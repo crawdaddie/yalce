@@ -1,6 +1,7 @@
-#include "./filter.h"
+#include "filter.h"
 #include "./common.h"
 #include "./ctx.h"
+#include "./filter_ext.h"
 #include "./node.h"
 #include "./primes.h"
 #include "audio_graph.h"
@@ -370,8 +371,8 @@ Node *biquad_lp_node(Node *freq, Node *res, Node *input) {
   };
 
   // Initialize state
-  biquad_state *state =
-      (biquad_state *)(graph->nodes_state_memory + node->state_offset);
+  biquad_state *state = state_ptr(graph, node);
+  // (biquad_state *)(graph->nodes_state_memory + node->state_offset);
   zero_biquad_filter_state(state);
   state->prev_freq = 0.0;
   state->prev_res = 0.0;
@@ -403,8 +404,9 @@ Node *biquad_bp_node(Node *freq, Node *res, Node *input) {
   };
 
   // Initialize state
-  biquad_state *state =
-      (biquad_state *)(graph->nodes_state_memory + node->state_offset);
+  biquad_state *state = state_ptr(graph, node);
+
+  // (biquad_state *)(graph->nodes_state_memory + node->state_offset);
   zero_biquad_filter_state(state);
   state->prev_freq = 0.0;
   state->prev_res = 0.0;
@@ -436,8 +438,8 @@ Node *biquad_hp_node(Node *freq, Node *res, Node *input) {
   };
 
   // Initialize state
-  biquad_state *state =
-      (biquad_state *)(graph->nodes_state_memory + node->state_offset);
+  biquad_state *state = state_ptr(graph, node);
+  // (biquad_state *)(graph->nodes_state_memory + node->state_offset);
   zero_biquad_filter_state(state);
   state->prev_freq = 0.0;
   state->prev_res = 0.0;
@@ -913,6 +915,7 @@ void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
 
 Node *comb_node(double delay_time, double max_delay_time, double fb, double ff,
                 Node *input) {
+
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
   int bufsize = (int)(max_delay_time * sample_rate * in_layout);
@@ -1732,11 +1735,52 @@ NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
   char *mem = state_ptr(graph, node);
 
   memset(mem, 0, state_size);
-  stutter_state *state = mem;
+  stutter_state *state = (stutter_state *)mem;
   *state = s;
 
   plug_input_in_graph(0, node, input);
   plug_input_in_graph(1, node, gate);
   plug_input_in_graph(2, node, repeat_time);
+  return graph_embed(node);
+}
+
+typedef struct {
+  void *opaque_ref;
+} opaque_ref_node_state;
+
+NodeRef wrap_opaque_ref_in_node(void *opaque_ref, void *perform, int out_chans,
+                                NodeRef input) {
+
+  AudioGraph *graph = _graph;
+
+  int state_size = sizeof(opaque_ref_node_state);
+
+  opaque_ref_node_state m = {.opaque_ref = opaque_ref};
+
+  Node *node = allocate_node_in_graph(graph, state_size);
+
+  *node = (Node){
+      .perform = (perform_func_t)perform,
+      .node_index = node->node_index,
+      .num_inputs = 1,
+      .state_size = state_size,
+      .state_offset = state_offset_ptr_in_graph(graph, state_size),
+      .output = (Signal){.layout = out_chans,
+                         .size = input->output.size,
+                         .buf = allocate_buffer_from_pool(
+                             graph, out_chans * input->output.size)},
+      .meta = "opaque_ref_filter_node",
+  };
+
+  /* Initialize state memory */
+  char *mem = state_ptr(graph, node);
+
+  memset(mem, 0, state_size);
+  opaque_ref_node_state *state = (opaque_ref_node_state *)mem;
+  *state = m;
+
+  // node->connections[0].source_node_index = input->node_index;
+  plug_input_in_graph(0, node, input);
+  //
   return graph_embed(node);
 }

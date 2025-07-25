@@ -22,7 +22,7 @@ typedef struct {
   int input_index;       // Which input slot this connects to
 } Connection;
 
-typedef struct {
+typedef struct Node {
   perform_func_t perform; // Node processing function
   int frame_offset;
   int node_index;                     // Position in the graph array

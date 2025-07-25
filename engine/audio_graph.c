@@ -12,7 +12,6 @@ double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
     return calloc(size, sizeof(double));
   }
 
-  // Ensure we have enough space
   if (graph->buffer_pool_size + size > graph->buffer_pool_capacity) {
 
     // printf("realloc buffer pool?? %d %d\n", graph->buffer_pool_size + size,

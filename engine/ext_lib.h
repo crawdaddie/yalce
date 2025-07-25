@@ -1,6 +1,7 @@
 #ifndef _ENGINE_EXT_LIB_H
 #define _ENGINE_EXT_LIB_H
 #include "./audio_graph.h"
+#include "ylc_datatypes.h"
 #include <stdint.h>
 
 void start_blob();
@@ -20,7 +21,7 @@ NodeRef set_input_trig_offset(NodeRef target, int input, uint64_t tick);
 NodeRef set_input_buf(int input, NodeRef buf, NodeRef node);
 NodeRef play_node_offset(uint64_t tick, NodeRef s);
 NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node);
-NodeRef load_soundfile(_YLC_String path);
+NodeRef load_soundfile(_String path);
 
 NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s);
 

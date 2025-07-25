@@ -1,0 +1,8 @@
+open ../../engine/bindings/Synth;
+let _ = dlopen "libvstloader.so";
+type VSTInstance = Ptr;
+let vst_load_plugin = extern fn String -> Ptr;
+let vst_load_plugin_of_arr = extern fn String -> Array of Double -> VSTInstance;
+let vst_load_plugin_of_assoc_list = extern fn String -> List of (Int, Double) -> VSTInstance;
+let vst_fx_node = extern fn Ptr -> Synth -> Synth;
+

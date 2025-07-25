@@ -220,6 +220,11 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
   }
 
   TICtx app_ctx = {};
+
+  // if (cons->data.T_CONS.args == NULL) {
+  //   return cons;
+  // }
+
   for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
 
     Type *cons_arg = cons->data.T_CONS.args[i];

@@ -25,7 +25,8 @@ FRAMEWORKS = -framework opengl \
 						 -framework AudioToolbox \
 						 -framework CoreFoundation
 
-COMPILER_OPTIONS += -I$(VST_LIB_PATH)/src
+COMPILER_OPTIONS += -I$(VST_LIB_PATH)/src -I../lang/
+
 CC = clang
 
 SHARED_LIB_TARGET := $(BUILD_DIR)/libyalce_synth.so

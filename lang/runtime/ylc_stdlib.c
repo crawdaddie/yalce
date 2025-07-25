@@ -18,14 +18,14 @@ void str_copy(char *dest, char *src, int len) {
   dest[len + 1] = '\0';
 }
 
-void print(String str) { printf("%s", str.chars); }
+void print(_String str) { printf("%s", str.chars); }
 void printc(char c) { printf("%c", c); }
 
-void fprint(FILE *f, String str) { fprintf(f, "%s", str.chars); }
+void fprint(FILE *f, _String str) { fprintf(f, "%s", str.chars); }
 struct char_matrix {
   int32_t rows;
   int32_t cols;
-  String data;
+  _String data;
 };
 
 void print_char_matrix(int32_t m, int32_t n, char *A) {
@@ -37,9 +37,6 @@ void print_char_matrix(int32_t m, int32_t n, char *A) {
     printf("\n");
   }
 }
-
-// YALCE STDLIB
-//
 
 // uniformly distributed integer between 0 and range-1
 int rand_int(int range) {
@@ -82,12 +79,12 @@ double unipolar_scale(double min, double max, double unipolar_input) {
 FILE *get_stderr() { return stderr; }
 FILE *get_stdout() { return stdout; }
 
-String string_concat(String *strings, int num_strings) {
+_String string_concat(_String *strings, int num_strings) {
   int total_len = 0;
   int lengths[num_strings];
 
   for (int i = 0; i < num_strings; i++) {
-    lengths[i] = strings[i].length;
+    lengths[i] = strings[i].size;
     total_len += lengths[i];
   }
 
@@ -98,14 +95,14 @@ String string_concat(String *strings, int num_strings) {
     offset += lengths[i];
   }
 
-  return (String){total_len, concatted};
+  return (_String){total_len, concatted};
 }
 
-String string_add(String a, String b) {
-  return string_concat((String[]){a, b}, 2);
+_String string_add(_String a, _String b) {
+  return string_concat((_String[]){a, b}, 2);
 }
 
-char *cstr(String s) { return s.chars; }
+char *cstr(_String s) { return s.chars; }
 
 int char_to_hex_int(char c) {
   // Convert the character to lowercase for easier processing
@@ -121,8 +118,8 @@ int char_to_hex_int(char c) {
   }
 }
 
-String transpose_string(int input_rows, int input_cols, int output_rows,
-                        int output_cols, String input) {
+_String transpose_string(int input_rows, int input_cols, int output_rows,
+                         int output_cols, _String input) {
   char *transposed =
       malloc(sizeof(char) * ((output_rows * (output_cols + 1)) + 1));
 
@@ -138,7 +135,7 @@ String transpose_string(int input_rows, int input_cols, int output_rows,
     }
   }
   transposed[output_idx + 1] = '\0';
-  String result = {output_idx, transposed};
+  _String result = {output_idx, transposed};
   return result;
 }
 
@@ -192,11 +189,11 @@ ByteArray read_bytes(FILE *f) {
 }
 
 /*
- * Free the memory used by a StrList
+ * Free the memory used by a _YLC__String_List
  */
-void free_str_list(StrList *list) {
+void free_str_list(_YLC__String_List *list) {
   while (list != NULL) {
-    StrList *next = list->next;
+    _YLC__String_List *next = list->next;
     // Note: We don't free data.chars because it points into the original buffer
     free(list);
     list = next;
@@ -216,27 +213,24 @@ ReadLinesResult read_lines(FILE *f) {
     return (ReadLinesResult){NULL, 0};
   }
 
-  // Read the entire file into memory
   ByteArray file_bytes = read_bytes(f);
   if (file_bytes.bytes == NULL || file_bytes.size == 0) {
-    // Return empty list for empty file
     return (ReadLinesResult){NULL, 0};
   }
 
-  // Create the first node as a sentinel (will be head of our list)
-  StrList *head = (StrList *)malloc(sizeof(StrList));
+  _YLC__String_List *head =
+      (_YLC__String_List *)malloc(sizeof(_YLC__String_List));
   if (head == NULL) {
     free(file_bytes.bytes);
 
     return (ReadLinesResult){NULL, 0};
   }
 
-  // Initialize head node
   head->data.chars = NULL;
-  head->data.length = 0;
+  head->data.size = 0;
   head->next = NULL;
 
-  StrList *current = head;
+  _YLC__String_List *current = head;
   char *buffer = file_bytes.bytes;
   char *line_start = buffer;
   size_t line_length = 0;
@@ -248,7 +242,8 @@ ReadLinesResult read_lines(FILE *f) {
         line_length++;
       }
 
-      StrList *new_node = (StrList *)malloc(sizeof(StrList));
+      _YLC__String_List *new_node =
+          (_YLC__String_List *)malloc(sizeof(_YLC__String_List));
       if (new_node == NULL) {
         // Memory allocation failed
         free(file_bytes.bytes);
@@ -256,16 +251,13 @@ ReadLinesResult read_lines(FILE *f) {
         return (ReadLinesResult){NULL, 0};
       }
 
-      // Store the line data
       new_node->data.chars = line_start;
-      new_node->data.length = line_length;
+      new_node->data.size = line_length;
       new_node->next = NULL;
 
-      // Add to the list
       current->next = new_node;
       current = new_node;
 
-      // Prepare for the next line
       line_start = buffer + i + 1;
       line_length = 0;
       num_lines++;
@@ -276,16 +268,15 @@ ReadLinesResult read_lines(FILE *f) {
 
   head->data.chars = file_bytes.bytes;
 
-  StrList *result = head->next;
+  _YLC__String_List *result = head->next;
   free(head);
 
   return (ReadLinesResult){result, num_lines};
 }
 
-struct _OptFile open_file(String path, String mode) {
+struct _OptFile open_file(_String path, _String mode) {
   FILE *f = fopen(path.chars, mode.chars);
   if (f) {
-    // printf("read file\n");
     return (struct _OptFile){0, f};
   }
   return (struct _OptFile){1, NULL};
@@ -298,14 +289,11 @@ struct sockaddr *create_server_addr(int af_inet, int inaddr_any, int port) {
   struct sockaddr_in servaddr;
   bzero(&servaddr, sizeof(servaddr));
 
-  // printf("%d %d %d\n", af_inet, inaddr_any, port);
-
   // assign IP, PORT
   servaddr.sin_family = af_inet;
   servaddr.sin_addr.s_addr = htonl(inaddr_any);
   servaddr.sin_port = htons(port);
   *_server_addr = servaddr;
-  // printf("sizeof sockaddr_in %lu\n", sizeof(struct sockaddr_in));
   return (struct sockaddr *)_server_addr;
 }
 
@@ -391,7 +379,6 @@ void _vec_add(int size, double *vec1, double *vec2) {
 }
 
 void _arr_copy(int size, double *from, double *to) {
-  printf("copy arr %d\n", size);
   int idx = 0;
   while (size--) {
     // printf("%d to %d\n", idx, idx);
@@ -457,8 +444,8 @@ double *mmap_double_array(int32_t data_size, double *data,
   return mapped_data;
 }
 
-struct _DoubleArray double_array_from_raw(int32_t size, double *data) {
-  return (struct _DoubleArray){size, data};
+_DoubleArray double_array_from_raw(int32_t size, double *data) {
+  return (_DoubleArray){size, data};
 }
 
 void mmap_sync_array(int32_t size, double *data) {
@@ -545,38 +532,22 @@ int first_str_match(const char *str, const char *delim) {
   return -1;
 }
 
-// StrList *string_split(String str, String delim) {
-//   printf("str split '%s' '%s'\n", str.chars, delim.chars);
-//   char *strc = str.chars;
-//   int strlen = str.length;
-//   StrList *head = malloc(sizeof(StrList));
-//   StrList *tail = head;
-//
-//   int offset = 0;
-//   while (offset < strlen) {
-//     if (strncmp(strc, delim.chars, delim.length)) {
-//     }
-//     strc++;
-//   }
-//
-//   return NULL;
-// }
-StrList *string_split(String str, String delim) {
+STRLIST *string_split(_String str, _String delim) {
 
-  if (str.length == 0) {
+  if (str.size == 0) {
     return NULL;
   }
 
-  StrList *head = NULL;
-  StrList *tail = NULL;
+  STRLIST *head = NULL;
+  STRLIST *tail = NULL;
 
   int start = 0;
   int i = 0;
 
-  while (i <= str.length - delim.length) {
-    if (strncmp(str.chars + i, delim.chars, delim.length) == 0) {
-      StrList *new_node = malloc(sizeof(StrList));
-      new_node->data.length = i - start;
+  while (i <= str.size - delim.size) {
+    if (strncmp(str.chars + i, delim.chars, delim.size) == 0) {
+      STRLIST *new_node = malloc(sizeof(STRLIST));
+      new_node->data.size = i - start;
       new_node->data.chars = str.chars + start;
       new_node->next = NULL;
 
@@ -587,15 +558,15 @@ StrList *string_split(String str, String delim) {
         tail = new_node;
       }
 
-      i += delim.length;
+      i += delim.size;
       start = i;
     } else {
       i++;
     }
   }
 
-  StrList *new_node = malloc(sizeof(StrList));
-  new_node->data.length = str.length - start;
+  STRLIST *new_node = malloc(sizeof(STRLIST));
+  new_node->data.size = str.size - start;
   new_node->data.chars = str.chars + start;
   new_node->next = NULL;
 

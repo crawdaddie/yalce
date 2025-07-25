@@ -2,7 +2,7 @@
 #define _ENGINE_LIB_H
 #include "./audio_graph.h"
 
-typedef struct {
+typedef struct InValList {
   struct {
     int idx;
     double val;

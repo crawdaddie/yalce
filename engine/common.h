@@ -19,9 +19,5 @@
 #define ANSI_COLOR_RESET "\x1b[0m"
 
 inline double pow2table_read(double pos, int tabsize, double *table);
-typedef struct {
-  int32_t size;
-  char *chars;
-} _YLC_String;
 
 #endif

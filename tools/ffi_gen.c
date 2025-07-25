@@ -219,6 +219,7 @@ int main(int argc, char *argv[]) {
   lookups = lookups_extend(lookups, "MIDIEndpointRef", "Int");
   lookups = lookups_extend(lookups, "ItemCount", "Int");
   lookups = lookups_extend(lookups, "_YLC_String", "String");
+  lookups = lookups_extend(lookups, "_String", "String");
   lookups = lookups_extend(lookups, "_ArrBool", "Array of Bool");
 
   // engine lib -specific lookups

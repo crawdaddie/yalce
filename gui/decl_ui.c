@@ -321,8 +321,10 @@ void render_plt(void *state, SDL_Renderer *renderer) {
   if (!plot)
     return;
 
-  int width, height;
-  SDL_GetRendererOutputSize(renderer, &width, &height);
+  SDL_Rect viewport;
+  SDL_RenderGetViewport(renderer, &viewport);
+  int width = viewport.w;
+  int height = viewport.h;
 
   calculate_plot_bounds(plot);
 
@@ -394,8 +396,10 @@ void render_scatter(void *state, SDL_Renderer *renderer) {
   if (!scatter || !scatter->x_data || !scatter->y_data || !plot)
     return;
 
-  int width, height;
-  SDL_GetRendererOutputSize(renderer, &width, &height);
+  SDL_Rect viewport;
+  SDL_RenderGetViewport(renderer, &viewport);
+  int width = viewport.w;
+  int height = viewport.h;
 
   for (int i = 0; i < scatter->size; i++) {
     SDL_Point screen_point = data_to_screen(plot, scatter->x_data[i],
@@ -462,8 +466,10 @@ void render_line_plt(void *state, SDL_Renderer *renderer) {
   LineData *line = (LineData *)state;
   PlotData *plot = get_current_plot();
 
-  int width, height;
-  SDL_GetRendererOutputSize(renderer, &width, &height);
+  SDL_Rect viewport;
+  SDL_RenderGetViewport(renderer, &viewport);
+  int width = viewport.w;
+  int height = viewport.h;
 
   SDL_SetRenderDrawColor(renderer, line->line_color.r, line->line_color.g,
                          line->line_color.b, line->line_color.a);

@@ -2,8 +2,8 @@ include ../.env
 # gui/Makefile
 
 # VST Library path
-VST_LIB_PATH := ${VST_LIB_PATH}
-VST_BUILD_PATH := $(VST_LIB_PATH)/build
+# VST_LIB_PATH := ${VST_LIB_PATH}
+# VST_BUILD_PATH := $(VST_LIB_PATH)/build
 CC := clang -g
 CC += -DYLC_LANG_DYN_LIB
 CFLAGS := -Wall -Wextra -fPIC -I. \
@@ -11,13 +11,13 @@ CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_PATH}/include/SDL2 \
 					-I${SDL2_TTF_PATH}/include \
 					-I${SDL2_GFX_PATH}/include \
-					-I$(VST_LIB_PATH)/src \
+					-I../lang
+					# -I$(VST_LIB_PATH)/src \
 
 LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
 					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
 					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
 					 -L$(shell brew --prefix sdl2_image)/lib -lSDL2_image \
-					 -L$(VST_BUILD_PATH) -lylcvst \
 					 -lGLEW -lglfw
 
 FRAMEWORKS := -framework Foundation -framework OpenGL 

@@ -1,16 +1,13 @@
 #ifndef _LANG_YLC_STDLIB_H
 #define _LANG_YLC_STDLIB_H
 #include <stdint.h>
-#include <stdio.h>
 
-typedef struct String {
-  int length;
-  char *chars;
-} String;
+#include "../ylc_datatypes.h"
+#include <stdio.h>
 
 void str_copy(char *dest, char *src, int len);
 
-void print(String str);
+void print(_String str);
 void printc(char c);
 
 int rand_int(int range);
@@ -35,21 +32,16 @@ FILE *get_stdout();
 
 const char *_string_concat(const char **strings, int num_strings);
 
-String string_concat(String *strings, int num_strings);
+_String string_concat(_String *strings, int num_strings);
 
-String string_add(String a, String b);
-char *cstr(String);
+_String string_add(_String a, _String b);
+char *cstr(_String);
 
 int char_to_hex_int(char c);
 
-String transpose_string(int, int, int, int, String);
+_String transpose_string(int, int, int, int, _String);
 
 double *double_array_init(int32_t size, double val);
-
-struct _DoubleArray {
-  int32_t size;
-  double *data;
-};
 
 struct _DoubleArray double_array(int32_t size, double val);
 
@@ -72,31 +64,22 @@ typedef struct ByteArray {
 
 struct ByteArray read_bytes(FILE *f);
 
-typedef struct StrList {
-  String data;
-  struct StrList *next;
+// typedef struct _YLC__String_List {
+//   _String data;
+//   struct _YLC__String_List *next;
+// } StrList;
 
-} StrList;
+YLC_LIST_TYPE(_String)
+typedef LIST_T(_String) STRLIST;
+
 typedef struct ReadLinesResult {
-  StrList *list;
+  STRLIST *list;
   int length;
 } ReadLinesResult;
 
 ReadLinesResult read_lines(FILE *fd);
 
-struct _OptFile open_file(String path, String mode);
-
-struct _size_stride_pair {
-  int size;
-  int stride;
-};
-
-typedef struct Tensor {
-  size_t dtype_size;
-  void *storage;
-  int ndim;
-  int sizes_strides[] // ndim * 2 [size, stride, size, stride ...]
-} Tensor;
+struct _OptFile open_file(_String path, _String mode);
 
 void _scanf(const char *fmt_string, const char *input_string, int size,
             void **pointers);
@@ -126,7 +109,7 @@ void _arr_copy(int size, double *from, double *to);
 double *mmap_double_array(int32_t data_size, double *data,
                           const char *filename);
 
-struct _DoubleArray double_array_from_raw(int32_t size, double *data);
+_DoubleArray double_array_from_raw(int32_t size, double *data);
 
 void _linalg_pool_init(int32_t size);
 double *_double_arr_alloc(int32_t size);
@@ -137,4 +120,5 @@ typedef struct DoublePair {
   double z0;
   double z1;
 } DoublePair;
+
 #endif

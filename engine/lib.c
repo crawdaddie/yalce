@@ -5,6 +5,7 @@
 #include "./node.h"
 #include "audio_loop.h"
 #include "scheduling.h"
+#include "ylc_datatypes.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -601,7 +602,7 @@ typedef struct {
   int sample_rate;
 } sf_meta;
 
-NodeRef load_soundfile(_YLC_String path) {
+NodeRef load_soundfile(_String path) {
   Node *sf = malloc(sizeof(Node) + sizeof(sf_meta));
   sf_meta *meta = (sf_meta *)((Node *)sf + 1);
   if (_read_file(path.chars, &sf->output, &meta->sample_rate) != 0) {
