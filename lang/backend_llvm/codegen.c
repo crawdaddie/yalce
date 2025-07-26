@@ -10,7 +10,7 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "builtin_functions.h"
-#include "coroutines.h"
+#include "coroutines/coroutines.h"
 #include "loop.h"
 #include "module.h"
 #include "modules.h"
@@ -225,7 +225,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *t = ast->md;
 
     if (t->kind == T_CREATE_NEW_GENERIC) {
-      Type *tpl = t->data.T_CREATE_NEW_GENERIC.template;
+      Type *tpl = t->data.T_CREATE_NEW_GENERIC.tpl;
       Type *resolved = t->data.T_CREATE_NEW_GENERIC.fn(tpl);
       if (resolved->kind == T_CONS) {
         t = resolved;

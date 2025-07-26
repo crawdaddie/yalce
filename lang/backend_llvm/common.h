@@ -79,7 +79,7 @@ typedef struct {
   int val_map[];
 } ModuleTypeMap;
 
-typedef struct {
+typedef struct JITSymbol {
   symbol_type type;
   LLVMTypeRef llvm_type;
   LLVMValueRef val;

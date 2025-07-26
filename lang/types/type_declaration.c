@@ -279,9 +279,9 @@ Type *compute_type_expression(Ast *expr, TypeEnv *env, TypeEnv **up) {
 
       if (lookup && lookup->kind == T_CREATE_NEW_GENERIC &&
           lookup->data.T_CREATE_NEW_GENERIC.fn &&
-          lookup->data.T_CREATE_NEW_GENERIC.template) {
+          lookup->data.T_CREATE_NEW_GENERIC.tpl) {
 
-        Type *tpl = lookup->data.T_CREATE_NEW_GENERIC.template;
+        Type *tpl = lookup->data.T_CREATE_NEW_GENERIC.tpl;
         tpl = deep_copy_type(tpl);
 
         tpl = _rec_generic_cons(tpl, up);
@@ -404,7 +404,7 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
                        .data = {.T_CREATE_NEW_GENERIC = {
                                     .fn = (CreateNewGenericTypeFn)
                                         create_generic_cons_from_declaration,
-                                    .template = type}}};
+                                    .tpl = type}}};
     type = gen_tmpl;
   }
 

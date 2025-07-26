@@ -4,7 +4,7 @@
 #include "binding.h"
 #include "closures.h"
 #include "codegen.h"
-#include "coroutines.h"
+#include "coroutines/coroutines.h"
 #include "currying.h"
 #include "function.h"
 #include "globals.h"

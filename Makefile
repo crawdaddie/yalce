@@ -21,6 +21,7 @@ LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wi
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/runtime/*.c)
+
 CFLAGS := -I./lang 
 CFLAGS += -I./gui -I${SDL2_PATH}/include -I${SDL2_PATH}/include/SDL2 -I${SDL2_TTF_PATH}/include
 
@@ -29,6 +30,10 @@ CFLAGS += -I./lang/backend_llvm
 CFLAGS += -I./lang/runtime
 CFLAGS += `$(LLVM_CONFIG) --cflags`
 CFLAGS += -I`$(LLVM_CONFIG) --includedir`
+LANG_CPP_SRCS := $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.cpp)
+LANG_CXX := clang++ -std=c++17 -stdlib=libc++ $(CFLAGS) -g
+# C++ object files
+LANG_CPP_OBJS := $(LANG_CPP_SRCS:$(LANG_SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 
 
 LANG_CC := clang $(CFLAGS)
@@ -37,13 +42,6 @@ LANG_CC += -g
 LANG_LD_FLAGS := -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 
-# LANG_CC += -D_USE_BLAS
-# LANG_CC += -I${OPENBLAS_PATH}/include
-# LANG_LD_FLAGS += -L${OPENBLAS_PATH}/lib -lopenblas
-#
-# LANG_CC += -D_USE_OPENMP
-# LANG_CC += -I${OPENMP_PATH}/include
-# LANG_LD_FLAGS += -L${OPENMP_PATH}/lib -lomp
 
 LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
@@ -82,6 +80,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)/backend_llvm
 	mkdir -p $(BUILD_DIR)/types
 	mkdir -p $(BUILD_DIR)/runtime
+	mkdir -p $(BUILD_DIR)/coroutines
 
 # Define Linux-specific YACC flags
 ifeq ($(shell uname -s),Linux)
@@ -100,9 +99,13 @@ $(LEX_OUTPUT): $(LEX_FILE)
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
+$(BUILD_DIR)/coroutines/%.o: $(LANG_SRC_DIR)/backend_llvm/coroutines/%.cpp | $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)/coroutines
+	clang++ -std=c++17 $(CFLAGS) -g -c -o $@ $<
+
 # Build the final executable
-$(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
-	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
+$(BUILD_DIR)/ylc: $(LANG_OBJS) $(BUILD_DIR)/coroutines/coroutines.o | engine gui
+	$(LANG_CC) -o $@ $(LANG_OBJS) $(BUILD_DIR)/coroutines/coroutines.o $(LANG_LD_FLAGS) -lstdc++
 	otool -L $(BUILD_DIR)/ylc
 
 clean:

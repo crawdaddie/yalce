@@ -1,7 +1,7 @@
 #include "backend_llvm/application.h"
 #include "adt.h"
 #include "builtin_functions.h"
-#include "coroutines.h"
+#include "coroutines/coroutines.h"
 #include "function.h"
 #include "modules.h"
 #include "serde.h"

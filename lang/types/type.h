@@ -218,7 +218,7 @@ extern _binop_map binop_map[];
 
 #define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none)
 
-typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
+typedef Type *(*TypeClassResolver)(struct Type *_this, TypeConstraint *env);
 
 // #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
 //   ((Type){                                                                     \
@@ -279,7 +279,7 @@ typedef struct Type {
 
     struct {
       CreateNewGenericTypeFn fn;
-      struct Type *template;
+      struct Type *tpl;
     } T_CREATE_NEW_GENERIC;
 
   } data;

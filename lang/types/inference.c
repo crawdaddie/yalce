@@ -265,7 +265,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
       type = ref->type;
       if (type->kind == T_CREATE_NEW_GENERIC) {
-        Type *tmpl = type->data.T_CREATE_NEW_GENERIC.template;
+        Type *tmpl = type->data.T_CREATE_NEW_GENERIC.tpl;
         type = type->data.T_CREATE_NEW_GENERIC.fn(tmpl);
       }
     }
@@ -274,8 +274,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Type *t = lookup_builtin_type(name);
 
       if (t && t->kind == T_CREATE_NEW_GENERIC) {
-        Type *template = t->data.T_CREATE_NEW_GENERIC.template;
-        type = t->data.T_CREATE_NEW_GENERIC.fn(template);
+        Type *tpl = t->data.T_CREATE_NEW_GENERIC.tpl;
+        type = t->data.T_CREATE_NEW_GENERIC.fn(tpl);
       } else if (t) {
         type = t;
       } else {
@@ -539,8 +539,8 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
     Type *type;
 
     if (lookup && lookup->kind == T_CREATE_NEW_GENERIC) {
-      Type *template = lookup->data.T_CREATE_NEW_GENERIC.template;
-      lookup = lookup->data.T_CREATE_NEW_GENERIC.fn(template);
+      Type *tpl = lookup->data.T_CREATE_NEW_GENERIC.tpl;
+      lookup = lookup->data.T_CREATE_NEW_GENERIC.fn(tpl);
       return lookup;
     }
 

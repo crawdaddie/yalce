@@ -1,8 +1,20 @@
-#ifndef _LANG_BACKEND_LLVM_COROUTINE_H
-#define _LANG_BACKEND_LLVM_COROUTINE_H
-#include "common.h"
-#include "parse.h"
+#ifndef _LANG_BACKEND_LLVM_COROUTINE_HPP
+#define _LANG_BACKEND_LLVM_COROUTINE_HPP
 
+#include "../../parse.h"
+#include "../common.h"
+#include "llvm-c/Core.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// C-compatible function declarations
+//
+LLVMValueRef compile_coroutine(LLVMModuleRef module, LLVMContextRef context,
+                               LLVMBuilderRef builder);
+
+LLVMTypeRef cor_inst_struct_type();
 LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *ast,
                                                   JITLangCtx *ctx,
                                                   LLVMModuleRef module,
@@ -67,4 +79,16 @@ LLVMValueRef CoroutineEndHandler(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef UseOrFinishHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
+
+void run_coroutine_passes_on_function(LLVMValueRef func_ref);
+
+void run_coroutine_passes_on_module(LLVMModuleRef module_ref);
+
+#ifdef __cplusplus
+}
+
+namespace coroutines {}
+
 #endif
+
+#endif // _LANG_BACKEND_LLVM_COROUTINE_HPP

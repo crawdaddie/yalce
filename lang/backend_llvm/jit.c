@@ -2,6 +2,7 @@
 #include "./codegen.h"
 #include "./common.h"
 #include "./globals.h"
+#include "backend_llvm/coroutines/coroutines.h"
 #include "builtin_functions.h"
 #include "config.h"
 #include "escape_analysis.h"
@@ -220,6 +221,7 @@ void dump_assembly(LLVMModuleRef module) {
 }
 
 void module_passes(LLVMModuleRef module) {
+  run_coroutine_passes_on_module(module);
   LLVMPassManagerRef pass_manager =
       LLVMCreateFunctionPassManagerForModule(module);
 

@@ -3,7 +3,7 @@
 #include "application.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/common.h"
-#include "backend_llvm/coroutines.h"
+#include "backend_llvm/coroutines/coroutines.h"
 #include "function.h"
 #include "input.h"
 #include "list.h"
