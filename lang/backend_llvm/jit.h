@@ -2,6 +2,9 @@
 #define _LANG_BACKEND_LLVM_JIT_H
 #include "./common.h"
 #include "llvm-c/ExecutionEngine.h"
+
+#include <llvm-c/LLJIT.h> // ORC LLJIT C API
+#include <llvm-c/Orc.h>   // ORC core C API
 int jit(int argc, char **argv);
 
 int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
