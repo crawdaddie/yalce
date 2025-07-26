@@ -2,7 +2,6 @@
 #include "./codegen.h"
 #include "./common.h"
 #include "./globals.h"
-#include "backend_llvm/coroutines/coroutines.h"
 #include "builtin_functions.h"
 #include "config.h"
 #include "escape_analysis.h"
@@ -13,16 +12,16 @@
 #include "serde.h"
 #include "testing.h"
 #include "types/inference.h"
-#include "llvm-c/Transforms/Utils.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/IRReader.h>
+#include <llvm-c/LLJIT.h>
 #include <llvm-c/Linker.h>
+#include <llvm-c/Orc.h>
 #include <llvm-c/Support.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
-#include <llvm-c/Transforms/InstCombine.h>
-#include <llvm-c/Transforms/Scalar.h>
+#include <llvm-c/Transforms/PassBuilder.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -30,6 +29,9 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+static LLVMTargetMachineRef target_machine;
+void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine);
 
 typedef struct {
   LLVMModuleRef module;
@@ -72,41 +74,45 @@ static Ast *top_level_ast(Ast *body) {
   return last;
 }
 
-static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
-                                       LLVMModuleRef module,
-                                       LLVMBuilderRef builder,
-                                       LLVMContextRef llvm_ctx, TypeEnv **env,
-                                       Ast **prog);
+static int eval_script(const char *filename, JITLangCtx *ctx,
+                       LLVMModuleRef module, LLVMBuilderRef builder,
+                       LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog);
 
 int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
                       LLVMModuleRef module) {
   char *error = NULL;
 
-  struct LLVMMCJITCompilerOptions *Options =
-      malloc(sizeof(struct LLVMMCJITCompilerOptions));
-  Options->OptLevel = 2;
+  // Initialize MCJIT compiler options
+  struct LLVMMCJITCompilerOptions options;
+  LLVMInitializeMCJITCompilerOptions(&options, sizeof(options));
+  options.OptLevel = 2;
 
-  if (LLVMCreateMCJITCompilerForModule(engine, module, Options, 1, &error) !=
-      0) {
+  // Create MCJIT execution engine
+  if (LLVMCreateMCJITCompilerForModule(engine, module, &options,
+                                       sizeof(options), &error) != 0) {
     fprintf(stderr, "Failed to create execution engine: %s\n", error);
     LLVMDisposeMessage(error);
     return 1;
   }
 
+  // Add global mappings for your globals
   LLVMValueRef array_global =
       LLVMGetNamedGlobal(module, "global_storage_array");
   LLVMValueRef size_global = LLVMGetNamedGlobal(module, "global_storage_size");
 
-  LLVMAddGlobalMapping(*engine, array_global, ctx->global_storage_array);
-  LLVMAddGlobalMapping(*engine, size_global, ctx->global_storage_capacity);
+  if (array_global) {
+    LLVMAddGlobalMapping(*engine, array_global, ctx->global_storage_array);
+  }
+  if (size_global) {
+    LLVMAddGlobalMapping(*engine, size_global, ctx->global_storage_capacity);
+  }
+
   return 0;
 }
 
-static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
-                                       LLVMModuleRef module,
-                                       LLVMBuilderRef builder,
-                                       LLVMContextRef llvm_ctx, TypeEnv **env,
-                                       Ast **prog) {
+static int eval_script(const char *filename, JITLangCtx *ctx,
+                       LLVMModuleRef module, LLVMBuilderRef builder,
+                       LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog) {
 
   __import_current_dir = get_dirname(filename);
 
@@ -160,6 +166,7 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
 
   LLVMValueRef top_level_func =
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
+  module_passes(module, target_machine);
 
   LLVMExecutionEngineRef engine;
   prepare_ex_engine(ctx, &engine, module);
@@ -173,19 +180,19 @@ static LLVMGenericValueRef eval_script(const char *filename, JITLangCtx *ctx,
     LLVMDumpModule(module);
     dump_assembly(module);
   }
-  LLVMGenericValueRef result =
-      LLVMRunFunction(engine, top_level_func, 0, exec_args);
 
-  // fflush(stdout);
-  // printf("> ");
-  return result; // Return success
+  const char *func_name = LLVMGetValueName(top_level_func);
+  uint64_t func_addr = LLVMGetFunctionAddress(engine, func_name);
+  typedef int (*top_level_func_t)(void);
+  top_level_func_t func = (top_level_func_t)func_addr;
+  int result = func();
+  return NULL;
 }
 
 typedef struct ll_int_t {
   int32_t el;
   struct ll_int_t *next;
 } int_ll_t;
-
 void dump_assembly(LLVMModuleRef module) {
   LLVMInitializeNativeTarget();
   LLVMInitializeNativeAsmPrinter();
@@ -200,10 +207,6 @@ void dump_assembly(LLVMModuleRef module) {
     return;
   }
 
-  LLVMTargetMachineRef target_machine = LLVMCreateTargetMachine(
-      target, triple, "generic", "", LLVMCodeGenLevelDefault, LLVMRelocDefault,
-      LLVMCodeModelDefault);
-
   LLVMMemoryBufferRef asm_buffer;
   if (LLVMTargetMachineEmitToMemoryBuffer(
           target_machine, module, LLVMAssemblyFile, &error_msg, &asm_buffer)) {
@@ -216,27 +219,31 @@ void dump_assembly(LLVMModuleRef module) {
     LLVMDisposeMemoryBuffer(asm_buffer);
   }
 
-  LLVMDisposeTargetMachine(target_machine);
+  // LLVMDisposeTargetMachine(target_machine);
   LLVMDisposeMessage(triple);
 }
 
-void module_passes(LLVMModuleRef module) {
-  run_coroutine_passes_on_module(module);
-  LLVMPassManagerRef pass_manager =
-      LLVMCreateFunctionPassManagerForModule(module);
+void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
+  char *error = NULL;
 
-  LLVMAddPromoteMemoryToRegisterPass(pass_manager);
-  LLVMAddInstructionCombiningPass(pass_manager);
-  LLVMAddReassociatePass(pass_manager);
-  LLVMAddGVNPass(pass_manager);
-  LLVMAddCFGSimplificationPass(pass_manager);
-  LLVMAddTailCallEliminationPass(pass_manager);
+  LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
+
+  LLVMErrorRef err =
+      LLVMRunPasses(module, "default<O2>", target_machine, options);
+
+  if (err) {
+    char *msg = LLVMGetErrorMessage(err);
+    fprintf(stderr, "Pass manager error: %s\n", msg);
+    LLVMDisposeErrorMessage(msg);
+    LLVMConsumeError(err);
+  }
+
+  LLVMDisposePassBuilderOptions(options);
 }
 
 #define GLOBAL_STORAGE_CAPACITY 1024
 
 int jit(int argc, char **argv) {
-  LLVMInitializeCore(LLVMGetGlobalPassRegistry());
   LLVMInitializeNativeTarget();
   LLVMInitializeNativeAsmPrinter();
   LLVMInitializeNativeAsmParser();
@@ -247,7 +254,21 @@ int jit(int argc, char **argv) {
       LLVMModuleCreateWithNameInContext("ylc.top-level", context);
 
   LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
-  module_passes(module);
+
+  // Create target machine for the new pass manager
+  char *triple = LLVMGetDefaultTargetTriple();
+  LLVMTargetRef target;
+  char *error_msg;
+
+  if (LLVMGetTargetFromTriple(triple, &target, &error_msg)) {
+    fprintf(stderr, "Error getting target: %s\n", error_msg);
+    LLVMDisposeMessage(error_msg);
+    return 1;
+  }
+
+  target_machine = LLVMCreateTargetMachine(
+      target, triple, "generic", "", LLVMCodeGenLevelDefault, LLVMRelocDefault,
+      LLVMCodeModelDefault);
 
   void *global_storage_array[GLOBAL_STORAGE_CAPACITY];
   int global_storage_capacity = GLOBAL_STORAGE_CAPACITY;
@@ -396,12 +417,17 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
       print_type(top_type);
       continue;
     } else {
+      // Run optimization passes before execution
+      module_passes(module, target_machine);
+
       LLVMExecutionEngineRef engine;
       prepare_ex_engine(ctx, &engine, module);
-      LLVMGenericValueRef exec_args[] = {};
+      const char *func_name = LLVMGetValueName(top_level_func);
+      uint64_t func_addr = LLVMGetFunctionAddress(engine, func_name);
+      typedef int (*top_level_func_t)(void);
+      top_level_func_t func = (top_level_func_t)func_addr;
       print_type(top_type);
-      LLVMGenericValueRef result =
-          LLVMRunFunction(engine, top_level_func, 0, exec_args);
+      int result = func();
     }
     printf(COLOR_RESET);
 
