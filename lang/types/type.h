@@ -1,8 +1,12 @@
 #ifndef _LANG_TYPE_TYPE_H
 #define _LANG_TYPE_TYPE_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "../parse.h"
 #include <stdbool.h>
 #include <unistd.h>
+
 #define _TSTORAGE_SIZE_DEFAULT 2000000
 
 typedef struct Type Type;
@@ -447,4 +451,9 @@ typedef struct Substitution {
   Type *to;   // Replacement type
   struct Substitution *next;
 } Substitution;
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

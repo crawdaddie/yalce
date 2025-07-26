@@ -81,7 +81,7 @@ MemoryUseList *list_extend_left(MemoryUseList *old, MemoryUseList *new) {
   return new;
 }
 
-MemoryUseList *ea(Ast *ast, AECtx *ctx) {
+MemoryUseList *ea(Ast *ast, EACtx *ctx) {
   MemoryUseList *mem_ids = NULL;
 
   if (!ast) {
@@ -129,7 +129,7 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
   }
 
   case AST_LAMBDA: {
-    AECtx lambda_ctx = *ctx;
+    EACtx lambda_ctx = *ctx;
     lambda_ctx.scope++;
 
     MemoryUseList *escapees = ea(ast->data.AST_LAMBDA.body, &lambda_ctx);
@@ -240,4 +240,4 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
   ast->ea_md = mem_ids;
   return mem_ids;
 }
-void escape_analysis(Ast *prog, AECtx *ctx) { ea(prog, ctx); }
+void escape_analysis(Ast *prog, EACtx *ctx) { ea(prog, ctx); }

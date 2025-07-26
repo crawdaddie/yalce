@@ -30,7 +30,6 @@
 #include <time.h>
 #include <unistd.h>
 
-static LLVMTargetMachineRef target_machine;
 void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine);
 
 typedef struct {
@@ -39,22 +38,26 @@ typedef struct {
   const char *dirname;
   JITLangCtx *ctx;
   LLVMBuilderRef builder;
+  LLVMTargetMachineRef target_machine;
 } repl_args;
 
 void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
-               JITLangCtx *ctx, LLVMBuilderRef builder);
+               JITLangCtx *ctx, LLVMBuilderRef builder,
+               LLVMTargetMachineRef target_machine);
 
 void *repl_loop_thread_fn(void *arg) {
   repl_args *args = (repl_args *)arg;
   repl_loop(args->module, args->filename, args->dirname, args->ctx,
-            args->builder);
+            args->builder, args->target_machine);
   return NULL;
 }
 
 void break_repl_for_gui_loop(LLVMModuleRef module, const char *filename,
                              const char *dirname, JITLangCtx *ctx,
-                             LLVMBuilderRef builder) {
-  repl_args thread_args = {module, filename, dirname, ctx, builder};
+                             LLVMBuilderRef builder,
+                             LLVMTargetMachineRef target_machine) {
+  repl_args thread_args = {module, filename, dirname,
+                           ctx,    builder,  target_machine};
 
   pthread_t repl_thread;
   __BREAK_REPL_FOR_GUI_LOOP = false;
@@ -65,7 +68,7 @@ void break_repl_for_gui_loop(LLVMModuleRef module, const char *filename,
   break_repl_for_gui_loop_cb();
   return;
 }
-void dump_assembly(LLVMModuleRef module);
+void dump_assembly(LLVMModuleRef module, LLVMTargetMachineRef);
 #define STACK_MAX 256
 
 static Ast *top_level_ast(Ast *body) {
@@ -76,7 +79,9 @@ static Ast *top_level_ast(Ast *body) {
 
 static int eval_script(const char *filename, JITLangCtx *ctx,
                        LLVMModuleRef module, LLVMBuilderRef builder,
-                       LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog);
+                       LLVMContextRef llvm_ctx,
+                       LLVMTargetMachineRef target_machine, TypeEnv **env,
+                       Ast **prog);
 
 int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
                       LLVMModuleRef module) {
@@ -112,7 +117,9 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
 
 static int eval_script(const char *filename, JITLangCtx *ctx,
                        LLVMModuleRef module, LLVMBuilderRef builder,
-                       LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog) {
+                       LLVMContextRef llvm_ctx,
+                       LLVMTargetMachineRef target_machine, TypeEnv **env,
+                       Ast **prog) {
 
   __import_current_dir = get_dirname(filename);
 
@@ -139,8 +146,8 @@ static int eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  AECtx ae_ctx = {.env = NULL};
-  escape_analysis(*prog, &ae_ctx);
+  EACtx ea_ctx = {.env = NULL};
+  escape_analysis(*prog, &ea_ctx);
 
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
@@ -178,7 +185,7 @@ static int eval_script(const char *filename, JITLangCtx *ctx,
   LLVMGenericValueRef exec_args[] = {};
   if (config.debug_codegen) {
     LLVMDumpModule(module);
-    dump_assembly(module);
+    dump_assembly(module, target_machine);
   }
 
   const char *func_name = LLVMGetValueName(top_level_func);
@@ -193,7 +200,8 @@ typedef struct ll_int_t {
   int32_t el;
   struct ll_int_t *next;
 } int_ll_t;
-void dump_assembly(LLVMModuleRef module) {
+
+void dump_assembly(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
   LLVMInitializeNativeTarget();
   LLVMInitializeNativeAsmPrinter();
 
@@ -219,7 +227,6 @@ void dump_assembly(LLVMModuleRef module) {
     LLVMDisposeMemoryBuffer(asm_buffer);
   }
 
-  // LLVMDisposeTargetMachine(target_machine);
   LLVMDisposeMessage(triple);
 }
 
@@ -227,9 +234,15 @@ void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
   char *error = NULL;
 
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
+  const char *pass_pipeline =
+      "coro-early,"           // Early coroutine pass (MODULE pass)
+      "cgscc(coro-split),"    // Coroutine splitting pass (CGSCC pass)
+      "function(coro-elide)," // Coroutine elision pass (FUNCTION pass)
+      "coro-cleanup,"         // Coroutine cleanup pass (MODULE pass)
+      "default<O2>";
 
   LLVMErrorRef err =
-      LLVMRunPasses(module, "default<O2>", target_machine, options);
+      LLVMRunPasses(module, pass_pipeline, target_machine, options);
 
   if (err) {
     char *msg = LLVMGetErrorMessage(err);
@@ -266,7 +279,7 @@ int jit(int argc, char **argv) {
     return 1;
   }
 
-  target_machine = LLVMCreateTargetMachine(
+  LLVMTargetMachineRef target_machine = LLVMCreateTargetMachine(
       target, triple, "generic", "", LLVMCodeGenLevelDefault, LLVMRelocDefault,
       LLVMCodeModelDefault);
 
@@ -316,8 +329,8 @@ int jit(int argc, char **argv) {
 
       Ast *script_prog;
 
-      eval_script(argv[arg_counter], &ctx, module, builder, context, &env,
-                  &script_prog);
+      eval_script(argv[arg_counter], &ctx, module, builder, context,
+                  target_machine, &env, &script_prog);
       arg_counter++;
     }
   }
@@ -340,18 +353,20 @@ int jit(int argc, char **argv) {
     init_readline();
 
     if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
-      break_repl_for_gui_loop(module, filename, dirname, &ctx, builder);
+      break_repl_for_gui_loop(module, filename, dirname, &ctx, builder,
+                              target_machine);
       return 0;
     }
 
-    repl_loop(module, filename, dirname, &ctx, builder);
+    repl_loop(module, filename, dirname, &ctx, builder, target_machine);
   }
 
   return 0;
 }
 
 void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
-               JITLangCtx *ctx, LLVMBuilderRef builder) {
+               JITLangCtx *ctx, LLVMBuilderRef builder,
+               LLVMTargetMachineRef target_machine) {
 
   LLVMTypeRef top_level_ret_type;
   char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
@@ -388,7 +403,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
 
     Type *typecheck_result = infer(prog, &ti_ctx);
 
-    AECtx ae_ctx = {.env = NULL};
+    EACtx ae_ctx = {.env = NULL};
     escape_analysis(prog, &ae_ctx);
 
     ctx->env = ti_ctx.env;
@@ -432,7 +447,8 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
     printf(COLOR_RESET);
 
     if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
-      return break_repl_for_gui_loop(module, filename, dirname, ctx, builder);
+      return break_repl_for_gui_loop(module, filename, dirname, ctx, builder,
+                                     target_machine);
     }
   }
 }

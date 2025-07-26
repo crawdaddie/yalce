@@ -1,7 +1,10 @@
 #ifndef _LANG_BACKEND_LLVM_CODEGEN_TYPES_H
 #define _LANG_BACKEND_LLVM_CODEGEN_TYPES_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "common.h"
-#include "serde.h"
 #include "types/type.h"
 #include "llvm-c/Types.h"
 // LLVMTypeRef type_to_llvm_type(Type *type, TypeEnv *env);
@@ -60,4 +63,8 @@ LLVMTypeRef type_to_llvm_type_fn_to_gen_ptr(Type *type, JITLangCtx *ctx,
                                             LLVMModuleRef module);
 
 LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type);
+
+#ifdef __cplusplus
+}
+#endif
 #endif

@@ -11,7 +11,23 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-LLVMTypeRef cor_inst_struct_type();
+LLVMTypeRef cor_inst_struct_type() {
+  // typedef struct cor {
+  //   int counter;
+  //   CoroutineFn fn_ptr;
+  //   struct cor *next;
+  //   void *argv;
+  // } cor;
+  LLVMTypeRef types[] = {
+      LLVMInt32Type(), // counter @ 0
+      GENERIC_PTR,     // fn ptr @ 1
+      GENERIC_PTR,     // next ptr
+      GENERIC_PTR,     // void *argv - state
+      LLVMInt8Type(),  // SIGNAL enum
+  };
+  LLVMTypeRef instance_struct_type = LLVMStructType(types, 5, 0);
+  return instance_struct_type;
+}
 
 void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
                                LLVMTypeRef *llvm_param_types,
