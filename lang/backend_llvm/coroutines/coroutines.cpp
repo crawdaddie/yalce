@@ -198,7 +198,7 @@ compile_llvm_coroutine(Ast *ast, JITLangCtx *ctx, llvm::Module *module,
 
   Value *initial_suspend = builder.CreateCall(
       coro_ctx.coro_suspend,
-      {ConstantTokenNone::get(context),
+      {coro_ctx.coro_id_val,
        ConstantInt::get(llvm::Type::getInt1Ty(context), false)},
       "initial.suspend");
 
@@ -438,6 +438,13 @@ static LLVMValueRef wrap_yield_result_in_option(LLVMValueRef coro_handle,
 LLVMValueRef yield_from_coroutine_instance(YLCSym *sym, JITLangCtx *ctx,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder) {
+  LLVMDumpModule(module);
+  return NULL;
+}
+
+LLVMValueRef __yield_from_coroutine_instance(YLCSym *sym, JITLangCtx *ctx,
+                                             LLVMModuleRef module,
+                                             LLVMBuilderRef builder) {
 
   YLCType *inst_type = sym->symbol_data.STYPE_FUNCTION.fn_type;
   YLCType *yield_opt_type = fn_return_type(inst_type);
