@@ -336,8 +336,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
 
   if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {
 
-    expr_val = create_coroutine_constructor_binding(binding, expr, inner_ctx,
-                                                    module, builder);
+    expr_val = compile_coroutine_expression(expr, inner_ctx, module, builder);
+    expr_val = create_fn_binding(binding, expr_type, expr_val, inner_ctx,
+                                 module, builder);
 
     return in_expr == NULL ? expr_val
                            : codegen(in_expr, inner_ctx, module, builder);
@@ -392,6 +393,16 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
         codegen_import(expr, binding, outer_ctx, module, builder);
 
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
+  }
+
+  if (is_coroutine_type(expr_type)) {
+    expr_val = codegen(expr, outer_ctx, module, builder);
+
+    expr_val = create_fn_binding(binding, expr_type, expr_val, inner_ctx,
+                                 module, builder);
+
+    return in_expr == NULL ? expr_val
+                           : codegen(in_expr, inner_ctx, module, builder);
   }
 
   expr_val = codegen(expr, outer_ctx, module, builder);

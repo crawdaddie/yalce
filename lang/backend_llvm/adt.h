@@ -2,6 +2,8 @@
 #define _LANG_BACKEND_LLVM_ADT
 #include "common.h"
 #include "types/type.h"
+
+#define OPTION_TAG_TYPE LLVMInt8Type()
 LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder);

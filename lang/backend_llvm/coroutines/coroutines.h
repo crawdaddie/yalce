@@ -15,10 +15,9 @@ LLVMValueRef compile_coroutine(LLVMModuleRef module, LLVMContextRef context,
                                LLVMBuilderRef builder);
 
 LLVMTypeRef cor_inst_struct_type();
-LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *ast,
-                                                  JITLangCtx *ctx,
-                                                  LLVMModuleRef module,
-                                                  LLVMBuilderRef builder);
+LLVMValueRef compile_coroutine_expression(Ast *ast, JITLangCtx *ctx,
+                                          LLVMModuleRef module,
+                                          LLVMBuilderRef builder);
 
 LLVMValueRef create_coroutine_instance_from_constructor(JITSymbol *sym,
                                                         Ast *args, int args_len,
