@@ -1,6 +1,10 @@
 #ifndef _LANG_BACKEND_LLVM_FUNCTION_H
 #define _LANG_BACKEND_LLVM_FUNCTION_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "common.h"
 #include "types/type.h"
 #include "llvm-c/Types.h"
@@ -54,4 +58,9 @@ void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
                                LLVMTypeRef *llvm_param_types,
                                LLVMTypeRef *llvm_return_type_ref,
                                JITLangCtx *ctx, LLVMModuleRef module);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

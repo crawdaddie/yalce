@@ -492,7 +492,5 @@ LLVMValueRef CStrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ArrayConstructor(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
-  print_ast(ast);
-  print_type(ast->md);
   return NULL;
 }

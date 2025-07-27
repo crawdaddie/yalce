@@ -1,5 +1,6 @@
 #include "backend_llvm/function.h"
 #include "binding.h"
+#include "serde.h"
 #include "symbols.h"
 #include "types.h"
 #include "types/inference.h"

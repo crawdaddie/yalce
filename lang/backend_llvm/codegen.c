@@ -13,7 +13,7 @@
 #include "coroutines/coroutines.h"
 #include "loop.h"
 #include "module.h"
-#include "modules.h"
+#include "serde.h"
 #include "types/common.h"
 #include "types/inference.h"
 #include "llvm-c/Core.h"

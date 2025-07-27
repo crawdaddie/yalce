@@ -38,6 +38,7 @@ typedef struct {
   int current_yield;
   LLVMBasicBlockRef switch_default;
   LLVMValueRef yield_switch_ref;
+  void *coroutine_ctx;
 } JITLangCtx;
 
 typedef struct SpecificFns {
