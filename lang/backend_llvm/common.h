@@ -16,14 +16,20 @@ typedef struct StackFrame {
   struct StackFrame *next;
 } StackFrame;
 
-typedef struct coroutine_ctx_t {
+typedef struct {
   LLVMValueRef func;
   LLVMTypeRef func_type;
   LLVMTypeRef instance_type;
-  int num_branches;
-  int current_branch;
+  Type *cons_type;
+  int num_coroutine_yields;
+  int current_yield;
+
+  AstList *yield_boundary_xs;
+  int num_yield_boundary_xs;
   LLVMBasicBlockRef *block_refs;
-} coroutine_ctx_t;
+  LLVMBasicBlockRef switch_default;
+  LLVMValueRef yield_switch_ref;
+} CoroutineCtx;
 
 typedef struct {
   // ht stack[STACK_MAX];
@@ -34,10 +40,7 @@ typedef struct {
   void **global_storage_array;
   int *global_storage_capacity;
   const char *module_name;
-  int num_coroutine_yields;
-  int current_yield;
-  LLVMBasicBlockRef switch_default;
-  LLVMValueRef yield_switch_ref;
+  CoroutineCtx *coro_ctx;
 } JITLangCtx;
 
 typedef struct SpecificFns {

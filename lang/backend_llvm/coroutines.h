@@ -48,7 +48,7 @@ LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
 
-int get_inner_state_slot(Ast *ast);
+int get_inner_state_slot(Ast *ast, JITLangCtx *ctx);
 
 LLVMValueRef get_inner_state_slot_gep(int slot, Ast *ast,
                                       LLVMBuilderRef builder);
@@ -67,4 +67,30 @@ LLVMValueRef CoroutineEndHandler(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef UseOrFinishHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
+
+LLVMTypeRef cor_inst_struct_type();
+LLVMTypeRef cor_coroutine_fn_type();
+LLVMValueRef get_instance_state_gep(LLVMValueRef instance_ptr,
+                                    LLVMBuilderRef builder);
+LLVMValueRef _cor_next(LLVMValueRef instance_ptr, LLVMValueRef ret_val_ref,
+                       LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef null_cor_inst();
+
+LLVMValueRef _cor_map(LLVMValueRef instance_ptr, LLVMValueRef map_fn,
+                      LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef _cor_alloc(LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef _cor_loop(LLVMValueRef instance_ptr, LLVMModuleRef module,
+                       LLVMBuilderRef builder);
+
+LLVMValueRef get_instance_counter_gep(LLVMValueRef instance_ptr,
+                                      LLVMBuilderRef builder);
+
+LLVMValueRef _cor_replace(LLVMValueRef this, LLVMValueRef other,
+                          LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef _cor_stop(LLVMValueRef this, LLVMModuleRef module,
+                       LLVMBuilderRef builder);
 #endif

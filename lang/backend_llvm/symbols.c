@@ -143,7 +143,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case STYPE_LOCAL_VAR: {
 
-    int inner_state_slot = get_inner_state_slot(ast);
+    int inner_state_slot = get_inner_state_slot(ast, ctx);
 
     if (inner_state_slot >= 0) {
       // Type *t = ast->md;

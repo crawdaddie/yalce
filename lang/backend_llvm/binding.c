@@ -85,7 +85,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
       return _TRUE;
     }
 
-    int inner_state_slot = get_inner_state_slot(binding);
+    int inner_state_slot = get_inner_state_slot(binding, ctx);
     if (inner_state_slot >= 0) {
 
       JITSymbol *sym = lookup_id_ast(binding, ctx);
