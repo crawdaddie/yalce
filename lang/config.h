@@ -9,6 +9,7 @@ typedef struct RTConfig {
   bool debug_codegen;
   const char *base_libs_dir;
   const char *import_current_dir;
+  const char *opt_level;
 
 } RTConfig;
 extern RTConfig config;

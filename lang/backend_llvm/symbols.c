@@ -70,9 +70,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 
   const char *chars = ast->data.AST_IDENTIFIER.value;
-  if (strcmp(chars, "coroutine_end") == 0) {
-    return CoroutineEndHandler(ast, ctx, module, builder);
-  }
 
   int length = ast->data.AST_IDENTIFIER.length;
 
@@ -142,21 +139,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_LOCAL_VAR: {
-
-    int inner_state_slot = get_inner_state_slot(ast, ctx);
-
-    if (inner_state_slot >= 0) {
-      // Type *t = ast->md;
-      // if (t->kind == T_FN && !is_coroutine_type(t)) {
-      //   printf("sym storage raw\n");
-      //   return sym->storage;
-      // }
-      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
-      // print_ast(ast);
-      // LLVMDumpType(llvm_type);
-      // printf("\n\n");
-      return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
-    }
     if (sym->storage != NULL) {
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
@@ -312,14 +294,6 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                            : codegen(in_expr, inner_ctx, module, builder);
   }
 
-  // JITSymbol *existing_sym = lookup_id_ast(binding, outer_ctx);
-  // if (existing_sym && existing_sym->storage) {
-  //
-  //   printf("existing sym -> is it mutable???\n");
-  //
-  //   return NULL;
-  // }
-
   if (binding->tag == AST_IDENTIFIER && expr->tag == AST_IDENTIFIER) {
     JITSymbol *sym = lookup_id_ast(expr, outer_ctx);
     if (sym) {
@@ -335,9 +309,13 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {
-
-    expr_val = create_coroutine_constructor_binding(binding, expr, inner_ctx,
-                                                    module, builder);
+    if (is_generic(expr_type)) {
+      expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
+    } else {
+      expr_val = compile_coroutine(expr, inner_ctx, module, builder);
+      expr_val = create_fn_binding(binding, expr_type, expr_val, inner_ctx,
+                                   module, builder);
+    }
 
     return in_expr == NULL ? expr_val
                            : codegen(in_expr, inner_ctx, module, builder);

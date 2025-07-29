@@ -1,1045 +1,481 @@
-#include "backend_llvm/coroutines.h"
-#include "adt.h"
-#include "binding.h"
+#include "./coroutines.h"
 #include "function.h"
-#include "serde.h"
 #include "symbols.h"
 #include "types.h"
-#include "types/common.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <stdlib.h>
 #include <string.h>
 
-LLVMTypeRef cor_coroutine_fn_type() {
-  // typedef void *(*CoroutineFn)(void *coroutine, void *ret_val);
-  return LLVMFunctionType(GENERIC_PTR,
-                          (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);
-}
-
-LLVMTypeRef cor_inst_struct_type() {
-  // typedef struct cor {
-  //   int counter;
-  //   CoroutineFn fn_ptr;
-  //   struct cor *next;
-  //   void *argv;
-  // } cor;
-  LLVMTypeRef types[] = {
-      LLVMInt32Type(), // counter @ 0
-      GENERIC_PTR,     // fn ptr @ 1
-      GENERIC_PTR,     // next ptr
-      GENERIC_PTR,     // void *argv - state
-      LLVMInt8Type(),  // SIGNAL enum
-  };
-  LLVMTypeRef instance_struct_type = LLVMStructType(types, 5, 0);
-  return instance_struct_type;
-}
-
-LLVMTypeRef create_coroutine_state_type(Type *constructor_type,
-                                        Type *state_struct, Ast *ast,
-                                        JITLangCtx *ctx, LLVMModuleRef module) {
-
-  int outer_args_len = fn_type_args_len(constructor_type);
-
-  int inner_args_len = ast->data.AST_LAMBDA.num_yield_boundary_crossers;
-
-  if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID &&
-      inner_args_len == 0) {
-    *state_struct = t_void;
-    return NULL;
-  }
-
-  if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
-    outer_args_len = 0;
-  }
-
-  int total_state_args = outer_args_len + inner_args_len;
-  Type *state_arg_types[total_state_args];
-
-  Type *f = constructor_type;
-  LLVMTypeRef llvm_state_arg_types[total_state_args];
-
-  for (int i = 0; i < outer_args_len; i++) {
-    Type *arg_type = f->data.T_FN.from;
-    state_arg_types[i] = arg_type;
-    llvm_state_arg_types[i] = type_to_llvm_type(arg_type, ctx, module);
-    if (arg_type->kind == T_FN) {
-      llvm_state_arg_types[i] = GENERIC_PTR;
-    }
-    f = f->data.T_FN.to;
-  }
-
-  AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
-  // for (int i = inner_args_len - 1; i >= 0; i--) {
-  for (int i = 0; i < inner_args_len; i++) {
-    Type *t = boundary_xs->ast->md;
-    state_arg_types[outer_args_len + i] = t;
-
-    llvm_state_arg_types[outer_args_len + i] =
-        type_to_llvm_type(t, ctx, module);
-
-    if (t->kind == T_FN) {
-      llvm_state_arg_types[i] = GENERIC_PTR;
-    }
-    boundary_xs = boundary_xs->next;
-  }
-
-  if (total_state_args == 1) {
-    *state_struct = *state_arg_types[0];
-    return llvm_state_arg_types[0];
-  }
-
-  LLVMTypeRef instance_state_struct_type =
-      LLVMStructType(llvm_state_arg_types, total_state_args, 0);
-
-  Type **arg_types = malloc(sizeof(Type *) * total_state_args);
-  for (int i = 0; i < total_state_args; i++) {
-    arg_types[i] = state_arg_types[i];
-  }
-  *state_struct = (Type){T_CONS,
-                         {.T_CONS = {.name = "state_struct",
-                                     .args = arg_types,
-                                     .num_args = total_state_args}}};
-
-  return instance_state_struct_type;
-}
-
-LLVMValueRef get_instance_counter_gep(LLVMValueRef instance_ptr,
-                                      LLVMBuilderRef builder) {
-  LLVMValueRef element_ptr =
-      LLVMBuildGEP2(builder, cor_inst_struct_type(), instance_ptr,
-                    (LLVMValueRef[]){
-                        LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
-                        LLVMConstInt(LLVMInt32Type(), 0, 0)  // Get counter
-                    },
-                    2, "instance_counter_gep");
-  return element_ptr;
-}
-
-LLVMValueRef get_instance_state_gep(LLVMValueRef instance_ptr,
-                                    LLVMBuilderRef builder) {
-  LLVMValueRef element_ptr =
-      LLVMBuildGEP2(builder, cor_inst_struct_type(), instance_ptr,
-                    (LLVMValueRef[]){
-                        LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
-                        LLVMConstInt(LLVMInt32Type(), 3, 0)  // Get state gep
-                    },
-                    2, "instance_state_gep");
-  return element_ptr;
-}
-
-LLVMValueRef get_instance_state_element_gep(int index,
-                                            LLVMValueRef instance_ptr,
-                                            LLVMTypeRef state_struct_type,
-                                            LLVMBuilderRef builder) {
-  // First get the pointer to the state field (index 3) in the instance struct
-  LLVMValueRef state_ptr =
-      LLVMBuildGEP2(builder, cor_inst_struct_type(), instance_ptr,
-                    (LLVMValueRef[]){
-                        LLVMConstInt(LLVMInt32Type(), 0, 0), // Deref pointer
-                        LLVMConstInt(LLVMInt32Type(), 3, 0)  // Get state field
-                    },
-                    2, "instance_state_ptr");
-
-  // Now get a pointer to the specific element within the state struct
-  LLVMValueRef element_ptr = LLVMBuildGEP2(
-      builder, state_struct_type, state_ptr,
-      (LLVMValueRef[]){
-          LLVMConstInt(LLVMInt32Type(), 0, 0),    // Deref pointer
-          LLVMConstInt(LLVMInt32Type(), index, 0) // Get specific element
-      },
-      2, "state_element_ptr");
-
-  return element_ptr;
-}
-LLVMValueRef get_cor_next_fn(LLVMModuleRef module) {
-
-  LLVMValueRef cor_next_func = LLVMGetNamedFunction(module, "cor_next");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-  LLVMTypeRef ret_val_ref_type = GENERIC_PTR;
-
-  LLVMTypeRef cor_next_type = LLVMFunctionType(
-      LLVMPointerType(inst_type, 0),
-      (LLVMTypeRef[]){LLVMPointerType(inst_type, 0), ret_val_ref_type}, 2,
-      false);
-
-  if (!cor_next_func) {
-    cor_next_func = LLVMAddFunction(module, "cor_next", cor_next_type);
-  }
-  return cor_next_func;
-}
-
-LLVMValueRef _cor_next(LLVMValueRef instance_ptr, LLVMValueRef ret_val_ref,
-                       LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMValueRef cor_next_func = LLVMGetNamedFunction(module, "cor_next");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-  LLVMTypeRef ret_val_ref_type = GENERIC_PTR;
-
-  LLVMTypeRef cor_next_type = LLVMFunctionType(
-      LLVMPointerType(inst_type, 0),
-      (LLVMTypeRef[]){LLVMPointerType(inst_type, 0), ret_val_ref_type}, 2,
-      false);
-
-  if (!cor_next_func) {
-    cor_next_func = LLVMAddFunction(module, "cor_next", cor_next_type);
-  }
-
-  return LLVMBuildCall2(builder, cor_next_type, cor_next_func,
-                        (LLVMValueRef[]){instance_ptr, ret_val_ref}, 2,
-                        "call_cor_next");
-}
-
-LLVMValueRef _cor_finished(LLVMValueRef instance_ptr, LLVMValueRef ret_val_ref,
-                           LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMValueRef cor_finished_func = LLVMGetNamedFunction(module, "cor_finished");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-
-  LLVMTypeRef cor_fin_type = LLVMFunctionType(
-      LLVMInt1Type(), (LLVMTypeRef[]){LLVMPointerType(inst_type, 0)}, 1, false);
-
-  if (!cor_finished_func) {
-    cor_finished_func = LLVMAddFunction(module, "cor_finished", cor_fin_type);
-  }
-
-  return LLVMBuildCall2(builder, cor_fin_type, cor_finished_func,
-                        (LLVMValueRef[]){
-                            instance_ptr,
-                        },
-                        1, "call_cor_finished");
-}
-
-LLVMValueRef _cor_init(LLVMValueRef instance_ptr, LLVMValueRef new_fn,
-                       LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMValueRef cor_init_func = LLVMGetNamedFunction(module, "cor_init");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-  LLVMTypeRef fn_type = cor_coroutine_fn_type();
-
-  LLVMTypeRef cor_init_type = LLVMFunctionType(
-      LLVMPointerType(inst_type, 0),
-      (LLVMTypeRef[]){LLVMPointerType(inst_type, 0), fn_type}, 2, false);
-
-  if (!cor_init_func) {
-    cor_init_func = LLVMAddFunction(module, "cor_init", cor_init_type);
-  }
-  return LLVMBuildCall2(builder, cor_init_type, cor_init_func,
-                        (LLVMValueRef[]){instance_ptr, new_fn}, 2,
-                        "call_cor_init");
-}
-
-LLVMValueRef _cor_alloc(LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMValueRef cor_alloc_func = LLVMGetNamedFunction(module, "cor_alloc");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-  LLVMTypeRef cor_alloc_type = LLVMFunctionType(LLVMPointerType(inst_type, 0),
-                                                (LLVMTypeRef[]){}, 0, false);
-
-  if (!cor_alloc_func) {
-    cor_alloc_func = LLVMAddFunction(module, "cor_alloc", cor_alloc_type);
-  }
-  return LLVMBuildCall2(builder, cor_alloc_type, cor_alloc_func,
-                        (LLVMValueRef[]){}, 0, "call_cor_alloc");
-}
-
-LLVMValueRef _cor_defer(LLVMValueRef instance_ptr, LLVMValueRef next_struct,
-                        LLVMValueRef ret_val_ref, LLVMModuleRef module,
-                        LLVMBuilderRef builder) {
-
-  // cor *cor_defer(cor *this, cor next_struct, void *ret_val);
-  LLVMValueRef cor_defer_func = LLVMGetNamedFunction(module, "cor_defer");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-
-  LLVMTypeRef cor_defer_type = LLVMFunctionType(
-      LLVMPointerType(inst_type, 0),
-      (LLVMTypeRef[]){
-          LLVMPointerType(inst_type, 0),
-          LLVMPointerType(inst_type, 0), // LLVM Implicitly converts struct args
-                                         // to pointers when calling C funcs
-          GENERIC_PTR},
-      3, false);
-
-  if (!cor_defer_func) {
-    cor_defer_func = LLVMAddFunction(module, "cor_defer", cor_defer_type);
-  }
-
-  return LLVMBuildCall2(
-      builder, cor_defer_type, cor_defer_func,
-      (LLVMValueRef[]){instance_ptr, next_struct, ret_val_ref}, 3,
-      "call_cor_defer");
-}
-
-LLVMValueRef _cor_map(LLVMValueRef instance_ptr, LLVMValueRef map_fn,
-                      LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMValueRef cor_map_func = LLVMGetNamedFunction(module, "cor_map");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-
-  LLVMTypeRef cor_map_type = LLVMFunctionType(
-      LLVMPointerType(inst_type, 0),
-      (LLVMTypeRef[]){LLVMPointerType(inst_type, 0), cor_coroutine_fn_type()},
-      2, false);
-
-  if (!cor_map_func) {
-    cor_map_func = LLVMAddFunction(module, "cor_map", cor_map_type);
-  }
-
-  return LLVMBuildCall2(builder, cor_map_type, cor_map_func,
-                        (LLVMValueRef[]){instance_ptr, map_fn}, 2,
-                        "call_cor_map");
-}
-
-LLVMValueRef _cor_loop(LLVMValueRef instance_ptr, LLVMModuleRef module,
-                       LLVMBuilderRef builder) {
-
-  LLVMValueRef cor_loop_func = LLVMGetNamedFunction(module, "cor_loop");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-  LLVMTypeRef fn_type = cor_coroutine_fn_type();
-
-  LLVMTypeRef cor_loop_type = LLVMFunctionType(
-      LLVMPointerType(inst_type, 0),
-      (LLVMTypeRef[]){LLVMPointerType(inst_type, 0)}, 1, false);
-
-  if (!cor_loop_func) {
-    cor_loop_func = LLVMAddFunction(module, "cor_loop", cor_loop_type);
-  }
-
-  return LLVMBuildCall2(builder, cor_loop_type, cor_loop_func,
-                        (LLVMValueRef[]){instance_ptr}, 1, "call_cor_loop");
-}
-
-LLVMValueRef _cor_replace(LLVMValueRef this, LLVMValueRef other,
-                          LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMValueRef cor_replace_func = LLVMGetNamedFunction(module, "cor_replace");
-
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-  LLVMTypeRef inst_ptr_type = LLVMPointerType(inst_type, 0);
-  LLVMTypeRef cor_replace_type = LLVMFunctionType(
-      inst_ptr_type, (LLVMTypeRef[]){inst_ptr_type, inst_ptr_type}, 2, false);
-
-  if (!cor_replace_func) {
-    cor_replace_func = LLVMAddFunction(module, "cor_replace", cor_replace_type);
-  }
-
-  return LLVMBuildCall2(builder, cor_replace_type, cor_replace_func,
-                        (LLVMValueRef[]){this, other}, 2, "");
-}
-
-LLVMValueRef _cor_stop(LLVMValueRef this, LLVMModuleRef module,
-                       LLVMBuilderRef builder) {
-
-  LLVMValueRef cor_stop_func = LLVMGetNamedFunction(module, "cor_stop");
-
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-  LLVMTypeRef inst_ptr_type = LLVMPointerType(inst_type, 0);
-  LLVMTypeRef cor_stop_type =
-      LLVMFunctionType(inst_ptr_type, (LLVMTypeRef[]){inst_ptr_type}, 1, false);
-
-  if (!cor_stop_func) {
-    cor_stop_func = LLVMAddFunction(module, "cor_stop", cor_stop_type);
-  }
-
-  return LLVMBuildCall2(builder, cor_stop_type, cor_stop_func,
-                        (LLVMValueRef[]){
-                            this,
-                        },
-                        1, "");
-}
-
-LLVMValueRef null_cor_inst() {
-  LLVMValueRef null_ptr =
-      LLVMConstNull(LLVMPointerType(cor_inst_struct_type(), 0));
-  return null_ptr;
-}
-
-LLVMValueRef _cor_reset(LLVMValueRef instance_ptr, LLVMValueRef next_struct,
-                        LLVMValueRef ret_val_ref, LLVMModuleRef module,
-                        LLVMBuilderRef builder) {
-  // cor *cor_reset(cor *this, cor next_struct, void *ret_val);
-  LLVMValueRef cor_reset_func = LLVMGetNamedFunction(module, "cor_reset");
-  LLVMTypeRef inst_type = cor_inst_struct_type();
-
-  LLVMTypeRef cor_reset_type = LLVMFunctionType(
-      LLVMPointerType(inst_type, 0),
-      (LLVMTypeRef[]){
-          LLVMPointerType(inst_type, 0),
-          LLVMPointerType(
-              inst_type, 0), // LLVM Implicitly converts struct args to pointers
-          GENERIC_PTR},
-      3, false);
-
-  if (!cor_reset_func) {
-    cor_reset_func = LLVMAddFunction(module, "cor_reset", cor_reset_type);
-  }
-  return LLVMBuildCall2(
-      builder, cor_reset_type, cor_reset_func,
-      (LLVMValueRef[]){instance_ptr, next_struct, ret_val_ref}, 3,
-      "call_cor_reset");
-}
-
-int get_inner_state_slot(Ast *ast, JITLangCtx *ctx) {
-
-  if (!ctx->coro_ctx) {
-    return -1;
-  }
+typedef struct {
+  Type *cons_type;
+  LLVMTypeRef coro_obj_type;
+  LLVMTypeRef promise_type;
+  int num_coroutine_yields;
+  int current_yield;
+  AstList *yield_boundary_xs;
+  int num_yield_boundary_xs;
+  LLVMBasicBlockRef *branches;
+  LLVMBasicBlockRef switch_default;
+  LLVMValueRef switch_ref;
+  LLVMValueRef func;
+} CoroutineCtx;
+
+#define PTR_ID_FUNC_TYPE(obj)                                                  \
+  LLVMFunctionType(LLVMPointerType(obj, 0),                                    \
+                   (LLVMTypeRef[]){LLVMPointerType(obj, 0)}, 1, 0)
+
+static LLVMValueRef coro_counter(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                                 LLVMBuilderRef builder);
+
+static LLVMValueRef coro_state(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                               LLVMBuilderRef builder);
+
+static LLVMValueRef coro_next_set(LLVMValueRef coro, LLVMValueRef next,
+                                  LLVMTypeRef coro_obj_type,
+                                  LLVMBuilderRef builder);
+
+static LLVMValueRef coro_next(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                              LLVMBuilderRef builder);
+
+static LLVMValueRef coro_advance(LLVMValueRef coro, CoroutineCtx *coro_ctx,
+                                 LLVMBuilderRef builder);
+
+static LLVMValueRef compile_coroutine_init(const char *name,
+                                           LLVMValueRef coro_fn,
+                                           LLVMValueRef func, JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
   CoroutineCtx *coro_ctx = ctx->coro_ctx;
-
-  Type *constructor_type = coro_ctx->cons_type;
-
-  int outer_args_len = fn_type_args_len(constructor_type);
-
-  int inner_args_len = coro_ctx->num_yield_boundary_xs;
-
-  if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID &&
-      inner_args_len == 0) {
-    return -1;
-  }
-
-  if (outer_args_len == 1 && constructor_type->data.T_FN.from->kind == T_VOID) {
-    outer_args_len = 0;
-  }
-
-  AstList *l = coro_ctx->yield_boundary_xs;
-  int li = coro_ctx->num_yield_boundary_xs - 1;
-
-  while (l) {
-    if (CHARS_EQ(ast->data.AST_IDENTIFIER.value,
-                 l->ast->data.AST_IDENTIFIER.value)) {
-
-      return outer_args_len + li;
-    }
-
-    l = l->next;
-    li--;
-  }
-  return -1;
-}
-
-void bind_coroutine_state_vars(Type *state_type, LLVMTypeRef llvm_state_type,
-                               LLVMValueRef instance_ptr, Ast *coroutine_ast,
-                               JITLangCtx *ctx, LLVMModuleRef module,
-                               LLVMBuilderRef builder) {
-  if (!state_type) {
-    return;
-  }
-  CoroutineCtx *coro_ctx = ctx->coro_ctx;
-
-  // Get pointer to the state pointer field (field 3)
-  LLVMValueRef state_gep = LLVMBuildStructGEP2(
-      builder, cor_inst_struct_type(), instance_ptr, 3, "instance_state_gep");
-
-  AstList *bxs = coro_ctx->yield_boundary_xs;
-  int num_bxs = coro_ctx->num_yield_boundary_xs;
-  int struct_offset = 0;
-  if (num_bxs > 0) {
-    for (struct_offset = 0; struct_offset < num_bxs; struct_offset++) {
-      Type *target_type = state_type->data.T_CONS.args[struct_offset];
-      Ast *param = bxs->ast;
-
-      LLVMValueRef state_ptr = LLVMBuildLoad2(
-          builder, LLVMPointerType(llvm_state_type, 0), state_gep, "state_ptr");
-
-      LLVMValueRef state_el_gep =
-          LLVMBuildStructGEP2(builder, llvm_state_type, state_ptr,
-                              struct_offset, "implicit_coroutine_state_var");
-
-      JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, target_type, NULL,
-                                  type_to_llvm_type(target_type, ctx, module));
-
-      const char *chars = param->data.AST_IDENTIFIER.value;
-      uint64_t id_hash = hash_string(chars, param->data.AST_IDENTIFIER.length);
-      sym->storage = state_el_gep;
-      ht_set_hash(ctx->frame->table, chars, id_hash, sym);
-
-      bxs = bxs->next;
-    }
-  }
-
-  AstList *args = coroutine_ast->data.AST_LAMBDA.params;
-  int args_len = coroutine_ast->data.AST_LAMBDA.len;
-  for (; struct_offset < num_bxs + args_len; struct_offset++) {
-
-    Type *target_type = state_type->data.T_CONS.args[struct_offset];
-    Ast *param = args->ast;
-
-    LLVMValueRef state_ptr = LLVMBuildLoad2(
-        builder, LLVMPointerType(llvm_state_type, 0), state_gep, "state_ptr");
-
-    LLVMValueRef state_el_gep =
-        LLVMBuildStructGEP2(builder, llvm_state_type, state_ptr, struct_offset,
-                            "explicit_coroutine_state_var");
-
-    LLVMValueRef val;
-
-    if (target_type->kind == T_FN) {
-      val = state_el_gep;
-    } else {
-      LLVMTypeRef val_type = type_to_llvm_type(target_type, ctx, module);
-      val = LLVMBuildLoad2(builder, val_type, state_el_gep, "");
-    }
-    codegen_pattern_binding(param, val, target_type, ctx, module, builder);
-    args = args->next;
-  }
-}
-
-void add_recursive_coroutine_fn_ref(ObjString fn_name, LLVMValueRef func,
-                                    Type *fn_type, Type *state_type,
-                                    JITLangCtx *fn_ctx) {
-
-  JITSymbol *sym = new_symbol(STYPE_COROUTINE_CONSTRUCTOR, fn_type, func, NULL);
-  sym->symbol_data.STYPE_COROUTINE_CONSTRUCTOR.state_type = state_type;
-  sym->symbol_data.STYPE_COROUTINE_CONSTRUCTOR.recursive_ref = true;
-
-  // JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, func,
-  // LLVMTypeOf(func)); sym->symbol_data.STYPE_FUNCTION.fn_type = fn_type;
-
-  ht *scope = fn_ctx->frame->table;
-  ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
-}
-
-static LLVMValueRef compile_coroutine_fn(Type *constructor_type,
-                                         Type *state_type, Ast *ast,
-                                         JITLangCtx *ctx, LLVMModuleRef module,
-                                         LLVMBuilderRef builder) {
-  CoroutineCtx coro_ctx = {
-      .num_yield_boundary_xs = ast->data.AST_LAMBDA.num_yield_boundary_crossers,
-      .yield_boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers,
-      .num_coroutine_yields = ast->data.AST_LAMBDA.num_yields,
-      .current_yield = 0,
-      .cons_type = constructor_type,
-  };
-
-  Type *ret_opt_type = fn_return_type(constructor_type);
-  Type *ret_type = type_of_option(ret_opt_type);
-
-  LLVMTypeRef fn_type = cor_coroutine_fn_type();
-
-  ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
-  bool is_anon = false;
-  if (fn_name.chars == NULL) {
-    is_anon = true;
-  }
-
-  LLVMValueRef func = LLVMAddFunction(
-      module, is_anon ? "anon_coroutine_func" : fn_name.chars, fn_type);
-  if (func == NULL) {
-    fprintf(stderr,
-            "Error: failure creating coroutine switch-resume function\n");
-    print_ast_err(ast);
-    return NULL;
-  }
-
-  LLVMSetLinkage(func, LLVMExternalLinkage);
-  STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
-  fn_ctx.coro_ctx = &coro_ctx;
+  LLVMTypeRef promise_type = coro_ctx->promise_type;
 
   LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMPositionBuilderAtEnd(builder, block);
 
-  if (!is_anon) {
-    add_recursive_coroutine_fn_ref(fn_name, func, constructor_type, state_type,
-                                   &fn_ctx);
-  }
+  LLVMTypeRef cor_obj_type = coro_ctx->coro_obj_type;
+  LLVMValueRef alloc = LLVMBuildMalloc(builder, cor_obj_type, "coro_alloc");
 
-  LLVMTypeRef state_struct_type =
-      state_type ? type_to_llvm_type(state_type, ctx, module) : NULL;
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0),
+                 LLVMBuildStructGEP2(builder, cor_obj_type, alloc, 0,
+                                     "insert_coro_counter"));
 
-  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
+  LLVMBuildStore(builder, coro_fn,
+                 LLVMBuildStructGEP2(builder, cor_obj_type, alloc, 1,
+                                     "insert_coro_fn_ptr"));
 
-  LLVMValueRef counter = LLVMBuildLoad2(
-      builder, LLVMInt32Type(), get_instance_counter_gep(instance_ptr, builder),
-      "load_instance_counter");
-  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+  LLVMValueRef promise_struct = LLVMGetUndef(promise_type);
+  promise_struct = LLVMBuildInsertValue(builder, promise_struct,
+                                        LLVMConstInt(LLVMInt32Type(), 1, 0), 0,
+                                        "insert_promise_field_0");
+  LLVMBuildStore(builder, promise_struct,
+                 LLVMBuildStructGEP2(builder, cor_obj_type, alloc, 3,
+                                     "insert_promise_struct"));
 
-  bind_coroutine_state_vars(state_type, state_struct_type, instance_ptr, ast,
-                            &fn_ctx, module, builder);
+  LLVMBuildRet(builder, alloc);
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  return func;
+}
+static void add_recursive_coroutine_ref(Ast *ast, LLVMValueRef init_fn,
+                                        LLVMTypeRef coro_init_type,
+                                        JITLangCtx *fn_ctx) {
+  ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
+  JITSymbol *sym = new_symbol(STYPE_FUNCTION, ast->md, init_fn, coro_init_type);
+  sym->symbol_data.STYPE_FUNCTION.fn_type = ast->md;
+  sym->symbol_data.STYPE_FUNCTION.recursive_ref = true;
 
-  LLVMBasicBlockRef switch_default_block =
-      LLVMAppendBasicBlock(func, "coroutine_iter_end");
+  ht *scope = fn_ctx->frame->table;
+  ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
+}
 
-  coro_ctx.switch_default = switch_default_block;
+// compile coroutine function ast (a function / lambda <cor_name> that contains
+// yields) result is a helper function <cor_name>.init:
+//   -- allocates a 'coro' object with
+//   --- coroutine state (enough memory to hold the function's args, closed-over
+//     values and any internal variables that cross a yield boundary (ie vars
+//     that must be valid in more than one block))
+//   --- a function pointer (<cor_name> function itself)
+//   --- a state value that keeps track of where in the coroutine we are
+//   --- a result option ptr
+//
+// AND the coroutine function itself <cor_name>
+// which takes a 'coro' object arg and a result Option ptr
+// - entry block,
+// - yield blocks
+//  -- in each yield block do some logic
+//  -- advance the arg's position state
+//  -- find the yield result
+//  -- insert it into the result Option ptr
+//  -- return the coro object
+// - cleanup block
+LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
 
-  LLVMPositionBuilderAtEnd(builder, switch_default_block);
+  Type *t = ast->md;
+  Type *return_opt_type = fn_return_type(t);
+  LLVMTypeRef promise_type = type_to_llvm_type(return_opt_type, ctx, module);
 
-  LLVMBuildRet(builder, null_cor_inst());
-  LLVMPositionBuilderAtEnd(builder, block);
+  LLVMTypeRef coro_obj_type = LLVMStructType(
+      (LLVMTypeRef[]){
+          LLVMInt32Type(), // counter
+          GENERIC_PTR,     // fn ptr
+          GENERIC_PTR,     // state
+          promise_type,    // result or 'promise'
+          GENERIC_PTR      // next
+      },
+      5, 0);
 
-  LLVMValueRef switch_ref = LLVMBuildSwitch(
-      builder, counter, switch_default_block, ast->data.AST_LAMBDA.num_yields);
-
-  coro_ctx.yield_switch_ref = switch_ref;
+  CoroutineCtx coro_ctx = {
+      .cons_type = t,
+      .coro_obj_type = coro_obj_type,
+      .promise_type = promise_type,
+      .current_yield = 0,
+      .num_coroutine_yields = ast->data.AST_LAMBDA.num_yields,
+      .num_yield_boundary_xs = ast->data.AST_LAMBDA.num_yield_boundary_crossers,
+      .yield_boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers,
+  };
+  STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
   fn_ctx.coro_ctx = &coro_ctx;
 
-  LLVMBasicBlockRef case_0 = LLVMAppendBasicBlock(func, "coroutine_iter_0");
-  LLVMPositionBuilderAtEnd(builder, case_0);
+  const char *name;
+  int name_len;
+  if (ast->data.AST_LAMBDA.fn_name.chars) {
+    name = ast->data.AST_LAMBDA.fn_name.chars;
+  } else {
+    name = "anon_coro";
+  }
+  char *init_func_name = calloc(strlen(name) + 5 + 1, sizeof(char));
+  sprintf(init_func_name, "%s.init", name);
 
-  LLVMAddCase(switch_ref, LLVMConstInt(LLVMInt32Type(), 0, 0), case_0);
-  LLVMPositionBuilderAtEnd(builder, case_0);
+  LLVMTypeRef coro_init_type = LLVMFunctionType(GENERIC_PTR, NULL, 0, 0);
+  LLVMValueRef init_fn =
+      LLVMAddFunction(module, init_func_name, coro_init_type);
+  LLVMSetLinkage(init_fn, LLVMExternalLinkage);
+
+  LLVMTypeRef coro_type = PTR_ID_FUNC_TYPE(coro_obj_type);
+
+  LLVMValueRef coro_fn = LLVMAddFunction(module, name, coro_type);
+  LLVMSetLinkage(coro_fn, LLVMExternalLinkage);
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(coro_fn, "entry");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, block);
+  LLVMValueRef coro = LLVMGetParam(coro_fn, 0);
+
+  if (ast->data.AST_LAMBDA.fn_name.chars) {
+    add_recursive_coroutine_ref(ast, init_fn, coro_init_type, &fn_ctx);
+  }
+
+  LLVMBasicBlockRef branches[coro_ctx.num_coroutine_yields + 1];
+
+  for (int i = 0; i < coro_ctx.num_coroutine_yields + 1; i++) {
+    char branch_name[19];
+    if (i == coro_ctx.num_coroutine_yields) {
+      sprintf(branch_name, "yield.default");
+    } else {
+      sprintf(branch_name, "yield.%d", i);
+    }
+    branches[i] = LLVMAppendBasicBlock(coro_fn, branch_name);
+  }
+  coro_ctx.branches = branches;
+  coro_ctx.switch_default = branches[coro_ctx.num_coroutine_yields];
+  LLVMPositionBuilderAtEnd(builder, coro_ctx.switch_default);
+  LLVMValueRef promise_struct = LLVMGetUndef(coro_ctx.promise_type);
+  promise_struct = LLVMBuildInsertValue(builder, promise_struct,
+                                        LLVMConstInt(LLVMInt32Type(), 1, 0), 0,
+                                        "insert_promise_status");
+
+  LLVMValueRef promise_gep =
+      LLVMBuildStructGEP2(builder, coro_ctx.coro_obj_type,
+                          LLVMGetParam(coro_fn, 0), 3, "promise_gep");
+  LLVMBuildStore(builder, promise_struct, promise_gep);
+
+  LLVMValueRef state = coro_state(coro, coro_ctx.coro_obj_type, builder);
+  LLVMBuildFree(builder, state);
+
+  LLVMBuildRet(builder, coro);
+
+  LLVMPositionBuilderAtEnd(builder, block);
+  LLVMValueRef switch_ref =
+      LLVMBuildSwitch(builder, coro_counter(coro, coro_obj_type, builder),
+                      coro_ctx.switch_default, coro_ctx.num_coroutine_yields);
+
+  for (int i = 0; i < coro_ctx.num_coroutine_yields; i++) {
+    LLVMAddCase(switch_ref, LLVMConstInt(LLVMInt32Type(), i, 0), branches[i]);
+  }
+
+  coro_ctx.switch_ref = switch_ref;
+  LLVMPositionBuilderAtEnd(builder, branches[0]);
+  coro_ctx.func = coro_fn;
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
   destroy_ctx(&fn_ctx);
 
-  return func;
+  LLVMValueRef init_func =
+      compile_coroutine_init(name, coro_fn, init_fn, &fn_ctx, module, builder);
+
+  return init_func;
 }
 
-Type *build_coroutine_state_type(Type *constructor_type, Ast *ast) {
+LLVMValueRef coro_create(JITSymbol *sym, Type *expected_fn_type, Ast *args,
+                         int args_len, JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
 
-  int total_args_len = fn_type_args_len(constructor_type) - 1 +
-                       ast->data.AST_LAMBDA.num_yield_boundary_crossers;
+  return LLVMBuildCall2(builder, LLVMFunctionType(GENERIC_PTR, NULL, 0, 0),
+                        sym->val, NULL, 0, "create_coro_inst");
+}
+static LLVMValueRef coro_fn_ptr(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                                LLVMBuilderRef builder) {
 
-  int non_void_args = ast->data.AST_LAMBDA.num_yield_boundary_crossers;
-  int t = total_args_len;
-  Type *f = constructor_type;
+  LLVMValueRef fn_ptr_gep =
+      LLVMBuildStructGEP2(builder, coro_obj_type, coro, 1, "fn_ptr_gep");
+  LLVMValueRef fn_ptr =
+      LLVMBuildLoad2(builder, GENERIC_PTR, fn_ptr_gep, "fn_ptr");
+  LLVMTypeRef fn_param_types[] = {LLVMPointerType(coro_obj_type, 0)};
 
-  while (f->kind == T_FN) {
-    if (f->data.T_FN.from->kind != T_VOID) {
-      non_void_args++;
-    }
-    f = f->data.T_FN.to;
-  }
+  LLVMTypeRef fn_type =
+      LLVMFunctionType(LLVMPointerType(coro_obj_type, 0), fn_param_types, 1, 0);
 
-  if (non_void_args == 0) {
-    return NULL;
-  }
+  LLVMValueRef typed_fn_ptr = LLVMBuildBitCast(
+      builder, fn_ptr, LLVMPointerType(fn_type, 0), "typed_fn_ptr");
 
-  Type **types = talloc(sizeof(Type *) * non_void_args);
-  int non_void_idx = 0;
-  AstList *bxs = ast->data.AST_LAMBDA.yield_boundary_crossers;
-  for (int i = 0; i < ast->data.AST_LAMBDA.num_yield_boundary_crossers; i++) {
-    types[non_void_idx] = bxs->ast->md;
-
-    bxs = bxs->next;
-    non_void_idx++;
-  }
-
-  f = constructor_type;
-  while (f->kind == T_FN && !f->data.T_FN.from->is_coroutine_instance) {
-    Type *t = f->data.T_FN.from;
-    if (t->kind != T_VOID) {
-      types[non_void_idx] = t;
-      non_void_idx++;
-    }
-    f = f->data.T_FN.to;
-  }
-
-  Type *struct_type = create_cons_type("state_struct", non_void_args, types);
-  return struct_type;
+  return typed_fn_ptr;
 }
 
-LLVMValueRef create_coroutine_constructor_binding(Ast *binding, Ast *fn_ast,
-                                                  JITLangCtx *ctx,
-                                                  LLVMModuleRef module,
-                                                  LLVMBuilderRef builder) {
-  Type *constructor_type = fn_ast->md;
-  const char *id_chars = binding->data.AST_IDENTIFIER.value;
-  int id_len = binding->data.AST_IDENTIFIER.length;
+static LLVMValueRef coro_promise(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                                 LLVMTypeRef promise_type,
+                                 LLVMBuilderRef builder) {
 
-  if (is_generic(constructor_type)) {
-    JITSymbol *sym =
-        new_symbol(STYPE_GENERIC_FUNCTION, constructor_type, NULL, NULL);
-    sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
-    sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
-    sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env = ctx->env;
-    sym->symbol_data.STYPE_GENERIC_FUNCTION.ast = fn_ast;
+  LLVMValueRef promise_gep =
+      LLVMBuildStructGEP2(builder, coro_obj_type, coro, 3, "promise_gep");
+  LLVMValueRef promise =
+      LLVMBuildLoad2(builder, promise_type, promise_gep, "promise");
+  return promise;
+}
 
-    ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
-                sym);
-    return NULL;
-  }
-  AstList *bxs = fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
-  while (bxs) {
-    bxs = bxs->next;
-  }
+static LLVMValueRef coro_state(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                               LLVMBuilderRef builder) {
 
-  Type *state_type = build_coroutine_state_type(constructor_type, fn_ast);
-  LLVMValueRef constructor = compile_coroutine_fn(constructor_type, state_type,
-                                                  fn_ast, ctx, module, builder);
+  LLVMValueRef state_gep =
+      LLVMBuildStructGEP2(builder, coro_obj_type, coro, 2, "state_gep");
+  LLVMValueRef state = LLVMBuildLoad2(builder, GENERIC_PTR, state_gep, "state");
+  return state;
+}
 
-  constructor_type->is_coroutine_constructor = true;
+static LLVMValueRef coro_promise_set(LLVMValueRef coro, LLVMValueRef val,
+                                     LLVMTypeRef coro_obj_type,
+                                     LLVMTypeRef promise_type,
+                                     LLVMBuilderRef builder) {
 
-  JITSymbol *sym = new_symbol(STYPE_COROUTINE_CONSTRUCTOR, constructor_type,
-                              constructor, NULL);
-  sym->symbol_data.STYPE_COROUTINE_CONSTRUCTOR.state_type = state_type;
+  LLVMValueRef promise_struct = LLVMGetUndef(promise_type);
 
-  ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len), sym);
+  promise_struct = LLVMBuildInsertValue(builder, promise_struct,
+                                        LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
+                                        "coro.promise.tag");
+
+  promise_struct = LLVMBuildInsertValue(builder, promise_struct, val, 1,
+                                        "coro.promise.value");
+
+  LLVMValueRef promise_gep =
+      LLVMBuildStructGEP2(builder, coro_obj_type, coro, 3, "coro.promise.gep");
+  LLVMBuildStore(builder, promise_struct, promise_gep);
+  return coro;
+}
+
+static LLVMValueRef coro_next_set(LLVMValueRef coro, LLVMValueRef next,
+                                  LLVMTypeRef coro_obj_type,
+                                  LLVMBuilderRef builder) {
+  LLVMValueRef next_gep =
+      LLVMBuildStructGEP2(builder, coro_obj_type, coro, 4, "coro.next.gep");
+  LLVMBuildStore(builder, next, next_gep);
+  return coro;
+}
+static LLVMValueRef coro_next(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                              LLVMBuilderRef builder) {
+  LLVMValueRef next_gep =
+      LLVMBuildStructGEP2(builder, coro_obj_type, coro, 4, "coro.next.gep");
+  LLVMValueRef next = LLVMBuildLoad2(builder, LLVMPointerType(coro_obj_type, 0),
+                                     next_gep, "coro.next");
+  return next;
+}
+
+static LLVMValueRef coro_counter(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                                 LLVMBuilderRef builder) {
+
+  LLVMValueRef counter_gep =
+      LLVMBuildStructGEP2(builder, coro_obj_type, coro, 0, "counter_gep");
+  LLVMValueRef counter =
+      LLVMBuildLoad2(builder, LLVMInt32Type(), counter_gep, "coro.counter");
+  return counter;
+}
+
+LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
+
+  LLVMValueRef coro = sym->val;
+  Type *coro_type = sym->symbol_type;
+  Type *ret_opt_type = fn_return_type(coro_type);
+  LLVMTypeRef promise_type = type_to_llvm_type(ret_opt_type, ctx, module);
+
+  LLVMTypeRef coro_obj_type = LLVMStructType(
+      (LLVMTypeRef[]){
+          LLVMInt32Type(), // counter
+          GENERIC_PTR,     // fn ptr
+          GENERIC_PTR,     // state
+          promise_type,    // result or 'promise'
+          GENERIC_PTR      // next
+      },
+      5, 0);
+
+  LLVMValueRef fn_ptr = coro_fn_ptr(coro, coro_obj_type, builder);
+
+  LLVMValueRef args[] = {coro};
+  LLVMValueRef new_cor = LLVMBuildCall2(
+      builder, PTR_ID_FUNC_TYPE(coro_obj_type), fn_ptr, args, 1, "");
+  sym->val = new_cor;
+
+  return coro_promise(coro, coro_obj_type, promise_type, builder);
+}
+
+static LLVMValueRef coro_advance(LLVMValueRef coro, CoroutineCtx *coro_ctx,
+                                 LLVMBuilderRef builder) {
+
+  LLVMTypeRef promise_type = coro_ctx->promise_type;
+
+  LLVMTypeRef coro_obj_type = LLVMStructType(
+      (LLVMTypeRef[]){
+          LLVMInt32Type(), // counter
+          GENERIC_PTR,     // fn ptr
+          GENERIC_PTR,     // state
+          promise_type,    // result or 'promise'
+          GENERIC_PTR      // next
+      },
+      5, 0);
+
+  LLVMValueRef fn_ptr = coro_fn_ptr(coro, coro_obj_type, builder);
+
+  LLVMValueRef args[] = {coro};
+  LLVMValueRef new_cor = LLVMBuildCall2(
+      builder, PTR_ID_FUNC_TYPE(coro_obj_type), fn_ptr, args, 1, "");
+
+  return new_cor;
+}
+
+static LLVMValueRef coro_incr(LLVMValueRef coro, CoroutineCtx *coro_ctx,
+                              LLVMBuilderRef builder) {
+
+  LLVMValueRef counter_gep = LLVMBuildStructGEP2(
+      builder, coro_ctx->coro_obj_type, coro, 0, "coro.counter.gep");
+  LLVMValueRef current_counter =
+      LLVMBuildLoad2(builder, LLVMInt32Type(), counter_gep, "coro.counter");
+  LLVMValueRef incremented_counter =
+      LLVMBuildAdd(builder, current_counter,
+                   LLVMConstInt(LLVMInt32Type(), 1, 0), "coro.counter.incr");
+  LLVMBuildStore(builder, incremented_counter, counter_gep);
   return NULL;
 }
+static LLVMValueRef recursive_coro_yield(LLVMValueRef coro,
+                                         CoroutineCtx *coro_ctx,
+                                         LLVMBuilderRef builder) {
 
-LLVMValueRef create_cor_inst_struct(LLVMBuilderRef builder, LLVMValueRef fn,
-                                    LLVMValueRef state) {
-  LLVMTypeRef cor_struct_type = cor_inst_struct_type();
+  LLVMValueRef func = coro_ctx->func;
+  LLVMValueRef counter_gep = LLVMBuildStructGEP2(
+      builder, coro_ctx->coro_obj_type, coro, 0, "coro.counter.gep");
 
-  LLVMValueRef cor_struct = LLVMGetUndef(cor_struct_type);
-  cor_struct = LLVMBuildInsertValue(builder, cor_struct,
-                                    LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
-                                    "insert_counter");
-
-  cor_struct =
-      LLVMBuildInsertValue(builder, cor_struct, fn, 1, "insert_fn_ptr");
-
-  cor_struct = LLVMBuildInsertValue(builder, cor_struct, null_cor_inst(), 2,
-                                    "insert_next_null");
-  cor_struct = LLVMBuildInsertValue(
-      builder, cor_struct,
-      state ? state : LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0)), 3,
-      "insert_state_ptr");
-  return cor_struct;
-}
-
-LLVMValueRef create_coroutine_state_ptr(Type *state_type, JITLangCtx *ctx,
-                                        LLVMModuleRef module,
-                                        LLVMBuilderRef builder) {
-  if (!state_type) {
-    return NULL;
-  }
-  LLVMTypeRef type = type_to_llvm_type(state_type, ctx, module);
-  LLVMValueRef state_ptr_alloca =
-      LLVMBuildMalloc(builder, type, "coroutine_state_storage");
-  return state_ptr_alloca;
-}
-void populate_state_struct_ptr(LLVMValueRef ptr, Type *state_type,
-                               int ast_args_len, Ast *args, JITLangCtx *ctx,
-                               LLVMModuleRef module, LLVMBuilderRef builder) {
-  if (!state_type) {
-    return;
-  }
-  if (!args || ast_args_len == 0) {
-    return;
-  }
-  if (args->tag == AST_VOID) {
-    return;
-  }
-
-  LLVMTypeRef llvm_state_type = type_to_llvm_type(state_type, ctx, module);
-
-  int num_args = state_type->data.T_CONS.num_args;
-
-  Type **state_args = state_type->data.T_CONS.args + (num_args - ast_args_len);
-
-  for (int i = 0; i < ast_args_len; i++) {
-    Type *state_arg_type = state_args[i];
-    int struct_offset = (num_args - ast_args_len) + i;
-
-    LLVMValueRef val = codegen(args + i, ctx, module, builder);
-
-    LLVMValueRef gep =
-        LLVMBuildStructGEP2(builder, llvm_state_type, ptr, struct_offset,
-                            "set_explicit_coroutine_state_var");
-    LLVMBuildStore(builder, val, gep);
-  }
-}
-
-LLVMValueRef create_coroutine_instance_from_generic_constructor(
-    JITSymbol *sym, Type *expected_type, Ast *args, int args_len,
-    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMValueRef func = specific_fns_lookup(
-      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_type);
-
-  Type *state_type;
-  if (!func) {
-
-    JITLangCtx compilation_ctx = *ctx;
-
-    Type *generic_type = sym->symbol_type;
-    compilation_ctx.stack_ptr =
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
-    compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
-
-    printf("generic coroutine\n");
-    print_type(expected_type);
-    print_type(sym->symbol_type);
-    compilation_ctx.env = create_env_for_generic_fn(
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
-        expected_type);
-
-    Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
-
-    fn_ast.md = expected_type;
-
-    AstList *bxs = fn_ast.data.AST_LAMBDA.yield_boundary_crossers;
-
-    state_type = build_coroutine_state_type(expected_type, &fn_ast);
-
-    LLVMValueRef specific_fn = compile_coroutine_fn(
-        expected_type, state_type, &fn_ast, &compilation_ctx, module, builder);
-
-    sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns = specific_fns_extend(
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_type,
-        specific_fn);
-    func = specific_fn;
-  }
-
-  Type *constructor_type = expected_type;
-
-  // TODO: need to save state_type for n > 1 coroutine instances from generics
-  LLVMValueRef state_struct_ptr =
-      create_coroutine_state_ptr(state_type, ctx, module, builder);
-
-  populate_state_struct_ptr(state_struct_ptr, state_type, args_len, args, ctx,
-                            module, builder);
-
-  LLVMValueRef cor_struct =
-      create_cor_inst_struct(builder, func, state_struct_ptr);
-
-  LLVMTypeRef cor_struct_type = cor_inst_struct_type();
-
-  // LLVMValueRef alloca =
-  //     ctx->stack_ptr > 0
-  //         ? LLVMBuildAlloca(builder, cor_struct_type,
-  //         "cor_instance_alloca") : LLVMBuildMalloc(builder,
-  //         cor_struct_type, "cor_instance_malloc");
-
-  LLVMValueRef alloca =
-      ctx->stack_ptr > 0
-          ? LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_alloca")
-          : LLVMBuildMalloc(builder, cor_struct_type, "cor_instance_malloc");
-
-  LLVMBuildStore(builder, cor_struct, alloca);
-  return alloca;
-}
-
-LLVMValueRef create_coroutine_instance_from_constructor(
-    JITSymbol *sym, Ast *args, int args_len, JITLangCtx *ctx,
-    LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  Type *constructor_type = sym->symbol_type;
-
-  LLVMValueRef state_struct_ptr = create_coroutine_state_ptr(
-      sym->symbol_data.STYPE_COROUTINE_CONSTRUCTOR.state_type, ctx, module,
-      builder);
-
-  populate_state_struct_ptr(
-      state_struct_ptr, sym->symbol_data.STYPE_COROUTINE_CONSTRUCTOR.state_type,
-      args_len, args, ctx, module, builder);
-
-  LLVMValueRef cor_struct =
-      create_cor_inst_struct(builder, sym->val, state_struct_ptr);
-
-  LLVMTypeRef cor_struct_type = cor_inst_struct_type();
-
-  // LLVMValueRef alloca =
-  //     ctx->stack_ptr > 0
-  //         ? LLVMBuildAlloca(builder, cor_struct_type,
-  //         "cor_instance_alloca") : _cor_alloc(module, builder);
-  //
-  LLVMValueRef alloca = ctx->stack_ptr > 0 ? _cor_alloc(module, builder)
-                                           : _cor_alloc(module, builder);
-
-  LLVMBuildStore(builder, cor_struct, alloca);
-  return alloca;
-}
-
-static LLVMValueRef wrap_yield_result_in_option(LLVMValueRef instance_ptr,
-                                                LLVMValueRef ret_val_ref,
-                                                LLVMTypeRef ret_val_type,
-                                                LLVMBuilderRef builder) {
-  LLVMValueRef sel = LLVMBuildSelect(
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_gep);
+  LLVMBuildRet(
       builder,
-      LLVMBuildICmp(builder, LLVMIntEQ, instance_ptr, null_cor_inst(),
-                    "is_null"),
-      codegen_none_typed(builder, ret_val_type),
-      codegen_some(LLVMBuildLoad2(builder, ret_val_type, ret_val_ref,
-                                  "load_from_ret_val_ref"),
-                   builder),
-      "select Some ret_val or None");
-  return sel;
-}
-
-LLVMValueRef yield_from_coroutine_instance(JITSymbol *sym, JITLangCtx *ctx,
-                                           LLVMModuleRef module,
-                                           LLVMBuilderRef builder) {
-
-  Type *coroutine_type = sym->symbol_type;
-  Type *ret_opt_type = fn_return_type(coroutine_type);
-  Type *ret_type = type_of_option(ret_opt_type);
-  LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx, module);
-  LLVMValueRef instance_ptr = sym->val;
-
-  LLVMValueRef ret_val_ref =
-      LLVMBuildAlloca(builder, llvm_ret_type, "ret_val_ref");
-
-  instance_ptr = _cor_next(instance_ptr, ret_val_ref, module, builder);
-
-  return wrap_yield_result_in_option(instance_ptr, ret_val_ref, llvm_ret_type,
-                                     builder);
-}
-
-static LLVMValueRef codegen_yield_nested_coroutine(
-    JITSymbol *sym, bool is_recursive_ref, LLVMValueRef instance_ptr,
-    Type *state_type, Ast *args, int args_len, LLVMValueRef ret_val_ref,
-    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  LLVMTypeRef llvm_state_type = type_to_llvm_type(state_type, ctx, module);
-
-  LLVMValueRef new_state_ptr = NULL;
-
-  if (state_type) {
-    if (is_recursive_ref) {
-      new_state_ptr = get_instance_state_gep(instance_ptr, builder);
-      new_state_ptr = LLVMBuildLoad2(
-          builder, LLVMPointerType(llvm_state_type, 0), new_state_ptr, "");
-    } else {
-      new_state_ptr = LLVMBuildMalloc(builder, llvm_state_type, "");
-    }
-    populate_state_struct_ptr(new_state_ptr, state_type, args_len, args, ctx,
-                              module, builder);
-  }
-
-  Type *constructor_type = sym->symbol_type;
-
-  LLVMValueRef cor_struct =
-      create_cor_inst_struct(builder, sym->val, new_state_ptr);
-
-  LLVMTypeRef cor_struct_type = cor_inst_struct_type();
-
-  LLVMValueRef next_instance_ptr =
-      LLVMBuildAlloca(builder, cor_struct_type, "cor_instance_alloca");
-
-  LLVMBuildStore(builder, cor_struct, next_instance_ptr);
-  // the following functions _cor_reset & _cor_defer are declared to take a
-  // struct as a second arg, but we actually need to pass pointers to structs
-  // as llvm compiles struct passing as pointers implicitly
-  if (is_recursive_ref == true) {
-    LLVMValueRef new_instance_ptr = _cor_reset(instance_ptr, next_instance_ptr,
-                                               ret_val_ref, module, builder);
-    return new_instance_ptr;
-
-  } else {
-    LLVMValueRef new_instance_ptr = _cor_defer(instance_ptr, next_instance_ptr,
-                                               ret_val_ref, module, builder);
-    return new_instance_ptr;
-  }
+      LLVMBuildCall2(builder, PTR_ID_FUNC_TYPE(coro_ctx->coro_obj_type), func,
+                     (LLVMValueRef[]){coro}, 1, "coro.recursive_call"));
 
   return NULL;
 }
+static LLVMValueRef tail_call_coro_yield(LLVMValueRef coro,
+                                         LLVMValueRef new_cor,
+                                         CoroutineCtx *coro_ctx,
+                                         LLVMBuilderRef builder) {
 
-JITSymbol *nested_coroutine_expr(Ast *ast, JITLangCtx *ctx) {
+  LLVMValueRef struct_size = LLVMSizeOf(coro_ctx->coro_obj_type);
 
-  if (ast->tag == AST_APPLICATION) {
-    JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
+  LLVMBuildFree(builder, coro_state(coro, coro_ctx->coro_obj_type, builder));
 
-    const char *sym_name =
-        ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+  LLVMBuildMemCpy(builder, coro, LLVMGetAlignment(coro), new_cor,
+                  LLVMGetAlignment(new_cor), struct_size);
+  LLVMValueRef fn_ptr = coro_fn_ptr(coro, coro_ctx->coro_obj_type, builder);
 
-    if (!sym) {
-      fprintf(stderr, "Error callable symbol %s not found in scope\n",
-              sym_name);
-      return NULL;
-    }
-    if (sym->type == STYPE_GENERIC_FUNCTION &&
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
-      return sym;
-    }
+  coro = LLVMBuildCall2(builder, PTR_ID_FUNC_TYPE(coro_ctx->coro_obj_type),
+                        fn_ptr, (LLVMValueRef[]){coro}, 1, "nested resume");
 
-    if (is_coroutine_constructor_type(sym->symbol_type)) {
-      return sym;
-    }
-  }
+  LLVMBuildFree(builder, new_cor);
+  LLVMBuildRet(builder, coro);
   return NULL;
 }
+static LLVMValueRef chain_new_coro_yield(LLVMValueRef coro,
+                                         LLVMValueRef new_cor,
+                                         CoroutineCtx *coro_ctx,
+                                         LLVMBuilderRef builder) {
 
-LLVMValueRef codegen_coroutine_short_circuit(JITLangCtx *ctx,
-                                             LLVMModuleRef module,
-                                             LLVMBuilderRef builder) {
-  // Get the current coroutine function parameters
-  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
-  LLVMValueRef func = LLVMGetBasicBlockParent(current_block);
-  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
-  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+  coro_incr(coro, coro_ctx, builder);
+  coro_next_set(new_cor, coro, coro_ctx->coro_obj_type, builder);
+  LLVMValueRef fn_ptr = coro_fn_ptr(new_cor, coro_ctx->coro_obj_type, builder);
 
-  // Option 2: Return null directly to signal completion
-  // This is probably what you want - when cor_next gets null back,
-  // it knows the coroutine is finished
-  LLVMBuildRet(builder, null_cor_inst());
+  new_cor =
+      LLVMBuildCall2(builder, PTR_ID_FUNC_TYPE(coro_ctx->coro_obj_type), fn_ptr,
+                     (LLVMValueRef[]){new_cor}, 1, "nested resume");
 
+  LLVMValueRef promise_gep = LLVMBuildStructGEP2(
+      builder, coro_ctx->coro_obj_type, coro, 3, "coro.promise.gep");
+
+  LLVMValueRef new_promise = coro_promise(new_cor, coro_ctx->coro_obj_type,
+                                          coro_ctx->promise_type, builder);
+
+  LLVMBuildStore(builder, new_promise, promise_gep);
+
+  LLVMBuildRet(builder, new_cor);
   return NULL;
 }
-
-// if (is_yield_end(ast)) {
-//   return codegen_coroutine_short_circuit(ctx, module, builder);
-// }
 
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+
   CoroutineCtx *coro_ctx = ctx->coro_ctx;
+  LLVMValueRef coro = LLVMGetParam(coro_ctx->func, 0);
 
-  LLVMBasicBlockRef current_case_block = LLVMGetInsertBlock(builder);
-  LLVMValueRef func = LLVMGetBasicBlockParent(current_case_block);
-  LLVMValueRef instance_ptr = LLVMGetParam(func, 0);
-  LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
+  if (ast->data.AST_YIELD.expr->tag == AST_APPLICATION) {
+    Ast *expr = ast->data.AST_YIELD.expr;
+    JITSymbol *sym = lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
 
-  coro_ctx->current_yield++;
-  LLVMBasicBlockRef next_case_block;
-  if (coro_ctx->current_yield < coro_ctx->num_coroutine_yields) {
-    char branch_name[19];
-    sprintf(branch_name, "coroutine_iter_%d", coro_ctx->current_yield);
-    next_case_block = LLVMAppendBasicBlock(func, branch_name);
-
-    LLVMValueRef switch_ref = coro_ctx->yield_switch_ref;
-    LLVMAddCase(switch_ref,
-                LLVMConstInt(LLVMInt32Type(), coro_ctx->current_yield, 0),
-                next_case_block);
-  }
-
-  Ast *yield_expr = ast->data.AST_YIELD.expr;
-  if (!yield_expr) {
-    LLVMBuildRet(builder, null_cor_inst());
-    return NULL;
-  }
-
-  JITSymbol *sym = nested_coroutine_expr(yield_expr, ctx);
-
-  if (sym != NULL) {
-    bool is_recursive_ref =
-        sym->type == STYPE_COROUTINE_CONSTRUCTOR &&
-        sym->symbol_data.STYPE_COROUTINE_CONSTRUCTOR.recursive_ref;
-
-    if (sym->type == STYPE_GENERIC_FUNCTION && sym->val == NULL) {
-      if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
-        LLVMValueRef new_instance_ptr =
-            sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
-                yield_expr, ctx, module, builder);
-
-        new_instance_ptr = _cor_defer(instance_ptr, new_instance_ptr,
-                                      ret_val_ref, module, builder);
-
-        LLVMBuildRet(builder, new_instance_ptr);
-      }
-    } else if (sym->type == STYPE_COROUTINE_CONSTRUCTOR) {
-
-      Type *symbol_type = sym->symbol_type;
-      Type *state_type =
-          sym->symbol_data.STYPE_COROUTINE_CONSTRUCTOR.state_type;
-
-      LLVMValueRef new_instance_ptr = codegen_yield_nested_coroutine(
-          sym, is_recursive_ref, instance_ptr, state_type,
-          yield_expr->data.AST_APPLICATION.args,
-          yield_expr->data.AST_APPLICATION.len, ret_val_ref, ctx, module,
-          builder);
-
-      LLVMBuildRet(builder, new_instance_ptr);
-    } else if (sym->type == STYPE_GENERIC_FUNCTION &&
-               sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
-      // printf("make nested version of iter\n");
-      return NULL;
+    if (sym && is_coroutine_constructor_type(sym->symbol_type) &&
+        sym->symbol_data.STYPE_FUNCTION.recursive_ref) {
+      return recursive_coro_yield(coro, coro_ctx, builder);
     }
-
-  } else {
-
-    LLVMValueRef expr_val = codegen(yield_expr, ctx, module, builder);
-
-    LLVMBuildStore(builder, expr_val, ret_val_ref);
-    LLVMBuildRet(builder, instance_ptr);
+    if (sym && is_coroutine_constructor_type(sym->symbol_type)) {
+      if (coro_ctx->current_yield == coro_ctx->num_coroutine_yields - 1) {
+        LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
+        return tail_call_coro_yield(coro, new_cor, coro_ctx, builder);
+      } else {
+        LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
+        chain_new_coro_yield(coro, new_cor, coro_ctx, builder);
+        coro_ctx->current_yield++;
+        LLVMPositionBuilderAtEnd(builder,
+                                 coro_ctx->branches[coro_ctx->current_yield]);
+        return NULL;
+      }
+    }
   }
 
-  if (next_case_block) {
-    LLVMPositionBuilderAtEnd(builder, next_case_block);
-  }
-  return NULL;
+  int branch_idx = coro_ctx->current_yield;
+  LLVMValueRef yield_val =
+      codegen(ast->data.AST_YIELD.expr, ctx, module, builder);
+
+  coro_incr(coro, coro_ctx, builder);
+  coro_promise_set(coro, yield_val, coro_ctx->coro_obj_type,
+                   coro_ctx->promise_type, builder);
+
+  LLVMBuildRet(builder, coro);
+  coro_ctx->current_yield++;
+  LLVMPositionBuilderAtEnd(builder,
+                           coro_ctx->branches[coro_ctx->current_yield]);
+  return yield_val;
 }

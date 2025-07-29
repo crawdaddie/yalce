@@ -233,29 +233,16 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (is_coroutine_constructor_type(symbol_type)) {
 
-    ast->md = fn_return_type(symbol_type);
-
-    if (sym->type == STYPE_GENERIC_FUNCTION) {
-      LLVMValueRef instance_ptr =
-          create_coroutine_instance_from_generic_constructor(
-              sym, expected_fn_type, ast->data.AST_APPLICATION.args, args_len,
-              ctx, module, builder);
-      return instance_ptr;
-    } else {
-
-      LLVMValueRef instance_ptr = create_coroutine_instance_from_constructor(
-          sym, ast->data.AST_APPLICATION.args, args_len, ctx, module, builder);
-
-      return instance_ptr;
-    }
+    LLVMValueRef instance_ptr =
+        coro_create(sym, expected_fn_type, ast->data.AST_APPLICATION.args,
+                    args_len, ctx, module, builder);
+    return instance_ptr;
 
   } else if (is_coroutine_type(symbol_type)) {
-    return yield_from_coroutine_instance(sym, ctx, module, builder);
+    return coro_resume(sym, ctx, module, builder);
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
-
-    // print_type(callable_type);
 
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);

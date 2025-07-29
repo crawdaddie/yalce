@@ -17,21 +17,6 @@ typedef struct StackFrame {
 } StackFrame;
 
 typedef struct {
-  LLVMValueRef func;
-  LLVMTypeRef func_type;
-  LLVMTypeRef instance_type;
-  Type *cons_type;
-  int num_coroutine_yields;
-  int current_yield;
-
-  AstList *yield_boundary_xs;
-  int num_yield_boundary_xs;
-  LLVMBasicBlockRef *block_refs;
-  LLVMBasicBlockRef switch_default;
-  LLVMValueRef yield_switch_ref;
-} CoroutineCtx;
-
-typedef struct {
   // ht stack[STACK_MAX];
   int stack_ptr;
   StackFrame *frame;
@@ -40,7 +25,7 @@ typedef struct {
   void **global_storage_array;
   int *global_storage_capacity;
   const char *module_name;
-  CoroutineCtx *coro_ctx;
+  void *coro_ctx;
 } JITLangCtx;
 
 typedef struct SpecificFns {

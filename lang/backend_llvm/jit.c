@@ -229,7 +229,8 @@ void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
 
   LLVMErrorRef err =
-      LLVMRunPasses(module, "default<O2>", target_machine, options);
+      LLVMRunPasses(module, config.opt_level ? config.opt_level : "default<O3>",
+                    target_machine, options);
 
   if (err) {
     char *msg = LLVMGetErrorMessage(err);
@@ -297,6 +298,7 @@ int jit(int argc, char **argv) {
 
   int arg_counter = 1;
   config.base_libs_dir = getenv("YLC_BASE_DIR");
+  int scripts = 0;
   while (arg_counter < argc) {
     if (strcmp(argv[arg_counter], "-i") == 0) {
       config.interactive_mode = true;
@@ -312,6 +314,18 @@ int jit(int argc, char **argv) {
       arg_counter++;
       config.base_libs_dir = argv[arg_counter];
       arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-O0") == 0) {
+      config.opt_level = "default<O0>";
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-O1") == 0) {
+      config.opt_level = "default<O1>";
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-O2") == 0) {
+      config.opt_level = "default<O2>";
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-O3") == 0) {
+      config.opt_level = "default<O3>";
+      arg_counter++;
     } else {
 
       Ast *script_prog;
@@ -319,7 +333,12 @@ int jit(int argc, char **argv) {
       eval_script(argv[arg_counter], &ctx, module, builder, context, &env,
                   &script_prog);
       arg_counter++;
+      scripts = 1;
     }
+  }
+
+  if (argc == 1 || !scripts) {
+    config.interactive_mode = true;
   }
 
   if (config.interactive_mode) {
@@ -334,8 +353,11 @@ int jit(int argc, char **argv) {
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n"
-                         "module base directory: %s\n" STYLE_RESET_ALL,
-           config.base_libs_dir == NULL ? "./" : config.base_libs_dir);
+                         "module base directory: %s\n"
+                         "Opt level: %s\n" STYLE_RESET_ALL,
+
+           config.base_libs_dir == NULL ? "./" : config.base_libs_dir,
+           config.opt_level ? config.opt_level : "default<O3>");
 
     init_readline();
 

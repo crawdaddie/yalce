@@ -264,19 +264,6 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
 
-  // print_ast(ast);
-  // if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
-  //   printf("APPLICATION\n");
-  //   print_ast(ast);
-  // }
-  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-  //              TYPE_NAME_REF)) {
-  //   Type *val_type = infer(ast->data.AST_APPLICATION.args, ctx);
-  //   val_type->is_ref = true;
-  //   ast->data.AST_APPLICATION.function->md = type_fn(val_type, val_type);
-  //   return val_type;
-  // }
   if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
       CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
                "addrof")) {
@@ -291,13 +278,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
 
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
-
-  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-  //              TYPE_NAME_RUN_IN_SCHEDULER)) {
-  //   infer_schedule_event_callback(ast, ctx);
-  //   return &t_void;
-  // }
 
   if (!fn_type) {
     return NULL;

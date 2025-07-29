@@ -8,31 +8,49 @@
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 
-LLVMTypeRef cor_inst_struct_type();
-LLVMTypeRef cor_coroutine_fn_type();
+int get_inner_state_slot(Ast *ast, JITLangCtx *ctx) { return NULL; }
+LLVMValueRef get_instance_state_gep(LLVMValueRef v, LLVMBuilderRef b) {
+  return NULL;
+}
+LLVMTypeRef cor_inst_struct_type() { return NULL; }
+LLVMTypeRef cor_coroutine_fn_type() { return NULL; }
 LLVMValueRef get_instance_state_gep(LLVMValueRef instance_ptr,
                                     LLVMBuilderRef builder);
 LLVMValueRef _cor_next(LLVMValueRef instance_ptr, LLVMValueRef ret_val_ref,
-                       LLVMModuleRef module, LLVMBuilderRef builder);
+                       LLVMModuleRef module, LLVMBuilderRef builder) {
+  return NULL;
+};
 
-LLVMValueRef null_cor_inst();
+LLVMValueRef null_cor_inst() { return NULL; }
 
 LLVMValueRef _cor_map(LLVMValueRef instance_ptr, LLVMValueRef map_fn,
-                      LLVMModuleRef module, LLVMBuilderRef builder);
+                      LLVMModuleRef module, LLVMBuilderRef builder) {
+  return NULL;
+}
 
-LLVMValueRef _cor_alloc(LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef _cor_alloc(LLVMModuleRef module, LLVMBuilderRef builder) {
+  return NULL;
+}
 
 LLVMValueRef _cor_loop(LLVMValueRef instance_ptr, LLVMModuleRef module,
-                       LLVMBuilderRef builder);
+                       LLVMBuilderRef builder) {
+  return NULL;
+}
 
 LLVMValueRef get_instance_counter_gep(LLVMValueRef instance_ptr,
-                                      LLVMBuilderRef builder);
+                                      LLVMBuilderRef builder) {
+  return NULL;
+}
 
 LLVMValueRef _cor_replace(LLVMValueRef this, LLVMValueRef other,
-                          LLVMModuleRef module, LLVMBuilderRef builder);
+                          LLVMModuleRef module, LLVMBuilderRef builder) {
+  return NULL;
+}
 
 LLVMValueRef _cor_stop(LLVMValueRef this, LLVMModuleRef module,
-                       LLVMBuilderRef builder);
+                       LLVMBuilderRef builder) {
+  return NULL;
+}
 
 LLVMValueRef _cor_wrap_effect(LLVMValueRef instance_ptr,
                               LLVMValueRef effect_handler, LLVMModuleRef module,
@@ -659,7 +677,9 @@ LLVMValueRef CoroutineEndHandler(Ast *ast, JITLangCtx *ctx,
   // Store null in the return value to indicate end
   LLVMBuildStore(builder, LLVMConstNull(GENERIC_PTR), ret_val_ref);
 
-  LLVMBasicBlockRef end_block = ctx->coro_ctx->switch_default;
+  // LLVMBasicBlockRef end_block = ((CoroutineCtx
+  // *)ctx->coro_ctx)->switch_default;
+  LLVMBasicBlockRef end_block = NULL;
 
   LLVMBuildBr(builder, end_block);
   return LLVMConstNull(type_to_llvm_type(ast->md, ctx, module));
@@ -676,7 +696,8 @@ LLVMValueRef UseOrFinishHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef func = LLVMGetBasicBlockParent(current_block);
   LLVMValueRef ret_val_ref = LLVMGetParam(func, 1);
 
-  LLVMBasicBlockRef end_block = ctx->coro_ctx->switch_default;
+  LLVMBasicBlockRef end_block = NULL;
+  // LLVMBasicBlockRef end_block = ctx->coro_ctx->switch_default;
 
   if (!end_block) {
     fprintf(stderr, "Error: coroutine_iter_end block not found\n");
