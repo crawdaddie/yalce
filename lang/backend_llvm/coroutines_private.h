@@ -3,70 +3,50 @@
 #include "common.h"
 #include "parse.h"
 
-LLVMValueRef WrapCoroutineWithEffectHandler(Ast *ast, JITLangCtx *ctx,
-                                            LLVMModuleRef module,
-                                            LLVMBuilderRef builder);
+typedef struct {
+  Type *cons_type;
+  LLVMTypeRef coro_obj_type;
+  LLVMTypeRef promise_type;
+  int num_coroutine_yields;
+  int current_yield;
+  AstList *yield_boundary_xs;
+  int num_yield_boundary_xs;
+  LLVMBasicBlockRef *branches;
+  LLVMBasicBlockRef switch_default;
+  LLVMValueRef switch_ref;
+  LLVMValueRef func;
+  LLVMTypeRef state_layout;
+} CoroutineCtx;
 
-LLVMValueRef MapCoroutineHandler(Ast *ast, JITLangCtx *ctx,
-                                 LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef coro_counter(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                          LLVMBuilderRef builder);
 
-LLVMValueRef IterOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                               LLVMBuilderRef builder);
+LLVMValueRef coro_next_set(LLVMValueRef coro, LLVMValueRef next,
+                           LLVMTypeRef coro_obj_type, LLVMBuilderRef builder);
 
-LLVMValueRef IterOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder);
-
-LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder);
-
-LLVMValueRef RunInSchedulerHandler(Ast *ast, JITLangCtx *ctx,
-                                   LLVMModuleRef module,
-                                   LLVMBuilderRef builder);
-
-LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder);
-
-LLVMValueRef get_inner_state_slot_gep(int slot, Ast *ast,
-                                      LLVMBuilderRef builder);
-
-LLVMValueRef CorReplaceHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                               LLVMBuilderRef builder);
-
-LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder);
-
-LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                         LLVMBuilderRef builder);
-
-LLVMValueRef CoroutineEndHandler(Ast *ast, JITLangCtx *ctx,
-                                 LLVMModuleRef module, LLVMBuilderRef builder);
-
-LLVMValueRef UseOrFinishHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder);
-
-LLVMTypeRef cor_inst_struct_type();
-LLVMTypeRef cor_coroutine_fn_type();
-LLVMValueRef get_instance_state_gep(LLVMValueRef instance_ptr,
-                                    LLVMBuilderRef builder);
-LLVMValueRef _cor_next(LLVMValueRef instance_ptr, LLVMValueRef ret_val_ref,
-                       LLVMModuleRef module, LLVMBuilderRef builder);
-
-LLVMValueRef null_cor_inst();
-
-LLVMValueRef _cor_map(LLVMValueRef instance_ptr, LLVMValueRef map_fn,
-                      LLVMModuleRef module, LLVMBuilderRef builder);
-
-LLVMValueRef _cor_alloc(LLVMModuleRef module, LLVMBuilderRef builder);
-
-LLVMValueRef _cor_loop(LLVMValueRef instance_ptr, LLVMModuleRef module,
+LLVMValueRef coro_next(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
                        LLVMBuilderRef builder);
 
-LLVMValueRef get_instance_counter_gep(LLVMValueRef instance_ptr,
-                                      LLVMBuilderRef builder);
+LLVMValueRef coro_advance(LLVMValueRef coro, CoroutineCtx *coro_ctx,
+                          LLVMBuilderRef builder);
 
-LLVMValueRef _cor_replace(LLVMValueRef this, LLVMValueRef other,
-                          LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef coro_replace(LLVMValueRef coro, LLVMValueRef new_coro,
+                          CoroutineCtx *coro_ctx, LLVMBuilderRef builder);
 
-LLVMValueRef _cor_stop(LLVMValueRef this, LLVMModuleRef module,
-                       LLVMBuilderRef builder);
+LLVMValueRef coro_promise_gep(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                              LLVMBuilderRef builder);
+LLVMTypeRef get_coro_state_layout(Ast *ast, JITLangCtx *ctx,
+                                  LLVMModuleRef module);
+
+LLVMValueRef coro_state_gep(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                            LLVMBuilderRef builder);
+
+LLVMValueRef coro_is_finished(LLVMValueRef coro, CoroutineCtx *ctx,
+                              LLVMBuilderRef builder);
+
+LLVMValueRef coro_state(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                        LLVMBuilderRef builder);
+
+LLVMValueRef coro_promise(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
+                          LLVMTypeRef promise_type, LLVMBuilderRef builder);
 #endif

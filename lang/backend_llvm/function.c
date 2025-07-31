@@ -42,10 +42,7 @@ void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
 
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module) {
-
-  if (is_coroutine_type(fn_type)) {
-    return LLVMPointerType(cor_inst_struct_type(), 0);
-  }
+  // TODO: return a type for a coroutine - is this necessary?
 
   LLVMTypeRef llvm_param_types[fn_len];
   LLVMTypeRef llvm_fn_type;

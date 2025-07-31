@@ -3,7 +3,7 @@
 #include "application.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/common.h"
-#include "backend_llvm/coroutines.h"
+#include "backend_llvm/coroutine_extensions.h"
 #include "function.h"
 #include "input.h"
 #include "list.h"
@@ -1313,18 +1313,21 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("||", &t_builtin_or, LogicalOrHandler);
   GENERIC_FN_SYMBOL("&&", &t_builtin_and, LogicalAndHandler);
 
-  GENERIC_FN_SYMBOL("cor_wrap_effect", &t_cor_wrap_effect_fn_sig,
-                    WrapCoroutineWithEffectHandler);
-
-  GENERIC_FN_SYMBOL("cor_map", &t_cor_map_fn_sig, MapCoroutineHandler);
-
-  GENERIC_FN_SYMBOL("iter_of_list", &t_iter_of_list_sig, IterOfListHandler);
-  GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig, IterOfArrayHandler);
-  GENERIC_FN_SYMBOL("iter", NULL, IterHandler);
-
   GENERIC_FN_SYMBOL("cor_loop", &t_cor_loop_sig, CorLoopHandler);
-  GENERIC_FN_SYMBOL("cor_replace", &t_cor_replace_fn_sig, CorReplaceHandler);
-  GENERIC_FN_SYMBOL("cor_stop", &t_cor_stop_fn_sig, CorStopHandler);
+  // GENERIC_FN_SYMBOL("cor_wrap_effect", &t_cor_wrap_effect_fn_sig,
+  //                   WrapCoroutineWithEffectHandler);
+  //
+  // GENERIC_FN_SYMBOL("cor_map", &t_cor_map_fn_sig, MapCoroutineHandler);
+  //
+  // GENERIC_FN_SYMBOL("iter_of_list", &t_iter_of_list_sig, IterOfListHandler);
+  // GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig,
+  // IterOfArrayHandler); GENERIC_FN_SYMBOL("iter", NULL, IterHandler);
+  //
+  // GENERIC_FN_SYMBOL("cor_replace", &t_cor_replace_fn_sig, CorReplaceHandler);
+  // GENERIC_FN_SYMBOL("cor_stop", &t_cor_stop_fn_sig, CorStopHandler);
+  // GENERIC_FN_SYMBOL("play_routine", &t_play_routine_sig, PlayRoutineHandler);
+  // GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
+
   GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);
   GENERIC_FN_SYMBOL("::", &t_list_prepend, ListPrependHandler);
   GENERIC_FN_SYMBOL("list_tail", &t_list_tail_sig, ListTailHandler);
@@ -1333,8 +1336,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("opt_map", &t_opt_map_sig, OptMapHandler);
   // GENERIC_FN_SYMBOL("run_in_scheduler", &t_run_in_scheduler_sig,
   //                   RunInSchedulerHandler);
-
-  GENERIC_FN_SYMBOL("play_routine", &t_play_routine_sig, PlayRoutineHandler);
 
   GENERIC_FN_SYMBOL("array_fill", &t_array_fill_sig, ArrayFillHandler);
   GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
@@ -1356,7 +1357,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("df_offset", &t_df_offset_sig, DFAtOffsetHandler);
   GENERIC_FN_SYMBOL("df_raw_fields", &t_df_raw_fields_sig, DFRawFieldsHandler);
   GENERIC_FN_SYMBOL(TYPE_NAME_ARRAY, &t_array_cons_sig, ArrayConstructor);
-  GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
   GENERIC_FN_SYMBOL("dlopen", NULL, DlOpenHandler);
   // GENERIC_FN_SYMBOL("coroutine_end", &t_coroutine_end, CoroutineEndHandler);

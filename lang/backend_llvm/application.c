@@ -62,7 +62,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-
   if (!callable) {
     return NULL;
   }
@@ -77,6 +76,7 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
     print_ast_err(ast);
     return NULL;
   }
+
   if (args_len < exp_args_len) {
     // return anonymous func
     int len = exp_args_len - args_len;
@@ -183,10 +183,13 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
+  // special application types:
+  // x[n] ??
   if (is_index_access_ast(ast)) {
     return IndexAccessHandler(ast, ctx, module, builder);
   }
 
+  // x.mem a ??
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
           ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record)) {
@@ -227,15 +230,13 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
         ast, ctx, module, builder);
   }
-
   int args_len = ast->data.AST_APPLICATION.len;
   int expected_args_len = fn_type_args_len(sym->symbol_type);
 
   if (is_coroutine_constructor_type(symbol_type)) {
 
     LLVMValueRef instance_ptr =
-        coro_create(sym, expected_fn_type, ast->data.AST_APPLICATION.args,
-                    args_len, ctx, module, builder);
+        coro_create(sym, expected_fn_type, ast, ctx, module, builder);
     return instance_ptr;
 
   } else if (is_coroutine_type(symbol_type)) {

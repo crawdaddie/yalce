@@ -371,7 +371,6 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
 
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
-
   expr_val = codegen(expr, outer_ctx, module, builder);
 
   if (!expr_val) {

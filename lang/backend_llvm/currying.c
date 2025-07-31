@@ -1,5 +1,6 @@
 #include "./currying.h"
 #include "symbols.h"
+#include "llvm-c/Core.h"
 #include <stdlib.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
