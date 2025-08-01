@@ -53,7 +53,7 @@ static LLVMValueRef compile_coroutine_init(const char *name,
 
   LLVMValueRef promise_struct = LLVMGetUndef(promise_type);
   promise_struct = LLVMBuildInsertValue(builder, promise_struct,
-                                        LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
+                                        LLVMConstInt(LLVMInt32Type(), 1, 0), 0,
                                         "insert_promise_tag_none");
   LLVMBuildStore(builder, promise_struct,
                  coro_promise_gep(coro, cor_obj_type, builder));

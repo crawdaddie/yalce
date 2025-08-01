@@ -49,4 +49,7 @@ LLVMValueRef coro_state(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
 
 LLVMValueRef coro_promise(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
                           LLVMTypeRef promise_type, LLVMBuilderRef builder);
+
+LLVMValueRef coro_incr(LLVMValueRef coro, CoroutineCtx *coro_ctx,
+                       LLVMBuilderRef builder);
 #endif

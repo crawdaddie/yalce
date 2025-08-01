@@ -349,12 +349,17 @@ Type *infer(Ast *ast, TICtx *ctx) {
     ObjString type_name = ast->data.AST_TRAIT_IMPL.type;
     ObjString trait_name = ast->data.AST_TRAIT_IMPL.trait_name;
 
-    if (!CHARS_EQ(trait_name.chars, "Constructor")) {
-
+    if (CHARS_EQ(trait_name.chars, "Arithmetic")) {
       Type *t = env_lookup(ctx->env, type_name.chars);
       double rank = tc_impl_rank(ast);
       TypeClass *tc = talloc(sizeof(TypeClass));
       *tc = (TypeClass){.rank = rank, .name = trait_name.chars};
+      typeclasses_extend(t, tc);
+    } else {
+      Type *t = env_lookup(ctx->env, type_name.chars);
+      TypeClass *tc = talloc(sizeof(TypeClass));
+      tc->module = type;
+      *tc = (TypeClass){.name = trait_name.chars};
       typeclasses_extend(t, tc);
     }
 
