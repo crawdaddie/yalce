@@ -1310,7 +1310,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_map", &t_cor_map_fn_sig, CorMapHandler);
   GENERIC_FN_SYMBOL("iter", NULL, IterHandler);
   //
-  // GENERIC_FN_SYMBOL("iter_of_list", &t_iter_of_list_sig, IterOfListHandler);
+  GENERIC_FN_SYMBOL("iter_of_list", &t_iter_of_list_sig, CorOfListHandler);
   // GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig,
   // IterOfArrayHandler);
   //

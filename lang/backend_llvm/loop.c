@@ -316,6 +316,7 @@ LLVMValueRef codegen_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (is_loop_of_iterable(ast)) {
     Type *iterable_type =
         ast->data.AST_LET.expr->data.AST_APPLICATION.function->md;
+
     if (is_coroutine_constructor_type(iterable_type)) {
       iterable_type = iterable_type->data.T_FN.from;
 

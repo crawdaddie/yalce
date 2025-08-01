@@ -558,8 +558,10 @@ void initialize_builtin_types() {
 
   add_builtin("cor_wrap_effect", &t_cor_wrap_effect_fn_sig);
   add_builtin("cor_map", &t_cor_map_fn_sig);
+
   add_builtin("iter_of_list", &t_iter_of_list_sig);
   add_builtin("iter_of_array", &t_iter_of_array_sig);
+
   add_builtin("cor_loop", &t_cor_loop_sig);
 
   add_builtin("opt_map", &t_opt_map_sig);

@@ -341,6 +341,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_MODULE: {
     type = infer_module(ast, ctx);
+    printf("inferred module as trait??\n");
+    print_type(type);
+    print_ast(ast);
     break;
   }
 
@@ -349,17 +352,23 @@ Type *infer(Ast *ast, TICtx *ctx) {
     ObjString type_name = ast->data.AST_TRAIT_IMPL.type;
     ObjString trait_name = ast->data.AST_TRAIT_IMPL.trait_name;
 
-    if (CHARS_EQ(trait_name.chars, "Arithmetic")) {
+    if (CHARS_EQ(trait_name.chars, "Arithmetic") ||
+        CHARS_EQ(trait_name.chars, "Eq") || CHARS_EQ(trait_name.chars, "Ord")) {
       Type *t = env_lookup(ctx->env, type_name.chars);
       double rank = tc_impl_rank(ast);
       TypeClass *tc = talloc(sizeof(TypeClass));
-      *tc = (TypeClass){.rank = rank, .name = trait_name.chars};
+      *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
       typeclasses_extend(t, tc);
     } else {
+      // TODO: implement robust traits
       Type *t = env_lookup(ctx->env, type_name.chars);
+      Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
+      // printf("trait impl - does \n");
+      // print_type(type);
+      // printf(" match \n");
+      // print_type(existing_trait_proto);
       TypeClass *tc = talloc(sizeof(TypeClass));
-      tc->module = type;
-      *tc = (TypeClass){.name = trait_name.chars};
+      *tc = (TypeClass){.name = trait_name.chars, .module = type};
       typeclasses_extend(t, tc);
     }
 
@@ -1179,6 +1188,6 @@ Type *infer_assignment(Ast *ast, TICtx *ctx) {
   Type *val_type = infer(ast->data.AST_BINOP.right, ctx);
   Type *var_type = infer(ast->data.AST_BINOP.left, ctx);
   // print_type(val_type);
-  // print_type(var_type);
+  // print_type(var_type;);
   return &t_void;
 }

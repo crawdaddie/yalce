@@ -74,9 +74,9 @@ static Ast *top_level_ast(Ast *body) {
   return last;
 }
 
-static int eval_script(const char *filename, JITLangCtx *ctx,
-                       LLVMModuleRef module, LLVMBuilderRef builder,
-                       LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog);
+static void *eval_script(const char *filename, JITLangCtx *ctx,
+                         LLVMModuleRef module, LLVMBuilderRef builder,
+                         LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog);
 
 int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
                       LLVMModuleRef module) {
@@ -110,9 +110,9 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
   return 0;
 }
 
-static int eval_script(const char *filename, JITLangCtx *ctx,
-                       LLVMModuleRef module, LLVMBuilderRef builder,
-                       LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog) {
+static void *eval_script(const char *filename, JITLangCtx *ctx,
+                         LLVMModuleRef module, LLVMBuilderRef builder,
+                         LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog) {
 
   __import_current_dir = get_dirname(filename);
 
