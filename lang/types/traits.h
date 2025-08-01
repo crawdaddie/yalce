@@ -1,0 +1,4 @@
+#ifndef _LANG_TYPE_TRAIT_INFERENCE_H
+#define _LANG_TYPE_TRAIT_INFERENCE_H
+
+#endif
