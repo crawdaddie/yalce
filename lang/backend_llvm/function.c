@@ -343,10 +343,10 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
 
   return env;
 }
+
 LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
                                          JITLangCtx *ctx, LLVMModuleRef module,
                                          LLVMBuilderRef builder) {
-
   int args_len = fn_type_args_len(specific_type);
   LLVMTypeRef fn_type = codegen_fn_type(specific_type, args_len, ctx, module);
 
@@ -467,6 +467,7 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
+  // printf("if following gets compiled it gets cached\n");
   LLVMValueRef func = specific_fns_lookup(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
 

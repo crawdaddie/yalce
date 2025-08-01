@@ -1,6 +1,7 @@
 #include "./coroutine_extensions.h"
 #include "./coroutines.h"
 #include "./coroutines_private.h"
+#include "list.h"
 #include "types.h"
 #include "llvm-c/Core.h"
 
@@ -101,6 +102,7 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+
   Type *out_cor_type = ast->md;
   Type *out_ptype = fn_return_type(out_cor_type);
   LLVMTypeRef out_promise_type = type_to_llvm_type(out_ptype, ctx, module);
@@ -127,6 +129,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
   LLVMValueRef map_func =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   LLVMValueRef map_cor_fn = LLVMAddFunction(module, "map_coroutine_fn",
                                             PTR_ID_FUNC_TYPE(out_cor_obj_type));
   LLVMSetLinkage(map_cor_fn, LLVMExternalLinkage);
@@ -239,5 +242,64 @@ LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
   printf("iter handler\n");
   print_ast(ast);
+  return NULL;
+}
+
+static SpecificFns *list_to_coroutine_fns = NULL;
+// LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key);
+// SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
+// LLVMValueRef func);
+//
+LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+
+  Type *ptype = fn_return_type(ast->md);
+  Type *item_type = type_of_option(ptype);
+  LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
+  LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
+
+  LLVMTypeRef list_type =
+      type_to_llvm_type(ast->data.AST_APPLICATION.args->md, ctx, module);
+
+  LLVMTypeRef state_type =
+      LLVMStructType((LLVMTypeRef[]){list_type, list_type}, 2, 0);
+
+  LLVMValueRef func = LLVMAddFunction(module, "cor_of_list_func",
+                                      PTR_ID_FUNC_TYPE(coro_obj_type));
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef entry_block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef list_fin_block =
+      LLVMAppendBasicBlock(func, "list_finished");
+  LLVMBasicBlockRef list_not_fin_block =
+      LLVMAppendBasicBlock(func, "list_not_finished");
+
+  LLVMPositionBuilderAtEnd(builder, entry_block);
+  LLVMValueRef coro = LLVMGetParam(func, 0);
+
+  LLVMValueRef head_and_tail = LLVMBuildBitCast(
+      builder, coro_state(coro, coro_obj_type, builder),
+      LLVMPointerType(state_type, 0), "bitcast_generic_state_ptr");
+
+  LLVMValueRef head =
+      LLVMBuildStructGEP2(builder, state_type, head_and_tail, 0, "get_head");
+
+  LLVMValueRef tail =
+      LLVMBuildStructGEP2(builder, state_type, head_and_tail, 1, "get_tail");
+
+  LLVMValueRef tail_is_null = LLVMBuildIsNull(builder, tail, "is_tail_null");
+  LLVMBuildCondBr(builder, tail_is_null, list_fin_block, list_not_fin_block);
+
+  LLVMPositionBuilderAtEnd(builder, list_fin_block);
+  LLVMBuildRet(builder, coro);
+
+  LLVMPositionBuilderAtEnd(builder, list_not_fin_block);
+  LLVMBuildRet(builder, coro);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  LLVMDumpValue(func);
+
   return NULL;
 }

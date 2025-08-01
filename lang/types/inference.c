@@ -1188,6 +1188,6 @@ Type *infer_assignment(Ast *ast, TICtx *ctx) {
   Type *val_type = infer(ast->data.AST_BINOP.right, ctx);
   Type *var_type = infer(ast->data.AST_BINOP.left, ctx);
   // print_type(val_type);
-  // print_type(var_type);
+  // print_type(var_type;);
   return &t_void;
 }
