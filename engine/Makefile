@@ -2,11 +2,35 @@ include ../.env
 # engine/Makefile
 
 BUILD_DIR := ./build
-SRCS := $(wildcard *.c)
+
+# Detect operating system
+UNAME_S := $(shell uname -s)
+
+# Base source files (excluding MIDI implementation)
+SRCS := $(filter-out midi_linux.c midi_darwin.c, $(wildcard *.c))
 SRCS += faust/temper.c
 SRCS += faust/vital_rev.c
 SRCS += faust/zita_rev.c
 SRCS += faust/imp_train.c
+
+# Add platform-specific MIDI implementation
+ifeq ($(UNAME_S),Linux)
+    SRCS += midi_linux.c
+    LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -lstdc++ -lasound
+    FRAMEWORKS :=
+else ifeq ($(UNAME_S),Darwin)
+    SRCS += midi_darwin.c
+    LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -lstdc++
+    FRAMEWORKS = -framework opengl \
+                 -framework CoreMIDI \
+                 -framework cocoa \
+                 -framework CoreAudio \
+                 -framework AudioToolbox \
+                 -framework CoreFoundation
+else
+    $(error Unsupported operating system: $(UNAME_S))
+endif
+
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 COMPILER_OPTIONS := -g
 
@@ -15,15 +39,7 @@ COMPILER_OPTIONS := -g
 # VST_BUILD_PATH := $(VST_LIB_PATH)/build
 # SRCS += vst/vst_node.c
 
-LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -lstdc++
 # LDFLAGS += -L$(VST_BUILD_PATH) -lylcvst 
-
-FRAMEWORKS = -framework opengl \
-						 -framework CoreMIDI \
-						 -framework cocoa \
-						 -framework CoreAudio \
-						 -framework AudioToolbox \
-						 -framework CoreFoundation
 
 COMPILER_OPTIONS += -I$(VST_LIB_PATH)/src -I../lang/
 
@@ -34,12 +50,10 @@ SHARED_LIB_TARGET := $(BUILD_DIR)/libyalce_synth.so
 .PHONY: all clean ylc_bindings vst_lib
 
 all: $(SHARED_LIB_TARGET)
-	# vst_lib
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(BUILD_DIR)/faust
-	# mkdir -p $(BUILD_DIR)/vst
 
 # Build the VST library
 vst_lib:
@@ -48,7 +62,7 @@ vst_lib:
 
 # Build engine object files
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
-	$(CC) $(COMPILER_OPTIONS) -c -o $@ $<
+	$(CC) $(COMPILER_OPTIONS) -fPIC -c -o $@ $<
 
 ylc_bindings:
 	$(MAKE) -C ../tools
@@ -73,9 +87,10 @@ ylc_bindings:
 
 # Build the shared library
 $(SHARED_LIB_TARGET): $(filter-out $(BUILD_DIR)/main.o, $(OBJS))
-	# | vst_lib
-	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
+	$(CC) -shared -fPIC -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
+ifeq ($(UNAME_S),Darwin)
 	install_name_tool -id @rpath/libyalce_synth.so $@
+endif
 	$(MAKE) -C ../tools;
 	$(MAKE) -C . ylc_bindings
 

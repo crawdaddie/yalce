@@ -1,14 +1,13 @@
 #include "./gui.h"
+#include "../lang/ylc_datatypes.h"
 #include "./common.h"
-#include "SDL2/SDL_image.h"
-#include "ylc_datatypes.h"
 #include <GL/glew.h>
-#include <SDL.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_render.h>
+// #include <SDL2/SDL_syswm.h>
 #include <SDL2/SDL_ttf.h>
-#include <SDL_opengl.h>
-#include <SDL_syswm.h>
 #include <dlfcn.h>
 #include <limits.h>
 #include <math.h>

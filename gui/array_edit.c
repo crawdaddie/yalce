@@ -3,12 +3,10 @@
 #include <stdbool.h>
 
 #include <GL/glew.h>
-#include <SDL.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
-#include <SDL_opengl.h>
-#include <SDL_syswm.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>

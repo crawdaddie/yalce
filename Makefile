@@ -12,7 +12,6 @@ endif
 
 LLVM_CONFIG := $(LLVM)/bin/llvm-config
 
-# macOS-specific settings
 READLINE_PREFIX := ${READLINE_PREFIX}
 
 LANG_SRC_DIR := lang
@@ -36,14 +35,6 @@ LANG_CC += -g
 
 LANG_LD_FLAGS := -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
-
-# LANG_CC += -D_USE_BLAS
-# LANG_CC += -I${OPENBLAS_PATH}/include
-# LANG_LD_FLAGS += -L${OPENBLAS_PATH}/lib -lopenblas
-#
-# LANG_CC += -D_USE_OPENMP
-# LANG_CC += -I${OPENMP_PATH}/include
-# LANG_LD_FLAGS += -L${OPENMP_PATH}/lib -lomp
 
 LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
@@ -85,13 +76,13 @@ $(BUILD_DIR):
 
 # Define Linux-specific YACC flags
 ifeq ($(shell uname -s),Linux)
-    LINUX_YACC_FLAGS = -Wno-yacc
+    LINUX_YACC_FLAGS = -Wno-yacc --feature=none
 else
     LINUX_YACC_FLAGS =
 endif
 # Build lex and yacc output files
 $(YACC_OUTPUT): $(YACC_FILE)
-	bison --locations -yd $(YACC_FILE) -o $(LANG_SRC_DIR)/y.tab.c
+	bison --locations -yd $(LINUX_YACC_FLAGS) $(YACC_FILE) -o $(LANG_SRC_DIR)/y.tab.c
 
 $(LEX_OUTPUT): $(LEX_FILE)
 	flex -o $(LEX_OUTPUT) $(LEX_FILE)
@@ -103,7 +94,7 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 # Build the final executable
 $(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
-	otool -L $(BUILD_DIR)/ylc
+	# otool -L $(BUILD_DIR)/ylc
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -1,28 +1,35 @@
 include ../.env
 # gui/Makefile
 
-# VST Library path
-# VST_LIB_PATH := ${VST_LIB_PATH}
-# VST_BUILD_PATH := $(VST_LIB_PATH)/build
 CC := clang -g
-CC += -DYLC_LANG_DYN_LIB
-CFLAGS := -Wall -Wextra -fPIC -I. \
-					-I${SDL2_PATH}/include \
-					-I${SDL2_PATH}/include/SDL2 \
-					-I${SDL2_TTF_PATH}/include \
-					-I${SDL2_GFX_PATH}/include \
-					-I../lang
-					# -I$(VST_LIB_PATH)/src \
 
-LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
-					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
-					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
-					 -L$(shell brew --prefix sdl2_image)/lib -lSDL2_image \
-					 -lGLEW -lglfw
+ifeq ($(UNAME_S),Linux)
+	CC += -DYLC_LANG_DYN_LIB
+	CFLAGS := -Wall -Wextra -fPIC -I. \
+						-I/usr/include/SDL2 \
+						-I/usr/include/SDL3 \
+						-I../lang
+	LDFLAGS := -L/usr/lib -lSDL2 \
+						 -lGLEW -lglfw
 
-FRAMEWORKS := -framework Foundation -framework OpenGL 
+else ifeq ($(UNAME_S),Darwin)
+	CC += -DYLC_LANG_DYN_LIB
+	CFLAGS := -Wall -Wextra -fPIC -I. \
+						-I${SDL2_PATH}/include \
+						-I${SDL2_PATH}/include/SDL2 \
+						-I${SDL2_TTF_PATH}/include \
+						-I${SDL2_GFX_PATH}/include \
+						-I../lang
+	LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
+						 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
+						 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
+						 -L$(shell brew --prefix sdl2_image)/lib -lSDL2_image \
+						 -lGLEW -lglfw
+	FRAMEWORKS := -framework Foundation -framework OpenGL 
+endif
 
-BUILD_DIR := build/
+
+BUILD_DIR := build
 
 SRCS := gui.c gl.c plt.c array_edit.c decl_ui.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
@@ -35,7 +42,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: %.c gui.h gl.h | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 
 $(BUILD_DIR)/libgui.a: $(OBJS)
@@ -43,8 +50,8 @@ $(BUILD_DIR)/libgui.a: $(OBJS)
 	$(MAKE) -C . ylc_bindings
 
 $(BUILD_DIR)/libgui.so: $(OBJS)
-	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
-	install_name_tool -id @rpath/libgui.so $@
+	$(CC) -shared -fPIC -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
+	# install_name_tool -id @rpath/libgui.so $@
 	$(MAKE) -C . ylc_bindings
 
 clean:

@@ -5,6 +5,7 @@
 #include "node_gc.h"
 #include "osc.h"
 #include "scheduling.h"
+#include "ylc_datatypes.h"
 #include <soundio/soundio.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -559,7 +560,7 @@ void set_input_conf(char *conf) {
   }
 }
 
-void set_input_device(_YLC_String name) {
+void set_input_device(_String name) {
   preferred_input_device_name = name.chars;
 }
 

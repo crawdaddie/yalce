@@ -1,7 +1,7 @@
 #ifndef _LANG_GUI_GL_H
 #define _LANG_GUI_GL_H
 #include <GL/glew.h>
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <stdbool.h>
 typedef void (*DeclGlFn)();
 typedef struct {
