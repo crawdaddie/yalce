@@ -1,4 +1,5 @@
 #include "audio_loop.h"
+#include "../lang/ylc_datatypes.h"
 #include "audio_loop_utils.h"
 #include "audio_routing.h"
 #include "ctx.h"
@@ -559,7 +560,7 @@ void set_input_conf(char *conf) {
   }
 }
 
-void set_input_device(_YLC_String name) {
+void set_input_device(_String name) {
   preferred_input_device_name = name.chars;
 }
 
