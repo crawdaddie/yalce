@@ -9,6 +9,37 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
+void jump_to_next(LLVMValueRef coro, LLVMValueRef func,
+                  LLVMTypeRef coro_obj_type, LLVMTypeRef promise_type,
+                  LLVMBuilderRef builder) {
+
+  LLVMBasicBlockRef end_completely_block =
+      LLVMAppendBasicBlock(func, "end_coroutine_bb");
+  LLVMBasicBlockRef proceed_to_chained_coro_block =
+      LLVMAppendBasicBlock(func, "defer_to_chained_coroutine_bb");
+
+  LLVMValueRef next_coro = coro_next(coro, coro_obj_type, builder);
+  LLVMValueRef next_is_null =
+      LLVMBuildIsNull(builder, next_coro, "is_next_null");
+  LLVMBuildCondBr(builder, next_is_null, end_completely_block,
+                  proceed_to_chained_coro_block);
+
+  LLVMPositionBuilderAtEnd(builder, end_completely_block);
+  coro_terminate_block(coro,
+                       &(CoroutineCtx){.coro_obj_type = coro_obj_type,
+                                       .promise_type = promise_type},
+                       builder);
+  LLVMBuildRet(builder, coro);
+
+  LLVMPositionBuilderAtEnd(builder, proceed_to_chained_coro_block);
+  LLVMValueRef n =
+      coro_jump_to_next_block(coro, next_coro,
+
+                              &(CoroutineCtx){.coro_obj_type = coro_obj_type,
+                                              .promise_type = promise_type},
+                              builder);
+  LLVMBuildRet(builder, n);
+}
 
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
@@ -187,17 +218,44 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // IS FINISHED BLOCK
   LLVMPositionBuilderAtEnd(builder, is_fin_bb);
 
-  LLVMValueRef promise_struct = LLVMGetUndef(out_promise_type);
-  promise_struct = LLVMBuildInsertValue(builder, promise_struct,
-                                        LLVMConstInt(LLVMInt32Type(), 1, 0), 0,
-                                        "insert_promise_tag_none");
-  LLVMBuildStore(builder, promise_struct,
-                 coro_promise_gep(wrapper_coro, out_cor_obj_type, builder));
+  // coro_terminate_block(wrapper_coro,
+  //                      &(CoroutineCtx){.coro_obj_type = out_cor_obj_type,
+  //                                      .promise_type = out_promise_type},
+  //                      builder);
+  // LLVMBuildRet(builder, wrapper_coro);
+  jump_to_next(wrapper_coro, map_cor_fn, out_cor_obj_type, out_promise_type,
+               builder);
 
-  // LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), -1, 1),
-  //                LLVMBuildStructGEP2(builder, out_cor_obj_type, wrapper_coro,
-  //                                    CORO_COUNTER_SLOT, ""));
-  LLVMBuildRet(builder, wrapper_coro);
+  // TODO: need to handle cor_map with a 'next' pointer
+  // LLVMBasicBlockRef end_completely_block =
+  //     LLVMAppendBasicBlock(map_cor_fn, "end_coroutine_bb");
+  // LLVMBasicBlockRef proceed_to_chained_coro_block =
+  //     LLVMAppendBasicBlock(map_cor_fn, "defer_to_chained_coroutine_bb");
+  //
+  // LLVMValueRef next_coro = coro_next(wrapper_coro, out_cor_obj_type,
+  // builder); LLVMValueRef next_is_null =
+  //     LLVMBuildIsNull(builder, next_coro, "is_next_null");
+  // LLVMBuildCondBr(builder, next_is_null, end_completely_block,
+  //                 proceed_to_chained_coro_block);
+  //
+  // LLVMPositionBuilderAtEnd(builder, end_completely_block);
+  //
+  // coro_terminate_block(wrapper_coro,
+  //                      &(CoroutineCtx){.coro_obj_type = out_cor_obj_type,
+  //                                      .promise_type = out_promise_type},
+  //                      builder);
+  // LLVMBuildRet(builder, wrapper_coro);
+  //
+  // LLVMPositionBuilderAtEnd(builder, proceed_to_chained_coro_block);
+  // LLVMValueRef n =
+  //     coro_jump_to_next_block(coro, next_coro,
+  //
+  //                             &(CoroutineCtx){.coro_obj_type =
+  //                             out_cor_obj_type,
+  //                                             .promise_type =
+  //                                             out_promise_type},
+  //                             builder);
+  // LLVMBuildRet(builder, n);
 
   // IS NOT FINISHED BLOCK
   LLVMPositionBuilderAtEnd(builder, else_bb);
@@ -207,6 +265,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildCall2(builder, type_to_llvm_type(&map_type, ctx, module),
                      map_func, (LLVMValueRef[]){pval}, 1, "call_map_func");
 
+  LLVMValueRef promise_struct = LLVMGetUndef(out_promise_type);
   promise_struct = LLVMGetUndef(out_promise_type);
   promise_struct = LLVMBuildInsertValue(builder, promise_struct,
                                         LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
@@ -362,14 +421,34 @@ static LLVMValueRef list_iter_func(LLVMTypeRef list_el_type,
   });
 
   // LIST END
-  //
   LLVMPositionBuilderAtEnd(builder, list_fin_block);
 
+  LLVMBasicBlockRef end_completely_block =
+      LLVMAppendBasicBlock(func, "end_coroutine_bb");
+  LLVMBasicBlockRef proceed_to_chained_coro_block =
+      LLVMAppendBasicBlock(func, "defer_to_chained_coroutine_bb");
+
+  LLVMValueRef next_coro = coro_next(coro, coro_obj_type, builder);
+  LLVMValueRef next_is_null =
+      LLVMBuildIsNull(builder, next_coro, "is_next_null");
+  LLVMBuildCondBr(builder, next_is_null, end_completely_block,
+                  proceed_to_chained_coro_block);
+
+  LLVMPositionBuilderAtEnd(builder, end_completely_block);
   coro_terminate_block(coro,
                        &(CoroutineCtx){.coro_obj_type = coro_obj_type,
                                        .promise_type = promise_type},
                        builder);
   LLVMBuildRet(builder, coro);
+
+  LLVMPositionBuilderAtEnd(builder, proceed_to_chained_coro_block);
+  LLVMValueRef n =
+      coro_jump_to_next_block(coro, next_coro,
+
+                              &(CoroutineCtx){.coro_obj_type = coro_obj_type,
+                                              .promise_type = promise_type},
+                              builder);
+  LLVMBuildRet(builder, n);
 
   // LIST CONTINUE
   ({
@@ -386,9 +465,6 @@ static LLVMValueRef list_iter_func(LLVMTypeRef list_el_type,
         "");
     LLVMValueRef v = ll_get_head_val(tail, list_el_type, builder);
     coro_promise_set(coro, v, coro_obj_type, promise_type, builder);
-
-    // INSERT_PRINTF(2, "list not null - yielding %d counter: %d\n", v,
-    // counter);
 
     coro_incr(coro, &(CoroutineCtx){.coro_obj_type = coro_obj_type}, builder);
     LLVMValueRef incr_tail = ll_get_next(tail, list_el_type, builder);
@@ -468,12 +544,35 @@ array_iter_func(LLVMTypeRef arr_el_type, LLVMTypeRef promise_type,
                                       "counter_is_at_end");
   LLVMBuildCondBr(builder, is_end, end_block, cont_block);
 
+  // ARRAY END BLOCK
   LLVMPositionBuilderAtEnd(builder, end_block);
+
+  LLVMBasicBlockRef end_completely_block =
+      LLVMAppendBasicBlock(func, "end_coroutine_bb");
+  LLVMBasicBlockRef proceed_to_chained_coro_block =
+      LLVMAppendBasicBlock(func, "defer_to_chained_coroutine_bb");
+
+  LLVMValueRef next_coro = coro_next(coro, coro_obj_type, builder);
+  LLVMValueRef next_is_null =
+      LLVMBuildIsNull(builder, next_coro, "is_next_null");
+  LLVMBuildCondBr(builder, next_is_null, end_completely_block,
+                  proceed_to_chained_coro_block);
+
+  LLVMPositionBuilderAtEnd(builder, end_completely_block);
   coro_terminate_block(coro,
                        &(CoroutineCtx){.coro_obj_type = coro_obj_type,
                                        .promise_type = promise_type},
                        builder);
   LLVMBuildRet(builder, coro);
+
+  LLVMPositionBuilderAtEnd(builder, proceed_to_chained_coro_block);
+  LLVMValueRef n =
+      coro_jump_to_next_block(coro, next_coro,
+
+                              &(CoroutineCtx){.coro_obj_type = coro_obj_type,
+                                              .promise_type = promise_type},
+                              builder);
+  LLVMBuildRet(builder, n);
 
   LLVMPositionBuilderAtEnd(builder, cont_block);
   coro_incr(coro,

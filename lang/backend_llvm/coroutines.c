@@ -83,10 +83,9 @@ void coro_terminate_block(LLVMValueRef coro, CoroutineCtx *coro_ctx,
   coro_end_counter(coro, coro_ctx->coro_obj_type, builder);
 }
 
-static LLVMValueRef coro_jump_to_next_block(LLVMValueRef coro,
-                                            LLVMValueRef next_coro,
-                                            CoroutineCtx *coro_ctx,
-                                            LLVMBuilderRef builder) {
+LLVMValueRef coro_jump_to_next_block(LLVMValueRef coro, LLVMValueRef next_coro,
+                                     CoroutineCtx *coro_ctx,
+                                     LLVMBuilderRef builder) {
 
   LLVMValueRef c = coro_replace(coro, next_coro, coro_ctx, builder);
   coro_incr(coro, coro_ctx, builder);
@@ -661,7 +660,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return recursive_coro_yield(coro, expr, ctx, module, builder);
     }
 
-    if (sym && is_coroutine_constructor_type(sym->symbol_type)) {
+    if (is_coroutine_type(expr->md)) {
       if (coro_ctx->current_yield == coro_ctx->num_coroutine_yields - 1) {
         LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
         return tail_call_coro_yield(coro, new_cor, coro_ctx, builder);

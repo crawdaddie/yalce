@@ -1,7 +1,7 @@
 #ifndef _LANG_BACKEND_LLVM_COMMON_H
 #define _LANG_BACKEND_LLVM_COMMON_H
 
-#include "escape_analysis.h"
+#include "./escape_analysis.h"
 #include "ht.h"
 #include "parse.h"
 #include "types/type.h"

@@ -32,6 +32,10 @@ LLVMValueRef coro_promise_set_none(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
 
 void coro_terminate_block(LLVMValueRef coro, CoroutineCtx *coro_ctx,
                           LLVMBuilderRef builder);
+
+LLVMValueRef coro_jump_to_next_block(LLVMValueRef coro, LLVMValueRef next_coro,
+                                     CoroutineCtx *coro_ctx,
+                                     LLVMBuilderRef builder);
 #define CORO_COUNTER_SLOT 0
 #define CORO_FN_PTR_SLOT 1
 #define CORO_STATE_SLOT 2
