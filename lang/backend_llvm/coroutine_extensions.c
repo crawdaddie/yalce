@@ -1,12 +1,15 @@
 #include "./coroutine_extensions.h"
 #include "./coroutines.h"
 #include "./coroutines_private.h"
+#include "array.h"
+#include "function.h"
 #include "list.h"
 #include "types.h"
 #include "llvm-c/Core.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
+
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
   Type *promise_type = fn_return_type(ast->md);
@@ -52,29 +55,33 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // reset inner cor counter
   coro_advance(inner_coro, &tmp_ctx, builder);
 
-  LLVMValueRef pp = coro_promise(inner_coro, coro_obj_type, ptype, builder);
-  LLVMValueRef promise_gep =
-      coro_promise_gep(wrapper_coro, coro_obj_type, builder);
-  LLVMBuildStore(builder, pp, promise_gep);
+  ({
+    LLVMValueRef pp = coro_promise(inner_coro, coro_obj_type, ptype, builder);
+    LLVMValueRef promise_gep =
+        coro_promise_gep(wrapper_coro, coro_obj_type, builder);
+    LLVMBuildStore(builder, pp, promise_gep);
 
-  LLVMValueRef c = LLVMConstInt(LLVMInt32Type(), 1, 1);
-  LLVMBuildStore(builder, c,
-                 LLVMBuildStructGEP2(builder, coro_obj_type, wrapper_coro,
-                                     CORO_COUNTER_SLOT, ""));
+    LLVMValueRef c = LLVMConstInt(LLVMInt32Type(), 1, 1);
+    LLVMBuildStore(builder, c,
+                   LLVMBuildStructGEP2(builder, coro_obj_type, wrapper_coro,
+                                       CORO_COUNTER_SLOT, ""));
+  });
 
   LLVMBuildRet(builder, wrapper_coro);
 
   // IS NOT FIN - KEEP YIELDING AND PASSING RESULTS UP
   LLVMPositionBuilderAtEnd(builder, else_bb);
-  LLVMValueRef pp2 = coro_promise(inner_coro, coro_obj_type, ptype, builder);
-  LLVMValueRef promise_gep2 =
-      coro_promise_gep(wrapper_coro, coro_obj_type, builder);
-  LLVMBuildStore(builder, pp2, promise_gep);
+  ({
+    LLVMValueRef pp = coro_promise(inner_coro, coro_obj_type, ptype, builder);
+    LLVMValueRef promise_gep =
+        coro_promise_gep(wrapper_coro, coro_obj_type, builder);
+    LLVMBuildStore(builder, pp, promise_gep);
 
-  LLVMValueRef cc = coro_counter(inner_coro, coro_obj_type, builder);
-  LLVMBuildStore(builder, cc,
-                 LLVMBuildStructGEP2(builder, coro_obj_type, wrapper_coro,
-                                     CORO_COUNTER_SLOT, ""));
+    LLVMValueRef cc = coro_counter(inner_coro, coro_obj_type, builder);
+    LLVMBuildStore(builder, cc,
+                   LLVMBuildStructGEP2(builder, coro_obj_type, wrapper_coro,
+                                       CORO_COUNTER_SLOT, ""));
+  });
   LLVMBuildRet(builder, wrapper_coro);
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
@@ -243,16 +250,172 @@ LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return NULL;
 }
 
+LLVMValueRef new_coro_obj(LLVMValueRef func, LLVMTypeRef promise_type,
+                          LLVMTypeRef coro_obj_type, LLVMValueRef state_struct,
+                          LLVMTypeRef state_layout, LLVMBuilderRef builder) {
+
+  LLVMValueRef coro = LLVMBuildMalloc(builder, coro_obj_type, "list_coro");
+
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 1),
+                 LLVMBuildStructGEP2(builder, coro_obj_type, coro,
+                                     CORO_COUNTER_SLOT, "insert_coro_counter"));
+
+  LLVMBuildStore(builder, func,
+                 LLVMBuildStructGEP2(builder, coro_obj_type, coro,
+                                     CORO_FN_PTR_SLOT, "insert_coro_fn_ptr"));
+
+  LLVMValueRef out_pstruct = LLVMGetUndef(promise_type);
+  out_pstruct = LLVMBuildInsertValue(builder, out_pstruct,
+                                     LLVMConstInt(LLVMInt8Type(), 1, 0), 0,
+                                     "insert_promise_tag_none");
+  LLVMBuildStore(builder, out_pstruct,
+                 coro_promise_gep(coro, coro_obj_type, builder));
+
+  LLVMValueRef state_storage =
+      LLVMBuildMalloc(builder, state_layout, "state storage malloc");
+  LLVMBuildStore(builder, state_struct, state_storage);
+
+  LLVMBuildStore(builder, state_storage,
+                 coro_state_gep(coro, coro_obj_type, builder));
+  return coro;
+}
+
 static SpecificFns *list_to_coroutine_fns = NULL;
 // LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key);
 // SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
 // LLVMValueRef func);
 //
+//
+static LLVMValueRef list_iter_func(LLVMTypeRef list_el_type,
+                                   LLVMTypeRef promise_type,
+                                   LLVMTypeRef coro_obj_type,
+                                   LLVMTypeRef state_type, LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  LLVMValueRef func = LLVMAddFunction(module, "cor_of_list_func",
+                                      PTR_ID_FUNC_TYPE(coro_obj_type));
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef entry_block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef reset_bb = LLVMAppendBasicBlock(func, "reset");
+  LLVMBasicBlockRef reset_merge_bb = LLVMAppendBasicBlock(func, "reset_merge");
+  LLVMBasicBlockRef list_fin_block =
+      LLVMAppendBasicBlock(func, "list_finished");
+  LLVMBasicBlockRef list_not_fin_block =
+      LLVMAppendBasicBlock(func, "list_not_finished");
+
+  // ENTRY BLOCK
+  LLVMPositionBuilderAtEnd(builder, entry_block);
+  LLVMValueRef coro = LLVMGetParam(func, 0);
+  LLVMValueRef counter = coro_counter(coro, coro_obj_type, builder);
+  LLVMValueRef is_reset =
+      LLVMBuildICmp(builder, LLVMIntEQ, counter,
+                    LLVMConstInt(LLVMInt32Type(), 0, 1), "is_counter_reset?");
+
+  // INSERT_PRINTF(1, "entry block counter: %d\n", counter);
+
+  LLVMValueRef head_and_tail = LLVMBuildBitCast(
+      builder, coro_state(coro, coro_obj_type, builder),
+      LLVMPointerType(state_type, 0), "bitcast_generic_state_ptr");
+
+  LLVMValueRef head = LLVMBuildLoad2(
+      builder, LLVMPointerType(llnode_type(list_el_type), 0),
+      LLVMBuildStructGEP2(builder, state_type, head_and_tail, 0, "get_head"),
+      "");
+
+  LLVMValueRef tail = LLVMBuildLoad2(
+      builder, LLVMPointerType(llnode_type(list_el_type), 0),
+      LLVMBuildStructGEP2(builder, state_type, head_and_tail, 1, "get_tail"),
+      "");
+
+  LLVMBuildCondBr(builder, is_reset, reset_bb, reset_merge_bb);
+
+  // RESET (counter = 0) BLOCK
+  LLVMPositionBuilderAtEnd(builder, reset_bb);
+
+  // INSERT_PRINTF(1, "resetting coroutine with head -> tail: %d\n", counter);
+  LLVMBuildStore(
+      builder, LLVMConstInt(LLVMInt32Type(), 0, 1),
+      LLVMBuildStructGEP2(builder, coro_obj_type, coro, CORO_COUNTER_SLOT, ""));
+
+  LLVMBuildStore(
+      builder, head,
+      LLVMBuildStructGEP2(builder, state_type, head_and_tail, 1, "tail_ptr"));
+  LLVMBuildStore(builder, head_and_tail,
+                 coro_state_gep(coro, coro_obj_type, builder));
+
+  LLVMBuildBr(builder, reset_merge_bb);
+
+  // RESET MERGE (rest of entry block)
+  LLVMPositionBuilderAtEnd(builder, reset_merge_bb);
+
+  ({
+    LLVMValueRef coro = LLVMGetParam(func, 0);
+    LLVMValueRef head_and_tail = LLVMBuildBitCast(
+        builder, coro_state(coro, coro_obj_type, builder),
+        LLVMPointerType(state_type, 0), "bitcast_generic_state_ptr");
+
+    LLVMValueRef tail = LLVMBuildLoad2(
+        builder, LLVMPointerType(llnode_type(list_el_type), 0),
+        LLVMBuildStructGEP2(builder, state_type, head_and_tail, 1, "get_tail"),
+        "");
+
+    LLVMValueRef tail_is_null = LLVMBuildIsNull(builder, tail, "is_tail_null");
+    LLVMBuildCondBr(builder, tail_is_null, list_fin_block, list_not_fin_block);
+  });
+
+  // LIST END
+  //
+  LLVMPositionBuilderAtEnd(builder, list_fin_block);
+
+  coro_terminate_block(coro,
+                       &(CoroutineCtx){.coro_obj_type = coro_obj_type,
+                                       .promise_type = promise_type},
+                       builder);
+  LLVMBuildRet(builder, coro);
+
+  // LIST CONTINUE
+  ({
+    LLVMPositionBuilderAtEnd(builder, list_not_fin_block);
+
+    LLVMValueRef coro = LLVMGetParam(func, 0);
+    LLVMValueRef head_and_tail = LLVMBuildBitCast(
+        builder, coro_state(coro, coro_obj_type, builder),
+        LLVMPointerType(state_type, 0), "bitcast_generic_state_ptr");
+
+    LLVMValueRef tail = LLVMBuildLoad2(
+        builder, LLVMPointerType(llnode_type(list_el_type), 0),
+        LLVMBuildStructGEP2(builder, state_type, head_and_tail, 1, "get_tail"),
+        "");
+    LLVMValueRef v = ll_get_head_val(tail, list_el_type, builder);
+    coro_promise_set(coro, v, coro_obj_type, promise_type, builder);
+
+    // INSERT_PRINTF(2, "list not null - yielding %d counter: %d\n", v,
+    // counter);
+
+    coro_incr(coro, &(CoroutineCtx){.coro_obj_type = coro_obj_type}, builder);
+    LLVMValueRef incr_tail = ll_get_next(tail, list_el_type, builder);
+    LLVMBuildStore(
+        builder, incr_tail,
+        LLVMBuildStructGEP2(builder, state_type, head_and_tail, 1, "tail_ptr"));
+
+    LLVMBuildRet(builder, coro);
+  });
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  return func;
+}
+
 LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
 
   Type *ptype = fn_return_type(ast->md);
   Type *item_type = type_of_option(ptype);
+  LLVMTypeRef list_el_type = type_to_llvm_type(item_type, ctx, module);
+  LLVMValueRef func = specific_fns_lookup(list_to_coroutine_fns, item_type);
+
   LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
 
@@ -262,6 +425,35 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef state_type =
       LLVMStructType((LLVMTypeRef[]){list_type, list_type}, 2, 0);
 
+  if (!func) {
+    func = list_iter_func(list_el_type, promise_type, coro_obj_type, state_type,
+                          module, builder);
+    list_to_coroutine_fns =
+        specific_fns_extend(list_to_coroutine_fns, item_type, func);
+  }
+
+  LLVMValueRef list =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  LLVMValueRef state = LLVMGetUndef(state_type);
+  state = LLVMBuildInsertValue(builder, state, list, 0, "insert_list_head");
+  state = LLVMBuildInsertValue(builder, state, list, 1, "insert_list_head");
+
+  LLVMValueRef list_coro = new_coro_obj(func, promise_type, coro_obj_type,
+                                        state, state_type, builder);
+  return list_coro;
+}
+
+static SpecificFns *array_to_coroutine_fns = NULL;
+// LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key);
+// SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
+// LLVMValueRef func);
+//
+//
+static LLVMValueRef
+array_iter_func(LLVMTypeRef arr_el_type, LLVMTypeRef promise_type,
+                LLVMTypeRef coro_obj_type, LLVMTypeRef state_type,
+                LLVMModuleRef module, LLVMBuilderRef builder) {
+
   LLVMValueRef func = LLVMAddFunction(module, "cor_of_list_func",
                                       PTR_ID_FUNC_TYPE(coro_obj_type));
 
@@ -269,35 +461,70 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMBasicBlockRef entry_block = LLVMAppendBasicBlock(func, "entry");
-  LLVMBasicBlockRef list_fin_block =
-      LLVMAppendBasicBlock(func, "list_finished");
-  LLVMBasicBlockRef list_not_fin_block =
-      LLVMAppendBasicBlock(func, "list_not_finished");
-
+  LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(func, "array_end");
+  LLVMBasicBlockRef cont_block = LLVMAppendBasicBlock(func, "array_continue");
   LLVMPositionBuilderAtEnd(builder, entry_block);
   LLVMValueRef coro = LLVMGetParam(func, 0);
+  LLVMValueRef counter = coro_counter(coro, coro_obj_type, builder);
+  LLVMValueRef array = LLVMBuildLoad2(
+      builder, state_type,
+      LLVMBuildBitCast(builder, coro_state(coro, coro_obj_type, builder),
+                       LLVMPointerType(state_type, 0),
+                       "bitcast_generic_to_array"),
+      "array_struct");
+  LLVMValueRef array_len = codegen_get_array_size(builder, array, arr_el_type);
+  LLVMValueRef is_end = LLVMBuildICmp(builder, LLVMIntEQ, counter, array_len,
+                                      "counter_is_at_end");
+  LLVMBuildCondBr(builder, is_end, end_block, cont_block);
 
-  LLVMValueRef head_and_tail = LLVMBuildBitCast(
-      builder, coro_state(coro, coro_obj_type, builder),
-      LLVMPointerType(state_type, 0), "bitcast_generic_state_ptr");
-
-  LLVMValueRef head =
-      LLVMBuildStructGEP2(builder, state_type, head_and_tail, 0, "get_head");
-
-  LLVMValueRef tail =
-      LLVMBuildStructGEP2(builder, state_type, head_and_tail, 1, "get_tail");
-
-  LLVMValueRef tail_is_null = LLVMBuildIsNull(builder, tail, "is_tail_null");
-  LLVMBuildCondBr(builder, tail_is_null, list_fin_block, list_not_fin_block);
-
-  LLVMPositionBuilderAtEnd(builder, list_fin_block);
+  LLVMPositionBuilderAtEnd(builder, end_block);
+  coro_terminate_block(coro,
+                       &(CoroutineCtx){.coro_obj_type = coro_obj_type,
+                                       .promise_type = promise_type},
+                       builder);
   LLVMBuildRet(builder, coro);
 
-  LLVMPositionBuilderAtEnd(builder, list_not_fin_block);
+  LLVMPositionBuilderAtEnd(builder, cont_block);
+  coro_incr(coro,
+            &(CoroutineCtx){.coro_obj_type = coro_obj_type,
+                            .promise_type = promise_type},
+            builder);
+  LLVMValueRef array_item =
+      get_array_element(builder, array, counter, arr_el_type);
+  coro_promise_set(coro, array_item, coro_obj_type, promise_type, builder);
   LLVMBuildRet(builder, coro);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
-  LLVMDumpValue(func);
+  return func;
+}
 
-  return NULL;
+LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+
+  Type *ptype = fn_return_type(ast->md);
+  Type *item_type = type_of_option(ptype);
+  LLVMTypeRef arr_el_type = type_to_llvm_type(item_type, ctx, module);
+  LLVMValueRef func = specific_fns_lookup(list_to_coroutine_fns, item_type);
+
+  LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
+  LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
+
+  LLVMTypeRef arr_type =
+      type_to_llvm_type(ast->data.AST_APPLICATION.args->md, ctx, module);
+
+  LLVMTypeRef state_type = arr_type;
+
+  if (!func) {
+    func = array_iter_func(arr_el_type, promise_type, coro_obj_type, state_type,
+                           module, builder);
+    array_to_coroutine_fns =
+        specific_fns_extend(array_to_coroutine_fns, item_type, func);
+  }
+
+  LLVMValueRef state =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMValueRef arr_coro = new_coro_obj(func, promise_type, coro_obj_type, state,
+                                       state_type, builder);
+  return arr_coro;
 }
