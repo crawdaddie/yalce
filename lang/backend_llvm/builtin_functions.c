@@ -4,6 +4,7 @@
 #include "backend_llvm/array.h"
 #include "backend_llvm/common.h"
 #include "backend_llvm/coroutine_extensions.h"
+#include "backend_llvm/coroutine_scheduling.h"
 #include "function.h"
 #include "input.h"
 #include "list.h"
@@ -1289,10 +1290,10 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                     //               ctx->env, module), module)
   );
 
-  FN_SYMBOL("empty_coroutine", &t_empty_cor,
-            get_extern_fn("empty_coroutine",
-                          type_to_llvm_type(&t_empty_cor, ctx, module),
-                          module));
+  // FN_SYMBOL("empty_coroutine", &t_empty_cor,
+  //           get_extern_fn("empty_coroutine",
+  //                         type_to_llvm_type(&t_empty_cor, ctx, module),
+  //                         module));
 
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at, ArrayAtHandler);
 
@@ -1316,8 +1317,15 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   // GENERIC_FN_SYMBOL("cor_replace", &t_cor_replace_fn_sig, CorReplaceHandler);
   GENERIC_FN_SYMBOL("cor_stop", &t_cor_stop_fn_sig, CorStopHandler);
   GENERIC_FN_SYMBOL("cor_counter", &t_cor_counter_fn_sig, CorCounterHandler);
+  GENERIC_FN_SYMBOL("cor_status", &t_cor_status_fn_sig, CorStatusHandler);
+  GENERIC_FN_SYMBOL("cor_promise", &t_cor_promise_fn_sig,
+                    CorGetPromiseValHandler);
+  GENERIC_FN_SYMBOL("cor_current", &t_current_cor_fn_sig, CurrentCorHandler);
+  GENERIC_FN_SYMBOL("cor_unwrap_or_end", &t_cor_unwrap_or_end_sig,
+                    CorUnwrapOrEndHandler);
 
-  // GENERIC_FN_SYMBOL("play_routine", &t_play_routine_sig, PlayRoutineHandler);
+  GENERIC_FN_SYMBOL("play_routine", &t_play_routine_sig, PlayRoutineHandler);
+
   // GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
 
   GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);

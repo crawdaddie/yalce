@@ -643,3 +643,72 @@ LLVMValueRef CorCounterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef count = coro_counter(coro, coro_ctx->coro_obj_type, builder);
   return count;
 }
+
+LLVMValueRef CurrentCorHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  CoroutineCtx *coro_ctx = ctx->coro_ctx;
+  if (!coro_ctx) {
+    fprintf(stderr,
+            "Error: current_cor should be called from inside a coroutine\n");
+    return NULL;
+  }
+
+  LLVMValueRef coro = LLVMGetParam(coro_ctx->func, 0);
+  return coro;
+}
+
+LLVMValueRef CorStatusHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+
+  Ast *expr = ast->data.AST_APPLICATION.args;
+
+  LLVMValueRef coro = codegen(expr, ctx, module, builder);
+  LLVMValueRef count = coro_counter(
+      coro, LLVMStructType((LLVMTypeRef[]){LLVMInt32Type()}, 1, 0), builder);
+  return count;
+}
+LLVMValueRef CorGetPromiseValHandler(Ast *ast, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  LLVMValueRef coro =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  Type *type = ast->data.AST_APPLICATION.args->md;
+  Type *ptype = fn_return_type(type);
+  LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
+  LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
+
+  LLVMValueRef prom_val =
+      coro_promise(coro, coro_obj_type, promise_type, builder);
+  // LLVMDumpValue(prom_val);
+  // printf("\n");
+  return prom_val;
+}
+
+LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  CoroutineCtx *coro_ctx = ctx->coro_ctx;
+  if (!coro_ctx) {
+    fprintf(
+        stderr,
+        "Error: cor_unwrap_or_end should only be called inside a coroutine\n");
+    return NULL;
+  }
+  LLVMValueRef result_opt =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef func = LLVMGetBasicBlockParent(current_block);
+  LLVMBasicBlockRef none_block = coro_ctx->switch_default;
+  LLVMBasicBlockRef some_block = LLVMAppendBasicBlock(func, "option_has_value");
+
+  LLVMValueRef is_some =
+      LLVMBuildICmp(builder, LLVMIntEQ,
+                    LLVMBuildExtractValue(builder, result_opt, 0, "tag_val"),
+                    LLVMConstInt(LLVMInt8Type(), 0, 0), "result_is_some");
+
+  LLVMBuildCondBr(builder, is_some, some_block, none_block);
+  LLVMPositionBuilderAtEnd(builder, some_block);
+  LLVMValueRef result_val = LLVMBuildExtractValue(builder, result_opt, 1, "");
+  return result_val;
+}

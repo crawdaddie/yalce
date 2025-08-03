@@ -12,6 +12,7 @@ open lib/Ref;
 import lib/Math;
 
 
+
 let q = 60. / 130.;
 let Kick = module
   let buf = load_soundfile "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Kick11.wav";
@@ -29,7 +30,7 @@ let Kick = module
     set_input_trig_offset synth 0 fo
   ;;
 
-  let pattern_ref = [| empty_coroutine () |] ;
+  let pattern_ref = [| cstr "" |] ;
   let set_pattern = fn t cor ->
     cor_stop (pattern_ref[0]);
     cor
@@ -63,7 +64,7 @@ let Snare = module
   ;;
 
 
-  let pattern_ref = [|empty_coroutine ()|] ;
+  let pattern_ref = [|cstr ""|] ;
   let set_pattern = fn t cor ->
     let pref =pattern_ref;
     cor_stop (pref[0]);
@@ -120,7 +121,7 @@ let Hihat = module
     set_input_trig_offset open_hh 0 fo
   ;;
 
-  let pattern_ref = [|empty_coroutine ()|] ;
+  let pattern_ref = [|cstr ""|] ;
   let set_pattern = fn t cor ->
     let pref = pattern_ref;
     cor_stop (pref[0]);
@@ -170,7 +171,7 @@ defer_quant (q * 1) (fn t ->
   |> Hihat.set_pattern t
   ;
 
-  iter [|3., 3., 3., 4., 3.|]  
+  iter_of_array [|3., 3., 3., 4., 3.|]  
   |> cor_loop
   |> cor_map ((*) (q * 0.25))
   |> cor_map (fn d -> Kick.trig (); d)

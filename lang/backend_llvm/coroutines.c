@@ -448,6 +448,7 @@ LLVMValueRef coro_next_set(LLVMValueRef coro, LLVMValueRef next,
   LLVMBuildStore(builder, next, next_gep);
   return coro;
 }
+
 LLVMValueRef coro_next(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
                        LLVMBuilderRef builder) {
   LLVMValueRef next_gep = LLVMBuildStructGEP2(builder, coro_obj_type, coro,
