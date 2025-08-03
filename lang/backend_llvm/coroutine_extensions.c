@@ -530,3 +530,17 @@ LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return coro;
 }
+
+LLVMValueRef CorCounterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  CoroutineCtx *coro_ctx = ctx->coro_ctx;
+  if (!coro_ctx) {
+    fprintf(stderr,
+            "Error: cor_counter should be called from inside a coroutine\n");
+    return NULL;
+  }
+
+  LLVMValueRef coro = LLVMGetParam(coro_ctx->func, 0);
+  LLVMValueRef count = coro_counter(coro, coro_ctx->coro_obj_type, builder);
+  return count;
+}

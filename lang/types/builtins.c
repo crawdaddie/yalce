@@ -378,6 +378,8 @@ Type *_cor_stop_fn_sig() {
 }
 
 Type t_cor_stop_fn_sig = GENERIC_TYPE(_cor_stop_fn_sig);
+Type t_cor_counter_fn_sig = {T_FN,
+                             .data = {.T_FN = {.from = &t_void, .to = &t_int}}};
 
 Type t_list_ref_set_sig = GENERIC_TYPE(_list_ref_set_sig);
 
@@ -563,6 +565,7 @@ void initialize_builtin_types() {
   add_builtin("iter_of_array", &t_iter_of_array_sig);
 
   add_builtin("cor_loop", &t_cor_loop_sig);
+  add_builtin("cor_counter", &t_cor_counter_fn_sig);
 
   add_builtin("opt_map", &t_opt_map_sig);
   add_builtin("cstr", &t_builtin_cstr);

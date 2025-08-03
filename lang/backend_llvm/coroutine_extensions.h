@@ -1,9 +1,9 @@
 #ifndef _BACKEND_LLVM_COROUTINE_EXT_H
 #define _BACKEND_LLVM_COROUTINE_EXT_H
-
 #include "common.h"
 #include "parse.h"
 #include "llvm-c/Types.h"
+
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder);
 
@@ -21,4 +21,7 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder);
+
+LLVMValueRef CorCounterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
 #endif

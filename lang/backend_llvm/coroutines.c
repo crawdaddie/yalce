@@ -628,32 +628,6 @@ LLVMValueRef tail_call_coro_yield(LLVMValueRef coro, LLVMValueRef new_cor,
   LLVMBuildRet(builder, coro);
   return NULL;
 }
-LLVMValueRef __chain_new_coro_yield(LLVMValueRef coro, LLVMValueRef new_cor,
-                                    CoroutineCtx *coro_ctx,
-                                    LLVMBuilderRef builder) {
-
-  // INCREMENT the current coroutine's counter BEFORE chaining
-  // coro_incr(coro, coro_ctx, builder);
-  coro_next_set(new_cor, coro, coro_ctx->coro_obj_type, builder);
-
-  LLVMValueRef fn_ptr = coro_fn_ptr(new_cor, coro_ctx->coro_obj_type, builder);
-
-  new_cor =
-      LLVMBuildCall2(builder, PTR_ID_FUNC_TYPE(coro_ctx->coro_obj_type), fn_ptr,
-                     (LLVMValueRef[]){new_cor}, 1, "nested resume");
-  coro_incr(new_cor, coro_ctx, builder);
-
-  LLVMValueRef promise_gep =
-      coro_promise_gep(coro, coro_ctx->coro_obj_type, builder);
-
-  LLVMValueRef new_promise = coro_promise(new_cor, coro_ctx->coro_obj_type,
-                                          coro_ctx->promise_type, builder);
-
-  LLVMBuildStore(builder, new_promise, promise_gep);
-
-  LLVMBuildRet(builder, new_cor);
-  return NULL;
-}
 
 LLVMValueRef chain_new_coro_yield(LLVMValueRef coro, LLVMValueRef new_cor,
                                   CoroutineCtx *coro_ctx,

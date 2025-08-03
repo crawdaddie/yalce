@@ -62,8 +62,7 @@ LLVMValueRef get_strlen_func(LLVMModuleRef module) {
 LLVMValueRef _int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
-  GET_SPRINTF
-  LLVMValueRef buffer =
+  GET_SPRINTF LLVMValueRef buffer =
       LLVMBuildAlloca(builder, LLVMArrayType(LLVMInt8Type(), 20), "str_buffer");
 
   LLVMValueRef format_string =
@@ -109,6 +108,7 @@ LLVMValueRef _char_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
 LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+
   LLVMValueRef data_ptr = _int_to_string(int_value, module, builder);
   LLVMValueRef strlen_func = get_strlen_func(module);
 
