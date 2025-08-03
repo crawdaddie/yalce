@@ -51,10 +51,10 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 ylc_bindings:
-	$(MAKE) -C ../tools
-	@echo "let _ = dlopen \"../build/libgui.so\";" > bindings/Gui.ylc
-	../build/tools/ffi_gen gui.h >> bindings/Gui.ylc
-	../build/tools/ffi_gen array_edit.h >> bindings/Gui.ylc
-	../build/tools/ffi_gen plt.h >> bindings/Gui.ylc
-	../build/tools/ffi_gen decl_ui.h >> bindings/Gui.ylc
-	cat bindings/_gui_extra.ylc >> bindings/Gui.ylc
+	# $(MAKE) -C ../tools
+	# @echo "let _ = dlopen \"../build/libgui.so\";" > bindings/Gui.ylc
+	# ../build/tools/ffi_gen gui.h >> bindings/Gui.ylc
+	# ../build/tools/ffi_gen array_edit.h >> bindings/Gui.ylc
+	# ../build/tools/ffi_gen plt.h >> bindings/Gui.ylc
+	# ../build/tools/ffi_gen decl_ui.h >> bindings/Gui.ylc
+	# cat bindings/_gui_extra.ylc >> bindings/Gui.ylc

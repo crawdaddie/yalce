@@ -1,37 +1,91 @@
-# tools/Makefile
+# Simple Makefile for YLC Header Parser
+# Reads LLVM_PATH from ../.env file
+
+# Include environment variables from ../.env
 include ../.env
 
-ENGINE_DIR := ../engine
-BUILD_DIR := ../build/tools
-
-# LLVM configuration
-LLVM_PATH ?= $(shell check_library "llvm")
+# LLVM configuration - use LLVM_PATH from .env file, with fallback
+LLVM_PATH := ${LLVM_PATH}
 LLVM_CONFIG := $(LLVM_PATH)/bin/llvm-config
-CC := clang
-CFLAGS := $(shell $(LLVM_CONFIG) --cflags)
-LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags --system-libs --libs) -lclang
 
-# Source and target configuration
-SRCS := $(wildcard *.c)
-EXES := $(SRCS:%.c=$(BUILD_DIR)/%)
+# Check if llvm-config exists
+ifeq ($(shell test -x "$(LLVM_CONFIG)" && echo yes),yes)
+    # Use llvm-config for flags
+    CFLAGS := $(shell $(LLVM_CONFIG) --cflags)
+    LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags --system-libs) -lclang
+else
+    # Fallback for manual LLVM installation
+    CFLAGS := -I$(LLVM_PATH)/include
+    LDFLAGS := -L$(LLVM_PATH)/lib -lclang
+endif
+
+# Add common flags
+CFLAGS += -std=c99 -Wall -Wextra
+CC := clang
+
+# Source and target
+SRC := ffi_gen.c
+TARGET := ../build/tools/ffi_gen
+
+# Build rule
+$(TARGET): $(SRC)
+	mkdir -p ../build/tools
+	@echo "Building $(TARGET) with LLVM at $(LLVM_PATH)..."
+	$(CC) $(CFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
+	@echo "Build complete!"
+
+# Test with a simple header
+test: $(TARGET)
+	@echo "Testing with a simple header..."
+	@echo '#include <stdint.h>' > test.h
+	@echo 'void test_func(uint64_t arg);' >> test.h
+	@echo 'typedef void (*TestCallback)(int x);' >> test.h
+	./$(TARGET) test.h
+	@rm -f test.h
+
+# Clean
+clean:
+	rm -f $(TARGET) test.h
+
+# Debug - show configuration
+debug:
+	@echo "LLVM_PATH: $(LLVM_PATH)"
+	@echo "LLVM_CONFIG: $(LLVM_CONFIG)"
+	@echo "CFLAGS: $(CFLAGS)"
+	@echo "LDFLAGS: $(LDFLAGS)"
+	@echo "CC: $(CC)"
+
+# Install to a directory (optional)
+install: $(TARGET)
+	@if [ -z "$(PREFIX)" ]; then \
+		echo "Usage: make install PREFIX=/usr/local"; \
+		exit 1; \
+	fi
+	mkdir -p $(PREFIX)/bin
+	cp $(TARGET) $(PREFIX)/bin/
+
+# Help
+help:
+	@echo "YLC Header Parser Makefile"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all/$(TARGET)  Build the header parser"
+	@echo "  test          Build and test with a simple header"
+	@echo "  clean         Remove built files"
+	@echo "  debug         Show build configuration"
+	@echo "  install       Install to PREFIX (e.g., make install PREFIX=/usr/local)"
+	@echo "  help          Show this help"
+	@echo ""
+	@echo "Variables:"
+	@echo "  LLVM_PATH     Path to LLVM installation (from ../.env or auto-detected)"
+	@echo "  CC            C compiler (default: clang)"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make"
+	@echo "  make test"
+	@echo "  echo 'LLVM_PATH=/usr/local/llvm-20' > ../.env && make"
+
+.PHONY: test clean debug install help
 
 # Default target
-.PHONY: all clean engine_bindings
-all: $(EXES)
-
-# Build rules
-$(BUILD_DIR)/%: %.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
-
-# Create build directory
-$(BUILD_DIR):
-	@mkdir -p $@
-
-clean:
-	rm -rf $(BUILD_DIR)
-
-# Add .PHONY target for each tool
-.PHONY: $(EXES:$(BUILD_DIR)/%=%)
-
-# Define targets for each tool
-$(EXES:$(BUILD_DIR)/%=%): %: $(BUILD_DIR)/%
+all: $(TARGET)

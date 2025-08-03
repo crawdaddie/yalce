@@ -7,6 +7,12 @@ typedef struct {
   const char *chars;
 } _String;
 
+#define YLC_STRING_TYPE(n)                                                     \
+  typedef struct {                                                             \
+    int size;                                                                  \
+    const char *chars;                                                         \
+  } n;
+
 typedef struct {
   int32_t size;
   double *data;

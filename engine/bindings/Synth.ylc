@@ -54,7 +54,8 @@ let set_input_trig_offset = extern fn Synth -> Int -> Uint64 -> Synth;
 let set_input_buf = extern fn Int -> Synth -> Synth -> Synth;
 let play_node_offset = extern fn Uint64 -> Synth -> Synth;
 let set_input_buf_immediate = extern fn Int -> Synth -> Synth -> Synth;
-let load_soundfile = extern fn Int -> Synth;
+
+let load_soundfile = extern fn String -> Synth;
 let trigger_gate = extern fn Uint64 -> Double -> Int -> Synth -> Synth;
 let midi_to_freq = extern fn Int -> Double;
 let dmidi_to_freq = extern fn Double -> Double;
@@ -70,6 +71,8 @@ let null_synth_node = extern fn () -> Synth;
 let group_node = extern fn () -> Synth;
 let play_node_dur_in_group = extern fn Uint64 -> Double -> Int -> Synth -> Synth -> Synth;
 let chain = extern fn Synth -> Synth;
+let wrap_opaque_ref_in_node = extern fn Ptr -> Ptr -> Int -> Synth -> Synth;
+
 
 # envelope.h
 let asr_kill_node = extern fn Double -> Double -> Double -> Synth -> Synth;
