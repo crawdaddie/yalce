@@ -23,17 +23,17 @@ let double_array = extern fn Int -> Double -> Array of Double;
 let pow = extern fn Double -> Double -> Double;
 let tanh = extern fn Double -> Double;
 
-let max_int = fn a: (Int) b: (Int) ->
-  match a with 
-  | a if a > b -> a 
-  | _ -> b
-;;
-
-let min_int = fn a: (Int) b: (Int) ->
-  match a with 
-  | a if a < b -> a 
-  | _ -> b
-;;
+# let max_int = fn a: (Int) b: (Int) ->
+#   match a with 
+#   | a if a > b -> a 
+#   | _ -> b
+# ;;
+#
+# let min_int = fn a: (Int) b: (Int) ->
+#   match a with 
+#   | a if a < b -> a 
+#   | _ -> b
+# ;;
 
 let max = fn a b ->
   match a > b with 
@@ -46,6 +46,7 @@ let min = fn a b ->
   | true -> a 
   | _ -> b
 ;;
+
 let abs = fn a ->
   match a > 0 with
   | true -> a

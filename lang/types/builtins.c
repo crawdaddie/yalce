@@ -500,6 +500,15 @@ void initialize_builtin_types() {
                                    .name = TYPE_NAME_TYPECLASS_EQ,
                                    .rank = 0.0,
                                }};
+  // t_int.implements = &(TypeClass){
+  //     .rank = 0.,
+  //     .name = TYPE_NAME_TYPECLASS_EQ,
+  //     .next = &(TypeClass){
+  //         .rank = 0.,
+  //         .name = TYPE_NAME_TYPECLASS_ORD,
+  //         .next = &(TypeClass){.rank = 0.,
+  //                              .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+  //                              .next = NULL}}};
   typeclasses_extend(&t_int, tc_int);
   typeclasses_extend(&t_int, tc_int + 1);
   typeclasses_extend(&t_int, tc_int + 2);
