@@ -1,11 +1,11 @@
 #include "audio_loop.h"
+#include "../lang/ylc_datatypes.h"
 #include "audio_loop_utils.h"
 #include "audio_routing.h"
 #include "ctx.h"
 #include "node_gc.h"
 #include "osc.h"
 #include "scheduling.h"
-#include "ylc_datatypes.h"
 #include <soundio/soundio.h>
 #include <stdarg.h>
 #include <stdio.h>

@@ -1,6 +1,7 @@
 #ifndef _ENGINE_EXT_LIB_H
 #define _ENGINE_EXT_LIB_H
 #include "./audio_graph.h"
+#include "ylc_datatypes.h"
 #include <stdint.h>
 
 void start_blob();

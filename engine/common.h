@@ -1,6 +1,5 @@
 #ifndef _ENGINE_COMMON_H
 #define _ENGINE_COMMON_H
-#include "ylc_datatypes.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -20,6 +19,5 @@
 #define ANSI_COLOR_RESET "\x1b[0m"
 
 inline double pow2table_read(double pos, int tabsize, double *table);
-typedef _String _String;
 
 #endif
