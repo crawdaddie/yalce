@@ -42,10 +42,7 @@ void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
 
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module) {
-
-  if (is_coroutine_type(fn_type)) {
-    return LLVMPointerType(cor_inst_struct_type(), 0);
-  }
+  // TODO: return a type for a coroutine - is this necessary?
 
   LLVMTypeRef llvm_param_types[fn_len];
   LLVMTypeRef llvm_fn_type;
@@ -346,10 +343,10 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
 
   return env;
 }
+
 LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
                                          JITLangCtx *ctx, LLVMModuleRef module,
                                          LLVMBuilderRef builder) {
-
   int args_len = fn_type_args_len(specific_type);
   LLVMTypeRef fn_type = codegen_fn_type(specific_type, args_len, ctx, module);
 
@@ -470,6 +467,7 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
+  // printf("if following gets compiled it gets cached\n");
   LLVMValueRef func = specific_fns_lookup(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
 

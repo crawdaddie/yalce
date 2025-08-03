@@ -378,6 +378,28 @@ Type *_cor_stop_fn_sig() {
 }
 
 Type t_cor_stop_fn_sig = GENERIC_TYPE(_cor_stop_fn_sig);
+Type t_cor_counter_fn_sig = {T_FN,
+                             .data = {.T_FN = {.from = &t_void, .to = &t_int}}};
+Type t_cor_status_fn_sig = {T_FN,
+                            .data = {.T_FN = {.from = &t_ptr, .to = &t_int}}};
+
+Type *_cor_promise_fn_sig() {
+  Type *map_from = next_tvar();
+  Type *cor_from = create_coroutine_instance_type(map_from);
+  return type_fn(cor_from, fn_return_type(cor_from));
+}
+
+Type t_cor_promise_fn_sig = GENERIC_TYPE(_cor_promise_fn_sig);
+
+Type *_cor_unwrap_or_end_sig() {
+  Type *map_from = next_tvar();
+  Type *opt = create_option_type(map_from);
+  return type_fn(opt, map_from);
+}
+Type t_cor_unwrap_or_end_sig = GENERIC_TYPE(_cor_unwrap_or_end_sig);
+
+Type t_current_cor_fn_sig = {T_FN,
+                             .data = {.T_FN = {.from = &t_void, .to = &t_ptr}}};
 
 Type t_list_ref_set_sig = GENERIC_TYPE(_list_ref_set_sig);
 
@@ -403,7 +425,7 @@ Type *_cor_loop_sig() {
   return type_fn(cor, cor);
 }
 Type t_cor_loop_sig = GENERIC_TYPE(_cor_loop_sig);
-Type t_empty_cor = MAKE_FN_TYPE_2(&t_void, &t_ptr);
+// Type t_empty_cor = MAKE_FN_TYPE_2(&t_void, &t_ptr);
 
 Type *_fst_sig() { return type_fn(next_tvar(), next_tvar()); }
 
@@ -567,9 +589,19 @@ void initialize_builtin_types() {
 
   add_builtin("cor_wrap_effect", &t_cor_wrap_effect_fn_sig);
   add_builtin("cor_map", &t_cor_map_fn_sig);
+
   add_builtin("iter_of_list", &t_iter_of_list_sig);
   add_builtin("iter_of_array", &t_iter_of_array_sig);
+
   add_builtin("cor_loop", &t_cor_loop_sig);
+  add_builtin("cor_counter", &t_cor_counter_fn_sig);
+  add_builtin("cor_status", &t_cor_status_fn_sig);
+  add_builtin("cor_current", &t_current_cor_fn_sig);
+  add_builtin("cor_replace", &t_cor_replace_fn_sig);
+  add_builtin("cor_stop", &t_cor_stop_fn_sig);
+  add_builtin("cor_promise", &t_cor_promise_fn_sig);
+  add_builtin("cor_unwrap_or_end", &t_cor_unwrap_or_end_sig);
+  // add_builtin("empty_coroutine", &t_empty_cor);
 
   add_builtin("opt_map", &t_opt_map_sig);
   add_builtin("cstr", &t_builtin_cstr);
@@ -583,9 +615,6 @@ void initialize_builtin_types() {
   add_builtin("array_range", &t_array_range_sig);
   add_builtin("array_offset", &t_array_offset_sig);
   add_builtin("array_view", &t_array_view_sig);
-  add_builtin("cor_replace", &t_cor_replace_fn_sig);
-  add_builtin("cor_stop", &t_cor_stop_fn_sig);
-  add_builtin("empty_coroutine", &t_empty_cor);
   add_builtin("fst", &t_fst_sig);
   add_builtin("df_offset", &t_df_offset_sig);
   add_builtin("df_raw_fields", &t_df_raw_fields_sig);

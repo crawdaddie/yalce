@@ -33,8 +33,13 @@ extern Type t_cor_loop_sig;
 extern Type t_iter_of_list_sig;
 extern Type t_iter_of_array_sig;
 extern Type t_cor_loop_sig;
+extern Type t_cor_counter_fn_sig;
+extern Type t_cor_status_fn_sig;
+extern Type t_current_cor_fn_sig;
+extern Type t_cor_promise_fn_sig;
+extern Type t_cor_unwrap_or_end_sig;
 
-extern Type t_empty_cor;
+// extern Type t_empty_cor;
 
 extern Type t_fst_sig;
 extern Type t_df_offset_sig;

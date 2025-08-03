@@ -37,14 +37,6 @@ LANG_CC += -g
 LANG_LD_FLAGS := -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 
-# LANG_CC += -D_USE_BLAS
-# LANG_CC += -I${OPENBLAS_PATH}/include
-# LANG_LD_FLAGS += -L${OPENBLAS_PATH}/lib -lopenblas
-#
-# LANG_CC += -D_USE_OPENMP
-# LANG_CC += -I${OPENMP_PATH}/include
-# LANG_LD_FLAGS += -L${OPENMP_PATH}/lib -lomp
-
 LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
 
@@ -108,6 +100,8 @@ $(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
+	$(MAKE) -C engine clean
+	$(MAKE) -C gui clean
 
 test:
 	$(MAKE) -C test

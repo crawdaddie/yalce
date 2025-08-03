@@ -3,7 +3,8 @@
 #include "application.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/common.h"
-#include "backend_llvm/coroutines.h"
+#include "backend_llvm/coroutine_extensions.h"
+#include "backend_llvm/coroutine_scheduling.h"
 #include "function.h"
 #include "input.h"
 #include "list.h"
@@ -785,7 +786,6 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (from_type->kind) {
   case T_INT: {
-    // Create uint64 type
     LLVMTypeRef uint64Type = LLVMInt64Type();
 
     // Perform zero extension to convert i32 to i64
@@ -866,9 +866,9 @@ LLVMValueRef SomeConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 #define _FALSE LLVMConstInt(LLVMInt1Type(), 0, 0)
 
+// short-circuiting and-operator
 LLVMValueRef LogicalAndHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-  // short-circuiting and-operator
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
   LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(function, "then");
@@ -879,20 +879,17 @@ LLVMValueRef LogicalAndHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBuildCondBr(builder, arg1, then_block, else_block);
 
-  /* Then block */
   LLVMPositionBuilderAtEnd(builder, then_block);
   LLVMValueRef then_result =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef then_end_block = LLVMGetInsertBlock(builder);
 
-  /* Else block */
   LLVMPositionBuilderAtEnd(builder, else_block);
   LLVMValueRef else_result = _FALSE;
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef else_end_block = LLVMGetInsertBlock(builder);
 
-  /* Merge block */
   LLVMPositionBuilderAtEnd(builder, merge_block);
   LLVMValueRef phi = LLVMBuildPhi(builder, LLVMTypeOf(then_result), "result");
   LLVMValueRef incoming_vals[] = {then_result, else_result};
@@ -902,37 +899,31 @@ LLVMValueRef LogicalAndHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return phi;
 }
 
+// short-circuiting or-operator
 LLVMValueRef LogicalOrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
-  // short-circuiting or-operator
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
   LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(function, "then");
   LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(function, "else");
   LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge");
 
-  // Evaluate first argument
   LLVMValueRef arg1 =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  // If arg1 is true, skip to then_block (short-circuit)
-  // If arg1 is false, evaluate second argument in else_block
   LLVMBuildCondBr(builder, arg1, then_block, else_block);
 
-  /* Then block - short circuit with true */
   LLVMPositionBuilderAtEnd(builder, then_block);
   LLVMValueRef then_result = _TRUE; // Short circuit with true
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef then_end_block = LLVMGetInsertBlock(builder);
 
-  /* Else block - evaluate second argument */
   LLVMPositionBuilderAtEnd(builder, else_block);
   LLVMValueRef else_result =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef else_end_block = LLVMGetInsertBlock(builder);
 
-  /* Merge block */
   LLVMPositionBuilderAtEnd(builder, merge_block);
   LLVMValueRef phi = LLVMBuildPhi(builder, LLVMTypeOf(then_result), "result");
   LLVMValueRef incoming_vals[] = {then_result, else_result};
@@ -1299,10 +1290,10 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                     //               ctx->env, module), module)
   );
 
-  FN_SYMBOL("empty_coroutine", &t_empty_cor,
-            get_extern_fn("empty_coroutine",
-                          type_to_llvm_type(&t_empty_cor, ctx, module),
-                          module));
+  // FN_SYMBOL("empty_coroutine", &t_empty_cor,
+  //           get_extern_fn("empty_coroutine",
+  //                         type_to_llvm_type(&t_empty_cor, ctx, module),
+  //                         module));
 
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at, ArrayAtHandler);
 
@@ -1313,18 +1304,30 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("||", &t_builtin_or, LogicalOrHandler);
   GENERIC_FN_SYMBOL("&&", &t_builtin_and, LogicalAndHandler);
 
-  GENERIC_FN_SYMBOL("cor_wrap_effect", &t_cor_wrap_effect_fn_sig,
-                    WrapCoroutineWithEffectHandler);
-
-  GENERIC_FN_SYMBOL("cor_map", &t_cor_map_fn_sig, MapCoroutineHandler);
-
-  GENERIC_FN_SYMBOL("iter_of_list", &t_iter_of_list_sig, IterOfListHandler);
-  GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig, IterOfArrayHandler);
-  GENERIC_FN_SYMBOL("iter", NULL, IterHandler);
-
   GENERIC_FN_SYMBOL("cor_loop", &t_cor_loop_sig, CorLoopHandler);
-  GENERIC_FN_SYMBOL("cor_replace", &t_cor_replace_fn_sig, CorReplaceHandler);
+  // GENERIC_FN_SYMBOL("cor_wrap_effect", &t_cor_wrap_effect_fn_sig,
+  //                   WrapCoroutineWithEffectHandler);
+  //
+  GENERIC_FN_SYMBOL("cor_map", &t_cor_map_fn_sig, CorMapHandler);
+  GENERIC_FN_SYMBOL("iter", NULL, IterHandler);
+  //
+  GENERIC_FN_SYMBOL("iter_of_list", &t_iter_of_list_sig, CorOfListHandler);
+  GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig, CorOfArrayHandler);
+  //
+  // GENERIC_FN_SYMBOL("cor_replace", &t_cor_replace_fn_sig, CorReplaceHandler);
   GENERIC_FN_SYMBOL("cor_stop", &t_cor_stop_fn_sig, CorStopHandler);
+  GENERIC_FN_SYMBOL("cor_counter", &t_cor_counter_fn_sig, CorCounterHandler);
+  GENERIC_FN_SYMBOL("cor_status", &t_cor_status_fn_sig, CorStatusHandler);
+  GENERIC_FN_SYMBOL("cor_promise", &t_cor_promise_fn_sig,
+                    CorGetPromiseValHandler);
+  GENERIC_FN_SYMBOL("cor_current", &t_current_cor_fn_sig, CurrentCorHandler);
+  GENERIC_FN_SYMBOL("cor_unwrap_or_end", &t_cor_unwrap_or_end_sig,
+                    CorUnwrapOrEndHandler);
+
+  GENERIC_FN_SYMBOL("play_routine", &t_play_routine_sig, PlayRoutineHandler);
+
+  // GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
+
   GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);
   GENERIC_FN_SYMBOL("::", &t_list_prepend, ListPrependHandler);
   GENERIC_FN_SYMBOL("list_tail", &t_list_tail_sig, ListTailHandler);
@@ -1333,8 +1336,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("opt_map", &t_opt_map_sig, OptMapHandler);
   // GENERIC_FN_SYMBOL("run_in_scheduler", &t_run_in_scheduler_sig,
   //                   RunInSchedulerHandler);
-
-  GENERIC_FN_SYMBOL("play_routine", &t_play_routine_sig, PlayRoutineHandler);
 
   GENERIC_FN_SYMBOL("array_fill", &t_array_fill_sig, ArrayFillHandler);
   GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
@@ -1356,7 +1357,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("df_offset", &t_df_offset_sig, DFAtOffsetHandler);
   GENERIC_FN_SYMBOL("df_raw_fields", &t_df_raw_fields_sig, DFRawFieldsHandler);
   GENERIC_FN_SYMBOL(TYPE_NAME_ARRAY, &t_array_cons_sig, ArrayConstructor);
-  GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
   GENERIC_FN_SYMBOL("dlopen", NULL, DlOpenHandler);
   // GENERIC_FN_SYMBOL("coroutine_end", &t_coroutine_end, CoroutineEndHandler);

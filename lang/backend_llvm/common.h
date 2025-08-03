@@ -1,7 +1,7 @@
 #ifndef _LANG_BACKEND_LLVM_COMMON_H
 #define _LANG_BACKEND_LLVM_COMMON_H
 
-#include "escape_analysis.h"
+#include "./escape_analysis.h"
 #include "ht.h"
 #include "parse.h"
 #include "types/type.h"
@@ -16,15 +16,6 @@ typedef struct StackFrame {
   struct StackFrame *next;
 } StackFrame;
 
-typedef struct coroutine_ctx_t {
-  LLVMValueRef func;
-  LLVMTypeRef func_type;
-  LLVMTypeRef instance_type;
-  int num_branches;
-  int current_branch;
-  LLVMBasicBlockRef *block_refs;
-} coroutine_ctx_t;
-
 typedef struct {
   // ht stack[STACK_MAX];
   int stack_ptr;
@@ -34,10 +25,7 @@ typedef struct {
   void **global_storage_array;
   int *global_storage_capacity;
   const char *module_name;
-  int num_coroutine_yields;
-  int current_yield;
-  LLVMBasicBlockRef switch_default;
-  LLVMValueRef yield_switch_ref;
+  void *coro_ctx;
 } JITLangCtx;
 
 typedef struct SpecificFns {

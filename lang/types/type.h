@@ -29,6 +29,7 @@ enum TypeClassType { TC_FN, TC_STRUCTURAL };
 typedef struct TypeClass {
   const char *name;
   double rank;
+  Type *module;
   struct TypeClass *next;
 } TypeClass;
 
