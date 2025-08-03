@@ -280,12 +280,7 @@ LLVMValueRef new_coro_obj(LLVMValueRef func, LLVMTypeRef promise_type,
   return coro;
 }
 
-static SpecificFns *list_to_coroutine_fns = NULL;
-// LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key);
-// SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
-// LLVMValueRef func);
-//
-//
+static SpecificFns *__LIST_TO_COROUTINE_FN_CACHE = NULL;
 static LLVMValueRef list_iter_func(LLVMTypeRef list_el_type,
                                    LLVMTypeRef promise_type,
                                    LLVMTypeRef coro_obj_type,
@@ -414,7 +409,8 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *ptype = fn_return_type(ast->md);
   Type *item_type = type_of_option(ptype);
   LLVMTypeRef list_el_type = type_to_llvm_type(item_type, ctx, module);
-  LLVMValueRef func = specific_fns_lookup(list_to_coroutine_fns, item_type);
+  LLVMValueRef func =
+      specific_fns_lookup(__LIST_TO_COROUTINE_FN_CACHE, item_type);
 
   LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
@@ -428,8 +424,8 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (!func) {
     func = list_iter_func(list_el_type, promise_type, coro_obj_type, state_type,
                           module, builder);
-    list_to_coroutine_fns =
-        specific_fns_extend(list_to_coroutine_fns, item_type, func);
+    __LIST_TO_COROUTINE_FN_CACHE =
+        specific_fns_extend(__LIST_TO_COROUTINE_FN_CACHE, item_type, func);
   }
 
   LLVMValueRef list =
@@ -443,12 +439,7 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return list_coro;
 }
 
-static SpecificFns *array_to_coroutine_fns = NULL;
-// LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key);
-// SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
-// LLVMValueRef func);
-//
-//
+static SpecificFns *__ARRAY_TO_COROUTINE_FN_CACHE = NULL;
 static LLVMValueRef
 array_iter_func(LLVMTypeRef arr_el_type, LLVMTypeRef promise_type,
                 LLVMTypeRef coro_obj_type, LLVMTypeRef state_type,
@@ -504,7 +495,8 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *ptype = fn_return_type(ast->md);
   Type *item_type = type_of_option(ptype);
   LLVMTypeRef arr_el_type = type_to_llvm_type(item_type, ctx, module);
-  LLVMValueRef func = specific_fns_lookup(list_to_coroutine_fns, item_type);
+  LLVMValueRef func =
+      specific_fns_lookup(__ARRAY_TO_COROUTINE_FN_CACHE, item_type);
 
   LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
@@ -517,8 +509,8 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (!func) {
     func = array_iter_func(arr_el_type, promise_type, coro_obj_type, state_type,
                            module, builder);
-    array_to_coroutine_fns =
-        specific_fns_extend(array_to_coroutine_fns, item_type, func);
+    __ARRAY_TO_COROUTINE_FN_CACHE =
+        specific_fns_extend(__ARRAY_TO_COROUTINE_FN_CACHE, item_type, func);
   }
 
   LLVMValueRef state =
@@ -527,4 +519,14 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef arr_coro = new_coro_obj(func, promise_type, coro_obj_type, state,
                                        state_type, builder);
   return arr_coro;
+}
+
+LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+  LLVMValueRef coro =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  coro_end_counter(coro, LLVMStructType((LLVMTypeRef[]){LLVMInt32Type()}, 1, 0),
+                   builder);
+
+  return coro;
 }

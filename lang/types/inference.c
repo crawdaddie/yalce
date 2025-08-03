@@ -341,9 +341,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_MODULE: {
     type = infer_module(ast, ctx);
-    printf("inferred module as trait??\n");
-    print_type(type);
-    print_ast(ast);
     break;
   }
 
