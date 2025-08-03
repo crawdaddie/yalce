@@ -1,0 +1,23 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/clang++",
+      "-c",
+      "-std=c++20",
+      "-Wall",
+      "-g",
+      "-I/opt/homebrew/Cellar/llvm@16/16.0.6_1/include",
+      "-D__STDC_CONSTANT_MACROS",
+      "-D__STDC_FORMAT_MACROS",
+      "-D__STDC_LIMIT_MACROS",
+      "-I",
+      "/opt/homebrew/include",
+      "-o",
+      "cor",
+      "cor.cpp"
+    ],
+    "directory": "/Users/adam/projects/sound/yalce/libs/cor",
+    "file": "/Users/adam/projects/sound/yalce/libs/cor/cor.cpp",
+    "output": "/Users/adam/projects/sound/yalce/libs/cor/cor"
+  }
+]

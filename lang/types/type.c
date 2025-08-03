@@ -22,7 +22,19 @@ Type *env_lookup(TypeEnv *env, const char *name);
 void reset_type_var_counter();
 Type *create_option_type(Type *option_of);
 
-Type t_int = {T_INT};
+Type t_int = {
+    T_INT
+    // , .implements = &(TypeClass){
+    //              .rank = 0.,
+    //              .name = TYPE_NAME_TYPECLASS_EQ,
+    //              .next = &(TypeClass){
+    //                  .rank = 0.,
+    //                  .name = TYPE_NAME_TYPECLASS_ORD,
+    //                  .next = &(TypeClass){.rank = 0.,
+    //                                       .name =
+    //                                       TYPE_NAME_TYPECLASS_ARITHMETIC,
+    //                                       .next = NULL}}}
+};
 
 Type t_uint64 = {T_UINT64};
 

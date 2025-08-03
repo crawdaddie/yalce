@@ -84,9 +84,12 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
     ctx->constraints->src = node;
     return t1;
   }
-
   if (t2->kind == T_VAR) {
-    for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
+    // printf("extend t2: ");
+    // print_type(t2);
+
+    for (TypeClass *tc = t1->implements; tc != NULL; tc = tc->next) {
+      // printf("with %s, ", tc->name);
       typeclasses_extend(t2, tc);
     }
   }
