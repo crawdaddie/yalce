@@ -106,15 +106,36 @@ let accept_reqs = fn server_fd ->
 
 
 
-let proc_tasks = fn server_fd: (Int) tq: (List of (Coroutine of Int), List of (Coroutine of Int)) ->
-  let p = Queue.pop_left tq;
-  match p with
-  | Some (cb, rem) -> (
-    match cb () with
-    | Some _ -> proc_tasks server_fd (Queue.append cb rem)
-    | _ -> proc_tasks server_fd rem
-  )
-  | None -> (proc_tasks server_fd (Queue.of_list [accept_reqs server_fd]); ())
+# let proc_tasks = fn server_fd tq ->
+#   let qr = Queue.pop_left tq;
+#   (
+#   match qr with
+#   | Some (task, remaining_tasks) -> 
+#
+#     match task () with
+#     | Some 1 -> Queue.append task remaining_tasks
+#     | _ -> remaining_task_q
+#
+#   | None -> Queue.of_list [accept_reqs server_fd]
+#   )
+#   |> proc_tasks server_fd 
+# ;;
+
+let proc_tasks = fn on_empty on_task ->
+  let q = Queue.of_list [on_empty ()];
+
+  let aux_rec = fn q on_empty on_task ->
+    let nq = match Queue.pop_left q with
+    | Some (task, remaining_tasks) ->
+      match on_task task with
+      | Some t -> Queue.append t remaining_tasks
+      | _ -> remaining_tasks
+
+    | None -> Queue.of_list [on_empty ()]
+    ;
+    aux_rec nq on_empty on_task
+  ;;
+  aux_rec q on_empty on_task
 ;;
 
 let init_server = fn port ->
@@ -122,7 +143,16 @@ let init_server = fn port ->
   let server_fd = socket AF_INET SOCK_STREAM 0;
   bind server_fd server_addr 16;
   listen server_fd 10; 
-  proc_tasks server_fd (Queue.of_list [accept_reqs server_fd])
+
+  proc_tasks
+    (fn () -> accept_reqs server_fd)
+    (fn task -> 
+      task ();
+      match cor_status task with
+      | -1 -> Some task
+      | _ -> None
+    )
+
 ;;
 init_server 8000
 
