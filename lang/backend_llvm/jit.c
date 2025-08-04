@@ -166,6 +166,9 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
 
   LLVMValueRef top_level_func =
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
+  if (config.debug_ir_pre) {
+    LLVMDumpModule(module);
+  }
   module_passes(module, target_machine);
 
   LLVMExecutionEngineRef engine;
@@ -312,6 +315,9 @@ int jit(int argc, char **argv) {
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--debug-ir") == 0) {
       config.debug_ir = true;
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "--debug-ir-pre") == 0) {
+      config.debug_ir_pre = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module

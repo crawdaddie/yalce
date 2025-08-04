@@ -26,14 +26,40 @@ let Linear = fn in_feat out_feat ->
     bias:   array_fill out_feat             Math.rand_double,
   )
 ;;
+#
+# let mse_loss = fn pred y ->
+#   # let r, _ = Arrays.foldi (fn i (res, y): (Double, Array of Double) p: (Double) -> 
+#   #   let d = p - y[i]; 
+#   #   (res + d * d, y) 
+#   # ) pred (0., y)
+#   # ;
+#
+#   let aux_rec = fn i res y p ->
+#   ;;
+#   let r = aux_rec 0 y pred
+#
+#   r / (array_size pred)
+# ;;
 
-let mse_loss = fn pred y ->
-  let r, _ = Arrays.foldi (fn i (res, y): (Double, Array of Double) p: (Double) -> 
-    let d = p - y[i]; 
-    (res + d * d, y) 
-  ) pred (0., y)
-  ;
-  r / (array_size pred)
+# let mse_loss = fn prediction: (Array of Double) y: (Array of Double) ->
+#   let aux_rec = fn i: (Int) res: (Double) y: (Array of Double) p: (Array of Double) ->
+#     match i >= array_size p with
+#     | true -> res
+#     | _ -> (
+#       let pred_val = p[i] in
+#       let target_val = y[i] in
+#       let diff = pred_val - target_val in
+#       let squared_diff = diff * diff in
+#       let new_res = res + squared_diff in
+#       aux_rec (i + 1) new_res y p
+#     )
+#   ;;
+#   let total_error = aux_rec 0 0.0 y prediction in
+#   let count = array_size prediction in
+#   total_error / count
+# ;;
+#
+let mse_loss = fn prediction: (Array of Double) y: (Array of Double) ->
 ;;
 
 
@@ -72,17 +98,16 @@ let train = fn model: (TLinear) epochs ->
     let pred = forward (model.weight, model.bias) X;
     let l = mse_loss pred Y;
     let m = sgd_optim 0.01 model pred X Y;
-
     train m (epochs - 1)
   )
 ;;
 
 train model 100;
 
-# import ../../gui/bindings/Gui;
-#
-# Gui.create_decl_ui (fn () ->
-#   let p = Gui.Plt 0. 11. 0. 30.;
-#   let s = Gui.Scatter p (array_size X) (cstr X) (cstr Y);
-#   let l = Gui.LinePlt p 2 (cstr [|0., 11.|]) (cstr (forward (model.weight, model.bias) [|0., 11.|]));
-# )
+import ../../gui/bindings/Gui;
+
+Gui.create_decl_ui (fn () ->
+  let p = Gui.Plt 0. 11. 0. 30.;
+  let s = Gui.Scatter p (array_size X) (cstr X) (cstr Y);
+  let l = Gui.LinePlt p 2 (cstr [|0., 11.|]) (cstr (forward (model.weight, model.bias) [|0., 11.|]));
+)

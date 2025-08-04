@@ -8,6 +8,7 @@ typedef struct RTConfig {
   bool gui_mode;
   bool debug_codegen;
   bool debug_ir;
+  bool debug_ir_pre;
   const char *base_libs_dir;
   const char *import_current_dir;
   const char *opt_level;
