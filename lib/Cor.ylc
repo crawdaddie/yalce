@@ -1,0 +1,7 @@
+let current = cor_current;
+let status = cor_status;
+let promise = cor_promise;
+let map = cor_map;
+let of_list = iter_of_list;
+let of_array = iter_of_list;
+let terminate = cor_stop;
