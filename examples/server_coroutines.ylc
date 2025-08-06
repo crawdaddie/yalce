@@ -83,10 +83,10 @@ let process_req = fn req client_sock ->
 ;;
 
 let accept_reqs = fn server_fd ->
-  let (client_sock, _addr) = use_or_finish @@ accept_conn server_fd;
+  let (client_sock, _addr) = accept_conn server_fd |> cor_unwrap_or_end ;
   yield 1;
 
-  let buffer = use_or_finish @@ read_bytes client_sock;
+  let buffer = read_bytes client_sock |> cor_unwrap_or_end;
   yield 1;
 
   let req = http_parse buffer;

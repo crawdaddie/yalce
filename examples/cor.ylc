@@ -84,32 +84,6 @@ let iter_all_arg = fn () ->
 ;; 
 iter_all_arg ();
 
-# FIXME:
-# let wrapped_cor = fn () ->
-#   let wrapper = fn x -> print `specially wrapped: {x}\n`
-#   ;;
-#
-#   let co_void = fn () ->
-#     yield 1;
-#     yield 2;
-#     yield 3;
-#     yield 200
-#   ;;
-#
-#   let inst = (co_void () |> cor_wrap_effect wrapper);
-#
-#   print `## coroutine with effectful wrapper wrapped 1 -> 2 -> 3 -> done
-# ## (effects printed above ^^)
-#   {inst ()}
-#   {inst ()}
-#   {inst ()}
-#   {inst ()}
-#   {inst ()}
-#   {inst ()}
-# `
-# ;;
-# wrapped_cor ();
-
 let map_cor = fn () ->
   "map each value of a coroutine Int -> String";
   let co_void = fn () ->
@@ -124,7 +98,7 @@ let map_cor = fn () ->
   let co = co_void () |> cor_map (fn x -> `[str {x}]`)
   ;
 
-  print `## coroutine mapped 1 -> 2 -> 3 -> done
+  print `## coroutine mapped [str 1] -> [str 2] -> [str 3] -> ...
   {co ()}
   {co ()}
   {co ()}
@@ -150,7 +124,7 @@ cor_list ();
 
 let cor_array = fn () -> 
   let l = [|1, 2, 3|] in
-  let c = iter l in
+  let c = iter_of_array l in
 
   print `## array yield:
   {c ()}
@@ -163,7 +137,7 @@ cor_array ();
 
 let cor_array2 = fn () -> 
   let l = [|1, 0, 0, 0, 1, 1, 0, 0, 1|] in
-  let c = iter l in
+  let c = iter_of_array l in
 
   print `## array yield:
   {c ()}
@@ -242,7 +216,7 @@ let loop_cor = fn () ->
 `
 ;;
 
-loop_cor ();
+# loop_cor ();
 
 let arithmetic_series = fn () -> 
   let arithmetic = fn s ->

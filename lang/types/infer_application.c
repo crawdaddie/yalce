@@ -13,8 +13,19 @@ void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type);
 void apply_substitutions_rec(Ast *ast, Substitution *subst);
 TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
                                    Type *t2);
+void print_subst(Substitution *c);
+void print_constraints(TypeConstraint *c);
 
 Type *infer_application(Ast *ast, TICtx *ctx);
+void find_coroutine_instance_args(Type *f, int len, Type *arg_types[]) {
+  for (int i = 0; i < len; i++) {
+    Type *ff = f->data.T_FN.from;
+    if (arg_types[i]->is_coroutine_instance) {
+      ff->is_coroutine_instance = true;
+    }
+    f = f->data.T_FN.to;
+  }
+}
 Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
@@ -74,9 +85,10 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   }
 
   Substitution *subst = solve_constraints(app_ctx.constraints);
-  // print_subst(subst);
 
   _fn_type = apply_substitution(subst, _fn_type);
+  find_coroutine_instance_args(_fn_type, len, arg_types);
+
   ast->data.AST_APPLICATION.function->md = _fn_type;
 
   Type *res_type = _fn_type;
@@ -264,19 +276,6 @@ Type *infer_cons_application(Ast *ast, TICtx *ctx) {
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
 
-  // print_ast(ast);
-  // if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
-  //   printf("APPLICATION\n");
-  //   print_ast(ast);
-  // }
-  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-  //              TYPE_NAME_REF)) {
-  //   Type *val_type = infer(ast->data.AST_APPLICATION.args, ctx);
-  //   val_type->is_ref = true;
-  //   ast->data.AST_APPLICATION.function->md = type_fn(val_type, val_type);
-  //   return val_type;
-  // }
   if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
       CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
                "addrof")) {
@@ -291,13 +290,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
 
   Type *fn_type = infer(ast->data.AST_APPLICATION.function, ctx);
-
-  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-  //              TYPE_NAME_RUN_IN_SCHEDULER)) {
-  //   infer_schedule_event_callback(ast, ctx);
-  //   return &t_void;
-  // }
 
   if (!fn_type) {
     return NULL;

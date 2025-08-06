@@ -14,7 +14,7 @@ let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
   let res_ref = [| res |];
   for v = iter a in (
     let r = res_ref[0];
-    res_ref[0] := (f r v)  
+    rs_ref[0] := (f r v)  
   );
   res_ref[0]
 ;;

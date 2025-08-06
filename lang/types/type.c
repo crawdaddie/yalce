@@ -1448,6 +1448,9 @@ bool type_implements(Type *t, TypeClass *constraint_tc) {
       (strcmp(t->data.T_CONS.name, constraint_tc->name) == 0)) {
     return true;
   }
+  if (!t->implements) {
+    return false;
+  }
   for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
 
     if (strcmp(tc->name, constraint_tc->name) == 0) {

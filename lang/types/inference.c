@@ -252,14 +252,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
         }
 
         if ((t->scope >= ctx->current_fn_scope) && !ref_already_listed &&
-            !(ast->data.AST_IDENTIFIER.is_fn_param ||
-              ast->data.AST_IDENTIFIER.is_recursive_fn_ref)) {
+            !(ref->is_fn_param || ref->is_recursive_fn_ref)) {
 
           AstList *next = malloc(sizeof(AstList));
           next->ast = ast;
           next->next =
               ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
           ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers = next;
+          printf("IDENTIFIER crosses boundary\n");
+          print_ast(ast);
+          printf("fn param %d\n", ref->is_fn_param);
           ctx->current_fn_ast->data.AST_LAMBDA.num_yield_boundary_crossers++;
         }
       }
@@ -349,12 +351,23 @@ Type *infer(Ast *ast, TICtx *ctx) {
     ObjString type_name = ast->data.AST_TRAIT_IMPL.type;
     ObjString trait_name = ast->data.AST_TRAIT_IMPL.trait_name;
 
-    if (!CHARS_EQ(trait_name.chars, "Constructor")) {
-
+    if (CHARS_EQ(trait_name.chars, "Arithmetic") ||
+        CHARS_EQ(trait_name.chars, "Eq") || CHARS_EQ(trait_name.chars, "Ord")) {
       Type *t = env_lookup(ctx->env, type_name.chars);
       double rank = tc_impl_rank(ast);
       TypeClass *tc = talloc(sizeof(TypeClass));
-      *tc = (TypeClass){.rank = rank, .name = trait_name.chars};
+      *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
+      typeclasses_extend(t, tc);
+    } else {
+      // TODO: implement robust traits
+      Type *t = env_lookup(ctx->env, type_name.chars);
+      Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
+      // printf("trait impl - does \n");
+      // print_type(type);
+      // printf(" match \n");
+      // print_type(existing_trait_proto);
+      TypeClass *tc = talloc(sizeof(TypeClass));
+      *tc = (TypeClass){.name = trait_name.chars, .module = type};
       typeclasses_extend(t, tc);
     }
 
@@ -1174,6 +1187,6 @@ Type *infer_assignment(Ast *ast, TICtx *ctx) {
   Type *val_type = infer(ast->data.AST_BINOP.right, ctx);
   Type *var_type = infer(ast->data.AST_BINOP.left, ctx);
   // print_type(val_type);
-  // print_type(var_type);
+  // print_type(var_type;);
   return &t_void;
 }

@@ -52,6 +52,7 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
   if (types_equal(t1, t2)) {
     return t1;
   }
+
   // if (t1->kind == T_VAR && t2->kind != T_VAR) {
   //   ctx->constraints = constraints_extend(ctx->constraints, t2, t1);
   //   ctx->constraints->src = node;
@@ -66,9 +67,9 @@ Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
 
   if (!is_generic(t2)) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
-      if (!type_implements(t2, tc)) {
-        // print_type(t1);
-        // print_type(t2);
+      if ((!CHARS_EQ(tc->name, "Constructor")) && !type_implements(t2, tc)) {
+        print_type(t1);
+        print_type(t2);
         return type_error(
             ctx, node,
             "Typecheck error type %s does not implement typeclass '%s' \n",
