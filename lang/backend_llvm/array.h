@@ -3,7 +3,7 @@
 
 #include "common.h"
 #include "parse.h"
-#include "llvm-c/Types.h"
+#include <llvm-c/Types.h>
 LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module, LLVMBuilderRef builder);
 

@@ -1,7 +1,7 @@
 #include "backend_llvm/array.h"
 #include "escape_analysis.h"
 #include "types.h"
-#include "llvm-c/Core.h"
+#include <llvm-c/Core.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
@@ -112,13 +112,15 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef data_ptr;
 
   // TODO: use proper allocation strategy
-  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
-    data_ptr =
-        LLVMBuildArrayAlloca(builder, element_type, size_const, "element_ptr");
-  } else {
-    data_ptr =
-        LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
-  }
+  // if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
+  //   data_ptr =
+  //       LLVMBuildArrayAlloca(builder, element_type, size_const,
+  //       "element_ptr");
+  // } else {
+  //   data_ptr =
+  //       LLVMBuildArrayMalloc(builder, element_type, size_const,
+  //       "element_ptr");
+  // }
 
   data_ptr =
       LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");

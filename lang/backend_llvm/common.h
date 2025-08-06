@@ -5,7 +5,7 @@
 #include "ht.h"
 #include "parse.h"
 #include "types/type.h"
-#include "llvm-c/Types.h"
+#include <llvm-c/Types.h>
 
 #define STACK_MAX 256
 

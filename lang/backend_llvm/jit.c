@@ -74,9 +74,9 @@ static Ast *top_level_ast(Ast *body) {
   return last;
 }
 
-static int eval_script(const char *filename, JITLangCtx *ctx,
-                       LLVMModuleRef module, LLVMBuilderRef builder,
-                       LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog);
+static void *eval_script(const char *filename, JITLangCtx *ctx,
+                         LLVMModuleRef module, LLVMBuilderRef builder,
+                         LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog);
 
 int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
                       LLVMModuleRef module) {
@@ -110,9 +110,9 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
   return 0;
 }
 
-static int eval_script(const char *filename, JITLangCtx *ctx,
-                       LLVMModuleRef module, LLVMBuilderRef builder,
-                       LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog) {
+static void *eval_script(const char *filename, JITLangCtx *ctx,
+                         LLVMModuleRef module, LLVMBuilderRef builder,
+                         LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog) {
 
   __import_current_dir = get_dirname(filename);
 
@@ -166,6 +166,9 @@ static int eval_script(const char *filename, JITLangCtx *ctx,
 
   LLVMValueRef top_level_func =
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
+  if (config.debug_ir_pre) {
+    LLVMDumpModule(module);
+  }
   module_passes(module, target_machine);
 
   LLVMExecutionEngineRef engine;
@@ -176,8 +179,11 @@ static int eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   LLVMGenericValueRef exec_args[] = {};
-  if (config.debug_codegen) {
+  if (config.debug_ir) {
     LLVMDumpModule(module);
+  }
+
+  if (config.debug_codegen) {
     dump_assembly(module);
   }
 
@@ -229,7 +235,8 @@ void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
 
   LLVMErrorRef err =
-      LLVMRunPasses(module, "default<O2>", target_machine, options);
+      LLVMRunPasses(module, config.opt_level ? config.opt_level : "default<O3>",
+                    target_machine, options);
 
   if (err) {
     char *msg = LLVMGetErrorMessage(err);
@@ -297,12 +304,20 @@ int jit(int argc, char **argv) {
 
   int arg_counter = 1;
   config.base_libs_dir = getenv("YLC_BASE_DIR");
+  int scripts = 0;
   while (arg_counter < argc) {
     if (strcmp(argv[arg_counter], "-i") == 0) {
       config.interactive_mode = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--debug-codegen") == 0) {
+      config.debug_ir = true;
       config.debug_codegen = true;
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "--debug-ir") == 0) {
+      config.debug_ir = true;
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "--debug-ir-pre") == 0) {
+      config.debug_ir_pre = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module
@@ -312,6 +327,18 @@ int jit(int argc, char **argv) {
       arg_counter++;
       config.base_libs_dir = argv[arg_counter];
       arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-O0") == 0) {
+      config.opt_level = "default<O0>";
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-O1") == 0) {
+      config.opt_level = "default<O1>";
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-O2") == 0) {
+      config.opt_level = "default<O2>";
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-O3") == 0) {
+      config.opt_level = "default<O3>";
+      arg_counter++;
     } else {
 
       Ast *script_prog;
@@ -319,7 +346,12 @@ int jit(int argc, char **argv) {
       eval_script(argv[arg_counter], &ctx, module, builder, context, &env,
                   &script_prog);
       arg_counter++;
+      scripts = 1;
     }
+  }
+
+  if (argc == 1 || !scripts) {
+    config.interactive_mode = true;
   }
 
   if (config.interactive_mode) {
@@ -334,8 +366,11 @@ int jit(int argc, char **argv) {
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
                          "version 0.0.0     \n"
-                         "module base directory: %s\n" STYLE_RESET_ALL,
-           config.base_libs_dir == NULL ? "./" : config.base_libs_dir);
+                         "module base directory: %s\n"
+                         "Opt level: %s\n" STYLE_RESET_ALL,
+
+           config.base_libs_dir == NULL ? "./" : config.base_libs_dir,
+           config.opt_level ? config.opt_level : "default<O3>");
 
     init_readline();
 

@@ -14,7 +14,7 @@ import lib/Math;
 
 let q = 60. / 130.;
 let Kick = module
-  let buf = load_soundfile "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Kick11.wav";
+  let buf = load_soundfile "./engine/assets/kick.wav";
   let synth = (fn () ->
     let trig = inlet 0.; # 0
     bufplayer_trig_node (buf_ref buf) ( 44100. / 48000. ) (inlet 0.) trig # 3 
@@ -40,7 +40,7 @@ let Kick = module
 
 let Snare = module
 
-  let buf = load_soundfile  "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Snare03.wav";
+  let buf = load_soundfile  "./engine/assets/snare.wav";
   let synth = (fn () ->
     let trig = inlet 0.; # 0
     bufplayer_trig_node (buf_ref buf) (44100. / 48000.) 0. trig # 3 
@@ -79,7 +79,7 @@ let Snare = module
 
 let Hihat = module
 
-  let closed_hh_buf = load_soundfile "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Closedhat12.wav";
+  let closed_hh_buf = load_soundfile "./engine/assets/hihat_closed.wav";
   let closed_hh = (fn () ->
     let trig = inlet 0.; # 0
     let imp = lfpulse_node 0. (inlet 0.) trig; # 1
@@ -93,7 +93,7 @@ let Hihat = module
     set_input_scalar_offset closed_hh 1 (get_current_sample ()) (Math.unipolar_scale 0. (8. / q) val)  
   );
 
-  let open_hh_buf = load_soundfile  "/Users/adam/Desktop/musicradar-techno-drum-fx-samples/Drum_Hits/Openhat02.wav";
+  let open_hh_buf = load_soundfile  "./engine/assets/hihat_open.wav";
   let open_hh = (fn () ->
     let trig = inlet 0.; # 0
     let imp = lfpulse_node 0. (inlet 0.) trig; # 1
@@ -155,13 +155,13 @@ let snrout = fn () ->
   yield snrout ()
 ;;
 
-let bin_pat = fn q: (Double) f d ->
-  match d with
-  | 1 -> f () 
-  | 0 -> ()
-  ;
-  q
-;;
+# let bin_pat = fn q: (Double) f d ->
+#   match d with
+#   | 1 -> f () 
+#   | 0 -> ()
+#   ;
+#   q
+# ;;
 
 
 defer_quant (q * 1) (fn t ->
@@ -206,25 +206,3 @@ let fx_chain = (fn () ->
 
 Snare.synth |> pipe_into fx_chain 0;
 
-#
-# (fn () -> 
-#   let trig = inlet 0.; # 0
-#   let imp = lfpulse_node 0. (inlet 0.) trig; # 1
-#   let gate = inlet 0.; # 2
-#   bufplayer_trig_node (buf_ref (Kick.buf)) (44100./ 48000.) (inlet 0.) imp # 3 
-#   |> (*) (aslr_node 0. 4. 0.2 0.1 trig)
-#   |> tanh_node 2.
-# )
-# |> compile_blob_template
-# |> instantiate_template []
-# |> node_replace (Kick.synth)
-  # iter [3., 3., 3., 4., 3.]  
-  # |> cor_loop
-  # |> cor_map ((*) (q * 0.25))
-  # |> cor_map (fn d -> Kick.trig (); d)
-  # |> Kick.set_pattern t
-  # ;
-# (
-#   open gui/bindings/Gui;
-#   create_vst_view (handle[0])
-# );
