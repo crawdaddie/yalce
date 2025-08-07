@@ -12,9 +12,13 @@ void set_base_dir(const char *dir) { __base_dir = dir; }
 
 const char *__filename;
 char *_cur_script;
-// const char *_cur_script_content;
-static void *palloc(size_t size) { return malloc(size); }
-static void *prealloc(void *p, size_t size) { return realloc(p, size); }
+const char *_cur_script_content;
+
+static void *__palloc(size_t size) { return malloc(size); }
+static void *__prealloc(void *p, size_t size) { return realloc(p, size); }
+
+AllocatorFnType palloc = __palloc;
+ReAllocatorFnType prealloc = __prealloc;
 
 custom_binops_t *__custom_binops = NULL;
 
@@ -188,7 +192,7 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
   }
 
   node->data.AST_APPLICATION.function = function;
-  node->data.AST_APPLICATION.args = malloc(sizeof(Ast) * 2);
+  node->data.AST_APPLICATION.args = palloc(sizeof(Ast) * 2);
   node->data.AST_APPLICATION.args[0] = *left;
   node->data.AST_APPLICATION.args[1] = *right;
   node->data.AST_APPLICATION.len = 2;
@@ -201,7 +205,7 @@ Ast *ast_unop(token_type op, Ast *right) {
     Ast *node = Ast_new(AST_APPLICATION);
     node->data.AST_APPLICATION.function =
         ast_identifier((ObjString){"deref", 5});
-    node->data.AST_APPLICATION.args = malloc(sizeof(Ast));
+    node->data.AST_APPLICATION.args = palloc(sizeof(Ast));
     node->data.AST_APPLICATION.args[0] = *right;
     node->data.AST_APPLICATION.len = 1;
     return node;
@@ -210,7 +214,7 @@ Ast *ast_unop(token_type op, Ast *right) {
     Ast *node = Ast_new(AST_APPLICATION);
     node->data.AST_APPLICATION.function =
         ast_identifier((ObjString){"addrof", 6});
-    node->data.AST_APPLICATION.args = malloc(sizeof(Ast) * 1);
+    node->data.AST_APPLICATION.args = palloc(sizeof(Ast) * 1);
     node->data.AST_APPLICATION.args[0] = *right;
     node->data.AST_APPLICATION.len = 1;
     return node;

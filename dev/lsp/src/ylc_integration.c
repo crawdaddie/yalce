@@ -69,13 +69,10 @@ struct json_object *parse_ylc_document(const char *content,
   struct json_object *result = json_object_new_object();
   struct json_object *diagnostics = json_object_new_array();
 
-  const char *content_copy = content;
-
   char *dirname = get_dirname(filename ? filename : ".");
 
   ylc_lsp_init_with_dir(dirname);
 
-  // Parse using YLC's parser
   yylineno = 1;
   yyabsoluteoffset = 0;
 
@@ -98,6 +95,7 @@ struct json_object *parse_ylc_document(const char *content,
   TICtx ti_ctx = {.env = env, .scope = 0};
 
   ti_ctx.err_stream = stderr;
+
   if (!infer(ast, &ti_ctx)) {
     return NULL;
   }
@@ -109,23 +107,52 @@ struct json_object *parse_ylc_document(const char *content,
   return result;
 }
 
+Ast *get_doc_ast(const char *content, const char *filename) {
+
+  struct json_object *result = json_object_new_object();
+  struct json_object *diagnostics = json_object_new_array();
+
+  char *dirname = get_dirname(filename ? filename : ".");
+
+  ylc_lsp_init_with_dir(dirname);
+
+  yylineno = 1;
+  yyabsoluteoffset = 0;
+
+  ast_root = Ast_new(AST_BODY);
+  ast_root->data.AST_BODY.len = 0;
+  ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
+
+  _cur_script = filename;
+  _cur_script_content = content;
+
+  yylineno = 1;
+  yyabsoluteoffset = 0;
+  yy_scan_string(_cur_script_content);
+  yyparse();
+  Ast *ast = ast_root;
+
+  TypeEnv *env = NULL;
+
+  initialize_builtin_types();
+  TICtx ti_ctx = {.env = env, .scope = 0};
+
+  ti_ctx.err_stream = stderr;
+
+  if (!infer(ast, &ti_ctx)) {
+    return NULL;
+  }
+  if (!solve_program_constraints(ast, &ti_ctx)) {
+    return NULL;
+  }
+
+  return ast;
+}
+
 struct json_object *get_ylc_diagnostics(const char *content,
                                         const char *filename) {
-  struct json_object *parse_result = parse_ylc_document(content, filename);
-  struct json_object *diagnostics;
+  // parse_ylc_document(content, filename);
 
-  if (parse_result &&
-      json_object_object_get_ex(parse_result, "diagnostics", &diagnostics)) {
-    json_object_get(diagnostics); // Increment reference count
-    json_object_put(parse_result);
-    return diagnostics;
-  }
-
-  if (parse_result) {
-    json_object_put(parse_result);
-  }
-
-  // Return empty diagnostics array if parsing failed
   return json_object_new_array();
 }
 
@@ -185,53 +212,6 @@ struct json_object *get_ylc_hover_at_position(const char *content,
                                               const char *filename, int line,
                                               int character) {
   struct json_object *hover = json_object_new_object();
-
-  // Extract word at cursor position
-  char *word = extract_word_at_position(content, line, character);
-  if (!word) {
-    // No word found at position
-    struct json_object *contents = json_object_new_object();
-    json_object_object_add(contents, "kind",
-                           json_object_new_string("markdown"));
-    json_object_object_add(contents, "value",
-                           json_object_new_string("No symbol found"));
-    json_object_object_add(hover, "contents", contents);
-    return hover;
-  }
-
-  char *dirname = strdup(filename ? filename : ".");
-  char *last_slash = strrchr(dirname, '/');
-  if (last_slash) {
-    *last_slash = '\0';
-  } else {
-    strcpy(dirname, ".");
-  }
-
-  char hover_text[512];
-
-  // Simple heuristic-based hints for common YLC patterns
-  if (strcmp(word, "let") == 0) {
-    snprintf(hover_text, sizeof(hover_text),
-             "**let**\n\nVariable binding keyword");
-  } else if (strcmp(word, "fn") == 0) {
-    snprintf(hover_text, sizeof(hover_text),
-             "**fn**\n\nFunction definition keyword");
-  } else if (strcmp(word, "match") == 0) {
-    snprintf(hover_text, sizeof(hover_text),
-             "**match**\n\nPattern matching keyword");
-  } else if (strcmp(word, "if") == 0) {
-    snprintf(hover_text, sizeof(hover_text), "**if**\n\nConditional keyword");
-  } else {
-    snprintf(hover_text, sizeof(hover_text), "**%s**\n\nYLC identifier", word);
-  }
-
-  struct json_object *contents = json_object_new_object();
-  json_object_object_add(contents, "kind", json_object_new_string("markdown"));
-  json_object_object_add(contents, "value", json_object_new_string(hover_text));
-  json_object_object_add(hover, "contents", contents);
-
-  free(word);
-  free(dirname);
   return hover;
 }
 
@@ -241,35 +221,6 @@ struct json_object *get_ylc_completions_at_position(const char *content,
   // TODO: Implement actual completions using YLC symbol table
 
   struct json_object *completions = json_object_new_array();
-
-  // Add YLC keywords
-  const char *keywords[] = {
-      "let",    "fn",    "match", "if",    "else",   "import", "extern", "type",
-      "struct", "trait", "impl",  "yield", "return", "true",   "false",  "nil"};
-  int num_keywords = sizeof(keywords) / sizeof(keywords[0]);
-
-  for (int i = 0; i < num_keywords; i++) {
-    struct json_object *item = json_object_new_object();
-    json_object_object_add(item, "label", json_object_new_string(keywords[i]));
-    json_object_object_add(item, "kind", json_object_new_int(14)); // Keyword
-    json_object_object_add(item, "detail",
-                           json_object_new_string("YLC keyword"));
-    json_object_array_add(completions, item);
-  }
-
-  // Add built-in types
-  const char *types[] = {"int", "double", "string", "bool", "array", "list"};
-  int num_types = sizeof(types) / sizeof(types[0]);
-
-  for (int i = 0; i < num_types; i++) {
-    struct json_object *item = json_object_new_object();
-    json_object_object_add(item, "label", json_object_new_string(types[i]));
-    json_object_object_add(item, "kind",
-                           json_object_new_int(25)); // TypeParameter
-    json_object_object_add(item, "detail",
-                           json_object_new_string("Built-in type"));
-    json_object_array_add(completions, item);
-  }
 
   return completions;
 }

@@ -26,12 +26,12 @@ YLC_OBJECTS = \
 	$(YLC_BUILD_DIR)/serde.o
 
 SRC_DIR = src
-BUILD_DIR = ../../build/dev/lsp
+BUILD_DIR = build
 INCLUDE_DIR = include
 
 SOURCES = $(wildcard $(SRC_DIR)/*.c)
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
-TARGET = $(BUILD_DIR)/ylc-lsp-server
+TARGET = $(BUILD_DIR)/lsp-server
 
 .PHONY: all clean directories
 

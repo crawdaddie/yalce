@@ -5,6 +5,11 @@
 #include <stdio.h>
 typedef struct Ast Ast;
 
+typedef void *(*AllocatorFnType)(size_t size);
+typedef void *(*ReAllocatorFnType)(void *p, size_t size);
+extern AllocatorFnType palloc;
+extern ReAllocatorFnType prealloc;
+
 void set_base_dir(const char *);
 
 typedef struct custom_binops_t {

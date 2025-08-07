@@ -350,7 +350,7 @@ void add_or_update_document(LSPServer *server, const char *uri,
     free(doc->content);
     doc->content = strdup(content);
     doc->version = version;
-    doc->cached_ast = NULL;  // Invalidate cache
+    doc->cached_ast = NULL; // Invalidate cache
     doc->cached_type_env = NULL;
   } else {
     // Add new document
@@ -383,15 +383,18 @@ void remove_document(LSPServer *server, const char *uri) {
 // Language analysis functions
 struct json_object *analyze_document(LSPServer *server, const char *uri) {
   DocumentInfo *doc = find_document(server, uri);
+
   if (!doc) {
     return json_object_new_array();
   }
 
   char *filename = uri_to_filename(uri);
+
   struct json_object *diagnostics = get_ylc_diagnostics(doc->content, filename);
   free(filename);
 
-  return diagnostics;
+  if (doc->cached_ast)
+    return diagnostics;
 }
 
 struct json_object *get_hover_info(LSPServer *server, const char *uri, int line,
