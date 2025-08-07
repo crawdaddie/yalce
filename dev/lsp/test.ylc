@@ -1,0 +1,8 @@
+let x = 42
+let y = "hello"
+
+fn add(a: int, b: int) -> int {
+  a + b
+}
+
+let result = add(x, 10)

@@ -1,0 +1,49 @@
+{
+  "name": "YLC Language Server",
+  "description": "Language Server Protocol implementation for the YLC programming language",
+  "version": "0.1.0",
+  "publisher": "ylc-team",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "ylc",
+      "aliases": ["YLC", "ylc"],
+      "extensions": [".ylc"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "ylc",
+      "scopeName": "source.ylc",
+      "path": "./syntaxes/ylc.tmLanguage.json"
+    }],
+    "configuration": {
+      "type": "object",
+      "title": "YLC",
+      "properties": {
+        "ylc.lsp.serverPath": {
+          "type": "string",
+          "default": "./build/dev/lsp/ylc-lsp-server",
+          "description": "Path to the YLC language server executable"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  }
+}
