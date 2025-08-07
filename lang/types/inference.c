@@ -259,9 +259,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
           next->next =
               ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
           ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers = next;
-          printf("IDENTIFIER crosses boundary\n");
-          print_ast(ast);
-          printf("fn param %d\n", ref->is_fn_param);
           ctx->current_fn_ast->data.AST_LAMBDA.num_yield_boundary_crossers++;
         }
       }

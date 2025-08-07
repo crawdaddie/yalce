@@ -113,8 +113,8 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef alloc_size =
       LLVMBuildMul(builder, total_size, node_size, "alloc_size");
 
-  // Allocate memory for all nodes at once
-  LLVMValueRef memory_block;
+  // Allocate memory for all nodes at once???
+  // LLVMValueRef memory_block;
   // TODO: use proper allocation strategy
   // if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
   //   memory_block = LLVMBuildAlloca(builder, LLVMArrayType(node_type, len),
@@ -124,8 +124,13 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   //                                  "list_memory_block");
   // }
   //
-  memory_block = LLVMBuildMalloc(builder, LLVMArrayType(node_type, len),
-                                 "list_memory_block");
+  // memory_block = LLVMBuildMalloc(builder, LLVMArrayType(node_type, len),
+  //                                "list_memory_block");
+  LLVMValueRef mem[len];
+  for (int i = 0; i < len; i++) {
+    mem[i] =
+        LLVMBuildMalloc(builder, node_type, "list_el_memory_non_contiguous");
+  }
 
   // Create and link all nodes
   LLVMValueRef current_node = NULL;
@@ -145,17 +150,19 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       // Perform the bitcast
       item_value =
-          LLVMBuildBitCast(builder, item_value, func_ptr_type, "func_ptr_cast");
+          LLVMBuildBitCast(builder, item_value, GENERIC_PTR, "func_ptr_cast");
     }
 
     // Calculate pointer to current node memory location
-    LLVMValueRef indices[2];
-    indices[0] = LLVMConstInt(LLVMInt32Type(), 0, 0); // Array base
-    indices[1] = LLVMConstInt(LLVMInt32Type(), i, 0); // Array index
-    LLVMValueRef node_ptr =
-        LLVMBuildGEP2(builder, LLVMArrayType(node_type, len), memory_block,
-                      indices, 2, "node_ptr");
+    // LLVMValueRef indices[2];
+    // indices[0] = LLVMConstInt(LLVMInt32Type(), 0, 0); // Array base
+    // indices[1] = LLVMConstInt(LLVMInt32Type(), i, 0); // Array index
+    // LLVMValueRef node_ptr =
+    //     LLVMBuildGEP2(builder, LLVMArrayType(node_type, len), memory_block,
+    //                   indices, 2, "node_ptr");
 
+    // current_node = node_ptr;
+    LLVMValueRef node_ptr = mem[i];
     current_node = node_ptr;
 
     LLVMValueRef data_ptr =

@@ -12,7 +12,7 @@ let uniformref_set = fn data: (Array of Double) obj: (Ptr) ->
   set_uniform obj (cstr data)
 ;;
 
-let pos_ref = [|empty_coroutine ()|];
+let pos_ref = [| cstr "" |];
 
 let stars_fb = fn () ->
   let vs = VShader `#version 330 core

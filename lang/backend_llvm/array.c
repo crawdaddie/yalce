@@ -119,6 +119,9 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
                                     "array_data_alloc");
   }
 
+  // data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
+  //                                 "array_data_alloc");
+
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                       "insert_array_size");
 

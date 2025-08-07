@@ -723,14 +723,9 @@ LLVMTypeRef get_coro_state_layout(Ast *ast, JITLangCtx *ctx,
   if (args_len > 0) {
     Type *ftype = ast->md;
 
-    printf("STATE LAYOUT %d\n", state_len);
     for (int i = 0; i < args_len; i++) {
       Type *from = ftype->data.T_FN.from;
-      printf("%d: ", i);
-      print_type(from);
       t[i] = type_to_llvm_type(ftype->data.T_FN.from, ctx, module);
-      LLVMDumpType(t[i]);
-      printf("\n");
       ftype = ftype->data.T_FN.to;
     }
   }
