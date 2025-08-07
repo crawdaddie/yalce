@@ -107,8 +107,8 @@ void ylc_lsp_init() {
 
   // Reset lexer state
   yylineno = 1;
-  yycolumn = 1;
-  yyprevcolumn = 1;
+  // yycolumn = 1;
+  // yyprevcolumn = 1;
   yyabsoluteoffset = 0;
   yyprevoffset = 0;
   yytext = NULL;

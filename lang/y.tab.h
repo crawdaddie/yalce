@@ -35,59 +35,59 @@
 
 /* Tokens.  */
 #ifndef YYTOKENTYPE
-# define YYTOKENTYPE
-   /* Put the tokens into the symbol table, so that GDB and other debuggers
-      know about them.  */
-   enum yytokentype {
-     INTEGER = 258,
-     DOUBLE = 259,
-     IDENTIFIER = 260,
-     MACRO_IDENTIFIER = 261,
-     PATH_IDENTIFIER = 262,
-     IDENTIFIER_LIST = 263,
-     TOK_STRING = 264,
-     TOK_CHAR = 265,
-     TRUE = 266,
-     FALSE = 267,
-     PIPE = 268,
-     EXTERN = 269,
-     TRIPLE_DOT = 270,
-     LET = 271,
-     FN = 272,
-     MATCH = 273,
-     WITH = 274,
-     ARROW = 275,
-     DOUBLE_COLON = 276,
-     TOK_VOID = 277,
-     IN = 278,
-     AND = 279,
-     ASYNC = 280,
-     DOUBLE_AT = 281,
-     THUNK = 282,
-     IMPORT = 283,
-     OPEN = 284,
-     IMPLEMENTS = 285,
-     AMPERSAND = 286,
-     TYPE = 287,
-     TEST_ID = 288,
-     MUT = 289,
-     THEN = 290,
-     ELSE = 291,
-     FSTRING_START = 292,
-     FSTRING_END = 293,
-     FSTRING_INTERP_START = 294,
-     FSTRING_INTERP_END = 295,
-     FSTRING_TEXT = 296,
-     APPLICATION = 297,
-     DOUBLE_PIPE = 298,
-     DOUBLE_AMP = 299,
-     NE = 300,
-     EQ = 301,
-     LE = 302,
-     GE = 303,
-     MODULO = 304,
-     UMINUS = 305
-   };
+#define YYTOKENTYPE
+/* Put the tokens into the symbol table, so that GDB and other debuggers
+   know about them.  */
+enum yytokentype {
+  INTEGER = 258,
+  DOUBLE = 259,
+  IDENTIFIER = 260,
+  MACRO_IDENTIFIER = 261,
+  PATH_IDENTIFIER = 262,
+  IDENTIFIER_LIST = 263,
+  TOK_STRING = 264,
+  TOK_CHAR = 265,
+  TRUE = 266,
+  FALSE = 267,
+  PIPE = 268,
+  EXTERN = 269,
+  TRIPLE_DOT = 270,
+  LET = 271,
+  FN = 272,
+  MATCH = 273,
+  WITH = 274,
+  ARROW = 275,
+  DOUBLE_COLON = 276,
+  TOK_VOID = 277,
+  IN = 278,
+  AND = 279,
+  ASYNC = 280,
+  DOUBLE_AT = 281,
+  THUNK = 282,
+  IMPORT = 283,
+  OPEN = 284,
+  IMPLEMENTS = 285,
+  AMPERSAND = 286,
+  TYPE = 287,
+  TEST_ID = 288,
+  MUT = 289,
+  THEN = 290,
+  ELSE = 291,
+  FSTRING_START = 292,
+  FSTRING_END = 293,
+  FSTRING_INTERP_START = 294,
+  FSTRING_INTERP_END = 295,
+  FSTRING_TEXT = 296,
+  APPLICATION = 297,
+  DOUBLE_PIPE = 298,
+  DOUBLE_AMP = 299,
+  NE = 300,
+  EQ = 301,
+  LE = 302,
+  GE = 303,
+  MODULO = 304,
+  UMINUS = 305
+};
 #endif
 /* Tokens.  */
 #define INTEGER 258
@@ -139,41 +139,37 @@
 #define MODULO 304
 #define UMINUS 305
 
-
-
-
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
+#if !defined YYSTYPE && !defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
 #line 31 "lang/parser.y"
 {
-    Ast *ast_node_ptr;          /* node pointer */
-    ObjString vident;           /* identifier */
-    ObjString vstr;             /* string */
-    int vint;                   /* int val */
-    double vdouble;
-    char vchar;
+  Ast *ast_node_ptr; /* node pointer */
+  ObjString vident;  /* identifier */
+  ObjString vstr;    /* string */
+  int vint;          /* int val */
+  double vdouble;
+  char vchar;
 }
 /* Line 1529 of yacc.c.  */
 #line 158 "lang/y.tab.h"
-	YYSTYPE;
-# define yystype YYSTYPE /* obsolescent; will be withdrawn */
-# define YYSTYPE_IS_DECLARED 1
-# define YYSTYPE_IS_TRIVIAL 1
+YYSTYPE;
+#define yystype YYSTYPE /* obsolescent; will be withdrawn */
+#define YYSTYPE_IS_DECLARED 1
+#define YYSTYPE_IS_TRIVIAL 1
 #endif
 
 extern YYSTYPE yylval;
 
-#if ! defined YYLTYPE && ! defined YYLTYPE_IS_DECLARED
-typedef struct YYLTYPE
-{
+#if !defined YYLTYPE && !defined YYLTYPE_IS_DECLARED
+typedef struct YYLTYPE {
   int first_line;
   int first_column;
   int last_line;
   int last_column;
 } YYLTYPE;
-# define yyltype YYLTYPE /* obsolescent; will be withdrawn */
-# define YYLTYPE_IS_DECLARED 1
-# define YYLTYPE_IS_TRIVIAL 1
+#define yyltype YYLTYPE /* obsolescent; will be withdrawn */
+#define YYLTYPE_IS_DECLARED 1
+#define YYLTYPE_IS_TRIVIAL 1
 #endif
 
 extern YYLTYPE yylloc;

@@ -12,7 +12,7 @@ void set_base_dir(const char *dir) { __base_dir = dir; }
 
 const char *__filename;
 char *_cur_script;
-const char *_cur_script_content;
+// const char *_cur_script_content;
 static void *palloc(size_t size) { return malloc(size); }
 static void *prealloc(void *p, size_t size) { return realloc(p, size); }
 
@@ -345,8 +345,11 @@ Ast *parse_input(char *input, const char *dirname) {
 
   _cur_script = "tmp.ylc";
   _cur_script_content = input;
+  fprintf(stderr, "about to scan string\n");
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
+  //
+  fprintf(stderr, "after yyparse\n");
 
   Ast *res = ast_root;
   if (prev != NULL) {

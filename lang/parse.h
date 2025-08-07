@@ -24,6 +24,7 @@ extern long long int yyabsoluteoffset;
 extern long long int yyprevoffset;
 
 extern char *_cur_script;
+extern const char *_cur_script_content;
 int yyparse();
 void yyrestart(FILE *);
 

@@ -8,9 +8,13 @@
 
 // Include YLC headers
 #include "common.h"
+#include "input.h"
 #include "parse.h"
 #include "types/inference.h"
 #include "types/type.h"
+#include "y.tab.h"
+
+void *yy_scan_string(const char *yystr);
 
 // Forward declaration of our initialization function from ylc_stubs.c
 void ylc_lsp_init();
@@ -61,67 +65,46 @@ struct json_object *create_diagnostic(int line, int column, int severity,
 
 struct json_object *parse_ylc_document(const char *content,
                                        const char *filename) {
-  fprintf(stderr, "DEBUG: parse_ylc_document called with filename: %s\n",
-          filename ? filename : "NULL");
-  fflush(stderr);
 
   struct json_object *result = json_object_new_object();
   struct json_object *diagnostics = json_object_new_array();
 
-  fprintf(stderr, "DEBUG: Making content copy\n");
-  fflush(stderr);
+  const char *content_copy = content;
 
-  // Make a mutable copy of content since parse_input may modify it
-  char *content_copy = strdup(content);
-  if (!content_copy) {
-    fprintf(stderr, "DEBUG: Failed to copy content\n");
-    fflush(stderr);
-    json_object_object_add(result, "diagnostics", diagnostics);
-    return result;
-  }
+  char *dirname = get_dirname(filename ? filename : ".");
 
-  fprintf(stderr, "DEBUG: Processing dirname\n");
-  fflush(stderr);
-
-  // Get directory from filename for module resolution
-  char *dirname = strdup(filename ? filename : ".");
-  char *last_slash = strrchr(dirname, '/');
-  if (last_slash) {
-    *last_slash = '\0';
-  } else {
-    strcpy(dirname, ".");
-  }
-
-  fprintf(stderr, "DEBUG: About to call parse_input with dirname: %s\n",
-          dirname);
-  fflush(stderr);
-
-  // Initialize YLC globals before parsing with the correct base directory
   ylc_lsp_init_with_dir(dirname);
 
-  fprintf(stderr,
-          "DEBUG: YLC initialized with base_dir=%s, calling parse_input\n",
-          dirname);
-  fflush(stderr);
-
   // Parse using YLC's parser
-  Ast *ast = parse_input(content_copy, dirname);
+  yylineno = 1;
+  yyabsoluteoffset = 0;
 
-  fprintf(stderr, "DEBUG: parse_input returned: %p\n", (void *)ast);
-  fflush(stderr);
+  ast_root = Ast_new(AST_BODY);
+  ast_root->data.AST_BODY.len = 0;
+  ast_root->data.AST_BODY.stmts = malloc(sizeof(Ast *));
 
-  if (ast == NULL) {
-    // Parse error occurred
-    struct json_object *error =
-        create_diagnostic(0, 0, 1, "Parse error in YLC code", "parse_error");
-    json_object_array_add(diagnostics, error);
-  } else {
-    // Successfully parsed - could add more sophisticated analysis here
-    // For now, just return empty diagnostics for successful parse
+  _cur_script = filename;
+  _cur_script_content = content;
+
+  yylineno = 1;
+  yyabsoluteoffset = 0;
+  yy_scan_string(_cur_script_content);
+  yyparse();
+  Ast *ast = ast_root;
+
+  TypeEnv *env = NULL;
+
+  initialize_builtin_types();
+  TICtx ti_ctx = {.env = env, .scope = 0};
+
+  ti_ctx.err_stream = stderr;
+  if (!infer(ast, &ti_ctx)) {
+    return NULL;
+  }
+  if (!solve_program_constraints(ast, &ti_ctx)) {
+    return NULL;
   }
 
-  free(content_copy);
-  free(dirname);
   json_object_object_add(result, "diagnostics", diagnostics);
   return result;
 }
@@ -216,7 +199,6 @@ struct json_object *get_ylc_hover_at_position(const char *content,
     return hover;
   }
 
-  // Parse and analyze the document
   char *dirname = strdup(filename ? filename : ".");
   char *last_slash = strrchr(dirname, '/');
   if (last_slash) {
@@ -225,17 +207,18 @@ struct json_object *get_ylc_hover_at_position(const char *content,
     strcpy(dirname, ".");
   }
 
-  // PERFORMANCE FIX: Skip expensive parsing/type inference for now
-  // Provide fast, basic hover information instead
   char hover_text[512];
-  
+
   // Simple heuristic-based hints for common YLC patterns
   if (strcmp(word, "let") == 0) {
-    snprintf(hover_text, sizeof(hover_text), "**let**\n\nVariable binding keyword");
+    snprintf(hover_text, sizeof(hover_text),
+             "**let**\n\nVariable binding keyword");
   } else if (strcmp(word, "fn") == 0) {
-    snprintf(hover_text, sizeof(hover_text), "**fn**\n\nFunction definition keyword");  
+    snprintf(hover_text, sizeof(hover_text),
+             "**fn**\n\nFunction definition keyword");
   } else if (strcmp(word, "match") == 0) {
-    snprintf(hover_text, sizeof(hover_text), "**match**\n\nPattern matching keyword");
+    snprintf(hover_text, sizeof(hover_text),
+             "**match**\n\nPattern matching keyword");
   } else if (strcmp(word, "if") == 0) {
     snprintf(hover_text, sizeof(hover_text), "**if**\n\nConditional keyword");
   } else {
