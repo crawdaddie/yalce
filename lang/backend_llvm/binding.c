@@ -19,6 +19,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
                                 Type *list_type, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+  printf("match list prepend\n");
+  print_ast(binding);
+
   Ast *head_expr = binding->data.AST_APPLICATION.args;
   Ast *tail_expr = binding->data.AST_APPLICATION.args + 1;
 
@@ -30,9 +33,9 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
   LLVMTypeRef llvm_list_el_type =
       list_el_type->kind == T_FN ? GENERIC_PTR
                                  : type_to_llvm_type(list_el_type, ctx, module);
+
   LLVMValueRef list_empty = ll_is_null(list, llvm_list_el_type, builder);
 
-  // Create blocks for the branch
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
   LLVMBasicBlockRef match_block =
@@ -40,13 +43,10 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
   LLVMBasicBlockRef merge_block =
       LLVMAppendBasicBlock(function, "binding.list.merge");
 
-  // Branch based on list_empty
   LLVMBuildCondBr(builder, list_empty, merge_block, match_block);
 
-  // Build the match block for non-empty list
   LLVMPositionBuilderAtEnd(builder, match_block);
 
-  // Match head and tail
   LLVMValueRef head_match = codegen_pattern_binding(
       head_expr, ll_get_head_val(list, llvm_list_el_type, builder),
       list_el_type, ctx, module, builder);
@@ -55,18 +55,15 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
       tail_expr, ll_get_next(list, llvm_list_el_type, builder), list_type, ctx,
       module, builder);
 
-  // Combine the results
   LLVMValueRef match_result =
       LLVMBuildAnd(builder, head_match, tail_match, "binding.list.result");
 
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef match_end_block = LLVMGetInsertBlock(builder);
 
-  // Build merge block with phi node
   LLVMPositionBuilderAtEnd(builder, merge_block);
   LLVMValueRef phi = LLVMBuildPhi(builder, LLVMInt1Type(), "result");
 
-  // Set up phi node inputs
   LLVMValueRef false_const = LLVMConstInt(LLVMInt1Type(), 0, 0);
   LLVMValueRef incoming_values[] = {match_result, false_const};
   LLVMBasicBlockRef incoming_blocks[] = {match_end_block, current_block};
@@ -86,9 +83,12 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     }
 
     JITSymbol *sym = lookup_id_ast(binding, ctx);
+
     if (sym && sym->storage) {
 
       LLVMValueRef storage = sym->storage;
+      print_ast(binding);
+      printf("storage exists\n");
       LLVMBuildStore(builder, val, storage);
       sym->val = val;
       return _TRUE;

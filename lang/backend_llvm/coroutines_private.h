@@ -16,6 +16,7 @@ typedef struct {
   LLVMValueRef switch_ref;
   LLVMValueRef func;
   LLVMTypeRef state_layout;
+  const char *name;
 } CoroutineCtx;
 
 LLVMValueRef coro_counter(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
