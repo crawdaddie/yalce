@@ -4,5 +4,8 @@
 #include "type.h"
 Type *type_declaration(Ast *ast, TypeEnv **env);
 
-Type *compute_type_expression(Ast *expr, TypeEnv *env, TypeEnv **env_to_update);
+typedef struct {
+  TypeEnv *env;
+} TDCtx;
+Type *compute_type_expression(Ast *expr, TDCtx *ctx);
 #endif

@@ -311,13 +311,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
     int params_count = sig->data.AST_LIST.len - 1;
 
     if (sig->tag == AST_FN_SIGNATURE) {
+      TDCtx tdctx = {.env = ctx->env};
       Type *f = compute_type_expression(sig->data.AST_LIST.items + params_count,
-                                        ctx->env, NULL);
+                                        &tdctx);
       sig->data.AST_LIST.items[params_count].md = f;
 
       for (int i = params_count - 1; i >= 0; i--) {
-        Type *p = compute_type_expression(sig->data.AST_LIST.items + i,
-                                          ctx->env, NULL);
+        TDCtx tdctx = {.env = ctx->env};
+        Type *p = compute_type_expression(sig->data.AST_LIST.items + i, &tdctx);
 
         sig->data.AST_LIST.items[i].md = p;
 
@@ -801,7 +802,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
     Type *param_type;
     if (def != NULL) {
-      param_type = compute_type_expression(def, body_ctx.env, &body_ctx.env);
+      TDCtx ctx = {.env = body_ctx.env};
+      param_type = compute_type_expression(def, &ctx);
     } else {
       param_type = infer_pattern(param, &body_ctx);
     }
