@@ -117,6 +117,22 @@ double tc_impl_rank(Ast *ast) {
   return 0.;
 }
 
+void extern_fn_arg_type_expression(Ast *expr, AstList **_traits) {
+  AstList *traits = NULL;
+  if (expr->tag == AST_LET) {
+    Ast *trait_expr = expr->data.AST_LET.expr;
+    expr = expr->data.AST_LET.binding;
+
+    while (trait_expr->tag == AST_LET) {
+      traits = ast_list_extend_left(traits, trait_expr->data.AST_LET.binding);
+      trait_expr = trait_expr->data.AST_LET.expr;
+    }
+
+    traits = ast_list_extend_left(traits, trait_expr);
+  }
+  *_traits = traits;
+}
+
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
   switch (ast->tag) {
@@ -312,13 +328,38 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     if (sig->tag == AST_FN_SIGNATURE) {
       TDCtx tdctx = {.env = ctx->env};
-      Ast *ret_expr = sig->data.AST_LIST.items + params_count;
+      Ast *expr = sig->data.AST_LIST.items + params_count;
 
-      if (ret_expr->tag == AST_LET) {
-        ret_expr = ret_expr->data.AST_LET.binding;
+      AstList *traits = NULL;
+      if (expr->tag == AST_LET) {
+        Ast *trait_expr = expr->data.AST_LET.expr;
+        expr = expr->data.AST_LET.binding;
+
+        while (trait_expr->tag == AST_LET) {
+          traits =
+              ast_list_extend_left(traits, trait_expr->data.AST_LET.binding);
+          trait_expr = trait_expr->data.AST_LET.expr;
+        }
+
+        traits = ast_list_extend_left(traits, trait_expr);
       }
-      Type *f = compute_type_expression(ret_expr, &tdctx);
-      print_type(f);
+
+      Type *f = compute_type_expression(expr, &tdctx);
+      if (traits) {
+        f = deep_copy_type(f);
+      }
+
+      while (traits) {
+        Ast *name = traits->ast;
+
+        TypeClass *tc = talloc(sizeof(TypeClass));
+        *tc = (TypeClass){
+            .name = name->data.AST_IDENTIFIER.value,
+        };
+
+        typeclasses_extend(f, tc);
+        traits = traits->next;
+      }
 
       sig->data.AST_LIST.items[params_count].md = f;
 
