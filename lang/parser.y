@@ -287,6 +287,7 @@ let_binding:
   | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); }
 
   | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($2, $4, $6); }
+  | LET IDENTIFIER ':' IDENTIFIER     { $$ = ast_trait_impl($2, $4, NULL); }
   ;
 
 extern_typed_signature:

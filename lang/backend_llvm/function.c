@@ -79,18 +79,23 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     LLVMTypeRef ret_type =
         type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
+
     LLVMTypeRef llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
     return get_extern_fn(name, llvm_fn_type, module);
   }
 
+  print_ast(ast);
   for (int i = 0; i < params_count; i++) {
     Type *param_type =
         ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[i].md;
+    printf("arg %d: ", i);
+    print_type(param_type);
 
     llvm_param_types[i] = param_type->kind == T_FN
                               ? GENERIC_PTR
                               : type_to_llvm_type(param_type, ctx, module);
   }
+  printf("---\n");
   LLVMTypeRef ret_type = type_to_llvm_type(
       ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[params_count]
           .md,

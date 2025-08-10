@@ -312,13 +312,45 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     if (sig->tag == AST_FN_SIGNATURE) {
       TDCtx tdctx = {.env = ctx->env};
-      Type *f = compute_type_expression(sig->data.AST_LIST.items + params_count,
-                                        &tdctx);
+      Ast *ret_expr = sig->data.AST_LIST.items + params_count;
+
+      if (ret_expr->tag == AST_LET) {
+        ret_expr = ret_expr->data.AST_LET.binding;
+      }
+      Type *f = compute_type_expression(ret_expr, &tdctx);
+      print_type(f);
+
       sig->data.AST_LIST.items[params_count].md = f;
 
       for (int i = params_count - 1; i >= 0; i--) {
         TDCtx tdctx = {.env = ctx->env};
-        Type *p = compute_type_expression(sig->data.AST_LIST.items + i, &tdctx);
+        Ast *expr = sig->data.AST_LIST.items + i;
+        AstList *traits = NULL;
+        if (expr->tag == AST_LET) {
+          Ast *trait_expr = expr->data.AST_LET.expr;
+          expr = expr->data.AST_LET.binding;
+
+          while (trait_expr->tag == AST_LET) {
+            traits =
+                ast_list_extend_left(traits, trait_expr->data.AST_LET.binding);
+            trait_expr = trait_expr->data.AST_LET.expr;
+          }
+
+          traits = ast_list_extend_left(traits, trait_expr);
+        }
+
+        Type *p = compute_type_expression(expr, &tdctx);
+        while (traits) {
+          Ast *name = traits->ast;
+
+          TypeClass *tc = talloc(sizeof(TypeClass));
+          *tc = (TypeClass){
+              .name = name->data.AST_IDENTIFIER.value,
+          };
+
+          typeclasses_extend(p, tc);
+          traits = traits->next;
+        }
 
         sig->data.AST_LIST.items[i].md = p;
 
@@ -345,28 +377,41 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_TRAIT_IMPL: {
-    type = infer(ast->data.AST_TRAIT_IMPL.impl, ctx);
     ObjString type_name = ast->data.AST_TRAIT_IMPL.type;
     ObjString trait_name = ast->data.AST_TRAIT_IMPL.trait_name;
 
-    if (CHARS_EQ(trait_name.chars, "Arithmetic") ||
-        CHARS_EQ(trait_name.chars, "Eq") || CHARS_EQ(trait_name.chars, "Ord")) {
-      Type *t = env_lookup(ctx->env, type_name.chars);
-      double rank = tc_impl_rank(ast);
-      TypeClass *tc = talloc(sizeof(TypeClass));
-      *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
-      typeclasses_extend(t, tc);
-    } else {
-      // TODO: implement robust traits
+    if (ast->data.AST_TRAIT_IMPL.impl == NULL) {
       Type *t = env_lookup(ctx->env, type_name.chars);
       Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
-      // printf("trait impl - does \n");
-      // print_type(type);
-      // printf(" match \n");
-      // print_type(existing_trait_proto);
       TypeClass *tc = talloc(sizeof(TypeClass));
       *tc = (TypeClass){.name = trait_name.chars, .module = type};
       typeclasses_extend(t, tc);
+      type = t;
+    } else {
+
+      type = infer(ast->data.AST_TRAIT_IMPL.impl, ctx);
+
+      if (CHARS_EQ(trait_name.chars, "Arithmetic") ||
+          CHARS_EQ(trait_name.chars, "Eq") ||
+          CHARS_EQ(trait_name.chars, "Ord")) {
+        Type *t = env_lookup(ctx->env, type_name.chars);
+        double rank = tc_impl_rank(ast);
+        TypeClass *tc = talloc(sizeof(TypeClass));
+        *tc =
+            (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
+        typeclasses_extend(t, tc);
+      } else {
+        // TODO: implement robust traits
+        Type *t = env_lookup(ctx->env, type_name.chars);
+        Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
+        // printf("trait impl - does \n");
+        // print_type(type);
+        // printf(" match \n");
+        // print_type(existing_trait_proto);
+        TypeClass *tc = talloc(sizeof(TypeClass));
+        *tc = (TypeClass){.name = trait_name.chars, .module = type};
+        typeclasses_extend(t, tc);
+      }
     }
 
     break;
@@ -1144,6 +1189,7 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
     stmt = body.data.AST_BODY.stmts[i];
     if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
           (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
+
       return type_error(ctx, stmt,
                         "Please only have let statements and type declarations "
                         "in a module\n");
@@ -1155,10 +1201,10 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
 
     if (stmt->tag == AST_TYPE_DECL) {
       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-
     } else if (stmt->tag == AST_IMPORT) {
-
       names[i] = stmt->data.AST_IMPORT.identifier;
+    } else if (stmt->tag == AST_TRAIT_IMPL) {
+      names[i] = stmt->data.AST_TRAIT_IMPL.trait_name.chars;
     } else {
       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
     }

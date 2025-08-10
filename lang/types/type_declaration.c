@@ -65,6 +65,7 @@ bool can_hold_recursive_ref(const char *container_type_name) {
 Type *_rec_generic_cons(Type *t, TypeEnv **env);
 
 Type *compute_type_expression(Ast *expr, TDCtx *ctx) {
+
   // TypeEnv _env;
   // TypeEnv *__env = &_env;
   // if (env == NULL) {
@@ -154,6 +155,11 @@ Type *compute_type_expression(Ast *expr, TDCtx *ctx) {
       const char *id_chars = expr->data.AST_IDENTIFIER.value;
       Type *new_var_type = type_var_of_id(id_chars);
       return new_var_type;
+    }
+
+    if (is_pointer_type(type)) {
+      Type *n = deep_copy_type(type);
+      return n;
     }
     return type;
   }
