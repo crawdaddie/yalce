@@ -398,15 +398,16 @@ Type *type_declaration(Ast *ast, TypeEnv **env) {
   // }
 
   type->alias = name;
-  if (is_generic(type) && type->kind == T_CONS) {
-    Type *gen_tmpl = empty_type();
-    *gen_tmpl = (Type){T_CREATE_NEW_GENERIC,
-                       .data = {.T_CREATE_NEW_GENERIC = {
-                                    .fn = (CreateNewGenericTypeFn)
-                                        create_generic_cons_from_declaration,
-                                    .template = type}}};
-    type = gen_tmpl;
-  }
+  // if (is_generic(type) && type->kind == T_CONS) {
+  //   Type *gen_tmpl = empty_type();
+  //   *gen_tmpl = (Type){T_CREATE_NEW_GENERIC,
+  //                      .data = {.T_CREATE_NEW_GENERIC = {
+  //                                   .fn = (CreateNewGenericTypeFn)
+  //                                       create_generic_cons_from_declaration,
+  //                                   .template = type}}};
+  //
+  //   type = gen_tmpl;
+  // }
 
   *env = env_extend(*env, name, type);
 

@@ -130,9 +130,6 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     if (is_return) {
       set_as_tail(result_expr);
     }
-    printf("branch %d: ", i);
-    printf("branch_ctx coro_ctx %p\n", branch_ctx.coro_ctx);
-    print_ast(result_expr);
 
     LLVMValueRef branch_result =
         codegen(result_expr, &branch_ctx, module, builder);

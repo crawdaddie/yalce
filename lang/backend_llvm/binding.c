@@ -19,8 +19,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
                                 Type *list_type, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("match list prepend\n");
-  print_ast(binding);
 
   Ast *head_expr = binding->data.AST_APPLICATION.args;
   Ast *tail_expr = binding->data.AST_APPLICATION.args + 1;
@@ -87,8 +85,6 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     if (sym && sym->storage) {
 
       LLVMValueRef storage = sym->storage;
-      print_ast(binding);
-      printf("storage exists\n");
       LLVMBuildStore(builder, val, storage);
       sym->val = val;
       return _TRUE;

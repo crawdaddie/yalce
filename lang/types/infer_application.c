@@ -151,7 +151,6 @@ Type *handle_coroutine_of_coroutines_application(Ast *ast, Type *res_type) {
         f = f->data.T_FN.to;
       }
       f->data.T_FN.to = res_type_of_opt;
-      print_type(ftype);
       return res_type_of_opt;
     }
   }

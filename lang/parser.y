@@ -166,9 +166,7 @@ expr:
                                           $$ = let;
 
                                       }
-                                      /*
   | expr '[' expr ']'                 { $$ = ast_application(ast_application(ast_identifier((ObjString){.chars = "array_at", 8}), $1), $3); }
-  */
   | expr ':' '=' expr                 { $$ = ast_assignment($1, $4); }
   ;
 

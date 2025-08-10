@@ -540,6 +540,7 @@ bool is_list_cons_operator(Ast *f) {
   return f->tag == AST_IDENTIFIER &&
          (strcmp(f->data.AST_IDENTIFIER.value, LIST_CONS_OPERATOR) == 0);
 }
+
 Type *generic_list_type() {}
 
 Type *infer_pattern(Ast *pattern, TICtx *ctx) {
@@ -602,7 +603,6 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
 
 TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope,
                      Ast *current_fn) {
-
   switch (binding->tag) {
   case AST_IDENTIFIER: {
 
