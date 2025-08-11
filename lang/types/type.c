@@ -809,6 +809,9 @@ bool is_generic(Type *t) {
 
   switch (t->kind) {
   case T_VAR: {
+    if (t->is_recursive_type_ref) {
+      return false;
+    }
     return true;
   }
 

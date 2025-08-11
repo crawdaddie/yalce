@@ -4,6 +4,7 @@
 #include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+// regcomp();
 void str_copy(char *dest, char *src, int len) {
   // printf("calling str copy %s %s %d\n", dest, src, len);
   memcpy(dest, src, len);
@@ -578,4 +580,50 @@ STRLIST *string_split(_String str, _String delim) {
   }
 
   return head;
+}
+
+int parse_num(const char *str) {
+
+  if (str == NULL || *str == '\0') {
+    return -1;
+  }
+
+  int count = 0;
+  int i = 0;
+
+  // Handle optional leading sign
+  if (str[i] == '+' || str[i] == '-') {
+    i++;
+    count++;
+  }
+
+  // Check if we have at least one digit after optional sign
+  if (str[i] < '0' || str[i] > '9') {
+    return -1;
+  }
+
+  // Count integer part digits
+  while (str[i] >= '0' && str[i] <= '9') {
+    i++;
+    count++;
+  }
+
+  // Check for decimal point and fractional part
+  if (str[i] == '.') {
+    i++;
+    count++;
+
+    // Count fractional digits (at least one digit required after decimal point)
+    if (str[i] < '0' || str[i] > '9') {
+      // No digits after decimal point, backtrack
+      count--;
+    } else {
+      while (str[i] >= '0' && str[i] <= '9') {
+        i++;
+        count++;
+      }
+    }
+  }
+
+  return count;
 }

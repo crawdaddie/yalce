@@ -6,6 +6,7 @@
 #include "types/type.h"
 #include "util.h"
 #include "llvm-c/Core.h"
+#include "llvm-c/Types.h"
 #include <stdlib.h>
 #include <string.h>
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -62,6 +63,44 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
 
   return llvm_fn_type;
 }
+static LLVMAttributeRef get_fn_attr(const char *name, int *attr_index,
+                                    LLVMContextRef llvm_ctx) {
+  if (strncmp(name, "NoCapture", 9) == 0) {
+    return LLVMCreateEnumAttribute(
+        llvm_ctx, LLVMGetEnumAttributeKindForName("nocapture", 9), 0);
+  }
+
+  if (strncmp(name, "ReadOnly", 8) == 0) {
+    return LLVMCreateEnumAttribute(
+        llvm_ctx, LLVMGetEnumAttributeKindForName("readonly", 8), 0);
+  }
+
+  if (strncmp(name, "NoFree", 6) == 0) {
+    if (attr_index) {
+      *attr_index = LLVMAttributeFunctionIndex;
+    }
+    return LLVMCreateEnumAttribute(
+        llvm_ctx, LLVMGetEnumAttributeKindForName("nofree", 6), 0);
+  }
+
+  if (strncmp(name, "WillReturn", 10) == 0) {
+    if (attr_index) {
+      *attr_index = LLVMAttributeFunctionIndex;
+    }
+    return LLVMCreateEnumAttribute(
+        llvm_ctx, LLVMGetEnumAttributeKindForName("willreturn", 10), 0);
+  }
+
+  if (strncmp(name, "NoUnwind", 8) == 0) {
+    if (attr_index) {
+      *attr_index = LLVMAttributeFunctionIndex;
+    }
+    return LLVMCreateEnumAttribute(
+        llvm_ctx, LLVMGetEnumAttributeKindForName("nounwind", 8), 0);
+  }
+
+  return NULL;
+}
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
@@ -79,6 +118,7 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     LLVMTypeRef ret_type =
         type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
+
     LLVMTypeRef llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
     return get_extern_fn(name, llvm_fn_type, module);
   }
@@ -91,6 +131,11 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               ? GENERIC_PTR
                               : type_to_llvm_type(param_type, ctx, module);
   }
+
+  Type *ylc_ret_type =
+      ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[params_count]
+          .md;
+
   LLVMTypeRef ret_type = type_to_llvm_type(
       ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[params_count]
           .md,
@@ -99,8 +144,37 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_fn_type =
       LLVMFunctionType(ret_type, llvm_param_types, params_count, 0);
 
-  LLVMValueRef val = get_extern_fn(name, llvm_fn_type, module);
-  return val;
+  LLVMValueRef fn = get_extern_fn(name, llvm_fn_type, module);
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+
+  TypeClass *tc = ylc_ret_type->implements;
+  while (tc) {
+    int attr_index;
+    LLVMAttributeRef attr = get_fn_attr(tc->name, &attr_index, llvm_ctx);
+    if (attr) {
+      LLVMAddAttributeAtIndex(fn, attr_index, attr);
+    }
+    tc = tc->next;
+  }
+
+  for (int i = 0; i < params_count; i++) {
+    Type *param_type =
+        ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[i].md;
+
+    TypeClass *tc = param_type->implements;
+    while (tc) {
+      LLVMAttributeRef attr = get_fn_attr(tc->name, NULL, llvm_ctx);
+      if (attr) {
+        LLVMAddAttributeAtIndex(fn, i + 1, attr);
+      }
+      tc = tc->next;
+    }
+
+    llvm_param_types[i] = param_type->kind == T_FN
+                              ? GENERIC_PTR
+                              : type_to_llvm_type(param_type, ctx, module);
+  }
+  return fn;
 }
 
 void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
@@ -150,7 +224,6 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
-
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
@@ -295,14 +368,15 @@ static TypeEnv *subst_fn_arg(TypeEnv *env, Substitution *subst, Type *arg) {
   return env;
 }
 
-TypeEnv *_bind_in_env(TypeEnv *env, Type *f, Type *t) {
+TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t) {
   switch (f->kind) {
   case T_VAR: {
     return env_extend(env, f->data.T_VAR, t);
   }
   case T_CONS: {
     for (int i = 0; i < f->data.T_CONS.num_args; i++) {
-      env = _bind_in_env(env, f->data.T_CONS.args[i], t->data.T_CONS.args[i]);
+      env = codegen_bind_in_env(env, f->data.T_CONS.args[i],
+                                t->data.T_CONS.args[i]);
     }
     break;
   }
@@ -318,7 +392,7 @@ TypeEnv *create_env_from_subst(TypeEnv *env, Substitution *subst) {
   }
   Type *f = subst->from;
   Type *t = subst->to;
-  env = _bind_in_env(env, f, t);
+  env = codegen_bind_in_env(env, f, t);
   return create_env_from_subst(env, subst->next);
 }
 
@@ -432,7 +506,7 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
     if (is_generic(f)) {
       Type *r = resolve_type_in_env(f, ctx->env);
       if (r) {
-        compilation_ctx.env = _bind_in_env(compilation_ctx.env, f, r);
+        compilation_ctx.env = codegen_bind_in_env(compilation_ctx.env, f, r);
       }
     }
 

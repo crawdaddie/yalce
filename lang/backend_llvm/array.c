@@ -6,7 +6,6 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-// Creates an array type: { i32, T* }
 LLVMTypeRef codegen_array_type(LLVMTypeRef element_type) {
   return LLVMStructType(
       (LLVMTypeRef[]){
@@ -16,7 +15,6 @@ LLVMTypeRef codegen_array_type(LLVMTypeRef element_type) {
       2, 0); // 2 elements, not packed
 }
 
-// Creates an array type: { i32, T* }
 LLVMTypeRef tmp_generic_codegen_array_type() {
   return LLVMStructType(
       (LLVMTypeRef[]){
@@ -113,10 +111,10 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
 
   if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
     data_ptr = LLVMBuildArrayAlloca(builder, element_type, size_const,
-                                    "array_data_alloc");
+                                    "array_data_alloca");
   } else {
     data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
-                                    "array_data_alloc");
+                                    "array_data_malloc");
   }
 
   // data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
@@ -234,9 +232,6 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
-  // printf("array fill const handler\n");
-  // print_ast(ast);
-
   Type *_array_type = ast->md;
   Type *el_type = _array_type->data.T_CONS.args[0];
 
@@ -248,7 +243,6 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef size_const =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  // Get the constant fill value from arg 2 instead of a function
   LLVMValueRef const_fill_value =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 

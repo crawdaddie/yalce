@@ -216,7 +216,7 @@ let loop_cor = fn () ->
 `
 ;;
 
-# loop_cor ();
+loop_cor ();
 
 let arithmetic_series = fn () -> 
   let arithmetic = fn s ->
@@ -281,6 +281,82 @@ let fib_ser = fn () ->
   {c ()}
 `
 ;;
+fib_ser ();
+
+let chained_cors = fn () ->
+  let cor_chain = fn cors ->
+    let h::rest = cors;
+    yield h;
+    yield cor_chain rest
+  ;;
+
+  let ff = fn () -> 
+    yield 200;
+    yield 300;
+    yield 400
+  ;;
+
+  let x = cor_chain [
+    iter_of_list [1,2,3],
+    iter_of_list [5,6,7],
+    ff (),
+    iter_of_list [1000, 2000, 3000],
+    iter_of_list [3,2,1]
+  ];
 
 
-fib_ser ()
+  print `## separate coroutines chained together in sequence
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  `
+
+;;
+
+chained_cors ()
+# let x = (fn () -> 
+#   let a = 2;
+#   yield 1;
+#   yield 2;
+#   yield a;
+#   yield 3;) in
+#   let xx = x () in 
+#   print `## persistent vars
+#   {xx ()}
+#   {xx ()}
+#   {xx ()}
+#   {xx ()}
+#   {xx ()}
+#   {xx ()}
+#   `;
+#
+# let x = (fn aa -> 
+#   let a = aa + 2;
+#   yield 1;
+#   yield 2;
+#   yield a;
+#   yield 3;
+#   ) in
+#   let xx = x 3 in 
+#   print `## persistent vars
+#   {xx ()}
+#   {xx ()}
+#   {xx ()}
+#   {xx ()}
+#   {xx ()}
+#   {xx ()}
+#   `;
+#

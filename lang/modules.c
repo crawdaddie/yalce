@@ -1,7 +1,9 @@
 #include "./modules.h"
 #include "./types/common.h"
+#include "escape_analysis.h"
 #include "ht.h"
 #include "input.h"
+#include "serde.h"
 #include "types/inference.h"
 #include "types/type.h"
 #include <stdlib.h>
@@ -48,6 +50,9 @@ Ast *parse_module(const char *filename, TypeEnv *env) {
   if (!solve_program_constraints(prog, &ti_ctx)) {
     return NULL;
   }
+
+  EACtx ea_ctx = {};
+  escape_analysis(prog, &ea_ctx);
 
   __import_current_dir = old_import_current_dir;
   *env = *ti_ctx.env;
