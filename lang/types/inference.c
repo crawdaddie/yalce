@@ -311,13 +311,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
     int params_count = sig->data.AST_LIST.len - 1;
 
     if (sig->tag == AST_FN_SIGNATURE) {
+      TDCtx tdctx = {.env = ctx->env};
       Type *f = compute_type_expression(sig->data.AST_LIST.items + params_count,
-                                        ctx->env, NULL);
+                                        &tdctx);
       sig->data.AST_LIST.items[params_count].md = f;
 
       for (int i = params_count - 1; i >= 0; i--) {
-        Type *p = compute_type_expression(sig->data.AST_LIST.items + i,
-                                          ctx->env, NULL);
+        TDCtx tdctx = {.env = ctx->env};
+        Type *p = compute_type_expression(sig->data.AST_LIST.items + i, &tdctx);
 
         sig->data.AST_LIST.items[i].md = p;
 
@@ -541,6 +542,8 @@ bool is_list_cons_operator(Ast *f) {
          (strcmp(f->data.AST_IDENTIFIER.value, LIST_CONS_OPERATOR) == 0);
 }
 
+Type *generic_list_type() {}
+
 Type *infer_pattern(Ast *pattern, TICtx *ctx) {
   switch (pattern->tag) {
   case AST_IDENTIFIER: {
@@ -579,13 +582,13 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
   case AST_APPLICATION: {
     if (is_list_cons_operator(pattern->data.AST_APPLICATION.function)) {
       Type *list_el_type = next_tvar();
-      pattern->data.AST_APPLICATION.args->md = list_el_type;
       Type *type = talloc(sizeof(Type));
       Type **contained = talloc(sizeof(Type *));
       contained[0] = list_el_type;
       *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, contained, 1}}};
       pattern->data.AST_APPLICATION.args->md = list_el_type;
       pattern->data.AST_APPLICATION.args[1].md = type;
+      pattern->md = type;
       return type;
     }
 
@@ -601,7 +604,6 @@ Type *infer_pattern(Ast *pattern, TICtx *ctx) {
 
 TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope,
                      Ast *current_fn) {
-
   switch (binding->tag) {
   case AST_IDENTIFIER: {
 
@@ -638,7 +640,8 @@ TypeEnv *bind_in_env(TypeEnv *env, Ast *binding, Type *expr_type, int scope,
   }
   case AST_APPLICATION: {
     if (is_list_cons_operator(binding->data.AST_APPLICATION.function)) {
-      Type *el_type = expr_type->data.T_CONS.args[0];
+      Type *binding_list_type = binding->md;
+      Type *el_type = binding_list_type->data.T_CONS.args[0];
       env = bind_in_env(env, binding->data.AST_APPLICATION.args, el_type, scope,
                         current_fn);
       env = bind_in_env(env, binding->data.AST_APPLICATION.args + 1, expr_type,
@@ -767,9 +770,6 @@ Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
   Type *ret = fn_return_type(fn_type);
   Type *coroutine_fn = create_coroutine_instance_type(ret);
 
-  // int num_boundary_xs = ast->data.AST_LAMBDA.num_yield_boundary_crossers;
-  // AstList *boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers;
-
   Type *f = deep_copy_type(fn_type);
 
   Type *ff = f;
@@ -780,9 +780,6 @@ Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
 
   *ff = *coroutine_fn;
   f->is_coroutine_constructor = true;
-
-  // printf("coroutine type: ");
-  // print_type(f);
 
   return f;
 }
@@ -805,7 +802,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
     Type *param_type;
     if (def != NULL) {
-      param_type = compute_type_expression(def, body_ctx.env, &body_ctx.env);
+      TDCtx ctx = {.env = body_ctx.env};
+      param_type = compute_type_expression(def, &ctx);
     } else {
       param_type = infer_pattern(param, &body_ctx);
     }
@@ -942,6 +940,9 @@ Type *infer_match_expr(Ast *ast, TICtx *ctx) {
       return type_error(
           ctx, branch_body,
           "Typecheck Error: Could not infer type of match branch body\n");
+    }
+    if (branch_ctx.yielded_type) {
+      ctx->yielded_type = branch_ctx.yielded_type;
     }
     if (ast->data.AST_MATCH.len == 1) {
       if (!unify_in_ctx(&t_void, branch_type, &branch_ctx, branch_body)) {

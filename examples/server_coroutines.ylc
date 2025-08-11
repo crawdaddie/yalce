@@ -96,7 +96,6 @@ let accept_reqs = fn server_fd ->
   # let _ = process_req req client_sock;
 
 
-  # let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!";
   let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\nX-Clacks-Overhead: GNU Terry Pratchett\r\n\r\nHello, World!";
   send client_sock (cstr response) (array_size response) 0;
 
@@ -106,22 +105,7 @@ let accept_reqs = fn server_fd ->
 
 
 
-# let proc_tasks = fn server_fd tq ->
-#   let qr = Queue.pop_left tq;
-#   (
-#   match qr with
-#   | Some (task, remaining_tasks) -> 
-#
-#     match task () with
-#     | Some 1 -> Queue.append task remaining_tasks
-#     | _ -> remaining_task_q
-#
-#   | None -> Queue.of_list [accept_reqs server_fd]
-#   )
-#   |> proc_tasks server_fd 
-# ;;
-
-let proc_tasks = fn on_empty on_task ->
+let task_loop = fn on_empty on_task ->
   let q = Queue.of_list [on_empty ()];
 
   let aux_rec = fn q on_empty on_task ->
@@ -144,7 +128,7 @@ let init_server = fn port ->
   bind server_fd server_addr 16;
   listen server_fd 10; 
 
-  proc_tasks
+  task_loop
     (fn () -> accept_reqs server_fd)
     (fn task -> 
       task ();

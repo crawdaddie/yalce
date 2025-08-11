@@ -215,7 +215,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return codegen_adt_member_with_args(expected_fn_type, sym->llvm_type, ast,
                                         sym_name, ctx, module, builder);
   }
-
   if (!sym) {
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);

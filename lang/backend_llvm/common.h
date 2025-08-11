@@ -137,7 +137,8 @@ void destroy_ctx(JITLangCtx *ctx);
   ht_init(&table);                                                             \
   StackFrame sf = {.table = &table, .next = _ctx_name.frame};                  \
   _ctx_name.frame = &sf;                                                       \
-  _ctx_name.stack_ptr = _ctx->stack_ptr + 1;
+  _ctx_name.stack_ptr = _ctx->stack_ptr + 1;                                   \
+  _ctx_name.coro_ctx = _ctx->coro_ctx;
 
 EscapeStatus find_allocation_strategy(Ast *expr, JITLangCtx *ctx);
 #endif

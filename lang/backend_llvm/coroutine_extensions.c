@@ -721,3 +721,43 @@ LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef result_val = LLVMBuildExtractValue(builder, result_opt, 1, "");
   return result_val;
 }
+// LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
+//                                    LLVMModuleRef module,
+//                                    LLVMBuilderRef builder) {
+//   CoroutineCtx *coro_ctx = ctx->coro_ctx;
+//   if (!coro_ctx) {
+//     fprintf(
+//         stderr,
+//         "Error: cor_unwrap_or_end should only be called inside a
+//         coroutine\n");
+//     return NULL;
+//   }
+//
+//   Type *t = ast->data.AST_APPLICATION.args->md;
+//   ast->data.AST_APPLICATION.args->md = t;
+//
+//   LLVMValueRef result_opt =
+//       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+//
+//   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+//   LLVMValueRef func = LLVMGetBasicBlockParent(current_block);
+//
+//   LLVMBasicBlockRef some_block = LLVMAppendBasicBlock(func,
+//   "option_has_value");
+//
+//   LLVMValueRef is_some =
+//       LLVMBuildICmp(builder, LLVMIntEQ,
+//                     LLVMBuildExtractValue(builder, result_opt, 0, "tag_val"),
+//                     LLVMConstInt(LLVMInt8Type(), 0, 0), "result_is_some");
+//
+//   // If None, jump to the default termination block (already exists in
+//   coro_ctx) LLVMBuildCondBr(builder, is_some, some_block,
+//   coro_ctx->switch_default);
+//
+//   // Continue in the Some block
+//   LLVMPositionBuilderAtEnd(builder, some_block);
+//   LLVMValueRef result_val = LLVMBuildExtractValue(builder, result_opt, 1,
+//   "");
+//
+//   return result_val;
+// }

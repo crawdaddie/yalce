@@ -13,6 +13,8 @@ void bind_in_ctx(TICtx *ctx, Ast *binding, Type *expr_type);
 void apply_substitutions_rec(Ast *ast, Substitution *subst);
 TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
                                    Type *t2);
+
+Type *handle_coroutine_of_coroutines_application(Ast *ast, Type *res_type);
 void print_subst(Substitution *c);
 void print_constraints(TypeConstraint *c);
 
@@ -127,6 +129,31 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     res_type = res_type->data.T_FN.to;
   }
 
+  // printf("application\n");
+  // print_ast(ast);
+  // print_type(ast->data.AST_APPLICATION.function->md);
+  // print_type(res_type);
+  res_type = handle_coroutine_of_coroutines_application(ast, res_type);
+
+  return res_type;
+}
+Type *handle_coroutine_of_coroutines_application(Ast *ast, Type *res_type) {
+  Type *ftype = ast->data.AST_APPLICATION.function->md;
+  if (!is_coroutine_constructor_type(ftype)) {
+    return res_type;
+  }
+  if (is_coroutine_type(res_type)) {
+    Type *res = fn_return_type(res_type);
+    Type *res_type_of_opt = type_of_option(res);
+    if (is_coroutine_type(res_type_of_opt)) {
+      Type *f = ftype;
+      while (!is_coroutine_type(f->data.T_FN.to)) {
+        f = f->data.T_FN.to;
+      }
+      f->data.T_FN.to = res_type_of_opt;
+      return res_type_of_opt;
+    }
+  }
   return res_type;
 }
 

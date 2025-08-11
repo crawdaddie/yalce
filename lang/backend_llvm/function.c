@@ -150,7 +150,6 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
-
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
@@ -295,14 +294,15 @@ static TypeEnv *subst_fn_arg(TypeEnv *env, Substitution *subst, Type *arg) {
   return env;
 }
 
-TypeEnv *_bind_in_env(TypeEnv *env, Type *f, Type *t) {
+TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t) {
   switch (f->kind) {
   case T_VAR: {
     return env_extend(env, f->data.T_VAR, t);
   }
   case T_CONS: {
     for (int i = 0; i < f->data.T_CONS.num_args; i++) {
-      env = _bind_in_env(env, f->data.T_CONS.args[i], t->data.T_CONS.args[i]);
+      env = codegen_bind_in_env(env, f->data.T_CONS.args[i],
+                                t->data.T_CONS.args[i]);
     }
     break;
   }
@@ -318,7 +318,7 @@ TypeEnv *create_env_from_subst(TypeEnv *env, Substitution *subst) {
   }
   Type *f = subst->from;
   Type *t = subst->to;
-  env = _bind_in_env(env, f, t);
+  env = codegen_bind_in_env(env, f, t);
   return create_env_from_subst(env, subst->next);
 }
 
@@ -432,7 +432,7 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
     if (is_generic(f)) {
       Type *r = resolve_type_in_env(f, ctx->env);
       if (r) {
-        compilation_ctx.env = _bind_in_env(compilation_ctx.env, f, r);
+        compilation_ctx.env = codegen_bind_in_env(compilation_ctx.env, f, r);
       }
     }
 

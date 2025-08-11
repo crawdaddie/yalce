@@ -6,6 +6,7 @@
 #include "function.h"
 #include "symbols.h"
 #include "types.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <stdlib.h>
@@ -169,6 +170,7 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *t = ast->md;
   Type *return_opt_type = fn_return_type(t);
+  print_type(return_opt_type);
   LLVMTypeRef promise_type = type_to_llvm_type(return_opt_type, ctx, module);
 
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
@@ -181,7 +183,7 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       .num_coroutine_yields = ast->data.AST_LAMBDA.num_yields,
       .num_yield_boundary_xs = ast->data.AST_LAMBDA.num_yield_boundary_crossers,
       .yield_boundary_xs = ast->data.AST_LAMBDA.yield_boundary_crossers,
-  };
+      .name = ast->data.AST_LAMBDA.fn_name.chars};
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
   fn_ctx.coro_ctx = &coro_ctx;
 
@@ -213,7 +215,6 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, entry_block);
   LLVMValueRef coro = LLVMGetParam(coro_fn, 0);
 
-  // Create all blocks first
   LLVMBasicBlockRef branches[coro_ctx.num_coroutine_yields + 1];
   for (int i = 0; i < coro_ctx.num_coroutine_yields + 1; i++) {
     char branch_name[19];
@@ -233,12 +234,10 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   coro_ctx.branches = branches;
   coro_ctx.switch_default = branches[coro_ctx.num_coroutine_yields];
 
-  // Entry block: check if finished
   LLVMValueRef is_finished = coro_is_finished(coro, &coro_ctx, builder);
   LLVMBuildCondBr(builder, is_finished, coro_ctx.switch_default,
                   var_setup_block);
 
-  // Variable setup block: setup coroutine state variables
   LLVMPositionBuilderAtEnd(builder, var_setup_block);
 
   if (coro_ctx.state_layout) {
@@ -251,8 +250,6 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
          arglist = arglist->next) {
 
       Ast *arg = arglist->ast;
-      print_ast(arg);
-      print_type(ftype->data.T_FN.from);
       LLVMValueRef state_storage =
 
           LLVMBuildStructGEP2(builder, coro_ctx.state_layout, state, i, "");
@@ -266,16 +263,41 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       i++;
       ftype = ftype->data.T_FN.to;
     }
+
+    if (ast->data.AST_LAMBDA.num_yield_boundary_crossers > 0) {
+      AstList *bxs = ast->data.AST_LAMBDA.yield_boundary_crossers;
+      for (int j = 0; j < ast->data.AST_LAMBDA.num_yield_boundary_crossers;
+           j++) {
+        Ast *bx = bxs->ast;
+        Type *bxt = bx->md;
+        if (is_generic(bxt)) {
+          bxt = resolve_type_in_env(bxt, ctx->env);
+        }
+        LLVMValueRef state_storage =
+            LLVMBuildStructGEP2(builder, coro_ctx.state_layout, state, i, "");
+
+        LLVMTypeRef item_type = type_to_llvm_type(bxt, &fn_ctx, module);
+        // LLVMBuildStore(builder, LLVMConstNull(item_type), state_storage);
+
+        JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, bxt, NULL, item_type);
+        sym->storage = state_storage;
+        const char *chars = bx->data.AST_IDENTIFIER.value;
+        int chars_len = bx->data.AST_IDENTIFIER.length;
+        ht_set_hash(fn_ctx.frame->table, chars, hash_string(chars, chars_len),
+                    sym);
+
+        bxs = bxs->next;
+        i++;
+      }
+    }
   }
 
   if (ast->data.AST_LAMBDA.fn_name.chars) {
     add_recursive_coroutine_ref(ast, init_fn, coro_init_type, &fn_ctx);
   }
 
-  // Branch to switch block after variable setup
   LLVMBuildBr(builder, switch_block);
 
-  // Switch block: the actual switch on counter
   LLVMPositionBuilderAtEnd(builder, switch_block);
   LLVMValueRef switch_ref =
       LLVMBuildSwitch(builder, coro_counter(coro, coro_obj_type, builder),
@@ -286,10 +308,8 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
   coro_ctx.switch_ref = switch_ref;
 
-  // Generate the end block (for yield.default)
   coro_end_block(coro, &coro_ctx, module, builder);
 
-  // Generate the coroutine body starting from branch 0
   LLVMPositionBuilderAtEnd(builder, branches[0]);
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
@@ -307,6 +327,34 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
                                              JITLangCtx *ctx,
                                              LLVMModuleRef module,
                                              LLVMBuilderRef builder) {
+  // TODO: figure out coroutines that accept other coroutines as args, eg:
+  //
+  // let cor_zip = fn c1 c2 ->
+  //   let x1 = cor_unwrap_or_end @@ c1 ();
+  //   let x2 = cor_unwrap_or_end @@ c2 ();
+  //   yield (x1, x2);
+  //   yield cor_zip c1 c2
+  // ;;
+  // let c1 = fn () -> yield 1; yield 2;;
+  // let c2 = fn () -> yield 2; yield 1;;
+  //
+  // let x = cor_zip (c1 ()) (c2 ());
+  //
+  // -- or --
+  //
+  // let get_head_opt = fn x ->
+  //   match x with
+  //   | x::rest -> Some (x, rest)
+  //   | [] -> None
+  // ;;
+  //
+  // let seq = fn cors ->
+  //   let (h, rest) = cor_unwrap_or_end @@ get_head_opt cors;
+  //   yield h;
+  //   yield combine rest
+  // ;;
+  //
+  // let x = seq [iter_of_list [1,2,3], iter_of_list [3,2,1]];
 
   LLVMValueRef func = specific_fns_lookup(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
@@ -324,10 +372,6 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
         sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
         expected_fn_type);
 
-    printf("GENERIC COR\n");
-    print_type(expected_fn_type);
-    print_type_env(compilation_ctx.env);
-
     Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
     fn_ast.md = expected_fn_type;
 
@@ -337,6 +381,7 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
     sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns = specific_fns_extend(
         sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type,
         specific_fn);
+
     func = specific_fn;
   }
 
@@ -451,6 +496,19 @@ LLVMValueRef coro_promise_set_none(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
 
 LLVMValueRef coro_next_set(LLVMValueRef coro, LLVMValueRef next,
                            LLVMTypeRef coro_obj_type, LLVMBuilderRef builder) {
+  LLVMValueRef next_gep = LLVMBuildStructGEP2(builder, coro_obj_type, coro,
+                                              CORO_NEXT_SLOT, "coro.next.gep");
+  LLVMBuildStore(builder, next, next_gep);
+  return coro;
+}
+
+LLVMValueRef coro_stack_push(LLVMValueRef coro, LLVMValueRef next,
+                             LLVMTypeRef coro_obj_type,
+                             LLVMBuilderRef builder) {
+
+  LLVMValueRef stack_head = coro_next(coro, coro_obj_type, builder);
+  coro_next_set(next, stack_head, coro_obj_type, builder);
+
   LLVMValueRef next_gep = LLVMBuildStructGEP2(builder, coro_obj_type, coro,
                                               CORO_NEXT_SLOT, "coro.next.gep");
   LLVMBuildStore(builder, next, next_gep);
@@ -637,18 +695,78 @@ LLVMValueRef tail_call_coro_yield(LLVMValueRef coro, LLVMValueRef new_cor,
   return NULL;
 }
 
+typedef struct {
+  int32_t counter;
+  void *fn_ptr;
+  void *state;
+  void *next;
+} coro_simple;
+
+void *coro_next_tail(void *_cor) {
+  if (_cor == NULL) {
+    return _cor;
+  }
+  coro_simple *c = _cor;
+  while (c->next != NULL) {
+    c = c->next;
+  }
+  return c;
+}
+
+// handle situations like the following:
+// arbitrarily nested coroutines
+//
+//
+//
+// let cor1 = fn () ->
+//   yield 1
+// ;;
+//
+// let cor2 = fn () -> yield cor1 (); yield 2 ;;
+//
+// let cor3 = fn () -> yield cor2 (); yield 3 ;;
+//
+// let cor = fn () -> yield cor3 (); yield 4 ;;
+//
+// let x = cor ();
+//
+//
+// expected yielded values:
+// 1 -> 2 -> 3 -> 4
 LLVMValueRef chain_new_coro_yield(LLVMValueRef coro, LLVMValueRef new_cor,
-                                  CoroutineCtx *coro_ctx,
+                                  CoroutineCtx *coro_ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
+  // let B = fn () ->
+  //   yield val_b_1
+  // ;;
+  //
+  // let A = fn () ->
+  //    yield B ();
+  //    yield val_a_1;
+  //    yield val_a_2;
+  // ;
+  //
 
-  LLVMValueRef next_cor = LLVMBuildMalloc(builder, coro_ctx->coro_obj_type,
-                                          "copy_calling_coroutine");
-  coro_replace(next_cor, coro, coro_ctx, builder);
+  LLVMValueRef A = LLVMBuildMalloc(builder, coro_ctx->coro_obj_type,
+                                   "copy_calling_coroutine");
 
-  LLVMValueRef advanced_new_cor = coro_advance(new_cor, coro_ctx, builder);
+  coro_replace(A, coro, coro_ctx, builder);
 
-  coro_replace(coro, advanced_new_cor, coro_ctx, builder);
-  coro_next_set(coro, next_cor, coro_ctx->coro_obj_type, builder);
+  LLVMValueRef B = coro_advance(new_cor, coro_ctx, builder);
+
+  coro_replace(coro, B, coro_ctx, builder);
+
+  LLVMTypeRef get_tail_fn_type =
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+
+  LLVMValueRef get_tail_fn = get_extern_fn(
+      "coro_next_tail",
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0),
+      module);
+  LLVMValueRef Btail = LLVMBuildCall2(builder, get_tail_fn_type, get_tail_fn,
+                                      (LLVMValueRef[]){coro}, 1, "");
+
+  coro_next_set(Btail, A, coro_ctx->coro_obj_type, builder);
 
   LLVMBuildRet(builder, coro);
   return NULL;
@@ -658,31 +776,55 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
   CoroutineCtx *coro_ctx = ctx->coro_ctx;
+  if (!coro_ctx) {
+    fprintf(stderr, "Error - yield must only be used in a coroutine context\n");
+    return NULL;
+  }
   LLVMValueRef coro = LLVMGetParam(coro_ctx->func, 0);
 
+  Ast *expr = ast->data.AST_YIELD.expr;
+
   if (ast->data.AST_YIELD.expr->tag == AST_APPLICATION) {
-    Ast *expr = ast->data.AST_YIELD.expr;
     JITSymbol *sym = lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
 
+    // RECURSIVE COROUTINE YIELD - REPLACE COROUTINE WITH ITSELF
     if (sym && is_coroutine_constructor_type(sym->symbol_type) &&
         sym->symbol_data.STYPE_FUNCTION.recursive_ref) {
       return recursive_coro_yield(coro, expr, ctx, module, builder);
     }
 
     if (is_coroutine_type(expr->md)) {
+      // COROUTINE DEFERS TO A NEW ONE AND CAN FORGET ABOUT ITSELF SINCE YIELD
+      // IS IN TAIL POSITION
       if (coro_ctx->current_yield == coro_ctx->num_coroutine_yields - 1) {
         LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
         return tail_call_coro_yield(coro, new_cor, coro_ctx, builder);
-      } else {
-
-        LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
-        LLVMValueRef n = chain_new_coro_yield(coro, new_cor, coro_ctx, builder);
-        coro_ctx->current_yield++;
-        LLVMPositionBuilderAtEnd(builder,
-                                 coro_ctx->branches[coro_ctx->current_yield]);
-        return n;
       }
+      // COROUTINE DEFERS TO A NEW ONE BUT MUST RETURN BACK TO ITSELF
+      LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
+      LLVMValueRef n =
+          chain_new_coro_yield(coro, new_cor, coro_ctx, module, builder);
+      coro_ctx->current_yield++;
+      LLVMPositionBuilderAtEnd(builder,
+                               coro_ctx->branches[coro_ctx->current_yield]);
+      return n;
     }
+  }
+
+  if (is_coroutine_type(expr->md)) {
+    if (coro_ctx->current_yield == coro_ctx->num_coroutine_yields - 1) {
+      LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
+      return tail_call_coro_yield(coro, new_cor, coro_ctx, builder);
+    }
+
+    // COROUTINE DEFERS TO A NEW ONE BUT MUST RETURN BACK TO ITSELF
+    LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
+    LLVMValueRef n =
+        chain_new_coro_yield(coro, new_cor, coro_ctx, module, builder);
+    coro_ctx->current_yield++;
+    LLVMPositionBuilderAtEnd(builder,
+                             coro_ctx->branches[coro_ctx->current_yield]);
+    return n;
   }
 
   int branch_idx = coro_ctx->current_yield;
@@ -726,6 +868,10 @@ LLVMTypeRef get_coro_state_layout(Ast *ast, JITLangCtx *ctx,
     for (int i = 0; i < args_len; i++) {
       Type *from = ftype->data.T_FN.from;
       t[i] = type_to_llvm_type(ftype->data.T_FN.from, ctx, module);
+      // printf("%d: ", i);
+      // print_type(ftype->data.T_FN.from);
+      // LLVMDumpType(t[i]);
+      // printf("\n");
       ftype = ftype->data.T_FN.to;
     }
   }
@@ -734,7 +880,12 @@ LLVMTypeRef get_coro_state_layout(Ast *ast, JITLangCtx *ctx,
     AstList *bxs = ast->data.AST_LAMBDA.yield_boundary_crossers;
     for (int j = args_len; j < state_len; j++) {
       Ast *bx = bxs->ast;
-      t[j] = type_to_llvm_type(bx->md, ctx, module);
+      Type *bxt = bx->md;
+      if (is_generic(bxt)) {
+        bxt = resolve_type_in_env(bxt, ctx->env);
+      }
+
+      t[j] = type_to_llvm_type(bxt, ctx, module);
       bxs = bxs->next;
     }
   }
