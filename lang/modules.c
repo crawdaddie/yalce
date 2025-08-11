@@ -4,6 +4,7 @@
 #include "input.h"
 #include "types/inference.h"
 #include "types/type.h"
+#include <regex.h>
 #include <stdlib.h>
 #include <string.h>
 
