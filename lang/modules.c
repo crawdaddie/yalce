@@ -26,7 +26,6 @@ bool is_module_ast(Ast *ast) {
 }
 
 Ast *parse_module(const char *filename, TypeEnv *env) {
-  printf("parse module %s\n", filename);
 
   char *old_import_current_dir = __import_current_dir;
   __import_current_dir = get_dirname(filename);
@@ -51,7 +50,8 @@ Ast *parse_module(const char *filename, TypeEnv *env) {
   if (!solve_program_constraints(prog, &ti_ctx)) {
     return NULL;
   }
-  EACtx ea_ctx = {.env = NULL};
+
+  EACtx ea_ctx = {};
   escape_analysis(prog, &ea_ctx);
 
   __import_current_dir = old_import_current_dir;
