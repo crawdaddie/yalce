@@ -1,5 +1,6 @@
 #include "backend_llvm/common.h"
 #include "escape_analysis.h"
+#include "serde.h"
 #include <stdlib.h>
 
 StackFrame *frame_extend(StackFrame *frame) {
@@ -36,5 +37,7 @@ EscapeStatus find_allocation_strategy(Ast *expr, JITLangCtx *ctx) {
   if (expr->ea_md && ctx->stack_ptr != 0) {
     return ((EscapeMeta *)expr->ea_md)->status;
   }
+  printf("no alloc strategy found??\n");
+  print_ast(expr);
   return EA_HEAP_ALLOC;
 }

@@ -9,23 +9,23 @@
 //   Ast *prev;
 // } RefGraph;
 
-typedef struct EscapesEnv {
+typedef struct {
   const char *varname;
   Ast *expr;
   uint32_t id;
   struct EscapesEnv *next;
 } EscapesEnv;
 
-typedef struct AECtx {
+typedef struct {
   int scope;
   EscapesEnv *env;
 
-} AECtx;
+} EACtx;
 
 typedef enum { EA_STACK_ALLOC, EA_HEAP_ALLOC } EscapeStatus;
 typedef struct EscapeMeta {
   EscapeStatus status;
 } EscapeMeta;
-void escape_analysis(Ast *prog, AECtx *ctx);
+void escape_analysis(Ast *prog, EACtx *ctx);
 
 #endif
