@@ -170,7 +170,6 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *t = ast->md;
   Type *return_opt_type = fn_return_type(t);
-  print_type(return_opt_type);
   LLVMTypeRef promise_type = type_to_llvm_type(return_opt_type, ctx, module);
 
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);

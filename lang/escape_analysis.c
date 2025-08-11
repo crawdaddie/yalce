@@ -1,91 +1,40 @@
 #include "./escape_analysis.h"
-#include "serde.h"
-#include "types/common.h"
 #include "types/type.h"
 #include <stdlib.h>
 #include <string.h>
-void *_ealloc(size_t size) { return malloc(size); }
 
-bool type_needs_alloc(Type *t) { return is_list_type(t) || is_array_type(t); }
+static int32_t next_alloc_id;
 
-static uint32_t __memory_id = 0;
-uint32_t next_mem_id() {
-  uint32_t id = __memory_id;
-  __memory_id++;
-  return id;
+void ctx_add_allocation(EACtx *ctx, const char *varname, Ast *alloc_site) {
+  Allocation *alloc = malloc(sizeof(Allocation));
+  *alloc = (Allocation){.id = next_alloc_id++,
+                        .varname = varname,
+                        .alloc_site = alloc_site,
+                        .escapes = false,
+                        .is_returned = false,
+                        .is_captured = false,
+                        .next = ctx->allocations};
+  ctx->allocations = alloc;
+
+  printf("Added allocation %d for variable '%s'\n", alloc->id, varname);
 }
 
-typedef struct MemoryUseList {
-  uint32_t id;
-  struct MemoryUseList *next;
-} MemoryUseList;
-
-void print_memory_list(MemoryUseList *l) {
-  if (!l) {
-    return;
+Allocation *ctx_find_allocation(EACtx *ctx, const char *varname) {
+  if (!ctx->allocations) {
+    return NULL;
   }
-
-  printf("[ ");
-  while (l) {
-    printf("%d, ", l->id);
-    l = l->next;
-  }
-  printf("]");
-}
-EscapesEnv *escapes_add(EscapesEnv *env, const char *name, Ast *node,
-                        uint32_t id) {
-
-  EscapesEnv *new = _ealloc(sizeof(EscapesEnv));
-
-  *new = (EscapesEnv){
-      .varname = name,
-      .expr = node,
-      .id = id,
-      .next = env,
-  };
-  return new;
-}
-
-EscapesEnv *escapes_find(EscapesEnv *env, const char *name) {
-  while (env) {
-    if (CHARS_EQ(env->varname, name)) {
-      return env;
+  for (Allocation *a = ctx->allocations; a; a = a->next) {
+    if (strcmp(a->varname, varname) == 0) {
+      return a;
     }
-    env = env->next;
   }
   return NULL;
 }
 
-EscapesEnv *escapes_find_by_id(EscapesEnv *env, uint32_t id) {
-  while (env) {
-    if (env->id == id) {
-      return env;
-    }
-    env = env->next;
-  }
-  return NULL;
-}
-
-MemoryUseList *list_extend_left(MemoryUseList *old, MemoryUseList *new) {
-  if (!old) {
-    return new;
-  }
-  if (!new) {
-    return old;
-  }
-  MemoryUseList *l = new;
-  while (l->next) {
-    l = l->next;
-  }
-  l->next = old;
-  return new;
-}
-
-MemoryUseList *ea(Ast *ast, AECtx *ctx) {
-  MemoryUseList *mem_ids = NULL;
+void ea(Ast *ast, EACtx *ctx) {
 
   if (!ast) {
-    return NULL;
+    return;
   }
 
   switch (ast->tag) {
@@ -93,19 +42,12 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
   case AST_LIST: {
 
     for (int i = 0; i < ast->data.AST_LIST.len; i++) {
-      mem_ids =
-          list_extend_left(mem_ids, ea(ast->data.AST_LIST.items + i, ctx));
     }
-    MemoryUseList *container_mem = _ealloc(sizeof(MemoryUseList));
-    *container_mem = (MemoryUseList){next_mem_id(), NULL};
-    mem_ids = list_extend_left(mem_ids, container_mem);
     break;
   }
 
   case AST_TUPLE: {
     for (int i = 0; i < ast->data.AST_LIST.len; i++) {
-      mem_ids =
-          list_extend_left(mem_ids, ea(ast->data.AST_LIST.items + i, ctx));
     }
     break;
   }
@@ -129,33 +71,34 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
   }
 
   case AST_LAMBDA: {
-    AECtx lambda_ctx = *ctx;
+
+    EACtx lambda_ctx = *ctx;
     lambda_ctx.scope++;
+    if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+      Ast *stmt = ast->data.AST_LAMBDA.body;
+      lambda_ctx.is_return_stmt = true;
+      ea(stmt, &lambda_ctx);
+    } else {
+      Ast *body = ast->data.AST_LAMBDA.body;
+      Ast *stmt;
+      for (int i = 0; i < body->data.AST_BODY.len; i++) {
+        stmt = body->data.AST_BODY.stmts[i];
 
-    MemoryUseList *escapees = ea(ast->data.AST_LAMBDA.body, &lambda_ctx);
-
-    for (MemoryUseList *esc = escapees; esc != NULL; esc = esc->next) {
-      uint32_t mem_id = esc->id;
-      EscapesEnv *env = escapes_find_by_id(lambda_ctx.env, mem_id);
-      if (env) {
-        EscapeMeta *ea_md = malloc(sizeof(EscapeMeta));
-        *ea_md = (EscapeMeta){.status = EA_HEAP_ALLOC};
-        env->expr->ea_md = ea_md;
-      } else {
-
-        // EscapeMeta *ea_md = malloc(sizeof(EscapeMeta));
-        // *ea_md = (EscapeMeta){.status = EA_STACK_ALLOC};
-        // lambda_ctx.env =
-        // ctx->env = escapes_add(ctx->env, );
-        // env->expr->ea_md = ea_md;
+        if (i == body->data.AST_BODY.len - 1) {
+          lambda_ctx.is_return_stmt = true;
+        }
+        ea(stmt, &lambda_ctx);
       }
     }
     break;
   }
 
   case AST_BODY: {
+
+    Ast *stmt;
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      mem_ids = ea(ast->data.AST_BODY.stmts[i], ctx);
+      stmt = ast->data.AST_BODY.stmts[i];
+      ea(stmt, ctx);
     }
     break;
   }
@@ -168,36 +111,16 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
       ea(ast->data.AST_APPLICATION.args + i, ctx);
     }
 
-    if (ast->md && type_needs_alloc(ast->md)) {
-      MemoryUseList *container_mem = _ealloc(sizeof(MemoryUseList));
-      *container_mem = (MemoryUseList){next_mem_id(), NULL};
-      mem_ids = list_extend_left(mem_ids, container_mem);
-    }
     break;
   }
   case AST_LOOP:
   case AST_LET: {
-    MemoryUseList *expr_ids = ea(ast->data.AST_LET.expr, ctx);
+    ea(ast->data.AST_LET.expr, ctx);
 
     Type *t = ast->data.AST_LET.expr->md;
-    // printf("ast let\n");
-    // print_type(t);
-    // printf("binding type needs alloc %d\n", type_needs_alloc(t));
-
-    if (type_needs_alloc(t) &&
-        ast->data.AST_LET.binding->tag == AST_IDENTIFIER && expr_ids) {
-      // printf("ast let type needs alloc\n");
-
-      ctx->env = escapes_add(
-          ctx->env, ast->data.AST_LET.binding->data.AST_IDENTIFIER.value,
-          ast->data.AST_LET.expr,
-          expr_ids->id // use first id as the 'containing' id
-      );
-    }
-    mem_ids = expr_ids;
 
     if (ast->data.AST_LET.in_expr) {
-      mem_ids = ea(ast->data.AST_LET.in_expr, ctx);
+      ea(ast->data.AST_LET.in_expr, ctx);
     }
 
     break;
@@ -207,8 +130,6 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
     ea(ast->data.AST_MATCH.expr, ctx);
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
       ea(ast->data.AST_MATCH.branches + (2 * i), ctx);
-      mem_ids = list_extend_left(
-          mem_ids, ea(ast->data.AST_MATCH.branches + (2 * i) + 1, ctx));
     }
 
     break;
@@ -225,10 +146,6 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
   }
   case AST_IDENTIFIER: {
     const char *varname = ast->data.AST_IDENTIFIER.value;
-    EscapesEnv *ref = escapes_find(ctx->env, varname);
-    if (ref) {
-      mem_ids = ref->expr->ea_md;
-    }
 
     break;
   }
@@ -237,7 +154,9 @@ MemoryUseList *ea(Ast *ast, AECtx *ctx) {
     break;
   }
   }
-  ast->ea_md = mem_ids;
-  return mem_ids;
+  return;
 }
-void escape_analysis(Ast *prog, AECtx *ctx) { ea(prog, ctx); }
+void escape_analysis(Ast *prog) {
+  EACtx ctx = {};
+  ea(prog, &ctx);
+}

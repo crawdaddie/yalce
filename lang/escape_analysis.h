@@ -2,30 +2,30 @@
 #define _LANG_ESCAPE_ANALYSIS_H
 #include "parse.h"
 
-// typedef struct RefGraph {
-//   Ast *start;
-//   Ast *this;
-//   Ast *next;
-//   Ast *prev;
-// } RefGraph;
-
-typedef struct EscapesEnv {
-  const char *varname;
-  Ast *expr;
+// Simple allocation tracking
+typedef struct Allocation {
   uint32_t id;
-  struct EscapesEnv *next;
-} EscapesEnv;
+  const char *varname; // Variable that holds this allocation
+  Ast *alloc_site;     // Where it was allocated
+  bool escapes;        // Does it escape the function?
+  bool is_returned;    // Is it returned from function?
+  bool is_captured;    // Is it captured by closure?
+  struct Allocation *next;
+} Allocation;
 
-typedef struct AECtx {
-  int scope;
-  EscapesEnv *env;
-
-} AECtx;
+// Escape Analysis Context - tracks state during analysis
+typedef struct {
+  Allocation *allocations; // Linked list of allocations in current scope
+  int scope;               // Current nesting level (for closures)
+  bool in_function;        // Are we inside a function definition?
+  bool is_return_stmt;
+} EACtx;
 
 typedef enum { EA_STACK_ALLOC, EA_HEAP_ALLOC } EscapeStatus;
 typedef struct EscapeMeta {
   EscapeStatus status;
+  uint32_t id;
 } EscapeMeta;
-void escape_analysis(Ast *prog, AECtx *ctx);
+void escape_analysis(Ast *prog);
 
 #endif

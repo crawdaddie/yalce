@@ -5,31 +5,59 @@ type Ast =
   ;
 
 let isdigit = extern fn Char -> Bool;
+let parse_num = extern fn Ptr -> Int;
 
-let split_at = fn str: (String) delim: (String) ->
-  let aux = fn str: (String) delim: (String) off: (Int) ->
-    let delim_len = array_size delim;
-    match array_range 0 delim_len str with
-    | s if s == delim -> off
-    | _ -> aux (array_succ str) delim (off + 1)
-  ;;
-
-  let split_offset = aux str delim 0;
-  (str |> array_range 0 split_offset, str |> array_range split_offset ((array_size str) - split_offset))
+let eval_seq_str = fn str ->
+  match (str[0]) with
+  | x if isdigit x -> print `is digit chars: {parse_num (cstr str)}\n`
+  | '[' -> print "start seq with bracket"
+  | ']' -> print "end seq with bracket"
+  | _ -> print "no parse"
+  ;
+  ()
 ;;
 
+eval_seq_str "1 2 3 4";
+# Token Regular Expression Patterns
+# Single character tokens
 
-# let eval_seq_str = fn str ->
-#   match (str[0]) with
-#   | x if isdigit x -> print "is digit"
-#   | '[' -> print "start seq with bracket"
-#   | ']' -> print "end seq with bracket"
-#   | _ -> print "no parse"
-#   ;
-#   ()
+# let lex_rules = [
+#   ("\[", fn () -> () ), # LEFT_BRACKET    
+#   ("\]", fn () -> () ), # RIGHT BRACKET
+#   ("<",  fn () -> () ), # LEFT_ANGLE 
+#   (">",  fn () -> () ), # RIGHT_ANGLE    
+#   ("%",  fn () -> () ), # PERCENT
+#   ("\*", fn () -> () ), # ASTERISK
+#   ("[+-]?(?:\d+\.?\d*|\.\d+)", fn () -> () ), # NUMBER
+#   ("\S+", fn () -> ()), # STRING
+#   ("\s+", fn () -> ()), # WS
+# ];
+
+import lib/Regex;
+let m = Regex.find_one "ab [ 3sda" "\[";
+match m with
+  | Some (rm_so, rm_eo) -> print `found match {rm_so} {rm_eo}\n`
+  | None -> print "no match\n"
+
+
+#
+# let split_at = fn str: (String) delim: (String) ->
+#   let aux = fn str: (String) delim: (String) off: (Int) ->
+#     let delim_len = array_size delim;
+#     match array_range 0 delim_len str with
+#     | s if s == delim -> off
+#     | _ -> aux (array_succ str) delim (off + 1)
+#   ;;
+#
+#   let split_offset = aux str delim 0;
+#
+#   (
+#     str |> array_range 0 split_offset,
+#     str |> array_range split_offset ((array_size str) - split_offset)
+#   )
 # ;;
-# #
-# eval_seq_str "1 2 3 4";
-# (Seq []);
-split_at "11 22" " ";
+#
 
+# #
+# (Seq []);
+# split_at "11 22" " ";

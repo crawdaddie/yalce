@@ -139,8 +139,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  AECtx ae_ctx = {.env = NULL};
-  escape_analysis(*prog, &ae_ctx);
+  escape_analysis(*prog);
 
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
@@ -423,8 +422,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
 
     Type *typecheck_result = infer(prog, &ti_ctx);
 
-    AECtx ae_ctx = {.env = NULL};
-    escape_analysis(prog, &ae_ctx);
+    escape_analysis(prog);
 
     ctx->env = ti_ctx.env;
 

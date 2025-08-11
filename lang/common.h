@@ -2,6 +2,7 @@
 #define _LANG_COMMON_H
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 typedef struct {
   char *chars;
@@ -11,7 +12,6 @@ typedef struct {
 
 uint64_t hash_string(const char *key, int length);
 uint64_t hash_key(const char *key);
-#include <stdio.h>
 
 #define TRY_MSG(expr, msg)                                                     \
   ({                                                                           \
@@ -34,4 +34,7 @@ extern void (*break_repl_for_gui_loop_cb)(void); // Changed from int to void
 
 void __set_break_repl_flag(bool f);
 void __set_break_repl_cb(void (*cb)(void)); // Proper function pointer type
+//
+typedef void *(*AllocatorFnType)(size_t size);
+typedef void *(*ReAllocatorFnType)(void *p, size_t size);
 #endif

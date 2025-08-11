@@ -13,9 +13,12 @@ void set_base_dir(const char *dir) { __base_dir = dir; }
 const char *__filename;
 char *_cur_script;
 const char *_cur_script_content;
-static void *palloc(size_t size) { return malloc(size); }
-static void *prealloc(void *p, size_t size) { return realloc(p, size); }
 
+static void *__palloc(size_t size) { return malloc(size); }
+static void *__prealloc(void *p, size_t size) { return realloc(p, size); }
+
+AllocatorFnType palloc = __palloc;
+ReAllocatorFnType prealloc = __prealloc;
 custom_binops_t *__custom_binops = NULL;
 
 void add_custom_binop(const char *binop_name) {

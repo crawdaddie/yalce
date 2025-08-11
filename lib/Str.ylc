@@ -1,0 +1,14 @@
+let first_str_match = extern fn Ptr -> Ptr -> Int;
+let split_at = fn str delim ->
+  let len = array_size str;
+  let delim_len = array_size delim;
+  let spl = first_str_match (cstr str) (cstr delim);
+  match (spl, len) with
+  | (_, 0) -> ("", "")
+  | (-1, _) -> (str, "")
+  | (spl,_) -> 
+    (
+      array_range 0 spl str, 
+      array_range (spl + delim_len) (len - spl - delim_len) str
+    )
+;;
