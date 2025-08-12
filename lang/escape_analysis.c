@@ -1,22 +1,54 @@
 #include "./escape_analysis.h"
-#include "types/type.h"
-#include <stdlib.h>
+#include "./arena_allocator.h"
+#include "serde.h"
 #include <string.h>
 
 static int32_t next_alloc_id;
 
-void ctx_add_allocation(EACtx *ctx, const char *varname, Ast *alloc_site) {
-  Allocation *alloc = malloc(sizeof(Allocation));
-  *alloc = (Allocation){.id = next_alloc_id++,
-                        .varname = varname,
-                        .alloc_site = alloc_site,
-                        .escapes = false,
-                        .is_returned = false,
-                        .is_captured = false,
-                        .next = ctx->allocations};
-  ctx->allocations = alloc;
+DECLARE_ARENA_ALLOCATOR(ea, 512);
 
-  printf("Added allocation %d for variable '%s'\n", alloc->id, varname);
+Allocation *create_alloc(const char *varname, Ast *alloc_site, int scope) {
+  Allocation *alloc = ea_alloc(sizeof(Allocation));
+  *alloc = (Allocation){
+      .id = next_alloc_id++,
+      .varname = varname,
+      .alloc_site = alloc_site,
+      .scope = scope,
+      .escapes = false,
+      .is_returned = false,
+      .is_captured = false,
+  };
+  return alloc;
+}
+
+void print_allocs(Allocation *allocs) {
+  while (allocs) {
+    printf("id %d: ", allocs->id);
+    if (allocs->varname) {
+      printf(" [%s] ", allocs->varname);
+    }
+    print_ast(allocs->alloc_site);
+    allocs = allocs->next;
+  }
+}
+Allocation *allocations_extend(Allocation *allocs, Allocation *alloc) {
+  if (!allocs) {
+    return alloc;
+  }
+  if (!alloc) {
+    return alloc;
+  }
+  Allocation *a = alloc;
+  while (a->next != NULL) {
+    a = a->next;
+  }
+  a->next = allocs;
+  return alloc;
+}
+
+void ctx_add_allocation(EACtx *ctx, Allocation *alloc) {
+  alloc->next = ctx->allocations;
+  ctx->allocations = alloc;
 }
 
 Allocation *ctx_find_allocation(EACtx *ctx, const char *varname) {
@@ -31,32 +63,56 @@ Allocation *ctx_find_allocation(EACtx *ctx, const char *varname) {
   return NULL;
 }
 
-void ea(Ast *ast, EACtx *ctx) {
-
-  if (!ast) {
+void ctx_bind_allocations(EACtx *ctx, Ast *binding, Allocation *allocs) {
+  if (!allocs) {
     return;
   }
+  switch (binding->tag) {
+  case AST_IDENTIFIER: {
+    Allocation *b = ea_alloc(sizeof(Allocation));
+    *b = *allocs;
+    b->varname = binding->data.AST_IDENTIFIER.value;
+    ctx_add_allocation(ctx, b);
+  }
+  default: {
+  }
+  }
+}
+
+Allocation *ea(Ast *ast, EACtx *ctx) {
+
+  if (!ast) {
+    return NULL;
+  }
+  Allocation *allocations = NULL;
 
   switch (ast->tag) {
   case AST_ARRAY:
   case AST_LIST: {
-
     for (int i = 0; i < ast->data.AST_LIST.len; i++) {
+      Ast *item = ast->data.AST_LIST.items + i;
+      allocations = allocations_extend(allocations, ea(item, ctx));
     }
-    break;
+    Allocation *list_alloc = create_alloc(NULL, ast, ctx->scope);
+    return allocations_extend(allocations, list_alloc);
   }
-
   case AST_TUPLE: {
     for (int i = 0; i < ast->data.AST_LIST.len; i++) {
+      allocations = allocations_extend(allocations,
+                                       ea(ast->data.AST_LIST.items + i, ctx));
     }
-    break;
+    // TUPLE doesn't allocate anything however it can expose allocations from
+    // its members
+    return allocations;
   }
   case AST_INT:
   case AST_DOUBLE:
   case AST_CHAR:
-  case AST_BOOL:
-  case AST_STRING: {
+  case AST_BOOL: {
     break;
+  }
+  case AST_STRING: {
+    return create_alloc(NULL, ast, ctx->scope);
   }
 
   case AST_FMT_STRING: {
@@ -71,13 +127,14 @@ void ea(Ast *ast, EACtx *ctx) {
   }
 
   case AST_LAMBDA: {
+    Allocation *ret_alloc;
 
     EACtx lambda_ctx = *ctx;
     lambda_ctx.scope++;
     if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
       Ast *stmt = ast->data.AST_LAMBDA.body;
       lambda_ctx.is_return_stmt = true;
-      ea(stmt, &lambda_ctx);
+      ret_alloc = ea(stmt, &lambda_ctx);
     } else {
       Ast *body = ast->data.AST_LAMBDA.body;
       Ast *stmt;
@@ -86,11 +143,20 @@ void ea(Ast *ast, EACtx *ctx) {
 
         if (i == body->data.AST_BODY.len - 1) {
           lambda_ctx.is_return_stmt = true;
+          ret_alloc = ea(stmt, &lambda_ctx);
+        } else {
+          ea(stmt, &lambda_ctx);
         }
-        ea(stmt, &lambda_ctx);
       }
     }
-    break;
+    if (ret_alloc) {
+      printf("lambda %s escaped "
+             "allocations:\n============================================\n",
+             ast->data.AST_LAMBDA.fn_name.chars);
+      print_allocs(ret_alloc);
+    }
+
+    return NULL;
   }
 
   case AST_BODY: {
@@ -98,32 +164,33 @@ void ea(Ast *ast, EACtx *ctx) {
     Ast *stmt;
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
       stmt = ast->data.AST_BODY.stmts[i];
-      ea(stmt, ctx);
+      allocations = allocations_extend(allocations, ea(stmt, ctx));
     }
-    break;
+    return allocations;
   }
 
   case AST_APPLICATION: {
 
-    ea(ast->data.AST_APPLICATION.function, ctx);
+    // ea(ast->data.AST_APPLICATION.function, ctx);
 
-    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-      ea(ast->data.AST_APPLICATION.args + i, ctx);
-    }
+    // for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+    //   ea(ast->data.AST_APPLICATION.args + i, ctx);
+    // }
 
     break;
   }
   case AST_LOOP:
   case AST_LET: {
-    ea(ast->data.AST_LET.expr, ctx);
-
-    Type *t = ast->data.AST_LET.expr->md;
+    allocations = ea(ast->data.AST_LET.expr, ctx);
 
     if (ast->data.AST_LET.in_expr) {
-      ea(ast->data.AST_LET.in_expr, ctx);
+      EACtx *let_ctx = ctx;
+      let_ctx->scope++;
+      ctx_bind_allocations(let_ctx, ast->data.AST_LET.binding, allocations);
+      return ea(ast->data.AST_LET.in_expr, let_ctx);
     }
-
-    break;
+    ctx_bind_allocations(ctx, ast->data.AST_LET.binding, allocations);
+    return allocations;
   }
 
   case AST_MATCH: {
@@ -146,17 +213,20 @@ void ea(Ast *ast, EACtx *ctx) {
   }
   case AST_IDENTIFIER: {
     const char *varname = ast->data.AST_IDENTIFIER.value;
-
-    break;
+    Allocation *found_alloc = ctx_find_allocation(ctx, varname);
+    return found_alloc;
   }
 
   default: {
     break;
   }
   }
-  return;
+  return NULL;
 }
+
 void escape_analysis(Ast *prog) {
-  EACtx ctx = {};
-  ea(prog, &ctx);
+  WITH_ARENA_ALLOCATOR(ea, ({
+                         EACtx ctx = {};
+                         ea(prog, &ctx);
+                       }));
 }

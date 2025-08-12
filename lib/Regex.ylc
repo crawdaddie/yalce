@@ -18,3 +18,17 @@ let find_one = fn str reg ->
   | 0 -> Some (rm.rm_so, rm.rm_eo)
   | _ -> None
 ;;
+
+let escape_test = fn str reg ->
+  let r = [| Regex (0, 0, cstr "", cstr "") |];
+  # let comp = regcomp (cstr r) (cstr reg) 0;
+  # let rmr = [| RegexMatch (0, 0) |];
+  # let ex = regexec (cstr r) (cstr str) 1 (cstr rmr) 0;
+  # let rm = rmr[0];
+  #
+  # match ex with
+  # | 0 -> Some (rm.rm_so, rm.rm_eo)
+  # | _ -> None
+  r
+
+;;

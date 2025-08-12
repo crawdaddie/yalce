@@ -10,6 +10,7 @@ typedef struct Allocation {
   bool escapes;        // Does it escape the function?
   bool is_returned;    // Is it returned from function?
   bool is_captured;    // Is it captured by closure?
+  int scope;
   struct Allocation *next;
 } Allocation;
 
