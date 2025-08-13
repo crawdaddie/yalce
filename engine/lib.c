@@ -691,21 +691,21 @@ NodeRef set_input_trig_offset(NodeRef node, int input, uint64_t tick) {
   return node;
 }
 
-sample_t midi_to_freq(int midi_note) {
+double midi_to_freq(int midi_note) {
   // A4 (MIDI note 69) has a frequency of 440 Hz
   // Each semitone is a factor of 2^(1/12)
   return 440.0 * pow(2.0, (midi_note - 69) / 12.0);
 }
 
-sample_t dmidi_to_freq(double midi_note) {
+double dmidi_to_freq(double midi_note) {
   // A4 (MIDI note 69) has a frequency of 440 Hz
   // Each semitone is a factor of 2^(1/12)
   return 440.0 * pow(2.0, ((float)midi_note - 69) / 12.0);
 }
 
-sample_t semi_to_ratio(int semitones) {
+double semi_to_ratio(int semitones) {
   // Each semitone is a factor of 2^(1/12)
-  return pow(2.0, (semitones) / 12.0);
+  return pow(2.0f, (semitones) / 12.0);
 }
 
 Signal *node_out(NodeRef node) { return &(node->output); }

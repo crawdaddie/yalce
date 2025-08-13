@@ -264,7 +264,7 @@ typedef struct scope_state {
   int size;    // Size of the input buffer (in frames)
 
   // Ring buffer for the oscilloscope (interleaved format)
-  double *ring_buffer;  // Interleaved ring buffer
+  float *ring_buffer;   // Interleaved ring buffer
   int ring_buffer_size; // Total size of ring buffer in frames
   int ring_buffer_pos;  // Current position in ring buffer (in frames)
 
@@ -518,7 +518,7 @@ void scope_event_handler(scope_state *state, SDL_Event *event) {
   }
 }
 
-int create_scope(double *signal, int layout, int size) {
+int create_scope(float *signal, int layout, int size) {
   scope_state *state =
       malloc(sizeof(scope_state) + BUFFER_SIZE * layout * sizeof(double));
 

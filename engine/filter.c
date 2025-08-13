@@ -529,7 +529,7 @@ void *delay_perform(Node *node, delay_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *delay_node(sample_t delay_time, sample_t max_delay_time, sample_t fb,
+Node *delay_node(double delay_time, double max_delay_time, double fb,
                  Node *input) {
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -640,8 +640,8 @@ void *delay2_perform(Node *node, delay2_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *delay2_node(sample_t delay_time_left, sample_t delay_time_right,
-                  sample_t max_delay_time, sample_t fb, Node *input) {
+Node *delay2_node(double delay_time_left, double delay_time_right,
+                  double max_delay_time, double fb, Node *input) {
 
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -698,9 +698,8 @@ Node *delay2_node(sample_t delay_time_left, sample_t delay_time_right,
 }
 
 // Convenience function for creating stereo delay with slight time differences
-Node *stereo_spread_delay_node(sample_t delay_time, sample_t spread_amount,
-                               sample_t max_delay_time, sample_t fb,
-                               Node *input) {
+Node *stereo_spread_delay_node(double delay_time, double spread_amount,
+                               double max_delay_time, double fb, Node *input) {
   sample_t delay_left = delay_time - spread_amount * 0.5;
   sample_t delay_right = delay_time + spread_amount * 0.5;
 
@@ -820,7 +819,7 @@ void *dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *dyn_delay_node(Node *delay_time, sample_t max_delay_time, sample_t fb,
+Node *dyn_delay_node(Node *delay_time, double max_delay_time, double fb,
                      Node *input) {
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -915,8 +914,8 @@ void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *comb_node(sample_t delay_time, sample_t max_delay_time, sample_t fb,
-                sample_t ff, Node *input) {
+Node *comb_node(double delay_time, double max_delay_time, double fb, double ff,
+                Node *input) {
 
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -1099,7 +1098,7 @@ void *tanh_perform(Node *node, tanh_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *tanh_node(sample_t gain, Node *input) {
+Node *tanh_node(double gain, Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(tanh_state));
 
@@ -1141,7 +1140,7 @@ void *dyn_tanh_perform(Node *node, tanh_state *state, Node *inputs[],
 
   while (nframes--) {
 
-    *out = tanh(*in * *gain);
+    *out = tanhf(*in * *gain);
     gain++;
     in++;
     out++;
@@ -1224,7 +1223,7 @@ void *allpass_perform(Node *node, allpass_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *allpass_node(sample_t delay_time, sample_t max_delay_time, sample_t g,
+Node *allpass_node(double delay_time, double max_delay_time, double g,
                    Node *input) {
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -1329,7 +1328,7 @@ void *dyn_allpass_perform(Node *node, allpass_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *dyn_allpass_node(sample_t max_delay_time, sample_t g, Node *input,
+Node *dyn_allpass_node(double max_delay_time, double g, Node *input,
                        Node *delay_time) {
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -1486,7 +1485,7 @@ void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
   }
 }
 
-NodeRef grain_pitchshift_node(sample_t shift, sample_t fb, NodeRef input) {
+NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
   AudioGraph *graph = _graph;
 
   int max_grains = 32;
@@ -1701,7 +1700,7 @@ void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-NodeRef stutter_node(sample_t max_time, NodeRef repeat_time, NodeRef gate,
+NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
                      NodeRef input) {
   AudioGraph *graph = _graph;
 

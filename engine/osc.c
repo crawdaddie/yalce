@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-sample_t _random_sample_t_range(sample_t min, sample_t max);
+sample_t _random_sample_range(sample_t min, sample_t max);
 int save_table_to_file(sample_t *table, int size, const char *filename) {
 
   FILE *file = fopen(filename, "w");
@@ -888,7 +888,7 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
 }
 
 // White noise generator
-sample_t _random_sample_t_range(sample_t min, sample_t max) {
+sample_t _random_sample_range(sample_t min, sample_t max) {
   int rand_int = rand();
   sample_t rand_sample_t = (sample_t)rand_int / RAND_MAX;
   rand_sample_t = rand_sample_t * (max - min) + min;
@@ -901,7 +901,7 @@ void *white_noise_perform(Node *node, void *state, Node *inputs[], int nframes,
   int out_layout = node->output.layout;
 
   while (nframes--) {
-    sample_t sample = _random_sample_t_range(-1.0, 1.0);
+    sample_t sample = _random_sample_range(-1.0, 1.0);
 
     for (int i = 0; i < out_layout; i++) {
       *out = sample;
@@ -943,7 +943,7 @@ void *brown_noise_perform(Node *node, brown_noise_state *state, Node *inputs[],
   sample_t scale = sqrt(spf);
 
   while (nframes--) {
-    sample_t add = scale * _random_sample_t_range(-1.0, 1.0);
+    sample_t add = scale * _random_sample_range(-1.0, 1.0);
     state->last += add;
 
     if (state->last > 1.0 || state->last < -1.0) {
@@ -1013,7 +1013,7 @@ void *lfnoise_perform(Node *node, lfnoise_state *state, Node *inputs[],
     // If we need a new random value
     if (state->samples_left <= 0) {
       // Generate new target value
-      state->target_value = _random_sample_t_range(min_range, max_range);
+      state->target_value = _random_sample_range(min_range, max_range);
 
       // Calculate samples until next change (based on frequency)
       sample_t samples_per_cycle = 1.0 / (freq * spf);
@@ -1060,8 +1060,8 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
   };
 
   lfnoise_state *state = (lfnoise_state *)state_ptr(graph, node);
-  sample_t rand_val = _random_sample_t_range(min_input->output.buf[0],
-                                             max_input->output.buf[0]);
+  sample_t rand_val =
+      _random_sample_range(min_input->output.buf[0], max_input->output.buf[0]);
   *state = (lfnoise_state){
       .current_value = rand_val,
       .target_value = rand_val,
@@ -1115,7 +1115,7 @@ void *static_chirp_perform(Node *node, chirp_state *state, Node *inputs[],
         progress = 1.0;
 
       state->current_freq = state->start_freq *
-                            pow(state->end_freq / state->start_freq, progress);
+                            powf(state->end_freq / state->start_freq, progress);
 
       state->elapsed_time += spf;
 
@@ -1200,7 +1200,7 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
         progress = 1.0;
 
       state->current_freq = state->start_freq *
-                            pow(state->end_freq / state->start_freq, progress);
+                            powf(state->end_freq / state->start_freq, progress);
 
       state->elapsed_time += spf;
 
@@ -1386,7 +1386,7 @@ void *trig_rand_perform(Node *node, trig_rand_state *state, Node *inputs[],
 
   while (nframes--) {
     if (*trig == 1.0) {
-      state->value = _random_sample_t_range(0.0, 1.0);
+      state->value = _random_sample_range(0.0, 1.0);
     }
 
     for (int i = 0; i < out_layout; i++) {
@@ -1417,7 +1417,7 @@ Node *trig_rand_node(Node *trig) {
   };
 
   trig_rand_state *state = (trig_rand_state *)state_ptr(graph, node);
-  *state = (trig_rand_state){.value = _random_sample_t_range(0.0, 1.0)};
+  *state = (trig_rand_state){.value = _random_sample_range(0.0, 1.0)};
 
   // node->connections[0].source_node_index = trig->node_index;
   plug_input_in_graph(0, node, trig);
@@ -1437,7 +1437,7 @@ void *trig_range_perform(Node *node, trig_rand_state *state, Node *inputs[],
   while (nframes--) {
 
     if (*trig == 1.0) {
-      state->value = _random_sample_t_range(*low, *high);
+      state->value = _random_sample_range(*low, *high);
     }
     low++;
     high++;
@@ -1467,7 +1467,7 @@ Node *trig_range_node(Node *low, Node *high, Node *trig) {
   };
 
   trig_rand_state *state = (trig_rand_state *)state_ptr(graph, node);
-  *state = (trig_rand_state){.value = _random_sample_t_range(0.0, 1.0)};
+  *state = (trig_rand_state){.value = _random_sample_range(0.0, 1.0)};
 
   plug_input_in_graph(0, node, trig);
   plug_input_in_graph(1, node, low);

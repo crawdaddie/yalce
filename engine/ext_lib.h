@@ -25,10 +25,10 @@ NodeRef load_soundfile(_String path);
 
 NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s);
 
-sample_t midi_to_freq(int midi_note);
-sample_t dmidi_to_freq(double midi_note);
+double midi_to_freq(int midi_note);
+double dmidi_to_freq(double midi_note);
 
-sample_t semi_to_ratio(int semitones);
+double semi_to_ratio(int semitones);
 
 sample_t *ctx_main_out();
 
