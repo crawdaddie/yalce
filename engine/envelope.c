@@ -100,8 +100,8 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *asr_kill_node(sample_t attack_time, sample_t sustain_level,
-                    sample_t release_time, Node *trigger) {
+Node *asr_kill_node(double attack_time, double sustain_level,
+                    double release_time, Node *trigger) {
 
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(asr_state));
@@ -141,8 +141,8 @@ Node *asr_kill_node(sample_t attack_time, sample_t sustain_level,
   return graph_embed(node);
 }
 
-Node *asr_node(sample_t attack_time, sample_t sustain_level,
-               sample_t release_time, Node *trigger) {
+Node *asr_node(double attack_time, double sustain_level, double release_time,
+               Node *trigger) {
 
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(asr_state));
@@ -265,8 +265,8 @@ void *aslr_perform(Node *node, aslr_state *state, Node *inputs[], int nframes,
 
   return node->output.buf;
 }
-Node *aslr_node(sample_t attack_time, sample_t sustain_level,
-                sample_t sustain_time, sample_t release_time, Node *trigger) {
+Node *aslr_node(double attack_time, double sustain_level, double sustain_time,
+                double release_time, Node *trigger) {
 
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(aslr_state));

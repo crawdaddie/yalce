@@ -36,7 +36,7 @@ NodeRef grain_pitchshift_node(sample_t shift, sample_t fb, NodeRef input);
 
 NodeRef dyn_tanh_node(NodeRef gain, NodeRef input);
 
-typedef sample_t (*MathNodeFn)(sample_t);
+typedef double (*MathNodeFn)(double);
 
 NodeRef math_node(MathNodeFn math_fn, NodeRef input);
 

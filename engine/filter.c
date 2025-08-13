@@ -1537,9 +1537,8 @@ NodeRef grain_pitchshift_node(sample_t shift, sample_t fb, NodeRef input) {
   return graph_embed(node);
 }
 
-typedef sample_t (*node_math_func_t)(sample_t samp);
 typedef struct math_node_state {
-  node_math_func_t math_fn;
+  MathNodeFn math_fn;
 } math_node_state;
 
 void *math_perform(Node *node, math_node_state *state, Node *inputs[],
@@ -1548,7 +1547,7 @@ void *math_perform(Node *node, math_node_state *state, Node *inputs[],
   Signal in = inputs[0]->output;
 
   for (int i = 0; i < in.size * in.layout; i++) {
-    out[i] = state->math_fn(in.buf[i]);
+    out[i] = (sample_t)state->math_fn((double)in.buf[i]);
   }
 
   return node->output.buf;
