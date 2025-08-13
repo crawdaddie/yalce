@@ -206,8 +206,8 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *reverb_node(sample_t room_size, sample_t wet, sample_t dry,
-                  sample_t width, Node *input) {
+Node *reverb_node(double room_size, double wet, double dry, double width,
+                  Node *input) {
   sample_t sr = (sample_t)ctx_sample_rate();
 
   const int comb_tunings[FREEVERB_NUM_COMBS] = {1116, 1188, 1277, 1356,

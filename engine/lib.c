@@ -554,7 +554,7 @@ NodeRef play_node(NodeRef s) {
   return play_node_offset(get_frame_offset(), s);
 }
 
-int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
+int _read_sf(const char *filename, Signal *signal, int *sf_sample_rate) {
   SNDFILE *infile;
   SF_INFO sfinfo;
   int readcount;
@@ -578,7 +578,6 @@ int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
   size_t total_size = sfinfo.channels * sfinfo.frames;
 
   sample_t *buf = calloc((int)total_size, sizeof(sample_t));
-  // sample_t *buf = signal->buf;
 
   // reads channels in interleaved
   int read = sf_read_float(infile, buf, total_size);
@@ -605,26 +604,13 @@ typedef struct {
 NodeRef load_soundfile(_String path) {
   Node *sf = malloc(sizeof(Node) + sizeof(sf_meta));
   sf_meta *meta = (sf_meta *)((Node *)sf + 1);
-  if (_read_file(path.chars, &sf->output, &meta->sample_rate) != 0) {
+  if (_read_sf(path.chars, &sf->output, &meta->sample_rate) != 0) {
     return NULL;
   }
-  // printf("created sf node %d %d (%d)\n", sf->output.layout, sf->output.size,
-  // meta->sample_rate);
 
   return sf;
 }
 
-// void set_input_scalar_offset(NodeRef target, int input, int offset, sample_t
-// val) {
-//   push_msg(
-//       &ctx.msg_queue,
-//       (scheduler_msg){NODE_SET_SCALAR,
-//                       offset,
-//                       {.NODE_SET_SCALAR = {
-//                            .target = target, .input = input, .value =
-//                            val}}});
-// }
-//
 NodeRef set_input_scalar(NodeRef node, int input, double value) {
   push_msg(&ctx.msg_queue,
            (scheduler_msg){NODE_SET_SCALAR,

@@ -1,7 +1,6 @@
 #! ylc -i
 # (
-# import engine/bindings/Config;
-# Config.set_input_conf [1,0]
+# import engine/bindings/Config; Config.set_input_conf [1,0]
 # );
 
 open engine/bindings/Synth; 
@@ -19,7 +18,7 @@ let Kick = module
     let trig = inlet 0.; # 0
     bufplayer_trig_node (buf_ref buf) ( 44100. / 48000. ) (inlet 0.) trig # 3 
     |> (*) (aslr_node 0. 1. 0.2 0.1 trig)
-    |> math_node (fn x -> 0.5 * (x + Math.sin (10. * x)))
+    |> math_node (fn x -> 0.5 * (x + Math.sin (1 + 5. * x)))
   )
   |> play_tpl
   ;
@@ -48,13 +47,6 @@ let Snare = module
   )
   |> play_tpl
   ;
-
-  # let synth = (fn () ->
-  #   let trig = inlet 0.;
-  #   sin_node (inlet 800.) 
-  #   |> (*) (aslr_node 0.01 1. 0.1 0.01 trig)
-  # ) |> play_tpl
-  # ;
 
 
   let trig = fn () -> 
@@ -155,13 +147,6 @@ let snrout = fn () ->
   yield snrout ()
 ;;
 
-# let bin_pat = fn q: (Double) f d ->
-#   match d with
-#   | 1 -> f () 
-#   | 0 -> ()
-#   ;
-#   q
-# ;;
 
 
 defer_quant (q * 1) (fn t ->
@@ -176,12 +161,6 @@ defer_quant (q * 1) (fn t ->
   |> cor_map (fn d -> Kick.trig (); d)
   |> Kick.set_pattern t
   ;
-  # iter (euclid 64 10)
-  # |> cor_loop
-  # |> cor_map (bin_pat (q * 0.25) (Kick.trig))
-  # |> Kick.set_pattern t
-  # ;
-  #
   snrout ()
   |> cor_map ((*) q)
   |> Snare.set_pattern t
@@ -198,14 +177,14 @@ let plugin = vst_load_plugin_of_assoc_list
     (3, 0.1),   # Delay_Ms : 0.5
     (4, 1.),    # DelayWarp : 0
     (5, 1.),    # Clear : 1
-    (6, 0.8),   # Feedback : 0.5
-    (7, 0.4),   # Density : 0
+    (6, 0.78),   # Feedback : 0.5
+    (7, 0.9),   # Density : 0
     (8, 1.),    # Width : 1
     (9, 0.),    # LowCut : 0
     (10, 1.),   # HighCut : 1
     (11, 0.1),  # ModRate : 0.273834
-    (12, 0.9),  # ModDepth : 0.5
-    (13, 0.05), # Mode : 0.0416667
+    (12, 0.1),  # ModDepth : 0.5
+    (13, 0.01), # Mode : 0.0416667
   ]
   ;
 
