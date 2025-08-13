@@ -7,9 +7,9 @@
 
 AudioGraph *_graph = NULL;
 
-double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
+sample_t *allocate_buffer_from_pool(AudioGraph *graph, int size) {
   if (!graph) {
-    return calloc(size, sizeof(double));
+    return calloc(size, sizeof(sample_t));
   }
 
   if (graph->buffer_pool_size + size > graph->buffer_pool_capacity) {
@@ -25,7 +25,7 @@ double *allocate_buffer_from_pool(AudioGraph *graph, int size) {
     // ...
   }
 
-  double *buffer = &graph->buffer_pool[graph->buffer_pool_size];
+  sample_t *buffer = &graph->buffer_pool[graph->buffer_pool_size];
   graph->buffer_pool_size += size;
   // while (size--) {
   //   *(buffer + size) = 0.0;
@@ -111,7 +111,7 @@ Node *allocate_node_in_graph(AudioGraph *graph, int state_size) {
 
   // Check if we need more state memory and reallocate if necessary
   if (graph->state_memory_size + state_size > graph->state_memory_capacity) {
-    // Double the state memory capacity or increase by what we need, whichever
+    // sample_t the state memory capacity or increase by what we need, whichever
     // is larger
     int new_capacity = graph->state_memory_capacity * 2;
     if (graph->state_memory_size + state_size > new_capacity) {
@@ -190,7 +190,7 @@ char *__node_get_state(Node *node, AudioGraph *graph) {
   return state;
 }
 void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
-                         int nframes, double spf) {
+                         int nframes, sample_t spf) {
 
   int node_count = graph->node_count;
   Node *node = graph->nodes;
@@ -212,7 +212,7 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
       if (node->trig_end == true) {
         _node->trig_end = true;
         memset(_node->output.buf, 0,
-               _node->output.size * _node->output.layout * sizeof(double));
+               _node->output.size * _node->output.layout * sizeof(sample_t));
       }
     }
 

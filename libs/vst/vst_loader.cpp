@@ -290,7 +290,7 @@ void *vst_load_plugin_of_assoc_list(_String _plugin_path, InValList *params) {
   InValList *param = params;
   while (param) {
     if (param->pair.idx < eff->numParams) {
-      eff->setParameter(eff, param->pair.idx, param->pair.val);
+      eff->setParameter(eff, param->pair.idx, (float)param->pair.val);
     }
     param = param->next;
   }
@@ -303,21 +303,21 @@ typedef struct {
 } vst_node_state;
 
 void *vst_fx_node_perform(Node *node, vst_node_state *state, Node *inputs[],
-                          int nframes, double spf) {
+                          int nframes, sample_t _spf) {
 
   VSTPlugin *plugin = state->handle;
 
   AEffect *effect = plugin->getEffect();
 
   if (!effect || !effect->processReplacing) {
-    double *out = node->output.buf;
-    double *in = inputs[0]->output.buf;
-    memcpy(out, in, nframes * node->output.layout * sizeof(double));
+    sample_t *out = node->output.buf;
+    sample_t *in = inputs[0]->output.buf;
+    memcpy(out, in, nframes * node->output.layout * sizeof(sample_t));
     return NULL;
   }
 
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
 
   std::vector<float *> &vstInputBuffers = plugin->getInputBuffers();
   std::vector<float *> &vstOutputBuffers = plugin->getOutputBuffers();

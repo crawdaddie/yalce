@@ -13,17 +13,18 @@
 
 // Biquad filter state
 typedef struct biquad_state {
-  double b0, b1, b2; // Feedforward coefficients
-  double a1, a2;     // Feedback coefficients
-  double x1, x2;     // Input delay elements
-  double y1, y2;     // Output delay elements
-  double prev_freq;  // Previous frequency value for coefficient updates
-  double prev_res;   // Previous resonance value
+  sample_t b0, b1, b2; // Feedforward coefficients
+  sample_t a1, a2;     // Feedback coefficients
+  sample_t x1, x2;     // Input delay elements
+  sample_t y1, y2;     // Output delay elements
+  sample_t prev_freq;  // Previous frequency value for coefficient updates
+  sample_t prev_res;   // Previous resonance value
 } biquad_state;
 
 // Initialize filter coefficients and state variables
-static void set_biquad_filter_state(biquad_state *filter, double b0, double b1,
-                                    double b2, double a1, double a2) {
+static void set_biquad_filter_state(biquad_state *filter, sample_t b0,
+                                    sample_t b1, sample_t b2, sample_t a1,
+                                    sample_t a2) {
   filter->b0 = b0;
   filter->b1 = b1;
   filter->b2 = b2;
@@ -40,83 +41,83 @@ static void zero_biquad_filter_state(biquad_state *filter) {
 }
 
 // Low-pass filter coefficient calculation
-static void set_biquad_lp_coefficients(double freq, double res, int fs,
+static void set_biquad_lp_coefficients(sample_t freq, sample_t res, int fs,
                                        biquad_state *state) {
-  double fc = freq; // Cutoff frequency (Hz)
-  double w0 = 2.0 * PI * fc / fs;
-  double Q = res; // Quality factor
+  sample_t fc = freq; // Cutoff frequency (Hz)
+  sample_t w0 = 2.0 * PI * fc / fs;
+  sample_t Q = res; // Quality factor
 
   // Compute filter coefficients
-  double A = sin(w0) / (2 * Q);
-  double C = cos(w0);
-  double b0 = (1 - C) / 2;
-  double b1 = 1 - C;
-  double b2 = (1 - C) / 2;
-  double a0 = 1 + A;
-  double a1 = -2 * C;
-  double a2 = 1 - A;
+  sample_t A = sinf(w0) / (2 * Q);
+  sample_t C = cosf(w0);
+  sample_t b0 = (1 - C) / 2;
+  sample_t b1 = 1 - C;
+  sample_t b2 = (1 - C) / 2;
+  sample_t a0 = 1 + A;
+  sample_t a1 = -2 * C;
+  sample_t a2 = 1 - A;
 
   // Initialize filter
   set_biquad_filter_state(state, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
 }
 
 // Band-pass filter coefficient calculation
-static void set_biquad_bp_coefficients(double freq, double res, int fs,
+static void set_biquad_bp_coefficients(sample_t freq, sample_t res, int fs,
                                        biquad_state *state) {
-  double fc = freq; // Center frequency (Hz)
-  double w0 = 2.0 * PI * fc / fs;
-  double Q = res; // Q factor for resonance
+  sample_t fc = freq; // Center frequency (Hz)
+  sample_t w0 = 2.0 * PI * fc / fs;
+  sample_t Q = res; // Q factor for resonance
 
   // Compute filter coefficients
-  double A = sin(w0) / (2 * Q);
-  double C = cos(w0);
-  double b0 = A;
-  double b1 = 0.0;
-  double b2 = -A;
-  double a0 = 1 + A;
-  double a1 = -2 * C;
-  double a2 = 1 - A;
+  sample_t A = sinf(w0) / (2 * Q);
+  sample_t C = cosf(w0);
+  sample_t b0 = A;
+  sample_t b1 = 0.0;
+  sample_t b2 = -A;
+  sample_t a0 = 1 + A;
+  sample_t a1 = -2 * C;
+  sample_t a2 = 1 - A;
 
   // Initialize filter
   set_biquad_filter_state(state, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
 }
 
 // High-pass filter coefficient calculation
-static void set_biquad_hp_coefficients(double freq, double res, int fs,
+static void set_biquad_hp_coefficients(sample_t freq, sample_t res, int fs,
                                        biquad_state *state) {
-  double fc = freq; // Cutoff frequency (Hz)
-  double w0 = 2.0 * PI * fc / fs;
-  double Q = res; // Quality factor
+  sample_t fc = freq; // Cutoff frequency (Hz)
+  sample_t w0 = 2.0 * PI * fc / fs;
+  sample_t Q = res; // Quality factor
 
   // Compute filter coefficients
-  double A = sin(w0) / (2 * Q);
-  double C = cos(w0);
-  double b0 = (1 + C) / 2;
-  double b1 = -(1 + C);
-  double b2 = (1 + C) / 2;
-  double a0 = 1 + A;
-  double a1 = -2 * C;
-  double a2 = 1 - A;
+  sample_t A = sinf(w0) / (2 * Q);
+  sample_t C = cosf(w0);
+  sample_t b0 = (1 + C) / 2;
+  sample_t b1 = -(1 + C);
+  sample_t b2 = (1 + C) / 2;
+  sample_t a0 = 1 + A;
+  sample_t a1 = -2 * C;
+  sample_t a2 = 1 - A;
 
   // Initialize filter
   set_biquad_filter_state(state, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
 }
 
 // Butterworth high-pass filter coefficient calculation
-static void set_butterworth_hp_coefficients(double freq, int fs,
+static void set_butterworth_hp_coefficients(sample_t freq, int fs,
                                             biquad_state *state) {
-  double fc = freq; // Cutoff frequency (Hz)
-  double w0 = 2.0 * PI * fc / fs;
-  double wc = tan(w0 / 2);
-  double k = wc * wc;
-  double sqrt2 = sqrt(2.0);
+  sample_t fc = freq; // Cutoff frequency (Hz)
+  sample_t w0 = 2.0 * PI * fc / fs;
+  sample_t wc = tan(w0 / 2);
+  sample_t k = wc * wc;
+  sample_t sqrt2 = sqrt(2.0);
 
   // Compute filter coefficients
-  double b0 = 1 / (1 + sqrt2 * wc + k);
-  double b1 = -2 * b0;
-  double b2 = b0;
-  double a1 = 2 * (k - 1) * b0;
-  double a2 = (1 - sqrt2 * wc + k) * b0;
+  sample_t b0 = 1 / (1 + sqrt2 * wc + k);
+  sample_t b1 = -2 * b0;
+  sample_t b2 = b0;
+  sample_t a1 = 2 * (k - 1) * b0;
+  sample_t a2 = (1 - sqrt2 * wc + k) * b0;
 
   // Initialize filter
   set_biquad_filter_state(state, b0, b1, b2, a1, a2);
@@ -124,15 +125,15 @@ static void set_butterworth_hp_coefficients(double freq, int fs,
 
 // Biquad filter perform function
 void *biquad_perform(Node *node, biquad_state *state, Node *inputs[],
-                     int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                     int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
 
   while (nframes--) {
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    sample_t input = *in;
+    sample_t output = state->b0 * input + state->b1 * state->x1 +
+                      state->b2 * state->x2 - state->a1 * state->y1 -
+                      state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -150,15 +151,15 @@ void *biquad_perform(Node *node, biquad_state *state, Node *inputs[],
 
 // Dynamic biquad low-pass filter perform function
 void *biquad_lp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
-                            int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *freq_in = inputs[1]->output.buf;
-  double *res_in = inputs[2]->output.buf;
+                            int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t *freq_in = inputs[1]->output.buf;
+  sample_t *res_in = inputs[2]->output.buf;
 
   // Initial check and coefficient update
-  double freq = *freq_in;
-  double res = *res_in;
+  sample_t freq = *freq_in;
+  sample_t res = *res_in;
 
   // Update coefficients if parameters changed
   if (freq != state->prev_freq || res != state->prev_res) {
@@ -178,10 +179,10 @@ void *biquad_lp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
       state->prev_res = res;
     }
 
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    sample_t input = *in;
+    sample_t output = state->b0 * input + state->b1 * state->x1 +
+                      state->b2 * state->x2 - state->a1 * state->y1 -
+                      state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -202,15 +203,15 @@ void *biquad_lp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
 
 // Dynamic biquad band-pass filter perform function
 void *biquad_bp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
-                            int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *freq_in = inputs[1]->output.buf;
-  double *res_in = inputs[2]->output.buf;
+                            int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t *freq_in = inputs[1]->output.buf;
+  sample_t *res_in = inputs[2]->output.buf;
 
   // Initial check and coefficient update
-  double freq = *freq_in;
-  double res = *res_in;
+  sample_t freq = *freq_in;
+  sample_t res = *res_in;
 
   // Update coefficients if parameters changed
   if (freq != state->prev_freq || res != state->prev_res) {
@@ -230,10 +231,10 @@ void *biquad_bp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
       state->prev_res = res;
     }
 
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    sample_t input = *in;
+    sample_t output = state->b0 * input + state->b1 * state->x1 +
+                      state->b2 * state->x2 - state->a1 * state->y1 -
+                      state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -254,15 +255,15 @@ void *biquad_bp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
 
 // Dynamic biquad high-pass filter perform function
 void *biquad_hp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
-                            int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *freq_in = inputs[1]->output.buf;
-  double *res_in = inputs[2]->output.buf;
+                            int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t *freq_in = inputs[1]->output.buf;
+  sample_t *res_in = inputs[2]->output.buf;
 
   // Initial check and coefficient update
-  double freq = *freq_in;
-  double res = *res_in;
+  sample_t freq = *freq_in;
+  sample_t res = *res_in;
 
   // Update coefficients if parameters changed
   if (freq != state->prev_freq || res != state->prev_res) {
@@ -282,10 +283,10 @@ void *biquad_hp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
       state->prev_res = res;
     }
 
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    sample_t input = *in;
+    sample_t output = state->b0 * input + state->b1 * state->x1 +
+                      state->b2 * state->x2 - state->a1 * state->y1 -
+                      state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -306,13 +307,13 @@ void *biquad_hp_dyn_perform(Node *node, biquad_state *state, Node *inputs[],
 
 // Butterworth high-pass filter perform function
 void *butterworth_hp_dyn_perform(Node *node, biquad_state *state,
-                                 Node *inputs[], int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *freq_in = inputs[1]->output.buf;
+                                 Node *inputs[], int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t *freq_in = inputs[1]->output.buf;
 
   // Initial check and coefficient update
-  double freq = *freq_in;
+  sample_t freq = *freq_in;
 
   // Update coefficients if frequency changed
   if (freq != state->prev_freq) {
@@ -329,10 +330,10 @@ void *butterworth_hp_dyn_perform(Node *node, biquad_state *state,
       state->prev_freq = freq;
     }
 
-    double input = *in;
-    double output = state->b0 * input + state->b1 * state->x1 +
-                    state->b2 * state->x2 - state->a1 * state->y1 -
-                    state->a2 * state->y2;
+    sample_t input = *in;
+    sample_t output = state->b0 * input + state->b1 * state->x1 +
+                      state->b2 * state->x2 - state->a1 * state->y1 -
+                      state->a2 * state->y2;
 
     // Update delay elements
     state->x2 = state->x1;
@@ -488,16 +489,16 @@ Node *butterworth_hp_node(Node *freq, Node *input) {
 typedef struct {
   int read_pos;
   int write_pos;
-  double fb;
+  sample_t fb;
 } delay_state;
 
 void *delay_perform(Node *node, delay_state *state, Node *inputs[], int nframes,
-                    double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                    sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
   int in_layout = inputs[0]->output.layout;
 
-  double *buf = inputs[1]->output.buf;
+  sample_t *buf = inputs[1]->output.buf;
   int bufsize = inputs[1]->output.size;
 
   // Calculate delay buffer size per channel
@@ -509,8 +510,8 @@ void *delay_perform(Node *node, delay_state *state, Node *inputs[], int nframes,
       int channel_offset = ch * delay_per_channel;
 
       // Get write and read pointers for this channel
-      double *write_ptr = buf + channel_offset + state->write_pos;
-      double *read_ptr = buf + channel_offset + state->read_pos;
+      sample_t *write_ptr = buf + channel_offset + state->write_pos;
+      sample_t *read_ptr = buf + channel_offset + state->read_pos;
 
       // Calculate output and write to buffer
       *out = *in + *read_ptr;
@@ -528,7 +529,7 @@ void *delay_perform(Node *node, delay_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *delay_node(double delay_time, double max_delay_time, double fb,
+Node *delay_node(sample_t delay_time, sample_t max_delay_time, sample_t fb,
                  Node *input) {
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -573,16 +574,16 @@ typedef struct {
   int write_pos_left;
   int read_pos_right;
   int write_pos_right;
-  double fb;
+  sample_t fb;
 } delay2_state;
 
 void *delay2_perform(Node *node, delay2_state *state, Node *inputs[],
-                     int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                     int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
   int in_layout = inputs[0]->output.layout;
 
-  double *buf = inputs[1]->output.buf;
+  sample_t *buf = inputs[1]->output.buf;
   int bufsize = inputs[1]->output.size;
 
   // Calculate delay buffer size per channel
@@ -592,8 +593,8 @@ void *delay2_perform(Node *node, delay2_state *state, Node *inputs[],
     if (in_layout >= 1) {
       // Left channel (channel 0)
       int channel_offset = 0 * delay_per_channel;
-      double *write_ptr = buf + channel_offset + state->write_pos_left;
-      double *read_ptr = buf + channel_offset + state->read_pos_left;
+      sample_t *write_ptr = buf + channel_offset + state->write_pos_left;
+      sample_t *read_ptr = buf + channel_offset + state->read_pos_left;
 
       *out = *in + *read_ptr;
       *write_ptr = state->fb * (*out);
@@ -605,8 +606,8 @@ void *delay2_perform(Node *node, delay2_state *state, Node *inputs[],
     if (in_layout >= 2) {
       // Right channel (channel 1)
       int channel_offset = 1 * delay_per_channel;
-      double *write_ptr = buf + channel_offset + state->write_pos_right;
-      double *read_ptr = buf + channel_offset + state->read_pos_right;
+      sample_t *write_ptr = buf + channel_offset + state->write_pos_right;
+      sample_t *read_ptr = buf + channel_offset + state->read_pos_right;
 
       *out = *in + *read_ptr;
       *write_ptr = state->fb * (*out);
@@ -618,8 +619,8 @@ void *delay2_perform(Node *node, delay2_state *state, Node *inputs[],
     // Handle additional channels with right channel timing (if any)
     for (int ch = 2; ch < in_layout; ch++) {
       int channel_offset = ch * delay_per_channel;
-      double *write_ptr = buf + channel_offset + state->write_pos_right;
-      double *read_ptr = buf + channel_offset + state->read_pos_right;
+      sample_t *write_ptr = buf + channel_offset + state->write_pos_right;
+      sample_t *read_ptr = buf + channel_offset + state->read_pos_right;
 
       *out = *in + *read_ptr;
       *write_ptr = state->fb * (*out);
@@ -639,8 +640,8 @@ void *delay2_perform(Node *node, delay2_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *delay2_node(double delay_time_left, double delay_time_right,
-                  double max_delay_time, double fb, Node *input) {
+Node *delay2_node(sample_t delay_time_left, sample_t delay_time_right,
+                  sample_t max_delay_time, sample_t fb, Node *input) {
 
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -697,10 +698,11 @@ Node *delay2_node(double delay_time_left, double delay_time_right,
 }
 
 // Convenience function for creating stereo delay with slight time differences
-Node *stereo_spread_delay_node(double delay_time, double spread_amount,
-                               double max_delay_time, double fb, Node *input) {
-  double delay_left = delay_time - spread_amount * 0.5;
-  double delay_right = delay_time + spread_amount * 0.5;
+Node *stereo_spread_delay_node(sample_t delay_time, sample_t spread_amount,
+                               sample_t max_delay_time, sample_t fb,
+                               Node *input) {
+  sample_t delay_left = delay_time - spread_amount * 0.5;
+  sample_t delay_right = delay_time + spread_amount * 0.5;
 
   // Ensure delays are positive
   if (delay_left < 0.0)
@@ -714,13 +716,13 @@ Node *stereo_spread_delay_node(double delay_time, double spread_amount,
 // ---------------------- Dyn delay Filter ---------------------------
 
 void *__dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
-                          int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *delay_buf = inputs[1]->output.buf;
+                          int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t *delay_buf = inputs[1]->output.buf;
   int buf_size = inputs[1]->output.size;
-  double *delay_time = inputs[2]->output.buf;
-  double sample_rate =
+  sample_t *delay_time = inputs[2]->output.buf;
+  sample_t sample_rate =
       1.0 / spf; // Calculate sample rate from seconds per frame
 
   while (nframes--) {
@@ -728,9 +730,9 @@ void *__dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
 
     delay_buf[write_pos] = *in + (state->fb * delay_buf[state->read_pos]);
 
-    double delay_samples = *delay_time * sample_rate;
+    sample_t delay_samples = *delay_time * sample_rate;
     int read_offset = (int)delay_samples;
-    double frac =
+    sample_t frac =
         delay_samples - read_offset; // Fractional part for interpolation
 
     // Ensure read position stays within buffer bounds with proper modulo
@@ -738,7 +740,7 @@ void *__dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
     int read_pos_next = (read_pos + 1) % buf_size;
 
     // Linear interpolation for smoother delay time changes
-    double sample =
+    sample_t sample =
         delay_buf[read_pos] * (1.0 - frac) + delay_buf[read_pos_next] * frac;
 
     *out = sample;
@@ -756,15 +758,15 @@ void *__dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
 }
 
 void *dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
-                        int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                        int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
   int in_layout = inputs[0]->output.layout;
 
-  double *delay_buf = inputs[1]->output.buf;
+  sample_t *delay_buf = inputs[1]->output.buf;
   int buf_size = inputs[1]->output.size;
-  double *delay_time = inputs[2]->output.buf;
-  double sample_rate =
+  sample_t *delay_time = inputs[2]->output.buf;
+  sample_t sample_rate =
       1.0 / spf; // Calculate sample rate from seconds per frame
 
   // Calculate delay buffer size per channel
@@ -783,9 +785,9 @@ void *dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
           *in + (state->fb * delay_buf[channel_offset + state->read_pos]);
 
       // Calculate delay in samples and interpolation
-      double delay_samples = *delay_time * sample_rate;
+      sample_t delay_samples = *delay_time * sample_rate;
       int read_offset = (int)delay_samples;
-      double frac =
+      sample_t frac =
           delay_samples - read_offset; // Fractional part for interpolation
 
       // Ensure read position stays within buffer bounds with proper modulo
@@ -798,8 +800,8 @@ void *dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
       int read_pos_next_abs = channel_offset + read_pos_next;
 
       // Linear interpolation for smoother delay time changes
-      double sample = delay_buf[read_pos_abs] * (1.0 - frac) +
-                      delay_buf[read_pos_next_abs] * frac;
+      sample_t sample = delay_buf[read_pos_abs] * (1.0 - frac) +
+                        delay_buf[read_pos_next_abs] * frac;
 
       *out = sample + *in;
 
@@ -818,7 +820,7 @@ void *dyn_delay_perform(Node *node, delay_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *dyn_delay_node(Node *delay_time, double max_delay_time, double fb,
+Node *dyn_delay_node(Node *delay_time, sample_t max_delay_time, sample_t fb,
                      Node *input) {
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -865,17 +867,17 @@ Node *dyn_delay_node(Node *delay_time, double max_delay_time, double fb,
 typedef struct {
   int read_pos;
   int write_pos;
-  double fb;
-  double ff; // feedforward gain
+  sample_t fb;
+  sample_t ff; // feedforward gain
 } comb_state;
 
 void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
-                   double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                   sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
   int in_layout = inputs[0]->output.layout;
 
-  double *buf = inputs[1]->output.buf;
+  sample_t *buf = inputs[1]->output.buf;
   int bufsize = inputs[1]->output.size;
 
   // Calculate delay buffer size per channel
@@ -887,12 +889,12 @@ void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
       int channel_offset = ch * delay_per_channel;
 
       // Get write and read pointers for this channel
-      double *write_ptr = buf + channel_offset + state->write_pos;
-      double *read_ptr = buf + channel_offset + state->read_pos;
+      sample_t *write_ptr = buf + channel_offset + state->write_pos;
+      sample_t *read_ptr = buf + channel_offset + state->read_pos;
 
       // True comb filter: y[n] = x[n] + ff * x[n-M] + fb * y[n-M]
       // where read_ptr points to x[n-M] and y[n-M] from previous iterations
-      double delayed_signal = *read_ptr;
+      sample_t delayed_signal = *read_ptr;
 
       // Calculate output: input + feedforward*delayed_input +
       // feedback*delayed_output
@@ -913,8 +915,8 @@ void *comb_perform(Node *node, comb_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *comb_node(double delay_time, double max_delay_time, double fb, double ff,
-                Node *input) {
+Node *comb_node(sample_t delay_time, sample_t max_delay_time, sample_t fb,
+                sample_t ff, Node *input) {
 
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -962,13 +964,13 @@ Node *comb_node(double delay_time, double max_delay_time, double fb, double ff,
 // ---------------------- Lag Filter ---------------------------
 
 typedef struct {
-  double current_value;
-  double target_value;
-  double coeff;
-  double lag_time;
+  sample_t current_value;
+  sample_t target_value;
+  sample_t coeff;
+  sample_t lag_time;
 } lag_state;
 
-// Node *static_lag_node(double lag_time, Node *input) {
+// Node *static_lag_node(sample_t lag_time, Node *input) {
 //   AudioGraph *graph = _graph;
 //   Node *node = allocate_node_in_graph(graph, sizeof(lag_state));
 //
@@ -991,7 +993,7 @@ typedef struct {
 //   state->current_value = 0.0;
 //   state->target_value = 0.0;
 //   state->lag_time = lag_time;
-//   double spf = 1.0 / ctx_sample_rate();
+//   sample_t spf = 1.0 / ctx_sample_rate();
 //   state->coeff = exp(-1.0 / (lag_time * (1.0 / spf)));
 //
 //   // Connect input
@@ -1000,13 +1002,13 @@ typedef struct {
 //   return graph_embed(node);
 // }
 void *lag_perform(Node *node, lag_state *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *lag_time = inputs[1]->output.buf;
+                  sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t *lag_time = inputs[1]->output.buf;
 
   while (nframes--) {
-    double lt = *lag_time;
+    sample_t lt = *lag_time;
     lag_time++;
 
     // Special case: when lag_time is 0, immediately jump to target value
@@ -1075,16 +1077,16 @@ Node *lag_node(NodeRef lag_time, Node *input) {
 // ---------------------- Tanh Distortion ---------------------------
 
 typedef struct {
-  double gain;
+  sample_t gain;
 } tanh_state;
 
 void *tanh_perform(Node *node, tanh_state *state, Node *inputs[], int nframes,
-                   double spf) {
-  double *out = node->output.buf;
+                   sample_t spf) {
+  sample_t *out = node->output.buf;
   int in_layout = inputs[0]->output.layout;
-  double *in = inputs[0]->output.buf;
+  sample_t *in = inputs[0]->output.buf;
 
-  double gain = state->gain;
+  sample_t gain = state->gain;
 
   while (nframes--) {
     for (int ch = 0; ch < in_layout; ch++) {
@@ -1097,7 +1099,7 @@ void *tanh_perform(Node *node, tanh_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *tanh_node(double gain, Node *input) {
+Node *tanh_node(sample_t gain, Node *input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(tanh_state));
 
@@ -1125,17 +1127,17 @@ Node *tanh_node(double gain, Node *input) {
   return graph_embed(node);
 }
 
-// Node *tanh_node(double gain, Node *input) {
+// Node *tanh_node(sample_t gain, Node *input) {
 //   Node *t = _tanh_node(gain, input);
 //
 //   return t;
 // }
 
 void *dyn_tanh_perform(Node *node, tanh_state *state, Node *inputs[],
-                       int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
-  double *gain = inputs[1]->output.buf;
+                       int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t *gain = inputs[1]->output.buf;
 
   while (nframes--) {
 
@@ -1175,16 +1177,16 @@ Node *dyn_tanh_node(NodeRef gain, Node *input) {
 typedef struct {
   int read_pos;
   int write_pos;
-  double g; // allpass gain coefficient
+  sample_t g; // allpass gain coefficient
 } allpass_state;
 
 void *allpass_perform(Node *node, allpass_state *state, Node *inputs[],
-                      int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                      int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
   int in_layout = inputs[0]->output.layout;
 
-  double *buf = inputs[1]->output.buf;
+  sample_t *buf = inputs[1]->output.buf;
   int bufsize = inputs[1]->output.size;
 
   // Calculate delay buffer size per channel
@@ -1196,13 +1198,13 @@ void *allpass_perform(Node *node, allpass_state *state, Node *inputs[],
       int channel_offset = ch * delay_per_channel;
 
       // Get write and read pointers for this channel
-      double *write_ptr = buf + channel_offset + state->write_pos;
-      double *read_ptr = buf + channel_offset + state->read_pos;
+      sample_t *write_ptr = buf + channel_offset + state->write_pos;
+      sample_t *read_ptr = buf + channel_offset + state->read_pos;
 
       // Allpass filter equation: y[n] = -g * x[n] + x[n-M] + g * y[n-M]
       // where read_ptr contains the delayed input x[n-M] + g * y[n-M] from
       // previous iterations
-      double delayed_signal = *read_ptr;
+      sample_t delayed_signal = *read_ptr;
 
       // Calculate output
       *out = -state->g * (*in) + delayed_signal;
@@ -1222,7 +1224,7 @@ void *allpass_perform(Node *node, allpass_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *allpass_node(double delay_time, double max_delay_time, double g,
+Node *allpass_node(sample_t delay_time, sample_t max_delay_time, sample_t g,
                    Node *input) {
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -1269,15 +1271,15 @@ Node *allpass_node(double delay_time, double max_delay_time, double g,
 // ---------------------- Dynamic Allpass Filter ---------------------------
 
 void *dyn_allpass_perform(Node *node, allpass_state *state, Node *inputs[],
-                          int nframes, double spf) {
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+                          int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
   int in_layout = inputs[0]->output.layout;
 
-  double *delay_buf = inputs[1]->output.buf;
+  sample_t *delay_buf = inputs[1]->output.buf;
   int buf_size = inputs[1]->output.size;
-  double *delay_time = inputs[2]->output.buf;
-  double sample_rate = 1.0 / spf;
+  sample_t *delay_time = inputs[2]->output.buf;
+  sample_t sample_rate = 1.0 / spf;
 
   // Calculate delay buffer size per channel
   int delay_per_channel = buf_size / in_layout;
@@ -1291,9 +1293,9 @@ void *dyn_allpass_perform(Node *node, allpass_state *state, Node *inputs[],
       int write_pos_abs = channel_offset + write_pos;
 
       // Calculate delay in samples and interpolation
-      double delay_samples = *delay_time * sample_rate;
+      sample_t delay_samples = *delay_time * sample_rate;
       int read_offset = (int)delay_samples;
-      double frac = delay_samples - read_offset;
+      sample_t frac = delay_samples - read_offset;
 
       // Calculate read positions with proper modulo
       int read_pos =
@@ -1305,8 +1307,8 @@ void *dyn_allpass_perform(Node *node, allpass_state *state, Node *inputs[],
       int read_pos_next_abs = channel_offset + read_pos_next;
 
       // Linear interpolation for delayed signal
-      double delayed_signal = delay_buf[read_pos_abs] * (1.0 - frac) +
-                              delay_buf[read_pos_next_abs] * frac;
+      sample_t delayed_signal = delay_buf[read_pos_abs] * (1.0 - frac) +
+                                delay_buf[read_pos_next_abs] * frac;
 
       // Allpass filter equation: y[n] = -g * x[n] + x[n-M] + g * y[n-M]
       *out = -state->g * (*in) + delayed_signal;
@@ -1327,7 +1329,7 @@ void *dyn_allpass_perform(Node *node, allpass_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *dyn_allpass_node(double max_delay_time, double g, Node *input,
+Node *dyn_allpass_node(sample_t max_delay_time, sample_t g, Node *input,
                        Node *delay_time) {
   int in_layout = input->output.layout;
   int sample_rate = ctx_sample_rate();
@@ -1374,57 +1376,57 @@ typedef struct grain_pitchshift_state {
   int active_grains;
   int next_trig;
   int trig_gap_in_frames;
-  double width;
-  double rate;
-  double fb;
+  sample_t width;
+  sample_t rate;
+  sample_t fb;
 } grain_pitchshift_state;
 
-double __pow2table_read(double pos, int tabsize, double *table) {
+sample_t __pow2table_read(sample_t pos, int tabsize, sample_t *table) {
   int mask = tabsize - 1;
 
-  double env_pos = pos * (mask);
+  sample_t env_pos = pos * (mask);
   int env_idx = (int)env_pos;
-  double env_frac = env_pos - env_idx;
+  sample_t env_frac = env_pos - env_idx;
 
   // Interpolate between envelope table values
-  double env_val = table[env_idx & mask] * (1.0 - env_frac) +
-                   table[(env_idx + 1) & mask] * env_frac;
+  sample_t env_val = table[env_idx & mask] * (1.0 - env_frac) +
+                     table[(env_idx + 1) & mask] * env_frac;
   return env_val;
 }
 
 void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
-                                  Node *inputs[], int nframes, double spf) {
+                                  Node *inputs[], int nframes, sample_t spf) {
 
   int out_layout = node->output.layout;
-  double *out = node->output.buf;
-  double *in = inputs[0]->output.buf;
+  sample_t *out = node->output.buf;
+  sample_t *in = inputs[0]->output.buf;
   char *mem = state + 1;
-  double *buf = mem;
+  sample_t *buf = mem;
   int buf_size = state->length;
-  mem += buf_size * sizeof(double);
+  mem += buf_size * sizeof(sample_t);
 
   int max_grains = state->max_grains;
 
-  double *phases = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *phases = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
-  double *widths = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *widths = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
-  double *remaining_secs = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *remaining_secs = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
-  double *starts = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *starts = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
   int *active = (int *)mem;
 
-  double d_index;
+  sample_t d_index;
   int index;
-  double frac;
-  double a, b;
-  double sample = 0.;
-  double r = state->rate;
+  sample_t frac;
+  sample_t a, b;
+  sample_t sample = 0.;
+  sample_t r = state->rate;
   const int table_mask = GRAIN_WINDOW_TABSIZE - 1;
   while (nframes--) {
     sample = 0.;
@@ -1446,10 +1448,10 @@ void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
     for (int i = 0; i < max_grains; i++) {
 
       if (active[i]) {
-        double p = phases[i];
-        double s = starts[i];
-        double w = widths[i];
-        double rem = remaining_secs[i];
+        sample_t p = phases[i];
+        sample_t s = starts[i];
+        sample_t w = widths[i];
+        sample_t rem = remaining_secs[i];
 
         d_index = s + (p * buf_size);
 
@@ -1459,8 +1461,8 @@ void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
         a = buf[index % buf_size];
         b = buf[(index + 1) % buf_size];
 
-        double grain_elapsed = 1.0 - (rem / w);
-        double env_val =
+        sample_t grain_elapsed = 1.0 - (rem / w);
+        sample_t env_val =
             __pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
 
         sample += env_val * ((1.0 - frac) * a + (frac * b));
@@ -1484,17 +1486,17 @@ void *granular_pitchshift_perform(Node *node, grain_pitchshift_state *state,
   }
 }
 
-NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
+NodeRef grain_pitchshift_node(sample_t shift, sample_t fb, NodeRef input) {
   AudioGraph *graph = _graph;
 
   int max_grains = 32;
   int state_size = sizeof(grain_pitchshift_state) +
-                   (1024 * sizeof(double))         // delay buffer
-                   + (max_grains * sizeof(double)) // phases
-                   + (max_grains * sizeof(double)) // widths
-                   + (max_grains * sizeof(double)) // elapsed
-                   + (max_grains * sizeof(double)) // starts
-                   + (max_grains * sizeof(int))    // active grains
+                   (1024 * sizeof(sample_t))         // delay buffer
+                   + (max_grains * sizeof(sample_t)) // phases
+                   + (max_grains * sizeof(sample_t)) // widths
+                   + (max_grains * sizeof(sample_t)) // elapsed
+                   + (max_grains * sizeof(sample_t)) // starts
+                   + (max_grains * sizeof(int))      // active grains
       ;
 
   grain_pitchshift_state pshift = {
@@ -1503,8 +1505,8 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
       .pos = 0,
       .max_grains = max_grains,
       .active_grains = 0,
-      .next_trig = ((double)1024) / shift,
-      .trig_gap_in_frames = ((double)1024) / shift,
+      .next_trig = ((sample_t)1024) / shift,
+      .trig_gap_in_frames = ((sample_t)1024) / shift,
       .width = 0.01,
       .rate = shift,
       .fb = fb};
@@ -1535,14 +1537,14 @@ NodeRef grain_pitchshift_node(double shift, double fb, NodeRef input) {
   return graph_embed(node);
 }
 
-typedef double (*node_math_func_t)(double samp);
+typedef sample_t (*node_math_func_t)(sample_t samp);
 typedef struct math_node_state {
   node_math_func_t math_fn;
 } math_node_state;
 
 void *math_perform(Node *node, math_node_state *state, Node *inputs[],
-                   int nframes, double spf) {
-  double *out = node->output.buf;
+                   int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   Signal in = inputs[0]->output;
 
   for (int i = 0; i < in.size * in.layout; i++) {
@@ -1605,21 +1607,21 @@ typedef struct stutter_state {
 } stutter_state;
 
 void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
-                      int nframes, double spf) {
-  double *buf_memory = (double *)((stutter_state *)state + 1);
+                      int nframes, sample_t spf) {
+  sample_t *buf_memory = (sample_t *)((stutter_state *)state + 1);
 
   Signal in = inputs[0]->output;
-  double *_gate = inputs[1]->output.buf;
-  double *_repeat_time = inputs[2]->output.buf;
-  double *out = node->output.buf;
+  sample_t *_gate = inputs[1]->output.buf;
+  sample_t *_repeat_time = inputs[2]->output.buf;
+  sample_t *out = node->output.buf;
 
   int chans = state->buf_chans;
   int sample_rate = (int)(1.0 / spf);
 
   for (int i = 0; i < nframes; i++) {
-    double gate = *_gate;
+    sample_t gate = *_gate;
     _gate++;
-    double repeat_time = *_repeat_time;
+    sample_t repeat_time = *_repeat_time;
     _repeat_time++;
 
     // Calculate frames to repeat (smaller for more rapid stuttering)
@@ -1700,7 +1702,7 @@ void *stutter_perform(Node *node, stutter_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
+NodeRef stutter_node(sample_t max_time, NodeRef repeat_time, NodeRef gate,
                      NodeRef input) {
   AudioGraph *graph = _graph;
 
@@ -1714,7 +1716,7 @@ NodeRef stutter_node(double max_time, NodeRef repeat_time, NodeRef gate,
                      .stutter_start = 0};
 
   int required_buf_frames = s.buf_chans * s.buf_size;
-  state_size += required_buf_frames * sizeof(double);
+  state_size += required_buf_frames * sizeof(sample_t);
 
   Node *node = allocate_node_in_graph(graph, state_size);
 

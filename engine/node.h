@@ -7,13 +7,13 @@
 #include <stdint.h>
 
 typedef void *(*perform_func_t)(void *ptr, void *state, void *inputs,
-                                int nframes, double spf);
+                                int nframes, sample_t spf);
 
 // Buffer / Signal information
 typedef struct {
-  int layout;  // Number of channels in the buffer
-  int size;    // Buffer capacity in frames
-  double *buf; // Pointer to actual buffer data
+  int layout;    // Number of channels in the buffer
+  int size;      // Buffer capacity in frames
+  sample_t *buf; // Pointer to actual buffer data
 } Signal;
 
 typedef struct {

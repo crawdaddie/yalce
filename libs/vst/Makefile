@@ -2,7 +2,7 @@
 # VST SDK path - UPDATE THIS to point to your VST SDK installation
 # Compiler and flags
 CXX = clang++
-CXXFLAGS = -std=c++11 -Wall -Wextra -O2
+CXXFLAGS = -g -std=c++11 -Wall -Wextra -O2
 LDFLAGS = -ldl
 # Include VST SDK headers
 VST_SDK_PATH = /Users/adam/projects/sound/ylc-vst/libs/VST2_SDK

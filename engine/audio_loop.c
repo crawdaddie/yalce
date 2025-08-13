@@ -15,7 +15,7 @@
 #include <unistd.h>
 #define RING_BUFFER_CAPACITY_SCALING 10
 
-static void (*write_sample)(char *ptr, double sample);
+static void (*write_sample)(char *ptr, sample_t sample);
 int scheduler_event_loop();
 
 uint64_t get_frame_offset() {
@@ -44,7 +44,7 @@ uint64_t us_offset(struct timespec start, struct timespec end) {
 int get_block_frame_offset(struct timespec start, struct timespec end,
                            int sample_rate) {
 
-  double ms_per_frame = 1000.0 / sample_rate;
+  sample_t ms_per_frame = 1000.0 / sample_rate;
   uint64_t ms = us_offset(start, end);
   return ((int)(ms / ms_per_frame)) % BUF_SIZE;
 }
@@ -153,8 +153,8 @@ static void write_callback(struct SoundIoOutStream *outstream,
   struct SoundIoChannelArea *areas;
   Ctx *ctx = outstream->userdata;
 
-  double float_sample_rate = outstream->sample_rate;
-  double seconds_per_frame = 1.0 / float_sample_rate;
+  sample_t float_sample_rate = outstream->sample_rate;
+  sample_t seconds_per_frame = 1.0 / float_sample_rate;
   int frames_left;
   int frame_count;
   int err;
@@ -185,7 +185,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
 
         // Get the sample value
         float fsample = *(float *)sample_ptr;
-        double sample = (double)fsample;
+        sample_t sample = (sample_t)fsample;
 
         // Store in the correct signal buffer
         Signal *sig = &ctx->input_signals[mapping->signal_index];
@@ -225,7 +225,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
     user_ctx_callback(ctx, buffer_start_sample, frame_count, seconds_per_frame);
 
     int sample_idx;
-    double sample;
+    sample_t sample;
     for (int channel = 0; channel < 2; channel += 1) {
       for (int frame = 0; frame < frame_count; frame += 1) {
 
@@ -485,7 +485,7 @@ int start_audio() {
     return 1;
   }
 
-  double actual_latency = outstream->software_latency;
+  sample_t actual_latency = outstream->software_latency;
   fprintf(stderr, ANSI_COLOR_RED "Actual output latency: %.4f sec\n",
           actual_latency);
 

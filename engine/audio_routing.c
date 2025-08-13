@@ -151,7 +151,7 @@ void print_routing_setup(struct SoundIoOutStream *outstream,
   fprintf(stderr, "Sample rate: %d Hz\n", outstream->sample_rate);
   if (ring_buffer) {
     fprintf(stderr, "Buffer size: %.2f ms\n",
-            (double)soundio_ring_buffer_capacity(ring_buffer) /
+            (sample_t)soundio_ring_buffer_capacity(ring_buffer) /
                 channel_bytes_per_frame / instream->sample_rate * 1000.0);
   }
 

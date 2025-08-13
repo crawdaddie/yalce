@@ -45,7 +45,9 @@ void iter_gc(node_group_state *ctx) {
   Node *prev = NULL;
 
   while (current != NULL) {
-    if (current->perform == (perform_func_t)perform_ensemble) {
+
+    if (current->perform &&
+        current->perform == (perform_func_t)perform_ensemble) {
       iter_gc(current->state_ptr);
     }
 

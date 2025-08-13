@@ -30,7 +30,7 @@ typedef struct scheduler_msg {
     struct NODE_SET_SCALAR {
       Node *target;
       int input;
-      double value;
+      sample_t value;
     } NODE_SET_SCALAR;
 
     struct NODE_SET_INPUT {
@@ -73,17 +73,17 @@ typedef struct {
 } node_group_state;
 
 typedef struct {
-  double output_buf[BUF_SIZE * LAYOUT];
+  sample_t output_buf[BUF_SIZE * LAYOUT];
   int num_input_signals;
   Signal *input_signals;
 
   node_group_state graph;
   int sample_rate;
-  double spf;
+  sample_t spf;
   msg_queue msg_queue;
   msg_queue overflow_queue;
   int **sig_to_hw_in_map;
-  double main_vol;
+  sample_t main_vol;
 } Ctx;
 
 extern Ctx ctx;
@@ -93,15 +93,16 @@ Ctx *get_audio_ctx();
 void init_ctx();
 
 void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int nframes,
-                       double seconds_per_frame);
+                       sample_t seconds_per_frame);
 
-void write_to_output(double *src, double *dest, int nframes, int output_num);
+void write_to_output(sample_t *src, sample_t *dest, int nframes,
+                     int output_num);
 
 Node *_audio_ctx_add(Node *node);
 Node *add_to_dac(Node *node);
 
 int ctx_sample_rate();
-double ctx_spf();
+sample_t ctx_spf();
 
 int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue);
 

@@ -25,15 +25,15 @@ NodeRef load_soundfile(_String path);
 
 NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s);
 
-double midi_to_freq(int midi_note);
-double dmidi_to_freq(double midi_note);
+sample_t midi_to_freq(int midi_note);
+sample_t dmidi_to_freq(double midi_note);
 
-double semi_to_ratio(int semitones);
+sample_t semi_to_ratio(int semitones);
 
-double *ctx_main_out();
+sample_t *ctx_main_out();
 
 SignalRef node_out(NodeRef node);
-double *sig_raw(SignalRef sig);
+sample_t *sig_raw(SignalRef sig);
 int sig_size(SignalRef sig);
 int sig_layout(SignalRef sig);
 

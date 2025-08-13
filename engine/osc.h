@@ -23,8 +23,8 @@ NodeRef bufplayer_trig_node(NodeRef buf, NodeRef rate, NodeRef start_pos,
 NodeRef white_noise_node();
 
 NodeRef brown_noise_node();
-NodeRef static_chirp_node(double start_freq, double end_freq, NodeRef lag_time,
-                          NodeRef trig);
+NodeRef static_chirp_node(sample_t start_freq, sample_t end_freq,
+                          NodeRef lag_time, NodeRef trig);
 
 NodeRef chirp_node(NodeRef start_freq, NodeRef end_freq, NodeRef lag_time,
                    NodeRef trig);
@@ -52,19 +52,19 @@ NodeRef grain_osc_node(int max_grains, NodeRef buf, NodeRef trig, NodeRef pos,
 
 void maketable_grain_window();
 
-NodeRef array_choose_trig_node(int arr_size, double *arr_data, NodeRef trig);
+NodeRef array_choose_trig_node(int arr_size, sample_t *arr_data, NodeRef trig);
 
-double pow2table_read(double pos, int tabsize, double *table);
+sample_t pow2table_read(sample_t pos, int tabsize, sample_t *table);
 #define GRAIN_WINDOW_TABSIZE (1 << 9)
-extern double grain_win[GRAIN_WINDOW_TABSIZE];
+extern sample_t grain_win[GRAIN_WINDOW_TABSIZE];
 
-// double *get_sq_table();
+// sample_t *get_sq_table();
 // uint32_t get_sq_tabsize();
 //
-// double *get_sin_table();
+// sample_t *get_sin_table();
 // uint32_t get_sin_tabsize();
 //
-// double *get_saw_table();
+// sample_t *get_saw_table();
 // uint32_t get_saw_tabsize();
 
 #endif

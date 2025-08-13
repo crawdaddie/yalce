@@ -33,36 +33,36 @@
     }                                                                          \
   }
 struct ReverbComb {
-  double fb;
-  double filter_state;
-  double damp1;
-  double damp2;
+  sample_t fb;
+  sample_t filter_state;
+  sample_t damp1;
+  sample_t damp2;
   int length;
   int pos;
 } ReverbComb;
 
 struct ReverbAllPass {
-  double fb;
+  sample_t fb;
   int length;
   int pos;
 } ReverbAllPass;
 
 typedef struct Reverb {
   /* User parameters */
-  double room_size;
-  double damp;
-  double wet;
-  double dry;
-  double width;
-  double mode;
-  double sample_rate;
+  sample_t room_size;
+  sample_t damp;
+  sample_t wet;
+  sample_t dry;
+  sample_t width;
+  sample_t mode;
+  sample_t sample_rate;
 
   /* Derived parameters */
-  double gain;
-  double room_size_scaled;
-  double damp_scaled;
-  double wet1;
-  double wet2;
+  sample_t gain;
+  sample_t room_size_scaled;
+  sample_t damp_scaled;
+  sample_t wet1;
+  sample_t wet2;
 
   /* Processing elements */
   struct ReverbComb combs_left[FREEVERB_NUM_COMBS];
@@ -73,57 +73,57 @@ typedef struct Reverb {
 } Reverb;
 
 void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
-                     double spf) {
+                     sample_t spf) {
   if (!inputs) {
     return NULL;
   }
 
   Signal _out = node->output;
   Signal _in = inputs[0]->output;
-  double *in_buf = inputs[0]->output.buf;
+  sample_t *in_buf = inputs[0]->output.buf;
   int in_layout = inputs[0]->output.layout;
 
   char *mem = (char *)(reverb + 1);
 
-  double *comb_buffers_left[FREEVERB_NUM_COMBS];
-  double *comb_buffers_right[FREEVERB_NUM_COMBS];
+  sample_t *comb_buffers_left[FREEVERB_NUM_COMBS];
+  sample_t *comb_buffers_right[FREEVERB_NUM_COMBS];
 
   for (int i = 0; i < FREEVERB_NUM_COMBS; i++) {
-    comb_buffers_left[i] = (double *)mem;
-    mem += reverb->combs_left[i].length * sizeof(double);
+    comb_buffers_left[i] = (sample_t *)mem;
+    mem += reverb->combs_left[i].length * sizeof(sample_t);
 
-    comb_buffers_right[i] = (double *)mem;
-    mem += reverb->combs_right[i].length * sizeof(double);
+    comb_buffers_right[i] = (sample_t *)mem;
+    mem += reverb->combs_right[i].length * sizeof(sample_t);
   }
 
-  double *allpass_buffers_left[FREEVERB_NUM_ALLPASSES];
-  double *allpass_buffers_right[FREEVERB_NUM_ALLPASSES];
+  sample_t *allpass_buffers_left[FREEVERB_NUM_ALLPASSES];
+  sample_t *allpass_buffers_right[FREEVERB_NUM_ALLPASSES];
   for (int i = 0; i < FREEVERB_NUM_ALLPASSES; i++) {
-    allpass_buffers_left[i] = (double *)mem;
-    mem += reverb->allpasses_left[i].length * sizeof(double);
+    allpass_buffers_left[i] = (sample_t *)mem;
+    mem += reverb->allpasses_left[i].length * sizeof(sample_t);
 
-    allpass_buffers_right[i] = (double *)mem;
-    mem += reverb->allpasses_right[i].length * sizeof(double);
+    allpass_buffers_right[i] = (sample_t *)mem;
+    mem += reverb->allpasses_right[i].length * sizeof(sample_t);
   }
 
   for (int frame = 0; frame < nframes; frame++) {
-    double input_sample = 0.;
+    sample_t input_sample = 0.;
     for (int i = 0; i < in_layout; i++) {
       input_sample += *in_buf;
       in_buf++;
     }
 
-    double output_left = 0.0;
-    double output_right = 0.0;
+    sample_t output_left = 0.0;
+    sample_t output_right = 0.0;
 
-    double input = input_sample * reverb->gain;
+    sample_t input = input_sample * reverb->gain;
 
     for (int i = 0; i < FREEVERB_NUM_COMBS; i++) {
-      double *buffer_left = comb_buffers_left[i];
+      sample_t *buffer_left = comb_buffers_left[i];
       int pos_left = reverb->combs_left[i].pos;
       int size_left = reverb->combs_left[i].length;
 
-      double output_l = buffer_left[pos_left];
+      sample_t output_l = buffer_left[pos_left];
       undenormalize(output_l);
 
       reverb->combs_left[i].filter_state =
@@ -139,11 +139,11 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
 
       output_left += output_l;
 
-      double *buffer_right = comb_buffers_right[i];
+      sample_t *buffer_right = comb_buffers_right[i];
       int pos_right = reverb->combs_right[i].pos;
       int size_right = reverb->combs_right[i].length;
 
-      double output_r = buffer_right[pos_right];
+      sample_t output_r = buffer_right[pos_right];
       undenormalize(output_r);
 
       reverb->combs_right[i].filter_state =
@@ -161,14 +161,14 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
     }
 
     for (int i = 0; i < FREEVERB_NUM_ALLPASSES; i++) {
-      double *buffer_left = allpass_buffers_left[i];
+      sample_t *buffer_left = allpass_buffers_left[i];
       int pos_left = reverb->allpasses_left[i].pos;
       int size_left = reverb->allpasses_left[i].length;
 
-      double delayed_left = buffer_left[pos_left];
+      sample_t delayed_left = buffer_left[pos_left];
       undenormalize(delayed_left);
 
-      double combined_left = -output_left + delayed_left;
+      sample_t combined_left = -output_left + delayed_left;
 
       buffer_left[pos_left] =
           output_left + delayed_left * reverb->allpasses_left[i].fb;
@@ -177,13 +177,13 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
 
       output_left = combined_left;
 
-      double *buffer_right = allpass_buffers_right[i];
+      sample_t *buffer_right = allpass_buffers_right[i];
       int pos_right = reverb->allpasses_right[i].pos;
       int size_right = reverb->allpasses_right[i].length;
-      double delayed_right = buffer_right[pos_right];
+      sample_t delayed_right = buffer_right[pos_right];
       undenormalize(delayed_right);
 
-      double combined_right = -output_right + delayed_right;
+      sample_t combined_right = -output_right + delayed_right;
 
       buffer_right[pos_right] =
           output_right + delayed_right * reverb->allpasses_right[i].fb;
@@ -193,11 +193,11 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
       output_right = combined_right;
     }
 
-    double l = output_left * reverb->wet1 + output_right * reverb->wet2 +
-               input_sample * reverb->dry;
+    sample_t l = output_left * reverb->wet1 + output_right * reverb->wet2 +
+                 input_sample * reverb->dry;
 
-    double r = output_right * reverb->wet1 + output_left * reverb->wet2 +
-               input_sample * reverb->dry;
+    sample_t r = output_right * reverb->wet1 + output_left * reverb->wet2 +
+                 input_sample * reverb->dry;
 
     WRITEV(_out, l);
     WRITEV(_out, r);
@@ -206,14 +206,14 @@ void *reverb_perform(Node *node, Reverb *reverb, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *reverb_node(double room_size, double wet, double dry, double width,
-                  Node *input) {
-  double sr = (double)ctx_sample_rate();
+Node *reverb_node(sample_t room_size, sample_t wet, sample_t dry,
+                  sample_t width, Node *input) {
+  sample_t sr = (sample_t)ctx_sample_rate();
 
   const int comb_tunings[FREEVERB_NUM_COMBS] = {1116, 1188, 1277, 1356,
                                                 1422, 1491, 1557, 1617};
   const int allpass_tunings[FREEVERB_NUM_ALLPASSES] = {556, 441, 341, 225};
-  double rate_scale = sr / 44100.0;
+  sample_t rate_scale = sr / 44100.0;
 
   Reverb reverb = {.room_size = room_size,
                    .damp = 0.0,
@@ -241,12 +241,12 @@ Node *reverb_node(double room_size, double wet, double dry, double width,
   for (int i = 0; i < FREEVERB_NUM_COMBS; i++) {
     *(reverb.combs_left + i) = base_comb;
     reverb.combs_left[i].length = (int)(comb_tunings[i] * rate_scale);
-    total_buffer_size += reverb.combs_left[i].length * sizeof(double);
+    total_buffer_size += reverb.combs_left[i].length * sizeof(sample_t);
 
     *(reverb.combs_right + i) = base_comb;
     reverb.combs_right[i].length =
         (int)((comb_tunings[i] + FREEVERB_STEREO_SPREAD) * rate_scale);
-    total_buffer_size += reverb.combs_right[i].length * sizeof(double);
+    total_buffer_size += reverb.combs_right[i].length * sizeof(sample_t);
   }
 
   struct ReverbAllPass base_allpass = {
@@ -256,12 +256,12 @@ Node *reverb_node(double room_size, double wet, double dry, double width,
   for (int i = 0; i < FREEVERB_NUM_ALLPASSES; i++) {
     *(reverb.allpasses_left + i) = base_allpass;
     reverb.allpasses_left[i].length = (int)(allpass_tunings[i] * rate_scale);
-    total_buffer_size += reverb.allpasses_left[i].length * sizeof(double);
+    total_buffer_size += reverb.allpasses_left[i].length * sizeof(sample_t);
 
     *(reverb.allpasses_right + i) = base_allpass;
     reverb.allpasses_right[i].length =
         (int)((allpass_tunings[i] + FREEVERB_STEREO_SPREAD) * rate_scale);
-    total_buffer_size += reverb.allpasses_right[i].length * sizeof(double);
+    total_buffer_size += reverb.allpasses_right[i].length * sizeof(sample_t);
   }
 
   /* Allocate state memory including space for all buffers */

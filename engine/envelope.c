@@ -12,27 +12,27 @@ typedef enum {
 
 typedef struct asr_state {
   EnvPhase phase;
-  double value;         // Current envelope value
-  double attack_time;   // Attack time in seconds
-  double sustain_level; // Sustain level (0.0 to 1.0)
-  double release_time;  // Release time in seconds
-  double attack_rate;   // Precalculated rate of change during attack
-  double release_rate;  // Precalculated rate of change during release
-  double prev_trigger;  // Previous trigger value for edge detection
-  double threshold;     // Trigger threshold (default 0.5)
+  sample_t value;         // Current envelope value
+  sample_t attack_time;   // Attack time in seconds
+  sample_t sustain_level; // Sustain level (0.0 to 1.0)
+  sample_t release_time;  // Release time in seconds
+  sample_t attack_rate;   // Precalculated rate of change during attack
+  sample_t release_rate;  // Precalculated rate of change during release
+  sample_t prev_trigger;  // Previous trigger value for edge detection
+  sample_t threshold;     // Trigger threshold (default 0.5)
   bool should_kill;
 } asr_state;
 
 void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
 
-  double *trigger = inputs[0]->output.buf;
+  sample_t *trigger = inputs[0]->output.buf;
 
   while (nframes--) {
     // Check for trigger events
-    double current_trigger = *trigger;
+    sample_t current_trigger = *trigger;
     trigger++;
 
     // Rising edge - start attack phase
@@ -100,8 +100,8 @@ void *asr_perform(Node *node, asr_state *state, Node *inputs[], int nframes,
   return node->output.buf;
 }
 
-Node *asr_kill_node(double attack_time, double sustain_level,
-                    double release_time, Node *trigger) {
+Node *asr_kill_node(sample_t attack_time, sample_t sustain_level,
+                    sample_t release_time, Node *trigger) {
 
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(asr_state));
@@ -141,8 +141,8 @@ Node *asr_kill_node(double attack_time, double sustain_level,
   return graph_embed(node);
 }
 
-Node *asr_node(double attack_time, double sustain_level, double release_time,
-               Node *trigger) {
+Node *asr_node(sample_t attack_time, sample_t sustain_level,
+               sample_t release_time, Node *trigger) {
 
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(asr_state));
@@ -183,26 +183,26 @@ Node *asr_node(double attack_time, double sustain_level, double release_time,
 }
 typedef struct aslr_state {
   EnvPhase phase;
-  double value;         // Current envelope value
-  double attack_time;   // Attack time in seconds
-  double sustain_level; // Sustain level (0.0 to 1.0)
-  double release_time;  // Release time in seconds
-  double attack_rate;   // Precalculated rate of change during attack
-  double release_rate;  // Precalculated rate of change during release
-  double prev_trigger;  // Previous trigger value for edge detection
-  double threshold;     // Trigger threshold (default 0.5)
+  sample_t value;         // Current envelope value
+  sample_t attack_time;   // Attack time in seconds
+  sample_t sustain_level; // Sustain level (0.0 to 1.0)
+  sample_t release_time;  // Release time in seconds
+  sample_t attack_rate;   // Precalculated rate of change during attack
+  sample_t release_rate;  // Precalculated rate of change during release
+  sample_t prev_trigger;  // Previous trigger value for edge detection
+  sample_t threshold;     // Trigger threshold (default 0.5)
   bool should_kill;
   int sustain_time; // sustain time in seconds
   int sustain_time_left;
 } aslr_state;
 
 void *aslr_perform(Node *node, aslr_state *state, Node *inputs[], int nframes,
-                   double spf) {
-  double *out = node->output.buf;
-  double *trigger = inputs[0]->output.buf;
+                   sample_t spf) {
+  sample_t *out = node->output.buf;
+  sample_t *trigger = inputs[0]->output.buf;
 
   while (nframes--) {
-    double current_trigger = *trigger;
+    sample_t current_trigger = *trigger;
     trigger++;
 
     if (current_trigger >= state->threshold &&
@@ -265,8 +265,8 @@ void *aslr_perform(Node *node, aslr_state *state, Node *inputs[], int nframes,
 
   return node->output.buf;
 }
-Node *aslr_node(double attack_time, double sustain_level, double sustain_time,
-                double release_time, Node *trigger) {
+Node *aslr_node(sample_t attack_time, sample_t sustain_level,
+                sample_t sustain_time, sample_t release_time, Node *trigger) {
 
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(aslr_state));

@@ -6,8 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-double _random_double_range(double min, double max);
-int save_table_to_file(double *table, int size, const char *filename) {
+sample_t _random_sample_t_range(sample_t min, sample_t max);
+int save_table_to_file(sample_t *table, int size, const char *filename) {
 
   FILE *file = fopen(filename, "w");
   if (!file) {
@@ -30,23 +30,23 @@ int save_table_to_file(double *table, int size, const char *filename) {
 
 #define SQ_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
-static double sq_table[SQ_TABSIZE] = {
+static sample_t sq_table[SQ_TABSIZE] = {
 #include "./assets/sq_table.csv"
 };
 #else
-static double sq_table[SQ_TABSIZE];
+static sample_t sq_table[SQ_TABSIZE];
 #endif
 
 void maketable_sq(void) {
 #ifndef READ_WTABLES
-  double phase = 0.0;
-  double phsinc = (2. * PI) / SQ_TABSIZE;
+  sample_t phase = 0.0;
+  sample_t phsinc = (2.0f * PI) / SQ_TABSIZE;
   for (int i = 0; i < SQ_TABSIZE; i++) {
 
     for (int harm = 1; harm < SQ_TABSIZE / 2;
          harm += 2) { // summing odd frequencies
 
-      double val = sin(phase * harm) / harm;
+      sample_t val = sinf(phase * harm) / harm;
       sq_table[i] += 4. * val / PI;
     }
     phase += phsinc;
@@ -54,26 +54,26 @@ void maketable_sq(void) {
   save_table_to_file(sq_table, SQ_TABSIZE, "engine/assets/sq_table.csv");
 #endif
 }
-double *get_sq_table() { return sq_table; }
+sample_t *get_sq_table() { return sq_table; }
 uint32_t get_sq_tabsize() { return SQ_TABSIZE; }
 
 #define SIN_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
-static double sin_table[SIN_TABSIZE] = {
+static sample_t sin_table[SIN_TABSIZE] = {
 #include "./assets/sin_table.csv"
 };
 #else
-static double sin_table[SIN_TABSIZE];
+static sample_t sin_table[SIN_TABSIZE];
 #endif
 
 void maketable_sin(void) {
 #ifndef READ_WTABLES
 
-  double phase = 0.0;
-  double phsinc = (2. * PI) / SIN_TABSIZE;
+  sample_t phase = 0.0;
+  sample_t phsinc = (2.0f * PI) / SIN_TABSIZE;
 
   for (int i = 0; i < SIN_TABSIZE; i++) {
-    double val = sin(phase);
+    sample_t val = sinf(phase);
     sin_table[i] = val;
     phase += phsinc;
   }
@@ -81,26 +81,27 @@ void maketable_sin(void) {
 #endif
 }
 
-double *get_sin_table() { return sin_table; }
+sample_t *get_sin_table() { return sin_table; }
 uint32_t get_sin_tabsize() { return SIN_TABSIZE; }
 
 typedef struct sin_state {
-  double phase;
+  sample_t phase;
 } sin_state;
 
 void *sin_perform(Node *node, sin_state *state, Node *inputs[], int nframes,
-                  double spf) {
+                  sample_t spf) {
 
-  double *out = node->output.buf;
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Get input buffer (frequency control) if connected
-  double *in = inputs[0]->output.buf;
-  double d_index;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t d_index;
   int index = 0;
-  double frac, a, b, sample;
-  double freq;
+  sample_t frac, a, b, sample;
+  sample_t freq;
   const int table_mask = SIN_TABSIZE - 1; // Assuming SIN_TABSIZE is power of 2
+  int frame_count = 0;
 
   while (nframes--) {
     freq = *in;
@@ -120,7 +121,8 @@ void *sin_perform(Node *node, sin_state *state, Node *inputs[], int nframes,
       out++;
     }
 
-    state->phase = fmod(state->phase + freq * spf, 1.0);
+    state->phase = fmodf(state->phase + freq * spf, 1.0);
+    frame_count++;
   }
 
   return node->output.buf;
@@ -154,19 +156,19 @@ Node *sin_node(Node *input) {
 
 // Square wave oscillator
 typedef struct sq_state {
-  double phase;
+  sample_t phase;
 } sq_state;
 
 void *sq_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
-                 double spf) {
-  double *out = node->output.buf;
+                 sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *in = inputs[0]->output.buf;
+  sample_t *in = inputs[0]->output.buf;
 
-  double d_index;
+  sample_t d_index;
   int index;
-  double frac, a, b, sample;
-  double freq;
+  sample_t frac, a, b, sample;
+  sample_t freq;
 
   const int table_mask = SQ_TABSIZE - 1; // Assuming SIN_TABSIZE is power of 2
 
@@ -187,7 +189,7 @@ void *sq_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
       out++;
     }
 
-    state->phase = fmod(state->phase + freq * spf, 1.0);
+    state->phase = fmodf(state->phase + freq * spf, 1.0);
   }
 
   return node->output.buf;
@@ -216,22 +218,22 @@ Node *sq_node(Node *input) {
   node->state_ptr = state;
   return graph_embed(node);
 }
-static inline double clamp_range(double input, double a, double b) {
+static inline sample_t clamp_range(sample_t input, sample_t a, sample_t b) {
   return input < a ? a : (input > b ? b : input);
 }
 
 // Square wave oscillator with PWM
 void *sq_pwm_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
-                     double spf) {
-  double *out = node->output.buf;
+                     sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
-  double *pw_in = inputs[1]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
+  sample_t *pw_in = inputs[1]->output.buf;
 
-  double d_index;
+  sample_t d_index;
   int index;
-  double frac, a, b, sample;
-  double freq, pw;
+  sample_t frac, a, b, sample;
+  sample_t freq, pw;
 
   const int table_mask = SQ_TABSIZE - 1;
 
@@ -241,7 +243,7 @@ void *sq_pwm_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
 
     pw = clamp_range(pw, 0.01, 0.99);
 
-    double adjusted_phase;
+    sample_t adjusted_phase;
     if (state->phase < pw) {
       adjusted_phase = 0.5 * state->phase / pw;
     } else {
@@ -261,7 +263,7 @@ void *sq_pwm_perform(Node *node, sq_state *state, Node *inputs[], int nframes,
       *out++ = sample;
     }
 
-    state->phase = fmod(state->phase + freq * spf, 1.0);
+    state->phase = fmodf(state->phase + freq * spf, 1.0);
   }
 
   return node->output.buf;
@@ -295,15 +297,15 @@ Node *sq_pwm_node(Node *pw_input, Node *freq_input) {
 
 // Phasor oscillator
 typedef struct phasor_state {
-  double phase;
+  sample_t phase;
 } phasor_state;
 
 void *phasor_perform(Node *node, phasor_state *state, Node *inputs[],
-                     int nframes, double spf) {
-  double *out = node->output.buf;
+                     int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *in = inputs[0]->output.buf;
-  double freq;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t freq;
 
   while (nframes--) {
     freq = *in;
@@ -314,7 +316,7 @@ void *phasor_perform(Node *node, phasor_state *state, Node *inputs[],
       out++;
     }
 
-    state->phase = fmod(state->phase + freq * spf, 1.0);
+    state->phase = fmodf(state->phase + freq * spf, 1.0);
   }
 
   return node->output.buf;
@@ -347,21 +349,21 @@ Node *phasor_node(Node *input) {
 
 // Raw oscillator (using custom wavetable)
 typedef struct raw_osc_state {
-  double phase;
+  sample_t phase;
 } raw_osc_state;
 
 void *raw_osc_perform(Node *node, raw_osc_state *state, Node *inputs[],
-                      int nframes, double spf) {
-  double *out = node->output.buf;
+                      int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
-  double *table = inputs[1]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
+  sample_t *table = inputs[1]->output.buf;
   int table_size = inputs[1]->output.size;
 
-  double d_index;
+  sample_t d_index;
   int index;
-  double frac, a, b, sample;
-  double freq;
+  sample_t frac, a, b, sample;
+  sample_t freq;
 
   while (nframes--) {
     freq = *freq_in;
@@ -381,7 +383,7 @@ void *raw_osc_perform(Node *node, raw_osc_state *state, Node *inputs[],
       out++;
     }
 
-    state->phase = fmod(state->phase + freq * spf, 1.0);
+    state->phase = fmodf(state->phase + freq * spf, 1.0);
   }
 
   return node->output.buf;
@@ -415,41 +417,41 @@ Node *raw_osc_node(Node *table, Node *freq) {
 
 // Oscillator Bank
 typedef struct osc_bank_state {
-  double phase;
+  sample_t phase;
 } osc_bank_state;
 
-static double get_freq_scaled_sample(double phase, double multiplier,
-                                     double *table, int table_size) {
-  double d_index = (phase * multiplier) * table_size;
+static sample_t get_freq_scaled_sample(sample_t phase, sample_t multiplier,
+                                       sample_t *table, int table_size) {
+  sample_t d_index = (phase * multiplier) * table_size;
   int index = (int)d_index;
-  double frac = d_index - index;
+  sample_t frac = d_index - index;
 
-  double a = table[index % table_size];
-  double b = table[(index + 1) % table_size];
+  sample_t a = table[index % table_size];
+  sample_t b = table[(index + 1) % table_size];
 
   return (1.0 - frac) * a + (frac * b);
 }
 
 void *osc_bank_perform(Node *node, osc_bank_state *state, Node *inputs[],
-                       int nframes, double spf) {
-  double *out = node->output.buf;
+                       int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
-  double *amps = inputs[1]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
+  sample_t *amps = inputs[1]->output.buf;
   int num_amps = inputs[1]->output.size;
 
-  double freq;
+  sample_t freq;
 
   while (nframes--) {
     freq = *freq_in;
     freq_in++;
 
-    double output = 0.0;
-    double norm = 1.0;
+    sample_t output = 0.0;
+    sample_t norm = 1.0;
 
     for (int i = 0; i < num_amps; i++) {
-      double sample = get_freq_scaled_sample(state->phase, (double)(i + 1),
-                                             sin_table, SIN_TABSIZE);
+      sample_t sample = get_freq_scaled_sample(state->phase, (sample_t)(i + 1),
+                                               sin_table, SIN_TABSIZE);
       sample *= amps[i];
       norm += amps[i];
       output += sample;
@@ -462,7 +464,7 @@ void *osc_bank_perform(Node *node, osc_bank_state *state, Node *inputs[],
       out++;
     }
 
-    state->phase = fmod(state->phase + freq * spf, 1.0);
+    state->phase = fmodf(state->phase + freq * spf, 1.0);
   }
 
   return node->output.buf;
@@ -499,36 +501,37 @@ typedef struct unison_osc_state {
   int num;
 } unison_osc_state;
 
-double get_unison_osc_sample(double phase, int table_size, double *table) {
-  double d_index = phase * table_size;
+sample_t get_unison_osc_sample(sample_t phase, int table_size,
+                               sample_t *table) {
+  sample_t d_index = phase * table_size;
   int index = (int)d_index;
-  double frac = d_index - index;
+  sample_t frac = d_index - index;
 
-  double a = table[index % table_size];
-  double b = table[(index + 1) % table_size];
+  sample_t a = table[index % table_size];
+  sample_t b = table[(index + 1) % table_size];
 
   return (1.0 - frac) * a + (frac * b);
 }
 
 void *unison_osc_perform(Node *node, unison_osc_state *state, Node *inputs[],
-                         int nframes, double spf) {
-  double *out = node->output.buf;
+                         int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
-  double *table = inputs[1]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
+  sample_t *table = inputs[1]->output.buf;
   int table_size = inputs[1]->output.size;
 
-  double *phases = (double *)(state + 1);
+  sample_t *phases = (sample_t *)(state + 1);
 
-  double *spread_in = inputs[2]->output.buf;
-  double *mix_in = inputs[3]->output.buf; // Mix controls only detuned voices
+  sample_t *spread_in = inputs[2]->output.buf;
+  sample_t *mix_in = inputs[3]->output.buf; // Mix controls only detuned voices
 
-  double d_index;
+  sample_t d_index;
   int index;
-  double frac, a, b, sample;
-  double freq;
-  double spread;
-  double mix;
+  sample_t frac, a, b, sample;
+  sample_t freq;
+  sample_t spread;
+  sample_t mix;
 
   while (nframes--) {
 
@@ -539,26 +542,26 @@ void *unison_osc_perform(Node *node, unison_osc_state *state, Node *inputs[],
     mix = *mix_in;
     mix_in++;
 
-    double output = get_unison_osc_sample(phases[0], table_size, table);
+    sample_t output = get_unison_osc_sample(phases[0], table_size, table);
 
-    phases[0] = fmod(phases[0] + freq * spf, 1.0);
+    phases[0] = fmodf(phases[0] + freq * spf, 1.0);
 
-    // double output = 0.;
+    // sample_t output = 0.;
     // Add detuned oscillators scaled by mix
     if (mix > 0.0 && state->num > 0) {
-      double detuned_sum = 0.0;
+      sample_t detuned_sum = 0.0;
       for (int i = 1; i <= state->num; i++) {
         // Higher frequency oscillator
         detuned_sum += get_unison_osc_sample(phases[i], table_size, table);
         // Higher frequency oscillator
-        phases[i] = fmod(phases[i] + freq * (1.0 + spread * i) * spf, 1.0);
+        phases[i] = fmodf(phases[i] + freq * (1.0 + spread * i) * spf, 1.0);
 
         // Lower frequency oscillator
         detuned_sum +=
             get_unison_osc_sample(phases[i + state->num], table_size, table);
         // Lower frequency oscillator
-        phases[i + state->num] =
-            fmod(phases[i + state->num] + freq * (1.0 - spread * i) * spf, 1.0);
+        phases[i + state->num] = fmodf(
+            phases[i + state->num] + freq * (1.0 - spread * i) * spf, 1.0);
       }
 
       // Only apply mix parameter to detuned voices
@@ -570,7 +573,7 @@ void *unison_osc_perform(Node *node, unison_osc_state *state, Node *inputs[],
       // Dynamic normalization based on mix parameter:
       // At mix=0: norm = 1 (just fundamental)
       // At mix=1: norm = 1 + 2*num (all voices at full volume)
-      double norm = 1.0 + (2.0 * state->num * mix);
+      sample_t norm = 1.0 + (2.0 * state->num * mix);
       output /= norm;
     }
     // Write output to all channels
@@ -586,7 +589,7 @@ NodeRef unison_osc_node(int num, NodeRef spread, NodeRef mix, NodeRef table,
                         NodeRef freq) {
 
   AudioGraph *graph = _graph;
-  int state_size = sizeof(unison_osc_state) + (1 + 2 * num) * sizeof(double);
+  int state_size = sizeof(unison_osc_state) + (1 + 2 * num) * sizeof(sample_t);
   state_size = (state_size + 7) & ~7; /* Align to 8-byte boundary */
   Node *node = allocate_node_in_graph(graph, state_size);
 
@@ -605,10 +608,10 @@ NodeRef unison_osc_node(int num, NodeRef spread, NodeRef mix, NodeRef table,
 
   unison_osc_state *state = (unison_osc_state *)(state_ptr(graph, node));
   *state = (unison_osc_state){.num = num};
-  double *phases = (double *)(state + 1);
+  sample_t *phases = (sample_t *)(state + 1);
   int phases_size = num * 2 + 1;
   for (int i = 1; i < phases_size; i++) {
-    phases[i] = (double)rand() / RAND_MAX; // randomize phases
+    phases[i] = (sample_t)rand() / RAND_MAX; // randomize phases
   }
 
   plug_input_in_graph(0, node, freq);
@@ -623,19 +626,19 @@ NodeRef unison_osc_node(int num, NodeRef spread, NodeRef mix, NodeRef table,
 
 // Buffer player
 typedef struct bufplayer_state {
-  double phase;
-  double prev_trig;
+  sample_t phase;
+  sample_t prev_trig;
 } bufplayer_state;
 
 void *__bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
-                          int nframes, double spf) {
-  double *out = node->output.buf;
+                          int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *buf = inputs[0]->output.buf;
+  sample_t *buf = inputs[0]->output.buf;
   int buf_size = inputs[0]->output.size;
-  double *rate = inputs[1]->output.buf;
+  sample_t *rate = inputs[1]->output.buf;
 
-  double d_index, frac, a, b, sample;
+  sample_t d_index, frac, a, b, sample;
   int index;
 
   while (nframes--) {
@@ -647,7 +650,7 @@ void *__bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
     b = buf[(index + 1) % buf_size];
 
     sample = (1.0 - frac) * a + (frac * b);
-    state->phase = fmod(state->phase + (*rate) / buf_size, 1.0);
+    state->phase = fmodf(state->phase + (*rate) / buf_size, 1.0);
 
     for (int i = 0; i < out_layout; i++) {
       *out = sample;
@@ -663,21 +666,21 @@ void *__bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
 // Buffer player with multi-channel support
 
 void *bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
-                        int nframes, double spf) {
-  double *out = node->output.buf;
+                        int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
 
-  double *buf = inputs[0]->output.buf;
+  sample_t *buf = inputs[0]->output.buf;
   int buf_size = inputs[0]->output.size;
   int buf_layout = inputs[0]->output.layout;
 
-  double *rate = inputs[1]->output.buf;
+  sample_t *rate = inputs[1]->output.buf;
 
   for (int frame = 0; frame < nframes; frame++) {
     int buf_frames = buf_size;
-    double d_index = state->phase * buf_frames;
+    sample_t d_index = state->phase * buf_frames;
     int index = (int)d_index;
-    double frac = d_index - index;
+    sample_t frac = d_index - index;
 
     int pos_a = (index % buf_frames) * buf_layout;
     int pos_b = ((index + 1) % buf_frames) * buf_layout;
@@ -685,15 +688,15 @@ void *bufplayer_perform(Node *node, bufplayer_state *state, Node *inputs[],
     for (int ch = 0; ch < out_layout; ch++) {
       int buf_ch = (ch < buf_layout) ? ch : (buf_layout - 1);
 
-      double a = buf[pos_a + buf_ch];
-      double b = buf[pos_b + buf_ch];
+      sample_t a = buf[pos_a + buf_ch];
+      sample_t b = buf[pos_b + buf_ch];
 
-      double sample = (1.0 - frac) * a + (frac * b);
+      sample_t sample = (1.0f - frac) * a + (frac * b);
 
       out[frame * out_layout + ch] = sample;
     }
 
-    state->phase = fmod(state->phase + rate[frame] / buf_frames, 1.0);
+    state->phase = fmodf(state->phase + rate[frame] / buf_frames, 1.0);
   }
 
   return node->output.buf;
@@ -728,16 +731,16 @@ Node *bufplayer_node(Node *buf, Node *rate) {
 
 // Buffer player with trigger
 void *_bufplayer_trig_perform(Node *node, bufplayer_state *state,
-                              Node *inputs[], int nframes, double spf) {
-  double *out = node->output.buf;
+                              Node *inputs[], int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *buf = inputs[0]->output.buf;
+  sample_t *buf = inputs[0]->output.buf;
   int buf_size = inputs[0]->output.size;
-  double *rate = inputs[1]->output.buf;
-  double *trig = inputs[2]->output.buf;
-  double *start_pos = inputs[3]->output.buf;
+  sample_t *rate = inputs[1]->output.buf;
+  sample_t *trig = inputs[2]->output.buf;
+  sample_t *start_pos = inputs[3]->output.buf;
 
-  double d_index, frac, a, b, sample;
+  sample_t d_index, frac, a, b, sample;
   int index;
 
   while (nframes--) {
@@ -745,7 +748,7 @@ void *_bufplayer_trig_perform(Node *node, bufplayer_state *state,
       state->phase = 0;
     }
 
-    d_index = (fmod(state->phase + *start_pos, 1.0)) * buf_size;
+    d_index = (fmodf(state->phase + *start_pos, 1.0)) * buf_size;
     index = (int)d_index;
     frac = d_index - index;
 
@@ -753,7 +756,7 @@ void *_bufplayer_trig_perform(Node *node, bufplayer_state *state,
     b = buf[(index + 1) % buf_size];
 
     sample = (1.0 - frac) * a + (frac * b);
-    state->phase = fmod(state->phase + *rate / buf_size, 1.0);
+    state->phase = fmodf(state->phase + *rate / buf_size, 1.0);
 
     for (int i = 0; i < out_layout; i++) {
       *out = sample;
@@ -799,17 +802,17 @@ Node *_bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
   return graph_embed(node);
 }
 void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
-                             int nframes, double spf) {
-  double *out = node->output.buf;
+                             int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *buf = inputs[0]->output.buf;
+  sample_t *buf = inputs[0]->output.buf;
   int buf_size = inputs[0]->output.size;
   int buf_channels = inputs[0]->output.layout;
-  double *rate = inputs[1]->output.buf;
-  double *trig = inputs[2]->output.buf;
-  double *start_pos = inputs[3]->output.buf;
+  sample_t *rate = inputs[1]->output.buf;
+  sample_t *trig = inputs[2]->output.buf;
+  sample_t *start_pos = inputs[3]->output.buf;
 
-  double d_index, frac, a, b, sample;
+  sample_t d_index, frac, a, b, sample;
   int index;
 
   while (nframes--) {
@@ -817,7 +820,7 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
       state->phase = 0;
     }
 
-    d_index = (fmod(state->phase + *start_pos, 1.0)) * buf_size;
+    d_index = (fmodf(state->phase + *start_pos, 1.0)) * buf_size;
     index = (int)d_index;
     frac = d_index - index;
 
@@ -842,7 +845,7 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
       *out++ = sample;
     }
 
-    state->phase = fmod(state->phase + *rate / buf_size, 1.0);
+    state->phase = fmodf(state->phase + *rate / buf_size, 1.0);
     if (state->phase < 0.) {
       state->phase = 1.;
     }
@@ -885,20 +888,20 @@ Node *bufplayer_trig_node(Node *buf, Node *rate, Node *start_pos, Node *trig) {
 }
 
 // White noise generator
-double _random_double_range(double min, double max) {
+sample_t _random_sample_t_range(sample_t min, sample_t max) {
   int rand_int = rand();
-  double rand_double = (double)rand_int / RAND_MAX;
-  rand_double = rand_double * (max - min) + min;
-  return rand_double;
+  sample_t rand_sample_t = (sample_t)rand_int / RAND_MAX;
+  rand_sample_t = rand_sample_t * (max - min) + min;
+  return rand_sample_t;
 }
 
 void *white_noise_perform(Node *node, void *state, Node *inputs[], int nframes,
-                          double spf) {
-  double *out = node->output.buf;
+                          sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
 
   while (nframes--) {
-    double sample = _random_double_range(-1.0, 1.0);
+    sample_t sample = _random_sample_t_range(-1.0, 1.0);
 
     for (int i = 0; i < out_layout; i++) {
       *out = sample;
@@ -930,17 +933,17 @@ Node *white_noise_node() {
 
 // Brown noise generator
 typedef struct brown_noise_state {
-  double last;
+  sample_t last;
 } brown_noise_state;
 
 void *brown_noise_perform(Node *node, brown_noise_state *state, Node *inputs[],
-                          int nframes, double spf) {
-  double *out = node->output.buf;
+                          int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double scale = sqrt(spf);
+  sample_t scale = sqrt(spf);
 
   while (nframes--) {
-    double add = scale * _random_double_range(-1.0, 1.0);
+    sample_t add = scale * _random_sample_t_range(-1.0, 1.0);
     state->last += add;
 
     if (state->last > 1.0 || state->last < -1.0) {
@@ -984,23 +987,23 @@ Node *brown_noise_node() {
 // lf White noise generator
 // LF Noise node with frequency and range inputs
 typedef struct lfnoise_state {
-  double current_value; // Current output value
-  double target_value;  // Target value to ramp to
-  double samples_left;  // Samples remaining until next random value
+  sample_t current_value; // Current output value
+  sample_t target_value;  // Target value to ramp to
+  sample_t samples_left;  // Samples remaining until next random value
 } lfnoise_state;
 
 void *lfnoise_perform(Node *node, lfnoise_state *state, Node *inputs[],
-                      int nframes, double spf) {
-  double *out = node->output.buf;
+                      int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
 
   // Input signals
-  double *freq_in = inputs[0]->output.buf; // Frequency in Hz
-  double *min_in = inputs[1]->output.buf;  // Minimum value
-  double *max_in = inputs[2]->output.buf;  // Maximum value
+  sample_t *freq_in = inputs[0]->output.buf; // Frequency in Hz
+  sample_t *min_in = inputs[1]->output.buf;  // Minimum value
+  sample_t *max_in = inputs[2]->output.buf;  // Maximum value
 
-  double freq, min_range, max_range;
-  double sample, increment;
+  sample_t freq, min_range, max_range;
+  sample_t sample, increment;
 
   while (nframes--) {
     freq = *freq_in++;
@@ -1010,10 +1013,10 @@ void *lfnoise_perform(Node *node, lfnoise_state *state, Node *inputs[],
     // If we need a new random value
     if (state->samples_left <= 0) {
       // Generate new target value
-      state->target_value = _random_double_range(min_range, max_range);
+      state->target_value = _random_sample_t_range(min_range, max_range);
 
       // Calculate samples until next change (based on frequency)
-      double samples_per_cycle = 1.0 / (freq * spf);
+      sample_t samples_per_cycle = 1.0 / (freq * spf);
       state->samples_left = samples_per_cycle;
 
       // Calculate increment per sample to reach target value
@@ -1057,8 +1060,8 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
   };
 
   lfnoise_state *state = (lfnoise_state *)state_ptr(graph, node);
-  double rand_val =
-      _random_double_range(min_input->output.buf[0], max_input->output.buf[0]);
+  sample_t rand_val = _random_sample_t_range(min_input->output.buf[0],
+                                             max_input->output.buf[0]);
   *state = (lfnoise_state){
       .current_value = rand_val,
       .target_value = rand_val,
@@ -1077,24 +1080,24 @@ NodeRef lfnoise_node(NodeRef freq_input, NodeRef min_input, NodeRef max_input) {
   return graph_embed(node);
 }
 typedef struct chirp_state {
-  double start_freq;
-  double end_freq;
-  double current_freq;
-  double elapsed_time;
+  sample_t start_freq;
+  sample_t end_freq;
+  sample_t current_freq;
+  sample_t elapsed_time;
   int trigger_active;
-  double prev_trig_value;
+  sample_t prev_trig_value;
 } chirp_state;
 
 void *static_chirp_perform(Node *node, chirp_state *state, Node *inputs[],
-                           int nframes, double spf) {
-  double *out = node->output.buf;
+                           int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *trig = inputs[0]->output.buf;
-  double *lag = inputs[1]->output.buf;
+  sample_t *trig = inputs[0]->output.buf;
+  sample_t *lag = inputs[1]->output.buf;
 
   for (int i = 0; i < nframes; i++) {
-    double trig_value = trig[i];
-    double lag_time = lag[i];
+    sample_t trig_value = trig[i];
+    sample_t lag_time = lag[i];
 
     if (((trig_value == 1.0) && (state->prev_trig_value != 1.0)) ||
         (state->prev_trig_value <= 0.5 && trig_value > 0.5)) {
@@ -1107,7 +1110,7 @@ void *static_chirp_perform(Node *node, chirp_state *state, Node *inputs[],
     state->prev_trig_value = trig_value;
 
     if (state->trigger_active) {
-      double progress = state->elapsed_time / lag_time;
+      sample_t progress = state->elapsed_time / lag_time;
       if (progress > 1.0)
         progress = 1.0;
 
@@ -1130,7 +1133,7 @@ void *static_chirp_perform(Node *node, chirp_state *state, Node *inputs[],
   return node->output.buf;
 }
 
-Node *static_chirp_node(double start_freq, double end_freq, Node *lag_input,
+Node *static_chirp_node(sample_t start_freq, sample_t end_freq, Node *lag_input,
                         Node *trig_input) {
   AudioGraph *graph = _graph;
   Node *node = allocate_node_in_graph(graph, sizeof(chirp_state));
@@ -1165,19 +1168,19 @@ Node *static_chirp_node(double start_freq, double end_freq, Node *lag_input,
 }
 
 void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
-                    double spf) {
-  double *out = node->output.buf;
+                    sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *trig = inputs[0]->output.buf;
-  double *lag = inputs[1]->output.buf;
-  double *_hi = inputs[2]->output.buf;
-  double *_lo = inputs[3]->output.buf;
+  sample_t *trig = inputs[0]->output.buf;
+  sample_t *lag = inputs[1]->output.buf;
+  sample_t *_hi = inputs[2]->output.buf;
+  sample_t *_lo = inputs[3]->output.buf;
 
   for (int i = 0; i < nframes; i++) {
-    double trig_value = trig[i];
-    double lag_time = lag[i];
-    double hi = _hi[i];
-    double lo = _lo[i];
+    sample_t trig_value = trig[i];
+    sample_t lag_time = lag[i];
+    sample_t hi = _hi[i];
+    sample_t lo = _lo[i];
 
     if (((trig_value == 1.0) && (state->prev_trig_value != 1.0)) ||
         (state->prev_trig_value <= 0.5 && trig_value > 0.5)) {
@@ -1192,7 +1195,7 @@ void *chirp_perform(Node *node, chirp_state *state, Node *inputs[], int nframes,
     state->prev_trig_value = trig_value;
 
     if (state->trigger_active) {
-      double progress = state->elapsed_time / lag_time;
+      sample_t progress = state->elapsed_time / lag_time;
       if (progress > 1.0)
         progress = 1.0;
 
@@ -1254,17 +1257,17 @@ Node *chirp_node(NodeRef start_freq, NodeRef end_freq, Node *lag_input,
 
 // Impulse generator (outputs a single sample of 1.0 per cycle)
 typedef struct impulse_state {
-  double phase;
+  sample_t phase;
 } impulse_state;
 
 void *impulse_perform(Node *node, impulse_state *state, Node *inputs[],
-                      int nframes, double spf) {
-  double *out = node->output.buf;
+                      int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
 
-  double freq;
-  double sample;
+  sample_t freq;
+  sample_t sample;
 
   while (nframes--) {
     freq = *freq_in;
@@ -1315,16 +1318,16 @@ Node *impulse_node(Node *freq) {
 
 // Ramp generator
 typedef struct ramp_state {
-  double phase;
+  sample_t phase;
 } ramp_state;
 
 void *ramp_perform(Node *node, ramp_state *state, Node *inputs[], int nframes,
-                   double spf) {
-  double *out = node->output.buf;
+                   sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
 
-  double freq;
+  sample_t freq;
 
   while (nframes--) {
     freq = *freq_in;
@@ -1372,18 +1375,18 @@ Node *ramp_node(Node *freq) {
 
 // Triggered random generator
 typedef struct trig_rand_state {
-  double value;
+  sample_t value;
 } trig_rand_state;
 
 void *trig_rand_perform(Node *node, trig_rand_state *state, Node *inputs[],
-                        int nframes, double spf) {
-  double *out = node->output.buf;
+                        int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *trig = inputs[0]->output.buf;
+  sample_t *trig = inputs[0]->output.buf;
 
   while (nframes--) {
     if (*trig == 1.0) {
-      state->value = _random_double_range(0.0, 1.0);
+      state->value = _random_sample_t_range(0.0, 1.0);
     }
 
     for (int i = 0; i < out_layout; i++) {
@@ -1414,7 +1417,7 @@ Node *trig_rand_node(Node *trig) {
   };
 
   trig_rand_state *state = (trig_rand_state *)state_ptr(graph, node);
-  *state = (trig_rand_state){.value = _random_double_range(0.0, 1.0)};
+  *state = (trig_rand_state){.value = _random_sample_t_range(0.0, 1.0)};
 
   // node->connections[0].source_node_index = trig->node_index;
   plug_input_in_graph(0, node, trig);
@@ -1424,17 +1427,17 @@ Node *trig_rand_node(Node *trig) {
 }
 
 void *trig_range_perform(Node *node, trig_rand_state *state, Node *inputs[],
-                         int nframes, double spf) {
-  double *out = node->output.buf;
+                         int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *trig = inputs[0]->output.buf;
-  double *low = inputs[1]->output.buf;
-  double *high = inputs[2]->output.buf;
+  sample_t *trig = inputs[0]->output.buf;
+  sample_t *low = inputs[1]->output.buf;
+  sample_t *high = inputs[2]->output.buf;
 
   while (nframes--) {
 
     if (*trig == 1.0) {
-      state->value = _random_double_range(*low, *high);
+      state->value = _random_sample_t_range(*low, *high);
     }
     low++;
     high++;
@@ -1464,7 +1467,7 @@ Node *trig_range_node(Node *low, Node *high, Node *trig) {
   };
 
   trig_rand_state *state = (trig_rand_state *)state_ptr(graph, node);
-  *state = (trig_rand_state){.value = _random_double_range(0.0, 1.0)};
+  *state = (trig_rand_state){.value = _random_sample_t_range(0.0, 1.0)};
 
   plug_input_in_graph(0, node, trig);
   plug_input_in_graph(1, node, low);
@@ -1476,15 +1479,15 @@ Node *trig_range_node(Node *low, Node *high, Node *trig) {
 
 // Triggered selector
 typedef struct trig_sel_state {
-  double value;
+  sample_t value;
 } trig_sel_state;
 
 void *trig_sel_perform(Node *node, trig_sel_state *state, Node *inputs[],
-                       int nframes, double spf) {
-  double *out = node->output.buf;
+                       int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *trig = inputs[0]->output.buf;
-  double *sels = inputs[1]->output.buf;
+  sample_t *trig = inputs[0]->output.buf;
+  sample_t *sels = inputs[1]->output.buf;
   int sels_size = inputs[1]->output.size;
 
   while (nframes--) {
@@ -1524,7 +1527,7 @@ Node *trig_sel_node(Node *trig, Node *sels) {
   plug_input_in_graph(0, node, trig);
   plug_input_in_graph(1, node, sels);
 
-  double *sels_buf = sels->output.buf;
+  sample_t *sels_buf = sels->output.buf;
   int sels_size = sels->output.size;
   state->value = sels_buf[rand() % sels_size];
 
@@ -1533,30 +1536,30 @@ Node *trig_sel_node(Node *trig, Node *sels) {
 }
 
 typedef struct pm_state {
-  double carrier_phase;
-  double modulator_phase;
+  sample_t carrier_phase;
+  sample_t modulator_phase;
 } pm_state;
 
 void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
-                           int nframes, double spf) {
-  double *out = node->output.buf;
+                           int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
 
-  double *freq_in = inputs[0]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
 
-  double *mod_index_in = inputs[1]->output.buf;
-  double *mod_ratio_in = inputs[2]->output.buf;
+  sample_t *mod_index_in = inputs[1]->output.buf;
+  sample_t *mod_ratio_in = inputs[2]->output.buf;
 
-  const double table_size = (double)SIN_TABSIZE;
+  const sample_t table_size = (sample_t)SIN_TABSIZE;
   const int table_mask = SIN_TABSIZE - 1;
 
-  double carrier_freq, modulator_freq;
-  double mod_index, mod_ratio;
-  double mod_phase_scaled, carrier_phase_scaled;
+  sample_t carrier_freq, modulator_freq;
+  sample_t mod_index, mod_ratio;
+  sample_t mod_phase_scaled, carrier_phase_scaled;
   int mod_index_int, carrier_index_int;
-  double mod_frac, carrier_frac;
-  double modulator_value, carrier_value;
-  double modulated_phase;
+  sample_t mod_frac, carrier_frac;
+  sample_t modulator_value, carrier_value;
+  sample_t modulated_phase;
 
   while (nframes--) {
     carrier_freq = *freq_in++;
@@ -1576,15 +1579,15 @@ void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
     int mod_idx_2 = (mod_index_int + 1) & table_mask;
     int mod_idx_3 = (mod_index_int + 2) & table_mask;
 
-    double mod_y0 = sin_table[mod_idx_0];
-    double mod_y1 = sin_table[mod_idx_1];
-    double mod_y2 = sin_table[mod_idx_2];
-    double mod_y3 = sin_table[mod_idx_3];
+    sample_t mod_y0 = sin_table[mod_idx_0];
+    sample_t mod_y1 = sin_table[mod_idx_1];
+    sample_t mod_y2 = sin_table[mod_idx_2];
+    sample_t mod_y3 = sin_table[mod_idx_3];
 
-    double mod_c0 = mod_y1;
-    double mod_c1 = 0.5 * (mod_y2 - mod_y0);
-    double mod_c2 = mod_y0 - 2.5 * mod_y1 + 2.0 * mod_y2 - 0.5 * mod_y3;
-    double mod_c3 = 0.5 * (mod_y3 - mod_y0) + 1.5 * (mod_y1 - mod_y2);
+    sample_t mod_c0 = mod_y1;
+    sample_t mod_c1 = 0.5 * (mod_y2 - mod_y0);
+    sample_t mod_c2 = mod_y0 - 2.5 * mod_y1 + 2.0 * mod_y2 - 0.5 * mod_y3;
+    sample_t mod_c3 = 0.5 * (mod_y3 - mod_y0) + 1.5 * (mod_y1 - mod_y2);
 
     modulator_value =
         ((mod_c3 * mod_frac + mod_c2) * mod_frac + mod_c1) * mod_frac + mod_c0;
@@ -1605,15 +1608,15 @@ void *pm_perform_optimized(Node *node, pm_state *state, Node **inputs,
     int carr_idx_2 = (carrier_index_int + 1) & table_mask;
     int carr_idx_3 = (carrier_index_int + 2) & table_mask;
 
-    double carr_y0 = sin_table[carr_idx_0];
-    double carr_y1 = sin_table[carr_idx_1];
-    double carr_y2 = sin_table[carr_idx_2];
-    double carr_y3 = sin_table[carr_idx_3];
+    sample_t carr_y0 = sin_table[carr_idx_0];
+    sample_t carr_y1 = sin_table[carr_idx_1];
+    sample_t carr_y2 = sin_table[carr_idx_2];
+    sample_t carr_y3 = sin_table[carr_idx_3];
 
-    double carr_c0 = carr_y1;
-    double carr_c1 = 0.5 * (carr_y2 - carr_y0);
-    double carr_c2 = carr_y0 - 2.5 * carr_y1 + 2.0 * carr_y2 - 0.5 * carr_y3;
-    double carr_c3 = 0.5 * (carr_y3 - carr_y0) + 1.5 * (carr_y1 - carr_y2);
+    sample_t carr_c0 = carr_y1;
+    sample_t carr_c1 = 0.5 * (carr_y2 - carr_y0);
+    sample_t carr_c2 = carr_y0 - 2.5 * carr_y1 + 2.0 * carr_y2 - 0.5 * carr_y3;
+    sample_t carr_c3 = 0.5 * (carr_y3 - carr_y0) + 1.5 * (carr_y1 - carr_y2);
 
     carrier_value =
         ((carr_c3 * carrier_frac + carr_c2) * carrier_frac + carr_c1) *
@@ -1664,23 +1667,23 @@ Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
 }
 #define SAW_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
-static double saw_table[SAW_TABSIZE] = {
+static sample_t saw_table[SAW_TABSIZE] = {
 #include "./assets/saw_table.csv"
 };
 #else
-static double saw_table[SQ_TABSIZE];
+static sample_t saw_table[SQ_TABSIZE];
 #endif
 
 void maketable_saw(void) {
 #ifndef READ_WTABLES
-  double phase = 0.0;
-  double phsinc = (2. * PI) / SAW_TABSIZE;
+  sample_t phase = 0.0;
+  sample_t phsinc = (2.0f * PI) / SAW_TABSIZE;
   for (int i = 0; i < SAW_TABSIZE; i++) {
 
     for (int harm = 1; harm < SAW_TABSIZE / 2;
          harm += 1) { // summing n frequencies
 
-      double val = sin(phase * harm) / harm;
+      sample_t val = sin(phase * harm) / harm;
       saw_table[i] += (-2. * val) / PI;
     }
     phase += phsinc;
@@ -1689,22 +1692,22 @@ void maketable_saw(void) {
 #endif
 }
 
-double *get_saw_table() { return saw_table; }
+sample_t *get_saw_table() { return saw_table; }
 uint32_t get_saw_tabsize() { return SAW_TABSIZE; }
 
 typedef struct saw_state {
-  double phase;
+  sample_t phase;
 } saw_state;
 void *saw_perform(Node *node, saw_state *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *in = inputs[0]->output.buf;
+  sample_t *in = inputs[0]->output.buf;
 
-  double d_index;
+  sample_t d_index;
   int index;
-  double frac, a, b, sample;
-  double freq;
+  sample_t frac, a, b, sample;
+  sample_t freq;
 
   const int table_mask = SAW_TABSIZE - 1; // Assuming SIN_TABSIZE is power of 2
 
@@ -1725,7 +1728,7 @@ void *saw_perform(Node *node, saw_state *state, Node *inputs[], int nframes,
       out++;
     }
 
-    state->phase = fmod(state->phase + freq * spf, 1.0);
+    state->phase = fmodf(state->phase + freq * spf, 1.0);
   }
 
   return node->output.buf;
@@ -1759,22 +1762,22 @@ Node *saw_node(Node *input) {
 
 // Granulator processor
 typedef struct {
-  int starts[32];    // Start positions for each grain
-  int lengths[32];   // Length of each grain
-  int positions[32]; // Current position in each grain
-  double rates[32];  // Playback rate for each grain
-  double amps[32];   // Amplitude of each grain
+  int starts[32];     // Start positions for each grain
+  int lengths[32];    // Length of each grain
+  int positions[32];  // Current position in each grain
+  sample_t rates[32]; // Playback rate for each grain
+  sample_t amps[32];  // Amplitude of each grain
 
   int max_concurrent_grains;
   int active_grains;
   int min_grain_length;
   int max_grain_length;
-  double overlap;
+  sample_t overlap;
   int next_free_grain;
 } granulator_state;
 
-static void init_grain(granulator_state *state, int index, double pos,
-                       int length, double rate) {
+static void init_grain(granulator_state *state, int index, sample_t pos,
+                       int length, sample_t rate) {
   state->starts[index] = (int)pos;
   state->lengths[index] = length;
   state->positions[index] = 0;
@@ -1783,16 +1786,16 @@ static void init_grain(granulator_state *state, int index, double pos,
   state->active_grains++;
 }
 
-static void process_grain(granulator_state *state, int i, double *out,
-                          double *buf, int buf_size) {
-  double d_index = state->starts[i] + state->positions[i] * state->rates[i];
+static void process_grain(granulator_state *state, int i, sample_t *out,
+                          sample_t *buf, int buf_size) {
+  sample_t d_index = state->starts[i] + state->positions[i] * state->rates[i];
   int index = (int)d_index;
-  double frac = d_index - index;
+  sample_t frac = d_index - index;
 
-  double a = buf[index % buf_size];
-  double b = buf[(index + 1) % buf_size];
+  sample_t a = buf[index % buf_size];
+  sample_t b = buf[(index + 1) % buf_size];
 
-  double sample = ((1.0 - frac) * a + (frac * b)) * state->amps[i];
+  sample_t sample = ((1.0 - frac) * a + (frac * b)) * state->amps[i];
   *out += sample;
 
   state->positions[i]++;
@@ -1803,7 +1806,7 @@ static void process_grain(granulator_state *state, int i, double *out,
       state->next_free_grain = i;
     }
   } else {
-    double env_pos = (double)state->positions[i] / state->lengths[i];
+    sample_t env_pos = (sample_t)state->positions[i] / state->lengths[i];
     if (env_pos < state->overlap) {
       state->amps[i] = env_pos / state->overlap;
     } else if (env_pos > (1.0 - state->overlap)) {
@@ -1815,20 +1818,20 @@ static void process_grain(granulator_state *state, int i, double *out,
 }
 
 void *granulator_perform(Node *node, granulator_state *state, Node *inputs[],
-                         int nframes, double spf) {
-  double *out = node->output.buf;
+                         int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *buf = inputs[0]->output.buf;
+  sample_t *buf = inputs[0]->output.buf;
   int buf_size = inputs[0]->output.size;
-  double *trig = inputs[1]->output.buf;
-  double *pos = inputs[2]->output.buf;
-  double *rate = inputs[3]->output.buf;
+  sample_t *trig = inputs[1]->output.buf;
+  sample_t *pos = inputs[2]->output.buf;
+  sample_t *rate = inputs[3]->output.buf;
 
   while (nframes--) {
-    double sample = 0.0;
+    sample_t sample = 0.0;
 
     if (*trig == 1.0 && state->active_grains < state->max_concurrent_grains) {
-      double p = fabs(*pos);
+      sample_t p = fabs(*pos);
       int start_pos = (int)(p * buf_size);
       int length = state->min_grain_length +
                    rand() % (state->max_grain_length - state->min_grain_length);
@@ -1917,35 +1920,35 @@ Node *granulator_node(int max_grains, Node *buf, Node *trig, Node *pos,
 }
 
 typedef struct rand_trig_state {
-  double val;
+  sample_t val;
 } rand_trig_state;
 
-double __rand_double_range(double min, double max) {
+sample_t __rand_sample_t_range(sample_t min, sample_t max) {
   int rand_int = rand();
-  double rand_double = (double)rand_int / RAND_MAX;
-  rand_double = rand_double * (max - min) + min;
-  return rand_double;
+  sample_t rand_sample_t = (sample_t)rand_int / RAND_MAX;
+  rand_sample_t = rand_sample_t * (max - min) + min;
+  return rand_sample_t;
 }
 
 void *rand_trig_perform(Node *node, rand_trig_state *state, Node *inputs[],
-                        int nframes, double spf) {
+                        int nframes, sample_t spf) {
 
-  double *out = node->output.buf;
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *in = inputs[0]->output.buf;
-  double *low = inputs[1]->output.buf;
-  double *high = inputs[2]->output.buf;
+  sample_t *in = inputs[0]->output.buf;
+  sample_t *low = inputs[1]->output.buf;
+  sample_t *high = inputs[2]->output.buf;
 
   while (nframes--) {
 
-    double lowv = *low;
+    sample_t lowv = *low;
     low++;
 
-    double highv = *high;
+    sample_t highv = *high;
     high++;
 
     if (*in == 1.0) {
-      state->val = __rand_double_range(lowv, highv);
+      state->val = __rand_sample_t_range(lowv, highv);
       // printf("trig: %f\n", state->val);
     }
     *out = state->val;
@@ -1990,17 +1993,18 @@ Node *rand_trig_node(Node *trig_input, Node *low, Node *high) {
  * works well)
  * @return Pointer to the allocated wavetable, or NULL if allocation fails
  */
-double *create_gaussian_wavetable(double *wavetable, int size, double sigma) {
-  double center = (size - 1) / 2.0;
+sample_t *create_gaussian_wavetable(sample_t *wavetable, int size,
+                                    sample_t sigma) {
+  sample_t center = (size - 1) / 2.0;
 
-  double scaling = 1.0 / (sigma * sqrt(2.0 * M_PI));
+  sample_t scaling = 1.0 / (sigma * sqrt(2.0 * M_PI));
 
-  double variance = sigma * sigma * size * size;
+  sample_t variance = sigma * sigma * size * size;
 
-  double max_value = 0.0;
+  sample_t max_value = 0.0;
   for (int i = 0; i < size; i++) {
-    double x = i - center;
-    double exponent = -(x * x) / (2.0 * variance);
+    sample_t x = i - center;
+    sample_t exponent = -(x * x) / (2.0 * variance);
     wavetable[i] = scaling * exp(exponent);
 
     if (wavetable[i] > max_value) {
@@ -2025,10 +2029,10 @@ double *create_gaussian_wavetable(double *wavetable, int size, double sigma) {
  * @param sigma_decay Sigma parameter for decay portion
  * @return Pointer to the allocated wavetable, or NULL if allocation fails
  */
-double *create_asymmetric_gaussian_wavetable(double *wavetable, int size,
-                                             double attack_ratio,
-                                             double sigma_attack,
-                                             double sigma_decay) {
+sample_t *create_asymmetric_gaussian_wavetable(sample_t *wavetable, int size,
+                                               sample_t attack_ratio,
+                                               sample_t sigma_attack,
+                                               sample_t sigma_decay) {
   // Validate parameters
   if (attack_ratio < 0.0 || attack_ratio > 1.0) {
     attack_ratio = 0.5; // Default to symmetric
@@ -2037,12 +2041,13 @@ double *create_asymmetric_gaussian_wavetable(double *wavetable, int size,
   int attack_samples = (int)(size * attack_ratio);
   int decay_samples = size - attack_samples;
 
-  double max_value = 0.0;
+  sample_t max_value = 0.0;
 
   for (int i = 0; i < attack_samples; i++) {
-    double x = i - attack_samples; // Negative values for left side
-    double normalized_x = x / (double)attack_samples; // Normalize to -1 to 0
-    double exponent =
+    sample_t x = i - attack_samples; // Negative values for left side
+    sample_t normalized_x =
+        x / (sample_t)attack_samples; // Normalize to -1 to 0
+    sample_t exponent =
         -(normalized_x * normalized_x) / (2.0 * sigma_attack * sigma_attack);
     wavetable[i] = exp(exponent);
 
@@ -2052,9 +2057,9 @@ double *create_asymmetric_gaussian_wavetable(double *wavetable, int size,
   }
 
   for (int i = attack_samples; i < size; i++) {
-    double x = i - attack_samples; // 0 to positive values for right side
-    double normalized_x = x / (double)decay_samples; // Normalize to 0 to 1
-    double exponent =
+    sample_t x = i - attack_samples; // 0 to positive values for right side
+    sample_t normalized_x = x / (sample_t)decay_samples; // Normalize to 0 to 1
+    sample_t exponent =
         -(normalized_x * normalized_x) / (2.0 * sigma_decay * sigma_decay);
     wavetable[i] = exp(exponent);
 
@@ -2079,11 +2084,11 @@ double *create_asymmetric_gaussian_wavetable(double *wavetable, int size,
  * @param alpha Parameter controlling the shape (typically between 2-4)
  * @return Pointer to the allocated wavetable, or NULL if allocation fails
  */
-double *create_grain_window_wavetable(double *wavetable, int size,
-                                      double alpha) {
+sample_t *create_grain_window_wavetable(sample_t *wavetable, int size,
+                                        sample_t alpha) {
   for (int i = 0; i < size; i++) {
-    double x = (i / (double)(size - 1)) * 2.0 - 1.0; // -1 to 1
-    double exponent = -alpha * x * x;
+    sample_t x = (i / (sample_t)(size - 1)) * 2.0 - 1.0; // -1 to 1
+    sample_t exponent = -alpha * x * x;
     wavetable[i] = exp(exponent);
   }
 
@@ -2091,19 +2096,19 @@ double *create_grain_window_wavetable(double *wavetable, int size,
 }
 
 #ifdef READ_WTABLES
-static double gaussian_win[SQ_TABSIZE] = {
+static sample_t gaussian_win[SQ_TABSIZE] = {
 #include "./assets/gaussian_win.csv"
 };
 #else
-static double gaussian_win[GRAIN_WINDOW_TABSIZE];
+static sample_t gaussian_win[GRAIN_WINDOW_TABSIZE];
 #endif
 
 #ifdef READ_WTABLES
-double grain_win[SQ_TABSIZE] = {
+sample_t grain_win[SQ_TABSIZE] = {
 #include "./assets/grain_win.csv"
 };
 #else
-double grain_win[GRAIN_WINDOW_TABSIZE];
+sample_t grain_win[GRAIN_WINDOW_TABSIZE];
 #endif
 void maketable_grain_window() {
 
@@ -2122,58 +2127,58 @@ typedef struct grain_osc_state {
   int active_grains;
 } grain_osc_state;
 
-double pow2table_read(double pos, int tabsize, double *table) {
+sample_t pow2table_read(sample_t pos, int tabsize, sample_t *table) {
   int mask = tabsize - 1;
 
-  double env_pos = pos * (mask);
+  sample_t env_pos = pos * (mask);
   int env_idx = (int)env_pos;
-  double env_frac = env_pos - env_idx;
+  sample_t env_frac = env_pos - env_idx;
 
   // Interpolate between envelope table values
-  double env_val = table[env_idx & mask] * (1.0 - env_frac) +
-                   table[(env_idx + 1) & mask] * env_frac;
+  sample_t env_val = table[env_idx & mask] * (1.0 - env_frac) +
+                     table[(env_idx + 1) & mask] * env_frac;
   return env_val;
 }
 
 void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
-                        int nframes, double spf) {
+                        int nframes, sample_t spf) {
 
-  double *out = node->output.buf;
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
 
-  double *buf = inputs[0]->output.buf;
+  sample_t *buf = inputs[0]->output.buf;
   int buf_size = inputs[0]->output.size;
 
-  double *trig = inputs[1]->output.buf;
-  double *pos = inputs[2]->output.buf;
-  double *rate = inputs[3]->output.buf;
-  double *width = inputs[4]->output.buf;
+  sample_t *trig = inputs[1]->output.buf;
+  sample_t *pos = inputs[2]->output.buf;
+  sample_t *rate = inputs[3]->output.buf;
+  sample_t *width = inputs[4]->output.buf;
 
   int max_grains = state->max_grains;
 
   char *mem = (char *)((grain_osc_state *)state + 1);
-  double *rates = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *rates = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
-  double *phases = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *phases = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
-  double *widths = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *widths = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
-  double *remaining_secs = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *remaining_secs = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
-  double *starts = (double *)mem;
-  mem += sizeof(double) * max_grains;
+  sample_t *starts = (sample_t *)mem;
+  mem += sizeof(sample_t) * max_grains;
 
   int *active = (int *)mem;
 
-  double d_index;
+  sample_t d_index;
   int index;
-  double frac;
-  double a, b;
-  double sample = 0.;
+  sample_t frac;
+  sample_t a, b;
+  sample_t sample = 0.;
   const int table_mask = GRAIN_WINDOW_TABSIZE - 1;
   while (nframes--) {
     sample = 0.;
@@ -2195,11 +2200,11 @@ void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
     for (int i = 0; i < max_grains; i++) {
 
       if (active[i]) {
-        double r = rates[i];
-        double p = phases[i];
-        double s = starts[i];
-        double w = widths[i];
-        double rem = remaining_secs[i];
+        sample_t r = rates[i];
+        sample_t p = phases[i];
+        sample_t s = starts[i];
+        sample_t w = widths[i];
+        sample_t rem = remaining_secs[i];
 
         d_index = s + (p * buf_size);
 
@@ -2209,8 +2214,8 @@ void *grain_osc_perform(Node *node, grain_osc_state *state, Node *inputs[],
         a = buf[index % buf_size];
         b = buf[(index + 1) % buf_size];
 
-        double grain_elapsed = 1.0 - (rem / w);
-        double env_val =
+        sample_t grain_elapsed = 1.0 - (rem / w);
+        sample_t env_val =
             pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
 
         sample += env_val * ((1.0 - frac) * a + (frac * b));
@@ -2241,12 +2246,12 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
 
   AudioGraph *graph = _graph;
   int state_size = sizeof(grain_osc_state) +
-                   (max_grains * sizeof(double))   // rates
-                   + (max_grains * sizeof(double)) // phases
-                   + (max_grains * sizeof(double)) // widths
-                   + (max_grains * sizeof(double)) // elapsed
-                   + (max_grains * sizeof(double)) // starts
-                   + (max_grains * sizeof(int))    // active grains
+                   (max_grains * sizeof(sample_t))   // rates
+                   + (max_grains * sizeof(sample_t)) // phases
+                   + (max_grains * sizeof(sample_t)) // widths
+                   + (max_grains * sizeof(sample_t)) // elapsed
+                   + (max_grains * sizeof(sample_t)) // starts
+                   + (max_grains * sizeof(int))      // active grains
       ;
   Node *node = allocate_node_in_graph(graph, state_size);
 
@@ -2278,17 +2283,17 @@ NodeRef grain_osc_node(int max_grains, Node *buf, Node *trig, Node *pos,
 
 typedef struct array_choose_trig_state {
   int size;
-  double *data;
-  double sample;
+  sample_t *data;
+  sample_t sample;
 } array_choose_trig_state;
 
 void *array_choose_trig_perform(Node *node, array_choose_trig_state *state,
-                                Node *inputs[], int nframes, double spf) {
+                                Node *inputs[], int nframes, sample_t spf) {
 
-  double *out = node->output.buf;
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *trig = inputs[0]->output.buf;
-  double sample;
+  sample_t *trig = inputs[0]->output.buf;
+  sample_t sample;
   while (nframes--) {
 
     if (*trig > 0.9) {
@@ -2301,7 +2306,7 @@ void *array_choose_trig_perform(Node *node, array_choose_trig_state *state,
   }
 }
 
-NodeRef array_choose_trig_node(int arr_size, double *arr_data, Node *trig) {
+NodeRef array_choose_trig_node(int arr_size, sample_t *arr_data, Node *trig) {
 
   AudioGraph *graph = _graph;
 

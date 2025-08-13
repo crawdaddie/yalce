@@ -27,11 +27,11 @@ struct arr {
 
 NodeRef array_to_buf(struct arr a);
 
-void write_to_dac(int dac_layout, double *dac_buf, int _layout, double *buf,
+void write_to_dac(int dac_layout, sample_t *dac_buf, int _layout, sample_t *buf,
                   int output_num, int nframes);
 extern AudioGraph *_graph;
 
-void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
+void perform_graph(Node *head, int frame_count, sample_t spf, sample_t *dac_buf,
                    int layout, int output_num);
 
 typedef void (*SynthTemplateFunc)();

@@ -6,32 +6,33 @@
 #include <string.h>
 
 typedef struct lfo_state {
-  double phase;
-  double prev_trig;
+  sample_t phase;
+  sample_t prev_trig;
   int current_segment;
-  double start;
-  double target;
-  double time;
-  double curve;
+  sample_t start;
+  sample_t target;
+  sample_t time;
+  sample_t curve;
   int active;
   int sustaining;
 } lfo_state;
 
 // Helper function to interpolate between two points based on curve parameter
-static double interpolate_value(double t, double y1, double y2, double curve) {
+static sample_t interpolate_value(sample_t t, sample_t y1, sample_t y2,
+                                  sample_t curve) {
   // Linear interpolation if curve is close to zero
   if (fabs(curve) < 0.001) {
     return y1 + t * (y2 - y1);
   } else {
     // Exponential curve
-    double sign = curve > 0 ? 1.0 : -1.0;
-    double k = exp(sign * fabs(curve) * 3.0); // Scale the curve effect
-    double curve_t = (exp(sign * fabs(curve) * 3.0 * t) - 1) / (k - 1);
+    sample_t sign = curve > 0 ? 1.0 : -1.0;
+    sample_t k = exp(sign * fabs(curve) * 3.0); // Scale the curve effect
+    sample_t curve_t = (exp(sign * fabs(curve) * 3.0 * t) - 1) / (k - 1);
     return y1 + curve_t * (y2 - y1);
   }
 }
 
-void reset_lfo(lfo_state *state, int num_points, double *data) {
+void reset_lfo(lfo_state *state, int num_points, sample_t *data) {
 
   state->phase = 0.0;
   state->current_segment = 0;
@@ -49,7 +50,7 @@ void reset_lfo(lfo_state *state, int num_points, double *data) {
   }
 }
 
-void set_segment(lfo_state *state, int num_points, int seg, double *data) {
+void set_segment(lfo_state *state, int num_points, int seg, sample_t *data) {
 
   state->phase = 0.0;
   state->current_segment = seg;
@@ -61,21 +62,21 @@ void set_segment(lfo_state *state, int num_points, int seg, double *data) {
 }
 
 void *lfo_perform(Node *node, lfo_state *state, Node *inputs[], int nframes,
-                  double spf) {
-  double *out = node->output.buf;
+                  sample_t spf) {
+  sample_t *out = node->output.buf;
   Signal _trig = inputs[0]->output;
-  double *data = inputs[1]->output.buf;
+  sample_t *data = inputs[1]->output.buf;
   int size = inputs[1]->output.size;
   int num_points = (size + 2) / 3;
 
   for (int i = 0; i < nframes; i++) {
-    double trig = *READ(_trig);
+    sample_t trig = *READ(_trig);
 
     if (trig >= 0.5 && state->prev_trig < 0.5) {
       reset_lfo(state, num_points, data);
     }
 
-    double norm_phase;
+    sample_t norm_phase;
     if (state->time > 0.0) {
       norm_phase = state->phase / state->time; // Normalized phase [0,1]
       norm_phase = fmin(1.0, norm_phase);      // Clamp to [0,1]
@@ -83,8 +84,8 @@ void *lfo_perform(Node *node, lfo_state *state, Node *inputs[], int nframes,
       norm_phase = 1.0; // At end of segment
     }
 
-    double value = interpolate_value(norm_phase, state->start, state->target,
-                                     state->curve);
+    sample_t value = interpolate_value(norm_phase, state->start, state->target,
+                                       state->curve);
     out[i] = value;
 
     state->phase += spf;
@@ -141,25 +142,25 @@ NodeRef lfo_node(NodeRef input, NodeRef trig) {
 }
 
 void *buf_env_perform(Node *node, lfo_state *state, Node *inputs[], int nframes,
-                      double spf) {
+                      sample_t spf) {
 
-  double *out = node->output.buf;
+  sample_t *out = node->output.buf;
   Signal _trig = inputs[0]->output;
-  double *data = inputs[1]->output.buf;
-  double *time_scale = inputs[2]->output.buf;
+  sample_t *data = inputs[1]->output.buf;
+  sample_t *time_scale = inputs[2]->output.buf;
   int size = inputs[1]->output.size;
   int num_points = (size + 2) / 3;
 
   while (nframes--) {
     // for (int i = 0; i < nframes; i++) {
-    double trig = *READ(_trig);
+    sample_t trig = *READ(_trig);
 
     if (trig >= 0.5 && state->prev_trig < 0.5) {
       state->active = 1;
       reset_lfo(state, num_points, data);
     }
 
-    double norm_phase;
+    sample_t norm_phase;
     if (state->time > 0.0) {
       norm_phase = state->phase / state->time; // Normalized phase [0,1]
       norm_phase = fmin(1.0, norm_phase);      // Clamp to [0,1]
@@ -167,8 +168,8 @@ void *buf_env_perform(Node *node, lfo_state *state, Node *inputs[], int nframes,
       norm_phase = 1.0; // At end of segment
     }
 
-    double value = interpolate_value(norm_phase, state->start, state->target,
-                                     state->curve);
+    sample_t value = interpolate_value(norm_phase, state->start, state->target,
+                                       state->curve);
     if (state->active) {
       state->phase += (spf / (*time_scale));
       *out = value;
@@ -234,22 +235,22 @@ NodeRef buf_env_node(NodeRef time_scale, NodeRef input, NodeRef trig) {
 }
 
 typedef struct lfpulse_state {
-  double phase;
-  double prev_trig;
+  sample_t phase;
+  sample_t prev_trig;
 } lfpulse_state;
 
 void *__lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
-                        int nframes, double spf) {
-  double *out = node->output.buf;
+                        int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
-  double *trig_in = inputs[1]->output.buf;
-  double *pw_in = inputs[2]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
+  sample_t *trig_in = inputs[1]->output.buf;
+  sample_t *pw_in = inputs[2]->output.buf;
 
-  double freq;
-  double trig;
-  double pw;
-  double sample;
+  sample_t freq;
+  sample_t trig;
+  sample_t pw;
+  sample_t sample;
 
   while (nframes--) {
     freq = *freq_in;
@@ -280,7 +281,7 @@ void *__lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
 
     *out = sample;
     out++;
-    double incr = (freq * spf);
+    sample_t incr = (freq * spf);
     state->phase += incr;
     state->prev_trig = trig;
   }
@@ -288,17 +289,17 @@ void *__lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
   return node->output.buf;
 }
 void *___lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
-                         int nframes, double spf) {
-  double *out = node->output.buf;
+                         int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
-  double *trig_in = inputs[1]->output.buf;
-  double *pw_in = inputs[2]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
+  sample_t *trig_in = inputs[1]->output.buf;
+  sample_t *pw_in = inputs[2]->output.buf;
 
-  double freq;
-  double trig;
-  double pw;
-  double sample;
+  sample_t freq;
+  sample_t trig;
+  sample_t pw;
+  sample_t sample;
 
   while (nframes--) {
     freq = *freq_in;
@@ -324,7 +325,7 @@ void *___lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
         sample = 1.;
       }
 
-      double incr = (freq * spf);
+      sample_t incr = (freq * spf);
       state->phase += incr;
       state->prev_trig = trig;
 
@@ -356,7 +357,7 @@ void *___lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
 
       *out = sample;
       out++;
-      double incr = (freq * spf);
+      sample_t incr = (freq * spf);
       state->phase += incr;
       state->prev_trig = trig;
     }
@@ -365,17 +366,17 @@ void *___lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
   return node->output.buf;
 }
 void *fpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
-                     int nframes, double spf) {
-  double *out = node->output.buf;
+                     int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
-  double *trig_in = inputs[1]->output.buf;
-  double *pw_in = inputs[2]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
+  sample_t *trig_in = inputs[1]->output.buf;
+  sample_t *pw_in = inputs[2]->output.buf;
 
-  double freq;
-  double trig;
-  double pw;
-  double sample;
+  sample_t freq;
+  sample_t trig;
+  sample_t pw;
+  sample_t sample;
 
   for (int i = 0; i < nframes; i++) {
     freq = *freq_in++;
@@ -399,7 +400,7 @@ void *fpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
     // Normal oscillator operation
     else {
       // Calculate new phase value for this sample
-      double incr = (freq * spf);
+      sample_t incr = (freq * spf);
       printf("incr %f\n", incr);
 
       // Check if we've completed a cycle
@@ -432,27 +433,27 @@ void *fpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
   return node->output.buf;
 }
 void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
-                      int nframes, double spf) {
-  double *out = node->output.buf;
+                      int nframes, sample_t spf) {
+  sample_t *out = node->output.buf;
   int out_layout = node->output.layout;
-  double *freq_in = inputs[0]->output.buf;
-  double *trig_in = inputs[1]->output.buf;
-  double *pw_in = inputs[2]->output.buf;
+  sample_t *freq_in = inputs[0]->output.buf;
+  sample_t *trig_in = inputs[1]->output.buf;
+  sample_t *pw_in = inputs[2]->output.buf;
 
   for (int i = 0; i < nframes; i++) {
-    double freq = *freq_in++;
-    double trig = *trig_in++;
-    double pw = *pw_in++;
+    sample_t freq = *freq_in++;
+    sample_t trig = *trig_in++;
+    sample_t pw = *pw_in++;
 
     // Initialize sample to 0 by default
-    double sample = 0.0;
+    sample_t sample = 0.0;
 
     // Track if phase wrapped this sample
     bool phase_wrapped = false;
 
     // Check if we've completed a cycle BEFORE incrementing the phase
     if (state->phase >= 1.0) {
-      state->phase = fmod(state->phase, 1.0);
+      state->phase = fmodf(state->phase, 1.0);
       phase_wrapped = true;
     }
 
@@ -480,7 +481,7 @@ void *lfpulse_perform(Node *node, lfpulse_state *state, Node *inputs[],
         sample = (state->phase < pw) ? 1.0 : 0.0;
       }
 
-      double incr = freq * spf;
+      sample_t incr = freq * spf;
       state->phase += incr;
     }
 
@@ -527,33 +528,33 @@ NodeRef lfpulse_node(NodeRef pw, NodeRef freq, NodeRef trig) {
   return graph_embed(node);
 }
 // clang-format off
-static double perc_env[10] = {0.000000, 0.000000,  2.400000,
+static sample_t perc_env[10] = {0.000000, 0.000000,  2.400000,
                               1.,       0.185902, -2.300000,
                               0.011111, 0.1, 1.300000,
                               0.000000
 };
 // clang-format on
 void *perc_env_perform(Node *node, lfo_state *state, Node *inputs[],
-                       int nframes, double spf) {
+                       int nframes, sample_t spf) {
 
-  double *out = node->output.buf;
+  sample_t *out = node->output.buf;
   Signal _trig = inputs[0]->output;
-  double *time_scale = inputs[1]->output.buf;
+  sample_t *time_scale = inputs[1]->output.buf;
 
-  double *data = perc_env;
+  sample_t *data = perc_env;
   int size = 10;
   int num_points = (size + 2) / 3;
 
   while (nframes--) {
     // for (int i = 0; i < nframes; i++) {
-    double trig = *READ(_trig);
+    sample_t trig = *READ(_trig);
 
     if (trig >= 0.5 && state->prev_trig < 0.5) {
       state->active = 1;
       reset_lfo(state, num_points, data);
     }
 
-    double norm_phase;
+    sample_t norm_phase;
     if (state->time > 0.0) {
       norm_phase = state->phase / state->time; // Normalized phase [0,1]
       norm_phase = fmin(1.0, norm_phase);      // Clamp to [0,1]
@@ -561,8 +562,8 @@ void *perc_env_perform(Node *node, lfo_state *state, Node *inputs[],
       norm_phase = 1.0; // At end of segment
     }
 
-    double value = interpolate_value(norm_phase, state->start, state->target,
-                                     state->curve);
+    sample_t value = interpolate_value(norm_phase, state->start, state->target,
+                                       state->curve);
     if (state->active) {
       state->phase += (spf / (*time_scale));
       *out = value;
@@ -622,16 +623,16 @@ NodeRef perc_env_node(NodeRef decay, NodeRef trig) {
 }
 
 void *gated_buf_env_perform(Node *node, lfo_state *state, Node *inputs[],
-                            int nframes, double spf) {
+                            int nframes, sample_t spf) {
 
-  double *out = node->output.buf;
-  double *_trig = inputs[0]->output.buf;
-  double *data = inputs[1]->output.buf;
+  sample_t *out = node->output.buf;
+  sample_t *_trig = inputs[0]->output.buf;
+  sample_t *data = inputs[1]->output.buf;
   int size = inputs[1]->output.size;
   int num_points = (size + 2) / 3;
 
   while (nframes--) {
-    double trig = *_trig;
+    sample_t trig = *_trig;
     _trig++;
 
     if (trig >= 0.5 && state->prev_trig < 0.5) {
@@ -660,14 +661,14 @@ void *gated_buf_env_perform(Node *node, lfo_state *state, Node *inputs[],
       }
     }
 
-    double value;
+    sample_t value;
 
     if (state->sustaining) {
       // If in sustain mode, hold at the second-to-last point's value
       value = state->start;
     } else {
       // Normal envelope traversal
-      double norm_phase;
+      sample_t norm_phase;
       if (state->time > 0.0) {
         norm_phase = state->phase / state->time; // Normalized phase [0,1]
         norm_phase = fmin(1.0, norm_phase);      // Clamp to [0,1]

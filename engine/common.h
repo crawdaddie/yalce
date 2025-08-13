@@ -5,7 +5,7 @@
 #include <stdint.h>
 #define BUF_SIZE 512
 #define PI M_PI
-#define EPSILON 2.220446e-16
+#define EPSILON 2.220446e-16f
 #define LAYOUT 2
 #define MAX_INPUTS 16
 #define MAX_SF_CHANNELS 16
@@ -18,6 +18,9 @@
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_RESET "\x1b[0m"
 
-inline double pow2table_read(double pos, int tabsize, double *table);
+typedef float sample_t;
+// typedef double sample_t;
+
+inline sample_t pow2table_read(sample_t pos, int tabsize, sample_t *table);
 
 #endif

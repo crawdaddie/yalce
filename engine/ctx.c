@@ -17,7 +17,7 @@ void init_ctx() {
   for (int i = 0; i < num_signals; i++) {
     int layout = signal_info[i].num_channels;
 
-    ctx.input_signals[i].buf = calloc(1, sizeof(double) * BUF_SIZE * layout);
+    ctx.input_signals[i].buf = calloc(1, sizeof(sample_t) * BUF_SIZE * layout);
     ctx.input_signals[i].layout = layout;
     ctx.input_signals[i].size = BUF_SIZE;
   }
@@ -210,7 +210,7 @@ void print_msg(scheduler_msg *msg) {
 //     struct NODE_SET_SCALAR {
 //       Node *target;
 //       int input;
-//       double value;
+//       sample_t value;
 //     } NODE_SET_SCALAR;
 //
 //     struct NODE_SET_INPUT {
@@ -317,10 +317,10 @@ int get_write_ptr() {
 }
 
 int ctx_sample_rate() { return ctx.sample_rate; }
-double ctx_spf() { return ctx.spf; }
+sample_t ctx_spf() { return ctx.spf; }
 
-double *ctx_main_out() { return ctx.output_buf; }
-void set_main_vol(double vol) { ctx.main_vol = vol; }
+sample_t *ctx_main_out() { return ctx.output_buf; }
+void set_main_vol(sample_t vol) { ctx.main_vol = vol; }
 
 void move_overflow() {
   msg_queue *queue = &ctx.overflow_queue;

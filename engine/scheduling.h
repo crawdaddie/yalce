@@ -1,6 +1,7 @@
 #ifndef _ENGINE_SCHEDULING_H
 #define _ENGINE_SCHEDULING_H
 
+#include "common.h"
 #include <stdatomic.h>
 #include <stdint.h>
 typedef void (*SchedulerCallback)(void *, uint64_t);
