@@ -31,6 +31,7 @@ void print_allocs(Allocation *allocs) {
     allocs = allocs->next;
   }
 }
+
 Allocation *allocations_extend(Allocation *allocs, Allocation *alloc) {
   if (!allocs) {
     return alloc;
@@ -130,6 +131,7 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     Allocation *ret_alloc;
 
     EACtx lambda_ctx = *ctx;
+    lambda_ctx.allocations = NULL;
     lambda_ctx.scope++;
     if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
       Ast *stmt = ast->data.AST_LAMBDA.body;
@@ -149,11 +151,27 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
         }
       }
     }
+
+    for (Allocation *a = lambda_ctx.allocations; a; a = a->next) {
+      EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
+      *ea_meta = (EscapeMeta){.status = EA_STACK_ALLOC, .id = a->id};
+      a->alloc_site->ea_md = ea_meta;
+    }
+
+    printf("lambda %s escaped "
+           "allocations:\n============================================\n",
+           ast->data.AST_LAMBDA.fn_name.chars);
+    print_allocs(ret_alloc);
+    printf("all internal allocs: \n");
+    print_allocs(lambda_ctx.allocations);
+
     if (ret_alloc) {
-      printf("lambda %s escaped "
-             "allocations:\n============================================\n",
-             ast->data.AST_LAMBDA.fn_name.chars);
-      print_allocs(ret_alloc);
+
+      for (Allocation *r = ret_alloc; r; r = r->next) {
+        EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
+        *ea_meta = (EscapeMeta){.status = EA_HEAP_ALLOC, .id = r->id};
+        r->alloc_site->ea_md = ea_meta;
+      }
     }
 
     return NULL;

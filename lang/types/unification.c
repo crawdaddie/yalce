@@ -328,10 +328,12 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     }
 
     if (t1->kind == T_CONS && ((1 << t2->kind) & TYPE_FLAGS_PRIMITIVE)) {
-      TICtx _ctx = {.err_stream = NULL};
-      return type_error(
-          &_ctx, constraints->src,
-          "Cannot constrain cons type to primitive simple type\n");
+
+      // TICtx _ctx = {.err_stream = NULL};
+      // return type_error(
+      //     &_ctx, constraints->src,
+      //     "Cannot constrain cons type to primitive simple type\n");
+      return NULL;
     }
 
     if (t1->kind == t2->kind && IS_PRIMITIVE_TYPE(t1)) {
@@ -439,10 +441,13 @@ Substitution *solve_constraints(TypeConstraint *constraints) {
     } else if (is_coroutine_type(t1) && is_pointer_type(t2)) {
     } else {
       TICtx _ctx = {.err_stream = NULL};
-      type_error(&_ctx, constraints->src, "Constraint solving type mismatch\n");
-      print_type_err(t1);
-      fprintf(stderr, " != ");
-      print_type_err(t2);
+      if (!(IS_PRIMITIVE_TYPE(t1) && IS_PRIMITIVE_TYPE(t2))) {
+        type_error(&_ctx, constraints->src,
+                   "Constraint solving type mismatch\n");
+        print_type_err(t1);
+        fprintf(stderr, " != ");
+        print_type_err(t2);
+      }
     }
 
     constraints = constraints->next;

@@ -7,7 +7,8 @@ type RegexMatch = (rm_so: Uint64, rm_eo: Uint64);
 let regcomp = extern fn Ptr -> Ptr -> Int -> Int;  
 let regexec = extern fn Ptr -> Ptr -> Uint64 -> Ptr -> Int -> Int;
 
-let find_one = fn str reg ->
+
+let escape_test = fn str reg ->
   let r = [| Regex (0, 0, cstr "", cstr "") |];
   let comp = regcomp (cstr r) (cstr reg) 0;
   let rmr = [| RegexMatch (0, 0) |];
@@ -17,4 +18,7 @@ let find_one = fn str reg ->
   match ex with
   | 0 -> Some (rm.rm_so, rm.rm_eo)
   | _ -> None
+  
+
 ;;
+escape_test "helo" "]"
