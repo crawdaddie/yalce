@@ -16,7 +16,7 @@ let close = extern fn Int -> Int;                      # close(fd)
 
 let string_split = extern fn String -> String -> List of String;
 
-let Queue = module
+et Queue = module
 
   let of_list = fn l ->
     let t = l in 

@@ -625,3 +625,11 @@ int parse_num(const char *str) {
 
   return count;
 }
+
+_String cstr_to_str(char *chars) {
+  return (_String){.size = strlen(chars), .chars = chars};
+}
+
+int set_env(_String varname, _String val) {
+  return setenv(varname.chars, val.chars, 1);
+}

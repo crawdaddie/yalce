@@ -38,12 +38,37 @@ void extend_closure_free_vars(Ast *fn, Ast *ref, Type *ref_type) {
   fn->data.AST_LAMBDA.num_closure_free_vars++;
 }
 
+void extend_closed_vals(Ast *fn, Ast *ref, Type *ref_type) {
+
+  for (AstList *l = fn->data.AST_LAMBDA.params; l; l = l->next) {
+    if (CHARS_EQ(ref->data.AST_IDENTIFIER.value,
+                 l->ast->data.AST_IDENTIFIER.value)) {
+      // avoid closing this function's existing params
+      return;
+    }
+  }
+
+  for (AstList *l = fn->data.AST_LAMBDA.closed_vals; l; l = l->next) {
+    if (CHARS_EQ(ref->data.AST_IDENTIFIER.value,
+                 l->ast->data.AST_IDENTIFIER.value)) {
+      // avoid adding closure variable twice
+      return;
+    }
+  }
+
+  ref->md = ref_type;
+  fn->data.AST_LAMBDA.closed_vals =
+      ast_list_extend_left(fn->data.AST_LAMBDA.closed_vals, ref);
+  fn->data.AST_LAMBDA.closed_vals++;
+}
+
 void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx) {
 
   int this_scope = ctx->current_fn_scope;
   int ref_scope = ref->type->scope;
   int is_fn_param = ref->is_fn_param;
   int is_rec_fn_ref = ref->is_recursive_fn_ref;
+
   if (!is_fn_param && (!is_rec_fn_ref) && (ref_scope > 0) &&
       (this_scope > ref_scope)) {
     // printf("closure stufff???? this scope %d ref_scope %d is_fn_param %d
@@ -53,5 +78,6 @@ void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx) {
     // print_ast(ctx->current_fn_ast);
     // print_ast(ast);
     extend_closure_free_vars(ctx->current_fn_ast, ast, ref->type);
+    // extend_closed_vals(ctx->current_fn_ast, ast, ref->type);
   }
 }

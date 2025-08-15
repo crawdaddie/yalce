@@ -57,6 +57,7 @@ typedef enum symbol_type {
   STYPE_VARIANT_TYPE,
   STYPE_COROUTINE_CONSTRUCTOR,
   STYPE_GENERIC_CONSTRUCTOR,
+  STYPE_CLOSURE,
 } symbol_type;
 
 typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
@@ -114,6 +115,8 @@ typedef struct {
       Type *state_type;
       bool recursive_ref;
     } STYPE_COROUTINE_CONSTRUCTOR;
+    struct {
+    } STYPE_CLOSURE;
   } symbol_data;
 
   Type *symbol_type;

@@ -158,12 +158,12 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
       a->alloc_site->ea_md = ea_meta;
     }
 
-    printf("lambda %s escaped "
-           "allocations:\n============================================\n",
-           ast->data.AST_LAMBDA.fn_name.chars);
-    print_allocs(ret_alloc);
-    printf("all internal allocs: \n");
-    print_allocs(lambda_ctx.allocations);
+    // printf("lambda %s escaped "
+    //        "allocations:\n============================================\n",
+    //        ast->data.AST_LAMBDA.fn_name.chars);
+    // print_allocs(ret_alloc);
+    // printf("all internal allocs: \n");
+    // print_allocs(lambda_ctx.allocations);
 
     if (ret_alloc) {
 

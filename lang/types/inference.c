@@ -88,6 +88,8 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
     if (_el_type->kind == T_VAR) {
       unify_in_ctx(_el_type, el_type, ctx, ast);
     } else if (!types_equal(el_type, _el_type)) {
+      print_type_err(el_type);
+      print_type_err(_el_type);
       return type_error(
           ctx, ast,
           "Typecheck Error: typechecking list literal - all elements must "
@@ -873,13 +875,15 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   ast->md = apply_substitution(subst, ast->md);
 
-  // if (is_named) {
   apply_substitutions_rec(ast->data.AST_LAMBDA.body, subst);
-  // }
 
   if (body_ctx.yielded_type != NULL) {
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
   }
+
+  print_ast(ast);
+  print_type(ast->md);
+  printf("==============================\n");
   return ast->md;
 }
 

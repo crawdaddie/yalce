@@ -4,60 +4,36 @@ type Ast =
   | Val of String
   ;
 
-let isdigit = extern fn Char -> Bool;
-let parse_num = extern fn Ptr -> Int;
-
-let eval_seq_str = fn str ->
-  match (str[0]) with
-  | x if isdigit x -> print `is digit chars: {parse_num (cstr str)}\n`
-  | '[' -> print "start seq with bracket"
-  | ']' -> print "end seq with bracket"
-  | _ -> print "no parse"
-  ;
-  ()
+let bind = fn p f input ->
+  match p input with
+  | None -> None
+  | Some (x, rest) -> f x rest  
+;;
+let choice = fn p1 p2 input ->
+  match p1 input with
+  | None -> p2 input
+  | Some result -> Some result 
 ;;
 
-eval_seq_str "1 2 3 4";
-# Token Regular Expression Patterns
-# Single character tokens
+let ( >>= ) = bind;
+let ( <|> ) = choice;
 
-# let lex_rules = [
-#   ("\[", fn () -> () ), # LEFT_BRACKET    
-#   ("\]", fn () -> () ), # RIGHT BRACKET
-#   ("<",  fn () -> () ), # LEFT_ANGLE 
-#   (">",  fn () -> () ), # RIGHT_ANGLE    
-#   ("%",  fn () -> () ), # PERCENT
-#   ("\*", fn () -> () ), # ASTERISK
-#   ("[+-]?(?:\d+\.?\d*|\.\d+)", fn () -> () ), # NUMBER
-#   ("\S+", fn () -> ()), # STRING
-#   ("\s+", fn () -> ()), # WS
-# ];
+let isdigit = extern fn Char -> Bool;
+let digit = fn input ->
+  let s = array_size input;
+  match (s, input[0]) with
+  | (0, _) -> None
+  | (_, x) if isdigit x -> Some (array_range 0 1 input, array_succ input)
+  | _ -> None
+;;
 
-import lib/Regex;
-let m = Regex.find_one "ab [ 3sda" "\[";
-match m with
-  | Some (rm_so, rm_eo) -> print `found match {rm_so} {rm_eo}\n`
-  | None -> print "no match\n"
+let return = fn x input -> Some (x, input);;
 
 
-#
-# let split_at = fn str: (String) delim: (String) ->
-#   let aux = fn str: (String) delim: (String) off: (Int) ->
-#     let delim_len = array_size delim;
-#     match array_range 0 delim_len str with
-#     | s if s == delim -> off
-#     | _ -> aux (array_succ str) delim (off + 1)
-#   ;;
-#
-#   let split_offset = aux str delim 0;
-#
-#   (
-#     str |> array_range 0 split_offset,
-#     str |> array_range split_offset ((array_size str) - split_offset)
-#   )
-# ;;
-#
+let two_digits = fn input ->
+  digit >>= (fn first ->
+  digit >>= (fn second ->
+    (fn inp -> Some ((first, second) inp))
+  )) input
+;;
 
-# #
-# (Seq []);
-# split_at "11 22" " ";

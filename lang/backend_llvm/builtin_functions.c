@@ -1062,7 +1062,7 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     free(full_path);
     return LLVMConstInt(LLVMInt32Type(), 0, 0);
   }
-  printf("loaded %s\n", full_path);
+  fprintf(stderr, "loaded %s\n", full_path);
 
   free(full_path);
   return LLVMConstInt(LLVMInt32Type(), 1, 0);

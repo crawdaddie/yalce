@@ -1,10 +1,40 @@
-#! env ylc
-let sum = fn a b -> a + b;;
-let proc = fn f p q -> f p q;;
+type Ast =
+  | Seq of List of Ast
+  | Mul of (List of Ast, Int) 
+  | Val of String
+  ;
 
-let r = proc sum 1 2
+let bind = fn p f input ->
+  match p input with
+  | None -> None
+  | Some (x, rest) -> f x rest  
+;;
+let choice = fn p1 p2 input ->
+  match p1 input with
+  | None -> p2 input
+  | Some result -> Some result 
+;;
+
+let ( >>= ) = bind;
+let ( <|> ) = choice;
+
+let isdigit = extern fn Char -> Bool;
+let digit = fn input ->
+  let s = array_size input;
+  match (s, input[0]) with
+  | (0, _) -> None
+  | (_, x) if isdigit x -> Some (array_range 0 1 input, array_succ input)
+  | _ -> None
+;;
+
+let return = fn x input -> Some (x, input);;
 
 
-
+let two_digits = fn input ->
+  digit >>= (fn first ->
+  digit >>= (fn second ->
+    (fn inp -> Some ((first, second) inp))
+  )) input
+;;
 
 

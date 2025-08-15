@@ -154,6 +154,12 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return codegen_extern_fn(ast, ctx, module, builder);
   }
 
+  if (ast->tag == AST_APPLICATION) {
+    fprintf(stderr, "Error: first-class function use unknown: ");
+    print_ast_err(ast);
+    return NULL;
+  }
+
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
   if (fn_name.chars == NULL) {
@@ -164,8 +170,15 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int fn_len = ast->data.AST_LAMBDA.len;
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
+  printf("CGEN FN:\n");
+  print_ast(ast);
+  print_type(fn_type);
+  print_type_env(ctx->env);
   LLVMTypeRef prototype =
       codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx, module);
+
+  LLVMDumpType(prototype);
+  printf("\n\n");
 
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 

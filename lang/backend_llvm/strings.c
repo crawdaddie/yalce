@@ -424,11 +424,10 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
 
   LLVMBuildStore(builder, str_const, data_ptr);
 
-  // LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
-  // LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
-  //                                            &length_val, 1,
-  //                                            "last_elem_ptr");
-  // LLVMBuildStore(builder, null_terminator, last_elem_ptr);
+  LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
+  LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
+                                             &length_val, 1, "last_elem_ptr");
+  LLVMBuildStore(builder, null_terminator, last_elem_ptr);
   return data_ptr;
 }
 

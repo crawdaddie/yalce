@@ -95,7 +95,7 @@ let x, y = get_training_batch ();
 Arrays.print_arr x.data;
 
 mprint x;
-mprint y;
+mprint y
 
 
 
