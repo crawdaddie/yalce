@@ -116,8 +116,6 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 
       JITSymbol *sym;
       if (ex_sym != NULL) {
-        // printf("restore existing symbol\n");
-        // print_ast(binding);
         ex_sym->val = val;
         ex_sym->llvm_type = llvm_type;
         ex_sym->symbol_type = val_type;

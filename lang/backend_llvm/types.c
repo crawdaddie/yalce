@@ -202,7 +202,13 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       t = t->data.T_FN.to;
       fn_len++;
     }
-    return codegen_fn_type(type, fn_len, ctx, module);
+
+    LLVMTypeRef ctype = codegen_fn_type(type, fn_len, ctx, module);
+    printf("\nllvm fn type: ");
+    print_type(type);
+    LLVMDumpType(ctype);
+    printf("\n");
+    return ctype;
   }
 
   default: {

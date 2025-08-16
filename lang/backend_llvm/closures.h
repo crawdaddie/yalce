@@ -15,4 +15,13 @@ LLVMValueRef create_curried_closure_binding(Ast *binding, Type *closure_type,
                                             Ast *closure, JITLangCtx *ctx,
                                             LLVMModuleRef module,
                                             LLVMBuilderRef builder);
+
+LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder);
+
+LLVMValueRef call_closure_sym(Ast *app, JITSymbol *sym, JITLangCtx *ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMTypeRef get_closure_obj_type(Type *fn_type, JITLangCtx *ctx,
+                                 LLVMModuleRef module);
 #endif

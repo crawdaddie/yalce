@@ -597,6 +597,11 @@ void print_type_to_stream(Type *t, FILE *stream) {
 
   case T_FN: {
     Type *fn = t;
+    if (is_closure(fn)) {
+      fprintf(stream, "[closure over ");
+      print_type_to_stream(fn->closure_meta, stream);
+      fprintf(stream, "]");
+    }
 
     fprintf(stream, "(");
     if (fn->is_coroutine_constructor) {
@@ -611,6 +616,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
       fprintf(stream, " -> ");
       fn = fn->data.T_FN.to;
     }
+
     // If it's not a function type, it's the return type itself
     print_type_to_stream(fn, stream);
     fprintf(stream, ")");
@@ -860,6 +866,7 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
   new_env->type = type;
   new_env->next = env;
   new_env->ref_count = 0;
+  new_env->is_fn_param = 0;
   return new_env;
 }
 
@@ -956,6 +963,9 @@ Type *create_coroutine_instance_type(Type *ret_type) {
 Type *deep_copy_type(const Type *original) {
   Type *copy = talloc(sizeof(Type));
   *copy = *original;
+  // if (original->closure_meta != NULL) {
+  //   copy->closure_meta = deep_copy_type(original->closure_meta);
+  // }
 
   // copy->kind = original->kind;
   // copy->alias = original->alias;
@@ -1023,12 +1033,18 @@ int fn_type_args_len(Type *fn_type) {
     return 1;
   }
 
+  // int fn_len = 0;
+  // Type *t = fn_type;
+  // while (t->kind == T_FN) {
+  //   // printf("arg %d: ", fn_len);
+  //   // print_type(t->data.T_FN.from);
+  //   t = t->data.T_FN.to;
+  //   fn_len++;
+  // }
+
   int fn_len = 0;
-  Type *t = fn_type;
-  while (t->kind == T_FN) {
-    // printf("arg %d: ", fn_len);
-    // print_type(t->data.T_FN.from);
-    t = t->data.T_FN.to;
+  for (Type *ct = fn_type; ct->kind == T_FN && !(is_closure(ct));
+       ct = ct->data.T_FN.to) {
     fn_len++;
   }
 
@@ -1550,3 +1566,5 @@ bool is_module(Type *t) {
   return t->kind == T_CONS &&
          (strcmp(t->data.T_CONS.name, TYPE_NAME_MODULE) == 0);
 }
+
+bool is_closure(Type *type) { return type->closure_meta != NULL; }

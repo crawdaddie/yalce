@@ -1,6 +1,7 @@
 #include "backend_llvm/application.h"
 #include "adt.h"
 #include "builtin_functions.h"
+#include "closures.h"
 #include "coroutines.h"
 #include "function.h"
 #include "modules.h"
@@ -67,6 +68,7 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
   }
 
   int args_len = ast->data.AST_APPLICATION.len;
+
   int exp_args_len = fn_type_args_len(callable_type);
 
   LLVMTypeRef llvm_callable_type =
@@ -109,6 +111,8 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
 
   if (callable_type->kind == T_FN &&
       callable_type->data.T_FN.from->kind == T_VOID) {
+    printf("calling func");
+    print_ast(ast);
 
     return LLVMBuildCall2(builder, llvm_callable_type, callable, NULL, 0,
                           "call_func");
@@ -117,7 +121,6 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
   LLVMValueRef app_vals[args_len];
 
   for (int i = 0; i < args_len; i++) {
-
     Type *expected_type = callable_type->data.T_FN.from;
 
     Ast *app_arg = ast->data.AST_APPLICATION.args + i;
@@ -180,8 +183,6 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("APPLICATION\n");
-  print_ast(ast);
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
@@ -264,6 +265,11 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return call_callable(ast, &exp, callable, ctx, module, builder);
   }
 
+  // if (is_closure(ast->md) && sym->type == STYPE_FUNCTION) {
+  //   printf("call something that returns a closure obj\n");
+  //   return NULL;
+  // }
+
   if (sym->type == STYPE_FUNCTION) {
     Type *callable_type = sym->symbol_type;
 
@@ -300,6 +306,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
 
     return res;
+  }
+  if (sym->type == STYPE_CLOSURE) {
+    return call_closure_sym(ast, sym, ctx, module, builder);
   }
 
   if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {

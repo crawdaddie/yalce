@@ -1,5 +1,6 @@
 #include "backend_llvm/function.h"
 #include "binding.h"
+#include "closures.h"
 #include "symbols.h"
 #include "types.h"
 #include "types/inference.h"
@@ -36,31 +37,46 @@ void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
   }
 
   Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
-
-  *llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
+  if (return_type->kind == T_FN) {
+    *llvm_return_type_ref = GENERIC_PTR;
+  } else {
+    *llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
+  }
 }
 
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module) {
-  // TODO: return a type for a coroutine - is this necessary?
-
-  LLVMTypeRef llvm_param_types[fn_len];
-  LLVMTypeRef llvm_fn_type;
 
   if (fn_len == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
 
-    LLVMTypeRef ret_type =
-        type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
-    llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
-  } else {
+    LLVMTypeRef llvm_param_types[1];
+    LLVMTypeRef llvm_fn_type;
     LLVMTypeRef llvm_return_type_ref;
-    codegen_fn_type_arg_types(fn_type, fn_len, llvm_param_types,
-                              &llvm_return_type_ref, ctx, module);
-    llvm_fn_type =
-        LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
+    Type *rtype = fn_type->data.T_FN.to;
+    LLVMTypeRef ret_type;
+    if (rtype->kind == T_FN) {
+      ret_type = GENERIC_PTR;
+    } else {
+      ret_type = type_to_llvm_type(rtype, ctx, module);
+    }
+
+    return LLVMFunctionType(ret_type, NULL, 0, false);
+  }
+  // int _fnl = fn_len;
+  int _fnl = 0;
+  for (Type *ftype = fn_type; ftype->data.T_FN.to && !is_closure(ftype);
+       ftype = ftype->data.T_FN.to) {
+    _fnl++;
   }
 
-  return llvm_fn_type;
+  LLVMTypeRef llvm_param_types[_fnl];
+  LLVMTypeRef llvm_fn_type;
+  LLVMTypeRef llvm_return_type_ref;
+
+  codegen_fn_type_arg_types(fn_type, _fnl, llvm_param_types,
+                            &llvm_return_type_ref, ctx, module);
+
+  return LLVMFunctionType(llvm_return_type_ref, llvm_param_types, _fnl, 0);
 }
 
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -165,20 +181,17 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (fn_name.chars == NULL) {
     is_anon = true;
   }
+
   Type *fn_type = ast->md;
+  if (is_closure(fn_type)) {
+    return compile_closure(ast, ctx, module, builder);
+  }
 
   int fn_len = ast->data.AST_LAMBDA.len;
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
-  printf("CGEN FN:\n");
-  print_ast(ast);
-  print_type(fn_type);
-  print_type_env(ctx->env);
   LLVMTypeRef prototype =
       codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx, module);
-
-  LLVMDumpType(prototype);
-  printf("\n\n");
 
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 

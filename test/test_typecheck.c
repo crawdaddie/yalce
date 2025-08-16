@@ -1278,5 +1278,58 @@ int main() {
   // ({
   //   T("let f = fn network -> network.layers;", &MAKE_FN_TYPE_2(&));
   // });
+  ({
+    Ast *b = T("fn () ->\n"
+               "let z = 2;\n"
+               "(fn () -> z + 2);\n"
+               ";\n",
+               &MAKE_FN_TYPE_3(&t_void, &t_void, &t_int));
+
+    Type *closure_type = b->data.AST_BODY.stmts[0]
+                             ->data.AST_LAMBDA.body->data.AST_BODY.stmts[1]
+                             ->md;
+
+    bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_int));
+    res &= (closure_type->closure_meta != NULL);
+    res &= (types_equal(closure_type->closure_meta, &TTUPLE(1, &t_int)));
+
+    const char *msg = "closure has type () -> Int and contains a reference to "
+                      "the types of closed-over vals (Int)\n";
+    if (res) {
+      printf("✅ %s", msg);
+    } else {
+
+      printf("❌ %s", msg);
+    }
+    status &= res;
+  });
+
+  ({
+    Ast *b = T("fn () ->\n"
+               "let z = 2;\n"
+               "let x = 3.;\n"
+               "(fn () -> z + 2 + x);\n"
+               ";\n",
+               &MAKE_FN_TYPE_3(&t_void, &t_void, &t_num));
+
+    Type *closure_type = b->data.AST_BODY.stmts[0]
+                             ->data.AST_LAMBDA.body->data.AST_BODY.stmts[2]
+                             ->md;
+
+    bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_num));
+    res &= (closure_type->closure_meta != NULL);
+    res &=
+        (types_equal(closure_type->closure_meta, &TTUPLE(2, &t_num, &t_int)));
+
+    const char *msg = "closure has type () -> Int and contains a reference to "
+                      "the types of closed-over vals (Double * Int)\n";
+    if (res) {
+      printf("✅ %s", msg);
+    } else {
+
+      printf("❌ %s", msg);
+    }
+    status &= res;
+  });
   return status == true ? 0 : 1;
 }
