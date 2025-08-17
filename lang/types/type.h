@@ -295,6 +295,7 @@ typedef struct Type {
   bool is_recursive_type_ref;
   bool is_ref;
   bool alloced_in_func; // metadata if this type appears as a function return
+  struct Type *closure_meta;
   // bool is_recursive_placeholder;
   int scope;
   int yield_boundary;
@@ -346,6 +347,7 @@ Type *deep_copy_type(const Type *original);
 bool is_list_type(Type *type);
 bool is_tuple_type(Type *type);
 bool is_pointer_type(Type *type);
+bool is_closure(Type *type);
 
 bool is_array_type(Type *type);
 

@@ -129,14 +129,11 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
     res_type = res_type->data.T_FN.to;
   }
 
-  // printf("application\n");
-  // print_ast(ast);
-  // print_type(ast->data.AST_APPLICATION.function->md);
-  // print_type(res_type);
   res_type = handle_coroutine_of_coroutines_application(ast, res_type);
 
   return res_type;
 }
+
 Type *handle_coroutine_of_coroutines_application(Ast *ast, Type *res_type) {
   Type *ftype = ast->data.AST_APPLICATION.function->md;
   if (!is_coroutine_constructor_type(ftype)) {

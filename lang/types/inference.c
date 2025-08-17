@@ -226,6 +226,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     const char *name = ast->data.AST_IDENTIFIER.value;
 
     TypeEnv *ref = env_lookup_ref(ctx->env, name);
+
     if (ref) {
       handle_closed_over_ref(ast, ref, ctx);
       ref->ref_count++;
@@ -785,6 +786,21 @@ Type *coroutine_constructor_type_from_fn_type(Type *fn_type) {
 
   return f;
 }
+Type *closure_type_from_fn_type(Type *t, Ast *ast) {
+  int num = ast->data.AST_LAMBDA.num_closed_vals;
+  Type **closure_args =
+      talloc(sizeof(Type *) * ast->data.AST_LAMBDA.num_closed_vals);
+  int i = 0;
+  for (AstList *l = ast->data.AST_LAMBDA.closed_vals; l; l = l->next) {
+    Ast *cv = l->ast;
+    Type *cvt = cv->md;
+    closure_args[i] = cvt;
+    i++;
+  }
+  Type *closure_type = create_tuple_type(num, closure_args);
+  t->closure_meta = closure_type;
+  return t;
+}
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
   TICtx body_ctx = *ctx;
@@ -879,11 +895,12 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   if (body_ctx.yielded_type != NULL) {
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
+  } else if (ast->data.AST_LAMBDA.num_closed_vals > 0) {
+    ast->md = closure_type_from_fn_type(ast->md, ast);
+  } else {
+    ((Type *)ast->md)->closure_meta = NULL;
   }
 
-  print_ast(ast);
-  print_type(ast->md);
-  printf("==============================\n");
   return ast->md;
 }
 
