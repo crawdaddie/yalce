@@ -84,7 +84,6 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       type_to_llvm_type(scheduler_type, ctx, module);
 
   LLVMValueRef coro = codegen(coro_ast, ctx, module, builder);
-  // Type *ptype = create_option_type(&t_num);
   Type *ptype = fn_return_type(coro_type);
   LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
 

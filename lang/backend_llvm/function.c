@@ -63,12 +63,18 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
 
     return LLVMFunctionType(ret_type, NULL, 0, false);
   }
-  // int _fnl = fn_len;
+
   int _fnl = 0;
-  for (Type *ftype = fn_type; ftype->data.T_FN.to && !is_closure(ftype);
+  for (Type *ftype = fn_type; ftype->kind == T_FN && !is_closure(ftype);
        ftype = ftype->data.T_FN.to) {
     _fnl++;
   }
+  //
+  // int _fnl = fn_len;
+  // for (Type *ftype = fn_type; ftype->kind == T_FN && !is_closure(ftype);
+  //      ftype = ftype->data.T_FN.to) {
+  //   _fnl++;
+  // }
 
   LLVMTypeRef llvm_param_types[_fnl];
   LLVMTypeRef llvm_fn_type;
@@ -184,9 +190,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *cltype = deep_copy_type(fn_type);
     cltype = resolve_type_in_env(cltype, ctx->env);
     clast.md = cltype;
-
-    LLVMValueRef cl = compile_closure(&clast, ctx, module, builder);
-    return cl;
+    return compile_closure(&clast, ctx, module, builder);
   }
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
