@@ -146,7 +146,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
 
   if (config.test_mode) {
     ctx->module_name = filename;
-    int res = test_module(*prog, ctx, module, builder);
+    int res = test_module(*prog, ctx, module, builder, target_machine);
     if (!res) {
       exit(1);
     } else {

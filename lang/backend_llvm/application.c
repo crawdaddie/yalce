@@ -288,11 +288,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (sym->type == STYPE_LOCAL_VAR && sym->symbol_type->kind == T_FN) {
 
-    // printf("call local var??\n");
-    // print_ast(ast);
-    // print_type(sym->symbol_type);
-    // print_type(expected_fn_type);
-
     Type *callable_type = sym->symbol_type;
 
     LLVMValueRef res =
