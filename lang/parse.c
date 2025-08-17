@@ -102,13 +102,13 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
   case TOKEN_ASSIGNMENT: {
 
     if (left->tag == AST_APPLICATION &&
-        left->data.AST_APPLICATION.args->tag == AST_LIST) {
+        strcmp(left->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "array_at") == 0) {
 
       Ast *app = ast_application(ast_identifier((ObjString){"array_set", 9}),
-                                 left->data.AST_APPLICATION.function);
+                                 left->data.AST_APPLICATION.args);
 
-      app = ast_application(
-          app, left->data.AST_APPLICATION.args->data.AST_LIST.items);
+      app = ast_application(app, left->data.AST_APPLICATION.args + 1);
       app = ast_application(app, right);
       return app;
     }
