@@ -812,7 +812,8 @@ bool ast_is_placeholder_id(Ast *ast) {
     return false;
   }
 
-  if (strcmp(ast->data.AST_IDENTIFIER.value, "_") == 0) {
+  if (ast->data.AST_IDENTIFIER.length == 1 &&
+      strcmp(ast->data.AST_IDENTIFIER.value, "_") == 0) {
     return true;
   }
 
