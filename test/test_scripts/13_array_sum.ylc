@@ -2,8 +2,13 @@ import ../../lib/Arrays;
 
 let test = module
   let test_sum_doubles = fn () ->
-    let sum = Arrays.fold (fn su x -> su + x) 0. [|1., 2., 3.|];
+    let sum = Arrays.fold (+) 0. [|1., 2., 3.|];
     sum == 6.
+    ;;
+
+  let test_sum_ints = fn () ->
+    let sum = Arrays.fold (+) 0 [|1, 2, 3|];
+    sum == 6
     ;;
 
 ;

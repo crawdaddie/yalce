@@ -180,8 +180,6 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("APPLICATION\n");
-  print_ast(ast);
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 

@@ -64,10 +64,10 @@ typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);
 
-typedef struct {
-  int num_exports;
-  int val_map[];
-} ModuleTypeMap;
+// typedef struct {
+//   int num_exports;
+//   int val_map[];
+// } ModuleTypeMap;
 
 typedef struct {
   symbol_type type;
@@ -107,31 +107,26 @@ typedef struct {
     struct {
       ht generics;
       JITLangCtx *ctx;
-      ModuleTypeMap map;
       const char *path;
     } STYPE_MODULE;
+
     struct {
       LLVMTypeRef llvm_state_type;
       Type *state_type;
       bool recursive_ref;
     } STYPE_COROUTINE_CONSTRUCTOR;
+
     struct {
     } STYPE_CLOSURE;
+
   } symbol_data;
 
   Type *symbol_type;
 } JITSymbol;
 
-typedef struct {
-  int stack_level;
-  JITSymbol val;
-} JITLookupResult;
-
 JITLangCtx ctx_push(JITLangCtx ctx);
 
 JITSymbol *find_in_ctx(const char *name, int name_len, JITLangCtx *ctx);
-
-bool is_top_level_frame(StackFrame *frame);
 
 void destroy_ctx(JITLangCtx *ctx);
 #define STACK_ALLOC_CTX_PUSH(_ctx_name, _ctx)                                  \

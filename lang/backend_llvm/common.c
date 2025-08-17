@@ -8,7 +8,6 @@ StackFrame *frame_extend(StackFrame *frame) {
   new_frame->next = frame;
   return new_frame;
 }
-bool is_top_level_frame(StackFrame *frame) { return frame->next == NULL; }
 
 JITLangCtx ctx_push(JITLangCtx ctx) {
   JITLangCtx new_ctx = ctx;

@@ -1,0 +1,10 @@
+let K = fn z q ->
+  (fn () -> 2 + q + z)
+;;
+
+
+let test = module
+  let test_cl_int = (let l = K 3 4 in l () == 9) ;
+  let test_cl_int2 = (let l = K 3 5 in l () == 10) ;
+  let test_cl_num2 = (let l = K 3. 5. in l () == 10.) ;
+;
