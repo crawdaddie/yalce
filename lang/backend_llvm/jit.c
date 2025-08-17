@@ -146,7 +146,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
 
   if (config.test_mode) {
     ctx->module_name = filename;
-    int res = test_module(*prog, ctx, module, builder);
+    int res = test_module(*prog, ctx, module, builder, target_machine);
     if (!res) {
       exit(1);
     } else {
@@ -191,6 +191,8 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   typedef int (*top_level_func_t)(void);
   top_level_func_t func = (top_level_func_t)func_addr;
   int result = func();
+
+  LLVMDisposeExecutionEngine(engine);
   return NULL;
 }
 

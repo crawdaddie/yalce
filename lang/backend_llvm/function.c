@@ -3,6 +3,7 @@
 #include "closures.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/common.h"
 #include "types/inference.h"
 #include "types/type.h"
 #include "util.h"
@@ -166,6 +167,7 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
+
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
@@ -175,16 +177,22 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     print_ast_err(ast);
     return NULL;
   }
+  Type *fn_type = ast->md;
+
+  if (is_closure(fn_type)) {
+    Ast clast = *ast;
+    Type *cltype = deep_copy_type(fn_type);
+    cltype = resolve_type_in_env(cltype, ctx->env);
+    clast.md = cltype;
+
+    LLVMValueRef cl = compile_closure(&clast, ctx, module, builder);
+    return cl;
+  }
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
   if (fn_name.chars == NULL) {
     is_anon = true;
-  }
-
-  Type *fn_type = ast->md;
-  if (is_closure(fn_type)) {
-    return compile_closure(ast, ctx, module, builder);
   }
 
   int fn_len = ast->data.AST_LAMBDA.len;
@@ -408,6 +416,7 @@ LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
 LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
                                  JITLangCtx *ctx, LLVMModuleRef module,
                                  LLVMBuilderRef builder) {
+
   JITLangCtx compilation_ctx = *ctx;
   if (!sym->symbol_data.STYPE_GENERIC_FUNCTION.ast) {
     if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
@@ -427,29 +436,6 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   TypeEnv *env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env;
 
-  // TypeConstraint *constraints = NULL;
-  // Type *f;
-  // for (f = generic_type; f->kind == T_FN; f = f->data.T_FN.to) {
-  //   Type *ff = f->data.T_FN.from;
-  //   if (is_generic(f->data.T_FN.from)) {
-  //     Type *r = resolve_type_in_env(ff, ctx->env);
-  //     if (r) {
-  //       constraints = constraints_extend(constraints, ff, r);
-  //     }
-  //   }
-  // }
-  //
-  // if (is_generic(f)) {
-  //   Type *r = resolve_type_in_env(f, ctx->env);
-  //   if (r) {
-  //     constraints = constraints_extend(constraints, f, r);
-  //   }
-  // }
-  //
-  // Substitution *subst = NULL;
-  // subst = solve_constraints(constraints);
-  // env = create_env_from_subst(env, subst);
-
   compilation_ctx.env =
       create_env_for_generic_fn(env, generic_type, specific_type);
 
@@ -464,7 +450,6 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
     specific_type = specific_type->data.T_FN.to;
   }
-
   LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
 
   return func;

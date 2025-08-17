@@ -111,9 +111,6 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
 
   if (callable_type->kind == T_FN &&
       callable_type->data.T_FN.from->kind == T_VOID) {
-    printf("calling func");
-    print_ast(ast);
-
     return LLVMBuildCall2(builder, llvm_callable_type, callable, NULL, 0,
                           "call_func");
   }
@@ -247,7 +244,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
-
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);
 

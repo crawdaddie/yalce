@@ -1,5 +1,6 @@
 #include "./testing.h"
 #include "codegen.h"
+#include "config.h"
 #include "jit.h"
 #include "serde.h"
 #include "symbols.h"
@@ -7,6 +8,7 @@
 #include "llvm-c/ExecutionEngine.h"
 #include <string.h>
 
+void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine);
 // Function prototype
 void _report_test_result(const char *name, int result);
 
@@ -203,7 +205,7 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 }
 
 int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                LLVMBuilderRef builder) {
+                LLVMBuilderRef builder, LLVMTargetMachineRef target_machine) {
 
   LLVMValueRef exec_tests = codegen_test_module(ast, ctx, module, builder);
 
@@ -211,14 +213,23 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return 0;
   }
 
+  module_passes(module, target_machine);
   LLVMExecutionEngineRef engine;
   if (prepare_ex_engine(ctx, &engine, module) != 0) {
     return 0;
   }
 
-  LLVMGenericValueRef result = LLVMRunFunction(engine, exec_tests, 0, NULL);
-  int int_res = (int)LLVMGenericValueToInt(result, 0);
+  if (config.debug_ir) {
+    LLVMDumpModule(module);
+  }
 
+  // LLVMGenericValueRef result = LLVMRunFunction(engine, exec_tests, 0, NULL);
+
+  const char *func_name = LLVMGetValueName(exec_tests);
+  uint64_t func_addr = LLVMGetFunctionAddress(engine, func_name);
+  typedef int (*top_level_func_t)(void);
+  top_level_func_t func = (top_level_func_t)func_addr;
+  int int_res = func();
   LLVMDisposeExecutionEngine(engine);
   return int_res;
 }

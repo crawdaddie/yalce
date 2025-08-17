@@ -260,6 +260,9 @@ Type *apply_substitution(Substitution *subst, Type *t) {
     *new_t = *t;
     new_t->data.T_FN.from = apply_substitution(subst, t->data.T_FN.from);
     new_t->data.T_FN.to = apply_substitution(subst, t->data.T_FN.to);
+    if (new_t->closure_meta) {
+      new_t->closure_meta = apply_substitution(subst, new_t->closure_meta);
+    }
     return new_t;
   }
   default: {

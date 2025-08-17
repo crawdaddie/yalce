@@ -139,17 +139,7 @@ LLVMTypeRef get_closure_obj_type(Type *fn_type, JITLangCtx *ctx,
       LLVMStructType(contained, num_closure_vals + 1, 0);
   return llvm_closure_obj_type;
 }
-// LLVMValueRef closure_fn(LLVMValueRef closure_obj, LLVMTypeRef obj_type,
-//                         LLVMBuilderRef builder) {
-//
-//   LLVMValueRef fn_ptr =
-//       LLVMBuildStructGEP2(builder, obj_type, closure_obj, 0, "");
-//
-//   return LLVMBuildLoad2(builder);
-// }
-//
-//
-//
+
 LLVMValueRef closure_closed_val_ptr(LLVMValueRef obj, LLVMTypeRef obj_type,
                                     int idx, LLVMBuilderRef builder) {
 
@@ -175,7 +165,7 @@ LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTypeRef closure_obj_ptr_type = LLVMPointerType(llvm_closure_obj_type, 0);
 
-  Type *ret_type = fn_return_type(closure_type);
+  Type *ret_type = deep_copy_type(fn_return_type(closure_type));
 
   int num_args = ast->data.AST_LAMBDA.len;
   LLVMTypeRef llvm_fn_type;
@@ -185,6 +175,7 @@ LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     llvm_fn_type = LLVMFunctionType(
         type_to_llvm_type(ret_type, ctx, module),
         (LLVMTypeRef[]){LLVMPointerType(llvm_closure_obj_type, 0)}, 1, false);
+
   } else {
     llvm_fn_type = get_closure_fn_type(num_args, closure_type, ret_type,
                                        llvm_closure_obj_type, ctx, module);
@@ -219,10 +210,12 @@ LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int i = 0;
   for (AstList *l = ast->data.AST_LAMBDA.closed_vals; l; l = l->next, i++) {
     Ast *b = l->ast;
-    Type *bt = b->md;
-    if (is_generic(bt)) {
-      bt = resolve_type_in_env(bt, ctx->env);
-    }
+    Type *bt = closure_type->closure_meta->data.T_CONS.args[i];
+
+    // TODO: ?????????
+    // if (is_generic(bt)) {
+    //   bt = resolve_type_in_env(bt, ctx->env);
+    // }
 
     LLVMValueRef closed_val = closure_closed_val(
         internal_closure_ref, llvm_closure_obj_type, i, builder);
@@ -236,15 +229,18 @@ LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     int chars_len = b->data.AST_IDENTIFIER.length;
     ht_set_hash(fn_ctx.frame->table, chars, hash_string(chars, chars_len), sym);
   }
+
   i = 0;
   Type *ftype = closure_type;
   for (AstList *arg = ast->data.AST_LAMBDA.params; arg;
        arg = arg->next, i++, ftype = ftype->data.T_FN.to) {
     Ast *param_ast = arg->ast;
-    Type *ptype = ftype->data.T_FN.from;
-    if (is_generic(ptype)) {
-      ptype = resolve_type_in_env(ptype, ctx->env);
-    }
+    Type *ptype = deep_copy_type(ftype->data.T_FN.from);
+
+    // TODO: ?????????
+    // if (is_generic(ptype)) {
+    //   ptype = resolve_type_in_env(ptype, ctx->env);
+    // }
 
     LLVMValueRef param_val = LLVMGetParam(func, i + 1);
 
@@ -315,7 +311,6 @@ LLVMValueRef call_closure_sym(Ast *app, JITSymbol *sym, JITLangCtx *ctx,
   LLVMTypeRef llvm_fn_type = get_closure_fn_type(
       num_args, closure_type, ret_type, obj_type, ctx, module);
 
-  printf("\n");
   LLVMValueRef fn_ptr =
       LLVMBuildStructGEP2(builder, sym->llvm_type, obj, 0, "");
   LLVMValueRef func = LLVMBuildLoad2(builder, GENERIC_PTR, fn_ptr, "");

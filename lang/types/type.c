@@ -963,26 +963,9 @@ Type *create_coroutine_instance_type(Type *ret_type) {
 Type *deep_copy_type(const Type *original) {
   Type *copy = talloc(sizeof(Type));
   *copy = *original;
-  // if (original->closure_meta != NULL) {
-  //   copy->closure_meta = deep_copy_type(original->closure_meta);
-  // }
-
-  // copy->kind = original->kind;
-  // copy->alias = original->alias;
-  // copy->constructor = original->constructor;
-  // copy->implements = original->implements;
-  //
-  // copy->is_recursive_fn_ref = original->is_recursive_fn_ref;
-  // copy->is_coroutine_constructor = original->is_coroutine_constructor;
-  // copy->is_coroutine_instance = original->is_coroutine_instance;
-  // copy->is_recursive_type_ref = original->is_recursive_type_ref;
-  //
-  // copy->scope = original->scope;
-  // copy->yield_boundary = original->yield_boundary;
-
-  // for (int i = 0; i < original->num_implements; i++) {
-  //   add_typeclass(copy, original->implements[i]);
-  // }
+  if (original->closure_meta != NULL) {
+    copy->closure_meta = deep_copy_type(original->closure_meta);
+  }
 
   switch (original->kind) {
   case T_VAR:
@@ -1019,28 +1002,10 @@ Type *copy_array_type(Type *t) {
 }
 
 int fn_type_args_len(Type *fn_type) {
-  // if (fn_type->is_coroutine_constructor) {
-  //   int args_len = 0;
-  //   Type *f = fn_type;
-  //   while (!(f->is_coroutine_instance)) {
-  //     args_len++;
-  //     f = f->data.T_FN.to;
-  //   }
-  //   return args_len;
-  // }
 
   if (fn_type->data.T_FN.from->kind == T_VOID) {
     return 1;
   }
-
-  // int fn_len = 0;
-  // Type *t = fn_type;
-  // while (t->kind == T_FN) {
-  //   // printf("arg %d: ", fn_len);
-  //   // print_type(t->data.T_FN.from);
-  //   t = t->data.T_FN.to;
-  //   fn_len++;
-  // }
 
   int fn_len = 0;
   for (Type *ct = fn_type; ct->kind == T_FN && !(is_closure(ct));
@@ -1122,6 +1087,9 @@ Type *resolve_tc_rank(Type *type) {
 }
 
 Type *resolve_type_in_env(Type *r, TypeEnv *env) {
+  if (r->closure_meta) {
+    r->closure_meta = resolve_type_in_env(r->closure_meta, env);
+  }
   switch (r->kind) {
   case T_VAR: {
     Type *rr = env_lookup(env, r->data.T_VAR);
