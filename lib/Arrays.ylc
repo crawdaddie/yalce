@@ -47,3 +47,22 @@ let last = fn x: (Array of T) ->
   x [len - 1]
 ;;
   
+
+let test = module
+  let test_sum_doubles = fn () ->
+    let sum = fold (+) 0. [|1., 2., 3.|];
+    sum == 6.
+  ;;
+
+  let test_sum_ints = fn () ->
+    let sum = fold (+) 0 [|1, 2, 3|];
+    sum == 6
+  ;;
+
+  let test_map = fn () ->
+    let s = map ((+) 3) [|1,2,3|];
+    s[0] == 4 && s[1] == 5 && s[2] == 6
+  ;;
+  let test_last = last [|1, 2, 3 |] == 3
+
+;

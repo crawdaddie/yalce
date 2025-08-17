@@ -197,10 +197,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     Type *t = type;
     int fn_len = 0;
 
-    while (t->kind == T_FN) {
-      Type *from = t->data.T_FN.from;
-      t = t->data.T_FN.to;
-      fn_len++;
+    for (Type *t = type; t->kind == T_FN && !(is_closure(t));
+         t = t->data.T_FN.to, fn_len++) {
     }
     return codegen_fn_type(type, fn_len, ctx, module);
   }

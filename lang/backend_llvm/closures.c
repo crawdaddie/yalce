@@ -155,6 +155,25 @@ LLVMValueRef closure_closed_val(LLVMValueRef obj, LLVMTypeRef obj_type, int idx,
                         closed_val_ptr, "");
 }
 
+LLVMTypeRef get_closure_callable_type(Type *closure_type, int num_args,
+                                      LLVMTypeRef obj_type, JITLangCtx *ctx,
+                                      LLVMModuleRef module) {
+
+  Type *ret_type = fn_return_type(closure_type);
+  LLVMTypeRef llvm_fn_type;
+
+  if (num_args == 1 && closure_type->data.T_FN.from->kind == T_VOID) {
+
+    llvm_fn_type = LLVMFunctionType(
+        type_to_llvm_type(ret_type, ctx, module),
+        (LLVMTypeRef[]){LLVMPointerType(obj_type, 0)}, 1, false);
+  } else {
+    llvm_fn_type = get_closure_fn_type(num_args, closure_type, ret_type,
+                                       obj_type, ctx, module);
+  }
+  return llvm_fn_type;
+}
+
 LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
 
@@ -165,21 +184,12 @@ LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTypeRef closure_obj_ptr_type = LLVMPointerType(llvm_closure_obj_type, 0);
 
-  Type *ret_type = deep_copy_type(fn_return_type(closure_type));
+  Type *ret_type = fn_return_type(closure_type);
 
   int num_args = ast->data.AST_LAMBDA.len;
-  LLVMTypeRef llvm_fn_type;
 
-  if (num_args == 1 && closure_type->data.T_FN.from->kind == T_VOID) {
-
-    llvm_fn_type = LLVMFunctionType(
-        type_to_llvm_type(ret_type, ctx, module),
-        (LLVMTypeRef[]){LLVMPointerType(llvm_closure_obj_type, 0)}, 1, false);
-
-  } else {
-    llvm_fn_type = get_closure_fn_type(num_args, closure_type, ret_type,
-                                       llvm_closure_obj_type, ctx, module);
-  }
+  LLVMTypeRef llvm_fn_type = get_closure_callable_type(
+      closure_type, num_args, llvm_closure_obj_type, ctx, module);
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
 

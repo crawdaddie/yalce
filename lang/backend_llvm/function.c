@@ -1,5 +1,6 @@
 #include "backend_llvm/function.h"
 #include "binding.h"
+#include "closures.h"
 #include "symbols.h"
 #include "types.h"
 #include "types/inference.h"
@@ -42,8 +43,8 @@ void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
 
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module) {
-  // TODO: return a type for a coroutine - is this necessary?
 
+  // TODO: return a type for a coroutine - is this necessary?
   LLVMTypeRef llvm_param_types[fn_len];
   LLVMTypeRef llvm_fn_type;
 
@@ -54,8 +55,28 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
     llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
   } else {
     LLVMTypeRef llvm_return_type_ref;
-    codegen_fn_type_arg_types(fn_type, fn_len, llvm_param_types,
-                              &llvm_return_type_ref, ctx, module);
+
+    for (int i = 0; i < fn_len; i++) {
+
+      Type *t = fn_type->data.T_FN.from;
+      if (t->kind == T_FN) {
+        llvm_param_types[i] = GENERIC_PTR;
+      } else if (is_pointer_type(t) && t->data.T_CONS.num_args == 0) {
+        llvm_param_types[i] = GENERIC_PTR;
+      } else if (is_pointer_type(t)) {
+        llvm_param_types[i] = LLVMPointerType(
+            type_to_llvm_type(t->data.T_CONS.args[0], ctx, module), 0);
+      } else {
+        llvm_param_types[i] = type_to_llvm_type(t, ctx, module);
+      }
+
+      fn_type = fn_type->data.T_FN.to;
+    }
+
+    Type *return_type = fn_len == 0 ? fn_type->data.T_FN.to : fn_type;
+
+    llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
+
     llvm_fn_type =
         LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
   }
@@ -150,14 +171,25 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
+
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
 
-  if (ast->tag == AST_APPLICATION) {
-    fprintf(stderr, "Error: first-class function use unknown: ");
-    print_ast_err(ast);
-    return NULL;
+  // if (ast->tag == AST_APPLICATION) {
+  //   fprintf(stderr, "Error: first-class function use unknown: ");
+  //   print_ast_err(ast);
+  //   return NULL;
+  // }
+  //
+  Type *fn_type = ast->md;
+
+  if (is_closure(fn_type)) {
+    Ast clast = *ast;
+    Type *cltype = deep_copy_type(fn_type);
+    cltype = resolve_type_in_env(cltype, ctx->env);
+    clast.md = cltype;
+    return compile_closure(&clast, ctx, module, builder);
   }
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
@@ -165,7 +197,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (fn_name.chars == NULL) {
     is_anon = true;
   }
-  Type *fn_type = ast->md;
 
   int fn_len = ast->data.AST_LAMBDA.len;
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;

@@ -267,6 +267,24 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     }
   }
 
+  if (is_closure(expr_type)) {
+    LLVMValueRef closure_obj = codegen(expr, outer_ctx, module, builder);
+    LLVMTypeRef closure_obj_type =
+        get_closure_obj_type(expr_type, outer_ctx, module);
+
+    JITSymbol *sym =
+        new_symbol(STYPE_CLOSURE, expr_type, closure_obj, closure_obj_type);
+
+    const char *id_chars = binding->data.AST_IDENTIFIER.value;
+    int id_len = binding->data.AST_IDENTIFIER.length;
+
+    ht_set_hash(outer_ctx->frame->table, id_chars,
+                hash_string(id_chars, id_len), sym);
+
+    return in_expr == NULL ? closure_obj
+                           : codegen(in_expr, inner_ctx, module, builder);
+  }
+
   if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
 
     if (is_coroutine_type(expr_type)) {
