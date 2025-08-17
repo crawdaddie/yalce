@@ -8,7 +8,6 @@ open engine/bindings/Synth;
 open engine/bindings/Sched; 
 open engine/bindings/VST; 
 import engine/bindings/MIDI;
-open lib/Ref;
 import lib/Math;
 
 

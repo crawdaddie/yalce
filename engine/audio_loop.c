@@ -309,9 +309,8 @@ struct SoundIoDevice *get_output_device(struct SoundIo *soundio,
                                         char *out_device_id) {
   bool out_raw = false;
 
-  // int default_out_device_index =
-  // soundio_default_output_device_index(soundio);
-  int default_out_device_index = 1;
+  int default_out_device_index = soundio_default_output_device_index(soundio);
+  // int default_out_device_index = 1;
 
   if (default_out_device_index < 0)
     panic("no output device found");
