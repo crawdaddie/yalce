@@ -1,6 +1,7 @@
 #include "backend_llvm/application.h"
 #include "adt.h"
 #include "builtin_functions.h"
+#include "closures.h"
 #include "coroutines.h"
 #include "function.h"
 #include "modules.h"
@@ -298,6 +299,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
 
     return res;
+  }
+  if (sym->type == STYPE_CLOSURE) {
+    return call_closure_sym(ast, sym, ctx, module, builder);
   }
 
   if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {

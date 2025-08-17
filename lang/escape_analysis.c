@@ -1,6 +1,7 @@
 #include "./escape_analysis.h"
 #include "./arena_allocator.h"
 #include "serde.h"
+#include "types/type.h"
 #include <string.h>
 
 static int32_t next_alloc_id;
@@ -158,13 +159,6 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
       a->alloc_site->ea_md = ea_meta;
     }
 
-    // printf("lambda %s escaped "
-    //        "allocations:\n============================================\n",
-    //        ast->data.AST_LAMBDA.fn_name.chars);
-    // print_allocs(ret_alloc);
-    // printf("all internal allocs: \n");
-    // print_allocs(lambda_ctx.allocations);
-
     if (ret_alloc) {
 
       for (Allocation *r = ret_alloc; r; r = r->next) {
@@ -172,6 +166,11 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
         *ea_meta = (EscapeMeta){.status = EA_HEAP_ALLOC, .id = r->id};
         r->alloc_site->ea_md = ea_meta;
       }
+    }
+
+    if (is_closure(ast->md)) {
+      Allocation *closure_alloc = create_alloc(NULL, ast, ctx->scope);
+      return allocations_extend(allocations, closure_alloc);
     }
 
     return NULL;
@@ -229,6 +228,7 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     ea(ast->data.AST_YIELD.expr, ctx);
     break;
   }
+
   case AST_IDENTIFIER: {
     const char *varname = ast->data.AST_IDENTIFIER.value;
     Allocation *found_alloc = ctx_find_allocation(ctx, varname);
