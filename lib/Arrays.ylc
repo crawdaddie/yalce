@@ -35,7 +35,7 @@ let map = fn f: (T -> R) a: (Array of T) ->
   let res = array_fill_const (array_size a) (f (a[0]));
   for i = 1 to (array_size a) in (
     let v = f (a [i]);
-    array_set res i v
+    res[i] :=  v
   );
   res
 ;;
