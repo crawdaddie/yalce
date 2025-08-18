@@ -246,9 +246,6 @@ LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
        arg = arg->next, i++, ftype = ftype->data.T_FN.to) {
     Ast *param_ast = arg->ast;
     Type *ptype = deep_copy_type(ftype->data.T_FN.from);
-    print_ast(param_ast);
-    printf("closure proper arg\n");
-    print_type(ptype);
 
     // TODO: ?????????
     // if (is_generic(ptype)) {
@@ -268,7 +265,6 @@ LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                   sym);
 
     } else {
-      printf("pattern binding\n");
       codegen_pattern_binding(param_ast, param_val, ptype, &fn_ctx, module,
                               builder);
     }
@@ -284,8 +280,6 @@ LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
   destroy_ctx(&fn_ctx);
-  LLVMDumpValue(func);
-  printf("\n");
 
   LLVMValueRef closure_obj;
   if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {

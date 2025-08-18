@@ -901,8 +901,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     ((Type *)ast->md)->closure_meta = NULL;
   }
 
-  printf("lambda: ");
-  print_type(ast->md);
+  // printf("lambda: ");
+  // print_type(ast->md);
   return ast->md;
 }
 
