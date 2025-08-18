@@ -1096,6 +1096,23 @@ Ast *ast_module(Ast *lambda) {
 }
 
 char *__import_current_dir;
+
+char *check_path(char *fully_qualified_name, const char *rel_path) {
+  if (access(fully_qualified_name, F_OK) != 0 &&
+      (config.base_libs_dir != NULL)) {
+    char *new_filename =
+        malloc(strlen(rel_path) + strlen(config.base_libs_dir) + 1);
+    sprintf(new_filename, "%s/%s", config.base_libs_dir, rel_path);
+    fully_qualified_name = new_filename;
+
+    if (access(fully_qualified_name, F_OK) != 0) {
+      return NULL;
+    }
+  }
+
+  return fully_qualified_name;
+}
+
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   char *mod_name = path_identifier.chars;
@@ -1110,19 +1127,12 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
            __import_current_dir, mod_name);
 
   fully_qualified_name = normalize_path(fully_qualified_name);
+  fully_qualified_name = check_path(fully_qualified_name, rel_path);
 
-  if (access(fully_qualified_name, F_OK) != 0 &&
-      (config.base_libs_dir != NULL)) {
-    char *new_filename =
-        malloc(strlen(rel_path) + strlen(config.base_libs_dir) + 1);
-    sprintf(new_filename, "%s/%s", config.base_libs_dir, rel_path);
-    fully_qualified_name = new_filename;
-
-    if (access(fully_qualified_name, F_OK) != 0) {
-      fprintf(stderr, "Error module %s not found in path\n",
-              fully_qualified_name);
-      return NULL;
-    }
+  if (!fully_qualified_name) {
+    fprintf(stderr, "Error module %s not found in path\n",
+            fully_qualified_name);
+    return NULL;
   }
 
   Ast *import_ast = Ast_new(AST_IMPORT);
