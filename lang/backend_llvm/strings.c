@@ -443,6 +443,7 @@ LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type) {
 
 LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
+
   LLVMValueRef data_ptr = char_array(chars, length, ctx, module, builder);
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
@@ -460,7 +461,39 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
   const char *chars = ast->data.AST_STRING.value;
   int length = ast->data.AST_STRING.length;
-  return _codegen_string(chars, length, ctx, module, builder);
+
+  LLVMTypeRef char_type = LLVMInt8Type();
+  LLVMTypeRef array_type = LLVMArrayType(char_type, length + 1);
+
+  LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length + 1, 0);
+  LLVMValueRef str_const = LLVMConstString(chars, length, 0);
+  LLVMTypeRef str_const_type = LLVMTypeOf(str_const);
+
+  LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+
+  LLVMValueRef data_ptr;
+  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
+    data_ptr = LLVMBuildAlloca(builder, str_const_type, "stack_array");
+  } else {
+    data_ptr = LLVMBuildMalloc(builder, str_const_type, "heap_array");
+  }
+
+  LLVMBuildStore(builder, str_const, data_ptr);
+
+  LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
+  LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
+                                             &length_val, 1, "last_elem_ptr");
+  LLVMBuildStore(builder, null_terminator, last_elem_ptr);
+  LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
+
+  LLVMTypeRef struct_type = string_struct_type(data_ptr_type);
+
+  LLVMValueRef str = LLVMGetUndef(struct_type);
+  str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
+  str = LLVMBuildInsertValue(builder, str,
+                             LLVMConstInt(LLVMInt32Type(), length, 0), 0,
+                             "insert_array_size");
+  return str;
 }
 
 LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx,

@@ -24,7 +24,7 @@ let __foldi = fn f: (Int -> R -> T -> R) idx: (Int) res: (R) a: (Array of T) ->
   | _ -> (
     __foldi f (idx + 1) (f idx res (a[0])) (array_succ a)
   )
-  ;;
+;;
 
 let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
   __foldi f 0 res a
@@ -49,20 +49,24 @@ let last = fn x: (Array of T) ->
   
 
 let test = module
-  let test_sum_doubles = fn () ->
-    let sum = fold (+) 0. [|1., 2., 3.|];
-    sum == 6.
-  ;;
+  let test_sum_doubles = fold (+) 0. [|1., 2., 3.|] == 6.;
 
-  let test_sum_ints = fn () ->
-    let sum = fold (+) 0 [|1, 2, 3|];
-    sum == 6
-  ;;
+  let test_sum_ints = fold (+) 0 [|1, 2, 3|] == 6;
 
-  let test_map = fn () ->
-    let s = map ((+) 3) [|1,2,3|];
-    s[0] == 4 && s[1] == 5 && s[2] == 6
-  ;;
+  let test_map = 
+    let s = map ((+) 3) [|1,2,3|] in
+    s[0] == 4 &&
+    s[1] == 5 &&
+    s[2] == 6
+  ;
+
+  let test_map_to_double = 
+    let s = map ((+) 3.) [|1,2,3|] in
+    s[0] == 4. &&
+    s[1] == 5. &&
+    s[2] == 6.
+  ;
+
   let test_last = last [|1, 2, 3 |] == 3
 
 ;

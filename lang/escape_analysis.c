@@ -114,7 +114,8 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     break;
   }
   case AST_STRING: {
-    return create_alloc(NULL, ast, ctx->scope);
+    Allocation *str_alloc = create_alloc(NULL, ast, ctx->scope);
+    return allocations_extend(allocations, str_alloc);
   }
 
   case AST_FMT_STRING: {
@@ -160,7 +161,6 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     }
 
     if (ret_alloc) {
-
       for (Allocation *r = ret_alloc; r; r = r->next) {
         EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
         *ea_meta = (EscapeMeta){.status = EA_HEAP_ALLOC, .id = r->id};
@@ -177,7 +177,6 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
   }
 
   case AST_BODY: {
-
     Ast *stmt;
     for (int i = 0; i < ast->data.AST_BODY.len; i++) {
       stmt = ast->data.AST_BODY.stmts[i];
@@ -212,11 +211,13 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
 
   case AST_MATCH: {
     ea(ast->data.AST_MATCH.expr, ctx);
-    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
-      ea(ast->data.AST_MATCH.branches + (2 * i), ctx);
-    }
 
-    break;
+    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+      Allocation *branch_allocs =
+          ea(ast->data.AST_MATCH.branches + (2 * i) + 1, ctx);
+      allocations = allocations_extend(allocations, branch_allocs);
+    }
+    return allocations;
   }
 
   case AST_MATCH_GUARD_CLAUSE: {
