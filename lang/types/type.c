@@ -612,7 +612,12 @@ void print_type_to_stream(Type *t, FILE *stream) {
       if (fn->is_coroutine_instance) {
         fprintf(stream, "[coroutine instance]");
       }
+
+      if (is_closure(fn->data.T_FN.from)) {
+        fprintf(stream, " closure ");
+      }
       print_type_to_stream(fn->data.T_FN.from, stream);
+
       fprintf(stream, " -> ");
       fn = fn->data.T_FN.to;
     }
@@ -1008,7 +1013,8 @@ int fn_type_args_len(Type *fn_type) {
   }
 
   int fn_len = 0;
-  for (Type *ct = fn_type; ct->kind == T_FN && !(is_closure(ct));
+
+  for (Type *ct = fn_type; ct->kind == T_FN && !(is_closure(ct->data.T_FN.to));
        ct = ct->data.T_FN.to) {
     fn_len++;
   }

@@ -463,9 +463,8 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int length = ast->data.AST_STRING.length;
 
   LLVMTypeRef char_type = LLVMInt8Type();
-  LLVMTypeRef array_type = LLVMArrayType(char_type, length + 1);
 
-  LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length + 1, 0);
+  LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length, 0);
   LLVMValueRef str_const = LLVMConstString(chars, length, 0);
   LLVMTypeRef str_const_type = LLVMTypeOf(str_const);
 
@@ -480,10 +479,11 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBuildStore(builder, str_const, data_ptr);
 
-  LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
-  LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
-                                             &length_val, 1, "last_elem_ptr");
-  LLVMBuildStore(builder, null_terminator, last_elem_ptr);
+  // LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
+  // LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,
+  //                                            &length_val, 1,
+  //                                            "last_elem_ptr");
+  // LLVMBuildStore(builder, null_terminator, last_elem_ptr);
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
   LLVMTypeRef struct_type = string_struct_type(data_ptr_type);
