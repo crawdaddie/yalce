@@ -629,3 +629,180 @@ Type *lookup_builtin_type(const char *name) {
   Type *t = ht_get_hash(&builtin_types, name, hash_string(name, strlen(name)));
   return t;
 }
+
+ht builtin_schemes;
+
+void add_builtin_scheme(char *name, Scheme *t) {
+  ht_set_hash(&builtin_schemes, name, hash_string(name, strlen(name)), t);
+}
+
+Scheme *create_arithmetic_scheme() {
+
+  Type *var_a = tvar("a");
+  TypeClass *arithmetic = talloc(sizeof(TypeClass));
+  *arithmetic = (TypeClass){
+      .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+      .rank = 0.0,
+  };
+
+  var_a->required = arithmetic;
+  Type *f = var_a;
+  f = type_fn(var_a, f);
+  f = type_fn(var_a, f);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = f};
+
+  return scheme;
+}
+
+Scheme *create_eq_scheme() {
+
+  Type *var_a = tvar("a");
+  TypeClass *eq = talloc(sizeof(TypeClass));
+  *eq = (TypeClass){
+      .name = TYPE_NAME_TYPECLASS_EQ,
+      .rank = 0.0,
+  };
+
+  var_a->required = eq;
+
+  Type *f = &t_bool;
+  f = type_fn(var_a, f);
+  f = type_fn(var_a, f);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = f};
+
+  return scheme;
+}
+
+Scheme *create_ord_scheme() {
+
+  Type *var_a = tvar("a");
+  TypeClass *ord = talloc(sizeof(TypeClass));
+  *ord = (TypeClass){
+      .name = TYPE_NAME_TYPECLASS_ORD,
+      .rank = 0.0,
+  };
+
+  var_a->required = ord;
+
+  Type *f = &t_bool;
+  f = type_fn(var_a, f);
+  f = type_fn(var_a, f);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = f};
+
+  return scheme;
+}
+Scheme *create_id_scheme() {
+
+  Type *var_a = tvar("a");
+  Type *full_type = type_fn(var_a, var_a); // a → a
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = full_type};
+
+  return scheme;
+}
+
+void initialize_builtin_schemes() {
+
+  static TypeClass tc_int[] = {{
+                                   .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                   .rank = 0.0,
+                               },
+                               {
+                                   .name = TYPE_NAME_TYPECLASS_ORD,
+                                   .rank = 0.0,
+                               },
+                               {
+                                   .name = TYPE_NAME_TYPECLASS_EQ,
+                                   .rank = 0.0,
+                               }};
+  typeclasses_extend(&t_int, tc_int);
+  typeclasses_extend(&t_int, tc_int + 1);
+  typeclasses_extend(&t_int, tc_int + 2);
+
+  static TypeClass tc_uint64[] = {{
+                                      .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                      .rank = 1.0,
+                                  },
+                                  {
+                                      .name = TYPE_NAME_TYPECLASS_ORD,
+                                      .rank = 1.0,
+                                  },
+                                  {
+                                      .name = TYPE_NAME_TYPECLASS_EQ,
+                                      .rank = 1.0,
+                                  }};
+
+  typeclasses_extend(&t_uint64, tc_uint64);
+  typeclasses_extend(&t_uint64, tc_uint64 + 1);
+  typeclasses_extend(&t_uint64, tc_uint64 + 2);
+
+  static TypeClass tc_num[] = {{
+
+                                   .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                   .rank = 2.0,
+                               },
+                               {
+                                   .name = TYPE_NAME_TYPECLASS_ORD,
+                                   .rank = 2.0,
+                               },
+                               {
+                                   .name = TYPE_NAME_TYPECLASS_EQ,
+                                   .rank = 2.0,
+                               }};
+
+  typeclasses_extend(&t_num, tc_num);
+  typeclasses_extend(&t_num, tc_num + 1);
+  typeclasses_extend(&t_num, tc_num + 2);
+
+  static TypeClass TCEq_bool = {
+      .name = TYPE_NAME_TYPECLASS_EQ,
+      .rank = 0.0,
+  };
+
+  typeclasses_extend(&t_bool, &TCEq_bool);
+
+  ht_init(&builtin_schemes);
+  Scheme *arithmetic_scheme = create_arithmetic_scheme();
+  add_builtin_scheme("+", arithmetic_scheme);
+  add_builtin_scheme("-", arithmetic_scheme);
+  add_builtin_scheme("*", arithmetic_scheme);
+  add_builtin_scheme("/", arithmetic_scheme);
+  add_builtin_scheme("%", arithmetic_scheme);
+
+  Scheme *eq_scheme = create_eq_scheme();
+  add_builtin_scheme("==", eq_scheme);
+  add_builtin_scheme("!=", eq_scheme);
+
+  Scheme *ord_scheme = create_ord_scheme();
+
+  add_builtin_scheme(">", ord_scheme);
+  add_builtin_scheme("<", ord_scheme);
+  add_builtin_scheme(">=", ord_scheme);
+  add_builtin_scheme("<=", ord_scheme);
+  add_builtin_scheme("id", create_id_scheme());
+}
+
+Scheme *lookup_builtin_scheme(const char *name) {
+  Scheme *builtin =
+      ht_get_hash(&builtin_schemes, name, hash_string(name, strlen(name)));
+  return builtin;
+}

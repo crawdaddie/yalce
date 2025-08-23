@@ -184,7 +184,4 @@ void some_function() {
     });
 }
 
-// String operations (if string.h included):
-#include <string.h>
-char *name_copy = ARENA_STRDUP(ea, "variable_name");
 */

@@ -1143,12 +1143,12 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 }
 
 Ast *ast_range_expression(Ast *from, Ast *to) {
-
   Ast *range = Ast_new(AST_RANGE_EXPRESSION);
   range->data.AST_RANGE_EXPRESSION.from = from;
   range->data.AST_RANGE_EXPRESSION.to = to;
   return range;
 }
+
 Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body) {
   Ast *loop = Ast_new(AST_LOOP);
   loop->data.AST_LET.binding = binding;
@@ -1156,6 +1156,7 @@ Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body) {
   loop->data.AST_LET.in_expr = body;
   return loop;
 }
+
 Ast *ast_assignment(Ast *var, Ast *val) {
   return ast_binop(TOKEN_ASSIGNMENT, var, val);
 }

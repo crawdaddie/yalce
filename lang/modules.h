@@ -2,6 +2,7 @@
 #define _LANG_MODULES_H
 #include "ht.h"
 #include "parse.h"
+#include "types/inference.h"
 #include "types/type.h"
 extern ht module_registry;
 void init_module_registry();

@@ -91,7 +91,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return codegen_simple_enum_member(enum_type, chars, ctx, module, builder);
 
     } else if (strcmp(chars, "None") == 0) {
-      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
+      LLVMTypeRef llvm_type = type_to_llvm_type(ast->term, ctx, module);
       LLVMValueRef v = LLVMGetUndef(llvm_type);
       v = LLVMBuildInsertValue(builder, v, LLVMConstInt(LLVMInt8Type(), 1, 0),
                                0, "insert None tag");
@@ -134,19 +134,20 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_GENERIC_FUNCTION: {
-    LLVMValueRef f = get_specific_callable(sym, ast->md, ctx, module, builder);
+    LLVMValueRef f =
+        get_specific_callable(sym, ast->term, ctx, module, builder);
     return f;
   }
 
   case STYPE_LOCAL_VAR: {
     if (sym->storage != NULL) {
-      LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
+      LLVMTypeRef llvm_type = type_to_llvm_type(ast->term, ctx, module);
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
     }
     return sym->val;
   }
   case STYPE_VARIANT_TYPE: {
-    return codegen_adt_member(ast->md, chars, ctx, module, builder);
+    return codegen_adt_member(ast->term, chars, ctx, module, builder);
   }
 
   default: {
@@ -156,7 +157,7 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 
 JITSymbol *create_generic_fn_symbol(Ast *fn_ast, JITLangCtx *ctx) {
-  JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, fn_ast->md, NULL, NULL);
+  JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, fn_ast->term, NULL, NULL);
   sym->symbol_data.STYPE_GENERIC_FUNCTION.ast = fn_ast;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
@@ -223,7 +224,7 @@ bool is_array_at(Ast *expr) {
   return false;
 }
 Type *array_type(Ast *expr) {
-  Type *arr = expr->data.AST_APPLICATION.args->md;
+  Type *arr = expr->data.AST_APPLICATION.args->term;
   if (arr->kind == T_CONS && is_array_type(arr) &&
       arr->data.T_CONS.args[0]->kind == T_FN) {
     return arr->data.T_CONS.args[0];
@@ -236,7 +237,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
   LLVMValueRef expr_val;
-  Type *expr_type = expr->md;
+  Type *expr_type = expr->term;
 
   if (binding == NULL && expr->tag == AST_IMPORT && in_expr) {
 
@@ -392,7 +393,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   expr_val = codegen(expr, outer_ctx, module, builder);
 
   if (!expr_val) {
-    print_type_err(expr->md);
+    print_type_err(expr->term);
     fprintf(stderr, "Error - could not compile value for binding to %s\n",
             binding->data.AST_IDENTIFIER.value);
     print_codegen_location();

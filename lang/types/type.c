@@ -5,7 +5,9 @@
 #include <string.h>
 
 static int type_var_counter = 0;
+
 void reset_type_var_counter() { type_var_counter = 0; }
+
 Type *next_tvar() {
   Type *tvar = talloc(sizeof(Type));
   char *tname = talloc(sizeof(char) * 5);
@@ -18,7 +20,6 @@ Type *next_tvar() {
   return tvar;
 }
 
-Type *env_lookup(TypeEnv *env, const char *name);
 void reset_type_var_counter();
 Type *create_option_type(Type *option_of);
 
@@ -108,16 +109,6 @@ Type t_opt_map_sig =
     MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&TVAR("opt_var"), &TVAR("opt_var_next")),
                    &TOPT(&TVAR("opt_var")), &TVAR("opt_var_next"));
 
-_binop_map binop_map[_NUM_BINOPS] = {
-    {TYPE_NAME_OP_ADD, &t_add}, {TYPE_NAME_OP_SUB, &t_sub},
-    {TYPE_NAME_OP_MUL, &t_mul}, {TYPE_NAME_OP_DIV, &t_div},
-    {TYPE_NAME_OP_MOD, &t_mod}, {TYPE_NAME_OP_LT, &t_lt},
-    {TYPE_NAME_OP_GT, &t_gt},   {TYPE_NAME_OP_LTE, &t_lte},
-    {TYPE_NAME_OP_GTE, &t_gte}, {TYPE_NAME_OP_EQ, &t_eq},
-    {TYPE_NAME_OP_NEQ, &t_neq}, {TYPE_NAME_OP_LIST_PREPEND, &t_list_prepend},
-};
-
-//
 static char *type_name_mapping[] = {
     [T_INT] = TYPE_NAME_INT,    [T_UINT64] = TYPE_NAME_UINT64,
     [T_NUM] = TYPE_NAME_DOUBLE, [T_BOOL] = TYPE_NAME_BOOL,
@@ -128,6 +119,15 @@ char *tc_list_to_string(Type *t, char *buffer) {
   if (t->implements != NULL) {
     buffer = strncat(buffer, " [", 2);
     for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
+      buffer = strncat(buffer, tc->name, strlen(tc->name));
+      buffer = strncat(buffer, ", ", 2);
+    }
+    buffer = strncat(buffer, "]", 1);
+  }
+
+  if (t->required != NULL) {
+    buffer = strncat(buffer, " [requires ", 11);
+    for (TypeClass *tc = t->required; tc != NULL; tc = tc->next) {
       buffer = strncat(buffer, tc->name, strlen(tc->name));
       buffer = strncat(buffer, ", ", 2);
     }
@@ -429,36 +429,23 @@ char *type_to_string(Type *t, char *buffer) {
 }
 
 void print_tc_list_to_stream(Type *t, FILE *stream) {
-  if (t->implements == NULL) {
-    return;
-  }
-
-  fprintf(stream, " with ");
-
-  TypeClass *implements = t->implements;
-  int first = 1;
-
-  while (implements != NULL) {
-    if (!first) {
-      fprintf(stream, ", ");
+  if (t->required) {
+    fprintf(stream, " [requires: ");
+    for (TypeClass *required = t->required; required;
+         required = required->next) {
+      fprintf(stream, "%s, ", required->name);
     }
 
-    // Print typeclass name
-    fprintf(stream, "%s", implements->name);
+    fprintf(stream, "]");
+  }
 
-    // // Print typeclass arguments if any
-    // if (implements->num_args > 0) {
-    //   fprintf(stream, " ");
-    //   for (int i = 0; i < implements->num_args; i++) {
-    //     print_type_to_stream(implements->args[i], stream);
-    //     if (i < implements->num_args - 1) {
-    //       fprintf(stream, " ");
-    //     }
-    //   }
-    // }
+  if (t->implements) {
+    fprintf(stream, " [implements: ");
+    for (TypeClass *impl = t->implements; impl; impl = impl->next) {
+      fprintf(stream, "%s, ", impl->name);
+    }
 
-    first = 0;
-    implements = implements->next;
+    fprintf(stream, "]");
   }
 }
 void print_type_to_stream(Type *t, FILE *stream) {
@@ -579,7 +566,6 @@ void print_type_to_stream(Type *t, FILE *stream) {
         }
       }
     }
-    print_tc_list_to_stream(t, stream);
     break;
   }
   case T_VAR: {
@@ -591,7 +577,6 @@ void print_type_to_stream(Type *t, FILE *stream) {
       fprintf(stream, "%s", t->data.T_VAR);
     }
 
-    print_tc_list_to_stream(t, stream);
     break;
   }
 
@@ -635,6 +620,8 @@ void print_type_to_stream(Type *t, FILE *stream) {
     }
   }
   }
+
+  print_tc_list_to_stream(t, stream);
 }
 
 // Updated print functions that use the stream-based approach
@@ -798,8 +785,9 @@ Type *tvar(const char *name) {
     fprintf(stderr, "Error allocating memory for type");
   }
   mem->kind = T_VAR;
-  mem->data.T_VAR = talloc(sizeof(char) * strlen(name));
+  mem->data.T_VAR = talloc(sizeof(char) * (strlen(name) + 1));
   memcpy(mem->data.T_VAR, name, strlen(name));
+
   return mem;
 }
 
@@ -862,72 +850,6 @@ bool is_generic(Type *t) {
 
   default:
     return false;
-  }
-}
-
-TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
-  TypeEnv *new_env = talloc(sizeof(TypeEnv));
-  new_env->name = name;
-  new_env->type = type;
-  new_env->next = env;
-  new_env->ref_count = 0;
-  new_env->is_fn_param = 0;
-  return new_env;
-}
-
-// Type *rec_env_lookup(TypeEnv *env, Type *var) {
-//   while (var && var->kind == T_VAR) {
-//     var = env_lookup(env, var->data.T_VAR);
-//   }
-//   return var;
-// }
-
-Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
-                            char **variant_name) {
-  while (env) {
-    if (is_variant_type(env->type)) {
-      Type *variant = env->type;
-      const char *_variant_name = env->name;
-      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-        Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-        if (variant_member->kind == T_CONS) {
-          mem_name = variant_member->data.T_CONS.name;
-        } else {
-          continue;
-        }
-
-        if (strcmp(mem_name, name) == 0) {
-          *idx = i;
-          *variant_name = _variant_name;
-          return variant;
-        }
-      }
-    }
-    if (strcmp(env->name, name) == 0) {
-      return env->type;
-    }
-
-    env = env->next;
-  }
-  return NULL;
-}
-
-void free_type_env(TypeEnv *env) {
-  // if (env->next) {
-  //   free_type_env(env->next);
-  //   free(env);
-  // }
-}
-
-void print_type_env(TypeEnv *env) {
-  if (!env) {
-    return;
-  }
-  printf("%s : ", env->name);
-  print_type(env->type);
-  if (env->next) {
-    print_type_env(env->next);
   }
 }
 
@@ -995,14 +917,6 @@ Type *deep_copy_type(const Type *original) {
     copy->data.T_FN.to = deep_copy_type(original->data.T_FN.to);
     break;
   }
-  return copy;
-}
-
-Type *copy_array_type(Type *t) {
-  int *size = array_type_size_ptr(t);
-
-  Type *copy = create_array_type(deep_copy_type(t->data.T_CONS.args[0]));
-  copy->kind = t->kind;
   return copy;
 }
 
@@ -1090,194 +1004,6 @@ Type *resolve_tc_rank(Type *type) {
     }
   }
   return max_ranked;
-}
-
-Type *resolve_type_in_env(Type *r, TypeEnv *env) {
-  if (r->closure_meta) {
-    r->closure_meta = resolve_type_in_env(r->closure_meta, env);
-  }
-  switch (r->kind) {
-  case T_VAR: {
-    Type *rr = env_lookup(env, r->data.T_VAR);
-    if (rr && rr->kind == T_VAR) {
-      return resolve_type_in_env(rr, env);
-    }
-
-    if (rr) {
-      *r = *rr;
-    }
-
-    return r;
-  }
-
-  case T_TYPECLASS_RESOLVE: {
-    bool still_generic = false;
-    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
-      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
-      if (r->data.T_CONS.args[i]->kind == T_VAR) {
-        still_generic = true;
-      }
-    }
-    if (!still_generic) {
-      return resolve_tc_rank(r);
-    }
-    return r;
-  }
-  case T_CONS: {
-    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
-      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
-    }
-    return r;
-  }
-
-  case T_FN: {
-    r->data.T_FN.from = resolve_type_in_env(r->data.T_FN.from, env);
-    r->data.T_FN.to = resolve_type_in_env(r->data.T_FN.to, env);
-    return r;
-  }
-
-  case T_INT:
-  case T_UINT64:
-  case T_NUM:
-  case T_CHAR:
-  case T_BOOL:
-  case T_VOID:
-  case T_STRING: {
-    return r;
-  }
-  }
-  return NULL;
-}
-// Type *resolve_type_in_env(Type *t, TypeEnv *env) {
-//   if (t->kind == T_VAR) {
-//     return env_lookup(env, t->data.T_VAR);
-//   }
-//   if (t->kind == T_CONS || t->kind == T_TYPECLASS_RESOLVE) {
-//     Type *cp = deep_copy_type(t);
-//     for (int i = 0; i < cp->data.T_CONS.num_args; i++) {
-//       cp->data.T_CONS.args[i] =
-//           resolve_type_in_env(cp->data.T_CONS.args[i], env);
-//     }
-//     return cp;
-//   }
-//
-//   return t;
-// }
-
-Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env) {
-  if (type->kind != T_TYPECLASS_RESOLVE) {
-    return type;
-  }
-
-  const char *comparison_tc = type->data.T_CONS.name;
-  Type *max_ranked = NULL;
-  double max_rank;
-  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-    Type *arg = type->data.T_CONS.args[i];
-    arg = resolve_type_in_env(arg, env);
-
-    if (max_ranked == NULL) {
-      max_ranked = arg;
-      max_rank = get_typeclass_rank(arg, comparison_tc);
-    } else if (get_typeclass_rank(arg, comparison_tc) >= max_rank) {
-      max_ranked = arg;
-      max_rank = get_typeclass_rank(arg, comparison_tc);
-    }
-  }
-  return max_ranked;
-}
-
-Type *replace_in(Type *type, Type *tvar, Type *replacement) {
-  switch (type->kind) {
-
-  case T_CONS: {
-
-    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-      type->data.T_CONS.args[i] =
-          replace_in(type->data.T_CONS.args[i], tvar, replacement);
-    }
-    return type;
-  }
-  case T_FN: {
-    type->data.T_FN.from = replace_in(type->data.T_FN.from, tvar, replacement);
-    type->data.T_FN.to = replace_in(type->data.T_FN.to, tvar, replacement);
-    return type;
-  }
-
-  case T_VAR: {
-    if (strcmp(type->data.T_VAR, tvar->data.T_VAR) == 0) {
-      return replacement;
-    }
-    return type;
-  }
-
-  default:
-    return type;
-  }
-}
-Type *resolve_generic_type(Type *t, TypeEnv *env) {
-  while (env) {
-    const char *key = env->name;
-    Type tvar = {T_VAR, .data = {.T_VAR = key}};
-    t = replace_in(t, &tvar, env->type);
-    env = env->next;
-  }
-
-  return t;
-}
-
-Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx) {
-  const char *name = member->data.T_CONS.name;
-
-  while (env) {
-    if (is_variant_type(env->type)) {
-      Type *variant = env->type;
-      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-        Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-        if (variant_member->kind == T_CONS) {
-          mem_name = variant_member->data.T_CONS.name;
-        } else {
-          continue;
-        }
-
-        if (strcmp(mem_name, name) == 0) {
-          *member_idx = i;
-          // printf("found member idx: %d\n", *member_idx);
-          return variant;
-        }
-      }
-    }
-
-    env = env->next;
-  }
-  return NULL;
-}
-
-Type *variant_lookup_name(TypeEnv *env, const char *name, int *member_idx) {
-  while (env) {
-    if (is_variant_type(env->type)) {
-      Type *variant = env->type;
-      for (int i = 0; i < variant->data.T_CONS.num_args; i++) {
-        Type *variant_member = variant->data.T_CONS.args[i];
-        const char *mem_name;
-        if (variant_member->kind == T_CONS) {
-          mem_name = variant_member->data.T_CONS.name;
-        } else {
-          continue;
-        }
-
-        if (strcmp(mem_name, name) == 0) {
-          // return copy_type(variant);
-          *member_idx = i;
-          return variant;
-        }
-      }
-    }
-
-    env = env->next;
-  }
-  return NULL;
 }
 
 Type *create_cons_type(const char *name, int len, Type **unified_args) {

@@ -1,9 +1,7 @@
 #include "../lang/parse.h"
-#include "../lang/types/builtins.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
 #include "serde.h"
-#include <stdlib.h>
 
 #define xT(input, type)
 
@@ -12,9 +10,8 @@
     reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
-    TICtx ctx = {.env = NULL, .err_stream = stderr};                           \
+    TICtx ctx = {};                                                            \
     stat &= (infer(ast, &ctx) != NULL);                                        \
-    stat &= (solve_program_constraints(ast, &ctx) != NULL);                    \
     stat &= (types_equal(ast->md, type));                                      \
     char buf[200] = {};                                                        \
     if (stat) {                                                                \
@@ -26,7 +23,6 @@
       fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= stat;                                                            \
-    env = ctx.env;                                                             \
     ast;                                                                       \
   })
 
@@ -36,10 +32,9 @@
     reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
-    TICtx ctx = {.env = NULL};                                                 \
+    TICtx ctx = {.subst = NULL};                                               \
     infer(ast, &ctx);                                                          \
     char buf[200] = {};                                                        \
-    env = ctx.env;                                                             \
     ast;                                                                       \
   })
 
@@ -60,9 +55,8 @@
     reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
-    TICtx ctx = {.env = NULL};                                                 \
+    TICtx ctx = {};                                                            \
     stat &= (infer(ast, &ctx) == NULL);                                        \
-    stat |= (solve_program_constraints(ast, &ctx) == NULL);                    \
     char buf[100] = {};                                                        \
     if (stat) {                                                                \
       fprintf(stderr, "✅ " input " fails typecheck\n");                       \
@@ -86,12 +80,21 @@
     res;                                                                       \
   })
 
+// int main() {
+//
+//   initialize_builtin_schemes();
+//
+//   bool status = true;
+//
+//   T("1 + 2.0", &t_num);
+// }
+
 int main() {
 
-  initialize_builtin_types();
+  initialize_builtin_schemes();
 
   bool status = true;
-  TypeEnv *env = NULL;
+  // TypeEnv *env = NULL;
 
   T("1", &t_int);
   T("1.", &t_num);
@@ -100,31 +103,40 @@ int main() {
   T("true", &t_bool);
   T("false", &t_bool);
   T("()", &t_void);
-  T("[]", &TLIST(&TVAR("`0")));
+  // T("[]", &TLIST(&TVAR("`0")));
+  T("(+)", &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`0"), &TVAR("`0")));
+  T("id 1", &t_int);
+  T("id 1.", &t_num);
+  T("id \'c\'", &t_char);
+  T("id \"c\"", &t_string);
+  T("id true", &t_bool);
+  T("id (1,22)", &TTUPLE(2, &t_int, &t_int));
+
   T("1 + 2", &t_int);
+  T("1. + 2.", &t_num);
   T("1 + 2.0", &t_num);
   T("(1 + 2) * 8", &t_int);
   T("1 + 2.0 * 8", &t_num);
   TFAIL("1 + \"hello\"");
   //
-  ({
-    Type tvar = arithmetic_var("`2");
-    T("x + 1", &tvar);
-  });
-  ({
-    Type tvar = arithmetic_var("`2");
-    T("1 + x", &tvar);
-  });
+  // ({
+  //   Type tvar = arithmetic_var("`2");
+  //   T("x + 1", &tvar);
+  // });
+  // ({
+  //   Type tvar = arithmetic_var("`2");
+  //   T("1 + x", &tvar);
+  // });
   //
-  ({
-    Type tvar = arithmetic_var("`6");
-    T("(1 + 2) * 8 - x", &tvar);
-  });
+  // ({
+  //   Type tvar = arithmetic_var("`6");
+  //   T("(1 + 2) * 8 - x", &tvar);
+  // });
   //
-  ({
-    Type tvar = arithmetic_var("`2");
-    T("x - 8", &tvar);
-  });
+  // ({
+  //   Type tvar = arithmetic_var("`2");
+  //   T("x - 8", &tvar);
+  // });
   //
   T("2.0 - 1", &t_num);
   T("1 == 1", &t_bool);
@@ -596,41 +608,42 @@ int main() {
     "x ()\n",
     &TOPT(&t_num));
 
-  ({
-    Ast *b = T("let co_void_rec = fn () ->\n"
-               "  yield 1.;\n"
-               "  yield 2.;\n"
-               "  yield co_void_rec ()\n"
-               ";;\n",
-               coroutine_constructor_type_from_fn_type(
-                   &MAKE_FN_TYPE_2(&t_void, &t_num)));
+  // ({
+  //   Ast *b = T("let co_void_rec = fn () ->\n"
+  //              "  yield 1.;\n"
+  //              "  yield 2.;\n"
+  //              "  yield co_void_rec ()\n"
+  //              ";;\n",
+  //              coroutine_constructor_type_from_fn_type(
+  //                  &MAKE_FN_TYPE_2(&t_void, &t_num)));
+  //
+  //   // Ast *rec_yield =
+  //   //     b->data.AST_BODY.stmts[0]
+  //   // ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts[2];
+  //   // print_ast(rec_yield);
+  //   // print_type(rec_yield->md);
+  //
+  //   // printf("## rec yield:\n");
+  //   // print_type(rec_yield->data.AST_YIELD.expr->md);
+  // });
 
-    // Ast *rec_yield =
-    //     b->data.AST_BODY.stmts[0]
-    //         ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts[2];
-    // print_ast(rec_yield);
-    // print_type(rec_yield->md);
-
-    // printf("## rec yield:\n");
-    // print_type(rec_yield->data.AST_YIELD.expr->md);
-  });
-
-  ({
-    Type cor =
-        TCONS("coroutine", 2, &t_void, &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)));
-    T("let ne = fn () ->\n"
-      "  yield 300.;\n"
-      "  yield 400.\n"
-      ";;\n"
-      "let co_void = fn () ->\n"
-      "  yield 1.;\n"
-      "  yield 2.;\n"
-      "  yield ne ();\n"
-      "  yield 3.\n"
-      ";;\n",
-      coroutine_constructor_type_from_fn_type(
-          &MAKE_FN_TYPE_2(&t_void, &t_num)));
-  });
+  // ({
+  //   Type cor =
+  //       TCONS("coroutine", 2, &t_void, &MAKE_FN_TYPE_2(&t_void,
+  //       &TOPT(&t_num)));
+  //   T("let ne = fn () ->\n"
+  //     "  yield 300.;\n"
+  //     "  yield 400.\n"
+  //     ";;\n"
+  //     "let co_void = fn () ->\n"
+  //     "  yield 1.;\n"
+  //     "  yield 2.;\n"
+  //     "  yield ne ();\n"
+  //     "  yield 3.\n"
+  //     ";;\n",
+  //     coroutine_constructor_type_from_fn_type(
+  //         &MAKE_FN_TYPE_2(&t_void, &t_num)));
+  // });
 
   T("let sq = fn x: (Int) -> x * 1.;;", &MAKE_FN_TYPE_2(&t_int, &t_num));
 

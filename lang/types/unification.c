@@ -1,455 +1,275 @@
 #include "./unification.h"
 #include "types/common.h"
-#include "types/type.h"
+#include <stdlib.h>
 #include <string.h>
-void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...);
-bool constraints_match(TypeConstraint *constraints, Type *t1, Type *t2) {
-  for (TypeConstraint *c = constraints; c; c = c->next) {
-    Type *_t1 = c->t1;
-    Type *_t2 = c->t2;
-    if (types_equal(t1, _t1) && types_equal(t2, _t2)) {
-      return true;
-    }
+
+Subst *subst_extend(Subst *s, const char *key, Type *type);
+Subst *compose_subst(Subst *s1, Subst *s2);
+Type *apply_substitution(Subst *subst, Type *t);
+Type *find_in_subst(Subst *subst, const char *name);
+
+void print_subst(Subst *subst);
+
+bool occurs_check(const char *var, Type *ty) {
+  switch (ty->kind) {
+  case T_VAR: {
+    return CHARS_EQ(ty->data.T_VAR, var);
   }
-  return false;
-}
-
-TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
-                                   Type *t2) {
-  if (constraints_match(constraints, t1, t2)) {
-    return constraints;
+  case T_FN: {
+    return occurs_check(var, ty->data.T_FN.from) ||
+           occurs_check(var, ty->data.T_FN.to);
   }
-
-  TypeConstraint *c = talloc(sizeof(TypeConstraint));
-  c->t1 = t1;
-  c->t2 = t2;
-  c->next = constraints;
-  return c;
-}
-
-void print_constraints(TypeConstraint *c) {
-  if (!c) {
-    return;
-  }
-  printf("constraints:\n");
-  for (TypeConstraint *con = c; con != NULL; con = con->next) {
-
-    if (con->t1->kind == T_VAR) {
-      printf("%s : ", con->t1->data.T_VAR);
-      print_type(con->t2);
-    } else {
-      print_type(con->t1);
-      print_type(con->t2);
-    }
-    // if (con->src) {
-    //   print_ast(con->src);
-    // };
-  }
-}
-
-Type *unify_in_ctx(Type *t1, Type *t2, TICtx *ctx, Ast *node) {
-
-  if (types_equal(t1, t2)) {
-    return t1;
-  }
-
-  // if (t1->kind == T_VAR && t2->kind != T_VAR) {
-  //   ctx->constraints = constraints_extend(ctx->constraints, t2, t1);
-  //   ctx->constraints->src = node;
-  //   return t2;
-  // }
-
-  if (IS_PRIMITIVE_TYPE(t1)) {
-    ctx->constraints = constraints_extend(ctx->constraints, t2, t1);
-    ctx->constraints->src = node;
-    return t1;
-  }
-
-  if (!is_generic(t2)) {
-    for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
-      if ((!CHARS_EQ(tc->name, "Constructor")) && !type_implements(t2, tc)) {
-        print_type(t1);
-        print_type(t2);
-        return type_error(
-            ctx, node,
-            "Typecheck error type %s does not implement typeclass '%s' \n",
-            t2->alias, tc->name);
-      }
-    }
-  }
-  if (is_list_type(t2) && t2->data.T_CONS.args[0]->kind == T_VAR &&
-      is_list_type(t1)) {
-
-    ctx->constraints = constraints_extend(
-        ctx->constraints, t2->data.T_CONS.args[0], t1->data.T_CONS.args[0]);
-    ctx->constraints->src = node;
-    return t1;
-  }
-  if (t2->kind == T_VAR) {
-    // printf("extend t2: ");
-    // print_type(t2);
-
-    for (TypeClass *tc = t1->implements; tc != NULL; tc = tc->next) {
-      // printf("with %s, ", tc->name);
-      typeclasses_extend(t2, tc);
-    }
-  }
-
-  if (is_pointer_type(t1) && is_pointer_type(t2)) {
-    return t1;
-  }
-
-  if (t1->kind == T_CONS && t2->kind == T_CONS &&
-      (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0)) {
-
-    int num_args = t1->data.T_CONS.num_args;
-    for (int i = 0; i < num_args; i++) {
-
-      Type *_t1 = t1->data.T_CONS.args[i];
-      Type *_t2 = t2->data.T_CONS.args[i];
-
-      if (!unify_in_ctx(_t1, _t2, ctx, node)) {
-        return NULL;
-      }
-    }
-  } else if (t1->kind == T_FN && t2->kind == T_FN) {
-
-    unify_in_ctx(t1->data.T_FN.from, t2->data.T_FN.from, ctx, node);
-    return unify_in_ctx(t1->data.T_FN.to, t2->data.T_FN.to, ctx, node);
-
-  } else if (t1->kind == T_CONS && IS_PRIMITIVE_TYPE(t2)) {
-    // printf("unify fail\n");
-    // print_type(t1);
-    // print_type(t2);
-    return t2;
-  } else if (t2->kind == T_VAR && t1->kind != T_VAR) {
-    return unify_in_ctx(t2, t1, ctx, node);
-  } else {
-    ctx->constraints = constraints_extend(ctx->constraints, t1, t2);
-    ctx->constraints->src = node;
-  }
-
-  return t1;
-}
-
-void print_subst(Substitution *c) {
-  if (!c) {
-    return;
-  }
-  for (Substitution *con = c; con != NULL; con = con->next) {
-
-    printf("subst: ");
-    if (con->from->kind == T_VAR) {
-      printf("%s with ", con->from->data.T_VAR);
-      print_type(con->to);
-    } else {
-      print_type(con->from);
-      printf("with ");
-      print_type(con->to);
-    }
-  }
-}
-
-bool occurs_check(Type *var, Type *t) {
-  if (!t) {
-    return false;
-  }
-
-  if (t->kind == T_VAR) {
-    return strcmp(var->data.T_VAR, t->data.T_VAR) == 0;
-  }
-
-  if (t->kind == T_FN) {
-    return occurs_check(var, t->data.T_FN.from) ||
-           occurs_check(var, t->data.T_FN.to);
-  }
-
-  if (t->kind == T_CONS || t->kind == T_TYPECLASS_RESOLVE) {
-    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      if (occurs_check(var, t->data.T_CONS.args[i])) {
+  case T_CONS: {
+    for (int i = 0; i < ty->data.T_CONS.num_args; i++) {
+      if (occurs_check(var, ty->data.T_CONS.args[i])) {
         return true;
       }
     }
-  }
-
-  return false;
-}
-
-Type *apply_substitution(Substitution *subst, Type *t) {
-  if (!subst) {
-    return t;
-  }
-
-  if (!t) {
-    return NULL;
-  }
-
-  switch (t->kind) {
-
-  case T_INT:
-  case T_UINT64:
-  case T_NUM:
-  case T_CHAR:
-  case T_BOOL:
-  case T_VOID:
-  case T_STRING: {
-    return t;
-  }
-  case T_VAR: {
-    if (t->is_recursive_type_ref) {
-      return t;
-    }
-    Substitution *s = subst;
-
-    while (s) {
-      if (types_equal(s->from, t)) {
-        // printf("\n\n");
-        // print_type(t);
-        // printf("apply subst\n");
-        // print_type(subst->from);
-        // printf(" -> ");
-        // print_type(subst->to);
-        Type *to = s->to;
-        // if (to->kind == T_CONS &&
-        //     CHARS_EQ(t->data.T_VAR, to->data.T_CONS.name)) {
-        //   return to;
-        // }
-
-        if (is_generic(to)) {
-          Type *t = apply_substitution(subst, to);
-          // printf("returning t\n");
-          // print_type(t);
-          return t;
-        } else {
-          return to;
-        }
-      }
-      s = s->next;
-    }
-    break;
-  }
-  case T_TYPECLASS_RESOLVE: {
-    // printf("apply subst tc resolve\n");
-    // print_type(t);
-    // print_subst(subst);
-
-    Type *new_t = talloc(sizeof(Type));
-
-    *new_t = *t;
-
-    new_t->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
-    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      new_t->data.T_CONS.args[i] =
-          apply_substitution(subst, t->data.T_CONS.args[i]);
-    }
-    return resolve_tc_rank(new_t);
-  }
-
-  case T_CONS: {
-    Type *new_t = talloc(sizeof(Type));
-    *new_t = *t;
-    new_t->data.T_CONS.args = talloc(sizeof(Type *) * t->data.T_CONS.num_args);
-    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      new_t->data.T_CONS.args[i] =
-          apply_substitution(subst, t->data.T_CONS.args[i]);
-    }
-    return new_t;
-  }
-  case T_FN: {
-    Type *new_t = talloc(sizeof(Type));
-    *new_t = *t;
-    new_t->data.T_FN.from = apply_substitution(subst, t->data.T_FN.from);
-    new_t->data.T_FN.to = apply_substitution(subst, t->data.T_FN.to);
-    if (new_t->closure_meta) {
-      new_t->closure_meta = apply_substitution(subst, new_t->closure_meta);
-    }
-    return new_t;
+    return false;
   }
   default: {
-    // printf("apply subst\n");
-    // print_type(t);
-    // print_subst(subst);
-    break;
+    return false;
   }
   }
-  return t;
+}
+// Add a constraint to the result
+void add_constraint(UnifyResult *result, Type *var, Type *type) {
+  Constraint *constraint = talloc(sizeof(Constraint));
+  *constraint =
+      (Constraint){.var = var, .type = type, .next = result->constraints};
+  result->constraints = constraint;
 }
 
-Type *tcr_make_non_degenerate(Type *t) {
-  if (t->kind == T_TYPECLASS_RESOLVE &&
-      types_equal(t->data.T_CONS.args[0], t->data.T_CONS.args[1])) {
-    return t->data.T_CONS.args[0];
-  }
-  return t;
+Constraint *constraints_extend(Constraint *constraints, Type *var, Type *type) {
+  Constraint *constraint = talloc(sizeof(Constraint));
+  *constraint = (Constraint){.var = var, .type = type, .next = constraints};
+  return constraint;
 }
 
-Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2) {
-  t2 = tcr_make_non_degenerate(t2);
+// Simple constraint list merging
+Constraint *merge_constraints(Constraint *list1, Constraint *list2) {
+  if (!list1)
+    return list2;
+  if (!list2)
+    return list1;
+
+  // Find end of list1 and append list2
+  Constraint *current = list1;
+  while (current->next) {
+    current = current->next;
+  }
+  current->next = list2;
+
+  return list1;
+}
+
+// Print all collected constraints
+void print_constraints(Constraint *constraints) {
+  printf("Collected constraints:\n");
+  if (!constraints) {
+    printf("  (none)\n");
+    return;
+  }
+
+  for (Constraint *c = constraints; c; c = c->next) {
+    printf("  %s := ", c->var->data.T_VAR);
+    print_type(c->type);
+  }
+}
+
+// Pure constraint collection unification - NO SOLVING
+int unify(Type *t1, Type *t2, UnifyResult *unify_res) {
+  // printf("Unifying: ");
+  // print_type(t1);
+  // printf(" ~ ");
+  // print_type(t2);
+  // printf("\n");
 
   if (types_equal(t1, t2)) {
-    return subst;
-  }
-  if (!is_generic(t1) && is_generic(t2)) {
-
-    return substitutions_extend(subst, t2, t1);
-  }
-  if (IS_PRIMITIVE_TYPE(t1) && !IS_PRIMITIVE_TYPE(t2)) {
-    return substitutions_extend(subst, t2, t1);
+    // No constraints needed for identical types
+    return 0;
   }
 
-  Substitution *new_subst = talloc(sizeof(Substitution));
-  new_subst->from = t1;
-  new_subst->to = t2;
-  new_subst->next = subst;
+  // Case 1: First type is a variable - COLLECT CONSTRAINT
+  if (t1->kind == T_VAR) {
+    if (occurs_check(t1->data.T_VAR, t2)) {
+      return 1; // Occurs check failure
+    }
 
+    add_constraint(unify_res, t1, t2);
+    return 0;
+  }
+
+  // Case 2: Second type is a variable - COLLECT CONSTRAINT
+  if (t2->kind == T_VAR) {
+    if (occurs_check(t2->data.T_VAR, t1)) {
+      return 1; // Occurs check failure
+    }
+
+    add_constraint(unify_res, t2, t1);
+    return 0;
+  }
+
+  // Case 3: Function types - recurse and merge constraints
+  if (t1->kind == T_FN && t2->kind == T_FN) {
+    // Unify parameter types
+    UnifyResult ur1 = {.subst = NULL, .constraints = NULL, .inf = NULL};
+    if (unify(t1->data.T_FN.from, t2->data.T_FN.from, &ur1) != 0) {
+      return 1;
+    }
+
+    // Unify return types
+    UnifyResult ur2 = {.subst = NULL, .constraints = NULL, .inf = NULL};
+    if (unify(t1->data.T_FN.to, t2->data.T_FN.to, &ur2) != 0) {
+      return 1;
+    }
+
+    // Merge all constraints (don't solve them)
+    unify_res->constraints =
+        merge_constraints(unify_res->constraints, ur1.constraints);
+    unify_res->constraints =
+        merge_constraints(unify_res->constraints, ur2.constraints);
+
+    return 0;
+  }
+
+  // Case 4: Constructor types - recurse and merge constraints
+  if (t1->kind == T_CONS && t2->kind == T_CONS) {
+    if (!CHARS_EQ(t1->data.T_CONS.name, t2->data.T_CONS.name) ||
+        t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+      return 1;
+    }
+
+    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+      UnifyResult ur = {.subst = NULL, .constraints = NULL, .inf = NULL};
+      if (unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], &ur) != 0) {
+        return 1;
+      }
+
+      // Merge constraints from this argument
+      unify_res->constraints =
+          merge_constraints(unify_res->constraints, ur.constraints);
+    }
+
+    return 0;
+  }
+
+  // Case 5: Two concrete types - this will be handled by constraint solver
+  // later
+  if (t1->kind != T_VAR && t2->kind != T_VAR) {
+    printf("Two concrete types - cannot unify directly: ");
+    print_type(t1);
+    printf(" vs ");
+    print_type(t2);
+    printf("\n");
+    return 1;
+  }
+
+  return 1; // Unification failure
+}
+
+// Helper: Update a substitution by replacing/updating a variable's binding
+Subst *update_substitution(Subst *subst, const char *var, Type *new_type) {
+  // Remove old binding if it exists
+  Subst *new_subst = NULL;
+
+  for (Subst *s = subst; s; s = s->next) {
+    if (!CHARS_EQ(s->var, var)) {
+      // Keep bindings for other variables
+      new_subst = subst_extend(new_subst, s->var, s->type);
+    }
+  }
+
+  // Add new binding
+  new_subst = subst_extend(new_subst, var, new_type);
   return new_subst;
 }
-
-bool cons_types_match(Type *t1, Type *t2) {
-
-  return (t1->kind == T_CONS) && (t2->kind == T_CONS) &&
-         (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) == 0);
+TypeClass *find_typeclass(TypeClass *impls, const char *name) {
+  for (TypeClass *tc = impls; tc; tc = tc->next) {
+    if (CHARS_EQ(tc->name, name)) {
+      return tc;
+    }
+  }
+  return NULL;
 }
 
-Substitution *solve_constraints(TypeConstraint *constraints) {
-  Substitution *subst = NULL;
-  // if (constraints && constraints->t1->kind == T_VAR &&
-  //     CHARS_EQ(constraints->t1->data.T_VAR, "`44")) {
-  //   printf("solve constraints\n");
-  //   print_type(constraints->t1);
-  //   print_type(constraints->t2);
-  // }
+Type *find_promoted_type(Type *var, Type *existing, Type *other_type) {
 
+  if (other_type->kind == T_VAR && existing->kind != T_VAR) {
+    return existing;
+  }
+
+  TypeClass *tc = var->required;
+
+  TypeClass *ex_tc = find_typeclass(existing->implements, tc->name);
+  TypeClass *other_tc = find_typeclass(other_type->implements, tc->name);
+  if (!other_tc) {
+    return NULL;
+  }
+  if (ex_tc->rank >= other_tc->rank) {
+    return existing;
+  } else {
+    return other_type;
+  }
+
+  return existing;
+}
+
+// Expected trace for your constraints:
+/*
+Processing constraint: `0 := Int
+  First binding for `0
+
+Processing constraint: `0 := Double
+  Variable `0 already bound to: Int
+  Trying to promote with: Double
+  Promoted to: Double
+
+Processing constraint: `0 := `1
+  (This is variable-to-variable, handled in step 2)
+
+Resolving variable constraint: `0 := `1
+  (But `1 is not bound yet, so skip)
+
+No more variable constraints to resolve.
+
+FINAL SOLUTION:
+  `0 := Double
+  `1 := Double (because `1 := `0 and `0 := Double)
+*/
+
+Subst *solve_constraints(Constraint *constraints) {
+
+  Subst *subst = NULL;
   while (constraints) {
+    Constraint *constr = constraints;
+    // Check if we already have a binding for this variable
+    Type *existing = find_in_subst(subst, constr->var->data.T_VAR);
 
-    Type *t1 = apply_substitution(subst, constraints->t1);
-    Type *t2 = apply_substitution(subst, constraints->t2);
-
-    if (!t1 || !t2) {
-      constraints = constraints->next;
-      continue;
-    }
-
-    if (t1->kind == T_CONS && ((1 << t2->kind) & TYPE_FLAGS_PRIMITIVE)) {
-
-      // TICtx _ctx = {.err_stream = NULL};
-      // return type_error(
-      //     &_ctx, constraints->src,
-      //     "Cannot constrain cons type to primitive simple type\n");
-      return NULL;
-    }
-
-    if (t1->kind == t2->kind && IS_PRIMITIVE_TYPE(t1)) {
-      constraints = constraints->next;
-      continue;
-    }
-
-    if (t1->kind == T_VAR) {
-      if (occurs_check(t1, t2)) {
-        constraints = constraints->next;
-        continue;
-      }
-      subst = substitutions_extend(subst, t1, t2);
-    } else if (t2->kind == T_VAR) {
-      if (occurs_check(t2, t1)) {
-        constraints = constraints->next;
-        continue;
-      }
-
-      subst = substitutions_extend(subst, t2, t1);
-
-    } else if (IS_PRIMITIVE_TYPE(t1) && t2->kind == T_TYPECLASS_RESOLVE) {
-      for (int i = 0; i < t2->data.T_CONS.num_args; i++) {
-        subst = substitutions_extend(subst, t2->data.T_CONS.args[i], t1);
-      }
-    } else if (IS_PRIMITIVE_TYPE(t2) && t1->kind == T_TYPECLASS_RESOLVE) {
-      for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-        subst = substitutions_extend(subst, t1->data.T_CONS.args[i], t2);
-      }
-    } else if (cons_types_match(t1, t2)) {
-
-      if (is_variant_type(t1) && is_variant_type(t2)) {
-        for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-          Type *mem1 = t1->data.T_CONS.args[i];
-          Type *mem2 = t2->data.T_CONS.args[i];
-
-          if (mem1->kind == T_CONS && mem1->data.T_CONS.num_args > 0) {
-            TypeConstraint *next = talloc(sizeof(TypeConstraint));
-            next->next = constraints->next;
-            next->t1 = mem1;
-            next->t2 = mem2;
-            next->src = constraints->src;
-            constraints->next = next;
-            continue;
-          }
-        }
-      } else if (is_generic(t1) && (!is_generic(t2))) {
-
-        for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-          Type *x = t1->data.T_CONS.args[i];
-          Type *y = t2->data.T_CONS.args[i];
-          if (x->kind == T_FN) {
-            TypeConstraint *next = talloc(sizeof(TypeConstraint));
-            next->next = constraints->next;
-            next->t1 = x;
-            next->t2 = y;
-            next->src = constraints->src;
-            constraints->next = next;
-          } else {
-            subst = substitutions_extend(subst, x, y);
-          }
-        }
-
-      } else {
-        for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-          if (!is_pointer_type(t2)) {
-            subst = substitutions_extend(subst, t1->data.T_CONS.args[i],
-                                         t2->data.T_CONS.args[i]);
-          }
-        }
-      }
-    } else if (t1->kind == T_FN && t2->kind == T_FN &&
-               t2->is_coroutine_instance && !is_generic(t2)) {
-      for (Substitution *s = subst; s != NULL; s = s->next) {
-        if (types_equal(t1, s->to)) {
-          // printf("replace sub ");
-          // print_type(s->from);
-          // print_type(s->to);
-          s->to = t2;
-          break;
-        }
-      }
-      // *t1 = *t2;
-    }
-
-    else if (t1->kind == T_FN && t2->kind == T_FN) {
-
-      Type *f1 = t1;
-      Type *f2 = t2;
-
-      while (f1->kind == T_FN && f2->kind == T_FN) {
-        subst =
-            substitutions_extend(subst, f1->data.T_FN.from, f2->data.T_FN.from);
-
-        f1 = f1->data.T_FN.to;
-        f2 = f2->data.T_FN.to;
-      }
-
-      subst = substitutions_extend(subst, f1, f2);
-    } else if (t1->kind == T_EMPTY_LIST && is_list_type(t2)) {
-      *t1 = *t2;
-    } else if (is_pointer_type(t1) && t2->kind == T_FN) {
-    } else if (is_pointer_type(t1) && t2->kind == T_CONS) {
-    } else if (is_coroutine_type(t1) && t2->kind == T_VOID) {
-    } else if (is_coroutine_type(t1) && is_pointer_type(t2)) {
+    if (!existing) {
+      subst = subst_extend(subst, constr->var->data.T_VAR,
+                           apply_substitution(subst, constr->type));
     } else {
-      TICtx _ctx = {.err_stream = NULL};
-      if (!(IS_PRIMITIVE_TYPE(t1) && IS_PRIMITIVE_TYPE(t2))) {
-        type_error(&_ctx, constraints->src,
-                   "Constraint solving type mismatch\n");
-        print_type_err(t1);
-        fprintf(stderr, " != ");
-        print_type_err(t2);
+
+      if (constr->type->kind == T_VAR) {
+        Type *lhs = constr->type;
+        Type *rhs = constr->var;
+        subst = subst_extend(subst, lhs->data.T_VAR,
+                             apply_substitution(subst, rhs));
+
+      } else if (!is_generic(constr->type)) {
+
+        // Variable already has a binding - need to promote
+        Type *promoted =
+            find_promoted_type(constr->var, existing, constr->type);
+
+        if (promoted) {
+
+          subst = update_substitution(subst, constr->var->data.T_VAR, promoted);
+        } else {
+          printf("ERROR: Cannot promote types\n");
+          return NULL; // Constraint solving failed
+        }
       }
     }
 

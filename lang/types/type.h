@@ -10,20 +10,6 @@ typedef struct Type Type;
 void reset_type_var_counter();
 Type *next_tvar();
 
-typedef struct TypeConstraint {
-  Type *t1;
-  Type *t2;
-  struct TypeConstraint *next;
-  Ast *src;
-} TypeConstraint;
-
-typedef struct Method {
-  const char *name;
-  void *method;
-  size_t size;
-  Type *signature;
-} Method;
-
 enum TypeClassType { TC_FN, TC_STRUCTURAL };
 
 typedef struct TypeClass {
@@ -33,7 +19,6 @@ typedef struct TypeClass {
   struct TypeClass *next;
 } TypeClass;
 
-typedef struct TypeEnv TypeEnv;
 typedef struct Type Type;
 
 extern Type t_int;
@@ -139,17 +124,13 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_TYPECLASS_ARITHMETIC "Arithmetic"
 #define TYPE_NAME_TYPECLASS_EQ "Eq"
 #define TYPE_NAME_TYPECLASS_ORD "Ord"
-#define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
 
-#define TYPE_NAME_REF "mut"
 
 typedef struct _binop_map {
   const char *name;
   Type *binop_fn_type;
 } _binop_map;
 
-#define _NUM_BINOPS 12
-extern _binop_map binop_map[];
 // clang-format on
 //
 
@@ -176,6 +157,12 @@ extern _binop_map binop_map[];
     T_VAR, {.T_VAR = n},                                                       \
         .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC,     \
                                    .rank = 1000.},                             \
+  }
+
+#define req_arithmetic_var(n)                                                  \
+  (Type) {                                                                     \
+    T_VAR, {.T_VAR = n},                                                       \
+        .required = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC, .rank = 0.},        \
   }
 
 #define MAKE_TC_RESOLVE_2(tc, a, b)                                            \
@@ -218,8 +205,6 @@ extern _binop_map binop_map[];
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
 
 #define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none)
-
-typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
 
 // #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
 //   ((Type){                                                                     \
@@ -287,6 +272,9 @@ typedef struct Type {
 
   const char *alias;
   TypeClass *implements;
+  TypeClass *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
+                       //  be instantiated to t1 [requires: Arithmetic] ->
+                       // t1 [requires: Arithmetic] -> t1 [requires Arithmetic]
 
   void *constructor;
   // size_t constructor_size;
@@ -301,28 +289,6 @@ typedef struct Type {
   int yield_boundary;
   void *meta;
 } Type;
-
-// TypeEnv represents a mapping from variable names to their types
-typedef struct TypeEnv {
-  const char *name;
-  Type *type;
-  int ref_count;
-  int is_fn_param;
-  int is_recursive_fn_ref;
-  int yield_boundary;
-  struct TypeEnv *next;
-} TypeEnv;
-
-TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
-Type *rec_env_lookup(TypeEnv *env, Type *var);
-
-Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
-                            char **variant_name);
-
-bool variant_contains_type(Type *variant, Type *member, int *idx);
-void free_type_env(TypeEnv *env);
-void print_type_env(TypeEnv *env);
-Type *find_type_in_env(TypeEnv *env, const char *name);
 
 char *type_to_string(Type *t, char *buffer);
 
@@ -354,13 +320,7 @@ bool is_array_type(Type *type);
 Type *resolve_tc_rank(Type *type);
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement);
-Type *resolve_generic_type(Type *t, TypeEnv *env);
 bool is_variant_type(Type *type);
-Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx);
-Type *variant_lookup_name(TypeEnv *env, const char *name, int *member_idx);
-
-typedef struct VariantContext {
-} VariantContext;
 
 Type *create_cons_type(const char *name, int len, Type **unified_args);
 Type *create_option_type(Type *option_of);
@@ -369,16 +329,6 @@ bool is_option_type(Type *t);
 Type *type_of_option(Type *option);
 
 Type *get_builtin_type(const char *id_chars);
-
-typedef struct TypeMap {
-  Type *key;
-  Type *val;
-  struct TypeMap *next;
-} TypeMap;
-
-TypeMap *constraints_map_extend(TypeMap *map, Type *key, Type *val);
-void print_constraints_map(TypeMap *map);
-Type *constraints_map_lookup(TypeMap *map, Type *key);
 
 Type *ptr_of_type(Type *);
 
@@ -415,10 +365,6 @@ bool is_simple_enum(Type *t);
 
 bool fn_types_match(Type *t1, Type *t2);
 
-Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
-
-Type *resolve_type_in_env(Type *r, TypeEnv *env);
-
 bool application_is_partial(Ast *app);
 
 bool is_coroutine_type(Type *fn_type);
@@ -433,21 +379,4 @@ void typeclasses_extend(Type *t, TypeClass *tc);
 
 bool is_module(Type *t);
 
-typedef struct TICtx {
-  TypeEnv *env;
-  TypeConstraint *constraints;
-  Ast *current_fn_ast;
-  Type *yielded_type;
-  int scope;
-  int current_fn_scope;
-  const char *err;
-  FILE *err_stream; // Replace const char *err
-} TICtx;
-
-// Substitution map for type variables
-typedef struct Substitution {
-  Type *from; // Type variable
-  Type *to;   // Replacement type
-  struct Substitution *next;
-} Substitution;
 #endif

@@ -154,7 +154,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
     }
   }
 
-  Type *result_type = top_level_ast(*prog)->md;
+  Type *result_type = top_level_ast(*prog)->term;
 
   if (result_type == NULL) {
     printf("typecheck failed\n");
@@ -444,7 +444,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
 
     printf(COLOR_GREEN "> ");
 
-    Type *top_type = prog->md;
+    Type *top_type = prog->term;
 
     if (top_level_func == NULL) {
       print_type(top_type);

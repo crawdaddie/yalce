@@ -2,6 +2,7 @@
 #define _LANG_TYPE_BUILTINS_H
 #include "ht.h"
 #include "type.h"
+#include "types/inference.h"
 extern ht builtin_types;
 void initialize_builtin_types();
 void add_builtin(char *name, Type *t);
@@ -54,4 +55,6 @@ extern Type t_coroutine_end;
 
 extern Type t_use_or_finish;
 extern Type t_list_empty;
+
+Scheme *lookup_builtin_scheme(const char *name);
 #endif
