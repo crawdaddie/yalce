@@ -272,6 +272,7 @@ struct Ast {
     struct AST_EMPTY_LIST {
       ObjString type_id;
     } AST_EMPTY_LIST;
+
     struct AST_MATCH {
       Ast *expr;
       Ast *branches;

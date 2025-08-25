@@ -75,6 +75,7 @@ void add_builtin(char *name, Type *t);
 void print_builtin_types();
 
 Scheme generalize(Type *type, TypeEnv *env);
+Type *instantiate(Scheme *scheme, TICtx *ctx);
 
 Scheme *lookup_scheme(TypeEnv *env, const char *name);
 Type *find_in_subst(Subst *subst, const char *name);
@@ -83,4 +84,17 @@ Subst *compose_subst(Subst *s1, Subst *s2);
 TypeEnv *apply_subst_env(Subst *subst, TypeEnv *env);
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, VarList *names, Type *type);
+
+Type *apply_substitution(Subst *subst, Type *t);
+void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...);
+
+void print_subst(Subst *subst);
+
+void print_typescheme(Scheme scheme);
+void print_type_env(TypeEnv *env);
+
+bool varlist_contains(VarList *vs, const char *name);
+
+VarList *varlist_add(VarList *vars, const char *v);
+
 #endif

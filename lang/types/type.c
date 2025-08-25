@@ -759,6 +759,7 @@ void *talloc(size_t size) {
             type_var_counter);
     return NULL;
   }
+
   void *mem = _tstorage.data + _tstorage.size;
   for (int i = 0; i < size; i++) {
     *(char *)(mem + i) = 0;
@@ -967,6 +968,9 @@ bool is_tuple_type(Type *type) {
 }
 
 bool is_variant_type(Type *type) {
+  if (!type) {
+    return false;
+  }
   return type->kind == T_CONS &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0);
 }

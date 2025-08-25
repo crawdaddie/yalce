@@ -452,4 +452,4 @@ type_atom:
 void yyerror(const char *s) {
   fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, _cur_script);
 }
-#endif _LANG_TAB_Hparse
+#endif _LANG_TAB_H

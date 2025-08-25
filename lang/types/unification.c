@@ -34,6 +34,12 @@ bool occurs_check(const char *var, Type *ty) {
 }
 // Add a constraint to the result
 void add_constraint(UnifyResult *result, Type *var, Type *type) {
+  for (Constraint *c = result->constraints; c; c = c->next) {
+    if (types_equal(c->var, var) && types_equal(c->type, type)) {
+      return;
+    }
+  }
+
   Constraint *constraint = talloc(sizeof(Constraint));
   *constraint =
       (Constraint){.var = var, .type = type, .next = result->constraints};
@@ -77,13 +83,7 @@ void print_constraints(Constraint *constraints) {
   }
 }
 
-// Pure constraint collection unification - NO SOLVING
 int unify(Type *t1, Type *t2, UnifyResult *unify_res) {
-  // printf("Unifying: ");
-  // print_type(t1);
-  // printf(" ~ ");
-  // print_type(t2);
-  // printf("\n");
 
   if (types_equal(t1, t2)) {
     // No constraints needed for identical types
@@ -157,11 +157,11 @@ int unify(Type *t1, Type *t2, UnifyResult *unify_res) {
   // Case 5: Two concrete types - this will be handled by constraint solver
   // later
   if (t1->kind != T_VAR && t2->kind != T_VAR) {
-    printf("Two concrete types - cannot unify directly: ");
-    print_type(t1);
-    printf(" vs ");
-    print_type(t2);
-    printf("\n");
+    // printf("Two concrete types - cannot unify directly: ");
+    // print_type(t1);
+    // printf(" vs ");
+    // print_type(t2);
+    // printf("\n");
     return 1;
   }
 
@@ -170,6 +170,9 @@ int unify(Type *t1, Type *t2, UnifyResult *unify_res) {
 
 // Helper: Update a substitution by replacing/updating a variable's binding
 Subst *update_substitution(Subst *subst, const char *var, Type *new_type) {
+  if (new_type->kind == T_VAR) {
+    return subst;
+  }
   // Remove old binding if it exists
   Subst *new_subst = NULL;
 
@@ -180,10 +183,10 @@ Subst *update_substitution(Subst *subst, const char *var, Type *new_type) {
     }
   }
 
-  // Add new binding
   new_subst = subst_extend(new_subst, var, new_type);
   return new_subst;
 }
+
 TypeClass *find_typeclass(TypeClass *impls, const char *name) {
   for (TypeClass *tc = impls; tc; tc = tc->next) {
     if (CHARS_EQ(tc->name, name)) {
@@ -198,10 +201,17 @@ Type *find_promoted_type(Type *var, Type *existing, Type *other_type) {
   if (other_type->kind == T_VAR && existing->kind != T_VAR) {
     return existing;
   }
+  if (types_equal(existing, other_type)) {
+    return existing;
+  }
 
   TypeClass *tc = var->required;
+  if (!tc) {
+    return other_type;
+  }
 
   TypeClass *ex_tc = find_typeclass(existing->implements, tc->name);
+
   TypeClass *other_tc = find_typeclass(other_type->implements, tc->name);
   if (!other_tc) {
     return NULL;
@@ -215,65 +225,51 @@ Type *find_promoted_type(Type *var, Type *existing, Type *other_type) {
   return existing;
 }
 
-// Expected trace for your constraints:
-/*
-Processing constraint: `0 := Int
-  First binding for `0
-
-Processing constraint: `0 := Double
-  Variable `0 already bound to: Int
-  Trying to promote with: Double
-  Promoted to: Double
-
-Processing constraint: `0 := `1
-  (This is variable-to-variable, handled in step 2)
-
-Resolving variable constraint: `0 := `1
-  (But `1 is not bound yet, so skip)
-
-No more variable constraints to resolve.
-
-FINAL SOLUTION:
-  `0 := Double
-  `1 := Double (because `1 := `0 and `0 := Double)
-*/
-
 Subst *solve_constraints(Constraint *constraints) {
-
   Subst *subst = NULL;
+
   while (constraints) {
-    Constraint *constr = constraints;
-    // Check if we already have a binding for this variable
-    Type *existing = find_in_subst(subst, constr->var->data.T_VAR);
+    Constraint *current = constraints;
+    constraints = constraints->next;
+
+    const char *var_name = current->var->data.T_VAR;
+
+    Type *new_type = apply_substitution(subst, current->type);
+    Type *existing = find_in_subst(subst, var_name);
 
     if (!existing) {
-      subst = subst_extend(subst, constr->var->data.T_VAR,
-                           apply_substitution(subst, constr->type));
-    } else {
+      subst = subst_extend(subst, var_name, new_type);
+      continue;
+    }
 
-      if (constr->type->kind == T_VAR) {
-        Type *lhs = constr->type;
-        Type *rhs = constr->var;
-        subst = subst_extend(subst, lhs->data.T_VAR,
-                             apply_substitution(subst, rhs));
+    Type *existing_subst = apply_substitution(subst, existing);
+    if (types_equal(existing_subst, new_type)) {
+      continue;
+    }
 
-      } else if (!is_generic(constr->type)) {
+    UnifyResult ur = {.constraints = constraints};
 
-        // Variable already has a binding - need to promote
-        Type *promoted =
-            find_promoted_type(constr->var, existing, constr->type);
-
-        if (promoted) {
-
-          subst = update_substitution(subst, constr->var->data.T_VAR, promoted);
-        } else {
-          printf("ERROR: Cannot promote types\n");
-          return NULL; // Constraint solving failed
-        }
+    if (unify(existing_subst, new_type, &ur) != 0) {
+      Type *promoted =
+          find_promoted_type(current->var, existing_subst, new_type);
+      if (promoted) {
+        subst = update_substitution(subst, var_name, promoted);
+        continue;
+      } else {
+        return NULL;
       }
     }
 
-    constraints = constraints->next;
+    // Apply direct substitutions
+    if (ur.subst) {
+      for (Subst *s = ur.subst; s; s = s->next) {
+        subst = subst_extend(subst, s->var, s->type);
+      }
+    }
+
+    constraints = ur.constraints;
+    subst = update_substitution(subst, var_name, new_type);
+    continue;
   }
 
   return subst;

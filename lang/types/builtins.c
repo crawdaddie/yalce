@@ -719,7 +719,41 @@ Scheme *create_id_scheme() {
 
   return scheme;
 }
+Scheme *create_opt_scheme() {
 
+  Type *var = tvar("a");
+  Type *full_type = create_option_type(var);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = full_type};
+
+  return scheme;
+}
+Scheme *create_list_prepend_scheme() {
+
+  Type *var = tvar("a");
+  Type *list_type = create_list_type_of_type(var);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  Type *f = list_type;
+  f = type_fn(list_type, f);
+  f = type_fn(var, f);
+  *scheme = (Scheme){.vars = vars, .type = f};
+
+  return scheme;
+}
+
+void add_primitive_scheme(char *tname, Type *t) {
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = NULL, .type = t};
+  add_builtin_scheme(tname, scheme);
+}
 void initialize_builtin_schemes() {
 
   static TypeClass tc_int[] = {{
@@ -799,6 +833,26 @@ void initialize_builtin_schemes() {
   add_builtin_scheme(">=", ord_scheme);
   add_builtin_scheme("<=", ord_scheme);
   add_builtin_scheme("id", create_id_scheme());
+
+  add_primitive_scheme(TYPE_NAME_INT, &t_int);
+  add_primitive_scheme(TYPE_NAME_DOUBLE, &t_num);
+  add_primitive_scheme(TYPE_NAME_UINT64, &t_uint64);
+  add_primitive_scheme(TYPE_NAME_BOOL, &t_bool);
+  add_primitive_scheme(TYPE_NAME_STRING, &t_string);
+  add_primitive_scheme(TYPE_NAME_CHAR, &t_char);
+  add_primitive_scheme(TYPE_NAME_VOID, &t_void);
+  add_primitive_scheme(TYPE_NAME_PTR, &t_ptr);
+
+  Scheme *opt_scheme = create_opt_scheme();
+  add_builtin_scheme("Option", opt_scheme);
+  add_builtin_scheme("Some", opt_scheme);
+  add_builtin_scheme("None", opt_scheme);
+
+  Scheme *list_prepend_scheme = create_list_prepend_scheme();
+  add_builtin_scheme("::", list_prepend_scheme);
+
+  // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
+  // &t_list_var);
 }
 
 Scheme *lookup_builtin_scheme(const char *name) {
