@@ -142,7 +142,9 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     branch_envs[i] = apply_subst_env(subst, branch_envs[i]);
   }
 
-  UnifyResult body_ur = {.subst = NULL, .constraints = NULL, .inf = NULL};
+  UnifyResult body_ur = {.subst = NULL,
+                         .constraints = pattern_unification.constraints,
+                         .inf = NULL};
 
   for (int i = 0; i < num_cases; i++) {
     Ast *body_ast = ast->data.AST_MATCH.branches + i * 2 + 1;
@@ -166,6 +168,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
 
   Subst *body_constraint_solution;
   if (body_ur.constraints) {
+    print_constraints(body_ur.constraints);
     body_constraint_solution = solve_constraints(body_ur.constraints);
   }
 

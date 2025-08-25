@@ -70,6 +70,7 @@ Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, TypeEnv **env,
     const char *var_name = pattern->data.AST_IDENTIFIER.value;
 
     Scheme *ex_scheme = lookup_scheme(*env, var_name);
+
     if (ex_scheme) {
       return pattern_type;
     }
@@ -220,9 +221,13 @@ Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, TypeEnv **env,
         return NULL;
       }
 
+      printf("concrete list type\n");
+      print_ast(rest_pattern);
+      print_type(concrete_list_type);
       // Recursively bind tail to list type
       Type *tail_result =
           bind_pattern_recursive(rest_pattern, concrete_list_type, env, ctx);
+
       if (!tail_result) {
         return NULL;
       }

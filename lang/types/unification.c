@@ -3,10 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-Subst *subst_extend(Subst *s, const char *key, Type *type);
-Subst *compose_subst(Subst *s1, Subst *s2);
-Type *apply_substitution(Subst *subst, Type *t);
-Type *find_in_subst(Subst *subst, const char *name);
+// Subst *subst_extend(Subst *s, const char *key, Type *type);
+// Subst *compose_subst(Subst *s1, Subst *s2);
+// Type *apply_substitution(Subst *subst, Type *t);
+// Type *find_in_subst(Subst *subst, const char *name);
 
 void print_subst(Subst *subst);
 

@@ -80,24 +80,21 @@
     res;                                                                       \
   })
 
-// int __main() {
-//
-//   initialize_builtin_schemes();
-//
-//   bool status = true;
-//
-//   ({
-//     Type opt_int = TOPT(&t_int);
-//     T("let f = fn x ->\n"
-//       "match x with\n"
-//       "  | Some y -> y + 1\n"
-//       "  | None -> 0\n"
-//       "  ;;\n",
-//       &MAKE_FN_TYPE_2(&opt_int, &t_int));
-//   });
-// }
-
 int main() {
+
+  initialize_builtin_schemes();
+
+  bool status = true;
+
+  T("let f = fn l->\n"
+    "  match l with\n"
+    "    | x::_ -> x\n"
+    "    | [] -> 0\n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+}
+
+int _main() {
 
   initialize_builtin_schemes();
 
