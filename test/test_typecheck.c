@@ -80,13 +80,21 @@
     res;                                                                       \
   })
 
-// int main() {
+// int __main() {
 //
 //   initialize_builtin_schemes();
 //
 //   bool status = true;
 //
-//   T("1 + 2.0", &t_num);
+//   ({
+//     Type opt_int = TOPT(&t_int);
+//     T("let f = fn x ->\n"
+//       "match x with\n"
+//       "  | Some y -> y + 1\n"
+//       "  | None -> 0\n"
+//       "  ;;\n",
+//       &MAKE_FN_TYPE_2(&opt_int, &t_int));
+//   });
 // }
 
 int main() {
@@ -163,9 +171,10 @@ int main() {
   T("let x = 1 in let y = x + 1.0", &t_num);
   T("let x, y = (1, 2) in x", &t_int);
   T("let x::_ = [1,2,3] in x", &t_int);
-  //
+  T("let x::y::_ = [1, 2] in x", &t_int);
+  T("let x::y::_ = [1, 2] in x + y", &t_int);
   T("let z = [1, 2] in let x::_ = z in x", &t_int);
-  // TFAIL("let z = 1 in let x::_ = z in x");
+  TFAIL("let z = 1 in let x::_ = z in x");
 
   T("let f = fn a b -> 2;;", &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`1"), &t_int));
   T("let f = fn a: (Int) b: (Int) -> 2;;",
@@ -249,18 +258,18 @@ int main() {
   });
 
   ({
-    Type t0 = TVAR("`0");
-    Type t1 = TVAR("`1");
-    Type t2 = TVAR("`2");
+    Type t0 = TVAR("`1");
+    Type t1 = TVAR("`2");
+    Type t2 = TVAR("`3");
 
     T("let f = fn (x, y, z) -> (z, y, x);",
       &MAKE_FN_TYPE_2(&TTUPLE(3, &t0, &t1, &t2), &TTUPLE(3, &t2, &t1, &t0)));
   });
 
   ({
-    Type t0 = TVAR("`0");
-    Type t1 = TVAR("`1");
-    Type t2 = TVAR("`2");
+    Type t0 = TVAR("`1");
+    Type t1 = TVAR("`2");
+    Type t2 = TVAR("`3");
 
     T("let f = fn (x, y, z) frame_offset: (Int) -> (z, y, x);",
       &MAKE_FN_TYPE_3(&TTUPLE(3, &t0, &t1, &t2), &t_int,
@@ -1201,6 +1210,7 @@ int main() {
 
     status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
   });
+
   ({
     Type free_var = TVAR("`5");
     Ast *b =
