@@ -106,13 +106,15 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       Type *lu = env_lookup(ctx->env, type->data.T_VAR);
 
       if (!lu) {
+
         // print_type_env(ctx->env);
         fprintf(stderr,
-                "Error type var %s not found in environment! [compiler source: "
-                "%s:%d]\n",
+                "Error type var %s not found in environment! [compiler source "
+                ": %s:%d]\n",
                 type->data.T_VAR, __FILE__, __LINE__);
         print_location(__current_ast);
         return NULL;
+        // return type_to_llvm_type(&t_string, ctx, module);
       }
 
       if (lu->kind == T_VAR && types_equal(lu, type)) {

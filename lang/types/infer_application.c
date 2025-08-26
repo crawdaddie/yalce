@@ -55,13 +55,16 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
 
     if (arg_types[i]->kind == T_FN) {
 
-      if ((!is_generic(fn_return_type(arg_types[i]))) &&
-          (arg->tag == AST_LAMBDA) &&
-          is_generic(arg->data.AST_LAMBDA.body->md)) {
-        // TODO: this is a really fiddly and complex edge-case
-        // when you have an anonymous function callback passed to a function
-        // with type information constraints generated within the callback
-        // aren't pushed back up to the app_ctx (???)
+      // if ((!is_generic(fn_return_type(arg_types[i]))) &&
+      //     (arg->tag == AST_LAMBDA) &&
+      //     is_generic(arg->data.AST_LAMBDA.body->md)) {
+      //
+      //   // TODO: this is a really fiddly and complex edge-case
+      //   // when you have an anonymous function callback passed to a function
+      //   // with type information constraints generated within the callback
+      //   // aren't pushed back up to the app_ctx (???)
+      // }
+      if (arg->tag == AST_LAMBDA) {
         unify_in_ctx(fn_return_type(arg_types[i]),
                      arg->data.AST_LAMBDA.body->md, &app_ctx, arg);
       }
@@ -94,11 +97,18 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   ast->data.AST_APPLICATION.function->md = _fn_type;
 
   Type *res_type = _fn_type;
+  printf("res type: ");
+  print_type(res_type);
+  print_subst(subst);
+  print_type_env(ctx->env);
+  printf("--------------------------------\n\n\n");
 
   for (int i = 0; i < len; i++) {
     Ast *arg = ast->data.AST_APPLICATION.args + i;
 
     if (arg->tag == AST_IDENTIFIER && arg->data.AST_IDENTIFIER.is_fn_param) {
+      arg->md = apply_substitution(subst, arg->md);
+    } else if (arg->tag == AST_LAMBDA) {
       arg->md = apply_substitution(subst, arg->md);
     }
 

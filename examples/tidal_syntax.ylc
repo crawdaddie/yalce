@@ -9,6 +9,7 @@ let bind = fn p f input ->
   | None -> None
   | Some (x, rest) -> f x rest  
 ;;
+
 let choice = fn p1 p2 input ->
   match p1 input with
   | None -> p2 input
@@ -27,13 +28,12 @@ let digit = fn input ->
   | _ -> None
 ;;
 
-let return = fn x input -> Some (x, input);;
 
 
 let two_digits = fn input ->
   digit >>= (fn first ->
   digit >>= (fn second ->
-    (fn inp -> Some ((first, second) inp))
+    (fn inp -> Some ((first, second), inp))
   )) input
 ;;
 

@@ -814,6 +814,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   AstList *params_list = ast->data.AST_LAMBDA.params;
   AstList *defs_list = ast->data.AST_LAMBDA.type_annotations;
+
   for (int i = 0; i < num_params; i++) {
     Ast *param = params_list->ast;
     Ast *def = defs_list ? defs_list->ast : NULL;
@@ -826,12 +827,16 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
       param_type = infer_pattern(param, &body_ctx);
     }
 
+    // print_ast(param);
+    // print_type(param_type);
+
     param_type->scope = body_ctx.scope;
     param_types[i] = param_type;
     bind_in_ctx(&body_ctx, param, param_types[i]);
     if (body_ctx.env) {
       body_ctx.env->is_fn_param = true;
     }
+
     params_list = params_list->next;
     defs_list = defs_list ? defs_list->next : NULL;
   }
@@ -896,18 +901,26 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (body_ctx.yielded_type != NULL) {
     ast->md = coroutine_constructor_type_from_fn_type(ast->md);
   } else if (ast->data.AST_LAMBDA.num_closed_vals > 0) {
+
+    // printf("### CLOSURE LAMBDA TYPE: ");
+    // print_ast(ast);
+    // print_type(ast->md);
+
     ast->md = closure_type_from_fn_type(ast->md, ast);
   } else {
+
+    // printf("### LAMBDA TYPE: ");
+    // print_ast(ast);
+    // print_type(ast->md);
+
+    ast->md = closure_type_from_fn_type(ast->md, ast);
     ((Type *)ast->md)->closure_meta = NULL;
   }
 
-  // printf("lambda: ");
-  // print_type(ast->md);
   return ast->md;
 }
 
 Type *infer_match_expr(Ast *ast, TICtx *ctx) {
-
   Type *result = next_tvar();
   Ast *expr = ast->data.AST_MATCH.expr;
   Type *expr_type;

@@ -1,6 +1,7 @@
 #include "backend_llvm/function.h"
 #include "binding.h"
 #include "closures.h"
+#include "codegen.h"
 #include "symbols.h"
 #include "types.h"
 #include "types/inference.h"
@@ -67,7 +68,11 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
         llvm_param_types[i] = LLVMPointerType(
             type_to_llvm_type(t->data.T_CONS.args[0], ctx, module), 0);
       } else {
-        llvm_param_types[i] = type_to_llvm_type(t, ctx, module);
+        LLVMTypeRef tref = type_to_llvm_type(t, ctx, module);
+        if (!tref) {
+          return NULL;
+        }
+        llvm_param_types[i] = tref;
       }
 
       fn_type = fn_type->data.T_FN.to;
@@ -117,6 +122,10 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
           .md,
       ctx, module);
 
+  AstList *params = __current_ast ? (__current_ast->tag == AST_LAMBDA
+                                         ? __current_ast->data.AST_LAMBDA.params
+                                         : NULL)
+                                  : NULL;
   LLVMTypeRef llvm_fn_type =
       LLVMFunctionType(ret_type, llvm_param_types, params_count, 0);
 
@@ -201,8 +210,16 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int fn_len = ast->data.AST_LAMBDA.len;
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
+  printf("cgen fn type proto??? %s\n", __FILE__);
+  print_ast(ast);
+  print_type(fn_type);
+  printf("--------------------\n");
+
   LLVMTypeRef prototype =
       codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx, module);
+  if (!prototype) {
+    return NULL;
+  }
 
   START_FUNC(module, is_anon ? "anonymous_func" : fn_name.chars, prototype)
 
@@ -385,6 +402,7 @@ LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
                                          JITLangCtx *ctx, LLVMModuleRef module,
                                          LLVMBuilderRef builder) {
   int args_len = fn_type_args_len(specific_type);
+
   LLVMTypeRef fn_type = codegen_fn_type(specific_type, args_len, ctx, module);
 
   Type *ft = specific_type;
@@ -438,31 +456,13 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   TypeEnv *env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env;
 
-  // TypeConstraint *constraints = NULL;
-  // Type *f;
-  // for (f = generic_type; f->kind == T_FN; f = f->data.T_FN.to) {
-  //   Type *ff = f->data.T_FN.from;
-  //   if (is_generic(f->data.T_FN.from)) {
-  //     Type *r = resolve_type_in_env(ff, ctx->env);
-  //     if (r) {
-  //       constraints = constraints_extend(constraints, ff, r);
-  //     }
-  //   }
-  // }
-  //
-  // if (is_generic(f)) {
-  //   Type *r = resolve_type_in_env(f, ctx->env);
-  //   if (r) {
-  //     constraints = constraints_extend(constraints, f, r);
-  //   }
-  // }
-  //
-  // Substitution *subst = NULL;
-  // subst = solve_constraints(constraints);
-  // env = create_env_from_subst(env, subst);
-
   compilation_ctx.env =
       create_env_for_generic_fn(env, generic_type, specific_type);
+
+  // printf("compile specific fn\n");
+  // print_type(specific_type);
+  // print_type(generic_type);
+  // print_type_env(compilation_ctx.env);
 
   while (specific_type->kind == T_FN) {
     Type *f = specific_type->data.T_FN.from;
