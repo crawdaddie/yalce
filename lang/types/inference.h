@@ -47,6 +47,7 @@ typedef struct TICtx {
   Subst *subst;
   TypeEnv *env;
   Ast *current_fn_ast;
+  Constraint *constraints;
   Type *yielded_type;
   int scope;
   int current_fn_scope;
@@ -77,6 +78,7 @@ void print_builtin_types();
 Scheme generalize(Type *type, TypeEnv *env);
 Type *instantiate(Scheme *scheme, TICtx *ctx);
 
+Type *instantiate_with_args(Scheme *scheme, Ast *args, TICtx *ctx);
 Scheme *lookup_scheme(TypeEnv *env, const char *name);
 Type *find_in_subst(Subst *subst, const char *name);
 Subst *subst_extend(Subst *s, const char *key, Type *type);

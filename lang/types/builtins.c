@@ -89,39 +89,62 @@ Type t_ord_fn_sig = {T_CREATE_NEW_GENERIC,
 Type t_eq_fn_sig = {T_CREATE_NEW_GENERIC,
                     {.T_CREATE_NEW_GENERIC = {.fn = create_new_eq_sig}}};
 
-Type *create_new_array_at_sig(void *_) {
-  Type *el = next_tvar();
+Scheme *create_new_array_at_sig() {
+
+  Type *el = tvar("a");
   Type *arr = create_array_type(el);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
   Type *f = el;
   f = type_fn(&t_int, f);
   f = type_fn(arr, f);
-  return f;
+  *scheme = (Scheme){.vars = vars, .type = f};
+  return scheme;
 }
-Type t_array_at = {T_CREATE_NEW_GENERIC,
-                   {.T_CREATE_NEW_GENERIC = {.fn = create_new_array_at_sig}}};
 
-Type *create_new_array_set_sig(void *_) {
-  Type *el = next_tvar();
+Scheme void_scheme = {.vars = NULL, .type = &t_void};
+// Type t_array_at = {T_CREATE_NEW_GENERIC,
+//                    {.T_CREATE_NEW_GENERIC = {.fn =
+//                    create_new_array_at_sig}}};
+//
+Scheme *create_new_array_set_sig() {
+  // Type *el = next_tvar();
+  // Type *arr = create_array_type(el);
+  // Type *f = arr;
+  // f = type_fn(el, f);
+  // f = type_fn(&t_int, f);
+  // f = type_fn(arr, f);
+  // return f;
+
+  Type *el = tvar("a");
   Type *arr = create_array_type(el);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
   Type *f = arr;
   f = type_fn(el, f);
   f = type_fn(&t_int, f);
   f = type_fn(arr, f);
-  return f;
+  *scheme = (Scheme){.vars = vars, .type = f};
+  return scheme;
 }
 
-Type t_array_set = {T_CREATE_NEW_GENERIC,
-                    {.T_CREATE_NEW_GENERIC = {.fn = create_new_array_set_sig}}};
+Scheme *create_new_array_size_sig() {
 
-Type *create_new_array_size_sig(void *_) {
-
-  Type *el = next_tvar();
+  Type *el = tvar("a");
   Type *arr = create_array_type(el);
-  return type_fn(arr, &t_int);
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
+  Type *f = type_fn(arr, &t_int);
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = f};
+  return scheme;
 }
-Type t_array_size = {
-    T_CREATE_NEW_GENERIC,
-    {.T_CREATE_NEW_GENERIC = {.fn = create_new_array_size_sig}}};
 
 Type *create_new_list_concat_sig(void *_) {
   Type *el = next_tvar();
@@ -576,9 +599,9 @@ void initialize_builtin_types() {
 
   typeclasses_extend(&t_bool, &TCEq_bool);
   add_builtin("print", &t_builtin_print);
-  add_builtin("array_at", &t_array_at);
-  add_builtin("array_set", &t_array_set);
-  add_builtin("array_size", &t_array_size);
+  // add_builtin("array_at", &t_array_at);
+  // add_builtin("array_set", &t_array_set);
+  // add_builtin("array_size", &t_array_size);
 
   add_builtin("list_concat", &t_list_concat);
   add_builtin("list_tail", &t_list_tail_sig);
@@ -851,6 +874,11 @@ void initialize_builtin_schemes() {
   Scheme *list_prepend_scheme = create_list_prepend_scheme();
   add_builtin_scheme("::", list_prepend_scheme);
 
+  add_primitive_scheme("&&", &t_builtin_and);
+
+  add_builtin_scheme("array_at", create_new_array_at_sig());
+  add_builtin_scheme("array_set", create_new_array_set_sig());
+  add_builtin_scheme("array_size", create_new_array_size_sig());
   // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
   // &t_list_var);
 }

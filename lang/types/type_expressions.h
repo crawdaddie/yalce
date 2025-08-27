@@ -3,4 +3,6 @@
 #include "./inference.h"
 #include "parse.h"
 Scheme *compute_type_expression(Ast *expr, TICtx *ctx);
+
+Type *type_declaration(Ast *ast, TICtx *ctx);
 #endif

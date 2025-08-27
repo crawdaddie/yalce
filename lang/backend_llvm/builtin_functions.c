@@ -643,7 +643,7 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
   }
   case T_CONS: {
 
-    if ((strcmp(type->data.T_CONS.name, "Variant") == 0) &&
+    if ((strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) &&
         (type->data.T_CONS.num_args == 2) &&
         (strcmp(type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
         (strcmp(type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {

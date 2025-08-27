@@ -85,16 +85,45 @@ int main() {
   initialize_builtin_schemes();
 
   bool status = true;
+  Type opt_int = TOPT(&t_int);
+  ({
+    Ast *b =
+        T("type SchedulerCallback = (() -> Option of Double) -> Int -> ();\n"
+          // "let schedule_event = extern fn SchedulerCallback -> (() -> Option
+          // " "of Double) -> Ptr -> "
+          // "();\n"
+          // "let runner = fn c off ->\n"
+          // "  match c () with\n"
+          // "  | Some dur -> schedule_event runner dur c\n"
+          // "  | None -> () \n"
+          // ";;\n"
+          // "schedule_event runner 0. c\n",
+          ,
+          &t_void);
 
-  T("let f = fn l->\n"
-    "  match l with\n"
-    "    | x::_ -> x\n"
-    "    | [] -> 0\n"
-    ";;",
-    &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+    Ast *runner_arg = b->data.AST_BODY.stmts[3]->data.AST_APPLICATION.args;
+    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
+    // cor_type.is_coroutine_instance = true;
+    Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
+
+    // bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
+    // const char *msg = "runner arg can be materialised to specific type:";
+    // if (res) {
+    //   printf("✅ %s\n", msg);
+    //   print_type(&runner_fn_arg_type);
+    //   status &= true;
+    // } else {
+    //   status &= false;
+    //   printf("❌ %s\nexpected:\n", msg);
+    //   print_type(&runner_fn_arg_type);
+    //   printf("got:\n");
+    //   print_type(runner_arg->md);
+    // }
+  });
+  return status;
 }
 
-int _main() {
+int __main() {
 
   initialize_builtin_schemes();
 
@@ -401,8 +430,8 @@ int _main() {
     &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
 
   ({
-    Type s = arithmetic_var("`4");
-    Type t = arithmetic_var("`8");
+    Type s = arithmetic_var("`6");
+    Type t = arithmetic_var("`0");
     T("let list_sum = fn s l ->\n"
       "  match l with\n"
       "  | [] -> s\n"

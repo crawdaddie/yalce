@@ -749,34 +749,36 @@ Ast *ast_meta(ObjString meta_id, Ast *next) {
 Ast *ast_extern_fn(ObjString name, Ast *signature) {
 
   Ast *extern_fn = Ast_new(AST_EXTERN_FN);
-  extern_fn->data.AST_EXTERN_FN.signature_types = signature;
+  extern_fn->data.AST_EXTERN_FN.signature_types =
+      ast_fn_signature_of_list(signature);
   extern_fn->data.AST_EXTERN_FN.fn_name = name;
 
-  Ast *l = signature;
-  int len = 0;
-  while (l->tag == AST_LIST || l->tag == AST_FN_SIGNATURE) {
-    l = l->data.AST_LIST.items + 1;
-    len++;
-  }
-  len++;
-
-  Ast *items = palloc(sizeof(Ast) * len);
-  int i = 0;
-  l = signature;
-  while (l->tag == AST_LIST || l->tag == AST_FN_SIGNATURE) {
-    *(items + i) = *l->data.AST_LIST.items;
-    l = l->data.AST_LIST.items + 1;
-    i++;
-  }
-  *(items + i) = *l;
-  Ast *sig_list = Ast_new(AST_LIST);
-  sig_list->data.AST_LIST.items = items;
-  sig_list->data.AST_LIST.len = len;
-  sig_list->tag = AST_FN_SIGNATURE;
-  extern_fn->data.AST_EXTERN_FN.signature_types = sig_list;
+  // Ast *l = signature;
+  // int len = 0;
+  // while (l->tag == AST_LIST || l->tag == AST_FN_SIGNATURE) {
+  //   l = l->data.AST_LIST.items + 1;
+  //   len++;
+  // }
+  // len++;
+  //
+  // Ast *items = palloc(sizeof(Ast) * len);
+  // int i = 0;
+  // l = signature;
+  // while (l->tag == AST_LIST || l->tag == AST_FN_SIGNATURE) {
+  //   *(items + i) = *l->data.AST_LIST.items;
+  //   l = l->data.AST_LIST.items + 1;
+  //   i++;
+  // }
+  // *(items + i) = *l;
+  // Ast *sig_list = Ast_new(AST_LIST);
+  // sig_list->data.AST_LIST.items = items;
+  // sig_list->data.AST_LIST.len = len;
+  // sig_list->tag = AST_FN_SIGNATURE;
+  // extern_fn->data.AST_EXTERN_FN.signature_types = sig_list;
 
   return extern_fn;
 }
+
 Ast *ast_assoc(Ast *l, Ast *r) { return ast_let(l, r, NULL); }
 
 Ast *ast_list_prepend(Ast *item, Ast *rest) {

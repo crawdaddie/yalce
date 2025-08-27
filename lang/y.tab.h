@@ -144,7 +144,7 @@
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 31 "lang/parser.y"
+#line 31 "../lang/parser.y"
 {
     Ast *ast_node_ptr;          /* node pointer */
     ObjString vident;           /* identifier */
@@ -154,7 +154,7 @@ typedef union YYSTYPE
     char vchar;
 }
 /* Line 1529 of yacc.c.  */
-#line 158 "lang/y.tab.h"
+#line 158 "../lang/y.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

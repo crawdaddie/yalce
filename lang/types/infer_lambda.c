@@ -2,6 +2,7 @@
 #include "./infer_binding.h"
 #include "serde.h"
 #include "types/type_expressions.h"
+#include "types/unification.h"
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
@@ -24,9 +25,9 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
       param_types[i] = next_tvar();
     }
   }
+  TICtx c = *ctx;
 
   // Step 2: Extend environment using pattern binding for each parameter
-  TypeEnv *new_env = ctx->env;
 
   int i = 0;
   for (AstList *pl = ast->data.AST_LAMBDA.params,
@@ -38,7 +39,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
     // Use bind_pattern_recursive to handle any pattern type
     Type *pattern_result =
-        bind_pattern_recursive(param_pattern, param_type, &new_env, ctx);
+        bind_pattern_recursive(param_pattern, param_type, &c);
 
     if (!pattern_result) {
       return type_error(ctx, param_pattern,
@@ -56,20 +57,20 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
         {.AST_IDENTIFIER = {.value = name,
                             .length = ast->data.AST_LAMBDA.fn_name.length}}};
 
-    bind_pattern_recursive(&rec_fn_name_binding, rec_fn_type, &new_env, ctx);
+    bind_pattern_recursive(&rec_fn_name_binding, rec_fn_type, &c);
   }
 
   // Step 3: Infer body type in extended environment
-  TICtx body_ctx = {
-      .env = new_env, .subst = ctx->subst, .err_stream = ctx->err_stream};
+  // TICtx body_ctx = {
+  //     .env = new_env, .subst = ctx->subst, .err_stream = ctx->err_stream};
 
-  Type *body_type = infer(body, &body_ctx);
+  Type *body_type = infer(body, &c);
   if (!body_type) {
     return type_error(ctx, body, "Cannot infer lambda body type");
   }
 
   // Step 4: Apply substitutions from body inference to parameter types
-  Subst *s1 = body_ctx.subst;
+  Subst *s1 = c.subst;
   Type **param_types_subst = talloc(sizeof(Type *) * num_params);
   for (int i = 0; i < num_params; i++) {
     param_types_subst[i] = apply_substitution(s1, param_types[i]);

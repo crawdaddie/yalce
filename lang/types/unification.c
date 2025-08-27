@@ -33,7 +33,7 @@ bool occurs_check(const char *var, Type *ty) {
   }
 }
 // Add a constraint to the result
-void add_constraint(UnifyResult *result, Type *var, Type *type) {
+void add_constraint(TICtx *result, Type *var, Type *type) {
   for (Constraint *c = result->constraints; c; c = c->next) {
     if (types_equal(c->var, var) && types_equal(c->type, type)) {
       return;
@@ -83,7 +83,11 @@ void print_constraints(Constraint *constraints) {
   }
 }
 
-int unify(Type *t1, Type *t2, UnifyResult *unify_res) {
+int unify(Type *t1, Type *t2, TICtx *unify_res) {
+  // printf("unify ");
+  // print_type(t1);
+  // printf(" ~ \n");
+  // print_type(t2);
 
   if (types_equal(t1, t2)) {
     // No constraints needed for identical types
@@ -113,13 +117,13 @@ int unify(Type *t1, Type *t2, UnifyResult *unify_res) {
   // Case 3: Function types - recurse and merge constraints
   if (t1->kind == T_FN && t2->kind == T_FN) {
     // Unify parameter types
-    UnifyResult ur1 = {.subst = NULL, .constraints = NULL, .inf = NULL};
+    TICtx ur1 = {};
     if (unify(t1->data.T_FN.from, t2->data.T_FN.from, &ur1) != 0) {
       return 1;
     }
 
     // Unify return types
-    UnifyResult ur2 = {.subst = NULL, .constraints = NULL, .inf = NULL};
+    TICtx ur2 = {};
     if (unify(t1->data.T_FN.to, t2->data.T_FN.to, &ur2) != 0) {
       return 1;
     }
@@ -141,7 +145,7 @@ int unify(Type *t1, Type *t2, UnifyResult *unify_res) {
     }
 
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-      UnifyResult ur = {.subst = NULL, .constraints = NULL, .inf = NULL};
+      TICtx ur = {};
       if (unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], &ur) != 0) {
         return 1;
       }
@@ -247,7 +251,7 @@ Subst *solve_constraints(Constraint *constraints) {
       continue;
     }
 
-    UnifyResult ur = {.constraints = constraints};
+    TICtx ur = {.constraints = constraints};
 
     if (unify(existing_subst, new_type, &ur) != 0) {
       Type *promoted =

@@ -100,7 +100,7 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_DOUBLE  "Double"
 #define TYPE_NAME_UINT64  "Uint64"
 #define TYPE_NAME_VOID    "()"
-#define TYPE_NAME_VARIANT "Variant"
+#define TYPE_NAME_VARIANT "Sum"
 #define TYPE_NAME_SOME    "Some"
 #define TYPE_NAME_NONE    "None"
 #define TYPE_NAME_QUEUE   "Queue"
@@ -162,7 +162,8 @@ typedef struct _binop_map {
 #define req_arithmetic_var(n)                                                  \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
-        .required = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC, .rank = 0.},        \
+        .required =                                                            \
+            &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC, .rank = 0.},  \
   }
 
 #define MAKE_TC_RESOLVE_2(tc, a, b)                                            \
@@ -272,9 +273,10 @@ typedef struct Type {
 
   const char *alias;
   TypeClass *implements;
-  TypeClass *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
-                       //  be instantiated to t1 [requires: Arithmetic] ->
-                       // t1 [requires: Arithmetic] -> t1 [requires Arithmetic]
+  TypeClass
+      *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
+                 //  be instantiated to t1 [requires: Arithmetic] ->
+                 // t1 [requires: Arithmetic] -> t1 [requires Arithmetic]
 
   void *constructor;
   // size_t constructor_size;
@@ -378,5 +380,12 @@ bool is_void_func(Type *f);
 void typeclasses_extend(Type *t, TypeClass *tc);
 
 bool is_module(Type *t);
+
+// Enhanced substitution structure to hold constraints
+typedef struct Constraint {
+  Type *var;  // Variable name (e.g., "t0")
+  Type *type; // Required type (e.g., Int or Double)
+  struct Constraint *next;
+} Constraint;
 
 #endif

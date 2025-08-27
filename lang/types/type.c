@@ -1,5 +1,6 @@
 #include "type.h"
 #include "serde.h"
+#include "types/common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -439,7 +440,7 @@ void print_tc_list_to_stream(Type *t, FILE *stream) {
     fprintf(stream, "]");
   }
 
-  if (t->implements) {
+  if (t->implements && !IS_PRIMITIVE_TYPE(t)) {
     fprintf(stream, " [implements: ");
     for (TypeClass *impl = t->implements; impl; impl = impl->next) {
       fprintf(stream, "%s, ", impl->name);

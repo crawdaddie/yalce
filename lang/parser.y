@@ -95,7 +95,6 @@ Ast* ast_root = NULL;
   lambda_expr
   lambda_arg
   lambda_args
-  extern_typed_signature
   list
   array
   tuple
@@ -287,12 +286,6 @@ let_binding:
   | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); }
 
   | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($2, $4, $6); }
-  ;
-
-extern_typed_signature:
-    EXTERN FN expr                  { $$ = extern_typed_signature($3); }
-  | extern_typed_signature ARROW expr %prec ':'
-                                    { $$ = extern_typed_signature_push($1, $3); }
   ;
 
 

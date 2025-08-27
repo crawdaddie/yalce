@@ -85,7 +85,15 @@ Type *find_in_subst(Subst *subst, const char *name) {
   return NULL;
 }
 
+bool subst_contains(Subst *subst, const char *k, Type *t) {
+  Type *found = find_in_subst(subst, k);
+  return (found != NULL) && (types_equal(t, found));
+}
+
 Subst *subst_extend(Subst *s, const char *key, Type *type) {
+  if (subst_contains(s, key, type)) {
+    return s;
+  }
   Subst *n = talloc(sizeof(Subst));
   *n = (Subst){.var = key, .type = type, .next = s};
   return n;
@@ -94,8 +102,12 @@ Subst *subst_extend(Subst *s, const char *key, Type *type) {
 Subst *compose_subst(Subst *s1, Subst *s2) {
   for (Subst *kv = s2; kv; kv = kv->next) {
     const char *k = kv->var;
+
     Type *type = kv->type;
-    s1 = subst_extend(s1, k, apply_substitution(s1, type));
+    type = apply_substitution(s1, type);
+    if (!subst_contains(s1, k, type)) {
+      s1 = subst_extend(s1, k, type);
+    }
   }
   return s1;
 }
@@ -337,9 +349,10 @@ Scheme generalize(Type *type, TypeEnv *env) {
 void print_subst(Subst *subst) {
   printf("substitutions:\n");
   for (Subst *s = subst; s; s = s->next) {
-    printf("%s:", s->var);
+    printf("  %s : ", s->var);
     print_type(s->type);
   }
+  printf("\n");
 }
 
 Type *instantiate(Scheme *scheme, TICtx *ctx) {
@@ -363,6 +376,28 @@ Type *instantiate(Scheme *scheme, TICtx *ctx) {
   return s;
 }
 
+Type *instantiate_with_args(Scheme *scheme, Ast *args, TICtx *ctx) {
+  if (!scheme) {
+    return NULL;
+  }
+
+  if (!scheme->vars) {
+    return scheme->type;
+  }
+
+  Subst *inst_subst = NULL;
+  for (VarList *v = scheme->vars; v; v = v->next, args++) {
+
+    Type *t = infer(args, ctx);
+    inst_subst = subst_extend(inst_subst, v->var, t);
+  }
+
+  Type *stype = deep_copy_type(scheme->type);
+
+  Type *s = apply_substitution(inst_subst, stype);
+  return s;
+}
+
 Type *infer_identifier(Ast *ast, TICtx *ctx) {
   Scheme *s = lookup_scheme(ctx->env, ast->data.AST_IDENTIFIER.value);
   if (!s) {
@@ -373,13 +408,28 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
   Type *inst = instantiate(s, ctx);
   return inst;
 }
+Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
+  Type *inst =
+      instantiate_with_args(cons_scheme, ast->data.AST_APPLICATION.args, ctx);
+  return inst;
+}
 
-Type *infer_app(Ast *ast, TICtx *ctx) {
+Type *infer_app(Ast *ast, TICtx *_ctx) {
   Ast *func = ast->data.AST_APPLICATION.function;
   Ast *args = ast->data.AST_APPLICATION.args;
   int num_args = ast->data.AST_APPLICATION.len;
 
+  if (func->tag == AST_IDENTIFIER) {
+    Scheme *s = lookup_scheme(_ctx->env, func->data.AST_IDENTIFIER.value);
+    if (s && s->type->kind == T_CONS) {
+      return infer_cons_application(ast, s, _ctx);
+    }
+  }
+
+  TICtx ctxr = *_ctx;
+  TICtx *ctx = &ctxr;
   Type *func_type = infer(func, ctx);
+
   if (!func_type) {
     fprintf(stderr, "Error: function type in application not found in scope\n");
     return NULL;
@@ -412,20 +462,19 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
 
   Type *func_type_subst = apply_substitution(accumulated_subst, func_type);
 
-  UnifyResult ur = {};
-  if (unify(func_type_subst, expected_type, &ur)) {
+  if (unify(func_type_subst, expected_type, ctx)) {
     return type_error(ctx, ast, "Function application type mismatch");
   }
+
   Type *final;
 
-  if (ur.constraints) {
-    Subst *solved_constraints = solve_constraints(ur.constraints);
+  if (ctx->constraints) {
+    Subst *solved_constraints = solve_constraints(ctx->constraints);
     if (!solved_constraints) {
       return NULL;
     }
 
     Type *final_result = apply_substitution(solved_constraints, result_type);
-    ctx->subst = compose_subst(ctx->subst, solved_constraints);
 
     final = final_result;
   } else {
@@ -433,6 +482,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   }
   return final;
 }
+
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
 
   if (ast->data.AST_LIST.len == 0) {
@@ -446,12 +496,11 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   int len = ast->data.AST_LIST.len;
   Type *el_type = infer(ast->data.AST_LIST.items, ctx);
 
-  UnifyResult ur = {};
   for (int i = 1; i < len; i++) {
     Ast *el = ast->data.AST_LIST.items + i;
     Type *_el_type = infer(el, ctx);
     if (_el_type->kind == T_VAR) {
-      unify(_el_type, el_type, &ur);
+      unify(_el_type, el_type, ctx);
     } else if (!types_equal(el_type, _el_type)) {
       print_type_err(el_type);
       print_type_err(_el_type);
@@ -533,7 +582,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_TYPE_DECL: {
-    // TODO: Implement type declaration inference
+    type = type_declaration(ast, ctx);
     break;
   }
 
@@ -556,7 +605,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
       stmt = ast->data.AST_BODY.stmts[i];
       Type *t = infer(stmt, ctx);
       if (!t) {
-        print_ast_err(stmt);
+        // print_ast_err(stmt);
         return NULL;
       }
       type = t;
@@ -591,45 +640,32 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
-  // case AST_EXTERN_FN: {
-  //   Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
-  //   int params_count = sig->data.AST_LIST.len - 1;
-  //
-  //   if (sig->tag == AST_FN_SIGNATURE) {
-  //     TDCtx tdctx = {.env = ctx->env};
-  //     Type *f = compute_type_expression(sig->data.AST_LIST.items +
-  //     params_count,
-  //                                       &tdctx);
-  //     sig->data.AST_LIST.items[params_count].md = f;
-  //
-  //     for (int i = params_count - 1; i >= 0; i--) {
-  //       TDCtx tdctx = {.env = ctx->env};
-  //       Type *p = compute_type_expression(sig->data.AST_LIST.items + i,
-  //       &tdctx);
-  //
-  //       sig->data.AST_LIST.items[i].md = p;
-  //
-  //       f = type_fn(p, f);
-  //     }
-  //     type = f;
-  //   }
   case AST_EXTERN_FN: {
 
     Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
-    int params_count = sig->data.AST_LIST.len - 1;
 
     if (sig->tag == AST_FN_SIGNATURE) {
-      Type *f = instantiate(
-          compute_type_expression(sig->data.AST_LIST.items + params_count, ctx),
-          ctx);
-      for (int i = params_count - 1; i >= 0; i--) {
-        f = type_fn(instantiate(compute_type_expression(
-                                    sig->data.AST_LIST.items + i, ctx),
-                                ctx),
-                    f);
-      }
-      type = f;
+      Scheme *s = compute_type_expression(sig, ctx);
+      type = s->type;
+      print_type(type);
     }
+    // print_type_env(ctx->env);
+
+    // int params_count = sig->data.AST_LIST.len - 1;
+
+    //
+    //   Type *f = instantiate(
+    //       compute_type_expression(sig->data.AST_LIST.items + params_count,
+    //       ctx), ctx);
+    //   for (int i = params_count - 1; i >= 0; i--) {
+    //     f = type_fn(instantiate(compute_type_expression(
+    //                                 sig->data.AST_LIST.items + i, ctx),
+    //                             ctx),
+    //                 f);
+    //   }
+    //   type = f;
+    // }
+
     // TODO: Implement extern function inference
     break;
   }
