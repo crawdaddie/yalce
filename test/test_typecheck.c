@@ -38,7 +38,7 @@
     ast;                                                                       \
   })
 
-#define TASSERT_EQ(t1, t2, msg)                                                   \
+#define TASSERT_EQ(t1, t2, msg)                                                \
   ({                                                                           \
     if (types_equal(t1, t2)) {                                                 \
       status &= true;                                                          \
@@ -319,7 +319,7 @@ int test_funcs() {
                   &t_num);
 
     TASSERT_EQ(body->data.AST_BODY.stmts[0]->md, &MAKE_FN_TYPE_2(&tvar, &tvar),
-            "f == `3 [arithmetic] -> `3 [arithmetic]");
+               "f == `3 [arithmetic] -> `3 [arithmetic]");
     TASSERT_EQ(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
     TASSERT_EQ(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
   });
@@ -344,15 +344,9 @@ int test_funcs() {
   });
 
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t1 = arithmetic_var("`1");
-    Type t2 = arithmetic_var("`2");
+    Type t7 = arithmetic_var("`7");
 
-    T("let f = fn x y z -> x + y + z;",
-      &MAKE_FN_TYPE_4(
-          &t0, &t1, &t2,
-          &MAKE_TC_RESOLVE_2("arithmetic",
-                             &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1), &t2)));
+    T("let f = fn x y z -> x + y + z;", &MAKE_FN_TYPE_4(&t7, &t7, &t7, &t7));
   });
 
   ({
@@ -382,6 +376,45 @@ int test_funcs() {
 
   T("let f = fn x: (Int) (y, z): (Int, Double) -> x + y + z;;",
     &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
+
+  Type t8 = arithmetic_var("`8");
+  T("let f = fn x (y, z) -> x + y + z;;",
+    &MAKE_FN_TYPE_3(&t8, &TTUPLE(2, &t8, &t8), &t8));
+
+  T("let bind = fn p f input ->\n"
+    "  match p input with\n"
+    "  | None -> None\n"
+    "  | Some (x, rest) -> f x rest  \n"
+    ";;\n"
+    "let choice = fn p1 p2 input ->\n"
+    "  match p1 input with\n"
+    "  | None -> p2 input\n"
+    "  | Some result -> Some result \n"
+    ";;\n"
+    "\n"
+    "let ( >>= ) = bind;\n"
+    "let ( <|> ) = choice;\n"
+    "\n"
+    "let isdigit = extern fn Char -> Bool;\n"
+    "let digit = fn input ->\n"
+    "  let s = array_size input;\n"
+    "  match (s, input[0]) with\n"
+    "  | (0, _) -> None\n"
+    "  | (_, x) if isdigit x -> Some (array_range 0 1 input, array_succ "
+    "input)\n"
+    "  | _ -> None\n"
+    ";;\n"
+    "\n"
+    "let return = fn x input -> Some (x, input);;\n"
+    "\n"
+    "\n"
+    "let two_digits = fn input ->\n"
+    "  digit >>= (fn first ->\n"
+    "  digit >>= (fn second ->\n"
+    "    (fn inp -> Some ((first, second) inp))\n"
+    "  )) input\n"
+    ";;\n",
+    &t_void);
   return status;
 }
 int test_match_exprs() {
@@ -462,8 +495,8 @@ int test_match_exprs() {
     Ast *guard = branch->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
 
     TASSERT_EQ(guard->data.AST_APPLICATION.function->md,
-            &MAKE_FN_TYPE_3(&t_int, &t_int, &t_bool),
-            "guard clause has type Int -> Int -> Bool\n");
+               &MAKE_FN_TYPE_3(&t_int, &t_int, &t_bool),
+               "guard clause has type Int -> Int -> Bool\n");
   });
   return status;
 }
@@ -577,9 +610,10 @@ int __main() {
                            .AST_MATCH.branches[5];
 
     TASSERT_EQ(final_branch.data.AST_APPLICATION.args[0]
-                .data.AST_APPLICATION.args[0]
-                .md,
-            &t_int, "references in sub-nodes properly typed :: (x - 1) == Int");
+                   .data.AST_APPLICATION.args[0]
+                   .md,
+               &t_int,
+               "references in sub-nodes properly typed :: (x - 1) == Int");
   });
   /*
     ({
@@ -1392,23 +1426,14 @@ int __main() {
   });
   return status == true ? 0 : 1;
 }
+
 int main() {
   bool status = true;
 
   initialize_builtin_schemes();
-  T("1 + x", &TVAR("`0"));
-  // ({
-  //   Type tvar = TVAR("`0");
-  //   Ast *body = T("let f = fn x -> 1 + x;;\n"
-  //                 // "f 1;\n"
-  //                 // "f 1.;\n",
-  //                 ,
-  //                 &t_num);
-  //
-  //   TASSERT_EQ(body->data.AST_BODY.stmts[0]->md, &MAKE_FN_TYPE_2(&tvar, &tvar),
-  //           "f == `3 [arithmetic] -> `3 [arithmetic]");
-  //   TASSERT_EQ(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
-  //   TASSERT_EQ(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
-  // });
-  return status;
+
+  Type t3 = req_arithmetic_var("`3");
+  T("let add1 = fn x -> 1 + x;;", &MAKE_FN_TYPE_2(&t3, &t3));
+
+  return status == true ? 0 : 1;
 }

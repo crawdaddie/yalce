@@ -83,24 +83,37 @@ void print_constraints(Constraint *constraints) {
   }
 }
 
+Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2) {
+  Type **args = talloc(sizeof(Type *) * 2);
+  args[0] = t1;
+  args[1] = t2;
+  Type *resolution = talloc(sizeof(Type));
+  *resolution =
+      (Type){T_TYPECLASS_RESOLVE,
+             {.T_CONS = {.name = tc->name, .args = args, .num_args = 2}}};
+  return resolution;
+}
+
 int unify(Type *t1, Type *t2, TICtx *unify_res) {
-  // printf("unify ");
-  // print_type(t1);
-  // printf(" ~ \n");
-  // print_type(t2);
+  printf("unify ");
+  print_type(t1);
+  printf(" ~ \n");
+  print_type(t2);
 
   if (types_equal(t1, t2)) {
-    // No constraints needed for identical types
     return 0;
   }
 
-  // Case 1: First type is a variable - COLLECT CONSTRAINT
   if (t1->kind == T_VAR) {
     if (occurs_check(t1->data.T_VAR, t2)) {
       return 1; // Occurs check failure
     }
+    if (IS_PRIMITIVE_TYPE(t2)) {
+      return 0;
+    }
 
     add_constraint(unify_res, t1, t2);
+
     return 0;
   }
 
@@ -201,34 +214,34 @@ TypeClass *find_typeclass(TypeClass *impls, const char *name) {
 }
 
 Type *find_promoted_type(Type *var, Type *existing, Type *other_type) {
-  // if (other_type->kind == T_VAR && existing->kind != T_VAR) {
-  //   return existing;
-  // }
   if (types_equal(existing, other_type)) {
     return existing;
   }
 
-  TypeClass *tc = var->required;
-  if (!tc) {
+  // Simple type promotion - prefer concrete types over variables
+  if (existing->kind == T_VAR && other_type->kind != T_VAR) {
     return other_type;
   }
-
-  TypeClass *ex_tc = find_typeclass(existing->implements, tc->name);
-
-  TypeClass *other_tc = find_typeclass(other_type->implements, tc->name);
-
-  if (!other_tc) {
-    return NULL;
-  }
-
-  printf("existing rank %f other rank %f\n", ex_tc->rank, other_tc->rank);
-  if (ex_tc->rank >= other_tc->rank) {
+  if (other_type->kind == T_VAR && existing->kind != T_VAR) {
     return existing;
-  } else {
-    return other_type;
   }
 
-  return existing;
+  // Both are concrete - use typeclass ranking
+  if (existing->kind != T_VAR && other_type->kind != T_VAR) {
+    TypeClass *ex_tc = find_typeclass(existing->implements, "Arithmetic");
+    TypeClass *other_tc = find_typeclass(other_type->implements, "Arithmetic");
+
+    if (ex_tc && other_tc) {
+      printf("existing rank %f other rank %f\n", ex_tc->rank, other_tc->rank);
+      if (ex_tc->rank >= other_tc->rank) {
+        return existing;
+      } else {
+        return other_type;
+      }
+    }
+  }
+
+  return other_type;
 }
 
 Subst *solve_constraints(Constraint *constraints) {
@@ -239,13 +252,34 @@ Subst *solve_constraints(Constraint *constraints) {
     constraints = constraints->next;
 
     const char *var_name = current->var->data.T_VAR;
-
     Type *new_type = apply_substitution(subst, current->type);
     Type *existing = find_in_subst(subst, var_name);
 
-    printf("solve??\n");
-    print_type(existing);
-    print_type(new_type);
+    // Handle T_TYPECLASS_RESOLVE constraints
+    if (new_type->kind == T_TYPECLASS_RESOLVE) {
+      printf("Resolving typeclass constraint for %s\n", var_name);
+
+      // Apply current substitutions to all args
+      for (int i = 0; i < new_type->data.T_CONS.num_args; i++) {
+        new_type->data.T_CONS.args[i] =
+            apply_substitution(subst, new_type->data.T_CONS.args[i]);
+      }
+
+      // Resolve to highest-ranked concrete type
+      Type *resolved = resolve_tc_rank(new_type);
+      if (resolved) {
+        printf("Resolved %s to: ", var_name);
+        print_type(resolved);
+        subst = subst_extend(subst, var_name, resolved);
+        continue;
+      }
+
+      // If no concrete resolution possible, keep the constraint for later
+      if (!existing) {
+        subst = subst_extend(subst, var_name, new_type);
+        continue;
+      }
+    }
 
     if (!existing) {
       subst = subst_extend(subst, var_name, new_type);
@@ -257,11 +291,55 @@ Subst *solve_constraints(Constraint *constraints) {
       continue;
     }
 
+    // Handle merging T_TYPECLASS_RESOLVE with other constraints
+    if (existing_subst->kind == T_TYPECLASS_RESOLVE &&
+        new_type->kind != T_TYPECLASS_RESOLVE) {
+      // Add new_type to the resolution candidates
+      Type **new_args =
+          talloc(sizeof(Type *) * (existing_subst->data.T_CONS.num_args + 1));
+      for (int i = 0; i < existing_subst->data.T_CONS.num_args; i++) {
+        new_args[i] = existing_subst->data.T_CONS.args[i];
+      }
+      new_args[existing_subst->data.T_CONS.num_args] = new_type;
+
+      Type *merged_resolve = talloc(sizeof(Type));
+      *merged_resolve = (Type){
+          T_TYPECLASS_RESOLVE,
+          {.T_CONS = {.name = existing_subst->data.T_CONS.name,
+                      .args = new_args,
+                      .num_args = existing_subst->data.T_CONS.num_args + 1}}};
+
+      subst = update_substitution(subst, var_name, merged_resolve);
+      continue;
+    }
+
+    if (new_type->kind == T_TYPECLASS_RESOLVE &&
+        existing_subst->kind != T_TYPECLASS_RESOLVE) {
+      // Add existing to the resolution candidates
+      Type **new_args =
+          talloc(sizeof(Type *) * (new_type->data.T_CONS.num_args + 1));
+      for (int i = 0; i < new_type->data.T_CONS.num_args; i++) {
+        new_args[i] = new_type->data.T_CONS.args[i];
+      }
+      new_args[new_type->data.T_CONS.num_args] = existing_subst;
+
+      Type *merged_resolve = talloc(sizeof(Type));
+      *merged_resolve =
+          (Type){T_TYPECLASS_RESOLVE,
+                 {.T_CONS = {.name = new_type->data.T_CONS.name,
+                             .args = new_args,
+                             .num_args = new_type->data.T_CONS.num_args + 1}}};
+
+      subst = update_substitution(subst, var_name, merged_resolve);
+      continue;
+    }
+
     TICtx ur = {.constraints = constraints};
 
     if (unify(existing_subst, new_type, &ur) != 0) {
       Type *promoted =
           find_promoted_type(current->var, existing_subst, new_type);
+
       if (promoted) {
         subst = update_substitution(subst, var_name, promoted);
         continue;

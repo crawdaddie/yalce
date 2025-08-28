@@ -285,6 +285,8 @@ typedef struct Type {
   bool is_recursive_type_ref;
   bool is_ref;
   bool alloced_in_func; // metadata if this type appears as a function return
+  bool external_scope;  // true if this type variable is part of a function
+                        // signature
   struct Type *closure_meta;
   // bool is_recursive_placeholder;
   int scope;

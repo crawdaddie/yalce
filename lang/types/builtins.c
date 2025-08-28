@@ -25,70 +25,6 @@ TypeClass GenericArithmetic = {.name = TYPE_NAME_TYPECLASS_ARITHMETIC,
 TypeClass GenericOrd = {.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.};
 TypeClass GenericEq = {.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.};
 
-Type *create_new_arithmetic_sig(void *i) {
-  Type *a = next_tvar();
-  typeclasses_extend(a, &GenericArithmetic);
-  Type *b = next_tvar();
-  typeclasses_extend(b, &GenericArithmetic);
-  Type *arith_res = talloc(sizeof(Type));
-
-  Type **args = talloc(sizeof(Type *) * 2);
-  args[0] = a;
-  args[1] = b;
-
-  *arith_res = ((Type){T_TYPECLASS_RESOLVE,
-                       {.T_CONS = {.name = TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                   .num_args = 2,
-                                   .args = args}}});
-  Type *f = arith_res;
-  f = type_fn(b, f);
-  f = type_fn(a, f);
-
-  return f;
-}
-
-Type *create_new_ord_sig(void *i) {
-  Type *a = next_tvar();
-  typeclasses_extend(a, &GenericOrd);
-  Type *b = next_tvar();
-  typeclasses_extend(b, &GenericOrd);
-
-  Type **args = talloc(sizeof(Type *) * 2);
-  args[0] = a;
-  args[1] = b;
-  Type *f = &t_bool;
-  f = type_fn(b, f);
-  f = type_fn(a, f);
-
-  return f;
-}
-
-Type *create_new_eq_sig(void *i) {
-  Type *a = next_tvar();
-  typeclasses_extend(a, &GenericEq);
-  // Type *b = next_tvar();
-  // typeclasses_extend(b, &GenericEq);
-
-  Type **args = talloc(sizeof(Type *) * 1);
-  args[0] = a;
-  args[1] = a;
-  Type *f = &t_bool;
-  f = type_fn(a, f);
-  f = type_fn(a, f);
-
-  return f;
-}
-
-Type t_arithmetic_fn_sig = {
-    T_CREATE_NEW_GENERIC,
-    {.T_CREATE_NEW_GENERIC = {.fn = create_new_arithmetic_sig}}};
-
-Type t_ord_fn_sig = {T_CREATE_NEW_GENERIC,
-                     {.T_CREATE_NEW_GENERIC = {.fn = create_new_ord_sig}}};
-
-Type t_eq_fn_sig = {T_CREATE_NEW_GENERIC,
-                    {.T_CREATE_NEW_GENERIC = {.fn = create_new_eq_sig}}};
-
 Scheme *create_new_array_at_sig() {
 
   Type *el = tvar("a");
@@ -511,160 +447,160 @@ Type *_t_list_empty() {
 }
 Type t_list_empty = GENERIC_TYPE(_t_list_empty);
 
-void initialize_builtin_types() {
-
-  ht_init(&builtin_types);
-  add_builtin("+", &t_arithmetic_fn_sig);
-  add_builtin("-", &t_arithmetic_fn_sig);
-  add_builtin("*", &t_arithmetic_fn_sig);
-  add_builtin("/", &t_arithmetic_fn_sig);
-  add_builtin("%", &t_arithmetic_fn_sig);
-
-  add_builtin(">", &t_ord_fn_sig);
-  add_builtin("<", &t_ord_fn_sig);
-  add_builtin(">=", &t_ord_fn_sig);
-  add_builtin("<=", &t_ord_fn_sig);
-  add_builtin("==", &t_eq_fn_sig);
-  add_builtin("!=", &t_eq_fn_sig);
-
-  t_option_of_var.alias = "Option";
-
-  add_builtin("Option", &t_option_of_var);
-  add_builtin("Some", &t_option_of_var);
-  add_builtin("None", &t_option_of_var);
-  add_builtin(TYPE_NAME_INT, &t_int);
-  add_builtin(TYPE_NAME_DOUBLE, &t_num);
-  add_builtin(TYPE_NAME_UINT64, &t_uint64);
-
-  add_builtin(TYPE_NAME_BOOL, &t_bool);
-
-  add_builtin(TYPE_NAME_STRING, &t_string);
-
-  add_builtin(TYPE_NAME_CHAR, &t_char);
-  add_builtin(TYPE_NAME_PTR, &t_ptr);
-
-  // add_builtin("Ref", &t_make_ref);
-
-  static TypeClass tc_int[] = {{
-                                   .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                   .rank = 0.0,
-                               },
-                               {
-                                   .name = TYPE_NAME_TYPECLASS_ORD,
-                                   .rank = 0.0,
-                               },
-                               {
-                                   .name = TYPE_NAME_TYPECLASS_EQ,
-                                   .rank = 0.0,
-                               }};
-  // t_int.implements = &(TypeClass){
-  //     .rank = 0.,
-  //     .name = TYPE_NAME_TYPECLASS_EQ,
-  //     .next = &(TypeClass){
-  //         .rank = 0.,
-  //         .name = TYPE_NAME_TYPECLASS_ORD,
-  //         .next = &(TypeClass){.rank = 0.,
-  //                              .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
-  //                              .next = NULL}}};
-  typeclasses_extend(&t_int, tc_int);
-  typeclasses_extend(&t_int, tc_int + 1);
-  typeclasses_extend(&t_int, tc_int + 2);
-
-  static TypeClass tc_uint64[] = {{
-                                      .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                      .rank = 1.0,
-                                  },
-                                  {
-                                      .name = TYPE_NAME_TYPECLASS_ORD,
-                                      .rank = 1.0,
-                                  },
-                                  {
-                                      .name = TYPE_NAME_TYPECLASS_EQ,
-                                      .rank = 1.0,
-                                  }};
-
-  typeclasses_extend(&t_uint64, tc_uint64);
-  typeclasses_extend(&t_uint64, tc_uint64 + 1);
-  typeclasses_extend(&t_uint64, tc_uint64 + 2);
-
-  static TypeClass tc_num[] = {{
-
-                                   .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                   .rank = 2.0,
-                               },
-                               {
-                                   .name = TYPE_NAME_TYPECLASS_ORD,
-                                   .rank = 2.0,
-                               },
-                               {
-                                   .name = TYPE_NAME_TYPECLASS_EQ,
-                                   .rank = 2.0,
-                               }};
-
-  typeclasses_extend(&t_num, tc_num);
-  typeclasses_extend(&t_num, tc_num + 1);
-  typeclasses_extend(&t_num, tc_num + 2);
-
-  static TypeClass TCEq_bool = {
-      .name = TYPE_NAME_TYPECLASS_EQ,
-      .rank = 0.0,
-  };
-
-  typeclasses_extend(&t_bool, &TCEq_bool);
-  add_builtin("print", &t_builtin_print);
-  // add_builtin("array_at", &t_array_at);
-  // add_builtin("array_set", &t_array_set);
-  // add_builtin("array_size", &t_array_size);
-
-  add_builtin("list_concat", &t_list_concat);
-  add_builtin("list_tail", &t_list_tail_sig);
-  add_builtin("::", &t_list_prepend);
-  add_builtin("list_ref_set", &t_list_ref_set_sig);
-
-  add_builtin("||", &t_builtin_or);
-  add_builtin("&&", &t_builtin_and);
-
-  add_builtin("cor_wrap_effect", &t_cor_wrap_effect_fn_sig);
-  add_builtin("cor_map", &t_cor_map_fn_sig);
-
-  add_builtin("iter_of_list", &t_iter_of_list_sig);
-  add_builtin("iter_of_array", &t_iter_of_array_sig);
-
-  add_builtin("cor_loop", &t_cor_loop_sig);
-  add_builtin("cor_counter", &t_cor_counter_fn_sig);
-  add_builtin("cor_status", &t_cor_status_fn_sig);
-  add_builtin("cor_current", &t_current_cor_fn_sig);
-  add_builtin("cor_replace", &t_cor_replace_fn_sig);
-  add_builtin("cor_stop", &t_cor_stop_fn_sig);
-  add_builtin("cor_promise", &t_cor_promise_fn_sig);
-  add_builtin("cor_unwrap_or_end", &t_cor_unwrap_or_end_sig);
-  // add_builtin("empty_coroutine", &t_empty_cor);
-
-  add_builtin("opt_map", &t_opt_map_sig);
-  add_builtin("cstr", &t_builtin_cstr);
-  // add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
-  add_builtin("play_routine", &t_play_routine_sig);
-  add_builtin("array_fill", &t_array_fill_sig);
-  add_builtin("array_fill_const", &t_array_fill_const_sig);
-  add_builtin("array_new", &t_array_fill_sig);
-  add_builtin("struct_set", &t_struct_set_sig);
-  add_builtin("array_succ", &t_array_identity_sig);
-  add_builtin("array_range", &t_array_range_sig);
-  add_builtin("array_offset", &t_array_offset_sig);
-  add_builtin("array_view", &t_array_view_sig);
-  add_builtin("fst", &t_fst_sig);
-  add_builtin("df_offset", &t_df_offset_sig);
-  add_builtin("df_raw_fields", &t_df_raw_fields_sig);
-  add_builtin(TYPE_NAME_ARRAY, &t_array_cons_sig);
-  add_builtin("coroutine_end", &t_coroutine_end);
-  add_builtin("use_or_finish", &t_use_or_finish);
-  add_builtin("list_empty", &t_list_empty);
-}
-
-Type *lookup_builtin_type(const char *name) {
-  Type *t = ht_get_hash(&builtin_types, name, hash_string(name, strlen(name)));
-  return t;
-}
+// void initialize_builtin_types() {
+//
+//   ht_init(&builtin_types);
+//   add_builtin("+", &t_arithmetic_fn_sig);
+//   add_builtin("-", &t_arithmetic_fn_sig);
+//   add_builtin("*", &t_arithmetic_fn_sig);
+//   add_builtin("/", &t_arithmetic_fn_sig);
+//   add_builtin("%", &t_arithmetic_fn_sig);
+//
+//   add_builtin(">", &t_ord_fn_sig);
+//   add_builtin("<", &t_ord_fn_sig);
+//   add_builtin(">=", &t_ord_fn_sig);
+//   add_builtin("<=", &t_ord_fn_sig);
+//   add_builtin("==", &t_eq_fn_sig);
+//   add_builtin("!=", &t_eq_fn_sig);
+//
+//   t_option_of_var.alias = "Option";
+//
+//   add_builtin("Option", &t_option_of_var);
+//   add_builtin("Some", &t_option_of_var);
+//   add_builtin("None", &t_option_of_var);
+//   add_builtin(TYPE_NAME_INT, &t_int);
+//   add_builtin(TYPE_NAME_DOUBLE, &t_num);
+//   add_builtin(TYPE_NAME_UINT64, &t_uint64);
+//
+//   add_builtin(TYPE_NAME_BOOL, &t_bool);
+//
+//   add_builtin(TYPE_NAME_STRING, &t_string);
+//
+//   add_builtin(TYPE_NAME_CHAR, &t_char);
+//   add_builtin(TYPE_NAME_PTR, &t_ptr);
+//
+//   // add_builtin("Ref", &t_make_ref);
+//
+//   static TypeClass tc_int[] = {{
+//                                    .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+//                                    .rank = 0.0,
+//                                },
+//                                {
+//                                    .name = TYPE_NAME_TYPECLASS_ORD,
+//                                    .rank = 0.0,
+//                                },
+//                                {
+//                                    .name = TYPE_NAME_TYPECLASS_EQ,
+//                                    .rank = 0.0,
+//                                }};
+// t_int.implements = &(TypeClass){
+//     .rank = 0.,
+//     .name = TYPE_NAME_TYPECLASS_EQ,
+//     .next = &(TypeClass){
+//         .rank = 0.,
+//         .name = TYPE_NAME_TYPECLASS_ORD,
+//         .next = &(TypeClass){.rank = 0.,
+//                              .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+//                              .next = NULL}}};
+//   typeclasses_extend(&t_int, tc_int);
+//   typeclasses_extend(&t_int, tc_int + 1);
+//   typeclasses_extend(&t_int, tc_int + 2);
+//
+//   static TypeClass tc_uint64[] = {{
+//                                       .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+//                                       .rank = 1.0,
+//                                   },
+//                                   {
+//                                       .name = TYPE_NAME_TYPECLASS_ORD,
+//                                       .rank = 1.0,
+//                                   },
+//                                   {
+//                                       .name = TYPE_NAME_TYPECLASS_EQ,
+//                                       .rank = 1.0,
+//                                   }};
+//
+//   typeclasses_extend(&t_uint64, tc_uint64);
+//   typeclasses_extend(&t_uint64, tc_uint64 + 1);
+//   typeclasses_extend(&t_uint64, tc_uint64 + 2);
+//
+//   static TypeClass tc_num[] = {{
+//
+//                                    .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+//                                    .rank = 2.0,
+//                                },
+//                                {
+//                                    .name = TYPE_NAME_TYPECLASS_ORD,
+//                                    .rank = 2.0,
+//                                },
+//                                {
+//                                    .name = TYPE_NAME_TYPECLASS_EQ,
+//                                    .rank = 2.0,
+//                                }};
+//
+//   typeclasses_extend(&t_num, tc_num);
+//   typeclasses_extend(&t_num, tc_num + 1);
+//   typeclasses_extend(&t_num, tc_num + 2);
+//
+//   static TypeClass TCEq_bool = {
+//       .name = TYPE_NAME_TYPECLASS_EQ,
+//       .rank = 0.0,
+//   };
+//
+//   typeclasses_extend(&t_bool, &TCEq_bool);
+//   add_builtin("print", &t_builtin_print);
+//   // add_builtin("array_at", &t_array_at);
+//   // add_builtin("array_set", &t_array_set);
+//   // add_builtin("array_size", &t_array_size);
+//
+//   add_builtin("list_concat", &t_list_concat);
+//   add_builtin("list_tail", &t_list_tail_sig);
+//   add_builtin("::", &t_list_prepend);
+//   add_builtin("list_ref_set", &t_list_ref_set_sig);
+//
+//   add_builtin("||", &t_builtin_or);
+//   add_builtin("&&", &t_builtin_and);
+//
+//   add_builtin("cor_wrap_effect", &t_cor_wrap_effect_fn_sig);
+//   add_builtin("cor_map", &t_cor_map_fn_sig);
+//
+//   add_builtin("iter_of_list", &t_iter_of_list_sig);
+//   add_builtin("iter_of_array", &t_iter_of_array_sig);
+//
+//   add_builtin("cor_loop", &t_cor_loop_sig);
+//   add_builtin("cor_counter", &t_cor_counter_fn_sig);
+//   add_builtin("cor_status", &t_cor_status_fn_sig);
+//   add_builtin("cor_current", &t_current_cor_fn_sig);
+//   add_builtin("cor_replace", &t_cor_replace_fn_sig);
+//   add_builtin("cor_stop", &t_cor_stop_fn_sig);
+//   add_builtin("cor_promise", &t_cor_promise_fn_sig);
+//   add_builtin("cor_unwrap_or_end", &t_cor_unwrap_or_end_sig);
+//   // add_builtin("empty_coroutine", &t_empty_cor);
+//
+//   add_builtin("opt_map", &t_opt_map_sig);
+//   add_builtin("cstr", &t_builtin_cstr);
+//   // add_builtin("run_in_scheduler", &t_run_in_scheduler_sig);
+//   add_builtin("play_routine", &t_play_routine_sig);
+//   add_builtin("array_fill", &t_array_fill_sig);
+//   add_builtin("array_fill_const", &t_array_fill_const_sig);
+//   add_builtin("array_new", &t_array_fill_sig);
+//   add_builtin("struct_set", &t_struct_set_sig);
+//   add_builtin("array_succ", &t_array_identity_sig);
+//   add_builtin("array_range", &t_array_range_sig);
+//   add_builtin("array_offset", &t_array_offset_sig);
+//   add_builtin("array_view", &t_array_view_sig);
+//   add_builtin("fst", &t_fst_sig);
+//   add_builtin("df_offset", &t_df_offset_sig);
+//   add_builtin("df_raw_fields", &t_df_raw_fields_sig);
+//   add_builtin(TYPE_NAME_ARRAY, &t_array_cons_sig);
+//   add_builtin("coroutine_end", &t_coroutine_end);
+//   add_builtin("use_or_finish", &t_use_or_finish);
+//   add_builtin("list_empty", &t_list_empty);
+// }
+//
+// Type *lookup_builtin_type(const char *name) {
+//   Type *t = ht_get_hash(&builtin_types, name, hash_string(name,
+//   strlen(name))); return t;
+// }
 
 ht builtin_schemes;
 

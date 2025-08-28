@@ -6,6 +6,7 @@
 int unify(Type *t1, Type *t2, TICtx *unify_res);
 
 void print_constraints(Constraint *constraints);
+Constraint *merge_constraints(Constraint *list1, Constraint *list2);
 
 Subst *solve_constraints(Constraint *constraints);
 

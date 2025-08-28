@@ -233,6 +233,7 @@ Type *infer_pattern_binding(Ast *binding, Ast *val, Ast *body, TICtx *ctx) {
   if (binding->tag == AST_IDENTIFIER) {
     // Simple binding: let x = val
 
+    // Don't solve constraints here - keep variables polymorphic
     Scheme gen_type_scheme = generalize(vtype_subst, env_subst);
     ctx->env = env_extend(env_subst, binding->data.AST_IDENTIFIER.value,
                           gen_type_scheme.vars, gen_type_scheme.type);

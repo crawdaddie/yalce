@@ -355,6 +355,30 @@ void print_subst(Subst *subst) {
   printf("\n");
 }
 
+// Helper function to find a variable by name in a type
+Type *find_var_in_type(Type *type, const char *var_name) {
+  if (!type)
+    return NULL;
+
+  switch (type->kind) {
+  case T_VAR:
+    return CHARS_EQ(type->data.T_VAR, var_name) ? type : NULL;
+  case T_FN: {
+    Type *found = find_var_in_type(type->data.T_FN.from, var_name);
+    return found ? found : find_var_in_type(type->data.T_FN.to, var_name);
+  }
+  case T_CONS:
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      Type *found = find_var_in_type(type->data.T_CONS.args[i], var_name);
+      if (found)
+        return found;
+    }
+    return NULL;
+  default:
+    return NULL;
+  }
+}
+
 Type *instantiate(Scheme *scheme, TICtx *ctx) {
   if (!scheme) {
     return NULL;
@@ -408,6 +432,7 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
   Type *inst = instantiate(s, ctx);
   return inst;
 }
+
 Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
   Type *inst =
       instantiate_with_args(cons_scheme, ast->data.AST_APPLICATION.args, ctx);
@@ -421,69 +446,57 @@ Type *infer_app(Ast *ast, TICtx *_ctx) {
 
   if (func->tag == AST_IDENTIFIER) {
     Scheme *s = lookup_scheme(_ctx->env, func->data.AST_IDENTIFIER.value);
-    if (s && s->type->kind == T_CONS) {
+    if (!s) {
+      return NULL;
+    }
+    if (s->type->kind == T_CONS) {
       return infer_cons_application(ast, s, _ctx);
     }
   }
 
-  TICtx ctxr = *_ctx;
-  TICtx *ctx = &ctxr;
-  Type *func_type = infer(func, ctx);
-
+  // Step 1: Infer function type
+  Type *func_type = infer(func, _ctx);
   if (!func_type) {
-    fprintf(stderr, "Error: function type in application not found in scope\n");
-    return NULL;
+    return type_error(_ctx, ast, "Cannot infer function type");
   }
 
+  // Step 2: Infer argument types
   Type **arg_types = talloc(sizeof(Type *) * num_args);
-  TypeEnv *current_env = apply_subst_env(ctx->subst, ctx->env);
-  Subst *accumulated_subst = ctx->subst;
-
   for (int i = 0; i < num_args; i++) {
-    TICtx arg_ctx = {.env = current_env,
-                     .subst = accumulated_subst,
-                     .err_stream = ctx->err_stream};
-
-    arg_types[i] = infer(&args[i], &arg_ctx);
+    arg_types[i] = infer(&args[i], _ctx);
     if (!arg_types[i]) {
-      return type_error(ctx, ast, "Failed to infer type of argument %d", i + 1);
+      return type_error(_ctx, ast, "Cannot infer argument %d type", i + 1);
     }
-
-    accumulated_subst = arg_ctx.subst;
-    current_env = apply_subst_env(accumulated_subst, current_env);
   }
 
+  // Step 3: Create expected function type
   Type *result_type = next_tvar();
   Type *expected_type = result_type;
 
+  // Build expected type: arg1 -> arg2 -> ... -> result
   for (int i = num_args - 1; i >= 0; i--) {
     expected_type = type_fn(arg_types[i], expected_type);
   }
 
-  Type *func_type_subst = apply_substitution(accumulated_subst, func_type);
-
-  print_type(func_type_subst);
-  print_type(expected_type);
-
-  if (unify(func_type_subst, expected_type, ctx)) {
-    print_type_err(func_type_subst);
+  // Step 4: Unify function type with expected type
+  TICtx unify_ctx = {};
+  if (unify(func_type, expected_type, &unify_ctx)) {
+    print_type_err(func_type);
     print_type_err(expected_type);
-    return type_error(ctx, ast, "Function application type mismatch");
+    return type_error(_ctx, ast, "Function application type mismatch");
   }
 
-  ast->data.AST_APPLICATION.function->md = func_type_subst;
+  print_type_env(_ctx->env);
+  print_constraints(unify_ctx.constraints);
 
-  Subst *solved_constraints = solve_constraints(ctx->constraints);
-
-  if (!solved_constraints) {
-    return NULL;
+  // Step 5: Solve constraints and apply substitutions
+  Subst *solution = solve_constraints(unify_ctx.constraints);
+  if (solution) {
+    _ctx->subst = compose_subst(solution, _ctx->subst);
+    return apply_substitution(solution, result_type);
   }
 
-  Type *final_result = apply_substitution(solved_constraints, result_type);
-  func_type_subst = apply_substitution(solved_constraints, func_type_subst);
-  ast->data.AST_APPLICATION.function->md = func_type_subst;
-
-  return final_result;
+  return result_type;
 }
 
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
