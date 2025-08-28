@@ -201,10 +201,9 @@ TypeClass *find_typeclass(TypeClass *impls, const char *name) {
 }
 
 Type *find_promoted_type(Type *var, Type *existing, Type *other_type) {
-
-  if (other_type->kind == T_VAR && existing->kind != T_VAR) {
-    return existing;
-  }
+  // if (other_type->kind == T_VAR && existing->kind != T_VAR) {
+  //   return existing;
+  // }
   if (types_equal(existing, other_type)) {
     return existing;
   }
@@ -217,9 +216,12 @@ Type *find_promoted_type(Type *var, Type *existing, Type *other_type) {
   TypeClass *ex_tc = find_typeclass(existing->implements, tc->name);
 
   TypeClass *other_tc = find_typeclass(other_type->implements, tc->name);
+
   if (!other_tc) {
     return NULL;
   }
+
+  printf("existing rank %f other rank %f\n", ex_tc->rank, other_tc->rank);
   if (ex_tc->rank >= other_tc->rank) {
     return existing;
   } else {
@@ -240,6 +242,10 @@ Subst *solve_constraints(Constraint *constraints) {
 
     Type *new_type = apply_substitution(subst, current->type);
     Type *existing = find_in_subst(subst, var_name);
+
+    printf("solve??\n");
+    print_type(existing);
+    print_type(new_type);
 
     if (!existing) {
       subst = subst_extend(subst, var_name, new_type);

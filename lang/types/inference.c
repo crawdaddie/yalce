@@ -462,25 +462,28 @@ Type *infer_app(Ast *ast, TICtx *_ctx) {
 
   Type *func_type_subst = apply_substitution(accumulated_subst, func_type);
 
+  print_type(func_type_subst);
+  print_type(expected_type);
+
   if (unify(func_type_subst, expected_type, ctx)) {
+    print_type_err(func_type_subst);
+    print_type_err(expected_type);
     return type_error(ctx, ast, "Function application type mismatch");
   }
 
-  Type *final;
+  ast->data.AST_APPLICATION.function->md = func_type_subst;
 
-  if (ctx->constraints) {
-    Subst *solved_constraints = solve_constraints(ctx->constraints);
-    if (!solved_constraints) {
-      return NULL;
-    }
+  Subst *solved_constraints = solve_constraints(ctx->constraints);
 
-    Type *final_result = apply_substitution(solved_constraints, result_type);
-
-    final = final_result;
-  } else {
-    final = result_type;
+  if (!solved_constraints) {
+    return NULL;
   }
-  return final;
+
+  Type *final_result = apply_substitution(solved_constraints, result_type);
+  func_type_subst = apply_substitution(solved_constraints, func_type_subst);
+  ast->data.AST_APPLICATION.function->md = func_type_subst;
+
+  return final_result;
 }
 
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
@@ -647,7 +650,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     if (sig->tag == AST_FN_SIGNATURE) {
       Scheme *s = compute_type_expression(sig, ctx);
       type = s->type;
-      print_type(type);
     }
     // print_type_env(ctx->env);
 

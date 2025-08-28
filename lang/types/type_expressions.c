@@ -18,6 +18,12 @@ Scheme *create_ts_var(const char *name) {
   sch->type = tvar(name);
   return sch;
 }
+Type *fn_type_decl(Ast *sig, TICtx *ctx) {
+  Ast *param_ast = sig->data.AST_LIST.items;
+  Type *fn = type_fn(instantiate(compute_type_expression(param_ast, ctx), ctx),
+                     fn_type_decl(param_ast + 1, ctx));
+  return fn;
+}
 
 Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
   switch (expr->tag) {
@@ -81,13 +87,17 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
   case AST_FN_SIGNATURE: {
 
     Ast *sig = expr;
-    int num_params = sig->data.AST_LIST.len;
+    int num_params = 0;
+    while (sig->tag == AST_FN_SIGNATURE || sig->tag == AST_LIST) {
+      num_params++;
+      sig = sig->data.AST_LIST.items + 1;
+    }
+
     Type *it[num_params];
     Type *ret;
-    print_ast(expr);
-    printf("num params %d\n", num_params);
 
     int i = 0;
+    sig = expr;
     while (sig->tag == AST_LIST || sig->tag == AST_FN_SIGNATURE) {
       it[i] = instantiate(
           compute_type_expression(sig->data.AST_LIST.items, ctx), ctx);
@@ -97,10 +107,10 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
 
     ret = instantiate(compute_type_expression(sig, ctx), ctx);
     Type *f = create_type_multi_param_fn(num_params, it, ret);
-    print_type(f);
     Scheme *gen = talloc(sizeof(Scheme));
 
     *gen = generalize(f, ctx->env);
+
     return gen;
   }
   case AST_BINOP: {

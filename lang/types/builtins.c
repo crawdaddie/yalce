@@ -155,6 +155,19 @@ Type *create_new_list_concat_sig(void *_) {
   return f;
 }
 
+Scheme *create_list_concat_scheme() {
+  Type *el = tvar("a");
+  Type *l = create_list_type_of_type(el);
+  Type *f = l;
+  f = type_fn(l, f);
+  f = type_fn(l, f);
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
+  Scheme *sch = talloc(sizeof(Scheme));
+  *sch = (Scheme){.vars = vars, .type = f};
+  return sch;
+}
+
 Type t_list_concat = {
     T_CREATE_NEW_GENERIC,
     {.T_CREATE_NEW_GENERIC = {.fn = create_new_list_concat_sig}}};
@@ -665,7 +678,7 @@ Scheme *create_arithmetic_scheme() {
   TypeClass *arithmetic = talloc(sizeof(TypeClass));
   *arithmetic = (TypeClass){
       .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
-      .rank = 0.0,
+      .rank = 1000.0,
   };
 
   var_a->required = arithmetic;
@@ -881,6 +894,8 @@ void initialize_builtin_schemes() {
   add_builtin_scheme("array_size", create_new_array_size_sig());
   // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
   // &t_list_var);
+  //
+  add_builtin_scheme("list_concat", create_list_concat_scheme());
 }
 
 Scheme *lookup_builtin_scheme(const char *name) {

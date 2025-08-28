@@ -15,7 +15,9 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
   for (int i = 0; i < num_cases; i++) {
     Ast *pattern_ast = ast->data.AST_MATCH.branches + i * 2;
 
+    Ast *guard = NULL;
     if (pattern_ast->tag == AST_MATCH_GUARD_CLAUSE) {
+      guard = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
       pattern_ast = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.test_expr;
     }
 
@@ -30,6 +32,13 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
       fprintf(stderr, "Error: cannot unify scrutinee with pattern type in "
                       "match expression\n");
       return NULL;
+    }
+
+    if (guard) {
+      infer(guard, &c);
+      print_type_env(c.env);
+      print_constraints(c.constraints);
+      print_subst(c.subst);
     }
   }
 
