@@ -206,10 +206,9 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           yylval.vint = atoi(yytext);
                           return INTEGER;
                         }
-
--?[1-9][0-9]*f          { 
-                          yylval.vdouble = atof(yytext);
-                          return DOUBLE;
+-?[0-9]+(\.[0-9]*)?f    {
+                          yylval.vfloat = strtof(yytext, NULL);
+                          return FLOAT;
                         }
 -?[1-9][0-9]*           { 
                           yylval.vint = atoi(yytext);

@@ -103,13 +103,14 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   if (types_equal(t1, t2)) {
     return 0;
   }
+  if (IS_PRIMITIVE_TYPE(t1)) {
+    add_constraint(unify_res, t2, t1);
+    return 0;
+  }
 
   if (t1->kind == T_VAR) {
     if (occurs_check(t1->data.T_VAR, t2)) {
       return 1; // Occurs check failure
-    }
-    if (IS_PRIMITIVE_TYPE(t2)) {
-      return 0;
     }
 
     add_constraint(unify_res, t1, t2);
@@ -117,8 +118,10 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     return 0;
   }
 
-  // Case 2: Second type is a variable - COLLECT CONSTRAINT
   if (t2->kind == T_VAR) {
+    for (TypeClass *tc = t1->implements; tc != NULL; tc = tc->next) {
+      typeclasses_extend(t2, tc);
+    }
     if (occurs_check(t2->data.T_VAR, t1)) {
       return 1; // Occurs check failure
     }

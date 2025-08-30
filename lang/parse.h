@@ -125,6 +125,7 @@ typedef enum token_type {
 
 typedef enum ast_tag {
   AST_INT,
+  AST_FLOAT,
   AST_DOUBLE,
   AST_STRING,
   AST_CHAR,
@@ -182,6 +183,10 @@ struct Ast {
     struct AST_INT {
       int value;
     } AST_INT;
+
+    struct AST_FLOAT {
+      float value;
+    } AST_FLOAT;
 
     struct AST_DOUBLE {
       double value;

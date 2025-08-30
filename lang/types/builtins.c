@@ -260,76 +260,70 @@ void add_builtin_scheme(char *name, Scheme *t) {
   ht_set_hash(&builtin_schemes, name, hash_string(name, strlen(name)), t);
 }
 
+Type *resolve_tc_type(const char *tc_name, Type *t1, Type *t2) {
+  Type **l = talloc(sizeof(Type *) * 2);
+  l[0] = t1;
+  l[1] = t2;
+  Type *tcr = talloc(sizeof(Type));
+  *tcr = (Type){T_TYPECLASS_RESOLVE,
+                {.T_CONS = {.name = tc_name, .args = l, .num_args = 2}}};
+  return tcr;
+}
+
 Scheme *create_arithmetic_scheme() {
 
-  Type *var_a = tvar("a");
-  TypeClass *arithmetic = talloc(sizeof(TypeClass));
-  *arithmetic = (TypeClass){
-      .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
-      .rank = 1000.0,
-  };
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  Type *f = resolve_tc_type(TYPE_NAME_TYPECLASS_ARITHMETIC, a, b);
+  f = type_fn(b, f);
+  f = type_fn(a, f);
 
-  var_a->required = arithmetic;
-  Type *f = var_a;
-  f = type_fn(var_a, f);
-  f = type_fn(var_a, f);
-
-  VarList *vars = talloc(sizeof(VarList));
-  *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
+  VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
+  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
 
   Scheme *scheme = talloc(sizeof(Scheme));
-  *scheme = (Scheme){.vars = vars, .type = f};
+  *scheme = (Scheme){.vars = vars_mem, .type = f};
 
   return scheme;
 }
 
 Scheme *create_eq_scheme() {
 
-  Type *var_a = tvar("a");
-  TypeClass *eq = talloc(sizeof(TypeClass));
-  *eq = (TypeClass){
-      .name = TYPE_NAME_TYPECLASS_EQ,
-      .rank = 0.0,
-  };
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  Type *f = resolve_tc_type(TYPE_NAME_TYPECLASS_EQ, a, b);
+  f = type_fn(b, f);
+  f = type_fn(a, f);
 
-  var_a->required = eq;
-
-  Type *f = &t_bool;
-  f = type_fn(var_a, f);
-  f = type_fn(var_a, f);
-
-  VarList *vars = talloc(sizeof(VarList));
-  *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
+  VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
+  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
 
   Scheme *scheme = talloc(sizeof(Scheme));
-  *scheme = (Scheme){.vars = vars, .type = f};
+  *scheme = (Scheme){.vars = vars_mem, .type = f};
 
   return scheme;
 }
 
 Scheme *create_ord_scheme() {
 
-  Type *var_a = tvar("a");
-  TypeClass *ord = talloc(sizeof(TypeClass));
-  *ord = (TypeClass){
-      .name = TYPE_NAME_TYPECLASS_ORD,
-      .rank = 0.0,
-  };
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  Type *f = resolve_tc_type(TYPE_NAME_TYPECLASS_ORD, a, b);
+  f = type_fn(b, f);
+  f = type_fn(a, f);
 
-  var_a->required = ord;
-
-  Type *f = &t_bool;
-  f = type_fn(var_a, f);
-  f = type_fn(var_a, f);
-
-  VarList *vars = talloc(sizeof(VarList));
-  *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
+  VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
+  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
 
   Scheme *scheme = talloc(sizeof(Scheme));
-  *scheme = (Scheme){.vars = vars, .type = f};
+  *scheme = (Scheme){.vars = vars_mem, .type = f};
 
   return scheme;
 }
+
 Scheme *create_id_scheme() {
 
   Type *var_a = tvar("a");
@@ -459,6 +453,7 @@ void initialize_builtin_schemes() {
   add_builtin_scheme("id", create_id_scheme());
 
   add_primitive_scheme(TYPE_NAME_INT, &t_int);
+  add_primitive_scheme(TYPE_NAME_FLOAT, &t_fl);
   add_primitive_scheme(TYPE_NAME_DOUBLE, &t_num);
   add_primitive_scheme(TYPE_NAME_UINT64, &t_uint64);
   add_primitive_scheme(TYPE_NAME_BOOL, &t_bool);

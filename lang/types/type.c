@@ -40,6 +40,7 @@ Type t_int = {
 
 Type t_uint64 = {T_UINT64};
 
+Type t_fl = {T_FLOAT};
 Type t_num = {T_NUM};
 
 Type t_string = {T_CONS,
@@ -477,15 +478,13 @@ void print_type_to_stream(Type *t, FILE *stream) {
   }
 
   case T_TYPECLASS_RESOLVE: {
-    fprintf(stream, "tc resolve %s [ ", t->data.T_CONS.name);
-
-    int len = t->data.T_CONS.num_args;
-    for (int i = 0; i < len - 1; i++) {
+    fprintf(stream, "tc resolve %s [", t->data.T_CONS.name);
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       print_type_to_stream(t->data.T_CONS.args[i], stream);
+      if (i < t->data.T_CONS.num_args - 1) {
+        fprintf(stream, " : ");
+      }
     }
-
-    fprintf(stream, " : ");
-    print_type_to_stream(t->data.T_CONS.args[len - 1], stream);
 
     fprintf(stream, "]");
     break;
@@ -612,13 +611,6 @@ void print_type_to_stream(Type *t, FILE *stream) {
     print_type_to_stream(fn, stream);
     fprintf(stream, ")");
     break;
-  }
-  case T_CREATE_NEW_GENERIC: {
-    if (t->data.T_CREATE_NEW_GENERIC.template) {
-      return print_type_to_stream(t->data.T_CREATE_NEW_GENERIC.template,
-                                  stream);
-      break;
-    }
   }
   }
 
@@ -846,10 +838,6 @@ bool is_generic(Type *t) {
     return is_generic(t->data.T_FN.from) || is_generic(t->data.T_FN.to);
   }
 
-  case T_CREATE_NEW_GENERIC: {
-    return true;
-  }
-
   default:
     return false;
   }
@@ -890,6 +878,9 @@ Type *create_coroutine_instance_type(Type *ret_type) {
 
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
+  if (IS_PRIMITIVE_TYPE(original)) {
+    return original;
+  }
   Type *copy = talloc(sizeof(Type));
   *copy = *original;
   if (original->closure_meta != NULL) {

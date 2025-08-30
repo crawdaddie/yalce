@@ -187,6 +187,8 @@ int main() {
   status &= test_parse("-4.", "-4.000000");
   status &= test_parse("1f", "1.000000");
   status &= test_parse("-4f", "-4.000000");
+  status &= test_parse("4.f", "4.000000");
+  status &= test_parse("4.123f", "4.123000");
   status &= test_parse("(1 + 2)", "((+ 1) 2)");
   status &= test_parse("x + y", "((+ x) y)");
   status &= test_parse("x - y", "((- x) y)");

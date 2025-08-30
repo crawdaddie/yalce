@@ -23,6 +23,7 @@ typedef struct Type Type;
 
 extern Type t_int;
 extern Type t_uint64;
+extern Type t_fl;
 extern Type t_num;
 extern Type t_string;
 extern Type t_char_array;
@@ -97,6 +98,7 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_STRING  "String"
 #define TYPE_NAME_BOOL    "Bool"
 #define TYPE_NAME_INT     "Int"
+#define TYPE_NAME_FLOAT   "Float"
 #define TYPE_NAME_DOUBLE  "Double"
 #define TYPE_NAME_UINT64  "Uint64"
 #define TYPE_NAME_VOID    "()"
@@ -224,19 +226,24 @@ typedef struct Type *(*CreateNewGenericTypeFn)(void *);
 enum TypeKind {
   T_INT = 0,    // Will give 1 << 0
   T_UINT64 = 1, // Will give 1 << 1
-  T_NUM = 2,    // Will give 1 << 2
-  T_CHAR = 3,
-  T_BOOL = 4,
-  T_VOID = 5,
-  T_STRING = 6,
+  T_FLOAT = 2,  // Will give 1 << 2
+  T_NUM = 3,    // Will give 1 << 3
+  T_CHAR = 4,
+  T_BOOL = 5,
+  T_VOID = 6,
+  T_STRING = 7,
   T_FN,
   T_CONS,
   T_VAR,
   T_EMPTY_LIST,
   T_TYPECLASS_RESOLVE,
-  T_CREATE_NEW_GENERIC,
 };
+
 #define TYPE_FLAGS_PRIMITIVE ((1 << T_STRING) | ((1 << T_STRING) - 1))
+typedef struct TypeList {
+  Type *type;
+  struct TypeList *next;
+} TypeList;
 
 typedef struct Type {
   enum TypeKind kind;
@@ -265,9 +272,9 @@ typedef struct Type {
     } T_COROUTINE_FN;
 
     struct {
-      CreateNewGenericTypeFn fn;
-      struct Type *template;
-    } T_CREATE_NEW_GENERIC;
+      const char *tc_name;
+      TypeList *list;
+    } T_TYPECLASS_RESOLVE;
 
   } data;
 

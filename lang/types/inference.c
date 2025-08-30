@@ -250,6 +250,7 @@ Type *apply_substitution(Subst *subst, Type *t) {
     t->data.T_FN.to = apply_substitution(subst, t->data.T_FN.to);
     return t;
   }
+  case T_TYPECLASS_RESOLVE:
   case T_CONS: {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       t->data.T_CONS.args[i] =
@@ -257,10 +258,6 @@ Type *apply_substitution(Subst *subst, Type *t) {
     }
     return t;
   }
-    // case T_EMPTY_LIST: {
-    // }
-    // case T_TYPECLASS_RESOLVE: {
-    // }
   }
   return t;
 }

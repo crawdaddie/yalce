@@ -34,11 +34,13 @@ Ast* ast_root = NULL;
     ObjString vstr;             /* string */
     int vint;                   /* int val */
     double vdouble;
+    float vfloat;
     char vchar;
 };
 
 %token <vint>    INTEGER
 %token <vdouble> DOUBLE 
+%token <vfloat>  FLOAT
 %token <vident>  IDENTIFIER
 %token <vident>  MACRO_IDENTIFIER
 %token <vident>  PATH_IDENTIFIER
@@ -172,6 +174,7 @@ expr:
 simple_expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
   | DOUBLE                { $$ = AST_CONST(AST_DOUBLE, $1); }
+  | FLOAT                 { $$ = AST_CONST(AST_FLOAT, $1); }
   | TOK_STRING            { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }

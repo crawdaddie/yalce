@@ -63,6 +63,12 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_FLOAT: {
+    char buf[100];
+    sprintf(buf, "%f", ast->data.AST_FLOAT.value);
+    buffer = strcat(buffer, buf);
+    break;
+  }
   case AST_DOUBLE: {
 
     char buf[100];
