@@ -127,14 +127,14 @@ char *tc_list_to_string(Type *t, char *buffer) {
     buffer = strncat(buffer, "]", 1);
   }
 
-  if (t->required != NULL) {
-    buffer = strncat(buffer, " [requires ", 11);
-    for (TypeClass *tc = t->required; tc != NULL; tc = tc->next) {
-      buffer = strncat(buffer, tc->name, strlen(tc->name));
-      buffer = strncat(buffer, ", ", 2);
-    }
-    buffer = strncat(buffer, "]", 1);
-  }
+  // if (t->required != NULL) {
+  //   buffer = strncat(buffer, " [requires ", 11);
+  //   for (TypeClass *tc = t->required; tc != NULL; tc = tc->next) {
+  //     buffer = strncat(buffer, tc->name, strlen(tc->name));
+  //     buffer = strncat(buffer, ", ", 2);
+  //   }
+  //   buffer = strncat(buffer, "]", 1);
+  // }
   return buffer;
 }
 
@@ -431,15 +431,15 @@ char *type_to_string(Type *t, char *buffer) {
 }
 
 void print_tc_list_to_stream(Type *t, FILE *stream) {
-  if (t->required) {
-    fprintf(stream, " [requires: ");
-    for (TypeClass *required = t->required; required;
-         required = required->next) {
-      fprintf(stream, "%s, ", required->name);
-    }
-
-    fprintf(stream, "]");
-  }
+  // if (t->required) {
+  // fprintf(stream, " [requires: ");
+  // for (TypeClass *required = t->required; required;
+  //      required = required->next) {
+  //   fprintf(stream, "%s, ", required->name);
+  // }
+  //
+  // fprintf(stream, "]");
+  // }
 
   if (t->implements && !IS_PRIMITIVE_TYPE(t)) {
     fprintf(stream, " [implements: ");

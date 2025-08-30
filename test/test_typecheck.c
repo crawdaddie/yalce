@@ -1517,7 +1517,7 @@ int main() {
 
   initialize_builtin_schemes();
 
-  Type t0 = req_arithmetic_var("`0");
+  Type t0 = arithmetic_var("`0");
   T("let add1 = fn x -> 1 + x;;", &MAKE_FN_TYPE_2(&t0, &t0));
   T("let add1 = fn x -> 1 + x;; add1 1", &t_int);
 

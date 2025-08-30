@@ -239,8 +239,8 @@ Type *apply_substitution(Subst *subst, Type *t) {
 
   case T_VAR: {
     Type *x = find_in_subst(subst, t->data.T_VAR);
+
     if (x) {
-      x->required = t->required;
       return x;
     }
     return t;

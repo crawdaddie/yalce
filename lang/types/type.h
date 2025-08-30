@@ -280,10 +280,10 @@ typedef struct Type {
 
   const char *alias;
   TypeClass *implements;
-  TypeClass
-      *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
-                 //  be instantiated to t1 [requires: Arithmetic] ->
-                 // t1 [requires: Arithmetic] -> t1 [requires Arithmetic]
+  // TypeClass
+  //     *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
+  //                //  be instantiated to t1 [requires: Arithmetic] ->
+  //                // t1 [requires: Arithmetic] -> t1 [requires Arithmetic]
 
   void *constructor;
   // size_t constructor_size;

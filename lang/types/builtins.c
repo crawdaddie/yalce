@@ -270,10 +270,17 @@ Type *resolve_tc_type(const char *tc_name, Type *t1, Type *t2) {
   return tcr;
 }
 
+TypeClass GenArithmeticTypeClass = {
+    .name = TYPE_NAME_TYPECLASS_ARITHMETIC,
+    .rank = 1000.,
+};
+
 Scheme *create_arithmetic_scheme() {
 
   Type *a = tvar("a");
   Type *b = tvar("b");
+  typeclasses_extend(a, &GenArithmeticTypeClass);
+  typeclasses_extend(b, &GenArithmeticTypeClass);
   Type *f = resolve_tc_type(TYPE_NAME_TYPECLASS_ARITHMETIC, a, b);
   f = type_fn(b, f);
   f = type_fn(a, f);

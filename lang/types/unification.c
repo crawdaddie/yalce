@@ -258,7 +258,6 @@ Subst *solve_constraints(Constraint *constraints) {
     Type *new_type = apply_substitution(subst, current->type);
     Type *existing = find_in_subst(subst, var_name);
 
-    // Handle T_TYPECLASS_RESOLVE constraints
     if (new_type->kind == T_TYPECLASS_RESOLVE) {
       printf("Resolving typeclass constraint for %s\n", var_name);
 
@@ -266,15 +265,6 @@ Subst *solve_constraints(Constraint *constraints) {
       for (int i = 0; i < new_type->data.T_CONS.num_args; i++) {
         new_type->data.T_CONS.args[i] =
             apply_substitution(subst, new_type->data.T_CONS.args[i]);
-      }
-
-      // Resolve to highest-ranked concrete type
-      Type *resolved = resolve_tc_rank(new_type);
-      if (resolved) {
-        printf("Resolved %s to: ", var_name);
-        print_type(resolved);
-        subst = subst_extend(subst, var_name, resolved);
-        continue;
       }
 
       // If no concrete resolution possible, keep the constraint for later
