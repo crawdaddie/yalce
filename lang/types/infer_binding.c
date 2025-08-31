@@ -32,11 +32,12 @@ Type *list_cons_bindings(Ast *pattern, Type *pattern_type, TICtx *ctx) {
 
   while (is_list_cons_operator(pattern)) {
     Ast *head = pattern->data.AST_APPLICATION.args;
-    Type *head_type = bind_pattern_recursive(head, element_type, ctx);
+    Type *head_type =
+        bind_pattern_recursive(head, element_type, (binding_md){}, ctx);
     pattern = pattern->data.AST_APPLICATION.args + 1;
   }
 
-  bind_pattern_recursive(pattern, list_type, ctx);
+  bind_pattern_recursive(pattern, list_type, (binding_md){}, ctx);
   TICtx _ctx = *ctx;
   if (unify(list_type, pattern_type, &_ctx)) {
     return NULL;
@@ -49,7 +50,8 @@ Type *list_cons_bindings(Ast *pattern, Type *pattern_type, TICtx *ctx) {
 }
 
 // Recursively bind patterns (handles nested destructuring)
-Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, TICtx *ctx) {
+Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, binding_md md,
+                             TICtx *ctx) {
   if (pattern_type == NULL) {
     return NULL;
   }
@@ -70,8 +72,13 @@ Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, TICtx *ctx) {
     }
     Scheme var_scheme = {.vars = NULL, .type = pattern_type};
     ctx->env = env_extend(ctx->env, var_name, var_scheme.vars, var_scheme.type);
+    ctx->env->md = md;
 
     return pattern_type;
+  }
+
+  case AST_VOID: {
+    return &t_void;
   }
 
   case AST_TUPLE: {
@@ -119,7 +126,8 @@ Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, TICtx *ctx) {
       Ast *element_pattern = &pattern->data.AST_LIST.items[i];
       Type *element_type = apply_substitution(ctx->subst, expected_types[i]);
 
-      Type *result = bind_pattern_recursive(element_pattern, element_type, ctx);
+      Type *result =
+          bind_pattern_recursive(element_pattern, element_type, md, ctx);
 
       if (!result) {
         return NULL;
@@ -198,7 +206,7 @@ Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, TICtx *ctx) {
         for (int i = 0; i < vt->data.T_CONS.num_args; i++) {
           vt->data.T_CONS.args[i] =
               bind_pattern_recursive(pattern->data.AST_APPLICATION.args + i,
-                                     vt->data.T_CONS.args[i], ctx);
+                                     vt->data.T_CONS.args[i], md, ctx);
         }
         res_type->data.T_CONS.args[idx] = vt;
 
@@ -215,8 +223,8 @@ Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, TICtx *ctx) {
   }
 }
 
-Type *infer_pattern_binding(Ast *binding, Ast *val, Ast *body, TICtx *ctx) {
-  // Step 1: Infer value type (same as infer_let_simple)
+Type *infer_let_pattern_binding(Ast *binding, Ast *val, Ast *body, TICtx *ctx) {
+
   Type *vtype = infer(val, ctx);
   if (!vtype) {
     return type_error(ctx, val, "Cannot infer value type");
@@ -229,21 +237,33 @@ Type *infer_pattern_binding(Ast *binding, Ast *val, Ast *body, TICtx *ctx) {
 
   // Step 3: Handle different binding patterns
   ctx->env = env_subst;
+  int binding_scope = ctx->scope;
+  if (body) {
+    binding_scope++;
+  }
+
+  binding_md binding_info = {
+      BT_VAR,
+      {.VAR = {.scope = binding_scope,
+               .yield_boundary_scope =
+                   (ctx->current_fn_ast && ctx->current_fn_ast->data.AST_LAMBDA
+                                               .num_yield_boundary_crossers) ||
+                   0}}};
 
   if (binding->tag == AST_IDENTIFIER) {
     // Simple binding: let x = val
 
     // Don't solve constraints here - keep variables polymorphic
     Scheme gen_type_scheme = generalize(vtype_subst, env_subst);
+
     ctx->env = env_extend(env_subst, binding->data.AST_IDENTIFIER.value,
                           gen_type_scheme.vars, gen_type_scheme.type);
+    ctx->env->md = binding_info;
   } else {
     // Complex pattern binding: let (x, y) = val or let x::xs = val
 
-    Type *pattern_result = bind_pattern_recursive(binding, vtype_subst, ctx);
-
-    // print_type(pattern_result);
-    // print_type(vtype_subst);
+    Type *pattern_result =
+        bind_pattern_recursive(binding, vtype_subst, binding_info, ctx);
 
     if (!pattern_result) {
       return type_error(ctx, binding, "Pattern binding failed");
@@ -252,7 +272,9 @@ Type *infer_pattern_binding(Ast *binding, Ast *val, Ast *body, TICtx *ctx) {
 
   // Step 4: Handle body (same as infer_let_simple)
   if (body) {
+
     TICtx body_ctx = *ctx;
+    body_ctx.scope = binding_scope;
     Type *body_type = infer(body, &body_ctx);
 
     if (!body_type) {

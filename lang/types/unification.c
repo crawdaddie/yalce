@@ -91,14 +91,16 @@ Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2) {
   *resolution =
       (Type){T_TYPECLASS_RESOLVE,
              {.T_CONS = {.name = tc->name, .args = args, .num_args = 2}}};
+  resolution->implements = tc;
   return resolution;
 }
 
 int unify(Type *t1, Type *t2, TICtx *unify_res) {
-  printf("unify ");
-  print_type(t1);
-  printf(" ~ \n");
-  print_type(t2);
+
+  // printf("unify ");
+  // print_type(t1);
+  // printf(" ~ \n");
+  // print_type(t2);
 
   if (types_equal(t1, t2)) {
     return 0;
@@ -118,10 +120,17 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     return 0;
   }
 
+  if (t2->kind == T_VAR && t1->kind == T_TYPECLASS_RESOLVE) {
+    add_constraint(unify_res, t2, t1);
+    return 0;
+  }
+
   if (t2->kind == T_VAR) {
+
     for (TypeClass *tc = t1->implements; tc != NULL; tc = tc->next) {
       typeclasses_extend(t2, tc);
     }
+
     if (occurs_check(t2->data.T_VAR, t1)) {
       return 1; // Occurs check failure
     }
@@ -246,6 +255,15 @@ Type *find_promoted_type(Type *var, Type *existing, Type *other_type) {
 
   return other_type;
 }
+Type *merge_typeclass_resolve(Type *t1, Type *t2) {
+
+  TypeClass *tc = t1->implements;
+  const char *tc_name = t1->data.T_CONS.name;
+  Type *m = t1->data.T_CONS.args[1];
+  t1->data.T_CONS.args[1] = create_tc_resolve(tc, m, t2);
+
+  return t1;
+}
 
 Subst *solve_constraints(Constraint *constraints) {
   Subst *subst = NULL;
@@ -259,9 +277,7 @@ Subst *solve_constraints(Constraint *constraints) {
     Type *existing = find_in_subst(subst, var_name);
 
     if (new_type->kind == T_TYPECLASS_RESOLVE) {
-      printf("Resolving typeclass constraint for %s\n", var_name);
 
-      // Apply current substitutions to all args
       for (int i = 0; i < new_type->data.T_CONS.num_args; i++) {
         new_type->data.T_CONS.args[i] =
             apply_substitution(subst, new_type->data.T_CONS.args[i]);
@@ -284,44 +300,26 @@ Subst *solve_constraints(Constraint *constraints) {
       continue;
     }
 
-    // Handle merging T_TYPECLASS_RESOLVE with other constraints
     if (existing_subst->kind == T_TYPECLASS_RESOLVE &&
-        new_type->kind != T_TYPECLASS_RESOLVE) {
-      // Add new_type to the resolution candidates
-      Type **new_args =
-          talloc(sizeof(Type *) * (existing_subst->data.T_CONS.num_args + 1));
-      for (int i = 0; i < existing_subst->data.T_CONS.num_args; i++) {
-        new_args[i] = existing_subst->data.T_CONS.args[i];
+        IS_PRIMITIVE_TYPE(new_type)) {
+
+      VarList *frees = free_vars_type(existing_subst);
+      for (VarList *f = frees; f; f = f->next) {
+        subst = update_substitution(subst, f->var, new_type);
       }
-      new_args[existing_subst->data.T_CONS.num_args] = new_type;
 
-      Type *merged_resolve = talloc(sizeof(Type));
-      *merged_resolve = (Type){
-          T_TYPECLASS_RESOLVE,
-          {.T_CONS = {.name = existing_subst->data.T_CONS.name,
-                      .args = new_args,
-                      .num_args = existing_subst->data.T_CONS.num_args + 1}}};
-
+      continue;
+    }
+    // Handle merging T_TYPECLASS_RESOLVE with other constraints
+    if (existing_subst->kind == T_TYPECLASS_RESOLVE) {
+      Type *merged_resolve = merge_typeclass_resolve(existing_subst, new_type);
       subst = update_substitution(subst, var_name, merged_resolve);
       continue;
     }
 
-    if (new_type->kind == T_TYPECLASS_RESOLVE &&
-        existing_subst->kind != T_TYPECLASS_RESOLVE) {
-      // Add existing to the resolution candidates
-      Type **new_args =
-          talloc(sizeof(Type *) * (new_type->data.T_CONS.num_args + 1));
-      for (int i = 0; i < new_type->data.T_CONS.num_args; i++) {
-        new_args[i] = new_type->data.T_CONS.args[i];
-      }
-      new_args[new_type->data.T_CONS.num_args] = existing_subst;
+    if (new_type->kind == T_TYPECLASS_RESOLVE) {
 
-      Type *merged_resolve = talloc(sizeof(Type));
-      *merged_resolve =
-          (Type){T_TYPECLASS_RESOLVE,
-                 {.T_CONS = {.name = new_type->data.T_CONS.name,
-                             .args = new_args,
-                             .num_args = new_type->data.T_CONS.num_args + 1}}};
+      Type *merged_resolve = merge_typeclass_resolve(new_type, existing_subst);
 
       subst = update_substitution(subst, var_name, merged_resolve);
       continue;

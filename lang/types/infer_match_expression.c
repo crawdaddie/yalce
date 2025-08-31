@@ -24,7 +24,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     TICtx c = *ctx;
 
     Type *pattern_type =
-        bind_pattern_recursive(pattern_ast, scrutinee_type, &c);
+        bind_pattern_recursive(pattern_ast, scrutinee_type, (binding_md){}, &c);
 
     branch_envs[i] = c.env;
 
@@ -36,10 +36,8 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
 
     if (guard) {
       infer(guard, &c);
-      print_type_env(c.env);
-      print_constraints(c.constraints);
-      print_subst(c.subst);
     }
+    // ctx->constraints = merge_constraints(ctx->constraints, c.constraints);
   }
 
   Subst *subst = solve_constraints(ctx->constraints);
@@ -69,6 +67,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
   }
 
   ctx->subst = solve_constraints(ctx->constraints);
+  // print_subst(ctx->subst);
 
   Type *final_scrutinee = apply_substitution(ctx->subst, scrutinee_type);
   ast->data.AST_MATCH.expr->md = final_scrutinee;

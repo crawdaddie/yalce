@@ -1,5 +1,6 @@
 
 #include "./infer_app.h"
+#include "serde.h"
 #include "types/unification.h"
 
 Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
@@ -13,18 +14,26 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   Ast *args = ast->data.AST_APPLICATION.args;
   int num_args = ast->data.AST_APPLICATION.len;
 
+  Type *func_type;
   if (func->tag == AST_IDENTIFIER) {
     Scheme *s = lookup_scheme(ctx->env, func->data.AST_IDENTIFIER.value);
     if (!s) {
       return NULL;
     }
-    if (s->type->kind == T_CONS) {
+    if (s->type->kind == T_CONS && !is_coroutine_constructor_type(s->type) &&
+        !is_coroutine_type(s->type)) {
       return infer_cons_application(ast, s, ctx);
     }
   }
 
   // Step 1: Infer function type
-  Type *func_type = infer(func, ctx);
+  func_type = infer(func, ctx);
+  if (is_coroutine_type(func_type)) {
+    func_type = func_type->data.T_CONS.args[0];
+  } else if (is_coroutine_constructor_type(func_type)) {
+    func_type = func_type->data.T_CONS.args[0];
+  }
+
   if (!func_type) {
     return type_error(ctx, ast, "Cannot infer function type");
   }
@@ -49,6 +58,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
 
   // Step 4: Unify function type with expected type
   TICtx unify_ctx = {};
+
   if (unify(func_type, expected_type, &unify_ctx)) {
     print_type_err(func_type);
     print_type_err(expected_type);
@@ -58,10 +68,12 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   // Step 5: Solve constraints and apply substitutions
   Subst *solution = solve_constraints(unify_ctx.constraints);
 
-  if (solution) {
-    ctx->subst = compose_subst(solution, ctx->subst);
-    return apply_substitution(solution, result_type);
+  ctx->subst = compose_subst(solution, ctx->subst);
+  expected_type = apply_substitution(solution, expected_type);
+  ast->data.AST_APPLICATION.function->md = expected_type;
+  Type *res = expected_type;
+  for (int n = num_args; n; n--) {
+    res = res->data.T_FN.to;
   }
-
-  return result_type;
+  return res;
 }

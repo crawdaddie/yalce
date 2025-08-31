@@ -490,6 +490,15 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
   case T_CONS: {
+    if (CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_VARIANT) &&
+        CHARS_EQ(t->alias, "Option")) {
+      Type *opt_of = type_of_option(t);
+
+      fprintf(stream, "Option of ");
+      print_type_to_stream(opt_of, stream);
+      break;
+    }
+
     if (is_forall_type(t)) {
       fprintf(stream, "forall ");
       int len = t->data.T_CONS.num_args;
@@ -691,6 +700,7 @@ bool types_equal(Type *t1, Type *t2) {
   case T_VAR: {
 
     bool eq = strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
+
     if (t2->implements != NULL) {
     }
     return eq;
@@ -700,20 +710,25 @@ bool types_equal(Type *t1, Type *t2) {
   case T_CONS: {
 
     if (t1->alias && t2->alias && (strcmp(t1->alias, t2->alias) != 0)) {
+
       return false;
     }
     if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0) {
+
       return false;
 
     } else if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+
       return false;
     }
-    bool eq = true;
+
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
-      eq &= types_equal(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i]);
+      if (!types_equal(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i])) {
+        return false;
+      }
     }
 
-    return eq;
+    return true;
   }
   case T_FN: {
     if (types_equal(t1->data.T_FN.from, t2->data.T_FN.from)) {
@@ -813,7 +828,7 @@ bool is_generic(Type *t) {
     if (t->data.T_CONS.num_args == 0) {
       return false;
     }
-    if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+    if (CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_VARIANT)) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         Type *arg = t->data.T_CONS.args[i];
         if (is_generic(arg)) {
@@ -822,8 +837,6 @@ bool is_generic(Type *t) {
       }
       return false;
 
-    } else if (strcmp(t->data.T_CONS.name, "forall") == 0) {
-      return true;
     } else {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         if (is_generic(t->data.T_CONS.args[i])) {
@@ -1235,12 +1248,19 @@ bool application_is_partial(Ast *app) {
   return actual_args_len < expected_args_len;
 }
 
-bool is_coroutine_type(Type *fn_type) {
-  return fn_type->kind == T_FN && fn_type->is_coroutine_instance;
-}
+// bool is_coroutine_type(Type *fn_type) {
+//   return fn_type->kind == T_FN && fn_type->is_coroutine_instance;
+// }
 
 bool is_coroutine_constructor_type(Type *fn_type) {
-  return fn_type->kind == T_FN && fn_type->is_coroutine_constructor;
+  // return fn_type->kind == T_FN && fn_type->is_coroutine_constructor;
+  return fn_type->kind == T_CONS &&
+         CHARS_EQ(fn_type->data.T_CONS.name, TYPE_NAME_COROUTINE_CONSTRUCTOR);
+}
+
+bool is_coroutine_type(Type *fn_type) {
+  return fn_type->kind == T_CONS &&
+         CHARS_EQ(fn_type->data.T_CONS.name, TYPE_NAME_COROUTINE_INSTANCE);
 }
 
 bool is_void_func(Type *f) {

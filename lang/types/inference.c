@@ -77,6 +77,15 @@ Scheme *lookup_scheme(TypeEnv *env, const char *name) {
   return lookup_builtin_scheme(name);
 }
 
+TypeEnv *lookup_scheme_ref(TypeEnv *env, const char *name) {
+  for (TypeEnv *e = env; e; e = e->next) {
+    if (CHARS_EQ(name, e->name)) {
+      return e;
+    }
+  }
+  return NULL;
+}
+
 Type *find_in_subst(Subst *subst, const char *name) {
   for (Subst *s = subst; s; s = s->next) {
     if (CHARS_EQ(name, s->var)) {
@@ -219,6 +228,30 @@ TypeEnv *apply_subst_env(Subst *subst, TypeEnv *env) {
   return env;
 }
 
+double tc_rank(const char *tc_name, Type *t) {
+  TypeClass *tc = t->implements;
+  for (TypeClass *tc = t->implements; tc; tc = tc->next) {
+    if CHARS_EQ (tc->name, tc_name) {
+      return tc->rank;
+    }
+  }
+  return 0.;
+}
+Type *tc_resolve(Type *tcr) {
+  const char *tc_name = tcr->data.T_CONS.name;
+  Type *a = tcr->data.T_CONS.args[0];
+  Type *b = tcr->data.T_CONS.args[1];
+
+  if (b->kind == T_TYPECLASS_RESOLVE) {
+    b = tc_resolve(b);
+  }
+
+  if (tc_rank(tc_name, a) >= tc_rank(tc_name, b)) {
+    return a;
+  }
+  return b;
+}
+
 Type *apply_substitution(Subst *subst, Type *t) {
   if (!subst) {
     return t;
@@ -250,7 +283,26 @@ Type *apply_substitution(Subst *subst, Type *t) {
     t->data.T_FN.to = apply_substitution(subst, t->data.T_FN.to);
     return t;
   }
-  case T_TYPECLASS_RESOLVE:
+
+  case T_TYPECLASS_RESOLVE: {
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      Type *s = apply_substitution(subst, t->data.T_CONS.args[i]);
+      // if (get_typeclass_by_name(s, t->data.T_CONS.name) == 0) {
+      //   fprintf(stderr, "Error: cannot apply substitution because ");
+      //   print_type_err(s);
+      //   fprintf(stderr, "does not implement %s\n", t->data.T_CONS.name);
+      //   return NULL;
+      // }
+      //
+      t->data.T_CONS.args[i] = s;
+    }
+
+    if (!is_generic(t)) {
+      return tc_resolve(t);
+    }
+
+    return t;
+  }
   case T_CONS: {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       t->data.T_CONS.args[i] =
@@ -284,6 +336,8 @@ VarList *free_vars_type(Type *t) {
     curr->next = to_vars;
     return from_vars;
   }
+
+  case T_TYPECLASS_RESOLVE:
   case T_CONS: {
     VarList *vars = NULL;
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
@@ -419,16 +473,86 @@ Type *instantiate_with_args(Scheme *scheme, Ast *args, TICtx *ctx) {
   Type *s = apply_substitution(inst_subst, stype);
   return s;
 }
+void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
+                                    TICtx *ctx) {
+  if (!ctx->current_fn_ast) {
+    return;
+  }
+  int binding_scope = binding_info.data.VAR.scope;
+  if (binding_scope < ctx->current_fn_base_scope) {
+    // not defined within current function, ignore
+    return;
+  }
+
+  int yield_boundary = binding_info.data.VAR.yield_boundary_scope;
+  int crosses_yield_boundary =
+      ctx->current_fn_ast &&
+      ctx->current_fn_ast->data.AST_LAMBDA.num_yields >
+          yield_boundary; // there is a yield between the creation of this
+                          // binding and its use
+  if (!crosses_yield_boundary) {
+    // print_ast(ast);
+    // printf("defined in scope %d [boundary %d] - current scope %d current "
+    //        "boundary %d\n",
+    //        binding_info.data.VAR.scope,
+    //        binding_info.data.VAR.yield_boundary_scope, ctx->scope,
+    //        ctx->current_fn_ast->data.AST_LAMBDA.num_yields);
+
+    return;
+  }
+
+  // scan boundary xer list
+  for (AstList *l =
+           ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
+       l; l = l->next) {
+    Ast *a = l->ast;
+    if (CHARS_EQ(a->data.AST_IDENTIFIER.value,
+                 ast->data.AST_IDENTIFIER.value)) {
+      // already registered
+      // printf("already registered\n");
+      return;
+    }
+  }
+
+  // printf("extend boundary crossers of ");
+  // print_ast(ctx->current_fn_ast);
+  // printf(" with ");
+  // print_ast(ast);
+  ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers =
+      ast_list_extend_left(
+          ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers, ast);
+
+  return;
+}
 
 Type *infer_identifier(Ast *ast, TICtx *ctx) {
-  Scheme *s = lookup_scheme(ctx->env, ast->data.AST_IDENTIFIER.value);
-  if (!s) {
-    // fprintf(stderr, "Error: could not resolve type of %s in env\n",
-    //         ast->data.AST_IDENTIFIER.value);
+
+  TypeEnv *scheme_ref =
+      lookup_scheme_ref(ctx->env, ast->data.AST_IDENTIFIER.value);
+
+  if (scheme_ref) {
+    if (scheme_ref->md.type == BT_RECURSIVE_REF) {
+      // printf("looked up recursive ref\n");
+      // print_type(scheme_ref->scheme.type);
+      return scheme_ref->scheme.type;
+    }
+
+    if (scheme_ref->md.type == BT_VAR) {
+      handle_yield_boundary_crossing(scheme_ref->md, ast, ctx);
+    }
+
+    Scheme s = scheme_ref->scheme;
+    Type *inst = instantiate(&s, ctx);
+    return inst;
+  }
+
+  Scheme *builtin_scheme =
+      lookup_builtin_scheme(ast->data.AST_IDENTIFIER.value);
+
+  if (!builtin_scheme) {
     return next_tvar();
   }
-  Type *inst = instantiate(s, ctx);
-  return inst;
+  return instantiate(builtin_scheme, ctx);
 }
 
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
@@ -466,6 +590,23 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
   contained[0] = el_type;
   *type = (Type){T_CONS, {.T_CONS = {cons_name, contained, 1}}};
   return type;
+}
+
+Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
+  Ast *expr = ast->data.AST_YIELD.expr;
+
+  Type *expr_type = infer(expr, ctx);
+
+  if (ctx->yielded_type != NULL) {
+    if (unify(expr_type, ctx->yielded_type, ctx)) {
+      fprintf(stderr, "Error: could not unify yield expressions in function - "
+                      "all yields must be of the same type\n");
+      return NULL;
+    }
+  }
+  ctx->yielded_type = expr_type;
+  ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
+  return expr_type;
 }
 
 Type *infer(Ast *ast, TICtx *ctx) {
@@ -518,9 +659,32 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     int arity = ast->data.AST_LIST.len;
     Type **args = talloc(sizeof(Type *) * arity);
+    if (ast->data.AST_LIST.items[0].tag == AST_LET) {
+      const char **names = talloc(sizeof(char *) * arity);
+
+      // named tuple
+      for (int i = 0; i < arity; i++) {
+        if (ast->data.AST_LIST.items[i].data.AST_LET.binding->tag !=
+            AST_IDENTIFIER) {
+          return NULL;
+        }
+        names[i] = ast->data.AST_LIST.items[i]
+                       .data.AST_LET.binding->data.AST_IDENTIFIER.value;
+        TICtx _ctx = *ctx;
+        _ctx.scope++;
+        args[i] = infer(ast->data.AST_LIST.items[i].data.AST_LET.expr, &_ctx);
+      }
+      type = create_tuple_type(arity, args);
+      type->data.T_CONS.names = names;
+      break;
+    }
+
     for (int i = 0; i < arity; i++) {
       Ast *member = ast->data.AST_LIST.items + i;
-      Type *member_type = infer(member, ctx);
+
+      Type *member_type;
+      member_type = infer(member, ctx);
+
       args[i] = member_type;
       if (!member_type) {
         return NULL;
@@ -576,7 +740,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     Ast *binding = ast->data.AST_LET.binding;
     Ast *val = ast->data.AST_LET.expr;
     Ast *body = ast->data.AST_LET.in_expr;
-    type = infer_pattern_binding(binding, val, body, ctx);
+    type = infer_let_pattern_binding(binding, val, body, ctx);
     break;
   }
 
@@ -598,28 +762,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Scheme *s = compute_type_expression(sig, ctx);
       type = s->type;
     }
-    // print_type_env(ctx->env);
-
-    // int params_count = sig->data.AST_LIST.len - 1;
-
-    //
-    //   Type *f = instantiate(
-    //       compute_type_expression(sig->data.AST_LIST.items + params_count,
-    //       ctx), ctx);
-    //   for (int i = params_count - 1; i >= 0; i--) {
-    //     f = type_fn(instantiate(compute_type_expression(
-    //                                 sig->data.AST_LIST.items + i, ctx),
-    //                             ctx),
-    //                 f);
-    //   }
-    //   type = f;
-    // }
-
-    // TODO: Implement extern function inference
     break;
   }
 
   case AST_YIELD: {
+    type = infer_yield_expr(ast, ctx);
     // TODO: Implement yield inference
     break;
   }

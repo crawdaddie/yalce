@@ -127,6 +127,8 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_TYPECLASS_EQ "Eq"
 #define TYPE_NAME_TYPECLASS_ORD "Ord"
 
+#define TYPE_NAME_COROUTINE_CONSTRUCTOR "CoroutineConstructor"
+#define TYPE_NAME_COROUTINE_INSTANCE "Coroutine"
 
 typedef struct _binop_map {
   const char *name;
@@ -207,7 +209,15 @@ typedef struct _binop_map {
 #define TTUPLE(num, ...)                                                       \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
 
-#define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none)
+#define TOPT(of)                                                               \
+  ((Type){T_CONS,                                                              \
+          {.T_CONS = {TYPE_NAME_VARIANT, .num_args = 2,                        \
+                      .args =                                                  \
+                          (Type *[]){                                          \
+                              &TCONS("Some", 1, of),                           \
+                              &t_none,                                         \
+                          }}},                                                 \
+          .alias = "Option"})
 
 // #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
 //   ((Type){                                                                     \
@@ -282,6 +292,8 @@ typedef struct Type {
   TypeClass *implements;
   // TypeClass
   //     *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
+  //     
+  //
   //                //  be instantiated to t1 [requires: Arithmetic] ->
   //                // t1 [requires: Arithmetic] -> t1 [requires Arithmetic]
 
@@ -295,7 +307,6 @@ typedef struct Type {
   bool external_scope;  // true if this type variable is part of a function
                         // signature
   struct Type *closure_meta;
-  // bool is_recursive_placeholder;
   int scope;
   int yield_boundary;
   void *meta;

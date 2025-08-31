@@ -31,9 +31,31 @@ typedef struct Scheme {
 } Scheme;
 
 // TypeScheme Env - maps names to type schemes
+typedef struct {
+  enum BindingType {
+    BT_VAR,
+    BT_RECURSIVE_REF,
+    BT_FN_PARAM,
+  } type;
+
+  union {
+    struct {
+      int scope;
+      int yield_boundary_scope;
+    } VAR;
+    struct {
+      int scope;
+    } RECURSIVE_REF;
+    struct {
+      int scope;
+    } FN_PARAM;
+  } data;
+} binding_md;
+
 typedef struct TypeEnv {
   const char *name;
   Scheme scheme;
+  binding_md md;
   struct TypeEnv *next;
 } TypeEnv;
 
@@ -50,24 +72,10 @@ typedef struct TICtx {
   Constraint *constraints;
   Type *yielded_type;
   int scope;
-  int current_fn_scope;
+  int current_fn_base_scope;
   FILE *err_stream; // Replace const char *err
 } TICtx;
 
-typedef struct InferenceTree {
-  const char *rule;
-  const char *input;
-  const char *output;
-  int num_children;
-  struct InferenceTree *children;
-} InferenceTree;
-
-typedef struct {
-  int status;
-  Subst *subst;
-  Type *type;
-  InferenceTree *tree;
-} InferenceResult;
 Type *infer(Ast *ast, TICtx *ctx);
 
 void initialize_builtin_schemes();
@@ -75,10 +83,12 @@ void add_builtin(char *name, Type *t);
 
 void print_builtin_types();
 
+VarList *free_vars_type(Type *t);
 Scheme generalize(Type *type, TypeEnv *env);
 Type *instantiate(Scheme *scheme, TICtx *ctx);
 
 Type *instantiate_with_args(Scheme *scheme, Ast *args, TICtx *ctx);
+
 Scheme *lookup_scheme(TypeEnv *env, const char *name);
 Type *find_in_subst(Subst *subst, const char *name);
 Subst *subst_extend(Subst *s, const char *key, Type *type);

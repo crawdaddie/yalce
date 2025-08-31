@@ -80,47 +80,6 @@
     res;                                                                       \
   })
 
-int _main() {
-
-  initialize_builtin_schemes();
-
-  bool status = true;
-  Type opt_int = TOPT(&t_int);
-  ({
-    Ast *b =
-        T("type SchedulerCallback = (() -> Option of Double) -> Int -> ();\n"
-          "let schedule_event = extern fn SchedulerCallback -> (() -> Option "
-          "of Double) -> Ptr -> ();\n"
-          "let runner = fn c off ->\n"
-          "  match c () with\n"
-          "  | Some dur -> schedule_event runner dur c\n"
-          "  | None -> () \n"
-          ";;\n"
-          "schedule_event runner 0. c\n",
-          &MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)), &t_int,
-                          &t_void));
-
-    Ast *runner_arg = b->data.AST_BODY.stmts[3]->data.AST_APPLICATION.args;
-    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
-    // cor_type.is_coroutine_instance = true;
-    Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
-
-    bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
-    const char *msg = "runner arg can be materialised to specific type:";
-    if (res) {
-      printf("✅ %s\n", msg);
-      print_type(&runner_fn_arg_type);
-      status &= true;
-    } else {
-      status &= false;
-      printf("❌ %s\nexpected:\n", msg);
-      print_type(&runner_fn_arg_type);
-      printf("got:\n");
-      print_type(runner_arg->md);
-    }
-  });
-  return status;
-}
 int test_type_declarations() {
   printf("TEST TYPE DECLARATIONS\n---------------------------------\n");
   bool status = true;
@@ -244,6 +203,7 @@ int test_list_processing() {
   //                   &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))));
   return status;
 }
+
 int test_basic_ops() {
   printf("## TEST BASIC OPS\n---------------------------------------------\n");
   bool status = true;
@@ -255,7 +215,13 @@ int test_basic_ops() {
   T("false", &t_bool);
   T("()", &t_void);
   // T("[]", &TLIST(&TVAR("`0")));
-  T("(+)", &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`0"), &TVAR("`0")));
+  ({
+    Type t0 = arithmetic_var("`0");
+    Type t1 = arithmetic_var("`1");
+    T("(+)", &MAKE_FN_TYPE_3(
+                 &t0, &t1,
+                 &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
+  });
   T("id 1", &t_int);
   T("id 1.", &t_num);
   T("id \'c\'", &t_char);
@@ -300,6 +266,7 @@ int test_basic_ops() {
   TFAIL("let z = 1 in let x::_ = z in x");
   return status;
 }
+
 int test_funcs() {
 
   printf("## TEST FUNCS\n---------------------------------------------\n");
@@ -312,14 +279,18 @@ int test_funcs() {
     &MAKE_FN_TYPE_3(&t_int, &t_num, &t_int));
 
   ({
-    Type tvar = {T_VAR, .data = {.T_VAR = "`0"}};
+    Type tvar = arithmetic_var("`0");
     Ast *body = T("let f = fn x -> 1 + x;;\n"
                   "f 1;\n"
                   "f 1.;\n",
                   &t_num);
 
-    TASSERT_EQ(body->data.AST_BODY.stmts[0]->md, &MAKE_FN_TYPE_2(&tvar, &tvar),
-               "f == `3 [arithmetic] -> `3 [arithmetic]");
+    TASSERT_EQ(body->data.AST_BODY.stmts[0]->md,
+               &MAKE_FN_TYPE_2(
+                   &tvar, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                             &t_int, &tvar)),
+               "f == `0 [Arithmetic] -> resolve Arithmetic `0 : Int");
+
     TASSERT_EQ(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
     TASSERT_EQ(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
   });
@@ -344,16 +315,23 @@ int test_funcs() {
   });
 
   ({
-    Type t7 = arithmetic_var("`7");
-
-    T("let f = fn x y z -> x + y + z;", &MAKE_FN_TYPE_4(&t7, &t7, &t7, &t7));
+    Type t0 = TVAR("`0");
+    Type t1 = TVAR("`1");
+    Type t2 = TVAR("`2");
+    T("let f = fn x y z -> x + y + z;",
+      &MAKE_FN_TYPE_4(
+          &t0, &t1, &t2,
+          &MAKE_TC_RESOLVE_2(
+              TYPE_NAME_TYPECLASS_ARITHMETIC,
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1),
+              &t2)));
   });
 
   ({
-    T("let count_10 = fn x ->\n"
+    T("let count10 = fn x ->\n"
       "  match x with\n"
       "  | 10 -> 10\n"
-      "  | _ -> count_10 (x + 1)\n"
+      "  | _ -> count10 (x + 1)\n"
       ";;\n",
       &MAKE_FN_TYPE_2(&t_int, &t_int));
   });
@@ -366,20 +344,20 @@ int test_funcs() {
     ";;\n",
     &MAKE_FN_TYPE_2(&t_int, &t_int));
 
-  T("let fib = fn x ->\n"
-    "  match x with\n"
-    "  | 0 -> 0\n"
-    "  | 1 -> 1\n"
-    "  | x -> (fib (x - 1)) + (fib (x - 2))\n"
-    ";;\n",
-    &MAKE_FN_TYPE_2(&t_int, &t_int));
-
   T("let f = fn x: (Int) (y, z): (Int, Double) -> x + y + z;;",
     &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
-
-  Type t8 = arithmetic_var("`8");
-  T("let f = fn x (y, z) -> x + y + z;;",
-    &MAKE_FN_TYPE_3(&t8, &TTUPLE(2, &t8, &t8), &t8));
+  ({
+    Type t0 = arithmetic_var("`0");
+    Type t2 = arithmetic_var("`2");
+    Type t3 = arithmetic_var("`3");
+    T("let f = fn x (y, z) -> x + y + z;;",
+      &MAKE_FN_TYPE_3(
+          &t0, &TTUPLE(2, &t2, &t3),
+          &MAKE_TC_RESOLVE_2(
+              TYPE_NAME_TYPECLASS_ARITHMETIC,
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t2),
+              &t3)));
+  });
 
   T("let bind = fn p f input ->\n"
     "  match p input with\n"
@@ -405,7 +383,6 @@ int test_funcs() {
     "  | _ -> None\n"
     ";;\n"
     "\n"
-    "let return = fn x input -> Some (x, input);;\n"
     "\n"
     "\n"
     "let two_digits = fn input ->\n"
@@ -414,19 +391,29 @@ int test_funcs() {
     "    (fn inp -> Some ((first, second) inp))\n"
     "  )) input\n"
     ";;\n",
-    &t_void);
+    &MAKE_FN_TYPE_2(&TVAR("`42"), &TOPT(&TVAR("`44"))));
+
+  Type t0 = arithmetic_var("`0");
+  T("let add1 = fn x -> 1 + x;;",
+    &MAKE_FN_TYPE_2(
+        &t0, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &t0)));
+  T("let add1 = fn x -> 1 + x;; add1 1", &t_int);
+  T("let add1 = fn x -> 1 + x;; add1 1; add1 1.", &t_num);
+
   ({
     T("let f = fn a b c d -> a == b && c == d;;\n"
       "f 1. 2. 3.;\n"
       "f 1 2 3\n",
-      &MAKE_FN_TYPE_2(&t_int, &t_bool));
+      &MAKE_FN_TYPE_2(&TVAR("`17"), &t_bool));
   });
 
   ({
-    Type t = arithmetic_var("`2");
-    Ast *b = T("let f = fn a b c -> a + b + c;;\n"
-               "f 1 2\n",
-               &MAKE_FN_TYPE_2(&t, &t));
+    Type t = arithmetic_var("`13");
+    Ast *b =
+        T("let f = fn a b c -> a + b + c;;\n"
+          "f 1 2\n",
+          &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t_int, &t)));
 
     bool is_partial = application_is_partial(b->data.AST_BODY.stmts[1]);
 
@@ -468,10 +455,11 @@ int test_funcs() {
     }
 
     ({
-      Type t = arithmetic_var("`2");
+      Type t = arithmetic_var("`13");
       T("let f = fn a b c -> a + b + c;;\n"
         "f 1. 2.\n",
-        &MAKE_FN_TYPE_2(&t, &t));
+        &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                               &t_num, &t)));
     });
 
     T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
@@ -482,170 +470,27 @@ int test_funcs() {
       Type t0 = arithmetic_var("`0");
       Type t1 = arithmetic_var("`1");
       T("(1, 2, fn a b -> a + b;);\n",
-        &TTUPLE(3, &t_int, &t_int,
-                &MAKE_FN_TYPE_3(&t0, &t1,
-                                &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1))));
+        &TTUPLE(
+            3, &t_int, &t_int,
+            &MAKE_FN_TYPE_3(
+                &t0, &t1,
+                &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1))));
     });
 
     ({
-      Type t0 = arithmetic_var("`2");
-      Type t1 = arithmetic_var("`3");
-      Type tuple =
-          TTUPLE(3, &t_int, &t_int,
-                 &MAKE_FN_TYPE_3(&t0, &t1,
-                                 &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1)));
+      Type t0 = arithmetic_var("`0");
+      Type t1 = arithmetic_var("`1");
+      Type tuple = TTUPLE(
+          3, &t_int, &t_int,
+          &MAKE_FN_TYPE_3(
+              &t0, &t1,
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
 
       tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
       T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
     });
 
     status &= is_partial;
-  });
-
-  return status;
-}
-int test_match_exprs() {
-  printf(
-      "## TEST MATCH EXPRS\n---------------------------------------------\n");
-  bool status = true;
-  T("match x with\n"
-    "| 1 -> 1\n"
-    "| 2 -> 0\n"
-    "| _ -> 3\n",
-    &t_int);
-
-  ({
-    Type opt_int = TOPT(&t_int);
-    T("let f = fn x ->\n"
-      "match x with\n"
-      "  | Some 1 -> 1\n"
-      "  | Some 0 -> 1\n"
-      "  | None -> 0\n"
-      "  ;;\n",
-      &MAKE_FN_TYPE_2(&opt_int, &t_int));
-  });
-
-  ({
-    Type opt_int = TOPT(&t_int);
-    T("let f = fn x ->\n"
-      "match x with\n"
-      "  | Some y -> y\n"
-      "  | None -> 0\n"
-      "  ;;\n",
-      &MAKE_FN_TYPE_2(&opt_int, &t_int));
-  });
-
-  ({
-    Type opt_int = TOPT(&t_int);
-    T("let f = fn x ->\n"
-      "match x with\n"
-      "  | Some y -> y + 1\n"
-      "  | None -> 0\n"
-      "  ;;\n",
-      &MAKE_FN_TYPE_2(&opt_int, &t_int));
-  });
-
-  ({
-    Type opt_int = TOPT(&t_int);
-    T("let f = fn x ->\n"
-      "match x with\n"
-      "  | Some y -> y * 2\n"
-      "  | None -> 0\n"
-      "  ;;\n",
-      &MAKE_FN_TYPE_2(&opt_int, &t_int));
-  });
-
-  T("let f = fn x ->\n"
-    "match x with\n"
-    "  | (1, 2) -> 1\n"
-    "  | (1, 3) -> 0\n"
-    "  ;;\n",
-    &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
-
-  T("let f = fn x ->\n"
-    "match x with\n"
-    "  | (1, y) -> y\n"
-    "  | (1, 3) -> 0\n"
-    "  ;;\n",
-    &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
-
-  ({
-    Ast *b = T("let x = 1;\n"
-               "match x with\n"
-               "| xx if xx > 300 -> xx\n"
-               "| 2 -> 0\n"
-               "| _ -> 3",
-               &t_int);
-    Ast *branch = b->data.AST_BODY.stmts[1]->data.AST_MATCH.branches;
-
-    Ast *guard = branch->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
-
-    TASSERT_EQ(guard->data.AST_APPLICATION.function->md,
-               &MAKE_FN_TYPE_3(&t_int, &t_int, &t_bool),
-               "guard clause has type Int -> Int -> Bool\n");
-  });
-  return status;
-}
-
-int __main() {
-  initialize_builtin_schemes();
-
-  bool status = true;
-  // TypeEnv *env = NULL;
-
-  status &= test_basic_ops();
-  status &= test_funcs();
-  status &= test_match_exprs();
-
-  // first-class functions
-  // ({
-  //   Type t0 = TVAR("`7");
-  //   Type t1 = TVAR("`8");
-  //   Type t2 = TVAR("`10");
-  //   Ast *b = T("let sum = fn a b -> a + b;;\n"
-  //              "let proc = fn f a b -> f a b;;\n"
-  //              "proc sum 1 2;\n",
-  //              &t_int);
-  //
-  //   Type *EX = &t2;
-  //   EX = type_fn(&t1, EX);
-  //   EX = type_fn(&t0, EX);
-  //   EX = type_fn(&MAKE_FN_TYPE_3(&t0, &t1, &t2), EX);
-  //
-  //   printf("expected: ");
-  //   print_type(EX);
-  //   printf("ast md:   ");
-  //   Type *got = b->data.AST_BODY.stmts[1]->md;
-  //   print_type(got);
-  //   TASSERT_EQ(got, EX, "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
-  //
-  //   print_ast(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args);
-  //   print_type(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args->md);
-  // });
-
-  // ({
-  //   Type t0 = TVAR("`7");
-  //   Type t1 = TVAR("`8");
-  //   Type t2 = TVAR("`10");
-  //   Ast *b = T("let sum = fn a b -> a + b;;\n"
-  //              "let proc = fn f a b -> f a b;;\n"
-  //              "proc sum 1.0 2.0;\n"
-  //              "proc sum 1 2;\n",
-  //              &t_int);
-  //
-  //   printf("expected: ");
-  //   print_type(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1,
-  //   &t2)); printf("ast md:   "); print_type(b->data.AST_BODY.stmts[1]->md);
-  //   TASSERT_EQ(b->data.AST_BODY.stmts[2]->md, &t_num, "proc sum 1. 2. ==
-  //   Double");
-  // });
-
-  status &= test_type_declarations();
-  status &= test_list_processing();
-
-  ({
-    Type opt_int = TOPT(&t_int);
-    T("Some 1", &opt_int);
   });
 
   ({
@@ -718,17 +563,20 @@ int __main() {
     */
 
   ({
+    Type v = TVAR("`17");
     T("let f = fn a b c d -> a == b && c == d;;\n"
       "f 1. 2. 3.;\n"
       "f 1 2 3\n",
-      &MAKE_FN_TYPE_2(&t_int, &t_bool));
+     &MAKE_FN_TYPE_2(&v, &t_bool));
   });
 
   ({
-    Type t = arithmetic_var("`2");
-    Ast *b = T("let f = fn a b c -> a + b + c;;\n"
-               "f 1 2\n",
-               &MAKE_FN_TYPE_2(&t, &t));
+    Type t = arithmetic_var("`13");
+    Ast *b =
+        T("let f = fn a b c -> a + b + c;;\n"
+          "f 1 2\n",
+          &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t_int, &t)));
 
     bool is_partial = application_is_partial(b->data.AST_BODY.stmts[1]);
 
@@ -738,10 +586,17 @@ int __main() {
     if (is_partial) {
       printf("✅ %s", msg);
     } else {
-
       printf("❌ %s", msg);
     }
     status &= is_partial;
+  });
+  ({
+    Type t = arithmetic_var("`13");
+    T("let f = fn a b c -> a + b + c;;\n"
+      "f 1. 2.\n",
+
+          &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t_num, &t)));
   });
 
   ({
@@ -771,12 +626,6 @@ int __main() {
     status &= is_partial;
   });
 
-  ({
-    Type t = arithmetic_var("`2");
-    T("let f = fn a b c -> a + b + c;;\n"
-      "f 1. 2.\n",
-      &MAKE_FN_TYPE_2(&t, &t));
-  });
 
   T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
     "f 1 2\n",
@@ -788,25 +637,171 @@ int __main() {
     T("(1, 2, fn a b -> a + b;);\n",
       &TTUPLE(3, &t_int, &t_int,
               &MAKE_FN_TYPE_3(&t0, &t1,
-                              &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1))));
+                              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t0, &t1))));
   });
 
   ({
-    Type t0 = arithmetic_var("`2");
-    Type t1 = arithmetic_var("`3");
-    Type tuple = TTUPLE(
-        3, &t_int, &t_int,
-        &MAKE_FN_TYPE_3(&t0, &t1, &MAKE_TC_RESOLVE_2("arithmetic", &t0, &t1)));
+    Type t0 = arithmetic_var("`0");
+    Type t1 = arithmetic_var("`1");
+    Type tuple =
+        TTUPLE(3, &t_int, &t_int,
+               &MAKE_FN_TYPE_3(&t0, &t1,
+                               &MAKE_TC_RESOLVE_2(
+                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
 
     tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
     T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
   });
 
+  T("let sq = fn x: (Int) -> x * 1.;;", &MAKE_FN_TYPE_2(&t_int, &t_num));
+
+  return status;
+}
+int test_match_exprs() {
+  printf(
+      "## TEST MATCH EXPRS\n---------------------------------------------\n");
+  bool status = true;
+
   ({
-    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
-    cor.is_coroutine_instance = true;
-    Type constructor = MAKE_FN_TYPE_2(&t_void, &cor);
-    constructor.is_coroutine_constructor = true;
+    Type opt_int = TOPT(&t_int);
+    T("Some 1", &opt_int);
+  });
+  T("match x with\n"
+    "| 1 -> 1\n"
+    "| 2 -> 0\n"
+    "| _ -> 3\n",
+    &t_int);
+
+  ({
+    Type opt_int = TOPT(&t_int);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some 1 -> 1\n"
+      "  | Some 0 -> 1\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+      &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
+  ({
+    Type opt_int = TOPT(&t_int);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some y -> y\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+      &MAKE_FN_TYPE_2(&opt_int, &t_int));
+  });
+
+  ({
+    Type v = TVAR("`3");
+    Type opt = TOPT(&v);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some y -> y + 1\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+
+      &MAKE_FN_TYPE_2(&opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                               &v, &t_int)));
+  });
+
+  ({
+    Type v = TVAR("`3");
+    Type opt = TOPT(&v);
+    T("let f = fn x ->\n"
+      "match x with\n"
+      "  | Some y -> y * 2\n"
+      "  | None -> 0\n"
+      "  ;;\n",
+      &MAKE_FN_TYPE_2(&opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                               &v, &t_int)));
+  });
+
+  T("let f = fn x ->\n"
+    "match x with\n"
+    "  | (1, 2) -> 1\n"
+    "  | (1, 3) -> 0\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
+
+  T("let f = fn x ->\n"
+    "match x with\n"
+    "  | (1, y) -> y\n"
+    "  | (1, 3) -> 0\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
+
+  ({
+    Ast *b = T("let x = 1;\n"
+               "match x with\n"
+               "| xx if xx > 300 -> xx\n"
+               "| 2 -> 0\n"
+               "| _ -> 3",
+               &t_int);
+    Ast *branch = b->data.AST_BODY.stmts[1]->data.AST_MATCH.branches;
+
+    Ast *guard = branch->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+
+    TASSERT_EQ(guard->data.AST_APPLICATION.function->md,
+               &MAKE_FN_TYPE_3(&t_int, &t_int, &t_bool),
+               "guard clause has type Int -> Int -> Bool\n");
+  });
+  return status;
+}
+// first-class functions
+// ({
+//   Type t0 = TVAR("`7");
+//   Type t1 = TVAR("`8");
+//   Type t2 = TVAR("`10");
+//   Ast *b = T("let sum = fn a b -> a + b;;\n"
+//              "let proc = fn f a b -> f a b;;\n"
+//              "proc sum 1 2;\n",
+//              &t_int);
+//
+//   Type *EX = &t2;
+//   EX = type_fn(&t1, EX);
+//   EX = type_fn(&t0, EX);
+//   EX = type_fn(&MAKE_FN_TYPE_3(&t0, &t1, &t2), EX);
+//
+//   printf("expected: ");
+//   print_type(EX);
+//   printf("ast md:   ");
+//   Type *got = b->data.AST_BODY.stmts[1]->md;
+//   print_type(got);
+//   TASSERT_EQ(got, EX, "proc == (`7 -> `8 -> `10) -> `7 -> `8 -> `10");
+//
+//   print_ast(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args);
+//   print_type(b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args->md);
+// });
+
+// ({
+//   Type t0 = TVAR("`7");
+//   Type t1 = TVAR("`8");
+//   Type t2 = TVAR("`10");
+//   Ast *b = T("let sum = fn a b -> a + b;;\n"
+//              "let proc = fn f a b -> f a b;;\n"
+//              "proc sum 1.0 2.0;\n"
+//              "proc sum 1 2;\n",
+//              &t_int);
+//
+//   printf("expected: ");
+//   print_type(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t0, &t1, &t2), &t0, &t1,
+//   &t2)); printf("ast md:   "); print_type(b->data.AST_BODY.stmts[1]->md);
+//   TASSERT_EQ(b->data.AST_BODY.stmts[2]->md, &t_num, "proc sum 1. 2. ==
+//   Double");
+// });
+
+int test_coroutines() {
+  printf("### TEST COROUTINES\n--------------------------------\n");
+  bool status = true;
+  #define COROUTINE_CONS(f) TCONS(TYPE_NAME_COROUTINE_CONSTRUCTOR, 1, f)
+  #define COROUTINE_INST(f) TCONS(TYPE_NAME_COROUTINE_INSTANCE, 1, f)
+
+  ({
+    Type cor = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)));
+    Type constructor = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
 
     T("let co_void = fn () ->\n"
       "  yield 1.;\n"
@@ -868,7 +863,6 @@ int __main() {
   //         &MAKE_FN_TYPE_2(&t_void, &t_num)));
   // });
 
-  T("let sq = fn x: (Int) -> x * 1.;;", &MAKE_FN_TYPE_2(&t_int, &t_num));
 
   // ({
   //   Type cor =
@@ -885,38 +879,165 @@ int __main() {
   // });
   //
   //
+  //
   ({
-    Ast *b =
-        T("type SchedulerCallback = (() -> Option of Double) -> Int -> ();\n"
-          "let schedule_event = extern fn SchedulerCallback -> (() -> Option "
-          "of Double) -> Ptr -> "
-          "();\n"
-          "let runner = fn c off ->\n"
-          "  match c () with\n"
-          "  | Some dur -> schedule_event runner dur c\n"
-          "  | None -> () \n"
-          ";;\n"
-          "schedule_event runner 0. c\n",
-          &t_void);
+    Type cor = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int)));
+    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  yield x + 2\n"
+               "  ;;\n",
+               &cor_cons);
 
-    Ast *runner_arg = b->data.AST_BODY.stmts[3]->data.AST_APPLICATION.args;
-    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
-    // cor_type.is_coroutine_instance = true;
-    Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
+    // AstList *boundary_crossers =
+    //     l->data.AST_BODY.stmts[0]
+    //         ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+    //
+    // Ast *b = boundary_crossers->ast;
+    //
+    // printf("boundary crosser (implicit state param): \n");
+    // print_ast(b);
+  });
 
-    // bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
-    // const char *msg = "runner arg can be materialised to specific type:";
-    // if (res) {
-    //   printf("✅ %s\n", msg);
-    //   print_type(&runner_fn_arg_type);
-    //   status &= true;
-    // } else {
-    //   status &= false;
-    //   printf("❌ %s\nexpected:\n", msg);
-    //   print_type(&runner_fn_arg_type);
-    //   printf("got:\n");
-    //   print_type(runner_arg->md);
-    // }
+  ({
+    Type cor = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int)));
+    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  yield x + 2;\n"
+               "  let y = 200;\n"
+               "  yield x + y;\n"
+               "  yield y\n"
+               "  ;;\n",
+               &cor_cons);
+
+    AstList *bx =
+        l->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+    int num_xs = 0;
+    Ast *b1 = bx->ast;
+    Ast *b2 = bx->next->ast;
+
+    while (bx) {
+      num_xs++;
+      bx = bx->next;
+    }
+
+    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
+    printf("boundary crossers (implicit state params): \n", num_xs);
+    print_ast(b1);
+    print_ast(b2);
+  });
+
+  ({
+    Type cor = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int)));
+    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    Ast *l = T("let f = fn () -> \n"
+               "  let x = 1;\n"
+               "  yield x;\n"
+               "  let y = 200;\n"
+               "  yield x + 2 + y;\n"
+               "  yield y\n"
+               "  ;;\n",
+               &cor_cons);
+
+    AstList *bx =
+        l->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
+
+    int num_xs = 0;
+    while (bx) {
+      num_xs++;
+      bx = bx->next;
+    }
+
+
+    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
+  });
+
+  ({
+    Type cor_inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    cor_inst.is_coroutine_instance = true;
+    T("let wrapped_cor = fn () ->\n"
+      "  let wrapper = fn x -> print `specially wrapped: {x}\n`\n"
+      "  ;;\n"
+      "  let co_void = fn () ->\n"
+      "    yield 1;\n"
+      "    yield 2;\n"
+      "    yield 3;\n"
+      "    yield 200\n"
+      "  ;;\n"
+      "  let inst = (co_void () |> cor_wrap_effect wrapper)\n"
+      ";;\n"
+      "wrapped_cor ()\n",
+      &cor_inst);
+  });
+
+  T("let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`;;",
+    &MAKE_FN_TYPE_2(&TVAR("`0"), &t_string));
+
+  ({
+    Type inst = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_string)));
+    Ast *b = T("let str_map = fn x -> `[str {x}]`;;\n"
+               "let co_void = fn () ->\n"
+               "  yield 1;\n"
+               "  yield 2;\n"
+               "  yield 3;\n"
+               "  yield 4;\n"
+               "  yield 5;\n"
+               "  yield 6;\n"
+               "  yield 7 \n"
+               ";;\n"
+               "co_void () |> cor_map str_map;\n",
+               &inst);
+    // print_ast(b->data.AST_BODY.stmts[2]);
+    Ast *cor_map_arg = b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args;
+
+    Type mapper = MAKE_FN_TYPE_2(&t_int, &t_string);
+    // Type mapper = t_ptr;
+    bool res = types_equal(cor_map_arg->md, &mapper);
+    const char *msg = "runner arg can be materialised to specific type:";
+    if (res) {
+      printf("✅ %s\n", msg);
+      print_type(&mapper);
+      status &= true;
+    } else {
+      status &= false;
+      printf("❌ %s\nexpected:\n", msg);
+      print_type(&mapper);
+      printf("got:\n");
+      print_type(cor_map_arg->md);
+    }
+
+    print_ast(b->data.AST_BODY.stmts[0]);
+    print_type(b->data.AST_BODY.stmts[0]->md);
+
+    print_ast(
+        b->data.AST_BODY.stmts[0]
+            ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
+        1);
+
+    print_type(
+        (b->data.AST_BODY.stmts[0]
+             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
+         1)
+            ->md);
+  });
+
+  ({
+    Type cor_type = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int)));
+    cor_type.is_coroutine_instance = true;
+
+    T("let l1 = [1, 2, 3];\n"
+      "let l2 = [6, 5, 4];\n"
+      "let co_void = fn () -> \n"
+      "  yield iter_of_list l1;\n"
+      "  yield iter_of_list l2\n"
+      ";;\n"
+      "let c = co_void ();\n",
+      &cor_type);
   });
 
   ({
@@ -960,19 +1081,59 @@ int __main() {
     }
   });
 
-  ({
-    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
-    cor_type.is_coroutine_instance = true;
+  return status;
+}
+int main() {
+  initialize_builtin_schemes();
 
-    T("let l1 = [1, 2, 3];\n"
-      "let l2 = [6, 5, 4];\n"
-      "let co_void = fn () -> \n"
-      "  yield iter_of_list l1;\n"
-      "  yield iter_of_list l2\n"
-      ";;\n"
-      "let c = co_void ();\n",
-      &cor_type);
+  bool status = true;
+  // TypeEnv *env = NULL;
+
+  status &= test_basic_ops();
+  status &= test_funcs();
+  status &= test_match_exprs();
+
+  status &= test_type_declarations();
+  status &= test_list_processing();
+  status &= test_coroutines();
+
+
+
+  ({
+    Ast *b =
+        T("type SchedulerCallback = (() -> Option of Double) -> Int -> ();\n"
+          "let schedule_event = extern fn SchedulerCallback -> (() -> Option "
+          "of Double) -> Ptr -> "
+          "();\n"
+          "let runner = fn c off ->\n"
+          "  match c () with\n"
+          "  | Some dur -> schedule_event runner dur c\n"
+          "  | None -> () \n"
+          ";;\n"
+          "schedule_event runner 0. c\n",
+          &t_void);
+
+    Ast *runner_arg = b->data.AST_BODY.stmts[3]->data.AST_APPLICATION.args;
+    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
+    // cor_type.is_coroutine_instance = true;
+    Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
+
+    // bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
+    // const char *msg = "runner arg can be materialised to specific type:";
+    // if (res) {
+    //   printf("✅ %s\n", msg);
+    //   print_type(&runner_fn_arg_type);
+    //   status &= true;
+    // } else {
+    //   status &= false;
+    //   printf("❌ %s\nexpected:\n", msg);
+    //   print_type(&runner_fn_arg_type);
+    //   printf("got:\n");
+    //   print_type(runner_arg->md);
+    // }
   });
+
+
 
   // ({
   //   Type v = TVAR("t");
@@ -1003,7 +1164,7 @@ int __main() {
     "  let idx = rand_int (array_size arr);\n"
     "  array_at arr idx \n"
     ";;\n",
-    &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`3")), &TVAR("`3")));
+    &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`6")), &TVAR("`6")));
 
   T("let rand_int = extern fn Int -> Int;\n"
     "let array_choose = fn arr ->\n"
@@ -1114,75 +1275,8 @@ int __main() {
       &t_int);
   });
 
-  ({
-    Type cor_inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
-    cor_inst.is_coroutine_instance = true;
-    T("let wrapped_cor = fn () ->\n"
-      "  let wrapper = fn x -> print `specially wrapped: {x}\n`\n"
-      "  ;;\n"
-      "  let co_void = fn () ->\n"
-      "    yield 1;\n"
-      "    yield 2;\n"
-      "    yield 3;\n"
-      "    yield 200\n"
-      "  ;;\n"
-      "  let inst = (co_void () |> cor_wrap_effect wrapper)\n"
-      ";;\n"
-      "wrapped_cor ()\n",
-      &cor_inst);
-  });
 
-  T("let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`;;",
-    &MAKE_FN_TYPE_2(&TVAR("`0"), &t_string));
 
-  ({
-    Type inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_string));
-    inst.is_coroutine_instance = true;
-    Ast *b = T("let str_map = fn x -> `[str {x}]`;;\n"
-               "let co_void = fn () ->\n"
-               "  yield 1;\n"
-               "  yield 2;\n"
-               "  yield 3;\n"
-               "  yield 4;\n"
-               "  yield 5;\n"
-               "  yield 6;\n"
-               "  yield 7 \n"
-               ";;\n"
-               "co_void () |> cor_map str_map;\n",
-               &inst);
-    // print_ast(b->data.AST_BODY.stmts[2]);
-    Ast *cor_map_arg = b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args;
-
-    Type mapper = MAKE_FN_TYPE_2(&t_int, &t_string);
-    // Type mapper = t_ptr;
-    bool res = types_equal(cor_map_arg->md, &mapper);
-    const char *msg = "runner arg can be materialised to specific type:";
-    if (res) {
-      printf("✅ %s\n", msg);
-      print_type(&mapper);
-      status &= true;
-    } else {
-      status &= false;
-      printf("❌ %s\nexpected:\n", msg);
-      print_type(&mapper);
-      printf("got:\n");
-      print_type(cor_map_arg->md);
-    }
-
-    print_ast(b->data.AST_BODY.stmts[0]);
-    print_type(b->data.AST_BODY.stmts[0]->md);
-
-    print_ast(
-        b->data.AST_BODY.stmts[0]
-            ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
-        1);
-
-    print_type(
-        (b->data.AST_BODY.stmts[0]
-             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
-         1)
-            ->md);
-  });
 
   ({
     Type t = arithmetic_var("`5");
@@ -1286,85 +1380,6 @@ int __main() {
   //     &t_void);
   // });
   //
-  ({
-    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
-    cor.is_coroutine_instance = true;
-    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
-    cor_cons.is_coroutine_constructor = true;
-    Ast *l = T("let f = fn () -> \n"
-               "  let x = 1;\n"
-               "  yield x;\n"
-               "  yield x + 2\n"
-               "  ;;\n",
-               &cor_cons);
-
-    AstList *boundary_crossers =
-        l->data.AST_BODY.stmts[0]
-            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
-    Ast *b = boundary_crossers->ast;
-    printf("boundary crosser (implicit state param): \n");
-    print_ast(b);
-  });
-
-  ({
-    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
-    cor.is_coroutine_instance = true;
-    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
-    cor_cons.is_coroutine_constructor = true;
-    Ast *l = T("let f = fn () -> \n"
-               "  let x = 1;\n"
-               "  yield x;\n"
-               "  yield x + 2;\n"
-               "  let y = 200;\n"
-               "  yield x + y;\n"
-               "  yield y\n"
-               "  ;;\n",
-               &cor_cons);
-
-    AstList *bx =
-        l->data.AST_BODY.stmts[0]
-            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
-    int num_xs = 0;
-    Ast *b1 = bx->ast;
-    Ast *b2 = bx->next->ast;
-
-    while (bx) {
-      num_xs++;
-      bx = bx->next;
-    }
-
-    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
-    printf("boundary crossers (implicit state params): \n", num_xs);
-    print_ast(b1);
-    print_ast(b2);
-  });
-
-  ({
-    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
-    cor.is_coroutine_instance = true;
-    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
-    cor_cons.is_coroutine_constructor = true;
-    Ast *l = T("let f = fn () -> \n"
-               "  let x = 1;\n"
-               "  yield x;\n"
-               "  let y = 200;\n"
-               "  yield x + 2 + y;\n"
-               "  yield y\n"
-               "  ;;\n",
-               &cor_cons);
-
-    AstList *bx =
-        l->data.AST_BODY.stmts[0]
-            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
-
-    int num_xs = 0;
-    while (bx) {
-      num_xs++;
-      bx = bx->next;
-    }
-
-    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
-  });
 
   ({
     Type free_var = TVAR("`5");
@@ -1509,17 +1524,5 @@ int __main() {
     }
     status &= res;
   });
-  return status == true ? 0 : 1;
-}
-
-int main() {
-  bool status = true;
-
-  initialize_builtin_schemes();
-
-  Type t0 = arithmetic_var("`0");
-  T("let add1 = fn x -> 1 + x;;", &MAKE_FN_TYPE_2(&t0, &t0));
-  T("let add1 = fn x -> 1 + x;; add1 1", &t_int);
-
   return status == true ? 0 : 1;
 }

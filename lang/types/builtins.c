@@ -265,6 +265,7 @@ Type *resolve_tc_type(const char *tc_name, Type *t1, Type *t2) {
   l[0] = t1;
   l[1] = t2;
   Type *tcr = talloc(sizeof(Type));
+
   *tcr = (Type){T_TYPECLASS_RESOLVE,
                 {.T_CONS = {.name = tc_name, .args = l, .num_args = 2}}};
   return tcr;
@@ -275,13 +276,15 @@ TypeClass GenArithmeticTypeClass = {
     .rank = 1000.,
 };
 
+Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2);
 Scheme *create_arithmetic_scheme() {
 
   Type *a = tvar("a");
   Type *b = tvar("b");
-  typeclasses_extend(a, &GenArithmeticTypeClass);
-  typeclasses_extend(b, &GenArithmeticTypeClass);
-  Type *f = resolve_tc_type(TYPE_NAME_TYPECLASS_ARITHMETIC, a, b);
+  typeclasses_extend(a, &GenericArithmetic);
+  typeclasses_extend(b, &GenericArithmetic);
+  Type *f = create_tc_resolve(&GenericArithmetic, a, b);
+  f->implements = &GenericArithmetic;
   f = type_fn(b, f);
   f = type_fn(a, f);
 
@@ -299,7 +302,11 @@ Scheme *create_eq_scheme() {
 
   Type *a = tvar("a");
   Type *b = tvar("b");
-  Type *f = resolve_tc_type(TYPE_NAME_TYPECLASS_EQ, a, b);
+
+  typeclasses_extend(a, &GenericEq);
+  typeclasses_extend(b, &GenericEq);
+
+  Type *f = &t_bool;
   f = type_fn(b, f);
   f = type_fn(a, f);
 
@@ -317,7 +324,11 @@ Scheme *create_ord_scheme() {
 
   Type *a = tvar("a");
   Type *b = tvar("b");
-  Type *f = resolve_tc_type(TYPE_NAME_TYPECLASS_ORD, a, b);
+
+  typeclasses_extend(a, &GenericOrd);
+  typeclasses_extend(b, &GenericOrd);
+
+  Type *f = &t_bool;
   f = type_fn(b, f);
   f = type_fn(a, f);
 
@@ -482,6 +493,8 @@ void initialize_builtin_schemes() {
   add_builtin_scheme("array_at", create_new_array_at_sig());
   add_builtin_scheme("array_set", create_new_array_set_sig());
   add_builtin_scheme("array_size", create_new_array_size_sig());
+
+  add_primitive_scheme("print", type_fn(&t_string, &t_void));
   // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
   // &t_list_var);
   //
