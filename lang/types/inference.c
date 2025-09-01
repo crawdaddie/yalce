@@ -399,6 +399,9 @@ Scheme generalize(Type *type, TypeEnv *env) {
 }
 
 void print_subst(Subst *subst) {
+  if (!subst) {
+    return;
+  }
   printf("substitutions:\n");
   for (Subst *s = subst; s; s = s->next) {
     printf("  %s : ", s->var);

@@ -153,13 +153,22 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   for (int i = 0; i < num_params; i++) {
     param_types[i] = apply_substitution(lambda_ctx.subst, param_types[i]);
   }
+
   body_type = apply_substitution(lambda_ctx.subst, body_type);
 
   // Build the final function type
   Type *result_type = body_type;
+
   for (int i = num_params - 1; i >= 0; i--) {
-    result_type = type_fn(param_types[i], result_type);
+    Type *t = param_types[i];
+
+    t = apply_substitution(lambda_ctx.subst, t);
+
+    result_type = type_fn(t, result_type);
   }
+
+  // print_ast(ast);
+  // print_type(result_type);
 
   // If this is a recursive function, unify the recursive reference with the
   // final type

@@ -10,6 +10,9 @@ Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
       instantiate_with_args(cons_scheme, ast->data.AST_APPLICATION.args, ctx);
   return inst;
 }
+Type *coroutine_inst_to_callable(Type *cor) {
+  return type_fn(&t_void, create_option_type(cor->data.T_CONS.args[0]));
+}
 
 Type *infer_app(Ast *ast, TICtx *ctx) {
   Ast *func = ast->data.AST_APPLICATION.function;
@@ -31,7 +34,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   // Step 1: Infer function type
   func_type = infer(func, ctx);
   if (is_coroutine_type(func_type)) {
-    func_type = func_type->data.T_CONS.args[0];
+    func_type = coroutine_inst_to_callable(func_type);
   } else if (is_coroutine_constructor_type(func_type)) {
     func_type = func_type->data.T_CONS.args[0];
   }
@@ -71,8 +74,10 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   Subst *solution = solve_constraints(unify_ctx.constraints);
 
   ctx->subst = compose_subst(solution, ctx->subst);
+  print_subst(ctx->subst);
   expected_type = apply_substitution(solution, expected_type);
   ast->data.AST_APPLICATION.function->md = expected_type;
+
   Type *res = expected_type;
   for (int n = num_args; n; n--) {
     res = res->data.T_FN.to;

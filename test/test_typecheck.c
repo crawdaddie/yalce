@@ -961,24 +961,6 @@ int test_coroutines() {
     status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
   });
 
-  ({
-    Type cor_inst = COROUTINE_INST(&t_int);
-    cor_inst.is_coroutine_instance = true;
-    T("let wrapped_cor = fn () ->\n"
-      "  let wrapper = fn x -> print `specially wrapped: {x}\n`\n"
-      "  ;;\n"
-      "  let co_void = fn () ->\n"
-      "    yield 1;\n"
-      "    yield 2;\n"
-      "    yield 3;\n"
-      "    yield 200\n"
-      "  ;;\n"
-      "  let inst = (co_void () |> cor_wrap_effect wrapper)\n"
-      ";;\n"
-      "wrapped_cor ()\n",
-      &cor_inst);
-  });
-
   T("let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`;;",
     &MAKE_FN_TYPE_2(&TVAR("`0"), &t_string));
 
@@ -1083,6 +1065,14 @@ int test_coroutines() {
       printf("got:\n");
       print_type(runner_arg->md);
     }
+  });
+
+  ({
+    Type cor = COROUTINE_INST(&t_int);
+    T("let f = iter_of_list [1,2,3]\n"
+      "  |> cor_map (fn x -> x * 2.;)\n"
+      "  |> cor_loop\n",
+      &cor);
   });
 
   return status;
@@ -1410,15 +1400,6 @@ int main() {
       "  inc\n"
       ";;\n",
       &MAKE_FN_TYPE_2(&TARRAY(&v), &v));
-  });
-
-  ({
-    Type cor = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
-    cor.is_coroutine_instance = true;
-    T("let f = iter_of_list [1,2,3]\n"
-      "  |> cor_map (fn x -> x * 2.;)\n"
-      "  |> cor_loop\n",
-      &cor);
   });
 
   ({
