@@ -491,12 +491,6 @@ void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
           yield_boundary; // there is a yield between the creation of this
                           // binding and its use
   if (!crosses_yield_boundary) {
-    // print_ast(ast);
-    // printf("defined in scope %d [boundary %d] - current scope %d current "
-    //        "boundary %d\n",
-    //        binding_info.data.VAR.scope,
-    //        binding_info.data.VAR.yield_boundary_scope, ctx->scope,
-    //        ctx->current_fn_ast->data.AST_LAMBDA.num_yields);
 
     return;
   }
@@ -508,21 +502,27 @@ void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
     Ast *a = l->ast;
     if (CHARS_EQ(a->data.AST_IDENTIFIER.value,
                  ast->data.AST_IDENTIFIER.value)) {
-      // already registered
-      // printf("already registered\n");
       return;
     }
   }
 
-  // printf("extend boundary crossers of ");
-  // print_ast(ctx->current_fn_ast);
-  // printf(" with ");
-  // print_ast(ast);
   ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers =
       ast_list_extend_left(
           ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers, ast);
 
   return;
+}
+void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
+  if (!ctx->current_fn_ast) {
+    return;
+  }
+
+  int scope = binding_info.data.VAR.scope;
+  if (scope > 0 && scope < ctx->current_fn_base_scope) {
+    ctx->current_fn_ast->data.AST_LAMBDA.num_closed_vals++;
+    ctx->current_fn_ast->data.AST_LAMBDA.closed_vals = ast_list_extend_left(
+        ctx->current_fn_ast->data.AST_LAMBDA.closed_vals, ast);
+  }
 }
 
 Type *infer_identifier(Ast *ast, TICtx *ctx) {
@@ -539,6 +539,7 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
 
     if (scheme_ref->md.type == BT_VAR) {
       handle_yield_boundary_crossing(scheme_ref->md, ast, ctx);
+      handle_closed_over_value(scheme_ref->md, ast, ctx);
     }
 
     Scheme s = scheme_ref->scheme;
@@ -596,6 +597,13 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
   Ast *expr = ast->data.AST_YIELD.expr;
 
   Type *expr_type = infer(expr, ctx);
+  if (!expr_type) {
+    return NULL;
+  }
+
+  if (is_coroutine_type(expr_type)) {
+    expr_type = expr_type->data.T_CONS.args[0];
+  }
 
   if (ctx->yielded_type != NULL) {
     if (unify(expr_type, ctx->yielded_type, ctx)) {
@@ -617,14 +625,17 @@ Type *infer(Ast *ast, TICtx *ctx) {
     type = &t_int;
     break;
   }
+
   case AST_DOUBLE: {
     type = &t_num;
     break;
   }
+
   case AST_STRING: {
     type = &t_string;
     break;
   }
+
   case AST_CHAR: {
     type = &t_char;
     break;

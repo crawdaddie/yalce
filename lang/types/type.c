@@ -884,9 +884,11 @@ Type *create_tuple_type(int len, Type **contained_types) {
 }
 
 Type *create_coroutine_instance_type(Type *ret_type) {
-  Type *coroutine_fn = type_fn(&t_void, create_option_type(ret_type));
-  coroutine_fn->is_coroutine_instance = true;
-  return coroutine_fn;
+  // Type *coroutine_fn = type_fn(&t_void, create_option_type(ret_type));
+  // coroutine_fn->is_coroutine_instance = true;
+  Type **ar = talloc(sizeof(Type *));
+  ar[0] = ret_type;
+  return create_cons_type(TYPE_NAME_COROUTINE_INSTANCE, 1, ar);
 }
 
 // Deep copy implementation (simplified)

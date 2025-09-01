@@ -8,6 +8,7 @@
 #define T(input, type)                                                         \
   ({                                                                           \
     reset_type_var_counter();                                                  \
+    printf("\n--------------------------------------\n%s\n", input);           \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
     TICtx ctx = {};                                                            \
@@ -15,11 +16,11 @@
     stat &= (types_equal(ast->md, type));                                      \
     char buf[200] = {};                                                        \
     if (stat) {                                                                \
-      fprintf(stderr, "✅ " input " => %s\n", type_to_string(type, buf));      \
+      fprintf(stderr, "✅ => %s\n", type_to_string(type, buf));                \
     } else {                                                                   \
       char buf2[200] = {};                                                     \
-      fprintf(stderr, "❌ " input " => %s (got %s)\n",                         \
-              type_to_string(type, buf), type_to_string(ast->md, buf2));       \
+      fprintf(stderr, "❌ => %s (got %s)\n", type_to_string(type, buf),        \
+              type_to_string(ast->md, buf2));                                  \
       fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= stat;                                                            \
@@ -53,16 +54,17 @@
 #define TFAIL(input)                                                           \
   ({                                                                           \
     reset_type_var_counter();                                                  \
+    printf("\n--------------------------------------\n%s\n", input);           \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
     TICtx ctx = {};                                                            \
     stat &= (infer(ast, &ctx) == NULL);                                        \
     char buf[100] = {};                                                        \
     if (stat) {                                                                \
-      fprintf(stderr, "✅ " input " fails typecheck\n");                       \
+      fprintf(stderr, "✅ fails typecheck\n");                                 \
     } else {                                                                   \
       char buf2[100] = {};                                                     \
-      fprintf(stderr, "❌ " input " does not fail typecheck\n");               \
+      fprintf(stderr, "❌ does not fail typecheck\n");                         \
       fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
     }                                                                          \
     status &= stat;                                                            \
@@ -567,7 +569,7 @@ int test_funcs() {
     T("let f = fn a b c d -> a == b && c == d;;\n"
       "f 1. 2. 3.;\n"
       "f 1 2 3\n",
-     &MAKE_FN_TYPE_2(&v, &t_bool));
+      &MAKE_FN_TYPE_2(&v, &t_bool));
   });
 
   ({
@@ -595,8 +597,8 @@ int test_funcs() {
     T("let f = fn a b c -> a + b + c;;\n"
       "f 1. 2.\n",
 
-          &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t_num, &t)));
+      &MAKE_FN_TYPE_2(
+          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t)));
   });
 
   ({
@@ -625,7 +627,6 @@ int test_funcs() {
     }
     status &= is_partial;
   });
-
 
   T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
     "f 1 2\n",
@@ -656,6 +657,11 @@ int test_funcs() {
 
   T("let sq = fn x: (Int) -> x * 1.;;", &MAKE_FN_TYPE_2(&t_int, &t_num));
 
+  ({
+    Type t = TVAR("`2");
+    T("let f = fn cb -> cb 1 2;;",
+      &MAKE_FN_TYPE_2(&MAKE_FN_TYPE_3(&t_int, &t_int, &t), &t));
+  });
   return status;
 }
 int test_match_exprs() {
@@ -796,11 +802,11 @@ int test_match_exprs() {
 int test_coroutines() {
   printf("### TEST COROUTINES\n--------------------------------\n");
   bool status = true;
-  #define COROUTINE_CONS(f) TCONS(TYPE_NAME_COROUTINE_CONSTRUCTOR, 1, f)
-  #define COROUTINE_INST(f) TCONS(TYPE_NAME_COROUTINE_INSTANCE, 1, f)
+#define COROUTINE_CONS(f) TCONS(TYPE_NAME_COROUTINE_CONSTRUCTOR, 1, f)
+#define COROUTINE_INST(f) TCONS(TYPE_NAME_COROUTINE_INSTANCE, 1, f)
 
   ({
-    Type cor = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)));
+    Type cor = COROUTINE_INST(&t_num);
     Type constructor = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
 
     T("let co_void = fn () ->\n"
@@ -863,7 +869,6 @@ int test_coroutines() {
   //         &MAKE_FN_TYPE_2(&t_void, &t_num)));
   // });
 
-
   // ({
   //   Type cor =
   //       TCONS("coroutine", 2, &t_num, &MAKE_FN_TYPE_2(&t_void,
@@ -881,7 +886,7 @@ int test_coroutines() {
   //
   //
   ({
-    Type cor = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int)));
+    Type cor = COROUTINE_INST(&t_int);
     Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
     Ast *l = T("let f = fn () -> \n"
                "  let x = 1;\n"
@@ -901,7 +906,7 @@ int test_coroutines() {
   });
 
   ({
-    Type cor = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int)));
+    Type cor = COROUTINE_INST(&t_int);
     Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
     Ast *l = T("let f = fn () -> \n"
                "  let x = 1;\n"
@@ -926,13 +931,13 @@ int test_coroutines() {
     }
 
     status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
-    printf("boundary crossers (implicit state params): \n", num_xs);
-    print_ast(b1);
-    print_ast(b2);
+    // printf("boundary crossers (implicit state params): \n", num_xs);
+    // print_ast(b1);
+    // print_ast(b2);
   });
 
   ({
-    Type cor = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int)));
+    Type cor = COROUTINE_INST(&t_int);
     Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
     Ast *l = T("let f = fn () -> \n"
                "  let x = 1;\n"
@@ -953,12 +958,11 @@ int test_coroutines() {
       bx = bx->next;
     }
 
-
     status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
   });
 
   ({
-    Type cor_inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int));
+    Type cor_inst = COROUTINE_INST(&t_int);
     cor_inst.is_coroutine_instance = true;
     T("let wrapped_cor = fn () ->\n"
       "  let wrapper = fn x -> print `specially wrapped: {x}\n`\n"
@@ -979,7 +983,7 @@ int test_coroutines() {
     &MAKE_FN_TYPE_2(&TVAR("`0"), &t_string));
 
   ({
-    Type inst = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_string)));
+    Type inst = COROUTINE_INST(&t_string);
     Ast *b = T("let str_map = fn x -> `[str {x}]`;;\n"
                "let co_void = fn () ->\n"
                "  yield 1;\n"
@@ -1027,7 +1031,7 @@ int test_coroutines() {
   });
 
   ({
-    Type cor_type = COROUTINE_INST(&MAKE_FN_TYPE_2(&t_void, &TOPT(&t_int)));
+    Type cor_type = COROUTINE_INST(&t_int);
     cor_type.is_coroutine_instance = true;
 
     T("let l1 = [1, 2, 3];\n"
@@ -1097,8 +1101,6 @@ int main() {
   status &= test_list_processing();
   status &= test_coroutines();
 
-
-
   ({
     Ast *b =
         T("type SchedulerCallback = (() -> Option of Double) -> Int -> ();\n"
@@ -1132,8 +1134,6 @@ int main() {
     //   print_type(runner_arg->md);
     // }
   });
-
-
 
   // ({
   //   Type v = TVAR("t");
@@ -1228,7 +1228,7 @@ int main() {
 
   xT("let accept = extern fn Int -> Ptr -> Ptr -> Int;\n"
      "let proc_tasks = extern fn (Queue of l) -> Int -> ();\n"
-     "let proc_tasks = fn tasks server_fd ->\n"
+     "let proc_loop = fn tasks server_fd ->\n"
      "  let ts = match (queue_pop_left tasks) with\n"
      "  | Some r -> (\n"
      "    match (r ()) with\n"
@@ -1237,7 +1237,7 @@ int main() {
      "  )\n"
      "  | None -> queue_of_list [ (accept_connections server_fd) ]\n"
      "  in\n"
-     "  proc_tasks ts server_fd\n"
+     "  proc_loop ts server_fd\n"
      ";;\n",
      &MAKE_FN_TYPE_3(&TCONS(TYPE_NAME_QUEUE, 1, &TVAR("l")), &t_int, &t_void));
 
@@ -1275,16 +1275,11 @@ int main() {
       &t_int);
   });
 
-
-
-
   ({
     Type t = arithmetic_var("`5");
     Type t2 = arithmetic_var("`1");
-    Type inst = MAKE_FN_TYPE_2(&t_void, &TOPT(&t));
-    inst.is_coroutine_instance = true;
-    Type cons = MAKE_FN_TYPE_3(&t, &t2, &inst);
-    cons.is_coroutine_constructor = true;
+    Type inst = COROUTINE_INST(&t);
+    Type cons = COROUTINE_CONS(&MAKE_FN_TYPE_3(&t, &t2, &inst));
     Ast *b = T("let fib = fn a b ->\n"
                "  yield a;\n"
                "  yield fib b (a + b)\n"
@@ -1320,6 +1315,7 @@ int main() {
       ";;\n",
       &MAKE_FN_TYPE_3(&TTUPLE(2, &t_int, &t_num), &t_ptr, &t_ptr));
   });
+
   ({
     Ast *b = T("type NoteCallback = Int -> Double -> ();\n"
                "let register_note_on_handler = extern fn NoteCallback -> Int "
@@ -1429,7 +1425,7 @@ int main() {
     Type vtype = TCONS("Value", 3, &t_num, &TARRAY(tvar("Value")), &t_num);
 
     vtype.data.T_CONS.names = (const char *[3]){"data", "children", "grad"};
-    print_type(&vtype);
+
     T("type Value = (data: Double, children: (Array of Value), grad: "
       "Double);\n"
       "let const = fn i ->\n"
@@ -1509,13 +1505,17 @@ int main() {
                              ->data.AST_LAMBDA.body->data.AST_BODY.stmts[2]
                              ->md;
 
+    // printf("closure type\n");
+    // print_type(closure_type);
+
     bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_num));
     res &= (closure_type->closure_meta != NULL);
     res &=
         (types_equal(closure_type->closure_meta, &TTUPLE(2, &t_num, &t_int)));
 
-    const char *msg = "closure has type () -> Int and contains a reference to "
-                      "the types of closed-over vals (Double * Int)\n";
+    const char *msg =
+        "closure has type () -> Double and contains a reference to "
+        "the types of closed-over vals (Double * Int)\n";
     if (res) {
       printf("✅ %s", msg);
     } else {

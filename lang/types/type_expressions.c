@@ -18,6 +18,7 @@ Scheme *create_ts_var(const char *name) {
   sch->type = tvar(name);
   return sch;
 }
+
 Type *fn_type_decl(Ast *sig, TICtx *ctx) {
   Ast *param_ast = sig->data.AST_LIST.items;
   Type *fn = type_fn(instantiate(compute_type_expression(param_ast, ctx), ctx),
@@ -44,8 +45,21 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
     Type **members = talloc(sizeof(Type *) * len);
 
     VarList *vars = NULL;
+    const char **names = NULL;
+    if (expr->data.AST_LIST.items[0].tag == AST_LET) {
+      names = talloc(sizeof(char *) * len);
+    }
+
     for (int i = 0; i < len; i++) {
-      Scheme *mem = compute_type_expression(expr->data.AST_LIST.items + i, ctx);
+
+      Ast *mem_ast = expr->data.AST_LIST.items + i;
+
+      if (mem_ast->tag == AST_LET) {
+        names[i] = mem_ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+        mem_ast = mem_ast->data.AST_LET.expr;
+      }
+
+      Scheme *mem = compute_type_expression(mem_ast, ctx);
 
       members[i] = mem->type;
 
@@ -55,6 +69,9 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
     }
 
     Type *tuple_type = create_tuple_type(len, members);
+    if (names) {
+      tuple_type->data.T_CONS.names = names;
+    }
 
     Scheme *sch = talloc(sizeof(Scheme));
     *sch = (Scheme){.vars = vars, .type = tuple_type};
@@ -119,6 +136,13 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
 
       Scheme *container = lookup_scheme(
           ctx->env, expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value);
+      if (!container) {
+
+        fprintf(stderr, "Error: could not find type %s\n",
+                expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value);
+        return NULL;
+      }
+
       Type *inst =
           instantiate_with_args(container, expr->data.AST_BINOP.right, ctx);
 

@@ -4,6 +4,8 @@
 #include "types/unification.h"
 
 Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
+  printf("infer cons app");
+  print_ast(ast);
   Type *inst =
       instantiate_with_args(cons_scheme, ast->data.AST_APPLICATION.args, ctx);
   return inst;

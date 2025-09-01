@@ -368,6 +368,34 @@ Scheme *create_opt_scheme() {
 
   return scheme;
 }
+
+Scheme *create_list_of_scheme() {
+
+  Type *var = tvar("a");
+  Type *full_type = create_list_type_of_type(var);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = full_type};
+
+  return scheme;
+}
+
+Scheme *create_array_of_scheme() {
+
+  Type *var = tvar("a");
+  Type *full_type = create_array_type(var);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var->data.T_VAR, .next = NULL};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = full_type};
+
+  return scheme;
+}
 Scheme *create_list_prepend_scheme() {
 
   Type *var = tvar("a");
@@ -390,6 +418,35 @@ void add_primitive_scheme(char *tname, Type *t) {
   *scheme = (Scheme){.vars = NULL, .type = t};
   add_builtin_scheme(tname, scheme);
 }
+
+Scheme *create_cor_map_scheme() {
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  Type *cor_a = create_coroutine_instance_type(a);
+  Type *cor_b = create_coroutine_instance_type(b);
+  Type *map_fn = type_fn(a, b);
+
+  Type *f = cor_b;
+  f = type_fn(cor_a, f);
+  f = type_fn(map_fn, f);
+
+  VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
+  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
+
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars_mem, .type = f};
+  return scheme;
+}
+Scheme *create_iter_of_list_scheme() {
+  Scheme *sch = create_list_of_scheme();
+  Type *l = sch->type;
+  Type *el = l->data.T_CONS.args[0];
+  Type *cor = create_coroutine_instance_type(el);
+  sch->type = type_fn(l, cor);
+  return sch;
+}
+
 void initialize_builtin_schemes() {
 
   static TypeClass tc_int[] = {{
@@ -488,6 +545,12 @@ void initialize_builtin_schemes() {
   Scheme *list_prepend_scheme = create_list_prepend_scheme();
   add_builtin_scheme("::", list_prepend_scheme);
 
+  Scheme *list_of_scheme = create_list_of_scheme();
+  add_builtin_scheme("List", list_of_scheme);
+
+  Scheme *array_of_scheme = create_array_of_scheme();
+  add_builtin_scheme("Array", array_of_scheme);
+
   add_primitive_scheme("&&", &t_builtin_and);
 
   add_builtin_scheme("array_at", create_new_array_at_sig());
@@ -499,6 +562,9 @@ void initialize_builtin_schemes() {
   // &t_list_var);
   //
   add_builtin_scheme("list_concat", create_list_concat_scheme());
+  add_builtin_scheme("cor_map", create_cor_map_scheme());
+
+  add_builtin_scheme("iter_of_list", create_iter_of_list_scheme());
 }
 
 Scheme *lookup_builtin_scheme(const char *name) {

@@ -77,7 +77,8 @@ void unify_recursive_ref(Ast *ast, Type *recursive_fn_type, Type *result_type,
 Type *create_coroutine_inst(Type *ret_type) {
   Type *instance_type = type_fn(&t_void, create_option_type(ret_type));
   Type **arg = talloc(sizeof(Type *));
-  arg[0] = instance_type;
+  arg[0] = ret_type;
+  // / instance_type;
   instance_type = create_cons_type(TYPE_NAME_COROUTINE_INSTANCE, 1, arg);
   return instance_type;
 }
@@ -100,6 +101,25 @@ Type *create_coroutine_lambda(Type *fn_type, TICtx *ctx) {
       create_cons_type(TYPE_NAME_COROUTINE_CONSTRUCTOR, 1, a);
 
   return constructor_type;
+}
+Type *create_closure(Ast *ast, Type *fn_type, TICtx *ctx) {
+  int num = ast->data.AST_LAMBDA.num_closed_vals;
+
+  if (num == 0) {
+    return NULL;
+  }
+  Type **closed_types = talloc(sizeof(Type) * num);
+
+  int i = 0;
+  for (AstList *l = ast->data.AST_LAMBDA.closed_vals; l; l = l->next, i++) {
+    // TODO: does the order here need to be reversed?
+    // ast->data.AST_LAMBDA.closed_vals is in reverse order from when things are
+    // used in the lambda
+    // therefore the closed_types array will also be in reverse order
+    closed_types[i] = l->ast->md;
+  }
+  fn_type->closure_meta = create_tuple_type(num, closed_types);
+  return fn_type;
 }
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
@@ -147,11 +167,15 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   // printf("rec types??\n");
   // print_type(recursive_fn_type);
   // print_type(result_type);
-  //
   ctx->subst = lambda_ctx.subst;
 
   if (lambda_ctx.yielded_type) {
     return create_coroutine_lambda(result_type, ctx);
+  }
+
+  Type *closure = create_closure(ast, result_type, ctx);
+  if (closure) {
+    return closure;
   }
 
   return result_type;
