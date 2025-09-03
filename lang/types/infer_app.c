@@ -2,13 +2,58 @@
 #include "./infer_app.h"
 #include "serde.h"
 #include "types/unification.h"
+//
+// Type *instantiate_with_args(Scheme *cons_scheme, Ast *args, TICtx *ctx) {
+//   if (!cons_scheme) {
+//     return NULL;
+//   }
+//
+//   if (!cons_scheme->vars) {
+//     return cons_scheme->type;
+//   }
+// }
 
 Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
-  printf("infer cons app");
-  print_ast(ast);
-  Type *inst =
-      instantiate_with_args(cons_scheme, ast->data.AST_APPLICATION.args, ctx);
-  return inst;
+
+  int len = ast->data.AST_APPLICATION.len;
+  Ast *args = ast->data.AST_APPLICATION.args;
+
+  Subst *inst_subst = NULL;
+
+  int i = 0;
+
+  Type *arg_types[len];
+  for (int i = 0; i < len; i++) {
+    arg_types[i] = infer(args + i, ctx);
+  }
+
+  Type *stype = deep_copy_type(cons_scheme->type);
+  for (VarList *v = cons_scheme->vars; v; v = v->next, i++) {
+    Type *t = arg_types[i];
+    inst_subst = subst_extend(inst_subst, v->var, t);
+  }
+
+  Type *s = apply_substitution(inst_subst, stype);
+  // for (int i = 0; i < len; i++) {
+  //   unify(arg_types[i], s->data.T_CONS.args[i], ctx);
+  // }
+
+  return s;
+
+  // for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+  //
+  //   printf("cons arg %d: ", i);
+  //   print_type(cons_scheme->type->data.T_CONS.args[i]);
+  //   print_type((ast->data.AST_APPLICATION.args + i)->md);
+  //   // if (unify(ast->data.AST_APPLICATION.args[i].md,
+  //   // inst->data.T_CONS.args[i],
+  //   //           ctx)) {
+  //   //   fprintf(stderr, "Unification of cons args failed\n");
+  //   //   return NULL;
+  //   // }
+  // }
+  //
+  // return inst;
 }
 Type *coroutine_inst_to_callable(Type *cor) {
   return type_fn(&t_void, create_option_type(cor->data.T_CONS.args[0]));
@@ -46,7 +91,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   // Step 2: Infer argument types
   Type **arg_types = talloc(sizeof(Type *) * num_args);
   for (int i = 0; i < num_args; i++) {
-    arg_types[i] = infer(&args[i], ctx);
+    arg_types[i] = infer(args + i, ctx);
     if (!arg_types[i]) {
       return type_error(ctx, ast, "Cannot infer argument %d type", i + 1);
     }
@@ -63,6 +108,10 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
 
   // Step 4: Unify function type with expected type
   TICtx unify_ctx = {};
+  printf("app: ");
+  print_ast(ast);
+  print_type(func_type);
+  print_type(expected_type);
 
   if (unify(func_type, expected_type, &unify_ctx)) {
     print_type_err(func_type);
@@ -74,8 +123,8 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   Subst *solution = solve_constraints(unify_ctx.constraints);
 
   ctx->subst = compose_subst(solution, ctx->subst);
-  print_subst(ctx->subst);
   expected_type = apply_substitution(solution, expected_type);
+
   ast->data.AST_APPLICATION.function->md = expected_type;
 
   Type *res = expected_type;

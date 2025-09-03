@@ -183,6 +183,17 @@ bool is_option_type(Type *t) {
                                (strcmp(t->data.T_CONS.name, "None") == 0));
 }
 
+bool is_option_sum_type(Type *tc) {
+  if (tc->kind != T_CONS) {
+    return false;
+  }
+  if (!CHARS_EQ(tc->data.T_CONS.name, TYPE_NAME_VARIANT)) {
+    return false;
+  }
+  Type *t = tc->data.T_CONS.args[0];
+  return t->kind == T_CONS && strcmp(t->data.T_CONS.name, "Some") == 0;
+}
+
 // Type t_option_of_var =
 //     TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, &t_option_var), &t_none);
 
@@ -316,6 +327,21 @@ char *type_to_string(Type *t, char *buffer) {
     break;
   }
   case T_CONS: {
+
+    if (CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_VARIANT) && t->alias &&
+        CHARS_EQ(t->alias, "Option")) {
+      Type *opt_of = type_of_option(t);
+
+      buffer = strncat(buffer, "Option of ", 10);
+      buffer = type_to_string(opt_of, buffer);
+      break;
+    }
+
+    if (CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_ARRAY) &&
+        types_equal(t->data.T_CONS.args[0], &t_char)) {
+      buffer = strncat(buffer, "String", 6);
+      break;
+    }
 
     if (is_forall_type(t)) {
       buffer = strncat(buffer, "forall ", 7);
@@ -477,6 +503,11 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
 
+  case T_EMPTY_ARRAY: {
+    fprintf(stream, "[||]");
+    break;
+  }
+
   case T_TYPECLASS_RESOLVE: {
     fprintf(stream, "tc resolve %s [", t->data.T_CONS.name);
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
@@ -496,6 +527,12 @@ void print_type_to_stream(Type *t, FILE *stream) {
 
       fprintf(stream, "Option of ");
       print_type_to_stream(opt_of, stream);
+      break;
+    }
+
+    if (CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_ARRAY) &&
+        types_equal(t->data.T_CONS.args[0], &t_char)) {
+      fprintf(stream, "String");
       break;
     }
 
@@ -694,6 +731,10 @@ bool types_equal(Type *t1, Type *t2) {
   case T_CHAR:
   case T_VOID:
   case T_EMPTY_LIST: {
+    return true;
+  }
+
+  case T_EMPTY_ARRAY: {
     return true;
   }
 

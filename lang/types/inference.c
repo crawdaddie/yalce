@@ -33,6 +33,7 @@ void print_subst(Subst *subst);
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, VarList *names,
                     Type *type) {
+
   TypeEnv *new_env = talloc(sizeof(TypeEnv));
   *new_env = (TypeEnv){
       .name = name,
@@ -271,6 +272,9 @@ Type *apply_substitution(Subst *subst, Type *t) {
   }
 
   case T_VAR: {
+    if (t->is_recursive_type_ref) {
+      return t;
+    }
     Type *x = find_in_subst(subst, t->data.T_VAR);
 
     if (x) {
@@ -466,7 +470,6 @@ Type *instantiate_with_args(Scheme *scheme, Ast *args, TICtx *ctx) {
 
   Subst *inst_subst = NULL;
   for (VarList *v = scheme->vars; v; v = v->next, args++) {
-
     Type *t = infer(args, ctx);
     inst_subst = subst_extend(inst_subst, v->var, t);
   }
@@ -476,6 +479,7 @@ Type *instantiate_with_args(Scheme *scheme, Ast *args, TICtx *ctx) {
   Type *s = apply_substitution(inst_subst, stype);
   return s;
 }
+
 void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
                                     TICtx *ctx) {
   if (!ctx->current_fn_ast) {
@@ -515,7 +519,9 @@ void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
 
   return;
 }
+
 void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
+
   if (!ctx->current_fn_ast) {
     return;
   }
@@ -526,6 +532,11 @@ void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
     ctx->current_fn_ast->data.AST_LAMBDA.closed_vals = ast_list_extend_left(
         ctx->current_fn_ast->data.AST_LAMBDA.closed_vals, ast);
   }
+}
+Type *env_lookup(TypeEnv *env, const char *name) {
+  Scheme *sch = lookup_scheme(env, name);
+  TICtx ctx;
+  return instantiate(sch, &ctx);
 }
 
 Type *infer_identifier(Ast *ast, TICtx *ctx) {
@@ -562,10 +573,17 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
 
   if (ast->data.AST_LIST.len == 0) {
+    // if (CHARS_EQ(cons_name, TYPE_NAME_ARRAY)) {
+    //   *t = (Type){T_EMPTY_ARRAY};
+    // } else {
+    //   *t = (Type){T_EMPTY_LIST};
+    // }
+    //
     Type *t = talloc(sizeof(Type));
-    Type **el = talloc(sizeof(Type *));
-    el[0] = next_tvar();
-    *t = (Type){T_CONS, {.T_CONS = {cons_name, el, 1}}};
+    Type **contained = talloc(sizeof(Type *));
+    contained[0] = next_tvar();
+    *t = (Type){T_CONS, {.T_CONS = {cons_name, contained, 1}}};
+
     return t;
   }
 
@@ -618,6 +636,13 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
   ctx->yielded_type = expr_type;
   ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
   return expr_type;
+}
+
+bool is_index_access_ast(Ast *application, Type *arg_type, Type *cons_type) {
+  Ast *arg_ast = application->data.AST_APPLICATION.args;
+
+  return is_list_type(arg_type) && arg_ast->tag == AST_LIST &&
+         application->data.AST_APPLICATION.len == 1 && is_array_type(cons_type);
 }
 
 Type *infer(Ast *ast, TICtx *ctx) {

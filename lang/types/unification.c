@@ -105,12 +105,27 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   if (types_equal(t1, t2)) {
     return 0;
   }
+
   if (IS_PRIMITIVE_TYPE(t1)) {
     add_constraint(unify_res, t2, t1);
     return 0;
   }
 
+  // if (t2->kind == T_EMPTY_LIST) {
+  //   return 0;
+  // }
+  //
+  // if (t2->kind == T_EMPTY_ARRAY) {
+  //   return 0;
+  // }
+
   if (t1->kind == T_VAR) {
+
+    if (t1->is_recursive_type_ref) {
+      // return unify(t2, t1, unify_res);
+      return 0;
+    }
+
     if (occurs_check(t1->data.T_VAR, t2)) {
       return 1; // Occurs check failure
     }

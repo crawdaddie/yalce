@@ -20,6 +20,8 @@
 #define LLVM_TYPE_char LLVMInt8Type()
 #define LLVM_TYPE_ptr(type) LLVMPointerType(LLVM_TYPE_##type, 0)
 
+Type *resolve_type_in_env(Type *gen, TypeEnv *env) { return NULL; }
+
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module);
 

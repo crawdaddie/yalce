@@ -74,10 +74,10 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef ts_val = codegen(timestamp_ast, ctx, module, builder);
 
   Ast *scheduler_ast = ast->data.AST_APPLICATION.args + 1;
-  Type *scheduler_type = scheduler_ast->term;
+  Type *scheduler_type = scheduler_ast->md;
 
   Ast *coro_ast = ast->data.AST_APPLICATION.args + 2;
-  Type *coro_type = coro_ast->term;
+  Type *coro_type = coro_ast->md;
 
   LLVMValueRef scheduler = codegen(scheduler_ast, ctx, module, builder);
   LLVMTypeRef llvm_scheduler_type =

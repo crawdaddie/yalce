@@ -451,7 +451,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, ")");
     break;
   }
-  case AST_EMPTY_LIST: {
+  case AST_EMPTY_CONTAINER: {
     buffer = strcat(buffer, ast->data.AST_EMPTY_LIST.type_id.chars);
     buffer = strcat(buffer, "[]");
     break;

@@ -8,7 +8,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
-#include "types/infer_application.h"
+#include "types/infer_app.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 
@@ -186,7 +186,8 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   // special application types:
   // x[n] ??
-  if (is_index_access_ast(ast)) {
+  if (is_index_access_ast(ast, ast->data.AST_APPLICATION.args->md,
+                          ast->data.AST_APPLICATION.function->md)) {
     return IndexAccessHandler(ast, ctx, module, builder);
   }
 

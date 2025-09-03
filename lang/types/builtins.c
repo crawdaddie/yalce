@@ -525,7 +525,8 @@ void initialize_builtin_schemes() {
   add_builtin_scheme("<", ord_scheme);
   add_builtin_scheme(">=", ord_scheme);
   add_builtin_scheme("<=", ord_scheme);
-  add_builtin_scheme("id", create_id_scheme());
+  Scheme *id_scheme = create_id_scheme();
+  add_builtin_scheme("id", id_scheme);
 
   add_primitive_scheme(TYPE_NAME_INT, &t_int);
   add_primitive_scheme(TYPE_NAME_FLOAT, &t_fl);
@@ -565,6 +566,7 @@ void initialize_builtin_schemes() {
   add_builtin_scheme("cor_map", create_cor_map_scheme());
 
   add_builtin_scheme("iter_of_list", create_iter_of_list_scheme());
+  add_builtin_scheme("cor_loop", id_scheme);
 }
 
 Scheme *lookup_builtin_scheme(const char *name) {

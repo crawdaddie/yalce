@@ -638,7 +638,7 @@ Ast *ast_empty_list() {
 }
 
 Ast *ast_typed_empty_list(ObjString id) {
-  Ast *l = Ast_new(AST_EMPTY_LIST);
+  Ast *l = Ast_new(AST_EMPTY_CONTAINER);
   l->data.AST_EMPTY_LIST.type_id = id;
   return l;
 }

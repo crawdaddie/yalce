@@ -6,9 +6,6 @@
 Type *infer_match_expression(Ast *ast, TICtx *ctx) {
 
   Type *scrutinee_type = infer(ast->data.AST_MATCH.expr, ctx);
-  print_ast(ast->data.AST_MATCH.expr);
-  print_type(ast->data.AST_MATCH.expr->md);
-  print_constraints(ctx->constraints);
 
   Type *result_type = next_tvar();
 
@@ -69,8 +66,8 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     ctx->constraints = body_ctx.constraints;
   }
 
-  ctx->subst = solve_constraints(ctx->constraints);
-  // print_subst(ctx->subst);
+  Subst *sols = solve_constraints(ctx->constraints);
+  ctx->subst = compose_subst(ctx->subst, sols);
 
   Type *final_scrutinee = apply_substitution(ctx->subst, scrutinee_type);
   ast->data.AST_MATCH.expr->md = final_scrutinee;

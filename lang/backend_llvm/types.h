@@ -19,6 +19,7 @@
     _t;                                                                        \
   })
 
+Type *resolve_type_in_env(Type *gen, TypeEnv *env);
 LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
                               LLVMModuleRef module);
 
@@ -42,8 +43,6 @@ LLVMValueRef codegen_type_declaration(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef codegen_eq_int(LLVMValueRef l, LLVMValueRef r,
                             LLVMModuleRef module, LLVMBuilderRef builder);
-
-Method *get_binop_method(const char *binop, Type *l, Type *r);
 
 TypeEnv *initialize_types(TypeEnv *env);
 

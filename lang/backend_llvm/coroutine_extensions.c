@@ -43,7 +43,7 @@ void jump_to_next(LLVMValueRef coro, LLVMValueRef func,
 
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-  Type *promise_type = fn_return_type(ast->term);
+  Type *promise_type = fn_return_type(ast->md);
   LLVMTypeRef ptype = type_to_llvm_type(promise_type, ctx, module);
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(ptype);
   LLVMValueRef coro =
@@ -140,25 +140,25 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  Type *out_cor_type = ast->term;
+  Type *out_cor_type = ast->md;
   Type *out_ptype = fn_return_type(out_cor_type);
   LLVMTypeRef out_promise_type = type_to_llvm_type(out_ptype, ctx, module);
   LLVMTypeRef out_cor_obj_type = CORO_OBJ_TYPE(out_promise_type);
 
-  Type *in_cor_type = (ast->data.AST_APPLICATION.args + 1)->term;
+  Type *in_cor_type = (ast->data.AST_APPLICATION.args + 1)->md;
   Type *in_ptype = fn_return_type(in_cor_type);
   LLVMTypeRef in_promise_type = type_to_llvm_type(in_ptype, ctx, module);
   LLVMTypeRef in_cor_obj_type = CORO_OBJ_TYPE(in_promise_type);
 
   Type map_type;
-  map_type = *((Type *)ast->data.AST_APPLICATION.args->term);
+  map_type = *((Type *)ast->data.AST_APPLICATION.args->md);
   if (is_generic(&map_type)) {
     Type *f = fn_return_type(in_cor_type);
     f = type_of_option(f);
     Type *t = fn_return_type(out_cor_type);
     t = type_of_option(t);
     map_type = (Type){T_FN, {.T_FN = {.from = f, .to = t}}};
-    ast->data.AST_APPLICATION.args->term = &map_type;
+    ast->data.AST_APPLICATION.args->md = &map_type;
   }
   // print_type(&map_type);
 
@@ -482,7 +482,7 @@ static LLVMValueRef list_iter_func(LLVMTypeRef list_el_type,
 LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
 
-  Type *ptype = fn_return_type(ast->term);
+  Type *ptype = fn_return_type(ast->md);
   Type *item_type = type_of_option(ptype);
   LLVMTypeRef list_el_type = type_to_llvm_type(item_type, ctx, module);
   LLVMValueRef func =
@@ -492,7 +492,7 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
 
   LLVMTypeRef list_type =
-      type_to_llvm_type(ast->data.AST_APPLICATION.args->term, ctx, module);
+      type_to_llvm_type(ast->data.AST_APPLICATION.args->md, ctx, module);
 
   LLVMTypeRef state_type =
       LLVMStructType((LLVMTypeRef[]){list_type, list_type}, 2, 0);
@@ -591,7 +591,7 @@ array_iter_func(LLVMTypeRef arr_el_type, LLVMTypeRef promise_type,
 LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
 
-  Type *ptype = fn_return_type(ast->term);
+  Type *ptype = fn_return_type(ast->md);
   Type *item_type = type_of_option(ptype);
   LLVMTypeRef arr_el_type = type_to_llvm_type(item_type, ctx, module);
   LLVMValueRef func =
@@ -601,7 +601,7 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
 
   LLVMTypeRef arr_type =
-      type_to_llvm_type(ast->data.AST_APPLICATION.args->term, ctx, module);
+      type_to_llvm_type(ast->data.AST_APPLICATION.args->md, ctx, module);
 
   LLVMTypeRef state_type = arr_type;
 
@@ -675,7 +675,7 @@ LLVMValueRef CorGetPromiseValHandler(Ast *ast, JITLangCtx *ctx,
                                      LLVMBuilderRef builder) {
   LLVMValueRef coro =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  Type *type = ast->data.AST_APPLICATION.args->term;
+  Type *type = ast->data.AST_APPLICATION.args->md;
   Type *ptype = fn_return_type(type);
   LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
@@ -696,12 +696,12 @@ LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
 
-  Type *t = ast->data.AST_APPLICATION.args->term;
+  Type *t = ast->data.AST_APPLICATION.args->md;
 
   // if (is_generic(t)) {
   //   t = resolve_type_in_env(t, ctx->env);
   // }
-  ast->data.AST_APPLICATION.args->term = t;
+  ast->data.AST_APPLICATION.args->md = t;
 
   LLVMValueRef result_opt =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);

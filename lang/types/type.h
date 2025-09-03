@@ -246,6 +246,7 @@ enum TypeKind {
   T_CONS,
   T_VAR,
   T_EMPTY_LIST,
+  T_EMPTY_ARRAY,
   T_TYPECLASS_RESOLVE,
 };
 
@@ -293,6 +294,7 @@ typedef struct Type {
   // TypeClass
   //     *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
   //     
+  //
   //
   //                //  be instantiated to t1 [requires: Arithmetic] ->
   //                // t1 [requires: Arithmetic] -> t1 [requires Arithmetic]
@@ -347,6 +349,8 @@ bool is_variant_type(Type *type);
 Type *create_cons_type(const char *name, int len, Type **unified_args);
 Type *create_option_type(Type *option_of);
 bool is_option_type(Type *t);
+
+bool is_option_sum_type(Type *tc);
 
 Type *type_of_option(Type *option);
 

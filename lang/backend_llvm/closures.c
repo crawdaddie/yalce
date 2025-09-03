@@ -2,7 +2,6 @@
 #include "binding.h"
 #include "symbols.h"
 #include "types.h"
-#include "types/closures.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -15,6 +14,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 bool is_lambda_with_closures(Ast *ast) {
   return ast->tag == AST_LAMBDA &&
          (ast->data.AST_LAMBDA.num_closure_free_vars > 0);
+}
+
+Type *get_full_fn_type_of_closure(Ast *closure) { // TODO: implement
+  return NULL;
 }
 
 LLVMValueRef create_curried_generic_closure_binding(

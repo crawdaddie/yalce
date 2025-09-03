@@ -43,12 +43,15 @@ typedef struct {
       int scope;
       int yield_boundary_scope;
     } VAR;
+
     struct {
       int scope;
     } RECURSIVE_REF;
+
     struct {
       int scope;
     } FN_PARAM;
+
   } data;
 } binding_md;
 
@@ -73,6 +76,7 @@ typedef struct TICtx {
   Type *yielded_type;
   int scope;
   int current_fn_base_scope;
+  void *type_decl_ctx;
   FILE *err_stream; // Replace const char *err
 } TICtx;
 
@@ -88,6 +92,8 @@ Scheme generalize(Type *type, TypeEnv *env);
 Type *instantiate(Scheme *scheme, TICtx *ctx);
 
 Type *instantiate_with_args(Scheme *scheme, Ast *args, TICtx *ctx);
+
+bool is_index_access_ast(Ast *application, Type *arg_type, Type *cons_type);
 
 Scheme *lookup_scheme(TypeEnv *env, const char *name);
 Type *find_in_subst(Subst *subst, const char *name);
@@ -108,5 +114,7 @@ void print_type_env(TypeEnv *env);
 bool varlist_contains(VarList *vs, const char *name);
 
 VarList *varlist_add(VarList *vars, const char *v);
+
+Type *env_lookup(TypeEnv *env, const char *name);
 
 #endif
