@@ -5,6 +5,16 @@
 #include <stdio.h>
 typedef struct Ast Ast;
 
+typedef struct {
+  Ast *ast_root;
+  const char *filename;
+  char *cur_script;
+  const char *cur_script_content;
+  char *import_current_dir;
+} ParsingContext;
+
+extern ParsingContext parsing_context;
+
 void set_base_dir(const char *);
 
 typedef struct custom_binops_t {

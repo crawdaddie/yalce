@@ -7,12 +7,23 @@
 #include <string.h>
 #include <unistd.h>
 
+ParsingContext parsing_context = {};
+
+// Structure to hold all parsing context
+// Static parsing context - single source of truth
+
+// Legacy global variables for backward compatibility (now point to
+// parsing_context)
+#define __filename parsing_context.filename
+#define _cur_script parsing_context.cur_script
+#define _cur_script_content parsing_context.cur_script_content
+#define __import_current_dir parsing_context.import_current_dir
+
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
 
-const char *__filename;
-char *_cur_script;
-const char *_cur_script_content;
+// Removed individual parsing context variables - now using static
+// parsing_context
 
 static void *__palloc(size_t size) { return malloc(size); }
 static void *__prealloc(void *p, size_t size) { return realloc(p, size); }
@@ -1097,7 +1108,17 @@ Ast *ast_module(Ast *lambda) {
   return lambda;
 }
 
-char *__import_current_dir;
+// Function to save current parsing context
+static ParsingContext save_parsing_context() {
+  parsing_context.ast_root = ast_root; // Sync global ast_root to context
+  return parsing_context;
+}
+
+// Function to restore parsing context
+static void restore_parsing_context(ParsingContext ctx) {
+  parsing_context = ctx;
+  ast_root = ctx.ast_root; // Sync context ast_root to global
+}
 
 char *check_path(char *fully_qualified_name, const char *rel_path) {
   if (access(fully_qualified_name, F_OK) != 0 &&
@@ -1114,6 +1135,9 @@ char *check_path(char *fully_qualified_name, const char *rel_path) {
 
   return fully_qualified_name;
 }
+
+bool module_exists(const char *key);
+bool register_module_ast(const char *key, Ast *module_ast);
 
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
@@ -1135,6 +1159,32 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
     fprintf(stderr, "Error module %s not found in path\n",
             fully_qualified_name);
     return NULL;
+  }
+
+  // Check if the module is already parsed and stored
+  if (!module_exists(fully_qualified_name)) {
+    // Module not found in registry, need to parse it
+    // Save current parsing context
+    ParsingContext saved_context = save_parsing_context();
+
+    // Temporarily reset parsing context
+    ast_root = NULL;
+    parsing_context.ast_root = NULL;
+    parsing_context.import_current_dir = get_dirname(fully_qualified_name);
+
+    // Parse the module
+    Ast *module_ast = parse_input_script(fully_qualified_name);
+    if (module_ast) {
+      // Convert to module format
+      module_ast = ast_lambda(NULL, module_ast);
+      module_ast->tag = AST_MODULE;
+      if (register_module_ast(fully_qualified_name, module_ast)) {
+        fprintf(stderr, "Could not register module %s\n", fully_qualified_name);
+      }
+    }
+
+    // Restore the original parsing context
+    restore_parsing_context(saved_context);
   }
 
   Ast *import_ast = Ast_new(AST_IMPORT);

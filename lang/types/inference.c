@@ -649,6 +649,86 @@ bool is_index_access_ast(Ast *application, Type *arg_type, Type *cons_type) {
          application->data.AST_APPLICATION.len == 1 && is_array_type(cons_type);
 }
 
+Type *infer_inline_module(Ast *ast, TICtx *ctx) {
+
+  AstList *type_annotations = ast->data.AST_LAMBDA.type_annotations;
+  AstList *params = ast->data.AST_LAMBDA.params;
+
+  // printf("infer parametrized module\n");
+  if (ast->data.AST_LAMBDA.len > 0) {
+
+    int i = 0;
+    for (AstList *p = params; p; i++, p = p->next,
+                 type_annotations = type_annotations ? type_annotations->next
+                                                     : NULL) {
+      // Ast *param = p->ast;
+      // print_ast(param);
+      // if (type_annotations && type_annotations->ast) {
+      //   printf("constraint: ");
+      //   print_ast(type_annotations->ast);
+      // }
+    }
+  }
+
+  Ast body;
+  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+    body = (Ast){
+        AST_BODY,
+        .data = {.AST_BODY = {.len = 1, .stmts = &ast->data.AST_LAMBDA.body}}};
+  } else {
+    body = *ast->data.AST_LAMBDA.body;
+  }
+
+  TICtx module_ctx = *ctx;
+  TypeEnv *env_start = module_ctx.env;
+
+  Ast *stmt;
+  int len = body.data.AST_BODY.len;
+  Type **member_types = talloc(sizeof(Type *) * len);
+  const char **names = talloc(sizeof(char *) * len);
+
+  for (int i = 0; i < len; i++) {
+    stmt = body.data.AST_BODY.stmts[i];
+    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
+          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
+      return type_error(ctx, stmt,
+                        "Please only have let statements and type declarations "
+                        "in a module\n");
+      return NULL;
+    }
+
+    Type *t = infer(stmt, &module_ctx);
+    member_types[i] = t;
+
+    if (stmt->tag == AST_TYPE_DECL) {
+      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
+    } else if (stmt->tag == AST_IMPORT) {
+
+      names[i] = stmt->data.AST_IMPORT.identifier;
+    } else {
+      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+    }
+
+    if (!t) {
+      print_ast_err(stmt);
+      return NULL;
+    }
+  }
+
+  TypeEnv *env = module_ctx.env;
+
+  Type *module_struct_type =
+      create_cons_type(TYPE_NAME_MODULE, len, member_types);
+
+  module_struct_type->data.T_CONS.names = names;
+
+  // TODO: do we need to keep module env scope from being pushed up
+  // ctx->env = env;
+
+  return module_struct_type;
+}
+
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
   switch (ast->tag) {
@@ -814,8 +894,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_MODULE: {
-    printf("infer inline module\n");
-    print_ast(ast);
+    type = infer_inline_module(ast, ctx);
     break;
   }
 

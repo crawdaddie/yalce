@@ -14,8 +14,6 @@ typedef struct {
   TypeEnv *env;
 } YLCModule;
 
-Type *get_import_type(Ast *ast);
-
 int get_import_ref(Ast *ast, void **ref, Ast **module_ast);
 
 void set_import_ref(Ast *ast, void *ref);
@@ -23,4 +21,9 @@ void set_import_ref(Ast *ast, void *ref);
 YLCModule *get_imported_module(Ast *ast);
 
 bool is_module_ast(Ast *ast);
+
+YLCModule *get_module(const char *key);
+
+bool module_exists(const char *key);
+bool register_module_ast(const char *key, Ast *module_ast);
 #endif
