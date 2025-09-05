@@ -1,4 +1,4 @@
-let test = module
+let test = module () ->
 
 let test_iter_all_void = 
   let co_void = (fn () ->

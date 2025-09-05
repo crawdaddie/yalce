@@ -1,4 +1,4 @@
-let test = module
+let test = module () ->
 let test_guard_clause = fn () -> 
   "guard clauses xx if xx > 300";
   let x = 302;

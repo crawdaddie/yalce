@@ -1381,10 +1381,10 @@ int test_modules() {
 
   ({
     Type mod_type = TCONS(TYPE_NAME_MODULE, 2, &t_int,
-                          &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`3")), &t_int));
+                          &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`2")), &t_int));
     const char *names[2] = {"x", "size"};
     mod_type.data.T_CONS.names = names;
-    T("let Mod = module\n"
+    T("let Mod = module () ->\n"
       "  let x = 1;\n"
       "  let size = fn arr ->\n"
       "    array_size arr\n"
@@ -1396,13 +1396,19 @@ int test_modules() {
   ({
     // parametrized module
     Type mod_type = TCONS(TYPE_NAME_MODULE, 2, &t_int,
-                          &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`3")), &t_int));
+                          &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`2")), &t_int));
     // const char *names[2] = {"x", "size"};
     // mod_type.data.T_CONS.names = names;
 
-    T("let Mod = module\n"
-      "  type T;\n"
-      "  type U;\n"
+    T("let Mod = module T U ->\n"
+      "  let x = 1;\n"
+      "  let size = fn arr ->\n"
+      "    array_size arr\n"
+      "  ;;\n"
+      ";\n",
+      &mod_type);
+
+    T("let Mod = module T: (Arithmetic, Eq) U ->\n"
       "  let x = 1;\n"
       "  let size = fn arr ->\n"
       "    array_size arr\n"

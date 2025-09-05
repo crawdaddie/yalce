@@ -1,4 +1,4 @@
-let test = module
+let test = module () ->
 
   let test_record_access = fn () ->
     let x = (

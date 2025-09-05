@@ -4,7 +4,7 @@ let f = fn x ->
     | None -> 0
 ;;
 
-let test = module
+let test = module () ->
   let test_some = fn () -> f (Some 1) == 1 ;;
   let test_none = fn () -> f None == 0 ;; # function None -> 0"
 ;
