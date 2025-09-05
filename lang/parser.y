@@ -273,7 +273,7 @@ lambda_expr:
     FN lambda_args ARROW expr_sequence ';'      { $$ = ast_lambda($2, $4); }
   | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_void_lambda($4); }
   | MODULE lambda_args ARROW expr_sequence ';'{ $$ = ast_module(ast_lambda($2, $4)); }
-  | MODULE expr_sequence ';'                  { $$ = ast_module(ast_lambda(NULL, $2)); }
+  | MODULE TOK_VOID ARROW expr_sequence ';'   { $$ = ast_module(ast_lambda(NULL, $4)); }
   ;
 
 

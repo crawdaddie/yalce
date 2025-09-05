@@ -437,7 +437,7 @@ int main() {
   //                      "((let @ array_at)\n"
   //                      "((@ x_ref) 0))");
   // extern funcs
-  status &= test_parse("let m = module\n"
+  status &= test_parse("let m = module () ->\n"
                        "  let x = 1;\n"
                        ";",
                        "(let m Module (() -> \n"
@@ -454,7 +454,7 @@ int main() {
   status &= test_parse("let m = module T U ->\n"
                        "  let x = 1\n"
                        ";",
-                       "(let m Module (T -> \n"
+                       "(let m Module (T U -> \n"
                        "(let x 1))\n"
                        ")");
 
@@ -464,5 +464,6 @@ int main() {
   //                      "(let m Module (T -> \n"
   //                      "(let x 1))\n"
   //                      ")");
+
   return status ? 0 : 1;
 }
