@@ -164,6 +164,7 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
   }
 
   case AST_FN_SIGNATURE: {
+    print_ast(expr);
 
     Ast *sig = expr;
     int num_params = 0;

@@ -1160,9 +1160,6 @@ int test_coroutines() {
     Ast *runner_arg = b->data.AST_BODY.stmts[4]->data.AST_APPLICATION.args;
     Ast *cor_arg = b->data.AST_BODY.stmts[4]->data.AST_APPLICATION.args + 2;
 
-    print_ast(cor_arg);
-    print_type(cor_arg->md);
-
     Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
@@ -1183,7 +1180,7 @@ int test_coroutines() {
   });
 
   ({
-    Type cor = COROUTINE_INST(&t_int);
+    Type cor = COROUTINE_INST(&t_num);
     T("let f = iter_of_list [1,2,3]\n"
       "  |> cor_map (fn x -> x * 2.;)\n"
       "  |> cor_loop\n",
@@ -1191,7 +1188,16 @@ int test_coroutines() {
   });
 
   ({
-    Type t = arithmetic_var("`5");
+    Type cor = COROUTINE_INST(&t_num);
+    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    T("let f = fn () ->\n"
+      "  yield 1.;\n"
+      "  yield f ()\n"
+      ";;\n ",
+      &cor_cons);
+  });
+  ({
+    Type t = arithmetic_var("`0");
     Type t2 = arithmetic_var("`1");
     Type inst = COROUTINE_INST(&t);
     Type cons = COROUTINE_CONS(&MAKE_FN_TYPE_3(&t, &t2, &inst));
@@ -1335,20 +1341,38 @@ int test_refs() {
   bool status = true;
 
   ({
-    Type v = arithmetic_var("`11");
+    Type v = arithmetic_var("`5");
     T("let Ref = fn item -> [|item|];;\n"
-      "let setref = fn arr v ->\n"
-      "  array_set arr 0 v\n"
-      ";;\n"
-      "let (<-) = setref;\n"
-      "let deref = fn arr -> array_at arr 0;;\n"
       "let incr_ref = fn rx ->\n"
-      "  let x = deref rx;\n"
+      "  let x = rx[0];\n"
       "  let inc = x + 1;\n"
-      "  rx <- inc;\n"
+      "  rx[0] := inc;\n"
       "  inc\n"
       ";;\n",
-      &MAKE_FN_TYPE_2(&TARRAY(&v), &v));
+      &MAKE_FN_TYPE_2(
+          &TARRAY(&v),
+          &MAKE_TC_RESOLVE_2(
+              TYPE_NAME_TYPECLASS_ARITHMETIC, &v,
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &v))));
+  });
+
+  ({
+    Type v = arithmetic_var("`5");
+    Ast *b = T("let Ref = fn item -> [|item|];;\n"
+               "let incr_ref = fn rx ->\n"
+               "  let x = rx[0];\n"
+               "  let inc = x + 1;\n"
+               "  rx[0] := inc;\n"
+               "  inc\n"
+               ";;\n"
+               "incr_ref [| 1 |]\n",
+               &t_int);
+
+    status &= EXTRA_CONDITION(
+        types_equal(
+            b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.function->md,
+            &MAKE_FN_TYPE_2(&TCONS(TYPE_NAME_ARRAY, 1, &t_int), &t_int)),
+        "incr_ref [|1|] has type Array of Int -> Int");
   });
   return status;
 }
@@ -1361,6 +1385,24 @@ int test_modules() {
     const char *names[2] = {"x", "size"};
     mod_type.data.T_CONS.names = names;
     T("let Mod = module\n"
+      "  let x = 1;\n"
+      "  let size = fn arr ->\n"
+      "    array_size arr\n"
+      "  ;;\n"
+      ";\n",
+      &mod_type);
+  });
+
+  ({
+    // parametrized module
+    Type mod_type = TCONS(TYPE_NAME_MODULE, 2, &t_int,
+                          &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`3")), &t_int));
+    // const char *names[2] = {"x", "size"};
+    // mod_type.data.T_CONS.names = names;
+
+    T("let Mod = module\n"
+      "  type T;\n"
+      "  type U;\n"
       "  let x = 1;\n"
       "  let size = fn arr ->\n"
       "    array_size arr\n"
@@ -1490,7 +1532,7 @@ int main() {
     T("let instantiate_template = extern fn List of (Int, Double) -> Ptr -> "
       "Ptr;\n"
       "let f = fn freq ->\n"
-      "  instantiate_template [(0, freq)]\n"
+      "  instantiate_template [(0, freq),]\n"
       ";;\n",
       &MAKE_FN_TYPE_3(&t_num, &t_ptr, &t_ptr));
   });
@@ -1499,7 +1541,7 @@ int main() {
     T("let instantiate_template = extern fn List of (Int, Double) -> Ptr -> "
       "Ptr;\n"
       "let f = fn (idx, freq) ->\n"
-      "  instantiate_template [(idx, freq)]\n"
+      "  instantiate_template [(idx, freq),]\n"
       ";;\n",
       &MAKE_FN_TYPE_3(&TTUPLE(2, &t_int, &t_num), &t_ptr, &t_ptr));
   });

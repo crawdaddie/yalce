@@ -287,6 +287,8 @@ int main() {
   status &= test_parse("[|1, 2, 3, 4|]", "[|1, 2, 3, 4|]");
   status &= test_parse("1::[1,2]", "((:: 1) [1, 2])");
   status &= test_parse("x::y::[1,2]", "((:: x) ((:: y) [1, 2]))");
+  status &= test_parse("let x::y::_ = [1, 2] in x",
+                       "(let ((:: x) ((:: y) _)) [1, 2]) : x");
   status &= test_parse("x::rest", "((:: x) rest)");
 
   status &= test_parse("let x::_ = [1, 2, 3]", "(let ((:: x) _) [1, 2, 3])");
@@ -338,11 +340,12 @@ int main() {
                        "\t_ -> 3\n"
                        ")");
 
-  status &= test_parse(
-      "let printf2 = extern fn string -> string -> Int -> Int -> ()",
-      "(let printf2 (extern printf2 (string -> string -> Int -> Int -> ())))"
+  status &=
+      test_parse("let printf2 = extern fn string -> string -> Int -> Int -> ()",
+                 "(let printf2 (extern printf2 (string -> (string -> (Int -> "
+                 "(Int -> ())))))"
 
-  );
+      );
 
   status &= test_parse("let voidf = extern fn () -> ()",
                        "(let voidf (extern voidf (() -> ())))");
@@ -434,5 +437,32 @@ int main() {
   //                      "((let @ array_at)\n"
   //                      "((@ x_ref) 0))");
   // extern funcs
+  status &= test_parse("let m = module\n"
+                       "  let x = 1;\n"
+                       ";",
+                       "(let m Module (() -> \n"
+                       "(let x 1))\n"
+                       ")");
+
+  status &= test_parse("let m = module T ->\n"
+                       "  let x = 1;\n"
+                       "",
+                       "(let m Module (T -> \n"
+                       "(let x 1))\n"
+                       ")");
+
+  status &= test_parse("let m = module T U ->\n"
+                       "  let x = 1\n"
+                       ";",
+                       "(let m Module (T -> \n"
+                       "(let x 1))\n"
+                       ")");
+
+  // status &= test_parse("let m = module S T ->\n"
+  //                      "  let x = 1;\n"
+  //                      ";;",
+  //                      "(let m Module (T -> \n"
+  //                      "(let x 1))\n"
+  //                      ")");
   return status ? 0 : 1;
 }

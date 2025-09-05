@@ -557,7 +557,9 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
     }
 
     Scheme s = scheme_ref->scheme;
+
     Type *inst = instantiate(&s, ctx);
+
     return inst;
   }
 
@@ -594,9 +596,11 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
     Ast *el = ast->data.AST_LIST.items + i;
     Type *_el_type = infer(el, ctx);
 
-    if (_el_type->kind == T_VAR) {
+    if (is_generic(_el_type)) {
       unify(_el_type, el_type, ctx);
+    } else if (is_generic(el_type)) {
 
+      unify(el_type, _el_type, ctx);
     } else if (!types_equal(el_type, _el_type)) {
       print_type_err(el_type);
       print_type_err(_el_type);
@@ -806,12 +810,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_YIELD: {
     type = infer_yield_expr(ast, ctx);
-    // TODO: Implement yield inference
     break;
   }
 
   case AST_MODULE: {
-    // TODO: Implement module inference
+    printf("infer inline module\n");
+    print_ast(ast);
     break;
   }
 

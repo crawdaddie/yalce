@@ -49,6 +49,7 @@ ESCAPE          \\(['"?\\abfnrtv]|[0-7]{1,3}|x[0-9a-fA-F]+)
 CHAR            '([^'\\\n]|{ESCAPE})'
 %%
 "fn"                    return FN;
+"module"                return MODULE;
 "let"                   return LET;
 "in"                    return IN;
 "and"                   return AND;
@@ -76,7 +77,6 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "||"                    return DOUBLE_PIPE;
 "*"                     return *yytext;
 "\\"                    return THUNK;
-"module"                return *yytext;
 "for"                   return *yytext;
 "to"                    return *yytext;
 [a-zA-Z_][a-zA-Z0-9_]*  {
@@ -88,14 +88,6 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return IDENTIFIER;
                         }
 
-(%)[a-zA-Z_][a-zA-Z0-9_]*  {
-
-                          int len = yyleng;
-                          yylval.vident.chars = strdup(yytext); 
-                          yylval.vident.length = len;
-                          yylval.vident.hash = hash_string(yylval.vident.chars, len);
-                          return MACRO_IDENTIFIER;
-                        }
 
 (\.\.\/)*[a-zA-Z_][a-zA-Z0-9_\/]*  {
                           int len = yyleng;

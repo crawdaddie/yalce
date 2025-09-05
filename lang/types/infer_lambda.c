@@ -147,14 +147,15 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (!body_type) {
     return type_error(ctx, body, "Cannot infer lambda body type");
   }
-
   Subst *ls = solve_constraints(lambda_ctx.constraints);
 
   for (int i = 0; i < num_params; i++) {
-    param_types[i] = apply_substitution(lambda_ctx.subst, param_types[i]);
+    param_types[i] = apply_substitution(ls, param_types[i]);
+    // param_types[i] = apply_substitution(lambda_ctx.subst, param_types[i]);
   }
 
-  body_type = apply_substitution(lambda_ctx.subst, body_type);
+  body_type = apply_substitution(ls, body_type);
+  // body_type = apply_substitution(lambda_ctx.subst, body_type);
 
   // Build the final function type
   Type *result_type = body_type;

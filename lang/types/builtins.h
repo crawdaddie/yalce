@@ -7,6 +7,8 @@ extern ht builtin_types;
 void initialize_builtin_types();
 void add_builtin(char *name, Type *t);
 
+extern Scheme array_at_scheme_glob;
+
 void print_builtin_types();
 
 Type *lookup_builtin_type(const char *name);

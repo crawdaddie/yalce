@@ -9,21 +9,12 @@ TypeClass GenericArithmetic = {.name = TYPE_NAME_TYPECLASS_ARITHMETIC,
 TypeClass GenericOrd = {.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.};
 TypeClass GenericEq = {.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.};
 
-Scheme *create_new_array_at_sig() {
-
-  Type *el = tvar("a");
-  Type *arr = create_array_type(el);
-
-  VarList *vars = talloc(sizeof(VarList));
-  *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
-
-  Scheme *scheme = talloc(sizeof(Scheme));
-  Type *f = el;
-  f = type_fn(&t_int, f);
-  f = type_fn(arr, f);
-  *scheme = (Scheme){.vars = vars, .type = f};
-  return scheme;
-}
+static Type array_el = TVAR("a");
+static Type arrt = TCONS(TYPE_NAME_ARRAY, 1, &TVAR("a"));
+static VarList array_at_scheme_varlist = {.var = "a", .next = NULL};
+static Type array_at_fn = MAKE_FN_TYPE_3(&arrt, &t_int, &array_el);
+Scheme array_at_scheme_glob = {.vars = &array_at_scheme_varlist,
+                               .type = &array_at_fn};
 
 Scheme void_scheme = {.vars = NULL, .type = &t_void};
 
@@ -554,7 +545,7 @@ void initialize_builtin_schemes() {
 
   add_primitive_scheme("&&", &t_builtin_and);
 
-  add_builtin_scheme("array_at", create_new_array_at_sig());
+  add_builtin_scheme("array_at", &array_at_scheme_glob);
   add_builtin_scheme("array_set", create_new_array_set_sig());
   add_builtin_scheme("array_size", create_new_array_size_sig());
 

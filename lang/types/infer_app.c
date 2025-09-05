@@ -1,17 +1,8 @@
 
 #include "./infer_app.h"
+#include "./builtins.h"
 #include "serde.h"
 #include "types/unification.h"
-//
-// Type *instantiate_with_args(Scheme *cons_scheme, Ast *args, TICtx *ctx) {
-//   if (!cons_scheme) {
-//     return NULL;
-//   }
-//
-//   if (!cons_scheme->vars) {
-//     return cons_scheme->type;
-//   }
-// }
 
 Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
 
@@ -23,6 +14,7 @@ Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
   int i = 0;
 
   Type *arg_types[len];
+
   for (int i = 0; i < len; i++) {
     arg_types[i] = infer(args + i, ctx);
   }
@@ -67,6 +59,22 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   Type *func_type;
   if (func->tag == AST_IDENTIFIER) {
     Scheme *s = lookup_scheme(ctx->env, func->data.AST_IDENTIFIER.value);
+
+    if (s == &array_at_scheme_glob &&
+        (ast->data.AST_APPLICATION.args + 1)->tag == AST_LIST) {
+
+      // TODO: handle weird function list arg being interpreted as
+      // array_at -eg f [(1,2)] is interpreted as array_at f (1,2)
+      // workaround is to add a comma -> f [(1,2),]
+      //
+      // Ast *func = ast->data.AST_APPLICATION.args;
+      // Ast *list_items = (ast->data.AST_APPLICATION.args + 1);
+    }
+
+    // if (s == &array_at_scheme_glob) {
+    //   printf("array at\n");
+    //   print_ast(ast);
+    // }
     if (!s) {
       return NULL;
     }
@@ -78,6 +86,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
 
   // Step 1: Infer function type
   func_type = infer(func, ctx);
+
   if (is_coroutine_type(func_type)) {
     func_type = coroutine_inst_to_callable(func_type);
   } else if (is_coroutine_constructor_type(func_type)) {
@@ -108,10 +117,6 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
 
   // Step 4: Unify function type with expected type
   TICtx unify_ctx = {};
-  printf("app: ");
-  print_ast(ast);
-  print_type(func_type);
-  print_type(expected_type);
 
   if (unify(func_type, expected_type, &unify_ctx)) {
     print_type_err(func_type);
@@ -128,6 +133,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   ast->data.AST_APPLICATION.function->md = expected_type;
 
   Type *res = expected_type;
+
   for (int n = num_args; n; n--) {
     res = res->data.T_FN.to;
   }

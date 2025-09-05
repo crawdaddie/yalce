@@ -250,11 +250,18 @@ Type *infer_let_pattern_binding(Ast *binding, Ast *val, Ast *body, TICtx *ctx) {
                                                .num_yield_boundary_crossers) ||
                    0}}};
 
-  if (binding->tag == AST_IDENTIFIER) {
+  if (binding->tag == AST_IDENTIFIER && vtype_subst->kind == T_FN &&
+      is_generic(vtype_subst)) {
     // Simple binding: let x = val
-
-    // Don't solve constraints here - keep variables polymorphic
+    // keep functions polymorphic
     Scheme gen_type_scheme = generalize(vtype_subst, env_subst);
+
+    ctx->env = env_extend(env_subst, binding->data.AST_IDENTIFIER.value,
+                          gen_type_scheme.vars, gen_type_scheme.type);
+    ctx->env->md = binding_info;
+  } else if (binding->tag == AST_IDENTIFIER) {
+
+    Scheme gen_type_scheme = {.vars = NULL, .type = vtype_subst};
 
     ctx->env = env_extend(env_subst, binding->data.AST_IDENTIFIER.value,
                           gen_type_scheme.vars, gen_type_scheme.type);

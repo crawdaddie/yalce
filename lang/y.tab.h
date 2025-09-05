@@ -43,18 +43,18 @@
      DOUBLE = 259,
      FLOAT = 260,
      IDENTIFIER = 261,
-     MACRO_IDENTIFIER = 262,
-     PATH_IDENTIFIER = 263,
-     IDENTIFIER_LIST = 264,
-     TOK_STRING = 265,
-     TOK_CHAR = 266,
-     TRUE = 267,
-     FALSE = 268,
-     PIPE = 269,
-     EXTERN = 270,
-     TRIPLE_DOT = 271,
-     LET = 272,
-     FN = 273,
+     PATH_IDENTIFIER = 262,
+     IDENTIFIER_LIST = 263,
+     TOK_STRING = 264,
+     TOK_CHAR = 265,
+     TRUE = 266,
+     FALSE = 267,
+     PIPE = 268,
+     EXTERN = 269,
+     TRIPLE_DOT = 270,
+     LET = 271,
+     FN = 272,
+     MODULE = 273,
      MATCH = 274,
      WITH = 275,
      ARROW = 276,
@@ -79,14 +79,14 @@
      FSTRING_INTERP_START = 295,
      FSTRING_INTERP_END = 296,
      FSTRING_TEXT = 297,
-     APPLICATION = 298,
-     DOUBLE_PIPE = 299,
-     DOUBLE_AMP = 300,
-     NE = 301,
-     EQ = 302,
-     LE = 303,
-     GE = 304,
-     MODULO = 305,
+     DOUBLE_PIPE = 298,
+     DOUBLE_AMP = 299,
+     NE = 300,
+     EQ = 301,
+     LE = 302,
+     GE = 303,
+     MODULO = 304,
+     APPLICATION = 305,
      UMINUS = 306
    };
 #endif
@@ -95,18 +95,18 @@
 #define DOUBLE 259
 #define FLOAT 260
 #define IDENTIFIER 261
-#define MACRO_IDENTIFIER 262
-#define PATH_IDENTIFIER 263
-#define IDENTIFIER_LIST 264
-#define TOK_STRING 265
-#define TOK_CHAR 266
-#define TRUE 267
-#define FALSE 268
-#define PIPE 269
-#define EXTERN 270
-#define TRIPLE_DOT 271
-#define LET 272
-#define FN 273
+#define PATH_IDENTIFIER 262
+#define IDENTIFIER_LIST 263
+#define TOK_STRING 264
+#define TOK_CHAR 265
+#define TRUE 266
+#define FALSE 267
+#define PIPE 268
+#define EXTERN 269
+#define TRIPLE_DOT 270
+#define LET 271
+#define FN 272
+#define MODULE 273
 #define MATCH 274
 #define WITH 275
 #define ARROW 276
@@ -131,14 +131,14 @@
 #define FSTRING_INTERP_START 295
 #define FSTRING_INTERP_END 296
 #define FSTRING_TEXT 297
-#define APPLICATION 298
-#define DOUBLE_PIPE 299
-#define DOUBLE_AMP 300
-#define NE 301
-#define EQ 302
-#define LE 303
-#define GE 304
-#define MODULO 305
+#define DOUBLE_PIPE 298
+#define DOUBLE_AMP 299
+#define NE 300
+#define EQ 301
+#define LE 302
+#define GE 303
+#define MODULO 304
+#define APPLICATION 305
 #define UMINUS 306
 
 
