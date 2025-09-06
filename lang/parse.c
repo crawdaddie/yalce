@@ -329,11 +329,11 @@ Ast *parse_input_script(const char *filename) {
 
   char *current_dir = get_dirname(filename);
 
-  ast_root = Ast_new(AST_BODY);
-  ast_root->data.AST_BODY.len = 0;
-  ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+  parsing_context.ast_root = Ast_new(AST_BODY);
+  parsing_context.ast_root->data.AST_BODY.len = 0;
+  parsing_context.ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+  parsing_context.cur_script = filename;
 
-  _cur_script = filename;
   const char *input = fcontent;
 
   _cur_script_content = input;

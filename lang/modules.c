@@ -54,8 +54,9 @@ bool module_exists(const char *key) {
 
 bool register_module_ast(const char *key, Ast *module_ast) {
   YLCModule *new_module = malloc(sizeof(YLCModule));
-  if (!new_module)
+  if (!new_module) {
     return true; // allocation failed
+  }
 
   *new_module =
       (YLCModule){.type = NULL, // Will be filled during type inference
