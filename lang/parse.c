@@ -517,7 +517,7 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
     return stmts;
   }
 
-  if (stmts->tag == AST_BODY) {
+  if (stmts && stmts->tag == AST_BODY) {
     ast_body_push(stmts, new_stmt);
     return stmts;
   }

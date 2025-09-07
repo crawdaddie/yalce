@@ -457,6 +457,18 @@ int main() {
                        "(let m Module (T U -> \n"
                        "(let x 1))\n"
                        ")");
+  status &= test_parse(
+
+      "let fib = fn x ->\n"
+      "  match x with\n"
+      "  | 0 -> 0\n"
+      "  | 1 -> 1\n"
+      "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+      ";;\n"
+      "let t = module () ->\n"
+      "  let t_fib2 = fib 2 == 1;\n"
+      ";\n",
+      "");
 
   // status &= test_parse("let m = module S T ->\n"
   //                      "  let x = 1;\n"

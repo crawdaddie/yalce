@@ -1230,6 +1230,7 @@ LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Ast *array_like_ast = ast->data.AST_APPLICATION.function;
   Ast *index_ast = ast->data.AST_APPLICATION.args;
   Type *array_type = array_like_ast->md;
+
   if (is_array_type(array_type)) {
     LLVMValueRef arr = codegen(array_like_ast, ctx, module, builder);
     LLVMValueRef idx =
@@ -1239,7 +1240,10 @@ LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     return get_array_element(builder, arr, idx, el_type);
   }
+  fprintf(stderr, "Index access not implemented for this type\n");
+  return NULL;
 }
+
 /*
 
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,

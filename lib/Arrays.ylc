@@ -48,7 +48,7 @@ let last = fn x: (Array of T) ->
 ;;
   
 
-let test = module
+let test = module () ->
   let test_sum_doubles = fold (+) 0. [|1., 2., 3.|] == 6.;
 
   let test_sum_ints = fold (+) 0 [|1, 2, 3|] == 6;
