@@ -1240,6 +1240,7 @@ LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return get_array_element(builder, arr, idx, el_type);
   }
 }
+/*
 
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
@@ -1380,3 +1381,4 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   return ctx->env;
 }
+*/

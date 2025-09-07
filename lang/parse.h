@@ -464,7 +464,7 @@ typedef struct AstVisitor {
   void *data; // Generic pointer for visitor-specific state
 } AstVisitor;
 Ast *ast_module(Ast *lambda);
-extern char *__import_current_dir;
+// extern char *__import_current_dir;
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
 Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body);
 

@@ -5,6 +5,7 @@
 #include "./infer_lambda.h"
 #include "./type.h"
 #include "./unification.h"
+#include "modules.h"
 #include "serde.h"
 #include "types/infer_app.h"
 #include "types/infer_match_expression.h"
@@ -728,6 +729,7 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
 
   return module_struct_type;
 }
+Type *infer_module(YLCModule *mod) { return NULL; }
 
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
@@ -904,6 +906,18 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_IMPORT: {
+    const char *key = ast->data.AST_IMPORT.fully_qualified_name;
+    YLCModule *mod = get_module(key);
+    if (!mod) {
+      return NULL;
+    }
+
+    if (mod->type) {
+      type = mod->type;
+    } else {
+      type = infer_module(mod);
+    }
+
     // TODO: Implement import inference
     break;
   }

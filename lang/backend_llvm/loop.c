@@ -13,6 +13,10 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+bool is_loop_of_iterable(Ast *ast) { // TODO: implement
+  return false;
+}
+
 LLVMValueRef codegen_loop_range(Ast *binding, Ast *range, Ast *body,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
@@ -234,8 +238,8 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
   LLVMValueRef first_data =
       LLVMBuildLoad2(builder, llvm_list_el_type, first_data_ptr, "first_data");
 
-  // TODO: need to use codegen_pattern_binding to properly set up bindings like
-  // (i, x)
+  // TODO: need to use codegen_pattern_binding to properly set up bindings
+  // like (i, x)
   JITSymbol *sym =
       new_symbol(STYPE_LOCAL_VAR, list_el_type, first_data, llvm_list_el_type);
   sym->storage = loop_var_alloca;

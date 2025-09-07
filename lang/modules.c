@@ -23,8 +23,6 @@ bool is_module_ast(Ast *ast) {
   return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
 }
 
-Type *get_import_type(Ast *ast) { return NULL; }
-
 YLCModule *get_imported_module(Ast *ast) {
   const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;
 

@@ -10,4 +10,6 @@ Constraint *merge_constraints(Constraint *list1, Constraint *list2);
 
 Subst *solve_constraints(Constraint *constraints);
 
+Constraint *constraints_extend(Constraint *constraints, Type *var, Type *type);
+
 #endif

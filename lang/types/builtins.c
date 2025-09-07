@@ -565,3 +565,4 @@ Scheme *lookup_builtin_scheme(const char *name) {
       ht_get_hash(&builtin_schemes, name, hash_string(name, strlen(name)));
   return builtin;
 }
+void print_builtin_types() {}

@@ -114,7 +114,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder,
                          LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog) {
 
-  __import_current_dir = get_dirname(filename);
+  // __import_current_dir = get_dirname(filename);
 
   if (config.test_mode) {
     printf("\n# Test %s\n"
@@ -132,10 +132,8 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   TICtx ti_ctx = {.env = *env, .scope = 0};
 
   ti_ctx.err_stream = stderr;
+
   if (!infer(*prog, &ti_ctx)) {
-    return NULL;
-  }
-  if (!solve_program_constraints(*prog, &ti_ctx)) {
     return NULL;
   }
 
@@ -154,7 +152,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
     }
   }
 
-  Type *result_type = top_level_ast(*prog)->term;
+  Type *result_type = top_level_ast(*prog)->md;
 
   if (result_type == NULL) {
     printf("typecheck failed\n");
@@ -285,7 +283,7 @@ int jit(int argc, char **argv) {
   setup_global_storage(module, builder);
 
   TypeEnv *env = NULL;
-  initialize_builtin_types();
+  initialize_builtin_schemes();
 
   ht table;
   ht_init(&table);
@@ -298,7 +296,7 @@ int jit(int argc, char **argv) {
                     .global_storage_capacity = &global_storage_capacity,
                     .frame = &initial_stack_frame};
 
-  initialize_builtin_funcs(&ctx, module, builder);
+  // initialize_builtin_funcs(&ctx, module, builder);
   // initialize_synth_types(&ctx, module, builder);
 
   int arg_counter = 1;
@@ -360,7 +358,8 @@ int jit(int argc, char **argv) {
     char filename[20];
     time_t current_time = time(NULL);
     snprintf(filename, 20, "tmp_%ld.ylc", current_time);
-    __import_current_dir = dirname;
+
+    // __import_current_dir = dirname;
 
     printf(COLOR_MAGENTA "YLC LANG REPL     \n"
                          "------------------\n"
@@ -444,7 +443,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
 
     printf(COLOR_GREEN "> ");
 
-    Type *top_type = prog->term;
+    Type *top_type = prog->md;
 
     if (top_level_func == NULL) {
       print_type(top_type);
