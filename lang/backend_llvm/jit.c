@@ -125,6 +125,8 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   LLVMSetSourceFileName(module, filename, strlen(filename));
 
   *prog = parse_input_script(filename);
+  print_ast(*prog);
+
   if (!(*prog)) {
     return NULL;
   }
@@ -401,7 +403,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
       print_type_env(ctx->env);
       continue;
     } else if (strncmp("%dump_ast", input, 9) == 0) {
-      print_ast(ast_root);
+      print_ast(parsing_context.ast_root);
       continue;
     } else if (strncmp("%builtins", input, 8) == 0) {
       print_builtin_types();

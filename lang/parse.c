@@ -81,19 +81,30 @@ void ast_body_push(Ast *body, Ast *stmt) {
   if (!stmt) {
     return;
   }
-
   if (stmt->tag != AST_BODY) {
-    Ast **members = body->data.AST_BODY.stmts;
-    body->data.AST_BODY.len++;
-    int len = body->data.AST_BODY.len;
+    // Create new AstList node
+    AstList *new_node = palloc(sizeof(AstList));
+    new_node->ast = stmt;
+    new_node->next = NULL;
 
-    body->data.AST_BODY.stmts = prealloc(members, sizeof(Ast *) * len);
-    body->data.AST_BODY.stmts[len - 1] = stmt;
+    // If this is the first statement
+    if (body->data.AST_BODY.stmts == NULL) {
+      body->data.AST_BODY.stmts = new_node;
+      body->data.AST_BODY.tail = new_node;
+    } else {
+      // Append to tail
+      body->data.AST_BODY.tail->next = new_node;
+      body->data.AST_BODY.tail = new_node;
+    }
+    body->data.AST_BODY.len++;
     return;
   }
   if (stmt->tag == AST_BODY) {
-    for (int i = 0; i < stmt->data.AST_BODY.len; i++) {
-      ast_body_push(body, stmt->data.AST_BODY.stmts[i]);
+    // Recursively add all statements from the body
+    AstList *current = stmt->data.AST_BODY.stmts;
+    while (current != NULL) {
+      ast_body_push(body, current->ast);
+      current = current->next;
     }
     return;
   }
@@ -319,7 +330,7 @@ char *prepend_current_directory(const char *filename) {
 }
 
 Ast *parse_input_script(const char *filename) {
-  __filename = filename;
+
   char *fcontent = read_script(filename);
   if (!fcontent) {
     return NULL;
@@ -328,43 +339,48 @@ Ast *parse_input_script(const char *filename) {
   char *dir = get_dirname(filename);
 
   char *current_dir = get_dirname(filename);
-
+  parsing_context.filename = filename;
+  parsing_context.import_current_dir = current_dir;
   parsing_context.ast_root = Ast_new(AST_BODY);
   parsing_context.ast_root->data.AST_BODY.len = 0;
-  parsing_context.ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+  parsing_context.ast_root->data.AST_BODY.stmts = NULL;
+  parsing_context.ast_root->data.AST_BODY.tail = NULL;
   parsing_context.cur_script = filename;
 
   const char *input = fcontent;
+  parsing_context.cur_script_content = input;
 
-  _cur_script_content = input;
   yylineno = 1;
   yyabsoluteoffset = 0;
   yy_scan_string(input);
   yyparse();
 
-  return ast_root;
+  return parsing_context.ast_root;
 }
 
 Ast *parse_input(char *input, const char *dirname) {
 
   Ast *prev = NULL;
 
-  if (ast_root != NULL && ast_root->data.AST_BODY.len > 0) {
-    prev = ast_root;
+  if (parsing_context.ast_root != NULL &&
+      parsing_context.ast_root->data.AST_BODY.len > 0) {
+    prev = parsing_context.ast_root;
   }
 
-  ast_root = Ast_new(AST_BODY);
-  ast_root->data.AST_BODY.len = 0;
-  ast_root->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+  parsing_context.ast_root = Ast_new(AST_BODY);
+  parsing_context.ast_root->data.AST_BODY.len = 0;
+  parsing_context.ast_root->data.AST_BODY.stmts = NULL;
+  parsing_context.ast_root->data.AST_BODY.tail = NULL;
 
   // _cur_script = "tmp.ylc";
   // _cur_script_content = input;
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
 
-  Ast *res = ast_root;
+  Ast *res = parsing_context.ast_root;
   if (prev != NULL) {
-    ast_root = prev;
+    parsing_context.ast_root = prev;
+    parsing_context.ast_root = prev;
   }
   return res;
 }
@@ -523,7 +539,9 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
   }
 
   Ast *body = Ast_new(AST_BODY);
-  body->data.AST_BODY.stmts = palloc(sizeof(Ast *));
+  body->data.AST_BODY.len = 0;
+  body->data.AST_BODY.stmts = NULL;
+  body->data.AST_BODY.tail = NULL;
   ast_body_push(body, stmts);
   ast_body_push(body, new_stmt);
   return body;
@@ -873,11 +891,11 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
   }
 
   Ast *body = Ast_new(AST_BODY);
-  body = Ast_new(AST_BODY);
-  body->data.AST_BODY.len = 2;
-  body->data.AST_BODY.stmts = palloc(sizeof(Ast *) * 2);
-  body->data.AST_BODY.stmts[0] = seq;
-  body->data.AST_BODY.stmts[1] = new;
+  body->data.AST_BODY.len = 0;
+  body->data.AST_BODY.stmts = NULL;
+  body->data.AST_BODY.tail = NULL;
+  ast_body_push(body, seq);
+  ast_body_push(body, new);
   return body;
 }
 
@@ -1110,14 +1128,14 @@ Ast *ast_module(Ast *lambda) {
 
 // Function to save current parsing context
 static ParsingContext save_parsing_context() {
-  parsing_context.ast_root = ast_root; // Sync global ast_root to context
+  parsing_context.ast_root =
+      parsing_context.ast_root; // Sync global ast_root to context
   return parsing_context;
 }
 
 // Function to restore parsing context
 static void restore_parsing_context(ParsingContext ctx) {
   parsing_context = ctx;
-  ast_root = ctx.ast_root; // Sync context ast_root to global
 }
 
 char *check_path(char *fully_qualified_name, const char *rel_path) {
@@ -1168,7 +1186,6 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
     ParsingContext saved_context = save_parsing_context();
 
     // Temporarily reset parsing context
-    ast_root = NULL;
     parsing_context.ast_root = NULL;
     parsing_context.import_current_dir = get_dirname(fully_qualified_name);
 

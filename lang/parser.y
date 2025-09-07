@@ -16,8 +16,6 @@ extern int yylineno;
 extern int yycolumn;
 extern char *yytext;
 
-/* Define global variable for the root of AST */
-Ast* ast_root = NULL;
 #define AST_CONST(type, val)                                            \
     ({                                                                  \
       Ast *prefix = Ast_new(type);                                      \
@@ -121,8 +119,8 @@ Ast* ast_root = NULL;
 
 
 program:
-    expr_sequence ';' { parse_stmt_list(ast_root, $1); }
-  | expr_sequence     { parse_stmt_list(ast_root, $1); }
+    expr_sequence ';' { parsing_context.ast_root = parse_stmt_list(parsing_context.ast_root, $1); }
+  | expr_sequence     { parsing_context.ast_root = parse_stmt_list(parsing_context.ast_root, $1); }
   | /* NULL */
   ;
 

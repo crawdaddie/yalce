@@ -148,7 +148,6 @@ typedef enum ast_tag {
   AST_APPLICATION,
   AST_TUPLE,
   AST_LAMBDA,
-  AST_LAMBDA_ARGS,
   AST_VOID,
   AST_EXTERN_FN,
   AST_LIST,
@@ -180,7 +179,8 @@ struct Ast {
   union {
     struct AST_BODY {
       size_t len;
-      Ast **stmts;
+      AstList *stmts;
+      AstList *tail;
     } AST_BODY;
 
     struct AST_LET {
@@ -274,11 +274,6 @@ struct Ast {
       ObjString fn_name;
     } AST_EXTERN_FN;
 
-    struct AST_LAMBDA_ARGS {
-      Ast **ids;
-      size_t len;
-    } AST_LAMBDA_ARGS;
-
     struct AST_LIST {
       Ast *items;
       size_t len;
@@ -349,9 +344,6 @@ struct Ast {
 Ast *Ast_new(enum ast_tag tag);
 
 void ast_body_push(Ast *body, Ast *stmt);
-
-/* External declaration of ast root */
-extern Ast *ast_root;
 
 Ast *ast_binop(token_type op, Ast *left, Ast *right);
 Ast *ast_unop(token_type op, Ast *right);

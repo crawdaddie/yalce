@@ -671,25 +671,33 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
     }
   }
 
-  Ast body;
+  Ast *body_ast;
+  AstList *stmt_list;
+  int len;
+  
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
-    body = (Ast){
-        AST_BODY,
-        .data = {.AST_BODY = {.len = 1, .stmts = &ast->data.AST_LAMBDA.body}}};
+    // Single statement - create a temporary AstList node
+    AstList *single_stmt = talloc(sizeof(AstList));
+    single_stmt->ast = ast->data.AST_LAMBDA.body;
+    single_stmt->next = NULL;
+    stmt_list = single_stmt;
+    len = 1;
   } else {
-    body = *ast->data.AST_LAMBDA.body;
+    body_ast = ast->data.AST_LAMBDA.body;
+    stmt_list = body_ast->data.AST_BODY.stmts;
+    len = body_ast->data.AST_BODY.len;
   }
 
   TICtx module_ctx = *ctx;
   TypeEnv *env_start = module_ctx.env;
 
   Ast *stmt;
-  int len = body.data.AST_BODY.len;
   Type **member_types = talloc(sizeof(Type *) * len);
   const char **names = talloc(sizeof(char *) * len);
 
-  for (int i = 0; i < len; i++) {
-    stmt = body.data.AST_BODY.stmts[i];
+  int i = 0;
+  for (AstList *current = stmt_list; current != NULL; current = current->next) {
+    stmt = current->ast;
     if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
           (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
       return type_error(ctx, stmt,
@@ -715,6 +723,7 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
       print_ast_err(stmt);
       return NULL;
     }
+    i++;
   }
 
   TypeEnv *env = module_ctx.env;
@@ -840,14 +849,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_BODY: {
     Ast *stmt;
-    for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      stmt = ast->data.AST_BODY.stmts[i];
+    int i = 0;
+    for (AstList *current = ast->data.AST_BODY.stmts; current != NULL; current = current->next) {
+      stmt = current->ast;
       Type *t = infer(stmt, ctx);
       if (!t) {
         // print_ast_err(stmt);
         return NULL;
       }
       type = t;
+      i++;
     }
     break;
   }

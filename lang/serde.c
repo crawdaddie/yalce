@@ -26,12 +26,14 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   switch (ast->tag) {
   case AST_BODY: {
-    for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
-      Ast *stmt = ast->data.AST_BODY.stmts[i];
-      buffer = ast_to_sexpr(stmt, buffer);
-      if (i < ast->data.AST_BODY.len - 1) {
+    int i = 0;
+    for (AstList *current = ast->data.AST_BODY.stmts; current != NULL;
+         current = current->next) {
+      buffer = ast_to_sexpr(current->ast, buffer);
+      if (current->next != NULL) {
         buffer = strcat(buffer, "\n");
       }
+      i++;
     }
     break;
   }
@@ -329,9 +331,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
   //
-  case AST_LAMBDA_ARGS: {
-    break;
-  }
   case AST_LIST: {
     buffer = strcat(buffer, "[");
     int len = ast->data.AST_LIST.len;
