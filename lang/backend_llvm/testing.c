@@ -64,16 +64,18 @@ Ast *get_test_module_ast(Ast *ast) {
     return ast->data.AST_LET.expr;
   }
   if (ast->tag == AST_BODY) {
-    for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      Ast *stmt = ast->data.AST_BODY.stmts[i];
+    AST_LIST_ITER(
+        ast->data.AST_BODY.stmts, ({
+          Ast *stmt = l->ast;
+          // Ast *stmt = ast->data.AST_BODY.stmts[i];
 
-      if (stmt->tag == AST_LET &&
-          stmt->data.AST_LET.binding->tag == AST_IDENTIFIER &&
-          strcmp(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value,
-                 "test") == 0) {
-        return stmt->data.AST_LET.expr;
-      }
-    }
+          if (stmt->tag == AST_LET &&
+              stmt->data.AST_LET.binding->tag == AST_IDENTIFIER &&
+              strcmp(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value,
+                     "test") == 0) {
+            return stmt->data.AST_LET.expr;
+          }
+        }));
   }
 
   return NULL;

@@ -1,4 +1,5 @@
 #include "./jit.h"
+#include "../modules.h"
 #include "./codegen.h"
 #include "./common.h"
 #include "./globals.h"
@@ -68,12 +69,6 @@ void break_repl_for_gui_loop(LLVMModuleRef module, const char *filename,
 void dump_assembly(LLVMModuleRef module);
 #define STACK_MAX 256
 
-static Ast *top_level_ast(Ast *body) {
-  size_t len = body->data.AST_BODY.len;
-  Ast *last = body->data.AST_BODY.stmts[len - 1];
-  return last;
-}
-
 static void *eval_script(const char *filename, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder,
                          LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog);
@@ -125,6 +120,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   LLVMSetSourceFileName(module, filename, strlen(filename));
 
   *prog = parse_input_script(filename);
+  printf("full prog\n");
   print_ast(*prog);
 
   if (!(*prog)) {
@@ -154,7 +150,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
     }
   }
 
-  Type *result_type = top_level_ast(*prog)->md;
+  Type *result_type = body_tail(*prog)->md;
 
   if (result_type == NULL) {
     printf("typecheck failed\n");
@@ -194,10 +190,6 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   return NULL;
 }
 
-typedef struct ll_int_t {
-  int32_t el;
-  struct ll_int_t *next;
-} int_ll_t;
 void dump_assembly(LLVMModuleRef module) {
   LLVMInitializeNativeTarget();
   LLVMInitializeNativeAsmPrinter();
@@ -403,7 +395,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
       print_type_env(ctx->env);
       continue;
     } else if (strncmp("%dump_ast", input, 9) == 0) {
-      print_ast(parsing_context.ast_root);
+      print_ast(pctx.ast_root);
       continue;
     } else if (strncmp("%builtins", input, 8) == 0) {
       print_builtin_types();
@@ -432,7 +424,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
     }
 
     if (typecheck_result->kind == T_VAR) {
-      Ast *top = top_level_ast(prog);
+      Ast *top = body_tail(prog);
       fprintf(stderr, "value not found: ");
       print_ast_err(top);
       print_location(top);

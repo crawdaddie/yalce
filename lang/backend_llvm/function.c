@@ -148,24 +148,25 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
   } else {
     int len = ast->data.AST_LAMBDA.body->data.AST_BODY.len;
-    for (int i = 0; i < len; i++) {
 
-      Ast *stmt = ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+    AST_LIST_ITER(ast->data.AST_LAMBDA.body->data.AST_BODY.stmts, ({
+                    Ast *stmt = l->ast;
 
-      if (i == 0 && stmt->tag == AST_STRING) {
-        continue;
-      }
+                    if (i == 0 && stmt->tag == AST_STRING) {
+                      continue;
+                    }
 
-      if (i == len - 1) {
-        stmt->is_body_tail = true;
-      }
-      body = codegen(stmt, fn_ctx, module, builder);
-      if (body == NULL && i == 1 && stmt->tag == AST_APPLICATION) {
-        // print_ast(stmt);
-        // print_type(stmt->data.AST_APPLICATION.args[0].md);
-        // print_type(stmt->data.AST_APPLICATION.args[1].md);
-      }
-    }
+                    if (i == len - 1) {
+                      stmt->is_body_tail = true;
+                    }
+                    body = codegen(stmt, fn_ctx, module, builder);
+                    if (body == NULL && i == 1 &&
+                        stmt->tag == AST_APPLICATION) {
+                      // print_ast(stmt);
+                      // print_type(stmt->data.AST_APPLICATION.args[0].md);
+                      // print_type(stmt->data.AST_APPLICATION.args[1].md);
+                    }
+                  }));
   }
   return body;
 }

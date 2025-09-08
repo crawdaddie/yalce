@@ -2127,12 +2127,12 @@ yyreduce:
     {
         case 2:
 #line 122 "lang/parser.y"
-    { parsing_context.ast_root = parse_stmt_list(parsing_context.ast_root, (yyvsp[(1) - (2)].ast_node_ptr)); }
+    { pctx.ast_root = parse_stmt_list(pctx.ast_root, (yyvsp[(1) - (2)].ast_node_ptr)); }
     break;
 
   case 3:
 #line 123 "lang/parser.y"
-    { parsing_context.ast_root = parse_stmt_list(parsing_context.ast_root, (yyvsp[(1) - (1)].ast_node_ptr)); }
+    { pctx.ast_root = parse_stmt_list(pctx.ast_root, (yyvsp[(1) - (1)].ast_node_ptr)); }
     break;
 
   case 6:
@@ -3107,7 +3107,7 @@ yyreturn:
 
 
 void yyerror(const char *s) {
-  fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, parsing_context.cur_script);
+  fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, pctx.cur_script);
 }
 #endif _LANG_TAB_H
 

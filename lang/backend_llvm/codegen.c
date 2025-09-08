@@ -80,10 +80,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_BODY: {
     LLVMValueRef val;
-    for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
-      Ast *stmt = ast->data.AST_BODY.stmts[i];
-      val = codegen(stmt, ctx, module, builder);
-    }
+    AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
+                    Ast *stmt = l->ast;
+                    val = codegen(stmt, ctx, module, builder);
+                  }));
     return val;
   }
 

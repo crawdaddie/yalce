@@ -65,3 +65,15 @@ bool register_module_ast(const char *key, Ast *module_ast) {
   ht_set(&module_registry, key, new_module);
   return false; // success
 }
+
+void parse_imports() {
+  hti it = ht_iterator(&module_registry);
+
+  bool cont = ht_next(&it);
+  printf("\nimported modules\n");
+  for (; cont; cont = ht_next(&it)) {
+    const char *key = it.key;
+    YLCModule *t = it.value;
+    printf("%s: ", key);
+  }
+}

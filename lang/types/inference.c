@@ -674,7 +674,7 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
   Ast *body_ast;
   AstList *stmt_list;
   int len;
-  
+
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     // Single statement - create a temporary AstList node
     AstList *single_stmt = talloc(sizeof(AstList));
@@ -849,17 +849,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_BODY: {
     Ast *stmt;
-    int i = 0;
-    for (AstList *current = ast->data.AST_BODY.stmts; current != NULL; current = current->next) {
-      stmt = current->ast;
-      Type *t = infer(stmt, ctx);
-      if (!t) {
-        // print_ast_err(stmt);
-        return NULL;
-      }
-      type = t;
-      i++;
-    }
+    AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
+                    stmt = l->ast;
+                    Type *t = infer(stmt, ctx);
+                    if (!t) {
+                      return NULL;
+                    }
+                    type = t;
+                  }));
     break;
   }
 

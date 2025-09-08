@@ -26,4 +26,6 @@ YLCModule *get_module(const char *key);
 
 bool module_exists(const char *key);
 bool register_module_ast(const char *key, Ast *module_ast);
+
+void parse_imports();
 #endif

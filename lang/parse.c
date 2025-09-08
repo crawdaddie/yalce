@@ -1,23 +1,18 @@
 #include "parse.h"
 #include "config.h"
 #include "input.h"
+#include "lex.yy.h"
+#include "modules.h"
 #include "serde.h"
 #include "y.tab.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-ParsingContext parsing_context = {};
+ParsingContext pctx = {};
 
 // Structure to hold all parsing context
 // Static parsing context - single source of truth
-
-// Legacy global variables for backward compatibility (now point to
-// parsing_context)
-#define __filename parsing_context.filename
-#define _cur_script parsing_context.cur_script
-#define _cur_script_content parsing_context.cur_script_content
-#define __import_current_dir parsing_context.import_current_dir
 
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
@@ -39,38 +34,14 @@ void add_custom_binop(const char *binop_name) {
   __custom_binops = new_custom_binops;
 }
 
-struct string_list {
-  const char *data;
-  struct string_list *next;
-};
-
-struct string_list *string_list_push_left(struct string_list *list,
-                                          const char *data) {
-  struct string_list *new = palloc(sizeof(struct string_list));
-  new->next = list;
-  new->data = data;
-  return new;
-}
-
-const char *string_list_find(struct string_list *list, const char *data) {
-
-  for (struct string_list *inc = list; inc != NULL; inc = inc->next) {
-    if (strcmp(inc->data, data) == 0) {
-      // module already included
-      return inc->data;
-    }
-  }
-  return NULL;
-}
-
 Ast *Ast_new(enum ast_tag tag) {
   Ast *node = palloc(sizeof(Ast));
   loc_info *loc = palloc(sizeof(loc_info));
   loc->line = yylloc.last_line;
   loc->col = yylloc.first_column;
   loc->col_end = yylloc.last_column;
-  loc->src = _cur_script;
-  loc->src_content = _cur_script_content;
+  loc->src = pctx.cur_script;
+  loc->src_content = pctx.cur_script_content;
   loc->absolute_offset = yyprevoffset;
   node->tag = tag;
   node->loc_info = loc;
@@ -300,10 +271,10 @@ Ast *ast_test_module(Ast *expr) {
   return node;
 }
 
-int yy_scan_string(char *);
-
-static char *current_dir;
-static int current_buf;
+// Flex lexer function declarations
+extern void *yy_scan_string(char *);
+extern void yypush_buffer_state(void *buffer);
+extern void yypop_buffer_state(void);
 
 char *prepend_current_directory(const char *filename) {
   if (filename == NULL) {
@@ -329,58 +300,28 @@ char *prepend_current_directory(const char *filename) {
   }
 }
 
-Ast *parse_input_script(const char *filename) {
-
-  char *fcontent = read_script(filename);
-  if (!fcontent) {
-    return NULL;
-  }
-
-  char *dir = get_dirname(filename);
-
-  char *current_dir = get_dirname(filename);
-  parsing_context.filename = filename;
-  parsing_context.import_current_dir = current_dir;
-  parsing_context.ast_root = Ast_new(AST_BODY);
-  parsing_context.ast_root->data.AST_BODY.len = 0;
-  parsing_context.ast_root->data.AST_BODY.stmts = NULL;
-  parsing_context.ast_root->data.AST_BODY.tail = NULL;
-  parsing_context.cur_script = filename;
-
-  const char *input = fcontent;
-  parsing_context.cur_script_content = input;
-
-  yylineno = 1;
-  yyabsoluteoffset = 0;
-  yy_scan_string(input);
-  yyparse();
-
-  return parsing_context.ast_root;
-}
-
 Ast *parse_input(char *input, const char *dirname) {
 
   Ast *prev = NULL;
 
-  if (parsing_context.ast_root != NULL &&
-      parsing_context.ast_root->data.AST_BODY.len > 0) {
-    prev = parsing_context.ast_root;
+  if (pctx.ast_root != NULL && pctx.ast_root->data.AST_BODY.len > 0) {
+    prev = pctx.ast_root;
   }
 
-  parsing_context.ast_root = Ast_new(AST_BODY);
-  parsing_context.ast_root->data.AST_BODY.len = 0;
-  parsing_context.ast_root->data.AST_BODY.stmts = NULL;
-  parsing_context.ast_root->data.AST_BODY.tail = NULL;
+  pctx.ast_root = Ast_new(AST_BODY);
+  pctx.ast_root->data.AST_BODY.len = 0;
+  pctx.ast_root->data.AST_BODY.stmts = NULL;
+  pctx.ast_root->data.AST_BODY.tail = NULL;
 
   // _cur_script = "tmp.ylc";
   // _cur_script_content = input;
   yy_scan_string(input); // Set the input for the lexer
   yyparse();             // Parse the input
 
-  Ast *res = parsing_context.ast_root;
+  Ast *res = pctx.ast_root;
   if (prev != NULL) {
-    parsing_context.ast_root = prev;
-    parsing_context.ast_root = prev;
+    pctx.ast_root = prev;
+    pctx.ast_root = prev;
   }
   return res;
 }
@@ -1128,15 +1069,12 @@ Ast *ast_module(Ast *lambda) {
 
 // Function to save current parsing context
 static ParsingContext save_parsing_context() {
-  parsing_context.ast_root =
-      parsing_context.ast_root; // Sync global ast_root to context
-  return parsing_context;
+  pctx.ast_root = pctx.ast_root; // Sync global ast_root to context
+  return pctx;
 }
 
 // Function to restore parsing context
-static void restore_parsing_context(ParsingContext ctx) {
-  parsing_context = ctx;
-}
+static void restore_parsing_context(ParsingContext ctx) { ctx = ctx; }
 
 char *check_path(char *fully_qualified_name, const char *rel_path) {
   if (access(fully_qualified_name, F_OK) != 0 &&
@@ -1152,63 +1090,6 @@ char *check_path(char *fully_qualified_name, const char *rel_path) {
   }
 
   return fully_qualified_name;
-}
-
-bool module_exists(const char *key);
-bool register_module_ast(const char *key, Ast *module_ast);
-
-Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
-
-  char *mod_name = path_identifier.chars;
-  const char *mod_id_chars = get_mod_name_from_path_identifier(mod_name);
-
-  int mod_name_len = strlen(__import_current_dir) + 1 + strlen(mod_name) + 4;
-  char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
-  char *rel_path = palloc(sizeof(char) * (strlen(mod_name) + 4));
-  sprintf(rel_path, "%s.ylc", mod_name);
-
-  snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc",
-           __import_current_dir, mod_name);
-
-  fully_qualified_name = normalize_path(fully_qualified_name);
-  fully_qualified_name = check_path(fully_qualified_name, rel_path);
-
-  if (!fully_qualified_name) {
-    fprintf(stderr, "Error module %s not found in path\n",
-            fully_qualified_name);
-    return NULL;
-  }
-
-  // Check if the module is already parsed and stored
-  if (!module_exists(fully_qualified_name)) {
-    // Module not found in registry, need to parse it
-    // Save current parsing context
-    ParsingContext saved_context = save_parsing_context();
-
-    // Temporarily reset parsing context
-    parsing_context.ast_root = NULL;
-    parsing_context.import_current_dir = get_dirname(fully_qualified_name);
-
-    // Parse the module
-    Ast *module_ast = parse_input_script(fully_qualified_name);
-    if (module_ast) {
-      // Convert to module format
-      module_ast = ast_lambda(NULL, module_ast);
-      module_ast->tag = AST_MODULE;
-      if (register_module_ast(fully_qualified_name, module_ast)) {
-        fprintf(stderr, "Could not register module %s\n", fully_qualified_name);
-      }
-    }
-
-    // Restore the original parsing context
-    restore_parsing_context(saved_context);
-  }
-
-  Ast *import_ast = Ast_new(AST_IMPORT);
-  import_ast->data.AST_IMPORT.identifier = mod_id_chars;
-  import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;
-  import_ast->data.AST_IMPORT.import_all = import_all;
-  return import_ast;
 }
 
 Ast *ast_range_expression(Ast *from, Ast *to) {
@@ -1237,4 +1118,107 @@ Ast *ast_trait_impl(ObjString trait_name, ObjString type_name, Ast *module) {
   trait_impl->data.AST_TRAIT_IMPL.type = type_name;
   trait_impl->data.AST_TRAIT_IMPL.impl = module;
   return trait_impl;
+}
+
+Ast *body_tail(Ast *body) {
+  Ast *last = body->data.AST_BODY.tail->ast;
+  return last;
+}
+
+void yypush_buffer_state(YY_BUFFER_STATE buffer);
+void yypop_buffer_state(void);
+YY_BUFFER_STATE yy_create_buffer(FILE *file, int size);
+
+YY_BUFFER_STATE read_script_to_buf(const char *filename) {
+
+  FILE *fp = fopen(filename, "r");
+  if (fp == NULL) {
+    fprintf(stderr, "Error opening file: %s\n", filename);
+    return NULL;
+  }
+
+  fseek(fp, 0, SEEK_END); // Move the file pointer to the end of the file
+  long fsize = ftell(fp); // Get the position, which is the file size
+  rewind(fp);
+  return yy_create_buffer(fp, fsize);
+}
+
+Ast *parse_input_script(const char *filename) {
+
+  char *fcontent = read_script(filename);
+  if (!fcontent) {
+    return NULL;
+  }
+
+  YY_BUFFER_STATE current_buf = read_script_to_buf(filename);
+
+  char *current_dir = get_dirname(filename);
+  const char *input = fcontent;
+  int prevyylineno = yylineno;
+  int prevyyabsoluteoffset = yyabsoluteoffset;
+
+  // Save current parsing context on stack
+  ParsingContext saved_context = pctx;
+  saved_context.saved_yyabsoluteoffset = yyabsoluteoffset;
+  saved_context.saved_yylineno = yylineno;
+  saved_context.cur_script_content = pctx.cur_script_content + yyabsoluteoffset;
+
+  // Set up new parsing context
+  pctx.filename = filename;
+  pctx.import_current_dir = current_dir;
+  pctx.cur_script = filename;
+  pctx.cur_script_content = input;
+  pctx.ast_root = Ast_new(AST_BODY);
+  pctx.ast_root->data.AST_BODY.len = 0;
+  pctx.ast_root->data.AST_BODY.stmts = NULL;
+  pctx.ast_root->data.AST_BODY.tail = NULL;
+
+  // Create and switch to new buffer for parsing imported file
+  YY_BUFFER_STATE new_buffer = yy_scan_string((char *)input);
+
+  // Reset lexer position for new file
+  yylineno = 1;
+  yyabsoluteoffset = 0;
+
+  // Parse the input
+  yyparse();
+
+  // Save the result
+  Ast *result = pctx.ast_root;
+  return result;
+}
+
+Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
+  char *mod_name = path_identifier.chars;
+  const char *mod_id_chars = get_mod_name_from_path_identifier(mod_name);
+
+  int mod_name_len = strlen(pctx.import_current_dir) + 1 + strlen(mod_name) + 4;
+  char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
+  char *rel_path = palloc(sizeof(char) * (strlen(mod_name) + 4));
+  sprintf(rel_path, "%s.ylc", mod_name);
+
+  snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc",
+           pctx.import_current_dir, mod_name);
+
+  fully_qualified_name = normalize_path(fully_qualified_name);
+  fully_qualified_name = check_path(fully_qualified_name, rel_path);
+
+  if (!fully_qualified_name) {
+    fprintf(stderr, "Error module %s not found in path\n",
+            fully_qualified_name);
+    return NULL;
+  }
+  if (!get_module(fully_qualified_name)) {
+    Ast *module_ast = parse_input_script(fully_qualified_name);
+    // printf("parse imported module: ");
+    // print_ast(module_ast);
+    register_module_ast(fully_qualified_name, module_ast);
+  }
+
+  Ast *import_ast = Ast_new(AST_IMPORT);
+  import_ast->data.AST_IMPORT.identifier = mod_id_chars;
+  import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;
+  import_ast->data.AST_IMPORT.import_all = import_all;
+
+  return import_ast;
 }

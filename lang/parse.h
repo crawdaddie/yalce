@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 typedef struct Ast Ast;
+extern void *__YY_CURRENT_BUFFER;
 
 typedef struct {
   Ast *ast_root;
@@ -11,9 +12,14 @@ typedef struct {
   char *cur_script;
   const char *cur_script_content;
   char *import_current_dir;
+
+  // Lexer state for proper save/restore during imports
+  void *lexer_buffer;
+  int saved_yylineno;
+  long long int saved_yyabsoluteoffset;
 } ParsingContext;
 
-extern ParsingContext parsing_context;
+extern ParsingContext pctx;
 
 void set_base_dir(const char *);
 
@@ -467,5 +473,6 @@ Ast *ast_assignment(Ast *var, Ast *val);
 AstList *ast_list_extend_left(AstList *l, Ast *n);
 Ast *ast_if_else(Ast *cond, Ast *then, Ast *el);
 Ast *ast_trait_impl(ObjString trait_name, ObjString type_name, Ast *module);
+Ast *body_tail(Ast *body);
 
 #endif

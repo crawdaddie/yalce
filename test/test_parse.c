@@ -12,8 +12,8 @@ bool test_parse(char input[], char *expected_sexpr) {
 
   Ast *prog;
 
-  parsing_context.cur_script = "test_parse";
-  parsing_context.import_current_dir = ".";
+  pctx.cur_script = "test_parse";
+  pctx.import_current_dir = ".";
   // printf("test input: %s\n", input);
   prog = parse_input(input, "");
 
@@ -34,7 +34,7 @@ bool test_parse(char input[], char *expected_sexpr) {
     yylineno = 1;
     yyrestart(NULL);
     // extern Ast *ast_root;
-    parsing_context.ast_root = NULL;
+    pctx.ast_root = NULL;
     return false;
   }
   bool res;
@@ -66,7 +66,7 @@ bool test_parse(char input[], char *expected_sexpr) {
   yylineno = 1;
   yyrestart(NULL);
   // extern Ast *ast_root;
-  parsing_context.ast_root = NULL;
+  pctx.ast_root = NULL;
   return res;
 }
 
@@ -93,7 +93,7 @@ bool test_parse_last(char input[], char *expected_sexpr) {
     yylineno = 1;
     yyrestart(NULL);
     // extern Ast *ast_root;
-    parsing_context.ast_root = NULL;
+    pctx.ast_root = NULL;
     return false;
   }
   bool res;
@@ -125,7 +125,7 @@ bool test_parse_last(char input[], char *expected_sexpr) {
   yylineno = 1;
   yyrestart(NULL);
   // extern Ast *ast_root;
-  parsing_context.ast_root = NULL;
+  pctx.ast_root = NULL;
   return res;
 }
 
@@ -175,7 +175,7 @@ bool test_parse_body(char *input, char *expected_sexpr) {
   yylineno = 1;
   yyrestart(NULL);
   // extern Ast *ast_root;
-  parsing_context.ast_root = NULL;
+  pctx.ast_root = NULL;
   return res;
 }
 
@@ -475,7 +475,8 @@ int main() {
       "(let)");
   status &= test_parse("import LocalMod;\n"
                        "let x = 2\n",
-                       "(let)"
+                       "(import LocalMod.ylc as LocalMod)\n"
+                       "(let x 2)"
 
   );
 
