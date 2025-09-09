@@ -16,8 +16,6 @@ extern int yylineno;
 extern int yycolumn;
 extern char *yytext;
 
-/* Define global variable for the root of AST */
-Ast* ast_root = NULL;
 #define AST_CONST(type, val)                                            \
     ({                                                                  \
       Ast *prefix = Ast_new(type);                                      \
@@ -121,8 +119,8 @@ Ast* ast_root = NULL;
 
 
 program:
-    expr_sequence ';' { parse_stmt_list(ast_root, $1); }
-  | expr_sequence     { parse_stmt_list(ast_root, $1); }
+    expr_sequence ';' { pctx.ast_root = parse_stmt_list(pctx.ast_root, $1); }
+  | expr_sequence     { pctx.ast_root = parse_stmt_list(pctx.ast_root, $1); }
   | /* NULL */
   ;
 
@@ -131,7 +129,7 @@ expr:
     atom_expr
   | 'yield' expr                      { $$ = ast_yield($2); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
-  | expr atom_expr %prec APPLICATION { $$ = ast_application($1, $2); }
+  | expr atom_expr %prec APPLICATION  { $$ = ast_application($1, $2); }
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr                     { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
   | expr '*' expr                     { $$ = ast_binop(TOKEN_STAR, $1, $3); }
@@ -409,6 +407,6 @@ type_atom:
 
 
 void yyerror(const char *s) {
-  fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, _cur_script);
+  fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, pctx.cur_script);
 }
 #endif _LANG_TAB_H

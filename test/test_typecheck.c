@@ -82,6 +82,15 @@
     res;                                                                       \
   })
 
+#define AST_LIST_NTH(astlist, n)                                               \
+  ({                                                                           \
+    AstList *ll = astlist;                                                     \
+    for (int i = 0; i < n; i++) {                                              \
+      ll = ll->next;                                                           \
+    }                                                                          \
+    ll->ast;                                                                   \
+  })
+
 int test_type_declarations() {
   printf("TEST TYPE DECLARATIONS\n---------------------------------\n");
   bool status = true;
@@ -275,7 +284,7 @@ int test_list_processing() {
                           &TTUPLE(2, &TTUPLE(2, &TLIST(&free_var), &TVAR("`2")),
                                   &TOPT(&free_var))));
     Ast *match_subj =
-        b->data.AST_BODY.stmts[0]
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
   });
 
@@ -363,14 +372,16 @@ int test_funcs() {
                   "f 1.;\n",
                   &t_num);
 
-    TASSERT_EQ(body->data.AST_BODY.stmts[0]->md,
+    TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 0)->md,
                &MAKE_FN_TYPE_2(
                    &tvar, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
                                              &t_int, &tvar)),
                "f == `0 [Arithmetic] -> resolve Arithmetic `0 : Int");
 
-    TASSERT_EQ(body->data.AST_BODY.stmts[1]->md, &t_int, "f 1 == Int");
-    TASSERT_EQ(body->data.AST_BODY.stmts[2]->md, &t_num, "f 1. == Num");
+    TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 1)->md, &t_int,
+               "f 1 == Int");
+    TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 2)->md, &t_num,
+               "f 1. == Num");
   });
 
   ({
@@ -493,7 +504,8 @@ int test_funcs() {
           &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
                                                  &t_int, &t)));
 
-    bool is_partial = application_is_partial(b->data.AST_BODY.stmts[1]);
+    bool is_partial =
+        application_is_partial(AST_LIST_NTH(b->data.AST_BODY.stmts, 1));
 
     const char *msg = "let f = fn a b c -> a + b + c;;\n"
                       "f 1 2\n"
@@ -513,12 +525,12 @@ int test_funcs() {
                 "let x2 = x1 2;\n"
                 "let x3 = x2 3;\n");
     bool is_partial = true;
-    is_partial &=
-        application_is_partial(b->data.AST_BODY.stmts[1]->data.AST_LET.expr);
-    is_partial &=
-        application_is_partial(b->data.AST_BODY.stmts[2]->data.AST_LET.expr);
-    is_partial &=
-        application_is_partial(b->data.AST_BODY.stmts[3]->data.AST_LET.expr);
+    is_partial &= application_is_partial(
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 1)->data.AST_LET.expr);
+    is_partial &= application_is_partial(
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_LET.expr);
+    is_partial &= application_is_partial(
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 3)->data.AST_LET.expr);
 
     const char *msg = "let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
                       "let x1 = f 1;\n"
@@ -613,7 +625,7 @@ int test_funcs() {
 
                &MAKE_FN_TYPE_2(&t_int, &t_int));
 
-    Ast final_branch = b->data.AST_BODY.stmts[0]
+    Ast final_branch = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
                            ->data.AST_LET.expr->data.AST_LAMBDA.body->data
                            .AST_MATCH.branches[5];
 
@@ -656,7 +668,8 @@ int test_funcs() {
           &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
                                                  &t_int, &t)));
 
-    bool is_partial = application_is_partial(b->data.AST_BODY.stmts[1]);
+    bool is_partial =
+        application_is_partial(AST_LIST_NTH(b->data.AST_BODY.stmts, 1));
 
     const char *msg = "let f = fn a b c -> a + b + c;;\n"
                       "f 1 2\n"
@@ -683,12 +696,12 @@ int test_funcs() {
                 "let x2 = x1 2;\n"
                 "let x3 = x2 3;\n");
     bool is_partial = true;
-    is_partial &=
-        application_is_partial(b->data.AST_BODY.stmts[1]->data.AST_LET.expr);
-    is_partial &=
-        application_is_partial(b->data.AST_BODY.stmts[2]->data.AST_LET.expr);
-    is_partial &=
-        application_is_partial(b->data.AST_BODY.stmts[3]->data.AST_LET.expr);
+    is_partial &= application_is_partial(
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 1)->data.AST_LET.expr);
+    is_partial &= application_is_partial(
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_LET.expr);
+    is_partial &= application_is_partial(
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 3)->data.AST_LET.expr);
 
     const char *msg = "let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
                       "let x1 = f 1;\n"
@@ -837,7 +850,8 @@ int test_match_exprs() {
                "| 2 -> 0\n"
                "| _ -> 3",
                &t_int);
-    Ast *branch = b->data.AST_BODY.stmts[1]->data.AST_MATCH.branches;
+    Ast *branch =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 1)->data.AST_MATCH.branches;
 
     Ast *guard = branch->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
 
@@ -858,8 +872,10 @@ int test_match_exprs() {
                "f None",
                &t_int);
 
-    print_type(b->data.AST_BODY.stmts[1]->data.AST_APPLICATION.function->md);
-    print_type(b->data.AST_BODY.stmts[1]->data.AST_APPLICATION.args->md);
+    print_type(AST_LIST_NTH(b->data.AST_BODY.stmts, 1)
+                   ->data.AST_APPLICATION.function->md);
+    print_type(
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 1)->data.AST_APPLICATION.args->md);
 
     // ->data.AST_LAMBDA.body->data.AST_MATCH
     //              .branches[1]
@@ -1034,7 +1050,7 @@ int test_coroutines() {
                &cor_cons);
 
     AstList *bx =
-        l->data.AST_BODY.stmts[0]
+        AST_LIST_NTH(l->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
     int num_xs = 0;
     Ast *b1 = bx->ast;
@@ -1064,7 +1080,7 @@ int test_coroutines() {
                &cor_cons);
 
     AstList *bx =
-        l->data.AST_BODY.stmts[0]
+        AST_LIST_NTH(l->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
 
     int num_xs = 0;
@@ -1094,7 +1110,8 @@ int test_coroutines() {
                "co_void () |> cor_map str_map;\n",
                &inst);
     // print_ast(b->data.AST_BODY.stmts[2]);
-    Ast *cor_map_arg = b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.args;
+    Ast *cor_map_arg =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.args;
 
     Type mapper = MAKE_FN_TYPE_2(&t_int, &t_string);
     // Type mapper = t_ptr;
@@ -1112,16 +1129,16 @@ int test_coroutines() {
       print_type(cor_map_arg->md);
     }
 
-    print_ast(b->data.AST_BODY.stmts[0]);
-    print_type(b->data.AST_BODY.stmts[0]->md);
+    print_ast(AST_LIST_NTH(b->data.AST_BODY.stmts, 0));
+    print_type(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->md);
 
     print_ast(
-        b->data.AST_BODY.stmts[0]
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
         1);
 
     print_type(
-        (b->data.AST_BODY.stmts[0]
+        (AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
              ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
          1)
             ->md);
@@ -1157,8 +1174,10 @@ int test_coroutines() {
                ";;\n"
                "schedule_event runner 0. c\n",
                &t_void);
-    Ast *runner_arg = b->data.AST_BODY.stmts[4]->data.AST_APPLICATION.args;
-    Ast *cor_arg = b->data.AST_BODY.stmts[4]->data.AST_APPLICATION.args + 2;
+    Ast *runner_arg =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 4)->data.AST_APPLICATION.args;
+    Ast *cor_arg =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 4)->data.AST_APPLICATION.args + 2;
 
     Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
     // cor_type.is_coroutine_instance = true;
@@ -1251,7 +1270,8 @@ int test_first_class_funcs() {
           "schedule_event runner 0. c\n",
           &t_void);
 
-    Ast *runner_arg = b->data.AST_BODY.stmts[3]->data.AST_APPLICATION.args;
+    Ast *runner_arg =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 3)->data.AST_APPLICATION.args;
     Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
@@ -1284,9 +1304,11 @@ int test_closures() {
                ";\n",
                &MAKE_FN_TYPE_3(&t_void, &t_void, &t_int));
 
-    Type *closure_type = b->data.AST_BODY.stmts[0]
-                             ->data.AST_LAMBDA.body->data.AST_BODY.stmts[1]
-                             ->md;
+    Type *closure_type =
+        AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                         ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+                     1)
+            ->md;
 
     bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_int));
     res &= (closure_type->closure_meta != NULL);
@@ -1311,9 +1333,11 @@ int test_closures() {
                ";\n",
                &MAKE_FN_TYPE_3(&t_void, &t_void, &t_num));
 
-    Type *closure_type = b->data.AST_BODY.stmts[0]
-                             ->data.AST_LAMBDA.body->data.AST_BODY.stmts[2]
-                             ->md;
+    Type *closure_type =
+        AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                         ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+                     2)
+            ->md;
 
     // printf("closure type\n");
     // print_type(closure_type);
@@ -1370,7 +1394,8 @@ int test_refs() {
 
     status &= EXTRA_CONDITION(
         types_equal(
-            b->data.AST_BODY.stmts[2]->data.AST_APPLICATION.function->md,
+            AST_LIST_NTH(b->data.AST_BODY.stmts, 2)
+                ->data.AST_APPLICATION.function->md,
             &MAKE_FN_TYPE_2(&TCONS(TYPE_NAME_ARRAY, 1, &t_int), &t_int)),
         "incr_ref [|1|] has type Array of Int -> Int");
   });
@@ -1494,7 +1519,7 @@ int main() {
         &MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&TVAR("`6")), &TVAR("`2")),
                         &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`6")), &TVAR("`2")),
                                 &TOPT(&TVAR("`6")))));
-    Ast none = b->data.AST_BODY.stmts[0]
+    Ast none = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
                    ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH
                    .branches[1]
                    .data.AST_LIST.items[1];
@@ -1559,7 +1584,7 @@ int main() {
                "register_note_on_handler (fn n vel -> vel + 0.0) 0\n",
                &t_void);
 
-    Ast *plus_app = b->data.AST_BODY.stmts[2]
+    Ast *plus_app = AST_LIST_NTH(b->data.AST_BODY.stmts, 2)
                         ->data.AST_APPLICATION.args->data.AST_LAMBDA.body;
 
     status &= EXTRA_CONDITION(

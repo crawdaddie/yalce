@@ -4,14 +4,31 @@
 #include <stdbool.h>
 #include <stdio.h>
 typedef struct Ast Ast;
-
-void set_base_dir(const char *);
+extern void *__YY_CURRENT_BUFFER;
 
 typedef struct custom_binops_t {
   const char *binop;
   struct custom_binops_t *next;
 } custom_binops_t;
-extern custom_binops_t *__custom_binops;
+typedef struct {
+  Ast *ast_root;
+  const char *filename;
+  char *cur_script;
+  const char *cur_script_content;
+  char *import_current_dir;
+  custom_binops_t *custom_binops;
+
+  // Lexer state for proper save/restore during imports
+  void *lexer_buffer;
+  int saved_yylineno;
+  long long int saved_yyabsoluteoffset;
+} ParsingContext;
+
+extern ParsingContext pctx;
+
+void set_base_dir(const char *);
+
+// extern custom_binops_t *__custom_binops;
 
 // parser prototypes
 extern FILE *yyin;
@@ -138,7 +155,6 @@ typedef enum ast_tag {
   AST_APPLICATION,
   AST_TUPLE,
   AST_LAMBDA,
-  AST_LAMBDA_ARGS,
   AST_VOID,
   AST_EXTERN_FN,
   AST_LIST,
@@ -170,7 +186,8 @@ struct Ast {
   union {
     struct AST_BODY {
       size_t len;
-      Ast **stmts;
+      AstList *stmts;
+      AstList *tail;
     } AST_BODY;
 
     struct AST_LET {
@@ -264,11 +281,6 @@ struct Ast {
       ObjString fn_name;
     } AST_EXTERN_FN;
 
-    struct AST_LAMBDA_ARGS {
-      Ast **ids;
-      size_t len;
-    } AST_LAMBDA_ARGS;
-
     struct AST_LIST {
       Ast *items;
       size_t len;
@@ -340,9 +352,6 @@ Ast *Ast_new(enum ast_tag tag);
 
 void ast_body_push(Ast *body, Ast *stmt);
 
-/* External declaration of ast root */
-extern Ast *ast_root;
-
 Ast *ast_binop(token_type op, Ast *left, Ast *right);
 Ast *ast_unop(token_type op, Ast *right);
 Ast *ast_identifier(ObjString id);
@@ -356,6 +365,7 @@ Ast *ast_arg_list_push(Ast *arg_list, Ast *arg_id, Ast *def);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input, const char *dirname);
 Ast *parse_input_script(const char *filename);
+Ast *parse_submodule(const char *module_path);
 Ast *ast_void();
 Ast *ast_string(ObjString lex_string);
 
@@ -454,7 +464,7 @@ typedef struct AstVisitor {
   void *data; // Generic pointer for visitor-specific state
 } AstVisitor;
 Ast *ast_module(Ast *lambda);
-extern char *__import_current_dir;
+// extern char *__import_current_dir;
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
 Ast *ast_for_loop(Ast *binding, Ast *iter_expr, Ast *body);
 
@@ -465,5 +475,6 @@ Ast *ast_assignment(Ast *var, Ast *val);
 AstList *ast_list_extend_left(AstList *l, Ast *n);
 Ast *ast_if_else(Ast *cond, Ast *then, Ast *el);
 Ast *ast_trait_impl(ObjString trait_name, ObjString type_name, Ast *module);
+Ast *body_tail(Ast *body);
 
 #endif

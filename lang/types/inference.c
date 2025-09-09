@@ -5,6 +5,7 @@
 #include "./infer_lambda.h"
 #include "./type.h"
 #include "./unification.h"
+#include "modules.h"
 #include "serde.h"
 #include "types/infer_app.h"
 #include "types/infer_match_expression.h"
@@ -257,9 +258,11 @@ Type *apply_substitution(Subst *subst, Type *t) {
   if (!subst) {
     return t;
   }
+
   if (!t) {
     return NULL;
   }
+
   switch (t->kind) {
   case T_INT:
   case T_UINT64:
@@ -318,55 +321,92 @@ Type *apply_substitution(Subst *subst, Type *t) {
   return t;
 }
 
-VarList *free_vars_type(Type *t) {
-  if (!t) {
-    return NULL;
-  }
+// VarList *_free_vars_type(Type *t) {
+//   if (!t) {
+//     return NULL;
+//   }
+//   switch (t->kind) {
+//
+//   case T_VAR: {
+//     VarList *v = talloc(sizeof(VarList));
+//     *v = (VarList){.var = t->data.T_VAR, .next = NULL};
+//     return v;
+//   }
+//
+//   case T_FN: {
+//     VarList *from_vars = free_vars_type(t->data.T_FN.from);
+//     VarList *to_vars = free_vars_type(t->data.T_FN.to);
+//
+//     // Concatenate lists (simplified - should remove duplicates)
+//     if (!from_vars) {
+//       return to_vars;
+//     }
+//     VarList *curr = from_vars;
+//     while (curr->next) {
+//       curr = curr->next;
+//     }
+//     curr->next = to_vars;
+//     return from_vars;
+//   }
+//
+//   case T_TYPECLASS_RESOLVE:
+//   case T_CONS: {
+//     VarList *vars = NULL;
+//     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+//       VarList *arg_vars = free_vars_type(t->data.T_CONS.args[i]);
+//       if (!vars) {
+//         vars = arg_vars;
+//       } else {
+//         VarList *curr = vars;
+//         while (curr->next)
+//           curr = curr->next;
+//         curr->next = arg_vars;
+//       }
+//     }
+//     return vars;
+//   }
+//   default:
+//     return NULL;
+//   }
+// }
+
+VarList *free_vars_type(VarList *vars, Type *t) {
+
   switch (t->kind) {
+
   case T_VAR: {
-    VarList *v = talloc(sizeof(VarList));
-    *v = (VarList){.var = t->data.T_VAR, .next = NULL};
-    return v;
+    if (!varlist_contains(vars, t->data.T_VAR)) {
+      vars = varlist_extend(vars, t->data.T_VAR);
+    }
+    return vars;
   }
+
   case T_FN: {
-    VarList *from_vars = free_vars_type(t->data.T_FN.from);
-    VarList *to_vars = free_vars_type(t->data.T_FN.to);
-    // Concatenate lists (simplified - should remove duplicates)
-    if (!from_vars)
-      return to_vars;
-    VarList *curr = from_vars;
-    while (curr->next)
-      curr = curr->next;
-    curr->next = to_vars;
-    return from_vars;
+    VarList *from_vars = free_vars_type(vars, t->data.T_FN.from);
+    VarList *to_vars = free_vars_type(from_vars, t->data.T_FN.to);
+    return to_vars;
   }
 
   case T_TYPECLASS_RESOLVE:
   case T_CONS: {
-    VarList *vars = NULL;
+    VarList *arg_vars = vars;
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      VarList *arg_vars = free_vars_type(t->data.T_CONS.args[i]);
-      if (!vars) {
-        vars = arg_vars;
-      } else {
-        VarList *curr = vars;
-        while (curr->next)
-          curr = curr->next;
-        curr->next = arg_vars;
-      }
+      arg_vars = free_vars_type(arg_vars, t->data.T_CONS.args[i]);
     }
-    return vars;
+    return arg_vars;
   }
   default:
-    return NULL;
+    return vars;
   }
 }
 
 VarList *free_vars_env(TypeEnv *env) {
   VarList *vars = NULL;
+
   for (TypeEnv *e = env; e; e = e->next) {
-    VarList *scheme_vars = free_vars_type(e->scheme.type);
+    VarList *scheme_vars = free_vars_type(NULL, e->scheme.type);
     VarList *filtered = NULL;
+
     for (VarList *sv = scheme_vars; sv; sv = sv->next) {
       if (!varlist_contains(e->scheme.vars, sv->var)) {
         VarList *new_var = talloc(sizeof(VarList));
@@ -374,6 +414,7 @@ VarList *free_vars_env(TypeEnv *env) {
         filtered = new_var;
       }
     }
+
     if (!vars) {
       vars = filtered;
     } else {
@@ -387,10 +428,12 @@ VarList *free_vars_env(TypeEnv *env) {
 }
 
 Scheme generalize(Type *type, TypeEnv *env) {
-  VarList *type_vars = free_vars_type(type);
+
+  VarList *type_vars = free_vars_type(NULL, type);
   VarList *env_vars = free_vars_env(env);
 
   VarList *free_vars = NULL;
+
   for (VarList *tv = type_vars; tv; tv = tv->next) {
     if (!varlist_contains(env_vars, tv->var)) {
       VarList *new_var = talloc(sizeof(VarList));
@@ -399,7 +442,8 @@ Scheme generalize(Type *type, TypeEnv *env) {
     }
   }
 
-  return (Scheme){.vars = free_vars, .type = type};
+  Scheme sch = (Scheme){.vars = free_vars, .type = type};
+  return sch;
 }
 
 void print_subst(Subst *subst) {
@@ -472,6 +516,27 @@ Type *instantiate_with_args(Scheme *scheme, Ast *args, TICtx *ctx) {
   for (VarList *v = scheme->vars; v; v = v->next, args++) {
     Type *t = infer(args, ctx);
     inst_subst = subst_extend(inst_subst, v->var, t);
+  }
+
+  Type *stype = deep_copy_type(scheme->type);
+
+  Type *s = apply_substitution(inst_subst, stype);
+  return s;
+}
+
+Type *instantiate_with_env(Scheme *scheme, TypeEnv *env) {
+  if (!scheme) {
+    return NULL;
+  }
+
+  if (!scheme->vars) {
+    return scheme->type;
+  }
+
+  Subst *inst_subst = NULL;
+  for (VarList *v = scheme->vars; v; v = v->next) {
+    Scheme *t = lookup_scheme(env, v->var);
+    inst_subst = subst_extend(inst_subst, v->var, t->type);
   }
 
   Type *stype = deep_copy_type(scheme->type);
@@ -648,6 +713,19 @@ bool is_index_access_ast(Ast *application, Type *arg_type, Type *cons_type) {
   return is_list_type(arg_type) && arg_ast->tag == AST_LIST &&
          application->data.AST_APPLICATION.len == 1 && is_array_type(cons_type);
 }
+bool is_custom_binop_app(Ast *app, custom_binops_t *binops) {
+  if (app->data.AST_APPLICATION.args->tag == AST_IDENTIFIER) {
+    custom_binops_t *b = binops;
+    while (b) {
+      if (CHARS_EQ(app->data.AST_APPLICATION.args->data.AST_IDENTIFIER.value,
+                   b->binop)) {
+        return true;
+      }
+      b = b->next;
+    }
+  }
+  return false;
+}
 
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
@@ -758,15 +836,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_BODY: {
     Ast *stmt;
-    for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      stmt = ast->data.AST_BODY.stmts[i];
-      Type *t = infer(stmt, ctx);
-      if (!t) {
-        // print_ast_err(stmt);
-        return NULL;
-      }
-      type = t;
-    }
+    AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
+                    stmt = l->ast;
+                    Type *t = infer(stmt, ctx);
+                    if (!t) {
+                      fprintf(stderr, "Error typecheck failed\n");
+                      print_ast_err(stmt);
+                      return NULL;
+                    }
+                    type = t;
+                  }));
     break;
   }
 
@@ -776,9 +855,19 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_APPLICATION: {
+
+    if (is_custom_binop_app(ast, ctx->custom_binops)) {
+
+      Ast binop = *ast->data.AST_APPLICATION.args;
+      Ast arg = *ast->data.AST_APPLICATION.function;
+
+      *ast->data.AST_APPLICATION.function = binop;
+      ast->data.AST_APPLICATION.args[0] = arg;
+    }
     type = infer_app(ast, ctx);
     break;
   }
+
   case AST_LET: {
     Ast *binding = ast->data.AST_LET.binding;
     Ast *val = ast->data.AST_LET.expr;
@@ -814,8 +903,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_MODULE: {
-    printf("infer inline module\n");
-    print_ast(ast);
+    type = infer_inline_module(ast, ctx);
     break;
   }
 
@@ -825,7 +913,39 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_IMPORT: {
-    // TODO: Implement import inference
+    const char *key = ast->data.AST_IMPORT.fully_qualified_name;
+    YLCModule *mod = get_module(key);
+
+    if (!mod) {
+      printf("mod not found\n");
+      return NULL;
+    }
+
+    if (!mod->type) {
+      type = init_import(mod)->type;
+    } else {
+      type = mod->type;
+    }
+
+    if (ast->data.AST_IMPORT.import_all) {
+      TypeEnv *mod_env = mod->env;
+      while (mod_env) {
+        ctx->env = env_extend(ctx->env, mod_env->name, mod_env->scheme.vars,
+                              mod_env->scheme.type);
+        mod_env = mod_env->next;
+      }
+      custom_binops_t *b = mod->custom_binops;
+      while (b) {
+        custom_binops_t *bb = talloc(sizeof(custom_binops_t));
+        *bb = (custom_binops_t){};
+
+        *bb = *b;
+        bb->next = ctx->custom_binops;
+        ctx->custom_binops = bb;
+        b = b->next;
+      }
+    }
+
     break;
   }
 

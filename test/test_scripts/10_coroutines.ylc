@@ -13,7 +13,7 @@ let test_iter_all_void =
   && co () == Some 3
   && co () == None
   && co () == None
-;
+  ;
 
 
 let test_embed_seq = fn () ->

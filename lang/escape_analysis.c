@@ -142,16 +142,16 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     } else {
       Ast *body = ast->data.AST_LAMBDA.body;
       Ast *stmt;
-      for (int i = 0; i < body->data.AST_BODY.len; i++) {
-        stmt = body->data.AST_BODY.stmts[i];
+      AST_LIST_ITER(body->data.AST_BODY.stmts, ({
+                      stmt = l->ast;
 
-        if (i == body->data.AST_BODY.len - 1) {
-          lambda_ctx.is_return_stmt = true;
-          ret_alloc = ea(stmt, &lambda_ctx);
-        } else {
-          ea(stmt, &lambda_ctx);
-        }
-      }
+                      if (i == body->data.AST_BODY.len - 1) {
+                        lambda_ctx.is_return_stmt = true;
+                        ret_alloc = ea(stmt, &lambda_ctx);
+                      } else {
+                        ea(stmt, &lambda_ctx);
+                      }
+                    }));
     }
 
     for (Allocation *a = lambda_ctx.allocations; a; a = a->next) {
@@ -178,10 +178,12 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
 
   case AST_BODY: {
     Ast *stmt;
-    for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      stmt = ast->data.AST_BODY.stmts[i];
-      allocations = allocations_extend(allocations, ea(stmt, ctx));
-    }
+    AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
+                    stmt = l->ast;
+                    allocations =
+                        allocations_extend(allocations, ea(stmt, ctx));
+                  }));
+
     return allocations;
   }
 

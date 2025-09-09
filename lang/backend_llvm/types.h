@@ -20,6 +20,8 @@
   })
 
 Type *resolve_type_in_env(Type *gen, TypeEnv *env);
+
+Type *resolve_type_in_env_mut(Type *t, TypeEnv *env);
 LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
                               LLVMModuleRef module);
 

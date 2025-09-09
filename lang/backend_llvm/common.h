@@ -95,6 +95,7 @@ typedef struct {
       TypeEnv *type_env;
       SpecificFns *specific_fns;
       BuiltinHandler builtin_handler;
+      Scheme *scheme;
     } STYPE_GENERIC_FUNCTION;
 
     struct {

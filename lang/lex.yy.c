@@ -1487,12 +1487,12 @@ YY_RULE_SETUP
 	YY_BREAK
 case 75:
 YY_RULE_SETUP
-#line 265 "../lang/lex.l"
+#line 266 "../lang/lex.l"
 { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 	YY_BREAK
 case 76:
 YY_RULE_SETUP
-#line 266 "../lang/lex.l"
+#line 267 "../lang/lex.l"
 ECHO;
 	YY_BREAK
 #line 1498 "../lang/lex.yy.c"
@@ -2514,7 +2514,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 266 "../lang/lex.l"
+#line 267 "../lang/lex.l"
 
 int yywrap(void) {
     return 1;

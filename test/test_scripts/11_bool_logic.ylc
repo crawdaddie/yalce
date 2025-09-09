@@ -1,22 +1,22 @@
-let test = module
+let test = module () ->
 
-let test_and = fn () ->
-  (true && false) == false
-;;
+  let test_and = fn () ->
+    (true && false) == false
+  ;;
 
-let test_or = fn () ->
-  (true || false) == true
-;;
+  let test_or = fn () ->
+    (true || false) == true
+  ;;
 
-let test_or1 = fn () ->
-  (true || true) == true
-;;
+  let test_or1 = fn () ->
+    (true || true) == true
+  ;;
 
-let test_and1 = fn () ->
-  (true && true) == true
-;;
+  let test_and1 = fn () ->
+    (true && true) == true
+  ;;
 
-let test_and2 = fn () ->
-  false == (false && false)
-;;
+  let test_and2 = fn () ->
+    false == (false && false)
+  ;;
 ;

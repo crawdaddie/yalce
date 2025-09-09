@@ -77,6 +77,7 @@ typedef struct TICtx {
   int scope;
   int current_fn_base_scope;
   void *type_decl_ctx;
+  custom_binops_t *custom_binops;
   FILE *err_stream; // Replace const char *err
 } TICtx;
 
@@ -87,7 +88,7 @@ void add_builtin(char *name, Type *t);
 
 void print_builtin_types();
 
-VarList *free_vars_type(Type *t);
+VarList *free_vars_type(VarList *v, Type *t);
 Scheme generalize(Type *type, TypeEnv *env);
 Type *instantiate(Scheme *scheme, TICtx *ctx);
 

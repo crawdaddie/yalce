@@ -296,6 +296,7 @@ typedef struct Type {
   //     
   //
   //
+  //
   //                //  be instantiated to t1 [requires: Arithmetic] ->
   //                // t1 [requires: Arithmetic] -> t1 [requires Arithmetic]
 
@@ -380,8 +381,6 @@ double get_typeclass_rank(Type *t, const char *name);
 bool type_implements(Type *t, TypeClass *tc);
 
 bool is_forall_type(Type *type);
-
-extern Type t_builtin_print;
 
 // extern TypeList *arithmetic_tc_registry;
 // extern TypeList *ord_tc_registry;

@@ -25,7 +25,7 @@ let pop_left = fn (h, t) ->
 ;;
 
 
-let test = module
+let test = module () ->
   let test_int_queue = fn () -> 
 
     let q = of_list [1]

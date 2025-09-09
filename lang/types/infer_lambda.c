@@ -102,6 +102,7 @@ Type *create_coroutine_lambda(Type *fn_type, TICtx *ctx) {
 
   return constructor_type;
 }
+
 Type *create_closure(Ast *ast, Type *fn_type, TICtx *ctx) {
   int num = ast->data.AST_LAMBDA.num_closed_vals;
 

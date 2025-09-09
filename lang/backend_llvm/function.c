@@ -5,6 +5,7 @@
 #include "types.h"
 #include "types/inference.h"
 #include "types/type.h"
+#include "types/unification.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -147,24 +148,25 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
   } else {
     int len = ast->data.AST_LAMBDA.body->data.AST_BODY.len;
-    for (int i = 0; i < len; i++) {
 
-      Ast *stmt = ast->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
+    AST_LIST_ITER(ast->data.AST_LAMBDA.body->data.AST_BODY.stmts, ({
+                    Ast *stmt = l->ast;
 
-      if (i == 0 && stmt->tag == AST_STRING) {
-        continue;
-      }
+                    if (i == 0 && stmt->tag == AST_STRING) {
+                      continue;
+                    }
 
-      if (i == len - 1) {
-        stmt->is_body_tail = true;
-      }
-      body = codegen(stmt, fn_ctx, module, builder);
-      if (body == NULL && i == 1 && stmt->tag == AST_APPLICATION) {
-        // print_ast(stmt);
-        // print_type(stmt->data.AST_APPLICATION.args[0].md);
-        // print_type(stmt->data.AST_APPLICATION.args[1].md);
-      }
-    }
+                    if (i == len - 1) {
+                      stmt->is_body_tail = true;
+                    }
+                    body = codegen(stmt, fn_ctx, module, builder);
+                    if (body == NULL && i == 1 &&
+                        stmt->tag == AST_APPLICATION) {
+                      // print_ast(stmt);
+                      // print_type(stmt->data.AST_APPLICATION.args[0].md);
+                      // print_type(stmt->data.AST_APPLICATION.args[1].md);
+                    }
+                  }));
   }
   return body;
 }
@@ -256,15 +258,14 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
-static Substitution *create_fn_arg_subst(Substitution *subst, Type *gen,
-                                         Type *spec) {
+static Subst *create_fn_arg_subst(Subst *subst, Type *gen, Type *spec) {
 
   if (!spec) {
     return NULL;
   }
 
   if (gen->kind == T_VAR) {
-    subst = substitutions_extend(subst, gen, spec);
+    subst = subst_extend(subst, gen, spec);
     return subst;
   }
 
@@ -304,10 +305,11 @@ static Substitution *create_fn_arg_subst(Substitution *subst, Type *gen,
   return subst;
 }
 
-static TypeEnv *subst_fn_arg(TypeEnv *env, Substitution *subst, Type *arg) {
+static TypeEnv *subst_fn_arg(TypeEnv *env, Subst *subst, Type *arg) {
 
   if (arg->kind == T_VAR) {
-    env = env_extend(env, arg->data.T_VAR, apply_substitution(subst, arg));
+    env =
+        env_extend(env, arg->data.T_VAR, NULL, apply_substitution(subst, arg));
     return env;
   }
 
@@ -331,30 +333,16 @@ static TypeEnv *subst_fn_arg(TypeEnv *env, Substitution *subst, Type *arg) {
   return env;
 }
 
-TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t) {
-  switch (f->kind) {
-  case T_VAR: {
-    return env_extend(env, f->data.T_VAR, t);
-  }
-  case T_CONS: {
-    for (int i = 0; i < f->data.T_CONS.num_args; i++) {
-      env = codegen_bind_in_env(env, f->data.T_CONS.args[i],
-                                t->data.T_CONS.args[i]);
-    }
-    break;
-  }
-  default: {
-  }
-  }
-  return env;
+TypeEnv *codegen_bind_in_env(TypeEnv *env, const char *f, Type *t) {
+  return env_extend(env, f, NULL, t);
 }
 
-TypeEnv *create_env_from_subst(TypeEnv *env, Substitution *subst) {
+TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst) {
   if (subst == NULL) {
     return env;
   }
-  Type *f = subst->from;
-  Type *t = subst->to;
+  const char *f = subst->var;
+  Type *t = subst->type;
   env = codegen_bind_in_env(env, f, t);
   return create_env_from_subst(env, subst->next);
 }
@@ -362,9 +350,10 @@ TypeEnv *create_env_from_subst(TypeEnv *env, Substitution *subst) {
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type) {
 
-  Substitution *subst = NULL;
+  Subst *subst = NULL;
 
-  TypeConstraint *constraints = NULL;
+  Constraint *constraints = NULL;
+
   while (generic_type->kind == T_FN) {
     Type *gen = generic_type->data.T_FN.from;
     Type *spec = specific_type->data.T_FN.from;

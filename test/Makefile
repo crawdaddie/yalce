@@ -56,7 +56,6 @@ test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_typecheck.c \
 		$(LANG_SRCS) \
-		$(LANG_SRC_DIR)/modules.c \
 		$(LANG_SRC_DIR)/types/*.c \
 		-o $(BUILD_DIR)/test_typecheck \
 		$(LDFLAGS)

@@ -60,7 +60,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   if (func->tag == AST_IDENTIFIER) {
     Scheme *s = lookup_scheme(ctx->env, func->data.AST_IDENTIFIER.value);
 
-    if (s == &array_at_scheme_glob &&
+    if (s == &array_at_scheme &&
         (ast->data.AST_APPLICATION.args + 1)->tag == AST_LIST) {
 
       // TODO: handle weird function list arg being interpreted as
