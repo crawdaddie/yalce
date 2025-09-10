@@ -222,15 +222,6 @@ LLVMValueRef curried_binop(Ast *saved_arg_ast, LLVMOpcode fop, LLVMOpcode iop,
     break;
   }
   default: {
-    // if (ret->alias) {
-    //   JITSymbol *sym = get_typeclass_method(ret->alias, _name, ctx);
-    //   if (!sym) {
-    //     return NULL;
-    //   }
-    //   if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler)
-    //     return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
-    //         ast, ctx, module, builder);
-    // }
     return NULL;
   }
   }
@@ -872,27 +863,6 @@ LLVMValueRef LogicalOrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return phi;
 }
 
-LLVMValueRef StructSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                              LLVMBuilderRef builder) {
-  LLVMValueRef idx =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-  LLVMValueRef record =
-      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-
-  LLVMValueRef value =
-      codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
-  LLVMDumpValue(idx);
-  printf("\n");
-  LLVMDumpValue(record);
-  printf("\n");
-  LLVMDumpValue(value);
-  printf("\n");
-
-  // print_ast(ast);
-  print_type(ast->md);
-  return NULL;
-}
 Type *lookup_var_in_env(TypeEnv *env, Type *tvar) {
   if (tvar->kind == T_VAR) {
     while (tvar->kind == T_VAR) {
@@ -900,19 +870,6 @@ Type *lookup_var_in_env(TypeEnv *env, Type *tvar) {
     }
   }
   return tvar;
-}
-
-LLVMValueRef AddrOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                           LLVMBuilderRef builder) {
-  Type *t = ast->md;
-  LLVMTypeRef llvm_type = type_to_llvm_type(t, ctx, module);
-  LLVMDumpType(llvm_type);
-  printf("\n");
-
-  LLVMValueRef val =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-  return val;
 }
 
 LLVMValueRef FstHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

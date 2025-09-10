@@ -133,9 +133,6 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
     return NULL;
   }
 
-  printf("full prog\n");
-  print_ast(*prog);
-
   escape_analysis(*prog);
 
   ctx->env = ti_ctx.env;

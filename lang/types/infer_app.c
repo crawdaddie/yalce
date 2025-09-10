@@ -101,6 +101,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   Type **arg_types = talloc(sizeof(Type *) * num_args);
   for (int i = 0; i < num_args; i++) {
     arg_types[i] = infer(args + i, ctx);
+
     if (!arg_types[i]) {
       return type_error(ctx, ast, "Cannot infer argument %d type", i + 1);
     }

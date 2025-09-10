@@ -840,8 +840,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
                     stmt = l->ast;
                     Type *t = infer(stmt, ctx);
                     if (!t) {
-                      fprintf(stderr, "Error typecheck failed\n");
-                      print_ast_err(stmt);
+                      // fprintf(stderr, "Error typecheck failed\n");
+                      // print_ast_err(stmt);
                       return NULL;
                     }
                     type = t;

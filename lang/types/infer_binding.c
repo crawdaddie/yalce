@@ -227,7 +227,7 @@ Type *infer_let_pattern_binding(Ast *binding, Ast *val, Ast *body, TICtx *ctx) {
 
   Type *vtype = infer(val, ctx);
   if (!vtype) {
-    return type_error(ctx, val, "Cannot infer value type");
+    return type_error(ctx, val, "Cannot infer value type in let binding");
   }
 
   // Step 2: Apply current substitutions (same as infer_let_simple)

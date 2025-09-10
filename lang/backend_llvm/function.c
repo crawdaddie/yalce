@@ -189,7 +189,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (is_closure(fn_type)) {
     Ast clast = *ast;
     Type *cltype = deep_copy_type(fn_type);
-    cltype = resolve_type_in_env(cltype, ctx->env);
+    cltype = resolve_type_in_env_mut(cltype, ctx->env);
     clast.md = cltype;
     return compile_closure(&clast, ctx, module, builder);
   }
@@ -219,7 +219,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                   Type *param_type = fn_type->data.T_FN.from;
 
                   if (param_type->kind == T_VAR) {
-                    param_type = resolve_type_in_env(param_type, ctx->env);
+                    param_type = resolve_type_in_env_mut(param_type, ctx->env);
                   }
 
                   LLVMValueRef param_val = LLVMGetParam(func, i);
@@ -456,7 +456,7 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   while (specific_type->kind == T_FN) {
     Type *f = specific_type->data.T_FN.from;
     if (is_generic(f)) {
-      Type *r = resolve_type_in_env(f, ctx->env);
+      Type *r = resolve_type_in_env_mut(f, ctx->env);
       if (r) {
         compilation_ctx.env = codegen_bind_in_env(compilation_ctx.env, f, r);
       }
