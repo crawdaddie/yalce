@@ -2,6 +2,55 @@
 #include "../lang/serde.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
+#include <string.h>
+
+#define MAX_FAILURES 1000
+#define MAX_FAILURE_MSG_LEN 2048
+
+typedef struct {
+    char message[MAX_FAILURE_MSG_LEN];
+    char file[256];
+    int line;
+} TestFailure;
+
+static TestFailure failures[MAX_FAILURES];
+static int failure_count = 0;
+
+static void add_failure(const char* message, const char* file, int line) {
+    if (failure_count < MAX_FAILURES) {
+        strncpy(failures[failure_count].message, message, MAX_FAILURE_MSG_LEN - 1);
+        failures[failure_count].message[MAX_FAILURE_MSG_LEN - 1] = '\0';
+        strncpy(failures[failure_count].file, file, 255);
+        failures[failure_count].file[255] = '\0';
+        failures[failure_count].line = line;
+        failure_count++;
+    }
+}
+
+static void add_type_failure(const char* message, Type* expected, Type* got, const char* file, int line) {
+    if (failure_count < MAX_FAILURES) {
+        char buf1[200] = {};
+        char buf2[200] = {};
+        char full_msg[MAX_FAILURE_MSG_LEN];
+        snprintf(full_msg, MAX_FAILURE_MSG_LEN, "%s\nExpected: %s\nGot: %s", 
+                 message, type_to_string(expected, buf1), type_to_string(got, buf2));
+        strncpy(failures[failure_count].message, full_msg, MAX_FAILURE_MSG_LEN - 1);
+        failures[failure_count].message[MAX_FAILURE_MSG_LEN - 1] = '\0';
+        strncpy(failures[failure_count].file, file, 255);
+        failures[failure_count].file[255] = '\0';
+        failures[failure_count].line = line;
+        failure_count++;
+    }
+}
+
+static void print_all_failures() {
+    if (failure_count > 0) {
+        fprintf(stderr, "\n\n=== FAILING TESTS (%d) ===\n", failure_count);
+        for (int i = 0; i < failure_count; i++) {
+            fprintf(stderr, "❌ %s\n%s:%d\n\n", failures[i].message, failures[i].file, failures[i].line);
+        }
+    }
+}
 
 #define xT(input, type)
 
@@ -19,9 +68,10 @@
       fprintf(stderr, "✅ => %s\n", type_to_string(type, buf));                \
     } else {                                                                   \
       char buf2[200] = {};                                                     \
-      fprintf(stderr, "❌ => %s (got %s)\n", type_to_string(type, buf),        \
-              type_to_string(ast->md, buf2));                                  \
-      fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
+      char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s\nExpected: %s\nGot: %s",    \
+               input, type_to_string(type, buf), type_to_string(ast->md, buf2));\
+      add_failure(fail_msg, __FILE__, __LINE__);                              \
     }                                                                          \
     status &= stat;                                                            \
     ast;                                                                       \
@@ -47,7 +97,12 @@
     } else {                                                                   \
       status &= false;                                                         \
       char buf[100] = {};                                                      \
-      fprintf(stderr, "❌ %s got %s\n", msg, type_to_string(t1, buf));         \
+      char buf2[100] = {};                                                     \
+      char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN,                                  \
+               "%s\nExpected: %s\nGot: %s", msg,                              \
+               type_to_string(t2, buf), type_to_string(t1, buf2));            \
+      add_failure(fail_msg, __FILE__, __LINE__);                              \
     }                                                                          \
   })
 
@@ -63,9 +118,10 @@
     if (stat) {                                                                \
       fprintf(stderr, "✅ fails typecheck\n");                                 \
     } else {                                                                   \
-      char buf2[100] = {};                                                     \
-      fprintf(stderr, "❌ does not fail typecheck\n");                         \
-      fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                          \
+      char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN,                                  \
+               "Expected to fail typecheck but succeeded:\n%s", input);        \
+      add_failure(fail_msg, __FILE__, __LINE__);                              \
     }                                                                          \
     status &= stat;                                                            \
     ast;                                                                       \
@@ -77,7 +133,9 @@
     if (res) {                                                                 \
       fprintf(stderr, "✅ " _msg "\n");                                        \
     } else {                                                                   \
-      fprintf(stderr, "❌ " _msg "\n");                                        \
+      char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "Condition failed: " _msg);     \
+      add_failure(fail_msg, __FILE__, __LINE__);                              \
     }                                                                          \
     res;                                                                       \
   })
@@ -513,8 +571,9 @@ int test_funcs() {
     if (is_partial) {
       printf("✅ %s", msg);
     } else {
-
-      printf("❌ %s", msg);
+      char fail_msg[MAX_FAILURE_MSG_LEN];
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
+      add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= is_partial;
   });
@@ -541,7 +600,9 @@ int test_funcs() {
       printf("✅ %s", msg);
     } else {
 
-      printf("❌ %s", msg);
+      char fail_msg[MAX_FAILURE_MSG_LEN];
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
+      add_failure(fail_msg, __FILE__, __LINE__);
     }
 
     ({
@@ -595,7 +656,9 @@ int test_funcs() {
       printf("✅ %s", msg);
     } else {
 
-      printf("❌ %s", msg);
+      char fail_msg[MAX_FAILURE_MSG_LEN];
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
+      add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= res;
   });
@@ -611,7 +674,9 @@ int test_funcs() {
       printf("✅ %s", msg);
     } else {
 
-      printf("❌ %s", msg);
+      char fail_msg[MAX_FAILURE_MSG_LEN];
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
+      add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= res;
   });
@@ -677,7 +742,9 @@ int test_funcs() {
     if (is_partial) {
       printf("✅ %s", msg);
     } else {
-      printf("❌ %s", msg);
+      char fail_msg[MAX_FAILURE_MSG_LEN];
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
+      add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= is_partial;
   });
@@ -712,7 +779,9 @@ int test_funcs() {
       printf("✅ %s", msg);
     } else {
 
-      printf("❌ %s", msg);
+      char fail_msg[MAX_FAILURE_MSG_LEN];
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
+      add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= is_partial;
   });
@@ -1123,10 +1192,7 @@ int test_coroutines() {
       status &= true;
     } else {
       status &= false;
-      printf("❌ %s\nexpected:\n", msg);
-      print_type(&mapper);
-      printf("got:\n");
-      print_type(cor_map_arg->md);
+      add_type_failure(msg, &mapper, cor_map_arg->md, __FILE__, __LINE__);
     }
 
     print_ast(AST_LIST_NTH(b->data.AST_BODY.stmts, 0));
@@ -1191,10 +1257,7 @@ int test_coroutines() {
       status &= true;
     } else {
       status &= false;
-      printf("❌ %s\nexpected:\n", msg);
-      print_type(&runner_fn_arg_type);
-      printf("got:\n");
-      print_type(runner_arg->md);
+      add_type_failure(msg, &runner_fn_arg_type, runner_arg->md, __FILE__, __LINE__);
     }
   });
 
@@ -1320,7 +1383,9 @@ int test_closures() {
       printf("✅ %s", msg);
     } else {
 
-      printf("❌ %s", msg);
+      char fail_msg[MAX_FAILURE_MSG_LEN];
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
+      add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= res;
   });
@@ -1354,7 +1419,9 @@ int test_closures() {
       printf("✅ %s", msg);
     } else {
 
-      printf("❌ %s", msg);
+      char fail_msg[MAX_FAILURE_MSG_LEN];
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
+      add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= res;
   });
@@ -1532,10 +1599,7 @@ int main() {
       status &= true;
     } else {
       status &= false;
-      printf("❌ %s\nexpected:\n", msg);
-      print_type(&TOPT(&TVAR("`4")));
-      printf("got:\n");
-      print_type(none.md);
+      add_type_failure(msg, &TOPT(&TVAR("`4")), none.md, __FILE__, __LINE__);
     }
   });
   T("let loop = fn () ->\n"
@@ -1595,5 +1659,6 @@ int main() {
         "Double : Double)");
   });
 
+  print_all_failures();
   return status == true ? 0 : 1;
 }
