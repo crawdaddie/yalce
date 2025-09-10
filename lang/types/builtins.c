@@ -3,65 +3,42 @@
 #include "types/type.h"
 #include <string.h>
 
+Scheme void_scheme;
+Scheme array_at_scheme;
+
+Scheme arithmetic_scheme;
+Scheme eq_scheme;
+Scheme ord_scheme;
+
+Scheme opt_scheme;
+
+Scheme list_prepend_scheme;
+Scheme list_of_scheme;
+Scheme array_of_scheme;
+Scheme array_set_scheme;
+Scheme array_size_scheme;
+Type t_builtin_print;
+
+Scheme array_of_scheme;
+Scheme array_set_scheme;
+Scheme array_size_scheme;
+Scheme list_concat_scheme;
+Scheme cor_map_scheme;
+Scheme iter_of_list_scheme;
+Scheme id_scheme;
+
 TypeClass GenericArithmetic = {.name = TYPE_NAME_TYPECLASS_ARITHMETIC,
                                .rank = 1000.};
 
 TypeClass GenericOrd = {.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.};
 TypeClass GenericEq = {.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.};
 
-static Type arithmetic_scheme_var_a =
-    ((Type){T_VAR, {.T_VAR = "a"}, .implements = &GenericArithmetic});
-
-static Type arithmetic_scheme_var_b =
-    ((Type){T_VAR, {.T_VAR = "b"}, .implements = &GenericArithmetic});
-
-static VarList arithmetic_scheme_varlist_b = {.var = "b"};
-static VarList arithmetic_scheme_varlist_a = {
-    .var = "a", .next = &arithmetic_scheme_varlist_b};
-
-static Type arithmetic_scheme_tc_resolve =
-    MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &arithmetic_scheme_var_a,
-                      &arithmetic_scheme_var_b);
-
-static Type arithmetic_scheme_full_fn =
-    MAKE_FN_TYPE_3(&arithmetic_scheme_var_a, &arithmetic_scheme_var_b,
-                   &arithmetic_scheme_tc_resolve);
-
-Scheme arithmetic_scheme = {.vars = &arithmetic_scheme_varlist_a,
-                            .type = &arithmetic_scheme_full_fn};
-
-static Type ord_scheme_var_a =
-    ((Type){T_VAR, {.T_VAR = "a"}, .implements = &GenericOrd});
-static Type ord_scheme_var_b =
-    ((Type){T_VAR, {.T_VAR = "b"}, .implements = &GenericOrd});
-static VarList ord_scheme_varlist_b = {.var = "b"};
-static VarList ord_scheme_varlist_a = {.var = "a",
-                                       .next = &ord_scheme_varlist_b};
-
-static Type ord_scheme_full_fn =
-    MAKE_FN_TYPE_3(&ord_scheme_var_a, &ord_scheme_var_b, &t_bool);
-
-Scheme ord_scheme = {.vars = &ord_scheme_varlist_a,
-                     .type = &ord_scheme_full_fn};
-
-static Type eq_scheme_var_a =
-    ((Type){T_VAR, {.T_VAR = "a"}, .implements = &GenericEq});
-static Type eq_scheme_var_b =
-    ((Type){T_VAR, {.T_VAR = "b"}, .implements = &GenericEq});
-static VarList eq_scheme_varlist_b = {.var = "b"};
-static VarList eq_scheme_varlist_a = {.var = "a", .next = &eq_scheme_varlist_b};
-
-static Type eq_scheme_full_fn =
-    MAKE_FN_TYPE_3(&eq_scheme_var_a, &eq_scheme_var_b, &t_bool);
-
-Scheme eq_scheme = {.vars = &eq_scheme_varlist_a, .type = &eq_scheme_full_fn};
-
 static Type array_el = TVAR("a");
 static Type arrt = TCONS(TYPE_NAME_ARRAY, 1, &TVAR("a"));
 static VarList array_at_scheme_varlist = {.var = "a", .next = NULL};
 static Type array_at_fn = MAKE_FN_TYPE_3(&arrt, &t_int, &array_el);
-Scheme array_at_scheme = {.vars = &array_at_scheme_varlist,
-                          .type = &array_at_fn};
+Scheme array_at_scheme_glob = {.vars = &array_at_scheme_varlist,
+                               .type = &array_at_fn};
 
 Scheme void_scheme = {.vars = NULL, .type = &t_void};
 
@@ -337,6 +314,24 @@ Scheme *create_arithmetic_scheme() {
   return scheme;
 }
 
+Scheme _create_arithmetic_scheme() {
+
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  typeclasses_extend(a, &GenericArithmetic);
+  typeclasses_extend(b, &GenericArithmetic);
+  Type *f = create_tc_resolve(&GenericArithmetic, a, b);
+  f->implements = &GenericArithmetic;
+  f = type_fn(b, f);
+  f = type_fn(a, f);
+
+  VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
+  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
+
+  return (Scheme){.vars = vars_mem, .type = f};
+}
+
 Scheme *create_eq_scheme() {
 
   Type *a = tvar("a");
@@ -359,7 +354,26 @@ Scheme *create_eq_scheme() {
   return scheme;
 }
 
-Scheme *create_ord_scheme() {
+Scheme _create_eq_scheme() {
+
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+
+  typeclasses_extend(a, &GenericEq);
+  typeclasses_extend(b, &GenericEq);
+
+  Type *f = &t_bool;
+  f = type_fn(b, f);
+  f = type_fn(a, f);
+
+  VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
+  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
+
+  return (Scheme){.vars = vars_mem, .type = f};
+}
+
+Scheme _create_ord_scheme() {
 
   Type *a = tvar("a");
   Type *b = tvar("b");
@@ -375,13 +389,10 @@ Scheme *create_ord_scheme() {
   vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
   vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
 
-  Scheme *scheme = talloc(sizeof(Scheme));
-  *scheme = (Scheme){.vars = vars_mem, .type = f};
-
-  return scheme;
+  return (Scheme){.vars = vars_mem, .type = f};
 }
 
-Scheme *create_id_scheme() {
+Scheme create_id_scheme() {
 
   Type *var_a = tvar("a");
   Type *full_type = type_fn(var_a, var_a); // a → a
@@ -389,12 +400,9 @@ Scheme *create_id_scheme() {
   VarList *vars = talloc(sizeof(VarList));
   *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
 
-  Scheme *scheme = talloc(sizeof(Scheme));
-  *scheme = (Scheme){.vars = vars, .type = full_type};
-
-  return scheme;
+  return (Scheme){.vars = vars, .type = full_type};
 }
-Scheme *create_opt_scheme() {
+Scheme create_opt_scheme() {
 
   Type *var = tvar("a");
   Type *full_type = create_option_type(var);
@@ -402,13 +410,10 @@ Scheme *create_opt_scheme() {
   VarList *vars = talloc(sizeof(VarList));
   *vars = (VarList){.var = var->data.T_VAR, .next = NULL};
 
-  Scheme *scheme = talloc(sizeof(Scheme));
-  *scheme = (Scheme){.vars = vars, .type = full_type};
-
-  return scheme;
+  return (Scheme){.vars = vars, .type = full_type};
 }
 
-Scheme *create_list_of_scheme() {
+Scheme create_list_of_scheme() {
 
   Type *var = tvar("a");
   Type *full_type = create_list_type_of_type(var);
@@ -416,10 +421,7 @@ Scheme *create_list_of_scheme() {
   VarList *vars = talloc(sizeof(VarList));
   *vars = (VarList){.var = var->data.T_VAR, .next = NULL};
 
-  Scheme *scheme = talloc(sizeof(Scheme));
-  *scheme = (Scheme){.vars = vars, .type = full_type};
-
-  return scheme;
+  return (Scheme){.vars = vars, .type = full_type};
 }
 
 Scheme *create_array_of_scheme() {
@@ -435,7 +437,7 @@ Scheme *create_array_of_scheme() {
 
   return scheme;
 }
-Scheme *create_list_prepend_scheme() {
+Scheme create_list_prepend_scheme() {
 
   Type *var = tvar("a");
   Type *list_type = create_list_type_of_type(var);
@@ -447,9 +449,7 @@ Scheme *create_list_prepend_scheme() {
   Type *f = list_type;
   f = type_fn(list_type, f);
   f = type_fn(var, f);
-  *scheme = (Scheme){.vars = vars, .type = f};
-
-  return scheme;
+  return (Scheme){.vars = vars, .type = f};
 }
 
 void add_primitive_scheme(char *tname, Type *t) {
@@ -477,27 +477,14 @@ Scheme *create_cor_map_scheme() {
   *scheme = (Scheme){.vars = vars_mem, .type = f};
   return scheme;
 }
-Scheme *create_iter_of_list_scheme() {
-  Scheme *sch = create_list_of_scheme();
-  Type *l = sch->type;
+Scheme create_iter_of_list_scheme() {
+  Scheme sch = create_list_of_scheme();
+  Type *l = sch.type;
   Type *el = l->data.T_CONS.args[0];
   Type *cor = create_coroutine_instance_type(el);
-  sch->type = type_fn(l, cor);
+  sch.type = type_fn(l, cor);
   return sch;
 }
-
-Type t_builtin_print = MAKE_FN_TYPE_2(&t_string, &t_void);
-Scheme opt_scheme;
-Scheme list_prepend_scheme;
-Scheme list_of_scheme;
-
-Scheme array_of_scheme;
-Scheme array_set_scheme;
-Scheme array_size_scheme;
-Scheme list_concat_scheme;
-Scheme cor_map_scheme;
-Scheme iter_of_list_scheme;
-Scheme id_scheme;
 
 void initialize_builtin_schemes() {
 
@@ -560,56 +547,25 @@ void initialize_builtin_schemes() {
   typeclasses_extend(&t_bool, &TCEq_bool);
 
   ht_init(&builtin_schemes);
+  arithmetic_scheme = _create_arithmetic_scheme();
   add_builtin_scheme("+", &arithmetic_scheme);
   add_builtin_scheme("-", &arithmetic_scheme);
   add_builtin_scheme("*", &arithmetic_scheme);
   add_builtin_scheme("/", &arithmetic_scheme);
   add_builtin_scheme("%", &arithmetic_scheme);
 
-  // Scheme *eq_scheme = create_eq_scheme();
+  eq_scheme = _create_eq_scheme();
   add_builtin_scheme("==", &eq_scheme);
   add_builtin_scheme("!=", &eq_scheme);
+
+  ord_scheme = _create_ord_scheme();
 
   add_builtin_scheme(">", &ord_scheme);
   add_builtin_scheme("<", &ord_scheme);
   add_builtin_scheme(">=", &ord_scheme);
   add_builtin_scheme("<=", &ord_scheme);
-  id_scheme = *create_id_scheme();
+  id_scheme = create_id_scheme();
   add_builtin_scheme("id", &id_scheme);
-
-  opt_scheme = *create_opt_scheme();
-  add_builtin_scheme("Option", &opt_scheme);
-  add_builtin_scheme("Some", &opt_scheme);
-  add_builtin_scheme("None", &opt_scheme);
-
-  list_prepend_scheme = *create_list_prepend_scheme();
-  add_builtin_scheme("::", &list_prepend_scheme);
-
-  list_of_scheme = *create_list_of_scheme();
-  add_builtin_scheme("List", &list_of_scheme);
-
-  array_of_scheme = *create_array_of_scheme();
-  add_builtin_scheme("Array", &array_of_scheme);
-
-  add_builtin_scheme("array_at", &array_at_scheme);
-  array_set_scheme = *create_new_array_set_sig();
-  add_builtin_scheme("array_set", &array_set_scheme);
-
-  array_size_scheme = *create_new_array_size_sig();
-  add_builtin_scheme("array_size", &array_size_scheme);
-
-  // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
-  // &t_list_var);
-  list_concat_scheme = *create_list_concat_scheme();
-  add_builtin_scheme("list_concat", &list_concat_scheme);
-
-  cor_map_scheme = *create_cor_map_scheme();
-  add_builtin_scheme("cor_map", &cor_map_scheme);
-
-  iter_of_list_scheme = *create_iter_of_list_scheme();
-  add_builtin_scheme("iter_of_list", &iter_of_list_scheme);
-
-  add_builtin_scheme("cor_loop", &id_scheme);
 
   add_primitive_scheme(TYPE_NAME_INT, &t_int);
   add_primitive_scheme(TYPE_NAME_FLOAT, &t_fl);
@@ -620,8 +576,37 @@ void initialize_builtin_schemes() {
   add_primitive_scheme(TYPE_NAME_CHAR, &t_char);
   add_primitive_scheme(TYPE_NAME_VOID, &t_void);
   add_primitive_scheme(TYPE_NAME_PTR, &t_ptr);
+
+  opt_scheme = create_opt_scheme();
+  add_builtin_scheme("Option", &opt_scheme);
+  add_builtin_scheme("Some", &opt_scheme);
+  add_builtin_scheme("None", &opt_scheme);
+
+  list_prepend_scheme = create_list_prepend_scheme();
+  add_builtin_scheme("::", &list_prepend_scheme);
+
+  list_of_scheme = create_list_of_scheme();
+  add_builtin_scheme("List", &list_of_scheme);
+
+  Scheme *array_of_scheme = create_array_of_scheme();
+  add_builtin_scheme("Array", array_of_scheme);
+
   add_primitive_scheme("&&", &t_builtin_and);
-  add_primitive_scheme("print", &t_builtin_print);
+
+  add_builtin_scheme("array_at", &array_at_scheme_glob);
+  add_builtin_scheme("array_set", create_new_array_set_sig());
+  add_builtin_scheme("array_size", create_new_array_size_sig());
+
+  add_primitive_scheme("print", type_fn(&t_string, &t_void));
+  // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
+  // &t_list_var);
+  //
+  add_builtin_scheme("list_concat", create_list_concat_scheme());
+  add_builtin_scheme("cor_map", create_cor_map_scheme());
+
+  iter_of_list_scheme = create_iter_of_list_scheme();
+  add_builtin_scheme("iter_of_list", &iter_of_list_scheme);
+  add_builtin_scheme("cor_loop", &id_scheme);
 }
 
 Scheme *lookup_builtin_scheme(const char *name) {

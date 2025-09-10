@@ -1,7 +1,7 @@
 #include "../lang/parse.h"
+#include "../lang/serde.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
-#include "serde.h"
 
 #define xT(input, type)
 
@@ -493,11 +493,11 @@ int test_funcs() {
     T("let f = fn a b c d -> a == b && c == d;;\n"
       "f 1. 2. 3.;\n"
       "f 1 2 3\n",
-      &MAKE_FN_TYPE_2(&TVAR("`17"), &t_bool));
+      &MAKE_FN_TYPE_2(&TVAR("`20"), &t_bool));
   });
 
   ({
-    Type t = arithmetic_var("`13");
+    Type t = arithmetic_var("`12");
     Ast *b =
         T("let f = fn a b c -> a + b + c;;\n"
           "f 1 2\n",
@@ -545,7 +545,7 @@ int test_funcs() {
     }
 
     ({
-      Type t = arithmetic_var("`13");
+      Type t = arithmetic_var("`12");
       T("let f = fn a b c -> a + b + c;;\n"
         "f 1. 2.\n",
         &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
@@ -653,7 +653,7 @@ int test_funcs() {
     */
 
   ({
-    Type v = TVAR("`17");
+    Type v = TVAR("`20");
     T("let f = fn a b c d -> a == b && c == d;;\n"
       "f 1. 2. 3.;\n"
       "f 1 2 3\n",
@@ -661,7 +661,7 @@ int test_funcs() {
   });
 
   ({
-    Type t = arithmetic_var("`13");
+    Type t = arithmetic_var("`12");
     Ast *b =
         T("let f = fn a b c -> a + b + c;;\n"
           "f 1 2\n",
@@ -682,7 +682,7 @@ int test_funcs() {
     status &= is_partial;
   });
   ({
-    Type t = arithmetic_var("`13");
+    Type t = arithmetic_var("`12");
     T("let f = fn a b c -> a + b + c;;\n"
       "f 1. 2.\n",
 

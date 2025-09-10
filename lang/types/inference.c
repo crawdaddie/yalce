@@ -494,6 +494,7 @@ Type *instantiate(Scheme *scheme, TICtx *ctx) {
   Subst *inst_subst = NULL;
   for (VarList *v = scheme->vars; v; v = v->next) {
     Type *fresh_type = next_tvar();
+
     inst_subst = subst_extend(inst_subst, v->var, fresh_type);
   }
 

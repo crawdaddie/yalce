@@ -84,6 +84,9 @@ void print_constraints(Constraint *constraints) {
 }
 
 Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2) {
+  if (types_equal(t1, t2)) {
+    return t1;
+  }
   Type **args = talloc(sizeof(Type *) * 2);
   args[0] = t1;
   args[1] = t2;
