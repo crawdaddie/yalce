@@ -24,7 +24,7 @@ void initial_lambda_signature(int num_params, Type **param_types,
 
     param_types[i] =
         type_annotation
-            ? instantiate(compute_type_expression(type_annotation, ctx), ctx)
+            ? instantiate(compute_typescheme(type_annotation, ctx), ctx)
             : next_tvar();
   }
 }

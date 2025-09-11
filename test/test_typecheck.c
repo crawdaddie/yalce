@@ -49,7 +49,8 @@ static void print_all_failures() {
   if (failure_count > 0) {
     fprintf(stderr, "\n\n=== FAILING TESTS (%d) ===\n", failure_count);
     for (int i = 0; i < failure_count; i++) {
-      fprintf(stderr, "❌ %s\n%s:%d\n\n", failures[i].message, failures[i].file, failures[i].line);
+      fprintf(stderr, "❌ %s\n%s:%d\n\n", failures[i].message, failures[i].file,
+              failures[i].line);
     }
   }
 }
@@ -1514,38 +1515,22 @@ int test_modules() {
   return status;
 }
 
-int main() {
-  initialize_builtin_schemes();
-
+int test_array_processing() {
   bool status = true;
-  // TypeEnv *env = NULL;
-
-  status &= test_basic_ops();
-  status &= test_funcs();
-  status &= test_match_exprs();
-
-  status &= test_type_declarations();
-  status &= test_list_processing();
-  status &= test_coroutines();
-  status &= test_first_class_funcs();
-  status &= test_closures();
-  status &= test_refs();
-  status &= test_modules();
-
-  // ({
-  //   Type v = TVAR("t");
-  //   Type r = TVAR("r");
-  //   T("let array_fold = fn f s arr ->\n"
-  //     "  let len = array_size arr in\n"
-  //     "  let aux = (fn i su -> \n"
-  //     "    match i with\n"
-  //     "    | i if i == len -> su\n"
-  //     "    | i -> aux (i + 1) (f su (array_at arr i))\n"
-  //     "    ;) in\n"
-  //     "  aux 0 s\n"
-  //     ";;\n",
-  //     &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &v, &r), &r, &TARRAY(&v), &r));
-  // });
+  ({
+    Type v = TVAR("t");
+    Type r = TVAR("r");
+    T("let array_fold = fn f s arr ->\n"
+      "  let len = array_size arr in\n"
+      "  let aux = (fn i su -> \n"
+      "    match i with\n"
+      "    | i if i == len -> su\n"
+      "    | i -> aux (i + 1) (f su (array_at arr i))\n"
+      "    ;) in\n"
+      "  aux 0 s\n"
+      ";;\n",
+      &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &v, &r), &r, &TARRAY(&v), &r));
+  });
 
   // T("let set_ref = array_set 0;",
   //   &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`0")), &TVAR("`0"),
@@ -1578,6 +1563,10 @@ int main() {
     ";;\n"
     "\\array_choose [|1,2,3|]",
     &MAKE_FN_TYPE_2(&t_void, &t_int));
+  return status;
+}
+int test_networking_funcs() {
+  bool status = true;
 
   ({
     Ast *b = T(
@@ -1625,6 +1614,11 @@ int main() {
      "  proc_loop ts server_fd\n"
      ";;\n",
      &MAKE_FN_TYPE_3(&TCONS(TYPE_NAME_QUEUE, 1, &TVAR("l")), &t_int, &t_void));
+  return status;
+}
+
+bool test_audio_funcs() {
+  bool status = true;
 
   ({
     T("let instantiate_template = extern fn List of (Int, Double) -> Ptr -> "
@@ -1661,6 +1655,67 @@ int main() {
         "callback constraint passed down to lambda -> (arithmetic resolve "
         "Double : Double)");
   });
+  return status;
+}
+
+#define ASSERT(_msg, expr)                                                     \
+  ({                                                                           \
+    bool res = (expr);                                                         \
+    if (res) {                                                                 \
+      fprintf(stderr, "✅ " _msg "\n");                                        \
+    } else {                                                                   \
+      char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "Condition failed: " _msg);      \
+      add_failure(fail_msg, __FILE__, __LINE__);                               \
+    }                                                                          \
+    res;                                                                       \
+  })
+
+bool test_type_exprs() {
+  bool status = true;
+  status &= ASSERT(
+      "fn type expression", ({
+        Ast *ast = parse_input(
+            "type f = (T -> Int -> ()) -> Double -> T -> ();", NULL);
+
+        TICtx ctx = {};
+        infer(ast, &ctx);
+
+        Scheme sch = ctx.env->scheme;
+        bool res = true;
+        res &= sch.vars != NULL && strcmp(sch.vars->var, "T") == 0;
+        Type t = TVAR("T");
+        res &= types_equal(sch.type,
+                           &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void),
+                                           &t_num, &t, &t_void));
+
+        res;
+      }));
+
+  return status;
+}
+
+int main() {
+  initialize_builtin_schemes();
+
+  bool status = true;
+  // TypeEnv *env = NULL;
+
+  status &= test_basic_ops();
+  status &= test_funcs();
+  status &= test_match_exprs();
+  status &= test_type_declarations();
+  status &= test_list_processing();
+  status &= test_coroutines();
+  status &= test_first_class_funcs();
+  status &= test_closures();
+  status &= test_refs();
+  status &= test_modules();
+  status &= test_array_processing();
+  status &= test_networking_funcs();
+  status &= test_audio_funcs();
+  status &= test_type_exprs();
+
 
   print_all_failures();
   return status == true ? 0 : 1;

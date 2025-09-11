@@ -118,6 +118,10 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
 
   // Step 4: Unify function type with expected type
   TICtx unify_ctx = {};
+  // printf("UNIFY\n");
+  // print_ast(ast);
+  // print_type(func_type);
+  // print_type(expected_type);
 
   if (unify(func_type, expected_type, &unify_ctx)) {
     print_type_err(func_type);

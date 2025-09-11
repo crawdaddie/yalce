@@ -226,11 +226,7 @@ typedef struct _binop_map {
 //                                        .dependencies = (Type *[]){dep1, dep2}, \
 //                                        .resolve_dependencies = resolver}}})
 
-#define TVAR(n)                                                                \
-  ((Type){                                                                     \
-      T_VAR,                                                                   \
-      {.T_VAR = n},                                                            \
-  })
+#define TVAR(n) ((Type){T_VAR, {.T_VAR = n}, .alias = NULL})
 
 typedef struct Type *(*CreateNewGenericTypeFn)(void *);
 enum TypeKind {
@@ -294,6 +290,7 @@ typedef struct Type {
   // TypeClass
   //     *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
   //     
+  //
   //
   //
   //

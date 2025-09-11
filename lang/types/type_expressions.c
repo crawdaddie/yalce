@@ -5,6 +5,7 @@
 #include "types/inference.h"
 #include <string.h>
 
+Type *compute_type_expression(Ast *expr, TICtx *ctx);
 Type *create_sum_type(int len, Type **members) {
   return create_cons_type(TYPE_NAME_VARIANT, len, members);
 }
@@ -24,7 +25,7 @@ Scheme *create_ts_var(const char *name) {
 
 Type *fn_type_decl(Ast *sig, TICtx *ctx) {
   Ast *param_ast = sig->data.AST_LIST.items;
-  Type *fn = type_fn(instantiate(compute_type_expression(param_ast, ctx), ctx),
+  Type *fn = type_fn(instantiate(compute_typescheme(param_ast, ctx), ctx),
                      fn_type_decl(param_ast + 1, ctx));
   return fn;
 }
@@ -56,7 +57,7 @@ Type *instantiate_scheme_with_args(Scheme *scheme, Ast *args, TICtx *ctx) {
   Subst *inst_subst = NULL;
   for (VarList *v = scheme->vars; v; v = v->next, args++) {
 
-    Scheme *s = compute_type_expression(args, ctx);
+    Scheme *s = compute_typescheme(args, ctx);
     if (!s) {
       return NULL;
     }
@@ -70,10 +71,33 @@ Type *instantiate_scheme_with_args(Scheme *scheme, Ast *args, TICtx *ctx) {
   return s;
 }
 
-Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
+Type *compute_fn_type(Ast *expr, TICtx *ctx) {
+  Ast *sig = expr;
+
+  int num_params = 0;
+
+  while (sig->tag == AST_FN_SIGNATURE || sig->tag == AST_LIST) {
+    num_params++;
+    sig = sig->data.AST_LIST.items + 1;
+  }
+  sig = expr;
+
+  Type *param_types[num_params];
+  for (int i = 0; i < num_params; i++) {
+    Ast *p = sig->data.AST_LIST.items;
+    Type *t = compute_type_expression(p, ctx);
+    param_types[i] = t;
+    sig = sig->data.AST_LIST.items + 1;
+  }
+  Type *ret = compute_type_expression(sig, ctx);
+  Type *f = create_type_multi_param_fn(num_params, param_types, ret);
+  return f;
+}
+
+Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   switch (expr->tag) {
   case AST_VOID: {
-    return &void_scheme;
+    return &t_void;
   }
 
   case AST_IDENTIFIER: {
@@ -85,19 +109,19 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
     if (!sch_ref) {
       Scheme *builtin_sch = lookup_builtin_scheme(name);
       if (builtin_sch) {
-        return builtin_sch;
+        return builtin_sch->type;
       }
 
       Scheme *new_var = create_ts_var(name);
       ctx->env = env_extend(ctx->env, name, new_var->vars, new_var->type);
-      return new_var;
+      return new_var->type;
     }
 
     if (sch_ref && sch_ref->md.type == BT_RECURSIVE_REF) {
       printf("recursive type ref: %s\n", name);
     }
 
-    Scheme *ts = &sch_ref->scheme;
+    Type *ts = sch_ref->scheme.type;
     return ts;
   }
 
@@ -121,13 +145,9 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
         print_ast(mem_ast);
       }
 
-      Scheme *mem = compute_type_expression(mem_ast, ctx);
+      Type *mem = compute_type_expression(mem_ast, ctx);
 
-      members[i] = mem->type;
-
-      for (VarList *mv = mem->vars; mv; mv = mv->next) {
-        varlist_add(vars, mv->var);
-      }
+      members[i] = mem;
     }
 
     Type *tuple_type = create_tuple_type(len, members);
@@ -135,9 +155,7 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
       tuple_type->data.T_CONS.names = names;
     }
 
-    Scheme *sch = talloc(sizeof(Scheme));
-    *sch = (Scheme){.vars = vars, .type = tuple_type};
-    return sch;
+    return tuple_type;
   }
 
   case AST_LIST: {
@@ -149,49 +167,50 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
         members[i] =
             create_cons_type(mem_ast->data.AST_IDENTIFIER.value, 0, NULL);
       } else {
-        Scheme *sch =
-            compute_type_expression(expr->data.AST_LIST.items + i, ctx);
+        Type *sch = compute_type_expression(expr->data.AST_LIST.items + i, ctx);
         if (!sch) {
           return NULL;
         }
-        members[i] = sch->type;
+        members[i] = sch;
       }
     }
+
     Type *sum_type = create_sum_type(len, members);
-    Scheme *gen = talloc(sizeof(Scheme));
-    *gen = generalize(sum_type, ctx->env);
-    return gen;
+    return sum_type;
   }
 
   case AST_FN_SIGNATURE: {
-    print_ast(expr);
-
-    Ast *sig = expr;
-    int num_params = 0;
-    while (sig->tag == AST_FN_SIGNATURE || sig->tag == AST_LIST) {
-      num_params++;
-      sig = sig->data.AST_LIST.items + 1;
-    }
-
-    Type *it[num_params];
-    Type *ret;
-
-    int i = 0;
-    sig = expr;
-    while (sig->tag == AST_LIST || sig->tag == AST_FN_SIGNATURE) {
-      it[i] = instantiate(
-          compute_type_expression(sig->data.AST_LIST.items, ctx), ctx);
-      sig = sig->data.AST_LIST.items + 1;
-      i++;
-    }
-
-    ret = instantiate(compute_type_expression(sig, ctx), ctx);
-    Type *f = create_type_multi_param_fn(num_params, it, ret);
-    Scheme *gen = talloc(sizeof(Scheme));
-
-    *gen = generalize(f, ctx->env);
-
-    return gen;
+    return compute_fn_type(expr, ctx);
+    //
+    //                Ast *
+    //            sig = expr;
+    // int num_params = 0;
+    //
+    // while (sig->tag == AST_FN_SIGNATURE || sig->tag == AST_LIST) {
+    //   num_params++;
+    //   sig = sig->data.AST_LIST.items + 1;
+    // }
+    //
+    // Type *it[num_params];
+    // Type *ret;
+    //
+    // int i = 0;
+    // sig = expr;
+    //
+    // while (sig->tag == AST_LIST || sig->tag == AST_FN_SIGNATURE) {
+    //   it[i] = instantiate(
+    //       compute_type_expression(sig->data.AST_LIST.items, ctx), ctx);
+    //   sig = sig->data.AST_LIST.items + 1;
+    //   i++;
+    // }
+    // Scheme *computed_scheme = compute_type_expression(sig, ctx);
+    // ret = instantiate(computed_scheme, ctx);
+    // Type *f = create_type_multi_param_fn(num_params, it, ret);
+    // Scheme *gen = talloc(sizeof(Scheme));
+    //
+    // *gen = generalize(f, ctx->env);
+    //
+    // return gen;
   }
   case AST_BINOP: {
     token_type op = expr->data.AST_BINOP.op;
@@ -207,15 +226,13 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
         return NULL;
       }
 
-      Scheme *contained =
+      Type *contained =
           compute_type_expression(expr->data.AST_BINOP.right, ctx);
 
       Type *inst = instantiate_scheme_with_args(
           container, expr->data.AST_BINOP.right, ctx);
 
-      Scheme *sch = talloc(sizeof(Scheme));
-      *sch = generalize(inst, ctx->env);
-      return sch;
+      return inst;
     }
   }
 
@@ -227,6 +244,13 @@ Scheme *compute_type_expression(Ast *expr, TICtx *ctx) {
 
 bool is_sum_type(Type *t) {
   return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_VARIANT);
+}
+
+Scheme *compute_typescheme(Ast *expr, TICtx *ctx) {
+  Type *computed = compute_type_expression(expr, ctx);
+  Scheme *sch = talloc(sizeof(Scheme));
+  *sch = generalize(computed, ctx->env);
+  return sch;
 }
 
 Type *type_declaration(Ast *ast, TICtx *ctx) {
@@ -247,7 +271,7 @@ Type *type_declaration(Ast *ast, TICtx *ctx) {
       BT_RECURSIVE_REF,
   };
 
-  Scheme *scheme = compute_type_expression(expr, &_ctx);
+  Scheme *scheme = compute_typescheme(expr, &_ctx);
 
   if (!scheme) {
     fprintf(stderr, "Error: type declaration failed\n");

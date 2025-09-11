@@ -286,18 +286,30 @@ Type *apply_substitution(Subst *subst, Type *t) {
     return t;
   }
   case T_FN: {
-    t->data.T_FN.from = apply_substitution(subst, t->data.T_FN.from);
-    t->data.T_FN.to = apply_substitution(subst, t->data.T_FN.to);
+    Type *fr = apply_substitution(subst, t->data.T_FN.from);
+    t->data.T_FN.from = fr;
+    // if (!fr) {
+    //   return NULL;
+    // }
+    Type *to = apply_substitution(subst, t->data.T_FN.to);
+
+    // if (!to) {
+    //   return NULL;
+    // }
+    t->data.T_FN.to = to;
+
     return t;
   }
 
   case T_TYPECLASS_RESOLVE: {
+
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       Type *s = apply_substitution(subst, t->data.T_CONS.args[i]);
-      // if (get_typeclass_by_name(s, t->data.T_CONS.name) == 0) {
-      //   fprintf(stderr, "Error: cannot apply substitution because ");
+      // if (!type_implements(s, t->implements)) {
+      //   fprintf(stderr, "Cannot substitute ");
       //   print_type_err(s);
-      //   fprintf(stderr, "does not implement %s\n", t->data.T_CONS.name);
+      //   fprintf(stderr, " for ");
+      //   print_type_err(t->data.T_CONS.args[i]);
       //   return NULL;
       // }
       //
@@ -312,8 +324,11 @@ Type *apply_substitution(Subst *subst, Type *t) {
   }
   case T_CONS: {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      t->data.T_CONS.args[i] =
-          apply_substitution(subst, t->data.T_CONS.args[i]);
+      Type *s = apply_substitution(subst, t->data.T_CONS.args[i]);
+      if (!s) {
+        return NULL;
+      }
+      t->data.T_CONS.args[i] = s;
     }
     return t;
   }
@@ -892,7 +907,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
 
     if (sig->tag == AST_FN_SIGNATURE) {
-      Scheme *s = compute_type_expression(sig, ctx);
+      Scheme *s = compute_typescheme(sig, ctx);
       type = s->type;
     }
     break;
