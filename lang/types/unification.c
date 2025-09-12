@@ -187,6 +187,9 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     //     t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
     //   return 1;
     // }
+    if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+      return 1;
+    }
 
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       TICtx ur = {};
