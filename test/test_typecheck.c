@@ -152,6 +152,19 @@ static void print_all_failures() {
     ll->ast;                                                                   \
   })
 
+#define TASSERT(_msg, _expr)                                                   \
+  ({                                                                           \
+    bool res = (_expr);                                                        \
+    if (res) {                                                                 \
+      fprintf(stderr, "✅ " _msg "\n");                                        \
+    } else {                                                                   \
+      char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
+      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "Condition failed: " _msg);      \
+      add_failure(fail_msg, __FILE__, __LINE__);                               \
+    }                                                                          \
+    res;                                                                       \
+  })
+
 int test_type_declarations() {
   printf("TEST TYPE DECLARATIONS\n---------------------------------\n");
   bool status = true;
@@ -216,6 +229,20 @@ int test_type_declarations() {
       &MAKE_FN_TYPE_2(&t_num, &vtype));
   });
 
+  T("let tensor_ndims = fn (_, sizes, _) -> \n"
+    "  array_size sizes \n"
+    ";;",
+    &MAKE_FN_TYPE_2(&TTUPLE(3, &TVAR("`1"), &TARRAY(&TVAR("`5")), &TVAR("`3")),
+                    &t_int));
+
+  // T("type Tensor = (Array of t, Array of Int, Array of Int);\n"
+  //   "let tensor_ndims = fn (_, sizes, _): (Tensor of T) -> \n"
+  //   "  array_size sizes \n"
+  //   ";; \n"
+  //   "let x = Tensor [|1,2,3,4|] [|2,2|] [|2,1|];\n"
+  //   "tensor_ndims x;\n",
+  //   &t_int);
+  //
   T("type Tensor = (Array of t, Array of Int, Array of Int);\n"
     "let tensor_ndims = fn (_, sizes, _) -> \n"
     "  array_size sizes \n"
@@ -225,6 +252,7 @@ int test_type_declarations() {
     &t_int);
   return status;
 }
+
 int test_list_processing() {
   bool status = true;
   printf("## LIST PROCESSING FUNCTIONS\n-------------------------------\n");
@@ -368,7 +396,7 @@ int test_basic_ops() {
     Type t1 = arithmetic_var("`1");
     T("(+)", &MAKE_FN_TYPE_3(
                  &t0, &t1,
-                 &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
+                 &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0)));
   });
   T("id 1", &t_int);
   T("id 1.", &t_num);
@@ -437,7 +465,7 @@ int test_funcs() {
                &MAKE_FN_TYPE_2(
                    &tvar, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
                                              &t_int, &tvar)),
-               "f == `0 [Arithmetic] -> resolve Arithmetic `0 : Int");
+               "f == `0 [Arithmetic] -> resolve Arithmetic Int : `0");
 
     TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 1)->md, &t_int,
                "f 1 == Int");
@@ -472,9 +500,8 @@ int test_funcs() {
       &MAKE_FN_TYPE_4(
           &t0, &t1, &t2,
           &MAKE_TC_RESOLVE_2(
-              TYPE_NAME_TYPECLASS_ARITHMETIC,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1),
-              &t2)));
+              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t2))));
   });
 
   ({
@@ -504,44 +531,9 @@ int test_funcs() {
       &MAKE_FN_TYPE_3(
           &t0, &TTUPLE(2, &t2, &t3),
           &MAKE_TC_RESOLVE_2(
-              TYPE_NAME_TYPECLASS_ARITHMETIC,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t2),
-              &t3)));
+              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t2, &t3))));
   });
-
-  T("let bind = fn p f input ->\n"
-    "  match p input with\n"
-    "  | None -> None\n"
-    "  | Some (x, rest) -> f x rest  \n"
-    ";;\n"
-    "let choice = fn p1 p2 input ->\n"
-    "  match p1 input with\n"
-    "  | None -> p2 input\n"
-    "  | Some result -> Some result \n"
-    ";;\n"
-    "\n"
-    "let ( >>= ) = bind;\n"
-    "let ( <|> ) = choice;\n"
-    "\n"
-    "let isdigit = extern fn Char -> Bool;\n"
-    "let digit = fn input ->\n"
-    "  let s = array_size input;\n"
-    "  match (s, input[0]) with\n"
-    "  | (0, _) -> None\n"
-    "  | (_, x) if isdigit x -> Some (array_range 0 1 input, array_succ "
-    "input)\n"
-    "  | _ -> None\n"
-    ";;\n"
-    "\n"
-    "\n"
-    "\n"
-    "let two_digits = fn input ->\n"
-    "  digit >>= (fn first ->\n"
-    "  digit >>= (fn second ->\n"
-    "    (fn inp -> Some ((first, second) inp))\n"
-    "  )) input\n"
-    ";;\n",
-    &MAKE_FN_TYPE_2(&t_string, &TOPT(&TVAR("`47"))));
 
   Type t0 = arithmetic_var("`0");
   T("let add1 = fn x -> 1 + x;;",
@@ -563,7 +555,7 @@ int test_funcs() {
         T("let f = fn a b c -> a + b + c;;\n"
           "f 1 2\n",
           &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t_int, &t)));
+                                                 &t, &t_int)));
 
     bool is_partial =
         application_is_partial(AST_LIST_NTH(b->data.AST_BODY.stmts, 1));
@@ -613,7 +605,7 @@ int test_funcs() {
       T("let f = fn a b c -> a + b + c;;\n"
         "f 1. 2.\n",
         &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &t_num, &t)));
+                                               &t, &t_num)));
     });
 
     T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
@@ -628,7 +620,7 @@ int test_funcs() {
             3, &t_int, &t_int,
             &MAKE_FN_TYPE_3(
                 &t0, &t1,
-                &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1))));
+                &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0))));
     });
 
     ({
@@ -638,7 +630,7 @@ int test_funcs() {
           3, &t_int, &t_int,
           &MAKE_FN_TYPE_3(
               &t0, &t1,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0)));
 
       tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
       T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
@@ -734,7 +726,7 @@ int test_funcs() {
         T("let f = fn a b c -> a + b + c;;\n"
           "f 1 2\n",
           &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t_int, &t)));
+                                                 &t, &t_int)));
 
     bool is_partial =
         application_is_partial(AST_LIST_NTH(b->data.AST_BODY.stmts, 1));
@@ -757,7 +749,7 @@ int test_funcs() {
       "f 1. 2.\n",
 
       &MAKE_FN_TYPE_2(
-          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t)));
+          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t, &t_num)));
   });
 
   ({
@@ -800,7 +792,7 @@ int test_funcs() {
       &TTUPLE(3, &t_int, &t_int,
               &MAKE_FN_TYPE_3(&t0, &t1,
                               &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t0, &t1))));
+                                                 &t1, &t0))));
   });
 
   ({
@@ -810,7 +802,7 @@ int test_funcs() {
         TTUPLE(3, &t_int, &t_int,
                &MAKE_FN_TYPE_3(&t0, &t1,
                                &MAKE_TC_RESOLVE_2(
-                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
+                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0)));
 
     tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
     T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
@@ -1198,19 +1190,19 @@ int test_coroutines() {
       add_type_failure(msg, &mapper, cor_map_arg->md, __FILE__, __LINE__);
     }
 
-    print_ast(AST_LIST_NTH(b->data.AST_BODY.stmts, 0));
-    print_type(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->md);
-
-    print_ast(
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
-            ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
-        1);
-
-    print_type(
-        (AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
-             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
-         1)
-            ->md);
+    // print_ast(AST_LIST_NTH(b->data.AST_BODY.stmts, 0));
+    // print_type(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->md);
+    //
+    // print_ast(
+    //     AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+    //         ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
+    //     1);
+    //
+    // print_type(
+    //     (AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+    //          ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_LIST.items +
+    //      1)
+    //         ->md);
   });
 
   ({
@@ -1228,9 +1220,8 @@ int test_coroutines() {
   });
 
   ({
-    Ast *b = T("let schedule_event = extern fn (tUserData -> Int -> ()) -> "
-               "Double -> tUserdData -> "
-               "();\n"
+    Ast *b = T("let schedule_event = extern fn (T -> Int -> ()) -> Double -> T "
+               "-> ();\n"
                "let co_void = fn () ->\n"
                "  yield 0.125;\n"
                "  yield co_void ()\n"
@@ -1248,7 +1239,7 @@ int test_coroutines() {
     Ast *cor_arg =
         AST_LIST_NTH(b->data.AST_BODY.stmts, 4)->data.AST_APPLICATION.args + 2;
 
-    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
+    Type cor_type = COROUTINE_INST(&t_num);
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
 
@@ -1306,28 +1297,52 @@ int test_coroutines() {
     //
   });
 
-  T("let seq = fn (durs, notes) ->\n"
-    "  let d = use_or_finish @@ durs ();\n"
-    "  let n = use_or_finish @@ notes ();\n"
-    "  yield d;\n"
-    "  yield (seq (durs, notes))\n"
-    ";;\n"
+  ({
+    Type tuple = TTUPLE(2, &MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num)),
+                        &COROUTINE_INST(&t_int));
 
-    "let vals = (\n"
-    "  dur: (fn () -> Some 0.2),\n"
-    "  note: iter [|39,    32, 41,   42,  35,    37,   41, 42, |]\n"
-    ");\n",
-    &t_void);
+    tuple.data.T_CONS.names = (char *[]){"dur", "note"};
+    T("let seq = fn (durs, notes) ->\n"
+      "  let d = use_or_finish @@ durs ();\n"
+      "  let n = use_or_finish @@ notes ();\n"
+      "  yield d;\n"
+      "  yield (seq (durs, notes))\n"
+      ";;\n"
+
+      "let vals = (\n"
+      "  dur: (fn () -> Some 0.2),\n"
+      "  note: iter_of_array [|39,    32, 41,   42,  35,    37,   41, 42, "
+      "|]\n"
+      ");\n",
+      &tuple);
+  });
 
   return status;
 }
 int test_first_class_funcs() {
   bool status = true;
+
+  // Ast *b = T("let schedule_event = extern fn (T -> Int -> ()) -> "
+  //            "Double -> T -> ();\n"
+  //            "let co_void = fn () ->\n"
+  //            "  yield 0.125;\n"
+  //            "  yield co_void ()\n"
+  //            ";;\n"
+  //
+  //            "let c = co_void ();\n"
+  //
+  //            "let runner = fn c off ->\n"
+  //            "  match c () with\n"
+  //            "  | Some dur -> schedule_event runner dur c\n"
+  //            "  | None -> () \n"
+  //            ";;\n"
+  //
+  //            "schedule_event runner 0. c\n",
+  //            &t_void);
   ({
     Ast *b =
         T("type SchedulerCallback = (() -> Option of Double) -> Int -> ();\n"
-          "let schedule_event = extern fn SchedulerCallback -> (() -> Option "
-          "of Double) -> Ptr -> "
+          "let schedule_event = extern fn (T -> Int -> ()) -> Double -> T -> "
           "();\n"
           "let runner = fn c off ->\n"
           "  match c () with\n"
@@ -1343,19 +1358,18 @@ int test_first_class_funcs() {
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
 
-    // bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
-    // const char *msg = "runner arg can be materialised to specific type:";
-    // if (res) {
-    //   printf("✅ %s\n", msg);
-    //   print_type(&runner_fn_arg_type);
-    //   status &= true;
-    // } else {
-    //   status &= false;
-    //   printf("❌ %s\nexpected:\n", msg);
-    //   print_type(&runner_fn_arg_type);
-    //   printf("got:\n");
-    //   print_type(runner_arg->md);
-    // }
+    bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
+    const char *msg = "runner arg can be materialised to specific type:";
+    if (res) {
+      printf("✅ %s\n", msg);
+      print_type(&runner_fn_arg_type);
+      status &= true;
+    } else {
+      status &= false;
+
+      add_type_failure(msg, &runner_fn_arg_type, runner_arg->md, __FILE__,
+                       __LINE__);
+    }
   });
 
   return status;
@@ -1446,9 +1460,7 @@ int test_refs() {
       ";;\n",
       &MAKE_FN_TYPE_2(
           &TARRAY(&v),
-          &MAKE_TC_RESOLVE_2(
-              TYPE_NAME_TYPECLASS_ARITHMETIC, &v,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &v))));
+          &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &v)));
   });
 
   ({
@@ -1517,20 +1529,20 @@ int test_modules() {
 
 int test_array_processing() {
   bool status = true;
-  ({
-    Type v = TVAR("t");
-    Type r = TVAR("r");
-    T("let array_fold = fn f s arr ->\n"
-      "  let len = array_size arr in\n"
-      "  let aux = (fn i su -> \n"
-      "    match i with\n"
-      "    | i if i == len -> su\n"
-      "    | i -> aux (i + 1) (f su (array_at arr i))\n"
-      "    ;) in\n"
-      "  aux 0 s\n"
-      ";;\n",
-      &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &v, &r), &r, &TARRAY(&v), &r));
-  });
+  // ({
+  //   Type v = TVAR("t");
+  //   Type r = TVAR("r");
+  //   T("let array_fold = fn f s arr ->\n"
+  //     "  let len = array_size arr in\n"
+  //     "  let aux = (fn i su -> \n"
+  //     "    match i with\n"
+  //     "    | i if i == len -> su\n"
+  //     "    | i -> aux (i + 1) (f su (array_at arr i))\n"
+  //     "    ;) in\n"
+  //     "  aux 0 s\n"
+  //     ";;\n",
+  //     &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &v, &r), &r, &TARRAY(&v), &r));
+  // });
 
   // T("let set_ref = array_set 0;",
   //   &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`0")), &TVAR("`0"),
@@ -1658,53 +1670,120 @@ bool test_audio_funcs() {
   return status;
 }
 
-#define ASSERT(_msg, expr)                                                     \
-  ({                                                                           \
-    bool res = (expr);                                                         \
-    if (res) {                                                                 \
-      fprintf(stderr, "✅ " _msg "\n");                                        \
-    } else {                                                                   \
-      char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
-      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "Condition failed: " _msg);      \
-      add_failure(fail_msg, __FILE__, __LINE__);                               \
-    }                                                                          \
-    res;                                                                       \
-  })
-
 bool test_type_exprs() {
   bool status = true;
-  status &= ASSERT(
-      "fn type expression", ({
-        Ast *ast = parse_input(
-            "type f = (T -> Int -> ()) -> Double -> T -> ();", NULL);
-
-        TICtx ctx = {};
-        infer(ast, &ctx);
-
-        Scheme sch = ctx.env->scheme;
-        bool res = true;
-        res &= sch.vars != NULL && strcmp(sch.vars->var, "T") == 0;
-        Type t = TVAR("T");
-        res &= types_equal(sch.type,
-                           &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void),
-                                           &t_num, &t, &t_void));
-
-        res;
-      }));
+  status &= TASSERT("fn type expression", {
+    Ast *ast =
+        parse_input("type f = (T -> Int -> ()) -> Double -> T -> ();", NULL);
+    TICtx ctx = {};
+    infer(ast, &ctx);
+    Scheme sch = ctx.env->scheme;
+    bool res = true;
+    res &= sch.vars != NULL && strcmp(sch.vars->var, "T") == 0;
+    Type t = TVAR("T");
+    res &= types_equal(sch.type,
+                       &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void),
+                                       &t_num, &t, &t_void));
+    res;
+  });
 
   return status;
 }
 
+bool test_parser_combinators() {
+
+  printf("### TEST PARSER COMBINATORS\n--------------------------------\n");
+  bool status = true;
+
+  ({
+    Type a = TVAR("`2");
+    Type b = TVAR("`7");
+    Type c = TVAR("`8");
+    Type d = TVAR("`11");
+    Ast *bd =
+        T("let bind = fn p f input ->\n"
+          "  match p input with\n"
+          "  | Some (x, rest) -> f x rest  \n"
+          "  | None -> None\n"
+          ";;\n",
+          &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&a, &TOPT(&TTUPLE(2, &b, &c))),
+                          &MAKE_FN_TYPE_3(&b, &c, &TOPT(&d)), &a, &TOPT(&d))
+
+        );
+  });
+  ({
+    Ast *bd =
+        T("type Parser = String -> Option of (T, String);\n"
+          "let bind = fn p f input ->\n"
+          "  match p input with\n"
+          "  | None -> None\n"
+          "  | Some (x, rest) -> f x rest  \n"
+          ";;\n"
+
+          "let ( >>= ) = bind;\n"
+
+          "let isdigit = extern fn Char -> Bool;\n"
+          "let digit = fn input ->\n"
+          "  let s = array_size input;\n"
+          "  match (s, input[0]) with\n"
+          "  | (0, _) -> None\n"
+          "  | (_, x) if isdigit x -> Some (array_range 0 1 input, array_succ "
+          "input)\n"
+          "  | _ -> None\n"
+          ";;\n"
+
+          "let two_digits = fn input ->\n"
+          "  digit >>= (fn first ->\n"
+          "  digit >>= (fn second ->\n"
+          "    (fn inp -> Some ((first, second), inp))\n"
+          "  )) input\n"
+          ";;\n",
+          &MAKE_FN_TYPE_2(
+              &t_string,
+              &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string), &t_string))));
+
+    Ast *digit = AST_LIST_NTH(bd->data.AST_BODY.stmts, 4);
+
+    status &= TASSERT(
+        "digit fn has type Parser of String", ({
+          types_equal(digit->md,
+                      &MAKE_FN_TYPE_2(&t_string,
+                                      &TOPT(&TTUPLE(2, &t_string, &t_string))));
+        }));
+
+    Ast *fn_bd = AST_LIST_NTH(bd->data.AST_BODY.stmts, 5)
+                     ->data.AST_LET.expr->data.AST_LAMBDA.body;
+    Ast *fn_first = fn_bd->data.AST_APPLICATION.args + 1;
+
+    status &= TASSERT(
+        "(fn first -> ...) arg has type Parser of (String, String)",
+        types_equal(
+            fn_first->md,
+            &MAKE_FN_TYPE_3(&t_string, &t_string,
+                            &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string),
+                                          &t_string)))));
+
+    Ast *fn_second =
+        fn_first->data.AST_LAMBDA.body->data.AST_APPLICATION.args + 1;
+
+    status &= TASSERT(
+        "(fn second -> ...) arg has type Parser of (String, String)",
+        types_equal(
+            fn_second->md,
+            &MAKE_FN_TYPE_3(&t_string, &t_string,
+                            &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string),
+                                          &t_string)))));
+  });
+  return status;
+}
 int main() {
   initialize_builtin_schemes();
 
   bool status = true;
-  // TypeEnv *env = NULL;
 
   status &= test_basic_ops();
   status &= test_funcs();
   status &= test_match_exprs();
-  status &= test_type_declarations();
   status &= test_list_processing();
   status &= test_coroutines();
   status &= test_first_class_funcs();
@@ -1715,8 +1794,14 @@ int main() {
   status &= test_networking_funcs();
   status &= test_audio_funcs();
   status &= test_type_exprs();
-
+  status &= test_parser_combinators();
+  status &= test_type_declarations();
 
   print_all_failures();
   return status == true ? 0 : 1;
 }
+
+// (Array of `5 [Arithmetic, ] -> tc resolve Arithmetic [ `5 [Arithmetic, ] : tc
+// resolve Arithmetic [ Int : `5 [Arithmetic, ]]]) (Array of `5 -> tc resolve
+// Arithmetic [ `5                : tc resolve Arithmetic [ tc resolve
+// Arithmetic [ Int : `5] : `5]])

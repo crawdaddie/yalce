@@ -10,6 +10,7 @@
 #include "types/infer_app.h"
 #include "types/infer_match_expression.h"
 #include "types/type_expressions.h"
+#include "types/typeclass_resolve.h"
 #include <stdarg.h>
 #include <string.h>
 
@@ -230,30 +231,6 @@ TypeEnv *apply_subst_env(Subst *subst, TypeEnv *env) {
   return env;
 }
 
-double tc_rank(const char *tc_name, Type *t) {
-  TypeClass *tc = t->implements;
-  for (TypeClass *tc = t->implements; tc; tc = tc->next) {
-    if CHARS_EQ (tc->name, tc_name) {
-      return tc->rank;
-    }
-  }
-  return 0.;
-}
-Type *tc_resolve(Type *tcr) {
-  const char *tc_name = tcr->data.T_CONS.name;
-  Type *a = tcr->data.T_CONS.args[0];
-  Type *b = tcr->data.T_CONS.args[1];
-
-  if (b->kind == T_TYPECLASS_RESOLVE) {
-    b = tc_resolve(b);
-  }
-
-  if (tc_rank(tc_name, a) >= tc_rank(tc_name, b)) {
-    return a;
-  }
-  return b;
-}
-
 Type *apply_substitution(Subst *subst, Type *t) {
   if (!subst) {
     return t;
@@ -288,14 +265,8 @@ Type *apply_substitution(Subst *subst, Type *t) {
   case T_FN: {
     Type *fr = apply_substitution(subst, t->data.T_FN.from);
     t->data.T_FN.from = fr;
-    // if (!fr) {
-    //   return NULL;
-    // }
     Type *to = apply_substitution(subst, t->data.T_FN.to);
 
-    // if (!to) {
-    //   return NULL;
-    // }
     t->data.T_FN.to = to;
 
     return t;
@@ -319,8 +290,7 @@ Type *apply_substitution(Subst *subst, Type *t) {
     if (!is_generic(t)) {
       return tc_resolve(t);
     }
-
-    return t;
+    return cleanup_tc_resolve(t);
   }
   case T_CONS: {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
@@ -907,8 +877,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     Ast *sig = ast->data.AST_EXTERN_FN.signature_types;
 
     if (sig->tag == AST_FN_SIGNATURE) {
-      Scheme *s = compute_typescheme(sig, ctx);
-      type = s->type;
+      type = compute_type_expression(sig, ctx);
     }
     break;
   }

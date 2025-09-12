@@ -58,6 +58,7 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
 
   Type *func_type;
   if (func->tag == AST_IDENTIFIER) {
+
     Scheme *s = lookup_scheme(ctx->env, func->data.AST_IDENTIFIER.value);
 
     if (s == &array_at_scheme &&
@@ -118,16 +119,17 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
 
   // Step 4: Unify function type with expected type
   TICtx unify_ctx = {};
-  // printf("UNIFY\n");
-  // print_ast(ast);
-  // print_type(func_type);
-  // print_type(expected_type);
 
   if (unify(func_type, expected_type, &unify_ctx)) {
+    type_error(ctx, ast, "Function application type mismatch : ");
     print_type_err(func_type);
+    fprintf(stderr, "  != \n");
     print_type_err(expected_type);
-    return type_error(ctx, ast, "Function application type mismatch");
+    return NULL;
   }
+
+  // print_constraints(unify_ctx.constraints);
+  ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
 
   // Step 5: Solve constraints and apply substitutions
   Subst *solution = solve_constraints(unify_ctx.constraints);

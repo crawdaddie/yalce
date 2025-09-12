@@ -89,11 +89,15 @@ Type *bind_pattern_recursive(Ast *pattern, Type *pattern_type, binding_md md,
 
     bool generic_tuple = false;
     for (int i = 0; i < num_elements; i++) {
+
+      // Type *inferred = infer(pattern->data.AST_LIST.items + i, ctx);
       Type *inferred = infer(pattern->data.AST_LIST.items + i, ctx);
+
       if (is_generic(inferred)) {
         generic_tuple = true;
       }
       expected_types[i] = inferred;
+      // expected_types[i] = next_tvar();
     }
 
     Type *expected_tuple = create_tuple_type(num_elements, expected_types);

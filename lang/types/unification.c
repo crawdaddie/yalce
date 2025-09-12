@@ -182,10 +182,11 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
   // Case 4: Constructor types - recurse and merge constraints
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
-    if (!CHARS_EQ(t1->data.T_CONS.name, t2->data.T_CONS.name) ||
-        t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
-      return 1;
-    }
+
+    // if (!CHARS_EQ(t1->data.T_CONS.name, t2->data.T_CONS.name) ||
+    //     t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+    //   return 1;
+    // }
 
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       TICtx ur = {};
@@ -336,9 +337,7 @@ Subst *solve_constraints(Constraint *constraints) {
     }
 
     if (new_type->kind == T_TYPECLASS_RESOLVE) {
-
       Type *merged_resolve = merge_typeclass_resolve(new_type, existing_subst);
-
       subst = update_substitution(subst, var_name, merged_resolve);
       continue;
     }

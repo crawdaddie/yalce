@@ -33,7 +33,8 @@ extern Scheme array_size_scheme;
 extern Scheme list_concat_scheme;
 extern Scheme cor_map_scheme;
 extern Scheme iter_of_list_scheme;
+extern Scheme iter_of_array_scheme;
 extern Scheme id_scheme;
-
+extern Scheme use_or_finish_scheme;
 Scheme *lookup_builtin_scheme(const char *name);
 #endif

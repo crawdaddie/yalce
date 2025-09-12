@@ -118,7 +118,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
     }
 
     if (sch_ref && sch_ref->md.type == BT_RECURSIVE_REF) {
-      printf("recursive type ref: %s\n", name);
+      // printf("recursive type ref: %s\n", name);
     }
 
     Type *ts = sch_ref->scheme.type;

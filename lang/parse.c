@@ -28,6 +28,7 @@ ReAllocatorFnType prealloc = __prealloc;
 custom_binops_t *__custom_binops = NULL;
 
 void add_custom_binop(const char *binop_name) {
+  // printf("add custom binop '%s'\n", binop_name);
   custom_binops_t *new_custom_binops = palloc(sizeof(custom_binops_t));
   new_custom_binops->binop = binop_name;
   new_custom_binops->next = pctx.custom_binops;
@@ -322,7 +323,7 @@ Ast *parse_input(char *input, const char *dirname) {
 }
 
 bool is_custom_binop(const char *id) {
-  custom_binops_t *bb = __custom_binops;
+  custom_binops_t *bb = pctx.custom_binops;
   while (bb) {
     if (strcmp(id, bb->binop) == 0) {
       return true;
@@ -337,7 +338,6 @@ Ast *ast_application(Ast *func, Ast *arg) {
   if (func->tag == AST_APPLICATION) {
 
     if (arg->tag == AST_IDENTIFIER &&
-
         is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
 
       Ast *app = Ast_new(AST_APPLICATION);

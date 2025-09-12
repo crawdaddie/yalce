@@ -139,23 +139,26 @@ typedef struct _binop_map {
 //
 
 #define MAKE_FN_TYPE_2(arg_type, ret_type)                                     \
-  ((Type){T_FN, {.T_FN = {.from = arg_type, .to = ret_type}}})
+  ((Type){T_FN, {.T_FN = {.from = arg_type, .to = ret_type}}, .alias = NULL})
 
 #define MAKE_FN_TYPE_3(arg1_type, arg2_type, ret_type)                         \
   ((Type){T_FN,                                                                \
           {.T_FN = {.from = arg1_type,                                         \
-                    .to = &MAKE_FN_TYPE_2(arg2_type, ret_type)}}})
+                    .to = &MAKE_FN_TYPE_2(arg2_type, ret_type)}},              \
+          .alias = NULL})
 
 #define MAKE_FN_TYPE_4(arg1_type, arg2_type, arg3_type, ret_type)              \
   ((Type){T_FN,                                                                \
           {.T_FN = {.from = arg1_type,                                         \
-                    .to = &MAKE_FN_TYPE_3(arg2_type, arg3_type, ret_type)}}})
+                    .to = &MAKE_FN_TYPE_3(arg2_type, arg3_type, ret_type)}},   \
+          .alias = NULL})
 
 #define MAKE_FN_TYPE_5(arg1_type, arg2_type, arg3_type, arg4_type, ret_type)   \
   ((Type){T_FN,                                                                \
           {.T_FN = {.from = arg1_type,                                         \
                     .to = &MAKE_FN_TYPE_4(arg2_type, arg3_type, arg4_type,     \
-                                          ret_type)}}})
+                                          ret_type)}},                         \
+          .alias = NULL})
 #define arithmetic_var(n)                                                      \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = n},                                                       \
@@ -172,7 +175,8 @@ typedef struct _binop_map {
 
 #define MAKE_TC_RESOLVE_2(tc, a, b)                                            \
   ((Type){T_TYPECLASS_RESOLVE,                                                 \
-          {.T_CONS = {.name = tc, .num_args = 2, .args = (Type *[]){a, b}}}})
+          {.T_CONS = {.name = tc, .num_args = 2, .args = (Type *[]){a, b}}},   \
+          .alias = NULL})
 
 #define ord_var(n)                                                             \
   (Type) {                                                                     \
@@ -199,7 +203,9 @@ typedef struct _binop_map {
   (Type) { T_VAR, {.T_VAR = n}, }
 
 #define TCONS(name, num, ...)                                                  \
-  ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
+  ((Type){T_CONS,                                                              \
+          {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}},                    \
+          .alias = NULL})
 
 #define TLIST(_t)                                                              \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){_t}, 1}}})
@@ -207,7 +213,10 @@ typedef struct _binop_map {
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){_t}, 1}}})
 
 #define TTUPLE(num, ...)                                                       \
-  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
+  ((Type){T_CONS,                                                              \
+          {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num,           \
+                      .names = NULL}},                                         \
+          .alias = NULL})
 
 #define TOPT(of)                                                               \
   ((Type){T_CONS,                                                              \
@@ -216,7 +225,8 @@ typedef struct _binop_map {
                           (Type *[]){                                          \
                               &TCONS("Some", 1, of),                           \
                               &t_none,                                         \
-                          }}},                                                 \
+                          },                                                   \
+                      .names = NULL}},                                         \
           .alias = "Option"})
 
 // #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
@@ -278,10 +288,10 @@ typedef struct Type {
       struct Type *state;
     } T_COROUTINE_FN;
 
-    struct {
-      const char *tc_name;
-      TypeList *list;
-    } T_TYPECLASS_RESOLVE;
+    // struct {
+    //   const char *tc_name;
+    //   TypeList *list;
+    // } T_TYPECLASS_RESOLVE;
 
   } data;
 
@@ -290,6 +300,9 @@ typedef struct Type {
   // TypeClass
   //     *required; // for type vars - eg the type scheme for '+' ∀α. α->α->α shoul
   //     
+  //
+  //
+  //
   //
   //
   //

@@ -133,22 +133,24 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
                            ast->data.AST_LAMBDA.type_annotations,
                            ast->data.AST_LAMBDA.params, ctx);
 
-  TICtx lambda_ctx = *ctx;
-  lambda_ctx.current_fn_ast = ast;
-  lambda_ctx.scope = ctx->scope + 1;
-  lambda_ctx.current_fn_base_scope = lambda_ctx.scope;
+  TICtx lctx = *ctx;
+  lctx.current_fn_ast = ast;
+  lctx.scope = ctx->scope + 1;
+  lctx.current_fn_base_scope = lctx.scope;
 
-  bind_lambda_params(ast, param_types, &lambda_ctx);
+  bind_lambda_params(ast, param_types, &lctx);
 
   // Create a fresh type variable for the recursive function reference
   Type *recursive_fn_type = next_tvar();
-  bind_recursive_ref(ast, recursive_fn_type, &lambda_ctx);
+  bind_recursive_ref(ast, recursive_fn_type, &lctx);
 
-  Type *body_type = infer(body, &lambda_ctx);
+  Type *body_type = infer(body, &lctx);
   if (!body_type) {
     return type_error(ctx, body, "Cannot infer lambda body type");
   }
-  Subst *ls = solve_constraints(lambda_ctx.constraints);
+  // print_constraints(lctx.constraints);
+
+  Subst *ls = solve_constraints(lctx.constraints);
 
   for (int i = 0; i < num_params; i++) {
     param_types[i] = apply_substitution(ls, param_types[i]);
@@ -164,7 +166,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   for (int i = num_params - 1; i >= 0; i--) {
     Type *t = param_types[i];
 
-    t = apply_substitution(lambda_ctx.subst, t);
+    t = apply_substitution(lctx.subst, t);
 
     result_type = type_fn(t, result_type);
   }
@@ -178,9 +180,9 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   // printf("rec types??\n");
   // print_type(recursive_fn_type);
   // print_type(result_type);
-  ctx->subst = lambda_ctx.subst;
+  ctx->subst = lctx.subst;
 
-  if (lambda_ctx.yielded_type) {
+  if (lctx.yielded_type) {
     return create_coroutine_lambda(result_type, ctx);
   }
 

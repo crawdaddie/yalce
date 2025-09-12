@@ -24,8 +24,10 @@ Scheme array_set_scheme;
 Scheme array_size_scheme;
 Scheme list_concat_scheme;
 Scheme cor_map_scheme;
+Scheme iter_of_array_scheme;
 Scheme iter_of_list_scheme;
 Scheme id_scheme;
+Scheme use_or_finish_scheme;
 
 TypeClass GenericArithmetic = {.name = TYPE_NAME_TYPECLASS_ARITHMETIC,
                                .rank = 1000.};
@@ -64,6 +66,20 @@ Scheme *create_new_array_size_sig() {
   VarList *vars = talloc(sizeof(VarList));
   *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
   Type *f = type_fn(arr, &t_int);
+  Scheme *scheme = talloc(sizeof(Scheme));
+  *scheme = (Scheme){.vars = vars, .type = f};
+  return scheme;
+}
+
+Scheme *create_new_array_range_sig() {
+  Type *el = tvar("a");
+  Type *arr = create_array_type(el);
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
+
+  Type *f = type_fn(arr, arr);
+  f = type_fn(&t_int, f);
+  f = type_fn(&t_int, f);
   Scheme *scheme = talloc(sizeof(Scheme));
   *scheme = (Scheme){.vars = vars, .type = f};
   return scheme;
@@ -424,7 +440,7 @@ Scheme create_list_of_scheme() {
   return (Scheme){.vars = vars, .type = full_type};
 }
 
-Scheme *create_array_of_scheme() {
+Scheme create_array_of_scheme() {
 
   Type *var = tvar("a");
   Type *full_type = create_array_type(var);
@@ -432,10 +448,7 @@ Scheme *create_array_of_scheme() {
   VarList *vars = talloc(sizeof(VarList));
   *vars = (VarList){.var = var->data.T_VAR, .next = NULL};
 
-  Scheme *scheme = talloc(sizeof(Scheme));
-  *scheme = (Scheme){.vars = vars, .type = full_type};
-
-  return scheme;
+  return (Scheme){.vars = vars, .type = full_type};
 }
 Scheme create_list_prepend_scheme() {
 
@@ -477,6 +490,7 @@ Scheme *create_cor_map_scheme() {
   *scheme = (Scheme){.vars = vars_mem, .type = f};
   return scheme;
 }
+
 Scheme create_iter_of_list_scheme() {
   Scheme sch = create_list_of_scheme();
   Type *l = sch.type;
@@ -484,6 +498,24 @@ Scheme create_iter_of_list_scheme() {
   Type *cor = create_coroutine_instance_type(el);
   sch.type = type_fn(l, cor);
   return sch;
+}
+
+Scheme create_iter_of_array_scheme() {
+  Scheme sch = create_array_of_scheme();
+  Type *l = sch.type;
+  Type *el = l->data.T_CONS.args[0];
+  Type *cor = create_coroutine_instance_type(el);
+  sch.type = type_fn(l, cor);
+  return sch;
+}
+
+Scheme create_use_or_finish_scheme() {
+  Type *var = tvar("a");
+  Type *opt = create_option_type(var);
+  Type *f = type_fn(opt, var);
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = var->data.T_VAR, .next = NULL};
+  return (Scheme){.vars = vars, .type = f};
 }
 
 void initialize_builtin_schemes() {
@@ -588,14 +620,16 @@ void initialize_builtin_schemes() {
   list_of_scheme = create_list_of_scheme();
   add_builtin_scheme("List", &list_of_scheme);
 
-  Scheme *array_of_scheme = create_array_of_scheme();
-  add_builtin_scheme("Array", array_of_scheme);
+  array_of_scheme = create_array_of_scheme();
+  add_builtin_scheme("Array", &array_of_scheme);
 
   add_primitive_scheme("&&", &t_builtin_and);
 
   add_builtin_scheme("array_at", &array_at_scheme_glob);
   add_builtin_scheme("array_set", create_new_array_set_sig());
   add_builtin_scheme("array_size", create_new_array_size_sig());
+  add_builtin_scheme("array_range", create_new_array_range_sig());
+  add_builtin_scheme("array_succ", &id_scheme);
 
   add_primitive_scheme("print", type_fn(&t_string, &t_void));
   // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
@@ -606,7 +640,14 @@ void initialize_builtin_schemes() {
 
   iter_of_list_scheme = create_iter_of_list_scheme();
   add_builtin_scheme("iter_of_list", &iter_of_list_scheme);
+
+  iter_of_array_scheme = create_iter_of_array_scheme();
+  add_builtin_scheme("iter_of_array", &iter_of_array_scheme);
+
   add_builtin_scheme("cor_loop", &id_scheme);
+
+  use_or_finish_scheme = create_use_or_finish_scheme();
+  add_builtin_scheme("use_or_finish", &use_or_finish_scheme);
 }
 
 Scheme *lookup_builtin_scheme(const char *name) {

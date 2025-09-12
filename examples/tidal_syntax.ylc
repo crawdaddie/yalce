@@ -4,6 +4,7 @@ type Ast =
   | Val of String
   ;
 
+
 let bind = fn p f input ->
   match p input with
   | None -> None
@@ -33,7 +34,7 @@ let return = fn x input -> Some (x, input);;
 let two_digits = fn input ->
   digit >>= (fn first ->
   digit >>= (fn second ->
-    (fn inp -> Some ((first, second) inp))
+    (fn inp -> Some ((first, second), inp))
   )) input
 ;;
 
