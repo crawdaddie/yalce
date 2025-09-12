@@ -26,9 +26,9 @@ Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
   }
 
   Type *s = apply_substitution(inst_subst, stype);
-  // for (int i = 0; i < len; i++) {
-  //   unify(arg_types[i], s->data.T_CONS.args[i], ctx);
-  // }
+  for (int i = 0; i < len; i++) {
+    unify(arg_types[i], s->data.T_CONS.args[i], ctx);
+  }
 
   return s;
 
