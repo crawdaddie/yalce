@@ -252,12 +252,20 @@ Type *apply_substitution(Subst *subst, Type *t) {
   }
 
   case T_VAR: {
+
     if (t->is_recursive_type_ref) {
       return t;
     }
     Type *x = find_in_subst(subst, t->data.T_VAR);
 
     if (x) {
+      // if (t->implements) {
+      //   for (TypeClass *tc = t->implements; tc; tc = tc->next) {
+      //     if (!type_implements(x, tc)) {
+      //       return NULL;
+      //     }
+      //   }
+      // }
       return x;
     }
     return t;
@@ -276,6 +284,9 @@ Type *apply_substitution(Subst *subst, Type *t) {
 
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       Type *s = apply_substitution(subst, t->data.T_CONS.args[i]);
+      if (!s) {
+        return NULL;
+      }
       // if (!type_implements(s, t->implements)) {
       //   fprintf(stderr, "Cannot substitute ");
       //   print_type_err(s);
@@ -362,6 +373,7 @@ VarList *free_vars_type(VarList *vars, Type *t) {
   case T_VAR: {
     if (!varlist_contains(vars, t->data.T_VAR)) {
       vars = varlist_extend(vars, t->data.T_VAR);
+      vars->implements = t->implements;
     }
     return vars;
   }
@@ -479,7 +491,7 @@ Type *instantiate(Scheme *scheme, TICtx *ctx) {
   Subst *inst_subst = NULL;
   for (VarList *v = scheme->vars; v; v = v->next) {
     Type *fresh_type = next_tvar();
-
+    fresh_type->implements = v->implements;
     inst_subst = subst_extend(inst_subst, v->var, fresh_type);
   }
 
@@ -711,6 +723,11 @@ bool is_custom_binop_app(Ast *app, custom_binops_t *binops) {
     }
   }
   return false;
+}
+TypeList *typelist_extend(TypeList *tl, Type *t) {
+  TypeList *tln = talloc(sizeof(TypeList));
+  *tln = (TypeList){.type = t, .next = tl};
+  return tln;
 }
 
 Type *infer(Ast *ast, TICtx *ctx) {

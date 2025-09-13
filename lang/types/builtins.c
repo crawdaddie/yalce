@@ -309,6 +309,11 @@ TypeClass GenArithmeticTypeClass = {
 
 Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2);
 
+VarList vlist_of_typevar(Type *t) {
+  return (VarList){
+      .var = t->data.T_VAR, .implements = t->implements, .next = NULL};
+}
+
 Scheme *create_arithmetic_scheme() {
 
   Type *a = tvar("a");
@@ -321,8 +326,10 @@ Scheme *create_arithmetic_scheme() {
   f = type_fn(a, f);
 
   VarList *vars_mem = talloc(sizeof(VarList) * 2);
-  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
-  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
+  vars_mem[1] = vlist_of_typevar(b);
+
+  vars_mem[0] = vlist_of_typevar(a);
+  vars_mem[0].next = vars_mem + 1;
 
   Scheme *scheme = talloc(sizeof(Scheme));
   *scheme = (Scheme){.vars = vars_mem, .type = f};
@@ -342,8 +349,9 @@ Scheme _create_arithmetic_scheme() {
   f = type_fn(a, f);
 
   VarList *vars_mem = talloc(sizeof(VarList) * 2);
-  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
-  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
+  vars_mem[1] = vlist_of_typevar(b);
+  vars_mem[0] = vlist_of_typevar(a);
+  vars_mem[0].next = vars_mem + 1;
 
   return (Scheme){.vars = vars_mem, .type = f};
 }
@@ -361,8 +369,10 @@ Scheme *create_eq_scheme() {
   f = type_fn(a, f);
 
   VarList *vars_mem = talloc(sizeof(VarList) * 2);
-  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
-  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
+
+  vars_mem[1] = vlist_of_typevar(b);
+  vars_mem[0] = vlist_of_typevar(a);
+  vars_mem[0].next = vars_mem + 1;
 
   Scheme *scheme = talloc(sizeof(Scheme));
   *scheme = (Scheme){.vars = vars_mem, .type = f};
@@ -383,8 +393,10 @@ Scheme _create_eq_scheme() {
   f = type_fn(a, f);
 
   VarList *vars_mem = talloc(sizeof(VarList) * 2);
-  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
-  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
+
+  vars_mem[1] = vlist_of_typevar(b);
+  vars_mem[0] = vlist_of_typevar(a);
+  vars_mem[0].next = vars_mem + 1;
 
   return (Scheme){.vars = vars_mem, .type = f};
 }
@@ -402,8 +414,10 @@ Scheme _create_ord_scheme() {
   f = type_fn(a, f);
 
   VarList *vars_mem = talloc(sizeof(VarList) * 2);
-  vars_mem[1] = (VarList){.var = b->data.T_VAR, .next = NULL};
-  vars_mem[0] = (VarList){.var = a->data.T_VAR, .next = vars_mem + 1};
+
+  vars_mem[1] = vlist_of_typevar(b);
+  vars_mem[0] = vlist_of_typevar(a);
+  vars_mem[0].next = vars_mem + 1;
 
   return (Scheme){.vars = vars_mem, .type = f};
 }
@@ -414,7 +428,7 @@ Scheme create_id_scheme() {
   Type *full_type = type_fn(var_a, var_a); // a → a
 
   VarList *vars = talloc(sizeof(VarList));
-  *vars = (VarList){.var = var_a->data.T_VAR, .next = NULL};
+  *vars = vlist_of_typevar(var_a);
 
   return (Scheme){.vars = vars, .type = full_type};
 }

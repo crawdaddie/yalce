@@ -934,9 +934,11 @@ Type *create_coroutine_instance_type(Type *ret_type) {
 
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
+
   if (IS_PRIMITIVE_TYPE(original)) {
     return original;
   }
+
   Type *copy = talloc(sizeof(Type));
   *copy = *original;
   if (original->closure_meta != NULL) {

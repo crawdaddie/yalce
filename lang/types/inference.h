@@ -19,7 +19,15 @@
 typedef struct VarList {
   const char *var;
   struct VarList *next;
+  TypeClass *implements;
 } VarList;
+
+// typedef TypeList VarList;
+// {
+//   const char *var;
+//   struct VarList *next;
+//   TypeClass *implements;
+// } VarList;
 
 // represents a polymorphic type scheme
 // eg: ∀α. α→α -> { vars: [α,] type: α -> α (fn type) }

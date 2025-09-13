@@ -936,10 +936,11 @@ int test_match_exprs() {
                "f None",
                &t_int);
 
-    print_type(AST_LIST_NTH(b->data.AST_BODY.stmts, 1)
-                   ->data.AST_APPLICATION.function->md);
-    print_type(
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 1)->data.AST_APPLICATION.args->md);
+    // print_type(AST_LIST_NTH(b->data.AST_BODY.stmts, 1)
+    //                ->data.AST_APPLICATION.function->md);
+    // print_type(
+    //     AST_LIST_NTH(b->data.AST_BODY.stmts,
+    //     1)->data.AST_APPLICATION.args->md);
 
     // ->data.AST_LAMBDA.body->data.AST_MATCH
     //              .branches[1]
@@ -948,6 +949,24 @@ int test_match_exprs() {
     //
     // .data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_APPLICATION
     // .args[0]);
+  });
+
+  ({
+    Ast *b = T("let fib = fn x ->\n"
+               "  match x with\n"
+               "  | 0 -> 0\n"
+               "  | 1 -> 1\n"
+               "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+               ";;\n",
+               &MAKE_FN_TYPE_2(&t_int, &t_int));
+
+    Ast *match = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                     ->data.AST_LET.expr->data.AST_LAMBDA.body;
+    TASSERT("match expr input has type Int", types_equal(match->md, &t_int));
+
+    Ast *sum = match->data.AST_MATCH.branches + 5;
+
+    TASSERT("match branch body has type Int", types_equal(sum->md, &t_int));
   });
   return status;
 }
@@ -1776,11 +1795,12 @@ bool test_parser_combinators() {
   });
   return status;
 }
+
 int main() {
   initialize_builtin_schemes();
 
   bool status = true;
-
+  //
   status &= test_basic_ops();
   status &= test_funcs();
   status &= test_match_exprs();
@@ -1792,10 +1812,10 @@ int main() {
   status &= test_modules();
   status &= test_array_processing();
   status &= test_networking_funcs();
-  status &= test_audio_funcs();
   status &= test_type_exprs();
   status &= test_parser_combinators();
   status &= test_type_declarations();
+  status &= test_audio_funcs();
 
   print_all_failures();
   return status == true ? 0 : 1;

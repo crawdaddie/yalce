@@ -48,7 +48,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *test_val_type = ast->data.AST_MATCH.expr->md;
   Type *_res_type = ast->md;
-  // print_type_env(ctx->env);
+
   LLVMTypeRef res_type = type_to_llvm_type(_res_type, ctx, module);
 
   int len = ast->data.AST_MATCH.len;

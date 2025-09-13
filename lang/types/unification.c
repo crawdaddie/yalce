@@ -100,11 +100,6 @@ Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2) {
 
 int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
-  // printf("unify ");
-  // print_type(t1);
-  // printf(" ~ \n");
-  // print_type(t2);
-
   if (types_equal(t1, t2)) {
     return 0;
   }
@@ -113,6 +108,17 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     add_constraint(unify_res, t2, t1);
     return 0;
   }
+
+  // if (IS_PRIMITIVE_TYPE(t2) && t1->kind == T_VAR && t1->implements) {
+  //   for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
+  //     if (!type_implements(t2, tc)) {
+  //       fprintf(stderr, "Error: ");
+  //       print_type_err(t2);
+  //       fprintf(stderr, "does not implement typeclass %s", tc->name);
+  //       return 1;
+  //     }
+  //   }
+  // }
 
   // if (t2->kind == T_EMPTY_LIST) {
   //   return 0;
@@ -183,10 +189,8 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   // Case 4: Constructor types - recurse and merge constraints
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
 
-    // if (!CHARS_EQ(t1->data.T_CONS.name, t2->data.T_CONS.name) ||
-    //     t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
-    //   return 1;
-    // }
+    // NB: don't worry about comparing the cons names - as long as the contained
+    // types match it doesn't really matter
     if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
       return 1;
     }
@@ -208,11 +212,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   // Case 5: Two concrete types - this will be handled by constraint solver
   // later
   if (t1->kind != T_VAR && t2->kind != T_VAR) {
-    // printf("Two concrete types - cannot unify directly: ");
-    // print_type(t1);
-    // printf(" vs ");
-    // print_type(t2);
-    // printf("\n");
     return 1;
   }
 
@@ -296,6 +295,7 @@ Subst *solve_constraints(Constraint *constraints) {
 
     const char *var_name = current->var->data.T_VAR;
     Type *new_type = apply_substitution(subst, current->type);
+
     Type *existing = find_in_subst(subst, var_name);
 
     if (new_type->kind == T_TYPECLASS_RESOLVE) {

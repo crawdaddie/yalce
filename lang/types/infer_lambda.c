@@ -123,6 +123,151 @@ Type *create_closure(Ast *ast, Type *fn_type, TICtx *ctx) {
   return fn_type;
 }
 
+void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
+  if (!ast) {
+    return;
+  }
+
+  switch (ast->tag) {
+
+  case AST_INT: {
+    break;
+  }
+
+  case AST_DOUBLE: {
+    break;
+  }
+
+  case AST_STRING: {
+    break;
+  }
+
+  case AST_CHAR: {
+    break;
+  }
+
+  case AST_BOOL: {
+    break;
+  }
+  case AST_VOID: {
+    break;
+  }
+
+  case AST_FMT_STRING:
+  case AST_ARRAY:
+  case AST_LIST:
+  case AST_TUPLE: {
+    int arity = ast->data.AST_LIST.len;
+    for (int i = 0; i < arity; i++) {
+      Ast *it = ast->data.AST_LIST.items + i;
+      apply_substitution_to_lambda_body(it, subst);
+    }
+    break;
+  }
+
+  case AST_TYPE_DECL: {
+    break;
+  }
+
+  case AST_BODY: {
+    Ast *stmt;
+    AST_LIST_ITER(ast->data.AST_BODY.stmts,
+                  ({ apply_substitution_to_lambda_body(l->ast, subst); }));
+    break;
+  }
+
+  case AST_IDENTIFIER: {
+    break;
+  }
+
+  case AST_APPLICATION: {
+    apply_substitution_to_lambda_body(ast->data.AST_APPLICATION.function,
+                                      subst);
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      apply_substitution_to_lambda_body(ast->data.AST_APPLICATION.args + i,
+                                        subst);
+    }
+
+    break;
+  }
+  case AST_LOOP:
+  case AST_LET: {
+
+    apply_substitution_to_lambda_body(ast->data.AST_LET.binding, subst);
+    apply_substitution_to_lambda_body(ast->data.AST_LET.expr, subst);
+    apply_substitution_to_lambda_body(ast->data.AST_LET.in_expr, subst);
+    break;
+  }
+
+  case AST_LAMBDA: {
+    apply_substitution_to_lambda_body(ast->data.AST_LAMBDA.body, subst);
+    break;
+  }
+
+  case AST_MATCH: {
+    apply_substitution_to_lambda_body(ast->data.AST_MATCH.expr, subst);
+    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+      apply_substitution_to_lambda_body(ast->data.AST_MATCH.branches + 2 * i,
+                                        subst);
+
+      apply_substitution_to_lambda_body(
+          ast->data.AST_MATCH.branches + 2 * i + 1, subst);
+    }
+    break;
+  }
+
+  case AST_EXTERN_FN: {
+    break;
+  }
+
+  case AST_YIELD: {
+    apply_substitution_to_lambda_body(ast->data.AST_YIELD.expr, subst);
+    break;
+  }
+
+  case AST_MODULE: {
+    break;
+  }
+
+  case AST_TRAIT_IMPL: {
+    break;
+  }
+
+  case AST_IMPORT: {
+    break;
+  }
+
+  case AST_RECORD_ACCESS: {
+
+    apply_substitution_to_lambda_body(ast->data.AST_RECORD_ACCESS.record,
+                                      subst);
+    apply_substitution_to_lambda_body(ast->data.AST_RECORD_ACCESS.member,
+                                      subst);
+    break;
+  }
+
+  case AST_RANGE_EXPRESSION: {
+
+    apply_substitution_to_lambda_body(ast->data.AST_RANGE_EXPRESSION.from,
+                                      subst);
+
+    apply_substitution_to_lambda_body(ast->data.AST_RANGE_EXPRESSION.to, subst);
+    break;
+  }
+
+  case AST_BINOP: {
+    break;
+  }
+
+  default: {
+    break;
+  }
+  }
+
+  Type *t = ast->md;
+  ast->md = apply_substitution(subst, t);
+}
+
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
   Ast *body = ast->data.AST_LAMBDA.body;
   int num_params = ast->data.AST_LAMBDA.len;
@@ -148,7 +293,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (!body_type) {
     return type_error(ctx, body, "Cannot infer lambda body type");
   }
-  // print_constraints(lctx.constraints);
 
   Subst *ls = solve_constraints(lctx.constraints);
 
@@ -158,28 +302,29 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   body_type = apply_substitution(ls, body_type);
-  // body_type = apply_substitution(lambda_ctx.subst, body_type);
 
   // Build the final function type
   Type *result_type = body_type;
 
   for (int i = num_params - 1; i >= 0; i--) {
     Type *t = param_types[i];
-
     t = apply_substitution(lctx.subst, t);
-
     result_type = type_fn(t, result_type);
   }
 
-  // print_ast(ast);
-  // print_type(result_type);
+  if (ast->data.AST_LAMBDA.fn_name.chars) {
+    // TODO: maybe not do this for anon funcs
+    //
+    // eg in this context:
+    //
+    // type NoteCallback = Int -> Double -> ();
+    // let register_note_on_handler = extern fn NoteCallback -> Int -> ();
+    // register_note_on_handler (fn n vel -> vel + 0.0) 0
+    // anonymous func arg would be incorrectly typed (the constraint from it
+    // being a NoteCallback would be overriden)
+    apply_substitution_to_lambda_body(body, ls);
+  }
 
-  // If this is a recursive function, unify the recursive reference with the
-  // final type
-  // unify_recursive_ref(ast, recursive_fn_type, result_type, &lambda_ctx);
-  // printf("rec types??\n");
-  // print_type(recursive_fn_type);
-  // print_type(result_type);
   ctx->subst = lctx.subst;
 
   if (lctx.yielded_type) {
@@ -187,6 +332,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   Type *closure = create_closure(ast, result_type, ctx);
+
   if (closure) {
     return closure;
   }

@@ -26,6 +26,7 @@ Type *resolve_type_in_env_mut(Type *mut_t, TypeEnv *env) {
 
   switch (mut_t->kind) {
   case T_VAR: {
+    Scheme *sch = lookup_scheme(env, mut_t->data.T_VAR);
     Type *l = lookup_scheme(env, mut_t->data.T_VAR)->type;
     return l;
   }
@@ -59,7 +60,10 @@ Type *resolve_type_in_env_mut(Type *mut_t, TypeEnv *env) {
 }
 
 Type *resolve_scheme_in_env(Scheme *gen, TypeEnv *env) { return NULL; }
-Type *resolve_tc_rank_in_env(Type *gen, TypeEnv *env) { return NULL; }
+Type *resolve_tc_rank_in_env(Type *gen, TypeEnv *env) {
+  printf("resolve tc rank in env\n");
+  return NULL;
+}
 
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module);
@@ -171,7 +175,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   }
 
   case T_TYPECLASS_RESOLVE: {
-    type = resolve_tc_rank_in_env(type, ctx->env);
+    type = deep_copy_type(type);
+    type = resolve_type_in_env_mut(type, ctx->env);
     return type_to_llvm_type(type, ctx, module);
   }
 
