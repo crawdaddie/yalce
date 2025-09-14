@@ -266,6 +266,10 @@ Type *apply_substitution(Subst *subst, Type *t) {
       //     }
       //   }
       // }
+      if (x->kind != T_VAR && is_generic(x)) {
+        return apply_substitution(subst, x);
+      }
+
       return x;
     }
     return t;

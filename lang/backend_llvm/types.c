@@ -27,6 +27,10 @@ Type *resolve_type_in_env_mut(Type *mut_t, TypeEnv *env) {
   switch (mut_t->kind) {
   case T_VAR: {
     Scheme *sch = lookup_scheme(env, mut_t->data.T_VAR);
+    if (!sch) {
+      fprintf(stderr, "%s not found in env\n", mut_t->data.T_VAR);
+      return NULL;
+    }
     Type *l = lookup_scheme(env, mut_t->data.T_VAR)->type;
     return l;
   }

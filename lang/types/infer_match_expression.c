@@ -25,6 +25,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
 
     Type *pattern_type =
         bind_pattern_recursive(pattern_ast, scrutinee_type, (binding_md){}, &c);
+    pattern_ast->md = pattern_type;
 
     branch_envs[i] = c.env;
 

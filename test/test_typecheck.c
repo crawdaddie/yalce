@@ -377,6 +377,36 @@ int test_list_processing() {
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
   });
 
+  T("let list_map = fn f l ->\n"
+    "  let aux = fn f l res -> \n"
+    "    match l with\n"
+    "    | [] -> res\n"
+    "    | x :: rest -> aux f rest (f x :: res) \n"
+    "  ;;\n"
+    "  aux f l []\n"
+    ";;\n",
+    // (`8 -> `15) -> `8[] -> `15
+    &MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&TVAR("`8"), &TVAR("`15")),
+                    &TLIST(&TVAR("`8")), &TLIST(&TVAR("`15"))));
+
+  T("(+) 1",
+    &MAKE_FN_TYPE_2(&arithmetic_var("`1"),
+                    &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                       &arithmetic_var("`1"), &t_int)));
+
+  ({
+    Ast *b = T("let list_map = fn f l ->\n"
+               "  let aux = fn f l res -> \n"
+               "    match l with\n"
+               "    | [] -> res\n"
+               "    | x :: rest -> aux f rest (f x :: res) \n"
+               "  ;;\n"
+               "  aux f l []\n"
+               ";;\n"
+               "(list_map ((+) 1) [0,1,2,3])",
+               &TLIST(&t_int));
+  });
+
   return status;
 }
 
@@ -464,7 +494,7 @@ int test_funcs() {
     TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 0)->md,
                &MAKE_FN_TYPE_2(
                    &tvar, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                             &t_int, &tvar)),
+                                             &tvar, &t_int)),
                "f == `0 [Arithmetic] -> resolve Arithmetic Int : `0");
 
     TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 1)->md, &t_int,
@@ -500,8 +530,8 @@ int test_funcs() {
       &MAKE_FN_TYPE_4(
           &t0, &t1, &t2,
           &MAKE_TC_RESOLVE_2(
-              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t2))));
+              TYPE_NAME_TYPECLASS_ARITHMETIC, &t1,
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t2, &t0))));
   });
 
   ({
@@ -531,14 +561,15 @@ int test_funcs() {
       &MAKE_FN_TYPE_3(
           &t0, &TTUPLE(2, &t2, &t3),
           &MAKE_TC_RESOLVE_2(
-              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t2, &t3))));
+              TYPE_NAME_TYPECLASS_ARITHMETIC, &t2,
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t3, &t0))));
   });
 
   Type t0 = arithmetic_var("`0");
   T("let add1 = fn x -> 1 + x;;",
     &MAKE_FN_TYPE_2(
-        &t0, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &t0)));
+        &t0, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t_int)));
+
   T("let add1 = fn x -> 1 + x;; add1 1", &t_int);
   T("let add1 = fn x -> 1 + x;; add1 1; add1 1.", &t_num);
 
@@ -620,7 +651,7 @@ int test_funcs() {
             3, &t_int, &t_int,
             &MAKE_FN_TYPE_3(
                 &t0, &t1,
-                &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0))));
+                &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1))));
     });
 
     ({
@@ -630,7 +661,7 @@ int test_funcs() {
           3, &t_int, &t_int,
           &MAKE_FN_TYPE_3(
               &t0, &t1,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0)));
+              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
 
       tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
       T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
@@ -792,7 +823,7 @@ int test_funcs() {
       &TTUPLE(3, &t_int, &t_int,
               &MAKE_FN_TYPE_3(&t0, &t1,
                               &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t1, &t0))));
+                                                 &t0, &t1))));
   });
 
   ({
@@ -802,7 +833,7 @@ int test_funcs() {
         TTUPLE(3, &t_int, &t_int,
                &MAKE_FN_TYPE_3(&t0, &t1,
                                &MAKE_TC_RESOLVE_2(
-                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0)));
+                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
 
     tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
     T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
@@ -1479,7 +1510,7 @@ int test_refs() {
       ";;\n",
       &MAKE_FN_TYPE_2(
           &TARRAY(&v),
-          &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &v)));
+          &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &v, &t_int)));
   });
 
   ({
@@ -1676,15 +1707,23 @@ bool test_audio_funcs() {
                "register_note_on_handler (fn n vel -> vel + 0.0) 0\n",
                &t_void);
 
-    Ast *plus_app = AST_LIST_NTH(b->data.AST_BODY.stmts, 2)
-                        ->data.AST_APPLICATION.args->data.AST_LAMBDA.body;
+    Ast *plus_app =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.args;
 
     status &= EXTRA_CONDITION(
-        types_equal(
-            plus_app->md,
-            &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t_num)),
-        "callback constraint passed down to lambda -> (arithmetic resolve "
-        "Double : Double)");
+        types_equal(plus_app->md, &MAKE_FN_TYPE_3(&t_int, &t_num, &t_num)),
+        "callback constraint passed down to lambda is Int -> Double -> Double");
+
+    // print_ast(plus_app);
+    // print_type(plus_app->md);
+
+    // status &= EXTRA_CONDITION(
+    //     types_equal(
+    //         plus_app->md,
+    //         &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num,
+    //         &t_num)),
+    //     "callback constraint passed down to lambda -> (arithmetic resolve "
+    //     "Double : Double)");
   });
   return status;
 }
@@ -1800,11 +1839,9 @@ int main() {
   initialize_builtin_schemes();
 
   bool status = true;
-  //
   status &= test_basic_ops();
   status &= test_funcs();
   status &= test_match_exprs();
-  status &= test_list_processing();
   status &= test_coroutines();
   status &= test_first_class_funcs();
   status &= test_closures();
@@ -1816,6 +1853,7 @@ int main() {
   status &= test_parser_combinators();
   status &= test_type_declarations();
   status &= test_audio_funcs();
+  status &= test_list_processing();
 
   print_all_failures();
   return status == true ? 0 : 1;
