@@ -558,9 +558,7 @@ LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
 LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
                      JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
-  printf("list eq\n not impl\n");
-
-  return LLVMConstInt(LLVMInt1Type(), 0, 0);
+  return _FALSE;
 }
 
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
