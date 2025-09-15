@@ -354,16 +354,16 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
 
   Constraint *constraints = NULL;
 
+  TICtx unify_ctx = {};
   while (generic_type->kind == T_FN) {
     Type *gen = generic_type->data.T_FN.from;
     Type *spec = specific_type->data.T_FN.from;
-    constraints = constraints_extend(constraints, gen, spec);
-
+    unify(gen, spec, &unify_ctx);
     specific_type = specific_type->data.T_FN.to;
     generic_type = generic_type->data.T_FN.to;
   }
 
-  subst = solve_constraints(constraints);
+  subst = solve_constraints(unify_ctx.constraints);
 
   env = create_env_from_subst(env, subst);
 
@@ -450,8 +450,14 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   // subst = solve_constraints(constraints);
   // env = create_env_from_subst(env, subst);
 
+  print_type(generic_type);
+  print_type(specific_type);
   compilation_ctx.env =
       create_env_for_generic_fn(env, generic_type, specific_type);
+
+  printf("compile spcific\n");
+  print_ast(&fn_ast);
+  print_type_env(compilation_ctx.env);
 
   while (specific_type->kind == T_FN) {
     Type *f = specific_type->data.T_FN.from;

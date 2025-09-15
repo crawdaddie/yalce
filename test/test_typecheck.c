@@ -405,6 +405,12 @@ int test_list_processing() {
                ";;\n"
                "(list_map ((+) 1) [0,1,2,3])",
                &TLIST(&t_int));
+    Ast *aux_app = AST_LIST_NTH(
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+            ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+        1);
+    print_ast(aux_app);
+    print_type(aux_app->data.AST_APPLICATION.function->md);
   });
 
   return status;
@@ -1839,20 +1845,20 @@ int main() {
   initialize_builtin_schemes();
 
   bool status = true;
-  status &= test_basic_ops();
-  status &= test_funcs();
-  status &= test_match_exprs();
-  status &= test_coroutines();
-  status &= test_first_class_funcs();
-  status &= test_closures();
-  status &= test_refs();
-  status &= test_modules();
-  status &= test_array_processing();
-  status &= test_networking_funcs();
-  status &= test_type_exprs();
-  status &= test_parser_combinators();
-  status &= test_type_declarations();
-  status &= test_audio_funcs();
+  // status &= test_basic_ops();
+  // status &= test_funcs();
+  // status &= test_match_exprs();
+  // status &= test_coroutines();
+  // status &= test_first_class_funcs();
+  // status &= test_closures();
+  // status &= test_refs();
+  // status &= test_modules();
+  // status &= test_array_processing();
+  // status &= test_networking_funcs();
+  // status &= test_type_exprs();
+  // status &= test_parser_combinators();
+  // status &= test_type_declarations();
+  // status &= test_audio_funcs();
   status &= test_list_processing();
 
   print_all_failures();

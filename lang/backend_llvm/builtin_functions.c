@@ -1167,6 +1167,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("==", &eq_scheme, EqAppHandler);
   GENERIC_FN_SYMBOL("!=", &eq_scheme, NeqHandler);
   GENERIC_FN_SYMBOL("Some", &opt_scheme, SomeConsHandler);
+  GENERIC_FN_SYMBOL("::", &list_prepend_scheme, ListPrependHandler);
   return NULL;
 }
 
