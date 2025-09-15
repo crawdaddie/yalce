@@ -555,6 +555,14 @@ LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
   return phi;
 }
 
+LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
+                     JITLangCtx *ctx, LLVMModuleRef module,
+                     LLVMBuilderRef builder) {
+  printf("list eq\n not impl\n");
+
+  return LLVMConstInt(LLVMInt1Type(), 0, 0);
+}
+
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
@@ -579,8 +587,13 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
         (strcmp(type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
       return option_eq(type, l, r, ctx, module, builder);
     }
+
     if (is_option_type(type)) {
       return option_eq(type, l, r, ctx, module, builder);
+    }
+    if (is_list_type(type)) {
+
+      return list_eq(type, l, r, ctx, module, builder);
     }
 
     return cons_equality(type, l, r, ctx, module, builder);

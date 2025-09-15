@@ -450,14 +450,8 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   // subst = solve_constraints(constraints);
   // env = create_env_from_subst(env, subst);
 
-  print_type(generic_type);
-  print_type(specific_type);
   compilation_ctx.env =
       create_env_for_generic_fn(env, generic_type, specific_type);
-
-  printf("compile spcific\n");
-  print_ast(&fn_ast);
-  print_type_env(compilation_ctx.env);
 
   while (specific_type->kind == T_FN) {
     Type *f = specific_type->data.T_FN.from;
