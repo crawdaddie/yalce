@@ -24,8 +24,10 @@ LLVMValueRef match_list_prepend(Ast *binding, LLVMValueRef list,
   Ast *tail_expr = binding->data.AST_APPLICATION.args + 1;
 
   Type *list_el_type = list_type->data.T_CONS.args[0];
+
   if (is_generic(list_el_type)) {
-    list_el_type = resolve_type_in_env(list_el_type, ctx->env);
+    list_el_type = deep_copy_type(list_el_type);
+    list_el_type = resolve_type_in_env_mut(list_el_type, ctx->env);
   }
 
   LLVMTypeRef llvm_list_el_type =
@@ -262,6 +264,9 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     LLVMValueRef test_val =
         codegen_pattern_binding(binding->data.AST_MATCH_GUARD_CLAUSE.test_expr,
                                 val, val_type, ctx, module, builder);
+
+    // print_ast(binding->data.AST_MATCH_GUARD_CLAUSE.guard_expr);
+    // print_type(binding->data.AST_MATCH_GUARD_CLAUSE.guard_expr->md);
 
     LLVMValueRef guard_val = codegen(
         binding->data.AST_MATCH_GUARD_CLAUSE.guard_expr, ctx, module, builder);

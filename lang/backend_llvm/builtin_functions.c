@@ -5,6 +5,8 @@
 #include "backend_llvm/common.h"
 #include "backend_llvm/coroutine_extensions.h"
 #include "backend_llvm/coroutine_scheduling.h"
+#include "common.h"
+#include "coroutines.h"
 #include "function.h"
 #include "input.h"
 #include "list.h"
@@ -555,10 +557,111 @@ LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
   return phi;
 }
 
+#define MUT_VAL(_llvm_type, _val)                                              \
+  ({                                                                           \
+    LLVMValueRef mut_val =                                                     \
+        LLVMBuildAlloca(builder, _llvm_type, "mut_val_alloca");                \
+    LLVMBuildStore(builder, _val, mut_val);                                    \
+    mut_val;                                                                   \
+  })
 LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
                      JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
-  return _FALSE;
+  Type *el_type = type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
+  LLVMTypeRef llvm_list_node_type = llnode_type(llvm_el_type);
+
+  LLVMValueRef current_function =
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+
+  LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef cond_block =
+      LLVMAppendBasicBlock(current_function, "loop.cond");
+  LLVMBasicBlockRef body_block =
+      LLVMAppendBasicBlock(current_function, "loop.body");
+  LLVMBasicBlockRef inc_block =
+      LLVMAppendBasicBlock(current_function, "loop.inc");
+  LLVMBasicBlockRef after_block =
+      LLVMAppendBasicBlock(current_function, "loop.after");
+
+  LLVMValueRef is_eq_alloca =
+      MUT_VAL(LLVMInt1Type(), LLVMConstInt(LLVMInt1Type(), 1, 0));
+
+  LLVMValueRef l_iterator = MUT_VAL(LLVMPointerType(llvm_list_node_type, 0), l);
+  LLVMValueRef r_iterator = MUT_VAL(LLVMPointerType(llvm_list_node_type, 0), r);
+
+  LLVMBuildBr(builder, cond_block);
+
+  LLVMPositionBuilderAtEnd(builder, cond_block);
+
+  LLVMValueRef l_current =
+      LLVMBuildLoad2(builder, LLVMPointerType(llvm_list_node_type, 0),
+                     l_iterator, "l_current");
+  LLVMValueRef r_current =
+      LLVMBuildLoad2(builder, LLVMPointerType(llvm_list_node_type, 0),
+                     r_iterator, "r_current");
+
+  LLVMValueRef l_is_null = ll_is_null(l_current, llvm_el_type, builder);
+  LLVMValueRef r_is_null = ll_is_null(r_current, llvm_el_type, builder);
+
+  LLVMValueRef both_null =
+      LLVMBuildAnd(builder, l_is_null, r_is_null, "both_null");
+
+  LLVMBuildCondBr(builder, both_null, after_block, body_block);
+
+  LLVMPositionBuilderAtEnd(builder, body_block);
+
+  LLVMValueRef one_null =
+      LLVMBuildXor(builder, l_is_null, r_is_null, "one_null");
+
+  LLVMBasicBlockRef compare_elements_block =
+      LLVMAppendBasicBlock(current_function, "compare_elements");
+  LLVMBasicBlockRef set_false_block =
+      LLVMAppendBasicBlock(current_function, "set_false");
+
+  LLVMBuildCondBr(builder, one_null, set_false_block, compare_elements_block);
+
+  LLVMPositionBuilderAtEnd(builder, set_false_block);
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_eq_alloca);
+  LLVMBuildBr(builder, after_block);
+
+  LLVMPositionBuilderAtEnd(builder, compare_elements_block);
+
+  LLVMValueRef l_data_ptr = LLVMBuildStructGEP2(builder, llvm_list_node_type,
+                                                l_current, 0, "l_data_ptr");
+
+  LLVMValueRef r_data_ptr = LLVMBuildStructGEP2(builder, llvm_list_node_type,
+                                                r_current, 0, "r_data_ptr");
+
+  LLVMValueRef l_data = ll_get_head_val(l_current, llvm_el_type, builder);
+  LLVMValueRef r_data = ll_get_head_val(r_current, llvm_el_type, builder);
+  // INSERT_PRINTF(2, "compare %d %d\n", l_data, r_data);
+
+  LLVMValueRef elements_equal =
+      _codegen_equality(el_type, l_data, r_data, ctx, module, builder);
+
+  LLVMValueRef current_eq =
+      LLVMBuildLoad2(builder, LLVMInt1Type(), is_eq_alloca, "current_eq");
+  LLVMValueRef new_eq =
+      LLVMBuildAnd(builder, current_eq, elements_equal, "new_eq");
+  LLVMBuildStore(builder, new_eq, is_eq_alloca);
+
+  LLVMBuildCondBr(builder, elements_equal, inc_block, after_block);
+
+  LLVMPositionBuilderAtEnd(builder, inc_block);
+
+  LLVMValueRef l_next = ll_get_next(l_current, llvm_el_type, builder);
+
+  LLVMValueRef r_next = ll_get_next(r_current, llvm_el_type, builder);
+
+  LLVMBuildStore(builder, l_next, l_iterator);
+  LLVMBuildStore(builder, r_next, r_iterator);
+
+  LLVMBuildBr(builder, cond_block);
+
+  LLVMPositionBuilderAtEnd(builder, after_block);
+
+  return LLVMBuildLoad2(builder, LLVMInt1Type(), is_eq_alloca, "list_els_eq");
 }
 
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
@@ -589,8 +692,8 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
     if (is_option_type(type)) {
       return option_eq(type, l, r, ctx, module, builder);
     }
-    if (is_list_type(type)) {
 
+    if (is_list_type(type)) {
       return list_eq(type, l, r, ctx, module, builder);
     }
 
@@ -603,9 +706,12 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
 
 LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
+  printf("eq handler\n");
+  print_ast(ast);
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
   Type *lt = fn_type->data.T_FN.from;
+  print_type(fn_type);
 
   lt = resolve_type_in_env_mut(lt, ctx->env);
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -1179,6 +1285,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("!=", &eq_scheme, NeqHandler);
   GENERIC_FN_SYMBOL("Some", &opt_scheme, SomeConsHandler);
   GENERIC_FN_SYMBOL("::", &list_prepend_scheme, ListPrependHandler);
+  GENERIC_FN_SYMBOL("list_concat", &list_concat_scheme, ListConcatHandler);
   return NULL;
 }
 
@@ -1271,7 +1378,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   // GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
 
-  GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);
   GENERIC_FN_SYMBOL("::", &t_list_prepend, ListPrependHandler);
   GENERIC_FN_SYMBOL("list_tail", &t_list_tail_sig, ListTailHandler);
   GENERIC_FN_SYMBOL("list_ref_set", &t_list_ref_set_sig, ListRefSetHandler);

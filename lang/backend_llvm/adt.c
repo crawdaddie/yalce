@@ -135,6 +135,11 @@ LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type) {
 
 LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
                              LLVMModuleRef module) {
+  if (is_generic(type)) {
+    type = deep_copy_type(type);
+    type = resolve_type_in_env_mut(type, ctx->env);
+  }
+
   if (type->alias != NULL && strcmp(type->alias, "Option") == 0) {
     Type *_underlying = type_of_option(type);
     if (is_generic(_underlying)) {

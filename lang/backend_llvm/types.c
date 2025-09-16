@@ -29,7 +29,7 @@ Type *resolve_type_in_env_mut(Type *mut_t, TypeEnv *env) {
     Scheme *sch = lookup_scheme(env, mut_t->data.T_VAR);
     if (!sch) {
       fprintf(stderr, "%s not found in env\n", mut_t->data.T_VAR);
-      return NULL;
+      return mut_t;
     }
     Type *l = lookup_scheme(env, mut_t->data.T_VAR)->type;
     return l;
@@ -226,9 +226,11 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
         // print_type(type);
         JITSymbol *sym =
             find_in_ctx(member_type_name, strlen(member_type_name), ctx);
+
         if (sym && sym->type == STYPE_VARIANT_TYPE) {
           return sym->llvm_type;
         }
+
         return codegen_adt_type(type, ctx, module);
       }
     }

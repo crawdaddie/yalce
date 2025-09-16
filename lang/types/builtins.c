@@ -649,7 +649,8 @@ void initialize_builtin_schemes() {
   // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
   // &t_list_var);
   //
-  add_builtin_scheme("list_concat", create_list_concat_scheme());
+  list_concat_scheme = *create_list_concat_scheme();
+  add_builtin_scheme("list_concat", &list_concat_scheme);
   add_builtin_scheme("cor_map", create_cor_map_scheme());
 
   iter_of_list_scheme = create_iter_of_list_scheme();

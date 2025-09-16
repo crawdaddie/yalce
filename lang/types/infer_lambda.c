@@ -207,12 +207,29 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   case AST_MATCH: {
     apply_substitution_to_lambda_body(ast->data.AST_MATCH.expr, subst);
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+
       apply_substitution_to_lambda_body(ast->data.AST_MATCH.branches + 2 * i,
                                         subst);
-
       apply_substitution_to_lambda_body(
           ast->data.AST_MATCH.branches + 2 * i + 1, subst);
     }
+    break;
+  }
+
+  case AST_MATCH_GUARD_CLAUSE: {
+    // print_ast(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr);
+    // print_type(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr->data.AST_APPLICATION
+    //                .function->md);
+    // print_subst(subst);
+
+    apply_substitution_to_lambda_body(
+        ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, subst);
+
+    // print_type(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr->data.AST_APPLICATION
+    //                .function->md);
+    //
+    apply_substitution_to_lambda_body(
+        ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, subst);
     break;
   }
 

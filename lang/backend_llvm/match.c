@@ -47,23 +47,20 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   Type *test_val_type = ast->data.AST_MATCH.expr->md;
-  Type *_res_type = ast->md;
+  Type *_res_type = deep_copy_type(ast->md);
+  _res_type = resolve_type_in_env_mut(_res_type, ctx->env);
 
   LLVMTypeRef res_type = type_to_llvm_type(_res_type, ctx, module);
 
   int len = ast->data.AST_MATCH.len;
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
 
-  // Track which branches actually need to merge
   bool branch_returns[len];
   bool any_branch_merges = false;
 
-  // Pre-analyze branches to see if we need an end block at all
   for (int i = 0; i < len; i++) {
     Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
 
-    // Check if this branch will definitely return (tail call or nested match
-    // that returns)
     if (is_return && (is_tail_call_expression(result_expr) ||
                       (branch_is_match(result_expr) &&
                        will_all_branches_return(result_expr)))) {
@@ -73,7 +70,6 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
   }
 
-  // Only create end block and phi if some branches actually merge
   LLVMBasicBlockRef end_block = NULL;
   LLVMValueRef phi = NULL;
 
@@ -87,12 +83,10 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBasicBlockRef next_block = NULL;
 
-  // Compile each branch
   for (int i = 0; i < len; i++) {
     Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
     Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
 
-    // Create a basic block for this branch
     LLVMBasicBlockRef branch_block = LLVMAppendBasicBlock(
         LLVMGetBasicBlockParent(current_block), "match.branch");
 
@@ -105,6 +99,9 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
     JITLangCtx branch_ctx = fn_ctx;
+    printf("match pattern %d\n", i);
+    print_ast(test_expr);
+    print_type(test_expr->md);
 
     LLVMValueRef test_value = codegen_pattern_binding(
         test_expr, test_val, test_val_type, &branch_ctx, module, builder);
@@ -112,18 +109,15 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     if (i == len - 1) {
       LLVMBuildBr(builder, branch_block);
     } else {
-      // Conditional branch - if no end block exists, last branch goes nowhere
       LLVMBasicBlockRef false_target =
           next_block ? next_block : (any_branch_merges ? end_block : NULL);
       if (false_target) {
         LLVMBuildCondBr(builder, test_value, branch_block, false_target);
       } else {
-        // All remaining branches return, so this is effectively an if-then
         LLVMBuildCondBr(builder, test_value, branch_block, branch_block);
       }
     }
 
-    // Compile the result expression in the branch block
     LLVMPositionBuilderAtEnd(builder, branch_block);
 
     if (is_return) {
@@ -139,29 +133,23 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return NULL;
     }
 
-    // Handle the result based on whether this branch returns or merges
     if (branch_returns[i]) {
-      // This branch should return directly
       if (is_tail_call_expression(result_expr)) {
         LLVMSetTailCall(branch_result, 1);
       }
       LLVMBuildRet(builder, branch_result);
-      // Don't add to phi - this branch doesn't reach the end block
     } else {
-      // This branch merges with others
       if (((Type *)ast->md)->kind == T_VOID) {
         branch_result = LLVMGetUndef(LLVMVoidType());
       }
 
       if (end_block) {
         LLVMBuildBr(builder, end_block);
-        // Only add incoming if we actually branch to end_block
         LLVMBasicBlockRef current_branch_block = LLVMGetInsertBlock(builder);
         LLVMAddIncoming(phi, &branch_result, &current_branch_block, 1);
       }
     }
 
-    // Continue with the next comparison if there is one
     if (next_block) {
       LLVMPositionBuilderAtEnd(builder, next_block);
     }
@@ -169,19 +157,16 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     destroy_ctx(&branch_ctx);
   }
 
-  // Position the builder at the end block and return the result
   if (end_block) {
     LLVMPositionBuilderAtEnd(builder, end_block);
     return phi;
   } else {
-    // All branches returned, this point is unreachable
     // Create a dummy return to satisfy LLVM
     LLVMBuildUnreachable(builder);
     return LLVMGetUndef(res_type);
   }
 }
 
-// Helper function to check if an expression is a direct tail call
 bool is_tail_call_expression(Ast *expr) {
   if (expr->tag == AST_BODY) {
     int n = expr->data.AST_BODY.len;
@@ -192,7 +177,6 @@ bool is_tail_call_expression(Ast *expr) {
   return expr->tag == AST_APPLICATION;
 }
 
-// Helper function to check if all branches of a nested match will return
 bool will_all_branches_return(Ast *match_expr) {
   if (!branch_is_match(match_expr)) {
     return is_tail_call_expression(match_expr);

@@ -1,10 +1,21 @@
+let list_rev = fn l ->
+
+  let aux = fn ll res ->
+    match ll with
+    | [] -> res
+    | x :: rest -> aux rest (x :: res)
+  ;;
+
+  aux l []
+;;
+
 let list_map = fn f l ->
   let aux = fn f l res -> 
     match l with
     | [] -> res
     | x :: rest -> aux f rest (f x :: res) 
   ;;
-  aux f l []
+  aux f l [] |> list_rev
 ;;
 
 
@@ -17,5 +28,5 @@ let list_map = fn f l ->
 
 
 let test = module () ->
-  let test_map_plus = (list_map ((+) 1) [0,1,2,3]) == [1,2,3,4];
+  let test_map_plus = (list_map ((+) 1) [0,1,2,3]) == [4, 3, 2, 1];
 ;

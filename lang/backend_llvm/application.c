@@ -184,13 +184,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
-  // special application types:
-  // x[n] ??
-  if (is_index_access_ast(ast, ast->data.AST_APPLICATION.args->md,
-                          ast->data.AST_APPLICATION.function->md)) {
-    return IndexAccessHandler(ast, ctx, module, builder);
-  }
-
   // x.mem a ??
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(

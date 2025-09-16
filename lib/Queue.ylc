@@ -3,21 +3,18 @@ let of_list = fn l ->
   let h = t in
   (h, t)
 ;;
-
 let append = fn n (h, t) ->
-  match list_empty h with
-  | true -> of_list [n]
+  match h with
+  | [] -> of_list [n,]
   | _ -> (
-    let nt = [n] in
+    let nt = [n,] in
     let tt = list_concat t nt in
     (h, tt)
   )
 ;;
-
 let prepend = fn n (h, t) ->
   (n::h, t)
 ;;
-
 let pop_left = fn (h, t) ->
   match h with
   | x::rest -> Some (x, (rest, t))  
@@ -28,18 +25,49 @@ let pop_left = fn (h, t) ->
 let test = module () ->
   let test_int_queue = fn () -> 
 
-    let q = of_list [1]
+    let q = of_list [1,]
       |> append 2 
       |> append 3 
       |> append 4;  
 
-    # let res = match pop_left q with
-    #   | Some (h, q) if h == 1 -> true  
-    #   | _ -> false
-    #
-    # res
-    true
+    let res = match pop_left q with
+      | Some (h, _) if h == 1 -> true  
+      | _ -> false
+    ;
+    res
 
   ;;
 
 ;
+
+let of_list = fn l ->
+  let t = l in 
+  let h = t in
+  (h, t)
+;;
+let append = fn n (h, t) ->
+  match h with
+  | [] -> of_list [n,]
+  | _ -> (
+    let nt = [n,] in
+    let tt = list_concat t nt in
+    (h, tt)
+  )
+;;
+let prepend = fn n (h, t) ->
+  (n::h, t)
+;;
+let pop_left = fn (h, t) ->
+  match h with
+  | x::rest -> Some (x, (rest, t))  
+  | [] -> None
+;;
+let q = of_list [1,]
+  |> append 2 
+  |> append 3 
+  |> append 4;  
+let res = match pop_left q with
+  | Some (h, _) if h == 1 -> true  
+  | _ -> false
+;
+

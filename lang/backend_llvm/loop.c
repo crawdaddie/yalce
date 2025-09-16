@@ -190,9 +190,9 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
                                     JITLangCtx *ctx, LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
+  const char *loop_var_name = binding->data.AST_IDENTIFIER.value;
   LLVMValueRef current_function =
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
-  const char *loop_var_name = binding->data.AST_IDENTIFIER.value;
 
   LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
   LLVMBasicBlockRef cond_block =
