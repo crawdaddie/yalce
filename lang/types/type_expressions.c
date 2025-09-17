@@ -142,7 +142,6 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
       if (mem_ast->tag == AST_LET) {
         names[i] = mem_ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
         mem_ast = mem_ast->data.AST_LET.expr;
-        print_ast(mem_ast);
       }
 
       Type *mem = compute_type_expression(mem_ast, ctx);

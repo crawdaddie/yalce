@@ -3,6 +3,8 @@
 #include "types/infer_binding.h"
 #include "types/unification.h"
 
+void apply_substitution_to_lambda_body(Ast *ast, Subst *subst);
+
 Type *infer_match_expression(Ast *ast, TICtx *ctx) {
 
   Type *scrutinee_type = infer(ast->data.AST_MATCH.expr, ctx);
@@ -12,6 +14,8 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
   int num_cases = ast->data.AST_MATCH.len;
 
   TypeEnv *branch_envs[num_cases];
+  Type *pattern_types[num_cases];
+
   for (int i = 0; i < num_cases; i++) {
     Ast *pattern_ast = ast->data.AST_MATCH.branches + i * 2;
 
@@ -27,6 +31,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
         bind_pattern_recursive(pattern_ast, scrutinee_type, (binding_md){}, &c);
 
     pattern_ast->md = pattern_type;
+    pattern_types[i] = pattern_type;
 
     branch_envs[i] = c.env;
 
@@ -67,6 +72,11 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
       return type_error(ctx, body_ast, "Case %d returns incompatible type",
                         i + 1);
     }
+
+    if (i > 0) {
+      unify(pattern_types[i], pattern_types[i - 1], &body_ctx);
+    }
+
     ctx->constraints = body_ctx.constraints;
   }
 
@@ -77,6 +87,23 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
   ast->data.AST_MATCH.expr->md = final_scrutinee;
 
   Type *final_result = apply_substitution(ctx->subst, result_type);
+  for (int i = 0; i < num_cases; i++) {
+    Ast *pattern_ast = ast->data.AST_MATCH.branches + i * 2;
+
+    Ast *guard = NULL;
+    if (pattern_ast->tag == AST_MATCH_GUARD_CLAUSE) {
+      guard = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+      apply_substitution_to_lambda_body(guard, ctx->subst);
+      pattern_ast = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+      apply_substitution_to_lambda_body(pattern_ast, ctx->subst);
+
+    } else {
+      apply_substitution_to_lambda_body(pattern_ast, ctx->subst);
+    }
+  }
+
+  // print_ast(ast);
+  // print_subst(ctx->subst);
 
   return final_result;
 }

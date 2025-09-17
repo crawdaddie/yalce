@@ -2,6 +2,7 @@
 #include "../lang/serde.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
+#include "../lang/types/unification.h"
 #include <string.h>
 
 #define MAX_FAILURES 1000
@@ -65,6 +66,7 @@ static void print_all_failures() {
     Ast *ast = parse_input(input, NULL);                                       \
     TICtx ctx = {};                                                            \
     stat &= (infer(ast, &ctx) != NULL);                                        \
+    stat &= (subst_top_level(ast, &ctx) != NULL);                                        \
     stat &= (types_equal(ast->md, type));                                      \
     char buf[200] = {};                                                        \
     if (stat) {                                                                \
@@ -409,8 +411,8 @@ int test_list_processing() {
         AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts,
         1);
-    print_ast(aux_app);
-    print_type(aux_app->data.AST_APPLICATION.function->md);
+    // print_ast(aux_app);
+    // print_type(aux_app->data.AST_APPLICATION.function->md);
   });
 
   T("let list_rev = fn l ->\n"
@@ -492,14 +494,14 @@ int test_list_processing() {
       "  | _ -> false\n"
       ";\n", &t_bool);
 
-    Ast *pop_left = AST_LIST_NTH(b->data.AST_BODY.stmts, 3);
-    print_type(pop_left->md);
+    // Ast *pop_left = AST_LIST_NTH(b->data.AST_BODY.stmts, 3);
+    // print_type(pop_left->md);
     Ast *res_bind = AST_LIST_NTH(b->data.AST_BODY.stmts, 5)->data.AST_LET.expr->data.AST_MATCH.branches[0].data.AST_MATCH_GUARD_CLAUSE.test_expr;
-    print_ast(res_bind);
-    print_type(res_bind->md);
+    TASSERT("match branch of pop_left q has type Option of (Int * (Int[] * Int[] ) )", types_equal(
+res_bind->md,
+      &TOPT(&TTUPLE(2, &t_int, &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))))
+    ));
 
-    // print_ast(res);
-    // print_type(res->md);
   });
 
 

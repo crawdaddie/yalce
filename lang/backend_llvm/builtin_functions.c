@@ -706,12 +706,9 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
 
 LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
-  printf("eq handler\n");
-  print_ast(ast);
 
   Type *fn_type = ast->data.AST_APPLICATION.function->md;
   Type *lt = fn_type->data.T_FN.from;
-  print_type(fn_type);
 
   lt = resolve_type_in_env_mut(lt, ctx->env);
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;

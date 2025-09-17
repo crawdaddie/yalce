@@ -99,9 +99,6 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
     JITLangCtx branch_ctx = fn_ctx;
-    printf("match pattern %d\n", i);
-    print_ast(test_expr);
-    print_type(test_expr->md);
 
     LLVMValueRef test_value = codegen_pattern_binding(
         test_expr, test_val, test_val_type, &branch_ctx, module, builder);

@@ -126,4 +126,6 @@ VarList *varlist_add(VarList *vars, const char *v);
 
 Type *env_lookup(TypeEnv *env, const char *name);
 
+Type *subst_top_level(Ast *ast, TICtx *ctx);
+
 #endif

@@ -985,3 +985,13 @@ Type *infer(Ast *ast, TICtx *ctx) {
   // Pure constraint collection unification - NO SOLVING
   return type;
 }
+
+Type *subst_top_level(Ast *ast, TICtx *ctx) {
+
+  // printf("make top-level substitutions\n");
+  // print_ast(ast);
+  // Subst *sol = solve_constraints(ctx->constraints);
+  // print_subst(sol);
+
+  return ast->md;
+}
