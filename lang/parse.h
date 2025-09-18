@@ -162,7 +162,6 @@ typedef enum ast_tag {
   AST_ARRAY,
   AST_MATCH,
   AST_PLACEHOLDER_ID,
-  AST_META,
   AST_IMPORT,
   AST_RECORD_ACCESS,
   AST_FMT_STRING,
@@ -225,12 +224,6 @@ struct Ast {
       bool is_recursive_fn_ref;
       bool is_fn_param;
     } AST_IDENTIFIER;
-
-    struct AST_META {
-      char *value;
-      size_t length;
-      Ast *next;
-    } AST_META;
 
     struct AST_BOOL {
       bool value;

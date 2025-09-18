@@ -167,6 +167,7 @@ static void print_all_failures() {
     res;                                                                       \
   })
 
+
 int test_type_declarations() {
   printf("TEST TYPE DECLARATIONS\n---------------------------------\n");
   bool status = true;
@@ -649,7 +650,6 @@ int test_funcs() {
       "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
       ";;\n",
       &MAKE_FN_TYPE_2(&t_int, &t_int));
-
     T("let f = fn x: (Int) (y, z): (Int, Double) -> x + y + z;;",
       &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
     ({
@@ -805,26 +805,6 @@ int test_funcs() {
       }
       status &= res;
     });
-    ({
-      Ast *b = T("let fib = fn x ->\n"
-                 "  match x with\n"
-                 "  | 0 -> 0\n"
-                 "  | 1 -> 1\n"
-                 "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
-                 ";;",
-
-                 &MAKE_FN_TYPE_2(&t_int, &t_int));
-
-      Ast final_branch = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
-                             ->data.AST_LET.expr->data.AST_LAMBDA.body->data
-                             .AST_MATCH.branches[5];
-
-      TASSERT_EQ(final_branch.data.AST_APPLICATION.args[0]
-                     .data.AST_APPLICATION.args[0]
-                     .md,
-                 &t_int,
-                 "references in sub-nodes properly typed :: (x - 1) == Int");
-    });
     /*
       ({
         Type s = arithmetic_var("`4");
@@ -961,6 +941,52 @@ int test_funcs() {
       T("let f = fn cb -> cb 1 2;;",
         &MAKE_FN_TYPE_2(&MAKE_FN_TYPE_3(&t_int, &t_int, &t), &t));
     });
+
+    ({
+      Ast *b = T("let fib = fn x ->\n"
+                 "  match x with\n"
+                 "  | 0 -> 0\n"
+                 "  | 1 -> 1\n"
+                 "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+                 ";;",
+
+                 &MAKE_FN_TYPE_2(&t_int, &t_int));
+
+      Ast final_branch = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                             ->data.AST_LET.expr->data.AST_LAMBDA.body->data
+                             .AST_MATCH.branches[5];
+
+      TASSERT_EQ(final_branch.data.AST_APPLICATION.args[0]
+                     .data.AST_APPLICATION.args[0]
+                     .md,
+                 &t_int,
+                 "references in sub-nodes properly typed :: (x - 1) == Int");
+
+      // TASSERT(
+      //            "references in sub-nodes properly typed :: fib == Int -> Int",
+      // types_equal(
+      // final_branch.data.AST_APPLICATION.function
+      //                ->md,
+      //            &MAKE_FN_TYPE_2(&t_int,&t_int))
+      //         );
+    });
+
+  ({
+
+    Ast *b = T("let fib = fn x ->\n"
+      "  match x with\n"
+      "  | 0 -> 0\n"
+      "  | 1 -> 1\n"
+      "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+      ";;\n",
+      &MAKE_FN_TYPE_2(&t_int, &t_int));
+    Ast *fb = &AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.branches[5];
+    print_ast(fb);
+    print_type(fb->md);
+    print_type(fb->data.AST_APPLICATION.function->md);
+    TASSERT("references in sub-nodes properly typed :: fib (x-1) + fib (x-2) == Int -> Int -> Int", types_equal(fb->data.AST_APPLICATION.function->md, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
+  });
+
     return status;
 }
 int test_match_exprs() {
@@ -1946,7 +1972,6 @@ int main() {
 
     bool status = true;
     status &= test_basic_ops();
-    status &= test_funcs();
     status &= test_match_exprs();
     status &= test_coroutines();
     status &= test_first_class_funcs();
@@ -1960,6 +1985,7 @@ int main() {
     status &= test_type_declarations();
     status &= test_audio_funcs();
     status &= test_list_processing();
+    status &= test_funcs();
 
     print_all_failures();
     return status == true ? 0 : 1;

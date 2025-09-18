@@ -423,14 +423,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, ")");
     break;
   }
-  case AST_META: {
-    buffer = strcat(buffer, "(");
-    buffer = strcat(buffer, ast->data.AST_META.value);
-    buffer = strcat(buffer, " ");
-    buffer = ast_to_sexpr(ast->data.AST_META.next, buffer);
-    buffer = strcat(buffer, ")");
-    break;
-  }
 
   case AST_MATCH_GUARD_CLAUSE: {
     buffer = ast_to_sexpr(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, buffer);

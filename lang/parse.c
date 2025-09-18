@@ -703,13 +703,6 @@ Ast *ast_tuple(Ast *list) {
   }
   return NULL;
 }
-Ast *ast_meta(ObjString meta_id, Ast *next) {
-  Ast *meta = Ast_new(AST_META);
-  meta->data.AST_META.value = meta_id.chars;
-  meta->data.AST_META.length = meta_id.length;
-  meta->data.AST_META.next = next;
-  return meta;
-}
 
 Ast *ast_extern_fn(ObjString name, Ast *signature) {
 

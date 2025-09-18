@@ -183,6 +183,7 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   case AST_APPLICATION: {
     apply_substitution_to_lambda_body(ast->data.AST_APPLICATION.function,
                                       subst);
+
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       apply_substitution_to_lambda_body(ast->data.AST_APPLICATION.args + i,
                                         subst);
@@ -219,28 +220,28 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
     break;
   }
 
-  // case AST_MATCH_GUARD_CLAUSE: {
-  //   // printf("apply subs recursively\n");
-  //   // print_subst(subst);
-  //   // print_ast(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr);
-  //   //
-  //   print_type(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr->data.AST_APPLICATION
-  //   //                .function->md);
-  //   // print_subst(subst);
-  //
-  //   apply_substitution_to_lambda_body(
-  //       ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, subst);
-  //
-  //   //
-  //   print_type(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr->data.AST_APPLICATION
-  //   //                .function->md);
-  //   //
-  //   printf("match test expr\n");
-  //   print_type(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr->md);
-  //   apply_substitution_to_lambda_body(
-  //       ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, subst);
-  //   break;
-  // }
+  case AST_MATCH_GUARD_CLAUSE: {
+    // printf("apply subs recursively\n");
+    // print_subst(subst);
+    // print_ast(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr);
+    //
+    // print_type(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr->data.AST_APPLICATION
+    //                .function->md);
+    // print_subst(subst);
+
+    apply_substitution_to_lambda_body(
+        ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, subst);
+
+    apply_substitution_to_lambda_body(
+        ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, subst);
+    //
+    // print_type(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr->data.AST_APPLICATION
+    //                .function->md);
+    //
+    // printf("match test expr\n");
+    // print_type(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr->md);
+    break;
+  }
   //
   case AST_EXTERN_FN: {
     break;
@@ -320,7 +321,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     return type_error(ctx, body, "Cannot infer lambda body type");
   }
 
-  Subst *ls = solve_constraints(lctx.constraints);
+  Subst *ls = compose_subst(lctx.subst, solve_constraints(lctx.constraints));
 
   for (int i = 0; i < num_params; i++) {
     param_types[i] = apply_substitution(ls, param_types[i]);

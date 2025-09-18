@@ -133,14 +133,15 @@ Type *infer_app(Ast *ast, TICtx *ctx) {
   // print_constraints(unify_ctx.constraints);
   ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
 
+  // printf("app constraints\n");
+  // print_ast(ast);
+  // print_constraints(unify_ctx.constraints);
+
   // Step 5: Solve constraints and apply substitutions
   Subst *solution = solve_constraints(unify_ctx.constraints);
 
   ctx->subst = compose_subst(solution, ctx->subst);
   expected_type = apply_substitution(solution, expected_type);
-  // print_type(expected_type);
-  // print_subst(solution);
-
   ast->data.AST_APPLICATION.function->md = expected_type;
 
   Type *res = expected_type;

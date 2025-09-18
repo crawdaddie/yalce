@@ -211,7 +211,7 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_list_node_type = llnode_type(
       type_to_llvm_type(list_type->data.T_CONS.args[0], ctx, module));
   if (!llvm_list_node_type) {
-    print_ast(ast);
+    // print_ast(ast);
     return NULL;
   }
 

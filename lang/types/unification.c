@@ -34,12 +34,17 @@ bool occurs_check(const char *var, Type *ty) {
 }
 // Add a constraint to the result
 void add_constraint(TICtx *result, Type *var, Type *type) {
+
   for (Constraint *c = result->constraints; c; c = c->next) {
     if (types_equal(c->var, var) && types_equal(c->type, type)) {
+
       return;
     }
   }
 
+  // printf("adding constraint???\n");
+  // print_type(var);
+  // print_type(type);
   Constraint *constraint = talloc(sizeof(Constraint));
   *constraint =
       (Constraint){.var = var, .type = type, .next = result->constraints};
@@ -127,13 +132,24 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   // if (t2->kind == T_EMPTY_ARRAY) {
   //   return 0;
   // }
+  //
+  // if (t1->kind == T_VAR && t2->kind == T_TYPECLASS_RESOLVE) {
+  //   print_constraints(unify_res->constraints);
+  //   printf("???");
+  //   print_type(t1);
+  //   print_type(t2);
+  //   for (int i = 0; i < t2->data.T_CONS.num_args; i++) {
+  //     print_type(t2->data.T_CONS.args[i]);
+  //     printf(" :: ");
+  //     print_type(t1);
+  //   }
+  // }
 
   if (t1->kind == T_VAR) {
-
-    if (t1->is_recursive_type_ref) {
-      // return unify(t2, t1, unify_res);
-      return 0;
-    }
+    // if (t1->is_recursive_type_ref) {
+    //   // return unify(t2, t1, unify_res);
+    //   return 0;
+    // }
 
     if (occurs_check(t1->data.T_VAR, t2)) {
       return 1; // Occurs check failure
@@ -294,6 +310,7 @@ Subst *solve_constraints(Constraint *constraints) {
     constraints = constraints->next;
 
     const char *var_name = current->var->data.T_VAR;
+
     Type *new_type = apply_substitution(subst, current->type);
 
     Type *existing = find_in_subst(subst, var_name);
@@ -317,6 +334,18 @@ Subst *solve_constraints(Constraint *constraints) {
       continue;
     }
 
+    if (existing->kind == T_TYPECLASS_RESOLVE && !is_generic(new_type)) {
+      for (int i = 0; i < existing->data.T_CONS.num_args; i++) {
+        if (existing->data.T_CONS.args[i]->kind == T_VAR) {
+          print_type(existing->data.T_CONS.args[i]);
+          print_type(new_type);
+          subst = subst_extend(subst, existing->data.T_CONS.args[i]->data.T_VAR,
+                               new_type);
+        }
+      }
+      continue;
+    }
+
     Type *existing_subst = apply_substitution(subst, existing);
     if (types_equal(existing_subst, new_type)) {
       continue;
@@ -332,15 +361,19 @@ Subst *solve_constraints(Constraint *constraints) {
 
       continue;
     }
+
     // Handle merging T_TYPECLASS_RESOLVE with other constraints
     if (existing_subst->kind == T_TYPECLASS_RESOLVE) {
+
       Type *merged_resolve = merge_typeclass_resolve(existing_subst, new_type);
       subst = update_substitution(subst, var_name, merged_resolve);
       continue;
     }
 
     if (new_type->kind == T_TYPECLASS_RESOLVE) {
+
       Type *merged_resolve = merge_typeclass_resolve(new_type, existing_subst);
+
       subst = update_substitution(subst, var_name, merged_resolve);
       continue;
     }

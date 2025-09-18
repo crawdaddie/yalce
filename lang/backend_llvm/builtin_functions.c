@@ -244,8 +244,10 @@ LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
-  Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+  // print_type_env(ctx->env);
+  Type *lt = ast->data.AST_APPLICATION.args[0].md;
+  Type *rt = ast->data.AST_APPLICATION.args[1].md;
+  // fn_type->data.T_FN.to->data.T_FN.from;
 
   ARITHMETIC_BINOP("+", LLVMFAdd, LLVMAdd);
 }
@@ -261,7 +263,7 @@ LLVMValueRef MinusHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
 
   ARITHMETIC_BINOP("-", LLVMFSub, LLVMSub);
 }
@@ -277,7 +279,7 @@ LLVMValueRef MulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
 
   ARITHMETIC_BINOP("*", LLVMFMul, LLVMMul);
 }
@@ -293,7 +295,7 @@ LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
 
   ARITHMETIC_BINOP("/", LLVMFDiv, LLVMSDiv);
 }
@@ -309,7 +311,8 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
 
   ARITHMETIC_BINOP("%", LLVMFRem, LLVMSRem);
 }
@@ -356,7 +359,7 @@ LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP(">", LLVMRealOGT, LLVMIntSGT);
 }
 LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -389,7 +392,8 @@ LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP("<", LLVMRealOLT, LLVMIntSLT);
 }
 
@@ -406,7 +410,8 @@ LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
 
   ORD_BINOP("<=", LLVMRealOLE, LLVMIntSLE);
 }
@@ -1256,6 +1261,9 @@ LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
+  t_uint64.constructor = uint64_constructor;
+  t_num.constructor = double_constructor;
+  t_int.constructor = int_constructor;
 
   ht *stack = (ctx->frame->table);
 #define GENERIC_FN_SYMBOL(id, _scheme, _builtin_handler)                       \
@@ -1280,9 +1288,17 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("==", &eq_scheme, EqAppHandler);
   GENERIC_FN_SYMBOL("!=", &eq_scheme, NeqHandler);
+
+  GENERIC_FN_SYMBOL("||", &bool_or_scheme, LogicalOrHandler);
+  GENERIC_FN_SYMBOL("&&", &bool_and_scheme, LogicalAndHandler);
+
   GENERIC_FN_SYMBOL("Some", &opt_scheme, SomeConsHandler);
   GENERIC_FN_SYMBOL("::", &list_prepend_scheme, ListPrependHandler);
+
   GENERIC_FN_SYMBOL("list_concat", &list_concat_scheme, ListConcatHandler);
+  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &array_at_scheme, ArrayAtHandler);
+  GENERIC_FN_SYMBOL("array_set", &array_set_scheme, ArraySetHandler);
+  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SIZE, &array_size_scheme, ArraySizeHandler);
   return NULL;
 }
 
@@ -1316,9 +1332,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   //                             codegen_none(LLVMVoidType(), builder), NULL);
   // ht_set_hash(stack, "None", hash_string("None", 4), sym);
 
-  t_uint64.constructor = uint64_constructor;
-  t_num.constructor = double_constructor;
-  t_int.constructor = int_constructor;
 
 #define FN_SYMBOL(id, type, val)                                               \
   ({                                                                           \
@@ -1342,11 +1355,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   //                         type_to_llvm_type(&t_empty_cor, ctx, module),
   //                         module));
 
-  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at, ArrayAtHandler);
-
-  GENERIC_FN_SYMBOL("array_set", &t_array_set_fn_sig, ArraySetHandler);
-  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SIZE, &t_array_size_fn_sig,
-                    ArraySizeHandler);
 
   GENERIC_FN_SYMBOL("||", &t_builtin_or, LogicalOrHandler);
   GENERIC_FN_SYMBOL("&&", &t_builtin_and, LogicalAndHandler);

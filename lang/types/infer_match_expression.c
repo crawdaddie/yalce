@@ -55,6 +55,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
   for (int i = 0; i < num_cases; i++) {
     branch_envs[i] = apply_subst_env(subst, branch_envs[i]);
   }
+  Type *case_body_types[num_cases];
 
   for (int i = 0; i < num_cases; i++) {
     Ast *body_ast = ast->data.AST_MATCH.branches + i * 2 + 1;
@@ -62,6 +63,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     body_ctx.env = branch_envs[i];
 
     Type *case_body_type = infer(body_ast, &body_ctx);
+    case_body_types[i] = case_body_type;
 
     if (!case_body_type) {
       return type_error(ctx, body_ast, "Cannot infer body type for case %d",
@@ -74,19 +76,23 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     }
 
     if (i > 0) {
-      unify(pattern_types[i], pattern_types[i - 1], &body_ctx);
+      // unify(pattern_types[i], pattern_types[i - 1], &body_ctx);
+      // unify(case_body_types[i], case_body_types[i - 1], &body_ctx);
     }
 
     ctx->constraints = body_ctx.constraints;
   }
 
   Subst *sols = solve_constraints(ctx->constraints);
+
   ctx->subst = compose_subst(ctx->subst, sols);
 
   Type *final_scrutinee = apply_substitution(ctx->subst, scrutinee_type);
   ast->data.AST_MATCH.expr->md = final_scrutinee;
 
+  // Type *final_result = result_type;
   Type *final_result = apply_substitution(ctx->subst, result_type);
+
   for (int i = 0; i < num_cases; i++) {
     Ast *pattern_ast = ast->data.AST_MATCH.branches + i * 2;
 

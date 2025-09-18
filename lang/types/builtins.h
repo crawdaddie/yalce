@@ -36,5 +36,8 @@ extern Scheme iter_of_list_scheme;
 extern Scheme iter_of_array_scheme;
 extern Scheme id_scheme;
 extern Scheme use_or_finish_scheme;
+
+extern Scheme bool_or_scheme;
+extern Scheme bool_and_scheme;
 Scheme *lookup_builtin_scheme(const char *name);
 #endif

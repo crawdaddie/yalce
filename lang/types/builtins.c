@@ -29,6 +29,9 @@ Scheme iter_of_list_scheme;
 Scheme id_scheme;
 Scheme use_or_finish_scheme;
 
+Scheme bool_or_scheme;
+Scheme bool_and_scheme;
+
 TypeClass GenericArithmetic = {.name = TYPE_NAME_TYPECLASS_ARITHMETIC,
                                .rank = 1000.};
 
@@ -532,6 +535,23 @@ Scheme create_use_or_finish_scheme() {
   return (Scheme){.vars = vars, .type = f};
 }
 
+Scheme create_logical_binop_scheme() {
+  Scheme sch;
+  Type *f = type_fn(&t_bool, &t_bool);
+  f = type_fn(&t_bool, f);
+  sch.type = f;
+  return sch;
+}
+
+Scheme create_and_scheme() {
+  Scheme sch = create_list_of_scheme();
+  Type *l = sch.type;
+  Type *el = l->data.T_CONS.args[0];
+  Type *cor = create_coroutine_instance_type(el);
+  sch.type = type_fn(l, cor);
+  return sch;
+}
+
 void initialize_builtin_schemes() {
 
   static TypeClass tc_int[] = {{
@@ -663,6 +683,12 @@ void initialize_builtin_schemes() {
 
   use_or_finish_scheme = create_use_or_finish_scheme();
   add_builtin_scheme("use_or_finish", &use_or_finish_scheme);
+
+  bool_or_scheme = create_logical_binop_scheme();
+  add_primitive_scheme("||", bool_or_scheme.type);
+
+  bool_and_scheme = create_logical_binop_scheme();
+  add_primitive_scheme("&&", bool_and_scheme.type);
 }
 
 Scheme *lookup_builtin_scheme(const char *name) {
