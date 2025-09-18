@@ -245,10 +245,15 @@ LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
   // print_type_env(ctx->env);
-  Type *lt = ast->data.AST_APPLICATION.args[0].md;
-  Type *rt = ast->data.AST_APPLICATION.args[1].md;
+  // print_type(fn_type);
+  // Type *lt = ast->data.AST_APPLICATION.args[0].md;
+  // Type *rt = ast->data.AST_APPLICATION.args[1].md;
+  // print_type(lt);
+  // print_type(rt);
   // fn_type->data.T_FN.to->data.T_FN.from;
 
+  Type *lt = fn_type->data.T_FN.from;
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ARITHMETIC_BINOP("+", LLVMFAdd, LLVMAdd);
 }
 

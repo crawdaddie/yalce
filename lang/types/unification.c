@@ -337,8 +337,6 @@ Subst *solve_constraints(Constraint *constraints) {
     if (existing->kind == T_TYPECLASS_RESOLVE && !is_generic(new_type)) {
       for (int i = 0; i < existing->data.T_CONS.num_args; i++) {
         if (existing->data.T_CONS.args[i]->kind == T_VAR) {
-          print_type(existing->data.T_CONS.args[i]);
-          print_type(new_type);
           subst = subst_extend(subst, existing->data.T_CONS.args[i]->data.T_VAR,
                                new_type);
         }

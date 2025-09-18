@@ -1,0 +1,14 @@
+let list_rev = fn l ->
+  let aux = fn ll res ->
+    match ll with
+    | [] -> res
+    | x :: rest -> aux rest (x :: res)
+  ;;
+  aux l []
+;;
+
+
+
+let test = module () ->
+  let test_rev_list = list_rev [0,1,2,3] == [3,2,1,0];
+;
