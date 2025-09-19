@@ -19,14 +19,6 @@ let list_map = fn f l ->
 ;;
 
 
-# let list_eq = fn l1 l2 ->
-#   match (l1, l2) with
-#   | ([], []) -> true
-#   | (x::l1, y::l2) if x == y -> list_eq l1 l2 
-#   | _ -> false
-# ;;
-
-
 let test = module () ->
-  let test_map_plus = (list_map ((+) 1) [0,1,2,3]) == [4,3,2,1];
+  let test_map_plus = (list_map ((+) 1) [0,1,2,3]) == [1,2,3,4];
 ;

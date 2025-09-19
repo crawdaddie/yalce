@@ -25,6 +25,9 @@ extern Scheme list_of_scheme;
 extern Scheme array_of_scheme;
 extern Scheme array_set_scheme;
 extern Scheme array_size_scheme;
+extern Scheme array_range_scheme;
+extern Scheme array_fill_const_scheme;
+extern Scheme array_offset_scheme;
 extern Type t_builtin_print;
 
 extern Scheme array_of_scheme;

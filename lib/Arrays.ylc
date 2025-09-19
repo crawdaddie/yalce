@@ -50,7 +50,6 @@ let last = fn x: (Array of T) ->
 
 let test = module () ->
   let test_sum_doubles = fold (+) 0. [|1., 2., 3.|] == 6.;
-
   let test_sum_ints = fold (+) 0 [|1, 2, 3|] == 6;
 
   let test_map = 
@@ -67,6 +66,12 @@ let test = module () ->
     s[2] == 6.
   ;
 
+  let test_map_type_conversion = 
+    let s = map ((+) 0.) [|1,2,3|] in
+    s[0] == 1. &&
+    s[1] == 2. &&
+    s[2] == 3.
+  ;
   let test_last = last [|1, 2, 3 |] == 3
 
 ;

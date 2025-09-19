@@ -427,40 +427,11 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   TypeEnv *env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env;
 
-  // TypeConstraint *constraints = NULL;
-  // Type *f;
-  // for (f = generic_type; f->kind == T_FN; f = f->data.T_FN.to) {
-  //   Type *ff = f->data.T_FN.from;
-  //   if (is_generic(f->data.T_FN.from)) {
-  //     Type *r = resolve_type_in_env(ff, ctx->env);
-  //     if (r) {
-  //       constraints = constraints_extend(constraints, ff, r);
-  //     }
-  //   }
-  // }
-  //
-  // if (is_generic(f)) {
-  //   Type *r = resolve_type_in_env(f, ctx->env);
-  //   if (r) {
-  //     constraints = constraints_extend(constraints, f, r);
-  //   }
-  // }
-  //
-  // Substitution *subst = NULL;
-  // subst = solve_constraints(constraints);
-  // env = create_env_from_subst(env, subst);
-
-  printf("type env\n");
-  print_type_env(ctx->env);
   specific_type = deep_copy_type(specific_type);
 
   compilation_ctx.env =
       create_env_for_generic_fn(env, generic_type, specific_type);
 
-  printf("compile real func\n");
-  print_ast(&fn_ast);
-  print_type(specific_type);
-  // print_type_env(compilation_ctx.env);
 
   while (specific_type->kind == T_FN) {
     Type *f = specific_type->data.T_FN.from;
@@ -475,7 +446,6 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
     specific_type = specific_type->data.T_FN.to;
   }
-
   LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
 
   return func;
@@ -504,7 +474,11 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
+  // printf("get specific callable\n");
+  // print_type(expected_fn_type);
+
   // printf("if following gets compiled it gets cached\n");
+  //
   LLVMValueRef func = specific_fns_lookup(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
 

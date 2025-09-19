@@ -960,16 +960,41 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
-  case AST_RANGE_EXPRESSION: {
-    // TODO: Implement range expression inference
-    break;
-  }
-
   case AST_LOOP: {
-    // TODO: Implement loop inference
+    Ast let = *ast;
+    // if (is_loop_of_iterable(ast)) {
+    //   type = for_loop_binding(let.data.AST_LET.binding,
+    //   let.data.AST_LET.expr,
+    //                           let.data.AST_LET.in_expr, ctx);
+    //
+    //   break;
+    // }
+    let.tag = AST_LET;
+    type = infer(&let, ctx);
     break;
   }
-
+  case AST_RANGE_EXPRESSION: {
+    Type *from = infer(ast->data.AST_RANGE_EXPRESSION.from, ctx);
+    Type *to = infer(ast->data.AST_RANGE_EXPRESSION.to, ctx);
+    unify(from, &t_int, ctx);
+    unify(to, &t_int, ctx);
+    type = &t_int;
+    break;
+  }
+  //
+  // case AST_LOOP: {
+  //   Ast let = *ast;
+  //   if (is_loop_of_iterable(ast)) {
+  //     type = for_loop_binding(let.data.AST_LET.binding,
+  //     let.data.AST_LET.expr,
+  //                             let.data.AST_LET.in_expr, ctx);
+  //
+  //     break;
+  //   }
+  //   let.tag = AST_LET;
+  //   type = infer(&let, ctx);
+  //   break;
+  // }
   case AST_BINOP: {
     // TODO: Implement binary operation inference
     break;

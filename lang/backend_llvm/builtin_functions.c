@@ -197,6 +197,9 @@ LLVMValueRef curried_binop(Ast *saved_arg_ast, LLVMOpcode fop, LLVMOpcode iop,
                            LLVMBuilderRef builder) {
 
   Type *ret = type->data.T_FN.to;
+
+  Type *free_arg_type = type->data.T_FN.from;
+
   LLVMTypeRef llvm_return_type_ref = type_to_llvm_type(ret, ctx, module);
 
   LLVMTypeRef llvm_from_type_ref =
@@ -215,12 +218,19 @@ LLVMValueRef curried_binop(Ast *saved_arg_ast, LLVMOpcode fop, LLVMOpcode iop,
   case T_INT:
   case T_UINT64: {
     binop_res =
-        LLVMBuildBinOp(builder, iop, saved_arg, free_arg, "curried_binop");
+        LLVMBuildBinOp(builder, iop, saved_arg,
+                       handle_type_conversions(free_arg, free_arg_type, ret,
+                                               ctx, module, builder),
+                       "curried_binop");
     break;
   }
   case T_NUM: {
     binop_res =
-        LLVMBuildBinOp(builder, fop, saved_arg, free_arg, "curried_binop");
+        LLVMBuildBinOp(builder, fop, saved_arg,
+
+                       handle_type_conversions(free_arg, free_arg_type, ret,
+                                               ctx, module, builder),
+                       "curried_binop");
     break;
   }
   default: {
@@ -244,13 +254,6 @@ LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
   fn_type = resolve_type_in_env_mut(fn_type, ctx->env);
-  // print_type_env(ctx->env);
-  // print_type(fn_type);
-  // Type *lt = ast->data.AST_APPLICATION.args[0].md;
-  // Type *rt = ast->data.AST_APPLICATION.args[1].md;
-  // print_type(lt);
-  // print_type(rt);
-  // fn_type->data.T_FN.to->data.T_FN.from;
 
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -1304,6 +1307,12 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &array_at_scheme, ArrayAtHandler);
   GENERIC_FN_SYMBOL("array_set", &array_set_scheme, ArraySetHandler);
   GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SIZE, &array_size_scheme, ArraySizeHandler);
+
+  GENERIC_FN_SYMBOL("array_fill_const", &array_fill_const_scheme,
+                    ArrayFillConstHandler);
+  GENERIC_FN_SYMBOL("array_succ", &id_scheme, ArraySuccHandler);
+  GENERIC_FN_SYMBOL("array_range", &array_range_scheme, ArrayRangeHandler);
+  GENERIC_FN_SYMBOL("array_offset", &array_offset_scheme, ArrayOffsetHandler);
   return NULL;
 }
 
@@ -1397,11 +1406,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   //                   RunInSchedulerHandler);
 
   GENERIC_FN_SYMBOL("array_fill", &t_array_fill_sig, ArrayFillHandler);
-  GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
-                    ArrayFillConstHandler);
-  GENERIC_FN_SYMBOL("array_succ", &t_array_identity_sig, ArraySuccHandler);
-  GENERIC_FN_SYMBOL("array_range", &t_array_range_sig, ArrayRangeHandler);
-  GENERIC_FN_SYMBOL("array_offset", &t_array_offset_sig, ArrayOffsetHandler);
 
   // GENERIC_FN_SYMBOL("array_view", &t_array_view_sig, ArrayViewHandler);
   GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);

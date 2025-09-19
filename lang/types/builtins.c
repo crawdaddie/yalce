@@ -17,6 +17,9 @@ Scheme list_of_scheme;
 Scheme array_of_scheme;
 Scheme array_set_scheme;
 Scheme array_size_scheme;
+Scheme array_range_scheme;
+Scheme array_fill_const_scheme;
+Scheme array_offset_scheme;
 Type t_builtin_print;
 
 Scheme array_of_scheme;
@@ -88,6 +91,31 @@ Scheme *create_new_array_range_sig() {
   return scheme;
 }
 
+Scheme create_array_fill_const_scheme() {
+  Type *el = tvar("a");
+  Type *arr = create_array_type(el);
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
+
+  Type *f = type_fn(el, arr);
+  f = type_fn(&t_int, f);
+  return (Scheme){.vars = vars, .type = f};
+}
+
+Scheme create_array_offset_scheme() {
+
+  Type *el = tvar("a");
+
+  Type *f = create_array_type(el);
+  f = type_fn(f, f);
+  f = type_fn(&t_int, f);
+
+  VarList *vars = talloc(sizeof(VarList));
+  *vars = (VarList){.var = el->data.T_VAR, .next = NULL};
+
+  return (Scheme){.vars = vars, .type = f};
+}
+
 Scheme *create_list_concat_scheme() {
   Type *el = tvar("a");
   Type *l = create_list_type_of_type(el);
@@ -126,58 +154,34 @@ Type *_cor_map_fn_sig() {
   return f;
 }
 
-Type *_array_fill_sig() {
-  Type *eltype = next_tvar();
-  Type *f = create_array_type(eltype);
-  Type *filler_cb = type_fn(&t_int, eltype);
-  f = type_fn(filler_cb, f);
-  f = type_fn(&t_int, f);
-  return f;
-}
+// Scheme _array_range_sig() {
+//   Type *eltype = next_tvar();
+//   Type *f = create_array_type(eltype);
+//   f = type_fn(f, f);
+//   f = type_fn(&t_int, f);
+//   f = type_fn(&t_int, f);
+//
+//   return f;
+// }
+//
+// Scheme _array_offset_sig() {
+//   Type *eltype = next_tvar();
+//
+//   Type *f = create_array_type(eltype);
+//   f = type_fn(f, f);
+//   f = type_fn(&t_int, f);
+//
+//   return f;
+// }
 
-Type *_array_fill_const_sig() {
-  Type *eltype = next_tvar();
-  Type *f = create_array_type(eltype);
-  Type *m = eltype;
-  f = type_fn(m, f);
-  f = type_fn(&t_int, f);
-  return f;
-}
-
-Type *_array_succ_sig() {
-  Type *eltype = next_tvar();
-  Type *f = create_array_type(eltype);
-  return type_fn(f, f);
-}
-
-Type *_array_range_sig() {
-  Type *eltype = next_tvar();
-  Type *f = create_array_type(eltype);
-  f = type_fn(f, f);
-  f = type_fn(&t_int, f);
-  f = type_fn(&t_int, f);
-
-  return f;
-}
-
-Type *_array_offset_sig() {
-  Type *eltype = next_tvar();
-
-  Type *f = create_array_type(eltype);
-  f = type_fn(f, f);
-  f = type_fn(&t_int, f);
-
-  return f;
-}
-
-Type *_array_view_sig() {
-  Type *eltype = next_tvar();
-  Type *f = create_array_type(eltype);
-  Type *func = type_fn(f, f);
-  func = type_fn(&t_int, func);
-  func = type_fn(&t_int, func);
-  return func;
-}
+// Type *_array_view_sig() {
+//   Type *eltype = next_tvar();
+//   Type *f = create_array_type(eltype);
+//   Type *func = type_fn(f, f);
+//   func = type_fn(&t_int, func);
+//   func = type_fn(&t_int, func);
+//   return func;
+// }
 
 Type *_struct_set_sig() {
   Type *eltype = next_tvar();
@@ -188,13 +192,13 @@ Type *_struct_set_sig() {
   return f;
 }
 
-Type *_cstr_sig() {
-  Type *el = next_tvar();
-  Type *t_arr = create_array_type(el);
-  return type_fn(t_arr, &t_ptr
-                 // ptr_of_type(el)
-  );
-}
+// Scheme _cstr_sig() {
+//   Type *el = next_tvar();
+//   Type *t_arr = create_array_type(el);
+//   return type_fn(t_arr, &t_ptr
+//                  // ptr_of_type(el)
+//   );
+// }
 
 Type *_play_routine_sig() {
   Type *v = &t_num;
@@ -659,11 +663,19 @@ void initialize_builtin_schemes() {
 
   add_primitive_scheme("&&", &t_builtin_and);
 
+  array_set_scheme = *create_new_array_set_sig();
+  array_size_scheme = *create_new_array_size_sig();
+  array_range_scheme = *create_new_array_range_sig();
+  array_fill_const_scheme = create_array_fill_const_scheme();
+  array_offset_scheme = create_array_offset_scheme();
+
   add_builtin_scheme("array_at", &array_at_scheme_glob);
-  add_builtin_scheme("array_set", create_new_array_set_sig());
-  add_builtin_scheme("array_size", create_new_array_size_sig());
-  add_builtin_scheme("array_range", create_new_array_range_sig());
+  add_builtin_scheme("array_set", &array_set_scheme);
+  add_builtin_scheme("array_size", &array_size_scheme);
+  add_builtin_scheme("array_range", &array_range_scheme);
   add_builtin_scheme("array_succ", &id_scheme);
+  add_builtin_scheme("array_fill_const", &array_fill_const_scheme);
+  add_builtin_scheme("array_offset", &array_offset_scheme);
 
   add_primitive_scheme("print", type_fn(&t_string, &t_void));
   // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
