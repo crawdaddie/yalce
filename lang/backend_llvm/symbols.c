@@ -91,7 +91,18 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return codegen_simple_enum_member(enum_type, chars, ctx, module, builder);
 
     } else if (strcmp(chars, "None") == 0) {
+
+      print_ast(ast);
+      print_location(ast);
+      print_type_env(ctx->env);
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
+
+      if (!llvm_type) {
+        print_location(ast);
+        fprintf(stderr, "Option type not found\n");
+        return NULL;
+      }
+
       LLVMValueRef v = LLVMGetUndef(llvm_type);
       v = LLVMBuildInsertValue(builder, v, LLVMConstInt(LLVMInt8Type(), 1, 0),
                                0, "insert None tag");

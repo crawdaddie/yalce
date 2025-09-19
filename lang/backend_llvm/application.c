@@ -185,7 +185,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
   if (is_generic(expected_fn_type)) {
-    expected_fn_type = deep_copy_type(expected_fn_type);  
+    expected_fn_type = deep_copy_type(expected_fn_type);
     expected_fn_type = resolve_type_in_env_mut(expected_fn_type, ctx->env);
   }
 
@@ -240,6 +240,8 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return instance_ptr;
 
   } else if (is_coroutine_type(symbol_type)) {
+    printf("apply coroutine inst\n");
+    print_ast(ast);
     return coro_resume(sym, ctx, module, builder);
   }
 

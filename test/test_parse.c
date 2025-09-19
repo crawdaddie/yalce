@@ -461,6 +461,7 @@ int main() {
                        "(let m Module (T U -> \n"
                        "(let x 1))\n"
                        ")");
+
   status &= test_parse("import LocalMod;\n"
                        "let x = 2\n",
                        "(import LocalMod.ylc as LocalMod)\n"

@@ -49,7 +49,7 @@ $(LEX_OUTPUT): $(LEX_FILE) $(YACC_HEADER)
 
 test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_parse.c $(LANG_SRCS) \
-		$(LANG_SRC_DIR)/types/common.c \
+		$(LANG_SRC_DIR)/types/*.c \
 		-o $(BUILD_DIR)/test_parse $(LDFLAGS)
 	$(BUILD_DIR)/test_parse
 
