@@ -4,6 +4,67 @@
 #include "serde.h"
 #include "types/unification.h"
 
+/*
+Type *infer_cons_application(Ast *ast, TICtx *ctx) {
+  Type *fn_type = ast->data.AST_APPLICATION.function->md;
+
+  Ast *fn_id = ast->data.AST_APPLICATION.function;
+  const char *fn_name = fn_id->data.AST_IDENTIFIER.value;
+  Type *cons = fn_type;
+
+  if (is_variant_type(fn_type)) {
+    cons = find_variant_member(fn_type, fn_name);
+    if (!cons) {
+      fprintf(stderr, "Error: %s not found in variant %s\n", fn_name,
+              cons->data.T_CONS.name);
+      return NULL;
+    }
+  }
+
+  TICtx app_ctx = {};
+
+  // if (cons->data.T_CONS.args == NULL) {
+  //   return cons;
+  // }
+
+  for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+
+    Type *cons_arg = cons->data.T_CONS.args[i];
+    Type *arg_type;
+
+    if (!(arg_type = infer(ast->data.AST_APPLICATION.args + i, ctx))) {
+      return type_error(
+          ctx, ast, "Could not infer argument type in cons %s application\n",
+          cons->data.T_CONS.name);
+    }
+
+    if (is_index_access_ast(ast)) {
+      Ast *arg_ast = ast->data.AST_APPLICATION.args + i;
+      Type *arg_type = arg_ast->md;
+      unify_in_ctx(create_list_type_of_type(&t_int), arg_type, ctx, ast);
+
+      return cons->data.T_CONS.args[0];
+    }
+
+    if (!unify_in_ctx(cons_arg, arg_type, &app_ctx, ast)) {
+      return type_error(ctx, ast,
+                        "Could not constrain type variable to function type\n");
+    }
+
+    if (is_generic(arg_type) && !(types_equal(arg_type, cons_arg))) {
+      ctx->constraints =
+          constraints_extend(ctx->constraints, arg_type, cons_arg);
+    }
+  }
+
+  Substitution *subst = solve_constraints(app_ctx.constraints);
+  Type *resolved_type = apply_substitution(subst, fn_type);
+  apply_substitutions_rec(ast, subst);
+  ast->data.AST_APPLICATION.function->md = resolved_type;
+  return resolved_type;
+}
+*/
+
 Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
 
   int len = ast->data.AST_APPLICATION.len;
@@ -29,6 +90,7 @@ Type *infer_cons_application(Ast *ast, Scheme *cons_scheme, TICtx *ctx) {
   for (int i = 0; i < len; i++) {
     unify(arg_types[i], s->data.T_CONS.args[i], ctx);
   }
+  ast->data.AST_APPLICATION.function->md = s;
 
   return s;
 

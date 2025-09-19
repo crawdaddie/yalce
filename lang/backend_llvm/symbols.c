@@ -92,9 +92,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     } else if (strcmp(chars, "None") == 0) {
 
-      print_ast(ast);
-      print_location(ast);
-      print_type_env(ctx->env);
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
 
       if (!llvm_type) {
@@ -337,7 +334,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     }
   }
 
-  if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {
+  if (is_coroutine_constructor_type(expr_type)) {
+    // if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type))
+    // {
     if (is_generic(expr_type)) {
       expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
     } else {

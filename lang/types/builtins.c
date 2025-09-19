@@ -366,20 +366,21 @@ Scheme _create_arithmetic_scheme() {
 Scheme *create_eq_scheme() {
 
   Type *a = tvar("a");
-  Type *b = tvar("b");
+  // Type *b = tvar("b");
 
   typeclasses_extend(a, &GenericEq);
-  typeclasses_extend(b, &GenericEq);
+  // typeclasses_extend(b, &GenericEq);
 
   Type *f = &t_bool;
-  f = type_fn(b, f);
+  f = type_fn(a, f);
   f = type_fn(a, f);
 
-  VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  // VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  VarList *vars_mem = talloc(sizeof(VarList));
 
-  vars_mem[1] = vlist_of_typevar(b);
+  // vars_mem[1] = vlist_of_typevar(b);
   vars_mem[0] = vlist_of_typevar(a);
-  vars_mem[0].next = vars_mem + 1;
+  // vars_mem[0].next = vars_mem + 1;
 
   Scheme *scheme = talloc(sizeof(Scheme));
   *scheme = (Scheme){.vars = vars_mem, .type = f};
@@ -390,20 +391,22 @@ Scheme *create_eq_scheme() {
 Scheme _create_eq_scheme() {
 
   Type *a = tvar("a");
-  Type *b = tvar("b");
+  // Type *b = tvar("b");
 
   typeclasses_extend(a, &GenericEq);
-  typeclasses_extend(b, &GenericEq);
+  // typeclasses_extend(b, &GenericEq);
 
   Type *f = &t_bool;
-  f = type_fn(b, f);
+  f = type_fn(a, f);
   f = type_fn(a, f);
 
-  VarList *vars_mem = talloc(sizeof(VarList) * 2);
-
-  vars_mem[1] = vlist_of_typevar(b);
-  vars_mem[0] = vlist_of_typevar(a);
-  vars_mem[0].next = vars_mem + 1;
+  // VarList *vars_mem = talloc(sizeof(VarList) * 2);
+  //
+  // vars_mem[1] = vlist_of_typevar(b);
+  // vars_mem[0] = vlist_of_typevar(a);
+  // vars_mem[0].next = vars_mem + 1;
+  VarList *vars_mem = talloc(sizeof(VarList));
+  *vars_mem = vlist_of_typevar(a);
 
   return (Scheme){.vars = vars_mem, .type = f};
 }

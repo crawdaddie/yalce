@@ -240,8 +240,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return instance_ptr;
 
   } else if (is_coroutine_type(symbol_type)) {
-    printf("apply coroutine inst\n");
-    print_ast(ast);
     return coro_resume(sym, ctx, module, builder);
   }
 

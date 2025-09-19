@@ -506,15 +506,15 @@ int test_list_processing() {
                                                     &TTUPLE(2, &TLIST(&t_int),
                                                             &TLIST(&t_int))))));
   });
-  T(
-    "let list_rev = fn l ->\n"
+  T("let list_rev = fn l ->\n"
     "  let aux = fn ll res ->\n"
     "    match ll with\n"
     "    | [] -> res\n"
     "    | x :: rest -> aux rest (x :: res)\n"
     "  ;;\n"
     "  aux l []\n"
-    ";;\n", &MAKE_FN_TYPE_2(&TLIST(&TVAR("`11")), &TLIST(&TVAR("`11"))));
+    ";;\n",
+    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`11")), &TLIST(&TVAR("`11"))));
   return status;
 }
 
@@ -683,7 +683,7 @@ int test_funcs() {
     T("let f = fn a b c d -> a == b && c == d;;\n"
       "f 1. 2. 3.;\n"
       "f 1 2 3\n",
-      &MAKE_FN_TYPE_2(&TVAR("`20"), &t_bool));
+      &MAKE_FN_TYPE_2(&t_int, &t_bool));
   });
 
   ({
@@ -834,7 +834,7 @@ int test_funcs() {
     T("let f = fn a b c d -> a == b && c == d;;\n"
       "f 1. 2. 3.;\n"
       "f 1 2 3\n",
-      &MAKE_FN_TYPE_2(&v, &t_bool));
+      &MAKE_FN_TYPE_2(&t_int, &t_bool));
   });
 
   ({
@@ -1006,14 +1006,21 @@ int test_funcs() {
                "proc sum 1 2;\n",
                &t_int);
 
-    Ast *proc_inst = AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.function;
+    Ast *proc_inst =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.function;
     print_ast(proc_inst);
     print_type(proc_inst->md);
-    TASSERT("instance of proc function in app is (Int -> Int -> Int) -> Int -> Int", types_equal(proc_inst->md, &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t_int, &t_int, &t_int), &t_int,  &t_int, &t_int)));
-    Ast *sum_inst = AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.args ;
+    TASSERT(
+        "instance of proc function in app is (Int -> Int -> Int) -> Int -> Int",
+        types_equal(proc_inst->md,
+                    &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t_int, &t_int, &t_int),
+                                    &t_int, &t_int, &t_int)));
+    Ast *sum_inst =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.args;
     print_ast(sum_inst);
     print_type(sum_inst->md);
-    TASSERT("instance of sum function in app is Int -> Int -> Int", types_equal(sum_inst->md, &MAKE_FN_TYPE_3(&t_int,  &t_int, &t_int)));
+    TASSERT("instance of sum function in app is Int -> Int -> Int",
+            types_equal(sum_inst->md, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
   });
 
   return status;
@@ -1156,7 +1163,6 @@ int test_match_exprs() {
   });
   return status;
 }
-
 
 int test_coroutines() {
   printf("### TEST COROUTINES\n--------------------------------\n");
@@ -1950,6 +1956,30 @@ bool test_parser_combinators() {
   });
   return status;
 }
+bool test_opts() {
+
+  printf("## TEST OPTION OPS\n---------------------------------------------\n");
+  bool status = true;
+  ({
+    Ast *b = T("Some 1 == None", &t_bool);
+    TASSERT("LHS of == operation forces None to be same type as LHS: ",
+            types_equal(
+                b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->md,
+                &MAKE_FN_TYPE_3(&TOPT(&t_int), &TOPT(&t_int), &t_bool)));
+
+    // print_ast(b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.args + 1);
+    // print_type(
+    //     (b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.args + 1)->md);
+  });
+  ({
+    Ast *b = T("Some 1", &TOPT(&t_int));
+    TASSERT("Some instance has application form of Option of Int\n",
+            types_equal(
+                b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->md,
+                &TOPT(&t_int)));
+  });
+  return status;
+}
 
 int main() {
   initialize_builtin_schemes();
@@ -1970,6 +2000,7 @@ int main() {
   status &= test_audio_funcs();
   status &= test_list_processing();
   status &= test_funcs();
+  status &= test_opts();
 
   print_all_failures();
   return status == true ? 0 : 1;

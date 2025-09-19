@@ -7,14 +7,13 @@ let test_iter_all_void =
     yield 3;
   ) in
   let co = co_void ()
-  in
+    in
      co () == Some 1
   && co () == Some 2
   && co () == Some 3
   && co () == None
   && co () == None
-  ;
-
+;
 
 let test_embed_seq = fn () ->
 
@@ -52,7 +51,6 @@ let test_rec = fn () ->
   && co () == Some 2
   && co () == Some 1
 ;;
-
 let test_fib_cor = fn () ->
 
   let fib = fn a b ->
@@ -69,7 +67,6 @@ let test_fib_cor = fn () ->
   && co () == Some 5
   && co () == Some 8
 ;;
-
 let test_geo = fn () ->
   let geo = fn a ->
     yield a;
@@ -98,6 +95,7 @@ let test_iter_all_arg = fn () ->
   && (co () == Some 3)
   && (co () == None)
 ;;
+
 let test_fib_ser = fn () ->
   let fib = fn a b ->
     yield a;
@@ -115,36 +113,25 @@ let test_fib_ser = fn () ->
   && c () == Some 13
   && c () == Some 21
   && c () == Some 34
-
 ;;
 
-
-let test_nested_coroutines = fn () ->
-  let cor1 = fn () ->
-    yield 1
+let test_geo_ser = fn () ->
+  let geo = fn s ->
+    yield s;
+    yield geo (s * 1.1)
   ;;
 
-  let cor2 = fn () ->
-    yield cor1 ();
-    yield 2
-  ;;
-
-  let cor3 = fn () ->
-    yield cor2 ();
-    yield 3
-  ;;
-
-  let cor = fn () ->
-    yield cor3 ();
-    yield 4 
-  ;;
-
-  let x = cor () in
-
-     x () == Some 1 
-  && x () == Some 2 
-  && x () == Some 3 
-  && x () == Some 4
-  && x () == None
+  let g = geo 1.0 in
+     g () == Some 1.000000
+  && g () == Some 1.100000
+  && g () == Some 1.210000
+  && g () == Some 1.331000
+  && g () == Some 1.464100
+  && g () == Some 1.610510
+  && g () == Some 1.771561
+  && g () == Some 1.948717
+  && g () == Some 2.143589
+  && g () == Some 2.357948
 ;;
+;
 
