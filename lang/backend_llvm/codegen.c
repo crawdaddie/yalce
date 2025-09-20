@@ -189,6 +189,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Ast *record = ast->data.AST_RECORD_ACCESS.record;
 
     Type *record_type = record->md;
+
     if (record_type->kind == T_CONS &&
         strcmp(record_type->data.T_CONS.name, TYPE_NAME_MODULE) == 0) {
       LLVMValueRef val = codegen_module_access(

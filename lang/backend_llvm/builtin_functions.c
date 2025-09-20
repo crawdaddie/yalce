@@ -744,7 +744,10 @@ LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
   r = handle_type_conversions(r, rt, target_type, ctx, module, builder);
 
-  return _codegen_equality(target_type, l, r, ctx, module, builder);
+  LLVMValueRef X = _codegen_equality(target_type, l, r, ctx, module, builder);
+  // LLVMDumpValue(X);
+  // printf("\n");
+  return X;
 }
 
 LLVMValueRef CharHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -1313,6 +1316,17 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("array_succ", &id_scheme, ArraySuccHandler);
   GENERIC_FN_SYMBOL("array_range", &array_range_scheme, ArrayRangeHandler);
   GENERIC_FN_SYMBOL("array_offset", &array_offset_scheme, ArrayOffsetHandler);
+
+#define FN_SYMBOL(id, type, val)                                               \
+  ({                                                                           \
+    JITSymbol *sym = new_symbol(STYPE_FUNCTION, type, val, NULL);              \
+    ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);                  \
+  });
+
+  FN_SYMBOL("print", &t_builtin_print,
+            get_extern_fn("print",
+                          type_to_llvm_type(&t_builtin_print, ctx, module),
+                          module));
   return NULL;
 }
 
@@ -1347,16 +1361,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   // ht_set_hash(stack, "None", hash_string("None", 4), sym);
 
 
-#define FN_SYMBOL(id, type, val)                                               \
-  ({                                                                           \
-    JITSymbol *sym = new_symbol(STYPE_FUNCTION, type, val, NULL);              \
-    ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);                  \
-  });
 
-  FN_SYMBOL("print", &t_builtin_print,
-            get_extern_fn("print",
-                          type_to_llvm_type(&t_builtin_print, ctx, module),
-                          module));
 
   GENERIC_FN_SYMBOL("cstr", &t_builtin_cstr, CStrHandler
                     // get_extern_fn("cstr",

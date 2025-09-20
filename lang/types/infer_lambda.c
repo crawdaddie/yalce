@@ -181,6 +181,7 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   }
 
   case AST_APPLICATION: {
+
     apply_substitution_to_lambda_body(ast->data.AST_APPLICATION.function,
                                       subst);
 

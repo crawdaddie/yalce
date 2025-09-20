@@ -680,7 +680,9 @@ void initialize_builtin_schemes() {
   add_builtin_scheme("array_fill_const", &array_fill_const_scheme);
   add_builtin_scheme("array_offset", &array_offset_scheme);
 
-  add_primitive_scheme("print", type_fn(&t_string, &t_void));
+  t_builtin_print = *type_fn(&t_string, &t_void);
+  add_primitive_scheme("print", &t_builtin_print);
+
   // Type t_list_prepend = MAKE_FN_TYPE_3(&t_list_var_el, &t_list_var,
   // &t_list_var);
   //
@@ -711,4 +713,5 @@ Scheme *lookup_builtin_scheme(const char *name) {
       ht_get_hash(&builtin_schemes, name, hash_string(name, strlen(name)));
   return builtin;
 }
+
 void print_builtin_types() {}

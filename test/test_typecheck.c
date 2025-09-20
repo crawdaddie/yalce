@@ -1956,6 +1956,7 @@ bool test_parser_combinators() {
   });
   return status;
 }
+
 bool test_opts() {
 
   printf("## TEST OPTION OPS\n---------------------------------------------\n");
@@ -1980,6 +1981,28 @@ bool test_opts() {
   });
   return status;
 }
+bool test_record_types() {
+
+  bool status = true;
+  printf(
+      "## TEST RECORD TYPES\n---------------------------------------------\n");
+  T("let x = (a: 1, b: 3); x.a + x.b == 4", &t_bool);
+  T("let x = (a: 1, b: 3); x.a", &t_int);
+  T("let X = module () ->\n"
+    "  let a = 1;\n"
+    ";\n"
+    "X.a",
+    &t_int);
+
+  T("let X = module () ->\n"
+    "  let a = 1;\n"
+    "  let f = fn () -> 22;;\n"
+    ";\n"
+    "X.f ()",
+    &t_int);
+
+  return status;
+}
 
 int main() {
   initialize_builtin_schemes();
@@ -2001,6 +2024,8 @@ int main() {
   status &= test_list_processing();
   status &= test_funcs();
   status &= test_opts();
+
+  status &= test_record_types();
 
   print_all_failures();
   return status == true ? 0 : 1;

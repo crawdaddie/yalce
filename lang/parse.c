@@ -1184,6 +1184,7 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   fully_qualified_name = normalize_path(fully_qualified_name);
   fully_qualified_name = check_path(fully_qualified_name, rel_path);
+  printf("import stmt %s %s\n", path_identifier.chars, fully_qualified_name);
 
   if (!fully_qualified_name) {
     fprintf(stderr, "Error module %s not found in path\n",

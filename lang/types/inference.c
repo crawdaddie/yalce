@@ -954,9 +954,75 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     break;
   }
+    // case AST_RECORD_ACCESS: {
+    //   Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
+    //
+    //   if (rec_type->kind == T_VAR && rec_type->is_recursive_type_ref) {
+    //     const char *rec_type_name = rec_type->data.T_VAR;
+    //     Type *record_type = env_lookup(ctx->env, rec_type_name);
+    //     if (record_type) {
+    //       rec_type = record_type;
+    //     }
+    //   }
+    //
+    //   if (rec_type->kind != T_CONS) {
+    //     return NULL;
+    //   }
+    //
+    //   if (rec_type->data.T_CONS.names == NULL) {
+    //     return NULL;
+    //   }
+    //
+    //   const char *member_name =
+    //       ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+    //
+    //   for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+    //     if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
+    //       type = rec_type->data.T_CONS.args[i];
+    //       ast->data.AST_RECORD_ACCESS.index = i;
+    //       int array = is_array_type(type);
+    //       int li = is_list_type(type);
+    //       if (array || li) {
+    //         Type *el_type = type->data.T_CONS.args[0];
+    //         if (el_type->kind == T_VAR && el_type->is_recursive_type_ref &&
+    //             CHARS_EQ(el_type->data.T_VAR, rec_type->data.T_CONS.name)) {
+    //           if (array) {
+    //             type = create_array_type(rec_type);
+    //           } else {
+    //             type = create_list_type_of_type(rec_type);
+    //           }
+    //         }
+    //       }
+    //
+    //       break;
+    //     }
+    //   }
+    //
+    //   break;
+    // }
 
   case AST_RECORD_ACCESS: {
-    // TODO: Implement record access inference
+
+    Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
+    const char *member_name =
+        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+
+    if (rec_type->kind != T_CONS) {
+      return NULL;
+    }
+
+    if (rec_type->kind == T_CONS && rec_type->data.T_CONS.names == NULL) {
+      return NULL;
+    }
+
+    for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+      if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
+        type = rec_type->data.T_CONS.args[i];
+        ast->data.AST_RECORD_ACCESS.index = i;
+        break;
+      }
+    }
+
     break;
   }
 

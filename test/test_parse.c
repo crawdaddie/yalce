@@ -425,6 +425,8 @@ int main() {
   status &= test_parse("f x.y", "(f (. x y))");
   status &= test_parse("f x.y.z", "(f (. (. x y) z)");
   status &= test_parse("x.y.z", "(. (. x y) z)");
+
+  status &= test_parse("x.f 1 2 == 3", "((== (((. x f) 1) 2)) 3)");
   status &= test_parse("x[10]", "((array_at x) 10)");
   status &= test_parse("x[10] := 1", "(((array_set x) 10) 1)");
 
