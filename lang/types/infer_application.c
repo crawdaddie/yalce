@@ -97,11 +97,6 @@ Type *infer_fn_application(Ast *ast, TICtx *ctx) {
   ast->data.AST_APPLICATION.function->md = _fn_type;
 
   Type *res_type = _fn_type;
-  printf("res type: ");
-  print_type(res_type);
-  print_subst(subst);
-  print_type_env(ctx->env);
-  printf("--------------------------------\n\n\n");
 
   for (int i = 0; i < len; i++) {
     Ast *arg = ast->data.AST_APPLICATION.args + i;

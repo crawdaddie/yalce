@@ -210,11 +210,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int fn_len = ast->data.AST_LAMBDA.len;
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
-  printf("cgen fn type proto??? %s\n", __FILE__);
-  print_ast(ast);
-  print_type(fn_type);
-  printf("--------------------\n");
-
   LLVMTypeRef prototype =
       codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx, module);
   if (!prototype) {

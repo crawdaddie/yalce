@@ -194,6 +194,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
           ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record)) {
+    printf("record access applicatoin\n");
 
     LLVMValueRef callable =
         codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
@@ -245,6 +246,8 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
+    print_ast(ast);
+    print_type(expected_fn_type);
 
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);
