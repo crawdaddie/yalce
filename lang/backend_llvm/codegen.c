@@ -272,7 +272,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
-    } else if (!is_variant_type(t)) {
+    } else if (!is_variant_type(t) && t->kind != T_FN) {
       fprintf(stderr,
               "Warning - constructor not implemented for type declaration ");
       print_ast_err(ast);
