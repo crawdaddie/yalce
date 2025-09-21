@@ -12,7 +12,7 @@ import lib/Math;
 
 
 let q = 60. / 130.;
-let Kick = module
+let Kick = module () ->
   let buf = load_soundfile "./engine/assets/kick.wav";
   let synth = (fn () ->
     let trig = inlet 0.; # 0
@@ -37,7 +37,7 @@ let Kick = module
   ;;
 ;
 
-let Snare = module
+let Snare = module () ->
 
   let buf = load_soundfile  "./engine/assets/snare.wav";
   let synth = (fn () ->
@@ -76,7 +76,7 @@ let Snare = module
   );
 ;
 
-let Hihat = module
+let Hihat = module () ->
 
   let closed_hh_buf = load_soundfile "./engine/assets/hihat_closed.wav";
   let closed_hh = (fn () ->

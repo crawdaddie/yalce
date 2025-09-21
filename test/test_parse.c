@@ -1,5 +1,6 @@
 #include "../lang/parse.h"
 #include "../lang/serde.h"
+#include "modules.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,9 @@ static char big_sexpr_buf[400];
 bool test_parse(char input[], char *expected_sexpr) {
 
   Ast *prog;
+
+  pctx.cur_script = "test_parse";
+  pctx.import_current_dir = ".";
   // printf("test input: %s\n", input);
   prog = parse_input(input, "");
 
@@ -30,7 +34,7 @@ bool test_parse(char input[], char *expected_sexpr) {
     yylineno = 1;
     yyrestart(NULL);
     // extern Ast *ast_root;
-    ast_root = NULL;
+    pctx.ast_root = NULL;
     return false;
   }
   bool res;
@@ -38,7 +42,7 @@ bool test_parse(char input[], char *expected_sexpr) {
     printf("✅ %s :: parse error\n", input);
     res = true;
   } else {
-    sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts[0], sexpr);
+    sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts->ast, sexpr);
     if (strncmp(sexpr, expected_sexpr, strlen(expected_sexpr)) != 0) {
       printf("❌ %s\n", input);
       printf("expected %s\n"
@@ -62,7 +66,7 @@ bool test_parse(char input[], char *expected_sexpr) {
   yylineno = 1;
   yyrestart(NULL);
   // extern Ast *ast_root;
-  ast_root = NULL;
+  pctx.ast_root = NULL;
   return res;
 }
 
@@ -89,7 +93,7 @@ bool test_parse_last(char input[], char *expected_sexpr) {
     yylineno = 1;
     yyrestart(NULL);
     // extern Ast *ast_root;
-    ast_root = NULL;
+    pctx.ast_root = NULL;
     return false;
   }
   bool res;
@@ -97,8 +101,7 @@ bool test_parse_last(char input[], char *expected_sexpr) {
     printf("✅ %s :: parse error\n", input);
     res = true;
   } else {
-    sexpr = ast_to_sexpr(prog->data.AST_BODY.stmts[prog->data.AST_BODY.len - 1],
-                         sexpr);
+    sexpr = ast_to_sexpr(prog->data.AST_BODY.tail->ast, sexpr);
     if (strncmp(sexpr, expected_sexpr, strlen(expected_sexpr)) != 0) {
       printf("❌ %s\n", input);
       printf("expected %s\n"
@@ -122,7 +125,7 @@ bool test_parse_last(char input[], char *expected_sexpr) {
   yylineno = 1;
   yyrestart(NULL);
   // extern Ast *ast_root;
-  ast_root = NULL;
+  pctx.ast_root = NULL;
   return res;
 }
 
@@ -172,13 +175,14 @@ bool test_parse_body(char *input, char *expected_sexpr) {
   yylineno = 1;
   yyrestart(NULL);
   // extern Ast *ast_root;
-  ast_root = NULL;
+  pctx.ast_root = NULL;
   return res;
 }
 
 int main() {
 
   bool status;
+  init_module_registry();
 
   status = test_parse("1 + 2", "((+ 1) 2)"); // single binop expression"
   //
@@ -187,6 +191,8 @@ int main() {
   status &= test_parse("-4.", "-4.000000");
   status &= test_parse("1f", "1.000000");
   status &= test_parse("-4f", "-4.000000");
+  status &= test_parse("4.f", "4.000000");
+  status &= test_parse("4.123f", "4.123000");
   status &= test_parse("(1 + 2)", "((+ 1) 2)");
   status &= test_parse("x + y", "((+ x) y)");
   status &= test_parse("x - y", "((- x) y)");
@@ -285,6 +291,8 @@ int main() {
   status &= test_parse("[|1, 2, 3, 4|]", "[|1, 2, 3, 4|]");
   status &= test_parse("1::[1,2]", "((:: 1) [1, 2])");
   status &= test_parse("x::y::[1,2]", "((:: x) ((:: y) [1, 2]))");
+  status &= test_parse("let x::y::_ = [1, 2] in x",
+                       "(let ((:: x) ((:: y) _)) [1, 2]) : x");
   status &= test_parse("x::rest", "((:: x) rest)");
 
   status &= test_parse("let x::_ = [1, 2, 3]", "(let ((:: x) _) [1, 2, 3])");
@@ -336,11 +344,12 @@ int main() {
                        "\t_ -> 3\n"
                        ")");
 
-  status &= test_parse(
-      "let printf2 = extern fn string -> string -> Int -> Int -> ()",
-      "(let printf2 (extern printf2 (string -> string -> Int -> Int -> ())))"
+  status &=
+      test_parse("let printf2 = extern fn string -> string -> Int -> Int -> ()",
+                 "(let printf2 (extern printf2 (string -> (string -> (Int -> "
+                 "(Int -> ())))))"
 
-  );
+      );
 
   status &= test_parse("let voidf = extern fn () -> ()",
                        "(let voidf (extern voidf (() -> ())))");
@@ -416,6 +425,8 @@ int main() {
   status &= test_parse("f x.y", "(f (. x y))");
   status &= test_parse("f x.y.z", "(f (. (. x y) z)");
   status &= test_parse("x.y.z", "(. (. x y) z)");
+
+  status &= test_parse("x.f 1 2 == 3", "((== (((. x f) 1) 2)) 3)");
   status &= test_parse("x[10]", "((array_at x) 10)");
   status &= test_parse("x[10] := 1", "(((array_set x) 10) 1)");
 
@@ -432,5 +443,40 @@ int main() {
   //                      "((let @ array_at)\n"
   //                      "((@ x_ref) 0))");
   // extern funcs
+  status &= test_parse("let m = module () ->\n"
+                       "  let x = 1;\n"
+                       ";",
+                       "(let m Module (() -> \n"
+                       "(let x 1))\n"
+                       ")");
+
+  status &= test_parse("let m = module T ->\n"
+                       "  let x = 1;\n"
+                       "",
+                       "(let m Module (T -> \n"
+                       "(let x 1))\n"
+                       ")");
+
+  status &= test_parse("let m = module T U ->\n"
+                       "  let x = 1\n"
+                       ";",
+                       "(let m Module (T U -> \n"
+                       "(let x 1))\n"
+                       ")");
+
+  status &= test_parse("import LocalMod;\n"
+                       "let x = 2\n",
+                       "(import LocalMod.ylc as LocalMod)\n"
+                       "(let x 2)"
+
+  );
+
+  // status &= test_parse("let m = module S T ->\n"
+  //                      "  let x = 1;\n"
+  //                      ";;",
+  //                      "(let m Module (T -> \n"
+  //                      "(let x 1))\n"
+  //                      ")");
+
   return status ? 0 : 1;
 }

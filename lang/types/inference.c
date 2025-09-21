@@ -106,16 +106,17 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
 
 double tc_impl_rank(Ast *ast) {
   Ast *impl = ast->data.AST_TRAIT_IMPL.impl;
-  for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
-    Ast *stmt = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
-    if (stmt->tag == AST_LET &&
-        stmt->data.AST_LET.binding->tag == AST_IDENTIFIER &&
-        CHARS_EQ(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value,
-                 "rank") &&
-        stmt->data.AST_LET.expr->tag == AST_DOUBLE) {
-      return stmt->data.AST_LET.expr->data.AST_DOUBLE.value;
-    }
-  }
+  AST_LIST_ITER(
+      impl->data.AST_LAMBDA.body->data.AST_BODY.stmts, ({
+        Ast *stmt = l->ast;
+        if (stmt->tag == AST_LET &&
+            stmt->data.AST_LET.binding->tag == AST_IDENTIFIER &&
+            CHARS_EQ(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value,
+                     "rank") &&
+            stmt->data.AST_LET.expr->tag == AST_DOUBLE) {
+          return stmt->data.AST_LET.expr->data.AST_DOUBLE.value;
+        }
+      }));
   return 0.;
 }
 
@@ -207,17 +208,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_BODY: {
     Ast *stmt;
-    for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      stmt = ast->data.AST_BODY.stmts[i];
+    AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
+                    stmt = l->ast;
+                    Type *t = infer(stmt, ctx);
 
-      Type *t = infer(stmt, ctx);
-
-      if (!t) {
-        print_ast_err(stmt);
-        return NULL;
-      }
-      type = t;
-    }
+                    if (!t) {
+                      print_ast_err(stmt);
+                      return NULL;
+                    }
+                    type = t;
+                  }));
     break;
   }
 
@@ -375,35 +375,69 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
 
+  // case AST_IMPORT: {
+  //   const char *name = ast->data.AST_IMPORT.identifier;
+  //
+  //   type = get_import_type(ast);
+  //   if (ast->data.AST_IMPORT.import_all) {
+  //
+  //     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+  //       if (type->data.T_CONS.names[i] == NULL) {
+  //         continue;
+  //       }
+  //
+  //       char *name = type->data.T_CONS.names[i];
+  //
+  //       Ast binding = {AST_IDENTIFIER, .data = {.AST_IDENTIFIER = {
+  //                                                   .value = name,
+  //                                                   .length = strlen(name),
+  //                                               }}};
+  //
+  //       bind_in_ctx(ctx, &binding, type->data.T_CONS.args[i]);
+  //     }
+  //     break;
+  //   }
+  //
+  //   Ast binding = {AST_IDENTIFIER, .data = {.AST_IDENTIFIER = {
+  //                                               .value = name,
+  //                                               .length = strlen(name),
+  //                                           }}};
+  //
+  //   bind_in_ctx(ctx, &binding, type);
+  //   break;
+  // }
   case AST_IMPORT: {
-    const char *name = ast->data.AST_IMPORT.identifier;
+    const char *key = ast->data.AST_IMPORT.fully_qualified_name;
+    YLCModule *mod = get_module(key);
 
-    type = get_import_type(ast);
-    if (ast->data.AST_IMPORT.import_all) {
-
-      for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-        if (type->data.T_CONS.names[i] == NULL) {
-          continue;
-        }
-
-        char *name = type->data.T_CONS.names[i];
-
-        Ast binding = {AST_IDENTIFIER, .data = {.AST_IDENTIFIER = {
-                                                    .value = name,
-                                                    .length = strlen(name),
-                                                }}};
-
-        bind_in_ctx(ctx, &binding, type->data.T_CONS.args[i]);
-      }
-      break;
+    if (!mod) {
+      printf("mod not found\n");
+      return NULL;
     }
 
-    Ast binding = {AST_IDENTIFIER, .data = {.AST_IDENTIFIER = {
-                                                .value = name,
-                                                .length = strlen(name),
-                                            }}};
+    if (!mod->type) {
+      type = init_import(mod)->type;
+    } else {
+      type = mod->type;
+    }
 
-    bind_in_ctx(ctx, &binding, type);
+    if (ast->data.AST_IMPORT.import_all) {
+      TypeEnv *mod_env = mod->env;
+      while (mod_env) {
+        ctx->env = env_extend(ctx->env, mod_env->name, mod_env->type);
+        mod_env = mod_env->next;
+      }
+      custom_binops_t *b = mod->custom_binops;
+      while (b) {
+        custom_binops_t *bb = talloc(sizeof(custom_binops_t));
+        *bb = (custom_binops_t){};
+
+        *bb = *b;
+        bb->next = ctx->custom_binops;
+        ctx->custom_binops = bb;
+        b = b->next;
+      }
+    }
     break;
   }
   case AST_RECORD_ACCESS: {
@@ -1055,10 +1089,10 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
 
   case AST_BODY: {
     Type *fin;
-    for (int i = 0; i < ast->data.AST_BODY.len; i++) {
-      apply_substitutions_rec(ast->data.AST_BODY.stmts[i], subst);
-      fin = ast->data.AST_BODY.stmts[i]->md;
-    }
+    AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
+                    apply_substitutions_rec(l->ast, subst);
+                    fin = l->ast->md;
+                  }));
     ast->md = fin;
     break;
   }
@@ -1112,7 +1146,7 @@ void apply_substitutions_rec(Ast *ast, Substitution *subst) {
     // print_type(ast->md);
     // print_subst(subst);
     apply_substitutions_rec(ast->data.AST_YIELD.expr, subst);
-    ast->md = apply_substitution(subst, ast);
+    ast->md = apply_substitution(subst, ast->md);
     break;
   }
 
@@ -1176,34 +1210,36 @@ Type *infer_module(Ast *ast, TICtx *ctx) {
   Type **member_types = talloc(sizeof(Type *) * len);
   const char **names = talloc(sizeof(char *) * len);
 
-  for (int i = 0; i < len; i++) {
-    stmt = body.data.AST_BODY.stmts[i];
-    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
-          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
-      return type_error(ctx, stmt,
-                        "Please only have let statements and type declarations "
-                        "in a module\n");
-      return NULL;
-    }
+  AST_LIST_ITER(
+      body.data.AST_BODY.stmts, ({
+        stmt = l->ast;
+        if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
+              (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
+          return type_error(
+              ctx, stmt,
+              "Please only have let statements and type declarations "
+              "in a module\n");
+          return NULL;
+        }
 
-    Type *t = infer(stmt, &module_ctx);
-    member_types[i] = t;
+        Type *t = infer(stmt, &module_ctx);
+        member_types[i] = t;
 
-    if (stmt->tag == AST_TYPE_DECL) {
-      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+        if (stmt->tag == AST_TYPE_DECL) {
+          names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
-    } else if (stmt->tag == AST_IMPORT) {
+        } else if (stmt->tag == AST_IMPORT) {
 
-      names[i] = stmt->data.AST_IMPORT.identifier;
-    } else {
-      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-    }
+          names[i] = stmt->data.AST_IMPORT.identifier;
+        } else {
+          names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+        }
 
-    if (!t) {
-      print_ast_err(stmt);
-      return NULL;
-    }
-  }
+        if (!t) {
+          print_ast_err(stmt);
+          return NULL;
+        }
+      }));
 
   TypeEnv *env = module_ctx.env;
 
@@ -1224,3 +1260,6 @@ Type *infer_assignment(Ast *ast, TICtx *ctx) {
   // print_type(var_type;);
   return &t_void;
 }
+
+Scheme generalize(Type *t, TICtx *ctx) { return (Scheme){}; }
+Type *instantiate(Scheme *sch, TICtx *ctx) { return NULL; }

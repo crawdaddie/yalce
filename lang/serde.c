@@ -26,12 +26,14 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
   switch (ast->tag) {
   case AST_BODY: {
-    for (size_t i = 0; i < ast->data.AST_BODY.len; ++i) {
-      Ast *stmt = ast->data.AST_BODY.stmts[i];
-      buffer = ast_to_sexpr(stmt, buffer);
-      if (i < ast->data.AST_BODY.len - 1) {
+    int i = 0;
+    for (AstList *current = ast->data.AST_BODY.stmts; current != NULL;
+         current = current->next) {
+      buffer = ast_to_sexpr(current->ast, buffer);
+      if (current->next != NULL) {
         buffer = strcat(buffer, "\n");
       }
+      i++;
     }
     break;
   }
@@ -63,6 +65,12 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
 
+  case AST_FLOAT: {
+    char buf[100];
+    sprintf(buf, "%f", ast->data.AST_FLOAT.value);
+    buffer = strcat(buffer, buf);
+    break;
+  }
   case AST_DOUBLE: {
 
     char buf[100];
@@ -257,12 +265,14 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
   case AST_IMPORT: {
-    buffer = strcat(buffer, "import ");
-    if (ast->data.AST_IMPORT.import_all) {
 
-      buffer = strcat(buffer, " * ");
+    if (ast->data.AST_IMPORT.import_all) {
+      buffer = strcat(buffer, "import * from ");
+      buffer = strcat(buffer, ast->data.AST_IMPORT.fully_qualified_name);
+      break;
     }
 
+    buffer = strcat(buffer, "import ");
     buffer = strcat(buffer, ast->data.AST_IMPORT.fully_qualified_name);
     buffer = strcat(buffer, " as ");
     buffer = strcat(buffer, ast->data.AST_IMPORT.identifier);
@@ -323,9 +333,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
   //
-  case AST_LAMBDA_ARGS: {
-    break;
-  }
   case AST_LIST: {
     buffer = strcat(buffer, "[");
     int len = ast->data.AST_LIST.len;
@@ -416,14 +423,6 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, ")");
     break;
   }
-  case AST_META: {
-    buffer = strcat(buffer, "(");
-    buffer = strcat(buffer, ast->data.AST_META.value);
-    buffer = strcat(buffer, " ");
-    buffer = ast_to_sexpr(ast->data.AST_META.next, buffer);
-    buffer = strcat(buffer, ")");
-    break;
-  }
 
   case AST_MATCH_GUARD_CLAUSE: {
     buffer = ast_to_sexpr(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, buffer);
@@ -445,7 +444,7 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     buffer = strcat(buffer, ")");
     break;
   }
-  case AST_EMPTY_LIST: {
+  case AST_EMPTY_CONTAINER: {
     buffer = strcat(buffer, ast->data.AST_EMPTY_LIST.type_id.chars);
     buffer = strcat(buffer, "[]");
     break;

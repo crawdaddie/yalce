@@ -140,6 +140,8 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_TYPECLASS_EQ "Eq"
 #define TYPE_NAME_TYPECLASS_ORD "Ord"
 #define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
+#define TYPE_NAME_COROUTINE_CONSTRUCTOR "CoroutineConstructor"
+#define TYPE_NAME_COROUTINE_INSTANCE "Coroutine"
 
 #define TYPE_NAME_REF "mut"
 
@@ -440,8 +442,10 @@ typedef struct TICtx {
   Type *yielded_type;
   int scope;
   int current_fn_scope;
+  custom_binops_t *custom_binops;
   const char *err;
   FILE *err_stream; // Replace const char *err
+
 } TICtx;
 
 // Substitution map for type variables
@@ -450,4 +454,5 @@ typedef struct Substitution {
   Type *to;   // Replacement type
   struct Substitution *next;
 } Substitution;
+
 #endif

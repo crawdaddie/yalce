@@ -23,16 +23,18 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
              $(LANG_SRC_DIR)/config.c \
              $(LANG_SRC_DIR)/string_proc.c \
              $(LANG_SRC_DIR)/serde.c \
+             $(LANG_SRC_DIR)/modules.c \
              $(LEX_OUTPUT) \
              $(YACC_OUTPUT)
 
 # Phony targets
-.PHONY: all clean test_parse test_typecheck test_scripts
+.PHONY: all clean test_parse test_typecheck test_scripts test_unification
 
 all:
 	-$(MAKE) test_parse
 	-$(MAKE) test_typecheck
 	-$(MAKE) test_scripts
+	-$(MAKE) test_unification
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -47,14 +49,13 @@ $(LEX_OUTPUT): $(LEX_FILE) $(YACC_HEADER)
 
 test_parse: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_parse.c $(LANG_SRCS) \
-		$(LANG_SRC_DIR)/types/common.c \
+		$(LANG_SRC_DIR)/types/*.c \
 		-o $(BUILD_DIR)/test_parse $(LDFLAGS)
 	$(BUILD_DIR)/test_parse
 
 test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_typecheck.c \
 		$(LANG_SRCS) \
-		$(LANG_SRC_DIR)/modules.c \
 		$(LANG_SRC_DIR)/types/*.c \
 		-o $(BUILD_DIR)/test_typecheck \
 		$(LDFLAGS)
@@ -64,6 +65,8 @@ test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 test_scripts: 
 	./run_test_scripts.sh ./test_scripts
 
+# test_unification:
+#
 
 clean:
 	rm -rf $(BUILD_DIR)

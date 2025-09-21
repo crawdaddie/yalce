@@ -86,7 +86,7 @@ $(YACC_OUTPUT): $(YACC_FILE)
 	bison --locations -yd $(YACC_FILE) -o $(LANG_SRC_DIR)/y.tab.c
 
 $(LEX_OUTPUT): $(LEX_FILE)
-	flex -o $(LEX_OUTPUT) $(LEX_FILE)
+	flex --header-file=$(LANG_SRC_DIR)/lex.yy.h -o $(LEX_OUTPUT) $(LEX_FILE)
 
 # Build language object files
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)

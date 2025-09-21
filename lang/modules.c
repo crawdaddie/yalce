@@ -1,13 +1,15 @@
 #include "./modules.h"
 #include "./types/common.h"
-#include "escape_analysis.h"
+// #include "escape_analysis.h"
 #include "ht.h"
-#include "input.h"
-#include "types/inference.h"
+#include "serde.h"
 #include "types/type.h"
 #include <regex.h>
 #include <stdlib.h>
 #include <string.h>
+
+void print_constraints(Constraint *constraints);
+void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...);
 
 ht module_registry;
 
@@ -25,63 +27,6 @@ bool is_module_ast(Ast *ast) {
   return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
 }
 
-Ast *parse_module(const char *filename, TypeEnv *env) {
-
-  char *old_import_current_dir = __import_current_dir;
-  __import_current_dir = get_dirname(filename);
-
-  Ast *prog = parse_input_script(filename);
-
-  prog = create_module_from_root(prog);
-
-  if (!prog) {
-    return NULL;
-  }
-
-  TICtx ti_ctx = {.env = NULL, .scope = 0};
-
-  // Open memory stream, passing pointers to buffer and length
-  ti_ctx.err_stream = stderr;
-
-  if (!infer(prog, &ti_ctx)) {
-    return NULL;
-  }
-
-  if (!solve_program_constraints(prog, &ti_ctx)) {
-    return NULL;
-  }
-  escape_analysis(prog);
-
-  __import_current_dir = old_import_current_dir;
-  *env = *ti_ctx.env;
-  return prog;
-}
-
-Type *get_import_type(Ast *ast) {
-  const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;
-  YLCModule *mod = ht_get(&module_registry, file_path);
-  if (mod) {
-    return mod->type;
-  }
-
-  Ast *prev_root = ast_root;
-  ast_root = NULL;
-  TypeEnv *env = malloc(sizeof(TypeEnv));
-  Ast *module_ast = parse_module(file_path, env);
-  ast_root = prev_root;
-  Type *module_type = module_ast->md;
-
-  YLCModule *registered_module = malloc(sizeof(YLCModule));
-  *registered_module = (YLCModule){
-      .type = deep_copy_type(module_ast->md), .ast = module_ast, .env = env};
-
-  // ht_init(&registered_module->generics);
-
-  ht_set(&module_registry, file_path, registered_module);
-
-  return module_ast->md;
-}
-
 YLCModule *get_imported_module(Ast *ast) {
   const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;
 
@@ -89,25 +34,6 @@ YLCModule *get_imported_module(Ast *ast) {
   mod->ast->data.AST_IMPORT.fully_qualified_name = file_path;
   return mod;
 }
-
-// int get_import_ref(Ast *ast, void **ref, Ast **module_ast) {
-//   const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;
-//
-//   YLCModule *mod = ht_get(&module_registry, file_path);
-//   if (!mod) {
-//     return 0;
-//   }
-//
-//   if (mod->ref) {
-//     *ref = mod->ref;
-//     *module_ast = NULL;
-//   }
-//
-//   *ref = NULL;
-//   *module_ast = mod->ast;
-//
-//   return 1;
-// }
 
 void set_import_ref(Ast *ast, void *ref) {
   const char *file_path = ast->data.AST_IMPORT.fully_qualified_name;
@@ -121,3 +47,244 @@ void set_import_ref(Ast *ast, void *ref) {
   }
   fprintf(stderr, "Error: no module found for %s\n", file_path);
 }
+
+YLCModule *get_module(const char *key) { return ht_get(&module_registry, key); }
+
+Type *infer_module_import(Ast *ast, TICtx *ctx) {
+
+  AstList *type_annotations = ast->data.AST_LAMBDA.type_annotations;
+  AstList *params = ast->data.AST_LAMBDA.params;
+
+  // printf("infer parametrized module\n");
+  if (ast->data.AST_LAMBDA.len > 0) {
+
+    int i = 0;
+    for (AstList *p = params; p; i++, p = p->next,
+                 type_annotations = type_annotations ? type_annotations->next
+                                                     : NULL) {
+      // Ast *param = p->ast;
+      // print_ast(param);
+      // if (type_annotations && type_annotations->ast) {
+      //   printf("constraint: ");
+      //   print_ast(type_annotations->ast);
+      // }
+    }
+  }
+
+  Ast *body_ast;
+  AstList *stmt_list;
+  int len;
+
+  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+    // Single statement - create a temporary AstList node
+    AstList *single_stmt = talloc(sizeof(AstList));
+    single_stmt->ast = ast->data.AST_LAMBDA.body;
+    single_stmt->next = NULL;
+    stmt_list = single_stmt;
+    len = 1;
+  } else {
+    body_ast = ast->data.AST_LAMBDA.body;
+    stmt_list = body_ast->data.AST_BODY.stmts;
+    len = body_ast->data.AST_BODY.len;
+  }
+
+  TypeEnv *env_start = ctx->env;
+
+  Ast *stmt;
+  Type **member_types = talloc(sizeof(Type *) * len);
+  const char **names = talloc(sizeof(char *) * len);
+
+  int i = 0;
+  for (AstList *current = stmt_list; current != NULL;
+       current = current->next, i++) {
+    stmt = current->ast;
+    Type *t = infer(stmt, ctx);
+
+    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
+          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
+
+      // TODO: iter over stmts and only count the 'exportable members'
+      member_types[i] = NULL;
+    } else {
+      member_types[i] = t;
+
+      if (stmt->tag == AST_TYPE_DECL) {
+        names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
+      } else if (stmt->tag == AST_IMPORT) {
+
+        names[i] = stmt->data.AST_IMPORT.identifier;
+      } else {
+        names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+      }
+
+      if (!t) {
+        printf("could not infer module member\n");
+        print_ast_err(stmt);
+        return NULL;
+      }
+    }
+  }
+
+  Type *module_struct_type =
+      create_cons_type(TYPE_NAME_MODULE, len, member_types);
+
+  module_struct_type->data.T_CONS.names = names;
+
+  // TODO: do we need to keep module env scope from being pushed up
+  // ctx->env = env;
+
+  return module_struct_type;
+}
+
+Type *infer_inline_module(Ast *ast, TICtx *ctx) {
+
+  AstList *type_annotations = ast->data.AST_LAMBDA.type_annotations;
+  AstList *params = ast->data.AST_LAMBDA.params;
+
+  // printf("infer parametrized module\n");
+  if (ast->data.AST_LAMBDA.len > 0) {
+
+    int i = 0;
+    for (AstList *p = params; p; i++, p = p->next,
+                 type_annotations = type_annotations ? type_annotations->next
+                                                     : NULL) {
+      // Ast *param = p->ast;
+      // print_ast(param);
+      // if (type_annotations && type_annotations->ast) {
+      //   printf("constraint: ");
+      //   print_ast(type_annotations->ast);
+      // }
+    }
+  }
+
+  Ast *body_ast;
+  AstList *stmt_list;
+  int len;
+
+  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+    // Single statement - create a temporary AstList node
+    AstList *single_stmt = talloc(sizeof(AstList));
+    single_stmt->ast = ast->data.AST_LAMBDA.body;
+    single_stmt->next = NULL;
+    stmt_list = single_stmt;
+    len = 1;
+  } else {
+    body_ast = ast->data.AST_LAMBDA.body;
+    stmt_list = body_ast->data.AST_BODY.stmts;
+    len = body_ast->data.AST_BODY.len;
+  }
+
+  TICtx module_ctx = *ctx;
+  TypeEnv *env_start = module_ctx.env;
+
+  Ast *stmt;
+  Type **member_types = talloc(sizeof(Type *) * len);
+  const char **names = talloc(sizeof(char *) * len);
+
+  int i = 0;
+  for (AstList *current = stmt_list; current != NULL; current = current->next) {
+    stmt = current->ast;
+    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
+          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
+      return type_error(ctx, stmt,
+                        "Please only have let statements and type declarations "
+                        "in a module\n");
+      return NULL;
+    }
+
+    Type *t = infer(stmt, &module_ctx);
+    member_types[i] = t;
+
+    if (stmt->tag == AST_TYPE_DECL) {
+      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
+    } else if (stmt->tag == AST_IMPORT) {
+
+      names[i] = stmt->data.AST_IMPORT.identifier;
+    } else {
+      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+    }
+
+    if (!t) {
+      print_ast_err(stmt);
+      return NULL;
+    }
+    i++;
+  }
+
+  TypeEnv *env = module_ctx.env;
+
+  Type *module_struct_type =
+      create_cons_type(TYPE_NAME_MODULE, len, member_types);
+
+  module_struct_type->data.T_CONS.names = names;
+
+  // TODO: do we need to keep module env scope from being pushed up
+  // ctx->env = env;
+
+  return module_struct_type;
+}
+
+YLCModule *init_import(YLCModule *mod) {
+  Ast *mod_ast = parse_input_script(mod->path);
+
+  mod_ast = ast_lambda(NULL, mod_ast);
+  mod_ast->tag = AST_MODULE;
+  custom_binops_t *custom_binops = pctx.custom_binops;
+  mod->ast = mod_ast;
+  mod->custom_binops = custom_binops;
+
+  TICtx mod_ctx = {};
+  Type *mod_struct = infer_module_import(mod->ast, &mod_ctx);
+  mod->type = mod_struct;
+  mod->env = mod_ctx.env;
+  return mod;
+}
+
+bool module_exists(const char *key) {
+  return ht_get(&module_registry, key) != NULL;
+}
+
+bool register_module_ast(const char *key, Ast *module_ast) {
+  YLCModule *new_module = malloc(sizeof(YLCModule));
+  if (!new_module) {
+    return true; // allocation failed
+  }
+
+  *new_module =
+      (YLCModule){.type = NULL, // Will be filled during type inference
+                  .ast = module_ast,
+                  .ref = NULL,
+                  .env = NULL,
+                  .path = key};
+
+  ht_set(&module_registry, key, new_module);
+  return false; // success
+}
+
+Type *infer_module_access(Ast *ast, Type *rec_type, const char *member_name,
+                          TICtx *ctx) {
+  Type *type = NULL;
+
+  for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+    if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
+      type = rec_type->data.T_CONS.args[i];
+      ast->data.AST_RECORD_ACCESS.index = i;
+      break;
+    }
+
+    // if (type == NULL) {
+    //   fprintf(stderr, "Error: %s not found in module %s\n", member_name,
+    //           ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value);
+    //   return NULL;
+    // }
+  }
+
+  if (is_generic(type)) {
+    Scheme gen = generalize(type, NULL);
+    type = instantiate(&gen, ctx);
+  }
+  return type;
+}
+Type *get_import_type(Ast *ast) { return NULL; }

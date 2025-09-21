@@ -49,6 +49,7 @@ ESCAPE          \\(['"?\\abfnrtv]|[0-7]{1,3}|x[0-9a-fA-F]+)
 CHAR            '([^'\\\n]|{ESCAPE})'
 %%
 "fn"                    return FN;
+"module"                return MODULE;
 "let"                   return LET;
 "in"                    return IN;
 "and"                   return AND;
@@ -76,7 +77,6 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "||"                    return DOUBLE_PIPE;
 "*"                     return *yytext;
 "\\"                    return THUNK;
-"module"                return *yytext;
 "for"                   return *yytext;
 "to"                    return *yytext;
 [a-zA-Z_][a-zA-Z0-9_]*  {
@@ -88,14 +88,6 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return IDENTIFIER;
                         }
 
-(%)[a-zA-Z_][a-zA-Z0-9_]*  {
-
-                          int len = yyleng;
-                          yylval.vident.chars = strdup(yytext); 
-                          yylval.vident.length = len;
-                          yylval.vident.hash = hash_string(yylval.vident.chars, len);
-                          return MACRO_IDENTIFIER;
-                        }
 
 (\.\.\/)*[a-zA-Z_][a-zA-Z0-9_\/]*  {
                           int len = yyleng;
@@ -206,10 +198,9 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           yylval.vint = atoi(yytext);
                           return INTEGER;
                         }
-
--?[1-9][0-9]*f          { 
-                          yylval.vdouble = atof(yytext);
-                          return DOUBLE;
+-?[0-9]+(\.[0-9]*)?f    {
+                          yylval.vfloat = strtof(yytext, NULL);
+                          return FLOAT;
                         }
 -?[1-9][0-9]*           { 
                           yylval.vint = atoi(yytext);
@@ -270,6 +261,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                     yylval.vident.hash = hash_string(yylval.vident.chars, len);
                     return IDENTIFIER;
                 }
+
 
 .               { char err[64]; snprintf(err, sizeof(err), "Unknown character: %s", yytext); yyerror(err); }
 %%

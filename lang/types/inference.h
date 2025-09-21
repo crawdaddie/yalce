@@ -28,8 +28,6 @@ TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
 
 Substitution *solve_constraints(TypeConstraint *constraints);
 
-void print_constraints(TypeConstraint *c);
-
 bool is_loop_of_iterable(Ast *let);
 
 Type *get_full_fn_type_of_closure(Ast *closure);
@@ -37,4 +35,54 @@ Type *get_full_fn_type_of_closure(Ast *closure);
 Type *coroutine_constructor_type_from_fn_type(Type *fn_type
                                               // , Ast *ast
 );
+
+typedef struct VarList {
+  const char *var;
+  struct VarList *next;
+  TypeClass *implements;
+} VarList;
+
+typedef struct Scheme {
+  VarList *vars;
+  Type *type;
+} Scheme;
+
+// TypeScheme Env - maps names to type schemes
+typedef struct {
+  enum BindingType {
+    BT_VAR,
+    BT_RECURSIVE_REF,
+    BT_FN_PARAM,
+  } type;
+
+  union {
+    struct {
+      int scope;
+      int yield_boundary_scope;
+    } VAR;
+
+    struct {
+      int scope;
+    } RECURSIVE_REF;
+
+    struct {
+      int scope;
+    } FN_PARAM;
+
+  } data;
+} binding_md;
+
+
+typedef struct Subst {
+  const char *var;
+  Type *type;
+  struct Subst *next;
+} Subst;
+
+typedef struct Constraint {
+} Constraint;
+
+Scheme generalize(Type *t, TICtx *ctx);
+Type *instantiate(Scheme *sch, TICtx *ctx);
+
 #endif

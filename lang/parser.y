@@ -16,8 +16,6 @@ extern int yylineno;
 extern int yycolumn;
 extern char *yytext;
 
-/* Define global variable for the root of AST */
-Ast* ast_root = NULL;
 #define AST_CONST(type, val)                                            \
     ({                                                                  \
       Ast *prefix = Ast_new(type);                                      \
@@ -34,13 +32,14 @@ Ast* ast_root = NULL;
     ObjString vstr;             /* string */
     int vint;                   /* int val */
     double vdouble;
+    float vfloat;
     char vchar;
 };
 
 %token <vint>    INTEGER
 %token <vdouble> DOUBLE 
+%token <vfloat>  FLOAT
 %token <vident>  IDENTIFIER
-%token <vident>  MACRO_IDENTIFIER
 %token <vident>  PATH_IDENTIFIER
 %token <vident>  IDENTIFIER_LIST
 %token <vstr>    TOK_STRING
@@ -51,6 +50,7 @@ Ast* ast_root = NULL;
 %token TRIPLE_DOT
 %token LET
 %token FN
+%token MODULE
 %token MATCH
 %token WITH 
 %token ARROW
@@ -77,34 +77,32 @@ Ast* ast_root = NULL;
 %left '|'
 %left PIPE
 %left DOUBLE_AT
-%left APPLICATION 
 %left DOUBLE_AMP DOUBLE_PIPE
 %left GE LE EQ NE '>' '<'
 %left '+' '-'
 %left '*' '/'
 %left MODULO
 %left ':'
+%right DOUBLE_COLON
 %left MATCH
+%right APPLICATION 
 %right '.' 
 
 %nonassoc UMINUS
 
 %type <ast_node_ptr>
   expr
-  application
+  atom_expr
   lambda_expr
   lambda_arg
   lambda_args
-  extern_typed_signature
   list
   array
   tuple
   expr_list
   match_expr
   match_branches
-  list_match_expr
   simple_expr
-  custom_binop
   let_binding
   fstring
   fstring_parts
@@ -121,17 +119,17 @@ Ast* ast_root = NULL;
 
 
 program:
-    expr_sequence ';' { parse_stmt_list(ast_root, $1); }
-  | expr_sequence     { parse_stmt_list(ast_root, $1); }
+    expr_sequence ';' { pctx.ast_root = parse_stmt_list(pctx.ast_root, $1); }
+  | expr_sequence     { pctx.ast_root = parse_stmt_list(pctx.ast_root, $1); }
   | /* NULL */
   ;
 
 
 expr:
-    simple_expr
+    atom_expr
   | 'yield' expr                      { $$ = ast_yield($2); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
-  | expr simple_expr %prec APPLICATION { $$ = ast_application($1, $2); }
+  | expr atom_expr %prec APPLICATION  { $$ = ast_application($1, $2); }
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
   | expr '-' expr                     { $$ = ast_binop(TOKEN_MINUS, $1, $3); }
   | expr '*' expr                     { $$ = ast_binop(TOKEN_STAR, $1, $3); }
@@ -155,11 +153,6 @@ expr:
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
   | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
-  | MACRO_IDENTIFIER expr             {
-                                        // TODO: not doing anything with macros yet - do we want to??
-                                        printf("macro '%s'\n", $1.chars);
-                                        $$ = $2;
-                                      } 
   | 'for' IDENTIFIER '=' expr IN expr   {
                                           Ast *let = ast_let(ast_identifier($2), $4, $6);
                                           let->tag = AST_LOOP;
@@ -170,9 +163,15 @@ expr:
   | expr ':' '=' expr                 { $$ = ast_assignment($1, $4); }
   ;
 
+atom_expr:
+    simple_expr
+  | atom_expr '.' IDENTIFIER          { $$ = ast_record_access($1, ast_identifier($3)); }
+  ;
+
 simple_expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); }
   | DOUBLE                { $$ = AST_CONST(AST_DOUBLE, $1); }
+  | FLOAT                 { $$ = AST_CONST(AST_FLOAT, $1); }
   | TOK_STRING            { $$ = ast_string($1); }
   | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
   | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
@@ -202,32 +201,9 @@ simple_expr:
   | '(' PIPE ')'          { $$ = ast_identifier((ObjString){"|", 1}); }
   | '(' ':' ')'           { $$ = ast_identifier((ObjString){":", 1}); }
   | '(' DOUBLE_COLON ')'  { $$ = ast_identifier((ObjString){"::", 2}); }
-  | '(' custom_binop ')'  { $$ = $2; }
-  | simple_expr '.' IDENTIFIER        { $$ = ast_record_access($1, ast_identifier($3)); }
+  | '(' IDENTIFIER ')'            { $$ = ast_identifier($2); }
   ;
 
-custom_binop:
-    IDENTIFIER 
-    {
-      // Check if the identifier is in the custom_binops list
-      bool found = false;
-      custom_binops_t* current = __custom_binops;
-      while (current != NULL) {
-        if (strcmp(current->binop, $1.chars) == 0) {
-          found = true;
-          break;
-        }
-        current = current->next;
-      }
-      
-      if (!found) {
-        yyerror("Invalid operator in section syntax");
-        YYERROR;
-      }
-      
-      $$ = ast_identifier($1);
-    }
-  ;
 
 expr_sequence:
     expr                        { $$ = $1; }
@@ -242,10 +218,6 @@ let_binding:
 
   | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
 
-  | LET MUT lambda_arg '=' expr     { Ast *let = ast_let($3, $5, NULL);
-                                      let->data.AST_LET.is_mut = true;
-                                      $$ = let;
-                                    }
   | LET expr_list '=' expr          { $$ = ast_let(ast_tuple($2), $4, NULL);}
 
   | LET MUT expr_list '=' expr      { Ast *let = ast_let(ast_tuple($3), $5, NULL);
@@ -289,49 +261,34 @@ let_binding:
   | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($2, $4, $6); }
   ;
 
-extern_typed_signature:
-    EXTERN FN expr                  { $$ = extern_typed_signature($3); }
-  | extern_typed_signature ARROW expr %prec ':'
-                                    { $$ = extern_typed_signature_push($1, $3); }
-  ;
-
 
 
 lambda_expr:
     FN lambda_args ARROW expr_sequence ';'      { $$ = ast_lambda($2, $4); }
   | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_void_lambda($4); }
-  | '(' FN lambda_args ARROW expr_sequence ')'  { $$ = ast_lambda($3, $5); }
-  | '(' FN TOK_VOID ARROW expr_sequence ')'     { $$ = ast_void_lambda($5); }
-  | 'module' lambda_args ARROW expr_sequence ';'{ $$ = ast_module(ast_lambda($2, $4)); }
-  | 'module' expr_sequence ';'                  { $$ = ast_module(ast_lambda(NULL, $2)); }
+  | MODULE lambda_args ARROW expr_sequence ';'{ $$ = ast_module(ast_lambda($2, $4)); }
+  | MODULE TOK_VOID ARROW expr_sequence ';'   { $$ = ast_module(ast_lambda(NULL, $4)); }
   ;
 
 
 
 
 lambda_args:
-    lambda_arg              { $$ = ast_arg_list($1, NULL); }
-  | lambda_arg '=' expr     { $$ = ast_arg_list($1, $3); }
-  | lambda_args lambda_arg  { $$ = ast_arg_list_push($1, $2, NULL); }
-  | lambda_args lambda_arg '=' expr { $$ = ast_arg_list_push($1, $2, $4); }
-
-  | lambda_arg              { $$ = ast_arg_list($1, NULL); }
-  | lambda_arg ':' '(' type_expr ')' { $$ = ast_arg_list($1, $4); }
-  | lambda_args lambda_arg  { $$ = ast_arg_list_push($1, $2, NULL); }
+    lambda_arg                                   { $$ = ast_arg_list($1, NULL); }
+  | lambda_arg '=' expr                          { $$ = ast_arg_list($1, $3); }
+  | lambda_arg ':' '(' type_expr ')'             { $$ = ast_arg_list($1, $4); }
+  | lambda_args lambda_arg                       { $$ = ast_arg_list_push($1, $2, NULL); }
+  | lambda_args lambda_arg '=' expr              { $$ = ast_arg_list_push($1, $2, $4); }
   | lambda_args lambda_arg ':' '(' type_expr ')' { $$ = ast_arg_list_push($1, $2, $5); }
   ;
 
 lambda_arg:
     IDENTIFIER              { $$ = ast_identifier($1); }
   | '(' expr_list ')'       { $$ = ast_tuple($2); }
-  | list_match_expr         { $$ = $1; }
+  | IDENTIFIER DOUBLE_COLON lambda_arg  { $$ = ast_list_prepend(ast_identifier($1), $3); }
+  | '_'                               { $$ = Ast_new(AST_PLACEHOLDER_ID); }
   ;
 
-application:
-    IDENTIFIER expr %prec APPLICATION   { $$ = ast_application(ast_identifier($1), $2); }
-  /*| expr expr               { $$ = ast_application($1, $2); } */
-  | application expr %prec APPLICATION  { $$ = ast_application($1, $2); }
-  ;
 
 list:
     '[' ']'                 { $$ = ast_empty_list(); }
@@ -345,10 +302,6 @@ array:
   | '[''|' expr_list ',' '|'']'   { $$ = ast_list_to_array($3); }
   ;
 
-list_match_expr:
-    IDENTIFIER DOUBLE_COLON IDENTIFIER  { $$ = ast_list_prepend(ast_identifier($1), ast_identifier($3)); }
-  | IDENTIFIER DOUBLE_COLON expr        { $$ = ast_list_prepend(ast_identifier($1), $3); }
-  ;
 
 tuple:
     '(' expr ')'          { $$ = $2; }
@@ -416,8 +369,8 @@ type_decl:
   ;
 
 type_args:
-    IDENTIFIER              { $$ = ast_arg_list(ast_identifier($1), NULL); }
-  | type_args IDENTIFIER    { $$ = ast_arg_list_push($1, ast_identifier($2), NULL); }
+    IDENTIFIER IDENTIFIER                { $$ = ast_arg_list_push(ast_arg_list(ast_identifier($1), NULL), ast_identifier($2), NULL); }
+  | type_args IDENTIFIER                 { $$ = ast_arg_list_push($1, ast_identifier($2), NULL); }
 
 fn_signature:
     type_expr ARROW type_expr           { $$ = ast_fn_sig($1, $3); }
@@ -450,6 +403,6 @@ type_atom:
 
 
 void yyerror(const char *s) {
-  fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, _cur_script);
+  fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, pctx.cur_script);
 }
-#endif _LANG_TAB_Hparse
+#endif _LANG_TAB_H

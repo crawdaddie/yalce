@@ -51,14 +51,16 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
               constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
               expr->md, func);
     } else {
-      for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
-        Ast *expr = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
-        LLVMValueRef func = codegen(expr, ctx, module, builder);
-        constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
-            specific_fns_extend(constructor_sym->symbol_data
-                                    .STYPE_GENERIC_FUNCTION.specific_fns,
-                                expr->md, func);
-      }
+
+      AST_LIST_ITER(
+          impl->data.AST_LAMBDA.body->data.AST_BODY.stmts, ({
+            Ast *expr = l->ast;
+            LLVMValueRef func = codegen(expr, ctx, module, builder);
+            constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
+                specific_fns_extend(constructor_sym->symbol_data
+                                        .STYPE_GENERIC_FUNCTION.specific_fns,
+                                    expr->md, func);
+          }));
     }
   }
   uint64_t hash_id = trait->data.AST_TRAIT_IMPL.type.hash;
@@ -80,38 +82,37 @@ LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
 
   ObjString type = trait->data.AST_TRAIT_IMPL.type;
 
-  for (int i = 0; i < impl->data.AST_LAMBDA.body->data.AST_BODY.len; i++) {
+  AST_LIST_ITER(impl->data.AST_LAMBDA.body->data.AST_BODY.stmts, ({
+                  Ast *stmt = l->ast;
+                  if (stmt->tag != AST_LET) {
+                    continue;
+                  }
+                  Ast *expr = stmt->data.AST_LET.expr;
+                  Ast *binding = stmt->data.AST_LET.binding;
+                  const char *name = binding->data.AST_IDENTIFIER.value;
+                  LLVMValueRef func = codegen(expr, ctx, module, builder);
 
-    Ast *stmt = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts[i];
-    if (stmt->tag != AST_LET) {
-      continue;
-    }
-    Ast *expr = stmt->data.AST_LET.expr;
-    Ast *binding = stmt->data.AST_LET.binding;
-    const char *name = binding->data.AST_IDENTIFIER.value;
-    LLVMValueRef func = codegen(expr, ctx, module, builder);
+                  int total_chars = strlen(type.chars) + 1 + 1;
+                  char chars[total_chars];
+                  if (CHARS_EQ(name, "add")) {
+                    sprintf(chars, "%s.%s", type.chars, "+");
+                  } else if (CHARS_EQ(name, "sub")) {
+                    sprintf(chars, "%s.%s", type.chars, "-");
+                  } else if (CHARS_EQ(name, "mul")) {
+                    sprintf(chars, "%s.%s", type.chars, "*");
+                  } else if (CHARS_EQ(name, "div")) {
+                    sprintf(chars, "%s.%s", type.chars, "/");
+                  } else if (CHARS_EQ(name, "mod")) {
+                    sprintf(chars, "%s.%s", type.chars, "%");
+                  }
 
-    int total_chars = strlen(type.chars) + 1 + 1;
-    char chars[total_chars];
-    if (CHARS_EQ(name, "add")) {
-      sprintf(chars, "%s.%s", type.chars, "+");
-    } else if (CHARS_EQ(name, "sub")) {
-      sprintf(chars, "%s.%s", type.chars, "-");
-    } else if (CHARS_EQ(name, "mul")) {
-      sprintf(chars, "%s.%s", type.chars, "*");
-    } else if (CHARS_EQ(name, "div")) {
-      sprintf(chars, "%s.%s", type.chars, "/");
-    } else if (CHARS_EQ(name, "mod")) {
-      sprintf(chars, "%s.%s", type.chars, "%");
-    }
+                  JITSymbol *method_sym =
+                      new_symbol(STYPE_FUNCTION, expr->md, func,
+                                 type_to_llvm_type(expr->md, ctx, module));
 
-    JITSymbol *method_sym =
-        new_symbol(STYPE_FUNCTION, expr->md, func,
-                   type_to_llvm_type(expr->md, ctx, module));
-
-    ht_set_hash(ctx->frame->table, chars, hash_string(chars, total_chars),
-                method_sym);
-  }
+                  ht_set_hash(ctx->frame->table, chars,
+                              hash_string(chars, total_chars), method_sym);
+                }));
   return NULL;
 }
 

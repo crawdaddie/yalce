@@ -19,7 +19,7 @@ bool branch_is_match(Ast *expr) {
   }
   if (expr->tag == AST_BODY) {
     int n = expr->data.AST_BODY.len;
-    Ast *last = expr->data.AST_BODY.stmts[n - 1];
+    Ast *last = body_tail(expr);
     return branch_is_match(last);
   }
   return false;
@@ -28,7 +28,7 @@ bool branch_is_match(Ast *expr) {
 void set_as_tail(Ast *expr) {
   if (expr->tag == AST_BODY) {
     int n = expr->data.AST_BODY.len;
-    Ast *last = expr->data.AST_BODY.stmts[n - 1];
+    Ast *last = body_tail(expr);
     return set_as_tail(last);
   }
   expr->is_body_tail = true;
@@ -186,7 +186,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 bool is_tail_call_expression(Ast *expr) {
   if (expr->tag == AST_BODY) {
     int n = expr->data.AST_BODY.len;
-    Ast *last = expr->data.AST_BODY.stmts[n - 1];
+    Ast *last = body_tail(expr);
     return is_tail_call_expression(last);
   }
 
@@ -201,7 +201,7 @@ bool will_all_branches_return(Ast *match_expr) {
 
   if (match_expr->tag == AST_BODY) {
     int n = match_expr->data.AST_BODY.len;
-    Ast *last = match_expr->data.AST_BODY.stmts[n - 1];
+    Ast *last = body_tail(match_expr);
     return will_all_branches_return(last);
   }
 

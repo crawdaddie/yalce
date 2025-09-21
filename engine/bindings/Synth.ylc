@@ -3,10 +3,10 @@
 let _ = dlopen "../build/libyalce_synth.so";
 type Synth = Ptr of Char;
 
-type SynthInput = 
-  | Scalar of Int
-  | Trig of Int
-  ;
+# type SynthInput = 
+#   | Scalar of Int
+#   | Trig of Int
+#   ;
 # osc.h
 let maketable_sin = extern fn () -> ();
 let maketable_sq = extern fn () -> ();
@@ -142,7 +142,7 @@ let imp_train_node = extern fn Synth -> Synth;
 # ;;
  
 # TODO: add impls for Ord and Eq??
-let Arithmetic : Synth = module 
+let Arithmetic : Synth = module () ->
   let rank = 5.; # rank must be a literal
   let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;
   let sub = fn a: (Synth) b: (Synth) -> sub2_node a b;;
@@ -151,7 +151,7 @@ let Arithmetic : Synth = module
   let mod = fn a: (Synth) b: (Synth) -> mod2_node a b;;
 ;
 
-let Constructor : Synth = module
+let Constructor : Synth = module () ->
   let of_int = fn a: (Int) ->
     const_sig a
   ;;
