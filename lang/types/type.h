@@ -10,13 +10,6 @@ typedef struct Type Type;
 void reset_type_var_counter();
 Type *next_tvar();
 
-typedef struct TypeConstraint {
-  Type *t1;
-  Type *t2;
-  struct TypeConstraint *next;
-  Ast *src;
-} TypeConstraint;
-
 typedef struct Method {
   const char *name;
   void *method;
@@ -33,75 +26,9 @@ typedef struct TypeClass {
   struct TypeClass *next;
 } TypeClass;
 
-typedef struct TypeEnv TypeEnv;
 typedef struct Type Type;
 
-extern Type t_int;
-extern Type t_uint64;
-extern Type t_num;
-extern Type t_string;
-extern Type t_char_array;
-extern Type t_string_add_fn_sig;
-extern Type t_string_array;
-
 bool is_string_type(Type *type);
-
-extern Type t_bool;
-extern Type t_void;
-extern Type t_char;
-extern Type t_ptr;
-extern Type t_empty_list;
-extern Type t_list_var;
-
-extern Type t_list_prepend;
-extern Type t_list_concat;
-
-// builtin binop types
-extern Type t_add;
-extern Type t_sub;
-extern Type t_mul;
-extern Type t_div;
-extern Type t_mod;
-extern Type t_gt;
-extern Type t_lt;
-extern Type t_gte;
-extern Type t_lte;
-extern Type t_eq;
-extern Type t_neq;
-extern Type t_bool_binop;
-
-extern Type t_array_var_el;
-extern Type t_array_var;
-
-extern Type t_array_size_fn_sig;
-extern Type t_array_to_list_fn_sig;
-extern Type t_array_at_fn_sig;
-extern Type t_array_set_fn_sig;
-extern Type t_array_data_ptr_fn_sig;
-extern Type t_array_slice_fn_sig;
-extern Type t_array_new_fn_sig;
-extern Type t_make_ref;
-
-extern Type t_array_of_chars_fn_sig;
-
-extern Type t_ptr_deref_sig;
-extern Type t_none;
-
-extern Type t_iter_cor_sig;
-extern Type t_cor_map_iter_sig;
-extern Type t_coroutine_concat_sig;
-
-extern Type t_cor_iter_of_list_sig;
-
-extern Type t_builtin_or;
-extern Type t_builtin_and;
-
-extern Type t_builtin_char_of;
-
-extern Type t_cor_wrap_effect_fn_sig;
-extern Type t_cor_play_sig;
-
-extern Type t_opt_map_sig;
 
 // clang-format off
 #define TYPE_NAME_LIST    "List"
@@ -115,7 +42,7 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_DOUBLE  "Double"
 #define TYPE_NAME_UINT64  "Uint64"
 #define TYPE_NAME_VOID    "()"
-#define TYPE_NAME_VARIANT "Variant"
+#define TYPE_NAME_VARIANT "Sum"
 #define TYPE_NAME_SOME    "Some"
 #define TYPE_NAME_NONE    "None"
 #define TYPE_NAME_QUEUE   "Queue"
@@ -143,17 +70,7 @@ extern Type t_opt_map_sig;
 #define TYPE_NAME_COROUTINE_CONSTRUCTOR "CoroutineConstructor"
 #define TYPE_NAME_COROUTINE_INSTANCE "Coroutine"
 
-#define TYPE_NAME_REF "mut"
 
-typedef struct _binop_map {
-  const char *name;
-  Type *binop_fn_type;
-} _binop_map;
-
-#define _NUM_BINOPS 12
-extern _binop_map binop_map[];
-// clang-format on
-//
 
 #define MAKE_FN_TYPE_2(arg_type, ret_type)                                     \
   ((Type){T_FN, {.T_FN = {.from = arg_type, .to = ret_type}}})
@@ -221,8 +138,6 @@ extern _binop_map binop_map[];
 
 #define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none)
 
-typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
-
 // #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
 //   ((Type){                                                                     \
 //       .kind = T_TYPECLASS_RESOLVE,                                             \
@@ -235,6 +150,7 @@ typedef Type *(*TypeClassResolver)(struct Type *this, TypeConstraint *env);
       T_VAR,                                                                   \
       {.T_VAR = n},                                                            \
   })
+
 
 typedef struct Type *(*CreateNewGenericTypeFn)(void *);
 enum TypeKind {
@@ -250,9 +166,14 @@ enum TypeKind {
   T_VAR,
   T_EMPTY_LIST,
   T_TYPECLASS_RESOLVE,
-  T_CREATE_NEW_GENERIC,
+  T_SCHEME,
 };
 #define TYPE_FLAGS_PRIMITIVE ((1 << T_STRING) | ((1 << T_STRING) - 1))
+
+typedef struct TypeList {
+  Type *type;
+  struct TypeList *next;
+} TypeList;
 
 typedef struct Type {
   enum TypeKind kind;
@@ -280,10 +201,12 @@ typedef struct Type {
       struct Type *state;
     } T_COROUTINE_FN;
 
+
     struct {
-      CreateNewGenericTypeFn fn;
-      struct Type *template;
-    } T_CREATE_NEW_GENERIC;
+      TypeList *vars;
+      int num_vars;
+      Type *type;
+    } T_SCHEME;
 
   } data;
 
@@ -304,39 +227,16 @@ typedef struct Type {
   void *meta;
 } Type;
 
-// TypeEnv represents a mapping from variable names to their types
-typedef struct TypeEnv {
-  const char *name;
-  Type *type;
-  int ref_count;
-  int is_fn_param;
-  int is_recursive_fn_ref;
-  int yield_boundary;
-  struct TypeEnv *next;
-} TypeEnv;
 
-TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
-Type *rec_env_lookup(TypeEnv *env, Type *var);
 
-Type *variant_member_lookup(TypeEnv *env, const char *name, int *idx,
-                            char **variant_name);
 
 bool variant_contains_type(Type *variant, Type *member, int *idx);
-void free_type_env(TypeEnv *env);
-void print_type_env(TypeEnv *env);
-Type *find_type_in_env(TypeEnv *env, const char *name);
 
-char *type_to_string(Type *t, char *buffer);
-
-void print_type(Type *t);
-void print_type_err(Type *t);
 bool types_equal(Type *l, Type *r);
 
 Type *fn_return_type(Type *);
 int fn_type_args_len(Type *);
 
-void *talloc(size_t size);
-void tfree(void *mem);
 Type *empty_type();
 Type *tvar(const char *name);
 bool is_generic(Type *t);
@@ -356,10 +256,7 @@ bool is_array_type(Type *type);
 Type *resolve_tc_rank(Type *type);
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement);
-Type *resolve_generic_type(Type *t, TypeEnv *env);
-bool is_variant_type(Type *type);
-Type *variant_lookup(TypeEnv *env, Type *member, int *member_idx);
-Type *variant_lookup_name(TypeEnv *env, const char *name, int *member_idx);
+bool is_sum_type(Type *type);
 
 typedef struct VariantContext {
 } VariantContext;
@@ -371,16 +268,6 @@ bool is_option_type(Type *t);
 Type *type_of_option(Type *option);
 
 Type *get_builtin_type(const char *id_chars);
-
-typedef struct TypeMap {
-  Type *key;
-  Type *val;
-  struct TypeMap *next;
-} TypeMap;
-
-TypeMap *constraints_map_extend(TypeMap *map, Type *key, Type *val);
-void print_constraints_map(TypeMap *map);
-Type *constraints_map_lookup(TypeMap *map, Type *key);
 
 Type *ptr_of_type(Type *);
 
@@ -407,19 +294,11 @@ bool type_implements(Type *t, TypeClass *tc);
 
 bool is_forall_type(Type *type);
 
-extern Type t_builtin_print;
 
-// extern TypeList *arithmetic_tc_registry;
-// extern TypeList *ord_tc_registry;
-// extern TypeList *eq_tc_registry;
-//
 bool is_simple_enum(Type *t);
 
 bool fn_types_match(Type *t1, Type *t2);
 
-Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
-
-Type *resolve_type_in_env(Type *r, TypeEnv *env);
 
 bool application_is_partial(Ast *app);
 
@@ -435,24 +314,49 @@ void typeclasses_extend(Type *t, TypeClass *tc);
 
 bool is_module(Type *t);
 
-typedef struct TICtx {
-  TypeEnv *env;
-  TypeConstraint *constraints;
-  Ast *current_fn_ast;
-  Type *yielded_type;
-  int scope;
-  int current_fn_scope;
-  custom_binops_t *custom_binops;
-  const char *err;
-  FILE *err_stream; // Replace const char *err
+Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2);
 
-} TICtx;
+#define MSCHEME(n, vlist, t) ((Type){T_SCHEME, {.T_SCHEME = {.vars = vlist, .num_vars = n, .type = t}}})
 
-// Substitution map for type variables
-typedef struct Substitution {
-  Type *from; // Type variable
-  Type *to;   // Replacement type
-  struct Substitution *next;
-} Substitution;
+// Recursive macro helpers for building TypeList chains
+#define _TYPELIST_1(t1) \
+  &(TypeList){.type = (t1), .next = NULL}
 
+#define _TYPELIST_2(t1, t2) \
+  &(TypeList){.type = (t1), .next = _TYPELIST_1(t2)}
+
+#define _TYPELIST_3(t1, t2, t3) \
+  &(TypeList){.type = (t1), .next = _TYPELIST_2(t2, t3)}
+
+#define _TYPELIST_4(t1, t2, t3, t4) \
+  &(TypeList){.type = (t1), .next = _TYPELIST_3(t2, t3, t4)}
+
+#define _TYPELIST_5(t1, t2, t3, t4, t5) \
+  &(TypeList){.type = (t1), .next = _TYPELIST_4(t2, t3, t4, t5)}
+
+#define _TYPELIST_6(t1, t2, t3, t4, t5, t6) \
+  &(TypeList){.type = (t1), .next = _TYPELIST_5(t2, t3, t4, t5, t6)}
+
+#define _TYPELIST_7(t1, t2, t3, t4, t5, t6, t7) \
+  &(TypeList){.type = (t1), .next = _TYPELIST_6(t2, t3, t4, t5, t6, t7)}
+
+#define _TYPELIST_8(t1, t2, t3, t4, t5, t6, t7, t8) \
+  &(TypeList){.type = (t1), .next = _TYPELIST_7(t2, t3, t4, t5, t6, t7, t8)}
+
+// Macro overloading helper
+#define _GET_TYPELIST_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, NAME, ...) NAME
+
+#define TYPELIST(...) \
+  _GET_TYPELIST_MACRO(__VA_ARGS__, _TYPELIST_8, _TYPELIST_7, _TYPELIST_6, _TYPELIST_5, _TYPELIST_4, _TYPELIST_3, _TYPELIST_2, _TYPELIST_1)(__VA_ARGS__)
+
+// Convenience macro for creating T_SCHEME with variadic type arguments
+#define TSCHEME(scheme_type, ...) \
+  MSCHEME(_GET_ARG_COUNT(__VA_ARGS__), TYPELIST(__VA_ARGS__), (scheme_type))
+
+// Helper to count arguments
+#define _GET_ARG_COUNT(...) \
+  _GET_ARG_COUNT_HELPER(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
+
+#define _GET_ARG_COUNT_HELPER(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
 #endif
+

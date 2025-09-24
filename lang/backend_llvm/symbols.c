@@ -392,7 +392,6 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   expr_val = codegen(expr, outer_ctx, module, builder);
 
   if (!expr_val) {
-    print_type_err(expr->md);
     fprintf(stderr, "Error - could not compile value for binding to %s\n",
             binding->data.AST_IDENTIFIER.value);
     print_codegen_location();

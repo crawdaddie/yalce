@@ -13,19 +13,6 @@ typedef struct {
 uint64_t hash_string(const char *key, int length);
 uint64_t hash_key(const char *key);
 
-#define TRY_MSG(expr, msg)                                                     \
-  ({                                                                           \
-    typeof(expr) _result = (expr);                                             \
-    if (!_result) {                                                            \
-      if (msg) {                                                               \
-        fprintf(stderr, "%s\n", msg);                                          \
-        fprintf(stderr, "%s:%d\n", __FILE__, __LINE__);                        \
-      }                                                                        \
-      return NULL;                                                             \
-    }                                                                          \
-    _result;                                                                   \
-  })
-
 #define FNV_OFFSET 14695981039346656037UL
 #define FNV_PRIME 1099511628211UL
 
@@ -37,4 +24,6 @@ void __set_break_repl_cb(void (*cb)(void)); // Proper function pointer type
 //
 typedef void *(*AllocatorFnType)(size_t size);
 typedef void *(*ReAllocatorFnType)(void *p, size_t size);
+
+#define CHARS_EQ(a, b) (strcmp(a, b) == 0)
 #endif

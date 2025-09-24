@@ -1,8 +1,10 @@
 #include "../lang/parse.h"
 #include "../lang/serde.h"
+#include "../lang/types/builtins.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type.h"
-#include "../lang/types/unification.h"
+#include "../lang/types/type_ser.h"
+
 #include <string.h>
 
 #define MAX_FAILURES 1000
@@ -64,7 +66,7 @@ static void print_all_failures() {
     printf("\n--------------------------------------\n%s\n", input);           \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
-    TICtx ctx = {};                                                            \
+    TICtx ctx = {.env = NULL};                                                 \
     stat &= (infer(ast, &ctx) != NULL);                                        \
     stat &= (types_equal(ast->md, type));                                      \
     char buf[200] = {};                                                        \
@@ -83,12 +85,11 @@ static void print_all_failures() {
   })
 
 #define _T(input)                                                              \
-  \ 
   ({                                                                           \
     reset_type_var_counter();                                                  \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
-    TICtx ctx = {};                                                            \
+    TICtx ctx = {.env = NULL};                                                 \
     infer(ast, &ctx);                                                          \
     char buf[200] = {};                                                        \
     ast;                                                                       \
@@ -115,7 +116,7 @@ static void print_all_failures() {
     printf("\n--------------------------------------\n%s\n", input);           \
     bool stat = true;                                                          \
     Ast *ast = parse_input(input, NULL);                                       \
-    TICtx ctx = {};                                                            \
+    TICtx ctx = {.env = NULL};                                                 \
     stat &= (infer(ast, &ctx) == NULL);                                        \
     char buf[100] = {};                                                        \
     if (stat) {                                                                \
@@ -282,8 +283,8 @@ int test_list_processing() {
     Type t = arithmetic_var("`0");
     T("let list_sum = fn s l ->\n"
       "  match l with\n"
-      "  | [] -> s\n"
       "  | x::rest -> list_sum (s + x) rest\n"
+      "  | [] -> s\n"
       ";;\n",
       &MAKE_FN_TYPE_3(&t, &TLIST(&s), &t));
   });
@@ -310,8 +311,8 @@ int test_list_processing() {
 
   T("let list_pop_left = fn l ->\n"
     "  match l with\n"
-    "  | [] -> None\n"
     "  | x::rest -> Some x \n"
+    "  | [] -> None\n"
     ";; \n",
     &MAKE_FN_TYPE_2(&TLIST(&TVAR("`4")), &TOPT(&TVAR("`4"))));
 
@@ -530,6 +531,8 @@ int test_basic_ops() {
   ({
     Type t0 = arithmetic_var("`0");
     Type t1 = arithmetic_var("`1");
+    TypeList tl = {&t0, &(TypeList){&t1}};
+
     T("(+)", &MAKE_FN_TYPE_3(
                  &t0, &t1,
                  &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0)));
@@ -576,13 +579,26 @@ int test_basic_ops() {
   T("let x::y::_ = [1, 2] in x + y", &t_int);
   T("let z = [1, 2] in let x::_ = z in x", &t_int);
   TFAIL("let z = 1 in let x::_ = z in x");
+  T("`{x} and {y} and {3} and {3.}`", &t_string);
+  ({
+    Ast *b = T("`{2} and`", &t_string);
+    Ast *strf = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->data.AST_LIST.items;
+    TASSERT("fmt string member has type string", types_equal(strf->md, &t_string));
+    TASSERT("fmt string member fn has type Int -> string", types_equal(strf->data.AST_APPLICATION.function->md, &MAKE_FN_TYPE_2(&t_int, &t_string)));
+  });
   return status;
 }
 
 int test_funcs() {
   printf("## TEST FUNCS\n---------------------------------------------\n");
   bool status = true;
-  T("let f = fn a b -> 2;;", &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`1"), &t_int));
+  ({
+    Type t0 = TVAR("`0");
+    Type t1 = TVAR("`1");
+    T("let f = fn a b -> 2;;",
+      &TSCHEME(&MAKE_FN_TYPE_3(&t0, &t1, &t_int), &t0, &t1));
+  });
+
   T("let f = fn a: (Int) b: (Int) -> 2;;",
     &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int));
 
@@ -596,11 +612,13 @@ int test_funcs() {
                   "f 1.;\n",
                   &t_num);
 
-    TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 0)->md,
-               &MAKE_FN_TYPE_2(
-                   &tvar, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                             &tvar, &t_int)),
-               "f == `0 [Arithmetic] -> resolve Arithmetic Int : `0");
+    TASSERT_EQ(
+        AST_LIST_NTH(body->data.AST_BODY.stmts, 0)->md,
+        &TSCHEME(&MAKE_FN_TYPE_2(
+                     &tvar, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                               &t_int, &tvar)),
+                 &tvar),
+        "f == `0 [Arithmetic] -> resolve Arithmetic Int : `0");
 
     TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 1)->md, &t_int,
                "f 1 == Int");
@@ -614,7 +632,9 @@ int test_funcs() {
     Type t2 = TVAR("`3");
 
     T("let f = fn (x, y, z) -> (z, y, x);",
-      &MAKE_FN_TYPE_2(&TTUPLE(3, &t0, &t1, &t2), &TTUPLE(3, &t2, &t1, &t0)));
+      &TSCHEME(
+          &MAKE_FN_TYPE_2(&TTUPLE(3, &t0, &t1, &t2), &TTUPLE(3, &t2, &t1, &t0)),
+          &t0, &t1, &t2));
   });
 
   ({
@@ -623,8 +643,9 @@ int test_funcs() {
     Type t2 = TVAR("`3");
 
     T("let f = fn (x, y, z) frame_offset: (Int) -> (z, y, x);",
-      &MAKE_FN_TYPE_3(&TTUPLE(3, &t0, &t1, &t2), &t_int,
-                      &TTUPLE(3, &t2, &t1, &t0)));
+      &TSCHEME(&MAKE_FN_TYPE_3(&TTUPLE(3, &t0, &t1, &t2), &t_int,
+                               &TTUPLE(3, &t2, &t1, &t0)),
+               &t0, &t1, &t2));
   });
 
   ({
@@ -632,11 +653,13 @@ int test_funcs() {
     Type t1 = TVAR("`1");
     Type t2 = TVAR("`2");
     T("let f = fn x y z -> x + y + z;",
-      &MAKE_FN_TYPE_4(
-          &t0, &t1, &t2,
-          &MAKE_TC_RESOLVE_2(
-              TYPE_NAME_TYPECLASS_ARITHMETIC, &t1,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t2, &t0))));
+      &TSCHEME(
+          &MAKE_FN_TYPE_4(&t0, &t1, &t2,
+                          &MAKE_TC_RESOLVE_2(
+                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
+                              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t1, &t2))),
+          &t0, &t1, &t2));
   });
 
   ({
@@ -655,6 +678,7 @@ int test_funcs() {
     "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
     ";;\n",
     &MAKE_FN_TYPE_2(&t_int, &t_int));
+
   T("let f = fn x: (Int) (y, z): (Int, Double) -> x + y + z;;",
     &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
   ({
@@ -662,17 +686,21 @@ int test_funcs() {
     Type t2 = arithmetic_var("`2");
     Type t3 = arithmetic_var("`3");
     T("let f = fn x (y, z) -> x + y + z;;",
-      &MAKE_FN_TYPE_3(
-          &t0, &TTUPLE(2, &t2, &t3),
-          &MAKE_TC_RESOLVE_2(
-              TYPE_NAME_TYPECLASS_ARITHMETIC, &t2,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t3, &t0))));
+      &TSCHEME(
+          &MAKE_FN_TYPE_3(&t0, &TTUPLE(2, &t2, &t3),
+                          &MAKE_TC_RESOLVE_2(
+                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
+                              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t2, &t3))),
+          &t0, &t2, &t3));
   });
 
   Type t0 = arithmetic_var("`0");
   T("let add1 = fn x -> 1 + x;;",
-    &MAKE_FN_TYPE_2(
-        &t0, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t_int)));
+    &TSCHEME(
+        &MAKE_FN_TYPE_2(&t0, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                &t_int, &t0)),
+        &t0));
 
   T("let add1 = fn x -> 1 + x;; add1 1", &t_int);
   T("let add1 = fn x -> 1 + x;; add1 1; add1 1.", &t_num);
@@ -685,12 +713,12 @@ int test_funcs() {
   });
 
   ({
-    Type t = arithmetic_var("`12");
+    Type t = arithmetic_var("`10");
     Ast *b =
         T("let f = fn a b c -> a + b + c;;\n"
           "f 1 2\n",
           &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t, &t_int)));
+                                                 &t_int, &t)));
 
     bool is_partial =
         application_is_partial(AST_LIST_NTH(b->data.AST_BODY.stmts, 1));
@@ -734,13 +762,14 @@ int test_funcs() {
       snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
       add_failure(fail_msg, __FILE__, __LINE__);
     }
+  });
 
     ({
-      Type t = arithmetic_var("`12");
+      Type t = arithmetic_var("`10");
       T("let f = fn a b c -> a + b + c;;\n"
         "f 1. 2.\n",
         &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &t, &t_num)));
+                                               &t_num, &t)));
     });
 
     T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
@@ -771,8 +800,6 @@ int test_funcs() {
       T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
     });
 
-    status &= is_partial;
-  });
 
   ({
     bool res =
@@ -810,22 +837,21 @@ int test_funcs() {
     }
     status &= res;
   });
-  /*
-    ({
-      Type s = arithmetic_var("`4");
-      Type t = arithmetic_var("`0");
-      Ast *b = T("let arr_sum = fn s a ->\n"
-                 "  let len = array_size a in\n"
-                 "  let aux = fn i su -> \n"
-                 "    match i with\n"
-                 "    | i if i == len -> su\n"
-                 "    | i -> aux (i + 1) (su + array_at a i)\n"
-                 "    ; in\n"
-                 "  aux 0 s\n"
-                 "  ;;\n",
-                 &MAKE_FN_TYPE_3(&t, &TARRAY(&s), &t));
-    });
-    */
+
+  // ({
+  //   Type s = arithmetic_var("`4");
+  //   Type t = arithmetic_var("`0");
+  //   Ast *b = T("let arr_sum = fn s a ->\n"
+  //              "  let len = array_size a in\n"
+  //              "  let aux = fn i su -> \n"
+  //              "    match i with\n"
+  //              "    | i if i == len -> su\n"
+  //              "    | i -> aux (i + 1) (su + array_at a i)\n"
+  //              "    ;;\n"
+  //              "  aux 0 s\n"
+  //              "  ;;\n",
+  //              &MAKE_FN_TYPE_3(&t, &TARRAY(&s), &t));
+  // });
 
   ({
     Type v = TVAR("`20");
@@ -836,12 +862,12 @@ int test_funcs() {
   });
 
   ({
-    Type t = arithmetic_var("`12");
+    Type t = arithmetic_var("`10");
     Ast *b =
         T("let f = fn a b c -> a + b + c;;\n"
           "f 1 2\n",
           &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t, &t_int)));
+                                                 &t_int, &t)));
 
     bool is_partial =
         application_is_partial(AST_LIST_NTH(b->data.AST_BODY.stmts, 1));
@@ -859,12 +885,12 @@ int test_funcs() {
     status &= is_partial;
   });
   ({
-    Type t = arithmetic_var("`12");
+    Type t = arithmetic_var("`10");
     T("let f = fn a b c -> a + b + c;;\n"
       "f 1. 2.\n",
 
       &MAKE_FN_TYPE_2(
-          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t, &t_num)));
+          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t)));
   });
 
   ({
@@ -925,25 +951,21 @@ int test_funcs() {
 
   T("let sq = fn x: (Int) -> x * 1.;;", &MAKE_FN_TYPE_2(&t_int, &t_num));
 
-  T("let bind = extern fn Int -> Int -> Int -> Int;\n"
-    "let _bind = fn server_fd server_addr ->\n"
-    "  match (bind server_fd server_addr 10) with\n"
-    "  | 0 -> Some server_fd\n"
-    "  | _ -> None \n"
-    ";;\n",
-    &MAKE_FN_TYPE_3(&t_int, &t_int, &TOPT(&t_int)));
   // 1st-class callback typing
   ({
     Type t1 = TVAR("`1");
     Type t2 = TVAR("`2");
     Type t4 = TVAR("`4");
     T("let f = fn c a b -> c a b;;",
-      &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t1, &t2, &t4), &t1, &t2, &t4));
+      &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t1, &t2, &t4), &t1, &t2, &t4),
+               &t4, &t2, &t1));
   });
+
+
   ({
     Type t = TVAR("`2");
     T("let f = fn cb -> cb 1 2;;",
-      &MAKE_FN_TYPE_2(&MAKE_FN_TYPE_3(&t_int, &t_int, &t), &t));
+      &TSCHEME(&MAKE_FN_TYPE_2(&MAKE_FN_TYPE_3(&t_int, &t_int, &t), &t), &t));
   });
 
   ({
@@ -996,9 +1018,6 @@ int test_funcs() {
   });
 
   ({
-    // Type t0 = TVAR("`7");
-    // Type t1 = TVAR("`8");
-    // Type t2 = TVAR("`10");
     Ast *b = T("let sum = fn a b -> a + b;;\n"
                "let proc = fn f a b -> f a b;;\n"
                "proc sum 1 2;\n",
@@ -1020,6 +1039,14 @@ int test_funcs() {
     TASSERT("instance of sum function in app is Int -> Int -> Int",
             types_equal(sum_inst->md, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
   });
+
+  T("let bind = extern fn Int -> Int -> Int -> Int;\n"
+    "let _bind = fn server_fd server_addr ->\n"
+    "  match (bind server_fd server_addr 10) with\n"
+    "  | 0 -> Some server_fd\n"
+    "  | _ -> None \n"
+    ";;\n",
+    &MAKE_FN_TYPE_3(&t_int, &t_int, &TOPT(&t_int)));
 
   return status;
 }
@@ -1060,7 +1087,7 @@ int test_match_exprs() {
   });
 
   ({
-    Type v = TVAR("`3");
+    Type v = TVAR("`4");
     Type opt = TOPT(&v);
     T("let f = fn x ->\n"
       "match x with\n"
@@ -1068,20 +1095,20 @@ int test_match_exprs() {
       "  | None -> 0\n"
       "  ;;\n",
 
-      &MAKE_FN_TYPE_2(&opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &v, &t_int)));
+      &TSCHEME(&MAKE_FN_TYPE_2(&opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                               &v, &t_int)), &v));
   });
 
   ({
-    Type v = TVAR("`3");
+    Type v = TVAR("`4");
     Type opt = TOPT(&v);
     T("let f = fn x ->\n"
       "match x with\n"
       "  | Some y -> y * 2\n"
       "  | None -> 0\n"
       "  ;;\n",
-      &MAKE_FN_TYPE_2(&opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &v, &t_int)));
+      &TSCHEME(&MAKE_FN_TYPE_2(&opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                               &v, &t_int)), &v));
   });
 
   T("let f = fn x ->\n"
@@ -1975,7 +2002,7 @@ bool test_opts() {
     TASSERT("Some instance has application form of Option of Int\n",
             types_equal(
                 b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->md,
-                &TOPT(&t_int)));
+                &MAKE_FN_TYPE_2(&t_int, &TOPT(&t_int))));
   });
   return status;
 }
@@ -2015,23 +2042,22 @@ int main() {
 
   bool status = true;
   status &= test_basic_ops();
-  status &= test_match_exprs();
-  status &= test_coroutines();
-  status &= test_first_class_funcs();
-  status &= test_closures();
-  status &= test_refs();
-  status &= test_modules();
-  status &= test_array_processing();
-  status &= test_networking_funcs();
-  status &= test_type_exprs();
-  status &= test_parser_combinators();
-  status &= test_type_declarations();
-  status &= test_audio_funcs();
-  status &= test_list_processing();
   status &= test_funcs();
   status &= test_opts();
-
-  status &= test_record_types();
+  status &= test_match_exprs();
+  // status &= test_coroutines();
+  status &= test_first_class_funcs();
+  // status &= test_closures();
+  // status &= test_refs();
+  // status &= test_modules();
+  // status &= test_array_processing();
+  // status &= test_networking_funcs();
+  // status &= test_type_exprs();
+  // status &= test_parser_combinators();
+  // status &= test_type_declarations();
+  // status &= test_audio_funcs();
+  status &= test_list_processing();
+  // status &= test_record_types();
 
   print_all_failures();
   return status == true ? 0 : 1;

@@ -934,27 +934,6 @@ LLVMValueRef LogicalOrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return phi;
 }
 
-LLVMValueRef StructSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                              LLVMBuilderRef builder) {
-  LLVMValueRef idx =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-  LLVMValueRef record =
-      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-
-  LLVMValueRef value =
-      codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
-  LLVMDumpValue(idx);
-  printf("\n");
-  LLVMDumpValue(record);
-  printf("\n");
-  LLVMDumpValue(value);
-  printf("\n");
-
-  // print_ast(ast);
-  print_type(ast->md);
-  return NULL;
-}
 Type *lookup_var_in_env(TypeEnv *env, Type *tvar) {
   if (tvar->kind == T_VAR) {
     while (tvar->kind == T_VAR) {
@@ -1031,9 +1010,6 @@ LLVMValueRef RefHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef SerializeBlobHandler(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
-  // print_ast(ast);
-  printf("path %s\n", ast->data.AST_APPLICATION.args->data.AST_STRING.value);
-  print_type(ast->data.AST_APPLICATION.args[1].md);
 
   return NULL;
 }
@@ -1253,19 +1229,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
     ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);                  \
   })
 
-  GENERIC_FN_SYMBOL("+", &t_add, SumHandler);
-  GENERIC_FN_SYMBOL("-", &t_sub, MinusHandler);
-  GENERIC_FN_SYMBOL("*", &t_mul, MulHandler);
-  GENERIC_FN_SYMBOL("/", &t_div, DivHandler);
-  GENERIC_FN_SYMBOL("%", &t_mod, ModHandler);
-  GENERIC_FN_SYMBOL(">", &t_gt, GtHandler);
-  GENERIC_FN_SYMBOL("<", &t_lt, LtHandler);
-  GENERIC_FN_SYMBOL(">=", &t_gte, GteHandler);
-  GENERIC_FN_SYMBOL("<=", &t_lte, LteHandler);
-  GENERIC_FN_SYMBOL("==", &t_eq, EqAppHandler);
-  GENERIC_FN_SYMBOL("!=", &t_neq, NeqHandler);
-  GENERIC_FN_SYMBOL("Some", &t_option_of_var, SomeConsHandler);
-
   // JITSymbol *sym = new_symbol(STYPE_TOP_LEVEL_VAR, &t_none,
   //                             codegen_none(LLVMVoidType(), builder), NULL);
   // ht_set_hash(stack, "None", hash_string("None", 4), sym);
@@ -1284,100 +1247,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
             get_extern_fn("print",
                           type_to_llvm_type(&t_builtin_print, ctx, module),
                           module));
-
-  GENERIC_FN_SYMBOL("cstr", &t_builtin_cstr, CStrHandler
-                    // get_extern_fn("cstr",
-                    //               type_to_llvm_type(&t_builtin_cstr,
-                    //               ctx->env, module), module)
-  );
-
-  // FN_SYMBOL("empty_coroutine", &t_empty_cor,
-  //           get_extern_fn("empty_coroutine",
-  //                         type_to_llvm_type(&t_empty_cor, ctx, module),
-  //                         module));
-
-  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_AT, &t_array_at, ArrayAtHandler);
-
-  GENERIC_FN_SYMBOL("array_set", &t_array_set_fn_sig, ArraySetHandler);
-  GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SIZE, &t_array_size_fn_sig,
-                    ArraySizeHandler);
-
-  GENERIC_FN_SYMBOL("||", &t_builtin_or, LogicalOrHandler);
-  GENERIC_FN_SYMBOL("&&", &t_builtin_and, LogicalAndHandler);
-
-  GENERIC_FN_SYMBOL("cor_loop", &t_cor_loop_sig, CorLoopHandler);
-  // GENERIC_FN_SYMBOL("cor_wrap_effect", &t_cor_wrap_effect_fn_sig,
-  //                   WrapCoroutineWithEffectHandler);
-  //
-  GENERIC_FN_SYMBOL("cor_map", &t_cor_map_fn_sig, CorMapHandler);
-  GENERIC_FN_SYMBOL("iter", NULL, IterHandler);
-  //
-  GENERIC_FN_SYMBOL("iter_of_list", &t_iter_of_list_sig, CorOfListHandler);
-  GENERIC_FN_SYMBOL("iter_of_array", &t_iter_of_array_sig, CorOfArrayHandler);
-  //
-  // GENERIC_FN_SYMBOL("cor_replace", &t_cor_replace_fn_sig, CorReplaceHandler);
-  GENERIC_FN_SYMBOL("cor_stop", &t_cor_stop_fn_sig, CorStopHandler);
-  GENERIC_FN_SYMBOL("cor_counter", &t_cor_counter_fn_sig, CorCounterHandler);
-  GENERIC_FN_SYMBOL("cor_status", &t_cor_status_fn_sig, CorStatusHandler);
-  GENERIC_FN_SYMBOL("cor_promise", &t_cor_promise_fn_sig,
-                    CorGetPromiseValHandler);
-  GENERIC_FN_SYMBOL("cor_current", &t_current_cor_fn_sig, CurrentCorHandler);
-  GENERIC_FN_SYMBOL("cor_unwrap_or_end", &t_cor_unwrap_or_end_sig,
-                    CorUnwrapOrEndHandler);
-
-  GENERIC_FN_SYMBOL("play_routine", &t_play_routine_sig, PlayRoutineHandler);
-
-  // GENERIC_FN_SYMBOL("use_or_finish", &t_use_or_finish, UseOrFinishHandler);
-
-  GENERIC_FN_SYMBOL("list_concat", &t_list_concat, ListConcatHandler);
-  GENERIC_FN_SYMBOL("::", &t_list_prepend, ListPrependHandler);
-  GENERIC_FN_SYMBOL("list_tail", &t_list_tail_sig, ListTailHandler);
-  GENERIC_FN_SYMBOL("list_ref_set", &t_list_ref_set_sig, ListRefSetHandler);
-
-  GENERIC_FN_SYMBOL("opt_map", &t_opt_map_sig, OptMapHandler);
-  // GENERIC_FN_SYMBOL("run_in_scheduler", &t_run_in_scheduler_sig,
-  //                   RunInSchedulerHandler);
-
-  GENERIC_FN_SYMBOL("array_fill", &t_array_fill_sig, ArrayFillHandler);
-  GENERIC_FN_SYMBOL("array_fill_const", &t_array_fill_const_sig,
-                    ArrayFillConstHandler);
-  GENERIC_FN_SYMBOL("array_succ", &t_array_identity_sig, ArraySuccHandler);
-  GENERIC_FN_SYMBOL("array_range", &t_array_range_sig, ArrayRangeHandler);
-  GENERIC_FN_SYMBOL("array_offset", &t_array_offset_sig, ArrayOffsetHandler);
-
-  // GENERIC_FN_SYMBOL("array_view", &t_array_view_sig, ArrayViewHandler);
-  GENERIC_FN_SYMBOL("Double", next_tvar(), double_constructor_handler);
-  GENERIC_FN_SYMBOL("Int", next_tvar(), int_constructor_handler);
-  GENERIC_FN_SYMBOL(TYPE_NAME_UINT64, next_tvar(), uint64_constructor_handler);
-  GENERIC_FN_SYMBOL(TYPE_NAME_CHAR, next_tvar(), char_cons_handler);
-
-  GENERIC_FN_SYMBOL("struct_set", &t_struct_set_sig, StructSetHandler);
-  GENERIC_FN_SYMBOL("addrof", NULL, AddrOfHandler);
-  GENERIC_FN_SYMBOL("fst", &t_fst_sig, FstHandler);
-  GENERIC_FN_SYMBOL("save_pattern_to_file", next_tvar(), SerializeBlobHandler);
-  GENERIC_FN_SYMBOL("df_offset", &t_df_offset_sig, DFAtOffsetHandler);
-  GENERIC_FN_SYMBOL("df_raw_fields", &t_df_raw_fields_sig, DFRawFieldsHandler);
-  GENERIC_FN_SYMBOL(TYPE_NAME_ARRAY, &t_array_cons_sig, ArrayConstructor);
-  GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
-  GENERIC_FN_SYMBOL("dlopen", NULL, DlOpenHandler);
-  // GENERIC_FN_SYMBOL("coroutine_end", &t_coroutine_end, CoroutineEndHandler);
-
-  // GENERIC_FN_SYMBOL(TYPE_NAME_REF, NULL, RefHandler);
-
-  // GENERIC_FN_SYMBOL("queue_append_right", &t_list_prepend,
-  // ListPrependHandler);
-
-  // GENERIC_FN_SYMBOL("Char", &t_builtin_char_of, CharHandler);
-  // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_DATA_PTR, &t_array_data_ptr_fn_sig);
-  //
-  // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_INCR, &t_array_incr_fn_sig);
-  //
-  // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_SLICE, &t_array_slice_fn_sig);
-  //
-  // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_NEW, &t_array_new_fn_sig);
-  //
-  // GENERIC_FN_SYMBOL(SYM_NAME_ARRAY_TO_LIST, &t_array_to_list_fn_sig);
-  //
 
   return ctx->env;
 }

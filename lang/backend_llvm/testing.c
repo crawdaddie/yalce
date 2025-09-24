@@ -1,4 +1,5 @@
 #include "./testing.h"
+#include "../types/builtins.h"
 #include "codegen.h"
 #include "config.h"
 #include "jit.h"
@@ -7,7 +8,6 @@
 #include "llvm-c/Core.h"
 #include "llvm-c/ExecutionEngine.h"
 #include <string.h>
-
 void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine);
 // Function prototype
 void _report_test_result(const char *name, int result);

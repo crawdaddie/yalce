@@ -6,6 +6,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/builtins.h"
 #include "types/inference.h"
 #include "types/type.h"
 #include "llvm-c/Core.h"
@@ -298,6 +299,9 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
   LLVMPositionBuilderAtEnd(builder, after_block);
 
   return NULL; // Return void for loops
+}
+bool is_loop_of_iterable(Ast *ast) { // TODO: implement
+  return false;
 }
 
 LLVMValueRef codegen_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

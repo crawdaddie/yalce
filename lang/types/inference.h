@@ -1,53 +1,23 @@
 #ifndef _LANG_TYPE_INFERENCE_H
 #define _LANG_TYPE_INFERENCE_H
 #include "../parse.h"
+#include "arena_allocator.h"
 #include "type.h"
+
+DECLARE_ARENA_ALLOCATOR_DEFAULT(t);
 void reset_type_var_counter();
 
-Substitution *substitutions_extend(Substitution *subst, Type *t1, Type *t2);
-
-Type *apply_substitution(Substitution *subst, Type *t);
-void print_subst(Substitution *c);
-
-Type *infer(Ast *ast, TICtx *ctx);
-Type *next_tvar();
-
-void initialize_builtin_types();
-void add_builtin(char *name, Type *t);
-
-void print_builtin_types();
-
-Type *env_lookup(TypeEnv *env, const char *name);
-
-TypeEnv *env_lookup_ref(TypeEnv *env, const char *name);
-
-Type *solve_program_constraints(Ast *prog, TICtx *ctx);
-
-TypeConstraint *constraints_extend(TypeConstraint *constraints, Type *t1,
-                                   Type *t2);
-
-Substitution *solve_constraints(TypeConstraint *constraints);
-
-bool is_loop_of_iterable(Ast *let);
-
-Type *get_full_fn_type_of_closure(Ast *closure);
-
-Type *coroutine_constructor_type_from_fn_type(Type *fn_type
-                                              // , Ast *ast
-);
-
-typedef struct VarList {
+typedef struct Subst {
   const char *var;
-  struct VarList *next;
-  TypeClass *implements;
-} VarList;
-
-typedef struct Scheme {
-  VarList *vars;
   Type *type;
-} Scheme;
+  struct Subst *next;
+} Subst;
 
-// TypeScheme Env - maps names to type schemes
+typedef struct Constraint {
+  Type *var;  // Variable type (e.g., "t0")
+  Type *type; // Required type (e.g., Int or Double)
+  struct Constraint *next;
+} Constraint;
 typedef struct {
   enum BindingType {
     BT_VAR,
@@ -72,17 +42,45 @@ typedef struct {
   } data;
 } binding_md;
 
-
-typedef struct Subst {
-  const char *var;
+// TypeEnv represents a mapping from variable names to their types
+typedef struct TypeEnv {
+  const char *name;
   Type *type;
-  struct Subst *next;
-} Subst;
+  binding_md md;
+  int ref_count;
 
-typedef struct Constraint {
-} Constraint;
+  struct TypeEnv *next;
+} TypeEnv;
 
-Scheme generalize(Type *t, TICtx *ctx);
-Type *instantiate(Scheme *sch, TICtx *ctx);
+typedef struct TICtx {
+  Subst *subst;
+  TypeEnv *env;
+  Ast *current_fn_ast;
+  Constraint *constraints;
+  Type *yielded_type;
+  int scope;
+  int current_fn_base_scope;
+  void *type_decl_ctx;
+  custom_binops_t *custom_binops;
+  FILE *err_stream; // Replace const char *err
+} TICtx;
 
+Type *infer(Ast *ast, TICtx *ctx);
+
+typedef struct VarList {
+  const char *var;
+  struct VarList *next;
+  TypeClass *implements;
+} VarList;
+
+// typedef struct Scheme {
+//   VarList *vars;
+//   Type *type;
+// } Scheme;
+
+Type *infer(Ast *ast, TICtx *ctx);
+
+Type *generalize(Type *t, TICtx *ctx);
+Type *instantiate(Type *sch, TICtx *ctx);
+Type *env_lookup(TypeEnv *env, const char *name);
 #endif

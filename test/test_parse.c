@@ -354,16 +354,16 @@ int main() {
   status &= test_parse("let voidf = extern fn () -> ()",
                        "(let voidf (extern voidf (() -> ())))");
 
+  status &= test_parse("`here's a printed "
+                       "version of {x} and {y}\\n`",
+                       "(fmt [\"here's a printed version of \", (str x), \" "
+                       "and \", (str y), \"\n\"])");
+
   status &= test_parse(
       "`here's a printed "
-      "version of {x} and {y}\\n`",
-      "str(\"here's a printed version of \", x, \" and \", y, \"\n\")");
-
-  status &=
-      test_parse("`here's a printed "
-                 "version of {1 + 2000} and {y 1 2}`",
-                 "str(\"here's a printed version of \", ((+ 1) 2000), \" and "
-                 "\", ((y 1) 2))");
+      "version of {1 + 2000} and {y 1 2}`",
+      "(fmt [\"here's a printed version of \", (str ((+ 1) 2000)), \" and "
+      "\", (str ((y 1) 2))])");
 
   status &= test_parse("type Timer = (Double, Int, Uint64);",
                        "(let Timer (Double, Int, Uint64))");

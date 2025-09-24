@@ -8,7 +8,6 @@
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
-#include "types/infer_application.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 
@@ -184,12 +183,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
-  // special application types:
-  // x[n] ??
-  if (is_index_access_ast(ast)) {
-    return IndexAccessHandler(ast, ctx, module, builder);
-  }
-
   // x.mem a ??
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
@@ -246,8 +239,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
-    print_ast(ast);
-    print_type(expected_fn_type);
 
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);

@@ -268,81 +268,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return func;
 }
 
-static Substitution *create_fn_arg_subst(Substitution *subst, Type *gen,
-                                         Type *spec) {
-
-  if (!spec) {
-    return NULL;
-  }
-
-  if (gen->kind == T_VAR) {
-    subst = substitutions_extend(subst, gen, spec);
-    return subst;
-  }
-
-  if (gen->kind == T_CONS ||
-      gen->kind == T_TYPECLASS_RESOLVE && gen->kind == spec->kind) {
-    for (int i = 0; i < gen->data.T_CONS.num_args; i++) {
-      Type *gt = gen->data.T_CONS.args[i];
-      Type *st = spec->data.T_CONS.args[i];
-      subst = create_fn_arg_subst(subst, gt, st);
-    }
-    return subst;
-  }
-
-  if (gen->kind == T_TYPECLASS_RESOLVE && gen->kind != spec->kind) {
-    for (int i = 0; i < gen->data.T_CONS.num_args; i++) {
-      Type *gt = gen->data.T_CONS.args[i];
-      Type *st = spec;
-      subst = create_fn_arg_subst(subst, gt, st);
-    }
-    return subst;
-  }
-
-  if (gen->kind == T_FN) {
-    while (gen->kind == T_FN) {
-      Type *gt = gen->data.T_FN.from;
-      Type *st = spec->data.T_FN.from;
-      subst = create_fn_arg_subst(subst, gt, st);
-      gen = gen->data.T_FN.to;
-      spec = spec->data.T_FN.to;
-    }
-
-    Type *gt = gen;
-    Type *st = spec;
-    subst = create_fn_arg_subst(subst, gt, st);
-    return subst;
-  }
-  return subst;
-}
-
-static TypeEnv *subst_fn_arg(TypeEnv *env, Substitution *subst, Type *arg) {
-
-  if (arg->kind == T_VAR) {
-    env = env_extend(env, arg->data.T_VAR, apply_substitution(subst, arg));
-    return env;
-  }
-
-  if (arg->kind == T_CONS || arg->kind == T_TYPECLASS_RESOLVE) {
-    for (int i = 0; i < arg->data.T_CONS.num_args; i++) {
-      Type *t = arg->data.T_CONS.args[i];
-      env = subst_fn_arg(env, subst, t);
-    }
-    return env;
-  }
-
-  if (arg->kind == T_FN) {
-    while (arg->kind == T_FN) {
-      Type *t = arg->data.T_FN.from;
-      env = subst_fn_arg(env, subst, t);
-      arg = arg->data.T_FN.to;
-    }
-    env = subst_fn_arg(env, subst, arg);
-    return env;
-  }
-  return env;
-}
-
 TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t) {
   switch (f->kind) {
   case T_VAR: {
@@ -361,12 +286,12 @@ TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t) {
   return env;
 }
 
-TypeEnv *create_env_from_subst(TypeEnv *env, Substitution *subst) {
+TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst) {
   if (subst == NULL) {
     return env;
   }
-  Type *f = subst->from;
-  Type *t = subst->to;
+  Type *f = tvar(subst->var);
+  Type *t = subst->type;
   env = codegen_bind_in_env(env, f, t);
   return create_env_from_subst(env, subst->next);
 }
@@ -374,22 +299,22 @@ TypeEnv *create_env_from_subst(TypeEnv *env, Substitution *subst) {
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type) {
 
-  Substitution *subst = NULL;
+  Subst *subst = NULL;
 
-  TypeConstraint *constraints = NULL;
-  while (generic_type->kind == T_FN) {
-    Type *gen = generic_type->data.T_FN.from;
-    Type *spec = specific_type->data.T_FN.from;
-    constraints = constraints_extend(constraints, gen, spec);
-
-    specific_type = specific_type->data.T_FN.to;
-    generic_type = generic_type->data.T_FN.to;
-  }
-
-  subst = solve_constraints(constraints);
-
-  env = create_env_from_subst(env, subst);
-
+  Constraint *constraints = NULL;
+  // while (generic_type->kind == T_FN) {
+  //   Type *gen = generic_type->data.T_FN.from;
+  //   Type *spec = specific_type->data.T_FN.from;
+  //   constraints = constraints_extend(constraints, gen, spec);
+  //
+  //   specific_type = specific_type->data.T_FN.to;
+  //   generic_type = generic_type->data.T_FN.to;
+  // }
+  //
+  // subst = solve_constraints(constraints);
+  //
+  // env = create_env_from_subst(env, subst);
+  //
   return env;
 }
 

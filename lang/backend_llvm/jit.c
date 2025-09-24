@@ -12,7 +12,9 @@
 #include "parse.h"
 #include "serde.h"
 #include "testing.h"
+#include "types/builtins.h"
 #include "types/inference.h"
+#include "types/type_ser.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/IRReader.h>

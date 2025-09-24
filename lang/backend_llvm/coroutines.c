@@ -1,4 +1,5 @@
 #include "./coroutines.h"
+#include "../types/builtins.h"
 #include "./coroutines_private.h"
 #include "adt.h"
 #include "application.h"

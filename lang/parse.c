@@ -484,6 +484,7 @@ Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt) {
 }
 
 Ast *ast_void() { return Ast_new(AST_VOID); }
+
 Ast *ast_string(ObjString lex_string) {
   Ast *s = Ast_new(AST_STRING);
   s->data.AST_STRING.value = lex_string.chars;
@@ -493,6 +494,21 @@ Ast *ast_string(ObjString lex_string) {
 
 Ast *parse_fstring_expr(Ast *list) {
   list->tag = AST_FMT_STRING;
+  for (int i = 0; i < list->data.AST_LIST.len; i++) {
+    Ast *item = list->data.AST_LIST.items + i;
+    if (item->tag != AST_STRING) {
+      print_ast(item);
+      Ast it = *item;
+      Ast *arg = palloc(sizeof(Ast) * 1);
+      *arg = it;
+      *item = (Ast){
+          AST_APPLICATION,
+          .data = {.AST_APPLICATION = {.function = ast_identifier((ObjString){
+                                           .chars = "str", .length = 3}),
+                                       .args = arg,
+                                       .len = 1}}};
+    }
+  }
   return list;
 }
 Ast *parse_format_expr(ObjString fstring) {
@@ -500,36 +516,37 @@ Ast *parse_format_expr(ObjString fstring) {
   // identifiers in between { & }
   // eg `hello {x} and {y}` -> "hello " + (str x) + " and " + (str y)
 
-  int seg_start = 0;
-  ObjString segment = {.chars = fstring.chars + seg_start};
+  // int seg_start = 0;
+  // ObjString segment = {.chars = fstring.chars + seg_start};
+  //
+  // for (int i = 0; i < fstring.length; i++) {
+  //   const char *curs = fstring.chars + i;
+  //   if (*curs == '{') {
+  //     if (i == 0) {
+  //     } else if (*(fstring.chars + i - 1) != '\\') {
+  //       int len = i - seg_start;
+  //       segment.length = len - 1;
+  //       Ast *str_segment = ast_string(segment);
+  //
+  //       seg_start = i;
+  //     } else {
+  //       continue;
+  //     }
+  //   } else if (*curs == '}' && i != 0 && *(fstring.chars + i - 1) != '\\') {
+  //     segment = (ObjString){.chars = fstring.chars + i + 1};
+  //     seg_start = i;
+  //   } else if (i == fstring.length - 1) {
+  //     int len = i - seg_start;
+  //     segment.length = len;
+  //     Ast *str_segment = ast_string(segment);
+  //   }
+  // }
+  //
+  // Ast *fmt_args = ast_arg_list(
+  //     ast_identifier((ObjString){.chars = "fmt_string", .length = 10}),
+  //     NULL);
 
-  for (int i = 0; i < fstring.length; i++) {
-    const char *curs = fstring.chars + i;
-    if (*curs == '{') {
-      if (i == 0) {
-      } else if (*(fstring.chars + i - 1) != '\\') {
-        int len = i - seg_start;
-        segment.length = len - 1;
-        Ast *str_segment = ast_string(segment);
-
-        seg_start = i;
-      } else {
-        continue;
-      }
-    } else if (*curs == '}' && i != 0 && *(fstring.chars + i - 1) != '\\') {
-      segment = (ObjString){.chars = fstring.chars + i + 1};
-      seg_start = i;
-    } else if (i == fstring.length - 1) {
-      int len = i - seg_start;
-      segment.length = len;
-      Ast *str_segment = ast_string(segment);
-    }
-  }
-
-  Ast *fmt_args = ast_arg_list(
-      ast_identifier((ObjString){.chars = "fmt_string", .length = 10}), NULL);
-
-  Ast *fmt_lambda = Ast_new(AST_LAMBDA);
+  // Ast *fmt_lambda = Ast_new(AST_LAMBDA);
 
   // while (*ch != '\0') {
   //   ch++;
@@ -560,6 +577,7 @@ Ast *parse_fstring(ObjString fstring) {
       // No more expressions, add the rest as a string
       ObjString str = {current, end - current,
                        hash_string(current, end - current)};
+
       result = ast_list_push(result, ast_string(str));
       break;
     }

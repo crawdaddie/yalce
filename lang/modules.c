@@ -1,5 +1,6 @@
 #include "./modules.h"
 #include "./types/common.h"
+#include "./types/inference.h"
 // #include "escape_analysis.h"
 #include "ht.h"
 #include "serde.h"
@@ -9,7 +10,7 @@
 #include <string.h>
 
 void print_constraints(Constraint *constraints);
-void *type_error(TICtx *ctx, Ast *node, const char *fmt, ...);
+void *type_error(Ast *node, const char *fmt, ...);
 
 ht module_registry;
 
@@ -77,7 +78,7 @@ Type *infer_module_import(Ast *ast, TICtx *ctx) {
 
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     // Single statement - create a temporary AstList node
-    AstList *single_stmt = talloc(sizeof(AstList));
+    AstList *single_stmt = t_alloc(sizeof(AstList));
     single_stmt->ast = ast->data.AST_LAMBDA.body;
     single_stmt->next = NULL;
     stmt_list = single_stmt;
@@ -91,8 +92,8 @@ Type *infer_module_import(Ast *ast, TICtx *ctx) {
   TypeEnv *env_start = ctx->env;
 
   Ast *stmt;
-  Type **member_types = talloc(sizeof(Type *) * len);
-  const char **names = talloc(sizeof(char *) * len);
+  Type **member_types = t_alloc(sizeof(Type *) * len);
+  const char **names = t_alloc(sizeof(char *) * len);
 
   int i = 0;
   for (AstList *current = stmt_list; current != NULL;
@@ -164,7 +165,7 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
 
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     // Single statement - create a temporary AstList node
-    AstList *single_stmt = talloc(sizeof(AstList));
+    AstList *single_stmt = t_alloc(sizeof(AstList));
     single_stmt->ast = ast->data.AST_LAMBDA.body;
     single_stmt->next = NULL;
     stmt_list = single_stmt;
@@ -179,15 +180,15 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
   TypeEnv *env_start = module_ctx.env;
 
   Ast *stmt;
-  Type **member_types = talloc(sizeof(Type *) * len);
-  const char **names = talloc(sizeof(char *) * len);
+  Type **member_types = t_alloc(sizeof(Type *) * len);
+  const char **names = t_alloc(sizeof(char *) * len);
 
   int i = 0;
   for (AstList *current = stmt_list; current != NULL; current = current->next) {
     stmt = current->ast;
     if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
           (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
-      return type_error(ctx, stmt,
+      return type_error(stmt,
                         "Please only have let statements and type declarations "
                         "in a module\n");
       return NULL;
@@ -282,8 +283,8 @@ Type *infer_module_access(Ast *ast, Type *rec_type, const char *member_name,
   }
 
   if (is_generic(type)) {
-    Scheme gen = generalize(type, NULL);
-    type = instantiate(&gen, ctx);
+    Type *gen = generalize(type, NULL);
+    type = instantiate(gen, ctx);
   }
   return type;
 }

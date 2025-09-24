@@ -33,6 +33,7 @@ CFLAGS += -I`$(LLVM_CONFIG) --includedir`
 
 LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
+LANG_CC += -Wall
 
 LANG_LD_FLAGS := -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
