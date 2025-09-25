@@ -4,18 +4,6 @@
 #include "types/type_expressions.h"
 #include "types/unification.h"
 
-Type *apply_substitution(Subst *subst, Type *t);
-Type *type_error(Ast *ast, const char *fmt, ...);
-Subst *compose_subst(Subst *s1, Subst *s2);
-Subst *solve_constraints(Constraint *constraints);
-
-void print_constraints(Constraint *constraints);
-
-int bind_type_in_ctx(Ast *binding, Type *type, binding_md binding_type,
-                     TICtx *ctx);
-
-TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
-
 void initial_lambda_signature(int num_params, Type **param_types,
                               AstList *type_annotation_list, AstList *params,
                               TICtx *ctx) {
@@ -344,8 +332,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (!body_type) {
     return type_error(body, "Error: Cannot infer lambda body\n");
   }
-  // print_constraints(lctx.constraints);
 
+  // printf("b4 solve?\n");
   Subst *ls = compose_subst(lctx.subst, solve_constraints(lctx.constraints));
 
   for (int i = 0; i < num_params; i++) {
@@ -353,6 +341,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     // param_types[i] = apply_substitution(lambda_ctx.subst, param_types[i]);
   }
 
+  // printf("b4 apply to body\n");
   body_type = apply_substitution(ls, body_type);
 
   // Build the final function type
@@ -374,6 +363,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     // register_note_on_handler (fn n vel -> vel + 0.0) 0
     // anonymous func arg would be incorrectly typed (the constraint from it
     // being a NoteCallback would be overriden)
+    // printf("b4 apply subst rec\n");
     apply_substitution_to_lambda_body(body, ls);
   }
 

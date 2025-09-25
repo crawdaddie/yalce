@@ -3,18 +3,13 @@
 #include "serde.h"
 #include "types/common.h"
 #include "types/inference.h"
+#include "types/type_ser.h"
 #include <string.h>
 
-TypeEnv *lookup_type_ref(TypeEnv *env, const char *name);
-Type *compute_type_expression(Ast *expr, TICtx *ctx);
 Type *create_sum_type(int len, Type **members) {
-
   return create_cons_type(TYPE_NAME_VARIANT, len, members);
 }
-
-typedef struct {
-} TypeDeclCtx;
-
+int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type, TICtx *ctx);
 // forall T : T
 // Scheme *create_ts_var(const char *name) {
 //   Scheme *sch = talloc(sizeof(Scheme));
@@ -132,40 +127,26 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
 
   case AST_FN_SIGNATURE: {
     return compute_fn_type(expr, ctx);
-    //
-    //                Ast *
-    //            sig = expr;
-    // int num_params = 0;
-    //
-    // while (sig->tag == AST_FN_SIGNATURE || sig->tag == AST_LIST) {
-    //   num_params++;
-    //   sig = sig->data.AST_LIST.items + 1;
-    // }
-    //
-    // Type *it[num_params];
-    // Type *ret;
-    //
-    // int i = 0;
-    // sig = expr;
-    //
-    // while (sig->tag == AST_LIST || sig->tag == AST_FN_SIGNATURE) {
-    //   it[i] = instantiate(
-    //       compute_type_expression(sig->data.AST_LIST.items, ctx), ctx);
-    //   sig = sig->data.AST_LIST.items + 1;
-    //   i++;
-    // }
-    // Scheme *computed_scheme = compute_type_expression(sig, ctx);
-    // ret = instantiate(computed_scheme, ctx);
-    // Type *f = create_type_multi_param_fn(num_params, it, ret);
-    // Scheme *gen = talloc(sizeof(Scheme));
-    //
-    // *gen = generalize(f, ctx->env);
-    //
-    // return gen;
   }
   case AST_BINOP: {
     token_type op = expr->data.AST_BINOP.op;
-    // if (op == TOKEN_OF) {
+    if (op == TOKEN_OF) {
+      Ast *container_ast = expr->data.AST_BINOP.left;
+      Ast *contained_ast = expr->data.AST_BINOP.right;
+      Type *container = compute_type_expression(container_ast, ctx);
+      if (!container) {
+        return type_error(container_ast, "could not find type");
+      }
+      Type *contained = compute_type_expression(contained_ast, ctx);
+
+      if (container->kind == T_SCHEME &&
+          container->data.T_SCHEME.num_vars == 1) {
+        TypeEnv env = {.name = container->data.T_SCHEME.vars->type->data.T_VAR,
+                       .type = contained};
+        Type *final = instantiate_type_in_env(container, &env);
+        return final;
+      }
+    }
     //
     //   Scheme *container = lookup_scheme(
     //       ctx->env, expr->data.AST_BINOP.left->data.AST_IDENTIFIER.value);
@@ -203,25 +184,56 @@ Type *compute_typescheme(Ast *expr, TICtx *ctx) {
   return generalize(computed, ctx->env);
 }
 
-/*
-Type *type_declaration(Ast *ast, TICtx *ctx) {
+Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   Ast *binding = ast->data.AST_LET.binding;
   const char *name = binding->data.AST_IDENTIFIER.value;
   Ast *expr = ast->data.AST_LET.expr;
 
   TICtx _ctx = *ctx;
-
-  // bind var name in case we have a recursive ref:
-  // eg type Tree = (val: Int, children: Array of Tree)
-  // Scheme *sch = create_ts_var(name);
   Type *t = tvar(name);
   t->is_recursive_type_ref = true;
-  _ctx.env = env_extend(_ctx.env, binding->data.AST_IDENTIFIER.value, NULL, t);
-
+  _ctx.env = env_extend(_ctx.env, binding->data.AST_IDENTIFIER.value, t);
   _ctx.env->md = (binding_md){
       BT_RECURSIVE_REF,
   };
 
+  Type *computed = compute_type_expression(expr, &_ctx);
+  if (!computed) {
+    type_error(ast, "Could not compute type declaration\n");
+    return NULL;
+  }
+
+  if (is_sum_type(computed)) {
+    bind_type_in_ctx(binding, computed, (binding_md){}, ctx);
+    for (int i = 0; i < computed->data.T_CONS.num_args; i++) {
+      Type *mem = computed->data.T_CONS.args[i];
+      const char *mem_name = computed->data.T_CONS.args[i]->data.T_CONS.name;
+      // Ast mem_bind = (Ast){AST_IDENTIFIER,
+      //                      .data = {.AST_IDENTIFIER = {.value = mem_name}}};
+      ctx->env = env_extend(ctx->env, mem_name, computed);
+    }
+    // print_type(computed);
+    return computed;
+  }
+
+  if (is_tuple_type(computed)) {
+    computed->data.T_CONS.name = name;
+    print_type(computed);
+  }
+  if (is_generic(computed)) {
+    computed = generalize(computed, ctx);
+  }
+
+  bind_type_in_ctx(binding, computed, (binding_md){}, ctx);
+  return computed;
+}
+
+/*
+Type *type_declaration(Ast *ast, TICtx *ctx) {
+
+  // bind var name in case we have a recursive ref:
+  // eg type Tree = (val: Int, children: Array of Tree)
+  // Scheme *sch = create_ts_var(name);
   Scheme *scheme = compute_typescheme(expr, &_ctx);
 
   if (!scheme) {

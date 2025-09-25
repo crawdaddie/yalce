@@ -2,8 +2,11 @@
 #include "../arena_allocator.h"
 #include "./builtins.h"
 #include "common.h"
+#include "modules.h"
 #include "serde.h"
+#include "types/infer_application.h"
 #include "types/infer_lambda.h"
+#include "types/infer_match_expression.h"
 #include "types/type.h"
 #include "types/type_expressions.h"
 #include "types/type_ser.h"
@@ -14,6 +17,10 @@
 
 TypeList *free_vars_type(TypeList *vars, Type *t);
 Type *generalize(Type *t, TICtx *ctx) {
+
+  if (!is_generic(t)) {
+    return t;
+  }
   Type *scheme = t_alloc(sizeof(Type));
 
   *scheme = (Type){T_SCHEME,
@@ -27,6 +34,27 @@ Type *generalize(Type *t, TICtx *ctx) {
 }
 Type *apply_substitution(Subst *subst, Type *t);
 
+Type *instantiate_type_in_env(Type *sch, TypeEnv *env) {
+  if (sch->kind != T_SCHEME) {
+    return sch;
+  }
+  Subst substs[sch->data.T_SCHEME.num_vars];
+  Subst *subst = substs;
+  int i = 0;
+  for (TypeList *v = sch->data.T_SCHEME.vars; v; v = v->next, i++, subst++) {
+    Type *env_type = env_lookup(env, v->type->data.T_VAR);
+
+    *subst =
+        (Subst){.var = v->type->data.T_VAR, .type = env_type, .next = NULL};
+    if (i < sch->data.T_SCHEME.num_vars - 1) {
+      subst->next = subst + 1;
+    }
+  }
+
+  Type *stype = deep_copy_type(sch->data.T_SCHEME.type);
+  Type *s = apply_substitution(substs, stype);
+  return s;
+}
 Type *instantiate(Type *sch, TICtx *ctx) {
   if (sch->kind != T_SCHEME) {
     return sch;
@@ -35,6 +63,12 @@ Type *instantiate(Type *sch, TICtx *ctx) {
   Subst *subst = substs;
   int i = 0;
   for (TypeList *v = sch->data.T_SCHEME.vars; v; v = v->next, i++, subst++) {
+    // Type *env_type = env_lookup(ctx->env, v->type->data.T_VAR);
+
+    // if (!env_type) {
+    //   env_type = fresh_type;
+    // }
+
     Type *fresh_type = next_tvar();
     fresh_type->implements = v->type->implements;
     *subst =
@@ -63,7 +97,13 @@ Type *next_tvar() {
   return tvar;
 }
 
-Type *env_lookup(TypeEnv *env, const char *name) { return NULL; }
+Type *env_lookup(TypeEnv *env, const char *name) {
+  TypeEnv *type_ref = lookup_type_ref(env, name);
+  if (type_ref) {
+    return type_ref->type;
+  }
+  return NULL;
+}
 
 void *type_error(Ast *ast, const char *fmt, ...) {
   va_list args;
@@ -334,7 +374,7 @@ Type *apply_substitution(Subst *subst, Type *t) {
   case T_BOOL:
   case T_VOID:
   case T_STRING: {
-    break;
+    return t;
   }
 
   case T_VAR: {
@@ -371,7 +411,6 @@ Type *apply_substitution(Subst *subst, Type *t) {
   }
 
   case T_TYPECLASS_RESOLVE: {
-
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       Type *s = apply_substitution(subst, t->data.T_CONS.args[i]);
       if (!s) {
@@ -665,15 +704,18 @@ void print_constraints(Constraint *constraints) {
     print_type(c->type);
   }
 }
-
-Type *create_fn_from_cons(Type *res, Type *cons) {
-
-  Type *f = res;
-  for (int i = cons->data.T_CONS.num_args - 1; i >= 0; i--) {
-    f = type_fn(cons->data.T_CONS.args[i], f);
+void print_subst(Subst *subst) {
+  if (!subst) {
+    return;
   }
-  return f;
+  printf("substitutions:\n");
+  for (Subst *s = subst; s; s = s->next) {
+    printf("  %s : ", s->var);
+    print_type(s->type);
+  }
+  printf("\n");
 }
+
 Type *extract_member_from_sum_type(Type *cons, Ast *id) {
   Type *f;
   for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
@@ -683,159 +725,6 @@ Type *extract_member_from_sum_type(Type *cons, Ast *id) {
     }
   }
   return NULL;
-}
-
-Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx);
-Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
-  Type *f;
-  if (is_sum_type(cons)) {
-    Type *mem =
-        extract_member_from_sum_type(cons, ast->data.AST_APPLICATION.function);
-    if (!mem) {
-      return NULL;
-    }
-    f = create_fn_from_cons(cons, mem);
-  } else {
-    f = create_fn_from_cons(cons, cons);
-  }
-
-  return infer_fn_application(f, ast, ctx);
-}
-
-Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
-  if (is_coroutine_type(func_type)) {
-
-    func_type =
-        type_fn(&t_void, create_option_type(func_type->data.T_CONS.args[0]));
-
-  } else if (is_coroutine_constructor_type(func_type)) {
-    func_type = func_type->data.T_CONS.args[0];
-  }
-
-  Ast *args = ast->data.AST_APPLICATION.args;
-  int num_args = ast->data.AST_APPLICATION.len;
-
-  // Step 2: Infer argument types
-  Type **arg_types = t_alloc(sizeof(Type *) * num_args);
-  for (int i = 0; i < num_args; i++) {
-    Type *at = infer(args + i, ctx);
-    if (!at) {
-
-      return type_error(args + i, "Cannot infer applicable arg");
-    }
-    arg_types[i] = at;
-  }
-
-  // Step 3: Create expected function type
-  Type *result_type = next_tvar();
-  Type *expected_type = result_type;
-
-  // Build expected type: arg1 -> arg2 -> ... -> result
-  for (int i = num_args - 1; i >= 0; i--) {
-    expected_type = type_fn(arg_types[i], expected_type);
-  }
-
-  TICtx unify_ctx = {};
-  if (unify(func_type, expected_type, &unify_ctx)) {
-    type_error(ast, "Function application type mismatch : ");
-    return NULL;
-  }
-
-  // Step 5: Solve constraints and apply substitutions
-  Subst *solution = solve_constraints(unify_ctx.constraints);
-  ctx->subst = compose_subst(solution, ctx->subst);
-
-  expected_type = apply_substitution(solution, expected_type);
-  ast->data.AST_APPLICATION.function->md = expected_type;
-
-  Type *res = expected_type;
-
-  for (int n = num_args; n; n--) {
-    res = res->data.T_FN.to;
-  }
-  return res;
-}
-
-// T-App: Γ ⊢ e₁ : τ₁    Γ ⊢ e₂ : τ₂    α fresh    S = unify(τ₁, τ₂ → α)
-//        ──────────────────────────────────────────────────────────────
-//                            Γ ⊢ e₁ e₂ : S(α)
-Type *infer_application(Ast *ast, TICtx *ctx) {
-  Ast *func = ast->data.AST_APPLICATION.function;
-
-  // Step 1: Infer function type
-  Type *func_type = infer(func, ctx);
-  if (!func_type) {
-    return type_error(ast, "Cannot infer type of applicable");
-  }
-
-  if (func_type->kind == T_CONS) {
-    return infer_cons_application(func_type, ast, ctx);
-  }
-
-  if (is_coroutine_type(func_type)) {
-
-    func_type =
-        type_fn(&t_void, create_option_type(func_type->data.T_CONS.args[0]));
-    return infer_fn_application(func_type, ast, ctx);
-  }
-  if (is_coroutine_constructor_type(func_type)) {
-    func_type = func_type->data.T_CONS.args[0];
-    return infer_fn_application(func_type, ast, ctx);
-  }
-
-  return infer_fn_application(func_type, ast, ctx);
-
-  // if (is_coroutine_type(func_type)) {
-  //
-  //   func_type =
-  //       type_fn(&t_void, create_option_type(func_type->data.T_CONS.args[0]));
-  //
-  // } else if (is_coroutine_constructor_type(func_type)) {
-  //   func_type = func_type->data.T_CONS.args[0];
-  // }
-  //
-  // Ast *args = ast->data.AST_APPLICATION.args;
-  // int num_args = ast->data.AST_APPLICATION.len;
-  //
-  // // Step 2: Infer argument types
-  // Type **arg_types = t_alloc(sizeof(Type *) * num_args);
-  // for (int i = 0; i < num_args; i++) {
-  //   Type *at = infer(args + i, ctx);
-  //   if (!at) {
-  //
-  //     return type_error(args + i, "Cannot infer applicable arg");
-  //   }
-  //   arg_types[i] = at;
-  // }
-  //
-  // // Step 3: Create expected function type
-  // Type *result_type = next_tvar();
-  // Type *expected_type = result_type;
-  //
-  // // Build expected type: arg1 -> arg2 -> ... -> result
-  // for (int i = num_args - 1; i >= 0; i--) {
-  //   expected_type = type_fn(arg_types[i], expected_type);
-  // }
-  //
-  // TICtx unify_ctx = {};
-  // if (unify(func_type, expected_type, &unify_ctx)) {
-  //   type_error(ast, "Function application type mismatch : ");
-  //   return NULL;
-  // }
-  //
-  // // Step 5: Solve constraints and apply substitutions
-  // Subst *solution = solve_constraints(unify_ctx.constraints);
-  // ctx->subst = compose_subst(solution, ctx->subst);
-  //
-  // expected_type = apply_substitution(solution, expected_type);
-  // ast->data.AST_APPLICATION.function->md = expected_type;
-  //
-  // Type *res = expected_type;
-  //
-  // for (int n = num_args; n; n--) {
-  //   res = res->data.T_FN.to;
-  // }
-  // return res;
 }
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
@@ -862,10 +751,23 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     }
     return 0;
   }
+  case AST_VOID: {
+    return 0;
+  }
 
   case AST_IDENTIFIER: {
+    if (ast_is_placeholder_id(binding)) {
+      binding->md = type;
+      return 0;
+    }
+    Type *existing = env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
+    if (existing) {
+      binding->md = existing;
+      return 0;
+    }
     binding->md = type;
     ctx->env = env_extend(ctx->env, binding->data.AST_IDENTIFIER.value, type);
+    ctx->env->md = bmd_type;
     return 0;
   }
 
@@ -911,7 +813,6 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
         CHARS_EQ(
             binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
             "::")) {
-      print_type(type);
 
       Ast *head = binding->data.AST_APPLICATION.args;
       Ast *rest = binding->data.AST_APPLICATION.args + 1;
@@ -946,11 +847,13 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       btype = extract_member_from_sum_type(
           btype, binding->data.AST_APPLICATION.function);
     }
+    // print_type(btype);
 
     for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
       bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
                        btype->data.T_CONS.args[i], bmd_type, ctx);
     }
+    binding->md = app_type;
 
     return 0;
   }
@@ -964,7 +867,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     }
   }
   default: {
-    type_error(binding, "Can not appear in a binding");
+    type_error(binding, "Cannot appear in a binding");
     return 1;
   }
   }
@@ -984,9 +887,11 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
 
   Type *val_type = infer(expr, ctx);
 
-  if (is_generic(val_type)) {
+  if (is_generic(val_type) && val_type->kind == T_FN) {
     val_type = generalize(val_type, ctx);
   }
+  //
+  // val_type = generalize(val_type, ctx);
 
   if (body) {
     TICtx body_ctx = *ctx;
@@ -1041,109 +946,6 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
   }
 
   return instantiate(type_ref->type, ctx);
-}
-void apply_substitution_to_lambda_body(Ast *ast, Subst *subst);
-
-Type *infer_match_expression(Ast *ast, TICtx *ctx) {
-
-  Type *scrutinee_type = infer(ast->data.AST_MATCH.expr, ctx);
-
-  Type *result_type = next_tvar();
-
-  int num_cases = ast->data.AST_MATCH.len;
-
-  TypeEnv *branch_envs[num_cases];
-  Type *pattern_types[num_cases];
-
-  for (int i = 0; i < num_cases; i++) {
-    Ast *pattern_ast = ast->data.AST_MATCH.branches + i * 2;
-
-    Ast *guard = NULL;
-    if (pattern_ast->tag == AST_MATCH_GUARD_CLAUSE) {
-      guard = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
-      pattern_ast = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.test_expr;
-    }
-
-    TICtx c = {.env = ctx->env};
-
-    bind_type_in_ctx(pattern_ast, scrutinee_type, (binding_md){}, &c);
-    Type *pattern_type = pattern_ast->md;
-    pattern_types[i] = pattern_type;
-
-    branch_envs[i] = c.env;
-
-    if (guard) {
-      infer(guard, &c);
-    }
-
-    ctx->constraints = merge_constraints(ctx->constraints, c.constraints);
-  }
-
-  Subst *subst = solve_constraints(ctx->constraints);
-  ctx->subst = compose_subst(ctx->subst, subst);
-
-  for (int i = 0; i < num_cases; i++) {
-    branch_envs[i] = apply_subst_env(subst, branch_envs[i]);
-  }
-  Type *case_body_types[num_cases];
-
-  for (int i = 0; i < num_cases; i++) {
-    Ast *body_ast = ast->data.AST_MATCH.branches + i * 2 + 1;
-    TICtx body_ctx = *ctx;
-    body_ctx.env = branch_envs[i];
-
-    Type *case_body_type = infer(body_ast, &body_ctx);
-    case_body_types[i] = case_body_type;
-
-    if (!case_body_type) {
-      return type_error(ctx, body_ast, "Cannot infer body type for case %d",
-                        i + 1);
-    }
-
-    if (unify(result_type, case_body_type, &body_ctx)) {
-      return type_error(ctx, body_ast, "Case %d returns incompatible type",
-                        i + 1);
-    }
-
-    if (i > 0) {
-      if (pattern_types[i] != NULL && pattern_types[i - 1] != NULL) {
-        unify(pattern_types[i], pattern_types[i - 1], &body_ctx);
-      }
-      unify(case_body_types[i], case_body_types[i - 1], &body_ctx);
-    }
-
-    ctx->constraints = body_ctx.constraints;
-  }
-
-  Subst *sols = solve_constraints(ctx->constraints);
-
-  ctx->subst = compose_subst(ctx->subst, sols);
-
-  Type *final_scrutinee = apply_substitution(ctx->subst, scrutinee_type);
-  ast->data.AST_MATCH.expr->md = final_scrutinee;
-
-  // Type *final_result = result_type;
-  Type *final_result = apply_substitution(ctx->subst, result_type);
-
-  for (int i = 0; i < num_cases; i++) {
-    Ast *pattern_ast = ast->data.AST_MATCH.branches + i * 2;
-
-    Ast *guard = NULL;
-    if (pattern_ast->tag == AST_MATCH_GUARD_CLAUSE) {
-      guard = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
-      apply_substitution_to_lambda_body(guard, ctx->subst);
-      pattern_ast = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.test_expr;
-      apply_substitution_to_lambda_body(pattern_ast, ctx->subst);
-
-    } else {
-      apply_substitution_to_lambda_body(pattern_ast, ctx->subst);
-    }
-  }
-
-  // print_ast(ast);
-  // print_subst(ctx->subst);
-
-  return final_result;
 }
 
 Type *infer(Ast *ast, TICtx *ctx) {
@@ -1279,11 +1081,22 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     if (sig->tag == AST_FN_SIGNATURE) {
       type = compute_type_expression(sig, ctx);
+      if (is_generic(type)) {
+        type = generalize(type, ctx);
+      }
     }
     break;
   }
   case AST_MATCH: {
     type = infer_match_expression(ast, ctx);
+    break;
+  }
+  case AST_TYPE_DECL: {
+    type = infer_type_declaration(ast, ctx);
+    break;
+  }
+  case AST_MODULE: {
+    type = infer_inline_module(ast, ctx);
     break;
   }
 

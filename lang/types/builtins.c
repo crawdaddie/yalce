@@ -149,6 +149,25 @@ Type create_array_at_scheme() {
   return (Type){T_SCHEME,
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
+
+Type array_set_scheme;
+Type create_array_set_scheme() {
+
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+
+  Type *f = arr;
+  f = type_fn(a, f);
+  f = type_fn(&t_int, f);
+  f = type_fn(arr, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
 Type opt_scheme;
 Type create_opt_scheme() {
   Type *var = tvar("a");
@@ -161,6 +180,33 @@ Type create_opt_scheme() {
   return (Type){T_SCHEME,
                 {.T_SCHEME = {.num_vars = 1, .vars = vars, .type = full_type}}};
 }
+
+Type array_scheme;
+Type create_array_scheme() {
+  Type *var = tvar("a");
+  Type *full_type = create_array_type(var);
+  // full_type = type_fn(var, full_type);
+
+  TypeList *vars = t_alloc(sizeof(TypeList));
+  *vars = vlist_of_typevar(var);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars, .type = full_type}}};
+}
+
+Type list_scheme;
+Type create_list_scheme() {
+  Type *var = tvar("a");
+  Type *full_type = create_list_type_of_type(var);
+  // full_type = type_fn(var, full_type);
+
+  TypeList *vars = t_alloc(sizeof(TypeList));
+  *vars = vlist_of_typevar(var);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars, .type = full_type}}};
+}
+
 Type list_concat_scheme;
 Type create_list_concat_scheme() {
 
@@ -289,12 +335,21 @@ void initialize_builtin_types() {
   add_builtin("array_size", &array_size_scheme);
 
   array_at_scheme = create_array_at_scheme();
-  add_builtin("array_size", &array_at_scheme);
+  add_builtin("array_at", &array_at_scheme);
+
+  array_set_scheme = create_array_set_scheme();
+  add_builtin("array_set", &array_set_scheme);
 
   opt_scheme = create_opt_scheme();
   add_builtin("Option", &opt_scheme);
   add_builtin("Some", &opt_scheme);
   add_builtin("None", &opt_scheme);
+
+  array_scheme = create_array_scheme();
+  add_builtin("Array", &array_scheme);
+
+  list_scheme = create_list_scheme();
+  add_builtin("List", &list_scheme);
 
   list_concat_scheme = create_list_concat_scheme();
   add_builtin("list_concat", &list_concat_scheme);
@@ -302,7 +357,7 @@ void initialize_builtin_types() {
   str_fmt_scheme = create_str_fmt_scheme();
   add_builtin("str", &str_fmt_scheme);
 
-  print_builtin_types();
+  // print_builtin_types();
 }
 
 Type *lookup_builtin_type(const char *name) {

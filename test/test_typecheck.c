@@ -230,20 +230,18 @@ int test_type_declarations() {
       &MAKE_FN_TYPE_2(&t_num, &vtype));
   });
 
-  T("let tensor_ndims = fn (_, sizes, _) -> \n"
-    "  array_size sizes \n"
-    ";;",
-    &MAKE_FN_TYPE_2(&TTUPLE(3, &TVAR("`1"), &TARRAY(&TVAR("`5")), &TVAR("`3")),
-                    &t_int));
+  ({
+    Type t1 = TVAR("`1");
+    Type t3 = TVAR("`3");
+    Type t5 = TVAR("`5");
 
-  // T("type Tensor = (Array of t, Array of Int, Array of Int);\n"
-  //   "let tensor_ndims = fn (_, sizes, _): (Tensor of T) -> \n"
-  //   "  array_size sizes \n"
-  //   ";; \n"
-  //   "let x = Tensor [|1,2,3,4|] [|2,2|] [|2,1|];\n"
-  //   "tensor_ndims x;\n",
-  //   &t_int);
-  //
+    T("let tensor_ndims = fn (_, sizes, _) -> \n"
+      "  array_size sizes\n"
+      ";;",
+      &TSCHEME(&MAKE_FN_TYPE_2(&TTUPLE(3, &t1, &TARRAY(&t5), &t3), &t_int), &t3,
+               &t5, &t1));
+  });
+
   T("type Tensor = (Array of t, Array of Int, Array of Int);\n"
     "let tensor_ndims = fn (_, sizes, _) -> \n"
     "  array_size sizes \n"
@@ -583,8 +581,11 @@ int test_basic_ops() {
   ({
     Ast *b = T("`{2} and`", &t_string);
     Ast *strf = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->data.AST_LIST.items;
-    TASSERT("fmt string member has type string", types_equal(strf->md, &t_string));
-    TASSERT("fmt string member fn has type Int -> string", types_equal(strf->data.AST_APPLICATION.function->md, &MAKE_FN_TYPE_2(&t_int, &t_string)));
+    TASSERT("fmt string member has type string",
+            types_equal(strf->md, &t_string));
+    TASSERT("fmt string member fn has type Int -> string",
+            types_equal(strf->data.AST_APPLICATION.function->md,
+                        &MAKE_FN_TYPE_2(&t_int, &t_string)));
   });
   return status;
 }
@@ -656,10 +657,10 @@ int test_funcs() {
       &TSCHEME(
           &MAKE_FN_TYPE_4(&t0, &t1, &t2,
                           &MAKE_TC_RESOLVE_2(
-                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
+                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t1,
                               &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t1, &t2))),
-          &t0, &t1, &t2));
+                                                 &t0, &t2))),
+          &t2, &t1, &t0));
   });
 
   ({
@@ -689,10 +690,10 @@ int test_funcs() {
       &TSCHEME(
           &MAKE_FN_TYPE_3(&t0, &TTUPLE(2, &t2, &t3),
                           &MAKE_TC_RESOLVE_2(
-                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
+                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t2,
                               &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t2, &t3))),
-          &t0, &t2, &t3));
+                                                 &t0, &t3))),
+          &t3, &t2, &t0));
   });
 
   Type t0 = arithmetic_var("`0");
@@ -764,42 +765,40 @@ int test_funcs() {
     }
   });
 
-    ({
-      Type t = arithmetic_var("`10");
-      T("let f = fn a b c -> a + b + c;;\n"
-        "f 1. 2.\n",
-        &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &t_num, &t)));
-    });
+  ({
+    Type t = arithmetic_var("`10");
+    T("let f = fn a b c -> a + b + c;;\n"
+      "f 1. 2.\n",
+      &MAKE_FN_TYPE_2(
+          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t)));
+  });
 
-    T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
-      "f 1 2\n",
-      &MAKE_FN_TYPE_2(&t_int, &t_bool));
+  T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
+    "f 1 2\n",
+    &MAKE_FN_TYPE_2(&t_int, &t_bool));
 
-    ({
-      Type t0 = arithmetic_var("`0");
-      Type t1 = arithmetic_var("`1");
-      T("(1, 2, fn a b -> a + b;);\n",
-        &TTUPLE(
-            3, &t_int, &t_int,
-            &MAKE_FN_TYPE_3(
-                &t0, &t1,
-                &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1))));
-    });
+  ({
+    Type t0 = arithmetic_var("`0");
+    Type t1 = arithmetic_var("`1");
+    T("(1, 2, fn a b -> a + b;);\n",
+      &TTUPLE(3, &t_int, &t_int,
+              &MAKE_FN_TYPE_3(&t0, &t1,
+                              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t0, &t1))));
+  });
 
-    ({
-      Type t0 = arithmetic_var("`0");
-      Type t1 = arithmetic_var("`1");
-      Type tuple = TTUPLE(
-          3, &t_int, &t_int,
-          &MAKE_FN_TYPE_3(
-              &t0, &t1,
-              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
+  ({
+    Type t0 = arithmetic_var("`0");
+    Type t1 = arithmetic_var("`1");
+    Type tuple =
+        TTUPLE(3, &t_int, &t_int,
+               &MAKE_FN_TYPE_3(&t0, &t1,
+                               &MAKE_TC_RESOLVE_2(
+                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
 
-      tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
-      T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
-    });
-
+    tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
+    T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
+  });
 
   ({
     bool res =
@@ -961,7 +960,6 @@ int test_funcs() {
                &t4, &t2, &t1));
   });
 
-
   ({
     Type t = TVAR("`2");
     T("let f = fn cb -> cb 1 2;;",
@@ -1095,8 +1093,10 @@ int test_match_exprs() {
       "  | None -> 0\n"
       "  ;;\n",
 
-      &TSCHEME(&MAKE_FN_TYPE_2(&opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &v, &t_int)), &v));
+      &TSCHEME(&MAKE_FN_TYPE_2(
+                   &opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                            &t_int, &v)),
+               &v));
   });
 
   ({
@@ -1107,8 +1107,10 @@ int test_match_exprs() {
       "  | Some y -> y * 2\n"
       "  | None -> 0\n"
       "  ;;\n",
-      &TSCHEME(&MAKE_FN_TYPE_2(&opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &v, &t_int)), &v));
+      &TSCHEME(&MAKE_FN_TYPE_2(
+                   &opt, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                            &t_int, &v)),
+               &v));
   });
 
   T("let f = fn x ->\n"
@@ -1536,10 +1538,14 @@ int test_first_class_funcs() {
   //
   //            "schedule_event runner 0. c\n",
   //            &t_void);
+  //
+  T("let schedule_event = extern fn (T -> Int -> ()) -> Double -> T -> ()",
+    &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&TVAR("T"), &t_int, &t_void),
+                             &t_num, &TVAR("T"), &t_void),
+             &TVAR("T")));
   ({
     Ast *b =
-        T("type SchedulerCallback = (() -> Option of Double) -> Int -> ();\n"
-          "let schedule_event = extern fn (T -> Int -> ()) -> Double -> T -> "
+        T("let schedule_event = extern fn (T -> Int -> ()) -> Double -> T -> "
           "();\n"
           "let runner = fn c off ->\n"
           "  match c () with\n"
@@ -1550,7 +1556,7 @@ int test_first_class_funcs() {
           &t_void);
 
     Ast *runner_arg =
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 3)->data.AST_APPLICATION.args;
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.args;
     Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
@@ -1646,24 +1652,26 @@ int test_closures() {
 int test_refs() {
   bool status = true;
 
+  T("let Ref = fn item -> [|item|];;",
+    &TSCHEME(&MAKE_FN_TYPE_2(&TVAR("`0"), &TARRAY(&TVAR("`0"))), &TVAR("`0")));
+
   ({
     Type v = arithmetic_var("`5");
-    T("let Ref = fn item -> [|item|];;\n"
-      "let incr_ref = fn rx ->\n"
+    T("let incr_ref = fn rx ->\n"
       "  let x = rx[0];\n"
       "  let inc = x + 1;\n"
       "  rx[0] := inc;\n"
       "  inc\n"
       ";;\n",
-      &MAKE_FN_TYPE_2(
-          &TARRAY(&v),
-          &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &v, &t_int)));
+      &TSCHEME(&MAKE_FN_TYPE_2(&TARRAY(&v),
+                               &MAKE_TC_RESOLVE_2(
+                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &v, &t_int)),
+               &v));
   });
 
   ({
     Type v = arithmetic_var("`5");
-    Ast *b = T("let Ref = fn item -> [|item|];;\n"
-               "let incr_ref = fn rx ->\n"
+    Ast *b = T("let incr_ref = fn rx ->\n"
                "  let x = rx[0];\n"
                "  let inc = x + 1;\n"
                "  rx[0] := inc;\n"
@@ -1685,8 +1693,10 @@ int test_modules() {
   bool status = true;
 
   ({
-    Type mod_type = TCONS(TYPE_NAME_MODULE, 2, &t_int,
-                          &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`2")), &t_int));
+    Type mod_type = TCONS(
+        TYPE_NAME_MODULE, 2, &t_int,
+        &TSCHEME(&MAKE_FN_TYPE_2(&TARRAY(&TVAR("`2")), &t_int), &TVAR("`2")));
+
     const char *names[2] = {"x", "size"};
     mod_type.data.T_CONS.names = names;
     T("let Mod = module () ->\n"
@@ -1700,8 +1710,9 @@ int test_modules() {
 
   ({
     // parametrized module
+    Type t2 = TVAR("`2");
     Type mod_type = TCONS(TYPE_NAME_MODULE, 2, &t_int,
-                          &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`2")), &t_int));
+                          &TSCHEME(&MAKE_FN_TYPE_2(&TARRAY(&t2), &t_int), &t2));
     // const char *names[2] = {"x", "size"};
     // mod_type.data.T_CONS.names = names;
 
@@ -1747,15 +1758,21 @@ int test_array_processing() {
 
   // T("let x = [|1|]; let set_ref = array_set 0; set_ref x 3",
   // &TARRAY(&t_int));
-  T("let (@) = array_at",
-    &MAKE_FN_TYPE_3(&TARRAY(&TVAR("`0")), &t_int, &TVAR("`0")));
+  ({
+    Type t0 = TVAR("`0");
+    T("let (@) = array_at",
+      &TSCHEME(&MAKE_FN_TYPE_3(&TARRAY(&t0), &t_int, &t0), &t0));
+  });
 
-  T("let rand_int = extern fn Int -> Int;\n"
-    "let array_choose = fn arr ->\n"
-    "  let idx = rand_int (array_size arr);\n"
-    "  array_at arr idx \n"
-    ";;\n",
-    &MAKE_FN_TYPE_2(&TARRAY(&TVAR("`6")), &TVAR("`6")));
+  ({
+    Type t6 = TVAR("`6");
+    T("let rand_int = extern fn Int -> Int;\n"
+      "let array_choose = fn arr ->\n"
+      "  let idx = rand_int (array_size arr);\n"
+      "  array_at arr idx \n"
+      ";;\n",
+      &TSCHEME(&MAKE_FN_TYPE_2(&TARRAY(&t6), &t6), &t6));
+  });
 
   T("let rand_int = extern fn Int -> Int;\n"
     "let array_choose = fn arr ->\n"
@@ -1764,7 +1781,7 @@ int test_array_processing() {
     ";;\n"
     "array_choose [|1,2,3|]",
     &t_int);
-
+  //
   T("let rand_int = extern fn Int -> Int;\n"
     "let array_choose = fn arr ->\n"
     "  let idx = rand_int (array_size arr);\n"
@@ -1778,15 +1795,17 @@ int test_networking_funcs() {
   bool status = true;
 
   ({
-    Ast *b = T(
-        "let pop_left = fn (head, tail) ->\n"
-        "  match head with\n"
-        "  | [] -> ((head, tail), None)\n"
-        "  | x::rest -> ((rest, tail), Some x)  \n"
-        ";;\n",
-        &MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&TVAR("`6")), &TVAR("`2")),
-                        &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`6")), &TVAR("`2")),
-                                &TOPT(&TVAR("`6")))));
+    Ast *b =
+        T("let pop_left = fn (head, tail) ->\n"
+          "  match head with\n"
+          "  | [] -> ((head, tail), None)\n"
+          "  | x::rest -> ((rest, tail), Some x)  \n"
+          ";;\n",
+          &TSCHEME(&MAKE_FN_TYPE_2(
+                       &TTUPLE(2, &TLIST(&TVAR("`6")), &TVAR("`2")),
+                       &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`6")), &TVAR("`2")),
+                               &TOPT(&TVAR("`6")))),
+                   &TVAR("`2"), &TVAR("`6")));
     Ast none = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
                    ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH
                    .branches[1]
@@ -1878,21 +1897,11 @@ bool test_audio_funcs() {
 
 bool test_type_exprs() {
   bool status = true;
-  status &= TASSERT("fn type expression", {
-    Ast *ast =
-        parse_input("type f = (T -> Int -> ()) -> Double -> T -> ();", NULL);
-    TICtx ctx = {};
-    infer(ast, &ctx);
-    // Scheme sch = ctx.env->scheme;
-    // bool res = true;
-    // res &= sch.vars != NULL && strcmp(sch.vars->var, "T") == 0;
-    // Type t = TVAR("T");
-    // res &= types_equal(sch.type,
-    //                    &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void),
-    //                                    &t_num, &t, &t_void));
-    // res;
-  });
-
+  Type t = TVAR("T");
+  T("type f = (T -> Int -> ()) -> Double -> T -> ();",
+    &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void), &t_num, &t,
+                             &t_void),
+             &t));
   return status;
 }
 
@@ -2045,18 +2054,18 @@ int main() {
   status &= test_funcs();
   status &= test_opts();
   status &= test_match_exprs();
-  // status &= test_coroutines();
+  status &= test_type_declarations();
   status &= test_first_class_funcs();
+  // status &= test_coroutines();
   // status &= test_closures();
   // status &= test_refs();
-  // status &= test_modules();
-  // status &= test_array_processing();
-  // status &= test_networking_funcs();
-  // status &= test_type_exprs();
-  // status &= test_parser_combinators();
-  // status &= test_type_declarations();
+  status &= test_modules();
+  status &= test_array_processing();
+  status &= test_networking_funcs();
+  status &= test_type_exprs();
+  status &= test_parser_combinators();
   // status &= test_audio_funcs();
-  status &= test_list_processing();
+  // status &= test_list_processing();
   // status &= test_record_types();
 
   print_all_failures();

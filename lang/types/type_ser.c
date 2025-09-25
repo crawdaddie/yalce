@@ -101,6 +101,21 @@ char *type_to_string(Type *t, char *buffer) {
       buffer = strncat(buffer, " )", 2);
       break;
     }
+    if (is_sum_type(t) && t->data.T_CONS.args[0]->kind == T_CONS &&
+        CHARS_EQ(t->data.T_CONS.args[0]->data.T_CONS.name, "Some")) {
+
+      buffer = strncat(buffer, "Option of ", 10);
+      buffer =
+          type_to_string(t->data.T_CONS.args[0]->data.T_CONS.args[0], buffer);
+      break;
+    }
+
+    if (t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, "Some")) {
+      buffer = strncat(buffer, "Option of ", 10);
+      buffer =
+          type_to_string(t->data.T_CONS.args[0]->data.T_CONS.args[0], buffer);
+      break;
+    }
 
     if (is_sum_type(t)) {
 
@@ -315,6 +330,20 @@ void print_type_to_stream(Type *t, FILE *stream) {
       }
 
       fprintf(stream, " )");
+      break;
+    }
+
+    if (is_sum_type(t) && t->data.T_CONS.args[0]->kind == T_CONS &&
+        CHARS_EQ(t->data.T_CONS.args[0]->data.T_CONS.name, "Some")) {
+
+      fprintf(stream, "Option of ");
+      print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0], stream);
+      break;
+    }
+
+    if (t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, "Some")) {
+      fprintf(stream, "Option of ");
+      print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0], stream);
       break;
     }
 

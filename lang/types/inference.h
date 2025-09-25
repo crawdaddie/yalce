@@ -79,8 +79,32 @@ typedef struct VarList {
 // } Scheme;
 
 Type *infer(Ast *ast, TICtx *ctx);
-
 Type *generalize(Type *t, TICtx *ctx);
 Type *instantiate(Type *sch, TICtx *ctx);
+Type *instantiate_type_in_env(Type *sch, TypeEnv *env);
 Type *env_lookup(TypeEnv *env, const char *name);
+TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
+Type *extract_member_from_sum_type(Type *cons, Ast *id);
+void *type_error(Ast *ast, const char *fmt, ...);
+
+Constraint *merge_constraints(Constraint *list1, Constraint *list2);
+Subst *solve_constraints(Constraint *constraints);
+Subst *compose_subst(Subst *s1, Subst *s2);
+Type *apply_substitution(Subst *subst, Type *t);
+
+TypeEnv *apply_subst_env(Subst *subst, TypeEnv *env);
+
+int unify(Type *t1, Type *t2, TICtx *unify_res);
+
+void print_constraints(Constraint *constraints);
+
+void print_subst(Subst *subst);
+
+int bind_type_in_ctx(Ast *binding, Type *type, binding_md binding_type,
+                     TICtx *ctx);
+TypeEnv *lookup_type_ref(TypeEnv *env, const char *name);
+
+void apply_substitution_to_lambda_body(Ast *ast, Subst *subst);
+void add_constraint(TICtx *result, Type *var, Type *type);
+
 #endif
