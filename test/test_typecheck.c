@@ -255,14 +255,14 @@ int test_type_declarations() {
 int test_list_processing() {
   bool status = true;
   printf("## LIST PROCESSING FUNCTIONS\n-------------------------------\n");
-  T("let f = fn l->\n"
+  T("let f = fn l ->\n"
     "  match l with\n"
     "    | x::_ -> x\n"
     "    | [] -> 0\n"
     ";;",
     &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
 
-  T("let f = fn l->\n"
+  T("let f = fn l ->\n"
     "  match l with\n"
     "    | x1::x2::_ -> x1\n"
     "    | [] -> 0\n"
@@ -331,23 +331,23 @@ int test_list_processing() {
                &t));
   });
 
-  // T("let enqueue = fn (head, tail): (List of Int, List of Int) item: "
-  //   "(Int) "
-  //   "->\n"
-  //   "  let last = [item] in\n"
-  //   "  match head with\n"
-  //   "  | [] -> (last, last)\n"
-  //   "  | _ -> (\n"
-  //   "    let _ = list_concat tail last in\n"
-  //   "    (head, last)\n"
-  //   "  )\n"
-  //   ";;\n",
-  //   // &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
-  //   //                 &TVAR("`0"),
-  //   //                 &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))))
-  //   //
-  //   &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int)), &t_int,
-  //                   &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))));
+  T("let enqueue = fn (head, tail): (List of Int, List of Int) item: "
+    "(Int) "
+    "->\n"
+    "  let last = [item] in\n"
+    "  match head with\n"
+    "  | [] -> (last, last)\n"
+    "  | _ -> (\n"
+    "    let _ = list_concat tail last in\n"
+    "    (head, last)\n"
+    "  )\n"
+    ";;\n",
+    // &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
+    //                 &TVAR("`0"),
+    //                 &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))))
+    //
+    &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int)), &t_int,
+                    &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))));
   //
   ({
     Type s = arithmetic_var("`4");
@@ -378,18 +378,6 @@ int test_list_processing() {
         AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
   });
-
-  T("let list_map = fn f l ->\n"
-    "  let aux = fn f l res -> \n"
-    "    match l with\n"
-    "    | [] -> res\n"
-    "    | x :: rest -> aux f rest (f x :: res) \n"
-    "  ;;\n"
-    "  aux f l []\n"
-    ";;\n",
-    // (`8 -> `15) -> `8[] -> `15
-    &MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&TVAR("`8"), &TVAR("`15")),
-                    &TLIST(&TVAR("`8")), &TLIST(&TVAR("`15"))));
 
   T("(+) 1",
     &MAKE_FN_TYPE_2(&arithmetic_var("`1"),
@@ -423,7 +411,8 @@ int test_list_processing() {
     "  ;;\n"
     "  aux l []\n"
     ";;\n",
-    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`11")), &TLIST(&TVAR("`11"))));
+    &TSCHEME(&MAKE_FN_TYPE_2(&TLIST(&TVAR("`11")), &TLIST(&TVAR("`11"))),
+             &TVAR("`11")));
 
   T("let of_list = fn l ->\n"
     "  let t = l in \n"
@@ -517,7 +506,53 @@ int test_list_processing() {
     "  ;;\n"
     "  aux l []\n"
     ";;\n",
-    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`11")), &TLIST(&TVAR("`11"))));
+    &TSCHEME(&MAKE_FN_TYPE_2(&TLIST(&TVAR("`11")), &TLIST(&TVAR("`11"))),
+             &TVAR("`11")));
+  ({
+    Type t0 = TVAR("`5");
+    Type t1 = TVAR("`7");
+    T("let aux = fn f l res -> \n"
+      "  match l with\n"
+      "  | [] -> res\n"
+      "  | x :: rest -> aux f rest (f x :: res) \n"
+      ";;\n",
+      &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&t0, &t1), &TLIST(&t0),
+                               &TLIST(&t1), &TLIST(&t1)),
+               &t0, &t1));
+  });
+
+  ({
+    Type t8 = TVAR("`14");
+    Type t10 = TVAR("`15");
+    T("let list_map = fn f l ->\n"
+      "  let aux = fn f l res -> \n"
+      "    match l with\n"
+      "    | [] -> res\n"
+      "    | x :: rest -> aux f rest (f x :: res) \n"
+      "  ;;\n"
+      "  aux f l []\n"
+      ";;\n",
+      // (`8 -> `15) -> `8[] -> `15
+      &TSCHEME(&MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t8, &t10), &TLIST(&t8),
+                               &TLIST(&t10)),
+               &t8, &t10));
+  });
+  return status;
+}
+int test_aux() {
+
+  bool status = true;
+  Type t0 = TVAR("`5");
+  Type t1 = TVAR("`7");
+  T("let aux = fn f l res -> \n"
+    "  match l with\n"
+    "  | [] -> res\n"
+    "  | x :: rest -> aux f rest (f x :: res) \n"
+    ";;\n",
+    &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&t0, &t1), &TLIST(&t0),
+                             &TLIST(&t1), &TLIST(&t1)),
+             &t0, &t1));
+
   return status;
 }
 
@@ -1015,6 +1050,7 @@ int test_funcs() {
     print_ast(fb);
     print_type(fb->md);
     print_type(fb->data.AST_APPLICATION.function->md);
+
     TASSERT("references in sub-nodes properly typed :: fib (x-1) + fib (x-2) "
             "== Int -> Int -> Int",
             types_equal(fb->data.AST_APPLICATION.function->md,
@@ -2043,12 +2079,25 @@ bool test_record_types() {
     "X.f ()",
     &t_int);
 
-  T("let X = module () ->\n"
-    "  let f = fn a b -> a + b;;\n"
-    ";\n"
-    "X.f 1 2;\n"
-    "X",
-    &t_int);
+  ({
+    Type t0 = TVAR("`0");
+    Type t1 = TVAR("`1");
+    Type mod = TCONS(
+        TYPE_NAME_MODULE, 1,
+        &TSCHEME(&MAKE_FN_TYPE_3(&t0, &t1,
+                                 &MAKE_TC_RESOLVE_2(
+                                     TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)),
+                 &t0, &t1));
+
+    mod.data.T_CONS.names = (char *[]){"f"};
+
+    T("let X = module () ->\n"
+      "  let f = fn a b -> a + b;;\n"
+      ";\n"
+      "X.f 1 2;\n"
+      "X",
+      &mod);
+  });
 
   return status;
 }
@@ -2059,22 +2108,24 @@ int main() {
 
   bool status = true;
   status &= test_basic_ops();
-  status &= test_funcs();
   status &= test_opts();
   status &= test_match_exprs();
   status &= test_type_declarations();
   status &= test_first_class_funcs();
+
   // status &= test_coroutines();
   // status &= test_closures();
   // status &= test_refs();
+  //
   status &= test_modules();
   status &= test_array_processing();
   status &= test_networking_funcs();
   status &= test_type_exprs();
   status &= test_parser_combinators();
   status &= test_audio_funcs();
-  status &= test_list_processing();
   status &= test_record_types();
+  status &= test_list_processing();
+  status &= test_funcs();
 
   print_all_failures();
   return status == true ? 0 : 1;

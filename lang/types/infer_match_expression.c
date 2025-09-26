@@ -182,8 +182,8 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     }
 
     if (i > 0) {
-      // unify(pattern_types[i], pattern_types[i - 1], &body_ctx);
-      // unify(case_body_types[i], case_body_types[i - 1], &body_ctx);
+      unify(pattern_types[i], pattern_types[i - 1], &body_ctx);
+      unify(case_body_types[i], case_body_types[i - 1], &body_ctx);
     }
 
     ctx->constraints = body_ctx.constraints;
@@ -211,10 +211,9 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     } else {
       apply_substitution_to_lambda_body(pattern_ast, ctx->subst);
     }
+    apply_substitution_to_lambda_body(ast->data.AST_MATCH.branches + i * 2 + 1,
+                                      ctx->subst);
   }
-
-  // print_ast(ast);
-  // print_subst(ctx->subst);
 
   return final_result;
 }

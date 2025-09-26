@@ -1,9 +1,11 @@
 #include "./infer_lambda.h"
 #include "./builtins.h"
+#include "common.h"
 #include "serde.h"
 #include "types/type_expressions.h"
 #include "types/type_ser.h"
 #include "types/unification.h"
+#include <string.h>
 
 void initial_lambda_signature(int num_params, Type **param_types,
                               AstList *type_annotation_list, AstList *params,
@@ -334,8 +336,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     return type_error(body, "Error: Cannot infer lambda body\n");
   }
 
-  // printf("b4 solve?\n");
-  Subst *ls = compose_subst(lctx.subst, solve_constraints(lctx.constraints));
+  Subst *ls = solve_constraints(lctx.constraints);
 
   for (int i = 0; i < num_params; i++) {
     param_types[i] = apply_substitution(ls, param_types[i]);

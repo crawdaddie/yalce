@@ -253,6 +253,24 @@ Type create_list_concat_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type list_prepend_scheme;
+Type create_list_prepend_scheme() {
+
+  Type *a = tvar("a");
+  Type *l = create_list_type_of_type(a);
+
+  Type *f = l;
+  f = type_fn(l, f);
+  f = type_fn(a, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 Type str_fmt_scheme;
 Type create_str_fmt_scheme() {
 
@@ -386,6 +404,8 @@ void initialize_builtin_types() {
 
   list_concat_scheme = create_list_concat_scheme();
   add_builtin("list_concat", &list_concat_scheme);
+  list_prepend_scheme = create_list_prepend_scheme();
+  add_builtin("::", &list_prepend_scheme);
 
   str_fmt_scheme = create_str_fmt_scheme();
   add_builtin("str", &str_fmt_scheme);

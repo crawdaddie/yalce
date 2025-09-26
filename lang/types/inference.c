@@ -124,7 +124,8 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
     Type **contained = t_alloc(sizeof(Type *));
     contained[0] = next_tvar();
     *t = (Type){T_CONS, {.T_CONS = {cons_name, contained, 1}}};
-
+    //
+    // Type *t = next_tvar();
     return t;
   }
 
@@ -768,6 +769,14 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       binding->md = type;
       return 0;
     }
+
+    if (bmd_type.type == BT_FN_PARAM) {
+      binding->md = type;
+      ctx->env = env_extend(ctx->env, binding->data.AST_IDENTIFIER.value, type);
+      ctx->env->md = bmd_type;
+      return 0;
+    }
+
     Type *builtin_type =
         lookup_builtin_type(binding->data.AST_IDENTIFIER.value);
 
@@ -906,8 +915,6 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   if (is_generic(val_type) && val_type->kind == T_FN) {
     val_type = generalize(val_type, ctx);
   }
-  //
-  // val_type = generalize(val_type, ctx);
 
   if (body) {
     TICtx body_ctx = *ctx;
@@ -1113,6 +1120,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_MODULE: {
     type = infer_inline_module(ast, ctx);
+    print_type(type);
     break;
   }
   case AST_RECORD_ACCESS: {
@@ -1135,6 +1143,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
         ast->data.AST_RECORD_ACCESS.index = i;
         break;
       }
+    }
+
+    if (type->kind == T_SCHEME) {
+      type = instantiate(type, ctx);
     }
 
     break;
