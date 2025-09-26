@@ -278,13 +278,13 @@ int test_list_processing() {
 
   ({
     Type s = arithmetic_var("`4");
-    Type t = arithmetic_var("`0");
+    Type t = arithmetic_var("`8");
     T("let list_sum = fn s l ->\n"
       "  match l with\n"
       "  | x::rest -> list_sum (s + x) rest\n"
       "  | [] -> s\n"
       ";;\n",
-      &MAKE_FN_TYPE_3(&t, &TLIST(&s), &t));
+      &TSCHEME(&MAKE_FN_TYPE_3(&t, &TLIST(&s), &t), &s, &t));
   });
 
   ({
@@ -294,7 +294,7 @@ int test_list_processing() {
       "  | x::rest -> (print `{x}, `; print_list rest)\n"
       "  | [] -> ()\n"
       ";;\n",
-      &MAKE_FN_TYPE_2(&ltype, &t_void));
+      &TSCHEME(&MAKE_FN_TYPE_2(&ltype, &t_void), &ltype));
   });
 
   ({
@@ -312,7 +312,8 @@ int test_list_processing() {
     "  | x::rest -> Some x \n"
     "  | [] -> None\n"
     ";; \n",
-    &MAKE_FN_TYPE_2(&TLIST(&TVAR("`4")), &TOPT(&TVAR("`4"))));
+    &TSCHEME(&MAKE_FN_TYPE_2(&TLIST(&TVAR("`3")), &TOPT(&TVAR("`3"))),
+             &TVAR("`3")));
 
   ({
     Type t = TVAR("`1");
@@ -325,8 +326,9 @@ int test_list_processing() {
       "    (head, last)\n"
       "  )\n"
       ";;\n",
-      &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&t), &TLIST(&t)), &t,
-                      &TTUPLE(2, &TLIST(&t), &TLIST(&t))));
+      &TSCHEME(&MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&t), &TLIST(&t)), &t,
+                               &TTUPLE(2, &TLIST(&t), &TLIST(&t))),
+               &t));
   });
 
   // T("let enqueue = fn (head, tail): (List of Int, List of Int) item: "
@@ -361,16 +363,17 @@ int test_list_processing() {
   });
 
   ({
-    Type free_var = TVAR("`5");
-    Ast *b =
-        T("let pop_left = fn (head, tail) ->\n"
-          "  match head with\n"
-          "  | x::rest -> ((rest, tail), Some x)  \n"
-          "  | [] -> ((head, tail), None)\n"
-          ";;\n",
-          &MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&free_var), &TVAR("`2")),
-                          &TTUPLE(2, &TTUPLE(2, &TLIST(&free_var), &TVAR("`2")),
-                                  &TOPT(&free_var))));
+    Type t5 = TVAR("`5");
+    Type t2 = TVAR("`2");
+    Ast *b = T("let pop_left = fn (head, tail) ->\n"
+               "  match head with\n"
+               "  | x::rest -> ((rest, tail), Some x)  \n"
+               "  | [] -> ((head, tail), None)\n"
+               ";;\n",
+               &TSCHEME(&MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&t5), &t2),
+                                        &TTUPLE(2, &TTUPLE(2, &TLIST(&t5), &t2),
+                                                &TOPT(&t5))),
+                        &t5, &t2));
     Ast *match_subj =
         AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
@@ -436,9 +439,11 @@ int test_list_processing() {
     "    (h, tt)\n"
     "  )\n"
     ";;\n",
-    &MAKE_FN_TYPE_3(&TVAR("`2"),
-                    &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2"))),
-                    &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2")))));
+    &TSCHEME(
+        &MAKE_FN_TYPE_3(&TVAR("`2"),
+                        &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2"))),
+                        &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2")))),
+        &TVAR("`2")));
 
   ({
     Ast *b =
@@ -447,10 +452,11 @@ int test_list_processing() {
           "  | x::rest -> Some (x, (rest, t))  \n"
           "  | [] -> None\n"
           ";;\n",
-          &MAKE_FN_TYPE_2(
-              &TTUPLE(2, &TLIST(&TVAR("`5")), &TVAR("`2")),
-              &TOPT(&TTUPLE(2, &TVAR("`5"),
-                            &TTUPLE(2, &TLIST(&TVAR("`5")), &TVAR("`2"))))));
+          &TSCHEME(&MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&TVAR("`5")), &TVAR("`2")),
+                                   &TOPT(&TTUPLE(2, &TVAR("`5"),
+                                                 &TTUPLE(2, &TLIST(&TVAR("`5")),
+                                                         &TVAR("`2"))))),
+                   &TVAR("`2"), &TVAR("`5")));
     Ast *m =
         b->data.AST_BODY.stmts->ast->data.AST_LET.expr->data.AST_LAMBDA.body;
     TASSERT("match result type = Option of `5",
@@ -657,9 +663,9 @@ int test_funcs() {
       &TSCHEME(
           &MAKE_FN_TYPE_4(&t0, &t1, &t2,
                           &MAKE_TC_RESOLVE_2(
-                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t1,
+                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
                               &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t0, &t2))),
+                                                 &t1, &t2))),
           &t2, &t1, &t0));
   });
 
@@ -690,9 +696,9 @@ int test_funcs() {
       &TSCHEME(
           &MAKE_FN_TYPE_3(&t0, &TTUPLE(2, &t2, &t3),
                           &MAKE_TC_RESOLVE_2(
-                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t2,
+                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
                               &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t0, &t3))),
+                                                 &t2, &t3))),
           &t3, &t2, &t0));
   });
 
@@ -1913,18 +1919,20 @@ bool test_parser_combinators() {
     Type a = TVAR("`2");
     Type b = TVAR("`7");
     Type c = TVAR("`8");
-    Type d = TVAR("`11");
-    Ast *bd =
-        T("let bind = fn p f input ->\n"
-          "  match p input with\n"
-          "  | Some (x, rest) -> f x rest  \n"
-          "  | None -> None\n"
-          ";;\n",
-          &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&a, &TOPT(&TTUPLE(2, &b, &c))),
-                          &MAKE_FN_TYPE_3(&b, &c, &TOPT(&d)), &a, &TOPT(&d))
+    Type d = TVAR("`14");
+    Ast *bd = T("let bind = fn p f input ->\n"
+                "  match p input with\n"
+                "  | Some (x, rest) -> f x rest  \n"
+                "  | None -> None\n"
+                ";;\n",
+                &TSCHEME(&MAKE_FN_TYPE_4(
+                             &MAKE_FN_TYPE_2(&a, &TOPT(&TTUPLE(2, &b, &c))),
+                             &MAKE_FN_TYPE_3(&b, &c, &TOPT(&d)), &a, &TOPT(&d)),
+                         &a, &b, &c, &d)
 
-        );
+    );
   });
+
   ({
     Ast *bd =
         T("type Parser = String -> Option of (T, String);\n"
@@ -2064,9 +2072,9 @@ int main() {
   status &= test_networking_funcs();
   status &= test_type_exprs();
   status &= test_parser_combinators();
-  // status &= test_audio_funcs();
-  // status &= test_list_processing();
-  // status &= test_record_types();
+  status &= test_audio_funcs();
+  status &= test_list_processing();
+  status &= test_record_types();
 
   print_all_failures();
   return status == true ? 0 : 1;

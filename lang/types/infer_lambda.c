@@ -2,6 +2,7 @@
 #include "./builtins.h"
 #include "serde.h"
 #include "types/type_expressions.h"
+#include "types/type_ser.h"
 #include "types/unification.h"
 
 void initial_lambda_signature(int num_params, Type **param_types,

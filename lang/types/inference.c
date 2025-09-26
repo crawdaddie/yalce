@@ -738,6 +738,14 @@ TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
   return new_env;
 }
 
+bool is_list_cons_operator(Ast *ast) {
+  return (ast->tag == AST_APPLICATION) &&
+         (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+          CHARS_EQ(
+              ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+              "::"));
+}
+
 int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
                      TICtx *ctx) {
   switch (binding->tag) {
@@ -760,7 +768,17 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       binding->md = type;
       return 0;
     }
+    Type *builtin_type =
+        lookup_builtin_type(binding->data.AST_IDENTIFIER.value);
+
+    if (builtin_type) {
+      Type *existing = instantiate(builtin_type, ctx);
+      binding->md = existing;
+      return 0;
+    }
+
     Type *existing = env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
+
     if (existing) {
       binding->md = existing;
       return 0;
@@ -809,11 +827,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
   }
 
   case AST_APPLICATION: {
-    if (binding->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-        CHARS_EQ(
-            binding->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-            "::")) {
-
+    if (is_list_cons_operator(binding)) {
       Ast *head = binding->data.AST_APPLICATION.args;
       Ast *rest = binding->data.AST_APPLICATION.args + 1;
 
@@ -838,24 +852,26 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       type_error(binding, "Could not create list destructure binding");
       return 1;
     }
+    if (binding->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+      Type *app_type = infer(binding, ctx);
 
-    Type *app_type = infer(binding, ctx);
+      Type *btype = app_type;
 
-    Type *btype = app_type;
+      if (is_sum_type(btype)) {
+        btype = extract_member_from_sum_type(
+            btype, binding->data.AST_APPLICATION.function);
+      }
+      // print_type(btype);
 
-    if (is_sum_type(btype)) {
-      btype = extract_member_from_sum_type(
-          btype, binding->data.AST_APPLICATION.function);
+      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
+                         btype->data.T_CONS.args[i], bmd_type, ctx);
+      }
+      binding->md = app_type;
+
+      return 0;
     }
-    // print_type(btype);
-
-    for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
-      bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
-                       btype->data.T_CONS.args[i], bmd_type, ctx);
-    }
-    binding->md = app_type;
-
-    return 0;
+    return 1;
   }
 
   case AST_LIST: {
@@ -1097,6 +1113,52 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_MODULE: {
     type = infer_inline_module(ast, ctx);
+    break;
+  }
+  case AST_RECORD_ACCESS: {
+
+    Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
+    const char *member_name =
+        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+
+    if (rec_type->kind != T_CONS) {
+      return NULL;
+    }
+
+    if (rec_type->kind == T_CONS && rec_type->data.T_CONS.names == NULL) {
+      return NULL;
+    }
+
+    for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+      if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
+        type = rec_type->data.T_CONS.args[i];
+        ast->data.AST_RECORD_ACCESS.index = i;
+        break;
+      }
+    }
+
+    break;
+  }
+
+  case AST_LOOP: {
+    Ast let = *ast;
+    // if (is_loop_of_iterable(ast)) {
+    //   type = for_loop_binding(let.data.AST_LET.binding,
+    //   let.data.AST_LET.expr,
+    //                           let.data.AST_LET.in_expr, ctx);
+    //
+    //   break;
+    // }
+    let.tag = AST_LET;
+    type = infer(&let, ctx);
+    break;
+  }
+  case AST_RANGE_EXPRESSION: {
+    Type *from = infer(ast->data.AST_RANGE_EXPRESSION.from, ctx);
+    Type *to = infer(ast->data.AST_RANGE_EXPRESSION.to, ctx);
+    unify(from, &t_int, ctx);
+    unify(to, &t_int, ctx);
+    type = &t_int;
     break;
   }
 

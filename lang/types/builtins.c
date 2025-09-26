@@ -55,6 +55,15 @@ Type id_scheme =
                          .num_vars = 1,
                          .type = &MAKE_FN_TYPE_2(&_tvar_a, &_tvar_a)}}};
 
+Type array_id_scheme =
+    (Type){T_SCHEME,
+           {.T_SCHEME = {.vars =
+                             &(TypeList){
+                                 .type = &TARRAY(&_tvar_a),
+                             },
+                         .num_vars = 1,
+                         .type = &MAKE_FN_TYPE_2(&TARRAY(&_tvar_a),
+                                                 &TARRAY(&_tvar_a))}}};
 TypeList vlist_of_typevar(Type *t) {
   return (TypeList){.type = t, .next = NULL};
 }
@@ -123,6 +132,25 @@ Type create_array_size_scheme() {
   Type *arr = create_array_type(a);
 
   Type *f = type_fn(arr, &t_int);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
+Type array_range_scheme;
+Type create_array_range_scheme() {
+
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+
+  Type *f = arr;
+  f = type_fn(arr, f);
+  f = type_fn(&t_int, f);
+  f = type_fn(&t_int, f);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
@@ -333,6 +361,9 @@ void initialize_builtin_types() {
 
   array_size_scheme = create_array_size_scheme();
   add_builtin("array_size", &array_size_scheme);
+  add_builtin("array_succ", &array_id_scheme);
+  array_range_scheme = create_array_range_scheme();
+  add_builtin("array_range", &array_range_scheme);
 
   array_at_scheme = create_array_at_scheme();
   add_builtin("array_at", &array_at_scheme);
@@ -344,6 +375,8 @@ void initialize_builtin_types() {
   add_builtin("Option", &opt_scheme);
   add_builtin("Some", &opt_scheme);
   add_builtin("None", &opt_scheme);
+
+  add_builtin("Ptr", &t_ptr);
 
   array_scheme = create_array_scheme();
   add_builtin("Array", &array_scheme);
