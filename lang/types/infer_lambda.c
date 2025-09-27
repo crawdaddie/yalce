@@ -82,12 +82,12 @@ void unify_recursive_ref(Ast *ast, Type *recursive_fn_type, Type *result_type,
 }
 
 Type *create_coroutine_inst(Type *ret_type) {
-  // Type *instance_type = type_fn(&t_void, create_option_type(ret_type));
-  // Type **arg = talloc(sizeof(Type *));
-  // arg[0] = ret_type;
-  // // / instance_type;
-  // instance_type = create_cons_type(TYPE_NAME_COROUTINE_INSTANCE, 1, arg);
-  // return instance_type;
+  Type *instance_type = type_fn(&t_void, create_option_type(ret_type));
+  Type **arg = t_alloc(sizeof(Type *));
+  arg[0] = ret_type;
+  // / instance_type;
+  instance_type = create_cons_type(TYPE_NAME_COROUTINE_INSTANCE, 1, arg);
+  return instance_type;
 }
 
 Type *create_coroutine_lambda(Type *fn_type, TICtx *ctx) {
@@ -343,7 +343,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     // param_types[i] = apply_substitution(lambda_ctx.subst, param_types[i]);
   }
 
-  // printf("b4 apply to body\n");
   body_type = apply_substitution(ls, body_type);
 
   // Build the final function type
@@ -365,7 +364,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     // register_note_on_handler (fn n vel -> vel + 0.0) 0
     // anonymous func arg would be incorrectly typed (the constraint from it
     // being a NoteCallback would be overriden)
-    // printf("b4 apply subst rec\n");
     apply_substitution_to_lambda_body(body, ls);
   }
 
@@ -381,5 +379,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     return closure;
   }
 
+  // printf("result type\n");
+  // print_type(result_type);
   return result_type;
 }

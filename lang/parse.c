@@ -104,6 +104,8 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
 
       app = ast_application(app, left->data.AST_APPLICATION.args + 1);
       app = ast_application(app, right);
+      // printf("assignment\n");
+      // print_ast(app);
       return app;
     }
 

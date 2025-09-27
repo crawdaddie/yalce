@@ -1396,7 +1396,7 @@ int test_coroutines() {
   });
 
   T("let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`;;",
-    &MAKE_FN_TYPE_2(&TVAR("`0"), &t_string));
+    &TSCHEME(&MAKE_FN_TYPE_2(&TVAR("`0"), &t_string), &TVAR("`0")));
 
   ({
     Type inst = COROUTINE_INST(&t_string);
@@ -1636,6 +1636,7 @@ int test_closures() {
                      1)
             ->md;
 
+
     bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_int));
     res &= (closure_type->closure_meta != NULL);
     res &= (types_equal(closure_type->closure_meta, &TTUPLE(1, &t_int)));
@@ -1667,8 +1668,6 @@ int test_closures() {
                      2)
             ->md;
 
-    // printf("closure type\n");
-    // print_type(closure_type);
 
     bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_num));
     res &= (closure_type->closure_meta != NULL);
@@ -1698,16 +1697,28 @@ int test_refs() {
     &TSCHEME(&MAKE_FN_TYPE_2(&TVAR("`0"), &TARRAY(&TVAR("`0"))), &TVAR("`0")));
 
   ({
-    Type v = arithmetic_var("`5");
+    Ast *b = T("let rx = [| 3. |] in rx[0] := 2.\n", &TARRAY(&t_num));
+    Ast *f = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                 ->data.AST_LET.in_expr->data.AST_APPLICATION.function;
+    TASSERT(
+        "array set operator := is Array of Double -> Int -> Double -> Array "
+        "of Double",
+        types_equal(f->md, &MAKE_FN_TYPE_4(&TARRAY(&t_num), &t_int, &t_num,
+                                           &TARRAY(&t_num))));
+  });
+  T("let rx = [| 3. |] in rx[0]\n", &t_num);
+
+  ({
+    Type v = arithmetic_var("`6");
     T("let incr_ref = fn rx ->\n"
-      "  let x = rx[0];\n"
-      "  let inc = x + 1;\n"
-      "  rx[0] := inc;\n"
-      "  inc\n"
+      "  rx[0] := rx[0] + 1\n"
       ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_2(&TARRAY(&v),
-                               &MAKE_TC_RESOLVE_2(
-                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &v, &t_int)),
+      &TSCHEME(&MAKE_FN_TYPE_2(
+                   &TARRAY(&MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                              &t_int, &v)),
+
+                   &TARRAY(&MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                              &v, &t_int))),
                &v));
   });
 
@@ -1715,18 +1726,15 @@ int test_refs() {
     Type v = arithmetic_var("`5");
     Ast *b = T("let incr_ref = fn rx ->\n"
                "  let x = rx[0];\n"
-               "  let inc = x + 1;\n"
-               "  rx[0] := inc;\n"
-               "  inc\n"
+               "  rx[0] := x + 1\n"
                ";;\n"
                "incr_ref [| 1 |]\n",
-               &t_int);
+               &TARRAY(&t_int));
 
     status &= EXTRA_CONDITION(
-        types_equal(
-            AST_LIST_NTH(b->data.AST_BODY.stmts, 2)
-                ->data.AST_APPLICATION.function->md,
-            &MAKE_FN_TYPE_2(&TCONS(TYPE_NAME_ARRAY, 1, &t_int), &t_int)),
+        types_equal(AST_LIST_NTH(b->data.AST_BODY.stmts, 1)
+                        ->data.AST_APPLICATION.function->md,
+                    &MAKE_FN_TYPE_2(&TARRAY(&t_int), &TARRAY(&t_int))),
         "incr_ref [|1|] has type Array of Int -> Int");
   });
   return status;
@@ -2113,10 +2121,6 @@ int main() {
   status &= test_type_declarations();
   status &= test_first_class_funcs();
 
-  // status &= test_coroutines();
-  // status &= test_closures();
-  // status &= test_refs();
-  //
   status &= test_modules();
   status &= test_array_processing();
   status &= test_networking_funcs();
@@ -2126,7 +2130,11 @@ int main() {
   status &= test_record_types();
   status &= test_list_processing();
   status &= test_funcs();
+  status &= test_refs();
 
+  status &= test_closures();
+  status &= test_coroutines();
+  //
   print_all_failures();
   return status == true ? 0 : 1;
 }

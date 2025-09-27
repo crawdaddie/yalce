@@ -194,12 +194,6 @@ Type *create_tuple_type(int len, Type **contained_types) {
   return tuple;
 }
 
-// Type *create_coroutine_instance_type(Type *ret_type) {
-//   Type *coroutine_fn = type_fn(&t_void, create_option_type(ret_type));
-//   coroutine_fn->is_coroutine_instance = true;
-//   return coroutine_fn;
-// }
-
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
   Type *copy = t_alloc(sizeof(Type));
@@ -551,12 +545,15 @@ bool application_is_partial(Ast *app) {
   return actual_args_len < expected_args_len;
 }
 
-bool is_coroutine_type(Type *fn_type) {
-  return fn_type->kind == T_FN && fn_type->is_coroutine_instance;
+bool is_coroutine_constructor_type(Type *fn_type) {
+  // return fn_type->kind == T_FN && fn_type->is_coroutine_constructor;
+  return fn_type->kind == T_CONS &&
+         CHARS_EQ(fn_type->data.T_CONS.name, TYPE_NAME_COROUTINE_CONSTRUCTOR);
 }
 
-bool is_coroutine_constructor_type(Type *fn_type) {
-  return fn_type->kind == T_FN && fn_type->is_coroutine_constructor;
+bool is_coroutine_type(Type *fn_type) {
+  return fn_type->kind == T_CONS &&
+         CHARS_EQ(fn_type->data.T_CONS.name, TYPE_NAME_COROUTINE_INSTANCE);
 }
 
 bool is_void_func(Type *f) {

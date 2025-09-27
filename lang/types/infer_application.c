@@ -1,6 +1,7 @@
 #include "./infer_application.h"
 #include "./builtins.h"
 #include "serde.h"
+#include "types/type.h"
 #include "types/type_ser.h"
 
 Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx);
@@ -13,7 +14,6 @@ Type *create_fn_from_cons(Type *res, Type *cons) {
   }
   return f;
 }
-
 
 Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
   Type *f;
@@ -39,23 +39,25 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
   // Step 1: Infer function type
   Type *func_type = infer(func, ctx);
+
   if (!func_type) {
     return type_error(ast, "Cannot infer type of applicable");
   }
 
-  if (func_type->kind == T_CONS) {
-    return infer_cons_application(func_type, ast, ctx);
-  }
-
   if (is_coroutine_type(func_type)) {
-
-    func_type =
-        type_fn(&t_void, create_option_type(func_type->data.T_CONS.args[0]));
-    return infer_fn_application(func_type, ast, ctx);
+    Type f = MAKE_FN_TYPE_2(&t_void,
+                            create_option_type(func_type->data.T_CONS.args[0]));
+    return infer_fn_application(&f, ast, ctx);
   }
+
   if (is_coroutine_constructor_type(func_type)) {
     func_type = func_type->data.T_CONS.args[0];
+
     return infer_fn_application(func_type, ast, ctx);
+  }
+
+  if (func_type->kind == T_CONS) {
+    return infer_cons_application(func_type, ast, ctx);
   }
 
   return infer_fn_application(func_type, ast, ctx);
@@ -65,13 +67,14 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
 
   Ast *args = ast->data.AST_APPLICATION.args;
   int num_args = ast->data.AST_APPLICATION.len;
+
   // Step 2: Infer argument types
   Type **arg_types = t_alloc(sizeof(Type *) * num_args);
   for (int i = 0; i < num_args; i++) {
     arg_types[i] = infer(args + i, ctx);
 
     if (!arg_types[i]) {
-      return type_error(ctx, ast, "Cannot infer argument %d type", i + 1);
+      return type_error(ast, "Cannot infer argument %d type", i + 1);
     }
   }
 
@@ -88,21 +91,13 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   TICtx unify_ctx = {};
 
   if (unify(func_type, expected_type, &unify_ctx)) {
-    type_error(ctx, ast, "Function application type mismatch : ");
+    type_error(ast, "Function application type mismatch : ");
     print_type_err(func_type);
     fprintf(stderr, "  != \n");
     print_type_err(expected_type);
     return NULL;
   }
-
-  // print_constraints(unify_ctx.constraints);
-
-  // print_constraints(unify_ctx.constraints);
   ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
-
-  // printf("app constraints\n");
-  // print_ast(ast);
-  // print_constraints(unify_ctx.constraints);
 
   // Step 5: Solve constraints and apply substitutions
   Subst *solution = solve_constraints(unify_ctx.constraints);

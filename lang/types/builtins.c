@@ -286,6 +286,73 @@ Type create_str_fmt_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type *create_coroutine_instance_type(Type *ret_type) {
+  Type *coroutine_fn = type_fn(&t_void, create_option_type(ret_type));
+  coroutine_fn->is_coroutine_instance = true;
+  Type **ar = t_alloc(sizeof(Type *));
+  ar[0] = ret_type;
+  return create_cons_type(TYPE_NAME_COROUTINE_INSTANCE, 1, ar);
+}
+
+Type cor_map_scheme;
+Type create_cor_map_scheme() {
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  Type *f = type_fn(a, b);
+  Type *cmap_f = create_coroutine_instance_type(b);
+  cmap_f = type_fn(create_coroutine_instance_type(a), cmap_f);
+  cmap_f = type_fn(f, cmap_f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList) * 2);
+  vars_mem[1] = vlist_of_typevar(b);
+  vars_mem[0] = vlist_of_typevar(a);
+  vars_mem[0].next = vars_mem + 1;
+
+  return (Type){
+      T_SCHEME,
+      {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = cmap_f}}};
+}
+
+Type iter_of_list_scheme;
+Type create_iter_of_list_scheme() {
+  Type *a = tvar("a");
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+  vars_mem[0] = vlist_of_typevar(a);
+
+  Type *f = create_coroutine_instance_type(a);
+  f = type_fn(create_list_type_of_type(a), f);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+}
+
+Type iter_of_array_scheme;
+Type create_iter_of_array_scheme() {
+  Type *a = tvar("a");
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+  vars_mem[0] = vlist_of_typevar(a);
+
+  Type *f = create_coroutine_instance_type(a);
+  f = type_fn(create_array_type(a), f);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+}
+
+Type use_or_finish_scheme;
+Type create_use_or_finish_scheme() {
+
+  Type *a = tvar("a");
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+  vars_mem[0] = vlist_of_typevar(a);
+
+  Type *f = a;
+  f = type_fn(create_option_type(a), f);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+}
+
 void initialize_builtin_types() {
   ht_init(&builtin_types);
   static TypeClass tc_int[] = {{
@@ -409,6 +476,20 @@ void initialize_builtin_types() {
 
   str_fmt_scheme = create_str_fmt_scheme();
   add_builtin("str", &str_fmt_scheme);
+
+  cor_map_scheme = create_cor_map_scheme();
+  add_builtin("cor_map", &cor_map_scheme);
+
+  iter_of_list_scheme = create_iter_of_list_scheme();
+  add_builtin("iter_of_list", &iter_of_list_scheme);
+
+  iter_of_array_scheme = create_iter_of_array_scheme();
+  add_builtin("iter_of_array", &iter_of_array_scheme);
+
+  add_builtin("cor_loop", &id_scheme);
+
+  use_or_finish_scheme = create_use_or_finish_scheme();
+  add_builtin("use_or_finish", &use_or_finish_scheme);
 
   // print_builtin_types();
 }

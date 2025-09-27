@@ -180,6 +180,7 @@ bool occurs_check(const char *var, Type *ty) {
     return occurs_check(var, ty->data.T_FN.from) ||
            occurs_check(var, ty->data.T_FN.to);
   }
+  case T_TYPECLASS_RESOLVE:
   case T_CONS: {
     for (int i = 0; i < ty->data.T_CONS.num_args; i++) {
       if (occurs_check(var, ty->data.T_CONS.args[i])) {
@@ -226,6 +227,7 @@ bool implements(Type *t, TypeClass *tc) {
   }
   return false;
 }
+
 int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
   if (types_equal(t1, t2)) {
@@ -288,6 +290,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     // Unify return types
     TICtx ur2 = {};
     if (unify(t1->data.T_FN.to, t2->data.T_FN.to, &ur2) != 0) {
+
       return 1;
     }
 
@@ -306,12 +309,14 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     // NB: don't worry about comparing the cons names - as long as the contained
     // types match it doesn't really matter
     if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+
       return 1;
     }
 
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       TICtx ur = {};
       if (unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], &ur) != 0) {
+
         return 1;
       }
 
@@ -319,13 +324,21 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
       unify_res->constraints =
           merge_constraints(unify_res->constraints, ur.constraints);
     }
-
+    return 0;
+  }
+  if (t1->kind == T_TYPECLASS_RESOLVE && t2->kind != T_VAR) {
+    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+      if (unify(t1->data.T_CONS.args[i], t2, unify_res)) {
+        return 1;
+      }
+    }
     return 0;
   }
 
   // Case 5: Two concrete types - this will be handled by constraint solver
   // later
   if (t1->kind != T_VAR && t2->kind != T_VAR) {
+
     return 1;
   }
 
@@ -612,6 +625,7 @@ Subst *solve_constraints(Constraint *constraints) {
 
       // If no concrete resolution possible, keep the constraint for later
       if (!existing) {
+
         subst = subst_extend(subst, var_name, new_type);
         continue;
       }
@@ -672,6 +686,7 @@ Subst *solve_constraints(Constraint *constraints) {
           find_promoted_type(current->var, existing_subst, new_type);
 
       if (promoted) {
+
         subst = update_substitution(subst, var_name, promoted);
         continue;
       } else {
@@ -915,28 +930,86 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
   if (is_generic(val_type) && val_type->kind == T_FN) {
     val_type = generalize(val_type, ctx);
   }
+  int binding_scope = ctx->scope;
+
+  if (body) {
+    binding_scope++;
+  }
+
+  binding_md bmd = (binding_md){
+      BT_VAR,
+      {.VAR = {.scope = binding_scope,
+               .yield_boundary_scope =
+                   (ctx->current_fn_ast && ctx->current_fn_ast->data.AST_LAMBDA
+                                               .num_yield_boundary_crossers) ||
+                   0}}};
 
   if (body) {
     TICtx body_ctx = *ctx;
-    body_ctx.scope++;
-    if (bind_type_in_ctx(
-            binding, val_type,
-            (binding_md){BT_VAR, {.VAR = {.scope = body_ctx.scope}}},
-            &body_ctx)) {
+    body_ctx.scope = binding_scope;
+    if (bind_type_in_ctx(binding, val_type, bmd, &body_ctx)) {
       return NULL;
     }
     return infer(body, &body_ctx);
   }
 
-  bind_type_in_ctx(binding, val_type, (binding_md){}, ctx);
+  bind_type_in_ctx(binding, val_type, bmd, ctx);
+
   return val_type;
 }
 
-void handle_yield_boundary_crossing(binding_md md, Ast *ast, TICtx *ctx) {
-  // TODO: implement
+void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
+                                    TICtx *ctx) {
+  if (!ctx->current_fn_ast) {
+    return;
+  }
+  int binding_scope = binding_info.data.VAR.scope;
+  if (binding_scope < ctx->current_fn_base_scope) {
+    // not defined within current function, ignore
+    return;
+  }
+
+  int yield_boundary = binding_info.data.VAR.yield_boundary_scope;
+  int crosses_yield_boundary =
+      ctx->current_fn_ast &&
+      ctx->current_fn_ast->data.AST_LAMBDA.num_yields >
+          yield_boundary; // there is a yield between the creation of this
+                          // binding and its use
+  if (!crosses_yield_boundary) {
+
+    return;
+  }
+
+  // scan boundary xer list
+  for (AstList *l =
+           ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers;
+       l; l = l->next) {
+    Ast *a = l->ast;
+    if (CHARS_EQ(a->data.AST_IDENTIFIER.value,
+                 ast->data.AST_IDENTIFIER.value)) {
+      return;
+    }
+  }
+
+  ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers =
+      ast_list_extend_left(
+          ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers, ast);
+
+  return;
 }
-void handle_closed_over_value(binding_md md, Ast *ast, TICtx *ctx) {
-  // TODO: implement
+
+void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
+
+  if (!ctx->current_fn_ast) {
+    return;
+  }
+
+  int scope = binding_info.data.VAR.scope;
+  if (scope > 0 && scope < ctx->current_fn_base_scope) {
+    ctx->current_fn_ast->data.AST_LAMBDA.num_closed_vals++;
+    ctx->current_fn_ast->data.AST_LAMBDA.closed_vals = ast_list_extend_left(
+        ctx->current_fn_ast->data.AST_LAMBDA.closed_vals, ast);
+  }
 }
 
 // Identifier: x : σ ∈ Γ    τ = inst(σ)
@@ -969,6 +1042,29 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
   }
 
   return instantiate(type_ref->type, ctx);
+}
+Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
+  Ast *expr = ast->data.AST_YIELD.expr;
+
+  Type *expr_type = infer(expr, ctx);
+  if (!expr_type) {
+    return NULL;
+  }
+
+  if (is_coroutine_type(expr_type)) {
+    expr_type = expr_type->data.T_CONS.args[0];
+  }
+
+  if (ctx->yielded_type != NULL) {
+    if (unify(expr_type, ctx->yielded_type, ctx)) {
+      fprintf(stderr, "Error: could not unify yield expressions in function - "
+                      "all yields must be of the same type\n");
+      return NULL;
+    }
+  }
+  ctx->yielded_type = expr_type;
+  ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
+  return expr_type;
 }
 
 Type *infer(Ast *ast, TICtx *ctx) {
@@ -1171,6 +1267,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     unify(from, &t_int, ctx);
     unify(to, &t_int, ctx);
     type = &t_int;
+    break;
+  }
+  case AST_YIELD: {
+    type = infer_yield_expr(ast, ctx);
     break;
   }
 
