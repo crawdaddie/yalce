@@ -336,6 +336,9 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     return type_error(body, "Error: Cannot infer lambda body\n");
   }
 
+  printf("%s\n", ast->data.AST_LAMBDA.fn_name.chars);
+  print_constraints(lctx.constraints);
+
   Subst *ls = solve_constraints(lctx.constraints);
 
   for (int i = 0; i < num_params; i++) {

@@ -8,6 +8,7 @@
 #include "serde.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 
@@ -183,11 +184,20 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
+  print_ast(ast);
+
+  print_type(expected_fn_type);
+  if (is_generic(expected_fn_type)) {
+    expected_fn_type = deep_copy_type(expected_fn_type);
+    expected_fn_type = resolve_type_in_env(expected_fn_type, ctx->env);
+  }
+
+  print_type(expected_fn_type);
+
   // x.mem a ??
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
           ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record)) {
-    printf("record access applicatoin\n");
 
     LLVMValueRef callable =
         codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
@@ -205,8 +215,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
-  if (sym && is_variant_type(expected_fn_type) &&
-      sym->type == STYPE_VARIANT_TYPE) {
+  if (sym && is_sum_type(expected_fn_type) && sym->type == STYPE_VARIANT_TYPE) {
     return codegen_adt_member_with_args(expected_fn_type, sym->llvm_type, ast,
                                         sym_name, ctx, module, builder);
   }

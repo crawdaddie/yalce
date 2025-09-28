@@ -1,4 +1,4 @@
-let test = module
+let test = module () ->
 
 let test_and = fn () ->
   (true && false) == false

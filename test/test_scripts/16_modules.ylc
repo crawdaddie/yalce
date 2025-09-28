@@ -1,4 +1,4 @@
-let M = module
+let M = module () ->
   let x = 1;
   let z = fn a: (Int) b: (Int) -> 
     a + b
@@ -8,7 +8,7 @@ let M = module
     a + b
   ;;
 ;
-let test = module
+let test = module () ->
 
 # let test_module_member_fn       = (M.z 1 2) == 3 ;
 # let test_module_member          = M.x == 1 ;

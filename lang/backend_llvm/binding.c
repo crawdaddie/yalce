@@ -158,7 +158,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 
     Type *cons_type = binding->md;
     if (cons_type->kind == T_CONS) {
-      if (is_variant_type(cons_type)) {
+      if (is_sum_type(cons_type)) {
         int vidx;
         Type *mem;
         for (vidx = 0; vidx < cons_type->data.T_CONS.num_args; vidx++) {

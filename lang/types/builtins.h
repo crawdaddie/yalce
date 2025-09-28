@@ -26,4 +26,28 @@ void print_builtin_types();
 
 Type *lookup_builtin_type(const char *name);
 
+extern Type arithmetic_scheme;
+extern Type ord_scheme;
+extern Type eq_scheme;
+
+extern Type array_id_scheme;
+extern Type array_size_scheme;
+extern Type array_range_scheme;
+extern Type array_at_scheme;
+extern Type array_set_scheme;
+extern Type array_fill_const_scheme;
+extern Type opt_scheme;
+extern Type array_scheme;
+extern Type list_scheme;
+extern Type list_concat_scheme;
+extern Type list_prepend_scheme;
+extern Type str_fmt_scheme;
+
+extern Type logical_op_scheme;
+
+extern Type cor_map_scheme;
+extern Type iter_of_list_scheme;
+extern Type iter_of_array_scheme;
+extern Type use_or_finish_scheme;
+
 #endif

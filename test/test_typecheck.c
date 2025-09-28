@@ -537,6 +537,17 @@ int test_list_processing() {
                                &TLIST(&t10)),
                &t8, &t10));
   });
+  T("let list_map = fn f l ->\n"
+    "  let aux = fn f l res -> \n"
+    "    match l with\n"
+    "    | [] -> res\n"
+    "    | x :: rest -> aux f rest (f x :: res) \n"
+    "  ;;\n"
+    "  aux f l []\n"
+    ";;\n"
+    "list_map ((+) 1) [0,1,2,3] == [1,2,3,4]\n",
+    &t_bool);
+
   return status;
 }
 int test_aux() {
@@ -1303,22 +1314,17 @@ int test_coroutines() {
   //         &MAKE_FN_TYPE_2(&t_void, &t_num)));
   // });
 
-  // ({
-  //   Type cor =
-  //       TCONS("coroutine", 2, &t_num, &MAKE_FN_TYPE_2(&t_void,
-  //       &TOPT(&t_num)));
-  //
-  //   T("let cor = fn a ->\n"
-  //     "  yield 1.;\n"
-  //     "  yield a;\n"
-  //     "  yield 3.\n"
-  //     ";;\n",
-  //
-  //     &MAKE_FN_TYPE_2(&t_num, &cor));
-  // });
-  //
-  //
-  //
+  ({
+    Type cor = COROUTINE_INST(&t_num);
+    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_num, &cor));
+
+    T("let cor = fn a ->\n"
+      "  yield 1.;\n"
+      "  yield a;\n"
+      "  yield 3.\n"
+      ";;\n",
+      &cor_cons);
+  });
   ({
     Type cor = COROUTINE_INST(&t_int);
     Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
@@ -1480,7 +1486,8 @@ int test_coroutines() {
     Ast *cor_arg =
         AST_LIST_NTH(b->data.AST_BODY.stmts, 4)->data.AST_APPLICATION.args + 2;
 
-    Type cor_type = COROUTINE_INST(&t_num);
+    // Type cor_type = COROUTINE_INST(&t_num);
+    Type cor_type = MAKE_FN_TYPE_2(&t_void, &TOPT(&t_num));
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
 
@@ -1532,7 +1539,7 @@ int test_coroutines() {
     //         ->data.AST_YIELD.expr;
     // print_ast(yield);
     // print_type(yield->md);
-    // print_type(yield->data.AST_APPLICATION.function->md);
+    // print_type(yeld->data.AST_APPLICATION.function->md);
     // print_type(yield->data.AST_APPLICATION.args->md);
     // print_type((yield->data.AST_APPLICATION.args + 1)->md);
     //
@@ -1636,7 +1643,6 @@ int test_closures() {
                      1)
             ->md;
 
-
     bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_int));
     res &= (closure_type->closure_meta != NULL);
     res &= (types_equal(closure_type->closure_meta, &TTUPLE(1, &t_int)));
@@ -1667,7 +1673,6 @@ int test_closures() {
                          ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
                      2)
             ->md;
-
 
     bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_num));
     res &= (closure_type->closure_meta != NULL);
@@ -1839,6 +1844,80 @@ int test_array_processing() {
     ";;\n"
     "\\array_choose [|1,2,3|]",
     &MAKE_FN_TYPE_2(&t_void, &t_int));
+
+  ({
+    Type r = TVAR("`6");
+    Type t = TVAR("`5");
+    Ast *b = T("let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->\n"
+               "  match array_size a with\n"
+               "  | 0 -> res\n"
+               "  | _ -> (\n"
+               "    fold f (f res (a[0])) (array_succ a)\n"
+               "  )\n"
+               ";;\n",
+               &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &t, &r), &r,
+                                        &TARRAY(&t), &r),
+                        &r, &t));
+    Ast *app =
+        AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+            ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
+    // print_type(app->md);
+    // print_type(app->data.AST_APPLICATION.function->md);
+    // print_type(app->data.AST_APPLICATION.args->md);
+  });
+
+  // T("let map = fn f: (T -> R) a: (Array of T) ->\n"
+  T("let map = fn f a ->\n"
+    "  let res = array_fill_const (array_size a) (f (a[0]));\n"
+    "  for i = 1 to (array_size a) in (\n"
+    "    let v = f (a [i]);\n"
+    "    res[i] :=  v\n"
+    "  );\n"
+    "  res\n"
+    ";;\n"
+    "map ((+) 3) [| 1,2,3 |]\n",
+    &TARRAY(&t_int));
+
+  T("let map = fn f a ->\n"
+    "  let res = array_fill_const (array_size a) (f (a[0]));\n"
+    "  for i = 1 to (array_size a) in (\n"
+    "    let v = f (a [i]);\n"
+    "    res[i] :=  v\n"
+    "  );\n"
+    "  res\n"
+    ";;\n"
+    "map ((+) 3) [| 1,2,3 |];\n"
+    "map ((+) 3) [| 1.,2.,3. |]\n",
+    &TARRAY(&t_num));
+
+  ({
+    Type a = TVAR("`14");
+    Type array_el = TVAR("`13");
+    Ast *bd = T("let map = fn f a ->\n"
+                "  let res = array_fill_const (array_size a) (f (a[0]));\n"
+                "  for i = 1 to (array_size a) in (\n"
+                "    let v = f (a [i]);\n"
+                "    res[i] :=  v\n"
+                "  );\n"
+                "  res\n"
+                ";;\n",
+                &TSCHEME(&MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&array_el, &a),
+                                         &TARRAY(&array_el), &TARRAY(&a)),
+                         &array_el, &a));
+    Ast *app =
+        AST_LIST_NTH(
+            AST_LIST_NTH(bd->data.AST_BODY.stmts, 0)
+                ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+            0)
+            ->data.AST_LET.expr;
+
+    TASSERT(
+        "array arg at has type `13 -- ",
+        types_equal(
+            (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->md,
+            &array_el));
+  });
+
   return status;
 }
 int test_networking_funcs() {
@@ -1942,6 +2021,7 @@ bool test_audio_funcs() {
     //     "callback constraint passed down to lambda -> (arithmetic resolve "
     //     "Double : Double)");
   });
+
   return status;
 }
 
@@ -2122,19 +2202,19 @@ int main() {
   status &= test_first_class_funcs();
 
   status &= test_modules();
-  status &= test_array_processing();
   status &= test_networking_funcs();
   status &= test_type_exprs();
   status &= test_parser_combinators();
   status &= test_audio_funcs();
   status &= test_record_types();
-  status &= test_list_processing();
   status &= test_funcs();
   status &= test_refs();
 
   status &= test_closures();
   status &= test_coroutines();
   //
+  status &= test_list_processing();
+  status &= test_array_processing();
   print_all_failures();
   return status == true ? 0 : 1;
 }

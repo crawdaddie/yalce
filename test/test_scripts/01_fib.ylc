@@ -5,7 +5,7 @@ let fib = fn x ->
   | _ -> (fib (x - 1)) + (fib (x - 2))
 ;;
 
-let test = module 
+let test = module () -> 
   let test_fib2 = fib 2 == 1;
   let test_fib3 = fib 3 == 2;
   let test_fib4 = fib 4 == 3;

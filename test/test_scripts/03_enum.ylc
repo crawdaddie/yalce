@@ -10,7 +10,7 @@ let f = fn x ->
     | B -> 2 
     | C -> 3
 ;;
-let test = module
+let test = module () ->
   let test_enum_C = f C == 3; 
   let test_enum_A = f A == 1; 
   let test_enum_B = f B == 2; 

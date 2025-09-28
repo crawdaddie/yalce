@@ -1,4 +1,6 @@
-let test = module
+type RegexMatch = (rm_so: Uint64, rm_eo: Uint64);
+
+let test = module () ->
 
   let test_record_access = fn () ->
     let x = (
@@ -7,5 +9,10 @@ let test = module
       f: (fn s: (Int) t: (Int) -> s + t)
     );
     x.f 1 2 == 3
+  ;;
+
+  let test_type_decl_rec_access = fn () ->
+    let x = RegexMatch (0, 0);
+    x.rm_so == 0
   ;;
 ;

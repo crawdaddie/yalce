@@ -117,6 +117,79 @@ void *type_error(Ast *ast, const char *fmt, ...) {
   return NULL;
 }
 
+Type *resolve_type_in_env(Type *r, TypeEnv *env) {
+
+  if (r->closure_meta) {
+    r->closure_meta = resolve_type_in_env(r->closure_meta, env);
+  }
+
+  switch (r->kind) {
+  case T_VAR: {
+    Type *rr = env_lookup(env, r->data.T_VAR);
+
+    if (rr && rr->kind == T_VAR) {
+      return resolve_type_in_env(rr, env);
+    }
+
+    if (rr) {
+      *r = *rr;
+    }
+
+    return r;
+  }
+
+  case T_TYPECLASS_RESOLVE: {
+    bool still_generic = false;
+    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
+      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
+      if (r->data.T_CONS.args[i]->kind == T_VAR) {
+        still_generic = true;
+      }
+    }
+    if (!still_generic) {
+      return resolve_tc_rank(r);
+    }
+    return r;
+  }
+  case T_CONS: {
+    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
+      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
+    }
+    return r;
+  }
+
+  case T_FN: {
+    r->data.T_FN.from = resolve_type_in_env(r->data.T_FN.from, env);
+    r->data.T_FN.to = resolve_type_in_env(r->data.T_FN.to, env);
+    return r;
+  }
+
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_CHAR:
+  case T_BOOL:
+  case T_VOID:
+  case T_STRING: {
+    return r;
+  }
+  }
+  return NULL;
+}
+bool is_custom_binop_app(Ast *app, custom_binops_t *binops) {
+  if (app->data.AST_APPLICATION.args->tag == AST_IDENTIFIER) {
+    custom_binops_t *b = binops;
+    while (b) {
+      if (CHARS_EQ(app->data.AST_APPLICATION.args->data.AST_IDENTIFIER.value,
+                   b->binop)) {
+        return true;
+      }
+      b = b->next;
+    }
+  }
+  return false;
+}
+
 Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
 
   if (ast->data.AST_LIST.len == 0) {
@@ -147,10 +220,9 @@ Type *create_list_type(Ast *ast, const char *cons_name, TICtx *ctx) {
     }
     el_type = _el_type;
   }
-  Type *type = t_alloc(sizeof(Type));
-  Type **contained = t_alloc(sizeof(Type *));
-  contained[0] = el_type;
-  *type = (Type){T_CONS, {.T_CONS = {cons_name, contained, 1}}};
+
+  Type *type = create_list_type_of_type(el_type);
+  type->data.T_CONS.name = cons_name;
   return type;
 }
 
@@ -240,6 +312,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   }
 
   if (t1->implements && t2->kind != T_VAR) {
+
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
       if (!implements(t2, tc)) {
         fprintf(stderr, "Unification Error ");
@@ -1180,6 +1253,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
   case AST_APPLICATION: {
+    if (is_custom_binop_app(ast, ctx->custom_binops)) {
+
+      Ast binop = *ast->data.AST_APPLICATION.args;
+      Ast arg = *ast->data.AST_APPLICATION.function;
+
+      *ast->data.AST_APPLICATION.function = binop;
+      ast->data.AST_APPLICATION.args[0] = arg;
+    }
     type = infer_application(ast, ctx);
     break;
   }
@@ -1216,20 +1297,29 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_MODULE: {
     type = infer_inline_module(ast, ctx);
-    print_type(type);
     break;
   }
   case AST_RECORD_ACCESS: {
 
     Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
+
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
 
+    if (rec_type->kind == T_FN && !is_generic(rec_type)) {
+      // TODO: this is dodgy - fix
+      rec_type = fn_return_type(rec_type);
+      ast->data.AST_RECORD_ACCESS.record->md = rec_type;
+    }
+
     if (rec_type->kind != T_CONS) {
+      fprintf(stderr, "Error: record type not cons\n");
       return NULL;
     }
 
     if (rec_type->kind == T_CONS && rec_type->data.T_CONS.names == NULL) {
+
+      fprintf(stderr, "Error: record type does not have names\n");
       return NULL;
     }
 
@@ -1249,6 +1339,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_LOOP: {
+    // printf("loop??\n");
+    // print_ast(ast);
     Ast let = *ast;
     // if (is_loop_of_iterable(ast)) {
     //   type = for_loop_binding(let.data.AST_LET.binding,
@@ -1271,6 +1363,46 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
   case AST_YIELD: {
     type = infer_yield_expr(ast, ctx);
+    break;
+  }
+
+  case AST_IMPORT: {
+    const char *key = ast->data.AST_IMPORT.fully_qualified_name;
+    YLCModule *mod = get_module(key);
+
+    if (!mod) {
+      fprintf(stderr, "mod %s not found\n", key);
+      return NULL;
+    }
+
+    if (!mod->type) {
+      type = init_import(mod)->type;
+    } else {
+      type = mod->type;
+    }
+
+    if (ast->data.AST_IMPORT.import_all) {
+      TypeEnv *mod_env = mod->env;
+
+      while (mod_env) {
+        ctx->env = env_extend(ctx->env, mod_env->name, mod_env->type);
+        mod_env = mod_env->next;
+      }
+
+      custom_binops_t *b = mod->custom_binops;
+      while (b) {
+        custom_binops_t *bb = t_alloc(sizeof(custom_binops_t));
+        *bb = (custom_binops_t){};
+
+        *bb = *b;
+        bb->next = ctx->custom_binops;
+        ctx->custom_binops = bb;
+        b = b->next;
+      }
+    } else {
+      ctx->env = env_extend(ctx->env, ast->data.AST_IMPORT.identifier, type);
+    }
+
     break;
   }
 

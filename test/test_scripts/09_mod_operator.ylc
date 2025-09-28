@@ -6,7 +6,7 @@
 #     | x if (x % 4.) > 0. -> 0 
 # ;;
 
-let test = module
+let test = module () ->
 let test_float_modulo = fn () -> 
   200. % 150. == 50.
 ;;

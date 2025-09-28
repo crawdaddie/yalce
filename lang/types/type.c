@@ -1,5 +1,6 @@
 #include "type.h"
 #include "serde.h"
+#include "types/builtins.h"
 #include "types/inference.h"
 #include "types/type_ser.h"
 #include <stdio.h>
@@ -220,10 +221,16 @@ Type *deep_copy_type(const Type *original) {
     copy->data.T_CONS.names = original->data.T_CONS.names;
 
     break;
-  case T_FN:
+  case T_FN: {
     copy->data.T_FN.from = deep_copy_type(original->data.T_FN.from);
     copy->data.T_FN.to = deep_copy_type(original->data.T_FN.to);
     break;
+  }
+
+    // case T_SCHEME: {
+    //   int num_vars = copy->data.T_SCHEME.num_vars;
+    //   break;
+    // }
   }
   return copy;
 }
@@ -261,67 +268,6 @@ bool is_tuple_type(Type *type) {
 bool is_sum_type(Type *type) {
   return type->kind == T_CONS &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0);
-}
-Type *resolve_tc_rank(Type *type) {
-  // TODO: implement this
-  return NULL;
-}
-
-Type *resolve_type_in_env(Type *r, TypeEnv *env) {
-  if (r->closure_meta) {
-    r->closure_meta = resolve_type_in_env(r->closure_meta, env);
-  }
-  switch (r->kind) {
-  case T_VAR: {
-    Type *rr = env_lookup(env, r->data.T_VAR);
-    if (rr && rr->kind == T_VAR) {
-      return resolve_type_in_env(rr, env);
-    }
-
-    if (rr) {
-      *r = *rr;
-    }
-
-    return r;
-  }
-
-  case T_TYPECLASS_RESOLVE: {
-    bool still_generic = false;
-    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
-      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
-      if (r->data.T_CONS.args[i]->kind == T_VAR) {
-        still_generic = true;
-      }
-    }
-    if (!still_generic) {
-      return resolve_tc_rank(r);
-    }
-    return r;
-  }
-  case T_CONS: {
-    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
-      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
-    }
-    return r;
-  }
-
-  case T_FN: {
-    r->data.T_FN.from = resolve_type_in_env(r->data.T_FN.from, env);
-    r->data.T_FN.to = resolve_type_in_env(r->data.T_FN.to, env);
-    return r;
-  }
-
-  case T_INT:
-  case T_UINT64:
-  case T_NUM:
-  case T_CHAR:
-  case T_BOOL:
-  case T_VOID:
-  case T_STRING: {
-    return r;
-  }
-  }
-  return NULL;
 }
 
 Type *create_cons_type(const char *name, int len, Type **unified_args) {
@@ -380,6 +326,7 @@ Type *create_list_type_of_type(Type *of) {
   gen_list->data.T_CONS.args = t_alloc(sizeof(Type *));
   gen_list->data.T_CONS.num_args = 1;
   gen_list->data.T_CONS.args[0] = of;
+  // typeclasses_extend(gen_list, &GenericEq);
   return gen_list;
 }
 

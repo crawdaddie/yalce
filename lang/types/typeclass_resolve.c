@@ -78,3 +78,35 @@ Type *cleanup_tc_resolve(Type *t) {
   clean->implements = t->implements;
   return clean;
 }
+
+Type *resolve_tc_rank(Type *type) {
+  if (type->kind != T_TYPECLASS_RESOLVE) {
+    return type;
+  }
+
+  bool all_generic = true;
+
+  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+    all_generic &= is_generic(type->data.T_CONS.args[i]);
+  }
+
+  if (all_generic) {
+    return type;
+  }
+
+  const char *comparison_tc = type->data.T_CONS.name;
+  Type *max_ranked = NULL;
+  double max_rank;
+  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+    Type *arg = type->data.T_CONS.args[i];
+
+    if (max_ranked == NULL) {
+      max_ranked = arg;
+      max_rank = get_typeclass_rank(arg, comparison_tc);
+    } else if (get_typeclass_rank(arg, comparison_tc) >= max_rank) {
+      max_ranked = arg;
+      max_rank = get_typeclass_rank(arg, comparison_tc);
+    }
+  }
+  return max_ranked;
+}

@@ -111,7 +111,8 @@ Type eq_scheme;
 
 Type create_eq_scheme() {
   Type *a = tvar("a");
-  typeclasses_extend(a, &GenericEq);
+  // NB: all types are assumed to have the eq typeclass
+  // typeclasses_extend(a, &GenericEq);
 
   Type *f = &t_bool;
   f = type_fn(a, f);
@@ -196,6 +197,24 @@ Type create_array_set_scheme() {
   return (Type){T_SCHEME,
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
+Type array_fill_const_scheme;
+Type create_array_fill_const_scheme() {
+
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+
+  Type *f = arr;
+  f = type_fn(a, f);
+  f = type_fn(&t_int, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 Type opt_scheme;
 Type create_opt_scheme() {
   Type *var = tvar("a");
@@ -339,6 +358,8 @@ Type create_iter_of_array_scheme() {
                 {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
 }
 
+Type logical_op_scheme = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
+
 Type use_or_finish_scheme;
 Type create_use_or_finish_scheme() {
 
@@ -435,18 +456,22 @@ void initialize_builtin_types() {
   add_builtin("print", type_fn(&t_string, &t_void));
 
   add_builtin(TYPE_NAME_INT, &t_int);
+  add_builtin(TYPE_NAME_UINT64, &t_uint64);
   add_builtin(TYPE_NAME_DOUBLE, &t_num);
   add_builtin(TYPE_NAME_CHAR, &t_char);
   add_builtin(TYPE_NAME_STRING, &t_string);
   add_builtin(TYPE_NAME_BOOL, &t_bool);
   add_builtin(TYPE_NAME_VOID, &t_void);
+  add_builtin(TYPE_NAME_PTR, &t_ptr);
 
-  add_builtin("&&", type_fn(&t_bool, type_fn(&t_bool, &t_bool)));
-  add_builtin("||", type_fn(&t_bool, type_fn(&t_bool, &t_bool)));
+  add_builtin("&&", &logical_op_scheme);
+  add_builtin("||", &logical_op_scheme);
 
   array_size_scheme = create_array_size_scheme();
   add_builtin("array_size", &array_size_scheme);
+
   add_builtin("array_succ", &array_id_scheme);
+
   array_range_scheme = create_array_range_scheme();
   add_builtin("array_range", &array_range_scheme);
 
@@ -461,10 +486,11 @@ void initialize_builtin_types() {
   add_builtin("Some", &opt_scheme);
   add_builtin("None", &opt_scheme);
 
-  add_builtin("Ptr", &t_ptr);
-
   array_scheme = create_array_scheme();
   add_builtin("Array", &array_scheme);
+
+  array_fill_const_scheme = create_array_fill_const_scheme();
+  add_builtin("array_fill_const", &array_fill_const_scheme);
 
   list_scheme = create_list_scheme();
   add_builtin("List", &list_scheme);

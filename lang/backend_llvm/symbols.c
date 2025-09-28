@@ -12,8 +12,10 @@
 #include "module.h"
 #include "serde.h"
 #include "types.h"
+#include "types/builtins.h"
 #include "types/inference.h"
 #include "types/type.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +47,7 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
   }
 
   if (ast->tag == AST_RECORD_ACCESS) {
+
     JITSymbol *record_symbol =
         lookup_id_ast(ast->data.AST_RECORD_ACCESS.record, ctx);
 
@@ -55,6 +58,7 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
       print_location(__current_ast);
       return NULL;
     }
+
     if (record_symbol->type == STYPE_MODULE) {
       JITSymbol *member_symbol =
           lookup_id_ast(ast->data.AST_RECORD_ACCESS.member,
@@ -79,6 +83,9 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *enum_type = env_lookup(ctx->env, chars);
 
     if (!enum_type) {
+      enum_type = lookup_builtin_type(chars);
+    }
+    if (!enum_type) {
       fprintf(
           stderr,
           "codegen identifier failed enum '%s' not found in scope %d %s:%d\n",
@@ -91,7 +98,15 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return codegen_simple_enum_member(enum_type, chars, ctx, module, builder);
 
     } else if (strcmp(chars, "None") == 0) {
+
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
+
+      if (!llvm_type) {
+        print_location(ast);
+        fprintf(stderr, "Option type not found\n");
+        return NULL;
+      }
+
       LLVMValueRef v = LLVMGetUndef(llvm_type);
       v = LLVMBuildInsertValue(builder, v, LLVMConstInt(LLVMInt8Type(), 1, 0),
                                0, "insert None tag");
@@ -124,8 +139,6 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return sym->val;
     }
 
-    Type *callable_type = sym->symbol_type;
-
     LLVMValueRef val = codegen_extern_fn(
         sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast, ctx, module, builder);
     sym->val = val;
@@ -139,12 +152,15 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case STYPE_LOCAL_VAR: {
+
     if (sym->storage != NULL) {
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->md, ctx, module);
       return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
     }
+
     return sym->val;
   }
+
   case STYPE_VARIANT_TYPE: {
     return codegen_adt_member(ast->md, chars, ctx, module, builder);
   }
@@ -326,7 +342,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     }
   }
 
-  if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type)) {
+  if (is_coroutine_constructor_type(expr_type)) {
+    // if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type))
+    // {
     if (is_generic(expr_type)) {
       expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
     } else {
@@ -392,6 +410,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   expr_val = codegen(expr, outer_ctx, module, builder);
 
   if (!expr_val) {
+    print_type_err(expr->md);
     fprintf(stderr, "Error - could not compile value for binding to %s\n",
             binding->data.AST_IDENTIFIER.value);
     print_codegen_location();

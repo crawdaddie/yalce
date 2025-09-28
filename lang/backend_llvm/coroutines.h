@@ -57,20 +57,4 @@ LLVMValueRef coro_jump_to_next_block(LLVMValueRef coro, LLVMValueRef next_coro,
                    (LLVMTypeRef[]){LLVMPointerType(obj, 0)}, 1, 0)
 #define COR_END_KW "cor_end"
 
-#define INSERT_PRINTF(num_args, fmt_str, ...)                                  \
-  ({                                                                           \
-    LLVMValueRef format_str =                                                  \
-        LLVMBuildGlobalStringPtr(builder, fmt_str, "format");                  \
-    LLVMValueRef printf_fn = LLVMGetNamedFunction(module, "printf");           \
-    if (!printf_fn) {                                                          \
-      LLVMTypeRef printf_type = LLVMFunctionType(                              \
-          LLVMInt32Type(),                                                     \
-          (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1, true);       \
-      printf_fn = LLVMAddFunction(module, "printf", printf_type);              \
-    }                                                                          \
-    LLVMBuildCall2(builder, LLVMGlobalGetValueType(printf_fn), printf_fn,      \
-                   (LLVMValueRef[]){format_str, __VA_ARGS__}, num_args + 1,    \
-                   "");                                                        \
-  })
-
 #endif

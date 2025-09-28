@@ -169,9 +169,6 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                     body = codegen(stmt, fn_ctx, module, builder);
                     if (body == NULL && i == 1 &&
                         stmt->tag == AST_APPLICATION) {
-                      // print_ast(stmt);
-                      // print_type(stmt->data.AST_APPLICATION.args[0].md);
-                      // print_type(stmt->data.AST_APPLICATION.args[1].md);
                     }
                   }));
   }
@@ -302,19 +299,20 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
   Subst *subst = NULL;
 
   Constraint *constraints = NULL;
-  // while (generic_type->kind == T_FN) {
-  //   Type *gen = generic_type->data.T_FN.from;
-  //   Type *spec = specific_type->data.T_FN.from;
-  //   constraints = constraints_extend(constraints, gen, spec);
-  //
-  //   specific_type = specific_type->data.T_FN.to;
-  //   generic_type = generic_type->data.T_FN.to;
-  // }
-  //
-  // subst = solve_constraints(constraints);
-  //
-  // env = create_env_from_subst(env, subst);
-  //
+
+  TICtx unify_ctx = {};
+  while (generic_type->kind == T_FN) {
+    Type *gen = generic_type->data.T_FN.from;
+    Type *spec = specific_type->data.T_FN.from;
+    unify(gen, spec, &unify_ctx);
+    specific_type = specific_type->data.T_FN.to;
+    generic_type = generic_type->data.T_FN.to;
+  }
+
+  subst = solve_constraints(unify_ctx.constraints);
+
+  env = create_env_from_subst(env, subst);
+
   return env;
 }
 

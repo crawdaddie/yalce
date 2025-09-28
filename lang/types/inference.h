@@ -107,4 +107,9 @@ TypeEnv *lookup_type_ref(TypeEnv *env, const char *name);
 void apply_substitution_to_lambda_body(Ast *ast, Subst *subst);
 void add_constraint(TICtx *result, Type *var, Type *type);
 
+Type *resolve_type_in_env(Type *r, TypeEnv *env);
+
+Type *resolve_tc_rank(Type *type);
+Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
+
 #endif

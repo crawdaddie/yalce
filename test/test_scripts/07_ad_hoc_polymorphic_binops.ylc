@@ -1,4 +1,4 @@
-let test = module
+let test = module () ->
 let test_int_plus_double = fn () -> 
   "Int + Double = Double";
   let x = 100 + 101.;

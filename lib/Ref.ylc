@@ -8,7 +8,7 @@ let (<-) = setref;
 
 let deref = fn arr -> array_at arr 0;;
 
-let test = module
+let test = module () ->
   let test_a = fn () ->
     let x = Ref 1;
     let res = deref x == 1;

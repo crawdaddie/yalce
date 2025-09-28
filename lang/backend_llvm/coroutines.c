@@ -124,6 +124,7 @@ static LLVMTypeRef get_coro_init_type(Ast *ast, JITLangCtx *ctx,
                                       LLVMModuleRef module) {
   CoroutineCtx *coro_ctx = ctx->coro_ctx;
   Type *ftype = coro_ctx->cons_type;
+
   if (ast->data.AST_LAMBDA.len == 0 ||
       ast->data.AST_LAMBDA.len == 1 &&
           ast->data.AST_LAMBDA.params->ast->tag == AST_VOID) {
@@ -168,15 +169,18 @@ static LLVMTypeRef get_coro_init_type(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-
   Type *t = ast->md;
-  Type *return_opt_type = fn_return_type(t);
-  LLVMTypeRef promise_type = type_to_llvm_type(return_opt_type, ctx, module);
+  Type *coro_cons_fn_type = t->data.T_CONS.args[0];
+  Type *ret_type = fn_return_type(coro_cons_fn_type);
+
+  // Type *return_opt_type = fn_return_type(t);
+  Type return_opt_type = TOPT(ret_type);
+  LLVMTypeRef promise_type = type_to_llvm_type(&return_opt_type, ctx, module);
 
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
 
   CoroutineCtx coro_ctx = {
-      .cons_type = t,
+      .cons_type = coro_cons_fn_type,
       .coro_obj_type = coro_obj_type,
       .promise_type = promise_type,
       .current_yield = 0,
@@ -399,13 +403,18 @@ LLVMValueRef coro_create(JITSymbol *sym, Type *expected_fn_type, Ast *ast,
     callable = sym->val;
   }
 
+  // expected_fn_type = expected_fn_type->data.T_CONS.args[0];
+
   Type *ctype = deep_copy_type(expected_fn_type);
+
   Type *c = ctype;
   int i = 0;
-  while (!c->data.T_FN.to->is_coroutine_instance) {
+
+  while (!is_coroutine_type(c->data.T_FN.to)) {
     c = c->data.T_FN.to;
     i++;
   }
+
   c->data.T_FN.to = &t_ptr;
   LLVMValueRef v = call_callable(ast, ctype, callable, ctx, module, builder);
   return v;
@@ -571,9 +580,13 @@ LLVMValueRef coro_is_finished(LLVMValueRef coro, CoroutineCtx *ctx,
 
 LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
+
   LLVMValueRef coro = sym->val;
+
   Type *coro_type = sym->symbol_type;
-  Type *ret_opt_type = fn_return_type(coro_type);
+
+  Type *ret_opt_type = create_option_type(coro_type->data.T_CONS.args[0]);
+
   LLVMTypeRef promise_type = type_to_llvm_type(ret_opt_type, ctx, module);
   CoroutineCtx tmp_ctx = {.promise_type = promise_type,
                           .coro_obj_type = CORO_OBJ_TYPE(promise_type)};
@@ -863,7 +876,9 @@ LLVMTypeRef get_coro_state_layout(Ast *ast, JITLangCtx *ctx,
   LLVMTypeRef t[state_len];
 
   if (args_len > 0) {
-    Type *ftype = ast->md;
+
+    Type *coro_cons_type = ast->md;
+    Type *ftype = coro_cons_type->data.T_CONS.args[0];
 
     for (int i = 0; i < args_len; i++) {
       Type *from = ftype->data.T_FN.from;

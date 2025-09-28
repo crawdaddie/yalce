@@ -219,14 +219,17 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_TYPE_DECL: {
     Type *t = ast->md;
 
-    if (t->kind == T_CREATE_NEW_GENERIC) {
-      Type *tpl = t->data.T_CREATE_NEW_GENERIC.template;
-      Type *resolved = t->data.T_CREATE_NEW_GENERIC.fn(tpl);
-      if (resolved->kind == T_CONS) {
-        t = resolved;
-      }
-    }
-    if (!is_generic(t) && is_variant_type(t)) {
+    // if (t->kind == T_SCHEME) {
+    //   // Type *tpl = t->data.T_CREATE_NEW_GENERIC.template;
+    //   // Type *resolved = t->data.T_CREATE_NEW_GENERIC.fn(tpl);
+    //   //
+    //   // if (resolved->kind == T_CONS) {
+    //   //   t = resolved;
+    //   // }
+    //   TICtx tctx = {.env = ctx->env};
+    //   t = instantiate(t, &tctx);
+    // }
+    if (!is_generic(t) && is_sum_type(t)) {
       LLVMTypeRef llvm_type = codegen_adt_type(t, ctx, module);
       JITSymbol *sym = new_symbol(STYPE_VARIANT_TYPE, t, NULL, llvm_type);
       Ast *binding = ast->data.AST_LET.binding;
@@ -267,7 +270,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
-    } else if (!is_variant_type(t) && t->kind != T_FN) {
+    } else if (!is_sum_type(t) && t->kind != T_FN) {
       fprintf(stderr,
               "Warning - constructor not implemented for type declaration ");
       print_ast_err(ast);

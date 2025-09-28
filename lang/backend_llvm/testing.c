@@ -7,7 +7,9 @@
 #include "symbols.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/ExecutionEngine.h"
+#include <stdlib.h>
 #include <string.h>
+
 void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine);
 // Function prototype
 void _report_test_result(const char *name, int result);
@@ -67,6 +69,8 @@ Ast *get_test_module_ast(Ast *ast) {
     AST_LIST_ITER(
         ast->data.AST_BODY.stmts, ({
           Ast *stmt = l->ast;
+          // Ast *stmt = ast->data.AST_BODY.stmts[i];
+
           if (stmt->tag == AST_LET &&
               stmt->data.AST_LET.binding->tag == AST_IDENTIFIER &&
               strcmp(stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value,
@@ -117,18 +121,21 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
   JITSymbol *test_module =
       ht_get_hash(ctx->frame->table, "test", hash_string("test", 4));
 
-  Ast **stmts;
+  AstList *stmts;
   int len = 0;
   if (test_module_ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     len = 1;
-    stmts = &test_module_ast->data.AST_LAMBDA.body;
+    AstList *l = malloc(sizeof(AstList));
+    *l = (AstList){.ast = test_module_ast->data.AST_LAMBDA.body};
+    stmts = l;
   } else {
     len = test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.len;
     stmts = test_module_ast->data.AST_LAMBDA.body->data.AST_BODY.stmts;
   }
 
-  for (int i = 0; i < len; i++) {
-    Ast *stmt = stmts[i];
+  int i = 0;
+  for (AstList *it = stmts; it; it = it->next, i++) {
+    Ast *stmt = it->ast;
 
     if (stmt->tag == AST_LET) {
       Ast *binding = stmt->data.AST_LET.binding;

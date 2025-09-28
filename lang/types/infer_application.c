@@ -16,6 +16,7 @@ Type *create_fn_from_cons(Type *res, Type *cons) {
 }
 
 Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
+
   Type *f;
   if (is_sum_type(cons)) {
     Type *mem =
@@ -97,6 +98,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     print_type_err(expected_type);
     return NULL;
   }
+  // print_constraints(unify_ctx.constraints);
   ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
 
   // Step 5: Solve constraints and apply substitutions

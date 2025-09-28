@@ -4,6 +4,7 @@
 #include "./escape_analysis.h"
 #include "ht.h"
 #include "parse.h"
+#include "types/inference.h"
 #include "types/type.h"
 #include <llvm-c/Types.h>
 
@@ -139,4 +140,20 @@ void destroy_ctx(JITLangCtx *ctx);
   _ctx_name.coro_ctx = _ctx->coro_ctx;
 
 EscapeStatus find_allocation_strategy(Ast *expr, JITLangCtx *ctx);
+
+#define INSERT_PRINTF(num_args, fmt_str, ...)                                  \
+  ({                                                                           \
+    LLVMValueRef format_str =                                                  \
+        LLVMBuildGlobalStringPtr(builder, fmt_str, "format");                  \
+    LLVMValueRef printf_fn = LLVMGetNamedFunction(module, "printf");           \
+    if (!printf_fn) {                                                          \
+      LLVMTypeRef printf_type = LLVMFunctionType(                              \
+          LLVMInt32Type(),                                                     \
+          (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1, true);       \
+      printf_fn = LLVMAddFunction(module, "printf", printf_type);              \
+    }                                                                          \
+    LLVMBuildCall2(builder, LLVMGlobalGetValueType(printf_fn), printf_fn,      \
+                   (LLVMValueRef[]){format_str, __VA_ARGS__}, num_args + 1,    \
+                   "");                                                        \
+  })
 #endif
