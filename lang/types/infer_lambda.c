@@ -376,7 +376,9 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   ctx->subst = lctx.subst;
 
   if (lctx.yielded_type) {
-    return create_coroutine_lambda(result_type, ctx);
+    Type *cor_cons_type = create_coroutine_lambda(result_type, ctx);
+    ast->md = cor_cons_type;
+    return cor_cons_type;
   }
 
   Type *closure = create_closure(ast, result_type, ctx);

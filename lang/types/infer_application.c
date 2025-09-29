@@ -93,7 +93,6 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
 
   // Step 4: Unify function type with expected type
   TICtx unify_ctx = {};
-
   if (unify(func_type, expected_type, &unify_ctx)) {
     type_error(ast, "Function application type mismatch : ");
     print_type_err(func_type);

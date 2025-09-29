@@ -64,12 +64,6 @@ char *type_to_string(Type *t, char *buffer) {
     break;
   }
   case T_CONS: {
-    if (t->alias) {
-
-      buffer = strcat(buffer, t->alias);
-      // buffer = tc_list_to_string(t, buffer);
-      break;
-    }
 
     if (is_string_type(t)) {
       buffer = strcat(buffer, "String");
@@ -124,6 +118,12 @@ char *type_to_string(Type *t, char *buffer) {
           buffer = strncat(buffer, " | ", 3);
         }
       }
+      break;
+    }
+
+    if (t->alias) {
+      buffer = strcat(buffer, t->alias);
+      // buffer = tc_list_to_string(t, buffer);
       break;
     }
     // if (is_array_type(t)) {

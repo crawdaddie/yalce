@@ -7,6 +7,7 @@
 #include "function.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/type.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
@@ -377,7 +378,9 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
         expected_fn_type);
 
     Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
-    fn_ast.md = expected_fn_type;
+
+    Type exp = TCONS(TYPE_NAME_COROUTINE_CONSTRUCTOR, 1, expected_fn_type);
+    fn_ast.md = &exp;
 
     LLVMValueRef specific_fn =
         compile_coroutine(&fn_ast, &compilation_ctx, module, builder);

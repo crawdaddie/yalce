@@ -2,7 +2,6 @@
 import ../lib/Math;
 open ../engine/bindings/Sched; 
 open ../engine/bindings/Synth; 
-open ../engine/bindings/VST; 
 
 let array_choose = fn arr ->
   let idx = Math.rand_int (array_size arr) in
@@ -12,7 +11,7 @@ let array_choose = fn arr ->
 
 let tempo = 155.;
 
-let Clicks = module
+let Clicks = module () ->
 
   let synth = (fn () ->
     let freq = inlet (tempo * 4. / 60.); 
@@ -51,7 +50,7 @@ let Clicks = module
 
 
 
-let Tones = module
+let Tones = module () ->
 
   let group = group_node () |> play_node_offset (get_current_sample ());
 
@@ -111,7 +110,7 @@ let Tones = module
     | _ -> ()
   ;;
 
-  let pattern_ref = [|empty_coroutine ()|] ;
+  let pattern_ref = [|cstr ""|] ;
   let set_pattern = fn t cor ->
     cor_stop ( pattern_ref[0]);
     cor

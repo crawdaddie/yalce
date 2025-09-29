@@ -334,7 +334,17 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     return 0;
   }
 
+  if (IS_PRIMITIVE_TYPE(t1) && t2->kind == T_TYPECLASS_RESOLVE) {
+    TypeList *free_r = free_vars_type(NULL, t2);
+    for (TypeList *fr = free_r; fr; fr = fr->next) {
+      add_constraint(unify_res, fr->type, t1);
+    }
+
+    return 0;
+  }
+
   if (IS_PRIMITIVE_TYPE(t1)) {
+
     add_constraint(unify_res, t2, t1);
     return 0;
   }
@@ -354,7 +364,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   if (t1->kind == T_VAR) {
 
     if (occurs_check(t1->data.T_VAR, t2)) {
-      printf("occurs check??\n");
       return 1; // Occurs check failure
     }
 
@@ -375,8 +384,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     }
 
     if (occurs_check(t2->data.T_VAR, t1)) {
-
-      printf("occurs check 2??\n");
       return 1; // Occurs check failure
     }
 
@@ -421,8 +428,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       TICtx ur = {};
       if (unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], &ur) != 0) {
-        printf("cons unify\n");
-
         return 1;
       }
 
@@ -432,11 +437,10 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     }
     return 0;
   }
+
   if (t1->kind == T_TYPECLASS_RESOLVE && t2->kind != T_VAR) {
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       if (unify(t1->data.T_CONS.args[i], t2, unify_res)) {
-
-        printf("tc resolve unify\n");
         return 1;
       }
     }

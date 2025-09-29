@@ -360,6 +360,7 @@ LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ArrayRangeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+
   LLVMValueRef offset_val =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 

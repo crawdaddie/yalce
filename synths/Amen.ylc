@@ -51,7 +51,7 @@ let trig = fn d: (Double) s: (Double) ->
 ;;
 
 
-let pattern_ref = [|empty_coroutine ()|] ;
+let pattern_ref = [| cstr "" |] ;
 let set_pattern = fn t cor ->
   cor_stop (pattern_ref[0]);
   cor

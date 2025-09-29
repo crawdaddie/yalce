@@ -224,7 +224,6 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
 
   // TODO: do we need to keep module env scope from being pushed up
   // ctx->env = env;
-  print_type(module_struct_type);
 
   return module_struct_type;
 }

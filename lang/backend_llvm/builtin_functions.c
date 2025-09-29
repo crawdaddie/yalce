@@ -1319,6 +1319,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("array_fill_const", &array_fill_const_scheme,
                     ArrayFillConstHandler);
   GENERIC_FN_SYMBOL("array_fill", &array_fill_scheme, ArrayFillHandler);
+  GENERIC_FN_SYMBOL("array_range", &array_range_scheme, ArrayRangeHandler);
 
   GENERIC_FN_SYMBOL("Some", &opt_scheme, SomeConsHandler);
 

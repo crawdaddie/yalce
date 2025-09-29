@@ -575,6 +575,9 @@ void initialize_builtin_types() {
   array_fill_scheme = create_array_fill_scheme();
   add_builtin("array_fill", &array_fill_scheme);
 
+  array_range_scheme = create_array_range_scheme();
+  add_builtin("array_range", &array_range_scheme);
+
   list_scheme = create_list_scheme();
   add_builtin("List", &list_scheme);
 

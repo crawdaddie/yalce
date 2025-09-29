@@ -1,8 +1,8 @@
 open engine/bindings/Synth;
 open engine/bindings/Sched; 
 import lib/Math;
-
-let Acid = module
+ 
+let Acid = module () ->
 
   let synth = (fn () -> 
     let freq = inlet 55. in
