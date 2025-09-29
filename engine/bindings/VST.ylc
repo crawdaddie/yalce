@@ -1,5 +1,0 @@
-let vstfx_node = extern fn Ptr of Char -> Synth -> Synth;
-let vstfx_load_preset = extern fn Ptr of Char -> Synth -> Synth;
-let vst_get_handle = extern fn Synth -> Ptr;
-
-

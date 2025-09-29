@@ -1,5 +1,6 @@
 #include "./inference.h"
 #include "../arena_allocator.h"
+#include "../parse.h"
 #include "./builtins.h"
 #include "closures.h"
 #include "common.h"
@@ -1204,6 +1205,16 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
 
   return instantiate(type_ref->type, ctx);
 }
+bool find_trait_impl_rank(Ast *impl, double *rank) {
+  Ast *r = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts->ast;
+  if (r->tag == AST_LET && r->data.AST_LET.binding->tag == AST_IDENTIFIER &&
+      CHARS_EQ(r->data.AST_LET.binding->data.AST_IDENTIFIER.value, "rank")) {
+    *rank = r->data.AST_LET.expr->data.AST_DOUBLE.value;
+    return true;
+  }
+  return false;
+}
+
 Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
   Ast *expr = ast->data.AST_YIELD.expr;
 
@@ -1489,6 +1500,33 @@ Type *infer(Ast *ast, TICtx *ctx) {
       }
     } else {
       ctx->env = env_extend(ctx->env, ast->data.AST_IMPORT.identifier, type);
+    }
+
+    break;
+  }
+  case AST_TRAIT_IMPL: {
+    type = infer(ast->data.AST_TRAIT_IMPL.impl, ctx);
+    ObjString type_name = ast->data.AST_TRAIT_IMPL.type;
+    ObjString trait_name = ast->data.AST_TRAIT_IMPL.trait_name;
+    double rank;
+    int has_rank = find_trait_impl_rank(ast->data.AST_TRAIT_IMPL.impl, &rank);
+
+    if (has_rank) {
+      Type *t = env_lookup(ctx->env, type_name.chars);
+      TypeClass *tc = t_alloc(sizeof(TypeClass));
+      *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
+      typeclasses_extend(t, tc);
+    } else {
+      // TODO: implement robust traits
+      Type *t = env_lookup(ctx->env, type_name.chars);
+      Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
+      // printf("trait impl - does \n");
+      // print_type(type);
+      // printf(" match \n");
+      // print_type(existing_trait_proto);
+      TypeClass *tc = t_alloc(sizeof(TypeClass));
+      *tc = (TypeClass){.name = trait_name.chars, .module = type};
+      typeclasses_extend(t, tc);
     }
 
     break;
