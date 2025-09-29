@@ -240,11 +240,6 @@ bool is_list_type(Type *type) {
          (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0);
 }
 
-bool is_forall_type(Type *type) {
-  return type->kind == T_CONS &&
-         (strncmp(type->data.T_CONS.name, "forall", 6) == 0);
-}
-
 bool is_string_type(Type *type) {
   return type->kind == T_CONS &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_ARRAY) == 0) &&

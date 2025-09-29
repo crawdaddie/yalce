@@ -1330,6 +1330,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   // get_extern_fn("print",
   //               type_to_llvm_type(&t_builtin_print, ctx, module),
   //               module));
+  GENERIC_FN_SYMBOL("cor_loop", &id_scheme, CorLoopHandler);
+  GENERIC_FN_SYMBOL("cor_map", &cor_map_scheme, CorMapHandler);
 
   return ctx->env;
 }

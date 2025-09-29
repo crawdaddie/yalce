@@ -65,15 +65,8 @@ char *type_to_string(Type *t, char *buffer) {
   }
   case T_CONS: {
 
-    if (is_forall_type(t)) {
-      buffer = strncat(buffer, "forall ", 7);
-      int len = t->data.T_CONS.num_args;
-      for (int i = 0; i < len - 1; i++) {
-        buffer = type_to_string(t->data.T_CONS.args[i], buffer);
-      }
-
-      buffer = strncat(buffer, " : ", 3);
-      buffer = type_to_string(t->data.T_CONS.args[len - 1], buffer);
+    if (is_string_type(t)) {
+      buffer = strcat(buffer, "String");
       break;
     }
 
@@ -281,15 +274,8 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
   case T_CONS: {
-    if (is_forall_type(t)) {
-      fprintf(stream, "forall ");
-      int len = t->data.T_CONS.num_args;
-      for (int i = 0; i < len - 1; i++) {
-        print_type_to_stream(t->data.T_CONS.args[i], stream);
-      }
-
-      fprintf(stream, " : ");
-      print_type_to_stream(t->data.T_CONS.args[len - 1], stream);
+    if (is_string_type(t)) {
+      fprintf(stream, "String");
       break;
     }
 

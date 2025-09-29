@@ -527,9 +527,6 @@ void initialize_builtin_types() {
   str_fmt_scheme = create_str_fmt_scheme();
   add_builtin("str", &str_fmt_scheme);
 
-  cor_map_scheme = create_cor_map_scheme();
-  add_builtin("cor_map", &cor_map_scheme);
-
   iter_of_list_scheme = create_iter_of_list_scheme();
   add_builtin("iter_of_list", &iter_of_list_scheme);
 
@@ -537,6 +534,9 @@ void initialize_builtin_types() {
   add_builtin("iter_of_array", &iter_of_array_scheme);
 
   add_builtin("cor_loop", &id_scheme);
+
+  cor_map_scheme = create_cor_map_scheme();
+  add_builtin("cor_map", &cor_map_scheme);
 
   use_or_finish_scheme = create_use_or_finish_scheme();
   add_builtin("use_or_finish", &use_or_finish_scheme);

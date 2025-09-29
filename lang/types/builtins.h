@@ -29,6 +29,7 @@ Type *lookup_builtin_type(const char *name);
 extern Type arithmetic_scheme;
 extern Type ord_scheme;
 extern Type eq_scheme;
+extern Type id_scheme;
 
 extern Type array_id_scheme;
 extern Type array_size_scheme;
