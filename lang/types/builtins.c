@@ -20,7 +20,7 @@ Type t_ptr = {T_CONS,
 Type t_none =
     (Type){T_CONS, {.T_CONS = {.name = TYPE_NAME_NONE, .num_args = 0}}};
 
-Type t_builtin_print;
+Type t_builtin_print = MAKE_FN_TYPE_2(&t_string, &t_void);
 
 ht builtin_types;
 
@@ -453,7 +453,8 @@ void initialize_builtin_types() {
   add_builtin("<=", &ord_scheme);
 
   add_builtin("id", &id_scheme);
-  add_builtin("print", type_fn(&t_string, &t_void));
+
+  add_builtin("print", &t_builtin_print);
 
   add_builtin(TYPE_NAME_INT, &t_int);
   add_builtin(TYPE_NAME_UINT64, &t_uint64);

@@ -12,7 +12,7 @@ let test = module () ->
   ;;
 
   let test_type_decl_rec_access = fn () ->
-    let x = RegexMatch (0, 0);
+    let x = RegexMatch 0 0;
     x.rm_so == 0
   ;;
 ;

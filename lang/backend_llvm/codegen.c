@@ -16,6 +16,7 @@
 #include "modules.h"
 #include "types/common.h"
 #include "types/inference.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -191,6 +192,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Type *record_type = record->md;
     if (record_type->kind == T_CONS &&
         strcmp(record_type->data.T_CONS.name, TYPE_NAME_MODULE) == 0) {
+
       LLVMValueRef val = codegen_module_access(
           record, record_type, ast->data.AST_RECORD_ACCESS.index,
           ast->data.AST_RECORD_ACCESS.member, ast->md, ctx, module, builder);

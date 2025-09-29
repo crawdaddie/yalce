@@ -218,7 +218,6 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
 
   if (is_tuple_type(computed)) {
     computed->data.T_CONS.name = name;
-    print_type(computed);
   }
   if (is_generic(computed)) {
     computed = generalize(computed, ctx);

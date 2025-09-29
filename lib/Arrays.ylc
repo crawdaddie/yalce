@@ -58,8 +58,8 @@ let test = module () ->
     let s = map ((+) 3) [| 1,2,3 |] in
     s == [| 4, 5, 6 |]
   ;
-  # let test_map_to_double = 
-  #   let s = map ((+) 3.) [|1,2,3|] in
-  #   s == [| 4., 5., 6.|]
-  # ;
+  let test_map_to_double = 
+    let s = map ((+) 3.) [|1,2,3|] in
+    s == [| 4., 5., 6.|]
+  ;
 ;

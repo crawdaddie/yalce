@@ -20,4 +20,12 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef StringFmtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder);
+
+LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder);
+
+LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type);
 #endif

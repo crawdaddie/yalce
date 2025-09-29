@@ -1,8 +1,10 @@
 #include "./infer_application.h"
 #include "./builtins.h"
+#include "common.h"
 #include "serde.h"
 #include "types/type.h"
 #include "types/type_ser.h"
+#include <string.h>
 
 Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx);
 
@@ -65,6 +67,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 }
 
 Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
+  Ast *func = ast->data.AST_APPLICATION.function;
 
   Ast *args = ast->data.AST_APPLICATION.args;
   int num_args = ast->data.AST_APPLICATION.len;
@@ -98,7 +101,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     print_type_err(expected_type);
     return NULL;
   }
-  // print_constraints(unify_ctx.constraints);
+
   ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
 
   // Step 5: Solve constraints and apply substitutions
@@ -113,5 +116,10 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   for (int n = num_args; n; n--) {
     res = res->data.T_FN.to;
   }
+
+  // if (CHARS_EQ(fn_name, "array_at")) {
+  //   printf("res type: \n");
+  //   print_type(res);
+  // }
   return res;
 }

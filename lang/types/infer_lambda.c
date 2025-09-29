@@ -197,6 +197,11 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
                                         subst);
     }
 
+    // printf("app type\n");
+    // print_ast(ast);
+    // print_subst(subst);
+    // print_type(ast->md);
+
     break;
   }
   case AST_LOOP:
@@ -300,7 +305,21 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   }
 
   Type *t = ast->md;
-  ast->md = apply_substitution(subst, t);
+  t = apply_substitution(subst, t);
+
+  if (ast->tag == AST_APPLICATION) {
+    Type *n = t;
+    while (n->kind == T_VAR) {
+      Type *x = find_in_subst(subst, n->data.T_VAR);
+      if (x) {
+        n = x;
+      } else {
+        break;
+      }
+    }
+    t = n;
+  }
+  ast->md = t;
 }
 
 // T-Lambda:  Γ, x₁ : α₁, x₂ : α₂, ..., xₙ : αₙ ⊢ e : τ    (α₁, α₂, ..., α esh)
@@ -335,9 +354,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (!body_type) {
     return type_error(body, "Error: Cannot infer lambda body\n");
   }
-
-  printf("%s\n", ast->data.AST_LAMBDA.fn_name.chars);
-  print_constraints(lctx.constraints);
 
   Subst *ls = solve_constraints(lctx.constraints);
 

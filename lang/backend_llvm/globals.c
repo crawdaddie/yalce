@@ -41,7 +41,7 @@ void codegen_set_global(const char *sym_name, JITSymbol *sym,
   *(ctx->num_globals) = slot + 1;
 }
 
-LLVMValueRef codegen_get_global(char *sym_name, JITSymbol *sym,
+LLVMValueRef codegen_get_global(const char *sym_name, JITSymbol *sym,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
   char buf[32];
   int slot = sym->symbol_data.STYPE_TOP_LEVEL_VAR;

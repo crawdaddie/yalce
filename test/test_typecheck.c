@@ -1911,6 +1911,17 @@ int test_array_processing() {
             0)
             ->data.AST_LET.expr;
 
+    print_ast((app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args);
+
+    print_type(
+        (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->md);
+
+    print_ast((app->data.AST_APPLICATION.args + 1)
+                  ->data.AST_APPLICATION.args->data.AST_APPLICATION.args);
+
+    print_type((app->data.AST_APPLICATION.args + 1)
+                   ->data.AST_APPLICATION.args->data.AST_APPLICATION.args->md);
+
     TASSERT(
         "array arg at has type `13 -- ",
         types_equal(

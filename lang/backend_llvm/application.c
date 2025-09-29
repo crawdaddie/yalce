@@ -184,15 +184,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
 
-  print_ast(ast);
-
-  print_type(expected_fn_type);
   if (is_generic(expected_fn_type)) {
     expected_fn_type = deep_copy_type(expected_fn_type);
     expected_fn_type = resolve_type_in_env(expected_fn_type, ctx->env);
   }
-
-  print_type(expected_fn_type);
 
   // x.mem a ??
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&

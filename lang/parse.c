@@ -499,7 +499,7 @@ Ast *parse_fstring_expr(Ast *list) {
   for (int i = 0; i < list->data.AST_LIST.len; i++) {
     Ast *item = list->data.AST_LIST.items + i;
     if (item->tag != AST_STRING) {
-      print_ast(item);
+      // print_ast(item);
       Ast it = *item;
       Ast *arg = palloc(sizeof(Ast) * 1);
       *arg = it;

@@ -479,6 +479,7 @@ Type *apply_substitution(Subst *subst, Type *t) {
       //     }
       //   }
       // }
+
       if (x->kind != T_VAR && is_generic(x)) {
         return apply_substitution(subst, x);
       }
@@ -671,6 +672,106 @@ TypeList *free_vars_type(TypeList *vars, Type *t) {
   }
 }
 
+Subst *solve_constraints___(Constraint *constraints) {
+  Subst *subst = NULL;
+
+  while (constraints) {
+    Constraint *current = constraints;
+    constraints = constraints->next;
+
+    const char *var_name = current->var->data.T_VAR;
+
+    Type *new_type = apply_substitution(subst, current->type);
+
+    Type *existing = find_in_subst(subst, var_name);
+
+    if (new_type->kind == T_TYPECLASS_RESOLVE) {
+
+      for (int i = 0; i < new_type->data.T_CONS.num_args; i++) {
+        new_type->data.T_CONS.args[i] =
+            apply_substitution(subst, new_type->data.T_CONS.args[i]);
+      }
+
+      // If no concrete resolution possible, keep the constraint for later
+      if (!existing) {
+        subst = subst_extend(subst, var_name, new_type);
+        continue;
+      }
+    }
+
+    if (!existing) {
+      subst = subst_extend(subst, var_name, new_type);
+      continue;
+    }
+
+    if (existing->kind == T_TYPECLASS_RESOLVE && !is_generic(new_type)) {
+      for (int i = 0; i < existing->data.T_CONS.num_args; i++) {
+        if (existing->data.T_CONS.args[i]->kind == T_VAR) {
+          subst = subst_extend(subst, existing->data.T_CONS.args[i]->data.T_VAR,
+                               new_type);
+        }
+      }
+      continue;
+    }
+
+    Type *existing_subst = apply_substitution(subst, existing);
+    if (types_equal(existing_subst, new_type)) {
+      continue;
+    }
+
+    if (existing_subst->kind == T_TYPECLASS_RESOLVE &&
+        IS_PRIMITIVE_TYPE(new_type)) {
+
+      VarList *frees = free_vars_type(NULL, existing_subst);
+      for (VarList *f = frees; f; f = f->next) {
+        subst = update_substitution(subst, f->var, new_type);
+      }
+      continue;
+    }
+
+    // Handle merging T_TYPECLASS_RESOLVE with other constraints
+    if (existing_subst->kind == T_TYPECLASS_RESOLVE) {
+
+      Type *merged_resolve = merge_typeclass_resolve(existing_subst, new_type);
+      subst = update_substitution(subst, var_name, merged_resolve);
+      continue;
+    }
+
+    if (new_type->kind == T_TYPECLASS_RESOLVE) {
+      Type *merged_resolve = merge_typeclass_resolve(new_type, existing_subst);
+      subst = update_substitution(subst, var_name, merged_resolve);
+      continue;
+    }
+
+    TICtx ur = {.constraints = constraints};
+
+    if (unify(existing_subst, new_type, &ur) != 0) {
+      Type *promoted =
+          find_promoted_type(current->var, existing_subst, new_type);
+
+      if (promoted) {
+        subst = update_substitution(subst, var_name, promoted);
+        continue;
+      } else {
+        return NULL;
+      }
+    }
+
+    // Apply direct substitutions
+    if (ur.subst) {
+      for (Subst *s = ur.subst; s; s = s->next) {
+        subst = subst_extend(subst, s->var, s->type);
+      }
+    }
+
+    constraints = ur.constraints;
+    subst = update_substitution(subst, var_name, new_type);
+    continue;
+  }
+
+  return subst;
+}
+
 Subst *solve_constraints(Constraint *constraints) {
   Subst *subst = NULL;
 
@@ -698,7 +799,6 @@ Subst *solve_constraints(Constraint *constraints) {
 
       // If no concrete resolution possible, keep the constraint for later
       if (!existing) {
-
         subst = subst_extend(subst, var_name, new_type);
         continue;
       }
@@ -745,9 +845,7 @@ Subst *solve_constraints(Constraint *constraints) {
     }
 
     if (new_type->kind == T_TYPECLASS_RESOLVE) {
-
       Type *merged_resolve = merge_typeclass_resolve(new_type, existing_subst);
-
       subst = update_substitution(subst, var_name, merged_resolve);
       continue;
     }

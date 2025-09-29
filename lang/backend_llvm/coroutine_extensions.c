@@ -304,8 +304,8 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
-  printf("iter handler\n");
-  print_ast(ast);
+  // printf("iter handler\n");
+  // print_ast(ast);
   return NULL;
 }
 
