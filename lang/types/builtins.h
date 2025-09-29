@@ -36,6 +36,7 @@ extern Type array_range_scheme;
 extern Type array_at_scheme;
 extern Type array_set_scheme;
 extern Type array_fill_const_scheme;
+extern Type array_fill_scheme;
 extern Type opt_scheme;
 extern Type array_scheme;
 extern Type list_scheme;

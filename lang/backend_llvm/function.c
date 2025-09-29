@@ -6,6 +6,7 @@
 #include "types.h"
 #include "types/inference.h"
 #include "types/type.h"
+#include "types/type_ser.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -100,6 +101,10 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTypeRef llvm_param_types[params_count];
   Type *fn_type = ast->md;
+  if (fn_type->kind == T_SCHEME) {
+    TICtx _c = {.env = ctx->env};
+    fn_type = instantiate(fn_type, &_c);
+  }
 
   if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
 
@@ -109,18 +114,21 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return get_extern_fn(name, llvm_fn_type, module);
   }
 
-  for (int i = 0; i < params_count; i++) {
-    Type *param_type =
-        ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[i].md;
+  Type *f = fn_type;
+  for (int i = 0; i < params_count; i++, f = f->data.T_FN.to) {
+    // Type *param_type =
+    //     ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[i].md;
+
+    Type *param_type = f->data.T_FN.from;
 
     llvm_param_types[i] = param_type->kind == T_FN
                               ? GENERIC_PTR
                               : type_to_llvm_type(param_type, ctx, module);
   }
-  LLVMTypeRef ret_type = type_to_llvm_type(
-      ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[params_count]
-          .md,
-      ctx, module);
+
+  LLVMTypeRef ret_type = type_to_llvm_type(f,
+
+                                           ctx, module);
 
   AstList *params = __current_ast ? (__current_ast->tag == AST_LAMBDA
                                          ? __current_ast->data.AST_LAMBDA.params

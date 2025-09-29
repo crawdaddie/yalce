@@ -1099,6 +1099,19 @@ int test_funcs() {
     ";;\n",
     &MAKE_FN_TYPE_3(&t_int, &t_int, &TOPT(&t_int)));
 
+  ({
+    Type t = arithmetic_var("`0");
+    T("let abs = fn a ->\n"
+      "  match a > 0 with\n"
+      "  | true -> a\n"
+      "  | _ -> a * -1\n"
+      ";;\n",
+      &TSCHEME(
+          &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t_int, &t)),
+          &t));
+  });
+
   return status;
 }
 int test_match_exprs() {
@@ -2200,6 +2213,35 @@ bool test_record_types() {
 
   return status;
 }
+bool test_math_funcs() {
+  bool status = true;
+
+  Ast *b = T("let shuffle = fn n -> \n"
+             "  let arr = array_fill n (fn i -> i);\n"
+             "\n"
+             "  for _i = 0 to n in (\n"
+             "    let i = n - 1 - _i; # reverse\n"
+             "    let j = rand_int (i + 1);\n"
+             "    let iv = arr[i];\n"
+             "    arr[i] := arr[j];\n"
+             "    arr[j] := iv\n"
+             "  );\n"
+             "  arr\n"
+             ";;\n",
+             &MAKE_FN_TYPE_2(&t_int, &TARRAY(&t_int)));
+  Ast *l = AST_LIST_NTH(
+      AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+          ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+      1);
+  printf("loop\n");
+  print_ast(l->data.AST_LET.binding);
+  print_type(l->data.AST_LET.binding->md);
+  print_ast(l->data.AST_LET.expr);
+  print_type(l->data.AST_LET.expr->md);
+  print_ast(AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0));
+  print_type(AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->md);
+  return status;
+}
 
 int main() {
   // initialize_builtin_schemes();
@@ -2226,6 +2268,7 @@ int main() {
   //
   status &= test_list_processing();
   status &= test_array_processing();
+  status &= test_math_funcs();
   print_all_failures();
   return status == true ? 0 : 1;
 }

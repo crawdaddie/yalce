@@ -1,6 +1,7 @@
 #include "./infer_lambda.h"
 #include "./builtins.h"
 #include "common.h"
+#include "inference.h"
 #include "serde.h"
 #include "types/type_expressions.h"
 #include "types/type_ser.h"
@@ -197,16 +198,10 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
                                         subst);
     }
 
-    // printf("app type\n");
-    // print_ast(ast);
-    // print_subst(subst);
-    // print_type(ast->md);
-
     break;
   }
   case AST_LOOP:
   case AST_LET: {
-
     apply_substitution_to_lambda_body(ast->data.AST_LET.binding, subst);
     apply_substitution_to_lambda_body(ast->data.AST_LET.expr, subst);
     apply_substitution_to_lambda_body(ast->data.AST_LET.in_expr, subst);
@@ -222,8 +217,6 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
     apply_substitution_to_lambda_body(ast->data.AST_MATCH.expr, subst);
 
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
-      // printf("apply rec\n");
-      // print_ast(ast->data.AST_MATCH.branches + 2 * i);
 
       apply_substitution_to_lambda_body(ast->data.AST_MATCH.branches + 2 * i,
                                         subst);
@@ -234,13 +227,6 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   }
 
   case AST_MATCH_GUARD_CLAUSE: {
-    // printf("apply subs recursively\n");
-    // print_subst(subst);
-    // print_ast(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr);
-    //
-    // print_type(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr->data.AST_APPLICATION
-    //                .function->md);
-    // print_subst(subst);
 
     apply_substitution_to_lambda_body(
         ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, subst);
@@ -307,6 +293,8 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   Type *t = ast->md;
   t = apply_substitution(subst, t);
 
+  // TODO: when a Subst contains a chain of vars `a -> `b -> `c we could
+  // eliminate `b and keep just `a -> `c
   if (ast->tag == AST_APPLICATION) {
     Type *n = t;
     while (n->kind == T_VAR) {
@@ -356,7 +344,6 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   Subst *ls = solve_constraints(lctx.constraints);
-
   for (int i = 0; i < num_params; i++) {
     param_types[i] = apply_substitution(ls, param_types[i]);
     // param_types[i] = apply_substitution(lambda_ctx.subst, param_types[i]);

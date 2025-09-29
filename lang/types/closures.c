@@ -88,3 +88,17 @@ void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx) {
   //   extend_closed_vals(ctx->current_fn_ast, ast, ref->type);
   // }
 }
+
+void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
+
+  if (!ctx->current_fn_ast) {
+    return;
+  }
+
+  int scope = binding_info.data.VAR.scope;
+  if (scope > 0 && scope < ctx->current_fn_base_scope) {
+    ctx->current_fn_ast->data.AST_LAMBDA.num_closed_vals++;
+    ctx->current_fn_ast->data.AST_LAMBDA.closed_vals = ast_list_extend_left(
+        ctx->current_fn_ast->data.AST_LAMBDA.closed_vals, ast);
+  }
+}

@@ -1318,9 +1318,13 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("array_set", &array_set_scheme, ArraySetHandler);
   GENERIC_FN_SYMBOL("array_fill_const", &array_fill_const_scheme,
                     ArrayFillConstHandler);
+  GENERIC_FN_SYMBOL("array_fill", &array_fill_scheme, ArrayFillHandler);
 
   GENERIC_FN_SYMBOL("Some", &opt_scheme, SomeConsHandler);
+
   GENERIC_FN_SYMBOL("::", &list_prepend_scheme, ListPrependHandler);
+  GENERIC_FN_SYMBOL("list_concat", &list_concat_scheme, ListConcatHandler);
+
   GENERIC_FN_SYMBOL("str", &str_fmt_scheme, StringFmtHandler);
   GENERIC_FN_SYMBOL("print", &t_builtin_print, PrintHandler);
   // get_extern_fn("print",

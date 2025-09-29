@@ -1,6 +1,7 @@
 #include "./inference.h"
 #include "../arena_allocator.h"
 #include "./builtins.h"
+#include "closures.h"
 #include "common.h"
 #include "modules.h"
 #include "serde.h"
@@ -791,6 +792,9 @@ Subst *solve_constraints(Constraint *constraints) {
     Type *existing = find_in_subst(subst, var_name);
 
     if (new_type->kind == T_TYPECLASS_RESOLVE) {
+      if (occurs_check(var_name, new_type)) {
+        continue;
+      }
 
       for (int i = 0; i < new_type->data.T_CONS.num_args; i++) {
         new_type->data.T_CONS.args[i] =
@@ -1169,20 +1173,6 @@ void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
   return;
 }
 
-void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
-
-  if (!ctx->current_fn_ast) {
-    return;
-  }
-
-  int scope = binding_info.data.VAR.scope;
-  if (scope > 0 && scope < ctx->current_fn_base_scope) {
-    ctx->current_fn_ast->data.AST_LAMBDA.num_closed_vals++;
-    ctx->current_fn_ast->data.AST_LAMBDA.closed_vals = ast_list_extend_left(
-        ctx->current_fn_ast->data.AST_LAMBDA.closed_vals, ast);
-  }
-}
-
 // Identifier: x : σ ∈ Γ    τ = inst(σ)
 //
 //            ─────────────────────────
@@ -1207,7 +1197,7 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
     return type_ref->type;
   }
 
-  if (type_ref->md.type == BT_VAR) {
+  if (type_ref->md.type == BT_VAR || type_ref->md.type == BT_FN_PARAM) {
     handle_yield_boundary_crossing(type_ref->md, ast, ctx);
     handle_closed_over_value(type_ref->md, ast, ctx);
   }
@@ -1437,8 +1427,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
   }
 
   case AST_LOOP: {
-    // printf("loop??\n");
-    // print_ast(ast);
     Ast let = *ast;
     // if (is_loop_of_iterable(ast)) {
     //   type = for_loop_binding(let.data.AST_LET.binding,
@@ -1447,8 +1435,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     //
     //   break;
     // }
+    //
     let.tag = AST_LET;
     type = infer(&let, ctx);
+    ast->md = let.md;
     break;
   }
   case AST_RANGE_EXPRESSION: {

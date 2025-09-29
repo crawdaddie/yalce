@@ -1,4 +1,3 @@
-# uniformly distributed integer between 0 and range-1
 
 let PI = 3.14159265358979323846264338327950288;
 let rand_int = extern fn Int -> Int ;
@@ -11,6 +10,7 @@ let rand_double_range = extern fn Double -> Double -> Double ;
 
 let amp_db = extern fn Double -> Double;
 let db_amp = extern fn Double -> Double;
+
 # let rec = extern fn Double -> Double;
 let sin = extern fn Double -> Double;
 let cos = extern fn Double -> Double;
@@ -23,17 +23,6 @@ let double_array = extern fn Int -> Double -> Array of Double;
 let pow = extern fn Double -> Double -> Double;
 let tanh = extern fn Double -> Double;
 
-# let max_int = fn a: (Int) b: (Int) ->
-#   match a with 
-#   | a if a > b -> a 
-#   | _ -> b
-# ;;
-#
-# let min_int = fn a: (Int) b: (Int) ->
-#   match a with 
-#   | a if a < b -> a 
-#   | _ -> b
-# ;;
 
 let max = fn a b ->
   match a > b with 
@@ -68,7 +57,7 @@ let chance2 = fn thresh f g ->
 ;;
 
 
-let shuffle = fn n -> 
+let shuffle = fn n: (Int) -> 
   # `
   # Fisher-Yates shuffle
   # return an array of numbers 0 to n-1 shuffled in random order
@@ -76,8 +65,8 @@ let shuffle = fn n ->
   # `;
   let arr = array_fill n (fn i -> i);
 
-  for _i = 0 to n in (
-    let i = n - 1 - _i; # reverse
+  for j = 0 to n in (
+    let i = n - 1 - j; # reverse
     let j = rand_int (i + 1);
     let iv = arr[i];
     arr[i] := arr[j];
@@ -95,8 +84,8 @@ let shuffle_ip = fn arr: (Array of T) ->
 
   let n = array_size arr;
 
-  for _i = 0 to n in (
-    let i = n - 1 - _i; # reverse
+  for j = 0 to n in (
+    let i = n - 1 - j;
     let j = rand_int (i + 1);
     let iv = arr[i];
     arr[i] := arr[j];
@@ -104,11 +93,11 @@ let shuffle_ip = fn arr: (Array of T) ->
   );
   arr
 ;;
+
 let array_choose = fn arr: (Array of T) ->
   let n = array_size arr;
   arr[rand_int n]
 ;;
-
 let nonzero_randu_double = extern fn () -> Double;
 let log = extern fn Double -> Double;
 let exp = extern fn Double -> Double;
@@ -120,4 +109,3 @@ let randn = fn mu: (Double) sig: (Double) ->
   let u1, _ = _randn_pair mu sig;
   u1
 ;;
-

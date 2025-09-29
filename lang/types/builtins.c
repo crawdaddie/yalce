@@ -215,6 +215,25 @@ Type create_array_fill_const_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type array_fill_scheme;
+Type create_array_fill_scheme() {
+
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+  Type *fill_func = type_fn(&t_int, a);
+
+  Type *f = arr;
+  f = type_fn(fill_func, f);
+  f = type_fn(&t_int, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 Type opt_scheme;
 Type create_opt_scheme() {
   Type *var = tvar("a");
@@ -493,11 +512,15 @@ void initialize_builtin_types() {
   array_fill_const_scheme = create_array_fill_const_scheme();
   add_builtin("array_fill_const", &array_fill_const_scheme);
 
+  array_fill_scheme = create_array_fill_scheme();
+  add_builtin("array_fill", &array_fill_scheme);
+
   list_scheme = create_list_scheme();
   add_builtin("List", &list_scheme);
 
   list_concat_scheme = create_list_concat_scheme();
   add_builtin("list_concat", &list_concat_scheme);
+
   list_prepend_scheme = create_list_prepend_scheme();
   add_builtin("::", &list_prepend_scheme);
 

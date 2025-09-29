@@ -13,7 +13,7 @@ let test = module () ->
     let x = Ref 1;
     let res = deref x == 1;
     x[0] := 2;
-    let res = res && deref x == 2
+    let res = res && x[0] == 2
   ;;
 ;
 #

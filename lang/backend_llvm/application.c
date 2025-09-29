@@ -293,6 +293,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
     return res;
   }
+
   if (sym->type == STYPE_CLOSURE) {
     return call_closure_sym(ast, sym, ctx, module, builder);
   }

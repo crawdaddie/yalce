@@ -1,8 +1,8 @@
 #include "./closures.h"
+#include "../types/closures.h"
 #include "binding.h"
 #include "symbols.h"
 #include "types.h"
-#include "types/closures.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 

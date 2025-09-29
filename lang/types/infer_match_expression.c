@@ -1,6 +1,7 @@
 #include "./infer_match_expression.h"
 #include "serde.h"
 #include "types/type_ser.h"
+#include <stdio.h>
 Type *infer_match_expression__(Ast *ast, TICtx *ctx) {
 
   Type *scrutinee_type = infer(ast->data.AST_MATCH.expr, ctx);

@@ -9,4 +9,6 @@ bool is_ref_to_closed_value(Ast *identifier);
 
 void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx);
 
+void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx);
+
 #endif
