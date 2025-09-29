@@ -1,0 +1,8 @@
+let test_option = fn opt ->
+  match opt with
+  | Some x -> x
+  | None -> "got none"
+;;
+
+print (test_option None);           # Should be "got none"
+print (test_option (Some "test"));  # Should be "test"

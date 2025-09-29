@@ -84,31 +84,31 @@ let iter_all_arg = fn () ->
 ;; 
 iter_all_arg ();
 
-let map_cor = fn () ->
-  "map each value of a coroutine Int -> String";
-  let co_void = fn () ->
-    yield 1;
-    yield 2;
-    yield 3;
-    yield 4;
-    yield 5;
-    yield 6;
-    yield 7 
-  ;;
-  let co = co_void () |> cor_map (fn x -> `[str {x}]`)
-  ;
-
-  print `## coroutine mapped [str 1] -> [str 2] -> [str 3] -> ...
-  {co ()}
-  {co ()}
-  {co ()}
-  {co ()}
-  {co ()}
-  {co ()}
-`
-;;
-map_cor ();
+# let map_cor = fn () ->
+#   "map each value of a coroutine Int -> String";
+#   let co_void = fn () ->
+#     yield 1;
+#     yield 2;
+#     yield 3;
+#     yield 4;
+#     yield 5;
+#     yield 6;
+#     yield 7 
+#   ;;
+#   let co = co_void () |> cor_map (fn x -> `[str {x}]`)
+#   ;
 #
+#   print `## coroutine mapped [str 1] -> [str 2] -> [str 3] -> ...
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+# `
+# ;;
+# map_cor ();
+# #
 let cor_list = fn () -> 
   let l = [1, 2, 3] in
   let c = iter_of_list l in
@@ -327,36 +327,37 @@ let chained_cors = fn () ->
 ;;
 
 chained_cors ()
-# let x = (fn () -> 
-#   let a = 2;
-#   yield 1;
-#   yield 2;
-#   yield a;
-#   yield 3;) in
-#   let xx = x () in 
-#   print `## persistent vars
-#   {xx ()}
-#   {xx ()}
-#   {xx ()}
-#   {xx ()}
-#   {xx ()}
-#   {xx ()}
-#   `;
-#
-# let x = (fn aa -> 
-#   let a = aa + 2;
-#   yield 1;
-#   yield 2;
-#   yield a;
-#   yield 3;
-#   ) in
-#   let xx = x 3 in 
-#   print `## persistent vars
-#   {xx ()}
-#   {xx ()}
-#   {xx ()}
-#   {xx ()}
-#   {xx ()}
-#   {xx ()}
-#   `;
-#
+
+let x = (fn () -> 
+  let a = 2;
+  yield 1;
+  yield 2;
+  yield a;
+  yield 3;) in
+  let xx = x () in 
+  print `## persistent vars
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  `;
+
+let x = (fn aa -> 
+  let a = aa + 2;
+  yield 1;
+  yield 2;
+  yield a;
+  yield 3;
+  ) in
+  let xx = x 3 in 
+  print `## persistent vars
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  `;
+

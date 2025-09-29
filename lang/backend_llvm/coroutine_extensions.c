@@ -43,8 +43,12 @@ void jump_to_next(LLVMValueRef coro, LLVMValueRef func,
 
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-  Type *promise_type = fn_return_type(ast->md);
-  LLVMTypeRef ptype = type_to_llvm_type(promise_type, ctx, module);
+
+  Type *cor_inst_type = ast->md;
+  Type *item_type = cor_inst_type->data.T_CONS.args[0];
+  Type *_ptype = create_option_type(item_type);
+  LLVMTypeRef ptype = type_to_llvm_type(_ptype, ctx, module);
+
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(ptype);
   LLVMValueRef coro =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
@@ -141,12 +145,15 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   Type *out_cor_type = ast->md;
-  Type *out_ptype = fn_return_type(out_cor_type);
+  Type *out_ptype = create_option_type(out_cor_type->data.T_CONS.args[0]);
+  // fn_return_type(out_cor_type);
+
   LLVMTypeRef out_promise_type = type_to_llvm_type(out_ptype, ctx, module);
   LLVMTypeRef out_cor_obj_type = CORO_OBJ_TYPE(out_promise_type);
 
   Type *in_cor_type = (ast->data.AST_APPLICATION.args + 1)->md;
-  Type *in_ptype = fn_return_type(in_cor_type);
+  Type *in_ptype = create_option_type(in_cor_type->data.T_CONS.args[0]);
+
   LLVMTypeRef in_promise_type = type_to_llvm_type(in_ptype, ctx, module);
   LLVMTypeRef in_cor_obj_type = CORO_OBJ_TYPE(in_promise_type);
 
@@ -210,6 +217,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef p =
       coro_promise(inner_coro, in_cor_obj_type, in_promise_type, builder);
+
   LLVMValueRef tag = LLVMBuildExtractValue(builder, p, 0, "promise_tag");
   LLVMValueRef is_none = LLVMBuildICmp(builder, LLVMIntEQ, tag,
                                        LLVMConstInt(LLVMInt8Type(), 1, 0), "");
@@ -482,8 +490,10 @@ static LLVMValueRef list_iter_func(LLVMTypeRef list_el_type,
 LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
 
-  Type *ptype = fn_return_type(ast->md);
-  Type *item_type = type_of_option(ptype);
+  Type *cor_inst_type = ast->md;
+  Type *item_type = cor_inst_type->data.T_CONS.args[0];
+  Type *ptype = create_option_type(item_type);
+
   LLVMTypeRef list_el_type = type_to_llvm_type(item_type, ctx, module);
   LLVMValueRef func =
       specific_fns_lookup(__LIST_TO_COROUTINE_FN_CACHE, item_type);
@@ -591,8 +601,9 @@ array_iter_func(LLVMTypeRef arr_el_type, LLVMTypeRef promise_type,
 LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
 
-  Type *ptype = fn_return_type(ast->md);
-  Type *item_type = type_of_option(ptype);
+  Type *cor_inst_type = ast->md;
+  Type *item_type = cor_inst_type->data.T_CONS.args[0];
+  Type *ptype = create_option_type(item_type);
   LLVMTypeRef arr_el_type = type_to_llvm_type(item_type, ctx, module);
   LLVMValueRef func =
       specific_fns_lookup(__ARRAY_TO_COROUTINE_FN_CACHE, item_type);
