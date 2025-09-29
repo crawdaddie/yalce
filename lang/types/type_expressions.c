@@ -222,6 +222,9 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   if (is_generic(computed)) {
     computed = generalize(computed, ctx);
   }
+  computed->alias = name;
+  printf("type declaration %s \n", name);
+  print_type(computed);
 
   bind_type_in_ctx(binding, computed, (binding_md){}, ctx);
   return computed;

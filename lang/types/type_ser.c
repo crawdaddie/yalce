@@ -64,6 +64,11 @@ char *type_to_string(Type *t, char *buffer) {
     break;
   }
   case T_CONS: {
+    if (t->alias) {
+
+      buffer = strcat(buffer, t->alias);
+      break;
+    }
 
     if (is_string_type(t)) {
       buffer = strcat(buffer, "String");
@@ -274,6 +279,12 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
   case T_CONS: {
+    if (t->alias) {
+      fprintf(stream, "%s", t->alias);
+      // print_tc_list_to_stream(t, stream);
+      break;
+    }
+
     if (is_string_type(t)) {
       fprintf(stream, "String");
       break;

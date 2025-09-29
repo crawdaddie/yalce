@@ -293,7 +293,31 @@ Constraint *merge_constraints(Constraint *list1, Constraint *list2) {
 
   return list1;
 }
+
+void print_typeclass(TypeClass *tc) {
+  printf("Type Class %s:\n", tc->name);
+  if (tc->module) {
+    printf("module:\n");
+    print_type(tc->module);
+  }
+}
+
 bool implements(Type *t, TypeClass *tc) {
+
+  if (CHARS_EQ(tc->name, "Constructor") && tc->module) {
+    for (int i = 0; i < tc->module->data.T_CONS.num_args; i++) {
+      Type *m = tc->module->data.T_CONS.args[i];
+      m = m->data.T_FN.from;
+      if (types_equal(t, m)) {
+        // printf("t can be passed to constructor\n");
+        // print_type(t);
+        // print_typeclass(tc);
+        return true;
+      }
+    }
+    return false;
+  }
+
   for (TypeClass *ttc = t->implements; ttc; ttc = ttc->next) {
     if (CHARS_EQ(ttc->name, tc->name)) {
       return true;
@@ -316,6 +340,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   if (t1->implements && t2->kind != T_VAR) {
 
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
+
       if (!implements(t2, tc)) {
         fprintf(stderr, "Unification Error ");
         print_type_err(t2);
@@ -327,6 +352,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   if (t1->kind == T_VAR) {
 
     if (occurs_check(t1->data.T_VAR, t2)) {
+      printf("occurs check??\n");
       return 1; // Occurs check failure
     }
 
@@ -347,6 +373,8 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     }
 
     if (occurs_check(t2->data.T_VAR, t1)) {
+
+      printf("occurs check 2??\n");
       return 1; // Occurs check failure
     }
 
@@ -391,6 +419,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       TICtx ur = {};
       if (unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], &ur) != 0) {
+        printf("cons unify\n");
 
         return 1;
       }
@@ -404,6 +433,8 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   if (t1->kind == T_TYPECLASS_RESOLVE && t2->kind != T_VAR) {
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       if (unify(t1->data.T_CONS.args[i], t2, unify_res)) {
+
+        printf("tc resolve unify\n");
         return 1;
       }
     }
@@ -414,7 +445,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   // later
   if (t1->kind != T_VAR && t2->kind != T_VAR) {
 
-    return 1;
+    return 0;
   }
 
   return 1; // Unification failure
@@ -1512,22 +1543,24 @@ Type *infer(Ast *ast, TICtx *ctx) {
     int has_rank = find_trait_impl_rank(ast->data.AST_TRAIT_IMPL.impl, &rank);
 
     if (has_rank) {
-      Type *t = env_lookup(ctx->env, type_name.chars);
+
+      TypeEnv *tref = lookup_type_ref(ctx->env, type_name.chars);
+      Type *t = tref->type;
       TypeClass *tc = t_alloc(sizeof(TypeClass));
       *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
       typeclasses_extend(t, tc);
+      tref->type = t;
     } else {
       // TODO: implement robust traits
-      Type *t = env_lookup(ctx->env, type_name.chars);
+      TypeEnv *tref = lookup_type_ref(ctx->env, type_name.chars);
+      Type *t = tref->type;
       Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
-      // printf("trait impl - does \n");
-      // print_type(type);
-      // printf(" match \n");
-      // print_type(existing_trait_proto);
       TypeClass *tc = t_alloc(sizeof(TypeClass));
       *tc = (TypeClass){.name = trait_name.chars, .module = type};
       typeclasses_extend(t, tc);
+      tref->type = t;
     }
+    print_type_env(ctx->env);
 
     break;
   }
