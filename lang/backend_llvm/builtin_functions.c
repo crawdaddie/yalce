@@ -1328,15 +1328,26 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("str", &str_fmt_scheme, StringFmtHandler);
   GENERIC_FN_SYMBOL("print", &t_builtin_print, PrintHandler);
 
-  GENERIC_FN_SYMBOL("cor_loop", &id_scheme, CorLoopHandler);
+  GENERIC_FN_SYMBOL("cor_loop", &cor_loop_scheme, CorLoopHandler);
   GENERIC_FN_SYMBOL("cor_map", &cor_map_scheme, CorMapHandler);
+  GENERIC_FN_SYMBOL("cor_stop", &cor_stop_scheme, CorStopHandler);
   GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
   GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme, CorOfArrayHandler);
+  GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
 
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
   GENERIC_FN_SYMBOL("dlopen", NULL, DlOpenHandler);
 
+  GENERIC_FN_SYMBOL("cstr", &cstr_scheme, CStrHandler);
+
   // FN_SYMBOL()
 
+  // GENERIC_FN_SYMBOL("cor_counter", &t_cor_counter_fn_sig, CorCounterHandler);
+  // GENERIC_FN_SYMBOL("cor_status", &t_cor_status_fn_sig, CorStatusHandler);
+  // GENERIC_FN_SYMBOL("cor_promise", &t_cor_promise_fn_sig,
+  //                   CorGetPromiseValHandler);
+  // GENERIC_FN_SYMBOL("cor_current", &t_current_cor_fn_sig, CurrentCorHandler);
+  // GENERIC_FN_SYMBOL("cor_unwrap_or_end", &t_cor_unwrap_or_end_sig,
+  //                   CorUnwrapOrEndHandler);
   return ctx->env;
 }

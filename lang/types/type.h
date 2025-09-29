@@ -253,7 +253,6 @@ bool is_closure(Type *type);
 
 bool is_array_type(Type *type);
 
-Type *resolve_tc_rank(Type *type);
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement);
 bool is_sum_type(Type *type);
@@ -292,6 +291,7 @@ double get_typeclass_rank(Type *t, const char *name);
 
 bool type_implements(Type *t, TypeClass *tc);
 
+bool is_forall_type(Type *type);
 
 
 bool is_simple_enum(Type *t);

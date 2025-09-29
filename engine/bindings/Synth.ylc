@@ -141,15 +141,6 @@ let imp_train_node = extern fn Synth -> Synth;
 #   end_chain x
 # ;;
  
-# TODO: add impls for Ord and Eq??
-let Arithmetic : Synth = module () ->
-  let rank = 5.; # rank must be a literal
-  let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;
-  let sub = fn a: (Synth) b: (Synth) -> sub2_node a b;;
-  let mul = fn a: (Synth) b: (Synth) -> mul2_node a b;;
-  let div = fn a: (Synth) b: (Synth) -> div2_node a b;;
-  let mod = fn a: (Synth) b: (Synth) -> mod2_node a b;;
-;
 
 let Constructor : Synth = module () ->
   let of_int = fn a: (Int) ->
@@ -159,6 +150,15 @@ let Constructor : Synth = module () ->
   let of_num = fn a: (Double) ->
     const_sig a
   ;;
+;
+# TODO: add impls for Ord and Eq??
+let Arithmetic : Synth = module () ->
+  let rank = 5.; # rank must be a literal
+  let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;
+  let sub = fn a: (Synth) b: (Synth) -> sub2_node a b;;
+  let mul = fn a: (Synth) b: (Synth) -> mul2_node a b;;
+  let div = fn a: (Synth) b: (Synth) -> div2_node a b;;
+  let mod = fn a: (Synth) b: (Synth) -> mod2_node a b;;
 ;
 
 

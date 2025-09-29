@@ -96,8 +96,7 @@ Type *tvar(const char *name) {
 
 bool is_generic(Type *t) {
   if (t == NULL) {
-    fprintf(stderr, "Error type passed to generic test is null\n");
-    return NULL;
+    return false;
   }
 
   switch (t->kind) {
@@ -521,8 +520,7 @@ bool is_module(Type *t) {
 bool is_closure(Type *type) { return type->closure_meta != NULL; }
 
 Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env) {
-  // TODO: implement
-  return NULL;
+  return resolve_tc_rank(type);
 }
 Type *type_of_option(Type *opt) {
   return opt->data.T_CONS.args[0]->data.T_CONS.args[0];

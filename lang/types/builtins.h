@@ -38,6 +38,8 @@ extern Type array_at_scheme;
 extern Type array_set_scheme;
 extern Type array_fill_const_scheme;
 extern Type array_fill_scheme;
+extern Type cstr_scheme;
+
 extern Type opt_scheme;
 extern Type array_scheme;
 extern Type list_scheme;
@@ -48,6 +50,10 @@ extern Type str_fmt_scheme;
 extern Type logical_op_scheme;
 
 extern Type cor_map_scheme;
+extern Type cor_stop_scheme;
+extern Type cor_loop_scheme;
+extern Type play_routine_scheme;
+
 extern Type iter_of_list_scheme;
 extern Type iter_of_array_scheme;
 extern Type use_or_finish_scheme;

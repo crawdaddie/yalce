@@ -67,6 +67,7 @@ char *type_to_string(Type *t, char *buffer) {
     if (t->alias) {
 
       buffer = strcat(buffer, t->alias);
+      buffer = tc_list_to_string(t, buffer);
       break;
     }
 
@@ -210,33 +211,11 @@ void print_tc_list_to_stream(Type *t, FILE *stream) {
   }
 
   fprintf(stream, " with ");
-
-  TypeClass *implements = t->implements;
-  int first = 1;
-
-  while (implements != NULL) {
-    if (!first) {
-      fprintf(stream, ", ");
-    }
-
-    // Print typeclass name
-    fprintf(stream, "%s", implements->name);
-
-    // // Print typeclass arguments if any
-    // if (implements->num_args > 0) {
-    //   fprintf(stream, " ");
-    //   for (int i = 0; i < implements->num_args; i++) {
-    //     print_type_to_stream(implements->args[i], stream);
-    //     if (i < implements->num_args - 1) {
-    //       fprintf(stream, " ");
-    //     }
-    //   }
-    // }
-
-    first = 0;
-    implements = implements->next;
+  for (TypeClass *i = t->implements; i; i = i->next) {
+    fprintf(stream, "%s, ", i->name);
   }
 }
+
 void print_type_to_stream(Type *t, FILE *stream) {
   if (t == NULL) {
     fprintf(stream, "null");
@@ -281,6 +260,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
   case T_CONS: {
     if (t->alias) {
       fprintf(stream, "%s", t->alias);
+      print_tc_list_to_stream(t, stream);
       // print_tc_list_to_stream(t, stream);
       break;
     }

@@ -87,9 +87,9 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   Ast *test_module_ast = get_test_module_ast(ast);
   if (!test_module_ast) {
-    fprintf(stderr,
-            "Error: could not find test module of module under test %s\n",
+    fprintf(stderr, "module %s does not contain a test module\n",
             ctx->module_name);
+    return NULL;
   }
 
   LLVMTypeRef ret_type = LLVMInt1Type();

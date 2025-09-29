@@ -58,9 +58,11 @@ Type *instantiate_type_in_env(Type *sch, TypeEnv *env) {
   return s;
 }
 Type *instantiate(Type *sch, TICtx *ctx) {
+
   if (sch->kind != T_SCHEME) {
     return sch;
   }
+
   Subst substs[sch->data.T_SCHEME.num_vars];
   Subst *subst = substs;
   int i = 0;
@@ -344,6 +346,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
       if (!implements(t2, tc)) {
         fprintf(stderr, "Unification Error ");
         print_type_err(t2);
+        fprintf(stderr, " [%p] [%p] ", t2, t2->implements);
         fprintf(stderr, " does not implement %s\n ", tc->name);
         return 1;
       }
@@ -1233,6 +1236,10 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
     handle_yield_boundary_crossing(type_ref->md, ast, ctx);
     handle_closed_over_value(type_ref->md, ast, ctx);
   }
+  if (CHARS_EQ(name, "Synth")) {
+    printf("infer id Synth: \n");
+    print_type(type_ref->type);
+  }
 
   return instantiate(type_ref->type, ctx);
 }
@@ -1411,9 +1418,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     if (sig->tag == AST_FN_SIGNATURE) {
       type = compute_type_expression(sig, ctx);
-      if (is_generic(type)) {
-        type = generalize(type, ctx);
-      }
+      // if (is_generic(type)) {
+      //   type = generalize(type, ctx);
+      // }
     }
     break;
   }
@@ -1515,6 +1522,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
       TypeEnv *mod_env = mod->env;
 
       while (mod_env) {
+        if (CHARS_EQ(mod_env->name, "Synth")) {
+          printf("importing type Synth: ");
+          print_type(mod_env->type);
+        }
         ctx->env = env_extend(ctx->env, mod_env->name, mod_env->type);
         mod_env = mod_env->next;
       }
@@ -1548,7 +1559,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Type *t = tref->type;
       TypeClass *tc = t_alloc(sizeof(TypeClass));
       *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
-      typeclasses_extend(t, tc);
+      tc->next = t->implements;
+      t->implements = tc;
+      printf("tc extend %p [%p]", t, t->implements);
+      print_type(t);
       tref->type = t;
     } else {
       // TODO: implement robust traits
@@ -1557,10 +1571,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
       Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
       TypeClass *tc = t_alloc(sizeof(TypeClass));
       *tc = (TypeClass){.name = trait_name.chars, .module = type};
-      typeclasses_extend(t, tc);
+      tc->next = t->implements;
+      t->implements = tc;
+      printf("tc extend %p [%p]", t, t->implements);
+      print_type(t);
       tref->type = t;
     }
-    print_type_env(ctx->env);
 
     break;
   }

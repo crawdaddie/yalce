@@ -179,6 +179,24 @@ Type create_array_at_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type cstr_scheme;
+Type create_cstr_scheme() {
+
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+
+  Type *f = a;
+  f = type_fn(&t_ptr, f);
+  f = type_fn(arr, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 Type array_set_scheme;
 Type create_array_set_scheme() {
 
@@ -351,6 +369,20 @@ Type create_cor_map_scheme() {
       {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = cmap_f}}};
 }
 
+Type cor_loop_scheme;
+Type create_cor_loop_scheme() {
+  Type *a = tvar("a");
+  Type *cor = create_coroutine_instance_type(a);
+  Type *f = type_fn(cor, cor);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+}
+
 Type iter_of_list_scheme;
 Type create_iter_of_list_scheme() {
   Type *a = tvar("a");
@@ -391,6 +423,31 @@ Type create_use_or_finish_scheme() {
 
   return (Type){T_SCHEME,
                 {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+}
+
+Type cor_stop_scheme;
+Type create_cor_stop_scheme() {
+  Type *a = tvar("a");
+  Type *cor = create_coroutine_instance_type(a);
+  Type *f = type_fn(cor, cor);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+}
+
+Type play_routine_scheme;
+Type create_play_routine_scheme() {
+  Type *v = &t_num;
+  Type *cor_from = create_coroutine_instance_type(v);
+
+  Type *f = type_fn(cor_from, cor_from);
+  f = type_fn(&t_ptr, f);
+  f = type_fn(&t_uint64, f);
+  return *f;
 }
 
 void initialize_builtin_types() {
@@ -498,6 +555,9 @@ void initialize_builtin_types() {
   array_at_scheme = create_array_at_scheme();
   add_builtin("array_at", &array_at_scheme);
 
+  cstr_scheme = create_cstr_scheme();
+  add_builtin("cstr", &cstr_scheme);
+
   array_set_scheme = create_array_set_scheme();
   add_builtin("array_set", &array_set_scheme);
 
@@ -533,13 +593,19 @@ void initialize_builtin_types() {
   iter_of_array_scheme = create_iter_of_array_scheme();
   add_builtin("iter_of_array", &iter_of_array_scheme);
 
-  add_builtin("cor_loop", &id_scheme);
+  cor_loop_scheme = create_cor_loop_scheme();
+  add_builtin("cor_loop", &cor_loop_scheme);
 
   cor_map_scheme = create_cor_map_scheme();
   add_builtin("cor_map", &cor_map_scheme);
 
   use_or_finish_scheme = create_use_or_finish_scheme();
   add_builtin("use_or_finish", &use_or_finish_scheme);
+
+  cor_stop_scheme = create_cor_stop_scheme();
+  add_builtin("cor_stop", &cor_stop_scheme);
+  play_routine_scheme = create_play_routine_scheme();
+  add_builtin("play_routine", &play_routine_scheme);
 
   // print_builtin_types();
 }
