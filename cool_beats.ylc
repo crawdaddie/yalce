@@ -13,6 +13,7 @@ import lib/Math;
 let q = 60. / 130.;
 let Kick = module () ->
   let buf = load_soundfile "./engine/assets/kick.wav";
+
   let synth = (fn () ->
     let trig = inlet 0.; # 0
     bufplayer_trig_node (buf_ref buf) ( 44100. / 48000. ) (inlet 0.) trig # 3 
@@ -28,6 +29,7 @@ let Kick = module () ->
   ;;
 
   let pattern_ref = [| cstr "" |] ;
+
   let set_pattern = fn t cor ->
     cor_stop (pattern_ref[0]);
     cor

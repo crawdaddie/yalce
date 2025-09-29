@@ -67,7 +67,7 @@ char *type_to_string(Type *t, char *buffer) {
     if (t->alias) {
 
       buffer = strcat(buffer, t->alias);
-      buffer = tc_list_to_string(t, buffer);
+      // buffer = tc_list_to_string(t, buffer);
       break;
     }
 
@@ -260,7 +260,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
   case T_CONS: {
     if (t->alias) {
       fprintf(stream, "%s", t->alias);
-      print_tc_list_to_stream(t, stream);
+      // print_tc_list_to_stream(t, stream);
       // print_tc_list_to_stream(t, stream);
       break;
     }

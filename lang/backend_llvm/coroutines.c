@@ -584,7 +584,6 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef coro = sym->val;
 
   Type *coro_type = sym->symbol_type;
-
   Type *ret_opt_type = create_option_type(coro_type->data.T_CONS.args[0]);
 
   LLVMTypeRef promise_type = type_to_llvm_type(ret_opt_type, ctx, module);

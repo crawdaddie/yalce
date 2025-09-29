@@ -686,8 +686,11 @@ LLVMValueRef CorGetPromiseValHandler(Ast *ast, JITLangCtx *ctx,
                                      LLVMBuilderRef builder) {
   LLVMValueRef coro =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   Type *type = ast->data.AST_APPLICATION.args->md;
-  Type *ptype = fn_return_type(type);
+
+  Type *item_type = type->data.T_CONS.args[0];
+  Type *ptype = create_option_type(item_type);
   LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
 

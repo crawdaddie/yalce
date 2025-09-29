@@ -343,10 +343,9 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
 
-      if (!implements(t2, tc)) {
+      if ((!CHARS_EQ(tc->name, "Constructor")) && !implements(t2, tc)) {
         fprintf(stderr, "Unification Error ");
         print_type_err(t2);
-        fprintf(stderr, " [%p] [%p] ", t2, t2->implements);
         fprintf(stderr, " does not implement %s\n ", tc->name);
         return 1;
       }
@@ -1522,10 +1521,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       TypeEnv *mod_env = mod->env;
 
       while (mod_env) {
-        if (CHARS_EQ(mod_env->name, "Synth")) {
-          printf("importing type Synth: ");
-          print_type(mod_env->type);
-        }
         ctx->env = env_extend(ctx->env, mod_env->name, mod_env->type);
         mod_env = mod_env->next;
       }
@@ -1561,8 +1556,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
       tc->next = t->implements;
       t->implements = tc;
-      printf("tc extend %p [%p]", t, t->implements);
-      print_type(t);
       tref->type = t;
     } else {
       // TODO: implement robust traits
@@ -1573,8 +1566,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       *tc = (TypeClass){.name = trait_name.chars, .module = type};
       tc->next = t->implements;
       t->implements = tc;
-      printf("tc extend %p [%p]", t, t->implements);
-      print_type(t);
       tref->type = t;
     }
 

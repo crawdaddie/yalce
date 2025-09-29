@@ -61,6 +61,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
     const char *name = expr->data.AST_IDENTIFIER.value;
 
     TypeEnv *type_ref = lookup_type_ref(ctx->env, name);
+
     if (type_ref) {
       return type_ref->type;
     }
@@ -198,6 +199,10 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   };
 
   Type *computed = compute_type_expression(expr, &_ctx);
+  if (expr->tag == AST_IDENTIFIER) {
+    computed = deep_copy_type(computed);
+  }
+
   if (!computed) {
     type_error(ast, "Could not compute type declaration\n");
     return NULL;
