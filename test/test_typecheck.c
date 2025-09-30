@@ -1166,8 +1166,7 @@ int test_match_exprs() {
       "  | None -> 0\n"
       "  ;;\n",
 
-      &MAKE_FN_TYPE_2(
-                   &opt, &t_int));
+      &MAKE_FN_TYPE_2(&opt, &t_int));
   });
 
   ({
@@ -1178,8 +1177,7 @@ int test_match_exprs() {
       "  | Some y -> y * 2\n"
       "  | None -> 0\n"
       "  ;;\n",
-      &MAKE_FN_TYPE_2(
-                   &opt, &t_int));
+      &MAKE_FN_TYPE_2(&opt, &t_int));
   });
 
   T("let f = fn x ->\n"
@@ -2073,6 +2071,44 @@ bool test_audio_funcs() {
     //     "callback constraint passed down to lambda -> (arithmetic resolve "
     //     "Double : Double)");
   });
+  ({
+    Type s = {T_CONS,
+              {.T_CONS = {.name = TYPE_NAME_PTR, .num_args = 0}},
+              .alias = "Synth"};
+    Ast *b =
+        T("type Synth = Ptr;\n"
+          "let Constructor : Synth = module () ->\n"
+          "  let of_int = fn a: (Int) ->\n"
+          "    const_sig a\n"
+          "  ;;\n"
+          "  let of_num = fn a: (Double) ->\n"
+          "    const_sig a\n"
+          "  ;;\n"
+          ";\n"
+          "let Arithmetic : Synth = module () ->\n"
+          "  let rank = 5.; \n"
+          "  let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;\n"
+          "  let sub = fn a: (Synth) b: (Synth) -> sub2_node a b;;\n"
+          "  let mul = fn a: (Synth) b: (Synth) -> mul2_node a b;;\n"
+          "  let div = fn a: (Synth) b: (Synth) -> div2_node a b;;\n"
+          "  let mod = fn a: (Synth) b: (Synth) -> mod2_node a b;;\n"
+          ";\n"
+          "let Math = module () ->\n"
+          "  let sin = extern fn Double -> Double;\n"
+          ";\n"
+          "let sin_node = extern fn Synth -> Synth;\n"
+          "let math_node = extern fn (Double -> Double) -> Synth -> Synth;\n"
+          "sin_node 100. |> math_node (fn x -> 0.5 * (x + Math.sin (10. * "
+          "x)));\n",
+          &s);
+    Ast *n = body_tail(b);
+    Ast *problem = (n->data.AST_APPLICATION.args->data.AST_LAMBDA.body->data
+                        .AST_APPLICATION.args +
+                    1)
+                       ->data.AST_APPLICATION.function;
+    print_ast(problem);
+    print_type(problem->md);
+  });
 
   return status;
 }
@@ -2261,13 +2297,11 @@ bool test_math_funcs() {
       AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
           ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts,
       1);
-  printf("loop\n");
-  print_ast(l->data.AST_LET.binding);
-  print_type(l->data.AST_LET.binding->md);
-  print_ast(l->data.AST_LET.expr);
-  print_type(l->data.AST_LET.expr->md);
-  print_ast(AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0));
-  print_type(AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->md);
+
+  TASSERT("Int",
+          types_equal(
+              AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->md,
+              &t_int));
   return status;
 }
 
@@ -2276,28 +2310,27 @@ int main() {
   initialize_builtin_types();
 
   bool status = true;
-  // status &= test_basic_ops();
-  // status &= test_opts();
-  // status &= test_match_exprs();
-  // status &= test_type_declarations();
-  // status &= test_first_class_funcs();
-  //
-  // status &= test_modules();
-  // status &= test_networking_funcs();
-  // status &= test_type_exprs();
-  // status &= test_parser_combinators();
-  status &= test_audio_funcs();
-  // status &= test_record_types();
-  // status &= test_refs();
-  //
-  // status &= test_closures();
-  // status &= test_coroutines();
-  // //
-  // status &= test_list_processing();
-  // status &= test_array_processing();
-  // status &= test_math_funcs();
-  // status &= test_funcs();
+  status &= test_basic_ops();
+  status &= test_opts();
+  status &= test_match_exprs();
+  status &= test_type_declarations();
+  status &= test_first_class_funcs();
 
+  status &= test_modules();
+  status &= test_networking_funcs();
+  status &= test_type_exprs();
+  status &= test_parser_combinators();
+  status &= test_record_types();
+  status &= test_refs();
+
+  status &= test_closures();
+  status &= test_coroutines();
+  //
+  status &= test_list_processing();
+  status &= test_array_processing();
+  status &= test_funcs();
+  status &= test_math_funcs();
+  status &= test_audio_funcs();
 
   print_all_failures();
   return status == true ? 0 : 1;

@@ -360,18 +360,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     result_type = type_fn(t, result_type);
   }
 
-  if (ast->data.AST_LAMBDA.fn_name.chars) {
-    // NB: maybe not do this for anon funcs
-    //
-    // eg in this context:
-    //
-    // type NoteCallback = Int -> Double -> ();
-    // let register_note_on_handler = extern fn NoteCallback -> Int -> ();
-    // register_note_on_handler (fn n vel -> vel + 0.0) 0
-    // anonymous func arg would be incorrectly typed (the constraint from it
-    // being a NoteCallback would be overriden)
-    apply_substitution_to_lambda_body(body, ls);
-  }
+  apply_substitution_to_lambda_body(body, ls);
 
   ctx->subst = lctx.subst;
 
