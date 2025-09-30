@@ -3,6 +3,7 @@
 #include "binding.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 
@@ -127,6 +128,9 @@ LLVMTypeRef get_closure_obj_type(Type *fn_type, JITLangCtx *ctx,
                                  LLVMModuleRef module) {
 
   Type *closure_vals_type = fn_type->closure_meta;
+  // printf("closed vals\n");
+  // print_type(closure_vals_type);
+  // print_type_env(ctx->env);
   int num_closure_vals = closure_vals_type->data.T_CONS.num_args;
   LLVMTypeRef contained[num_closure_vals + 1];
   contained[0] = GENERIC_PTR; // fn pointer
@@ -137,6 +141,9 @@ LLVMTypeRef get_closure_obj_type(Type *fn_type, JITLangCtx *ctx,
 
   LLVMTypeRef llvm_closure_obj_type =
       LLVMStructType(contained, num_closure_vals + 1, 0);
+  // printf("real closure obj type\n");
+  // LLVMDumpType(llvm_closure_obj_type);
+  // printf("\n");
   return llvm_closure_obj_type;
 }
 

@@ -1761,7 +1761,7 @@ int test_refs() {
       ";;\n",
       &TSCHEME(&MAKE_FN_TYPE_2(
                    &TARRAY(&MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                              &t_int, &v)),
+                                              &v, &t_int)),
 
                    &TARRAY(&MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
                                               &v, &t_int))),
@@ -1832,6 +1832,7 @@ int test_modules() {
 }
 
 int test_array_processing() {
+  printf("## ARRAY PROCESSING\n----------------------------\n");
   bool status = true;
   // ({
   //   Type v = TVAR("t");
@@ -1962,6 +1963,9 @@ int test_array_processing() {
 
     print_type((app->data.AST_APPLICATION.args + 1)
                    ->data.AST_APPLICATION.args->data.AST_APPLICATION.args->md);
+
+    print_type(
+        (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->md);
 
     TASSERT(
         "array arg at has type `13 -- ",
@@ -2106,8 +2110,8 @@ bool test_audio_funcs() {
                         .AST_APPLICATION.args +
                     1)
                        ->data.AST_APPLICATION.function;
-    print_ast(problem);
-    print_type(problem->md);
+    TASSERT("internal fn binop type Double -> Double -> Double",
+            types_equal(problem->md, &MAKE_FN_TYPE_3(&t_num, &t_num, &t_num)));
   });
 
   return status;
@@ -2207,6 +2211,19 @@ bool test_parser_combinators() {
             &MAKE_FN_TYPE_3(&t_string, &t_string,
                             &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string),
                                           &t_string)))));
+
+    Ast *clos = fn_second->data.AST_LAMBDA.body;
+    Type exp_closure_type = MAKE_FN_TYPE_2(
+        &t_string,
+        &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string), &t_string)));
+    exp_closure_type.closure_meta = &TTUPLE(2, &t_string, &t_string);
+    // print_type(&exp_closure_type);
+    // print_ast(clos);
+    // print_type(clos->md);
+    // status &=
+    status &= TASSERT("(fn int -> Some ((first, second), inp)) is a closure "
+                      "object with the correct internal types\n",
+                      types_equal(clos->md, &exp_closure_type));
   });
   return status;
 }
@@ -2319,7 +2336,6 @@ int main() {
   status &= test_modules();
   status &= test_networking_funcs();
   status &= test_type_exprs();
-  status &= test_parser_combinators();
   status &= test_record_types();
   status &= test_refs();
 
@@ -2331,6 +2347,7 @@ int main() {
   status &= test_funcs();
   status &= test_math_funcs();
   status &= test_audio_funcs();
+  status &= test_parser_combinators();
 
   print_all_failures();
   return status == true ? 0 : 1;

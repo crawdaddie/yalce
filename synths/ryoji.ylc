@@ -100,15 +100,15 @@ let Tones = module () ->
     | _ -> ()
   ;;
 
-  let beep_rev = fn dur f: (Double) ->
-    match dur > 0. with
-    | true -> (
-      let t = get_tl_tick ();
-      beep_tpl |> instantiate_template [(1, f), (2, 0.)] |> node_add_dur t dur 0 group;
-      ()
-    )
-    | _ -> ()
-  ;;
+  # let beep_rev = fn dur f: (Double) ->
+  #   match dur > 0. with
+  #   | true -> (
+  #     let t = get_tl_tick ();
+  #     beep_tpl |> instantiate_template [(1, f), (2, 0.)] |> node_add_dur t dur 0 group;
+  #     ()
+  #   )
+  #   | _ -> ()
+  # ;;
 
   let pattern_ref = [|cstr ""|] ;
   let set_pattern = fn t cor ->
@@ -152,7 +152,7 @@ let routine = fn () ->
 ;;
 
 defer_quant (2 * q) (fn t -> 
-  iter [| 
+  iter_of_array [| 
     (16., 1., 3000.), 
     (1., 0.8, 3000.), 
     (1., 1., 3000.), 
@@ -171,18 +171,18 @@ defer_quant (2 * q) (fn t ->
   |> Tones.set_pattern t
   ;
 
-  iter [|
+  iter_of_array [|
     (32., 0., 0.),
     (16., 2., 1000.),
     (16., 0., 0.),
   |]
   |> cor_loop
   |> cor_map (fn (dur, d, f) -> (q * 0.25 * dur, q * 0.24 * d, f))
-  |> cor_map (fn (dur, d, f) -> Tones.beep_rev d f; dur)
+  |> cor_map (fn (dur, d, f) -> Tones.beep d f; dur)
   |> play_routine t schedule_event
   ;
 
-  iter [|
+  iter_of_array [|
     (34., 0., 0.),
     (6., 5.6, midi_to_freq 26),
     (8., 3.6, midi_to_freq 26),

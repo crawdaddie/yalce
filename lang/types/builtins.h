@@ -1,6 +1,6 @@
 #ifndef _LANG_TYPE_BUILTINS_H
 #define _LANG_TYPE_BUILTINS_H
-#include "ht.h"
+#include "../ht.h"
 #include "type.h"
 extern ht builtin_types;
 

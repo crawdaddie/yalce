@@ -1,8 +1,8 @@
 #ifndef _LANG_BACKEND_LLVM_CLOSURES_H
 #define _LANG_BACKEND_LLVM_CLOSURES_H
-#include "common.h"
-#include "parse.h"
-#include "types/type.h"
+#include "../parse.h"
+#include "../types/type.h"
+#include "./common.h"
 #include "llvm-c/Types.h"
 #include <stdbool.h>
 bool is_lambda_with_closures(Ast *ast);

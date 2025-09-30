@@ -193,7 +193,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   }
 
   case T_FN: {
-    if (type->is_coroutine_instance) {
+    if (is_closure(type)) {
       return GENERIC_PTR;
     }
     Type *t = type;

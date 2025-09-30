@@ -18,7 +18,7 @@ let Kick = module () ->
     let trig = inlet 0.; # 0
     bufplayer_trig_node (buf_ref buf) ( 44100. / 48000. ) (inlet 0.) trig # 3 
     |> (*) (aslr_node 0. 1. 0.2 0.1 trig)
-    |> math_node (fn x -> 0.5 * (x + Math.sin (10. * x)))
+    |> math_node (fn x -> 0.5 * (x + Math.sin (7. * x)))
   )
   |> play_tpl
   ;

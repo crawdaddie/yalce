@@ -54,6 +54,7 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
 
     LLVMTypeRef ret_type =
         type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
+
     llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
   } else {
     LLVMTypeRef llvm_return_type_ref;
@@ -217,6 +218,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTypeRef prototype =
       codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx, module);
+
   if (!prototype) {
     return NULL;
   }
@@ -269,7 +271,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   END_FUNC
   destroy_ctx(&fn_ctx);
-  // LLVMDumpValue(func);
   return func;
 }
 

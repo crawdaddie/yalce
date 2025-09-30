@@ -258,12 +258,6 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
   case T_CONS: {
-    if (t->alias) {
-      fprintf(stream, "%s", t->alias);
-      // print_tc_list_to_stream(t, stream);
-      // print_tc_list_to_stream(t, stream);
-      break;
-    }
 
     if (is_string_type(t)) {
       fprintf(stream, "String");
@@ -334,6 +328,12 @@ void print_type_to_stream(Type *t, FILE *stream) {
       }
       break;
     }
+    if (t->alias) {
+      fprintf(stream, "%s", t->alias);
+      // print_tc_list_to_stream(t, stream);
+      // print_tc_list_to_stream(t, stream);
+      break;
+    }
 
     fprintf(stream, "%s", t->data.T_CONS.name);
     if (t->data.T_CONS.num_args > 0) {
@@ -366,33 +366,19 @@ void print_type_to_stream(Type *t, FILE *stream) {
 
   case T_FN: {
     Type *fn = t;
+
+    fprintf(stream, "(");
+
     if (is_closure(fn)) {
       fprintf(stream, "[closure over ");
       print_type_to_stream(fn->closure_meta, stream);
       fprintf(stream, "]");
     }
 
-    fprintf(stream, "(");
-    if (fn->is_coroutine_constructor) {
-      fprintf(stream, "[coroutine constructor]");
-    }
+    print_type_to_stream(fn->data.T_FN.from, stream);
 
-    while (fn->kind == T_FN) {
-      if (fn->is_coroutine_instance) {
-        fprintf(stream, "[coroutine instance]");
-      }
-
-      if (is_closure(fn->data.T_FN.from)) {
-        fprintf(stream, " closure ");
-      }
-      print_type_to_stream(fn->data.T_FN.from, stream);
-
-      fprintf(stream, " -> ");
-      fn = fn->data.T_FN.to;
-    }
-
-    // If it's not a function type, it's the return type itself
-    print_type_to_stream(fn, stream);
+    fprintf(stream, " -> ");
+    print_type_to_stream(fn->data.T_FN.to, stream);
     fprintf(stream, ")");
     break;
   }

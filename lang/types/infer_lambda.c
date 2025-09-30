@@ -1,11 +1,11 @@
 #include "./infer_lambda.h"
+#include "../serde.h"
 #include "./builtins.h"
+#include "./type_expressions.h"
+#include "./type_ser.h"
+#include "./unification.h"
 #include "common.h"
 #include "inference.h"
-#include "serde.h"
-#include "types/type_expressions.h"
-#include "types/type_ser.h"
-#include "types/unification.h"
 #include <string.h>
 
 void initial_lambda_signature(int num_params, Type **param_types,
@@ -356,13 +356,13 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   for (int i = num_params - 1; i >= 0; i--) {
     Type *t = param_types[i];
-    t = apply_substitution(lctx.subst, t);
+    t = apply_substitution(ls, t);
     result_type = type_fn(t, result_type);
   }
 
-  apply_substitution_to_lambda_body(body, ls);
+  ls = compose_subst(ctx->subst, ls);
 
-  ctx->subst = lctx.subst;
+  apply_substitution_to_lambda_body(body, ls);
 
   if (lctx.yielded_type) {
     Type *cor_cons_type = create_coroutine_lambda(result_type, ctx);

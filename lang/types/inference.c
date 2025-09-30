@@ -492,6 +492,10 @@ Type *apply_substitution(Subst *subst, Type *t) {
     return NULL;
   }
 
+  if (t->closure_meta) {
+    t->closure_meta = apply_substitution(subst, t->closure_meta);
+  }
+
   switch (t->kind) {
   case T_INT:
   case T_UINT64:

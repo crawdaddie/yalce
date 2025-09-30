@@ -206,7 +206,7 @@ LLVMValueRef curried_binop(Ast *saved_arg_ast, LLVMOpcode fop, LLVMOpcode iop,
   LLVMTypeRef curried_fn_type = LLVMFunctionType(
       llvm_return_type_ref, (LLVMTypeRef[]){llvm_from_type_ref}, 1, 0);
 
-  START_FUNC(module, "anon_curried_value", curried_fn_type);
+  START_FUNC(module, "anon_curried_binop", curried_fn_type);
 
   LLVMValueRef saved_arg = codegen(saved_arg_ast, ctx, module, builder);
   LLVMValueRef free_arg = LLVMGetParam(func, 0);

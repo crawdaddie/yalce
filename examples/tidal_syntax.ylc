@@ -1,8 +1,8 @@
-type Ast =
-  | Seq of List of Ast
-  | Mul of (List of Ast, Int) 
-  | Val of String
-  ;
+# type Ast =
+#   | Seq of List of Ast
+#   | Mul of (List of Ast, Int) 
+#   | Val of String
+#   ;
 
 let bind = fn p f input ->
   match p input with
@@ -37,3 +37,5 @@ let two_digits = fn input ->
   )) input
 ;;
 
+
+two_digits "12"

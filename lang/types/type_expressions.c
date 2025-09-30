@@ -1,9 +1,6 @@
 #include "./type_expressions.h"
 #include "./builtins.h"
-#include "serde.h"
-#include "types/common.h"
-#include "types/inference.h"
-#include "types/type_ser.h"
+#include "./inference.h"
 #include <string.h>
 
 Type *create_sum_type(int len, Type **members) {
@@ -134,10 +131,13 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
     if (op == TOKEN_OF) {
       Ast *container_ast = expr->data.AST_BINOP.left;
       Ast *contained_ast = expr->data.AST_BINOP.right;
+
       Type *container = compute_type_expression(container_ast, ctx);
+
       if (!container) {
         return type_error(container_ast, "could not find type");
       }
+
       Type *contained = compute_type_expression(contained_ast, ctx);
 
       if (container->kind == T_SCHEME &&
@@ -147,6 +147,12 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         Type *final = instantiate_type_in_env(container, &env);
         return final;
       }
+
+      // printf("OF\n");
+      // print_ast(container_ast);
+      // print_ast(contained_ast);
+      // print_type(contained);
+      return contained;
     }
     //
     //   Scheme *container = lookup_scheme(

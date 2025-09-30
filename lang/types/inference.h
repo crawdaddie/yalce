@@ -1,8 +1,8 @@
 #ifndef _LANG_TYPE_INFERENCE_H
 #define _LANG_TYPE_INFERENCE_H
+#include "../arena_allocator.h"
 #include "../parse.h"
-#include "arena_allocator.h"
-#include "type.h"
+#include "./type.h"
 
 DECLARE_ARENA_ALLOCATOR_DEFAULT(t);
 void reset_type_var_counter();

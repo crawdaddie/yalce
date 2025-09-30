@@ -83,11 +83,18 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
     int len = exp_args_len - args_len;
     LLVMTypeRef arg_types[exp_args_len];
     LLVMTypeRef llvm_return_type_ref;
+
     codegen_fn_type_arg_types(callable_type, exp_args_len, arg_types,
                               &llvm_return_type_ref, ctx, module);
 
+    // printf("\n\n");
+    // printf("anon curried value\n");
+    // print_ast(ast);
+    // print_type(callable_type);
+
     LLVMTypeRef curried_fn_type =
         LLVMFunctionType(llvm_return_type_ref, arg_types + args_len, len, 0);
+
     START_FUNC(module, "anon_curried_value", curried_fn_type);
     LLVMValueRef arg_vals[exp_args_len];
     int i = 0;
