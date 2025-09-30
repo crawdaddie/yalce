@@ -21,7 +21,7 @@ let close = extern fn Int -> Int;                      # close(fd)
 
 
 
-let Queue = module
+let Queue = module () ->
   let of_list = fn l ->
     let t = l in 
     let h = t in
@@ -51,7 +51,7 @@ let Queue = module
 
 let accept_connection = fn sock: (Int) ->
   let client_addr = create_server_addr 0 0 0;
-  let client_sock = accept sock client_addr [1];
+  let client_sock = accept sock client_addr [1,];
   (client_sock, client_addr)
 ;;
 

@@ -94,8 +94,8 @@ let allpass_node = extern fn Double -> Double -> Double -> Synth -> Synth;
 let reverb_node = extern fn Double -> Double -> Double -> Double -> Synth -> Synth;
 let grain_pitchshift_node = extern fn Double -> Double -> Synth -> Synth;
 let dyn_tanh_node = extern fn Synth -> Synth -> Synth;
-type MathNodeFn = Double -> Double;
-let math_node = extern fn MathNodeFn -> Synth -> Synth;
+# type MathNodeFn = Double -> Double;
+let math_node = extern fn (Double -> Double) -> Synth -> Synth;
 let stutter_node = extern fn Double -> Synth -> Synth -> Synth -> Synth;
 let wrap_opaque_ref_in_node = extern fn Ptr -> Ptr -> Int -> Synth -> Synth;
 
