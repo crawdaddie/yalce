@@ -1,10 +1,10 @@
-# let quantize_mod = fn i ->
-#   match i with
-#     | x if (x % 4.) > 3. -> 3 
-#     | x if (x % 4.) > 2. -> 2
-#     | x if (x % 4.) > 1. -> 1
-#     | x if (x % 4.) > 0. -> 0 
-# ;;
+let quantize_mod = fn i ->
+  match i with
+    | x if (x % 4.) > 3. -> 3 
+    | x if (x % 4.) > 2. -> 2
+    | x if (x % 4.) > 1. -> 1
+    | x if (x % 4.) > 0. -> 0 
+;;
 
 let test = module () ->
 let test_float_modulo = fn () -> 
@@ -15,16 +15,16 @@ let test_float_add = fn () ->
   200. + 150. == 350.
 ;;
 
-# let test_quant0 = fn () ->
-#   quantize_mod 3.5 == 3
-# ;;
+let test_quant0 = fn () ->
+  quantize_mod 3.5 == 3
+;;
 
-# let test_quantize_3_5 = fn () ->
-#   (quantize_mod 3.5) == 3
-# ;;
-# let test_quantize_2_5 = fn () -> (quantize_mod 2.5) == 2;; # "2.5 -> 2";
-# let test_quantize_1_5 = fn () -> (quantize_mod 1.5) == 1;; # "1.5 -> 1";
-# let test_quantize_0_5 = fn () -> (quantize_mod 0.5) == 0;; # "0.5 -> 0";
-# let test_quantize_4_5 = fn () -> (quantize_mod 4.5) == 0;; # "4.5 -> 0";
-#
+let test_quantize_3_5 = fn () ->
+  (quantize_mod 3.5) == 3
+;;
+
+let test_quantize_2_5 = quantize_mod 2.5 == 2; # "2.5 -> 2";
+let test_quantize_1_5 = quantize_mod 1.5 == 1; # "1.5 -> 1";
+let test_quantize_0_5 = quantize_mod 0.5 == 0; # "0.5 -> 0";
+let test_quantize_4_5 = quantize_mod 4.5 == 0; # "4.5 -> 0";
 ;

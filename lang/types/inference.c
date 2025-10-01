@@ -354,10 +354,23 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
 
       if ((!CHARS_EQ(tc->name, "Constructor")) && !implements(t2, tc)) {
-        fprintf(stderr, "Unification Error ");
-        print_type_err(t2);
-        fprintf(stderr, " does not implement %s\n ", tc->name);
-        return 1;
+
+        if (t2->kind == T_TYPECLASS_RESOLVE) {
+          TypeList *free_vars = free_vars_type(NULL, t2);
+          if (free_vars) {
+            for (TypeList *l = free_vars; l; l = l->next) {
+              typeclasses_extend(t2, tc);
+            }
+            return 0;
+          } else {
+            return 1;
+          }
+        } else {
+          fprintf(stderr, "Unification Error ");
+          print_type_err(t2);
+          fprintf(stderr, " does not implement %s\n ", tc->name);
+          return 1;
+        }
       }
     }
   }
