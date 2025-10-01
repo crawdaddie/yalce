@@ -1225,6 +1225,19 @@ int test_match_exprs() {
 
     TASSERT("match branch body has type Int", types_equal(sum->md, &t_int));
   });
+  // "    | x if (x % 4.) > 2. -> 2\n"
+  // "    | x if (x % 4.) > 1. -> 1\n"
+  // "    | x if (x % 4.) > 0. -> 0 \n"
+
+  ({
+    Type free_var = arithmetic_var("`0");
+    T("let quantize_mod = fn i ->\n"
+      "  match i with\n"
+      "    | x if (x % 4.) > 3. -> 3 \n"
+      "    | _ -> 0\n"
+      ";;\n",
+      &TSCHEME(&MAKE_FN_TYPE_2(&free_var, &t_int), &free_var));
+  });
   return status;
 }
 
