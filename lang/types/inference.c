@@ -1243,10 +1243,6 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
     handle_yield_boundary_crossing(type_ref->md, ast, ctx);
     handle_closed_over_value(type_ref->md, ast, ctx);
   }
-  if (CHARS_EQ(name, "Synth")) {
-    printf("infer id Synth: \n");
-    print_type(type_ref->type);
-  }
 
   return instantiate(type_ref->type, ctx);
 }

@@ -170,21 +170,18 @@ char *type_to_string(Type *t, char *buffer) {
     Type *fn = t;
 
     buffer = strcat(buffer, "(");
-    if (fn->is_coroutine_constructor) {
-      buffer = strcat(buffer, "[coroutine constructor]");
+    if (is_closure(fn)) {
+      buffer = strcat(buffer, "[closure over ");
+      buffer = type_to_string(fn->closure_meta, buffer);
+      buffer = strcat(buffer, "] ");
     }
 
-    while (fn->kind == T_FN) {
-      if (fn->is_coroutine_instance) {
-        buffer = strcat(buffer, "[coroutine instance]");
-      }
-      buffer = type_to_string(fn->data.T_FN.from, buffer);
-      buffer = strncat(buffer, " -> ", 4);
-      fn = fn->data.T_FN.to;
-    }
-    // If it's not a function type, it's the return type itself
-    buffer = type_to_string(fn, buffer);
+    buffer = type_to_string(fn->data.T_FN.from, buffer);
+    buffer = strncat(buffer, " -> ", 4);
+
+    buffer = type_to_string(fn->data.T_FN.to, buffer);
     buffer = strcat(buffer, ")");
+
     break;
   }
 
@@ -372,7 +369,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
     if (is_closure(fn)) {
       fprintf(stream, "[closure over ");
       print_type_to_stream(fn->closure_meta, stream);
-      fprintf(stream, "]");
+      fprintf(stream, "] ");
     }
 
     print_type_to_stream(fn->data.T_FN.from, stream);

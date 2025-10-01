@@ -69,7 +69,15 @@ bool types_equal(Type *t1, Type *t2) {
         !types_equal(t1->closure_meta, t2->closure_meta)) {
       return false;
     }
+    if (t1->closure_meta != NULL && t2->closure_meta == NULL) {
+      return false;
+    }
+
+    if (t2->closure_meta != NULL && t1->closure_meta == NULL) {
+      return false;
+    }
     if (types_equal(t1->data.T_FN.from, t2->data.T_FN.from)) {
+
       return types_equal(t1->data.T_FN.to, t2->data.T_FN.to) &&
              (t1->is_coroutine_instance == t2->is_coroutine_instance);
     }

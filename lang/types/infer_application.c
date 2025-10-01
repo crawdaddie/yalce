@@ -68,6 +68,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
 Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   Ast *func = ast->data.AST_APPLICATION.function;
+  int expected_args_len = fn_type_args_len(func_type);
 
   Ast *args = ast->data.AST_APPLICATION.args;
   int num_args = ast->data.AST_APPLICATION.len;
@@ -116,6 +117,15 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     res = res->data.T_FN.to;
   }
 
+  if (expected_args_len > num_args) {
+    printf("curried???\n");
+    print_type(func_type);
+    Type **_arg_types = t_alloc(sizeof(Type *) * num_args);
+    memcpy(_arg_types, arg_types, sizeof(Type *) * num_args);
+    Type *closure_meta = create_tuple_type(num_args, _arg_types);
+    res->closure_meta = closure_meta;
+    print_type(res);
+  }
   // if (CHARS_EQ(fn_name, "array_at")) {
   //   printf("res type: \n");
   //   print_type(res);

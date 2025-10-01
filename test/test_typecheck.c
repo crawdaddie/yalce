@@ -379,10 +379,13 @@ int test_list_processing() {
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
   });
 
-  T("(+) 1",
-    &MAKE_FN_TYPE_2(&arithmetic_var("`1"),
-                    &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                       &arithmetic_var("`1"), &t_int)));
+  ({
+    Type f = MAKE_FN_TYPE_2(&arithmetic_var("`1"),
+                        &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                           &arithmetic_var("`1"), &t_int));
+    f.closure_meta = &TTUPLE(1, &t_int);
+    T("(+) 1",&f);
+  });
 
   ({
     Ast *b = T("let list_map = fn f l ->\n"
@@ -758,76 +761,7 @@ int test_funcs() {
   T("let add1 = fn x -> 1 + x;; add1 1", &t_int);
   T("let add1 = fn x -> 1 + x;; add1 1; add1 1.", &t_num);
 
-  ({
-    T("let f = fn a b c d -> a == b && c == d;;\n"
-      "f 1. 2. 3.;\n"
-      "f 1 2 3\n",
-      &MAKE_FN_TYPE_2(&t_int, &t_bool));
-  });
 
-  ({
-    Type t = arithmetic_var("`10");
-    Ast *b =
-        T("let f = fn a b c -> a + b + c;;\n"
-          "f 1 2\n",
-          &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t_int, &t)));
-
-    bool is_partial =
-        application_is_partial(AST_LIST_NTH(b->data.AST_BODY.stmts, 1));
-
-    const char *msg = "let f = fn a b c -> a + b + c;;\n"
-                      "f 1 2\n"
-                      "application_is_partial fn test\n";
-    if (is_partial) {
-      printf("✅ %s", msg);
-    } else {
-      char fail_msg[MAX_FAILURE_MSG_LEN];
-      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
-      add_failure(fail_msg, __FILE__, __LINE__);
-    }
-    status &= is_partial;
-  });
-
-  ({
-    Ast *b = _T("let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
-                "let x1 = f 1;\n"
-                "let x2 = x1 2;\n"
-                "let x3 = x2 3;\n");
-    bool is_partial = true;
-    is_partial &= application_is_partial(
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 1)->data.AST_LET.expr);
-    is_partial &= application_is_partial(
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_LET.expr);
-    is_partial &= application_is_partial(
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 3)->data.AST_LET.expr);
-
-    const char *msg = "let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
-                      "let x1 = f 1;\n"
-                      "let x2 = x1 2;\n"
-                      "let x3 = x2 3;\n"
-                      "several application_is_partial fn tests\n";
-    if (is_partial) {
-      printf("✅ %s", msg);
-    } else {
-
-      char fail_msg[MAX_FAILURE_MSG_LEN];
-      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
-      add_failure(fail_msg, __FILE__, __LINE__);
-    }
-  });
-
-  ({
-    Type t = arithmetic_var("`10");
-    T("let f = fn a b c -> a + b + c;;\n"
-      "f 1. 2.\n",
-      &MAKE_FN_TYPE_2(
-          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t)));
-  });
-
-  T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
-    "f 1 2\n",
-    &MAKE_FN_TYPE_2(&t_int, &t_bool));
 
   ({
     Type t0 = arithmetic_var("`0");
@@ -904,78 +838,6 @@ int test_funcs() {
   //              &MAKE_FN_TYPE_3(&t, &TARRAY(&s), &t));
   // });
 
-  ({
-    Type v = TVAR("`20");
-    T("let f = fn a b c d -> a == b && c == d;;\n"
-      "f 1. 2. 3.;\n"
-      "f 1 2 3\n",
-      &MAKE_FN_TYPE_2(&t_int, &t_bool));
-  });
-
-  ({
-    Type t = arithmetic_var("`10");
-    Ast *b =
-        T("let f = fn a b c -> a + b + c;;\n"
-          "f 1 2\n",
-          &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t_int, &t)));
-
-    bool is_partial =
-        application_is_partial(AST_LIST_NTH(b->data.AST_BODY.stmts, 1));
-
-    const char *msg = "let f = fn a b c -> a + b + c;;\n"
-                      "f 1 2\n"
-                      "application_is_partial fn test\n";
-    if (is_partial) {
-      printf("✅ %s", msg);
-    } else {
-      char fail_msg[MAX_FAILURE_MSG_LEN];
-      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
-      add_failure(fail_msg, __FILE__, __LINE__);
-    }
-    status &= is_partial;
-  });
-  ({
-    Type t = arithmetic_var("`10");
-    T("let f = fn a b c -> a + b + c;;\n"
-      "f 1. 2.\n",
-
-      &MAKE_FN_TYPE_2(
-          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t)));
-  });
-
-  ({
-    Ast *b = _T("let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
-                "let x1 = f 1;\n"
-                "let x2 = x1 2;\n"
-                "let x3 = x2 3;\n");
-    bool is_partial = true;
-    is_partial &= application_is_partial(
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 1)->data.AST_LET.expr);
-    is_partial &= application_is_partial(
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_LET.expr);
-    is_partial &= application_is_partial(
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 3)->data.AST_LET.expr);
-
-    const char *msg = "let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
-                      "let x1 = f 1;\n"
-                      "let x2 = x1 2;\n"
-                      "let x3 = x2 3;\n"
-                      "several application_is_partial fn tests\n";
-    if (is_partial) {
-      printf("✅ %s", msg);
-    } else {
-
-      char fail_msg[MAX_FAILURE_MSG_LEN];
-      snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s", msg);
-      add_failure(fail_msg, __FILE__, __LINE__);
-    }
-    status &= is_partial;
-  });
-
-  T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
-    "f 1 2\n",
-    &MAKE_FN_TYPE_2(&t_int, &t_bool));
 
   ({
     Type t0 = arithmetic_var("`0");
@@ -1119,6 +981,114 @@ int test_funcs() {
       ";;\n",
       &MAKE_FN_TYPE_2(&t_int, &TARRAY(&t_int)));
 
+  return status;
+}
+
+int test_curried_funcs() {
+  printf("## TEST CURRIED FUNCS\n---------------------------------------------\n");
+  bool status = true;
+
+  ({
+    Type t = arithmetic_var("`10");
+    Type f = MAKE_FN_TYPE_2(
+          &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t));
+    f.closure_meta = &TTUPLE(2, &t_num, &t_num) ;
+    T("let f = fn a b c -> a + b + c;;\n"
+      "f 1. 2.\n",
+      &f);
+  });
+
+  ({
+    Type f = MAKE_FN_TYPE_2(&t_int, &t_bool);
+    f.closure_meta = &TTUPLE(2, &t_int, &t_int);
+  T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
+    "f 1 2\n",
+    &f);
+  });
+
+  ({
+    Type f = 
+MAKE_FN_TYPE_2(&t_int, &t_bool);
+    f.closure_meta = &TTUPLE(3, &t_int, &t_int, &t_int);
+    T("let f = fn a b c d -> a == b && c == d;;\n"
+      "f 1. 2. 3.;\n"
+      "f 1 2 3\n",
+      &f);
+  });
+
+  ({
+    Type t = arithmetic_var("`10");
+    Type f = MAKE_FN_TYPE_2(
+        &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &t));
+
+    f.closure_meta = &TTUPLE(2, &t_int, &t_int);
+    Ast *b = T("let f = fn a b c -> a + b + c;;\n"
+               "f 1 2\n",
+               &f);
+
+  });
+
+  /*
+  ({
+    Type a = TVAR("`35");
+    Type b = TVAR("`35");
+    Type c = TVAR("`35");
+    // Type f = MAKE_FN_TYPE
+
+    Ast *bd = T("let f = fn a b c d e f -> a + b + c + d + e + f;;\n"
+                "let x1 = f 1;\n"
+                "let x2 = x1 2;\n"
+                "let x3 = x2 3;\n", &t_int);
+
+    print_ast(AST_LIST_NTH(bd->data.AST_BODY.stmts, 1)->data.AST_LET.expr);
+    print_ast(AST_LIST_NTH(bd->data.AST_BODY.stmts, 2)->data.AST_LET.expr);
+    print_ast(AST_LIST_NTH(bd->data.AST_BODY.stmts, 3)->data.AST_LET.expr);
+
+  });
+  */
+
+  ({
+    Type v = TVAR("`20");
+    Type f = MAKE_FN_TYPE_2(&t_int, &t_bool);
+    f.closure_meta = &TTUPLE(3, &t_int, &t_int, &t_int);
+    T("let f = fn a b c d -> a == b && c == d;;\n"
+      "f 1. 2. 3.;\n"
+      "f 1 2 3\n",
+      &f);
+  });
+
+  ({
+
+    Type t = arithmetic_var("`10");
+    Type f = MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
+                                                 &t_int, &t));
+    f.closure_meta = &TTUPLE(2, &t_int, &t_int);
+    Ast *b =
+        T("let f = fn a b c -> a + b + c;;\n"
+          "f 1 2\n",
+          &f);
+
+  });
+  ({
+    Type t = arithmetic_var("`10");
+    Type f = MAKE_FN_TYPE_2(
+        &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t));
+    f.closure_meta = &TTUPLE(2, &t_num, &t_num);
+    T("let f = fn a b c -> a + b + c;;\n"
+      "f 1. 2.\n",
+
+      &f);
+  });
+
+
+  ({
+    Type f = MAKE_FN_TYPE_2(&t_int, &t_bool);
+    f.closure_meta = &TTUPLE(2, &t_int, &t_int);
+  T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
+
+    "f 1 2\n",
+    &f);
+  });
   return status;
 }
 int test_match_exprs() {
@@ -1672,11 +1642,13 @@ int test_closures() {
   bool status = true;
 
   ({
+    Type f = MAKE_FN_TYPE_3(&t_void, &t_void, &t_int);
+    f.data.T_FN.to->closure_meta = &TTUPLE(1, &t_int);
     Ast *b = T("fn () ->\n"
                "let z = 2;\n"
                "(fn () -> z + 2);\n"
                ";\n",
-               &MAKE_FN_TYPE_3(&t_void, &t_void, &t_int));
+               &f);
 
     Type *closure_type =
         AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
@@ -1684,7 +1656,7 @@ int test_closures() {
                      1)
             ->md;
 
-    bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_int));
+    bool res = types_equal(closure_type, f.data.T_FN.to);
     res &= (closure_type->closure_meta != NULL);
     res &= (types_equal(closure_type->closure_meta, &TTUPLE(1, &t_int)));
 
@@ -1702,12 +1674,14 @@ int test_closures() {
   });
 
   ({
+    Type f = MAKE_FN_TYPE_3(&t_void, &t_void, &t_num);
+    f.data.T_FN.to->closure_meta = &TTUPLE(2, &t_num, &t_int);
     Ast *b = T("fn () ->\n"
                "let z = 2;\n"
                "let x = 3.;\n"
                "(fn () -> z + 2 + x);\n"
                ";\n",
-               &MAKE_FN_TYPE_3(&t_void, &t_void, &t_num));
+               &f);
 
     Type *closure_type =
         AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
@@ -1715,7 +1689,9 @@ int test_closures() {
                      2)
             ->md;
 
-    bool res = types_equal(closure_type, &MAKE_FN_TYPE_2(&t_void, &t_num));
+    Type ex = MAKE_FN_TYPE_2(&t_void, &t_num);
+    ex.closure_meta = &TTUPLE(2, &t_num ,&t_int);
+    bool res = types_equal(closure_type, &ex);
     res &= (closure_type->closure_meta != NULL);
     res &=
         (types_equal(closure_type->closure_meta, &TTUPLE(2, &t_num, &t_int)));
@@ -2033,21 +2009,27 @@ bool test_audio_funcs() {
   bool status = true;
 
   ({
+    Type fc = MAKE_FN_TYPE_2(&t_ptr, &t_ptr);
+    fc.closure_meta = &TTUPLE(1, &TLIST(&TTUPLE(2, &t_int, &t_num)));
+    Type f = MAKE_FN_TYPE_2(&t_num, &fc);
     T("let instantiate_template = extern fn List of (Int, Double) -> Ptr -> "
       "Ptr;\n"
       "let f = fn freq ->\n"
       "  instantiate_template [(0, freq),]\n"
       ";;\n",
-      &MAKE_FN_TYPE_3(&t_num, &t_ptr, &t_ptr));
+      &f);
   });
 
   ({
+    Type fc = MAKE_FN_TYPE_2(&t_ptr, &t_ptr);
+    fc.closure_meta = &TTUPLE(1, &TLIST(&TTUPLE(2, &t_int, &t_num)));
+    Type f = MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_num), &fc);
     T("let instantiate_template = extern fn List of (Int, Double) -> Ptr -> "
       "Ptr;\n"
       "let f = fn (idx, freq) ->\n"
       "  instantiate_template [(idx, freq),]\n"
       ";;\n",
-      &MAKE_FN_TYPE_3(&TTUPLE(2, &t_int, &t_num), &t_ptr, &t_ptr));
+      &f);
   });
 
   ({
@@ -2193,6 +2175,8 @@ bool test_parser_combinators() {
                      ->data.AST_LET.expr->data.AST_LAMBDA.body;
     Ast *fn_first = fn_bd->data.AST_APPLICATION.args + 1;
 
+    print_ast(fn_first);
+            print_type(fn_first->md);
     status &= TASSERT(
         "(fn first -> ...) arg has type Parser of (String, String)",
         types_equal(
@@ -2344,9 +2328,10 @@ int main() {
   //
   status &= test_list_processing();
   status &= test_array_processing();
-  status &= test_funcs();
   status &= test_math_funcs();
   status &= test_audio_funcs();
+  status &= test_funcs();
+  status &= test_curried_funcs();
   status &= test_parser_combinators();
 
   print_all_failures();
