@@ -212,19 +212,28 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return call_callable(ast, expected_fn_type, callable, ctx, module, builder);
   }
 
+  Type *res_type = ast->md;
+
+  if (is_closure(res_type)) {
+    printf("codegen closure\n");
+    print_ast(ast);
+    return NULL;
+  }
+
   const char *sym_name =
       ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
-  if (sym && is_sum_type(expected_fn_type) && sym->type == STYPE_VARIANT_TYPE) {
-    return codegen_adt_member_with_args(expected_fn_type, sym->llvm_type, ast,
-                                        sym_name, ctx, module, builder);
-  }
   if (!sym) {
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);
     return NULL;
+  }
+
+  if (is_sum_type(expected_fn_type) && sym->type == STYPE_VARIANT_TYPE) {
+    return codegen_adt_member_with_args(expected_fn_type, sym->llvm_type, ast,
+                                        sym_name, ctx, module, builder);
   }
 
   Type *symbol_type = sym->symbol_type;

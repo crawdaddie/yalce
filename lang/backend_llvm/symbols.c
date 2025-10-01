@@ -284,6 +284,11 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (is_closure(expr_type)) {
+    printf("CLOSURE\n");
+    print_ast(binding);
+    print_type(expr_type);
+    print_ast(expr);
+
     LLVMValueRef closure_obj = codegen(expr, outer_ctx, module, builder);
     LLVMTypeRef closure_obj_type =
         get_closure_obj_type(expr_type, outer_ctx, module);
@@ -301,32 +306,33 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
                            : codegen(in_expr, inner_ctx, module, builder);
   }
 
-  if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
-
-    if (is_coroutine_type(expr_type)) {
-      expr_val = codegen(expr, outer_ctx, module, builder);
-
-      LLVMValueRef match_result = codegen_pattern_binding(
-          binding, expr_val, expr_type, in_expr ? inner_ctx : outer_ctx, module,
-          builder);
-
-      if (!match_result) {
-        fprintf(stderr,
-                "Error: could not bind coroutine instance in let expression "
-                "failed\n");
-        print_ast_err(binding);
-        print_ast_err(expr);
-        print_codegen_location();
-        return NULL;
-      }
-    } else {
-      expr_val =
-          create_curried_fn_binding(binding, expr, outer_ctx, module, builder);
-    }
-
-    return in_expr == NULL ? expr_val
-                           : codegen(in_expr, inner_ctx, module, builder);
-  }
+  // if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
+  //
+  //   if (is_coroutine_type(expr_type)) {
+  //     expr_val = codegen(expr, outer_ctx, module, builder);
+  //
+  //     LLVMValueRef match_result = codegen_pattern_binding(
+  //         binding, expr_val, expr_type, in_expr ? inner_ctx : outer_ctx,
+  //         module, builder);
+  //
+  //     if (!match_result) {
+  //       fprintf(stderr,
+  //               "Error: could not bind coroutine instance in let expression "
+  //               "failed\n");
+  //       print_ast_err(binding);
+  //       print_ast_err(expr);
+  //       print_codegen_location();
+  //       return NULL;
+  //     }
+  //   } else {
+  //     expr_val =
+  //         create_curried_fn_binding(binding, expr, outer_ctx, module,
+  //         builder);
+  //   }
+  //
+  //   return in_expr == NULL ? expr_val
+  //                          : codegen(in_expr, inner_ctx, module, builder);
+  // }
 
   if (binding->tag == AST_IDENTIFIER && expr->tag == AST_IDENTIFIER) {
     JITSymbol *sym = lookup_id_ast(expr, outer_ctx);

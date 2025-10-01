@@ -2176,7 +2176,7 @@ bool test_parser_combinators() {
     Ast *fn_first = fn_bd->data.AST_APPLICATION.args + 1;
 
     print_ast(fn_first);
-            print_type(fn_first->md);
+    print_type(fn_first->md);
     status &= TASSERT(
         "(fn first -> ...) arg has type Parser of (String, String)",
         types_equal(
