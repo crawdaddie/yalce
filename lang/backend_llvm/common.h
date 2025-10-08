@@ -53,12 +53,10 @@ typedef enum symbol_type {
   STYPE_FUNCTION,
   STYPE_LAZY_EXTERN_FUNCTION,
   STYPE_GENERIC_FUNCTION,
-  STYPE_PARTIAL_EVAL_CLOSURE,
   STYPE_MODULE,
   STYPE_VARIANT_TYPE,
   STYPE_COROUTINE_CONSTRUCTOR,
   STYPE_GENERIC_CONSTRUCTOR,
-  STYPE_CLOSURE,
 } symbol_type;
 
 typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
@@ -69,6 +67,17 @@ typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
 //   int num_exports;
 //   int val_map[];
 // } ModuleTypeMap;
+typedef struct {
+  Type *type;
+  LLVMTypeRef rec_type;
+  LLVMValueRef rec;
+  LLVMTypeRef fn_type;
+} Closure;
+
+typedef struct ClosureList {
+  Closure closure;
+  struct ClosureList *next;
+} ClosureList;
 
 typedef struct {
   symbol_type type;
@@ -77,10 +86,8 @@ typedef struct {
   LLVMValueRef storage;
   union {
     int STYPE_TOP_LEVEL_VAR;
-    int STYPE_FN_PARAM;
 
     struct {
-      Type *fn_type;
       bool recursive_ref;
     } STYPE_FUNCTION;
 
@@ -98,15 +105,6 @@ typedef struct {
     } STYPE_GENERIC_FUNCTION;
 
     struct {
-      struct JITSymbol *callable_sym;
-      LLVMValueRef *args;
-      int provided_args_len;
-      int original_args_len;
-      Type *original_callable_type;
-    } STYPE_PARTIAL_EVAL_CLOSURE;
-
-    struct {
-      ht generics;
       JITLangCtx *ctx;
       const char *path;
     } STYPE_MODULE;
@@ -116,9 +114,6 @@ typedef struct {
       Type *state_type;
       bool recursive_ref;
     } STYPE_COROUTINE_CONSTRUCTOR;
-
-    struct {
-    } STYPE_CLOSURE;
 
   } symbol_data;
 

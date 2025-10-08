@@ -871,6 +871,7 @@ LLVMValueRef ArraySizeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
+
   Type *ret_type = ast->md;
   Ast *array_ast = ast->data.AST_APPLICATION.args;
   Ast *idx_ast = ast->data.AST_APPLICATION.args + 1;
@@ -884,9 +885,12 @@ LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef el_type = type_to_llvm_type(ret_type, ctx, module);
 
   if (!el_type) {
+    fprintf(stderr, "Error: no array element type found\n");
     return NULL;
   }
-  return get_array_element(builder, array, idx, el_type);
+
+  LLVMValueRef el = get_array_element(builder, array, idx, el_type);
+  return el;
 }
 
 LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

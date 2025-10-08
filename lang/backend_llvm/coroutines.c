@@ -66,12 +66,8 @@ static LLVMValueRef compile_coroutine_init(const char *name,
 static void add_recursive_coroutine_ref(Ast *ast, LLVMValueRef init_fn,
                                         LLVMTypeRef coro_init_type,
                                         JITLangCtx *fn_ctx) {
-  // printf("add recursive coroutine ref\n");
-  // print_ast(ast);
-  // print_type(ast->md);
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, ast->md, init_fn, coro_init_type);
-  sym->symbol_data.STYPE_FUNCTION.fn_type = ast->md;
   sym->symbol_data.STYPE_FUNCTION.recursive_ref = true;
 
   ht *scope = fn_ctx->frame->table;

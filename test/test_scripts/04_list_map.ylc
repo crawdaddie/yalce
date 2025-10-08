@@ -8,13 +8,11 @@ let list_rev = fn l ->
 ;;
 
 let list_map = fn f l ->
-
   let aux = fn f l res -> 
     match l with
     | [] -> res
     | x :: rest -> aux f rest (f x :: res) 
   ;;
-
   aux f l [] |> list_rev
 ;;
 

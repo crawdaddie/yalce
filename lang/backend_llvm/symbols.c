@@ -1,11 +1,11 @@
 #include "backend_llvm/symbols.h"
 
 #include "adt.h"
+#include "application.h"
 #include "binding.h"
 #include "closures.h"
 #include "codegen.h"
 #include "coroutines.h"
-#include "currying.h"
 #include "function.h"
 #include "globals.h"
 #include "ht.h"
@@ -284,23 +284,8 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (is_closure(expr_type)) {
-    printf("CLOSURE\n");
-    print_ast(binding);
-    print_type(expr_type);
-    print_ast(expr);
-
-    LLVMValueRef closure_obj = codegen(expr, outer_ctx, module, builder);
-    LLVMTypeRef closure_obj_type =
-        get_closure_obj_type(expr_type, outer_ctx, module);
-
-    JITSymbol *sym =
-        new_symbol(STYPE_CLOSURE, expr_type, closure_obj, closure_obj_type);
-
-    const char *id_chars = binding->data.AST_IDENTIFIER.value;
-    int id_len = binding->data.AST_IDENTIFIER.length;
-
-    ht_set_hash(outer_ctx->frame->table, id_chars,
-                hash_string(id_chars, id_len), sym);
+    LLVMValueRef closure_obj =
+        create_closure_symbol(binding, expr, outer_ctx, module, builder);
 
     return in_expr == NULL ? closure_obj
                            : codegen(in_expr, inner_ctx, module, builder);
@@ -364,29 +349,23 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
   }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
-    if (is_lambda_with_closures(expr)) {
-      expr_val = create_curried_generic_closure_binding(
-          binding, expr_type, expr, inner_ctx, module, builder);
-    } else {
-      expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
-    }
+    expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
 
     return in_expr == NULL ? expr_val
                            : codegen(in_expr, inner_ctx, module, builder);
   }
 
   if (expr_type->kind == T_FN && !is_coroutine_type(expr_type)) {
-    // printf("codegen function??\n");
-    // print_ast(binding);
-    // print_type(expr_type);
 
-    if (is_lambda_with_closures(expr)) {
-      expr_val = create_curried_closure_binding(binding, expr_type, expr,
-                                                inner_ctx, module, builder);
-    } else if (expr->tag == AST_EXTERN_FN) {
+    // if (is_lambda_with_closures(expr)) {
+    //   expr_val = create_curried_closure_binding(binding, expr_type, expr,
+    //                                             inner_ctx, module, builder);
+    // } else
+    if (expr->tag == AST_EXTERN_FN) {
       expr_val = create_lazy_extern_fn_binding(binding, expr, expr_type, NULL,
                                                inner_ctx, module, builder);
     } else {
+
       expr_val = create_fn_binding(binding, expr_type,
                                    codegen_fn(expr, outer_ctx, module, builder),
                                    inner_ctx, module, builder);
@@ -402,14 +381,12 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
 
   if (expr->tag == AST_IMPORT) {
     if (in_expr != NULL && !expr->data.AST_IMPORT.import_all) {
-      JITSymbol *module_symbol =
-          codegen_import(expr, binding, inner_ctx, module, builder);
+      codegen_import(expr, binding, inner_ctx, module, builder);
 
       return codegen(in_expr, inner_ctx, module, builder);
     }
 
-    JITSymbol *module_symbol =
-        codegen_import(expr, binding, outer_ctx, module, builder);
+    codegen_import(expr, binding, outer_ctx, module, builder);
 
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }

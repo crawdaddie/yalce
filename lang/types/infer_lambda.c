@@ -376,7 +376,5 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     return closure;
   }
 
-  // printf("result type\n");
-  // print_type(result_type);
   return result_type;
 }

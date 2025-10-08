@@ -472,6 +472,11 @@ bool is_simple_enum(Type *t) {
  * compares two function types for equality, ignoring the return type of each
  * */
 bool fn_types_match(Type *t1, Type *t2) {
+  if (t1->closure_meta != NULL && t2->closure_meta != NULL) {
+    if (!types_equal(t1->closure_meta, t2->closure_meta)) {
+      return false;
+    }
+  }
   while (t1->kind == T_FN) {
     Type *c1 = t1->data.T_FN.from;
     Type *c2 = t2->data.T_FN.from;

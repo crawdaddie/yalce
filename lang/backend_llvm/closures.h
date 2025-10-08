@@ -16,12 +16,21 @@ LLVMValueRef create_curried_closure_binding(Ast *binding, Type *closure_type,
                                             LLVMModuleRef module,
                                             LLVMBuilderRef builder);
 
-LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                             LLVMBuilderRef builder);
+LLVMValueRef call_closure_sym(Ast *app, Type *expected_fn_type, JITSymbol *sym,
+                              JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder);
 
-LLVMValueRef call_closure_sym(Ast *app, JITSymbol *sym, JITLangCtx *ctx,
-                              LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef codegen_create_closure(Ast *ast, JITLangCtx *ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder);
 
-LLVMTypeRef get_closure_obj_type(Type *fn_type, JITLangCtx *ctx,
-                                 LLVMModuleRef module);
+LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
+
+LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef rec_type,
+                            JITLangCtx *ctx, LLVMModuleRef module);
+
+LLVMTypeRef closure_record_type(Type *clos_type, JITLangCtx *ctx,
+                                LLVMModuleRef module);
 #endif

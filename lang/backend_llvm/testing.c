@@ -220,6 +220,10 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return 0;
   }
 
+  if (config.debug_ir_pre) {
+    LLVMDumpModule(module);
+  }
+
   module_passes(module, target_machine);
   LLVMExecutionEngineRef engine;
   if (prepare_ex_engine(ctx, &engine, module) != 0) {

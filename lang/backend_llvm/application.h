@@ -16,4 +16,5 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
 LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
+
 #endif

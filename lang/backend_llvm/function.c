@@ -16,10 +16,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMTypeRef cor_inst_struct_type();
 
-void codegen_fn_type_arg_types(Type *fn_type, int fn_len,
-                               LLVMTypeRef *llvm_param_types,
-                               LLVMTypeRef *llvm_return_type_ref,
-                               JITLangCtx *ctx, LLVMModuleRef module) {
+void callable_arg_types(Type *fn_type, int fn_len,
+                        LLVMTypeRef *llvm_param_types,
+                        LLVMTypeRef *llvm_return_type_ref, JITLangCtx *ctx,
+                        LLVMModuleRef module) {
 
   for (int i = 0; i < fn_len; i++) {
 
@@ -145,7 +145,6 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
                           JITLangCtx *fn_ctx) {
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, func, LLVMTypeOf(func));
-  sym->symbol_data.STYPE_FUNCTION.fn_type = fn_type;
   sym->symbol_data.STYPE_FUNCTION.recursive_ref = true;
 
   ht *scope = fn_ctx->frame->table;
@@ -199,13 +198,13 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   //
   Type *fn_type = ast->md;
 
-  if (is_closure(fn_type)) {
-    Ast clast = *ast;
-    Type *cltype = deep_copy_type(fn_type);
-    cltype = resolve_type_in_env(cltype, ctx->env);
-    clast.md = cltype;
-    return compile_closure(&clast, ctx, module, builder);
-  }
+  // if (is_closure(fn_type)) {
+  //   Ast clast = *ast;
+  //   Type *cltype = deep_copy_type(fn_type);
+  //   cltype = resolve_type_in_env(cltype, ctx->env);
+  //   clast.md = cltype;
+  //   return compile_closure(&clast, ctx, module, builder);
+  // }
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
@@ -231,34 +230,46 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     add_recursive_fn_ref(fn_name, func, fn_type, &fn_ctx);
   }
 
-  AST_LIST_ITER(ast->data.AST_LAMBDA.params, ({
-                  Ast *param_ast = l->ast;
-                  Type *param_type = fn_type->data.T_FN.from;
+  AST_LIST_ITER(
+      ast->data.AST_LAMBDA.params, ({
+        Ast *param_ast = l->ast;
+        Type *param_type = fn_type->data.T_FN.from;
 
-                  if (param_type->kind == T_VAR) {
-                    param_type = resolve_type_in_env(param_type, ctx->env);
-                  }
+        if (param_type->kind == T_VAR) {
+          param_type = resolve_type_in_env(param_type, ctx->env);
+        }
 
-                  LLVMValueRef param_val = LLVMGetParam(func, i);
+        LLVMValueRef param_val = LLVMGetParam(func, i);
 
-                  if (param_type->kind == T_FN) {
-                    const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
-                    int id_len = param_ast->data.AST_IDENTIFIER.length;
-                    LLVMTypeRef llvm_type =
-                        type_to_llvm_type(param_type, ctx, module);
+        if (param_type->kind == T_FN && is_closure(param_type)) {
 
-                    JITSymbol *sym = new_symbol(STYPE_FUNCTION, param_type,
-                                                param_val, llvm_type);
+          const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+          int id_len = param_ast->data.AST_IDENTIFIER.length;
 
-                    ht_set_hash(fn_ctx.frame->table, id_chars,
-                                hash_string(id_chars, id_len), sym);
+          LLVMTypeRef rec_type = closure_record_type(param_type, ctx, module);
+          JITSymbol *sym = new_symbol(STYPE_FUNCTION, param_type, param_val,
+                                      LLVMPointerType(rec_type, 0));
 
-                  } else {
-                    codegen_pattern_binding(param_ast, param_val, param_type,
-                                            &fn_ctx, module, builder);
-                  }
-                  fn_type = fn_type->data.T_FN.to;
-                }));
+          ht_set_hash(fn_ctx.frame->table, id_chars,
+                      hash_string(id_chars, id_len), sym);
+
+        } else if (param_type->kind == T_FN) {
+          const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+          int id_len = param_ast->data.AST_IDENTIFIER.length;
+          LLVMTypeRef llvm_type = type_to_llvm_type(param_type, ctx, module);
+
+          JITSymbol *sym =
+              new_symbol(STYPE_FUNCTION, param_type, param_val, llvm_type);
+
+          ht_set_hash(fn_ctx.frame->table, id_chars,
+                      hash_string(id_chars, id_len), sym);
+
+        } else {
+          codegen_pattern_binding(param_ast, param_val, param_type, &fn_ctx,
+                                  module, builder);
+        }
+        fn_type = fn_type->data.T_FN.to;
+      }));
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
@@ -375,6 +386,7 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   }
 
   Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
+
   fn_ast.md = specific_type;
 
   Type *generic_type = sym->symbol_type;

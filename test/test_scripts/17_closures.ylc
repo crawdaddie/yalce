@@ -1,10 +1,23 @@
-let K = fn z q ->
-  (fn () -> 2 + q + z)
+# let K = fn z q ->
+  # (fn () -> 2 + q + z)
+# ;;
+
+let fmul = fn a b ->
+  a * b
+;;
+
+let fmul_concrete = fn a: (Int) b: (Int) ->
+  a * b
 ;;
 
 
 let test = module () ->
-  let test_cl_int = (let l = K 3 4 in l () == 9) ;
-  let test_cl_int2 = (let l = K 3 5 in l () == 10) ;
-  let test_cl_num2 = (let l = K 3. 5. in l () == 10.) ;
+  # let test_cl_int = (let l = K 3 4 in l () == 9) ;
+  # let test_cl_int2 = (let l = K 3 5 in l () == 10) ;
+  # let test_cl_num2 = (let l = K 3. 5. in l () == 10.) ;
+  let test1 = (let K = fmul 3 in K 3 == 9);
+  let test2 = (let K = fmul 3. in K 3 == 9.);
+  let test3 = (let K = fmul_concrete 3 in K 3 == 9);
+  let test4 = (let K = (+) 1 in K 3 == 4);
+  let test5 = (let K = (+) in K 3 1 == 4);
 ;

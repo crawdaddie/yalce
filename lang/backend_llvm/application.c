@@ -78,43 +78,6 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
     return NULL;
   }
 
-  if (args_len < exp_args_len) {
-    // return anonymous func
-    int len = exp_args_len - args_len;
-    LLVMTypeRef arg_types[exp_args_len];
-    LLVMTypeRef llvm_return_type_ref;
-
-    codegen_fn_type_arg_types(callable_type, exp_args_len, arg_types,
-                              &llvm_return_type_ref, ctx, module);
-
-    // printf("\n\n");
-    // printf("anon curried value\n");
-    // print_ast(ast);
-    // print_type(callable_type);
-
-    LLVMTypeRef curried_fn_type =
-        LLVMFunctionType(llvm_return_type_ref, arg_types + args_len, len, 0);
-
-    START_FUNC(module, "anon_curried_value", curried_fn_type);
-    LLVMValueRef arg_vals[exp_args_len];
-    int i = 0;
-    for (i = 0; i < args_len; i++) {
-      arg_vals[i] =
-          codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
-    }
-    for (; i < exp_args_len; i++) {
-      arg_vals[i] = LLVMGetParam(func, i - args_len);
-    }
-    LLVMValueRef call = LLVMBuildCall2(
-        builder,
-        LLVMFunctionType(llvm_return_type_ref, arg_types, exp_args_len, 0),
-        callable, arg_vals, exp_args_len, "inner_call");
-    LLVMBuildRet(builder, call);
-
-    END_FUNC
-    return func;
-  }
-
   if (callable_type->kind == T_FN &&
       callable_type->data.T_FN.from->kind == T_VOID) {
 
@@ -155,8 +118,11 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
     app_vals[i] = app_val;
   }
 
-  return LLVMBuildCall2(builder, llvm_callable_type, callable, app_vals,
-                        args_len, "call_func");
+  LLVMValueRef c =
+      LLVMBuildCall2(builder, llvm_callable_type, callable, app_vals,
+
+                     args_len, "call_func");
+  return c;
 }
 
 static LLVMValueRef
@@ -185,6 +151,7 @@ call_callable_with_args(LLVMValueRef *args, int len, Type *callable_type,
                                     len, "call_func");
   return res;
 }
+bool is_closure_symbol(JITSymbol *sym) { return is_closure(sym->symbol_type); }
 
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -194,6 +161,16 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   if (is_generic(expected_fn_type)) {
     expected_fn_type = deep_copy_type(expected_fn_type);
     expected_fn_type = resolve_type_in_env(expected_fn_type, ctx->env);
+    Type *ex = expected_fn_type;
+    for (int i = 0; i < ast->data.AST_APPLICATION.len;
+         i++, ex = ex->data.T_FN.to) {
+      if (ast->data.AST_APPLICATION.args[i].tag == AST_IDENTIFIER) {
+        JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.args + i, ctx);
+        if (sym->type == STYPE_FUNCTION && is_closure(sym->symbol_type)) {
+          ex->data.T_FN.from = sym->symbol_type;
+        }
+      }
+    }
   }
 
   // x.mem a ??
@@ -215,9 +192,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   Type *res_type = ast->md;
 
   if (is_closure(res_type)) {
-    printf("codegen closure\n");
-    print_ast(ast);
-    return NULL;
+    return codegen_create_closure(ast, ctx, module, builder);
   }
 
   const char *sym_name =
@@ -229,6 +204,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);
     return NULL;
+  }
+
+  if (is_closure_symbol(sym)) {
+    return call_closure_sym(ast, expected_fn_type, sym, ctx, module, builder);
   }
 
   if (is_sum_type(expected_fn_type) && sym->type == STYPE_VARIANT_TYPE) {
@@ -258,7 +237,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return coro_resume(sym, ctx, module, builder);
   }
 
-  if (sym->type == STYPE_GENERIC_FUNCTION) {
+  if (sym->type == STYPE_GENERIC_FUNCTION && !is_closure(sym->symbol_type)) {
 
     LLVMValueRef callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);
@@ -301,78 +280,12 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_LOCAL_VAR && sym->symbol_type->kind == T_FN) {
-
     Type *callable_type = sym->symbol_type;
 
     LLVMValueRef res =
         call_callable(ast, callable_type, sym->val, ctx, module, builder);
 
     return res;
-  }
-
-  if (sym->type == STYPE_CLOSURE) {
-    return call_closure_sym(ast, sym, ctx, module, builder);
-  }
-
-  if (sym->type == STYPE_PARTIAL_EVAL_CLOSURE) {
-    // TODO: refactor this into the currying module
-
-    LLVMValueRef *provided_args =
-        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args;
-    int provided_args_len =
-        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len;
-    int total_len =
-        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_args_len;
-    Type *original_callable_type =
-        sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.original_callable_type;
-
-    JITSymbol *original_callable_sym =
-        (JITSymbol *)sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.callable_sym;
-
-    if (args_len + provided_args_len == total_len) {
-
-      LLVMValueRef full_args[total_len];
-      Type *full_expected_fn_type = deep_copy_type(original_callable_type);
-      Type *f = full_expected_fn_type;
-
-      for (int i = 0;
-           i < sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.provided_args_len;
-           i++) {
-        full_args[i] = sym->symbol_data.STYPE_PARTIAL_EVAL_CLOSURE.args[i];
-        f = f->data.T_FN.to;
-      }
-
-      *f = *expected_fn_type;
-
-      for (int i = 0; i < args_len; i++) {
-        full_args[provided_args_len + i] =
-            codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
-      }
-
-      LLVMValueRef callable;
-      if (!original_callable_sym) {
-        callable = sym->val;
-      } else if (original_callable_sym->type == STYPE_FUNCTION) {
-        callable = original_callable_sym->val;
-      } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION &&
-                 original_callable_sym->symbol_data.STYPE_GENERIC_FUNCTION
-                     .ast) {
-        callable = get_specific_callable(
-            original_callable_sym, full_expected_fn_type, ctx, module, builder);
-      } else if (original_callable_sym->type == STYPE_GENERIC_FUNCTION &&
-                 original_callable_sym->symbol_data.STYPE_GENERIC_FUNCTION
-                     .builtin_handler) {
-        return NULL;
-      } else {
-        fprintf(stderr, "Error: currying failed\n");
-        print_ast_err(ast);
-        return NULL;
-      }
-
-      return call_callable_with_args(full_args, total_len,
-                                     full_expected_fn_type, callable, ctx,
-                                     module, builder);
-    }
   }
 
   return NULL;

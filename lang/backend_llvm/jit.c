@@ -161,9 +161,11 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
 
   LLVMValueRef top_level_func =
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
+
   if (config.debug_ir_pre) {
     LLVMDumpModule(module);
   }
+
   module_passes(module, target_machine);
 
   LLVMExecutionEngineRef engine;

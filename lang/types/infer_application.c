@@ -67,7 +67,9 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 }
 
 Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
+
   Ast *func = ast->data.AST_APPLICATION.function;
+
   int expected_args_len = fn_type_args_len(func_type);
 
   Ast *args = ast->data.AST_APPLICATION.args;
@@ -108,6 +110,10 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   Subst *solution = solve_constraints(unify_ctx.constraints);
 
   ctx->subst = compose_subst(solution, ctx->subst);
+
+  if (is_closure(func_type)) {
+    expected_type->closure_meta = deep_copy_type(func_type->closure_meta);
+  }
   expected_type = apply_substitution(solution, expected_type);
   ast->data.AST_APPLICATION.function->md = expected_type;
 
@@ -118,13 +124,14 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   }
 
   if (expected_args_len > num_args) {
-    printf("curried???\n");
-    print_type(func_type);
+    res = deep_copy_type(res);
+    // printf("curried???\n");
+    // print_type(func_type);
     Type **_arg_types = t_alloc(sizeof(Type *) * num_args);
     memcpy(_arg_types, arg_types, sizeof(Type *) * num_args);
     Type *closure_meta = create_tuple_type(num_args, _arg_types);
     res->closure_meta = closure_meta;
-    print_type(res);
+    // print_type(res);
   }
   // if (CHARS_EQ(fn_name, "array_at")) {
   //   printf("res type: \n");
