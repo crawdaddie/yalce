@@ -2,9 +2,11 @@
 #include "./coroutines.h"
 #include "./coroutines_private.h"
 #include "array.h"
+#include "closures.h"
 #include "function.h"
 #include "list.h"
 #include "types.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -144,11 +146,13 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+
   Type *out_cor_type = ast->md;
   Type *out_ptype = create_option_type(out_cor_type->data.T_CONS.args[0]);
   // fn_return_type(out_cor_type);
 
   LLVMTypeRef out_promise_type = type_to_llvm_type(out_ptype, ctx, module);
+
   LLVMTypeRef out_cor_obj_type = CORO_OBJ_TYPE(out_promise_type);
 
   Type *in_cor_type = (ast->data.AST_APPLICATION.args + 1)->md;
@@ -159,6 +163,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type map_type;
   map_type = *((Type *)ast->data.AST_APPLICATION.args->md);
+
   if (is_generic(&map_type)) {
     Type *f = fn_return_type(in_cor_type);
     f = type_of_option(f);
@@ -167,12 +172,33 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     map_type = (Type){T_FN, {.T_FN = {.from = f, .to = t}}};
     ast->data.AST_APPLICATION.args->md = &map_type;
   }
-  // print_type(&map_type);
+
+  LLVMTypeRef map_state_struct_type;
+  if (is_closure(&map_type)) {
+
+    // State struct: { ptr inner_coro, ptr closure }
+    map_state_struct_type = LLVMStructType(
+        (LLVMTypeRef[]){
+            LLVMPointerType(in_cor_obj_type, 0), // Field 0: inner coroutine
+            GENERIC_PTR                          // Field 1: closure pointer
+        },
+        2, 0);
+  } else {
+    // State struct: { ptr inner_coro, ptr function }
+    map_state_struct_type = LLVMStructType(
+        (LLVMTypeRef[]){
+            LLVMPointerType(in_cor_obj_type, 0), // Field 0: inner coroutine
+            GENERIC_PTR                          // Field 1: function pointer
+        },
+        2, 0);
+  }
 
   LLVMValueRef coro =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
   LLVMValueRef map_func =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   LLVMValueRef map_cor_fn = LLVMAddFunction(module, "map_coroutine_fn",
                                             PTR_ID_FUNC_TYPE(out_cor_obj_type));
   LLVMSetLinkage(map_cor_fn, LLVMExternalLinkage);
@@ -193,11 +219,31 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef wrapper_coro = LLVMGetParam(map_cor_fn, 0);
 
-  LLVMValueRef inner_coro = LLVMBuildBitCast(
-      builder, coro_state(wrapper_coro, in_cor_obj_type, builder),
-      LLVMPointerType(in_cor_obj_type, 0), "bitcast_generic_state_ptr");
+  // LLVMValueRef inner_coro = LLVMBuildBitCast(
+  //     builder, coro_state(wrapper_coro, in_cor_obj_type, builder),
+  //     LLVMPointerType(in_cor_obj_type, 0), "bitcast_generic_state_ptr");
+  LLVMValueRef state_ptr = coro_state(wrapper_coro, out_cor_obj_type, builder);
+  LLVMValueRef typed_state_ptr = LLVMBuildBitCast(
+      builder, state_ptr, LLVMPointerType(map_state_struct_type, 0),
+      "bitcast_to_map_state");
 
+  // Extract inner coroutine from field 0
+  LLVMValueRef inner_coro_gep = LLVMBuildStructGEP2(
+      builder, map_state_struct_type, typed_state_ptr, 0, "inner_coro_gep");
+  LLVMValueRef inner_coro =
+      LLVMBuildLoad2(builder, LLVMPointerType(in_cor_obj_type, 0),
+                     inner_coro_gep, "inner_coro");
+
+  // Extract map function/closure from field 1
+  LLVMValueRef map_func_gep = LLVMBuildStructGEP2(
+      builder, map_state_struct_type, typed_state_ptr, 1, "map_func_gep");
+
+  LLVMValueRef loaded_map_func =
+      LLVMBuildLoad2(builder, GENERIC_PTR, map_func_gep, "map_func");
+
+  // COUNTER
   LLVMValueRef counter = coro_counter(wrapper_coro, out_cor_obj_type, builder);
+
   LLVMValueRef is_reset =
       LLVMBuildICmp(builder, LLVMIntEQ, counter,
                     LLVMConstInt(LLVMInt32Type(), 0, 1), "is_counter_reset?");
@@ -226,61 +272,49 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // IS FINISHED BLOCK
   LLVMPositionBuilderAtEnd(builder, is_fin_bb);
 
-  // coro_terminate_block(wrapper_coro,
-  //                      &(CoroutineCtx){.coro_obj_type = out_cor_obj_type,
-  //                                      .promise_type = out_promise_type},
-  //                      builder);
-  // LLVMBuildRet(builder, wrapper_coro);
   jump_to_next(wrapper_coro, map_cor_fn, out_cor_obj_type, out_promise_type,
                builder);
-
-  // TODO: need to handle cor_map with a 'next' pointer
-  // LLVMBasicBlockRef end_completely_block =
-  //     LLVMAppendBasicBlock(map_cor_fn, "end_coroutine_bb");
-  // LLVMBasicBlockRef proceed_to_chained_coro_block =
-  //     LLVMAppendBasicBlock(map_cor_fn, "defer_to_chained_coroutine_bb");
-  //
-  // LLVMValueRef next_coro = coro_next(wrapper_coro, out_cor_obj_type,
-  // builder); LLVMValueRef next_is_null =
-  //     LLVMBuildIsNull(builder, next_coro, "is_next_null");
-  // LLVMBuildCondBr(builder, next_is_null, end_completely_block,
-  //                 proceed_to_chained_coro_block);
-  //
-  // LLVMPositionBuilderAtEnd(builder, end_completely_block);
-  //
-  // coro_terminate_block(wrapper_coro,
-  //                      &(CoroutineCtx){.coro_obj_type = out_cor_obj_type,
-  //                                      .promise_type = out_promise_type},
-  //                      builder);
-  // LLVMBuildRet(builder, wrapper_coro);
-  //
-  // LLVMPositionBuilderAtEnd(builder, proceed_to_chained_coro_block);
-  // LLVMValueRef n =
-  //     coro_jump_to_next_block(coro, next_coro,
-  //
-  //                             &(CoroutineCtx){.coro_obj_type =
-  //                             out_cor_obj_type,
-  //                                             .promise_type =
-  //                                             out_promise_type},
-  //                             builder);
-  // LLVMBuildRet(builder, n);
 
   // IS NOT FINISHED BLOCK
   LLVMPositionBuilderAtEnd(builder, else_bb);
   LLVMValueRef pval =
       LLVMBuildExtractValue(builder, p, 1, "extract_val_from_prom");
-  LLVMValueRef mapped_pval =
-      LLVMBuildCall2(builder, type_to_llvm_type(&map_type, ctx, module),
-                     map_func, (LLVMValueRef[]){pval}, 1, "call_map_func");
+
+  LLVMValueRef mapped_pval;
+
+  if (is_closure(&map_type)) {
+    LLVMTypeRef rec_type = closure_record_type(&map_type, ctx, module);
+    LLVMTypeRef rec_fn_type = closure_fn_type(&map_type, rec_type, ctx, module);
+
+    // Bitcast the loaded generic ptr to the specific closure type
+    LLVMValueRef typed_closure =
+        LLVMBuildBitCast(builder, loaded_map_func, LLVMPointerType(rec_type, 0),
+                         "typed_closure");
+
+    LLVMValueRef fn =
+        LLVMBuildStructGEP2(builder, rec_type, typed_closure, 0, "fn_ptr_gep");
+    fn = LLVMBuildLoad2(builder, GENERIC_PTR, fn, "fn_ptr");
+
+    mapped_pval = LLVMBuildCall2(builder, rec_fn_type, fn,
+                                 (LLVMValueRef[]){typed_closure, pval}, 2,
+                                 "call_map_func_as_closure");
+  } else {
+    // For non-closure functions, cast and call directly
+    LLVMTypeRef fn_type = type_to_llvm_type(&map_type, ctx, module);
+    LLVMValueRef typed_fn = LLVMBuildBitCast(
+        builder, loaded_map_func, LLVMPointerType(fn_type, 0), "typed_fn_ptr");
+    mapped_pval = LLVMBuildCall2(builder, fn_type, typed_fn,
+                                 (LLVMValueRef[]){pval}, 1, "call_map_func");
+  }
 
   LLVMValueRef promise_struct = LLVMGetUndef(out_promise_type);
   promise_struct = LLVMGetUndef(out_promise_type);
   promise_struct = LLVMBuildInsertValue(builder, promise_struct,
                                         LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
                                         "insert_promise_tag_none");
-
   promise_struct = LLVMBuildInsertValue(builder, promise_struct, mapped_pval, 1,
                                         "insert_promise_val");
+
   LLVMBuildStore(builder, promise_struct,
                  coro_promise_gep(wrapper_coro, out_cor_obj_type, builder));
   LLVMBuildRet(builder, wrapper_coro);
@@ -302,11 +336,27 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   out_pstruct = LLVMBuildInsertValue(builder, out_pstruct,
                                      LLVMConstInt(LLVMInt8Type(), 1, 0), 0,
                                      "insert_promise_tag_none");
+  // Allocate the state struct
+  LLVMValueRef state_storage =
+      LLVMBuildMalloc(builder, map_state_struct_type, "map_state_storage");
+
+  // Store inner coroutine at field 0
+  LLVMValueRef inner_coro_field = LLVMBuildStructGEP2(
+      builder, map_state_struct_type, state_storage, 0, "inner_coro_field");
+  LLVMBuildStore(builder, coro, inner_coro_field);
+
+  // Store map function/closure at field 1
+  LLVMValueRef map_func_field = LLVMBuildStructGEP2(
+      builder, map_state_struct_type, state_storage, 1, "map_func_ftield");
+  LLVMBuildStore(builder, map_func, map_func_field);
+
+  // Store the state struct pointer in the coroutine
+  LLVMBuildStore(builder, state_storage,
+                 coro_state_gep(mapped_coro, out_cor_obj_type, builder));
+
   LLVMBuildStore(builder, out_pstruct,
                  coro_promise_gep(mapped_coro, out_cor_obj_type, builder));
 
-  LLVMBuildStore(builder, coro,
-                 coro_state_gep(mapped_coro, out_cor_obj_type, builder));
   return mapped_coro;
 }
 

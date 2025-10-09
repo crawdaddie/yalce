@@ -1293,6 +1293,42 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
   return expr_type;
 }
 
+bool is_constant_expr(Ast *expr) {
+  return (expr->tag >= AST_INT && expr->tag <= AST_BOOL)
+      //
+      // || (expr->tag == AST_IDENTIFIER &&
+      //     (((Type *)expr->md)->kind == T_INT ||
+      //      ((Type *)expr->md)->kind == T_NUM ||
+      //      ((Type *)expr->md)->kind == T_UINT64 ||
+      //      ((Type *)expr->md)->kind == T_STRING ||
+      //      ((Type *)expr->md)->kind == T_CHAR ||
+      //      ((Type *)expr->md)->kind == T_BOOL))
+      //
+      ;
+}
+
+bool is_constant_closure(Ast *ast) {
+  if (ast->tag == AST_APPLICATION) {
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      Ast *arg = ast->data.AST_APPLICATION.args + i;
+      if (!is_constant_expr(arg)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+Type *handle_closure_constants(Ast *ast, Type *type, TICtx *ctx) {
+  if (!is_constant_closure(ast)) {
+    return type;
+  }
+
+  ast->data.AST_APPLICATION.is_curried_with_constants = true;
+  type->closure_meta = NULL;
+  return type;
+}
+
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
   switch (ast->tag) {
@@ -1414,7 +1450,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
       *ast->data.AST_APPLICATION.function = binop;
       ast->data.AST_APPLICATION.args[0] = arg;
     }
+
     type = infer_application(ast, ctx);
+
+    if (type && is_closure(type)) {
+      handle_closure_constants(ast, type, ctx);
+    }
     break;
   }
   case AST_IDENTIFIER: {

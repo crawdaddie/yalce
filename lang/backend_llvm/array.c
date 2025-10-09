@@ -80,7 +80,8 @@ LLVMValueRef set_array_element(LLVMBuilderRef builder, LLVMValueRef array,
       LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
                     "element_ptr");
 
-  return LLVMBuildStore(builder, value, element_ptr);
+  LLVMBuildStore(builder, value, element_ptr);
+  return array;
 }
 
 LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,

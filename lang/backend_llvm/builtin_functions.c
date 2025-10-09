@@ -1341,7 +1341,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
 
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
-  GENERIC_FN_SYMBOL("dlopen", NULL, DlOpenHandler);
+  GENERIC_FN_SYMBOL("dlopen", &MAKE_FN_TYPE_2(&t_string, &t_void),
+                    DlOpenHandler);
 
   GENERIC_FN_SYMBOL("cstr", &cstr_scheme, CStrHandler);
 

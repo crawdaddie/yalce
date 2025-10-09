@@ -92,12 +92,13 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef wrapper_fn = build_scheduled_cor_wrapper(
       promise_type, scheduler, llvm_scheduler_type, module, builder);
-  return LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
-                        (LLVMValueRef[]){
-                            ts_val,
-                            LLVMConstReal(LLVMDoubleType(), 0.),
-                            wrapper_fn,
-                            coro,
-                        },
-                        4, "");
+  LLVMBuildCall2(builder, llvm_scheduler_type, scheduler,
+                 (LLVMValueRef[]){
+                     ts_val,
+                     LLVMConstReal(LLVMDoubleType(), 0.),
+                     wrapper_fn,
+                     coro,
+                 },
+                 4, "");
+  return coro;
 }

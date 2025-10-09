@@ -141,12 +141,12 @@ typedef enum token_type {
 } token_type;
 
 typedef enum ast_tag {
-  AST_INT,
-  AST_FLOAT,
-  AST_DOUBLE,
-  AST_STRING,
-  AST_CHAR,
-  AST_BOOL,
+  AST_INT = 0,
+  AST_FLOAT = 1,
+  AST_DOUBLE = 2,
+  AST_STRING = 3,
+  AST_CHAR = 4,
+  AST_BOOL = 5,
   AST_IDENTIFIER,
   AST_BODY,
   AST_LET,
@@ -244,6 +244,7 @@ struct Ast {
       Ast *function;
       Ast *args;
       size_t len;
+      bool is_curried_with_constants;
       // size_t num_args;
     } AST_APPLICATION;
 

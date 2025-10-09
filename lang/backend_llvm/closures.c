@@ -171,6 +171,10 @@ LLVMValueRef expr_to_closure_rec(Ast *expr, Type *clos_type, JITLangCtx *ctx,
   return NULL;
 }
 
+LLVMValueRef codegen_curried_fn_with_constant_args(Ast *expr, JITLangCtx *ctx,
+                                                   LLVMModuleRef module,
+                                                   LLVMBuilderRef builder) {}
+
 LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
@@ -281,6 +285,7 @@ LLVMValueRef codegen_create_closure(Ast *ast, JITLangCtx *ctx,
                                     LLVMBuilderRef builder) {
 
   Type *fn_type;
+
   if (ast->tag == AST_APPLICATION) {
     fn_type = ast->data.AST_APPLICATION.function->md;
     return codegen_curried_fn_closure(fn_type, ast, ctx, module, builder);

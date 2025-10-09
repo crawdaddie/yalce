@@ -1,4 +1,5 @@
 #include "backend_llvm/function.h"
+#include "application.h"
 #include "binding.h"
 #include "closures.h"
 #include "codegen.h"
@@ -139,6 +140,10 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMFunctionType(ret_type, llvm_param_types, params_count, 0);
 
   LLVMValueRef val = get_extern_fn(name, llvm_fn_type, module);
+  printf("codegen extern fn decl\n");
+  print_ast(ast);
+  LLVMDumpType(llvm_fn_type);
+  printf("\n");
   return val;
 }
 
@@ -182,6 +187,65 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
   }
   return body;
 }
+LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+  Type *fn_type = ast->md;
+
+  int fn_len = fn_type_args_len(fn_type);
+  LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx, module);
+
+  if (!prototype) {
+    return NULL;
+  }
+
+  START_FUNC(module, "curried_fn_with_const_params", prototype)
+
+  STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
+
+  Type *inner_fn_type = ast->data.AST_APPLICATION.function->md;
+  inner_fn_type = resolve_type_in_env(inner_fn_type, ctx->env);
+  int inner_args_len = fn_type_args_len(inner_fn_type);
+
+  LLVMValueRef inner_args[inner_args_len];
+  Type *f = inner_fn_type;
+  int i = 0;
+  for (i = 0; i < ast->data.AST_APPLICATION.len; i++, f = f->data.T_FN.to) {
+    inner_args[i] =
+        codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
+    inner_args[i] = handle_type_conversions(
+        inner_args[i], ast->data.AST_APPLICATION.args[i].md, f->data.T_FN.from,
+        ctx, module, builder);
+  }
+
+  for (i = 0; i < fn_len; i++) {
+    inner_args[inner_args_len - 1 + i] = LLVMGetParam(func, i);
+  }
+
+  LLVMValueRef inner_fn =
+      codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
+
+  LLVMTypeRef llvm_inner_fn_type =
+      type_to_llvm_type(inner_fn_type, ctx, module);
+
+  LLVMValueRef body =
+      LLVMBuildCall2(builder, llvm_inner_fn_type, inner_fn, inner_args,
+                     inner_args_len, "curried_fn_inner_call");
+
+  Type *res_type = fn_return_type(fn_type);
+  if (res_type->kind == T_VOID) {
+    // printf("build ret for some reason???\n");
+    LLVMBuildRetVoid(builder);
+  } else {
+    LLVMBuildRet(builder, body);
+  }
+
+  END_FUNC
+  destroy_ctx(&fn_ctx);
+  // LLVMDumpValue(func);
+  // printf("\n");
+  return func;
+}
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
@@ -189,22 +253,12 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
+  if (ast->tag == AST_APPLICATION &&
+      ast->data.AST_APPLICATION.is_curried_with_constants) {
+    return codegen_const_curried_fn(ast, ctx, module, builder);
+  }
 
-  // if (ast->tag == AST_APPLICATION) {
-  //   fprintf(stderr, "Error: first-class function use unknown: ");
-  //   print_ast_err(ast);
-  //   return NULL;
-  // }
-  //
   Type *fn_type = ast->md;
-
-  // if (is_closure(fn_type)) {
-  //   Ast clast = *ast;
-  //   Type *cltype = deep_copy_type(fn_type);
-  //   cltype = resolve_type_in_env(cltype, ctx->env);
-  //   clast.md = cltype;
-  //   return compile_closure(&clast, ctx, module, builder);
-  // }
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
