@@ -902,13 +902,10 @@ LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef array = codegen(array_ast, ctx, module, builder);
   LLVMValueRef idx = codegen(idx_ast, ctx, module, builder);
   LLVMValueRef val = codegen(val_ast, ctx, module, builder);
-  // printf("array set find el type\n");
-  // print_ast(val_ast);
-  // print_type(ret_type->data.T_CONS.args[0]);
   Type *el_type = ret_type->data.T_CONS.args[0];
 
   return set_array_element(builder, array, idx, val,
-                           el_type->kind == T_FN
+                           el_type->kind == T_FN || is_coroutine_type(el_type)
                                ? GENERIC_PTR
                                : type_to_llvm_type(el_type, ctx, module));
 }

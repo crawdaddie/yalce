@@ -70,6 +70,8 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
       } else if (is_pointer_type(t)) {
         llvm_param_types[i] = LLVMPointerType(
             type_to_llvm_type(t->data.T_CONS.args[0], ctx, module), 0);
+      } else if (is_coroutine_type(t)) {
+        llvm_param_types[i] = GENERIC_PTR;
       } else {
         LLVMTypeRef tref = type_to_llvm_type(t, ctx, module);
         if (!tref) {
@@ -92,8 +94,8 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
   return llvm_fn_type;
 }
 
-LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                               LLVMBuilderRef builder) {
+LLVMValueRef __codegen_extern_fn(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
 
   const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
   int name_len = strlen(name);
@@ -140,10 +142,39 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMFunctionType(ret_type, llvm_param_types, params_count, 0);
 
   LLVMValueRef val = get_extern_fn(name, llvm_fn_type, module);
-  printf("codegen extern fn decl\n");
-  print_ast(ast);
-  LLVMDumpType(llvm_fn_type);
-  printf("\n");
+  if (CHARS_EQ(name, "schedule_event")) {
+    printf("codegen extern fn decl\n");
+    print_ast(ast);
+    LLVMDumpType(llvm_fn_type);
+    printf("\n");
+    LLVMDumpValue(val);
+  }
+  return val;
+}
+
+LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+
+  const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
+  int name_len = strlen(name);
+  Type *fn_type = ast->md;
+
+  if (fn_type->kind == T_SCHEME) {
+    TICtx _c = {.env = ctx->env};
+    fn_type = instantiate(fn_type, &_c);
+  }
+  int params_count = fn_type_args_len(fn_type);
+
+  if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
+
+    LLVMTypeRef ret_type =
+        type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
+    LLVMTypeRef llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
+    return get_extern_fn(name, llvm_fn_type, module);
+  }
+  LLVMTypeRef llvm_fn_type = type_to_llvm_type(fn_type, ctx, module);
+
+  LLVMValueRef val = get_extern_fn(name, llvm_fn_type, module);
   return val;
 }
 
@@ -253,6 +284,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
+
   if (ast->tag == AST_APPLICATION &&
       ast->data.AST_APPLICATION.is_curried_with_constants) {
     return codegen_const_curried_fn(ast, ctx, module, builder);
