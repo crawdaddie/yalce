@@ -29,4 +29,6 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
                                           Ast *app, const char *mem_name,
                                           JITLangCtx *ctx, LLVMModuleRef module,
                                           LLVMBuilderRef builder);
+
+#define OPTION_TAG_TYPE LLVMInt8Type()
 #endif

@@ -266,10 +266,16 @@ LLVMValueRef codegen_curried_fn_closure(Type *original_fn_type, Ast *ast,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
   Type *closure_type = ast->md;
+  printf("CODEGEN CURRIED FN CLOSURE\n");
+  print_type(closure_type);
+  print_ast(ast);
   LLVMTypeRef rec_type = closure_record_type(closure_type, ctx, module);
   LLVMTypeRef fn_type = closure_fn_type(closure_type, rec_type, ctx, module);
   LLVMValueRef rec =
       expr_to_closure_rec(ast, closure_type, ctx, module, builder);
+  printf("closure rec: \n");
+  LLVMDumpValue(rec);
+  printf("\n");
 
   return rec;
 }

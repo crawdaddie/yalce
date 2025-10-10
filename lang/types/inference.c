@@ -1293,25 +1293,35 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
   return expr_type;
 }
 
-bool is_constant_expr(Ast *expr) {
-  return (expr->tag >= AST_INT && expr->tag <= AST_BOOL)
-      //
-      // || (expr->tag == AST_IDENTIFIER &&
-      //     (((Type *)expr->md)->kind == T_INT ||
-      //      ((Type *)expr->md)->kind == T_NUM ||
-      //      ((Type *)expr->md)->kind == T_UINT64 ||
-      //      ((Type *)expr->md)->kind == T_STRING ||
-      //      ((Type *)expr->md)->kind == T_CHAR ||
-      //      ((Type *)expr->md)->kind == T_BOOL))
-      //
-      ;
+bool is_constant_closure(Ast *ast, TICtx *ctx);
+
+bool is_constant_expr(Ast *expr, TICtx *ctx) {
+  if (expr->tag >= AST_INT && expr->tag <= AST_BOOL) {
+    return true;
+  }
+
+  if (expr->tag == AST_IDENTIFIER) {
+
+    TypeEnv *type_ref =
+        lookup_type_ref(ctx->env, expr->data.AST_IDENTIFIER.value);
+    if (type_ref && type_ref->md.type == BT_VAR &&
+        type_ref->md.data.VAR.scope == 0) {
+      return true;
+    }
+  }
+
+  return is_constant_closure(expr, ctx);
 }
 
-bool is_constant_closure(Ast *ast) {
+// returns whether the partial-application expression can be compiled to a
+// regular function rather than a closure object this is true if it's an
+// application and each supplied parameter is a constant value, or another
+// constant expression, or a reference to a value in the global scope
+bool is_constant_closure(Ast *ast, TICtx *ctx) {
   if (ast->tag == AST_APPLICATION) {
     for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
       Ast *arg = ast->data.AST_APPLICATION.args + i;
-      if (!is_constant_expr(arg)) {
+      if (!is_constant_expr(arg, ctx)) {
         return false;
       }
     }
@@ -1320,7 +1330,7 @@ bool is_constant_closure(Ast *ast) {
 }
 
 Type *handle_closure_constants(Ast *ast, Type *type, TICtx *ctx) {
-  if (!is_constant_closure(ast)) {
+  if (!is_constant_closure(ast, ctx)) {
     return type;
   }
 

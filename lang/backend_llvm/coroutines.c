@@ -476,7 +476,7 @@ LLVMValueRef coro_promise_set(LLVMValueRef coro, LLVMValueRef val,
   LLVMValueRef promise_struct = LLVMGetUndef(promise_type);
 
   promise_struct = LLVMBuildInsertValue(builder, promise_struct,
-                                        LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
+                                        LLVMConstInt(OPTION_TAG_TYPE, 0, 0), 0,
                                         "coro.promise.tag");
 
   promise_struct = LLVMBuildInsertValue(builder, promise_struct, val, 1,
@@ -494,7 +494,7 @@ LLVMValueRef coro_promise_set_none(LLVMValueRef coro, LLVMTypeRef coro_obj_type,
   LLVMValueRef promise_struct = LLVMGetUndef(promise_type);
 
   promise_struct = LLVMBuildInsertValue(builder, promise_struct,
-                                        LLVMConstInt(LLVMInt32Type(), 1, 0), 0,
+                                        LLVMConstInt(OPTION_TAG_TYPE, 1, 0), 0,
                                         "coro.promise.tag");
 
   LLVMValueRef promise_gep = coro_promise_gep(coro, coro_obj_type, builder);

@@ -1,6 +1,7 @@
 #include "./coroutine_extensions.h"
 #include "./coroutines.h"
 #include "./coroutines_private.h"
+#include "adt.h"
 #include "array.h"
 #include "closures.h"
 #include "function.h"
@@ -293,25 +294,26 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     LLVMValueRef fn =
         LLVMBuildStructGEP2(builder, rec_type, typed_closure, 0, "fn_ptr_gep");
+
     fn = LLVMBuildLoad2(builder, GENERIC_PTR, fn, "fn_ptr");
+    LLVMTypeRef fn_ptr_type = LLVMPointerType(rec_fn_type, 0);
+    fn = LLVMBuildPointerCast(builder, fn, fn_ptr_type, "fn_ptr_typed");
 
     mapped_pval = LLVMBuildCall2(builder, rec_fn_type, fn,
                                  (LLVMValueRef[]){typed_closure, pval}, 2,
                                  "call_map_func_as_closure");
   } else {
-    // For non-closure functions, cast and call directly
     LLVMTypeRef fn_type = type_to_llvm_type(&map_type, ctx, module);
-    LLVMValueRef typed_fn = LLVMBuildBitCast(
-        builder, loaded_map_func, LLVMPointerType(fn_type, 0), "typed_fn_ptr");
-    mapped_pval = LLVMBuildCall2(builder, fn_type, typed_fn,
+    mapped_pval = LLVMBuildCall2(builder, fn_type, loaded_map_func,
                                  (LLVMValueRef[]){pval}, 1, "call_map_func");
   }
 
   LLVMValueRef promise_struct = LLVMGetUndef(out_promise_type);
   promise_struct = LLVMGetUndef(out_promise_type);
   promise_struct = LLVMBuildInsertValue(builder, promise_struct,
-                                        LLVMConstInt(LLVMInt32Type(), 0, 0), 0,
+                                        LLVMConstInt(OPTION_TAG_TYPE, 0, 0), 0,
                                         "insert_promise_tag_none");
+
   promise_struct = LLVMBuildInsertValue(builder, promise_struct, mapped_pval, 1,
                                         "insert_promise_val");
 
