@@ -1296,7 +1296,9 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
 bool is_constant_closure(Ast *ast, TICtx *ctx);
 
 // returns whether the partial-application expression can be compiled to a
-// regular function rather than a closure object this is true if it's an
+// regular function rather than a closure object
+//
+// this is true if it's an
 // application and each supplied parameter is a constant value, or another
 // constant expression, or a reference to a value in the global scope
 bool is_constant_expr(Ast *expr, TICtx *ctx) {
