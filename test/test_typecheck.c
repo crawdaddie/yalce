@@ -1128,13 +1128,10 @@ int test_curried_funcs() {
     TASSERT("K has type of curried closure\n", types_equal(bt, &clos));
   });
 
-
   T("let sum3 = fn a b c -> a + b + c;;\n"
     "let c = sum3 1 2;\n"
     "c 3;\n",
-    &t_int
-  );
-
+    &t_int);
 
   return status;
 }
@@ -2235,32 +2232,47 @@ bool test_parser_combinators() {
                      ->data.AST_LET.expr->data.AST_LAMBDA.body;
     Ast *fn_first = fn_bd->data.AST_APPLICATION.args + 1;
 
-    print_ast(fn_first);
-    print_type(fn_first->md);
-    status &= TASSERT(
-        "(fn first -> ...) arg has type Parser of (String, String)",
-        types_equal(
-            fn_first->md,
-            &MAKE_FN_TYPE_3(&t_string, &t_string,
-                            &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string),
-                                          &t_string)))));
+    Type ex_fn_first = MAKE_FN_TYPE_3(
+        &t_string, &t_string,
+        &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string), &t_string)));
+
+    Type nested_fn = MAKE_FN_TYPE_3(
+        &t_string, &t_string,
+        &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string), &t_string)));
+
+    Type clmeta2 = TTUPLE(2, &t_string, &t_string);
+    nested_fn.data.T_FN.to->closure_meta = &clmeta2;
+    Type clmeta1 = TTUPLE(
+        2, &MAKE_FN_TYPE_2(&t_string, &TOPT(&TTUPLE(2, &t_string, &t_string))),
+        &nested_fn);
+
+    ex_fn_first.data.T_FN.to->closure_meta = &clmeta1;
+
+    status &=
+        TASSERT("(fn first -> ...) arg has type Parser of (String, String)",
+                types_equal(fn_first->md, &ex_fn_first));
 
     Ast *fn_second =
         fn_first->data.AST_LAMBDA.body->data.AST_APPLICATION.args + 1;
 
-    status &= TASSERT(
-        "(fn second -> ...) arg has type Parser of (String, String)",
-        types_equal(
-            fn_second->md,
-            &MAKE_FN_TYPE_3(&t_string, &t_string,
-                            &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string),
-                                          &t_string)))));
+    Type exp_fn_second = MAKE_FN_TYPE_3(
+        &t_string, &t_string,
+        &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string), &t_string)));
+
+    exp_fn_second.data.T_FN.to->closure_meta = &TTUPLE(2, &t_string, &t_string);
+
+    status &=
+        TASSERT("(fn second -> ...) arg has type Parser of (String, String)",
+                types_equal(fn_second->md, &exp_fn_second));
 
     Ast *clos = fn_second->data.AST_LAMBDA.body;
+
     Type exp_closure_type = MAKE_FN_TYPE_2(
         &t_string,
         &TOPT(&TTUPLE(2, &TTUPLE(2, &t_string, &t_string), &t_string)));
+
     exp_closure_type.closure_meta = &TTUPLE(2, &t_string, &t_string);
+
     // print_type(&exp_closure_type);
     // print_ast(clos);
     // print_type(clos->md);
@@ -2387,10 +2399,10 @@ int main() {
   status &= test_list_processing();
   status &= test_array_processing();
   status &= test_math_funcs();
-  status &= test_audio_funcs();
   status &= test_funcs();
-  status &= test_parser_combinators();
   status &= test_curried_funcs();
+  status &= test_audio_funcs();
+  status &= test_parser_combinators();
 
   print_all_failures();
   return status == true ? 0 : 1;
