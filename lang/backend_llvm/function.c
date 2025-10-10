@@ -94,64 +94,6 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
   return llvm_fn_type;
 }
 
-LLVMValueRef __codegen_extern_fn(Ast *ast, JITLangCtx *ctx,
-                                 LLVMModuleRef module, LLVMBuilderRef builder) {
-
-  const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
-  int name_len = strlen(name);
-
-  int params_count =
-      ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.len - 1;
-
-  LLVMTypeRef llvm_param_types[params_count];
-  Type *fn_type = ast->md;
-  if (fn_type->kind == T_SCHEME) {
-    TICtx _c = {.env = ctx->env};
-    fn_type = instantiate(fn_type, &_c);
-  }
-
-  if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
-
-    LLVMTypeRef ret_type =
-        type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
-    LLVMTypeRef llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
-    return get_extern_fn(name, llvm_fn_type, module);
-  }
-
-  Type *f = fn_type;
-  for (int i = 0; i < params_count; i++, f = f->data.T_FN.to) {
-    // Type *param_type =
-    //     ast->data.AST_EXTERN_FN.signature_types->data.AST_LIST.items[i].md;
-
-    Type *param_type = f->data.T_FN.from;
-
-    llvm_param_types[i] = param_type->kind == T_FN
-                              ? GENERIC_PTR
-                              : type_to_llvm_type(param_type, ctx, module);
-  }
-
-  LLVMTypeRef ret_type = type_to_llvm_type(f,
-
-                                           ctx, module);
-
-  AstList *params = __current_ast ? (__current_ast->tag == AST_LAMBDA
-                                         ? __current_ast->data.AST_LAMBDA.params
-                                         : NULL)
-                                  : NULL;
-  LLVMTypeRef llvm_fn_type =
-      LLVMFunctionType(ret_type, llvm_param_types, params_count, 0);
-
-  LLVMValueRef val = get_extern_fn(name, llvm_fn_type, module);
-  if (CHARS_EQ(name, "schedule_event")) {
-    printf("codegen extern fn decl\n");
-    print_ast(ast);
-    LLVMDumpType(llvm_fn_type);
-    printf("\n");
-    LLVMDumpValue(val);
-  }
-  return val;
-}
-
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
 

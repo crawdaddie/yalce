@@ -283,7 +283,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     }
   }
 
-  if (is_closure(expr_type)) {
+  if (is_closure(expr_type) && application_is_partial(expr)) {
     LLVMValueRef closure_obj =
         create_closure_symbol(binding, expr, outer_ctx, module, builder);
 
@@ -364,6 +364,11 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     if (expr->tag == AST_EXTERN_FN) {
       expr_val = create_lazy_extern_fn_binding(binding, expr, expr_type, NULL,
                                                inner_ctx, module, builder);
+    } else if (is_closure(expr_type)) {
+      expr_val = codegen(expr, inner_ctx, module, builder);
+
+      create_fn_binding(binding, expr_type, expr_val, inner_ctx, module,
+                        builder);
     } else {
 
       expr_val = create_fn_binding(binding, expr_type,
