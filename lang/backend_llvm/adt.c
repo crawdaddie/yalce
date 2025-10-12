@@ -126,8 +126,6 @@ LLVMTypeRef get_largest_type(LLVMContextRef context, LLVMTypeRef *types,
   return largest_type;
 }
 
-#define OPTION_TAG_TYPE LLVMInt8Type()
-
 LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type) {
   LLVMTypeRef tu_types[] = {OPTION_TAG_TYPE, type};
   LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);

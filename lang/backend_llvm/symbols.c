@@ -247,89 +247,48 @@ Type *array_type(Ast *expr) {
   return NULL;
 }
 
-LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
-                               JITLangCtx *outer_ctx, JITLangCtx *inner_ctx,
+LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
   LLVMValueRef expr_val;
   Type *expr_type = expr->md;
-
-  if (binding == NULL && expr->tag == AST_IMPORT && in_expr) {
-
-    JITSymbol *module_symbol =
-        codegen_import(expr, NULL, inner_ctx, module, builder);
-
-    return codegen(in_expr, inner_ctx, module, builder);
-  }
 
   if (expr->tag == AST_APPLICATION && is_array_at(expr)) {
     Type *fn_type = array_type(expr);
     if (fn_type && !is_generic(fn_type)) {
 
       expr_val = create_fn_binding(binding, expr_type,
-                                   codegen(expr, outer_ctx, module, builder),
-                                   inner_ctx, module, builder);
+                                   codegen(expr, ctx, module, builder), ctx,
+                                   module, builder);
 
-      return in_expr == NULL ? expr_val
-                             : codegen(in_expr, inner_ctx, module, builder);
+      return expr_val;
     }
 
     if (fn_type && is_generic(fn_type)) {
 
-      expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
+      expr_val = create_generic_fn_binding(binding, expr, ctx);
 
-      return in_expr == NULL ? expr_val
-                             : codegen(in_expr, inner_ctx, module, builder);
+      return expr_val;
     }
   }
 
-  if (is_closure(expr_type)) {
+  if (is_closure(expr_type) && application_is_partial(expr)) {
     LLVMValueRef closure_obj =
-        create_closure_symbol(binding, expr, outer_ctx, module, builder);
+        create_closure_symbol(binding, expr, ctx, module, builder);
 
-    return in_expr == NULL ? closure_obj
-                           : codegen(in_expr, inner_ctx, module, builder);
+    return closure_obj;
   }
 
-  // if (expr->tag == AST_APPLICATION && application_is_partial(expr)) {
-  //
-  //   if (is_coroutine_type(expr_type)) {
-  //     expr_val = codegen(expr, outer_ctx, module, builder);
-  //
-  //     LLVMValueRef match_result = codegen_pattern_binding(
-  //         binding, expr_val, expr_type, in_expr ? inner_ctx : outer_ctx,
-  //         module, builder);
-  //
-  //     if (!match_result) {
-  //       fprintf(stderr,
-  //               "Error: could not bind coroutine instance in let expression "
-  //               "failed\n");
-  //       print_ast_err(binding);
-  //       print_ast_err(expr);
-  //       print_codegen_location();
-  //       return NULL;
-  //     }
-  //   } else {
-  //     expr_val =
-  //         create_curried_fn_binding(binding, expr, outer_ctx, module,
-  //         builder);
-  //   }
-  //
-  //   return in_expr == NULL ? expr_val
-  //                          : codegen(in_expr, inner_ctx, module, builder);
-  // }
-
   if (binding->tag == AST_IDENTIFIER && expr->tag == AST_IDENTIFIER) {
-    JITSymbol *sym = lookup_id_ast(expr, outer_ctx);
+    JITSymbol *sym = lookup_id_ast(expr, ctx);
     if (sym) {
       // create symbol alias - ie rebind symbol to another name
       // printf("create symbol alias - ie rebind symbol to another name\n");
       const char *chars = binding->data.AST_IDENTIFIER.value;
       int len = binding->data.AST_IDENTIFIER.length;
-      ht_set_hash(inner_ctx->frame->table, chars, hash_string(chars, len), sym);
+      ht_set_hash(ctx->frame->table, chars, hash_string(chars, len), sym);
 
-      return in_expr == NULL ? sym->val
-                             : codegen(in_expr, inner_ctx, module, builder);
+      return sym->val;
     }
   }
 
@@ -337,61 +296,52 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     // if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type))
     // {
     if (is_generic(expr_type)) {
-      expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
+      expr_val = create_generic_fn_binding(binding, expr, ctx);
     } else {
-      expr_val = compile_coroutine(expr, inner_ctx, module, builder);
-      expr_val = create_fn_binding(binding, expr_type, expr_val, inner_ctx,
-                                   module, builder);
+      expr_val = compile_coroutine(expr, ctx, module, builder);
+      expr_val =
+          create_fn_binding(binding, expr_type, expr_val, ctx, module, builder);
     }
 
-    return in_expr == NULL ? expr_val
-                           : codegen(in_expr, inner_ctx, module, builder);
+    return expr_val;
   }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {
-    expr_val = create_generic_fn_binding(binding, expr, inner_ctx);
+    expr_val = create_generic_fn_binding(binding, expr, ctx);
 
-    return in_expr == NULL ? expr_val
-                           : codegen(in_expr, inner_ctx, module, builder);
+    return expr_val;
   }
 
   if (expr_type->kind == T_FN && !is_coroutine_type(expr_type)) {
 
-    // if (is_lambda_with_closures(expr)) {
-    //   expr_val = create_curried_closure_binding(binding, expr_type, expr,
-    //                                             inner_ctx, module, builder);
-    // } else
     if (expr->tag == AST_EXTERN_FN) {
+
       expr_val = create_lazy_extern_fn_binding(binding, expr, expr_type, NULL,
-                                               inner_ctx, module, builder);
+                                               ctx, module, builder);
+
+    } else if (is_closure(expr_type)) {
+      expr_val = codegen(expr, ctx, module, builder);
+      create_fn_binding(binding, expr_type, expr_val, ctx, module, builder);
     } else {
 
       expr_val = create_fn_binding(binding, expr_type,
-                                   codegen_fn(expr, outer_ctx, module, builder),
-                                   inner_ctx, module, builder);
+                                   codegen_fn(expr, ctx, module, builder), ctx,
+                                   module, builder);
     }
 
-    return in_expr == NULL ? expr_val
-                           : codegen(in_expr, inner_ctx, module, builder);
+    return expr_val;
   }
 
   if (expr->tag == AST_MODULE) {
-    return codegen_inline_module(binding, expr, outer_ctx, module, builder);
+    return codegen_inline_module(binding, expr, ctx, module, builder);
   }
 
   if (expr->tag == AST_IMPORT) {
-    if (in_expr != NULL && !expr->data.AST_IMPORT.import_all) {
-      codegen_import(expr, binding, inner_ctx, module, builder);
-
-      return codegen(in_expr, inner_ctx, module, builder);
-    }
-
-    codegen_import(expr, binding, outer_ctx, module, builder);
-
+    codegen_import(expr, binding, ctx, module, builder);
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
 
-  expr_val = codegen(expr, outer_ctx, module, builder);
+  expr_val = codegen(expr, ctx, module, builder);
 
   if (!expr_val) {
     print_type_err(expr->md);
@@ -401,21 +351,17 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, Ast *in_expr,
     return NULL;
   }
 
-  LLVMValueRef match_result =
-      codegen_pattern_binding(binding, expr_val, expr_type,
-                              in_expr ? inner_ctx : outer_ctx, module, builder);
+  LLVMValueRef match_result = codegen_pattern_binding(
+      binding, expr_val, expr_type, ctx, module, builder);
 
   if (match_result == NULL) {
     fprintf(stderr, "Error: codegen for pattern binding in let expression "
                     "failed\n");
-    print_ast_err(binding);
-    print_ast_err(expr);
     print_codegen_location();
     return NULL;
   }
 
-  return in_expr == NULL ? expr_val
-                         : codegen(in_expr, inner_ctx, module, builder);
+  return expr_val;
 }
 
 LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
@@ -431,10 +377,10 @@ LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
   }
 
   LLVMValueRef res = _codegen_let_expr(binding, ast->data.AST_LET.expr,
-                                       ast->data.AST_LET.in_expr, outer_ctx,
                                        &cont_ctx, module, builder);
 
   if (ast->data.AST_LET.in_expr != NULL) {
+    res = codegen(ast->data.AST_LET.in_expr, &cont_ctx, module, builder);
     destroy_ctx(&cont_ctx);
   }
   return res;

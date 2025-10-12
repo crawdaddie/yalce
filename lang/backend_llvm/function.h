@@ -56,4 +56,8 @@ void callable_arg_types(Type *fn_type, int fn_len,
                         LLVMModuleRef module);
 
 TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst);
+
+void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
+                   JITLangCtx *ctx, JITLangCtx *fn_ctx, LLVMModuleRef module,
+                   LLVMBuilderRef builder);
 #endif

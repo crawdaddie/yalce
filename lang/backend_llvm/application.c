@@ -191,7 +191,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *res_type = ast->md;
 
-  if (is_closure(res_type)) {
+  if (is_closure(res_type) && application_is_partial(ast)) {
     return codegen_create_closure(ast, ctx, module, builder);
   }
 

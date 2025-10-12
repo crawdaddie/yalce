@@ -1340,6 +1340,16 @@ Type *handle_closure_constants(Ast *ast, Type *type, TICtx *ctx) {
     return type;
   }
 
+  int i = 0;
+  Type *f = ast->data.AST_APPLICATION.function->md;
+  for (; f->kind == T_FN && !is_closure(f); f = f->data.T_FN.to) {
+    i++;
+  }
+
+  if (ast->data.AST_APPLICATION.len == i) {
+    return type;
+  }
+
   ast->data.AST_APPLICATION.is_curried_with_constants = true;
   type->closure_meta = NULL;
   return type;

@@ -11,7 +11,22 @@ let fmul_concrete = fn a: (Int) b: (Int) ->
 ;;
 
 
-# let sum3 = fn a b c -> a + b + c;;
+# 2nd-order functions
+let f = fn c ->
+  let a = 1;
+  let b = 2;
+
+  fn () ->
+    a + b + c;
+;;
+
+let f2 = fn () ->
+  let a = 1;
+  let b = 2;
+
+  fn () ->
+    a + b;
+;;
 
 
 let test = module () ->
@@ -23,5 +38,9 @@ let test = module () ->
   let test3 = (let K = fmul_concrete 3 in K 3 == 9);
   let test4 = (let K = (+) 1 in K 3 == 4);
   let test5 = (let K = (+) in K 3 1 == 4);
+  let test6 = (let K = f 2 in K () == 5);
+  let test7 = (let K = f 3 in K () == 6);
+  let test8 = (let K = f 4 in K () == 7);
+  let test9 = (let K = f2 () in K () == 3);
 
 ;

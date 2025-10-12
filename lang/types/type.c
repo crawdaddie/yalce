@@ -491,6 +491,9 @@ bool fn_types_match(Type *t1, Type *t2) {
 }
 
 bool application_is_partial(Ast *app) {
+  if (app->tag != AST_APPLICATION) {
+    return false;
+  }
 
   if (((Type *)app->data.AST_APPLICATION.function->md)->kind != T_FN) {
     return false;
@@ -498,8 +501,8 @@ bool application_is_partial(Ast *app) {
 
   int expected_args_len =
       fn_type_args_len(app->data.AST_APPLICATION.function->md);
-
   int actual_args_len = app->data.AST_APPLICATION.len;
+
   return actual_args_len < expected_args_len;
 }
 
