@@ -172,8 +172,8 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
       }
     }
   }
-
-  // x.mem a ??
+  //
+  // // x.mem a ??
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
           ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record)) {

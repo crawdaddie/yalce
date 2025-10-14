@@ -197,9 +197,18 @@ LLVMValueRef codegen_module_access(Ast *record_ast, Type *record_type,
     return NULL;
   }
 
-  JITSymbol *member_symbol =
+  JITSymbol *sym =
       lookup_id_ast(member, module_symbol->symbol_data.STYPE_MODULE.ctx);
   // LLVMDumpValue(member_symbol->val);
+  if (sym->type == STYPE_GENERIC_FUNCTION) {
+    return get_specific_callable(sym, expected_member_type,
+                                 module_symbol->symbol_data.STYPE_MODULE.ctx,
+                                 llvm_module_ref, builder);
+  }
 
-  return member_symbol->val;
+  if (sym->type == STYPE_LAZY_EXTERN_FUNCTION) {
+    return instantiate_extern_fn_sym(sym, ctx, llvm_module_ref, builder);
+  }
+
+  return sym->val;
 }

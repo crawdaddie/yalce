@@ -60,4 +60,8 @@ TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst);
 void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
                    JITLangCtx *ctx, JITLangCtx *fn_ctx, LLVMModuleRef module,
                    LLVMBuilderRef builder);
+
+LLVMValueRef instantiate_extern_fn_sym(JITSymbol *sym, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder);
 #endif
