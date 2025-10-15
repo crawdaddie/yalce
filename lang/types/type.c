@@ -28,6 +28,7 @@ bool types_equal(Type *t1, Type *t2) {
 
   switch (t1->kind) {
   case T_INT:
+  case T_UINT64:
   case T_NUM:
   case T_STRING:
   case T_BOOL:

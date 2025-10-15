@@ -338,7 +338,7 @@ struct Ast {
 
   void *ea_md;
   void *md;
-  void *loc_info;
+  loc_info *loc_info;
   bool is_body_tail;
 };
 

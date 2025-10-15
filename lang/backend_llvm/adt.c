@@ -27,7 +27,7 @@ LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 
-  if ((strcmp(enum_type->data.T_CONS.name, "Variant") == 0) &&
+  if (CHARS_EQ(enum_type->data.T_CONS.name, TYPE_NAME_VARIANT) &&
       (enum_type->data.T_CONS.num_args == 2) &&
       (strcmp(enum_type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
       (strcmp(enum_type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
