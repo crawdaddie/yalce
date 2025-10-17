@@ -2,6 +2,7 @@
 #include "backend_llvm/strings.h"
 #include "backend_llvm/types.h"
 #include "serde.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -39,7 +40,9 @@ LLVMValueRef codegen_tuple(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     } else {
 
       LLVMValueRef tuple_element = codegen(mem_ast, ctx, module, builder);
-      tuple = LLVMBuildInsertValue(builder, tuple, tuple_element, offset, "");
+
+      tuple = LLVMBuildInsertValue(builder, tuple, tuple_element, offset,
+                                   "insertx");
 
       offset++;
     }

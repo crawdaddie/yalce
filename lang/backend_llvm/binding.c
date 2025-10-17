@@ -9,6 +9,7 @@
 #include "./types.h"
 #include "./util.h"
 #include "types/inference.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdint.h>
 #include <string.h>
@@ -76,6 +77,7 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
                                      LLVMBuilderRef builder) {
   switch (binding->tag) {
   case AST_IDENTIFIER: {
+
     if (ast_is_placeholder_id(binding)) {
       return _TRUE;
     }
@@ -93,8 +95,25 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
     const char *chars = binding->data.AST_IDENTIFIER.value;
     uint64_t id_hash = hash_string(chars, binding->data.AST_IDENTIFIER.length);
 
-    Type *enum_type = env_lookup(ctx->env, chars);
+    Type *enum_type = val_type;
+    // INSERT NEW CODE HERE (between line 110 and 112)
+    // Handle nullary constructors in sum types (like None in Option)
+    if (is_sum_type(enum_type)) {
+      for (int vidx = 0; vidx < enum_type->data.T_CONS.num_args; vidx++) {
+        Type *mem = enum_type->data.T_CONS.args[vidx];
+        if (strcmp(chars, mem->data.T_CONS.name) == 0) {
+          if (mem->data.T_CONS.num_args == 0) {
+            LLVMValueRef tag = extract_tag(val, builder);
+            return LLVMBuildICmp(builder, LLVMIntEQ, tag,
+                                 LLVMConstInt(LLVMInt8Type(), vidx, 0),
+                                 "tag_match");
+          }
+          break;
+        }
+      }
+    }
 
+    enum_type = env_lookup(ctx->env, chars);
     if (enum_type != NULL && is_simple_enum(enum_type)) {
       int vidx;
       Type *mem;

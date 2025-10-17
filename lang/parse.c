@@ -390,7 +390,14 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   if (body->tag != AST_BODY) {
     body->is_body_tail = true;
   }
+
   lambda->data.AST_LAMBDA.body = body;
+  if (lambda->data.AST_LAMBDA.body->tag == AST_BODY) {
+    body_tail(lambda->data.AST_LAMBDA.body)->is_body_tail = true;
+  } else {
+    lambda->data.AST_LAMBDA.body->is_body_tail = true;
+  }
+
   return lambda;
 }
 
@@ -661,6 +668,11 @@ Ast *ast_match(Ast *expr, Ast *match) {
   return match;
 }
 Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result) {
+  if (result->tag == AST_BODY) {
+    body_tail(result)->is_body_tail = true;
+  } else {
+    result->is_body_tail = true;
+  }
   if (match == NULL) {
     match = Ast_new(AST_MATCH);
     match->data.AST_MATCH.branches = palloc(sizeof(Ast) * 2);
@@ -678,6 +690,7 @@ Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result) {
   match->data.AST_MATCH.branches = prealloc(branches, sizeof(Ast) * len * 2);
   match->data.AST_MATCH.branches[len * 2 - 2] = *expr;
   match->data.AST_MATCH.branches[len * 2 - 1] = *result;
+
   return match;
 }
 

@@ -46,8 +46,10 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
   Type *callable_type;
   LLVMTypeRef llvm_callable_type;
   LLVMValueRef callable_val;
+  const char *fname;
 
   if (expr->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+    fname = expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
     JITSymbol *callable_sym =
         lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
@@ -71,6 +73,8 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
     }
 
   } else if (expr->data.AST_APPLICATION.function->tag == AST_LAMBDA) {
+
+    fname = expr->data.AST_APPLICATION.function->data.AST_LAMBDA.fn_name.chars;
     callable_type = expr->data.AST_APPLICATION.function->md;
     llvm_callable_type = type_to_llvm_type(callable_type, ctx, module);
     callable_val = codegen(expr, ctx, module, builder);
@@ -79,7 +83,9 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
     return NULL;
   }
 
-  START_FUNC(module, "curried_fn", clos_fn_type);
+  char name[32];
+  snprintf(name, 32, "curried.%s", fname);
+  START_FUNC(module, name, clos_fn_type);
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx);
   int len = fn_type_args_len(callable_type);
@@ -339,13 +345,22 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef closure_rec_type,
                             JITLangCtx *ctx, LLVMModuleRef module) {
 
   LLVMTypeRef closure_rec_ptr_type = LLVMPointerType(closure_rec_type, 0);
+  if (is_void_func(clos_type)) {
 
-  int args_len = fn_type_args_len(clos_type);
+    Type *ret_type = clos_type->data.T_FN.to;
+    LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx, module);
+    LLVMTypeRef ftype =
+        LLVMFunctionType(llvm_ret_type, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+    return ftype;
+  }
 
-  if ((args_len == 1 || args_len == 0) && is_void_func(clos_type)) {
-    args_len = 1;
-  } else {
-    args_len = args_len + 1;
+  int args_len = 1;
+
+  Type *t = clos_type;
+
+  while (!is_closure(t->data.T_FN.from) && t->kind == T_FN) {
+    args_len++;
+    t = t->data.T_FN.to;
   }
 
   LLVMTypeRef arg_types[args_len];
@@ -359,10 +374,13 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef closure_rec_type,
   }
 
   Type *ret_type = f;
+
   if (is_void_func(clos_type)) {
     ret_type = clos_type->data.T_FN.to;
   }
+
   LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx, module);
+
   return LLVMFunctionType(llvm_ret_type, arg_types, args_len, 0);
 }
 
@@ -387,9 +405,13 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
   LLVMTypeRef llvm_clos_fn_type =
       closure_fn_type(fn_type, rec_type, ctx, module);
 
-  int fn_len = fn_type_args_len(fn_type);
+  char name[32];
+  snprintf(name, 32, "lambda.closure.\\%s",
+           ast->data.AST_LAMBDA.fn_name.chars
+               ? ast->data.AST_LAMBDA.fn_name.chars
+               : ast->data.AST_LAMBDA.params->ast->data.AST_IDENTIFIER.value);
 
-  START_FUNC(module, "lambda_with_closure_values", llvm_clos_fn_type);
+  START_FUNC(module, name, llvm_clos_fn_type);
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
   LLVMValueRef inner_closure_rec = LLVMGetParam(func, 0);
 
@@ -424,8 +446,10 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
                   LLVMValueRef param_val = LLVMGetParam(func, i + 1);
                   Ast *param_ast = l->ast;
                   Type *param_type = fn_type->data.T_FN.from;
+
                   bind_fn_param(param_val, param_type, param_ast, ctx, &fn_ctx,
                                 module, builder);
+
                   fn_type = fn_type->data.T_FN.to;
                 }));
 

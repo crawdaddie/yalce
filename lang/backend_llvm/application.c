@@ -130,12 +130,35 @@ typedef struct ArgValList {
   struct ArgValList *next;
 } ArgValList;
 
-LLVMValueRef call_callable_rec(int num_args_processed, int num_args_total,
+LLVMValueRef call_callable_rec(int num_args_processed,
                                ArgValList *args_processed, Ast *ast,
                                Type *callable_type,
                                LLVMTypeRef llvm_callable_type,
                                LLVMValueRef callable, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  printf("\n\nCall callable rec\n%d:\n", num_args_processed);
+  print_ast(ast->data.AST_APPLICATION.function);
+  print_ast(ast->data.AST_APPLICATION.args);
+  print_type(callable_type);
+
+  // if (is_closure(callable_type)) {
+  //
+  //   LLVMTypeRef rec_type = closure_record_type(callable_type, ctx, module);
+  //
+  //   LLVMValueRef fn =
+  //       LLVMBuildStructGEP2(builder, rec_type, callable, 0, "fn_ptr_gep");
+  //   fn = LLVMBuildLoad2(builder, GENERIC_PTR, fn,
+  //                       "fn_ptr"); // extract from rec as just generic ptr
+  //   num_args_processed++;
+  //   ArgValList argl = {.val = callable, .next = args_processed};
+  //   Type _callable_type = *callable_type;
+  //   _callable_type.closure_meta = NULL;
+  //
+  //   return call_callable_rec(num_args_processed + 1, &argl, ast,
+  //                            &_callable_type, llvm_callable_type, callable,
+  //                            ctx, module, builder);
+  // }
 
   if (ast->data.AST_APPLICATION.len == 0) {
     LLVMValueRef arg_vals[num_args_processed];
@@ -169,7 +192,7 @@ LLVMValueRef call_callable_rec(int num_args_processed, int num_args_total,
   ArgValList argl = {.val = val, .next = args_processed};
   ast->data.AST_APPLICATION.args++;
   ast->data.AST_APPLICATION.len--;
-  return call_callable_rec(num_args_processed + 1, num_args_total, &argl, ast,
+  return call_callable_rec(num_args_processed + 1, &argl, ast,
                            callable_type->data.T_FN.to, llvm_callable_type,
                            callable, ctx, module, builder);
 }
@@ -193,9 +216,8 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
     _ast.data.AST_APPLICATION.len = 0;
   }
 
-  return call_callable_rec(0, ast->data.AST_APPLICATION.len, NULL, &_ast,
-                           callable_type, llvm_callable_type, callable, ctx,
-                           module, builder);
+  return call_callable_rec(0, NULL, &_ast, callable_type, llvm_callable_type,
+                           callable, ctx, module, builder);
 }
 
 bool is_closure_symbol(JITSymbol *sym) { return is_closure(sym->symbol_type); }

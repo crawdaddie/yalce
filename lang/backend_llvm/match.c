@@ -73,6 +73,17 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       any_branch_merges = true;
     }
   }
+  for (int i = 0; i < len; i++) {
+    Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
+
+    // In tail position, all branches that produce values should return
+    // The only exception is if the result type is void
+    if (is_return && _res_type->kind != T_VOID) {
+      branch_returns[i] = true;
+    } else {
+      any_branch_merges = true;
+    }
+  }
 
   // Only create end block and phi if some branches actually merge
   LLVMBasicBlockRef end_block = NULL;

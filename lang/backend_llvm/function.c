@@ -136,8 +136,6 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     Ast *stmt = ast->data.AST_LAMBDA.body;
-
-    stmt->is_body_tail = true;
     body = codegen(stmt, fn_ctx, module, builder);
 
   } else {
@@ -149,9 +147,6 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                       continue;
                     }
 
-                    if (i == len - 1) {
-                      stmt->is_body_tail = true;
-                    }
                     body = codegen(stmt, fn_ctx, module, builder);
                     if (body == NULL && i == 1 &&
                         stmt->tag == AST_APPLICATION) {

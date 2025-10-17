@@ -69,6 +69,7 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
 
   return func;
 }
+
 Ast *__current_ast;
 
 void print_codegen_location() { print_location(__current_ast); }
@@ -83,6 +84,9 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMValueRef val;
     AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
                     Ast *stmt = l->ast;
+
+                    if (stmt == ast->data.AST_BODY.tail) {
+                    }
                     val = codegen(stmt, ctx, module, builder);
                   }));
     return val;
