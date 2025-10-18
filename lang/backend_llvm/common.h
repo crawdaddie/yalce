@@ -28,6 +28,7 @@ typedef struct {
   const char *module_name;
   void *coro_ctx;
   LLVMValueRef allocator;
+  bool tail_expression;
 } JITLangCtx;
 
 typedef struct SpecificFns {
@@ -151,4 +152,12 @@ EscapeStatus find_allocation_strategy(Ast *expr, JITLangCtx *ctx);
                    (LLVMValueRef[]){format_str, __VA_ARGS__}, num_args + 1,    \
                    "");                                                        \
   })
+
+typedef struct BindList {
+  LLVMValueRef val;
+  LLVMTypeRef val_type;
+  Type *type;
+  Ast *binding;
+  struct BindList *next;
+} BindList;
 #endif

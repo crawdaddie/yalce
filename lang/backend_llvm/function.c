@@ -129,6 +129,25 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
+void set_tail_call_expressions(Ast *ast) {
+  Ast *tail;
+  if (ast->tag == AST_BODY) {
+    tail = body_tail(ast);
+  } else {
+    tail = ast;
+  }
+
+  tail->is_body_tail = true;
+
+  if (tail->tag == AST_MATCH) {
+    for (int i = 0; i < tail->data.AST_MATCH.len; i++) {
+      Ast *branch_body = tail->data.AST_MATCH.branches + (2 * i + 1);
+      set_tail_call_expressions(branch_body);
+    }
+  }
+  return;
+}
+
 LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -241,54 +260,30 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                   bind_fn_param(param_val, param_type, param_ast, ctx, &fn_ctx,
                                 module, builder);
 
-                  // if (param_type->kind == T_VAR) {
-                  //   param_type = resolve_type_in_env(param_type, ctx->env);
-                  // }
-                  //
-                  // if (param_type->kind == T_FN && is_closure(param_type)) {
-                  //
-                  //   const char *id_chars =
-                  //   param_ast->data.AST_IDENTIFIER.value; int id_len =
-                  //   param_ast->data.AST_IDENTIFIER.length;
-                  //
-                  //   LLVMTypeRef rec_type = closure_record_type(param_type,
-                  //   ctx, module); JITSymbol *sym = new_symbol(STYPE_FUNCTION,
-                  //   param_type, param_val,
-                  //                               LLVMPointerType(rec_type,
-                  //                               0));
-                  //
-                  //   ht_set_hash(fn_ctx.frame->table, id_chars,
-                  //               hash_string(id_chars, id_len), sym);
-                  //
-                  // } else if (param_type->kind == T_FN) {
-                  //   const char *id_chars =
-                  //   param_ast->data.AST_IDENTIFIER.value; int id_len =
-                  //   param_ast->data.AST_IDENTIFIER.length; LLVMTypeRef
-                  //   llvm_type = type_to_llvm_type(param_type, ctx, module);
-                  //
-                  //   JITSymbol *sym =
-                  //       new_symbol(STYPE_FUNCTION, param_type, param_val,
-                  //       llvm_type);
-                  //
-                  //   ht_set_hash(fn_ctx.frame->table, id_chars,
-                  //               hash_string(id_chars, id_len), sym);
-                  //
-                  // } else {
-                  //   codegen_pattern_binding(param_ast, param_val, param_type,
-                  //   &fn_ctx,
-                  //                           module, builder);
-                  // }
                   fn_type = fn_type->data.T_FN.to;
                 }));
 
+  set_tail_call_expressions(ast->data.AST_LAMBDA.body);
+
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
+  // if (LLVMIsACallInst())
 
   if (fn_type->kind == T_VOID) {
-    // printf("build ret for some reason???\n");
     LLVMBuildRetVoid(builder);
-  } else {
-    LLVMBuildRet(builder, body);
   }
+
+  // Check if the current block already has a terminator
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  if (current_block && !LLVMGetBasicBlockTerminator(current_block)) {
+    // Only add return if block is not already terminated
+    LLVMBuildRet(builder, body);
+    if (LLVMIsACallInst(body)) {
+      LLVMSetTailCall(body, true);
+    }
+  }
+  //   else {
+  //
+  // }
 
   END_FUNC
   destroy_ctx(&fn_ctx);

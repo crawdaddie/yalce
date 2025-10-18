@@ -10,4 +10,12 @@ LLVMValueRef match_values(Ast *left, LLVMValueRef right, Type *right_type,
                           JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder);
 
+void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
+                      LLVMValueRef val, LLVMTypeRef val_type, Type *type,
+                      JITLangCtx *ctx, LLVMModuleRef module,
+                      LLVMBuilderRef builder);
+
+void set_pattern_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder);
+
 #endif

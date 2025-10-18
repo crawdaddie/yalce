@@ -387,16 +387,18 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
     lambda->data.AST_LAMBDA.len = 0;
     lambda->data.AST_LAMBDA.type_annotations = NULL;
   }
+
   if (body->tag != AST_BODY) {
     body->is_body_tail = true;
   }
 
   lambda->data.AST_LAMBDA.body = body;
-  if (lambda->data.AST_LAMBDA.body->tag == AST_BODY) {
-    body_tail(lambda->data.AST_LAMBDA.body)->is_body_tail = true;
-  } else {
-    lambda->data.AST_LAMBDA.body->is_body_tail = true;
-  }
+
+  // if (lambda->data.AST_LAMBDA.body->tag == AST_BODY) {
+  //   body_tail(lambda->data.AST_LAMBDA.body)->is_body_tail = true;
+  // } else {
+  //   lambda->data.AST_LAMBDA.body->is_body_tail = true;
+  // }
 
   return lambda;
 }
@@ -668,11 +670,11 @@ Ast *ast_match(Ast *expr, Ast *match) {
   return match;
 }
 Ast *ast_match_branches(Ast *match, Ast *expr, Ast *result) {
-  if (result->tag == AST_BODY) {
-    body_tail(result)->is_body_tail = true;
-  } else {
-    result->is_body_tail = true;
-  }
+  // if (result->tag == AST_BODY) {
+  //   body_tail(result)->is_body_tail = true;
+  // } else {
+  //   result->is_body_tail = true;
+  // }
   if (match == NULL) {
     match = Ast_new(AST_MATCH);
     match->data.AST_MATCH.branches = palloc(sizeof(Ast) * 2);

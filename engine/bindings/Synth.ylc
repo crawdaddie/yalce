@@ -100,12 +100,6 @@ let stutter_node = extern fn Double -> Synth -> Synth -> Synth -> Synth;
 let wrap_opaque_ref_in_node = extern fn Ptr -> Ptr -> Int -> Synth -> Synth;
 
 # node_util.h
-let sum2_node = extern fn Synth -> Synth -> Synth;
-let mul2_node = extern fn Synth -> Synth -> Synth;
-let sub2_node = extern fn Synth -> Synth -> Synth;
-let mod2_node = extern fn Synth -> Synth -> Synth;
-let div2_node = extern fn Synth -> Synth -> Synth;
-let const_sig = extern fn Double -> Synth;
 let const_buf = extern fn Double -> Int -> Int -> Synth;
 let stereo_node = extern fn Synth -> Synth;
 let pan_node = extern fn Synth -> Synth -> Synth;
@@ -141,6 +135,12 @@ let imp_train_node = extern fn Synth -> Synth;
 #   end_chain x
 # ;;
  
+let sum2_node = extern fn Synth -> Synth -> Synth;
+let mul2_node = extern fn Synth -> Synth -> Synth;
+let sub2_node = extern fn Synth -> Synth -> Synth;
+let mod2_node = extern fn Synth -> Synth -> Synth;
+let div2_node = extern fn Synth -> Synth -> Synth;
+let const_sig = extern fn Double -> Synth;
 
 let Constructor : Synth = module () ->
   let of_int = fn a: (Int) ->
@@ -151,14 +151,15 @@ let Constructor : Synth = module () ->
     const_sig a
   ;;
 ;
+
 # TODO: add impls for Ord and Eq??
 let Arithmetic : Synth = module () ->
   let rank = 5.; # rank must be a literal
-  let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;
-  let sub = fn a: (Synth) b: (Synth) -> sub2_node a b;;
-  let mul = fn a: (Synth) b: (Synth) -> mul2_node a b;;
-  let div = fn a: (Synth) b: (Synth) -> div2_node a b;;
-  let mod = fn a: (Synth) b: (Synth) -> mod2_node a b;;
+  let add = sum2_node;
+  let sub = sub2_node;
+  let mul = mul2_node;
+  let div = div2_node;
+  let mod = mod2_node;
 ;
 
 

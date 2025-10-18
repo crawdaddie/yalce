@@ -60,73 +60,9 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-LLVMValueRef _call_callable(Ast *ast, Type *callable_type,
-                            LLVMValueRef callable, JITLangCtx *ctx,
-                            LLVMModuleRef module, LLVMBuilderRef builder) {
-  if (!callable) {
-    return NULL;
-  }
-
-  int args_len = ast->data.AST_APPLICATION.len;
-  int exp_args_len = fn_type_args_len(callable_type);
-
-  LLVMTypeRef llvm_callable_type =
-      type_to_llvm_type(callable_type, ctx, module);
-
-  if (!llvm_callable_type) {
-    print_ast_err(ast);
-    return NULL;
-  }
-
-  if (callable_type->kind == T_FN &&
-      callable_type->data.T_FN.from->kind == T_VOID) {
-
-    return LLVMBuildCall2(builder, llvm_callable_type, callable, NULL, 0,
-                          "call_func");
-  }
-
-  LLVMValueRef app_vals[args_len];
-
-  for (int i = 0; i < args_len; i++) {
-
-    Type *expected_type = callable_type->data.T_FN.from;
-
-    Ast *app_arg = ast->data.AST_APPLICATION.args + i;
-
-    Type *app_arg_type = app_arg->md;
-
-    LLVMValueRef app_val;
-    if (is_generic(app_arg->md) && expected_type->kind == T_FN) {
-
-      Ast _app_arg = *app_arg;
-      _app_arg.md = expected_type;
-      app_val = codegen(&_app_arg, ctx, module, builder);
-    } else if (!types_equal(app_arg_type, expected_type) &&
-               expected_type->alias != NULL) {
-
-      app_val = codegen(app_arg, ctx, module, builder);
-
-      app_val = handle_type_conversions(app_val, app_arg_type, expected_type,
-                                        ctx, module, builder);
-
-    } else {
-      app_val = codegen(app_arg, ctx, module, builder);
-    }
-
-    callable_type = callable_type->data.T_FN.to;
-
-    app_vals[i] = app_val;
-  }
-
-  LLVMValueRef c =
-      LLVMBuildCall2(builder, llvm_callable_type, callable, app_vals,
-
-                     args_len, "call_func");
-  return c;
-}
-
 typedef struct ArgValList {
   LLVMValueRef val;
+  LLVMTypeRef llvm_type;
   struct ArgValList *next;
 } ArgValList;
 
@@ -137,28 +73,10 @@ LLVMValueRef call_callable_rec(int num_args_processed,
                                LLVMValueRef callable, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  printf("\n\nCall callable rec\n%d:\n", num_args_processed);
-  print_ast(ast->data.AST_APPLICATION.function);
-  print_ast(ast->data.AST_APPLICATION.args);
-  print_type(callable_type);
-
-  // if (is_closure(callable_type)) {
-  //
-  //   LLVMTypeRef rec_type = closure_record_type(callable_type, ctx, module);
-  //
-  //   LLVMValueRef fn =
-  //       LLVMBuildStructGEP2(builder, rec_type, callable, 0, "fn_ptr_gep");
-  //   fn = LLVMBuildLoad2(builder, GENERIC_PTR, fn,
-  //                       "fn_ptr"); // extract from rec as just generic ptr
-  //   num_args_processed++;
-  //   ArgValList argl = {.val = callable, .next = args_processed};
-  //   Type _callable_type = *callable_type;
-  //   _callable_type.closure_meta = NULL;
-  //
-  //   return call_callable_rec(num_args_processed + 1, &argl, ast,
-  //                            &_callable_type, llvm_callable_type, callable,
-  //                            ctx, module, builder);
-  // }
+  // printf("\n\nCall callable rec\n%d:\n", num_args_processed);
+  // print_ast(ast->data.AST_APPLICATION.function);
+  // print_ast(ast->data.AST_APPLICATION.args);
+  // print_type(callable_type);
 
   if (ast->data.AST_APPLICATION.len == 0) {
     LLVMValueRef arg_vals[num_args_processed];
@@ -189,7 +107,9 @@ LLVMValueRef call_callable_rec(int num_args_processed,
 
   val = handle_type_conversions(val, from_type, to_type, ctx, module, builder);
 
-  ArgValList argl = {.val = val, .next = args_processed};
+  ArgValList argl = {.val = val,
+                     .llvm_type = type_to_llvm_type(to_type, ctx, module),
+                     .next = args_processed};
   ast->data.AST_APPLICATION.args++;
   ast->data.AST_APPLICATION.len--;
   return call_callable_rec(num_args_processed + 1, &argl, ast,

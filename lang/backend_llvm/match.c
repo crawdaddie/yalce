@@ -1,231 +1,411 @@
-
 #include "backend_llvm/match.h"
+#include "adt.h"
+#include "backend_llvm/adt.h"
+#include "backend_llvm/list.h"
+#include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
-#include "binding.h"
+#include "builtin_functions.h"
+#include "parse.h"
+#include "symbols.h"
+#include "tuple.h"
 #include "llvm-c/Core.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-bool is_tail_call_expression(Ast *expr);
-
-bool will_all_branches_return(Ast *match_expr);
-
-bool branch_is_match(Ast *expr) {
-  if (expr->tag == AST_MATCH) {
-    return true;
-  }
-  if (expr->tag == AST_BODY) {
-    int n = expr->data.AST_BODY.len;
-    Ast *last = body_tail(expr);
-    return branch_is_match(last);
-  }
-  return false;
-}
-
 void set_as_tail(Ast *expr) {
   if (expr->tag == AST_BODY) {
-    int n = expr->data.AST_BODY.len;
     Ast *last = body_tail(expr);
     return set_as_tail(last);
   }
   expr->is_body_tail = true;
 }
+Ast *get_branch_tail(Ast *b) {
+  if (b->tag == AST_BODY) {
+    return body_tail(b);
+  }
+  return b;
+}
+
+void set_pattern_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder) {
+
+  // Iterate through the binding list and add each binding to the context
+  for (BindList *b = bl; b != NULL; b = b->next) {
+    if (ast_is_placeholder_id(b->binding)) {
+      continue; // Skip placeholder bindings like '_'
+    }
+
+    const char *chars = b->binding->data.AST_IDENTIFIER.value;
+    uint64_t id_hash =
+        hash_string(chars, b->binding->data.AST_IDENTIFIER.length);
+
+    // Local binding
+    JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, b->type, b->val, b->val_type);
+    ht_set_hash(ctx->frame->table, chars, id_hash, sym);
+  }
+}
+
+void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
+                      LLVMValueRef val, LLVMTypeRef val_type, Type *type,
+                      JITLangCtx *ctx, LLVMModuleRef module,
+                      LLVMBuilderRef builder) {
+  switch (pattern->tag) {
+  case AST_IDENTIFIER: {
+    // Placeholder: no test, no binding
+    if (ast_is_placeholder_id(pattern)) {
+      return;
+    }
+
+    // Check if this is a sum type constructor (nullary variant like None)
+    const char *chars = pattern->data.AST_IDENTIFIER.value;
+    if (is_sum_type(type)) {
+      for (int vidx = 0; vidx < type->data.T_CONS.num_args; vidx++) {
+        Type *mem = type->data.T_CONS.args[vidx];
+        if (strcmp(chars, mem->data.T_CONS.name) == 0) {
+          if (mem->data.T_CONS.num_args == 0) {
+            // This is a nullary constructor - add equality test
+            LLVMValueRef tag = extract_tag(val, builder);
+            LLVMValueRef tag_test = LLVMBuildICmp(
+                builder, LLVMIntEQ, tag, LLVMConstInt(LLVMInt8Type(), vidx, 0),
+                "tag_match");
+
+            // AND with accumulated result
+            *test_result = LLVMBuildAnd(builder, *test_result, tag_test, "");
+            return;
+          }
+          break;
+        }
+      }
+    }
+
+    // Regular identifier - add to binding list
+    BindList *new_binding = malloc(sizeof(BindList));
+    *new_binding = (BindList){.val = val,
+                              .val_type = val_type,
+                              .type = type,
+                              .binding = pattern,
+                              .next = *bl};
+    *bl = new_binding;
+    return;
+  }
+
+  case AST_APPLICATION: {
+    if (pattern->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
+      return;
+    }
+
+    const char *cons_name =
+        pattern->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+
+    // Handle list prepend (::)
+    if (strcmp(cons_name, "::") == 0) {
+      // Test if list is non-empty
+      Type *list_el_type = type->data.T_CONS.args[0];
+      LLVMTypeRef llvm_list_el_type =
+          type_to_llvm_type(list_el_type, ctx, module);
+
+      LLVMValueRef is_empty = ll_is_null(val, llvm_list_el_type, builder);
+      LLVMValueRef is_not_empty =
+          LLVMBuildNot(builder, is_empty, "list_not_empty");
+
+      // AND with accumulated result
+      *test_result = LLVMBuildAnd(builder, *test_result, is_not_empty, "");
+
+      // Recursively test head and tail
+      Ast *head_pattern = pattern->data.AST_APPLICATION.args;
+      Ast *tail_pattern = pattern->data.AST_APPLICATION.args + 1;
+
+      test_pattern_rec(head_pattern, bl, test_result,
+                       ll_get_head_val(val, llvm_list_el_type, builder),
+                       llvm_list_el_type, list_el_type, ctx, module, builder);
+      test_pattern_rec(tail_pattern, bl, test_result,
+                       ll_get_next(val, llvm_list_el_type, builder), val_type,
+                       type, ctx, module, builder);
+      return;
+    }
+
+    // Handle sum type variant with arguments
+    Type *cons_type = pattern->md;
+    if (cons_type->kind == T_CONS && is_sum_type(cons_type)) {
+      // Find variant index
+      int vidx;
+      Type *variant_type;
+      for (vidx = 0; vidx < cons_type->data.T_CONS.num_args; vidx++) {
+        variant_type = cons_type->data.T_CONS.args[vidx];
+        if (strcmp(cons_name, variant_type->data.T_CONS.name) == 0) {
+          break;
+        }
+      }
+
+      // Add tag test
+      LLVMValueRef tag = extract_tag(val, builder);
+      LLVMValueRef tag_test =
+          LLVMBuildICmp(builder, LLVMIntEQ, tag,
+                        LLVMConstInt(LLVMInt8Type(), vidx, 0), "tag_match");
+
+      // AND with accumulated result
+      *test_result = LLVMBuildAnd(builder, *test_result, tag_test, "");
+
+      // Extract payload and test nested pattern
+      LLVMValueRef payload = codegen_tuple_access(
+          1, val, type_to_llvm_type(cons_type, ctx, module), builder);
+      Type *payload_type = variant_type->data.T_CONS.args[0];
+      LLVMTypeRef llvm_payload_type =
+          type_to_llvm_type(payload_type, ctx, module);
+
+      for (int i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
+        test_pattern_rec(pattern->data.AST_APPLICATION.args + i, bl,
+                         test_result, payload, llvm_payload_type, payload_type,
+                         ctx, module, builder);
+      }
+    }
+    return;
+  }
+
+  case AST_TUPLE: {
+    // Test each element of tuple
+    int len = pattern->data.AST_LIST.len;
+    for (int i = 0; i < len; i++) {
+      LLVMValueRef elem_val = codegen_tuple_access(i, val, val_type, builder);
+      Type *elem_type = type->data.T_CONS.args[i];
+      LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);
+
+      test_pattern_rec(pattern->data.AST_LIST.items + i, bl, test_result,
+                       elem_val, llvm_elem_type, elem_type, ctx, module,
+                       builder);
+    }
+    return;
+  }
+
+  case AST_LIST: {
+    Type *list_el_type = type->data.T_CONS.args[0];
+    LLVMTypeRef llvm_list_el_type =
+        type_to_llvm_type(list_el_type, ctx, module);
+
+    if (pattern->data.AST_LIST.len == 0) {
+      // Empty list test
+      LLVMValueRef is_empty = ll_is_null(val, llvm_list_el_type, builder);
+      *test_result = LLVMBuildAnd(builder, *test_result, is_empty, "");
+      return;
+    }
+
+    // Non-empty list - test each element
+    LLVMValueRef current = val;
+    for (int i = 0; i < pattern->data.AST_LIST.len; i++) {
+      // Test that list has at least one more element
+      LLVMValueRef is_empty = ll_is_null(current, llvm_list_el_type, builder);
+      LLVMValueRef is_not_empty =
+          LLVMBuildNot(builder, is_empty, "list_not_empty");
+
+      *test_result = LLVMBuildAnd(builder, *test_result, is_not_empty, "");
+
+      // Test head element
+      LLVMValueRef head = ll_get_head_val(current, llvm_list_el_type, builder);
+      test_pattern_rec(pattern->data.AST_LIST.items + i, bl, test_result, head,
+                       llvm_list_el_type, list_el_type, ctx, module, builder);
+
+      // Move to next element
+      current = ll_get_next(current, llvm_list_el_type, builder);
+    }
+    return;
+  }
+
+  case AST_VOID: {
+    // Void matches anything
+    return;
+  }
+
+  default: {
+    // Literal value - test for equality
+    LLVMValueRef pattern_val = codegen(pattern, ctx, module, builder);
+    LLVMValueRef equality_test =
+        _codegen_equality(type, pattern_val, val, ctx, module, builder);
+
+    *test_result = LLVMBuildAnd(builder, *test_result, equality_test, "");
+    return;
+  }
+  }
+}
+// test val against a pattern collecting a series of bindings that should be
+// made at the end
+LLVMValueRef test_pattern(Ast *pattern, LLVMValueRef val, Type *val_type,
+                          JITLangCtx *ctx, LLVMModuleRef module,
+                          LLVMBuilderRef builder) {
+  BindList *bl = NULL;
+  LLVMTypeRef llvm_val_type = type_to_llvm_type(val_type, ctx, module);
+
+  // Start with true - AND all tests with this
+  LLVMValueRef test_result = LLVMConstInt(LLVMInt1Type(), 1, 0);
+
+  Ast *guard_expr = NULL;
+  if (pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+    guard_expr = pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+    pattern = pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+  }
+
+  // Recursively collect tests and bindings, building up test_result
+  test_pattern_rec(pattern, &bl, &test_result, val, llvm_val_type, val_type,
+                   ctx, module, builder);
+
+  // Apply bindings before evaluating guard (guard needs access to bound vars)
+  set_pattern_bindings(bl, ctx, module, builder);
+
+  if (guard_expr) {
+    LLVMValueRef guard_result = codegen(guard_expr, ctx, module, builder);
+    test_result = LLVMBuildAnd(builder, test_result, guard_result, "");
+  }
+
+  // Free allocated binding list
+  while (bl != NULL) {
+    BindList *next = bl->next;
+    free(bl);
+    bl = next;
+  }
+
+  return test_result;
+}
 
 LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  bool is_return = ast->is_body_tail;
-
   LLVMValueRef test_val =
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
 
   if (!test_val) {
-
     fprintf(stderr, "could not compile test expression\n");
     return NULL;
   }
 
   Type *test_val_type = ast->data.AST_MATCH.expr->md;
-  Type *_res_type = ast->md;
-  // print_type_env(ctx->env);
-  LLVMTypeRef res_type = type_to_llvm_type(_res_type, ctx, module);
+  Type *result_type = ast->md;
+  LLVMTypeRef llvm_result_type = type_to_llvm_type(result_type, ctx, module);
 
-  int len = ast->data.AST_MATCH.len;
-  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  int num_branches = ast->data.AST_MATCH.len;
+  LLVMValueRef parent_func =
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+  bool is_tail_position = ast->is_body_tail;
 
-  // Track which branches actually need to merge
-  bool branch_returns[len];
-  bool any_branch_merges = false;
+  // Create merge block only if not in tail position
+  LLVMBasicBlockRef merge_block = NULL;
+  LLVMValueRef result_phi = NULL;
 
-  // Pre-analyze branches to see if we need an end block at all
-  for (int i = 0; i < len; i++) {
-    Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
-
-    // Check if this branch will definitely return (tail call or nested match
-    // that returns)
-    if (is_return && (is_tail_call_expression(result_expr) ||
-                      (branch_is_match(result_expr) &&
-                       will_all_branches_return(result_expr)))) {
-      branch_returns[i] = true;
-    } else {
-      any_branch_merges = true;
-    }
-  }
-  for (int i = 0; i < len; i++) {
-    Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
-
-    // In tail position, all branches that produce values should return
-    // The only exception is if the result type is void
-    if (is_return && _res_type->kind != T_VOID) {
-      branch_returns[i] = true;
-    } else {
-      any_branch_merges = true;
-    }
+  if (!is_tail_position) {
+    merge_block = LLVMAppendBasicBlock(parent_func, "match.merge");
+    LLVMPositionBuilderAtEnd(builder, merge_block);
+    result_phi = LLVMBuildPhi(builder, llvm_result_type, "match.result");
+    // Position back to continue building branches
+    LLVMPositionBuilderAtEnd(builder, LLVMGetFirstBasicBlock(parent_func));
+    LLVMPositionBuilderAtEnd(
+        builder, LLVMGetLastInstruction(LLVMGetEntryBasicBlock(parent_func))
+                     ? LLVMGetInstructionParent(LLVMGetLastInstruction(
+                           LLVMGetEntryBasicBlock(parent_func)))
+                     : LLVMGetEntryBasicBlock(parent_func));
   }
 
-  // Only create end block and phi if some branches actually merge
-  LLVMBasicBlockRef end_block = NULL;
-  LLVMValueRef phi = NULL;
+  // Track whether we actually use the merge block
+  int num_branches_to_merge = 0;
 
-  if (any_branch_merges) {
-    end_block = LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block),
-                                     "match.end");
-    LLVMPositionBuilderAtEnd(builder, end_block);
-    phi = LLVMBuildPhi(builder, res_type, "match.result");
-    LLVMPositionBuilderAtEnd(builder, current_block);
-  }
+  // Generate code for each branch
+  for (int i = 0; i < num_branches; i++) {
+    Ast *pattern = ast->data.AST_MATCH.branches + (2 * i);
+    Ast *branch_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
 
-  LLVMBasicBlockRef next_block = NULL;
+    // Create basic blocks for this branch
+    LLVMBasicBlockRef branch_body =
+        LLVMAppendBasicBlock(parent_func, "match.case");
+    LLVMBasicBlockRef next_test =
+        (i < num_branches - 1) ? LLVMAppendBasicBlock(parent_func, "match.next")
+                               : NULL;
 
-  // Compile each branch
-  for (int i = 0; i < len; i++) {
-    Ast *test_expr = ast->data.AST_MATCH.branches + (2 * i);
-    Ast *result_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
+    // Create new scope for pattern bindings
+    STACK_ALLOC_CTX_PUSH(branch_ctx_mem, ctx)
+    JITLangCtx branch_ctx = branch_ctx_mem;
 
-    // Create a basic block for this branch
-    LLVMBasicBlockRef branch_block = LLVMAppendBasicBlock(
-        LLVMGetBasicBlockParent(current_block), "match.branch");
+    // Generate pattern matching test
+    LLVMValueRef pattern_matches = test_pattern(
+        pattern, test_val, test_val_type, &branch_ctx, module, builder);
 
-    if (i < len - 1) {
-      next_block = LLVMAppendBasicBlock(LLVMGetBasicBlockParent(current_block),
-                                        "match.next");
+    // Branch based on pattern match
+    if (i == num_branches - 1) {
+      // Last branch - always take it
+      LLVMBuildBr(builder, branch_body);
     } else {
-      next_block = NULL;
+      // Conditional branch to next test or branch body
+      LLVMBasicBlockRef false_dest = next_test ? next_test : merge_block;
+      LLVMBuildCondBr(builder, pattern_matches, branch_body, false_dest);
     }
 
-    STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
-    JITLangCtx branch_ctx = fn_ctx;
+    // Generate branch body
+    LLVMPositionBuilderAtEnd(builder, branch_body);
 
-    LLVMValueRef test_value = codegen_pattern_binding(
-        test_expr, test_val, test_val_type, &branch_ctx, module, builder);
-
-    if (i == len - 1) {
-      LLVMBuildBr(builder, branch_block);
-    } else {
-      // Conditional branch - if no end block exists, last branch goes nowhere
-      LLVMBasicBlockRef false_target =
-          next_block ? next_block : (any_branch_merges ? end_block : NULL);
-      if (false_target) {
-        LLVMBuildCondBr(builder, test_value, branch_block, false_target);
-      } else {
-        // All remaining branches return, so this is effectively an if-then
-        LLVMBuildCondBr(builder, test_value, branch_block, branch_block);
-      }
-    }
-
-    // Compile the result expression in the branch block
-    LLVMPositionBuilderAtEnd(builder, branch_block);
-
-    if (is_return) {
-      set_as_tail(result_expr);
+    if (is_tail_position) {
+      set_as_tail(branch_expr);
     }
 
     LLVMValueRef branch_result =
-        codegen(result_expr, &branch_ctx, module, builder);
+        codegen(branch_expr, &branch_ctx, module, builder);
 
     if (!branch_result) {
       destroy_ctx(&branch_ctx);
-      fprintf(stderr, "no branch result\n");
+      fprintf(stderr, "failed to compile match branch\n");
       return NULL;
     }
 
-    // Handle the result based on whether this branch returns or merges
-    if (branch_returns[i]) {
-      // This branch should return directly
-      if (is_tail_call_expression(result_expr)) {
-        LLVMSetTailCall(branch_result, 1);
+    // Handle branch termination
+    LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+
+    if (is_tail_position) {
+      // In tail position - return directly if not already terminated
+      if (!LLVMGetBasicBlockTerminator(current_block)) {
+        if (LLVMIsACallInst(branch_result)) {
+          LLVMSetTailCall(branch_result, true);
+        }
+        LLVMBuildRet(builder, branch_result);
       }
-      LLVMBuildRet(builder, branch_result);
-      // Don't add to phi - this branch doesn't reach the end block
     } else {
-      // This branch merges with others
-      if (((Type *)ast->md)->kind == T_VOID) {
-        branch_result = LLVMGetUndef(LLVMVoidType());
+      // Not in tail position - branch to merge block
+      if (!LLVMGetBasicBlockTerminator(current_block)) {
+        LLVMBuildBr(builder, merge_block);
+        LLVMAddIncoming(result_phi, &branch_result, &current_block, 1);
+        num_branches_to_merge++;
       }
-
-      if (end_block) {
-        LLVMBuildBr(builder, end_block);
-        // Only add incoming if we actually branch to end_block
-        LLVMBasicBlockRef current_branch_block = LLVMGetInsertBlock(builder);
-        LLVMAddIncoming(phi, &branch_result, &current_branch_block, 1);
-      }
-    }
-
-    // Continue with the next comparison if there is one
-    if (next_block) {
-      LLVMPositionBuilderAtEnd(builder, next_block);
     }
 
     destroy_ctx(&branch_ctx);
-  }
 
-  // Position the builder at the end block and return the result
-  if (end_block) {
-    LLVMPositionBuilderAtEnd(builder, end_block);
-    return phi;
-  } else {
-    // All branches returned, this point is unreachable
-    // Create a dummy return to satisfy LLVM
-    LLVMBuildUnreachable(builder);
-    return LLVMGetUndef(res_type);
-  }
-}
-
-// Helper function to check if an expression is a direct tail call
-bool is_tail_call_expression(Ast *expr) {
-  if (expr->tag == AST_BODY) {
-    int n = expr->data.AST_BODY.len;
-    Ast *last = body_tail(expr);
-    return is_tail_call_expression(last);
-  }
-
-  return expr->tag == AST_APPLICATION;
-}
-
-// Helper function to check if all branches of a nested match will return
-bool will_all_branches_return(Ast *match_expr) {
-  if (!branch_is_match(match_expr)) {
-    return is_tail_call_expression(match_expr);
-  }
-
-  if (match_expr->tag == AST_BODY) {
-    int n = match_expr->data.AST_BODY.len;
-    Ast *last = body_tail(match_expr);
-    return will_all_branches_return(last);
-  }
-
-  if (match_expr->tag == AST_MATCH) {
-    int len = match_expr->data.AST_MATCH.len;
-    for (int i = 0; i < len; i++) {
-      Ast *branch_result = match_expr->data.AST_MATCH.branches + (2 * i + 1);
-      if (!will_all_branches_return(branch_result)) {
-        return false;
-      }
+    // Position at next test block for next iteration
+    if (next_test) {
+      LLVMPositionBuilderAtEnd(builder, next_test);
     }
-    return true;
   }
 
-  return false;
+  // Handle merge block
+  if (!is_tail_position) {
+    if (num_branches_to_merge == 0) {
+      // No branches reached merge block - delete it
+      LLVMDeleteBasicBlock(merge_block);
+      // All branches must have returned - mark unreachable
+      LLVMBasicBlockRef last_block = LLVMGetInsertBlock(builder);
+      if (!LLVMGetBasicBlockTerminator(last_block)) {
+        LLVMBuildUnreachable(builder);
+      }
+      return LLVMGetUndef(llvm_result_type);
+    } else {
+      // Some branches merged - return phi result
+      LLVMPositionBuilderAtEnd(builder, merge_block);
+      return result_phi;
+    }
+  } else {
+    // In tail position - all branches returned
+    // Make sure the current block is terminated
+    LLVMBasicBlockRef current = LLVMGetInsertBlock(builder);
+    if (current && !LLVMGetBasicBlockTerminator(current)) {
+      LLVMBuildUnreachable(builder);
+    }
+    // Return undef - this value won't be used since all branches returned
+    return LLVMGetUndef(llvm_result_type);
+  }
 }
