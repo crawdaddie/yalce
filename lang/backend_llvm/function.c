@@ -129,7 +129,7 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
-void set_tail_call_expressions(Ast *ast) {
+void find_tail_call_expressions(Ast *ast) {
   Ast *tail;
   if (ast->tag == AST_BODY) {
     tail = body_tail(ast);
@@ -142,7 +142,7 @@ void set_tail_call_expressions(Ast *ast) {
   if (tail->tag == AST_MATCH) {
     for (int i = 0; i < tail->data.AST_MATCH.len; i++) {
       Ast *branch_body = tail->data.AST_MATCH.branches + (2 * i + 1);
-      set_tail_call_expressions(branch_body);
+      find_tail_call_expressions(branch_body);
     }
   }
   return;
@@ -223,6 +223,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       ast->data.AST_APPLICATION.is_curried_with_constants) {
     return codegen_const_curried_fn(ast, ctx, module, builder);
   }
+
   if (ast->data.AST_LAMBDA.num_closed_vals > 0) {
     return codegen_lambda_closure(ast->md, ast, ctx, module, builder);
   }
@@ -236,10 +237,8 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   int fn_len = ast->data.AST_LAMBDA.len;
-  int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
-  LLVMTypeRef prototype =
-      codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx, module);
+  LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx, module);
 
   if (!prototype) {
     return NULL;
@@ -263,7 +262,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                   fn_type = fn_type->data.T_FN.to;
                 }));
 
-  set_tail_call_expressions(ast->data.AST_LAMBDA.body);
+  find_tail_call_expressions(ast->data.AST_LAMBDA.body);
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
   // if (LLVMIsACallInst())

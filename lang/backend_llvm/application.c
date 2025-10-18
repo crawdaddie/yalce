@@ -80,10 +80,12 @@ LLVMValueRef call_callable_rec(int num_args_processed,
 
   if (ast->data.AST_APPLICATION.len == 0) {
     LLVMValueRef arg_vals[num_args_processed];
+    LLVMTypeRef arg_types[num_args_processed];
     ArgValList *avl = args_processed;
     for (int i = num_args_processed - 1; i >= 0; i--, avl = avl->next) {
       LLVMValueRef val = avl->val;
       arg_vals[i] = val;
+      arg_types[i] = avl->llvm_type;
     }
     char name[32];
     if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
@@ -92,7 +94,19 @@ LLVMValueRef call_callable_rec(int num_args_processed,
     } else {
       sprintf(name, "call.record_member");
     }
-    return LLVMBuildCall2(builder, llvm_callable_type, callable, arg_vals,
+    printf("CALL CALLABLE\n");
+    print_ast(ast->data.AST_APPLICATION.function);
+    printf("num args %d\n", num_args_processed);
+    LLVMDumpValue(callable);
+    printf("\n");
+    LLVMDumpType(llvm_callable_type);
+    printf("\n");
+    print_type(ast->md);
+    LLVMTypeRef ctype =
+        LLVMFunctionType(type_to_llvm_type(ast->md, ctx, module), arg_types,
+                         num_args_processed, 0);
+    LLVMDumpType(ctype);
+    return LLVMBuildCall2(builder, ctype, callable, arg_vals,
                           num_args_processed, name);
   }
 
@@ -168,9 +182,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *res_type = ast->md;
 
-  if (is_closure(res_type) && application_is_partial(ast)) {
-    return codegen_create_closure(ast, ctx, module, builder);
-  }
+  // if (is_closure(res_type) && application_is_partial(ast)) {
+  //   return codegen_create_closure(ast, ctx, module, builder);
+  // }
 
   LLVMValueRef callable;
   Type *callable_type = expected_fn_type;
@@ -196,9 +210,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
 
-  if (is_closure_symbol(sym)) {
-    return call_closure_sym(ast, callable_type, sym, ctx, module, builder);
-  }
+  // if (is_closure_symbol(sym)) {
+  //   return call_closure_sym(ast, callable_type, sym, ctx, module, builder);
+  // }
 
   if (is_sum_type(callable_type) && sym->type == STYPE_VARIANT_TYPE) {
     return codegen_adt_member_with_args(callable_type, sym->llvm_type, ast,
@@ -221,7 +235,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return coro_resume(sym, ctx, module, builder);
   }
 
-  if (sym->type == STYPE_GENERIC_FUNCTION && !is_closure(sym->symbol_type)) {
+  if (sym->type == STYPE_GENERIC_FUNCTION) {
 
     callable =
         get_specific_callable(sym, expected_fn_type, ctx, module, builder);

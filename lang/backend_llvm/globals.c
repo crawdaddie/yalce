@@ -41,6 +41,50 @@ void codegen_set_global(const char *sym_name, JITSymbol *sym,
   *(ctx->num_globals) = slot + 1;
 }
 
+int codegen_set_global_closure_storage(LLVMValueRef rec_storage,
+                                       JITLangCtx *ctx, LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+
+  LLVMValueRef malloced_space =
+      LLVMBuildMalloc(builder, GENERIC_PTR, "closure_storage");
+
+  LLVMBuildStore(builder, rec_storage, malloced_space);
+
+  LLVMValueRef generic_ptr =
+      LLVMBuildBitCast(builder, malloced_space, _VOID_PTR_T, "closure_storage");
+
+  int slot = *ctx->num_globals;
+  LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
+
+  LLVMValueRef indices[] = {ZERO, slot_index};
+  LLVMValueRef slot_ptr =
+      LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE, global_storage_array_llvm,
+                    indices, 2, "closure_storage_slot_ptr");
+  LLVMBuildStore(builder, generic_ptr, slot_ptr);
+  *(ctx->num_globals) = slot + 1;
+  return slot;
+}
+
+LLVMValueRef codegen_get_global_closure_storage(int slot, JITLangCtx *ctx,
+                                                LLVMModuleRef module,
+                                                LLVMBuilderRef builder) {
+
+  LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
+
+  LLVMValueRef indices[] = {ZERO, slot_index};
+  LLVMValueRef slot_ptr =
+      LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE, global_storage_array_llvm,
+                    indices, 2, "get_closure_slot_ptr");
+
+  LLVMValueRef generic_ptr =
+      LLVMBuildLoad2(builder, _VOID_PTR_T, slot_ptr, "void_ptr");
+
+  LLVMValueRef typed_ptr = LLVMBuildBitCast(
+      builder, generic_ptr, LLVMPointerType(GENERIC_PTR, 0), "typed_ptr");
+
+  return LLVMBuildLoad2(builder, GENERIC_PTR, typed_ptr, "get_closure_data");
+}
+
 LLVMValueRef codegen_get_global(const char *sym_name, JITSymbol *sym,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
   char buf[32];
