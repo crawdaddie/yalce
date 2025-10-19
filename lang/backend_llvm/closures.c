@@ -1,5 +1,4 @@
 #include "./closures.h"
-#include "../types/closures.h"
 #include "application.h"
 #include "binding.h"
 #include "function.h"
@@ -142,11 +141,11 @@ LLVMValueRef compile_lambda_as_closure(Ast *expr, Type *expected_clos_type,
 
   Type *callable_type;
 
-  START_FUNC(module, "curried_fn", clos_fn_type);
+  START_FUNC(module, "lambda", clos_fn_type);
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx);
-  int len = fn_type_args_len(expected_clos_type);
-  LLVMValueRef args[len + 1];
+  // int len = fn_type_args_len(expected_clos_type);
+  // LLVMValueRef args[len + 1];
   Type *recordt = clos_type->closure_meta;
   LLVMValueRef record = LLVMGetParam(func, 0);
 
@@ -161,7 +160,7 @@ LLVMValueRef compile_lambda_as_closure(Ast *expr, Type *expected_clos_type,
 
         type_to_llvm_type(recordt->data.T_CONS.args[i], &fn_ctx, module),
 
-        LLVMBuildStructGEP2(builder, closure_rec_type, record, i + 1,
+        LLVMBuildStructGEP2(builder, closure_rec_type, record, i,
                             "closure_record_val_ptr"),
         "closure_record_val");
     codegen_pattern_binding(cl, closed_val, recordt->data.T_CONS.args[i],
@@ -205,9 +204,10 @@ LLVMValueRef store_closure_record_values(LLVMValueRef rec_alloc, Ast *expr,
   LLVMTypeRef llvm_rec_type = type_to_llvm_type(rec_type, ctx, module);
 
   // Store function pointer at offset 0
-  LLVMValueRef fn_ptr_slot =
-      LLVMBuildStructGEP2(builder, llvm_rec_type, rec_alloc, 0, "fn_ptr_slot");
-  LLVMBuildStore(builder, fn_ptr, fn_ptr_slot);
+  // LLVMValueRef fn_ptr_slot =
+  //     LLVMBuildStructGEP2(builder, llvm_rec_type, rec_alloc, 0,
+  //     "fn_ptr_slot");
+  // LLVMBuildStore(builder, fn_ptr, fn_ptr_slot);
 
   if (expr->tag == AST_APPLICATION) {
     for (int i = 0; i < expr->data.AST_APPLICATION.len; i++) {
@@ -215,7 +215,7 @@ LLVMValueRef store_closure_record_values(LLVMValueRef rec_alloc, Ast *expr,
           codegen(expr->data.AST_APPLICATION.args + i, ctx, module, builder);
 
       LLVMValueRef field_slot = LLVMBuildStructGEP2(
-          builder, llvm_rec_type, rec_alloc, i + 1, "app_arg_slot");
+          builder, llvm_rec_type, rec_alloc, i, "app_arg_slot");
       LLVMBuildStore(builder, arg_val, field_slot);
     }
 
@@ -231,7 +231,7 @@ LLVMValueRef store_closure_record_values(LLVMValueRef rec_alloc, Ast *expr,
       LLVMValueRef closed_val = codegen(cl, ctx, module, builder);
 
       LLVMValueRef field_slot = LLVMBuildStructGEP2(
-          builder, llvm_rec_type, rec_alloc, i + 1, "closed_val_slot");
+          builder, llvm_rec_type, rec_alloc, i, "closed_val_slot");
       LLVMBuildStore(builder, closed_val, field_slot);
     }
 
@@ -262,7 +262,14 @@ LLVMValueRef expr_to_closure_rec(Ast *expr, Type *clos_type, JITLangCtx *ctx,
     rec_storage =
         store_closure_record_values(rec_storage, expr, clos_type->closure_meta,
                                     closure_fn, ctx, module, builder);
-    return rec_storage;
+
+    LLVMValueRef str = LLVMGetUndef(
+        LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0));
+    str = LLVMBuildInsertValue(builder, str, closure_fn, 0, "store_closure_fn");
+    str =
+        LLVMBuildInsertValue(builder, str, rec_storage, 1, "store_closure_env");
+
+    return str;
   }
 
   if (expr->tag == AST_LAMBDA) {
@@ -274,7 +281,12 @@ LLVMValueRef expr_to_closure_rec(Ast *expr, Type *clos_type, JITLangCtx *ctx,
         store_closure_record_values(rec_storage, expr, clos_type->closure_meta,
                                     closure_fn, ctx, module, builder);
 
-    return rec_storage;
+    LLVMValueRef str = LLVMGetUndef(
+        LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0));
+    str = LLVMBuildInsertValue(builder, str, closure_fn, 0, "store_closure_fn");
+    str =
+        LLVMBuildInsertValue(builder, str, rec_storage, 1, "store_closure_env");
+    return str;
   }
   return NULL;
 }
@@ -327,17 +339,17 @@ LLVMTypeRef closure_record_type(Type *clos_type, JITLangCtx *ctx,
   Type *obj_type = clos_type->closure_meta;
   int len = obj_type->data.T_CONS.num_args;
 
-  LLVMTypeRef rec_members[len + 1];
-  rec_members[0] = GENERIC_PTR;
+  LLVMTypeRef rec_members[len];
+  // rec_members[0] = GENERIC_PTR;
 
   for (int i = 0; i < len; i++) {
     Type *mtype = obj_type->data.T_CONS.args[i];
-    rec_members[i + 1] = mtype->kind == T_FN
-                             ? GENERIC_PTR
-                             : type_to_llvm_type(mtype, ctx, module);
+    rec_members[i] = mtype->kind == T_FN
+                         ? GENERIC_PTR
+                         : type_to_llvm_type(mtype, ctx, module);
   }
 
-  LLVMTypeRef rec = LLVMStructType(rec_members, len + 1, 0);
+  LLVMTypeRef rec = LLVMStructType(rec_members, len, 0);
   return rec;
 }
 
@@ -346,11 +358,10 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef closure_rec_type,
 
   LLVMTypeRef closure_rec_ptr_type = LLVMPointerType(closure_rec_type, 0);
   if (is_void_func(clos_type)) {
-
     Type *ret_type = clos_type->data.T_FN.to;
     LLVMTypeRef llvm_ret_type = type_to_llvm_type(ret_type, ctx, module);
-    LLVMTypeRef ftype =
-        LLVMFunctionType(llvm_ret_type, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+    LLVMTypeRef ftype = LLVMFunctionType(
+        llvm_ret_type, (LLVMTypeRef[]){closure_rec_ptr_type}, 1, 0);
     return ftype;
   }
 
@@ -430,7 +441,7 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
                   // print_type(clos_type);
                   LLVMValueRef param_val =
                       LLVMBuildStructGEP2(builder, rec_type, inner_closure_rec,
-                                          i + 1, "closed_val_from_rec");
+                                          i, "closed_val_from_rec");
                   Type *ptype = clos_type->data.T_CONS.args[i];
                   LLVMTypeRef llvm_ptype =
                       type_to_llvm_type(ptype, ctx, module);
@@ -472,7 +483,6 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
     rec_storage = LLVMBuildMalloc(builder, rec_type, "closure_obj_alloc_heap");
   }
 
-  int size = rec_struct_type->data.T_CONS.num_args + 1;
   // LLVMValueRef vals[size];
   // vals[0] = func;
   // AST_LIST_ITER(ast->data.AST_LAMBDA.closed_vals, ({
@@ -487,9 +497,9 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
   //                 vals[i + 1] = param_val;
   //               }));
   // Store function pointer at offset 0
-  LLVMValueRef fn_ptr_slot =
-      LLVMBuildStructGEP2(builder, rec_type, rec_storage, 0, "fn_ptr_slot");
-  LLVMBuildStore(builder, func, fn_ptr_slot);
+  // LLVMValueRef fn_ptr_slot =
+  //     LLVMBuildStructGEP2(builder, rec_type, rec_storage, 0, "fn_ptr_slot");
+  // LLVMBuildStore(builder, func, fn_ptr_slot);
 
   AST_LIST_ITER(ast->data.AST_LAMBDA.closed_vals, ({
                   Ast *param_ast = l->ast;
@@ -498,11 +508,16 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
 
                   // Store at offset i+1 (offset 0 is the function pointer)
                   LLVMValueRef field_slot = LLVMBuildStructGEP2(
-                      builder, rec_type, rec_storage, i + 1, "closed_val_slot");
+                      builder, rec_type, rec_storage, i, "closed_val_slot");
                   LLVMBuildStore(builder, param_val, field_slot);
                 }));
 
-  return rec_storage;
+  LLVMValueRef str = LLVMGetUndef(
+      LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0));
+  str = LLVMBuildInsertValue(builder, str, func, 0, "store_closure_fn");
+  str = LLVMBuildInsertValue(builder, str, rec_storage, 1, "store_closure_env");
+
+  return str;
 }
 
 LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
@@ -593,26 +608,34 @@ bool is_lambda_with_closures(Ast *ast) {
 void add_recursive_closure_ref(ObjString fn_name, LLVMValueRef func,
                                Type *fn_type, JITLangCtx *fn_ctx) {}
 
-LLVMValueRef call_closure_rec(LLVMValueRef rec, Type *closure_type, Ast *app,
+LLVMValueRef call_closure_obj(LLVMValueRef rec, Type *closure_type, Ast *app,
                               JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
+  print_ast(app);
+  printf("CALL CLOSURE OBJ\n");
+  LLVMDumpValue(rec);
+  printf("\n");
+  print_type(closure_type);
 
   int num_args = fn_type_args_len(closure_type);
 
-  LLVMTypeRef rec_type = closure_record_type(closure_type, ctx, module);
+  LLVMTypeRef env_type = closure_record_type(closure_type, ctx, module);
   LLVMTypeRef clos_fn_type =
-      closure_fn_type(closure_type, rec_type, ctx, module);
+      closure_fn_type(closure_type, env_type, ctx, module);
 
-  LLVMValueRef fn =
-      LLVMBuildStructGEP2(builder, rec_type, rec, 0, "fn_ptr_gep");
-  fn = LLVMBuildLoad2(builder, GENERIC_PTR, fn,
-                      "fn_ptr"); // extract from rec as just generic ptr
-  //
+  LLVMValueRef fn = LLVMBuildExtractValue(builder, rec, 0, "fn");
   LLVMTypeRef fn_type = clos_fn_type;
   LLVMValueRef args[num_args + 1];
-
-  args[0] = rec;
+  LLVMValueRef rec_env = LLVMBuildExtractValue(builder, rec, 1, "env");
   Type *ff = closure_type;
+  if (ff->data.T_FN.from->kind == T_VOID &&
+      app->data.AST_APPLICATION.args->tag == AST_VOID) {
+    LLVMValueRef call = LLVMBuildCall2(
+        builder, fn_type, fn, (LLVMValueRef[]){rec_env}, 1, "call_closure");
+    return call;
+  }
+
+  args[0] = rec_env;
 
   for (int i = 0; i < num_args; i++, ff = ff->data.T_FN.to) {
     Type *arg_type = deep_copy_type(app->data.AST_APPLICATION.args[i].md);
@@ -627,6 +650,7 @@ LLVMValueRef call_closure_rec(LLVMValueRef rec, Type *closure_type, Ast *app,
   }
   LLVMValueRef call =
       LLVMBuildCall2(builder, fn_type, fn, args, num_args + 1, "call_closure");
+
   return call;
 }
 
@@ -673,7 +697,7 @@ LLVMValueRef call_generic_closure_sym(Ast *app, Type *expected_fn_type,
         closure);
   }
 
-  return call_closure_rec(closure, expected_fn_type, app, ctx, module, builder);
+  return call_closure_obj(closure, expected_fn_type, app, ctx, module, builder);
 }
 
 LLVMValueRef call_closure_sym(Ast *app, Type *expected_fn_type, JITSymbol *sym,
@@ -685,8 +709,6 @@ LLVMValueRef call_closure_sym(Ast *app, Type *expected_fn_type, JITSymbol *sym,
                                     builder);
   }
 
-  Closure closure;
-
-  return call_closure_rec(sym->val, sym->symbol_type, app, ctx, module,
+  return call_closure_obj(sym->val, sym->symbol_type, app, ctx, module,
                           builder);
 }

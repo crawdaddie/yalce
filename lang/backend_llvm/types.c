@@ -1,6 +1,7 @@
 #include "backend_llvm/types.h"
 #include "adt.h"
 #include "backend_llvm/array.h"
+#include "closures.h"
 #include "codegen.h"
 #include "common.h"
 #include "list.h"
@@ -194,7 +195,14 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
 
   case T_FN: {
     if (is_closure(type)) {
-      return GENERIC_PTR;
+
+      LLVMTypeRef clos_env_type = closure_record_type(type, ctx, module);
+      LLVMTypeRef clos_impl_type =
+          closure_fn_type(type, clos_env_type, ctx, module);
+
+      return LLVMStructType(
+          (LLVMTypeRef[]){clos_impl_type, LLVMPointerType(clos_env_type, 0)}, 2,
+          0);
     }
     Type *t = type;
     int fn_len = 0;

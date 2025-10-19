@@ -185,12 +185,18 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
 
   if (param_type->kind == T_FN && is_closure(param_type)) {
 
+    printf("bind fn param which is a closure??\n");
     const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
     int id_len = param_ast->data.AST_IDENTIFIER.length;
 
-    LLVMTypeRef rec_type = closure_record_type(param_type, ctx, module);
-    JITSymbol *sym = new_symbol(STYPE_FUNCTION, param_type, param_val,
-                                LLVMPointerType(rec_type, 0));
+    LLVMTypeRef rec_type =
+        LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);
+
+    JITSymbol *sym =
+        new_symbol(STYPE_FUNCTION, param_type, param_val, rec_type);
+
+    printf("rec type\n");
+    LLVMDumpType(rec_type);
 
     ht_set_hash(fn_ctx->frame->table, id_chars, hash_string(id_chars, id_len),
                 sym);
