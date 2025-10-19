@@ -16,6 +16,10 @@ typedef struct {
   LLVMValueRef switch_ref;
   LLVMValueRef func;
   LLVMTypeRef state_layout;
+  LLVMBasicBlockRef cleanup_bb;
+  LLVMBasicBlockRef suspend_bb;
+  LLVMValueRef coro_id;   // The token from llvm.coro.id
+  LLVMValueRef coro_hdl;  // The handle from llvm.coro.begin
   const char *name;
 } CoroutineCtx;
 

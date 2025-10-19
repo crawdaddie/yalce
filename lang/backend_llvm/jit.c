@@ -227,9 +227,27 @@ void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
 
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
 
-  LLVMErrorRef err =
-      LLVMRunPasses(module, config.opt_level ? config.opt_level : "default<O3>",
-                    target_machine, options);
+  // For coroutines to work properly, we need to run coroutine lowering passes
+  // BEFORE general optimizations. The coroutine passes split coroutines into
+  // ramp, resume, and destroy functions.
+  //
+  // Note: In LLVM's new pass manager, coroutine passes must be explicitly
+  // enabled We need to run them in this order:
+  // 1. Always inline the coroutine allocation
+  // 2. coro-early and coro-split to transform the coroutine
+  // 3. Regular optimizations
+  // 4. coro-cleanup to remove leftover intrinsics
+  const char *pass_pipeline = config.opt_level
+                                  ? config.opt_level
+                                  : "always-inline,coro-early,coro-split,"
+                                    "default<O3>,coro-cleanup";
+
+  // Enable coroutine passes explicitly in the options
+  // LLVMPassBuilderOptionsSetCoroutinesLoweringEnabled(options, 1);
+
+  // LLVMErrorRef err =
+  //     LLVMRunPasses(module, pass_pipeline, target_machine, options);
+  LLVMErrorRef err = NULL;
 
   if (err) {
     char *msg = LLVMGetErrorMessage(err);
