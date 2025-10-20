@@ -1,5 +1,6 @@
 #include "backend_llvm/adt.h"
 #include "types.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/Types.h"
@@ -160,7 +161,8 @@ LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
   LLVMTypeRef largest_type =
       get_largest_type(LLVMGetModuleContext(module), contained_types, len,
                        LLVMGetModuleDataLayout(module));
-  return LLVMStructType((LLVMTypeRef[]){TAG_TYPE, largest_type}, 2, 0);
+
+  return STRUCT_TY(2, TAG_TYPE, largest_type);
 }
 
 LLVMValueRef codegen_some(LLVMValueRef val, LLVMBuilderRef builder) {
@@ -175,16 +177,10 @@ LLVMValueRef codegen_some(LLVMValueRef val, LLVMBuilderRef builder) {
 }
 
 LLVMValueRef codegen_none(LLVMBuilderRef builder) {
-  LLVMTypeRef tu_types[] = {OPTION_TAG_TYPE, LLVMInt8Type()};
-  LLVMTypeRef tu_type = LLVMStructType(tu_types, 2, 0);
-  LLVMValueRef none = LLVMGetUndef(tu_type);
-
-  none = LLVMBuildInsertValue(
-      builder, none, LLVMConstInt(OPTION_TAG_TYPE, 1, 0), 0, "insert None tag");
-
-  none =
-      LLVMBuildInsertValue(builder, none, LLVMConstInt(LLVMInt32Type(), 0, 0),
-                           1, "insert None dummy val");
+  LLVMTypeRef tu_type = STRUCT_TY(2, OPTION_TAG_TYPE, LLVMInt8Type());
+  LLVMValueRef none =
+      STRUCT(tu_type, builder, 2, LLVMConstInt(OPTION_TAG_TYPE, 1, 0),
+             LLVMConstInt(LLVMInt32Type(), 0, 0));
 
   return none;
 }
@@ -249,8 +245,13 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+
+  LLVMValueRef tag = LLVMBuildExtractValue(builder, opt_value, 0, "tag_val");
+  LLVMValueRef is_none = LLVMBuildICmp(builder, LLVMIntEQ, tag,
+                                       LLVMConstInt(OPTION_TAG_TYPE, 1, 0), "");
+
   LLVMValueRef result = LLVMBuildSelect(
-      builder, codegen_option_is_none(opt_value, builder),
+      builder, is_none,
 
       _codegen_string("None", 4, ctx, module, builder),
 
@@ -264,6 +265,7 @@ LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
           },
           2, module, builder),
       "select");
+
   return result;
 }
 

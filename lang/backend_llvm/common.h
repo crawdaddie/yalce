@@ -160,4 +160,11 @@ typedef struct BindList {
   Ast *binding;
   struct BindList *next;
 } BindList;
+
+#define STRUCT_TY(n, ...) LLVMStructType((LLVMTypeRef[]){__VA_ARGS__}, n, 0)
+
+// Utility function to build a struct by inserting values into an undef value
+LLVMValueRef STRUCT(LLVMTypeRef type, LLVMBuilderRef builder, int num_values,
+                    ...);
+
 #endif

@@ -73,11 +73,6 @@ LLVMValueRef call_callable_rec(int num_args_processed,
                                LLVMValueRef callable, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  // printf("\n\nCall callable rec\n%d:\n", num_args_processed);
-  // print_ast(ast->data.AST_APPLICATION.function);
-  // print_ast(ast->data.AST_APPLICATION.args);
-  // print_type(callable_type);
-
   if (ast->data.AST_APPLICATION.len == 0) {
     LLVMValueRef arg_vals[num_args_processed];
     ArgValList *avl = args_processed;
@@ -94,6 +89,39 @@ LLVMValueRef call_callable_rec(int num_args_processed,
     }
     return LLVMBuildCall2(builder, llvm_callable_type, callable, arg_vals,
                           num_args_processed, name);
+  }
+
+  if (is_closure(callable_type)) {
+    LLVMValueRef arg_vals[num_args_processed];
+    ArgValList *avl = args_processed;
+    for (int i = num_args_processed - 1; i >= 0; i--, avl = avl->next) {
+      LLVMValueRef val = avl->val;
+      arg_vals[i] = val;
+    }
+
+    LLVMValueRef resolved_closure_struct =
+        LLVMBuildCall2(builder, llvm_callable_type, callable, arg_vals,
+                       num_args_processed, "");
+
+    LLVMValueRef closure_fn = LLVMBuildExtractValue(
+        builder, resolved_closure_struct, 0, "closure_fn_impl");
+
+    LLVMValueRef closure_env = LLVMBuildExtractValue(
+        builder, resolved_closure_struct, 1, "closure_env");
+
+    LLVMTypeRef llvm_rec_type = closure_record_type(callable_type, ctx, module);
+    ArgValList argl = {.val = closure_env,
+                       .llvm_type = LLVMPointerType(llvm_rec_type, 0),
+                       .next = NULL};
+
+    LLVMValueRef resolved_callable = closure_fn;
+    Type _ct = *callable_type;
+    _ct.closure_meta = NULL;
+
+    return call_callable_rec(
+        1, &argl, ast, &_ct,
+        closure_fn_type(callable_type, llvm_rec_type, ctx, module),
+        resolved_callable, ctx, module, builder);
   }
 
   Type *to_type = callable_type->data.T_FN.from;
@@ -138,6 +166,15 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
 
   return call_callable_rec(0, NULL, &_ast, callable_type, llvm_callable_type,
                            callable, ctx, module, builder);
+}
+
+Type *resolve_sym_type(Type *exp, Type *sym_type, TypeEnv *env) {
+  TICtx ctx = {};
+  unify(exp, sym_type, &ctx);
+  Subst *subst = solve_constraints(ctx.constraints);
+  env = create_env_from_subst(env, subst);
+  Type *res = deep_copy_type(sym_type);
+  return resolve_type_in_env(res, env);
 }
 
 bool is_closure_symbol(JITSymbol *sym) { return is_closure(sym->symbol_type); }
@@ -222,9 +259,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION && !is_closure(sym->symbol_type)) {
+    callable_type =
+        resolve_sym_type(expected_fn_type, sym->symbol_type, ctx->env);
 
-    callable =
-        get_specific_callable(sym, expected_fn_type, ctx, module, builder);
+    callable = get_specific_callable(sym, callable_type, ctx, module, builder);
 
     return call_callable(ast, callable_type, callable, ctx, module, builder);
   }

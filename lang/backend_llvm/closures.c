@@ -94,12 +94,18 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
 
   int i;
   for (i = 0; i < recordt->data.T_CONS.num_args; i++) {
+    Type *rt = recordt->data.T_CONS.args[i];
+
+    printf("record arg %d: ", i);
+    LLVMTypeRef lt = type_to_llvm_type(rt, &fn_ctx, module);
+
+    print_type(recordt->data.T_CONS.args[i]);
+    LLVMDumpType(lt);
+    printf("\n");
+
     args[i] = LLVMBuildLoad2(
-        builder,
-
-        type_to_llvm_type(recordt->data.T_CONS.args[i], &fn_ctx, module),
-
-        LLVMBuildStructGEP2(builder, closure_rec_type, record, i + 1,
+        builder, rt->kind == T_FN && (!is_closure(rt)) ? GENERIC_PTR : lt,
+        LLVMBuildStructGEP2(builder, closure_rec_type, record, i,
                             "closure_record_val_ptr"),
         "closure_record_val");
   }
@@ -611,13 +617,11 @@ void add_recursive_closure_ref(ObjString fn_name, LLVMValueRef func,
 LLVMValueRef call_closure_obj(LLVMValueRef rec, Type *closure_type, Ast *app,
                               JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
+  printf("CALL closure obj\n");
   print_ast(app);
-  printf("CALL CLOSURE OBJ\n");
-  LLVMDumpValue(rec);
-  printf("\n");
-  print_type(closure_type);
 
   int num_args = fn_type_args_len(closure_type);
+  printf("num args %d\n", num_args);
 
   LLVMTypeRef env_type = closure_record_type(closure_type, ctx, module);
   LLVMTypeRef clos_fn_type =
@@ -627,13 +631,18 @@ LLVMValueRef call_closure_obj(LLVMValueRef rec, Type *closure_type, Ast *app,
   LLVMTypeRef fn_type = clos_fn_type;
   LLVMValueRef args[num_args + 1];
   LLVMValueRef rec_env = LLVMBuildExtractValue(builder, rec, 1, "env");
+
   Type *ff = closure_type;
+
   if (ff->data.T_FN.from->kind == T_VOID &&
       app->data.AST_APPLICATION.args->tag == AST_VOID) {
+
     LLVMValueRef call = LLVMBuildCall2(
         builder, fn_type, fn, (LLVMValueRef[]){rec_env}, 1, "call_closure");
     return call;
   }
+
+  // return call_callable(app, closure_type, );
 
   args[0] = rec_env;
 
@@ -697,7 +706,7 @@ LLVMValueRef call_generic_closure_sym(Ast *app, Type *expected_fn_type,
         closure);
   }
 
-  return call_closure_obj(closure, expected_fn_type, app, ctx, module, builder);
+  return call_callable(app, expected_fn_type, closure, ctx, module, builder);
 }
 
 LLVMValueRef call_closure_sym(Ast *app, Type *expected_fn_type, JITSymbol *sym,
@@ -709,6 +718,5 @@ LLVMValueRef call_closure_sym(Ast *app, Type *expected_fn_type, JITSymbol *sym,
                                     builder);
   }
 
-  return call_closure_obj(sym->val, sym->symbol_type, app, ctx, module,
-                          builder);
+  return call_callable(app, expected_fn_type, sym->val, ctx, module, builder);
 }

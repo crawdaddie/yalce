@@ -1,5 +1,7 @@
 #include "backend_llvm/common.h"
 #include "escape_analysis.h"
+#include "llvm-c/Core.h"
+#include <stdarg.h>
 #include <stdlib.h>
 
 StackFrame *frame_extend(StackFrame *frame) {
@@ -36,4 +38,23 @@ EscapeStatus find_allocation_strategy(Ast *expr, JITLangCtx *ctx) {
     return ((EscapeMeta *)expr->ea_md)->status;
   }
   return EA_HEAP_ALLOC;
+}
+
+LLVMValueRef STRUCT(LLVMTypeRef type, LLVMBuilderRef builder, int num_values,
+                    ...) {
+  // Start with an undef value of the given struct type
+  LLVMValueRef result = LLVMGetUndef(type);
+
+  // Initialize varargs
+  va_list args;
+  va_start(args, num_values);
+
+  // Successively insert each value at the corresponding index
+  for (int i = 0; i < num_values; i++) {
+    LLVMValueRef value = va_arg(args, LLVMValueRef);
+    result = LLVMBuildInsertValue(builder, result, value, i, "");
+  }
+
+  va_end(args);
+  return result;
 }

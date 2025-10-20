@@ -44,8 +44,8 @@ void callable_arg_types(Type *fn_type, int fn_len,
   *llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
 }
 
-LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
-                            LLVMModuleRef module) {
+LLVMTypeRef __codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
+                              LLVMModuleRef module) {
 
   // TODO: return a type for a coroutine - is this necessary?
   LLVMTypeRef llvm_param_types[fn_len];
@@ -90,6 +90,54 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
     llvm_fn_type =
         LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
   }
+
+  return llvm_fn_type;
+}
+
+LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
+                            LLVMModuleRef module) {
+
+  LLVMTypeRef llvm_param_types[fn_len];
+  LLVMTypeRef llvm_fn_type;
+
+  if (fn_type->data.T_FN.from->kind == T_VOID) {
+
+    LLVMTypeRef ret_type =
+        type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
+
+    return LLVMFunctionType(ret_type, NULL, 0, false);
+  }
+
+  LLVMTypeRef llvm_return_type_ref;
+  Type *f = fn_type;
+  int i = 0;
+  for (f = fn_type; f->kind == T_FN && !is_closure(f);
+       f = f->data.T_FN.to, i++) {
+    Type *t = f->data.T_FN.from;
+    if (t->kind == T_FN) {
+      llvm_param_types[i] = GENERIC_PTR;
+    } else if (is_pointer_type(t) && t->data.T_CONS.num_args == 0) {
+      llvm_param_types[i] = GENERIC_PTR;
+    } else if (is_pointer_type(t)) {
+      llvm_param_types[i] = LLVMPointerType(
+          type_to_llvm_type(t->data.T_CONS.args[0], ctx, module), 0);
+    } else if (is_coroutine_type(t)) {
+      llvm_param_types[i] = GENERIC_PTR;
+    } else {
+      LLVMTypeRef tref = type_to_llvm_type(t, ctx, module);
+      if (!tref) {
+        return NULL;
+      }
+      llvm_param_types[i] = tref;
+    }
+  }
+
+  Type *return_type = f;
+
+  llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
+
+  llvm_fn_type =
+      LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
 
   return llvm_fn_type;
 }
@@ -185,7 +233,6 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
 
   if (param_type->kind == T_FN && is_closure(param_type)) {
 
-    printf("bind fn param which is a closure??\n");
     const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
     int id_len = param_ast->data.AST_IDENTIFIER.length;
 
@@ -194,9 +241,6 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
 
     JITSymbol *sym =
         new_symbol(STYPE_FUNCTION, param_type, param_val, rec_type);
-
-    printf("rec type\n");
-    LLVMDumpType(rec_type);
 
     ht_set_hash(fn_ctx->frame->table, id_chars, hash_string(id_chars, id_len),
                 sym);

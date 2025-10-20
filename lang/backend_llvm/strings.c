@@ -4,6 +4,7 @@
 #include "list.h"
 #include "types.h"
 #include "types/type.h"
+#include "types/type_ser.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
@@ -121,6 +122,32 @@ LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                      (LLVMValueRef[]){data_ptr}, 1, "strlen_call");
 
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
+
+  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
+
+  LLVMValueRef str = LLVMGetUndef(struct_type);
+  str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
+  str = LLVMBuildInsertValue(builder, str, len, 0, "insert_array_size");
+  return str;
+}
+
+LLVMValueRef bool_to_string(LLVMValueRef int_value, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+
+  LLVMValueRef true_str = LLVMBuildGlobalStringPtr(builder, "True", "true_str");
+  LLVMValueRef false_str =
+      LLVMBuildGlobalStringPtr(builder, "False", "false_str");
+
+  LLVMValueRef bool_val =
+      LLVMBuildICmp(builder, LLVMIntNE, int_value,
+                    LLVMConstInt(LLVMTypeOf(int_value), 0, 0), "to_bool");
+  LLVMValueRef data_ptr =
+      LLVMBuildSelect(builder, bool_val, true_str, false_str, "select_str");
+
+  LLVMValueRef true_len = LLVMConstInt(LLVMInt32Type(), 4, 0);
+  LLVMValueRef false_len = LLVMConstInt(LLVMInt32Type(), 5, 0);
+  LLVMValueRef len =
+      LLVMBuildSelect(builder, bool_val, true_len, false_len, "select_len");
 
   LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
 
@@ -258,6 +285,202 @@ LLVMValueRef tuple_to_string(LLVMValueRef val, Type *tuple_type,
   return stream_string_concat(strings, num_string_components, module, builder);
 }
 
+typedef struct StringList {
+  LLVMValueRef str;
+  struct StringList *prev;
+} StringList;
+
+static LLVMValueRef _cons_to_string_rec(LLVMValueRef val, Type *val_type,
+                                        int num_strings,
+                                        LLVMValueRef end_string,
+                                        StringList *str_list, JITLangCtx *ctx,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+  // Base case: we've processed all fields
+  if (val_type->data.T_CONS.num_args == 0) {
+    // Build array of strings from the linked list
+    LLVMValueRef strings[num_strings + 1];
+
+    // Add end string
+    strings[num_strings] = end_string;
+
+    // Walk backwards through the list to get strings in order
+    StringList *current = str_list;
+    for (int i = num_strings - 1; i >= 0; i--) {
+      strings[i] = current->str;
+      current = current->prev;
+    }
+
+    return stream_string_concat(strings, num_strings + 1, module, builder);
+  }
+
+  // Process each field of the struct
+  int total_strings = num_strings;
+  StringList *current_list = str_list;
+
+  for (int i = 0; i < val_type->data.T_CONS.num_args; i++) {
+    // Extract the field value
+    LLVMValueRef field_val = LLVMBuildExtractValue(builder, val, i, "");
+    Type *field_type = val_type->data.T_CONS.args[i];
+
+    // Add field name if present
+    if (val_type->data.T_CONS.names != NULL) {
+      const char *field_name = val_type->data.T_CONS.names[i];
+      int name_len = strlen(field_name);
+      char name_with_colon[name_len + 3];
+      sprintf(name_with_colon, "%s: ", field_name);
+
+      LLVMValueRef name_str =
+          _codegen_string(name_with_colon, name_len + 2, ctx, module, builder);
+      StringList *name_node = alloca(sizeof(StringList));
+      name_node->str = name_str;
+      name_node->prev = current_list;
+      current_list = name_node;
+      total_strings++;
+    }
+
+    // Serialize the field value
+    if (is_string_type(field_type)) {
+      StringList *field_node = alloca(sizeof(StringList));
+      field_node->str = _codegen_string("\"", 1, ctx, module, builder);
+      field_node->prev = current_list;
+      current_list = field_node;
+      total_strings++;
+    }
+
+    LLVMValueRef field_str =
+        llvm_string_serialize(field_val, field_type, ctx, module, builder);
+
+    StringList *field_node = alloca(sizeof(StringList));
+    field_node->str = field_str;
+    field_node->prev = current_list;
+    current_list = field_node;
+    total_strings++;
+
+    // Serialize the field value
+    if (is_string_type(field_type)) {
+
+      StringList *field_node = alloca(sizeof(StringList));
+      field_node->str = _codegen_string("\"", 1, ctx, module, builder);
+      field_node->prev = current_list;
+      current_list = field_node;
+      total_strings++;
+    }
+
+    // Add delimiter (comma + space) if not the last field
+    if (i < val_type->data.T_CONS.num_args - 1) {
+      LLVMValueRef delimiter = _codegen_string(", ", 2, ctx, module, builder);
+      StringList *delim_node = alloca(sizeof(StringList));
+      delim_node->str = delimiter;
+      delim_node->prev = current_list;
+      current_list = delim_node;
+      total_strings++;
+    }
+  }
+
+  // Build the final array of strings
+  LLVMValueRef strings[total_strings + 1];
+  strings[total_strings] = end_string;
+
+  // Walk backwards through the list
+  StringList *node = current_list;
+  for (int i = total_strings - 1; i >= 0; i--) {
+    strings[i] = node->str;
+    node = node->prev;
+  }
+
+  return stream_string_concat(strings, total_strings + 1, module, builder);
+}
+
+#define STRUCT_MEM(v, n) LLVMBuildExtractValue(builder, v, n, "struct_mem");
+
+// Helper function to serialize an array
+static LLVMValueRef codegen_array_to_string_impl(LLVMValueRef array_val,
+                                                 Type *elem_type,
+                                                 JITLangCtx *ctx,
+                                                 LLVMModuleRef module,
+                                                 LLVMBuilderRef builder) {
+  LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);
+
+  LLVMValueRef size = STRUCT_MEM(array_val, 0);
+  LLVMValueRef data_ptr = STRUCT_MEM(array_val, 1);
+
+  LLVMValueRef is_empty =
+      LLVMBuildICmp(builder, LLVMIntEQ, size,
+                    LLVMConstInt(LLVMInt32Type(), 0, 0), "is_empty");
+
+  LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
+  LLVMValueRef func = LLVMGetBasicBlockParent(current_bb);
+
+  LLVMBasicBlockRef empty_bb = LLVMAppendBasicBlock(func, "array_empty");
+  LLVMBasicBlockRef nonempty_bb = LLVMAppendBasicBlock(func, "array_nonempty");
+  LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlock(func, "array_merge");
+
+  LLVMBuildCondBr(builder, is_empty, empty_bb, nonempty_bb);
+
+  // Empty array
+  LLVMPositionBuilderAtEnd(builder, empty_bb);
+  LLVMValueRef empty_str = _codegen_string("[]", 2, ctx, module, builder);
+  LLVMBuildBr(builder, merge_bb);
+
+  // Non-empty array
+  LLVMPositionBuilderAtEnd(builder, nonempty_bb);
+  // For now, return a simplified placeholder
+  // TODO: Loop through array elements and serialize each
+  LLVMValueRef nonempty_str =
+      _codegen_string("[| ... |]", 9, ctx, module, builder);
+  LLVMBuildBr(builder, merge_bb);
+
+  LLVMPositionBuilderAtEnd(builder, merge_bb);
+  LLVMValueRef result =
+      LLVMBuildPhi(builder, LLVMTypeOf(empty_str), "array_result");
+  LLVMAddIncoming(result, (LLVMValueRef[]){empty_str, nonempty_str},
+                  (LLVMBasicBlockRef[]){empty_bb, nonempty_bb}, 2);
+
+  return result;
+}
+
+static LLVMValueRef codegen_cons_to_string(LLVMValueRef val, Type *val_type,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+
+  LLVMValueRef start;
+
+  if (CHARS_EQ(val_type->data.T_CONS.name, TYPE_NAME_LIST)) {
+    return codegen_list_to_string(val, val_type, ctx, module, builder);
+  }
+
+  if (CHARS_EQ(val_type->data.T_CONS.name, TYPE_NAME_ARRAY)) {
+    return codegen_array_to_string_impl(val, val_type->data.T_CONS.args[0], ctx,
+                                        module, builder);
+  }
+
+  if (CHARS_EQ(val_type->data.T_CONS.name, TYPE_NAME_TUPLE)) {
+    start = _codegen_string("(", 1, ctx, module, builder);
+    StringList sl = {.str = start, .prev = NULL};
+    return _cons_to_string_rec(val, val_type, 1,
+                               _codegen_string(")", 1, ctx, module, builder),
+                               &sl, ctx, module, builder);
+  }
+
+  start =
+      _codegen_string(val_type->data.T_CONS.name,
+                      strlen(val_type->data.T_CONS.name), ctx, module, builder);
+
+  if (val_type->data.T_CONS.num_args == 0) {
+    return start;
+  }
+
+  LLVMValueRef space = _codegen_string(" ", 1, ctx, module, builder);
+  StringList sl2 = {.str = space, .prev = NULL};
+  StringList sl1 = {.str = start, .prev = &sl2};
+
+  return _cons_to_string_rec(val, val_type, 2,
+                             _codegen_string("", 0, ctx, module, builder), &sl1,
+                             ctx, module, builder);
+}
+
 LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
@@ -290,18 +513,21 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
   }
 
   if (val_type->kind == T_BOOL) {
-    return int_to_string(val, module, builder);
+    return bool_to_string(val, module, builder);
   }
 
   if ((strcmp(val_type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) &&
       (val_type->data.T_CONS.num_args == 2) &&
       (strcmp(val_type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
       (strcmp(val_type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
+    printf("OPT TO STRING\n");
 
     return opt_to_string(val, val_type, ctx, module, builder);
   }
 
   if (is_option_type(val_type)) {
+
+    printf("OPT TO String\n");
     return opt_to_string(val, val_type, ctx, module, builder);
   }
 
@@ -309,13 +535,12 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
     return _codegen_string("Ptr", 3, ctx, module, builder);
   }
 
-  if (is_list_type(val_type)) {
-    return codegen_list_to_string(val, val_type, ctx, module, builder);
-  }
-
   if (val_type->kind == T_CONS) {
-    return _codegen_string("Tuple", 5, ctx, module, builder);
+    return codegen_cons_to_string(val, val_type, ctx, module, builder);
   }
+  // if (is_list_type(val_type)) {
+  //   return codegen_list_to_string(val, val_type, ctx, module, builder);
+  // }
 
   return char_to_string(LLVMConstInt(LLVMInt8Type(), 60, 0), module, builder);
 }
@@ -435,13 +660,7 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
 }
 
 LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type) {
-
-  return LLVMStructType(
-      (LLVMTypeRef[]){
-          LLVMInt32Type(),
-          data_ptr_type,
-      },
-      2, 0);
+  return STRUCT_TY(2, LLVMInt32Type(), data_ptr_type);
 }
 
 LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
