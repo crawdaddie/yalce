@@ -593,7 +593,7 @@ Type *apply_substitution(Subst *subst, Type *t) {
 
 TypeEnv *lookup_type_ref(TypeEnv *env, const char *name) {
   for (TypeEnv *e = env; e; e = e->next) {
-    if (CHARS_EQ(e->name, name)) {
+    if (e->name && CHARS_EQ(e->name, name)) {
       return e;
     }
   }
@@ -1037,6 +1037,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       binding->md = existing;
       return 0;
     }
+
     binding->md = type;
     ctx->env = env_extend(ctx->env, binding->data.AST_IDENTIFIER.value, type);
     ctx->env->md = bmd_type;

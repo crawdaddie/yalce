@@ -30,5 +30,7 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
                                           JITLangCtx *ctx, LLVMModuleRef module,
                                           LLVMBuilderRef builder);
 
+LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module);
 #define OPTION_TAG_TYPE LLVMInt8Type()
 #endif

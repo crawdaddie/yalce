@@ -50,11 +50,6 @@ SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type);
 
-void callable_arg_types(Type *fn_type, int fn_len,
-                        LLVMTypeRef *llvm_param_types,
-                        LLVMTypeRef *llvm_return_type_ref, JITLangCtx *ctx,
-                        LLVMModuleRef module);
-
 TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst);
 
 void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,

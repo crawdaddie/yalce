@@ -221,19 +221,17 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_TYPE_DECL: {
     Type *t = ast->md;
-
-    // if (t->kind == T_SCHEME) {
-    //   // Type *tpl = t->data.T_CREATE_NEW_GENERIC.template;
-    //   // Type *resolved = t->data.T_CREATE_NEW_GENERIC.fn(tpl);
-    //   //
-    //   // if (resolved->kind == T_CONS) {
-    //   //   t = resolved;
-    //   // }
-    //   TICtx tctx = {.env = ctx->env};
-    //   t = instantiate(t, &tctx);
-    // }
     if (!is_generic(t) && is_sum_type(t)) {
-      LLVMTypeRef llvm_type = codegen_adt_type(t, ctx, module);
+      // print_ast(ast);
+      // print_type(t);
+      //
+      // for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      //   printf("%s, ", t->data.T_CONS.names[i]);
+      // }
+      // printf("\n");
+
+      LLVMTypeRef llvm_type = codegen_recursive_datatype(t, ast, ctx, module);
+
       JITSymbol *sym = new_symbol(STYPE_VARIANT_TYPE, t, NULL, llvm_type);
       Ast *binding = ast->data.AST_LET.binding;
 
@@ -242,8 +240,12 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
                   sym);
+
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-        const char *member_name = t->data.T_CONS.args[i]->data.T_CONS.name;
+        Ast *mem_ast = ast->data.AST_LET.expr->data.AST_LIST.items + i;
+        const char *member_name =
+            mem_ast->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
+
         int member_name_len = strlen(member_name);
 
         ht_set_hash(ctx->frame->table, member_name,

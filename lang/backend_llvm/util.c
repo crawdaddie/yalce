@@ -45,6 +45,11 @@ LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
 
   if (fn == NULL) {
     fn = LLVMAddFunction(module, name, fn_type);
+
+    // Set C calling convention for extern functions
+    // This ensures LLVM uses the platform's C ABI, including proper
+    // struct return handling (sret) for large return values
+    LLVMSetFunctionCallConv(fn, LLVMCCallConv);
   }
   return fn;
 }

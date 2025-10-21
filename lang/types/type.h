@@ -138,6 +138,9 @@ bool is_string_type(Type *type);
 
 #define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none)
 
+#define TSUM(num, ...) \
+  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_VARIANT, (Type *[]){__VA_ARGS__}, num}}}) 
+
 // #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
 //   ((Type){                                                                     \
 //       .kind = T_TYPECLASS_RESOLVE,                                             \

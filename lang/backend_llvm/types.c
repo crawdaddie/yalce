@@ -7,6 +7,7 @@
 #include "list.h"
 #include "types/inference.h"
 #include "types/type.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>
 #include <string.h>
@@ -138,6 +139,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   }
 
   case T_CONS: {
+    if (is_option_type(type)) {
+      Type *opt_of = type_of_option(type);
+      return codegen_option_struct_type(type_to_llvm_type(opt_of, ctx, module));
+    }
 
     if (is_array_type(type)) {
       if (type->data.T_CONS.args[0]->kind == T_VAR) {
@@ -173,12 +178,12 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       if (is_simple_enum(type)) {
         return LLVMInt8Type();
       } else {
-        Type *member_type = type->data.T_CONS.args[0];
-        const char *member_type_name = member_type->data.T_CONS.name;
-        // printf("member %s\n", member_type_name);
-        // print_type(type);
+        // Type *member_type = type->data.T_CONS.names[0];
+        const char *member_type_name = type->data.T_CONS.names[0];
+
         JITSymbol *sym =
             find_in_ctx(member_type_name, strlen(member_type_name), ctx);
+
         if (sym && sym->type == STYPE_VARIANT_TYPE) {
           return sym->llvm_type;
         }

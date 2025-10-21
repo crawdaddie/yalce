@@ -1,6 +1,8 @@
 #include "./type_expressions.h"
 #include "./builtins.h"
 #include "./inference.h"
+#include "serde.h"
+#include "types/type_ser.h"
 #include <string.h>
 
 Type *create_sum_type(int len, Type **members) {
@@ -105,21 +107,37 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   case AST_LIST: {
     int len = expr->data.AST_LIST.len;
     Type **members = t_alloc(sizeof(Type *) * len);
+    char **names = malloc(sizeof(char *) * len);
     for (int i = 0; i < len; i++) {
+      char *name;
       Ast *mem_ast = expr->data.AST_LIST.items + i;
       if (mem_ast->tag == AST_IDENTIFIER) {
+        name = mem_ast->data.AST_IDENTIFIER.value;
         members[i] =
             create_cons_type(mem_ast->data.AST_IDENTIFIER.value, 0, NULL);
       } else {
+        Ast *item = expr->data.AST_LIST.items + i;
+        if (item->tag == AST_BINOP &&
+            item->data.AST_BINOP.left->tag == AST_IDENTIFIER) {
+          name = item->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
+        }
         Type *sch = compute_type_expression(expr->data.AST_LIST.items + i, ctx);
         if (!sch) {
           return NULL;
         }
         members[i] = sch;
       }
+      names[i] = name;
     }
 
     Type *sum_type = create_sum_type(len, members);
+    sum_type->data.T_CONS.names = names;
+
+    // computed->data.T_CONS.names =
+    //     malloc(sizeof(char *) * computed->data.T_CONS.num_args);
+    // for (int i = 0; i < expr->data.AST_LIST.len; i++) {
+    //   Ast *name = i
+    // }
     return sum_type;
   }
 
@@ -230,6 +248,7 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   if (is_tuple_type(computed)) {
     computed->data.T_CONS.name = name;
   }
+
   if (is_generic(computed)) {
     computed = generalize(computed, ctx);
   }

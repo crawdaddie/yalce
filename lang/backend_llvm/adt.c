@@ -1,4 +1,5 @@
 #include "backend_llvm/adt.h"
+#include "symbols.h"
 #include "types.h"
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
@@ -135,6 +136,7 @@ LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type) {
 
 LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
                              LLVMModuleRef module) {
+
   if (type->alias != NULL && strcmp(type->alias, "Option") == 0) {
     Type *_underlying = type_of_option(type);
     if (is_generic(_underlying)) {
@@ -313,4 +315,95 @@ LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
 
   return phi;
+}
+// Helper to check if a type contains a recursive reference
+bool type_contains_recursive_ref(Type *type, const char *target_name) {
+  if (!type)
+    return false;
+
+  switch (type->kind) {
+  case T_VAR:
+    return type->is_recursive_type_ref;
+
+  case T_CONS:
+    if (type->data.T_CONS.name &&
+        strcmp(type->data.T_CONS.name, target_name) == 0) {
+      return true;
+    }
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      if (type_contains_recursive_ref(type->data.T_CONS.args[i], target_name)) {
+        return true;
+      }
+    }
+    return false;
+
+  case T_FN:
+    return type_contains_recursive_ref(type->data.T_FN.from, target_name) ||
+           type_contains_recursive_ref(type->data.T_FN.to, target_name);
+
+  default:
+    return false;
+  }
+}
+
+LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module) {
+  // For recursive datatypes like PatResult/List, we need to:
+  // 1. Create an opaque struct type first (forward declaration)
+  // 2. Convert member types (which may reference the opaque type)
+  // 3. Set the struct body with the actual fields
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+
+  Ast *name_ast = ast->data.AST_LET.binding;
+  const char *name = name_ast->data.AST_IDENTIFIER.value;
+
+  // Create opaque named struct for the variant type
+  LLVMTypeRef variant_struct = LLVMStructCreateNamed(llvm_ctx, name);
+  STACK_ALLOC_CTX_PUSH(_ctx, ctx);
+
+  // Register this type in the context so recursive references can find it
+  // JITSymbol *temp_sym =
+  //     new_symbol(STYPE_VARIANT_TYPE, type, NULL, variant_struct);
+  //
+  // ht_set_hash(_ctx.frame->table, name, hash_string(name, strlen(name)),
+  //             temp_sym);
+
+  // Process each variant member
+  int len = type->data.T_CONS.num_args;
+  LLVMTypeRef member_types[len];
+
+  for (int i = 0; i < len; i++) {
+    Type *member_type = type->data.T_CONS.args[i];
+
+    // Check if this member contains a recursive reference
+    if (type_contains_recursive_ref(member_type, name)) {
+
+      // For recursive members, we need to use a pointer
+      // The member type itself might be complex (e.g., List of T_CONS)
+      if (is_list_type(member_type)) {
+        member_types[i] = GENERIC_PTR;
+      } else if (is_array_type(member_type)) {
+        member_types[i] = GENERIC_PTR;
+      } else {
+        fprintf(stderr,
+                "Error: type %s cannot hold a recursive reference without a "
+                "List or Array container",
+                name);
+        continue;
+      }
+    } else {
+      member_types[i] = type_to_llvm_type(member_type, ctx, module);
+    }
+  }
+
+  LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
+  LLVMTypeRef largest_type =
+      get_largest_type(llvm_ctx, member_types, len, target_data);
+
+  LLVMTypeRef body_fields[] = {TAG_TYPE, largest_type};
+  LLVMStructSetBody(variant_struct, body_fields, 2, 0);
+
+  destroy_ctx(&_ctx);
+  return variant_struct;
 }

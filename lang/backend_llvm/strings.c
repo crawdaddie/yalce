@@ -516,18 +516,13 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
     return bool_to_string(val, module, builder);
   }
 
-  if ((strcmp(val_type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) &&
-      (val_type->data.T_CONS.num_args == 2) &&
-      (strcmp(val_type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
-      (strcmp(val_type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
-    printf("OPT TO STRING\n");
-
-    return opt_to_string(val, val_type, ctx, module, builder);
-  }
+  // if ((strcmp(val_type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) &&
+  //     (val_type->data.T_CONS.num_args == 2) &&
+  //     (strcmp(val_type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0)
+  //     && (strcmp(val_type->data.T_CONS.args[1]->data.T_CONS.name, "None") ==
+  //     0)) {
 
   if (is_option_type(val_type)) {
-
-    printf("OPT TO String\n");
     return opt_to_string(val, val_type, ctx, module, builder);
   }
 

@@ -2158,11 +2158,21 @@ bool test_audio_funcs() {
 
 bool test_type_exprs() {
   bool status = true;
-  Type t = TVAR("T");
-  T("type f = (T -> Int -> ()) -> Double -> T -> ();",
-    &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void), &t_num, &t,
-                             &t_void),
-             &t));
+  ({
+    Type t = TVAR("T");
+    T("type f = (T -> Int -> ()) -> Double -> T -> ();",
+      &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void), &t_num, &t,
+                               &t_void),
+               &t));
+  });
+  ({
+    T("type Pat =\n"
+      "  | PatInt of Int\n"
+      "  | PatDouble of Double\n"
+      "  | PatList of List of Pat\n"
+      "  ;\n",
+      &TSUM(3, &t_int, &t_num, &TLIST(&TVAR("Pat"))));
+  });
   return status;
 }
 

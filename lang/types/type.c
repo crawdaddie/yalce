@@ -546,9 +546,11 @@ Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env) {
 Type *type_of_option(Type *opt) {
   return opt->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
-bool is_option_type(Type *opt) {
-  // TODO: implement
-  return false;
+bool is_option_type(Type *type) {
+  return (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) &&
+         (type->data.T_CONS.num_args == 2) &&
+         (strcmp(type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
+         (strcmp(type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0);
 }
 
 Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2) {
