@@ -1,0 +1,9 @@
+let _ = dlopen "libpatternlang.so";
+
+type Pat =
+  | PatInt of Int
+  | PatDouble of Double
+  | PatList of List of Pat
+  ;
+
+let parse_pattern = extern fn String -> Option of Pat;
