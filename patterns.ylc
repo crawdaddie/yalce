@@ -1,0 +1,15 @@
+let _ = dlopen "./libs/pattern_lang/libpatternlang.so";
+
+type Pat =
+  | PatInt of Int
+  | PatDouble of Double
+  | PatList of List of Pat
+  ;
+
+let parse_pattern = extern fn String -> Option of Pat;
+
+let res = parse_pattern "1 2 3 4";
+
+# match res with
+# | Some _ -> print "parse succeeded\n"
+# | None -> print "parse failed\n"
