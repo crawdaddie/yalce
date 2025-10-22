@@ -10,6 +10,7 @@
 #include "types/type_ser.h"
 #include "util.h"
 #include "llvm-c/Core.h"
+#include "llvm-c/Target.h"
 #include <stdlib.h>
 #include <string.h>
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -65,6 +66,75 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
   return llvm_fn_type;
 }
 
+static bool needs_sret_transform(LLVMTypeRef ret_type,
+                                 LLVMTargetDataRef target_data) {
+  if (LLVMGetTypeKind(ret_type) != LLVMStructTypeKind) {
+    return false;
+  }
+
+  unsigned long long size = LLVMStoreSizeOfType(target_data, ret_type);
+  // ARM64 and x86_64 use sret for structs >16 bytes
+  return size > 16;
+}
+LLVMTypeRef codegen_extern_fn_type(Type *fn_type, int fn_len, bool *needs_sret,
+                                   LLVMTypeRef *ret_type, JITLangCtx *ctx,
+                                   LLVMModuleRef module) {
+
+  if (fn_type->data.T_FN.from->kind == T_VOID) {
+
+    LLVMTypeRef ret_type =
+        type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
+
+    return LLVMFunctionType(ret_type, NULL, 0, false);
+  }
+
+  LLVMTypeRef llvm_param_types[fn_len + 1];
+  LLVMTypeRef llvm_fn_type;
+  LLVMTypeRef llvm_return_type_ref;
+
+  Type *f = fn_type;
+  int i = 1;
+  for (f = fn_type; f->kind == T_FN && !is_closure(f);
+       f = f->data.T_FN.to, i++) {
+    Type *t = f->data.T_FN.from;
+    if (t->kind == T_FN) {
+      llvm_param_types[i] = GENERIC_PTR;
+    } else if (is_pointer_type(t) && t->data.T_CONS.num_args == 0) {
+      llvm_param_types[i] = GENERIC_PTR;
+    } else if (is_pointer_type(t)) {
+      llvm_param_types[i] = LLVMPointerType(
+          type_to_llvm_type(t->data.T_CONS.args[0], ctx, module), 0);
+    } else if (is_coroutine_type(t)) {
+      llvm_param_types[i] = GENERIC_PTR;
+    } else {
+      LLVMTypeRef tref = type_to_llvm_type(t, ctx, module);
+      if (!tref) {
+        return NULL;
+      }
+      llvm_param_types[i] = tref;
+    }
+  }
+
+  Type *return_type = f;
+
+  llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
+  *ret_type = llvm_return_type_ref;
+
+  LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
+  if (needs_sret_transform(llvm_return_type_ref, target_data)) {
+    llvm_param_types[0] = LLVMPointerType(llvm_return_type_ref, 0);
+    llvm_fn_type =
+        LLVMFunctionType(LLVMVoidType(), llvm_param_types, fn_len + 1, 0);
+    *needs_sret = true;
+    return llvm_fn_type;
+  }
+
+  llvm_fn_type =
+      LLVMFunctionType(llvm_return_type_ref, llvm_param_types + 1, fn_len, 0);
+
+  return llvm_fn_type;
+}
+
 LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
 
@@ -79,15 +149,20 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int params_count = fn_type_args_len(fn_type);
 
   if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
-
     LLVMTypeRef ret_type =
         type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
     LLVMTypeRef llvm_fn_type = LLVMFunctionType(ret_type, NULL, 0, false);
-    return get_extern_fn(name, llvm_fn_type, module);
+    return get_extern_fn(name, llvm_fn_type, false, ret_type, module);
   }
-  LLVMTypeRef llvm_fn_type = type_to_llvm_type(fn_type, ctx, module);
+  int fn_len = fn_type_args_len(fn_type);
 
-  LLVMValueRef val = get_extern_fn(name, llvm_fn_type, module);
+  bool needs_sret = false;
+  LLVMTypeRef ret_type;
+  LLVMTypeRef llvm_fn_type = codegen_extern_fn_type(
+      fn_type, fn_len, &needs_sret, &ret_type, ctx, module);
+
+  LLVMValueRef val =
+      get_extern_fn(name, llvm_fn_type, module, needs_sret, ret_type);
   return val;
 }
 

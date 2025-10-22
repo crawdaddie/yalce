@@ -65,6 +65,37 @@ typedef struct ArgValList {
   LLVMTypeRef llvm_type;
   struct ArgValList *next;
 } ArgValList;
+LLVMValueRef call_with_sret(int num_args_processed, ArgValList *args_processed,
+                            LLVMTypeRef ret_type, LLVMValueRef callable,
+                            LLVMTypeRef llvm_callable_type,
+                            LLVMBuilderRef builder) {
+
+  LLVMValueRef arg_vals[num_args_processed + 1];
+  ArgValList *avl = args_processed;
+  for (int i = num_args_processed; i >= 1; i--, avl = avl->next) {
+    LLVMValueRef val = avl->val;
+    arg_vals[i] = val;
+  }
+  // Allocate space for return value
+  LLVMValueRef ret_alloc = LLVMBuildAlloca(builder, ret_type, "sret_temp");
+  arg_vals[0] = ret_alloc;
+
+  LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable), callable, arg_vals,
+                 num_args_processed + 1, "call_with_sret");
+  return LLVMBuildLoad2(builder, ret_type, ret_alloc, "load_from_sret");
+}
+
+bool function_uses_sret(LLVMValueRef func) {
+  if (!LLVMIsAFunction(func)) {
+    return false;
+  }
+
+  unsigned sret_kind_id = LLVMGetEnumAttributeKindForName("sret", 4);
+
+  LLVMAttributeRef attr = LLVMGetEnumAttributeAtIndex(func, 1, sret_kind_id);
+
+  return attr != NULL;
+}
 
 LLVMValueRef call_callable_rec(int num_args_processed,
                                ArgValList *args_processed, Ast *ast,
@@ -74,6 +105,12 @@ LLVMValueRef call_callable_rec(int num_args_processed,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len == 0) {
+    if (function_uses_sret(callable)) {
+      return call_with_sret(num_args_processed, args_processed,
+                            type_to_llvm_type(ast->md, ctx, module), callable,
+                            llvm_callable_type, builder);
+    }
+
     LLVMValueRef arg_vals[num_args_processed];
     ArgValList *avl = args_processed;
     for (int i = num_args_processed - 1; i >= 0; i--, avl = avl->next) {
@@ -87,6 +124,7 @@ LLVMValueRef call_callable_rec(int num_args_processed,
     } else {
       sprintf(name, "call.record_member");
     }
+
     return LLVMBuildCall2(builder, llvm_callable_type, callable, arg_vals,
                           num_args_processed, name);
   }

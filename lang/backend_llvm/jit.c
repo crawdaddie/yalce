@@ -68,6 +68,7 @@ void break_repl_for_gui_loop(LLVMModuleRef module, const char *filename,
   break_repl_for_gui_loop_cb();
   return;
 }
+
 void dump_assembly(LLVMModuleRef module);
 #define STACK_MAX 256
 

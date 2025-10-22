@@ -40,16 +40,23 @@ LLVMValueRef and_vals(LLVMValueRef l, LLVMValueRef r, LLVMBuilderRef builder) {
 }
 
 LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
-                           LLVMModuleRef module) {
+                           LLVMModuleRef module, bool needs_sret,
+                           LLVMTypeRef sret_type) {
   LLVMValueRef fn = LLVMGetNamedFunction(module, name);
 
   if (fn == NULL) {
     fn = LLVMAddFunction(module, name, fn_type);
-
-    // Set C calling convention for extern functions
-    // This ensures LLVM uses the platform's C ABI, including proper
-    // struct return handling (sret) for large return values
     LLVMSetFunctionCallConv(fn, LLVMCCallConv);
+
+    // If this function uses sret (struct return via pointer), add the attribute
+    if (needs_sret) {
+      LLVMContextRef context = LLVMGetModuleContext(module);
+      unsigned sret_kind_id = LLVMGetEnumAttributeKindForName("sret", 4);
+      LLVMAttributeRef sret_attr =
+          LLVMCreateTypeAttribute(context, sret_kind_id, sret_type);
+      // Add sret attribute to parameter 1 (first parameter, index 0 is return)
+      LLVMAddAttributeAtIndex(fn, 1, sret_attr);
+    }
   }
   return fn;
 }

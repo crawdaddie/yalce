@@ -26,7 +26,8 @@ LLVMValueRef insert_printf_call(const char *format, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
 
 LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
-                           LLVMModuleRef module);
+                           LLVMModuleRef module, bool needs_sret,
+                           LLVMTypeRef sret_type);
 LLVMValueRef alloc(LLVMTypeRef type, JITLangCtx *ctx, LLVMBuilderRef builder);
 
 LLVMValueRef heap_alloc(LLVMTypeRef type, LLVMBuilderRef builder);
