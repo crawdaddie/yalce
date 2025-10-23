@@ -243,8 +243,17 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         Ast *mem_ast = ast->data.AST_LET.expr->data.AST_LIST.items + i;
-        const char *member_name =
-            mem_ast->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
+        print_ast(mem_ast);
+        const char *member_name;
+        if (mem_ast->tag == AST_BINOP) {
+          member_name = mem_ast->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
+        } else if (mem_ast->tag == AST_IDENTIFIER) {
+          member_name = mem_ast->data.AST_IDENTIFIER.value;
+        } else {
+          fprintf(stderr, "Error: cannot create sum type member");
+          print_location(mem_ast);
+          return NULL;
+        }
 
         int member_name_len = strlen(member_name);
 

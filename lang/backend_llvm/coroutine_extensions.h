@@ -38,4 +38,7 @@ LLVMValueRef CorGetPromiseValHandler(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
+
+LLVMValueRef CorConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder);
 #endif

@@ -1171,8 +1171,8 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
       BT_VAR,
       {.VAR = {.scope = binding_scope,
                .yield_boundary_scope =
-                   (ctx->current_fn_ast && ctx->current_fn_ast->data.AST_LAMBDA
-                                               .num_yield_boundary_crossers) ||
+                   (ctx->current_fn_ast &&
+                    ctx->current_fn_ast->data.AST_LAMBDA.num_yields) ||
                    0}}};
 
   if (body) {
@@ -1633,9 +1633,14 @@ Type *infer(Ast *ast, TICtx *ctx) {
     double rank;
     int has_rank = find_trait_impl_rank(ast->data.AST_TRAIT_IMPL.impl, &rank);
 
-    if (has_rank) {
+    TypeEnv *tref = lookup_type_ref(ctx->env, type_name.chars);
 
-      TypeEnv *tref = lookup_type_ref(ctx->env, type_name.chars);
+    if (!tref) {
+      fprintf(stderr, "Error: could not find type %s\n", type_name.chars);
+      return NULL;
+    }
+
+    if (has_rank) {
       Type *t = tref->type;
       TypeClass *tc = t_alloc(sizeof(TypeClass));
       *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
@@ -1644,7 +1649,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       tref->type = t;
     } else {
       // TODO: implement robust traits
-      TypeEnv *tref = lookup_type_ref(ctx->env, type_name.chars);
       Type *t = tref->type;
       Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
       TypeClass *tc = t_alloc(sizeof(TypeClass));

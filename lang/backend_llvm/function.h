@@ -56,6 +56,8 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
                    JITLangCtx *ctx, JITLangCtx *fn_ctx, LLVMModuleRef module,
                    LLVMBuilderRef builder);
 
+TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t);
+
 LLVMValueRef instantiate_extern_fn_sym(JITSymbol *sym, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);

@@ -55,25 +55,23 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
                       LLVMBuilderRef builder) {
   switch (pattern->tag) {
   case AST_IDENTIFIER: {
-    // Placeholder: no test, no binding
     if (ast_is_placeholder_id(pattern)) {
       return;
     }
 
-    // Check if this is a sum type constructor (nullary variant like None)
     const char *chars = pattern->data.AST_IDENTIFIER.value;
     if (is_sum_type(type)) {
       for (int vidx = 0; vidx < type->data.T_CONS.num_args; vidx++) {
         Type *mem = type->data.T_CONS.args[vidx];
+
         if (strcmp(chars, mem->data.T_CONS.name) == 0) {
           if (mem->data.T_CONS.num_args == 0) {
-            // This is a nullary constructor - add equality test
+
             LLVMValueRef tag = extract_tag(val, builder);
             LLVMValueRef tag_test = LLVMBuildICmp(
                 builder, LLVMIntEQ, tag, LLVMConstInt(LLVMInt8Type(), vidx, 0),
                 "tag_match");
 
-            // AND with accumulated result
             *test_result = LLVMBuildAnd(builder, *test_result, tag_test, "");
             return;
           }
@@ -103,10 +101,17 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
 
     // Handle list prepend (::)
     if (strcmp(cons_name, "::") == 0) {
-      // Test if list is non-empty
+
       Type *list_el_type = type->data.T_CONS.args[0];
       LLVMTypeRef llvm_list_el_type =
           type_to_llvm_type(list_el_type, ctx, module);
+      LLVMDumpType(llvm_list_el_type);
+      printf("\n");
+
+      if (!llvm_list_el_type) {
+        fprintf(stderr, "Error: list cons binding failed\n");
+        return;
+      }
 
       LLVMValueRef is_empty = ll_is_null(val, llvm_list_el_type, builder);
       LLVMValueRef is_not_empty =
@@ -122,6 +127,7 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
       test_pattern_rec(head_pattern, bl, test_result,
                        ll_get_head_val(val, llvm_list_el_type, builder),
                        llvm_list_el_type, list_el_type, ctx, module, builder);
+
       test_pattern_rec(tail_pattern, bl, test_result,
                        ll_get_next(val, llvm_list_el_type, builder), val_type,
                        type, ctx, module, builder);
@@ -131,6 +137,7 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
     // Handle sum type variant with arguments
     Type *cons_type = pattern->md;
     if (cons_type->kind == T_CONS && is_sum_type(cons_type)) {
+
       // Find variant index
       int vidx;
       Type *variant_type;
@@ -167,7 +174,6 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
   }
 
   case AST_TUPLE: {
-    // Test each element of tuple
     int len = pattern->data.AST_LIST.len;
     for (int i = 0; i < len; i++) {
       LLVMValueRef elem_val = codegen_tuple_access(i, val, val_type, builder);
@@ -185,6 +191,10 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
     Type *list_el_type = type->data.T_CONS.args[0];
     LLVMTypeRef llvm_list_el_type =
         type_to_llvm_type(list_el_type, ctx, module);
+    if (!llvm_list_el_type) {
+      fprintf(stderr, "Error: list binding failed\n");
+      return;
+    }
 
     if (pattern->data.AST_LIST.len == 0) {
       // Empty list test
@@ -196,6 +206,7 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
     // Non-empty list - test each element
     LLVMValueRef current = val;
     for (int i = 0; i < pattern->data.AST_LIST.len; i++) {
+
       // Test that list has at least one more element
       LLVMValueRef is_empty = ll_is_null(current, llvm_list_el_type, builder);
       LLVMValueRef is_not_empty =

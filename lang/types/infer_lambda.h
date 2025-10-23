@@ -3,4 +3,6 @@
 #include "../parse.h"
 #include "./inference.h"
 Type *infer_lambda(Ast *ast, TICtx *ctx);
+
+Type *create_coroutine_inst(Type *ret_type);
 #endif

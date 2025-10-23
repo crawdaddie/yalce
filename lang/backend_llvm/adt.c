@@ -182,7 +182,7 @@ LLVMValueRef codegen_none(LLVMBuilderRef builder) {
   LLVMTypeRef tu_type = STRUCT_TY(2, OPTION_TAG_TYPE, LLVMInt8Type());
   LLVMValueRef none =
       STRUCT(tu_type, builder, 2, LLVMConstInt(OPTION_TAG_TYPE, 1, 0),
-             LLVMConstInt(LLVMInt32Type(), 0, 0));
+             LLVMConstInt(LLVMInt8Type(), 0, 0));
 
   return none;
 }

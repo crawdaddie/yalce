@@ -8,6 +8,7 @@
 #include "symbols.h"
 #include "types.h"
 #include "types/type.h"
+#include "types/type_ser.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
@@ -40,7 +41,7 @@ static LLVMValueRef compile_coroutine_init(const char *name,
 
   LLVMValueRef promise_struct = LLVMGetUndef(promise_type);
   promise_struct = LLVMBuildInsertValue(builder, promise_struct,
-                                        LLVMConstInt(LLVMInt32Type(), 1, 0), 0,
+                                        LLVMConstInt(OPTION_TAG_TYPE, 1, 0), 0,
                                         "insert_promise_tag_none");
   LLVMBuildStore(builder, promise_struct,
                  coro_promise_gep(coro, cor_obj_type, builder));
@@ -168,10 +169,16 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   Type *t = ast->md;
   Type *coro_cons_fn_type = t->data.T_CONS.args[0];
-  Type *ret_type = fn_return_type(coro_cons_fn_type);
+  Type *ret_inst_type = fn_return_type(coro_cons_fn_type);
 
-  // Type *return_opt_type = fn_return_type(t);
-  Type return_opt_type = TOPT(ret_type);
+  ret_inst_type = ret_inst_type->data.T_CONS.args[0];
+
+  if (is_coroutine_type(ret_inst_type)) {
+    ret_inst_type = ret_inst_type->data.T_CONS.args[0];
+  }
+
+  Type return_opt_type = TOPT(ret_inst_type);
+
   LLVMTypeRef promise_type = type_to_llvm_type(&return_opt_type, ctx, module);
 
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
@@ -365,6 +372,8 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
     JITLangCtx compilation_ctx = *ctx;
 
     Type *generic_type = sym->symbol_type;
+    generic_type = generic_type->data.T_CONS.args[0];
+
     compilation_ctx.stack_ptr =
         sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
     compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
@@ -583,7 +592,14 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef coro = sym->val;
 
   Type *coro_type = sym->symbol_type;
-  Type *ret_opt_type = create_option_type(coro_type->data.T_CONS.args[0]);
+  Type *ret_inst_type = coro_type->data.T_CONS.args[0];
+
+  // Unwrap nested coroutine types (Coroutine<Coroutine<T>> -> T)
+  while (is_coroutine_type(ret_inst_type)) {
+    ret_inst_type = ret_inst_type->data.T_CONS.args[0];
+  }
+
+  Type *ret_opt_type = create_option_type(ret_inst_type);
 
   LLVMTypeRef promise_type = type_to_llvm_type(ret_opt_type, ctx, module);
   CoroutineCtx tmp_ctx = {.promise_type = promise_type,
@@ -604,7 +620,11 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCondBr(builder, is_finished, then_block, else_block);
 
   LLVMPositionBuilderAtEnd(builder, then_block);
-  LLVMValueRef none_promise = codegen_none_typed(builder, tmp_ctx.promise_type);
+
+  LLVMValueRef none_promise = LLVMGetUndef(tmp_ctx.promise_type);
+  none_promise = LLVMBuildInsertValue(builder, none_promise,
+                                      LLVMConstInt(OPTION_TAG_TYPE, 1, 0), 0,
+                                      "insert_none_tag");
 
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef then_end_block = LLVMGetInsertBlock(builder);
@@ -794,6 +814,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef coro = LLVMGetParam(coro_ctx->func, 0);
 
   Ast *expr = ast->data.AST_YIELD.expr;
+  Type *expr_type = resolve_type_in_env(deep_copy_type(expr->md), ctx->env);
 
   if (ast->data.AST_YIELD.expr->tag == AST_APPLICATION) {
     JITSymbol *sym = lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
@@ -804,7 +825,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return recursive_coro_yield(coro, expr, ctx, module, builder);
     }
 
-    if (is_coroutine_type(expr->md)) {
+    if (is_coroutine_type(expr_type)) {
       // COROUTINE DEFERS TO A NEW ONE AND CAN FORGET ABOUT ITSELF SINCE YIELD
       // IS IN TAIL POSITION
       if (coro_ctx->current_yield == coro_ctx->num_coroutine_yields - 1) {
@@ -822,16 +843,18 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
   }
 
-  if (is_coroutine_type(expr->md)) {
+  if (is_coroutine_type(expr_type)) {
     if (coro_ctx->current_yield == coro_ctx->num_coroutine_yields - 1) {
       LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
       return tail_call_coro_yield(coro, new_cor, coro_ctx, builder);
     }
 
     // COROUTINE DEFERS TO A NEW ONE BUT MUST RETURN BACK TO ITSELF
+    //
     LLVMValueRef new_cor = codegen(expr, ctx, module, builder);
     LLVMValueRef n =
         chain_new_coro_yield(coro, new_cor, coro_ctx, module, builder);
+
     coro_ctx->current_yield++;
     LLVMPositionBuilderAtEnd(builder,
                              coro_ctx->branches[coro_ctx->current_yield]);
@@ -839,8 +862,14 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   int branch_idx = coro_ctx->current_yield;
-  LLVMValueRef yield_val =
-      codegen(ast->data.AST_YIELD.expr, ctx, module, builder);
+
+  LLVMValueRef yield_val = codegen(expr, ctx, module, builder);
+  // printf("\nyield val: %d\n", branch_idx);
+  // print_ast(ast->data.AST_YIELD.expr);
+  // print_type(ast->data.AST_YIELD.expr->md);
+  // print_type_env(ctx->env);
+  // LLVMDumpValue(yield_val);
+  // printf("\n");
 
   coro_incr(coro, coro_ctx, builder);
   coro_promise_set(coro, yield_val, coro_ctx->coro_obj_type,
@@ -893,6 +922,10 @@ LLVMTypeRef get_coro_state_layout(Ast *ast, JITLangCtx *ctx,
     AstList *bxs = ast->data.AST_LAMBDA.yield_boundary_crossers;
     for (int j = args_len; j < state_len; j++) {
       Ast *bx = bxs->ast;
+
+      // printf("boundary crosser\n");
+      // print_ast(bx);
+
       Type *bxt = bx->md;
       if (is_generic(bxt)) {
         bxt = resolve_type_in_env(bxt, ctx->env);

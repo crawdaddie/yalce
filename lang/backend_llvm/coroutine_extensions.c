@@ -787,3 +787,10 @@ LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef result_val = LLVMBuildExtractValue(builder, result_opt, 1, "");
   return result_val;
 }
+
+LLVMValueRef CorConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+  printf("coroutine of something\n");
+  print_ast(ast);
+  return NULL;
+}

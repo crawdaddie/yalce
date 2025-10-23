@@ -144,6 +144,14 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       return codegen_option_struct_type(type_to_llvm_type(opt_of, ctx, module));
     }
 
+    if (is_coroutine_constructor_type(type)) {
+      return GENERIC_PTR;
+    }
+
+    if (is_coroutine_type(type)) {
+      return GENERIC_PTR;
+    }
+
     if (is_array_type(type)) {
       if (type->data.T_CONS.args[0]->kind == T_VAR) {
         return tmp_generic_codegen_array_type();

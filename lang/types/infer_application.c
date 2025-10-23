@@ -19,6 +19,10 @@ Type *create_fn_from_cons(Type *res, Type *cons) {
 
 Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
 
+  // printf("infer cons app\n");
+  // print_ast(ast);
+  // print_type(cons);
+
   Type *f;
   if (is_sum_type(cons)) {
     Type *mem =
@@ -48,6 +52,11 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
 
   if (is_coroutine_type(func_type)) {
+    // TypeClass constructor = {"Constructor"};
+    // if (type_implements(func_type, &constructor)) {
+    //   return infer_cons_application(func_type, ast, ctx);
+    // }
+
     Type f = MAKE_FN_TYPE_2(&t_void,
                             create_option_type(func_type->data.T_CONS.args[0]));
     return infer_fn_application(&f, ast, ctx);

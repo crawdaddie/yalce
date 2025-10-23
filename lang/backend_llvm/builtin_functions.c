@@ -1329,6 +1329,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("str", &str_fmt_scheme, StringFmtHandler);
   GENERIC_FN_SYMBOL("print", &t_builtin_print, PrintHandler);
+  // GENERIC_FN_SYMBOL("Coroutine", &cor_scheme, CorConsHandler);
 
   GENERIC_FN_SYMBOL("cor_loop", &cor_loop_scheme, CorLoopHandler);
   GENERIC_FN_SYMBOL("cor_map", &cor_map_scheme, CorMapHandler);

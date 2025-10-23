@@ -265,6 +265,25 @@ Type create_opt_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars, .type = full_type}}};
 }
 
+// Type cor_scheme;
+// Type cor_constructor;
+// Type create_cor_scheme() {
+//   Type *var = tvar("a");
+//   Type *full_type = create_coroutine_instance_type(var);
+//   TypeClass *tc = t_alloc(sizeof(TypeClass));
+//   *tc = (TypeClass){.name = "Constructor", .module = &cor_constructor};
+//   tc->next = full_type->implements;
+//   full_type->implements = tc;
+//   // full_type = type_fn(var, full_type);
+//
+//   TypeList *vars = t_alloc(sizeof(TypeList));
+//   *vars = vlist_of_typevar(var);
+//
+//   return (Type){T_SCHEME,
+//                 {.T_SCHEME = {.num_vars = 1, .vars = vars, .type =
+//                 full_type}}};
+// }
+
 Type array_scheme;
 Type create_array_scheme() {
   Type *var = tvar("a");
@@ -568,6 +587,9 @@ void initialize_builtin_types() {
 
   array_scheme = create_array_scheme();
   add_builtin("Array", &array_scheme);
+
+  // cor_scheme = create_cor_scheme();
+  // add_builtin("Coroutine", &cor_scheme);
 
   array_fill_const_scheme = create_array_fill_const_scheme();
   add_builtin("array_fill_const", &array_fill_const_scheme);
