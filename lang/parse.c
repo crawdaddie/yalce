@@ -11,14 +11,8 @@
 
 ParsingContext pctx = {};
 
-// Structure to hold all parsing context
-// Static parsing context - single source of truth
-
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
-
-// Removed individual parsing context variables - now using static
-// parsing_context
 
 static void *__palloc(size_t size) { return malloc(size); }
 static void *__prealloc(void *p, size_t size) { return realloc(p, size); }
@@ -54,17 +48,14 @@ void ast_body_push(Ast *body, Ast *stmt) {
     return;
   }
   if (stmt->tag != AST_BODY) {
-    // Create new AstList node
     AstList *new_node = palloc(sizeof(AstList));
     new_node->ast = stmt;
     new_node->next = NULL;
 
-    // If this is the first statement
     if (body->data.AST_BODY.stmts == NULL) {
       body->data.AST_BODY.stmts = new_node;
       body->data.AST_BODY.tail = new_node;
     } else {
-      // Append to tail
       body->data.AST_BODY.tail->next = new_node;
       body->data.AST_BODY.tail = new_node;
     }
@@ -72,7 +63,6 @@ void ast_body_push(Ast *body, Ast *stmt) {
     return;
   }
   if (stmt->tag == AST_BODY) {
-    // Recursively add all statements from the body
     AstList *current = stmt->data.AST_BODY.stmts;
     while (current != NULL) {
       ast_body_push(body, current->ast);
