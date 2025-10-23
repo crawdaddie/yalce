@@ -5,8 +5,6 @@
 #include <unistd.h>
 #define _TSTORAGE_SIZE_DEFAULT 2000000
 
-typedef struct Type Type;
-
 void reset_type_var_counter();
 Type *next_tvar();
 

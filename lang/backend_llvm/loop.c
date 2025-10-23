@@ -107,7 +107,7 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
   LLVMBasicBlockRef after_block =
       LLVMAppendBasicBlock(current_function, "loop.after");
 
-  Type *arr_type = iter_array_expr->data.AST_APPLICATION.args->md;
+  Type *arr_type = iter_array_expr->data.AST_APPLICATION.args->type;
   Type *_type = arr_type->data.T_CONS.args[0];
 
   LLVMTypeRef loop_var_type = type_to_llvm_type(_type, ctx, module);
@@ -201,7 +201,7 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
   LLVMBasicBlockRef after_block =
       LLVMAppendBasicBlock(current_function, "loop.after");
 
-  Type *ltype = iter_expr->data.AST_APPLICATION.args->md;
+  Type *ltype = iter_expr->data.AST_APPLICATION.args->type;
 
   LLVMValueRef list_val =
       codegen(iter_expr->data.AST_APPLICATION.args, ctx, module, builder);
@@ -319,7 +319,7 @@ LLVMValueRef codegen_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (is_loop_of_iterable(ast)) {
     Type *iterable_type =
-        ast->data.AST_LET.expr->data.AST_APPLICATION.function->md;
+        ast->data.AST_LET.expr->data.AST_APPLICATION.function->type;
 
     if (is_coroutine_constructor_type(iterable_type)) {
       iterable_type = iterable_type->data.T_FN.from;

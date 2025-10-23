@@ -133,7 +133,7 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
     }
 
     // Handle sum type variant with arguments
-    Type *cons_type = pattern->md;
+    Type *cons_type = pattern->type;
     if (cons_type->kind == T_CONS && is_sum_type(cons_type)) {
 
       // Find variant index
@@ -288,8 +288,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 
-  Type *test_val_type = ast->data.AST_MATCH.expr->md;
-  Type *result_type = ast->md;
+  Type *test_val_type = ast->data.AST_MATCH.expr->type;
+  Type *result_type = ast->type;
   LLVMTypeRef llvm_result_type = type_to_llvm_type(result_type, ctx, module);
 
   int num_branches = ast->data.AST_MATCH.len;

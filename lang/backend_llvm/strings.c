@@ -757,7 +757,7 @@ LLVMValueRef StringFmtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef to_str =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   LLVMValueRef str = llvm_string_serialize(
-      to_str, ast->data.AST_APPLICATION.args->md, ctx, module, builder);
+      to_str, ast->data.AST_APPLICATION.args->type, ctx, module, builder);
 
   return str;
 }

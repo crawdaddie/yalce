@@ -1000,8 +1000,8 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
   case AST_STRING:
   case AST_CHAR:
   case AST_BOOL: {
-    if (binding->md == NULL) {
-      binding->md = infer(binding, ctx);
+    if (binding->type == NULL) {
+      binding->type = infer(binding, ctx);
     }
     return 0;
   }
@@ -1011,12 +1011,12 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
 
   case AST_IDENTIFIER: {
     if (ast_is_placeholder_id(binding)) {
-      binding->md = type;
+      binding->type = type;
       return 0;
     }
 
     if (bmd_type.type == BT_FN_PARAM) {
-      binding->md = type;
+      binding->type = type;
       ctx->env = env_extend(ctx->env, binding->data.AST_IDENTIFIER.value, type);
       ctx->env->md = bmd_type;
       return 0;
@@ -1027,18 +1027,18 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
 
     if (builtin_type) {
       Type *existing = instantiate(builtin_type, ctx);
-      binding->md = existing;
+      binding->type = existing;
       return 0;
     }
 
     Type *existing = env_lookup(ctx->env, binding->data.AST_IDENTIFIER.value);
 
     if (existing) {
-      binding->md = existing;
+      binding->type = existing;
       return 0;
     }
 
-    binding->md = type;
+    binding->type = type;
     ctx->env = env_extend(ctx->env, binding->data.AST_IDENTIFIER.value, type);
     ctx->env->md = bmd_type;
     return 0;
@@ -1056,7 +1056,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     if (type->kind == T_CONS &&
         binding->data.AST_LIST.len == type->data.T_CONS.num_args) {
 
-      binding->md = type;
+      binding->type = type;
 
       for (int i = 0; i < binding->data.AST_LIST.len; i++) {
         Ast *mem = binding->data.AST_LIST.items + i;
@@ -1087,7 +1087,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       Ast *rest = binding->data.AST_APPLICATION.args + 1;
 
       if (is_list_type(type)) {
-        binding->md = type;
+        binding->type = type;
         bind_type_in_ctx(head, type->data.T_CONS.args[0], bmd_type, ctx);
         bind_type_in_ctx(rest, type, bmd_type, ctx);
         return 0;
@@ -1097,7 +1097,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
         Type *list_el = next_tvar();
         Type *list_type = create_list_type_of_type(list_el);
         unify(type, list_type, ctx);
-        binding->md = list_type;
+        binding->type = list_type;
         bind_type_in_ctx(head, list_el, bmd_type, ctx);
         bind_type_in_ctx(rest, list_type, bmd_type, ctx);
 
@@ -1122,7 +1122,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
         bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
                          btype->data.T_CONS.args[i], bmd_type, ctx);
       }
-      binding->md = app_type;
+      binding->type = app_type;
 
       return 0;
     }
@@ -1133,7 +1133,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     if (binding->data.AST_LIST.len == 0) {
       // printf("empty list pattern\n");
       // print_type(type);
-      binding->md = type;
+      binding->type = type;
       return 0;
     }
   }
@@ -1342,7 +1342,7 @@ Type *handle_closure_constants(Ast *ast, Type *type, TICtx *ctx) {
   }
 
   int i = 0;
-  Type *f = ast->data.AST_APPLICATION.function->md;
+  Type *f = ast->data.AST_APPLICATION.function->type;
   for (; f->kind == T_FN && !is_closure(f); f = f->data.T_FN.to) {
     i++;
   }
@@ -1530,7 +1530,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     if (rec_type->kind == T_FN && !is_generic(rec_type)) {
       // TODO: this is dodgy - fix
       rec_type = fn_return_type(rec_type);
-      ast->data.AST_RECORD_ACCESS.record->md = rec_type;
+      ast->data.AST_RECORD_ACCESS.record->type = rec_type;
     }
 
     if (rec_type->kind != T_CONS) {
@@ -1571,7 +1571,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     //
     let.tag = AST_LET;
     type = infer(&let, ctx);
-    ast->md = let.md;
+    ast->type = let.type;
     break;
   }
   case AST_RANGE_EXPRESSION: {
@@ -1665,6 +1665,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
   }
-  ast->md = type;
-  return ast->md;
+  ast->type = type;
+  return ast->type;
 }

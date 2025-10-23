@@ -25,7 +25,7 @@ Ast *create_module_from_root(Ast *ast_root) {
 }
 
 bool is_module_ast(Ast *ast) {
-  Type *t = ast->md;
+  Type *t = ast->type;
   return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
 }
 

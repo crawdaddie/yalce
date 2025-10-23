@@ -276,7 +276,7 @@ LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef func =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  Type *mapper_type = ast->data.AST_APPLICATION.args->md;
+  Type *mapper_type = ast->data.AST_APPLICATION.args->type;
 
   LLVMTypeRef llvm_mapper_type = type_to_llvm_type(mapper_type, ctx, module);
 

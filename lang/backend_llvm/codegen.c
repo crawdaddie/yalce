@@ -24,7 +24,7 @@
 LLVMValueRef GenericConsConstructorHandler(Ast *ast, JITLangCtx *ctx,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder) {
-  Type *expected_type = ast->md;
+  Type *expected_type = ast->type;
   if (expected_type->kind == T_CONS) {
     LLVMTypeRef struct_type = named_struct_type(expected_type->data.T_CONS.name,
                                                 expected_type, ctx, module);
@@ -48,7 +48,7 @@ LLVMValueRef GenericConsConstructorHandler(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  Type *t = ast->md;
+  Type *t = ast->type;
   LLVMTypeRef ret = LLVMVoidType();
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
@@ -114,7 +114,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       Ast *item = ast->data.AST_LIST.items + i;
 
       LLVMValueRef val = codegen(item, ctx, module, builder);
-      Type *t = item->md;
+      Type *t = item->type;
 
       if (t->kind == T_VAR) {
         t = env_lookup(ctx->env, t->data.T_VAR);
@@ -148,7 +148,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_TUPLE: {
-    Type *tuple_type = ast->md;
+    Type *tuple_type = ast->type;
     return codegen_tuple(ast, ctx, module, builder);
   }
 
@@ -190,13 +190,13 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_RECORD_ACCESS: {
     Ast *record = ast->data.AST_RECORD_ACCESS.record;
 
-    Type *record_type = record->md;
+    Type *record_type = record->type;
     if (record_type->kind == T_CONS &&
         strcmp(record_type->data.T_CONS.name, TYPE_NAME_MODULE) == 0) {
 
       LLVMValueRef val = codegen_module_access(
           record, record_type, ast->data.AST_RECORD_ACCESS.index,
-          ast->data.AST_RECORD_ACCESS.member, ast->md, ctx, module, builder);
+          ast->data.AST_RECORD_ACCESS.member, ast->type, ctx, module, builder);
       return val;
     }
 
@@ -220,7 +220,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_TYPE_DECL: {
-    Type *t = ast->md;
+    Type *t = ast->type;
     if (!is_generic(t) && is_sum_type(t)) {
 
       LLVMTypeRef llvm_type = codegen_recursive_datatype(t, ast, ctx, module);

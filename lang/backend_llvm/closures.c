@@ -30,7 +30,7 @@ LLVMValueRef find_callable_from_generic(Ast *expr, Type *callable_type,
   JITLangCtx _ctx = *ctx;
   _ctx.env = new_env;
   Ast ast_func = *expr->data.AST_APPLICATION.function;
-  ast_func.md = ftype;
+  ast_func.type = ftype;
   return codegen(&ast_func, &_ctx, module, builder);
 }
 
@@ -39,7 +39,7 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
                                 LLVMTypeRef clos_fn_type, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  Type *clos_type = expr->md;
+  Type *clos_type = expr->type;
   clos_type = resolve_type_in_env(clos_type, ctx->env);
 
   Type *callable_type;
@@ -58,7 +58,7 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
       return NULL;
     }
 
-    Type *ftype = deep_copy_type(expr->data.AST_APPLICATION.function->md);
+    Type *ftype = deep_copy_type(expr->data.AST_APPLICATION.function->type);
     ftype = resolve_type_in_env(ftype, ctx->env);
     callable_type = ftype;
     llvm_callable_type = type_to_llvm_type(callable_type, ctx, module);
@@ -74,7 +74,7 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
   } else if (expr->data.AST_APPLICATION.function->tag == AST_LAMBDA) {
 
     fname = expr->data.AST_APPLICATION.function->data.AST_LAMBDA.fn_name.chars;
-    callable_type = expr->data.AST_APPLICATION.function->md;
+    callable_type = expr->data.AST_APPLICATION.function->type;
     llvm_callable_type = type_to_llvm_type(callable_type, ctx, module);
     callable_val = codegen(expr, ctx, module, builder);
   } else {
@@ -142,7 +142,7 @@ LLVMValueRef compile_lambda_as_closure(Ast *expr, Type *expected_clos_type,
                                        JITLangCtx *ctx, LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
 
-  Type *clos_type = expr->md;
+  Type *clos_type = expr->type;
   clos_type = resolve_type_in_env(clos_type, ctx->env);
 
   Type *callable_type;
@@ -301,7 +301,7 @@ LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
-  Type *clos_type = expr->md;
+  Type *clos_type = expr->type;
 
   if (expr->tag == AST_APPLICATION && is_generic(clos_type)) {
     JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, clos_type, NULL, NULL);
@@ -404,7 +404,7 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef closure_rec_type,
 LLVMValueRef codegen_curried_fn_closure(Type *original_fn_type, Ast *ast,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
-  Type *closure_type = ast->md;
+  Type *closure_type = ast->type;
   LLVMTypeRef rec_type = closure_record_type(closure_type, ctx, module);
   LLVMTypeRef fn_type = closure_fn_type(closure_type, rec_type, ctx, module);
   LLVMValueRef rec =
@@ -529,7 +529,7 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
 LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
-  Type *fn_type = ast->md;
+  Type *fn_type = ast->type;
 
   int fn_len = fn_type_args_len(fn_type);
   LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx, module);
@@ -542,7 +542,7 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
 
-  Type *inner_fn_type = ast->data.AST_APPLICATION.function->md;
+  Type *inner_fn_type = ast->data.AST_APPLICATION.function->type;
   inner_fn_type = resolve_type_in_env(inner_fn_type, ctx->env);
   int inner_args_len = fn_type_args_len(inner_fn_type);
 
@@ -553,8 +553,8 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
     inner_args[i] =
         codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
     inner_args[i] = handle_type_conversions(
-        inner_args[i], ast->data.AST_APPLICATION.args[i].md, f->data.T_FN.from,
-        ctx, module, builder);
+        inner_args[i], ast->data.AST_APPLICATION.args[i].type,
+        f->data.T_FN.from, ctx, module, builder);
   }
 
   for (i = 0; i < fn_len; i++) {
@@ -594,12 +594,12 @@ LLVMValueRef codegen_create_closure(Ast *ast, JITLangCtx *ctx,
   Type *fn_type;
 
   if (ast->tag == AST_APPLICATION) {
-    fn_type = ast->data.AST_APPLICATION.function->md;
+    fn_type = ast->data.AST_APPLICATION.function->type;
     return codegen_curried_fn_closure(fn_type, ast, ctx, module, builder);
   }
 
   if (ast->tag == AST_LAMBDA) {
-    fn_type = ast->md;
+    fn_type = ast->type;
     return codegen_lambda_closure(fn_type, ast, ctx, module, builder);
   }
 
@@ -647,7 +647,7 @@ LLVMValueRef call_closure_obj(LLVMValueRef rec, Type *closure_type, Ast *app,
   args[0] = rec_env;
 
   for (int i = 0; i < num_args; i++, ff = ff->data.T_FN.to) {
-    Type *arg_type = deep_copy_type(app->data.AST_APPLICATION.args[i].md);
+    Type *arg_type = deep_copy_type(app->data.AST_APPLICATION.args[i].type);
     arg_type = resolve_type_in_env(arg_type, ctx->env);
     Type *expected_type = ff->data.T_FN.from;
 

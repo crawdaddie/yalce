@@ -124,7 +124,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     expected_type->closure_meta = deep_copy_type(func_type->closure_meta);
   }
   expected_type = apply_substitution(solution, expected_type);
-  ast->data.AST_APPLICATION.function->md = expected_type;
+  ast->data.AST_APPLICATION.function->type = expected_type;
 
   Type *res = expected_type;
 

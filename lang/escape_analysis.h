@@ -27,6 +27,7 @@ typedef struct EscapeMeta {
   EscapeStatus status;
   uint32_t id;
 } EscapeMeta;
+
 void escape_analysis(Ast *prog);
 
 #endif

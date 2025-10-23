@@ -168,7 +168,7 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
       }
     }
 
-    if (is_closure(ast->md)) {
+    if (is_closure(ast->type)) {
       Allocation *closure_alloc = create_alloc(NULL, ast, ctx->scope);
       return allocations_extend(allocations, closure_alloc);
     }

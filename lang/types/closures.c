@@ -5,12 +5,12 @@ Type *_get_full_closure_type(int num, Type *f, AstList *cl) {
   if (num == 0) {
     return f;
   }
-  return type_fn(cl->ast->md, _get_full_closure_type(num - 1, f, cl->next));
+  return type_fn(cl->ast->type, _get_full_closure_type(num - 1, f, cl->next));
 }
 
 Type *get_full_fn_type_of_closure(Ast *closure) {
 
-  Type *fn_type = closure->md;
+  Type *fn_type = closure->type;
   Type *t =
       _get_full_closure_type(closure->data.AST_LAMBDA.num_closure_free_vars,
                              fn_type, closure->data.AST_LAMBDA.params);
@@ -28,7 +28,7 @@ void extend_closure_free_vars(Ast *fn, Ast *ref, Type *ref_type) {
     }
     l = l->next;
   }
-  ref->md = ref_type;
+  ref->type = ref_type;
   fn->data.AST_LAMBDA.params =
       ast_list_extend_left(fn->data.AST_LAMBDA.params, ref);
 
@@ -57,7 +57,7 @@ void extend_closed_vals(Ast *fn, Ast *ref, Type *ref_type) {
     }
   }
 
-  ref->md = ref_type;
+  ref->type = ref_type;
   fn->data.AST_LAMBDA.closed_vals =
       ast_list_extend_left(fn->data.AST_LAMBDA.closed_vals, ref);
   fn->data.AST_LAMBDA.num_closed_vals++;

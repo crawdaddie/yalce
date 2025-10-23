@@ -129,7 +129,7 @@ LLVMValueRef call_callable_rec(int num_args_processed,
   LLVMValueRef val =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  Type *from_type = ast->data.AST_APPLICATION.args->md;
+  Type *from_type = ast->data.AST_APPLICATION.args->type;
   from_type = deep_copy_type(from_type);
   from_type = resolve_type_in_env(from_type, ctx->env);
 
@@ -183,7 +183,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   // TODO: this function is extraordinarily ugly - refactor to something a bit
   // more easy to read with logical sequence of cases
 
-  Type *expected_fn_type = ast->data.AST_APPLICATION.function->md;
+  Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;
 
   if (is_generic(expected_fn_type)) {
     expected_fn_type = deep_copy_type(expected_fn_type);
@@ -203,7 +203,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  Type *res_type = ast->md;
+  Type *res_type = ast->type;
 
   if (is_closure(res_type) && application_is_partial(ast)) {
     return codegen_create_closure(ast, ctx, module, builder);
@@ -268,7 +268,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_GENERIC_CONSTRUCTOR) {
-    Type *from_type = ast->data.AST_APPLICATION.args->md;
+    Type *from_type = ast->data.AST_APPLICATION.args->type;
     Type exp = (Type){
         T_FN, .data = {.T_FN = {.from = from_type, .to = expected_fn_type}}};
     callable_type = &exp;

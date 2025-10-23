@@ -92,7 +92,7 @@ LLVMValueRef ll_get_next(LLVMValueRef list, LLVMTypeRef list_el_type,
 LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
 
-  Type *list_el_type = *((Type *)ast->md)->data.T_CONS.args;
+  Type *list_el_type = *((Type *)ast->type)->data.T_CONS.args;
   LLVMTypeRef llvm_el_type;
   if (list_el_type->kind == T_FN) {
     llvm_el_type = GENERIC_PTR;
@@ -141,7 +141,7 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Ast *item_ast = &ast->data.AST_LIST.items[i];
     LLVMValueRef item_value = codegen(item_ast, ctx, module, builder);
 
-    Type *item_type = item_ast->md;
+    Type *item_type = item_ast->type;
 
     // If the item is a function, we need to bitcast it to a pointer type
     // before storing it in the list
@@ -207,7 +207,7 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  Type *list_type = ast->md;
+  Type *list_type = ast->type;
   LLVMTypeRef llvm_list_node_type = llnode_type(
       type_to_llvm_type(list_type->data.T_CONS.args[0], ctx, module));
   if (!llvm_list_node_type) {
@@ -261,7 +261,7 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-  Type *list_type = ast->data.AST_APPLICATION.args->md;
+  Type *list_type = ast->data.AST_APPLICATION.args->type;
 
   Type *list_el_type = *list_type->data.T_CONS.args;
   if (list_el_type->kind == T_VAR) {
@@ -292,7 +292,7 @@ LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  Type *list_type = ast->md;
+  Type *list_type = ast->type;
 
   Type *list_el_type = *list_type->data.T_CONS.args;
   if (list_el_type->kind == T_VAR) {
@@ -371,7 +371,7 @@ LLVMValueRef ListPrependHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  Type *list_type = (ast->data.AST_APPLICATION.args + 1)->md;
+  Type *list_type = (ast->data.AST_APPLICATION.args + 1)->type;
 
   // Get the element type from the list type, not from the value
   Type *el_type = list_type->data.T_CONS.args[0];
@@ -410,7 +410,7 @@ LLVMValueRef codegen_list_to_string(LLVMValueRef val, Type *val_type,
 
 LLVMValueRef ListEmptyHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
-  Type *ltype = ast->data.AST_APPLICATION.args->md;
+  Type *ltype = ast->data.AST_APPLICATION.args->type;
   Type *el_type = ltype->data.T_CONS.args[0];
   LLVMValueRef l =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);

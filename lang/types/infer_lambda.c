@@ -56,10 +56,10 @@ void bind_recursive_ref(Ast *ast, Type *function_type, TICtx *ctx) {
     return;
   }
   const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
-  Ast id = (Ast){
-      .tag = AST_IDENTIFIER,
-      {.AST_IDENTIFIER = {.value = fn_name,
-                          .length = ast->data.AST_LAMBDA.fn_name.length}}};
+  Ast id = (Ast){.tag = AST_IDENTIFIER,
+                 .data = {.AST_IDENTIFIER = {
+                              .value = fn_name,
+                              .length = ast->data.AST_LAMBDA.fn_name.length}}};
   bind_type_in_ctx(&id, function_type, (binding_md){BT_RECURSIVE_REF}, ctx);
 }
 
@@ -125,7 +125,7 @@ Type *create_closure(Ast *ast, Type *fn_type, TICtx *ctx) {
     // ast->data.AST_LAMBDA.closed_vals is in reverse order from when things are
     // used in the lambda
     // therefore the closed_types array will also be in reverse order
-    closed_types[i] = l->ast->md;
+    closed_types[i] = l->ast->type;
   }
   fn_type->closure_meta = create_tuple_type(num, closed_types);
   return fn_type;
@@ -290,7 +290,7 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   }
   }
 
-  Type *t = ast->md;
+  Type *t = ast->type;
   t = apply_substitution(subst, t);
 
   // TODO: when a Subst contains a chain of vars `a -> `b -> `c we could
@@ -307,7 +307,7 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
     }
     t = n;
   }
-  ast->md = t;
+  ast->type = t;
 }
 
 // T-Lambda:  Γ, x₁ : α₁, x₂ : α₂, ..., xₙ : αₙ ⊢ e : τ    (α₁, α₂, ..., α esh)
@@ -366,7 +366,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   if (lctx.yielded_type) {
     Type *cor_cons_type = create_coroutine_lambda(result_type, ctx);
-    ast->md = cor_cons_type;
+    ast->type = cor_cons_type;
     return cor_cons_type;
   }
 

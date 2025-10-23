@@ -182,6 +182,11 @@ typedef enum ast_tag {
 
 struct Ast {
   ast_tag tag;
+
+  EscapeMeta *ea_md;
+  Type *type;
+  loc_info *loc_info;
+  bool is_body_tail;
   union {
     struct AST_BODY {
       size_t len;
@@ -335,11 +340,6 @@ struct Ast {
       int i;
     } AST_GET_ARG;
   } data;
-
-  void *ea_md;
-  void *md;
-  loc_info *loc_info;
-  bool is_body_tail;
 };
 
 Ast *Ast_new(enum ast_tag tag);

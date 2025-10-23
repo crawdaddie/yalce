@@ -95,7 +95,7 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   if (array_size > 0) {
     first_element = codegen(ast->data.AST_LIST.items, ctx, module, builder);
   } else {
-    LLVMTypeRef empty_type = type_to_llvm_type(ast->md, ctx, module);
+    LLVMTypeRef empty_type = type_to_llvm_type(ast->type, ctx, module);
 
     LLVMValueRef size_const = LLVMConstInt(LLVMInt32Type(), 0, 0);
     LLVMValueRef array_struct = LLVMGetUndef(empty_type);
@@ -156,7 +156,7 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder, LLVMValueRef array,
 LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
 
-  Type *_array_type = ast->md;
+  Type *_array_type = ast->type;
   Type *el_type = _array_type->data.T_CONS.args[0];
 
   LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx, module);
@@ -181,9 +181,9 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                       "insert_array_size");
 
-  Type *ftype = ast->data.AST_APPLICATION.function->md;
+  Type *ftype = ast->data.AST_APPLICATION.function->type;
   Type *fill_func_type = ftype->data.T_FN.to->data.T_FN.from;
-  ast->data.AST_APPLICATION.args[1].md = fill_func_type;
+  ast->data.AST_APPLICATION.args[1].type = fill_func_type;
 
   LLVMValueRef fill_func =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
@@ -238,7 +238,7 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
   // printf("array fill const handler\n");
   // print_ast(ast);
 
-  Type *_array_type = ast->md;
+  Type *_array_type = ast->type;
   Type *el_type = _array_type->data.T_CONS.args[0];
 
   LLVMTypeRef element_type = el_type->kind == T_FN
@@ -310,7 +310,7 @@ LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef array =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  Type *_array_type = ast->md;
+  Type *_array_type = ast->type;
   Type *el_type = _array_type->data.T_CONS.args[0];
 
   LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx, module);
@@ -371,7 +371,7 @@ LLVMValueRef ArrayRangeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef array =
       codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
 
-  Type *_array_type = ast->md;
+  Type *_array_type = ast->type;
   Type *el_type = _array_type->data.T_CONS.args[0];
 
   LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx, module);
@@ -419,7 +419,7 @@ LLVMValueRef ArrayOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef array =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  Type *_array_type = ast->md;
+  Type *_array_type = ast->type;
   Type *el_type = _array_type->data.T_CONS.args[0];
 
   LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx, module);
@@ -475,14 +475,14 @@ LLVMValueRef ArrayStrideHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef array =
       codegen(ast->data.AST_APPLICATION.args + 2, ctx, module, builder);
 
-  Type *_array_type = ast->md;
+  Type *_array_type = ast->type;
   return NULL;
 }
 
 LLVMValueRef CStrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
 
-  Type *arr_type = ast->data.AST_APPLICATION.args->md;
+  Type *arr_type = ast->data.AST_APPLICATION.args->type;
   LLVMTypeRef llvm_arr_type = type_to_llvm_type(arr_type, ctx, module);
   LLVMValueRef arr =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);

@@ -496,12 +496,12 @@ bool application_is_partial(Ast *app) {
     return false;
   }
 
-  if (((Type *)app->data.AST_APPLICATION.function->md)->kind != T_FN) {
+  if (((Type *)app->data.AST_APPLICATION.function->type)->kind != T_FN) {
     return false;
   }
 
   int expected_args_len =
-      fn_type_args_len(app->data.AST_APPLICATION.function->md);
+      fn_type_args_len(app->data.AST_APPLICATION.function->type);
   int actual_args_len = app->data.AST_APPLICATION.len;
 
   return actual_args_len < expected_args_len;

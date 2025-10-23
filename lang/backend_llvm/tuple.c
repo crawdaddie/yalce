@@ -12,7 +12,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef codegen_tuple(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
-  LLVMTypeRef tuple_type = type_to_llvm_type(ast->md, ctx, module);
+  LLVMTypeRef tuple_type = type_to_llvm_type(ast->type, ctx, module);
   LLVMValueRef tuple = LLVMGetUndef(tuple_type);
 
   int len = ast->data.AST_LIST.len;
@@ -22,7 +22,7 @@ LLVMValueRef codegen_tuple(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Ast *mem_ast = ast->data.AST_LIST.items + i;
 
     if (mem_ast->tag == AST_SPREAD_OP) {
-      Type *mem_type = mem_ast->md;
+      Type *mem_type = mem_ast->type;
       mem_ast = mem_ast->data.AST_SPREAD_OP.expr;
 
       LLVMTypeRef _tuple_type = type_to_llvm_type(mem_type, ctx, module);

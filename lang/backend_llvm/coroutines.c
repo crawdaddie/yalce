@@ -68,7 +68,8 @@ static void add_recursive_coroutine_ref(Ast *ast, LLVMValueRef init_fn,
                                         LLVMTypeRef coro_init_type,
                                         JITLangCtx *fn_ctx) {
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
-  JITSymbol *sym = new_symbol(STYPE_FUNCTION, ast->md, init_fn, coro_init_type);
+  JITSymbol *sym =
+      new_symbol(STYPE_FUNCTION, ast->type, init_fn, coro_init_type);
   sym->symbol_data.STYPE_FUNCTION.recursive_ref = true;
 
   ht *scope = fn_ctx->frame->table;
@@ -167,7 +168,7 @@ static LLVMTypeRef get_coro_init_type(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-  Type *t = ast->md;
+  Type *t = ast->type;
   Type *coro_cons_fn_type = t->data.T_CONS.args[0];
   Type *ret_inst_type = fn_return_type(coro_cons_fn_type);
 
@@ -277,7 +278,7 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       for (int j = 0; j < ast->data.AST_LAMBDA.num_yield_boundary_crossers;
            j++) {
         Ast *bx = bxs->ast;
-        Type *bxt = bx->md;
+        Type *bxt = bx->type;
         if (is_generic(bxt)) {
           bxt = resolve_type_in_env(bxt, ctx->env);
         }
@@ -385,7 +386,7 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
     Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
 
     Type exp = TCONS(TYPE_NAME_COROUTINE_CONSTRUCTOR, 1, expected_fn_type);
-    fn_ast.md = &exp;
+    fn_ast.type = &exp;
 
     LLVMValueRef specific_fn =
         compile_coroutine(&fn_ast, &compilation_ctx, module, builder);
@@ -814,7 +815,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef coro = LLVMGetParam(coro_ctx->func, 0);
 
   Ast *expr = ast->data.AST_YIELD.expr;
-  Type *expr_type = resolve_type_in_env(deep_copy_type(expr->md), ctx->env);
+  Type *expr_type = resolve_type_in_env(deep_copy_type(expr->type), ctx->env);
 
   if (ast->data.AST_YIELD.expr->tag == AST_APPLICATION) {
     JITSymbol *sym = lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
@@ -904,7 +905,7 @@ LLVMTypeRef get_coro_state_layout(Ast *ast, JITLangCtx *ctx,
 
   if (args_len > 0) {
 
-    Type *coro_cons_type = ast->md;
+    Type *coro_cons_type = ast->type;
     Type *ftype = coro_cons_type->data.T_CONS.args[0];
 
     for (int i = 0; i < args_len; i++) {
@@ -926,7 +927,7 @@ LLVMTypeRef get_coro_state_layout(Ast *ast, JITLangCtx *ctx,
       // printf("boundary crosser\n");
       // print_ast(bx);
 
-      Type *bxt = bx->md;
+      Type *bxt = bx->type;
       if (is_generic(bxt)) {
         bxt = resolve_type_in_env(bxt, ctx->env);
       }

@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+typedef struct Type Type;
+typedef struct EscapeMeta EscapeMeta;
+
 typedef struct {
   char *chars;
   int length;

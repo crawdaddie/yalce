@@ -92,7 +92,7 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
                                    LLVMBuilderRef builder) {
 
   YLCModule _module = {
-      .type = module_ast->md,
+      .type = module_ast->type,
       .ast = module_ast,
   };
 

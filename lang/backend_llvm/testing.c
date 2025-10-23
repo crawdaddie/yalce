@@ -174,7 +174,7 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
         test_result =
             LLVMBuildAnd(builder, test_result, test_call, "test_result");
-      } else if (types_equal(stmt->data.AST_LET.expr->md, &t_bool)) {
+      } else if (types_equal(stmt->data.AST_LET.expr->type, &t_bool)) {
         const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
         JITSymbol *sym = find_in_ctx(key, strlen(key),

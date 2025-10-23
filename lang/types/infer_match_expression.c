@@ -28,7 +28,7 @@ Type *infer_match_expression__(Ast *ast, TICtx *ctx) {
 
     bind_type_in_ctx(pattern_ast, scrutinee_type, (binding_md){}, &c);
 
-    Type *pattern_type = pattern_ast->md;
+    Type *pattern_type = pattern_ast->type;
     pattern_types[i] = pattern_type;
     unify(pattern_type, scrutinee_type, ctx);
 
@@ -82,7 +82,7 @@ Type *infer_match_expression__(Ast *ast, TICtx *ctx) {
   ctx->subst = compose_subst(ctx->subst, sols);
 
   Type *final_scrutinee = apply_substitution(ctx->subst, scrutinee_type);
-  ast->data.AST_MATCH.expr->md = final_scrutinee;
+  ast->data.AST_MATCH.expr->type = final_scrutinee;
 
   // Type *final_result = result_type;
   Type *final_result = apply_substitution(ctx->subst, result_type);
@@ -135,9 +135,9 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     //     &c);
     //
     bind_type_in_ctx(pattern_ast, scrutinee_type, (binding_md){}, &c);
-    Type *pattern_type = pattern_ast->md;
+    Type *pattern_type = pattern_ast->type;
 
-    pattern_ast->md = pattern_type;
+    pattern_ast->type = pattern_type;
     pattern_types[i] = pattern_type;
 
     branch_envs[i] = c.env;
@@ -150,7 +150,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
 
     if (guard) {
       infer(guard, &c);
-      (ast->data.AST_MATCH.branches + i * 2)->md = pattern_type;
+      (ast->data.AST_MATCH.branches + i * 2)->type = pattern_type;
     }
 
     // ctx->constraints = merge_constraints(ctx->constraints, c.constraints);
@@ -195,7 +195,7 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
   ctx->subst = compose_subst(ctx->subst, sols);
 
   Type *final_scrutinee = apply_substitution(ctx->subst, scrutinee_type);
-  ast->data.AST_MATCH.expr->md = final_scrutinee;
+  ast->data.AST_MATCH.expr->type = final_scrutinee;
 
   Type *final_result = apply_substitution(ctx->subst, result_type);
 

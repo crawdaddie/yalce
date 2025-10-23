@@ -51,7 +51,7 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
       constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
           specific_fns_extend(
               constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
-              expr->md, func);
+              expr->type, func);
     } else {
 
       AST_LIST_ITER(
@@ -61,7 +61,7 @@ LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
             constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
                 specific_fns_extend(constructor_sym->symbol_data
                                         .STYPE_GENERIC_FUNCTION.specific_fns,
-                                    expr->md, func);
+                                    expr->type, func);
           }));
     }
   }
@@ -109,8 +109,8 @@ LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
                   }
 
                   JITSymbol *method_sym =
-                      new_symbol(STYPE_FUNCTION, expr->md, func,
-                                 type_to_llvm_type(expr->md, ctx, module));
+                      new_symbol(STYPE_FUNCTION, expr->type, func,
+                                 type_to_llvm_type(expr->type, ctx, module));
 
                   ht_set_hash(ctx->frame->table, chars,
                               hash_string(chars, total_chars), method_sym);
@@ -247,10 +247,10 @@ LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (ast->data.AST_APPLICATION.len < 2) {
     return curried_binop(ast->data.AST_APPLICATION.args, LLVMFAdd, LLVMAdd,
-                         ast->md, ctx, module, builder);
+                         ast->type, ctx, module, builder);
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
 
   Type *lt = fn_type->data.T_FN.from;
@@ -263,10 +263,10 @@ LLVMValueRef MinusHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (ast->data.AST_APPLICATION.len < 2) {
     return curried_binop(ast->data.AST_APPLICATION.args, LLVMFSub, LLVMSub,
-                         ast->md, ctx, module, builder);
+                         ast->type, ctx, module, builder);
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -279,10 +279,10 @@ LLVMValueRef MulHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (ast->data.AST_APPLICATION.len < 2) {
     return curried_binop(ast->data.AST_APPLICATION.args, LLVMFMul, LLVMMul,
-                         ast->md, ctx, module, builder);
+                         ast->type, ctx, module, builder);
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -295,10 +295,10 @@ LLVMValueRef DivHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (ast->data.AST_APPLICATION.len < 2) {
     return curried_binop(ast->data.AST_APPLICATION.args, LLVMFDiv, LLVMSDiv,
-                         ast->md, ctx, module, builder);
+                         ast->type, ctx, module, builder);
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -311,10 +311,10 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (ast->data.AST_APPLICATION.len < 2) {
     return curried_binop(ast->data.AST_APPLICATION.args, LLVMFRem, LLVMSRem,
-                         ast->md, ctx, module, builder);
+                         ast->type, ctx, module, builder);
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
 
@@ -362,7 +362,7 @@ LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -378,7 +378,7 @@ LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to;
@@ -395,7 +395,7 @@ LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
 
@@ -413,7 +413,7 @@ LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return NULL;
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->md);
+  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
 
@@ -719,7 +719,7 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
 LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
 
-  Type *fn_type = ast->data.AST_APPLICATION.function->md;
+  Type *fn_type = ast->data.AST_APPLICATION.function->type;
   Type *lt = fn_type->data.T_FN.from;
 
   lt = resolve_type_in_env(lt, ctx->env);
@@ -755,7 +755,7 @@ LLVMValueRef CharHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef NeqHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
-  Type *fn_type = ast->data.AST_APPLICATION.function->md;
+  Type *fn_type = ast->data.AST_APPLICATION.function->type;
   Type *lt = fn_type->data.T_FN.from;
   lt = resolve_type_in_env(lt, ctx->env);
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -860,7 +860,7 @@ LLVMValueRef ArraySizeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Ast *array_ast = ast->data.AST_APPLICATION.args;
 
-  Type *arr_type = array_ast->md;
+  Type *arr_type = array_ast->type;
   Type *el_type = arr_type->data.T_CONS.args[0];
   LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
 
@@ -872,7 +872,7 @@ LLVMValueRef ArraySizeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
-  Type *ret_type = ast->md;
+  Type *ret_type = ast->type;
   Ast *array_ast = ast->data.AST_APPLICATION.args;
   Ast *idx_ast = ast->data.AST_APPLICATION.args + 1;
   LLVMValueRef array = codegen(array_ast, ctx, module, builder);
@@ -895,7 +895,7 @@ LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
-  Type *ret_type = ast->md;
+  Type *ret_type = ast->type;
   Ast *idx_ast = ast->data.AST_APPLICATION.args + 1;
   Ast *array_ast = ast->data.AST_APPLICATION.args;
   Ast *val_ast = ast->data.AST_APPLICATION.args + 2;
@@ -1001,7 +1001,7 @@ Type *lookup_var_in_env(TypeEnv *env, Type *tvar) {
 
 LLVMValueRef AddrOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  Type *t = ast->md;
+  Type *t = ast->type;
   LLVMTypeRef llvm_type = type_to_llvm_type(t, ctx, module);
 
   LLVMValueRef val =
@@ -1030,7 +1030,7 @@ LLVMValueRef uint64_constructor_handler(Ast *ast, JITLangCtx *ctx,
                                         LLVMBuilderRef builder) {
   LLVMValueRef in =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  return uint64_constructor(in, ast->data.AST_APPLICATION.args->md, module,
+  return uint64_constructor(in, ast->data.AST_APPLICATION.args->type, module,
                             builder);
 }
 
@@ -1038,7 +1038,7 @@ LLVMValueRef char_cons_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   LLVMValueRef val =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  Type *from_type = ast->data.AST_APPLICATION.args->md;
+  Type *from_type = ast->data.AST_APPLICATION.args->type;
 
   switch (from_type->kind) {
   case T_INT: {
@@ -1056,7 +1056,7 @@ LLVMValueRef char_cons_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef RefHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
   Ast *arg = ast->data.AST_APPLICATION.args;
-  Type *t = ast->md;
+  Type *t = ast->type;
   LLVMValueRef val = codegen(arg, ctx, module, builder);
   return val;
 }
@@ -1135,7 +1135,7 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 // }
 LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-  Type *t = ast->md;
+  Type *t = ast->type;
   if (t->kind != T_CONS) {
     fprintf(stderr,
             "Error: value passed to df function must be struct (of arrays)\n");
@@ -1208,7 +1208,7 @@ LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   printf("df raw fields handler\n");
   print_ast(ast);
-  Type *t = ast->data.AST_APPLICATION.args->md;
+  Type *t = ast->data.AST_APPLICATION.args->type;
   if (t->kind != T_CONS) {
     fprintf(stderr,
             "Error: value passed to df function must be struct (of arrays)\n");
@@ -1260,7 +1260,7 @@ LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   Ast *array_like_ast = ast->data.AST_APPLICATION.function;
   Ast *index_ast = ast->data.AST_APPLICATION.args;
-  Type *array_type = array_like_ast->md;
+  Type *array_type = array_like_ast->type;
   if (is_array_type(array_type)) {
     LLVMValueRef arr = codegen(array_like_ast, ctx, module, builder);
     LLVMValueRef idx =

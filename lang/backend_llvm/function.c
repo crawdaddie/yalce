@@ -70,7 +70,7 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   const char *name = ast->data.AST_EXTERN_FN.fn_name.chars;
   int name_len = strlen(name);
-  Type *fn_type = ast->md;
+  Type *fn_type = ast->type;
 
   if (fn_type->kind == T_SCHEME) {
     TICtx _c = {.env = ctx->env};
@@ -197,10 +197,10 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return codegen_const_curried_fn(ast, ctx, module, builder);
   }
   if (ast->data.AST_LAMBDA.num_closed_vals > 0) {
-    return codegen_lambda_closure(ast->md, ast, ctx, module, builder);
+    return codegen_lambda_closure(ast->type, ast, ctx, module, builder);
   }
 
-  Type *fn_type = ast->md;
+  Type *fn_type = ast->type;
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;
@@ -327,7 +327,7 @@ LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
 
   while (i < args_len) {
     args[i] = (Ast){AST_GET_ARG, .data = {.AST_GET_ARG = {.i = i}},
-                    .md = ft->data.T_FN.from};
+                    .type = ft->data.T_FN.from};
     ft = ft->data.T_FN.to;
     i++;
   }
@@ -335,10 +335,10 @@ LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
   Ast app = {
       AST_APPLICATION,
       .data = {.AST_APPLICATION = {.function = &(Ast){AST_IDENTIFIER,
-                                                      .md = specific_type},
+                                                      .type = specific_type},
                                    .args = args,
                                    .len = args_len}},
-      .md = fn_return_type(specific_type)};
+      .type = fn_return_type(specific_type)};
 
   START_FUNC(module, "anonymous_func", fn_type);
   LLVMValueRef res = sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
@@ -365,7 +365,7 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
 
   Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
 
-  fn_ast.md = specific_type;
+  fn_ast.type = specific_type;
 
   Type *generic_type = sym->symbol_type;
   compilation_ctx.stack_ptr = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
