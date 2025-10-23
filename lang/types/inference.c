@@ -1225,6 +1225,7 @@ void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
   ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers =
       ast_list_extend_left(
           ctx->current_fn_ast->data.AST_LAMBDA.yield_boundary_crossers, ast);
+  ctx->current_fn_ast->data.AST_LAMBDA.num_yield_boundary_crossers++;
 
   return;
 }

@@ -3,6 +3,7 @@
 #include "./symbols.h"
 #include "./types.h"
 #include "match.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdint.h>
 
@@ -22,15 +23,15 @@ void set_var_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
     uint64_t id_hash =
         hash_string(chars, b->binding->data.AST_IDENTIFIER.length);
 
+    LLVMTypeRef llvm_type = bl->val_type;
+    LLVMValueRef val = bl->val;
+    Type *type = bl->type;
     if (ctx->stack_ptr == 0) {
-
-      LLVMTypeRef llvm_type = bl->val_type;
-      LLVMValueRef val = bl->val;
-      Type *type = bl->type;
 
       JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
 
       JITSymbol *sym;
+
       if (ex_sym != NULL) {
         // printf("restore existing symbol\n");
         // print_ast(binding);
@@ -51,9 +52,16 @@ void set_var_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
       continue;
     }
 
-    // Local binding
-    JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, b->type, b->val, b->val_type);
-    ht_set_hash(ctx->frame->table, chars, id_hash, sym);
+    JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
+
+    if (ex_sym != NULL && ex_sym->storage) {
+      LLVMBuildStore(builder, bl->val, ex_sym->storage);
+    } else {
+      // Local binding
+      JITSymbol *sym =
+          new_symbol(STYPE_LOCAL_VAR, b->type, b->val, b->val_type);
+      ht_set_hash(ctx->frame->table, chars, id_hash, sym);
+    }
   }
 }
 

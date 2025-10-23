@@ -255,10 +255,14 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         LLVMPointerType(coro_ctx.state_layout, 0), "bitcast_generic_state_ptr");
     int i = 0;
     Type *ftype = coro_ctx.cons_type;
+
     for (AstList *arglist = ast->data.AST_LAMBDA.params; arglist != NULL;
          arglist = arglist->next) {
 
       Ast *arg = arglist->ast;
+      if (arg->tag == AST_VOID) {
+        break;
+      }
       LLVMValueRef state_storage =
 
           LLVMBuildStructGEP2(builder, coro_ctx.state_layout, state, i, "");
@@ -275,6 +279,7 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (ast->data.AST_LAMBDA.num_yield_boundary_crossers > 0) {
       AstList *bxs = ast->data.AST_LAMBDA.yield_boundary_crossers;
+
       for (int j = 0; j < ast->data.AST_LAMBDA.num_yield_boundary_crossers;
            j++) {
         Ast *bx = bxs->ast;
@@ -865,12 +870,6 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int branch_idx = coro_ctx->current_yield;
 
   LLVMValueRef yield_val = codegen(expr, ctx, module, builder);
-  // printf("\nyield val: %d\n", branch_idx);
-  // print_ast(ast->data.AST_YIELD.expr);
-  // print_type(ast->data.AST_YIELD.expr->md);
-  // print_type_env(ctx->env);
-  // LLVMDumpValue(yield_val);
-  // printf("\n");
 
   coro_incr(coro, coro_ctx, builder);
   coro_promise_set(coro, yield_val, coro_ctx->coro_obj_type,
