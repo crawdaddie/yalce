@@ -105,8 +105,6 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
       Type *list_el_type = type->data.T_CONS.args[0];
       LLVMTypeRef llvm_list_el_type =
           type_to_llvm_type(list_el_type, ctx, module);
-      LLVMDumpType(llvm_list_el_type);
-      printf("\n");
 
       if (!llvm_list_el_type) {
         fprintf(stderr, "Error: list cons binding failed\n");

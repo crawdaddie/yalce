@@ -170,11 +170,8 @@ void print_graph(AudioGraph *g) {
 
 void __node_get_inputs(Node *node, AudioGraph *graph, Node *inputs[]) {
   int num_inputs = node->num_inputs;
-  // printf("get inputs for %s\n", node->meta);
   for (int i = 0; i < num_inputs; i++) {
-    // printf("%llu -\n ", node->connections[i].source_node_index);
     inputs[i] = graph->nodes + node->connections[i].source_node_index;
-    // printf("input %s\n", inputs[i]->meta);
   }
 }
 

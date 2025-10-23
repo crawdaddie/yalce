@@ -196,4 +196,3 @@ let fx_chain = (fn () ->
 ) |> play_tpl;
 
 Snare.synth |> pipe_into fx_chain 0;
-#

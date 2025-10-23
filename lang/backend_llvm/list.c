@@ -80,8 +80,6 @@ LLVMValueRef ll_is_not_null(LLVMValueRef list, LLVMTypeRef list_el_type,
 LLVMValueRef ll_get_head_val(LLVMValueRef list, LLVMTypeRef list_el_type,
                              LLVMBuilderRef builder) {
   LLVMTypeRef node_type = llnode_type(list_el_type);
-  printf("get head val\n");
-  LLVMDumpType(node_type);
   return struct_ptr_get(0, list, node_type, builder);
 }
 

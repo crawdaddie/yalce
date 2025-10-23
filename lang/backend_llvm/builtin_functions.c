@@ -1003,8 +1003,6 @@ LLVMValueRef AddrOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   Type *t = ast->md;
   LLVMTypeRef llvm_type = type_to_llvm_type(t, ctx, module);
-  LLVMDumpType(llvm_type);
-  printf("\n");
 
   LLVMValueRef val =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);

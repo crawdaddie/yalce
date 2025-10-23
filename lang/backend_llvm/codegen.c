@@ -222,13 +222,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_TYPE_DECL: {
     Type *t = ast->md;
     if (!is_generic(t) && is_sum_type(t)) {
-      // print_ast(ast);
-      // print_type(t);
-      //
-      // for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      //   printf("%s, ", t->data.T_CONS.names[i]);
-      // }
-      // printf("\n");
 
       LLVMTypeRef llvm_type = codegen_recursive_datatype(t, ast, ctx, module);
 
@@ -243,7 +236,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         Ast *mem_ast = ast->data.AST_LET.expr->data.AST_LIST.items + i;
-        print_ast(mem_ast);
         const char *member_name;
         if (mem_ast->tag == AST_BINOP) {
           member_name = mem_ast->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
