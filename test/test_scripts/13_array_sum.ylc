@@ -1,4 +1,4 @@
-import ../../lib/Arrays;
+import std/Arrays;
 
 let test = module () ->
   let test_sum_doubles = fn () ->

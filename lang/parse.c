@@ -1089,11 +1089,13 @@ static ParsingContext save_parsing_context() {
 // Function to restore parsing context
 static void restore_parsing_context(ParsingContext ctx) { ctx = ctx; }
 
-char *check_path(char *fully_qualified_name, const char *rel_path) {
+char *check_path(char *fully_qualified_name, char *rel_path) {
   if (access(fully_qualified_name, F_OK) != 0 &&
       (config.base_libs_dir != NULL)) {
-    char *new_filename =
-        malloc(strlen(rel_path) + strlen(config.base_libs_dir) + 1);
+
+    char *new_filename = malloc(
+        sizeof(char) * (strlen(rel_path) + strlen(config.base_libs_dir) + 2));
+
     sprintf(new_filename, "%s/%s", config.base_libs_dir, rel_path);
     fully_qualified_name = new_filename;
 
@@ -1199,20 +1201,22 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
   char *mod_name = path_identifier.chars;
   const char *mod_id_chars = get_mod_name_from_path_identifier(mod_name);
 
-  int mod_name_len = strlen(pctx.import_current_dir) + 1 + strlen(mod_name) + 4;
-  char *fully_qualified_name = palloc(sizeof(char) * mod_name_len);
-  char *rel_path = palloc(sizeof(char) * (strlen(mod_name) + 4));
+  int mod_name_len =
+      strlen(pctx.import_current_dir) + 1 + strlen(mod_name) + 4 + 1;
+  char *fully_qualified_name = malloc(sizeof(char) * mod_name_len);
+  int rel_path_size = strlen(mod_name) + 5;
+  char *rel_path = malloc(sizeof(char) * rel_path_size);
+
   sprintf(rel_path, "%s.ylc", mod_name);
 
-  snprintf(fully_qualified_name, mod_name_len + 1, "%s/%s.ylc",
+  snprintf(fully_qualified_name, mod_name_len, "%s/%s.ylc",
            pctx.import_current_dir, mod_name);
 
   fully_qualified_name = normalize_path(fully_qualified_name);
   fully_qualified_name = check_path(fully_qualified_name, rel_path);
 
   if (!fully_qualified_name) {
-    fprintf(stderr, "Error module %s not found in path\n",
-            fully_qualified_name);
+    fprintf(stderr, "Error module %s not found in path\n", mod_name);
     return NULL;
   }
   if (!get_module(fully_qualified_name)) {

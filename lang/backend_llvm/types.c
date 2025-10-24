@@ -7,7 +7,6 @@
 #include "list.h"
 #include "types/inference.h"
 #include "types/type.h"
-#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>
 #include <string.h>
@@ -212,7 +211,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       return STRUCT_TY(2, GENERIC_PTR, LLVMPointerType(clos_env_type, 0));
     }
 
-    Type *t = type;
     int fn_len = 0;
 
     for (Type *t = type; t->kind == T_FN && !(is_closure(t));

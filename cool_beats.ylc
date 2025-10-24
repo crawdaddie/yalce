@@ -7,7 +7,7 @@
 open engine/bindings/Synth; 
 open engine/bindings/Sched; 
 import engine/bindings/MIDI;
-import lib/Math;
+import std/Math;
 
 
 let q = 60. / 130.;

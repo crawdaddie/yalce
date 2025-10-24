@@ -1,7 +1,5 @@
 #include "backend_llvm/adt.h"
-#include "symbols.h"
 #include "types.h"
-#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/Types.h"

@@ -14,7 +14,7 @@ fi
 
 # Find all .ylc files in the test_scripts directory
 YLC_FILES=$(find ./test_scripts -name "*.ylc" | sort)
-YLC_LIB_FILES=$(find ../lib -name "*.ylc" | sort)
+YLC_STDLIB_FILES=$(find ../std -name "*.ylc" | sort)
 
 # Check if any .ylc files were found
 if [ -z "$YLC_FILES" ]; then
@@ -36,7 +36,7 @@ NC='\033[0m'
 
 # Loop through each .ylc file and run the executable
 echo -e "Testing YLC lib"
-for file in $YLC_LIB_FILES; do
+for file in $YLC_STDLIB_FILES; do
     ylc --test $file
     exit_code=$?
     if [ $exit_code -eq 139 ]; then  # 139 indicates segmentation fault
