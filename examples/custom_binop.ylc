@@ -1,3 +1,0 @@
-#! env ylc
-let ($~) = fn a b -> a + b
-;;

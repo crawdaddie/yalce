@@ -1,4 +1,0 @@
-#! env ylc
-%include Synth
-let x = sq_node 50.;
-play_node

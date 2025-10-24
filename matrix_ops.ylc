@@ -1,0 +1,6 @@
+
+
+
+let matrix_zeroes = fn c r ->
+  Matrix r c (array_fill_const (r * c) 0.)
+;;

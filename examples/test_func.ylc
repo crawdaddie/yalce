@@ -1,8 +1,0 @@
-#! env ylc
-
-let x = 1;
-
-let sum3 = fn a b c ->
-  a + b + c
-;;
-

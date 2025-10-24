@@ -1,6 +1,0 @@
-#! env ylc
-let sq_node = extern fn Signal -> Synth
-;
-
-let x = 0.5 * sq_node 100.
-

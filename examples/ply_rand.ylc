@@ -1,9 +1,0 @@
-#! /usr/bin/env ylc --gui -i
-open ../gui/bindings/Gui;
-import ../lib/Math;
-
-let pc_data = array_fill 600 (fn i: (Int) -> 
-  Math.randn 0. 1.
-);
-
-let w = create_pointcloud_window (cstr pc_data) 200;

@@ -1,7 +1,0 @@
-#! env ylc
-%include Fmt
-# let printf = extern fn String -> () ; # simplified printf from c stdlib
-let x = 1;
-let y = 42;
-
-let () = printf `{x} hello {y}\n`

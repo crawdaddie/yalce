@@ -1,0 +1,33 @@
+
+let x = (fn () -> 
+  let a = 2;
+  yield 1;
+  yield 2;
+  yield a;
+  yield 3;) in
+  let xx = x () in 
+  print `## persistent vars
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  `;
+
+let x = (fn aa -> 
+  let a = aa + 2;
+  yield 1;
+  yield 2;
+  yield a;
+  yield 3;
+  ) in
+  let xx = x 3 in 
+  print `## persistent vars
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  `;

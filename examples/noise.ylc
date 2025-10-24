@@ -1,6 +1,0 @@
-#! env ylc
-%include Synth
-
-white_noise_node () |> biquad_bp_node 8000. 10. |> play_node
-# brown_noise_node () |> play_node;
-

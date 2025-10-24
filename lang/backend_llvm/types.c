@@ -211,12 +211,14 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       LLVMTypeRef clos_env_type = closure_record_type(type, ctx, module);
       return STRUCT_TY(2, GENERIC_PTR, LLVMPointerType(clos_env_type, 0));
     }
+
     Type *t = type;
     int fn_len = 0;
 
     for (Type *t = type; t->kind == T_FN && !(is_closure(t));
          t = t->data.T_FN.to, fn_len++) {
     }
+
     return codegen_fn_type(type, fn_len, ctx, module);
   }
 

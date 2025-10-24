@@ -1,7 +1,0 @@
-#! env ylc
-let first = fn (a, _) -> 
-  a
-;;
-
-
-first (1, 2)

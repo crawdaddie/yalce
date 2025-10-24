@@ -1,0 +1,23 @@
+import gui/bindings/Gui;
+import lib/Math;
+
+let bools = array_fill_const 16 true;
+
+let X = array_fill 16 (fn i -> Math.rand_double_range 0. 20.);
+let Y = array_fill 16 (fn i -> Math.rand_double_range 0. 20.);
+
+Gui.create_decl_ui (fn () ->
+  Gui.CheckBoxes bools;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+  Gui.CheckBoxes @@ array_fill_const 16 true;
+)
+
+
+

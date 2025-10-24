@@ -1,5 +1,0 @@
-#! env ylc
-import List;
-
-
-List.sum 0 [1,2,3,4]

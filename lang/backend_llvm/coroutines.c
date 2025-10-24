@@ -8,7 +8,6 @@
 #include "symbols.h"
 #include "types.h"
 #include "types/type.h"
-#include "types/type_ser.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
