@@ -1,0 +1,319 @@
+let iter_all_void = fn () ->
+  let co_void = fn () ->
+    yield 1.;
+    yield 2.;
+    yield 3.
+  ;;
+
+  let inst = co_void () in
+
+  print `## simple coroutine 1. -> 2. -> 3. -> done
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+`
+;;
+iter_all_void ();
+
+let rec = fn () ->
+  let co_void_rec = fn () ->
+    yield 1.;
+    yield 2.;
+    yield co_void_rec ()
+  ;;
+
+  let inst = co_void_rec () in
+  print `## recursive coroutine 1. -> 2. -> 1. -> 2. ...
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+`
+;;
+
+rec ();
+
+let seq = fn () ->
+
+  let ne = fn () ->
+    yield 300;
+    yield 400
+  ;;
+
+  let co_void = fn () ->
+    yield 1;
+    yield 2;
+    yield ne ();
+    yield 3
+  ;;
+
+  let inst = co_void () in
+  print `## embed coroutine in another 1 -> 2 -> 300 -> 400 -> 3 -> done
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+`
+;;
+seq ();
+
+let iter_all_arg = fn () ->
+  let co_void = fn a b ->
+    yield 1.;
+    yield a;
+    yield b;
+    yield 3.
+  ;;
+
+  let inst = co_void 2. 1.;
+  print `## coroutine with state args
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+  {inst ()}
+`
+;; 
+iter_all_arg ();
+
+# let map_cor = fn () ->
+#   "map each value of a coroutine Int -> String";
+#   let co_void = fn () ->
+#     yield 1;
+#     yield 2;
+#     yield 3;
+#     yield 4;
+#     yield 5;
+#     yield 6;
+#     yield 7 
+#   ;;
+#   let co = co_void () |> cor_map (fn x -> `[str {x}]`)
+#   ;
+#
+#   print `## coroutine mapped [str 1] -> [str 2] -> [str 3] -> ...
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+#   {co ()}
+# `
+# ;;
+# map_cor ();
+# #
+let cor_list = fn () -> 
+  let l = [1, 2, 3] in
+  let c = iter_of_list l in
+
+  print `## list yield:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+cor_list ();
+
+let cor_array = fn () -> 
+  let l = [|1, 2, 3|] in
+  let c = iter_of_array l in
+
+  print `## array yield:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+cor_array ();
+
+let cor_array2 = fn () -> 
+  let l = [|1, 0, 0, 0, 1, 1, 0, 0, 1|] in
+  let c = iter_of_array l in
+
+  print `## array yield:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+cor_array2 ();
+
+let loop_cor = fn () ->  
+  let co_void = fn () -> 
+    yield 1;
+    yield 2;
+    yield 3
+  ;;
+
+  let c = co_void () |> cor_loop in
+  print `## looped coroutine:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  `;
+
+  let d = iter_of_list [1,2,3] |> cor_loop in
+  print `## looped list
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+  {d ()}
+`;
+
+  let f = iter_of_list [1,2,3]
+  |> cor_loop
+  |> cor_map (fn x -> x * 8)
+  in
+  print `## looped mapped list
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+  {f ()}
+`;
+
+  let e = iter_of_array [|1,2,3|] |> cor_loop in
+  print `## looped array
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+  {e ()}
+`
+;;
+
+loop_cor ();
+
+let arithmetic_series = fn () -> 
+  let arithmetic = fn s ->
+    yield s;
+    yield arithmetic (s + 1)
+  ;;
+  let c = arithmetic 1 in
+  print `## arithmetic series:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+arithmetic_series ();
+
+let geometric = fn () -> 
+  let geo = fn s ->
+    yield s;
+    yield geo (s * 1.1)
+  ;;
+  let g = geo 1.0 in
+
+  print `## geometric series:
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+  {g ()}
+`
+;;
+geometric ();
+
+let fib_ser = fn () ->
+  let fib = fn a b ->
+    yield a;
+    yield fib b (a + b)
+  ;;
+
+  let c = fib 0 1 in
+  print `## fib series:
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+  {c ()}
+`
+;;
+
+fib_ser ();
+
+let x = (fn () -> 
+  let a = 2;
+  yield 1;
+  yield 2;
+  yield a;
+  yield 3;) in
+  let xx = x () in 
+  print `## persistent vars
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  `;
+
+let x = (fn aa -> 
+  let a = aa + 2;
+  yield 1;
+  yield 2;
+  yield a;
+  yield 3;
+  ) in
+  let xx = x 3 in 
+  print `## persistent vars
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  {xx ()}
+  `;
+
