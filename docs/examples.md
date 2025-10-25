@@ -86,6 +86,9 @@ let train = fn model: (TLinear) epochs ->
 train model 100;
 
 # Optional to view the scatter plot of input data vs the interpolated line:
+# NB: using the Gui library requires using the ylc -i option in order to keep
+# the parent process running and able to create windows
+
 import gui/bindings/Gui;
 
 Gui.create_decl_ui (fn () ->
