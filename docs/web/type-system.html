@@ -151,9 +151,9 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     </style>
   </head>
   <body>
-    <h1>Type System</h1>
+    <h1 id="type-system">Type System</h1>
 <p>YALCE uses Hindley-Milner type inference, which means you rarely need to write type annotations—the compiler infers types automatically.</p>
-<h2>Type Inference</h2>
+<h2 id="type-inference">Type Inference</h2>
 <p>The compiler automatically determines types:</p>
 <div class="codehilite"><pre><span></span><code>let x = 42;;
 # x : int
@@ -165,7 +165,7 @@ let id = fn x -&gt; x;;
 # id : &#39;a -&gt; &#39;a (polymorphic)
 </code></pre></div>
 
-<h2>Polymorphism</h2>
+<h2 id="polymorphism">Polymorphism</h2>
 <p>Functions can work with any type:</p>
 <div class="codehilite"><pre><span></span><code># Generic identity function
 let id = fn x -&gt; x;;
@@ -176,15 +176,15 @@ id &quot;hello&quot;;;  # &quot;hello&quot; : string
 id [1, 2];;   # [1, 2] : [int]
 </code></pre></div>
 
-<h3>Type Variables</h3>
+<h3 id="type-variables">Type Variables</h3>
 <p>Type variables are written with a leading apostrophe:</p>
 <ul>
 <li><code>'a</code>, <code>'b</code>, <code>'c</code> - Generic type variables</li>
 <li><code>['a]</code> - List of any type</li>
 <li><code>'a -&gt; 'b</code> - Function from any type to any type</li>
 </ul>
-<h2>Algebraic Data Types (ADTs)</h2>
-<h3>Simple Enums</h3>
+<h2 id="algebraic-data-types-adts">Algebraic Data Types (ADTs)</h2>
+<h3 id="simple-enums">Simple Enums</h3>
 <div class="codehilite"><pre><span></span><code>type Color = Red | Green | Blue;
 
 let is_primary = fn color -&gt;
@@ -195,7 +195,7 @@ let is_primary = fn color -&gt;
 ;;
 </code></pre></div>
 
-<h3>Parameterized Types</h3>
+<h3 id="parameterized-types">Parameterized Types</h3>
 <div class="codehilite"><pre><span></span><code>type Option a = Some a | None;
 
 let safe_head = fn list -&gt;
@@ -206,7 +206,7 @@ let safe_head = fn list -&gt;
 # safe_head : [&#39;a] -&gt; Option &#39;a
 </code></pre></div>
 
-<h3>Recursive Types</h3>
+<h3 id="recursive-types">Recursive Types</h3>
 <div class="codehilite"><pre><span></span><code>type Tree a =
   | Leaf
   | Node a (Tree a) (Tree a);
@@ -215,7 +215,7 @@ let singleton = fn value -&gt; Node value Leaf Leaf;;
 # singleton : &#39;a -&gt; Tree &#39;a
 </code></pre></div>
 
-<h3>Multiple Type Parameters</h3>
+<h3 id="multiple-type-parameters">Multiple Type Parameters</h3>
 <div class="codehilite"><pre><span></span><code>type Result err ok =
   | Ok ok
   | Error err;
@@ -229,13 +229,13 @@ let divide = fn a b -&gt;
 # divide : int -&gt; int -&gt; Result string int
 </code></pre></div>
 
-<h2>Function Types</h2>
-<h3>Simple Functions</h3>
+<h2 id="function-types">Function Types</h2>
+<h3 id="simple-functions">Simple Functions</h3>
 <div class="codehilite"><pre><span></span><code>let add = fn x y -&gt; x + y;;
 # add : int -&gt; int -&gt; int
 </code></pre></div>
 
-<h3>Higher-Order Functions</h3>
+<h3 id="higher-order-functions">Higher-Order Functions</h3>
 <div class="codehilite"><pre><span></span><code>let apply = fn f x -&gt; f x;;
 # apply : (&#39;a -&gt; &#39;b) -&gt; &#39;a -&gt; &#39;b
 
@@ -243,7 +243,7 @@ let compose = fn f g x -&gt; f (g x);;
 # compose : (&#39;b -&gt; &#39;c) -&gt; (&#39;a -&gt; &#39;b) -&gt; &#39;a -&gt; &#39;c
 </code></pre></div>
 
-<h3>Currying</h3>
+<h3 id="currying">Currying</h3>
 <p>All multi-argument functions are curried:</p>
 <div class="codehilite"><pre><span></span><code>let add = fn x y -&gt; x + y;;
 # add : int -&gt; int -&gt; int
@@ -253,7 +253,7 @@ let add5 = add 5;;
 # add5 : int -&gt; int
 </code></pre></div>
 
-<h2>List Types</h2>
+<h2 id="list-types">List Types</h2>
 <div class="codehilite"><pre><span></span><code>[1, 2, 3];;
 # [int]
 
@@ -267,7 +267,7 @@ let add5 = add 5;;
 # [&#39;a] (polymorphic empty list)
 </code></pre></div>
 
-<h2>Tuple Types</h2>
+<h2 id="tuple-types">Tuple Types</h2>
 <div class="codehilite"><pre><span></span><code>(1, &quot;hello&quot;);;
 # (int, string)
 
@@ -278,7 +278,7 @@ let add5 = add 5;;
 # (bool, [int], string)
 </code></pre></div>
 
-<h2>Type Aliases</h2>
+<h2 id="type-aliases">Type Aliases</h2>
 <p>Create names for complex types:</p>
 <div class="codehilite"><pre><span></span><code>type Point = (float, float);
 type UserId = int;
@@ -290,8 +290,8 @@ let distance = fn (x1, y1) (x2, y2) -&gt;
 # distance : Point -&gt; Point -&gt; float
 </code></pre></div>
 
-<h2>Type Constraints</h2>
-<h3>Numeric Types</h3>
+<h2 id="type-constraints">Type Constraints</h2>
+<h3 id="numeric-types">Numeric Types</h3>
 <p>YALCE distinguishes between <code>int</code> and <code>float</code>:</p>
 <div class="codehilite"><pre><span></span><code>1 + 2;;        # 3 : int
 1.0 + 2.0;;    # 3.0 : float
@@ -305,7 +305,7 @@ let distance = fn (x1, y1) (x2, y2) -&gt;
 int_of_float 3.14;;  # 3 : int
 </code></pre></div>
 
-<h3>List Homogeneity</h3>
+<h3 id="list-homogeneity">List Homogeneity</h3>
 <p>Lists must contain elements of the same type:</p>
 <div class="codehilite"><pre><span></span><code>[1, 2, 3];;        # OK: [int]
 [&quot;a&quot;, &quot;b&quot;];;       # OK: [string]
@@ -314,7 +314,7 @@ int_of_float 3.14;;  # 3 : int
 [1, &quot;hello&quot;];;     # Cannot mix types
 </code></pre></div>
 
-<h2>Pattern Matching and Types</h2>
+<h2 id="pattern-matching-and-types">Pattern Matching and Types</h2>
 <p>Pattern matching must be exhaustive:</p>
 <div class="codehilite"><pre><span></span><code>type Option a = Some a | None;
 
@@ -335,8 +335,8 @@ let unwrap_or = fn default opt -&gt;
 ;;
 </code></pre></div>
 
-<h2>Type Inference Examples</h2>
-<h3>Example 1: Map Function</h3>
+<h2 id="type-inference-examples">Type Inference Examples</h2>
+<h3 id="example-1-map-function">Example 1: Map Function</h3>
 <div class="codehilite"><pre><span></span><code>let map = fn f list -&gt;
   match list with
   | [] -&gt; []
@@ -352,7 +352,7 @@ let unwrap_or = fn default opt -&gt;
 - <code>f</code> is a function from type <code>'a</code> to type <code>'b</code>
 - <code>list</code> is a list of <code>'a</code>
 - Result is a list of <code>'b</code></p>
-<h3>Example 2: Filter Function</h3>
+<h3 id="example-2-filter-function">Example 2: Filter Function</h3>
 <div class="codehilite"><pre><span></span><code>let filter = fn pred list -&gt;
   match list with
   | [] -&gt; []
@@ -368,7 +368,7 @@ let unwrap_or = fn default opt -&gt;
 <div class="codehilite"><pre><span></span><code>filter : (&#39;a -&gt; bool) -&gt; [&#39;a] -&gt; [&#39;a]
 </code></pre></div>
 
-<h3>Example 3: Fold Function</h3>
+<h3 id="example-3-fold-function">Example 3: Fold Function</h3>
 <div class="codehilite"><pre><span></span><code>let fold_left = fn f acc list -&gt;
   match list with
   | [] -&gt; acc
@@ -380,8 +380,8 @@ let unwrap_or = fn default opt -&gt;
 <div class="codehilite"><pre><span></span><code>fold_left : (&#39;a -&gt; &#39;b -&gt; &#39;a) -&gt; &#39;a -&gt; [&#39;b] -&gt; &#39;a
 </code></pre></div>
 
-<h2>Type Errors</h2>
-<h3>Common Type Errors</h3>
+<h2 id="type-errors">Type Errors</h2>
+<h3 id="common-type-errors">Common Type Errors</h3>
 <p><strong>Type Mismatch</strong></p>
 <div class="codehilite"><pre><span></span><code>let add = fn x y -&gt; x + y;;
 add 1 &quot;hello&quot;;;
@@ -402,8 +402,8 @@ add 1 &quot;hello&quot;;;
 # Missing case: []
 </code></pre></div>
 
-<h2>Advanced Type Features</h2>
-<h3>Existential Types (Planned)</h3>
+<h2 id="advanced-type-features">Advanced Type Features</h2>
+<h3 id="existential-types-planned">Existential Types (Planned)</h3>
 <div class="codehilite"><pre><span></span><code># Abstract types
 type Stack a;
 
@@ -412,7 +412,7 @@ val push : &#39;a -&gt; Stack &#39;a -&gt; Stack &#39;a
 val pop : Stack &#39;a -&gt; Option (&#39;a, Stack &#39;a)
 </code></pre></div>
 
-<h3>Type Classes (Planned)</h3>
+<h3 id="type-classes-planned">Type Classes (Planned)</h3>
 <div class="codehilite"><pre><span></span><code># Planned feature for ad-hoc polymorphism
 class Eq a where
   eq : a -&gt; a -&gt; bool
@@ -423,7 +423,7 @@ instance Eq int where
 end
 </code></pre></div>
 
-<h3>GADTs (Planned)</h3>
+<h3 id="gadts-planned">GADTs (Planned)</h3>
 <div class="codehilite"><pre><span></span><code># Generalized Algebraic Data Types
 type Expr a where
   | IntLit : int -&gt; Expr int
@@ -433,7 +433,7 @@ type Expr a where
 end
 </code></pre></div>
 
-<h2>Type Annotations (Optional)</h2>
+<h2 id="type-annotations-optional">Type Annotations (Optional)</h2>
 <p>You can add type annotations for documentation:</p>
 <div class="codehilite"><pre><span></span><code># Function with type annotation
 let add : int -&gt; int -&gt; int = fn x y -&gt; x + y;;
@@ -445,7 +445,7 @@ let (x : int) = 42;;
 let id : &#39;a -&gt; &#39;a = fn x -&gt; x;;
 </code></pre></div>
 
-<h2>Best Practices</h2>
+<h2 id="best-practices">Best Practices</h2>
 <ol>
 <li><strong>Let the Compiler Infer</strong> - Avoid unnecessary type annotations</li>
 <li><strong>Use Type Aliases</strong> - Make complex types more readable</li>
@@ -453,7 +453,7 @@ let id : &#39;a -&gt; &#39;a = fn x -&gt; x;;
 <li><strong>Leverage Polymorphism</strong> - Write generic, reusable functions</li>
 <li><strong>Use ADTs</strong> - Model your domain with algebraic data types</li>
 </ol>
-<h2>See Also</h2>
+<h2 id="see-also">See Also</h2>
 <ul>
 <li><a href="ylc-ref.html">Language Reference</a> - Complete language syntax</li>
 <li><a href="examples.html">Examples</a> - Type system in practice</li>

@@ -151,9 +151,9 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     </style>
   </head>
   <body>
-    <h1>YALCE Examples</h1>
+    <h1 id="yalce-examples">YALCE Examples</h1>
 <p>Practical code examples demonstrating YALCE features.</p>
-<h2>Table of Contents</h2>
+<h2 id="table-of-contents">Table of Contents</h2>
 <ul>
 <li><a href="#basic-examples">Basic Examples</a></li>
 <li><a href="#data-structures">Data Structures</a></li>
@@ -162,13 +162,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <li><a href="#recursion">Recursion</a></li>
 <li><a href="#audio-examples">Audio Examples</a></li>
 </ul>
-<h2>Basic Examples</h2>
-<h3>Hello World</h3>
+<h2 id="basic-examples">Basic Examples</h2>
+<h3 id="hello-world">Hello World</h3>
 <div class="codehilite"><pre><span></span><code>let message = &quot;Hello, YALCE!&quot;;;
 print message;;
 </code></pre></div>
 
-<h3>Simple Calculator</h3>
+<h3 id="simple-calculator">Simple Calculator</h3>
 <div class="codehilite"><pre><span></span><code>let add = fn x y -&gt; x + y;;
 let sub = fn x y -&gt; x - y;;
 let mul = fn x y -&gt; x * y;;
@@ -185,7 +185,7 @@ print (div 10 2);;    # Some 5
 print (div 10 0);;    # None
 </code></pre></div>
 
-<h3>FizzBuzz</h3>
+<h3 id="fizzbuzz">FizzBuzz</h3>
 <div class="codehilite"><pre><span></span><code>let fizzbuzz = fn n -&gt;
   if n % 15 == 0 then
     &quot;FizzBuzz&quot;
@@ -209,8 +209,8 @@ let rec run_fizzbuzz = fn i max -&gt;
 run_fizzbuzz 1 100;;
 </code></pre></div>
 
-<h2>Data Structures</h2>
-<h3>Working with Lists</h3>
+<h2 id="data-structures">Data Structures</h2>
+<h3 id="working-with-lists">Working with Lists</h3>
 <div class="codehilite"><pre><span></span><code># List construction
 let numbers = [1, 2, 3, 4, 5];;
 let more_numbers = 0 :: numbers;;
@@ -244,7 +244,7 @@ print (sum numbers);;       # 15
 print (reverse numbers);;   # [5, 4, 3, 2, 1]
 </code></pre></div>
 
-<h3>Binary Tree</h3>
+<h3 id="binary-tree">Binary Tree</h3>
 <div class="codehilite"><pre><span></span><code>type Tree a =
   | Leaf
   | Node a (Tree a) (Tree a);
@@ -295,8 +295,8 @@ print (contains 4 tree);;   # false
 print (inorder tree);;      # [1, 3, 5, 7]
 </code></pre></div>
 
-<h2>Functional Programming</h2>
-<h3>Map, Filter, Reduce</h3>
+<h2 id="functional-programming">Functional Programming</h2>
+<h3 id="map-filter-reduce">Map, Filter, Reduce</h3>
 <div class="codehilite"><pre><span></span><code># Map: Transform each element
 let rec map = fn f list -&gt;
   match list with
@@ -338,7 +338,7 @@ let product = fold_left ( * ) 1 numbers;;
 # 120
 </code></pre></div>
 
-<h3>Function Composition</h3>
+<h3 id="function-composition">Function Composition</h3>
 <div class="codehilite"><pre><span></span><code># Compose two functions
 let compose = fn f g x -&gt; f (g x);;
 
@@ -356,7 +356,7 @@ let add1_then_double = pipeline add1 double;;
 print (add1_then_double 5);;  # 12
 </code></pre></div>
 
-<h3>Currying and Partial Application</h3>
+<h3 id="currying-and-partial-application">Currying and Partial Application</h3>
 <div class="codehilite"><pre><span></span><code>let add = fn x y -&gt; x + y;;
 
 # Partial application
@@ -375,8 +375,8 @@ print (double 7);;  # 14
 print (triple 7);;  # 21
 </code></pre></div>
 
-<h2>Pattern Matching</h2>
-<h3>Option Type</h3>
+<h2 id="pattern-matching">Pattern Matching</h2>
+<h3 id="option-type">Option Type</h3>
 <div class="codehilite"><pre><span></span><code>type Option a = Some a | None;
 
 let safe_div = fn a b -&gt;
@@ -404,7 +404,7 @@ let doubled = map_option (fn x -&gt; x * 2) result;;
 # Some 10
 </code></pre></div>
 
-<h3>Result Type</h3>
+<h3 id="result-type">Result Type</h3>
 <div class="codehilite"><pre><span></span><code>type Result err ok =
   | Ok ok
   | Error err;
@@ -428,7 +428,7 @@ let doubled = map_result (fn x -&gt; x * 2) result;;
 # Ok 246
 </code></pre></div>
 
-<h3>List Patterns</h3>
+<h3 id="list-patterns">List Patterns</h3>
 <div class="codehilite"><pre><span></span><code># Get first and second elements
 let first_two = fn list -&gt;
   match list with
@@ -454,8 +454,8 @@ let describe = fn list -&gt;
 ;;
 </code></pre></div>
 
-<h2>Recursion</h2>
-<h3>Factorial</h3>
+<h2 id="recursion">Recursion</h2>
+<h3 id="factorial">Factorial</h3>
 <div class="codehilite"><pre><span></span><code>let rec factorial = fn n -&gt;
   match n with
   | 0 -&gt; 1
@@ -466,7 +466,7 @@ let describe = fn list -&gt;
 print (factorial 5);;  # 120
 </code></pre></div>
 
-<h3>Fibonacci</h3>
+<h3 id="fibonacci">Fibonacci</h3>
 <div class="codehilite"><pre><span></span><code># Naive recursive
 let rec fib = fn n -&gt;
   match n with
@@ -488,7 +488,7 @@ print (fib 10);;       # 55
 print (fib_fast 10);;  # 55
 </code></pre></div>
 
-<h3>Greatest Common Divisor</h3>
+<h3 id="greatest-common-divisor">Greatest Common Divisor</h3>
 <div class="codehilite"><pre><span></span><code>let rec gcd = fn a b -&gt;
   if b == 0 then
     a
@@ -499,7 +499,7 @@ print (fib_fast 10);;  # 55
 print (gcd 48 18);;  # 6
 </code></pre></div>
 
-<h3>Quicksort</h3>
+<h3 id="quicksort">Quicksort</h3>
 <div class="codehilite"><pre><span></span><code>let rec quicksort = fn list -&gt;
   match list with
   | [] -&gt; []
@@ -514,8 +514,8 @@ print (quicksort unsorted);;
 # [1, 1, 2, 3, 4, 5, 6, 9]
 </code></pre></div>
 
-<h2>Audio Examples</h2>
-<h3>Simple Oscillator</h3>
+<h2 id="audio-examples">Audio Examples</h2>
+<h3 id="simple-oscillator">Simple Oscillator</h3>
 <div class="codehilite"><pre><span></span><code># Sine wave oscillator
 let sin_osc = fn freq phase -&gt;
   sin (phase * 2.0 * 3.14159 * freq)
@@ -541,7 +541,7 @@ let generate_tone = fn duration -&gt;
 let tone = generate_tone 1.0;;  # 1 second of 440Hz
 </code></pre></div>
 
-<h3>Audio Processing Chain</h3>
+<h3 id="audio-processing-chain">Audio Processing Chain</h3>
 <div class="codehilite"><pre><span></span><code># Simple effects chain
 let amplify = fn gain signal -&gt;
   map (fn x -&gt; x * gain) signal
@@ -561,7 +561,7 @@ let amplified = amplify 2.0 dry_signal;;
 let clipped = clip 0.9 amplified;;
 </code></pre></div>
 
-<h3>ADSR Envelope</h3>
+<h3 id="adsr-envelope">ADSR Envelope</h3>
 <div class="codehilite"><pre><span></span><code>type ADSRPhase =
   | Attack
   | Decay
@@ -594,7 +594,7 @@ let adsr_envelope = fn attack decay sustain release -&gt;
 let envelope = adsr_envelope 0.1 0.2 0.7 0.3;;
 </code></pre></div>
 
-<h2>See Also</h2>
+<h2 id="see-also">See Also</h2>
 <ul>
 <li><a href="ylc-ref.html">Language Reference</a> - Complete syntax guide</li>
 <li><a href="type-system.html">Type System</a> - Understanding types</li>

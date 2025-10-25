@@ -14,6 +14,10 @@ make
 
 ## Documentation
 
+**[📚 Full Documentation Navigation](navigation.md)** - Complete hierarchical guide
+
+### Main Sections
+
 - [Getting Started](getting-started.md) - Installation and first steps
 - [Language Reference](ylc-ref.md) - Complete language syntax and features
 - [Type System](type-system.md) - Hindley-Milner type inference

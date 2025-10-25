@@ -151,9 +151,9 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     </style>
   </head>
   <body>
-    <h1>Audio Engine</h1>
+    <h1 id="audio-engine">Audio Engine</h1>
 <p>YALCE includes a real-time audio engine designed for low-latency audio synthesis and processing.</p>
-<h2>Architecture</h2>
+<h2 id="architecture">Architecture</h2>
 <p>The audio engine uses a <strong>node graph</strong> architecture where:</p>
 <ul>
 <li><strong>Nodes</strong> are individual audio processing units (oscillators, filters, effects)</li>
@@ -161,14 +161,14 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <li><strong>Real-time thread</strong> processes audio with guaranteed low latency</li>
 <li><strong>Message queue</strong> allows safe updates from non-RT thread</li>
 </ul>
-<h3>Key Components</h3>
+<h3 id="key-components">Key Components</h3>
 <ol>
 <li><strong>AudioGraph</strong> - Container for audio nodes with memory pooling</li>
 <li><strong>Node</strong> - Basic audio processing unit with perform function</li>
 <li><strong>Scheduling</strong> - Message-based graph updates</li>
 <li><strong>Ring Buffer</strong> - RT-safe communication between threads</li>
 </ol>
-<h2>Real-Time Safety</h2>
+<h2 id="real-time-safety">Real-Time Safety</h2>
 <p>The audio engine is designed for hard real-time constraints:</p>
 <ul>
 <li><strong>No allocation</strong> in audio callback (<code>malloc</code>/<code>free</code>)</li>
@@ -176,8 +176,8 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <li><strong>Pre-allocated</strong> memory pools for nodes and buffers</li>
 <li><strong>Message queue</strong> for safe graph modifications</li>
 </ul>
-<h2>Basic Usage</h2>
-<h3>Starting the Audio Engine</h3>
+<h2 id="basic-usage">Basic Usage</h2>
+<h3 id="starting-the-audio-engine">Starting the Audio Engine</h3>
 <div class="codehilite"><pre><span></span><code>import Audio;
 
 # Initialize audio engine
@@ -187,7 +187,7 @@ Audio.init 44100 256;;  # sample_rate, buffer_size
 Audio.start;;
 </code></pre></div>
 
-<h3>Creating Audio Nodes</h3>
+<h3 id="creating-audio-nodes">Creating Audio Nodes</h3>
 <div class="codehilite"><pre><span></span><code># Simple sine wave oscillator
 let osc = Audio.sin_osc 440.0;;  # 440 Hz (A4)
 
@@ -198,8 +198,8 @@ Audio.connect osc Audio.output;;
 Audio.play osc;;
 </code></pre></div>
 
-<h2>Audio Nodes</h2>
-<h3>Oscillators</h3>
+<h2 id="audio-nodes">Audio Nodes</h2>
+<h3 id="oscillators">Oscillators</h3>
 <div class="codehilite"><pre><span></span><code># Sine wave
 let sin = Audio.sin_osc frequency;;
 
@@ -216,7 +216,7 @@ let triangle = Audio.tri_osc frequency;;
 let noise = Audio.white_noise;;
 </code></pre></div>
 
-<h3>Filters</h3>
+<h3 id="filters">Filters</h3>
 <div class="codehilite"><pre><span></span><code># Low-pass filter
 let lpf = Audio.lpf cutoff resonance;;
 
@@ -231,7 +231,7 @@ let saw = Audio.saw_osc 110.0;;
 let filtered = Audio.lpf 1000.0 0.7 saw;;
 </code></pre></div>
 
-<h3>Envelopes</h3>
+<h3 id="envelopes">Envelopes</h3>
 <div class="codehilite"><pre><span></span><code># ADSR envelope
 let env = Audio.adsr attack decay sustain release;;
 
@@ -240,7 +240,7 @@ let osc = Audio.sin_osc 440.0;;
 let shaped = Audio.mul osc env;;
 </code></pre></div>
 
-<h3>Effects</h3>
+<h3 id="effects">Effects</h3>
 <div class="codehilite"><pre><span></span><code># Delay/Echo
 let delay = Audio.delay time feedback;;
 
@@ -254,8 +254,8 @@ let dist = Audio.distortion amount;;
 let chorus = Audio.chorus rate depth;;
 </code></pre></div>
 
-<h2>Node Graph Operations</h2>
-<h3>Connecting Nodes</h3>
+<h2 id="node-graph-operations">Node Graph Operations</h2>
+<h3 id="connecting-nodes">Connecting Nodes</h3>
 <div class="codehilite"><pre><span></span><code># Serial connection (chain)
 let osc = Audio.sin_osc 440.0;;
 let filtered = Audio.lpf 1000.0 0.5 osc;;
@@ -264,7 +264,7 @@ let delayed = Audio.delay 0.5 0.3 filtered;;
 Audio.connect delayed Audio.output;;
 </code></pre></div>
 
-<h3>Mixing Nodes</h3>
+<h3 id="mixing-nodes">Mixing Nodes</h3>
 <div class="codehilite"><pre><span></span><code># Mix multiple signals
 let osc1 = Audio.sin_osc 440.0;;
 let osc2 = Audio.sin_osc 554.37;;  # C#5
@@ -273,7 +273,7 @@ let mix = Audio.mix [osc1, osc2];;
 Audio.connect mix Audio.output;;
 </code></pre></div>
 
-<h3>Modulation</h3>
+<h3 id="modulation">Modulation</h3>
 <div class="codehilite"><pre><span></span><code># Frequency modulation
 let carrier = Audio.sin_osc 440.0;;
 let modulator = Audio.sin_osc 5.0;;  # 5 Hz LFO
@@ -281,8 +281,8 @@ let modulator = Audio.sin_osc 5.0;;  # 5 Hz LFO
 let fm = Audio.fm_osc carrier modulator depth;;
 </code></pre></div>
 
-<h2>Real-Time Updates</h2>
-<h3>Parameter Control</h3>
+<h2 id="real-time-updates">Real-Time Updates</h2>
+<h3 id="parameter-control">Parameter Control</h3>
 <div class="codehilite"><pre><span></span><code># Create controllable parameter
 let freq = Audio.param 440.0;;
 let osc = Audio.sin_osc_param freq;;
@@ -294,7 +294,7 @@ Audio.set_param freq 880.0;;
 Audio.ramp_param freq 880.0 1.0;;  # Ramp to 880Hz over 1 second
 </code></pre></div>
 
-<h3>Dynamic Graph Modification</h3>
+<h3 id="dynamic-graph-modification">Dynamic Graph Modification</h3>
 <div class="codehilite"><pre><span></span><code># Add node to running graph
 let new_osc = Audio.sin_osc 220.0;;
 Audio.add_node new_osc;;
@@ -304,8 +304,8 @@ Audio.connect new_osc Audio.output;;
 Audio.remove_node new_osc;;
 </code></pre></div>
 
-<h2>Audio Buffers</h2>
-<h3>Working with Buffers</h3>
+<h2 id="audio-buffers">Audio Buffers</h2>
+<h3 id="working-with-buffers">Working with Buffers</h3>
 <div class="codehilite"><pre><span></span><code># Create audio buffer
 let buffer = Audio.buffer_create 44100;;  # 1 second at 44.1kHz
 
@@ -317,7 +317,7 @@ let player = Audio.buffer_player sample;;
 Audio.connect player Audio.output;;
 </code></pre></div>
 
-<h3>Buffer Operations</h3>
+<h3 id="buffer-operations">Buffer Operations</h3>
 <div class="codehilite"><pre><span></span><code># Loop buffer
 let looper = Audio.loop_buffer buffer start_pos end_pos;;
 
@@ -325,7 +325,7 @@ let looper = Audio.loop_buffer buffer start_pos end_pos;;
 let grains = Audio.granular buffer grain_size density;;
 </code></pre></div>
 
-<h2>Example: Complete Synthesizer</h2>
+<h2 id="example-complete-synthesizer">Example: Complete Synthesizer</h2>
 <div class="codehilite"><pre><span></span><code>import Audio;
 
 # Initialize
@@ -366,8 +366,8 @@ let mod_cutoff = Audio.map_range lfo 500.0 2000.0;;
 Audio.connect_param mod_cutoff cutoff;;
 </code></pre></div>
 
-<h2>Performance Considerations</h2>
-<h3>Buffer Sizes</h3>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<h3 id="buffer-sizes">Buffer Sizes</h3>
 <div class="codehilite"><pre><span></span><code># Smaller buffer = lower latency, higher CPU
 Audio.init 44100 128;;  # ~3ms latency
 
@@ -375,14 +375,14 @@ Audio.init 44100 128;;  # ~3ms latency
 Audio.init 44100 512;;  # ~12ms latency
 </code></pre></div>
 
-<h3>Sample Rates</h3>
+<h3 id="sample-rates">Sample Rates</h3>
 <div class="codehilite"><pre><span></span><code># Standard sample rates
 Audio.init 44100 256;;  # CD quality
 Audio.init 48000 256;;  # Professional audio
 Audio.init 96000 512;;  # High resolution
 </code></pre></div>
 
-<h3>CPU Usage</h3>
+<h3 id="cpu-usage">CPU Usage</h3>
 <div class="codehilite"><pre><span></span><code># Monitor CPU usage
 let usage = Audio.cpu_usage;;
 print usage;;  # Percentage of available time
@@ -392,8 +392,8 @@ let node_count = Audio.count_nodes;;
 print node_count;;
 </code></pre></div>
 
-<h2>Advanced Features</h2>
-<h3>Custom DSP Nodes</h3>
+<h2 id="advanced-features">Advanced Features</h2>
+<h3 id="custom-dsp-nodes">Custom DSP Nodes</h3>
 <div class="codehilite"><pre><span></span><code># Define custom audio processing function
 let my_processor = fn input_buffer output_buffer size -&gt;
   for i in range 0 size do
@@ -407,7 +407,7 @@ let my_processor = fn input_buffer output_buffer size -&gt;
 let custom = Audio.custom_node my_processor;;
 </code></pre></div>
 
-<h3>FFT Analysis</h3>
+<h3 id="fft-analysis">FFT Analysis</h3>
 <div class="codehilite"><pre><span></span><code># Frequency domain analysis
 let analyzer = Audio.fft_analyzer 1024;;  # FFT size
 
@@ -415,7 +415,7 @@ let analyzer = Audio.fft_analyzer 1024;;  # FFT size
 let spectrum = Audio.get_spectrum analyzer;;
 </code></pre></div>
 
-<h3>Metering</h3>
+<h3 id="metering">Metering</h3>
 <div class="codehilite"><pre><span></span><code># Peak meter
 let peak = Audio.peak_meter input;;
 let peak_value = Audio.get_peak peak;;
@@ -425,7 +425,7 @@ let rms = Audio.rms_meter input;;
 let rms_value = Audio.get_rms rms;;
 </code></pre></div>
 
-<h2>See Also</h2>
+<h2 id="see-also">See Also</h2>
 <ul>
 <li><a href="examples.html">Examples</a> - Audio code examples</li>
 <li><a href="api-reference.html">API Reference</a> - Complete API documentation</li>

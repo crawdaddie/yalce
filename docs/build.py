@@ -63,12 +63,13 @@ def build_docs():
             # Convert markdown links to HTML links
             md_content = convert_md_links_to_html(md_content)
 
-            # Convert markdown to HTML with syntax highlighting
+            # Convert markdown to HTML with syntax highlighting and anchor links
             html_content = markdown.markdown(
                 md_content,
                 extensions=[
                     'fenced_code',
                     'tables',
+                    'toc',  # Table of contents extension (generates heading IDs)
                     CodeHiliteExtension(linenums=False, guess_lang=False)
                 ]
             )

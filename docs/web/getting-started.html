@@ -151,15 +151,15 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     </style>
   </head>
   <body>
-    <h1>Getting Started with YALCE</h1>
+    <h1 id="getting-started-with-yalce">Getting Started with YALCE</h1>
 <p>This guide will help you install YALCE and write your first programs.</p>
-<h2>Installation</h2>
-<h3>Option 1: Homebrew (macOS)</h3>
+<h2 id="installation">Installation</h2>
+<h3 id="option-1-homebrew-macos">Option 1: Homebrew (macOS)</h3>
 <div class="codehilite"><pre><span></span><code>brew<span class="w"> </span>install<span class="w"> </span>crawdaddie/yalce/yalce
 </code></pre></div>
 
-<h3>Option 2: Build from Source</h3>
-<h4>Prerequisites</h4>
+<h3 id="option-2-build-from-source">Option 2: Build from Source</h3>
+<h4 id="prerequisites">Prerequisites</h4>
 <ul>
 <li><strong>LLVM</strong> - For JIT compilation</li>
 <li><strong>readline</strong> - For REPL line editing</li>
@@ -171,7 +171,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <div class="codehilite"><pre><span></span><code>brew<span class="w"> </span>install<span class="w"> </span>llvm<span class="w"> </span>readline<span class="w"> </span>libsoundio<span class="w"> </span>fftw<span class="w"> </span>sdl2<span class="w"> </span>sdl2_ttf
 </code></pre></div>
 
-<h4>Build Steps</h4>
+<h4 id="build-steps">Build Steps</h4>
 <ol>
 <li>
 <p>Clone the repository:
@@ -203,8 +203,8 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
    <code>bash
    export PATH="$PATH:$(pwd)/build"</code></li>
 </ol>
-<h2>Your First YALCE Program</h2>
-<h3>Hello World</h3>
+<h2 id="your-first-yalce-program">Your First YALCE Program</h2>
+<h3 id="hello-world">Hello World</h3>
 <p>Create a file <code>hello.ylc</code>:</p>
 <div class="codehilite"><pre><span></span><code>let message = &quot;Hello, YALCE!&quot;;
 print message;
@@ -214,7 +214,7 @@ print message;
 <div class="codehilite"><pre><span></span><code>ylc<span class="w"> </span>hello.ylc
 </code></pre></div>
 
-<h3>Interactive REPL</h3>
+<h3 id="interactive-repl">Interactive REPL</h3>
 <p>Start the REPL:</p>
 <div class="codehilite"><pre><span></span><code>ylc<span class="w"> </span>-i
 </code></pre></div>
@@ -236,7 +236,7 @@ greet : string -&gt; string
 &quot;Hello, World!&quot; : string
 </code></pre></div>
 
-<h3>Recursive Functions</h3>
+<h3 id="recursive-functions">Recursive Functions</h3>
 <p>Create <code>factorial.ylc</code>:</p>
 <div class="codehilite"><pre><span></span><code>let factorial = fn n -&gt;
   match n with
@@ -253,7 +253,7 @@ print (factorial 5);
 <div class="codehilite"><pre><span></span><code>ylc<span class="w"> </span>factorial.ylc
 </code></pre></div>
 
-<h3>Pattern Matching with Lists</h3>
+<h3 id="pattern-matching-with-lists">Pattern Matching with Lists</h3>
 <div class="codehilite"><pre><span></span><code>let sum_list = fn list -&gt;
   match list with
   | [] -&gt; 0
@@ -265,7 +265,7 @@ print (sum_list numbers);
 # Output: 15
 </code></pre></div>
 
-<h3>Working with Options</h3>
+<h3 id="working-with-options">Working with Options</h3>
 <div class="codehilite"><pre><span></span><code>type Option a = Some a | None;
 
 let safe_div = fn a b -&gt;
@@ -283,7 +283,7 @@ match result with
 ;;
 </code></pre></div>
 
-<h2>REPL Commands</h2>
+<h2 id="repl-commands">REPL Commands</h2>
 <p>The REPL supports several commands:</p>
 <ul>
 <li><strong>Load a file</strong>: <code>#use "filename.ylc";;</code></li>
@@ -291,7 +291,7 @@ match result with
 <li><strong>Multi-line input</strong>: Use <code>;;</code> to terminate an expression</li>
 <li><strong>Exit</strong>: Press <code>Ctrl+D</code> or <code>Ctrl+C</code></li>
 </ul>
-<h2>Running Tests</h2>
+<h2 id="running-tests">Running Tests</h2>
 <p>YALCE includes a built-in test framework:</p>
 <div class="codehilite"><pre><span></span><code># tests.ylc
 let test = module () -&gt;
@@ -304,25 +304,25 @@ let test = module () -&gt;
 <div class="codehilite"><pre><span></span><code>ylc<span class="w"> </span>--test<span class="w"> </span>tests.ylc
 </code></pre></div>
 
-<h2>Next Steps</h2>
+<h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><a href="ylc-ref.html">Language Reference</a> - Learn all language features</li>
 <li><a href="type-system.html">Type System</a> - Understand type inference</li>
 <li><a href="examples.html">Examples</a> - Explore more code examples</li>
 <li><a href="audio-engine.html">Audio Engine</a> - Build audio applications</li>
 </ul>
-<h2>Common Issues</h2>
-<h3>LLVM not found</h3>
+<h2 id="common-issues">Common Issues</h2>
+<h3 id="llvm-not-found">LLVM not found</h3>
 <p>If you get LLVM errors, ensure your <code>.env</code> file has the correct <code>LLVM_PATH</code>:</p>
 <div class="codehilite"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;LLVM_PATH=</span><span class="k">$(</span>brew<span class="w"> </span>--prefix<span class="w"> </span>llvm<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>.env
 </code></pre></div>
 
-<h3>readline not found</h3>
+<h3 id="readline-not-found">readline not found</h3>
 <p>On macOS, readline is keg-only:</p>
 <div class="codehilite"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;READLINE_PREFIX=</span><span class="k">$(</span>brew<span class="w"> </span>--prefix<span class="w"> </span>readline<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>.env
 </code></pre></div>
 
-<h3>Build errors</h3>
+<h3 id="build-errors">Build errors</h3>
 <p>Try a clean build:</p>
 <div class="codehilite"><pre><span></span><code>make<span class="w"> </span>clean
 make

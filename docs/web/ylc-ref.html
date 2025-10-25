@@ -151,9 +151,9 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     </style>
   </head>
   <body>
-    <h1>YALCE Language Reference</h1>
+    <h1 id="yalce-language-reference">YALCE Language Reference</h1>
 <p>Complete reference for the YALCE programming language syntax and features.</p>
-<h2>Table of Contents</h2>
+<h2 id="table-of-contents">Table of Contents</h2>
 <ul>
 <li><a href="#basic-syntax">Basic Syntax</a></li>
 <li><a href="#types">Types</a></li>
@@ -164,30 +164,30 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <li><a href="#coroutines">Coroutines</a></li>
 <li><a href="#operators">Operators</a></li>
 </ul>
-<h2>Basic Syntax</h2>
-<h3>Comments</h3>
+<h2 id="basic-syntax">Basic Syntax</h2>
+<h3 id="comments">Comments</h3>
 <div class="codehilite"><pre><span></span><code># Single-line comment
 
 (* Multi-line
    comment *)
 </code></pre></div>
 
-<h3>Let Bindings</h3>
+<h3 id="let-bindings">Let Bindings</h3>
 <div class="codehilite"><pre><span></span><code>let x = 42;;
 let name = &quot;YALCE&quot;;;
 let pi = 3.14159;;
 </code></pre></div>
 
-<h3>Statements</h3>
+<h3 id="statements">Statements</h3>
 <p>Statements are terminated with <code>;;</code>:</p>
 <div class="codehilite"><pre><span></span><code>let x = 1;;
 let y = 2;;
 print (x + y);;
 </code></pre></div>
 
-<h2>Types</h2>
+<h2 id="types">Types</h2>
 <p>YALCE uses Hindley-Milner type inference, so type annotations are optional.</p>
-<h3>Primitive Types</h3>
+<h3 id="primitive-types">Primitive Types</h3>
 <div class="codehilite"><pre><span></span><code># Integer
 let count = 42;;
 # count : int
@@ -209,12 +209,12 @@ let nothing = ();;
 # nothing : unit
 </code></pre></div>
 
-<h3>Type Aliases</h3>
+<h3 id="type-aliases">Type Aliases</h3>
 <div class="codehilite"><pre><span></span><code>type UserId = int;
 type Point = (float, float);
 </code></pre></div>
 
-<h3>Algebraic Data Types</h3>
+<h3 id="algebraic-data-types">Algebraic Data Types</h3>
 <div class="codehilite"><pre><span></span><code># Simple enum
 type Color = Red | Green | Blue;
 
@@ -227,7 +227,7 @@ type Tree a =
   | Node a (Tree a) (Tree a);
 </code></pre></div>
 
-<h3>Polymorphic Types</h3>
+<h3 id="polymorphic-types">Polymorphic Types</h3>
 <div class="codehilite"><pre><span></span><code># Generic identity function
 let id = fn x -&gt; x;;
 # id : &#39;a -&gt; &#39;a
@@ -241,8 +241,8 @@ let map = fn f list -&gt;
 # map : (&#39;a -&gt; &#39;b) -&gt; [&#39;a] -&gt; [&#39;b]
 </code></pre></div>
 
-<h2>Functions</h2>
-<h3>Function Definition</h3>
+<h2 id="functions">Functions</h2>
+<h3 id="function-definition">Function Definition</h3>
 <div class="codehilite"><pre><span></span><code># Single parameter
 let square = fn x -&gt; x * x;;
 
@@ -258,14 +258,14 @@ let factorial = fn n -&gt;
 ;;
 </code></pre></div>
 
-<h3>Anonymous Functions (Lambdas)</h3>
+<h3 id="anonymous-functions-lambdas">Anonymous Functions (Lambdas)</h3>
 <div class="codehilite"><pre><span></span><code>let double = fn x -&gt; x * 2;;
 
 # Immediately invoked
 (fn x -&gt; x + 1) 5;;  # Returns 6
 </code></pre></div>
 
-<h3>Currying</h3>
+<h3 id="currying">Currying</h3>
 <p>Functions are automatically curried:</p>
 <div class="codehilite"><pre><span></span><code>let add = fn x y -&gt; x + y;;
 
@@ -277,7 +277,7 @@ add5 10;;  # Returns 15
 let add = fn x -&gt; fn y -&gt; x + y;;
 </code></pre></div>
 
-<h3>Recursive Functions</h3>
+<h3 id="recursive-functions">Recursive Functions</h3>
 <p>Functions can call themselves:</p>
 <div class="codehilite"><pre><span></span><code>let fib = fn n -&gt;
   match n with
@@ -287,7 +287,7 @@ let add = fn x -&gt; fn y -&gt; x + y;;
 ;;
 </code></pre></div>
 
-<h3>Higher-Order Functions</h3>
+<h3 id="higher-order-functions">Higher-Order Functions</h3>
 <div class="codehilite"><pre><span></span><code># Function that takes a function
 let twice = fn f x -&gt; f (f x);;
 
@@ -303,8 +303,8 @@ let add10 = make_adder 10;;
 add10 5;;  # Returns 15
 </code></pre></div>
 
-<h2>Pattern Matching</h2>
-<h3>Basic Match Expression</h3>
+<h2 id="pattern-matching">Pattern Matching</h2>
+<h3 id="basic-match-expression">Basic Match Expression</h3>
 <div class="codehilite"><pre><span></span><code>let classify = fn n -&gt;
   match n with
   | 0 -&gt; &quot;zero&quot;
@@ -313,7 +313,7 @@ add10 5;;  # Returns 15
 ;;
 </code></pre></div>
 
-<h3>Matching on ADTs</h3>
+<h3 id="matching-on-adts">Matching on ADTs</h3>
 <div class="codehilite"><pre><span></span><code>type Option a = Some a | None;
 
 let unwrap_or = fn default opt -&gt;
@@ -323,7 +323,7 @@ let unwrap_or = fn default opt -&gt;
 ;;
 </code></pre></div>
 
-<h3>List Patterns</h3>
+<h3 id="list-patterns">List Patterns</h3>
 <div class="codehilite"><pre><span></span><code>let head_opt = fn list -&gt;
   match list with
   | [] -&gt; None
@@ -339,14 +339,14 @@ let first_two = fn list -&gt;
 ;;
 </code></pre></div>
 
-<h3>Tuple Patterns</h3>
+<h3 id="tuple-patterns">Tuple Patterns</h3>
 <div class="codehilite"><pre><span></span><code>let swap = fn tuple -&gt;
   match tuple with
   | (a, b) -&gt; (b, a)
 ;;
 </code></pre></div>
 
-<h3>Nested Patterns</h3>
+<h3 id="nested-patterns">Nested Patterns</h3>
 <div class="codehilite"><pre><span></span><code>type Tree a = Leaf | Node a (Tree a) (Tree a);
 
 let depth = fn tree -&gt;
@@ -358,8 +358,8 @@ let depth = fn tree -&gt;
 ;;
 </code></pre></div>
 
-<h2>Data Structures</h2>
-<h3>Lists</h3>
+<h2 id="data-structures">Data Structures</h2>
+<h3 id="lists">Lists</h3>
 <div class="codehilite"><pre><span></span><code># List literal
 let numbers = [1, 2, 3, 4, 5];;
 
@@ -373,7 +373,7 @@ let list = 1 :: 2 :: 3 :: [];;
 let combined = [1, 2] ++ [3, 4];;
 </code></pre></div>
 
-<h3>Tuples</h3>
+<h3 id="tuples">Tuples</h3>
 <div class="codehilite"><pre><span></span><code># Pair
 let point = (3.0, 4.0);;
 
@@ -384,22 +384,22 @@ let rgb = (255, 128, 0);;
 let (x, y) = point;;
 </code></pre></div>
 
-<h3>Records (Planned)</h3>
+<h3 id="records-planned">Records (Planned)</h3>
 <div class="codehilite"><pre><span></span><code># Record syntax (if implemented)
 type Person = { name: string, age: int };
 
 let person = { name: &quot;Alice&quot;, age: 30 };
 </code></pre></div>
 
-<h3>Arrays</h3>
+<h3 id="arrays">Arrays</h3>
 <div class="codehilite"><pre><span></span><code># Fixed-size arrays for audio processing
 let buffer = Array.make 1024 0.0;;
 Array.set buffer 0 1.0;;
 let value = Array.get buffer 0;;
 </code></pre></div>
 
-<h2>Modules</h2>
-<h3>Module Definition</h3>
+<h2 id="modules">Modules</h2>
+<h3 id="module-definition">Module Definition</h3>
 <div class="codehilite"><pre><span></span><code># math_utils.ylc
 let square = fn x -&gt; x * x;;
 let cube = fn x -&gt; x * x * x;;
@@ -407,13 +407,13 @@ let cube = fn x -&gt; x * x * x;;
 export square, cube;
 </code></pre></div>
 
-<h3>Importing Modules</h3>
+<h3 id="importing-modules">Importing Modules</h3>
 <div class="codehilite"><pre><span></span><code>import MathUtils;
 
 let result = MathUtils.square 5;;
 </code></pre></div>
 
-<h3>Test Modules</h3>
+<h3 id="test-modules">Test Modules</h3>
 <div class="codehilite"><pre><span></span><code>let test = module () -&gt;
   let test_addition = 2 + 2 == 4;
   let test_square = square 5 == 25;
@@ -424,9 +424,9 @@ let result = MathUtils.square 5;;
 <div class="codehilite"><pre><span></span><code>ylc<span class="w"> </span>--test<span class="w"> </span>myfile.ylc
 </code></pre></div>
 
-<h2>Coroutines</h2>
+<h2 id="coroutines">Coroutines</h2>
 <p>YALCE supports coroutines for generators and iteration:</p>
-<h3>Generator Functions</h3>
+<h3 id="generator-functions">Generator Functions</h3>
 <div class="codehilite"><pre><span></span><code>let range = gen fn start end -&gt;
   let current = ref start;
   while !current &lt; end do
@@ -442,7 +442,7 @@ for x in nums do
 done
 </code></pre></div>
 
-<h3>Async/Await Pattern</h3>
+<h3 id="asyncawait-pattern">Async/Await Pattern</h3>
 <div class="codehilite"><pre><span></span><code>let process_items = gen fn items -&gt;
   for item in items do
     let result = process item;
@@ -451,8 +451,8 @@ done
 ;;
 </code></pre></div>
 
-<h2>Operators</h2>
-<h3>Arithmetic Operators</h3>
+<h2 id="operators">Operators</h2>
+<h3 id="arithmetic-operators">Arithmetic Operators</h3>
 <div class="codehilite"><pre><span></span><code>+ # Addition
 - # Subtraction
 * # Multiplication
@@ -460,7 +460,7 @@ done
 % # Modulo
 </code></pre></div>
 
-<h3>Comparison Operators</h3>
+<h3 id="comparison-operators">Comparison Operators</h3>
 <div class="codehilite"><pre><span></span><code>== # Equal
 != # Not equal
 &lt;  # Less than
@@ -469,31 +469,31 @@ done
 &gt;= # Greater than or equal
 </code></pre></div>
 
-<h3>Logical Operators</h3>
+<h3 id="logical-operators">Logical Operators</h3>
 <div class="codehilite"><pre><span></span><code>&amp;&amp; # Logical AND
 || # Logical OR
 !  # Logical NOT
 </code></pre></div>
 
-<h3>List Operators</h3>
+<h3 id="list-operators">List Operators</h3>
 <div class="codehilite"><pre><span></span><code>::  # Cons (prepend to list)
 ++  # List concatenation
 </code></pre></div>
 
-<h3>String Operators</h3>
+<h3 id="string-operators">String Operators</h3>
 <div class="codehilite"><pre><span></span><code>++  # String concatenation
 &quot;Hello&quot; ++ &quot; &quot; ++ &quot;World&quot;  # &quot;Hello World&quot;
 </code></pre></div>
 
-<h3>Pipeline Operator</h3>
+<h3 id="pipeline-operator">Pipeline Operator</h3>
 <div class="codehilite"><pre><span></span><code>|&gt; # Forward pipe (planned)
 
 # Instead of: f (g (h x))
 # Write: x |&gt; h |&gt; g |&gt; f
 </code></pre></div>
 
-<h2>Control Flow</h2>
-<h3>If Expressions</h3>
+<h2 id="control-flow">Control Flow</h2>
+<h3 id="if-expressions">If Expressions</h3>
 <div class="codehilite"><pre><span></span><code>let abs = fn x -&gt;
   if x &lt; 0 then
     -x
@@ -502,7 +502,7 @@ done
 ;;
 </code></pre></div>
 
-<h3>While Loops</h3>
+<h3 id="while-loops">While Loops</h3>
 <div class="codehilite"><pre><span></span><code>let count_down = fn n -&gt;
   let i = ref n;
   while !i &gt; 0 do
@@ -512,13 +512,13 @@ done
 ;;
 </code></pre></div>
 
-<h3>For Loops</h3>
+<h3 id="for-loops">For Loops</h3>
 <div class="codehilite"><pre><span></span><code>for i in [1, 2, 3, 4, 5] do
   print i;
 done
 </code></pre></div>
 
-<h2>References (Mutable State)</h2>
+<h2 id="references-mutable-state">References (Mutable State)</h2>
 <div class="codehilite"><pre><span></span><code># Create a reference
 let counter = ref 0;;
 
@@ -529,22 +529,22 @@ let value = !counter;;
 counter := !counter + 1;;
 </code></pre></div>
 
-<h2>Built-in Functions</h2>
-<h3>I/O Functions</h3>
+<h2 id="built-in-functions">Built-in Functions</h2>
+<h3 id="io-functions">I/O Functions</h3>
 <div class="codehilite"><pre><span></span><code>print value          # Print to stdout
 print_string str     # Print string
 print_int n          # Print integer
 print_float f        # Print float
 </code></pre></div>
 
-<h3>List Functions</h3>
+<h3 id="list-functions">List Functions</h3>
 <div class="codehilite"><pre><span></span><code>List.length [1, 2, 3]        # 3
 List.map (fn x -&gt; x * 2) [1, 2, 3]  # [2, 4, 6]
 List.filter (fn x -&gt; x &gt; 0) [-1, 0, 1]  # [1]
 List.fold_left (+) 0 [1, 2, 3]  # 6
 </code></pre></div>
 
-<h3>Math Functions</h3>
+<h3 id="math-functions">Math Functions</h3>
 <div class="codehilite"><pre><span></span><code>sin 1.0
 cos 1.0
 sqrt 2.0
@@ -553,13 +553,13 @@ max 3 7
 min 3 7
 </code></pre></div>
 
-<h3>String Functions</h3>
+<h3 id="string-functions">String Functions</h3>
 <div class="codehilite"><pre><span></span><code>String.length &quot;hello&quot;          # 5
 String.concat &quot; &quot; [&quot;hello&quot;, &quot;world&quot;]  # &quot;hello world&quot;
 String.sub &quot;hello&quot; 0 3        # &quot;hel&quot;
 </code></pre></div>
 
-<h2>FFI (Foreign Function Interface)</h2>
+<h2 id="ffi-foreign-function-interface">FFI (Foreign Function Interface)</h2>
 <p>Call C functions from YALCE:</p>
 <div class="codehilite"><pre><span></span><code>external malloc : int -&gt; ptr = &quot;malloc&quot;;
 external free : ptr -&gt; unit = &quot;free&quot;;
@@ -568,7 +568,7 @@ external free : ptr -&gt; unit = &quot;free&quot;;
 external sin_osc : float -&gt; float = &quot;sin_osc&quot;;
 </code></pre></div>
 
-<h2>Syntax Cheat Sheet</h2>
+<h2 id="syntax-cheat-sheet">Syntax Cheat Sheet</h2>
 <div class="codehilite"><pre><span></span><code># Variables
 let x = 42;;
 
@@ -602,7 +602,7 @@ let gen = gen fn () -&gt;
 ;;
 </code></pre></div>
 
-<h2>See Also</h2>
+<h2 id="see-also">See Also</h2>
 <ul>
 <li><a href="type-system.html">Type System</a> - Deep dive into Hindley-Milner inference</li>
 <li><a href="examples.html">Examples</a> - More code examples</li>
