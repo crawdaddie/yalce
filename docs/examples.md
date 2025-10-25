@@ -99,3 +99,5 @@ Gui.create_decl_ui (fn () ->
     ;
 )
 ```
+
+Further example programs [here](../examples)

@@ -33,6 +33,22 @@ def convert_md_links_to_html(md_content):
     return re.sub(pattern, replacer, md_content)
 
 
+def convert_relative_links_to_github(md_content):
+    """Convert relative ../ links to GitHub repository URLs."""
+    github_base = "https://github.com/crawdaddie/yalce/tree/main"
+    # Pattern: [text](../path)
+    pattern = r'\[([^\]]+)\]\(\.\./([^\)]+)\)'
+
+    def replacer(match):
+        text = match.group(1)
+        path = match.group(2)
+        # Convert to GitHub URL
+        github_url = f'{github_base}/{path}'
+        return f'[{text}]({github_url})'
+
+    return re.sub(pattern, replacer, md_content)
+
+
 def build_docs():
     """Convert all .md files in docs/ to individual HTML files."""
     docs_dir = Path(__file__).parent
@@ -68,6 +84,7 @@ def build_docs():
             md_content = f.read()
 
             md_content = convert_md_links_to_html(md_content)
+            md_content = convert_relative_links_to_github(md_content)
 
             html_content = markdown.markdown(
                 md_content,
