@@ -381,7 +381,7 @@ LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
-  Type *rt = fn_type->data.T_FN.to;
+  Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP(">=", LLVMRealOGE, LLVMIntSGE);
 }
 

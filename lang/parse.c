@@ -35,8 +35,9 @@ Ast *Ast_new(enum ast_tag tag) {
   loc->line = yylloc.last_line;
   loc->col = yylloc.first_column;
   loc->col_end = yylloc.last_column;
-  loc->src = pctx.cur_script;
+  loc->src_file = pctx.cur_script;
   loc->src_content = pctx.cur_script_content;
+  loc->src_ptr = pctx.cur_script_content + yyprevoffset;
   loc->absolute_offset = yyprevoffset;
   node->tag = tag;
   node->loc_info = loc;
@@ -907,11 +908,11 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
 
 void print_location(Ast *ast) {
   loc_info *loc = ast->loc_info;
-  if (!loc || !loc->src || !loc->src_content) {
+  if (!loc || !loc->src_file || !loc->src_content) {
     print_ast_err(ast);
     return;
   }
-  fprintf(stderr, "%s %d:%d\n", loc->src, loc->line, loc->col);
+  fprintf(stderr, "%s %d:%d\n", loc->src_file, loc->line, loc->col);
 
   const char *start = loc->src_content;
   const char *offset = start + loc->absolute_offset;

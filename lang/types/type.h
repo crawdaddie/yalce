@@ -197,13 +197,6 @@ typedef struct Type {
     } T_FN;
 
     struct {
-      struct Type *from;
-      struct Type *to;
-      struct Type *state;
-    } T_COROUTINE_FN;
-
-
-    struct {
       TypeList *vars;
       int num_vars;
       Type *type;

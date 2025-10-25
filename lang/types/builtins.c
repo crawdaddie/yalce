@@ -180,14 +180,30 @@ Type create_array_at_scheme() {
 }
 
 Type cstr_scheme;
+
+Type *create_ptr_type(Type *v) {
+  Type *ptr_t = empty_type();
+  Type **r = t_alloc(sizeof(Type *));
+  r[0] = v;
+
+  *ptr_t = (Type){T_CONS,
+                  {.T_CONS = {.name = TYPE_NAME_PTR, .num_args = 1, .args = r}},
+                  .alias = TYPE_NAME_PTR};
+  return ptr_t;
+}
+
 Type create_cstr_scheme() {
 
   Type *a = tvar("a");
   Type *arr = create_array_type(a);
 
-  Type *f = a;
-  f = type_fn(&t_ptr, f);
-  f = type_fn(arr, f);
+  // Type *f = a;
+  // f = type_fn(&t_ptr, f);
+  // f = type_fn(arr, f);
+  //
+  //
+  Type *p = create_ptr_type(a);
+  Type *f = type_fn(arr, p);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
@@ -399,7 +415,7 @@ Type create_cor_loop_scheme() {
   vars_mem[0] = vlist_of_typevar(a);
 
   return (Type){T_SCHEME,
-                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
 Type iter_of_list_scheme;
@@ -412,7 +428,7 @@ Type create_iter_of_list_scheme() {
   f = type_fn(create_list_type_of_type(a), f);
 
   return (Type){T_SCHEME,
-                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
 Type iter_of_array_scheme;
@@ -425,7 +441,7 @@ Type create_iter_of_array_scheme() {
   f = type_fn(create_array_type(a), f);
 
   return (Type){T_SCHEME,
-                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
 Type logical_op_scheme = MAKE_FN_TYPE_3(&t_bool, &t_bool, &t_bool);
@@ -441,7 +457,7 @@ Type create_use_or_finish_scheme() {
   f = type_fn(create_option_type(a), f);
 
   return (Type){T_SCHEME,
-                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
 Type cor_stop_scheme;
@@ -455,7 +471,7 @@ Type create_cor_stop_scheme() {
   vars_mem[0] = vlist_of_typevar(a);
 
   return (Type){T_SCHEME,
-                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
 Type play_routine_scheme;

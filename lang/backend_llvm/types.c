@@ -7,6 +7,7 @@
 #include "list.h"
 #include "types/inference.h"
 #include "types/type.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdio.h>
 #include <string.h>
@@ -74,6 +75,13 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   if (!type) {
     return NULL;
   }
+
+  // if (type->kind == T_TYPECLASS_RESOLVE) {
+  //   print_ast(__current_ast);
+  //   print_type(type);
+  //   print_type_env(ctx->env);
+  //   // return NULL;
+  // }
 
   // LLVMTypeRef variant = variant_member_to_llvm_type(type, env, module);
   // if (variant) {

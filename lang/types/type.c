@@ -541,6 +541,11 @@ bool is_module(Type *t) {
 bool is_closure(Type *type) { return type->closure_meta != NULL; }
 
 Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env) {
+
+  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+    type->data.T_CONS.args[i] =
+        resolve_type_in_env(type->data.T_CONS.args[i], env);
+  }
   return resolve_tc_rank(type);
 }
 Type *type_of_option(Type *opt) {

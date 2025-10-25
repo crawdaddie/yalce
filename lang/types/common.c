@@ -3,12 +3,12 @@
 void _print_location(Ast *ast, FILE *fstream) {
   loc_info *loc = ast->loc_info;
 
-  if (!loc || !loc->src || !loc->src_content) {
+  if (!loc || !loc->src_file || !loc->src_content) {
     print_ast_err(ast);
     return;
   }
 
-  fprintf(fstream, " %s %d:%d\n", loc->src, loc->line, loc->col);
+  fprintf(fstream, " %s %d:%d\n", loc->src_file, loc->line, loc->col);
 
   const char *start = loc->src_content;
   const char *offset = start + loc->absolute_offset;

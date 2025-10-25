@@ -287,6 +287,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   if (sym->type == STYPE_LAZY_EXTERN_FUNCTION) {
     callable_type = sym->symbol_type;
     callable = instantiate_extern_fn_sym(sym, ctx, module, builder);
+    // printf("\n\nAPPLICATION\n");
+    // print_ast(ast);
+    // LLVMDumpValue(callable);
+    // print_type(callable_type);
     LLVMValueRef res =
         call_callable(ast, callable_type, callable, ctx, module, builder);
     return res;

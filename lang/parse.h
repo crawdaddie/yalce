@@ -49,8 +49,9 @@ void yyerror(const char *s);
 int yylex(void);
 
 typedef struct loc_info {
-  const char *src;
+  const char *src_file;
   const char *src_content;
+  const char *src_ptr;
   int line;
   int col;
   int col_end;

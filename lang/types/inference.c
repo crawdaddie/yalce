@@ -397,6 +397,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     }
 
     if (occurs_check(t2->data.T_VAR, t1)) {
+      printf("t2->data.T_VAR %s != t1", t2->data.T_VAR);
       return 1; // Occurs check failure
     }
 
@@ -414,6 +415,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
     // Unify return types
     TICtx ur2 = {};
+
     if (unify(t1->data.T_FN.to, t2->data.T_FN.to, &ur2) != 0) {
 
       return 1;
@@ -430,6 +432,9 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
   // Case 4: Constructor types - recurse and merge constraints
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
+    if (is_pointer_type(t1) && is_pointer_type(t2)) {
+      return 0;
+    }
 
     // NB: don't worry about comparing the cons names - as long as the contained
     // types match it doesn't really matter
