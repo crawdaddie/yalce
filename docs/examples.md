@@ -1,6 +1,6 @@
 ## Linear Regression Example
 
-```
+```ocaml
 #! /usr/bin/env ylc -i
 import std/Math;
 import std/Arrays;
