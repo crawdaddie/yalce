@@ -8,8 +8,8 @@
 # ///
 """Build documentation from markdown files."""
 
-import os
-import glob
+# import os
+# import glob
 import re
 from pathlib import Path
 
@@ -51,6 +51,8 @@ def convert_relative_links_to_github(md_content):
 
 def build_docs():
     """Convert all .md files in docs/ to individual HTML files."""
+    # Register the YLC lexer
+
     docs_dir = Path(__file__).parent
     md_files = sorted(docs_dir.glob("*.md"))
 
@@ -58,7 +60,8 @@ def build_docs():
         print("No markdown files found in docs/")
         return
 
-    formatter = HtmlFormatter(style='default', noclasses=False)
+    # formatter = HtmlFormatter(style='solarized-light', noclasses=False)
+    formatter = HtmlFormatter(style='friendly', noclasses=False)
     pygments_css = formatter.get_style_defs('.codehilite')
 
     css_template_path = docs_dir / "style.css"
