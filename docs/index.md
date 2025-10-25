@@ -1,5 +1,4 @@
-**YALCE / YLC** (Yet Another Live-Coding Environment) is a functional programming language bundled with libraries for audio synthesis and OpenGL graphics.
-
+**YALCE / YLC** (Yet Another Live-Coding Environment) is a functional programming language bundled with libraries for audio synthesis and OpenGL graphics.  
 YLC aims to be small, simple and performant, with a minimal set of features and seamless C interoperability
 
 ## Key Features

@@ -145,11 +145,11 @@ print message;
 <p>prints the LLVM IR (<em>after</em> optimisation passes have been run on it) for the input module</p>
 <h3 id="ylc-0level-moduleylc"><code>ylc -0&lt;level&gt; &lt;module&gt;.ylc</code></h3>
 <p>the optimisation level for the LLVM compiler backend to use before execution.</p>
-<p>the available options are <code>-O0</code>, <code>-O1</code>, <code>-O2</code> and <code>-O3</code>
-without this option, -O3 (the most aggressive) is used by default
+<p>the available options are <code>-O0</code>, <code>-O1</code>, <code>-O2</code> and <code>-O3</code>.  <br />
+without this option, <code>-O3</code> (the most aggressive) is used by default.<br />
 these correspond roughly with <a href="https://clang.llvm.org/docs/CommandGuide/clang.html#code-generation-options">clang's optimisation options</a></p>
 <h3 id="ylc-test-moduleylc"><code>ylc --test &lt;module&gt;.ylc</code></h3>
-<p><strong>YLC</strong> includes a built-in test framework:</p>
+<p><strong>ylc</strong> includes a built-in test framework:</p>
 <div class="codehilite"><pre><span></span><code><span class="o">#</span> <span class="n">arithmetic</span><span class="o">.</span><span class="n">ylc</span>
 <span class="k">let</span> <span class="n">test</span> <span class="o">=</span> <span class="k">module</span> <span class="bp">()</span> <span class="o">-&gt;</span>
   <span class="k">let</span> <span class="n">test_addition</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">4</span><span class="o">;</span>

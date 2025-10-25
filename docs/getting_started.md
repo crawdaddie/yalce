@@ -130,7 +130,7 @@ the -i flag enters the interactive repl after all input files have been run
 ```bash
 ylc audio_program_setup.ylc -i
 ```
-without input files `-i` is assumed, so `ylc` will drop you straight into the repl
+without input files ```-i``` is assumed, so ```ylc``` will drop you straight into the repl
 
 
 ### `ylc --debug-ir-pre <module>.ylc`
@@ -142,14 +142,14 @@ prints the LLVM IR (_after_ optimisation passes have been run on it) for the inp
 ### `ylc -0<level> <module>.ylc`
 the optimisation level for the LLVM compiler backend to use before execution.
 
-the available options are `-O0`, `-O1`, `-O2` and `-O3`
-without this option, -O3 (the most aggressive) is used by default
+the available options are `-O0`, `-O1`, `-O2` and `-O3`.    
+without this option, `-O3` (the most aggressive) is used by default.  
 these correspond roughly with [clang's optimisation options](https://clang.llvm.org/docs/CommandGuide/clang.html#code-generation-options)
 
 
 
 ### `ylc --test <module>.ylc`
-**YLC** includes a built-in test framework:
+**ylc** includes a built-in test framework:
 
 ```ocaml
 # arithmetic.ylc
