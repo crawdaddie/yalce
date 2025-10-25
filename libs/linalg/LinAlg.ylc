@@ -1,4 +1,0 @@
-let _ = dlopen "./liblinalg.so";
-# linalg_export.h
-
-let _linalg_pool_init = extern fn Int -> ();

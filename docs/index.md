@@ -1,8 +1,10 @@
 **YALCE / YLC** (Yet Another Live-Coding Environment) is a functional programming language bundled with libraries for audio synthesis and OpenGL graphics.
+It aims to be small, simple and performant, with a minimal set of features.
+
 ## Key Features
 
 - **Functional Programming** - OCaml-like syntax with first-class functions
-- **Type Inference** - Hindley-Milner type system with polymorphism
+- **Type Inference** - Hindley-Milner type system, with some typeclass-based extensions 
 - **LLVM JIT** - Compiles to native targets using the LLVM JIT backend
 - **Interactive REPL** - Iterative development and live coding
 - **Pattern Matching** - Algebraic data types
