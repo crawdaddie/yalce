@@ -99,5 +99,8 @@ Gui.create_decl_ui (fn () ->
     ;
 )
 ```
+here's an example output plot:
+![Linear Regression Plot](lin_reg_example_plt.png)
+
 
 Further example programs [here](../examples)

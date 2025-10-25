@@ -8,8 +8,7 @@
 # ///
 """Build documentation from markdown files."""
 
-# import os
-# import glob
+import shutil
 import re
 from pathlib import Path
 
@@ -49,11 +48,26 @@ def convert_relative_links_to_github(md_content):
     return re.sub(pattern, replacer, md_content)
 
 
+def copy_images(docs_dir, web_dir):
+    """Copy image files from docs/ to web/ directory."""
+    image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'}
+    copied_images = []
+
+    for img_file in docs_dir.iterdir():
+        if img_file.suffix.lower() in image_extensions:
+            dest = web_dir / img_file.name
+            shutil.copy2(img_file, dest)
+            copied_images.append(img_file.name)
+
+    return copied_images
+
+
 def build_docs():
     """Convert all .md files in docs/ to individual HTML files."""
     # Register the YLC lexer
 
     docs_dir = Path(__file__).parent
+    web_dir = docs_dir / "web"
     md_files = sorted(docs_dir.glob("*.md"))
 
     if not md_files:
@@ -69,9 +83,12 @@ def build_docs():
         with open(css_template_path, 'r') as f:
             css_content = f.read()
         css_content = css_content.replace("{{ PYGMENTS_CSS }}", pygments_css)
-        css_output_path = docs_dir / "web" / "style.css"
+        css_output_path = web_dir / "style.css"
         with open(css_output_path, 'w') as f:
             f.write(css_content)
+
+    # Copy image files to web directory
+    copied_images = copy_images(docs_dir, web_dir)
 
     template_path = docs_dir / "template.html"
     if not template_path.exists():
@@ -102,7 +119,7 @@ def build_docs():
         html = template.replace("{{ CONTENT }}", html_content)
 
         html_filename = md_file.stem + ".html"
-        html_path = docs_dir / "web" / html_filename
+        html_path = web_dir / html_filename
         with open(html_path, 'w') as f:
             f.write(html)
 
@@ -111,6 +128,11 @@ def build_docs():
     print(f"✓ Built documentation from {len(md_files)} markdown file(s)")
     for output in output_files:
         print(f"  → {output}")
+
+    if copied_images:
+        print(f"✓ Copied {len(copied_images)} image(s)")
+        for img in copied_images:
+            print(f"  → {img}")
 
 
 if __name__ == "__main__":
