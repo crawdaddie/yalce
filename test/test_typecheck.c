@@ -60,7 +60,7 @@ static void print_all_failures() {
 
 #define xT(input, type)
 
-#define T(input, type)                                                         \
+#define T(input, _type)                                                        \
   ({                                                                           \
     reset_type_var_counter();                                                  \
     printf("\n--------------------------------------\n%s\n", input);           \
@@ -68,16 +68,16 @@ static void print_all_failures() {
     Ast *ast = parse_input(input, NULL);                                       \
     TICtx ctx = {.env = NULL};                                                 \
     stat &= (infer(ast, &ctx) != NULL);                                        \
-    stat &= (types_equal(ast->md, type));                                      \
+    stat &= (types_equal(ast->type, _type));                                   \
     char buf[200] = {};                                                        \
     if (stat) {                                                                \
-      fprintf(stderr, "✅ => %s\n", type_to_string(type, buf));                \
+      fprintf(stderr, "✅ => %s\n", type_to_string(_type, buf));               \
     } else {                                                                   \
       char buf2[200] = {};                                                     \
       char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
       snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s\nExpected: %s\nGot: %s",     \
-               input, type_to_string(type, buf),                               \
-               type_to_string(ast->md, buf2));                                 \
+               input, type_to_string(_type, buf),                              \
+               type_to_string(ast->type, buf2));                               \
       add_failure(fail_msg, __FILE__, __LINE__);                               \
     }                                                                          \
     status &= stat;                                                            \
@@ -451,7 +451,7 @@ int test_list_processing() {
     Ast *m =
         b->data.AST_BODY.stmts->ast->data.AST_LET.expr->data.AST_LAMBDA.body;
     TASSERT("match result type = Option of `5",
-            types_equal(m->md, &TOPT(&TTUPLE(2, &TVAR("`5"),
+            types_equal(m->type, &TOPT(&TTUPLE(2, &TVAR("`5"),
                                              &TTUPLE(2, &TLIST(&TVAR("`5")),
                                                      &TVAR("`2"))))));
   });
@@ -490,13 +490,13 @@ int test_list_processing() {
                &t_bool);
 
     // Ast *pop_left = AST_LIST_NTH(b->data.AST_BODY.stmts, 3);
-    // print_type(pop_left->md);
+    // print_type(pop_left->type);
     Ast *res_bind = AST_LIST_NTH(b->data.AST_BODY.stmts, 5)
                         ->data.AST_LET.expr->data.AST_MATCH.branches[0]
                         .data.AST_MATCH_GUARD_CLAUSE.test_expr;
     TASSERT("match branch of pop_left q has type Option of (Int * (Int[] * "
             "Int[] ) )",
-            types_equal(res_bind->md, &TOPT(&TTUPLE(2, &t_int,
+            types_equal(res_bind->type, &TOPT(&TTUPLE(2, &t_int,
                                                     &TTUPLE(2, &TLIST(&t_int),
                                                             &TLIST(&t_int))))));
   });
@@ -636,9 +636,9 @@ int test_basic_ops() {
     Ast *b = T("`{2} and`", &t_string);
     Ast *strf = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->data.AST_LIST.items;
     TASSERT("fmt string member has type string",
-            types_equal(strf->md, &t_string));
+            types_equal(strf->type, &t_string));
     TASSERT("fmt string member fn has type Int -> string",
-            types_equal(strf->data.AST_APPLICATION.function->md,
+            types_equal(strf->data.AST_APPLICATION.function->type,
                         &MAKE_FN_TYPE_2(&t_int, &t_string)));
   });
   return status;
@@ -668,16 +668,16 @@ int test_funcs() {
                   &t_num);
 
     TASSERT_EQ(
-        AST_LIST_NTH(body->data.AST_BODY.stmts, 0)->md,
+        AST_LIST_NTH(body->data.AST_BODY.stmts, 0)->type,
         &TSCHEME(&MAKE_FN_TYPE_2(
                      &tvar, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
                                                &t_int, &tvar)),
                  &tvar),
         "f == `0 [Arithmetic] -> resolve Arithmetic Int : `0");
 
-    TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 1)->md, &t_int,
+    TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 1)->type, &t_int,
                "f 1 == Int");
-    TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 2)->md, &t_num,
+    TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 2)->type, &t_num,
                "f 1. == Num");
   });
 
@@ -892,7 +892,7 @@ int test_funcs() {
 
     TASSERT_EQ(final_branch.data.AST_APPLICATION.args[0]
                    .data.AST_APPLICATION.args[0]
-                   .md,
+                   .type,
                &t_int,
                "references in sub-nodes properly typed :: (x - 1) == Int");
 
@@ -917,12 +917,12 @@ int test_funcs() {
                    ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH
                    .branches[5];
     print_ast(fb);
-    print_type(fb->md);
-    print_type(fb->data.AST_APPLICATION.function->md);
+    print_type(fb->type);
+    print_type(fb->data.AST_APPLICATION.function->type);
 
     TASSERT("references in sub-nodes properly typed :: fib (x-1) + fib (x-2) "
             "== Int -> Int -> Int",
-            types_equal(fb->data.AST_APPLICATION.function->md,
+            types_equal(fb->data.AST_APPLICATION.function->type,
                         &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
   });
 
@@ -935,18 +935,18 @@ int test_funcs() {
     Ast *proc_inst =
         AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.function;
     print_ast(proc_inst);
-    print_type(proc_inst->md);
+    print_type(proc_inst->type);
     TASSERT(
         "instance of proc function in app is (Int -> Int -> Int) -> Int -> Int",
-        types_equal(proc_inst->md,
+        types_equal(proc_inst->type,
                     &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t_int, &t_int, &t_int),
                                     &t_int, &t_int, &t_int)));
     Ast *sum_inst =
         AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.args;
     print_ast(sum_inst);
-    print_type(sum_inst->md);
+    print_type(sum_inst->type);
     TASSERT("instance of sum function in app is Int -> Int -> Int",
-            types_equal(sum_inst->md, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
+            types_equal(sum_inst->type, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
   });
 
   T("let bind = extern fn Int -> Int -> Int -> Int;\n"
@@ -1105,7 +1105,7 @@ int test_curried_funcs() {
 
     b = AST_LIST_NTH(b->data.AST_BODY.stmts, 1);
     b = b->data.AST_APPLICATION.function;
-    Type *f = b->md;
+    Type *f = b->type;
     Type clos = MAKE_FN_TYPE_2(&t_int, &t_int);
     TASSERT("concrete func application type has closure\n",
             types_equal(f->data.T_FN.from, &clos));
@@ -1122,7 +1122,7 @@ int test_curried_funcs() {
                &t_int);
     b = AST_LIST_NTH(b->data.AST_BODY.stmts, 1)->data.AST_LET.in_expr;
     b = b->data.AST_APPLICATION.function;
-    Type *bt = b->md;
+    Type *bt = b->type;
 
     Type clos = MAKE_FN_TYPE_2(&t_int, &t_int);
     TASSERT("K has type of curried closure\n", types_equal(bt, &clos));
@@ -1220,7 +1220,7 @@ int test_match_exprs() {
 
     Ast *guard = branch->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
 
-    TASSERT_EQ(guard->data.AST_APPLICATION.function->md,
+    TASSERT_EQ(guard->data.AST_APPLICATION.function->type,
                &MAKE_FN_TYPE_3(&t_int, &t_int, &t_bool),
                "guard clause has type Int -> Int -> Bool\n");
   });
@@ -1263,11 +1263,11 @@ int test_match_exprs() {
 
     Ast *match = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
                      ->data.AST_LET.expr->data.AST_LAMBDA.body;
-    TASSERT("match expr input has type Int", types_equal(match->md, &t_int));
+    TASSERT("match expr input has type Int", types_equal(match->type, &t_int));
 
     Ast *sum = match->data.AST_MATCH.branches + 5;
 
-    TASSERT("match branch body has type Int", types_equal(sum->md, &t_int));
+    TASSERT("match branch body has type Int", types_equal(sum->type, &t_int));
   });
   // "    | x if (x % 4.) > 2. -> 2\n"
   // "    | x if (x % 4.) > 1. -> 1\n"
@@ -1331,7 +1331,7 @@ int test_coroutines() {
   //   //     b->data.AST_BODY.stmts[0]
   //   // ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts[2];
   //   // print_ast(rec_yield);
-  //   // print_type(rec_yield->md);
+  //   // print_type(rec_yield->type);
   //
   //   // printf("## rec yield:\n");
   //   // print_type(rec_yield->data.AST_YIELD.expr->md);
@@ -1465,7 +1465,7 @@ int test_coroutines() {
 
     Type mapper = MAKE_FN_TYPE_2(&t_int, &t_string);
     // Type mapper = t_ptr;
-    bool res = types_equal(cor_map_arg->md, &mapper);
+    bool res = types_equal(cor_map_arg->type, &mapper);
     const char *msg = "runner arg can be materialised to specific type:";
     if (res) {
       printf("✅ %s\n", msg);
@@ -1473,7 +1473,7 @@ int test_coroutines() {
       status &= true;
     } else {
       status &= false;
-      add_type_failure(msg, &mapper, cor_map_arg->md, __FILE__, __LINE__);
+      add_type_failure(msg, &mapper, cor_map_arg->type, __FILE__, __LINE__);
     }
 
     // print_ast(AST_LIST_NTH(b->data.AST_BODY.stmts, 0));
@@ -1532,7 +1532,7 @@ int test_coroutines() {
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
 
-    bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
+    bool res = types_equal(runner_arg->type, &runner_fn_arg_type);
     const char *msg = "runner arg can be materialised to specific type:";
     if (res) {
       printf("✅ %s\n", msg);
@@ -1540,7 +1540,7 @@ int test_coroutines() {
       status &= true;
     } else {
       status &= false;
-      add_type_failure(msg, &runner_fn_arg_type, runner_arg->md, __FILE__,
+      add_type_failure(msg, &runner_fn_arg_type, runner_arg->type, __FILE__,
                        __LINE__);
     }
   });
@@ -1678,7 +1678,7 @@ int test_first_class_funcs() {
     // cor_type.is_coroutine_instance = true;
     Type runner_fn_arg_type = MAKE_FN_TYPE_3(&cor_type, &t_int, &t_void);
 
-    bool res = types_equal(runner_arg->md, &runner_fn_arg_type);
+    bool res = types_equal(runner_arg->type, &runner_fn_arg_type);
     const char *msg = "runner arg can be materialised to specific type:";
     if (res) {
       printf("✅ %s\n", msg);
@@ -1687,7 +1687,7 @@ int test_first_class_funcs() {
     } else {
       status &= false;
 
-      add_type_failure(msg, &runner_fn_arg_type, runner_arg->md, __FILE__,
+      add_type_failure(msg, &runner_fn_arg_type, runner_arg->type, __FILE__,
                        __LINE__);
     }
   });
@@ -1711,7 +1711,7 @@ int test_closures() {
         AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
                          ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
                      1)
-            ->md;
+            ->type;
 
     bool res = types_equal(closure_type, f.data.T_FN.to);
     res &= (closure_type->closure_meta != NULL);
@@ -1744,7 +1744,7 @@ int test_closures() {
         AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
                          ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
                      2)
-            ->md;
+            ->type;
 
     Type ex = MAKE_FN_TYPE_2(&t_void, &t_num);
     ex.closure_meta = &TTUPLE(2, &t_num, &t_int);
@@ -1782,7 +1782,7 @@ int test_refs() {
     TASSERT(
         "array set operator := is Array of Double -> Int -> Double -> Array "
         "of Double",
-        types_equal(f->md, &MAKE_FN_TYPE_4(&TARRAY(&t_num), &t_int, &t_num,
+        types_equal(f->type, &MAKE_FN_TYPE_4(&TARRAY(&t_num), &t_int, &t_num,
                                            &TARRAY(&t_num))));
   });
   T("let rx = [| 3. |] in rx[0]\n", &t_num);
@@ -1812,7 +1812,7 @@ int test_refs() {
 
     status &= EXTRA_CONDITION(
         types_equal(AST_LIST_NTH(b->data.AST_BODY.stmts, 1)
-                        ->data.AST_APPLICATION.function->md,
+                        ->data.AST_APPLICATION.function->type,
                     &MAKE_FN_TYPE_2(&TARRAY(&t_int), &TARRAY(&t_int))),
         "incr_ref [|1|] has type Array of Int -> Int");
   });
@@ -1936,7 +1936,7 @@ int test_array_processing() {
     Ast *app =
         AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
-    // print_type(app->md);
+    // print_type(app->type);
     // print_type(app->data.AST_APPLICATION.function->md);
     // print_type(app->data.AST_APPLICATION.args->md);
   });
@@ -1989,21 +1989,21 @@ int test_array_processing() {
     print_ast((app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args);
 
     print_type(
-        (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->md);
+        (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->type);
 
     print_ast((app->data.AST_APPLICATION.args + 1)
                   ->data.AST_APPLICATION.args->data.AST_APPLICATION.args);
 
     print_type((app->data.AST_APPLICATION.args + 1)
-                   ->data.AST_APPLICATION.args->data.AST_APPLICATION.args->md);
+                   ->data.AST_APPLICATION.args->data.AST_APPLICATION.args->type);
 
     print_type(
-        (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->md);
+        (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->type);
 
     TASSERT(
         "array arg at has type `13 -- ",
         types_equal(
-            (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->md,
+            (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->type,
             &array_el));
   });
 
@@ -2029,15 +2029,15 @@ int test_networking_funcs() {
                    .branches[1]
                    .data.AST_LIST.items[1];
 
-    bool res = types_equal(none.md, &TOPT(&TVAR("`6")));
+    bool res = types_equal(none.type, &TOPT(&TVAR("`6")));
     const char *msg = "None return val";
     if (res) {
       printf("✅ %s\n", msg);
-      print_type(none.md);
+      print_type(none.type);
       status &= true;
     } else {
       status &= false;
-      add_type_failure(msg, &TOPT(&TVAR("`4")), none.md, __FILE__, __LINE__);
+      add_type_failure(msg, &TOPT(&TVAR("`4")), none.type, __FILE__, __LINE__);
     }
   });
   T("let loop = fn () ->\n"
@@ -2099,12 +2099,12 @@ bool test_audio_funcs() {
     Ast *plus_app =
         AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.args;
     status &= EXTRA_CONDITION(
-        types_equal(plus_app->md, &MAKE_FN_TYPE_3(&t_int, &t_num, &t_void)),
+        types_equal(plus_app->type, &MAKE_FN_TYPE_3(&t_int, &t_num, &t_void)),
         "callback constraint passed down to lambda is Int -> Double -> "
         "()");
 
     // print_ast(plus_app);
-    // print_type(plus_app->md);
+    // print_type(plus_app->type);
 
     // status &= EXTRA_CONDITION(
     //     types_equal(
@@ -2150,7 +2150,7 @@ bool test_audio_funcs() {
                     1)
                        ->data.AST_APPLICATION.function;
     TASSERT("internal fn binop type Double -> Double -> Double",
-            types_equal(problem->md, &MAKE_FN_TYPE_3(&t_num, &t_num, &t_num)));
+            types_equal(problem->type, &MAKE_FN_TYPE_3(&t_num, &t_num, &t_num)));
   });
 
   return status;
@@ -2233,7 +2233,7 @@ bool test_parser_combinators() {
 
     status &= TASSERT(
         "digit fn has type Parser of String", ({
-          types_equal(digit->md,
+          types_equal(digit->type,
                       &MAKE_FN_TYPE_2(&t_string,
                                       &TOPT(&TTUPLE(2, &t_string, &t_string))));
         }));
@@ -2260,7 +2260,7 @@ bool test_parser_combinators() {
 
     status &=
         TASSERT("(fn first -> ...) arg has type Parser of (String, String)",
-                types_equal(fn_first->md, &ex_fn_first));
+                types_equal(fn_first->type, &ex_fn_first));
 
     Ast *fn_second =
         fn_first->data.AST_LAMBDA.body->data.AST_APPLICATION.args + 1;
@@ -2273,7 +2273,7 @@ bool test_parser_combinators() {
 
     status &=
         TASSERT("(fn second -> ...) arg has type Parser of (String, String)",
-                types_equal(fn_second->md, &exp_fn_second));
+                types_equal(fn_second->type, &exp_fn_second));
 
     Ast *clos = fn_second->data.AST_LAMBDA.body;
 
@@ -2289,7 +2289,7 @@ bool test_parser_combinators() {
     // status &=
     status &= TASSERT("(fn int -> Some ((first, second), inp)) is a closure "
                       "object with the correct internal types\n",
-                      types_equal(clos->md, &exp_closure_type));
+                      types_equal(clos->type, &exp_closure_type));
   });
   return status;
 }
@@ -2301,7 +2301,7 @@ bool test_opts() {
     Ast *b = T("Some 1 == None", &t_bool);
     TASSERT("LHS of == operation forces None to be same type as LHS: ",
             types_equal(
-                b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->md,
+                b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
                 &MAKE_FN_TYPE_3(&TOPT(&t_int), &TOPT(&t_int), &t_bool)));
 
     // print_ast(b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.args + 1);
@@ -2312,7 +2312,7 @@ bool test_opts() {
     Ast *b = T("Some 1", &TOPT(&t_int));
     TASSERT("Some instance has application form of Option of Int\n",
             types_equal(
-                b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->md,
+                b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
                 &MAKE_FN_TYPE_2(&t_int, &TOPT(&t_int))));
   });
   return status;
@@ -2381,7 +2381,7 @@ bool test_math_funcs() {
 
   TASSERT("Int",
           types_equal(
-              AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->md,
+              AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->type,
               &t_int));
   return status;
 }

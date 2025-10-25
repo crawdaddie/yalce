@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YLC Documentation</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.6;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+        color: #333;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: "Monaco", "Courier New", monospace;
+      }
+
+      /* Pygments syntax highlighting styles */
+      pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+
+      .codehilite {
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+        margin: 20px 0;
+      }
+
+      .codehilite pre {
+        padding: 0;
+        margin: 0;
+      }
+
+      .codehilite code {
+        padding: 0;
+      }
+
+      h1 {
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+      }
+
+      h2 {
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+        margin-top: 30px;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 20px 0;
+      }
+
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px 12px;
+        text-align: left;
+      }
+
+      th {
+        background-color: #f4f4f4;
+      }
+
+      a {
+        color: #0366d6;
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Audio Engine</h1>
+<p>YALCE includes a real-time audio engine designed for low-latency audio synthesis and processing.</p>
+<h2>Architecture</h2>
+<p>The audio engine uses a <strong>node graph</strong> architecture where:</p>
+<ul>
+<li><strong>Nodes</strong> are individual audio processing units (oscillators, filters, effects)</li>
+<li><strong>Graph</strong> connects nodes together to create signal flow</li>
+<li><strong>Real-time thread</strong> processes audio with guaranteed low latency</li>
+<li><strong>Message queue</strong> allows safe updates from non-RT thread</li>
+</ul>
+<h3>Key Components</h3>
+<ol>
+<li><strong>AudioGraph</strong> - Container for audio nodes with memory pooling</li>
+<li><strong>Node</strong> - Basic audio processing unit with perform function</li>
+<li><strong>Scheduling</strong> - Message-based graph updates</li>
+<li><strong>Ring Buffer</strong> - RT-safe communication between threads</li>
+</ol>
+<h2>Real-Time Safety</h2>
+<p>The audio engine is designed for hard real-time constraints:</p>
+<ul>
+<li><strong>No allocation</strong> in audio callback (<code>malloc</code>/<code>free</code>)</li>
+<li><strong>Lock-free</strong> data structures for inter-thread communication</li>
+<li><strong>Pre-allocated</strong> memory pools for nodes and buffers</li>
+<li><strong>Message queue</strong> for safe graph modifications</li>
+</ul>
+<h2>Basic Usage</h2>
+<h3>Starting the Audio Engine</h3>
+<div class="codehilite"><pre><span></span><code>import Audio;
+
+# Initialize audio engine
+Audio.init 44100 256;;  # sample_rate, buffer_size
+
+# Start audio processing
+Audio.start;;
+</code></pre></div>
+
+<h3>Creating Audio Nodes</h3>
+<div class="codehilite"><pre><span></span><code># Simple sine wave oscillator
+let osc = Audio.sin_osc 440.0;;  # 440 Hz (A4)
+
+# Connect to output
+Audio.connect osc Audio.output;;
+
+# Start playback
+Audio.play osc;;
+</code></pre></div>
+
+<h2>Audio Nodes</h2>
+<h3>Oscillators</h3>
+<div class="codehilite"><pre><span></span><code># Sine wave
+let sin = Audio.sin_osc frequency;;
+
+# Sawtooth wave
+let saw = Audio.saw_osc frequency;;
+
+# Square wave
+let square = Audio.square_osc frequency;;
+
+# Triangle wave
+let triangle = Audio.tri_osc frequency;;
+
+# Noise generator
+let noise = Audio.white_noise;;
+</code></pre></div>
+
+<h3>Filters</h3>
+<div class="codehilite"><pre><span></span><code># Low-pass filter
+let lpf = Audio.lpf cutoff resonance;;
+
+# High-pass filter
+let hpf = Audio.hpf cutoff resonance;;
+
+# Band-pass filter
+let bpf = Audio.bpf cutoff bandwidth;;
+
+# Example: filtered sawtooth
+let saw = Audio.saw_osc 110.0;;
+let filtered = Audio.lpf 1000.0 0.7 saw;;
+</code></pre></div>
+
+<h3>Envelopes</h3>
+<div class="codehilite"><pre><span></span><code># ADSR envelope
+let env = Audio.adsr attack decay sustain release;;
+
+# Example: envelope applied to oscillator
+let osc = Audio.sin_osc 440.0;;
+let shaped = Audio.mul osc env;;
+</code></pre></div>
+
+<h3>Effects</h3>
+<div class="codehilite"><pre><span></span><code># Delay/Echo
+let delay = Audio.delay time feedback;;
+
+# Reverb
+let reverb = Audio.reverb size damping;;
+
+# Distortion
+let dist = Audio.distortion amount;;
+
+# Chorus
+let chorus = Audio.chorus rate depth;;
+</code></pre></div>
+
+<h2>Node Graph Operations</h2>
+<h3>Connecting Nodes</h3>
+<div class="codehilite"><pre><span></span><code># Serial connection (chain)
+let osc = Audio.sin_osc 440.0;;
+let filtered = Audio.lpf 1000.0 0.5 osc;;
+let delayed = Audio.delay 0.5 0.3 filtered;;
+
+Audio.connect delayed Audio.output;;
+</code></pre></div>
+
+<h3>Mixing Nodes</h3>
+<div class="codehilite"><pre><span></span><code># Mix multiple signals
+let osc1 = Audio.sin_osc 440.0;;
+let osc2 = Audio.sin_osc 554.37;;  # C#5
+
+let mix = Audio.mix [osc1, osc2];;
+Audio.connect mix Audio.output;;
+</code></pre></div>
+
+<h3>Modulation</h3>
+<div class="codehilite"><pre><span></span><code># Frequency modulation
+let carrier = Audio.sin_osc 440.0;;
+let modulator = Audio.sin_osc 5.0;;  # 5 Hz LFO
+
+let fm = Audio.fm_osc carrier modulator depth;;
+</code></pre></div>
+
+<h2>Real-Time Updates</h2>
+<h3>Parameter Control</h3>
+<div class="codehilite"><pre><span></span><code># Create controllable parameter
+let freq = Audio.param 440.0;;
+let osc = Audio.sin_osc_param freq;;
+
+# Update parameter (RT-safe)
+Audio.set_param freq 880.0;;
+
+# Ramp parameter over time
+Audio.ramp_param freq 880.0 1.0;;  # Ramp to 880Hz over 1 second
+</code></pre></div>
+
+<h3>Dynamic Graph Modification</h3>
+<div class="codehilite"><pre><span></span><code># Add node to running graph
+let new_osc = Audio.sin_osc 220.0;;
+Audio.add_node new_osc;;
+Audio.connect new_osc Audio.output;;
+
+# Remove node
+Audio.remove_node new_osc;;
+</code></pre></div>
+
+<h2>Audio Buffers</h2>
+<h3>Working with Buffers</h3>
+<div class="codehilite"><pre><span></span><code># Create audio buffer
+let buffer = Audio.buffer_create 44100;;  # 1 second at 44.1kHz
+
+# Load audio file
+let sample = Audio.load_wav &quot;sample.wav&quot;;;
+
+# Play buffer
+let player = Audio.buffer_player sample;;
+Audio.connect player Audio.output;;
+</code></pre></div>
+
+<h3>Buffer Operations</h3>
+<div class="codehilite"><pre><span></span><code># Loop buffer
+let looper = Audio.loop_buffer buffer start_pos end_pos;;
+
+# Granular synthesis
+let grains = Audio.granular buffer grain_size density;;
+</code></pre></div>
+
+<h2>Example: Complete Synthesizer</h2>
+<div class="codehilite"><pre><span></span><code>import Audio;
+
+# Initialize
+Audio.init 44100 256;;
+
+# Oscillators
+let osc1 = Audio.saw_osc 110.0;;  # A2
+let osc2 = Audio.saw_osc 220.0;;  # A3 (octave up)
+
+# Mix oscillators
+let mix = Audio.mix [
+  Audio.gain 0.5 osc1,
+  Audio.gain 0.3 osc2
+];;
+
+# Filter
+let cutoff = Audio.param 1000.0;;
+let filtered = Audio.lpf_param cutoff 0.7 mix;;
+
+# Envelope
+let env = Audio.adsr 0.01 0.1 0.7 0.5;;
+let shaped = Audio.mul filtered env;;
+
+# Effects
+let delayed = Audio.delay 0.375 0.3 shaped;;
+let reverbed = Audio.reverb 0.5 0.5 delayed;;
+
+# Output
+let master = Audio.gain 0.5 reverbed;;
+Audio.connect master Audio.output;;
+
+# Control
+Audio.start;;
+
+# Modulate filter cutoff
+let lfo = Audio.sin_osc 0.5;;  # 0.5 Hz
+let mod_cutoff = Audio.map_range lfo 500.0 2000.0;;
+Audio.connect_param mod_cutoff cutoff;;
+</code></pre></div>
+
+<h2>Performance Considerations</h2>
+<h3>Buffer Sizes</h3>
+<div class="codehilite"><pre><span></span><code># Smaller buffer = lower latency, higher CPU
+Audio.init 44100 128;;  # ~3ms latency
+
+# Larger buffer = higher latency, lower CPU
+Audio.init 44100 512;;  # ~12ms latency
+</code></pre></div>
+
+<h3>Sample Rates</h3>
+<div class="codehilite"><pre><span></span><code># Standard sample rates
+Audio.init 44100 256;;  # CD quality
+Audio.init 48000 256;;  # Professional audio
+Audio.init 96000 512;;  # High resolution
+</code></pre></div>
+
+<h3>CPU Usage</h3>
+<div class="codehilite"><pre><span></span><code># Monitor CPU usage
+let usage = Audio.cpu_usage;;
+print usage;;  # Percentage of available time
+
+# Node counts
+let node_count = Audio.count_nodes;;
+print node_count;;
+</code></pre></div>
+
+<h2>Advanced Features</h2>
+<h3>Custom DSP Nodes</h3>
+<div class="codehilite"><pre><span></span><code># Define custom audio processing function
+let my_processor = fn input_buffer output_buffer size -&gt;
+  for i in range 0 size do
+    let sample = Array.get input_buffer i in
+    let processed = sample * 0.5 in  # Simple gain
+    Array.set output_buffer i processed;
+  done
+;;
+
+# Create node from function
+let custom = Audio.custom_node my_processor;;
+</code></pre></div>
+
+<h3>FFT Analysis</h3>
+<div class="codehilite"><pre><span></span><code># Frequency domain analysis
+let analyzer = Audio.fft_analyzer 1024;;  # FFT size
+
+# Get frequency bins
+let spectrum = Audio.get_spectrum analyzer;;
+</code></pre></div>
+
+<h3>Metering</h3>
+<div class="codehilite"><pre><span></span><code># Peak meter
+let peak = Audio.peak_meter input;;
+let peak_value = Audio.get_peak peak;;
+
+# RMS meter
+let rms = Audio.rms_meter input;;
+let rms_value = Audio.get_rms rms;;
+</code></pre></div>
+
+<h2>See Also</h2>
+<ul>
+<li><a href="examples.html">Examples</a> - Audio code examples</li>
+<li><a href="api-reference.html">API Reference</a> - Complete API documentation</li>
+<li><a href="ylc-ref.html">Language Reference</a> - YALCE language guide</li>
+</ul>
+  </body>
+</html>
