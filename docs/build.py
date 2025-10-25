@@ -42,9 +42,17 @@ def build_docs():
         print("No markdown files found in docs/")
         return
 
-    # Use a light-background friendly style with explicit background color
     formatter = HtmlFormatter(style='default', noclasses=False)
     pygments_css = formatter.get_style_defs('.codehilite')
+
+    css_template_path = docs_dir / "style.css"
+    if css_template_path.exists():
+        with open(css_template_path, 'r') as f:
+            css_content = f.read()
+        css_content = css_content.replace("{{ PYGMENTS_CSS }}", pygments_css)
+        css_output_path = docs_dir / "web" / "style.css"
+        with open(css_output_path, 'w') as f:
+            f.write(css_content)
 
     template_path = docs_dir / "template.html"
     if not template_path.exists():
@@ -54,31 +62,25 @@ def build_docs():
     with open(template_path, 'r') as f:
         template = f.read()
 
-    # Convert each markdown file to HTML
     output_files = []
     for md_file in md_files:
         with open(md_file, 'r') as f:
             md_content = f.read()
 
-            # Convert markdown links to HTML links
             md_content = convert_md_links_to_html(md_content)
 
-            # Convert markdown to HTML with syntax highlighting and anchor links
             html_content = markdown.markdown(
                 md_content,
                 extensions=[
                     'fenced_code',
                     'tables',
-                    'toc',  # Table of contents extension (generates heading IDs)
+                    'toc',
                     CodeHiliteExtension(linenums=False, guess_lang=False)
                 ]
             )
 
-        # Replace template variables
         html = template.replace("{{ CONTENT }}", html_content)
-        html = html.replace("{{ PYGMENTS_CSS }}", pygments_css)
 
-        # Write to corresponding .html file
         html_filename = md_file.stem + ".html"
         html_path = docs_dir / "web" / html_filename
         with open(html_path, 'w') as f:

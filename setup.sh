@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Detect OS
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "macos"
@@ -16,7 +15,6 @@ detect_os() {
 OS=$(detect_os)
 echo "Detected OS: $OS"
 
-# Define package manager and standard paths based on detected OS
 case $OS in
     macos)
         PKG_MANAGER="brew"
@@ -45,7 +43,6 @@ case $OS in
         ;;
 esac
 
-# Package name mappings for different OSes
 declare -A arch_pkgs=(
     ["llvm@16"]="llvm"
     ["sdl2"]="sdl2"
@@ -68,7 +65,6 @@ declare -A ubuntu_pkgs=(
     ["fftw"]="libfftw3-dev"
 )
 
-# Function to check if a library exists
 check_library() {
     local lib_name=$1
     
@@ -88,12 +84,10 @@ check_library() {
     echo ""
 }
 
-# Function to check repository
 check_repo() {
     [ -d "$1/.git" ] && echo "$1" || echo ""
 }
 
-# Function to install a package based on OS
 install_package() {
     local brew_pkg=$1
     
@@ -118,7 +112,6 @@ install_package() {
     esac
 }
 
-# Function to get library path after installation
 get_lib_path() {
     local lib_name=$1
     
@@ -141,13 +134,11 @@ get_lib_path() {
     esac
 }
 
-# Initialize .env with default paths
 cat > .env << EOF
 export CPATH=$DEFAULT_CPATH
 export LIBRARY_PATH=$DEFAULT_LIBRARY_PATH
 EOF
 
-# Library definitions: {brew_package};{env_var}
 libs=(
     "llvm@16;LLVM_PATH"
     "sdl2;SDL2_PATH"
@@ -159,11 +150,10 @@ libs=(
     "fftw;LIBFFTW3_PATH"
 )
 
-# Install and configure libraries
 for lib in "${libs[@]}"; do
     IFS=";" read -r lib_name env_var <<< "$lib"
     
-    lib_dir_name=${lib_name%%@*}  # Remove version suffix for directory checking
+    lib_dir_name=${lib_name%%@*}
     
     if path=$(check_library "$lib_dir_name"); then
         echo "$lib_name Found at: $path"
