@@ -28,4 +28,11 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder);
 
 LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type);
+
+LLVMValueRef stringify_value(LLVMValueRef val, Type *val_type, JITLangCtx *ctx,
+                             LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
+                       LLVMBuilderRef builder);
+
 #endif

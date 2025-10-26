@@ -70,6 +70,37 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   return func;
 }
 
+LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
+                                    JITLangCtx *ctx, LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  Type *t = ast->type;
+  LLVMTypeRef ret = LLVMVoidType();
+
+  LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
+
+  LLVMValueRef func = LLVMAddFunction(module, "top", funcType);
+
+  if (func == NULL) {
+    return NULL;
+  }
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMPositionBuilderAtEnd(builder, block);
+
+  LLVMValueRef body = codegen(ast, ctx, module, builder);
+
+  if (ast->type->kind != T_VOID) {
+    LLVMValueRef str = stringify_value(body, ast->type, ctx, module, builder);
+    print_str(str, ctx, module, builder);
+  }
+
+  LLVMBuildRetVoid(builder);
+
+  return func;
+}
+
 Ast *__current_ast;
 
 void print_codegen_location() { print_location(__current_ast); }

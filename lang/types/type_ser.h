@@ -8,4 +8,6 @@ void print_type_err(Type *t);
 char *type_to_string(Type *t, char *buffer);
 
 void print_type_env(TypeEnv *env);
+
+void print_type_to_stream(Type *t, FILE *stream);
 #endif

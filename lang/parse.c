@@ -301,6 +301,7 @@ Ast *parse_input(char *input, const char *dirname) {
   pctx.ast_root->data.AST_BODY.len = 0;
   pctx.ast_root->data.AST_BODY.stmts = NULL;
   pctx.ast_root->data.AST_BODY.tail = NULL;
+  pctx.import_current_dir = dirname;
 
   // _cur_script = "tmp.ylc";
   // _cur_script_content = input;

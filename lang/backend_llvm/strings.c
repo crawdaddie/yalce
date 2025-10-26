@@ -762,6 +762,40 @@ LLVMValueRef StringFmtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return str;
 }
 
+LLVMValueRef stringify_value(LLVMValueRef val, Type *val_type, JITLangCtx *ctx,
+                             LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMValueRef str = llvm_string_serialize(val, val_type, ctx, module, builder);
+  return str;
+}
+LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
+                       LLVMBuilderRef builder) {
+
+  LLVMTypeRef printf_type = LLVMFunctionType(
+      LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
+      1);
+  LLVMValueRef printf_func = get_extern_fn("printf", printf_type, module);
+
+  LLVMTypeRef fflush_type = LLVMFunctionType(
+      LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
+      0);
+
+  LLVMValueRef fflush_func = get_extern_fn("fflush", fflush_type, module);
+
+  LLVMValueRef chars_ptr =
+      LLVMBuildExtractValue(builder, val, 1, "string_chars");
+
+  LLVMValueRef printf_args[] = {chars_ptr};
+  LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 1,
+                 "printf_call");
+
+  LLVMValueRef null_ptr = LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0));
+  LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1,
+                 "fflush_stdout");
+
+  return LLVMConstNull(LLVMVoidType());
+}
+
 LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
   LLVMTypeRef printf_type = LLVMFunctionType(

@@ -11,4 +11,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 extern Ast *__current_ast;
 void print_codegen_location();
+
+LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
+                                    JITLangCtx *ctx, LLVMModuleRef module,
+                                    LLVMBuilderRef builder);
 #endif

@@ -388,6 +388,23 @@ int jit(int argc, char **argv) {
   return 0;
 }
 
+void _print_type(Type *t) {
+  if (!t) {
+    printf("null\n");
+    return;
+  }
+
+  // if (t->alias) {
+  //   printf("%s\n", t->alias);
+  //   return;
+  // }
+
+  fflush(stdout);
+  print_type_to_stream(t, stdout);
+  fflush(stdout);
+  printf(": ");
+}
+
 void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
                JITLangCtx *ctx, LLVMBuilderRef builder) {
 
@@ -436,7 +453,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
 
     if (typecheck_result->kind == T_VAR) {
       Ast *top = body_tail(prog);
-      fprintf(stderr, "value not found: ");
+      fprintf(stderr, "type not found: ");
       print_ast_err(top);
       print_location(top);
       continue;
@@ -444,7 +461,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
 
     // Generate node.
     LLVMValueRef top_level_func =
-        codegen_top_level(prog, &top_level_ret_type, ctx, module, builder);
+        codegen_repl_top_level(prog, &top_level_ret_type, ctx, module, builder);
 
     printf(COLOR_GREEN "> ");
 
@@ -463,8 +480,9 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
       uint64_t func_addr = LLVMGetFunctionAddress(engine, func_name);
       typedef int (*top_level_func_t)(void);
       top_level_func_t func = (top_level_func_t)func_addr;
-      print_type(top_type);
+      _print_type(top_type);
       int result = func();
+      printf("\n");
     }
     printf(COLOR_RESET);
 
