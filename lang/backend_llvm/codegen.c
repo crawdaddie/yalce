@@ -91,7 +91,8 @@ LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
 
-  if (ast->type->kind != T_VOID) {
+  if (VALUE_IS_PRINTABLE(ast->type)) {
+
     LLVMValueRef str = stringify_value(body, ast->type, ctx, module, builder);
     print_str(str, ctx, module, builder);
   }

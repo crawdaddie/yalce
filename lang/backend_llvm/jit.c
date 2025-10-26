@@ -100,6 +100,7 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
   if (array_global) {
     LLVMAddGlobalMapping(*engine, array_global, ctx->global_storage_array);
   }
+
   if (size_global) {
     LLVMAddGlobalMapping(*engine, size_global, ctx->global_storage_capacity);
   }
@@ -402,7 +403,6 @@ void _print_type(Type *t) {
   fflush(stdout);
   print_type_to_stream(t, stdout);
   fflush(stdout);
-  printf(": ");
 }
 
 void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
@@ -481,6 +481,9 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
       typedef int (*top_level_func_t)(void);
       top_level_func_t func = (top_level_func_t)func_addr;
       _print_type(top_type);
+      if (VALUE_IS_PRINTABLE(top_type)) {
+        printf(": ");
+      }
       int result = func();
       printf("\n");
     }
