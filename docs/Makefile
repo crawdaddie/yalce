@@ -24,7 +24,7 @@ dev:
 	@trap 'echo "\nStopping dev server..."; kill 0' INT; \
 	(python3 -m http.server 8000 -d web > /dev/null 2>&1) & \
 	while true; do \
-		fswatch -1 -e "web/" .; \
+		fswatch -1 -e "web/" . web/repl.html; \
 		echo "Change detected, rebuilding..."; \
 		./build.py; \
 	done

@@ -118,6 +118,7 @@ test_scripts:
 
 wasm:
 	./build_wasm.sh
+	cp lang/backend_wasm/wasm.js docs/web/wasm.js
 
 serve_docs:
 	python -m http.server -d docs
@@ -129,7 +130,7 @@ audio_test:
 KERNEL_DIR := dev/kernel
 VENV_DIR := $(KERNEL_DIR)/.venv
 
-.PHONY: kernel-venv kernel-install kernel-uninstall kernel-clean
+.PHONY: kernel-venv kernel-install kernel-uninstall kernel-clean wasm
 
 # Create a Python virtual environment for the kernel
 kernel-venv:

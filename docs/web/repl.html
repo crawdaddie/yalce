@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YLC WASM REPL</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+        /* WASM REPL specific styles */
+        .repl-container {
+            margin-top: 20px;
+        }
+
+        #repl-terminal {
+            width: 100%;
+            min-height: 500px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        #repl-terminal:focus {
+            outline: none;
+            border-color: #0366d6;
+        }
+
+        .repl-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-start;
+            padding: 15px 0;
+        }
+
+        .repl-controls button {
+            padding: 8px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .btn-secondary {
+            background: #e1e4e8;
+            color: #24292e;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5da;
+        }
+
+        .status {
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-weight: 500;
+            margin-top: 10px;
+        }
+
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <header class="top-bar">
+        <div class="top-bar-content">
+            <h1><a href="index.html">🦔 YLC</a></h1>
+            <nav>
+                <a href="https://github.com/crawdaddie/yalce" target="_blank" rel="noopener noreferrer">
+                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                    GitHub
+                </a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="content">
+        <h1>WASM REPL</h1>
+        <p>Execute YLC code in your browser using WebAssembly. Press Enter to execute.</p>
+
+        <div class="repl-container">
+            <textarea id="repl-terminal" spellcheck="false"></textarea>
+
+            <div class="repl-controls">
+                <button class="btn-secondary" onclick="clearREPL()">Clear</button>
+            </div>
+
+            <div id="status" class="status" style="display: none;"></div>
+        </div>
+    </main>
+
+    <script type="module" src="wasm.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 #! /usr/bin/env ylc -i
-open ../engine/bindings/Synth;
-open ../engine/bindings/Sched;
-import ../lib/Math;
+open engine/bindings/Synth;
+open engine/bindings/Sched;
+import std/Math;
 
 
 
