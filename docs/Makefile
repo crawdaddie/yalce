@@ -10,7 +10,7 @@ watch:
 	@echo "Watching docs/ for changes... (Press Ctrl+C to stop)"
 	@trap 'echo "\nStopping watch..."; exit 0' INT; \
 	while true; do \
-		fswatch -1 -e "web/" -e ".*\.html" .; \
+		fswatch -1 -e "web/" .; \
 		echo "Change detected, rebuilding..."; \
 		./build.py; \
 	done

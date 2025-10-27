@@ -290,7 +290,6 @@ char *prepend_current_directory(const char *filename) {
 }
 
 Ast *parse_input(char *input, const char *dirname) {
-
   Ast *prev = NULL;
 
   if (pctx.ast_root != NULL && pctx.ast_root->data.AST_BODY.len > 0) {
