@@ -771,6 +771,8 @@ LLVMValueRef stringify_value(LLVMValueRef val, Type *val_type, JITLangCtx *ctx,
 LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
+  LLVMValueRef format_str =
+      LLVMBuildGlobalStringPtr(builder, "%.*s", "fmt_str");
   LLVMTypeRef printf_type = LLVMFunctionType(
       LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
       1);
@@ -785,8 +787,10 @@ LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef chars_ptr =
       LLVMBuildExtractValue(builder, val, 1, "string_chars");
 
-  LLVMValueRef printf_args[] = {chars_ptr};
-  LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 1,
+  LLVMValueRef len = LLVMBuildExtractValue(builder, val, 0, "string_len");
+
+  LLVMValueRef printf_args[] = {format_str, len, chars_ptr};
+  LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 3,
                  "printf_call");
 
   LLVMValueRef null_ptr = LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0));
@@ -820,10 +824,12 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMValueRef chars_ptr =
           LLVMBuildExtractValue(builder, val, 1, "string_chars");
 
+      LLVMValueRef len = LLVMBuildExtractValue(builder, val, 0, "string_len");
+
       LLVMValueRef format_str =
-          LLVMBuildGlobalStringPtr(builder, "%s", "fmt_str");
-      LLVMValueRef printf_args[] = {format_str, chars_ptr};
-      LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 2,
+          LLVMBuildGlobalStringPtr(builder, "%.*s", "fmt_str");
+      LLVMValueRef printf_args[] = {format_str, len, chars_ptr};
+      LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 3,
                      "printf_call");
     }
 
@@ -840,9 +846,14 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef chars_ptr =
       LLVMBuildExtractValue(builder, val, 1, "string_chars");
 
-  LLVMValueRef format_str = LLVMBuildGlobalStringPtr(builder, "%s", "fmt_str");
-  LLVMValueRef printf_args[] = {format_str, chars_ptr};
-  LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 2,
+  LLVMValueRef len = LLVMBuildExtractValue(builder, val, 0, "string_len");
+  // LLVMDumpValue(len);
+  // printf("\n");
+
+  LLVMValueRef format_str =
+      LLVMBuildGlobalStringPtr(builder, "%.*s", "fmt_str");
+  LLVMValueRef printf_args[] = {format_str, len, chars_ptr};
+  LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 3,
                  "printf_call");
 
   LLVMValueRef null_ptr = LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0));

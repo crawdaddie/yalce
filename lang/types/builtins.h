@@ -59,4 +59,5 @@ extern Type iter_of_list_scheme;
 extern Type iter_of_array_scheme;
 extern Type use_or_finish_scheme;
 
+extern Type sizeof_scheme;
 #endif

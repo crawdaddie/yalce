@@ -3,6 +3,7 @@
 #include "modules.h"
 #include "serde.h"
 #include "symbols.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -199,8 +200,9 @@ LLVMValueRef codegen_module_access(Ast *record_ast, Type *record_type,
 
   JITSymbol *sym =
       lookup_id_ast(member, module_symbol->symbol_data.STYPE_MODULE.ctx);
-  // LLVMDumpValue(member_symbol->val);
+
   if (sym->type == STYPE_GENERIC_FUNCTION) {
+
     return get_specific_callable(sym, expected_member_type,
                                  module_symbol->symbol_data.STYPE_MODULE.ctx,
                                  llvm_module_ref, builder);

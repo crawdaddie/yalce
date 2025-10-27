@@ -9,7 +9,6 @@ LLVMValueRef global_storage_size_llvm;
 #define _GLOBAL_STORAGE_SIZE 1024
 #define _VOID_PTR_T LLVMPointerType(LLVMInt8Type(), 0)
 #define _GLOBAL_STORAGE_TYPE LLVMArrayType(_VOID_PTR_T, _GLOBAL_STORAGE_SIZE)
-#define ZERO LLVMConstInt(LLVMInt32Type(), 0, 0)
 
 LLVMValueRef get_global_storage_array(LLVMModuleRef module) {
 
@@ -84,7 +83,6 @@ LLVMValueRef codegen_get_global(const char *sym_name, JITSymbol *sym,
 }
 
 void setup_global_storage(LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("setup global storage\n");
   global_storage_array_llvm =
       LLVMAddGlobal(module, _GLOBAL_STORAGE_TYPE, "global_storage_array");
   LLVMSetLinkage(global_storage_array_llvm, LLVMExternalLinkage);

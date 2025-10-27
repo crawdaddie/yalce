@@ -71,6 +71,15 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   if (func_type->kind == T_CONS) {
     return infer_cons_application(func_type, ast, ctx);
   }
+  if (IS_PRIMITIVE_TYPE(func_type)) {
+    infer(ast->data.AST_APPLICATION.args, ctx);
+    return func_type;
+    // if (func_type->kind == T_CHAR) {
+    //   // printf("primitive type with constructor???\n");
+    //   // print_type(func_type);
+    //   // return NULL;
+    // }
+  }
 
   return infer_fn_application(func_type, ast, ctx);
 }

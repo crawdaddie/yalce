@@ -75,16 +75,12 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
   LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
   LLVMValueRef union_value = LLVMGetUndef(union_type);
 
-  // For "Accept of Int" - insert the integer into the first field of the union
-  // Codegen the integer argument
   LLVMValueRef val =
       codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
 
-  // Insert the integer into the first position of the union struct
   union_value =
       LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
 
-  // Insert the populated union into the main struct
   some = LLVMBuildInsertValue(builder, some, union_value, 1,
                               "insert variant data");
 

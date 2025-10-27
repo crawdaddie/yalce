@@ -177,7 +177,9 @@ Type *resolve_sym_type(Type *exp, Type *sym_type, TypeEnv *env) {
   return resolve_type_in_env(res, env);
 }
 
-bool is_closure_symbol(JITSymbol *sym) { return is_closure(sym->symbol_type); }
+bool is_closure_symbol(JITSymbol *sym) {
+  return sym->symbol_type && is_closure(sym->symbol_type);
+}
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   // TODO: this function is extraordinarily ugly - refactor to something a bit

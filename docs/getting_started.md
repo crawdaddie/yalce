@@ -91,14 +91,14 @@ Try some expressions:
 
 ```ylc
 λ 1 + 2
-> Int
+> Int: 3
 
 λ let double = fn x -> x * 2;
 > ∀ `3, : (`3 -> tc resolve Arithmetic [ `3 : Int])
 
 λ let d = double 21 in print `{d}\n`
 > ()
-42
+Int: 42
 ```
 
 ### Recursive Functions

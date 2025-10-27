@@ -17,8 +17,10 @@
 #include "types/builtins.h"
 #include "types/common.h"
 #include "types/inference.h"
+#include "types/type_expressions.h"
 #include "types/type_ser.h"
 #include "util.h"
+#include "llvm-c/Target.h"
 #include <dlfcn.h>
 #include <llvm-c/Core.h>
 #include <stdlib.h>
@@ -823,6 +825,39 @@ LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
   }
 }
 
+LLVMValueRef char_constructor(LLVMValueRef val, Type *from_type,
+                              LLVMModuleRef module, LLVMBuilderRef builder) {
+  switch (from_type->kind) {
+  case T_NUM: {
+    // return LLVMBuildFPToSI(builder, val, LLVMInt32Type(),
+    // "cast_double_to_int");
+    return NULL;
+  }
+
+  case T_INT: {
+    // return LLVMBuildI;
+    return LLVMBuildTrunc(builder, val, LLVMInt8Type(), "trunc_to_i8");
+  }
+
+  case T_UINT64: {
+    // return LLVMBuildUIToFP(builder, val, LLVMDoubleType(),
+    //                        "cast_uint64_to_double");
+    return NULL;
+  }
+
+  default:
+    return NULL;
+  }
+}
+
+LLVMValueRef CharConstructorHandler(Ast *ast, JITLangCtx *ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  return char_constructor(
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder),
+      ast->data.AST_APPLICATION.args->type, module, builder);
+}
+
 LLVMValueRef int_constructor_handler(Ast *ast, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
@@ -1206,8 +1241,7 @@ LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
-  printf("df raw fields handler\n");
-  print_ast(ast);
+
   Type *t = ast->data.AST_APPLICATION.args->type;
   if (t->kind != T_CONS) {
     fprintf(stderr,
@@ -1272,6 +1306,34 @@ LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 }
 
+LLVMValueRef SizeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  Type *t = NULL;
+  TICtx _ctx = {.env = ctx->env};
+
+  Ast *expr = ast->data.AST_APPLICATION.args;
+  t = expr->type;
+
+  unsigned size;
+
+  if (!t) {
+    size = 0;
+  }
+
+  LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef llvm_type = type_to_llvm_type(t, ctx, module);
+
+  if (!llvm_type) {
+    size = 0;
+  } else {
+    size = LLVMStoreSizeOfType(target_data, llvm_type);
+  }
+
+  return LLVMConstInt(LLVMInt32Type(), size, 0);
+}
+
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
   ht *stack = (ctx->frame->table);
@@ -1290,6 +1352,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   t_uint64.constructor = uint64_constructor;
   t_num.constructor = double_constructor;
   t_int.constructor = int_constructor;
+  // t_char.constructor = char_constructor;
 
 #define FN_SYMBOL(id, type, val)                                               \
   ({                                                                           \
@@ -1341,6 +1404,9 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                     DlOpenHandler);
 
   GENERIC_FN_SYMBOL("cstr", &cstr_scheme, CStrHandler);
+  GENERIC_FN_SYMBOL("sizeof", &sizeof_scheme, SizeOfHandler);
+
+  GENERIC_FN_SYMBOL("Char", NULL, CharConstructorHandler);
 
   // FN_SYMBOL()
 

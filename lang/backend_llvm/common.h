@@ -12,6 +12,8 @@
 
 #define GENERIC_PTR LLVMPointerType(LLVMInt8Type(), 0)
 
+#define ZERO LLVMConstInt(LLVMInt32Type(), 0, 0)
+
 typedef struct StackFrame {
   ht *table;
   struct StackFrame *next;

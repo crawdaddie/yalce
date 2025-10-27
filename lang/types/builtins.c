@@ -7,10 +7,13 @@
 Type t_int = {T_INT};
 Type t_uint64 = {T_UINT64};
 Type t_num = {T_NUM};
+
 Type t_char = {T_CHAR};
+
 Type t_string = {T_CONS,
                  {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){&t_char}, 1}},
                  .alias = TYPE_NAME_STRING};
+
 Type t_bool = {T_BOOL};
 Type t_void = {T_VOID};
 Type t_empty_list = {T_EMPTY_LIST};
@@ -484,6 +487,18 @@ Type create_play_routine_scheme() {
   f = type_fn(&t_uint64, f);
   return *f;
 }
+Type sizeof_scheme;
+Type create_sizeof_scheme() {
+  Type *a = tvar("a");
+  Type *f = type_fn(a, &t_int);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
 
 void initialize_builtin_types() {
   ht_init(&builtin_types);
@@ -648,6 +663,8 @@ void initialize_builtin_types() {
   play_routine_scheme = create_play_routine_scheme();
   add_builtin("play_routine", &play_routine_scheme);
 
+  sizeof_scheme = create_sizeof_scheme();
+  add_builtin("sizeof", &sizeof_scheme);
   // print_builtin_types();
 }
 

@@ -53,11 +53,21 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
       }
       llvm_param_types[i] = tref;
     }
+
+    if (llvm_param_types[i] == NULL) {
+      fprintf(stderr, "Error: could not find type ");
+      print_type_err(t);
+      return NULL;
+    }
   }
 
   Type *return_type = f;
 
   llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
+
+  if (!llvm_return_type_ref) {
+    return NULL;
+  }
 
   llvm_fn_type =
       LLVMFunctionType(llvm_return_type_ref, llvm_param_types, fn_len, 0);
