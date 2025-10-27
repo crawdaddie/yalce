@@ -308,8 +308,8 @@ Ast *parse_input(char *input, const char *dirname) {
   yyparse();             // Parse the input
 
   Ast *res = pctx.ast_root;
+
   if (prev != NULL) {
-    pctx.ast_root = prev;
     pctx.ast_root = prev;
   }
   return res;

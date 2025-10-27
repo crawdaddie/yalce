@@ -14,20 +14,29 @@
         #repl-terminal {
             width: 100%;
             min-height: 500px;
+            max-height: 800px;
             padding: 15px;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
-            background: #1e1e1e;
-            color: #d4d4d4;
+            color: #1e1e1e;
+            background: #e7e7e7;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 14px;
-            resize: vertical;
+            overflow-y: auto;
             line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
         #repl-terminal:focus {
             outline: none;
             border-color: #0366d6;
+        }
+
+        .prompt {
+            color: #0366d6;
+            font-weight: bold;
+            user-select: none;
         }
 
         .repl-controls {
@@ -99,7 +108,7 @@
         <p>Execute YLC code in your browser using WebAssembly. Press Enter to execute.</p>
 
         <div class="repl-container">
-            <textarea id="repl-terminal" spellcheck="false"></textarea>
+            <div id="repl-terminal" contenteditable="true" spellcheck="false"></div>
 
             <div class="repl-controls">
                 <button class="btn-secondary" onclick="clearREPL()">Clear</button>
