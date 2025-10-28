@@ -1,0 +1,125 @@
+import ../../lib/Math;
+
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String;
+
+type StarData = (x: Double, y: Double, z: Double, mag: Double);
+
+let parse_double_simple = extern fn Ptr -> Ptr -> Ptr -> (Double, Int);
+
+let parse_double = fn bytes ->
+  let x = [|0.|];
+  let n = [|0|];
+  
+  parse_double_simple (cstr bytes) (cstr x) (cstr n);
+  (x[0], n[0])
+;;
+
+let set_x = fn v: (Double)(x,y,z,m): (StarData) ->
+  StarData v y z m
+;;
+
+let set_y = fn v: (Double) (x,y,z,m): (StarData) ->
+  StarData x v z m 
+;;
+
+let set_z = fn v: (Double) (x,y,z,m): (StarData) ->
+  StarData x y v m
+;;
+
+let set_mag = fn v: (Double) (x,y,z,m): (StarData) ->
+  StarData x y z v
+;;
+
+
+
+let parse_star_list = fn bytes: (String) list: (List of StarData) cur_star: (StarData) (lines, cols): (Int, Int) ->
+  match (array_size bytes, bytes[0], cols) with
+  | (0, _, cols) -> (list, (lines, cols))  
+  | (_, ',',  cols) -> parse_star_list (array_offset 1 bytes) list cur_star (lines, cols + 1)
+  | (_, '\n', cols) -> parse_star_list (array_offset 1 bytes) (cur_star::list) cur_star (lines + 1, 0)
+
+  | (_, char, 14) -> (
+    let val, n = parse_double bytes;
+    parse_star_list (array_offset n bytes) list (cur_star |> set_mag val) (lines, cols)
+  )
+
+  | (_, char, 17) -> (
+    let val, n = parse_double bytes;
+    parse_star_list (array_offset n bytes) list (cur_star |> set_x val) (lines, cols)
+  )
+
+  | (_, char, 18) -> (
+    let val, n = parse_double bytes;
+    parse_star_list (array_offset n bytes) list (cur_star |> set_y val) (lines, cols)
+  )
+
+  | (_, char, 19) -> (
+    let val, n = parse_double bytes;
+    parse_star_list (array_offset n bytes) list (cur_star |> set_z val) (lines, cols)
+  )
+
+  | _ -> parse_star_list (array_offset 1 bytes) list cur_star (lines, cols)
+;;
+
+let magnitude_to_brightness = fn mag ->
+  let clamped_mag = Math.max (-2.0) (Math.min 12.0 mag);
+  
+  let brightness = Math.pow 10.0 ((-0.4) * clamped_mag);
+  
+  let max_brightness = Math.pow 10.0 ((-0.4) * (-2.0));  # mag -2
+  let min_brightness = Math.pow 10.0 ((-0.4) * 12.0);    # mag 12
+  
+  let normalized = (brightness - min_brightness) / (max_brightness - min_brightness);
+  Math.max 0.1 (Math.min 1.0 normalized)
+;;
+
+let get_stars_array = fn list: (List of StarData) idx arr ->
+  match list with
+  | [] -> arr
+  | (x,y,z,mag)::rest -> (
+
+    let brightness = magnitude_to_brightness mag;
+    arr[idx * 6] := x;
+    arr[idx * 6 + 1] := y;
+    arr[idx * 6 + 2] := z;
+    arr[idx * 6 + 3] := brightness * 0.5;
+    arr[idx * 6 + 4] := brightness * 0.75;
+    arr[idx * 6 + 5] := brightness * 1.; 
+    get_stars_array rest (idx+1) arr
+  )
+;;
+
+let skip_csv_header = fn arr -> 
+  let aux = fn arr: (String) idx ->
+    match arr[idx] with
+    | '\n' -> idx
+    | _ -> aux arr (idx + 1)
+  ;;
+  let off = aux arr 0;
+  array_offset off arr
+;;
+
+let load_str = fn path ->
+  let content = match (open_file path "rb") with
+    | Some fd -> read_bytes fd
+    | None -> ""
+;;
+
+let _load = fn path ->
+  let content = match (open_file path "rb") with
+    | Some fd -> (
+      let bytes = (read_bytes fd) |> skip_csv_header;
+      let rev_stars, (n, cols) = parse_star_list bytes [] (0., 0., 0., 0., 0., 0.) (0, 0);
+      let arr = array_fill_const (n * 6) 0.;
+      get_stars_array rev_stars 0 arr 
+    )
+    | None -> [|0.|]
+;;
+let load = fn () ->
+  _load "/Users/adam/Desktop/hygdata_v41.csv"
+;;
+
+
+

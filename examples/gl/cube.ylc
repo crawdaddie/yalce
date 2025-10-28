@@ -1,0 +1,95 @@
+#! /usr/bin/env ylc --gui -i
+
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+open ../../gui/bindings/Gui;
+import ../../lib/Math;
+
+
+let VShader = extern fn String -> Ptr;
+let FShader = extern fn String -> Ptr;
+let TriangleData = extern fn Array of Double -> Ptr;
+let Points = extern fn Array of Double -> Double -> Ptr;
+let Uniform3f = extern fn String -> Double -> Double -> Double -> Ptr;
+let LagUniform = extern fn Ptr -> Double -> Ptr -> Ptr;
+
+let set_uniform = extern fn Ptr -> Ptr -> ();
+
+let uniformref_set = fn data: (Array of Double) obj: (Ptr) ->
+  set_uniform obj (cstr data)
+;;
+
+let CamView = extern fn Ptr -> Ptr -> Ptr;
+
+let gl_obj_bind_handler = extern fn Ptr -> Ptr -> Ptr; 
+
+let SDL_RegisterEvents = extern fn Int -> Int;
+
+let gl_push_custom_event = extern fn Int -> Ptr -> ();
+
+let pos = [|[]|];
+
+let w = create_decl_window (fn () ->
+
+  let vs = VShader `#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uProjection;
+out vec3 vertexColor;
+out vec3 worldPos;
+void main() \{
+  vec4 worldPosition = uModel * vec4(aPos, 1.0);
+  worldPos = worldPosition.xyz;
+  
+  vec4 viewPosition = uView * worldPosition;
+  gl_Position = uProjection * viewPosition;
+  vertexColor = aColor;
+}`;
+
+  let fs = FShader `#version 330 core
+in vec3 vertexColor;
+in vec3 worldPos;
+uniform vec3 uCameraPos;
+uniform float uTime;
+out vec4 FragColor;
+
+void main() \{
+    FragColor = vec4(vertexColor, 1.);
+\}`;
+
+  let pos = (Uniform3f "pos" 2. 3. 7.); 
+  let lag = pos |> LagUniform "pos_lag" 0.5;
+
+  let target  = Uniform3f "target" 0. 0. 0.;
+
+  let view = CamView lag target;
+
+  let origin = Points [|
+    0.0, 0.0, 0., 1.,0.,0.,
+  |] 10.;
+
+  let points = Points [|
+    0.,0.,0., 1.,0.,1.,
+    0.,0.,1., 1.,0.,1.,
+    0.,1.,0., 1.,0.,1.,
+    1.,0.,0., 1.,0.,1.,
+    0.,1.,1., 1.,0.,1.,
+    1.,1.,0., 1.,0.,1.,
+    1.,0.,1., 1.,0.,1.,
+    1.,1.,1., 1.,0.,1.,
+  |] 3.;
+
+  let rout = fn pos ->
+    uniformref_set [|Math.rand_double_range -10. 10., Math.rand_double_range -10. 10., Math.rand_double_range -10. 10.|] pos;
+    yield 0.25;
+    yield rout pos
+  ;;
+  #
+  #
+  rout pos
+    |> play_routine 0 schedule_event
+);
+
+

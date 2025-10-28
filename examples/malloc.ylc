@@ -1,0 +1,15 @@
+let malloc = extern fn Int -> Ptr;
+
+print `
+Layouts:
+  Char: {sizeof Char}
+  String: {sizeof String}
+  Int: {sizeof Int}
+  Bool: {sizeof Bool}
+  Double: {sizeof Double}
+  Ptr: {sizeof Ptr} 
+  Array of Double: {sizeof (type _ = Array of Double)}
+`;
+
+let x = malloc @@ sizeof Double;
+print `{x}\n`;

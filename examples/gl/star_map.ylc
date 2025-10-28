@@ -1,0 +1,118 @@
+#! /usr/bin/env ylc --gui -i
+open ../../gui/bindings/Gui;
+import ../../lib/Math;
+import examples/gl/Hyg41Dataset;
+
+let arr = Hyg41Dataset.arr;
+
+let VShader = extern fn String -> Ptr;
+let FShader = extern fn String -> Ptr;
+let TriangleData = extern fn Array of Double -> Ptr;
+let MVPView = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Ptr;
+let Points = extern fn Array of Double -> Double -> Ptr;
+let w = create_decl_window (fn () ->
+
+  let v = MVPView
+    2. 3. 8. # pos
+    0. 0. 0. # target
+  ;
+
+  # let vs = VShader @@ load_str "./vs.glsl";
+let vs = VShader `#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uProjection;
+out vec3 vertexColor;
+out vec3 worldPos;
+void main() \{
+  vec4 worldPosition = uModel * vec4(aPos, 1.0);
+  worldPos = worldPosition.xyz;
+  
+  // Transform to view space to get distance from camera
+  vec4 viewPosition = uView * worldPosition;
+  float viewDistance = length(viewPosition.xyz);
+  
+  // Size based on view distance
+  float baseSize = 3.0;
+  float scaleFactor = 25.0 / (1.0 + viewDistance * 0.4);
+  float finalSize = clamp(baseSize * scaleFactor, 1.0, 25.0);
+  
+  gl_PointSize = finalSize;
+  gl_Position = uProjection * viewPosition;
+  vertexColor = aColor;
+}`;
+  let fs = FShader `#version 330 core
+in vec3 vertexColor;
+in vec3 worldPos;
+uniform vec3 uCameraPos;
+uniform float uTime;
+out vec4 FragColor;
+
+float random(vec2 st) \{
+    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+\}
+
+float noise(vec2 st) \{
+    vec2 i = floor(st);
+    vec2 f = fract(st);
+    float a = random(i);
+    float b = random(i + vec2(1.0, 0.0));
+    float c = random(i + vec2(0.0, 1.0));
+    float d = random(i + vec2(1.0, 1.0));
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+\}
+
+void main() \{
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float dist = length(coord);
+    
+    // Core gaussian blur
+    float core = exp(-dist*dist * 12.0);
+    
+    // Outer glow
+    float glow = exp(-dist*dist * 3.0) * 0.4;
+    
+    // Diffraction spikes for bright stars
+    float brightness_threshold = length(vertexColor);
+    if (brightness_threshold > 0.7) \{
+        float spike_width = 0.015;
+        float spike_length = 0.35;
+        
+        float h_spike = step(abs(coord.y), spike_width) * step(abs(coord.x), spike_length);
+        h_spike *= (1.0 - smoothstep(0.0, spike_length, abs(coord.x))) * 0.5;
+        
+        float v_spike = step(abs(coord.x), spike_width) * step(abs(coord.y), spike_length);
+        v_spike *= (1.0 - smoothstep(0.0, spike_length, abs(coord.y))) * 0.5;
+        
+        core += h_spike + v_spike;
+    \}
+    
+    // Scintillation
+    vec2 noise_coord = worldPos.xy * 30.0 + uTime * 1.5;
+    float twinkle = noise(noise_coord) * 0.2 + 0.8;
+    
+    // Distance-based effects
+    float distanceFromCamera = length(worldPos - uCameraPos);
+    float distance_brightness = 25.0 / (1.0 + distanceFromCamera * 0.1);
+    distance_brightness = clamp(distance_brightness, 0.5, 1.0);
+    
+    // Combine all effects
+    float star_intensity = (core + glow) * twinkle * distance_brightness;
+    
+    if (star_intensity < 0.01) \{
+      discard;
+    \}
+    
+    FragColor = vec4(vertexColor * star_intensity, star_intensity);
+\}`;
+
+  let origin = Points [|
+    0.0, 0.0, 0., 1.0, 0., 1.,
+  |] 10.;
+
+  let points = Points arr 3.
+
+)
