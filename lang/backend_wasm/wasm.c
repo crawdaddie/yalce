@@ -24,7 +24,6 @@ WasmContext *create_wasm_context() {
   return ctx;
 }
 
-// Bind a variable to a memory slot
 void bind_variable(WasmContext *ctx, const char *name, int name_len,
                    Type *type) {
   WasmBinding *binding = (WasmBinding *)malloc(sizeof(WasmBinding));
@@ -35,7 +34,6 @@ void bind_variable(WasmContext *ctx, const char *name, int name_len,
   ht_set_hash(&ctx->bindings, name, hash, binding);
 }
 
-// Look up a variable binding
 WasmBinding *lookup_variable(WasmContext *ctx, const char *name, int name_len) {
   uint64_t hash = hash_string(name, name_len);
   return (WasmBinding *)ht_get_hash(&ctx->bindings, name, hash);
@@ -53,7 +51,6 @@ uint8_t *generate_base_module(size_t *out_size) {
     buffer_push(&buffer, header[i]);
   }
 
-  // Type section - define function signatures
   buffer_push(&buffer, 0x01); // Type section
   buffer_push(&buffer, 0x0b); // Section size (11 bytes)
   buffer_push(&buffer, 0x02); // 2 types
@@ -96,13 +93,11 @@ uint8_t *generate_base_module(size_t *out_size) {
   buffer_push(&buffer, 0x00); // no maximum
   buffer_push(&buffer, 0x01); // initial: 1 page (64KB)
 
-  // Export section
   buffer_push(&buffer, 0x07); // Export section
   buffer_push(&buffer, 0x2d); // Section size (45 bytes)
 
   buffer_push(&buffer, 0x04); // 4 exports
 
-  // Export "table"
   buffer_push(&buffer, 0x05); // name length
   buffer_push(&buffer, 't');
   buffer_push(&buffer, 'a');
@@ -112,7 +107,6 @@ uint8_t *generate_base_module(size_t *out_size) {
   buffer_push(&buffer, 0x01); // table
   buffer_push(&buffer, 0x00); // index 0
 
-  // Export "memory"
   buffer_push(&buffer, 0x06); // name length
   buffer_push(&buffer, 'm');
   buffer_push(&buffer, 'e');
@@ -123,7 +117,6 @@ uint8_t *generate_base_module(size_t *out_size) {
   buffer_push(&buffer, 0x02); // memory
   buffer_push(&buffer, 0x00); // index 0
 
-  // Export "store_value"
   buffer_push(&buffer, 0x0b); // name length
   buffer_push(&buffer, 's');
   buffer_push(&buffer, 't');
@@ -139,7 +132,6 @@ uint8_t *generate_base_module(size_t *out_size) {
   buffer_push(&buffer, 0x00); // function
   buffer_push(&buffer, 0x00); // index 0
 
-  // Export "load_value"
   buffer_push(&buffer, 0x0a); // name length
   buffer_push(&buffer, 'l');
   buffer_push(&buffer, 'o');
@@ -154,7 +146,6 @@ uint8_t *generate_base_module(size_t *out_size) {
   buffer_push(&buffer, 0x00); // function
   buffer_push(&buffer, 0x01); // index 1
 
-  // Code section
   CodeBuffer code_section;
   buffer_init(&code_section);
 
@@ -242,7 +233,6 @@ static uint8_t *generate_executable_module_from_ast(Ast *ast, WasmContext *ctx,
   CodeBuffer buffer;
   buffer_init(&buffer);
 
-  // Header
   uint8_t header[] = {
       0x00, 0x61, 0x73, 0x6d, // Magic number (\0asm)
       0x01, 0x00, 0x00, 0x00  // Version 1
@@ -251,7 +241,6 @@ static uint8_t *generate_executable_module_from_ast(Ast *ast, WasmContext *ctx,
     buffer_push(&buffer, header[i]);
   }
 
-  // Type section - 3 function types
   buffer_push(&buffer, 0x01); // Type section ID
   CodeBuffer type_section;
   buffer_init(&type_section);
