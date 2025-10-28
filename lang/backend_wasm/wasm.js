@@ -103,22 +103,6 @@ class YLCWasmREPL {
         memory: this.baseModule.exports.memory,
         store_value: this.baseModule.exports.store_value,
         load_value: this.baseModule.exports.load_value,
-
-        // Runtime functions for output
-        // print_int: (x) => {
-        //   console.log('[output]', x);
-        //   const outputEl = document.getElementById('output');
-        //   if (outputEl) {
-        //     outputEl.textContent += `Result: ${x}\n`;
-        //   }
-        // },
-        // print_float: (x) => {
-        //   console.log('[output]', x);
-        //   const outputEl = document.getElementById('output');
-        //   if (outputEl) {
-        //     outputEl.textContent += `Result: ${x}\n`;
-        //   }
-        // },
       }
     };
   }
@@ -247,13 +231,13 @@ function writeStringToMemory(str) {
   mem.set(bytes);
   return ptr;
 }
-
+const PROMPT = 'λ ';
 
 // Create a prompt span element
 function createPrompt() {
   const span = document.createElement('span');
   span.className = 'prompt';
-  span.textContent = 'λ > ';
+  span.textContent = PROMPT;
   span.contentEditable = 'false';
   return span;
 }
@@ -275,6 +259,13 @@ function initTerminal() {
   if (terminal) {
     terminal.innerHTML = '';
     terminal.appendChild(createPrompt());
+
+    const paramsString = window.location.search;
+    const searchParams = new URLSearchParams(paramsString);
+    const codeInput = searchParams.get("code"); // a
+    if (codeInput) {
+      terminal.appendChild(document.createTextNode(codeInput));
+    }
     moveCursorToEnd(terminal);
   }
 }
@@ -283,13 +274,13 @@ function initTerminal() {
 function getCurrentInput() {
   const terminal = document.getElementById('repl-terminal');
   const text = terminal.textContent;
-  const lastPromptIndex = text.lastIndexOf('λ > ');
+  const lastPromptIndex = text.lastIndexOf(PROMPT);
 
   if (lastPromptIndex === -1) {
     return '';
   }
 
-  return text.substring(lastPromptIndex + 4); // 4 = length of 'λ > '
+  return text.substring(lastPromptIndex + PROMPT.length);
 }
 
 // Execute code in REPL
@@ -323,7 +314,7 @@ async function executeCurrentLine() {
 
     // Append result to terminal
     if (result !== null && result !== undefined) {
-      terminal.appendChild(document.createTextNode(`\n=> ${result}\n`));
+      terminal.appendChild(document.createTextNode(`\n> ${result}\n`));
     } else {
       terminal.appendChild(document.createTextNode(`\n`));
     }
@@ -427,7 +418,7 @@ function handleTerminalKeydown(e) {
   const terminal = document.getElementById('repl-terminal');
   const lastPrompt = getLastPrompt();
 
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.metaKey && e.key === 'Enter') {
     e.preventDefault();
     executeCurrentLine();
     return;

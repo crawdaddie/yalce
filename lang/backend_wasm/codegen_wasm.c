@@ -62,7 +62,6 @@ void codegen(Ast *ast, WasmContext *ctx, CodeBuffer *code) {
   }
 
   case AST_IDENTIFIER: {
-    // Look up variable and load from memory
     const char *name = ast->data.AST_IDENTIFIER.value;
     int name_len = ast->data.AST_IDENTIFIER.length;
     WasmBinding *binding = lookup_variable(ctx, name, name_len);
@@ -104,7 +103,6 @@ void codegen(Ast *ast, WasmContext *ctx, CodeBuffer *code) {
       buffer_push(code, 0x41); // i32.const (slot)
       encode_i32_leb128(code, var_binding->slot);
 
-      // Now generate value (will be pushed after slot)
       codegen(expr, ctx, code);
 
       // Stack is now: [slot, value]

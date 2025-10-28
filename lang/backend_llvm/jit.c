@@ -481,6 +481,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
       typedef int (*top_level_func_t)(void);
       top_level_func_t func = (top_level_func_t)func_addr;
       _print_type(top_type);
+
       if (VALUE_IS_PRINTABLE(top_type)) {
         printf(": ");
       }
