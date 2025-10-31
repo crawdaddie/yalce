@@ -464,6 +464,26 @@ static LLVMValueRef codegen_cons_to_string(LLVMValueRef val, Type *val_type,
                                &sl, ctx, module, builder);
   }
 
+  if (is_coroutine_type(val_type)) {
+
+    GET_SPRINTF LLVMValueRef buffer = LLVMBuildAlloca(
+        builder, LLVMArrayType(LLVMInt8Type(), 11), "str_buffer");
+
+    LLVMValueRef format_string =
+        LLVMBuildGlobalStringPtr(builder, "%p", "format_string");
+
+    LLVMValueRef args[] = {buffer, format_string, val};
+    LLVMBuildCall2(builder, sprintf_type, sprintf_func, args, 3, "");
+
+    LLVMValueRef str =
+        LLVMGetUndef(string_struct_type(LLVMPointerType(LLVMInt8Type(), 0)));
+    str = LLVMBuildInsertValue(builder, str, buffer, 1, "insert_array_data");
+    str =
+        LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt32Type(), 10, 0),
+                             0, "insert_array_size");
+    return str;
+  }
+
   start =
       _codegen_string(val_type->data.T_CONS.name,
                       strlen(val_type->data.T_CONS.name), ctx, module, builder);

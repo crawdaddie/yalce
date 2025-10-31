@@ -364,7 +364,9 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
                                  JITLangCtx *ctx, LLVMModuleRef module,
                                  LLVMBuilderRef builder) {
   JITLangCtx compilation_ctx = *ctx;
+
   if (!sym->symbol_data.STYPE_GENERIC_FUNCTION.ast) {
+
     if (sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
       return create_builtin_func_wrapper(specific_type, sym, ctx, module,
                                          builder);
@@ -431,7 +433,6 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
-  // printf("if following gets compiled it gets cached\n");
   LLVMValueRef func = specific_fns_lookup(
       sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
 

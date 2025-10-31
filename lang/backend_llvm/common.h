@@ -60,6 +60,7 @@ typedef enum symbol_type {
   STYPE_VARIANT_TYPE,
   STYPE_COROUTINE_CONSTRUCTOR,
   STYPE_GENERIC_CONSTRUCTOR,
+  STYPE_CONSTRUCTOR_MODULE,
 } symbol_type;
 
 typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,

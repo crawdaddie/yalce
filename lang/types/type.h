@@ -227,6 +227,7 @@ typedef struct Type {
 bool variant_contains_type(Type *variant, Type *member, int *idx);
 
 bool types_equal(Type *l, Type *r);
+bool types_match(Type *l, Type *r);
 
 Type *fn_return_type(Type *);
 int fn_type_args_len(Type *);

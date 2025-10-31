@@ -1,60 +1,100 @@
 #include "backend_llvm/application.h"
 #include "adt.h"
-#include "builtin_functions.h"
 #include "closures.h"
 #include "coroutines.h"
 #include "function.h"
 #include "modules.h"
-#include "serde.h"
 #include "symbols.h"
 #include "types.h"
+#include "types/infer_application.h"
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <string.h>
 
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
+LLVMValueRef handle_constructor_module_conversion(
+    LLVMValueRef val, JITSymbol *constructor_sym, Type *from_type,
+    Type *to_type, JITLangCtx *ctx, LLVMModuleRef module,
+    LLVMBuilderRef builder) {
+
+  Type *constructor_method_tscheme = NULL;
+
+  int index;
+  char *cons_method_name = find_constructor_method(
+      constructor_sym->symbol_type, 1, (Type *[]){from_type}, &index,
+      &constructor_method_tscheme);
+
+  if (!cons_method_name) {
+    fprintf(
+        stderr,
+        "Error: could not find constructor method for type conversion to %s",
+        to_type->alias);
+    return val;
+  }
+
+  JITSymbol *method =
+      find_in_ctx(cons_method_name, strlen(cons_method_name),
+                  constructor_sym->symbol_data.STYPE_MODULE.ctx);
+  Type *exp_type = type_fn(from_type, to_type);
+
+  LLVMValueRef callable = NULL;
+
+  if (method->type == STYPE_GENERIC_FUNCTION) {
+    callable = get_specific_callable(
+        method, exp_type, constructor_sym->symbol_data.STYPE_MODULE.ctx, module,
+        builder);
+  } else if (method->type == STYPE_FUNCTION) {
+    callable = method->val;
+  }
+
+  if (!callable) {
+    fprintf(stderr, "Error: callable for constructor %s not found\n",
+            cons_method_name);
+    return NULL;
+  }
+
+  LLVMTypeRef fn_type = codegen_fn_type(exp_type, 1, ctx, module);
+
+  return LLVMBuildCall2(builder, fn_type, callable, (LLVMValueRef[]){val}, 1,
+                        "convert_arg_via_cons");
+}
 
 LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
                                      Type *to_type, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
 
+  // printf("handle type conversion: ");
+  // LLVMDumpValue(val);
+  // printf("\n");
+  // print_type(from_type);
+  // print_type(to_type);
+
   if (types_equal(from_type, to_type)) {
     return val;
   }
 
-  if (to_type->kind == T_CONS && to_type->alias) {
+  JITSymbol *constructor_sym = NULL;
 
-    Ast id = (Ast){
-        AST_IDENTIFIER,
-        .data = {.AST_IDENTIFIER = {to_type->alias, strlen(to_type->alias)}}};
+  if (to_type->kind == T_CONS) {
+    const char *name =
+        to_type->alias ? to_type->alias : to_type->data.T_CONS.name;
 
-    // TODO: once all constructors are type symbol (ie first-class) we can add
-    // them directly to the type instead of looking them up in the env
-    JITSymbol *constructor_sym = lookup_id_ast(&id, ctx);
+    constructor_sym = find_in_ctx(name, strlen(name), ctx);
 
-    if (constructor_sym && constructor_sym->type == STYPE_GENERIC_CONSTRUCTOR) {
-      Type f =
-          (Type){T_FN, .data = {.T_FN = {.from = from_type, .to = to_type}}};
-
-      LLVMTypeRef fn_type = type_to_llvm_type(&f, ctx, module);
-      LLVMValueRef cons_val = specific_fns_lookup(
-          constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
-          from_type);
-
-      return LLVMBuildCall2(builder, fn_type, cons_val, (LLVMValueRef[]){val},
-                            1, "constructor");
+    if (constructor_sym && constructor_sym->type == STYPE_MODULE) {
+      return handle_constructor_module_conversion(
+          val, constructor_sym, from_type, to_type, ctx, module, builder);
     }
   }
 
-  if (!to_type->constructor) {
-    return val;
+  if (to_type->constructor) {
+    ConsMethod constructor = to_type->constructor;
+    return constructor(val, from_type, module, builder);
   }
 
-  ConsMethod constructor = to_type->constructor;
-
-  return constructor(val, from_type, module, builder);
+  return val;
 }
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -180,6 +220,7 @@ Type *resolve_sym_type(Type *exp, Type *sym_type, TypeEnv *env) {
 bool is_closure_symbol(JITSymbol *sym) {
   return sym->symbol_type && is_closure(sym->symbol_type);
 }
+
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   // TODO: this function is extraordinarily ugly - refactor to something a bit
@@ -218,6 +259,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS &&
       !is_module_ast(
           ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record)) {
+
     callable =
         codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
 
@@ -225,7 +267,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   const char *sym_name =
-      ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+      ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER
+          ? ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value
+          : "";
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
@@ -245,6 +289,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   Type *symbol_type = sym->symbol_type;
+
   if (sym->type == STYPE_GENERIC_FUNCTION &&
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
 
@@ -277,6 +322,13 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     callable = get_specific_callable(sym, &exp, ctx, module, builder);
     return call_callable(ast, &exp, callable, ctx, module, builder);
   }
+
+  // if (sym->type == STYPE_MODULE) {
+  //   printf("use constructor module\n");
+  //   print_ast(ast);
+  //   // sym->symbol_data.STYPE_MODULE.
+  //   return NULL;
+  // }
 
   if (sym->type == STYPE_FUNCTION) {
     callable_type = sym->symbol_type;

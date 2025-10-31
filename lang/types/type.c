@@ -13,6 +13,89 @@ Type *env_lookup(TypeEnv *env, const char *name);
 void reset_type_var_counter();
 Type *create_option_type(Type *option_of);
 
+bool types_match(Type *t1, Type *t2) {
+  if (t1 == t2) {
+    return true;
+  }
+
+  if (t1 == NULL || t2 == NULL) {
+    return false;
+  }
+
+  if (t1->kind == T_VAR) {
+    return true;
+  }
+
+  if (t1->kind != t2->kind) {
+    return false;
+  }
+
+  switch (t1->kind) {
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_STRING:
+  case T_BOOL:
+  case T_CHAR:
+  case T_VOID:
+  case T_EMPTY_LIST: {
+    return true;
+  }
+
+  case T_VAR: {
+
+    bool eq = strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
+    if (t2->implements != NULL) {
+    }
+    return eq;
+  }
+
+  case T_TYPECLASS_RESOLVE:
+  case T_CONS: {
+
+    if (t1->alias && t2->alias && (strcmp(t1->alias, t2->alias) != 0)) {
+      return false;
+    }
+    if (strcmp(t1->data.T_CONS.name, t2->data.T_CONS.name) != 0) {
+      return false;
+
+    } else if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
+      return false;
+    }
+    bool eq = true;
+    for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
+      eq &= types_match(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i]);
+    }
+
+    return eq;
+  }
+  case T_FN: {
+    if ((t1->closure_meta != NULL) && (t2->closure_meta != NULL) &&
+        !types_match(t1->closure_meta, t2->closure_meta)) {
+      return false;
+    }
+    if (t1->closure_meta != NULL && t2->closure_meta == NULL) {
+      return false;
+    }
+
+    if (t2->closure_meta != NULL && t1->closure_meta == NULL) {
+      return false;
+    }
+    if (types_match(t1->data.T_FN.from, t2->data.T_FN.from)) {
+
+      return types_match(t1->data.T_FN.to, t2->data.T_FN.to) &&
+             (t1->is_coroutine_instance == t2->is_coroutine_instance);
+    }
+    return false;
+  }
+
+  case T_SCHEME: {
+    return types_match(t1->data.T_SCHEME.type, t2->data.T_SCHEME.type);
+  }
+  }
+  return false;
+}
+
 bool types_equal(Type *t1, Type *t2) {
   if (t1 == t2) {
     return true;
@@ -148,6 +231,9 @@ bool is_generic(Type *t) {
 
   case T_FN: {
     return is_generic(t->data.T_FN.from) || is_generic(t->data.T_FN.to);
+  }
+  case T_SCHEME: {
+    return is_generic(t->data.T_SCHEME.type);
   }
 
   default:
@@ -423,10 +509,17 @@ TypeClass *get_typeclass_by_name(Type *t, const char *name) {
       return tc;
     }
   }
+  // if (t->prototype) {
+  //   return get_typeclass_by_name(t->prototype, name);
+  // }
   return NULL;
 }
 
 bool type_implements(Type *t, TypeClass *constraint_tc) {
+
+  if (t->kind == T_SCHEME) {
+    t = t->data.T_SCHEME.type;
+  }
   if (t->kind == T_TYPECLASS_RESOLVE &&
       (strcmp(t->data.T_CONS.name, constraint_tc->name) == 0)) {
     return true;

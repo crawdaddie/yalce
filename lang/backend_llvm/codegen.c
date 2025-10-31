@@ -223,6 +223,15 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     Ast *record = ast->data.AST_RECORD_ACCESS.record;
 
     Type *record_type = record->type;
+    JITSymbol *constructor_sym = lookup_id_ast(record, ctx);
+
+    if (constructor_sym) {
+    }
+
+    // printf("RECORD ACCESS cons: %p\n", record_type->constructor);
+    // print_ast(ast);
+    // print_type(record_type);
+
     if (record_type->kind == T_CONS &&
         strcmp(record_type->data.T_CONS.name, TYPE_NAME_MODULE) == 0) {
 
@@ -233,9 +242,13 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
 
     LLVMValueRef rec = codegen(record, ctx, module, builder);
+    // // print_ast(ast);
+    // print_ast(record);
+    // printf("rec %p\n", rec);
 
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+
     int member_idx = ast->data.AST_RECORD_ACCESS.index;
 
     if (member_idx < 0) {
@@ -309,10 +322,13 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
     } else if (!is_sum_type(t) && t->kind != T_FN) {
-      fprintf(stderr,
-              "Warning - constructor not implemented for type declaration ");
-      print_ast_err(ast);
-      return NULL;
+      TypeClass cons = {.name = "Constructor"};
+      if (!type_implements(t, &cons)) {
+        fprintf(stderr,
+                "Warning - constructor not implemented for type declaration ");
+        print_ast_err(ast);
+        return NULL;
+      }
     }
 
     break;
@@ -338,7 +354,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_TRAIT_IMPL: {
     if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Constructor")) {
 
-      return create_constructor_methods(ast, ctx, module, builder);
+      return create_constructor_module(ast, ctx, module, builder);
     }
 
     if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Arithmetic")) {

@@ -19,10 +19,6 @@ Type *create_fn_from_cons(Type *res, Type *cons) {
 
 Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
 
-  // printf("infer cons app\n");
-  // print_ast(ast);
-  // print_type(cons);
-
   Type *f;
   if (is_sum_type(cons)) {
     Type *mem =
@@ -38,6 +34,106 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
   return infer_fn_application(f, ast, ctx);
 }
 
+bool match_arg_lists(int len, Type **a, Type **b) {
+  for (int i = 0; i < len; i++) {
+    if (!types_match(a[i], b[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const char *find_constructor_method(Type *cons_mod, int len, Type **inputs,
+                                    int *index, Type **method) {
+
+  for (int i = 0; i < cons_mod->data.T_CONS.num_args; i++) {
+    Type *t = cons_mod->data.T_CONS.args[i];
+    if (t->kind == T_SCHEME) {
+      t = t->data.T_SCHEME.type;
+    }
+    int l = fn_type_args_len(t);
+    Type *cons_fn_types[l];
+    int j = 0;
+    for (Type *tt = t; tt->kind == T_FN; tt = tt->data.T_FN.to, j++) {
+      cons_fn_types[j] = tt->data.T_FN.from;
+    }
+
+    if (match_arg_lists(len, cons_fn_types, inputs)) {
+      *index = i;
+      *method = cons_mod->data.T_CONS.args[i];
+      return cons_mod->data.T_CONS.names[i];
+    }
+  }
+
+  return NULL;
+}
+
+Type *infer_constructor_application(TypeClass *constructor_tc, Type *cons,
+                                    Ast *ast, TICtx *ctx) {
+
+  if (!constructor_tc) {
+    return NULL;
+  }
+
+  int len = ast->data.AST_APPLICATION.len;
+  Type *fn_types[len];
+
+  for (int i = 0; i < len; i++) {
+    Ast *arg = ast->data.AST_APPLICATION.args + i;
+    fn_types[i] = infer(arg, ctx);
+  }
+
+  Type *cons_mod = constructor_tc->module;
+  Type *constructor_method_tscheme = NULL;
+
+  int index;
+  char *cons_method_name = find_constructor_method(
+      cons_mod, len, fn_types, &index, &constructor_method_tscheme);
+
+  // for (int i = 0; i < cons_mod->data.T_CONS.num_args; i++) {
+  //   Type *t = cons_mod->data.T_CONS.args[i];
+  //   if (t->kind == T_SCHEME) {
+  //     t = t->data.T_SCHEME.type;
+  //   }
+  //   int l = fn_type_args_len(t);
+  //   Type *cons_fn_types[l];
+  //   int j = 0;
+  //   for (Type *tt = t; tt->kind == T_FN; tt = tt->data.T_FN.to, j++) {
+  //     cons_fn_types[j] = tt->data.T_FN.from;
+  //   }
+  //
+  //   if (match_arg_lists(len, cons_fn_types, fn_types)) {
+  //     constructor_method_tscheme = cons_mod->data.T_CONS.args[i];
+  //     cons_method_name = cons_mod->data.T_CONS.names[i];
+  //     break;
+  //   }
+  // }
+
+  if (!cons_method_name) {
+    return NULL;
+  }
+  if (!constructor_method_tscheme) {
+    return NULL;
+  }
+
+  if (constructor_method_tscheme->kind == T_SCHEME) {
+    constructor_method_tscheme = instantiate(constructor_method_tscheme, ctx);
+  }
+
+  Type *res = infer_fn_application(constructor_method_tscheme, ast, ctx);
+  Type *expected_type = ast->data.AST_APPLICATION.function->type;
+
+  ast->data.AST_APPLICATION.function = ast_record_access(
+      ast->data.AST_APPLICATION.function,
+      ast_identifier((ObjString){.chars = cons_method_name,
+                                 .length = strlen(cons_method_name)}));
+
+  ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record->type =
+      cons_mod;
+  ast->data.AST_APPLICATION.function->type = expected_type;
+  return res;
+}
+
 // T-App: Γ ⊢ e₁ : τ₁    Γ ⊢ e₂ : τ₂    α fresh    S = unify(τ₁, τ₂ → α)
 //        ──────────────────────────────────────────────────────────────
 //                            Γ ⊢ e₁ e₂ : S(α)
@@ -51,15 +147,17 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     return type_error(ast, "Cannot infer type of applicable");
   }
 
-  if (is_coroutine_type(func_type)) {
-    // TypeClass constructor = {"Constructor"};
-    // if (type_implements(func_type, &constructor)) {
-    //   return infer_cons_application(func_type, ast, ctx);
-    // }
+  if (is_coroutine_type(func_type) &&
+      ast->data.AST_APPLICATION.args->tag == AST_VOID) {
 
     Type f = MAKE_FN_TYPE_2(&t_void,
                             create_option_type(func_type->data.T_CONS.args[0]));
     return infer_fn_application(&f, ast, ctx);
+  }
+
+  TypeClass *cons_tc = get_typeclass_by_name(func_type, "Constructor");
+  if (cons_tc) {
+    return infer_constructor_application(cons_tc, func_type, ast, ctx);
   }
 
   if (is_coroutine_constructor_type(func_type)) {

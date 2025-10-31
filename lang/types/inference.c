@@ -430,8 +430,42 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     return 0;
   }
 
+  // Case 3.5: Constructor types with a constructor implementation
+  // TypeClass *cons_tc = get_typeclass_by_name(t1, "Constructor");
+  //
+  // if ((t1->kind == T_CONS) && (cons_tc != NULL)) {
+  //
+  //   int index;
+  //
+  //   Type *constructor_method_tscheme = NULL;
+  //   char *cons_method_name =
+  //       find_constructor_method(cons_tc->module, 1, (Type *[]){t2}, &index,
+  //                               &constructor_method_tscheme);
+  //
+  //   if (cons_method_name != NULL) {
+  //
+  //     Type *f = type_fn(t2, t1);
+  //
+  //     TICtx ur1 = {};
+  //     Type *g = constructor_method_tscheme;
+  //     if (g->kind == T_SCHEME) {
+  //       g = instantiate(g, &ur1);
+  //     }
+  //     // printf("t2 can go into t1 constructor\n");
+  //     // print_type(f);
+  //     // print_type(g);
+  //     // unify(f, g, &ur1);
+  //     // print_constraints(ur1.constraints);
+  //     unify_res->constraints =
+  //         merge_constraints(unify_res->constraints, ur1.constraints);
+  //
+  //     return 0;
+  //   }
+  // }
+
   // Case 4: Constructor types - recurse and merge constraints
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
+
     if (is_pointer_type(t1) && is_pointer_type(t2)) {
       return 0;
     }
@@ -1390,6 +1424,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
     type = &t_int;
     break;
   }
+
+  // case AST_UINT64: {
+  //   type = &t_uint64;
+  //   break;
+  // }
+  //
+  // case AST_FLOAT: {
+  //   type = &t_float;
+  //   break;
+  // }
   case AST_DOUBLE: {
     type = &t_num;
     break;
@@ -1641,6 +1685,15 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     TypeEnv *tref = lookup_type_ref(ctx->env, type_name.chars);
 
+    TypeEnv _tref = {};
+    if (!tref) {
+      Type *x = lookup_builtin_type(type_name.chars);
+      if (x) {
+        _tref = (TypeEnv){.name = type_name.chars, .type = x};
+        tref = &_tref;
+      }
+    }
+
     if (!tref) {
       fprintf(stderr, "Error: could not find type %s\n", type_name.chars);
       return NULL;
@@ -1648,21 +1701,37 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
     if (has_rank) {
       Type *t = tref->type;
+      Type *ti = t;
+      if (t->kind == T_SCHEME) {
+        ti = t->data.T_SCHEME.type;
+      }
+      // if (ti->prototype) {
+      //   ti = ti->prototype;
+      // }
       TypeClass *tc = t_alloc(sizeof(TypeClass));
       *tc = (TypeClass){.rank = rank, .name = trait_name.chars, .module = type};
-      tc->next = t->implements;
-      t->implements = tc;
+      tc->next = ti->implements;
+
+      ti->implements = tc;
       tref->type = t;
-    } else {
-      // TODO: implement robust traits
-      Type *t = tref->type;
-      Type *existing_trait_proto = env_lookup(ctx->env, trait_name.chars);
-      TypeClass *tc = t_alloc(sizeof(TypeClass));
-      *tc = (TypeClass){.name = trait_name.chars, .module = type};
-      tc->next = t->implements;
-      t->implements = tc;
-      tref->type = t;
+      break;
     }
+
+    // TODO: implement robust traits
+    Type *t = tref->type;
+
+    Type *ti = t;
+    if (t->kind == T_SCHEME) {
+      ti = t->data.T_SCHEME.type;
+    }
+    // if (ti->prototype) {
+    //   ti = ti->prototype;
+    // }
+    TypeClass *tc = t_alloc(sizeof(TypeClass));
+    *tc = (TypeClass){.name = trait_name.chars, .module = type};
+    tc->next = ti->implements;
+    ti->implements = tc;
+    tref->type = t;
 
     break;
   }

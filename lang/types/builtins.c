@@ -284,25 +284,6 @@ Type create_opt_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars, .type = full_type}}};
 }
 
-// Type cor_scheme;
-// Type cor_constructor;
-// Type create_cor_scheme() {
-//   Type *var = tvar("a");
-//   Type *full_type = create_coroutine_instance_type(var);
-//   TypeClass *tc = t_alloc(sizeof(TypeClass));
-//   *tc = (TypeClass){.name = "Constructor", .module = &cor_constructor};
-//   tc->next = full_type->implements;
-//   full_type->implements = tc;
-//   // full_type = type_fn(var, full_type);
-//
-//   TypeList *vars = t_alloc(sizeof(TypeList));
-//   *vars = vlist_of_typevar(var);
-//
-//   return (Type){T_SCHEME,
-//                 {.T_SCHEME = {.num_vars = 1, .vars = vars, .type =
-//                 full_type}}};
-// }
-
 Type array_scheme;
 Type create_array_scheme() {
   Type *var = tvar("a");
@@ -380,12 +361,34 @@ Type create_str_fmt_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type coroutine_prototype = {T_CONS, {.T_CONS = {.name = "Coroutine"}}};
+
 Type *create_coroutine_instance_type(Type *ret_type) {
   Type *coroutine_fn = type_fn(&t_void, create_option_type(ret_type));
   coroutine_fn->is_coroutine_instance = true;
   Type **ar = t_alloc(sizeof(Type *));
   ar[0] = ret_type;
-  return create_cons_type(TYPE_NAME_COROUTINE_INSTANCE, 1, ar);
+  Type *c = create_cons_type(TYPE_NAME_COROUTINE_INSTANCE, 1, ar);
+  // c->prototype = &coroutine_prototype;
+  return c;
+}
+
+Type cor_scheme;
+Type cor_constructor;
+Type create_cor_scheme() {
+  Type *var = tvar("a");
+  Type *full_type = create_coroutine_instance_type(var);
+  // TypeClass *tc = t_alloc(sizeof(TypeClass));
+  // *tc = (TypeClass){.name = "Constructor", .module = &cor_constructor};
+  // tc->next = full_type->implements;
+  // full_type->implements = tc;
+  // full_type = type_fn(var, full_type);
+
+  TypeList *vars = t_alloc(sizeof(TypeList));
+  *vars = vlist_of_typevar(var);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars, .type = full_type}}};
 }
 
 Type cor_map_scheme;
@@ -405,6 +408,21 @@ Type create_cor_map_scheme() {
   return (Type){
       T_SCHEME,
       {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = cmap_f}}};
+}
+
+Type cor_combine_scheme;
+Type create_cor_combine_scheme() {
+  Type *a = tvar("a");
+  Type *ca = create_coroutine_instance_type(a);
+  Type *f = ca;
+  f = type_fn(ca, f);
+  f = type_fn(ca, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList) * 1);
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
 Type cor_loop_scheme;
@@ -499,6 +517,7 @@ Type create_sizeof_scheme() {
   return (Type){T_SCHEME,
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
+Type dlopen_type = MAKE_FN_TYPE_2(&t_string, &t_void);
 
 void initialize_builtin_types() {
   ht_init(&builtin_types);
@@ -619,8 +638,8 @@ void initialize_builtin_types() {
   array_scheme = create_array_scheme();
   add_builtin("Array", &array_scheme);
 
-  // cor_scheme = create_cor_scheme();
-  // add_builtin("Coroutine", &cor_scheme);
+  cor_scheme = create_cor_scheme();
+  add_builtin("Coroutine", &cor_scheme);
 
   array_fill_const_scheme = create_array_fill_const_scheme();
   add_builtin("array_fill_const", &array_fill_const_scheme);
@@ -655,6 +674,9 @@ void initialize_builtin_types() {
   cor_map_scheme = create_cor_map_scheme();
   add_builtin("cor_map", &cor_map_scheme);
 
+  cor_combine_scheme = create_cor_combine_scheme();
+  add_builtin("cor_combine", &cor_combine_scheme);
+
   use_or_finish_scheme = create_use_or_finish_scheme();
   add_builtin("use_or_finish", &use_or_finish_scheme);
 
@@ -665,6 +687,7 @@ void initialize_builtin_types() {
 
   sizeof_scheme = create_sizeof_scheme();
   add_builtin("sizeof", &sizeof_scheme);
+  add_builtin("dlopen", &dlopen_type);
   // print_builtin_types();
 }
 

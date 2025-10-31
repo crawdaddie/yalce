@@ -1,7 +1,7 @@
 #! /usr/bin/env ylc --gui -i
 
-open ../../gui/bindings/Gui;
-import ../../lib/Math;
+open gui/bindings/Gui;
+import std/Math;
 
 import examples/gl/Hyg41Dataset;
 

@@ -2,6 +2,7 @@
 #include "./coroutines.h"
 #include "./coroutines_private.h"
 #include "adt.h"
+#include "application.h"
 #include "array.h"
 #include "closures.h"
 #include "function.h"
@@ -49,12 +50,18 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *cor_inst_type = ast->type;
   Type *item_type = cor_inst_type->data.T_CONS.args[0];
+
   Type *_ptype = create_option_type(item_type);
   LLVMTypeRef ptype = type_to_llvm_type(_ptype, ctx, module);
 
   LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(ptype);
+
   LLVMValueRef coro =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  if (!is_coroutine_type(ast->data.AST_APPLICATION.args->type)) {
+    coro = handle_type_conversions(coro, ast->data.AST_APPLICATION.args->type,
+                                   cor_inst_type, ctx, module, builder);
+  }
 
   LLVMTypeRef loop_wrapper_type = PTR_ID_FUNC_TYPE(coro_obj_type);
 
@@ -788,9 +795,33 @@ LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
   return result_val;
 }
 
-LLVMValueRef CorConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
-  printf("coroutine of something\n");
+// LLVMValueRef CorConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+//                             LLVMBuilderRef builder) {
+//   printf("coroutine of something\n");
+//   print_ast(ast);
+//   return NULL;
+// }
+
+LLVMValueRef CorCombineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  LLVMValueRef a =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  a = handle_type_conversions(a, ast->data.AST_APPLICATION.args->type,
+                              ast->type, ctx, module, builder);
+  LLVMValueRef b =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+
+  b = handle_type_conversions(b, (ast->data.AST_APPLICATION.args + 1)->type,
+                              ast->type, ctx, module, builder);
+
+  LLVMDumpValue(a);
+  printf("\n");
+  LLVMDumpValue(b);
+  printf("\n");
+  printf("cor combine handler\n");
   print_ast(ast);
+  print_type(ast->type);
+  print_type(ast->data.AST_APPLICATION.function->type);
+
   return NULL;
 }

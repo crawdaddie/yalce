@@ -1,4 +1,4 @@
-import ../../lib/Math;
+import std/Math;
 
 let open_file = extern fn String -> String -> Option of Ptr;
 let fclose = extern fn Ptr -> ();

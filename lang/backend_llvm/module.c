@@ -3,6 +3,7 @@
 #include "modules.h"
 #include "serde.h"
 #include "symbols.h"
+#include "types/builtins.h"
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
@@ -67,6 +68,63 @@ LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
     print_type(t->symbol_type);
   }
 #endif
+
+  return LLVMConstInt(LLVMInt32Type(), 0, 0);
+}
+LLVMValueRef create_constructor_module(Ast *trait, JITLangCtx *ctx,
+                                       LLVMModuleRef llvm_module_ref,
+                                       LLVMBuilderRef builder) {
+
+  ObjString type_name = trait->data.AST_TRAIT_IMPL.type;
+
+  Ast binding = (Ast){AST_IDENTIFIER,
+                      .data = {.AST_IDENTIFIER = {.value = type_name.chars}}};
+
+  Ast *module_ast = trait->data.AST_TRAIT_IMPL.impl;
+
+  YLCModule _module = {
+      .type = module_ast->type,
+      .ast = module_ast,
+  };
+
+  const char *mod_binding = binding.data.AST_IDENTIFIER.value;
+  int mod_binding_len = strlen(mod_binding);
+  YLCModule *module = &_module;
+  JITSymbol *module_symbol;
+
+  Type *module_type = module->type;
+  Type *underlying = module_type->data.T_CONS.args[0];
+
+  if (underlying->kind == T_SCHEME) {
+    underlying = underlying->data.T_SCHEME.type;
+  }
+  underlying = fn_return_type(underlying);
+
+  module_symbol =
+      create_module_symbol(module_type, NULL, module_ast, ctx, llvm_module_ref);
+
+  compile_module(module_symbol, module_ast, llvm_module_ref, builder);
+
+  ht_set_hash(ctx->frame->table, mod_binding,
+              hash_string(mod_binding, mod_binding_len), module_symbol);
+  if (!is_pointer_type(underlying)) {
+    char *canonical_name = underlying->data.T_CONS.name;
+    ht_set_hash(ctx->frame->table, canonical_name,
+                hash_string(canonical_name, strlen(canonical_name)),
+                module_symbol);
+  }
+
+  module->ref = module_symbol;
+
+  Type *out_type = env_lookup(ctx->env, type_name.chars);
+  if (!out_type) {
+    out_type = lookup_builtin_type(type_name.chars);
+  }
+
+  if (out_type->kind == T_SCHEME) {
+    out_type = out_type->data.T_SCHEME.type;
+  }
+  out_type->constructor = module_symbol;
 
   return LLVMConstInt(LLVMInt32Type(), 0, 0);
 }

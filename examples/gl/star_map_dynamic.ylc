@@ -2,8 +2,8 @@
 
 open engine/bindings/Synth; 
 open engine/bindings/Sched; 
-open ../../gui/bindings/Gui;
-import ../../lib/Math;
+open gui/bindings/Gui;
+import std/Math;
 
 import examples/gl/Hyg41Dataset;
 

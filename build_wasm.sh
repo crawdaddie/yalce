@@ -1,4 +1,4 @@
-WASI_SDK_PATH=$PWD/wasi-sdk-27.0-arm64-macos
+WASI_SDK_PATH=../wasi-sdk-27.0-arm64-macos
 BINARYEN_PATH=$HOME/projects/sound/binaryen
 
 $WASI_SDK_PATH/bin/clang \

@@ -8,6 +8,7 @@
 #include "symbols.h"
 #include "types.h"
 #include "types/type.h"
+#include "types/type_ser.h"
 #include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
@@ -408,6 +409,11 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
 LLVMValueRef coro_create(JITSymbol *sym, Type *expected_fn_type, Ast *ast,
                          JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {
+
+  printf("coro create\n");
+  print_ast(ast);
+  print_type(expected_fn_type);
+
   LLVMValueRef callable;
   if (sym->type == STYPE_GENERIC_FUNCTION) {
     callable = coro_create_from_generic(sym, expected_fn_type, ast, ctx, module,

@@ -58,6 +58,9 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   case AST_IDENTIFIER: {
 
     const char *name = expr->data.AST_IDENTIFIER.value;
+    // if (CHARS_EQ(name, TYPE_NAME_PTR)) {
+    //   return deep_copy_type(&t_ptr);
+    // }
 
     TypeEnv *type_ref = lookup_type_ref(ctx->env, name);
 
@@ -214,6 +217,12 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   const char *name = binding->data.AST_IDENTIFIER.value;
   Ast *expr = ast->data.AST_LET.expr;
 
+  if (!expr) {
+    Type *comp = create_cons_type(binding->data.AST_IDENTIFIER.value, 0, NULL);
+    bind_type_in_ctx(binding, comp, (binding_md){}, ctx);
+    return comp;
+  }
+
   TICtx _ctx = *ctx;
   Type *t = tvar(name);
   t->is_recursive_type_ref = true;
@@ -223,6 +232,7 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   };
 
   Type *computed = compute_type_expression(expr, &_ctx);
+
   if (expr->tag == AST_IDENTIFIER) {
     computed = deep_copy_type(computed);
   }
@@ -235,13 +245,9 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   if (is_sum_type(computed)) {
     bind_type_in_ctx(binding, computed, (binding_md){}, ctx);
     for (int i = 0; i < computed->data.T_CONS.num_args; i++) {
-      Type *mem = computed->data.T_CONS.args[i];
       const char *mem_name = computed->data.T_CONS.args[i]->data.T_CONS.name;
-      // Ast mem_bind = (Ast){AST_IDENTIFIER,
-      //                      .data = {.AST_IDENTIFIER = {.value = mem_name}}};
       ctx->env = env_extend(ctx->env, mem_name, computed);
     }
-    // print_type(computed);
     return computed;
   }
 
@@ -249,7 +255,7 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
     computed->data.T_CONS.name = name;
   }
 
-  if (is_generic(computed)) {
+  if (is_generic(computed) && computed->kind != T_SCHEME) {
     computed = generalize(computed, ctx);
   }
   computed->alias = name;

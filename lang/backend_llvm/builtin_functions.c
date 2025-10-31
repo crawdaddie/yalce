@@ -29,50 +29,6 @@
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
 
-LLVMValueRef create_constructor_methods(Ast *trait, JITLangCtx *ctx,
-                                        LLVMModuleRef module,
-                                        LLVMBuilderRef builder) {
-
-  const char *name = trait->data.AST_TRAIT_IMPL.type.chars;
-
-  Type *out_type = env_lookup(ctx->env, name);
-
-  Type *constructor_type = type_fn(tvar("cons.Input"), out_type);
-
-  JITSymbol *constructor_sym =
-      new_symbol(STYPE_GENERIC_CONSTRUCTOR, constructor_type, NULL, NULL);
-
-  Ast *impl = trait->data.AST_TRAIT_IMPL.impl;
-
-  if (impl->tag == AST_MODULE) {
-    // print_ast(impl);
-
-    if (impl->data.AST_LAMBDA.body->tag != AST_BODY) {
-      Ast *expr = impl->data.AST_LAMBDA.body;
-      LLVMValueRef func = codegen(expr, ctx, module, builder);
-      constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
-          specific_fns_extend(
-              constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
-              expr->type, func);
-    } else {
-
-      AST_LIST_ITER(
-          impl->data.AST_LAMBDA.body->data.AST_BODY.stmts, ({
-            Ast *expr = l->ast;
-            LLVMValueRef func = codegen(expr, ctx, module, builder);
-            constructor_sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
-                specific_fns_extend(constructor_sym->symbol_data
-                                        .STYPE_GENERIC_FUNCTION.specific_fns,
-                                    expr->type, func);
-          }));
-    }
-  }
-  uint64_t hash_id = trait->data.AST_TRAIT_IMPL.type.hash;
-  ht_set_hash(ctx->frame->table, name, hash_id, constructor_sym);
-  out_type->constructor = constructor_sym;
-  return NULL;
-}
-
 LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
                                                  LLVMModuleRef module,
                                                  LLVMBuilderRef builder) {
@@ -1398,10 +1354,11 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
   GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme, CorOfArrayHandler);
   GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
+  GENERIC_FN_SYMBOL("cor_combine", &cor_combine_scheme, CorCombineHandler);
 
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
-  GENERIC_FN_SYMBOL("dlopen", &MAKE_FN_TYPE_2(&t_string, &t_void),
-                    DlOpenHandler);
+
+  GENERIC_FN_SYMBOL("dlopen", &dlopen_type, DlOpenHandler);
 
   GENERIC_FN_SYMBOL("cstr", &cstr_scheme, CStrHandler);
   GENERIC_FN_SYMBOL("sizeof", &sizeof_scheme, SizeOfHandler);

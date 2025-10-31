@@ -23,4 +23,17 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
                                    JITLangCtx *ctx,
                                    LLVMModuleRef llvm_module_ref,
                                    LLVMBuilderRef builder);
+
+JITSymbol *create_module_symbol(Type *module_type, TypeEnv *module_type_env,
+                                Ast *module_ast, JITLangCtx *ctx,
+
+                                LLVMModuleRef llvm_module_ref);
+
+LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
+                            LLVMModuleRef llvm_module_ref,
+                            LLVMBuilderRef builder);
+
+LLVMValueRef create_constructor_module(Ast *trait, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder);
 #endif

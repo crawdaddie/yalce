@@ -52,12 +52,14 @@ extern Type logical_op_scheme;
 extern Type cor_map_scheme;
 extern Type cor_stop_scheme;
 extern Type cor_loop_scheme;
+extern Type cor_combine_scheme;
 extern Type play_routine_scheme;
 
 extern Type cor_scheme;
 extern Type iter_of_list_scheme;
 extern Type iter_of_array_scheme;
 extern Type use_or_finish_scheme;
+extern Type dlopen_type;
 
 extern Type sizeof_scheme;
 #endif
