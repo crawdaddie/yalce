@@ -42,6 +42,7 @@ LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef CorConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder);
 
-LLVMValueRef CorCombineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                               LLVMBuilderRef builder);
+// LLVMValueRef CorCombineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef
+// module,
+//                                LLVMBuilderRef builder);
 #endif

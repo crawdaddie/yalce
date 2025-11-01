@@ -802,26 +802,27 @@ LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
 //   return NULL;
 // }
 
-LLVMValueRef CorCombineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                               LLVMBuilderRef builder) {
-  LLVMValueRef a =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  a = handle_type_conversions(a, ast->data.AST_APPLICATION.args->type,
-                              ast->type, ctx, module, builder);
-  LLVMValueRef b =
-      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
-
-  b = handle_type_conversions(b, (ast->data.AST_APPLICATION.args + 1)->type,
-                              ast->type, ctx, module, builder);
-
-  LLVMDumpValue(a);
-  printf("\n");
-  LLVMDumpValue(b);
-  printf("\n");
-  printf("cor combine handler\n");
-  print_ast(ast);
-  print_type(ast->type);
-  print_type(ast->data.AST_APPLICATION.function->type);
-
-  return NULL;
-}
+// LLVMValueRef CorCombineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef
+// module,
+//                                LLVMBuilderRef builder) {
+//   LLVMValueRef a =
+//       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+//   a = handle_type_conversions(a, ast->data.AST_APPLICATION.args->type,
+//                               ast->type, ctx, module, builder);
+//   LLVMValueRef b =
+//       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+//
+//   b = handle_type_conversions(b, (ast->data.AST_APPLICATION.args + 1)->type,
+//                               ast->type, ctx, module, builder);
+//
+//   LLVMDumpValue(a);
+//   printf("\n");
+//   LLVMDumpValue(b);
+//   printf("\n");
+//   printf("cor combine handler\n");
+//   print_ast(ast);
+//   print_type(ast->type);
+//   print_type(ast->data.AST_APPLICATION.function->type);
+//
+//   return NULL;
+// }

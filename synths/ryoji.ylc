@@ -1,7 +1,7 @@
 #! /usr/bin/env ylc -i
-import ../lib/Math;
-open ../engine/bindings/Sched; 
-open ../engine/bindings/Synth; 
+import std/Math;
+open engine/bindings/Sched; 
+open engine/bindings/Synth; 
 
 let array_choose = fn arr ->
   let idx = Math.rand_int (array_size arr) in
@@ -127,7 +127,7 @@ let Tones = module () ->
   ) |> compile_blob_template
   ;
 
-  let beep_bass = fn dur f: (Double) ->
+  let beep_bass = fn dur f ->
     match dur > 0. with
     | true -> (
       let t = get_tl_tick ();

@@ -79,7 +79,7 @@ Run it:
 ylc hello.ylc
 ```
 
-### Interactive REPL
+## Interactive REPL
 
 Start the REPL:
 
@@ -101,29 +101,6 @@ Try some expressions:
 Int: 42
 ```
 
-### Recursive Functions
-
-Create `factorial.ylc`:
-
-```ocaml
-# factorial.ylc
-let factorial = fn n ->
-  match n with
-  | 0 -> 1
-  | 1 -> 1
-  | _ -> n * (factorial (n - 1))
-;;
-
-print `{factorial 5}\n`;
-
-# Output: 120
-```
-
-Run it:
-
-```bash
-ylc factorial.ylc
-```
 ## YLC CLI options
 ### `ylc -i` 
 the -i flag enters the interactive repl after all input files have been run 
@@ -169,6 +146,17 @@ $ ylc --test arithmetic.ylc
 ✅ test_double
 2 / 2 passed
 ```
+
+## Jupyter Kernel
+You can set up a jupyter kernel in the project directory where you cloned the yalce project: `<yalce_dir>/dev/kernel`
+```bash
+make jupyter
+jupyter lab
+```
+This assumes the `jupyter` command is installed and available, you can then use YLC in an interactive notebook format:
+![YLC in Jupyter Lab](Screenshot 2025-11-01 at 17.06.50.png)
+(You can do this also in VSCode with the jupyter extension by selecting the ylc kernel found at `<yalce_dir>/dev/kernel`)
+
 
 ## Next Steps
 - [Language Reference](reference.md) - Learn all language features

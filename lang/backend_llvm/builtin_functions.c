@@ -1354,7 +1354,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
   GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme, CorOfArrayHandler);
   GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
-  GENERIC_FN_SYMBOL("cor_combine", &cor_combine_scheme, CorCombineHandler);
+  // GENERIC_FN_SYMBOL("cor_combine", &cor_combine_scheme, CorCombineHandler);
 
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
 

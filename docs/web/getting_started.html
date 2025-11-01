@@ -102,7 +102,7 @@ print message;
 <div class="codehilite"><pre><span></span><code>ylc<span class="w"> </span>hello.ylc
 </code></pre></div>
 
-<h3 id="interactive-repl">Interactive REPL</h3>
+<h2 id="interactive-repl">Interactive REPL</h2>
 <p>Start the REPL:</p>
 <div class="codehilite"><pre><span></span><code>ylc
 </code></pre></div>
@@ -117,25 +117,6 @@ print message;
 λ let d = double 21 in print `{d}\n`
 &gt; ()
 Int: 42
-</code></pre></div>
-
-<h3 id="recursive-functions">Recursive Functions</h3>
-<p>Create <code>factorial.ylc</code>:</p>
-<div class="codehilite"><pre><span></span><code><span class="o">#</span> <span class="n">factorial</span><span class="o">.</span><span class="n">ylc</span>
-<span class="k">let</span> <span class="n">factorial</span> <span class="o">=</span> <span class="n">fn</span> <span class="n">n</span> <span class="o">-&gt;</span>
-  <span class="k">match</span> <span class="n">n</span> <span class="k">with</span>
-  <span class="o">|</span> <span class="mi">0</span> <span class="o">-&gt;</span> <span class="mi">1</span>
-  <span class="o">|</span> <span class="mi">1</span> <span class="o">-&gt;</span> <span class="mi">1</span>
-  <span class="o">|</span> <span class="o">_</span> <span class="o">-&gt;</span> <span class="n">n</span> <span class="o">*</span> <span class="o">(</span><span class="n">factorial</span> <span class="o">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="o">))</span>
-<span class="o">;;</span>
-
-<span class="n">print</span> <span class="o">`{</span><span class="n">factorial</span> <span class="mi">5</span><span class="o">}</span><span class="err">\</span><span class="n">n</span><span class="o">`;</span>
-
-<span class="o">#</span> <span class="nc">Output</span><span class="o">:</span> <span class="mi">120</span>
-</code></pre></div>
-
-<p>Run it:</p>
-<div class="codehilite"><pre><span></span><code>ylc<span class="w"> </span>factorial.ylc
 </code></pre></div>
 
 <h2 id="ylc-cli-options">YLC CLI options</h2>
@@ -173,6 +154,15 @@ these correspond roughly with <a href="https://clang.llvm.org/docs/CommandGuide/
 <span class="m">2</span><span class="w"> </span>/<span class="w"> </span><span class="m">2</span><span class="w"> </span>passed
 </code></pre></div>
 
+<h2 id="jupyter-kernel">Jupyter Kernel</h2>
+<p>You can set up a jupyter kernel in the project directory where you cloned the yalce project: <code>&lt;yalce_dir&gt;/dev/kernel</code></p>
+<div class="codehilite"><pre><span></span><code>make<span class="w"> </span>jupyter
+jupyter<span class="w"> </span>lab
+</code></pre></div>
+
+<p>This assumes the <code>jupyter</code> command is installed and available, you can then use YLC in an interactive notebook format:
+<img alt="YLC in Jupyter Lab" src="Screenshot 2025-11-01 at 17.06.50.png" />
+(You can do this also in VSCode with the jupyter extension)</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><a href="reference.html">Language Reference</a> - Learn all language features</li>

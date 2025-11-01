@@ -121,7 +121,7 @@ wasm:
 	cp lang/backend_wasm/wasm.js docs/web/wasm.js
 
 serve_docs:
-	python -m http.server -d docs
+	$(MAKE) -C docs dev
 
 audio_test:
 	$(MAKE) -C engine audio_test
@@ -139,7 +139,7 @@ kernel-venv:
 	@echo "Installing kernel dependencies..."
 	cd $(KERNEL_DIR) && . .venv/bin/activate && pip install -e .
 
-kernel-install: kernel-venv
+kernel-install: kernel-venv all
 	@echo "Installing YLC kernel in Jupyter..."
 	cd $(KERNEL_DIR) && . .venv/bin/activate && python -m ylc_kernel.install install --ylc-path $(shell pwd)/$(BUILD_DIR)/ylc --user
 	@echo "YLC kernel installed successfully. Use 'jupyter lab' to start Jupyter."
@@ -153,11 +153,7 @@ kernel-uninstall:
 kernel-clean: kernel-uninstall
 	@echo "Cleaning up kernel files..."
 	rm -rf $(VENV_DIR)
-	rm -rf $(KERNEL_DIR)/*.egg-info
-	rm -rf $(KERNEL_DIR)/build
-	rm -rf $(KERNEL_DIR)/dist
-	rm -rf $(KERNEL_DIR)/__pycache__
-	rm -rf $(KERNEL_DIR)/ylc_kernel/__pycache__
+	rm -rf $(KERNEL_DIR)/*
 
 # Combined target to build YLC and install the kernel
 jupyter: $(BUILD_DIR)/ylc kernel-install

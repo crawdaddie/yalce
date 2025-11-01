@@ -315,5 +315,23 @@ let x = (fn aa ->
   {xx ()}
   {xx ()}
   {xx ()}
-  `;
+`;
 
+let (+>) = fn a b -> yield a; yield b;;
+
+let z = ([ 1,2,3 ] |> iter_of_list)
+  +> ([| 6,5,4 |] |> iter_of_array |> cor_loop) in
+
+print `## combine coroutines after one another (1 2 3 -> loop 6 5 4)
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+`

@@ -36,15 +36,16 @@ let amen = load_soundfile "fat_amen_mono_48000.wav";
 
 let synth = (fn () ->
   let trig = inlet 0.; # 0
-  bufplayer_trig_node (buf_ref amen) (tempo / original_tempo) (inlet 0.) trig # 3 
+  bufplayer_trig_node (buf_ref amen) (tempo * (inlet 1.) / original_tempo) (inlet 0.) trig # 3 
   |> stutter_node (60. * 4. / tempo) (trig_sel_node trig (buf_ref stutter_rates)) (rand_trig_node trig -1. 1.)
 )
 |> play_tpl
 ;
 
-let trig = fn d: (Double) s: (Double) -> 
+let trig = fn d s p -> 
   let fo = get_tl_tick ();
-  set_input_scalar_offset synth 1 fo s; 
+  set_input_scalar_offset synth 2 fo s; 
+  set_input_scalar_offset synth 1 fo p; 
   # trigger_gate fo d 1 synth; 
   set_input_trig_offset synth 0 fo
   # set_input_scalar_offset synth 1 fo (Math.rand_double_range 0. 20.)
@@ -64,27 +65,27 @@ let set_pattern = fn t cor ->
 
 defer_quant q (fn t ->
   let rout = fn () ->
-    yield (0.5,  0.0    );
-    yield (0.5,  0.125  );
-    yield (0.75, 0.25   );
-    yield (0.75, 0.25   );
-    yield (0.75, 0.25   );
-    yield (0.75, 0.25   );
+    yield (0.5,  0.0    ,1.);
+    yield (0.5,  0.125  ,1.);
+    yield (0.75, 0.25   ,1.);
+    yield (0.75, 0.25   ,1.);
+    yield (0.75, 0.25   ,1.);
+    yield (0.75, 0.25   ,1.5);
 
-    yield (0.5,  0.375  );
-    yield (0.5,  0.5    );
-    yield (0.5,  0.625  );
-    yield (0.5,  0.75   );
-    yield (0.75, 0.625  );
-    yield (0.25, 0.75   );
-    yield (1.,   0.875  );
+    yield (0.5,  0.375  ,1.);
+    yield (0.5,  0.5    ,1.);
+    yield (0.5,  0.625  ,1.);
+    yield (0.5,  0.75   ,1.);
+    yield (0.75, 0.625  ,1.);
+    yield (0.25, 0.75   ,1.);
+    yield (1.,   0.875  ,1.);
 
     yield rout ()
   ;;
 
   rout ()
-  |> cor_map (fn (d, s): (Double, Double) ->
-    trig (d * q) s;
+  |> cor_map (fn (d, s, p) ->
+    trig (d * q) s p;
     d * q
   )
   |> play_routine t schedule_event
