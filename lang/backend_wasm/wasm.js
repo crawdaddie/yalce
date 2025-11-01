@@ -262,9 +262,23 @@ function initTerminal() {
 
     const paramsString = window.location.search;
     const searchParams = new URLSearchParams(paramsString);
-    const codeInput = searchParams.get("code"); // a
+    let codeInput = searchParams.get("code");
     if (codeInput) {
-      terminal.appendChild(document.createTextNode(codeInput));
+      // URLSearchParams might not preserve newlines correctly, try manual decode
+      const manualMatch = paramsString.match(/[?&]code=([^&]*)/);
+      if (manualMatch) {
+        // Manually decode to preserve newlines
+        codeInput = decodeURIComponent(manualMatch[1]);
+      }
+
+      // Split by newlines and insert each line with <br> elements
+      const lines = codeInput.split('\n');
+      lines.forEach((line, index) => {
+        terminal.appendChild(document.createTextNode(line));
+        if (index < lines.length - 1) {
+          terminal.appendChild(document.createElement('br'));
+        }
+      });
     }
     moveCursorToEnd(terminal);
   }

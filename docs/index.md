@@ -46,13 +46,7 @@ let fib = fn x ->
   | _ -> (fib (x - 1)) + (fib (x - 2))
 ;;
 ```
-[try in repl](repl.html?code=let fib = fn x ->
-  match x with
-  | 0 -> 0
-  | 1 -> 1
-  | _ -> (fib (x - 1)) + (fib (x - 2))
-  ;;
-)
+[try in repl](repl.html?code=let%20fib%20%3D%20fn%20x%20-%3E%0A%20%20match%20x%20with%0A%20%20%7C%200%20-%3E%200%0A%20%20%7C%201%20-%3E%201%0A%20%20%7C%20_%20-%3E%20(fib%20(x%20-%201))%20%2B%20(fib%20(x%20-%202))%0A%20%20%3B%3B%0A)
 
 ### First-class functions
 ```ocaml
