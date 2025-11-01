@@ -1,33 +1,18 @@
+let (+>) = fn a b -> yield a; yield b;;
 
-let x = (fn () -> 
-  let a = 2;
-  yield 1;
-  yield 2;
-  yield a;
-  yield 3;) in
-  let xx = x () in 
-  print `## persistent vars
-  {xx ()}
-  {xx ()}
-  {xx ()}
-  {xx ()}
-  {xx ()}
-  {xx ()}
-  `;
+let z = ([ 1,2,3 ] |> iter_of_list )
+  +> ([| 6,5,4 |] |> iter_of_array |> cor_loop);
 
-let x = (fn aa -> 
-  let a = aa + 2;
-  yield 1;
-  yield 2;
-  yield a;
-  yield 3;
-  ) in
-  let xx = x 3 in 
-  print `## persistent vars
-  {xx ()}
-  {xx ()}
-  {xx ()}
-  {xx ()}
-  {xx ()}
-  {xx ()}
-  `;
+print `
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+{z ()}
+`

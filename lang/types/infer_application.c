@@ -163,7 +163,11 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   if (is_coroutine_constructor_type(func_type)) {
     func_type = func_type->data.T_CONS.args[0];
 
-    return infer_fn_application(func_type, ast, ctx);
+    Type *t = infer_fn_application(func_type, ast, ctx);
+    if (is_coroutine_type(t->data.T_CONS.args[0])) {
+      t = t->data.T_CONS.args[0];
+    }
+    return t;
   }
 
   if (func_type->kind == T_CONS) {
