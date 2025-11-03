@@ -1,0 +1,155 @@
+open engine/bindings/Sched; 
+open engine/bindings/Synth; 
+open gui/bindings/Gui;
+import std/Math;
+
+
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String;
+let skip_csv_header = fn arr -> 
+  let aux = fn arr: (String) idx ->
+    match arr[idx] with
+    | '\n' -> idx
+    | _ -> aux arr (idx + 1)
+  ;;
+  let off = aux arr 0;
+  array_offset off arr
+;;
+
+type Star = (x: Double, y: Double, z: Double, mag: Double);
+
+let parse_double_simple = extern fn Ptr -> Ptr -> Ptr -> (Double, Int);
+
+let parse_double = fn bytes ->
+  let x = [|0.|];
+  let n = [|0|];
+  
+  parse_double_simple (cstr bytes) (cstr x) (cstr n);
+  (x[0], n[0])
+;;
+
+let parse = fn bytes: (String) lines cols cur_star: (Star) list: (List of Star) -> 
+  if (array_size bytes == 0) then (
+    (lines, cols, list)
+  ) else ( 
+    match (bytes[0], cols) with
+    | (',', cols)  -> parse (array_succ bytes) lines (cols + 1) cur_star list
+    | ('\n', cols) -> parse (array_succ bytes) (lines + 1) 0 (Star 0. 0. 0. 0.) (cur_star::list)
+    | (_, 14) -> (
+      let val, n = parse_double bytes;
+      parse (array_offset n bytes) lines cols (Star cur_star.x cur_star.y cur_star.z val) list
+    )
+
+    | (_, 17) -> (
+      let val, n = parse_double bytes;
+      parse (array_offset n bytes) lines cols (Star val cur_star.y cur_star.z cur_star.mag) list
+    )
+
+    | (_, 18) -> (
+      let val, n = parse_double bytes;
+      parse (array_offset n bytes) lines cols (Star cur_star.x val cur_star.z cur_star.mag) list
+    )
+
+    | (_, 19) -> (
+      let val, n = parse_double bytes;
+      parse (array_offset n bytes) lines cols (Star cur_star.x cur_star.y val cur_star.mag) list
+    )
+    | _ -> parse (array_succ bytes) lines cols cur_star list
+  )
+;;
+
+let max_brightness = Math.pow 10.0 ((-0.4) * (-2.0));  # mag -2
+let min_brightness = Math.pow 10.0 ((-0.4) * 12.0);    # mag 12
+let magnitude_to_brightness = fn mag ->
+  let clamped_mag = Math.max (-2.0) (Math.min 12.0 mag);
+  
+  let brightness = Math.pow 10.0 ((-0.4) * clamped_mag);
+  
+  
+  let normalized = (brightness - min_brightness) / (max_brightness - min_brightness);
+  Math.max 0.1 (Math.min 1.0 normalized)
+;;
+
+let get_stars_array = fn list: (List of Star) idx arr ->
+  match list with
+  | [] -> arr
+  | (x,y,z,mag)::rest -> (
+
+    let brightness = magnitude_to_brightness mag;
+    arr[idx * 6] := x;
+    arr[idx * 6 + 1] := y;
+    arr[idx * 6 + 2] := z;
+    arr[idx * 6 + 3] := brightness * 0.5;
+    arr[idx * 6 + 4] := brightness * 0.75;
+    arr[idx * 6 + 5] := brightness * 1.; 
+    get_stars_array rest (idx+1) arr
+  )
+;;
+
+let stars = match (open_file "/Users/adam/Desktop/hygdata_v41.csv" "rb") with
+  | Some fd -> (
+    let bytes = (read_bytes fd) |> skip_csv_header;
+    let lines, cols, star_list = parse bytes 0 0 (Star 0. 0. 0. 0.) [];
+    # let star1::rest = star_list;
+    # print `star0: {star1}\n`;
+    let arr = array_fill_const (lines * 6) 0.;
+    get_stars_array star_list 0 arr
+  )
+  | None -> [|0.|]
+;
+
+let w = create_decl_window (fn () ->
+  let vs = VShader `#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uProjection;
+out vec3 vertexColor;
+out vec3 worldPos;
+void main() \{
+  vec4 worldPosition = uModel * vec4(aPos, 1.0);
+  worldPos = worldPosition.xyz;
+  
+  // Transform to view space to get distance from camera
+  vec4 viewPosition = uView * worldPosition;
+  
+  gl_Position = uProjection * viewPosition;
+  vertexColor = aColor;
+}`;
+
+
+  let fs = FShader `#version 330 core
+in vec3 vertexColor;
+in vec3 worldPos;
+uniform vec3 uCameraPos;
+uniform float uTime;
+out vec4 FragColor;
+
+void main() \{
+  FragColor = vec4(vertexColor, 1.);
+\}`;
+
+
+  let pos = Uniform3f "pos" 2. 3. 8.; 
+  let target  = Uniform3f "target" 0. 0. 0.;
+  let view = CamView (pos |> LagUniform "uPosLag" 0.3) target;
+
+  let points = Points stars 1.;
+
+
+  let rout = fn p ->
+    set_uniform p (cstr [|
+
+      Math.rand_double_range -2000. 2000.,
+      Math.rand_double_range -2000. 2000.,
+      Math.rand_double_range -1000. 1000.
+    |]);
+    yield 0.75;
+    yield rout p
+  ;;
+
+  play_routine 0 schedule_event (rout pos);
+  pos
+);

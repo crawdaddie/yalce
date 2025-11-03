@@ -30,6 +30,10 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
   } else {
     f = create_fn_from_cons(cons, cons);
   }
+  // printf("cons");
+  // print_type(cons);
+  // print_ast(ast);
+  // print_type(f);
 
   return infer_fn_application(f, ast, ctx);
 }
@@ -221,6 +225,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     print_type_err(func_type);
     fprintf(stderr, "  != \n");
     print_type_err(expected_type);
+    // print_constraints(unify_ctx.constraints);
     return NULL;
   }
 

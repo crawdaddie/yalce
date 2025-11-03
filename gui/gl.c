@@ -48,6 +48,7 @@ static GLObj *append_obj(GLObj obj) {
   *tail = obj;
   _dcl_ctx_tail->next = tail;
   _dcl_ctx_tail = tail;
+
   return tail;
 }
 static bool init_opengl_decl_win(void *_state) {
@@ -241,7 +242,8 @@ void *Uniform3f(_String name, double x, double y, double z) {
                       .render_gl = (GLObjRenderFn)render_uniform_data,
                       .next = NULL};
 
-  return append_obj(obj);
+  void *o = append_obj(obj);
+  return o;
 }
 
 void *UniformMat4(_String name, _DoubleArray matrix_values) {

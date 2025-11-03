@@ -9,15 +9,12 @@
 #include "input.h"
 #include "list.h"
 #include "module.h"
-#include "serde.h"
 #include "strings.h"
 #include "symbols.h"
 #include "tuple.h"
 #include "types.h"
 #include "types/builtins.h"
-#include "types/common.h"
 #include "types/inference.h"
-#include "types/type_expressions.h"
 #include "types/type_ser.h"
 #include "util.h"
 #include "llvm-c/Target.h"
@@ -638,6 +635,9 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
 
+  if (type->kind == T_VAR) {
+    type = resolve_type_in_env(type, ctx->env);
+  }
   switch (type->kind) {
   case T_BOOL:
   case T_INT:
@@ -1338,6 +1338,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                     ArrayFillConstHandler);
   GENERIC_FN_SYMBOL("array_fill", &array_fill_scheme, ArrayFillHandler);
   GENERIC_FN_SYMBOL("array_range", &array_range_scheme, ArrayRangeHandler);
+  GENERIC_FN_SYMBOL("array_offset", &array_offset_scheme, ArrayOffsetHandler);
 
   GENERIC_FN_SYMBOL("Some", &opt_scheme, SomeConsHandler);
 

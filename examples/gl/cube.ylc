@@ -1,35 +1,12 @@
-#! /usr/bin/env ylc --gui -i
-
-open engine/bindings/Synth; 
 open engine/bindings/Sched; 
-open ../../gui/bindings/Gui;
-import ../../lib/Math;
+open engine/bindings/Synth; 
+open gui/bindings/Gui;
+import std/Math;
 
-
-let VShader = extern fn String -> Ptr;
-let FShader = extern fn String -> Ptr;
-let TriangleData = extern fn Array of Double -> Ptr;
-let Points = extern fn Array of Double -> Double -> Ptr;
-let Uniform3f = extern fn String -> Double -> Double -> Double -> Ptr;
-let LagUniform = extern fn Ptr -> Double -> Ptr -> Ptr;
-
-let set_uniform = extern fn Ptr -> Ptr -> ();
-
-let uniformref_set = fn data: (Array of Double) obj: (Ptr) ->
-  set_uniform obj (cstr data)
-;;
-
-let CamView = extern fn Ptr -> Ptr -> Ptr;
-
-let gl_obj_bind_handler = extern fn Ptr -> Ptr -> Ptr; 
-
-let SDL_RegisterEvents = extern fn Int -> Int;
-
-let gl_push_custom_event = extern fn Int -> Ptr -> ();
-
-let pos = [|[]|];
+let pos = [|cstr ""|];
 
 let w = create_decl_window (fn () ->
+
 
   let vs = VShader `#version 330 core
 layout (location = 0) in vec3 aPos;
@@ -59,8 +36,8 @@ void main() \{
     FragColor = vec4(vertexColor, 1.);
 \}`;
 
-  let pos = (Uniform3f "pos" 2. 3. 7.); 
-  let lag = pos |> LagUniform "pos_lag" 0.5;
+  pos[0] := (Uniform3f "pos" 2. 3. 7.); 
+  let lag = pos[0] |> LagUniform "pos_lag" 0.5;
 
   let target  = Uniform3f "target" 0. 0. 0.;
 
@@ -81,15 +58,15 @@ void main() \{
     1.,1.,1., 1.,0.,1.,
   |] 3.;
 
-  let rout = fn pos ->
-    uniformref_set [|Math.rand_double_range -10. 10., Math.rand_double_range -10. 10., Math.rand_double_range -10. 10.|] pos;
+  let rout = fn () ->
+    set_uniform (pos[0]) (cstr [|Math.rand_double_range -10. 10., Math.rand_double_range -10. 10., Math.rand_double_range -10. 10.|]);
     yield 0.25;
-    yield rout pos
+    yield rout ()
   ;;
-  #
-  #
-  rout pos
-    |> play_routine 0 schedule_event
+
+  play_routine 0 schedule_event (rout ());
+  pos
 );
+
 
 

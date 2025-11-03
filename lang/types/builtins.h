@@ -38,6 +38,7 @@ extern Type array_at_scheme;
 extern Type array_set_scheme;
 extern Type array_fill_const_scheme;
 extern Type array_fill_scheme;
+extern Type array_offset_scheme;
 extern Type cstr_scheme;
 
 extern Type opt_scheme;

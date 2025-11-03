@@ -164,6 +164,23 @@ Type create_array_range_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type array_offset_scheme;
+Type create_array_offset_scheme() {
+
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+
+  Type *f = type_fn(arr, arr);
+  f = type_fn(&t_int, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 Type array_at_scheme;
 Type create_array_at_scheme() {
 
@@ -649,6 +666,9 @@ void initialize_builtin_types() {
 
   array_range_scheme = create_array_range_scheme();
   add_builtin("array_range", &array_range_scheme);
+
+  array_offset_scheme = create_array_offset_scheme();
+  add_builtin("array_offset", &array_offset_scheme);
 
   list_scheme = create_list_scheme();
   add_builtin("List", &list_scheme);

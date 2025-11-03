@@ -53,6 +53,7 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
                       LLVMValueRef val, LLVMTypeRef val_type, Type *type,
                       JITLangCtx *ctx, LLVMModuleRef module,
                       LLVMBuilderRef builder) {
+
   switch (pattern->tag) {
   case AST_IDENTIFIER: {
     if (ast_is_placeholder_id(pattern)) {

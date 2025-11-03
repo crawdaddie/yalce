@@ -96,12 +96,12 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
   for (i = 0; i < recordt->data.T_CONS.num_args; i++) {
     Type *rt = recordt->data.T_CONS.args[i];
 
-    printf("record arg %d: ", i);
+    // printf("record arg %d: ", i);
     LLVMTypeRef lt = type_to_llvm_type(rt, &fn_ctx, module);
 
-    print_type(recordt->data.T_CONS.args[i]);
-    LLVMDumpType(lt);
-    printf("\n");
+    // print_type(recordt->data.T_CONS.args[i]);
+    // LLVMDumpType(lt);
+    // printf("\n");
 
     args[i] = LLVMBuildLoad2(
         builder, rt->kind == T_FN && (!is_closure(rt)) ? GENERIC_PTR : lt,

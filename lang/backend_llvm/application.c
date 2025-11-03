@@ -236,7 +236,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
          i++, ex = ex->data.T_FN.to) {
       if (ast->data.AST_APPLICATION.args[i].tag == AST_IDENTIFIER) {
         JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.args + i, ctx);
-        if (sym->type == STYPE_FUNCTION &&
+        if (sym && sym->type == STYPE_FUNCTION &&
             is_closure(
                 sym->symbol_type)) { // detect closure set in current scope if
                                      // can also be bound to a normal function

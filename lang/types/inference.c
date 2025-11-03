@@ -377,6 +377,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   if (t1->kind == T_VAR) {
 
     if (occurs_check(t1->data.T_VAR, t2)) {
+
       return 1; // Occurs check failure
     }
 
@@ -397,7 +398,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     }
 
     if (occurs_check(t2->data.T_VAR, t1)) {
-      printf("t2->data.T_VAR %s != t1", t2->data.T_VAR);
+
       return 1; // Occurs check failure
     }
 
@@ -410,6 +411,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     // Unify parameter types
     TICtx ur1 = {};
     if (unify(t1->data.T_FN.from, t2->data.T_FN.from, &ur1) != 0) {
+
       return 1;
     }
 
@@ -430,41 +432,11 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     return 0;
   }
 
-  // Case 3.5: Constructor types with a constructor implementation
-  // TypeClass *cons_tc = get_typeclass_by_name(t1, "Constructor");
-  //
-  // if ((t1->kind == T_CONS) && (cons_tc != NULL)) {
-  //
-  //   int index;
-  //
-  //   Type *constructor_method_tscheme = NULL;
-  //   char *cons_method_name =
-  //       find_constructor_method(cons_tc->module, 1, (Type *[]){t2}, &index,
-  //                               &constructor_method_tscheme);
-  //
-  //   if (cons_method_name != NULL) {
-  //
-  //     Type *f = type_fn(t2, t1);
-  //
-  //     TICtx ur1 = {};
-  //     Type *g = constructor_method_tscheme;
-  //     if (g->kind == T_SCHEME) {
-  //       g = instantiate(g, &ur1);
-  //     }
-  //     // printf("t2 can go into t1 constructor\n");
-  //     // print_type(f);
-  //     // print_type(g);
-  //     // unify(f, g, &ur1);
-  //     // print_constraints(ur1.constraints);
-  //     unify_res->constraints =
-  //         merge_constraints(unify_res->constraints, ur1.constraints);
-  //
-  //     return 0;
-  //   }
-  // }
-
   // Case 4: Constructor types - recurse and merge constraints
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
+    // print_type(t1);
+    // print_type(t2);
+    // printf("unify cons\n");
 
     if (is_pointer_type(t1) && is_pointer_type(t2)) {
       return 0;
@@ -472,6 +444,12 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
     // NB: don't worry about comparing the cons names - as long as the contained
     // types match it doesn't really matter
+    // if (is_list_type(t1)) {
+    //   print_type(t1);
+    //   print_type(t2);
+    // }
+
+    // if (t1->alias
     if (t1->data.T_CONS.num_args != t2->data.T_CONS.num_args) {
 
       return 1;
@@ -480,6 +458,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       TICtx ur = {};
       if (unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], &ur) != 0) {
+
         return 1;
       }
 
@@ -493,6 +472,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   if (t1->kind == T_TYPECLASS_RESOLVE && t2->kind != T_VAR) {
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       if (unify(t1->data.T_CONS.args[i], t2, unify_res)) {
+
         return 1;
       }
     }
@@ -693,9 +673,14 @@ bool subst_contains(Subst *subst, const char *k, Type *t) {
 }
 
 Subst *subst_extend(Subst *s, const char *key, Type *type) {
+  if (type->kind == T_VAR && CHARS_EQ(key, type->data.T_VAR)) {
+    return s;
+  }
+
   if (subst_contains(s, key, type)) {
     return s;
   }
+
   Subst *n = t_alloc(sizeof(Subst));
   *n = (Subst){.var = key, .type = type, .next = s};
   return n;
