@@ -30,10 +30,6 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
   } else {
     f = create_fn_from_cons(cons, cons);
   }
-  // printf("cons");
-  // print_type(cons);
-  // print_ast(ast);
-  // print_type(f);
 
   return infer_fn_application(f, ast, ctx);
 }
@@ -146,6 +142,10 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
   // Step 1: Infer function type
   Type *func_type = infer(func, ctx);
+
+  // printf("infer cons application??\n");
+  // print_ast(ast);
+  // print_type(func_type);
 
   if (!func_type) {
     return type_error(ast, "Cannot infer type of applicable");

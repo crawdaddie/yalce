@@ -289,6 +289,11 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                         sym_name, ctx, module, builder);
   }
 
+  if (sym->type == STYPE_VARIANT_TYPE) {
+    return codegen_adt_member_with_args(callable_type, sym->llvm_type, ast,
+                                        sym_name, ctx, module, builder);
+  }
+
   Type *symbol_type = sym->symbol_type;
 
   if (sym->type == STYPE_GENERIC_FUNCTION &&

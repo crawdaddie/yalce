@@ -82,6 +82,69 @@ void unify_recursive_ref(Ast *ast, Type *recursive_fn_type, Type *result_type,
   }
 }
 
+// Helper to check if an AST node is a self-recursive call
+static bool is_tail_recursive_call(Ast *ast, const char *fn_name) {
+  if (!ast || !fn_name) {
+    return false;
+  }
+
+  if (ast->tag == AST_APPLICATION) {
+    Ast *func = ast->data.AST_APPLICATION.function;
+    if (func->tag == AST_IDENTIFIER) {
+      const char *callee = func->data.AST_IDENTIFIER.value;
+      size_t fn_name_len = strlen(fn_name);
+      size_t callee_len = func->data.AST_IDENTIFIER.length;
+      if (fn_name_len == callee_len &&
+          strncmp(fn_name, callee, fn_name_len) == 0) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// Check if the lambda body ends with an unconditional tail-recursive call
+static bool has_infinite_tail_recursion(Ast *body, const char *fn_name) {
+  if (!body || !fn_name) {
+    return false;
+  }
+
+  // For a body (sequence of statements), check the last statement
+  if (body->tag == AST_BODY) {
+    if (!body->data.AST_BODY.tail) {
+      return false;
+    }
+    Ast *last_stmt = body->data.AST_BODY.tail->ast;
+    return has_infinite_tail_recursion(last_stmt, fn_name);
+  }
+
+  // For a let binding, check the in_expr
+  if (body->tag == AST_LET) {
+    return has_infinite_tail_recursion(body->data.AST_LET.in_expr, fn_name);
+  }
+
+  // For a match expression, check if ALL branches end in tail recursion
+  if (body->tag == AST_MATCH) {
+    if (body->data.AST_MATCH.len == 0) {
+      return false;
+    }
+
+    for (int i = 0; i < body->data.AST_MATCH.len; i++) {
+      Ast *branch_expr = body->data.AST_MATCH.branches + 2 * i + 1;
+      if (!has_infinite_tail_recursion(branch_expr, fn_name)) {
+        // If any branch doesn't end in tail recursion, the function can return
+        return false;
+      }
+    }
+    // All branches end in tail recursion
+    return true;
+  }
+
+  // Direct tail recursive call
+  return is_tail_recursive_call(body, fn_name);
+}
+
 Type *create_coroutine_inst(Type *ret_type) {
   Type *instance_type = type_fn(&t_void, create_option_type(ret_type));
   Type **arg = t_alloc(sizeof(Type *));
@@ -351,6 +414,17 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   body_type = apply_substitution(ls, body_type);
+
+  // Check for direct infinite tail recursion pattern, eg
+  // let f = fn () ->
+  //   print "do some work\n";
+  //   f ()
+  // ;;
+  // If the function ends with an unconditional recursive call, treat it as void
+  if (ast->data.AST_LAMBDA.fn_name.chars != NULL &&
+      has_infinite_tail_recursion(body, ast->data.AST_LAMBDA.fn_name.chars)) {
+    body_type = &t_void;
+  }
 
   // Build the final function type
   Type *result_type = body_type;

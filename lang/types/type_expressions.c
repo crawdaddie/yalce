@@ -131,6 +131,9 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         members[i] = sch;
       }
       names[i] = name;
+      if (members[i]->kind == T_CONS) {
+        members[i]->data.T_CONS.name = name;
+      }
     }
 
     Type *sum_type = create_sum_type(len, members);
@@ -241,7 +244,6 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
     type_error(ast, "Could not compute type declaration\n");
     return NULL;
   }
-
   if (is_sum_type(computed)) {
     bind_type_in_ctx(binding, computed, (binding_md){}, ctx);
     for (int i = 0; i < computed->data.T_CONS.num_args; i++) {

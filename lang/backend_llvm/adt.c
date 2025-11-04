@@ -60,6 +60,10 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
                                           JITLangCtx *ctx, LLVMModuleRef module,
                                           LLVMBuilderRef builder) {
 
+  if (enum_type->kind == T_FN) {
+    enum_type = fn_return_type(enum_type);
+  }
+
   int i = 0;
   while (strcmp(mem_name, enum_type->data.T_CONS.args[i]->data.T_CONS.name) !=
          0) {

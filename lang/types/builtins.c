@@ -427,6 +427,20 @@ Type create_cor_map_scheme() {
       {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = cmap_f}}};
 }
 
+Type cor_try_opt_scheme;
+Type create_cor_try_opt_scheme() {
+  Type *a = tvar("a");
+  Type *opta = create_option_type(a);
+
+  Type *f = type_fn(opta, a);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList) * 1);
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 Type cor_combine_scheme;
 Type create_cor_combine_scheme() {
   Type *a = tvar("a");
@@ -696,6 +710,9 @@ void initialize_builtin_types() {
 
   cor_combine_scheme = create_cor_combine_scheme();
   add_builtin("cor_combine", &cor_combine_scheme);
+
+  cor_try_opt_scheme = create_cor_try_opt_scheme();
+  add_builtin("cor_try_opt", &cor_try_opt_scheme);
 
   use_or_finish_scheme = create_use_or_finish_scheme();
   add_builtin("use_or_finish", &use_or_finish_scheme);

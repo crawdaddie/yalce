@@ -321,6 +321,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
+
     } else if (!is_sum_type(t) && t->kind != T_FN) {
       TypeClass cons = {.name = "Constructor"};
       if (!type_implements(t, &cons)) {
