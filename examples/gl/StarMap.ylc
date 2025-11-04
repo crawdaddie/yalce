@@ -59,16 +59,17 @@ let parse = fn bytes: (String) lines cols cur_star: (Star) list: (List of Star) 
   )
 ;;
 
-let max_brightness = Math.pow 10.0 ((-0.4) * (-2.0));  # mag -2
-let min_brightness = Math.pow 10.0 ((-0.4) * 12.0);    # mag 12
+let MAX_BRIGHTNESS = Math.pow 10.0 ((-0.4) * (-2.0));  # mag -2
+let MIN_BRIGHTNESS = Math.pow 10.0 ((-0.4) * 12.0);    # mag 12
+
 let magnitude_to_brightness = fn mag ->
-  let clamped_mag = Math.max (-2.0) (Math.min 12.0 mag);
-  
-  let brightness = Math.pow 10.0 ((-0.4) * clamped_mag);
-  
-  
-  let normalized = (brightness - min_brightness) / (max_brightness - min_brightness);
-  Math.max 0.1 (Math.min 1.0 normalized)
+
+  let clamped_mag = mag |> Math.clamp -2.0 12.0 in
+  let brightness = Math.pow 10.0 (-0.4 * clamped_mag) in
+  brightness
+  |> Math.normalize MIN_BRIGHTNESS MAX_BRIGHTNESS
+  |> Math.clamp 0.1 1.
+
 ;;
 
 let get_stars_array = fn list: (List of Star) idx arr ->
@@ -141,7 +142,6 @@ void main() \{
 
   let rout = fn p ->
     set_uniform p (cstr [|
-
       Math.rand_double_range -2000. 2000.,
       Math.rand_double_range -2000. 2000.,
       Math.rand_double_range -1000. 1000.
@@ -150,6 +150,5 @@ void main() \{
     yield rout p
   ;;
 
-  play_routine 0 schedule_event (rout pos);
-  pos
+  play_routine 0 schedule_event (rout pos)
 );

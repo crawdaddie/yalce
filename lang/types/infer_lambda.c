@@ -339,6 +339,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   bind_recursive_ref(ast, recursive_fn_type, &lctx);
 
   Type *body_type = infer(body, &lctx);
+
   if (!body_type) {
     return type_error(body, "Error: Cannot infer lambda body\n");
   }

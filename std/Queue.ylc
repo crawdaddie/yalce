@@ -12,9 +12,11 @@ let append = fn n (h, t) ->
     (h, tt)
   )
 ;;
+
 let prepend = fn n (h, t) ->
   (n::h, t)
 ;;
+
 let pop_left = fn (h, t) ->
   match h with
   | x::rest -> Some (x, (rest, t))  
@@ -23,20 +25,14 @@ let pop_left = fn (h, t) ->
 
 
 let test = module () ->
-  let test_int_queue = fn () -> 
-
+  let test_int_queue =  
     let q = of_list [1,]
       |> append 2 
       |> append 3 
-      |> append 4;  
-
-    let res = match pop_left q with
+      |> append 4
+    in
+    match pop_left q with
       | Some (h, _) if h == 1 -> true  
       | _ -> false
-    ;
-    res
-
-  ;;
-
+      ;
 ;
-

@@ -25,22 +25,25 @@ let tanh = extern fn Double -> Double;
 
 
 let max = fn a b ->
-  match a > b with 
-  | true -> a 
-  | _ -> b
+match a > b with 
+| true -> a 
+| _ -> b
 ;;
 
 let min = fn a b ->
-  match a < b with 
-  | true -> a 
-  | _ -> b
+match a < b with 
+| true -> a 
+| _ -> b
 ;;
+let clamp = fn mn mx v -> v |> min mx |> max mn ;;
 
 let abs = fn a ->
-  match a > 0 with
-  | true -> a
-  | _ -> a * -1
+match a > 0 with
+| true -> a
+| _ -> a * -1
 ;;
+
+let normalize = fn mn mx v -> (v - mn) / (mx - mn);;
 
 let chance = fn thresh f -> 
   let x = rand_double () in

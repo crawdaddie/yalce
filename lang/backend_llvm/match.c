@@ -298,6 +298,9 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
   bool is_tail_position = ast->is_body_tail;
 
+  // Save current insertion point before creating merge block
+  LLVMBasicBlockRef current_insert_block = LLVMGetInsertBlock(builder);
+
   // Create merge block only if not in tail position
   LLVMBasicBlockRef merge_block = NULL;
   LLVMValueRef result_phi = NULL;
@@ -306,13 +309,9 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     merge_block = LLVMAppendBasicBlock(parent_func, "match.merge");
     LLVMPositionBuilderAtEnd(builder, merge_block);
     result_phi = LLVMBuildPhi(builder, llvm_result_type, "match.result");
-    // Position back to continue building branches
-    LLVMPositionBuilderAtEnd(builder, LLVMGetFirstBasicBlock(parent_func));
-    LLVMPositionBuilderAtEnd(
-        builder, LLVMGetLastInstruction(LLVMGetEntryBasicBlock(parent_func))
-                     ? LLVMGetInstructionParent(LLVMGetLastInstruction(
-                           LLVMGetEntryBasicBlock(parent_func)))
-                     : LLVMGetEntryBasicBlock(parent_func));
+
+    // Restore builder to where it was before creating merge block
+    LLVMPositionBuilderAtEnd(builder, current_insert_block);
   }
 
   // Track whether we actually use the merge block

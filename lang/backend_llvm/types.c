@@ -121,6 +121,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
                 "Error type var %s not found in environment! [compiler source "
                 ": %s:%d]\n",
                 type->data.T_VAR, __FILE__, __LINE__);
+        // print_ast(__current_ast);
         print_location(__current_ast);
         return NULL;
         // return type_to_llvm_type(&t_string, ctx, module);

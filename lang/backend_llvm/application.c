@@ -191,6 +191,7 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
 
   if (!callable) {
     fprintf(stderr, "Error: callable not found for\n");
+    print_ast_err(ast->data.AST_APPLICATION.function);
     print_location(ast);
     return NULL;
   }
