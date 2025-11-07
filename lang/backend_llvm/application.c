@@ -3,6 +3,7 @@
 #include "closures.h"
 #include "coroutines.h"
 #include "function.h"
+#include "function_extern.h"
 #include "modules.h"
 #include "symbols.h"
 #include "types.h"
@@ -65,14 +66,15 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
 
-  // printf("handle type conversion: ");
-  // LLVMDumpValue(val);
-  // printf("\n");
-  // print_type(from_type);
-  // print_type(to_type);
-
   if (types_equal(from_type, to_type)) {
     return val;
+  }
+  if (is_pointer_type(to_type) && to_type->data.T_CONS.num_args == 1 &&
+      types_equal(to_type->data.T_CONS.args[0], from_type)) {
+    LLVMTypeRef lvft = type_to_llvm_type(from_type, ctx, module);
+    LLVMValueRef alloca = LLVMBuildAlloca(builder, lvft, "tmp_alloca");
+    LLVMBuildStore(builder, val, alloca);
+    return alloca;
   }
 
   JITSymbol *constructor_sym = NULL;

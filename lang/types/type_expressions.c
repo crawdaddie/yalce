@@ -171,6 +171,13 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         Type *final = instantiate_type_in_env(container, &env);
         return final;
       }
+      if (is_pointer_type(container)) {
+        container = deep_copy_type(container);
+        container->data.T_CONS.args = t_alloc(sizeof(Type *));
+        container->data.T_CONS.args[0] = contained;
+        container->data.T_CONS.num_args = 1;
+        return container;
+      }
 
       // printf("OF\n");
       // print_ast(container_ast);

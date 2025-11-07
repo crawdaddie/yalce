@@ -8,6 +8,7 @@
 #include "parse.h"
 #include "symbols.h"
 #include "tuple.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -133,7 +134,6 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
       return;
     }
 
-    // Handle sum type variant with arguments
     Type *cons_type = pattern->type;
     if (cons_type->kind == T_CONS && is_sum_type(cons_type)) {
 
@@ -147,26 +147,21 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
         }
       }
 
-      // Add tag test
       LLVMValueRef tag = extract_tag(val, builder);
       LLVMValueRef tag_test =
           LLVMBuildICmp(builder, LLVMIntEQ, tag,
                         LLVMConstInt(LLVMInt8Type(), vidx, 0), "tag_match");
 
-      // AND with accumulated result
       *test_result = LLVMBuildAnd(builder, *test_result, tag_test, "");
 
-      // Extract payload and test nested pattern
       LLVMValueRef payload = codegen_tuple_access(
           1, val, type_to_llvm_type(cons_type, ctx, module), builder);
-      Type *payload_type = variant_type->data.T_CONS.args[0];
-      LLVMTypeRef llvm_payload_type =
-          type_to_llvm_type(payload_type, ctx, module);
 
       for (int i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
-        test_pattern_rec(pattern->data.AST_APPLICATION.args + i, bl,
-                         test_result, payload, llvm_payload_type, payload_type,
-                         ctx, module, builder);
+        test_pattern_rec(
+            pattern->data.AST_APPLICATION.args + i, bl, test_result, payload,
+            type_to_llvm_type(variant_type->data.T_CONS.args[i], ctx, module),
+            variant_type->data.T_CONS.args[i], ctx, module, builder);
       }
     }
     return;

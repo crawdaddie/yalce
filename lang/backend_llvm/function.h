@@ -24,9 +24,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
                             LLVMModuleRef module);
 
-LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                               LLVMBuilderRef builder);
-
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder);
 
@@ -58,7 +55,4 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
 
 TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t);
 
-LLVMValueRef instantiate_extern_fn_sym(JITSymbol *sym, JITLangCtx *ctx,
-                                       LLVMModuleRef module,
-                                       LLVMBuilderRef builder);
 #endif

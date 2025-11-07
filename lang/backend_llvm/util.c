@@ -39,21 +39,6 @@ LLVMValueRef and_vals(LLVMValueRef l, LLVMValueRef r, LLVMBuilderRef builder) {
   return LLVMBuildAnd(builder, l, r, "and_vals");
 }
 
-LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
-                           LLVMModuleRef module) {
-  LLVMValueRef fn = LLVMGetNamedFunction(module, name);
-
-  if (fn == NULL) {
-    fn = LLVMAddFunction(module, name, fn_type);
-
-    // Set C calling convention for extern functions
-    // This ensures LLVM uses the platform's C ABI, including proper
-    // struct return handling (sret) for large return values
-    LLVMSetFunctionCallConv(fn, LLVMCCallConv);
-  }
-  return fn;
-}
-
 LLVMValueRef alloc(LLVMTypeRef type, JITLangCtx *ctx, LLVMBuilderRef builder) {
   return ctx->stack_ptr == 0 ? LLVMBuildMalloc(builder, type, "heap_alloc")
                              : LLVMBuildAlloca(builder, type, "stack_alloc");

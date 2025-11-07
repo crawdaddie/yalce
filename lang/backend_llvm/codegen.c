@@ -3,6 +3,7 @@
 #include "backend_llvm/application.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/function.h"
+#include "backend_llvm/function_extern.h"
 #include "backend_llvm/list.h"
 #include "backend_llvm/match.h"
 #include "backend_llvm/strings.h"

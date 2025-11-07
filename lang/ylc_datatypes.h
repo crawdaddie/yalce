@@ -10,7 +10,7 @@ typedef struct {
 #define YLC_STRING_TYPE(n)                                                     \
   typedef struct {                                                             \
     int size;                                                                  \
-    const char *chars;                                                         \
+    char *chars;                                                               \
   } n;
 
 typedef struct {

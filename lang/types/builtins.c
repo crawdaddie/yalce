@@ -549,6 +549,7 @@ Type create_sizeof_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 Type dlopen_type = MAKE_FN_TYPE_2(&t_string, &t_void);
+Type cor_current_scheme = MAKE_FN_TYPE_2(&t_void, &t_ptr);
 
 void initialize_builtin_types() {
   ht_init(&builtin_types);
@@ -719,6 +720,9 @@ void initialize_builtin_types() {
 
   cor_stop_scheme = create_cor_stop_scheme();
   add_builtin("cor_stop", &cor_stop_scheme);
+
+  add_builtin("cor_current", &cor_current_scheme);
+
   play_routine_scheme = create_play_routine_scheme();
   add_builtin("play_routine", &play_routine_scheme);
 

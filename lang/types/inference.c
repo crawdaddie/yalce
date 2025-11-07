@@ -442,6 +442,11 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
       return 0;
     }
 
+    if (is_pointer_type(t1) && (t1->data.T_CONS.num_args == 1) &&
+        !unify(t1->data.T_CONS.args[0], t2, unify_res)) {
+      return 0;
+    }
+
     // NB: don't worry about comparing the cons names - as long as the contained
     // types match it doesn't really matter
     // if (is_list_type(t1)) {
@@ -1199,6 +1204,11 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
                     ctx->current_fn_ast->data.AST_LAMBDA.num_yields) ||
                    0}}};
 
+  // if (expr->tag == AST_YIELD && ctx->current_fn_ast &&
+  //     ctx->current_fn_ast->data.AST_LAMBDA.num_yields == 1) {
+  //   bmd.data.VAR.yield_boundary_scope = 0;
+  // }
+
   if (body) {
     TICtx body_ctx = *ctx;
     body_ctx.scope = binding_scope;
@@ -1556,8 +1566,29 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
   case AST_RECORD_ACCESS: {
+    print_ast(ast);
 
     Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
+    // if (is_sum_type(rec_type)) {
+    //   print_type(rec_type);
+    //   for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+    //
+    //     print_type(rec_type->data.T_CONS.args[i]);
+    //
+    //     printf("variant member %s == %s ?\n",
+    //            rec_type->data.T_CONS.args[i]->data.T_CONS.name,
+    //            ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value);
+    //
+    //     if (CHARS_EQ(
+    //             ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value,
+    //             rec_type->data.T_CONS.args[i]->data.T_CONS.name)) {
+    //       rec_type = rec_type->data.T_CONS.args[i];
+    //       print_type(rec_type->data.T_CONS.args[i]);
+    //       break;
+    //     }
+    //   }
+    // }
+    // print_type(rec_type);
 
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;

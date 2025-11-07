@@ -1,5 +1,6 @@
 #include "./module.h"
 #include "function.h"
+#include "function_extern.h"
 #include "modules.h"
 #include "serde.h"
 #include "symbols.h"

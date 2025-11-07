@@ -7,6 +7,7 @@
 #include "codegen.h"
 #include "coroutines.h"
 #include "function.h"
+#include "function_extern.h"
 #include "globals.h"
 #include "ht.h"
 #include "module.h"

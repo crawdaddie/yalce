@@ -71,6 +71,7 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
   }
 
   LLVMValueRef some = LLVMGetUndef(tu_type);
+
   int num = 0;
   some = LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), i, 0),
                               0, "insert Some tag");
@@ -78,15 +79,28 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
   // Get the union field type (the second field of your struct)
   LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
   LLVMValueRef union_value = LLVMGetUndef(union_type);
+  LLVMValueRef val;
 
-  LLVMValueRef val =
-      codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
+  if (app->data.AST_APPLICATION.len > 1) {
+    for (int i = 0; i < app->data.AST_APPLICATION.len; i++) {
 
-  union_value =
-      LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
+      LLVMValueRef field_val =
+          codegen(app->data.AST_APPLICATION.args + i, ctx, module, builder);
 
-  some = LLVMBuildInsertValue(builder, some, union_value, 1,
-                              "insert variant data");
+      union_value = LLVMBuildInsertValue(builder, union_value, field_val, i,
+                                         "insert int arg");
+    }
+    some = LLVMBuildInsertValue(builder, some, union_value, 1,
+                                "insert variant data");
+  } else {
+    val = codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
+
+    union_value =
+        LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
+
+    some = LLVMBuildInsertValue(builder, some, union_value, 1,
+                                "insert variant data");
+  }
 
   return some;
 }
