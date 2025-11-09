@@ -111,11 +111,11 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef array_struct = LLVMGetUndef(array_type);
 
   LLVMValueRef data_ptr;
-
   if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
     data_ptr = LLVMBuildArrayAlloca(builder, element_type, size_const,
                                     "array_data_alloc");
   } else {
+
     data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
                                     "array_data_alloc");
   }
@@ -170,7 +170,8 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // =
   //     LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
   // TODO: use proper allocation strategy
-  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
+  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC &&
+      ctx->coro_ctx == NULL) {
     data_ptr =
         LLVMBuildArrayAlloca(builder, element_type, size_const, "element_ptr");
   } else {

@@ -196,6 +196,7 @@ bool is_generic(Type *t) {
   }
 
   switch (t->kind) {
+
   case T_VAR: {
     if (t->is_recursive_type_ref) {
       return false;
@@ -322,6 +323,7 @@ Type *deep_copy_type(const Type *original) {
   case T_FN: {
     copy->data.T_FN.from = deep_copy_type(original->data.T_FN.from);
     copy->data.T_FN.to = deep_copy_type(original->data.T_FN.to);
+    copy->data.T_FN.attributes = original->data.T_FN.attributes;
     break;
   }
 
@@ -664,4 +666,16 @@ Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2) {
              {.T_CONS = {.name = tc->name, .args = args, .num_args = 2}}};
   resolution->implements = tc;
   return resolution;
+}
+
+bool has_attr(TypeAttributes attrs, TypeAttributes flag) {
+  return (attrs & flag) != 0;
+}
+
+TypeAttributes set_attr(TypeAttributes attrs, TypeAttributes flag) {
+  return attrs | flag;
+}
+
+TypeAttributes clear_attr(TypeAttributes attrs, TypeAttributes flag) {
+  return attrs & ~flag;
 }

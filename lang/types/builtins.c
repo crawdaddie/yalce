@@ -252,14 +252,18 @@ Type create_array_set_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 Type array_fill_const_scheme;
-Type create_array_fill_const_scheme() {
 
+Type create_array_fill_const_scheme() {
   Type *a = tvar("a");
   Type *arr = create_array_type(a);
 
   Type *f = arr;
   f = type_fn(a, f);
   f = type_fn(&t_int, f);
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, ATTR_ALLOCATES);
+
+  // printf("%llu %d allocates\n", f->data.T_FN.attributes,
+  //        has_attr(f->data.T_FN.attributes, ATTR_ALLOCATES));
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
@@ -279,6 +283,7 @@ Type create_array_fill_scheme() {
   Type *f = arr;
   f = type_fn(fill_func, f);
   f = type_fn(&t_int, f);
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, ATTR_ALLOCATES);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 

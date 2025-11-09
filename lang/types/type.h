@@ -171,6 +171,50 @@ enum TypeKind {
 };
 #define TYPE_FLAGS_PRIMITIVE ((1 << T_STRING) | ((1 << T_STRING) - 1))
 
+// Bitfield attribute flags (64 max)
+typedef uint64_t TypeAttributes;
+
+// Predefined attribute flags
+#define ATTR_NONE           0x0000000000000000ULL
+#define ATTR_PURE           0x0000000000000001ULL  // Pure function (no side effects)
+#define ATTR_INLINE         0x0000000000000002ULL  // Inline hint
+#define ATTR_NOINLINE       0x0000000000000004ULL  // Never inline
+#define ATTR_REALTIME_SAFE  0x0000000000000008ULL  // Safe for audio callback
+#define ATTR_ALLOCATES      0x0000000000000010ULL  // Module export
+#define ATTR_RECURSIVE      0x0000000000000020ULL  // Recursive function
+//
+// #define ATTR_TAIL_RECURSIVE 0x0000000000000040ULL  // Tail-recursive
+// #define ATTR_MEMOIZED       0x0000000000000080ULL  // Memoization candidate
+// #define ATTR_HOT            0x0000000000000100ULL  // Hot path (optimize)
+// #define ATTR_COLD           0x0000000000000200ULL  // Cold path (deprioritize)
+// #define ATTR_UNSAFE         0x0000000000000400ULL  // Unsafe operations
+// #define ATTR_FFI            0x0000000000000800ULL  // Foreign function
+// #define ATTR_COROUTINE      0x0000000000001000ULL  // Coroutine function
+// #define ATTR_ASYNC          0x0000000000002000ULL  // Async/await
+// #define ATTR_VARIADIC       0x0000000000004000ULL  // Variadic function
+// #define ATTR_DEPRECATED     0x0000000000008000ULL  // Deprecated
+// #define ATTR_EXPERIMENTAL   0x0000000000010000ULL  // Experimental feature
+// #define ATTR_OPAQUE         0x0000000000020000ULL  // Opaque type
+
+// Attribute query functions
+bool has_attr(TypeAttributes attrs, TypeAttributes flag);
+
+TypeAttributes set_attr(TypeAttributes attrs, TypeAttributes flag);
+
+TypeAttributes clear_attr(TypeAttributes attrs, TypeAttributes flag);
+
+// static inline bool has_any_attr(TypeAttributes attrs, TypeAttributes flags) {
+//   return (attrs & flags) != 0;
+// }
+//
+// static inline bool has_all_attrs(TypeAttributes attrs, TypeAttributes flags) {
+//   return (attrs & flags) == flags;
+// }
+
+// Pretty printing
+const char* attr_to_string(TypeAttributes attr);
+void print_attrs(TypeAttributes attrs);
+
 typedef struct TypeList {
   Type *type;
   struct TypeList *next;
@@ -194,6 +238,7 @@ typedef struct Type {
     struct {
       struct Type *from;
       struct Type *to;
+      TypeAttributes attributes;
     } T_FN;
 
     struct {
@@ -210,10 +255,7 @@ typedef struct Type {
   void *constructor;
   // size_t constructor_size;
   bool is_coroutine_instance;
-  bool is_coroutine_constructor;
   bool is_recursive_type_ref;
-  bool is_ref;
-  bool alloced_in_func; // metadata if this type appears as a function return
   struct Type *closure_meta;
   // bool is_recursive_placeholder;
   int scope;

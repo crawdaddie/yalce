@@ -284,9 +284,11 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
            j++) {
         Ast *bx = bxs->ast;
         Type *bxt = bx->type;
+
         if (is_generic(bxt)) {
           bxt = resolve_type_in_env(bxt, ctx->env);
         }
+
         LLVMValueRef state_storage =
             LLVMBuildStructGEP2(builder, coro_ctx.state_layout, state, i, "");
 

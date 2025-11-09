@@ -225,7 +225,6 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     print_type_err(func_type);
     fprintf(stderr, "  != \n");
     print_type_err(expected_type);
-    // print_constraints(unify_ctx.constraints);
     return NULL;
   }
 
@@ -240,6 +239,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     expected_type->closure_meta = deep_copy_type(func_type->closure_meta);
   }
   expected_type = apply_substitution(solution, expected_type);
+  expected_type->data.T_FN.attributes = func_type->data.T_FN.attributes;
   ast->data.AST_APPLICATION.function->type = expected_type;
 
   Type *res = expected_type;

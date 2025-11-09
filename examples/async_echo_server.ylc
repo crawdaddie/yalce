@@ -1,0 +1,65 @@
+# Minimal async I/O example
+
+let _ = dlopen "libs/asyncio/libasyncio.so";
+import std/Math;
+
+
+
+let AF_INET = 2;
+let SOCK_STREAM = 1;
+let INADDR_ANY = 0; 
+let socket =  extern fn Int -> Int -> Int -> Int;
+let create_server_addr = extern fn Int -> Int -> Int -> Ptr; 
+let bind =    extern fn Int -> Ptr -> Int -> Int;
+let listen =  extern fn Int -> Int -> Int;
+
+let io_accept = extern fn Int -> Ptr -> Ptr -> Ptr;
+let io_read   = extern fn Int -> Ptr -> Ptr -> Ptr;
+let io_write  = extern fn Int -> Ptr -> Ptr -> Ptr;
+
+let event_loop_create = extern fn () -> Ptr;
+let event_loop_register_coroutine = extern fn Ptr -> Coroutine of Ptr -> ();
+let event_loop_run = extern fn Ptr -> ();
+
+let memcpy = extern fn Ptr -> Ptr -> Int -> ();
+
+let handle_request = fn input: (String) res_ptr: (Ptr) ->
+  let write_data = `HTTP/1.1 200 OK\r
+Content-Length: 13\r
+X-Clacks-Overhead: GNU Terry Pratchett\r
+\r
+{Math.rand_int 20000} Hello, World!`;
+  memcpy res_ptr (cstr write_data) (array_size write_data);
+  res_ptr
+;;
+
+
+let handle_connection = fn sfd ->
+  let cfd = [| 0 |] ;
+  yield cor_current () |> io_accept sfd (cstr cfd);
+
+  let read_res = array_fill_const 4096 '\0'; 
+  yield cor_current () |> io_read (cfd[0]) (cstr read_res);
+
+
+  let write_data = array_fill_const 4096 '\0'; 
+  handle_request read_res (cstr write_data);
+  yield cor_current () |> io_write (cfd[0]) (cstr write_data)
+
+;;
+
+let loop = event_loop_create ();
+let init_server = fn port ->
+  let server_addr = create_server_addr AF_INET INADDR_ANY port;
+  let server_fd = socket AF_INET SOCK_STREAM 0;
+  bind server_fd server_addr 16;
+  listen server_fd 10;
+  server_fd
+;;
+
+let server_fd = init_server 8000;
+let coro = handle_connection server_fd;
+event_loop_register_coroutine loop coro;
+event_loop_run loop;
+
+

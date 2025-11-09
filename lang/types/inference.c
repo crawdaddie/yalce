@@ -84,6 +84,7 @@ Type *instantiate(Type *sch, TICtx *ctx) {
 
   Type *stype = deep_copy_type(sch->data.T_SCHEME.type);
   Type *s = apply_substitution(substs, stype);
+
   return s;
 }
 
@@ -574,6 +575,8 @@ Type *apply_substitution(Subst *subst, Type *t) {
     Type *to = apply_substitution(subst, t->data.T_FN.to);
 
     t->data.T_FN.to = to;
+    // print_type(t->data.T_FN.from);
+    //   printf("attributes %llu\n", t->data.)
 
     return t;
   }
@@ -1566,29 +1569,8 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
   case AST_RECORD_ACCESS: {
-    print_ast(ast);
 
     Type *rec_type = infer(ast->data.AST_RECORD_ACCESS.record, ctx);
-    // if (is_sum_type(rec_type)) {
-    //   print_type(rec_type);
-    //   for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
-    //
-    //     print_type(rec_type->data.T_CONS.args[i]);
-    //
-    //     printf("variant member %s == %s ?\n",
-    //            rec_type->data.T_CONS.args[i]->data.T_CONS.name,
-    //            ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value);
-    //
-    //     if (CHARS_EQ(
-    //             ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value,
-    //             rec_type->data.T_CONS.args[i]->data.T_CONS.name)) {
-    //       rec_type = rec_type->data.T_CONS.args[i];
-    //       print_type(rec_type->data.T_CONS.args[i]);
-    //       break;
-    //     }
-    //   }
-    // }
-    // print_type(rec_type);
 
     const char *member_name =
         ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
