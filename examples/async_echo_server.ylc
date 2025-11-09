@@ -38,12 +38,12 @@ let handle_connection = fn sfd ->
   let cfd = [| 0 |] ;
   yield cor_current () |> io_accept sfd (cstr cfd);
 
-  let read_res = array_fill_const 4096 '\0'; 
-  yield cor_current () |> io_read (cfd[0]) (cstr read_res);
+  let read_data = array_fill_const 4096 '\0'; 
+  yield cor_current () |> io_read (cfd[0]) (cstr read_data);
 
 
   let write_data = array_fill_const 4096 '\0'; 
-  handle_request read_res (cstr write_data);
+  handle_request read_data (cstr write_data);
   yield cor_current () |> io_write (cfd[0]) (cstr write_data)
 
 ;;
