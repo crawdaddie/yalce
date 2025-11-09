@@ -82,6 +82,17 @@ void ctx_bind_allocations(EACtx *ctx, Ast *binding, Allocation *allocs) {
   }
 }
 
+bool alloc_crosses_yield_boundary(Allocation *alloc, Ast *lambda_ast) {
+
+  AST_LIST_ITER(
+      lambda_ast->data.AST_LAMBDA.yield_boundary_crossers, ({
+        if (CHARS_EQ(l->ast->data.AST_IDENTIFIER.value, alloc->varname)) {
+          return true;
+        }
+      }));
+  return false;
+}
+
 Allocation *ea(Ast *ast, EACtx *ctx) {
 
   if (!ast) {
@@ -155,8 +166,15 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     }
 
     for (Allocation *a = lambda_ctx.allocations; a; a = a->next) {
+
       EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
-      *ea_meta = (EscapeMeta){.status = EA_STACK_ALLOC, .id = a->id};
+      if (alloc_crosses_yield_boundary(a, ast)) {
+
+        *ea_meta = (EscapeMeta){.status = EA_HEAP_ALLOC, .id = a->id};
+      } else {
+
+        *ea_meta = (EscapeMeta){.status = EA_STACK_ALLOC, .id = a->id};
+      }
       a->alloc_site->ea_md = ea_meta;
     }
 
@@ -173,6 +191,11 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
       return allocations_extend(allocations, closure_alloc);
     }
 
+    // AST_LIST_ITER(ast->data.AST_LAMBDA.yield_boundary_crossers, ({
+    //                 EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
+    //                 *ea_meta = (EscapeMeta){.status = EA_HEAP_ALLOC};
+    //                 l->ast->ea_md = ea_meta;
+    //               }));
     return NULL;
   }
 
@@ -187,12 +210,13 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
   }
 
   case AST_APPLICATION: {
-
-    // ea(ast->data.AST_APPLICATION.function, ctx);
-
-    // for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-    //   ea(ast->data.AST_APPLICATION.args + i, ctx);
-    // }
+    if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+      Ast *fn_ast = ast->data.AST_APPLICATION.function;
+      if (CHARS_EQ(fn_ast->data.AST_IDENTIFIER.value, "array_fill_const")) {
+        Allocation *arr_alloc = create_alloc(NULL, ast, ctx->scope);
+        return allocations_extend(allocations, arr_alloc);
+      }
+    }
 
     break;
   }

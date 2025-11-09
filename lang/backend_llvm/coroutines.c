@@ -46,6 +46,9 @@ static LLVMValueRef compile_coroutine_init(const char *name,
   LLVMBuildStore(builder, promise_struct,
                  coro_promise_gep(coro, cor_obj_type, builder));
 
+  printf("state layout for %s\n", name);
+  LLVMDumpType(coro_ctx->state_layout);
+
   if (coro_ctx->state_layout) {
     LLVMValueRef state_storage =
         LLVMBuildMalloc(builder, coro_ctx->state_layout, "");
@@ -284,9 +287,14 @@ LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
            j++) {
         Ast *bx = bxs->ast;
         Type *bxt = bx->type;
+        printf("implicit state var %d\n", i);
+        print_ast(bx);
+        print_type(bxt);
+
         if (is_generic(bxt)) {
           bxt = resolve_type_in_env(bxt, ctx->env);
         }
+
         LLVMValueRef state_storage =
             LLVMBuildStructGEP2(builder, coro_ctx.state_layout, state, i, "");
 

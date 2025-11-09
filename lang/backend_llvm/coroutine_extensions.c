@@ -740,6 +740,7 @@ LLVMValueRef CorStatusHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       coro, LLVMStructType((LLVMTypeRef[]){LLVMInt32Type()}, 1, 0), builder);
   return count;
 }
+
 LLVMValueRef CorGetPromiseValHandler(Ast *ast, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
@@ -756,6 +757,34 @@ LLVMValueRef CorGetPromiseValHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef prom_val =
       coro_promise(coro, coro_obj_type, promise_type, builder);
   return prom_val;
+}
+
+LLVMValueRef CorGetLastValHandler(Ast *ast, JITLangCtx *ctx,
+                                  LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  LLVMValueRef coro = CurrentCorHandler(NULL, ctx, module, builder);
+  CoroutineCtx *coro_ctx = ctx->coro_ctx;
+
+  Type *coro_cons_fn_type = coro_ctx->cons_type;
+  Type *ret_inst_type = fn_return_type(coro_cons_fn_type);
+
+  ret_inst_type = ret_inst_type->data.T_CONS.args[0];
+
+  Type *item_type = ret_inst_type;
+
+  Type *ptype = create_option_type(item_type);
+  LLVMTypeRef promise_type = type_to_llvm_type(ptype, ctx, module);
+  LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
+
+  // Load the promise (Option type with tag at index 0, value at index 1)
+  LLVMValueRef promise =
+      coro_promise(coro, coro_obj_type, promise_type, builder);
+
+  // Extract the value from the Option (index 1)
+  LLVMValueRef value =
+      LLVMBuildExtractValue(builder, promise, 1, "promise.value");
+
+  return value;
 }
 
 LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
