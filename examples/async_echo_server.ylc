@@ -23,7 +23,7 @@ let event_loop_run = extern fn Ptr -> ();
 
 let memcpy = extern fn Ptr -> Ptr -> Int -> ();
 
-let handle_request = fn input: (String) res_ptr: (Ptr) ->
+let handle_request = fn input res_ptr ->
   let resp = `{Math.rand_int 20000} Hello, World!`;
   let write_data = `HTTP/1.1 200 OK\r
 Content-Length: {array_size resp}\r
