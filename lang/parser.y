@@ -128,6 +128,7 @@ program:
 expr:
     atom_expr
   | 'yield' expr                      { $$ = ast_yield($2); }
+  | 'await' expr                      { $$ = ast_await($2); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr atom_expr %prec APPLICATION  { $$ = ast_application($1, $2); }
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }

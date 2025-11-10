@@ -854,11 +854,6 @@ Ast *ast_sequence(Ast *seq, Ast *new) {
   return body;
 }
 
-Ast *ast_await(Ast *awaitable) {
-  // printf("parse await\n");
-  return awaitable;
-}
-
 Ast *ast_fn_sig(Ast *a, Ast *b) {
   a = ast_list(a);
   ast_list_push(a, b);
@@ -942,6 +937,13 @@ Ast *ast_yield(Ast *expr) {
   Ast *y = Ast_new(AST_YIELD);
   y->data.AST_YIELD.expr = expr;
   return y;
+}
+Ast *ast_await(Ast *expr) {
+  expr = ast_application(
+      expr, ast_application(ast_identifier((ObjString){.chars = "cor_current",
+                                                       .length = 11}),
+                            ast_void()));
+  return ast_yield(expr);
 }
 
 Ast *ast_yield_end() {

@@ -13,7 +13,7 @@ syn match ylcStructKey "\v([a-zA-Z_][a-zA-Z0-9_]*)\ze\s*\:" contained containedi
 
 " Keywords
 " Keywords
-syn keyword ylcKeyword fn let in and extern true false match with import open type of if include
+syn keyword ylcKeyword fn let in and extern true false match with import open type of if await yield
 syn match ylcKeywordMatch "\<\(fn\|let\|in\|and\|extern\|true\|false\|match\|with\|import\|type\|of\|if\|include\)\>" contains=ylcKeyword
 
 " Types

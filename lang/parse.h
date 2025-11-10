@@ -400,8 +400,6 @@ Ast *ast_sequence(Ast *seq, Ast *new_);
 
 // Ast *macro(Ast *expr);
 
-Ast *ast_await(Ast *awaitable);
-
 Ast *ast_fn_sig(Ast *, Ast *);
 Ast *ast_fn_sig_push(Ast *, Ast *);
 
@@ -418,6 +416,7 @@ void add_custom_binop(const char *binop_name);
 void print_location(Ast *ast);
 
 Ast *ast_yield(Ast *expr);
+Ast *ast_await(Ast *expr);
 Ast *ast_yield_end();
 
 Ast *ast_thunk_expr(Ast *expr);

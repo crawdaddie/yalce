@@ -72,6 +72,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "then"                  return THEN;
 "else"                  return ELSE;
 "yield"                 return *yytext;
+"await"                 return *yytext;
 "&&"                    return DOUBLE_AMP;
 "&"                     return AMPERSAND;
 "||"                    return DOUBLE_PIPE;
