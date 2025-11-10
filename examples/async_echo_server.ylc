@@ -33,7 +33,6 @@ X-Clacks-Overhead: GNU Terry Pratchett\r
   res_ptr
 ;;
 
-
 let handle_connection = fn sfd ->
   let cfd = [| 0 |] ;
   yield cor_current () |> io_accept sfd (cstr cfd);
@@ -45,7 +44,6 @@ let handle_connection = fn sfd ->
   let write_data = array_fill_const 4096 '\0'; 
   handle_request read_data (cstr write_data);
   yield cor_current () |> io_write (cfd[0]) (cstr write_data)
-
 ;;
 
 let loop = event_loop_create ();

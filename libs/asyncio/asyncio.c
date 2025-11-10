@@ -51,7 +51,6 @@ typedef struct {
   CorPromise promise;
 } Cor;
 
-// Pending I/O operation
 typedef struct PendingOp {
   Cor *cor;
   int32_t waiting_fd;
@@ -87,9 +86,9 @@ typedef struct {
 Cor *clone_coroutine(Cor *cor) {
   Cor *new = io_alloc(sizeof(Cor));
 
-  // TODO: copy state as well (just don't know really how big it is)
   *new = *cor;
   new->state = io_alloc(512 * sizeof(char));
+  // TODO: copy state as well (just don't know really how big it is)
   memcpy(new->state, cor->state, 512);
 
   new->counter = 0;
