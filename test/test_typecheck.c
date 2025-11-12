@@ -452,8 +452,8 @@ int test_list_processing() {
         b->data.AST_BODY.stmts->ast->data.AST_LET.expr->data.AST_LAMBDA.body;
     TASSERT("match result type = Option of `5",
             types_equal(m->type, &TOPT(&TTUPLE(2, &TVAR("`5"),
-                                             &TTUPLE(2, &TLIST(&TVAR("`5")),
-                                                     &TVAR("`2"))))));
+                                               &TTUPLE(2, &TLIST(&TVAR("`5")),
+                                                       &TVAR("`2"))))));
   });
 
   ({
@@ -496,9 +496,10 @@ int test_list_processing() {
                         .data.AST_MATCH_GUARD_CLAUSE.test_expr;
     TASSERT("match branch of pop_left q has type Option of (Int * (Int[] * "
             "Int[] ) )",
-            types_equal(res_bind->type, &TOPT(&TTUPLE(2, &t_int,
-                                                    &TTUPLE(2, &TLIST(&t_int),
-                                                            &TLIST(&t_int))))));
+            types_equal(
+                res_bind->type,
+                &TOPT(&TTUPLE(2, &t_int,
+                              &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))))));
   });
   T("let list_rev = fn l ->\n"
     "  let aux = fn ll res ->\n"
@@ -945,8 +946,9 @@ int test_funcs() {
         AST_LIST_NTH(b->data.AST_BODY.stmts, 2)->data.AST_APPLICATION.args;
     print_ast(sum_inst);
     print_type(sum_inst->type);
-    TASSERT("instance of sum function in app is Int -> Int -> Int",
-            types_equal(sum_inst->type, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
+    TASSERT(
+        "instance of sum function in app is Int -> Int -> Int",
+        types_equal(sum_inst->type, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
   });
 
   T("let bind = extern fn Int -> Int -> Int -> Int;\n"
@@ -1783,7 +1785,7 @@ int test_refs() {
         "array set operator := is Array of Double -> Int -> Double -> Array "
         "of Double",
         types_equal(f->type, &MAKE_FN_TYPE_4(&TARRAY(&t_num), &t_int, &t_num,
-                                           &TARRAY(&t_num))));
+                                             &TARRAY(&t_num))));
   });
   T("let rx = [| 3. |] in rx[0]\n", &t_num);
 
@@ -1944,7 +1946,7 @@ int test_array_processing() {
   // T("let map = fn f: (T -> R) a: (Array of T) ->\n"
   T("let map = fn f a ->\n"
     "  let res = array_fill_const (array_size a) (f (a[0]));\n"
-    "  for i = 1 to (array_size a) in (\n"
+    "  for i = 1 .. (array_size a) in (\n"
     "    let v = f (a [i]);\n"
     "    res[i] :=  v\n"
     "  );\n"
@@ -1955,7 +1957,7 @@ int test_array_processing() {
 
   T("let map = fn f a ->\n"
     "  let res = array_fill_const (array_size a) (f (a[0]));\n"
-    "  for i = 1 to (array_size a) in (\n"
+    "  for i = 1 .. (array_size a) in (\n"
     "    let v = f (a [i]);\n"
     "    res[i] :=  v\n"
     "  );\n"
@@ -1970,7 +1972,7 @@ int test_array_processing() {
     Type array_el = TVAR("`13");
     Ast *bd = T("let map = fn f a ->\n"
                 "  let res = array_fill_const (array_size a) (f (a[0]));\n"
-                "  for i = 1 to (array_size a) in (\n"
+                "  for i = 1 .. (array_size a) in (\n"
                 "    let v = f (a [i]);\n"
                 "    res[i] :=  v\n"
                 "  );\n"
@@ -1994,17 +1996,17 @@ int test_array_processing() {
     print_ast((app->data.AST_APPLICATION.args + 1)
                   ->data.AST_APPLICATION.args->data.AST_APPLICATION.args);
 
-    print_type((app->data.AST_APPLICATION.args + 1)
-                   ->data.AST_APPLICATION.args->data.AST_APPLICATION.args->type);
+    print_type(
+        (app->data.AST_APPLICATION.args + 1)
+            ->data.AST_APPLICATION.args->data.AST_APPLICATION.args->type);
 
     print_type(
         (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->type);
 
-    TASSERT(
-        "array arg at has type `13 -- ",
-        types_equal(
-            (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->type,
-            &array_el));
+    TASSERT("array arg at has type `13 -- ",
+            types_equal((app->data.AST_APPLICATION.args + 1)
+                            ->data.AST_APPLICATION.args->type,
+                        &array_el));
   });
 
   return status;
@@ -2120,7 +2122,7 @@ bool test_audio_funcs() {
               .alias = "Synth"};
     Ast *b =
         T("type Synth = Ptr;\n"
-          "let Constructor : Synth = module () ->\n"
+          "let Synth : Constructor = module () ->\n"
           "  let of_int = fn a: (Int) ->\n"
           "    const_sig a\n"
           "  ;;\n"
@@ -2128,7 +2130,7 @@ bool test_audio_funcs() {
           "    const_sig a\n"
           "  ;;\n"
           ";\n"
-          "let Arithmetic : Synth = module () ->\n"
+          "let Synth : Arithmetic = module () ->\n"
           "  let rank = 5.; \n"
           "  let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;\n"
           "  let sub = fn a: (Synth) b: (Synth) -> sub2_node a b;;\n"
@@ -2149,8 +2151,9 @@ bool test_audio_funcs() {
                         .AST_APPLICATION.args +
                     1)
                        ->data.AST_APPLICATION.function;
-    TASSERT("internal fn binop type Double -> Double -> Double",
-            types_equal(problem->type, &MAKE_FN_TYPE_3(&t_num, &t_num, &t_num)));
+    TASSERT(
+        "internal fn binop type Double -> Double -> Double",
+        types_equal(problem->type, &MAKE_FN_TYPE_3(&t_num, &t_num, &t_num)));
   });
 
   return status;
@@ -2171,7 +2174,8 @@ bool test_type_exprs() {
       "  | PatDouble of Double\n"
       "  | PatList of List of Pat\n"
       "  ;\n",
-      &TSUM(3, &t_int, &t_num, &TLIST(&TVAR("Pat"))));
+      &TSUM(3, &TCONS("PatInt", 1, &t_int), &TCONS("PatDouble", 1, &t_num),
+            &TCONS("PatList", 1, &TLIST(&TVAR("Pat")))));
   });
   return status;
 }
@@ -2299,10 +2303,11 @@ bool test_opts() {
   bool status = true;
   ({
     Ast *b = T("Some 1 == None", &t_bool);
-    TASSERT("LHS of == operation forces None to be same type as LHS: ",
-            types_equal(
-                b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
-                &MAKE_FN_TYPE_3(&TOPT(&t_int), &TOPT(&t_int), &t_bool)));
+    TASSERT(
+        "LHS of == operation forces None to be same type as LHS: ",
+        types_equal(
+            b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
+            &MAKE_FN_TYPE_3(&TOPT(&t_int), &TOPT(&t_int), &t_bool)));
 
     // print_ast(b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.args + 1);
     // print_type(
@@ -2310,10 +2315,11 @@ bool test_opts() {
   });
   ({
     Ast *b = T("Some 1", &TOPT(&t_int));
-    TASSERT("Some instance has application form of Option of Int\n",
-            types_equal(
-                b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
-                &MAKE_FN_TYPE_2(&t_int, &TOPT(&t_int))));
+    TASSERT(
+        "Some instance has application form of Option of Int\n",
+        types_equal(
+            b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
+            &MAKE_FN_TYPE_2(&t_int, &TOPT(&t_int))));
   });
   return status;
 }
@@ -2364,7 +2370,7 @@ bool test_math_funcs() {
   Ast *b = T("let shuffle = fn n -> \n"
              "  let arr = array_fill n (fn i -> i);\n"
              "\n"
-             "  for _i = 0 to n in (\n"
+             "  for _i = 0 .. n in (\n"
              "    let i = n - 1 - _i; # reverse\n"
              "    let j = rand_int (i + 1);\n"
              "    let iv = arr[i];\n"
@@ -2379,10 +2385,11 @@ bool test_math_funcs() {
           ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts,
       1);
 
-  TASSERT("Int",
-          types_equal(
-              AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->type,
-              &t_int));
+  TASSERT(
+      "Int",
+      types_equal(
+          AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->type,
+          &t_int));
   return status;
 }
 

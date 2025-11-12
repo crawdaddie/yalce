@@ -31,6 +31,7 @@ enum PType {
   ASYNC_ACCEPT = 0,
   ASYNC_READ = 1,
   ASYNC_WRITE = 2,
+  ASYNC_CONNECT = 3,
 };
 
 void *io_alloc(size_t num_bytes) { return malloc(num_bytes); }
