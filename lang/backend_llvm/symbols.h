@@ -29,6 +29,10 @@ JITSymbol *create_generic_fn_symbol(Ast *fn_ast, JITLangCtx *ctx);
 
 LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
                                        JITLangCtx *ctx);
+
+LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
+                               JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
 // TODO: use gperf for better builtin func lookups
 #define SYM_NAME_ARRAY_AT "array_at"
 #define SYM_NAME_ARRAY_SIZE "array_size"

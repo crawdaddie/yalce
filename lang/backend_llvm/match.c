@@ -5,6 +5,7 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "builtin_functions.h"
+#include "function.h"
 #include "parse.h"
 #include "symbols.h"
 #include "tuple.h"
@@ -223,6 +224,23 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
     // Void matches anything
     return;
   }
+  case AST_RANGE_EXPRESSION: {
+    LLVMValueRef from_val =
+        codegen(pattern->data.AST_RANGE_EXPRESSION.from, ctx, module, builder);
+
+    LLVMValueRef to_val =
+        codegen(pattern->data.AST_RANGE_EXPRESSION.to, ctx, module, builder);
+
+    *test_result =
+        LLVMBuildAnd(builder, *test_result,
+                     gte_val(val, from_val, type, ctx, module, builder), "");
+
+    *test_result =
+        LLVMBuildAnd(builder, *test_result,
+                     lte_val(val, to_val, type, ctx, module, builder), "");
+
+    return;
+  }
 
   default: {
     // Literal value - test for equality
@@ -367,7 +385,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         if (LLVMIsACallInst(branch_result)) {
           LLVMSetTailCall(branch_result, true);
         }
-        LLVMBuildRet(builder, branch_result);
+        build_ret(branch_result, branch_expr->type, builder);
       }
     } else {
       // Not in tail position - branch to merge block

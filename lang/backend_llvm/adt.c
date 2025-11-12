@@ -1,5 +1,7 @@
 #include "backend_llvm/adt.h"
+#include "array.h"
 #include "types.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/Types.h"
@@ -76,12 +78,11 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
   some = LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), i, 0),
                               0, "insert Some tag");
 
-  // Get the union field type (the second field of your struct)
-  LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
-  LLVMValueRef union_value = LLVMGetUndef(union_type);
   LLVMValueRef val;
 
   if (app->data.AST_APPLICATION.len > 1) {
+    LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
+    LLVMValueRef union_value = LLVMGetUndef(union_type);
     for (int i = 0; i < app->data.AST_APPLICATION.len; i++) {
 
       LLVMValueRef field_val =
@@ -93,13 +94,15 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
     some = LLVMBuildInsertValue(builder, some, union_value, 1,
                                 "insert variant data");
   } else {
+
+    LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
+    // LLVMValueRef union_value = LLVMGetUndef(union_type);
     val = codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
 
-    union_value =
-        LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
+    // union_value =
+    //     LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
 
-    some = LLVMBuildInsertValue(builder, some, union_value, 1,
-                                "insert variant data");
+    some = LLVMBuildInsertValue(builder, some, val, 1, "insert variant data");
   }
 
   return some;
@@ -116,9 +119,37 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
  * error
  */
 LLVMTypeRef get_largest_type(LLVMContextRef context, LLVMTypeRef *types,
-                             size_t count, LLVMTargetDataRef target_data) {
+                             size_t count, LLVMTargetDataRef target_data,
+                             unsigned long long *largest_size_bits) {
   if (!types || count == 0 || !target_data) {
     return NULL;
+  }
+
+  LLVMTypeRef largest_type = types[0];
+  unsigned largest_size = LLVMStoreSizeOfType(target_data, largest_type);
+  unsigned largest_align = 256;
+
+  for (size_t i = 1; i < count; i++) {
+    unsigned current_size = LLVMStoreSizeOfType(target_data, types[i]);
+    unsigned current_align = LLVMABIAlignmentOfType(target_data, types[i]);
+
+    if (current_size > largest_size ||
+        (current_size == largest_size && current_align > largest_align)) {
+      largest_type = types[i];
+      largest_size = current_size;
+      largest_align = current_align;
+      *largest_size_bits = largest_size;
+    }
+  }
+
+  return largest_type;
+}
+
+unsigned long long get_largest_type_size(LLVMContextRef context,
+                                         LLVMTypeRef *types, size_t count,
+                                         LLVMTargetDataRef target_data) {
+  if (!types || count == 0 || !target_data) {
+    return 0;
   }
 
   LLVMTypeRef largest_type = types[0];
@@ -137,7 +168,7 @@ LLVMTypeRef get_largest_type(LLVMContextRef context, LLVMTypeRef *types,
     }
   }
 
-  return largest_type;
+  return largest_size;
 }
 
 LLVMTypeRef codegen_option_struct_type(LLVMTypeRef type) {
@@ -172,11 +203,11 @@ LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
     contained_types[i] = type_to_llvm_type(mem, ctx, module);
   }
 
-  LLVMTypeRef largest_type =
-      get_largest_type(LLVMGetModuleContext(module), contained_types, len,
-                       LLVMGetModuleDataLayout(module));
+  unsigned long long union_size_bytes =
+      get_largest_type_size(LLVMGetModuleContext(module), contained_types, len,
+                            LLVMGetModuleDataLayout(module));
 
-  return STRUCT_TY(2, TAG_TYPE, largest_type);
+  return STRUCT_TY(2, TAG_TYPE, LLVMIntType(union_size_bytes * 8));
 }
 
 LLVMValueRef codegen_some(LLVMValueRef val, LLVMBuilderRef builder) {
@@ -330,24 +361,29 @@ LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 // Helper to check if a type contains a recursive reference
 bool type_contains_recursive_ref(Type *type, const char *target_name) {
-  if (!type)
+
+  if (!type) {
     return false;
+  }
 
   switch (type->kind) {
   case T_VAR:
     return type->is_recursive_type_ref;
 
-  case T_CONS:
+  case T_CONS: {
+
     if (type->data.T_CONS.name &&
         strcmp(type->data.T_CONS.name, target_name) == 0) {
       return true;
     }
+
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
       if (type_contains_recursive_ref(type->data.T_CONS.args[i], target_name)) {
         return true;
       }
     }
     return false;
+  }
 
   case T_FN:
     return type_contains_recursive_ref(type->data.T_FN.from, target_name) ||
@@ -393,14 +429,14 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
 
       // For recursive members, we need to use a pointer
       // The member type itself might be complex (e.g., List of T_CONS)
-      if (is_list_type(member_type)) {
+      if (is_list_type(member_type->data.T_CONS.args[0])) {
         member_types[i] = GENERIC_PTR;
-      } else if (is_array_type(member_type)) {
-        member_types[i] = GENERIC_PTR;
+      } else if (is_array_type(member_type->data.T_CONS.args[0])) {
+        member_types[i] = codegen_array_type(LLVMInt8Type());
       } else {
         fprintf(stderr,
                 "Error: type %s cannot hold a recursive reference without a "
-                "List or Array container",
+                "List or Array container\n",
                 name);
         continue;
       }
@@ -410,11 +446,13 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   }
 
   LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
-  LLVMTypeRef largest_type =
-      get_largest_type(llvm_ctx, member_types, len, target_data);
+  unsigned long long union_size_bytes =
 
-  LLVMTypeRef body_fields[] = {TAG_TYPE, largest_type};
+      get_largest_type_size(llvm_ctx, member_types, len, target_data);
+
+  LLVMTypeRef body_fields[] = {TAG_TYPE, LLVMIntType(union_size_bytes * 8)};
   LLVMStructSetBody(variant_struct, body_fields, 2, 0);
+  // LLVMDumpType(variant_struct);
 
   destroy_ctx(&_ctx);
   return variant_struct;

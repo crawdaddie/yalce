@@ -47,7 +47,7 @@ extern char *yytext;
 %token TRUE FALSE
 %token PIPE
 %token EXTERN
-%token TRIPLE_DOT
+%token DOUBLE_DOT
 %token LET
 %token FN
 %token MODULE
@@ -84,8 +84,9 @@ extern char *yytext;
 %left MODULO
 %left ':'
 %right DOUBLE_COLON
+%left DOUBLE_DOT
 %left MATCH
-%right APPLICATION 
+%right APPLICATION
 %right '.' 
 
 %nonassoc UMINUS
@@ -146,13 +147,13 @@ expr:
   | expr EQ expr                      { $$ = ast_binop(TOKEN_EQUALITY, $1, $3); }
   | expr PIPE expr                    { $$ = ast_application($3, $1); }
   | expr ':' expr                     { $$ = ast_assoc($1, $3); }
-  | expr 'to' expr                    { $$ = ast_range_expression($1, $3); }
+  | expr DOUBLE_DOT expr              { $$ = ast_range_expression($1, $3); }
   | expr DOUBLE_COLON expr            { $$ = ast_list_prepend($1, $3); }
   | let_binding                       { $$ = $1; }
   | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
-  | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
+  // | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
   | 'for' IDENTIFIER '=' expr IN expr   {
                                           Ast *let = ast_let(ast_identifier($2), $4, $6);
@@ -160,7 +161,7 @@ expr:
                                           $$ = let;
 
                                       }
-  | expr '[' expr ']'                 { $$ = ast_application(ast_application(ast_identifier((ObjString){.chars = "array_at", 8}), $1), $3); }
+  | expr '[' expr ']'                 { $$ = array_index_expression($1, $3);}
   | expr ':' '=' expr                 { $$ = ast_assignment($1, $4); }
   ;
 
@@ -259,7 +260,7 @@ let_binding:
   | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); }
   | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); }
 
-  | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($2, $4, $6); }
+  | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($4, $2, $6); }
   ;
 
 

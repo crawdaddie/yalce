@@ -57,13 +57,13 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "extern"                return EXTERN;
 "true"                  return TRUE;
 "false"                 return FALSE;
-"..."                   return TRIPLE_DOT;
 "match"                 return MATCH;
 "with"                  return WITH;
 "["                     return *yytext;
 "]"                     return *yytext;
 "import"                return IMPORT;
 "open"                  return OPEN;
+".."                    return DOUBLE_DOT;
 "."                     return *yytext;
 "type"                  return TYPE;
 "test"                  return TEST_ID;

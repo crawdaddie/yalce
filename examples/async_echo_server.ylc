@@ -34,8 +34,22 @@ X-Clacks-Overhead: GNU Terry Pratchett\r
   res_ptr
 ;;
 
+
+# let Asyncio = module () ->
+#   let loop_ref = [|cstr ""|];  
+#
+#   let get_loop = fn () ->
+#     loop_ref [0]
+#   ;;
+#
+#   let create_loop = fn () ->
+#     loop_ref[0] := event_loop_create;
+#   ;;
+#
+# ;
+
 let handle_connection = fn sfd ->
-  let cfd = [| 0 |] ;
+  let cfd = [| 0 |];
   await io_accept sfd (cstr cfd);
 
   let read_data = array_fill_const 4096 '\0'; 

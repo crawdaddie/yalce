@@ -267,6 +267,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_TYPE_DECL: {
     Type *t = ast->type;
+
     if (!is_generic(t) && is_sum_type(t)) {
 
       LLVMTypeRef llvm_type = codegen_recursive_datatype(t, ast, ctx, module);
@@ -340,6 +341,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     codegen_import(ast, NULL, ctx, module, builder);
     return LLVMConstInt(LLVMInt32Type(), 1, 0);
   }
+
   case AST_LOOP: {
     return codegen_loop(ast, ctx, module, builder);
   }
@@ -355,13 +357,38 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_TRAIT_IMPL: {
     if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Constructor")) {
-
       return create_constructor_module(ast, ctx, module, builder);
     }
 
     if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Arithmetic")) {
       return create_arithmetic_typeclass_methods(ast, ctx, module, builder);
     }
+
+    if (ast->type->kind == T_FN) {
+
+      int name_len = ast->data.AST_TRAIT_IMPL.type.length +
+                     ast->data.AST_TRAIT_IMPL.trait_name.length + 1;
+
+      char sym_name[name_len + 1];
+
+      sprintf(sym_name, "%s.Str", ast->data.AST_TRAIT_IMPL.type.chars);
+      Ast fn_ast = *ast->data.AST_TRAIT_IMPL.impl;
+      fn_ast.data.AST_LAMBDA.fn_name =
+          (ObjString){.chars = sym_name, .length = name_len};
+
+      Ast binding = (Ast){
+          AST_IDENTIFIER,
+          .data = {.AST_IDENTIFIER = {.value = sym_name, .length = name_len}}};
+      if (!is_generic(ast->type)) {
+        LLVMValueRef fn = codegen(&fn_ast, ctx, module, builder);
+        create_fn_binding(&binding, ast->type, fn, ctx, module, builder);
+      } else {
+        create_generic_fn_binding(&binding, &fn_ast, ctx);
+      }
+
+      return NULL;
+    }
+
     return NULL;
   }
   }

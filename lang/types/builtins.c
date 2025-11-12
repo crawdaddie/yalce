@@ -262,9 +262,6 @@ Type create_array_fill_const_scheme() {
   f = type_fn(&t_int, f);
   f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, ATTR_ALLOCATES);
 
-  // printf("%llu %d allocates\n", f->data.T_FN.attributes,
-  //        has_attr(f->data.T_FN.attributes, ATTR_ALLOCATES));
-
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
   vars_mem[0] = vlist_of_typevar(a);

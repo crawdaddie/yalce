@@ -169,6 +169,13 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
                             builder);
   }
 }
+LLVMValueRef build_ret(LLVMValueRef val, Type *type, LLVMBuilderRef builder) {
+
+  if (type->kind == T_VOID) {
+    return LLVMBuildRetVoid(builder);
+  }
+  return LLVMBuildRet(builder, val);
+}
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
@@ -224,24 +231,23 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   set_tail_call_expressions(ast->data.AST_LAMBDA.body);
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
-  // if (LLVMIsACallInst())
-
-  if (fn_type->kind == T_VOID) {
-    LLVMBuildRetVoid(builder);
-  }
 
   // Check if the current block already has a terminator
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   if (current_block && !LLVMGetBasicBlockTerminator(current_block)) {
-    // Only add return if block is not already terminated
-    LLVMBuildRet(builder, body);
+
     if (LLVMIsACallInst(body)) {
       LLVMSetTailCall(body, true);
     }
+    build_ret(body, fn_type, builder);
+
+    //
+    // if (fn_type->kind == T_VOID) {
+    //   LLVMBuildRetVoid(builder);
+    // } else {
+    //   LLVMBuildRet(builder, body);
+    // }
   }
-  //   else {
-  //
-  // }
 
   END_FUNC
   destroy_ctx(&fn_ctx);

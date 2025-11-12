@@ -278,6 +278,50 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   ARITHMETIC_BINOP("%", LLVMFRem, LLVMSRem);
 }
 
+LLVMValueRef gte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
+                     JITLangCtx *ctx, LLVMModuleRef module,
+                     LLVMBuilderRef builder) {
+  LLVMValueRef l = val;
+  LLVMValueRef r = from;
+
+  switch (type->kind) {
+  case T_INT:
+  case T_CHAR:
+  case T_UINT64: {
+    return LLVMBuildICmp(builder, LLVMIntSGE, l, r, "gte_int");
+  }
+  case T_NUM: {
+    return LLVMBuildFCmp(builder, LLVMRealOGE, l, r, "gte_num");
+  }
+  default: {
+    fprintf(stderr, "Error: unrecognized operands for ord binop");
+    return NULL;
+  }
+  }
+}
+
+LLVMValueRef lte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
+                     JITLangCtx *ctx, LLVMModuleRef module,
+                     LLVMBuilderRef builder) {
+  LLVMValueRef l = val;
+  LLVMValueRef r = from;
+
+  switch (type->kind) {
+  case T_INT:
+  case T_CHAR:
+  case T_UINT64: {
+    return LLVMBuildICmp(builder, LLVMIntSLE, l, r, "lte_int");
+  }
+  case T_NUM: {
+    return LLVMBuildFCmp(builder, LLVMRealOLE, l, r, "lte_num");
+  }
+  default: {
+    fprintf(stderr, "Error: unrecognized operands for ord binop");
+    return NULL;
+  }
+  }
+}
+
 #define ORD_BINOP(_name, _flop, _iop)                                          \
   ({                                                                           \
     Type *target_type;                                                         \
@@ -323,6 +367,7 @@ LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP(">", LLVMRealOGT, LLVMIntSGT);
 }
+
 LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 

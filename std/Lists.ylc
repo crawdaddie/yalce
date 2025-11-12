@@ -1,6 +1,6 @@
 let print_list = fn a: (List of T) ->
   print "["; 
-  for l = iter a in (
+  for l = iter_of_list a in (
     print `{l}, `
   );
   print "]\n" 

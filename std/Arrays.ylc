@@ -4,7 +4,7 @@
 
 let print_arr = fn a: (Array of T) ->
   print "[|"; 
-  for i = 0 to array_size a in (
+  for i = 0 .. array_size a in (
     print `{a[i]}, `
   );
   print "|]\n" 
@@ -34,7 +34,7 @@ let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
 # let map = fn f: (T -> R) a: (Array of T) ->
 let map = fn f a ->
   let res = array_fill_const (array_size a) (f (a[0]));
-  for i = 1 to (array_size a) in (
+  for i = 1 .. (array_size a) in (
     let v = f (a [i]);
     res[i] :=  v
   );

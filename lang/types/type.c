@@ -201,6 +201,7 @@ bool is_generic(Type *t) {
     if (t->is_recursive_type_ref) {
       return false;
     }
+
     return true;
   }
 

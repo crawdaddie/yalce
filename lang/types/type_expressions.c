@@ -124,6 +124,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
             item->data.AST_BINOP.left->tag == AST_IDENTIFIER) {
           name = item->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
         }
+
         Type *sch = compute_type_expression(expr->data.AST_LIST.items + i, ctx);
         if (!sch) {
           return NULL;
@@ -150,6 +151,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   case AST_FN_SIGNATURE: {
     return compute_fn_type(expr, ctx);
   }
+
   case AST_BINOP: {
     token_type op = expr->data.AST_BINOP.op;
     if (op == TOKEN_OF) {
@@ -157,6 +159,9 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
       Ast *contained_ast = expr->data.AST_BINOP.right;
 
       Type *container = compute_type_expression(container_ast, ctx);
+      if (container->kind == T_VAR) {
+        container->kind = T_CONS;
+      }
 
       if (!container) {
         return type_error(container_ast, "could not find type");
@@ -166,11 +171,23 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
 
       if (container->kind == T_SCHEME &&
           container->data.T_SCHEME.num_vars == 1) {
+
         TypeEnv env = {.name = container->data.T_SCHEME.vars->type->data.T_VAR,
                        .type = contained};
+
         Type *final = instantiate_type_in_env(container, &env);
+
+        // printf("final\n");
+        // print_type(final);
+        //
+        // container->data.T_CONS.args = t_alloc(sizeof(Type *));
+        // container->data.T_CONS.args[0] = contained;
+        //
+        // print_type(container);
+
         return final;
       }
+
       if (is_pointer_type(container)) {
         container = deep_copy_type(container);
         container->data.T_CONS.args = t_alloc(sizeof(Type *));
@@ -179,11 +196,11 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         return container;
       }
 
-      // printf("OF\n");
-      // print_ast(container_ast);
-      // print_ast(contained_ast);
-      // print_type(contained);
-      return contained;
+      container->data.T_CONS.args = t_alloc(sizeof(Type *));
+      container->data.T_CONS.args[0] = contained;
+      container->data.T_CONS.num_args = 1;
+
+      return container;
     }
     //
     //   Scheme *container = lookup_scheme(
@@ -251,7 +268,9 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
     type_error(ast, "Could not compute type declaration\n");
     return NULL;
   }
+
   if (is_sum_type(computed)) {
+    computed->alias = name;
     bind_type_in_ctx(binding, computed, (binding_md){}, ctx);
     for (int i = 0; i < computed->data.T_CONS.num_args; i++) {
       const char *mem_name = computed->data.T_CONS.args[i]->data.T_CONS.name;

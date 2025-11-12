@@ -1,5 +1,6 @@
 #include "backend_llvm/strings.h"
 #include "adt.h"
+#include "application.h"
 #include "backend_llvm/array.h"
 #include "list.h"
 #include "types.h"
@@ -506,6 +507,7 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
   if (val_type == NULL) {
     return _codegen_string("", 0, ctx, module, builder);
   }
+  val_type = resolve_type_in_env(val_type, ctx->env);
   if (val_type->kind == T_STRING) {
     return val;
   }
@@ -551,6 +553,7 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
   if (val_type->kind == T_CONS) {
     return codegen_cons_to_string(val, val_type, ctx, module, builder);
   }
+
   // if (is_list_type(val_type)) {
   //   return codegen_list_to_string(val, val_type, ctx, module, builder);
   // }
@@ -564,43 +567,103 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
 
-  LLVMValueRef string_concat_func =
-      LLVMGetNamedFunction(module, "string_concat");
+  if (num_strings == 0) {
+    // Return empty string
+    LLVMValueRef empty_str = LLVMBuildGlobalStringPtr(builder, "", "empty");
+    LLVMTypeRef string_type = LLVMStructType(
+        (LLVMTypeRef[]){LLVMInt32Type(), LLVMPointerType(LLVMInt8Type(), 0)}, 2,
+        0);
+    LLVMValueRef result = LLVMGetUndef(string_type);
+    result = LLVMBuildInsertValue(builder, result,
+                                  LLVMConstInt(LLVMInt32Type(), 0, 0), 0, "");
+    result = LLVMBuildInsertValue(builder, result, empty_str, 1, "");
+    return result;
+  }
 
+  if (num_strings == 1) {
+    return strings[0];
+  }
+
+  // Calculate total length
+  LLVMValueRef total_len = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  for (int i = 0; i < num_strings; i++) {
+    LLVMValueRef len = LLVMBuildExtractValue(builder, strings[i], 0, "str_len");
+    total_len = LLVMBuildAdd(builder, total_len, len, "add_len");
+  }
+
+  // Allocate buffer for concatenated string (total_len + 1 for null terminator)
+  LLVMValueRef buffer_size = LLVMBuildAdd(
+      builder, total_len, LLVMConstInt(LLVMInt32Type(), 1, 0), "buffer_size");
+
+  LLVMValueRef malloc_func = LLVMGetNamedFunction(module, "malloc");
+  if (!malloc_func) {
+    LLVMTypeRef malloc_type =
+        LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
+                         (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+    malloc_func = LLVMAddFunction(module, "malloc", malloc_type);
+  }
+
+  LLVMTypeRef malloc_type =
+      LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
+                       (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+  LLVMValueRef dest_buffer = LLVMBuildCall2(builder, malloc_type, malloc_func,
+                                            &buffer_size, 1, "concat_buffer");
+
+  // Get memcpy intrinsic
+  LLVMValueRef memcpy_func =
+      LLVMGetNamedFunction(module, "llvm.memcpy.p0.p0.i32");
+  if (!memcpy_func) {
+    LLVMTypeRef memcpy_type =
+        LLVMFunctionType(LLVMVoidType(),
+                         (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
+                                         LLVMPointerType(LLVMInt8Type(), 0),
+                                         LLVMInt32Type(), LLVMInt1Type()},
+                         4, 0);
+    memcpy_func = LLVMAddFunction(module, "llvm.memcpy.p0.p0.i32", memcpy_type);
+  }
+
+  LLVMTypeRef memcpy_type =
+      LLVMFunctionType(LLVMVoidType(),
+                       (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
+                                       LLVMPointerType(LLVMInt8Type(), 0),
+                                       LLVMInt32Type(), LLVMInt1Type()},
+                       4, 0);
+
+  // Copy each string into the buffer
+  LLVMValueRef offset = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  for (int i = 0; i < num_strings; i++) {
+    LLVMValueRef str_len =
+        LLVMBuildExtractValue(builder, strings[i], 0, "str_len");
+    LLVMValueRef str_ptr =
+        LLVMBuildExtractValue(builder, strings[i], 1, "str_ptr");
+
+    // Calculate destination pointer: dest_buffer + offset
+    LLVMValueRef dest_ptr = LLVMBuildGEP2(builder, LLVMInt8Type(), dest_buffer,
+                                          &offset, 1, "dest_offset");
+
+    // memcpy(dest_ptr, str_ptr, str_len, is_volatile=false)
+    LLVMValueRef memcpy_args[] = {dest_ptr, str_ptr, str_len,
+                                  LLVMConstInt(LLVMInt1Type(), 0, 0)};
+    LLVMBuildCall2(builder, memcpy_type, memcpy_func, memcpy_args, 4, "");
+
+    // Update offset
+    offset = LLVMBuildAdd(builder, offset, str_len, "next_offset");
+  }
+
+  // Add null terminator
+  LLVMValueRef null_ptr = LLVMBuildGEP2(builder, LLVMInt8Type(), dest_buffer,
+                                        &total_len, 1, "null_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt8Type(), 0, 0), null_ptr);
+
+  // Build result struct {i32 length, ptr data}
   LLVMTypeRef string_type = LLVMStructType(
       (LLVMTypeRef[]){LLVMInt32Type(), LLVMPointerType(LLVMInt8Type(), 0)}, 2,
       0);
+  LLVMValueRef result = LLVMGetUndef(string_type);
+  result = LLVMBuildInsertValue(builder, result, total_len, 0, "insert_len");
+  result = LLVMBuildInsertValue(builder, result, dest_buffer, 1, "insert_ptr");
 
-  LLVMTypeRef string_array_type = LLVMArrayType(string_type, num_strings);
-
-  LLVMTypeRef fn_type = LLVMFunctionType(
-      string_type,
-      (LLVMTypeRef[]){LLVMPointerType(string_type, 0), LLVMInt32Type()}, 2, 0);
-
-  if (!string_concat_func) {
-    string_concat_func = LLVMAddFunction(module, "string_concat", fn_type);
-  }
-
-  LLVMValueRef array_alloca =
-      LLVMBuildAlloca(builder, string_array_type, "string_array");
-
-  for (int i = 0; i < num_strings; i++) {
-    LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), 0, 0),
-                              LLVMConstInt(LLVMInt32Type(), i, 0)};
-    LLVMValueRef ptr =
-        LLVMBuildGEP2(builder, string_array_type, array_alloca, indices, 2, "");
-
-    LLVMBuildStore(builder, strings[i], ptr);
-  }
-
-  LLVMValueRef array_ptr = LLVMBuildBitCast(
-      builder, array_alloca, LLVMPointerType(string_type, 0), "array_ptr");
-
-  LLVMValueRef args[] = {array_ptr,
-                         LLVMConstInt(LLVMInt32Type(), num_strings, 0)};
-
-  return LLVMBuildCall2(builder, fn_type, string_concat_func, args, 2,
-                        "concat_result");
+  return result;
 }
 
 LLVMValueRef string_is_empty(LLVMValueRef string, LLVMBuilderRef builder) {
@@ -772,8 +835,50 @@ LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx,
 
 LLVMValueRef StringFmtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
+  Type *t = ast->data.AST_APPLICATION.args->type;
+  TypeClass *tc = get_typeclass_by_name(t, "Str");
+  if (tc) {
+    const char *name = t->alias;
+
+    if (!name && t->kind == T_CONS) {
+      name = t->data.T_CONS.name;
+    }
+
+    if (!name) {
+      return NULL;
+    }
+    char sym_name[strlen(name) + 5];
+    sprintf(sym_name, "%s.Str", name);
+    Ast str_app = *ast;
+
+    str_app.data.AST_APPLICATION.function->data.AST_IDENTIFIER.value = sym_name;
+    str_app.data.AST_APPLICATION.function->data.AST_IDENTIFIER.length =
+        strlen(sym_name);
+
+    LLVMValueRef str = codegen(&str_app, ctx, module, builder);
+    return str;
+
+    // JITSymbol *str_impl_sym = find_in_ctx(sym_name, strlen(sym_name), ctx);
+    //
+    // if (!str_impl_sym) {
+    //   fprintf(stderr,
+    //           "Error: could not find corresponding trait symbol for '%s'\n",
+    //           sym_name);
+    //   return NULL;
+    // }
+    //
+    // if (str_impl_sym->type == STYPE_FUNCTION) {
+    //   LLVMValueRef v = call_callable(ast, str_impl_sym->symbol_type,
+    //                                  str_impl_sym->val, ctx, module,
+    //                                  builder);
+    //   LLVMDumpValue(v);
+    //   return v;
+    // }
+  }
+
   LLVMValueRef to_str =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
   LLVMValueRef str = llvm_string_serialize(
       to_str, ast->data.AST_APPLICATION.args->type, ctx, module, builder);
 

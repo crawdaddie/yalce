@@ -51,7 +51,7 @@
      FALSE = 267,
      PIPE = 268,
      EXTERN = 269,
-     TRIPLE_DOT = 270,
+     DOUBLE_DOT = 270,
      LET = 271,
      FN = 272,
      MODULE = 273,
@@ -103,7 +103,7 @@
 #define FALSE 267
 #define PIPE 268
 #define EXTERN 269
-#define TRIPLE_DOT 270
+#define DOUBLE_DOT 270
 #define LET 271
 #define FN 272
 #define MODULE 273

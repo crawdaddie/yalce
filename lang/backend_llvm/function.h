@@ -5,6 +5,7 @@
 #include "types/type.h"
 #include "llvm-c/Types.h"
 
+LLVMValueRef build_ret(LLVMValueRef val, Type *type, LLVMBuilderRef builder);
 #define START_FUNC(_module, _name, _type)                                      \
   LLVMValueRef func = LLVMAddFunction(_module, _name, _type);                  \
   if (func == NULL) {                                                          \

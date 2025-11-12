@@ -68,7 +68,7 @@ let shuffle = fn n: (Int) ->
   # `;
   let arr = array_fill n (fn i -> i);
 
-  for j = 0 to n in (
+  for j = 0 .. n in (
     let i = n - 1 - j; # reverse
     let j = rand_int (i + 1);
     let iv = arr[i];
@@ -87,7 +87,7 @@ let shuffle_ip = fn arr: (Array of T) ->
 
   let n = array_size arr;
 
-  for j = 0 to n in (
+  for j = 0 .. n in (
     let i = n - 1 - j;
     let j = rand_int (i + 1);
     let iv = arr[i];

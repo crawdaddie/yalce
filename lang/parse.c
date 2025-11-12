@@ -1233,3 +1233,29 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
 
   return import_ast;
 }
+Ast *array_index_expression(Ast *array, Ast *index_expr) {
+  if (index_expr->tag == AST_RANGE_EXPRESSION) {
+
+    Ast *e = ast_application(
+        ast_application(
+            ast_application(
+                ast_identifier((ObjString){.chars = "array_range", 11}),
+                index_expr->data.AST_RANGE_EXPRESSION.from),
+            index_expr->data.AST_RANGE_EXPRESSION.to),
+        array);
+    return e;
+  }
+  return ast_application(
+      ast_application(ast_identifier((ObjString){.chars = "array_at", 8}),
+                      array),
+      index_expr);
+}
+
+// Ast *array_offset_expression(Ast *array, Ast *index_expr) {
+//   printf("Array offset expr\n");
+//   return ast_application(
+//       ast_application(ast_identifier((ObjString){.chars = "array_offset",
+//       12}),
+//                       index_expr),
+//       array);
+// }

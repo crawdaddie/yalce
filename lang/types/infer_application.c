@@ -23,10 +23,13 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
   if (is_sum_type(cons)) {
     Type *mem =
         extract_member_from_sum_type(cons, ast->data.AST_APPLICATION.function);
+
     if (!mem) {
       return NULL;
     }
+
     f = create_fn_from_cons(cons, mem);
+
   } else {
     f = create_fn_from_cons(cons, cons);
   }

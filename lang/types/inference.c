@@ -130,6 +130,9 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
 
   switch (r->kind) {
   case T_VAR: {
+    if (r->is_recursive_type_ref) {
+      return r;
+    }
     Type *rr = env_lookup(env, r->data.T_VAR);
 
     if (rr && rr->kind == T_VAR) {
@@ -249,6 +252,11 @@ void add_constraint(TICtx *result, Type *var, Type *type) {
 }
 
 bool occurs_check(const char *var, Type *ty) {
+
+  if (ty == NULL) {
+    return false;
+  }
+
   switch (ty->kind) {
   case T_VAR: {
     return CHARS_EQ(ty->data.T_VAR, var);
@@ -375,6 +383,24 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
       }
     }
   }
+
+  if (t1->kind == T_VAR && t1->is_recursive_type_ref && is_sum_type(t2) &&
+      (t2->alias && CHARS_EQ(t1->data.T_VAR, t2->alias))) {
+    return 0;
+    // printf("t2 -> alias %s", t2->alias);
+
+    // int len = binding->data.AST_LIST.len;
+    // for (int i = 0; i < len; i++) {
+    //   Ast *mem = binding->data.AST_LIST.items + i;
+    //   bind_type_in_ctx(mem, pattern_type->data.T_CONS.args[i], bmd_type,
+    //   ctx);
+    // }
+    //
+    // unify(type, pattern_type, ctx);
+    //
+    // return 0;
+  }
+
   if (t1->kind == T_VAR) {
 
     if (occurs_check(t1->data.T_VAR, t2)) {
@@ -435,9 +461,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
   // Case 4: Constructor types - recurse and merge constraints
   if (t1->kind == T_CONS && t2->kind == T_CONS) {
-    // print_type(t1);
-    // print_type(t2);
-    // printf("unify cons\n");
 
     if (is_pointer_type(t1) && is_pointer_type(t2)) {
       return 0;
@@ -463,8 +486,8 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
     for (int i = 0; i < t1->data.T_CONS.num_args; i++) {
       TICtx ur = {};
-      if (unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], &ur) != 0) {
 
+      if (unify(t1->data.T_CONS.args[i], t2->data.T_CONS.args[i], &ur) != 0) {
         return 1;
       }
 
@@ -1169,6 +1192,24 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       return 0;
     }
   }
+  case AST_RANGE_EXPRESSION: {
+    Ast *from = binding->data.AST_RANGE_EXPRESSION.from;
+    Ast *to = binding->data.AST_RANGE_EXPRESSION.to;
+    bind_type_in_ctx(from, type, bmd_type, ctx);
+    bind_type_in_ctx(to, type, bmd_type, ctx);
+
+    // print_ast(binding);
+    //
+    // if (type->kind == T_VAR) {
+    //   printf("unify type: ");
+    //   print_type(type);
+    //   print_type(from->type);
+    //   unify(type, from->type, ctx);
+    // }
+
+    binding->type = from->type;
+    return 0;
+  }
   default: {
     type_error(binding, "Cannot appear in a binding");
     return 1;
@@ -1299,6 +1340,10 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
   return instantiate(type_ref->type, ctx);
 }
 bool find_trait_impl_rank(Ast *impl, double *rank) {
+  if (impl->data.AST_LAMBDA.body->tag != AST_BODY) {
+    return false;
+  }
+
   Ast *r = impl->data.AST_LAMBDA.body->data.AST_BODY.stmts->ast;
   if (r->tag == AST_LET && r->data.AST_LET.binding->tag == AST_IDENTIFIER &&
       CHARS_EQ(r->data.AST_LET.binding->data.AST_IDENTIFIER.value, "rank")) {
@@ -1675,14 +1720,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
     break;
   }
   case AST_TRAIT_IMPL: {
-    type = infer(ast->data.AST_TRAIT_IMPL.impl, ctx);
     ObjString type_name = ast->data.AST_TRAIT_IMPL.type;
     ObjString trait_name = ast->data.AST_TRAIT_IMPL.trait_name;
-    double rank;
-    int has_rank = find_trait_impl_rank(ast->data.AST_TRAIT_IMPL.impl, &rank);
 
     TypeEnv *tref = lookup_type_ref(ctx->env, type_name.chars);
-
     TypeEnv _tref = {};
     if (!tref) {
       Type *x = lookup_builtin_type(type_name.chars);
@@ -1691,14 +1732,25 @@ Type *infer(Ast *ast, TICtx *ctx) {
         tref = &_tref;
       }
     }
-
     if (!tref) {
       fprintf(stderr, "Error: could not find type %s\n", type_name.chars);
       return NULL;
     }
+    Type *t = tref->type;
+
+    double rank;
+    int has_rank = find_trait_impl_rank(ast->data.AST_TRAIT_IMPL.impl, &rank);
+
+    Ast impl = *ast->data.AST_TRAIT_IMPL.impl;
+
+    if (impl.tag == AST_LAMBDA) {
+      impl.data.AST_LAMBDA.type_annotations->ast = ast_identifier(type_name);
+    }
+
+    type = infer(&impl, ctx);
+    ast->data.AST_TRAIT_IMPL.impl->type = type;
 
     if (has_rank) {
-      Type *t = tref->type;
       Type *ti = t;
       if (t->kind == T_SCHEME) {
         ti = t->data.T_SCHEME.type;
@@ -1714,9 +1766,6 @@ Type *infer(Ast *ast, TICtx *ctx) {
       tref->type = t;
       break;
     }
-
-    // TODO: implement robust traits
-    Type *t = tref->type;
 
     Type *ti = t;
     if (t->kind == T_SCHEME) {
