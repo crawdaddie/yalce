@@ -113,6 +113,9 @@ LLVMValueRef _char_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
 LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+  // printf("Int to string\n");
+  // LLVMDumpValue(int_value);
+  // printf("\n");
 
   LLVMValueRef data_ptr = _int_to_chars(int_value, module, builder);
   LLVMValueRef strlen_func = get_strlen_func(module);

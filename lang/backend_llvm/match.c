@@ -37,6 +37,7 @@ void set_pattern_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Iterate through the binding list and add each binding to the context
   for (BindList *b = bl; b != NULL; b = b->next) {
+
     if (ast_is_placeholder_id(b->binding)) {
       continue; // Skip placeholder bindings like '_'
     }
@@ -118,27 +119,67 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
       LLVMValueRef is_not_empty =
           LLVMBuildNot(builder, is_empty, "list_not_empty");
 
-      // AND with accumulated result
-      *test_result = LLVMBuildAnd(builder, *test_result, is_not_empty, "");
+      // Create basic blocks for conditional head/tail testing
+      LLVMValueRef parent_func =
+          LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+      LLVMBasicBlockRef test_elements_block =
+          LLVMAppendBasicBlock(parent_func, "list_cons_test_elements");
+      LLVMBasicBlockRef merge_block =
+          LLVMAppendBasicBlock(parent_func, "list_cons_merge");
 
-      // Recursively test head and tail
+      LLVMBasicBlockRef pre_branch_block = LLVMGetInsertBlock(builder);
+
+      // Branch based on is_not_empty
+      LLVMBuildCondBr(builder, is_not_empty, test_elements_block, merge_block);
+
+      LLVMPositionBuilderAtEnd(builder, test_elements_block);
+
+      LLVMValueRef elements_test_result = *test_result;
+
       Ast *head_pattern = pattern->data.AST_APPLICATION.args;
-      Ast *tail_pattern = pattern->data.AST_APPLICATION.args + 1;
-
-      test_pattern_rec(head_pattern, bl, test_result,
+      test_pattern_rec(head_pattern, bl, &elements_test_result,
                        ll_get_head_val(val, llvm_list_el_type, builder),
                        llvm_list_el_type, list_el_type, ctx, module, builder);
 
-      test_pattern_rec(tail_pattern, bl, test_result,
+      Ast *tail_pattern = pattern->data.AST_APPLICATION.args + 1;
+      test_pattern_rec(tail_pattern, bl, &elements_test_result,
                        ll_get_next(val, llvm_list_el_type, builder), val_type,
                        type, ctx, module, builder);
+
+      LLVMBuildBr(builder, merge_block);
+
+      LLVMPositionBuilderAtEnd(builder, merge_block);
+
+      // Create phi to merge results
+      // If we came from the empty branch: result is false
+      // If we came from test_elements_block: result is elements_test_result
+      LLVMValueRef phi =
+          LLVMBuildPhi(builder, LLVMInt1Type(), "list_cons_result");
+
+      LLVMBasicBlockRef incoming_blocks[2];
+      LLVMValueRef incoming_values[2];
+
+      // // Get the block before conditional branch (where is_not_empty was
+      // // computed)
+      // LLVMBasicBlockRef pre_branch_block =
+      //     LLVMGetPreviousBasicBlock(test_elements_block);
+
+      incoming_blocks[0] = pre_branch_block;
+      incoming_values[0] = LLVMConstInt(LLVMInt1Type(), 0, 0);
+
+      incoming_blocks[1] = test_elements_block;
+      incoming_values[1] = elements_test_result;
+
+      LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
+
+      *test_result = LLVMBuildAnd(builder, *test_result, phi, "");
+
       return;
     }
 
     Type *cons_type = pattern->type;
     if (cons_type->kind == T_CONS && is_sum_type(cons_type)) {
 
-      // Find variant index
       int vidx;
       Type *variant_type;
       for (vidx = 0; vidx < cons_type->data.T_CONS.num_args; vidx++) {
@@ -148,15 +189,21 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
         }
       }
 
-      LLVMValueRef tag = extract_tag(val, builder);
+      LLVMValueRef tag = LLVMBuildExtractValue(builder, val, 0, "sum.tag");
+
       LLVMValueRef tag_test =
           LLVMBuildICmp(builder, LLVMIntEQ, tag,
                         LLVMConstInt(LLVMInt8Type(), vidx, 0), "tag_match");
 
       *test_result = LLVMBuildAnd(builder, *test_result, tag_test, "");
 
-      LLVMValueRef payload = codegen_tuple_access(
-          1, val, type_to_llvm_type(cons_type, ctx, module), builder);
+      LLVMTypeRef t = type_to_llvm_type(cons_type, ctx, module);
+
+      LLVMValueRef payload =
+          LLVMBuildExtractValue(builder, val, 1, "sum.payload");
+
+      payload = cast_union(payload, variant_type->data.T_CONS.args[0], ctx,
+                           module, builder);
 
       for (int i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
         test_pattern_rec(

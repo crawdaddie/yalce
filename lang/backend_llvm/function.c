@@ -1,5 +1,4 @@
 #include "backend_llvm/function.h"
-#include "application.h"
 #include "backend_llvm/function_extern.h"
 #include "binding.h"
 #include "closures.h"
@@ -9,10 +8,8 @@
 #include "types/inference.h"
 #include "types/type.h"
 #include "types/type_ser.h"
-#include "util.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
-#include <string.h>
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
@@ -79,6 +76,7 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
 void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
                           JITLangCtx *fn_ctx) {
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, func, LLVMTypeOf(func));
+
   sym->symbol_data.STYPE_FUNCTION.recursive_ref = true;
 
   ht *scope = fn_ctx->frame->table;
@@ -188,6 +186,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       ast->data.AST_APPLICATION.is_curried_with_constants) {
     return codegen_const_curried_fn(ast, ctx, module, builder);
   }
+
   if (ast->data.AST_LAMBDA.num_closed_vals > 0) {
     return codegen_lambda_closure(ast->type, ast, ctx, module, builder);
   }

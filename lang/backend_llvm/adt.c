@@ -99,6 +99,23 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
     // LLVMValueRef union_value = LLVMGetUndef(union_type);
     val = codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
 
+    // Convert val to match the union type
+    LLVMTypeRef val_type = LLVMTypeOf(val);
+    LLVMTypeKind val_kind = LLVMGetTypeKind(val_type);
+
+    // If val is a pointer, convert it to i64 for storage in the union
+    if (val_kind == LLVMPointerTypeKind) {
+      val = LLVMBuildPtrToInt(builder, val, union_type, "ptr_to_int");
+    } else if (val_kind == LLVMIntegerTypeKind &&
+               // // If val is a smaller integer, extend it
+               LLVMGetIntTypeWidth(val_type) <
+                   LLVMGetIntTypeWidth(union_type)) {
+      val = LLVMBuildZExt(builder, val, union_type, "zext_to_union");
+    } else if (val_kind == LLVMDoubleTypeKind) {
+      // If val is a double, bitcast it
+      val = LLVMBuildBitCast(builder, val, union_type, "double_to_i64");
+    }
+
     // union_value =
     //     LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
 
@@ -456,4 +473,78 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
 
   destroy_ctx(&_ctx);
   return variant_struct;
+}
+
+LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMTypeRef target_llvm_type = type_to_llvm_type(desired_type, ctx, module);
+  if (!target_llvm_type) {
+    fprintf(stderr, "Error: could not get LLVM type for desired type\n");
+    return NULL;
+  }
+
+  switch (desired_type->kind) {
+  case T_INT: {
+    // i64 -> i32: truncate
+    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_int");
+  }
+
+  case T_UINT64: {
+    // i64 -> i64: no-op, but might need bitcast depending on context
+    LLVMTypeRef un_type = LLVMTypeOf(un);
+    if (LLVMGetTypeKind(un_type) == LLVMIntegerTypeKind &&
+        LLVMGetIntTypeWidth(un_type) == 64) {
+      return un; // Already i64
+    }
+    return LLVMBuildZExtOrBitCast(builder, un, target_llvm_type,
+                                  "union_to_uint64");
+  }
+
+  case T_NUM: {
+    // i64 -> double: bitcast (reinterpret bits)
+    return LLVMBuildBitCast(builder, un, target_llvm_type, "union_to_double");
+  }
+
+  case T_CHAR: {
+    // i64 -> i8: truncate
+    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_char");
+  }
+
+  case T_BOOL: {
+    // i64 -> i1: truncate to least significant bit
+    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_bool");
+  }
+
+  case T_VOID: {
+    // No value needed for void
+    return NULL;
+  }
+
+  case T_STRING:
+  case T_FN:
+  case T_CONS: {
+    // These are pointer types or aggregate types
+    // i64 -> ptr: inttoptr
+    if (LLVMGetTypeKind(target_llvm_type) == LLVMPointerTypeKind) {
+      return LLVMBuildIntToPtr(builder, un, target_llvm_type, "union_to_ptr");
+    }
+
+    // For struct types stored in the union, we need to use the alloca method
+    // This handles cases where the union contains a struct value directly
+    LLVMValueRef alloca =
+        LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
+    LLVMBuildStore(builder, un, alloca);
+
+    // Load as the target type
+    return LLVMBuildLoad2(builder, target_llvm_type, alloca, "union_to_struct");
+  }
+
+  default: {
+    fprintf(stderr, "Error, could not cast union type (kind: %d)\n",
+            desired_type->kind);
+    print_type(desired_type);
+    return NULL;
+  }
+  }
 }

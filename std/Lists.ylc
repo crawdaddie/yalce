@@ -24,6 +24,15 @@ let map = fn f l ->
   aux f l []
 ;;
 
+let rev = fn l: (List of T) ->
+  let aux = (fn l: (List of T) res: (List of T) ->
+    match l with
+    | x :: rest -> aux rest (x :: res)
+    | [] -> res
+  ) in
+  aux l []
+;;
+
 #
 # let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
 #   let res_ref = [| res |];

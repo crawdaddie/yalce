@@ -822,7 +822,7 @@ LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
   }
 
   default:
-    return NULL;
+    return val;
   }
 }
 

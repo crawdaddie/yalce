@@ -80,13 +80,17 @@ LLVMValueRef ll_is_not_null(LLVMValueRef list, LLVMTypeRef list_el_type,
 LLVMValueRef ll_get_head_val(LLVMValueRef list, LLVMTypeRef list_el_type,
                              LLVMBuilderRef builder) {
   LLVMTypeRef node_type = llnode_type(list_el_type);
-  return struct_ptr_get(0, list, node_type, builder);
+  LLVMValueRef head = struct_ptr_get(0, list, node_type, builder);
+  LLVMSetValueName(head, "list_head");
+  return head;
 }
 
 LLVMValueRef ll_get_next(LLVMValueRef list, LLVMTypeRef list_el_type,
                          LLVMBuilderRef builder) {
   LLVMTypeRef node_type = llnode_type(list_el_type);
-  return struct_ptr_get(1, list, node_type, builder);
+  LLVMValueRef rest = struct_ptr_get(1, list, node_type, builder);
+  LLVMSetValueName(rest, "list_rest");
+  return rest;
 }
 
 LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

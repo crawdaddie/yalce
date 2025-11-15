@@ -633,3 +633,11 @@ _String cstr_to_str(char *chars) {
 int set_env(_String varname, _String val) {
   return setenv(varname.chars, val.chars, 1);
 }
+
+int32_t int32_parse(_String str) {
+  // char copy[str.size + 1];
+  // copy[str.size] = '\0';
+  // memcpy(copy, str.chars, str.size);
+  int32_t x = (int32_t)strtol(str.chars, NULL, 10);
+  return x;
+}

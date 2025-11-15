@@ -191,20 +191,25 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     // }
 
     if (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
+
       if (is_simple_enum(type)) {
         return LLVMInt8Type();
-      } else {
-        // Type *member_type = type->data.T_CONS.names[0];
-        const char *member_type_name = type->data.T_CONS.names[0];
-
-        JITSymbol *sym =
-            find_in_ctx(member_type_name, strlen(member_type_name), ctx);
-
-        if (sym && sym->type == STYPE_VARIANT_TYPE) {
-          return sym->llvm_type;
-        }
-        return codegen_adt_type(type, ctx, module);
       }
+      // Type *member_type = type->data.T_CONS.names[0];
+      const char *member_type_name = type->data.T_CONS.names[0];
+
+      JITSymbol *sym =
+          find_in_ctx(member_type_name, strlen(member_type_name), ctx);
+
+      if (sym && sym->type == STYPE_VARIANT_TYPE) {
+        // printf("variant type\n");
+        // print_type(sym->symbol_type);
+        // LLVMDumpType(sym->llvm_type);
+        // printf("\n");
+        return sym->llvm_type;
+      }
+
+      return codegen_adt_type(type, ctx, module);
     }
 
     // if (type->data.T_CONS.num_args == 0) {

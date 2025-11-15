@@ -259,7 +259,11 @@ bool occurs_check(const char *var, Type *ty) {
 
   switch (ty->kind) {
   case T_VAR: {
-    return CHARS_EQ(ty->data.T_VAR, var);
+    bool chars_eq = CHARS_EQ(ty->data.T_VAR, var);
+    if (chars_eq && ty->is_recursive_type_ref) {
+      return false;
+    }
+    return chars_eq;
   }
   case T_FN: {
     return occurs_check(var, ty->data.T_FN.from) ||
@@ -357,7 +361,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     add_constraint(unify_res, t2, t1);
     return 0;
   }
-
   if (t1->implements && t2->kind != T_VAR) {
 
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
@@ -383,7 +386,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
       }
     }
   }
-
   if (t1->kind == T_VAR && t1->is_recursive_type_ref && is_sum_type(t2) &&
       (t2->alias && CHARS_EQ(t1->data.T_VAR, t2->alias))) {
     return 0;
@@ -399,6 +401,18 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     // unify(type, pattern_type, ctx);
     //
     // return 0;
+  }
+
+  if (t1->kind == T_VAR && t1->is_recursive_type_ref && t2->kind == T_VAR) {
+
+    if (occurs_check(t2->data.T_VAR, t1)) {
+
+      return 1; // Occurs check failure
+    }
+
+    add_constraint(unify_res, t2, t1);
+
+    return 0;
   }
 
   if (t1->kind == T_VAR) {
@@ -419,7 +433,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   }
 
   if (t2->kind == T_VAR) {
-
     for (TypeClass *tc = t1->implements; tc != NULL; tc = tc->next) {
       typeclasses_extend(t2, tc);
     }
@@ -438,6 +451,9 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     // Unify parameter types
     TICtx ur1 = {};
     if (unify(t1->data.T_FN.from, t2->data.T_FN.from, &ur1) != 0) {
+      // printf("fn 1st arg mismatch\n");
+      // print_type(t1->data.T_FN.from);
+      // print_type(t2->data.T_FN.from);
 
       return 1;
     }
@@ -510,6 +526,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
   // Case 5: Two concrete types - this will be handled by constraint solver
   // later
+  //
   if (t1->kind != T_VAR && t2->kind != T_VAR) {
 
     return 0;
@@ -1247,6 +1264,10 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
                    (ctx->current_fn_ast &&
                     ctx->current_fn_ast->data.AST_LAMBDA.num_yields) ||
                    0}}};
+
+  if (expr->tag == AST_EXTERN_FN) {
+    bmd.type = BT_EXTERN_FN;
+  }
 
   // if (expr->tag == AST_YIELD && ctx->current_fn_ast &&
   //     ctx->current_fn_ast->data.AST_LAMBDA.num_yields == 1) {

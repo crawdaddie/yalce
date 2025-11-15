@@ -34,7 +34,12 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
     f = create_fn_from_cons(cons, cons);
   }
 
-  return infer_fn_application(f, ast, ctx);
+  Type *r = infer_fn_application(f, ast, ctx);
+  // print_ast(ast);
+  // print_type(f);
+  // print_type(ast->data.AST_APPLICATION.function->type);
+  // print_type(ast->data.AST_APPLICATION.args->type);
+  return r;
 }
 
 bool match_arg_lists(int len, Type **a, Type **b) {
@@ -146,10 +151,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   // Step 1: Infer function type
   Type *func_type = infer(func, ctx);
 
-  // printf("infer cons application??\n");
-  // print_ast(ast);
-  // print_type(func_type);
-
   if (!func_type) {
     return type_error(ast, "Cannot infer type of applicable");
   }
@@ -183,14 +184,11 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   if (IS_PRIMITIVE_TYPE(func_type)) {
     infer(ast->data.AST_APPLICATION.args, ctx);
     return func_type;
-    // if (func_type->kind == T_CHAR) {
-    //   // printf("primitive type with constructor???\n");
-    //   // print_type(func_type);
-    //   // return NULL;
-    // }
   }
 
-  return infer_fn_application(func_type, ast, ctx);
+
+  Type *x = infer_fn_application(func_type, ast, ctx);
+  return x;
 }
 
 Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
@@ -242,6 +240,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     expected_type->closure_meta = deep_copy_type(func_type->closure_meta);
   }
   expected_type = apply_substitution(solution, expected_type);
+
   expected_type->data.T_FN.attributes = func_type->data.T_FN.attributes;
   ast->data.AST_APPLICATION.function->type = expected_type;
 

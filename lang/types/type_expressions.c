@@ -131,7 +131,9 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         }
         members[i] = sch;
       }
+
       names[i] = name;
+
       if (members[i]->kind == T_CONS) {
         members[i]->data.T_CONS.name = name;
       }
@@ -176,14 +178,6 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
                        .type = contained};
 
         Type *final = instantiate_type_in_env(container, &env);
-
-        // printf("final\n");
-        // print_type(final);
-        //
-        // container->data.T_CONS.args = t_alloc(sizeof(Type *));
-        // container->data.T_CONS.args[0] = contained;
-        //
-        // print_type(container);
 
         return final;
       }
