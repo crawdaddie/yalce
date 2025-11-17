@@ -51,6 +51,7 @@ typedef struct TypeEnv {
   int ref_count;
 
   struct TypeEnv *next;
+  bool is_opened_var;
 } TypeEnv;
 
 typedef struct TICtx {

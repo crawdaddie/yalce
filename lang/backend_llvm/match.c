@@ -96,12 +96,31 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
   }
 
   case AST_APPLICATION: {
-    if (pattern->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
+
+    // if (pattern->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+    //   fprintf(stderr, "match pattern not implemented\n");
+    //   return;
+    // }
+    //
+    // if (pattern->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
+    //   fprintf(stderr, "match pattern not implemented\n");
+    //   return;
+    // }
+
+    const char *cons_name;
+
+    if (pattern->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+      cons_name =
+          pattern->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+    } else if (pattern->data.AST_APPLICATION.function->tag ==
+               AST_RECORD_ACCESS) {
+
+      cons_name = pattern->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS
+                      .member->data.AST_IDENTIFIER.value;
+    } else {
+      fprintf(stderr, "match pattern not implemented\n");
       return;
     }
-
-    const char *cons_name =
-        pattern->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
     // Handle list prepend (::)
     if (strcmp(cons_name, "::") == 0) {
@@ -119,7 +138,6 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
       LLVMValueRef is_not_empty =
           LLVMBuildNot(builder, is_empty, "list_not_empty");
 
-      // Create basic blocks for conditional head/tail testing
       LLVMValueRef parent_func =
           LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
       LLVMBasicBlockRef test_elements_block =
@@ -129,7 +147,6 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
 
       LLVMBasicBlockRef pre_branch_block = LLVMGetInsertBlock(builder);
 
-      // Branch based on is_not_empty
       LLVMBuildCondBr(builder, is_not_empty, test_elements_block, merge_block);
 
       LLVMPositionBuilderAtEnd(builder, test_elements_block);
@@ -158,11 +175,6 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
 
       LLVMBasicBlockRef incoming_blocks[2];
       LLVMValueRef incoming_values[2];
-
-      // // Get the block before conditional branch (where is_not_empty was
-      // // computed)
-      // LLVMBasicBlockRef pre_branch_block =
-      //     LLVMGetPreviousBasicBlock(test_elements_block);
 
       incoming_blocks[0] = pre_branch_block;
       incoming_values[0] = LLVMConstInt(LLVMInt1Type(), 0, 0);

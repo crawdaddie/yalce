@@ -216,6 +216,11 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
     //   return inst;
     // }
   }
+  case AST_RECORD_ACCESS: {
+    Type *inf = infer(expr, ctx);
+
+    return inf;
+  }
 
   default: {
     return NULL;

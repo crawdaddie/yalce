@@ -10,6 +10,7 @@ typedef struct custom_binops_t {
   const char *binop;
   struct custom_binops_t *next;
 } custom_binops_t;
+
 typedef struct {
   Ast *ast_root;
   const char *filename;

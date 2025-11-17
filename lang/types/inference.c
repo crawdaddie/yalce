@@ -1154,6 +1154,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
   }
 
   case AST_APPLICATION: {
+
     if (is_list_cons_operator(binding)) {
       Ast *head = binding->data.AST_APPLICATION.args;
       Ast *rest = binding->data.AST_APPLICATION.args + 1;
@@ -1179,6 +1180,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       type_error(binding, "Could not create list destructure binding");
       return 1;
     }
+
     if (binding->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
       Type *app_type = infer(binding, ctx);
 
@@ -1188,8 +1190,27 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
         btype = extract_member_from_sum_type(
             btype, binding->data.AST_APPLICATION.function);
       }
-      // print_type(btype);
 
+      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
+                         btype->data.T_CONS.args[i], bmd_type, ctx);
+      }
+      binding->type = app_type;
+
+      return 0;
+    }
+
+    if (binding->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+
+      Type *app_type = infer(binding->data.AST_APPLICATION.function, ctx);
+
+      Type *btype = app_type;
+
+      if (is_sum_type(btype)) {
+        btype = extract_member_from_sum_type(
+            btype, binding->data.AST_APPLICATION.function->data
+                       .AST_RECORD_ACCESS.member);
+      }
       for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
         bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
                          btype->data.T_CONS.args[i], bmd_type, ctx);
@@ -1227,6 +1248,11 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     binding->type = from->type;
     return 0;
   }
+
+  // case AST_RECORD_ACCESS: {
+  //   print_ast(binding);
+  //   return 0;
+  // }
   default: {
     type_error(binding, "Cannot appear in a binding");
     return 1;
@@ -1659,13 +1685,17 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+
       if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
         type = rec_type->data.T_CONS.args[i];
+        // printf("found type @ %d??\n", i);
+        // print_type(type);
         ast->data.AST_RECORD_ACCESS.index = i;
         break;
       }
     }
 
+    // print_type(type);
     if (type->kind == T_SCHEME) {
       type = instantiate(type, ctx);
     }
@@ -1721,6 +1751,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       while (mod_env) {
         ctx->env = env_extend(ctx->env, mod_env->name, mod_env->type);
+        ctx->env->is_opened_var = true;
         mod_env = mod_env->next;
       }
 

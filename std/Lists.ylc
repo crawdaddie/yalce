@@ -15,6 +15,7 @@ let fold = fn f: (R -> T -> R) res: (R) a: (List of T) ->
   res_ref[0]
 ;;
 
+
 let map = fn f l ->
   let aux = fn f l res -> 
     match l with
