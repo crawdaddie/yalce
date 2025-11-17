@@ -1,0 +1,176 @@
+let _ = dlopen "./libpatterns.so";
+let int32_parse = extern fn String -> Int;
+
+type Seq =
+  | SeqInt of Int
+  | SeqList of (List of Seq)
+  | SeqChoose of (List of Seq)
+  | SeqAlt of (List of Seq)
+  ;
+
+
+let seq_extend = fn seq new ->
+  match seq with
+  | SeqList (x::xs) ->   SeqList (new::x::xs)  # Non-empty list
+  | SeqChoose (x::xs) -> SeqChoose (new::x::xs)  # Non-empty choose
+  | SeqAlt (x::xs) ->    SeqAlt (new::x::xs)  # Non-empty choose
+  | SeqInt i -> SeqList [new, SeqInt i]       # Wrap int in a list
+  | SeqList [] -> SeqList [new,]               # Empty list
+  | SeqChoose [] -> SeqChoose [new,]           # Empty choose
+  | SeqAlt [] -> SeqAlt [new,]               # Empty list
+  ;;
+
+
+let conclude_current = fn parse_fn next_tok current stack ->
+  match stack with
+  | SeqList (parent::rest) -> (
+    let updated_parent = seq_extend parent current;
+    (SeqList rest) |> parse_fn 0 next_tok next_tok updated_parent 
+  )
+  | SeqChoose (parent::rest) -> (
+    let updated_parent = seq_extend parent current;
+    (SeqChoose rest) |> parse_fn 0 next_tok next_tok updated_parent
+  )
+  | SeqAlt (parent::rest) -> (
+    let updated_parent = seq_extend parent current;
+    (SeqAlt rest) |> parse_fn 0 next_tok next_tok updated_parent 
+  )
+  | SeqList [] -> parse_fn 0 next_tok next_tok current stack
+  | SeqChoose [] -> parse_fn 0 next_tok next_tok current stack
+  | SeqAlt [] -> parse_fn 0 next_tok next_tok current stack
+  | _ -> current  # Shouldn't happen - unreachable?
+  ;;
+
+let start_new = fn tok_len start next current stack ->
+  let final_current = if tok_len == 0 then current
+                      else seq_extend current (SeqInt (int32_parse start));
+  # Push current context onto stack, start new SeqChoose context
+  seq_extend stack final_current
+  ;;
+
+let parse_seq = fn tok_len start next current stack ->
+
+
+  match next[0] with
+  | '0'..'9' ->
+    parse_seq (tok_len + 1) start (array_succ next) current stack
+
+  | ' ' -> (
+    let nn = array_succ next;
+    if tok_len == 0 then
+      # Skip leading/multiple spaces
+      parse_seq 0 nn nn current stack
+
+    else (
+      let tok_str = start[0 .. tok_len];
+      let tok_int = int32_parse tok_str;
+
+      # Add the parsed integer to current context
+      let updated_current = seq_extend current (SeqInt tok_int);
+      parse_seq 0 nn nn updated_current stack
+    )
+  )
+
+  | '{' -> (
+    let nn = array_succ next;
+    let new_stack = start_new tok_len start next current stack;
+    parse_seq 0 nn nn (SeqChoose []) new_stack
+  )
+
+  | '}' -> (
+    let next = array_succ next;
+    let current = if tok_len == 0 then current
+                        else seq_extend current (SeqInt (int32_parse start)) in
+    conclude_current parse_seq next current stack
+  )
+
+  | '[' -> (
+    let nn = array_succ next;
+    let new_stack = start_new tok_len start next current stack;
+    parse_seq 0 nn nn (SeqList []) new_stack
+  )
+
+  | ']' -> (
+    let next = array_succ next;
+    let current = if tok_len == 0 then current
+                        else seq_extend current (SeqInt (int32_parse start)) in
+    conclude_current parse_seq next current stack
+  )
+
+  | '<' -> (
+    let nn = array_succ next;
+    let new_stack = start_new tok_len start next current stack;
+    parse_seq 0 nn nn (SeqAlt []) new_stack
+  )
+
+  | '>' -> (
+    let next = array_succ next;
+    let current = if tok_len == 0 then current
+                        else seq_extend current (SeqInt (int32_parse start)) in
+    conclude_current parse_seq next current stack
+  )
+
+  | '\0' -> (
+    if tok_len == 0 then current else (
+      let tok_str = start[0 .. tok_len];
+      seq_extend current (SeqInt (int32_parse start))
+    )
+  )
+  ;;
+
+let print_seq_helper = fn is_first seq ->
+  match seq with
+  | SeqList [] -> print "], "
+  | SeqChoose [] -> print "}, "
+  | SeqAlt [] -> print ">, "
+  | SeqInt i -> print `{i}, `
+  | SeqList (x::rest) -> (
+    if is_first then (print "[") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqList rest)
+  )
+  | SeqChoose (x::rest) -> (
+    if is_first then (print "{") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqChoose rest)
+  )
+
+  | SeqAlt (x::rest) -> (
+    if is_first then (print "<") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqAlt rest)
+  )
+  | _ -> ()
+  ;;
+
+let print_seq = print_seq_helper true;
+
+# let input = "1 2 3 { 4 5 [ 199 200 {3 2 1} ] } 7 8";
+# let result = parse 0 input input (SeqList []) (SeqList []);
+# print_seq result;
+
+
+let seq_reverse = fn s -> 
+
+  let seq_list_rev = fn l res ->
+    match l with
+    | [] -> res
+    | x :: rest -> seq_list_rev rest ((seq_reverse x) :: res)
+  ;;
+
+  match s with
+  | SeqInt i -> s
+  | SeqList l -> SeqList (seq_list_rev l []) 
+  | SeqChoose l -> SeqChoose (seq_list_rev l []) 
+  | SeqAlt l -> SeqAlt (seq_list_rev l []) 
+  ;;
+
+let parse = (fn input -> parse_seq 0 input input (SeqList []) (SeqList []) |> seq_reverse);
+
+let compile_coroutine_from_seq = extern fn Seq -> Coroutine of Seq;
+
+let as_cor = fn seq ->
+  compile_coroutine_from_seq seq
+  ;;
+
+
