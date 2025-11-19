@@ -1251,6 +1251,14 @@ Ast *array_index_expression(Ast *array, Ast *index_expr) {
       index_expr);
 }
 
+Ast *array_offset_expression(Ast *array, Ast *index_expr) {
+
+  return ast_application(
+      ast_application(ast_identifier((ObjString){.chars = "array_offset", 12}),
+                      index_expr),
+      array);
+}
+
 // Ast *array_offset_expression(Ast *array, Ast *index_expr) {
 //   printf("Array offset expr\n");
 //   return ast_application(

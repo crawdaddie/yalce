@@ -493,9 +493,6 @@ LLVMValueRef cons_equality(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
     return array_eq(tuple1, tuple2, type, ctx, module, builder);
   }
 
-  LLVMTypeRef type1 = LLVMTypeOf(tuple1);
-  LLVMTypeRef type2 = LLVMTypeOf(tuple2);
-
   // Create basic blocks for the comparison loop
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
@@ -579,8 +576,12 @@ LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
 LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
                      JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
+
   Type *el_type = type->data.T_CONS.args[0];
+
   LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
+  LLVMDumpType(llvm_el_type);
+  printf("\n");
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_el_type);
 
   LLVMValueRef current_function =
@@ -648,14 +649,22 @@ LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
   LLVMValueRef l_data = ll_get_head_val(l_current, llvm_el_type, builder);
   LLVMValueRef r_data = ll_get_head_val(r_current, llvm_el_type, builder);
   // INSERT_PRINTF(2, "compare %d %d\n", l_data, r_data);
+  printf("???\n");
 
+  print_type(el_type);
+  LLVMDumpValue(l_data);
+  LLVMDumpValue(r_data);
+  printf("\n");
   LLVMValueRef elements_equal =
       _codegen_equality(el_type, l_data, r_data, ctx, module, builder);
 
   LLVMValueRef current_eq =
       LLVMBuildLoad2(builder, LLVMInt1Type(), is_eq_alloca, "current_eq");
+
+  printf("\n");
   LLVMValueRef new_eq =
       LLVMBuildAnd(builder, current_eq, elements_equal, "new_eq");
+
   LLVMBuildStore(builder, new_eq, is_eq_alloca);
 
   LLVMBuildCondBr(builder, elements_equal, inc_block, after_block);
@@ -683,7 +692,17 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
   if (type->kind == T_VAR) {
     type = resolve_type_in_env(type, ctx->env);
   }
+
   switch (type->kind) {
+  case T_VAR: {
+    // if (type->is_recursive_type_ref) {
+    //   Type t = *type;
+    //   t.is_recursive_type_ref = false;
+    //   return _codegen_equality(&t, l, r, ctx, module, builder);
+    // }
+
+    return _FALSE;
+  }
   case T_BOOL:
   case T_INT:
   case T_UINT64: {
@@ -712,11 +731,15 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
       return list_eq(type, l, r, ctx, module, builder);
     }
 
+    if (is_sum_type(type)) {
+      return sum_type_eq(type, l, r, ctx, module, builder);
+    }
+
     return cons_equality(type, l, r, ctx, module, builder);
   }
   }
 
-  return NULL;
+  return _FALSE;
 }
 
 LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -806,6 +829,9 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
 
 LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
+  printf("int constructor\n");
+  print_type(from_type);
+
   switch (from_type->kind) {
   case T_NUM: {
     return LLVMBuildFPToSI(builder, val, LLVMInt32Type(), "cast_double_to_int");
@@ -818,7 +844,8 @@ LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
   case T_UINT64: {
     // return LLVMBuildUIToFP(builder, val, LLVMDoubleType(),
     //                        "cast_uint64_to_double");
-    return NULL;
+    //
+    return LLVMBuildTrunc(builder, val, LLVMInt32Type(), "trunc_to_i32");
   }
 
   default:
@@ -863,8 +890,8 @@ LLVMValueRef int_constructor_handler(Ast *ast, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
   return int_constructor(
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder), &t_int,
-      module, builder);
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder),
+      ast->data.AST_APPLICATION.args->type, module, builder);
 }
 LLVMValueRef double_constructor_handler(Ast *ast, JITLangCtx *ctx,
                                         LLVMModuleRef module,
@@ -1410,6 +1437,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("sizeof", &sizeof_scheme, SizeOfHandler);
 
   GENERIC_FN_SYMBOL("Char", NULL, CharConstructorHandler);
+  GENERIC_FN_SYMBOL("Int", NULL, int_constructor_handler);
 
   // FN_SYMBOL()
 

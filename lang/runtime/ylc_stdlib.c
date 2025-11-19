@@ -4,6 +4,7 @@
 #include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -640,4 +641,33 @@ int32_t int32_parse(_String str) {
   // memcpy(copy, str.chars, str.size);
   int32_t x = (int32_t)strtol(str.chars, NULL, 10);
   return x;
+}
+
+// Find first regex match in a string
+// Returns 0 on success, 1 on failure or error
+// res[0] will contain rm_so, res[1] will contain rm_eo on success
+int regex_find_one(char *str, char *pattern, int32_t *res) {
+  regex_t regex;
+  regmatch_t match;
+
+  // Compile the regex pattern
+  int comp_result = regcomp(&regex, pattern, REG_EXTENDED);
+  if (comp_result != 0) {
+    return 1; // Compilation failed
+  }
+
+  // Execute the regex
+  int exec_result = regexec(&regex, str, 1, &match, 0);
+
+  regfree(&regex);
+
+  if (exec_result == 0) {
+    // Match found
+    res[0] = (int32_t)match.rm_so;
+    res[1] = (int32_t)match.rm_eo;
+    return 0; // Success
+  } else {
+    // No match or error
+    return 1; // Failure
+  }
 }

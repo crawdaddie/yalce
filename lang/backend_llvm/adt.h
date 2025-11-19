@@ -33,6 +33,11 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
 LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module);
 
-LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder) ;
+LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef sum_type_eq(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
+                         JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder);
 #define OPTION_TAG_TYPE LLVMInt8Type()
 #endif

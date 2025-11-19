@@ -183,9 +183,11 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
   if (IS_PRIMITIVE_TYPE(func_type)) {
     infer(ast->data.AST_APPLICATION.args, ctx);
+    // print_ast(ast);
+    // print_type(func_type);
+    // print_type(ast->data.AST_APPLICATION.args->type);
     return func_type;
   }
-
 
   Type *x = infer_fn_application(func_type, ast, ctx);
   return x;

@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,10 +15,10 @@ typedef struct Seq {
 } Seq;
 
 typedef enum {
-  SEQ_INT,
-  SEQ_LIST,
-  SEQ_CHOOSE,
-  SEQ_ALT,
+  SEQ_INT = 0,
+  SEQ_LIST = 1,
+  SEQ_CHOOSE = 2,
+  SEQ_ALT = 3,
 } SeqType;
 
 struct SeqList {
@@ -27,6 +28,42 @@ struct SeqList {
 
 typedef struct CSeqList CSeqList;
 typedef struct CSeq CSeq;
+
+bool seq_eq(Seq a, Seq b);
+bool seql_eq(SeqList *a, SeqList *b) {
+
+  if (a && b && a->next && b->next) {
+    return seq_eq(a->data, b->data) && seql_eq(a->next, b->next);
+  }
+
+  if (a && b) {
+    return seq_eq(a->data, b->data);
+  }
+  return false;
+}
+
+bool seq_eq(Seq a, Seq b) {
+  if (a.tag != b.tag) {
+    return false;
+  }
+  switch (a.tag) {
+  case SEQ_INT: {
+    return a.data.int_val == b.data.int_val;
+  }
+  case SEQ_LIST:
+  case SEQ_CHOOSE:
+  case SEQ_ALT: {
+    SeqList *la = a.data.list;
+    SeqList *lb = b.data.list;
+    if (la && lb) {
+      return seql_eq(la, lb);
+    }
+
+    return false;
+  }
+  }
+  return false;
+}
 
 typedef struct CSeqArray {
   int32_t size;
@@ -228,7 +265,7 @@ void iter_seq(CorState **state_ptr, Seq *val) {
     CSeq *chosen = current->data.choose.arr.data + c;
 
     if (chosen->tag == SEQ_INT) {
-      *val = (Seq){.tag = SEQ_INT, .data = {.int_val = current->data.int_val}};
+      *val = (Seq){.tag = SEQ_INT, .data = {.int_val = chosen->data.int_val}};
       if (state->parent) {
         CorState *parent = (CorState *)state->parent;
         free(state);
@@ -265,7 +302,7 @@ void iter_seq(CorState **state_ptr, Seq *val) {
     CSeq *chosen = current->data.alternate.arr.data + c;
 
     if (chosen->tag == SEQ_INT) {
-      *val = (Seq){.tag = SEQ_INT, .data = {.int_val = current->data.int_val}};
+      *val = (Seq){.tag = SEQ_INT, .data = {.int_val = chosen->data.int_val}};
       if (state->parent) {
         CorState *parent = (CorState *)state->parent;
         free(state);
@@ -290,6 +327,7 @@ void *seq_coroutine_fn(Cor *cor) {
   CorState **state_ptr = (CorState **)&cor->state;
   Seq val;
   iter_seq(state_ptr, &val);
+  cor->promise.tag = 0;
   cor->promise.val = val;
   cor->counter++;
   return cor;

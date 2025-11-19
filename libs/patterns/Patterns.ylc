@@ -173,4 +173,5 @@ let as_cor = fn seq ->
   compile_coroutine_from_seq seq
   ;;
 
-
+let seq_eq = extern fn Seq -> Seq -> Bool;
+let Seq : Eq = fn a b -> seq_eq a b;;

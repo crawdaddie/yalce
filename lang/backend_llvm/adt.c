@@ -2,6 +2,7 @@
 #include "array.h"
 #include "types.h"
 #include "types/type_ser.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/Types.h"
@@ -9,6 +10,10 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
+
+LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
+                               JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
 
 LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
                                         JITLangCtx *ctx, LLVMModuleRef module,
@@ -547,4 +552,91 @@ LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
     return NULL;
   }
   }
+}
+LLVMValueRef sum_type_eq(Type *type, LLVMValueRef val1, LLVMValueRef val2,
+                         JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
+
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+
+  LLVMBasicBlockRef tag_mismatch_block =
+      LLVMAppendBasicBlock(function, "sum_tag_mismatch");
+  LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(function, "sum_eq_end");
+
+  LLVMValueRef tag1 = extract_tag(val1, builder);
+  LLVMValueRef tag2 = extract_tag(val2, builder);
+
+  LLVMValueRef tags_equal =
+      LLVMBuildICmp(builder, LLVMIntEQ, tag1, tag2, "tags_eq");
+
+  LLVMBasicBlockRef switch_block =
+      LLVMAppendBasicBlock(function, "sum_tag_switch");
+  LLVMBuildCondBr(builder, tags_equal, switch_block, tag_mismatch_block);
+
+  LLVMPositionBuilderAtEnd(builder, tag_mismatch_block);
+  LLVMBuildBr(builder, end_block);
+
+  LLVMPositionBuilderAtEnd(builder, switch_block);
+
+  int num_variants = type->data.T_CONS.num_args;
+  LLVMBasicBlockRef default_block = tag_mismatch_block; // Should never happen
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, tag1, default_block, num_variants);
+
+  LLVMValueRef phi_values[num_variants + 1];
+  LLVMBasicBlockRef phi_blocks[num_variants + 1];
+
+  int phi_count = 0;
+
+  phi_values[phi_count] = _FALSE;
+  phi_blocks[phi_count] = tag_mismatch_block;
+  phi_count++;
+
+  for (int vidx = 0; vidx < num_variants; vidx++) {
+    LLVMBasicBlockRef variant_block =
+        LLVMAppendBasicBlock(function, "sum_variant_eq");
+
+    LLVMAddCase(switch_inst, LLVMConstInt(TAG_TYPE, vidx, 0), variant_block);
+
+    LLVMPositionBuilderAtEnd(builder, variant_block);
+    Type *variant_type = type->data.T_CONS.args[vidx];
+    Type *payload_type = NULL;
+
+    if (variant_type->data.T_CONS.num_args > 0) {
+      payload_type = variant_type->data.T_CONS.args[0];
+    }
+
+    // Extract payloads
+    LLVMValueRef payload1 = LLVMBuildExtractValue(builder, val1, 1, "payload1");
+    payload1 = cast_union(payload1, payload_type, ctx, module, builder);
+
+    LLVMValueRef payload2 = LLVMBuildExtractValue(builder, val2, 1, "payload2");
+    payload2 = cast_union(payload2, payload_type, ctx, module, builder);
+
+    if (variant_type->data.T_CONS.num_args > 0) {
+      printf("compare\n");
+      print_type(payload_type);
+
+      LLVMValueRef payloads_equal = _codegen_equality(
+          payload_type, payload1, payload2, ctx, module, builder);
+
+      phi_values[phi_count] = payloads_equal;
+    } else {
+      // No payload, just tags matching means equal
+      phi_values[phi_count] = _TRUE;
+    }
+
+    phi_blocks[phi_count] = variant_block;
+    phi_count++;
+
+    LLVMBuildBr(builder, end_block);
+  }
+
+  // Build phi node to merge results
+  LLVMPositionBuilderAtEnd(builder, end_block);
+  LLVMValueRef result_phi = LLVMBuildPhi(builder, LLVMInt1Type(), "eq_result");
+  LLVMAddIncoming(result_phi, phi_values, phi_blocks, phi_count);
+
+  return result_phi;
 }

@@ -130,9 +130,12 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
 
   switch (r->kind) {
   case T_VAR: {
+
     if (r->is_recursive_type_ref) {
+      // TODO??? wtf
       return r;
     }
+
     Type *rr = env_lookup(env, r->data.T_VAR);
 
     if (rr && rr->kind == T_VAR) {
