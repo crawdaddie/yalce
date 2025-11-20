@@ -2,6 +2,7 @@
 #include "array.h"
 #include "types.h"
 #include "types/type_ser.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/Types.h"
@@ -9,6 +10,10 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
+
+LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
+                               JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
 
 LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
                                         JITLangCtx *ctx, LLVMModuleRef module,
@@ -99,6 +104,35 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
     // LLVMValueRef union_value = LLVMGetUndef(union_type);
     val = codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
 
+    // Convert val to match the union type
+    LLVMTypeRef val_type = LLVMTypeOf(val);
+    LLVMTypeKind val_kind = LLVMGetTypeKind(val_type);
+
+    // If val is a pointer, convert it to i64 for storage in the union
+    if (val_kind == LLVMPointerTypeKind) {
+      val = LLVMBuildPtrToInt(builder, val, union_type, "ptr_to_int");
+    } else if (val_kind == LLVMIntegerTypeKind &&
+               // // If val is a smaller integer, extend it
+               LLVMGetIntTypeWidth(val_type) <
+                   LLVMGetIntTypeWidth(union_type)) {
+      val = LLVMBuildZExt(builder, val, union_type, "zext_to_iN");
+    } else if (val_kind == LLVMDoubleTypeKind) {
+      val = LLVMBuildBitCast(builder, val, union_type, "double_to_iN");
+    } else if (val_kind == LLVMStructTypeKind) {
+      // For struct types, we need to manually pack the fields into the i128
+      // to avoid alignment issues with bitcast
+      // Store to memory with align 4 (natural alignment), then load as i128
+      LLVMValueRef alloca = LLVMBuildAlloca(builder, val_type, "struct_pack_temp");
+      LLVMValueRef store = LLVMBuildStore(builder, val, alloca);
+      LLVMSetAlignment(store, 4);  // Use natural alignment to avoid padding
+
+      LLVMValueRef load = LLVMBuildLoad2(builder, union_type, alloca, "struct_to_iN");
+      LLVMSetAlignment(load, 4);  // Match store alignment
+      val = load;
+    } else {
+      val = LLVMBuildBitCast(builder, val, union_type, "any_to_iN");
+    }
+
     // union_value =
     //     LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
 
@@ -159,6 +193,9 @@ unsigned long long get_largest_type_size(LLVMContextRef context,
   for (size_t i = 1; i < count; i++) {
     unsigned current_size = LLVMStoreSizeOfType(target_data, types[i]);
     unsigned current_align = LLVMABIAlignmentOfType(target_data, types[i]);
+    printf("size %d\n", current_size);
+    LLVMDumpType(types[i]);
+    printf("\n");
 
     if (current_size > largest_size ||
         (current_size == largest_size && current_align > largest_align)) {
@@ -423,6 +460,8 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
 
   for (int i = 0; i < len; i++) {
     Type *member_type = type->data.T_CONS.args[i];
+    printf("%d: ", i);
+    print_type(member_type);
 
     // Check if this member contains a recursive reference
     if (type_contains_recursive_ref(member_type, name)) {
@@ -441,7 +480,9 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
         continue;
       }
     } else {
-      member_types[i] = type_to_llvm_type(member_type, ctx, module);
+      print_type(member_type->data.T_CONS.args[0]);
+      member_types[i] =
+          type_to_llvm_type(member_type->data.T_CONS.args[0], ctx, module);
     }
   }
 
@@ -456,4 +497,172 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
 
   destroy_ctx(&_ctx);
   return variant_struct;
+}
+
+LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMTypeRef target_llvm_type = type_to_llvm_type(desired_type, ctx, module);
+  if (!target_llvm_type) {
+    fprintf(stderr, "Error: could not get LLVM type for desired type\n");
+    return NULL;
+  }
+
+  switch (desired_type->kind) {
+  case T_INT: {
+    // i64 -> i32: truncate
+    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_int");
+  }
+
+  case T_UINT64: {
+    // i64 -> i64: no-op, but might need bitcast depending on context
+    LLVMTypeRef un_type = LLVMTypeOf(un);
+    if (LLVMGetTypeKind(un_type) == LLVMIntegerTypeKind &&
+        LLVMGetIntTypeWidth(un_type) == 64) {
+      return un; // Already i64
+    }
+    return LLVMBuildZExtOrBitCast(builder, un, target_llvm_type,
+                                  "union_to_uint64");
+  }
+
+  case T_NUM: {
+    // i64 -> double: bitcast (reinterpret bits)
+    return LLVMBuildBitCast(builder, un, target_llvm_type, "union_to_double");
+  }
+
+  case T_CHAR: {
+    // i64 -> i8: truncate
+    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_char");
+  }
+
+  case T_BOOL: {
+    // i64 -> i1: truncate to least significant bit
+    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_bool");
+  }
+
+  case T_VOID: {
+    // No value needed for void
+    return NULL;
+  }
+
+  case T_STRING:
+  case T_FN:
+  case T_CONS: {
+    // These are pointer types or aggregate types
+    // i64 -> ptr: inttoptr
+    if (LLVMGetTypeKind(target_llvm_type) == LLVMPointerTypeKind) {
+      return LLVMBuildIntToPtr(builder, un, target_llvm_type, "union_to_ptr");
+    }
+
+    // For struct types stored in the union, we need to use the alloca method
+    // This handles cases where the union contains a struct value directly
+    // Use align 4 to match the natural struct alignment without padding
+    LLVMValueRef alloca =
+        LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
+
+    // Store with explicit alignment 4 to match how the struct was packed
+    LLVMValueRef store = LLVMBuildStore(builder, un, alloca);
+    LLVMSetAlignment(store, 4);
+
+    // Load as the target type with matching alignment
+    LLVMValueRef load = LLVMBuildLoad2(builder, target_llvm_type, alloca, "union_to_struct");
+    LLVMSetAlignment(load, 4);
+
+    return load;
+  }
+
+  default: {
+    fprintf(stderr, "Error, could not cast union type (kind: %d)\n",
+            desired_type->kind);
+    print_type(desired_type);
+    return NULL;
+  }
+  }
+}
+LLVMValueRef sum_type_eq(Type *type, LLVMValueRef val1, LLVMValueRef val2,
+                         JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
+
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+
+  LLVMBasicBlockRef tag_mismatch_block =
+      LLVMAppendBasicBlock(function, "sum_tag_mismatch");
+  LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(function, "sum_eq_end");
+
+  LLVMValueRef tag1 = extract_tag(val1, builder);
+  LLVMValueRef tag2 = extract_tag(val2, builder);
+
+  LLVMValueRef tags_equal =
+      LLVMBuildICmp(builder, LLVMIntEQ, tag1, tag2, "tags_eq");
+
+  LLVMBasicBlockRef switch_block =
+      LLVMAppendBasicBlock(function, "sum_tag_switch");
+  LLVMBuildCondBr(builder, tags_equal, switch_block, tag_mismatch_block);
+
+  LLVMPositionBuilderAtEnd(builder, tag_mismatch_block);
+  LLVMBuildBr(builder, end_block);
+
+  LLVMPositionBuilderAtEnd(builder, switch_block);
+
+  int num_variants = type->data.T_CONS.num_args;
+  LLVMBasicBlockRef default_block = tag_mismatch_block; // Should never happen
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, tag1, default_block, num_variants);
+
+  LLVMValueRef phi_values[num_variants + 1];
+  LLVMBasicBlockRef phi_blocks[num_variants + 1];
+
+  int phi_count = 0;
+
+  phi_values[phi_count] = _FALSE;
+  phi_blocks[phi_count] = tag_mismatch_block;
+  phi_count++;
+
+  for (int vidx = 0; vidx < num_variants; vidx++) {
+    LLVMBasicBlockRef variant_block =
+        LLVMAppendBasicBlock(function, "sum_variant_eq");
+
+    LLVMAddCase(switch_inst, LLVMConstInt(TAG_TYPE, vidx, 0), variant_block);
+
+    LLVMPositionBuilderAtEnd(builder, variant_block);
+    Type *variant_type = type->data.T_CONS.args[vidx];
+    Type *payload_type = NULL;
+
+    if (variant_type->data.T_CONS.num_args > 0) {
+      payload_type = variant_type->data.T_CONS.args[0];
+    }
+
+    // Extract payloads
+    LLVMValueRef payload1 = LLVMBuildExtractValue(builder, val1, 1, "payload1");
+    payload1 = cast_union(payload1, payload_type, ctx, module, builder);
+
+    LLVMValueRef payload2 = LLVMBuildExtractValue(builder, val2, 1, "payload2");
+    payload2 = cast_union(payload2, payload_type, ctx, module, builder);
+
+    if (variant_type->data.T_CONS.num_args > 0) {
+      // printf("compare\n");
+      // print_type(payload_type);
+
+      LLVMValueRef payloads_equal = _codegen_equality(
+          payload_type, payload1, payload2, ctx, module, builder);
+
+      phi_values[phi_count] = payloads_equal;
+    } else {
+      // No payload, just tags matching means equal
+      phi_values[phi_count] = _TRUE;
+    }
+
+    phi_blocks[phi_count] = variant_block;
+    phi_count++;
+
+    LLVMBuildBr(builder, end_block);
+  }
+
+  // Build phi node to merge results
+  LLVMPositionBuilderAtEnd(builder, end_block);
+  LLVMValueRef result_phi = LLVMBuildPhi(builder, LLVMInt1Type(), "eq_result");
+  LLVMAddIncoming(result_phi, phi_values, phi_blocks, phi_count);
+
+  return result_phi;
 }

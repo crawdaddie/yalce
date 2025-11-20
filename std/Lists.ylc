@@ -15,6 +15,7 @@ let fold = fn f: (R -> T -> R) res: (R) a: (List of T) ->
   res_ref[0]
 ;;
 
+
 let map = fn f l ->
   let aux = fn f l res -> 
     match l with
@@ -22,6 +23,15 @@ let map = fn f l ->
     | x :: rest -> aux f rest (f x :: res) 
   ;;
   aux f l []
+;;
+
+let rev = fn l: (List of T) ->
+  let aux = (fn l: (List of T) res: (List of T) ->
+    match l with
+    | x :: rest -> aux rest (x :: res)
+    | [] -> res
+  ) in
+  aux l []
 ;;
 
 #

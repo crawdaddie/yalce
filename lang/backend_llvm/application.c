@@ -69,6 +69,7 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
   if (types_equal(from_type, to_type)) {
     return val;
   }
+
   if (is_pointer_type(to_type) && to_type->data.T_CONS.num_args == 1 &&
       types_equal(to_type->data.T_CONS.args[0], from_type)) {
     LLVMTypeRef lvft = type_to_llvm_type(from_type, ctx, module);
@@ -129,8 +130,10 @@ LLVMValueRef call_callable_rec(int num_args_processed,
     } else {
       sprintf(name, "call.record_member");
     }
-    return LLVMBuildCall2(builder, llvm_callable_type, callable, arg_vals,
-                          num_args_processed, name);
+
+    LLVMValueRef x = LLVMBuildCall2(builder, llvm_callable_type, callable,
+                                    arg_vals, num_args_processed, name);
+    return x;
   }
 
   if (is_closure(callable_type)) {
@@ -277,8 +280,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
   if (!sym) {
+
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);
+    print_location(ast->data.AST_APPLICATION.function);
     return NULL;
   }
 

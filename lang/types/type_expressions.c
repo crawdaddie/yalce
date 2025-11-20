@@ -131,7 +131,9 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         }
         members[i] = sch;
       }
+
       names[i] = name;
+
       if (members[i]->kind == T_CONS) {
         members[i]->data.T_CONS.name = name;
       }
@@ -177,14 +179,6 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
 
         Type *final = instantiate_type_in_env(container, &env);
 
-        // printf("final\n");
-        // print_type(final);
-        //
-        // container->data.T_CONS.args = t_alloc(sizeof(Type *));
-        // container->data.T_CONS.args[0] = contained;
-        //
-        // print_type(container);
-
         return final;
       }
 
@@ -221,6 +215,11 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
     //
     //   return inst;
     // }
+  }
+  case AST_RECORD_ACCESS: {
+    Type *inf = infer(expr, ctx);
+
+    return inf;
   }
 
   default: {
@@ -276,6 +275,8 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
       const char *mem_name = computed->data.T_CONS.args[i]->data.T_CONS.name;
       ctx->env = env_extend(ctx->env, mem_name, computed);
     }
+    print_type_env(ctx->env);
+    print_type(computed);
     return computed;
   }
 

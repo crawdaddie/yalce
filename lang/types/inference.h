@@ -21,6 +21,7 @@ typedef struct Constraint {
 typedef struct {
   enum BindingType {
     BT_VAR,
+    BT_EXTERN_FN,
     BT_RECURSIVE_REF,
     BT_FN_PARAM,
   } type;

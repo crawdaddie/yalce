@@ -104,6 +104,19 @@ LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
 }
 
 Ast *__current_ast;
+bool is_recursive_datatype(Type *t) {
+  if (t->kind == T_VAR && t->is_recursive_type_ref) {
+    return true;
+  }
+  if (t->kind == T_CONS) {
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      if (is_recursive_datatype(t->data.T_CONS.args[i])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 void print_codegen_location() { print_location(__current_ast); }
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -268,7 +281,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   case AST_TYPE_DECL: {
     Type *t = ast->type;
 
-    if (!is_generic(t) && is_sum_type(t)) {
+    if (!is_generic(t) && is_sum_type(t) && is_recursive_datatype(t)) {
 
       LLVMTypeRef llvm_type = codegen_recursive_datatype(t, ast, ctx, module);
 

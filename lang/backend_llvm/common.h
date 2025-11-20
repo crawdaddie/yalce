@@ -161,6 +161,7 @@ typedef struct BindList {
   LLVMTypeRef val_type;
   Type *type;
   Ast *binding;
+  int load_inst;
   struct BindList *next;
 } BindList;
 

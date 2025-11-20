@@ -1,7 +1,7 @@
-#include "ht.h"
-#include "inference.h"
-#include "types/type.h"
-#include "types/type_ser.h"
+#include "../ht.h"
+#include "../types/inference.h"
+#include "../types/type.h"
+#include "../types/type_ser.h"
 #include <string.h>
 
 Type t_int = {T_INT};
