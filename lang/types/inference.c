@@ -103,6 +103,8 @@ Type *next_tvar() {
 }
 
 Type *env_lookup(TypeEnv *env, const char *name) {
+  printf("lookup type ref %s\n", name);
+  print_type_env(env);
   TypeEnv *type_ref = lookup_type_ref(env, name);
   if (type_ref) {
     return type_ref->type;

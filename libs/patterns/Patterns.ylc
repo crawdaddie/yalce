@@ -33,7 +33,7 @@ let print_seq_helper = fn is_first seq ->
   match seq with
   | SeqInt i -> print `{i}, `
   | SeqNum n -> print `{n}, `
-  | SeqKey k -> print `{k}, `
+  | SeqKey k -> print `k{k}, `
   | SeqList [] -> print "], "
   | SeqChoose [] -> print "}, "
   | SeqAlt [] -> print ">, "
@@ -208,5 +208,5 @@ let as_cor = fn seq ->
   compile_coroutine_from_seq seq
   ;;
 
-let seq_eq = extern fn Seq -> Seq -> Bool;
-let Seq : Eq = fn a b -> seq_eq a b;;
+# let seq_eq = extern fn Seq -> Seq -> Bool;
+# let Seq : Eq = fn a b -> seq_eq a b;;

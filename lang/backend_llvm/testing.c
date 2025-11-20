@@ -5,6 +5,7 @@
 #include "jit.h"
 #include "serde.h"
 #include "symbols.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/ExecutionEngine.h"
 #include <stdlib.h>
@@ -85,6 +86,8 @@ Ast *get_test_module_ast(Ast *ast) {
 
 LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
+  printf("codegen test module\n");
+  print_type_env(ctx->env);
   Ast *test_module_ast = get_test_module_ast(ast);
   if (!test_module_ast) {
     fprintf(stderr, "module %s does not contain a test module\n",

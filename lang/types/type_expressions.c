@@ -275,6 +275,8 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
       const char *mem_name = computed->data.T_CONS.args[i]->data.T_CONS.name;
       ctx->env = env_extend(ctx->env, mem_name, computed);
     }
+    print_type_env(ctx->env);
+    print_type(computed);
     return computed;
   }
 

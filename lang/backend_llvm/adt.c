@@ -118,6 +118,17 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
       val = LLVMBuildZExt(builder, val, union_type, "zext_to_iN");
     } else if (val_kind == LLVMDoubleTypeKind) {
       val = LLVMBuildBitCast(builder, val, union_type, "double_to_iN");
+    } else if (val_kind == LLVMStructTypeKind) {
+      // For struct types, we need to manually pack the fields into the i128
+      // to avoid alignment issues with bitcast
+      // Store to memory with align 4 (natural alignment), then load as i128
+      LLVMValueRef alloca = LLVMBuildAlloca(builder, val_type, "struct_pack_temp");
+      LLVMValueRef store = LLVMBuildStore(builder, val, alloca);
+      LLVMSetAlignment(store, 4);  // Use natural alignment to avoid padding
+
+      LLVMValueRef load = LLVMBuildLoad2(builder, union_type, alloca, "struct_to_iN");
+      LLVMSetAlignment(load, 4);  // Match store alignment
+      val = load;
     } else {
       val = LLVMBuildBitCast(builder, val, union_type, "any_to_iN");
     }
@@ -182,6 +193,9 @@ unsigned long long get_largest_type_size(LLVMContextRef context,
   for (size_t i = 1; i < count; i++) {
     unsigned current_size = LLVMStoreSizeOfType(target_data, types[i]);
     unsigned current_align = LLVMABIAlignmentOfType(target_data, types[i]);
+    printf("size %d\n", current_size);
+    LLVMDumpType(types[i]);
+    printf("\n");
 
     if (current_size > largest_size ||
         (current_size == largest_size && current_align > largest_align)) {
@@ -446,6 +460,8 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
 
   for (int i = 0; i < len; i++) {
     Type *member_type = type->data.T_CONS.args[i];
+    printf("%d: ", i);
+    print_type(member_type);
 
     // Check if this member contains a recursive reference
     if (type_contains_recursive_ref(member_type, name)) {
@@ -464,7 +480,9 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
         continue;
       }
     } else {
-      member_types[i] = type_to_llvm_type(member_type, ctx, module);
+      print_type(member_type->data.T_CONS.args[0]);
+      member_types[i] =
+          type_to_llvm_type(member_type->data.T_CONS.args[0], ctx, module);
     }
   }
 
@@ -472,7 +490,6 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   unsigned long long union_size_bytes =
 
       get_largest_type_size(llvm_ctx, member_types, len, target_data);
-  printf("union size bytes %llu\n", union_size_bytes);
 
   LLVMTypeRef body_fields[] = {TAG_TYPE, LLVMIntType(union_size_bytes * 8)};
   LLVMStructSetBody(variant_struct, body_fields, 2, 0);
@@ -539,12 +556,19 @@ LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
 
     // For struct types stored in the union, we need to use the alloca method
     // This handles cases where the union contains a struct value directly
+    // Use align 4 to match the natural struct alignment without padding
     LLVMValueRef alloca =
         LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
-    LLVMBuildStore(builder, un, alloca);
 
-    // Load as the target type
-    return LLVMBuildLoad2(builder, target_llvm_type, alloca, "union_to_struct");
+    // Store with explicit alignment 4 to match how the struct was packed
+    LLVMValueRef store = LLVMBuildStore(builder, un, alloca);
+    LLVMSetAlignment(store, 4);
+
+    // Load as the target type with matching alignment
+    LLVMValueRef load = LLVMBuildLoad2(builder, target_llvm_type, alloca, "union_to_struct");
+    LLVMSetAlignment(load, 4);
+
+    return load;
   }
 
   default: {

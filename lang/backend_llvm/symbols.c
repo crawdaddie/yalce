@@ -77,15 +77,20 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   const char *chars = ast->data.AST_IDENTIFIER.value;
 
   int length = ast->data.AST_IDENTIFIER.length;
+  printf("lookup id %s %d %p\n", chars, length, ctx->env);
+  print_type_env(ctx->env);
 
   JITSymbol *sym = lookup_id_ast(ast, ctx);
 
   if (!sym) {
     Type *enum_type = env_lookup(ctx->env, chars);
 
+    print_type(enum_type);
+
     if (!enum_type) {
       enum_type = lookup_builtin_type(chars);
     }
+
     if (!enum_type) {
       fprintf(
           stderr,
