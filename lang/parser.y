@@ -162,6 +162,7 @@ expr:
 
                                       }
   | expr '[' expr ']'                 { $$ = array_index_expression($1, $3);}
+  | expr '[' expr DOUBLE_DOT ']'      { $$ = array_offset_expression($1, $3);}
   | expr ':' '=' expr                 { $$ = ast_assignment($1, $4); }
   ;
 

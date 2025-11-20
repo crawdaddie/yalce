@@ -10,6 +10,7 @@ typedef struct custom_binops_t {
   const char *binop;
   struct custom_binops_t *next;
 } custom_binops_t;
+
 typedef struct {
   Ast *ast_root;
   const char *filename;
@@ -472,5 +473,7 @@ Ast *ast_trait_impl(ObjString trait_name, ObjString type_name, Ast *module);
 Ast *body_tail(Ast *body);
 
 Ast *array_index_expression(Ast *array, Ast *index_expr);
+
+Ast *array_offset_expression(Ast *array, Ast *index_expr);
 // Ast *array_offset_expression(Ast *array, Ast *index_expr);
 #endif
