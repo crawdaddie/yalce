@@ -128,8 +128,11 @@ typedef struct __attribute__((packed)) {
   int32_t rm_eo; // end offset
 } RegexMatchOption;
 
-// Find first regex match in a string
+// String parsing functions
+int32_t int32_parse(_String str);
+double double_parse(_String str);
 
+// Find first regex match in a string
 int regex_find_one(char *str, char *pattern, int32_t *res);
 
 #endif

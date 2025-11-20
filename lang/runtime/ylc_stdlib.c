@@ -643,6 +643,13 @@ int32_t int32_parse(_String str) {
   return x;
 }
 
+double double_parse(_String str) {
+  int len = str.size;
+  char *copy[len + 1];
+  memcpy(copy, str.chars, len);
+  return strtod(copy, NULL);
+}
+
 // Find first regex match in a string
 // Returns 0 on success, 1 on failure or error
 // res[0] will contain rm_so, res[1] will contain rm_eo on success

@@ -1,24 +1,32 @@
+#include "ylc_datatypes.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct Seq Seq;
 typedef struct SeqList SeqList;
 
+YLC_STRING_TYPE(String)
+
 typedef struct Seq {
   int8_t tag;
-  union {
+  union { // Union starts at offset 4
     int32_t int_val;
+    double num_val;
+    String key_val;
     SeqList *list;
   } data;
-} Seq;
+} __attribute__((packed)) Seq;
 
 typedef enum {
   SEQ_INT = 0,
-  SEQ_LIST = 1,
-  SEQ_CHOOSE = 2,
-  SEQ_ALT = 3,
+  SEQ_NUM = 1,
+  SEQ_KEY = 2,
+  SEQ_LIST = 3,
+  SEQ_CHOOSE = 4,
+  SEQ_ALT = 5,
 } SeqType;
 
 struct SeqList {
@@ -74,6 +82,8 @@ typedef struct CSeq {
   SeqType tag;
   union {
     int32_t int_val;
+    double num_val;
+    char *key_val;
     struct {
       CSeqArray arr;
     } choose;
@@ -96,6 +106,48 @@ struct CSeqList {
 };
 
 CSeq *compile_data(Seq *seq);
+
+// CSeqArray __seq_list_to_arr(Seq *seq) {
+//
+//   printf("seq_list_to_arr called with tag=%d\n", seq->tag);
+//   printf("  sizeof(Seq) = %zu\n", sizeof(Seq));
+//   printf("  raw i128 value: 0x%016llx%016llx\n",
+//          (unsigned long long)(seq->data.raw >> 64),
+//          (unsigned long long)(seq->data.raw & 0xFFFFFFFFFFFFFFFFULL));
+//
+//   // Dump the raw bytes of the struct
+//   printf("  raw bytes: ");
+//   unsigned char *bytes = (unsigned char *)seq;
+//   for (int i = 0; i < sizeof(Seq); i++) {
+//     printf("%02x ", bytes[i]);
+//   }
+//   printf("\n");
+//
+//   SeqList *l = seq->data.list;
+//   printf("  list pointer (direct): %p\n", (void *)l);
+//
+//   // Try extracting pointer from lower 64 bits of i128
+//   uint64_t ptr_val_lower = (uint64_t)(seq->data.raw & 0xFFFFFFFFFFFFFFFFULL);
+//   printf("  pointer from lower 64 bits: %p\n", (void *)ptr_val_lower);
+//
+//   // Try extracting pointer from upper 64 bits of i128
+//   uint64_t ptr_val_upper = (uint64_t)(seq->data.raw >> 64);
+//   printf("  pointer from upper 64 bits: %p\n", (void *)ptr_val_upper);
+//
+//   int n = 0;
+//   while (l != NULL) {
+//     printf("  element %d: tag=%d, next=%p\n", n, l->data.tag, (void
+//     *)l->next); n++; l = l->next;
+//   }
+//
+//   CSeq *data = malloc(sizeof(CSeq) * n);
+//   int i = 0;
+//   for (l = seq->data.list; l; l = l->next, i++) {
+//     data[i] = *compile_data(&l->data);
+//   }
+//   return (CSeqArray){.size = n, .data = data};
+// }
+//
 CSeqArray seq_list_to_arr(Seq *seq) {
 
   SeqList *l = seq->data.list;
@@ -108,6 +160,7 @@ CSeqArray seq_list_to_arr(Seq *seq) {
 
   CSeq *data = malloc(sizeof(CSeq) * n);
   int i = 0;
+
   for (l = seq->data.list; l; l = l->next, i++) {
     data[i] = *compile_data(&l->data);
   }
@@ -120,7 +173,24 @@ CSeq *compile_data(Seq *seq) {
   cseq->tag = tag;
   switch (tag) {
   case SEQ_INT: {
+
     cseq->data.int_val = seq->data.int_val;
+    printf("compile data int %d seq->data.int_val %d\n", cseq->data.int_val,
+           seq->data.int_val);
+    break;
+  }
+
+  case SEQ_NUM: {
+    cseq->data.num_val = seq->data.num_val;
+    break;
+  }
+
+  case SEQ_KEY: {
+    char *copy = malloc(sizeof(char) * seq->data.key_val.size + 1);
+    memcpy(copy, seq->data.key_val.chars, seq->data.key_val.size);
+    copy[seq->data.key_val.size] = '\0';
+
+    cseq->data.key_val = copy;
     break;
   }
 
@@ -131,6 +201,7 @@ CSeq *compile_data(Seq *seq) {
   case SEQ_LIST: {
     cseq->data.list.arr = seq_list_to_arr(seq);
     cseq->data.list.state = 0;
+    break;
   }
   case SEQ_ALT: {
     cseq->data.alternate.arr = seq_list_to_arr(seq);
@@ -141,47 +212,56 @@ CSeq *compile_data(Seq *seq) {
   return cseq;
 }
 
-// void print_cseq(CSeq *seq) {
-//   if (!seq) {
-//     return;
-//   }
-//
-//   switch (seq->tag) {
-//   case SEQ_INT: {
-//     printf("%d, ", seq->data.int_val);
-//
-//     break;
-//   }
-//   case SEQ_ALT: {
-//     printf("alternate: <");
-//     for (int i = 0; i < seq->data.arr.size; i++) {
-//       print_cseq(seq->data.alternate.arr.data + i);
-//     }
-//     printf(">, ");
-//     break;
-//   }
-//
-//   case SEQ_CHOOSE: {
-//     printf("choose: {");
-//     for (int i = 0; i < seq->data.arr.size; i++) {
-//       print_cseq(seq->data.arr.data + i);
-//     }
-//     printf("}, ");
-//
-//     break;
-//   }
-//
-//   case SEQ_LIST: {
-//     printf("[");
-//     for (int i = 0; i < seq->data.arr.size; i++) {
-//       print_cseq(seq->data.list.arr.data + i);
-//     }
-//     printf("], ");
-//
-//     break;
-//   }
-//   }
-// }
+void print_cseq(CSeq *seq) {
+  if (!seq) {
+    return;
+  }
+
+  switch (seq->tag) {
+  case SEQ_INT: {
+    printf("%d, ", seq->data.int_val);
+    break;
+  }
+
+  case SEQ_NUM: {
+    printf("%f, ", seq->data.num_val);
+    break;
+  }
+
+  case SEQ_KEY: {
+    printf("%s, ", seq->data.key_val);
+    break;
+  }
+  case SEQ_ALT: {
+    printf("alternate: <");
+    for (int i = 0; i < seq->data.alternate.arr.size; i++) {
+      print_cseq(seq->data.alternate.arr.data + i);
+    }
+    printf(">, ");
+    break;
+  }
+
+  case SEQ_CHOOSE: {
+    printf("choose: {");
+    for (int i = 0; i < seq->data.choose.arr.size; i++) {
+      print_cseq(seq->data.choose.arr.data + i);
+    }
+    printf("}, ");
+
+    break;
+  }
+
+  case SEQ_LIST: {
+    printf("[");
+    for (int i = 0; i < seq->data.list.arr.size; i++) {
+      print_cseq(seq->data.list.arr.data + i);
+    }
+    printf("], ");
+
+    break;
+  }
+  }
+}
 //
 typedef struct {
   int8_t tag;
@@ -205,7 +285,37 @@ typedef struct {
   CorPromise promise;
 } Cor;
 
+void set_val(CSeq *current, Seq *val) {
+  switch (current->tag) {
+  case SEQ_INT: {
+
+    printf("set int\n");
+    *val = (Seq){.tag = SEQ_INT, .data = {.int_val = current->data.int_val}};
+    break;
+  }
+
+  case SEQ_NUM: {
+
+    printf("set num\n");
+    *val = (Seq){.tag = SEQ_NUM, .data = {.num_val = current->data.num_val}};
+
+    break;
+  }
+
+  case SEQ_KEY: {
+
+    printf("set key\n");
+    *val = (Seq){
+        .tag = SEQ_KEY,
+        .data = {.key_val = (String){.size = strlen(current->data.key_val),
+                                     .chars = current->data.key_val}}};
+
+    break;
+  }
+  }
+}
 void iter_seq(CorState **state_ptr, Seq *val) {
+
   CorState *state = *state_ptr;
 
   if (!state || !state->current) {
@@ -213,13 +323,29 @@ void iter_seq(CorState **state_ptr, Seq *val) {
   }
 
   CSeq *current = state->current;
+  printf("iter seq %d\n", current->tag);
   switch (current->tag) {
   case SEQ_INT: {
+    printf("set int\n");
     *val = (Seq){.tag = SEQ_INT, .data = {.int_val = current->data.int_val}};
+    break;
+  }
+
+  case SEQ_NUM: {
+    *val = (Seq){.tag = SEQ_NUM, .data = {.num_val = current->data.num_val}};
+    break;
+  }
+
+  case SEQ_KEY: {
+    *val = (Seq){
+        .tag = SEQ_KEY,
+        .data = {.key_val = (String){.chars = current->data.key_val,
+                                     .size = strlen(current->data.key_val)}}};
     break;
   }
   case SEQ_LIST: {
     int c = current->data.list.state;
+    printf("list state %d\n", c);
 
     if (c >= current->data.list.arr.size) {
       current->data.list.state = 0;
@@ -237,8 +363,9 @@ void iter_seq(CorState **state_ptr, Seq *val) {
     CSeq *next_elem = current->data.list.arr.data + c;
     current->data.list.state++;
 
-    if (next_elem->tag == SEQ_INT) {
-      *val = (Seq){.tag = SEQ_INT, .data = {.int_val = current->data.int_val}};
+    if (next_elem->tag == SEQ_INT || next_elem->tag == SEQ_NUM ||
+        next_elem->tag == SEQ_KEY) {
+      set_val(current, val);
     } else {
       CorState *child_state = malloc(sizeof(CorState));
       child_state->current = next_elem;
@@ -264,8 +391,10 @@ void iter_seq(CorState **state_ptr, Seq *val) {
     int c = rand() % current->data.choose.arr.size;
     CSeq *chosen = current->data.choose.arr.data + c;
 
-    if (chosen->tag == SEQ_INT) {
-      *val = (Seq){.tag = SEQ_INT, .data = {.int_val = chosen->data.int_val}};
+    if (chosen->tag == SEQ_INT || chosen->tag == SEQ_NUM ||
+        chosen->tag == SEQ_KEY) {
+      set_val(chosen, val);
+
       if (state->parent) {
         CorState *parent = (CorState *)state->parent;
         free(state);
@@ -301,8 +430,9 @@ void iter_seq(CorState **state_ptr, Seq *val) {
 
     CSeq *chosen = current->data.alternate.arr.data + c;
 
-    if (chosen->tag == SEQ_INT) {
-      *val = (Seq){.tag = SEQ_INT, .data = {.int_val = chosen->data.int_val}};
+    if (chosen->tag == SEQ_INT || chosen->tag == SEQ_NUM ||
+        chosen->tag == SEQ_KEY) {
+      set_val(chosen, val);
       if (state->parent) {
         CorState *parent = (CorState *)state->parent;
         free(state);
@@ -329,6 +459,15 @@ void *seq_coroutine_fn(Cor *cor) {
   iter_seq(state_ptr, &val);
   cor->promise.tag = 0;
   cor->promise.val = val;
+  if (val.tag == SEQ_INT) {
+    printf("yield (int) %d\n", val.data.int_val);
+  } else if (val.tag == SEQ_NUM) {
+
+    printf("yield (num) %f\n", val.data.num_val);
+  } else if (val.tag == SEQ_KEY) {
+
+    printf("yield (key) %s\n", val.data.key_val.chars);
+  }
   cor->counter++;
   return cor;
 }
@@ -339,18 +478,70 @@ void *seq_coroutine_fn(Cor *cor) {
 // struct Cor *next;
 // CorPromise promise;
 
-Cor *compile_coroutine_from_seq(Seq seq) {
-  // printf("compile seq %d\n", seq.tag);
-  CSeq *base = compile_data(&seq);
-  CorState *state = malloc(sizeof(CorState));
-  *state = (CorState){base, NULL};
+void print_seq(Seq *seq) {
+  if (!seq) {
+    return;
+  }
 
-  // print_cseq(data);
+  switch (seq->tag) {
+  case SEQ_INT: {
+    printf("%d, ", seq->data.int_val);
+    break;
+  }
+
+  case SEQ_NUM: {
+    printf("%f, ", seq->data.num_val);
+    break;
+  }
+
+  case SEQ_KEY: {
+    printf("%s, ", seq->data.key_val);
+    break;
+  }
+  case SEQ_ALT: {
+    printf("alternate: <");
+    for (SeqList *l = seq->data.list; l; l = l->next) {
+      print_seq(&l->data);
+    }
+    printf(">, ");
+    break;
+  }
+
+  case SEQ_CHOOSE: {
+    printf("choose: {");
+
+    for (SeqList *l = seq->data.list; l; l = l->next) {
+      print_seq(&l->data);
+    }
+    printf("}, ");
+
+    break;
+  }
+
+  case SEQ_LIST: {
+    printf("[");
+
+    for (SeqList *l = seq->data.list; l; l = l->next) {
+      print_seq(&l->data);
+    }
+    printf("], ");
+
+    break;
+  }
+  }
+}
+
+Cor *compile_coroutine_from_seq(Seq *seq) {
+  print_seq(seq);
+  // CSeq *base = compile_data(seq);
+  // CorState *state = malloc(sizeof(CorState));
+  // *state = (CorState){base, NULL};
+
   Cor *cor = malloc(sizeof(Cor));
   *cor = (Cor){
       0,
       (CorFn)seq_coroutine_fn,
-      state,
+      // state,
       NULL,
   };
   return cor;

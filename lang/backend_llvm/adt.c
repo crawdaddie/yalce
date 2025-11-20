@@ -115,10 +115,11 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
                // // If val is a smaller integer, extend it
                LLVMGetIntTypeWidth(val_type) <
                    LLVMGetIntTypeWidth(union_type)) {
-      val = LLVMBuildZExt(builder, val, union_type, "zext_to_union");
+      val = LLVMBuildZExt(builder, val, union_type, "zext_to_iN");
     } else if (val_kind == LLVMDoubleTypeKind) {
-      // If val is a double, bitcast it
-      val = LLVMBuildBitCast(builder, val, union_type, "double_to_i64");
+      val = LLVMBuildBitCast(builder, val, union_type, "double_to_iN");
+    } else {
+      val = LLVMBuildBitCast(builder, val, union_type, "any_to_iN");
     }
 
     // union_value =
@@ -471,6 +472,7 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   unsigned long long union_size_bytes =
 
       get_largest_type_size(llvm_ctx, member_types, len, target_data);
+  printf("union size bytes %llu\n", union_size_bytes);
 
   LLVMTypeRef body_fields[] = {TAG_TYPE, LLVMIntType(union_size_bytes * 8)};
   LLVMStructSetBody(variant_struct, body_fields, 2, 0);
@@ -615,8 +617,8 @@ LLVMValueRef sum_type_eq(Type *type, LLVMValueRef val1, LLVMValueRef val2,
     payload2 = cast_union(payload2, payload_type, ctx, module, builder);
 
     if (variant_type->data.T_CONS.num_args > 0) {
-      printf("compare\n");
-      print_type(payload_type);
+      // printf("compare\n");
+      // print_type(payload_type);
 
       LLVMValueRef payloads_equal = _codegen_equality(
           payload_type, payload1, payload2, ctx, module, builder);
