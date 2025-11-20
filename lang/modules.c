@@ -76,7 +76,6 @@ Type *infer_module_import(Ast *ast, TICtx *ctx) {
   Ast *body_ast;
   AstList *stmt_list;
   int len;
-
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     // Single statement - create a temporary AstList node
     AstList *single_stmt = t_alloc(sizeof(AstList));
@@ -90,51 +89,104 @@ Type *infer_module_import(Ast *ast, TICtx *ctx) {
     len = body_ast->data.AST_BODY.len;
   }
 
-  TypeEnv *env_start = ctx->env;
-
-  Ast *stmt;
-  Type **member_types = t_alloc(sizeof(Type *) * len);
-  const char **names = t_alloc(sizeof(char *) * len);
-
   int i = 0;
   for (AstList *current = stmt_list; current != NULL;
        current = current->next, i++) {
-    stmt = current->ast;
-    Type *t = infer(stmt, ctx);
-
-    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
-          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
-
-      // TODO: iter over stmts and only count the 'exportable members'
-      member_types[i] = NULL;
-    } else {
-      member_types[i] = t;
-
-      if (stmt->tag == AST_TYPE_DECL) {
-        names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-
-      } else if (stmt->tag == AST_IMPORT) {
-
-        names[i] = stmt->data.AST_IMPORT.identifier;
-      } else {
-        names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-      }
-
-      if (!t) {
-        printf("could not infer module member\n");
-        print_ast_err(stmt);
-        return NULL;
-      }
-    }
+    Ast *stmt = current->ast;
+    infer(stmt, ctx);
   }
 
+  // printf("\n\n## module type env:\n");
+
+  int n = 0;
+  for (TypeEnv *t = ctx->env; t; t = t->next) {
+    if (t->is_opened_var) {
+      continue;
+    }
+
+    if (CHARS_EQ(t->name, "test") && is_module(t->type)) {
+      continue;
+    }
+
+    // printf("%s: ", t->name);
+    // print_type(t->type);
+    n++;
+  }
+
+  Type **member_types = t_alloc(sizeof(Type *) * n);
+  const char **names = t_alloc(sizeof(char *) * n);
+
+  int idx = 0;
+  for (TypeEnv *t = ctx->env; t; t = t->next) {
+    if (t->is_opened_var) {
+      continue;
+    }
+
+    if (CHARS_EQ(t->name, "test") && is_module(t->type)) {
+      continue;
+    }
+
+    names[idx] = t->name;
+    member_types[idx] = t->type;
+    idx++;
+  }
+
+  // if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+  //   // Single statement - create a temporary AstList node
+  //   AstList *single_stmt = t_alloc(sizeof(AstList));
+  //   single_stmt->ast = ast->data.AST_LAMBDA.body;
+  //   single_stmt->next = NULL;
+  //   stmt_list = single_stmt;
+  //   len = 1;
+  // } else {
+  //   body_ast = ast->data.AST_LAMBDA.body;
+  //   stmt_list = body_ast->data.AST_BODY.stmts;
+  //   len = body_ast->data.AST_BODY.len;
+  // }
+
+  // Ast *stmt;
+  // Type **member_types = t_alloc(sizeof(Type *) * len);
+  // const char **names = t_alloc(sizeof(char *) * len);
+  //
+  // i = 0;
+  // for (AstList *current = stmt_list; current != NULL;
+  //      current = current->next, i++) {
+  //   stmt = current->ast;
+  //   Type *t = stmt->type;
+  //
+  //   if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
+  //         (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
+  //
+  //     // TODO: iter over stmts and only count the 'exportable members'
+  //     member_types[i] = NULL;
+  //   } else {
+  //     member_types[i] = t;
+  //
+  //     if (stmt->tag == AST_TYPE_DECL) {
+  //       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+  //
+  //       // printf("type decl of module %s\n", names[i]);
+  //       // print_ast(stmt);
+  //       // print_type(t);
+  //
+  //     } else if (stmt->tag == AST_IMPORT) {
+  //
+  //       names[i] = stmt->data.AST_IMPORT.identifier;
+  //     } else {
+  //       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+  //     }
+  //
+  //     if (!t) {
+  //       printf("could not infer module member\n");
+  //       print_ast_err(stmt);
+  //       return NULL;
+  //     }
+  //   }
+  // }
+
   Type *module_struct_type =
-      create_cons_type(TYPE_NAME_MODULE, len, member_types);
-
+      create_cons_type(TYPE_NAME_MODULE, n, member_types);
   module_struct_type->data.T_CONS.names = names;
-
-  // TODO: do we need to keep module env scope from being pushed up
-  // ctx->env = env;
 
   return module_struct_type;
 }
