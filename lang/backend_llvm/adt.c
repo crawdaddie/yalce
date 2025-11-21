@@ -433,21 +433,12 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   LLVMTypeRef variant_struct = LLVMStructCreateNamed(llvm_ctx, name);
   STACK_ALLOC_CTX_PUSH(_ctx, ctx);
 
-  // Register this type in the context so recursive references can find it
-  // JITSymbol *temp_sym =
-  //     new_symbol(STYPE_VARIANT_TYPE, type, NULL, variant_struct);
-  //
-  // ht_set_hash(_ctx.frame->table, name, hash_string(name, strlen(name)),
-  //             temp_sym);
-
-  // Process each variant member
   int len = type->data.T_CONS.num_args;
   LLVMTypeRef member_types[len];
 
   for (int i = 0; i < len; i++) {
     Type *member_type = type->data.T_CONS.args[i];
 
-    // Check if this member contains a recursive reference
     if (type_contains_recursive_ref(member_type, name)) {
 
       // For recursive members, we need to use a pointer

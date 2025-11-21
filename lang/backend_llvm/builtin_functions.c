@@ -1438,6 +1438,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("Char", NULL, CharConstructorHandler);
   GENERIC_FN_SYMBOL("Int", NULL, int_constructor_handler);
+  GENERIC_FN_SYMBOL("Array", NULL, ArrayConstructorHandler);
 
   // FN_SYMBOL()
 

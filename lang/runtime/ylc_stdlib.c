@@ -645,7 +645,7 @@ int32_t int32_parse(_String str) {
 
 double double_parse(_String str) {
   int len = str.size;
-  char *copy[len + 1];
+  char *copy[len + 1]; // copy input to ensure it's nul-terminated
   memcpy(copy, str.chars, len);
   return strtod(copy, NULL);
 }
@@ -657,24 +657,20 @@ int regex_find_one(char *str, char *pattern, int32_t *res) {
   regex_t regex;
   regmatch_t match;
 
-  // Compile the regex pattern
   int comp_result = regcomp(&regex, pattern, REG_EXTENDED);
   if (comp_result != 0) {
     return 1; // Compilation failed
   }
 
-  // Execute the regex
   int exec_result = regexec(&regex, str, 1, &match, 0);
 
   regfree(&regex);
 
   if (exec_result == 0) {
-    // Match found
     res[0] = (int32_t)match.rm_so;
     res[1] = (int32_t)match.rm_eo;
     return 0; // Success
   } else {
-    // No match or error
     return 1; // Failure
   }
 }
