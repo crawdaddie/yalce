@@ -51,6 +51,23 @@ void set_pattern_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
     ht_set_hash(ctx->frame->table, chars, id_hash, sym);
   }
 }
+bool needs_union_cast(Type *s) {
+  Type *contained = NULL;
+  for (int i = 0; i < s->data.T_CONS.num_args; i++) {
+    Type *mem = s->data.T_CONS.args[i];
+    if (mem->kind == T_CONS && mem->data.T_CONS.num_args == 1) {
+      mem = mem->data.T_CONS.args[0];
+    }
+
+    if (mem->kind == T_CONS && mem->data.T_CONS.num_args > 0) {
+      if (contained != NULL && !types_equal(mem, contained)) {
+        return true;
+      }
+    }
+    contained = mem;
+  }
+  return false;
+}
 
 void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
                       LLVMValueRef val, LLVMTypeRef val_type, Type *type,
@@ -193,12 +210,12 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
     if (cons_type->kind == T_CONS && is_sum_type(cons_type)) {
 
       int vidx;
-      Type *variant_type;
-      for (vidx = 0; vidx < cons_type->data.T_CONS.num_args; vidx++) {
-        variant_type = cons_type->data.T_CONS.args[vidx];
-        if (strcmp(cons_name, variant_type->data.T_CONS.name) == 0) {
-          break;
-        }
+
+      Type *btype = extract_member_from_sum_type_idx(
+          cons_type, pattern->data.AST_APPLICATION.function, &vidx);
+
+      if (btype->kind == T_CONS && btype->data.T_CONS.num_args == 1) {
+        btype = btype->data.T_CONS.args[0];
       }
 
       LLVMValueRef tag = LLVMBuildExtractValue(builder, val, 0, "sum.tag");
@@ -207,29 +224,88 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
           LLVMBuildICmp(builder, LLVMIntEQ, tag,
                         LLVMConstInt(LLVMInt8Type(), vidx, 0), "tag_match");
 
-      *test_result = LLVMBuildAnd(builder, *test_result, tag_test, "");
+      // Create basic blocks for conditional extraction (like list cons does)
+      LLVMValueRef parent_func =
+          LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+      LLVMBasicBlockRef tag_matches_block =
+          LLVMAppendBasicBlock(parent_func, "sum_tag_matches");
+      LLVMBasicBlockRef merge_block =
+          LLVMAppendBasicBlock(parent_func, "sum_merge");
 
-      LLVMTypeRef t = type_to_llvm_type(cons_type, ctx, module);
+      LLVMBasicBlockRef pre_branch_block = LLVMGetInsertBlock(builder);
+
+      // Branch based on tag test
+      LLVMBuildCondBr(builder, tag_test, tag_matches_block, merge_block);
+
+      // In tag_matches_block: extract and cast the payload
+      LLVMPositionBuilderAtEnd(builder, tag_matches_block);
 
       LLVMValueRef payload =
           LLVMBuildExtractValue(builder, val, 1, "sum.payload");
 
-      payload = cast_union(payload, variant_type->data.T_CONS.args[0], ctx,
-                           module, builder);
-
-      for (int i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
-        test_pattern_rec(
-            pattern->data.AST_APPLICATION.args + i, bl, test_result, payload,
-            type_to_llvm_type(variant_type->data.T_CONS.args[i], ctx, module),
-            variant_type->data.T_CONS.args[i], ctx, module, builder);
+      if (needs_union_cast(cons_type)) {
+        payload = cast_union(payload, btype, ctx, module, builder);
       }
+
+      // Track test result for this branch
+      LLVMValueRef fields_test_result = *test_result;
+
+      if (btype->kind == T_CONS &&
+          btype->data.T_CONS.num_args == pattern->data.AST_APPLICATION.len) {
+        // Multi-field struct - extract each field separately
+        for (int i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
+          Type *arg_type = btype->data.T_CONS.args[i];
+          LLVMValueRef field_val =
+              LLVMBuildExtractValue(builder, payload, i, "struct_element");
+
+          test_pattern_rec(pattern->data.AST_APPLICATION.args + i, bl,
+                           &fields_test_result, field_val,
+                           type_to_llvm_type(arg_type, ctx, module), arg_type,
+                           ctx, module, builder);
+        }
+      } else {
+        // Single field or no fields - use payload directly
+        test_pattern_rec(pattern->data.AST_APPLICATION.args, bl,
+                         &fields_test_result, payload,
+                         type_to_llvm_type(btype, ctx, module), btype, ctx,
+                         module, builder);
+      }
+
+      // After recursive pattern matching, we might be in a different block
+      // (e.g., if we matched a list cons pattern which created its own
+      // branches)
+      LLVMBasicBlockRef fields_end_block = LLVMGetInsertBlock(builder);
+
+      LLVMBuildBr(builder, merge_block);
+
+      // Merge with phi
+      LLVMPositionBuilderAtEnd(builder, merge_block);
+      LLVMValueRef phi =
+          LLVMBuildPhi(builder, LLVMInt1Type(), "sum_match_result");
+
+      LLVMBasicBlockRef incoming_blocks[2];
+      LLVMValueRef incoming_values[2];
+
+      incoming_blocks[0] = pre_branch_block;
+      incoming_values[0] =
+          LLVMConstInt(LLVMInt1Type(), 0, 0); // Tag didn't match
+
+      // Use the actual block we ended in after pattern matching
+      incoming_blocks[1] = fields_end_block;
+      incoming_values[1] = fields_test_result; // Tag matched, check fields
+
+      LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
+
+      *test_result = LLVMBuildAnd(builder, *test_result, phi, "");
+
+      return;
     }
-    return;
   }
 
   case AST_TUPLE: {
     int len = pattern->data.AST_LIST.len;
     for (int i = 0; i < len; i++) {
+
       LLVMValueRef elem_val = codegen_tuple_access(i, val, val_type, builder);
       Type *elem_type = type->data.T_CONS.args[i];
       LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);

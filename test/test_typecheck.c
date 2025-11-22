@@ -2185,24 +2185,6 @@ bool test_parser_combinators() {
   bool status = true;
 
   ({
-    Type a = TVAR("`2");
-    Type b = TVAR("`7");
-    Type c = TVAR("`8");
-    Type d = TVAR("`14");
-    Ast *bd = T("let bind = fn p f input ->\n"
-                "  match p input with\n"
-                "  | Some (x, rest) -> f x rest  \n"
-                "  | None -> None\n"
-                ";;\n",
-                &TSCHEME(&MAKE_FN_TYPE_4(
-                             &MAKE_FN_TYPE_2(&a, &TOPT(&TTUPLE(2, &b, &c))),
-                             &MAKE_FN_TYPE_3(&b, &c, &TOPT(&d)), &a, &TOPT(&d)),
-                         &a, &b, &c, &d)
-
-    );
-  });
-
-  ({
     Ast *bd =
         T("type Parser = String -> Option of (T, String);\n"
           "let bind = fn p f input ->\n"
@@ -2295,6 +2277,25 @@ bool test_parser_combinators() {
                       "object with the correct internal types\n",
                       types_equal(clos->type, &exp_closure_type));
   });
+
+  ({
+    Type a = TVAR("`2");
+    Type b = TVAR("`7");
+    Type c = TVAR("`8");
+    Type d = TVAR("`14");
+    Ast *bd = T("let bind = fn p f input ->\n"
+                "  match p input with\n"
+                "  | Some (x, rest) -> f x rest  \n"
+                "  | None -> None\n"
+                ";;\n",
+                &TSCHEME(&MAKE_FN_TYPE_4(
+                             &MAKE_FN_TYPE_2(&a, &TOPT(&TTUPLE(2, &b, &c))),
+                             &MAKE_FN_TYPE_3(&b, &c, &TOPT(&d)), &a, &TOPT(&d)),
+                         &a, &b, &c, &d)
+
+    );
+  });
+
   return status;
 }
 

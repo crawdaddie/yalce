@@ -1038,10 +1038,20 @@ void print_subst(Subst *subst) {
 }
 
 Type *extract_member_from_sum_type(Type *cons, Ast *id) {
-  Type *f;
   for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
     Type *mem = cons->data.T_CONS.args[i];
     if (CHARS_EQ(id->data.AST_IDENTIFIER.value, mem->data.T_CONS.name)) {
+      return mem;
+    }
+  }
+  return NULL;
+}
+
+Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx) {
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    Type *mem = cons->data.T_CONS.args[i];
+    if (CHARS_EQ(id->data.AST_IDENTIFIER.value, mem->data.T_CONS.name)) {
+      *idx = i;
       return mem;
     }
   }
@@ -1080,6 +1090,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     }
     return 0;
   }
+
   case AST_VOID: {
     return 0;
   }
@@ -1190,14 +1201,28 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       Type *btype = app_type;
 
       if (is_sum_type(btype)) {
+
         btype = extract_member_from_sum_type(
             btype, binding->data.AST_APPLICATION.function);
+
+        if (btype->kind == T_CONS &&
+            !CHARS_EQ(btype->data.T_CONS.name, "Some") &&
+            btype->data.T_CONS.num_args == 1) {
+          btype = btype->data.T_CONS.args[0];
+        }
       }
 
-      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
-        bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
-                         btype->data.T_CONS.args[i], bmd_type, ctx);
+      if (btype->kind == T_CONS) {
+        for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+          bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
+                           btype->data.T_CONS.args[i], bmd_type, ctx);
+        }
+      } else {
+
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
       }
+
       binding->type = app_type;
 
       return 0;

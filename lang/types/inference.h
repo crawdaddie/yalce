@@ -87,6 +87,7 @@ Type *instantiate_type_in_env(Type *sch, TypeEnv *env);
 Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 Type *extract_member_from_sum_type(Type *cons, Ast *id);
+Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx);
 void *type_error(Ast *ast, const char *fmt, ...);
 
 Constraint *merge_constraints(Constraint *list1, Constraint *list2);

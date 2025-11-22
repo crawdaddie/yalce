@@ -1133,6 +1133,7 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   const char *path = ast->data.AST_APPLICATION.args->data.AST_STRING.value;
   const char *full_path;
+  printf("module_path %s\n", module_path);
   if (module_path == NULL) {
     full_path = path;
   } else {

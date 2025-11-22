@@ -68,13 +68,11 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     case_body_types[i] = case_body_type;
 
     if (!case_body_type) {
-      return type_error(ctx, body_ast, "Cannot infer body type for case %d",
-                        i + 1);
+      return type_error(body_ast, "Cannot infer body type for case %d", i + 1);
     }
 
     if (unify(result_type, case_body_type, &body_ctx)) {
-      return type_error(ctx, body_ast, "Case %d returns incompatible type",
-                        i + 1);
+      return type_error(body_ast, "Case %d returns incompatible type", i + 1);
     }
 
     if (i > 0) {
