@@ -1,6 +1,6 @@
 # Minimal async I/O example
 
-let _ = dlopen "libs/asyncio/libasyncio.so";
+let _ = dlopen "../libs/asyncio/libasyncio.so";
 import std/Math;
 
 
