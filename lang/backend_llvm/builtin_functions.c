@@ -829,8 +829,6 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
 
 LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("int constructor\n");
-  print_type(from_type);
 
   switch (from_type->kind) {
   case T_NUM: {

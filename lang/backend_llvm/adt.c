@@ -76,6 +76,8 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
          0) {
     i++;
   }
+  // print_type(enum_type);
+  // print_ast(app);
 
   LLVMValueRef some = LLVMGetUndef(tu_type);
 
@@ -86,8 +88,14 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
   LLVMValueRef val;
 
   if (app->data.AST_APPLICATION.len > 1) {
-    LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
-    LLVMValueRef union_value = LLVMGetUndef(union_type);
+    Type *member_type = extract_member_from_sum_type(
+        enum_type, app->data.AST_APPLICATION.function);
+    member_type = member_type->data.T_CONS.args[0];
+
+    LLVMTypeRef llvm_member_type = type_to_llvm_type(member_type, ctx, module);
+
+    // LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
+    LLVMValueRef union_value = LLVMGetUndef(llvm_member_type);
     for (int i = 0; i < app->data.AST_APPLICATION.len; i++) {
 
       LLVMValueRef field_val =
@@ -383,7 +391,8 @@ LLVMValueRef OptMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return phi;
 }
 // Helper to check if a type contains a recursive reference
-bool type_contains_recursive_ref(Type *type, const char *target_name) {
+bool type_contains_recursive_ref(Type *type, const char *target_name,
+                                 Type **container) {
 
   if (!type) {
     return false;
@@ -401,7 +410,9 @@ bool type_contains_recursive_ref(Type *type, const char *target_name) {
     }
 
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-      if (type_contains_recursive_ref(type->data.T_CONS.args[i], target_name)) {
+
+      if (type_contains_recursive_ref(type->data.T_CONS.args[i], target_name,
+                                      container)) {
         return true;
       }
     }
@@ -409,8 +420,10 @@ bool type_contains_recursive_ref(Type *type, const char *target_name) {
   }
 
   case T_FN:
-    return type_contains_recursive_ref(type->data.T_FN.from, target_name) ||
-           type_contains_recursive_ref(type->data.T_FN.to, target_name);
+    return type_contains_recursive_ref(type->data.T_FN.from, target_name,
+                                       container) ||
+           type_contains_recursive_ref(type->data.T_FN.to, target_name,
+                                       container);
 
   default:
     return false;
@@ -439,7 +452,8 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   for (int i = 0; i < len; i++) {
     Type *member_type = type->data.T_CONS.args[i];
 
-    if (type_contains_recursive_ref(member_type, name)) {
+    Type *container;
+    if (type_contains_recursive_ref(member_type, name, &container)) {
 
       // For recursive members, we need to use a pointer
       // The member type itself might be complex (e.g., List of T_CONS)
@@ -463,7 +477,6 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   unsigned long long union_size_bytes =
 
       get_largest_type_size(llvm_ctx, member_types, len, target_data);
-  printf("union size bytes %llu\n", union_size_bytes);
 
   LLVMTypeRef body_fields[] = {TAG_TYPE, LLVMIntType(union_size_bytes * 8)};
   LLVMStructSetBody(variant_struct, body_fields, 2, 0);

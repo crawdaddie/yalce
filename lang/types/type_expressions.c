@@ -110,18 +110,20 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   case AST_LIST: {
     int len = expr->data.AST_LIST.len;
     Type **members = t_alloc(sizeof(Type *) * len);
-    char **names = malloc(sizeof(char *) * len);
+    const char **names = malloc(sizeof(char *) * len);
     for (int i = 0; i < len; i++) {
-      char *name;
+      const char *name;
       Ast *mem_ast = expr->data.AST_LIST.items + i;
       if (mem_ast->tag == AST_IDENTIFIER) {
         name = mem_ast->data.AST_IDENTIFIER.value;
         members[i] =
             create_cons_type(mem_ast->data.AST_IDENTIFIER.value, 0, NULL);
       } else {
-        Ast *item = expr->data.AST_LIST.items + i;
+        Ast *item = mem_ast;
+
         if (item->tag == AST_BINOP &&
             item->data.AST_BINOP.left->tag == AST_IDENTIFIER) {
+
           name = item->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
         }
 
@@ -258,6 +260,7 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   };
 
   Type *computed = compute_type_expression(expr, &_ctx);
+  computed->alias = name;
 
   if (expr->tag == AST_IDENTIFIER) {
     computed = deep_copy_type(computed);

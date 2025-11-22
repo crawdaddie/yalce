@@ -9,10 +9,18 @@
 Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx);
 
 Type *create_fn_from_cons(Type *res, Type *cons) {
-
   Type *f = res;
   for (int i = cons->data.T_CONS.num_args - 1; i >= 0; i--) {
-    f = type_fn(cons->data.T_CONS.args[i], f);
+    if (is_tuple_type(cons->data.T_CONS.args[i])) {
+      Type *t = cons->data.T_CONS.args[i];
+      for (int j = t->data.T_CONS.num_args - 1; j >= 0; j--) {
+
+        f = type_fn(t->data.T_CONS.args[j], f);
+      }
+
+    } else {
+      f = type_fn(cons->data.T_CONS.args[i], f);
+    }
   }
   return f;
 }
@@ -35,10 +43,7 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
   }
 
   Type *r = infer_fn_application(f, ast, ctx);
-  // print_ast(ast);
-  // print_type(f);
-  // print_type(ast->data.AST_APPLICATION.function->type);
-  // print_type(ast->data.AST_APPLICATION.args->type);
+
   return r;
 }
 
@@ -265,6 +270,13 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   // if (CHARS_EQ(fn_name, "array_at")) {
   //   printf("res type: \n");
   //   print_type(res);
+  // }
+  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+  //              "array_range")) {
+  // print_ast(ast);
+  // printf("line %d\n", ast->loc_info->line);
+  // print_type(res);
   // }
   return res;
 }

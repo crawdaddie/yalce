@@ -647,6 +647,9 @@ void initialize_builtin_types() {
   add_builtin("&&", &logical_op_scheme);
   add_builtin("||", &logical_op_scheme);
 
+  // add_builtin(">>")
+  // add_builtin("&")
+
   array_size_scheme = create_array_size_scheme();
   add_builtin("array_size", &array_size_scheme);
 

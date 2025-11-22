@@ -674,3 +674,24 @@ int regex_find_one(char *str, char *pattern, int32_t *res) {
     return 1; // Failure
   }
 }
+
+int32_t rshift(int32_t x, int32_t n) { return x >> n; }
+int32_t lshift(int32_t x, int32_t n) { return x << n; }
+int32_t bit_and(int32_t x, int32_t y) { return x & y; }
+
+// Convert a byte to a 2-character hex string (e.g., 255 -> "ff", 16 -> "10")
+_String char_to_hex_string(char byte) {
+  static const char hex_chars[] = "0123456789abcdef";
+
+  char *result = malloc(3); // 2 hex chars + null terminator
+  if (!result) {
+    return (_String){.size = 0, .chars = NULL};
+  }
+
+  unsigned char ubyte =
+      (unsigned char)byte; // Treat as unsigned for correct hex conversion
+  result[0] = hex_chars[(ubyte >> 4) & 0x0F]; // High nibble
+  result[1] = hex_chars[ubyte & 0x0F];        // Low nibble
+  result[2] = '\0';
+  return (_String){.size = 2, .chars = result};
+}

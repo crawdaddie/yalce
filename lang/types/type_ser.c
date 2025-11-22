@@ -316,13 +316,16 @@ void print_type_to_stream(Type *t, FILE *stream) {
     }
 
     if (is_sum_type(t)) {
-      fprintf(stream, "%s ", t->data.T_CONS.name);
+      fprintf(stream, "%s { ",
+              t->alias != NULL ? t->alias : t->data.T_CONS.name);
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         print_type_to_stream(t->data.T_CONS.args[i], stream);
         if (i < t->data.T_CONS.num_args - 1) {
           fprintf(stream, " | ");
         }
       }
+
+      fprintf(stream, " }");
       break;
     }
     if (t->alias) {

@@ -561,6 +561,8 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
   //   return codegen_list_to_string(val, val_type, ctx, module, builder);
   // }
 
+  printf("str serialize??\n");
+  print_type(val_type);
   return char_to_string(LLVMConstInt(LLVMInt8Type(), 60, 0), module, builder);
 }
 
