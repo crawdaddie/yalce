@@ -458,14 +458,11 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMPositionBuilderAtEnd(builder, merge_block);
     result_phi = LLVMBuildPhi(builder, llvm_result_type, "match.result");
 
-    // Restore builder to where it was before creating merge block
     LLVMPositionBuilderAtEnd(builder, current_insert_block);
   }
 
-  // Track whether we actually use the merge block
   int num_branches_to_merge = 0;
 
-  // Generate code for each branch
   for (int i = 0; i < num_branches; i++) {
     Ast *pattern = ast->data.AST_MATCH.branches + (2 * i);
     Ast *branch_expr = ast->data.AST_MATCH.branches + (2 * i + 1);
