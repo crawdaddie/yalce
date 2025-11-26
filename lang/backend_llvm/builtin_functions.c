@@ -649,12 +649,6 @@ LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
   LLVMValueRef l_data = ll_get_head_val(l_current, llvm_el_type, builder);
   LLVMValueRef r_data = ll_get_head_val(r_current, llvm_el_type, builder);
   // INSERT_PRINTF(2, "compare %d %d\n", l_data, r_data);
-  printf("???\n");
-
-  print_type(el_type);
-  LLVMDumpValue(l_data);
-  LLVMDumpValue(r_data);
-  printf("\n");
   LLVMValueRef elements_equal =
       _codegen_equality(el_type, l_data, r_data, ctx, module, builder);
 
@@ -1133,7 +1127,6 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   const char *path = ast->data.AST_APPLICATION.args->data.AST_STRING.value;
   const char *full_path;
-  printf("module_path %s\n", module_path);
   if (module_path == NULL) {
     full_path = path;
   } else {

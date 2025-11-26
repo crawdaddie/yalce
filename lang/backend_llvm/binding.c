@@ -65,25 +65,80 @@ void set_var_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
   }
 }
 
+LLVMValueRef bind_value(Ast *id, LLVMValueRef val, Type *val_type,
+                        JITLangCtx *ctx, LLVMModuleRef module,
+                        LLVMBuilderRef builder) {
+  // printf("BIND VALUE\n");
+  // print_ast(id);
+  // LLVMDumpValue(val);
+
+  if (ast_is_placeholder_id(id)) {
+    return val;
+  }
+
+  const char *chars = id->data.AST_IDENTIFIER.value;
+  uint64_t id_hash = hash_string(chars, id->data.AST_IDENTIFIER.length);
+
+  LLVMTypeRef llvm_type = type_to_llvm_type(val_type, ctx, module);
+  Type *type = val_type;
+  if (ctx->stack_ptr == 0) {
+
+    JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
+
+    JITSymbol *sym;
+
+    if (ex_sym != NULL) {
+      // printf("restore existing symbol\n");
+      // print_ast(binding);
+      ex_sym->val = val;
+      ex_sym->llvm_type = llvm_type;
+      ex_sym->symbol_type = type;
+      if (ex_sym->storage) {
+        LLVMBuildStore(builder, val, ex_sym->storage);
+      }
+      sym = ex_sym;
+    } else {
+      sym = new_symbol(STYPE_TOP_LEVEL_VAR, type, val, llvm_type);
+      codegen_set_global(chars, sym, val, type, llvm_type, ctx, module,
+                         builder);
+    }
+
+    ht_set_hash(ctx->frame->table, chars, id_hash, sym);
+    return val;
+  }
+
+  JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
+
+  if (ex_sym != NULL && ex_sym->storage) {
+    LLVMBuildStore(builder, val, ex_sym->storage);
+  } else {
+    // Local binding
+    JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
+    ht_set_hash(ctx->frame->table, chars, id_hash, sym);
+  }
+  return val;
+}
+
 LLVMValueRef codegen_pattern_binding(Ast *pattern, LLVMValueRef val,
                                      Type *val_type, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
-
-  BindList *bl = NULL;
-  LLVMTypeRef llvm_val_type = type_to_llvm_type(val_type, ctx, module);
-  LLVMValueRef test_result = LLVMConstInt(LLVMInt1Type(), 1, 0);
-
-  test_pattern_rec(pattern, &bl, &test_result, val, llvm_val_type, val_type,
-                   ctx, module, builder);
-
-  set_var_bindings(bl, ctx, module, builder);
-
-  while (bl != NULL) {
-    BindList *next = bl->next;
-    free(bl);
-    bl = next;
+  if (pattern->tag == AST_VOID) {
+    return val;
   }
+  test_pattern(pattern, val, val_type, ctx, module, builder);
 
-  return test_result;
+  // BindList *bl = NULL;
+  // LLVMTypeRef llvm_val_type = type_to_llvm_type(val_type, ctx, module);
+  // LLVMValueRef test_result = LLVMConstInt(LLVMInt1Type(), 1, 0);
+  //
+  // set_var_bindings(bl, ctx, module, builder);
+  //
+  // while (bl != NULL) {
+  //   BindList *next = bl->next;
+  //   free(bl);
+  //   bl = next;
+  // }
+
+  return val;
 }

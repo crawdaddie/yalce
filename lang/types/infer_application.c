@@ -11,16 +11,18 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx);
 Type *create_fn_from_cons(Type *res, Type *cons) {
   Type *f = res;
   for (int i = cons->data.T_CONS.num_args - 1; i >= 0; i--) {
-    if (is_tuple_type(cons->data.T_CONS.args[i])) {
-      Type *t = cons->data.T_CONS.args[i];
-      for (int j = t->data.T_CONS.num_args - 1; j >= 0; j--) {
-
-        f = type_fn(t->data.T_CONS.args[j], f);
-      }
-
-    } else {
-      f = type_fn(cons->data.T_CONS.args[i], f);
-    }
+    // if (is_tuple_type(cons->data.T_CONS.args[i])) {
+    //   Type *t = cons->data.T_CONS.args[i];
+    //   for (int j = t->data.T_CONS.num_args - 1; j >= 0; j--) {
+    //
+    //     f = type_fn(t->data.T_CONS.args[j], f);
+    //   }
+    //
+    // } else {
+    //   f = type_fn(cons->data.T_CONS.args[i], f);
+    // }
+    //
+    f = type_fn(cons->data.T_CONS.args[i], f);
   }
   return f;
 }

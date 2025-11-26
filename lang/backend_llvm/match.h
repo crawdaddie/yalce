@@ -15,6 +15,9 @@ void test_pattern_rec(Ast *pattern, BindList **bl, LLVMValueRef *test_result,
                       JITLangCtx *ctx, LLVMModuleRef module,
                       LLVMBuilderRef builder);
 
+void test_pattern(Ast *pattern, LLVMValueRef val, Type *type, JITLangCtx *ctx,
+                  LLVMModuleRef module, LLVMBuilderRef builder);
+
 void set_pattern_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder);
 

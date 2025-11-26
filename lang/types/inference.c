@@ -1194,25 +1194,57 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       type_error(binding, "Could not create list destructure binding");
       return 1;
     }
+    Type *btype;
 
     if (binding->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
       Type *app_type = infer(binding, ctx);
 
-      Type *btype = app_type;
+      btype = app_type;
 
       if (is_sum_type(btype)) {
-
         btype = extract_member_from_sum_type(
             btype, binding->data.AST_APPLICATION.function);
-
-        if (btype->kind == T_CONS &&
-            !CHARS_EQ(btype->data.T_CONS.name, "Some") &&
-            btype->data.T_CONS.num_args == 1) {
+        if (btype->kind == T_CONS && btype->data.T_CONS.num_args == 1) {
           btype = btype->data.T_CONS.args[0];
         }
       }
 
-      if (btype->kind == T_CONS) {
+      if (btype->kind == T_CONS && binding->data.AST_APPLICATION.len == 1 &&
+          (binding->data.AST_APPLICATION.args->tag == AST_TUPLE)) {
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
+      } else if (btype->kind == T_CONS) {
+        for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+          bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
+                           btype->data.T_CONS.args[i], bmd_type, ctx);
+        }
+      } else {
+
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
+      }
+
+      binding->type = app_type;
+
+      return 0;
+    } else if (binding->data.AST_APPLICATION.function->tag ==
+               AST_RECORD_ACCESS) {
+
+      Type *app_type = infer(binding->data.AST_APPLICATION.function, ctx);
+
+      btype = app_type;
+
+      if (is_sum_type(btype)) {
+        btype = extract_member_from_sum_type(
+            btype, binding->data.AST_APPLICATION.function->data
+                       .AST_RECORD_ACCESS.member);
+      }
+
+      if (btype->kind == T_CONS && binding->data.AST_APPLICATION.len == 1 &&
+          (binding->data.AST_APPLICATION.args->tag == AST_TUPLE)) {
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
+      } else if (btype->kind == T_CONS) {
         for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
           bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
                            btype->data.T_CONS.args[i], bmd_type, ctx);
@@ -1228,25 +1260,6 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       return 0;
     }
 
-    if (binding->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
-
-      Type *app_type = infer(binding->data.AST_APPLICATION.function, ctx);
-
-      Type *btype = app_type;
-
-      if (is_sum_type(btype)) {
-        btype = extract_member_from_sum_type(
-            btype, binding->data.AST_APPLICATION.function->data
-                       .AST_RECORD_ACCESS.member);
-      }
-      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
-        bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
-                         btype->data.T_CONS.args[i], bmd_type, ctx);
-      }
-      binding->type = app_type;
-
-      return 0;
-    }
     return 1;
   }
 

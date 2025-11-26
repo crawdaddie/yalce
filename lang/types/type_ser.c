@@ -332,6 +332,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
       fprintf(stream, "%s", t->alias);
       // print_tc_list_to_stream(t, stream);
       // print_tc_list_to_stream(t, stream);
+      // u
       break;
     }
 

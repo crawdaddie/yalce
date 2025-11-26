@@ -107,6 +107,8 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md binding_type,
                      TICtx *ctx);
 TypeEnv *lookup_type_ref(TypeEnv *env, const char *name);
 
+bool is_list_cons_operator(Ast *ast);
+
 void apply_substitution_to_lambda_body(Ast *ast, Subst *subst);
 void add_constraint(TICtx *result, Type *var, Type *type);
 
