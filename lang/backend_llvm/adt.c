@@ -90,6 +90,7 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
         enum_type, app->data.AST_APPLICATION.function);
     member_type = member_type->data.T_CONS.args[0];
 
+    LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
     LLVMTypeRef llvm_member_type = type_to_llvm_type(member_type, ctx, module);
     LLVMValueRef union_value = LLVMGetUndef(llvm_member_type);
 
@@ -101,36 +102,39 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
       union_value = LLVMBuildInsertValue(builder, union_value, field_val, i,
                                          "insert int arg");
     }
-    some = LLVMBuildInsertValue(builder, some, union_value, 1,
+
+    // Store struct to temp, then load as byte array
+    LLVMValueRef struct_temp =
+        LLVMBuildAlloca(builder, llvm_member_type, "struct_temp");
+    LLVMBuildStore(builder, union_value, struct_temp);
+
+    LLVMValueRef byte_ptr = LLVMBuildBitCast(
+        builder, struct_temp, LLVMPointerType(LLVMInt8Type(), 0), "byte_ptr");
+    LLVMValueRef union_as_bytes =
+        LLVMBuildLoad2(builder, union_type, byte_ptr, "load_as_bytes");
+
+    some = LLVMBuildInsertValue(builder, some, union_as_bytes, 1,
                                 "insert variant data");
   } else {
 
     LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
-    // LLVMValueRef union_value = LLVMGetUndef(union_type);
     val = codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
 
-    // Convert val to match the union type
+    // Store value into byte array union storage
     LLVMTypeRef val_type = LLVMTypeOf(val);
-    LLVMTypeKind val_kind = LLVMGetTypeKind(val_type);
 
-    // If val is a pointer, convert it to i64 for storage in the union
-    if (val_kind == LLVMPointerTypeKind) {
-      val = LLVMBuildPtrToInt(builder, val, union_type, "ptr_to_int");
-    } else if (val_kind == LLVMIntegerTypeKind &&
-               // // If val is a smaller integer, extend it
-               LLVMGetIntTypeWidth(val_type) <
-                   LLVMGetIntTypeWidth(union_type)) {
-      val = LLVMBuildZExt(builder, val, union_type, "zext_to_iN");
-    } else if (val_kind == LLVMDoubleTypeKind) {
-      val = LLVMBuildBitCast(builder, val, union_type, "double_to_iN");
-    } else {
-      val = LLVMBuildBitCast(builder, val, union_type, "any_to_iN");
-    }
+    // Allocate temp space for the value
+    LLVMValueRef val_temp = LLVMBuildAlloca(builder, val_type, "val_temp");
+    LLVMBuildStore(builder, val, val_temp);
 
-    // union_value =
-    //     LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
+    // Cast to byte pointer and load as byte array
+    LLVMValueRef byte_ptr = LLVMBuildBitCast(
+        builder, val_temp, LLVMPointerType(LLVMInt8Type(), 0), "byte_ptr");
+    LLVMValueRef union_val =
+        LLVMBuildLoad2(builder, union_type, byte_ptr, "load_as_bytes");
 
-    some = LLVMBuildInsertValue(builder, some, val, 1, "insert variant data");
+    some = LLVMBuildInsertValue(builder, some, union_val, 1,
+                                "insert variant data");
   }
 
   return some;
@@ -235,7 +239,9 @@ LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
       get_largest_type_size(LLVMGetModuleContext(module), contained_types, len,
                             LLVMGetModuleDataLayout(module));
 
-  return STRUCT_TY(2, TAG_TYPE, LLVMIntType(union_size_bytes * 8));
+  // Use byte array instead of integer for union storage
+  return STRUCT_TY(2, TAG_TYPE,
+                   LLVMArrayType(LLVMInt8Type(), union_size_bytes));
 }
 
 LLVMValueRef codegen_some(LLVMValueRef val, LLVMBuilderRef builder) {
@@ -484,7 +490,9 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
 
       get_largest_type_size(llvm_ctx, member_types, len, target_data);
 
-  LLVMTypeRef body_fields[] = {TAG_TYPE, LLVMIntType(union_size_bytes * 8)};
+  // Use byte array instead of integer for union storage
+  LLVMTypeRef body_fields[] = {TAG_TYPE,
+                               LLVMArrayType(LLVMInt8Type(), union_size_bytes)};
   LLVMStructSetBody(variant_struct, body_fields, 2, 0);
 
   destroy_ctx(&_ctx);
@@ -501,35 +509,38 @@ LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
   }
 
   switch (desired_type->kind) {
-  case T_INT: {
-    // i64 -> i32: truncate
-    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_int");
-  }
-
-  case T_UINT64: {
-    // i64 -> i64: no-op, but might need bitcast depending on context
-    LLVMTypeRef un_type = LLVMTypeOf(un);
-    if (LLVMGetTypeKind(un_type) == LLVMIntegerTypeKind &&
-        LLVMGetIntTypeWidth(un_type) == 64) {
-      return un; // Already i64
-    }
-    return LLVMBuildZExtOrBitCast(builder, un, target_llvm_type,
-                                  "union_to_uint64");
-  }
-
-  case T_NUM: {
-    // i64 -> double: bitcast (reinterpret bits)
-    return LLVMBuildBitCast(builder, un, target_llvm_type, "union_to_double");
-  }
-
-  case T_CHAR: {
-    // i64 -> i8: truncate
-    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_char");
-  }
-
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_CHAR:
   case T_BOOL: {
-    // i64 -> i1: truncate to least significant bit
-    return LLVMBuildTrunc(builder, un, target_llvm_type, "union_to_bool");
+    // Extract scalar from byte array union storage
+    // Store byte array to memory, then load as target type
+    LLVMValueRef union_alloca =
+        LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
+
+    LLVMBuildStore(builder, un, union_alloca);
+
+    // Cast pointer to target type and load
+    LLVMValueRef typed_ptr = LLVMBuildBitCast(
+        builder, union_alloca, LLVMPointerType(target_llvm_type, 0),
+        "cast_to_target_ptr");
+    return LLVMBuildLoad2(builder, target_llvm_type, typed_ptr,
+                          "union_to_scalar");
+  }
+  case T_FN: {
+
+    LLVMValueRef union_alloca =
+        LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
+
+    LLVMBuildStore(builder, un, union_alloca);
+
+    // Cast pointer to target type and load
+    LLVMValueRef typed_ptr = LLVMBuildBitCast(
+        builder, union_alloca, LLVMPointerType(LLVMInt8Type(), 0),
+        "cast_to_target_ptr");
+    return LLVMBuildLoad2(builder, target_llvm_type, typed_ptr,
+                          "union_to_fn_ptr");
   }
 
   case T_VOID: {
@@ -538,30 +549,20 @@ LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
   }
 
   case T_STRING:
-  case T_FN:
   case T_CONS: {
-    // These are pointer types or aggregate types
-    // i64 -> ptr: inttoptr
-    if (LLVMGetTypeKind(target_llvm_type) == LLVMPointerTypeKind) {
-      return LLVMBuildIntToPtr(builder, un, target_llvm_type, "union_to_ptr");
-    }
-
-    print_type(desired_type);
-    LLVMDumpType(LLVMTypeOf(un));
-    printf("\n");
-    LLVMDumpValue(un);
-    printf("\n");
-
-    // For struct types stored in the union, we need to use the alloca
-    // method This handles cases where the union contains a struct value
-    // directly
-    LLVMValueRef alloca =
+    // Extract from byte array union storage
+    // Store byte array to memory, then load as target type
+    LLVMValueRef union_alloca =
         LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
+    LLVMBuildStore(builder, un, union_alloca);
 
-    LLVMBuildStore(builder, un, alloca);
-
-    // Load as the target type
-    return LLVMBuildLoad2(builder, target_llvm_type, alloca, "union_to_struct");
+    // Cast pointer to target type and load
+    // This reinterprets the bytes as the target type
+    LLVMValueRef typed_ptr = LLVMBuildBitCast(
+        builder, union_alloca, LLVMPointerType(target_llvm_type, 0),
+        "cast_to_target_ptr");
+    return LLVMBuildLoad2(builder, target_llvm_type, typed_ptr,
+                          "union_to_struct");
   }
 
   default: {
@@ -572,6 +573,7 @@ LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
   }
   }
 }
+
 LLVMValueRef sum_type_eq(Type *type, LLVMValueRef val1, LLVMValueRef val2,
                          JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder) {

@@ -763,6 +763,9 @@ LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
 LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
   const char *chars = ast->data.AST_STRING.value;
+
+  // printf("codegen string '%s'\n", chars);
+
   int length = ast->data.AST_STRING.length;
 
   LLVMTypeRef char_type = LLVMInt8Type();

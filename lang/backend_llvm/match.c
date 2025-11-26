@@ -115,8 +115,8 @@ void stable_partition_match_over_sum_type(Ast *patterns_and_bodies, size_t n,
     int tag = get_constructor_index(&pattern);
 
     if (tag < 0) {
-      print_ast(&pattern);
       fprintf(stderr, "Error: match constructor rearranging failed %d\n", tag);
+      print_ast_err(&pattern);
       return;
     }
 
@@ -312,7 +312,7 @@ LLVMValueRef test_pattern(Ast *pattern,
       Ast *p = pattern->data.AST_LIST.items + i;
       sprintf(field_name, "struct_field_%d", i);
       LLVMValueRef tv = LLVMBuildExtractValue(builder, val, i, field_name);
-      LLVMValueRef pv = test_pattern(p, tv, val_type->data.T_CONS.args[0], ctx,
+      LLVMValueRef pv = test_pattern(p, tv, val_type->data.T_CONS.args[i], ctx,
                                      module, builder);
       bool_acc = LLVMBuildAnd(builder, bool_acc, pv, "match_succ_accumulator");
     }
@@ -333,6 +333,22 @@ LLVMValueRef test_pattern(Ast *pattern,
     }
 
     break;
+  }
+
+  case AST_RANGE_EXPRESSION: {
+    LLVMValueRef from_val =
+        codegen(pattern->data.AST_RANGE_EXPRESSION.from, ctx, module, builder);
+
+    LLVMValueRef to_val =
+        codegen(pattern->data.AST_RANGE_EXPRESSION.to, ctx, module, builder);
+
+    LLVMValueRef from = gte_val(val, from_val, val_type, ctx, module, builder);
+
+    LLVMValueRef test_result =
+        LLVMBuildAnd(builder, from,
+                     lte_val(val, to_val, val_type, ctx, module, builder), "");
+
+    return test_result;
   }
 
   default: {
@@ -412,6 +428,9 @@ void test_sum_type_pattern(int pidx, int num_branches,
 
     subtype = extract_member_from_sum_type_idx(
         val_type, p->data.AST_APPLICATION.function, &ptag_idx);
+    // print_ast(pattern);
+    // print_type(subtype);
+
   } else {
     fprintf(stderr, "Error could not handle tag match\n");
     return;

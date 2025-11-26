@@ -1,0 +1,234 @@
+let _ = dlopen "./libpatterns.so";
+
+import std/Regex;
+let int32_parse = extern fn String -> Int;
+let double_parse = extern fn String -> Double;
+
+
+type Seq =
+  | SeqInt of Int
+  | SeqNum of Double
+  | SeqKey of String
+  | SeqList of (Int, Int, List of Seq)
+  ;
+
+let seq_extend = fn seq new ->
+  match seq with
+  | SeqInt i -> SeqList (3, 2, [seq, new])       # Wrap int in a list
+  | SeqNum n -> SeqList (3, 2, [seq, new])       # Wrap int in a list
+  | SeqKey k -> SeqList (3, 2, [seq, new])         # Wrap int in a list
+
+  | SeqList (t, 0, []) -> SeqList (t, 1, [new,])               # Empty list
+  | SeqList (t, n, x) -> SeqList (t, (n + 1), new::x)  # Non-empty list
+  ;;
+
+
+
+let seq_reverse = fn s -> 
+
+  let seq_list_rev = fn l res ->
+    match l with
+    | [] -> res
+    | x :: rest -> seq_list_rev rest ((seq_reverse x) :: res)
+  ;;
+
+  match s with
+  | SeqInt i -> s
+  | SeqNum n -> s
+  | SeqKey k -> s
+  | SeqList (t, n, l) -> SeqList (t, n, seq_list_rev l []) 
+;;
+
+let conclude_current = fn current stack ->
+
+
+
+  print "CONCLUDE CURRENT: finishing current list\n";
+  match stack with
+  | SeqList (t, n, parent::rest) -> (
+
+    let updated_parent = seq_extend parent current;
+
+    (updated_parent, SeqList (t, (n - 1), rest))
+  )
+  | SeqList (_, 0, []) -> (
+    (current, stack)
+  )
+  | _ -> (
+    (current, stack)
+  )
+  ;;
+
+let start_new = fn next current stack new_context ->
+  # Push current context onto stack, start new context
+  print "START_NEW: pushing current to stack\n";
+  print "  -> current: ";
+  (match current with
+   | SeqList (ct, cn, _) -> print `type={ct}, len={cn}`
+   | _ -> print "other");
+  print "\n";
+
+  let new_stack = seq_extend stack current;
+
+  print "  -> new_stack: ";
+  (match new_stack with
+   | SeqList (nt, nn, _) -> print `type={nt}, len={nn}`
+   | _ -> print "other");
+  print "\n";
+
+  (next, new_context, new_stack)
+  ;;
+
+
+let malloc = extern fn Int -> Ptr; 
+let realloc = extern fn Ptr -> Int -> Ptr; 
+let memcpy = extern fn Ptr -> Ptr -> Int -> Ptr; 
+let copy_str_slice = fn s: (String) ->
+  let len = array_size s;
+  let copy = malloc (len + 1);
+  memcpy copy (cstr s) len;
+  let c = Array len copy;
+  c[len] := '\0';
+  c
+;;
+let SEQ_LIST_TYPE = 3;
+let SEQ_CHOOSE_TYPE = 4;
+let SEQ_ALT_TYPE = 5;
+
+let parse_seq = fn x current stack ->
+  if (array_size x > 0) then (
+
+    let (next, curr, new_stack) =
+      match Regex.find_one x "^-?[0-9]*\.([0-9]*[1-9]|[0-9][0-9]*)?" with
+      | Some (st, end) -> (
+        # Found a double - parse_seq it and add to current
+        let double_val = double_parse @@ x[st .. end];
+        let updated = seq_extend current (SeqNum double_val);
+        (x[end ..], updated, stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^[0-9]+" with
+      | Some (st, end) -> (
+        # Found an int - parse_seq it and add to current
+        let int_val = int32_parse @@ x[st .. end];
+        let updated = seq_extend current (SeqInt int_val);
+        (x[end ..], updated, stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^[a-zA-Z_][a-zA-Z0-9_#]*" with
+      | Some (st, end) -> (
+        # Found an identifier - add to current
+        let k = x[st .. end]
+        |> copy_str_slice;
+        let updated = seq_extend current (SeqKey k);
+        (x[end ..], updated, stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^\{" with
+      | Some (st, end) -> (
+        # print "\nstart choose: \n";
+        # print_seq_helper true current;
+        # Start new SeqChoose context
+        start_new (x[end ..]) current stack (SeqList (SEQ_CHOOSE_TYPE, 0, []))
+        )
+      | None ->
+
+      match Regex.find_one x "^\}" with
+      | Some (st, end) -> (
+
+        print `found } - concluding current\n`;
+        # Close current SeqChoose - pop from stack
+        let next = x[end ..];
+        let (new_current, new_stack) = conclude_current current stack;
+        (next, new_current, new_stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^\[" with
+      | Some (st, end) ->
+        # Start new SeqList context
+        start_new (x[end ..]) current stack (SeqList (SEQ_LIST_TYPE, 0, []))
+      | None ->
+
+      match Regex.find_one x "^\]" with
+      | Some (st, end) -> (
+
+        print `found ] - concluding current\n`;
+        # Close current SeqList - pop from stack
+        let next = x[end ..];
+        let (new_current, new_stack) = conclude_current current stack;
+        (next, new_current, new_stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^<" with
+      | Some (st, end) -> (
+
+        # print "\nstart alt: \n";
+        # print_seq_helper true current;
+        # Start new SeqAlt context
+        start_new (x[end ..]) current stack (SeqList (SEQ_ALT_TYPE, 0, []))
+        )
+      | None ->
+
+      match Regex.find_one x "^>" with
+      | Some (st, end) -> (
+        # Close current SeqAlt - pop from stack
+        print `found > - concluding current\n`;
+        let next = x[end ..];
+        let (new_current, new_stack) = conclude_current current stack;
+        (next, new_current, new_stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^[ ]+" with
+      | Some (st, end) -> (
+        # Skip whitespace
+        (x[end ..], current, stack)
+      )
+      | None -> ("", current, stack)
+
+    in
+
+
+    parse_seq next curr new_stack
+  )
+  else current
+;;
+
+let parse = fn input ->
+  parse_seq input (SeqList (3, 0, [])) (SeqList (3, 0, []))
+  |> seq_reverse
+;;
+
+let compile_coroutine_from_seq = extern fn Ptr of Seq -> Coroutine of Seq;
+
+let as_cor = fn seq ->
+  compile_coroutine_from_seq seq
+  ;;
+
+let seq_eq = extern fn Seq -> Seq -> Bool;
+let Seq : Eq = fn a b -> seq_eq a b;;
+
+let s = parse "1 7 8 9 {3 4}";
+
+let print_seq_helper = fn is_first seq ->
+  match seq with
+  | SeqInt i -> print `{i}, `
+  | SeqNum n -> print `{n}, `
+  | SeqKey k -> print `{k}, `
+  | SeqList (_, 0, []) -> print "], "
+  | SeqList (t, len, x::rest) -> (
+
+    if is_first then (print `{t}:{len}[`) else ();
+
+    print_seq_helper true x;
+    print_seq_helper false (SeqList (t, (len - 1), rest))
+  )
+  | _ -> ()
+  ;;
+
+s |> print_seq_helper true
