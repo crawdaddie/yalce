@@ -73,7 +73,6 @@ void unify_recursive_ref(Ast *ast, Type *recursive_fn_type, Type *result_type,
     if (unify(recursive_fn_type, result_type, &unify_ctx)) {
       type_error(ast, "Recursive function type mismatch");
     }
-
     // Apply the unification results
     if (unify_ctx.subst) {
       ctx->subst = compose_subst(unify_ctx.subst, ctx->subst);
@@ -281,8 +280,20 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
 
     for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
 
-      apply_substitution_to_lambda_body(ast->data.AST_MATCH.branches + 2 * i,
-                                        subst);
+      Ast *pattern = ast->data.AST_MATCH.branches + i * 2;
+      Ast *guard = NULL;
+
+      if (pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+        guard = pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+        pattern = pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+        print_ast(pattern);
+      }
+
+      apply_substitution_to_lambda_body(pattern, subst);
+      if (guard) {
+        apply_substitution_to_lambda_body(guard, subst);
+      }
+
       apply_substitution_to_lambda_body(
           ast->data.AST_MATCH.branches + 2 * i + 1, subst);
     }
@@ -372,8 +383,27 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   }
   ast->type = t;
 }
+Type *apply_substitutions_rec(Subst *subst, Type *t) {
 
-// T-Lambda:  Γ, x₁ : α₁, x₂ : α₂, ..., xₙ : αₙ ⊢ e : τ    (α₁, α₂, ..., α esh)
+  t = apply_substitution(subst, t);
+
+  // TODO: when a Subst contains a chain of vars `a -> `b -> `c we could
+  // eliminate `b and keep just `a -> `c
+  Type *n = t;
+  while (n->kind == T_VAR) {
+    Type *x = find_in_subst(subst, n->data.T_VAR);
+    if (x) {
+      n = x;
+    } else {
+      break;
+    }
+  }
+  t = n;
+  return t;
+}
+
+// T-Lambda:  Γ, x₁ : α₁, x₂ : α₂, ..., xₙ : αₙ ⊢ e : τ    (α₁, α₂, ..., α
+// esh)
 //
 //
 //            ─────────────────────────────────────────────────────────────────────
@@ -402,15 +432,17 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   bind_recursive_ref(ast, recursive_fn_type, &lctx);
 
   Type *body_type = infer(body, &lctx);
+  // printf("\n### LAMBDA CONSTRAINTS\n");
+  // print_constraints(lctx.constraints);
 
   if (!body_type) {
     return type_error(body, "Error: Cannot infer lambda body\n");
   }
 
   Subst *ls = solve_constraints(lctx.constraints);
+
   for (int i = 0; i < num_params; i++) {
-    param_types[i] = apply_substitution(ls, param_types[i]);
-    // param_types[i] = apply_substitution(lambda_ctx.subst, param_types[i]);
+    param_types[i] = apply_substitutions_rec(ls, param_types[i]);
   }
 
   body_type = apply_substitution(ls, body_type);
@@ -420,7 +452,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   //   print "do some work\n";
   //   f ()
   // ;;
-  // If the function ends with an unconditional recursive call, treat it as void
+  // If the function ends with an unconditional recursive call, treat it as
+  // void
   if (ast->data.AST_LAMBDA.fn_name.chars != NULL &&
       has_infinite_tail_recursion(body, ast->data.AST_LAMBDA.fn_name.chars)) {
     body_type = &t_void;
@@ -430,11 +463,12 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   Type *result_type = body_type;
 
   for (int i = num_params - 1; i >= 0; i--) {
+
     Type *t = param_types[i];
-    t = apply_substitution(ls, t);
     result_type = type_fn(t, result_type);
   }
 
+  // don't remove this line 🙃
   ls = compose_subst(ctx->subst, ls);
 
   apply_substitution_to_lambda_body(body, ls);
@@ -450,6 +484,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (closure) {
     return closure;
   }
+  // printf("final lambda type\n");
+  // print_type(result_type);
 
   return result_type;
 }

@@ -130,9 +130,12 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
 
   switch (r->kind) {
   case T_VAR: {
+
     if (r->is_recursive_type_ref) {
+      // TODO??? wtf
       return r;
     }
+
     Type *rr = env_lookup(env, r->data.T_VAR);
 
     if (rr && rr->kind == T_VAR) {
@@ -259,7 +262,11 @@ bool occurs_check(const char *var, Type *ty) {
 
   switch (ty->kind) {
   case T_VAR: {
-    return CHARS_EQ(ty->data.T_VAR, var);
+    bool chars_eq = CHARS_EQ(ty->data.T_VAR, var);
+    if (chars_eq && ty->is_recursive_type_ref) {
+      return false;
+    }
+    return chars_eq;
   }
   case T_FN: {
     return occurs_check(var, ty->data.T_FN.from) ||
@@ -357,7 +364,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     add_constraint(unify_res, t2, t1);
     return 0;
   }
-
   if (t1->implements && t2->kind != T_VAR) {
 
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
@@ -383,7 +389,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
       }
     }
   }
-
   if (t1->kind == T_VAR && t1->is_recursive_type_ref && is_sum_type(t2) &&
       (t2->alias && CHARS_EQ(t1->data.T_VAR, t2->alias))) {
     return 0;
@@ -399,6 +404,18 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     // unify(type, pattern_type, ctx);
     //
     // return 0;
+  }
+
+  if (t1->kind == T_VAR && t1->is_recursive_type_ref && t2->kind == T_VAR) {
+
+    if (occurs_check(t2->data.T_VAR, t1)) {
+
+      return 1; // Occurs check failure
+    }
+
+    add_constraint(unify_res, t2, t1);
+
+    return 0;
   }
 
   if (t1->kind == T_VAR) {
@@ -419,7 +436,6 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   }
 
   if (t2->kind == T_VAR) {
-
     for (TypeClass *tc = t1->implements; tc != NULL; tc = tc->next) {
       typeclasses_extend(t2, tc);
     }
@@ -438,6 +454,9 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     // Unify parameter types
     TICtx ur1 = {};
     if (unify(t1->data.T_FN.from, t2->data.T_FN.from, &ur1) != 0) {
+      // printf("fn 1st arg mismatch\n");
+      // print_type(t1->data.T_FN.from);
+      // print_type(t2->data.T_FN.from);
 
       return 1;
     }
@@ -510,6 +529,7 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
   // Case 5: Two concrete types - this will be handled by constraint solver
   // later
+  //
   if (t1->kind != T_VAR && t2->kind != T_VAR) {
 
     return 0;
@@ -721,6 +741,7 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
   for (Subst *kv = s2; kv; kv = kv->next) {
     const char *k = kv->var;
 
+    // Type *type = deep_copy_type(kv->type);
     Type *type = kv->type;
     type = apply_substitution(s1, type);
     if (!subst_contains(s1, k, type)) {
@@ -729,6 +750,7 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
   }
   return s1;
 }
+
 Subst *update_substitution(Subst *subst, const char *var, Type *new_type) {
   if (new_type->kind == T_VAR) {
     return subst;
@@ -758,6 +780,9 @@ TypeList *free_vars_type(TypeList *vars, Type *t) {
   switch (t->kind) {
 
   case T_VAR: {
+    if (t->is_recursive_type_ref) {
+      return vars;
+    }
     if (!typelist_contains(vars, t)) {
       vars = typelist_extend(vars, t);
     }
@@ -772,6 +797,7 @@ TypeList *free_vars_type(TypeList *vars, Type *t) {
 
   case T_TYPECLASS_RESOLVE:
   case T_CONS: {
+
     TypeList *arg_vars = vars;
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       arg_vars = free_vars_type(arg_vars, t->data.T_CONS.args[i]);
@@ -1018,10 +1044,20 @@ void print_subst(Subst *subst) {
 }
 
 Type *extract_member_from_sum_type(Type *cons, Ast *id) {
-  Type *f;
   for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
     Type *mem = cons->data.T_CONS.args[i];
     if (CHARS_EQ(id->data.AST_IDENTIFIER.value, mem->data.T_CONS.name)) {
+      return mem;
+    }
+  }
+  return NULL;
+}
+
+Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx) {
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    Type *mem = cons->data.T_CONS.args[i];
+    if (CHARS_EQ(id->data.AST_IDENTIFIER.value, mem->data.T_CONS.name)) {
+      *idx = i;
       return mem;
     }
   }
@@ -1060,6 +1096,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     }
     return 0;
   }
+
   case AST_VOID: {
     return 0;
   }
@@ -1137,6 +1174,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
   }
 
   case AST_APPLICATION: {
+
     if (is_list_cons_operator(binding)) {
       Ast *head = binding->data.AST_APPLICATION.args;
       Ast *rest = binding->data.AST_APPLICATION.args + 1;
@@ -1162,25 +1200,72 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       type_error(binding, "Could not create list destructure binding");
       return 1;
     }
+    Type *btype;
+
     if (binding->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
       Type *app_type = infer(binding, ctx);
 
-      Type *btype = app_type;
+      btype = app_type;
 
       if (is_sum_type(btype)) {
         btype = extract_member_from_sum_type(
             btype, binding->data.AST_APPLICATION.function);
+        if (btype->kind == T_CONS && btype->data.T_CONS.num_args == 1) {
+          btype = btype->data.T_CONS.args[0];
+        }
       }
-      // print_type(btype);
 
-      for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
-        bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
-                         btype->data.T_CONS.args[i], bmd_type, ctx);
+      if (btype->kind == T_CONS && binding->data.AST_APPLICATION.len == 1 &&
+          (binding->data.AST_APPLICATION.args->tag == AST_TUPLE)) {
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
+      } else if (btype->kind == T_CONS) {
+        for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+          bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
+                           btype->data.T_CONS.args[i], bmd_type, ctx);
+        }
+      } else {
+
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
       }
+
+      binding->type = app_type;
+
+      return 0;
+    } else if (binding->data.AST_APPLICATION.function->tag ==
+               AST_RECORD_ACCESS) {
+
+      Type *app_type = infer(binding->data.AST_APPLICATION.function, ctx);
+
+      btype = app_type;
+
+      if (is_sum_type(btype)) {
+        btype = extract_member_from_sum_type(
+            btype, binding->data.AST_APPLICATION.function->data
+                       .AST_RECORD_ACCESS.member);
+      }
+
+      if (btype->kind == T_CONS && binding->data.AST_APPLICATION.len == 1 &&
+          (binding->data.AST_APPLICATION.args->tag == AST_TUPLE)) {
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
+      } else if (btype->kind == T_CONS) {
+        for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+          bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
+                           btype->data.T_CONS.args[i], bmd_type, ctx);
+        }
+      } else {
+
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
+      }
+
       binding->type = app_type;
 
       return 0;
     }
+
     return 1;
   }
 
@@ -1210,6 +1295,11 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     binding->type = from->type;
     return 0;
   }
+
+  // case AST_RECORD_ACCESS: {
+  //   print_ast(binding);
+  //   return 0;
+  // }
   default: {
     type_error(binding, "Cannot appear in a binding");
     return 1;
@@ -1247,6 +1337,10 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
                    (ctx->current_fn_ast &&
                     ctx->current_fn_ast->data.AST_LAMBDA.num_yields) ||
                    0}}};
+
+  if (expr->tag == AST_EXTERN_FN) {
+    bmd.type = BT_EXTERN_FN;
+  }
 
   // if (expr->tag == AST_YIELD && ctx->current_fn_ast &&
   //     ctx->current_fn_ast->data.AST_LAMBDA.num_yields == 1) {
@@ -1638,13 +1732,17 @@ Type *infer(Ast *ast, TICtx *ctx) {
     }
 
     for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+
       if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
         type = rec_type->data.T_CONS.args[i];
+        // printf("found type @ %d??\n", i);
+        // print_type(type);
         ast->data.AST_RECORD_ACCESS.index = i;
         break;
       }
     }
 
+    // print_type(type);
     if (type->kind == T_SCHEME) {
       type = instantiate(type, ctx);
     }
@@ -1700,6 +1798,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
       while (mod_env) {
         ctx->env = env_extend(ctx->env, mod_env->name, mod_env->type);
+        ctx->env->is_opened_var = true;
         mod_env = mod_env->next;
       }
 

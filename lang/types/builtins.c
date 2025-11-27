@@ -1,7 +1,7 @@
-#include "ht.h"
-#include "inference.h"
-#include "types/type.h"
-#include "types/type_ser.h"
+#include "../ht.h"
+#include "../types/inference.h"
+#include "../types/type.h"
+#include "../types/type_ser.h"
 #include <string.h>
 
 Type t_int = {T_INT};
@@ -538,6 +538,7 @@ Type create_play_routine_scheme() {
   f = type_fn(&t_uint64, f);
   return *f;
 }
+
 Type sizeof_scheme;
 Type create_sizeof_scheme() {
   Type *a = tvar("a");
@@ -550,6 +551,22 @@ Type create_sizeof_scheme() {
   return (Type){T_SCHEME,
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
+
+Type asbytes_scheme;
+Type create_asbytes_scheme() {
+  Type *a = tvar("a");
+  Type *f = type_fn(a, &t_string);
+
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, ATTR_ALLOCATES);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 Type dlopen_type = MAKE_FN_TYPE_2(&t_string, &t_void);
 Type cor_current_scheme = MAKE_FN_TYPE_2(&t_void, &t_ptr);
 
@@ -647,6 +664,9 @@ void initialize_builtin_types() {
   add_builtin("&&", &logical_op_scheme);
   add_builtin("||", &logical_op_scheme);
 
+  // add_builtin(">>")
+  // add_builtin("&")
+
   array_size_scheme = create_array_size_scheme();
   add_builtin("array_size", &array_size_scheme);
 
@@ -731,6 +751,10 @@ void initialize_builtin_types() {
   sizeof_scheme = create_sizeof_scheme();
   add_builtin("sizeof", &sizeof_scheme);
   add_builtin("dlopen", &dlopen_type);
+  // add_builtin("dlopen", &dlopen_type);
+
+  asbytes_scheme = create_asbytes_scheme();
+  add_builtin("asbytes", &asbytes_scheme);
   // print_builtin_types();
 }
 

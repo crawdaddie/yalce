@@ -226,6 +226,13 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
   }
   case AST_LOOP:
   case AST_LET: {
+    if (ast->data.AST_LET.binding->tag == AST_IDENTIFIER &&
+        CHARS_EQ(ast->data.AST_LET.binding->data.AST_IDENTIFIER.value,
+                 "test") &&
+        ast->data.AST_LET.expr->tag == AST_MODULE) {
+      // TODO: don't skip test module
+      break;
+    }
     allocations = ea(ast->data.AST_LET.expr, ctx);
 
     if (ast->data.AST_LET.in_expr) {
@@ -263,6 +270,18 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     const char *varname = ast->data.AST_IDENTIFIER.value;
     Allocation *found_alloc = ctx_find_allocation(ctx, varname);
     return found_alloc;
+  }
+  case AST_MODULE: {
+
+    Ast *body = ast->data.AST_LAMBDA.body;
+    Ast *stmt;
+
+    EACtx lambda_ctx = *ctx;
+    lambda_ctx.allocations = NULL;
+    AST_LIST_ITER(body->data.AST_BODY.stmts, ({
+                    stmt = l->ast;
+                    ea(stmt, &lambda_ctx);
+                  }));
   }
 
   default: {

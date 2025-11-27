@@ -18,16 +18,16 @@ let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
   )
 ;;
 
-let __foldi = fn f: (Int -> R -> T -> R) idx: (Int) res: (R) a: (Array of T) ->
+let _foldi = fn f: (Int -> R -> T -> R) idx: (Int) res: (R) a: (Array of T) ->
   match array_size a with
   | 0 -> res
   | _ -> (
-    __foldi f (idx + 1) (f idx res (a[0])) (array_succ a)
+    _foldi f (idx + 1) (f idx res (a[0])) (array_succ a)
   )
 ;;
 
 let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
-  __foldi f 0 res a
+  _foldi f 0 res a
 ;;
 
 

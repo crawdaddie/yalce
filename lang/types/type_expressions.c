@@ -1,6 +1,5 @@
 #include "./type_expressions.h"
-#include "./builtins.h"
-#include "./inference.h"
+#include "./builtins.h" #include "./inference.h"
 #include "serde.h"
 #include "types/type_ser.h"
 #include <string.h>
@@ -110,18 +109,20 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   case AST_LIST: {
     int len = expr->data.AST_LIST.len;
     Type **members = t_alloc(sizeof(Type *) * len);
-    char **names = malloc(sizeof(char *) * len);
+    const char **names = malloc(sizeof(char *) * len);
     for (int i = 0; i < len; i++) {
-      char *name;
+      const char *name;
       Ast *mem_ast = expr->data.AST_LIST.items + i;
       if (mem_ast->tag == AST_IDENTIFIER) {
         name = mem_ast->data.AST_IDENTIFIER.value;
         members[i] =
             create_cons_type(mem_ast->data.AST_IDENTIFIER.value, 0, NULL);
       } else {
-        Ast *item = expr->data.AST_LIST.items + i;
+        Ast *item = mem_ast;
+
         if (item->tag == AST_BINOP &&
             item->data.AST_BINOP.left->tag == AST_IDENTIFIER) {
+
           name = item->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
         }
 
@@ -131,7 +132,9 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         }
         members[i] = sch;
       }
+
       names[i] = name;
+
       if (members[i]->kind == T_CONS) {
         members[i]->data.T_CONS.name = name;
       }
@@ -177,14 +180,6 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
 
         Type *final = instantiate_type_in_env(container, &env);
 
-        // printf("final\n");
-        // print_type(final);
-        //
-        // container->data.T_CONS.args = t_alloc(sizeof(Type *));
-        // container->data.T_CONS.args[0] = contained;
-        //
-        // print_type(container);
-
         return final;
       }
 
@@ -221,6 +216,11 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
     //
     //   return inst;
     // }
+  }
+  case AST_RECORD_ACCESS: {
+    Type *inf = infer(expr, ctx);
+
+    return inf;
   }
 
   default: {
@@ -259,6 +259,7 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   };
 
   Type *computed = compute_type_expression(expr, &_ctx);
+  computed->alias = name;
 
   if (expr->tag == AST_IDENTIFIER) {
     computed = deep_copy_type(computed);

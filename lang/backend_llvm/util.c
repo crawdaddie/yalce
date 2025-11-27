@@ -19,11 +19,9 @@ void struct_ptr_set(int item_offset, LLVMValueRef struct_ptr,
 
 LLVMValueRef struct_ptr_get(int item_offset, LLVMValueRef struct_ptr,
                             LLVMTypeRef struct_type, LLVMBuilderRef builder) {
-  // Get a pointer to the item
   LLVMValueRef item_ptr = LLVMBuildStructGEP2(builder, struct_type, struct_ptr,
                                               item_offset, "item_ptr");
 
-  // Load the value from the pointer
   LLVMTypeRef item_type = LLVMStructGetTypeAtIndex(struct_type, item_offset);
   return LLVMBuildLoad2(builder, item_type, item_ptr, "loaded_item");
 }

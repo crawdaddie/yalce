@@ -1243,6 +1243,7 @@ Ast *array_index_expression(Ast *array, Ast *index_expr) {
                 index_expr->data.AST_RANGE_EXPRESSION.from),
             index_expr->data.AST_RANGE_EXPRESSION.to),
         array);
+
     return e;
   }
   return ast_application(

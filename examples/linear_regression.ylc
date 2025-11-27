@@ -10,7 +10,7 @@ let forward = fn (pw, pb) x ->
   let out_feat = array_size pb;
   let out = array_fill_const (out_feat * (array_size x)) 0.;
 
-  for i = 0 to (array_size out) in (
+  for i = 0 .. (array_size out) in (
     out[i] := pb[0] + pw[0] * x[i]
   );
   out
@@ -52,7 +52,7 @@ let sgd_optim = fn learning_rate model: (TLinear) pred X y ->
   let grad_weight = [| 0. |];
   let grad_bias = [| 0. |];
   
-  for i = 0 to n in (
+  for i = 0 .. n in (
     let error = pred[i] - y[i];
     let x_i = X[i]; 
     

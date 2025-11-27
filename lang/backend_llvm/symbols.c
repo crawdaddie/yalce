@@ -347,8 +347,8 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
 
   if (!expr_val) {
     print_type_err(expr->type);
-    fprintf(stderr, "Error - could not compile value for binding to %s\n",
-            binding->data.AST_IDENTIFIER.value);
+    fprintf(stderr, "Error - could not compile value for binding to ");
+    print_ast_err(binding);
     print_codegen_location();
     return NULL;
   }

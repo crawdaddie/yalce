@@ -1,0 +1,212 @@
+let _ = dlopen "./libpatterns.so";
+
+import std/Regex;
+let int32_parse = extern fn String -> Int;
+let double_parse = extern fn String -> Double;
+
+
+type Seq =
+  | SeqInt of Int
+  | SeqNum of Double
+  | SeqKey of String
+  | SeqList of (List of Seq)
+  | SeqChoose of (List of Seq)
+  | SeqAlt of (List of Seq)
+  ;
+
+let seq_extend = fn seq new ->
+  match seq with
+  | SeqInt _ -> SeqList [seq, new]       # Wrap int in a list
+  | SeqNum _ -> SeqList [seq, new]       # Wrap int in a list
+  | SeqKey _ -> SeqList  [seq, new]         # Wrap int in a list
+
+  | SeqList (x::xs) ->   SeqList (new::x::xs)  # Non-empty list
+  | SeqChoose (x::xs) -> SeqChoose (new::x::xs)  # Non-empty choose
+  | SeqAlt (x::xs) ->    SeqAlt (new::x::xs)  # Non-empty alt
+  | SeqList [] -> SeqList [new,]               # Empty list
+  | SeqChoose [] -> SeqChoose [new,]           # Empty choose
+  | SeqAlt [] -> SeqAlt [new,]               # Empty list
+  ;;
+
+
+let print_seq_helper = fn is_first seq ->
+  match seq with
+  | SeqInt i -> print `{i}, `
+  | SeqNum n -> print `{n}, `
+  | SeqKey k -> print `{k}, `
+  | SeqList [] -> print "], "
+  | SeqChoose [] -> print "}, "
+  | SeqAlt [] -> print ">, "
+  | SeqList (x::rest) -> (
+    if is_first then (print "[") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqList rest)
+  )
+  | SeqChoose (x::rest) -> (
+    if is_first then (print "{") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqChoose rest)
+  )
+
+  | SeqAlt (x::rest) -> (
+    if is_first then (print "<") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqAlt rest)
+  )
+  | _ -> ()
+  ;;
+
+
+let seq_reverse = fn s -> 
+
+  let seq_list_rev = fn l res ->
+    match l with
+    | [] -> res
+    | x :: rest -> seq_list_rev rest ((seq_reverse x) :: res)
+  ;;
+
+  match s with
+  | SeqInt _ -> s
+  | SeqNum _ -> s
+  | SeqKey _ -> s
+  | SeqList l -> SeqList (seq_list_rev l []) 
+  | SeqChoose l -> SeqChoose (seq_list_rev l []) 
+  | SeqAlt l -> SeqAlt (seq_list_rev l []) 
+  ;;
+
+let conclude_current = fn current stack ->
+  match stack with
+  | SeqList (parent::rest) -> (
+    let updated_parent = seq_extend parent current;
+    (updated_parent, SeqList rest)
+  )
+  | SeqChoose (parent::rest) -> (
+    let updated_parent = seq_extend parent current;
+    (updated_parent, SeqChoose rest)
+  )
+  | SeqAlt (parent::rest) -> (
+    let updated_parent = seq_extend parent current;
+    (updated_parent, SeqAlt rest)
+  )
+  | SeqList [] -> (current, stack)
+  | SeqChoose [] -> (current, stack)
+  | SeqAlt [] -> (current, stack)
+  | _ -> (current, stack)  # Shouldn't happen - unreachable?
+  ;;
+
+let start_new = fn next current stack new_context ->
+  # Push current context onto stack, start new context
+  let new_stack = seq_extend stack current;
+  (next, new_context, new_stack)
+  ;;
+
+
+let parse_seq = fn x current stack ->
+  if (array_size x > 0) then (
+
+    let (next, curr, new_stack) =
+      match Regex.find_one x "^-?[0-9]*\.([0-9]*[1-9]|[0-9][0-9]*)?" with
+      | Some (st, end) -> (
+        # Found a double - parse_seq it and add to current
+        let double_val = double_parse @@ x[st .. end];
+        let updated = seq_extend current (SeqNum double_val);
+        (x[end ..], updated, stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^[0-9]+" with
+      | Some (st, end) -> (
+        # Found an int - parse_seq it and add to current
+        let int_val = int32_parse @@ x[st .. end];
+        let updated = seq_extend current (SeqInt int_val);
+        (x[end ..], updated, stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^[a-zA-Z_][a-zA-Z0-9_#]*" with
+      | Some (st, end) -> (
+        # Found an identifier - add to current
+        let id_str = x[st .. end];
+        let updated = seq_extend current (SeqKey id_str);
+        (x[end ..], updated, stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^\{" with
+      | Some (st, end) -> (
+        # print "\nstart choose: \n";
+        # print_seq_helper true current;
+        # Start new SeqChoose context
+        start_new (x[end ..]) current stack (SeqChoose [])
+        )
+      | None ->
+
+      match Regex.find_one x "^\}" with
+      | Some (st, end) -> (
+        # Close current SeqChoose - pop from stack
+        let next = x[end ..];
+        let (new_current, new_stack) = conclude_current current stack;
+        (next, new_current, new_stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^\[" with
+      | Some (st, end) ->
+        # Start new SeqList context
+        start_new (x[end ..]) current stack (SeqList [])
+      | None ->
+
+      match Regex.find_one x "^\]" with
+      | Some (st, end) -> (
+        # Close current SeqList - pop from stack
+        let next = x[end ..];
+        let (new_current, new_stack) = conclude_current current stack;
+        (next, new_current, new_stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^<" with
+      | Some (st, end) -> (
+
+        # print "\nstart alt: \n";
+        # print_seq_helper true current;
+        # Start new SeqAlt context
+        start_new (x[end ..]) current stack (SeqAlt [])
+        )
+      | None ->
+
+      match Regex.find_one x "^>" with
+      | Some (st, end) -> (
+        # Close current SeqAlt - pop from stack
+        let next = x[end ..];
+        let (new_current, new_stack) = conclude_current current stack;
+        (next, new_current, new_stack)
+      )
+      | None ->
+
+      match Regex.find_one x "^[ ]+" with
+      | Some (st, end) -> (
+        # Skip whitespace
+        (x[end ..], current, stack)
+      )
+      | None -> ("", current, stack)
+    in
+
+    parse_seq next curr new_stack
+  )
+  else current
+;;
+
+let parse = fn input ->
+  parse_seq input (SeqList []) (SeqList [])
+  |> seq_reverse
+;;
+
+let compile_coroutine_from_seq = extern fn Ptr of Seq -> Coroutine of Seq;
+
+let as_cor = fn seq ->
+  compile_coroutine_from_seq seq
+  ;;
+
+let seq_eq = extern fn Seq -> Seq -> Bool;
+let Seq : Eq = fn a b -> seq_eq a b;;

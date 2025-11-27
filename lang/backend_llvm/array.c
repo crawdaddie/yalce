@@ -1,6 +1,7 @@
 #include "backend_llvm/array.h"
 #include "escape_analysis.h"
 #include "types.h"
+#include "types/type_ser.h"
 #include <llvm-c/Core.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -111,6 +112,8 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef array_struct = LLVMGetUndef(array_type);
 
   LLVMValueRef data_ptr;
+  // printf("create array %d \n", find_allocation_strategy(ast, ctx));
+  // print_ast(ast);
   if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
     data_ptr = LLVMBuildArrayAlloca(builder, element_type, size_const,
                                     "array_data_alloc");
@@ -496,4 +499,18 @@ LLVMValueRef ArrayConstructor(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
   print_ast(ast);
   return NULL;
+}
+
+LLVMValueRef ArrayConstructorHandler(Ast *ast, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  Type *ptr_type = (ast->data.AST_APPLICATION.args + 1)->type;
+  LLVMValueRef data_ptr =
+      codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
+  LLVMValueRef size =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  LLVMValueRef v = LLVMGetUndef(tmp_generic_codegen_array_type());
+  v = LLVMBuildInsertValue(builder, v, size, 0, "insert_arr_size");
+  v = LLVMBuildInsertValue(builder, v, data_ptr, 1, "insert_arr_data");
+  return v;
 }

@@ -68,50 +68,37 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     case_body_types[i] = case_body_type;
 
     if (!case_body_type) {
-      return type_error(ctx, body_ast, "Cannot infer body type for case %d",
-                        i + 1);
+      return type_error(body_ast, "Cannot infer body type for case %d", i + 1);
     }
 
     if (unify(result_type, case_body_type, &body_ctx)) {
-      return type_error(ctx, body_ast, "Case %d returns incompatible type",
-                        i + 1);
+      return type_error(body_ast, "Case %d returns incompatible type", i + 1);
     }
 
     if (i > 0) {
       unify(pattern_types[i], pattern_types[i - 1], &body_ctx);
       unify(case_body_types[i], case_body_types[i - 1], &body_ctx);
     }
+    // printf("body %d: ", i);
+    // print_constraints(body_ctx.constraints);
 
     ctx->constraints = body_ctx.constraints;
   }
 
   Subst *sols = solve_constraints(ctx->constraints);
+  // print_subst(sols);
 
   ctx->subst = compose_subst(ctx->subst, sols);
 
+  // printf("after match\n");
+  // print_constraints(ctx->constraints);
   Type *final_scrutinee = apply_substitution(ctx->subst, scrutinee_type);
   ast->data.AST_MATCH.expr->type = final_scrutinee;
 
   Type *final_result = apply_substitution(ctx->subst, result_type);
 
-  for (int i = 0; i < num_cases; i++) {
-    Ast *pattern_ast = ast->data.AST_MATCH.branches + i * 2;
-
-    Ast *guard = NULL;
-
-    if (pattern_ast->tag == AST_MATCH_GUARD_CLAUSE) {
-      guard = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
-      apply_substitution_to_lambda_body(guard, ctx->subst);
-      pattern_ast = pattern_ast->data.AST_MATCH_GUARD_CLAUSE.test_expr;
-      apply_substitution_to_lambda_body(pattern_ast, ctx->subst);
-
-    } else {
-      apply_substitution_to_lambda_body(pattern_ast, ctx->subst);
-    }
-
-    apply_substitution_to_lambda_body(ast->data.AST_MATCH.branches + i * 2 + 1,
-                                      ctx->subst);
+  if (ctx->scope == 0) {
+    apply_substitution_to_lambda_body(ast, ctx->subst);
   }
-
   return final_result;
 }

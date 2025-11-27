@@ -113,6 +113,9 @@ LLVMValueRef _char_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
 LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
+  // printf("Int to string\n");
+  // LLVMDumpValue(int_value);
+  // printf("\n");
 
   LLVMValueRef data_ptr = _int_to_chars(int_value, module, builder);
   LLVMValueRef strlen_func = get_strlen_func(module);
@@ -558,6 +561,8 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
   //   return codegen_list_to_string(val, val_type, ctx, module, builder);
   // }
 
+  printf("str serialize??\n");
+  print_type(val_type);
   return char_to_string(LLVMConstInt(LLVMInt8Type(), 60, 0), module, builder);
 }
 

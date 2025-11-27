@@ -2,6 +2,7 @@
 #include "array.h"
 #include "types.h"
 #include "types/type_ser.h"
+#include "util.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/Types.h"
@@ -9,6 +10,10 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
+
+LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
+                               JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
 
 LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
                                         JITLangCtx *ctx, LLVMModuleRef module,
@@ -81,8 +86,14 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
   LLVMValueRef val;
 
   if (app->data.AST_APPLICATION.len > 1) {
+    Type *member_type = extract_member_from_sum_type(
+        enum_type, app->data.AST_APPLICATION.function);
+    member_type = member_type->data.T_CONS.args[0];
+
     LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
-    LLVMValueRef union_value = LLVMGetUndef(union_type);
+    LLVMTypeRef llvm_member_type = type_to_llvm_type(member_type, ctx, module);
+    LLVMValueRef union_value = LLVMGetUndef(llvm_member_type);
+
     for (int i = 0; i < app->data.AST_APPLICATION.len; i++) {
 
       LLVMValueRef field_val =
@@ -91,18 +102,39 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
       union_value = LLVMBuildInsertValue(builder, union_value, field_val, i,
                                          "insert int arg");
     }
-    some = LLVMBuildInsertValue(builder, some, union_value, 1,
+
+    // Store struct to temp, then load as byte array
+    LLVMValueRef struct_temp =
+        LLVMBuildAlloca(builder, llvm_member_type, "struct_temp");
+    LLVMBuildStore(builder, union_value, struct_temp);
+
+    LLVMValueRef byte_ptr = LLVMBuildBitCast(
+        builder, struct_temp, LLVMPointerType(LLVMInt8Type(), 0), "byte_ptr");
+    LLVMValueRef union_as_bytes =
+        LLVMBuildLoad2(builder, union_type, byte_ptr, "load_as_bytes");
+
+    some = LLVMBuildInsertValue(builder, some, union_as_bytes, 1,
                                 "insert variant data");
   } else {
 
     LLVMTypeRef union_type = LLVMStructGetTypeAtIndex(tu_type, 1);
-    // LLVMValueRef union_value = LLVMGetUndef(union_type);
     val = codegen(app->data.AST_APPLICATION.args, ctx, module, builder);
 
-    // union_value =
-    //     LLVMBuildInsertValue(builder, union_value, val, 0, "insert int arg");
+    // Store value into byte array union storage
+    LLVMTypeRef val_type = LLVMTypeOf(val);
 
-    some = LLVMBuildInsertValue(builder, some, val, 1, "insert variant data");
+    // Allocate temp space for the value
+    LLVMValueRef val_temp = LLVMBuildAlloca(builder, val_type, "val_temp");
+    LLVMBuildStore(builder, val, val_temp);
+
+    // Cast to byte pointer and load as byte array
+    LLVMValueRef byte_ptr = LLVMBuildBitCast(
+        builder, val_temp, LLVMPointerType(LLVMInt8Type(), 0), "byte_ptr");
+    LLVMValueRef union_val =
+        LLVMBuildLoad2(builder, union_type, byte_ptr, "load_as_bytes");
+
+    some = LLVMBuildInsertValue(builder, some, union_val, 1,
+                                "insert variant data");
   }
 
   return some;
@@ -207,7 +239,9 @@ LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
       get_largest_type_size(LLVMGetModuleContext(module), contained_types, len,
                             LLVMGetModuleDataLayout(module));
 
-  return STRUCT_TY(2, TAG_TYPE, LLVMIntType(union_size_bytes * 8));
+  // Use byte array instead of integer for union storage
+  return STRUCT_TY(2, TAG_TYPE,
+                   LLVMArrayType(LLVMInt8Type(), union_size_bytes));
 }
 
 LLVMValueRef codegen_some(LLVMValueRef val, LLVMBuilderRef builder) {
@@ -378,6 +412,7 @@ bool type_contains_recursive_ref(Type *type, const char *target_name) {
     }
 
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+
       if (type_contains_recursive_ref(type->data.T_CONS.args[i], target_name)) {
         return true;
       }
@@ -392,6 +427,24 @@ bool type_contains_recursive_ref(Type *type, const char *target_name) {
   default:
     return false;
   }
+}
+
+Type *find_recursive_type_container(Type *t, const char *name,
+                                    Type *container) {
+  if (t->kind == T_VAR && t->is_recursive_type_ref &&
+      CHARS_EQ(t->data.T_VAR, name)) {
+    return container;
+  }
+  if (t->kind == T_CONS) {
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      Type *x;
+      if ((x = find_recursive_type_container(t->data.T_CONS.args[i], name,
+                                             t)) != NULL) {
+        return x;
+      }
+    }
+  }
+  return NULL;
 }
 
 LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
@@ -410,39 +463,26 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   LLVMTypeRef variant_struct = LLVMStructCreateNamed(llvm_ctx, name);
   STACK_ALLOC_CTX_PUSH(_ctx, ctx);
 
-  // Register this type in the context so recursive references can find it
-  // JITSymbol *temp_sym =
-  //     new_symbol(STYPE_VARIANT_TYPE, type, NULL, variant_struct);
-  //
-  // ht_set_hash(_ctx.frame->table, name, hash_string(name, strlen(name)),
-  //             temp_sym);
-
-  // Process each variant member
   int len = type->data.T_CONS.num_args;
   LLVMTypeRef member_types[len];
 
   for (int i = 0; i < len; i++) {
     Type *member_type = type->data.T_CONS.args[i];
 
-    // Check if this member contains a recursive reference
+    // Type *container;
     if (type_contains_recursive_ref(member_type, name)) {
 
-      // For recursive members, we need to use a pointer
-      // The member type itself might be complex (e.g., List of T_CONS)
-      if (is_list_type(member_type->data.T_CONS.args[0])) {
-        member_types[i] = GENERIC_PTR;
-      } else if (is_array_type(member_type->data.T_CONS.args[0])) {
-        member_types[i] = codegen_array_type(LLVMInt8Type());
-      } else {
+      Type *container = find_recursive_type_container(
+          member_type->data.T_CONS.args[0], name, type);
+      if (!(is_list_type(container) || is_array_type(container))) {
         fprintf(stderr,
                 "Error: type %s cannot hold a recursive reference without a "
                 "List or Array container\n",
                 name);
-        continue;
+        return NULL;
       }
-    } else {
-      member_types[i] = type_to_llvm_type(member_type, ctx, module);
     }
+    member_types[i] = type_to_llvm_type(member_type, ctx, module);
   }
 
   LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
@@ -450,10 +490,174 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
 
       get_largest_type_size(llvm_ctx, member_types, len, target_data);
 
-  LLVMTypeRef body_fields[] = {TAG_TYPE, LLVMIntType(union_size_bytes * 8)};
+  // Use byte array instead of integer for union storage
+  LLVMTypeRef body_fields[] = {TAG_TYPE,
+                               LLVMArrayType(LLVMInt8Type(), union_size_bytes)};
   LLVMStructSetBody(variant_struct, body_fields, 2, 0);
-  // LLVMDumpType(variant_struct);
 
   destroy_ctx(&_ctx);
   return variant_struct;
+}
+
+LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMTypeRef target_llvm_type = type_to_llvm_type(desired_type, ctx, module);
+  if (!target_llvm_type) {
+    fprintf(stderr, "Error: could not get LLVM type for desired type\n");
+    return NULL;
+  }
+
+  switch (desired_type->kind) {
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_CHAR:
+  case T_BOOL: {
+    // Extract scalar from byte array union storage
+    // Store byte array to memory, then load as target type
+    LLVMValueRef union_alloca =
+        LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
+
+    LLVMBuildStore(builder, un, union_alloca);
+
+    // Cast pointer to target type and load
+    LLVMValueRef typed_ptr = LLVMBuildBitCast(
+        builder, union_alloca, LLVMPointerType(target_llvm_type, 0),
+        "cast_to_target_ptr");
+    return LLVMBuildLoad2(builder, target_llvm_type, typed_ptr,
+                          "union_to_scalar");
+  }
+  case T_FN: {
+
+    LLVMValueRef union_alloca =
+        LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
+
+    LLVMBuildStore(builder, un, union_alloca);
+
+    // Cast pointer to target type and load
+    LLVMValueRef typed_ptr = LLVMBuildBitCast(
+        builder, union_alloca, LLVMPointerType(LLVMInt8Type(), 0),
+        "cast_to_target_ptr");
+    return LLVMBuildLoad2(builder, target_llvm_type, typed_ptr,
+                          "union_to_fn_ptr");
+  }
+
+  case T_VOID: {
+    // No value needed for void
+    return NULL;
+  }
+
+  case T_STRING:
+  case T_CONS: {
+    // Extract from byte array union storage
+    // Store byte array to memory, then load as target type
+    LLVMValueRef union_alloca =
+        LLVMBuildAlloca(builder, LLVMTypeOf(un), "union_cast_temp");
+    LLVMBuildStore(builder, un, union_alloca);
+
+    // Cast pointer to target type and load
+    // This reinterprets the bytes as the target type
+    LLVMValueRef typed_ptr = LLVMBuildBitCast(
+        builder, union_alloca, LLVMPointerType(target_llvm_type, 0),
+        "cast_to_target_ptr");
+    return LLVMBuildLoad2(builder, target_llvm_type, typed_ptr,
+                          "union_to_struct");
+  }
+
+  default: {
+    fprintf(stderr, "Error, could not cast union type (kind: %d)\n",
+            desired_type->kind);
+    print_type(desired_type);
+    return NULL;
+  }
+  }
+}
+
+LLVMValueRef sum_type_eq(Type *type, LLVMValueRef val1, LLVMValueRef val2,
+                         JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
+
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+
+  LLVMBasicBlockRef tag_mismatch_block =
+      LLVMAppendBasicBlock(function, "sum_tag_mismatch");
+  LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(function, "sum_eq_end");
+
+  LLVMValueRef tag1 = extract_tag(val1, builder);
+  LLVMValueRef tag2 = extract_tag(val2, builder);
+
+  LLVMValueRef tags_equal =
+      LLVMBuildICmp(builder, LLVMIntEQ, tag1, tag2, "tags_eq");
+
+  LLVMBasicBlockRef switch_block =
+      LLVMAppendBasicBlock(function, "sum_tag_switch");
+  LLVMBuildCondBr(builder, tags_equal, switch_block, tag_mismatch_block);
+
+  LLVMPositionBuilderAtEnd(builder, tag_mismatch_block);
+  LLVMBuildBr(builder, end_block);
+
+  LLVMPositionBuilderAtEnd(builder, switch_block);
+
+  int num_variants = type->data.T_CONS.num_args;
+  LLVMBasicBlockRef default_block = tag_mismatch_block; // Should never happen
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, tag1, default_block, num_variants);
+
+  LLVMValueRef phi_values[num_variants + 1];
+  LLVMBasicBlockRef phi_blocks[num_variants + 1];
+
+  int phi_count = 0;
+
+  phi_values[phi_count] = _FALSE;
+  phi_blocks[phi_count] = tag_mismatch_block;
+  phi_count++;
+
+  for (int vidx = 0; vidx < num_variants; vidx++) {
+    LLVMBasicBlockRef variant_block =
+        LLVMAppendBasicBlock(function, "sum_variant_eq");
+
+    LLVMAddCase(switch_inst, LLVMConstInt(TAG_TYPE, vidx, 0), variant_block);
+
+    LLVMPositionBuilderAtEnd(builder, variant_block);
+    Type *variant_type = type->data.T_CONS.args[vidx];
+    Type *payload_type = NULL;
+
+    if (variant_type->data.T_CONS.num_args > 0) {
+      payload_type = variant_type->data.T_CONS.args[0];
+    }
+
+    // Extract payloads
+    LLVMValueRef payload1 = LLVMBuildExtractValue(builder, val1, 1, "payload1");
+    payload1 = cast_union(payload1, payload_type, ctx, module, builder);
+
+    LLVMValueRef payload2 = LLVMBuildExtractValue(builder, val2, 1, "payload2");
+    payload2 = cast_union(payload2, payload_type, ctx, module, builder);
+
+    if (variant_type->data.T_CONS.num_args > 0) {
+      // printf("compare\n");
+      // print_type(payload_type);
+
+      LLVMValueRef payloads_equal = _codegen_equality(
+          payload_type, payload1, payload2, ctx, module, builder);
+
+      phi_values[phi_count] = payloads_equal;
+    } else {
+      // No payload, just tags matching means equal
+      phi_values[phi_count] = _TRUE;
+    }
+
+    phi_blocks[phi_count] = variant_block;
+    phi_count++;
+
+    LLVMBuildBr(builder, end_block);
+  }
+
+  // Build phi node to merge results
+  LLVMPositionBuilderAtEnd(builder, end_block);
+  LLVMValueRef result_phi = LLVMBuildPhi(builder, LLVMInt1Type(), "eq_result");
+  LLVMAddIncoming(result_phi, phi_values, phi_blocks, phi_count);
+
+  return result_phi;
 }

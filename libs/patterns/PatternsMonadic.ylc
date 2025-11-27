@@ -1,0 +1,314 @@
+let _ = dlopen "./libpatterns.so";
+let int32_parse = extern fn String -> Int;
+
+type Seq =
+  | SeqInt of Int | SeqList of (List of Seq)
+  | SeqChoose of (List of Seq)
+  | SeqAlt of (List of Seq)
+  ;
+
+# Parser state: (tok_len, start, next, current, stack)
+type ParseState = (Int, String, String, Seq, Seq);
+
+
+
+# === Monadic combinators ===
+
+# Monadic return: wrap a value in the parser monad
+let preturn = fn x -> fn state -> Some (x, state);
+
+# Monadic bind: sequence two parsers
+let pbind = fn parser f -> fn state ->
+  match parser state with
+  | Some (result, new_state) -> f result new_state
+  | None -> None
+  ;;
+
+# Monadic bind operator (>>= in Haskell)
+let (>>=) = pbind;
+
+# Sequence operator: run two parsers, return second result
+let (>>) = fn p1 p2 -> pbind p1 (fn _ -> p2);
+
+# Map over parser result (fmap)
+let pmap = fn f parser -> fn state ->
+  match parser state with
+  | Some (result, new_state) -> Some (f result, new_state)
+  | None -> None
+  ;;
+
+# Alternative: try first parser, if it fails try second
+let (<|>) = fn p1 p2 -> fn state ->
+  match p1 state with
+  | Some (result, new_state) -> Some (result, new_state)
+  | _ -> p2 state
+  ;;
+
+# === State manipulation ===
+
+# Get current state
+let get_state = fn state -> Some (state, state);
+
+# Put new state
+let put_state = fn new_state -> fn _ -> Some ((), new_state);
+
+# Modify state
+let modify_state = fn f -> fn state -> Some ((), f state);
+
+# === Parser primitives ===
+
+# Peek at current character without consuming
+let peek_char = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  Some (next[0], state)
+  ;;
+
+# Get current character and advance
+let any_char = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  let c = next[0];
+  Some (c, (tok_len + 1, start, array_succ next, current, stack))
+  ;;
+
+# Check if character satisfies predicate
+let satisfy = fn pred ->
+  pbind peek_char (fn c ->
+    if pred c then any_char
+    else (fn _ -> None)
+  )
+  ;;
+
+# Match specific character
+let pchar = fn expected ->
+  satisfy (fn c -> c == expected)
+  ;;
+
+# Skip character and reset token position
+let skip_and_reset = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  let nn = array_succ next;
+  Some ((), (0, nn, nn, current, stack))
+  ;;
+
+# Check for end of input
+let is_eof = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  Some (next[0] == '\0', state)
+  ;;
+
+# === Seq manipulation helpers ===
+
+let seq_extend = fn seq new ->
+  match seq with
+  | SeqList (x::xs) ->   SeqList (new::x::xs)
+  | SeqChoose (x::xs) -> SeqChoose (new::x::xs)
+  | SeqAlt (x::xs) ->    SeqAlt (new::x::xs)
+  | SeqInt i -> SeqList [new, SeqInt i]
+  | SeqList [] -> SeqList [new,]
+  | SeqChoose [] -> SeqChoose [new,]
+  | SeqAlt [] -> SeqAlt [new,]
+  ;;
+
+# Get current sequence being built
+let get_current = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  Some (current, state)
+  ;;
+
+# Update current sequence
+let put_current = fn new_current -> fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  Some ((), (tok_len, start, next, new_current, stack))
+  ;;
+
+# Get stack
+let get_stack = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  Some (stack, state)
+  ;;
+
+# Push current onto stack, start new sequence
+let push_context = fn new_seq -> fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  let new_stack = seq_extend stack current;
+  let nn = array_succ next;
+  Some ((), (0, nn, nn, new_seq, new_stack))
+  ;;
+
+# Pop from stack and merge with current
+let pop_context = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  match stack with
+  | SeqList (parent::rest) ->
+      Some (parent, (tok_len, start, next, current, SeqList rest))
+  | SeqChoose (parent::rest) ->
+      Some (parent, (tok_len, start, next, current, SeqChoose rest))
+  | SeqAlt (parent::rest) ->
+      Some (parent, (tok_len, start, next, current, SeqAlt rest))
+  | _ -> (print "Cannot pop from empty stack"; None)
+  ;;
+
+# Add element to current sequence
+let extend_current = fn elem ->
+  pbind get_current (fn current ->
+    put_current (seq_extend current elem)
+  )
+  ;;
+
+# === Token parsing ===
+
+# Get current token length
+let get_tok_len = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  Some (tok_len, state)
+  ;;
+
+# Get token string and reset
+let consume_token = fn state ->
+  let (tok_len, start, next, current, stack) = state;
+  if tok_len == 0 then Some ("", state)
+  else
+    let tok_str = start[0 .. tok_len];
+    Some (tok_str, (0, next, next, current, stack))
+  ;;
+
+# Parse accumulated digits as integer and add to current
+let parse_int_token =
+  pbind get_tok_len (fn tok_len ->
+    if tok_len == 0 then preturn ()
+    else
+      pbind consume_token (fn tok_str ->
+        let tok_int = int32_parse tok_str;
+        extend_current (SeqInt tok_int)
+      )
+  )
+  ;;
+
+# === Main parser combinators ===
+
+# Parse digits (accumulate in tok_len)
+let parse_digit = fn () ->
+  pbind peek_char (fn c ->
+    match c with
+    | '0'..'9' -> any_char >> parse_digit ()
+    | _ -> preturn ()
+  )
+  ;;
+
+# Parse whitespace
+let parse_space =
+  pbind get_tok_len (fn tok_len ->
+    if tok_len == 0 then skip_and_reset
+    else parse_int_token >> skip_and_reset
+  )
+  ;;
+
+# Forward declaration placeholder - will be defined later
+let parse_expr = fn () -> fn state -> None;
+
+# Parse opening bracket/brace and push context
+let parse_open = fn bracket new_seq ->
+  pbind (pchar bracket) (fn _ ->
+    pbind get_tok_len (fn tok_len ->
+      (if tok_len == 0 then preturn ()
+       else parse_int_token) >>
+      push_context new_seq
+    )
+  )
+  ;;
+
+# Parse closing bracket/brace and pop context
+let parse_close = fn bracket ->
+  pbind (pchar bracket) (fn _ ->
+    pbind get_tok_len (fn tok_len ->
+      (if tok_len == 0 then preturn ()
+       else parse_int_token) >>
+      pbind get_current (fn current ->
+        pbind pop_context (fn parent ->
+          put_current (seq_extend parent current)
+        )
+      )
+    )
+  )
+  ;;
+
+# Main expression parser (to be called recursively)
+let parse_seq_monadic = fn () ->
+  pbind is_eof (fn eof ->
+    if eof then
+      pbind get_tok_len (fn tok_len ->
+        if tok_len == 0 then get_current
+        else parse_int_token >> get_current
+      )
+    else
+      pbind peek_char (fn c ->
+        match c with
+        | '0'..'9' -> any_char >> parse_seq_monadic ()
+        | ' ' -> parse_space >> parse_seq_monadic ()
+        | '{' -> parse_open '{' (SeqChoose []) >> parse_seq_monadic ()
+        | '}' -> parse_close '}' >> parse_seq_monadic ()
+        | '[' -> parse_open '[' (SeqList []) >> parse_seq_monadic ()
+        | ']' -> parse_close ']' >> parse_seq_monadic ()
+        | '<' -> parse_open '<' (SeqAlt []) >> parse_seq_monadic ()
+        | '>' -> parse_close '>' >> parse_seq_monadic ()
+        | _ -> fn _ -> (print "Unexpected character"; None)
+      )
+  )
+  ;;
+
+# Reverse sequences (same as original)
+let seq_reverse = fn s ->
+  let seq_list_rev = fn l res ->
+    match l with
+    | [] -> res
+    | x :: rest -> seq_list_rev rest ((seq_reverse x) :: res)
+  ;;
+
+  match s with
+  | SeqInt i -> s
+  | SeqList l -> SeqList (seq_list_rev l [])
+  | SeqChoose l -> SeqChoose (seq_list_rev l [])
+  | SeqAlt l -> SeqAlt (seq_list_rev l [])
+  ;;
+
+# Main parse function
+let parse = fn input ->
+  let initial_state = (0, input, input, SeqList [], SeqList []);
+  match parse_seq_monadic () initial_state with
+  | Some (result, _) -> seq_reverse result
+  | ParseError msg -> (print `Parse error: {msg}\n`; SeqList [])
+  ;;
+
+# === Printing and compilation (same as original) ===
+
+let print_seq_helper = fn is_first seq ->
+  match seq with
+  | SeqList [] -> print "], "
+  | SeqChoose [] -> print "}, "
+  | SeqAlt [] -> print ">, "
+  | SeqInt i -> print `{i}, `
+  | SeqList (x::rest) -> (
+    if is_first then (print "[") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqList rest)
+  )
+  | SeqChoose (x::rest) -> (
+    if is_first then (print "{") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqChoose rest)
+  )
+  | SeqAlt (x::rest) -> (
+    if is_first then (print "<") else ();
+    print_seq_helper true x;
+    print_seq_helper false (SeqAlt rest)
+  )
+  | _ -> ()
+  ;;
+
+let print_seq = print_seq_helper true;
+
+let compile_coroutine_from_seq = extern fn Seq -> Coroutine of Int;
+
+let as_cor = fn seq ->
+  compile_coroutine_from_seq seq
+  ;;

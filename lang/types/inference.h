@@ -21,6 +21,7 @@ typedef struct Constraint {
 typedef struct {
   enum BindingType {
     BT_VAR,
+    BT_EXTERN_FN,
     BT_RECURSIVE_REF,
     BT_FN_PARAM,
   } type;
@@ -86,6 +87,7 @@ Type *instantiate_type_in_env(Type *sch, TypeEnv *env);
 Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
 Type *extract_member_from_sum_type(Type *cons, Ast *id);
+Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx);
 void *type_error(Ast *ast, const char *fmt, ...);
 
 Constraint *merge_constraints(Constraint *list1, Constraint *list2);
@@ -104,6 +106,8 @@ void print_subst(Subst *subst);
 int bind_type_in_ctx(Ast *binding, Type *type, binding_md binding_type,
                      TICtx *ctx);
 TypeEnv *lookup_type_ref(TypeEnv *env, const char *name);
+
+bool is_list_cons_operator(Ast *ast);
 
 void apply_substitution_to_lambda_body(Ast *ast, Subst *subst);
 void add_constraint(TICtx *result, Type *var, Type *type);

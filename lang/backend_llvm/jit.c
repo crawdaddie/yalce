@@ -8,6 +8,7 @@
 #include "escape_analysis.h"
 #include "format_utils.h"
 #include "input.h"
+#include "module.h"
 #include "modules.h"
 #include "parse.h"
 #include "serde.h"
@@ -111,6 +112,7 @@ int prepare_ex_engine(JITLangCtx *ctx, LLVMExecutionEngineRef *engine,
 static void *eval_script(const char *filename, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder,
                          LLVMContextRef llvm_ctx, TypeEnv **env, Ast **prog) {
+  module_path = filename;
 
   // __import_current_dir = get_dirname(filename);
 

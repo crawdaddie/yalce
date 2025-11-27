@@ -121,4 +121,18 @@ typedef struct DoublePair {
   double z1;
 } DoublePair;
 
+// Regex match result - Option type containing (start, end) positions
+typedef struct __attribute__((packed)) {
+  int8_t tag;    // 0 = Some, 1 = None
+  int32_t rm_so; // start offset
+  int32_t rm_eo; // end offset
+} RegexMatchOption;
+
+// String parsing functions
+int32_t int32_parse(_String str);
+double double_parse(_String str);
+
+// Find first regex match in a string
+int regex_find_one(char *str, char *pattern, int32_t *res);
+
 #endif
