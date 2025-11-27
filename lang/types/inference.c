@@ -741,6 +741,7 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
   for (Subst *kv = s2; kv; kv = kv->next) {
     const char *k = kv->var;
 
+    // Type *type = deep_copy_type(kv->type);
     Type *type = kv->type;
     type = apply_substitution(s1, type);
     if (!subst_contains(s1, k, type)) {
@@ -749,6 +750,7 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
   }
   return s1;
 }
+
 Subst *update_substitution(Subst *subst, const char *var, Type *new_type) {
   if (new_type->kind == T_VAR) {
     return subst;
@@ -1421,10 +1423,6 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
   }
 
   if (type_ref->md.type == BT_RECURSIVE_REF) {
-    if (CHARS_EQ(ast->data.AST_IDENTIFIER.value, "compile")) {
-      print_ast(ast);
-      print_type(type_ref->type);
-    }
     return type_ref->type;
   }
 

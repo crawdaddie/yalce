@@ -189,9 +189,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
   if (IS_PRIMITIVE_TYPE(func_type)) {
     infer(ast->data.AST_APPLICATION.args, ctx);
-    // print_ast(ast);
-    // print_type(func_type);
-    // print_type(ast->data.AST_APPLICATION.args->type);
     return func_type;
   }
 
@@ -238,12 +235,6 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     return NULL;
   }
 
-  if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-               "compile")) {
-    printf("app constraints\n");
-    print_constraints(unify_ctx.constraints);
-  }
-
   ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
 
   // Step 5: Solve constraints and apply substitutions
@@ -256,6 +247,13 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   }
 
   expected_type = apply_substitution(solution, expected_type);
+
+  // if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+  //              ">")) {
+  //   print_ast(ast);
+  //   print_type(expected_type);
+  //   print_constraints(unify_ctx.constraints);
+  // }
 
   expected_type->data.T_FN.attributes = func_type->data.T_FN.attributes;
   ast->data.AST_APPLICATION.function->type = expected_type;
@@ -274,24 +272,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     memcpy(_arg_types, arg_types, sizeof(Type *) * num_args);
     Type *closure_meta = create_tuple_type(num_args, _arg_types);
     res->closure_meta = closure_meta;
-    // print_type(res);
   }
 
-  if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-               "compile")) {
-    printf("res type: \n");
-    print_type(res);
-
-    printf("func type: \n");
-    print_type(func_type);
-    print_type(expected_type);
-  }
-  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-  //              "array_range")) {
-  // print_ast(ast);
-  // printf("line %d\n", ast->loc_info->line);
-  // print_type(res);
-  // }
   return res;
 }

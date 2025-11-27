@@ -294,7 +294,7 @@ LLVMValueRef gte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
     return LLVMBuildFCmp(builder, LLVMRealOGE, l, r, "gte_num");
   }
   default: {
-    fprintf(stderr, "Error: unrecognized operands for ord binop");
+    fprintf(stderr, "Error: unrecognized operands for ord binop\n");
     return NULL;
   }
   }
@@ -316,7 +316,7 @@ LLVMValueRef lte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
     return LLVMBuildFCmp(builder, LLVMRealOLE, l, r, "lte_num");
   }
   default: {
-    fprintf(stderr, "Error: unrecognized operands for ord binop");
+    fprintf(stderr, "Error: unrecognized operands for ord binop\n");
     return NULL;
   }
   }
@@ -345,7 +345,7 @@ LLVMValueRef lte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
       return LLVMBuildFCmp(builder, _flop, l, r, _name "_num");                \
     }                                                                          \
     default: {                                                                 \
-      fprintf(stderr, "Error: unrecognized operands for ord binop");           \
+      fprintf(stderr, "Error: unrecognized operands for ord binop\n");         \
       return NULL;                                                             \
     }                                                                          \
     }                                                                          \
@@ -365,6 +365,10 @@ LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
+  // printf("ord\n");
+  // print_type(lt);
+  // print_type(rt);
+  // print_type_env(ctx->env);
   ORD_BINOP(">", LLVMRealOGT, LLVMIntSGT);
 }
 

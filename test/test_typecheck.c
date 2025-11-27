@@ -498,12 +498,14 @@ int test_list_processing() {
     Ast *res_bind = AST_LIST_NTH(b->data.AST_BODY.stmts, 5)
                         ->data.AST_LET.expr->data.AST_MATCH.branches[0]
                         .data.AST_MATCH_GUARD_CLAUSE.test_expr;
-    TASSERT("match branch of pop_left q has type Option of (Int * (Int[] * "
-            "Int[] ) )",
-            types_equal(
-                res_bind->type,
-                &TOPT(&TTUPLE(2, &t_int,
-                              &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))))));
+
+    print_type(res_bind->type);
+    TASSERT(
+        "match branch guard of pop_left q has type Option of (Int * (Int[] * "
+        "Int[] ) )",
+        types_equal(res_bind->type, &TOPT(&TTUPLE(2, &t_int,
+                                                  &TTUPLE(2, &TLIST(&t_int),
+                                                          &TLIST(&t_int))))));
   });
   T("let list_rev = fn l ->\n"
     "  let aux = fn ll res ->\n"
@@ -1800,7 +1802,7 @@ int test_refs() {
       ";;\n",
       &TSCHEME(&MAKE_FN_TYPE_2(
                    &TARRAY(&MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                              &v, &t_int)),
+                                              &t_int, &v)),
 
                    &TARRAY(&MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
                                               &v, &t_int))),
@@ -2401,6 +2403,18 @@ bool test_math_funcs() {
 bool test_sum_types() {
 
   bool status = true;
+  Ast *sum_type_expr = parse_input("type Seq =\n"
+                                   "  | SeqInt of Int\n"
+                                   "  | SeqNum of Double\n"
+                                   "  | SeqKey of String\n"
+                                   "  | SeqList of List of Seq\n"
+                                   "  ;\n",
+                                   NULL);
+  TICtx ctx = {.env = NULL};
+  infer(sum_type_expr, &ctx);
+  Type *sum_type = sum_type_expr->type;
+  Type t18 = TVAR("`18");
+
   Ast *b = T("type Seq =\n"
              "  | SeqInt of Int\n"
              "  | SeqNum of Double\n"
@@ -2418,7 +2432,7 @@ bool test_sum_types() {
              "  )\n"
              "  | _ -> ba\n"
              ";;",
-             &t_void);
+             &TSCHEME(&MAKE_FN_TYPE_3(sum_type, &t18, &t18), &t18));
   return status;
 }
 

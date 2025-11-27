@@ -194,6 +194,12 @@ let seq_eq = extern fn Seq -> Seq -> Bool;
 let Seq : Eq = fn a b -> seq_eq a b;;
 
 # let s = parse "1 7 8 9 {3 4} 4. c2";
+let ltype_str = fn i ->
+  match i with
+  | 3 -> "List"
+  | 4 -> "Choose"
+  | 5 -> "Alt"
+;;
 
 let print_seq_helper = fn is_first seq ->
   match seq with
@@ -211,19 +217,19 @@ let print_seq_helper = fn is_first seq ->
   | _ -> ()
   ;;
 
-let compile_bytecode = fn seq ba ->
+let compile_bytecode = fn is_first seq ba ->
   match seq with
-  | SeqInt i -> (print `{i},`; ba)
-  | SeqNum n -> (print `{n},`; ba)
-  | SeqKey k -> (print `{k},`; ba)
+  | SeqInt i -> (print `{i}, `; ba)
+  | SeqNum n -> (print `{n}, `; ba)
+  | SeqKey k -> (print `{k}, `; ba)
+  | SeqList (_, 0, []) -> (print "] "; ba)
   | SeqList (t, len, x::rest) -> ( 
+
+    if is_first then (print `{ltype_str t} [({len}) `) else ();
     ba
-    |> compile_bytecode x
-    |> compile_bytecode (SeqList (t, (len - 1), rest))
-    ;
-    ba
+    |> compile_bytecode true x
+    |> compile_bytecode false (SeqList (t, (len - 1), rest))
   )
-  | SeqList (_, 0, []) -> ba
   | _ -> ba
   ;;
 
