@@ -322,6 +322,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     callable_type =
         resolve_sym_type(expected_fn_type, sym->symbol_type, ctx->env);
 
+    printf("get specific callable???\n");
+    print_ast(ast);
+    print_type(callable_type);
     callable = get_specific_callable(sym, callable_type, ctx, module, builder);
 
     return call_callable(ast, callable_type, callable, ctx, module, builder);

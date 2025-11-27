@@ -8,198 +8,24 @@ static char *type_name_mapping[] = {
     [T_VOID] = TYPE_NAME_VOID,  [T_CHAR] = TYPE_NAME_CHAR,
 };
 
-char *tc_list_to_string(Type *t, char *buffer) {
-  if (t->implements != NULL) {
-    buffer = strncat(buffer, " [", 2);
-    for (TypeClass *tc = t->implements; tc != NULL; tc = tc->next) {
-      buffer = strncat(buffer, tc->name, strlen(tc->name));
-      buffer = strncat(buffer, ", ", 2);
-    }
-    buffer = strncat(buffer, "]", 1);
+char *type_to_string_dynamic(Type *t) {
+  char *buffer = NULL;
+  size_t size = 0;
+
+  FILE *stream = open_memstream(&buffer, &size);
+  if (!stream) {
+    return NULL;
   }
-  return buffer;
+
+  print_type_to_stream(t, stream);
+  fclose(stream); // This finalizes and null-terminates the buffer
+
+  return buffer; // Caller must free() this
 }
 
 char *type_to_string(Type *t, char *buffer) {
-  if (t == NULL) {
-    return strncat(buffer, "null", 4);
-  }
-
-  // if (t->alias != NULL) {
-  //   return strncat(buffer, t->alias, strlen(t->alias));
-  // }
-  //
-  switch (t->kind) {
-  case T_INT:
-  case T_UINT64:
-  case T_NUM:
-  case T_BOOL:
-  case T_VOID:
-  case T_CHAR: {
-    char *m = type_name_mapping[t->kind];
-    buffer = strncat(buffer, m, strlen(m));
-    break;
-  }
-  case T_EMPTY_LIST: {
-
-    buffer = strncat(buffer, "[]", 2);
-    break;
-  }
-
-  case T_TYPECLASS_RESOLVE: {
-    buffer = strncat(buffer, "tc resolve ", 12);
-
-    buffer = strncat(buffer, t->data.T_CONS.name, strlen(t->data.T_CONS.name));
-    buffer = strncat(buffer, " [ ", 3);
-
-    int len = t->data.T_CONS.num_args;
-    for (int i = 0; i < len - 1; i++) {
-      buffer = type_to_string(t->data.T_CONS.args[i], buffer);
-    }
-
-    buffer = strncat(buffer, " : ", 3);
-    buffer = type_to_string(t->data.T_CONS.args[len - 1], buffer);
-
-    buffer = strncat(buffer, "]", 1);
-    break;
-  }
-  case T_CONS: {
-
-    if (is_string_type(t)) {
-      buffer = strcat(buffer, "String");
-      break;
-    }
-
-    if (is_list_type(t)) {
-      buffer = type_to_string(t->data.T_CONS.args[0], buffer);
-      buffer = strncat(buffer, "[]", 2);
-      break;
-    }
-
-    if (is_tuple_type(t)) {
-      buffer = strncat(buffer, "( ", 2);
-      int is_named = t->data.T_CONS.names != NULL;
-      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-        if (is_named) {
-          buffer = strncat(buffer, t->data.T_CONS.names[i],
-                           strlen(t->data.T_CONS.names[i]));
-          buffer = strncat(buffer, ": ", 2);
-        }
-        buffer = type_to_string(t->data.T_CONS.args[i], buffer);
-        if (i < t->data.T_CONS.num_args - 1) {
-          buffer = strncat(buffer, " * ", 3);
-        }
-      }
-
-      buffer = strncat(buffer, " )", 2);
-      break;
-    }
-    if (is_sum_type(t) && t->data.T_CONS.args[0]->kind == T_CONS &&
-        CHARS_EQ(t->data.T_CONS.args[0]->data.T_CONS.name, "Some")) {
-
-      buffer = strncat(buffer, "Option of ", 10);
-      buffer =
-          type_to_string(t->data.T_CONS.args[0]->data.T_CONS.args[0], buffer);
-      break;
-    }
-
-    if (t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, "Some")) {
-      buffer = strncat(buffer, "Option of ", 10);
-      buffer =
-          type_to_string(t->data.T_CONS.args[0]->data.T_CONS.args[0], buffer);
-      break;
-    }
-
-    if (is_sum_type(t)) {
-
-      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-        buffer = type_to_string(t->data.T_CONS.args[i], buffer);
-        if (i < t->data.T_CONS.num_args - 1) {
-          buffer = strncat(buffer, " | ", 3);
-        }
-      }
-      break;
-    }
-
-    if (t->alias) {
-      buffer = strcat(buffer, t->alias);
-      // buffer = tc_list_to_string(t, buffer);
-      break;
-    }
-    // if (is_array_type(t)) {
-    //   buffer = type_to_string(t->data.T_CONS.args[0], buffer);
-    //   buffer = strncat(buffer, "[|", 1);
-    //   if (t->data.T_CONS.num_args > 1) {
-    //     buffer = strncat(buffer, "%d", 2);
-    //   }
-    //   buffer = strncat(buffer, "|]", 1);
-    // }
-
-    buffer = strncat(buffer, t->data.T_CONS.name, strlen(t->data.T_CONS.name));
-    if (t->data.T_CONS.num_args > 0) {
-      buffer = strncat(buffer, " of ", 4);
-      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-        if (t->data.T_CONS.names) {
-          buffer = strcat(buffer, t->data.T_CONS.names[i]);
-          buffer = strcat(buffer, ": ");
-        }
-        buffer = type_to_string(t->data.T_CONS.args[i], buffer);
-        if (i < t->data.T_CONS.num_args - 1) {
-          buffer = strcat(buffer, ", ");
-        }
-      }
-    }
-    buffer = tc_list_to_string(t, buffer);
-    break;
-  }
-  case T_VAR: {
-    uint64_t vname = (uint64_t)t->data.T_VAR;
-    if (vname < 65) {
-      vname += 65;
-      buffer = strncat(buffer, (char *)&vname, 1);
-    } else {
-
-      buffer = strncat(buffer, t->data.T_VAR, strlen(t->data.T_VAR));
-    }
-
-    buffer = tc_list_to_string(t, buffer);
-    break;
-  }
-
-  case T_FN: {
-    Type *fn = t;
-
-    buffer = strcat(buffer, "(");
-    if (is_closure(fn)) {
-      buffer = strcat(buffer, "[closure over ");
-      buffer = type_to_string(fn->closure_meta, buffer);
-      buffer = strcat(buffer, "] ");
-    }
-
-    buffer = type_to_string(fn->data.T_FN.from, buffer);
-    buffer = strncat(buffer, " -> ", 4);
-
-    buffer = type_to_string(fn->data.T_FN.to, buffer);
-    buffer = strcat(buffer, ")");
-
-    break;
-  }
-
-  case T_SCHEME: {
-
-    strncat(buffer, "∀ ", 2);
-    for (TypeList *v = t->data.T_SCHEME.vars; v; v = v->next) {
-      Type *n = v->type;
-      buffer = type_to_string(n, buffer);
-      strncat(buffer, ", ", 2);
-    }
-
-    strncat(buffer, ": ", 2);
-    buffer = type_to_string(t->data.T_SCHEME.type, buffer);
-  }
-  }
-
-  return buffer;
+  (void)buffer; // Ignore the buffer argument
+  return type_to_string_dynamic(t);
 }
 
 void print_tc_list_to_stream(Type *t, FILE *stream) {
@@ -275,8 +101,9 @@ void print_type_to_stream(Type *t, FILE *stream) {
       if (t->data.T_CONS.num_args > 0) {
         fprintf(stream, " of \n");
         for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-
-          fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
+          if (t->data.T_CONS.names != NULL) {
+            fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
+          }
           print_type_to_stream(t->data.T_CONS.args[i], stream);
           fprintf(stream, "\n");
         }

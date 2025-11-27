@@ -778,6 +778,9 @@ TypeList *free_vars_type(TypeList *vars, Type *t) {
   switch (t->kind) {
 
   case T_VAR: {
+    if (t->is_recursive_type_ref) {
+      return vars;
+    }
     if (!typelist_contains(vars, t)) {
       vars = typelist_extend(vars, t);
     }
@@ -792,6 +795,7 @@ TypeList *free_vars_type(TypeList *vars, Type *t) {
 
   case T_TYPECLASS_RESOLVE:
   case T_CONS: {
+
     TypeList *arg_vars = vars;
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       arg_vars = free_vars_type(arg_vars, t->data.T_CONS.args[i]);
@@ -1417,6 +1421,10 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
   }
 
   if (type_ref->md.type == BT_RECURSIVE_REF) {
+    if (CHARS_EQ(ast->data.AST_IDENTIFIER.value, "compile")) {
+      print_ast(ast);
+      print_type(type_ref->type);
+    }
     return type_ref->type;
   }
 

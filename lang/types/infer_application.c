@@ -43,7 +43,6 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
   } else {
     f = create_fn_from_cons(cons, cons);
   }
-
   Type *r = infer_fn_application(f, ast, ctx);
 
   return r;
@@ -211,6 +210,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
 
   // Step 2: Infer argument types
   Type **arg_types = t_alloc(sizeof(Type *) * num_args);
+
   for (int i = 0; i < num_args; i++) {
     arg_types[i] = infer(args + i, ctx);
 
@@ -238,6 +238,12 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     return NULL;
   }
 
+  if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "compile")) {
+    printf("app constraints\n");
+    print_constraints(unify_ctx.constraints);
+  }
+
   ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
 
   // Step 5: Solve constraints and apply substitutions
@@ -248,6 +254,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   if (is_closure(func_type)) {
     expected_type->closure_meta = deep_copy_type(func_type->closure_meta);
   }
+
   expected_type = apply_substitution(solution, expected_type);
 
   expected_type->data.T_FN.attributes = func_type->data.T_FN.attributes;
@@ -269,10 +276,16 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     res->closure_meta = closure_meta;
     // print_type(res);
   }
-  // if (CHARS_EQ(fn_name, "array_at")) {
-  //   printf("res type: \n");
-  //   print_type(res);
-  // }
+
+  if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "compile")) {
+    printf("res type: \n");
+    print_type(res);
+
+    printf("func type: \n");
+    print_type(func_type);
+    print_type(expected_type);
+  }
   // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
   //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
   //              "array_range")) {

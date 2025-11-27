@@ -3,7 +3,7 @@
 #include "../parse.h"
 #include <stdbool.h>
 #include <unistd.h>
-#define _TSTORAGE_SIZE_DEFAULT 2000000
+#define _TSTORAGE_SIZE_DEFAULT 200000
 
 void reset_type_var_counter();
 Type *next_tvar();

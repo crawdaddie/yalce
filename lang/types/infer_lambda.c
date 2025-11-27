@@ -73,7 +73,6 @@ void unify_recursive_ref(Ast *ast, Type *recursive_fn_type, Type *result_type,
     if (unify(recursive_fn_type, result_type, &unify_ctx)) {
       type_error(ast, "Recursive function type mismatch");
     }
-
     // Apply the unification results
     if (unify_ctx.subst) {
       ctx->subst = compose_subst(unify_ctx.subst, ctx->subst);
@@ -402,13 +401,20 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   bind_recursive_ref(ast, recursive_fn_type, &lctx);
 
   Type *body_type = infer(body, &lctx);
+  printf("\n\nlambda constraints\n");
+  print_constraints(lctx.constraints);
 
   if (!body_type) {
     return type_error(body, "Error: Cannot infer lambda body\n");
   }
 
   Subst *ls = solve_constraints(lctx.constraints);
+  print_subst(ls);
+
   for (int i = 0; i < num_params; i++) {
+
+    // printf("arg type %d: ", i);
+    // print_type(param_types[i]);
     param_types[i] = apply_substitution(ls, param_types[i]);
     // param_types[i] = apply_substitution(lambda_ctx.subst, param_types[i]);
   }
@@ -430,8 +436,11 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   Type *result_type = body_type;
 
   for (int i = num_params - 1; i >= 0; i--) {
+
     Type *t = param_types[i];
-    t = apply_substitution(ls, t);
+    printf("arg type %d: ", i);
+    print_type(t);
+    // t = apply_substitution(ls, t);
     result_type = type_fn(t, result_type);
   }
 
@@ -450,6 +459,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (closure) {
     return closure;
   }
+  printf("final lambda type\n");
+  print_type(result_type);
 
   return result_type;
 }

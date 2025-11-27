@@ -65,4 +65,5 @@ extern Type use_or_finish_scheme;
 extern Type dlopen_type;
 
 extern Type sizeof_scheme;
+extern Type asbytes_scheme;
 #endif

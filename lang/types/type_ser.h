@@ -6,6 +6,7 @@
 void print_type(Type *t);
 void print_type_err(Type *t);
 char *type_to_string(Type *t, char *buffer);
+char *type_to_string_dynamic(Type *t); // Returns malloc'd string, caller must free
 
 void print_type_env(TypeEnv *env);
 

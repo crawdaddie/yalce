@@ -33,18 +33,19 @@ static void add_failure(const char *message, const char *file, int line) {
 static void add_type_failure(const char *message, Type *expected, Type *got,
                              const char *file, int line) {
   if (failure_count < MAX_FAILURES) {
-    char buf1[200] = {};
-    char buf2[200] = {};
     char full_msg[MAX_FAILURE_MSG_LEN];
+    char *ex_ts = type_to_string_dynamic(got);
+    char *got_ts = type_to_string_dynamic(expected);
     snprintf(full_msg, MAX_FAILURE_MSG_LEN, "%s\nExpected: %s\nGot: %s",
-             message, type_to_string(expected, buf1),
-             type_to_string(got, buf2));
+             message, ex_ts, got_ts);
     strncpy(failures[failure_count].message, full_msg, MAX_FAILURE_MSG_LEN - 1);
     failures[failure_count].message[MAX_FAILURE_MSG_LEN - 1] = '\0';
     strncpy(failures[failure_count].file, file, 255);
     failures[failure_count].file[255] = '\0';
     failures[failure_count].line = line;
     failure_count++;
+    free(ex_ts);
+    free(got_ts);
   }
 }
 
@@ -69,16 +70,19 @@ static void print_all_failures() {
     TICtx ctx = {.env = NULL};                                                 \
     stat &= (infer(ast, &ctx) != NULL);                                        \
     stat &= (types_equal(ast->type, _type));                                   \
-    char buf[200] = {};                                                        \
     if (stat) {                                                                \
-      fprintf(stderr, "✅ => %s\n", type_to_string(_type, buf));               \
+      char *ts = type_to_string_dynamic(_type);                                \
+      fprintf(stderr, "✅ => %s\n", ts);                                       \
+      free(ts);                                                                \
     } else {                                                                   \
-      char buf2[200] = {};                                                     \
       char fail_msg[MAX_FAILURE_MSG_LEN];                                      \
+      char *ts1 = type_to_string_dynamic(_type);                               \
+      char *ts2 = type_to_string_dynamic(ast->type);                           \
       snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s\nExpected: %s\nGot: %s",     \
-               input, type_to_string(_type, buf),                              \
-               type_to_string(ast->type, buf2));                               \
+               input, ts1, ts2);                                               \
       add_failure(fail_msg, __FILE__, __LINE__);                               \
+      free(ts1);                                                               \
+      free(ts2);                                                               \
     }                                                                          \
     status &= stat;                                                            \
     ast;                                                                       \
@@ -2365,6 +2369,7 @@ bool test_record_types() {
 
   return status;
 }
+
 bool test_math_funcs() {
   bool status = true;
 
@@ -2391,6 +2396,29 @@ bool test_math_funcs() {
       types_equal(
           AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->type,
           &t_int));
+  return status;
+}
+bool test_sum_types() {
+
+  bool status = true;
+  Ast *b = T("type Seq =\n"
+             "  | SeqInt of Int\n"
+             "  | SeqNum of Double\n"
+             "  | SeqKey of String\n"
+             "  | SeqList of List of Seq\n"
+             "  ;\n"
+             "let compile = fn seq ba ->\n"
+             "  match seq with\n"
+             "  | SeqInt i -> (print `{i},`; ba)\n"
+             "  | SeqNum n -> (print `{n},`; ba)\n"
+             "  | SeqList x::rest -> ( \n"
+             "    ba\n"
+             "    |> compile x\n"
+             "    |> compile (SeqList rest)\n"
+             "  )\n"
+             "  | _ -> ba\n"
+             ";;",
+             &t_void);
   return status;
 }
 
@@ -2421,6 +2449,7 @@ int main() {
   status &= test_curried_funcs();
   status &= test_audio_funcs();
   status &= test_parser_combinators();
+  status &= test_sum_types();
 
   print_all_failures();
   return status == true ? 0 : 1;

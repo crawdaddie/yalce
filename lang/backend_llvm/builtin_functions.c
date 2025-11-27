@@ -1354,6 +1354,111 @@ LLVMValueRef SizeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return LLVMConstInt(LLVMInt32Type(), size, 0);
 }
 
+LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+
+  bool on_stack = false;
+  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
+    on_stack = true;
+  }
+
+  Type *t = ast->data.AST_APPLICATION.args->type;
+
+  switch (t->kind) {
+  case T_INT: {
+    LLVMTypeRef char_type = LLVMInt8Type();
+
+    LLVMValueRef value =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+    LLVMTypeRef array_type = LLVMArrayType(char_type, 4);
+
+    LLVMValueRef byte_array_ptr;
+    if (on_stack && ctx->coro_ctx == NULL) {
+      byte_array_ptr = LLVMBuildAlloca(builder, array_type, "int_bytes_stack");
+    } else {
+      byte_array_ptr = LLVMBuildMalloc(builder, array_type, "int_bytes_heap");
+    }
+
+    LLVMValueRef byte_ptr = LLVMBuildBitCast(
+        builder, byte_array_ptr, LLVMPointerType(char_type, 0), "byte_ptr");
+
+    for (int i = 0; i < 4; i++) {
+      LLVMValueRef shift_amount = LLVMConstInt(LLVMInt32Type(), i * 8, 0);
+      LLVMValueRef shifted =
+          LLVMBuildLShr(builder, value, shift_amount, "shift");
+      LLVMValueRef byte = LLVMBuildTrunc(builder, shifted, char_type, "byte");
+
+      // Store the byte in the array - now using byte_ptr (i8*)
+      LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), i, 0)};
+      LLVMValueRef elem_ptr =
+          LLVMBuildGEP2(builder, char_type, byte_ptr, // Changed!
+                        indices, 1, "elem_ptr");
+      LLVMBuildStore(builder, byte, elem_ptr);
+    }
+
+    LLVMTypeRef struct_type = string_struct_type(LLVMPointerType(char_type, 0));
+    LLVMValueRef str = LLVMGetUndef(struct_type);
+    str = LLVMBuildInsertValue(builder, str, byte_ptr, 1, "insert_data");
+    str = LLVMBuildInsertValue(
+        builder, str, LLVMConstInt(LLVMInt32Type(), 4, 0), 0, "insert_size");
+    return str;
+  }
+
+  case T_UINT64: {
+    int width = 8;
+
+    LLVMTypeRef char_type = LLVMInt8Type();
+
+    LLVMValueRef value =
+        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+    LLVMTypeRef array_type = LLVMArrayType(char_type, width);
+
+    LLVMValueRef byte_array_ptr;
+    if (on_stack && ctx->coro_ctx == NULL) {
+      byte_array_ptr = LLVMBuildAlloca(builder, array_type, "int_bytes_stack");
+    } else {
+      byte_array_ptr = LLVMBuildMalloc(builder, array_type, "int_bytes_heap");
+    }
+
+    LLVMValueRef byte_ptr = LLVMBuildBitCast(
+        builder, byte_array_ptr, LLVMPointerType(char_type, 0), "byte_ptr");
+
+    for (int i = 0; i < 8; i++) {
+      LLVMValueRef shift_amount = LLVMConstInt(LLVMInt32Type(), i * 8, 0);
+      LLVMValueRef shifted =
+          LLVMBuildLShr(builder, value, shift_amount, "shift");
+      LLVMValueRef byte = LLVMBuildTrunc(builder, shifted, char_type, "byte");
+
+      // Store the byte in the array - now using byte_ptr (i8*)
+      LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), i, 0)};
+      LLVMValueRef elem_ptr =
+          LLVMBuildGEP2(builder, char_type, byte_ptr, // Changed!
+                        indices, 1, "elem_ptr");
+      LLVMBuildStore(builder, byte, elem_ptr);
+    }
+
+    LLVMTypeRef struct_type = string_struct_type(LLVMPointerType(char_type, 0));
+    LLVMValueRef str = LLVMGetUndef(struct_type);
+    str = LLVMBuildInsertValue(builder, str, byte_ptr, 1, "insert_data");
+    str = LLVMBuildInsertValue(builder, str,
+                               LLVMConstInt(LLVMInt32Type(), width, 0), 0,
+                               "insert_size");
+    return str;
+  }
+
+  case T_NUM: {
+  }
+
+  case T_CHAR: {
+  }
+  default: {
+    return NULL;
+  }
+  }
+}
+
 TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
   ht *stack = (ctx->frame->table);
@@ -1430,6 +1535,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("Char", NULL, CharConstructorHandler);
   GENERIC_FN_SYMBOL("Int", NULL, int_constructor_handler);
+  GENERIC_FN_SYMBOL("Uint64", NULL, uint64_constructor_handler);
   GENERIC_FN_SYMBOL("Array", NULL, ArrayConstructorHandler);
 
   // FN_SYMBOL()
@@ -1440,5 +1546,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_last_val", NULL, CorGetLastValHandler);
   GENERIC_FN_SYMBOL("cor_current", &cor_current_scheme, CurrentCorHandler);
   GENERIC_FN_SYMBOL("cor_try_opt", &cor_try_opt_scheme, CorUnwrapOrEndHandler);
+
+  GENERIC_FN_SYMBOL("asbytes", &asbytes_scheme, AsBytesHandler);
   return ctx->env;
 }

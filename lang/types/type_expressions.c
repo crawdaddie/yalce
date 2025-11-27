@@ -1,6 +1,5 @@
 #include "./type_expressions.h"
-#include "./builtins.h"
-#include "./inference.h"
+#include "./builtins.h" #include "./inference.h"
 #include "serde.h"
 #include "types/type_ser.h"
 #include <string.h>
