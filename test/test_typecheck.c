@@ -2413,7 +2413,7 @@ bool test_sum_types() {
   TICtx ctx = {.env = NULL};
   infer(sum_type_expr, &ctx);
   Type *sum_type = sum_type_expr->type;
-  Type t18 = TVAR("`18");
+  Type t19 = TVAR("`19");
 
   Ast *b = T("type Seq =\n"
              "  | SeqInt of Int\n"
@@ -2432,7 +2432,7 @@ bool test_sum_types() {
              "  )\n"
              "  | _ -> ba\n"
              ";;",
-             &TSCHEME(&MAKE_FN_TYPE_3(sum_type, &t18, &t18), &t18));
+             &TSCHEME(&MAKE_FN_TYPE_3(sum_type, &t19, &t19), &t19));
   return status;
 }
 
