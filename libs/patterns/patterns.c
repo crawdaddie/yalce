@@ -546,3 +546,93 @@ Cor *compile_coroutine_from_seq(Seq *seq) {
   };
   return cor;
 }
+
+// Unions for type punning
+typedef union {
+  uint8_t bytes[4];
+  float vfloat;
+  int32_t vint;
+} conv32_t;
+
+typedef union {
+  uint8_t bytes[8];
+  uint8_t bytes4[4];
+  double vdouble;
+  float vfloat;
+  int64_t vint64;
+} conv64_t;
+
+// Heap-allocated versions (caller must free)
+uint8_t *double_to_bytes_heap(double d) {
+  uint8_t *result = malloc(8);
+  conv64_t conv;
+  conv.vdouble = d;
+  memcpy(result, conv.bytes, 8);
+  return result;
+}
+
+uint8_t *int_to_bytes_heap(int32_t i) {
+  uint8_t *result = malloc(4);
+  conv32_t conv;
+  conv.vint = i;
+  memcpy(result, conv.bytes, 4);
+  return result;
+}
+
+uint8_t *float_to_bytes_heap(float f) {
+  uint8_t *result = malloc(4);
+  conv32_t conv;
+  conv.vfloat = f;
+  memcpy(result, conv.bytes, 4);
+  return result;
+}
+
+// Buffer-based versions (caller provides buffer)
+void double_to_bytes(double d, uint8_t *buffer) {
+  conv64_t conv;
+  conv.vdouble = d;
+  memcpy(buffer, conv.bytes, 8);
+}
+
+void int_to_bytes(int32_t i, uint8_t *buffer) {
+  conv32_t conv;
+  conv.vint = i;
+  memcpy(buffer, conv.bytes, 4);
+}
+
+// Alternative: direct memcpy (avoids union, more portable)
+void double_to_bytes_memcpy(double d, uint8_t *buffer) {
+  memcpy(buffer, &d, 8);
+}
+
+void int_to_bytes_memcpy(int32_t i, uint8_t *buffer) { memcpy(buffer, &i, 4); }
+
+void encode_int32_as_bytes(int32_t d, uint8_t *buffer) {
+  conv32_t conv;
+  conv.vint = d;
+  memcpy(buffer, conv.bytes, 4);
+}
+
+double int32_bytes_to_int(uint8_t *buffer) {
+  conv32_t conv;
+  memcpy(conv.bytes, buffer, 4);
+  return (int)conv.vint;
+}
+
+void encode_double_as_float_bytes(double d, uint8_t *buffer) {
+  conv32_t conv;
+  conv.vfloat = (float)d;
+  memcpy(buffer, conv.bytes, 4);
+}
+
+double float_bytes_to_double(uint8_t *buffer) {
+  conv64_t conv;
+  memcpy(conv.bytes, buffer, 4);
+  return (double)conv.vfloat;
+}
+
+void encode_double_as_bytes(double d, uint8_t *buffer) {
+  conv64_t conv;
+  conv.vdouble = d;
+  memcpy(buffer, conv.bytes, 8);
+}

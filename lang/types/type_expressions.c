@@ -272,9 +272,15 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
 
   if (is_sum_type(computed)) {
     computed->alias = name;
+
+    Type *c = computed;
+    // TODO: do we scheme??
+    if (is_generic(computed) && computed->kind != T_SCHEME) {
+      computed = generalize(computed, ctx);
+    }
     bind_type_in_ctx(binding, computed, (binding_md){}, ctx);
-    for (int i = 0; i < computed->data.T_CONS.num_args; i++) {
-      const char *mem_name = computed->data.T_CONS.args[i]->data.T_CONS.name;
+    for (int i = 0; i < c->data.T_CONS.num_args; i++) {
+      const char *mem_name = c->data.T_CONS.args[i]->data.T_CONS.name;
       ctx->env = env_extend(ctx->env, mem_name, computed);
     }
     return computed;

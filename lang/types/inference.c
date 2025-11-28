@@ -1044,6 +1044,11 @@ void print_subst(Subst *subst) {
 }
 
 Type *extract_member_from_sum_type(Type *cons, Ast *id) {
+
+  while (id->tag == AST_RECORD_ACCESS) {
+    id = id->data.AST_RECORD_ACCESS.member;
+  }
+
   for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
     Type *mem = cons->data.T_CONS.args[i];
     if (CHARS_EQ(id->data.AST_IDENTIFIER.value, mem->data.T_CONS.name)) {
@@ -1054,6 +1059,10 @@ Type *extract_member_from_sum_type(Type *cons, Ast *id) {
 }
 
 Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx) {
+
+  while (id->tag == AST_RECORD_ACCESS) {
+    id = id->data.AST_RECORD_ACCESS.member;
+  }
   for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
     Type *mem = cons->data.T_CONS.args[i];
     if (CHARS_EQ(id->data.AST_IDENTIFIER.value, mem->data.T_CONS.name)) {

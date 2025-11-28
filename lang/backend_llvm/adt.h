@@ -39,5 +39,7 @@ LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
 LLVMValueRef sum_type_eq(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
                          JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder);
+
+bool type_contains_recursive_ref(Type *type, const char *target_name);
 #define OPTION_TAG_TYPE LLVMInt8Type()
 #endif

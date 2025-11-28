@@ -55,6 +55,29 @@ int get_constructor_index(Ast *pattern) {
         pattern->type, pattern->data.AST_APPLICATION.function, &idx);
     return idx;
   }
+
+  if (pattern->tag == AST_APPLICATION &&
+      pattern->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+
+    Ast *id = pattern->data.AST_APPLICATION.function;
+    while (id->tag == AST_RECORD_ACCESS) {
+      id = id->data.AST_RECORD_ACCESS.member;
+    }
+    Ast p = *id;
+    p.type = pattern->type;
+    return get_constructor_index(&p);
+  }
+
+  if (pattern->tag == AST_RECORD_ACCESS) {
+
+    Ast *id = pattern;
+    while (id->tag == AST_RECORD_ACCESS) {
+      id = id->data.AST_RECORD_ACCESS.member;
+    }
+    Ast p = *id;
+    p.type = pattern->type;
+    return get_constructor_index(&p);
+  }
   return -1;
 }
 
@@ -423,8 +446,8 @@ void test_sum_type_pattern(int pidx, int num_branches,
   Type *subtype;
   if (p->tag == AST_IDENTIFIER) {
     subtype = extract_member_from_sum_type_idx(val_type, p, &ptag_idx);
-  } else if (p->tag == AST_APPLICATION &&
-             p->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+  } else if (p->tag == AST_APPLICATION) {
+    Ast *id = p->data.AST_APPLICATION.function;
 
     subtype = extract_member_from_sum_type_idx(
         val_type, p->data.AST_APPLICATION.function, &ptag_idx);
@@ -505,6 +528,9 @@ void test_sum_type_pattern(int pidx, int num_branches,
 
     LLVMValueRef cast_val =
         cast_union(payload, payload_type, ctx, module, builder);
+
+    // if (is_rec)
+    //
 
     LLVMValueRef cond = test_pattern(p->data.AST_APPLICATION.args, cast_val,
                                      payload_type, ctx, module, builder);
@@ -623,6 +649,14 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     STACK_ALLOC_CTX_PUSH(branch_ctx_mem, ctx)
     JITLangCtx branch_ctx = branch_ctx_mem;
+
+    // print_type_env(ctx->env);
+    if (val_type->alias &&
+        type_contains_recursive_ref(val_type, val_type->alias) &&
+        !lookup_type_ref(branch_ctx.env, val_type->alias)) {
+
+      branch_ctx.env = env_extend(branch_ctx.env, val_type->alias, val_type);
+    }
 
     if (is_match_over_sum) {
       test_sum_type_pattern(i, num_branches, tag_blocks, test_blocks,

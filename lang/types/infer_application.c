@@ -35,6 +35,9 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
         extract_member_from_sum_type(cons, ast->data.AST_APPLICATION.function);
 
     if (!mem) {
+      fprintf(stderr, "Error: could not find member in sum type");
+      print_ast_err(ast->data.AST_APPLICATION.function);
+
       return NULL;
     }
 
@@ -43,6 +46,7 @@ Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
   } else {
     f = create_fn_from_cons(cons, cons);
   }
+
   Type *r = infer_fn_application(f, ast, ctx);
 
   return r;
@@ -152,6 +156,7 @@ Type *infer_constructor_application(TypeClass *constructor_tc, Type *cons,
 //        ──────────────────────────────────────────────────────────────
 //                            Γ ⊢ e₁ e₂ : S(α)
 Type *infer_application(Ast *ast, TICtx *ctx) {
+
   Ast *func = ast->data.AST_APPLICATION.function;
 
   // Step 1: Infer function type

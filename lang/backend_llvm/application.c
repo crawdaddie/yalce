@@ -272,10 +272,20 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return call_callable(ast, callable_type, callable, ctx, module, builder);
   }
 
-  const char *sym_name =
-      ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER
-          ? ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value
-          : "";
+  const char *sym_name;
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+    sym_name = ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+  } else if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+    Ast *id = ast->data.AST_APPLICATION.function;
+    while (id->tag == AST_RECORD_ACCESS) {
+      id = id->data.AST_RECORD_ACCESS.member;
+    }
+
+    sym_name = id->data.AST_IDENTIFIER.value;
+
+  } else {
+    sym_name = "";
+  }
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 

@@ -693,5 +693,6 @@ _String char_to_hex_string(char byte) {
   result[0] = hex_chars[(ubyte >> 4) & 0x0F]; // High nibble
   result[1] = hex_chars[ubyte & 0x0F];        // Low nibble
   result[2] = '\0';
+
   return (_String){.size = 2, .chars = result};
 }
