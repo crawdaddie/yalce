@@ -295,7 +295,8 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
   }
 
   if (is_coroutine_constructor_type(expr_type)) {
-    // if (expr_type->kind == T_FN && is_coroutine_constructor_type(expr_type))
+    // if (expr_type->kind == T_FN &&
+    // is_coroutine_constructor_type(expr_type))
     // {
     if (is_generic(expr_type)) {
       expr_val = create_generic_fn_binding(binding, expr, ctx);

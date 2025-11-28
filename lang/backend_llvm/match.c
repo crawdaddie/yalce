@@ -529,9 +529,6 @@ void test_sum_type_pattern(int pidx, int num_branches,
     LLVMValueRef cast_val =
         cast_union(payload, payload_type, ctx, module, builder);
 
-    // if (is_rec)
-    //
-
     LLVMValueRef cond = test_pattern(p->data.AST_APPLICATION.args, cast_val,
                                      payload_type, ctx, module, builder);
 

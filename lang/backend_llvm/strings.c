@@ -510,7 +510,9 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
   if (val_type == NULL) {
     return _codegen_string("", 0, ctx, module, builder);
   }
+
   val_type = resolve_type_in_env(val_type, ctx->env);
+
   if (val_type->kind == T_STRING) {
     return val;
   }
@@ -561,8 +563,8 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
   //   return codegen_list_to_string(val, val_type, ctx, module, builder);
   // }
 
-  printf("str serialize??\n");
-  print_type(val_type);
+  fprintf(stderr, "Warning - cannot serialize var type ");
+  print_type_err(val_type);
   return char_to_string(LLVMConstInt(LLVMInt8Type(), 60, 0), module, builder);
 }
 
@@ -841,6 +843,7 @@ LLVMValueRef codegen_string_add(LLVMValueRef a, LLVMValueRef b, JITLangCtx *ctx,
 LLVMValueRef StringFmtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
   Type *t = ast->data.AST_APPLICATION.args->type;
+
   TypeClass *tc = get_typeclass_by_name(t, "Str");
   if (tc) {
     const char *name = t->alias;
@@ -883,6 +886,9 @@ LLVMValueRef StringFmtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef to_str =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  // printf("serialize\n");
+  // print_type(ast->data.AST_APPLICATION.args->type);
 
   LLVMValueRef str = llvm_string_serialize(
       to_str, ast->data.AST_APPLICATION.args->type, ctx, module, builder);

@@ -1111,6 +1111,7 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
   }
 
   case AST_IDENTIFIER: {
+
     if (ast_is_placeholder_id(binding)) {
       binding->type = type;
       return 0;
@@ -1213,12 +1214,12 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
 
     if (binding->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
       Type *app_type = infer(binding, ctx);
-
       btype = app_type;
 
       if (is_sum_type(btype)) {
         btype = extract_member_from_sum_type(
             btype, binding->data.AST_APPLICATION.function);
+
         if (btype->kind == T_CONS && btype->data.T_CONS.num_args == 1) {
           btype = btype->data.T_CONS.args[0];
         }
@@ -1228,6 +1229,13 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
           (binding->data.AST_APPLICATION.args->tag == AST_TUPLE)) {
         bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
                          ctx);
+
+      } else if (btype->kind == T_CONS &&
+                 binding->data.AST_APPLICATION.len == 1) {
+
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
+
       } else if (btype->kind == T_CONS) {
         for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
           bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
@@ -1238,7 +1246,6 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
         bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
                          ctx);
       }
-
       binding->type = app_type;
 
       return 0;
@@ -1248,19 +1255,31 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       Type *app_type = infer(binding->data.AST_APPLICATION.function, ctx);
 
       btype = app_type;
-
       if (is_sum_type(btype)) {
         btype = extract_member_from_sum_type(
             btype, binding->data.AST_APPLICATION.function->data
                        .AST_RECORD_ACCESS.member);
+
+        if (btype->kind == T_CONS && btype->data.T_CONS.num_args == 1) {
+          btype = btype->data.T_CONS.args[0];
+        }
       }
 
       if (btype->kind == T_CONS && binding->data.AST_APPLICATION.len == 1 &&
           (binding->data.AST_APPLICATION.args->tag == AST_TUPLE)) {
+
         bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
                          ctx);
+      } else if (btype->kind == T_CONS &&
+                 binding->data.AST_APPLICATION.len == 1) {
+
+        bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
+                         ctx);
+
       } else if (btype->kind == T_CONS) {
+
         for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
+
           bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
                            btype->data.T_CONS.args[i], bmd_type, ctx);
         }
@@ -1416,6 +1435,7 @@ void handle_yield_boundary_crossing(binding_md binding_info, Ast *ast,
 //            ─────────────────────────
 //
 //                  Γ ⊢ x : τ
+//
 Type *infer_identifier(Ast *ast, TICtx *ctx) {
   const char *name = ast->data.AST_IDENTIFIER.value;
   TypeEnv *type_ref = lookup_type_ref(ctx->env, name);
@@ -1603,9 +1623,15 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_FMT_STRING: {
     for (int i = 0; i < ast->data.AST_LIST.len; i++) {
       Ast *item = ast->data.AST_LIST.items + i;
+
       if (infer(item, ctx) == NULL) {
         return NULL;
       }
+
+      // if (item->tag == AST_APPLICATION) {
+      //   print_ast(item->data.AST_APPLICATION.args);
+      //   print_type(item->data.AST_APPLICATION.args->type);
+      // }
     }
     type = &t_string;
     break;

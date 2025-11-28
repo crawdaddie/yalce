@@ -2,10 +2,12 @@
 #include "./globals.h"
 #include "./symbols.h"
 #include "./types.h"
+#include "common.h"
 #include "match.h"
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdint.h>
+#include <string.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);

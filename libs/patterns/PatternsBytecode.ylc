@@ -217,20 +217,20 @@ let print_seq_helper = fn is_first seq ->
   | _ -> ()
   ;;
 
-let compile_bytecode = fn is_first seq ba ->
-  match seq with
-  | SeqInt i -> (print `{i}, `; ba)
-  | SeqNum n -> (print `{n}, `; ba)
-  | SeqKey k -> (print `{k}, `; ba)
-  | SeqList (_, 0, []) -> (print "] "; ba)
-  | SeqList (t, len, x::rest) -> ( 
-
-    if is_first then (print `{ltype_str t} [({len}) `) else ();
-    ba
-    |> compile_bytecode true x
-    |> compile_bytecode false (SeqList (t, (len - 1), rest))
-  )
-  | _ -> ba
-  ;;
+# let compile_bytecode = fn is_first seq ba ->
+#   match seq with
+#   | SeqInt i -> (print `{i}, `; ba)
+#   | SeqNum n -> (print `{n}, `; ba)
+#   | SeqKey k -> (print `{k}, `; ba)
+#   | SeqList (_, 0, []) -> (print "] "; ba)
+#   | SeqList (t, len, x::rest) -> ( 
+#
+#     if is_first then (print `{ltype_str t} [({len}) `) else ();
+#     ba
+#     |> compile_bytecode true x
+#     |> compile_bytecode false (SeqList (t, (len - 1), rest))
+#   )
+#   | _ -> ba
+#   ;;
 
 # s |> print_seq_helper true

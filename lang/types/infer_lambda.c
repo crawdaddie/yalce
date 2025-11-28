@@ -286,7 +286,6 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
       if (pattern->tag == AST_MATCH_GUARD_CLAUSE) {
         guard = pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
         pattern = pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
-        print_ast(pattern);
       }
 
       apply_substitution_to_lambda_body(pattern, subst);
