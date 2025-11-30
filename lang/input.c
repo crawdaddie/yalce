@@ -1,6 +1,7 @@
 #include "input.h"
 // clang-format off
 // -- need to make sure stdio is included BEFORE readline
+#include <signal.h>
 #include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>

@@ -14,13 +14,17 @@ CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I../lang
 					# -I$(VST_LIB_PATH)/src \
 
-LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
-					 -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
-					 -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
-					 -L$(shell brew --prefix sdl2_image)/lib -lSDL2_image \
-					 -lGLEW -lglfw
-
-FRAMEWORKS := -framework Foundation -framework OpenGL 
+ifeq ($(shell uname -s),Darwin)
+    LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \
+               -L$(shell brew --prefix sdl2_ttf)/lib -lSDL2_ttf \
+               -L$(shell brew --prefix sdl2_gfx)/lib -lSDL2_gfx \
+               -L$(shell brew --prefix sdl2_image)/lib -lSDL2_image \
+               -lGLEW -lglfw
+    FRAMEWORKS := -framework Foundation -framework OpenGL
+else
+    LDFLAGS := -lSDL2 -lSDL2_ttf -lSDL2_gfx -lSDL2_image -lGLEW -lglfw -lGL
+    FRAMEWORKS :=
+endif 
 
 BUILD_DIR := build/
 
@@ -44,7 +48,9 @@ $(BUILD_DIR)/libgui.a: $(OBJS)
 
 $(BUILD_DIR)/libgui.so: $(OBJS)
 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
+ifeq ($(shell uname -s),Darwin)
 	install_name_tool -id @rpath/libgui.so $@
+endif
 	$(MAKE) -C . ylc_bindings
 
 clean:

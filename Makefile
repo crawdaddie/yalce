@@ -96,7 +96,11 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 # Build the final executable
 $(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
 	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
+ifeq ($(shell uname -s),Darwin)
 	otool -L $(BUILD_DIR)/ylc
+else
+	ldd $(BUILD_DIR)/ylc || true
+endif
 
 clean:
 	rm -rf $(BUILD_DIR)

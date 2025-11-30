@@ -16,14 +16,18 @@ COMPILER_OPTIONS := -g
 # SRCS += vst/vst_node.c
 
 LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -lstdc++
-# LDFLAGS += -L$(VST_BUILD_PATH) -lylcvst 
+# LDFLAGS += -L$(VST_BUILD_PATH) -lylcvst
 
-FRAMEWORKS = -framework opengl \
-						 -framework CoreMIDI \
-						 -framework cocoa \
-						 -framework CoreAudio \
-						 -framework AudioToolbox \
-						 -framework CoreFoundation
+ifeq ($(shell uname -s),Darwin)
+    FRAMEWORKS = -framework opengl \
+                 -framework CoreMIDI \
+                 -framework cocoa \
+                 -framework CoreAudio \
+                 -framework AudioToolbox \
+                 -framework CoreFoundation
+else
+    FRAMEWORKS =
+endif
 
 COMPILER_OPTIONS += -I$(VST_LIB_PATH)/src -I../lang/
 
@@ -75,7 +79,9 @@ ylc_bindings:
 $(SHARED_LIB_TARGET): $(filter-out $(BUILD_DIR)/main.o, $(OBJS))
 	# | vst_lib
 	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
+ifeq ($(shell uname -s),Darwin)
 	install_name_tool -id @rpath/libyalce_synth.so $@
+endif
 	$(MAKE) -C ../tools;
 	$(MAKE) -C . ylc_bindings
 
