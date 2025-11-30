@@ -8,7 +8,7 @@ SRCS += faust/vital_rev.c
 SRCS += faust/zita_rev.c
 SRCS += faust/imp_train.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
-COMPILER_OPTIONS := -g
+COMPILER_OPTIONS := -g -fPIC
 
 # VST Library path
 # VST_LIB_PATH := ${VST_LIB_PATH}

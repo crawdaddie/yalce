@@ -1,3 +1,5 @@
+// Cross-platform types
+#ifdef __APPLE__
 #include "audio_loop.h"
 #include "ctx.h"
 #include "midi.h"
@@ -608,3 +610,5 @@ void send_data(midi_endpoint_t destination, size_t size, char *data) {
 
   MIDISend(output_port, destination, packetList);
 }
+
+#endif
