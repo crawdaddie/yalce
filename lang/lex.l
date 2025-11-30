@@ -67,18 +67,18 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "."                     return *yytext;
 "type"                  return TYPE;
 "test"                  return TEST_ID;
-"of"                    return *yytext;
-"if"                    return *yytext;
+"of"                    return OF;
+"if"                    return IF;
 "then"                  return THEN;
 "else"                  return ELSE;
-"yield"                 return *yytext;
-"await"                 return *yytext;
+"yield"                 return YIELD;
+"await"                 return AWAIT;
 "&&"                    return DOUBLE_AMP;
 "&"                     return AMPERSAND;
 "||"                    return DOUBLE_PIPE;
 "*"                     return *yytext;
 "\\"                    return THUNK;
-"for"                   return *yytext;
+"for"                   return FOR;
 "to"                    return *yytext;
 [a-zA-Z_][a-zA-Z0-9_]*  {
 

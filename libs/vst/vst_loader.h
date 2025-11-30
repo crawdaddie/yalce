@@ -1,9 +1,9 @@
 #ifndef VST_LOADER_H
 #define VST_LOADER_H
 
-#include "lib.h"
-#include "node.h"
-#include "ylc_datatypes.h"
+#include "../../engine/lib.h"
+#include "../../engine/node.h"
+#include "../../lang/ylc_datatypes.h"
 #ifdef __cplusplus
 extern "C" {
 #endif

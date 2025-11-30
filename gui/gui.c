@@ -27,7 +27,7 @@ bool _create_window(window_creation_data *data);
 
 bool _create_opengl_window(window_creation_data *data);
 
-Window windows[MAX_WINDOWS];
+Win windows[MAX_WINDOWS];
 
 int window_count = 0;
 
@@ -93,7 +93,7 @@ int init_gui() {
   return 0;
 }
 
-Window *get_window(SDL_Event event) {
+Win *get_window(SDL_Event event) {
 
   for (int i = 0; i < window_count; i++) {
     if (SDL_GetWindowID(windows[i].window) == event.window.windowID) {

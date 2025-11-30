@@ -68,6 +68,7 @@ extern char *yytext;
 %token TEST_ID
 %token MUT
 %token THEN ELSE
+%token YIELD AWAIT FOR IF OF
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -128,8 +129,8 @@ program:
 
 expr:
     atom_expr
-  | 'yield' expr                      { $$ = ast_yield($2); }
-  | 'await' expr                      { $$ = ast_await($2); }
+  | YIELD expr                      { $$ = ast_yield($2); }
+  | AWAIT expr                      { $$ = ast_await($2); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr atom_expr %prec APPLICATION  { $$ = ast_application($1, $2); }
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
@@ -155,7 +156,7 @@ expr:
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
   // | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
-  | 'for' IDENTIFIER '=' expr IN expr   {
+  | FOR IDENTIFIER '=' expr IN expr   {
                                           Ast *let = ast_let(ast_identifier($2), $4, $6);
                                           let->tag = AST_LOOP;
                                           $$ = let;
@@ -318,13 +319,13 @@ expr_list:
 
 match_expr:
     MATCH expr WITH match_branches { $$ = ast_match($2, $4); }
-  | 'if' expr THEN expr ELSE expr  { $$ = ast_if_else($2, $4 ,$6);} 
-  | 'if' expr THEN expr            { $$ = ast_if_else($2, $4, NULL);} 
+  | IF expr THEN expr ELSE expr  { $$ = ast_if_else($2, $4 ,$6);}
+  | IF expr THEN expr            { $$ = ast_if_else($2, $4, NULL);}
   ;
 
 match_test_clause:
     expr {$$ = $1;}
-  | expr 'if' expr { $$ = ast_match_guard_clause($1, $3);}
+  | expr IF expr { $$ = ast_match_guard_clause($1, $3);}
 
 match_branches:
     '|' match_test_clause ARROW expr                 {$$ = ast_match_branches(NULL, $2, $4);}
@@ -394,8 +395,8 @@ type_expr:
 
 type_atom:
     IDENTIFIER                { $$ = ast_identifier($1); }
-  | IDENTIFIER '=' INTEGER    { $$ = ast_let(ast_identifier($1), AST_CONST(AST_INT, $3), NULL); } 
-  | IDENTIFIER 'of' type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); } 
+  | IDENTIFIER '=' INTEGER    { $$ = ast_let(ast_identifier($1), AST_CONST(AST_INT, $3), NULL); }
+  | IDENTIFIER OF type_atom { $$ = ast_cons_decl(TOKEN_OF, ast_identifier($1), $3); }
   | IDENTIFIER ':' type_atom  { $$ = ast_assoc(ast_identifier($1), $3); } 
   | '(' type_expr ')'         { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }

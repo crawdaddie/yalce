@@ -14,7 +14,11 @@ ParsingContext pctx = {};
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
 
-static void *__palloc(size_t size) { return malloc(size); }
+static void *__palloc(size_t size) {
+  void *mem = malloc(size);
+  memset(mem, 0, size);
+  return mem;
+}
 static void *__prealloc(void *p, size_t size) { return realloc(p, size); }
 
 AllocatorFnType palloc = __palloc;
@@ -376,7 +380,22 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
     lambda = Ast_new(AST_LAMBDA);
     lambda->data.AST_LAMBDA.params = NULL;
     lambda->data.AST_LAMBDA.len = 0;
+    lambda->data.AST_LAMBDA.num_closure_free_vars = 0;
+    lambda->data.AST_LAMBDA.num_closed_vals = 0;
     lambda->data.AST_LAMBDA.type_annotations = NULL;
+
+    // int num_closure_free_vars;
+    // size_t len;
+    // AstList *params;
+    // ObjString fn_name;
+    // Ast *body;
+    // AstList *type_annotations;
+    // bool is_coroutine;
+    // int num_yields;
+    // AstList *yield_boundary_crossers;
+    // int num_yield_boundary_crossers;
+    // AstList *closed_vals;
+    // int num_closed_vals;
   }
 
   if (body->tag != AST_BODY) {

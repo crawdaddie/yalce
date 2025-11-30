@@ -1,8 +1,8 @@
 #include "./vst_loader.h"
-#include "filter_ext.h"
-#include "lib.h"
-#include "node.h"
-#include "ylc_datatypes.h"
+#include "../../engine/filter_ext.h"
+#include "../../engine/lib.h"
+#include "../../engine/node.h"
+#include "../../lang/ylc_datatypes.h"
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>

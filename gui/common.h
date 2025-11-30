@@ -17,9 +17,9 @@ typedef struct {
 extern Uint32 CREATE_WINDOW_EVENT;
 extern Uint32 CREATE_OPENGL_WINDOW_EVENT;
 
-typedef struct Window Window;
+typedef struct Win Win;
 
-typedef void (*EventHandler)(Window *window, SDL_Event *event);
+typedef void (*EventHandler)(Win *window, SDL_Event *event);
 typedef void (*WindowRenderFn)(void *window, SDL_Renderer *renderer);
 typedef bool (*GLWindowInitFn)(void *state);
 
@@ -30,7 +30,7 @@ typedef struct window_creation_data {
   GLWindowInitFn init_gl;
 } window_creation_data;
 
-typedef struct Window {
+typedef struct Win {
   SDL_Window *window;
   SDL_Renderer *renderer;
   void *data;
@@ -39,11 +39,11 @@ typedef struct Window {
   EventHandler handle_event; // Function pointer for event handling
   WindowRenderFn render_fn;
   int num_children;
-  struct Window *children;
-} Window;
+  struct Win *children;
+} Win;
 
 SDL_Renderer *render_text(const char *text, int x, int y,
                           SDL_Renderer *renderer, SDL_Color text_color);
 
-Window *get_window(SDL_Event event);
+Win *get_window(SDL_Event event);
 #endif
