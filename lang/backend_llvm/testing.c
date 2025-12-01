@@ -230,6 +230,14 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return 0;
   }
 
+  // Add function mappings for runtime functions
+  LLVMAddGlobalMapping(engine,
+                       LLVMGetNamedFunction(module, "_report_test_result"),
+                       (void *)_report_test_result);
+  LLVMAddGlobalMapping(engine,
+                       LLVMGetNamedFunction(module, "_report_test_totals"),
+                       (void *)_report_test_totals);
+
   if (config.debug_ir) {
     LLVMDumpModule(module);
   }

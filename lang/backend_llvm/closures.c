@@ -423,6 +423,7 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
       closure_fn_type(fn_type, rec_type, ctx, module);
 
   char name[32];
+  print_ast(ast);
   snprintf(name, 32, "lambda.closure.\\%s",
            ast->data.AST_LAMBDA.fn_name.chars
                ? ast->data.AST_LAMBDA.fn_name.chars

@@ -383,6 +383,7 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
     lambda->data.AST_LAMBDA.num_closure_free_vars = 0;
     lambda->data.AST_LAMBDA.num_closed_vals = 0;
     lambda->data.AST_LAMBDA.type_annotations = NULL;
+    lambda->data.AST_LAMBDA.fn_name = (ObjString){0};
 
     // int num_closure_free_vars;
     // size_t len;
@@ -1184,6 +1185,7 @@ Ast *parse_input_script(const char *filename) {
 
   char *fcontent = read_script(filename);
   if (!fcontent) {
+    fprintf(stderr, "Error: failed reading input %s\n", filename);
     return NULL;
   }
 

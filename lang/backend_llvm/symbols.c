@@ -28,6 +28,7 @@ JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type) {
 
   JITSymbol *sym = malloc(sizeof(JITSymbol));
+  memset(sym, 0, sizeof(JITSymbol));
   sym->type = type_tag;
   sym->symbol_type = symbol_type;
   sym->val = val;
@@ -215,6 +216,7 @@ LLVMValueRef create_lazy_extern_fn_binding(Ast *binding, Ast *expr,
                                            LLVMBuilderRef builder) {
 
   JITSymbol *sym = malloc(sizeof(JITSymbol));
+  memset(sym, 0, sizeof(JITSymbol));
   sym->type = STYPE_LAZY_EXTERN_FUNCTION;
   sym->symbol_type = fn_type;
   sym->val = NULL;
