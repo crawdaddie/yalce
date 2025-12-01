@@ -971,7 +971,8 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1,
                    "fflush_stdout");
 
-    return LLVMConstNull(LLVMVoidType());
+    // return LLVMConstNull(LLVMVoidType());
+    return NULL;
   }
   Ast *item = ast->data.AST_APPLICATION.args;
 
@@ -994,5 +995,6 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1,
                  "fflush_stdout");
 
-  return LLVMConstNull(LLVMVoidType());
+  // return LLVMConstNull(LLVMVoidType());
+  return NULL;
 }
