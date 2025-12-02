@@ -5,4 +5,5 @@ RTConfig config = {
     .test_mode = false,
     .gui_mode = false,
     .debug_codegen = false,
+    .debug_symbols = false,
 };

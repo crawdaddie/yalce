@@ -5,6 +5,7 @@
 #include "./globals.h"
 #include "builtin_functions.h"
 #include "config.h"
+#include "debugging.h"
 #include "escape_analysis.h"
 #include "format_utils.h"
 #include "input.h"
@@ -143,6 +144,10 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
 
+  if (config.debug_symbols) {
+    init_debugging(filename, ctx, module);
+  }
+
   if (config.test_mode) {
     ctx->module_name = filename;
     int res = test_module(*prog, ctx, module, builder, target_machine);
@@ -230,9 +235,13 @@ void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
 
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
 
-  LLVMErrorRef err =
-      LLVMRunPasses(module, config.opt_level ? config.opt_level : "default<O3>",
-                    target_machine, options);
+  const char *opt_level;
+  if (config.debug_symbols) {
+    opt_level = "default<O0>";
+  } else {
+    opt_level = config.opt_level ? config.opt_level : "default<O3>";
+  }
+  LLVMErrorRef err = LLVMRunPasses(module, opt_level, target_machine, options);
 
   if (err) {
     char *msg = LLVMGetErrorMessage(err);
@@ -343,6 +352,9 @@ int jit(int argc, char **argv) {
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "-O3") == 0) {
       config.opt_level = "default<O3>";
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "-g") == 0) {
+      config.debug_symbols = true;
       arg_counter++;
     } else {
 

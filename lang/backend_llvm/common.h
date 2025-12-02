@@ -20,6 +20,12 @@ typedef struct StackFrame {
 } StackFrame;
 
 typedef struct {
+  LLVMDIBuilderRef di_builder;
+  LLVMMetadataRef di_file;
+  LLVMMetadataRef di_compile_unit;
+  const char *source_filename;
+} DebugCtx;
+typedef struct {
   // ht stack[STACK_MAX];
   int stack_ptr;
   StackFrame *frame;
@@ -31,6 +37,8 @@ typedef struct {
   void *coro_ctx;
   LLVMValueRef allocator;
   bool tail_expression;
+
+  DebugCtx debug_ctx;
 } JITLangCtx;
 
 typedef struct SpecificFns {
