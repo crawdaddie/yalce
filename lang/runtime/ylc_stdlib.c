@@ -643,6 +643,14 @@ int32_t int32_parse(_String str) {
   return x;
 }
 
+uint64_t uint64_parse(_String str) {
+  // char copy[str.size + 1];
+  // copy[str.size] = '\0';
+  // memcpy(copy, str.chars, str.size);
+  uint64_t x = (uint64_t)strtoll(str.chars, NULL, 10);
+  return x;
+}
+
 double double_parse(_String str) {
   int len = str.size;
   char *copy[len + 1]; // copy input to ensure it's nul-terminated
@@ -695,4 +703,13 @@ _String char_to_hex_string(char byte) {
   result[2] = '\0';
 
   return (_String){.size = 2, .chars = result};
+}
+int ilog2(long long x) { return 64 - __builtin_clzl(x) - 1; }
+
+long long u64pow(long long x, long long ex) {
+  long long res = 1;
+  while (ex--) {
+    res = res * x;
+  }
+  return res;
 }

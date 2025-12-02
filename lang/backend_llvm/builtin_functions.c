@@ -829,8 +829,14 @@ LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
 
   switch (from_type->kind) {
+
+  case T_BOOL: {
+    return LLVMBuildZExt(builder, val, LLVMInt32Type(), "cast_bool_to_int32");
+  }
+
   case T_NUM: {
-    return LLVMBuildFPToSI(builder, val, LLVMInt32Type(), "cast_double_to_int");
+    return LLVMBuildFPToSI(builder, val, LLVMInt32Type(),
+                           "cast_double_to_int32");
   }
 
   case T_INT: {

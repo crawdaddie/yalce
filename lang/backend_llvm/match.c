@@ -594,11 +594,16 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBasicBlockRef merge_block = NULL;
   LLVMValueRef result_phi = NULL;
+  bool is_void_type = (LLVMGetTypeKind(llvm_result_type) == LLVMVoidTypeKind);
 
   if (!is_tail_position) {
     merge_block = LLVMAppendBasicBlock(parent_func, "match.merge");
     LLVMPositionBuilderAtEnd(builder, merge_block);
-    result_phi = LLVMBuildPhi(builder, llvm_result_type, "match.result");
+
+    // Only create phi node if result type is not void
+    if (!is_void_type) {
+      result_phi = LLVMBuildPhi(builder, llvm_result_type, "match.result");
+    }
 
     LLVMPositionBuilderAtEnd(builder, current_insert_block);
   }
@@ -710,7 +715,11 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       // Not in tail position - branch to merge block
       if (!LLVMGetBasicBlockTerminator(current_block)) {
         LLVMBuildBr(builder, merge_block);
-        LLVMAddIncoming(result_phi, &branch_result, &current_block, 1);
+
+        // Only add to phi if we have one (non-void type)
+        if (result_phi && !is_void_type) {
+          LLVMAddIncoming(result_phi, &branch_result, &current_block, 1);
+        }
         num_branches_to_merge++;
       }
     }
@@ -737,7 +746,8 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     } else {
       LLVMPositionBuilderAtEnd(builder, merge_block);
-      return result_phi;
+      // Return phi for non-void, or undef for void
+      return is_void_type ? LLVMGetUndef(llvm_result_type) : result_phi;
     }
   } else {
     LLVMBasicBlockRef current = LLVMGetInsertBlock(builder);
