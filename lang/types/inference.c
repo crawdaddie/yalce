@@ -1803,8 +1803,10 @@ Type *infer(Ast *ast, TICtx *ctx) {
   case AST_RANGE_EXPRESSION: {
     Type *from = infer(ast->data.AST_RANGE_EXPRESSION.from, ctx);
     Type *to = infer(ast->data.AST_RANGE_EXPRESSION.to, ctx);
+
     unify(from, &t_int, ctx);
     unify(to, &t_int, ctx);
+
     type = &t_int;
     break;
   }

@@ -22,6 +22,8 @@ let double_array_init = extern fn Int -> Double -> Ptr;
 let double_array = extern fn Int -> Double -> Array of Double;
 let pow = extern fn Double -> Double -> Double;
 let tanh = extern fn Double -> Double;
+let ilog2 = extern fn Int -> Int;
+let u64pow = extern fn Uint64 -> Uint64 -> Uint64;
 
 
 let max = fn a b ->
@@ -111,4 +113,15 @@ let _randn_pair = extern fn Double -> Double -> (Double, Double);
 let randn = fn mu sig ->
   let u1, _ = _randn_pair mu sig;
   u1
+;;
+
+
+let ilog10 = fn a ->
+  let aux = fn d x -> 
+    let x2 = x / 10;
+    match x2 > 0 with
+    | true -> aux (d+1) x2 
+    | _ -> d
+  ;;
+  aux 0 a
 ;;
